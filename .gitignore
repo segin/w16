@@ -1,0 +1,8 @@
+# Local tool cache (downloaded test dependencies; never committed)
+/.tools/
+# Build output
+/build/
+*.o
+*.obj
+*.err
+*.map

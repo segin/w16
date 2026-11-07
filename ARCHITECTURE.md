@@ -111,7 +111,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `KEYBOARD.DRV` | KEYBOARD | `keyboard.drv` | Keyboard input, `ToAscii`, OEM/ANSI conversion | P0 |
 | `KBD*.DLL` (e.g. `KBDUS.DLL`) | KBD* | `[keyboard] keyboard.dll` | Keyboard layout tables | P1 |
 | `MOUSE.DRV` | MOUSE | `mouse.drv` | Mouse input | P0 |
-| `VGA.DRV` (and others: `SUPERVGA.DRV`, `EGA.DRV`, `8514.DRV`, …) | DISPLAY | `display.drv` | GDI DDI display driver | P0 |
+| `VGA.DRV` | DISPLAY | `display.drv` | GDI DDI display driver, 640×480×16 (other display drivers deferred, see §6.10) | P0 |
 | `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON` | — | `fonts.fon`, `fixedfon.fon`, `oemfonts.fon` | System, fixed and OEM fonts | P0 |
 | `SOUND.DRV` | SOUND | `sound.drv` | Legacy `OpenSound` API (speaker) | P1 |
 | `COMM.DRV` | COMM | `comm.drv` | Serial and parallel ports | P1 |
@@ -194,10 +194,44 @@ Because w16 aims for 100% binary compatibility, **every w16 driver is a genuine 
 - Conversely, unmodified third-party Windows 3.1 drivers must work on w16.
 - No private w16-only driver interfaces. If w16 internals need something, it goes through the documented Windows mechanism (exports, `Escape`, `DriverProc` messages, VxD services).
 
+### 6.8 Design Note: UI Fidelity
+
+Like ReactOS, w16 user interfaces match the original Windows 3.1 UIs 1:1 wherever possible.
+
+- **Match exactly:** layout, metrics and spacing, colours, the system colour scheme, window frames and captions, 3D bevels, controls (buttons, check boxes, scroll bars, list boxes, combo boxes, edit controls), menus, dialog templates (control positions in dialog units), keyboard behaviour, and the wording of standard UI text (button labels, menu items, common-dialog strings).
+- **Reference method:** black-box observation of real Windows 3.1, such as screenshots and pixel comparison at the same resolution and colour depth. This is allowed by §3. Functional elements drawn by code (frames, bevels, scroll arrows, check marks, radio buttons, size boxes) are recreated by measurement.
+- **Pixel tests:** UI work is validated by screenshot comparison against real Windows 3.1 at 640×480×16.
+- **Exceptions (redrawn originally, matching size and style only):**
+  - Artwork: icons, cursors, bitmaps that are pictures rather than functional glyphs, wallpapers, and the startup logo.
+  - Microsoft logos and branding are never reproduced.
+  - Games (`SOL`, `WINMINE`, etc.) get original designs, not recreations.
+- **Fonts:** see §6.9.
+
+### 6.9 Fonts (`.FON`)
+
+w16 needs its own raster and vector font set, drawn from scratch. Face names, file names and **metrics must match exactly**, because USER layout depends on them. For example, dialog base units come from the System font's average character width and height, so a one-pixel difference moves every dialog control. Glyph shapes are original, following the same approach as Wine's own `.FON` files.
+
+**File format:** `.FON` is a resource-only NE DLL containing `RT_FONTDIR` and `RT_FONT` resources. Each `RT_FONT` is a Windows `.FNT` file, version 2.0 (raster) or 3.0. A host tool, `tools/fontc`, compiles text glyph sources into `.FNT` and packages them into `.FON`. Metrics are recorded per size from black-box measurement (`GetTextMetrics`, `GetCharWidth`) on real Windows 3.1.
+
+| Set | Files | Faces | Pri |
+|---|---|---|---|
+| VGA (96 dpi) system | `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON` | System, Fixedsys, Terminal | P0 |
+| VGA (96 dpi) "E" set | `SSERIFE.FON`, `SERIFE.FON`, `COURE.FON`, `SYMBOLE.FON`, `SMALLE.FON` | MS Sans Serif, MS Serif, Courier, Symbol, Small Fonts | P1 |
+| Vector | `MODERN.FON`, `ROMAN.FON`, `SCRIPT.FON` | Modern, Roman, Script | P2 |
+| DOS box | `DOSAPP.FON`, `EGA80WOA.FON`, `EGA40WOA.FON`, `CGA80WOA.FON`, `CGA40WOA.FON` | Terminal (windowed DOS apps) | P2 |
+| 8514 (120 dpi) | `8514SYS.FON`, `8514FIX.FON`, `8514OEM.FON`, `SSERIFF.FON`, `SERIFF.FON`, `COURF.FON`, `SYMBOLF.FON`, `SMALLF.FON` | as above | Deferred |
+| EGA/CGA | `EGASYS.FON`, `EGAFIX.FON`, `EGAOEM.FON`, `CGASYS.FON`, `CGAFIX.FON`, `CGAOEM.FON`, the `*B.FON`/`*A.FON` sets | as above | Deferred |
+
+The TrueType core fonts (Arial, Times New Roman, Courier New, Symbol, Wingdings) are not `.FON` files. They are covered later by metric-compatible, freely licensed TrueType fonts (e.g. Liberation) installed under the same face names.
+
+### 6.10 Scope: VGA First
+
+For now, w16 targets **VGA (640×480, 16 colours, 96 dpi) only**: `VGA.DRV`, the VGA grabber (`VGA.3GR`/`VGA.2GR`) and the VGA font sets. SuperVGA, 8514/A (120 dpi), EGA and CGA display drivers and their font sets are deferred. Nothing in the design should assume VGA in a way that would prevent adding them later; for example, metrics come from the display driver and are never hard-coded.
+
 ## 7. Proposed Milestones
 
 1. **M1:** NE loader plus KERNEL running on an existing DPMI host. A console-less test app calls KERNEL exports.
-2. **M2:** DOSX equivalent, WIN.COM, SYSTEM/KEYBOARD/MOUSE/DISPLAY (VGA), and USER/GDI. A "Hello World" Win16 app built with OpenWatcom runs (Standard mode).
+2. **M2:** DOSX equivalent, WIN.COM, SYSTEM/KEYBOARD/MOUSE/DISPLAY (VGA), USER/GDI, `tools/fontc`, and the P0 VGA system fonts (§6.9). A "Hello World" Win16 app built with OpenWatcom runs (Standard mode).
 3. **M3:** COMMDLG, SHELL, WIN87EM, TOOLHELP, VER, LZEXPAND, DDEML, OLECLI/OLESVR, MMSYSTEM, WINHELP, PROGMAN. Common 3.1 software runs.
 4. **M4:** WIN386 (VMM and the core VxDs), WINOA386, DOS boxes.
 5. **M5:** Printing, multimedia drivers, the remaining P2/P3 items.
