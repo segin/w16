@@ -1,0 +1,12 @@
+# TK5.EXE (tests/apps/tk5.c): imports TKDLL.DLL by name and by ordinal,
+# exports the prologue procedures of prolog.asm
+@tests/apps/app.lnk
+export ASM_PRO_MOV.1
+export ASM_PRO_PUSH.2
+import DLL_INFO TKDLL
+import DLL_ADD TKDLL
+import DLL_SUB TKDLL.3
+import DLL_MPI TKDLL.6
+import DLL_SELFADDR TKDLL.7
+import DLL_LALLOC TKDLL.8
+import DLL_PEEK TKDLL.9

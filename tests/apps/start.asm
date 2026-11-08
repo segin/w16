@@ -138,3 +138,44 @@ _call_ds:
         pop ds
         pop bp
         retf
+
+; int dos_int21(WORD far *r): INT 21h with r[] = {ax, bx, cx, dx, si, di,
+; ds, es} in and out. Returns the carry flag (1 = error).
+global _dos_int21
+_dos_int21:
+        push bp
+        mov bp, sp
+        push ds
+        push es
+        push si
+        push di
+        les bx, [bp + 6]
+        mov ax, [es:bx + 0]
+        mov cx, [es:bx + 4]
+        mov dx, [es:bx + 6]
+        mov si, [es:bx + 8]
+        mov di, [es:bx + 10]
+        mov ds, [es:bx + 12]
+        push word [es:bx + 2]
+        mov es, [es:bx + 14]
+        pop bx
+        int 21h
+        push es
+        push bx
+        les bx, [bp + 6]
+        mov [es:bx + 0], ax
+        pop word [es:bx + 2]
+        mov [es:bx + 4], cx
+        mov [es:bx + 6], dx
+        mov [es:bx + 8], si
+        mov [es:bx + 10], di
+        mov [es:bx + 12], ds
+        pop word [es:bx + 14]
+        mov ax, 0
+        adc ax, 0
+        pop di
+        pop si
+        pop es
+        pop ds
+        pop bp
+        retf

@@ -1,0 +1,7 @@
+# TKID.TPL, TKBAD.DLL, TKNODEP.DLL (tests/apps/tkid.c); the Makefile adds
+# the module name (and for TKNODEP the import of a missing module)
+@tests/apps/dll.lnk
+export ID_GET.1
+export ID_SETWEP.2
+export ID_INFO.3
+export WEP.4 resident
