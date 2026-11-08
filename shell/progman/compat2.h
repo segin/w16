@@ -29,14 +29,19 @@ UINT FAR pm_WinExec(LPCSTR, UINT);
 HINSTANCE FAR pm_ShellExecute(HWND, LPCSTR, LPCSTR, LPCSTR, LPCSTR, int);
 HINSTANCE FAR pm_FindExecutable(LPCSTR, LPCSTR, LPSTR);
 
-/* no SHELL.DLL: no drag and drop, no icon extraction */
+/* no SHELL.DLL: no drag and drop; icons are read from files by iconx.c */
 #define DragAcceptFiles(w, b)       ((void)0)
 #define DragFinish(h)               ((void)0)
 #define ExtractIcon(i, f, n)        ((HICON)NULL)
 
-/* no CreateIcon: items show the default icon (TODO: 2.x icons) */
-#define CreateIcon(i, w, h, p, b, a, x)  ((HICON)NULL)
-#define DestroyIcon(h)              ((void)0)
+/* no CreateIcon: our own icons, a pair of bitmaps that pm_DrawIcon draws
+   (an AND mask, then the image XORed); other HICONs go to DrawIcon */
+#define CreateIcon                  pm_CreateIcon
+#define DestroyIcon                 pm_DestroyIcon
+#define DrawIcon                    pm_DrawIcon
+HICON FAR pm_CreateIcon(HINSTANCE, int, int, BYTE, BYTE, const void FAR *, const void FAR *);
+BOOL FAR pm_DestroyIcon(HICON);
+BOOL FAR pm_DrawIcon(HDC, int, int, HICON);
 
 #define GetWindowPlacement          pm_GetWindowPlacement
 #define SetWindowPlacement          pm_SetWindowPlacement

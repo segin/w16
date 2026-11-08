@@ -460,7 +460,11 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     if (!mdi2_register(hinst))
         return 1;
 #endif
-    if (!register_frame() || !group_register() || !hotkey_register())
+    if (!register_frame() || !group_register() || !hotkey_register()
+#ifdef W16_WIN2
+        || !iconlist_register()
+#endif
+        )
         return 1;
 
     g_autoarrange = ini_bool("AutoArrange", FALSE);

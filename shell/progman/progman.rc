@@ -11,10 +11,10 @@
 #include <windows.h>
 #include "progman.h"
 
-/* Windows 2.x cannot read 3.x-format icons; the 2.x build has none yet
-   (TODO: icons in the 2.x format), nor dialog fonts (3.0 and later). */
-#ifndef W16_WIN2
-/* the stock icons, IDs 1..46 in index order (see progman.h) */
+/* the stock icons, IDs 1..46 in index order (see progman.h). The 2.x
+   build carries them too: Windows 2.x's LoadIcon can't read them, but
+   Program Manager reads them itself (iconx.c), so Change Icon offers the
+   same set on 2.x and 3.x. */
 1  ICON "stock00.ico"
 2  ICON "stock01.ico"
 3  ICON "stock02.ico"
@@ -61,7 +61,6 @@
 44 ICON "stock43.ico"
 45 ICON "stock44.ico"
 46 ICON "stock45.ico"
-#endif
 
 IDM_MAIN MENU
 BEGIN
@@ -132,6 +131,7 @@ BEGIN
     IDS_COPYTITLE,      "Copy Program Item:"
     IDS_MOVELABEL,      "Move Program Item:"
     IDS_COPYLABEL,      "Copy Program Item:"
+    IDS_NOICONS,        "%s contains no icons."
 END
 
 /* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */
@@ -219,7 +219,7 @@ BEGIN
     PUSHBUTTON      "&Browse...", IDC_BROWSE, 191, 43, 55, 14
     PUSHBUTTON      "Change &Icon...", IDC_CHANGEICON, 191, 60, 55, 14
     PUSHBUTTON      "&Help", IDC_HELPBTN, 191, 77, 55, 14
-    CONTROL         "", IDC_ITEMICON, "Static", SS_ICON, 24, 65, 18, 20
+    CONTROL         "", IDC_ITEMICON, "pmicon", 0, 24, 65, 18, 20
 END
 #endif
 
@@ -305,4 +305,34 @@ BEGIN
                     SS_LEFT | SS_NOPREFIX, 30, 10, 125, 10
     DEFPUSHBUTTON   "OK", IDOK, 30, 30, 40, 14
     PUSHBUTTON      "Cancel", IDCANCEL, 90, 30, 40, 14
+END
+
+/* Change Icon (observed: 222 x 82 units, at screen 152,135 over the
+   item dialog; IDs 99/100/99/102/1/2/112/126; the list at 244,213 210x54;
+   the icon list is an owner-drawn, multi-column list box with a
+   horizontal scroll bar). Windows 2.x has neither owner-drawn nor
+   multi-column list boxes: its build uses its own icon strip, pmiconlist
+   (dialogs.c). */
+IDD_CHGICON DIALOG 25, 22, 222, 82
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Change Icon"
+#ifndef W16_WIN2
+FONT 8, "MS Sans Serif"
+#endif
+BEGIN
+    CONTROL         "&File Name:", IDC_STATIC, "Static", SS_LEFT, 5, 7, 43, 10
+    EDITTEXT        IDC_ICONFILE, 50, 6, 120, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    CONTROL         "&Current Icon:", IDC_STATIC, "Static", SS_LEFT, 5, 22, 79, 10
+#ifndef W16_WIN2
+    CONTROL         "", IDC_ICONLIST, "ListBox",
+                    LBS_NOTIFY | LBS_OWNERDRAWFIXED | LBS_NOINTEGRALHEIGHT | LBS_MULTICOLUMN |
+                    LBS_DISABLENOSCROLL | WS_BORDER | WS_HSCROLL | WS_TABSTOP, 50, 34, 119, 32
+#else
+    CONTROL         "", IDC_ICONLIST, "pmiconlist", WS_BORDER | WS_HSCROLL | WS_TABSTOP,
+                    50, 34, 119, 32
+#endif
+    DEFPUSHBUTTON   "OK", IDOK, 178, 6, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 178, 23, 40, 14
+    PUSHBUTTON      "&Browse...", IDC_BROWSE, 178, 43, 40, 14
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 178, 60, 40, 14
 END

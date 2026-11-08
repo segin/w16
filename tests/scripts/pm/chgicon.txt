@@ -1,0 +1,29 @@
+run PROGMAN.EXE
+wait 3000
+menu f
+char p
+wait 500
+alt i
+wait 1000
+snap C:\I1.BMP
+dump
+key 1B
+wait 300
+key 1B
+wait 300
+key 27
+key 27
+key 27
+key 27
+wait 300
+menu f
+char p
+wait 500
+alt i
+wait 1000
+snap C:\I2.BMP
+dump
+key 1B
+wait 300
+key 1B
+wait 300

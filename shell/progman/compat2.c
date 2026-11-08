@@ -476,4 +476,112 @@ HMENU pm_load_menu(HINSTANCE inst, LPCSTR name)
         FreeResource(h);
     return m;
 }
+/* ---- icons ----
+ * Windows 2.x has no CreateIcon. Ours is a global block holding two
+ * bitmaps: the AND mask (monochrome) and the image (screen format); the
+ * blocks we made are listed, so DrawIcon and DestroyIcon can tell them
+ * from the system's icons. No limit on how many. */
+typedef struct {
+    int cx, cy;
+    HBITMAP and_bm, xor_bm;
+} pmicon;
+
+static HGLOBAL FAR *icons;              /* the icons we made */
+static int nicons;
+
+static int icon_slot(HICON h)
+{
+    int i;
+    for (i = 0; i < nicons; i++)
+        if (icons[i] == (HGLOBAL)h)
+            return i;
+    return -1;
+}
+
+HICON FAR pm_CreateIcon(HINSTANCE inst, int cx, int cy, BYTE planes, BYTE bits,
+                        const void FAR *and_bits, const void FAR *xor_bits)
+{
+    HGLOBAL h, FAR *grown;
+    pmicon FAR *p;
+    HDC dc;
+    (void)inst;
+    (void)planes;
+    (void)bits;
+    grown = (HGLOBAL FAR *)mem_realloc((LPSTR)icons, (DWORD)(nicons + 1) * sizeof(HGLOBAL));
+    if (!grown)
+        return NULL;
+    icons = grown;
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(pmicon));
+    if (!h)
+        return NULL;
+    p = (pmicon FAR *)GlobalLock(h);
+    p->cx = cx;
+    p->cy = cy;
+    /* AND rows are word-aligned, as a monochrome bitmap's are */
+    p->and_bm = CreateBitmap(cx, cy, 1, 1, (LPSTR)and_bits);
+    dc = GetDC(NULL);
+    p->xor_bm = CreateCompatibleBitmap(dc, cx, cy);
+    ReleaseDC(NULL, dc);
+    if (p->xor_bm) {
+        BITMAP b;
+        GetObject(p->xor_bm, sizeof b, (LPSTR)&b);
+        SetBitmapBits(p->xor_bm, (DWORD)b.bmWidthBytes * b.bmHeight * b.bmPlanes,
+                      (LPSTR)xor_bits);
+    }
+    if (!p->and_bm || !p->xor_bm) {
+        if (p->and_bm)
+            DeleteObject(p->and_bm);
+        if (p->xor_bm)
+            DeleteObject(p->xor_bm);
+        GlobalUnlock(h);
+        GlobalFree(h);
+        return NULL;
+    }
+    GlobalUnlock(h);
+    icons[nicons++] = h;
+    return (HICON)h;
+}
+
+BOOL FAR pm_DestroyIcon(HICON h)
+{
+    int i = icon_slot(h);
+    pmicon FAR *p;
+    if (i < 0)
+        return FALSE;                   /* not ours (a system icon) */
+    p = (pmicon FAR *)GlobalLock((HGLOBAL)h);
+    DeleteObject(p->and_bm);
+    DeleteObject(p->xor_bm);
+    GlobalUnlock((HGLOBAL)h);
+    GlobalFree((HGLOBAL)h);
+    icons[i] = icons[--nicons];
+    return TRUE;
+}
+
+#undef DrawIcon
+BOOL FAR pm_DrawIcon(HDC dc, int x, int y, HICON h)
+{
+    pmicon FAR *p;
+    HDC mdc;
+    HBITMAP old;
+    COLORREF fg, bg;
+    if (icon_slot(h) < 0)
+        return DrawIcon(dc, x, y, h);
+    p = (pmicon FAR *)GlobalLock((HGLOBAL)h);
+    mdc = CreateCompatibleDC(dc);
+    if (mdc) {
+        /* a monochrome source: 1 bits take the background colour */
+        fg = SetTextColor(dc, RGB(0, 0, 0));
+        bg = SetBkColor(dc, RGB(255, 255, 255));
+        old = SelectObject(mdc, p->and_bm);
+        BitBlt(dc, x, y, p->cx, p->cy, mdc, 0, 0, SRCAND);
+        SetTextColor(dc, fg);
+        SetBkColor(dc, bg);
+        SelectObject(mdc, p->xor_bm);
+        BitBlt(dc, x, y, p->cx, p->cy, mdc, 0, 0, SRCINVERT);
+        SelectObject(mdc, old);
+        DeleteDC(mdc);
+    }
+    GlobalUnlock((HGLOBAL)h);
+    return TRUE;
+}
 #endif

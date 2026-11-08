@@ -34,6 +34,7 @@
 #define IDD_ITEMPROPS       14
 #define IDD_MOVECOPY        15
 #define IDD_EXITWIN         16
+#define IDD_CHGICON         17
 
 #define IDM_NEW             100
 #define IDM_OPEN            101
@@ -98,12 +99,18 @@
 #define IDC_MC_ITEM         0x75
 #define IDC_MC_TO           0x76
 #define IDC_EXITICON        200
+#ifndef LBS_DISABLENOSCROLL             /* Windows 3.1; not in every header */
+#define LBS_DISABLENOSCROLL 0x1000L
+#endif
+#define IDC_ICONFILE        0x64        /* Change Icon (observed IDs) */
+#define IDC_ICONLIST        0x66
 
 /* the shortcut key control (class "pmhotkey", observed) */
 #define HKM_SETHOTKEY       (WM_USER + 0)
 #define HKM_GETHOTKEY       (WM_USER + 1)
 #define HOTKEY_CTRLALT      0x0600      /* modifier byte observed in .GRP */
 BOOL hotkey_register(void);
+BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 
 /* string table */
 #define IDS_APPNAME         1
@@ -123,6 +130,7 @@ BOOL hotkey_register(void);
 #define IDS_COPYTITLE       15
 #define IDS_MOVELABEL       16
 #define IDS_COPYLABEL       17
+#define IDS_NOICONS         18
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -154,6 +162,8 @@ BOOL group_get_props(HWND hwnd, itemprops FAR *ip);
 void itemprops_free(itemprops FAR *ip);
 BOOL group_add_item(HWND hwnd, const itemprops FAR *ip);
 BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip);
+LPSTR group_selected_icon(HWND hwnd, WORD FAR *index);
+BOOL CALLBACK __export ChangeIconDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL group_rename(HWND hwnd, const char FAR *name);
 BOOL group_set_file(HWND hwnd, const char FAR *path);
 BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only);
@@ -200,6 +210,15 @@ int  run_dialog(HWND owner, FARPROC proc, int id);
 
 /* ---- dialogs.c: program execution ---- */
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized);
+
+/* ---- iconx.c: icons read from .ICO, NE (3.x and 2.x) and PE files ---- */
+int   iconx_count(const char FAR *path);
+LPSTR iconx_bits(const char FAR *path, int index, WORD FAR *cband, WORD FAR *cbxor);
+HICON iconx_icon(const char FAR *bits);
+/* both: SHELL's ExtractIcon first (3.x), then our own reader */
+LPSTR icon_file(const char FAR *name);  /* group.c: an icon file's path */
+int   icon_count(const char FAR *path);
+HICON icon_extract(const char FAR *path, int index);
 
 /* ---- util.c ---- */
 LPSTR mem_alloc(DWORD n);               /* zeroed, locked global memory */

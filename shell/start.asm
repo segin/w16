@@ -95,6 +95,39 @@ _dos_setdrive:
         pop bp
         retf
 
+; __U4D: the compiler's unsigned 32-bit divide helper. DX:AX / CX:BX:
+; quotient in DX:AX, remainder in CX:BX (shift and subtract, 32 steps).
+; Preserves every other register.
+global __U4D
+__U4D:
+        push si
+        push di
+        push bp
+        xor si, si              ; SI:DI = running remainder
+        xor di, di
+        mov bp, 32
+.step:  shl ax, 1               ; next dividend bit into the remainder;
+        rcl dx, 1               ; the quotient bit lands in AX bit 0
+        rcl di, 1
+        rcl si, 1
+        jc .sub                 ; remainder past 32 bits: surely >= divisor
+        cmp si, cx
+        jb .next
+        ja .sub
+        cmp di, bx
+        jb .next
+.sub:   sub di, bx
+        sbb si, cx
+        inc ax
+.next:  dec bp
+        jnz .step
+        mov cx, si
+        mov bx, di
+        pop bp
+        pop di
+        pop si
+        retf
+
 ; __U4M / __I4M: the compiler's 32-bit multiply helper (we link no C
 ; run-time). DX:AX = DX:AX * CX:BX, low 32 bits (same for signed).
 ; Preserves every register but DX:AX.

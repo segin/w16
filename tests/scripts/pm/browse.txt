@@ -1,0 +1,31 @@
+run PROGMAN.EXE
+wait 3000
+menu f
+char p
+wait 500
+alt b
+wait 1500
+snap C:\B1.BMP
+dump
+type NOTEPAD.EXE
+key 0D
+wait 1000
+snap C:\B2.BMP
+dump
+alt i
+wait 1000
+alt b
+wait 1500
+snap C:\B3.BMP
+dump
+type MORICONS.DLL
+key 0D
+wait 1500
+snap C:\B4.BMP
+dump
+key 1B
+wait 300
+key 1B
+wait 300
+key 1B
+wait 300

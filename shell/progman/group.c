@@ -182,8 +182,22 @@ static void free_item(item FAR *t)
     mem_free((LPSTR)t);
 }
 
-/* An HICON from the cached bits if they suit this display, else (3.x
-   build) from the icon's file, else the default icon. */
+/* An icon file as named in a group (a new string): a bare name
+   ("write.exe") is searched for as programs are; our own stock icons
+   ("PROGMAN.EXE") come from this very program, wherever it lives. */
+LPSTR icon_file(const char FAR *name)
+{
+    OFSTRUCT of;
+    char own[144];                      /* DOS paths: OFSTRUCT's own bound */
+    if (!s_icmp(name, "PROGMAN.EXE") && GetModuleFileName(g_hinst, own, sizeof own))
+        return s_dup(own);
+    if (OpenFile(name, &of, OF_EXIST) != HFILE_ERROR)
+        return s_dup(of.szPathName);
+    return s_dup(name);
+}
+
+/* An HICON from the cached bits if they suit this display, else from the
+   icon's file, else the default icon. */
 static void make_icon(item FAR *t)
 {
     HDC dc;
@@ -202,21 +216,18 @@ static void make_icon(item FAR *t)
         }
         ReleaseDC(NULL, dc);
     }
-#ifndef W16_WIN2
     /* The cached bits are for another display (or missing): take the icon
        from its file instead, for showing only; the file keeps its cache.
        UNVERIFIED: whether the original also rewrites the cached bits. */
     if (!t->own_icon && t->iconpath && t->iconpath[0]) {
-        /* a bare name ("write.exe") is searched for as programs are */
-        OFSTRUCT of;
-        HICON i = ExtractIcon(g_hinst, OpenFile(t->iconpath, &of, OF_EXIST) != HFILE_ERROR
-                                       ? (LPCSTR)of.szPathName : t->iconpath, t->iicon);
-        if ((UINT)i > 1) {
+        LPSTR path = icon_file(t->iconpath);
+        HICON i = path ? icon_extract(path, t->iicon) : NULL;
+        mem_free(path);
+        if (i) {
             t->hicon = i;
             t->own_icon = TRUE;
         }
     }
-#endif
 }
 
 /* Append item t at the end of the data order. */
@@ -1072,6 +1083,34 @@ static BOOL icon_bits(item FAR *t, HICON hicon)
 
 #endif
 
+/* Cache icon `index` of file `name` in t (bits only): from SHELL's
+   ExtractIcon (3.x), else read from the file ourselves (iconx.c). */
+static BOOL fetch_bits(item FAR *t, const char FAR *name, int index)
+{
+    LPSTR path = icon_file(name);
+    BOOL ok = FALSE;
+    if (!path)
+        return FALSE;
+#ifndef W16_WIN2
+    {
+        HICON h = ExtractIcon(g_hinst, path, index);
+        if ((UINT)h > 1) {
+            ok = icon_bits(t, h);
+            DestroyIcon(h);
+        }
+    }
+#endif
+    if (!ok) {
+        t->icon = iconx_bits(path, index, &t->cband, &t->cbxor);
+        if (t->icon) {
+            t->cbhdr = 12;
+            ok = TRUE;
+        }
+    }
+    mem_free(path);
+    return ok;
+}
+
 /* Is the extension of path one of the program types? */
 static BOOL is_program(const char FAR *path)
 {
@@ -1099,6 +1138,35 @@ static LPSTR first_word(const char FAR *cmd)
     return w;
 }
 
+/* The selected item's icon file (a new string) and index. */
+LPSTR group_selected_icon(HWND hwnd, WORD FAR *index)
+{
+    group FAR *g = grp_of(hwnd);
+    if (!g || !g->sel)
+        return NULL;
+    *index = g->sel->iicon;
+    return s_dup(g->sel->iconpath);
+}
+
+/* Give item t icon `index` of file `path` (Change Icon, DDE AddItem):
+   path and index are stored, the bits cached, the old icon dropped. */
+static void set_icon(item FAR *t, const char FAR *path, WORD index)
+{
+    if (t->own_icon)
+        DestroyIcon(t->hicon);
+    t->own_icon = FALSE;
+    mem_free(t->icon);
+    mem_free(t->iconpath);
+    t->icon = NULL;
+    t->cbhdr = t->cband = t->cbxor = 0;
+    t->iconpath = s_dup(path);
+    t->iicon = index;
+    fetch_bits(t, path, index);
+    if (!t->iconpath)
+        t->iconpath = s_dup("");
+    make_icon(t);
+}
+
 /* Find the icon for a command: the program's own first icon, or the
    associated program's for a document. Fills iconpath, iicon, bits. */
 static void choose_icon(item FAR *t, const char FAR *cmd)
@@ -1106,7 +1174,6 @@ static void choose_icon(item FAR *t, const char FAR *cmd)
     LPSTR file = first_word(cmd);
     char found[144];                    /* DOS paths: OFSTRUCT's own bound */
     OFSTRUCT of;
-    HICON h = NULL;
 
     t->iicon = 0;
     if (file) {
@@ -1118,36 +1185,16 @@ static void choose_icon(item FAR *t, const char FAR *cmd)
         }
         mem_free(file);
     }
-#ifdef W16_WIN2
-    /* no SHELL.DLL (ExtractIcon) and no CreateIcon on Windows 2.x: the
-       item keeps its icon path, with no cached bits (TODO) */
-    (void)h;
-    if (!t->iconpath)
-        t->iconpath = s_dup("");
-    make_icon(t);
-#else
-    if (t->iconpath) {
-        h = ExtractIcon(g_hinst, t->iconpath, 0);
-        if ((UINT)h <= 1)
-            h = NULL;
-    }
-    if (!h) {
+    if (!t->iconpath || !fetch_bits(t, t->iconpath, 0)) {
         /* our own default item icon (PROGMAN.EXE, third icon) */
         mem_free(t->iconpath);
         t->iconpath = s_dup("PROGMAN.EXE");
         t->iicon = 2;
-        h = ExtractIcon(g_hinst, "PROGMAN.EXE", 2);
-        if ((UINT)h <= 1)
-            h = NULL;
-    }
-    if (h) {
-        icon_bits(t, h);
-        DestroyIcon(h);
+        fetch_bits(t, "PROGMAN.EXE", 2);
     }
     if (!t->iconpath)
         t->iconpath = s_dup("");
     make_icon(t);
-#endif
 }
 
 /* ---- an item's command, working directory and options ----
@@ -1348,20 +1395,9 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
         free_item(t);
         return FALSE;
     }
-#ifndef W16_WIN2
-    if (ip->iconpath && ip->iconpath[0]) {      /* DDE AddItem's icon */
-        HICON h = ExtractIcon(g_hinst, ip->iconpath, ip->iconindex);
-        t->iconpath = s_dup(ip->iconpath);
-        t->iicon = ip->iconindex;
-        if ((UINT)h > 1) {
-            icon_bits(t, h);
-            DestroyIcon(h);
-        }
-        if (!t->iconpath)
-            t->iconpath = s_dup("");
-        make_icon(t);
-    } else
-#endif
+    if (ip->iconpath && ip->iconpath[0])        /* DDE AddItem's icon */
+        set_icon(t, ip->iconpath, ip->iconindex);
+    else
         choose_icon(t, ip->cmd);
     if (ip->has_pos) {
         t->x = ip->x;
@@ -1429,7 +1465,9 @@ BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip)
     invalidate_item(hwnd, t);
     if (!set_fields(t, ip->desc, ip->cmd, ip->dir, ip->hotkey, ip->minimized))
         return FALSE;
-    if (!same_program) {                /* UNVERIFIED: a new program, its icon */
+    if (ip->iconpath && ip->iconpath[0]) {      /* chosen with Change Icon */
+        set_icon(t, ip->iconpath, ip->iconindex);
+    } else if (!same_program) {         /* UNVERIFIED: a new program, its icon */
         if (t->own_icon)
             DestroyIcon(t->hicon);
         mem_free(t->icon);
@@ -1846,7 +1884,13 @@ BOOL group_register(void)
 #endif
 
 #ifdef W16_WIN2
-    def_icon = LoadIcon(NULL, IDI_APPLICATION); /* TODO: 2.x-format icons */
+    {   /* LoadIcon can't read 3.x-format icons: our own reader can */
+        LPSTR own = icon_file("PROGMAN.EXE");
+        def_icon = own ? icon_extract(own, 2) : NULL;
+        mem_free(own);
+        if (!def_icon)
+            def_icon = LoadIcon(NULL, IDI_APPLICATION);
+    }
 #else
     def_icon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_DEFITEM));
 #endif

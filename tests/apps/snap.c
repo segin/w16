@@ -11,6 +11,7 @@
  *                            testing our own programs, whose IDs we know)
  *     key <vk-hex>           post a key press to the window with the focus
  *     char <c>               post a WM_CHAR to the window with the focus
+ *     alt <c>                Alt+c (WM_SYSCHAR), for dialog mnemonics
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
@@ -130,7 +131,9 @@ static HWND top_window(void)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
         return FindWindow("Progman", NULL);
-    while ((p = GetParent(h)) != NULL)
+    /* up to the first window that is not a child: GetParent of a dialog
+       is its owner, which is not where its commands go */
+    while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
         h = p;
     return h;
 }
@@ -425,6 +428,11 @@ static void run_line(char *l)
         pump(200);
     } else if (same(l, "char")) {
         PostMessage(target(), WM_CHAR, (BYTE)arg[0], 1L);
+        pump(200);
+    } else if (same(l, "alt")) {
+        /* Alt+letter, as a dialog's mnemonics see it: WM_SYSCHAR with
+           the context bit (29) set */
+        PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
     } else if (same(l, "dump")) {
         out("\r\n");
