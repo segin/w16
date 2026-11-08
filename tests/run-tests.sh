@@ -44,7 +44,7 @@ rm -rf "$stage"
 mkdir -p "$stage/WINDOWS/SYSTEM"
 cp "$dos/KRNL286.EXE" "$stage/WINDOWS/SYSTEM/"
 cp "$dos/TK5.EXE" "$dos/TKID.TPL" "$stage/"
-for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL; do
+for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     cp "$dos/$f" "$stage/WINDOWS/"
 done
 DOSRUN_PRE='SET PATH=C:\TKPATH;Z:\'

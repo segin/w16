@@ -35,7 +35,8 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2 TK3 TK4 TK5
 # DLLs and files TK5 uses
-TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL
+TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
+            TKUSEX.DLL TKEXEM.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -151,6 +152,18 @@ $(DOS)/TKNODEP.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o \
 	$(WLINK) @tests/apps/tkid.lnk option modname=TKNODEP import NOFUNC TKNONE \
 	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tknodep.map \
 	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o }
+$(DOS)/TKUSEX.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o \
+                   tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TKUSEX import NOFUNC TKEXEM \
+	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tkusex.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o }
+$(DOS)/TKEXEM.EXE: $(B)/tests/dllstart.o $(B)/tests/dll/tkid.o \
+                   tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TKEXEM name $@ \
+	    libpath $(WATCOM)/lib286/win option map=$(B)/tests/tkexem.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tkid.o }
 $(DOS)/TKNOD.DLL: $(B)/tests/tknod.o
 	@mkdir -p $(@D)
 	$(WLINK) format windows dll option quiet option modname=TKNOD \
