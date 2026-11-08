@@ -61,7 +61,8 @@ all: host dos shell
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
-     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN
+     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
+     $(DOS)/TK18.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -374,6 +375,11 @@ $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 
 # WINENV.COM: test tool, runs KERNEL with windir= set as WIN.COM would
 $(DOS)/WINENV.COM: tests/dos/winenv.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
+$(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
