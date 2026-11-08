@@ -931,7 +931,8 @@ static BOOL add_tag(item FAR *t, WORD id, const void FAR *data, WORD n)
     return TRUE;
 }
 
-/* Copy an icon's bits (header, AND, XOR) out of an HICON. Windows 3.x
+/* Copy an icon's bits (header, AND, XOR) out of an HICON (see
+   ARCHITECTURE.md 6.11: w16's USER must keep this layout). Windows 3.x
    keeps an icon as a global block holding exactly the 12-byte header
    that .GRP files store, followed by the bits (as described in published
    accounts of Windows internals; the sizes are checked here). */

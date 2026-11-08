@@ -233,6 +233,17 @@ The TrueType core fonts (Arial, Times New Roman, Courier New, Symbol, Wingdings)
 
 For now, w16 targets **VGA (640×480, 16 colours, 96 dpi) only**: `VGA.DRV`, the VGA grabber (`VGA.3GR`/`VGA.2GR`) and the VGA font sets. SuperVGA, 8514/A (120 dpi), EGA and CGA display drivers and their font sets are deferred. Nothing in the design should assume VGA in a way that would prevent adding them later; for example, metrics come from the display driver and are never hard-coded.
 
+### 6.11 Design Note: Undocumented Layouts Are Part of the Contract
+
+Programs from the period depend on some internal data layouts that the SDK never documented. When w16's own programs or observed applications rely on one, w16's modules must reproduce it exactly. Known so far:
+
+| Layout | Who relies on it | Evidence |
+|---|---|---|
+| **HICON memory block** (USER): `GlobalLock(hIcon)` yields a 12-byte header (hotspot x, y, width, height, bytes per row, planes, bits per pixel), then the AND mask, then the XOR bits in the display driver's format. | Program Manager (ours and the original) copies these bytes straight into `.GRP` files (`shell/progman/group.c`, `icon_bits`). Other applications are believed to read it too. | Described in published books on Windows internals. Confirmed black-box: a `.GRP` file written by w16's Program Manager from this block on Windows 3.1 is byte-identical to the one the original Program Manager writes. |
+| **`.GRP` file format** | Program Manager; installers and tools that read group files | Observed on Windows 3.1 (`shell/progman/group.c` header comment, `tools/grpdump.py`). |
+
+So w16's USER must store icons (and probably cursors, which share the format) in exactly this layout. Add rows here as more such layouts turn up.
+
 ## 7. Proposed Milestones
 
 1. **M1:** NE loader plus KERNEL running on an existing DPMI host. A console-less test app calls KERNEL exports.
