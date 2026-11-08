@@ -429,6 +429,91 @@ void cmd_properties(HWND frame)
     props_group = NULL;
 }
 
+/* ---- File > Move, File > Copy ---- */
+
+/* Windows 2.x has no combo box control (3.0 and later): its dialog has a
+   sorted list box instead. */
+#ifdef W16_WIN2
+#define TO_ADD      LB_ADDSTRING
+#define TO_SETSEL   LB_SETCURSEL
+#define TO_GETSEL   LB_GETCURSEL
+#define TO_GETTEXT  LB_GETTEXT
+#define TO_TEXTLEN  LB_GETTEXTLEN
+#else
+#define TO_ADD      CB_ADDSTRING
+#define TO_SETSEL   CB_SETCURSEL
+#define TO_GETSEL   CB_GETCURSEL
+#define TO_GETTEXT  CB_GETLBTEXT
+#define TO_TEXTLEN  CB_GETLBTEXTLEN
+#endif
+
+static HWND mc_from;
+static BOOL mc_copy;
+
+/* Observed: "Move Program Item" lists every group but the item's own,
+   "Copy Program Item:" lists all of them; both sorted, the first chosen. */
+BOOL CALLBACK __export MoveCopyDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
+{
+    char text[64];                      /* our own resource strings */
+    HWND w;
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG:
+        LoadString(g_hinst, mc_copy ? IDS_COPYTITLE : IDS_MOVETITLE, text, sizeof text);
+        SetWindowText(dlg, text);
+        LoadString(g_hinst, mc_copy ? IDS_COPYLABEL : IDS_MOVELABEL, text, sizeof text);
+        SetDlgItemText(dlg, IDC_MC_LABEL, text);
+        SetDlgItemText(dlg, IDC_MC_ITEM, group_selected_name(mc_from));
+        SetDlgItemText(dlg, IDC_MC_GROUP, group_name(mc_from));
+        for (w = GetWindow(g_client, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+            if (group_name(w) && (mc_copy || w != mc_from))
+                SendDlgItemMessage(dlg, IDC_MC_TO, TO_ADD, 0, (LPARAM)group_name(w));
+        SendDlgItemMessage(dlg, IDC_MC_TO, TO_SETSEL, 0, 0);
+        return TRUE;
+    case WM_COMMAND:
+        switch (wp) {
+        case IDOK: {
+            LONG i = SendDlgItemMessage(dlg, IDC_MC_TO, TO_GETSEL, 0, 0);
+            LONG n = i < 0 ? -1 : SendDlgItemMessage(dlg, IDC_MC_TO, TO_TEXTLEN, (WPARAM)i, 0);
+            LPSTR name = n >= 0 ? mem_alloc(n + 1) : NULL;
+            HWND to = NULL;
+            if (name) {
+                SendDlgItemMessage(dlg, IDC_MC_TO, TO_GETTEXT, (WPARAM)i, (LPARAM)name);
+                /* UNVERIFIED: groups with the same name; the first wins */
+                for (w = GetWindow(g_client, GW_CHILD); w && !to; w = GetWindow(w, GW_HWNDNEXT))
+                    if (group_name(w) && (mc_copy || w != mc_from) && !s_icmp(group_name(w), name))
+                        to = w;
+                mem_free(name);
+            }
+            if (to && !group_transfer_selected(mc_from, to, mc_copy))
+                message(dlg, IDS_CANTWRITE, group_path(to));
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        case IDC_HELPBTN:
+            message(dlg, IDS_NOTYET, NULL);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+/* UNVERIFIED: with no item selected (a minimized or empty group) the
+   original greys these commands; here they do nothing. */
+void cmd_movecopy(HWND frame, BOOL copy_only)
+{
+    HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+    if (!g || IsIconic(g) || !group_selected_name(g))
+        return;
+    mc_from = g;
+    mc_copy = copy_only;
+    run_dialog(frame, (FARPROC)MoveCopyDlgProc, IDD_MOVECOPY);
+}
+
 /* ---- File > Delete ---- */
 
 /* Observed: in an open group with a selected item, Delete asks "Are you

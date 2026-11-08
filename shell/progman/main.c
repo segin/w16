@@ -235,7 +235,7 @@ static void command(HWND hwnd, WORD id)
         break;
     case IDM_MOVE:
     case IDM_COPY:
-        message(hwnd, IDS_NOTYET, NULL);        /* TODO: M-shell 2 */
+        cmd_movecopy(hwnd, id == IDM_COPY);
         break;
     default:
         /* the Window menu's group list and other MDI commands */

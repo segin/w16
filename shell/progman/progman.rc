@@ -84,6 +84,10 @@ BEGIN
     IDS_HOTKEYPREFIX,   "Ctrl + Alt + "
     IDS_CANTWRITE,      "Cannot write the group file %s."
     IDS_DLGFAIL,        "The dialog box could not be opened."
+    IDS_MOVETITLE,      "Move Program Item"
+    IDS_COPYTITLE,      "Copy Program Item:"
+    IDS_MOVELABEL,      "Move Program Item:"
+    IDS_COPYLABEL,      "Copy Program Item:"
 END
 
 /* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */
@@ -210,4 +214,34 @@ BEGIN
     LTEXT           "A clean-room reimplementation, part of w16.", -1,
                     45, 25, 145, 20, SS_NOPREFIX
     DEFPUSHBUTTON   "OK", IDOK, 177, 5, 40, 14
+END
+
+/* Move/Copy Program Item (observed: 200 x 64 units, IDs 115/117/99/116/
+   99/118/1/2/126; caption and first label set by the program) */
+#ifndef W16_WIN2
+IDD_MOVECOPY DIALOG 23, 20, 200, 64
+#else
+IDD_MOVECOPY DIALOG 23, 20, 200, 90
+#endif
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Move Program Item"
+#ifndef W16_WIN2
+FONT 8, "MS Sans Serif"
+#endif
+BEGIN
+    CONTROL         "Move Program Item:", IDC_MC_LABEL, "Static", SS_LEFT, 5, 3, 70, 10
+    CONTROL         "", IDC_MC_ITEM, "Static", SS_LEFTNOWORDWRAP | SS_NOPREFIX, 80, 3, 73, 10
+    CONTROL         "From Program Group:", IDC_STATIC, "Static", SS_LEFT, 5, 13, 74, 10
+    CONTROL         "", IDC_MC_GROUP, "Static", SS_LEFTNOWORDWRAP | SS_NOPREFIX, 80, 13, 73, 10
+    CONTROL         "&To Group:", IDC_STATIC, "Static", SS_LEFT, 5, 25, 45, 10
+#ifndef W16_WIN2
+    CONTROL         "", IDC_MC_TO, "ComboBox",
+                    CBS_DROPDOWNLIST | CBS_SORT | CBS_HASSTRINGS | WS_TABSTOP, 5, 37, 130, 60
+#else
+    CONTROL         "", IDC_MC_TO, "ListBox",
+                    LBS_SORT | WS_BORDER | WS_VSCROLL | WS_TABSTOP, 5, 37, 130, 48
+#endif
+    DEFPUSHBUTTON   "OK", IDOK, 154, 6, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 154, 23, 40, 14
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 154, 44, 40, 14
 END

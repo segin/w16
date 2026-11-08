@@ -945,12 +945,21 @@ BOOL group_open_selected(HWND hwnd)
     return TRUE;
 }
 
+/* How many grid columns fit the group's client area. For a minimized
+   group that is the area it has when restored (observed: items moved or
+   copied into a minimized group fill its normal-size grid). */
 static int grid_cols(HWND hwnd)
 {
     RECT rc;
-    int cols;
-    GetClientRect(hwnd, &rc);
-    cols = (rc.right - rc.left) / CX_SPACING;
+    int cols, width;
+    group FAR *g = grp_of(hwnd);
+    if (g && IsIconic(hwnd)) {
+        width = g->rc.right - g->rc.left - 2 * GetSystemMetrics(SM_CXFRAME);
+    } else {
+        GetClientRect(hwnd, &rc);
+        width = rc.right - rc.left;
+    }
+    cols = width / CX_SPACING;
     return cols < 1 ? 1 : cols;
 }
 
@@ -1385,6 +1394,87 @@ BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip)
     return write_group(g);
 }
 
+/* A copy of item t, data and tags included (icon bits shared by value). */
+static item FAR *clone_item(item FAR *t)
+{
+    item FAR *u = (item FAR *)mem_alloc(sizeof(item));
+    DWORD nicon = (DWORD)t->cbhdr + t->cband + t->cbxor;
+    if (!u)
+        return NULL;
+    u->iicon = t->iicon;
+    u->name = s_dup(t->name);
+    u->cmd = s_dup(t->cmd);
+    u->iconpath = s_dup(t->iconpath);
+    u->cbhdr = t->cbhdr;
+    u->cband = t->cband;
+    u->cbxor = t->cbxor;
+    if (nicon && (u->icon = mem_alloc(nicon)) != NULL)
+        copy(u->icon, t->icon, (WORD)nicon);
+    u->cbtags = t->cbtags;
+    if (t->cbtags && (u->tags = mem_alloc(t->cbtags)) != NULL)
+        copy(u->tags, t->tags, t->cbtags);
+    if (!u->name || !u->cmd || !u->iconpath || (nicon && !u->icon) || (t->cbtags && !u->tags)) {
+        free_item(u);
+        return NULL;
+    }
+    make_icon(u);
+    return u;
+}
+
+/* Take item t out of g: the gap closes, cItems stays (observed), and the
+   new top item is selected (observed after Move and Delete). */
+static void remove_item(HWND hwnd, group FAR *g, item FAR *t)
+{
+    int i = zindex(g, t);
+    if (i < 0)
+        return;
+    invalidate_item(hwnd, t);
+    for (; i + 1 < (int)g->nz; i++)
+        g->z[i] = g->z[i + 1];
+    g->nz--;
+    data_remove(g, t);
+    if (g->sel == t)
+        g->sel = g->nz ? g->z[0] : NULL;
+    invalidate_item(hwnd, g->sel);
+}
+
+/* File > Move and File > Copy (observed): the item arrives in `to` on top
+   of the z-order, in the first free grid cell, its data at the end, and
+   is selected there; Move then removes it from `from`. */
+BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
+{
+    group FAR *src = grp_of(from), FAR *dst = grp_of(to);
+    item FAR *t, FAR *u;
+    WORD k;
+    if (!src || !dst || !src->sel || !grow_slots(dst))
+        return FALSE;
+    t = src->sel;
+    u = clone_item(t);
+    if (!u)
+        return FALSE;
+    free_cell(to, dst, &u->x, &u->y);
+    for (k = dst->nz; k > 0; k--)
+        dst->z[k] = dst->z[k - 1];
+    dst->z[0] = u;
+    dst->nz++;
+    data_append(dst, u);
+    if (!write_group(dst)) {
+        remove_item(to, dst, u);
+        free_item(u);
+        return FALSE;
+    }
+    invalidate_item(to, dst->sel);
+    dst->sel = u;
+    if (g_autoarrange)
+        group_arrange(to);
+    invalidate_item(to, u);
+    if (copy_only)
+        return TRUE;
+    remove_item(from, src, t);
+    free_item(t);
+    return write_group(src);
+}
+
 /* Program Group Properties with a different file (observed): the group
    is written to the new file, the old one is deleted, and the same
    GroupN= entry names the new file. */
@@ -1434,21 +1524,10 @@ BOOL group_delete_selected(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     item FAR *t;
-    int i;
     if (!g || !g->sel)
         return FALSE;
     t = g->sel;
-    i = zindex(g, t);
-    if (i < 0)
-        return FALSE;
-    invalidate_item(hwnd, t);
-    for (; i + 1 < (int)g->nz; i++)
-        g->z[i] = g->z[i + 1];
-    g->nz--;
-    data_remove(g, t);
-    /* UNVERIFIED: which item is selected next; the top one here */
-    g->sel = g->nz ? g->z[0] : NULL;
-    invalidate_item(hwnd, g->sel);
+    remove_item(hwnd, g, t);
     free_item(t);
     return write_group(g);
 }

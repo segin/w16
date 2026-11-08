@@ -251,7 +251,9 @@ static void dump_tree(HWND w, int depth)
         if (!IsWindowVisible(w) && depth == 0)
             continue;
         GetClassName(w, cls, sizeof cls);
-        GetWindowText(w, text, sizeof text);
+        /* WM_GETTEXT, unlike GetWindowText, reaches another task's edit
+           controls (16-bit Windows shares one address space) */
+        SendMessage(w, WM_GETTEXT, sizeof text, (LPARAM)(LPSTR)text);
         GetWindowRect(w, &r);
         out("WIN ");
         for (i = 0; i < depth; i++)
@@ -274,6 +276,28 @@ static void dump_tree(HWND w, int depth)
         outint(r.right); out(",");
         outint(r.bottom);
         out("\r\n");
+#ifndef SNAP_WIN2
+        {   /* the entries of list and combo boxes */
+            BOOL combo = !lstrcmpi(cls, "ComboBox"), list = !lstrcmpi(cls, "ListBox");
+            if (combo || list) {
+                LONG n = SendMessage(w, combo ? CB_GETCOUNT : LB_GETCOUNT, 0, 0), k;
+                LONG cur = SendMessage(w, combo ? CB_GETCURSEL : LB_GETCURSEL, 0, 0);
+                for (k = 0; k < n; k++) {
+                    if (SendMessage(w, combo ? CB_GETLBTEXTLEN : LB_GETTEXTLEN, (WPARAM)k, 0) <
+                        (LONG)sizeof text) {
+                        SendMessage(w, combo ? CB_GETLBTEXT : LB_GETTEXT, (WPARAM)k,
+                                    (LPARAM)(LPSTR)text);
+                        out("WIN ");
+                        for (i = 0; i <= depth; i++)
+                            out("  ");
+                        out(k == cur ? "* entry \"" : "  entry \"");
+                        out(text);
+                        out("\"\r\n");
+                    }
+                }
+            }
+        }
+#endif
         c = GetWindow(w, GW_CHILD);
         if (c)
             dump_tree(c, depth + 1);
