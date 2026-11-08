@@ -64,7 +64,8 @@ host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
-     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE)
+     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
+     $(DOS)/DOSX.EXE $(DXPROBES:%=$(DOS)/%.COM)
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -482,6 +483,17 @@ $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 $(DOS)/WINENV.COM: tests/dos/winenv.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
+
+# DOSX.EXE: w16's Standard-mode DOS extender (dosx/, ARCHITECTURE.md 9.5)
+$(DOS)/DOSX.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I . -o $@ $<
+
+# DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
+DXPROBES := DX1 DX2 DX5
+$(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
 
 # TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
 $(DOS)/TK18.COM: tests/dos/tk18.asm
