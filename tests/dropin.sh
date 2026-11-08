@@ -20,6 +20,8 @@
 #                virtual X display, xvfb-run, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
+#     -x CPU     run in DOSBox-X (which checks segment limits) emulating CPU
+#                (386, or 286 for a real 80286) instead of DOSBox
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
 # seconds, our KERNEL reports where the processor was and exits (-i
 # w16:watchdog=0 turns that off).
@@ -33,7 +35,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
 cmd='WIN /S /B' secs=60 shot= keep= useref= files= inis='w16:watchdog=15'
-while getopts k:c:t:f:i:s:o:r opt; do
+xcpu=
+while getopts k:c:t:f:i:s:o:rx: opt; do
     case $opt in
     k) kernel=$OPTARG ;;
     c) cmd=$OPTARG ;;
@@ -45,6 +48,7 @@ $OPTARG" ;;
     s) shot=$OPTARG ;;
     o) keep=$OPTARG ;;
     r) useref=1 ;;
+    x) xcpu=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -97,11 +101,18 @@ elif not done:
 open(path, 'wb').write('\r\n'.join(out).encode('latin-1'))
 PY
 done
+if [ -n "$xcpu" ]; then
+    emu="dosbox-x -nogui -fastlaunch" xconf="quit warning=false
+machine=svga_s3"
+else
+    emu="dosbox -noconsole" xconf=
+fi
 common="[dosbox]
+$xconf
 memsize=16
 [cpu]
 core=normal
-cputype=386
+cputype=${xcpu:-386}
 cycles=max
 [mixer]
 nosound=true
@@ -117,12 +128,12 @@ exit"
 if [ -z "$shot" ]; then
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
     SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$secs" \
-        dosbox -noconsole -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
+        $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 else
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox -noconsole -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+SDL_AUDIODRIVER=dummy timeout $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
 sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$work/s.png"
