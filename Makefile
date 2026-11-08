@@ -37,10 +37,10 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15
+           TK11 TK12 TK13 TK14 TK15 TK16
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
-            TKUSEX.DLL TKEXEM.EXE TK15A.EXE
+            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -145,6 +145,25 @@ $(DOS)/TK15A.EXE: $(B)/tests/tk15s.o $(B)/tests/tk15a.o \
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk15a.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk15a.map file { $(B)/tests/tk15s.o $(B)/tests/tk15a.o }
+
+# TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
+# TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
+$(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
+$(DOS)/TK16.EXE: $(B)/tests/start.o $(B)/tests/tk16.o \
+                tests/apps/app.lnk tests/apps/tk16.lnk tests/apps/tk15k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk16.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk16.map file { $(B)/tests/start.o $(B)/tests/tk16.o }
+$(B)/tests/tk16%.o: tests/apps/tk16a.c tests/apps/tk15.h tests/apps/tk16.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) $(if $(filter B,$*),-dTK16_BAD) $(if $(filter C,$*),-dTK16_FAR) \
+	    -fo=$@ $<
+$(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
+                  tests/apps/app.lnk tests/apps/tk16.lnk tests/apps/tk15k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk16.lnk $(if $(filter B,$*),import ID_GET TKBAD) \
+	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk16$*.map \
+	    file { $(B)/tests/tk15s.o $(B)/tests/tk16$*.o }
 
 # TK12.EXE: the resource probe, with the resources of tk12.rc
 $(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tklog.h

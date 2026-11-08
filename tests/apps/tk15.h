@@ -11,6 +11,8 @@
  *   B  observe, then Yield() until TK15 sets `go`, then exit
  *   C  observe, then WaitEvent(0) three times (events probe), exit
  */
+#pragma disable_message(202)    /* helpers below a probe may not use */
+
 #define TK15_SLOTS   3
 #define TK15_SLOTW   128
 #define TK15_TRACE   96

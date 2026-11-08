@@ -1,0 +1,4 @@
+# TK16.EXE (tests/apps/tk16.c) and its helpers TK16A/B/C (tk16a.c with
+# tk15s.asm); the Makefile adds TK16B's import from TKBAD
+@tests/apps/app.lnk
+@tests/apps/tk15k.lnk

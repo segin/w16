@@ -1,0 +1,32 @@
+/*
+ * tk16.h - shared by the task probe TK16.EXE (tk16.c) and its helpers
+ * TK16A.EXE, TK16B.EXE and TK16C.EXE (all tk16a.c): the block in TK16's
+ * DGROUP the helpers write to. Command line as for TK15A (tk15.h):
+ * "<mode> <slot> <TK16's DS> <offset of tk16sh> <TK16's hTask>". Modes:
+ *   R  report and exit
+ *   W  report, then Yield() until TK16 sets `go`, then exit
+ */
+#define TK16_SLOTS  4
+#define TK16_SLOTW  48
+
+typedef struct {
+    WORD go;
+    WORD v[TK16_SLOTS][TK16_SLOTW];
+} tk16sh;
+
+enum {
+    W_PRE,              /* set before InitTask */
+    W_RAN,              /* set after InitTask */
+    W_HPREV,
+    W_TAILLEN,
+    W_TAIL,             /* 12 words: the PSP's command tail */
+    W_CWD = W_TAIL + 12,/* 12 words: the current directory */
+    W_ENVSAME = W_CWD + 12,
+    W_ENVSEL,
+    W_ENVLEN,           /* up to the double NUL */
+    W_ENVTAIL,          /* the word after it */
+    W_ENVPATH,          /* 4 words: the bytes after that */
+    W_ENVPATH_END = W_ENVPATH + 3,
+    W_ENV,              /* 8 words: the start of the environment */
+    W_COUNT = W_ENV + 8
+};
