@@ -1,18 +1,18 @@
 /*
- * tk6.c - the in-memory module table (what an hModule points to) of
- * TK6.EXE, TKDLL.DLL (imported), TKDLB.DLL (imported by TKDLL) and
+ * tk11.c - the in-memory module table (what an hModule points to) of
+ * TK11.EXE, TKDLL.DLL (imported), TKDLB.DLL (imported by TKDLL) and
  * KERNEL.
  *
  * The fields probed are those of the layout published in Pietrek,
  * "Windows Internals" (1993), Table 3-1; this probe checks them black-box
  * against Windows 3.1 before w16 relies on them.
  *
- * Needs the same files as TK5 (tests/tk5ref.sh TK6.EXE puts them in
- * place). Output and checks: see tklog.h; reference values in tk6ref.h.
+ * Needs the same files as TK5 (tests/tk5ref.sh TK11.EXE puts them in
+ * place). Output and checks: see tklog.h; reference values in tk11ref.h.
  */
 #include <windows.h>
 
-#define TK_REF "tk6ref.h"
+#define TK_REF "tk11ref.h"
 #include "tklog.h"
 
 extern WORD FAR PASCAL DLL_INFO(WORD i);        /* TKDLL.DLL */
@@ -183,17 +183,17 @@ int __cdecl tmain(void)
     WORD off;
     FARPROC p;
 
-    out("TK6 start\r\n");
+    out("TK11 start\r\n");
     hk = GetModuleHandle("KERNEL");
     hd = GetModuleHandle("TKDLL");
     hb = GetModuleHandle("TKDLB");
-    hs = GetModuleHandle("TK6");
+    hs = GetModuleHandle("TK11");
     (void)DLL_INFO(0);
 
     probe_module("TKDLL", hd, DLL_INFO(26) & ~1u, 1);
     probe_module("TKDLB", hb, (WORD)LoadLibrary("TKDLB.DLL"), 1);
     FreeLibrary(GetModuleHandle("TKDLB"));
-    probe_module("TK6", hs, hinst(), 1);
+    probe_module("TK11", hs, hinst(), 1);
     probe_module("KERNEL", hk, 0, 0);
 
     /* module list through offset 06h, from KERNEL */
@@ -207,7 +207,7 @@ int __cdecl tmain(void)
     }
     obs("list from KERNEL ends", guard < 200);
     obs("list from KERNEL has TKDLL", found_d);
-    obs("list from KERNEL has TK6", found_s);
+    obs("list from KERNEL has TK11", found_s);
     obs_env("modules in list", n);
 
     /* modules TKDLL imports from (offset 28h: hModules) */
@@ -227,9 +227,9 @@ int __cdecl tmain(void)
     obs("TKDLL entry table first bundle first", W(m, W(m, 4)));
     obs("TKDLL entry table first bundle last", W(m, W(m, 4) + 2));
     obs("TKDLL entry 1 found", entry_of(m, 1, &type, &flags, &seg, &off));
-    obs("TK6 entry 1 found", entry_of((WORD)hs, 1, &type, &flags, &seg, &off));
+    obs("TK11 entry 1 found", entry_of((WORD)hs, 1, &type, &flags, &seg, &off));
 
-    out("TK6 done, failures=");
+    out("TK11 done, failures=");
     outhex((WORD)failures);
     out("\r\n");
     return failures;

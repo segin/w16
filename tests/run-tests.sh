@@ -36,9 +36,9 @@ run TK3 0
 run TK4 0
 run TK2 255 "w16: call to unimplemented KERNEL.204"
 
-# TK5 (DLL loading) and TK6 (module tables), laid out like the reference
+# TK5 (DLL loading) and TK11 (module tables), laid out like the reference
 # runs (tests/tk5ref.sh): the DLLs in the Windows directory C:\WINDOWS,
-# TK5.EXE, TK6.EXE and TKID.TPL in C:\, C:\TKPATH on the PATH. KERNEL is
+# TK5.EXE, TK11.EXE and TKID.TPL in C:\, C:\TKPATH on the PATH. KERNEL is
 # started as WIN.COM would, with windir=C:\WINDOWS in its environment
 # (WINENV.COM); it lives in C:\W16SYS, so the Windows directory can only
 # have come from windir.
@@ -46,7 +46,7 @@ stage="$root/build/tk5root"
 rm -rf "$stage"
 mkdir -p "$stage/WINDOWS" "$stage/W16SYS"
 cp "$dos/KRNL286.EXE" "$stage/W16SYS/"
-cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK6.EXE" "$dos/TKID.TPL" "$stage/"
+cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TKID.TPL" "$stage/"
 for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     cp "$dos/$f" "$stage/WINDOWS/"
 done
@@ -54,5 +54,5 @@ DOSRUN_PRE='SET PATH=C:\TKPATH;Z:\'
 export DOSRUN_PRE
 dir=$stage kernel='WINENV C:\WINDOWS W16SYS\KRNL286.EXE'
 run TK5 0
-run TK6 0
+run TK11 0
 exit $status

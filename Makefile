@@ -34,7 +34,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3 TK4 TK5 TK6
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK11
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
@@ -103,15 +103,15 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
-$(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+$(B)/tests/tk11.o: tests/apps/tk11ref.h tests/apps/tklog.h
 
-# TK6.EXE: the in-memory module table probe (uses TK5's DLLs)
-$(DOS)/TK6.EXE: $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/prolog.o \
-                tests/apps/app.lnk tests/apps/tk6.lnk
+# TK11.EXE: the in-memory module table probe (uses TK5's DLLs)
+$(DOS)/TK11.EXE: $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o \
+                tests/apps/app.lnk tests/apps/tk11.lnk
 	@mkdir -p $(@D)
-	$(WLINK) @tests/apps/tk6.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/tk6.map \
-	    file { $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/prolog.o }
+	$(WLINK) @tests/apps/tk11.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk11.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o }
 
 # TK5.EXE: the DLL loading probe, with its DLLs (tests/apps/tk5.c)
 $(B)/tests/%.o: tests/apps/%.asm

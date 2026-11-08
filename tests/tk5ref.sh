@@ -1,9 +1,9 @@
 #!/bin/sh
-# Run a DLL probe (TK5.EXE, the default, or TK6.EXE) with the test DLLs on
+# Run a DLL probe (TK5.EXE, the default, or TK11.EXE) with the test DLLs on
 # the reference Windows 3.1 in Standard and 386 Enhanced mode
 # (tests/refrun.sh), and write the logs to OUTDIR as NAME-win31-S.log and
 # NAME-win31-3.log.
-#   usage: tests/tk5ref.sh OUTDIR [TK6]
+#   usage: tests/tk5ref.sh OUTDIR [TK11]
 # Then: tools/obsref.py OUTDIR/TK5-win31-S.log OUTDIR/TK5-win31-3.log \
 #           > tests/apps/tk5ref.h
 # With REFRUN_SHELL=PROGMAN.EXE the probe starts from WIN.INI's load=

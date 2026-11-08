@@ -3,7 +3,7 @@
  * is the selector of.
  *
  * Layout: as published in Pietrek, "Windows Internals" (1993), Table 3-1
- * (facts only), checked black-box on Windows 3.1 with tests/apps/tk6.c
+ * (facts only), checked black-box on Windows 3.1 with tests/apps/tk11.c
  * (Standard and 386 Enhanced mode agree). It is the NE header and tables
  * of the file, changed as follows:
  *   02h  usage count (GetModuleUsage)

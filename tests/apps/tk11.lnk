@@ -1,4 +1,4 @@
-# TK6.EXE (tests/apps/tk6.c): imports TKDLL.DLL; exports one procedure
+# TK11.EXE (tests/apps/tk11.c): imports TKDLL.DLL; exports one procedure
 # (prolog.asm) so its entry table is not empty
 @tests/apps/app.lnk
 export ASM_PRO_MOV.1

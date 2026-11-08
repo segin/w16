@@ -76,9 +76,9 @@ u16 task_start(module FAR *m, const char FAR *cmdtail)
     ssel = m->seg[h->ss - 1].sel;
     /* SP of 0 in the header means "end of the stack" (see above). */
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
-    /* UNVERIFIED: Windows 3.1 had 2434h at 18h of TK6's module table (file:
-       0; this SP: 2DF4h); what it is computed from is not known, so w16
-       leaves the file's value. */
+    /* UNVERIFIED: offset 18h of the module table (initial SS:SP) held this
+       SP on Windows 3.1 in one probe build and other values in two
+       earlier ones (ARCHITECTURE.md 9.2); w16 leaves the file's value. */
 
     cur.m = m;
     cur.hinstance = m->seg[h->auto_data - 1].hnd;
