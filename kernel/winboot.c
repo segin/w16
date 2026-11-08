@@ -207,6 +207,7 @@ static void boot_fail(const char FAR *name)
     kputs("\r\n\r\nError loading ");
     kputs(name);
     kputs("\r\n");
+    trace_print();                      /* w16's [w16] trace, if any */
     kexit_to_dos(1);                    /* UNVERIFIED: the exit code */
 }
 

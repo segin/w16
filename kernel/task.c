@@ -803,7 +803,9 @@ void KAPI OldYield(void)                                      /* KERNEL.117 */
 }
 
 /* GetDOSEnvironment: the environment (every task shares KERNEL's). */
-u32 KAPI GetDOSEnvironment(void)                              /* KERNEL.131 */
+/* KERNEL.131, through kentry.asm, which keeps BX and ES (observed on
+   3.1, TK24: only DX:AX change; MOUSE.DRV relies on ES) */
+u32 KAPI GDEnv(void)
 {
     u16 pdb = cur_task ? cur_pdb : psp_sel;
     return (u32)*(u16 FAR *)MK_FP(pdb, 0x2C) << 16;

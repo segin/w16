@@ -1,6 +1,7 @@
 /*
  * tk24.c - register-level KERNEL services USER relies on: GetTaskQueueDS
- * and GetTaskQueueES (KERNEL.118, 119). Called with known values in every
+ * and GetTaskQueueES (KERNEL.118, 119), and what GetDOSEnvironment
+ * (KERNEL.131) leaves in the registers besides DX:AX. Called with known values in every
  * register (tk24s.asm, carry set), after InitApp has made a queue; logs
  * which registers they change. Run as the shell (tests/dropin.sh, and -r
  * for Windows 3.1).
@@ -14,6 +15,7 @@ extern WORD FAR PASCAL K_WAITEVENT(WORD htask);
 extern WORD FAR PASCAL K_GETTASKQUEUE(WORD htask);
 extern int FAR PASCAL U_INITAPP(WORD hinst);
 extern WORD __cdecl q_regs[10];
+extern DWORD FAR PASCAL K_GETDOSENVIRONMENT(void);
 extern void __cdecl __far q_call(int es_version);
 
 static const char *const names[10] = {
@@ -60,6 +62,25 @@ int __cdecl tmain(void)
     show("GetTaskQueueDS");
     q_call(1);
     show("GetTaskQueueES");
+    q_call(2);
+    {
+        DWORD e = K_GETDOSENVIRONMENT();
+        WORD i;
+        obs("GetDOSEnvironment AX", q_regs[0]);
+        obs("GetDOSEnvironment DX==env", q_regs[3] == HIWORD(e));
+        obs("GetDOSEnvironment ES==env", q_regs[8] == HIWORD(e));
+        obs("GetDOSEnvironment ES==DS", q_regs[8] == q_regs[7]);
+        obs_env("GetDOSEnvironment ES", q_regs[8]);
+        obs_env("GetDOSEnvironment DX", q_regs[3]);
+        for (i = 1; i < 7; i++)
+            if (i != 3) {
+                char n[40];
+                lstrcpy(n, "GetDOSEnvironment ");
+                lstrcat(n, names[i]);
+                lstrcat(n, " kept");
+                obs(n, q_regs[i] == before[i]);
+            }
+    }
     out("TK24 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

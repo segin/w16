@@ -12,10 +12,12 @@ segment _DATA
 global _q_regs
 _q_regs times 10 dw 0
 q_ds    dw 0
+q_which dw 0
 segment _TEXT public align=16 class=CODE use16
-extern GETTASKQUEUEDS, GETTASKQUEUEES
+extern GETTASKQUEUEDS, GETTASKQUEUEES, GETDOSENVIRONMENT
 
-; void __cdecl __far q_call(int es_version)
+; void __cdecl __far q_call(int which): 0 GetTaskQueueDS, 1 GetTaskQueueES,
+; 2 GetDOSEnvironment (KERNEL.131)
 global _q_call
 _q_call:
         push bp
@@ -25,7 +27,8 @@ _q_call:
         push ds
         push es
         mov [q_ds wrt DGROUP], ds
-        cmp word [bp + 6], 0
+        mov ax, [bp + 6]
+        mov [q_which wrt DGROUP], ax
         mov ax, 1111h
         mov bx, 2222h
         mov cx, 3333h
@@ -34,9 +37,14 @@ _q_call:
         mov di, 6666h
         push bp
         mov bp, 7777h
-        jne .es
+        cmp word [q_which wrt DGROUP], 1
+        je .es
+        ja .env
         stc
         call far GETTASKQUEUEDS
+        jmp .rec
+.env:   stc
+        call far GETDOSENVIRONMENT
         jmp .rec
 .es:    stc
         call far GETTASKQUEUEES

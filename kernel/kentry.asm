@@ -827,3 +827,15 @@ trace_entry:
         popf
         pop bp
         retf                            ; to the real target
+
+; GetDOSEnvironment (KERNEL.131): task.c's GDEnv, keeping BX and ES, as
+; observed on Windows 3.1 (TK24). MOUSE.DRV uses ES afterwards as it was.
+extern GDENV
+global GETDOSENVIRONMENT
+GETDOSENVIRONMENT:
+        push bx
+        push es
+        call far GDENV
+        pop es
+        pop bx
+        retf
