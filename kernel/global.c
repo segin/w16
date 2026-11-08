@@ -236,8 +236,25 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
         a->flags = (a->flags & ~GMEM_DISCARDABLE) | (flags & GMEM_DISCARDABLE);
         return handle_of(a);
     }
-    if (size == 0)
-        return 0;                       /* UNVERIFIED: discard semantics */
+    if (size == 0) {
+        /* GlobalDiscard. Observed on Windows 3.1 (tests/apps/tk12.c): an
+           unlocked discardable block becomes discarded (GlobalFlags
+           4000h | 0100h, size 0) and keeps its handle, which is returned.
+           UNVERIFIED: moveable blocks that are not discardable (discarded
+           here too, as LocalReAlloc does), locked and fixed blocks (0). */
+        u16 i;
+        if (!(flags & GMEM_MOVEABLE) || a->lock ||
+            !(a->flags & (GMEM_MOVEABLE | GMEM_DISCARDABLE)))
+            return 0;
+        if (!discarded(a)) {
+            dpmi_free_mem(a->dpmi);
+            a->size = 0;
+            a->lin = a->dpmi = 0;
+            for (i = 0; i < a->nsel; i++)
+                dpmi_set_desc(a->sel + i * sel_inc, 0, 0, 0);
+        }
+        return handle_of(a);
+    }
     newsize = ROUND(size);
     if (((newsize + 0xFFFFUL) >> 16) > a->nsel)
         return 0;                       /* TODO: grow the selector tile run */
