@@ -21,6 +21,8 @@ This document records the project's goals, toolchain, source and clean-room poli
 
 ## 3. Source and Clean-Room Policy
 
+w16 is licensed under the MIT licence (`LICENSE`). Everything in the repository must be compatible with that, which is why copyleft code below is reference only.
+
 Every piece of knowledge in w16 must have a recorded source. When a fact, structure layout, ordinal or behaviour comes from a document, cite it in the code or spec (e.g. `/* Source: MT-DOS Memory Management spec, 1984-10-30, MIT */`).
 
 | Source | Status | How it may be used |
@@ -36,6 +38,9 @@ Every piece of knowledge in w16 must have a recorded source. When a fact, struct
 | Windows 3.1 DDK **sample source** | **Excluded** | Public availability removes trade-secret concerns but not copyright. Do not copy, adapt or redistribute it, and whoever writes a w16 module should not read the matching sample. |
 | Windows binaries (any version) | **Forbidden** | Never disassemble or decompile. In particular, never check MT-DOS-derived code against Windows 1.x binaries. |
 | Leaked Windows source | **Forbidden** | Never. |
+| Third-party permissive code (MIT, BSD, zlib), e.g. the user's LOSE.COM (MIT) | **Allowed** | May be included. Keep its copyright notice and licence text. |
+| Third-party copyleft code (GPL, LGPL), e.g. VBADOS/VBMOUSE.DRV (GPL-2.0), Wine's 16-bit DLLs (LGPL) | **Reference only** | Read for facts and approach; never copy or adapt code, which would stop w16 being MIT. |
+| Test-only tools (DOSBox, HDPMI16, the user-supplied reference Windows copies) | **Not shipped** | Used to build and test only; kept out of the repository (`.tools/`). |
 | Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not licensed by MIT. Use only to describe compatibility, never as the product's name. |
 
 Notes:
