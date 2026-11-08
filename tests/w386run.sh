@@ -9,6 +9,8 @@
 # AUTOEXEC.BAT runs "WIN386 C:\PROGRAM.EXE" then POWEROFF.COM (APM), so
 # the program must end the Windows session itself (ExitWindows).
 # W386_SHOT=N: take a screenshot every N seconds (xvfb-run) for debugging.
+# W386_GET="DOS paths" and W386_OUT=dir: copy those files out afterwards
+# (e.g. SNAP2's .DDB screenshots).
 set -eu
 # Never reach the user's desktop: DOSBox-X shows native dialogs (e.g. its
 # quit warning) on whatever display it can find.
@@ -71,6 +73,12 @@ else
         dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >"$work/dosbox.log" 2>&1 || true
 fi
 img="$work/hdd.img@@32256"
+if [ -n "${W386_OUT:-}" ]; then          # files to copy back out of the image
+    mkdir -p "$W386_OUT"
+    for f in ${W386_GET:-}; do
+        MTOOLS_SKIP_CHECK=1 mcopy -o -i "$img" "::$f" "$W386_OUT/" 2>/dev/null || true
+    done
+fi
 for f in WIN386/TK.LOG TK.LOG; do
     MTOOLS_SKIP_CHECK=1 mtype -i "$img" "::$f" 2>/dev/null | tr -d '\r' || true
 done

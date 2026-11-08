@@ -96,6 +96,7 @@ BOOL hotkey_register(void);
 #define IDS_HOTKEYNONE      10
 #define IDS_HOTKEYPREFIX    11
 #define IDS_CANTWRITE       12
+#define IDS_DLGFAIL         13
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;

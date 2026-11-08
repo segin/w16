@@ -293,6 +293,18 @@ UINT FAR pm_WinExec(LPCSTR cmd, UINT show)
     tail[0] = (char)t;
     s_cpy(tail + 1, c, t + 1);
     tail[t + 1] = '\r';
+    {
+        /* Observed: Windows 2.x's loader puts up a system-modal "Change
+           Disk ... insert in drive A:" box when the file is missing,
+           which blocks everything; check first and report "not found"
+           (2) like WinExec does. */
+        OFSTRUCT of;
+        if (OpenFile(file, &of, OF_EXIST) == HFILE_ERROR) {
+            mem_free(file);
+            mem_free(tail);
+            return 2;
+        }
+    }
     shw[0] = 2;
     shw[1] = show;
     lp.env = 0;

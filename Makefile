@@ -34,7 +34,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP TW2 TEXP3 TEXP2
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
@@ -103,6 +103,16 @@ $(DOS)/TEXP2.EXE: $(B)/tests/start.o $(B)/tests/texp2.o tests/apps/app.lnk tools
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/texp2.map file { $(B)/tests/start.o $(B)/tests/texp2.o }
+	python3 tools/nemark.py $@ 2.0
+
+# SNAP2.EXE: SNAP for Windows 2.x (marked 2.0)
+$(B)/tests/snap2.o: tests/apps/snap.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -dSNAP_WIN2 -fo=$@ $<
+$(DOS)/SNAP2.EXE: $(B)/tests/start.o $(B)/tests/snap2.o tests/apps/app.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/snap2.map file { $(B)/tests/start.o $(B)/tests/snap2.o }
 	python3 tools/nemark.py $@ 2.0
 
 # TW2.EXE: the Windows 2.x probe, marked as a Windows 2.0 program

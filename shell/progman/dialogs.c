@@ -3,11 +3,40 @@
  */
 #include "progman.h"
 
+#ifdef PM_DEBUGLOG
+void dbg(const char FAR *s, int v)
+{
+    OFSTRUCT of;
+    HFILE f = OpenFile("C:\\PMDEBUG.LOG", &of, OF_WRITE);
+    char n[8];
+    if (f == HFILE_ERROR)
+        f = OpenFile("C:\\PMDEBUG.LOG", &of, OF_CREATE | OF_WRITE);
+    if (f == HFILE_ERROR)
+        return;
+    _llseek(f, 0, 2);
+    _lwrite(f, s, s_len(s));
+    s_itoa(n, v);
+    _lwrite(f, " ", 1);
+    _lwrite(f, n, s_len(n));
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
+}
+#endif
+
 int run_dialog(HWND owner, FARPROC proc, int id)
 {
     FARPROC thunk = MakeProcInstance(proc, g_hinst);
-    int r = DialogBox(g_hinst, MAKEINTRESOURCE(id), owner, (DLGPROC)thunk);
+    int r;
+#ifdef PM_DEBUGLOG
+    dbg("DialogBox id", id);
+#endif
+    r = DialogBox(g_hinst, MAKEINTRESOURCE(id), owner, (DLGPROC)thunk);
+#ifdef PM_DEBUGLOG
+    dbg("DialogBox returned", r);
+#endif
     FreeProcInstance(thunk);
+    if (r == -1)                        /* could not be created */
+        message(owner, IDS_DLGFAIL, NULL);
     return r;
 }
 

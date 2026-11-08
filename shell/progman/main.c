@@ -154,9 +154,16 @@ static void check(int id, BOOL on)
 
 /* ---- commands ---- */
 
+#ifdef PM_DEBUGLOG
+void dbg(const char FAR *s, int v);
+#endif
+
 static void command(HWND hwnd, WORD id)
 {
     HWND active = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+#ifdef PM_DEBUGLOG
+    dbg("WM_COMMAND", id);
+#endif
 
     switch (id) {
     case IDM_OPEN:
@@ -230,6 +237,10 @@ static void command(HWND hwnd, WORD id)
 
 LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
+#ifdef PM_DEBUGLOG
+    if (msg == WM_COMMAND)
+        dbg("FrameWndProc WM_COMMAND", wp);
+#endif
     switch (msg) {
     case WM_CREATE: {
         CLIENTCREATESTRUCT cc;
@@ -302,6 +313,9 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
 
     (void)cmdline;
     g_hinst = hinst;
+#ifdef PM_DEBUGLOG
+    dbg("WinMain", 0);
+#endif
     if (hprev) {
         /* one Program Manager: bring the existing one forward */
         HWND w = FindWindow(cls_frame, NULL);

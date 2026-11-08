@@ -6,6 +6,8 @@
  *     run <command line>     WinExec it (SW_SHOWNORMAL)
  *     wait <ms>              keep dispatching messages for <ms> ms
  *     menu <letter>          open the active window's menu (Alt+letter)
+ *     cmd <decimal id>       post WM_COMMAND id to the active window (for
+ *                            testing our own programs, whose IDs we know)
  *     key <vk-hex>           post a key press to the window with the focus
  *     char <c>               post a WM_CHAR to the window with the focus
  *     type <text>            post a WM_CHAR for each character of <text>
@@ -18,6 +20,12 @@
  * Used for black-box observation of the reference Windows (the original
  * Program Manager's layout, for UI fidelity) and for comparing w16's own
  * programs against it pixel by pixel. Only documented APIs are used.
+ *
+ * SNAP_WIN2 builds SNAP2.EXE for Windows 2.x (tests/w386run.sh): programs
+ * start through LoadModule, screenshots are device-dependent bitmaps
+ * (GetBitmapBits, no DIBs before 3.0) written as .DDB files that
+ * tools/ddb2png.py converts, and the session ends with ExitWindows when
+ * the script is done.
  */
 #include <windows.h>
 
@@ -51,6 +59,44 @@ static void pump(DWORD ms)
     } while ((long)(GetTickCount() - end) < 0);
 }
 
+static int same(const char *a, const char *b)
+{
+    while (*a && *a == *b) {
+        a++;
+        b++;
+    }
+    return *a == *b;
+}
+
+#ifdef SNAP_WIN2
+/* WinExec for Windows 2.x: LoadModule with a parameter block */
+static UINT start_program(char *cmd)
+{
+    static char tail[130];
+    static WORD show[2] = { 2, SW_SHOWNORMAL };
+    struct { WORD env; LPSTR tail; WORD FAR *show; DWORD res; } lp;
+    char *a = cmd;
+    int n = 0;
+    while (*a && *a != ' ')
+        a++;
+    if (*a)
+        *a++ = 0;
+    while (a[n] && n < 126) {
+        tail[1 + n] = a[n];
+        n++;
+    }
+    tail[0] = (char)n;
+    tail[1 + n] = '\r';
+    lp.env = 0;
+    lp.tail = tail;
+    lp.show = show;
+    lp.res = 0;
+    return (UINT)LoadModule(cmd, &lp);
+}
+#else
+#define start_program(cmd) WinExec(cmd, SW_SHOWNORMAL)
+#endif
+
 static WORD parse_num(const char *s, WORD base)
 {
     WORD v = 0;
@@ -74,14 +120,30 @@ static HWND target(void)
     return h ? h : GetActiveWindow();
 }
 
+/* The top-level window of the focus: Windows 2.x answers GetActiveWindow
+   per task, and SNAP has no window of its own (observed). */
+static HWND top_window(void)
+{
+    HWND h = GetFocus(), p;
+    if (!h)
+        h = GetActiveWindow();
+    if (!h)                             /* Windows 2.x: not our task's */
+        return FindWindow("Progman", NULL);
+    while ((p = GetParent(h)) != NULL)
+        h = p;
+    return h;
+}
+
+#ifndef SNAP_WIN2
 /* ---- screenshot ---- */
+
+#define BAND 96                         /* scan lines per call */
 
 typedef struct {
     BITMAPINFOHEADER h;
     RGBQUAD pal[16];
 } BMI16;
 
-#define BAND 96                         /* scan lines per GetDIBits call */
 
 static int snap(const char *file)
 {
@@ -148,6 +210,8 @@ done:
     return ok;
 }
 
+#endif
+
 /* ---- window dump ---- */
 
 static void outhex(DWORD v, int digits)
@@ -198,8 +262,10 @@ static void dump_tree(HWND w, int depth)
         out(text);
         out("\" style=");
         outhex(GetWindowLong(w, GWL_STYLE), 8);
+#ifndef SNAP_WIN2                       /* no extended styles before 3.0 */
         out(" exstyle=");
         outhex(GetWindowLong(w, GWL_EXSTYLE), 8);
+#endif
         out(" id=");
         outhex(GetWindowWord(w, GWW_ID), 4);
         out(" rect=");
@@ -213,6 +279,68 @@ static void dump_tree(HWND w, int depth)
             dump_tree(c, depth + 1);
     }
 }
+
+#ifdef SNAP_WIN2
+#define BAND 96
+/* The screen as device-dependent bitmap bits, in bands of BAND lines:
+   header "DDB2" cx cy band planes bitspixel widthbytes (words), then
+   each band's GetBitmapBits data. */
+static int snap(const char *file)
+{
+    int cx = GetSystemMetrics(SM_CXSCREEN), cy = GetSystemMetrics(SM_CYSCREEN), y, ok = 0;
+    HDC scr = GetDC(NULL);
+    HDC mem = CreateCompatibleDC(scr);
+    HBITMAP bm = CreateCompatibleBitmap(scr, cx, BAND), old;
+    BITMAP info;
+    HGLOBAL hbuf = NULL;
+    BYTE FAR *buf = NULL;
+    WORD hdr[7], size = 0;
+    HFILE f;
+    OFSTRUCT of;
+
+    if (!mem || !bm)
+        goto done;
+    GetObject(bm, sizeof info, (LPSTR)&info);
+    size = info.bmWidthBytes * info.bmPlanes * BAND;
+    hbuf = GlobalAlloc(GMEM_MOVEABLE, size);
+    buf = hbuf ? (BYTE FAR *)GlobalLock(hbuf) : NULL;
+    if (!buf)
+        goto done;
+    f = OpenFile(file, &of, OF_CREATE | OF_WRITE);
+    if (f == HFILE_ERROR)
+        goto done;
+    hdr[0] = 'D' | ('D' << 8);
+    hdr[1] = 'B' | ('2' << 8);
+    hdr[2] = cx;
+    hdr[3] = cy;
+    hdr[4] = BAND;
+    hdr[5] = info.bmPlanes | (info.bmBitsPixel << 8);
+    hdr[6] = info.bmWidthBytes;
+    _lwrite(f, (LPCSTR)hdr, sizeof hdr);
+    ok = 1;
+    old = SelectObject(mem, bm);
+    for (y = 0; y < cy; y += BAND) {
+        BitBlt(mem, 0, 0, cx, BAND, scr, 0, y, SRCCOPY);
+        SelectObject(mem, old);
+        if (GetBitmapBits(bm, size, (LPSTR)buf) != (LONG)size || _lwrite(f, (LPCSTR)buf, size) != size)
+            ok = 0;
+        SelectObject(mem, bm);
+    }
+    SelectObject(mem, old);
+    _lclose(f);
+done:
+    if (buf)
+        GlobalUnlock(hbuf);
+    if (hbuf)
+        GlobalFree(hbuf);
+    if (bm)
+        DeleteObject(bm);
+    if (mem)
+        DeleteDC(mem);
+    ReleaseDC(NULL, scr);
+    return ok;
+}
+#endif
 
 /* ---- script ---- */
 
@@ -229,33 +357,44 @@ static void run_line(char *l)
     out(l);
     out(" ");
     out(arg);
-    if (!lstrcmp(l, "run")) {
-        if (WinExec(arg, SW_SHOWNORMAL) < 32)
+    if (same(l, "run")) {
+        if (start_program(arg) < 32)
             out(" -> failed");
-    } else if (!lstrcmp(l, "wait")) {
+    } else if (same(l, "wait")) {
         pump(parse_num(arg, 10));
-    } else if (!lstrcmp(l, "menu")) {
-        PostMessage(GetActiveWindow(), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)arg[0]);
+    } else if (same(l, "menu")) {
+        PostMessage(top_window(), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)arg[0]);
         pump(200);
-    } else if (!lstrcmp(l, "key")) {
+    } else if (same(l, "cmd")) {
+        HWND w = top_window();
+        char cls[32];
+        cls[0] = 0;
+        if (w)
+            GetClassName(w, cls, sizeof cls);
+        out(" -> ");
+        out(cls);
+        if (!PostMessage(w, WM_COMMAND, parse_num(arg, 10), 0))
+            out(" (post failed)");
+        pump(300);
+    } else if (same(l, "key")) {
         WORD vk = parse_num(arg, 16);
         PostMessage(target(), WM_KEYDOWN, vk, 1L);
         PostMessage(target(), WM_KEYUP, vk, 0xC0000001L);
         pump(200);
-    } else if (!lstrcmp(l, "type")) {
+    } else if (same(l, "type")) {
         char *c;
         for (c = arg; *c; c++) {
             PostMessage(target(), WM_CHAR, (BYTE)*c, 1L);
             pump(30);
         }
         pump(200);
-    } else if (!lstrcmp(l, "char")) {
+    } else if (same(l, "char")) {
         PostMessage(target(), WM_CHAR, (BYTE)arg[0], 1L);
         pump(200);
-    } else if (!lstrcmp(l, "dump")) {
+    } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);
-    } else if (!lstrcmp(l, "snap")) {
+    } else if (same(l, "snap")) {
         if (!snap(arg))
             out(" -> failed");
     } else {
@@ -291,5 +430,8 @@ int __cdecl tmain(void)
             run_line(p);
     }
     out("SNAP done\r\n");
+#ifdef SNAP_WIN2
+    ExitWindows(0, 0);                  /* not the shell on 2.x: end it */
+#endif
     return 0;
 }
