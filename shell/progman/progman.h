@@ -14,6 +14,7 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include "compat2.h"
 
 /* ---- resource and command IDs (our own numbering) ---- */
 #define IDM_MAIN            1
@@ -54,6 +55,7 @@
 #define MENU_FILE           0
 #define MENU_OPTIONS        1
 #define MENU_WINDOW         2
+#define WINDOW_MENU_FIXED   3           /* Cascade, Tile, Arrange Icons */
 
 /* Run dialog controls */
 #define IDC_RUNCMD          119     /* observed control IDs */

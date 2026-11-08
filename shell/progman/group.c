@@ -35,11 +35,14 @@
  * Observed: on exit the original rewrites only groups that changed; one
  * merely looked at is left byte for byte as it was.
  *
- * Item order, as observed: rgiItems is the z-order, bottom first.
- * Selecting an item (also the initial selection) brings it to the top;
- * deleting one closes the gap and leaves cItems as it was (empty slots
- * at the end). An item's data blocks have an order of their own: new
- * items' data goes at the end of the file, a deleted item's is removed.
+ * Item order, as observed: rgiItems is the z-order, top first; the
+ * initially selected item is the top one. Selecting an item (mouse or
+ * arrow keys) raises it to the top. Typing a letter first sends the
+ * current item to the bottom, then raises the first item, from the top,
+ * whose name starts with that letter. Deleting closes the gap and leaves
+ * cItems as it was (empty slots at the end). An item's data blocks have
+ * an order of their own: new items' data goes at the end of the file, a
+ * deleted item's is removed.
  *
  * Each group lives in global memory as a list of items, and is written
  * back from that model in the layout above. There are no fixed limits
@@ -84,7 +87,7 @@ typedef struct group {
     RECT rc;
     POINT pmin;
     BYTE hdr18[8];                      /* header bytes 18h..1Fh */
-    item FAR * FAR *z;                  /* rgiItems: z-order, bottom first */
+    item FAR * FAR *z;                  /* rgiItems: z-order, top first */
     WORD nz, cap;                       /* used slots, cItems */
     item FAR *dfirst;                   /* data order */
     LPSTR gtags;                        /* other group-level tags */
@@ -232,6 +235,15 @@ static BOOL grow_slots(group FAR *g)
 
 /* Move the item at z-index i to the top (observed on selection). */
 static void raise_item(group FAR *g, int i)
+{
+    item FAR *t = g->z[i];
+    for (; i > 0; i--)
+        g->z[i] = g->z[i - 1];
+    g->z[0] = t;
+}
+
+/* Move the item at z-index i to the bottom (observed on letter keys). */
+static void lower_item(group FAR *g, int i)
 {
     item FAR *t = g->z[i];
     for (; i + 1 < (int)g->nz; i++)
@@ -579,13 +591,10 @@ static HWND open_window(group FAR *g, BOOL use_rc)
     return g->hwnd;
 }
 
-/* The initial selection, which the original also brings to the top. */
+/* The initial selection: the top item (observed; nothing moves). */
 static void initial_select(group FAR *g)
 {
-    if (g->nz) {
-        g->sel = g->z[0];
-        raise_item(g, 0);
-    }
+    g->sel = g->nz ? g->z[0] : NULL;
 }
 
 /* Create the window for a group file. ininum is N of GroupN=. */
@@ -758,7 +767,7 @@ static void paint(HWND hwnd, group FAR *g)
                   GetActiveWindow() == g_frame;
     WORD i;
 
-    for (i = 0; i < g->nz; i++) {       /* bottom first */
+    for (i = g->nz; i-- > 0;) {         /* bottom first */
         item FAR *t = g->z[i];
         RECT r;
         BOOL hi = active && t == g->sel;
@@ -787,7 +796,7 @@ static item FAR *hit(HWND hwnd, group FAR *g, int x, int y)
     HDC dc = GetDC(hwnd);
     item FAR *found = NULL;
     int i;
-    for (i = g->nz - 1; i >= 0 && !found; i--) {
+    for (i = 0; i < (int)g->nz && !found; i++) {   /* top first */
         item FAR *t = g->z[i];
         RECT r;
         if (x >= t->x + ICON_DX && x < t->x + ICON_DX + 32 &&
@@ -931,6 +940,7 @@ static BOOL add_tag(item FAR *t, WORD id, const void FAR *data, WORD n)
     return TRUE;
 }
 
+#ifndef W16_WIN2
 /* Copy an icon's bits (header, AND, XOR) out of an HICON (see
    ARCHITECTURE.md 6.11: w16's USER must keep this layout). Windows 3.x
    keeps an icon as a global block holding exactly the 12-byte header
@@ -959,6 +969,8 @@ static BOOL icon_bits(item FAR *t, HICON hicon)
     GlobalUnlock((HGLOBAL)hicon);
     return ok;
 }
+
+#endif
 
 /* Is the extension of path one of the program types? */
 static BOOL is_program(const char FAR *path)
@@ -1006,6 +1018,14 @@ static void choose_icon(item FAR *t)
         }
         mem_free(file);
     }
+#ifdef W16_WIN2
+    /* no SHELL.DLL (ExtractIcon) and no CreateIcon on Windows 2.x: the
+       item keeps its icon path, with no cached bits (TODO) */
+    (void)h;
+    if (!t->iconpath)
+        t->iconpath = s_dup("");
+    make_icon(t);
+#else
     if (t->iconpath) {
         h = ExtractIcon(g_hinst, t->iconpath, 0);
         if ((UINT)h <= 1)
@@ -1027,6 +1047,7 @@ static void choose_icon(item FAR *t)
     if (!t->iconpath)
         t->iconpath = s_dup("");
     make_icon(t);
+#endif
 }
 
 /* File > New > Program Item. dir and hotkey are optional (hotkey 0 =
@@ -1098,9 +1119,18 @@ BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
     }
     choose_icon(t);
     free_cell(hwnd, g, &t->x, &t->y);
-    g->z[g->nz++] = t;                  /* on top */
+    {                                   /* on top */
+        WORD k;
+        for (k = g->nz; k > 0; k--)
+            g->z[k] = g->z[k - 1];
+        g->z[0] = t;
+        g->nz++;
+    }
     data_append(g, t);
     if (!write_group(g)) {
+        int k;
+        for (k = 0; k + 1 < (int)g->nz; k++)
+            g->z[k] = g->z[k + 1];
         g->nz--;
         data_remove(g, t);
         free_item(t);
@@ -1133,7 +1163,7 @@ BOOL group_delete_selected(HWND hwnd)
     g->nz--;
     data_remove(g, t);
     /* UNVERIFIED: which item is selected next; the top one here */
-    g->sel = g->nz ? g->z[g->nz - 1] : NULL;
+    g->sel = g->nz ? g->z[0] : NULL;
     invalidate_item(hwnd, g->sel);
     free_item(t);
     return write_group(g);
@@ -1163,6 +1193,7 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             group_arrange(hwnd);
         break;
     case WM_LBUTTONDOWN:
+        SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)hwnd, 0);
         if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL)
             select_item(hwnd, g, t);
         return 0;
@@ -1189,24 +1220,49 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         select_item(hwnd, g, t);
         return 0;
     case WM_CHAR:
-        /* first letter: the next item, in slot order, whose name starts
-           with it (the selected item sits at the top, so the search
-           starts from the bottom) */
+        /* observed: the current item goes to the bottom, then the first
+           item from the top whose name starts with the letter is
+           selected (and so raised) */
         if (g && g->nz) {
             char c = (char)wp;
             WORD k;
+            int cur = g->sel ? zindex(g, g->sel) : -1;
             if (c >= 'a' && c <= 'z')
                 c -= 'a' - 'A';
             for (k = 0; k < g->nz; k++) {
                 char f = g->z[k]->name[0];
                 if (f >= 'a' && f <= 'z')
                     f -= 'a' - 'A';
-                if (f == c && g->z[k] != g->sel) {
-                    select_item(hwnd, g, g->z[k]);
+                if (f == c)
+                    break;
+            }
+            if (k == g->nz)
+                return 0;               /* UNVERIFIED: no match, nothing moves */
+            if (cur >= 0)
+                lower_item(g, cur);
+            for (k = 0; k < g->nz; k++) {
+                char f = g->z[k]->name[0];
+                if (f >= 'a' && f <= 'z')
+                    f -= 'a' - 'A';
+                if (f == c) {
+                    item FAR *t = g->z[k];
+                    if (t == g->sel)    /* the only match: raise it again */
+                        raise_item(g, k);
+                    else
+                        select_item(hwnd, g, t);
                     break;
                 }
             }
         }
+        return 0;
+    case WM_SYSCOMMAND:
+        /* observed: closing a group (Ctrl+F4, its Close command) only
+           minimizes it; it stays in Order= and its file */
+        if ((wp & 0xFFF0) != SC_CLOSE)
+            break;
+        /* fall through */
+    case WM_CLOSE:
+        ShowWindow(hwnd, SW_MINIMIZE);
         return 0;
     case WM_DROPFILES:
         DragFinish((HDROP)wp);          /* TODO: add items for the files */
@@ -1224,12 +1280,20 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 BOOL group_register(void)
 {
     WNDCLASS wc;
-    LOGFONT lf;
+#ifndef W16_WIN2
+    LOGFONT lf;                         /* Windows 2.x: the system font */
+#endif
 
+#ifdef W16_WIN2
+    def_icon = LoadIcon(NULL, IDI_APPLICATION); /* TODO: 2.x-format icons */
+#else
     def_icon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_DEFITEM));
+#endif
+#ifndef W16_WIN2
     /* the icon title font, as the user configured it (Windows 3.1) */
     if (SystemParametersInfo(SPI_GETICONTITLELOGFONT, sizeof lf, &lf, 0))
         title_font = CreateFontIndirect(&lf);
+#endif
 
     wc.style = CS_DBLCLKS;
     wc.lpfnWndProc = GroupWndProc;

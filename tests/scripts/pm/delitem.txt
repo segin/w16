@@ -1,0 +1,14 @@
+run PROGMAN.EXE
+wait 3000
+char c
+char c
+wait 300
+snap C:\C1.BMP
+key 2E
+wait 500
+key 0D
+wait 800
+snap C:\C2.BMP
+menu f
+char x
+wait 1500

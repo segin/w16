@@ -237,7 +237,7 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         window_menu = GetSubMenu(GetMenu(hwnd), MENU_WINDOW);
         cc.hWindowMenu = window_menu;
         cc.idFirstChild = IDM_FIRSTCHILD;
-        g_client = CreateWindow("MDICLIENT", NULL,
+        g_client = CreateWindow(MDI_CLIENT_CLASS, NULL,
                                 WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_BORDER,
                                 0, 0, 0, 0, hwnd, (HMENU)1, g_hinst, (LPVOID)&cc);
         return g_client ? 0 : -1;
@@ -304,6 +304,10 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
         }
         return 0;
     }
+#ifdef W16_WIN2
+    if (!mdi2_register(hinst))
+        return 1;
+#endif
     if (!register_frame() || !group_register() || !hotkey_register())
         return 1;
 

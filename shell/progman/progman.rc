@@ -11,9 +11,13 @@
 #include <windows.h>
 #include "progman.h"
 
+/* Windows 2.x cannot read 3.x-format icons; the 2.x build has none yet
+   (TODO: icons in the 2.x format), nor dialog fonts (3.0 and later). */
+#ifndef W16_WIN2
 IDI_PROGMAN ICON "progman.ico"
 IDI_GROUP   ICON "group.ico"
 IDI_DEFITEM ICON "defitem.ico"
+#endif
 
 IDM_MAIN MENU
 BEGIN
@@ -85,7 +89,9 @@ END
 IDD_NEW DIALOG 23, 20, 162, 63
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "New Program Object"
+#ifndef W16_WIN2
 FONT 8, "MS Sans Serif"
+#endif
 BEGIN
     GROUPBOX        "New", IDC_STATIC, 9, 6, 95, 41, WS_GROUP
     CONTROL         "Program &Group", IDC_NEWGROUP, "Button",
@@ -101,7 +107,9 @@ END
 IDD_GROUPPROPS DIALOG 23, 21, 226, 63
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Program Group Properties"
+#ifndef W16_WIN2
 FONT 8, "MS Sans Serif"
+#endif
 BEGIN
     CONTROL         "&Description:", IDC_STATIC, "Static", SS_LEFT, 5, 9, 45, 10
     EDITTEXT        IDC_DESC, 54, 7, 119, 12, ES_AUTOHSCROLL
@@ -116,7 +124,9 @@ END
 IDD_ITEMPROPS DIALOG 23, 20, 251, 97
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Program Item Properties"
+#ifndef W16_WIN2
 FONT 8, "MS Sans Serif"
+#endif
 BEGIN
     CONTROL         "&Description:", IDC_STATIC, "Static", SS_LEFT, 5, 10, 60, 10
     EDITTEXT        IDC_DESC, 77, 6, 105, 12, ES_AUTOHSCROLL
@@ -140,7 +150,9 @@ END
 IDD_RUN DIALOG 23, 20, 210, 81
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Run"
+#ifndef W16_WIN2
 FONT 8, "MS Sans Serif"
+#endif
 BEGIN
     LTEXT           "&Command Line:", 99, 3, 12, 60, 10, WS_GROUP
     EDITTEXT        IDC_RUNCMD, 3, 23, 134, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
@@ -157,9 +169,13 @@ END
 IDD_ABOUT DIALOG 23, 20, 220, 158
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "About Program Manager"
+#ifndef W16_WIN2
 FONT 8, "MS Sans Serif"
+#endif
 BEGIN
+#ifndef W16_WIN2
     ICON            IDI_PROGMAN, -1, 10, 5, 18, 20
+#endif
     LTEXT           "w16 Program Manager", -1, 45, 5, 127, 10, SS_NOPREFIX
     LTEXT           "Version 3.1", -1, 45, 15, 100, 10, SS_NOPREFIX
     LTEXT           "A clean-room reimplementation, part of w16.", -1,

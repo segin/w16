@@ -37,7 +37,8 @@ TESTS   := TK1 TK2
 WINTOOLS := SNAP TW2 TEXP3 TEXP2
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
-            $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o
+            $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
+            $(B)/shell/progman/compat2.o $(B)/shell/progman/mdi2.o
 ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
             $(B)/shell/res/defitem.ico
 
@@ -141,7 +142,7 @@ shell2: $(WIN2)/PROGMAN.EXE
 $(B)/shell/start.o: shell/start.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
-$(B)/shell/progman/%.o: shell/progman/%.c shell/progman/progman.h
+$(B)/shell/progman/%.o: shell/progman/%.c shell/progman/progman.h shell/progman/compat2.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(ICONS) &: tools/mkicons.py
@@ -159,7 +160,7 @@ $(DOS)/PROGMAN.EXE: $(SHELL_PM) $(B)/shell/progman/progman.res shell/progman/pro
 $(B)/shell2/start.o: $(B)/shell/start.o
 	@mkdir -p $(@D)
 	cp $< $@
-$(B)/shell2/progman/%.o: shell/progman/%.c shell/progman/progman.h
+$(B)/shell2/progman/%.o: shell/progman/%.c shell/progman/progman.h shell/progman/compat2.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -fo=$@ $<
 $(B)/shell2/progman/progman.res: shell/progman/progman.rc shell/progman/progman.h $(ICONS)

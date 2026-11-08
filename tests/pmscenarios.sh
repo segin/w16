@@ -1,0 +1,47 @@
+#!/bin/sh
+# Program Manager regression against the original: each scenario in
+# tests/scripts/pm/*.txt (a SNAP.EXE script that starts "run PROGMAN.EXE")
+# runs once with the original Program Manager and once with w16's
+# (build/dos/PROGMAN.EXE) on the reference Windows 3.1. Afterwards the
+# group files and PROGMAN.INI must be byte-identical, and screenshots may
+# differ only by our own icon art (reported as pixel counts).
+#   usage: tests/pmscenarios.sh [scenario...]    (default: all)
+set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
+root=$(cd "$(dirname "$0")/.." && pwd)
+out=$root/build/ref/scenarios
+files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/TESTGROU.GRP"
+names=${*:-$(cd "$root/tests/scripts/pm" && ls *.txt | sed 's/\.txt$//')}
+status=0
+for n in $names; do
+    for who in orig w16; do
+        d=$out/$n/$who
+        rm -rf "$d"; mkdir -p "$d"
+        if [ $who = orig ]; then
+            sed 's/$/\r/' "$root/tests/scripts/pm/$n.txt" > "$d/SNAP.TXT"
+            extra=
+        else
+            sed 's/^run PROGMAN.EXE$/run C:\\PROGMAN.EXE/; s/$/\r/' "$root/tests/scripts/pm/$n.txt" > "$d/SNAP.TXT"
+            extra=$root/build/dos/PROGMAN.EXE
+        fi
+        REFRUN_FILES="$d/SNAP.TXT $extra" REFRUN_OUT=$d REFRUN_GET="$files" \
+            "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt"
+    done
+    result=ok
+    for f in $files; do
+        b=$(basename "$f")
+        if [ -f "$out/$n/orig/$b" ] || [ -f "$out/$n/w16/$b" ]; then
+            cmp -s "$out/$n/orig/$b" "$out/$n/w16/$b" || { result=FAIL; echo "  $n: $b differs"; }
+        fi
+    done
+    shots=""
+    for f in "$out/$n"/orig/*.BMP; do
+        [ -f "$f" ] || continue
+        s=$(basename "$f" .BMP)
+        px=$(magick compare -metric AE "$f" "$out/$n/w16/$s.BMP" null: 2>&1 | cut -d' ' -f1)
+        shots="$shots $s=$px"
+    done
+    echo "== $n: $result (pixels:$shots)"
+    [ $result = ok ] || status=1
+done
+exit $status

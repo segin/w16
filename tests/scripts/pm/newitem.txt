@@ -1,0 +1,34 @@
+run PROGMAN.EXE
+wait 3000
+menu f
+char n
+wait 500
+snap C:\N1.BMP
+key 26
+wait 200
+snap C:\N2.BMP
+key 0D
+wait 500
+snap C:\NG.BMP
+dump
+type Test Group
+key 0D
+wait 1000
+snap C:\NG2.BMP
+menu f
+char n
+wait 500
+snap C:\N3.BMP
+key 0D
+wait 500
+snap C:\NI.BMP
+dump
+type Notepad Item
+key 09
+type NOTEPAD.EXE
+key 0D
+wait 1500
+snap C:\NI2.BMP
+menu f
+char x
+wait 1500

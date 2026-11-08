@@ -1,0 +1,11 @@
+run PROGMAN.EXE
+wait 3000
+key 27
+wait 300
+menu -
+wait 300
+char c
+wait 800
+menu f
+char x
+wait 1500
