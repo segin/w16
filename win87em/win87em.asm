@@ -456,7 +456,8 @@ fpm_emu:
 ; Observed (tests/apps/tk9.c): takes one word argument (pops 2 bytes;
 ; 0, 1 and 200h all behaved the same) and reinitialises the coprocessor
 ; like function 0 (the register stack emptied, control word 1330h);
-; AX = 0, CX = 0, BX, SI, DI kept, CF = 0. Without a coprocessor the
+; AX = 0, CX = 0, CF = 0 (BX, SI and DI came back as 01A6h, an internal
+; value it seems; kept here). Without a coprocessor the
 ; 3.1 emulator ended the program at its next floating-point instruction
 ; afterwards; here the emulator is reset instead (UNVERIFIED: what the
 ; argument means; probably a task, as in a per-task clean-up).
