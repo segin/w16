@@ -174,7 +174,7 @@ static void table(void)
     obs("after table: name length", B(hm, p + 2));
     for (n = 0; n < 11; n++) {
         WORD e = ni_n(n);
-        obs(cat(rname[n], "offset"), W(hm, e));
+        obs_env(cat(rname[n], "offset"), W(hm, e));
         obs(cat(rname[n], "length"), W(hm, e + 2));
         obs(cat(rname[n], "id"), (W(hm, e + 6) & 0x8000) ? W(hm, e + 6) : 0);
     }
