@@ -280,14 +280,14 @@ static void command(HWND hwnd, WORD id)
         else
             SendMessage(g_client, WM_MDIICONARRANGE, 0, 0);
         break;
-    case IDM_HELPCONTENTS:
-        WinHelp(hwnd, "PROGMAN.HLP", HELP_INDEX, 0);
+    case IDM_HELPCONTENTS:              /* also F1 (an accelerator) */
+        help_contents(hwnd);
         break;
     case IDM_HELPSEARCH:
-        WinHelp(hwnd, "PROGMAN.HLP", HELP_PARTIALKEY, (DWORD)(LPCSTR)"");
+        help_search(hwnd);
         break;
     case IDM_HELPHELP:
-        WinHelp(hwnd, NULL, HELP_HELPONHELP, 0);
+        help_on_help(hwnd);
         break;
     case IDM_TUTORIAL:
         pm_exec(hwnd, "WINTUTOR.EXE", NULL, FALSE);
@@ -361,6 +361,7 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         command(hwnd, wp);
         return 0;
     case WM_MENUSELECT:
+        help_menu_select(wp, lp);
         if (LOWORD(lp) == 0xFFFF && !HIWORD(lp)) {      /* the menu closed */
             menu_closed_at = GetTickCount();
         } else {
@@ -404,7 +405,8 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
            ExitWindows) */
         return TRUE;
     case WM_DESTROY:
-        WinHelp(hwnd, NULL, HELP_QUIT, 0);
+        help_quit(hwnd);               /* UNVERIFIED: the original's */
+        help_done();
         PostQuitMessage(0);
         return 0;
     }
@@ -466,6 +468,7 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
 #endif
         )
         return 1;
+    help_init();
 
     g_autoarrange = ini_bool("AutoArrange", FALSE);
     g_minonrun = ini_bool("MinOnRun", FALSE);

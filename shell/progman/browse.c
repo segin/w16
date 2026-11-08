@@ -954,7 +954,7 @@ BOOL CALLBACK __export BrowseDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_B_HELP:
-            WinHelp(dlg, "PROGMAN.HLP", HELP_CONTENTS, 0);
+            help_topic(dlg, help_browse_current());
             return TRUE;
         }
         break;

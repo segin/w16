@@ -1,0 +1,15 @@
+run PROGMAN.EXE
+wait 3000
+menu f
+char r
+wait 800
+alt b
+wait 1500
+dump
+type NOTEPAD.EXE
+key 0D
+wait 1000
+snap C:\R1.BMP
+dump
+key 1B
+wait 500
