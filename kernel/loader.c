@@ -354,36 +354,28 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
      10, ES 11), 90 9B -> CD 3D. WIN87EM's emulator handles these; a
      program that does not import WIN87EM gets no emulator.
    Code is never patched back afterwards (observed in both cases).
-   UNVERIFIED: non-additive records (MS LINK and wlink write additive
-   ones); followed as a chain here. */
+   The record's additive flag does not matter and there are no chains
+   (observed with tests/apps/tk10.c: a record without the flag whose site
+   held the offset of another site patched only its own site, as a
+   number: 04BCh became 04B1h with a coprocessor, 60EEh without). With a
+   coprocessor the first byte is lowered by 0Bh (9Bh -> 90h). */
 static void os_fixup(u16 sel, const ne_reloc FAR *rr, int have87)
 {
     static const u16 fi[] = { NEFIX_FIARQQ, NEFIX_FISRQQ, NEFIX_FICRQQ,
                               NEFIX_FIERQQ, NEFIX_FIDRQQ, NEFIX_FIWRQQ };
     static const u16 fj[] = { NEFIX_FJARQQ, NEFIX_FJSRQQ, NEFIX_FJCRQQ };
     u8 FAR *p = MK_FP(sel, 0);
-    u32 size = gsize_of_sel(sel);
-    u16 type = rr->t1, off = rr->offset, n;
+    u16 type = rr->t1, off = rr->offset;
 
-    if (type < NEOSFIX_DS || type > NEOSFIX_W)
+    if (type < NEOSFIX_DS || type > NEOSFIX_W ||
+        (u32)off + 3 > gsize_of_sel(sel))
         return;
-    for (n = 0; ; n++) {
-        u16 next;
-        if ((u32)off + 3 > size)
-            return;
-        next = *(u16 FAR *)(p + off);
-        if (have87 && type != NEOSFIX_W) {
-            p[off] = 0x90;
-        } else {
-            *(u16 FAR *)(p + off) += fi[type - 1];
-            if (type <= NEOSFIX_CS)
-                *(u16 FAR *)(p + off + 1) += fj[type - 1];
-        }
-        /* a chain ends at FFFFh; a segment can not hold more links than
-           bytes (a guard against a looping chain) */
-        if ((rr->flags & NERF_ADDITIVE) || next == NE_CHAIN_END || n > size)
-            return;
-        off = next;
+    if (have87 && type != NEOSFIX_W) {
+        p[off] -= 0x0B;
+    } else {
+        *(u16 FAR *)(p + off) += fi[type - 1];
+        if (type <= NEOSFIX_CS)
+            *(u16 FAR *)(p + off + 1) += fj[type - 1];
     }
 }
 
