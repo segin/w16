@@ -79,6 +79,31 @@ int3d_handler:
 ; tests/apps/tk15.c: the selector GetCurrentPDB gives).
 global int21_handler
 int21_handler:
+        ; record the call (AX, BX, DX, caller CS:IP) in a ring of 16 for
+        ; the fault report (fault.c)
+        push ds
+        push bx
+        push bp
+        mov bp, sp
+        mov bx, DGROUP
+        mov ds, bx
+        mov bx, [_i21_pos wrt DGROUP]
+        add bx, 10
+        cmp bx, 160
+        jb .rok
+        xor bx, bx
+.rok:   mov [_i21_pos wrt DGROUP], bx
+        mov [_i21_ring + bx wrt DGROUP], ax
+        push word [bp + 2]
+        pop word [_i21_ring + bx + 2 wrt DGROUP]        ; caller's BX
+        mov [_i21_ring + bx + 4 wrt DGROUP], dx
+        push word [bp + 6]
+        pop word [_i21_ring + bx + 6 wrt DGROUP]        ; IP
+        push word [bp + 8]
+        pop word [_i21_ring + bx + 8 wrt DGROUP]        ; CS
+        pop bp
+        pop bx
+        pop ds
         cmp ah, 4Ch
         je .exit
         cmp ah, 51h
@@ -441,3 +466,196 @@ __E000H:        db 0
 __0040H:        db 0
 __F000H:        db 0
 __C000H:        db 0
+
+; ---------------------------------------------------------------------------
+; Fault reporting while booting Windows (fault.c). A DPMI exception
+; handler (DPMI 0.9, 16-bit frame: return CS:IP to the host, error code,
+; IP, CS, FLAGS, SP, SS) records the faulting state, points the frame at
+; fault_exit on KERNEL's exit stack and returns to the host, which
+; resumes there; fault_exit calls fault_report (does not return).
+extern _fault_report            ; void __cdecl __far fault_report(void)
+global _fault_regs
+segment _BSS
+global _i21_ring, _i21_pos
+_i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
+_i21_pos        resw 1
+_fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+segment _TEXT
+
+%macro FAULTENTRY 1
+global fault_entry_%1
+fault_entry_%1:
+        push word %1
+        jmp fault_common
+%endmacro
+FAULTENTRY 00h
+FAULTENTRY 06h
+FAULTENTRY 0Bh
+FAULTENTRY 0Ch
+FAULTENTRY 0Dh
+FAULTENTRY 0Eh
+
+fault_common:
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        pop word [_fault_regs + 14 wrt DGROUP]          ; ax
+        pop word [_fault_regs + 28 wrt DGROUP]          ; ds
+        mov ax, [bp + 2]
+        mov [_fault_regs wrt DGROUP], ax                ; exception
+        mov ax, [bp + 8]
+        mov [_fault_regs + 2 wrt DGROUP], ax            ; error code
+        mov ax, [bp + 10]
+        mov [_fault_regs + 4 wrt DGROUP], ax            ; ip
+        mov ax, [bp + 12]
+        mov [_fault_regs + 6 wrt DGROUP], ax            ; cs
+        mov ax, [bp + 14]
+        mov [_fault_regs + 8 wrt DGROUP], ax            ; flags
+        mov ax, [bp + 16]
+        mov [_fault_regs + 10 wrt DGROUP], ax           ; sp
+        mov ax, [bp + 18]
+        mov [_fault_regs + 12 wrt DGROUP], ax           ; ss
+        mov [_fault_regs + 16 wrt DGROUP], bx
+        mov [_fault_regs + 18 wrt DGROUP], cx
+        mov [_fault_regs + 20 wrt DGROUP], dx
+        mov [_fault_regs + 22 wrt DGROUP], si
+        mov [_fault_regs + 24 wrt DGROUP], di
+        mov ax, [bp]
+        mov [_fault_regs + 26 wrt DGROUP], ax           ; bp
+        mov [_fault_regs + 30 wrt DGROUP], es
+        mov word [bp + 10], fault_exit
+        mov word [bp + 12], cs
+        mov word [bp + 16], exit_stack_top wrt DGROUP
+        mov word [bp + 18], DGROUP
+        pop bp
+        add sp, 2
+        retf
+fault_exit:
+        mov ax, DGROUP
+        mov ds, ax
+        mov es, ax
+        call far _fault_report
+.hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; Boot watchdog (fault.c): a protected-mode IRQ 0 (INT 08h) handler that
+; samples the interrupted CS:IP into a ring of 64 and counts ticks; when
+; wd_limit ticks pass without progress (fault.c resets wd_ticks), it
+; points the interrupt's return at wd_fire, which reports the samples.
+; It stays the first handler: when a driver (SYSTEM.DRV's timer) hooks
+; INT 08h after it and calls it from its own handler, it takes the
+; vector back, calls that driver's handler itself (wd_next8), and passes
+; the driver's nested call straight on to the original handler
+; (wd_orig8). Otherwise its samples would all be in the driver's handler.
+extern _wd_report               ; void __cdecl __far wd_report(void)
+global _wd_orig8, _wd_next8, _wd_ticks, _wd_limit, _wd_samples, _wd_pos
+global wd_int08
+segment _DATA
+_wd_orig8       dd 0
+_wd_next8       dd 0
+_wd_ticks       dw 0
+_wd_limit       dw 0
+_wd_pos         dw 0
+wd_busy         dw 0
+segment _BSS
+_wd_samples     resw 128        ; 64 x (ip cs)
+segment _TEXT
+wd_int08:
+        sub sp, 4                       ; room for a far target
+        push ds
+        push bx
+        push bp
+        mov bp, sp                      ; [bp+6] target, [bp+10] IP, CS, FL
+        mov bx, DGROUP
+        mov ds, bx
+        cmp word [wd_busy wrt DGROUP], 0
+        jne .orig                       ; nested: the driver's chain
+        ; are we still the first handler?
+        push ax
+        push cx
+        push dx
+        mov ax, 0204h
+        mov bl, 08h
+        int 31h
+        mov ax, cs
+        cmp cx, ax
+        jne .taken
+        cmp dx, wd_int08
+        je .first
+.taken: ; a driver hooked in front of us and called us: take the vector
+        ; back for the next tick, and pass this call on
+        mov [_wd_next8 wrt DGROUP], dx
+        mov [_wd_next8 + 2 wrt DGROUP], cx
+        mov ax, 0205h
+        mov bl, 08h
+        mov cx, cs
+        mov dx, wd_int08
+        int 31h
+        pop dx
+        pop cx
+        pop ax
+        jmp .orig
+.first: pop dx
+        pop cx
+        pop ax
+        mov bx, [_wd_pos wrt DGROUP]
+        add bx, 4
+        and bx, 255
+        mov [_wd_pos wrt DGROUP], bx
+        push word [bp + 10]
+        pop word [_wd_samples + bx wrt DGROUP]
+        push word [bp + 12]
+        pop word [_wd_samples + bx + 2 wrt DGROUP]
+        inc word [_wd_ticks wrt DGROUP]
+        mov bx, [_wd_limit wrt DGROUP]
+        or bx, bx
+        jz .next
+        cmp [_wd_ticks wrt DGROUP], bx
+        jb .next
+        mov word [_wd_limit wrt DGROUP], 0
+        mov word [bp + 10], wd_fire
+        mov word [bp + 12], cs
+.next:  ; call the next handler (a driver's, else the original) like an
+        ; interrupt, then return from ours
+        mov bx, [_wd_next8 wrt DGROUP]
+        mov [bp + 6], bx
+        mov bx, [_wd_next8 + 2 wrt DGROUP]
+        mov [bp + 8], bx
+        mov word [wd_busy wrt DGROUP], 1
+        pop bp
+        pop bx
+        pop ds
+        push bp
+        mov bp, sp
+        pushf
+        call far [bp + 2]
+        pop bp
+        add sp, 4
+        push ds
+        push bx
+        mov bx, DGROUP
+        mov ds, bx
+        mov word [wd_busy wrt DGROUP], 0
+        pop bx
+        pop ds
+        iret
+.orig:  mov bx, [_wd_orig8 wrt DGROUP]
+        mov [bp + 6], bx
+        mov bx, [_wd_orig8 + 2 wrt DGROUP]
+        mov [bp + 8], bx
+        pop bp
+        pop bx
+        pop ds
+        retf                            ; to the original handler (IRET frame)
+wd_fire:
+        mov ax, DGROUP
+        mov ds, ax
+        mov es, ax
+        mov ss, ax
+        mov sp, exit_stack_top wrt DGROUP
+        sti
+        call far _wd_report
+.hang:  jmp .hang

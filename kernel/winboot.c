@@ -41,6 +41,8 @@ u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n);
 u16 KAPI LoadLibrary(const char FAR *name);
 u32 KAPI GetProcAddress(u16 h, const char FAR *name);
 u16 KAPI GetModuleHandle(const char FAR *name);
+u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
+                              const char FAR *file);
 
 /* ---- the boot log ---- */
 
@@ -64,6 +66,7 @@ static void diag_write(const char FAR *s)
 {
     int cf;
     u16 fh;
+    wd_progress();
     if (!diag)
         return;
     fh = dos(0x3D22, 0, 0, FP_OFF((char FAR *)logpath),
@@ -207,9 +210,12 @@ u16 winboot(void)
     u8 FAR *psp = MK_FP(psp_sel, 0);
     u8 tail[0x80];
     module FAR *m;
-    u16 i, n, err, ad;
+    u16 i, n, err, ad, libinit = 0;
 
     winboot_active = 1;
+    fault_init();
+    task_boot_tdb();
+    wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
     if (take_switch_b())
         diag_init();
     booting = 1;
@@ -235,11 +241,11 @@ u16 winboot(void)
     kmemcpy(tail + 1, psp + 0x81 + i, n - i);
     tail[1 + n - i] = '\r';
     diag_load_start(shell);
-    m = module_load_program(shell, &err);
+    m = module_load_program_init(shell, &err, &libinit);
     ad = m ? NE_HDR(m)->auto_data : 0;
     if (m && (!ad || ad > m->seg_count ||
               !task_create(m, m->seg[ad - 1].sel, m->seg[ad - 1].hnd, 0,
-                           (const u8 FAR *)tail, (const u16 FAR *)show, 0)))
+                           (const u8 FAR *)tail, (const u16 FAR *)show, libinit)))
         err = 11;                       /* UNVERIFIED */
     else if (m)
         err = m->seg[ad - 1].hnd;
@@ -248,5 +254,7 @@ u16 winboot(void)
         boot_fail(shell);
     booting = 0;
     final_user_init();
+    wd_stop();
+    task_boot_tdb_end();
     return task_boot();
 }

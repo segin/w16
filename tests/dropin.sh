@@ -20,6 +20,9 @@
 #                virtual X display, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
+# SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
+# seconds, our KERNEL reports where the processor was and exits (-i
+# w16:watchdog=0 turns that off).
 #
 # Prints KERNEL's messages (C:\OUT.TXT: WIN's standard output), the boot
 # log, and a summary: which modules loaded, whether USER's initialisation
@@ -29,7 +32,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 shot= keep= useref= files= inis=
+cmd='WIN /S /B' secs=60 shot= keep= useref= files= inis='w16:watchdog=15'
 while getopts k:c:t:f:i:s:o:r opt; do
     case $opt in
     k) kernel=$OPTARG ;;

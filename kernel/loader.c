@@ -961,6 +961,21 @@ static module FAR *acquire(const char FAR *name, u16 *err)
     return m;
 }
 
+/* the same, while a task is current (the boot task): *libinit gets the
+   list of DLLs the program's InitTask is to initialise (for task_create) */
+module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit)
+{
+    module FAR *m;
+    last_libinit = 0;
+    m = load_file(path, NULL, 1, err);
+    *libinit = last_libinit;
+    last_libinit = 0;
+    if (m)
+        uses(m, 1);
+    sweep();
+    return m;
+}
+
 module FAR *module_load_program(const char FAR *path, u16 *err)
 {
     module FAR *m = load_file(path, NULL, 1, err);
