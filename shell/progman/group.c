@@ -1475,6 +1475,27 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     return write_group(src);
 }
 
+/* Start every item of the group, as Windows does with StartUp. Each
+   item runs as its Properties say (working directory, Run Minimized).
+   UNVERIFIED: the original's order; here the order of the file's data. */
+void group_run_all(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t, FAR *keep;
+    if (!g)
+        return;
+    keep = g->sel;
+    for (t = g->dfirst; t; t = t->dnext) {
+        itemprops ip;
+        g->sel = t;                     /* group_get_props reads the selection */
+        if (group_get_props(hwnd, &ip)) {
+            pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized);
+            itemprops_free(&ip);
+        }
+    }
+    g->sel = keep;
+}
+
 /* Program Group Properties with a different file (observed): the group
    is written to the new file, the old one is deleted, and the same
    GroupN= entry names the new file. */

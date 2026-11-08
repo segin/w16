@@ -28,6 +28,7 @@
 #define IDD_GROUPPROPS      13
 #define IDD_ITEMPROPS       14
 #define IDD_MOVECOPY        15
+#define IDD_EXITWIN         16
 
 #define IDM_NEW             100
 #define IDM_OPEN            101
@@ -81,6 +82,7 @@
 #define IDC_MC_GROUP        0x74
 #define IDC_MC_ITEM         0x75
 #define IDC_MC_TO           0x76
+#define IDC_EXITICON        200
 
 /* the shortcut key control (class "pmhotkey", observed) */
 #define HKM_SETHOTKEY       (WM_USER + 0)
@@ -110,7 +112,7 @@ BOOL hotkey_register(void);
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
 extern HWND g_frame, g_client;
-extern BOOL g_autoarrange, g_minonrun, g_savesettings;
+extern BOOL g_autoarrange, g_minonrun, g_savesettings, g_isshell;
 extern char g_ini[];                    /* "PROGMAN.INI" */
 
 /* ---- group.c ----
@@ -134,6 +136,7 @@ BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip);
 BOOL group_rename(HWND hwnd, const char FAR *name);
 BOOL group_set_file(HWND hwnd, const char FAR *path);
 BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only);
+void group_run_all(HWND hwnd);
 BOOL group_delete_selected(HWND hwnd);
 LPCSTR group_name(HWND hwnd);
 LPCSTR group_path(HWND hwnd);
@@ -160,6 +163,7 @@ void cmd_delete(HWND frame);
 void cmd_properties(HWND frame);
 void cmd_movecopy(HWND frame, BOOL copy_only);
 BOOL CALLBACK __export MoveCopyDlgProc(HWND, UINT, WPARAM, LPARAM);
+BOOL CALLBACK __export ExitWinDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);
 int  run_dialog(HWND owner, FARPROC proc, int id);

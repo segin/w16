@@ -7,6 +7,9 @@ delete/D4 1474
 delitem/C1 1474
 delitem/C2 1474
 grpfile/G1 1777
+maxclose/Z1 566
+maxclose/Z2 566
+maxclose/Z3 1777
 movecopy/M1 1474
 movecopy/M2 1474
 movecopy/M3 1474

@@ -514,6 +514,35 @@ void cmd_movecopy(HWND frame, BOOL copy_only)
     run_dialog(frame, (FARPROC)MoveCopyDlgProc, IDD_MOVECOPY);
 }
 
+/* ---- Exit Windows (as the shell) ---- */
+
+BOOL CALLBACK __export ExitWinDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
+{
+    RECT r;
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG:
+        /* observed: centred on the screen */
+        GetWindowRect(dlg, &r);
+        SetWindowPos(dlg, NULL,
+                     (GetSystemMetrics(SM_CXSCREEN) - (r.right - r.left)) / 2,
+                     (GetSystemMetrics(SM_CYSCREEN) - (r.bottom - r.top)) / 2,
+                     0, 0, SWP_NOSIZE | SWP_NOZORDER);
+#ifndef W16_WIN2
+        SendDlgItemMessage(dlg, IDC_EXITICON, STM_SETICON,
+                           (WPARAM)LoadIcon(NULL, IDI_ASTERISK), 0);
+#endif
+        return TRUE;
+    case WM_COMMAND:
+        if (wp == IDOK || wp == IDCANCEL) {
+            EndDialog(dlg, wp);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 /* ---- File > Delete ---- */
 
 /* Observed: in an open group with a selected item, Delete asks "Are you

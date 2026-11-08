@@ -27,7 +27,14 @@ for f in ${REFRUN_FILES:-}; do
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
-sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
+if [ -n "${REFRUN_SHELL:-}" ]; then
+    # REFRUN_SHELL=PROG: PROG is the shell and our program starts from
+    # WIN.INI's load= line (to test a program as the Windows shell)
+    sed -i "s/^shell=.*/shell=${REFRUN_SHELL}\r/" "$work/c/WINDOWS/SYSTEM.INI"
+    sed -i "s/^load=.*/load=C:\\\\$name\r/" "$work/c/WINDOWS/WIN.INI"
+else
+    sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
+fi
 cat > "$work/dosbox.conf" <<CONF
 [sdl]
 output=surface
@@ -56,5 +63,7 @@ if [ -n "${REFRUN_OUT:-}" ]; then
     for f in "$work"/c/*.BMP; do [ -f "$f" ] && cp "$f" "$REFRUN_OUT/"; done
     for f in ${REFRUN_GET:-}; do [ -f "$work/c/$f" ] && cp "$work/c/$f" "$REFRUN_OUT/"; done
 fi
-[ -f "$work/c/WINDOWS/TK.LOG" ] && tr -d '\r' < "$work/c/WINDOWS/TK.LOG"
+for log in "$work/c/WINDOWS/TK.LOG" "$work/c/TK.LOG"; do   # cwd varies
+    [ -f "$log" ] && tr -d '\r' < "$log"
+done
 tr -d '\r' < "$work/c/OUT.TXT"

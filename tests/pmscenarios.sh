@@ -5,7 +5,7 @@
 # (build/dos/PROGMAN.EXE) on the reference Windows 3.1. Afterwards the
 # group files and PROGMAN.INI must be byte-identical, and no screenshot may
 # differ from the original by more pixels than recorded in
-# tests/scripts/pm/baseline.txt ("scenario/SHOT count"). The baseline is
+# tests/scripts/pm.baseline ("scenario/SHOT count"). The baseline is
 # what our own icon art and the known menu-bar spacing difference cost; a
 # count above it fails, a count below it is reported so the baseline can
 # be tightened. PM_BASELINE=update rewrites the baseline from this run.
@@ -17,7 +17,7 @@ out=$root/build/ref/scenarios
 files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/TESTGROU.GRP WINDOWS/STUP2.GRP"
 names=${*:-$(cd "$root/tests/scripts/pm" && ls *.txt | sed 's/\.txt$//')}
 status=0
-base=$root/tests/scripts/pm/baseline.txt
+base=$root/tests/scripts/pm.baseline
 [ -f "$base" ] || : > "$base"
 newbase=$(mktemp); trap 'rm -f "$newbase"' EXIT
 for n in $names; do

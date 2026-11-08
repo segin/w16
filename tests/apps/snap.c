@@ -6,6 +6,7 @@
  *     run <command line>     WinExec it (SW_SHOWNORMAL)
  *     wait <ms>              keep dispatching messages for <ms> ms
  *     menu <letter>          open the active window's menu (Alt+letter)
+ *     childcmd <hex>         post WM_SYSCOMMAND to the active MDI child
  *     cmd <decimal id>       post WM_COMMAND id to the active window (for
  *                            testing our own programs, whose IDs we know)
  *     key <vk-hex>           post a key press to the window with the focus
@@ -400,6 +401,16 @@ static void run_line(char *l)
         if (!PostMessage(w, WM_COMMAND, parse_num(arg, 10), 0))
             out(" (post failed)");
         pump(300);
+    } else if (same(l, "childcmd")) {
+        /* WM_SYSCOMMAND to the active MDI child (its window menu), e.g.
+           F030 maximize, F060 close */
+        HWND frame = top_window(), client = frame ? GetWindow(frame, GW_CHILD) : NULL;
+        HWND child = client ? (HWND)LOWORD(SendMessage(client, WM_MDIGETACTIVE, 0, 0)) : NULL;
+        if (child)
+            PostMessage(child, WM_SYSCOMMAND, parse_num(arg, 16), 0);
+        else
+            out(" -> no MDI child");
+        pump(500);
     } else if (same(l, "key")) {
         WORD vk = parse_num(arg, 16);
         PostMessage(target(), WM_KEYDOWN, vk, 1L);

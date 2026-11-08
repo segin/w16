@@ -245,3 +245,20 @@ BEGIN
     PUSHBUTTON      "Cancel", IDCANCEL, 154, 23, 40, 14
     PUSHBUTTON      "&Help", IDC_HELPBTN, 154, 44, 40, 14
 END
+
+/* Exit Windows (observed: a system-modal dialog in the dialog font,
+   centred on the screen; measured from screenshots, about 160 x 50
+   units). Shown when Program Manager is the shell. */
+IDD_EXITWIN DIALOG 0, 0, 160, 50
+STYLE DS_MODALFRAME | DS_SYSMODAL | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Exit Windows"
+#ifndef W16_WIN2
+FONT 8, "MS Sans Serif"
+#endif
+BEGIN
+    CONTROL         "", IDC_EXITICON, "Static", SS_ICON, 5, 5, 18, 20
+    CONTROL         "This will end your Windows session.", IDC_STATIC, "Static",
+                    SS_LEFT | SS_NOPREFIX, 30, 10, 125, 10
+    DEFPUSHBUTTON   "OK", IDOK, 30, 30, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 90, 30, 40, 14
+END

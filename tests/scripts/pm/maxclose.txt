@@ -1,0 +1,17 @@
+run PROGMAN.EXE
+wait 3000
+menu -
+wait 300
+char x
+wait 800
+snap C:\Z1.BMP
+menu -
+wait 300
+snap C:\Z2.BMP
+char c
+wait 1000
+snap C:\Z3.BMP
+dump
+menu f
+char x
+wait 1500

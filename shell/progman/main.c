@@ -13,6 +13,7 @@
 HINSTANCE g_hinst;
 HWND g_frame, g_client;
 BOOL g_autoarrange, g_minonrun, g_savesettings = TRUE;
+BOOL g_isshell;                         /* SYSTEM.INI shell= is us */
 char g_ini[] = "PROGMAN.INI";
 
 static char cls_frame[] = "Progman";
@@ -125,6 +126,52 @@ void ini_remove_group(int n)
 void ini_groups_changed(void)
 {
     write_order();
+}
+
+/* Start each program named in WIN.INI [windows] key (blank- or
+   comma-separated). */
+static void run_list(const char *key, BOOL minimized)
+{
+    LPSTR list = profile_get("windows", key, "WIN.INI");
+    LPSTR p = list;
+    if (!list)
+        return;
+    while (*p) {
+        LPSTR w;
+        while (*p == ' ' || *p == ',' || *p == '\t')
+            p++;
+        w = p;
+        while (*p && *p != ' ' && *p != ',' && *p != '\t')
+            p++;
+        if (*p)
+            *p++ = 0;
+        if (*w)
+            pm_exec(g_frame, w, NULL, minimized);
+    }
+    mem_free(list);
+}
+
+/* As the shell, Program Manager starts the session's programs (observed:
+   with w16's Program Manager as the shell and nothing doing this, a
+   WIN.INI load= program never ran; with the original it did). load=
+   programs start minimized, run= ones normally, then the StartUp group
+   (named by PROGMAN.INI [Settings] Startup=, else "StartUp") unless
+   Shift is held. */
+static void start_session(void)
+{
+    LPSTR name;
+    HWND w;
+    run_list("load", TRUE);
+    run_list("run", FALSE);
+    if (GetKeyState(VK_SHIFT) < 0)
+        return;
+    name = profile_get(s_settings, "Startup", g_ini);
+    for (w = GetWindow(g_client, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+        if (group_name(w) && !s_icmp(group_name(w), name ? name : "StartUp")) {
+            group_run_all(w);
+            break;
+        }
+    mem_free(name);
 }
 
 static void save_settings(void)
@@ -276,12 +323,24 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         command(hwnd, wp);
         return 0;
     case WM_CLOSE:
-    case WM_QUERYENDSESSION:
+        /* Observed: as the shell, Program Manager asks first, in a
+           system-modal box "Exit Windows" / "This will end your Windows
+           session." (OK, Cancel, information icon), then ends the
+           session; not being the shell, it closes without asking. */
+        if (g_isshell) {
+            if (run_dialog(hwnd, (FARPROC)ExitWinDlgProc, IDD_EXITWIN) != IDOK)
+                return 0;
+            save_settings();
+            ExitWindows(0, 0);          /* returns if an application refused */
+            return 0;
+        }
         save_settings();
-        if (msg == WM_QUERYENDSESSION)
-            return TRUE;
         DestroyWindow(hwnd);
         return 0;
+    case WM_QUERYENDSESSION:
+        if (!g_isshell)                 /* as the shell, saved before ExitWindows */
+            save_settings();
+        return TRUE;
     case WM_DESTROY:
         WinHelp(hwnd, NULL, HELP_QUIT, 0);
         PostQuitMessage(0);
@@ -367,13 +426,14 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
 
     /* "Exit Windows..." when we are the shell, otherwise "Exit" */
     file = GetSubMenu(GetMenu(g_frame), MENU_FILE);
-    GetPrivateProfileString("boot", "shell", "", buf, sizeof buf, "SYSTEM.INI");
     {
-        int n = s_len(buf), k = n;
-        while (k > 0 && buf[k - 1] != '\\' && buf[k - 1] != ':')
+        LPSTR sh = profile_get("boot", "shell", "SYSTEM.INI");
+        int k = sh ? s_len(sh) : 0;
+        while (k > 0 && sh[k - 1] != '\\' && sh[k - 1] != ':')
             k--;
-        LoadString(hinst, s_icmp(buf + k, "PROGMAN.EXE") == 0 ? IDS_EXITWINDOWS : IDS_EXIT,
-                   name, sizeof name);
+        g_isshell = sh && s_icmp(sh + k, "PROGMAN.EXE") == 0;
+        mem_free(sh);
+        LoadString(hinst, g_isshell ? IDS_EXITWINDOWS : IDS_EXIT, name, sizeof name);
         ModifyMenu(file, IDM_EXIT, MF_BYCOMMAND | MF_STRING, IDM_EXIT, name);
     }
     check(IDM_AUTOARRANGE, g_autoarrange);
@@ -388,6 +448,8 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
     load_groups();
+    if (g_isshell)
+        start_session();
 
     acc = LoadAccelerators(hinst, MAKEINTRESOURCE(IDA_MAIN));
     while (GetMessage(&msg, NULL, 0, 0)) {

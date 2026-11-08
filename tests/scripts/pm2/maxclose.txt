@@ -1,0 +1,8 @@
+run C:\PROGMAN.EXE
+wait 4000
+childcmd F030
+wait 1000
+snap C:\MAX.DDB
+childcmd F060
+wait 1500
+snap C:\CLOSED.DDB
