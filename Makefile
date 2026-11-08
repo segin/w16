@@ -33,11 +33,13 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
-           $(B)/kernel/profile.o $(B)/kernel/selector.o
+           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
+# probes for the Windows boot (tests/dropin.sh); not in make test
+DROPIN   := TK20 TK21 TK22
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -61,7 +63,8 @@ all: host dos shell
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
-     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN
+     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
+     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE)
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -86,6 +89,12 @@ $(B)/kernel/%.o: kernel/%.asm kernel/inc/intcall.inc
 $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -fo=$@ $<
+# KERNEL's code outgrew one segment: the Windows boot and the exports for
+# Microsoft's modules go in a second code segment, BOOT_TEXT
+KBOOT_C := winboot dosx kmisc selector fault
+$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
@@ -145,6 +154,27 @@ $(DOS)/TK15A.EXE: $(B)/tests/tk15s.o $(B)/tests/tk15a.o \
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk15a.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk15a.map file { $(B)/tests/tk15s.o $(B)/tests/tk15a.o }
+
+# TK22.EXE: the Windows boot probe (imports DiagOutput, KERNEL.340)
+$(B)/tests/tk22.o: tests/apps/tk22ref.h tests/apps/tklog.h
+$(DOS)/TK22.EXE: $(B)/tests/start.o $(B)/tests/tk22.o tests/apps/app.lnk tests/apps/tk22.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk22.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk22.map file { $(B)/tests/start.o $(B)/tests/tk22.o }
+
+# TK20.EXE: the first window (imports InitApp, USER.5)
+$(B)/tests/tk20.o: tests/apps/tk20ref.h tests/apps/tklog.h
+$(DOS)/TK20.EXE: $(B)/tests/start.o $(B)/tests/tk20.o tests/apps/app.lnk tests/apps/tk20.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk20.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk20.map file { $(B)/tests/start.o $(B)/tests/tk20.o }
+
+# TK21.EXE: the system timer (imports SYSTEM.2, 3, 6)
+$(B)/tests/tk21.o: tests/apps/tk21ref.h tests/apps/tklog.h
+$(DOS)/TK21.EXE: $(B)/tests/start.o $(B)/tests/tk21.o tests/apps/app.lnk tests/apps/tk21.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk21.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk21.map file { $(B)/tests/start.o $(B)/tests/tk21.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
@@ -396,6 +426,11 @@ $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 
 # WINENV.COM: test tool, runs KERNEL with windir= set as WIN.COM would
 $(DOS)/WINENV.COM: tests/dos/winenv.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
+$(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 

@@ -167,11 +167,15 @@ static int is_task(u16 t)
     return 0;
 }
 
+static u16 boot_tdb;            /* the boot task (task_boot_tdb) */
+
 static u16 task_of(u16 t)
 {
     u16 x;
     if (!t)
         return 0;
+    if (boot_tdb && (t | 3) == (boot_tdb | 3))
+        return boot_tdb;
     for (x = task_head; x; x = TW(x, TDB_NEXT))
         if ((x | 3) == (t | 3))
             return x;
@@ -310,8 +314,16 @@ static void list_requeue(u16 t)
 
 /* ---- the scheduler ---- */
 
+static void sti(void);
+#pragma aux sti = "sti" modify exact [];
+
+/* The idle loop runs with interrupts enabled: USER's GetMessage calls
+   WaitEvent with them disabled (observed: with them left so, USER's
+   timer procedure, called from IRQ 0 through SYSTEM.DRV, ran 12 times in
+   15 seconds instead of every 100 ms, and no WM_TIMER arrived). */
 static void idle(void)
 {
+    sti();
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
     rm_int(0x2F, 0x1689, 1, 0, 0);      /* Windows kernel idle */
 }
@@ -345,8 +357,8 @@ static void switch_to(u16 t)
 static void reschedule(void)
 {
     u16 t;
-    if (in_sched)
-        return;
+    if (in_sched || (boot_tdb && cur_task == boot_tdb))
+        return;                         /* nothing to switch to yet */
     in_sched = 1;
     if (cur_task) {
         t = TW(cur_task, TDB_YIELDTO);
@@ -570,7 +582,11 @@ void __cdecl task_exit_c(u16 code)
 {
     u16 t = cur_task, pdb = cur_pdb, i;
     taskx FAR *x = tx_of(t), FAR *FAR *pp;
+
     module FAR *m = x ? x->m : NULL;
+
+    if (boot_tdb && t == boot_tdb)
+        kexit_to_dos((u8)code);         /* while booting: back to DOS */
 
     in_sched = 1;
     if (TW(t, TDB_LIBINIT))
@@ -724,8 +740,8 @@ u16 KAPI WaitEvent(u16 htask)                                 /* KERNEL.30 */
             TW(t, TDB_EVENTS)--;
             return 0;
         }
-        if (t != cur_task)
-            return 0;           /* UNVERIFIED: another task's */
+        if (t != cur_task || t == boot_tdb)
+            return 0;           /* UNVERIFIED: another task's, the boot's */
         reschedule();
     }
 }
@@ -829,3 +845,43 @@ u16 KAPI IsTask(u16 h)                                        /* KERNEL.320 */
 }
 
 /* GetSelectorBase (KERNEL.186): selector.c */
+
+/* ---- the boot task ----
+   While Windows boots, KERNEL runs as a task of its own, so that what
+   the boot modules do for "the current task" works (USER makes a message
+   queue for it: SetTaskQueue(0, ...)): Pietrek (ch. 1, BootStrap) shows
+   KERNEL making a TDB with KERNEL's PDB, DTA PDB:80h, one event, module
+   -1 and its signature, and deleting it once the shell is loaded
+   (SlowBoot). w16's is not in the task list: nothing is scheduled until
+   it is gone. UNVERIFIED: the fields Pietrek does not list. */
+u16 task_boot_tdb(void)
+{
+    u16 seg, t = galloc_dos(TDB_SIZE, 0, &seg);
+    if (!t)
+        return 0;
+    TW(t, TDB_SELF) = t;
+    TW(t, TDB_EVENTS) = 1;
+    TW(t, TDB_PDB) = psp_sel;
+    TW(t, TDB_DTA) = 0x80;
+    TW(t, TDB_DTA + 2) = psp_sel;
+    TW(t, TDB_HMOD) = 0xFFFF;
+    TW(t, TDB_VERSION) = NE_HDR(module_first)->expver;
+    TW(t, TDB_SIG) = TDB_MAGIC;
+    boot_tdb = t;
+    cur_task = t;
+    cur_pdb = psp_sel;
+    return t;
+}
+
+void task_boot_tdb_end(void)
+{
+    u16 t = boot_tdb;
+    if (!t)
+        return;
+    if (cur_task == t) {
+        cur_task = 0;
+        cur_pdb = 0;
+    }
+    boot_tdb = 0;
+    GlobalFree(t);
+}

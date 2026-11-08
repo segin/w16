@@ -365,8 +365,11 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
         pstr_to_c(modname, name, sizeof name);
         tm = module_of(MOD_MODREF(m, rr->t1 - 1));
         if ((rr->flags & NERF_TYPEMASK) == NERF_IMPORTORD) {
-            if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const))
+            if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const)) {
+                if (!is_const && trace_wanted(name, rr->t2))
+                    thunk_trace(name, rr->t2, tsel, toff);
                 return 1;
+            }
             return thunk_make(name, rr->t2, NULL, tsel, toff);
         }
         if (tm && mod_find_name(tm, imported_name(m, rr->t2), &ord) &&
@@ -602,6 +605,8 @@ static void release(module FAR *m)
 static int is_pending(const char *name)
 {
     u16 i;
+    if (winboot_active)
+        return 0;                       /* Windows' own modules are there */
     for (i = 0; pending_modules[i]; i++)
         if (kstricmp(pending_modules[i], name) == 0)
             return 1;
@@ -622,8 +627,18 @@ static int acquire_import(const char *name, u16 *hmod, u16 *err)
     *hmod = 0;
     if (!d && is_pending(name))
         return 1;
-    if (!d && (d = load_file(name, ".DLL", 0, err)) == NULL)
-        return 0;
+    if (!d) {
+        char logname[MODNAME_MAX + 5];
+        u16 i;
+        for (i = 0; name[i] && i < MODNAME_MAX; i++)
+            logname[i] = name[i];
+        kmemcpy(logname + i, ".DLL", 5);
+        diag_load_start(logname);       /* observed: "SHELL.DLL" */
+        d = load_file(name, ".DLL", 0, err);
+        diag_load_end(logname, d ? 32 : *err);
+        if (!d)
+            return 0;
+    }
     *hmod = d->ne_sel;
     return 1;
 }
@@ -959,6 +974,21 @@ static module FAR *acquire(const char FAR *name, u16 *err)
     return m;
 }
 
+/* the same, while a task is current (the boot task): *libinit gets the
+   list of DLLs the program's InitTask is to initialise (for task_create) */
+module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit)
+{
+    module FAR *m;
+    last_libinit = 0;
+    m = load_file(path, NULL, 1, err);
+    *libinit = last_libinit;
+    last_libinit = 0;
+    if (m)
+        uses(m, 1);
+    sweep();
+    return m;
+}
+
 module FAR *module_load_program(const char FAR *path, u16 *err)
 {
     module FAR *m = load_file(path, NULL, 1, err);
@@ -976,9 +1006,15 @@ module FAR *module_load_program(const char FAR *path, u16 *err)
    0 when its initialisation returns 0. */
 u16 KAPI LoadLibrary(const char FAR *name)                     /* KERNEL.95 */
 {
-    u16 err;
-    module FAR *m = acquire(name, &err);
-    return m ? module_instance(m) : err;
+    u16 err, r;
+    module FAR *m;
+    if (FP_SEG(name))
+        diag_load_start(name);
+    m = acquire(name, &err);
+    r = m ? module_instance(m) : err;
+    if (FP_SEG(name))
+        diag_load_end(name, r < 32 ? r : 32);
+    return r;
 }
 
 /* Observed: one use less (hInstance or hModule); at 0 the DLL's WEP runs

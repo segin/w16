@@ -87,12 +87,15 @@ void __cdecl kmain(bootinfo FAR *pbi)
     for (sel_shift = 0; (1u << sel_shift) < sel_inc; sel_shift++)
         ;
 
+    dosx_init();
     global_init();
     thunk_init();
     module_register_kernel(&bi);
     old21 = hook_int(0x21, int21_handler);
     hook_int(0x3D, int3d_handler);      /* floating-point fixups (FWAIT) */
 
+    if (winboot_wanted())
+        kexit_to_dos((u8)winboot());
     if (!parse_command_line()) {
         kputs("usage: KRNL286 program.exe [arguments]\r\n");
         kexit_to_dos(1);

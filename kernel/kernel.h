@@ -38,9 +38,27 @@ extern void __far int21_handler(void);
 extern void __far int3d_handler(void);
 #pragma aux int3d_handler "*"
 extern void __far unimpl_entry(void);
+extern void __far trace_entry(void);
+#pragma aux trace_entry "*"
 #pragma aux int21_handler "*"           /* asm labels: no name decoration */
 #pragma aux unimpl_entry "*"
 extern u32  __cdecl old21;
+
+/* ---- winboot.c ---- */
+extern int winboot_active;
+int  winboot_wanted(void);
+u16  winboot(void);
+void diag_load_start(const char FAR *name);
+void diag_load_end(const char FAR *name, u16 rc);
+
+/* ---- fault.c ---- */
+void fault_init(void);
+void wd_start(u16 seconds);
+void wd_progress(void);
+void wd_stop(void);
+
+/* ---- dosx.c ---- */
+void dosx_init(void);
 
 /* ---- util.c ---- */
 void kmemset(void FAR *d, u8 v, u16 n);
@@ -161,6 +179,7 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
 extern module FAR *module_first;        /* KERNEL */
 void     module_register_kernel(const bootinfo FAR *bi);
 module FAR *module_load_program(const char FAR *path, u16 *err);
+module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit);
 module FAR *module_find(const char FAR *name);
 module FAR *module_of(u16 h);
 u16      module_instance(module FAR *m);
@@ -196,6 +215,9 @@ void thunk_init(void);
 int  thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
                 u16 *sel, u16 *off);
 void __cdecl unimpl_report(u16 index);
+int  thunk_trace(const char FAR *mod, u16 ordinal, u16 *sel, u16 *off);
+void trace_print(void);
+int  trace_wanted(const char FAR *mod, u16 ordinal);   /* winboot.c */
 
 /* ---- task.c ---- */
 extern u16 cur_task, cur_pdb;           /* the running task (0: none) */
@@ -204,6 +226,8 @@ u16  task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
 void task_start(u16 t);
 void task_set_env(u16 t, u16 env);
 u16  task_boot(void);
+u16  task_boot_tdb(void);
+void task_boot_tdb_end(void);
 u16  task_pdb(void);                    /* the running task's PDB, or 0 */
 module FAR *task_module(void);          /* the running task's, or NULL */
 module FAR *task_module_of_sel(u16 sel);

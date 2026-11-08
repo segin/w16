@@ -1,0 +1,5 @@
+# TK21.EXE (tests/apps/tk21.c): the system timer
+@tests/apps/app.lnk
+import S_CREATESYSTEMTIMER SYSTEM.2
+import S_KILLSYSTEMTIMER SYSTEM.3
+import S_GETSYSTEMMSECCOUNT SYSTEM.6
