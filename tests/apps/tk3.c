@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #define TK_REF "tk3ref.h"
+#define TK_REF286 "tk3ref286.h"
 #include "tklog.h"
 
 static WORD ds(void)

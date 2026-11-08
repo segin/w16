@@ -13,6 +13,11 @@
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
 # REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
 # flags); REFRUN_FPU=false then runs without a coprocessor.
+# Standard mode (/S) on a 386 or later runs KRNL386.EXE; KRNL286.EXE only
+# on an 80286. To observe KRNL286: REFRUN_CPU=286 (DOSBox-X, implies
+# REFRUN_X) emulates an 80286, or REFRUN_KRNL286=1 copies KRNL286.EXE over
+# KRNL386.EXE in the scratch copy (KRNL286 then runs on the 386; GetWinFlags
+# reports the real processor, and TOOLHELP still reads its heap).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -38,6 +43,10 @@ if [ -n "${REFRUN_SHELL:-}" ]; then
 else
     sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
 fi
+cputype=386
+if [ -n "${REFRUN_CPU:-}" ]; then
+    REFRUN_X=1 cputype=$REFRUN_CPU
+fi
 if [ -n "${REFRUN_X:-}" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" xcpu="fpu=${REFRUN_FPU:-true}"
 else
@@ -51,7 +60,7 @@ memsize=16
 $xdos
 [cpu]
 core=normal
-cputype=386
+cputype=$cputype
 cycles=max
 $xcpu
 [mixer]
@@ -61,6 +70,7 @@ pcspeaker=false
 [autoexec]
 mount c "$work/c"
 c:
+${REFRUN_KRNL286:+COPY C:\\WINDOWS\\SYSTEM\\KRNL286.EXE C:\\WINDOWS\\SYSTEM\\KRNL386.EXE > NUL}
 ${REFRUN_PRE:-}
 cd \\WINDOWS
 WIN $mode > C:\\OUT.TXT

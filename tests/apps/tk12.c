@@ -16,6 +16,7 @@
 #include <windows.h>
 
 #define TK_REF "tk12ref.h"
+#define TK_REF286 "tk12ref286.h"
 #include "tklog.h"
 
 extern int __cdecl dos_int21(WORD FAR *r);
