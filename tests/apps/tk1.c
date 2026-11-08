@@ -153,6 +153,11 @@ static void test_version(void)
     obs("GetWinFlags", (WORD)f);
 }
 
+/* Windows 3.1's KRNL386 rounds block sizes up to 20h; KRNL286 (and w16)
+   rounds arena and data together up to 20h, the arena being 10h
+   (tests/apps/tk19.c), and a fixed block's handle is its selector. */
+static int k286;
+
 static void test_global(void)
 {
     HGLOBAL h, hz, hf, hh;
@@ -161,6 +166,10 @@ static void test_global(void)
     WORD i, inc, sel;
     int ok;
 
+    h = GlobalAlloc(GMEM_FIXED, 1);
+    k286 = GlobalSize(h) == 0x10;
+    GlobalFree(h);
+    obs("KRNL286 heap", k286);
     h = GlobalAlloc(GMEM_MOVEABLE, 1000);
     check(h != 0, "GlobalAlloc moveable");
     p = GlobalLock(h);
@@ -202,7 +211,10 @@ static void test_global(void)
     obs("fixed GlobalHandle(sel).lo", LOWORD(GlobalHandle(sel_of(p))));
     obs("fixed GlobalHandle(sel).hi", HIWORD(GlobalHandle(sel_of(p))));
     obs("fixed GlobalUnlock", GlobalUnlock(hf));
-    check((hf & 1) == 0 && (hf ^ sel_of(p)) == 1, "fixed handle == sel with bit 0 clear");
+    if (k286)
+        check(hf == sel_of(p) && (hf & 1), "fixed handle == sel (KRNL286)");
+    else
+        check((hf & 1) == 0 && (hf ^ sel_of(p)) == 1, "fixed handle == sel with bit 0 clear");
     GlobalFree(hf);
 
     {
@@ -216,7 +228,8 @@ static void test_global(void)
                 n[14 - d] = "0123456789ABCDEF"[(v >> (4 * d)) & 15];
             hf = GlobalAlloc(GMEM_MOVEABLE, sizes[k]);
             obs(n, (WORD)GlobalSize(hf));
-            if (GlobalSize(hf) != ((sizes[k] + 31UL) & ~31UL))
+            if (GlobalSize(hf) != (k286 ? ((((sizes[k] + 15UL) >> 4) + 2) & ~1UL) * 16 - 16
+                                        : ((sizes[k] + 31UL) & ~31UL)))
                 check(0, n);
             GlobalFree(hf);
         }

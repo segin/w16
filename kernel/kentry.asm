@@ -408,11 +408,17 @@ GETTASKQUEUEES:
 ; ---------------------------------------------------------------------------
 ; void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase)
 ; Copy nwords words from sel:0 to tmp:0, then set sel's base to newbase
-; (DPMI 0007h) and reload SS. sel may be the current stack segment: after
-; the copy nothing is written to the stack until SS describes the new
-; memory (only reads, and INT 31h's own frame, which is popped through the
-; descriptor SS still caches), so the stack the caller sees afterwards is
-; exactly the one it had. The caller frees the old memory afterwards.
+; (DPMI 0007h). sel may be the current stack segment: then the call runs
+; on a stack of KERNEL's from before the copy until SS is sel again with
+; the new base, so nothing is pushed onto the old memory after the copy.
+; (HDPMI16 pops INT 31h's frame through the SS it has cached; DOSX does
+; not: under DOSX, KERNEL's first version, which called INT 31h on the
+; moving stack, returned through zeros - observed with TK19 as the shell
+; in tests/dropin.sh.) The caller frees the old memory afterwards.
+segment _BSS
+move_stack      resb 256
+move_stack_top:
+segment _TEXT
 global _seg_move
 _seg_move:
         push bp
@@ -421,20 +427,100 @@ _seg_move:
         push di
         push ds
         push es
+        mov dx, [bp + 12]               ; newbase
+        mov cx, [bp + 14]
+        mov bx, [bp + 6]                ; sel
+        mov ax, [bp + 10]               ; nwords
         mov ds, [bp + 6]
         mov es, [bp + 8]
+        ; onto KERNEL's stack (SS:SP kept in DI:SI)
+        mov si, sp
+        mov di, ss
+        cli
+        mov ss, [cs:dgroup_word]
+        mov sp, move_stack_top wrt DGROUP
+        sti
+        push si
+        push di
+        push cx
+        mov cx, ax
+        xor si, si
+        xor di, di
+        cld
+        rep movsw
+        pop cx
+        mov ax, 0007h
+        int 31h
+        pop di
+        pop si
+        cli
+        mov ss, di                      ; sel, now at its new base, or SS
+        mov sp, si
+        sti
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+dgroup_word     dw DGROUP
+
+; ---------------------------------------------------------------------------
+; void __cdecl kcopyw(u16 dsel, u16 ssel, u16 nwords): ssel:0 to dsel:0
+; void __cdecl kzerow(u16 sel, u16 nwords): zero sel:0
+global _kcopyw, _kzerow
+_kcopyw:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        mov es, [bp + 6]
+        mov ds, [bp + 8]
         mov cx, [bp + 10]
         xor si, si
         xor di, di
         cld
         rep movsw
-        mov bx, [bp + 6]
-        mov dx, [bp + 12]
-        mov cx, [bp + 14]
-        mov ax, 0007h
-        int 31h
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+_kzerow:
+        push bp
+        mov bp, sp
+        push di
+        push es
+        mov es, [bp + 6]
+        mov cx, [bp + 8]
+        xor di, di
+        xor ax, ax
+        cld
+        rep stosw
+        pop es
+        pop di
+        pop bp
+        retf
+
+; u16 __cdecl notify_call(u32 proc, u16 h)
+; Call a GlobalNotify procedure, BOOL FAR PASCAL proc(HGLOBAL h), with
+; DS = ES = SS (Pietrek, "Windows Internals", GlobalNotify). Returns AX.
+global _notify_call
+_notify_call:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        push word [bp + 10]             ; h
         mov ax, ss
-        mov ss, ax
+        mov ds, ax
+        mov es, ax
+        call far [ss:bp + 6]
         pop es
         pop ds
         pop di

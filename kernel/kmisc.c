@@ -16,7 +16,6 @@
 u16  KAPI GlobalAlloc(u16 flags, u32 size);
 void FAR * KAPI GlobalLock(u16 h);
 u16  KAPI GlobalUnlock(u16 h);
-u32  KAPI GlobalHandle(u16 sel);
 u32  local_spaces(u16 seg);
 
 #define TDB_ERRMODE     0x18    /* Pietrek: error handling flags */
@@ -162,30 +161,9 @@ u16 KAPI SetErrorMode(u16 mode)
     return old;
 }
 
-/* GlobalWire / GlobalUnwire (KERNEL.111, 112): move low and lock; w16's
-   blocks do not move, so a lock. GlobalFix / GlobalUnfix (197, 198),
-   GlobalPageLock / GlobalPageUnlock (191, 192): the same here (no
-   paging in Standard mode). */
-void FAR * KAPI GlobalWire(u16 h)
-{
-    return GlobalLock(h);
-}
-
-u16 KAPI GlobalUnwire(u16 h)
-{
-    return GlobalUnlock(h) == 0;
-}
-
-void KAPI GlobalFix(u16 h)
-{
-    GlobalLock(h);
-}
-
-u16 KAPI GlobalUnfix(u16 h)
-{
-    return GlobalUnlock(h) == 0;
-}
-
+/* GlobalPageLock / GlobalPageUnlock (191, 192): no paging in Standard
+   mode; a lock here (UNVERIFIED). GlobalWire/Fix and friends are in
+   global.c. */
 u16 KAPI GlobalPageLock(u16 h)
 {
     return GlobalLock(h) ? 1 : 0;
@@ -260,11 +238,6 @@ u16 KAPI IsWinOldApTask(u16 htask)
     return 0;
 }
 
-/* GlobalHandleNoRIP (KERNEL.159): GlobalHandle, 0 for a bad selector. */
-u32 KAPI GlobalHandleNoRIP(u16 sel)
-{
-    return GlobalHandle(sel);
-}
 
 /* GetExpWinVer (KERNEL.167): the expected Windows version in the NE
    header (3Eh) of hModule or hInstance. */
@@ -284,22 +257,6 @@ u16 KAPI DirectResAlloc(u16 hinst, u16 flags, u16 size)
     return GlobalAlloc(GMEM_MOVEABLE, size);
 }
 
-/* GetFreeSpace (KERNEL.169): free global memory in bytes: the DPMI
-   host's largest free block (DPMI 0500h). UNVERIFIED: what Windows adds
-   (discardable blocks, the free heap). */
-u32 KAPI GetFreeSpace(u16 flags)
-{
-    static u32 info[12];
-    regs16 r;
-    (void)flags;
-    r.ax = 0x0500;
-    r.di = FP_OFF((void FAR *)info);
-    r.es = FP_SEG((void FAR *)info);
-    r.ds = 0;
-    if (dpmi31(&r))
-        return 0;
-    return info[0];
-}
 
 /* LongPtrAdd (KERNEL.180): a huge pointer plus a 32-bit offset, the
    selector stepping by __AHINCR per 64 KB. */

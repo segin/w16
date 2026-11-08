@@ -686,9 +686,14 @@ static int snapshot(module FAR *m)
     u32 n;
     if (!ad || ad > m->seg_count)
         return 1;
+    /* KRNL286 sizes are odd multiples of 10h (arena and block together
+       rounded to 20h): asking for the size rounded down to 20h gives the
+       same size back; at most 64K is data */
     n = gsize_of_sel(m->seg[ad - 1].sel);
-    if (!galloc(GMEM_FIXED, n, m->ne_sel, &sel))
+    if (!galloc(GMEM_FIXED, n & ~0x1FUL, m->ne_sel, &sel))
         return 0;
+    if (n > 0x10000UL)
+        n = 0x10000UL;
     m->dg_snap = sel;
     if (n > 0x8000UL) {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->seg[ad - 1].sel, 0), 0x8000);
@@ -836,7 +841,12 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             if (size > 0x10000UL)
                 size = 0x10000UL;
         }
-        m->seg[i].hnd = galloc((s->flags & NESEG_MOVABLE) ? GMEM_MOVEABLE : GMEM_FIXED,
+        /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
+           segments are loaded moveable (even handles, hInstance = DS &
+           ~1). UNVERIFIED: a DLL's fixed segments stay fixed. */
+        m->seg[i].hnd = galloc(((s->flags & NESEG_MOVABLE) || !(h.flags & NEF_LIBRARY) ?
+                                GMEM_MOVEABLE : GMEM_FIXED) |
+                               (i + 1 == h.auto_data ? GA_REQ_DGROUP : 0),
                                size, m->ne_sel, &sel);
         m->seg[i].sel = sel;
         if (!m->seg[i].hnd) {
@@ -1056,9 +1066,11 @@ static u16 new_instance(module FAR *m, const loadparms FAR *lp)
     if (!m->dg_snap)
         return LE_NOMEM;
     size = gsize_of_sel(m->dg_snap);
-    hnd = galloc(GMEM_MOVEABLE, size, m->ne_sel, &sel);
+    hnd = galloc(GMEM_MOVEABLE | GA_REQ_DGROUP, size & ~0x1FUL, m->ne_sel, &sel);
     if (!hnd)
         return LE_NOMEM;
+    if (size > 0x10000UL)
+        size = 0x10000UL;
     if (size > 0x8000UL) {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->dg_snap, 0), 0x8000);
         kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->dg_snap, 0x8000), (u16)(size - 0x8000UL));
