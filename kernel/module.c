@@ -1,20 +1,18 @@
 /*
- * module.c - module table and NE loader.
+ * module.c - the module list, entry and name tables, and the module APIs
+ * that look things up (GetModuleHandle, GetModuleFileName,
+ * GetProcAddress, GetModuleUsage). Loading and freeing: loader.c.
  *
- * M1 scope: load an NE module's segments, apply all relocations, resolve
- * imports against already-loaded modules (only KERNEL for now). Imports
- * that cannot be resolved are bound to thunks that report the missing
- * function and end the task, so a missing API is easy to find.
- *
- * Not yet: loading dependent DLLs, demand loading / discarding, the
- * Windows module database (MDB) layout, self-loading applications,
- * floating-point OS fixups, LibMain for DLLs.
+ * Every loaded module has a record (struct module, kernel.h) in its own
+ * global block; the records form a list that starts with KERNEL. The
+ * Windows module database (MDB) layout is not used yet: the hModule is
+ * the selector of the module's NE tables as read from the file.
  *
  * NE format source: see include/w16/ne.h.
  */
 #include "kernel.h"
 
-module modules[MAX_MODULES];
+module FAR *module_first;
 
 /* ---- KERNEL constant exports (see the KCONST segment in kentry.asm) ---- */
 
@@ -63,12 +61,12 @@ static int kconst_lookup(u16 ordinal, u16 *value)
     return 0;
 }
 
-/* ---- module table ---- */
+/* ---- module list ---- */
 
-static void set_name(module *m)
+void mod_set_name(module FAR *m)
 {
     const u8 FAR *p = MK_FP(m->ne_sel, NE_HDR(m)->resname_off);
-    u8 n = p[0] > 8 ? 8 : p[0], i;
+    u8 n = p[0] > MODNAME_MAX ? MODNAME_MAX : p[0], i;
     for (i = 0; i < n; i++) {
         char c = (char)p[1 + i];
         m->name[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
@@ -76,45 +74,144 @@ static void set_name(module *m)
     m->name[n] = 0;
 }
 
-static module *mod_alloc(void)
+/* A new, zeroed record with room for seg_count segments and dep_count
+   imported modules; not yet in the list. */
+module FAR *mod_new(u16 seg_count, u16 dep_count)
 {
-    int i;
-    for (i = 0; i < MAX_MODULES; i++)
-        if (!modules[i].in_use) {
-            kmemset(&modules[i], 0, sizeof modules[i]);
-            modules[i].in_use = 1;
-            return &modules[i];
+    u32 size = sizeof(module) + (u32)seg_count * sizeof(modseg) + 2UL * dep_count;
+    module FAR *m;
+    u16 sel;
+
+    if (size > 0xFFF0UL || !galloc(GMEM_FIXED, size, 0, &sel))
+        return NULL;
+    m = MK_FP(sel, 0);                  /* galloc zeroes new memory */
+    m->self = sel;
+    m->seg_count = seg_count;
+    m->dep_count = dep_count;
+    return m;
+}
+
+void mod_link(module FAR *m)
+{
+    module FAR *p = module_first;
+    m->next = NULL;
+    if (!p) {
+        module_first = m;
+        return;
+    }
+    while (p->next)
+        p = p->next;
+    p->next = m;
+}
+
+void mod_unlink(module FAR *m)
+{
+    module FAR *p;
+    if (module_first == m) {
+        module_first = m->next;
+        return;
+    }
+    for (p = module_first; p; p = p->next)
+        if (p->next == m) {
+            p->next = m->next;
+            return;
         }
-    return NULL;
+}
+
+/* Record the module's file as a full path (observed: GetModuleFileName
+   gives e.g. C:\TK4.EXE for a program started as TK4.EXE), using DOS
+   TRUENAME (INT 21h AH=60h). */
+void mod_set_path(module FAR *m, const char FAR *path)
+{
+    char full[DOS_PATHMAX];
+    regs16 r;
+    u16 i;
+
+    r.ax = 0x6000;
+    r.si = FP_OFF(path);
+    r.ds = FP_SEG(path);
+    r.di = FP_OFF((char FAR *)full);
+    r.es = FP_SEG((char FAR *)full);
+    if (!dos21(&r))
+        path = full;
+    for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
+        m->path[i] = path[i];
+    m->path[i] = 0;
 }
 
 void module_register_kernel(const bootinfo FAR *bi)
 {
-    module *m = mod_alloc();
+    module FAR *m = mod_new(bi->seg_count, 0);
     u16 i;
+    if (!m) {
+        kputs("w16: out of memory\r\n");
+        kexit_to_dos(0xFF);
+    }
     m->ne_sel = bi->ne_sel;
     m->ne_len = bi->ne_len;
-    m->seg_count = bi->seg_count;
+    m->flags = NE_HDR(m)->flags;
     for (i = 0; i < bi->seg_count; i++)
-        m->seg_sel[i] = m->seg_hnd[i] = bi->seg_sel[i];
+        m->seg[i].sel = m->seg[i].hnd = bi->seg_sel[i];
     m->usage = 1;
-    kmemcpy(m->path, bi->path, sizeof m->path);
-    set_name(m);
+    for (i = 0; i < sizeof m->path - 1 && i < BOOT_PATHMAX && bi->path[i]; i++)
+        m->path[i] = bi->path[i];
+    mod_set_name(m);
+    mod_link(m);
     kconst_init();
+    loader_init(m->path);
 }
 
-module *module_find(const char FAR *name)
+module FAR *module_find(const char FAR *name)
 {
-    int i;
-    for (i = 0; i < MAX_MODULES; i++)
-        if (modules[i].in_use && kstricmp(modules[i].name, name) == 0)
-            return &modules[i];
+    module FAR *m;
+    for (m = module_first; m; m = m->next)
+        if (kstricmp(m->name, name) == 0)
+            return m;
     return NULL;
 }
 
+static int same_sel(u16 a, u16 b)
+{
+    return (a | 3) == (b | 3);          /* ignore RPL and the handle bit */
+}
+
+/* The module a module handle, instance handle or other segment of the
+   module refers to. Observed: GetModuleHandle(MAKELP(0, h)) accepts the
+   hModule, hInstance and hInstance | 1. */
+module FAR *module_of(u16 h)
+{
+    module FAR *m;
+    u16 s;
+    if (!h)
+        return NULL;
+    for (m = module_first; m; m = m->next) {
+        if (same_sel(m->ne_sel, h))
+            return m;
+        for (s = 0; s < m->seg_count; s++)
+            if (same_sel(m->seg[s].sel, h))
+                return m;
+    }
+    return NULL;
+}
+
+/* What LoadLibrary returns for a module. Observed on Windows 3.1: the
+   handle of the automatic data segment (DS & ~1) for a DLL with one,
+   the hModule for a DLL without (TKNOD.DLL), and for KERNEL an odd
+   selector other than its hModule (here: KERNEL's DS, which the bootstrap
+   made a plain selector). */
+u16 module_instance(module FAR *m)
+{
+    u16 ad = NE_HDR(m)->auto_data;
+    if (ad && ad <= m->seg_count)
+        return m->seg[ad - 1].hnd;
+    return m->ne_sel;
+}
+
+/* ---- entry and name tables ---- */
+
 /* Resolve an entry ordinal to sel:off, or to a constant (is_const, value
    in *off and *sel). */
-int module_entry(module *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
+int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
 {
     ne_header FAR *h = NE_HDR(m);
     const u8 FAR *p = MK_FP(m->ne_sel, h->entry_off);
@@ -122,7 +219,7 @@ int module_entry(module *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
     u16 ord = 1;
 
     *is_const = 0;
-    if (m == &modules[0] && kconst_lookup(ordinal, off)) {
+    if (m == module_first && kconst_lookup(ordinal, off)) {
         *sel = *off;
         *is_const = 1;
         return 1;
@@ -154,7 +251,7 @@ int module_entry(module *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
             }
             if (segno < 1 || segno > m->seg_count)
                 return 0;
-            *sel = m->seg_sel[segno - 1];
+            *sel = m->seg[segno - 1].sel;
             return 1;
         }
         p += (type == NEB_MOVABLE ? sizeof(ne_entry_movable)
@@ -164,11 +261,11 @@ int module_entry(module *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
     return 0;
 }
 
-/* Find an exported name (length-prefixed) in the resident name table. */
-static int find_resident_name(module *m, const u8 FAR *pname, u16 *ordinal)
+/* Look a length-prefixed name up in a name table (resident or
+   non-resident); the first entry (module name or description) is not an
+   export. */
+static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
 {
-    ne_header FAR *h = NE_HDR(m);
-    const u8 FAR *p = MK_FP(m->ne_sel, h->resname_off);
     int first = 1;
 
     while (p[0]) {
@@ -192,330 +289,36 @@ static int find_resident_name(module *m, const u8 FAR *pname, u16 *ordinal)
     return 0;
 }
 
-/* Record the module's file as a full path (observed: GetModuleFileName
-   gives e.g. C:\TK4.EXE for a program started as TK4.EXE), using DOS
-   TRUENAME (INT 21h AH=60h). A path that does not fit is a DOS limit. */
-static void set_path(module *m, const char FAR *path)
+/* An exported name, in the resident and then the non-resident name table
+   (observed: GetProcAddress and imports by name find both). */
+int mod_find_name(module FAR *m, const u8 FAR *pname, u16 *ordinal)
 {
-    char full[128];             /* TRUENAME's output buffer size (DOS) */
-    regs16 r;
-    u16 i;
-
-    r.ax = 0x6000;
-    r.si = FP_OFF(path);
-    r.ds = FP_SEG(path);
-    r.di = FP_OFF((char FAR *)full);
-    r.es = FP_SEG((char FAR *)full);
-    if (!dos21(&r) && kstrlen(full) < sizeof m->path)
-        path = full;
-    for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
-        m->path[i] = path[i];
-    m->path[i] = 0;
-}
-
-/* ---- file access (INT 21h, translated by the DOS extender) ---- */
-
-static u16 fh;
-
-static int f_seek(u32 pos)
-{
-    regs16 r;
-    r.ax = 0x4200;
-    r.bx = fh;
-    r.cx = (u16)(pos >> 16);
-    r.dx = (u16)pos;
-    r.ds = r.es = 0;
-    return !dos21(&r);
-}
-
-static int f_read(void FAR *buf, u16 n)
-{
-    regs16 r;
-    r.ax = 0x3F00;
-    r.bx = fh;
-    r.cx = n;
-    r.dx = FP_OFF(buf);
-    r.ds = FP_SEG(buf);
-    r.es = 0;
-    return !dos21(&r) && r.ax == n;
-}
-
-static int f_read_big(u16 sel, u32 len)
-{
-    if (len > 0x8000UL)
-        return f_read(MK_FP(sel, 0), 0x8000) &&
-               f_read(MK_FP(sel, 0x8000), (u16)(len - 0x8000UL));
-    return len ? f_read(MK_FP(sel, 0), (u16)len) : 1;
-}
-
-static void f_close(void)
-{
-    regs16 r;
-    r.ax = 0x3E00;
-    r.bx = fh;
-    r.ds = r.es = 0;
-    dos21(&r);
-}
-
-static module *load_fail(const char FAR *path, const char *why)
-{
-    kputs("w16: cannot load ");
-    kputs(path);
-    kputs(": ");
-    kputs(why);
-    kputs("\r\n");
-    return NULL;
-}
-
-/* ---- relocation ---- */
-
-/* Copy a length-prefixed string (at most 8 chars) to a C string. */
-static void pstr_to_c(const u8 FAR *p, char *out, u16 max)
-{
-    u16 n = p[0] < max - 1 ? p[0] : max - 1, i;
-    for (i = 0; i < n; i++)
-        out[i] = (char)p[1 + i];
-    out[n] = 0;
-}
-
-static const u8 FAR *imported_name(module *m, u16 offset)
-{
-    return MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
-}
-
-static const u8 FAR *modref_name(module *m, u16 index)
-{
-    ne_header FAR *h = NE_HDR(m);
-    if (index < 1 || index > h->modref_count)
-        return NULL;
-    return imported_name(m, *(const u16 FAR *)MK_FP(m->ne_sel, h->modref_off + 2 * (index - 1)));
-}
-
-static void patch(u16 sel, const ne_reloc FAR *rr, u16 tsel, u16 toff)
-{
-    u8 FAR *p = MK_FP(sel, 0);
-    u16 off = rr->offset;
-    u8 src = rr->src & NERS_MASK;
-    int add = (rr->flags & NERF_ADDITIVE) != 0;
-
-    for (;;) {
-        u16 FAR *w = (u16 FAR *)(p + off);
-        u16 next = *w;
-        switch (src) {
-        case NERS_LOBYTE:
-            p[off] = add ? (u8)(p[off] + toff) : (u8)toff;
-            add = 1;
-            break;
-        case NERS_SEGMENT:
-            *w = tsel;
-            break;
-        case NERS_OFFSET:
-            *w = add ? *w + toff : toff;
-            break;
-        case NERS_FARPTR:
-            w[0] = add ? w[0] + toff : toff;
-            w[1] = tsel;
-            break;
-        default:
-            return;             /* 32-bit fixups: not valid in Win16 */
-        }
-        if (add || next == NE_CHAIN_END)
-            break;
-        off = next;
-    }
-}
-
-/* Resolve one relocation's target. Returns 0 if the record is skipped. */
-static int target(module *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
-{
-    int is_const;
-    u16 segno, ord;
-    const u8 FAR *modname;
-    module *tm;
-    char name[9];
-
-    switch (rr->flags & NERF_TYPEMASK) {
-    case NERF_INTERNAL:
-        segno = rr->t1 & 0xFF;
-        if (segno == NE_MOVABLE_SEG)
-            return module_entry(m, rr->t2, tsel, toff, &is_const);
-        if (segno < 1 || segno > m->seg_count)
-            return 0;
-        *tsel = m->seg_sel[segno - 1];
-        *toff = rr->t2;
+    if (find_in_table(MK_FP(m->ne_sel, NE_HDR(m)->resname_off), pname, ordinal))
         return 1;
-
-    case NERF_IMPORTORD:
-    case NERF_IMPORTNAME:
-        modname = modref_name(m, rr->t1);
-        if (!modname)
-            return 0;
-        pstr_to_c(modname, name, sizeof name);
-        tm = module_find(name);
-        if ((rr->flags & NERF_TYPEMASK) == NERF_IMPORTORD) {
-            if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const))
-                return 1;
-            return thunk_make(name, rr->t2, NULL, tsel, toff);
-        }
-        if (tm && find_resident_name(tm, imported_name(m, rr->t2), &ord) &&
-            module_entry(tm, ord, tsel, toff, &is_const))
-            return 1;
-        return thunk_make(name, 0, imported_name(m, rr->t2), tsel, toff);
-
-    default:
-        return 0;               /* OS fixups: TODO floating-point patching */
-    }
+    return m->nonres_sel && find_in_table(MK_FP(m->nonres_sel, 0), pname, ordinal);
 }
 
-static int relocate_segment(module *m, u16 i, u32 data_end)
+/* The module name a file name stands for: the part after the last path
+   separator, up to the first dot. 0 if empty or longer than any module
+   name. */
+int mod_base_name(const char FAR *name, char *base)
 {
-    ne_reloc buf[32];
-    u16 n, done = 0;
+    const char FAR *p, *s = name;
+    u16 n = 0;
 
-    if (!f_seek(data_end) || !f_read(&n, 2))
-        return 0;
-    while (done < n) {
-        u16 k, batch = n - done > 32 ? 32 : n - done;
-        if (!f_read(buf, batch * sizeof(ne_reloc)))
+    for (p = name; *p; p++)
+        if (*p == '\\' || *p == '/' || *p == ':')
+            s = p + 1;
+    for (p = s; *p && *p != '.'; p++)
+        if (n < MODNAME_MAX)
+            base[n++] = *p;
+        else
             return 0;
-        for (k = 0; k < batch; k++) {
-            u16 tsel, toff;
-            if (target(m, &buf[k], &tsel, &toff))
-                patch(m->seg_sel[i], &buf[k], tsel, toff);
-        }
-        done += batch;
-    }
-    return 1;
-}
-
-/* ---- loader ---- */
-
-module *module_load(const char FAR *path)
-{
-    regs16 r;
-    u8 mz[64];
-    ne_header h;
-    u32 ne_base;
-    u16 i, shift, sel;
-    module *m;
-
-    r.ax = 0x3D00;
-    r.dx = FP_OFF(path);
-    r.ds = FP_SEG(path);
-    r.es = 0;
-    if (dos21(&r))
-        return load_fail(path, "file not found");
-    fh = r.ax;
-
-    if (!f_read(mz, sizeof mz) || *(u16 *)mz != MZ_MAGIC) {
-        f_close();
-        return load_fail(path, "not an executable");
-    }
-    ne_base = *(u32 *)(mz + MZ_LFANEW_OFF);
-    if (!f_seek(ne_base) || !f_read(&h, sizeof h) || h.magic != NE_MAGIC) {
-        f_close();
-        return load_fail(path, "not a Windows (NE) executable");
-    }
-    if (h.flags & NEF_SELFLOAD) {
-        f_close();
-        return load_fail(path, "self-loading applications are not supported yet");
-    }
-    if (h.seg_count > MAX_MODSEGS) {
-        f_close();
-        return load_fail(path, "too many segments");
-    }
-    m = mod_alloc();
-    if (!m) {
-        f_close();
-        return load_fail(path, "module table full");
-    }
-    m->ne_len = h.entry_off + h.entry_len;
-    if (!galloc(GMEM_FIXED, m->ne_len, 0, &m->ne_sel) ||
-        !f_seek(ne_base) || !f_read(MK_FP(m->ne_sel, 0), m->ne_len)) {
-        f_close();
-        m->in_use = 0;
-        return load_fail(path, "cannot read module tables");
-    }
-    set_name(m);
-    m->seg_count = h.seg_count;
-    m->usage = 1;
-    set_path(m, path);
-    shift = h.align_shift ? h.align_shift : 9;
-
-    /* allocate and read every segment */
-    for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
-        u32 size = s->min_alloc ? s->min_alloc : 0x10000UL;
-        u32 flen = s->sector ? (s->file_len ? s->file_len : 0x10000UL) : 0;
-        if (flen > size)
-            size = flen;
-        if (i + 1 == h.auto_data) {
-            size += (u32)h.heap_size + h.stack_size;
-            if (size > 0x10000UL)
-                size = 0x10000UL;
-        }
-        m->seg_hnd[i] = galloc((s->flags & NESEG_MOVABLE) ? GMEM_MOVEABLE : GMEM_FIXED,
-                               size, m->ne_sel, &sel);
-        m->seg_sel[i] = sel;
-        if (!m->seg_hnd[i]) {
-            f_close();
-            return load_fail(path, "out of memory");
-        }
-        if (flen && (!f_seek((u32)s->sector << shift) || !f_read_big(sel, flen))) {
-            f_close();
-            return load_fail(path, "cannot read segment");
-        }
-    }
-
-    /* relocations: all segments are writable data selectors until now */
-    for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
-        if ((s->flags & NESEG_RELOCS) && s->sector) {
-            u32 flen = s->file_len ? s->file_len : 0x10000UL;
-            if (!relocate_segment(m, i, ((u32)s->sector << shift) + flen)) {
-                f_close();
-                return load_fail(path, "bad relocation data");
-            }
-        }
-    }
-    f_close();
-
-    for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
-        if (!(s->flags & NESEG_DATA))
-            gset_code(m->seg_sel[i]);
-    }
-    return m;
+    base[n] = 0;
+    return n != 0;
 }
 
 /* ---- API ---- */
-
-static int same_sel(u16 a, u16 b)
-{
-    return (a | 3) == (b | 3);          /* ignore RPL and the handle bit */
-}
-
-/* The module a module handle, instance handle or other segment of the
-   module refers to. Observed: GetModuleHandle(MAKELP(0, h)) accepts the
-   hModule, hInstance and hInstance | 1. */
-static module *module_of(u16 h)
-{
-    int i;
-    u16 s;
-    if (!h)
-        return NULL;
-    for (i = 0; i < MAX_MODULES; i++) {
-        module *m = &modules[i];
-        if (!m->in_use)
-            continue;
-        if (same_sel(m->ne_sel, h))
-            return m;
-        for (s = 0; s < m->seg_count; s++)
-            if (same_sel(m->seg_sel[s], h))
-                return m;
-    }
-    return NULL;
-}
 
 /* Observed on Windows 3.1: the hModule is the selector of the module's
    NE header in memory (odd: RPL bits set; word 0 is "NE"); names match
@@ -525,26 +328,14 @@ static module *module_of(u16 h)
    here) or the module's file name; they were the same in the probe. */
 u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
 {
-    char base[9];
-    const char FAR *p, *s;
-    u16 n = 0;
-    module *m;
+    char base[MODNAME_MAX + 1];
+    module FAR *m;
 
     if (!FP_SEG(name)) {
         m = module_of(FP_OFF(name));
         return m ? m->ne_sel : 0;
     }
-    s = name;
-    for (p = name; *p; p++)
-        if (*p == '\\' || *p == '/' || *p == ':')
-            s = p + 1;
-    for (p = s; *p && *p != '.'; p++)
-        if (n < sizeof base - 1)
-            base[n++] = *p;
-        else
-            return 0;                   /* longer than any module name */
-    base[n] = 0;
-    if (!n)
+    if (!mod_base_name(name, base))
         return 0;
     m = module_find((const char FAR *)base);
     return m ? m->ne_sel : 0;
@@ -555,7 +346,7 @@ u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
    string. */
 u16 KAPI GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
 {
-    module *m = module_of(h);
+    module FAR *m = module_of(h);
     u16 i;
 
     if (!n)
@@ -572,16 +363,18 @@ u16 KAPI GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
 
 /* Observed: names match regardless of case (also "#n" for ordinal n);
    bit 15 of an ordinal is ignored; ordinal 0, gaps and unknown names give
-   0; a constant export comes back as FFFF:value.
-   UNVERIFIED: the non-resident name table is not searched yet (KERNEL
-   puts all its names in the resident one); hModule 0. */
+   0; a constant export comes back as FFFF:value; names in the
+   non-resident table are found too; a program's own exports are not
+   (TK5.EXE: 0 by name and by ordinal, through hModule or hInstance).
+   UNVERIFIED: whether that is decided by the library flag (as here) or by
+   the module having a task; hModule 0. */
 u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
 {
-    module *m = module_of(h);
+    module FAR *m = module_of(h);
     u16 ord = 0, sel, off;
     int is_const;
 
-    if (!m || !name)
+    if (!m || !name || !(m->flags & NEF_LIBRARY))
         return 0;
     if (!FP_SEG(name)) {
         ord = FP_OFF(name) & 0x7FFF;
@@ -603,7 +396,7 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
             else
                 pname[1 + i] = (u8)name[i];
         pname[0] = (u8)i;
-        if (!find_resident_name(m, (const u8 FAR *)pname, &ord))
+        if (!mod_find_name(m, (const u8 FAR *)pname, &ord))
             return 0;
     }
     if (!ord || !module_entry(m, ord, &sel, &off, &is_const))
@@ -611,4 +404,14 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
     if (is_const)
         sel = 0xFFFF;
     return ((u32)sel << 16) | off;
+}
+
+/* Observed: 1 for a module loaded once (implicitly or by LoadLibrary);
+   each LoadLibrary / LoadModule adds 1, each FreeLibrary / FreeModule
+   takes 1 away; hModule and hInstance both work.
+   UNVERIFIED: the result for a handle that is not a module (0 here). */
+u16 KAPI GetModuleUsage(u16 h)                                /* KERNEL.48 */
+{
+    module FAR *m = module_of(h);
+    return m ? m->usage : 0;
 }

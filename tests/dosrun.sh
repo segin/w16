@@ -4,6 +4,7 @@
 #   usage: tests/dosrun.sh <dir-mounted-as-C> <dos command line...>
 # Output (including the exit code) is written to C:\OUT.TXT inside DOS and
 # echoed here. Exits with the DOS program's ERRORLEVEL.
+# DOSRUN_PRE = DOS commands (one per line) run first, e.g. SET PATH=...
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -31,6 +32,7 @@ mount c "$dir"
 mount d "$work"
 c:
 d:\\HDPMI16.EXE -r > NUL
+${DOSRUN_PRE:-}
 $* > C:\\OUT.TXT
 if errorlevel 1 goto fail
 echo EXIT=0 >> C:\\OUT.TXT

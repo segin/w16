@@ -1,0 +1,8 @@
+# wlink directives shared by the test DLLs (tests/apps/dllstart.asm); each
+# DLL's own .lnk adds its module name, exports and imports.
+format windows dll
+option quiet
+option start=libentry
+option heapsize=1k
+option map
+library windows.lib

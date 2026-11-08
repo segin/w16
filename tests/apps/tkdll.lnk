@@ -1,0 +1,16 @@
+# TKDLL.DLL (tests/apps/tkdll.c). DLL_INFO's name is resident, the others
+# are in the non-resident name table.
+@tests/apps/dll.lnk
+option modname=TKDLL
+export DLL_INFO.1 resident
+export DLL_ADD.2
+export DLL_SUB.3
+export ASM_PRO_MOV.4
+export ASM_PRO_PUSH.5
+export DLL_MPI.6
+export DLL_SELFADDR.7
+export DLL_LALLOC.8
+export DLL_PEEK.9
+export WEP.11 resident
+import DLB_INITED TKDLB
+import DLB_ID TKDLB.2

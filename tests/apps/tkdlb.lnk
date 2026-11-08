@@ -1,0 +1,6 @@
+# TKDLB.DLL (tests/apps/tkdlb.c)
+@tests/apps/dll.lnk
+option modname=TKDLB
+export DLB_INITED.1 resident
+export DLB_ID.2
+export DLB_INFO.3

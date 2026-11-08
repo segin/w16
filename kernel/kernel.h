@@ -81,6 +81,7 @@ u16  galloc(u16 flags, u32 size, u16 owner, u16 *sel_out); /* returns handle */
 int  gset_code(u16 sel);                    /* make a block executable */
 u32  gsize_of_sel(u16 sel);
 u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
+u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
 u32  KAPI GlobalHandle(u16 sel);
 
@@ -88,28 +89,59 @@ u32  KAPI GlobalHandle(u16 sel);
 int  local_init_task(u16 ds, u16 heap);
 
 /* ---- module.c ---- */
-#define MAX_MODULES     32
-#define MAX_MODSEGS     64
+#define DOS_PATHMAX     128     /* DOS: longest full path (TRUENAME buffer) */
+#define MODNAME_MAX     8       /* NE: module names are at most 8 chars */
 
+typedef struct modseg {
+    u16 sel;                    /* selector of the segment */
+    u16 hnd;                    /* its global handle */
+} modseg;
+
+/* One per loaded module, in its own global block; modules form a list
+   (module_first). seg[] has seg_count entries and is followed by
+   dep_count words: the hModules of the modules this one imports from
+   (0 for imports bound to "unimplemented" thunks). */
 typedef struct module {
-    u16  in_use;
-    char name[9];               /* module name, upper case */
+    struct module FAR *next;
+    u16  self;                  /* selector of this block */
+    char name[MODNAME_MAX + 1]; /* module name, upper case */
     u16  ne_sel;                /* resident NE tables; also the hModule */
     u16  ne_len;
-    u16  seg_count;
-    u16  seg_sel[MAX_MODSEGS];  /* selector of each segment */
-    u16  seg_hnd[MAX_MODSEGS];  /* handle of each segment */
+    u16  nonres_sel;            /* non-resident name table, 0 if none */
+    u16  flags;                 /* NE header flags (NEF_*) */
     u16  usage;
-    char path[80];
+    u16  seg_count;
+    u16  dep_count;
+    char path[DOS_PATHMAX];
+    modseg seg[1];              /* seg_count entries, then the deps */
 } module;
 
-#define NE_HDR(m) ((ne_header FAR *)MK_FP((m)->ne_sel, 0))
+#define NE_HDR(m)   ((ne_header FAR *)MK_FP((m)->ne_sel, 0))
+#define MOD_DEPS(m) ((u16 FAR *)&(m)->seg[(m)->seg_count])
 
-extern module modules[MAX_MODULES];
+extern module FAR *module_first;        /* KERNEL */
 void     module_register_kernel(const bootinfo FAR *bi);
-module  *module_load(const char FAR *path);
-module  *module_find(const char FAR *name);
-int      module_entry(module *m, u16 ordinal, u16 *sel, u16 *off, int *is_const);
+module FAR *module_load_program(const char FAR *path, u16 *err);
+module FAR *module_find(const char FAR *name);
+module FAR *module_of(u16 h);
+u16      module_instance(module FAR *m);
+int      module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const);
+module FAR *mod_new(u16 seg_count, u16 dep_count);
+void     mod_link(module FAR *m);
+void     mod_unlink(module FAR *m);
+void     mod_set_name(module FAR *m);
+void     mod_set_path(module FAR *m, const char FAR *path);
+int      mod_find_name(module FAR *m, const u8 FAR *pname, u16 *ordinal);
+int      mod_base_name(const char FAR *name, char *base);
+
+/* ---- loader.c ---- */
+void     loader_init(const char FAR *kernel_path);
+
+/* far-call cs:ip as KERNEL calls a DLL's entry point (AX = 1, CX, DX =
+   DS, SI = 0, DI, ES = 0, DS), with one Pascal word argument if nargs;
+   returns AX (kentry.asm) */
+extern u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
+                            u16 nargs, u16 arg);
 
 /* ---- thunk.c ---- */
 void thunk_init(void);
@@ -118,7 +150,8 @@ int  thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
 void __cdecl unimpl_report(u16 index);
 
 /* ---- task.c ---- */
-u16  task_start(module *m, const char FAR *cmdtail);
+u16  task_start(module FAR *m, const char FAR *cmdtail);
+module FAR *task_module(void);          /* the running task's, or NULL */
 void __cdecl inittask_c(regs16 FAR *r);
 u16  get_winflags(void);
 extern u16 psp_sel;

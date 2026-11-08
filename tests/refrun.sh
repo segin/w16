@@ -9,7 +9,8 @@
 # Prints the program's TK.LOG followed by WINEXIT.
 # Environment: REFRUN_FILES = extra host files copied to C:\ (upper-cased
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
-# REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there.
+# REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
+# REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -51,6 +52,7 @@ pcspeaker=false
 [autoexec]
 mount c "$work/c"
 c:
+${REFRUN_PRE:-}
 cd \\WINDOWS
 WIN $mode > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
