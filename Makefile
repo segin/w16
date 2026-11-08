@@ -31,9 +31,11 @@ WRC     := wrc
 KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/dpmi.o $(B)/kernel/global.o $(B)/kernel/module.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
-           $(B)/kernel/string.o
+           $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3 TK4
+TESTS   := TK1 TK2 TK3 TK4 TK5
+# DLLs and files TK5 uses
+TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -52,7 +54,8 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(WINTOOLS:%=$(DOS)/%.EXE) \
+dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
+     $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(B)/hdd/MBR.BIN
 
 # ---- host tools ----
@@ -97,6 +100,62 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
+$(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
+
+# TK5.EXE: the DLL loading probe, with its DLLs (tests/apps/tk5.c)
+$(B)/tests/%.o: tests/apps/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/TK5.EXE: $(B)/tests/start.o $(B)/tests/tk5.o $(B)/tests/prolog.o \
+                tests/apps/app.lnk tests/apps/tk5.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk5.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk5.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk5.o $(B)/tests/prolog.o }
+# DLL code runs on its callers' stacks: SS != DS
+$(B)/tests/dll/%.o: tests/apps/%.c tests/apps/tkdll.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(B)/tests/dll/tkbad.o: tests/apps/tkid.c tests/apps/tkdll.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dTK_BAD -fo=$@ $<
+$(B)/tests/dll/tknodep.o: tests/apps/tkid.c tests/apps/tkdll.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dTK_NODEP -fo=$@ $<
+$(DOS)/TKDLL.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tkdll.o $(B)/tests/prolog.o \
+                  tests/apps/dll.lnk tests/apps/tkdll.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkdll.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tkdll.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tkdll.o $(B)/tests/prolog.o }
+$(DOS)/TKDLB.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tkdlb.o \
+                  tests/apps/dll.lnk tests/apps/tkdlb.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkdlb.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tkdlb.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tkdlb.o }
+$(DOS)/TKID.TPL: $(B)/tests/dllstart.o $(B)/tests/dll/tkid.o \
+                 tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TKID name $@ \
+	    libpath $(WATCOM)/lib286/win option map=$(B)/tests/tkid.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tkid.o }
+$(DOS)/TKBAD.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tkbad.o \
+                  tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TKBAD name $@ \
+	    libpath $(WATCOM)/lib286/win option map=$(B)/tests/tkbad.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tkbad.o }
+$(DOS)/TKNODEP.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o \
+                    tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TKNODEP import NOFUNC TKNONE \
+	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tknodep.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o }
+$(DOS)/TKNOD.DLL: $(B)/tests/tknod.o
+	@mkdir -p $(@D)
+	$(WLINK) format windows dll option quiet option modname=TKNOD \
+	    option start=nodentry export NOD_GET.1 name $@ \
+	    option map=$(B)/tests/tknod.map file { $(B)/tests/tknod.o }
 
 # TEXP3/TEXP2: export-table probes for Windows 3.x and 2.x
 $(B)/tests/texp2.o: tests/apps/texp.c

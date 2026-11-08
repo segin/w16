@@ -30,6 +30,7 @@ group DGROUP _DATA CONST CONST2 _BSS
 extern _kmain                   ; void __cdecl __far kmain(bootinfo __far *)
 extern _unimpl_report           ; void __cdecl __far unimpl_report(u16 index)
 extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
+extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 
 segment _DATA
 global _old21, _task_active
@@ -175,6 +176,11 @@ unimpl_entry:
         push ax
         call far _unimpl_report
         add sp, 2
+        cmp word [_task_active wrt DGROUP], 0
+        jne .task
+        mov ax, 0FFh                    ; no task yet (a DLL's LibMain)
+        call far kexit_to_dos_          ; Watcom register convention
+.task:
         mov al, 0FFh
         jmp task_exit_al
 
@@ -245,6 +251,48 @@ LOCALAPI LOCALSIZE,    LSIZE,    1      ; KERNEL.10
 LOCALAPI LOCALHANDLE,  LHANDLE,  1      ; KERNEL.11
 LOCALAPI LOCALFLAGS,   LFLAGS,   1      ; KERNEL.12
 LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
+; Other APIs that need the caller's DS (procinst.c)
+LOCALAPI MAKEPROCINSTANCE, MPI, 3       ; KERNEL.51
+LOCALAPI GETINSTANCEDATA, GIDATA, 3     ; KERNEL.54
+
+; ---------------------------------------------------------------------------
+; u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
+;                      u16 nargs, u16 arg)
+; Far-call cs:ip on the current stack the way KERNEL calls a DLL's entry
+; point (observed on Windows 3.1: AX = 1, CX = heap size, DX = DS, SI = 0,
+; DI = hInstance, ES = 0, DS = DGROUP), pushing `arg` first if nargs is
+; nonzero (a Pascal procedure such as WEP pops it). Returns AX. Relies on
+; the callee keeping BP, as Windows procedures do.
+global _mod_call
+_mod_call:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        push word [bp + 6]              ; far call target: cs
+        push word [bp + 8]              ;                   ip
+        mov bx, sp
+        cmp word [bp + 16], 0
+        je .call
+        push word [bp + 18]
+.call:
+        mov cx, [bp + 12]
+        mov di, [bp + 14]
+        mov dx, [bp + 10]
+        xor si, si
+        mov es, si
+        mov ax, 1
+        mov ds, dx
+        call far [ss:bx]
+        lea sp, [bp - 8]
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
 
 ; DOS3Call (KERNEL.102): issue INT 21h with the caller's registers.
 global DOS3CALL

@@ -23,7 +23,7 @@ u16 psp_sel;
 #define SW_SHOWNORMAL   1
 
 static struct {
-    module *m;
+    module FAR *m;
     u16 hinstance;
     u16 stack_size;
     u16 heap_size;
@@ -46,7 +46,12 @@ u16 get_winflags(void)
     return f;
 }
 
-u16 task_start(module *m, const char FAR *cmdtail)
+module FAR *task_module(void)
+{
+    return task_active ? cur.m : NULL;
+}
+
+u16 task_start(module FAR *m, const char FAR *cmdtail)
 {
     ne_header FAR *h = NE_HDR(m);
     const ne_segment FAR *ds;
@@ -67,17 +72,17 @@ u16 task_start(module *m, const char FAR *cmdtail)
     if (dsize > 0xFFFEUL)
         dsize = 0xFFFEUL;
 
-    dsel = m->seg_sel[h->auto_data - 1];
-    ssel = m->seg_sel[h->ss - 1];
+    dsel = m->seg[h->auto_data - 1].sel;
+    ssel = m->seg[h->ss - 1].sel;
     /* SP of 0 in the header means "end of the stack" (see above). */
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
 
     cur.m = m;
-    cur.hinstance = m->seg_hnd[h->auto_data - 1];
+    cur.hinstance = m->seg[h->auto_data - 1].hnd;
     cur.stack_size = h->stack_size;
     cur.heap_size = h->heap_size;
     cur.sp = sp;
-    return task_run(m->seg_sel[h->cs - 1], h->ip, dsel, ssel, sp,
+    return task_run(m->seg[h->cs - 1].sel, h->ip, dsel, ssel, sp,
                     h->stack_size, h->heap_size, cur.hinstance, 0, psp_sel);
 }
 

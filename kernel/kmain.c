@@ -68,7 +68,7 @@ static int parse_command_line(void)
 void __cdecl kmain(bootinfo FAR *pbi)
 {
     regs16 r;
-    module *app;
+    module FAR *app;
     u16 rc;
 
     kmemcpy(&bi, pbi, sizeof bi);
@@ -94,9 +94,15 @@ void __cdecl kmain(bootinfo FAR *pbi)
         kputs("usage: KRNL286 program.exe [arguments]\r\n");
         kexit_to_dos(1);
     }
-    app = module_load(app_path);
-    if (!app)
+    app = module_load_program(app_path, &rc);
+    if (!app) {
+        kputs("w16: cannot load ");
+        kputs(app_path);
+        kputs(", error ");
+        kputdec(rc);
+        kputs("\r\n");
         kexit_to_dos(0xFE);
+    }
     rc = task_start(app, NULL);
     kexit_to_dos((u8)rc);
 }
