@@ -95,6 +95,99 @@ _dos_setdrive:
         pop bp
         retf
 
+; int dos_findfirst(const char far *spec, int attr, void far *dta): 0 if
+; found (AH=1Ah sets the 43-byte DTA, AH=4Eh). The DTA is set on every
+; call, so other code's DTA in between does not matter.
+global _dos_findfirst
+_dos_findfirst:
+        push bp
+        mov bp, sp
+        push ds
+        lds dx, [bp + 12]       ; dta
+        mov ah, 1Ah
+        call far DOS3CALL
+        lds dx, [bp + 6]        ; spec
+        mov cx, [bp + 10]       ; attributes
+        mov ah, 4Eh
+        call far DOS3CALL
+        pop ds
+        jmp dos_result
+
+; int dos_findnext(void far *dta): 0 if found (AH=4Fh)
+global _dos_findnext
+_dos_findnext:
+        push bp
+        mov bp, sp
+        push ds
+        lds dx, [bp + 6]
+        mov ah, 1Ah
+        call far DOS3CALL
+        mov ah, 4Fh
+        call far DOS3CALL
+        pop ds
+        jmp dos_result
+
+; int dos_getcwd(int drive, char far *buf): drive 1 = A:; buf (64 bytes,
+; DOS's own bound) gets the path without drive or leading backslash; 0 ok
+global _dos_getcwd
+_dos_getcwd:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        mov dl, [bp + 6]
+        lds si, [bp + 8]
+        mov ah, 47h
+        call far DOS3CALL
+        pop si
+        pop ds
+        jmp dos_result
+
+; int dos_getdrive(void): the current drive, 0 = A: (AH=19h)
+global _dos_getdrive
+_dos_getdrive:
+        mov ah, 19h
+        call far DOS3CALL
+        xor ah, ah
+        retf
+
+; int dos_drivetype(int drive): drive 1 = A:; -1 no such drive, 0
+; removable, 1 fixed, 2 remote (IOCTL 4408h/4409h: no media is touched)
+global _dos_drivetype
+_dos_drivetype:
+        push bp
+        mov bp, sp
+        mov bl, [bp + 6]
+        mov ax, 4409h           ; remote?
+        call far DOS3CALL
+        jc .none
+        test dx, 1000h
+        jnz .remote
+        mov bl, [bp + 6]
+        mov ax, 4408h           ; removable? AX = 0 yes, 1 no
+        call far DOS3CALL
+        jc .fixed               ; not supported by its driver: say fixed
+        pop bp
+        retf
+.fixed: mov ax, 1
+        pop bp
+        retf
+.remote:
+        mov ax, 2
+        pop bp
+        retf
+.none:  mov ax, -1
+        pop bp
+        retf
+
+; the common tail: AX = 0 if CF is clear, else -1; restores BP
+dos_result:
+        mov ax, 0
+        jnc .ok
+        dec ax
+.ok:    pop bp
+        retf
+
 ; __U4D: the compiler's unsigned 32-bit divide helper. DX:AX / CX:BX:
 ; quotient in DX:AX, remainder in CX:BX (shift and subtract, 32 steps).
 ; Preserves every other register.

@@ -205,7 +205,7 @@ BOOL CALLBACK __export NewDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* Text of a dialog control in a new global block. */
-static LPSTR dlg_text(HWND dlg, int id)
+LPSTR dlg_text(HWND dlg, int id)
 {
     int n = GetWindowTextLength(GetDlgItem(dlg, id)) + 1;
     LPSTR s = mem_alloc(n);
@@ -511,6 +511,19 @@ BOOL CALLBACK __export ChangeIconDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_BROWSE:
+            /* observed: the chosen file's name goes in and its icons are
+               listed at once */
+            name = browse_file(dlg, IDS_FILTER_ICONS);
+            if (name) {
+                SetDlgItemText(dlg, IDC_ICONFILE, name);
+                if (!load_icon_list(dlg, name))
+                    message(dlg, IDS_NOICONS, name);
+                SendDlgItemMessage(dlg, IDC_ICONLIST, LB_SETCURSEL, 0, 0);
+                mem_free(name);
+            }
+            /* observed (after a file was chosen): the focus goes to OK */
+            SendMessage(dlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(dlg, IDOK), 1L);
+            return TRUE;
         case IDC_HELPBTN:
             message(dlg, IDS_NOTYET, NULL);     /* TODO */
             return TRUE;
@@ -766,6 +779,7 @@ static LPSTR pi_iconpath;               /* the item's icon file, or chosen */
 static WORD pi_iconindex;
 static BOOL pi_icon_chosen;             /* Change Icon was confirmed */
 static HICON pi_shown;                  /* an icon we made for the dialog */
+static LPSTR pi_cmd0;                   /* the command line as it was */
 
 BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -779,8 +793,10 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
         pi_iconindex = 0;
         pi_icon_chosen = FALSE;
         pi_shown = NULL;
+        pi_cmd0 = NULL;
         if (props_group && group_get_props(props_group, &ip)) {
             pi_iconpath = group_selected_icon(props_group, &pi_iconindex);
+            pi_cmd0 = s_dup(ip.cmd);
             /* observed: the fields filled in, the item's icon shown */
             SetDlgItemText(dlg, IDC_DESC, ip.desc);
             SetDlgItemText(dlg, IDC_CMDLINE, ip.cmd);
@@ -811,18 +827,24 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
                 EnableWindow(GetDlgItem(dlg, IDC_CHANGEICON), any);
             }
             return TRUE;
-        case IDC_CHANGEICON:
-            if (pi_iconpath) {
+        case IDC_CHANGEICON: {
+            /* the item's icon file; observed: once the command line has
+               been changed (and no icon chosen), the new program's */
+            LPSTR cmd = dlg_text(dlg, IDC_CMDLINE);
+            if (pi_iconpath && (pi_icon_chosen || !cmd || !pi_cmd0 || !s_icmp(cmd, pi_cmd0))) {
                 ci_path = s_dup(pi_iconpath);
                 ci_index = pi_iconindex;
-            } else {                    /* a new item: its program's icons */
-                LPSTR cmd = dlg_text(dlg, IDC_CMDLINE);
+                mem_free(cmd);
+            } else {                    /* the command's program */
                 int n = 0;
                 while (cmd && cmd[n] && cmd[n] != ' ')
                     n++;
                 if (cmd)
                     cmd[n] = 0;
-                ci_path = cmd;
+                ci_path = cmd ? icon_file(cmd) : NULL;
+                mem_free(cmd);
+                if (ci_path)            /* shown as a full path, capitals */
+                    AnsiUpper(ci_path);
                 ci_index = 0;
             }
             if (ci_path && run_dialog(dlg, (FARPROC)ChangeIconDlgProc, IDD_CHGICON) == IDOK) {
@@ -847,6 +869,7 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
                Cancel */
             SendMessage(dlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(dlg, IDOK), 1L);
             return TRUE;
+        }
         case IDOK:
             group = props_group ? props_group
                                 : (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
@@ -871,7 +894,17 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
         case IDCANCEL:
             EndDialog(dlg, IDCANCEL);
             return TRUE;
-        case IDC_BROWSE:
+        case IDC_BROWSE: {
+            /* observed: the command line becomes the file's full path */
+            LPSTR f = browse_file(dlg, IDS_FILTER_PROGRAMS);
+            if (f) {
+                SetDlgItemText(dlg, IDC_CMDLINE, f);
+                mem_free(f);
+            }
+            /* observed (after a file was chosen): the focus goes to OK */
+            SendMessage(dlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(dlg, IDOK), 1L);
+            return TRUE;
+        }
         case IDC_HELPBTN:
             message(dlg, IDS_NOTYET, NULL);     /* TODO */
             return TRUE;
@@ -880,6 +913,8 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
     case WM_DESTROY:
         mem_free(pi_iconpath);
         pi_iconpath = NULL;
+        mem_free(pi_cmd0);
+        pi_cmd0 = NULL;
         if (pi_shown)
             DestroyIcon(pi_shown);
         pi_shown = NULL;

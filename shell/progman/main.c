@@ -462,7 +462,7 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
 #endif
     if (!register_frame() || !group_register() || !hotkey_register()
 #ifdef W16_WIN2
-        || !iconlist_register()
+        || !iconlist_register() || !browse_register()
 #endif
         )
         return 1;

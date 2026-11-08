@@ -7,3 +7,4 @@ option heapsize=16k
 option description 'w16 Program Manager'
 library windows.lib
 library shell.lib
+library commdlg.lib

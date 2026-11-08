@@ -132,6 +132,10 @@ BEGIN
     IDS_MOVELABEL,      "Move Program Item:"
     IDS_COPYLABEL,      "Copy Program Item:"
     IDS_NOICONS,        "%s contains no icons."
+    IDS_BROWSE,         "Browse"
+    IDS_FILTER_PROGRAMS, "Programs|*.exe;*.pif;*.com;*.bat|All Files (*.*)|*.*|"
+    IDS_FILTER_ICONS,   "Icon Files|*.ico;*.exe;*.dll|Programs (*.exe)|*.exe|Libraries (*.dll)|*.dll|Icons (*.ico)|*.ico|All Files (*.*)|*.*|"
+    IDS_FILENOTFOUND,   "%s\nFile not found."
 END
 
 /* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */
@@ -336,3 +340,29 @@ BEGIN
     PUSHBUTTON      "&Browse...", IDC_BROWSE, 178, 43, 40, 14
     PUSHBUTTON      "&Help", IDC_HELPBTN, 178, 60, 40, 14
 END
+
+#ifdef W16_WIN2
+/* Browse, for Windows 2.x (no COMMDLG): COMMDLG's Open dialog as observed
+   on Windows 3.1 (its pixel layout halved into 2.x dialog units, and its
+   control IDs), with our own folder tree and drop-down lists. */
+IDD_BROWSE DIALOG 32, 10, 232, 113
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Browse"
+BEGIN
+    CONTROL         "File &Name:", 0x442, "Static", SS_LEFT, 6, 6, 80, 8
+    EDITTEXT        0x480, 5, 14, 80, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    CONTROL         "", 0x460, "ListBox", LBS_SORT | LBS_NOTIFY | WS_VSCROLL | WS_BORDER |
+                    WS_TABSTOP, 5, 29, 80, 55
+    CONTROL         "&Directories:", -1, "Static", SS_LEFT, 97, 6, 80, 8
+    CONTROL         "", 0x440, "Static", SS_LEFT | SS_NOPREFIX, 97, 16, 80, 8
+    CONTROL         "", 0x461, "pmdirlist", WS_VSCROLL | WS_BORDER | WS_TABSTOP,
+                    96, 29, 82, 55
+    CONTROL         "List Files of &Type:", 0x441, "Static", SS_LEFT, 6, 87, 80, 8
+    CONTROL         "", 0x470, "pmcombo", WS_TABSTOP, 5, 96, 80, 12
+    CONTROL         "Dri&ves:", 0x443, "Static", SS_LEFT, 97, 87, 80, 8
+    CONTROL         "", 0x471, "pmcombo", CBS_OWNERDRAWFIXED | WS_TABSTOP, 96, 96, 82, 12
+    DEFPUSHBUTTON   "OK", IDOK, 184, 6, 44, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 184, 22, 44, 14
+    PUSHBUTTON      "&Help", 0x40E, 184, 40, 44, 14
+END
+#endif

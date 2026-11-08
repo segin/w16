@@ -35,6 +35,7 @@
 #define IDD_MOVECOPY        15
 #define IDD_EXITWIN         16
 #define IDD_CHGICON         17
+#define IDD_BROWSE          18          /* the 2.x build's own */
 
 #define IDM_NEW             100
 #define IDM_OPEN            101
@@ -131,6 +132,10 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_MOVELABEL       16
 #define IDS_COPYLABEL       17
 #define IDS_NOICONS         18
+#define IDS_BROWSE          19
+#define IDS_FILTER_PROGRAMS 20
+#define IDS_FILTER_ICONS    21
+#define IDS_FILENOTFOUND    22
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -207,6 +212,11 @@ BOOL CALLBACK __export ExitWinDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);
 int  run_dialog(HWND owner, FARPROC proc, int id);
+LPSTR dlg_text(HWND dlg, int id);       /* a control's text, new string */
+
+/* ---- browse.c: Browse (COMMDLG on 3.x, our own on 2.x) ---- */
+LPSTR browse_file(HWND owner, int filter_ids);  /* full path, capitals */
+BOOL browse_register(void);                     /* 2.x: pmcombo, pmdirlist */
 
 /* ---- dialogs.c: program execution ---- */
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized);
@@ -238,6 +248,6 @@ void message(HWND owner, int ids, const char FAR *arg);
 int  ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags);
 
 extern int __cdecl dos_chdir(const char FAR *path);
-extern void __cdecl dos_setdrive(int drive);
+extern void __cdecl dos_setdrive(int drive);    /* 0 = A: */
 
 #endif
