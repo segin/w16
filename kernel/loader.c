@@ -502,7 +502,9 @@ static u16 entry_ds(module FAR *m);
    TKDLL and TKDLB, where TKDLL imports TKDLB, gave 1 for both; a second
    instance 2 for both). Freeing takes one use from each, and the DLLs
    that reach 0 are freed (WEP first). Pietrek describes the same
-   (IncExeUsage, DecExeUsage). KERNEL is not counted. */
+   (IncExeUsage, DecExeUsage). KERNEL is counted too (observed under a
+   booted 3.1, TK29: 11 at the shell, one more with every DLL loaded,
+   whatever it imports), but never freed. */
 static u16 walk_gen;            /* marks modules already counted */
 static u16 load_depth;          /* nested load_file calls */
 
@@ -510,7 +512,7 @@ static void closure_walk(module FAR *m, int delta)
 {
     u16 i, n;
     module FAR *d;
-    if (m == module_first || m->walk == walk_gen)
+    if (m->walk == walk_gen)
         return;
     m->walk = walk_gen;
     if (delta > 0)

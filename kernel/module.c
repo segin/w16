@@ -132,15 +132,48 @@ void mod_set_path(module FAR *m, const char FAR *path)
     regs16 r;
     u16 i;
 
-    r.ax = 0x6000;
-    r.si = FP_OFF(path);
-    r.ds = FP_SEG(path);
-    r.di = FP_OFF((char FAR *)full);
-    r.es = FP_SEG((char FAR *)full);
-    if (!dos21(&r))
+    /* a full path stays as it is; a relative one gets the current drive
+       and directory (INT 21h 19h, 47h). DOS's TRUENAME (60h), used
+       before, returned garbage for some names under DOSX on DOSBox-X. */
+    if (!(path[0] && path[1] == ':' && path[2] == '\\')) {
+        u16 n = 0, j = 0;
+        r.ax = 0x1900;
+        r.ds = r.es = 0;
+        dos21(&r);
+        if (path[0] && path[1] == ':') {
+            full[n++] = path[0];        /* "X:NAME": that drive's directory */
+            j = 2;
+        } else {
+            full[n++] = (char)('A' + (r.ax & 0xFF));
+        }
+        full[n++] = ':';
+        full[n++] = '\\';
+        if (path[j] != '\\') {
+            r.ax = 0x4700;
+            r.dx = (full[0] | 0x20) - 'a' + 1;
+            r.si = FP_OFF((char FAR *)(full + n));
+            r.ds = FP_SEG((char FAR *)(full + n));
+            r.es = 0;
+            full[n] = 0;
+            if (!dos21(&r)) {
+                while (full[n] && n < sizeof full - 2)
+                    n++;
+                if (full[n - 1] != '\\')
+                    full[n++] = '\\';
+            }
+        } else {
+            j++;
+        }
+        while (path[j] && n < sizeof full - 1)
+            full[n++] = path[j++];
+        full[n] = 0;
         path = full;
+    }
+    /* observed on Windows 3.1 (TK22): the file name in upper case, e.g.
+       "C:\WINDOWS\SYSTEM\SYSTEM.DRV" for [boot] system.drv=system.drv
+       (UNVERIFIED: characters beyond ASCII) */
     for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
-        m->path[i] = path[i];
+        m->path[i] = path[i] >= 'a' && path[i] <= 'z' ? path[i] - 'a' + 'A' : path[i];
     m->path[i] = 0;
 }
 

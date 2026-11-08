@@ -175,6 +175,8 @@ static void print_modmap(void)
     for (m = module_first; m; m = m->next) {
         kputs("w16: ");
         kputs(m->name);
+        kputs(" rec=");
+        kputhex(m->self);
         kputs(" hmod=");
         kputhex(m->ne_sel);
         for (i = 0; i < m->seg_count; i++) {
@@ -183,6 +185,8 @@ static void print_modmap(void)
             kputs("=");
             kputhex(m->seg[i].sel);
         }
+        kputs(" ");
+        kputs(m->path);
         kputs("\r\n");
     }
 }
@@ -208,6 +212,8 @@ static void boot_fail(const char FAR *name)
     kputs(name);
     kputs("\r\n");
     trace_print();                      /* w16's [w16] trace, if any */
+    if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
+        print_modmap();
     kexit_to_dos(1);                    /* UNVERIFIED: the exit code */
 }
 
