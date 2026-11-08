@@ -86,7 +86,7 @@ u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
 u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
 u32  KAPI GlobalHandle(u16 sel);
-u16  galloc_dos(u16 size, u16 owner, u16 *seg);
+u16  galloc_dos(u32 size, u16 owner, u16 *seg);
 u16  galias_code(u16 sel, u16 owner);
 void gfree_owner(u16 owner);
 u16  gowner(u16 h);

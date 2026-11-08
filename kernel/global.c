@@ -126,11 +126,16 @@ static int set_tiles(garena FAR *a)
     u32 left = a->size;
     if (discarded(a))                   /* keep the selector, no memory */
         return dpmi_set_desc(a->sel, 0, 0, 0);
+    /* Observed (tests/apps/tk17.c): each tile's limit reaches the end of
+       the block (tile i: size - 64K * i - 1), as a 386 can address
+       through it. A host that only takes 64K limits gets those. */
     for (i = 0; i < a->nsel; i++) {
-        u32 lim = left > 0x10000UL ? 0x10000UL : left;
-        if (!dpmi_set_desc(a->sel + i * sel_inc, a->lin + ((u32)i << 16), lim - 1, 0))
+        u16 t = a->sel + i * sel_inc;
+        u32 base = a->lin + ((u32)i << 16);
+        if (!dpmi_set_desc(t, base, left - 1, 0) &&
+            !dpmi_set_desc(t, base, (left > 0x10000UL ? 0x10000UL : left) - 1, 0))
             return 0;
-        left -= lim;
+        left -= left > 0x10000UL ? 0x10000UL : left;
     }
     return 1;
 }
@@ -220,13 +225,17 @@ static void gfree(garena FAR *a)
     a->sel = 0;
 }
 
-/* A zeroed block of `size` bytes (below 64K) in DOS memory (DPMI 0100h),
-   whose handle is its selector; *seg is its real-mode segment. Returns
-   the selector, 0 if out of memory. */
-u16 galloc_dos(u16 size, u16 owner, u16 *seg)
+/* A zeroed block of `size` bytes in DOS memory (DPMI 0100h), whose handle
+   is its selector; *seg is its real-mode segment. A block over 64K has
+   tiles as GlobalAlloc's (observed, tests/apps/tk17.c: GlobalDOSAlloc).
+   Returns the selector, 0 if out of memory. */
+u16 galloc_dos(u32 size, u16 owner, u16 *seg)
 {
-    garena FAR *a = free_record();
+    garena FAR *a;
     regs16 r;
+    if (size == 0 || ROUND(size) > 0xFFFF0UL)
+        return 0;
+    a = free_record();
     if (!a)
         return 0;
     r.ax = 0x0100;
@@ -236,15 +245,16 @@ u16 galloc_dos(u16 size, u16 owner, u16 *seg)
         return 0;
     a->sel = r.dx;
     a->dpmi = r.dx;
-    a->nsel = 1;
     a->lin = (u32)r.ax << 4;
     a->size = ROUND(size);
+    a->nsel = (u16)((a->size + 0xFFFFUL) >> 16);
     a->flags = GMEM_FIXED;
     a->lock = 0;
     a->owner = owner;
     a->kind = GK_DOS;
     *seg = r.ax;
-    kmemset(MK_FP(a->sel, 0), 0, (u16)a->size);
+    set_tiles(a);                       /* rights and limits as GlobalAlloc's */
+    zero_range(a, 0);
     return a->sel;
 }
 
@@ -323,10 +333,19 @@ u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
     return galloc(flags, size, (flags & GMEM_SHARE) ? 0 : task_pdb(), NULL);
 }
 
+/* Give back a selector run that a failed reallocation took. */
+static void undo_run(u16 run, u16 n)
+{
+    u16 i;
+    for (i = 0; run && i < n; i++)
+        dpmi_free_desc(run + i * sel_inc);
+}
+
 u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
 {
     garena FAR *a = find(h);
     u32 old, lin, nh, newsize;
+    u16 newn, run = 0;
 
     if (!a || a->kind != GK_NORMAL)
         return 0;
@@ -355,13 +374,22 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
         return handle_of(a);
     }
     newsize = ROUND(size);
-    if (((newsize + 0xFFFFUL) >> 16) > a->nsel)
-        return 0;                       /* TODO: grow the selector tile run */
+    newn = (u16)((newsize + 0xFFFFUL) >> 16);
+    if (newn > a->nsel) {
+        /* More tiles. Observed (tests/apps/tk17.c): the block always moves
+           to a new selector run, so the handle changes, for moveable and
+           fixed blocks alike (also without GMEM_MOVEABLE). */
+        run = dpmi_alloc_desc(newn);
+        if (!run)
+            return 0;
+    }
     old = a->size;
     if (discarded(a)) {
-        if (!dpmi_alloc_mem(newsize, &lin, &nh))
+        if (!dpmi_alloc_mem(newsize, &lin, &nh)) {
+            undo_run(run, newn);
             return 0;
-    } else if (a->nsel == 1) {
+        }
+    } else if (a->nsel == 1 && newn == 1) {
         /* A single-tile block may be the running task's stack (its DGROUP
            grows with its local heap), so it must never be unmapped while
            in use, as DPMI 0503h may do when it moves a block. Growing:
@@ -386,8 +414,21 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
             nh = a->dpmi;
         }
     } else if (!dpmi_resize_mem(a->dpmi, newsize, &lin, &nh)) {
+        undo_run(run, newn);
         return 0;
     }
+    if (run) {                          /* the block moves to the new run */
+        u16 i;
+        for (i = 0; i < a->nsel; i++)
+            dpmi_free_desc(a->sel + i * sel_inc);
+        a->sel = run;
+    }
+    if (newn < a->nsel) {               /* fewer tiles: free the rest */
+        u16 i;
+        for (i = newn; i < a->nsel; i++)
+            dpmi_free_desc(a->sel + i * sel_inc);
+    }
+    a->nsel = newn;
     a->lin = lin;
     a->dpmi = nh;
     a->size = newsize;
