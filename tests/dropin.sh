@@ -16,8 +16,8 @@
 #     -f SRC=DST copy SRC to C:\DST as well (repeatable), e.g. a test
 #                program; DST "-" deletes SRC (a path under C:\) instead
 #     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable)
-#     -s PNG     also take a screenshot after SECS seconds (DOSBox-X on a
-#                virtual X display, never the user's desktop)
+#     -s PNG     also take a screenshot after SECS seconds (DOSBox on a
+#                virtual X display, xvfb-run, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
@@ -115,18 +115,18 @@ if [ -z "$shot" ]; then
     SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$secs" \
         dosbox -noconsole -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 else
-    printf '%s\n' "$common" | sed 's/^\[dosbox\]$/[dosbox]\nquit warning=false\nmachine=svga_s3/' \
-        > "$work/dosbox.conf"
+    printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >/dev/null 2>&1 &
+SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox -noconsole -conf "$work/dosbox.conf" >/dev/null 2>&1 &
 sleep $secs
-import -window root "$work/s.png"
+wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
+import -window "\${wid:-root}" "$work/s.png"
 wait
 SH
     chmod +x "$work/shot.sh"
     xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh" || true
-    magick "$work/s.png" -crop 640x480+0+0 +repage "$shot" 2>/dev/null || cp "$work/s.png" "$shot"
+    cp "$work/s.png" "$shot"
 fi
 echo "== KERNEL output (C:\\OUT.TXT)"
 if [ -f "$work/c/OUT.TXT" ]; then tr -d '\r' < "$work/c/OUT.TXT"; else echo "(none: still running at the time limit?)"; fi

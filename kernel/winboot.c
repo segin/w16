@@ -254,7 +254,8 @@ u16 winboot(void)
         boot_fail(shell);
     booting = 0;
     final_user_init();
-    wd_stop();
+    /* the watchdog keeps running: a debugging aid, it reports where the
+       system is after SECONDS without a boot log line */
     task_boot_tdb_end();
     return task_boot();
 }

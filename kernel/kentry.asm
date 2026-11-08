@@ -659,3 +659,89 @@ wd_fire:
         sti
         call far _wd_report
 .hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; K327 (HandleParamError, Schulman): register-based; USER's and GDI's
+; parameter validation far-calls it when a parameter is bad, with the
+; error code in BX (observed from PROGMAN under w16: BX=6040h,
+; ERR_BAD_HWND, called from USER's SendMessage layer), and continues
+; after it returns. The retail KERNEL's LogParamError does nothing
+; (Pietrek); w16 prints the first few (a debugging aid) and returns with
+; every register kept. UNVERIFIED: what else the retail K327 does.
+extern _k327_note               ; void __cdecl __far k327_note(u16 err, u16 ip, u16 cs)
+global K327
+K327:
+        pushf
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push ds
+        push es
+        push bp
+        mov bp, sp
+        mov ax, DGROUP
+        mov ds, ax
+        push word [bp + 22]             ; caller's CS
+        push word [bp + 20]             ; caller's IP
+        push bx                         ; error code
+        call far _k327_note
+        add sp, 6
+        pop bp
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        popf
+        retf
+
+; ---------------------------------------------------------------------------
+; Catch (KERNEL.55) and Throw (KERNEL.56), as the SDK describes them:
+; Catch(LPCATCHBUF) saves the execution state in the 9-word buffer and
+; returns 0; Throw(LPCATCHBUF, n) returns from that Catch again, with n.
+; The buffer's layout is w16's own (UNVERIFIED against Windows'): return
+; IP, CS, the SP after Catch returns, SS, BP, SI, DI, DS.
+global CATCH, THROW
+CATCH:
+        push bp
+        mov bp, sp
+        push es
+        push bx
+        les bx, [bp + 6]
+        mov ax, [bp + 2]
+        mov [es:bx], ax                 ; IP
+        mov ax, [bp + 4]
+        mov [es:bx + 2], ax             ; CS
+        lea ax, [bp + 10]
+        mov [es:bx + 4], ax             ; SP after the return
+        mov [es:bx + 6], ss
+        mov ax, [bp]
+        mov [es:bx + 8], ax             ; BP
+        mov [es:bx + 10], si
+        mov [es:bx + 12], di
+        mov [es:bx + 14], ds
+        pop bx
+        pop es
+        pop bp
+        xor ax, ax
+        retf 4
+THROW:
+        mov bx, sp
+        mov ax, [ss:bx + 4]             ; n
+        mov es, [ss:bx + 8]
+        mov bx, [ss:bx + 6]             ; the buffer
+        mov si, [es:bx + 10]
+        mov di, [es:bx + 12]
+        mov ds, [es:bx + 14]
+        mov bp, [es:bx + 8]
+        mov ss, [es:bx + 6]
+        mov sp, [es:bx + 4]
+        push word [es:bx + 2]
+        push word [es:bx]
+        retf

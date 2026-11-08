@@ -214,3 +214,19 @@ void __cdecl wd_report(void)
     print_int21_ring(ipos);
     kexit_to_dos(0xFE);
 }
+
+/* K327 (kentry.asm): note the first parameter errors on standard output */
+void __cdecl k327_note(u16 err, u16 ip, u16 cs)
+{
+    static u16 count;
+    if (++count > 8)
+        return;
+    kputs("w16: parameter error ");
+    kputhex(err);
+    kputs(" at ");
+    kputhex(cs);
+    kputs(":");
+    kputhex(ip);
+    where(cs);
+    kputs("\r\n");
+}
