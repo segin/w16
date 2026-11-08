@@ -37,18 +37,18 @@ TESTS   := TK1 TK2
 WINTOOLS := SNAP TW2
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
-            $(B)/shell/progman/util.o
+            $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o
 ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
             $(B)/shell/res/defitem.ico
 
 .SECONDARY:
 
-.PHONY: all host dos shell test clean
+.PHONY: all host dos shell shell2 test clean
 all: host dos shell
 
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(WINTOOLS:%=$(DOS)/%.EXE) \
-     $(DOS)/KEYFEED.COM
+     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(B)/hdd/MBR.BIN
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -91,6 +91,7 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
 # TW2.EXE: the Windows 2.x probe, marked as a Windows 2.0 program
+$(B)/tests/tw2.o: tests/apps/tw2api.h
 $(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
@@ -107,8 +108,21 @@ $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
-# ---- shell: PROGMAN.EXE ----
+$(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(B)/hdd/MBR.BIN: tools/dos/mbr.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# ---- shell: PROGMAN.EXE, in two builds from one source tree ----
+#   $(DOS)/PROGMAN.EXE    Windows 3.x build (marked 3.0, uses MDI etc.)
+#   $(WIN2)/PROGMAN.EXE   Windows 2.x build (W16_WIN2: 8086 code, fixed
+#                         segments, no 3.x-only calls; marked 2.0)
+WIN2    := $(B)/win2
+SHELL_PM2 := $(patsubst $(B)/shell/%,$(B)/shell2/%,$(SHELL_PM))
 shell: $(DOS)/PROGMAN.EXE
+shell2: $(WIN2)/PROGMAN.EXE
 
 $(B)/shell/start.o: shell/start.asm
 	@mkdir -p $(@D)
@@ -127,6 +141,24 @@ $(DOS)/PROGMAN.EXE: $(SHELL_PM) $(B)/shell/progman/progman.res shell/progman/pro
 	$(WLINK) @shell/progman/progman.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/shell/progman/progman.map \
 	    option resource=$(B)/shell/progman/progman.res file { $(SHELL_PM) }
+
+$(B)/shell2/start.o: $(B)/shell/start.o
+	@mkdir -p $(@D)
+	cp $< $@
+$(B)/shell2/progman/%.o: shell/progman/%.c shell/progman/progman.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -fo=$@ $<
+$(B)/shell2/progman/progman.res: shell/progman/progman.rc shell/progman/progman.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/progman \
+	    -i=$(B)/shell/res -fo=$@ $<
+$(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/progman2.lnk \
+                     tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/progman/progman2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell2/progman/progman.map \
+	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
+	python3 tools/nemark.py $@ 2.0
 
 test: dos
 	tests/run-tests.sh

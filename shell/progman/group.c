@@ -1,36 +1,50 @@
 /*
  * group.c - program groups: .GRP files and the PMGroup MDI child windows.
  *
- * .GRP layout, as observed in files written by Windows 3.1 Setup
- * (tests: .tools/ref/win31; offsets in bytes, all little-endian):
+ * .GRP layout, as observed in files written by Windows 3.1 Setup and by
+ * the original Program Manager (offsets in bytes, little-endian):
  *   00  "PMCC"
  *   04  checksum: makes the 16-bit word sum of the file zero (an odd
  *       final byte is summed as a word with a zero high byte)
- *   06  cbGroup: size of the group data (the whole file so far)
+ *   06  cbGroup: size of the group data (tags excluded)
  *   08  nCmdShow of the group window
  *   0A  rcNormal: window rectangle in MDI client coordinates
  *   12  ptMin: position when minimized (-1,-1 = not set)
  *   16  pName: offset of the group name
- *   18  cxIcon, cyIcon (32, 32)
- *   1C  two bytes 01 04, 1E a word 0000 (meaning not yet known)
+ *   18  cxIcon, cyIcon (32, 32), then bytes 01 04 and a word 0000
+ *       (preserved; their meaning is not yet known)
  *   20  cItems: number of item slots
  *   22  rgiItems[cItems]: item offsets, 0 = empty slot
- * Item (24 bytes): x, y (icon position in client coordinates), iIcon,
+ * Item record (24 bytes): x, y (position in client coordinates), iIcon,
  *   cbHeader, cbANDPlane, cbXORPlane, pHeader, pANDPlane, pXORPlane,
- *   pName, pCommand, pIconPath. The header is 12 bytes: hotspot x, y,
- *   cx, cy, AND row bytes, planes, bits per pixel. The icon bits are in
- *   the display driver's own format (VGA: 4 planes of 1 bit).
- * Tags follow cbGroup (Setup writes none; observed after editing items
- * with the original Program Manager): records { WORD id, WORD item,
- * WORD cb (whole record), BYTE data[cb - 6] }, starting with
- * { 8000h, FFFFh, 10, "PMCC" } and ending with { FFFFh, FFFFh, 0 }.
+ *   pName, pCommand, pIconPath. The icon header is 12 bytes: hotspot x,
+ *   y, cx, cy, row bytes, planes, bits per pixel; the bits are in the
+ *   display driver's format (VGA: 4 planes of 1 bit).
+ * Layout of a file Program Manager writes: header, rgiItems, group name,
+ *   then for each item its record, name, command, icon path, icon header,
+ *   AND bits and XOR bits.
+ * Tags follow cbGroup: records { WORD id, WORD item, WORD cb (whole
+ *   record), BYTE data[cb - 6] }, the first { 8000h, FFFFh, 10, "PMCC" },
+ *   the last { FFFFh, FFFFh, 0 }. There are none if no item has any.
  *   8102h  hotkey: WORD, low byte virtual key, high byte modifiers
  *          (06h = Ctrl+Alt)
  *   8103h  run minimized: no data
- * cbGroup does not include the tags; the checksum covers the whole file.
- * Tags are not interpreted yet. TODO: the working directory (expected
- * 8101h; not yet captured), and why editing an item moves it to a new
- * index.
+ *   8101h  working directory (expected; not yet seen: when the command
+ *          has no path, the working directory is prepended to it)
+ *
+ * Observed: on exit the original rewrites only groups that changed; one
+ * merely looked at is left byte for byte as it was.
+ *
+ * Item order, as observed: rgiItems is the z-order, bottom first.
+ * Selecting an item (also the initial selection) brings it to the top;
+ * deleting one closes the gap and leaves cItems as it was (empty slots
+ * at the end). An item's data blocks have an order of their own: new
+ * items' data goes at the end of the file, a deleted item's is removed.
+ *
+ * Each group lives in global memory as a list of items, and is written
+ * back from that model in the layout above. There are no fixed limits
+ * (Zero-One-Infinity) beyond the format's own: offsets are 16-bit, so a
+ * group file stays below 64K.
  */
 #include "progman.h"
 
@@ -43,28 +57,40 @@
 #define ICON_DY         2
 #define TITLE_DY        (ICON_DY + 32 + 1)
 
-typedef struct {
+#define HDR_SIZE        0x22
+#define ITEM_SIZE       24
+#define TAG_HOTKEY      0x8102
+#define TAG_MINIMIZE    0x8103
+
+typedef struct item {
+    struct item FAR *dnext;             /* data order */
     int x, y;
-    HICON icon;
-    WORD pname, pcmd, picon;
-    BOOL own_icon;                      /* we created it: destroy it */
+    WORD iicon;
+    LPSTR name, cmd, iconpath;
+    LPSTR icon;                         /* header + AND + XOR bits */
+    WORD cbhdr, cband, cbxor;
+    LPSTR tags;                         /* this item's tag records */
+    WORD cbtags;
+    HICON hicon;
+    BOOL own_icon;
 } item;
 
-/* Each group lives in its own global memory block, not in the 64K
-   automatic data segment, and groups form a list: there is no limit on
-   their number, on items per group, or on the path length (Zero-One-
-   Infinity). Blocks stay locked while the group exists. (TODO for the
-   real-mode Windows 2.x build: lock per use.) */
 typedef struct group {
     struct group FAR *next;
     HWND hwnd;
-    HGLOBAL hdata;                      /* the whole .GRP file, tags included */
-    WORD size;                          /* cbGroup: the group data proper */
-    WORD fsize;                         /* file size: group data + tags */
     int ininum;                         /* N of GroupN= in PROGMAN.INI */
-    item FAR *items;                    /* nitems entries */
-    int nitems;
-    int sel;                            /* selected item, -1 = none */
+    LPSTR name;
+    WORD show;
+    RECT rc;
+    POINT pmin;
+    BYTE hdr18[8];                      /* header bytes 18h..1Fh */
+    item FAR * FAR *z;                  /* rgiItems: z-order, bottom first */
+    WORD nz, cap;                       /* used slots, cItems */
+    item FAR *dfirst;                   /* data order */
+    LPSTR gtags;                        /* other group-level tags */
+    WORD cbgtags;
+    item FAR *sel;
+    BOOL dirty;                         /* items changed since written */
     char path[1];                       /* the .GRP path, allocated to fit */
 } group;
 
@@ -72,8 +98,9 @@ static group FAR *first;
 static HFONT title_font;
 static HICON def_icon;
 static char cls_group[] = "PMGroup";
+static const BYTE new_hdr18[8] = { 32, 0, 32, 0, 1, 4, 0, 0 };
 
-/* ---- .GRP access ---- */
+/* ---- little helpers ---- */
 
 static WORD rd16(const BYTE FAR *p, WORD off)
 {
@@ -84,6 +111,14 @@ static void wr16(BYTE FAR *p, WORD off, WORD v)
 {
     p[off] = (BYTE)v;
     p[off + 1] = (BYTE)(v >> 8);
+}
+
+static void copy(void FAR *d, const void FAR *s, WORD n)
+{
+    BYTE FAR *dp = d;
+    const BYTE FAR *sp = s;
+    while (n--)
+        *dp++ = *sp++;
 }
 
 /* Is a NUL-terminated string at off inside the data? */
@@ -116,107 +151,350 @@ static group FAR *grp_of(HWND hwnd)
     return NULL;
 }
 
-static HICON item_icon(group FAR *g, const BYTE FAR *p, WORD it, BOOL FAR *own)
+static int zindex(group FAR *g, item FAR *t)
 {
-    WORD cbh = rd16(p, it + 6), cba = rd16(p, it + 8), cbx = rd16(p, it + 10);
-    WORD ph = rd16(p, it + 12), pa = rd16(p, it + 14), px = rd16(p, it + 16);
-    HDC dc;
-    int planes, bits;
-    HICON h;
-
-    *own = FALSE;
-    if (cbh < 12 || ph + 12 > g->size || pa + cba > g->size || px + cbx > g->size)
-        return def_icon;
-    /* The cached bits are device dependent: use them only if they match
-       the display. TODO: otherwise extract the icon from pIconPath. */
-    dc = GetDC(NULL);
-    planes = GetDeviceCaps(dc, PLANES);
-    bits = GetDeviceCaps(dc, BITSPIXEL);
-    ReleaseDC(NULL, dc);
-    if (p[ph + 10] != planes || p[ph + 11] != bits)
-        return def_icon;
-    h = CreateIcon(g_hinst, rd16(p, ph + 4), rd16(p, ph + 6), p[ph + 10], p[ph + 11],
-                   p + pa, p + px);
-    if (!h)
-        return def_icon;
-    *own = TRUE;
-    return h;
+    WORD i;
+    for (i = 0; i < g->nz; i++)
+        if (g->z[i] == t)
+            return i;
+    return -1;
 }
 
-static BOOL parse(group FAR *g)
+/* ---- items ---- */
+
+static void free_item(item FAR *t)
 {
-    const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
-    WORD n, i;
+    if (t->own_icon)
+        DestroyIcon(t->hicon);
+    mem_free(t->name);
+    mem_free(t->cmd);
+    mem_free(t->iconpath);
+    mem_free(t->icon);
+    mem_free(t->tags);
+    mem_free((LPSTR)t);
+}
+
+/* An HICON from the cached bits, if they suit this display. TODO:
+   otherwise extract the icon from iconpath. */
+static void make_icon(item FAR *t)
+{
+    HDC dc;
+    BYTE FAR *h = (BYTE FAR *)t->icon;
+    t->hicon = def_icon;
+    t->own_icon = FALSE;
+    if (!h || t->cbhdr < 12)
+        return;
+    dc = GetDC(NULL);
+    if (h[10] == GetDeviceCaps(dc, PLANES) && h[11] == GetDeviceCaps(dc, BITSPIXEL)) {
+        HICON i = CreateIcon(g_hinst, rd16(h, 4), rd16(h, 6), h[10], h[11],
+                             h + t->cbhdr, h + t->cbhdr + t->cband);
+        if (i) {
+            t->hicon = i;
+            t->own_icon = TRUE;
+        }
+    }
+    ReleaseDC(NULL, dc);
+}
+
+/* Append item t at the end of the data order. */
+static void data_append(group FAR *g, item FAR *t)
+{
+    item FAR * FAR *pp = &g->dfirst;
+    while (*pp)
+        pp = &(*pp)->dnext;
+    t->dnext = NULL;
+    *pp = t;
+}
+
+static void data_remove(group FAR *g, item FAR *t)
+{
+    item FAR * FAR *pp;
+    for (pp = &g->dfirst; *pp; pp = &(*pp)->dnext)
+        if (*pp == t) {
+            *pp = t->dnext;
+            return;
+        }
+}
+
+/* Make room for one more slot. */
+static BOOL grow_slots(group FAR *g)
+{
+    item FAR * FAR *z;
+    if (g->nz < g->cap)
+        return TRUE;
+    z = (item FAR * FAR *)mem_realloc((LPSTR)g->z, (DWORD)(g->cap + 1) * sizeof(item FAR *));
+    if (!z)
+        return FALSE;
+    g->z = z;
+    g->cap++;
+    return TRUE;
+}
+
+/* Move the item at z-index i to the top (observed on selection). */
+static void raise_item(group FAR *g, int i)
+{
+    item FAR *t = g->z[i];
+    for (; i + 1 < (int)g->nz; i++)
+        g->z[i] = g->z[i + 1];
+    g->z[g->nz - 1] = t;
+}
+
+/* ---- parsing ---- */
+
+static LPSTR dup_at(const BYTE FAR *p, WORD off)
+{
+    return s_dup((const char FAR *)p + off);
+}
+
+static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
+{
+    WORD size, n, i, slot;
+    item FAR * FAR *byslot;
     BOOL ok = FALSE;
 
-    if (g->fsize < 0x22 || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C')
-        goto out;
-    g->size = rd16(p, 6);
-    if (g->size < 0x22 || g->size > g->fsize)
-        goto out;
+    if (fsize < HDR_SIZE || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C')
+        return FALSE;
+    size = rd16(p, 6);
+    if (size < HDR_SIZE || size > fsize)
+        return FALSE;
     n = rd16(p, 0x20);
-    if (0x22 + 2UL * n > g->size || !str_ok(p, g->size, rd16(p, 0x16)))
+    if (HDR_SIZE + 2UL * n > size || !str_ok(p, size, rd16(p, 0x16)))
+        return FALSE;
+    g->name = dup_at(p, rd16(p, 0x16));
+    g->show = rd16(p, 8);
+    g->rc.left = (int)rd16(p, 0x0A);
+    g->rc.top = (int)rd16(p, 0x0C);
+    g->rc.right = (int)rd16(p, 0x0E);
+    g->rc.bottom = (int)rd16(p, 0x10);
+    g->pmin.x = (int)rd16(p, 0x12);
+    g->pmin.y = (int)rd16(p, 0x14);
+    copy(g->hdr18, p + 0x18, 8);
+    g->cap = n;
+    g->z = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
+    byslot = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
+    if (!g->name || !g->z || !byslot)
         goto out;
-    g->nitems = 0;
-    g->items = n ? (item FAR *)mem_alloc((DWORD)n * sizeof(item)) : NULL;
-    if (n && !g->items)
-        goto out;
-    for (i = 0; i < n; i++) {
-        WORD it = rd16(p, 0x22 + 2 * i);
-        item FAR *t = &g->items[g->nitems];
-        if (!it)
+
+    for (slot = 0; slot < n; slot++) {
+        WORD it = rd16(p, HDR_SIZE + 2 * slot);
+        item FAR *t;
+        WORD ph, pa, px;
+        if (!it || it + ITEM_SIZE > size)
             continue;                   /* empty slot */
-        if (it + 24 > g->size)
+        if (!str_ok(p, size, rd16(p, it + 18)) || !str_ok(p, size, rd16(p, it + 20)))
             continue;
+        t = (item FAR *)mem_alloc(sizeof(item));
+        if (!t)
+            goto out;
         t->x = (int)rd16(p, it);
         t->y = (int)rd16(p, it + 2);
-        t->pname = rd16(p, it + 18);
-        t->pcmd = rd16(p, it + 20);
-        t->picon = rd16(p, it + 22);
-        if (!str_ok(p, g->size, t->pname) || !str_ok(p, g->size, t->pcmd))
-            continue;
-        if (!str_ok(p, g->size, t->picon))
-            t->picon = 0;
-        t->icon = item_icon(g, p, it, &t->own_icon);
-        g->nitems++;
+        t->iicon = rd16(p, it + 4);
+        t->name = dup_at(p, rd16(p, it + 18));
+        t->cmd = dup_at(p, rd16(p, it + 20));
+        t->iconpath = str_ok(p, size, rd16(p, it + 22)) ? dup_at(p, rd16(p, it + 22)) : s_dup("");
+        t->cbhdr = rd16(p, it + 6);
+        t->cband = rd16(p, it + 8);
+        t->cbxor = rd16(p, it + 10);
+        ph = rd16(p, it + 12);
+        pa = rd16(p, it + 14);
+        px = rd16(p, it + 16);
+        if ((DWORD)ph + t->cbhdr <= size && (DWORD)pa + t->cband <= size &&
+            (DWORD)px + t->cbxor <= size &&
+            (t->icon = mem_alloc((DWORD)t->cbhdr + t->cband + t->cbxor)) != NULL) {
+            copy(t->icon, p + ph, t->cbhdr);
+            copy(t->icon + t->cbhdr, p + pa, t->cband);
+            copy(t->icon + t->cbhdr + t->cband, p + px, t->cbxor);
+        } else {
+            t->cbhdr = t->cband = t->cbxor = 0;
+        }
+        if (!t->name || !t->cmd || !t->iconpath) {
+            free_item(t);
+            goto out;
+        }
+        byslot[slot] = t;
+        g->z[g->nz++] = t;
+        t->tags = (LPSTR)(DWORD)it;     /* sort key for the data order */
     }
+
+    /* data order: by record offset */
+    for (i = 0; i < g->nz; i++) {
+        item FAR *best = NULL;
+        WORD k;
+        for (k = 0; k < g->nz; k++) {
+            item FAR *t = g->z[k];
+            if (t->tags && (!best || (DWORD)t->tags < (DWORD)best->tags))
+                best = t;
+        }
+        best->tags = NULL;
+        data_append(g, best);
+    }
+
+    /* tags: keep each with its item (by slot), others with the group */
+    if (fsize > size) {
+        WORD at = size;
+        while (at + 6 <= fsize) {
+            WORD id = rd16(p, at), it = rd16(p, at + 2), cb = rd16(p, at + 4);
+            LPSTR FAR *dst;
+            WORD FAR *dcb;
+            if (id == 0xFFFF || cb < 6 || at + cb > fsize)
+                break;
+            if (id == 0x8000) {         /* PMCC: written afresh */
+                at += cb;
+                continue;
+            }
+            if (it < n && byslot[it]) {
+                dst = &byslot[it]->tags;
+                dcb = &byslot[it]->cbtags;
+            } else {
+                dst = &g->gtags;
+                dcb = &g->cbgtags;
+            }
+            {
+                LPSTR nb = mem_realloc(*dst, (DWORD)*dcb + cb);
+                if (!nb)
+                    goto out;
+                copy(nb + *dcb, p + at, cb);
+                *dst = nb;
+                *dcb += cb;
+            }
+            at += cb;
+        }
+    }
+    for (i = 0; i < g->nz; i++)
+        make_icon(g->z[i]);
     ok = TRUE;
 out:
-    GlobalUnlock(g->hdata);
+    mem_free((LPSTR)byslot);
     return ok;
 }
 
-static BOOL read_file(group FAR *g)
-{
-    OFSTRUCT of;
-    HFILE f = OpenFile(g->path, &of, OF_READ);
-    long len;
-    BYTE FAR *p;
+/* ---- serializing ---- */
 
-    if (f == HFILE_ERROR)
-        return FALSE;
-    len = _llseek(f, 0, 2);
-    _llseek(f, 0, 0);
-    if (len <= 0 || len > 0xFFF0L) {
-        _lclose(f);
-        return FALSE;
+/* Build the .GRP file for g in a new global block; *size receives its
+   length. NULL if it would not fit the format (64K) or memory. */
+static LPSTR serialize(group FAR *g, WORD *size)
+{
+    DWORD total, cb;
+    item FAR *t;
+    BOOL anytags = g->cbgtags != 0;
+    LPSTR buf;
+    BYTE FAR *p;
+    WORD at, i;
+
+    total = HDR_SIZE + 2UL * g->cap + s_len(g->name) + 1;
+    for (t = g->dfirst; t; t = t->dnext) {
+        total += ITEM_SIZE + s_len(t->name) + 1 + s_len(t->cmd) + 1 + s_len(t->iconpath) + 1 +
+                 t->cbhdr + t->cband + t->cbxor;
+        if (t->cbtags)
+            anytags = TRUE;
     }
-    g->fsize = (WORD)len;
-    g->hdata = GlobalAlloc(GMEM_MOVEABLE, len);
-    if (!g->hdata) {
-        _lclose(f);
-        return FALSE;
+    cb = total;
+    if (anytags) {
+        total += 10 + 6 + g->cbgtags;
+        for (t = g->dfirst; t; t = t->dnext)
+            total += t->cbtags;
     }
-    p = (BYTE FAR *)GlobalLock(g->hdata);
-    if (_lread(f, p, g->fsize) != g->fsize) {
-        GlobalUnlock(g->hdata);
-        _lclose(f);
-        return FALSE;
+    if (total > 0xFFF0UL)
+        return NULL;
+    buf = mem_alloc(total);
+    if (!buf)
+        return NULL;
+    p = (BYTE FAR *)buf;
+
+    p[0] = 'P'; p[1] = 'M'; p[2] = 'C'; p[3] = 'C';
+    wr16(p, 6, (WORD)cb);
+    wr16(p, 8, g->show);
+    wr16(p, 0x0A, g->rc.left);
+    wr16(p, 0x0C, g->rc.top);
+    wr16(p, 0x0E, g->rc.right);
+    wr16(p, 0x10, g->rc.bottom);
+    wr16(p, 0x12, g->pmin.x);
+    wr16(p, 0x14, g->pmin.y);
+    copy(p + 0x18, g->hdr18, 8);
+    wr16(p, 0x20, g->cap);
+    at = HDR_SIZE + 2 * g->cap;
+    wr16(p, 0x16, at);
+    copy(p + at, g->name, s_len(g->name) + 1);
+    at += s_len(g->name) + 1;
+
+    for (t = g->dfirst; t; t = t->dnext) {
+        WORD rec = at, n;
+        at += ITEM_SIZE;
+        wr16(p, rec, t->x);
+        wr16(p, rec + 2, t->y);
+        wr16(p, rec + 4, t->iicon);
+        wr16(p, rec + 6, t->cbhdr);
+        wr16(p, rec + 8, t->cband);
+        wr16(p, rec + 10, t->cbxor);
+        wr16(p, rec + 18, at);
+        n = s_len(t->name) + 1;
+        copy(p + at, t->name, n);
+        at += n;
+        wr16(p, rec + 20, at);
+        n = s_len(t->cmd) + 1;
+        copy(p + at, t->cmd, n);
+        at += n;
+        wr16(p, rec + 22, at);
+        n = s_len(t->iconpath) + 1;
+        copy(p + at, t->iconpath, n);
+        at += n;
+        wr16(p, rec + 12, at);
+        wr16(p, rec + 14, at + t->cbhdr);
+        wr16(p, rec + 16, at + t->cbhdr + t->cband);
+        copy(p + at, t->icon, t->cbhdr + t->cband + t->cbxor);
+        at += t->cbhdr + t->cband + t->cbxor;
+        i = zindex(g, t);
+        wr16(p, HDR_SIZE + 2 * i, rec);
     }
-    GlobalUnlock(g->hdata);
-    _lclose(f);
-    return TRUE;
+
+    if (anytags) {
+        wr16(p, at, 0x8000);
+        wr16(p, at + 2, 0xFFFF);
+        wr16(p, at + 4, 10);
+        p[at + 6] = 'P'; p[at + 7] = 'M'; p[at + 8] = 'C'; p[at + 9] = 'C';
+        at += 10;
+        for (i = 0; i < g->nz; i++) {   /* in slot order */
+            item FAR *u = g->z[i];
+            WORD k;
+            copy(p + at, u->tags, u->cbtags);
+            for (k = 0; k < u->cbtags; k += rd16(p, at + k + 4)) {
+                wr16(p, at + k + 2, i);
+                if (rd16(p, at + k + 4) < 6)
+                    break;
+            }
+            at += u->cbtags;
+        }
+        copy(p + at, g->gtags, g->cbgtags);
+        at += g->cbgtags;
+        wr16(p, at, 0xFFFF);
+        wr16(p, at + 2, 0xFFFF);
+        wr16(p, at + 4, 0);
+        at += 6;
+    }
+    wr16(p, 4, (WORD)-checksum(p, at));
+    *size = at;
+    return buf;
 }
+
+static BOOL write_group(group FAR *g)
+{
+    WORD size;
+    LPSTR buf = serialize(g, &size);
+    OFSTRUCT of;
+    HFILE f;
+    BOOL ok = FALSE;
+    if (!buf)
+        return FALSE;
+    f = OpenFile(g->path, &of, OF_CREATE | OF_WRITE);
+    if (f != HFILE_ERROR) {
+        ok = _lwrite(f, buf, size) == size;
+        _lclose(f);
+    }
+    mem_free(buf);
+    return ok;
+}
+
+/* ---- loading, creating, freeing ---- */
 
 static group FAR *new_group(const char FAR *path)
 {
@@ -238,119 +516,177 @@ static void unlink_group(group FAR *g)
 
 static void free_group(group FAR *g)
 {
-    int i;
-    for (i = 0; i < g->nitems; i++)
-        if (g->items[i].own_icon)
-            DestroyIcon(g->items[i].icon);
-    mem_free((LPSTR)g->items);
-    if (g->hdata)
-        GlobalFree(g->hdata);
+    item FAR *t = g->dfirst;
+    while (t) {
+        item FAR *n = t->dnext;
+        free_item(t);
+        t = n;
+    }
+    mem_free((LPSTR)g->z);
+    mem_free(g->name);
+    mem_free(g->gtags);
     mem_free((LPSTR)g);
+}
+
+static BOOL read_file(group FAR *g)
+{
+    OFSTRUCT of;
+    HFILE f = OpenFile(g->path, &of, OF_READ);
+    long len;
+    LPSTR buf;
+    BOOL ok = FALSE;
+
+    if (f == HFILE_ERROR)
+        return FALSE;
+    len = _llseek(f, 0, 2);
+    _llseek(f, 0, 0);
+    if (len > 0 && len <= 0xFFF0L && (buf = mem_alloc(len)) != NULL) {
+        if (_lread(f, buf, (WORD)len) == (WORD)len)
+            ok = parse(g, (const BYTE FAR *)buf, (WORD)len);
+        mem_free(buf);
+    }
+    _lclose(f);
+    return ok;
+}
+
+/* Create the MDI child for g (whose model is complete) and link it in. */
+static HWND open_window(group FAR *g, BOOL use_rc)
+{
+    MDICREATESTRUCT mc;
+
+    g->next = first;
+    first = g;
+    mc.szClass = cls_group;
+    mc.szTitle = g->name;
+    mc.hOwner = g_hinst;
+    if (use_rc) {
+        mc.x = g->rc.left;
+        mc.y = g->rc.top;
+        mc.cx = g->rc.right - g->rc.left;
+        mc.cy = g->rc.bottom - g->rc.top;
+    } else {                            /* MDI's default cascade (observed) */
+        mc.x = mc.y = mc.cx = mc.cy = CW_USEDEFAULT;
+    }
+    mc.style = 0x0115;                  /* observed low word of the style */
+    mc.lParam = 0;
+    g->hwnd = (HWND)(WORD)SendMessage(g_client, WM_MDICREATE, 0, (LPARAM)(LPVOID)&mc);
+    if (!g->hwnd) {
+        unlink_group(g);
+        return NULL;
+    }
+    /* observed: group windows accept dropped files (Windows 3.1) */
+    DragAcceptFiles(g->hwnd, TRUE);
+    return g->hwnd;
+}
+
+/* The initial selection, which the original also brings to the top. */
+static void initial_select(group FAR *g)
+{
+    if (g->nz) {
+        g->sel = g->z[0];
+        raise_item(g, 0);
+    }
 }
 
 /* Create the window for a group file. ininum is N of GroupN=. */
 HWND group_load(const char FAR *grpfile, int ininum)
 {
     group FAR *g = new_group(grpfile);
-    MDICREATESTRUCT mc;
-    const BYTE FAR *p;
-    int show;
-    RECT rc;
-    POINT pmin;
 
     if (!g)
         return NULL;
     g->ininum = ininum;
-    g->sel = -1;
-    if (!read_file(g) || !parse(g)) {
+    if (!read_file(g)) {
         free_group(g);
         return NULL;
     }
-    p = (const BYTE FAR *)GlobalLock(g->hdata);     /* until the window exists */
-    show = rd16(p, 8);
-    rc.left = (int)rd16(p, 0x0A);
-    rc.top = (int)rd16(p, 0x0C);
-    rc.right = (int)rd16(p, 0x0E);
-    rc.bottom = (int)rd16(p, 0x10);
-    pmin.x = (int)rd16(p, 0x12);
-    pmin.y = (int)rd16(p, 0x14);
-    if (g->nitems)
-        g->sel = 0;
-    g->next = first;
-    first = g;
-
-    mc.szClass = cls_group;
-    mc.szTitle = (LPCSTR)p + rd16(p, 0x16);
-    mc.hOwner = g_hinst;
-    mc.x = rc.left;
-    mc.y = rc.top;
-    mc.cx = rc.right - rc.left;
-    mc.cy = rc.bottom - rc.top;
-    mc.style = 0x0115;                  /* observed low word of the style */
-    mc.lParam = 0;
-    g->hwnd = (HWND)(WORD)SendMessage(g_client, WM_MDICREATE, 0, (LPARAM)(LPVOID)&mc);
-    GlobalUnlock(g->hdata);
-    if (!g->hwnd) {
-        unlink_group(g);
+    initial_select(g);
+    if (!open_window(g, TRUE)) {
         free_group(g);
         return NULL;
     }
-    /* observed: group windows accept dropped files (Windows 3.1) */
-    DragAcceptFiles(g->hwnd, TRUE);
-    /* each new group goes on top, so creating them in Order= sequence
-       rebuilds the saved z-order */
-    SetWindowPos(g->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    if (pmin.x != -1 || pmin.y != -1) {
+    if (g->pmin.x != -1 || g->pmin.y != -1) {
         /* where the group sits when minimized */
         WINDOWPLACEMENT wp;
         wp.length = sizeof wp;
         GetWindowPlacement(g->hwnd, &wp);
         wp.flags = WPF_SETMINPOSITION;
-        wp.ptMinPosition = pmin;
+        wp.ptMinPosition = g->pmin;
         wp.showCmd = SW_SHOWNA;
         SetWindowPlacement(g->hwnd, &wp);
     }
-    if (show == SW_SHOWMINIMIZED || show == SW_MINIMIZE || show == SW_SHOWMINNOACTIVE)
+    if (g->show == SW_SHOWMINIMIZED || g->show == SW_MINIMIZE || g->show == SW_SHOWMINNOACTIVE)
         ShowWindow(g->hwnd, SW_SHOWMINNOACTIVE);
-    else if (show == SW_SHOWMAXIMIZED)
+    else if (g->show == SW_SHOWMAXIMIZED)
         SendMessage(g_client, WM_MDIMAXIMIZE, (WPARAM)g->hwnd, 0);
+    /* each new group goes on top (after minimizing, which sends a window
+       to the bottom), so loading in Order= sequence rebuilds the saved
+       z-order */
+    SetWindowPos(g->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     return g->hwnd;
 }
 
-/* Write the window state back into each .GRP (Save Settings on Exit). */
+/* Take the current window state into g's model; TRUE if it differs
+   from what the file holds. */
+static BOOL capture_state(group FAR *g)
+{
+    WINDOWPLACEMENT wp;
+    WORD show;
+    BOOL changed;
+    wp.length = sizeof wp;
+    GetWindowPlacement(g->hwnd, &wp);
+    show = IsIconic(g->hwnd) ? SW_SHOWMINIMIZED :
+           IsZoomed(g->hwnd) ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    /* a stored show command of 1 or 2 differs only in form */
+    changed = !((show == g->show) ||
+                (show == SW_SHOWMINIMIZED && (g->show == SW_MINIMIZE ||
+                                              g->show == SW_SHOWMINNOACTIVE)));
+    changed |= wp.rcNormalPosition.left != g->rc.left || wp.rcNormalPosition.top != g->rc.top ||
+               wp.rcNormalPosition.right != g->rc.right ||
+               wp.rcNormalPosition.bottom != g->rc.bottom;
+    if (changed)
+        g->show = show;
+    g->rc = wp.rcNormalPosition;
+    if ((wp.flags & WPF_SETMINPOSITION) || IsIconic(g->hwnd)) {
+        changed |= wp.ptMinPosition.x != g->pmin.x || wp.ptMinPosition.y != g->pmin.y;
+        g->pmin = wp.ptMinPosition;
+    }
+    return changed;
+}
+
+/* A new, empty group (File > New > Program Group): write its file and
+   show it. Returns the window, or NULL. */
+HWND group_create(const char FAR *name, const char FAR *path, int ininum)
+{
+    group FAR *g = new_group(path);
+    if (!g)
+        return NULL;
+    g->ininum = ininum;
+    g->name = s_dup(name);
+    g->show = SW_SHOWNORMAL;
+    g->pmin.x = g->pmin.y = -1;
+    copy(g->hdr18, new_hdr18, 8);
+    g->z = (item FAR * FAR *)mem_alloc(sizeof(item FAR *));
+    if (!g->name || !g->z || !open_window(g, FALSE)) {
+        free_group(g);
+        return NULL;
+    }
+    capture_state(g);
+    if (!write_group(g)) {
+        DestroyWindow(g->hwnd);         /* frees g */
+        return NULL;
+    }
+    return g->hwnd;
+}
+
+/* Write the window state back into each .GRP that changed (Save
+   Settings on Exit). */
 void group_save_all(void)
 {
     group FAR *g;
-    for (g = first; g; g = g->next) {
-        WINDOWPLACEMENT wp;
-        BYTE FAR *p;
-        OFSTRUCT of;
-        HFILE f;
-        WORD show;
-        wp.length = sizeof wp;
-        GetWindowPlacement(g->hwnd, &wp);
-        show = IsIconic(g->hwnd) ? SW_SHOWMINIMIZED :
-               IsZoomed(g->hwnd) ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
-        p = (BYTE FAR *)GlobalLock(g->hdata);
-        wr16(p, 8, show);
-        wr16(p, 0x0A, wp.rcNormalPosition.left);
-        wr16(p, 0x0C, wp.rcNormalPosition.top);
-        wr16(p, 0x0E, wp.rcNormalPosition.right);
-        wr16(p, 0x10, wp.rcNormalPosition.bottom);
-        if (wp.flags & WPF_SETMINPOSITION || IsIconic(g->hwnd)) {
-            wr16(p, 0x12, wp.ptMinPosition.x);
-            wr16(p, 0x14, wp.ptMinPosition.y);
-        }
-        wr16(p, 4, 0);
-        /* the checksum covers the whole file, tags included */
-        wr16(p, 4, (WORD)-checksum(p, g->fsize));
-        f = OpenFile(g->path, &of, OF_WRITE);
-        if (f != HFILE_ERROR) {
-            _lwrite(f, (LPCSTR)p, g->fsize);
-            _lclose(f);
-        }
-        GlobalUnlock(g->hdata);
-    }
+    for (g = first; g; g = g->next)
+        if ((capture_state(g) || g->dirty) && write_group(g))
+            g->dirty = FALSE;
 }
 
 void group_destroy_all(void)
@@ -368,19 +704,35 @@ int group_ininum(HWND hwnd)
     return g ? g->ininum : 0;
 }
 
+LPCSTR group_name(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    return g ? g->name : NULL;
+}
+
+LPCSTR group_path(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    return g ? g->path : NULL;
+}
+
+LPCSTR group_selected_name(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    return g && g->sel ? g->sel->name : NULL;
+}
+
 /* ---- layout and painting ---- */
 
-static void title_rect(HDC dc, group FAR *g, int i, RECT *r)
+static void title_rect(HDC dc, item FAR *t, RECT *r)
 {
-    const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
-    item FAR *t = &g->items[i];
     HFONT old = title_font ? SelectObject(dc, title_font) : NULL;
     int cx = t->x + ICON_DX + 16;
     r->left = cx - CX_SPACING / 2 + 1;
     r->right = cx + CX_SPACING / 2 - 1;
     r->top = t->y + TITLE_DY;
     r->bottom = r->top + 100;
-    DrawText(dc, (LPCSTR)p + t->pname, -1, r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+    DrawText(dc, t->name, -1, r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
     /* DT_CALCRECT keeps the left edge; centre the result under the icon */
     {
         int w = r->right - r->left;
@@ -393,27 +745,25 @@ static void title_rect(HDC dc, group FAR *g, int i, RECT *r)
     r->bottom += 2;
     if (old)
         SelectObject(dc, old);
-    GlobalUnlock(g->hdata);
 }
 
 static void paint(HWND hwnd, group FAR *g)
 {
     PAINTSTRUCT ps;
     HDC dc = BeginPaint(hwnd, &ps);
-    const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
     HFONT old = title_font ? SelectObject(dc, title_font) : NULL;
     /* observed: the selection is highlighted only in the active group
        while Program Manager itself is the active window */
     BOOL active = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0) == hwnd &&
                   GetActiveWindow() == g_frame;
-    int i;
+    WORD i;
 
-    for (i = 0; i < g->nitems; i++) {
-        item FAR *t = &g->items[i];
+    for (i = 0; i < g->nz; i++) {       /* bottom first */
+        item FAR *t = g->z[i];
         RECT r;
-        BOOL hi = active && i == g->sel;
-        DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->icon);
-        title_rect(dc, g, i, &r);
+        BOOL hi = active && t == g->sel;
+        DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->hicon);
+        title_rect(dc, t, &r);
         SetBkMode(dc, hi ? OPAQUE : TRANSPARENT);
         SetBkColor(dc, GetSysColor(COLOR_HIGHLIGHT));
         SetTextColor(dc, GetSysColor(hi ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
@@ -424,67 +774,76 @@ static void paint(HWND hwnd, group FAR *g)
         }
         InflateRect(&r, -2, 0);
         r.bottom -= 2;
-        DrawText(dc, (LPCSTR)p + t->pname, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+        DrawText(dc, t->name, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
     }
     if (old)
         SelectObject(dc, old);
-    GlobalUnlock(g->hdata);
     EndPaint(hwnd, &ps);
 }
 
-static int hit(HWND hwnd, group FAR *g, int x, int y)
+/* The topmost item at (x, y), or NULL. */
+static item FAR *hit(HWND hwnd, group FAR *g, int x, int y)
 {
     HDC dc = GetDC(hwnd);
-    int i, found = -1;
-    for (i = 0; i < g->nitems && found < 0; i++) {
-        item FAR *t = &g->items[i];
+    item FAR *found = NULL;
+    int i;
+    for (i = g->nz - 1; i >= 0 && !found; i--) {
+        item FAR *t = g->z[i];
         RECT r;
         if (x >= t->x + ICON_DX && x < t->x + ICON_DX + 32 &&
             y >= t->y + ICON_DY && y < t->y + ICON_DY + 32)
-            found = i;
-        title_rect(dc, g, i, &r);
+            found = t;
+        title_rect(dc, t, &r);
         if (x >= r.left && x < r.right && y >= r.top && y < r.bottom)
-            found = i;
+            found = t;
     }
     ReleaseDC(hwnd, dc);
     return found;
 }
 
-static void invalidate_item(HWND hwnd, group FAR *g, int i)
+static void invalidate_item(HWND hwnd, item FAR *t)
 {
     HDC dc;
     RECT r;
-    if (i < 0 || i >= g->nitems)
+    if (!t)
         return;
     dc = GetDC(hwnd);
-    title_rect(dc, g, i, &r);
+    title_rect(dc, t, &r);
     ReleaseDC(hwnd, dc);
+    InvalidateRect(hwnd, &r, TRUE);
+    r.left = t->x + ICON_DX;
+    r.top = t->y + ICON_DY;
+    r.right = r.left + 32;
+    r.bottom = r.top + 32;
     InvalidateRect(hwnd, &r, TRUE);
 }
 
-static void select_item(HWND hwnd, group FAR *g, int i)
+static void select_item(HWND hwnd, group FAR *g, item FAR *t)
 {
-    if (i == g->sel)
+    int i;
+    if (!t || t == g->sel)
         return;
-    invalidate_item(hwnd, g, g->sel);
-    g->sel = i;
-    invalidate_item(hwnd, g, g->sel);
+    invalidate_item(hwnd, g->sel);
+    g->sel = t;
+    i = zindex(g, t);
+    if (i >= 0)
+        raise_item(g, i);               /* observed: selection raises */
+    invalidate_item(hwnd, t);
 }
 
 /* Keyboard navigation: the nearest item in the given direction. */
-static int neighbour(group FAR *g, int dx, int dy)
+static item FAR *neighbour(group FAR *g, int dx, int dy)
 {
-    item FAR *c;
-    int i, best = -1;
+    item FAR *c = g->sel, FAR *best = NULL;
     long bestd = 0x7FFFFFFFL;
-    if (g->sel < 0)
-        return g->nitems ? 0 : -1;
-    c = &g->items[g->sel];
-    for (i = 0; i < g->nitems; i++) {
-        item FAR *t = &g->items[i];
+    WORD i;
+    if (!c)
+        return g->nz ? g->z[0] : NULL;
+    for (i = 0; i < g->nz; i++) {
+        item FAR *t = g->z[i];
         int ddx = t->x - c->x, ddy = t->y - c->y;
         long d;
-        if (i == g->sel)
+        if (t == c)
             continue;
         if ((dx > 0 && ddx <= 0) || (dx < 0 && ddx >= 0) ||
             (dy > 0 && ddy <= 0) || (dy < 0 && ddy >= 0))
@@ -494,7 +853,7 @@ static int neighbour(group FAR *g, int dx, int dy)
                : (long)(ddy < 0 ? -ddy : ddy) + 8L * (ddx < 0 ? -ddx : ddx);
         if (d < bestd) {
             bestd = d;
-            best = i;
+            best = t;
         }
     }
     return best;
@@ -503,41 +862,288 @@ static int neighbour(group FAR *g, int dx, int dy)
 BOOL group_open_selected(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
-    const BYTE FAR *p;
-    BOOL ok;
-    if (!g || g->sel < 0)
+    if (!g || !g->sel)
         return FALSE;
-    p = (const BYTE FAR *)GlobalLock(g->hdata);
-    ok = pm_exec(g_frame, (LPCSTR)p + g->items[g->sel].pcmd, NULL, FALSE);
-    GlobalUnlock(g->hdata);
-    if (ok && g_minonrun)
+    if (pm_exec(g_frame, g->sel->cmd, NULL, FALSE) && g_minonrun)
         ShowWindow(g_frame, SW_MINIMIZE);
     return TRUE;
+}
+
+static int grid_cols(HWND hwnd)
+{
+    RECT rc;
+    int cols;
+    GetClientRect(hwnd, &rc);
+    cols = (rc.right - rc.left) / CX_SPACING;
+    return cols < 1 ? 1 : cols;
 }
 
 /* Arrange Icons: the observed grid, as many columns as fit. */
 void group_arrange(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
-    RECT rc;
-    int cols, i;
+    item FAR *t;
+    int cols, i = 0;
     if (!g)
         return;
-    GetClientRect(hwnd, &rc);
-    cols = (rc.right - rc.left) / CX_SPACING;
-    if (cols < 1)
-        cols = 1;
-    for (i = 0; i < g->nitems; i++) {
-        g->items[i].x = X_FIRST + (i % cols) * CX_SPACING;
-        g->items[i].y = (i / cols) * CY_SPACING;
+    cols = grid_cols(hwnd);
+    for (t = g->dfirst; t; t = t->dnext, i++) {
+        t->x = X_FIRST + (i % cols) * CX_SPACING;
+        t->y = (i / cols) * CY_SPACING;
     }
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
+/* The first grid cell, in reading order, that no item occupies
+   (observed: the first item of an empty group goes to (21, 0)). */
+static void free_cell(HWND hwnd, group FAR *g, int FAR *x, int FAR *y)
+{
+    int cols = grid_cols(hwnd), cell;
+    for (cell = 0;; cell++) {
+        int cx = X_FIRST + (cell % cols) * CX_SPACING, cy = (cell / cols) * CY_SPACING;
+        WORD i;
+        for (i = 0; i < g->nz; i++)
+            if (g->z[i]->x == cx && g->z[i]->y == cy)
+                break;
+        if (i == g->nz) {
+            *x = cx;
+            *y = cy;
+            return;
+        }
+    }
+}
+
+/* ---- adding and deleting items ---- */
+
+static BOOL add_tag(item FAR *t, WORD id, const void FAR *data, WORD n)
+{
+    LPSTR nb = mem_realloc(t->tags, (DWORD)t->cbtags + 6 + n);
+    BYTE FAR *p;
+    if (!nb)
+        return FALSE;
+    p = (BYTE FAR *)nb + t->cbtags;
+    wr16(p, 0, id);
+    wr16(p, 2, 0);                      /* the slot, filled in on writing */
+    wr16(p, 4, 6 + n);
+    copy(p + 6, data, n);
+    t->tags = nb;
+    t->cbtags += 6 + n;
+    return TRUE;
+}
+
+/* Copy an icon's bits (header, AND, XOR) out of an HICON. Windows 3.x
+   keeps an icon as a global block holding exactly the 12-byte header
+   that .GRP files store, followed by the bits (as described in published
+   accounts of Windows internals; the sizes are checked here). */
+static BOOL icon_bits(item FAR *t, HICON hicon)
+{
+    const BYTE FAR *h = (const BYTE FAR *)GlobalLock((HGLOBAL)hicon);
+    DWORD have = GlobalSize((HGLOBAL)hicon);
+    WORD rowb, cy, cband, cbxor;
+    BOOL ok = FALSE;
+    if (!h)
+        return FALSE;
+    rowb = rd16(h, 8);
+    cy = rd16(h, 6);
+    cband = ((rd16(h, 4) + 15) / 16) * 2 * cy;
+    cbxor = rowb * cy * h[10];
+    if (rowb && cy && (DWORD)12 + cband + cbxor <= have &&
+        (t->icon = mem_alloc(12UL + cband + cbxor)) != NULL) {
+        copy(t->icon, h, 12 + cband + cbxor);
+        t->cbhdr = 12;
+        t->cband = cband;
+        t->cbxor = cbxor;
+        ok = TRUE;
+    }
+    GlobalUnlock((HGLOBAL)hicon);
+    return ok;
+}
+
+/* Is the extension of path one of the program types? */
+static BOOL is_program(const char FAR *path)
+{
+    int n = s_len(path);
+    const char FAR *e = path + n;
+    while (e > path && e[-1] != '.' && e[-1] != '\\' && e[-1] != ':')
+        e--;
+    if (e == path || e[-1] != '.')
+        return FALSE;
+    return !s_icmp(e, "EXE") || !s_icmp(e, "COM") || !s_icmp(e, "PIF") || !s_icmp(e, "BAT");
+}
+
+/* The command's program file (its first word) as a new string. */
+static LPSTR first_word(const char FAR *cmd)
+{
+    LPSTR w;
+    int n = 0;
+    while (*cmd == ' ')
+        cmd++;
+    while (cmd[n] && cmd[n] != ' ')
+        n++;
+    w = mem_alloc(n + 1);
+    if (w)
+        s_cpy(w, cmd, n + 1);
+    return w;
+}
+
+/* Find the icon for a command: the program's own first icon, or the
+   associated program's for a document. Fills iconpath, iicon, bits. */
+static void choose_icon(item FAR *t)
+{
+    LPSTR file = first_word(t->cmd);
+    char found[144];                    /* DOS paths: OFSTRUCT's own bound */
+    OFSTRUCT of;
+    HICON h = NULL;
+
+    t->iicon = 0;
+    if (file) {
+        if (is_program(file)) {
+            if (OpenFile(file, &of, OF_EXIST) != HFILE_ERROR)
+                t->iconpath = s_dup(of.szPathName);
+        } else if ((UINT)FindExecutable(file, NULL, found) > 32) {
+            t->iconpath = s_dup(found);
+        }
+        mem_free(file);
+    }
+    if (t->iconpath) {
+        h = ExtractIcon(g_hinst, t->iconpath, 0);
+        if ((UINT)h <= 1)
+            h = NULL;
+    }
+    if (!h) {
+        /* our own default item icon (PROGMAN.EXE, third icon) */
+        mem_free(t->iconpath);
+        t->iconpath = s_dup("PROGMAN.EXE");
+        t->iicon = 2;
+        h = ExtractIcon(g_hinst, "PROGMAN.EXE", 2);
+        if ((UINT)h <= 1)
+            h = NULL;
+    }
+    if (h) {
+        icon_bits(t, h);
+        DestroyIcon(h);
+    }
+    if (!t->iconpath)
+        t->iconpath = s_dup("");
+    make_icon(t);
+}
+
+/* File > New > Program Item. dir and hotkey are optional (hotkey 0 =
+   none). Observed: with a working directory and a command without a
+   path, the directory is stored in front of the command. */
+BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
+                    const char FAR *dir, WORD hotkey, BOOL minimized)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t;
+    LPSTR file;
+    BOOL has_path;
+
+    if (!g || !cmd[0] || !grow_slots(g))
+        return FALSE;
+    t = (item FAR *)mem_alloc(sizeof(item));
+    if (!t)
+        return FALSE;
+    file = first_word(cmd);
+    has_path = file && (file[0] && (file[1] == ':' || file[0] == '\\'));
+    {
+        int k;
+        for (k = 0; file && file[k]; k++)
+            if (file[k] == '\\')
+                has_path = TRUE;
+    }
+    mem_free(file);
+    if (dir && dir[0] && !has_path) {
+        t->cmd = s_dup(dir);
+        if (t->cmd && t->cmd[s_len(t->cmd) - 1] != '\\')
+            s_append(&t->cmd, "\\");
+        if (t->cmd) {
+            const char FAR *c = cmd;
+            while (*c == ' ')
+                c++;
+            s_append(&t->cmd, c);
+        }
+    } else {
+        t->cmd = s_dup(cmd);
+        /* TODO: tag 8101h for a working directory with a pathed command */
+    }
+    if (desc && desc[0]) {
+        t->name = s_dup(desc);
+    } else {
+        /* UNVERIFIED: an empty description becomes the program's name */
+        LPSTR w = first_word(cmd);
+        const char FAR *b = w;
+        int k;
+        for (k = 0; w && w[k]; k++)
+            if (w[k] == '\\' || w[k] == ':')
+                b = w + k + 1;
+        t->name = s_dup(b ? b : "");
+        for (k = 0; t->name && t->name[k]; k++)
+            if (t->name[k] == '.')
+                t->name[k] = 0;
+        mem_free(w);
+    }
+    if (!t->name || !t->cmd) {
+        free_item(t);
+        return FALSE;
+    }
+    if (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) {
+        free_item(t);
+        return FALSE;
+    }
+    if (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0)) {
+        free_item(t);
+        return FALSE;
+    }
+    choose_icon(t);
+    free_cell(hwnd, g, &t->x, &t->y);
+    g->z[g->nz++] = t;                  /* on top */
+    data_append(g, t);
+    if (!write_group(g)) {
+        g->nz--;
+        data_remove(g, t);
+        free_item(t);
+        return FALSE;
+    }
+    invalidate_item(hwnd, g->sel);
+    g->sel = t;
+    if (g_autoarrange)
+        group_arrange(hwnd);
+    invalidate_item(hwnd, t);
+    return TRUE;
+}
+
+/* Delete the selected item (observed: the slot count stays, the gap
+   closes). */
+BOOL group_delete_selected(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t;
+    int i;
+    if (!g || !g->sel)
+        return FALSE;
+    t = g->sel;
+    i = zindex(g, t);
+    if (i < 0)
+        return FALSE;
+    invalidate_item(hwnd, t);
+    for (; i + 1 < (int)g->nz; i++)
+        g->z[i] = g->z[i + 1];
+    g->nz--;
+    data_remove(g, t);
+    /* UNVERIFIED: which item is selected next; the top one here */
+    g->sel = g->nz ? g->z[g->nz - 1] : NULL;
+    invalidate_item(hwnd, g->sel);
+    free_item(t);
+    return write_group(g);
+}
+
+/* ---- the window ---- */
+
 LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     group FAR *g = grp_of(hwnd);
-    int i;
+    item FAR *t;
 
     switch (msg) {
     case WM_PAINT:
@@ -549,19 +1155,19 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_MDIACTIVATE:
     case WM_NCACTIVATE:                 /* also sent when the frame changes */
         if (g)
-            invalidate_item(hwnd, g, g->sel);
+            invalidate_item(hwnd, g->sel);
         break;
     case WM_SIZE:
         if (g && g_autoarrange && wp != SIZE_MINIMIZED)
             group_arrange(hwnd);
         break;
     case WM_LBUTTONDOWN:
-        if (g && (i = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) >= 0)
-            select_item(hwnd, g, i);
+        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL)
+            select_item(hwnd, g, t);
         return 0;
     case WM_LBUTTONDBLCLK:
-        if (g && (i = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) >= 0) {
-            select_item(hwnd, g, i);
+        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL) {
+            select_item(hwnd, g, t);
             group_open_selected(hwnd);
         }
         return 0;
@@ -569,36 +1175,36 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         if (!g)
             break;
         switch (wp) {
-        case VK_LEFT:  i = neighbour(g, -1, 0); break;
-        case VK_RIGHT: i = neighbour(g, 1, 0);  break;
-        case VK_UP:    i = neighbour(g, 0, -1); break;
-        case VK_DOWN:  i = neighbour(g, 0, 1);  break;
-        case VK_HOME:  i = g->nitems ? 0 : -1;  break;
-        case VK_END:   i = g->nitems - 1;       break;
+        case VK_LEFT:  t = neighbour(g, -1, 0); break;
+        case VK_RIGHT: t = neighbour(g, 1, 0);  break;
+        case VK_UP:    t = neighbour(g, 0, -1); break;
+        case VK_DOWN:  t = neighbour(g, 0, 1);  break;
+        case VK_HOME:  t = g->dfirst;           break;
+        case VK_END:   for (t = g->dfirst; t && t->dnext; t = t->dnext)
+                           ;
+                       break;
         default:       return 0;
         }
-        if (i >= 0)
-            select_item(hwnd, g, i);
+        select_item(hwnd, g, t);
         return 0;
     case WM_CHAR:
-        /* first letter jumps to the next item whose name starts with it */
-        if (g && g->nitems) {
-            const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
+        /* first letter: the next item, in slot order, whose name starts
+           with it (the selected item sits at the top, so the search
+           starts from the bottom) */
+        if (g && g->nz) {
             char c = (char)wp;
-            int k;
+            WORD k;
             if (c >= 'a' && c <= 'z')
                 c -= 'a' - 'A';
-            for (k = 1; k <= g->nitems; k++) {
-                int j = (g->sel + k) % g->nitems;
-                char f = p[g->items[j].pname];
+            for (k = 0; k < g->nz; k++) {
+                char f = g->z[k]->name[0];
                 if (f >= 'a' && f <= 'z')
                     f -= 'a' - 'A';
-                if (f == c) {
-                    select_item(hwnd, g, j);
+                if (f == c && g->z[k] != g->sel) {
+                    select_item(hwnd, g, g->z[k]);
                     break;
                 }
             }
-            GlobalUnlock(g->hdata);
         }
         return 0;
     case WM_DROPFILES:

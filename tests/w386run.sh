@@ -1,45 +1,52 @@
 #!/bin/sh
-# Run a program under the reference Windows/386 2.11 (installed by
-# tests/w386setup.sh with tests/scripts/w386-install.txt) in headless
-# DOSBox: WIN386 PROGRAM. The program must end the session itself
-# (ExitWindows). Prints the program's TK.LOG.
-#   usage: tests/w386run.sh PROGRAM.EXE
+# Run a program under the reference Windows/386 2.11 on real DOS, headless
+# (black-box observation). Windows/386 needs a real DOS (it patches DOS's
+# internal data), so this builds a hard disk image with MS-DOS 4.00 built
+# from Microsoft's MIT-licensed source (tests/msdos-build.sh), the
+# Windows/386 install (tests/w386setup.sh), and the program; boots it in
+# DOSBox-X; and afterwards prints the program's TK.LOG from the image.
+#   usage: tests/w386run.sh PROGRAM.EXE [extra files...]
+# AUTOEXEC.BAT runs "WIN386 C:\PROGRAM.EXE" then POWEROFF.COM (APM), so
+# the program must end the Windows session itself (ExitWindows).
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
-ref=$root/.tools/ref/w386/cdrive
-[ -f "$ref/WIN386/WIN386.EXE" ] || { echo "no Windows/386 install in $ref" >&2; exit 2; }
+dos=$root/.tools/msdos/build/src
+win=$root/.tools/ref/w386/cdrive/WIN386
+[ -f "$dos/BIOS/IO.SYS" ] || { echo "MS-DOS 4.00 not built (tests/msdos-build.sh)" >&2; exit 2; }
+[ -f "$win/WIN386.EXE" ] || { echo "Windows/386 not installed (tests/w386setup.sh)" >&2; exit 2; }
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
-cp -r "$ref" "$work/c"
-name=$(basename "$1" | tr a-z A-Z)
-cp "$1" "$work/c/$name"
+prog=$1; shift
+name=$(basename "$prog" | tr a-z A-Z)
+printf 'FILES=30\r\nBUFFERS=20\r\n' > "$work/CONFIG.SYS"
+printf '@ECHO OFF\r\nPATH C:\;C:\\WIN386\r\nCD \\WIN386\r\nWIN386 C:\\%s\r\nC:\\POWEROFF.COM\r\n' "$name" \
+    > "$work/AUTOEXEC.BAT"
+python3 "$root/tools/mkhdd.py" "$work/hdd.img" --mbr "$root/build/hdd/MBR.BIN" \
+    --boot "$dos/BOOT/MSBOOT.BIN" --io "$dos/BIOS/IO.SYS" --dos "$dos/DOS/MSDOS.SYS" \
+    "$dos/CMD/COMMAND/COMMAND.COM" "$work/CONFIG.SYS" "$work/AUTOEXEC.BAT" \
+    "$root/build/dos/POWEROFF.COM" "$win=WIN386" "$prog" "$@" 2>&1 | grep -v '^$' || true
 cat > "$work/dosbox.conf" <<CONF
 [sdl]
-output=surface
+autolock=false
 [dosbox]
+machine=vga
 memsize=16
 [cpu]
 core=normal
 cputype=386
 cycles=max
 [dos]
-ems=false
-xms=false
+ver=4.0
 [mixer]
 nosound=true
 [speaker]
 pcspeaker=false
 [autoexec]
-mount c "$work/c"
-c:
-ver set 3 30
-cd \\WIN386
-WIN386 C:\\$name > C:\\OUT.TXT
-echo WINEXIT >> C:\\OUT.TXT
-exit
+imgmount c "$work/hdd.img"
+boot c:
 CONF
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${W386_TIMEOUT:-90} \
-    dosbox -conf "$work/dosbox.conf" -noconsole >/dev/null 2>&1 || true
-for f in "$work/c/WIN386/TK.LOG" "$work/c/TK.LOG"; do
-    [ -f "$f" ] && tr -d '\r' < "$f"
+    dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >"$work/dosbox.log" 2>&1 || true
+img="$work/hdd.img@@32256"
+for f in WIN386/TK.LOG TK.LOG; do
+    MTOOLS_SKIP_CHECK=1 mtype -i "$img" "::$f" 2>/dev/null | tr -d '\r' || true
 done
-[ -f "$work/c/OUT.TXT" ] && tr -d '\r' < "$work/c/OUT.TXT" || echo "(no OUT.TXT: timed out)"

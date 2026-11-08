@@ -72,6 +72,68 @@ BEGIN
     IDS_EXECFAIL,       "Cannot run program or open document: %s"
     IDS_EXIT,           "E&xit"
     IDS_EXITWINDOWS,    "E&xit Windows..."
+    IDS_DELETE,         "Delete"
+    IDS_DELITEM,        "Are you sure you want to delete the item '%s'?"
+    IDS_DELGROUP,       "Are you sure you want to delete the group '%s'?"
+    IDS_NOGROUP,        "There is no program group to add the item to."
+    IDS_HOTKEYNONE,     "None"
+    IDS_HOTKEYPREFIX,   "Ctrl + Alt + "
+    IDS_CANTWRITE,      "Cannot write the group file %s."
+END
+
+/* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */
+IDD_NEW DIALOG 23, 20, 162, 63
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "New Program Object"
+FONT 8, "MS Sans Serif"
+BEGIN
+    GROUPBOX        "New", IDC_STATIC, 9, 6, 95, 41, WS_GROUP
+    CONTROL         "Program &Group", IDC_NEWGROUP, "Button",
+                    BS_AUTORADIOBUTTON | WS_GROUP, 16, 16, 82, 12
+    CONTROL         "Program &Item", IDC_NEWITEM, "Button",
+                    BS_AUTORADIOBUTTON | WS_TABSTOP, 16, 29, 82, 12
+    DEFPUSHBUTTON   "OK", IDOK, 115, 6, 40, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 115, 23, 40, 14, WS_GROUP
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 115, 43, 40, 14, WS_GROUP
+END
+
+/* Program Group Properties (observed: 226 x 63 units at (23, 21)) */
+IDD_GROUPPROPS DIALOG 23, 21, 226, 63
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Program Group Properties"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL         "&Description:", IDC_STATIC, "Static", SS_LEFT, 5, 9, 45, 10
+    EDITTEXT        IDC_DESC, 54, 7, 119, 12, ES_AUTOHSCROLL
+    CONTROL         "&Group File:", IDC_STATIC, "Static", SS_LEFT, 5, 24, 45, 10
+    EDITTEXT        IDC_GROUPFILE, 54, 22, 119, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    DEFPUSHBUTTON   "OK", IDOK, 180, 6, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 180, 23, 40, 14
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 180, 43, 40, 14
+END
+
+/* Program Item Properties (observed: 251 x 97 units) */
+IDD_ITEMPROPS DIALOG 23, 20, 251, 97
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Program Item Properties"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL         "&Description:", IDC_STATIC, "Static", SS_LEFT, 5, 10, 60, 10
+    EDITTEXT        IDC_DESC, 77, 6, 105, 12, ES_AUTOHSCROLL
+    CONTROL         "&Command Line:", IDC_STATIC, "Static", SS_LEFT, 5, 23, 67, 10
+    EDITTEXT        IDC_CMDLINE, 77, 20, 105, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    CONTROL         "&Working Directory:", IDC_WORKDIR_LABEL, "Static", SS_LEFT, 5, 36, 71, 10
+    EDITTEXT        IDC_WORKDIR, 77, 34, 105, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    CONTROL         "&Shortcut Key:", IDC_STATIC, "Static", SS_LEFT, 5, 50, 63, 10
+    CONTROL         "", IDC_HOTKEY, "pmhotkey", WS_BORDER | WS_TABSTOP, 77, 49, 105, 12
+    CONTROL         "&Run Minimized", IDC_ITEMMIN, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 77, 65, 111, 12
+    DEFPUSHBUTTON   "OK", IDOK, 191, 6, 55, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 191, 23, 55, 14
+    PUSHBUTTON      "&Browse...", IDC_BROWSE, 191, 43, 55, 14
+    PUSHBUTTON      "Change &Icon...", IDC_CHANGEICON, 191, 60, 55, 14
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 191, 77, 55, 14
+    CONTROL         "", IDC_ITEMICON, "Static", SS_ICON, 24, 65, 18, 20
 END
 
 /* observed: 210 x 81 units, controls 99/119/105/1/2/112/126 */

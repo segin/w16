@@ -139,6 +139,15 @@ void s_utoa(char FAR *d, unsigned v)
     s_cpy(d, b + i, 6);
 }
 
+void s_itoa(char FAR *d, int v)
+{
+    if (v < 0) {
+        *d++ = '-';
+        v = -v;
+    }
+    s_utoa(d, (unsigned)v);
+}
+
 /* Parse an optionally signed decimal number, skipping leading blanks;
    advances *ps past it. */
 int s_atoi(const char FAR **ps)
@@ -157,20 +166,19 @@ int s_atoi(const char FAR **ps)
     return neg ? -v : v;
 }
 
-/* Show string resource `ids` (with "%s" replaced by arg) in a message box. */
-void message(HWND owner, int ids, const char FAR *arg)
+/* A message box: string resource `ids` with "%s" replaced by arg, under
+   the title string `title_ids`. Returns MessageBox's answer. */
+int ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags)
 {
     /* our own resource strings: these buffers fit all of them */
     char fmt[128], title[40];
     LPSTR text;
-    int i, j = 0;
+    int i, j = 0, r;
     LoadString(g_hinst, ids, fmt, sizeof fmt);
-    LoadString(g_hinst, IDS_APPNAME, title, sizeof title);
+    LoadString(g_hinst, title_ids, title, sizeof title);
     text = mem_alloc(s_len(fmt) + (arg ? s_len(arg) : 0) + 1);
-    if (!text) {
-        MessageBox(owner, fmt, title, MB_OK | MB_ICONEXCLAMATION);
-        return;
-    }
+    if (!text)
+        return MessageBox(owner, fmt, title, flags);
     for (i = 0; fmt[i]; i++) {
         if (fmt[i] == '%' && fmt[i + 1] == 's' && arg) {
             int k;
@@ -182,6 +190,12 @@ void message(HWND owner, int ids, const char FAR *arg)
         }
     }
     text[j] = 0;
-    MessageBox(owner, text, title, MB_OK | MB_ICONEXCLAMATION);
+    r = MessageBox(owner, text, title, flags);
     mem_free(text);
+    return r;
+}
+
+void message(HWND owner, int ids, const char FAR *arg)
+{
+    ask(owner, IDS_APPNAME, ids, arg, MB_OK | MB_ICONEXCLAMATION);
 }

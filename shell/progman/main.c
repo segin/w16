@@ -22,70 +22,128 @@ static HMENU window_menu;
 
 /* ---- settings ---- */
 
+/* The options as loaded: observed, the original writes an option only
+   when it changed (an untouched PROGMAN.INI keeps no such keys). */
+static BOOL loaded_autoarrange, loaded_minonrun, loaded_savesettings;
+
 static BOOL ini_bool(const char *key, BOOL def)
 {
     return GetPrivateProfileInt(s_settings, key, def, g_ini) != 0;
 }
 
-static void ini_put_bool(const char *key, BOOL v)
+static void ini_put_bool(const char *key, BOOL v, BOOL loaded)
 {
-    WritePrivateProfileString(s_settings, key, v ? "1" : "0", g_ini);
+    if (v != loaded)
+        WritePrivateProfileString(s_settings, key, v ? "1" : "0", g_ini);
+}
+
+static void group_key(char *key, int n)     /* "GroupN": N fits an int */
+{
+    s_cpy(key, "Group", 12);
+    s_utoa(key + 5, n);
 }
 
 static void load_groups(void)
 {
-    char order[160], key[12], path[128];
+    LPSTR order = profile_get(s_settings, "Order", g_ini);
     const char FAR *p = order;
+    char key[12];
     int n;
 
     /* Order lists GroupN numbers bottom to top; create them in that order
        so the last one ends up active. */
-    GetPrivateProfileString(s_settings, "Order", "", order, sizeof order, g_ini);
+    if (!order)
+        return;
     while ((n = s_atoi(&p)) > 0) {
-        s_cpy(key, "Group", sizeof key);
-        s_utoa(key + 5, n);
-        if (GetPrivateProfileString(s_groups, key, "", path, sizeof path, g_ini))
+        LPSTR path;
+        group_key(key, n);
+        if ((path = profile_get(s_groups, key, g_ini)) != NULL) {
             group_load(path, n);
+            mem_free(path);
+        }
     }
+    mem_free(order);
+}
+
+/* Order=: the groups' GroupN numbers in z-order, bottom first, each
+   preceded by a blank (observed: "Order= 2 3 4 1"). */
+static void write_order(void)
+{
+    LPSTR buf = s_dup("");
+    HWND w, last = NULL;
+    char num[8];
+    int n;
+    if (!buf)
+        return;
+    for (w = GetWindow(g_client, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+        last = w;
+    for (w = last; w; w = GetWindow(w, GW_HWNDPREV))
+        if ((n = group_ininum(w)) != 0) {
+            num[0] = ' ';
+            s_utoa(num + 1, n);
+            if (!s_append(&buf, num))
+                break;
+        }
+    WritePrivateProfileString(s_settings, "Order", buf, g_ini);
+    mem_free(buf);
+}
+
+/* Record a new group file under the lowest free GroupN (observed: with
+   Group1..4 taken, the new one became Group5). Order= is rewritten when
+   the window exists, by the caller. */
+int ini_add_group(const char FAR *path)
+{
+    char key[12];
+    int n;
+    for (n = 1;; n++) {
+        LPSTR have;
+        group_key(key, n);
+        have = profile_get(s_groups, key, g_ini);
+        if (!have)
+            break;
+        mem_free(have);
+    }
+    WritePrivateProfileString(s_groups, key, path, g_ini);
+    return n;
+}
+
+void ini_remove_group(int n)
+{
+    char key[12];
+    group_key(key, n);
+    WritePrivateProfileString(s_groups, key, NULL, g_ini);
+    write_order();
+}
+
+void ini_groups_changed(void)
+{
+    write_order();
 }
 
 static void save_settings(void)
 {
-    char buf[160];
+    char buf[48];                       /* four ints and a digit */
     WINDOWPLACEMENT wp;
-    HWND w, last = NULL;
     RECT *r = &wp.rcNormalPosition;
-    int n;
 
-    ini_put_bool("AutoArrange", g_autoarrange);
-    ini_put_bool("MinOnRun", g_minonrun);
-    ini_put_bool("SaveSettings", g_savesettings);
+    ini_put_bool("AutoArrange", g_autoarrange, loaded_autoarrange);
+    ini_put_bool("MinOnRun", g_minonrun, loaded_minonrun);
+    ini_put_bool("SaveSettings", g_savesettings, loaded_savesettings);
     if (!g_savesettings)
         return;
 
     wp.length = sizeof wp;
     GetWindowPlacement(g_frame, &wp);
-    buf[0] = 0;
-    s_utoa(buf, r->left);
+    s_itoa(buf, r->left);
     s_cat(buf, " ", sizeof buf);
-    s_utoa(buf + s_len(buf), r->top);
+    s_itoa(buf + s_len(buf), r->top);
     s_cat(buf, " ", sizeof buf);
-    s_utoa(buf + s_len(buf), r->right);
+    s_itoa(buf + s_len(buf), r->right);
     s_cat(buf, " ", sizeof buf);
-    s_utoa(buf + s_len(buf), r->bottom);
+    s_itoa(buf + s_len(buf), r->bottom);
     s_cat(buf, IsZoomed(g_frame) ? " 3" : " 1", sizeof buf);   /* UNVERIFIED: 3 */
     WritePrivateProfileString(s_settings, "Window", buf, g_ini);
-
-    /* z-order, bottom first */
-    buf[0] = 0;
-    for (w = GetWindow(g_client, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
-        last = w;
-    for (w = last; w; w = GetWindow(w, GW_HWNDPREV))
-        if ((n = group_ininum(w)) != 0) {
-            s_cat(buf, " ", sizeof buf);
-            s_utoa(buf + s_len(buf), n);
-        }
-    WritePrivateProfileString(s_settings, "Order", buf, g_ini);
+    write_order();
     group_save_all();
 }
 
@@ -153,9 +211,13 @@ static void command(HWND hwnd, WORD id)
         run_dialog(hwnd, (FARPROC)AboutDlgProc, IDD_ABOUT);
         break;
     case IDM_NEW:
+        cmd_new(hwnd);
+        break;
+    case IDM_DELETE:
+        cmd_delete(hwnd);
+        break;
     case IDM_MOVE:
     case IDM_COPY:
-    case IDM_DELETE:
     case IDM_PROPERTIES:
         message(hwnd, IDS_NOTYET, NULL);        /* TODO: M-shell 2 */
         break;
@@ -242,12 +304,15 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
         }
         return 0;
     }
-    if (!register_frame() || !group_register())
+    if (!register_frame() || !group_register() || !hotkey_register())
         return 1;
 
     g_autoarrange = ini_bool("AutoArrange", FALSE);
     g_minonrun = ini_bool("MinOnRun", FALSE);
     g_savesettings = ini_bool("SaveSettings", TRUE);
+    loaded_autoarrange = g_autoarrange;
+    loaded_minonrun = g_minonrun;
+    loaded_savesettings = g_savesettings;
     if (GetPrivateProfileString(s_settings, "Window", "", buf, sizeof buf, g_ini)) {
         int l = s_atoi(&p), t = s_atoi(&p), r = s_atoi(&p), b = s_atoi(&p);
         wshow = s_atoi(&p);

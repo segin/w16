@@ -23,6 +23,9 @@
 #define IDI_DEFITEM         3
 #define IDD_RUN             10
 #define IDD_ABOUT           11
+#define IDD_NEW             12
+#define IDD_GROUPPROPS      13
+#define IDD_ITEMPROPS       14
 
 #define IDM_NEW             100
 #define IDM_OPEN            101
@@ -58,12 +61,39 @@
 #define IDC_BROWSE          112
 #define IDC_HELPBTN         126
 
+/* observed control IDs of the New, group and item properties dialogs */
+#define IDC_STATIC          0x63
+#define IDC_DESC            0x64
+#define IDC_CMDLINE         0x65
+#define IDC_CHANGEICON      0x66
+#define IDC_ITEMMIN         0x69
+#define IDC_WORKDIR_LABEL   0x6E
+#define IDC_NEWGROUP        0x74
+#define IDC_NEWITEM         0x75
+#define IDC_GROUPFILE       0x77
+#define IDC_WORKDIR         0x79
+#define IDC_HOTKEY          0x7B
+#define IDC_ITEMICON        0x7D
+
+/* the shortcut key control (class "pmhotkey", observed) */
+#define HKM_SETHOTKEY       (WM_USER + 0)
+#define HKM_GETHOTKEY       (WM_USER + 1)
+#define HOTKEY_CTRLALT      0x0600      /* modifier byte observed in .GRP */
+BOOL hotkey_register(void);
+
 /* string table */
 #define IDS_APPNAME         1
 #define IDS_NOTYET          2
 #define IDS_EXECFAIL        3
 #define IDS_EXIT            4
 #define IDS_EXITWINDOWS     5
+#define IDS_DELETE          6
+#define IDS_DELITEM         7
+#define IDS_DELGROUP        8
+#define IDS_NOGROUP         9
+#define IDS_HOTKEYNONE      10
+#define IDS_HOTKEYPREFIX    11
+#define IDS_CANTWRITE       12
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -77,6 +107,13 @@ extern char g_ini[];                    /* "PROGMAN.INI" */
  * formats themselves (a .GRP's offsets are 16-bit, so a group is < 64K). */
 BOOL group_register(void);
 HWND group_load(const char FAR *grpfile, int ininum);
+HWND group_create(const char FAR *name, const char FAR *path, int ininum);
+BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
+                    const char FAR *dir, WORD hotkey, BOOL minimized);
+BOOL group_delete_selected(HWND hwnd);
+LPCSTR group_name(HWND hwnd);
+LPCSTR group_path(HWND hwnd);
+LPCSTR group_selected_name(HWND hwnd);
 void group_save_all(void);
 void group_destroy_all(void);
 int  group_ininum(HWND hwnd);           /* GroupN number, 0 if none */
@@ -84,7 +121,17 @@ BOOL group_open_selected(HWND hwnd);
 void group_arrange(HWND hwnd);
 LRESULT CALLBACK __export GroupWndProc(HWND, UINT, WPARAM, LPARAM);
 
+/* ---- main.c: PROGMAN.INI [Groups] and Order= ---- */
+int  ini_add_group(const char FAR *path);       /* returns N of GroupN= */
+void ini_remove_group(int n);
+void ini_groups_changed(void);                  /* rewrite Order= */
+
 /* ---- dialogs.c ---- */
+BOOL CALLBACK __export NewDlgProc(HWND, UINT, WPARAM, LPARAM);
+BOOL CALLBACK __export GroupPropsDlgProc(HWND, UINT, WPARAM, LPARAM);
+BOOL CALLBACK __export ItemPropsDlgProc(HWND, UINT, WPARAM, LPARAM);
+void cmd_new(HWND frame);
+void cmd_delete(HWND frame);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);
 int  run_dialog(HWND owner, FARPROC proc, int id);
@@ -104,8 +151,10 @@ void s_cpy(char FAR *d, const char FAR *s, int max);
 void s_cat(char FAR *d, const char FAR *s, int max);
 int  s_icmp(const char FAR *a, const char FAR *b);
 void s_utoa(char FAR *d, unsigned v);
+void s_itoa(char FAR *d, int v);
 int  s_atoi(const char FAR **ps);
 void message(HWND owner, int ids, const char FAR *arg);
+int  ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags);
 
 extern int __cdecl dos_chdir(const char FAR *path);
 extern void __cdecl dos_setdrive(int drive);
