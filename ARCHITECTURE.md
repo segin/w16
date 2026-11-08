@@ -39,6 +39,8 @@ Every piece of knowledge in w16 must have a recorded source. When a fact, struct
 | Windows binaries (any version) | **Forbidden** | Never disassemble or decompile. In particular, never check MT-DOS-derived code against Windows 1.x binaries. |
 | Leaked Windows source | **Forbidden** | Never. |
 | Third-party permissive code (MIT, BSD, zlib), e.g. the user's LOSE.COM (MIT) | **Allowed** | May be included. Keep its copyright notice and licence text. |
+| Wine before its March 2002 move to the LGPL (X11 licence), and the ReWind fork that continued that tree | **Allowed (X11, MIT-equivalent)** | Study, adapt or include. Keep Wine's copyright notice and licence text with anything derived. Most useful for export ordinal tables (`.spec` files) and 16-bit structure layouts. Some early Wine knowledge may have come from disassembly by others; like the books above, such facts are acceptable, but w16 contributors still never disassemble Windows themselves. |
+| TransGaming WineX/Cedega additions (Aladdin Free Public License) | **Reference only** | Not open source; never copy. Take X11-era Wine code from Wine or ReWind instead. |
 | Third-party copyleft code (GPL, LGPL), e.g. VBADOS/VBMOUSE.DRV (GPL-2.0), Wine's 16-bit DLLs (LGPL) | **Reference only** | Read for facts and approach; never copy or adapt code, which would stop w16 being MIT. |
 | Test-only tools (DOSBox, HDPMI16, the user-supplied reference Windows copies) | **Not shipped** | Used to build and test only; kept out of the repository (`.tools/`). |
 | Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not licensed by MIT. Use only to describe compatibility, never as the product's name. |
@@ -254,7 +256,8 @@ So w16's USER must store icons (and probably cursors, which share the format) in
 
 ## 8. Open Items
 
-- **Ordinal tables:** export names and ordinals for each module must be reconstructed from public sources (SDK import libraries and `.DEF` documentation, *Undocumented Windows*, and observing which ordinals real apps import). Each module needs its own `.DEF` with provenance noted.
+- **Ordinal tables (largely resolved):** `docs/exports/*.txt` lists, for every Windows 3.1 system module, which ordinals exist, observed black-box with `tests/apps/texp.c` (`GetProcAddress` by ordinal; Standard and 386 Enhanced mode agree), plus the same for Windows/386 2.11. Names come from OpenWatcom's import libraries and Wine's X11-licensed spec files (wine-20020228); `tools/exports.py` regenerates them. Still open: names for some OLE, SHELL and COMMDLG ordinals, and each export's exact semantics. Observed along the way: `GetProcAddress` ignores bit 15 of an ordinal (32769 finds ordinal 1).
+- **Windows 2.x reference:** Windows/386 2.11 runs headless (`tests/w386run.sh`): MS-DOS 4.00 built from Microsoft's MIT source (`tests/msdos-build.sh`) boots from an image (`tools/mkhdd.py`) in DOSBox-X. Observed: it has no system MDI client class, no private-profile calls, no `WinExec`, no SHELL.DLL (see `build/ref/tw2-w386.txt` and `docs/exports`). The 2.x builds of w16 programs must work around each.
 - **MT-DOS relevance:** 3.1 has no real mode, so the MT-DOS memory manager informs the *semantics* of the handle-based Global/Local APIs (movable, discardable, lock counts, compaction) rather than the selector-based implementation.
 
 ## 9. Implementation Notes

@@ -11,6 +11,7 @@
 # CRLF. The build stops at the first C utility (its C library headers are
 # not in the release), after the files above are made.
 set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 d=$root/.tools/msdos
 mkdir -p "$d"

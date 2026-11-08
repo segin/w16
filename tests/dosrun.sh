@@ -5,6 +5,7 @@
 # Output (including the exit code) is written to C:\OUT.TXT inside DOS and
 # echoed here. Exits with the DOS program's ERRORLEVEL.
 set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 dir=$(cd "$1" && pwd); shift
 hdpmi="$root/.tools/hx/hxrt/BIN/HDPMI16.EXE"

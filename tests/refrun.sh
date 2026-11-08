@@ -11,6 +11,7 @@
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there.
 set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 exe=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 mode=${2:-/S}

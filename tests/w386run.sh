@@ -8,7 +8,11 @@
 #   usage: tests/w386run.sh PROGRAM.EXE [extra files...]
 # AUTOEXEC.BAT runs "WIN386 C:\PROGRAM.EXE" then POWEROFF.COM (APM), so
 # the program must end the Windows session itself (ExitWindows).
+# W386_SHOT=N: take a screenshot every N seconds (xvfb-run) for debugging.
 set -eu
+# Never reach the user's desktop: DOSBox-X shows native dialogs (e.g. its
+# quit warning) on whatever display it can find.
+unset DISPLAY WAYLAND_DISPLAY
 root=$(cd "$(dirname "$0")/.." && pwd)
 dos=$root/.tools/msdos/build/src
 win=$root/.tools/ref/w386/cdrive/WIN386
@@ -28,6 +32,7 @@ cat > "$work/dosbox.conf" <<CONF
 [sdl]
 autolock=false
 [dosbox]
+quit warning=false
 machine=vga
 memsize=16
 [cpu]
@@ -44,8 +49,27 @@ pcspeaker=false
 imgmount c "$work/hdd.img"
 boot c:
 CONF
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${W386_TIMEOUT:-90} \
-    dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >"$work/dosbox.log" 2>&1 || true
+if [ -n "${W386_SHOT:-}" ]; then
+    # debugging: screenshots W386_SHOT seconds apart into $W386_SHOTDIR,
+    # on a virtual X display (never the user's)
+    shots=${W386_SHOTDIR:-$root/build/ref/w386shots}
+    mkdir -p "$shots"
+    cat > "$work/shot.sh" <<SH
+#!/bin/sh
+SDL_AUDIODRIVER=dummy timeout ${W386_TIMEOUT:-90} dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >"$work/dosbox.log" 2>&1 &
+i=0
+while kill -0 \$! 2>/dev/null; do
+    sleep $W386_SHOT
+    i=\$((i + 1))
+    import -window root "$shots/shot\$i.png" 2>/dev/null
+done
+SH
+    chmod +x "$work/shot.sh"
+    xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh"
+else
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${W386_TIMEOUT:-90} \
+        dosbox-x -conf "$work/dosbox.conf" -nogui -fastlaunch >"$work/dosbox.log" 2>&1 || true
+fi
 img="$work/hdd.img@@32256"
 for f in WIN386/TK.LOG TK.LOG; do
     MTOOLS_SKIP_CHECK=1 mtype -i "$img" "::$f" 2>/dev/null | tr -d '\r' || true

@@ -5,6 +5,7 @@
 # script.txt is a tools/kfcomp.py script. The disks' files (merged) are
 # A:, cdrive (default .tools/ref/w386/cdrive, emptied first) is C:.
 set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 src=$root/.tools/ref/w386/src
 cdrive=${2:-$root/.tools/ref/w386/cdrive}

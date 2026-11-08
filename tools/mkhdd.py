@@ -62,7 +62,9 @@ def main():
 
     img = '%s@@%d' % (a.out, start * 512)
     mtools('mformat', '-i', img, '-T', str(count), '-h', str(HEADS), '-s', str(SECTORS),
-           '-H', str(start), '-v', 'W16TEST', '::', img=img)
+           '-H', str(start), '::', img=img)
+    # no volume label: it would take the first directory entry, where the
+    # DOS boot code expects IO.SYS
 
     # DOS's boot code, keeping the BPB mformat wrote (bytes 3..3Dh)
     boot = open(a.boot, 'rb').read()

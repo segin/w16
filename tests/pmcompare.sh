@@ -5,6 +5,7 @@
 #   usage: tests/pmcompare.sh [outdir]      (default build/ref/cmp)
 # Black-box observation only: screenshots of the running programs.
 set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=${1:-$root/build/ref/cmp}
 rm -rf "$out"; mkdir -p "$out/orig" "$out/w16"
