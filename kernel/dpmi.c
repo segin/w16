@@ -47,7 +47,8 @@ int dpmi_set_desc(u16 sel, u32 base, u32 limit, int code)
         return 0;
     r.ax = 0x0009;
     r.bx = sel;
-    r.cx = (code ? 0x9A : 0x92) | (cpl << 5);
+    /* accessed set, as Windows 3.1 sets it (observed access F3h, FBh) */
+    r.cx = (code ? 0x9B : 0x93) | (cpl << 5);
     return call(&r);
 }
 

@@ -235,13 +235,13 @@ static int res_read(module FAR *m, u16 r, u16 sel)
 }
 
 /* GMEM flags for a resource's memory, from its flags. Observed: a
-   discardable resource's block has GlobalFlags 0100h, others 0. */
+   discardable resource's block has GlobalFlags 0100h, others 0; every
+   resource's handle is even, a fixed one's too (KRNL286, tk12.c). */
 static u16 mem_flags(module FAR *m, u16 r)
 {
-    u16 f = NAME(m, r)->flags;
-    if (f & RNF_DISCARD)
+    if (NAME(m, r)->flags & RNF_DISCARD)
         return GMEM_MOVEABLE | GMEM_DISCARDABLE;
-    return (f & RNF_MOVEABLE) ? GMEM_MOVEABLE : GMEM_FIXED;
+    return GMEM_MOVEABLE;
 }
 
 /* ---- loading and freeing modules (loader.c) ---- */

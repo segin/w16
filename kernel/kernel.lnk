@@ -38,6 +38,8 @@ export GLOBALFLAGS.22 resident
 export LOCKSEGMENT.23 resident
 export UNLOCKSEGMENT.24 resident
 export GLOBALCOMPACT.25 resident
+export GLOBALFREEALL.26 resident
+export GLOBALMASTERHANDLE.28 resident
 export YIELD.29 resident
 export WAITEVENT.30 resident
 export POSTEVENT.31 resident
@@ -87,6 +89,8 @@ export LOADLIBRARY.95 resident
 export FREELIBRARY.96 resident
 export GETTEMPFILENAME.97 resident
 export DOS3CALL.102 resident
+export GLOBALWIRE.111 resident
+export GLOBALUNWIRE.112 resident
 export __AHSHIFT.113 resident
 export __AHINCR.114 resident
 export OUTPUTDEBUGSTRING.115 resident
@@ -102,8 +106,13 @@ export GETSYSTEMDIRECTORY.135 resident
 export GETDRIVETYPE.136 resident
 export DIRECTEDYIELD.150 resident
 export GETNUMTASKS.152 resident
+export GLOBALNOTIFY.154 resident
 export GETTASKDS.155 resident
+export GLOBALHANDLENORIP.159 resident
+export GLOBALLRUOLDEST.163 resident
+export GLOBALLRUNEWEST.164 resident
 export WINEXEC.166 resident
+export GETFREESPACE.169 resident
 export __ROMBIOS.173 resident
 export __A000H.174 resident
 export __WINFLAGS.178 resident
@@ -116,7 +125,11 @@ export __E000H.190 resident
 export __0040H.193 resident
 export __F000H.194 resident
 export __C000H.195 resident
+export GLOBALFIX.197 resident
+export GLOBALUNFIX.198 resident
 export SETHANDLECOUNT.199 resident
 export ISTASK.320 resident
 export _HREAD.349 resident
 export _HWRITE.350 resident
+export FARSETOWNER.403 resident
+export FARGETOWNER.404 resident
