@@ -148,6 +148,17 @@ static void del_file(const char *name)
     dos(0x4100, 0, 0, name, NULL);
 }
 
+/* bytes read, 0 if the file cannot be opened */
+static WORD read_file(const char *name, void FAR *buf, WORD n)
+{
+    WORD h, r = 0;
+    if (!dos(0x3D00, 0, 0, name, &h))
+        return 0;
+    dos(0x3F00, h, n, buf, &r);
+    dos(0x3E00, h, 0, 0, NULL);
+    return r;
+}
+
 /* ---- implicitly loaded DLLs ---- */
 
 static HMODULE hdll, hdlb;
@@ -375,6 +386,38 @@ static void probe_mpi(void)
     if (p != q)
         FreeProcInstance(p);
     obs("DLL_MPI()==DLL_SELFADDR()", DLL_MPI() == DLL_SELFADDR());
+    {
+        /* DS = a global block that belongs to no module's segments */
+        HGLOBAL hb = GlobalAlloc(GMEM_FIXED, 64);
+        WORD bs = sel_of(GlobalLock(hb));
+        p = (FARPROC)call_ds(bs, (FARPROC)MakeProcInstance, 3, sel_of(fn), off_of(fn), hinst());
+        obs("MPI with DS = a global block==fn", p == fn);
+        if (p && p != fn) {
+            obs("MPI with DS = a global block word 1==that DS", thunk_word(p) == bs);
+            FreeProcInstance(p);
+        }
+        GlobalUnlock(hb);
+        GlobalFree(hb);
+    }
+}
+
+/* many global blocks at once */
+static void probe_many_blocks(void)
+{
+    static HGLOBAL h[300];
+    WORD i, ok = 1, distinct = 1;
+    for (i = 0; i < 300; i++) {
+        h[i] = GlobalAlloc(GMEM_MOVEABLE, 16);
+        if (!h[i])
+            ok = 0;
+        else if (i && h[i] == h[i - 1])
+            distinct = 0;
+    }
+    obs("300 GlobalAllocs all succeed", ok);
+    obs("300 GlobalAllocs distinct", distinct);
+    for (i = 0; i < 300; i++)
+        if (h[i])
+            GlobalFree(h[i]);
 }
 
 /* ---- GetInstanceData ---- */
@@ -457,11 +500,31 @@ static void probe_loadlibrary(void)
     obs_load("LoadLibrary(TKNOD) (not loaded; no extension)", h);
     if ((WORD)h >= 32)
         FreeLibrary(h);
+    del_file("C:\\TKNOD.REG");
     h = LoadLibrary("TKNOD.DLL");
     obs_load("LoadLibrary(TKNOD.DLL)", h);
     if ((WORD)h >= 32) {
         FARPROC g = GetProcAddress(h, "NOD_GET");
         HMODULE m = GetModuleHandle("TKNOD");
+        /* its entry point's registers: ax bx cx dx si di bp ds es ss sp */
+        WORD r[11];
+        obs("TKNOD init regs written", read_file("C:\\TKNOD.REG", r, sizeof r));
+        del_file("C:\\TKNOD.REG");
+        obs("TKNOD init AX", r[0]);
+        obs_env("TKNOD init BX", r[1]);
+        obs("TKNOD init CX", r[2]);
+        obs_env("TKNOD init DX", r[3]);
+        obs("TKNOD init SI", r[4]);
+        obs_env("TKNOD init DI", r[5]);
+        obs("TKNOD init DI==hModule", r[5] == (WORD)m);
+        obs("TKNOD init DI==hModule&~1", r[5] == ((WORD)m & ~1u));
+        obs_env("TKNOD init DS", r[7]);
+        obs("TKNOD init DS==0", r[7] == 0);
+        obs("TKNOD init DS==TK5 DS", r[7] == entry_regs[E_DS]);
+        obs("TKNOD init DS==hModule", r[7] == (WORD)m);
+        obs("TKNOD init DX==DS", r[3] == r[7]);
+        obs("TKNOD init ES", r[8]);
+        obs("TKNOD init SS==TK5 SS", r[9] == entry_regs[10]);
         obs("LoadLibrary(TKNOD.DLL)==hModule", (WORD)h == (WORD)m);
         obs("LoadLibrary(TKNOD.DLL)==hModule&~1", (WORD)h == ((WORD)m & ~1u));
         obs("TKNOD NOD_GET()", g ? ((wordfn)g)() : 0);
@@ -496,9 +559,21 @@ static void probe_loadlibrary(void)
         del_file("C:\\TKMZ.DLL");
     }
     STEP("TKBAD");
+    del_file("C:\\TKWEP.TMP");
     h = LoadLibrary("TKBAD.DLL");
     obs_load("LoadLibrary(TKBAD.DLL) (init fails)", h);
     obs("TKBAD loaded afterwards", GetModuleHandle("TKBAD") != 0);
+    /* its WEP creates C:\TKWEP.TMP; INT 21h 4300h: does the file exist */
+    obs("TKBAD WEP called", dos(0x4300, 0, 0, "C:\\TKWEP.TMP", NULL));
+    del_file("C:\\TKWEP.TMP");
+    STEP("TKUSEX");
+    h = LoadLibrary("TKUSEX.DLL");
+    obs_load("LoadLibrary(TKUSEX.DLL) (imports TKEXEM, only TKEXEM.EXE exists)", h);
+    obs("TKEXEM loaded with it", GetModuleHandle("TKEXEM") != 0);
+    if ((WORD)h >= 32) {
+        FreeLibrary(h);
+        obs("TKEXEM unloaded with it", GetModuleHandle("TKEXEM") == 0);
+    }
 
     /* LoadModule / FreeModule with a DLL */
     show[0] = 2;
@@ -746,6 +821,8 @@ int __cdecl tmain(void)
     probe_loadlibrary();
     STEP("search order");
     probe_search();
+    STEP("many blocks");
+    probe_many_blocks();
     STEP("TKDLL LocalAlloc");
     obs("TKDLL LocalAlloc(8) != 0", DLL_LALLOC(8) != 0);
     STEP("missing dependency");

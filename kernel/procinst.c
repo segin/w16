@@ -16,8 +16,9 @@
  *    (another selector than the program's code, RPL 3, a global block for
  *    GlobalHandle); FreeProcInstance makes a thunk the next one handed
  *    out.
- * UNVERIFIED: the result for a DS that belongs to no module (a thunk
- * here); where in its segment the first thunk lies (offset BAh on
+ *  - Called with DS = a global block of no module, it makes a thunk that
+ *    loads that DS.
+ * UNVERIFIED: where in its segment the first thunk lies (offset BAh on
  * Windows, with other data before it; here 8).
  */
 #include "kernel.h"

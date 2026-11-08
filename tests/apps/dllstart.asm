@@ -105,3 +105,23 @@ libentry:
         pop bx
         pop ds
         retf
+
+; void touch_file(const char far *name): create (truncate) the file and
+; close it, to leave a trace where a DLL has no other channel
+global _touch_file
+_touch_file:
+        push bp
+        mov bp, sp
+        push ds
+        lds dx, [bp + 6]
+        xor cx, cx
+        mov ah, 3Ch
+        int 21h
+        jc .done
+        mov bx, ax
+        mov ah, 3Eh
+        int 21h
+.done:
+        pop ds
+        pop bp
+        retf
