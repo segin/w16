@@ -47,7 +47,9 @@ int dpmi_set_desc(u16 sel, u32 base, u32 limit, int code)
         return 0;
     r.ax = 0x0009;
     r.bx = sel;
-    r.cx = (code ? 0x9A : 0x92) | (cpl << 5);
+    /* with the accessed bit set, as Windows 3.1 gives its blocks and
+       aliases (observed, tests/apps/tk17.c: F3h data, FBh code) */
+    r.cx = (code ? 0x9B : 0x93) | (cpl << 5);
     return call(&r);
 }
 
@@ -112,4 +114,61 @@ u16 dpmi_cpu_type(void)
     regs16 r;
     r.ax = 0x0400;
     return call(&r) ? (r.cx & 0xFF) : 2;
+}
+
+/* DPMI 000Bh: the 8-byte descriptor of sel into d; 1 = success */
+int dpmi_get_ldt(u16 sel, u8 FAR *d)
+{
+    regs16 r;
+    r.ax = 0x000B;
+    r.bx = sel;
+    r.di = FP_OFF(d);
+    r.ds = 0;
+    r.es = FP_SEG(d);
+    return !dpmi31(&r);
+}
+
+/* DPMI 000Ch: set the descriptor of sel from d; 1 = success */
+int dpmi_set_ldt(u16 sel, const u8 FAR *d)
+{
+    regs16 r;
+    r.ax = 0x000C;
+    r.bx = sel;
+    r.di = FP_OFF(d);
+    r.ds = 0;
+    r.es = FP_SEG(d);
+    return !dpmi31(&r);
+}
+
+/* DPMI 0008h alone: set the limit of sel; 1 = success */
+int dpmi_set_limit(u16 sel, u32 limit)
+{
+    regs16 r;
+    r.ax = 0x0008;
+    r.bx = sel;
+    r.cx = (u16)(limit >> 16);
+    r.dx = (u16)limit;
+    return call(&r);
+}
+
+/* DPMI 0007h alone: set the base of sel; 1 = success */
+int dpmi_set_base(u16 sel, u32 base)
+{
+    regs16 r;
+    r.ax = 0x0007;
+    r.bx = sel;
+    r.cx = (u16)(base >> 16);
+    r.dx = (u16)base;
+    return call(&r);
+}
+
+/* DPMI 0009h alone: access byte (low) and the 386 flags nibble (high byte,
+   bits 4-7) of sel; 1 = success */
+int dpmi_set_rights(u16 sel, u16 rights)
+{
+    regs16 r;
+    r.ax = 0x0009;
+    r.bx = sel;
+    r.cx = rights;
+    return call(&r);
 }

@@ -120,3 +120,26 @@ export SETHANDLECOUNT.199 resident
 export ISTASK.320 resident
 export _HREAD.349 resident
 export _HWRITE.350 resident
+# Selector services and the lock calls that are not GlobalLock
+# (kernel/selector.c)
+export GLOBALWIRE.111 resident
+export GLOBALUNWIRE.112 resident
+export GLOBALHANDLENORIP.159 resident
+export ALLOCCSTODSALIAS.170 resident
+export ALLOCDSTOCSALIAS.171 resident
+export ALLOCALIAS.172 resident
+export ALLOCSELECTOR.175 resident
+export FREESELECTOR.176 resident
+export PRESTOCHANGOSELECTOR.177 resident
+export LONGPTRADD.180 resident
+export GLOBALDOSALLOC.184 resident
+export GLOBALDOSFREE.185 resident
+export SETSELECTORBASE.187 resident
+export GETSELECTORLIMIT.188 resident
+export SETSELECTORLIMIT.189 resident
+export GLOBALPAGELOCK.191 resident
+export GLOBALPAGEUNLOCK.192 resident
+export SELECTORACCESSRIGHTS.196 resident
+export GLOBALFIX.197 resident
+export GLOBALUNFIX.198 resident
+export ALLOCSELECTORARRAY.206 resident

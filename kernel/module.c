@@ -24,7 +24,7 @@ static struct {
     { 113, 0, 0 },      /* __AHSHIFT */
     { 114, 0, 0 },      /* __AHINCR */
     { 178, 0, 0 },      /* __WINFLAGS */
-    { 173, 0xF000, 0 }, /* __ROMBIOS  UNVERIFIED: base of the ROM BIOS selector */
+    { 173, 0xF000, 0 }, /* __ROMBIOS: the same selector as __F000H (tk17.c) */
     { 174, 0xA000, 0 }, /* __A000H */
     { 179, 0xD000, 0 }, /* __D000H */
     { 181, 0xB000, 0 }, /* __B000H */

@@ -63,6 +63,11 @@ int  dpmi_alloc_mem(u32 size, u32 *lin, u32 *handle);
 int  dpmi_free_mem(u32 handle);
 int  dpmi_resize_mem(u32 handle, u32 size, u32 *lin, u32 *newhandle);
 u16  dpmi_cpu_type(void);
+int  dpmi_get_ldt(u16 sel, u8 FAR *d);         /* 000Bh, 8 bytes */
+int  dpmi_set_ldt(u16 sel, const u8 FAR *d);   /* 000Ch */
+int  dpmi_set_limit(u16 sel, u32 limit);
+int  dpmi_set_base(u16 sel, u32 base);
+int  dpmi_set_rights(u16 sel, u16 rights);
 
 /* ---- global.c ---- */
 #define GMEM_FIXED          0x0000
