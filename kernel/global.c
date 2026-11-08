@@ -1,0 +1,271 @@
+/*
+ * global.c - global heap (GlobalAlloc and friends), first version.
+ *
+ * M1 implementation: every block is its own DPMI memory block (INT 31h
+ * 0501h) with one descriptor per 64K tile, consecutive by the selector
+ * increment (__AHINCR). This is enough for the API semantics. The real
+ * Windows global arena (sub-allocation, compaction order, discarding, the
+ * arena structures TOOLHELP walks) comes later.
+ *
+ * Handle convention (UNVERIFIED: recalled from published descriptions of
+ * Windows 3.x protected mode): a fixed block's handle is its selector; a
+ * moveable block's handle is its selector with bit 0 cleared, and
+ * GlobalLock turns the handle back into the selector by setting bit 0.
+ */
+#include "kernel.h"
+
+#define MAX_ARENA 256
+
+typedef struct garena {
+    u16 sel;            /* first selector; 0 = free slot */
+    u16 nsel;           /* number of 64K tiles */
+    u32 lin;            /* linear base address */
+    u32 size;           /* size reported by GlobalSize */
+    u32 dpmi;           /* DPMI memory block handle */
+    u16 flags;          /* GMEM_* flags */
+    u16 lock;           /* lock count (moveable blocks) */
+    u16 owner;
+} garena;
+
+static garena arena[MAX_ARENA];
+
+void global_init(void)
+{
+    kmemset(arena, 0, sizeof arena);
+}
+
+static garena *find(u16 h)
+{
+    u16 sel = h | 1;
+    int i;
+    if (!h)
+        return NULL;
+    for (i = 0; i < MAX_ARENA; i++)
+        if (arena[i].sel && arena[i].sel == sel)
+            return &arena[i];
+    return NULL;
+}
+
+static u16 handle_of(const garena *a)
+{
+    return (a->flags & GMEM_MOVEABLE) ? (a->sel & ~1u) : a->sel;
+}
+
+/* Set the base and limit of every tile of `a` from a->lin and a->size. */
+static int set_tiles(garena *a)
+{
+    u16 i;
+    u32 left = a->size;
+    for (i = 0; i < a->nsel; i++) {
+        u32 lim = left > 0x10000UL ? 0x10000UL : left;
+        if (!dpmi_set_desc(a->sel + i * sel_inc, a->lin + ((u32)i << 16), lim - 1, 0))
+            return 0;
+        left -= lim;
+    }
+    return 1;
+}
+
+static void zero_range(garena *a, u32 from)
+{
+    while (from < a->size) {
+        u16 tile = (u16)(from >> 16);
+        u16 off = (u16)from;
+        u32 end = ((u32)tile + 1) << 16;
+        u32 n;
+        if (end > a->size)
+            end = a->size;
+        n = end - from;
+        if (n == 0x10000UL) {           /* kmemset takes at most 0xFFFF */
+            kmemset(MK_FP(a->sel + tile * sel_inc, 0), 0, 0x8000);
+            kmemset(MK_FP(a->sel + tile * sel_inc, 0x8000), 0, 0x8000);
+        } else {
+            kmemset(MK_FP(a->sel + tile * sel_inc, off), 0, (u16)n);
+        }
+        from = end;
+    }
+}
+
+u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
+{
+    garena *a = NULL;
+    int i;
+
+    /* UNVERIFIED: zero-size allocations (moveable ones should yield a
+       discarded block in real Windows); rejected for now. */
+    if (size == 0 || size > 0x00FF0000UL)
+        return 0;
+    for (i = 0; i < MAX_ARENA; i++)
+        if (!arena[i].sel) {
+            a = &arena[i];
+            break;
+        }
+    if (!a)
+        return 0;
+
+    a->size = (size + 15) & ~15UL;      /* UNVERIFIED: rounding granularity */
+    a->nsel = (u16)((a->size + 0xFFFFUL) >> 16);
+    if (!dpmi_alloc_mem(a->size, &a->lin, &a->dpmi))
+        return 0;
+    a->sel = dpmi_alloc_desc(a->nsel);
+    if (!a->sel) {
+        dpmi_free_mem(a->dpmi);
+        return 0;
+    }
+    if (!set_tiles(a)) {
+        for (i = 0; i < a->nsel; i++)
+            dpmi_free_desc(a->sel + i * sel_inc);
+        dpmi_free_mem(a->dpmi);
+        a->sel = 0;
+        return 0;
+    }
+    /* Always zero new memory: deterministic, and never less compatible
+       than whatever happened to be there. */
+    zero_range(a, 0);
+    a->flags = flags;
+    a->lock = 0;
+    a->owner = owner;
+    if (sel_out)
+        *sel_out = a->sel;
+    return handle_of(a);
+}
+
+static void gfree(garena *a)
+{
+    u16 i;
+    for (i = 0; i < a->nsel; i++)
+        dpmi_free_desc(a->sel + i * sel_inc);
+    dpmi_free_mem(a->dpmi);
+    a->sel = 0;
+}
+
+int gset_code(u16 sel)
+{
+    garena *a = find(sel);
+    if (!a)
+        return 0;
+    return dpmi_set_desc(a->sel, a->lin, (a->size > 0x10000UL ? 0x10000UL : a->size) - 1, 1);
+}
+
+u32 gsize_of_sel(u16 sel)
+{
+    garena *a = find(sel);
+    return a ? a->size : 0;
+}
+
+/* ---- API ---- */
+
+u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
+{
+    return galloc(flags, size, 0, NULL);
+}
+
+u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
+{
+    garena *a = find(h);
+    u32 old, lin, nh, newsize;
+
+    if (!a)
+        return 0;
+    if (flags & GMEM_MODIFY) {
+        /* only the discardable/moveable attributes can change */
+        a->flags = (a->flags & ~GMEM_DISCARDABLE) | (flags & GMEM_DISCARDABLE);
+        return handle_of(a);
+    }
+    if (size == 0)
+        return 0;                       /* UNVERIFIED: discard semantics */
+    newsize = (size + 15) & ~15UL;
+    if (((newsize + 0xFFFFUL) >> 16) > a->nsel)
+        return 0;                       /* TODO: grow the selector tile run */
+    if (!dpmi_resize_mem(a->dpmi, newsize, &lin, &nh))
+        return 0;
+    old = a->size;
+    a->lin = lin;
+    a->dpmi = nh;
+    a->size = newsize;
+    set_tiles(a);
+    if (newsize > old)
+        zero_range(a, old);
+    return handle_of(a);
+}
+
+u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
+{
+    garena *a = find(h);
+    if (!a)
+        return h;
+    gfree(a);
+    return 0;
+}
+
+void FAR * KAPI GlobalLock(u16 h)                             /* KERNEL.18 */
+{
+    garena *a = find(h);
+    if (!a)
+        return NULL;
+    if ((a->flags & GMEM_MOVEABLE) && a->lock < 0xFF)
+        a->lock++;
+    return MK_FP(a->sel, 0);
+}
+
+u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
+{
+    garena *a = find(h);
+    if (!a)
+        return 0;
+    if (a->lock)
+        a->lock--;
+    return a->lock != 0;
+}
+
+u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
+{
+    garena *a = find(h);
+    return a ? a->size : 0;
+}
+
+/* Returns handle in the low word and selector in the high word. */
+u32 KAPI GlobalHandle(u16 sel)                                /* KERNEL.21 */
+{
+    garena *a = find(sel);
+    if (!a)
+        return 0;
+    return ((u32)a->sel << 16) | handle_of(a);
+}
+
+u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
+{
+    garena *a = find(h);
+    if (!a)
+        return 0;
+    return (a->lock & GMEM_LOCKCOUNT) | (a->flags & GMEM_DISCARDABLE);
+}
+
+/* TODO: LockSegment(-1) should lock the caller's data segment; __loadds
+   has replaced DS by then, so it needs an asm entry point. UNVERIFIED:
+   return value details for fixed segments. */
+u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+{
+    garena *a = find(seg);
+    if (!a)
+        return 0;
+    if (a->lock < 0xFF)
+        a->lock++;
+    return handle_of(a);
+}
+
+u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+{
+    garena *a = find(seg);
+    if (!a)
+        return 0;
+    if (a->lock)
+        a->lock--;
+    return handle_of(a);
+}
+
+/* Largest free block. The DPMI host's figure is the honest answer here. */
+u32 KAPI GlobalCompact(u32 min_free)                          /* KERNEL.25 */
+{
+    (void)min_free;
+    return 0x00100000UL;                /* UNVERIFIED: placeholder 1 MB */
+}

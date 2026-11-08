@@ -1,0 +1,240 @@
+; kentry.asm - KERNEL entry point and low-level glue (16-bit protected mode).
+;
+; Large model. All KERNEL code lives in one segment, _TEXT (C is compiled
+; with -nt=_TEXT). DGROUP = _DATA CONST CONST2 _BSS.
+;
+; Contents:
+;   kernel_entry     NE entry point, called by the bootstrap
+;   int21_handler    protected-mode INT 21h hook (task termination)
+;   _task_run        start a task on its own stack; returns its exit code
+;   unimpl_entry     target of the "unimplemented import" thunks
+;   INITTASK         register-based API wrapper around inittask_c
+;   DOS3CALL         KERNEL.102
+;   _dos21, _dpmi31  generic interrupt helpers for C
+;   KCONST segment   placeholders for KERNEL's constant exports
+
+        bits 16
+        cpu 286
+
+segment _TEXT  public align=16 class=CODE use16
+segment _DATA  public align=16 class=DATA use16
+segment CONST  public align=2  class=DATA use16
+segment CONST2 public align=2  class=DATA use16
+segment _BSS   public align=2  class=BSS  use16
+group DGROUP _DATA CONST CONST2 _BSS
+
+%include "intcall.inc"
+
+extern _kmain                   ; void __cdecl __far kmain(bootinfo __far *)
+extern _unimpl_report           ; void __cdecl __far unimpl_report(u16 index)
+extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
+
+segment _DATA
+global _old21, _task_active
+_old21          dd 0            ; previous protected-mode INT 21h vector
+_task_active    dw 0            ; nonzero while a task runs under _task_run
+saved_ss        dw 0
+saved_sp        dw 0
+t_cs            dw 0
+t_ip            dw 0
+t_ds            dw 0
+t_ss            dw 0
+t_sp            dw 0
+t_bx            dw 0
+t_cx            dw 0
+t_di            dw 0
+t_si            dw 0
+t_es            dw 0
+
+segment _TEXT
+
+; ---------------------------------------------------------------------------
+; kernel_entry: ES:BX -> bootinfo. Called far by the bootstrap.
+global kernel_entry
+kernel_entry:
+        mov ax, DGROUP
+        mov ds, ax
+        push es
+        push bx
+        call far _kmain
+        add sp, 4
+        retf
+
+; ---------------------------------------------------------------------------
+; Protected-mode INT 21h hook. AH=4Ch from a running task ends the task;
+; everything else goes to the previous handler.
+global int21_handler
+int21_handler:
+        cmp ah, 4Ch
+        jne .chain
+        push ds
+        push bx
+        mov bx, DGROUP
+        mov ds, bx
+        cmp word [_task_active wrt DGROUP], 0
+        pop bx
+        pop ds
+        jne task_exit_al
+.chain:
+        sub sp, 4                       ; room for the far jump target
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [_old21 wrt DGROUP]
+        mov [bp+2], ax
+        mov ax, [_old21+2 wrt DGROUP]
+        mov [bp+4], ax
+        pop ax
+        pop ds
+        pop bp
+        retf                            ; to the old handler; IRET frame intact
+
+; ---------------------------------------------------------------------------
+; u16 __cdecl __far task_run(u16 cs, u16 ip, u16 ds, u16 ss, u16 sp,
+;                            u16 bx, u16 cx, u16 di, u16 si, u16 es)
+; Enter a task's entry point with Windows' task-start register set:
+;   AX=0, BX=stack size, CX=heap size, DX=0, DI=hInstance, SI=hPrevInstance,
+;   ES=PSP, DS=DGROUP, SS:SP=initial stack, BP=0.
+; UNVERIFIED: AX/DX/BP values at task entry.
+; Returns the exit code when the task terminates with INT 21h AH=4Ch.
+global _task_run
+_task_run:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        mov ax, DGROUP
+        mov ds, ax
+        mov [saved_ss wrt DGROUP], ss
+        mov [saved_sp wrt DGROUP], sp
+        mov ax, [bp+6]
+        mov [t_cs wrt DGROUP], ax
+        mov ax, [bp+8]
+        mov [t_ip wrt DGROUP], ax
+        mov ax, [bp+10]
+        mov [t_ds wrt DGROUP], ax
+        mov ax, [bp+12]
+        mov [t_ss wrt DGROUP], ax
+        mov ax, [bp+14]
+        mov [t_sp wrt DGROUP], ax
+        mov ax, [bp+16]
+        mov [t_bx wrt DGROUP], ax
+        mov ax, [bp+18]
+        mov [t_cx wrt DGROUP], ax
+        mov ax, [bp+20]
+        mov [t_di wrt DGROUP], ax
+        mov ax, [bp+22]
+        mov [t_si wrt DGROUP], ax
+        mov ax, [bp+24]
+        mov [t_es wrt DGROUP], ax
+        mov word [_task_active wrt DGROUP], 1
+        mov ss, [t_ss wrt DGROUP]
+        mov sp, [t_sp wrt DGROUP]
+        push word [t_cs wrt DGROUP]
+        push word [t_ip wrt DGROUP]
+        mov bx, [t_bx wrt DGROUP]
+        mov cx, [t_cx wrt DGROUP]
+        mov di, [t_di wrt DGROUP]
+        mov si, [t_si wrt DGROUP]
+        mov es, [t_es wrt DGROUP]
+        xor ax, ax
+        xor dx, dx
+        xor bp, bp
+        mov ds, [t_ds wrt DGROUP]
+        retf
+
+; AL = exit code. Abandons the task's stack and returns from _task_run.
+task_exit_al:
+        mov bx, DGROUP
+        mov ds, bx
+        mov word [_task_active wrt DGROUP], 0
+        mov ss, [saved_ss wrt DGROUP]
+        mov sp, [saved_sp wrt DGROUP]
+        sti
+        xor ah, ah
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
+; ---------------------------------------------------------------------------
+; Unimplemented-import thunks do:  mov ax, <index> / jmp far unimpl_entry
+global unimpl_entry
+unimpl_entry:
+        mov bx, DGROUP
+        mov ds, bx
+        push ax
+        call far _unimpl_report
+        add sp, 2
+        mov al, 0FFh
+        jmp task_exit_al
+
+; ---------------------------------------------------------------------------
+; InitTask (KERNEL.91) is register-based: it takes and returns values in
+; registers. Build a regs16 on the stack and let C fill in the results.
+global INITTASK
+INITTASK:
+        pushf
+        push es
+        push ds
+        push di
+        push si
+        push dx
+        push cx
+        push bx
+        push ax
+        mov ax, sp
+        push ss
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        call far _inittask_c
+        add sp, 4
+        pop ax
+        pop bx
+        pop cx
+        pop dx
+        pop si
+        pop di
+        pop ds
+        pop es
+        popf
+        retf
+
+; DOS3Call (KERNEL.102): issue INT 21h with the caller's registers.
+global DOS3CALL
+DOS3CALL:
+        int 21h
+        retf
+
+INTCALL _dos21, 21h, far
+INTCALL _dpmi31, 31h, far
+
+; ---------------------------------------------------------------------------
+; Constant exports. wlink cannot export absolute symbols, so these labels
+; live in their own segment, which keeps them in their own entry-table
+; bundles. KERNEL resolves these ordinals to their runtime values (see
+; kconst_lookup in module.c); the offsets here are placeholders.
+segment KCONST public align=16 class=KCONST use16
+global __AHSHIFT, __AHINCR, __ROMBIOS, __A000H, __WINFLAGS, __D000H
+global __B000H, __B800H, __0000H, __E000H, __0040H, __F000H, __C000H
+__AHSHIFT:      db 0
+__AHINCR:       db 0
+__ROMBIOS:      db 0
+__A000H:        db 0
+__WINFLAGS:     db 0
+__D000H:        db 0
+__B000H:        db 0
+__B800H:        db 0
+__0000H:        db 0
+__E000H:        db 0
+__0040H:        db 0
+__F000H:        db 0
+__C000H:        db 0

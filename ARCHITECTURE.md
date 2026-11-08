@@ -240,3 +240,41 @@ For now, w16 targets **VGA (640×480, 16 colours, 96 dpi) only**: `VGA.DRV`, the
 
 - **Ordinal tables:** export names and ordinals for each module must be reconstructed from public sources (SDK import libraries and `.DEF` documentation, *Undocumented Windows*, and observing which ordinals real apps import). Each module needs its own `.DEF` with provenance noted.
 - **MT-DOS relevance:** 3.1 has no real mode, so the MT-DOS memory manager informs the *semantics* of the handle-based Global/Local APIs (movable, discardable, lock counts, compaction) rather than the selector-based implementation.
+
+## 9. Implementation Notes
+
+### 9.1 KRNL286.EXE layout and boot (M1)
+
+`KRNL286.EXE` has the same shape as the original: an MZ stub followed by the NE module `KERNEL`.
+
+1. **Bootstrap** (the MZ stub, `kernel/boot/`, real mode, small model). It finds its own path from the DOS environment and reads the resident NE tables, every KERNEL segment and their relocation records into conventional memory. It then enters 16-bit protected mode through DPMI (INT 2Fh AX=1687h), creates a descriptor per segment, applies KERNEL's relocations, and far-calls the NE entry point with ES:BX pointing to a `bootinfo` block (`kernel/bootinfo.h`, internal to w16). KERNEL may not import anything.
+2. **KERNEL** (`kernel/`, large model, SS ≠ DS, no C runtime). Exported APIs are `far pascal __loadds`. Its startup:
+   - registers itself as module 0;
+   - hooks protected-mode INT 21h, so AH=4Ch from a task ends that task;
+   - loads the application named on the command line through the NE loader;
+   - starts it with the Windows task-entry register set.
+3. **DOS services** come through INT 21h from protected mode, translated by the DOS extender, exactly as the real KERNEL relies on DOSX/WIN386. The M1 test host is HDPMI16; w16's own DOSX replaces it in M2.
+4. **Constant exports** (`__AHINCR`, `__0040H`, `__WINFLAGS`, …). `wlink` cannot export absolute symbols, so these labels live in their own `KCONST` segment and KERNEL resolves those ordinals to runtime values.
+5. **Unimplemented imports** bind to 8-byte thunks. A thunk reports `w16: call to unimplemented MODULE.ordinal` and ends the task with exit code 0FFh. Loading never fails just because an API is missing.
+
+M1 limitations, in order of when they should be fixed:
+- **Local heap:** `LocalInit`/`LocalAlloc` are not implemented yet.
+- **Global heap:** each block is one DPMI allocation; there is no Windows arena.
+- **Loading:** no dependent-DLL loading, self-loading apps, floating-point OS fixups, demand loading, or `LibMain`.
+- **Module and task layout:** w16's own structures are used where Windows has the MDB and TDB.
+- **Tasks:** a single task; it shares KERNEL's PSP.
+
+### 9.2 Testing and verification
+
+- `make test` runs each test program under `KRNL286.EXE` in headless DOSBox with HDPMI16 (`tests/dosrun.sh`, `tests/run-tests.sh`).
+- Test programs print `PASS`/`FAIL` lines for behaviour we are certain of, and `OBS name=value` lines for details that have not been checked against Windows yet.
+- Code that relies on a recalled-but-unchecked detail is marked `UNVERIFIED:`. `grep -rn UNVERIFIED kernel` lists them.
+- **Reference system (needed):** a licensed Windows 3.1 installation run in the same DOSBox setup. Running the same test programs there and diffing the `OBS` lines is black-box observation (§3). Each `UNVERIFIED` item is closed by such a diff. Until then, a passing test only shows w16 is consistent with itself.
+
+### 9.3 Additional permitted sources and tools
+
+| Item | Status |
+|---|---|
+| OpenWatcom headers and import libraries (`h/win`, `lib286/win/windows.lib`) | Allowed (open source, Sybase OWPL): API names, ordinals, constants and structure layouts as facts. Used directly only to build test programs. |
+| HDPMI16 (HX DOS extender, freeware, "may be used for any purpose") | Test-only DPMI host, fetched into `.tools/` by `tools/fetch-hdpmi.sh`; never committed or redistributed. |
+| DOSBox | Test-only emulator. |

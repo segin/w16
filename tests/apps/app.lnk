@@ -1,0 +1,9 @@
+# wlink directives for the TK* test programs (output and objects come from
+# the Makefile)
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=1k
+option map
+library windows.lib

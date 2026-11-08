@@ -1,0 +1,49 @@
+# wlink directives for KRNL286.EXE: the NE KERNEL module, with the real-mode
+# bootstrap (kernel/boot) as its MZ stub. Object files, the output name and
+# the stub are supplied by the Makefile.
+#
+# Export ordinals are ABI: Win16 programs import KERNEL functions by ordinal.
+# Source of the name/ordinal pairs: OpenWatcom's lib286/win/windows.lib
+# (extract with tools/omfimp.py).
+
+format windows dll
+option modname=KERNEL
+option description 'w16 KERNEL'
+option start=kernel_entry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+
+export FATALEXIT.1 resident
+export GETVERSION.3 resident
+export GLOBALALLOC.15 resident
+export GLOBALREALLOC.16 resident
+export GLOBALFREE.17 resident
+export GLOBALLOCK.18 resident
+export GLOBALUNLOCK.19 resident
+export GLOBALSIZE.20 resident
+export GLOBALHANDLE.21 resident
+export GLOBALFLAGS.22 resident
+export LOCKSEGMENT.23 resident
+export UNLOCKSEGMENT.24 resident
+export GLOBALCOMPACT.25 resident
+export YIELD.29 resident
+export WAITEVENT.30 resident
+export INITTASK.91 resident
+export DOS3CALL.102 resident
+export __AHSHIFT.113 resident
+export __AHINCR.114 resident
+export OUTPUTDEBUGSTRING.115 resident
+export GETWINFLAGS.132 resident
+export __ROMBIOS.173 resident
+export __A000H.174 resident
+export __WINFLAGS.178 resident
+export __D000H.179 resident
+export __B000H.181 resident
+export __B800H.182 resident
+export __0000H.183 resident
+export __E000H.190 resident
+export __0040H.193 resident
+export __F000H.194 resident
+export __C000H.195 resident
