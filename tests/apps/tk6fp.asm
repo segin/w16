@@ -114,6 +114,58 @@ _regcall:
         pop bp
         retf
 
+; void regcall3(FARPROC fn, WORD FAR *r, WORD a1, WORD a2, WORD a3):
+; regcall with a1, a2, a3 pushed in that order (a Pascal call with three
+; word arguments); r[9] (SP change) is then -6 plus what fn popped.
+global _regcall3
+_regcall3:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        push di
+        mov [rc_sp wrt DGROUP], sp
+        push word [bp + 14]
+        push word [bp + 16]
+        push word [bp + 18]
+        les bx, [bp + 10]
+        mov ax, [es:bx + 0]
+        mov cx, [es:bx + 4]
+        mov dx, [es:bx + 6]
+        mov si, [es:bx + 8]
+        mov di, [es:bx + 10]
+        push word [es:bx + 2]
+        mov es, [es:bx + 12]
+        pop bx
+        call far [bp + 6]
+        pushf
+        push ds
+        push es
+        push bx
+        mov bx, DGROUP
+        mov ds, bx
+        mov bp, [rc_sp wrt DGROUP]      ; frame: bp+0 di, +2 si, +4 ds, +6 bp
+        add bp, 6
+        les bx, [ss:bp + 10]
+        mov [es:bx + 0], ax
+        mov [es:bx + 4], cx
+        mov [es:bx + 6], dx
+        mov [es:bx + 8], si
+        mov [es:bx + 10], di
+        pop word [es:bx + 2]            ; bx
+        pop word [es:bx + 12]           ; es
+        pop word [es:bx + 16]           ; ds
+        pop word [es:bx + 14]           ; flags
+        mov ax, sp
+        sub ax, [rc_sp wrt DGROUP]
+        mov [es:bx + 18], ax            ; SP after the call - SP before
+        mov sp, [rc_sp wrt DGROUP]
+        pop di
+        pop si
+        pop ds
+        pop bp
+        retf
+
 ; ---- coprocessor access through emulator-fixup sequences ----
 ; Every floating-point instruction below is FWAIT + ESC with an FIDRQQ
 ; fixup (and FWAIT alone as NOP FWAIT with FIWRQQ), as compiled code has

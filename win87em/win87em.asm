@@ -49,6 +49,10 @@ _fn12           dw 0                    ; function 12: AX kept (meaning unknown)
 _em_acc         dw 0                    ; emulator: exceptions since fn 9/0
 old_vec         times 2 * (3Eh - 34h + 1) dw 0
 hooked          dw 0
+old_irq13       dd 0
+irq13_hooked    dw 0
+irq_sw          dw 0
+irq_cw          dw 0
 tmp             dw 0
 tmp32           dd 0
 env             times 7 dw 0            ; FSTENV image (16-bit)
@@ -66,6 +70,7 @@ libentry:
         and ax, WF_80x87
         jz .noco
         mov word [_have87 wrt DGROUP], 1
+        call hook_irq13
         jmp .done
 .noco:
         call far _emu_reset
@@ -81,8 +86,12 @@ WEP:
         mov ax, DGROUP
         mov ds, ax
         cmp word [hooked wrt DGROUP], 0
-        je .ret
+        je .irq
         call unhook_vectors
+.irq:
+        cmp word [irq13_hooked wrt DGROUP], 0
+        je .ret
+        call unhook_irq13
 .ret:
         mov ax, 1
         pop ds
@@ -131,6 +140,95 @@ unhook_vectors:
         pop si
         ret
 
+; ---- coprocessor exceptions (IRQ 13) ----
+; UNVERIFIED: not observable in the reference set-up (neither DOSBox nor
+; DOSBox-X raises IRQ 13). What follows is the documented PC/AT path: an
+; unmasked exception of a coprocessor wired the AT way (FERR# to IRQ 13,
+; CR0.NE clear, as DOS-compatible DPMI hosts leave it) raises IRQ 13,
+; which the default PIC set-up delivers as INT 75h in protected mode.
+; The handler clears the coprocessor's BUSY latch (OUT F0h), sends the
+; end of interrupt to both PICs, reads and clears the exception flags,
+; and calls the program's handler (function 3) the way the emulator does
+; (AL = FPE code, the program's DS pushed), for the highest-priority
+; unmasked exception.
+IRQ13_VEC       equ 75h
+
+hook_irq13:
+        mov ax, 0204h
+        mov bl, IRQ13_VEC
+        int 31h
+        mov [old_irq13 wrt DGROUP], dx
+        mov [old_irq13 + 2 wrt DGROUP], cx
+        mov ax, 0205h
+        mov bl, IRQ13_VEC
+        mov cx, cs
+        mov dx, irq13_handler
+        int 31h
+        jc .ret
+        mov word [irq13_hooked wrt DGROUP], 1
+.ret:
+        ret
+
+unhook_irq13:
+        mov ax, 0205h
+        mov bl, IRQ13_VEC
+        mov dx, [old_irq13 wrt DGROUP]
+        mov cx, [old_irq13 + 2 wrt DGROUP]
+        int 31h
+        mov word [irq13_hooked wrt DGROUP], 0
+        ret
+
+irq13_handler:
+        pusha
+        push ds
+        push es
+        mov bp, sp
+        mov ax, DGROUP
+        mov ds, ax
+        xor al, al
+        out 0F0h, al                    ; clear the coprocessor's BUSY
+        mov al, 20h
+        out 0A0h, al                    ; end of interrupt: slave, master
+        out 20h, al
+        fnstsw [irq_sw wrt DGROUP]
+        fnstcw [irq_cw wrt DGROUP]
+        fnclex
+        mov ax, [irq_cw wrt DGROUP]
+        not ax
+        and ax, [irq_sw wrt DGROUP]
+        and ax, 3Fh                     ; unmasked exceptions that occurred
+        jz .done
+        mov cx, 81h                     ; IE: invalid (stack fault: 8Ah/8Bh)
+        test al, 01h
+        jz .notie
+        test word [irq_sw wrt DGROUP], 40h
+        jz .call
+        mov cl, 8Bh                     ; SF with C1 clear: underflow
+        test word [irq_sw wrt DGROUP], 200h
+        jz .call
+        mov cl, 8Ah                     ; C1 set: overflow
+        jmp .call
+.notie:
+        mov cl, 82h
+.next:
+        shr al, 1
+        test al, 1
+        jnz .call
+        inc cl
+        cmp cl, 86h
+        jbe .next
+        jmp .done
+.call:
+        push word [bp + 2]              ; the interrupted DS
+        push cx
+        call far _call_handler
+        add sp, 4
+.done:
+        pop es
+        pop ds
+        popa
+        iret
+
 ; One stub per vector: push the interrupt number, go to emu_common.
 STUB_LEN        equ 5
 stubs:
@@ -163,7 +261,7 @@ emu_common:
 ; ---- __FPMATH ----
 ; In: BX = function, AX/DX as the function needs. Out: AX (DX for 7),
 ; CF as observed; BX = 2 * function (as observed); CX = our DS; SI, DI,
-; BP, DS kept. Functions 0-12 observed; others do nothing (UNVERIFIED).
+; BP, DS kept. Functions 0-24 observed.
 global __FPMATH
 __FPMATH:
         push ds
@@ -197,8 +295,17 @@ fpm_ret_cf1:
         stc
         jmp fpm_ret
 
+; above 12: AX = DX = FFFFh, CF = 0, BX and CX kept (observed for 13-24,
+; with and without a coprocessor; nothing else changed)
 fpm_none:
-        jmp fpm_ret_cf0
+        mov ax, 0FFFFh
+        mov dx, ax
+        clc
+        pop bp
+        pop di
+        pop si
+        pop ds
+        retf
 
 ; 0: initialise: FINIT, CW 1332h (the coprocessor gets 1330h); AX = 0.
 ; It does not change the exception handler (observed).
@@ -345,11 +452,31 @@ fpm_emu:
         pop ds
         retf
 
-; ---- ordinal 2 ----
-; UNVERIFIED: unnamed on Windows 3.1 and not observed; does nothing.
+; ---- ordinal 2 (no name) ----
+; Observed (tests/apps/tk9.c): takes one word argument (pops 2 bytes;
+; 0, 1 and 200h all behaved the same) and reinitialises the coprocessor
+; like function 0 (the register stack emptied, control word 1330h);
+; AX = 0, CX = 0, BX, SI, DI kept, CF = 0. Without a coprocessor the
+; 3.1 emulator ended the program at its next floating-point instruction
+; afterwards; here the emulator is reset instead (UNVERIFIED: what the
+; argument means; probably a task, as in a per-task clean-up).
 global WIN87EM_2
 WIN87EM_2:
-        retf
+        push ds
+        mov ax, DGROUP
+        mov ds, ax
+        cmp word [_have87 wrt DGROUP], 0
+        je .emu
+        call init87
+        jmp .ret
+.emu:
+        call far _emu_reset
+        mov word [_em_acc wrt DGROUP], 0
+.ret:
+        xor ax, ax
+        xor cx, cx
+        pop ds
+        retf 2
 
 ; ---- __WIN87EMINFO(buf, size) ----
 ; Observed: size < 12 -> FFFFh, nothing written; else 12 bytes: 0600h,
