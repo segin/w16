@@ -199,13 +199,37 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     newsize = ROUND(size);
     if (((newsize + 0xFFFFUL) >> 16) > a->nsel)
         return 0;                       /* TODO: grow the selector tile run */
+    old = a->size;
     if (discarded(a)) {
         if (!dpmi_alloc_mem(newsize, &lin, &nh))
             return 0;
+    } else if (a->nsel == 1) {
+        /* A single-tile block may be the running task's stack (its DGROUP
+           grows with its local heap), so it must never be unmapped while
+           in use, as DPMI 0503h may do when it moves a block. Growing:
+           copy into a new block and switch the selector in one step
+           (seg_move). Shrinking: keep the memory. */
+        if (newsize > old) {
+            u16 tmp;
+            if (!dpmi_alloc_mem(newsize, &lin, &nh))
+                return 0;
+            tmp = dpmi_alloc_desc(1);
+            if (!tmp || !dpmi_set_desc(tmp, lin, newsize - 1, 0)) {
+                if (tmp)
+                    dpmi_free_desc(tmp);
+                dpmi_free_mem(nh);
+                return 0;
+            }
+            seg_move(a->sel, tmp, (u16)((old + 1) >> 1), lin);
+            dpmi_free_desc(tmp);
+            dpmi_free_mem(a->dpmi);
+        } else {
+            lin = a->lin;
+            nh = a->dpmi;
+        }
     } else if (!dpmi_resize_mem(a->dpmi, newsize, &lin, &nh)) {
         return 0;
     }
-    old = a->size;
     a->lin = lin;
     a->dpmi = nh;
     a->size = newsize;

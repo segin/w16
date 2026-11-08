@@ -29,6 +29,7 @@ extern int  __cdecl dos21(regs16 FAR *r);       /* returns carry */
 extern int  __cdecl dpmi31(regs16 FAR *r);      /* returns carry */
 extern u16  __cdecl task_run(u16 cs, u16 ip, u16 ds, u16 ss, u16 sp,
                              u16 bx, u16 cx, u16 di, u16 si, u16 es);
+extern void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);
 extern void __far int21_handler(void);
 extern void __far unimpl_entry(void);
 #pragma aux int21_handler "*"           /* asm labels: no name decoration */
@@ -79,6 +80,12 @@ void global_init(void);
 u16  galloc(u16 flags, u32 size, u16 owner, u16 *sel_out); /* returns handle */
 int  gset_code(u16 sel);                    /* make a block executable */
 u32  gsize_of_sel(u16 sel);
+u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
+u32  KAPI GlobalSize(u16 h);
+u32  KAPI GlobalHandle(u16 sel);
+
+/* ---- local.c ---- */
+int  local_init_task(u16 ds, u16 heap);
 
 /* ---- module.c ---- */
 #define MAX_MODULES     32

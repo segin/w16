@@ -17,6 +17,16 @@ segment type data fixed preload
 
 export FATALEXIT.1 resident
 export GETVERSION.3 resident
+export LOCALINIT.4 resident
+export LOCALALLOC.5 resident
+export LOCALREALLOC.6 resident
+export LOCALFREE.7 resident
+export LOCALLOCK.8 resident
+export LOCALUNLOCK.9 resident
+export LOCALSIZE.10 resident
+export LOCALHANDLE.11 resident
+export LOCALFLAGS.12 resident
+export LOCALCOMPACT.13 resident
 export GLOBALALLOC.15 resident
 export GLOBALREALLOC.16 resident
 export GLOBALFREE.17 resident

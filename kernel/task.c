@@ -91,7 +91,10 @@ u16 task_start(module *m, const char FAR *cmdtail)
  * Observed on Windows 3.1 (Standard and 386 Enhanced): CX = 0Ah = entry SP
  * - stack size + STACK_SLOP, 0Ch = 0Eh = entry SP; the command tail is
  * NUL-terminated (the CR replaced) and BX points past its leading blanks.
- * TODO: local heap (LocalInit) when CX != 0.
+ * With a nonzero heap size (CX at task entry), the task's local heap is
+ * made in the last CX bytes of DGROUP (observed: the layout of
+ * LocalInit(DS, 0, CX)); pHeap goes to instance word 06h.
+ * UNVERIFIED: InitTask's result when that fails.
  */
 void __cdecl inittask_c(regs16 FAR *r)
 {
@@ -111,6 +114,8 @@ void __cdecl inittask_c(regs16 FAR *r)
         ;
 
     r->ax = 1;
+    if (cur.heap_size && !local_init_task(r->ds, cur.heap_size))
+        r->ax = 0;
     r->bx = cmd;
     r->cx = top;
     r->dx = SW_SHOWNORMAL;

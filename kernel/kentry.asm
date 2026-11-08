@@ -10,7 +10,9 @@
 ;   unimpl_entry     target of the "unimplemented import" thunks
 ;   INITTASK         register-based API wrapper around inittask_c
 ;   DOS3CALL         KERNEL.102
+;   LOCAL*           Local heap APIs: pass the caller's DS to local.c
 ;   _dos21, _dpmi31  generic interrupt helpers for C
+;   _seg_move        move a segment's contents and base, even if it is SS
 ;   KCONST segment   placeholders for KERNEL's constant exports
 
         bits 16
@@ -208,10 +210,83 @@ INITTASK:
         popf
         retf
 
+; ---------------------------------------------------------------------------
+; The Local* APIs work on the local heap in the caller's DS. KAPI functions
+; load KERNEL's DS, so these wrappers call the C function (far pascal) with
+; the caller's DS as an extra first argument, followed by copies of the
+; caller's NARGS word arguments, and restore DS on return.
+;   LOCALAPI exported-name, c-function, nargs
+%macro LOCALAPI 3
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        push ds
+        push ds
+%assign i %3
+%rep %3
+        push word [bp + 4 + 2 * i]
+%assign i i - 1
+%endrep
+        call far %2
+        pop ds
+        pop bp
+        retf 2 * %3
+%endmacro
+
+LOCALAPI LOCALINIT,    LINIT,    3      ; KERNEL.4
+LOCALAPI LOCALALLOC,   LALLOC,   2      ; KERNEL.5
+LOCALAPI LOCALREALLOC, LREALLOC, 3      ; KERNEL.6
+LOCALAPI LOCALFREE,    LFREE,    1      ; KERNEL.7
+LOCALAPI LOCALLOCK,    LLOCK,    1      ; KERNEL.8
+LOCALAPI LOCALUNLOCK,  LUNLOCK,  1      ; KERNEL.9
+LOCALAPI LOCALSIZE,    LSIZE,    1      ; KERNEL.10
+LOCALAPI LOCALHANDLE,  LHANDLE,  1      ; KERNEL.11
+LOCALAPI LOCALFLAGS,   LFLAGS,   1      ; KERNEL.12
+LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
+
 ; DOS3Call (KERNEL.102): issue INT 21h with the caller's registers.
 global DOS3CALL
 DOS3CALL:
         int 21h
+        retf
+
+; ---------------------------------------------------------------------------
+; void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase)
+; Copy nwords words from sel:0 to tmp:0, then set sel's base to newbase
+; (DPMI 0007h) and reload SS. sel may be the current stack segment: after
+; the copy nothing is written to the stack until SS describes the new
+; memory (only reads, and INT 31h's own frame, which is popped through the
+; descriptor SS still caches), so the stack the caller sees afterwards is
+; exactly the one it had. The caller frees the old memory afterwards.
+global _seg_move
+_seg_move:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        mov ds, [bp + 6]
+        mov es, [bp + 8]
+        mov cx, [bp + 10]
+        xor si, si
+        xor di, di
+        cld
+        rep movsw
+        mov bx, [bp + 6]
+        mov dx, [bp + 12]
+        mov cx, [bp + 14]
+        mov ax, 0007h
+        int 31h
+        mov ax, ss
+        mov ss, ax
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
         retf
 
 INTCALL _dos21, 21h, far
