@@ -1,0 +1,106 @@
+/*
+ * progman.rc - Program Manager resources.
+ *
+ * Menus, accelerators, and dialog layouts match Windows 3.1's Program
+ * Manager as observed (SNAP.EXE screenshots and window dumps). Dialog
+ * units follow from the observed pixel rectangles with the dialog font
+ * (8 pt MS Sans Serif: base units 7 x 13 at 96 dpi). Control IDs are the
+ * observed ones, and every dialog sits at (23, 20). Text that names
+ * Microsoft products, the copyright, and all artwork are our own.
+ */
+#include <windows.h>
+#include "progman.h"
+
+IDI_PROGMAN ICON "progman.ico"
+IDI_GROUP   ICON "group.ico"
+IDI_DEFITEM ICON "defitem.ico"
+
+IDM_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New...",                     IDM_NEW
+        MENUITEM "&Open\tEnter",                IDM_OPEN
+        MENUITEM "&Move...\tF7",                IDM_MOVE
+        MENUITEM "&Copy...\tF8",                IDM_COPY
+        MENUITEM "&Delete\tDel",                IDM_DELETE
+        MENUITEM "&Properties...\tAlt+Enter",   IDM_PROPERTIES
+        MENUITEM SEPARATOR
+        MENUITEM "&Run...",                     IDM_RUN
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       IDM_EXIT
+    END
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Auto Arrange",               IDM_AUTOARRANGE
+        MENUITEM "&Minimize on Use",            IDM_MINONRUN
+        MENUITEM "&Save Settings on Exit",      IDM_SAVESETTINGS
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&Cascade\tShift+F5",          IDM_CASCADE
+        MENUITEM "&Tile\tShift+F4",             IDM_TILE
+        MENUITEM "&Arrange Icons",              IDM_ARRANGE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents",                   IDM_HELPCONTENTS
+        MENUITEM "&Search for Help on...",      IDM_HELPSEARCH
+        MENUITEM SEPARATOR
+        MENUITEM "&How to Use Help",            IDM_HELPHELP
+        MENUITEM "&Windows Tutorial",           IDM_TUTORIAL
+        MENUITEM SEPARATOR
+        MENUITEM "&About Program Manager...",   IDM_ABOUT
+    END
+END
+
+IDA_MAIN ACCELERATORS
+BEGIN
+    VK_RETURN,  IDM_OPEN,           VIRTKEY
+    VK_F7,      IDM_MOVE,           VIRTKEY
+    VK_F8,      IDM_COPY,           VIRTKEY
+    VK_DELETE,  IDM_DELETE,         VIRTKEY
+    VK_RETURN,  IDM_PROPERTIES,     VIRTKEY, ALT
+    VK_F5,      IDM_CASCADE,        VIRTKEY, SHIFT
+    VK_F4,      IDM_TILE,           VIRTKEY, SHIFT
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPNAME,        "Program Manager"
+    IDS_NOTYET,         "This command is not implemented yet."
+    IDS_EXECFAIL,       "Cannot run program or open document: %s"
+    IDS_EXIT,           "E&xit"
+    IDS_EXITWINDOWS,    "E&xit Windows..."
+END
+
+/* observed: 210 x 81 units, controls 99/119/105/1/2/112/126 */
+IDD_RUN DIALOG 23, 20, 210, 81
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Run"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "&Command Line:", 99, 3, 12, 60, 10, WS_GROUP
+    EDITTEXT        IDC_RUNCMD, 3, 23, 134, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
+    CONTROL         "Run &Minimized", IDC_RUNMIN, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 3, 42, 71, 12
+    DEFPUSHBUTTON   "OK", IDOK, 165, 6, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 165, 23, 40, 14
+    PUSHBUTTON      "&Browse...", IDC_BROWSE, 165, 40, 40, 14
+    PUSHBUTTON      "&Help", IDC_HELPBTN, 165, 61, 40, 14
+END
+
+/* Our own About box (the original's comes from SHELL.DLL's ShellAbout);
+   same frame size, 220 x 158 units. */
+IDD_ABOUT DIALOG 23, 20, 220, 158
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "About Program Manager"
+FONT 8, "MS Sans Serif"
+BEGIN
+    ICON            IDI_PROGMAN, -1, 10, 5, 18, 20
+    LTEXT           "w16 Program Manager", -1, 45, 5, 127, 10, SS_NOPREFIX
+    LTEXT           "Version 3.1", -1, 45, 15, 100, 10, SS_NOPREFIX
+    LTEXT           "A clean-room reimplementation, part of w16.", -1,
+                    45, 25, 145, 20, SS_NOPREFIX
+    DEFPUSHBUTTON   "OK", IDOK, 177, 5, 40, 14
+END

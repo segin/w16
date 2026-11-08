@@ -22,7 +22,11 @@ BCFLAGS := -q -bt=dos -ms -0 -s -zl -ox -wx -we $(INC)
 # test applications: large model Windows programs, no C runtime
 TCFLAGS := -q -bt=windows -ml -2 -s -zl -ox -wx -we \
            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+# shell programs: medium model, 286, smart callbacks (DS from SS)
+SCFLAGS := -q -bt=windows -mm -2 -s -zl -ox -wx -we -zWs \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
 NFLAGS  := -f obj -Ikernel/inc/
+WRC     := wrc
 
 KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/dpmi.o $(B)/kernel/global.o $(B)/kernel/module.o \
@@ -31,11 +35,16 @@ BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP
+SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
+            $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
+            $(B)/shell/progman/util.o
+ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
+            $(B)/shell/res/defitem.ico
 
 .SECONDARY:
 
-.PHONY: all host dos test clean
-all: host dos
+.PHONY: all host dos shell test clean
+all: host dos shell
 
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(WINTOOLS:%=$(DOS)/%.EXE)
@@ -84,6 +93,27 @@ $(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/snap.map file { $(B)/tests/start.o $(B)/tests/snap.o }
+
+# ---- shell: PROGMAN.EXE ----
+shell: $(DOS)/PROGMAN.EXE
+
+$(B)/shell/start.o: shell/start.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/progman/%.o: shell/progman/%.c shell/progman/progman.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(ICONS) &: tools/mkicons.py
+	python3 tools/mkicons.py $(B)/shell/res
+$(B)/shell/progman/progman.res: shell/progman/progman.rc shell/progman/progman.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/progman -i=$(B)/shell/res \
+	    -fo=$@ $<
+$(DOS)/PROGMAN.EXE: $(SHELL_PM) $(B)/shell/progman/progman.res shell/progman/progman.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/progman/progman.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/progman/progman.map \
+	    option resource=$(B)/shell/progman/progman.res file { $(SHELL_PM) }
 
 test: dos
 	tests/run-tests.sh
