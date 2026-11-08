@@ -1,0 +1,252 @@
+/*
+ * winboot.c - booting Windows: what KERNEL does after itself when it runs
+ * as WINDOWS\SYSTEM\KRNL286.EXE (started by WIN.COM through DOSX).
+ *
+ * Observed on Windows 3.1 Standard mode (ARCHITECTURE.md 9.4; tests/
+ * dropin.sh -r writes the reference BOOTLOG.TXT, tests/apps/tk19.c):
+ *   - KERNEL's command tail is what WIN.COM leaves of its own: the
+ *     switches it handled blanked out ("WIN /S /B X Y" gives
+ *     "     /B X Y"). /B is KERNEL's: it writes WINDOWS\BOOTLOG.TXT,
+ *     starting with "[boot]", then "LoadStart = NAME" before and
+ *     "LoadSuccess = NAME" or "LoadFail = NAME Failure code is NN" after
+ *     each load while Windows boots (the [boot] modules, what their
+ *     initialisation loads, the shell and the DLLs it imports; nothing
+ *     after the boot). DiagOutput (KERNEL.340) appends a string as it
+ *     is (USER writes "INIT=Keyboard\r\n" etc. through it).
+ *   - The order: SYSTEM.INI [boot] system.drv, keyboard.drv, mouse.drv,
+ *     display.drv, sound.drv, comm.drv, fonts.fon, oemfonts.fon (each
+ *     logged under its value there, e.g. "vga.drv"), then GDI.EXE and
+ *     USER.EXE (logged so), then the shell (shell=, logged as written),
+ *     whose command tail is the rest of KERNEL's.
+ *   - A module that does not load: "Error loading NAME" on the screen
+ *     and back to DOS.
+ * Pietrek (ch. 1, LoadNewExe, SlowBoot) describes the same sequence; the
+ * default names for missing keys come from there (UNVERIFIED).
+ *
+ * After USER, KERNEL calls USER's FinalUserInit (USER.400, Pietrek) once
+ * the shell is loaded: BOOTLOG.TXT shows "INIT=Final USER" right after
+ * "LoadSuccess = progman.exe".
+ */
+#include "kernel.h"
+
+int winboot_active;             /* booting Windows (loader.c) */
+static int diag;                /* writing BOOTLOG.TXT */
+static int booting;             /* still logging loads */
+static char logpath[DOS_PATHMAX + 16];
+
+int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
+                                 const char FAR *def, char FAR *buf, u16 n,
+                                 const char FAR *file);
+u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n);
+u16 KAPI LoadLibrary(const char FAR *name);
+u32 KAPI GetProcAddress(u16 h, const char FAR *name);
+u16 KAPI GetModuleHandle(const char FAR *name);
+
+/* ---- the boot log ---- */
+
+static u16 dos(u16 ax, u16 bx, u16 cx, u16 dx, u16 ds, int *cf)
+{
+    regs16 r;
+    r.ax = ax;
+    r.bx = bx;
+    r.cx = cx;
+    r.dx = dx;
+    r.ds = ds;
+    r.es = 0;
+    r.si = r.di = 0;
+    *cf = dos21(&r);
+    return r.ax;
+}
+
+/* Append s to BOOTLOG.TXT: open, write, close each time, so that what
+   was written survives a crash (Pietrek, DiagOutput). */
+static void diag_write(const char FAR *s)
+{
+    int cf;
+    u16 fh;
+    if (!diag)
+        return;
+    fh = dos(0x3D22, 0, 0, FP_OFF((char FAR *)logpath),
+             FP_SEG((char FAR *)logpath), &cf);
+    if (cf)
+        return;
+    dos(0x4202, fh, 0, 0, 0, &cf);
+    dos(0x4000, fh, kstrlen(s), FP_OFF(s), FP_SEG(s), &cf);
+    dos(0x3E00, fh, 0, 0, 0, &cf);
+}
+
+static void diag_init(void)
+{
+    int cf;
+    u16 n = GetWindowsDirectory(logpath, DOS_PATHMAX), fh;
+    const char *f = "BOOTLOG.TXT";
+    if (n && logpath[n - 1] != '\\')
+        logpath[n++] = '\\';
+    while (*f)
+        logpath[n++] = *f++;
+    logpath[n] = 0;
+    fh = dos(0x3D22, 0, 0, FP_OFF((char FAR *)logpath),
+             FP_SEG((char FAR *)logpath), &cf);
+    if (cf)
+        fh = dos(0x3C00, 0, 0, FP_OFF((char FAR *)logpath),
+                 FP_SEG((char FAR *)logpath), &cf);
+    if (cf)
+        return;
+    dos(0x3E00, fh, 0, 0, 0, &cf);
+    diag = 1;
+    diag_write("[boot]\r\n");
+}
+
+/* DiagOutput (KERNEL.340): observed on 3.1 (TK19) to append the string
+   to BOOTLOG.TXT as it is, also after the boot. */
+void KAPI DiagOutput(const char FAR *s)
+{
+    diag_write(s);
+}
+
+/* the loader's hooks (loader.c) */
+void diag_load_start(const char FAR *name)
+{
+    if (!booting)
+        return;
+    diag_write("LoadStart = ");
+    diag_write(name);
+    diag_write("\r\n");
+}
+
+void diag_load_end(const char FAR *name, u16 rc)
+{
+    char code[3];
+    if (!booting)
+        return;
+    if (rc >= 32) {
+        diag_write("LoadSuccess = ");
+        diag_write(name);
+        diag_write("\r\n");
+        return;
+    }
+    code[0] = "0123456789ABCDEF"[(rc >> 4) & 15];   /* UNVERIFIED: hex */
+    code[1] = "0123456789ABCDEF"[rc & 15];
+    code[2] = 0;
+    diag_write("LoadFail = ");
+    diag_write(name);
+    diag_write(" Failure code is ");
+    diag_write(code);
+    diag_write("\r\n");
+}
+
+/* ---- the boot ---- */
+
+static const char sysini[] = "SYSTEM.INI";
+
+/* Is this a Windows boot? w16's own rule: the Windows directory has a
+   SYSTEM.INI with a [boot] section that names the system driver.
+   Otherwise KERNEL runs the program named on its command line (the M1
+   test mode, ARCHITECTURE.md 9.1). */
+int winboot_wanted(void)
+{
+    char buf[16];
+    return GetPrivateProfileString("boot", "system.drv", "", buf, sizeof buf,
+                                   sysini) > 0;
+}
+
+static void boot_fail(const char FAR *name)
+{
+    kputs("\r\n\r\nError loading ");
+    kputs(name);
+    kputs("\r\n");
+    kexit_to_dos(1);                    /* UNVERIFIED: the exit code */
+}
+
+/* Load one boot module: SYSTEM.INI [boot] key (if any) names its file. */
+static u16 boot_load(const char *key, const char *def)
+{
+    static char name[DOS_PATHMAX];
+    u16 h;
+    if (key)
+        GetPrivateProfileString("boot", key, def, name, sizeof name, sysini);
+    else
+        kmemcpy(name, def, kstrlen(def) + 1);
+    h = LoadLibrary(name);              /* logs LoadStart, LoadSuccess */
+    if (h < 32)
+        boot_fail(name);
+    return h;
+}
+
+/* Remove /B or -B from KERNEL's command tail (blanked, as WIN.COM does
+   with its own switches); returns whether it was there. UNVERIFIED:
+   only a /B word on its own is KERNEL's. */
+static int take_switch_b(void)
+{
+    u8 FAR *psp = MK_FP(psp_sel, 0);
+    u16 i, len = psp[0x80], found = 0;
+    for (i = 0; i + 1 < len; i++) {
+        u8 c = psp[0x81 + i], d = psp[0x82 + i];
+        if ((c == '/' || c == '-') && (d == 'b' || d == 'B') &&
+            (i == 0 || psp[0x80 + i] == ' ' || psp[0x80 + i] == '\t') &&
+            (i + 2 >= len || psp[0x83 + i] == ' ' || psp[0x83 + i] == '\t')) {
+            psp[0x81 + i] = psp[0x82 + i] = ' ';
+            found = 1;
+        }
+    }
+    return found;
+}
+
+/* USER's FinalUserInit (USER.400, Pietrek) */
+static void final_user_init(void)
+{
+    u32 p = GetProcAddress(GetModuleHandle("USER"), "#400");
+    if (p)
+        ((void (__far __pascal *)(void))p)();
+}
+
+u16 winboot(void)
+{
+    static char shell[DOS_PATHMAX];
+    static const u16 show[2] = { 2, 1 };
+    u8 FAR *psp = MK_FP(psp_sel, 0);
+    u8 tail[0x80];
+    module FAR *m;
+    u16 i, n, err, ad;
+
+    winboot_active = 1;
+    if (take_switch_b())
+        diag_init();
+    booting = 1;
+    boot_load("system.drv", "SYSTEM.DRV");
+    boot_load("keyboard.drv", "KEYBOARD.DRV");
+    boot_load("mouse.drv", "MOUSE.DRV");
+    boot_load("display.drv", "DISPLAY.DRV");
+    boot_load("sound.drv", "SOUND.DRV");
+    boot_load("comm.drv", "COMM.DRV");
+    boot_load("fonts.fon", "FONTS.FON");
+    boot_load("oemfonts.fon", "OEMFONTS.FON");
+    boot_load(NULL, "GDI.EXE");
+    boot_load(NULL, "USER.EXE");
+
+    /* the shell: its command tail is the rest of KERNEL's, without the
+       leading blanks (UNVERIFIED) */
+    GetPrivateProfileString("boot", "shell", "PROGMAN.EXE", shell, sizeof shell,
+                            sysini);
+    n = psp[0x80] < 0x7E ? psp[0x80] : 0x7E;
+    for (i = 0; i < n && (psp[0x81 + i] == ' ' || psp[0x81 + i] == '\t'); i++)
+        ;
+    tail[0] = (u8)(n - i);
+    kmemcpy(tail + 1, psp + 0x81 + i, n - i);
+    tail[1 + n - i] = '\r';
+    diag_load_start(shell);
+    m = module_load_program(shell, &err);
+    ad = m ? NE_HDR(m)->auto_data : 0;
+    if (m && (!ad || ad > m->seg_count ||
+              !task_create(m, m->seg[ad - 1].sel, m->seg[ad - 1].hnd, 0,
+                           (const u8 FAR *)tail, (const u16 FAR *)show, 0)))
+        err = 11;                       /* UNVERIFIED */
+    else if (m)
+        err = m->seg[ad - 1].hnd;
+    diag_load_end(shell, err);
+    if (err < 32)
+        boot_fail(shell);
+    booting = 0;
+    final_user_init();
+    return task_boot();
+}

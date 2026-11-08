@@ -848,3 +848,48 @@ u16 KAPI LCompact(u16 ds, u16 want)                           /* KERNEL.13 */
     B(ds, hp.info + LI_DISLEVEL) = discarding ? 0x00 : 0x10;
     return m < 6 ? 0 : m - 6;
 }
+
+/* ---- for the Windows boot (Microsoft's GDI and USER import these;
+   ARCHITECTURE.md 9.4). UNVERIFIED against Windows 3.1: the SDK's
+   descriptions only. ---- */
+
+static u16 count_free(const lheap *hp)
+{
+    u16 first = I(hp, LI_FIRST), last = I(hp, LI_LAST), f, n = 0;
+    for (f = W(hp->seg, first + LA_FREENEXT); f != last; f = W(hp->seg, f + LA_FREENEXT))
+        n += a_size(hp, f);
+    return n;
+}
+
+/* free and total bytes of the local heap in seg: HIWORD total (last
+   sentinel - first), LOWORD free; 0 without a heap */
+u32 local_spaces(u16 seg)
+{
+    lheap hp;
+    if (!heap_of(seg, &hp))
+        return 0;
+    return ((u32)(I(&hp, LI_LAST) - I(&hp, LI_FIRST)) << 16) | count_free(&hp);
+}
+
+/* LocalCountFree (KERNEL.161): free bytes in the caller's heap */
+u16 KAPI LCountFree(u16 ds)
+{
+    return (u16)local_spaces(ds);
+}
+
+/* LocalHeapSize (KERNEL.162): bytes the caller's heap spans */
+u16 KAPI LHeapSize(u16 ds)
+{
+    return (u16)(local_spaces(ds) >> 16);
+}
+
+/* LocalShrink (KERNEL.121): the SDK: shrinks the heap in hseg (0: the
+   caller's DS) towards cb bytes and returns its new size. w16 does not
+   shrink yet: it returns the size the heap has. */
+u16 KAPI LShrink(u16 ds, u16 hseg, u16 cb)
+{
+    (void)cb;
+    if (hseg)
+        ds = hseg | 1;      /* a handle or selector: UNVERIFIED */
+    return (u16)(local_spaces(ds) >> 16);
+}

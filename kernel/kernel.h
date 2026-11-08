@@ -39,6 +39,16 @@ extern void __far unimpl_entry(void);
 #pragma aux unimpl_entry "*"
 extern u32  __cdecl old21;
 
+/* ---- winboot.c ---- */
+extern int winboot_active;
+int  winboot_wanted(void);
+u16  winboot(void);
+void diag_load_start(const char FAR *name);
+void diag_load_end(const char FAR *name, u16 rc);
+
+/* ---- dosx.c ---- */
+void dosx_init(void);
+
 /* ---- util.c ---- */
 void kmemset(void FAR *d, u8 v, u16 n);
 void kmemcpy(void FAR *d, const void FAR *s, u16 n);

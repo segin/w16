@@ -282,6 +282,10 @@ LOCALAPI ADDATOM,      AADD,     2      ; KERNEL.70
 LOCALAPI DELETEATOM,   ADEL,     1      ; KERNEL.71
 LOCALAPI GETATOMNAME,  ANAME,    4      ; KERNEL.72
 LOCALAPI GETATOMHANDLE, AHANDLE, 1      ; KERNEL.73
+; for the Windows boot (local.c)
+LOCALAPI LOCALSHRINK,  LSHRINK,  2      ; KERNEL.121
+LOCALAPI LOCALCOUNTFREE, LCOUNTFREE, 0  ; KERNEL.161
+LOCALAPI LOCALHEAPSIZE, LHEAPSIZE, 0    ; KERNEL.162
 
 ; ---------------------------------------------------------------------------
 ; u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
@@ -328,6 +332,54 @@ DOS3CALL:
         int 21h
         retf
 
+; NoHookDosCall (KERNEL.101): INT 21h past KERNEL's own hook (Schulman).
+; w16's hook only ends tasks (4Ch) and answers 51h/62h; this calls the
+; handler that was there before KERNEL (old21) with the caller's
+; registers, through an IRET frame back to here. UNVERIFIED.
+global NOHOOKDOSCALL
+NOHOOKDOSCALL:
+        pushf
+        push cs
+        push word .back
+        sub sp, 4                       ; the far target
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [_old21 wrt DGROUP]
+        mov [bp + 2], ax
+        mov ax, [_old21 + 2 wrt DGROUP]
+        mov [bp + 4], ax
+        pop ax
+        pop ds
+        pop bp
+        retf
+.back:  retf
+
+; GetTaskQueueDS / GetTaskQueueES (KERNEL.118, 119): load DS (ES) with
+; the current task's message queue (TDB 20h; Schulman). AX keeps it too
+; (UNVERIFIED).
+global GETTASKQUEUEDS, GETTASKQUEUEES
+GETTASKQUEUEDS:
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [_cur_task wrt DGROUP]
+        or ax, ax
+        jz .none
+        mov ds, ax
+        mov ax, [20h]
+.none:  mov ds, ax
+        retf
+GETTASKQUEUEES:
+        push ds
+        call far GETTASKQUEUEDS
+        push ds
+        pop es
+        pop ds
+        retf
+
 ; ---------------------------------------------------------------------------
 ; void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase)
 ; Copy nwords words from sel:0 to tmp:0, then set sel's base to newbase
@@ -366,7 +418,7 @@ _seg_move:
         retf
 
 INTCALL _dos21, 21h, far
-INTCALL _dpmi31, 31h, far
+INTCALL _dpmi31_host, 31h, far    ; dosx.c: dpmi31 wraps it
 
 ; ---------------------------------------------------------------------------
 ; Constant exports. wlink cannot export absolute symbols, so these labels
