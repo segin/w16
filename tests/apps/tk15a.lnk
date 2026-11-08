@@ -1,0 +1,6 @@
+# TK15A.EXE (tests/apps/tk15a.c with tk15s.asm): the helper task of TK15;
+# imports TKDLL.DLL and TKDLB.DLL
+@tests/apps/app.lnk
+@tests/apps/tk15k.lnk
+import DLL_INFO TKDLL
+import DLB_INFO TKDLB.3

@@ -36,10 +36,10 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12
+           TK11 TK12 TK15
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
-            TKUSEX.DLL TKEXEM.EXE
+            TKUSEX.DLL TKEXEM.EXE TK15A.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -127,6 +127,21 @@ $(DOS)/TK11.EXE: $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o \
 	    option map=$(B)/tests/tk11.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o }
 $(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+
+# TK15.EXE: the task probe; it starts TK15A.EXE (tk15a.c, own start-up
+# code tk15s.asm), which imports TKDLL.DLL and TKDLB.DLL
+$(B)/tests/tk15.o: tests/apps/tk15ref.h tests/apps/tklog.h tests/apps/tk15.h
+$(B)/tests/tk15a.o: tests/apps/tk15.h
+$(DOS)/TK15.EXE: $(B)/tests/start.o $(B)/tests/tk15.o \
+                tests/apps/app.lnk tests/apps/tk15.lnk tests/apps/tk15k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk15.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk15.map file { $(B)/tests/start.o $(B)/tests/tk15.o }
+$(DOS)/TK15A.EXE: $(B)/tests/tk15s.o $(B)/tests/tk15a.o \
+                 tests/apps/app.lnk tests/apps/tk15a.lnk tests/apps/tk15k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk15a.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk15a.map file { $(B)/tests/tk15s.o $(B)/tests/tk15a.o }
 
 # TK12.EXE: the resource probe, with the resources of tk12.rc
 $(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tklog.h

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Run a DLL probe (TK5.EXE, the default, or TK11.EXE) with the test DLLs on
+# Run a DLL probe (TK5.EXE, the default, TK11.EXE or TK15.EXE) with the test DLLs on
 # the reference Windows 3.1 in Standard and 386 Enhanced mode
 # (tests/refrun.sh), and write the logs to OUTDIR as NAME-win31-S.log and
 # NAME-win31-3.log.
-#   usage: tests/tk5ref.sh OUTDIR [TK11]
+#   usage: tests/tk5ref.sh OUTDIR [TK11|TK15]
 # Then: tools/obsref.py OUTDIR/TK5-win31-S.log OUTDIR/TK5-win31-3.log \
 #           > tests/apps/tk5ref.h
 # With REFRUN_SHELL=PROGMAN.EXE the probe starts from WIN.INI's load=
@@ -19,6 +19,10 @@ REFRUN_PRE='SET PATH=C:\TKPATH;Z:\'
 # Windows loads the shell, the DLLs it imports are not looked for in its
 # own directory (C:\); with them there, Windows waits forever.
 REFRUN_FILES="$d/TKID.TPL"
+# a probe's helper programs (TK15A.EXE for TK15) go next to it, in C:\
+for f in "$d/${prog}"[A-Z].EXE; do
+    [ -f "$f" ] && REFRUN_FILES="$REFRUN_FILES $f"
+done
 for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     REFRUN_FILES="$REFRUN_FILES $d/$f=WINDOWS/$f"
 done

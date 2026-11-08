@@ -1,0 +1,3 @@
+# TK15.EXE (tests/apps/tk15.c): the task probe
+@tests/apps/app.lnk
+@tests/apps/tk15k.lnk
