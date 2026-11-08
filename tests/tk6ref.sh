@@ -20,7 +20,7 @@ export REFRUN_X
 for fpu in true false; do
     tag=87; [ $fpu = true ] || tag=em
     for mode in S 3; do
-        for p in TK6 TK6N TK7; do
+        for p in TK6 TK6N TK7 TK8; do
             REFRUN_FPU=$fpu "$root/tests/refrun.sh" "$root/build/dos/$p.EXE" /$mode \
                 > "$out/$p-win31-$tag-$mode.log" 2>&1 &
         done

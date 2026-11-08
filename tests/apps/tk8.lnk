@@ -1,0 +1,5 @@
+# TK8.EXE (tests/apps/tk8.c): floating-point probe, part 2
+@tests/apps/app.lnk
+import FPMATH WIN87EM.1
+import FPRESTORE WIN87EM.4
+import FPSAVE WIN87EM.5

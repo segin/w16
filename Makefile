@@ -34,7 +34,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
-TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
@@ -130,6 +130,15 @@ $(DOS)/TK7.EXE: $(B)/tests/start.o $(B)/tests/tk7.o $(B)/tests/tk6fp.o $(B)/test
 	$(WLINK) @tests/apps/tk7.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk7.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk7.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk8.o: tests/apps/tk8.c tests/apps/tk8ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK8.EXE: $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk8.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk8.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
 $(B)/tests/tk6n.o: tests/apps/tk6n.c tests/apps/tk6nref.h tests/apps/tklog.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
