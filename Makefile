@@ -36,7 +36,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11
+           TK11 TK12
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
@@ -127,6 +127,18 @@ $(DOS)/TK11.EXE: $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o \
 	    option map=$(B)/tests/tk11.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o }
 $(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+
+# TK12.EXE: the resource probe, with the resources of tk12.rc
+$(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tklog.h
+$(B)/tests/tk12.res: tests/apps/tk12.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/TK12.EXE: $(B)/tests/start.o $(B)/tests/tk12.o $(B)/tests/tk12.res \
+                tests/apps/app.lnk tests/apps/tk12.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk12.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk12.map option resource=$(B)/tests/tk12.res \
+	    file { $(B)/tests/start.o $(B)/tests/tk12.o }
 
 # TK6.EXE: the floating-point probe; tk6.c is built with emulator fixups
 # (-fpi), so its floating-point code carries NE OS fixups

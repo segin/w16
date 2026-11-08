@@ -1,0 +1,5 @@
+# TK12.EXE (tests/apps/tk12.c): the resource probe, with the resources of
+# tests/apps/tk12.rc; alignment 16 makes the resource shift 4, so resource
+# lengths in the table are rounded to 16 bytes
+@tests/apps/app.lnk
+option alignment=16
