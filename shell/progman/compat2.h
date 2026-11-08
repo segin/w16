@@ -62,10 +62,17 @@ LRESULT FAR pm_DefFrameProc(HWND, HWND, UINT, WPARAM, LPARAM);
 LRESULT FAR pm_DefMDIChildProc(HWND, UINT, WPARAM, LPARAM);
 BOOL FAR pm_TranslateMDISysAccel(HWND, MSG FAR *);
 BOOL mdi2_register(HINSTANCE);
+HMENU pm_load_menu(HINSTANCE, LPCSTR);
+
+/* no highlight colours before 3.0: inverted window colours instead */
+#define PM_COLOR_HIGHLIGHT          COLOR_WINDOWTEXT
+#define PM_COLOR_HIGHLIGHTTEXT      COLOR_WINDOW
 #define MDI_CLIENT_CLASS            "PMMDIClient"
 
 #else
 #define MDI_CLIENT_CLASS            "MDICLIENT"
+#define PM_COLOR_HIGHLIGHT          COLOR_HIGHLIGHT
+#define PM_COLOR_HIGHLIGHTTEXT      COLOR_HIGHLIGHTTEXT
 #endif
 
 #endif

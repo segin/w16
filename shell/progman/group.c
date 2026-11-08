@@ -733,6 +733,50 @@ LPCSTR group_selected_name(HWND hwnd)
 
 /* ---- layout and painting ---- */
 
+#ifdef W16_WIN2
+/* Windows 2.x's DrawText has neither DT_CALCRECT nor DT_WORDBREAK, so
+   titles are wrapped here: as many words per line as fit `width` (a
+   word longer than that is broken), each line centred on cx. Returns the
+   height; *maxw receives the widest line. Draws only if `draw`. */
+static int wrap_title(HDC dc, const char FAR *s, int width, int cx, int top, BOOL draw,
+                      int *maxw)
+{
+    TEXTMETRIC tm;
+    int y = top;
+    GetTextMetrics(dc, &tm);
+    *maxw = 0;
+    while (*s) {
+        int n = 0, fit = 0, w;
+        while (*s == ' ')
+            s++;
+        if (!*s)
+            break;
+        for (;;) {                      /* extend word by word */
+            int m = n;
+            while (s[m] == ' ')
+                m++;
+            while (s[m] && s[m] != ' ')
+                m++;
+            if (LOWORD(GetTextExtent(dc, s, m)) > width && fit)
+                break;
+            fit = n = m;
+            if (!s[m] || LOWORD(GetTextExtent(dc, s, m)) > width)
+                break;
+        }
+        while (n > 1 && LOWORD(GetTextExtent(dc, s, n)) > width)
+            n--;                        /* one word too long: break it */
+        w = LOWORD(GetTextExtent(dc, s, n));
+        if (w > *maxw)
+            *maxw = w;
+        if (draw)
+            TextOut(dc, cx - w / 2, y, s, n);
+        y += tm.tmHeight;
+        s += n;
+    }
+    return y - top;
+}
+#endif
+
 static void title_rect(HDC dc, item FAR *t, RECT *r)
 {
     HFONT old = title_font ? SelectObject(dc, title_font) : NULL;
@@ -741,7 +785,15 @@ static void title_rect(HDC dc, item FAR *t, RECT *r)
     r->right = cx + CX_SPACING / 2 - 1;
     r->top = t->y + TITLE_DY;
     r->bottom = r->top + 100;
+#ifdef W16_WIN2
+    {
+        int w;
+        r->bottom = r->top + wrap_title(dc, t->name, r->right - r->left, cx, r->top, FALSE, &w);
+        r->right = r->left + w;
+    }
+#else
     DrawText(dc, t->name, -1, r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+#endif
     /* DT_CALCRECT keeps the left edge; centre the result under the icon */
     {
         int w = r->right - r->left;
@@ -774,16 +826,23 @@ static void paint(HWND hwnd, group FAR *g)
         DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->hicon);
         title_rect(dc, t, &r);
         SetBkMode(dc, hi ? OPAQUE : TRANSPARENT);
-        SetBkColor(dc, GetSysColor(COLOR_HIGHLIGHT));
-        SetTextColor(dc, GetSysColor(hi ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
+        SetBkColor(dc, GetSysColor(PM_COLOR_HIGHLIGHT));
+        SetTextColor(dc, GetSysColor(hi ? PM_COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
         if (hi) {
-            HBRUSH b = CreateSolidBrush(GetSysColor(COLOR_HIGHLIGHT));
+            HBRUSH b = CreateSolidBrush(GetSysColor(PM_COLOR_HIGHLIGHT));
             FillRect(dc, &r, b);
             DeleteObject(b);
         }
         InflateRect(&r, -2, 0);
         r.bottom -= 2;
+#ifdef W16_WIN2
+        {
+            int w;
+            wrap_title(dc, t->name, CX_SPACING - 2, t->x + ICON_DX + 16, r.top, TRUE, &w);
+        }
+#else
         DrawText(dc, t->name, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+#endif
     }
     if (old)
         SelectObject(dc, old);
@@ -1293,6 +1352,15 @@ BOOL group_register(void)
     /* the icon title font, as the user configured it (Windows 3.1) */
     if (SystemParametersInfo(SPI_GETICONTITLELOGFONT, sizeof lf, &lf, 0))
         title_font = CreateFontIndirect(&lf);
+#else
+    {   /* Windows 2.x: 8-point Helv, the small font of the time */
+        HDC dc = GetDC(NULL);
+        int h = (8 * GetDeviceCaps(dc, LOGPIXELSY) + 36) / 72;
+        ReleaseDC(NULL, dc);
+        title_font = CreateFont(-h, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
+                                OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                                VARIABLE_PITCH | FF_SWISS, "Helv");
+    }
 #endif
 
     wc.style = CS_DBLCLKS;
@@ -1300,7 +1368,11 @@ BOOL group_register(void)
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hInstance = g_hinst;
+#ifdef W16_WIN2
+    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);     /* TODO: 2.x icons */
+#else
     wc.hIcon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_GROUP));
+#endif
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wc.lpszMenuName = NULL;

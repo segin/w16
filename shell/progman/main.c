@@ -234,6 +234,9 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_CREATE: {
         CLIENTCREATESTRUCT cc;
         g_frame = hwnd;
+#ifdef W16_WIN2
+        SetMenu(hwnd, pm_load_menu(g_hinst, MAKEINTRESOURCE(IDM_MAIN)));
+#endif
         window_menu = GetSubMenu(GetMenu(hwnd), MENU_WINDOW);
         cc.hWindowMenu = window_menu;
         cc.idFirstChild = IDM_FIRSTCHILD;
@@ -275,10 +278,15 @@ static BOOL register_frame(void)
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hInstance = g_hinst;
+#ifdef W16_WIN2
+    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);     /* TODO: 2.x icons */
+    wc.lpszMenuName = NULL;             /* built in WM_CREATE: pm_load_menu */
+#else
     wc.hIcon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_PROGMAN));
+    wc.lpszMenuName = MAKEINTRESOURCE(IDM_MAIN);
+#endif
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_APPWORKSPACE + 1);
-    wc.lpszMenuName = MAKEINTRESOURCE(IDM_MAIN);
     wc.lpszClassName = cls_frame;
     return RegisterClass(&wc) != 0;
 }

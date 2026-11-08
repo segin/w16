@@ -414,3 +414,54 @@ BOOL FAR pm_WinHelp(HWND w, LPCSTR file, UINT cmd, DWORD data)
 }
 
 #endif
+
+#ifdef W16_WIN2
+/* ---- menus: built from our menu resource ----
+ * Windows 2.x cannot load the 3.x menu resource format wrc writes (its
+ * 4-byte header), so the menu is rebuilt with CreateMenu and ChangeMenu
+ * from the same resource: header, then items { WORD flags; WORD id
+ * (not for popups); text }, MF_END on the last item of each menu. */
+
+static const BYTE FAR *build_items(HMENU m, const BYTE FAR *p)
+{
+    for (;;) {
+        WORD flags = p[0] | (p[1] << 8), id = 0;
+        const char FAR *text;
+        p += 2;
+        if (!(flags & MF_POPUP)) {
+            id = p[0] | (p[1] << 8);
+            p += 2;
+        }
+        text = (const char FAR *)p;
+        p += s_len(text) + 1;
+        if (flags & MF_POPUP) {
+            HMENU sub = CreateMenu();
+            p = build_items(sub, p);
+            ChangeMenu(m, 0, text, (UINT)sub, MF_APPEND | MF_POPUP);
+        } else if (!text[0] && !id) {
+            ChangeMenu(m, 0, NULL, 0, MF_APPEND | MF_SEPARATOR);
+        } else {
+            ChangeMenu(m, 0, text, id,
+                       MF_APPEND | MF_STRING | (flags & (MF_GRAYED | MF_DISABLED | MF_CHECKED)));
+        }
+        if (flags & MF_END)
+            return p;
+    }
+}
+
+HMENU pm_load_menu(HINSTANCE inst, LPCSTR name)
+{
+    HRSRC r = FindResource(inst, name, RT_MENU);
+    HGLOBAL h = r ? LoadResource(inst, r) : NULL;
+    const BYTE FAR *p = h ? (const BYTE FAR *)LockResource(h) : NULL;
+    HMENU m = NULL;
+    if (p) {
+        m = CreateMenu();
+        build_items(m, p + 4 + (p[2] | (p[3] << 8)));
+        UnlockResource(h);
+    }
+    if (h)
+        FreeResource(h);
+    return m;
+}
+#endif
