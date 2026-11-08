@@ -434,6 +434,17 @@ $(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# ---- WIN.COM (win/win.asm; ARCHITECTURE.md 9.5) ----
+# WIN.CNF is the program alone; WIN.COM is WIN.CNF with w16's start-up logo
+# (a BI_RLE4 bitmap, assets/boot) appended, as Windows 3.1 Setup builds its
+# WIN.COM from WIN.CNF and a logo (copy /b).
+$(DOS)/WIN.CNF: win/win.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/WIN.COM: $(DOS)/WIN.CNF assets/boot/W16LOGOR.BMP
+	cat $^ > $@
+dos: $(DOS)/WIN.COM
+
 # WC1-WC8.COM: the WIN.COM probes (tests/wincom.sh; ARCHITECTURE.md 9.5);
 # WC9.EXE: ExitWindowsExec as the shell
 WCPROBES := $(DOS)/WC1.COM $(DOS)/WC2.COM $(DOS)/WC3.COM $(DOS)/WC3B.COM \

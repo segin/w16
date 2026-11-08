@@ -11,7 +11,11 @@
         cpu 8086
         org 100h
 
+%ifdef BLKX
+BLK     equ 1344
+%else
 BLK     equ 512
+%endif
 
 start:
         mov sp, stack_top

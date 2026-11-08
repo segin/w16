@@ -23,7 +23,7 @@ MAXPER  equ 6
 %define DXAXOFF 0                       ; dump DX:AX+DXAXOFF
 %endif
 NKEYS   equ 96
-BLKSZ   equ 1E0h                     ; WIN.COM's switcher block, as dumped
+BLKSZ   equ 500h                     ; WIN.COM's switcher block, as dumped
 RECSZ   equ 2*9 + 4 + 2*9 + 2 + 128    ; in regs, caller, out regs, flags, bytes
 
 start:
@@ -273,6 +273,14 @@ dump:
         call log_str
         mov si, prog
         call log_str
+        mov si, s_tail                  ; our (the program's) tail
+        call log_str
+        mov si, 81h
+        xor cx, cx
+        mov cl, [80h]
+        call log_quoted
+        mov al, ']'
+        call log_chr
         mov si, s_rc
         call log_str
         mov al, [rc]
@@ -394,6 +402,7 @@ bytes16:
 
 s_head:   db '== WC3 ', 0
 s_rc:     db ' rc=', 0
+s_tail:   db ' tail=[', 0
 s_err:    db ' execerror=', 0
 s_in:     db 'in  ax bx cx dx si di ds es bp:', 0
 s_from:   db ' from ', 0
