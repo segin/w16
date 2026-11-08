@@ -31,9 +31,10 @@ WRC     := wrc
 KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/dpmi.o $(B)/kernel/global.o $(B)/kernel/module.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
-           $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o
+           $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
+           $(B)/kernel/mdb.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3 TK4 TK5
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK6
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
@@ -57,7 +58,7 @@ all: host dos shell
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
-     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(B)/hdd/MBR.BIN
+     $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -102,6 +103,15 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
+$(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+
+# TK6.EXE: the in-memory module table probe (uses TK5's DLLs)
+$(DOS)/TK6.EXE: $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/prolog.o \
+                tests/apps/app.lnk tests/apps/tk6.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk6.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk6.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/prolog.o }
 
 # TK5.EXE: the DLL loading probe, with its DLLs (tests/apps/tk5.c)
 $(B)/tests/%.o: tests/apps/%.asm
@@ -222,6 +232,11 @@ $(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
 
 # ---- DOS test tools ----
 $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# WINENV.COM: test tool, runs KERNEL with windir= set as WIN.COM would
+$(DOS)/WINENV.COM: tests/dos/winenv.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 

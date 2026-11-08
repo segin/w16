@@ -116,14 +116,49 @@ static void dir_of(char *d, const char FAR *path)
     d[cut] = 0;
 }
 
+/* The value of an environment variable of KERNEL's environment (the
+   name in exact case), or NULL. */
+static const char FAR *env_var(const char *name)
+{
+    u16 env = *(u16 FAR *)MK_FP(psp_sel, 0x2C);
+    const char FAR *e;
+    if (!env)
+        return NULL;
+    for (e = MK_FP(env, 0); *e; ) {
+        const char *n = name;
+        const char FAR *p = e;
+        while (*n && *p == *n) {
+            n++;
+            p++;
+        }
+        if (!*n && *p == '=')
+            return p + 1;
+        while (*e)
+            e++;
+        e++;
+    }
+    return NULL;
+}
+
 /* The system directory is the one KRNL286.EXE is in (as on Windows,
-   where it is in WINDOWS\SYSTEM); the Windows directory is its parent if
-   it is called SYSTEM, else the same directory. w16's own convention
-   until there is a WIN.COM to say where the Windows directory is. */
+   where it is in WINDOWS\SYSTEM). The Windows directory is the value of
+   the environment variable "windir", which WIN.COM (or LOSE.COM) passes:
+   observed on Windows 3.1, every task's environment holds lowercase
+   "windir=C:\WINDOWS", the same as GetWindowsDirectory. Without it (KERNEL
+   started directly), w16 takes the parent of the system directory if that
+   is called SYSTEM, else the system directory itself. */
 void loader_init(const char FAR *kernel_path)
 {
+    const char FAR *w = env_var("windir");
     u16 n;
     dir_of(sys_dir, kernel_path);
+    if (w && *w && kstrlen(w) < sizeof win_dir) {
+        str_copy(win_dir, w, sizeof win_dir);
+        n = kstrlen(win_dir);
+        if (n > 3 && win_dir[n - 1] == '\\')
+            win_dir[n - 1] = 0;         /* as GetWindowsDirectory gives it */
+        return;
+    }
     str_copy(win_dir, sys_dir, sizeof win_dir);
     n = kstrlen(win_dir);
     if (n > 7 && kstricmp(win_dir + n - 7, "\\SYSTEM") == 0) {
@@ -180,18 +215,7 @@ static int try_dir(const char FAR *dir, u16 dlen, const char FAR *name,
 /* The PATH variable of KERNEL's environment, or NULL. */
 static const char FAR *env_path(void)
 {
-    u16 env = *(u16 FAR *)MK_FP(psp_sel, 0x2C);
-    const char FAR *e;
-    if (!env)
-        return NULL;
-    for (e = MK_FP(env, 0); *e; ) {
-        if (e[0] == 'P' && e[1] == 'A' && e[2] == 'T' && e[3] == 'H' && e[4] == '=')
-            return e + 5;
-        while (*e)
-            e++;
-        e++;
-    }
-    return NULL;
+    return env_var("PATH");
 }
 
 /* Open a module's file. A name with a path is opened as it is (the DOS
@@ -257,12 +281,14 @@ static const u8 FAR *imported_name(module FAR *m, u16 offset)
     return MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
 }
 
+/* The name of imported module `index` (1-based), from the file's tables:
+   the module table holds hModules there instead. Only while loading. */
 static const u8 FAR *modref_name(module FAR *m, u16 index)
 {
-    ne_header FAR *h = NE_HDR(m);
-    if (index < 1 || index > h->modref_count)
+    const ne_header FAR *fh = MK_FP(m->ft_sel, 0);
+    if (!m->ft_sel || index < 1 || index > fh->modref_count)
         return NULL;
-    return imported_name(m, *(const u16 FAR *)MK_FP(m->ne_sel, h->modref_off + 2 * (index - 1)));
+    return imported_name(m, *(const u16 FAR *)MK_FP(m->ft_sel, fh->modref_off + 2 * (index - 1)));
 }
 
 static void patch(u16 sel, const ne_reloc FAR *rr, u16 tsel, u16 toff)
@@ -325,7 +351,7 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
         if (!modname)
             return 0;
         pstr_to_c(modname, name, sizeof name);
-        tm = rr->t1 <= m->dep_count ? module_of(MOD_DEPS(m)[rr->t1 - 1]) : NULL;
+        tm = module_of(MOD_MODREF(m, rr->t1 - 1));
         if ((rr->flags & NERF_TYPEMASK) == NERF_IMPORTORD) {
             if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const))
                 return 1;
@@ -373,37 +399,23 @@ static int relocate_segment(module FAR *m, u16 fh, u16 i, u32 data_end)
 static void patch_prologues(module FAR *m)
 {
     ne_header FAR *h = NE_HDR(m);
-    const u8 FAR *p = MK_FP(m->ne_sel, h->entry_off);
-    const u8 FAR *end = p + h->entry_len;
+    u16 t = m->ne_sel, b;
     int lib = (m->flags & NEF_LIBRARY) != 0;
     u16 dgroup = h->auto_data && h->auto_data <= m->seg_count
                  ? m->seg[h->auto_data - 1].sel : 0;
 
     if (lib && !dgroup)
         return;
-    while (p < end && p[0]) {
-        u8 count = p[0], type = p[1], k;
-        p += 2;
-        if (type == NEB_UNUSED)
-            continue;
+    /* the in-memory entry table (mdb.c) */
+    for (b = MDB_W(t, MDB_ENTRY); b; b = MDB_W(t, b + 4)) {
+        u16 k, count = MDB_W(t, b + 2) - MDB_W(t, b);
         for (k = 0; k < count; k++) {
-            u8 flags;
-            u16 segno, off;
+            const u8 FAR *e = MK_FP(t, b + 6 + 5 * k);
+            u16 segno = e[2], off = *(const u16 FAR *)(e + 3);
             u8 FAR *c;
-            if (type == NEB_MOVABLE) {
-                const ne_entry_movable FAR *e = (const ne_entry_movable FAR *)p + k;
-                flags = e->flags;
-                segno = e->seg;
-                off = e->offset;
-            } else {
-                const ne_entry_fixed FAR *e = (const ne_entry_fixed FAR *)p + k;
-                flags = e->flags;
-                segno = type;
-                off = e->offset;
-            }
-            if (type == NEB_CONSTANT || !(flags & NEE_EXPORTED) ||
+            if (e[0] == NEB_CONSTANT || !(e[1] & NEE_EXPORTED) ||
                 segno < 1 || segno > m->seg_count ||
-                (((const ne_segment FAR *)MK_FP(m->ne_sel, h->seg_off))[segno - 1].flags & NESEG_DATA) ||
+                (MOD_SEG(m, segno - 1)->flags & NESEG_DATA) ||
                 (u32)off + 3 > gsize_of_sel(m->seg[segno - 1].sel))
                 continue;
             c = MK_FP(m->seg[segno - 1].sel, off);
@@ -418,8 +430,6 @@ static void patch_prologues(module FAR *m)
                 c[0] = c[1] = c[2] = 0x90;
             }
         }
-        p += (type == NEB_MOVABLE ? sizeof(ne_entry_movable)
-                                  : sizeof(ne_entry_fixed)) * count;
     }
 }
 
@@ -431,19 +441,23 @@ static u16 entry_ds(module FAR *m);
 /* Free a module's memory and release the modules it imports from. */
 static void destroy(module FAR *m)
 {
-    u16 i;
+    u16 i, n;
     mod_unlink(m);
     for (i = 0; i < m->seg_count; i++)
         if (m->seg[i].hnd)
             GlobalFree(m->seg[i].hnd);
     if (m->nonres_sel)
         GlobalFree(m->nonres_sel);
-    if (m->ne_sel)
+    if (m->ft_sel)
+        GlobalFree(m->ft_sel);
+    if (m->ne_sel) {
+        n = NE_HDR(m)->modref_count;
+        for (i = 0; i < n; i++) {
+            module FAR *d = module_of(MOD_MODREF(m, i));
+            if (d)
+                release(d);
+        }
         GlobalFree(m->ne_sel);
-    for (i = 0; i < m->dep_count; i++) {
-        module FAR *d = module_of(MOD_DEPS(m)[i]);
-        if (d)
-            release(d);
     }
     GlobalFree(m->self);
 }
@@ -464,11 +478,12 @@ static void call_wep(module FAR *m)
 
 static void release(module FAR *m)
 {
-    if (m->usage)
-        m->usage--;
-    if (m->usage || m == module_first || !(m->flags & NEF_LIBRARY))
+    if (MOD_USAGE(m))
+        MOD_USAGE(m)--;
+    if (MOD_USAGE(m) || m == module_first || !(m->flags & NEF_LIBRARY))
         return;
-    call_wep(m);
+    if (NE_HDR(m)->flags & MDBF_WEP)
+        call_wep(m);
     destroy(m);
 }
 
@@ -496,7 +511,7 @@ static int acquire_import(const char *name, u16 *hmod, u16 *err)
     if (!d && is_pending(name))
         return 1;
     if (d)
-        d->usage++;
+        MOD_USAGE(d)++;
     else if ((d = load_file(name, ".DLL", 0, err)) == NULL)
         return 0;
     *hmod = d->ne_sel;
@@ -558,23 +573,36 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     }
     ne_len = h.entry_off + h.entry_len;
     *err = LE_NOMEM;
-    m = mod_new(h.seg_count, h.modref_count);
+    m = mod_new(h.seg_count);
     if (!m) {
         f_close(fh);
         return NULL;
     }
-    mod_link(m);
+    m->flags = h.flags;
     if (!galloc(GMEM_FIXED, ne_len, 0, &sel)) {
         f_close(fh);
         return load_fail(m, path, "out of memory");
     }
-    m->ne_sel = sel;
-    m->ne_len = ne_len;
-    m->flags = h.flags;
+    m->ft_sel = sel;
     *err = LE_BADFORMAT;
-    if (!f_seek(fh, ne_base) || !f_read(fh, MK_FP(m->ne_sel, 0), ne_len)) {
+    if (!f_seek(fh, ne_base) || !f_read(fh, MK_FP(sel, 0), ne_len)) {
         f_close(fh);
         return load_fail(m, path, "cannot read module tables");
+    }
+    mod_set_path(m, path);
+    {
+        regs16 r;                       /* the file's date and time */
+        r.ax = 0x5700;
+        r.bx = fh;
+        r.ds = r.es = 0;
+        if (dos21(&r))
+            r.cx = r.dx = 0;
+        m->ne_sel = mdb_build(MK_FP(m->ft_sel, 0), m->path, r.dx, r.cx, 0);
+    }
+    if (!m->ne_sel) {
+        f_close(fh);
+        *err = LE_NOMEM;
+        return load_fail(m, path, "out of memory");
     }
     mod_set_name(m);
 
@@ -584,13 +612,13 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
        loaded module names before opening anything (observed); what it
        does when the module inside is called differently is not. */
     for (dup = module_first; dup; dup = dup->next)
-        if (dup != m && kstricmp(dup->name, m->name) == 0) {
+        if (kstricmp(dup->name, m->name) == 0) {
             f_close(fh);
             destroy(m);
-            dup->usage++;
+            MOD_USAGE(dup)++;
             return dup;
         }
-    mod_set_path(m, path);
+    mod_link(m);
 
     if (h.nonres_len) {
         if (!galloc(GMEM_FIXED, h.nonres_len + 1UL, 0, &sel)) {
@@ -608,7 +636,7 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     /* allocate and read every segment */
     shift = h.align_shift ? h.align_shift : 9;
     for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
+        ne_segment FAR *s = MOD_SEG(m, i);
         u32 size = s->min_alloc ? s->min_alloc : 0x10000UL;
         u32 flen = s->sector ? (s->file_len ? s->file_len : 0x10000UL) : 0;
         if (flen > size)
@@ -626,25 +654,31 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
             *err = LE_NOMEM;
             return load_fail(m, path, "out of memory");
         }
+        /* in the module table: the handle, and the flags of a loaded
+           segment. UNVERIFIED: Windows 3.1 changed further bits (0400h,
+           the top four) in ways not understood yet. */
+        MOD_SEGHND(m, i) = m->seg[i].hnd;
+        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED | NESEG_MOVABLE;
         if (flen && (!f_seek(fh, (u32)s->sector << shift) || !f_read_big(fh, sel, flen))) {
             f_close(fh);
             return load_fail(m, path, "cannot read segment");
         }
     }
     f_close(fh);
-    m->usage = 1;
+    MOD_USAGE(m) = 1;
 
     /* the modules it imports from (observed: loaded, and initialised,
        before the module itself; one that is missing fails the load with
-       2 and nothing stays loaded) */
-    for (i = 0; i < m->dep_count; i++) {
+       2 and nothing stays loaded); their hModules go to the module
+       reference table */
+    for (i = 0; i < h.modref_count; i++) {
         char dname[MODNAME_MAX + 1];
         pstr_to_c(modref_name(m, i + 1), dname, sizeof dname);
         if (!acquire_import(dname, &sel, err)) {
             destroy(m);
             return NULL;
         }
-        MOD_DEPS(m)[i] = sel;
+        MOD_MODREF(m, i) = sel;
     }
 
     /* relocations: all segments are writable data selectors until now */
@@ -652,7 +686,7 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     if (!f_open(path, &fh, err))
         return load_fail(m, path, "cannot reopen");
     for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
+        const ne_segment FAR *s = MOD_SEG(m, i);
         if ((s->flags & NESEG_RELOCS) && s->sector) {
             u32 flen = s->file_len ? s->file_len : 0x10000UL;
             if (!relocate_segment(m, fh, i, ((u32)s->sector << shift) + flen)) {
@@ -663,12 +697,12 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
         }
     }
     f_close(fh);
+    GlobalFree(m->ft_sel);
+    m->ft_sel = 0;
     patch_prologues(m);
-    for (i = 0; i < h.seg_count; i++) {
-        const ne_segment FAR *s = (const ne_segment FAR *)MK_FP(m->ne_sel, h.seg_off) + i;
-        if (!(s->flags & NESEG_DATA))
+    for (i = 0; i < h.seg_count; i++)
+        if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
             gset_code(m->seg[i].sel);
-    }
 
     /* A DLL's initialisation, on the caller's stack. Observed on Windows
        3.1 at the entry point: AX = 1, CX = heap size, DX = DS = the DGROUP
@@ -677,6 +711,8 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
        0 makes LoadLibrary return 0, and the DLL's WEP runs before it is
        freed. A DLL without DGROUP gets DS = DX = DI = its hModule.
        UNVERIFIED: WEP's argument after a failed initialisation (0 here). */
+    if (h.flags & NEF_LIBRARY)
+        NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
         if (!mod_call(m->seg[h.cs - 1].sel, h.ip, entry_ds(m), h.heap_size,
                       module_instance(m), 0, 0)) {
@@ -705,11 +741,11 @@ static module FAR *acquire(const char FAR *name, u16 *err)
             *err = LE_NOTFOUND;         /* UNVERIFIED */
             return NULL;
         }
-        m->usage++;
+        MOD_USAGE(m)++;
         return m;
     }
     if (mod_base_name(name, base) && (m = module_find((const char FAR *)base)) != NULL) {
-        m->usage++;
+        MOD_USAGE(m)++;
         return m;
     }
     return load_file(name, NULL, 0, err);

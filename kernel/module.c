@@ -5,8 +5,8 @@
  *
  * Every loaded module has a record (struct module, kernel.h) in its own
  * global block; the records form a list that starts with KERNEL. The
- * Windows module database (MDB) layout is not used yet: the hModule is
- * the selector of the module's NE tables as read from the file.
+ * hModule is the selector of the module's in-memory module table in the
+ * Windows 3.1 layout (mdb.c).
  *
  * NE format source: see include/w16/ne.h.
  */
@@ -74,11 +74,11 @@ void mod_set_name(module FAR *m)
     m->name[n] = 0;
 }
 
-/* A new, zeroed record with room for seg_count segments and dep_count
-   imported modules; not yet in the list. */
-module FAR *mod_new(u16 seg_count, u16 dep_count)
+/* A new, zeroed record with room for seg_count segments; not yet in the
+   list. */
+module FAR *mod_new(u16 seg_count)
 {
-    u32 size = sizeof(module) + (u32)seg_count * sizeof(modseg) + 2UL * dep_count;
+    u32 size = sizeof(module) + (u32)seg_count * sizeof(modseg);
     module FAR *m;
     u16 sel;
 
@@ -87,14 +87,17 @@ module FAR *mod_new(u16 seg_count, u16 dep_count)
     m = MK_FP(sel, 0);                  /* galloc zeroes new memory */
     m->self = sel;
     m->seg_count = seg_count;
-    m->dep_count = dep_count;
     return m;
 }
 
+/* Append to the list; the module tables are chained too (offset 06h:
+   observed on Windows 3.1, a module's table is linked when it is made,
+   before the modules it imports from). */
 void mod_link(module FAR *m)
 {
     module FAR *p = module_first;
     m->next = NULL;
+    MDB_W(m->ne_sel, MDB_NEXT) = 0;
     if (!p) {
         module_first = m;
         return;
@@ -102,6 +105,7 @@ void mod_link(module FAR *m)
     while (p->next)
         p = p->next;
     p->next = m;
+    MDB_W(p->ne_sel, MDB_NEXT) = m->ne_sel;
 }
 
 void mod_unlink(module FAR *m)
@@ -114,6 +118,7 @@ void mod_unlink(module FAR *m)
     for (p = module_first; p; p = p->next)
         if (p->next == m) {
             p->next = m->next;
+            MDB_W(p->ne_sel, MDB_NEXT) = m->next ? m->next->ne_sel : 0;
             return;
         }
 }
@@ -141,20 +146,29 @@ void mod_set_path(module FAR *m, const char FAR *path)
 
 void module_register_kernel(const bootinfo FAR *bi)
 {
-    module FAR *m = mod_new(bi->seg_count, 0);
+    module FAR *m = mod_new(bi->seg_count);
     u16 i;
     if (!m) {
         kputs("w16: out of memory\r\n");
         kexit_to_dos(0xFF);
     }
-    m->ne_sel = bi->ne_sel;
-    m->ne_len = bi->ne_len;
-    m->flags = NE_HDR(m)->flags;
-    for (i = 0; i < bi->seg_count; i++)
-        m->seg[i].sel = m->seg[i].hnd = bi->seg_sel[i];
-    m->usage = 1;
     for (i = 0; i < sizeof m->path - 1 && i < BOOT_PATHMAX && bi->path[i]; i++)
         m->path[i] = bi->path[i];
+    /* the bootstrap's copy of KERNEL's file tables becomes its module
+       table (UNVERIFIED: KERNEL's file date and time, 0 here) */
+    m->flags = ((const ne_header FAR *)MK_FP(bi->ne_sel, 0))->flags;
+    m->ne_sel = mdb_build(MK_FP(bi->ne_sel, 0), m->path, 0, 0, 1);
+    if (!m->ne_sel) {
+        kputs("w16: out of memory\r\n");
+        kexit_to_dos(0xFF);
+    }
+    for (i = 0; i < bi->seg_count; i++) {
+        ne_segment FAR *s = MOD_SEG(m, i);
+        m->seg[i].sel = m->seg[i].hnd = bi->seg_sel[i];
+        MOD_SEGHND(m, i) = bi->seg_sel[i];
+        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED | NESEG_MOVABLE;
+    }
+    MOD_USAGE(m) = 1;
     mod_set_name(m);
     mod_link(m);
     kconst_init();
@@ -213,10 +227,7 @@ u16 module_instance(module FAR *m)
    in *off and *sel). */
 int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
 {
-    ne_header FAR *h = NE_HDR(m);
-    const u8 FAR *p = MK_FP(m->ne_sel, h->entry_off);
-    const u8 FAR *end = p + h->entry_len;
-    u16 ord = 1;
+    u16 t = m->ne_sel, b = MDB_W(t, MDB_ENTRY);
 
     *is_const = 0;
     if (m == module_first && kconst_lookup(ordinal, off)) {
@@ -224,41 +235,24 @@ int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
         *is_const = 1;
         return 1;
     }
-    while (p < end && p[0]) {
-        u8 count = p[0], type = p[1];
-        p += 2;
-        if (type == NEB_UNUSED) {
-            ord += count;
-            continue;
-        }
-        if (ordinal < ord)
-            return 0;                   /* in a gap: not exported */
-        if (ordinal < ord + count) {
-            u16 k = ordinal - ord, segno;
-            if (type == NEB_MOVABLE) {
-                const ne_entry_movable FAR *e = (const ne_entry_movable FAR *)p + k;
-                segno = e->seg;
-                *off = e->offset;
-            } else {
-                const ne_entry_fixed FAR *e = (const ne_entry_fixed FAR *)p + k;
-                if (type == NEB_CONSTANT) {
-                    *sel = *off = e->offset;
-                    *is_const = 1;
-                    return 1;
-                }
-                segno = type;
-                *off = e->offset;
+    /* in-memory entry table (mdb.c): bundles {first - 1, last, next} */
+    for (; b; b = MDB_W(t, b + 4)) {
+        u16 first = MDB_W(t, b), last = MDB_W(t, b + 2);
+        if (ordinal > first && ordinal <= last) {
+            const u8 FAR *e = MK_FP(t, b + 6 + 5 * (ordinal - first - 1));
+            *off = *(const u16 FAR *)(e + 3);
+            if (e[0] == NEB_CONSTANT) {
+                *sel = *off;
+                *is_const = 1;
+                return 1;
             }
-            if (segno < 1 || segno > m->seg_count)
+            if (e[2] < 1 || e[2] > m->seg_count)
                 return 0;
-            *sel = m->seg[segno - 1].sel;
+            *sel = m->seg[e[2] - 1].sel;
             return 1;
         }
-        p += (type == NEB_MOVABLE ? sizeof(ne_entry_movable)
-                                  : sizeof(ne_entry_fixed)) * count;
-        ord += count;
     }
-    return 0;
+    return 0;                           /* not in any bundle: not exported */
 }
 
 /* Look a length-prefixed name up in a name table (resident or
@@ -413,5 +407,5 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
 u16 KAPI GetModuleUsage(u16 h)                                /* KERNEL.48 */
 {
     module FAR *m = module_of(h);
-    return m ? m->usage : 0;
+    return m ? MOD_USAGE(m) : 0;
 }

@@ -634,6 +634,28 @@ static void get_cwd(char *buf)
         buf[0] = 0;
 }
 
+/* the value of environment variable `name` (exact case) in the task's
+   environment, or NULL */
+static const char FAR *env_get(const char *name)
+{
+    WORD envsel = *w_at(entry_regs[9], 0x2C);
+    const char FAR *e = (const char FAR *)MAKELP(envsel, 0);
+    while (*e) {
+        const char *n = name;
+        const char FAR *p = e;
+        while (*n && *p == *n) {
+            n++;
+            p++;
+        }
+        if (!*n && *p == '=')
+            return p + 1;
+        while (*e)
+            e++;
+        e++;
+    }
+    return NULL;
+}
+
 static int env_has_tkpath(void)
 {
     WORD psp = entry_regs[9];
@@ -692,6 +714,15 @@ static void probe_search(void)
     trim(loc_dir[1]);
     trim(loc_dir[2]);
     obs_str("windir", loc_dir[1]);
+    {
+        const char FAR *w = env_get("windir");
+        obs("environment has windir", w != NULL);
+        obs("environment has WINDIR", env_get("WINDIR") != NULL);
+        if (w) {
+            obs_str("environment windir", w);
+            obs("environment windir==GetWindowsDirectory", seq(w, loc_dir[1]));
+        }
+    }
     obs_str("sysdir", loc_dir[2]);
     obs_str("appdir", loc_dir[3]);
     for (i = 0; i < N_LOC; i++) {

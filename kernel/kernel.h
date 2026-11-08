@@ -97,27 +97,43 @@ typedef struct modseg {
     u16 hnd;                    /* its global handle */
 } modseg;
 
-/* One per loaded module, in its own global block; modules form a list
-   (module_first). seg[] has seg_count entries and is followed by
-   dep_count words: the hModules of the modules this one imports from
-   (0 for imports bound to "unimplemented" thunks). */
+/* One per loaded module, in its own global block, beside the module's
+   in-memory module table (mdb.c), whose selector is the hModule; modules
+   form a list (module_first, and offset 06h of the tables). seg[] has
+   seg_count entries. */
 typedef struct module {
     struct module FAR *next;
     u16  self;                  /* selector of this block */
     char name[MODNAME_MAX + 1]; /* module name, upper case */
-    u16  ne_sel;                /* resident NE tables; also the hModule */
-    u16  ne_len;
+    u16  ne_sel;                /* the module table; also the hModule */
     u16  nonres_sel;            /* non-resident name table, 0 if none */
-    u16  flags;                 /* NE header flags (NEF_*) */
-    u16  usage;
+    u16  ft_sel;                /* while loading: the file's NE tables */
+    u16  flags;                 /* NE file header flags (NEF_*) */
     u16  seg_count;
-    u16  dep_count;
     char path[DOS_PATHMAX];
-    modseg seg[1];              /* seg_count entries, then the deps */
+    modseg seg[1];              /* seg_count entries */
 } module;
 
-#define NE_HDR(m)   ((ne_header FAR *)MK_FP((m)->ne_sel, 0))
-#define MOD_DEPS(m) ((u16 FAR *)&(m)->seg[(m)->seg_count])
+/* ---- mdb.c: the in-memory module table ---- */
+#define MDB_W(sel, off) (*(u16 FAR *)MK_FP((sel), (off)))
+#define MDB_USAGE       0x02
+#define MDB_ENTRY       0x04    /* in-memory entry table */
+#define MDB_NEXT        0x06    /* next module table */
+#define MDB_DGROUP      0x08    /* DGROUP's segment table entry */
+#define MDB_LOADFILE    0x0A
+#define MDB_SEGSIZE     10      /* segment table entry: file's 8 + handle */
+#define MDBF_LOADED     0x0040  /* set on every module (observed) */
+#define MDBF_WEP        0x4000  /* a DLL whose WEP is to be called */
+
+#define NE_HDR(m)       ((ne_header FAR *)MK_FP((m)->ne_sel, 0))
+#define MOD_USAGE(m)    MDB_W((m)->ne_sel, MDB_USAGE)
+#define MOD_SEG(m, i)   ((ne_segment FAR *)MK_FP((m)->ne_sel, \
+                             NE_HDR(m)->seg_off + MDB_SEGSIZE * (i)))
+#define MOD_SEGHND(m, i) MDB_W((m)->ne_sel, NE_HDR(m)->seg_off + MDB_SEGSIZE * (i) + 8)
+#define MOD_MODREF(m, i) MDB_W((m)->ne_sel, NE_HDR(m)->modref_off + 2 * (i))
+
+u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
+              int is_kernel);
 
 extern module FAR *module_first;        /* KERNEL */
 void     module_register_kernel(const bootinfo FAR *bi);
@@ -126,7 +142,7 @@ module FAR *module_find(const char FAR *name);
 module FAR *module_of(u16 h);
 u16      module_instance(module FAR *m);
 int      module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const);
-module FAR *mod_new(u16 seg_count, u16 dep_count);
+module FAR *mod_new(u16 seg_count);
 void     mod_link(module FAR *m);
 void     mod_unlink(module FAR *m);
 void     mod_set_name(module FAR *m);
