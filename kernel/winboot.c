@@ -3,7 +3,7 @@
  * as WINDOWS\SYSTEM\KRNL286.EXE (started by WIN.COM through DOSX).
  *
  * Observed on Windows 3.1 Standard mode (ARCHITECTURE.md 9.4; tests/
- * dropin.sh -r writes the reference BOOTLOG.TXT, tests/apps/tk19.c):
+ * dropin.sh -r writes the reference BOOTLOG.TXT, tests/apps/tk22.c):
  *   - KERNEL's command tail is what WIN.COM leaves of its own: the
  *     switches it handled blanked out ("WIN /S /B X Y" gives
  *     "     /B X Y"). /B is KERNEL's: it writes WINDOWS\BOOTLOG.TXT,
@@ -100,7 +100,7 @@ static void diag_init(void)
     diag_write("[boot]\r\n");
 }
 
-/* DiagOutput (KERNEL.340): observed on 3.1 (TK19) to append the string
+/* DiagOutput (KERNEL.340): observed on 3.1 (TK22) to append the string
    to BOOTLOG.TXT as it is, also after the boot. */
 void KAPI DiagOutput(const char FAR *s)
 {

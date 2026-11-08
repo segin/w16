@@ -1,0 +1,3 @@
+# TK22.EXE (tests/apps/tk22.c): the Windows boot probe
+@tests/apps/app.lnk
+import K_DIAGOUTPUT KERNEL.340

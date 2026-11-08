@@ -1,5 +1,5 @@
 /*
- * tk19.c - the Windows boot probe: run as the shell of a scratch Windows
+ * tk22.c - the Windows boot probe: run as the shell of a scratch Windows
  * 3.1 install started with WIN /S /B (tests/dropin.sh), it records what
  * KERNEL has loaded by the time the shell runs, and writes to the boot
  * log:
@@ -12,7 +12,7 @@
  */
 #include <windows.h>
 
-#define TK_REF "tk19ref.h"
+#define TK_REF "tk22ref.h"
 #include "tklog.h"
 
 extern void FAR PASCAL K_DIAGOUTPUT(LPCSTR s);
@@ -20,7 +20,7 @@ extern void FAR PASCAL K_DIAGOUTPUT(LPCSTR s);
 static const char *const mods[] = {
     "KERNEL", "SYSTEM", "KEYBOARD", "MOUSE", "DISPLAY", "SOUND", "COMM",
     "FONTS", "OEMFONTS", "FIXFONTS", "GDI", "USER", "SHELL", "MMSYSTEM",
-    "TIMER", "LZEXPAND", "VER", "PROGMAN", "TK19", NULL
+    "TIMER", "LZEXPAND", "VER", "PROGMAN", "TK22", NULL
 };
 
 int __cdecl tmain(void)
@@ -28,7 +28,7 @@ int __cdecl tmain(void)
     char buf[128];
     WORD i, h;
 
-    out("TK19 start\r\n");
+    out("TK22 start\r\n");
     for (i = 0; mods[i]; i++) {
         h = GetModuleHandle(mods[i]);
         out(mods[i]);
@@ -46,15 +46,15 @@ int __cdecl tmain(void)
     }
     obs("GetWinFlags", (WORD)GetWinFlags());
     obs("GetNumTasks", GetNumTasks());
-    K_DIAGOUTPUT("TK19 one");
-    K_DIAGOUTPUT("TK19 two\r\n");
-    K_DIAGOUTPUT("TK19 three");
+    K_DIAGOUTPUT("TK22 one");
+    K_DIAGOUTPUT("TK22 two\r\n");
+    K_DIAGOUTPUT("TK22 three");
     h = LoadLibrary("TKDLL.DLL");
     obs("LoadLibrary(TKDLL) > 32", h > 32);
     h = LoadLibrary("TKNOSUCH.DLL");
     obs("LoadLibrary(TKNOSUCH)", h);
-    K_DIAGOUTPUT("TK19 end");
-    out("TK19 done, failures=");
+    K_DIAGOUTPUT("TK22 end");
+    out("TK22 done, failures=");
     outhex((WORD)failures);
     out("\r\n");
     return failures;
