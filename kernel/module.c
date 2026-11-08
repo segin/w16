@@ -192,6 +192,27 @@ static int find_resident_name(module *m, const u8 FAR *pname, u16 *ordinal)
     return 0;
 }
 
+/* Record the module's file as a full path (observed: GetModuleFileName
+   gives e.g. C:\TK4.EXE for a program started as TK4.EXE), using DOS
+   TRUENAME (INT 21h AH=60h). A path that does not fit is a DOS limit. */
+static void set_path(module *m, const char FAR *path)
+{
+    char full[128];             /* TRUENAME's output buffer size (DOS) */
+    regs16 r;
+    u16 i;
+
+    r.ax = 0x6000;
+    r.si = FP_OFF(path);
+    r.ds = FP_SEG(path);
+    r.di = FP_OFF((char FAR *)full);
+    r.es = FP_SEG((char FAR *)full);
+    if (!dos21(&r) && kstrlen(full) < sizeof m->path)
+        path = full;
+    for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
+        m->path[i] = path[i];
+    m->path[i] = 0;
+}
+
 /* ---- file access (INT 21h, translated by the DOS extender) ---- */
 
 static u16 fh;
@@ -418,9 +439,7 @@ module *module_load(const char FAR *path)
     set_name(m);
     m->seg_count = h.seg_count;
     m->usage = 1;
-    for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
-        m->path[i] = path[i];
-    m->path[i] = 0;
+    set_path(m, path);
     shift = h.align_shift ? h.align_shift : 9;
 
     /* allocate and read every segment */
@@ -467,4 +486,129 @@ module *module_load(const char FAR *path)
             gset_code(m->seg_sel[i]);
     }
     return m;
+}
+
+/* ---- API ---- */
+
+static int same_sel(u16 a, u16 b)
+{
+    return (a | 3) == (b | 3);          /* ignore RPL and the handle bit */
+}
+
+/* The module a module handle, instance handle or other segment of the
+   module refers to. Observed: GetModuleHandle(MAKELP(0, h)) accepts the
+   hModule, hInstance and hInstance | 1. */
+static module *module_of(u16 h)
+{
+    int i;
+    u16 s;
+    if (!h)
+        return NULL;
+    for (i = 0; i < MAX_MODULES; i++) {
+        module *m = &modules[i];
+        if (!m->in_use)
+            continue;
+        if (same_sel(m->ne_sel, h))
+            return m;
+        for (s = 0; s < m->seg_count; s++)
+            if (same_sel(m->seg_sel[s], h))
+                return m;
+    }
+    return NULL;
+}
+
+/* Observed on Windows 3.1: the hModule is the selector of the module's
+   NE header in memory (odd: RPL bits set; word 0 is "NE"); names match
+   regardless of case; "TK4.EXE" and "C:\TK4.EXE" find module TK4, "TK4 "
+   does not; MAKELP(0, handle) looks a handle up; NULL gives 0.
+   UNVERIFIED: whether a file name is matched against the module name (as
+   here) or the module's file name; they were the same in the probe. */
+u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
+{
+    char base[9];
+    const char FAR *p, *s;
+    u16 n = 0;
+    module *m;
+
+    if (!FP_SEG(name)) {
+        m = module_of(FP_OFF(name));
+        return m ? m->ne_sel : 0;
+    }
+    s = name;
+    for (p = name; *p; p++)
+        if (*p == '\\' || *p == '/' || *p == ':')
+            s = p + 1;
+    for (p = s; *p && *p != '.'; p++)
+        if (n < sizeof base - 1)
+            base[n++] = *p;
+        else
+            return 0;                   /* longer than any module name */
+    base[n] = 0;
+    if (!n)
+        return 0;
+    m = module_find((const char FAR *)base);
+    return m ? m->ne_sel : 0;
+}
+
+/* Observed: returns the length copied; at most n - 1 characters and a
+   NUL; nothing written for n = 0; an unknown handle gives 0 and an empty
+   string. */
+u16 KAPI GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
+{
+    module *m = module_of(h);
+    u16 i;
+
+    if (!n)
+        return 0;
+    if (!m) {
+        buf[0] = 0;
+        return 0;
+    }
+    for (i = 0; i + 1 < n && m->path[i]; i++)
+        buf[i] = m->path[i];
+    buf[i] = 0;
+    return i;
+}
+
+/* Observed: names match regardless of case (also "#n" for ordinal n);
+   bit 15 of an ordinal is ignored; ordinal 0, gaps and unknown names give
+   0; a constant export comes back as FFFF:value.
+   UNVERIFIED: the non-resident name table is not searched yet (KERNEL
+   puts all its names in the resident one); hModule 0. */
+u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
+{
+    module *m = module_of(h);
+    u16 ord = 0, sel, off;
+    int is_const;
+
+    if (!m || !name)
+        return 0;
+    if (!FP_SEG(name)) {
+        ord = FP_OFF(name) & 0x7FFF;
+    } else if (name[0] == '#') {
+        const char FAR *p = name + 1;
+        if (!*p)
+            return 0;
+        for (; *p; p++) {
+            if (*p < '0' || *p > '9')
+                return 0;
+            ord = ord * 10 + (u16)(*p - '0');
+        }
+    } else {
+        u8 pname[256];          /* length-prefixed: at most 255 characters */
+        u16 i;
+        for (i = 0; name[i]; i++)
+            if (i == 255)
+                return 0;
+            else
+                pname[1 + i] = (u8)name[i];
+        pname[0] = (u8)i;
+        if (!find_resident_name(m, (const u8 FAR *)pname, &ord))
+            return 0;
+    }
+    if (!ord || !module_entry(m, ord, &sel, &off, &is_const))
+        return 0;
+    if (is_const)
+        sel = 0xFFFF;
+    return ((u32)sel << 16) | off;
 }

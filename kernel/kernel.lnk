@@ -40,6 +40,12 @@ export UNLOCKSEGMENT.24 resident
 export GLOBALCOMPACT.25 resident
 export YIELD.29 resident
 export WAITEVENT.30 resident
+export GETMODULEHANDLE.47 resident
+export GETMODULEFILENAME.49 resident
+export GETPROCADDRESS.50 resident
+export LSTRCPY.88 resident
+export LSTRCAT.89 resident
+export LSTRLEN.90 resident
 export INITTASK.91 resident
 export DOS3CALL.102 resident
 export __AHSHIFT.113 resident

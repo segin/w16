@@ -30,9 +30,10 @@ WRC     := wrc
 
 KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/dpmi.o $(B)/kernel/global.o $(B)/kernel/module.o \
-           $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o
+           $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
+           $(B)/kernel/string.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3
+TESTS   := TK1 TK2 TK3 TK4
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -91,7 +92,8 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
-$(B)/tests/tk3.o: tests/apps/tk3ref.h
+$(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
+$(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 
 # TEXP3/TEXP2: export-table probes for Windows 3.x and 2.x
 $(B)/tests/texp2.o: tests/apps/texp.c

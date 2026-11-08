@@ -316,6 +316,12 @@ M1 limitations, in order of when they should be fixed:
   - **LocalFree:** returns 0 always, also for invalid and locked handles (a locked block is freed).
   - **LocalCompact(n):** moves unlocked moveable blocks up into free space above them; discards unlocked discardable blocks only if the largest free arena is still smaller than n; returns the largest free arena less 6. It does not grow the segment.
   - **Growing:** a request that does not fit reallocates the segment (fixed segments too) to round32(GlobalSize + arena size + 200h + 18h); the new space joins the end of the heap. LocalAlloc of FFF0h fails.
+- Module and string findings (`tests/apps/tk4.c`; both modes identical):
+  - **hModule** is the selector (RPL bits set, so odd) of the module's NE header in memory: word 0 reads "NE". It differs from hInstance.
+  - **GetModuleHandle:** names match regardless of case; "TK4.EXE" and "C:\TK4.EXE" find module TK4, "TK4 " does not; `MAKELP(0, h)` with the hModule, hInstance or hInstance | 1 returns the module; NULL and unknown names give 0.
+  - **GetModuleFileName:** the full upper-case path ("C:\TK4.EXE" for a program started from C:\), returning the number of characters copied; at most n − 1 characters plus NUL; n = 0 writes nothing; an unknown handle returns 0 with an empty string.
+  - **GetProcAddress:** names match regardless of case, "#3" means ordinal 3, bit 15 of an ordinal is ignored; ordinal 0, gaps, unknown ordinals and names, and the module-name entry give 0; a constant export such as `__AHINCR` comes back as FFFF:value.
+  - **lstrcpy/lstrcat** return the destination. A NULL far pointer does not fault in them: it acts as a small scratch string (lstrlen(NULL) = 2, `lstrcpy(NULL, "x")` returns NULL but later reads of NULL see "x"). w16 treats NULL as an empty string instead (`kernel/string.c`).
 
 ### 9.3 Additional permitted sources and tools
 
