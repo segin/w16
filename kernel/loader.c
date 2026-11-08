@@ -492,6 +492,7 @@ static void destroy(module FAR *m)
     if (m->ft_sel)
         GlobalFree(m->ft_sel);
     if (m->ne_sel) {
+        rsrc_free(m);
         n = NE_HDR(m)->modref_count;
         for (i = 0; i < n; i++) {
             module FAR *d = module_of(MOD_MODREF(m, i));
@@ -744,6 +745,7 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     for (i = 0; i < h.seg_count; i++)
         if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
             gset_code(m->seg[i].sel);
+    rsrc_init(m);
 
     /* A DLL's initialisation, on the caller's stack. Observed on Windows
        3.1 at the entry point: AX = 1, CX = heap size, DX = DS = the DGROUP

@@ -155,6 +155,10 @@ int      mod_base_name(const char FAR *name, char *base);
 /* ---- loader.c ---- */
 void     loader_init(const char FAR *kernel_path);
 
+/* ---- resource.c ---- */
+void     rsrc_init(module FAR *m);      /* handlers, PRELOAD resources */
+void     rsrc_free(module FAR *m);
+
 /* far-call cs:ip as KERNEL calls a DLL's entry point (AX = 1, CX, DX =
    DS, SI = 0, DI, ES = 0, DS), with one Pascal word argument if nargs;
    returns AX (kentry.asm) */

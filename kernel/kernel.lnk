@@ -49,6 +49,14 @@ export GETPROCADDRESS.50 resident
 export MAKEPROCINSTANCE.51 resident
 export FREEPROCINSTANCE.52 resident
 export GETINSTANCEDATA.54 resident
+export FINDRESOURCE.60 resident
+export LOADRESOURCE.61 resident
+export LOCKRESOURCE.62 resident
+export FREERESOURCE.63 resident
+export ACCESSRESOURCE.64 resident
+export SIZEOFRESOURCE.65 resident
+export ALLOCRESOURCE.66 resident
+export SETRESOURCEHANDLER.67 resident
 export LSTRCPY.88 resident
 export LSTRCAT.89 resident
 export LSTRLEN.90 resident
