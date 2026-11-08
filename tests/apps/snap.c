@@ -429,6 +429,13 @@ static void run_line(char *l)
     } else if (same(l, "char")) {
         PostMessage(target(), WM_CHAR, (BYTE)arg[0], 1L);
         pump(200);
+    } else if (same(l, "mark")) {
+        /* label the next observations of tests/apps/thelp.c (its log
+           shows "HELP msg 0477 wp=<n>") */
+        HWND h = FindWindow("MS_WINHELP", NULL);
+        if (h)
+            PostMessage(h, WM_USER + 0x77, parse_num(arg, 10), 0);
+        pump(200);
     } else if (same(l, "alt")) {
         /* Alt+letter, as a dialog's mnemonics see it: WM_SYSCHAR with
            the context bit (29) set */

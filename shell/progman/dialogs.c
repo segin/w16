@@ -111,6 +111,8 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     LPSTR cmd;
     int n;
     (void)lp;
+    if (help_commdlg(dlg, msg))
+        return TRUE;
     switch (msg) {
     case WM_INITDIALOG:
         EnableWindow(GetDlgItem(dlg, IDOK), FALSE);
@@ -140,9 +142,22 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         case IDCANCEL:
             EndDialog(dlg, IDCANCEL);
             return TRUE;
-        case IDC_BROWSE:
+        case IDC_BROWSE: {
+            /* observed: "Programs" / "All Files"; the command line becomes
+               the file's full path */
+            LPSTR f;
+            help_browse_topic(HELP_BROWSE_RUN);
+            f = browse_file(dlg, IDS_FILTER_PROGRAMS);
+            if (f) {
+                SetDlgItemText(dlg, IDC_RUNCMD, f);
+                mem_free(f);
+            }
+            /* observed: the focus goes to OK */
+            SendMessage(dlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(dlg, IDOK), 1L);
+            return TRUE;
+        }
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);     /* TODO */
+            help_topic(dlg, HELP_RUN);
             return TRUE;
         }
         break;
@@ -196,7 +211,7 @@ BOOL CALLBACK __export NewDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);     /* TODO: help */
+            help_topic(dlg, HELP_NEW);
             return TRUE;
         }
         break;
@@ -381,7 +396,7 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);
+            help_topic(dlg, HELP_GROUPPROPS);
             return TRUE;
         }
         break;
@@ -432,6 +447,8 @@ static int load_icon_list(HWND dlg, const char FAR *name)
 BOOL CALLBACK __export ChangeIconDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     LPSTR name;
+    if (help_commdlg(dlg, msg))
+        return TRUE;
     switch (msg) {
     case WM_MEASUREITEM:
         ((MEASUREITEMSTRUCT FAR *)lp)->itemHeight = ICON_ROW;
@@ -513,6 +530,7 @@ BOOL CALLBACK __export ChangeIconDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
         case IDC_BROWSE:
             /* observed: the chosen file's name goes in and its icons are
                listed at once */
+            help_browse_topic(HELP_BROWSE_ICON);
             name = browse_file(dlg, IDS_FILTER_ICONS);
             if (name) {
                 SetDlgItemText(dlg, IDC_ICONFILE, name);
@@ -525,7 +543,7 @@ BOOL CALLBACK __export ChangeIconDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
             SendMessage(dlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(dlg, IDOK), 1L);
             return TRUE;
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);     /* TODO */
+            help_topic(dlg, HELP_CHGICON);
             return TRUE;
         }
         break;
@@ -787,6 +805,8 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
     HWND group;
     BOOL ok;
     (void)lp;
+    if (help_commdlg(dlg, msg))
+        return TRUE;
     switch (msg) {
     case WM_INITDIALOG:
         pi_iconpath = NULL;
@@ -896,7 +916,9 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
             return TRUE;
         case IDC_BROWSE: {
             /* observed: the command line becomes the file's full path */
-            LPSTR f = browse_file(dlg, IDS_FILTER_PROGRAMS);
+            LPSTR f;
+            help_browse_topic(HELP_BROWSE_ITEM);
+            f = browse_file(dlg, IDS_FILTER_PROGRAMS);
             if (f) {
                 SetDlgItemText(dlg, IDC_CMDLINE, f);
                 mem_free(f);
@@ -906,7 +928,7 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
             return TRUE;
         }
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);     /* TODO */
+            help_topic(dlg, HELP_ITEMPROPS);
             return TRUE;
         }
         break;
@@ -1019,7 +1041,7 @@ BOOL CALLBACK __export MoveCopyDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_HELPBTN:
-            message(dlg, IDS_NOTYET, NULL);
+            help_topic(dlg, mc_copy ? HELP_COPY : HELP_MOVE);
             return TRUE;
         }
         break;

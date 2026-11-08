@@ -55,4 +55,32 @@ export DOSRUN_PRE
 dir=$stage kernel='WINENV C:\WINDOWS W16SYS\KRNL286.EXE'
 run TK5 0
 run TK11 0
+
+# TK6-TK10 (floating point; tests/tk6ref.sh) in DOSBox-X, with a
+# coprocessor and without one: KRNL286 and WIN87EM.DLL in C:\WINDOWS\SYSTEM,
+# KERNEL started through WINENV.COM with windir=C:\WINDOWS (as WIN.COM).
+stage="$root/build/tk6root"
+rm -rf "$stage"
+mkdir -p "$stage/WINDOWS/SYSTEM"
+cp "$dos/KRNL286.EXE" "$dos/WIN87EM.DLL" "$stage/WINDOWS/SYSTEM/"
+cp "$dos/WINENV.COM" "$stage/"
+for f in TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10; do
+    cp "$dos/$f.EXE" "$stage/"
+done
+unset DOSRUN_PRE
+DOSRUN_X=1
+export DOSRUN_X DOSRUN_FPU
+dir=$stage kernel='WINENV C:\WINDOWS WINDOWS\SYSTEM\KRNL286.EXE'
+for DOSRUN_FPU in true false; do
+    echo "== (DOSBox-X, fpu=$DOSRUN_FPU)"
+    for t in TK6 TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10; do
+        run $t 0
+    done
+done
+# TK6N only with a coprocessor: without one its floating-point code has no
+# emulator (it does not import WIN87EM), so the INTs return into the
+# instruction's operand bytes; Windows 3.1 computed a wrong result and
+# then hung there, w16 faults.
+DOSRUN_FPU=true
+run TK6N 0
 exit $status

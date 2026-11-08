@@ -230,6 +230,30 @@ LPSTR icon_file(const char FAR *name);  /* group.c: an icon file's path */
 int   icon_count(const char FAR *path);
 HICON icon_extract(const char FAR *path, int index);
 
+/* ---- help.c: WinHelp requests, as the original makes them ---- */
+/* dialog topics in PROGMAN.HLP (observed) */
+#define HELP_NEW            0x1F43
+#define HELP_GROUPPROPS     0x1F45
+#define HELP_CHGICON        0x1F46
+#define HELP_ITEMPROPS      0x1F47
+#define HELP_RUN            0x1F49
+#define HELP_BROWSE_RUN     0x1B59
+#define HELP_BROWSE_ITEM    0x1B5A
+#define HELP_BROWSE_ICON    0x1B5B
+#define HELP_MOVE           0x1B5C
+#define HELP_COPY           0x1B5D
+void help_init(void);
+void help_done(void);
+void help_contents(HWND w);
+void help_search(HWND w);
+void help_on_help(HWND w);
+void help_topic(HWND w, DWORD topic);
+void help_quit(HWND w);
+void help_menu_select(WPARAM wp, LPARAM lp);
+void help_browse_topic(DWORD topic);
+DWORD help_browse_current(void);
+BOOL help_commdlg(HWND dlg, UINT msg);  /* COMMDLG's Help: handled */
+
 /* ---- util.c ---- */
 LPSTR mem_alloc(DWORD n);               /* zeroed, locked global memory */
 LPSTR mem_realloc(LPSTR p, DWORD n);    /* NULL on failure (p still valid) */

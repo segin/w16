@@ -1,0 +1,22 @@
+# wlink directives for WIN87EM.DLL (win87em/). Object files and the output
+# name come from the Makefile. Ordinals 1-5 as observed on Windows 3.1
+# (docs/exports/WIN87EM.txt). UNVERIFIED: ordinal 2 has no name there;
+# WEP (ordinal 6, needed to take the emulator off its vectors when the DLL
+# is freed) was not among the observed ordinals.
+format windows dll
+option modname=WIN87EM
+option description 'w16 WIN87EM'
+option start=libentry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+export __FPMATH.1 resident
+export WIN87EM_2.2
+export __WIN87EMINFO.3 resident
+export __WIN87EMRESTORE.4 resident
+export __WIN87EMSAVE.5 resident
+export WEP.6 resident
+import GETWINFLAGS KERNEL.132
+import GLOBALALLOC KERNEL.15
+import GLOBALFREE KERNEL.17

@@ -1,6 +1,6 @@
 # w16 build. Requires OpenWatcom v2 (WATCOM, default /opt/watcom), nasm,
-# and a host C compiler. `make test` additionally needs DOSBox and HDPMI16
-# (tools/fetch-hdpmi.sh).
+# and a host C compiler. `make test` additionally needs DOSBox, DOSBox-X (the
+# floating-point tests) and HDPMI16 (tools/fetch-hdpmi.sh).
 
 WATCOM  ?= /opt/watcom
 export WATCOM
@@ -34,18 +34,20 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3 TK4 TK5 TK11
+W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
+           TK11
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
             $(B)/shell/progman/compat2.o $(B)/shell/progman/mdi2.o \
             $(B)/shell/progman/dde.o $(B)/shell/progman/iconx.o \
-            $(B)/shell/progman/browse.o
+            $(B)/shell/progman/browse.o $(B)/shell/progman/help.o
 ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 \
                          20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 \
                          40 41 42 43 44 45,$(B)/shell/res/stock$(n).ico)
@@ -56,7 +58,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
+dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN
 
@@ -88,6 +90,18 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
 	    option map=$(B)/kernel/krnl286.map file { $(KOBJS) }
 
+# ---- WIN87EM.DLL: floating-point support (win87em/) ----
+$(B)/win87em/%.o: win87em/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/win87em/%.o: win87em/%.c win87em/emu.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -fo=$@ $<
+$(DOS)/WIN87EM.DLL: $(W87OBJS) win87em/win87em.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @win87em/win87em.lnk name $@ option map=$(B)/win87em/win87em.map \
+	    file { $(W87OBJS) }
+
 # ---- test applications: TKn.EXE = tests/apps/start.asm + tests/apps/tkn.c ----
 $(B)/tests/start.o: tests/apps/start.asm
 	@mkdir -p $(@D)
@@ -112,6 +126,74 @@ $(DOS)/TK11.EXE: $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o \
 	$(WLINK) @tests/apps/tk11.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk11.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o }
+$(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+
+# TK6.EXE: the floating-point probe; tk6.c is built with emulator fixups
+# (-fpi), so its floating-point code carries NE OS fixups
+$(B)/tests/tk6.o: tests/apps/tk6.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(B)/tests/tk7.o: tests/apps/tk7.c tests/apps/tk7ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK7.EXE: $(B)/tests/start.o $(B)/tests/tk7.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk7.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk7.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk7.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk7.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk8.o: tests/apps/tk8.c tests/apps/tk8ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK8.EXE: $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk8.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk8.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk9.o: tests/apps/tk9.c tests/apps/tk9ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK9.EXE: $(B)/tests/start.o $(B)/tests/tk9.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk9.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk9.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk9.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk9.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+# TK10.EXE: OS fixups as a chain and without the additive flag, made by
+# rewriting the linked file (tools/nechain.py)
+$(DOS)/TK10.EXE: $(B)/tests/start.o $(B)/tests/tk10.o $(B)/tests/tk10fp.o $(B)/tests/fixrqq.o \
+                 tests/apps/app.lnk tests/apps/tk10.lnk tools/nechain.py
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk10.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk10.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk10.o $(B)/tests/tk10fp.o $(B)/tests/fixrqq.o }
+	python3 tools/nechain.py $@
+$(B)/tests/tk10.o: tests/apps/tk10ref.h tests/apps/tklog.h
+# TK8T1-5: one transcendental instruction each (tests/apps/tk8.c, TK8_T)
+$(B)/tests/tk8t%.o: tests/apps/tk8.c tests/apps/tk8tref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -dTK8_T=$* -fo=$@ $<
+$(DOS)/TK8T%.EXE: $(B)/tests/start.o $(B)/tests/tk8t%.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                  tests/apps/app.lnk tests/apps/tk8.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk8t$*.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk8t$*.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk6n.o: tests/apps/tk6n.c tests/apps/tk6nref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK6N.EXE: $(B)/tests/start.o $(B)/tests/tk6n.o $(B)/tests/fixrqq.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk6n.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk6n.o $(B)/tests/fixrqq.o }
+$(DOS)/TK6.EXE: $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk6.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk6.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk6.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
 
 # TK5.EXE: the DLL loading probe, with its DLLs (tests/apps/tk5.c)
 $(B)/tests/%.o: tests/apps/%.asm
@@ -200,6 +282,12 @@ $(DOS)/TICONS.EXE: $(B)/tests/start.o $(B)/tests/ticons.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/ticons.map file { $(B)/tests/start.o $(B)/tests/ticons.o } \
 	    library shell.lib
+
+# THELP.EXE: a stand-in WINHELP.EXE that logs WinHelp requests
+$(DOS)/THELP.EXE: $(B)/tests/start.o $(B)/tests/thelp.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/thelp.map file { $(B)/tests/start.o $(B)/tests/thelp.o }
 
 # TDDE.EXE: Program Manager DDE probe
 $(DOS)/TDDE.EXE: $(B)/tests/start.o $(B)/tests/tdde.o tests/apps/app.lnk

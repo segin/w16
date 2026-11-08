@@ -127,7 +127,7 @@ static void dump_relocs(int segno, const ne_segment *s, unsigned shift)
             printf("\n");
             break;
         case NERF_OSFIXUP:
-            printf("-> OS fixup %u\n", r.t1);
+            printf("-> OS fixup %u (t2 %04X)\n", r.t1, r.t2);
             break;
         }
     }

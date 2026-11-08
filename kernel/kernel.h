@@ -31,6 +31,8 @@ extern u16  __cdecl task_run(u16 cs, u16 ip, u16 ds, u16 ss, u16 sp,
                              u16 bx, u16 cx, u16 di, u16 si, u16 es);
 extern void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);
 extern void __far int21_handler(void);
+extern void __far int3d_handler(void);
+#pragma aux int3d_handler "*"
 extern void __far unimpl_entry(void);
 #pragma aux int21_handler "*"           /* asm labels: no name decoration */
 #pragma aux unimpl_entry "*"
@@ -170,6 +172,13 @@ u16  task_start(module FAR *m, const char FAR *cmdtail);
 module FAR *task_module(void);          /* the running task's, or NULL */
 void __cdecl inittask_c(regs16 FAR *r);
 u16  get_winflags(void);
+#define WF_PMODE        0x0001
+#define WF_CPU286       0x0002
+#define WF_CPU386       0x0004
+#define WF_CPU486       0x0008
+#define WF_STANDARD     0x0010
+#define WF_ENHANCED     0x0020
+#define WF_80x87        0x0400
 extern u16 psp_sel;
 
 #endif

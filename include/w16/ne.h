@@ -139,16 +139,30 @@ typedef struct ne_reloc {
 #define NE_MOVABLE_SEG  0xFF            /* t1 segment value for movable target */
 #define NE_CHAIN_END    0xFFFF
 
-/* OS fixups (floating-point emulation hooks), NERF_OSFIXUP t1 values */
-#define NEOSFIX_FIARQQ  1
-#define NEOSFIX_FJARQQ  2
-#define NEOSFIX_FISRQQ  3
-#define NEOSFIX_FJSRQQ  4
-#define NEOSFIX_FICRQQ  5
-#define NEOSFIX_FJCRQQ  6
-#define NEOSFIX_FIERQQ  7
-#define NEOSFIX_FIDRQQ  8
-#define NEOSFIX_FIWRQQ  9
+/* OS fixups (floating-point emulation hooks), NERF_OSFIXUP t1 values.
+ * Each record is additive and points at the FWAIT (9Bh) before a
+ * floating-point instruction; types 1-3 stand for a pair of emulator
+ * fixups, FIxRQQ at the FWAIT and FJxRQQ one byte further (the segment
+ * prefix and the escape byte). Numbering as wlink writes it from the
+ * FIxRQQ references of OpenWatcom code (-fpi), checked with nedump;
+ * the values (NEFIX_*) as OpenWatcom's emu87.lib defines them. What the
+ * Windows 3.1 loader does with them: kernel/loader.c. */
+#define NEOSFIX_DS      1               /* FIARQQ + FJARQQ: DS: prefix */
+#define NEOSFIX_SS      2               /* FISRQQ + FJSRQQ: SS: prefix */
+#define NEOSFIX_CS      3               /* FICRQQ + FJCRQQ: CS: prefix */
+#define NEOSFIX_ES      4               /* FIERQQ: ES: prefix */
+#define NEOSFIX_D       5               /* FIDRQQ: FWAIT + escape */
+#define NEOSFIX_W       6               /* FIWRQQ: NOP + FWAIT */
+
+#define NEFIX_FIARQQ    0xFE32u
+#define NEFIX_FJARQQ    0x4000u
+#define NEFIX_FISRQQ    0x0632u
+#define NEFIX_FJSRQQ    0x8000u
+#define NEFIX_FICRQQ    0x0E32u
+#define NEFIX_FJCRQQ    0xC000u
+#define NEFIX_FIERQQ    0x1632u
+#define NEFIX_FIDRQQ    0x5C32u
+#define NEFIX_FIWRQQ    0xA23Du
 
 /* ---- Entry table ----
  * A sequence of bundles: u8 count (0 ends the table), u8 type.

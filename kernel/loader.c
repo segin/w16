@@ -6,10 +6,9 @@
  *
  * Behaviour observed black-box on Windows 3.1 (Standard and 386 Enhanced
  * mode agree) with tests/apps/tk5.c and its DLLs; ARCHITECTURE.md 9.2
- * lists the findings. Not yet: demand loading and discarding, the
- * Windows module database (MDB) layout, self-loading modules,
- * floating-point OS fixups, starting a second task (LoadModule of a
- * program).
+ * lists the findings. The module table (hModule) is built by mdb.c. Not
+ * yet: demand loading and discarding, self-loading modules, starting a
+ * second task (LoadModule of a program).
  *
  * NE format source: see include/w16/ne.h.
  */
@@ -31,7 +30,7 @@
    load, as on Windows. */
 static const char *const pending_modules[] = {
     "USER", "GDI", "KEYBOARD", "SOUND", "SYSTEM", "DISPLAY", "MOUSE",
-    "COMM", "WIN87EM", NULL
+    "COMM", NULL
 };
 
 static char win_dir[DOS_PATHMAX], sys_dir[DOS_PATHMAX];
@@ -363,7 +362,46 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
         return thunk_make(name, 0, imported_name(m, rr->t2), tsel, toff);
 
     default:
-        return 0;               /* OS fixups: TODO floating-point patching */
+        return 0;               /* OS fixups: os_fixup() */
+    }
+}
+
+/* Floating-point OS fixups (NERF_OSFIXUP; include/w16/ne.h). Observed on
+   Windows 3.1 (tests/apps/tk6.c; Standard and 386 Enhanced mode agree):
+   - with a coprocessor (WF_80x87), the FWAIT at a type 1-5 site becomes a
+     NOP (9B D9 C0 -> 90 D9 C0, 9B 26 D9 07 -> 90 26 D9 07), so the
+     coprocessor runs the instruction itself; a type 6 site (NOP FWAIT)
+     becomes INT 3Dh (CD 3D), which KERNEL handles even when WIN87EM is
+     not loaded (int3d_handler);
+   - without one, FIxRQQ is added to the word at the site and, for types
+     1-3, FJxRQQ to the word one byte further: 9B D9 -> CD 35 (INT 34h +
+     escape - D8h), 9B 3E D9 -> CD 3C 19 (INT 3Ch; the escape byte keeps
+     its low 3 bits and gets the segment in its top 2: DS 00, SS 01, CS
+     10, ES 11), 90 9B -> CD 3D. WIN87EM's emulator handles these; a
+     program that does not import WIN87EM gets no emulator.
+   Code is never patched back afterwards (observed in both cases).
+   The record's additive flag does not matter and there are no chains
+   (observed with tests/apps/tk10.c: a record without the flag whose site
+   held the offset of another site patched only its own site, as a
+   number: 04BCh became 04B1h with a coprocessor, 60EEh without). With a
+   coprocessor the first byte is lowered by 0Bh (9Bh -> 90h). */
+static void os_fixup(u16 sel, const ne_reloc FAR *rr, int have87)
+{
+    static const u16 fi[] = { NEFIX_FIARQQ, NEFIX_FISRQQ, NEFIX_FICRQQ,
+                              NEFIX_FIERQQ, NEFIX_FIDRQQ, NEFIX_FIWRQQ };
+    static const u16 fj[] = { NEFIX_FJARQQ, NEFIX_FJSRQQ, NEFIX_FJCRQQ };
+    u8 FAR *p = MK_FP(sel, 0);
+    u16 type = rr->t1, off = rr->offset;
+
+    if (type < NEOSFIX_DS || type > NEOSFIX_W ||
+        (u32)off + 3 > gsize_of_sel(sel))
+        return;
+    if (have87 && type != NEOSFIX_W) {
+        p[off] -= 0x0B;
+    } else {
+        *(u16 FAR *)(p + off) += fi[type - 1];
+        if (type <= NEOSFIX_CS)
+            *(u16 FAR *)(p + off + 1) += fj[type - 1];
     }
 }
 
@@ -371,6 +409,7 @@ static int relocate_segment(module FAR *m, u16 fh, u16 i, u32 data_end)
 {
     ne_reloc buf[32];
     u16 n, done = 0;
+    int have87 = (get_winflags() & WF_80x87) != 0;
 
     if (!f_seek(fh, data_end) || !f_read(fh, &n, 2))
         return 0;
@@ -380,7 +419,9 @@ static int relocate_segment(module FAR *m, u16 fh, u16 i, u32 data_end)
             return 0;
         for (k = 0; k < batch; k++) {
             u16 tsel, toff;
-            if (target(m, &buf[k], &tsel, &toff))
+            if ((buf[k].flags & NERF_TYPEMASK) == NERF_OSFIXUP)
+                os_fixup(m->seg[i].sel, &buf[k], have87);
+            else if (target(m, &buf[k], &tsel, &toff))
                 patch(m->seg[i].sel, &buf[k], tsel, toff);
         }
         done += batch;

@@ -1,0 +1,3 @@
+# TK7.EXE (tests/apps/tk7.c): floating-point arithmetic probe
+@tests/apps/app.lnk
+import FPMATH WIN87EM.1
