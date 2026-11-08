@@ -112,3 +112,29 @@ _log_write:
         pop ds
         pop bp
         retf
+
+; u32 call_ds(u16 ds, void far *fn, u16 nargs, u16 a1, u16 a2, u16 a3)
+; Far-call the Pascal function fn with DS = ds and its first nargs (0-3)
+; word arguments a1..a3, as a program does to use a local heap in another
+; segment. Returns DX:AX.
+global _call_ds
+_call_ds:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        mov cx, [bp + 12]               ; nargs
+        lea si, [bp + 14]               ; a1
+.arg:
+        jcxz .call
+        push word [ss:si]
+        add si, 2
+        dec cx
+        jmp .arg
+.call:
+        mov ds, [bp + 6]
+        call far [ss:bp + 8]
+        pop si
+        pop ds
+        pop bp
+        retf

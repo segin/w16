@@ -31,5 +31,6 @@ run() {
 }
 
 run TK1 0
+run TK3 0
 run TK2 255 "w16: call to unimplemented KERNEL.204"
 exit $status
