@@ -1,11 +1,12 @@
 /*
  * tk1.c - M1 KERNEL test and probe.
  *
- * Output (through OutputDebugString), one item per line:
+ * Output (to TK.LOG, see start.asm), one item per line:
  *   PASS <name> / FAIL <name>   checks of behaviour we are confident about
- *   OBS <name>=<value>          observations of details not yet verified
- *                               against real Windows 3.1 (run this program
- *                               on both and compare these lines)
+ *                               (behaviour observed on Windows 3.1)
+ *   OBS <name>=<value>          raw observations; run this program on both
+ *                               w16 and Windows 3.1 (tests/refrun.sh) and
+ *                               compare these lines
  * The exit code is the number of failures.
  */
 #include <windows.h>
@@ -15,6 +16,7 @@ extern WORD __cdecl init_regs[7];    /* ax bx cx dx si di es */
 extern WORD __cdecl get_ahincr(void);
 extern WORD __cdecl get_0040h(void);
 extern WORD __cdecl dos3call_getver(void);
+extern void __cdecl log_write(const char FAR *buf, WORD len);
 
 #define E_AX 0
 #define E_BX 1
@@ -39,7 +41,10 @@ static int failures;
 
 static void out(const char *s)
 {
-    OutputDebugString(s);
+    WORD n = 0;
+    while (s[n])
+        n++;
+    log_write(s, n);
 }
 
 static void outhex(WORD v)
@@ -92,6 +97,18 @@ static void test_task_start(void)
     check(init_regs[I_DI] == entry_regs[E_DI], "InitTask DI == hInstance");
     check(init_regs[I_ES] == entry_regs[E_ES], "InitTask ES == PSP");
     check(init_regs[I_SI] == 0, "InitTask SI == hPrevInstance");
+    check((entry_regs[E_DI] & 1) == 0 && (entry_regs[E_DI] ^ entry_regs[E_DS]) == 1,
+          "hInstance == DS with bit 0 clear");
+    check(entry_regs[E_SP] - init_regs[I_CX] == entry_regs[E_BX] - 0x96,
+          "InitTask CX == SP - stack + 96h");
+    check(inst[5] == init_regs[I_CX] && inst[6] == entry_regs[E_SP] &&
+          inst[7] == entry_regs[E_SP], "instance data stack fields");
+    {
+        BYTE FAR *psp = (BYTE FAR *)MAKELP(init_regs[I_ES], 0);
+        WORD b = init_regs[I_BX];
+        check(b >= 0x81 && psp[b] != ' ' && psp[0x81 + psp[0x80]] == 0,
+              "InitTask command line: blanks skipped, NUL-terminated");
+    }
 
     obs("entry.AX", entry_regs[E_AX]);
     obs("entry.BX(stack)", entry_regs[E_BX]);
@@ -107,6 +124,17 @@ static void test_task_start(void)
     obs("inst[0A](stack top)", inst[5]);
     obs("inst[0C](stack min)", inst[6]);
     obs("inst[0E](stack bottom)", inst[7]);
+    obs("entry.DI^DS", entry_regs[E_DI] ^ entry_regs[E_DS]);
+    obs("entry.SP-inst[0A]", entry_regs[E_SP] - inst[5]);
+    {
+        BYTE FAR *psp = (BYTE FAR *)MAKELP(init_regs[I_ES], 0);
+        WORD i;
+        for (i = 0x80; i < 0x88; i++) {
+            char n[] = "PSP[8x]";
+            n[5] = "0123456789ABCDEF"[i & 15];
+            obs(n, psp[i]);
+        }
+    }
 }
 
 static void test_version(void)
@@ -120,6 +148,8 @@ static void test_version(void)
           "GetVersion DOS version matches DOS3Call");
     check((f & WF_PMODE) != 0, "GetWinFlags WF_PMODE");
     check((f & (WF_STANDARD | WF_ENHANCED)) != 0, "GetWinFlags mode bit");
+    check(((f & WF_80x87) != 0) ==
+          ((*(WORD FAR *)MAKELP(get_0040h(), 0x10) & 2) != 0), "GetWinFlags WF_80x87");
     obs("GetWinFlags", (WORD)f);
 }
 
@@ -143,7 +173,8 @@ static void test_global(void)
             ok = 0;
     check(ok, "moveable block read/write");
     check(GlobalSize(h) >= 1000, "GlobalSize >= requested");
-    check((GlobalFlags(h) & GMEM_LOCKCOUNT) == 1, "GlobalFlags lock count 1");
+    check(GlobalFlags(h) == 0, "GlobalFlags(locked moveable) == 0");
+    obs("GlobalFlags(moveable, locked)", GlobalFlags(h));
     check(LOWORD(GlobalHandle(sel_of(p))) == h, "GlobalHandle(sel) == handle");
     obs("moveable handle&1", h & 1);
     obs("moveable sel^handle", sel_of(p) ^ h);
@@ -166,7 +197,53 @@ static void test_global(void)
     check(hf != 0 && p != NULL, "GlobalAlloc fixed");
     obs("fixed handle&1", hf & 1);
     obs("fixed handle==sel", hf == sel_of(p));
+    obs("fixed sel^handle", hf ^ sel_of(p));
+    obs("fixed GlobalFlags(locked)", GlobalFlags(hf));
+    obs("fixed GlobalHandle(sel).lo", LOWORD(GlobalHandle(sel_of(p))));
+    obs("fixed GlobalHandle(sel).hi", HIWORD(GlobalHandle(sel_of(p))));
+    obs("fixed GlobalUnlock", GlobalUnlock(hf));
+    check((hf & 1) == 0 && (hf ^ sel_of(p)) == 1, "fixed handle == sel with bit 0 clear");
     GlobalFree(hf);
+
+    {
+        static const WORD sizes[] = { 1, 15, 16, 17, 31, 32, 33, 64, 100,
+                                      4096, 4097, 65000u };
+        WORD k;
+        for (k = 0; k < sizeof sizes / sizeof sizes[0]; k++) {
+            char n[] = "GlobalSize(xxxx)";
+            WORD v = sizes[k], d;
+            for (d = 0; d < 4; d++)
+                n[14 - d] = "0123456789ABCDEF"[(v >> (4 * d)) & 15];
+            hf = GlobalAlloc(GMEM_MOVEABLE, sizes[k]);
+            obs(n, (WORD)GlobalSize(hf));
+            if (GlobalSize(hf) != ((sizes[k] + 31UL) & ~31UL))
+                check(0, n);
+            GlobalFree(hf);
+        }
+        hf = GlobalAlloc(GMEM_MOVEABLE, 0);
+        obs("GlobalAlloc(moveable,0)!=0", hf != 0);
+        check(hf != 0 && GlobalFlags(hf) == GMEM_DISCARDED && GlobalSize(hf) == 0 &&
+              GlobalLock(hf) == NULL, "GlobalAlloc(moveable, 0) is discarded");
+        if (hf) {
+            obs("GlobalFlags(size0)", GlobalFlags(hf));
+            obs("GlobalSize(size0)", (WORD)GlobalSize(hf));
+            obs("GlobalLock(size0) sel", sel_of(GlobalLock(hf)));
+            GlobalFree(hf);
+        }
+        hf = GlobalAlloc(GMEM_FIXED, 0);
+        obs("GlobalAlloc(fixed,0)!=0", hf != 0);
+        if (hf)
+            GlobalFree(hf);
+        hf = GlobalAlloc(GMEM_MOVEABLE | GMEM_DISCARDABLE, 100);
+        GlobalLock(hf);
+        obs("GlobalFlags(discardable, locked)", GlobalFlags(hf));
+        check(GlobalFlags(hf) == (GMEM_DISCARDABLE | 1), "discardable lock count");
+        GlobalUnlock(hf);
+        obs("GlobalFlags(discardable, unlocked)", GlobalFlags(hf));
+        check(GlobalFlags(hf) == GMEM_DISCARDABLE, "discardable unlocked");
+        GlobalFree(hf);
+        obs("GlobalFree(bogus)", GlobalFree(0x1234));
+    }
 
     /* huge block: tiles are __AHINCR apart */
     inc = get_ahincr();

@@ -5,10 +5,12 @@
  */
 #include <windows.h>
 
+extern void __cdecl log_write(const char FAR *buf, WORD len);
+
 int __cdecl tmain(void)
 {
-    OutputDebugString("TK2 calling LocalAlloc\r\n");
+    log_write("TK2 calling LocalAlloc\r\n", 24);
     LocalAlloc(LMEM_FIXED, 16);         /* KERNEL.5: not implemented yet */
-    OutputDebugString("FAIL returned from unimplemented API\r\n");
+    log_write("FAIL returned from unimplemented API\r\n", 38);
     return 1;
 }

@@ -74,3 +74,41 @@ _dos3call_getver:
         mov ah, 30h
         call far DOS3CALL
         retf
+
+; Log file shared by w16 and the reference Windows (where a task's stdout
+; and OutputDebugString are not visible): every test writes TK.LOG in the
+; current directory through plain INT 21h.
+segment _DATA
+logname db "TK.LOG", 0
+loghandle dw 0FFFFh
+
+segment _TEXT
+; void log_write(const char far *buf, u16 len)
+global _log_write
+_log_write:
+        push bp
+        mov bp, sp
+        push ds
+        mov bx, [loghandle wrt DGROUP]
+        cmp bx, 0FFFFh
+        jne .open
+        mov ah, 3Ch                     ; create (truncate)
+        xor cx, cx
+        mov dx, logname wrt DGROUP
+        int 21h
+        jc .done
+        mov [loghandle wrt DGROUP], ax
+        mov bx, ax
+.open:
+        mov cx, [bp + 10]
+        lds dx, [bp + 6]
+        mov ah, 40h
+        int 21h
+        pop ds
+        push ds
+        mov ah, 68h                     ; commit, so the log survives a crash
+        int 21h
+.done:
+        pop ds
+        pop bp
+        retf

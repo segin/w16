@@ -14,6 +14,11 @@ u16 psp_sel;
 #define WF_CPU486       0x0008
 #define WF_STANDARD     0x0010
 #define WF_ENHANCED     0x0020
+#define WF_80x87        0x0400
+
+/* InitTask's stack limit lies this far above the lowest address of the
+   stack (observed on Windows 3.1: SP - limit = stack size - 96h). */
+#define STACK_SLOP      0x0096
 
 #define SW_SHOWNORMAL   1
 
@@ -22,6 +27,7 @@ static struct {
     u16 hinstance;
     u16 stack_size;
     u16 heap_size;
+    u16 sp;                     /* SP at task entry */
 } cur;
 
 u16 get_winflags(void)
@@ -34,7 +40,9 @@ u16 get_winflags(void)
         f |= WF_CPU386;
     else
         f |= WF_CPU286;
-    /* TODO: WF_80x87 (0x0400) when a coprocessor is present */
+    /* BIOS equipment word (0040:0010), bit 1: math coprocessor present */
+    if (*(u16 FAR *)MK_FP(dpmi_seg_to_desc(0x0040), 0x0010) & 2)
+        f |= WF_80x87;
     return f;
 }
 
@@ -52,20 +60,23 @@ u16 task_start(module *m, const char FAR *cmdtail)
         return 0xFE;
     }
     ds = (const ne_segment FAR *)MK_FP(m->ne_sel, h->seg_off) + (h->auto_data - 1);
-    dsize = (ds->min_alloc ? ds->min_alloc : 0x10000UL) + h->heap_size + h->stack_size;
-    if (dsize > 0x10000UL)
-        dsize = 0x10000UL;
+    /* Layout of the automatic data segment (observed on Windows 3.1):
+       static data, then the stack, then the local heap. SP starts at the
+       end of the stack. */
+    dsize = (ds->min_alloc ? ds->min_alloc : 0x10000UL) + h->stack_size;
+    if (dsize > 0xFFFEUL)
+        dsize = 0xFFFEUL;
 
     dsel = m->seg_sel[h->auto_data - 1];
     ssel = m->seg_sel[h->ss - 1];
-    /* SP of 0 in the header means "top of the automatic data segment".
-       UNVERIFIED: exact top-of-stack value Windows uses. */
+    /* SP of 0 in the header means "end of the stack" (see above). */
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
 
     cur.m = m;
     cur.hinstance = m->seg_hnd[h->auto_data - 1];
     cur.stack_size = h->stack_size;
     cur.heap_size = h->heap_size;
+    cur.sp = sp;
     return task_run(m->seg_sel[h->cs - 1], h->ip, dsel, ssel, sp,
                     h->stack_size, h->heap_size, cur.hinstance, 0, psp_sel);
 }
@@ -77,23 +88,30 @@ u16 task_start(module *m, const char FAR *cmdtail)
  * Out: AX = 1 on success, ES:BX = command line, CX = stack limit,
  *      DX = nCmdShow, SI = hPrevInstance, DI = hInstance.
  * Fills the instance data at DGROUP:0000 (stack limits).
- * UNVERIFIED: BX = 81h, CX = stack top, the instance-data offsets, and the
- * stack-limit arithmetic. TODO: local heap (LocalInit) when CX != 0.
+ * Observed on Windows 3.1 (Standard and 386 Enhanced): CX = 0Ah = entry SP
+ * - stack size + STACK_SLOP, 0Ch = 0Eh = entry SP; the command tail is
+ * NUL-terminated (the CR replaced) and BX points past its leading blanks.
+ * TODO: local heap (LocalInit) when CX != 0.
  */
 void __cdecl inittask_c(regs16 FAR *r)
 {
     u16 FAR *inst = MK_FP(r->ds, 0);
-    /* The caller's SP before the far call: our regs16 block plus the
-       4-byte return address sit on top of it. */
-    u16 sp = FP_OFF(r) + sizeof(regs16) + 4;
-    u16 top = sp > cur.stack_size ? sp - cur.stack_size : 0;
+    u8 FAR *psp = MK_FP(psp_sel, 0);
+    u16 sp = cur.sp;
+    u16 top = sp > cur.stack_size ? sp - cur.stack_size + STACK_SLOP : 0;
+    u16 cmd, end;
 
     inst[5] = top;              /* 0Ah: stack top (lowest address) */
     inst[6] = sp;               /* 0Ch: lowest SP seen so far */
     inst[7] = sp;               /* 0Eh: stack bottom (highest address) */
 
+    end = 0x81 + (psp[0x80] < 0x7E ? psp[0x80] : 0x7E);
+    psp[end] = 0;
+    for (cmd = 0x81; cmd < end && (psp[cmd] == ' ' || psp[cmd] == '\t'); cmd++)
+        ;
+
     r->ax = 1;
-    r->bx = 0x81;
+    r->bx = cmd;
     r->cx = top;
     r->dx = SW_SHOWNORMAL;
     r->si = 0;

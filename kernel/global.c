@@ -7,10 +7,17 @@
  * Windows global arena (sub-allocation, compaction order, discarding, the
  * arena structures TOOLHELP walks) comes later.
  *
- * Handle convention (UNVERIFIED: recalled from published descriptions of
- * Windows 3.x protected mode): a fixed block's handle is its selector; a
- * moveable block's handle is its selector with bit 0 cleared, and
- * GlobalLock turns the handle back into the selector by setting bit 0.
+ * Behaviour observed on Windows 3.1 (Standard and 386 Enhanced mode, with
+ * tests/apps/tk1.c; see ARCHITECTURE.md 9.2):
+ *  - every block's handle, fixed or moveable, is its selector with bit 0
+ *    cleared; GlobalLock sets bit 0 again.
+ *  - sizes are rounded up to 32 bytes (GlobalSize(1) = 20h).
+ *  - only discardable blocks keep a lock count; GlobalFlags of a locked
+ *    fixed or moveable block reads 0, of a locked discardable one 0101h.
+ *  - GlobalAlloc(GMEM_MOVEABLE, 0) gives a block that is already
+ *    discarded: GlobalFlags = GMEM_DISCARDED, GlobalSize = 0, GlobalLock
+ *    returns NULL.
+ *  - GlobalFree of a handle that is not a block returned 0.
  */
 #include "kernel.h"
 
@@ -26,6 +33,9 @@ typedef struct garena {
     u16 lock;           /* lock count (moveable blocks) */
     u16 owner;
 } garena;
+
+#define GRAN 32UL                       /* allocation granularity */
+#define ROUND(n) (((n) + GRAN - 1) & ~(GRAN - 1))
 
 static garena arena[MAX_ARENA];
 
@@ -48,7 +58,12 @@ static garena *find(u16 h)
 
 static u16 handle_of(const garena *a)
 {
-    return (a->flags & GMEM_MOVEABLE) ? (a->sel & ~1u) : a->sel;
+    return a->sel & ~1u;
+}
+
+static int discarded(const garena *a)
+{
+    return a->size == 0;
 }
 
 /* Set the base and limit of every tile of `a` from a->lin and a->size. */
@@ -56,6 +71,8 @@ static int set_tiles(garena *a)
 {
     u16 i;
     u32 left = a->size;
+    if (discarded(a))                   /* keep the selector, no memory */
+        return dpmi_set_desc(a->sel, 0, 0, 0);
     for (i = 0; i < a->nsel; i++) {
         u32 lim = left > 0x10000UL ? 0x10000UL : left;
         if (!dpmi_set_desc(a->sel + i * sel_inc, a->lin + ((u32)i << 16), lim - 1, 0))
@@ -90,9 +107,11 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     garena *a = NULL;
     int i;
 
-    /* UNVERIFIED: zero-size allocations (moveable ones should yield a
-       discarded block in real Windows); rejected for now. */
-    if (size == 0 || size > 0x00FF0000UL)
+    /* A zero-size fixed block also succeeds on Windows 3.1; what it
+       contains is UNVERIFIED, so it gets the minimum allocation. */
+    if (size == 0 && !(flags & GMEM_MOVEABLE))
+        size = GRAN;
+    if (size > 0x00FF0000UL)
         return 0;
     for (i = 0; i < MAX_ARENA; i++)
         if (!arena[i].sel) {
@@ -102,19 +121,22 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     if (!a)
         return 0;
 
-    a->size = (size + 15) & ~15UL;      /* UNVERIFIED: rounding granularity */
-    a->nsel = (u16)((a->size + 0xFFFFUL) >> 16);
-    if (!dpmi_alloc_mem(a->size, &a->lin, &a->dpmi))
+    a->size = ROUND(size);
+    a->nsel = size ? (u16)((a->size + 0xFFFFUL) >> 16) : 1;
+    a->lin = a->dpmi = 0;
+    if (size && !dpmi_alloc_mem(a->size, &a->lin, &a->dpmi))
         return 0;
     a->sel = dpmi_alloc_desc(a->nsel);
     if (!a->sel) {
-        dpmi_free_mem(a->dpmi);
+        if (size)
+            dpmi_free_mem(a->dpmi);
         return 0;
     }
     if (!set_tiles(a)) {
         for (i = 0; i < a->nsel; i++)
             dpmi_free_desc(a->sel + i * sel_inc);
-        dpmi_free_mem(a->dpmi);
+        if (size)
+            dpmi_free_mem(a->dpmi);
         a->sel = 0;
         return 0;
     }
@@ -134,7 +156,8 @@ static void gfree(garena *a)
     u16 i;
     for (i = 0; i < a->nsel; i++)
         dpmi_free_desc(a->sel + i * sel_inc);
-    dpmi_free_mem(a->dpmi);
+    if (!discarded(a))
+        dpmi_free_mem(a->dpmi);
     a->sel = 0;
 }
 
@@ -173,11 +196,15 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     }
     if (size == 0)
         return 0;                       /* UNVERIFIED: discard semantics */
-    newsize = (size + 15) & ~15UL;
+    newsize = ROUND(size);
     if (((newsize + 0xFFFFUL) >> 16) > a->nsel)
         return 0;                       /* TODO: grow the selector tile run */
-    if (!dpmi_resize_mem(a->dpmi, newsize, &lin, &nh))
+    if (discarded(a)) {
+        if (!dpmi_alloc_mem(newsize, &lin, &nh))
+            return 0;
+    } else if (!dpmi_resize_mem(a->dpmi, newsize, &lin, &nh)) {
         return 0;
+    }
     old = a->size;
     a->lin = lin;
     a->dpmi = nh;
@@ -191,18 +218,17 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
 u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
 {
     garena *a = find(h);
-    if (!a)
-        return h;
-    gfree(a);
+    if (a)
+        gfree(a);
     return 0;
 }
 
 void FAR * KAPI GlobalLock(u16 h)                             /* KERNEL.18 */
 {
     garena *a = find(h);
-    if (!a)
+    if (!a || discarded(a))
         return NULL;
-    if ((a->flags & GMEM_MOVEABLE) && a->lock < 0xFF)
+    if ((a->flags & GMEM_DISCARDABLE) && a->lock < 0xFF)
         a->lock++;
     return MK_FP(a->sel, 0);
 }
@@ -237,7 +263,8 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
     garena *a = find(h);
     if (!a)
         return 0;
-    return (a->lock & GMEM_LOCKCOUNT) | (a->flags & GMEM_DISCARDABLE);
+    return (a->lock & GMEM_LOCKCOUNT) | (a->flags & GMEM_DISCARDABLE) |
+           (discarded(a) ? GMEM_DISCARDED : 0);
 }
 
 /* TODO: LockSegment(-1) should lock the caller's data segment; __loadds

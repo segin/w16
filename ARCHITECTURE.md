@@ -267,9 +267,23 @@ M1 limitations, in order of when they should be fixed:
 ### 9.2 Testing and verification
 
 - `make test` runs each test program under `KRNL286.EXE` in headless DOSBox with HDPMI16 (`tests/dosrun.sh`, `tests/run-tests.sh`).
-- Test programs print `PASS`/`FAIL` lines for behaviour we are certain of, and `OBS name=value` lines for details that have not been checked against Windows yet.
+- Test programs print `PASS`/`FAIL` lines for behaviour we are certain of, and `OBS name=value` lines for raw observations to compare between w16 and Windows.
 - Code that relies on a recalled-but-unchecked detail is marked `UNVERIFIED:`. `grep -rn UNVERIFIED kernel` lists them.
-- **Reference system (needed):** a licensed Windows 3.1 installation run in the same DOSBox setup. Running the same test programs there and diffing the `OBS` lines is black-box observation (§3). Each `UNVERIFIED` item is closed by such a diff. Until then, a passing test only shows w16 is consistent with itself.
+- Test programs write their results to `TK.LOG` in the current directory with plain INT 21h. On real Windows a task's stdout and `OutputDebugString` are not visible, so a log file is the one channel that works on both systems.
+- **Reference systems:** the user supplied disk images of Windows 3.1 (3.10.103) and Windows for Workgroups 3.11a. Both are installed with an unattended Setup (`SETUP /H:` with a settings file) into `.tools/ref/win31/cdrive` and `.tools/ref/wfw311a/cdrive`. `.tools/` is gitignored, so no Microsoft files enter the repository.
+- `tests/refrun.sh PROGRAM.EXE [/S|/3] [ref-dir]` runs a test program on the reference system in headless DOSBox. It makes the program the shell (`shell=` in a scratch copy of SYSTEM.INI), so Windows exits when the program does, then prints `TK.LOG`. This is black-box observation (§3): only the program's own observations are used, and no Windows binary is inspected.
+- Windows 3.1 is the authority. WfW 3.11 runs only in 386 Enhanced mode, so where it differs from 3.1 the difference is investigated rather than copied.
+- Behaviour confirmed on Windows 3.1 becomes a `PASS`/`FAIL` check. Values that depend on the environment, such as selector numbers and the command tail WIN.COM builds, remain `OBS`.
+- First findings, the same in Standard and 386 Enhanced mode unless noted. Several replaced recalled guesses that were wrong:
+  - **Initial stack:** the automatic data segment is laid out as static data, then the stack, then the local heap. Initial SP = data size + stack size.
+  - **InitTask:** CX and instance word 0Ah equal SP − stack size + 96h. Words 0Ch and 0Eh equal the entry SP. The command tail is NUL-terminated (the CR is replaced), and BX points past its leading blanks.
+  - **hInstance:** the handle of the automatic data segment, which is DS with bit 0 clear.
+  - **Global handles:** every handle, fixed or moveable, is its selector with bit 0 clear.
+  - **GlobalSize:** rounds up to 32 bytes.
+  - **Lock counts:** kept only for discardable blocks. GlobalFlags of a locked fixed or moveable block is 0, and of a locked discardable block 0101h.
+  - **GlobalAlloc(GMEM_MOVEABLE, 0):** returns a block that is already discarded (GlobalFlags 4000h, size 0, GlobalLock returns NULL). `GlobalAlloc(GMEM_FIXED, 0)` succeeds too.
+  - **GlobalFree of a non-handle:** returned 0.
+  - **GetWinFlags:** 0419h in Standard mode and 0C29h in 386 Enhanced mode, on a 486 with an FPU. That includes WF_80x87, and in Enhanced mode also WF_PAGING.
 
 ### 9.3 Additional permitted sources and tools
 

@@ -12,7 +12,9 @@ status=0
 run() {
     app=$1 want=$2 need=${3:-}
     echo "== $app"
+    rm -f "$dos/TK.LOG"
     out=$("$root/tests/dosrun.sh" "$dos" "KRNL286 $app.EXE" 2>&1)
+    [ -f "$dos/TK.LOG" ] && out=$(tr -d '\r' < "$dos/TK.LOG"; printf '%s\n' "$out")
     printf '%s\n' "$out"
     if [ "$want" = 0 ]; then
         printf '%s\n' "$out" | grep -q 'EXIT=0$' || { echo "== $app: FAILED (exit code)"; status=1; return; }
