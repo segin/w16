@@ -1,0 +1,15 @@
+# Unattended install of Windows/386 2.11 (tests/w386setup.sh). Each step
+# answers one Setup screen, as observed.
+key ENTER       # welcome
+key ENTER       # directory C:\WIN386
+key ENTER       # computer type (default)
+key ENTER       # display VGA, US keyboard, mouse: as detected
+# printer: none
+type c
+key ENTER       # country: United States
+# do not modify AUTOEXEC.BAT
+type n
+key ENTER       # readme note: any key
+# continue without running Memset
+type c
+snap

@@ -34,7 +34,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP
+WINTOOLS := SNAP TW2
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o
@@ -47,7 +47,8 @@ ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(WINTOOLS:%=$(DOS)/%.EXE)
+dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(WINTOOLS:%=$(DOS)/%.EXE) \
+     $(DOS)/KEYFEED.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -89,10 +90,22 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
+# TW2.EXE: the Windows 2.x probe, marked as a Windows 2.0 program
+$(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tw2.map file { $(B)/tests/start.o $(B)/tests/tw2.o }
+	python3 tools/nemark.py $@ 2.0
+
 $(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/snap.map file { $(B)/tests/start.o $(B)/tests/snap.o }
+
+# ---- DOS test tools ----
+$(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 
 # ---- shell: PROGMAN.EXE ----
 shell: $(DOS)/PROGMAN.EXE
