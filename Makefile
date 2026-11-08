@@ -434,6 +434,24 @@ $(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# WC1-WC8.COM: the WIN.COM probes (tests/wincom.sh; ARCHITECTURE.md 9.5);
+# WC9.EXE: ExitWindowsExec as the shell
+WCPROBES := $(DOS)/WC1.COM $(DOS)/WC2.COM $(DOS)/WC3.COM $(DOS)/WC3B.COM \
+            $(DOS)/WC4.COM $(DOS)/WC5.COM $(DOS)/WC6.COM $(DOS)/WC7.COM \
+            $(DOS)/WC8.COM $(DOS)/WC9.EXE
+wcprobes: $(WCPROBES)
+$(DOS)/WC%.COM: tests/dos/wc%.asm tests/dos/wclib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/WC3B.COM: tests/dos/wc3.asm tests/dos/wclib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -DDXAXOFF=0x160 -o $@ $<
+$(B)/tests/wc9.o: tests/apps/wc9ref.h tests/apps/tklog.h
+$(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wc9.map file { $(B)/tests/start.o $(B)/tests/wc9.o }
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
