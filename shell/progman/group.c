@@ -42,7 +42,12 @@ typedef struct {
     BOOL own_icon;                      /* we created it: destroy it */
 } item;
 
+/* Each group lives in its own global memory block, not in the 64K
+   automatic data segment, so the number and size of groups is not
+   limited by the local heap. The block stays locked while the group
+   exists. (TODO for the real-mode Windows 2.x build: lock per use.) */
 typedef struct {
+    HGLOBAL hself;                      /* this block */
     HWND hwnd;
     HGLOBAL hdata;                      /* the .GRP file contents */
     WORD size;
@@ -53,7 +58,7 @@ typedef struct {
     int sel;                            /* selected item, -1 = none */
 } group;
 
-static group *groups[MAX_GROUPS];
+static group FAR *groups[MAX_GROUPS];
 static HFONT title_font;
 static HICON def_icon;
 static char cls_group[] = "PMGroup";
@@ -92,7 +97,7 @@ static WORD checksum(const BYTE FAR *p, WORD size)
     return sum;
 }
 
-static group *grp_of(HWND hwnd)
+static group FAR *grp_of(HWND hwnd)
 {
     int i;
     for (i = 0; i < MAX_GROUPS; i++)
@@ -101,7 +106,7 @@ static group *grp_of(HWND hwnd)
     return NULL;
 }
 
-static HICON item_icon(group *g, const BYTE FAR *p, WORD it, BOOL *own)
+static HICON item_icon(group FAR *g, const BYTE FAR *p, WORD it, BOOL FAR *own)
 {
     WORD cbh = rd16(p, it + 6), cba = rd16(p, it + 8), cbx = rd16(p, it + 10);
     WORD ph = rd16(p, it + 12), pa = rd16(p, it + 14), px = rd16(p, it + 16);
@@ -128,7 +133,7 @@ static HICON item_icon(group *g, const BYTE FAR *p, WORD it, BOOL *own)
     return h;
 }
 
-static BOOL parse(group *g)
+static BOOL parse(group FAR *g)
 {
     const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
     WORD n, i;
@@ -145,7 +150,7 @@ static BOOL parse(group *g)
     g->nitems = 0;
     for (i = 0; i < n && g->nitems < MAX_ITEMS; i++) {
         WORD it = rd16(p, 0x22 + 2 * i);
-        item *t = &g->items[g->nitems];
+        item FAR *t = &g->items[g->nitems];
         if (!it)
             continue;                   /* empty slot */
         if (it + 24 > g->size)
@@ -168,7 +173,7 @@ out:
     return ok;
 }
 
-static BOOL read_file(group *g)
+static BOOL read_file(group FAR *g)
 {
     OFSTRUCT of;
     HFILE f = OpenFile(g->path, &of, OF_READ);
@@ -200,21 +205,38 @@ static BOOL read_file(group *g)
     return TRUE;
 }
 
-static void free_group(group *g)
+static group FAR *new_group(void)
 {
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(group));
+    group FAR *g;
+    if (!h)
+        return NULL;
+    g = (group FAR *)GlobalLock(h);
+    if (!g) {
+        GlobalFree(h);
+        return NULL;
+    }
+    g->hself = h;
+    return g;
+}
+
+static void free_group(group FAR *g)
+{
+    HGLOBAL h = g->hself;
     int i;
     for (i = 0; i < g->nitems; i++)
         if (g->items[i].own_icon)
             DestroyIcon(g->items[i].icon);
     if (g->hdata)
         GlobalFree(g->hdata);
-    LocalFree((HLOCAL)g);
+    GlobalUnlock(h);
+    GlobalFree(h);
 }
 
 /* Create the window for a group file. ininum is N of GroupN=. */
 HWND group_load(const char *grpfile, int ininum)
 {
-    group *g = (group *)LocalAlloc(LPTR, sizeof(group));
+    group FAR *g = new_group();
     MDICREATESTRUCT mc;
     const BYTE FAR *p;
     char name[64];
@@ -227,7 +249,7 @@ HWND group_load(const char *grpfile, int ininum)
     for (slot = 0; slot < MAX_GROUPS && groups[slot]; slot++)
         ;
     if (slot == MAX_GROUPS) {
-        LocalFree((HLOCAL)g);
+        free_group(g);
         return NULL;
     }
     s_cpy(g->path, grpfile, sizeof g->path);
@@ -293,7 +315,7 @@ void group_save_all(void)
 {
     int i;
     for (i = 0; i < MAX_GROUPS; i++) {
-        group *g = groups[i];
+        group FAR *g = groups[i];
         WINDOWPLACEMENT wp;
         BYTE FAR *p;
         OFSTRUCT of;
@@ -338,16 +360,16 @@ void group_destroy_all(void)
 
 int group_ininum(HWND hwnd)
 {
-    group *g = grp_of(hwnd);
+    group FAR *g = grp_of(hwnd);
     return g ? g->ininum : 0;
 }
 
 /* ---- layout and painting ---- */
 
-static void title_rect(HDC dc, group *g, int i, RECT *r)
+static void title_rect(HDC dc, group FAR *g, int i, RECT *r)
 {
     const BYTE FAR *p = (const BYTE FAR *)GlobalLock(g->hdata);
-    item *t = &g->items[i];
+    item FAR *t = &g->items[i];
     HFONT old = title_font ? SelectObject(dc, title_font) : NULL;
     int cx = t->x + ICON_DX + 16;
     r->left = cx - CX_SPACING / 2 + 1;
@@ -370,7 +392,7 @@ static void title_rect(HDC dc, group *g, int i, RECT *r)
     GlobalUnlock(g->hdata);
 }
 
-static void paint(HWND hwnd, group *g)
+static void paint(HWND hwnd, group FAR *g)
 {
     PAINTSTRUCT ps;
     HDC dc = BeginPaint(hwnd, &ps);
@@ -383,7 +405,7 @@ static void paint(HWND hwnd, group *g)
     int i;
 
     for (i = 0; i < g->nitems; i++) {
-        item *t = &g->items[i];
+        item FAR *t = &g->items[i];
         RECT r;
         BOOL hi = active && i == g->sel;
         DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->icon);
@@ -406,12 +428,12 @@ static void paint(HWND hwnd, group *g)
     EndPaint(hwnd, &ps);
 }
 
-static int hit(HWND hwnd, group *g, int x, int y)
+static int hit(HWND hwnd, group FAR *g, int x, int y)
 {
     HDC dc = GetDC(hwnd);
     int i, found = -1;
     for (i = 0; i < g->nitems && found < 0; i++) {
-        item *t = &g->items[i];
+        item FAR *t = &g->items[i];
         RECT r;
         if (x >= t->x + ICON_DX && x < t->x + ICON_DX + 32 &&
             y >= t->y + ICON_DY && y < t->y + ICON_DY + 32)
@@ -424,7 +446,7 @@ static int hit(HWND hwnd, group *g, int x, int y)
     return found;
 }
 
-static void invalidate_item(HWND hwnd, group *g, int i)
+static void invalidate_item(HWND hwnd, group FAR *g, int i)
 {
     HDC dc;
     RECT r;
@@ -436,7 +458,7 @@ static void invalidate_item(HWND hwnd, group *g, int i)
     InvalidateRect(hwnd, &r, TRUE);
 }
 
-static void select_item(HWND hwnd, group *g, int i)
+static void select_item(HWND hwnd, group FAR *g, int i)
 {
     if (i == g->sel)
         return;
@@ -446,16 +468,16 @@ static void select_item(HWND hwnd, group *g, int i)
 }
 
 /* Keyboard navigation: the nearest item in the given direction. */
-static int neighbour(group *g, int dx, int dy)
+static int neighbour(group FAR *g, int dx, int dy)
 {
-    item *c;
+    item FAR *c;
     int i, best = -1;
     long bestd = 0x7FFFFFFFL;
     if (g->sel < 0)
         return g->nitems ? 0 : -1;
     c = &g->items[g->sel];
     for (i = 0; i < g->nitems; i++) {
-        item *t = &g->items[i];
+        item FAR *t = &g->items[i];
         int ddx = t->x - c->x, ddy = t->y - c->y;
         long d;
         if (i == g->sel)
@@ -476,7 +498,7 @@ static int neighbour(group *g, int dx, int dy)
 
 BOOL group_open_selected(HWND hwnd)
 {
-    group *g = grp_of(hwnd);
+    group FAR *g = grp_of(hwnd);
     const BYTE FAR *p;
     char cmd[128];
     if (!g || g->sel < 0)
@@ -492,7 +514,7 @@ BOOL group_open_selected(HWND hwnd)
 /* Arrange Icons: the observed grid, as many columns as fit. */
 void group_arrange(HWND hwnd)
 {
-    group *g = grp_of(hwnd);
+    group FAR *g = grp_of(hwnd);
     RECT rc;
     int cols, i;
     if (!g)
@@ -510,7 +532,7 @@ void group_arrange(HWND hwnd)
 
 LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
-    group *g = grp_of(hwnd);
+    group FAR *g = grp_of(hwnd);
     int i;
 
     switch (msg) {
