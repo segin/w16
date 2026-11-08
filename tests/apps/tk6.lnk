@@ -1,0 +1,6 @@
+# TK6.EXE (tests/apps/tk6.c, tk6fp.asm): imports WIN87EM by ordinal
+@tests/apps/app.lnk
+import FPMATH WIN87EM.1
+import FPINFO WIN87EM.3
+import FPRESTORE WIN87EM.4
+import FPSAVE WIN87EM.5

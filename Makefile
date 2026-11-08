@@ -33,7 +33,8 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
-TESTS   := TK1 TK2 TK3 TK4 TK5
+W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
@@ -54,7 +55,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
+dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(B)/hdd/MBR.BIN
 
@@ -86,6 +87,18 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
 	    option map=$(B)/kernel/krnl286.map file { $(KOBJS) }
 
+# ---- WIN87EM.DLL: floating-point support (win87em/) ----
+$(B)/win87em/%.o: win87em/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/win87em/%.o: win87em/%.c win87em/emu.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -fo=$@ $<
+$(DOS)/WIN87EM.DLL: $(W87OBJS) win87em/win87em.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @win87em/win87em.lnk name $@ option map=$(B)/win87em/win87em.map \
+	    file { $(W87OBJS) }
+
 # ---- test applications: TKn.EXE = tests/apps/start.asm + tests/apps/tkn.c ----
 $(B)/tests/start.o: tests/apps/start.asm
 	@mkdir -p $(@D)
@@ -101,6 +114,27 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
+$(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
+
+# TK6.EXE: the floating-point probe; tk6.c is built with emulator fixups
+# (-fpi), so its floating-point code carries NE OS fixups
+$(B)/tests/tk6.o: tests/apps/tk6.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(B)/tests/tk6n.o: tests/apps/tk6n.c tests/apps/tk6nref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK6N.EXE: $(B)/tests/start.o $(B)/tests/tk6n.o $(B)/tests/fixrqq.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk6n.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk6n.o $(B)/tests/fixrqq.o }
+$(DOS)/TK6.EXE: $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk6.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk6.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk6.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk6.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
 
 # TK5.EXE: the DLL loading probe, with its DLLs (tests/apps/tk5.c)
 $(B)/tests/%.o: tests/apps/%.asm

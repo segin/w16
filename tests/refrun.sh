@@ -11,6 +11,8 @@
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
+# REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
+# flags); REFRUN_FPU=false then runs without a coprocessor.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,15 +38,22 @@ if [ -n "${REFRUN_SHELL:-}" ]; then
 else
     sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
 fi
+if [ -n "${REFRUN_X:-}" ]; then
+    emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" xcpu="fpu=${REFRUN_FPU:-true}"
+else
+    emu="dosbox -noconsole" xdos= xcpu=
+fi
 cat > "$work/dosbox.conf" <<CONF
 [sdl]
 output=surface
 [dosbox]
 memsize=16
+$xdos
 [cpu]
 core=normal
 cputype=386
 cycles=max
+$xcpu
 [mixer]
 nosound=true
 [speaker]
@@ -58,7 +67,7 @@ WIN $mode > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} dosbox -conf "$work/dosbox.conf" -noconsole >/dev/null 2>&1 || true
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 [ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
 if [ -n "${REFRUN_OUT:-}" ]; then
     mkdir -p "$REFRUN_OUT"

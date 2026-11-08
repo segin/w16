@@ -8,14 +8,6 @@
 
 u16 psp_sel;
 
-#define WF_PMODE        0x0001
-#define WF_CPU286       0x0002
-#define WF_CPU386       0x0004
-#define WF_CPU486       0x0008
-#define WF_STANDARD     0x0010
-#define WF_ENHANCED     0x0020
-#define WF_80x87        0x0400
-
 /* InitTask's stack limit lies this far above the lowest address of the
    stack (observed on Windows 3.1: SP - limit = stack size - 96h). */
 #define STACK_SLOP      0x0096

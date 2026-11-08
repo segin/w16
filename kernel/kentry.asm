@@ -6,6 +6,7 @@
 ; Contents:
 ;   kernel_entry     NE entry point, called by the bootstrap
 ;   int21_handler    protected-mode INT 21h hook (task termination)
+;   int3d_handler    protected-mode INT 3Dh: FWAIT (floating-point fixups)
 ;   _task_run        start a task on its own stack; returns its exit code
 ;   unimpl_entry     target of the "unimplemented import" thunks
 ;   INITTASK         register-based API wrapper around inittask_c
@@ -66,6 +67,16 @@ kernel_entry:
 ; ---------------------------------------------------------------------------
 ; Protected-mode INT 21h hook. AH=4Ch from a running task ends the task;
 ; everything else goes to the previous handler.
+; INT 3Dh: the loader turns the NOP FWAIT of a floating-point OS fixup
+; (FIWRQQ) into INT 3Dh also when there is a coprocessor; observed on
+; Windows 3.1 to work in a program that does not import WIN87EM, so KERNEL
+; handles it (kernel/loader.c, os_fixup). Without a coprocessor WIN87EM
+; replaces this vector with its emulator's.
+global int3d_handler
+int3d_handler:
+        fwait
+        iret
+
 global int21_handler
 int21_handler:
         cmp ah, 4Ch

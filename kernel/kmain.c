@@ -8,20 +8,22 @@
 static bootinfo bi;
 static char app_path[80];
 
-static void hook_int21(void)
+/* Set a protected-mode interrupt vector; returns the previous one. */
+static u32 hook_int(u8 n, void (__far *h)(void))
 {
     regs16 r;
-    void (__far *h)(void) = int21_handler;
+    u32 old;
     r.ax = 0x0204;
-    r.bx = 0x21;
+    r.bx = n;
     r.ds = r.es = 0;
     dpmi31(&r);
-    old21 = ((u32)r.cx << 16) | r.dx;
+    old = ((u32)r.cx << 16) | r.dx;
     r.ax = 0x0205;
-    r.bx = 0x21;
+    r.bx = n;
     r.cx = FP_SEG(h);
     r.dx = FP_OFF(h);
     dpmi31(&r);
+    return old;
 }
 
 /* Split the PSP command tail into the program path and the rest; the rest
@@ -88,7 +90,8 @@ void __cdecl kmain(bootinfo FAR *pbi)
     global_init();
     thunk_init();
     module_register_kernel(&bi);
-    hook_int21();
+    old21 = hook_int(0x21, int21_handler);
+    hook_int(0x3D, int3d_handler);      /* floating-point fixups (FWAIT) */
 
     if (!parse_command_line()) {
         kputs("usage: KRNL286 program.exe [arguments]\r\n");
