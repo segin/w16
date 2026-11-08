@@ -34,7 +34,6 @@
  */
 #include "progman.h"
 
-#define MAX_ITEMS       64
 #define CX_SPACING      75              /* observed item grid */
 #define CY_SPACING      72
 #define X_FIRST         21
@@ -52,22 +51,24 @@ typedef struct {
 } item;
 
 /* Each group lives in its own global memory block, not in the 64K
-   automatic data segment, so the number and size of groups is not
-   limited by the local heap. The block stays locked while the group
-   exists. (TODO for the real-mode Windows 2.x build: lock per use.) */
-typedef struct {
-    HGLOBAL hself;                      /* this block */
+   automatic data segment, and groups form a list: there is no limit on
+   their number, on items per group, or on the path length (Zero-One-
+   Infinity). Blocks stay locked while the group exists. (TODO for the
+   real-mode Windows 2.x build: lock per use.) */
+typedef struct group {
+    struct group FAR *next;
     HWND hwnd;
-    HGLOBAL hdata;                      /* the .GRP file contents */
-    WORD size;
+    HGLOBAL hdata;                      /* the whole .GRP file, tags included */
+    WORD size;                          /* cbGroup: the group data proper */
+    WORD fsize;                         /* file size: group data + tags */
     int ininum;                         /* N of GroupN= in PROGMAN.INI */
-    char path[128];
+    item FAR *items;                    /* nitems entries */
     int nitems;
-    item items[MAX_ITEMS];
     int sel;                            /* selected item, -1 = none */
+    char path[1];                       /* the .GRP path, allocated to fit */
 } group;
 
-static group FAR *groups[MAX_GROUPS];
+static group FAR *first;
 static HFONT title_font;
 static HICON def_icon;
 static char cls_group[] = "PMGroup";
@@ -108,10 +109,10 @@ static WORD checksum(const BYTE FAR *p, WORD size)
 
 static group FAR *grp_of(HWND hwnd)
 {
-    int i;
-    for (i = 0; i < MAX_GROUPS; i++)
-        if (groups[i] && groups[i]->hwnd == hwnd)
-            return groups[i];
+    group FAR *g;
+    for (g = first; g; g = g->next)
+        if (g->hwnd == hwnd)
+            return g;
     return NULL;
 }
 
@@ -148,16 +149,19 @@ static BOOL parse(group FAR *g)
     WORD n, i;
     BOOL ok = FALSE;
 
-    if (g->size < 0x22 || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C')
-        goto out;
-    if (rd16(p, 6) > g->size)
+    if (g->fsize < 0x22 || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C')
         goto out;
     g->size = rd16(p, 6);
+    if (g->size < 0x22 || g->size > g->fsize)
+        goto out;
     n = rd16(p, 0x20);
-    if (0x22 + 2 * n > g->size || !str_ok(p, g->size, rd16(p, 0x16)))
+    if (0x22 + 2UL * n > g->size || !str_ok(p, g->size, rd16(p, 0x16)))
         goto out;
     g->nitems = 0;
-    for (i = 0; i < n && g->nitems < MAX_ITEMS; i++) {
+    g->items = n ? (item FAR *)mem_alloc((DWORD)n * sizeof(item)) : NULL;
+    if (n && !g->items)
+        goto out;
+    for (i = 0; i < n; i++) {
         WORD it = rd16(p, 0x22 + 2 * i);
         item FAR *t = &g->items[g->nitems];
         if (!it)
@@ -197,14 +201,14 @@ static BOOL read_file(group FAR *g)
         _lclose(f);
         return FALSE;
     }
-    g->size = (WORD)len;
+    g->fsize = (WORD)len;
     g->hdata = GlobalAlloc(GMEM_MOVEABLE, len);
     if (!g->hdata) {
         _lclose(f);
         return FALSE;
     }
     p = (BYTE FAR *)GlobalLock(g->hdata);
-    if (_lread(f, p, g->size) != g->size) {
+    if (_lread(f, p, g->fsize) != g->fsize) {
         GlobalUnlock(g->hdata);
         _lclose(f);
         return FALSE;
@@ -214,62 +218,55 @@ static BOOL read_file(group FAR *g)
     return TRUE;
 }
 
-static group FAR *new_group(void)
+static group FAR *new_group(const char FAR *path)
 {
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(group));
-    group FAR *g;
-    if (!h)
-        return NULL;
-    g = (group FAR *)GlobalLock(h);
-    if (!g) {
-        GlobalFree(h);
-        return NULL;
-    }
-    g->hself = h;
+    group FAR *g = (group FAR *)mem_alloc(sizeof(group) + s_len(path));
+    if (g)
+        s_cpy(g->path, path, s_len(path) + 1);
     return g;
+}
+
+static void unlink_group(group FAR *g)
+{
+    group FAR * FAR *pp;
+    for (pp = &first; *pp; pp = &(*pp)->next)
+        if (*pp == g) {
+            *pp = g->next;
+            return;
+        }
 }
 
 static void free_group(group FAR *g)
 {
-    HGLOBAL h = g->hself;
     int i;
     for (i = 0; i < g->nitems; i++)
         if (g->items[i].own_icon)
             DestroyIcon(g->items[i].icon);
+    mem_free((LPSTR)g->items);
     if (g->hdata)
         GlobalFree(g->hdata);
-    GlobalUnlock(h);
-    GlobalFree(h);
+    mem_free((LPSTR)g);
 }
 
 /* Create the window for a group file. ininum is N of GroupN=. */
-HWND group_load(const char *grpfile, int ininum)
+HWND group_load(const char FAR *grpfile, int ininum)
 {
-    group FAR *g = new_group();
+    group FAR *g = new_group(grpfile);
     MDICREATESTRUCT mc;
     const BYTE FAR *p;
-    char name[64];
-    int slot, show;
+    int show;
     RECT rc;
     POINT pmin;
 
     if (!g)
         return NULL;
-    for (slot = 0; slot < MAX_GROUPS && groups[slot]; slot++)
-        ;
-    if (slot == MAX_GROUPS) {
-        free_group(g);
-        return NULL;
-    }
-    s_cpy(g->path, grpfile, sizeof g->path);
     g->ininum = ininum;
     g->sel = -1;
     if (!read_file(g) || !parse(g)) {
         free_group(g);
         return NULL;
     }
-    p = (const BYTE FAR *)GlobalLock(g->hdata);
-    s_cpy(name, (const char FAR *)p + rd16(p, 0x16), sizeof name);
+    p = (const BYTE FAR *)GlobalLock(g->hdata);     /* until the window exists */
     show = rd16(p, 8);
     rc.left = (int)rd16(p, 0x0A);
     rc.top = (int)rd16(p, 0x0C);
@@ -277,13 +274,13 @@ HWND group_load(const char *grpfile, int ininum)
     rc.bottom = (int)rd16(p, 0x10);
     pmin.x = (int)rd16(p, 0x12);
     pmin.y = (int)rd16(p, 0x14);
-    GlobalUnlock(g->hdata);
     if (g->nitems)
         g->sel = 0;
-    groups[slot] = g;
+    g->next = first;
+    first = g;
 
     mc.szClass = cls_group;
-    mc.szTitle = name;
+    mc.szTitle = (LPCSTR)p + rd16(p, 0x16);
     mc.hOwner = g_hinst;
     mc.x = rc.left;
     mc.y = rc.top;
@@ -292,8 +289,9 @@ HWND group_load(const char *grpfile, int ininum)
     mc.style = 0x0115;                  /* observed low word of the style */
     mc.lParam = 0;
     g->hwnd = (HWND)(WORD)SendMessage(g_client, WM_MDICREATE, 0, (LPARAM)(LPVOID)&mc);
+    GlobalUnlock(g->hdata);
     if (!g->hwnd) {
-        groups[slot] = NULL;
+        unlink_group(g);
         free_group(g);
         return NULL;
     }
@@ -322,16 +320,13 @@ HWND group_load(const char *grpfile, int ininum)
 /* Write the window state back into each .GRP (Save Settings on Exit). */
 void group_save_all(void)
 {
-    int i;
-    for (i = 0; i < MAX_GROUPS; i++) {
-        group FAR *g = groups[i];
+    group FAR *g;
+    for (g = first; g; g = g->next) {
         WINDOWPLACEMENT wp;
         BYTE FAR *p;
         OFSTRUCT of;
         HFILE f;
         WORD show;
-        if (!g)
-            continue;
         wp.length = sizeof wp;
         GetWindowPlacement(g->hwnd, &wp);
         show = IsIconic(g->hwnd) ? SW_SHOWMINIMIZED :
@@ -347,10 +342,11 @@ void group_save_all(void)
             wr16(p, 0x14, wp.ptMinPosition.y);
         }
         wr16(p, 4, 0);
-        wr16(p, 4, (WORD)-checksum(p, g->size));
+        /* the checksum covers the whole file, tags included */
+        wr16(p, 4, (WORD)-checksum(p, g->fsize));
         f = OpenFile(g->path, &of, OF_WRITE);
         if (f != HFILE_ERROR) {
-            _lwrite(f, (LPCSTR)p, g->size);
+            _lwrite(f, (LPCSTR)p, g->fsize);
             _lclose(f);
         }
         GlobalUnlock(g->hdata);
@@ -359,12 +355,11 @@ void group_save_all(void)
 
 void group_destroy_all(void)
 {
-    int i;
-    for (i = 0; i < MAX_GROUPS; i++)
-        if (groups[i]) {
-            free_group(groups[i]);
-            groups[i] = NULL;
-        }
+    while (first) {
+        group FAR *g = first;
+        first = g->next;
+        free_group(g);
+    }
 }
 
 int group_ininum(HWND hwnd)
@@ -509,13 +504,13 @@ BOOL group_open_selected(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     const BYTE FAR *p;
-    char cmd[128];
+    BOOL ok;
     if (!g || g->sel < 0)
         return FALSE;
     p = (const BYTE FAR *)GlobalLock(g->hdata);
-    s_cpy(cmd, (const char FAR *)p + g->items[g->sel].pcmd, sizeof cmd);
+    ok = pm_exec(g_frame, (LPCSTR)p + g->items[g->sel].pcmd, NULL, FALSE);
     GlobalUnlock(g->hdata);
-    if (pm_exec(g_frame, cmd, NULL, FALSE) && g_minonrun)
+    if (ok && g_minonrun)
         ShowWindow(g_frame, SW_MINIMIZE);
     return TRUE;
 }
@@ -611,9 +606,7 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         return 0;
     case WM_DESTROY:
         if (g) {
-            for (i = 0; i < MAX_GROUPS; i++)
-                if (groups[i] == g)
-                    groups[i] = NULL;
+            unlink_group(g);
             free_group(g);
         }
         break;

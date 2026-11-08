@@ -94,3 +94,29 @@ _dos_setdrive:
         call far DOS3CALL
         pop bp
         retf
+
+; __U4M / __I4M: the compiler's 32-bit multiply helper (we link no C
+; run-time). DX:AX = DX:AX * CX:BX, low 32 bits (same for signed).
+; Preserves every register but DX:AX.
+global __U4M, __I4M
+__U4M:
+__I4M:
+        push si
+        push di
+        mov si, dx              ; a_hi
+        mov di, ax              ; a_lo
+        mul bx                  ; DX:AX = a_lo * b_lo
+        push ax
+        push dx
+        mov ax, si
+        mul bx                  ; AX = low(a_hi * b_lo)
+        mov si, ax
+        mov ax, di
+        mul cx                  ; AX = low(a_lo * b_hi)
+        add si, ax
+        pop dx
+        pop ax
+        add dx, si
+        pop di
+        pop si
+        retf

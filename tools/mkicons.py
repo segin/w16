@@ -49,16 +49,30 @@ class Icon:
         self.frame(x0, y0, x1, y1, BLACK)
         self.rect(x0, y0 + 5, x1, y0 + 5, BLACK)
 
-    def slab(self, x, y, w, face, top, side=BLACK):
-        """one isometric slab, as in the boot splash: top face, front face"""
-        for i in range(4):                     # top face, slanted 2:1
-            self.rect(x + 4 - i, y + i, x + 4 - i + w, y + i, top)
-        self.rect(x, y + 4, x + w, y + 7, face)
-        self.frame(x, y + 4, x + w, y + 7, side)
-        for i in range(4):                     # outline of the top face
-            self.px[y + i][x + 4 - i] = side
-            self.px[y + i][x + 4 - i + w] = side
-        self.rect(x + 4, y, x + 4 + w, y, side)
+    def slab(self, x, y, w, face, top, side_fill, edge=BLACK):
+        """one slab, as in the boot splash: a box seen from above and to
+        the front-left. Rows y..y+3 hold the top face, slanting 1 pixel
+        per row; rows y+4..y+7 the front face (x..x+w); the right side
+        face joins the front's right edge to the back corner (x+w+4, y)."""
+        for r in range(8):
+            # top face (rows 0..3) or front face (rows 4..7)
+            if r < 4:
+                x0, x1, c = x + 4 - r, x + 4 - r + w, top
+            else:
+                x0, x1, c = x, x + w, face
+            self.rect(x0, y + r, x1, y + r, c)
+            # right side face: from the front's right edge to the back edge
+            back = x + w + 4 if r < 4 else x + w + 7 - r
+            if back > x1:
+                self.rect(x1 + 1, y + r, back, y + r, side_fill)
+                self.px[y + r][back] = edge
+            # left outline
+            self.px[y + r][x0] = edge
+            if r == 4 or r == 7:
+                self.rect(x0, y + r, x1, y + r, edge)
+            else:
+                self.px[y + r][x1] = edge
+        self.rect(x + 4, y, x + 4 + w, y, edge)    # back edge of the top
 
     def ico(self):
         rows = []
@@ -88,9 +102,10 @@ def progman():
     """the shell: a window holding the w16 slab stack"""
     i = Icon()
     i.window(1, 2, 30, 29, NAVY, SILVER)
-    i.slab(7, 9, 15, BLUE, NAVY)
-    i.slab(7, 14, 15, TEAL, CYAN)
-    i.slab(7, 19, 15, WHITE, SILVER)
+    # bottom first, so each slab rests on the one below
+    i.slab(5, 18, 17, WHITE, SILVER, GRAY)
+    i.slab(5, 14, 17, TEAL, CYAN, NAVY)
+    i.slab(5, 10, 17, BLUE, CYAN, NAVY)
     return i
 
 

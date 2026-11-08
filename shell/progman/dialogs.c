@@ -17,8 +17,9 @@ int run_dialog(HWND owner, FARPROC proc, int id)
    directory first. */
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized)
 {
-    char line[160];
+    LPSTR line, params;
     UINT r;
+    int show = minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL;
 
     if (dir && dir[0]) {
         if (dir[1] == ':') {
@@ -29,26 +30,36 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
         }
         dos_chdir(dir);
     }
-    s_cpy(line, cmd, sizeof line);
-    r = (UINT)ShellExecute(owner, NULL, line, NULL, NULL,
-                           minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);
-    if (r == 31) {                      /* no association: try it as a program */
-        r = WinExec(line, minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);
-    }
+    while (*cmd == ' ')
+        cmd++;
+    line = s_dup(cmd);
+    if (!line)
+        return FALSE;
+    /* ShellExecute takes the file and its parameters separately (DOS
+       names have no spaces, so the first blank ends the file name) */
+    for (params = line; *params && *params != ' '; params++)
+        ;
+    if (*params)
+        *params++ = 0;
+    r = (UINT)ShellExecute(owner, NULL, line, *params ? params : NULL, NULL, show);
+    if (r == 31)                        /* no association: try it as a program */
+        r = WinExec(cmd, show);
     if (r < 32) {
-        message(owner, IDS_EXECFAIL, line);
+        message(owner, IDS_EXECFAIL, cmd);
+        mem_free(line);
         return FALSE;
     }
+    mem_free(line);
     return TRUE;
 }
 
 BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
-    char cmd[128];
+    LPSTR cmd;
+    int n;
     (void)lp;
     switch (msg) {
     case WM_INITDIALOG:
-        SendDlgItemMessage(dlg, IDC_RUNCMD, EM_LIMITTEXT, sizeof cmd - 1, 0);
         EnableWindow(GetDlgItem(dlg, IDOK), FALSE);
         return TRUE;
     case WM_COMMAND:
@@ -59,12 +70,17 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                              GetWindowTextLength(GetDlgItem(dlg, IDC_RUNCMD)) > 0);
             return TRUE;
         case IDOK:
-            GetDlgItemText(dlg, IDC_RUNCMD, cmd, sizeof cmd);
+            n = GetWindowTextLength(GetDlgItem(dlg, IDC_RUNCMD)) + 1;
+            cmd = mem_alloc(n);
+            if (!cmd)
+                return TRUE;
+            GetDlgItemText(dlg, IDC_RUNCMD, cmd, n);
             if (pm_exec(dlg, cmd, NULL, IsDlgButtonChecked(dlg, IDC_RUNMIN))) {
                 EndDialog(dlg, IDOK);
                 if (g_minonrun)
                     ShowWindow(g_frame, SW_MINIMIZE);
             }
+            mem_free(cmd);
             return TRUE;
         case IDCANCEL:
             EndDialog(dlg, IDCANCEL);

@@ -21,7 +21,10 @@ cp -r "$ref" "$work/c"
 name=$(basename "$exe" | tr a-z A-Z)
 cp "$exe" "$work/c/$name"
 for f in ${REFRUN_FILES:-}; do
-    cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)"
+    case $f in
+    *=*) cp "${f%%=*}" "$work/c/${f#*=}" ;;          # src=path/under/C
+    *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
+    esac
 done
 sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
 cat > "$work/dosbox.conf" <<CONF

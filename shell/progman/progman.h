@@ -71,10 +71,12 @@ extern HWND g_frame, g_client;
 extern BOOL g_autoarrange, g_minonrun, g_savesettings;
 extern char g_ini[];                    /* "PROGMAN.INI" */
 
-/* ---- group.c ---- */
-#define MAX_GROUPS          40
+/* ---- group.c ----
+ * Zero-One-Infinity: no fixed limits on groups, items, or string lengths;
+ * everything is sized from the data. The remaining bounds come from the
+ * formats themselves (a .GRP's offsets are 16-bit, so a group is < 64K). */
 BOOL group_register(void);
-HWND group_load(const char *grpfile, int ininum);
+HWND group_load(const char FAR *grpfile, int ininum);
 void group_save_all(void);
 void group_destroy_all(void);
 int  group_ininum(HWND hwnd);           /* GroupN number, 0 if none */
@@ -91,6 +93,12 @@ int  run_dialog(HWND owner, FARPROC proc, int id);
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized);
 
 /* ---- util.c ---- */
+LPSTR mem_alloc(DWORD n);               /* zeroed, locked global memory */
+LPSTR mem_realloc(LPSTR p, DWORD n);    /* NULL on failure (p still valid) */
+void  mem_free(LPSTR p);
+LPSTR s_dup(const char FAR *s);
+BOOL  s_append(LPSTR FAR *buf, const char FAR *s);  /* grows *buf */
+LPSTR profile_get(const char FAR *sec, const char FAR *key, const char FAR *file);
 int  s_len(const char FAR *s);
 void s_cpy(char FAR *d, const char FAR *s, int max);
 void s_cat(char FAR *d, const char FAR *s, int max);
