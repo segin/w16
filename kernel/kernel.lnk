@@ -49,6 +49,12 @@ export GETPROCADDRESS.50 resident
 export MAKEPROCINSTANCE.51 resident
 export FREEPROCINSTANCE.52 resident
 export GETINSTANCEDATA.54 resident
+export INITATOMTABLE.68 resident
+export FINDATOM.69 resident
+export ADDATOM.70 resident
+export DELETEATOM.71 resident
+export GETATOMNAME.72 resident
+export GETATOMHANDLE.73 resident
 export LSTRCPY.88 resident
 export LSTRCAT.89 resident
 export LSTRLEN.90 resident
