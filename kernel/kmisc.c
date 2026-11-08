@@ -161,19 +161,8 @@ u16 KAPI SetErrorMode(u16 mode)
     return old;
 }
 
-/* GlobalPageLock / GlobalPageUnlock (191, 192): no paging in Standard
-   mode; a lock here (UNVERIFIED). GlobalWire/Fix and friends are in
-   global.c. */
-u16 KAPI GlobalPageLock(u16 h)
-{
-    return GlobalLock(h) ? 1 : 0;
-}
-
-u16 KAPI GlobalPageUnlock(u16 h)
-{
-    GlobalUnlock(h);
-    return 0;
-}
+/* GlobalPageLock / GlobalPageUnlock (191, 192): selector.c (as observed,
+   tests/apps/tk17.c). GlobalWire/Fix and friends are in global.c. */
 
 /* KbdRst (KERNEL.123): Schulman: does nothing in Standard and 386
    Enhanced mode. CVWBreak (205), Bunny_351 (351): nothing either. */
@@ -258,14 +247,8 @@ u16 KAPI DirectResAlloc(u16 hinst, u16 flags, u16 size)
 }
 
 
-/* LongPtrAdd (KERNEL.180): a huge pointer plus a 32-bit offset, the
-   selector stepping by __AHINCR per 64 KB. */
-u32 KAPI LongPtrAdd(u32 ptr, u32 add)
-{
-    u32 off = (ptr & 0xFFFFUL) + add;
-    u16 sel = (u16)(ptr >> 16) + (u16)(off >> 16) * sel_inc;
-    return ((u32)sel << 16) | (u16)off;
-}
+/* LongPtrAdd (KERNEL.180): selector.c. Observed (tests/apps/tk17.c), it
+   moves the selector's base rather than stepping by __AHINCR. */
 
 /* WriteOutProfiles (KERNEL.315): w16 writes profiles through at once. */
 void KAPI WriteOutProfiles(void)

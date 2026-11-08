@@ -84,6 +84,11 @@ int  dpmi_alloc_mem(u32 size, u32 *lin, u32 *handle);
 int  dpmi_free_mem(u32 handle);
 int  dpmi_resize_mem(u32 handle, u32 size, u32 *lin, u32 *newhandle);
 u16  dpmi_cpu_type(void);
+int  dpmi_get_ldt(u16 sel, u8 FAR *d);         /* 000Bh, 8 bytes */
+int  dpmi_set_ldt(u16 sel, const u8 FAR *d);   /* 000Ch */
+int  dpmi_set_limit(u16 sel, u32 limit);
+int  dpmi_set_base(u16 sel, u32 base);
+int  dpmi_set_rights(u16 sel, u16 rights);
 
 /* ---- global.c ---- */
 #define GMEM_FIXED          0x0000
@@ -111,10 +116,12 @@ u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
 u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
 u32  KAPI GlobalHandle(u16 sel);
-u16  galloc_dos(u16 size, u16 owner, u16 *seg);
+u16  galloc_dos(u32 size, u16 owner, u16 *seg);
 u16  galias_code(u16 sel, u16 owner);
 void gfree_owner(u16 owner);
 u16  gowner(u16 h);
+u16  KAPI GlobalFix(u16 h);
+u16  KAPI GlobalUnfix(u16 h);
 
 /* ---- local.c ---- */
 int  local_init_task(u16 ds, u16 heap);

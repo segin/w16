@@ -1068,10 +1068,10 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     return galloc_where(flags, size, owner, sel_out, WHERE_ANY);
 }
 
-/* A fixed, zeroed block below 1 MB (a task database); *seg is its
-   real-mode segment. Returns the selector (= handle), 0 if out of
-   memory. */
-u16 galloc_dos(u16 size, u16 owner, u16 *seg)
+/* A fixed, zeroed block below 1 MB (a task database, GlobalDOSAlloc;
+   over 64K it has tiles like any block); *seg is its real-mode segment.
+   Returns the selector (= handle), 0 if out of memory. */
+u16 galloc_dos(u32 size, u16 owner, u16 *seg)
 {
     u16 s;
     if (!galloc_where(GMEM_FIXED, size, owner, &s, WHERE_DOS))
@@ -1360,6 +1360,48 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
     return h;
 }
 
+/* Block a (handle h) grows to tot paragraphs, more 64K tiles than it has.
+   Observed (tests/apps/tk17.c, TK17A, KRNL286 and KRNL386): the block
+   always moves to a new selector run, so its handle changes (the data is
+   kept); a fixed block only with GMEM_MOVEABLE (KRNL286). Returns the new
+   handle, 0 if there is no room or no selectors. */
+static u16 grow_tiles(u16 a, u16 h, u16 tot, u16 flags)
+{
+    u16 os = h | 1, on = tiles((u32)AR(a)->size << 4), ns, nn, f, i;
+    u32 old = (u32)AR(a)->size << 4, bytes;
+    int code = is_code(os);
+
+    if ((h & 1) && !(flags & GMEM_MOVEABLE))
+        return 0;
+    if (AR(a)->count && !(h & 1))
+        return 0;                       /* UNVERIFIED: a locked block */
+    nn = tiles(((u32)tot - 1) << 4);
+    ns = dpmi_alloc_desc(nn);
+    if (!ns)
+        return 0;
+    AR(a)->count++;                     /* hold it while making room */
+    f = alloc_space(tot, lin_of(a) >= ONE_MB ? WHERE_ANY : WHERE_DOS, flags);
+    AR(a)->count--;
+    if (!f) {
+        for (i = 0; i < nn; i++)
+            dpmi_free_desc(ns + i * sel_inc);
+        return 0;
+    }
+    transplant(a, f);                   /* the old selectors follow it */
+    a = f;
+    *seltab(os) = 0;
+    for (i = 0; i < on; i++)
+        dpmi_free_desc(os + i * sel_inc);
+    h = (h & 1) ? ns : ns & ~1u;
+    AR(a)->handle = h;
+    *seltab(ns) = a;
+    bytes = (u32)AR(a)->size << 4;
+    set_tiles(ns, nn, lin_of(a) + 0x10, bytes, code);
+    if (bytes > old)
+        lin_zero(lin_of(a) + 0x10 + old, bytes - old);
+    return h;
+}
+
 /* Block a is to grow to tot paragraphs: move the moveable block after
    it out of the way if that frees enough room right after it (observed:
    a moveable block grown in front of another moveable block stays put). */
@@ -1422,7 +1464,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     cur = TOTAL(a);
     n = tiles(((u32)cur - 1) << 4);
     if (tiles(((u32)tot - 1) << 4) > n)
-        return 0;                       /* TODO: a longer run of tiles */
+        return grow_tiles(a, h, tot, flags);
     old = (u32)AR(a)->size << 4;
     if (tot < cur) {
         /* shrink in place; the rest becomes free (UNVERIFIED: 3.1 was
@@ -1466,6 +1508,9 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     }
     bytes = (u32)AR(a)->size << 4;
     set_tiles(s, tiles(bytes), lin_of(a) + 0x10, bytes, is_code(s));
+    /* observed (tk17.c): shrinking to fewer tiles frees the rest */
+    for (cur = tiles(bytes); cur < n; cur++)
+        dpmi_free_desc(s + cur * sel_inc);
     if (bytes > old)
         lin_zero(lin_of(a) + 0x10 + old, bytes - old);
     return h;
@@ -1559,14 +1604,17 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
     return 0;
 }
 
-/* UNVERIFIED: LockSegment/UnlockSegment as GlobalFix/GlobalUnfix, and
-   LockSegment(-1) (the caller's DS: __loadds has replaced DS by then). */
+/* Observed (tests/apps/tk17.c, KRNL286 and KRNL386): LockSegment and
+   UnlockSegment count only for discardable blocks (GlobalFlags of a
+   moveable block stays 0), as GlobalLock; both return the handle.
+   UNVERIFIED: LockSegment(-1) (the caller's DS: __loadds has replaced DS
+   by then). */
 u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
 {
     u16 a;
     if (find(seg, &a) != FB_BLOCK)
         return 0;
-    if (!(AR(a)->handle & 1) && AR(a)->count < 0xFF)
+    if (!(AR(a)->handle & 1) && discardable(a) && AR(a)->count < 0xFF)
         AR(a)->count++;
     return AR(a)->handle;
 }
@@ -1576,7 +1624,7 @@ u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
     u16 a;
     if (find(seg, &a) != FB_BLOCK)
         return 0;
-    if (!(AR(a)->handle & 1) && AR(a)->count)
+    if (!(AR(a)->handle & 1) && discardable(a) && AR(a)->count)
         AR(a)->count--;
     return AR(a)->handle;
 }
@@ -1648,13 +1696,14 @@ void FAR * KAPI GlobalWire(u16 h)                             /* KERNEL.111 */
     return MK_FP(AR(a)->handle | 1, 0);
 }
 
-u16 KAPI GlobalUnfix(u16 h);
-
 /* GlobalUnfix; returns FFFFh when the count reaches 0, else 0
    (observed). */
 u16 KAPI GlobalUnwire(u16 h)                                  /* KERNEL.112 */
 {
-    return GlobalUnfix(h);
+    u16 a;
+    if (find(h, &a) != FB_BLOCK || (AR(a)->handle & 1) || !AR(a)->count)
+        return 0;
+    return --AR(a)->count ? 0 : 0xFFFF;
 }
 
 /* The task's GlobalNotify procedure, in its TDB (Pietrek; observed at
@@ -1711,25 +1760,25 @@ u32 KAPI GetFreeSpace(u16 flags)                              /* KERNEL.169 */
     return t;
 }
 
-/* GlobalFix: moveable blocks only (observed); 3.1 returns nothing
-   documented (UNVERIFIED: AX). */
+/* GlobalFix: moveable blocks only (observed). GlobalFix and GlobalUnfix
+   are void; observed (tests/apps/tk17.c): AX is the handle passed
+   afterwards, for both. */
 u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
 {
     u16 a;
     if (find(h, &a) != FB_BLOCK)
-        return 0;
+        return h;
     if (!(AR(a)->handle & 1) && AR(a)->count < 0xFF)
         AR(a)->count++;
-    return 1;
+    return h;
 }
 
-/* UNVERIFIED: the result, as GlobalUnwire's */
 u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
 {
     u16 a;
-    if (find(h, &a) != FB_BLOCK || (AR(a)->handle & 1) || !AR(a)->count)
-        return 0;
-    return --AR(a)->count ? 0 : 0xFFFF;
+    if (find(h, &a) == FB_BLOCK && !(AR(a)->handle & 1) && AR(a)->count)
+        AR(a)->count--;
+    return h;
 }
 
 /* The owner word of a block's arena (Schulman). */

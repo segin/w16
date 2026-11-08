@@ -133,22 +133,28 @@ export _HREAD.349 resident
 export _HWRITE.350 resident
 export FARSETOWNER.403 resident
 export FARGETOWNER.404 resident
+# Selector services and the lock calls that are not GlobalLock
+# (kernel/selector.c)
+export ALLOCCSTODSALIAS.170 resident
+export ALLOCDSTOCSALIAS.171 resident
+export ALLOCALIAS.172 resident
+export ALLOCSELECTOR.175 resident
+export FREESELECTOR.176 resident
+export PRESTOCHANGOSELECTOR.177 resident
+export LONGPTRADD.180 resident
+export GLOBALDOSALLOC.184 resident
+export GLOBALDOSFREE.185 resident
+export SETSELECTORBASE.187 resident
+export GETSELECTORLIMIT.188 resident
+export SETSELECTORLIMIT.189 resident
+export GLOBALPAGELOCK.191 resident
+export GLOBALPAGEUNLOCK.192 resident
+export SELECTORACCESSRIGHTS.196 resident
+export ALLOCSELECTORARRAY.206 resident
 
 # ---- exports for booting Windows 3.1 with Microsoft's USER, GDI and
 # drivers (kernel/winboot.c, ARCHITECTURE.md 9.4); kept together here ----
 export DIAGOUTPUT.340
-# TEMPORARY selector services (kernel/selstub.c), until the real ones
-# (probe TK17) are merged: then delete these lines and selstub.c
-export ALLOCCSTODSALIAS.170
-export ALLOCDSTOCSALIAS.171
-export ALLOCSELECTOR.175
-export FREESELECTOR.176
-export PRESTOCHANGOSELECTOR.177
-export GLOBALDOSALLOC.184
-export GLOBALDOSFREE.185
-export SETSELECTORBASE.187
-export GETSELECTORLIMIT.188
-export SETSELECTORLIMIT.189
 # kernel/kmisc.c, kentry.asm, local.c
 export EXITKERNEL.2
 export LOCKCURRENTTASK.33
@@ -175,9 +181,6 @@ export LOCALCOUNTFREE.161
 export LOCALHEAPSIZE.162
 export GETEXPWINVER.167
 export DIRECTRESALLOC.168
-export LONGPTRADD.180
-export GLOBALPAGELOCK.191
-export GLOBALPAGEUNLOCK.192
 export CVWBREAK.205
 export WRITEOUTPROFILES.315
 export ISROMMODULE.323

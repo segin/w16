@@ -33,11 +33,11 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
-           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selstub.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o
+           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK19
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
 DROPIN   := TK20 TK21 TK22 TK23
 # DLLs and files TK5 uses
@@ -91,7 +91,7 @@ $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
-KBOOT_C := winboot dosx kmisc selstub fault
+KBOOT_C := winboot dosx kmisc selector fault
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
@@ -201,6 +201,19 @@ $(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
 	$(WLINK) @tests/apps/tk16.lnk $(if $(filter B,$*),import ID_GET TKBAD) \
 	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk16$*.map \
 	    file { $(B)/tests/tk15s.o $(B)/tests/tk16$*.o }
+
+# TK17.EXE: the selector probe, with descriptor helpers in tk17s.asm
+# (TK17A: its huge-block part, the same source with TK17A defined)
+$(B)/tests/tk17.o: tests/apps/tk17ref.h tests/apps/tk17ref286.h tests/apps/tklog.h
+$(B)/tests/tk17A.o: tests/apps/tk17.c tests/apps/tk17aref.h tests/apps/tk17aref286.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -dTK17A -fo=$@ $<
+$(DOS)/TK17.EXE $(DOS)/TK17A.EXE: $(DOS)/TK17%.EXE: $(B)/tests/start.o $(B)/tests/tk17%.o \
+                $(B)/tests/tk17s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk17$*.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk17$*.o $(B)/tests/tk17s.o }
 
 # TK19.EXE: the global heap probe (KERNEL imports by ordinal: tk19k.lnk)
 $(B)/tests/tk19.o: tests/apps/tk19ref.h tests/apps/tklog.h

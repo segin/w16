@@ -844,10 +844,7 @@ u16 KAPI IsTask(u16 h)                                        /* KERNEL.320 */
     return task_of(h) ? h : 0;
 }
 
-u32 KAPI GetSelectorBase(u16 sel)                             /* KERNEL.186 */
-{
-    return dpmi_get_base(sel);
-}
+/* GetSelectorBase (KERNEL.186): selector.c */
 
 /* ---- the boot task ----
    While Windows boots, KERNEL runs as a task of its own, so that what
