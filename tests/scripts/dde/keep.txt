@@ -1,0 +1,9 @@
+run PROGMAN.EXE
+connect
+exec [CreateGroup(DDE Keep)][AddItem(NOTEPAD.EXE,Notes)][AddItem(C:\WINDOWS\CALC.EXE,Calculator,C:\WINDOWS\CALC.EXE,0,171,72,C:\WINDOWS,0,1)]
+exec [AddItem("WRITE.EXE README.WRI","Read, Me")]
+exec [ReplaceItem(Notes)][AddItem(CLOCK.EXE,Clock)]
+request DDE Keep
+exec [ShowGroup(DDE Keep,2)]
+request Groups
+disconnect

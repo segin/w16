@@ -1,0 +1,11 @@
+run C:\PROGMAN.EXE
+wait 4000
+cmd 100
+wait 1000
+char g
+key 0D
+wait 1000
+type Test Group
+key 0D
+wait 1500
+snap C:\NEWGRP.DDB

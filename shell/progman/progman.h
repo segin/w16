@@ -59,6 +59,16 @@
 #define MENU_WINDOW         2
 #define WINDOW_MENU_FIXED   3           /* Cascade, Tile, Arrange Icons */
 
+/* Automatic radio buttons and check boxes arrived with Windows 3.0; the
+   2.x build uses plain ones and checks them itself (dialogs.c) */
+#ifdef W16_WIN2
+#define PM_RADIO            BS_RADIOBUTTON
+#define PM_CHECK            BS_CHECKBOX
+#else
+#define PM_RADIO            BS_AUTORADIOBUTTON
+#define PM_CHECK            BS_AUTOCHECKBOX
+#endif
+
 /* Run dialog controls */
 #define IDC_RUNCMD          119     /* observed control IDs */
 #define IDC_RUNMIN          105
@@ -128,6 +138,12 @@ typedef struct {
     WORD hotkey;                        /* 0 = none */
     BOOL minimized;
     HICON icon;                         /* the item's, not to be destroyed */
+    /* for DDE AddItem only (zero otherwise) */
+    LPSTR iconpath;                     /* NULL: the program's own icon */
+    WORD iconindex;
+    BOOL has_pos;
+    int x, y;
+    BOOL dde;                           /* placed as DDE AddItem places it */
 } itemprops;
 BOOL group_get_props(HWND hwnd, itemprops FAR *ip);
 void itemprops_free(itemprops FAR *ip);
@@ -137,6 +153,11 @@ BOOL group_rename(HWND hwnd, const char FAR *name);
 BOOL group_set_file(HWND hwnd, const char FAR *path);
 BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only);
 void group_run_all(HWND hwnd);
+HWND group_find(const char FAR *name);
+LPSTR group_dde_text(HWND hwnd);
+BOOL group_delete_named(HWND hwnd, const char FAR *name);
+BOOL group_replace_named(HWND hwnd, const char FAR *name);
+void group_show(HWND hwnd, int show);
 BOOL group_delete_selected(HWND hwnd);
 LPCSTR group_name(HWND hwnd);
 LPCSTR group_path(HWND hwnd);
@@ -150,7 +171,8 @@ LRESULT CALLBACK __export GroupWndProc(HWND, UINT, WPARAM, LPARAM);
 
 /* ---- main.c: PROGMAN.INI [Groups] and Order= ---- */
 int  ini_add_group(const char FAR *path);       /* returns N of GroupN= */
-void ini_remove_group(int n);
+void ini_remove_group(int n, LPSTR order);
+LPSTR order_string(BOOL leading);               /* Order= value, z-order */
 void ini_set_group(int n, const char FAR *path);
 void ini_groups_changed(void);                  /* rewrite Order= */
 
@@ -162,6 +184,9 @@ void cmd_new(HWND frame);
 void cmd_delete(HWND frame);
 void cmd_properties(HWND frame);
 void cmd_movecopy(HWND frame, BOOL copy_only);
+HWND create_group_named(const char FAR *name, const char FAR *file);
+LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp);  /* dde.c */
+void delete_group(HWND g);
 BOOL CALLBACK __export MoveCopyDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export ExitWinDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);

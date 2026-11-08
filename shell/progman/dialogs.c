@@ -23,6 +23,30 @@ void dbg(const char FAR *s, int v)
 }
 #endif
 
+/* Windows 2.x: plain radio buttons and check boxes (PM_RADIO, PM_CHECK)
+   do not check themselves; do it on BN_CLICKED. TRUE if it was one. */
+static BOOL manual_button(HWND dlg, WPARAM id, LPARAM lp)
+{
+#ifdef W16_WIN2
+    if (HIWORD(lp) != BN_CLICKED)
+        return FALSE;
+    if (id == IDC_NEWGROUP || id == IDC_NEWITEM) {
+        if (IsWindowEnabled(GetDlgItem(dlg, id)))
+            CheckRadioButton(dlg, IDC_NEWGROUP, IDC_NEWITEM, id);
+        return TRUE;
+    }
+    if (id == IDC_RUNMIN || id == IDC_ITEMMIN) {
+        CheckDlgButton(dlg, id, !IsDlgButtonChecked(dlg, id));
+        return TRUE;
+    }
+#else
+    (void)dlg;
+    (void)id;
+    (void)lp;
+#endif
+    return FALSE;
+}
+
 int run_dialog(HWND owner, FARPROC proc, int id)
 {
     FARPROC thunk = MakeProcInstance(proc, g_hinst);
@@ -92,6 +116,8 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         EnableWindow(GetDlgItem(dlg, IDOK), FALSE);
         return TRUE;
     case WM_COMMAND:
+        if (manual_button(dlg, wp, lp))
+            return TRUE;
         switch (wp) {
         case IDC_RUNCMD:
             if (HIWORD(lp) == EN_CHANGE)
@@ -159,6 +185,8 @@ BOOL CALLBACK __export NewDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         SetFocus(GetDlgItem(dlg, new_choice));
         return FALSE;
     case WM_COMMAND:
+        if (manual_button(dlg, wp, lp))
+            return TRUE;
         switch (wp) {
         case IDOK:
             new_choice = IsDlgButtonChecked(dlg, IDC_NEWGROUP) ? IDC_NEWGROUP : IDC_NEWITEM;
@@ -269,6 +297,41 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
 /* The group being edited by Properties, or NULL for File > New. */
 static HWND props_group;
 
+/* A new group (New Program Group, DDE CreateGroup): its file (as typed,
+   or made from the name), its PROGMAN.INI entry, its window. */
+HWND create_group_named(const char FAR *name, const char FAR *file)
+{
+    LPSTR path = group_file_name(name, file);
+    HWND w = NULL;
+    int n;
+    if (!path)
+        return NULL;
+    n = ini_add_group(path);
+    w = group_create(name, path, n);
+    if (w)
+        ini_groups_changed();
+    else
+        ini_remove_group(n, NULL);
+    mem_free(path);
+    return w;
+}
+
+/* Delete a group: its window, its file, its PROGMAN.INI entry. */
+void delete_group(HWND g)
+{
+    LPSTR path = s_dup(group_path(g));
+    LPSTR order = order_string(FALSE);  /* before the window goes */
+    int n = group_ininum(g);
+    OFSTRUCT of;
+    SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g, 0);
+    if (path) {
+        OpenFile(path, &of, OF_DELETE);
+        mem_free(path);
+    }
+    ini_remove_group(n, order);
+    mem_free(order);
+}
+
 BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     LPSTR desc, file, path;
@@ -305,20 +368,14 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
                 return TRUE;
             }
             file = dlg_text(dlg, IDC_GROUPFILE);
-            path = desc ? group_file_name(desc, file) : NULL;
-            if (path) {
-                int n = ini_add_group(path);
-                if (group_create(desc, path, n)) {
-                    ini_groups_changed();
+            if (desc && file) {
+                if (create_group_named(desc, file))
                     EndDialog(dlg, IDOK);
-                } else {
-                    ini_remove_group(n);
-                    message(dlg, IDS_CANTWRITE, path);
-                }
+                else
+                    message(dlg, IDS_CANTWRITE, file);
             }
             mem_free(desc);
             mem_free(file);
-            mem_free(path);
             return TRUE;
         case IDCANCEL:
             EndDialog(dlg, IDCANCEL);
@@ -361,6 +418,8 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
         EnableWindow(GetDlgItem(dlg, IDC_CHANGEICON), FALSE);
         return TRUE;
     case WM_COMMAND:
+        if (manual_button(dlg, wp, lp))
+            return TRUE;
         switch (wp) {
         case IDC_CMDLINE:
             /* UNVERIFIED: OK becomes available once there is a command */
@@ -376,6 +435,9 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
             ip.dir = dlg_text(dlg, IDC_WORKDIR);
             ip.hotkey = (WORD)SendDlgItemMessage(dlg, IDC_HOTKEY, HKM_GETHOTKEY, 0, 0);
             ip.minimized = IsDlgButtonChecked(dlg, IDC_ITEMMIN);
+            ip.iconpath = NULL;
+            ip.has_pos = FALSE;
+            ip.dde = FALSE;
             ok = ip.desc && ip.cmd && ip.dir && group &&
                  (props_group ? group_edit_selected(group, &ip) : group_add_item(group, &ip));
             if (ok)
@@ -562,15 +624,6 @@ void cmd_delete(HWND frame)
             message(frame, IDS_CANTWRITE, group_path(g));
         return;
     }
-    if (ask(frame, IDS_DELETE, IDS_DELGROUP, group_name(g), MB_YESNO | MB_ICONEXCLAMATION) == IDYES) {
-        LPSTR path = s_dup(group_path(g));
-        int n = group_ininum(g);
-        OFSTRUCT of;
-        SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g, 0);
-        if (path) {
-            OpenFile(path, &of, OF_DELETE);
-            mem_free(path);
-        }
-        ini_remove_group(n);
-    }
+    if (ask(frame, IDS_DELETE, IDS_DELGROUP, group_name(g), MB_YESNO | MB_ICONEXCLAMATION) == IDYES)
+        delete_group(g);
 }

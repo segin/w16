@@ -9,6 +9,7 @@
  * Order=<GroupN numbers, bottom of the z-order first>; [Groups] GroupN=.
  */
 #include "progman.h"
+#include <dde.h>
 
 HINSTANCE g_hinst;
 HWND g_frame, g_client;
@@ -66,27 +67,36 @@ static void load_groups(void)
     mem_free(order);
 }
 
-/* Order=: the groups' GroupN numbers in z-order, bottom first, each
-   preceded by a blank (observed: "Order= 2 3 4 1"). */
-static void write_order(void)
+/* Order=: the groups' GroupN numbers in z-order, bottom first. Observed:
+   written on exit each preceded by a blank ("Order= 2 3 4 1"), but when a
+   group is created only separated by blanks ("Order=2 3 4 1 5"). */
+LPSTR order_string(BOOL leading)
 {
     LPSTR buf = s_dup("");
     HWND w, last = NULL;
     char num[8];
     int n;
     if (!buf)
-        return;
+        return NULL;
     for (w = GetWindow(g_client, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
         last = w;
     for (w = last; w; w = GetWindow(w, GW_HWNDPREV))
         if ((n = group_ininum(w)) != 0) {
             num[0] = ' ';
             s_utoa(num + 1, n);
-            if (!s_append(&buf, num))
+            if (!s_append(&buf, buf[0] || leading ? num : num + 1))
                 break;
         }
-    WritePrivateProfileString(s_settings, "Order", buf, g_ini);
-    mem_free(buf);
+    return buf;
+}
+
+static void write_order(BOOL leading)
+{
+    LPSTR buf = order_string(leading);
+    if (buf) {
+        WritePrivateProfileString(s_settings, "Order", buf, g_ini);
+        mem_free(buf);
+    }
 }
 
 /* Record a new group file under the lowest free GroupN (observed: with
@@ -115,17 +125,23 @@ void ini_set_group(int n, const char FAR *path)
     WritePrivateProfileString(s_groups, key, path, g_ini);
 }
 
-void ini_remove_group(int n)
+/* Remove GroupN=. With `order` (from order_string before the group's
+   window went away), also write that as Order=: observed, deleting a
+   group writes Order= without leading blank and still naming the deleted
+   group, until Order= is next written in full. */
+void ini_remove_group(int n, LPSTR order)
 {
     char key[12];
     group_key(key, n);
     WritePrivateProfileString(s_groups, key, NULL, g_ini);
-    write_order();
+    if (order)
+        WritePrivateProfileString(s_settings, "Order", order, g_ini);
 }
 
+/* Observed: creating a group writes Order= in full, as on exit. */
 void ini_groups_changed(void)
 {
-    write_order();
+    write_order(TRUE);
 }
 
 /* Start each program named in WIN.INI [windows] key (blank- or
@@ -197,7 +213,7 @@ static void save_settings(void)
     s_itoa(buf + s_len(buf), r->bottom);
     s_cat(buf, IsZoomed(g_frame) ? " 3" : " 1", sizeof buf);   /* UNVERIFIED: 3 */
     WritePrivateProfileString(s_settings, "Window", buf, g_ini);
-    write_order();
+    write_order(TRUE);
     group_save_all();
 }
 
@@ -322,6 +338,12 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_COMMAND:
         command(hwnd, wp);
         return 0;
+    case WM_DDE_INITIATE:
+    case WM_DDE_EXECUTE:
+    case WM_DDE_REQUEST:
+    case WM_DDE_TERMINATE:
+    case WM_DDE_ACK:
+        return dde_message(hwnd, msg, wp, lp);
     case WM_CLOSE:
         /* Observed: as the shell, Program Manager asks first, in a
            system-modal box "Exit Windows" / "This will end your Windows
@@ -338,8 +360,9 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         DestroyWindow(hwnd);
         return 0;
     case WM_QUERYENDSESSION:
-        if (!g_isshell)                 /* as the shell, saved before ExitWindows */
-            save_settings();
+        /* observed: when Windows ends while Program Manager is not the
+           shell, nothing is saved (as the shell, it saved before
+           ExitWindows) */
         return TRUE;
     case WM_DESTROY:
         WinHelp(hwnd, NULL, HELP_QUIT, 0);

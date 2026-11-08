@@ -35,11 +35,12 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2 TK3 TK4
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
-            $(B)/shell/progman/compat2.o $(B)/shell/progman/mdi2.o
+            $(B)/shell/progman/compat2.o $(B)/shell/progman/mdi2.o \
+            $(B)/shell/progman/dde.o
 ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
             $(B)/shell/res/defitem.ico
 
@@ -108,6 +109,12 @@ $(DOS)/TEXP2.EXE: $(B)/tests/start.o $(B)/tests/texp2.o tests/apps/app.lnk tools
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/texp2.map file { $(B)/tests/start.o $(B)/tests/texp2.o }
 	python3 tools/nemark.py $@ 2.0
+
+# TDDE.EXE: Program Manager DDE probe
+$(DOS)/TDDE.EXE: $(B)/tests/start.o $(B)/tests/tdde.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tdde.map file { $(B)/tests/start.o $(B)/tests/tdde.o }
 
 # SNAP2.EXE: SNAP for Windows 2.x (marked 2.0)
 $(B)/tests/snap2.o: tests/apps/snap.c

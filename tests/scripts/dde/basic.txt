@@ -1,0 +1,16 @@
+run PROGMAN.EXE
+connect
+request Groups
+exec [CreateGroup(DDE Test)]
+exec [ShowGroup(DDE Test,1)]
+exec [AddItem(NOTEPAD.EXE,Note Pad)]
+exec [AddItem(C:\WINDOWS\CALC.EXE,Calc,C:\WINDOWS\CALC.EXE,0,96,0,C:\WINDOWS,0,1)]
+request Groups
+request DDE Test
+exec [DeleteItem(Note Pad)]
+request DDE Test
+exec [Bogus()]
+exec [DeleteGroup(No Such Group)]
+exec [DeleteGroup(DDE Test)]
+request Groups
+disconnect

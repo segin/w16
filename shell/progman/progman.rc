@@ -100,9 +100,9 @@ FONT 8, "MS Sans Serif"
 BEGIN
     GROUPBOX        "New", IDC_STATIC, 9, 6, 95, 41, WS_GROUP
     CONTROL         "Program &Group", IDC_NEWGROUP, "Button",
-                    BS_AUTORADIOBUTTON | WS_GROUP, 16, 16, 82, 12
+                    PM_RADIO | WS_GROUP, 16, 16, 82, 12
     CONTROL         "Program &Item", IDC_NEWITEM, "Button",
-                    BS_AUTORADIOBUTTON | WS_TABSTOP, 16, 29, 82, 12
+                    PM_RADIO | WS_TABSTOP, 16, 29, 82, 12
     DEFPUSHBUTTON   "OK", IDOK, 115, 6, 40, 14, WS_GROUP
     PUSHBUTTON      "Cancel", IDCANCEL, 115, 23, 40, 14, WS_GROUP
     PUSHBUTTON      "&Help", IDC_HELPBTN, 115, 43, 40, 14, WS_GROUP
@@ -143,7 +143,7 @@ BEGIN
     CONTROL         "&Shortcut Key:", IDC_STATIC, "Static", SS_LEFT, 5, 50, 63, 10
     CONTROL         "", IDC_HOTKEY, "pmhotkey", WS_BORDER | WS_TABSTOP, 77, 49, 105, 12
     CONTROL         "&Run Minimized", IDC_ITEMMIN, "Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP, 77, 65, 111, 12
+                    PM_CHECK | WS_TABSTOP, 77, 65, 111, 12
     DEFPUSHBUTTON   "OK", IDOK, 191, 6, 55, 14
     PUSHBUTTON      "Cancel", IDCANCEL, 191, 23, 55, 14
     PUSHBUTTON      "&Browse...", IDC_BROWSE, 191, 43, 55, 14
@@ -169,7 +169,7 @@ BEGIN
     CONTROL         "&Shortcut Key:", IDC_STATIC, "Static", SS_LEFT, 5, 50, 76, 10
     CONTROL         "", IDC_HOTKEY, "pmhotkey", WS_BORDER | WS_TABSTOP, 83, 49, 100, 12
     CONTROL         "&Run Minimized", IDC_ITEMMIN, "Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP, 83, 65, 100, 12
+                    PM_CHECK | WS_TABSTOP, 83, 65, 100, 12
     DEFPUSHBUTTON   "OK", IDOK, 191, 6, 55, 14
     PUSHBUTTON      "Cancel", IDCANCEL, 191, 23, 55, 14
     PUSHBUTTON      "&Browse...", IDC_BROWSE, 191, 43, 55, 14
@@ -190,7 +190,7 @@ BEGIN
     LTEXT           "&Command Line:", 99, 3, 12, 60, 10, WS_GROUP
     EDITTEXT        IDC_RUNCMD, 3, 23, 134, 12, ES_AUTOHSCROLL | ES_OEMCONVERT
     CONTROL         "Run &Minimized", IDC_RUNMIN, "Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP, 3, 42, 71, 12
+                    PM_CHECK | WS_TABSTOP, 3, 42, 71, 12
     DEFPUSHBUTTON   "OK", IDOK, 165, 6, 40, 14
     PUSHBUTTON      "Cancel", IDCANCEL, 165, 23, 40, 14
     PUSHBUTTON      "&Browse...", IDC_BROWSE, 165, 40, 40, 14

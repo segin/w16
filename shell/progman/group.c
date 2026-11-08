@@ -94,10 +94,15 @@ typedef struct group {
     WORD cbgtags;
     item FAR *sel;
     BOOL dirty;                         /* items changed since written */
+    BOOL have_replaced;                 /* DDE ReplaceItem: next position */
+    int replaced_x, replaced_y;
+    WORD replaced_z;
     LPSTR path;                         /* the .GRP file */
 } group;
 
 static group FAR *first;
+
+static void remove_item(HWND hwnd, group FAR *g, item FAR *t);
 static HFONT title_font;
 static HICON def_icon;
 static char cls_group[] = "PMGroup";
@@ -574,7 +579,10 @@ static HWND open_window(group FAR *g, BOOL use_rc)
     mc.szClass = cls_group;
     mc.szTitle = g->name;
     mc.hOwner = g_hinst;
-    if (use_rc) {
+    /* observed: a group whose file has an empty rectangle (as a newly
+       created one has until settings are saved) gets MDI's default
+       position and size */
+    if (use_rc && g->rc.right > g->rc.left && g->rc.bottom > g->rc.top) {
         mc.x = g->rc.left;
         mc.y = g->rc.top;
         mc.cx = g->rc.right - g->rc.left;
@@ -659,10 +667,10 @@ static BOOL capture_state(group FAR *g)
     if (changed)
         g->show = show;
     g->rc = wp.rcNormalPosition;
-    if ((wp.flags & WPF_SETMINPOSITION) || IsIconic(g->hwnd)) {
-        changed |= wp.ptMinPosition.x != g->pmin.x || wp.ptMinPosition.y != g->pmin.y;
-        g->pmin = wp.ptMinPosition;
-    }
+    /* observed: a group never minimized is saved with (-1,-1), which is
+       also what GetWindowPlacement reports for it */
+    changed |= wp.ptMinPosition.x != g->pmin.x || wp.ptMinPosition.y != g->pmin.y;
+    g->pmin = wp.ptMinPosition;
     return changed;
 }
 
@@ -675,15 +683,16 @@ HWND group_create(const char FAR *name, const char FAR *path, int ininum)
         return NULL;
     g->ininum = ininum;
     g->name = s_dup(name);
-    g->show = SW_SHOWNORMAL;
-    g->pmin.x = g->pmin.y = -1;
+    /* observed: a new group's file starts with show 0, rectangle and
+       minimized position all 0; the window state is saved on exit */
+    g->show = 0;
+    g->pmin.x = g->pmin.y = 0;
     copy(g->hdr18, new_hdr18, 8);
     g->z = (item FAR * FAR *)mem_alloc(sizeof(item FAR *));
     if (!g->name || !g->z || !open_window(g, FALSE)) {
         free_group(g);
         return NULL;
     }
-    capture_state(g);
     if (!write_group(g)) {
         DestroyWindow(g->hwnd);         /* frees g */
         return NULL;
@@ -1248,10 +1257,11 @@ static BOOL set_fields(item FAR *t, const char FAR *desc, const char FAR *cmd,
         }
     }
 
+    /* observed order: hotkey, minimized, path */
     drop_own_tags(t);
-    if (!t->name || (path && !add_tag(t, TAG_PATH, path, s_len(path) + 1)) ||
-        (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) ||
-        (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0))) {
+    if (!t->name || (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) ||
+        (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0)) ||
+        (path && !add_tag(t, TAG_PATH, path, s_len(path) + 1))) {
         mem_free(path);
         return FALSE;
     }
@@ -1267,7 +1277,8 @@ BOOL group_get_props(HWND hwnd, itemprops FAR *ip)
     const BYTE FAR *path;
     WORD np, nh;
     int n, d;
-    ip->desc = ip->cmd = ip->dir = NULL;
+    ip->desc = ip->cmd = ip->dir = ip->iconpath = NULL;
+    ip->has_pos = FALSE;
     if (!g || !g->sel)
         return FALSE;
     t = g->sel;
@@ -1303,7 +1314,8 @@ void itemprops_free(itemprops FAR *ip)
     mem_free(ip->desc);
     mem_free(ip->cmd);
     mem_free(ip->dir);
-    ip->desc = ip->cmd = ip->dir = NULL;
+    mem_free(ip->iconpath);
+    ip->desc = ip->cmd = ip->dir = ip->iconpath = NULL;
 }
 
 /* File > New > Program Item. */
@@ -1321,22 +1333,46 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
         free_item(t);
         return FALSE;
     }
-    choose_icon(t, ip->cmd);
-    free_cell(hwnd, g, &t->x, &t->y);
-    {                                   /* on top */
-        WORD k;
-        for (k = g->nz; k > 0; k--)
+#ifndef W16_WIN2
+    if (ip->iconpath && ip->iconpath[0]) {      /* DDE AddItem's icon */
+        HICON h = ExtractIcon(g_hinst, ip->iconpath, ip->iconindex);
+        t->iconpath = s_dup(ip->iconpath);
+        t->iicon = ip->iconindex;
+        if ((UINT)h > 1) {
+            icon_bits(t, h);
+            DestroyIcon(h);
+        }
+        if (!t->iconpath)
+            t->iconpath = s_dup("");
+        make_icon(t);
+    } else
+#endif
+        choose_icon(t, ip->cmd);
+    if (ip->has_pos) {
+        t->x = ip->x;
+        t->y = ip->y;
+    } else if (g->have_replaced) {      /* ReplaceItem: the old position */
+        t->x = g->replaced_x;
+        t->y = g->replaced_y;
+    } else {
+        free_cell(hwnd, g, &t->x, &t->y);
+    }
+    {
+        /* where it goes in the z-order: on top for File > New (UNVERIFIED
+           beyond an empty group); for DDE AddItem at the bottom, or in the
+           place of the item ReplaceItem removed (observed) */
+        WORD k, at = 0;
+        if (ip->dde)
+            at = g->have_replaced && g->replaced_z <= g->nz ? g->replaced_z : g->nz;
+        for (k = g->nz; k > at; k--)
             g->z[k] = g->z[k - 1];
-        g->z[0] = t;
+        g->z[at] = t;
         g->nz++;
     }
+    g->have_replaced = FALSE;
     data_append(g, t);
     if (!write_group(g)) {
-        int k;
-        for (k = 0; k + 1 < (int)g->nz; k++)
-            g->z[k] = g->z[k + 1];
-        g->nz--;
-        data_remove(g, t);
+        remove_item(hwnd, g, t);
         free_item(t);
         return FALSE;
     }
@@ -1494,6 +1530,122 @@ void group_run_all(HWND hwnd)
         }
     }
     g->sel = keep;
+}
+
+/* ---- for the DDE interface ---- */
+
+HWND group_find(const char FAR *name)
+{
+    group FAR *g;
+    for (g = first; g; g = g->next)
+        if (!s_icmp(g->name, name))
+            return g->hwnd;
+    return NULL;
+}
+
+void group_show(HWND hwnd, int show)
+{
+    if (show == SW_SHOWMAXIMIZED)
+        SendMessage(g_client, WM_MDIMAXIMIZE, (WPARAM)hwnd, 0);
+    else
+        ShowWindow(hwnd, show);
+    if (show != SW_HIDE && show != SW_MINIMIZE && show != SW_SHOWMINNOACTIVE &&
+        show != SW_SHOWNA)
+        SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)hwnd, 0);
+}
+
+/* A group as the DDE request for its name answers (observed):
+     "name",path,items,show
+     "item","command",workdir,iconpath,x,y,iconindex,hotkey,minimized
+   items top of the z-order first, each line ending CR LF. */
+LPSTR group_dde_text(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    LPSTR s;
+    char num[8];
+    WORD i;
+    BOOL ok;
+    if (!g)
+        return NULL;
+    s = s_dup("\"");
+    ok = s && s_append(&s, g->name) && s_append(&s, "\",") && s_append(&s, g->path) &&
+         s_append(&s, ",");
+    s_utoa(num, g->nz);
+    ok = ok && s_append(&s, num) && s_append(&s, ",");
+    s_utoa(num, IsIconic(hwnd) ? SW_SHOWMINIMIZED : IsZoomed(hwnd) ? SW_SHOWMAXIMIZED
+                                                                  : SW_SHOWNORMAL);
+    ok = ok && s_append(&s, num) && s_append(&s, "\r\n");
+    /* observed: newest item first (the reverse of the file's data order) */
+    for (i = g->nz; ok && i-- > 0;) {
+        item FAR *keep = g->sel;
+        itemprops ip;
+        item FAR *t = g->dfirst;
+        WORD k;
+        for (k = 0; t && k < i; k++)
+            t = t->dnext;
+        if (!t)
+            break;
+        g->sel = t;
+        if (!group_get_props(hwnd, &ip)) {
+            g->sel = keep;
+            ok = FALSE;
+            break;
+        }
+        g->sel = keep;
+        ok = s_append(&s, "\"") && s_append(&s, ip.desc) && s_append(&s, "\",\"") &&
+             s_append(&s, ip.cmd) && s_append(&s, "\",") && s_append(&s, ip.dir) &&
+             s_append(&s, ",") && s_append(&s, t->iconpath) && s_append(&s, ",");
+        s_itoa(num, t->x);
+        ok = ok && s_append(&s, num) && s_append(&s, ",");
+        s_itoa(num, t->y);
+        ok = ok && s_append(&s, num) && s_append(&s, ",");
+        s_utoa(num, t->iicon);
+        ok = ok && s_append(&s, num) && s_append(&s, ",");
+        s_utoa(num, ip.hotkey);
+        ok = ok && s_append(&s, num) && s_append(&s, ip.minimized ? ",1\r\n" : ",0\r\n");
+        itemprops_free(&ip);
+    }
+    if (!ok) {
+        mem_free(s);
+        return NULL;
+    }
+    return s;
+}
+
+static item FAR *item_named(group FAR *g, const char FAR *name)
+{
+    WORD i;
+    for (i = 0; i < g->nz; i++)
+        if (!s_icmp(g->z[i]->name, name))
+            return g->z[i];
+    return NULL;
+}
+
+BOOL group_delete_named(HWND hwnd, const char FAR *name)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t = g ? item_named(g, name) : NULL;
+    if (!t)
+        return FALSE;
+    remove_item(hwnd, g, t);
+    free_item(t);
+    return write_group(g);
+}
+
+/* DDE ReplaceItem: delete the item; the next AddItem takes its place. */
+BOOL group_replace_named(HWND hwnd, const char FAR *name)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t = g ? item_named(g, name) : NULL;
+    if (!t)
+        return FALSE;
+    g->have_replaced = TRUE;
+    g->replaced_x = t->x;
+    g->replaced_y = t->y;
+    g->replaced_z = zindex(g, t);
+    remove_item(hwnd, g, t);
+    free_item(t);
+    return write_group(g);
 }
 
 /* Program Group Properties with a different file (observed): the group
