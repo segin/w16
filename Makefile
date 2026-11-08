@@ -37,7 +37,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16
+           TK11 TK12 TK13 TK14 TK15 TK16 TK19
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -164,6 +164,15 @@ $(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
 	$(WLINK) @tests/apps/tk16.lnk $(if $(filter B,$*),import ID_GET TKBAD) \
 	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk16$*.map \
 	    file { $(B)/tests/tk15s.o $(B)/tests/tk16$*.o }
+
+# TK19.EXE: the global heap probe (KERNEL imports by ordinal: tk19k.lnk)
+$(B)/tests/tk19.o: tests/apps/tk19ref.h tests/apps/tklog.h
+$(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o \
+                tests/apps/app.lnk tests/apps/tk19.lnk tests/apps/tk19k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk19.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk19.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o }
 
 # TK12.EXE: the resource probe, with the resources of tk12.rc
 $(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tk12ref286.h tests/apps/tklog.h
