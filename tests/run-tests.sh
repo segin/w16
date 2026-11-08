@@ -35,6 +35,7 @@ run TK1 0
 run TK3 0
 run TK4 0
 run TK12 0
+run TK13 0
 run TK2 255 "w16: call to unimplemented KERNEL.204"
 
 # TK5 (DLL loading) and TK11 (module tables), laid out like the reference
@@ -56,6 +57,24 @@ export DOSRUN_PRE
 dir=$stage kernel='WINENV C:\WINDOWS W16SYS\KRNL286.EXE'
 run TK5 0
 run TK11 0
+
+# TK14 (profiles and files), laid out like tests/tk14ref.sh: TK14.EXE in
+# C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS
+# (WINENV.COM), a WIN.INI of our own, C:\TKTMP made before KERNEL starts,
+# PATH=C:\TKPATH;Z:\ and TEMP=C:\TKTMP.
+stage="$root/build/tk14root"
+rm -rf "$stage"
+mkdir -p "$stage/WINDOWS/SYSTEM"
+cp "$dos/KRNL286.EXE" "$stage/WINDOWS/SYSTEM/"
+cp "$dos/WINENV.COM" "$dos/TK14.EXE" "$stage/"
+printf '[windows]\r\nload=\r\n' > "$stage/WINDOWS/WIN.INI"
+DOSRUN_PRE='MD C:\TKTMP
+SET PATH=C:\TKPATH;Z:\
+SET TEMP=C:\TKTMP'
+export DOSRUN_PRE
+dir=$stage kernel='WINENV C:\WINDOWS WINDOWS\SYSTEM\KRNL286.EXE'
+run TK14 0
+unset DOSRUN_PRE
 
 # TK6-TK10 (floating point; tests/tk6ref.sh) in DOSBox-X, with a
 # coprocessor and without one: KRNL286 and WIN87EM.DLL in C:\WINDOWS\SYSTEM,

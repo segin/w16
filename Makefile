@@ -32,11 +32,12 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/dpmi.o $(B)/kernel/global.o $(B)/kernel/module.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
-           $(B)/kernel/mdb.o $(B)/kernel/resource.o
+           $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
+           $(B)/kernel/profile.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12
+           TK11 TK12 TK13 TK14
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
@@ -118,6 +119,8 @@ $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
 $(B)/tests/tk11.o: tests/apps/tk11ref.h tests/apps/tklog.h
+$(B)/tests/tk13.o: tests/apps/tk13ref.h tests/apps/tklog.h
+$(B)/tests/tk14.o: tests/apps/tk14ref.h tests/apps/tklog.h
 
 # TK11.EXE: the in-memory module table probe (uses TK5's DLLs)
 $(DOS)/TK11.EXE: $(B)/tests/start.o $(B)/tests/tk11.o $(B)/tests/prolog.o \

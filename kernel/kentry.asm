@@ -265,6 +265,13 @@ LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
 ; Other APIs that need the caller's DS (procinst.c)
 LOCALAPI MAKEPROCINSTANCE, MPI, 3       ; KERNEL.51
 LOCALAPI GETINSTANCEDATA, GIDATA, 3     ; KERNEL.54
+; Local atoms (atom.c)
+LOCALAPI INITATOMTABLE, AINIT,  1      ; KERNEL.68
+LOCALAPI FINDATOM,     AFIND,    2      ; KERNEL.69
+LOCALAPI ADDATOM,      AADD,     2      ; KERNEL.70
+LOCALAPI DELETEATOM,   ADEL,     1      ; KERNEL.71
+LOCALAPI GETATOMNAME,  ANAME,    4      ; KERNEL.72
+LOCALAPI GETATOMHANDLE, AHANDLE, 1      ; KERNEL.73
 
 ; ---------------------------------------------------------------------------
 ; u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
