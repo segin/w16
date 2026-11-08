@@ -314,8 +314,16 @@ static void list_requeue(u16 t)
 
 /* ---- the scheduler ---- */
 
+static void sti(void);
+#pragma aux sti = "sti" modify exact [];
+
+/* The idle loop runs with interrupts enabled: USER's GetMessage calls
+   WaitEvent with them disabled (observed: with them left so, USER's
+   timer procedure, called from IRQ 0 through SYSTEM.DRV, ran 12 times in
+   15 seconds instead of every 100 ms, and no WM_TIMER arrived). */
 static void idle(void)
 {
+    sti();
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
     rm_int(0x2F, 0x1689, 1, 0, 0);      /* Windows kernel idle */
 }

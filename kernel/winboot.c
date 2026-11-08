@@ -166,6 +166,27 @@ int trace_wanted(const char FAR *mod, u16 ordinal)
     return 0;
 }
 
+/* [w16] modmap=1 (a debugging aid): every module's segment selectors on
+   standard output once the shell is loaded */
+static void print_modmap(void)
+{
+    module FAR *m;
+    u16 i;
+    for (m = module_first; m; m = m->next) {
+        kputs("w16: ");
+        kputs(m->name);
+        kputs(" hmod=");
+        kputhex(m->ne_sel);
+        for (i = 0; i < m->seg_count; i++) {
+            kputs(" ");
+            kputdec(i + 1);
+            kputs("=");
+            kputhex(m->seg[i].sel);
+        }
+        kputs("\r\n");
+    }
+}
+
 /* ---- the boot ---- */
 
 static const char sysini[] = "SYSTEM.INI";
@@ -283,6 +304,8 @@ u16 winboot(void)
     if (err < 32)
         boot_fail(shell);
     booting = 0;
+    if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
+        print_modmap();
     final_user_init();
     /* the watchdog keeps running: a debugging aid, it reports where the
        system is after SECONDS without a boot log line */

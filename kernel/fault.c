@@ -52,7 +52,7 @@ static u16 lsl(u16 sel);
     parm [dx] value [ax] modify exact [ax];
 
 /* " MODULE:n" for the module segment sel belongs to */
-static void where(u16 sel)
+void where(u16 sel)
 {
     module FAR *m;
     u16 i;

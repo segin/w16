@@ -17,6 +17,18 @@ extern WORD FAR PASCAL K_WAITEVENT(WORD htask);
 extern WORD FAR PASCAL K_GETTASKQUEUE(WORD htask);
 extern int FAR PASCAL U_INITAPP(WORD hinst);
 extern WORD __cdecl get_0040h(void);
+extern WORD FAR PASCAL S_CREATESYSTEMTIMER(WORD ms, FARPROC proc);
+extern WORD FAR PASCAL S_KILLSYSTEMTIMER(WORD id);
+
+static volatile WORD sys_calls;
+
+void FAR __loadds sys_timer(void)
+{
+    sys_calls++;
+}
+
+static WORD get_flags(void);
+#pragma aux get_flags = "pushf" "pop ax" value [ax];
 
 static WORD n_create, n_paint, n_timer, n_destroy, n_size, n_show, n_other;
 static HWND hwnd_created;
@@ -98,15 +110,20 @@ int __cdecl tmain(void)
         /* PeekMessage for about a second first (BIOS ticks) */
         volatile DWORD FAR *ticks = (volatile DWORD FAR *)MAKELP(get_0040h(), 0x6C);
         DWORD t0 = *ticks;
-        WORD peeked = 0;
+        WORD peeked = 0, id, ifl = 0x200;
+        id = S_CREATESYSTEMTIMER(55, (FARPROC)sys_timer);
         while (*ticks - t0 < 18 && n_timer < 2) {
             if (PeekMessage(&m, 0, 0, 0, PM_REMOVE)) {
                 peeked++;
                 DispatchMessage(&m);
             }
+            ifl &= get_flags();
         }
+        S_KILLSYSTEMTIMER(id);
         obs("WM_TIMER while peeking > 0", n_timer > 0);
         obs_env("messages peeked", peeked);
+        obs_env("own system timer calls", sys_calls);
+        obs("IF always set after PeekMessage", (ifl & 0x200) != 0);
     }
     out("loop\r\n");
     while (GetMessage(&m, 0, 0, 0)) {

@@ -160,6 +160,8 @@ void __cdecl unimpl_report(u16 index)
     kputs("\r\n");
 }
 
+void where(u16 sel);             /* fault.c */
+
 /* ---- the import trace (a debugging aid for the Windows boot) ----
    SYSTEM.INI [w16] trace=MOD.ORD,MOD.ORD,... makes the loader bind those
    imports to trace thunks: each call is recorded (thunk, caller CS:IP,
@@ -216,6 +218,7 @@ void trace_print(void)
         kputhex(r->cs);
         kputs(":");
         kputhex(r->ip);
+        where(r->cs);
         kputs(" ax="); kputhex(r->ax);
         kputs(" bx="); kputhex(r->bx);
         kputs(" cx="); kputhex(r->cx);
