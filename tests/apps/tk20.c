@@ -50,8 +50,11 @@ LRESULT FAR PASCAL __export __loadds WndProc(HWND h, UINT msg, WPARAM wp, LPARAM
     }
     case WM_TIMER:
         n_timer++;
-        if (n_timer == 4)
+        if (n_timer == 4) {
+            out("DestroyWindow\r\n");
             DestroyWindow(h);
+            out("DestroyWindow returned\r\n");
+        }
         return 0;
     case WM_SIZE:
         n_size++;
@@ -61,6 +64,7 @@ LRESULT FAR PASCAL __export __loadds WndProc(HWND h, UINT msg, WPARAM wp, LPARAM
         break;
     case WM_DESTROY:
         n_destroy++;
+        out("WM_DESTROY\r\n");
         PostQuitMessage(7);
         return 0;
     default:

@@ -167,7 +167,7 @@ void where(u16 sel);             /* fault.c */
    imports to trace thunks: each call is recorded (thunk, caller CS:IP,
    AX, BX, CX, DX and the first 6 stack words above the return address)
    in a ring the fault and watchdog reports print. */
-#define TR_N 32
+#define TR_N 96
 typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, arg[6]; } trrec;
 static trrec trring[TR_N];
 static u16 trpos, trcount;

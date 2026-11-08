@@ -627,115 +627,59 @@ fault_exit:
 .hang:  jmp .hang
 
 ; ---------------------------------------------------------------------------
-; Boot watchdog (fault.c): a protected-mode IRQ 0 (INT 08h) handler that
-; samples the interrupted CS:IP into a ring of 64 and counts ticks; when
-; wd_limit ticks pass without progress (fault.c resets wd_ticks), it
-; points the interrupt's return at wd_fire, which reports the samples.
-; It stays the first handler: when a driver (SYSTEM.DRV's timer) hooks
-; INT 08h after it and calls it from its own handler, it takes the
-; vector back, calls that driver's handler itself (wd_next8), and passes
-; the driver's nested call straight on to the original handler
-; (wd_orig8). Otherwise its samples would all be in the driver's handler.
+; Boot watchdog (fault.c): samples the interrupted CS:IP into a ring of 64
+; from the RTC's periodic interrupt (IRQ 8, INT 70h, 16 per second),
+; which nothing in Windows Standard mode uses, and counts them; when
+; wd_limit pass without progress (fault.c resets wd_ticks), it points the
+; interrupt's return at wd_fire, which reports the samples. (A first
+; version sampled IRQ 0; standing in front of SYSTEM.DRV's timer handler
+; stopped SYSTEM's timer procedures once a task had called InitApp.)
 extern _wd_report               ; void __cdecl __far wd_report(void)
-global _wd_orig8, _wd_next8, _wd_ticks, _wd_limit, _wd_samples, _wd_pos
-global wd_int08
+global _wd_ticks, _wd_limit, _wd_samples, _wd_pos
+global wd_int70
 segment _DATA
-_wd_orig8       dd 0
-_wd_next8       dd 0
 _wd_ticks       dw 0
 _wd_limit       dw 0
 _wd_pos         dw 0
-wd_busy         dw 0
 segment _BSS
 _wd_samples     resw 128        ; 64 x (ip cs)
 segment _TEXT
-wd_int08:
-        sub sp, 4                       ; room for a far target
+wd_int70:
         push ds
         push bx
+        push ax
         push bp
-        mov bp, sp                      ; [bp+6] target, [bp+10] IP, CS, FL
+        mov bp, sp                      ; [bp+8] IP, CS, FLAGS
+        mov al, 0Ch                     ; acknowledge the RTC (register C)
+        out 70h, al
+        in al, 71h
+        mov al, 20h                     ; end of interrupt, slave and master
+        out 0A0h, al
+        out 20h, al
         mov bx, DGROUP
         mov ds, bx
-        cmp word [wd_busy wrt DGROUP], 0
-        jne .orig                       ; nested: the driver's chain
-        ; are we still the first handler?
-        push ax
-        push cx
-        push dx
-        mov ax, 0204h
-        mov bl, 08h
-        int 31h
-        mov ax, cs
-        cmp cx, ax
-        jne .taken
-        cmp dx, wd_int08
-        je .first
-.taken: ; a driver hooked in front of us and called us: take the vector
-        ; back for the next tick, and pass this call on
-        mov [_wd_next8 wrt DGROUP], dx
-        mov [_wd_next8 + 2 wrt DGROUP], cx
-        mov ax, 0205h
-        mov bl, 08h
-        mov cx, cs
-        mov dx, wd_int08
-        int 31h
-        pop dx
-        pop cx
-        pop ax
-        jmp .orig
-.first: pop dx
-        pop cx
-        pop ax
         mov bx, [_wd_pos wrt DGROUP]
         add bx, 4
         and bx, 255
         mov [_wd_pos wrt DGROUP], bx
-        push word [bp + 10]
+        push word [bp + 8]
         pop word [_wd_samples + bx wrt DGROUP]
-        push word [bp + 12]
+        push word [bp + 10]
         pop word [_wd_samples + bx + 2 wrt DGROUP]
         inc word [_wd_ticks wrt DGROUP]
         mov bx, [_wd_limit wrt DGROUP]
         or bx, bx
-        jz .next
+        jz .out
         cmp [_wd_ticks wrt DGROUP], bx
-        jb .next
+        jb .out
         mov word [_wd_limit wrt DGROUP], 0
-        mov word [bp + 10], wd_fire
-        mov word [bp + 12], cs
-.next:  ; call the next handler (a driver's, else the original) like an
-        ; interrupt, then return from ours
-        mov bx, [_wd_next8 wrt DGROUP]
-        mov [bp + 6], bx
-        mov bx, [_wd_next8 + 2 wrt DGROUP]
-        mov [bp + 8], bx
-        mov word [wd_busy wrt DGROUP], 1
-        pop bp
-        pop bx
-        pop ds
-        push bp
-        mov bp, sp
-        pushf
-        call far [bp + 2]
-        pop bp
-        add sp, 4
-        push ds
-        push bx
-        mov bx, DGROUP
-        mov ds, bx
-        mov word [wd_busy wrt DGROUP], 0
+        mov word [bp + 8], wd_fire
+        mov word [bp + 10], cs
+.out:   pop bp
+        pop ax
         pop bx
         pop ds
         iret
-.orig:  mov bx, [_wd_orig8 wrt DGROUP]
-        mov [bp + 6], bx
-        mov bx, [_wd_orig8 + 2 wrt DGROUP]
-        mov [bp + 8], bx
-        pop bp
-        pop bx
-        pop ds
-        retf                            ; to the original handler (IRET frame)
 wd_fire:
         mov ax, DGROUP
         mov ds, ax

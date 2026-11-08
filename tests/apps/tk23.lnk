@@ -1,0 +1,6 @@
+# TK23.EXE (tests/apps/tk23.c): what stops the system timer
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5
+import S_CREATESYSTEMTIMER SYSTEM.2
+import S_KILLSYSTEMTIMER SYSTEM.3
