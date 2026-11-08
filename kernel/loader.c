@@ -475,7 +475,7 @@ static void patch_prologues(module FAR *m)
 /* ---- loading and freeing ---- */
 
 static void release(module FAR *m);
-static u16 dgroup_sel(module FAR *m);
+static u16 entry_ds(module FAR *m);
 
 /* Free a module's memory and release the modules it imports from. */
 static void destroy(module FAR *m)
@@ -500,19 +500,24 @@ static void destroy(module FAR *m)
 /* One user less. A DLL nobody uses any more gets its WEP called (observed
    on Windows 3.1: with 0, WEP_FREE_DLL) and is freed. KERNEL and
    programs stay. */
-static void release(module FAR *m)
+static void call_wep(module FAR *m)
 {
     static const u8 wep[] = "\3WEP";
     u16 ord, sel, off;
     int is_const;
 
+    if (mod_find_name(m, (const u8 FAR *)wep, &ord) &&
+        module_entry(m, ord, &sel, &off, &is_const) && !is_const)
+        mod_call(sel, off, entry_ds(m), 0, module_instance(m), 1, 0);
+}
+
+static void release(module FAR *m)
+{
     if (m->usage)
         m->usage--;
     if (m->usage || m == module_first || !(m->flags & NEF_LIBRARY))
         return;
-    if (mod_find_name(m, (const u8 FAR *)wep, &ord) &&
-        module_entry(m, ord, &sel, &off, &is_const) && !is_const)
-        mod_call(sel, off, dgroup_sel(m), 0, module_instance(m), 1, 0);
+    call_wep(m);
     destroy(m);
 }
 
@@ -531,7 +536,8 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
 /* A module another one imports from: shared if loaded, else loaded from
    NAME.DLL. *hmod is its hModule, or 0 for a module w16 does not have
    yet (pending_modules). Returns 0 with *err set on failure.
-   UNVERIFIED: whether Windows also tries NAME.EXE. */
+   Observed: NAME.EXE is not tried (TKUSEX.DLL, importing TKEXEM with only
+   TKEXEM.EXE present, failed with 2). */
 static int acquire_import(const char *name, u16 *hmod, u16 *err)
 {
     module FAR *d = module_find(name);
@@ -546,10 +552,13 @@ static int acquire_import(const char *name, u16 *hmod, u16 *err)
     return 1;
 }
 
-static u16 dgroup_sel(module FAR *m)
+/* DS for a DLL's entry point and WEP: the DGROUP selector; for a DLL
+   without DGROUP the hModule (observed at the entry point of TKNOD.DLL;
+   UNVERIFIED for WEP). */
+static u16 entry_ds(module FAR *m)
 {
     u16 ad = NE_HDR(m)->auto_data;
-    return ad && ad <= m->seg_count ? m->seg[ad - 1].sel : 0;
+    return ad && ad <= m->seg_count ? m->seg[ad - 1].sel : m->ne_sel;
 }
 
 static module FAR *load_fail(module FAR *m, const char FAR *path, const char *why)
@@ -714,13 +723,14 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
        3.1 at the entry point: AX = 1, CX = heap size, DX = DS = the DGROUP
        selector, DI = hInstance (DS & ~1), SI = 0, ES = 0; DS:0000-000F all
        zero and no local heap yet (the DLL makes it, LocalInit); returning
-       0 makes LoadLibrary return 0 and frees the DLL.
-       UNVERIFIED: DS and DI for a DLL without DGROUP (0 and hModule here);
-       whether WEP is called when the initialisation fails (not here). */
+       0 makes LoadLibrary return 0, and the DLL's WEP runs before it is
+       freed. A DLL without DGROUP gets DS = DX = DI = its hModule.
+       UNVERIFIED: WEP's argument after a failed initialisation (0 here). */
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
-        if (!mod_call(m->seg[h.cs - 1].sel, h.ip, dgroup_sel(m), h.heap_size,
+        if (!mod_call(m->seg[h.cs - 1].sel, h.ip, entry_ds(m), h.heap_size,
                       module_instance(m), 0, 0)) {
             *err = LE_FAILED;
+            call_wep(m);
             destroy(m);
             return NULL;
         }

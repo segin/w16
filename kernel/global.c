@@ -21,7 +21,7 @@
  */
 #include "kernel.h"
 
-#define MAX_ARENA 256
+#define ARENA_CHUNK 64          /* block records per chunk (see achunk) */
 
 typedef struct garena {
     u16 sel;            /* first selector; 0 = free slot */
@@ -37,37 +37,83 @@ typedef struct garena {
 #define GRAN 32UL                       /* allocation granularity */
 #define ROUND(n) (((n) + GRAN - 1) & ~(GRAN - 1))
 
-static garena arena[MAX_ARENA];
+/* The block records live in chunks of their own DPMI memory, chained;
+   another chunk is added when all are in use. */
+typedef struct achunk {
+    struct achunk FAR *next;
+    garena a[ARENA_CHUNK];
+} achunk;
+
+static achunk FAR *chunks;
 
 void global_init(void)
 {
-    kmemset(arena, 0, sizeof arena);
+    chunks = NULL;
 }
 
-static garena *find(u16 h)
+static achunk FAR *chunk_new(void)
 {
-    u16 sel = h | 1;
-    int i;
+    u32 lin, h;
+    u16 sel;
+    achunk FAR *c;
+
+    if (!dpmi_alloc_mem(sizeof(achunk), &lin, &h))
+        return NULL;
+    sel = dpmi_alloc_desc(1);
+    if (!sel || !dpmi_set_desc(sel, lin, sizeof(achunk) - 1, 0)) {
+        if (sel)
+            dpmi_free_desc(sel);
+        dpmi_free_mem(h);
+        return NULL;
+    }
+    c = MK_FP(sel, 0);
+    kmemset(c, 0, sizeof(achunk));
+    return c;
+}
+
+static garena FAR *find(u16 h)
+{
+    u16 sel = h | 1, i;
+    achunk FAR *c;
     if (!h)
         return NULL;
-    for (i = 0; i < MAX_ARENA; i++)
-        if (arena[i].sel && arena[i].sel == sel)
-            return &arena[i];
+    for (c = chunks; c; c = c->next)
+        for (i = 0; i < ARENA_CHUNK; i++)
+            if (c->a[i].sel == sel)
+                return &c->a[i];
     return NULL;
 }
 
-static u16 handle_of(const garena *a)
+static garena FAR *free_record(void)
+{
+    achunk FAR *c, FAR *last = NULL;
+    u16 i;
+    for (c = chunks; c; last = c, c = c->next)
+        for (i = 0; i < ARENA_CHUNK; i++)
+            if (!c->a[i].sel)
+                return &c->a[i];
+    c = chunk_new();
+    if (!c)
+        return NULL;
+    if (last)
+        last->next = c;
+    else
+        chunks = c;
+    return &c->a[0];
+}
+
+static u16 handle_of(const garena FAR *a)
 {
     return a->sel & ~1u;
 }
 
-static int discarded(const garena *a)
+static int discarded(const garena FAR *a)
 {
     return a->size == 0;
 }
 
 /* Set the base and limit of every tile of `a` from a->lin and a->size. */
-static int set_tiles(garena *a)
+static int set_tiles(garena FAR *a)
 {
     u16 i;
     u32 left = a->size;
@@ -82,7 +128,7 @@ static int set_tiles(garena *a)
     return 1;
 }
 
-static void zero_range(garena *a, u32 from)
+static void zero_range(garena FAR *a, u32 from)
 {
     while (from < a->size) {
         u16 tile = (u16)(from >> 16);
@@ -104,7 +150,7 @@ static void zero_range(garena *a, u32 from)
 
 u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
 {
-    garena *a = NULL;
+    garena FAR *a = NULL;
     int i;
 
     /* A zero-size fixed block also succeeds on Windows 3.1; what it
@@ -113,11 +159,7 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
         size = GRAN;
     if (size > 0x00FF0000UL)
         return 0;
-    for (i = 0; i < MAX_ARENA; i++)
-        if (!arena[i].sel) {
-            a = &arena[i];
-            break;
-        }
+    a = free_record();
     if (!a)
         return 0;
 
@@ -151,7 +193,7 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     return handle_of(a);
 }
 
-static void gfree(garena *a)
+static void gfree(garena FAR *a)
 {
     u16 i;
     for (i = 0; i < a->nsel; i++)
@@ -163,7 +205,7 @@ static void gfree(garena *a)
 
 int gset_code(u16 sel)
 {
-    garena *a = find(sel);
+    garena FAR *a = find(sel);
     if (!a)
         return 0;
     return dpmi_set_desc(a->sel, a->lin, (a->size > 0x10000UL ? 0x10000UL : a->size) - 1, 1);
@@ -171,7 +213,7 @@ int gset_code(u16 sel)
 
 u32 gsize_of_sel(u16 sel)
 {
-    garena *a = find(sel);
+    garena FAR *a = find(sel);
     return a ? a->size : 0;
 }
 
@@ -184,7 +226,7 @@ u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
 
 u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     u32 old, lin, nh, newsize;
 
     if (!a)
@@ -241,7 +283,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
 
 u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     if (a)
         gfree(a);
     return 0;
@@ -249,7 +291,7 @@ u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
 
 void FAR * KAPI GlobalLock(u16 h)                             /* KERNEL.18 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     if (!a || discarded(a))
         return NULL;
     if ((a->flags & GMEM_DISCARDABLE) && a->lock < 0xFF)
@@ -259,7 +301,7 @@ void FAR * KAPI GlobalLock(u16 h)                             /* KERNEL.18 */
 
 u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     if (!a)
         return 0;
     if (a->lock)
@@ -269,14 +311,14 @@ u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
 
 u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     return a ? a->size : 0;
 }
 
 /* Returns handle in the low word and selector in the high word. */
 u32 KAPI GlobalHandle(u16 sel)                                /* KERNEL.21 */
 {
-    garena *a = find(sel);
+    garena FAR *a = find(sel);
     if (!a)
         return 0;
     return ((u32)a->sel << 16) | handle_of(a);
@@ -284,7 +326,7 @@ u32 KAPI GlobalHandle(u16 sel)                                /* KERNEL.21 */
 
 u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
 {
-    garena *a = find(h);
+    garena FAR *a = find(h);
     if (!a)
         return 0;
     return (a->lock & GMEM_LOCKCOUNT) | (a->flags & GMEM_DISCARDABLE) |
@@ -296,7 +338,7 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
    return value details for fixed segments. */
 u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
 {
-    garena *a = find(seg);
+    garena FAR *a = find(seg);
     if (!a)
         return 0;
     if (a->lock < 0xFF)
@@ -306,7 +348,7 @@ u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
 
 u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
 {
-    garena *a = find(seg);
+    garena FAR *a = find(seg);
     if (!a)
         return 0;
     if (a->lock)

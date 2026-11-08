@@ -15,7 +15,7 @@ REFRUN_PRE='SET PATH=C:\TKPATH;Z:\'
 # Windows loads the shell, the DLLs it imports are not looked for in its
 # own directory (C:\); with them there, Windows waits forever.
 REFRUN_FILES="$d/TKID.TPL"
-for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL; do
+for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     REFRUN_FILES="$REFRUN_FILES $d/$f=WINDOWS/$f"
 done
 export REFRUN_PRE REFRUN_FILES

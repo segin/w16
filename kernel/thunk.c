@@ -6,31 +6,72 @@
  * unimpl_entry (kentry.asm) reports the call and ends the task with exit
  * code 0FFh. Loading never fails just because an API is missing; the gap
  * shows up only if the program actually calls it.
+ *
+ * Thunks live in blocks of TB_COUNT, chained; another block is made when
+ * all are used. A block holds the thunks' code (run through a code alias)
+ * followed by their descriptions. The index is 16 bits (the immediate of
+ * "mov ax"), which bounds the number of distinct missing imports.
  */
 #include "kernel.h"
 
-#define MAX_THUNKS 256
-#define THUNK_SIZE 8
+#define TB_COUNT    64          /* thunks per block */
+#define THUNK_SIZE  8
+#define NAME_MAX    32          /* longest import name reported */
 
 typedef struct thunkinfo {
-    char mod[9];
+    char mod[MODNAME_MAX + 1];
     u16  ordinal;               /* 0 when imported by name */
-    char name[33];
+    char name[NAME_MAX + 1];
 } thunkinfo;
 
-static thunkinfo info[MAX_THUNKS];
-static u16 count;
-static u16 data_sel, code_sel;
+typedef struct tblock {
+    u8  code[TB_COUNT * THUNK_SIZE];
+    thunkinfo info[TB_COUNT];
+    u16 next;                   /* data selector of the next block */
+    u16 code_sel;               /* code alias of this block */
+} tblock;
+
+static u16 first;               /* data selector of the first block */
+static u16 count;               /* thunks made */
 
 void thunk_init(void)
 {
-    u32 size = (u32)MAX_THUNKS * THUNK_SIZE;
+    first = 0;
     count = 0;
-    if (!galloc(GMEM_FIXED, size, 0, &data_sel))
-        return;
-    code_sel = dpmi_alloc_desc(1);
-    if (code_sel && !dpmi_set_desc(code_sel, dpmi_get_base(data_sel), size - 1, 1))
-        code_sel = 0;
+}
+
+static tblock FAR *block(u16 sel)
+{
+    return MK_FP(sel, 0);
+}
+
+/* The block holding thunk `index`, made if needed (and allowed). */
+static tblock FAR *block_of(u16 index, int make)
+{
+    u16 sel = first, prev = 0, n = index / TB_COUNT;
+    while (sel && n) {
+        prev = sel;
+        sel = block(sel)->next;
+        n--;
+    }
+    if (!sel && make && !n) {
+        u16 cs;
+        if (!galloc(GMEM_FIXED, sizeof(tblock), 0, &sel))
+            return NULL;
+        cs = dpmi_alloc_desc(1);
+        if (!cs || !dpmi_set_desc(cs, dpmi_get_base(sel), sizeof(tblock) - 1, 1)) {
+            if (cs)
+                dpmi_free_desc(cs);
+            GlobalFree(sel);
+            return NULL;
+        }
+        block(sel)->code_sel = cs;
+        if (prev)
+            block(prev)->next = sel;
+        else
+            first = sel;
+    }
+    return sel ? block(sel) : NULL;
 }
 
 int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
@@ -38,30 +79,39 @@ int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
 {
     u16 i, n;
     u8 FAR *code;
-    char name[33];
+    char name[NAME_MAX + 1];
+    tblock FAR *b;
+    thunkinfo FAR *t;
     void (__far *target)(void) = unimpl_entry;
 
-    if (!code_sel)
-        return 0;
     name[0] = 0;
     if (pname) {
-        n = pname[0] < 32 ? pname[0] : 32;
+        n = pname[0] < NAME_MAX ? pname[0] : NAME_MAX;
         for (i = 0; i < n; i++)
             name[i] = (char)pname[1 + i];
         name[n] = 0;
     }
-    for (i = 0; i < count; i++)
-        if (info[i].ordinal == ordinal && kstricmp(info[i].mod, mod) == 0 &&
-            kstricmp(info[i].name, name) == 0)
+    for (i = 0; i < count; i++) {
+        b = block_of(i, 0);
+        t = &b->info[i % TB_COUNT];
+        if (t->ordinal == ordinal && kstricmp(t->mod, mod) == 0 &&
+            kstricmp(t->name, name) == 0)
             goto found;
-    if (count == MAX_THUNKS)
+    }
+    if (count == 0xFFFF)
         return 0;
-    i = count++;
-    kmemcpy(info[i].mod, mod, 9);
-    info[i].mod[8] = 0;
-    info[i].ordinal = ordinal;
-    kmemcpy(info[i].name, name, sizeof name);
-    code = MK_FP(data_sel, i * THUNK_SIZE);
+    i = count;
+    b = block_of(i, 1);
+    if (!b)
+        return 0;
+    count++;
+    t = &b->info[i % TB_COUNT];
+    for (n = 0; n < MODNAME_MAX && mod[n]; n++)
+        t->mod[n] = mod[n];
+    t->mod[n] = 0;
+    t->ordinal = ordinal;
+    kmemcpy(t->name, name, sizeof name);
+    code = &b->code[(i % TB_COUNT) * THUNK_SIZE];
     code[0] = 0xB8;
     code[1] = (u8)i;
     code[2] = (u8)(i >> 8);
@@ -71,23 +121,23 @@ int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
     code[6] = (u8)FP_SEG(target);
     code[7] = (u8)(FP_SEG(target) >> 8);
 found:
-    *sel = code_sel;
-    *off = i * THUNK_SIZE;
+    *sel = b->code_sel;
+    *off = (i % TB_COUNT) * THUNK_SIZE;
     return 1;
 }
 
 void __cdecl unimpl_report(u16 index)
 {
+    tblock FAR *b = index < count ? block_of(index, 0) : NULL;
     kputs("w16: call to unimplemented ");
-    if (index < count) {
-        kputs(info[index].mod);
-        if (info[index].name[0]) {
-            kputs(".");
-            kputs(info[index].name);
-        } else {
-            kputs(".");
-            kputdec(info[index].ordinal);
-        }
+    if (b) {
+        thunkinfo FAR *t = &b->info[index % TB_COUNT];
+        kputs(t->mod);
+        kputs(".");
+        if (t->name[0])
+            kputs(t->name);
+        else
+            kputdec(t->ordinal);
     }
     kputs("\r\n");
 }
