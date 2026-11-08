@@ -39,7 +39,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -207,6 +207,28 @@ $(DOS)/TK26.EXE: $(B)/tests/start.o $(B)/tests/tk26.o $(B)/tests/tk26.res tests/
 	$(WLINK) @tests/apps/tk26.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk26.map option resource=$(B)/tests/tk26.res \
 	    file { $(B)/tests/start.o $(B)/tests/tk26.o }
+
+# TK27.EXE: the cursor block LoadCursor gives
+$(B)/tests/tk27.o: tests/apps/tk27ref.h tests/apps/tklog.h
+$(DOS)/TK27.EXE: $(B)/tests/start.o $(B)/tests/tk27.o tests/apps/app.lnk tests/apps/tk27.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk27.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk27.map file { $(B)/tests/start.o $(B)/tests/tk27.o }
+
+# TK28.EXE: cursors from a program's resources (tk28.rc; the cursor
+# file is made by tests/apps/tk28cur.py)
+$(B)/tests/tk28.cur: tests/apps/tk28cur.py
+	@mkdir -p $(@D)
+	python3 $< $@
+$(B)/tests/tk28.o: tests/apps/tk28ref.h tests/apps/tklog.h
+$(B)/tests/tk28.res: tests/apps/tk28.rc $(B)/tests/tk28.cur
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/tests -fo=$@ $<
+$(DOS)/TK28.EXE: $(B)/tests/start.o $(B)/tests/tk28.o $(B)/tests/tk28.res tests/apps/app.lnk tests/apps/tk28.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk28.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk28.map option resource=$(B)/tests/tk28.res \
+	    file { $(B)/tests/start.o $(B)/tests/tk28.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c

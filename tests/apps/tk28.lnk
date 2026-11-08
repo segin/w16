@@ -1,0 +1,4 @@
+# TK28.EXE (tests/apps/tk28.c, tk28.rc): cursors from own resources
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5
