@@ -61,12 +61,13 @@
  *  - GlobalFlags = flags << 8 (DGROUP 0400h, discardable code 0800h; not
  *    GMEM_NOTIFY) | 0100h if discardable | 4000h if discarded | the lock
  *    count of a moveable block. Discardable blocks are the ones in the LRU
- *    ring, fixed ones included (GMEM_FIXED | GMEM_DISCARDABLE).
+ *    ring, fixed ones included (GMEM_FIXED | GMEM_DISCARDABLE), though
+ *    only moveable ones are discarded.
  *  - GlobalLock counts only for discardable blocks; GlobalUnlock likewise,
  *    returning the new count. GlobalFix/GlobalUnfix count for every
  *    moveable block, not for fixed ones. GlobalWire = GlobalFix and moving
  *    the block to the lowest free place; GlobalUnwire = GlobalUnfix,
- *    returning whether the count is 0 now.
+ *    returning FFFFh when the count reaches 0, else 0.
  *  - GlobalFree returns 0, also for locked blocks (freed), for handles
  *    already freed and for non-handles.
  *  - GlobalReAlloc: MODIFY puts a block into the LRU ring (at the newest
@@ -75,18 +76,27 @@
  *    discarded block gets memory again under its handle (still
  *    discardable); a block grows in place into following free space, else
  *    a moveable block moves, and a fixed one only with GMEM_MOVEABLE (its
- *    selector stays); otherwise 0.
+ *    selector stays); otherwise 0. A moveable block in the way of a
+ *    growing block is moved instead of it.
  *  - New discardable blocks go to the newest end of the LRU ring (its head,
  *    Burgermaster 1Ah); GlobalLRUNewest/Oldest move a block to either end.
  *  - Discarding calls the GlobalNotify procedure of the owner's task for a
  *    GMEM_NOTIFY block, with the handle and DS = ES = SS; if it returns 0
  *    the block stays (also for GlobalReAlloc(h, 0, GMEM_MOVEABLE), which
- *    then returns 0). Blocks without GMEM_NOTIFY are discarded silently.
+ *    then returns 0). Blocks without GMEM_NOTIFY are discarded silently;
+ *    a discarded block that is reallocated has lost GMEM_NOTIFY. The
+ *    procedure is kept at TDB 2Eh (a pointer with a bad selector is
+ *    ignored).
  *  - GlobalCompact(n) moves moveable blocks down into free space and
  *    returns the size of the largest free block less 30h; GlobalCompact(-1)
  *    discards every unlocked discardable block.
  *  - When an allocation does not fit, unlocked discardable blocks are
- *    discarded, oldest first.
+ *    discarded, oldest first (3.1 discarded all three of the probe's at
+ *    once; w16 discards one at a time until the block fits).
+ *  - TOOLHELP reads these structures: GlobalInfo.wcItems is the
+ *    Burgermaster's count + 1; GlobalFirst/Next report the arena's address,
+ *    GlobalSize, arena byte 0 as wcLock, the flags (| GF_PDB_OWNER for a
+ *    PDB's block) and the next arena's selector.
  *  - Fixed and moveable blocks are allocated from the lowest free space
  *    that fits (3.1 also moves moveable blocks up out of a fixed block's
  *    way, and puts discardable code at the top of the heap above a fence:
