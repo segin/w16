@@ -106,6 +106,25 @@ void __cdecl kmain(bootinfo FAR *pbi)
         kputs("\r\n");
         kexit_to_dos(0xFE);
     }
-    rc = task_start(app, NULL);
+    /* the first task: the rest of KERNEL's command line is its tail;
+       nCmdShow 1 (observed for the shell) */
+    {
+        static const u16 show[2] = { 2, 1 };
+        u8 tail[0x80];
+        u8 FAR *psp = MK_FP(psp_sel, 0);
+        u16 i, n = psp[0x80] < 0x7E ? psp[0x80] : 0x7E;
+        u16 ad = NE_HDR(app)->auto_data;
+        tail[0] = (u8)n;
+        for (i = 0; i < n; i++)
+            tail[1 + i] = psp[0x81 + i];
+        tail[1 + n] = '\r';
+        if (!ad || ad > app->seg_count ||
+            !task_create(app, app->seg[ad - 1].sel, app->seg[ad - 1].hnd, 0,
+                         (const u8 FAR *)tail, (const u16 FAR *)show, 0)) {
+            kputs("w16: not a runnable application\r\n");
+            kexit_to_dos(0xFE);
+        }
+    }
+    rc = task_boot();
     kexit_to_dos((u8)rc);
 }

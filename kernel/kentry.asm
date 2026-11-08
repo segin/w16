@@ -7,7 +7,8 @@
 ;   kernel_entry     NE entry point, called by the bootstrap
 ;   int21_handler    protected-mode INT 21h hook (task termination)
 ;   int3d_handler    protected-mode INT 3Dh: FWAIT (floating-point fixups)
-;   _task_run        start a task on its own stack; returns its exit code
+;   _task_switch     switch stacks between tasks (the scheduler, task.c)
+;   task_tramp       first code a new task runs (from its first switch)
 ;   unimpl_entry     target of the "unimplemented import" thunks
 ;   INITTASK         register-based API wrapper around inittask_c
 ;   DOS3CALL         KERNEL.102
@@ -32,23 +33,20 @@ extern _kmain                   ; void __cdecl __far kmain(bootinfo __far *)
 extern _unimpl_report           ; void __cdecl __far unimpl_report(u16 index)
 extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
+extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
+extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
 
 segment _DATA
-global _old21, _task_active
+global _old21
 _old21          dd 0            ; previous protected-mode INT 21h vector
-_task_active    dw 0            ; nonzero while a task runs under _task_run
-saved_ss        dw 0
-saved_sp        dw 0
-t_cs            dw 0
-t_ip            dw 0
-t_ds            dw 0
-t_ss            dw 0
-t_sp            dw 0
-t_bx            dw 0
-t_cx            dw 0
-t_di            dw 0
-t_si            dw 0
-t_es            dw 0
+
+segment _BSS
+; The stack a task's end runs on (task_exit_c: freeing the task, its
+; module and DLLs, whose WEPs run here), as the task's own stack goes.
+exit_stack      resb 4096
+exit_stack_top:
+
+segment _DATA
 
 segment _TEXT
 
@@ -77,15 +75,34 @@ int3d_handler:
         fwait
         iret
 
+; AH=51h and 62h from a task return its PDB (observed on Windows 3.1,
+; tests/apps/tk15.c: the selector GetCurrentPDB gives).
 global int21_handler
 int21_handler:
         cmp ah, 4Ch
+        je .exit
+        cmp ah, 51h
+        je .pdb
+        cmp ah, 62h
         jne .chain
+.pdb:
+        push ds
+        mov bx, DGROUP
+        mov ds, bx
+        cmp word [_cur_task wrt DGROUP], 0
+        je .nopdb
+        mov bx, [_cur_pdb wrt DGROUP]
+        pop ds
+        iret
+.nopdb:
+        pop ds
+        jmp .chain
+.exit:
         push ds
         push bx
         mov bx, DGROUP
         mov ds, bx
-        cmp word [_task_active wrt DGROUP], 0
+        cmp word [_cur_task wrt DGROUP], 0
         pop bx
         pop ds
         jne task_exit_al
@@ -107,76 +124,69 @@ int21_handler:
         retf                            ; to the old handler; IRET frame intact
 
 ; ---------------------------------------------------------------------------
-; u16 __cdecl __far task_run(u16 cs, u16 ip, u16 ds, u16 ss, u16 sp,
-;                            u16 bx, u16 cx, u16 di, u16 si, u16 es)
-; Enter a task's entry point with Windows' task-start register set:
-;   AX=0, BX=stack size, CX=heap size, DX=0, DI=hInstance, SI=hPrevInstance,
-;   ES=PSP, DS=DGROUP, SS:SP=initial stack, BP=0.
-; UNVERIFIED: AX/DX/BP values at task entry.
-; Returns the exit code when the task terminates with INT 21h AH=4Ch.
-global _task_run
-_task_run:
+; void __cdecl task_switch(u16 far *save, u16 ss, u16 sp)
+; Push the registers a task keeps across a switch (BP, DS, ES, SI, DI, BX,
+; CX, DX), store SS:SP at *save (SP first; not if save is NULL), load the
+; other task's SS:SP and pop its registers: it returns from its own
+; task_switch, or, for a new task, into task_tramp (task.c builds that
+; frame). UNVERIFIED: the registers Windows itself keeps (Pietrek lists
+; BP, DS, SI, DI, AX, CX, ES, BX, DX); AX is not kept here.
+global _task_switch
+_task_switch:
         push bp
         mov bp, sp
-        push si
-        push di
         push ds
         push es
-        mov ax, DGROUP
-        mov ds, ax
-        mov [saved_ss wrt DGROUP], ss
-        mov [saved_sp wrt DGROUP], sp
-        mov ax, [bp+6]
-        mov [t_cs wrt DGROUP], ax
-        mov ax, [bp+8]
-        mov [t_ip wrt DGROUP], ax
-        mov ax, [bp+10]
-        mov [t_ds wrt DGROUP], ax
-        mov ax, [bp+12]
-        mov [t_ss wrt DGROUP], ax
-        mov ax, [bp+14]
-        mov [t_sp wrt DGROUP], ax
-        mov ax, [bp+16]
-        mov [t_bx wrt DGROUP], ax
-        mov ax, [bp+18]
-        mov [t_cx wrt DGROUP], ax
-        mov ax, [bp+20]
-        mov [t_di wrt DGROUP], ax
-        mov ax, [bp+22]
-        mov [t_si wrt DGROUP], ax
-        mov ax, [bp+24]
-        mov [t_es wrt DGROUP], ax
-        mov word [_task_active wrt DGROUP], 1
-        mov ss, [t_ss wrt DGROUP]
-        mov sp, [t_sp wrt DGROUP]
-        push word [t_cs wrt DGROUP]
-        push word [t_ip wrt DGROUP]
-        mov bx, [t_bx wrt DGROUP]
-        mov cx, [t_cx wrt DGROUP]
-        mov di, [t_di wrt DGROUP]
-        mov si, [t_si wrt DGROUP]
-        mov es, [t_es wrt DGROUP]
+        push si
+        push di
+        push bx
+        push cx
+        push dx
+        mov ax, [bp+10]                 ; ss
+        mov dx, [bp+12]                 ; sp
+        les bx, [bp+6]
+        mov cx, es
+        or cx, bx
+        jz .load
+        mov [es:bx], sp
+        mov [es:bx+2], ss
+.load:
+        mov ss, ax
+        mov sp, dx
+        pop dx
+        pop cx
+        pop bx
+        pop di
+        pop si
+        pop ax                          ; ES: it may name a block freed
+        verr ax                         ; since (an ended task's TDB)
+        jz .es
         xor ax, ax
-        xor dx, dx
-        xor bp, bp
-        mov ds, [t_ds wrt DGROUP]
+.es:
+        mov es, ax
+        pop ds
+        pop bp
         retf
 
-; AL = exit code. Abandons the task's stack and returns from _task_run.
+; A new task's first switch lands here, with its start-up registers
+; popped; the far address of its entry point is next on the stack, at its
+; initial SP. AX = 0 at a task's entry (observed on Windows 3.1).
+global task_tramp
+task_tramp:
+        xor ax, ax
+        retf
+
+; AL = exit code. Leaves the task's stack for KERNEL's exit stack and ends
+; the task there (task_exit_c does not return).
 task_exit_al:
         mov bx, DGROUP
         mov ds, bx
-        mov word [_task_active wrt DGROUP], 0
-        mov ss, [saved_ss wrt DGROUP]
-        mov sp, [saved_sp wrt DGROUP]
+        mov ss, bx
+        mov sp, exit_stack_top wrt DGROUP
         sti
         xor ah, ah
-        pop es
-        pop ds
-        pop di
-        pop si
-        pop bp
-        retf
+        push ax
+        call far _task_exit_c
 
 ; ---------------------------------------------------------------------------
 ; Unimplemented-import thunks do:  mov ax, <index> / jmp far unimpl_entry
@@ -187,7 +197,7 @@ unimpl_entry:
         push ax
         call far _unimpl_report
         add sp, 2
-        cmp word [_task_active wrt DGROUP], 0
+        cmp word [_cur_task wrt DGROUP], 0
         jne .task
         mov ax, 0FFh                    ; no task yet (a DLL's LibMain)
         call far kexit_to_dos_          ; Watcom register convention

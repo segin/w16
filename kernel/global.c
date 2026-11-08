@@ -32,7 +32,12 @@ typedef struct garena {
     u16 flags;          /* GMEM_* flags */
     u16 lock;           /* lock count (moveable blocks) */
     u16 owner;
+    u16 kind;           /* GK_* */
 } garena;
+
+#define GK_NORMAL   0
+#define GK_DOS      1   /* DOS memory (DPMI 0100h): dpmi = its selector */
+#define GK_ALIAS    2   /* a code alias of another block's memory */
 
 #define GRAN 32UL                       /* allocation granularity */
 #define ROUND(n) (((n) + GRAN - 1) & ~(GRAN - 1))
@@ -104,7 +109,9 @@ static garena FAR *free_record(void)
 
 static u16 handle_of(const garena FAR *a)
 {
-    return a->sel & ~1u;
+    /* observed (tests/apps/tk15.c): a task database, which is in DOS
+       memory, has GlobalHandle(hTask) == hTask, an odd selector */
+    return a->kind == GK_NORMAL ? a->sel & ~1u : a->sel;
 }
 
 static int discarded(const garena FAR *a)
@@ -188,6 +195,7 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     a->flags = flags;
     a->lock = 0;
     a->owner = owner;
+    a->kind = GK_NORMAL;
     if (sel_out)
         *sel_out = a->sel;
     return handle_of(a);
@@ -196,11 +204,98 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
 static void gfree(garena FAR *a)
 {
     u16 i;
+    regs16 r;
+    if (a->kind == GK_DOS) {
+        r.ax = 0x0101;                  /* frees the selector too */
+        r.dx = (u16)a->dpmi;
+        r.ds = r.es = 0;
+        dpmi31(&r);
+        a->sel = 0;
+        return;
+    }
     for (i = 0; i < a->nsel; i++)
         dpmi_free_desc(a->sel + i * sel_inc);
-    if (!discarded(a))
+    if (a->kind == GK_NORMAL && !discarded(a))
         dpmi_free_mem(a->dpmi);
     a->sel = 0;
+}
+
+/* A zeroed block of `size` bytes (below 64K) in DOS memory (DPMI 0100h),
+   whose handle is its selector; *seg is its real-mode segment. Returns
+   the selector, 0 if out of memory. */
+u16 galloc_dos(u16 size, u16 owner, u16 *seg)
+{
+    garena FAR *a = free_record();
+    regs16 r;
+    if (!a)
+        return 0;
+    r.ax = 0x0100;
+    r.bx = (u16)((ROUND(size) + 15) >> 4);
+    r.ds = r.es = 0;
+    if (dpmi31(&r))
+        return 0;
+    a->sel = r.dx;
+    a->dpmi = r.dx;
+    a->nsel = 1;
+    a->lin = (u32)r.ax << 4;
+    a->size = ROUND(size);
+    a->flags = GMEM_FIXED;
+    a->lock = 0;
+    a->owner = owner;
+    a->kind = GK_DOS;
+    *seg = r.ax;
+    kmemset(MK_FP(a->sel, 0), 0, (u16)a->size);
+    return a->sel;
+}
+
+/* A code selector for the memory of block `sel`, itself a block that
+   GlobalHandle and GlobalSize know (freeing it frees only the selector).
+   Returns 0 on failure. */
+u16 galias_code(u16 sel, u16 owner)
+{
+    garena FAR *s = find(sel), FAR *a;
+    u16 c;
+    if (!s || discarded(s) || s->size > 0x10000UL)
+        return 0;
+    a = free_record();
+    if (!a)
+        return 0;
+    c = dpmi_alloc_desc(1);
+    if (!c)
+        return 0;
+    if (!dpmi_set_desc(c, s->lin, s->size - 1, 1)) {
+        dpmi_free_desc(c);
+        return 0;
+    }
+    a->sel = c;
+    a->nsel = 1;
+    a->lin = s->lin;
+    a->size = s->size;
+    a->dpmi = 0;
+    a->flags = GMEM_FIXED;
+    a->lock = 0;
+    a->owner = owner;
+    a->kind = GK_ALIAS;
+    return c;
+}
+
+/* Free every block `owner` owns (a task's PDB, when the task ends). */
+void gfree_owner(u16 owner)
+{
+    achunk FAR *c;
+    u16 i;
+    if (!owner)
+        return;
+    for (c = chunks; c; c = c->next)
+        for (i = 0; i < ARENA_CHUNK; i++)
+            if (c->a[i].sel && c->a[i].owner == owner)
+                gfree(&c->a[i]);
+}
+
+u16 gowner(u16 h)
+{
+    garena FAR *a = find(h);
+    return a ? a->owner : 0;
 }
 
 int gset_code(u16 sel)
@@ -219,9 +314,13 @@ u32 gsize_of_sel(u16 sel)
 
 /* ---- API ---- */
 
+/* Observed (tests/apps/tk15.c): a block a task allocates is freed when
+   the task ends. As on Windows (Pietrek, "Windows Internals"), the owner
+   is the current task's PDB. UNVERIFIED: GMEM_SHARE blocks (owned by no
+   task here). */
 u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
 {
-    return galloc(flags, size, 0, NULL);
+    return galloc(flags, size, (flags & GMEM_SHARE) ? 0 : task_pdb(), NULL);
 }
 
 u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
@@ -229,7 +328,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     garena FAR *a = find(h);
     u32 old, lin, nh, newsize;
 
-    if (!a)
+    if (!a || a->kind != GK_NORMAL)
         return 0;
     if (flags & GMEM_MODIFY) {
         /* only the discardable/moveable attributes can change */

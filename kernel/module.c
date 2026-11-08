@@ -205,7 +205,7 @@ module FAR *module_of(u16 h)
             if (same_sel(m->seg[s].sel, h))
                 return m;
     }
-    return NULL;
+    return task_module_of_sel(h);       /* a later instance's DGROUP */
 }
 
 /* What LoadLibrary returns for a module. Observed on Windows 3.1: the
@@ -398,6 +398,14 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
     if (is_const)
         sel = 0xFFFF;
     return ((u32)sel << 16) | off;
+}
+
+/* Observed (tests/apps/tk15.c): the hModule for an hInstance (also a
+   later instance's) or hModule; 0 for an hTask and for 0. */
+u16 KAPI GetExePtr(u16 h)                                     /* KERNEL.133 */
+{
+    module FAR *m = module_of(h);
+    return m ? m->ne_sel : 0;
 }
 
 /* Observed: 1 for a module loaded once (implicitly or by LoadLibrary);

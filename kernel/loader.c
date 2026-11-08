@@ -6,9 +6,10 @@
  *
  * Behaviour observed black-box on Windows 3.1 (Standard and 386 Enhanced
  * mode agree) with tests/apps/tk5.c and its DLLs; ARCHITECTURE.md 9.2
- * lists the findings. The module table (hModule) is built by mdb.c. Not
- * yet: demand loading and discarding, self-loading modules, starting a
- * second task (LoadModule of a program).
+ * lists the findings. The module table (hModule) is built by mdb.c.
+ * Starting programs (LoadModule, WinExec; tests/apps/tk15.c) makes tasks
+ * through task.c. Not yet: demand loading and discarding, self-loading
+ * modules.
  *
  * NE format source: see include/w16/ne.h.
  */
@@ -19,10 +20,22 @@
 #define LE_NOTFOUND     2       /* also: a module it imports is missing */
 #define LE_NOPATH       3
 #define LE_BADFORMAT    20      /* not MZ, or MZ without an NE header */
+#define LE_PROGRAM      5       /* LoadLibrary of a program (tk15.c) */
 
-/* UNVERIFIED: these are w16's own choices. */
+/* UNVERIFIED: these are w16's own choices or documented values not yet
+   seen on Windows. */
 #define LE_NOMEM        8       /* out of memory */
-#define LE_PROGRAM      16      /* a program, not a DLL: w16 has one task */
+#define LE_MULTIDATA    16      /* a second instance of a program with
+                                   more than one writable data segment
+                                   (the SDK's value) */
+
+/* While a program is loaded for a new task (not the first one), the DLLs
+   loaded with it are not initialised then but listed here, for InitTask
+   to initialise them on the task's stack: observed on Windows 3.1 (tk15.c,
+   and TK5 started from WIN.INI's load=), as Pietrek describes. A block:
+   a count word, then hModules. */
+static u16 defer_sel;
+static u16 last_libinit;        /* the list the last program load made */
 
 /* Windows' own modules that w16 does not provide yet. A program that
    imports from one of them still loads: the imports go to the
@@ -479,10 +492,73 @@ static void patch_prologues(module FAR *m)
 static void release(module FAR *m);
 static u16 entry_ds(module FAR *m);
 
-/* Free a module's memory and release the modules it imports from. */
-static void destroy(module FAR *m)
+/* Usage counts (observed on Windows 3.1, tk5.c and tk15.c): loading a
+   module, or another instance of a program, or LoadLibrary of a loaded
+   DLL, adds one use to the module and to every DLL in its import
+   closure, each once however many paths lead to it (a program importing
+   TKDLL and TKDLB, where TKDLL imports TKDLB, gave 1 for both; a second
+   instance 2 for both). Freeing takes one use from each, and the DLLs
+   that reach 0 are freed (WEP first). Pietrek describes the same
+   (IncExeUsage, DecExeUsage). KERNEL is not counted. */
+static u16 walk_gen;            /* marks modules already counted */
+static u16 load_depth;          /* nested load_file calls */
+
+static void closure_walk(module FAR *m, int delta)
 {
     u16 i, n;
+    module FAR *d;
+    if (m == module_first || m->walk == walk_gen)
+        return;
+    m->walk = walk_gen;
+    if (delta > 0)
+        MOD_USAGE(m)++;
+    else if (MOD_USAGE(m))
+        MOD_USAGE(m)--;
+    n = NE_HDR(m)->modref_count;
+    for (i = 0; i < n; i++) {
+        d = module_of(MOD_MODREF(m, i));
+        if (d && (d->flags & NEF_LIBRARY))
+            closure_walk(d, delta);
+    }
+}
+
+static void uses(module FAR *m, int delta)
+{
+    if (!++walk_gen) {                  /* wrapped: clear every mark */
+        module FAR *x;
+        for (x = module_first; x; x = x->next)
+            x->walk = 0;
+        walk_gen = 1;
+    }
+    closure_walk(m, delta);
+}
+
+static void destroy(module FAR *m);
+static void call_wep(module FAR *m);
+
+/* Free the DLLs nobody uses any more, importers first (the module list
+   has a module before the modules it imports). Not while loading. */
+static void sweep(void)
+{
+    module FAR *m;
+    if (load_depth)
+        return;
+    for (m = module_first; m; ) {
+        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m)) {
+            if (NE_HDR(m)->flags & MDBF_WEP)
+                call_wep(m);
+            destroy(m);
+            m = module_first;
+            continue;
+        }
+        m = m->next;
+    }
+}
+
+/* Free a module's memory (its imports: uses() and sweep()). */
+static void destroy(module FAR *m)
+{
+    u16 i;
     mod_unlink(m);
     for (i = 0; i < m->seg_count; i++)
         if (m->seg[i].hnd)
@@ -491,22 +567,17 @@ static void destroy(module FAR *m)
         GlobalFree(m->nonres_sel);
     if (m->ft_sel)
         GlobalFree(m->ft_sel);
+    if (m->dg_snap)
+        GlobalFree(m->dg_snap);
     if (m->ne_sel) {
         rsrc_free(m);
-        n = NE_HDR(m)->modref_count;
-        for (i = 0; i < n; i++) {
-            module FAR *d = module_of(MOD_MODREF(m, i));
-            if (d)
-                release(d);
-        }
         GlobalFree(m->ne_sel);
     }
     GlobalFree(m->self);
 }
 
-/* One user less. A DLL nobody uses any more gets its WEP called (observed
-   on Windows 3.1: with 0, WEP_FREE_DLL) and is freed. KERNEL and
-   programs stay. */
+/* A DLL nobody uses any more gets its WEP called (observed on Windows
+   3.1: with 0, WEP_FREE_DLL) before it is freed. */
 static void call_wep(module FAR *m)
 {
     static const u8 wep[] = "\3WEP";
@@ -518,15 +589,14 @@ static void call_wep(module FAR *m)
         mod_call(sel, off, entry_ds(m), 0, module_instance(m), 1, 0);
 }
 
+/* One use less of a DLL (FreeLibrary, FreeModule); KERNEL and programs
+   stay (a program goes with its last instance, module_end_instance). */
 static void release(module FAR *m)
 {
-    if (MOD_USAGE(m))
-        MOD_USAGE(m)--;
-    if (MOD_USAGE(m) || m == module_first || !(m->flags & NEF_LIBRARY))
+    if (m == module_first || !(m->flags & NEF_LIBRARY))
         return;
-    if (NE_HDR(m)->flags & MDBF_WEP)
-        call_wep(m);
-    destroy(m);
+    uses(m, -1);
+    sweep();
 }
 
 static int is_pending(const char *name)
@@ -552,9 +622,7 @@ static int acquire_import(const char *name, u16 *hmod, u16 *err)
     *hmod = 0;
     if (!d && is_pending(name))
         return 1;
-    if (d)
-        MOD_USAGE(d)++;
-    else if ((d = load_file(name, ".DLL", 0, err)) == NULL)
+    if (!d && (d = load_file(name, ".DLL", 0, err)) == NULL)
         return 0;
     *hmod = d->ne_sel;
     return 1;
@@ -581,10 +649,67 @@ static module FAR *load_fail(module FAR *m, const char FAR *path, const char *wh
     return NULL;
 }
 
+/* Append hmod to the deferred list; 0 if out of memory. */
+static int defer_add(u16 hmod)
+{
+    u16 n = *(u16 FAR *)MK_FP(defer_sel, 0);
+    if ((u32)(n + 2) * 2 > gsize_of_sel(defer_sel) &&
+        !GlobalReAlloc(defer_sel, (u32)(n + 2) * 2 + 64, 0))
+        return 0;
+    *(u16 FAR *)MK_FP(defer_sel, 2 + 2 * n) = hmod;
+    *(u16 FAR *)MK_FP(defer_sel, 0) = n + 1;
+    return 1;
+}
+
+/* Copy the DGROUP of a program just loaded, for its later instances
+   (UNVERIFIED: Windows reads the segment from the file again; a far
+   pointer to DGROUP in the data would point to the first instance's
+   here). */
+static int snapshot(module FAR *m)
+{
+    u16 ad = NE_HDR(m)->auto_data, sel;
+    u32 n;
+    if (!ad || ad > m->seg_count)
+        return 1;
+    n = gsize_of_sel(m->seg[ad - 1].sel);
+    if (!galloc(GMEM_FIXED, n, m->ne_sel, &sel))
+        return 0;
+    m->dg_snap = sel;
+    if (n > 0x8000UL) {
+        kmemcpy(MK_FP(sel, 0), MK_FP(m->seg[ad - 1].sel, 0), 0x8000);
+        kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->seg[ad - 1].sel, 0x8000), (u16)(n - 0x8000UL));
+    } else {
+        kmemcpy(MK_FP(sel, 0), MK_FP(m->seg[ad - 1].sel, 0), (u16)n);
+    }
+    return 1;
+}
+
+static module FAR *load_body(const char FAR *name, const char *ext, int program,
+                             u16 *err);
+
 /* Load a module from its file (name searched as in open_search, ext
    appended), with the modules it imports from, and run a DLL's
-   initialisation. Programs only if `program`. */
+   initialisation (or, for a program loaded for a new task, list them:
+   last_libinit). Programs only if `program`. */
 static module FAR *load_file(const char FAR *name, const char *ext, int program,
+                             u16 *err)
+{
+    u16 saved = defer_sel;
+    module FAR *m;
+    load_depth++;
+    m = load_body(name, ext, program, err);
+    load_depth--;
+    if (defer_sel != saved) {
+        if (m && *(u16 FAR *)MK_FP(defer_sel, 0))
+            last_libinit = defer_sel;
+        else
+            GlobalFree(defer_sel);
+        defer_sel = saved;
+    }
+    return m;
+}
+
+static module FAR *load_body(const char FAR *name, const char *ext, int program,
                              u16 *err)
 {
     char path[DOS_PATHMAX];
@@ -607,6 +732,15 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
         f_close(fh);
         *err = LE_PROGRAM;
         return NULL;
+    }
+    if (!(h.flags & NEF_LIBRARY) && cur_task) {
+        u16 dsel;
+        if (!galloc(GMEM_FIXED, 64, 0, &dsel)) {
+            f_close(fh);
+            *err = LE_NOMEM;
+            return NULL;
+        }
+        defer_sel = dsel;
     }
     *err = LE_BADFORMAT;
     if (h.flags & NEF_SELFLOAD) {
@@ -657,7 +791,6 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
         if (kstricmp(dup->name, m->name) == 0) {
             f_close(fh);
             destroy(m);
-            MOD_USAGE(dup)++;
             return dup;
         }
     mod_link(m);
@@ -707,7 +840,6 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
         }
     }
     f_close(fh);
-    MOD_USAGE(m) = 1;
 
     /* the modules it imports from (observed: loaded, and initialised,
        before the module itself; one that is missing fails the load with
@@ -741,6 +873,10 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     f_close(fh);
     GlobalFree(m->ft_sel);
     m->ft_sel = 0;
+    if (!(h.flags & NEF_LIBRARY) && !snapshot(m)) {
+        *err = LE_NOMEM;
+        return load_fail(m, path, "out of memory");
+    }
     patch_prologues(m);
     for (i = 0; i < h.seg_count; i++)
         if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
@@ -756,7 +892,13 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
        UNVERIFIED: WEP's argument after a failed initialisation (0 here). */
     if (h.flags & NEF_LIBRARY)
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
-    if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
+    if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
+        if (!defer_add(m->ne_sel)) {
+            *err = LE_NOMEM;
+            destroy(m);
+            return NULL;
+        }
+    } else if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
         if (!mod_call(m->seg[h.cs - 1].sel, h.ip, entry_ds(m), h.heap_size,
                       module_instance(m), 0, 0)) {
             *err = LE_FAILED;
@@ -773,30 +915,47 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
    module is found by the base name of the argument, whatever the path
    (even C:\TKNODIR\TKDLB.DLL, a directory that does not exist), and by
    MAKELP(0, hModule); then its usage count goes up and nothing is read. */
-static module FAR *acquire(const char FAR *name, u16 *err)
+static module FAR *find_loaded(const char FAR *name)
 {
     char base[MODNAME_MAX + 1];
+    if (!FP_SEG(name))
+        return module_of(FP_OFF(name));
+    if (mod_base_name(name, base))
+        return module_find((const char FAR *)base);
+    return NULL;
+}
+
+static module FAR *acquire(const char FAR *name, u16 *err)
+{
     module FAR *m;
 
-    if (!FP_SEG(name)) {
-        m = module_of(FP_OFF(name));
-        if (!m) {
-            *err = LE_NOTFOUND;         /* UNVERIFIED */
+    m = find_loaded(name);
+    if (m) {
+        if (!(m->flags & NEF_LIBRARY) && m != module_first) {
+            *err = LE_PROGRAM;          /* observed, also while it runs */
             return NULL;
         }
-        MOD_USAGE(m)++;
+        uses(m, 1);
         return m;
     }
-    if (mod_base_name(name, base) && (m = module_find((const char FAR *)base)) != NULL) {
-        MOD_USAGE(m)++;
-        return m;
+    if (!FP_SEG(name)) {
+        *err = LE_NOTFOUND;             /* UNVERIFIED */
+        return NULL;
     }
-    return load_file(name, NULL, 0, err);
+    m = load_file(name, NULL, 0, err);
+    if (m)
+        uses(m, 1);
+    sweep();                            /* what a failed load left */
+    return m;
 }
 
 module FAR *module_load_program(const char FAR *path, u16 *err)
 {
-    return load_file(path, NULL, 1, err);
+    module FAR *m = load_file(path, NULL, 1, err);
+    if (m)
+        uses(m, 1);
+    sweep();
+    return m;
 }
 
 /* ---- API ---- */
@@ -821,14 +980,190 @@ void KAPI FreeLibrary(u16 h)                                   /* KERNEL.96 */
         release(m);
 }
 
-/* Observed with a DLL: the same as LoadLibrary (the parameter block is
-   not used). w16 runs one task, so a program cannot be started.
-   UNVERIFIED: the result for a program (LE_PROGRAM here). */
+/* LoadModule's parameter block */
+typedef struct loadparms {
+    u16 env;                    /* UNVERIFIED: every task gets KERNEL's
+                                   environment (observed with 0) */
+    const u8 FAR *cmd;          /* length byte, text, CR */
+    const u16 FAR *show;        /* 2, nCmdShow */
+    u32 reserved;
+} loadparms;
+
+/* Start a task for an instance of program m whose DGROUP is dg. */
+static u16 start_task(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
+                      const loadparms FAR *lp, u16 libinit)
+{
+    u16 t = task_create(m, dg_sel, dg_hnd, hprev, lp ? lp->cmd : NULL,
+                        lp ? lp->show : NULL, libinit);
+    if (!t)
+        return 0;
+    task_start(t);
+    return dg_hnd;
+}
+
+/* Another instance of a loaded program: a new DGROUP (the module's as
+   loaded), one more use of the module and of the DLLs it imports
+   (import_uses; the DLLs are not initialised again); hPrevInstance is
+   the first instance (observed with two). */
+static u16 new_instance(module FAR *m, const loadparms FAR *lp)
+{
+    u16 i, n = 0, sel, hnd, hprev, r;
+    u32 size;
+
+    for (i = 0; i < m->seg_count; i++)
+        if ((MOD_SEG(m, i)->flags & NESEG_DATA) && !(MOD_SEG(m, i)->flags & NESEG_RDONLY))
+            n++;
+    if (n > 1)
+        return LE_MULTIDATA;
+    if (!m->dg_snap)
+        return LE_NOMEM;
+    size = gsize_of_sel(m->dg_snap);
+    hnd = galloc(GMEM_MOVEABLE, size, m->ne_sel, &sel);
+    if (!hnd)
+        return LE_NOMEM;
+    if (size > 0x8000UL) {
+        kmemcpy(MK_FP(sel, 0), MK_FP(m->dg_snap, 0), 0x8000);
+        kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->dg_snap, 0x8000), (u16)(size - 0x8000UL));
+    } else {
+        kmemcpy(MK_FP(sel, 0), MK_FP(m->dg_snap, 0), (u16)size);
+    }
+    hprev = task_prev_instance(m);
+    uses(m, 1);
+    r = start_task(m, sel, hnd, hprev, lp, 0);
+    if (!r) {
+        module_end_instance(m, hnd, sel);
+        return LE_NOMEM;
+    }
+    return r;
+}
+
+/* One instance of program m has ended (task.c): its DGROUP goes, and one
+   use of the module and the modules it imports; with the last one the
+   module is freed (observed: GetModuleHandle gives 0 afterwards, and the
+   implicitly loaded DLLs are gone). UNVERIFIED: which DGROUP the
+   module's segment table holds when the first instance ends before
+   another. */
+void module_end_instance(module FAR *m, u16 dg_hnd, u16 dg_sel)
+{
+    u16 ad = NE_HDR(m)->auto_data;
+    (void)dg_sel;
+    uses(m, -1);
+    if (MOD_USAGE(m)) {
+        if (ad && ad <= m->seg_count && m->seg[ad - 1].hnd == dg_hnd) {
+            u16 sel = 0, h = task_other_dgroup(m, dg_hnd, &sel);
+            m->seg[ad - 1].hnd = h;
+            m->seg[ad - 1].sel = sel;
+            MOD_SEGHND(m, ad - 1) = h;
+        }
+        GlobalFree(dg_hnd);
+        sweep();
+        return;
+    }
+    if (ad && ad <= m->seg_count && m->seg[ad - 1].hnd != dg_hnd)
+        GlobalFree(dg_hnd);
+    destroy(m);
+    sweep();
+}
+
+/* Initialise a DLL whose initialisation was deferred (InitTask, on the
+   task's stack); returns its result. */
+int module_init_dll(u16 hmod)
+{
+    module FAR *m = module_of(hmod);
+    ne_header FAR *h;
+    if (!m)
+        return 1;
+    h = NE_HDR(m);
+    if (!h->cs || h->cs > m->seg_count)
+        return 1;
+    return mod_call(m->seg[h->cs - 1].sel, h->ip, entry_ds(m), h->heap_size,
+                    module_instance(m), 0, 0) != 0;
+}
+
+/* Observed on Windows 3.1 (tk5.c, tk15.c): for a DLL the same as
+   LoadLibrary; with the parameter block -1 (what LoadLibrary passes,
+   Pietrek) a program gives 5. A program starts a task: a new module,
+   whose DLLs are initialised in the task's InitTask, or another instance
+   of a loaded one; the result is the hInstance, after the new task has
+   run until it yielded. Errors as LoadLibrary's. */
 u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
 {
-    (void)params;
-    return LoadLibrary(name);
+    const loadparms FAR *lp = params;
+    module FAR *m;
+    u16 err, libinit, ad, r;
+
+    if (params == (void FAR *)-1L)
+        return LoadLibrary(name);
+    m = find_loaded(name);
+    if (m && ((m->flags & NEF_LIBRARY) || m == module_first)) {
+        uses(m, 1);
+        return module_instance(m);
+    }
+    if (m)
+        return new_instance(m, lp);
+    if (!FP_SEG(name))
+        return LE_NOTFOUND;             /* UNVERIFIED */
+    last_libinit = 0;
+    m = load_file(name, NULL, 1, &err);
+    libinit = last_libinit;
+    last_libinit = 0;
+    if (m)
+        uses(m, 1);
+    sweep();
+    if (!m)
+        return err;
+    if (m->flags & NEF_LIBRARY)
+        return module_instance(m);
+    ad = NE_HDR(m)->auto_data;
+    r = ad && ad <= m->seg_count
+        ? start_task(m, m->seg[ad - 1].sel, m->seg[ad - 1].hnd, 0, lp, libinit) : 0;
+    if (!r) {
+        if (libinit)
+            GlobalFree(libinit);
+        uses(m, -1);
+        destroy(m);
+        sweep();
+        return LE_NOMEM;
+    }
+    return r;
 }
+
+/* WinExec (KERNEL.166): LoadModule with the command line split into the
+   program and its tail. Observed on Windows 3.1 (tk15.c): the blank after
+   the program's name is not part of the tail; nCmdShow reaches InitTask;
+   a missing file gives 2, a missing directory 3.
+   UNVERIFIED: more blanks, a name without extension, quotes. */
+u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
+{
+    char name[DOS_PATHMAX];
+    u8 tail[0x80];
+    u16 shw[2];
+    loadparms lp;
+    u16 i = 0, n = 0;
+
+    while (cmd[i] == ' ')
+        i++;
+    while (cmd[i] && cmd[i] != ' ') {
+        if (n >= sizeof name - 1)
+            return LE_NOTFOUND;
+        name[n++] = cmd[i++];
+    }
+    name[n] = 0;
+    if (cmd[i] == ' ')
+        i++;
+    for (n = 0; cmd[i] && n < 0x7E; n++)
+        tail[1 + n] = (u8)cmd[i++];
+    tail[0] = (u8)n;
+    tail[1 + n] = 13;
+    shw[0] = 2;
+    shw[1] = show;
+    lp.env = 0;
+    lp.cmd = tail;
+    lp.show = shw;
+    lp.reserved = 0;
+    return LoadModule(name, &lp);
+}
+
 
 /* Observed: the same as FreeLibrary; the value in AX afterwards is not
    meaningful (F300h on Windows 3.1). */

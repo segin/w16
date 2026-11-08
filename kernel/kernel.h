@@ -27,8 +27,9 @@
 /* ---- asm helpers (kentry.asm) ---- */
 extern int  __cdecl dos21(regs16 FAR *r);       /* returns carry */
 extern int  __cdecl dpmi31(regs16 FAR *r);      /* returns carry */
-extern u16  __cdecl task_run(u16 cs, u16 ip, u16 ds, u16 ss, u16 sp,
-                             u16 bx, u16 cx, u16 di, u16 si, u16 es);
+extern void __cdecl task_switch(u16 FAR *save, u16 ss, u16 sp);
+extern void __far task_tramp(void);
+#pragma aux task_tramp "*"
 extern void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);
 extern void __far int21_handler(void);
 extern void __far int3d_handler(void);
@@ -37,7 +38,6 @@ extern void __far unimpl_entry(void);
 #pragma aux int21_handler "*"           /* asm labels: no name decoration */
 #pragma aux unimpl_entry "*"
 extern u32  __cdecl old21;
-extern u16  __cdecl task_active;
 
 /* ---- util.c ---- */
 void kmemset(void FAR *d, u8 v, u16 n);
@@ -86,6 +86,10 @@ u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
 u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
 u32  KAPI GlobalHandle(u16 sel);
+u16  galloc_dos(u16 size, u16 owner, u16 *seg);
+u16  galias_code(u16 sel, u16 owner);
+void gfree_owner(u16 owner);
+u16  gowner(u16 h);
 
 /* ---- local.c ---- */
 int  local_init_task(u16 ds, u16 heap);
@@ -112,6 +116,9 @@ typedef struct module {
     u16  ft_sel;                /* while loading: the file's NE tables */
     u16  flags;                 /* NE file header flags (NEF_*) */
     u16  seg_count;
+    u16 dg_snap;                /* a program's DGROUP as loaded, for more
+                                   instances (loader.c) */
+    u16 walk;                   /* loader.c: counted in this usage walk */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;
@@ -154,6 +161,8 @@ int      mod_base_name(const char FAR *name, char *base);
 
 /* ---- loader.c ---- */
 void     loader_init(const char FAR *kernel_path);
+void     module_end_instance(module FAR *m, u16 dg_hnd, u16 dg_sel);
+int      module_init_dll(u16 hmod);
 
 /* ---- resource.c ---- */
 void     rsrc_init(module FAR *m);      /* handlers, PRELOAD resources */
@@ -165,6 +174,9 @@ void     rsrc_free(module FAR *m);
 extern u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
                             u16 nargs, u16 arg);
 
+/* ---- procinst.c ---- */
+void procinst_init_tdb(u16 t);
+
 /* ---- thunk.c ---- */
 void thunk_init(void);
 int  thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
@@ -172,9 +184,20 @@ int  thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
 void __cdecl unimpl_report(u16 index);
 
 /* ---- task.c ---- */
-u16  task_start(module FAR *m, const char FAR *cmdtail);
+extern u16 cur_task, cur_pdb;           /* the running task (0: none) */
+u16  task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
+                 const u8 FAR *tail, const u16 FAR *show, u16 libinit);
+void task_start(u16 t);
+u16  task_boot(void);
+u16  task_pdb(void);                    /* the running task's PDB, or 0 */
 module FAR *task_module(void);          /* the running task's, or NULL */
+module FAR *task_module_of_sel(u16 sel);
+u16  task_other_dgroup(module FAR *m, u16 not_hnd, u16 *sel);
+u16  task_prev_instance(module FAR *m);
 void __cdecl inittask_c(regs16 FAR *r);
+void __cdecl task_exit_c(u16 code);
+void KAPI OldYield(void);
+u32  KAPI GetCurrentTask(void);
 u16  get_winflags(void);
 #define WF_PMODE        0x0001
 #define WF_CPU286       0x0002
