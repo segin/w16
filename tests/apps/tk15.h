@@ -45,7 +45,7 @@ enum {
     V_NTASKS, V_USAGE, V_HMOD, V_CS, V_DS,
     V_MPI_SEG, V_MPI_OFF, V_CMD /* 8 words */,
     V_PREV_DATA = V_CMD + 8, V_GID, V_EV_A1, V_EV_A2,
-    V_GBLOCK, V_TKID, V_CWDOK, V_CWD2OK, V_WAITRET,
+    V_GBLOCK, V_TKID, V_CWDOK, V_CWD2OK, V_WAITRET, V_DGSIZE, V_PHEAP,
     V_COUNT
 };
 
@@ -112,5 +112,15 @@ static WORD cur_ss(void);
 #pragma aux cur_ss = "mov ax, ss" value [ax];
 static WORD cur_sp(void);
 #pragma aux cur_sp = "mov ax, sp" value [ax];
+/* (lstrcmp is USER's, which w16 does not have yet) */
+static int str_eq(const char FAR *a, const char FAR *b)
+{
+    while (*a && *a == *b) {
+        a++;
+        b++;
+    }
+    return *a == *b;
+}
+
 static WORD cur_ds(void);
 #pragma aux cur_ds = "mov ax, ds" value [ax];

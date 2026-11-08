@@ -192,13 +192,29 @@ static void self(void)
     obs("GetExePtr(0)", K_GETEXEPTR(0));
     obs("GetExePtr(KERNEL hModule)==it",
         K_GETEXEPTR((WORD)GetModuleHandle("KERNEL")) == (WORD)GetModuleHandle("KERNEL"));
-    obs("IsTask(hTask)", K_ISTASK(t));
-    obs("IsTask(hTask | 1)", K_ISTASK(t | 1));
+    obs("IsTask(hTask)==hTask", K_ISTASK(t) == t);
+    obs("IsTask(hTask | 1)==hTask | 1", K_ISTASK(t | 1) == (t | 1));
+    obs("IsTask(hTask & ~1)==hTask", K_ISTASK(t & ~1u) == t);
+    obs("IsTask(hTask & ~1)==hTask & ~1", K_ISTASK(t & ~1u) == (t & ~1u));
     obs("IsTask(hInstance)", K_ISTASK(hinst()));
     obs("IsTask(hModule)", K_ISTASK((WORD)GetModuleHandle("TK15")));
     obs("IsTask(0)", K_ISTASK(0));
     obs("IsTask(PDB)", K_ISTASK(pdb));
     obs("GetTaskDS==DS", K_GETTASKDS() == entry_regs[E_DS]);
+    obs("GetTaskDS==hInstance", K_GETTASKDS() == hinst());
+    obs_env("GetTaskDS", K_GETTASKDS());
+    obs_env("GetExePtr(hTask)", K_GETEXEPTR(t));
+    obs("InitTask AX==PDB", init_regs[0] == pdb);
+    obs("InitTask DX", init_regs[3]);
+    /* these depend on the probe's own size (its reference table!), so
+       they are compared relative to each other */
+    obs_env("DGROUP size", (WORD)GlobalSize((HGLOBAL)hinst()));
+    obs_env("pHeap", *(WORD __near *)6);
+    obs_env("entry SP", entry_regs[E_SP]);
+    obs("DGROUP size - round32(entry SP + heap)",
+        (WORD)GlobalSize((HGLOBAL)hinst()) - ((entry_regs[E_SP] + entry_regs[E_CX] + 31) & ~31u));
+    obs("pHeap + heap - 10h - DGROUP size",
+        *(WORD __near *)6 + entry_regs[E_CX] - 0x10 - (WORD)GlobalSize((HGLOBAL)hinst()));
     obs("GetTaskQueue(0)", K_GETTASKQUEUE(0));
     obs("GetTaskQueue(hTask)", K_GETTASKQUEUE(t));
     q = K_SETTASKQUEUE(0, 0x1234);
@@ -209,9 +225,9 @@ static void self(void)
     obs("then TDB [20h] again", tdbw(t, 0x20));
 
     /* events of the running task */
-    obs("PostEvent(0)", K_POSTEVENT(0));
+    obs("PostEvent(0)==hTask", K_POSTEVENT(0) == t);
     obs("events after PostEvent(0)", tdbw(t, 6));
-    obs("PostEvent(hTask)", K_POSTEVENT(t));
+    obs("PostEvent(hTask)==hTask", K_POSTEVENT(t) == t);
     obs("events after PostEvent(hTask)", tdbw(t, 6));
     obs("WaitEvent(0)", K_WAITEVENT(0));
     obs("events after WaitEvent", tdbw(t, 6));
@@ -265,7 +281,7 @@ static void thunks(void)
         dump("thunk segment 2", s, 0, 0x20);
     }
     obs("thunk 9 call", ((WORD (FAR PASCAL *)(WORD))p[9])(41));
-    obs("thunk 0 bytes 0-1", *(WORD FAR *)p[0]);
+    obs("thunk 0 byte 0", *(BYTE FAR *)p[0]);
     FreeProcInstance(p[3]);
     obs("TDB [B8h] after freeing thunk 3", tdbw(t, 0xB8));
     dump("TDB after free 3", t, 0xB0, 0x28);
@@ -368,8 +384,8 @@ static void child_report(const char *tag, WORD slot, WORD h)
     O("TKDLL init SS==task SS", v[V_DLL_SS] == v[V_E_SS]);
     O("TKDLB init SS==task SS", v[V_DLB_SS] == v[V_E_SS]);
     O("TKDLL init SP==TKDLB init SP", v[V_DLL_SP] == v[V_DLB_SP]);
-    O("entry SP - TKDLL init SP", v[V_E_SP] - v[V_DLL_SP]);
-    O("pre_init SP - TKDLL init SP", v[V_SP_PRE] - v[V_DLL_SP]);
+    OE("entry SP - TKDLL init SP", v[V_E_SP] - v[V_DLL_SP]);
+    OE("pre_init SP - TKDLL init SP", v[V_SP_PRE] - v[V_DLL_SP]);
     O("TKDLL init DI==its DS & ~1", v[V_DLL_DI] == (v[V_DLL_DSNOW] & ~1u));
     O("TKDLL init ES", v[V_DLL_ES]);
     O("TKDLL init cmdlen", v[V_DLL_CMDLEN]);
@@ -400,8 +416,10 @@ static void child_report(const char *tag, WORD slot, WORD h)
     O("command line length", i);
     O("PSP [80h] length", v[V_PSP80] & 0xFF);
     for (i = 0; i < 8; i++) {
-        name2(nm, tag, "PSP tail word");
-        obsn(nm, i, v[V_TAIL + i]);
+        /* from word 2 on: TK15's DS etc. in hex, which vary */
+        nm[0] = '~';
+        name2(nm + 1, tag, "PSP tail word");
+        obsn(i < 2 ? nm + 1 : nm, i, v[V_TAIL + i]);
     }
     O("TDB [00h]", v[V_T00]);
     O("TDB [06h] events after InitTask", v[V_T06]);
@@ -425,7 +443,7 @@ static void child_report(const char *tag, WORD slot, WORD h)
     O("TDB [FAh]", v[V_TFA]);
     O("thunk sel==TDB [B0h]", v[V_MPI_SEG] == v[V_TB0]);
     O("thunk off", v[V_MPI_OFF]);
-    O("GetCurrentPDB DX", v[V_PDB_DX]);
+    O("GetCurrentPDB DX==parent PDB [16h]", v[V_PDB_DX] == tdbw(tdbw(self_task, 0x60), 0x16));
     O("PDB!=parent's", v[V_PDB] != tdbw(self_task, 0x60));
     O("INT 21h 62h==PDB", v[V_I21_62] == v[V_PDB]);
     O("INT 21h 51h==PDB", v[V_I21_51] == v[V_PDB]);
@@ -439,6 +457,8 @@ static void child_report(const char *tag, WORD slot, WORD h)
     O("GetModuleUsage", v[V_USAGE]);
     OE("CS", v[V_CS]);
     OE("DS", v[V_DS]);
+    O("DGROUP size", v[V_DGSIZE]);
+    O("pHeap", v[V_PHEAP]);
     O("WaitEvent result", v[V_WAITRET]);
     O("events after first wait", v[V_EV_A1]);
     O("events at the end", v[V_EV_A2]);
@@ -487,7 +507,7 @@ static void child_a(void)
         return;
     ct = sh.v[0][V_HTASK];
     obs("A GetNumTasks after LoadModule", K_GETNUMTASKS());
-    obs("A IsTask(child)", K_ISTASK(ct));
+    obs("A IsTask(child)==child", K_ISTASK(ct) == ct);
     obs("A child events after LoadModule", tdbw(ct, 6));
     obs("A own events after LoadModule", tdbw(self_task, 6));
     obs("A child TDB [04h]==its SS", tdbw(ct, 4) == sh.v[0][V_E_SS]);
@@ -496,18 +516,20 @@ static void child_a(void)
     obs("A GetExePtr(hInstance)==child's hModule", mod == sh.v[0][V_HMOD]);
     obs("A GetExePtr(child hTask)==child's hModule", K_GETEXEPTR(ct) == mod);
     obs("A GetModuleUsage", GetModuleUsage((HINSTANCE)mod));
+    obs("A GetModuleUsage(TKDLL)", GetModuleUsage(GetModuleHandle("TKDLL")));
+    obs("A GetModuleUsage(TKDLB)", GetModuleUsage(GetModuleHandle("TKDLB")));
     task_list("A");
     for (i = 0; i < 20 && K_ISTASK(ct); i++) {
         ptr(0x10 + i);
         K_YIELD();
         if (cwd_ok == 0xFFFF && sh.v[0][V_GBLOCK]) {
             cwd(now);
-            cwd_ok = lstrcmp(now, before) == 0;
+            cwd_ok = str_eq(now, before);
             obs("A own directory unchanged", cwd_ok);
             tdb_str("A child TDB [67h] directory", ct, 0x67, 0x41);
             obs("A child TDB [66h] drive", tdbb(ct, 0x66));
             tdb_str("A own TDB [67h] directory", self_task, 0x67, 0x41);
-            obs("A child alive", K_ISTASK(ct));
+            obs("A child alive", K_ISTASK(ct) != 0);
         }
     }
     ptr(0x3F);
@@ -532,7 +554,7 @@ static void child_a(void)
     obs("A child's DGROUP: GlobalSize", (WORD)GlobalSize((HGLOBAL)h));
     obs("A child's directory kept", sh.v[0][V_CWD2OK]);
     cwd(now);
-    obs("A own directory unchanged at the end", lstrcmp(now, before) == 0);
+    obs("A own directory unchanged at the end", str_eq(now, before));
     obs("A events of TK15 at the end", tdbw(self_task, 6));
     dos(r, 0x3A00, "C:\\TK15DIR");
 }
@@ -575,6 +597,7 @@ static void instances(void)
     obs("B instance 2 GetModuleUsage", b[V_USAGE]);
     obs("B instance 2 TKDLL inits", b[V_DLL_CALLS]);
     obs("B GetModuleUsage(TKDLL)", GetModuleUsage(GetModuleHandle("TKDLL")));
+    obs("B GetModuleUsage(TKDLB)", GetModuleUsage(GetModuleHandle("TKDLB")));
     obs("B instance 2 entry ES==PDB", b[V_E_ES] == b[V_PDB]);
     obs("B different PDB", a[V_PDB] != b[V_PDB]);
     l = (WORD)LoadLibrary(helper);
@@ -618,7 +641,7 @@ static void events(void)
     K_YIELD();
     ptr(3);
     obs("C child events after Yield", tdbw(ct, 6));
-    obs("C PostEvent(child)", K_POSTEVENT(ct));
+    obs("C PostEvent(child)==child", K_POSTEVENT(ct) == ct);
     obs("C child events after PostEvent", tdbw(ct, 6));
     ptr(4);
     K_YIELD();

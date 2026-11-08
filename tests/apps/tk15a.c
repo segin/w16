@@ -138,6 +138,8 @@ static void observe(void)
     v[V_USAGE] = GetModuleUsage((HINSTANCE)v[V_HMOD]);
     v[V_CS] = cur_cs();
     v[V_DS] = cur_ds();
+    v[V_DGSIZE] = (WORD)GlobalSize((HGLOBAL)(cur_ds() & ~1u));
+    v[V_PHEAP] = *(WORD __near *)6;
     p = MakeProcInstance((FARPROC)observe, (HINSTANCE)(cur_ds() & ~1u));
     v[V_MPI_SEG] = (WORD)((DWORD)p >> 16);
     v[V_MPI_OFF] = (WORD)(DWORD)p;
@@ -172,7 +174,7 @@ static void mode_a(void)
     tr(4);
     /* still in C:\TK15DIR? */
     dos(r, 0x4700, buf);
-    v[V_CWD2OK] = lstrcmpi(buf, "TK15DIR") == 0;
+    v[V_CWD2OK] = str_eq(buf, "TK15DIR");
     v[V_EV_A2] = tdbw(pre[0], 6);
 }
 
