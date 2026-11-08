@@ -1,0 +1,7 @@
+# TK24.EXE (tests/apps/tk24.c, tk24s.asm): GetTaskQueueDS/ES registers
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import K_GETTASKQUEUE KERNEL.35
+import GETTASKQUEUEDS KERNEL.118
+import GETTASKQUEUEES KERNEL.119
+import U_INITAPP USER.5

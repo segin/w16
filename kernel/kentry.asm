@@ -384,10 +384,14 @@ NOHOOKDOSCALL:
 .back:  retf
 
 ; GetTaskQueueDS / GetTaskQueueES (KERNEL.118, 119): load DS (ES) with
-; the current task's message queue (TDB 20h; Schulman). AX keeps it too
-; (UNVERIFIED).
+; the current task's message queue (TDB 20h; Schulman). Observed on 3.1
+; (TK24): every other register and the carry flag are kept. (w16's first
+; version returned the queue in AX too, and USER's PostQuitMessage then
+; never ended GetMessage.)
 global GETTASKQUEUEDS, GETTASKQUEUEES
 GETTASKQUEUEDS:
+        pushf
+        push ax
         mov ax, DGROUP
         mov ds, ax
         mov ax, [_cur_task wrt DGROUP]
@@ -396,6 +400,8 @@ GETTASKQUEUEDS:
         mov ds, ax
         mov ax, [20h]
 .none:  mov ds, ax
+        pop ax
+        popf
         retf
 GETTASKQUEUEES:
         push ds
