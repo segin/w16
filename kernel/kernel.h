@@ -90,6 +90,8 @@ u16  galloc_dos(u32 size, u16 owner, u16 *seg);
 u16  galias_code(u16 sel, u16 owner);
 void gfree_owner(u16 owner);
 u16  gowner(u16 h);
+int  glock_adjust(u16 h, int delta);        /* selector.c's lock calls */
+int  gpagelock_adjust(u16 h, int delta);
 
 /* ---- local.c ---- */
 int  local_init_task(u16 ds, u16 heap);

@@ -33,6 +33,7 @@ typedef struct garena {
     u16 lock;           /* lock count (moveable blocks) */
     u16 owner;
     u16 kind;           /* GK_* */
+    u16 pglock;         /* GlobalPageLock count (selector.c) */
 } garena;
 
 #define GK_NORMAL   0
@@ -201,6 +202,7 @@ u16 galloc(u16 flags, u32 size, u16 owner, u16 *sel_out)
     a->lock = 0;
     a->owner = owner;
     a->kind = GK_NORMAL;
+    a->pglock = 0;
     if (sel_out)
         *sel_out = a->sel;
     return handle_of(a);
@@ -252,6 +254,7 @@ u16 galloc_dos(u32 size, u16 owner, u16 *seg)
     a->lock = 0;
     a->owner = owner;
     a->kind = GK_DOS;
+    a->pglock = 0;
     *seg = r.ax;
     set_tiles(a);                       /* rights and limits as GlobalAlloc's */
     zero_range(a, 0);
@@ -286,6 +289,7 @@ u16 galias_code(u16 sel, u16 owner)
     a->lock = 0;
     a->owner = owner;
     a->kind = GK_ALIAS;
+    a->pglock = 0;
     return c;
 }
 
@@ -320,6 +324,35 @@ u32 gsize_of_sel(u16 sel)
 {
     garena FAR *a = find(sel);
     return a ? a->size : 0;
+}
+
+/* Lock counts for selector.c (GlobalFix, GlobalWire, GlobalPageLock,
+   AllocDStoCSAlias): add delta to the block's lock count, which counts
+   for every kind of block, and return the new count; -1 if h is not a
+   block. The count does not go below 0. */
+int glock_adjust(u16 h, int delta)
+{
+    garena FAR *a = find(h);
+    if (!a)
+        return -1;
+    if (delta > 0 && a->lock < GMEM_LOCKCOUNT)
+        a->lock++;
+    else if (delta < 0 && a->lock)
+        a->lock--;
+    return a->lock;
+}
+
+/* The same for the page-lock count; delta 0 reads it. */
+int gpagelock_adjust(u16 h, int delta)
+{
+    garena FAR *a = find(h);
+    if (!a)
+        return -1;
+    if (delta > 0)
+        a->pglock++;
+    else if (delta < 0 && a->pglock)
+        a->pglock--;
+    return a->pglock;
 }
 
 /* ---- API ---- */
@@ -490,15 +523,16 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
            (discarded(a) ? GMEM_DISCARDED : 0);
 }
 
-/* TODO: LockSegment(-1) should lock the caller's data segment; __loadds
-   has replaced DS by then, so it needs an asm entry point. UNVERIFIED:
-   return value details for fixed segments. */
+/* Observed (tests/apps/tk17.c): LockSegment and UnlockSegment return the
+   handle, and count only for discardable blocks, as GlobalLock does.
+   TODO: LockSegment(-1) should lock the caller's data segment; __loadds
+   has replaced DS by then, so it needs an asm entry point. */
 u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
 {
     garena FAR *a = find(seg);
     if (!a)
         return 0;
-    if (a->lock < 0xFF)
+    if ((a->flags & GMEM_DISCARDABLE) && a->lock < GMEM_LOCKCOUNT)
         a->lock++;
     return handle_of(a);
 }
@@ -508,7 +542,7 @@ u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
     garena FAR *a = find(seg);
     if (!a)
         return 0;
-    if (a->lock)
+    if ((a->flags & GMEM_DISCARDABLE) && a->lock)
         a->lock--;
     return handle_of(a);
 }
