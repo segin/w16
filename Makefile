@@ -1,6 +1,6 @@
 # w16 build. Requires OpenWatcom v2 (WATCOM, default /opt/watcom), nasm,
-# and a host C compiler. `make test` additionally needs DOSBox and HDPMI16
-# (tools/fetch-hdpmi.sh).
+# and a host C compiler. `make test` additionally needs DOSBox, DOSBox-X (the
+# floating-point tests) and HDPMI16 (tools/fetch-hdpmi.sh).
 
 WATCOM  ?= /opt/watcom
 export WATCOM
