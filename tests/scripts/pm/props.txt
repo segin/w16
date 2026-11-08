@@ -1,0 +1,56 @@
+run PROGMAN.EXE
+wait 3000
+menu f
+char p
+wait 500
+snap C:\P1.BMP
+dump
+key 1B
+wait 300
+menu f
+char p
+wait 500
+key 09
+key 09
+type C:\WINDOWS\SYSTEM
+key 0D
+wait 1000
+menu f
+char p
+wait 500
+snap C:\P2.BMP
+dump
+key 1B
+wait 300
+key 27
+wait 300
+menu f
+char p
+wait 500
+key 09
+type C:\WINDOWS\CONTROL.EXE
+key 09
+type C:\WINDOWS\SYSTEM
+key 0D
+wait 1000
+menu f
+char p
+wait 500
+snap C:\P3.BMP
+dump
+key 1B
+wait 300
+menu -
+wait 300
+char c
+wait 800
+menu f
+char p
+wait 500
+snap C:\P4.BMP
+dump
+key 1B
+wait 300
+menu f
+char x
+wait 1500

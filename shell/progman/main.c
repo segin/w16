@@ -107,6 +107,13 @@ int ini_add_group(const char FAR *path)
     return n;
 }
 
+void ini_set_group(int n, const char FAR *path)
+{
+    char key[12];
+    group_key(key, n);
+    WritePrivateProfileString(s_groups, key, path, g_ini);
+}
+
 void ini_remove_group(int n)
 {
     char key[12];
@@ -223,9 +230,11 @@ static void command(HWND hwnd, WORD id)
     case IDM_DELETE:
         cmd_delete(hwnd);
         break;
+    case IDM_PROPERTIES:
+        cmd_properties(hwnd);
+        break;
     case IDM_MOVE:
     case IDM_COPY:
-    case IDM_PROPERTIES:
         message(hwnd, IDS_NOTYET, NULL);        /* TODO: M-shell 2 */
         break;
     default:

@@ -111,8 +111,19 @@ extern char g_ini[];                    /* "PROGMAN.INI" */
 BOOL group_register(void);
 HWND group_load(const char FAR *grpfile, int ininum);
 HWND group_create(const char FAR *name, const char FAR *path, int ininum);
-BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
-                    const char FAR *dir, WORD hotkey, BOOL minimized);
+/* an item as Program Item Properties shows it */
+typedef struct {
+    LPSTR desc, cmd, dir;               /* global memory (mem_alloc) */
+    WORD hotkey;                        /* 0 = none */
+    BOOL minimized;
+    HICON icon;                         /* the item's, not to be destroyed */
+} itemprops;
+BOOL group_get_props(HWND hwnd, itemprops FAR *ip);
+void itemprops_free(itemprops FAR *ip);
+BOOL group_add_item(HWND hwnd, const itemprops FAR *ip);
+BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip);
+BOOL group_rename(HWND hwnd, const char FAR *name);
+BOOL group_set_file(HWND hwnd, const char FAR *path);
 BOOL group_delete_selected(HWND hwnd);
 LPCSTR group_name(HWND hwnd);
 LPCSTR group_path(HWND hwnd);
@@ -127,6 +138,7 @@ LRESULT CALLBACK __export GroupWndProc(HWND, UINT, WPARAM, LPARAM);
 /* ---- main.c: PROGMAN.INI [Groups] and Order= ---- */
 int  ini_add_group(const char FAR *path);       /* returns N of GroupN= */
 void ini_remove_group(int n);
+void ini_set_group(int n, const char FAR *path);
 void ini_groups_changed(void);                  /* rewrite Order= */
 
 /* ---- dialogs.c ---- */
@@ -135,6 +147,7 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export ItemPropsDlgProc(HWND, UINT, WPARAM, LPARAM);
 void cmd_new(HWND frame);
 void cmd_delete(HWND frame);
+void cmd_properties(HWND frame);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);
 int  run_dialog(HWND owner, FARPROC proc, int id);

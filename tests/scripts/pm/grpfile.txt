@@ -1,0 +1,17 @@
+run PROGMAN.EXE
+wait 3000
+menu -
+wait 300
+char c
+wait 800
+menu f
+char p
+wait 500
+key 09
+type C:\WINDOWS\STUP2.GRP
+key 0D
+wait 1000
+snap C:\G1.BMP
+menu f
+char x
+wait 1500

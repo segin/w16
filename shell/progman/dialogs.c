@@ -266,13 +266,21 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
     }
 }
 
+/* The group being edited by Properties, or NULL for File > New. */
+static HWND props_group;
+
 BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     LPSTR desc, file, path;
     (void)lp;
     switch (msg) {
     case WM_INITDIALOG:
-        EnableWindow(GetDlgItem(dlg, IDOK), FALSE);   /* observed */
+        if (props_group) {              /* observed: name and file shown */
+            SetDlgItemText(dlg, IDC_DESC, group_name(props_group));
+            SetDlgItemText(dlg, IDC_GROUPFILE, group_path(props_group));
+        } else {
+            EnableWindow(GetDlgItem(dlg, IDOK), FALSE);   /* observed */
+        }
         return TRUE;
     case WM_COMMAND:
         switch (wp) {
@@ -283,6 +291,19 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
             return TRUE;
         case IDOK:
             desc = dlg_text(dlg, IDC_DESC);
+            if (props_group) {
+                file = dlg_text(dlg, IDC_GROUPFILE);
+                path = file && desc ? group_file_name(desc, file) : NULL;
+                if (!desc || !path || !group_rename(props_group, desc) ||
+                    !group_set_file(props_group, path))
+                    message(dlg, IDS_CANTWRITE, path ? path : group_path(props_group));
+                else
+                    EndDialog(dlg, IDOK);
+                mem_free(desc);
+                mem_free(file);
+                mem_free(path);
+                return TRUE;
+            }
             file = dlg_text(dlg, IDC_GROUPFILE);
             path = desc ? group_file_name(desc, file) : NULL;
             if (path) {
@@ -313,11 +334,27 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
 
 BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
-    LPSTR desc, cmd, dir;
+    itemprops ip;
     HWND group;
+    BOOL ok;
     (void)lp;
     switch (msg) {
     case WM_INITDIALOG:
+        if (props_group && group_get_props(props_group, &ip)) {
+            /* observed: the fields filled in, the item's icon shown */
+            SetDlgItemText(dlg, IDC_DESC, ip.desc);
+            SetDlgItemText(dlg, IDC_CMDLINE, ip.cmd);
+            SetDlgItemText(dlg, IDC_WORKDIR, ip.dir);
+            SendDlgItemMessage(dlg, IDC_HOTKEY, HKM_SETHOTKEY, ip.hotkey, 0);
+            CheckDlgButton(dlg, IDC_ITEMMIN, ip.minimized);
+#ifndef W16_WIN2
+            SendDlgItemMessage(dlg, IDC_ITEMICON, STM_SETICON, (WPARAM)ip.icon, 0);
+#endif
+            itemprops_free(&ip);
+            /* select the description, as a dialog does for its first edit */
+            SendDlgItemMessage(dlg, IDC_DESC, EM_SETSEL, 0, MAKELPARAM(0, 0x7FFF));
+            return TRUE;
+        }
         /* observed for a new item: OK and Change Icon start disabled, and
            no icon is shown yet */
         EnableWindow(GetDlgItem(dlg, IDOK), FALSE);
@@ -332,20 +369,20 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
                              GetWindowTextLength(GetDlgItem(dlg, IDC_CMDLINE)) > 0);
             return TRUE;
         case IDOK:
-            group = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
-            desc = dlg_text(dlg, IDC_DESC);
-            cmd = dlg_text(dlg, IDC_CMDLINE);
-            dir = dlg_text(dlg, IDC_WORKDIR);
-            if (desc && cmd && dir && group &&
-                group_add_item(group, desc, cmd, dir,
-                               (WORD)SendDlgItemMessage(dlg, IDC_HOTKEY, HKM_GETHOTKEY, 0, 0),
-                               IsDlgButtonChecked(dlg, IDC_ITEMMIN)))
+            group = props_group ? props_group
+                                : (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+            ip.desc = dlg_text(dlg, IDC_DESC);
+            ip.cmd = dlg_text(dlg, IDC_CMDLINE);
+            ip.dir = dlg_text(dlg, IDC_WORKDIR);
+            ip.hotkey = (WORD)SendDlgItemMessage(dlg, IDC_HOTKEY, HKM_GETHOTKEY, 0, 0);
+            ip.minimized = IsDlgButtonChecked(dlg, IDC_ITEMMIN);
+            ok = ip.desc && ip.cmd && ip.dir && group &&
+                 (props_group ? group_edit_selected(group, &ip) : group_add_item(group, &ip));
+            if (ok)
                 EndDialog(dlg, IDOK);
             else if (group)
                 message(dlg, IDS_CANTWRITE, group_path(group));
-            mem_free(desc);
-            mem_free(cmd);
-            mem_free(dir);
+            itemprops_free(&ip);
             return TRUE;
         case IDCANCEL:
             EndDialog(dlg, IDCANCEL);
@@ -363,6 +400,7 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
 
 void cmd_new(HWND frame)
 {
+    props_group = NULL;
     if (run_dialog(frame, (FARPROC)NewDlgProc, IDD_NEW) != IDOK)
         return;
     if (new_choice == IDC_NEWGROUP)
@@ -371,6 +409,24 @@ void cmd_new(HWND frame)
         run_dialog(frame, (FARPROC)ItemPropsDlgProc, IDD_ITEMPROPS);
     else
         message(frame, IDS_NOGROUP, NULL);
+}
+
+/* ---- File > Properties ---- */
+
+/* Observed: on a selected item in an open group, Program Item Properties;
+   on a minimized group, Program Group Properties. UNVERIFIED: an open
+   group without items (taken to be the group's properties here). */
+void cmd_properties(HWND frame)
+{
+    HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+    if (!g)
+        return;
+    props_group = g;
+    if (!IsIconic(g) && group_selected_name(g))
+        run_dialog(frame, (FARPROC)ItemPropsDlgProc, IDD_ITEMPROPS);
+    else
+        run_dialog(frame, (FARPROC)GroupPropsDlgProc, IDD_GROUPPROPS);
+    props_group = NULL;
 }
 
 /* ---- File > Delete ---- */

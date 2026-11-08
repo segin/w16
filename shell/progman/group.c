@@ -94,7 +94,7 @@ typedef struct group {
     WORD cbgtags;
     item FAR *sel;
     BOOL dirty;                         /* items changed since written */
-    char path[1];                       /* the .GRP path, allocated to fit */
+    LPSTR path;                         /* the .GRP file */
 } group;
 
 static group FAR *first;
@@ -510,9 +510,11 @@ static BOOL write_group(group FAR *g)
 
 static group FAR *new_group(const char FAR *path)
 {
-    group FAR *g = (group FAR *)mem_alloc(sizeof(group) + s_len(path));
-    if (g)
-        s_cpy(g->path, path, s_len(path) + 1);
+    group FAR *g = (group FAR *)mem_alloc(sizeof(group));
+    if (g && (g->path = s_dup(path)) == NULL) {
+        mem_free((LPSTR)g);
+        g = NULL;
+    }
     return g;
 }
 
@@ -537,6 +539,7 @@ static void free_group(group FAR *g)
     mem_free((LPSTR)g->z);
     mem_free(g->name);
     mem_free(g->gtags);
+    mem_free(g->path);
     mem_free((LPSTR)g);
 }
 
@@ -930,9 +933,14 @@ static item FAR *neighbour(group FAR *g, int dx, int dy)
 BOOL group_open_selected(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
-    if (!g || !g->sel)
+    itemprops ip;
+    BOOL ok;
+    if (!g || !g->sel || !group_get_props(hwnd, &ip))
         return FALSE;
-    if (pm_exec(g_frame, g->sel->cmd, NULL, FALSE) && g_minonrun)
+    /* run the program from its own path, in the working directory */
+    ok = pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized);
+    itemprops_free(&ip);
+    if (ok && g_minonrun)
         ShowWindow(g_frame, SW_MINIMIZE);
     return TRUE;
 }
@@ -1060,9 +1068,9 @@ static LPSTR first_word(const char FAR *cmd)
 
 /* Find the icon for a command: the program's own first icon, or the
    associated program's for a document. Fills iconpath, iicon, bits. */
-static void choose_icon(item FAR *t)
+static void choose_icon(item FAR *t, const char FAR *cmd)
 {
-    LPSTR file = first_word(t->cmd);
+    LPSTR file = first_word(cmd);
     char found[144];                    /* DOS paths: OFSTRUCT's own bound */
     OFSTRUCT of;
     HICON h = NULL;
@@ -1109,74 +1117,202 @@ static void choose_icon(item FAR *t)
 #endif
 }
 
-/* File > New > Program Item. dir and hotkey are optional (hotkey 0 =
-   none). Observed: with a working directory and a command without a
-   path, the directory is stored in front of the command. */
-BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
-                    const char FAR *dir, WORD hotkey, BOOL minimized)
-{
-    group FAR *g = grp_of(hwnd);
-    item FAR *t;
-    LPSTR file;
-    BOOL has_path;
+/* ---- an item's command, working directory and options ----
+ * Observed (Program Item Properties on Windows 3.1): with a working
+ * directory, the stored command is that directory plus the program's file
+ * name (and arguments); if the typed command had its own path, that path
+ * goes in tag 8101h (with its trailing backslash). Without a working
+ * directory the command is stored as typed. Shown back, the working
+ * directory is the stored command's directory, and the command is the
+ * 8101h path plus the file name and arguments. */
 
-    if (!g || !cmd[0] || !grow_slots(g))
-        return FALSE;
-    t = (item FAR *)mem_alloc(sizeof(item));
-    if (!t)
-        return FALSE;
-    file = first_word(cmd);
-    has_path = file && (file[0] && (file[1] == ':' || file[0] == '\\'));
-    {
-        int k;
-        for (k = 0; file && file[k]; k++)
-            if (file[k] == '\\')
-                has_path = TRUE;
+#define TAG_PATH        0x8101
+
+/* Length of the first word, and of its directory part (up to and
+   including the last '\' or ':'). */
+static int word_len(const char FAR *s)
+{
+    int n = 0;
+    while (s[n] && s[n] != ' ')
+        n++;
+    return n;
+}
+
+static int dir_part(const char FAR *s, int n)
+{
+    while (n > 0 && s[n - 1] != '\\' && s[n - 1] != ':')
+        n--;
+    return n;
+}
+
+static const char FAR *skip_blanks(const char FAR *s)
+{
+    while (*s == ' ')
+        s++;
+    return s;
+}
+
+/* The data of this item's tag `id`, or NULL; *n receives its length. */
+static const BYTE FAR *find_tag(item FAR *t, WORD id, WORD *n)
+{
+    WORD at = 0;
+    while (at + 6 <= t->cbtags) {
+        const BYTE FAR *p = (const BYTE FAR *)t->tags + at;
+        WORD cb = rd16(p, 4);
+        if (cb < 6)
+            break;
+        if (rd16(p, 0) == id) {
+            *n = cb - 6;
+            return p + 6;
+        }
+        at += cb;
     }
-    mem_free(file);
-    if (dir && dir[0] && !has_path) {
-        t->cmd = s_dup(dir);
-        if (t->cmd && t->cmd[s_len(t->cmd) - 1] != '\\')
-            s_append(&t->cmd, "\\");
-        if (t->cmd) {
-            const char FAR *c = cmd;
-            while (*c == ' ')
-                c++;
-            s_append(&t->cmd, c);
+    return NULL;
+}
+
+/* Remove the tags w16 manages (path, hotkey, minimized), keeping others. */
+static void drop_own_tags(item FAR *t)
+{
+    WORD at = 0, out = 0;
+    BYTE FAR *p = (BYTE FAR *)t->tags;
+    while (at + 6 <= t->cbtags) {
+        WORD cb = rd16(p + at, 4), id = rd16(p + at, 0);
+        if (cb < 6)
+            break;
+        if (id != TAG_PATH && id != TAG_HOTKEY && id != TAG_MINIMIZE) {
+            copy(p + out, p + at, cb);
+            out += cb;
+        }
+        at += cb;
+    }
+    t->cbtags = out;
+}
+
+/* Fill the fields of t from what the user typed. Returns FALSE when out
+   of memory (t is then left for the caller to free or keep). */
+static BOOL set_fields(item FAR *t, const char FAR *desc, const char FAR *cmd,
+                       const char FAR *dir, WORD hotkey, BOOL minimized)
+{
+    LPSTR stored = NULL, path = NULL;
+    int n, d;
+
+    cmd = skip_blanks(cmd);
+    dir = dir ? skip_blanks(dir) : "";
+    n = word_len(cmd);
+    d = dir_part(cmd, n);
+    if (dir[0]) {
+        stored = s_dup(dir);
+        if (stored && stored[s_len(stored) - 1] != '\\')
+            s_append(&stored, "\\");
+        if (stored && !s_append(&stored, cmd + d)) {
+            mem_free(stored);
+            stored = NULL;
+        }
+        if (d && (path = mem_alloc(d + 1)) != NULL)
+            s_cpy(path, cmd, d + 1);
+        if (d && !path) {
+            mem_free(stored);
+            return FALSE;
         }
     } else {
-        t->cmd = s_dup(cmd);
-        /* TODO: tag 8101h for a working directory with a pathed command */
+        stored = s_dup(cmd);
     }
+    if (!stored) {
+        mem_free(path);
+        return FALSE;
+    }
+    mem_free(t->cmd);
+    t->cmd = stored;
+
+    mem_free(t->name);
     if (desc && desc[0]) {
         t->name = s_dup(desc);
     } else {
         /* UNVERIFIED: an empty description becomes the program's name */
-        LPSTR w = first_word(cmd);
-        const char FAR *b = w;
         int k;
-        for (k = 0; w && w[k]; k++)
-            if (w[k] == '\\' || w[k] == ':')
-                b = w + k + 1;
-        t->name = s_dup(b ? b : "");
-        for (k = 0; t->name && t->name[k]; k++)
-            if (t->name[k] == '.')
-                t->name[k] = 0;
-        mem_free(w);
+        t->name = mem_alloc(n - d + 1);
+        if (t->name) {
+            s_cpy(t->name, cmd + d, n - d + 1);
+            for (k = 0; t->name[k]; k++)
+                if (t->name[k] == '.')
+                    t->name[k] = 0;
+        }
     }
-    if (!t->name || !t->cmd) {
+
+    drop_own_tags(t);
+    if (!t->name || (path && !add_tag(t, TAG_PATH, path, s_len(path) + 1)) ||
+        (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) ||
+        (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0))) {
+        mem_free(path);
+        return FALSE;
+    }
+    mem_free(path);
+    return TRUE;
+}
+
+/* The item's fields as the Properties dialog shows them. */
+BOOL group_get_props(HWND hwnd, itemprops FAR *ip)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t;
+    const BYTE FAR *path;
+    WORD np, nh;
+    int n, d;
+    ip->desc = ip->cmd = ip->dir = NULL;
+    if (!g || !g->sel)
+        return FALSE;
+    t = g->sel;
+    n = word_len(t->cmd);
+    d = dir_part(t->cmd, n);
+    path = find_tag(t, TAG_PATH, &np);
+    ip->desc = s_dup(t->name);
+    ip->cmd = path ? s_dup((const char FAR *)path) : s_dup("");
+    if (ip->cmd)
+        s_append(&ip->cmd, t->cmd + d);
+    /* the directory without its last backslash, except a root ("C:\") */
+    ip->dir = mem_alloc(d + 1);
+    if (ip->dir) {
+        s_cpy(ip->dir, t->cmd, d + 1);
+        if (d > 1 && ip->dir[d - 1] == '\\' && !(d == 3 && ip->dir[1] == ':'))
+            ip->dir[d - 1] = 0;
+    }
+    ip->hotkey = 0;
+    path = find_tag(t, TAG_HOTKEY, &nh);
+    if (path && nh >= 2)
+        ip->hotkey = rd16(path, 0);
+    ip->minimized = find_tag(t, TAG_MINIMIZE, &nh) != NULL;
+    ip->icon = t->hicon;
+    if (!ip->desc || !ip->cmd || !ip->dir) {
+        itemprops_free(ip);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void itemprops_free(itemprops FAR *ip)
+{
+    mem_free(ip->desc);
+    mem_free(ip->cmd);
+    mem_free(ip->dir);
+    ip->desc = ip->cmd = ip->dir = NULL;
+}
+
+/* File > New > Program Item. */
+BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t;
+
+    if (!g || !skip_blanks(ip->cmd)[0] || !grow_slots(g))
+        return FALSE;
+    t = (item FAR *)mem_alloc(sizeof(item));
+    if (!t)
+        return FALSE;
+    if (!set_fields(t, ip->desc, ip->cmd, ip->dir, ip->hotkey, ip->minimized)) {
         free_item(t);
         return FALSE;
     }
-    if (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) {
-        free_item(t);
-        return FALSE;
-    }
-    if (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0)) {
-        free_item(t);
-        return FALSE;
-    }
-    choose_icon(t);
+    choose_icon(t, ip->cmd);
     free_cell(hwnd, g, &t->x, &t->y);
     {                                   /* on top */
         WORD k;
@@ -1201,6 +1337,95 @@ BOOL group_add_item(HWND hwnd, const char FAR *desc, const char FAR *cmd,
         group_arrange(hwnd);
     invalidate_item(hwnd, t);
     return TRUE;
+}
+
+/* File > Properties on an item. Observed: the item keeps its place in
+   the z-order and its data moves to the end of the file. */
+BOOL group_edit_selected(HWND hwnd, const itemprops FAR *ip)
+{
+    group FAR *g = grp_of(hwnd);
+    item FAR *t;
+    itemprops old;
+    BOOL same_program;
+    if (!g || !g->sel || !skip_blanks(ip->cmd)[0])
+        return FALSE;
+    t = g->sel;
+    if (!group_get_props(hwnd, &old))
+        return FALSE;
+    {                                   /* did the program change? */
+        const char FAR *a = skip_blanks(old.cmd), FAR *b = skip_blanks(ip->cmd);
+        int na = word_len(a), nb = word_len(b), k;
+        same_program = na == nb;
+        for (k = 0; same_program && k < na; k++) {
+            char x = a[k], y = b[k];
+            if (x >= 'a' && x <= 'z')
+                x -= 'a' - 'A';
+            if (y >= 'a' && y <= 'z')
+                y -= 'a' - 'A';
+            same_program = x == y;
+        }
+    }
+    itemprops_free(&old);
+    invalidate_item(hwnd, t);
+    if (!set_fields(t, ip->desc, ip->cmd, ip->dir, ip->hotkey, ip->minimized))
+        return FALSE;
+    if (!same_program) {                /* UNVERIFIED: a new program, its icon */
+        if (t->own_icon)
+            DestroyIcon(t->hicon);
+        mem_free(t->icon);
+        mem_free(t->iconpath);
+        t->icon = NULL;
+        t->iconpath = NULL;
+        t->cbhdr = t->cband = t->cbxor = 0;
+        choose_icon(t, ip->cmd);
+    }
+    data_remove(g, t);
+    data_append(g, t);
+    invalidate_item(hwnd, t);
+    return write_group(g);
+}
+
+/* Program Group Properties with a different file (observed): the group
+   is written to the new file, the old one is deleted, and the same
+   GroupN= entry names the new file. */
+BOOL group_set_file(HWND hwnd, const char FAR *path)
+{
+    group FAR *g = grp_of(hwnd);
+    LPSTR old, n;
+    OFSTRUCT of;
+    if (!g)
+        return FALSE;
+    if (!s_icmp(g->path, path))
+        return TRUE;
+    n = s_dup(path);
+    if (!n)
+        return FALSE;
+    old = g->path;
+    g->path = n;
+    if (!write_group(g)) {
+        g->path = old;
+        mem_free(n);
+        return FALSE;
+    }
+    OpenFile(old, &of, OF_DELETE);
+    mem_free(old);
+    ini_set_group(g->ininum, g->path);
+    return TRUE;
+}
+
+/* Program Group Properties on an existing group: a new description. */
+BOOL group_rename(HWND hwnd, const char FAR *name)
+{
+    group FAR *g = grp_of(hwnd);
+    LPSTR n = s_dup(name);
+    if (!g || !n) {
+        mem_free(n);
+        return FALSE;
+    }
+    mem_free(g->name);
+    g->name = n;
+    SetWindowText(hwnd, n);
+    return write_group(g);
 }
 
 /* Delete the selected item (observed: the slot count stays, the gap

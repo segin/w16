@@ -10,7 +10,7 @@ set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$root/build/ref/scenarios
-files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/TESTGROU.GRP"
+files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/TESTGROU.GRP WINDOWS/STUP2.GRP"
 names=${*:-$(cd "$root/tests/scripts/pm" && ls *.txt | sed 's/\.txt$//')}
 status=0
 for n in $names; do
