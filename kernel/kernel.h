@@ -188,6 +188,7 @@ extern u16 cur_task, cur_pdb;           /* the running task (0: none) */
 u16  task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
                  const u8 FAR *tail, const u16 FAR *show, u16 libinit);
 void task_start(u16 t);
+void task_set_env(u16 t, u16 env);
 u16  task_boot(void);
 u16  task_pdb(void);                    /* the running task's PDB, or 0 */
 module FAR *task_module(void);          /* the running task's, or NULL */

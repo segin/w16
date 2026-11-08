@@ -982,8 +982,8 @@ void KAPI FreeLibrary(u16 h)                                   /* KERNEL.96 */
 
 /* LoadModule's parameter block */
 typedef struct loadparms {
-    u16 env;                    /* UNVERIFIED: every task gets KERNEL's
-                                   environment (observed with 0) */
+    u16 env;                    /* observed: 0 shares KERNEL's (one
+                                   selector for all tasks); else a copy */
     const u8 FAR *cmd;          /* length byte, text, CR */
     const u16 FAR *show;        /* 2, nCmdShow */
     u32 reserved;
@@ -997,6 +997,8 @@ static u16 start_task(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
                         lp ? lp->show : NULL, libinit);
     if (!t)
         return 0;
+    if (lp && lp->env)
+        task_set_env(t, lp->env);
     task_start(t);
     return dg_hnd;
 }
@@ -1129,10 +1131,25 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
 }
 
 /* WinExec (KERNEL.166): LoadModule with the command line split into the
-   program and its tail. Observed on Windows 3.1 (tk15.c): the blank after
-   the program's name is not part of the tail; nCmdShow reaches InitTask;
-   a missing file gives 2, a missing directory 3.
-   UNVERIFIED: more blanks, a name without extension, quotes. */
+   program and its tail. Observed on Windows 3.1 (tk15.c, tk16.c): one
+   blank after the program's name is not part of the tail (with three,
+   the tail starts with two); a name without extension gets ".EXE"; the
+   name is searched as LoadLibrary's (TK16A was found in the directory of
+   the caller's program); nCmdShow reaches InitTask; a missing file gives
+   2, a missing directory 3.
+   UNVERIFIED: tabs, quotes, a name ending in a dot. */
+/* a dot in the last part of a path */
+static int has_ext(const char *name)
+{
+    int dot = 0;
+    for (; *name; name++)
+        if (*name == '.')
+            dot = 1;
+        else if (*name == '\\' || *name == '/' || *name == ':')
+            dot = 0;
+    return dot;
+}
+
 u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
 {
     char name[DOS_PATHMAX];
@@ -1149,6 +1166,15 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
         name[n++] = cmd[i++];
     }
     name[n] = 0;
+    if (!has_ext(name)) {
+        if (n + 4 >= sizeof name)
+            return LE_NOTFOUND;
+        name[n++] = '.';
+        name[n++] = 'E';
+        name[n++] = 'X';
+        name[n++] = 'E';
+        name[n] = 0;
+    }
     if (cmd[i] == ' ')
         i++;
     for (n = 0; cmd[i] && n < 0x7E; n++)

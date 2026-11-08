@@ -502,6 +502,30 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     return t;
 }
 
+static u16 seg_limit(u16 sel);
+#pragma aux seg_limit = ".286p" "lsl ax, dx" parm [dx] value [ax];
+
+/* Give task t a copy of the environment at env:0 (LoadModule's parameter
+   block). Observed: the task gets a new block (32 bytes for "TK16=YES"
+   and the double NUL), not the selector given, and the block was still
+   there after the task had ended. UNVERIFIED: what follows the double
+   NUL (nothing here; DOS would add the program's path); when Windows
+   frees the block (here: never). */
+void task_set_env(u16 t, u16 env)
+{
+    u32 lim = gsize_of_sel(env);
+    u16 n = 0, sel;
+    const u8 FAR *e = MK_FP(env, 0);
+    if (!lim)
+        lim = (u32)seg_limit(env) + 1;
+    while ((u32)n + 1 < lim && n < 0x7FFF && (e[n] || e[n + 1]))
+        n++;
+    if (!galloc(GMEM_FIXED, n + 2, 0, &sel))
+        return;
+    kmemcpy(MK_FP(sel, 0), e, n + 2 <= lim ? n + 2 : (u16)lim);
+    *(u16 FAR *)MK_FP(TW(t, TDB_PDB), 0x2C) = sel;
+}
+
 /* Start the new task t from a running task: it runs until it yields
    (observed: LoadModule returned after the new task's first Yield). */
 void task_start(u16 t)
