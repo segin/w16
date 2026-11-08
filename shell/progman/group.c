@@ -182,26 +182,41 @@ static void free_item(item FAR *t)
     mem_free((LPSTR)t);
 }
 
-/* An HICON from the cached bits, if they suit this display. TODO:
-   otherwise extract the icon from iconpath. */
+/* An HICON from the cached bits if they suit this display, else (3.x
+   build) from the icon's file, else the default icon. */
 static void make_icon(item FAR *t)
 {
     HDC dc;
     BYTE FAR *h = (BYTE FAR *)t->icon;
     t->hicon = def_icon;
     t->own_icon = FALSE;
-    if (!h || t->cbhdr < 12)
-        return;
-    dc = GetDC(NULL);
-    if (h[10] == GetDeviceCaps(dc, PLANES) && h[11] == GetDeviceCaps(dc, BITSPIXEL)) {
-        HICON i = CreateIcon(g_hinst, rd16(h, 4), rd16(h, 6), h[10], h[11],
-                             h + t->cbhdr, h + t->cbhdr + t->cband);
-        if (i) {
+    if (h && t->cbhdr >= 12) {
+        dc = GetDC(NULL);
+        if (h[10] == GetDeviceCaps(dc, PLANES) && h[11] == GetDeviceCaps(dc, BITSPIXEL)) {
+            HICON i = CreateIcon(g_hinst, rd16(h, 4), rd16(h, 6), h[10], h[11],
+                                 h + t->cbhdr, h + t->cbhdr + t->cband);
+            if (i) {
+                t->hicon = i;
+                t->own_icon = TRUE;
+            }
+        }
+        ReleaseDC(NULL, dc);
+    }
+#ifndef W16_WIN2
+    /* The cached bits are for another display (or missing): take the icon
+       from its file instead, for showing only; the file keeps its cache.
+       UNVERIFIED: whether the original also rewrites the cached bits. */
+    if (!t->own_icon && t->iconpath && t->iconpath[0]) {
+        /* a bare name ("write.exe") is searched for as programs are */
+        OFSTRUCT of;
+        HICON i = ExtractIcon(g_hinst, OpenFile(t->iconpath, &of, OF_EXIST) != HFILE_ERROR
+                                       ? (LPCSTR)of.szPathName : t->iconpath, t->iicon);
+        if ((UINT)i > 1) {
             t->hicon = i;
             t->own_icon = TRUE;
         }
     }
-    ReleaseDC(NULL, dc);
+#endif
 }
 
 /* Append item t at the end of the data order. */
