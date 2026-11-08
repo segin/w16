@@ -20,8 +20,17 @@
  *   pName, pCommand, pIconPath. The header is 12 bytes: hotspot x, y,
  *   cx, cy, AND row bytes, planes, bits per pixel. The icon bits are in
  *   the display driver's own format (VGA: 4 planes of 1 bit).
- * Data after cbGroup (tags: working directory, hotkey, run minimized) is
- * not written by Setup and is not interpreted yet.
+ * Tags follow cbGroup (Setup writes none; observed after editing items
+ * with the original Program Manager): records { WORD id, WORD item,
+ * WORD cb (whole record), BYTE data[cb - 6] }, starting with
+ * { 8000h, FFFFh, 10, "PMCC" } and ending with { FFFFh, FFFFh, 0 }.
+ *   8102h  hotkey: WORD, low byte virtual key, high byte modifiers
+ *          (06h = Ctrl+Alt)
+ *   8103h  run minimized: no data
+ * cbGroup does not include the tags; the checksum covers the whole file.
+ * Tags are not interpreted yet. TODO: the working directory (expected
+ * 8101h; not yet captured), and why editing an item moves it to a new
+ * index.
  */
 #include "progman.h"
 

@@ -8,7 +8,8 @@
 # Windows 3.1 Setup); .tools/ref/wfw311a/cdrive is WfW 3.11 (Enhanced only).
 # Prints the program's TK.LOG followed by WINEXIT.
 # Environment: REFRUN_FILES = extra host files copied to C:\ (upper-cased
-# names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards.
+# names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
+# REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 exe=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -49,6 +50,7 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} dosbo
 if [ -n "${REFRUN_OUT:-}" ]; then
     mkdir -p "$REFRUN_OUT"
     for f in "$work"/c/*.BMP; do [ -f "$f" ] && cp "$f" "$REFRUN_OUT/"; done
+    for f in ${REFRUN_GET:-}; do [ -f "$work/c/$f" ] && cp "$work/c/$f" "$REFRUN_OUT/"; done
 fi
 [ -f "$work/c/WINDOWS/TK.LOG" ] && tr -d '\r' < "$work/c/WINDOWS/TK.LOG"
 tr -d '\r' < "$work/c/OUT.TXT"

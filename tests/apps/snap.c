@@ -8,6 +8,7 @@
  *     menu <letter>          open the active window's menu (Alt+letter)
  *     key <vk-hex>           post a key press to the window with the focus
  *     char <c>               post a WM_CHAR to the window with the focus
+ *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
@@ -240,6 +241,13 @@ static void run_line(char *l)
         WORD vk = parse_num(arg, 16);
         PostMessage(target(), WM_KEYDOWN, vk, 1L);
         PostMessage(target(), WM_KEYUP, vk, 0xC0000001L);
+        pump(200);
+    } else if (!lstrcmp(l, "type")) {
+        char *c;
+        for (c = arg; *c; c++) {
+            PostMessage(target(), WM_CHAR, (BYTE)*c, 1L);
+            pump(30);
+        }
         pump(200);
     } else if (!lstrcmp(l, "char")) {
         PostMessage(target(), WM_CHAR, (BYTE)arg[0], 1L);
