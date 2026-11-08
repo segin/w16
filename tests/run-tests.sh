@@ -52,13 +52,13 @@ export DOSRUN_PRE
 dir=$stage kernel='WINDOWS\SYSTEM\KRNL286'
 run TK5 0
 
-# TK6 and TK6N (floating point; tests/tk6ref.sh) in DOSBox-X, with a
+# TK6, TK6N and TK7 (floating point; tests/tk6ref.sh) in DOSBox-X, with a
 # coprocessor and without one: KRNL286 and WIN87EM.DLL in C:\WINDOWS\SYSTEM.
 stage="$root/build/tk6root"
 rm -rf "$stage"
 mkdir -p "$stage/WINDOWS/SYSTEM"
 cp "$dos/KRNL286.EXE" "$dos/WIN87EM.DLL" "$stage/WINDOWS/SYSTEM/"
-cp "$dos/TK6.EXE" "$dos/TK6N.EXE" "$stage/"
+cp "$dos/TK6.EXE" "$dos/TK6N.EXE" "$dos/TK7.EXE" "$stage/"
 unset DOSRUN_PRE
 DOSRUN_X=1
 export DOSRUN_X DOSRUN_FPU
@@ -66,6 +66,7 @@ dir=$stage
 for DOSRUN_FPU in true false; do
     echo "== (DOSBox-X, fpu=$DOSRUN_FPU)"
     run TK6 0
+    run TK7 0
 done
 # TK6N only with a coprocessor: without one its floating-point code has no
 # emulator (it does not import WIN87EM), so the INTs return into the

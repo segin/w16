@@ -24,9 +24,11 @@
  * FCLEX/FLDCW/FSTCW/FSTSW/FLDENV/FSTENV/FSAVE/FRSTOR (16-bit format),
  * FNOP and the 8087/287 no-ops (FENI, FDISI, FSETPM). FINIT is not
  * emulated, as observed (see unemulated()); programs initialise through
- * __fpMath. Tested so far only as far as tests/apps/tk6.c goes: loads and
- * stores, add, multiply, divide, compare, square root, rounding, integer
- * conversion; the rest is written to Intel's description, UNVERIFIED.
+ * __fpMath. Checked against the 3.1 emulator as far as tests/apps/tk6.c
+ * and tk7.c go (loads and stores of reals and 16/32-bit integers, add,
+ * subtract, multiply, divide, compare, square root, rounding, the
+ * rounding and precision controls, constants; ARCHITECTURE.md 9.2); the
+ * rest is written to Intel's description, UNVERIFIED.
  * Not yet (treated as unemulated, FPE_UNEMULATED 87h): FBLD, FBSTP,
  * F2XM1, FYL2X, FYL2XP1, FPTAN, FPATAN, and the 387's FPREM1, FSIN, FCOS,
  * FSINCOS. INT 3Eh is
@@ -223,15 +225,15 @@ static int w_is_zero(const u16 *w, u16 n)
 static void w_shr_sticky(u16 *w, u16 n, u32 k)
 {
     u16 st = 0, i;
-    while (k >= 16 && !w_is_zero(w, n)) {
+    while (k >= 16) {
         st |= w[0];
         for (i = 0; i + 1 < n; i++)
             w[i] = w[i + 1];
         w[n - 1] = 0;
         k -= 16;
+        if (w_is_zero(w, n))
+            k = 0;              /* nothing left to shift */
     }
-    if (w_is_zero(w, n))
-        return;
     if (k) {
         st |= w[0] & ((1u << k) - 1);
         for (i = 0; i + 1 < n; i++)
@@ -240,6 +242,15 @@ static void w_shr_sticky(u16 *w, u16 n, u32 k)
     }
     if (st)
         w[0] |= 1;
+}
+
+/* plain shift right by k < 16 bits */
+static void w_shr(u16 *w, u16 n, u16 k)
+{
+    u16 i;
+    for (i = 0; i + 1 < n; i++)
+        w[i] = (w[i] >> k) | (w[i + 1] << (16 - k));
+    w[n - 1] >>= k;
 }
 
 static void w_shl(u16 *w, u16 n, u16 k)
@@ -665,6 +676,8 @@ static void divide(const ext *a, const ext *b, ext *r)
     }
     if (is_zero(b)) {
         if (is_zero(a)) {
+            /* observed (3.1 emulator): 0/0 sets ZE as well as IE */
+            raise(SW_ZE, FPE_INVALID);
             invalid_result(r, FPE_INVALID);
             return;
         }
@@ -709,17 +722,17 @@ static void isqrt(u16 *x, u16 *res)
     w_clear(one, 10);
     one[9] = 0x4000;                    /* 2^158, the largest power of 4 */
     while (w_cmp(one, x, 10) > 0)
-        w_shr_sticky(one, 10, 2);
+        w_shr(one, 10, 2);
     while (!w_is_zero(one, 10)) {
         for (i = 0; i < 10; i++)
             t[i] = res[i];
         w_add(t, one, 10);
-        w_shr_sticky(res, 10, 1);
+        w_shr(res, 10, 1);
         if (w_cmp(x, t, 10) >= 0) {
             w_sub(x, t, 10);
             w_add(res, one, 10);
         }
-        w_shr_sticky(one, 10, 2);
+        w_shr(one, 10, 2);
     }
 }
 
@@ -773,7 +786,12 @@ static void round_int(const ext *a, ext *r)
         nan_result(a, NULL, r);
         return;
     }
-    if (is_inf(a) || is_zero(a)) {
+    if (is_zero(a)) {
+        raise(SW_PE, FPE_INEXACT);      /* observed (3.1 emulator) */
+        *r = *a;
+        return;
+    }
+    if (is_inf(a)) {
         *r = *a;
         return;
     }
@@ -849,14 +867,19 @@ static void to_int(const ext *a, u16 bits, u16 *out)
     }
     if (is_zero(a))
         return;
-    round_int(a, &rr);
-    if (is_zero(&rr))
-        return;
-    unpack(&rr, &u);
-    if (u.exp >= (s32)bits - 1) {
-        /* only -2^(bits-1) fits */
-        if (!(u.sign && u.exp == (s32)bits - 1 && u.w[7] == 0x8000 &&
-              w_is_zero(u.w, 7))) {
+    {
+        /* out of range: IE only, no PE from the rounding (observed) */
+        u16 sw0 = sw, acc0 = em_acc, fc0 = fault_code;
+        round_int(a, &rr);
+        if (is_zero(&rr))
+            return;
+        unpack(&rr, &u);
+        if (u.exp >= (s32)bits - 1 &&
+            !(u.sign && u.exp == (s32)bits - 1 && u.w[7] == 0x8000 &&
+              w_is_zero(u.w, 7))) {     /* only -2^(bits-1) fits */
+            sw = sw0;
+            em_acc = acc0;
+            fault_code = fc0;
             raise(SW_IE, FPE_INVALID);
             out[n - 1] = 0x8000;
             return;
@@ -899,7 +922,9 @@ static void from_real(const u16 FAR *p, u16 bits, ext *x)
         return;
     }
     if (e == 0 && w_is_zero(u.w, 8)) {
-        set_zero(x, sign);
+        /* observed (3.1 emulator): -0.0 loads as +0 (or is stored so;
+           UNVERIFIED which) */
+        set_zero(x, 0);
         return;
     }
     /* W = 0.f (fraction at bit 127 down); value = (e ? 1.f : 0.f) * 2^(e - bias) */
@@ -1618,7 +1643,9 @@ static void exec(insn *in)
             case 0: case 1: case 4:     /* FENI FDISI FSETPM: nothing */
                 return;
             case 2:                     /* FCLEX */
-                sw &= ~(0x00FF | SW_B);
+                /* observed (3.1 emulator): the condition codes read 0
+                   after FLDCW + FCLEX; UNVERIFIED which of the two */
+                sw &= ~(0x00FF | SW_B | SW_C0 | SW_C1 | SW_C2 | SW_C3);
                 return;
             case 3:                     /* FINIT: not emulated (observed) */
                 unemulated();

@@ -600,6 +600,15 @@ static void probe_details(void)
         obe("depth.ax", k, NULL, h_regs[0]);
         fpu_clex();
     }
+    /* does function 0 empty the register stack? */
+    fpu_init();
+    fpm(4, 0x133F, 0);
+    fp_ld1();
+    fp_ld1();
+    fpm(0, 0, 0);
+    fpm(10, 0, 0);
+    ob("f0.depth", -1, NULL, r[R_AX]);
+    ob("f0.depth.sw", -1, NULL, fpu_sw());
     fpu_init();
     fpm(4, 0x1332, 0);
 }
