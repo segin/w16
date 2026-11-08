@@ -365,6 +365,69 @@ _seg_move:
         pop bp
         retf
 
+; ---------------------------------------------------------------------------
+; void __cdecl kcopyw(u16 dsel, u16 ssel, u16 nwords): ssel:0 to dsel:0
+; void __cdecl kzerow(u16 sel, u16 nwords): zero sel:0
+global _kcopyw, _kzerow
+_kcopyw:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        mov es, [bp + 6]
+        mov ds, [bp + 8]
+        mov cx, [bp + 10]
+        xor si, si
+        xor di, di
+        cld
+        rep movsw
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+_kzerow:
+        push bp
+        mov bp, sp
+        push di
+        push es
+        mov es, [bp + 6]
+        mov cx, [bp + 8]
+        xor di, di
+        xor ax, ax
+        cld
+        rep stosw
+        pop es
+        pop di
+        pop bp
+        retf
+
+; u16 __cdecl notify_call(u32 proc, u16 h)
+; Call a GlobalNotify procedure, BOOL FAR PASCAL proc(HGLOBAL h), with
+; DS = ES = SS (Pietrek, "Windows Internals", GlobalNotify). Returns AX.
+global _notify_call
+_notify_call:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        push word [bp + 10]             ; h
+        mov ax, ss
+        mov ds, ax
+        mov es, ax
+        call far [ss:bp + 6]
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
 INTCALL _dos21, 21h, far
 INTCALL _dpmi31, 31h, far
 

@@ -3,17 +3,17 @@
  * AllocSelectorArray, FreeSelector, Get/SetSelectorBase and Limit,
  * SelectorAccessRights, PrestoChangoSelector, the aliases
  * (AllocDStoCSAlias, AllocCStoDSAlias, AllocAlias), LongPtrAdd,
- * GlobalDOSAlloc/GlobalDOSFree, GlobalHandleNoRIP; and the lock calls
- * that are not GlobalLock (GlobalFix, GlobalWire, GlobalPageLock and
- * their inverses).
+ * GlobalDOSAlloc/GlobalDOSFree and GlobalPageLock/Unlock. (GlobalFix,
+ * GlobalWire and GlobalHandleNoRIP are the global heap's: global.c.)
  *
  * Descriptors are managed through DPMI 0.9 (dpmi.c). Windows 3.1's KERNEL
  * keeps its own free list in the LDT (Pietrek, "Windows Internals"); w16
  * allocates each selector from the DPMI host, which a DPMI client cannot
  * tell apart except by the selector values.
  *
- * Behaviour observed on Windows 3.1, Standard and 386 Enhanced mode, with
- * tests/apps/tk17.c (ARCHITECTURE.md 9.2 has the full list):
+ * Behaviour observed on Windows 3.1 with tests/apps/tk17.c, KRNL286 (which
+ * w16 follows where it differs from KRNL386) and KRNL386 in Standard and
+ * 386 Enhanced mode; ARCHITECTURE.md 9.2 has the full list:
  *  - AllocSelector(0) gives a selector the CPU does not accept (Windows
  *    marks it in use with a system type, 0Fh, at DPL 0) until it is given
  *    access rights. DPMI cannot make such a descriptor, so w16 gives a
@@ -22,23 +22,23 @@
  *    selectors __AHINCR apart, each with base + 64K * i and the remaining
  *    limit (limit - 64K * i).
  *  - AllocSelectorArray(n) gives n present, writeable data selectors
- *    (F3h) with base 0; their limits are left over from Windows' free
- *    list, w16 gives 0.
+ *    (F3h) with base 0 and (KRNL286) limit 0.
  *  - FreeSelector returns 0 and frees (limit >> 16) + 1 selectors of a
- *    valid selector, one of any other.
+ *    valid selector, one of any other; the selector of a block frees the
+ *    block.
  *  - Get/SetSelectorBase work on the LDT slot sel & ~7, whatever the TI
- *    and RPL bits; SetSelectorBase returns sel, SetSelectorLimit 0;
- *    GetSelectorLimit is the 32-bit LSL limit (0 if LSL fails).
+ *    and RPL bits; SetSelectorBase returns sel, SetSelectorLimit 0.
  *  - SelectorAccessRights(sel, 0, x): (descriptor byte 6 & D0h) << 8 |
  *    (byte 5 & 1Eh), 0 if LAR fails. With any other op (1, also 2) it
  *    sets byte 5's bits 1Eh and byte 6's D0h from x, keeping the present
  *    bit, DPL and the accessed bit; returns 0.
  *  - The aliases copy the descriptor and set (DStoCS) or clear (CStoDS,
  *    with the writeable bit set) the code bit; AllocDStoCSAlias also does
- *    GlobalFix on the block (its GlobalFlags lock count stays 1 after the
- *    alias is freed). Aliases are not blocks: GlobalHandle(alias) = 0.
+ *    GlobalFix on the block (a moveable block's GlobalFlags lock count
+ *    stays 1 after the alias is freed). Aliases are not blocks:
+ *    GlobalHandle(alias) = 0.
  *  - PrestoChangoSelector(src, dst) copies src into dst with the code bit
- *    toggled and returns dst | 1; 0 when src is not valid.
+ *    toggled and returns dst (KRNL386: dst | 1); 0 when src is not valid.
  */
 #include "kernel.h"
 
@@ -270,9 +270,19 @@ u16 KAPI SetSelectorBase(u16 sel, u32 base)                   /* KERNEL.187 */
     return sel;
 }
 
+/* KRNL286 reads the descriptor's limit (observed: a free selector gave
+   its free-list word), KRNL386 uses LSL (0 when that fails). w16 reads the
+   descriptor; the granularity bit counts. */
 u32 KAPI GetSelectorLimit(u16 sel)                            /* KERNEL.188 */
 {
-    return seg_limit(sel);
+    desc8 d;
+    u32 lim;
+    if (!sel || !get_desc(sel, &d))
+        return 0;
+    lim = d.b[0] | ((u32)d.b[1] << 8) | ((u32)(d.b[6] & 0x0F) << 16);
+    if (d.b[6] & 0x80)
+        lim = (lim << 12) | 0xFFF;
+    return lim;
 }
 
 /* Observed: SetSelectorLimit(sel, n) stores n's low 20 bits as a byte
@@ -313,7 +323,7 @@ u16 KAPI PrestoChangoSelector(u16 src, u16 dst)               /* KERNEL.177 */
     d.b[5] ^= AR_CODE;
     if (!put_desc(dst, &d))
         return 0;
-    return dst | 1;
+    return dst;                         /* KRNL286; KRNL386: dst | 1 */
 }
 
 u16 KAPI AllocDStoCSAlias(u16 sel)                            /* KERNEL.171 */
@@ -326,7 +336,8 @@ u16 KAPI AllocDStoCSAlias(u16 sel)                            /* KERNEL.171 */
                                            Windows copies from a free slot */
     a = copy_selector(sel | 1, 1);
     if (a)
-        glock_adjust(sel, 1);           /* GlobalFix */
+        GlobalFix(sel);                 /* observed: a moveable block's
+                                           lock count stays 1 */
     return a;
 }
 
@@ -343,16 +354,17 @@ u16 KAPI AllocAlias(u16 sel)                                  /* KERNEL.172 */
 }
 
 /* Observed: the selector's base grows by add plus the offset's paragraph
-   part (offset & FFF0h), and the result is sel:(offset & 0Fh); nothing
-   changes and 0 is returned when the new base would wrap past 4 GB or
-   reach 80000000h (UNVERIFIED: the exact boundary). Only the one selector
-   changes (UNVERIFIED: tiled selectors; the probe of one stopped
-   Windows). */
+   part (offset & FFF0h), and the result is sel:(offset & 0Fh). KRNL286
+   returns 0 and changes nothing when add is 1 MB or more (FFFFFh worked,
+   100000h did not; "negative" adds fail too); UNVERIFIED whether add or
+   add plus the offset part is limited. (KRNL386 took up to FF0000h and
+   failed for 7FFF0000h.) Only the one selector changes (UNVERIFIED: tiled
+   selectors; the probe of one stopped Windows). */
 u32 KAPI LongPtrAdd(u32 p, u32 add)                           /* KERNEL.180 */
 {
     u16 sel = (u16)(p >> 16), off = (u16)p;
     u32 base = GetSelectorBase(sel), inc = add + (off & 0xFFF0u);
-    if (inc < add || base + inc < base || ((base + inc) & 0x80000000UL))
+    if (add > 0xFFFFFUL || inc < add)
         return 0;
     if (!dpmi_set_base(ldt_sel(sel), base + inc))
         return 0;
@@ -378,58 +390,24 @@ u16 KAPI GlobalDOSFree(u16 sel)                               /* KERNEL.185 */
     return 0;
 }
 
-/* Observed: as GlobalHandle (Schulman: without the debug KERNEL's RIP). */
-u32 KAPI GlobalHandleNoRIP(u16 sel)                           /* KERNEL.159 */
-{
-    return GlobalHandle(sel);
-}
-
-/* ---- locks that are not GlobalLock ----
-   Observed: GlobalFix, GlobalWire and GlobalPageLock add 1 to the lock
-   count GlobalFlags shows, for every kind of block (GlobalLock only
-   counts for discardable ones); GlobalUnfix, GlobalUnWire and
-   GlobalPageUnlock take it off. GlobalFix leaves AX = the handle (as
-   passed). GlobalWire returns handle | 1 : 0. GlobalUnWire returned
-   FFFFh. GlobalPageLock/Unlock return the page-lock count (separate from
-   the lock count), 0 for 0. UNVERIFIED: unbalanced unlocks (the probe
-   avoids them; Windows does not stop below 0 everywhere). */
-
-u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
-{
-    glock_adjust(h, 1);
-    return h;
-}
-
-u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
-{
-    glock_adjust(h, -1);
-    return h;
-}
-
-void FAR * KAPI GlobalWire(u16 h)                             /* KERNEL.111 */
-{
-    if (!h || glock_adjust(h, 1) < 0)
-        return NULL;
-    return MK_FP(h | 1, 0);
-}
-
-u16 KAPI GlobalUnWire(u16 h)                                  /* KERNEL.112 */
-{
-    glock_adjust(h, -1);
-    return 0xFFFF;
-}
+/* ---- page locks ----
+   Observed with KRNL286 (tests/apps/tk17.c): GlobalPageLock adds a
+   GlobalFix lock (GlobalFlags of a moveable block shows it) and returns
+   1, for any block (0 for 0); GlobalPageUnlock takes it off and returns 0.
+   (KRNL386 returns a page-lock count: 1, 2, then 1, 0.) DOSX does not
+   page, so nothing is page-locked (UNVERIFIED: DPMI 0004h/0600h). */
 
 u16 KAPI GlobalPageLock(u16 h)                                /* KERNEL.191 */
 {
-    if (!h || glock_adjust(h, 1) < 0)
+    if (!h || !GlobalHandle(h))
         return 0;
-    return gpagelock_adjust(h, 1);
+    GlobalFix(h);
+    return 1;
 }
 
 u16 KAPI GlobalPageUnlock(u16 h)                              /* KERNEL.192 */
 {
-    if (!h || gpagelock_adjust(h, 0) == 0)
-        return 0;
-    glock_adjust(h, -1);
-    return gpagelock_adjust(h, -1);
+    if (h && GlobalHandle(h))
+        GlobalUnfix(h);
+    return 0;
 }

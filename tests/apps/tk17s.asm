@@ -1,10 +1,15 @@
 ; tk17s.asm - descriptor helpers for the selector probe TK17 (tk17.c):
 ; the protected-mode instructions LAR, LSL, VERR and VERW, and DPMI 000Bh
-; (get descriptor). All far cdecl. The 32-bit forms need a 386, which
-; every test host (DOSBox, cputype=386) has.
+; (get descriptor). All far cdecl, called with DS = DGROUP. The 32-bit
+; forms are used when use386 (tk17.c) is set; on an 80286 (tests/refrun.sh
+; REFRUN_CPU=286) the 16-bit ones.
 
         bits 16
         cpu 386
+
+segment _DATA public align=2 class=DATA use16
+group DGROUP _DATA
+extern _use386
 
 segment _TEXT public align=16 class=CODE use16
 
@@ -27,6 +32,18 @@ global _sel_ar
 _sel_ar:
         push bp
         mov bp, sp
+        cmp word [_use386 wrt DGROUP], 0
+        jne .w32
+        xor ax, ax
+        lar ax, [bp + 6]
+        jz .ok16
+        xor ax, ax
+.ok16:
+        mov al, ah
+        xor ah, ah
+        pop bp
+        retf
+.w32:
         xor eax, eax
         movzx edx, word [bp + 6]
         lar eax, edx
@@ -43,6 +60,17 @@ global _sel_lsl
 _sel_lsl:
         push bp
         mov bp, sp
+        cmp word [_use386 wrt DGROUP], 0
+        jne .w32
+        xor ax, ax
+        lsl ax, [bp + 6]
+        jz .ok16
+        xor ax, ax
+.ok16:
+        xor dx, dx
+        pop bp
+        retf
+.w32:
         xor eax, eax
         movzx edx, word [bp + 6]
         lsl eax, edx

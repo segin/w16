@@ -19,6 +19,7 @@
 #include <windows.h>
 
 #define TK_REF "tk15ref.h"
+#define TK_REF286 "tk15ref286.h"
 #include "tklog.h"
 #include "tk15.h"
 

@@ -1,0 +1,4 @@
+# TK19.EXE (tests/apps/tk19.c): the global heap probe
+@tests/apps/app.lnk
+@tests/apps/tk19k.lnk
+export NOTIFY_PROC.1

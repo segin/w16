@@ -13,6 +13,7 @@
 #include <windows.h>
 
 #define TK_REF "tk16ref.h"
+#define TK_REF286 "tk16ref286.h"
 #include "tklog.h"
 #include "tk15.h"
 #include "tk16.h"

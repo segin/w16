@@ -31,6 +31,9 @@ extern void __cdecl task_switch(u16 FAR *save, u16 ss, u16 sp);
 extern void __far task_tramp(void);
 #pragma aux task_tramp "*"
 extern void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);
+extern void __cdecl kcopyw(u16 dsel, u16 ssel, u16 nwords);    /* :0 to :0 */
+extern void __cdecl kzerow(u16 sel, u16 nwords);               /* sel:0 */
+extern u16  __cdecl notify_call(u32 proc, u16 h);   /* DS = ES = SS */
 extern void __far int21_handler(void);
 extern void __far int3d_handler(void);
 #pragma aux int3d_handler "*"
@@ -83,8 +86,12 @@ int  dpmi_set_rights(u16 sel, u16 rights);
 #define GMEM_LOCKCOUNT      0x00FF
 #define GMEM_DISCARDED      0x4000
 
+#define GA_REQ_DGROUP       0x0004  /* galloc only: a DGROUP (GlobalFlags 0400h) */
+#define GA_REQ_DISCCODE     0x0008  /* galloc only: discardable code */
+
 void global_init(void);
 u16  galloc(u16 flags, u32 size, u16 owner, u16 *sel_out); /* returns handle */
+void KAPI FarSetOwner(u16 h, u16 owner);
 int  gset_code(u16 sel);                    /* make a block executable */
 u32  gsize_of_sel(u16 sel);
 u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
@@ -95,8 +102,8 @@ u16  galloc_dos(u32 size, u16 owner, u16 *seg);
 u16  galias_code(u16 sel, u16 owner);
 void gfree_owner(u16 owner);
 u16  gowner(u16 h);
-int  glock_adjust(u16 h, int delta);        /* selector.c's lock calls */
-int  gpagelock_adjust(u16 h, int delta);
+u16  KAPI GlobalFix(u16 h);
+u16  KAPI GlobalUnfix(u16 h);
 
 /* ---- local.c ---- */
 int  local_init_task(u16 ds, u16 heap);

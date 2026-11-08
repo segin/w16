@@ -37,7 +37,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -115,7 +115,7 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
-$(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tklog.h
+$(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tk3ref286.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
 $(B)/tests/tk11.o: tests/apps/tk11ref.h tests/apps/tklog.h
@@ -133,7 +133,7 @@ $(B)/tests/tk6.o: tests/apps/tk6ref.h tests/apps/tklog.h
 
 # TK15.EXE: the task probe; it starts TK15A.EXE (tk15a.c, own start-up
 # code tk15s.asm), which imports TKDLL.DLL and TKDLB.DLL
-$(B)/tests/tk15.o: tests/apps/tk15ref.h tests/apps/tklog.h tests/apps/tk15.h
+$(B)/tests/tk15.o: tests/apps/tk15ref.h tests/apps/tk15ref286.h tests/apps/tklog.h tests/apps/tk15.h
 $(B)/tests/tk15a.o: tests/apps/tk15.h
 $(DOS)/TK15.EXE: $(B)/tests/start.o $(B)/tests/tk15.o \
                 tests/apps/app.lnk tests/apps/tk15.lnk tests/apps/tk15k.lnk
@@ -148,7 +148,7 @@ $(DOS)/TK15A.EXE: $(B)/tests/tk15s.o $(B)/tests/tk15a.o \
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
-$(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
+$(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tk16ref286.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
 $(DOS)/TK16.EXE: $(B)/tests/start.o $(B)/tests/tk16.o \
                 tests/apps/app.lnk tests/apps/tk16.lnk tests/apps/tk15k.lnk
 	@mkdir -p $(@D)
@@ -167,8 +167,8 @@ $(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
 
 # TK17.EXE: the selector probe, with descriptor helpers in tk17s.asm
 # (TK17A: its huge-block part, the same source with TK17A defined)
-$(B)/tests/tk17.o: tests/apps/tk17ref.h tests/apps/tklog.h
-$(B)/tests/tk17A.o: tests/apps/tk17.c tests/apps/tk17aref.h tests/apps/tklog.h
+$(B)/tests/tk17.o: tests/apps/tk17ref.h tests/apps/tk17ref286.h tests/apps/tklog.h
+$(B)/tests/tk17A.o: tests/apps/tk17.c tests/apps/tk17aref.h tests/apps/tk17aref286.h tests/apps/tklog.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -dTK17A -fo=$@ $<
 $(DOS)/TK17.EXE $(DOS)/TK17A.EXE: $(DOS)/TK17%.EXE: $(B)/tests/start.o $(B)/tests/tk17%.o \
@@ -178,8 +178,17 @@ $(DOS)/TK17.EXE $(DOS)/TK17A.EXE: $(DOS)/TK17%.EXE: $(B)/tests/start.o $(B)/test
 	    option map=$(B)/tests/tk17$*.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk17$*.o $(B)/tests/tk17s.o }
 
+# TK19.EXE: the global heap probe (KERNEL imports by ordinal: tk19k.lnk)
+$(B)/tests/tk19.o: tests/apps/tk19ref.h tests/apps/tklog.h
+$(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o \
+                tests/apps/app.lnk tests/apps/tk19.lnk tests/apps/tk19k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk19.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk19.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o }
+
 # TK12.EXE: the resource probe, with the resources of tk12.rc
-$(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tklog.h
+$(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tk12ref286.h tests/apps/tklog.h
 $(B)/tests/tk12.res: tests/apps/tk12.rc
 	@mkdir -p $(@D)
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<

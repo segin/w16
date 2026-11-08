@@ -19,8 +19,10 @@
 
 #ifdef TK17A
 #define TK_REF "tk17aref.h"
+#define TK_REF286 "tk17aref286.h"
 #else
 #define TK_REF "tk17ref.h"
+#define TK_REF286 "tk17ref286.h"
 #endif
 #include "tklog.h"
 
@@ -162,7 +164,9 @@ void constants(void)
     /* selector 40h itself (Schulman: usable in Windows) */
     obs("sel 0040 lar ok", sel_ok(0x40));
     obs32("sel 0040", "GetSelectorBase", GetSelectorBase(0x40));
-    obs32("sel 0040", "lsl", sel_lsl(0x40));
+    /* its limit is the DOS extender's (DOSX FFFFh, WIN386 2FFh) */
+    obs_env("sel 0040 lsl hi", HIWORD(sel_lsl(0x40)));
+    obs_env("sel 0040 lsl lo", LOWORD(sel_lsl(0x40)));
     obs("cs ar", sel_ar(cur_cs()));
     obs("ds ar", sel_ar(cur_ds()));
     obs("cs rpl/ti", cur_cs() & 7);
@@ -171,6 +175,7 @@ void constants(void)
 }
 
 static WORD inc_;
+WORD use386;                    /* tk17s.asm: 32-bit LAR and LSL */
 
 void alloc_selector(void)
 {
@@ -298,7 +303,7 @@ void alloc_selector(void)
     hs = SELECTOROF(GlobalLock(h));
     s = AllocSelector(hs);
     obs("AllocSelector(huge)!=0", s != 0);
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 4; i++) {           /* (the fifth is not ours) */
         WORD x = s + i * inc_;
         obsn("AllocSelector(huge) tile lar ok", i, sel_ok(x));
         if (!sel_ok(x))
@@ -330,7 +335,8 @@ void selector_array(void)
     obs("AllocSelectorArray(3)!=0", s != 0);
     for (i = 0; i < 4; i++) {
         WORD x = s + i * inc_;
-        obsn("ASA tile lar ok", i, sel_ok(x));
+        if (i < 3)
+            obsn("ASA tile lar ok", i, sel_ok(x));
         if (i < 3) {
             obsn("ASA tile ar", i, sel_ar(x));
             obsn("ASA tile lsl lo", i, LOWORD(sel_lsl(x)));
@@ -632,9 +638,9 @@ void huge_blocks(void)
     b = GetSelectorBase(s);
     for (i = 0; i < 4; i++) {
         WORD x = s + i * inc_;
-        obsn("huge tile lar ok", i, sel_ok(x));
         if (i == 3)
-            break;
+            break;                      /* the selector after: not ours */
+        obsn("huge tile lar ok", i, sel_ok(x));
         obsn("huge tile ar", i, sel_ar(x));
         obsn("huge tile lsl hi", i, HIWORD(sel_lsl(x)));
         obsn("huge tile lsl lo", i, LOWORD(sel_lsl(x)));
@@ -680,7 +686,7 @@ void huge_blocks(void)
         obs("ReAlloc 25000 last byte", *(BYTE FAR *)MAKELP(s + 2 * inc_, 0x4FFF));
         obs_env("ReAlloc 25000 new memory byte", *(BYTE FAR *)MAKELP(s + inc_, 0x10));
         GlobalUnlock(hn);
-        obs("h2 still ok", GlobalSize(h2) == 0x1000);
+        obs("h2 still ok", GlobalSize(h2) >= 0x1000);
         /* shrink back */
         h = GlobalReAlloc(hn, 0x800, GMEM_MOVEABLE);
         obs("ReAlloc 25000->800 same handle", h == hn);
@@ -739,7 +745,8 @@ void bad(void)
     FreeSelector(f);                    /* f: a free selector */
     obs("GetSelectorBase(free) lo", LOWORD(GetSelectorBase(f)));
     obs("GetSelectorBase(free) hi", HIWORD(GetSelectorBase(f)));
-    obs("GetSelectorLimit(free) lo", LOWORD(GetSelectorLimit(f)));
+    /* KRNL286 reads the free slot's limit word, KRNL386 uses LSL */
+    obs_env("GetSelectorLimit(free) lo", LOWORD(GetSelectorLimit(f)));
     obs("GetSelectorBase(0) lo", LOWORD(GetSelectorBase(0)));
     obs("GetSelectorLimit(0) lo", LOWORD(GetSelectorLimit(0)));
     obs("SelectorAccessRights(free)", SelectorAccessRights(f, 0, 0));
@@ -755,7 +762,7 @@ void bad(void)
     SetSelectorLimit(s, 0xFFFF);
     heapinfo("raw selector", s);
     obs("GlobalLock(raw) ", (WORD)((DWORD)GlobalLock(s) != 0));
-    obs("GlobalFree(raw) ret==sel", GlobalFree(s) == s);
+    /* GlobalFree of it stopped Windows (KRNL286): not probed */
     obs_env("raw after GlobalFree lar ok", sel_ok(s));
     SetSelectorBase(s, 0);
     FreeSelector(s);
@@ -772,6 +779,31 @@ void bad(void)
 
 /* Last: these stopped Windows 3.1 (Standard mode) in earlier runs or may
    disturb the heap. */
+/* (TK17A) where LongPtrAdd's limit is: more additions to base 10000h */
+void lpa_more(void)
+{
+    static const DWORD add[] = {
+        0x0FFFFFUL, 0x100000UL, 0x3F0000UL, 0x400000UL, 0x7F0000UL,
+        0x800000UL, 0xBF0000UL, 0xC00000UL, 0xDF0000UL, 0xE00000UL, 0
+    };
+    char name[24];
+    WORD i, s = AllocSelectorArray(1);
+    STEP("LongPtrAdd limits");
+    for (i = 0; add[i]; i++) {
+        DWORD r;
+        SetSelectorBase(s, 0x10000UL);
+        r = LongPtrAdd(MAKELONG(0, s), add[i]);
+        lstrcpy(name, "LPA+");
+        name[4] = "0123456789ABCDEF"[(WORD)(add[i] >> 20) & 15];
+        name[5] = "0123456789ABCDEF"[(WORD)(add[i] >> 16) & 15];
+        name[6] = 0;
+        obs(nm(name, "ok"), HIWORD(r) == s);
+        obs(nm(name, "base hi"), HIWORD(GetSelectorBase(s)));
+    }
+    SetSelectorBase(s, 0);
+    FreeSelector(s);
+}
+
 void dos_last(void)
 {
     DWORD d;
@@ -811,11 +843,13 @@ int __cdecl tmain(void)
 #else
     out("TK17 start\r\n");
 #endif
+    use386 = (GetWinFlags() & (WF_CPU386 | WF_CPU486)) != 0;
     inc_ = LOWORD((DWORD)GetProcAddress(GetModuleHandle("KERNEL"), "__AHINCR"));
 #ifdef TK17A
     /* TK17A: huge blocks, in a fresh program (TK17's earlier steps left
        Windows 3.1 unable to finish these) */
     huge_blocks();
+    lpa_more();
     dos_last();
 #else
     constants();

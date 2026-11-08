@@ -393,6 +393,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     t = galloc_dos(TDB_SIZE, 0, &seg);
     if (!t)
         return 0;
+    FarSetOwner(t, t);          /* observed: a TDB owns itself */
     if (!galloc(GMEM_FIXED, sizeof(taskx), 0, &xsel)) {
         GlobalFree(t);
         return 0;

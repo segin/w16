@@ -53,7 +53,10 @@
  * Growing: when a request does not fit, the segment is reallocated to
  * round32(GlobalSize + arena size + extra + 18h) and the new space joins
  * the heap end. (That 18h is the observed slack; any value in 15h..18h
- * gives the same sizes, since arenas are multiples of 4.)
+ * gives the same sizes, since arenas are multiples of 4.) Observed with
+ * KRNL286 too (tests/apps/tk3.c): the segment grows by the same amount,
+ * so the formula starts from GlobalSize rounded down to 32 (KRNL286's
+ * sizes are odd multiples of 10h).
  */
 #include "kernel.h"
 
@@ -398,13 +401,19 @@ static int grow(const lheap *hp, u16 need)
 
     if (!h || !old)
         return 0;
-    size = (old + need + I(hp, LI_EXTRA) + GROW_SLOP + 31) & ~31UL;
+    size = ((old & ~31UL) + need + I(hp, LI_EXTRA) + GROW_SLOP + 31) & ~31UL;
     /* UNVERIFIED: what Windows does when this passes 64K */
     if (size > SEG_MAX)
         size = SEG_MAX;
     nl = (u16)((size - 1 - SENTINEL_SIZE) & ~3UL);
     if (size <= old || nl <= last || nl - last < need || !GlobalReAlloc(h, size, 0))
         return 0;
+    /* the heap ends at the segment's end, which is what GlobalSize says
+       (KRNL286 gives 10h more than asked) */
+    size = GlobalSize(h);
+    if (size > SEG_MAX)
+        size = SEG_MAX;
+    nl = (u16)((size - 1 - SENTINEL_SIZE) & ~3UL);
     /* the old last sentinel becomes an arena; a new one ends the heap */
     p = W(hp->seg, last + LA_FREEPREV);
     set_prev(hp, nl, last, LA_BUSY);
