@@ -1,153 +1,16 @@
 /*
  * tk3.c - local heap probe (LocalInit .. LocalCompact, InitTask's heap).
  *
- * Output (to TK.LOG, see start.asm), one item per line:
- *   PASS <name> / FAIL <name>   checks of behaviour observed on Windows 3.1
- *   OBS <name>=<value>          raw observations; run this program on both
- *                               w16 and Windows 3.1 (tests/refrun.sh) and
- *                               compare these lines
- *   OBS ~<name>=<value>         a value that depends on the program's
- *                               layout or the environment (addresses)
- *   OBS <name>@<off>=w w w ...  memory dumps (words, DS-relative offsets)
+ * Output and checks: see tklog.h; the reference values are in tk3ref.h.
  * The exit code is the number of failures.
- *
- * Every plain OBS whose name is in tk3ref.h is also checked against the
- * value observed on Windows 3.1 (Standard and 386 Enhanced mode gave the
- * same values); tk3ref.h is generated from a reference run with
- * tools/obsref.py. Layout-dependent values (OBS ~) are checked relative to
- * each other in the code instead.
  *
  * The program makes no heap calls before these tests, so the task's local
  * heap is in the state InitTask left it in.
  */
 #include <windows.h>
 
-extern WORD __cdecl entry_regs[11];   /* ax bx cx dx si di bp sp ds es ss */
-extern WORD __cdecl init_regs[7];    /* ax bx cx dx si di es */
-extern void __cdecl log_write(const char FAR *buf, WORD len);
-
-#define E_BX 1
-#define E_CX 2
-#define E_SP 7
-#define E_DS 8
-
-static int failures;
-
-static void out(const char *s)
-{
-    WORD n = 0;
-    while (s[n])
-        n++;
-    log_write(s, n);
-}
-
-static void outhex(WORD v)
-{
-    char b[5];
-    int i;
-    for (i = 3; i >= 0; i--) {
-        b[i] = "0123456789ABCDEF"[v & 15];
-        v >>= 4;
-    }
-    b[4] = 0;
-    out(b);
-}
-
-static void check(int ok, const char *name)
-{
-    out(ok ? "PASS " : "FAIL ");
-    out(name);
-    out("\r\n");
-    if (!ok)
-        failures++;
-}
-
-typedef struct { const char *name; WORD value; } refval;
-static const refval ref[] = {
-#include "tk3ref.h"
-    { 0, 0 }
-};
-
-static int same(const char *a, const char *b)
-{
-    while (*a && *a == *b) {
-        a++;
-        b++;
-    }
-    return *a == *b;
-}
-
-static void obs(const char *name, WORD v)
-{
-    WORD i;
-    out("OBS ");
-    out(name);
-    out("=");
-    outhex(v);
-    out("\r\n");
-    for (i = 0; ref[i].name; i++)
-        if (same(ref[i].name, name)) {
-            if (v != ref[i].value) {
-                out("FAIL ");
-                out(name);
-                out(" (Windows 3.1: ");
-                outhex(ref[i].value);
-                out(")\r\n");
-                failures++;
-            }
-            break;
-        }
-}
-
-/* an address or other layout-dependent value: not in tk3ref.h */
-static void obs_env(const char *name, WORD v)
-{
-    out("OBS ~");
-    out(name);
-    out("=");
-    outhex(v);
-    out("\r\n");
-}
-
-/* name with a 4-digit hex suffix: "prefix(xxxx)" */
-static void obsn(const char *prefix, WORD n, WORD v)
-{
-    char name[64];
-    WORD i = 0, d;
-    while (*prefix && i < sizeof name - 7)
-        name[i++] = *prefix++;
-    name[i++] = '(';
-    for (d = 0; d < 4; d++)
-        name[i++] = "0123456789ABCDEF"[(n >> (12 - 4 * d)) & 15];
-    name[i++] = ')';
-    name[i] = 0;
-    obs(name, v);
-}
-
-static WORD FAR *w_at(WORD seg, WORD off)
-{
-    return (WORD FAR *)MAKELP(seg, off);
-}
-
-static void dump(const char *name, WORD seg, WORD off, WORD nwords)
-{
-    WORD i;
-    for (i = 0; i < nwords; i++) {
-        if ((i & 7) == 0) {
-            if (i)
-                out("\r\n");
-            out("OBS ");
-            out(name);
-            out("@");
-            outhex(off + 2 * i);
-            out("=");
-        } else {
-            out(" ");
-        }
-        outhex(*w_at(seg, off + 2 * i));
-    }
-    out("\r\n");
-}
+#define TK_REF "tk3ref.h"
+#include "tklog.h"
 
 static WORD ds(void)
 {
