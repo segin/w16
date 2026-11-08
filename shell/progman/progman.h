@@ -19,8 +19,13 @@
 /* ---- resource and command IDs (our own numbering) ---- */
 #define IDM_MAIN            1
 #define IDA_MAIN            1
+/* The stock icons have resource IDs 1..STOCK_ICONS in index order, so
+   ExtractIcon("PROGMAN.EXE", n) gives stock icon n (tools/stockicons.py:
+   the original's 46, by subject). Program Manager's own icon is stock 0,
+   a group's stock 7, an item without one stock 2. */
+#define STOCK_ICONS         46
 #define IDI_PROGMAN         1
-#define IDI_GROUP           2
+#define IDI_GROUP           8
 #define IDI_DEFITEM         3
 #define IDD_RUN             10
 #define IDD_ABOUT           11

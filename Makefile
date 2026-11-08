@@ -35,14 +35,15 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 TESTS   := TK1 TK2 TK3 TK4
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
             $(B)/shell/progman/compat2.o $(B)/shell/progman/mdi2.o \
             $(B)/shell/progman/dde.o
-ICONS    := $(B)/shell/res/progman.ico $(B)/shell/res/group.ico \
-            $(B)/shell/res/defitem.ico
+ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 \
+                         20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 \
+                         40 41 42 43 44 45,$(B)/shell/res/stock$(n).ico)
 
 .SECONDARY:
 
@@ -110,6 +111,13 @@ $(DOS)/TEXP2.EXE: $(B)/tests/start.o $(B)/tests/texp2.o tests/apps/app.lnk tools
 	    option map=$(B)/tests/texp2.map file { $(B)/tests/start.o $(B)/tests/texp2.o }
 	python3 tools/nemark.py $@ 2.0
 
+# TICONS.EXE: shows the icons a file offers (ExtractIcon)
+$(DOS)/TICONS.EXE: $(B)/tests/start.o $(B)/tests/ticons.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/ticons.map file { $(B)/tests/start.o $(B)/tests/ticons.o } \
+	    library shell.lib
+
 # TDDE.EXE: Program Manager DDE probe
 $(DOS)/TDDE.EXE: $(B)/tests/start.o $(B)/tests/tdde.o tests/apps/app.lnk
 	@mkdir -p $(@D)
@@ -166,7 +174,7 @@ $(B)/shell/start.o: shell/start.asm
 $(B)/shell/progman/%.o: shell/progman/%.c shell/progman/progman.h shell/progman/compat2.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
-$(ICONS) &: tools/mkicons.py
+$(ICONS) &: tools/mkicons.py tools/stockicons.py
 	python3 tools/mkicons.py $(B)/shell/res
 $(B)/shell/progman/progman.res: shell/progman/progman.rc shell/progman/progman.h $(ICONS)
 	@mkdir -p $(@D)

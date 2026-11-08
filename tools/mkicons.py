@@ -42,6 +42,80 @@ class Icon:
         self.rect(x0, y0, x0, y1, c)
         self.rect(x1, y0, x1, y1, c)
 
+    def set(self, x, y, c):
+        if 0 <= x < 32 and 0 <= y < 32:
+            self.px[y][x] = c
+
+    def line(self, x0, y0, x1, y1, c):
+        """Bresenham, inclusive"""
+        dx, dy = abs(x1 - x0), -abs(y1 - y0)
+        sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
+        err = dx + dy
+        while True:
+            self.set(x0, y0, c)
+            if x0 == x1 and y0 == y1:
+                return
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x0 += sx
+            if e2 <= dx:
+                err += dx
+                y0 += sy
+
+    def disc(self, cx, cy, r, c):
+        """filled circle"""
+        for y in range(cy - r, cy + r + 1):
+            for x in range(cx - r, cx + r + 1):
+                if (x - cx) ** 2 + (y - cy) ** 2 <= r * r + r:
+                    self.set(x, y, c)
+
+    def ring(self, cx, cy, r, c):
+        """circle outline"""
+        for y in range(cy - r - 1, cy + r + 2):
+            for x in range(cx - r - 1, cx + r + 2):
+                d = (x - cx) ** 2 + (y - cy) ** 2
+                if r * r - r <= d <= r * r + r:
+                    self.set(x, y, c)
+
+    def poly(self, pts, c, edge=None):
+        """filled polygon (even-odd, pixel centres), optional outline"""
+        ys = [p[1] for p in pts]
+        for y in range(max(0, min(ys)), min(31, max(ys)) + 1):
+            xs = []
+            for (xa, ya), (xb, yb) in zip(pts, pts[1:] + pts[:1]):
+                if (ya <= y < yb) or (yb <= y < ya):
+                    xs.append(xa + (y - ya) * (xb - xa) / (yb - ya))
+            xs.sort()
+            for a, b in zip(xs[::2], xs[1::2]):
+                for x in range(int(round(a)), int(round(b)) + 1):
+                    self.set(x, y, c)
+        if edge is not None:
+            for (xa, ya), (xb, yb) in zip(pts, pts[1:] + pts[:1]):
+                self.line(xa, ya, xb, yb, edge)
+
+    # a 3x5 pixel font for the few letters the icons need
+    FONT = {
+        'C': ['111', '100', '100', '100', '111'], ':': ['000', '010', '000', '010', '000'],
+        '\\': ['100', '100', '010', '001', '001'], '>': ['100', '010', '001', '010', '100'],
+        '_': ['000', '000', '000', '000', '111'], 'W': ['101', '101', '101', '111', '101'],
+        '1': ['010', '110', '010', '010', '111'], '6': ['111', '100', '111', '101', '111'],
+    }
+
+    def text(self, x, y, s, c):
+        for ch in s:
+            for r, bits in enumerate(self.FONT[ch]):
+                for k, b in enumerate(bits):
+                    if b == '1':
+                        self.set(x + k, y + r, c)
+            x += 4
+
+    def page(self, x0, y0, x1, y1, fold=4, body=WHITE):
+        """a sheet of paper with a folded top-right corner"""
+        self.poly([(x0, y0), (x1 - fold, y0), (x1, y0 + fold), (x1, y1), (x0, y1)], body, BLACK)
+        self.line(x1 - fold, y0, x1 - fold, y0 + fold, BLACK)
+        self.line(x1 - fold, y0 + fold, x1, y0 + fold, BLACK)
+
     def window(self, x0, y0, x1, y1, title=NAVY, body=WHITE):
         """a small window: black outline, title bar, body"""
         self.rect(x0, y0, x1, y1, body)
@@ -98,45 +172,16 @@ class Icon:
         return head + entry + img
 
 
-def progman():
-    """the shell: a window holding the w16 slab stack"""
-    i = Icon()
-    i.window(1, 2, 30, 29, NAVY, SILVER)
-    # bottom first, so each slab rests on the one below
-    i.slab(5, 18, 17, WHITE, SILVER, GRAY)
-    i.slab(5, 14, 17, TEAL, CYAN, NAVY)
-    i.slab(5, 10, 17, BLUE, CYAN, NAVY)
-    return i
-
-
-def group():
-    """a program group: a window with three small program tiles"""
-    i = Icon()
-    i.window(1, 4, 30, 27, NAVY, WHITE)
-    for n, (fill, edge) in enumerate(((BLUE, NAVY), (CYAN, TEAL), (SILVER, GRAY))):
-        x = 5 + n * 8
-        i.rect(x, 13, x + 5, 18, fill)
-        i.frame(x, 13, x + 5, 18, edge)
-        i.rect(x, 21, x + 5, 21, GRAY)
-    return i
-
-
-def defitem():
-    """a program with no icon of its own: a plain application window"""
-    i = Icon()
-    i.window(2, 4, 29, 27, TEAL, WHITE)
-    i.rect(3, 10, 28, 10, SILVER)
-    for y in (14, 17, 20, 23):
-        i.rect(6, y, 22 if y != 23 else 15, y, GRAY)
-    return i
-
-
 def main():
+    """stock00.ico .. stock45.ico: PROGMAN.EXE's stock icons (stockicons.py);
+    its own, group and default item icons are stock 0, 7 and 2"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import stockicons
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for name, fn in (('progman', progman), ('group', group), ('defitem', defitem)):
-        with open(os.path.join(out, name + '.ico'), 'wb') as f:
-            f.write(fn().ico())
+    for n in range(len(stockicons.STOCK)):
+        with open(os.path.join(out, 'stock%02d.ico' % n), 'wb') as f:
+            f.write(stockicons.make(n).ico())
 
 
 if __name__ == '__main__':
