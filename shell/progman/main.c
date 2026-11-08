@@ -22,6 +22,14 @@ static char s_settings[] = "Settings";
 static char s_groups[] = "Groups";
 static HMENU window_menu;
 
+/* Wine delivers commands from a maximized group's control menu (in the
+   menu bar) to the frame as WM_SYSCOMMAND, where Windows 3.1 has them
+   reach the group (observed, tests under Wine 11: SC_CLOSE at the frame
+   closed Program Manager). The frame notes when that menu was last used
+   and passes such a command on. */
+static HWND menu_child;                 /* group whose control menu was used */
+static DWORD menu_closed_at;            /* GetTickCount when the menu closed */
+
 /* ---- settings ---- */
 
 /* The options as loaded: observed, the original writes an option only
@@ -312,6 +320,20 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 #ifdef PM_DEBUGLOG
     if (msg == WM_COMMAND)
         dbg("FrameWndProc WM_COMMAND", wp);
+    if (msg == WM_SYSCOMMAND) {
+        dbg("FrameWndProc WM_SYSCOMMAND", wp);
+        dbg("  lParam lo", LOWORD(lp));
+        dbg("  lParam hi", HIWORD(lp));
+    }
+    if (msg == WM_INITMENUPOPUP) {
+        HWND act = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+        dbg("FrameWndProc WM_INITMENUPOPUP hmenu", wp);
+        dbg("  system menu flag", HIWORD(lp));
+        dbg("  active child's system menu", act ? (int)GetSystemMenu(act, FALSE) : 0);
+        dbg("  frame's system menu", (int)GetSystemMenu(hwnd, FALSE));
+    }
+    if (msg == WM_CLOSE)
+        dbg("FrameWndProc WM_CLOSE", 0);
 #endif
     switch (msg) {
     case WM_CREATE: {
@@ -338,6 +360,23 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_COMMAND:
         command(hwnd, wp);
         return 0;
+    case WM_MENUSELECT:
+        if (LOWORD(lp) == 0xFFFF && !HIWORD(lp)) {      /* the menu closed */
+            menu_closed_at = GetTickCount();
+        } else {
+            HWND act = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+            menu_child = act && (HMENU)HIWORD(lp) == GetSystemMenu(act, FALSE) ? act : NULL;
+        }
+        break;
+    case WM_SYSCOMMAND:
+        if ((wp & 0xFFF0) != SC_KEYMENU && (wp & 0xFFF0) != SC_MOUSEMENU) {
+            HWND child = menu_child;
+            menu_child = NULL;
+            /* within a second of that menu closing: it was its command */
+            if (child && IsWindow(child) && GetTickCount() - menu_closed_at < 1000)
+                return SendMessage(child, WM_SYSCOMMAND, wp, lp);
+        }
+        break;
     case WM_DDE_INITIATE:
     case WM_DDE_EXECUTE:
     case WM_DDE_REQUEST:

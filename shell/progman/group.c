@@ -1707,11 +1707,21 @@ BOOL group_delete_selected(HWND hwnd)
 
 /* ---- the window ---- */
 
+#ifdef PM_DEBUGLOG
+void dbg(const char FAR *s, int v);
+#endif
+
 LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     group FAR *g = grp_of(hwnd);
     item FAR *t;
 
+#ifdef PM_DEBUGLOG
+    if (msg == WM_SYSCOMMAND)
+        dbg("GroupWndProc WM_SYSCOMMAND", wp);
+    if (msg == WM_CLOSE)
+        dbg("GroupWndProc WM_CLOSE", 0);
+#endif
     switch (msg) {
     case WM_PAINT:
         if (g) {
