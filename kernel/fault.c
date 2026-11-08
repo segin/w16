@@ -63,6 +63,12 @@ void where(u16 sel)
                 kputs(m->name);
                 kputs(":");
                 kputdec(i + 1);
+                kputs(" base ");
+                {
+                    u32 b = dpmi_get_base(sel);
+                    kputhex((u16)(b >> 16));
+                    kputhex((u16)b);
+                }
                 kputs(" limit ");
                 kputhex(lsl(sel));
                 kputs(")");

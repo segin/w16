@@ -151,6 +151,9 @@ typedef struct module {
     u16 dg_snap;                /* a program's DGROUP as loaded, for more
                                    instances (loader.c) */
     u16 walk;                   /* loader.c: counted in this usage walk */
+    u16 dg_min;                 /* the DGROUP's minimum allocation in the
+                                   file (the module table's includes the
+                                   heap and the stack, as on 3.1) */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;

@@ -140,7 +140,7 @@ void diag_load_end(const char FAR *name, u16 rc)
 
 /* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ---- */
 
-static char trace_list[1024];
+static char trace_list[2048];
 
 int trace_wanted(const char FAR *mod, u16 ordinal)
 {

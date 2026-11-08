@@ -3,6 +3,8 @@
  *
  * Each thunk is 8 bytes of code:   B8 lo hi        mov ax, <index>
  *                                  EA ofs seg      jmp far unimpl_entry
+ * (a trace thunk pushes the index instead: 68 lo hi, push <index>, and
+ * jumps to trace_entry, so the callee gets the caller's AX)
  * unimpl_entry (kentry.asm) reports the call and ends the task with exit
  * code 0FFh. Loading never fails just because an API is missing; the gap
  * shows up only if the program actually calls it.
@@ -130,7 +132,7 @@ static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
     kmemcpy(t->name, name, sizeof name);
     t->real = real;
     code = &b->code[(i % TB_COUNT) * THUNK_SIZE];
-    code[0] = 0xB8;
+    code[0] = real ? 0x68 : 0xB8;       /* push imm16 / mov ax, imm16 */
     code[1] = (u8)i;
     code[2] = (u8)(i >> 8);
     code[3] = 0xEA;
@@ -167,7 +169,7 @@ void where(u16 sel);             /* fault.c */
    imports to trace thunks: each call is recorded (thunk, caller CS:IP,
    AX, BX, CX, DX and the first 6 stack words above the return address)
    in a ring the fault and watchdog reports print. */
-#define TR_N 96
+#define TR_N 400
 typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, arg[6]; } trrec;
 static trrec trring[TR_N];
 static u16 trpos, trcount;

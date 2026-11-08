@@ -103,9 +103,13 @@ int KAPI KLstrcmp(const char FAR *a, const char FAR *b)
 }
 
 /* GetCodeInfo (KERNEL.104, SDK): lpProc is a procedure address or
-   MAKELONG(segment number, hModule); fills a SEGINFO:
-   offSegment (sectors), cbSegment, flags, cbAlloc, h, alignShift,
-   reserved[2]. Returns nonzero if found. */
+   MAKELONG(segment number, hModule); fills a SEGINFO: offSegment
+   (sectors), cbSegment, flags, cbAlloc, h, alignShift, reserved[2].
+   Observed on 3.1 (TK25): the six words come from the module table's
+   segment entry (loaded flags, the DGROUP's allocation with heap and
+   stack), h is the segment's handle, reserved[] is left alone, a bad
+   address gives 0 and writes nothing; the result is otherwise nonzero
+   (various values). */
 u16 KAPI GetCodeInfo(u32 proc, u16 FAR *info)
 {
     u16 hi = (u16)(proc >> 16), lo = (u16)proc, i;
@@ -133,8 +137,7 @@ u16 KAPI GetCodeInfo(u32 proc, u16 FAR *info)
     info[3] = s->min_alloc;
     info[4] = MOD_SEGHND(m, i);
     info[5] = NE_HDR(m)->align_shift ? NE_HDR(m)->align_shift : 9;
-    info[6] = info[7] = 0;
-    return 1;
+    return 1;                   /* observed (TK25): reserved[] untouched */
 }
 
 /* GetExeVersion (KERNEL.105): the expected Windows version of the

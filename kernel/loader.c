@@ -855,10 +855,27 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             return load_fail(m, path, "out of memory");
         }
         /* in the module table: the handle, and the flags of a loaded
-           segment. UNVERIFIED: Windows 3.1 changed further bits (0400h,
-           the top four) in ways not understood yet. */
+           segment. Observed with GetCodeInfo (TK25): a DLL's fixed code
+           segment stays fixed (USER's first: file 0D40h, loaded C146h);
+           the DPL bits go; a DLL's segments get 8000h, code segments
+           4000h, a program's code 0400h too (program code 0D40h ->
+           4556h, program data 0D41h -> 0157h, SHELL's code 1D50h ->
+           D156h, SHELL's data -> 8077h). UNVERIFIED: what those bits
+           mean, other kinds of segments. */
         MOD_SEGHND(m, i) = m->seg[i].hnd;
-        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED | NESEG_MOVABLE;
+        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED |
+                   (((s->flags & NESEG_MOVABLE) || !(h.flags & NEF_LIBRARY)) ? NESEG_MOVABLE : 0);
+        if (h.flags & NEF_LIBRARY)
+            s->flags |= 0x8000;
+        if (!(s->flags & NESEG_DATA))
+            s->flags |= (h.flags & NEF_LIBRARY) ? 0x4000 : 0x4400;
+        /* observed (TK25): the automatic data segment's minimum
+           allocation includes the local heap and the stack */
+        if (i + 1 == h.auto_data) {
+            m->dg_min = s->min_alloc;
+            if (size < 0x10000UL)
+                s->min_alloc = (u16)size;
+        }
         if (flen && (!f_seek(fh, (u32)s->sector << shift) || !f_read_big(fh, sel, flen))) {
             f_close(fh);
             return load_fail(m, path, "cannot read segment");

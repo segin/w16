@@ -784,15 +784,15 @@ THROW:
 
 ; ---------------------------------------------------------------------------
 ; trace_entry: target of the import trace thunks (thunk.c), entered with
-; AX = the thunk's index and the caller's far return address on the
-; stack. Records the call (trace_note, which returns the real target)
-; and jumps there with every register as the caller left it.
+; the thunk's index pushed above the caller's far return address. Records
+; the call (trace_note, which returns the real target) and jumps there
+; with every register as the caller left it.
 extern _trace_note
 global trace_entry
 trace_entry:
-        sub sp, 4                       ; the real target, filled below
+        sub sp, 2                       ; with the index: the real target
         push bp
-        mov bp, sp
+        mov bp, sp                      ; [bp+4] index, [bp+6] return
         pushf
         push ax
         push bx
@@ -802,18 +802,16 @@ trace_entry:
         push di
         push ds
         push es
-        mov si, ax
-        mov ax, DGROUP
-        mov ds, ax
-        mov ax, [bp - 4]                ; the caller's AX (the index): lost
+        mov si, DGROUP
+        mov ds, si
         push dx
         push cx
         push bx
         push ax
         push ss
-        lea ax, [bp + 6]
-        push ax                         ; the caller's frame
-        push si
+        lea si, [bp + 6]
+        push si                         ; the caller's frame
+        push word [bp + 4]
         call far _trace_note
         add sp, 14
         mov [bp + 2], ax
