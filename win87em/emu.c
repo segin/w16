@@ -17,22 +17,22 @@
  * behaviour (the __fpMath functions, how the program's exception handler
  * is called) was observed on Windows 3.1 (tests/apps/tk6.c).
  *
- * Implemented: loads and stores of all real and integer formats (not
- * BCD), FLD/FST/FSTP/FXCH/FFREE/FINCSTP/FDECSTP, the constants, FADD/FSUB
+ * Implemented: loads and stores of all real and integer formats,
+ * FLD/FST/FSTP/FXCH/FFREE/FINCSTP/FDECSTP, the constants, FADD/FSUB
  * /FSUBR/FMUL/FDIV/FDIVR in all forms, FCOM/FCOMP/FCOMPP/FICOM/FUCOM*,
- * FTST, FXAM, FCHS, FABS, FSQRT, FRNDINT, FSCALE, FXTRACT, FPREM,
- * FCLEX/FLDCW/FSTCW/FSTSW/FLDENV/FSTENV/FSAVE/FRSTOR (16-bit format),
- * FNOP and the 8087/287 no-ops (FENI, FDISI, FSETPM). FINIT is not
- * emulated, as observed (see unemulated()); programs initialise through
- * __fpMath. Checked against the 3.1 emulator as far as tests/apps/tk6.c
- * and tk7.c go (loads and stores of reals and 16/32-bit integers, add,
- * subtract, multiply, divide, compare, square root, rounding, the
- * rounding and precision controls, constants; ARCHITECTURE.md 9.2); the
- * rest is written to Intel's description, UNVERIFIED.
- * Not yet (treated as unemulated, FPE_UNEMULATED 87h): FBLD, FBSTP,
- * F2XM1, FYL2X, FYL2XP1, FPTAN, FPATAN, and the 387's FPREM1, FSIN, FCOS,
- * FSINCOS. INT 3Eh is
- * ignored (UNVERIFIED: its use).
+ * FTST, FXAM, FCHS, FABS, FSQRT, FRNDINT, FSCALE, FPREM, F2XM1, FYL2X,
+ * FYL2XP1, FPTAN, FPATAN, FCLEX/FLDCW/FSTCW/FSTSW/FLDENV/FSTENV/FSAVE/
+ * FRSTOR (16-bit format), FNOP and the 8087/287 no-ops (FENI, FDISI,
+ * FSETPM).
+ * Not emulated, as observed of the 3.1 emulator (see unemulated(): the
+ * handler gets 87h): FINIT (programs initialise through __fpMath), FBLD,
+ * FBSTP, FXTRACT; likewise the 387's FPREM1, FSIN, FCOS, FSINCOS
+ * (UNVERIFIED for those). INT 3Eh is ignored (UNVERIFIED: its use).
+ * Checked against the 3.1 emulator with tests/apps/tk6.c, tk7.c, tk8.c
+ * (ARCHITECTURE.md 9.2). Where its results come from its own
+ * approximations (some square roots one unit in the last place off, the
+ * transcendentals a few units, FPTAN's unnormalised pair) w16 computes
+ * its own (correctly rounded or within about two units) instead.
  */
 #include "emu.h"
 
@@ -481,23 +481,81 @@ static int st_empty(u16 i)
     return tag_of(phys(i)) == TAG_EMPTY;
 }
 
-/* stack underflow: IE (observed: no SF) */
+/* stack underflow: IE (observed: no SF), and the handler is called with
+   8Bh whatever the masks (observed) */
 static void underflow(void)
 {
     raise(SW_IE, FPE_STACKUNDERFLOW);
+    if (!fault_code)                    /* reported masked or not */
+        fault_code = FPE_STACKUNDERFLOW;
+}
+
+/* A store from ST(0) to memory. Observed with the 3.1 emulator (an FSTP
+   TBYTE from an empty stack): no exception flag, the register's stale
+   contents are stored, and the handler is called with 8Bh (stack
+   underflow) although IE was masked. Returns 1: the store goes ahead. */
+static int need_store(void)
+{
+    if (st_empty(0) && !fault_code)
+        fault_code = FPE_STACKUNDERFLOW;
+    return 1;
+}
+
+/* The register stack is deeper than eight (observed: 20 values pushed
+   came back intact). Registers below ST(7) are spilled to a block that
+   grows as needed (spill, spill_n); ST(0)-ST(7) stay in reg[]. The
+   handler is called once with 8Ah (stack overflow), masked or not, when
+   the depth first exceeds DEEP_REPORT (observed: at the 15th push, of 20),
+   and no flag is set. */
+#define DEEP_REPORT     14
+
+u16 __far __pascal GLOBALALLOC(u16 flags, u32 size);    /* KERNEL.15 */
+u16 __far __pascal GLOBALFREE(u16 h);                   /* KERNEL.17 */
+
+static u16 spill_sel, spill_cap, spill_n;   /* selector, capacity, used */
+
+/* room for one more spilled register; 0 if out of memory */
+static int spill_room(void)
+{
+    if (spill_n == spill_cap) {
+        u16 ncap = spill_cap ? spill_cap * 2 : 8, sel, i;
+        if (ncap > 0xFFF0u / sizeof(ext))
+            return 0;                   /* one segment's worth */
+        sel = GLOBALALLOC(0x0040, umul16(ncap, sizeof(ext)));    /* GMEM_ZEROINIT */
+        if (!sel)
+            return 0;
+        for (i = 0; i < spill_n; i++)
+            ((ext FAR *)MK_FP(sel, 0))[i] = ((ext FAR *)MK_FP(spill_sel, 0))[i];
+        if (spill_sel)
+            GLOBALFREE(spill_sel);
+        spill_sel = sel;
+        spill_cap = ncap;
+    }
+    return 1;
+}
+
+static u16 depth_now(void)
+{
+    u16 i, n = 0;
+    for (i = 0; i < 8; i++)
+        if (tag_of(i) != TAG_EMPTY)
+            n++;
+    return n + spill_n;
 }
 
 static int push(const ext *x)
 {
     u16 t = (top() - 1) & 7;
     if (tag_of(t) != TAG_EMPTY) {
-        raise(SW_IE, FPE_STACKOVERFLOW);        /* UNVERIFIED: as underflow */
-        if (!masked(SW_IE))
+        /* ST(7) goes below the eight registers */
+        if (!spill_room()) {
+            raise(SW_IE, FPE_STACKOVERFLOW);    /* UNVERIFIED */
             return 0;
-        set_top(t);
-        set_indefinite(&reg[t]);
-        set_tag(t, TAG_SPECIAL);
-        return 0;
+        }
+        ((ext FAR *)MK_FP(spill_sel, 0))[spill_n++] = reg[t];
+        set_tag(t, TAG_EMPTY);
+        if (depth_now() == DEEP_REPORT && !fault_code)
+            fault_code = FPE_STACKOVERFLOW;
     }
     set_top(t);
     reg[t] = *x;
@@ -507,8 +565,14 @@ static int push(const ext *x)
 
 static void pop(void)
 {
-    set_tag(top(), TAG_EMPTY);
-    set_top(top() + 1);
+    u16 t = top();
+    set_tag(t, TAG_EMPTY);
+    set_top(t + 1);
+    if (spill_n) {
+        /* the slot just freed is the new ST(7) */
+        reg[t] = ((ext FAR *)MK_FP(spill_sel, 0))[--spill_n];
+        set_tag(t, tag_for(&reg[t]));
+    }
 }
 
 static void set_st(u16 i, const ext *x)
@@ -752,7 +816,9 @@ static void square_root(const ext *a, ext *r)
         return;
     }
     if (is_inf(a)) {
-        *r = *a;
+        /* observed: the 3.1 emulator takes the square root of +infinity
+           as invalid, reported like that of a negative number (88h) */
+        invalid_result(r, FPE_SQRTNEG);
         return;
     }
     unpack(a, &u);
@@ -1156,9 +1222,17 @@ static void load_env(const u16 FAR *p)
 
 void __cdecl __far emu_reset(void)
 {
+    u16 i;
     cw = CW_INIT;
     sw = 0;
     tw = 0xFFFF;
+    spill_n = 0;
+    /* observed once: a register never used stores as 0 with exponent
+       3FFFh (UNVERIFIED as the general rule) */
+    for (i = 0; i < 8; i++) {
+        reg[i].m[0] = reg[i].m[1] = reg[i].m[2] = reg[i].m[3] = 0;
+        reg[i].se = EXP_BIAS;
+    }
 }
 
 static void finit(void)
@@ -1267,6 +1341,502 @@ static void fpu_unemulated(void)
     unemulated();
 }
 
+/* ---- internal arithmetic for FPREM, FSCALE and the transcendentals ---- */
+
+/* These run with their own control word (round to nearest, 64 bits, all
+   masked) and leave the status word alone; the instruction sets its
+   flags itself. */
+typedef struct saved_st {
+    u16 cw, sw, acc, fc;
+} saved_st;
+
+static void quiet_begin(saved_st *q)
+{
+    q->cw = cw;
+    q->sw = sw;
+    q->acc = em_acc;
+    q->fc = fault_code;
+    cw = 0x037F;
+}
+
+static void quiet_end(const saved_st *q)
+{
+    cw = q->cw;
+    sw = q->sw;
+    em_acc = q->acc;
+    fault_code = q->fc;
+}
+
+static ext e_add(ext a, ext b) { ext r; add_sub(&a, &b, &r, 0); return r; }
+static ext e_sub(ext a, ext b) { ext r; add_sub(&a, &b, &r, 1); return r; }
+static ext e_mul(ext a, ext b) { ext r; mul(&a, &b, &r); return r; }
+static ext e_div(ext a, ext b) { ext r; divide(&a, &b, &r); return r; }
+
+static ext e_int(s16 n)
+{
+    ext r;
+    from_int(n, 0, 0, &r);
+    return r;
+}
+
+/* x * 2^k (exact within the range) */
+static ext e_scale(ext x, s16 k)
+{
+    if (!is_zero(&x))
+        x.se = (x.se & 0x8000) | (u16)((x.se & EXP_MAX) + k);
+    return x;
+}
+
+static int is_neg(const ext *x)
+{
+    return (x->se & 0x8000) != 0;
+}
+
+/* the term no longer changes the sum (70 bits below it) */
+static int small_vs(const ext *term, const ext *sum)
+{
+    if (is_zero(term))
+        return 1;
+    return (s16)(term->se & EXP_MAX) < (s16)(sum->se & EXP_MAX) - 70;
+}
+
+/* t + t^3/3 + t^5/5 + ... (alternating signs if alt): atanh, atan */
+static ext odd_series(ext t, int alt)
+{
+    ext t2 = e_mul(t, t), p = t, sum = t, term;
+    s16 n;
+    for (n = 3; n < 400; n += 2) {
+        p = e_mul(p, t2);
+        term = e_div(p, e_int(n));
+        if (alt && (n & 2))
+            term.se ^= 0x8000;
+        if (small_vs(&term, &sum))
+            break;
+        sum = e_add(sum, term);
+    }
+    return sum;
+}
+
+/* ln(x), x finite and > 0 */
+static ext e_ln(ext x)
+{
+    unp u;
+    s16 k;
+    ext m, s;
+    unpack(&x, &u);
+    k = (s16)u.exp;
+    m = x;
+    m.se = EXP_BIAS;                    /* m in [1, 2) */
+    if (!(x.se & EXP_MAX)) {            /* denormal: take the normalised form */
+        m.m[0] = u.w[4];
+        m.m[1] = u.w[5];
+        m.m[2] = u.w[6];
+        m.m[3] = u.w[7];
+    }
+    if (m.m[3] > 0xB504) {              /* above sqrt(2): m / 2 */
+        m.se = EXP_BIAS - 1;
+        k++;
+    }
+    /* ln(m) = 2 atanh((m - 1) / (m + 1)) */
+    s = e_div(e_sub(m, k_one), e_add(m, k_one));
+    s = e_scale(odd_series(s, 0), 1);
+    if (k)
+        s = e_add(s, e_mul(e_int(k), k_ln2));
+    return s;
+}
+
+/* 2^x - 1 */
+static ext e_exp2m1(ext x)
+{
+    ext t = e_mul(x, k_ln2), term = t, sum = t;
+    s16 n;
+    for (n = 2; n < 400; n++) {
+        term = e_div(e_mul(term, t), e_int(n));
+        if (small_vs(&term, &sum))
+            break;
+        sum = e_add(sum, term);
+    }
+    return sum;
+}
+
+/* atan(z), z >= 0 */
+static ext e_atan(ext z)
+{
+    ext r;
+    int inv = 0, shift = 0;
+    if (is_zero(&z))
+        return z;
+    r = e_sub(z, k_one);
+    if (!is_neg(&r)) {
+        z = e_div(k_one, z);            /* atan(z) = pi/2 - atan(1/z) */
+        inv = 1;
+    }
+    /* above tan(pi/8) = 0.4142 (up to 1): atan(z) = pi/4 +
+       atan((z - 1) / (z + 1)) */
+    if ((z.se & EXP_MAX) == EXP_BIAS || (z.se & EXP_MAX) == EXP_BIAS - 1 ||
+        ((z.se & EXP_MAX) == EXP_BIAS - 2 && z.m[3] >= 0xD413)) {
+        z = e_div(e_sub(z, k_one), e_add(z, k_one));
+        shift = 1;
+    }
+    r = odd_series(z, 1);
+    if (shift)
+        r = e_add(e_scale(k_pi, -2), r);
+    if (inv)
+        r = e_sub(e_scale(k_pi, -1), r);
+    return r;
+}
+
+/* sin and cos of x, |x| <= pi/2 */
+static void e_sincos(ext x, ext *sn, ext *cs)
+{
+    ext term = x, s = x, c = k_one, t;
+    s16 n;
+    int done_s = 0, done_c = 0;
+    for (n = 2; n < 400 && !(done_s && done_c); n += 2) {
+        term = e_div(e_mul(term, x), e_int(n));         /* x^n / n! */
+        t = term;
+        if (n & 2)
+            t.se ^= 0x8000;
+        if (small_vs(&t, &c))
+            done_c = 1;
+        else
+            c = e_add(c, t);
+        term = e_div(e_mul(term, x), e_int(n + 1));     /* x^(n+1)/(n+1)! */
+        t = term;
+        if (n & 2)
+            t.se ^= 0x8000;
+        if (small_vs(&t, &s))
+            done_s = 1;
+        else
+            s = e_add(s, t);
+    }
+    *sn = s;
+    *cs = c;
+}
+
+static int is_pow2(const ext *x)
+{
+    return x->m[3] == 0x8000 && !(x->m[2] | x->m[1] | x->m[0]);
+}
+
+/* a transcendental result: rounded as the control word says; PE unless
+   exact */
+static void trans_result(ext v, int exact, ext *r)
+{
+    unp u;
+    if (is_zero(&v) || is_inf(&v) || is_nan(&v)) {
+        *r = v;
+        return;
+    }
+    unpack(&v, &u);
+    pack(&u, r);
+    if (!exact)
+        raise(SW_PE, FPE_INEXACT);
+}
+
+/* |a| mod |b| with the sign of a; the whole quotient is worked out (its
+   low three bits in *q); if nearest, the remainder closest to zero.
+   a, b finite and nonzero. */
+static void rem_parts(ext *a, const ext *b, u16 *q, int nearest)
+{
+    unp ua, ub;
+    s32 d, i;
+    u16 rem[5], dv[5], k, qq = 0;
+    unpack(a, &ua);
+    unpack(b, &ub);
+    d = ua.exp - ub.exp;
+    if (d < 0) {
+        if (nearest && d == -1) {
+            /* |a| in [|b|/2, |b|): a - b is closer when |a| > |b|/2 */
+            ext t = *b;
+            t.se = (t.se & 0x7FFF) | (a->se & 0x8000);
+            t = e_sub(*a, t);
+            t.se &= 0x7FFF;
+            {
+                ext aa = *a;
+                aa.se &= 0x7FFF;
+                t = e_sub(t, aa);
+                if (is_neg(&t)) {
+                    ext bb = *b;
+                    bb.se = (bb.se & 0x7FFF) | (a->se & 0x8000);
+                    *a = e_sub(*a, bb);
+                    qq = 1;
+                }
+            }
+        }
+        *q = qq;
+        return;
+    }
+    for (k = 0; k < 4; k++) {
+        rem[k] = ua.w[4 + k];
+        dv[k] = ub.w[4 + k];
+    }
+    rem[4] = dv[4] = 0;
+    for (i = 0; i <= d; i++) {
+        qq <<= 1;
+        if (w_cmp(rem, dv, 5) >= 0) {
+            w_sub(rem, dv, 5);
+            qq |= 1;
+        }
+        if (i < d)
+            w_shl(rem, 5, 1);
+    }
+    if (nearest) {
+        u16 twice[5];
+        for (k = 0; k < 5; k++)
+            twice[k] = rem[k];
+        w_shl(twice, 5, 1);
+        if (w_cmp(twice, dv, 5) > 0 || (w_cmp(twice, dv, 5) == 0 && (qq & 1))) {
+            u16 t[5];
+            for (k = 0; k < 5; k++)
+                t[k] = dv[k];
+            w_sub(t, rem, 5);
+            for (k = 0; k < 5; k++)
+                rem[k] = t[k];
+            ua.sign ^= 0x8000;
+            qq++;
+        }
+    }
+    *q = qq;
+    if (w_is_zero(rem, 5)) {
+        set_zero(a, ua.sign);
+        return;
+    }
+    w_clear(ua.w, 8);
+    for (k = 0; k < 4; k++)
+        ua.w[4 + k] = rem[k];
+    ua.exp = ub.exp;
+    normalise(&ua);
+    pack_range(&ua, a, 64, 1 - EXP_BIAS, EXP_BIAS);
+}
+
+/* FPREM. Observed with the 3.1 emulator: the remainder is complete in
+   one go whatever the exponents (C2 never set; 1e30 rem 3 gave 1 with
+   the quotient bits in C0 C3 C1), and a zero divisor gives +0 with no
+   exception and the condition codes clear. */
+static void fprem(void)
+{
+    ext a, b;
+    u16 q;
+    if (!need(0) || !need(1))
+        return;
+    a = *st(0);
+    b = *st(1);
+    sw &= ~(SW_C0 | SW_C1 | SW_C2 | SW_C3);
+    if (is_nan(&a) || is_nan(&b)) {
+        if (nan_result(&a, &b, &a))
+            set_st(0, &a);
+        return;
+    }
+    if (is_zero(&b)) {
+        set_zero(&a, 0);
+        set_st(0, &a);
+        return;
+    }
+    if (is_inf(&a)) {                   /* UNVERIFIED */
+        invalid_result(&a, FPE_INVALID);
+        set_st(0, &a);
+        return;
+    }
+    if (is_zero(&a) || is_inf(&b))
+        return;
+    {
+        saved_st s;
+        quiet_begin(&s);
+        rem_parts(&a, &b, &q, 0);
+        quiet_end(&s);
+    }
+    if (q & 1) sw |= SW_C1;
+    if (q & 2) sw |= SW_C3;
+    if (q & 4) sw |= SW_C0;
+    set_st(0, &a);
+}
+
+/* FSCALE. Observed with the 3.1 emulator: no exception flags at all, and
+   the scale taken from ST(1) as the top 16 bits of its significand
+   shifted right by (15 - unbiased exponent) & 15, negated if negative
+   (0.9 scaled by E666h = -6554; -3.7 by -3; 2.5 by 2). Overflow and
+   underflow give infinity and zero. */
+static void fscale(void)
+{
+    ext a, b;
+    unp u;
+    s16 e, n;
+    saved_st s;
+    if (!need(0) || !need(1))
+        return;
+    a = *st(0);
+    b = *st(1);
+    if (is_nan(&a) || is_nan(&b) || is_inf(&a) || is_zero(&a)) {
+        if (nan_result(&a, &b, &a))
+            set_st(0, &a);
+        return;
+    }
+    e = (s16)((b.se & EXP_MAX) - EXP_BIAS);
+    n = (s16)(b.m[3] >> ((15 - e) & 15));
+    if (is_neg(&b))
+        n = -n;
+    quiet_begin(&s);
+    unpack(&a, &u);
+    u.exp += n;
+    pack(&u, &a);
+    quiet_end(&s);
+    set_st(0, &a);
+}
+
+/* D9 F0-FF (n = rm for F0-F7, 8 + rm for F8-FF) */
+static void d9_misc(u16 n)
+{
+    ext x, y, r;
+    saved_st q;
+    switch (n) {
+    case 6:                                     /* FDECSTP */
+        set_top(top() - 1);
+        return;
+    case 7:                                     /* FINCSTP */
+        set_top(top() + 1);
+        return;
+    case 8 + 2:                                 /* FSQRT */
+        if (!need(0))
+            return;
+        square_root(st(0), &r);
+        set_st(0, &r);
+        return;
+    case 8 + 4:                                 /* FRNDINT */
+        if (!need(0))
+            return;
+        round_int(st(0), &r);
+        set_st(0, &r);
+        return;
+    case 8 + 0:
+        fprem();
+        return;
+    case 8 + 5:
+        fscale();
+        return;
+    case 0:                                     /* F2XM1 */
+        if (!need(0))
+            return;
+        x = *st(0);
+        if (is_nan(&x) || is_inf(&x) || is_zero(&x))
+            return;                             /* UNVERIFIED: NaN, inf */
+        quiet_begin(&q);
+        y = e_exp2m1(x);
+        quiet_end(&q);
+        trans_result(y, 0, &r);
+        set_st(0, &r);
+        return;
+    case 1:                                     /* FYL2X: ST1 * log2(ST0) */
+    case 8 + 1: {                               /* FYL2XP1: ST1 * log2(ST0 + 1) */
+        int exact = 0;
+        if (!need(0) || !need(1))
+            return;
+        x = *st(0);
+        y = *st(1);
+        if (is_nan(&x) || is_nan(&y)) {
+            nan_result(&x, &y, &r);
+        } else if (n == 1 && is_zero(&x)) {
+            raise(SW_ZE, FPE_ZERODIVIDE);       /* UNVERIFIED */
+            set_inf(&r, (y.se ^ 0x8000) & 0x8000);
+        } else if ((n == 1 && is_neg(&x)) || is_inf(&x) || is_inf(&y)) {
+            invalid_result(&r, FPE_INVALID);    /* UNVERIFIED */
+        } else if (n != 1 && is_zero(&x)) {
+            set_zero(&r, (x.se ^ y.se) & 0x8000);
+        } else {
+            quiet_begin(&q);
+            if (n == 1 && is_pow2(&x)) {        /* exact: y * exponent */
+                unp u;
+                unpack(&x, &u);
+                r = e_mul(y, e_int((s16)u.exp));
+                exact = 1;
+            } else if (n == 1) {
+                r = e_mul(y, e_mul(e_ln(x), k_l2e));
+            } else {
+                /* ln(1 + x) = 2 atanh(x / (2 + x)) */
+                ext t = e_div(x, e_add(e_scale(k_one, 1), x));
+                r = e_mul(y, e_mul(e_scale(odd_series(t, 0), 1), k_l2e));
+            }
+            quiet_end(&q);
+            trans_result(r, exact, &r);
+        }
+        pop();
+        set_st(0, &r);
+        return;
+    }
+    case 2: {                                   /* FPTAN */
+        ext sn, cs;
+        if (!need(0))
+            return;
+        x = *st(0);
+        if (is_nan(&x) || is_inf(&x)) {
+            invalid_result(&r, FPE_INVALID);    /* UNVERIFIED */
+            set_st(0, &r);
+            return;
+        }
+        if (is_zero(&x)) {
+            r = x;
+        } else {
+            u16 neg = x.se & 0x8000, qq;
+            x.se &= 0x7FFF;
+            quiet_begin(&q);
+            /* beyond pi/4 (the 8087's range) reduced modulo pi */
+            y = e_sub(x, e_scale(k_pi, -2));
+            if (!is_neg(&y))
+                rem_parts(&x, &k_pi, &qq, 1);
+            e_sincos(x, &sn, &cs);
+            r = e_div(sn, cs);
+            r.se ^= neg;
+            quiet_end(&q);
+            trans_result(r, 0, &r);
+        }
+        /* ST0 = tan(x), then 1.0 pushed: the 387's form. The 8087 and the
+           3.1 emulator leave some pair Y (ST1), X (ST0) with Y / X =
+           tan(x) (observed), which programs divide. */
+        set_st(0, &r);
+        x = k_one;
+        load(&x);
+        return;
+    }
+    case 3: {                                   /* FPATAN: atan(ST1 / ST0) */
+        ext z;
+        if (!need(0) || !need(1))
+            return;
+        x = *st(0);
+        y = *st(1);
+        if (is_nan(&x) || is_nan(&y)) {
+            nan_result(&x, &y, &r);
+        } else if (is_zero(&y) && !is_neg(&x)) {
+            r = y;
+        } else {
+            u16 ys = y.se & 0x8000, xs = x.se & 0x8000;
+            x.se &= 0x7FFF;
+            y.se &= 0x7FFF;
+            quiet_begin(&q);
+            if (is_zero(&x) || is_inf(&y))
+                z = e_scale(k_pi, -1);
+            else if (is_inf(&x))
+                z = k_zero;
+            else
+                z = e_atan(e_div(y, x));
+            /* the quadrants as the 387 does them; the 3.1 emulator, like
+               the 8087, needs 0 <= Y < X and gave other values otherwise
+               (observed) */
+            if (xs)
+                z = e_sub(k_pi, z);
+            z.se |= ys;
+            quiet_end(&q);
+            trans_result(z, 0, &r);
+        }
+        pop();
+        set_st(0, &r);
+        return;
+    }
+    }
+    /* FXTRACT (observed: not emulated by the 3.1 emulator), FPREM1,
+       FSINCOS, FSIN, FCOS (387 instructions) */
+    unemulated();
+}
+
 static void exec(insn *in)
 {
     ext x, r;
@@ -1298,7 +1868,7 @@ static void exec(insn *in)
             case 0: from_real(pw, 32, &x); load(&x); return;
             case 2:
             case 3:
-                if (!need(0))
+                if (!need_store())
                     return;
                 to_real(st(0), 32, pw);
                 if (in->reg == 3)
@@ -1318,7 +1888,7 @@ static void exec(insn *in)
                 return;
             case 2:
             case 3:
-                if (!need(0))
+                if (!need_store())
                     return;
                 to_int(st(0), 32, w);
                 if (!(sw & SW_IE) || masked(SW_IE)) {
@@ -1333,7 +1903,7 @@ static void exec(insn *in)
                 load(&x);
                 return;
             case 7:
-                if (!need(0))
+                if (!need_store())
                     return;
                 *(ext FAR *)pw = *st(0);
                 pop();
@@ -1345,7 +1915,7 @@ static void exec(insn *in)
             case 0: from_real(pw, 64, &x); load(&x); return;
             case 2:
             case 3:
-                if (!need(0))
+                if (!need_store())
                     return;
                 to_real(st(0), 64, pw);
                 if (in->reg == 3)
@@ -1374,7 +1944,7 @@ static void exec(insn *in)
             case 0: from_int((s32)(s16)pw[0], 0, 0, &x); load(&x); return;
             case 2:
             case 3:
-                if (!need(0))
+                if (!need_store())
                     return;
                 to_int(st(0), 16, w);
                 if (!(sw & SW_IE) || masked(SW_IE))
@@ -1388,7 +1958,7 @@ static void exec(insn *in)
                 load(&x);
                 return;
             case 7:
-                if (!need(0))
+                if (!need_store())
                     return;
                 to_int(st(0), 64, w);
                 if (!(sw & SW_IE) || masked(SW_IE)) {
@@ -1493,137 +2063,8 @@ static void exec(insn *in)
             break;
         }
         case 6:
-            switch (in->rm) {
-            case 4:                     /* FXTRACT */
-                if (!need(0))
-                    return;
-                if (is_zero(st(0))) {
-                    raise(SW_ZE, FPE_ZERODIVIDE);
-                    r = *st(0);
-                    set_inf(&x, 0x8000);
-                    set_st(0, &x);
-                    load(&r);
-                    return;
-                }
-                {
-                    unp u;
-                    unpack(st(0), &u);
-                    r = *st(0);
-                    r.se = (r.se & 0x8000) | EXP_BIAS;
-                    from_int(u.exp, 0, 0, &x);
-                    set_st(0, &x);
-                    load(&r);
-                }
-                return;
-            case 6: set_top(top() - 1); return;     /* FDECSTP */
-            case 7: set_top(top() + 1); return;     /* FINCSTP */
-            }
-            fpu_unemulated();           /* F2XM1 FYL2X FPTAN FPATAN FPREM1 */
-            return;
         case 7:
-            switch (in->rm) {
-            case 0:                     /* FPREM */
-                if (!need(0) || !need(1))
-                    return;
-                {
-                    /* partial remainder: at most 63 quotient bits per
-                       step (C2 = 1 when incomplete) */
-                    ext a = *st(0), b = *st(1);
-                    unp ua, ub;
-                    s32 d;
-                    u16 q = 0;
-                    sw &= ~(SW_C0 | SW_C1 | SW_C2 | SW_C3);
-                    if (is_nan(&a) || is_nan(&b) || is_inf(&a) || is_zero(&b)) {
-                        invalid_result(&r, FPE_INVALID);
-                        set_st(0, &r);
-                        return;
-                    }
-                    if (is_zero(&a) || is_inf(&b))
-                        return;
-                    unpack(&a, &ua);
-                    unpack(&b, &ub);
-                    d = ua.exp - ub.exp;
-                    if (d >= 64) {
-                        /* reduce by a power-of-two multiple only */
-                        ub.exp = ua.exp - 32;
-                        d = 32;
-                        sw |= SW_C2;
-                    }
-                    if (d >= 0) {
-                        u16 rem[5], dv[5], i;
-                        for (i = 0; i < 4; i++) {
-                            rem[i] = ua.w[4 + i];
-                            dv[i] = ub.w[4 + i];
-                        }
-                        rem[4] = dv[4] = 0;
-                        for (i = 0; i <= (u16)d; i++) {
-                            q <<= 1;
-                            if (w_cmp(rem, dv, 5) >= 0) {
-                                w_sub(rem, dv, 5);
-                                q |= 1;
-                            }
-                            if (i < (u16)d)
-                                w_shl(rem, 5, 1);
-                        }
-                        /* rem = |a| mod |b| scaled by 2^(eb) */
-                        w_clear(ua.w, 8);
-                        for (i = 0; i < 4; i++)
-                            ua.w[4 + i] = rem[i];
-                        ua.exp = ub.exp;
-                        if (!(sw & SW_C2)) {
-                            if (q & 1) sw |= SW_C1;
-                            if (q & 2) sw |= SW_C3;
-                            if (q & 4) sw |= SW_C0;
-                        }
-                        if (w_is_zero(ua.w, 8)) {
-                            set_zero(&r, a.se & 0x8000);
-                        } else {
-                            normalise(&ua);
-                            pack_range(&ua, &r, 64, 1 - EXP_BIAS, EXP_BIAS);
-                        }
-                        set_st(0, &r);
-                    }
-                }
-                return;
-            case 2:                     /* FSQRT */
-                if (!need(0))
-                    return;
-                square_root(st(0), &r);
-                set_st(0, &r);
-                return;
-            case 4:                     /* FRNDINT */
-                if (!need(0))
-                    return;
-                round_int(st(0), &r);
-                set_st(0, &r);
-                return;
-            case 5:                     /* FSCALE */
-                if (!need(0) || !need(1))
-                    return;
-                {
-                    ext n;
-                    u16 iw[4];
-                    s32 k;
-                    unp u;
-                    u16 rc = cw;
-                    if (is_nan(st(0)) || is_nan(st(1)) || is_inf(st(0)) ||
-                        is_zero(st(0)) || is_inf(st(1))) {
-                        if (nan_result(st(0), st(1), &r))
-                            set_st(0, &r);
-                        return;
-                    }
-                    cw |= 0x0C00;       /* chop ST(1) to an integer */
-                    to_int(st(1), 32, iw);
-                    cw = rc;
-                    k = (s32)((u32)iw[1] << 16 | iw[0]);
-                    unpack(st(0), &u);
-                    u.exp += k;
-                    pack(&u, &n);
-                    set_st(0, &n);
-                }
-                return;
-            }
-            fpu_unemulated();           /* FYL2XP1 FSINCOS FSIN FCOS */
+            d9_misc((u16)(in->reg == 6 ? in->rm : 8 + in->rm));
             return;
         }
         break;
@@ -1799,14 +2240,9 @@ void __cdecl __far emu_fpmath(u16 fn, fpm_regs FAR *rg)
         em_acc = 0;
         rg->ax = 0;
         break;
-    case 10: {
-        u16 i, n = 0;
-        for (i = 0; i < 8; i++)
-            if (tag_of(i) != TAG_EMPTY)
-                n++;
-        rg->ax = n;
+    case 10:
+        rg->ax = depth_now();
         break;
-    }
     case 11:
         rg->ax = 0;
         break;
@@ -1816,8 +2252,16 @@ void __cdecl __far emu_fpmath(u16 fn, fpm_regs FAR *rg)
     }
 }
 
-/* ---- __Win87EmSave / __Win87EmRestore: WIN87EM's state after the
-   94-byte FSAVE image (w16's own layout) ---- */
+/* ---- __Win87EmSave / __Win87EmRestore ----
+   The area (01CDh bytes) after the 94-byte FSAVE image holds WIN87EM's
+   own state. Observed on Windows 3.1 (tests/apps/tk8.c), the words that
+   carry a known value: 94/96 the handler of function 3 (offset,
+   selector; without a coprocessor only), 98 1 with a coprocessor,
+   100 the control word of function 4, 104 the same & FF3Ch (what the
+   coprocessor gets), 256 function 12's word. The rest held selectors,
+   addresses and values of unknown meaning; w16 keeps its own state from
+   offset 304 (the reference's area was zero from 304 to the end) and
+   zeroes everything else. */
 
 typedef struct saved {
     u16 cw, sw, tw;
@@ -1827,13 +2271,23 @@ typedef struct saved {
 } saved;
 
 #define SAVE_SIZE   0x01CD      /* observed (__WIN87EMINFO) */
+#define SAVE_OWN    304
+
+extern u16 __cdecl have87;
 
 void __cdecl __far emu_save(void FAR *buf)
 {
-    saved FAR *s = (saved FAR *)((u8 FAR *)buf + 94);
+    u8 FAR *b = (u8 FAR *)buf;
+    saved FAR *s = (saved FAR *)(b + SAVE_OWN);
     u16 i;
     for (i = 94; i < SAVE_SIZE; i++)    /* the whole area is written */
-        ((u8 FAR *)buf)[i] = 0;
+        b[i] = 0;
+    if (!have87)
+        *(u32 FAR *)(b + 94) = handler;
+    *(u16 FAR *)(b + 98) = have87;
+    *(u16 FAR *)(b + 100) = user_cw;
+    *(u16 FAR *)(b + 104) = user_cw & 0xFF3C;
+    *(u16 FAR *)(b + 256) = fn12;
     s->cw = cw;
     s->sw = sw;
     s->tw = tw;
@@ -1847,7 +2301,7 @@ void __cdecl __far emu_save(void FAR *buf)
 
 void __cdecl __far emu_restore(void FAR *buf)
 {
-    const saved FAR *s = (const saved FAR *)((const u8 FAR *)buf + 94);
+    const saved FAR *s = (const saved FAR *)((const u8 FAR *)buf + SAVE_OWN);
     u16 i;
     cw = s->cw;
     sw = s->sw;

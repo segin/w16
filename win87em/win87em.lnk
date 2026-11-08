@@ -18,3 +18,5 @@ export __WIN87EMRESTORE.4 resident
 export __WIN87EMSAVE.5 resident
 export WEP.6 resident
 import GETWINFLAGS KERNEL.132
+import GLOBALALLOC KERNEL.15
+import GLOBALFREE KERNEL.17

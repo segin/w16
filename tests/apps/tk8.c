@@ -14,7 +14,11 @@
  */
 #include <windows.h>
 
+#ifdef TK8_T
+#define TK_REF "tk8tref.h"
+#else
 #define TK_REF "tk8ref.h"
+#endif
 #include "tklog.h"
 
 #define STEP(s) out("-- " s "\r\n")
@@ -72,6 +76,34 @@ static void ob(const char *prefix, WORD n, const char *suffix, WORD v, int env)
         obs(b, v);
 }
 
+/* number of registers in use (__fpMath function 10) */
+static WORD depth(void)
+{
+    fpm(10, 0, 0);
+    return rr[0];
+}
+
+/* record the depth, then pop up to two registers into t80, t80b (CCh if
+   not there) and start again from an empty stack (function 0) */
+static void take(const char *op, WORD i)
+{
+    WORD n = depth(), j;
+    for (j = 0; j < 10; j++)
+        t80[j] = t80b[j] = 0xCC;
+    ob(op, i, "depth", n, 0);
+    if (n >= 1) {
+        _asm {
+            fstp tbyte ptr t80
+        }
+    }
+    if (n >= 2) {
+        _asm {
+            fstp tbyte ptr t80b
+        }
+    }
+    fpm(0, 0, 0);
+}
+
 static void setcw(WORD cw)
 {
     cwv = cw;
@@ -82,18 +114,24 @@ static void setcw(WORD cw)
     h_calls = 0;
 }
 
+/* Results that the 3.1 emulator computes with its own errors (square
+   roots one unit in the last place off for some inputs, transcendentals
+   up to a few units, FPTAN as an unnormalised pair) are only shown
+   without a coprocessor: w16 does not reproduce them bit for bit. */
+static int env_vals, env_flags;
+
 static void rep_bytes(const char *op, WORD i, const BYTE *p, WORD nwords)
 {
     static const char *const n[] = { "0", "1", "2", "3", "4" };
     WORD j;
     for (j = 0; j < nwords; j++)
-        ob(op, i, n[j], *(WORD *)(p + 2 * j), 0);
+        ob(op, i, n[j], *(WORD *)(p + 2 * j), env_vals && !have87);
 }
 
 /* flags (and condition codes if cc), handler calls and code */
 static void rep_sw(const char *op, WORD i, int cc)
 {
-    ob(op, i, "s", swv & (cc ? 0x473F : 0x003F), 0);
+    ob(op, i, "s", swv & (cc ? 0x473F : 0x003F), env_flags && !have87);
     ob(op, i, "h", h_calls ? (h_calls << 8) | (h_regs[0] & 0xFF) : 0, 0);
 }
 
@@ -110,9 +148,12 @@ static const double at_x[] = { 2.0, 1.0, 1.0, 1.0, 4.0, 7.0, -2.0, 2.0 };
 
 #define N(a) (sizeof a / sizeof a[0])
 
-static void trans(void)
+static void trans(int which)
 {
     WORD i;
+    env_vals = 1;
+    if (which && which != 1)
+        goto skip1;
     STEP("f2xm1");
     for (i = 0; i < N(f2_x); i++) {
         qa = f2_x[i];
@@ -126,6 +167,9 @@ static void trans(void)
         rep_bytes("f2xm1", i, t80, 5);
         rep_sw("f2xm1", i, 0);
     }
+skip1:
+    if (which && which != 2)
+        goto skip2;
     STEP("fyl2x");
     for (i = 0; i < N(l2_x); i++) {
         qa = l2_y[i];
@@ -141,6 +185,9 @@ static void trans(void)
         rep_bytes("fyl2x", i, t80, 5);
         rep_sw("fyl2x", i, 0);
     }
+skip2:
+    if (which && which != 3)
+        goto skip3;
     STEP("fyl2xp1");
     for (i = 0; i < N(l1_x); i++) {
         qa = l1_y[i];
@@ -156,6 +203,9 @@ static void trans(void)
         rep_bytes("fyl2xp1", i, t80, 5);
         rep_sw("fyl2xp1", i, 0);
     }
+skip3:
+    if (which && which != 4)
+        goto skip4;
     STEP("fptan");
     for (i = 0; i < N(tan_x); i++) {
         qa = tan_x[i];
@@ -171,6 +221,9 @@ static void trans(void)
         rep_bytes("fptan.st1", i, t80b, 5);
         rep_sw("fptan", i, 0);
     }
+skip4:
+    if (which && which != 5)
+        goto skip5;
     STEP("fpatan");
     for (i = 0; i < N(at_x); i++) {
         qa = at_y[i];
@@ -186,6 +239,8 @@ static void trans(void)
         rep_bytes("fpatan", i, t80, 5);
         rep_sw("fpatan", i, 0);
     }
+skip5:
+    env_vals = 0;
 }
 
 /* ---- BCD ---- */
@@ -209,20 +264,22 @@ static void bcdops(void)
     for (i = 0; i < N(bcd_in); i++) {
         for (j = 0; j < 10; j++)
             bcd[j] = bcd_in[i][j];
+        fpm(0, 0, 0);
         setcw(0x037F);
         _asm {
             fbld tbyte ptr bcd
-            fstp tbyte ptr t80
             fstsw swv
         }
-        rep_bytes("fbld", i, t80, 5);
         rep_sw("fbld", i, 0);
+        take("fbld", i);
+        rep_bytes("fbld", i, t80, 5);
     }
     STEP("fbstp");
     for (i = 0; i < N(bcd_out); i++) {
         qa = bcd_out[i];
         for (j = 0; j < 10; j++)
             bcd[j] = 0xCC;
+        fpm(0, 0, 0);
         setcw(0x037F);
         _asm {
             fld qa
@@ -231,6 +288,7 @@ static void bcdops(void)
         }
         rep_bytes("fbstp", i, bcd, 5);
         rep_sw("fbstp", i, 0);
+        take("fbstp", i);
     }
 }
 
@@ -280,17 +338,17 @@ static void misc(void)
     STEP("fxtract");
     for (i = 0; i < N(xt_a); i++) {
         qa = xt_a[i];
+        fpm(0, 0, 0);
         setcw(0x037F);
         _asm {
             fld qa
             fxtract
-            fstp tbyte ptr t80
-            fstp tbyte ptr t80b
             fstsw swv
         }
-        rep_bytes("fxtract.sig", i, t80, 5);
-        rep_bytes("fxtract.exp", i, t80b, 5);
         rep_sw("fxtract", i, 0);
+        take("fxtract", i);
+        rep_bytes("fxtract.st0", i, t80, 5);
+        rep_bytes("fxtract.st1", i, t80b, 5);
     }
 }
 
@@ -343,6 +401,7 @@ static const double sq_in[] = { 2.0, 3.0, 5.0, 10.0, 1e308, 1e300, 1e-300, 7e307
 static void roots(void)
 {
     WORD i;
+    env_vals = env_flags = 1;   /* the 3.1 emulator's PE differs too */
     STEP("sqrt");
     for (i = 0; i < N(sq_in); i++) {
         qa = sq_in[i];
@@ -355,6 +414,20 @@ static void roots(void)
         }
         rep_bytes("sqrt", i, t80, 5);
         rep_sw("sqrt", i, 0);
+    }
+    /* the integers 2-61 */
+    STEP("sqrtn");
+    for (i = 2; i < 62; i++) {
+        i64[0] = i;
+        setcw(0x037F);
+        _asm {
+            fild dword ptr i64
+            fsqrt
+            fstp tbyte ptr t80
+            fstsw swv
+        }
+        rep_bytes("sqrtn", i, t80, 4);
+        rep_sw("sqrtn", i, 0);
     }
     /* extended inputs: 1, 2, 4 and 2^64 - 1 times a power of two */
     STEP("sqrt80");
@@ -378,6 +451,101 @@ static void roots(void)
         rep_bytes("sqrt80", i, t80, 5);
         rep_sw("sqrt80", i, 0);
     }
+    env_vals = env_flags = 0;
+}
+
+/* ---- stack faults, from an empty stack ---- */
+
+static void stack_faults(void)
+{
+    WORD j;
+    STEP("stack");
+    fpm(0, 0, 0);
+    setcw(0x037F);
+    _asm {
+        fstp st(0)
+        fstsw swv
+    }
+    rep_sw("uf.fstpr", 0, 0);
+    ob("uf.fstpr", 0, "depth", depth(), 0);
+    fpm(0, 0, 0);
+    setcw(0x037F);
+    _asm {
+        fld1
+        fadd st, st(1)
+        fstsw swv
+    }
+    rep_sw("uf.fadd", 0, 0);
+    take("uf.fadd", 0);
+    rep_bytes("uf.fadd", 0, t80, 5);
+    fpm(0, 0, 0);
+    setcw(0x037F);
+    _asm {
+        fld1
+        fld1
+        fld1
+        fld1
+        fld1
+        fld1
+        fld1
+        fld1
+        fldz
+        fstsw swv
+    }
+    rep_sw("of.fld", 0, 0);
+    ob("of.fld", 0, "depth", depth(), 0);
+    _asm {
+        fstp tbyte ptr t80
+    }
+    rep_bytes("of.fld", 0, t80, 5);
+    fpm(0, 0, 0);
+    /* how deep the stack goes: push 1..20, then pop them all */
+    {
+        WORD k, ok = 1, got = 0;
+        static short v;
+        fpm(0, 0, 0);
+        setcw(0x037F);
+        for (k = 1; k <= 20; k++) {
+            v = (short)k;
+            _asm {
+                fild v
+            }
+            ob("deep.calls", k, NULL, h_calls, 0);
+        }
+        _asm {
+            fstsw swv
+        }
+        rep_sw("deep.push", 0, 0);
+        ob("deep.push", 0, "depth", depth(), 0);
+        for (k = 20; k >= 1; k--) {
+            _asm {
+                fistp v
+            }
+            if (v == (short)k && ok)
+                got++;
+            else
+                ok = 0;
+        }
+        _asm {
+            fstsw swv
+        }
+        rep_sw("deep.pop", 0, 0);
+        ob("deep.pop", 0, "good", got, 0);
+        ob("deep.pop", 0, "depth", depth(), 0);
+        fpm(0, 0, 0);
+    }
+    /* last: without a coprocessor the reference run ended after this */
+    fpm(0, 0, 0);
+    setcw(0x037F);
+    for (j = 0; j < 10; j++)
+        t80[j] = 0xCC;
+    _asm {
+        fstp tbyte ptr t80
+        fstsw swv
+    }
+    rep_bytes("uf.fstpm", 0, t80, 5);
+    rep_sw("uf.fstpm", 0, 0);
+    ob("uf.fstpm", 0, "depth", depth(), 0);
 }
 
 /* ---- the save area ---- */
@@ -411,7 +579,10 @@ static void save_area(void)
         n[k++] = (char)('0' + d / 10 % 10);
         n[k++] = (char)('0' + d % 10);
         n[k] = 0;
-        ob("area", 0, n, *(WORD *)(area + i), 0);
+        /* checked: the FSAVE part (untouched without a coprocessor) and
+           the words with a known meaning (emu.c, emu_save) */
+        ob("area", 0, n, *(WORD *)(area + i),
+           !(i < 94 || i == 98 || i == 100 || i == 104 || i == 256));
     }
     v = FPRESTORE(area, sizeof area);
     ob("restore", 0, "ret", v, 0);
@@ -435,12 +606,28 @@ int __cdecl tmain(void)
     obs_env("WF_80x87", have87);
     fpm(0, 0, 0);
     fpm(3, (WORD)(DWORD)h, (WORD)((DWORD)h >> 16));
+#ifdef TK8_T
+    /* TK8T1-5: one transcendental instruction each; without a
+       coprocessor the 3.1 emulator's run ended at the first one */
+    trans(TK8_T);
+    if (!have87 && have87) {            /* referenced, not run */
+        stack_faults();
+        roots();
+        ints();
+        misc();
+        bcdops();
+        save_area();
+    }
+#else
     roots();
     ints();
     misc();
     bcdops();
-    trans();
     save_area();
+    stack_faults();
+    if (have87)
+        trans(0);
+#endif
     out("TK8 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

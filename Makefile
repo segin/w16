@@ -34,7 +34,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
-TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8
+TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE
@@ -140,6 +140,35 @@ $(DOS)/TK8.EXE: $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/test
 	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk8.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk8.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk9.o: tests/apps/tk9.c tests/apps/tk9ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK9.EXE: $(B)/tests/start.o $(B)/tests/tk9.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                tests/apps/app.lnk tests/apps/tk9.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk9.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk9.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk9.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+# TK10.EXE: OS fixups as a chain and without the additive flag, made by
+# rewriting the linked file (tools/nechain.py)
+$(DOS)/TK10.EXE: $(B)/tests/start.o $(B)/tests/tk10.o $(B)/tests/tk10fp.o $(B)/tests/fixrqq.o \
+                 tests/apps/app.lnk tests/apps/tk10.lnk tools/nechain.py
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk10.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk10.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk10.o $(B)/tests/tk10fp.o $(B)/tests/fixrqq.o }
+	python3 tools/nechain.py $@
+$(B)/tests/tk10.o: tests/apps/tk10ref.h tests/apps/tklog.h
+# TK8T1-5: one transcendental instruction each (tests/apps/tk8.c, TK8_T)
+$(B)/tests/tk8t%.o: tests/apps/tk8.c tests/apps/tk8tref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -dTK8_T=$* -fo=$@ $<
+$(DOS)/TK8T%.EXE: $(B)/tests/start.o $(B)/tests/tk8t%.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                  tests/apps/app.lnk tests/apps/tk8.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk8t$*.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk8t$*.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
 $(B)/tests/tk6n.o: tests/apps/tk6n.c tests/apps/tk6nref.h tests/apps/tklog.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
