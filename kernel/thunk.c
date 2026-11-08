@@ -22,6 +22,7 @@ typedef struct thunkinfo {
     char mod[MODNAME_MAX + 1];
     u16  ordinal;               /* 0 when imported by name */
     char name[NAME_MAX + 1];
+    u32  real;                  /* a trace thunk's target, else 0 */
 } thunkinfo;
 
 typedef struct tblock {
@@ -74,15 +75,31 @@ static tblock FAR *block_of(u16 index, int make)
     return sel ? block(sel) : NULL;
 }
 
+static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
+                u16 *sel, u16 *off, u32 real);
+
 int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
                u16 *sel, u16 *off)
+{
+    return make(mod, ordinal, pname, sel, off, 0);
+}
+
+/* A thunk that records each call (trace_note) and goes on to real. */
+int thunk_trace(const char FAR *mod, u16 ordinal, u16 *sel, u16 *off)
+{
+    u32 real = ((u32)*sel << 16) | *off;
+    return make(mod, ordinal, NULL, sel, off, real);
+}
+
+static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
+                u16 *sel, u16 *off, u32 real)
 {
     u16 i, n;
     u8 FAR *code;
     char name[NAME_MAX + 1];
     tblock FAR *b;
     thunkinfo FAR *t;
-    void (__far *target)(void) = unimpl_entry;
+    void (__far *target)(void) = real ? trace_entry : unimpl_entry;
 
     name[0] = 0;
     if (pname) {
@@ -95,7 +112,7 @@ int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
         b = block_of(i, 0);
         t = &b->info[i % TB_COUNT];
         if (t->ordinal == ordinal && kstricmp(t->mod, mod) == 0 &&
-            kstricmp(t->name, name) == 0)
+            kstricmp(t->name, name) == 0 && t->real == real)
             goto found;
     }
     if (count == 0xFFFF)
@@ -111,6 +128,7 @@ int thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
     t->mod[n] = 0;
     t->ordinal = ordinal;
     kmemcpy(t->name, name, sizeof name);
+    t->real = real;
     code = &b->code[(i % TB_COUNT) * THUNK_SIZE];
     code[0] = 0xB8;
     code[1] = (u8)i;
@@ -140,4 +158,73 @@ void __cdecl unimpl_report(u16 index)
             kputdec(t->ordinal);
     }
     kputs("\r\n");
+}
+
+/* ---- the import trace (a debugging aid for the Windows boot) ----
+   SYSTEM.INI [w16] trace=MOD.ORD,MOD.ORD,... makes the loader bind those
+   imports to trace thunks: each call is recorded (thunk, caller CS:IP,
+   AX, BX, CX, DX and the first 6 stack words above the return address)
+   in a ring the fault and watchdog reports print. */
+#define TR_N 32
+typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, arg[6]; } trrec;
+static trrec trring[TR_N];
+static u16 trpos, trcount;
+
+/* called by trace_entry (kentry.asm) with the thunk's index and the
+   caller's frame (return IP, CS, arguments) and registers; returns the
+   real target */
+u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
+{
+    tblock FAR *b = block_of(idx, 0);
+    trrec *r = &trring[trpos];
+    u16 i;
+    trpos = (trpos + 1) % TR_N;
+    trcount++;
+    r->idx = idx;
+    r->ip = frame[0];
+    r->cs = frame[1];
+    r->ax = ax;
+    r->bx = bx;
+    r->cx = cx;
+    r->dx = dx;
+    for (i = 0; i < 6; i++)
+        r->arg[i] = frame[2 + i];
+    return b ? b->info[idx % TB_COUNT].real : 0;
+}
+
+void trace_print(void)
+{
+    u16 i, j, k = trpos;
+    if (!trcount)
+        return;
+    kputs("traced calls (oldest first), ");
+    kputhex(trcount);
+    kputs(" in all:\r\n");
+    for (i = 0; i < TR_N; i++, k = (k + 1) % TR_N) {
+        trrec *r = &trring[k];
+        tblock FAR *b;
+        if (!r->cs)
+            continue;
+        b = block_of(r->idx, 0);
+        kputs(" ");
+        if (b) {
+            kputs(b->info[r->idx % TB_COUNT].mod);
+            kputs(".");
+            kputdec(b->info[r->idx % TB_COUNT].ordinal);
+        }
+        kputs(" from ");
+        kputhex(r->cs);
+        kputs(":");
+        kputhex(r->ip);
+        kputs(" ax="); kputhex(r->ax);
+        kputs(" bx="); kputhex(r->bx);
+        kputs(" cx="); kputhex(r->cx);
+        kputs(" dx="); kputhex(r->dx);
+        kputs(" args");
+        for (j = 0; j < 6; j++) {
+            kputs(" ");
+            kputhex(r->arg[j]);
+        }
+        kputs("\r\n");
+    }
 }

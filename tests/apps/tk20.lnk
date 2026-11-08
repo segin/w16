@@ -1,0 +1,5 @@
+# TK20.EXE (tests/apps/tk20.c): the first window
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import K_GETTASKQUEUE KERNEL.35
+import U_INITAPP USER.5

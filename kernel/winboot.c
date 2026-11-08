@@ -138,6 +138,34 @@ void diag_load_end(const char FAR *name, u16 rc)
     diag_write("\r\n");
 }
 
+/* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ---- */
+
+static char trace_list[256];
+
+int trace_wanted(const char FAR *mod, u16 ordinal)
+{
+    const char *p = trace_list;
+    while (*p) {
+        const char FAR *m = mod;
+        u16 n = 0;
+        while (*m && *p && *p != '.' &&
+               ((*m | 0x20) == (*p | 0x20)))
+            m++, p++;
+        if (!*m && *p == '.') {
+            p++;
+            while (*p >= '0' && *p <= '9')
+                n = n * 10 + (*p++ - '0');
+            if (n == ordinal)
+                return 1;
+        }
+        while (*p && *p != ',')
+            p++;
+        if (*p == ',')
+            p++;
+    }
+    return 0;
+}
+
 /* ---- the boot ---- */
 
 static const char sysini[] = "SYSTEM.INI";
@@ -214,6 +242,8 @@ u16 winboot(void)
 
     winboot_active = 1;
     fault_init();
+    GetPrivateProfileString("w16", "trace", "", trace_list, sizeof trace_list,
+                            sysini);
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
     if (take_switch_b())

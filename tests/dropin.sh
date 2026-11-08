@@ -88,7 +88,11 @@ for i, l in enumerate(lines):
             out.append(f'{key}={val}'); done = True
         continue
     out.append(l)
-if not done:
+if not done and cur == sec.lower():
+    while out and out[-1] == '':
+        out.pop()
+    out.append(f'{key}={val}')
+elif not done:
     out += [f'[{sec}]', f'{key}={val}']
 open(path, 'wb').write('\r\n'.join(out).encode('latin-1'))
 PY

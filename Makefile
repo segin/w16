@@ -39,7 +39,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK19
+DROPIN   := TK19 TK20 TK21
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -155,6 +155,20 @@ $(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk19.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk19.map file { $(B)/tests/start.o $(B)/tests/tk19.o }
+
+# TK20.EXE: the first window (imports InitApp, USER.5)
+$(B)/tests/tk20.o: tests/apps/tk20ref.h tests/apps/tklog.h
+$(DOS)/TK20.EXE: $(B)/tests/start.o $(B)/tests/tk20.o tests/apps/app.lnk tests/apps/tk20.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk20.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk20.map file { $(B)/tests/start.o $(B)/tests/tk20.o }
+
+# TK21.EXE: the system timer (imports SYSTEM.2, 3, 6)
+$(B)/tests/tk21.o: tests/apps/tk21ref.h tests/apps/tklog.h
+$(DOS)/TK21.EXE: $(B)/tests/start.o $(B)/tests/tk21.o tests/apps/app.lnk tests/apps/tk21.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk21.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk21.map file { $(B)/tests/start.o $(B)/tests/tk21.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c

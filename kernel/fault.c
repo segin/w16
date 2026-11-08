@@ -135,6 +135,7 @@ void __cdecl fault_report(void)
     reg("SP", f[5]);
     kputs("\r\n");
     print_int21_ring(pos);
+    trace_print();
     kexit_to_dos(0xFF);
 }
 
@@ -212,6 +213,7 @@ void __cdecl wd_report(void)
         kputs("\r\n");
     }
     print_int21_ring(ipos);
+    trace_print();
     kexit_to_dos(0xFE);
 }
 

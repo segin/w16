@@ -35,6 +35,8 @@ extern void __far int21_handler(void);
 extern void __far int3d_handler(void);
 #pragma aux int3d_handler "*"
 extern void __far unimpl_entry(void);
+extern void __far trace_entry(void);
+#pragma aux trace_entry "*"
 #pragma aux int21_handler "*"           /* asm labels: no name decoration */
 #pragma aux unimpl_entry "*"
 extern u32  __cdecl old21;
@@ -199,6 +201,9 @@ void thunk_init(void);
 int  thunk_make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
                 u16 *sel, u16 *off);
 void __cdecl unimpl_report(u16 index);
+int  thunk_trace(const char FAR *mod, u16 ordinal, u16 *sel, u16 *off);
+void trace_print(void);
+int  trace_wanted(const char FAR *mod, u16 ordinal);   /* winboot.c */
 
 /* ---- task.c ---- */
 extern u16 cur_task, cur_pdb;           /* the running task (0: none) */

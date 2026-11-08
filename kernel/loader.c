@@ -365,8 +365,11 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
         pstr_to_c(modname, name, sizeof name);
         tm = module_of(MOD_MODREF(m, rr->t1 - 1));
         if ((rr->flags & NERF_TYPEMASK) == NERF_IMPORTORD) {
-            if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const))
+            if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const)) {
+                if (!is_const && trace_wanted(name, rr->t2))
+                    thunk_trace(name, rr->t2, tsel, toff);
                 return 1;
+            }
             return thunk_make(name, rr->t2, NULL, tsel, toff);
         }
         if (tm && mod_find_name(tm, imported_name(m, rr->t2), &ord) &&

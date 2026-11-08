@@ -745,3 +745,51 @@ THROW:
         push word [es:bx + 2]
         push word [es:bx]
         retf
+
+; ---------------------------------------------------------------------------
+; trace_entry: target of the import trace thunks (thunk.c), entered with
+; AX = the thunk's index and the caller's far return address on the
+; stack. Records the call (trace_note, which returns the real target)
+; and jumps there with every register as the caller left it.
+extern _trace_note
+global trace_entry
+trace_entry:
+        sub sp, 4                       ; the real target, filled below
+        push bp
+        mov bp, sp
+        pushf
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push ds
+        push es
+        mov si, ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp - 4]                ; the caller's AX (the index): lost
+        push dx
+        push cx
+        push bx
+        push ax
+        push ss
+        lea ax, [bp + 6]
+        push ax                         ; the caller's frame
+        push si
+        call far _trace_note
+        add sp, 14
+        mov [bp + 2], ax
+        mov [bp + 4], dx
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        popf
+        pop bp
+        retf                            ; to the real target
