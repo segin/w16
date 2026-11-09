@@ -379,21 +379,31 @@ BOOL WINAPI RedrawWindow(HWND h, const RECT __far *rc, HRGN rgn, UINT flags)
     return TRUE;
 }
 
+/* move a window's children (and theirs: rectangles are on the screen) */
+static void offset_children(PWND w, int dx, int dy)
+{
+    HWND c;
+    for (c = w->hwndChild; c; c = PW(c)->hwndNext) {
+        OffsetRect(&PW(c)->rcWindow, dx, dy);
+        OffsetRect(&PW(c)->rcClient, dx, dy);
+        offset_children(PW(c), dx, dy);
+    }
+}
+
+void refresh_dcs(void);
+
 /* ScrollWindow: w16 repaints instead of copying bits (UNVERIFIED: the
    result on screen equals Windows' when the window paints the same) */
 void WINAPI ScrollWindow(HWND h, int dx, int dy, const RECT __far *rc, const RECT __far *clip)
 {
     PWND w = valid_wnd(h);
-    HWND c;
     if (!w)
         return;
     if (!rc)
-        for (c = w->hwndChild; c; c = PW(c)->hwndNext) {
-            OffsetRect(&PW(c)->rcWindow, dx, dy);
-            OffsetRect(&PW(c)->rcClient, dx, dy);
-        }
+        offset_children(w, dx, dy);
     (void)clip;
     InvalidateRect(h, rc, TRUE);
+    refresh_dcs();
 }
 
 /* UNVERIFIED: w16 does not yet exclude the update region from hdc */
