@@ -258,6 +258,7 @@ u16  task_prev_instance(module FAR *m);
 void __cdecl inittask_c(regs16 FAR *r);
 void __cdecl task_exit_c(u16 code);
 void KAPI OldYield(void);
+void KAPI Yield(void);
 u32  KAPI_ES GetCurrentTask(void);
 u16  get_winflags(void);
 /* ---- toolhelp.c: THHOOK and the notification hooks ---- */
