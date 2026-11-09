@@ -132,8 +132,8 @@ static WORD dos_year(void);
 static WORD dos_md(void);
 #pragma aux dos_md = "mov ah, 2Ah" "int 21h" value [dx] modify [ax cx];
 
-/* The time as [intl] asks for it. UNVERIFIED: the hour with iTime=1 in
-   the afternoon (see ARCHITECTURE.md 15.1). */
+/* The time as [intl] asks for it (observed also: iTime=1 at 21:05 gives
+   "21:05PM", 00:05 with iTime=0 "12:05AM"). */
 void time_part(char *p)
 {
     char sep[4], am[8], pm[8];
@@ -271,6 +271,7 @@ BOOL file_load(const char FAR *path, BOOL ask_create)
     reset_edit();
     s_cpy(g_file, name, sizeof g_file);
     set_title();
+    /* UNVERIFIED: a .LOG file whose text does not end in CR LF */
     if (starts_log(buf)) {
         char stamp[72];
         WORD end;
@@ -340,7 +341,7 @@ static BOOL file_dialog(char *file, BOOL save)
 void file_open(void)
 {
     char file[DOS_PATH];
-    if (!file_query_save())
+    if (!file_query_save())             /* UNVERIFIED: before the dialog */
         return;
     file[0] = 0;
     if (file_dialog(file, FALSE))

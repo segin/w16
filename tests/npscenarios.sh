@@ -28,6 +28,12 @@ status=0
 base=$root/tests/scripts/np.baseline
 [ -f "$base" ] || : > "$base"
 newbase=$(mktemp); gen=$(mktemp -d); trap 'rm -rf "$newbase" "$gen"' EXIT
+# the caret blinks once a minute, so screenshots do not catch it half the
+# time (both runs get this WIN.INI)
+mkdir -p "$gen/ini"
+tr -d '\r' < "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" |
+    sed 's/^CursorBlinkRate=.*/CursorBlinkRate=60000/; s/$/\r/' > "$gen/ini/WIN.INI"
+wininfiles="$gen/ini/WIN.INI=WINDOWS/WIN.INI"
 mkdir -p "$out"
 for n in $names; do
     s=$sd/$n.txt
@@ -50,7 +56,7 @@ open(sys.argv[3], 'wb').write((line * (n // len(line) + 1))[:n])" "$size" "$len"
         extra=
         [ $who = w16 ] && extra=$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE
         REFRUN_X=$x REFRUN_PRE=$pre REFRUN_TIMEOUT=${REFRUN_TIMEOUT:-300} \
-        REFRUN_FILES="$d/SNAP.TXT $files $help $extra" REFRUN_OUT=$d REFRUN_GET="$get" \
+        REFRUN_FILES="$d/SNAP.TXT $wininfiles $files $help $extra" REFRUN_OUT=$d REFRUN_GET="$get" \
             "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt" 2>&1 || true
         # one line per WinHelp request: mark, command, file, data (the
         # topic only where the command has one)
