@@ -21,6 +21,10 @@ typedef CB __near *PCB;
 
 static HBITMAP bmCombo;
 
+/* the edit or selection box: the font's height plus 8 (US4: 24 with the
+   system font; UNVERIFIED as the rule) */
+#define EH(c) ((c)->itemh + 8)
+
 static PCB cb_of(HWND h)
 {
     return (PCB)GetWindowWord(h, 0);
@@ -45,7 +49,8 @@ static void show_list(HWND h, PCB c, BOOL show)
     if (show) {
         GetWindowRect(h, &r);
         notify(h, CBN_DROPDOWN);
-        set_window_pos(c->list, HWND_TOP, r.left, r.top + c->itemh + 4,
+        /* its top line on the box's bottom line (US4) */
+        set_window_pos(c->list, HWND_TOP, r.left, r.top + EH(c) - 1,
                        r.right - r.left, c->droph, SWP_SHOWWINDOW | SWP_NOACTIVATE);
         SetCapture(h);
     } else {
@@ -78,23 +83,42 @@ static void paint(HWND h, PCB c, HDC hdc)
     GetClientRect(h, &r);
     if (kind(h) != CBS_SIMPLE) {
         int bw = sysmet[SM_CXVSCROLL];
-        SetRect(&box, 0, 0, r.right, c->itemh + 4);
+        RECT in;
+        SetRect(&box, 0, 0, r.right, EH(c));
         FillRect(hdc, &r, sysbrush[COLOR_WINDOW]);
         FrameRect(hdc, &box, sysbrush[COLOR_WINDOWFRAME]);
-        /* the button */
-        SetRect(&c->button, r.right - bw, 0, r.right, c->itemh + 4);
+        /* the button: the box's frame around it, a raised face (white
+           line left and top, two-pixel shadow right and bottom) and the
+           display's OBM_COMBO arrow in the middle (US4) */
+        SetRect(&c->button, r.right - bw, 0, r.right, EH(c));
+        FrameRect(hdc, &c->button, sysbrush[COLOR_WINDOWFRAME]);
+        SetRect(&in, c->button.left + 1, 1, c->button.right - 1, EH(c) - 1);
+        FillRect(hdc, &in, sysbrush[COLOR_BTNFACE]);
+        {
+            HBRUSH ob = SelectObject(hdc, sysbrush[COLOR_BTNHIGHLIGHT]);
+            PatBlt(hdc, in.left, in.top, 1, in.bottom - in.top - 1, PATCOPY);
+            PatBlt(hdc, in.left, in.top, in.right - in.left - 1, 1, PATCOPY);
+            SelectObject(hdc, sysbrush[COLOR_BTNSHADOW]);
+            PatBlt(hdc, in.right - 1, in.top, 1, in.bottom - in.top, PATCOPY);
+            PatBlt(hdc, in.right - 2, in.top + 1, 1, in.bottom - in.top - 1, PATCOPY);
+            PatBlt(hdc, in.left, in.bottom - 1, in.right - in.left, 1, PATCOPY);
+            PatBlt(hdc, in.left + 1, in.bottom - 2, in.right - in.left - 1, 1, PATCOPY);
+            SelectObject(hdc, ob);
+        }
         if (!bmCombo)
             bmCombo = LoadBitmap(0, MAKEINTRESOURCE(OBM_COMBO));
-        FillRect(hdc, &c->button, sysbrush[COLOR_BTNFACE]);
-        FrameRect(hdc, &c->button, sysbrush[COLOR_WINDOWFRAME]);
         {
             BITMAP bm;
             HBITMAP ob;
+            COLORREF tc = SetTextColor(hdc, RGB(0, 0, 0)), bc = SetBkColor(hdc, syscolor[COLOR_BTNFACE]);
             GetObject(bmCombo, sizeof bm, &bm);
             ob = SelectObject(hdcMem, bmCombo);
-            BitBlt(hdc, c->button.left + (bw - bm.bmWidth) / 2,
-                   (c->itemh + 4 - bm.bmHeight) / 2, bm.bmWidth, bm.bmHeight, hdcMem, 0, 0, SRCCOPY);
+            BitBlt(hdc, in.left + (in.right - in.left - bm.bmWidth) / 2,
+                   in.top + (in.bottom - in.top - bm.bmHeight) / 2, bm.bmWidth, bm.bmHeight,
+                   hdcMem, 0, 0, SRCCOPY);
             SelectObject(hdcMem, ob);
+            SetTextColor(hdc, tc);
+            SetBkColor(hdc, bc);
         }
         if (kind(h) == CBS_DROPDOWNLIST) {
             int i = (int)send_message(c->list, LB_GETCURSEL, 0, 0);
@@ -107,7 +131,7 @@ static void paint(HWND h, PCB c, HDC hdc)
             FillRect(hdc, &t, sysbrush[c->focus ? COLOR_HIGHLIGHT : COLOR_WINDOW]);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[c->focus ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
-            TextOut(hdc, t.left + 1, t.top, buf, lstr_len(buf));
+            TextOut(hdc, 3, (EH(c) - c->itemh) / 2 - 1, buf, lstr_len(buf));  /* US4 */
             if (c->focus)
                 DrawFocusRect(hdc, &t);
         }
@@ -119,13 +143,14 @@ static void paint(HWND h, PCB c, HDC hdc)
 static void layout(HWND h, PCB c)
 {
     RECT r;
-    int eh = c->itemh + 4;
+    int eh = EH(c);
     GetClientRect(h, &r);
     if (kind(h) == CBS_SIMPLE) {
         if (c->edit)
             MoveWindow(c->edit, 0, 0, r.right, eh, TRUE);
         if (c->list)
-            MoveWindow(c->list, sysmet[SM_CXBORDER] * 0 + 8, eh, r.right - 8, r.bottom - eh, TRUE);
+            /* indented 8, its top line on the edit's bottom line (US4) */
+            MoveWindow(c->list, 8, eh - 1, r.right - 8, r.bottom - eh + 2, TRUE);
     } else if (c->edit)
         MoveWindow(c->edit, 0, 0, r.right - sysmet[SM_CXVSCROLL], eh, TRUE);
 }
@@ -144,8 +169,14 @@ LRESULT WINAPI ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (!c)
             return -1;
         SetWindowWord(h, 0, (WORD)c);
+        /* the scroll bar styles are the list's, not the box's */
+        {
+            PWND w = valid_wnd(h);
+            w->style &= ~(WS_VSCROLL | WS_HSCROLL);
+            calc_client(w);
+        }
         c->itemh = cySysChar;
-        c->droph = cs->cy - (c->itemh + 4);
+        c->droph = cs->cy - (EH(c));
         if (c->droph < c->itemh * 2)
             c->droph = c->itemh * 4 + 2;
         if (kind(h) != CBS_DROPDOWNLIST)
@@ -168,7 +199,7 @@ LRESULT WINAPI ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         /* the height of a drop-down combo box is its edit's (3.1 SDK) */
         if (kind(h) != CBS_SIMPLE) {
             PWND w = valid_wnd(h);
-            w->rcWindow.bottom = w->rcWindow.top + c->itemh + 4;
+            w->rcWindow.bottom = w->rcWindow.top + EH(c);
             calc_client(w);
         }
         layout(h, c);

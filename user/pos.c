@@ -203,8 +203,11 @@ static void icon_place(PWND w, POINT *pt)
         if (s != (HWND)(WORD)w && (PW(s)->style & WS_MINIMIZE))
             n++;
     pt->x = (n % ((pr.right - pr.left) / cx)) * cx + (cx - sysmet[SM_CXICON]) / 2;
-    pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx)) +
-            (cy - sysmet[SM_CYICON]) / 2 - 2 + 6;
+    pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx));
+    /* on the desktop the icon's window starts a whole spacing above the
+       bottom (US4: 408 on a 480-line screen, its title at 444) */
+    if (w->style & WS_CHILD)
+        pt->y += (cy - sysmet[SM_CYICON]) / 2 - 2 + 6;
 }
 
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
