@@ -823,22 +823,33 @@ static void factorial(void)
     result(r);
 }
 
+/* dms and Inv dms, in the order of operations of Microsoft's Calculator
+   engine (src/CalcManager/CEngine/scifunc.cpp, IDC_DMS), whose scifunc.c
+   names "SCICALC Scientific Calculator for Windows 3.00.12".
+   Adapted from: Copyright (c) Microsoft Corporation. All rights reserved.
+   Licensed under the MIT License (shell/calc/LICENSE-mscalc.txt). Checked on 3.1 with CA1 (1.3 Inv
+   dms - 1.5 = 0, 2.45 dms - 2.27 = 0, 701.8 Inv dms). */
 static void dms(void)
 {
-    double v = operand(), d, m, s, r;
-    if (!g.inv) {
-        d = fp_trunc(v);
-        m = (v - d) * 60;
-        s = (m - fp_trunc(m)) * 60;
-        m = fp_trunc(m);
-        r = d + m / 100 + s / 10000;
-    } else {
-        d = fp_trunc(v);
-        m = fp_trunc((v - d) * 100);
-        s = ((v - d) * 100 - m) * 100;
-        r = d + m / 60 + s / 3600;
+    double v = operand(), shft = g.inv ? 100 : 60, deg, minute, second;
+    deg = fp_trunc(v);
+    minute = (v - deg) * shft;
+    {
+        /* UNVERIFIED how: the original's minutes come out whole where the
+           product is a hair below a whole number (2.45 dms is exactly 2.27,
+           1.3 Inv dms exactly 1.5) while other results keep their last
+           bits; snapping to a whole number within 1e-9 does both */
+        double w = fp_floor(minute + 0.5), dlt = minute - w;
+        if (w != 0 && dlt < 1e-9 && dlt > -1e-9)
+            minute = w;
     }
-    result(r);
+    second = minute;
+    minute = fp_trunc(minute);
+    second = (second - minute) * shft;
+    shft = g.inv ? 60 : 100;
+    second /= shft;
+    minute = (minute + second) / shft;
+    result(deg + minute);
 }
 
 static void function(int id)
@@ -915,8 +926,8 @@ static void function(int id)
         r = 1 / v;
         break;
     case IDC_FACT:
+        g.inv = inv;                    /* n! has no Inv: it stays set */
         factorial();
-        g.hyp = 0;
         return;
     case IDC_DMS:
         g.inv = inv;
@@ -954,7 +965,11 @@ static void function(int id)
         break;
     }
     }
-    g.hyp = 0;
+    /* observed (CA1): only functions with an Inv meaning use it up; after
+       1/x, Not, sqrt and % it is still set; Hyp only goes with sin, cos,
+       tan */
+    if (id == IDC_RECIP || id == IDC_NOT || id == IDC_SQRT || id == IDC_PERCENT)
+        g.inv = inv;
     if (fp_isinf(r) || r != r) {
         set_error(ERR_BIG);
         return;
@@ -1165,6 +1180,7 @@ void calc_command(int id)
             start_entry();
             g.havelast = hl;
             g.ceafter = 1;
+            g.inv = 0;                  /* observed: CE clears Inv */
             show_x();
         }
         break;
