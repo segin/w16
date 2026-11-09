@@ -22,6 +22,7 @@ LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
+void track_window(HWND h, UINT hit, BOOL keyboard);
 LRESULT WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
@@ -367,6 +368,28 @@ LONG nc_hittest(PWND w, POINT pt)
     return HTBORDER;
 }
 
+/* the next visible, enabled top-level window after cur, activated */
+static void switch_window(HWND cur, BOOL tobottom)
+{
+    HWND t, first = 0;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
+        PWND tw = PW(t);
+        if (t == cur || tw->hwndOwner || !(tw->style & WS_VISIBLE) || (tw->style & WS_DISABLED))
+            continue;
+        if (!first)
+            first = t;
+    }
+    if (!first)
+        return;
+    if (tobottom && valid_wnd(cur))
+        set_window_pos(cur, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    /* Alt+Tab takes the window under the current one: the bottom of the
+       others goes on top when cur stays put (UNVERIFIED order) */
+    activate_window(first, FALSE);
+    if (IsIconic(first))
+        ShowWindow(first, SW_RESTORE);
+}
+
 /* ---- DefWindowProc ---- */
 extern WORD lastkey;            /* the last key pressed (input.c) */
 static LONG def_ctlcolor(HDC hdc, int type)
@@ -393,6 +416,12 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     switch (cmd & 0xFFF0) {
     case SC_CLOSE:
         send_message(h, WM_CLOSE, 0, 0);
+        break;
+    case SC_MOVE:
+        track_window(h, HTCAPTION, (cmd & 0xF) == 0);
+        break;
+    case SC_SIZE:
+        track_window(h, (cmd & 0xF) ? HTLEFT + (cmd & 0xF) - 1 : HTBOTTOMRIGHT, (cmd & 0xF) == 0);
         break;
     case SC_MINIMIZE:
         ShowWindow(h, SW_MINIMIZE);
@@ -468,6 +497,24 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NCLBUTTONDOWN:
         switch (wp) {
         case HTCAPTION:
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if ((w = valid_wnd(h)) != 0 && !(w->style & WS_MAXIMIZE))
+                send_message(h, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, lp);
+            break;
+        case HTLEFT:
+        case HTRIGHT:
+        case HTTOP:
+        case HTTOPLEFT:
+        case HTTOPRIGHT:
+        case HTBOTTOM:
+        case HTBOTTOMLEFT:
+        case HTBOTTOMRIGHT:
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if ((w = valid_wnd(h)) != 0)
+                send_message(h, WM_SYSCOMMAND, SC_SIZE | (wp - HTLEFT + 1), lp);
+            break;
         case HTCLIENT:
             if (!(w->style & WS_CHILD) && h != hwndActive)
                 activate_window(h, TRUE);
@@ -576,9 +623,19 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SYSCOMMAND:
         sys_command(h, w, wp, lp);
         return 0;
+    case WM_KEYDOWN:
+        /* Ctrl+Esc: the Task List (the system menu's Switch To...) */
+        if (wp == VK_ESCAPE && (GetKeyState(VK_CONTROL) & 0x8000))
+            send_message(top_level(h), WM_SYSCOMMAND, SC_TASKLIST, 0);
+        return 0;
     case WM_SYSKEYDOWN:
         if (wp == VK_F4 && (HIWORD(lp) & KF_ALTDOWN))
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
+        /* Alt+Tab, Alt+Esc: the next top-level window (Alt+Esc sends the
+           current one to the bottom). UNVERIFIED: Windows 3.1 shows the
+           window's title while Alt+Tab is held; here it switches at once */
+        else if ((wp == VK_TAB || wp == VK_ESCAPE) && (HIWORD(lp) & KF_ALTDOWN))
+            switch_window(top_level(h), wp == VK_ESCAPE);
         return 0;
     case WM_SYSKEYUP:
         /* Alt or F10 pressed and released alone (Alt+F4 must not then
@@ -665,6 +722,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 LRESULT WINAPI DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_LBUTTONDBLCLK:
+        /* a double-click on the desktop: the Task List (3.1 User's Guide) */
+        WinExec("taskman.exe", SW_SHOWNORMAL);
+        return 0;
     case WM_ERASEBKGND: {
         RECT r;
         HBRUSH old;

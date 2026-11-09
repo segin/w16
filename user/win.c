@@ -108,7 +108,7 @@ static void set_text(PWND w, LPCSTR s)
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
    frame off screen) */
-static void minmax(PWND w, MINMAXINFO __far *mm)
+void minmax(PWND w, MINMAXINFO __far *mm)
 {
     int cxf = sysmet[SM_CXFRAME], cyf = sysmet[SM_CYFRAME];
     if (!(w->style & WS_THICKFRAME)) {
