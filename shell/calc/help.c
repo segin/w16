@@ -5,7 +5,7 @@
  * file is Microsoft's (w16 ships none). The requests are the original's,
  * observed with the logging stand-in WINHELP.EXE (tests/apps/thelp.c,
  * tests/calcscenarios.sh): F1 and Help > Contents: HELP_INDEX; Search for
- * Help On: HELP_PARTIALKEY ""; How to Use Help: HELP_HELPONHELP; F1 on a
+ * Help On: HELP_PARTIALKEY ""; How to Use Help: HELP_HELPONHELP without a file name; F1 on a
  * menu item: nothing; closing Calculator: HELP_QUIT.
  */
 #include <windows.h>
@@ -33,7 +33,8 @@ void help_command(int id)
         WinHelp(g_wnd, file(), HELP_PARTIALKEY, (DWORD)(LPCSTR)"");
         break;
     case IDM_HELPHELP:
-        WinHelp(g_wnd, file(), HELP_HELPONHELP, 0);
+        /* observed: no file name (the request block has none) */
+        WinHelp(g_wnd, NULL, HELP_HELPONHELP, 0);
         break;
     }
 }

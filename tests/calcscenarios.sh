@@ -129,13 +129,15 @@ help)
     mkdir -p "$out/help"
     for who in orig w16; do
         mkdir -p "$out/help/$who"
-        run_snap "$root/tests/scripts/calc-help.txt" $who "$out/help/$who" \
+        # plain DOSBox: no arithmetic here, and THELP keeps one log there
+        REFRUN_X= run_snap "$root/tests/scripts/calc-help.txt" $who "$out/help/$who" \
             "$root/build/dos/THELP.EXE=WINDOWS/WINHELP.EXE" &
     done
     wait
     for who in orig w16; do
         grep -a '^HELP \(msg 0477\|block\)' "$out/help/$who/log.txt" |
-            sed 's/^HELP block [0-9A-F]* /HELP block /' > "$out/help/$who/requests.txt"
+            sed 's/^HELP block [0-9A-F]* /HELP block /; s/\(63 61 6C 63 2E 68 6C 70 00\).*/\1/' \
+            > "$out/help/$who/requests.txt"     # bytes after the file name are leftovers
     done
     if cmp -s "$out/help/orig/requests.txt" "$out/help/w16/requests.txt"; then
         echo "== help: ok ($(grep -c block "$out/help/orig/requests.txt") requests)"

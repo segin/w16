@@ -949,7 +949,7 @@ w16's Calculator is a 1:1 replacement for Windows 3.1's (`make shell` builds `bu
 - Errors: `Cannot divide by zero.`, `Invalid value for this function.`, `Result of function is undefined.`, `Result is too large to store.`; then only C and CE work. Hex values beyond 32 bits are too large; a ninth hex digit is too large whatever the word size.
 - Statistics Box: Dat adds the display's text; s is 0 for fewer than two values and `Invalid value` when the variance is not above 0.
 - Paste: the whole CF_TEXT block (GlobalSize bytes, NULs skipped), each character as a key; `:` and a digit n is Fn, `:c :m :p :r` MC MS M+ MR, `:e` Exp (decimal scientific), `:q` nothing, `\` Dat; the standard view ignores keys it has no button for.
-- Help: calc.hlp; F1 and Contents HELP_INDEX, Search HELP_PARTIALKEY "", How to Use Help HELP_HELPONHELP, nothing for F1 on menus, HELP_QUIT on exit.
+- Help: calc.hlp; F1 and Contents HELP_INDEX, Search HELP_PARTIALKEY "", How to Use Help HELP_HELPONHELP without a file name, nothing for F1 on menus, HELP_QUIT on exit.
 
 **Not matched (UNVERIFIED or known):** `exp` is about 1.7e-15*x relative above the true value in the original (e^709 shows `...565`, ours `...555`); a few last-bit differences of sin, cos, tan near multiples of pi and of the rounding of numbers within 1e-13 of a power of ten; parentheses after a typed number (`2+3*4(5=`); the standard display's width limit between 176 and 184 pixels; the grad constant; the key flash on mouse clicks. The About text is w16's own (the original names its developer).
 
