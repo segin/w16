@@ -625,6 +625,45 @@ $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/fn$*.map file { $(B)/tests/start.o $(B)/tests/fn$*.o }
 
+# ---- win386: w16's WIN386.EXE (386 Enhanced mode; ARCHITECTURE.md 12) ----
+# The real-mode loader (16-bit C and nasm, an MZ program) followed by a W3
+# table of LE modules: for now the VMM ("WIN386", 32-bit C and nasm, linked
+# by wlink as a VxD). tools/mkw3.py puts them together.
+W386     := $(B)/win386
+W386INC  := win386/include
+W386LDR  := $(W386)/ldr.o $(W386)/ldrasm.o
+W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o
+W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h
+.PHONY: win386
+win386: $(W386)/WIN386.EXE
+$(W386)/ldr.o: win386/ldr/ldr.c $(W386HDRS)
+	@mkdir -p $(@D)
+	$(WCC) -q -zq -bt=dos -ms -3 -s -os -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(W386)/ldrasm.o: win386/ldr/ldrasm.asm $(W386HDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(W386)/%.o: win386/vmm/%.c $(W386HDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(W386)/%.o: win386/vmm/%.asm $(W386HDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(W386)/WIN386L.EXE: $(W386LDR)
+	$(WLINK) option quiet format dos name $@ option map=$(W386)/ldr.map option stack=4096 \
+	    libpath $(WATCOM)/lib286/dos libpath $(WATCOM)/lib286 file { $(W386LDR) }
+$(W386)/VMM.386: $(W386VMM) win386/vmm/vmm.lnk
+	$(WLINK) @win386/vmm/vmm.lnk name $@ option map=$(W386)/vmm.map file { $(W386VMM) }
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 tools/mkw3.py
+	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386
+
+# VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM
+vxprobes: $(VXPROBES)
+dos: $(VXPROBES)
+$(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<

@@ -1,0 +1,6 @@
+# w16 VMM: the "WIN386" module of WIN386.EXE, an LE VxD (device 0001h)
+format windows vxd
+option quiet
+option nodefaultlibs
+option start=_vmm_entry
+export VMM_DDB.1
