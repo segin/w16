@@ -660,7 +660,7 @@ $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/app
 W386     := $(B)/win386
 W386INC  := win386/include
 W386LDR  := $(W386)/ldr.o $(W386)/ldrasm.o
-W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o
+W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o $(W386)/vxdapi.o
 W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h
 .PHONY: win386
 win386: $(W386)/WIN386.EXE
@@ -685,9 +685,14 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
+$(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX3.EXE: $(B)/tests/start.o $(B)/tests/vx3.o $(B)/tests/vx3s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx3.map file { $(B)/tests/start.o $(B)/tests/vx3.o $(B)/tests/vx3s.o }
 $(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
@@ -791,7 +796,7 @@ test: dos fonts
 # boot real Windows 3.1 on w16's parts and compare each screen with the
 # reference (tests/boottest.sh); run after every merge: make test does not
 # boot Windows
-boot-test: dos install-tree
+boot-test: dos install-tree win386
 	tests/boottest.sh
 .PHONY: boot-test
 
@@ -1015,3 +1020,26 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- shell: NOTEPAD.EXE (Windows 3.1; shell/notepad, ARCHITECTURE.md 15.1) ----
+NP_SRC  := main file find print help util
+SHELL_NP  := $(B)/shell/start.o $(NP_SRC:%=$(B)/shell/notepad/%.o)
+shell: $(DOS)/NOTEPAD.EXE
+$(B)/shell/res/notepad.ico: tools/npicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 -B tools/npicon.py $@
+$(B)/shell/notepad/%.o: shell/notepad/%.c shell/notepad/notepad.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/notepad/notepad.res: shell/notepad/notepad.rc shell/notepad/notepad.h $(B)/shell/res/notepad.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/notepad -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/NOTEPAD.EXE: $(SHELL_NP) $(B)/shell/notepad/notepad.res shell/notepad/notepad.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/notepad/notepad.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/notepad/notepad.map \
+	    option resource=$(B)/shell/notepad/notepad.res file { $(SHELL_NP) }
+install-tree: $(W16)/NOTEPAD.EXE
+$(W16)/NOTEPAD.EXE: $(DOS)/NOTEPAD.EXE
+	@mkdir -p $(@D)
+	cp $< $@
