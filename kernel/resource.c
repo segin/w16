@@ -247,7 +247,12 @@ static u16 mem_flags(module FAR *m, u16 r)
 /* ---- loading and freeing modules (loader.c) ---- */
 
 /* Every type gets the default handler; PRELOAD resources are read (they
-   get a handle, usage 0, flag 0004h not set: observed). */
+   get a handle, usage 0, flag 0004h not set: observed). Not cursors and
+   icons (RT_CURSOR, RT_ICON): observed (TK28), a PRELOAD FIXED cursor's
+   block is already in the display format USER's handler makes, which
+   the program installs only later (InitApp); so they wait for their
+   first LoadResource. UNVERIFIED: whether Windows reads them at load
+   time some other way. */
 void rsrc_init(module FAR *m)
 {
     u16 t, k;
@@ -258,7 +263,8 @@ void rsrc_init(module FAR *m)
             u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
             NAME(m, r)->handle = NAME(m, r)->usage = 0;
             NAME(m, r)->flags &= ~RNF_LOADED;
-            if (NAME(m, r)->flags & RNF_PRELOAD)
+            if ((NAME(m, r)->flags & RNF_PRELOAD) &&
+                TYPE(m, t)->type_id != (0x8000 | 1) && TYPE(m, t)->type_id != (0x8000 | 3))
                 NAME(m, r)->handle = DefResourceHandler(0, m->ne_sel, r);
         }
 }

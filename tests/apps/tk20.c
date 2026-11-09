@@ -5,7 +5,8 @@
  * Windows program's life, to compare w16's KERNEL with Windows' under
  * Microsoft's USER: InitApp, the message queue, RegisterClass,
  * CreateWindow, ShowWindow/UpdateWindow, a timer, the message loop,
- * DestroyWindow and WM_QUIT. The messages the window gets are counted.
+ * DestroyWindow and WM_QUIT. Command tail 1: PostQuitMessage from the
+ * timer instead of DestroyWindow; 2: PostMessage(WM_USER) and quit there. The messages the window gets are counted.
  * Exits with the number of failures.
  */
 #include <windows.h>
@@ -32,6 +33,7 @@ static WORD get_flags(void);
 
 static WORD n_create, n_paint, n_timer, n_destroy, n_size, n_show, n_other;
 static HWND hwnd_created;
+static WORD mode;               /* command tail: how the program ends */
 
 LRESULT FAR PASCAL __export __loadds WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -50,8 +52,23 @@ LRESULT FAR PASCAL __export __loadds WndProc(HWND h, UINT msg, WPARAM wp, LPARAM
     }
     case WM_TIMER:
         n_timer++;
-        if (n_timer == 4)
+        if (n_timer == 4 && mode == 1) {
+            out("PostQuitMessage\r\n");
+            KillTimer(h, 1);
+            PostQuitMessage(7);
+        } else if (n_timer == 4 && mode == 2) {
+            out("PostMessage WM_USER\r\n");
+            KillTimer(h, 1);
+            PostMessage(h, WM_USER, 0, 0);
+        } else if (n_timer == 4) {
+            out("DestroyWindow\r\n");
             DestroyWindow(h);
+            out("DestroyWindow returned\r\n");
+        }
+        return 0;
+    case WM_USER:
+        out("WM_USER\r\n");
+        PostQuitMessage(7);
         return 0;
     case WM_SIZE:
         n_size++;
@@ -61,6 +78,7 @@ LRESULT FAR PASCAL __export __loadds WndProc(HWND h, UINT msg, WPARAM wp, LPARAM
         break;
     case WM_DESTROY:
         n_destroy++;
+        out("WM_DESTROY\r\n");
         PostQuitMessage(7);
         return 0;
     default:
@@ -78,6 +96,15 @@ int __cdecl tmain(void)
     MSG m;
     WORD n = 0, r;
 
+    {
+        LPSTR tail = (LPSTR)MAKELP(init_regs[6], init_regs[1]);   /* ES:BX */
+        for (n = 0; n < 8 && tail[n] != '\r' && tail[n]; n++)
+            if (tail[n] >= '0' && tail[n] <= '9') {
+                mode = tail[n] - '0';
+                break;
+            }
+        n = 0;
+    }
     out("TK20 start\r\n");
     K_WAITEVENT(0);
     r = U_INITAPP(hinst);

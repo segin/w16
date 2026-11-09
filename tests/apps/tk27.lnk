@@ -1,0 +1,4 @@
+# TK27.EXE (tests/apps/tk27.c): the cursor block
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5

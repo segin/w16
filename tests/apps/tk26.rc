@@ -1,0 +1,3 @@
+/* tk26.rc - resources for TK26.EXE: two icons (stock icons of w16 PROGMAN) */
+1 ICON "stock00.ico"
+TKICON ICON "stock01.ico"

@@ -63,6 +63,12 @@ void where(u16 sel)
                 kputs(m->name);
                 kputs(":");
                 kputdec(i + 1);
+                kputs(" base ");
+                {
+                    u32 b = dpmi_get_base(sel);
+                    kputhex((u16)(b >> 16));
+                    kputhex((u16)b);
+                }
                 kputs(" limit ");
                 kputhex(lsl(sel));
                 kputs(")");
@@ -96,11 +102,10 @@ static void reg(const char *name, u16 v)
 
 static u16 ring[80];
 
-extern u32 __cdecl wd_orig8, wd_next8;
 extern u16 __cdecl wd_ticks, wd_limit, wd_pos;
 extern u16 __cdecl wd_samples[128];
-extern void __far wd_int08(void);
-#pragma aux wd_int08 "*"
+extern void __far wd_int70(void);
+#pragma aux wd_int70 "*"
 
 static void print_int21_ring(u16 pos);
 
@@ -162,27 +167,37 @@ static void print_int21_ring(u16 pos)
 }
 
 /* The boot watchdog: SYSTEM.INI [w16] watchdog=SECONDS (w16's own key;
-   0 or none: off). While Windows boots, SECONDS without progress (a boot
+   0 or none: off). While Windows runs, SECONDS without progress (a boot
    log line, a module loaded) make KERNEL report where the processor has
    been (timer samples) and leave to DOS. */
+static u8 inb(u16 port);
+#pragma aux inb = "in al, dx" parm [dx] value [al];
+static void outb(u16 port, u8 v);
+#pragma aux outb = "out dx, al" parm [dx] [al];
+
 void wd_start(u16 seconds)
 {
     regs16 r;
     if (!seconds)
         return;
-    r.ax = 0x0204;
-    r.bx = 0x08;
-    r.ds = r.es = 0;
-    dpmi31(&r);
-    wd_orig8 = wd_next8 = ((u32)r.cx << 16) | r.dx;
     wd_ticks = 0;
-    wd_limit = seconds * 18 + (seconds >> 2) - (seconds >> 4);  /* x 18.2 */
+    wd_limit = seconds * 16;
     r.ax = 0x0205;
-    r.bx = 0x08;
-    r.cx = FP_SEG(wd_int08);
-    r.dx = FP_OFF(wd_int08);
+    r.bx = 0x70;
+    r.cx = FP_SEG(wd_int70);
+    r.dx = FP_OFF(wd_int70);
     r.ds = r.es = 0;
     dpmi31(&r);
+    /* RTC: 16 periodic interrupts a second (rate 12), enabled; IRQ 8 and
+       the cascade unmasked */
+    outb(0x70, 0x0A);
+    outb(0x71, (u8)((inb(0x71) & 0xF0) | 0x0C));
+    outb(0x70, 0x0B);
+    outb(0x71, (u8)(inb(0x71) | 0x40));
+    outb(0x70, 0x0C);
+    inb(0x71);
+    outb(0xA1, (u8)(inb(0xA1) & ~0x01));
+    outb(0x21, (u8)(inb(0x21) & ~0x04));
 }
 
 void wd_progress(void)

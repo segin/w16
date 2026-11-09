@@ -397,7 +397,6 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     u32 dsize;
     taskx FAR *x;
     u8 FAR *p;
-    const ne_segment FAR *ds;
 
     if (!h->auto_data || h->auto_data > m->seg_count ||
         !h->cs || h->cs > m->seg_count || !h->ss || h->ss > m->seg_count)
@@ -474,8 +473,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        size, DX = 0, SI = hPrevInstance, DI = hInstance, BP = 0, ES = PDB,
        DS = SS = DGROUP, SP = the end of the stack (static data, then the
        stack, then the local heap) */
-    ds = MOD_SEG(m, h->auto_data - 1);
-    dsize = (ds->min_alloc ? ds->min_alloc : 0x10000UL) + h->stack_size;
+    dsize = (m->dg_min ? m->dg_min : 0x10000UL) + h->stack_size;
     if (dsize > 0xFFFEUL)
         dsize = 0xFFFEUL;
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
@@ -805,7 +803,9 @@ void KAPI OldYield(void)                                      /* KERNEL.117 */
 }
 
 /* GetDOSEnvironment: the environment (every task shares KERNEL's). */
-u32 KAPI GetDOSEnvironment(void)                              /* KERNEL.131 */
+/* KERNEL.131, through kentry.asm, which keeps BX and ES (observed on
+   3.1, TK24: only DX:AX change; MOUSE.DRV relies on ES) */
+u32 KAPI GDEnv(void)
 {
     u16 pdb = cur_task ? cur_pdb : psp_sel;
     return (u32)*(u16 FAR *)MK_FP(pdb, 0x2C) << 16;

@@ -1,0 +1,3 @@
+# TK25.EXE (tests/apps/tk25.c): GetCodeInfo
+@tests/apps/app.lnk
+import K_GETCODEINFO KERNEL.104

@@ -1,0 +1,4 @@
+# TK26.EXE (tests/apps/tk26.c, tk26.rc): icons from own resources
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5
