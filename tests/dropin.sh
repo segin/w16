@@ -20,12 +20,9 @@
 #                virtual X display, xvfb-run, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
-<<<<<<< HEAD
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
 #                Microsoft's DOSX.EXE; -X FILE: that file as DOSX.EXE
-=======
 #     -w         use w16's WIN.COM (build/dos/WIN.COM) instead of Windows 3.1's
->>>>>>> master
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
 # seconds, our KERNEL reports where the processor was and exits (-i
 # w16:watchdog=0 turns that off).
@@ -38,13 +35,8 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-<<<<<<< HEAD
 cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= files= inis='w16:watchdog=15'
-while getopts k:c:t:f:i:s:o:rxX: opt; do
-=======
-cmd='WIN /S /B' secs=60 shot= keep= useref= files= inis='w16:watchdog=15'
-while getopts k:c:t:f:i:s:o:rw opt; do
->>>>>>> master
+while getopts k:c:t:f:i:s:o:rxX:w opt; do
     case $opt in
     k) kernel=$OPTARG ;;
     c) cmd=$OPTARG ;;
@@ -56,13 +48,10 @@ $OPTARG" ;;
     s) shot=$OPTARG ;;
     o) keep=$OPTARG ;;
     r) useref=1 ;;
-<<<<<<< HEAD
     x) dosx=$root/build/dos/DOSX.EXE ;;
     X) dosx=$OPTARG ;;
-=======
     w) files="$files
 $root/build/dos/WIN.COM=WINDOWS/WIN.COM" ;;
->>>>>>> master
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
