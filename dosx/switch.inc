@@ -369,7 +369,8 @@ rmx_common:
         mov ax, [x_ax]
         mov [bp+R_EAX], ax
         mov ax, [x_fl]
-        mov [bp+R_FL], ax
+        and ax, ~FL_NT          ; real mode can leave NT set: no IRET
+        mov [bp+R_FL], ax       ; in protected mode may see it
         mov ax, [x_ss]
         mov [bp+R_SS], ax
         mov ax, [x_sp]

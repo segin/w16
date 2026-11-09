@@ -190,10 +190,29 @@ v_out:  push si
 ; op_int15 (ring 0, from int15_stub): INT 15h from protected mode. AH=C0h
 ; (system configuration) returns ES:BX pointing at a table in the BIOS:
 ; ES becomes a selector for it (MOUSE.DRV reads the feature bytes there
-; to look for a PS/2 mouse port). Microsoft's DOSX has its own INT 15h
-; handler too (DX1: vector 15h); what else it translates is UNVERIFIED.
+; to look for a PS/2 mouse port). AH=C207h with a handler (ES:BX not 0)
+; does not reach the BIOS and succeeds (AH = 0, CF clear): TK46 under
+; Microsoft's DOSX, its own protected-mode handler given to C207h, was
+; never called while the mouse moved, and Windows went on; passed to the
+; BIOS (w16 before) the BIOS called the selector:offset as a real-mode
+; address once the mouse was enabled, and Windows stopped taking input.
+; MOUSE.DRV reads the mouse at IRQ 12 itself (INT 74h). Microsoft's DOSX
+; has its own INT 15h handler too (DX1: vector 15h); what else it
+; translates is UNVERIFIED.
 op_int15:
-        sub sp, R_SIZE
+        ; C207h (set the pointing-device handler) with a protected-mode
+        ; ES:BX, as MOUSE.DRV gives it: not passed on (the BIOS would call
+        ; the selector:offset as a real-mode address); success
+        cmp word [bp+F_AX], 0C207h
+        jne .go
+        mov ax, [bp+F_BX]
+        or ax, [bp+F_ES]
+        jz .go
+        mov byte [bp+F_AX+1], 0
+        call ring3sp
+        and word [es:si+K_FL], ~FL_CF
+        ret
+.go:    sub sp, R_SIZE
         mov bx, sp
         call rs_from_frame
         call ring3sp

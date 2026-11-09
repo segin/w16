@@ -842,6 +842,17 @@ idt_from_pmvec:
 r0_rmx:
         mov bp, sp
         cld
+%ifdef TRACE
+        push ax
+        mov ax, [bp+R_SIZE+2]
+        and ax, 0FFh
+        or ax, 0200h
+        cmp byte [bp+R_SIZE], 0
+        je .tk
+        add ax, 0100h           ; 03nnh: hook of vector nn
+.tk:    call trc
+        pop ax
+%endif
         inc word [rmx_depth]
         cmp byte [bp+R_SIZE], 0
         jne near .hook
@@ -889,7 +900,7 @@ r0_rmx:
         mov word [es:di], ret3_stub
         mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
-        and cx, ~(FL_IF | FL_TF)
+        and cx, ~(FL_IF | FL_TF | FL_NT)
         or cx, FL_IOPL
         mov [es:di+4], cx
         pop es
@@ -939,7 +950,7 @@ r0_rmx:
         mov word [es:di], ret3_stub
         mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
-        and cx, ~(FL_IF | FL_TF)
+        and cx, ~(FL_IF | FL_TF | FL_NT)
         or cx, FL_IOPL
         mov [es:di+4], cx
         pop es
