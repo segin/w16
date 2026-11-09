@@ -64,7 +64,8 @@ host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
-     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE)
+     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -521,10 +522,62 @@ $(DOS)/WINENV.COM: tests/dos/winenv.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# DOSX.EXE: w16's Standard-mode DOS extender (dosx/, ARCHITECTURE.md 9.6)
+$(DOS)/DOSX.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I . -o $@ $<
+
+# DOSXT.EXE: the same with the trace buffer (dosx/trace.inc)
+$(DOS)/DOSXT.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -dTRACE -I . -o $@ $<
+
+# DX6.EXE: a Windows program dumping the GDT/IDT (run as the shell)
+$(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
+
+# DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
+DXPROBES := DX1 DX2 DX5
+$(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
 # TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
 $(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
+
+# ---- WIN.COM (win/win.asm; ARCHITECTURE.md 9.5) ----
+# WIN.CNF is the program alone; WIN.COM is WIN.CNF with w16's start-up logo
+# (a BI_RLE4 bitmap, assets/boot) appended, as Windows 3.1 Setup builds its
+# WIN.COM from WIN.CNF and a logo (copy /b).
+$(DOS)/WIN.CNF: win/win.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/WIN.COM: $(DOS)/WIN.CNF assets/boot/W16LOGOR.BMP
+	cat $^ > $@
+dos: $(DOS)/WIN.COM
+
+# WC1-WC8.COM: the WIN.COM probes (tests/wincom.sh; ARCHITECTURE.md 9.5);
+# WC9.EXE: ExitWindowsExec as the shell
+WCPROBES := $(DOS)/WC1.COM $(DOS)/WC2.COM $(DOS)/WC3.COM $(DOS)/WC3B.COM \
+            $(DOS)/WC4.COM $(DOS)/WC5.COM $(DOS)/WC6.COM $(DOS)/WC7.COM \
+            $(DOS)/WC8.COM $(DOS)/WC9.EXE
+wcprobes: $(WCPROBES)
+dos: $(WCPROBES)
+$(DOS)/WC%.COM: tests/dos/wc%.asm tests/dos/wclib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/WC3B.COM: tests/dos/wc3.asm tests/dos/wclib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -DDXAXOFF=0x160 -o $@ $<
+$(B)/tests/wc9.o: tests/apps/wc9ref.h tests/apps/tklog.h
+$(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wc9.map file { $(B)/tests/start.o $(B)/tests/wc9.o }
 
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
