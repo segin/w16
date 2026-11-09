@@ -19,17 +19,32 @@ void page_free(u32 phys);
 
 #define LDT_FIRST 0x11          /* first index handed out (Windows 3.1: DS 8Fh) */
 
-static u32 ldt_used[8192 / 32];
+/* LDT ownership. KRNL386 takes every all-zero descriptor below the limit
+ * of the LDT alias (the vendor API's selector) for its own free list, and
+ * asks for 100h more selectors with 0000h while that limit is below F000h
+ * (Pietrek, Windows Internals ch. 1-2). So here a descriptor is free if
+ * and only if its 8 bytes are zero, and the LDT grows: ldt_top is the
+ * size in use (the alias' limit + 1), raised 4 KB at a time when 0000h
+ * needs room, up to the architecture's 64 KB. UNVERIFIED: Windows 3.1's
+ * starting size and step. */
+static u32 ldt_top = 0x1000;
+static u32 ldt_alias;               /* the vendor API's LDT selector */
 
 static u8 *ldt_desc(u32 sel)
 {
     return ldt + (sel & ~7u);
 }
 
+static int desc_free(u32 i)
+{
+    u32 *d = (u32 *)(ldt + i * 8);
+    return !d[0] && !d[1];
+}
+
 static int sel_valid(u32 sel)
 {
     u32 i = sel >> 3;
-    return (sel & 4) && i < 8192 && (ldt_used[i / 32] & (1u << (i % 32)));
+    return (sel & 4) && i < 8192 && !desc_free(i);
 }
 
 u32 sel_base(u32 sel)
@@ -39,37 +54,43 @@ u32 sel_base(u32 sel)
     return desc_base(gdt + (sel & ~7u));
 }
 
+static void ldt_grow(void)
+{
+    if (ldt_top >= 0x10000) return;
+    ldt_top += 0x1000;
+    if (ldt_alias) set_desc(ldt_desc(ldt_alias), (u32)ldt, ldt_top - 1, 0xF2, 0);
+}
+
 /* Allocate n consecutive LDT selectors; 0 if none. */
 static u32 ldt_alloc(u32 n)
 {
     u32 i, j;
-    for (i = LDT_FIRST; i + n <= 8192; i++) {
-        for (j = 0; j < n; j++)
-            if (ldt_used[(i + j) / 32] & (1u << ((i + j) % 32))) break;
-        if (j == n) {
-            for (j = 0; j < n; j++) {
-                ldt_used[(i + j) / 32] |= 1u << ((i + j) % 32);
-                /* data, present, DPL 3, base 0, limit 0 */
-                set_desc(ldt + (i + j) * 8, 0, 0, 0xF2, 0);
+    for (;;) {
+        for (i = LDT_FIRST; i + n <= ldt_top / 8; i++) {
+            for (j = 0; j < n; j++)
+                if (!desc_free(i + j)) break;
+            if (j == n) {
+                for (j = 0; j < n; j++)     /* data, present, DPL 3, base 0, limit 0 */
+                    set_desc(ldt + (i + j) * 8, 0, 0, 0xF2, 0);
+                return (i << 3) | 7;
             }
-            return (i << 3) | 7;
+            i += j;
         }
+        if (ldt_top >= 0x10000) return 0;
+        ldt_grow();
     }
-    return 0;
 }
 
 static void ldt_free(u32 sel)
 {
-    u32 i = sel >> 3;
-    ldt_used[i / 32] &= ~(1u << (i % 32));
-    memset(ldt + i * 8, 0, 8);
+    memset(ldt + (sel >> 3) * 8, 0, 8);
 }
 
 /* A selector for a real-mode segment (0002h): one per segment, kept. */
 struct segsel { struct segsel *next; u32 seg, sel; };
 static struct segsel *segsels;
 
-static u32 seg_to_sel(u32 seg, u32 access)
+u32 seg_to_sel(u32 seg, u32 access)
 {
     struct segsel *s;
     u32 sel;
@@ -88,7 +109,7 @@ static u32 seg_to_sel(u32 seg, u32 access)
 
 /* The real-mode segment for a selector, or -1: base below 1 MB + 64 KB and
  * on a paragraph boundary. */
-static int sel_to_seg(u32 sel)
+int sel_to_seg(u32 sel)
 {
     u32 b;
     if (!sel) return 0;
@@ -139,8 +160,6 @@ void dpmi_init(void)
 {
     int i;
 
-    memset(ldt_used, 0, sizeof(ldt_used));
-    ldt_used[0] = 0x0001FFFF;           /* 0-10h reserved */
     for (i = 0; i < 256; i++) {
         sysvm.pmvec_sel[i] = SEL_PMBP;  /* the host's default handlers */
         sysvm.pmvec_off[i] = i;
@@ -193,59 +212,54 @@ void dpmi_switch(struct cregs *r)
     r->fs = r->gs = 0;
     if (!sysvm.client32) r->esp &= 0xFFFF;
     r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT)) | EFL_IOPL | EFL_IF;
+    sysvm.dsel = dsel;
     sysvm.pm = 1;
 }
 
 /* ---- reflecting into V86 mode and back ---- */
-static int to_v86_seg(u32 sel, u32 *seg)
-{
-    int s = sel_to_seg(sel);
-    if (s < 0) { *seg = 0; return 0; }
-    *seg = s;
-    return 1;
-}
+int dpmi_verbose;
 
-/* Run the V86 handler of vec (or, for NEST_0300, the prepared state) for
- * the protected-mode state in *r; dpmi_refret comes back. */
-static void nest_v86(struct cregs *r, int kind, struct cregs *v)
-{
-    struct nest *n = kmalloc(sizeof(*n));
-    if (!n) panic("out of memory (nest)");
-    n->pm = *r;
-    n->kind = kind;
-    n->prev = sysvm.nest;
-    n->v86sp = sysvm.refsp;
-    sysvm.nest = n;
-    *r = *v;
-}
-
+/* An interrupt from protected mode that the client has not hooked: run the
+ * V86 handler with the client's registers; DS and ES become segments where
+ * their selectors map conventional memory. Results come back, and segment
+ * registers the V86 code changed come back as selectors. */
 int pm_v86_reflect(struct cregs *r, int vec, int hw)
 {
-    struct cregs v;
-    u16 *ivt = (u16 *)0;
+    struct cregs v, pm = *r;
+    int ds, es;
 
-    v = *r;
+    if (dpmi_verbose && !hw) trace("[R%x:%x]", vec, AX(r));
+    v = pm;
+    v.ss = 0; v.esp = 0;
+    v.fs = v.gs = 0;
     if (hw) {
         v.ds = v.es = 0;
-    } else {
-        if (!to_v86_seg(r->ds, &v.ds) && (r->ds & ~3u))
-            trace("DPMI: INT %x AX=%x: DS %x not in conventional memory\n", vec, AX(r), r->ds);
-        if (!to_v86_seg(r->es, &v.es) && (r->es & ~3u))
-            trace("DPMI: INT %x AX=%x: ES %x not in conventional memory\n", vec, AX(r), r->es);
+        v86_int(&v, vec);
+        *r = pm;
+        return 1;
     }
-    v.fs = v.gs = 0;
-    v.ss = info->refstk_seg;
-    v.esp = sysvm.refsp;
-    v.eflags = (r->eflags & 0xFFFF & ~(EFL_NT)) | EFL_VM | EFL_IOPL;
-    /* an IRET frame back to the REFRET breakpoint */
-    v86_push16(&v, (u16)v.eflags);
-    v86_push16(&v, (u16)info->ldr_cs);
-    v86_push16(&v, (u16)(info->bp_off + W386_BP_REFRET));
-    v.eflags &= ~(EFL_IF | EFL_TF);
-    v.eip = ivt[vec * 2];
-    v.cs = ivt[vec * 2 + 1];
-    nest_v86(r, hw ? NEST_HWINT : NEST_INT, &v);
-    sysvm.refsp = (u16)v.esp;
+    ds = sel_to_seg(pm.ds);
+    es = sel_to_seg(pm.es);
+    if (ds < 0 && (pm.ds & 4))
+        trace("DPMI: INT %x AX=%x: DS %x not in conventional memory\n", vec, AX(r), pm.ds);
+    if (es < 0 && (pm.es & 4))
+        trace("DPMI: INT %x AX=%x: ES %x not in conventional memory\n", vec, AX(r), pm.es);
+    v.ds = ds < 0 ? 0 : ds;
+    v.es = es < 0 ? 0 : es;
+    v.eflags = pm.eflags;
+    v86_int(&v, vec);
+    *r = pm;
+    r->eax = v.eax; r->ebx = v.ebx; r->ecx = v.ecx; r->edx = v.edx;
+    r->esi = v.esi; r->edi = v.edi; r->ebp = v.ebp;
+    r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);    /* CF PF AF ZF SF OF */
+    if ((int)(v.ds & 0xFFFF) != (ds < 0 ? 0 : ds)) {
+        u32 sel = seg_to_sel(v.ds & 0xFFFF, 0xF2);
+        if (sel) r->ds = sel;
+    }
+    if ((int)(v.es & 0xFFFF) != (es < 0 ? 0 : es)) {
+        u32 sel = seg_to_sel(v.es & 0xFFFF, 0xF2);
+        if (sel) r->es = sel;
+    }
     return 1;
 }
 
@@ -256,46 +270,12 @@ struct rmregs {             /* DPMI real-mode register structure */
 };
 #pragma pack()
 
-void dpmi_refret(struct cregs *r)
-{
-    struct nest *n = sysvm.nest;
-    struct cregs v = *r;
-    if (!n) panic("REFRET without a nested call");
-    sysvm.nest = n->prev;
-    sysvm.refsp = n->v86sp;
-    *r = n->pm;
-    if (n->kind == NEST_INT) {
-        u32 sel;
-        r->eax = v.eax; r->ebx = v.ebx; r->ecx = v.ecx; r->edx = v.edx;
-        r->esi = v.esi; r->edi = v.edi; r->ebp = v.ebp;
-        r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);    /* OF DF? no: CF PF AF ZF SF OF */
-        /* segment registers the V86 code changed come back as selectors */
-        if (sel_to_seg(r->ds) != (int)(v.ds & 0xFFFF)) {
-            sel = seg_to_sel(v.ds & 0xFFFF, 0xF2);
-            if (sel) r->ds = sel;
-        }
-        if (sel_to_seg(r->es) != (int)(v.es & 0xFFFF)) {
-            sel = seg_to_sel(v.es & 0xFFFF, 0xF2);
-            if (sel) r->es = sel;
-        }
-    } else if (n->kind == NEST_0300) {
-        struct rmregs *s = (struct rmregs *)n->regstruct;
-        s->edi = v.edi; s->esi = v.esi; s->ebp = v.ebp; s->ebx = v.ebx;
-        s->edx = v.edx; s->ecx = v.ecx; s->eax = v.eax;
-        s->flags = (u16)v.eflags;
-        s->es = (u16)v.es; s->ds = (u16)v.ds; s->fs = (u16)v.fs; s->gs = (u16)v.gs;
-        set_cf(r, 0);
-    }
-    kfree(n);
-}
-
 /* DPMI 0300h-0302h: run real-mode code with the client's register structure */
 static void dpmi_simulate(struct cregs *r, int fn)
 {
     u32 lin = sel_base(r->es) + (sysvm.client32 ? r->edi : DI(r));
     struct rmregs *s = (struct rmregs *)lin;
-    struct cregs v;
-    u16 *ivt = (u16 *)0;
+    struct cregs v, pm = *r;
     u32 ncopy = CX(r) * 2, i;
     u8 *src;
 
@@ -305,29 +285,25 @@ static void dpmi_simulate(struct cregs *r, int fn)
     v.es = s->es; v.ds = s->ds; v.fs = s->fs; v.gs = s->gs;
     if (s->ss || s->sp) { v.ss = s->ss; v.esp = s->sp; }
     else { v.ss = info->refstk_seg; v.esp = sysvm.refsp; }
-    v.eflags = (s->flags & 0x0FD5) | EFL_VM | EFL_IOPL | EFL_IF | 2;
+    v.eflags = s->flags;
     /* parameters copied from the client's stack */
     src = (u8 *)(stack_lin(r));
     for (i = ncopy; i > 0; i -= 2)
         v86_push16(&v, *(u16 *)(src + i - 2));
-    if (fn == 0x0300 || fn == 0x0302)
-        v86_push16(&v, (u16)v.eflags);
-    v86_push16(&v, (u16)info->ldr_cs);
-    v86_push16(&v, (u16)(info->bp_off + W386_BP_REFRET));
-    if (fn == 0x0300) {
-        v.eip = ivt[BX(r) & 0xFF] * 1;
-        v.eip = ivt[(BX(r) & 0xFF) * 2];
-        v.cs = ivt[(BX(r) & 0xFF) * 2 + 1];
-        v.eflags &= ~(EFL_IF | EFL_TF);
-    } else {
-        v.eip = s->ip;
+    if (dpmi_verbose) trace("[31:%x %x:%x]", fn, fn == 0x300 ? BX(r) & 0xFF : s->cs, s->ip);
+    if (fn == 0x0300)
+        v86_int(&v, BX(r) & 0xFF);
+    else {
         v.cs = s->cs;
+        v.eip = s->ip;
+        v86_farcall(&v, fn == 0x0302);
     }
-    nest_v86(r, NEST_0300, &v);
-    sysvm.nest->regstruct = lin;
-    if (!(s->ss || s->sp)) sysvm.refsp = (u16)(v.esp - 0);
-    /* the parameters stay on the V86 stack: the callee (or the caller's
-     * convention) handles them; REFRET restores the reflection stack */
+    s->edi = v.edi; s->esi = v.esi; s->ebp = v.ebp; s->ebx = v.ebx;
+    s->edx = v.edx; s->ecx = v.ecx; s->eax = v.eax;
+    s->flags = (u16)v.eflags;
+    s->es = (u16)v.es; s->ds = (u16)v.ds; s->fs = (u16)v.fs; s->gs = (u16)v.gs;
+    *r = pm;
+    set_cf(r, 0);
 }
 
 /* ---- memory blocks (0501h) ---- */
@@ -388,16 +364,38 @@ static u32 reg_ofs(struct cregs *r, u32 e)
     return sysvm.client32 ? e : (e & 0xFFFF);
 }
 
+/* 0100h-0102h: DOS memory through INT 21h 48h/49h/4Ah in V86 mode; the
+ * block gets one selector (64 KB or less; larger blocks would need
+ * several: ARCHITECTURE.md 12.4) */
 static void dos_alloc(struct cregs *r, u32 fn)
 {
-    /* run INT 21h 48h/49h/4Ah in V86 mode; the result arrives in REFRET.
-     * Done synchronously through a nested call is not possible here, so
-     * the client's registers are prepared for INT 21h and the selector work
-     * happens afterwards: stage 1 keeps it simple and fails instead. */
-    (void)fn;
-    trace("DPMI: 01%02xh not implemented yet\n", fn & 0xFF);
-    set_cf(r, 1);
-    SETW(r->eax, 8);
+    struct cregs v, pm = *r;
+    int seg;
+    u32 sel;
+
+    memset(&v, 0, sizeof(v));
+    if (fn == 0x0100) {
+        v.eax = 0x4800; v.ebx = BX(r);
+        v86_int(&v, 0x21);
+        *r = pm;
+        if (v.eflags & EFL_CF) { set_cf(r, 1); SETW(r->eax, v.eax); SETW(r->ebx, v.ebx); return; }
+        sel = ldt_alloc(1);
+        if (!sel) { set_cf(r, 1); SETW(r->eax, 8); return; }
+        set_desc(ldt_desc(sel), (v.eax & 0xFFFF) << 4, BX(r) ? BX(r) * 16 - 1 : 0, 0xF2, 0);
+        SETW(r->eax, v.eax);
+        SETW(r->edx, sel);
+        return;
+    }
+    seg = sel_to_seg(DX(r));
+    if (seg < 0) { set_cf(r, 1); SETW(r->eax, 9); return; }
+    v.es = seg;
+    if (fn == 0x0101) v.eax = 0x4900;
+    else { v.eax = 0x4A00; v.ebx = BX(r); }
+    v86_int(&v, 0x21);
+    *r = pm;
+    if (v.eflags & EFL_CF) { set_cf(r, 1); SETW(r->eax, v.eax); SETW(r->ebx, v.ebx); return; }
+    if (fn == 0x0101) ldt_free(DX(r));
+    else set_desc(ldt_desc(DX(r)), seg << 4, BX(r) * 16 - 1, 0xF2, 0);
 }
 
 static void dpmi_call(struct cregs *r)
@@ -407,6 +405,7 @@ static void dpmi_call(struct cregs *r)
     struct memblk *b;
 
     set_cf(r, 0);
+    if (dpmi_verbose) trace("[31:%x bx=%x cx=%x dx=%x]", fn, BX(r), CX(r), DX(r));
     switch (fn) {
     case 0x0000:                        /* allocate LDT descriptors */
         sel = ldt_alloc(CX(r) ? CX(r) : 1);
@@ -421,6 +420,9 @@ static void dpmi_call(struct cregs *r)
         sel = seg_to_sel(BX(r), 0xF2);
         if (!sel) { set_cf(r, 1); break; }
         SETW(r->eax, sel);
+        break;
+    case 0x0004:                        /* lock/unlock a selector (Windows' own; reserved in 0.9): */
+    case 0x0005:                        /* nothing is paged out, so nothing to do */
         break;
     case 0x0003:                        /* selector increment */
         SETW(r->eax, 8);
@@ -612,8 +614,18 @@ int int2f_pm(struct cregs *r)
         SETW(r->edi, 0);
         r->es = 0;
         return 1;
-    case 0x168A:                        /* vendor entry: not offered yet */
-        return 1;
+    case 0x168A: {                      /* vendor entry: "MS-DOS" only */
+        const char *p = (const char *)(sel_base(r->ds) + reg_ofs(r, r->esi));
+        if (p[0] == 'M' && p[1] == 'S' && p[2] == '-' && p[3] == 'D' && p[4] == 'O'
+            && p[5] == 'S' && p[6] == 0) {
+            SETLO(r->eax, 0);
+            r->es = SEL_PMBP;
+            if (sysvm.client32) r->edi = PMBP_VENDOR;
+            else SETW(r->edi, PMBP_VENDOR);
+            return 1;
+        }
+        return 0;
+    }
     }
     return 0;
 }
@@ -622,6 +634,11 @@ int int2f_pm(struct cregs *r)
 static int pmvec_default(int vec)
 {
     return sysvm.pmvec_sel[vec] == SEL_PMBP && sysvm.pmvec_off[vec] == (u32)vec;
+}
+
+u32 pm_lin(u32 sel, u32 off)
+{
+    return sel_base(sel) + (sysvm.client32 ? off : (off & 0xFFFF));
 }
 
 static void terminate_client(struct cregs *r)
@@ -651,6 +668,12 @@ void dpmi_int(struct cregs *r, int vec, int hw)
         return;
     }
     if (!hw && vec == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
+    if (!hw && vec == 0x21) { dos_pm(r); return; }
+    if (!hw && vec == 0x10) { video_pm(r); return; }
+    /* INT 41h: the protected-mode debugger interface (AX=004Fh asks
+     * whether one is there); no debugger: nothing happens, as without
+     * one under Windows 3.1 (UNVERIFIED that Windows does exactly this) */
+    if (!hw && vec == 0x41) return;
     pm_v86_reflect(r, vec, hw);
 }
 
@@ -667,14 +690,40 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         if (index == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
         if (index == 0x31) { dpmi_call(r); return; }
         if (index == 0x2F && int2f_pm(r)) return;
+        if (index == 0x41) return;
+        if (index == 0x21) { dos_pm(r); return; }
+        if (index == 0x10) { video_pm(r); return; }
         pm_v86_reflect(r, index, index >= 8 && index < 16);
+        return;
+    }
+    if (index == PMBP_IRQRET) {
+        exec_return(r);
+        return;
+    }
+    if (index == PMBP_VENDOR) {
+        /* the "MS-DOS" vendor extension (Pietrek, Windows Internals ch. 1:
+         * KRNL386 calls it with AX=0100h and expects the selector of a
+         * writable alias of the LDT in AX, carry clear). Called far. */
+        u32 ip = pm_pop(r), cs = pm_pop(r);
+        set_cf(r, 1);
+        if (AX(r) == 0x0100) {
+            if (!ldt_alias) {
+                ldt_alias = ldt_alloc(1);
+                set_desc(ldt_desc(ldt_alias), (u32)ldt, ldt_top - 1, 0xF2, 0);
+                make_user((u32)ldt, ldt_limit + 1);
+            }
+            SETW(r->eax, ldt_alias);
+            set_cf(r, 0);
+        } else
+            trace("DPMI: vendor call AX=%x\n", AX(r));
+        r->eip = ip;
+        r->cs = cs;
         return;
     }
     if (index == PMBP_EXCRET) {
         /* back from a client's exception handler: the DPMI frame */
         u32 err, ip, cs, fl, sp, ss;
-        pm_pop(r); pm_pop(r);           /* our return address */
-        err = pm_pop(r);
+        err = pm_pop(r);                /* the handler's RETF took our address */
         ip = pm_pop(r); cs = pm_pop(r); fl = pm_pop(r); sp = pm_pop(r); ss = pm_pop(r);
         (void)err;
         r->eip = ip; r->cs = cs; r->eflags = (fl & 0xFFFF) | EFL_IOPL; r->esp = sp; r->ss = ss;
@@ -683,12 +732,60 @@ void dpmi_pmbp(struct cregs *r, u32 index)
     panic("unknown PM breakpoint %x", index);
 }
 
+/* ---- interrupts from V86 mode for protected-mode handlers ----
+ * A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code
+ * runs goes to the client's protected-mode handler if it installed one
+ * (DPMI 0.9), on a stack of the host's; the handler's IRET reaches the
+ * IRQRET breakpoint and the V86 code goes on. */
+static u32 hstk_sel, hstk_lin, hstk_sp;
+#define HSTK_SIZE 0x4000
+
+int dpmi_v86_hook(struct cregs *r, int vec, int hw)
+{
+    struct cregs p;
+    u32 saved_sp;
+
+    if (!sysvm.pm || pmvec_default(vec)) return 0;
+    if (!hstk_sel) {
+        u32 i, pg;
+        hstk_lin = 0x00300000;          /* below the client's blocks (4 MB up) */
+        for (i = 0; i < HSTK_SIZE; i += 4096) {
+            pg = page_alloc();
+            if (!pg || !map_page(hstk_lin + i, pg, 7)) return 0;
+        }
+        hstk_sel = ldt_alloc(1);
+        set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
+        hstk_sp = HSTK_SIZE;
+    }
+    (void)hw;
+    memset(&p, 0, sizeof(p));
+    p.ss = hstk_sel;
+    p.esp = hstk_sp;
+    p.ds = p.es = sysvm.dsel;
+    p.eflags = (r->eflags & 0x0FD5 & ~EFL_TF) | EFL_IOPL | 2;
+    p.eflags |= EFL_IF;
+    pm_push(&p, p.eflags);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags &= ~EFL_IF;
+    p.cs = sysvm.pmvec_sel[vec];
+    p.eip = sysvm.pmvec_off[vec];
+    saved_sp = hstk_sp;
+    hstk_sp = p.esp & (sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu);
+    exec_v86(&p);
+    hstk_sp = saved_sp;
+    /* flags the handler changed (CF etc. for INT 23h/24h) */
+    if (!hw) r->eflags = (r->eflags & ~0x8D5u) | (p.eflags & 0x8D5u);
+    return 1;
+}
+
 void dpmi_exception(struct cregs *r, int vec, u32 err)
 {
     if (vec < 32 && sysvm.excvec_sel[vec]) {
         /* the DPMI 0.9 exception frame: return address, error code, IP,
          * CS, FLAGS, SP, SS (words for a 16-bit client) */
         struct cregs o = *r;
+        if (dpmi_verbose) trace("[EXC %x err %x at %x:%x cr2 %x]", vec, err, r->cs, r->eip, get_cr2());
         pm_push(r, o.ss);
         pm_push(r, o.esp);
         pm_push(r, o.eflags);
@@ -702,6 +799,12 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         r->eflags &= ~(EFL_IF | EFL_TF);
         return;
     }
-    panic("client exception %x err %x at %x:%x (eax %x ds %x es %x ss:esp %x:%x cr2 %x)",
-          vec, err, r->cs, r->eip, r->eax, r->ds, r->es, r->ss, r->esp, get_cr2());
+    {
+        u8 *c = (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+        u8 *d = ldt_desc(err);
+        trace("code %x %x %x %x %x %x  desc(err) %x %x %x %x %x %x %x %x\n", c[0], c[1], c[2], c[3], c[4], c[5],
+              d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+    }
+    panic("client exception %x err %x at %x:%x (eax %x ebx %x ds %x es %x fs %x gs %x ss:esp %x:%x cr2 %x)",
+          vec, err, r->cs, r->eip, r->eax, r->ebx, r->ds, r->es, r->fs, r->gs, r->ss, r->esp, get_cr2());
 }

@@ -35,6 +35,11 @@ static struct {
 static struct { u16 limit; u32 base; } gdtr, idtr;
 #pragma pack()
 
+static void tss_set_esp0(u32 v)
+{
+    tss.esp0 = v;
+}
+
 void set_desc(u8 *d, u32 base, u32 limit, u32 access, u32 flags)
 {
     if (limit > 0xFFFFF) {
@@ -214,6 +219,19 @@ int map_page(u32 lin, u32 phys, u32 flags)
     return 1;
 }
 
+/* Let ring 3 reach VMM memory (the LDT, for the vendor API's alias). */
+void make_user(u32 lin, u32 size)
+{
+    u32 a, *pd = pdir(), *pt;
+    for (a = lin & ~0xFFFu; a < lin + size; a += 4096) {
+        if (!(pd[a >> 22] & 1)) continue;
+        pd[a >> 22] |= 4;
+        pt = (u32 *)phys_to_lin(pd[a >> 22] & ~0xFFFu);
+        pt[(a >> 12) & 0x3FF] |= 4;
+    }
+    flush_tlb();
+}
+
 u32 lin_to_phys(u32 lin)
 {
     u32 pde = pdir()[lin >> 22], pte;
@@ -307,6 +325,92 @@ void v86_reflect(struct cregs *r, int vec)
     r->cs = ivt[vec * 2 + 1];
 }
 
+/* ---- nested V86 execution ----
+ * exec_v86 runs V86 code for the VMM (for an interrupt reflected from
+ * protected mode, a DPMI 0300h call, a DOS call made for the client) and
+ * returns when it reaches the REFRET breakpoint: the ring-0 stack in use
+ * moves below this frame while the V86 code runs, so traps during it
+ * (interrupts, nested calls) work as usual. Depth is limited only by the
+ * ring-0 stack. */
+struct execctx {
+    u32 jb[6];
+    struct execctx *prev;
+    u32 saved_esp0;
+    u16 saved_refsp;
+    struct cregs res;
+    struct cregs *v;
+};
+static struct execctx *cur_exec;
+int exec_trace;
+
+void exec_v86(struct cregs *v)
+{
+    /* after k_longjmp only memory (c, through EBP/ESP) is trustworthy:
+     * scratch registers holding v or anything else are gone */
+    volatile struct execctx c;
+    c.v = v;
+    c.prev = cur_exec;
+    c.saved_esp0 = kesp0;
+    c.saved_refsp = sysvm.refsp;
+    if (!k_setjmp((u32 *)c.jb)) {
+        cur_exec = (struct execctx *)&c;
+        if ((u16)v->ss == info->refstk_seg && (u16)v->esp < sysvm.refsp)
+            sysvm.refsp = (u16)v->esp;
+        kesp0 = ((u32)&c - 512) & ~15u;
+        tss_set_esp0(kesp0);
+        sysvm.r = *v;
+        if (exec_trace) trace("<%x %x:%x", v->eax & 0xFFFF, v->cs, v->eip);
+        resume(&sysvm.r);
+    }
+    if (exec_trace) trace(">%x", c.res.eax & 0xFFFF);
+    cur_exec = c.prev;
+    kesp0 = c.saved_esp0;
+    tss_set_esp0(kesp0);
+    sysvm.refsp = c.saved_refsp;
+    memcpy(c.v, (void *)&c.res, sizeof(struct cregs));
+}
+
+/* INT vec in V86 mode with registers *v (SS:SP 0: the reflection stack) */
+void v86_int(struct cregs *v, int vec)
+{
+    u16 *ivt = (u16 *)0;
+    if (!v->ss && !(v->esp & 0xFFFF)) {
+        v->ss = info->refstk_seg;
+        v->esp = sysvm.refsp;
+    }
+    v->eflags = (v->eflags & 0x0FD5) | EFL_VM | EFL_IOPL | 2;
+    v86_push16(v, (u16)(v->eflags | EFL_IF));
+    v86_push16(v, (u16)info->ldr_cs);
+    v86_push16(v, (u16)(info->bp_off + W386_BP_REFRET));
+    v->eip = ivt[vec * 2];
+    v->cs = ivt[vec * 2 + 1];
+    exec_v86(v);
+}
+
+/* a far call (iret: a far call to an IRET-ending routine) to v->cs:v->eip */
+void v86_farcall(struct cregs *v, int iret)
+{
+    if (!v->ss && !(v->esp & 0xFFFF)) {
+        v->ss = info->refstk_seg;
+        v->esp = sysvm.refsp;
+    }
+    v->eflags = (v->eflags & 0x0FD5) | EFL_VM | EFL_IOPL | EFL_IF | 2;
+    if (iret) v86_push16(v, (u16)v->eflags);
+    v86_push16(v, (u16)info->ldr_cs);
+    v86_push16(v, (u16)(info->bp_off + W386_BP_REFRET));
+    exec_v86(v);
+}
+
+void exec_return(struct cregs *r)
+{
+    if (!cur_exec) panic("return breakpoint outside a nested call at %x:%x", r->cs, r->eip);
+    cur_exec->res = *r;
+    k_longjmp(cur_exec->jb, 1);
+}
+
+u32 xbuf_lin(void) { return (u32)info->xbuf_seg << 4; }
+u32 xbuf_size(void) { return info->xbuf_size; }
+
 /* ---- INT 2Fh in V86 mode: the Windows functions (DDK INT 2Fh 16xxh) ---- */
 static int int2f_v86(struct cregs *r)
 {
@@ -370,6 +474,8 @@ static void software_int(struct cregs *r, int vec)
 {
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
+        /* INT 1Ch, 23h, 24h go to a protected-mode handler (DPMI 0.9) */
+        if ((vec == 0x1C || vec == 0x23 || vec == 0x24) && dpmi_v86_hook(r, vec, 0)) return;
         v86_reflect(r, vec);
     } else
         dpmi_int(r, vec, 0);
@@ -380,7 +486,16 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     switch (idx) {
     case W386_BP_EXIT:   exit_windows(r); break;
     case W386_BP_DPMI:   dpmi_switch(r); break;
-    case W386_BP_REFRET: dpmi_refret(r); break;
+    case W386_BP_REFRET:
+        exec_return(r);
+        if (0) {
+            u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
+            panic("REFRET outside a nested call: %x:%x ss:sp %x:%x [%x %x %x %x] ax %x refsp %x",
+                  r->cs, r->eip, r->ss, r->esp, sp[0], sp[1], sp[2], sp[3], r->eax, sysvm.refsp);
+        }
+        cur_exec->res = *r;
+        k_longjmp(cur_exec->jb, 1);
+        break;
     default:
         panic("unknown V86 breakpoint %d at %x:%x", idx, r->cs, r->eip);
     }
@@ -394,7 +509,10 @@ static u8 *code_ptr(struct cregs *r)
 
 void __cdecl trap(struct tframe *f)
 {
-    struct cregs *r = &sysvm.r;
+    /* the client's state is worked on in this frame's own copy: handlers
+     * may run nested V86 code (exec_v86), whose traps use sysvm.r */
+    struct cregs local;
+    struct cregs *r = &local;
     u32 vec = f->vec;
     u8 *op;
 
@@ -418,8 +536,10 @@ void __cdecl trap(struct tframe *f)
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
         int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;
-        if (r->eflags & EFL_VM) v86_reflect(r, v);
-        else dpmi_int(r, v, 1);
+        if (r->eflags & EFL_VM) {
+            if (!dpmi_v86_hook(r, v, 1)) v86_reflect(r, v);
+        } else
+            dpmi_int(r, v, 1);
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -453,7 +573,15 @@ void __cdecl trap(struct tframe *f)
             dpmi_exception(r, vec, f->err);
     } else
         software_int(r, vec);           /* through a DPL 3 gate */
-    resume(r);
+    if (!(r->eflags & EFL_VM)) {
+        /* catch a bad state before the processor does */
+        u8 *d = (r->cs & 4) ? ldt + (r->cs & ~7u) : gdt + (r->cs & ~7u);
+        if ((r->cs & 3) != 3 || !(d[5] & 0x80) || (d[5] & 0x18) != 0x18)
+            panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
+                  r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
+    }
+    sysvm.r = local;
+    resume(&sysvm.r);
 }
 
 /* ---- start-up ---- */
@@ -469,6 +597,7 @@ void __cdecl vmm_main(struct w386_info *inf)
         outb(info->log_port + 3, 0x03);
         outb(info->log_port + 1, 0);
     }
+    { extern int dpmi_verbose; dpmi_verbose = exec_trace = info->trace; }
     trace("w16 VMM: %d KB at %x, image %x+%x\n", info->xms_size >> 10, info->xms_phys,
           info->img_off, info->img_size);
     next_page = info->img_off + info->img_size;
@@ -500,6 +629,7 @@ void __cdecl vmm_main(struct w386_info *inf)
     /* TSS: the ring-0 stack, every I/O port allowed */
     memset(&tss, 0, sizeof(tss));
     tss.esp0 = (u32)kstack_top;
+    kesp0 = tss.esp0;
     tss.ss0 = SEL_DATA;
     tss.iobase = (u16)((u8 *)tss.iomap - (u8 *)&tss);
     tss.iomap[8192] = 0xFF;

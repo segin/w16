@@ -50,6 +50,7 @@ emm386|vx1 ems=emm386|C:\VX2 eeee;WIN /3 > C:\O1.TXT;C:\WC2 !emm386
 emsboard|vx1 ems=true|C:\VX2 eeee;WIN /3 > C:\O1.TXT;C:\WC2 !emsboard
 noini|vx1 rm=WINDOWS/SYSTEM.INI|WIN /3 > C:\O1.TXT;C:\WC2 !noini
 help|vx1|SYSTEM\WIN386 /? > C:\O1.TXT;C:\WC2 !help
+krnl|-|WIN /3 /B > C:\O1.TXT;C:\WC2 !krnl
 '
 
 run_one() {   # run_one DIR OPTIONS COMMANDS

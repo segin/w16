@@ -34,7 +34,10 @@ I_MEM_KB        equ 80
 I_PMBP_OFF      equ 84
 I_PMBP_COUNT    equ 86
 I_SDA_LIN       equ 88
-I_SIZE          equ 92
+I_XBUF_SEG      equ 92
+I_XBUF_SIZE     equ 94
+I_TRACE         equ 96
+I_SIZE          equ 100
 
 BP_EXIT         equ 0
 BP_COUNT        equ 64

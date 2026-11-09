@@ -39,7 +39,8 @@ extern void __far *xms_entry;
 
 static struct w386_info info;
 static char refstk[2048];           /* V86 stack for interrupts reflected from PM */
-static unsigned char pmbp[258];     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
+static unsigned char pmbp[320];
+static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
 static unsigned v86cb_off, v86cb_seg;   /* Enable/Disable V86 mode callback (1605h) */
@@ -443,9 +444,17 @@ int main(int argc, char **argv)
     intdosx(&r, &r, &sr);
     info.sda_lin = r.x.cflag ? 0 : ((unsigned long)sr.ds << 4) + r.x.si;
     segread(&sr);
+    /* the transfer buffer: paragraph aligned, in our data segment */
+    info.xbuf_seg = sr.ds + (((unsigned)xbuf + 15) >> 4);
+    info.xbuf_size = sizeof(xbuf) - 16;
     info.pic1_base = 0x08;
     info.pic2_base = 0x70;
     info.log_port = 0x3F8;              /* the VMM's trace goes to COM1 */
+    {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace */
+        char __far *q;
+        for (q = ini; q && *q; q++)
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=1", 10)) info.trace = 1;
+    }
     r.h.ah = 0x48; r.x.bx = 0xFFFF;
     intdos(&r, &r);
     info.conv_free = r.x.bx;

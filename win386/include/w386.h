@@ -59,6 +59,9 @@ struct w386_info {
     w_u16 pmbp_off;     /* PM breakpoints: HLT bytes at ldr_ds:pmbp_off */
     w_u16 pmbp_count;
     w_u32 sda_lin;      /* DOS swappable data area (current PSP at +10h) */
+    w_u16 xbuf_seg;     /* transfer buffer for DOS calls from PM (real mode) */
+    w_u16 xbuf_size;    /* bytes */
+    w_u32 trace;        /* SYSTEM.INI [w16] vmmtrace=1: detailed VMM trace */
 };
 #pragma pack()
 

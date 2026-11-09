@@ -32,6 +32,7 @@ R_GS    equ 60
 segment _TEXT public align=16 class=CODE use32 flat
 
 global _vmm_entry, _resume, _outb, _inb, _lgdt, _lidt, _lldt, _ltr
+global _k_setjmp, _k_longjmp
 global _to_realmode, _get_cr0, _get_cr2, _get_cr3, _set_cr3, _hlt
 extern _vmm_main, _trap
 
@@ -95,7 +96,7 @@ trap_common:
 ; the top of the ring-0 stack. Does not return.
 _resume:
         mov esi, [esp+4]
-        mov esp, _kstack_top
+        mov esp, [_kesp0]
         test dword [esi+R_EFL], 20000h
         jz .pm
         push dword [esi+R_GS]
@@ -150,6 +151,30 @@ _to_realmode:
         mov ss, ax
         jmp far [cs:rmvec]
 
+; int k_setjmp(u32 jb[6]) / void k_longjmp(u32 jb[6], int v): nested V86
+; execution (exec_v86) waits for the client with these
+_k_setjmp:
+        mov eax, [esp+4]
+        mov [eax], ebx
+        mov [eax+4], esi
+        mov [eax+8], edi
+        mov [eax+12], ebp
+        lea ecx, [esp+4]
+        mov [eax+16], ecx
+        mov ecx, [esp]
+        mov [eax+20], ecx
+        xor eax, eax
+        ret
+_k_longjmp:
+        mov edx, [esp+4]
+        mov eax, [esp+8]
+        mov ebx, [edx]
+        mov esi, [edx+4]
+        mov edi, [edx+8]
+        mov ebp, [edx+12]
+        mov esp, [edx+16]
+        jmp [edx+20]
+
 _outb:  mov edx, [esp+4]
         mov eax, [esp+8]
         out dx, al
@@ -200,9 +225,12 @@ _trap_stubs:
 %assign i i+1
 %endrep
 
+global _kesp0
+_kesp0  dd _kstack_top                  ; the ring-0 stack top in use (= TSS.ESP0)
+
 segment _BSS public align=16 class=BSS use32 flat
 global _kstack_top
-        resb 16384
+        resb 65536
 _kstack_top:
 
 group DGROUP _DATA _BSS

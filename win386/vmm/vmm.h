@@ -85,6 +85,7 @@ struct vm {
     struct cregs v86save;   /* the V86 state at the mode switch */
     u16 refsp;              /* the reflection stack pointer (info->refstk_seg) */
     u16 psp_seg;
+    u32 dsel;               /* the client's first DS selector */
     u32 pmvec_sel[256];     /* protected-mode interrupt vectors (0205h) */
     u32 pmvec_off[256];
     u32 excvec_sel[32];     /* exception handlers (0203h) */
@@ -109,6 +110,9 @@ u32 __cdecl get_cr2(void);
 u32 __cdecl get_cr3(void);
 void __cdecl set_cr3(u32);
 void __cdecl hlt(void);
+int __cdecl k_setjmp(u32 *jb);
+void __cdecl k_longjmp(u32 *jb, int v);
+extern u32 kesp0;
 extern u32 trap_stubs[256];
 extern u8 kstack_top[];
 
@@ -122,6 +126,7 @@ u32 pages_free(void);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
 u32 lin_to_phys(u32 lin);
+void make_user(u32 lin, u32 size);
 void memset(void *d, int c, u32 n);
 void memcpy(void *d, const void *s, u32 n);
 u32 v86_lin(u32 seg, u32 off);
@@ -135,21 +140,37 @@ extern u8 gdt[];
 extern u8 *ldt;
 extern u32 ldt_limit;
 
+void exec_v86(struct cregs *v);            /* run client code until REFRET/IRQRET */
+void exec_return(struct cregs *r);         /* that breakpoint: back to exec_v86's caller */
+void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
+void v86_farcall(struct cregs *v, int iret);
+u32 xbuf_lin(void);                        /* the transfer buffer */
+u32 xbuf_size(void);
+
+/* dosx.c: INT 21h from protected mode */
+void dos_pm(struct cregs *r);
+void video_pm(struct cregs *r);
+int sel_to_seg(u32 sel);
+u32 seg_to_sel(u32 seg, u32 access);
+u32 pm_lin(u32 sel, u32 off);
+
 /* dpmi.c */
 void dpmi_init(void);
 void dpmi_switch(struct cregs *r);                 /* the V86 entry breakpoint */
-void dpmi_refret(struct cregs *r);                 /* end of reflected V86 code */
 void dpmi_int(struct cregs *r, int vec, int hw);   /* INT n / IRQ in protected mode */
 void dpmi_pmbp(struct cregs *r, u32 index);        /* a PM breakpoint (HLT) */
 void dpmi_exception(struct cregs *r, int vec, u32 err);
 u32 sel_base(u32 sel);
 int pm_v86_reflect(struct cregs *r, int vec, int hw);
 int int2f_pm(struct cregs *r);
+int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
 
 /* the PM breakpoints: HLT bytes in a ring-3 code segment (SEL_PMBP) */
 #define PMBP_DEFAULT    0       /* 0-255: the default handler for INT n */
 #define PMBP_EXCRET     256     /* return from a client's exception handler */
 #define PMBP_VENDOR     257     /* the "MS-DOS" vendor entry (INT 2Fh 168Ah) */
-#define PMBP_COUNT      258
+#define PMBP_IRQRET     258     /* end of a hardware interrupt run in PM for V86 */
+#define PMBP_API        259     /* 259..: a VxD's PM API entry (1684h), by device */
+#define PMBP_COUNT      320
 
 #endif
