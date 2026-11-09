@@ -2,7 +2,7 @@
  * face.c - the analog clock.
  *
  * Geometry observed on Windows 3.1 (the GDI calls of the original at a
- * dozen window sizes, tests/clockscenarios.sh; ARCHITECTURE.md 15.x):
+ * dozen window sizes, tests/clockscenarios.sh; ARCHITECTURE.md 15.2):
  * - The face fits the client area: m = the smaller of its width and
  *   height, centred, its centre at (cx - m)/2 + m/2 - 1 (same for y).
  * - Hour marks are s x s squares, s = MulDiv(25, m, 640); the radius of
@@ -35,7 +35,8 @@
 /* 60 points on a circle of radius 8000, clockwise from 12: x, y. Made by
    tools/clocktable.py: sin and cos at 6-degree steps, rounded, with the
    entries the original uses one smaller in magnitude corrected as
-   observed (its MulDiv calls when it draws the face; ARCHITECTURE.md) */
+   observed (its MulDiv calls when it draws the face; ARCHITECTURE.md
+   15.2) */
 static int circ[120] = {
 #include "circle.h"
 };

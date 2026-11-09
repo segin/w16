@@ -2,7 +2,7 @@
  * digital.c - the digital clock.
  *
  * Observed on Windows 3.1 (the original's GDI calls at many window
- * sizes, tests/clockscenarios.sh; ARCHITECTURE.md 15.x):
+ * sizes, tests/clockscenarios.sh; ARCHITECTURE.md 15.2):
  * - The time is laid out as the string "88:88:88 MM" (intl.c) would be.
  *   With the font at height -1000 the string and the date are measured;
  *   the usable width is W = 7/8 of the client width, and the font height

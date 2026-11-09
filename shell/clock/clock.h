@@ -3,7 +3,7 @@
  *
  * A clean-room Clock, made to match the Windows 3.1 one in look and
  * behaviour. Every visible detail comes from black-box observation of the
- * original on the reference install (ARCHITECTURE.md 15.x): screenshots
+ * original on the reference install (ARCHITECTURE.md 15.2): screenshots
  * (tests/apps/snap.c), window and menu dumps, the CLOCK.INI it writes, and
  * the GDI calls it makes as GD2 records them (tests/refrun.sh with
  * REFRUN_GDLOG=1, tools/gdcalls.py). tests/clockscenarios.sh compares

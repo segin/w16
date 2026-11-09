@@ -16,11 +16,6 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
- *     info                   log the active top-level window in detail:
- *                            class data, client rectangle, children
- *                            relative to it (font, edit state), scroll
- *                            bars, every menu item's state
- *     text                   log the whole text of the focus window
  *     settime hh:mm:ss[.cc]  set the DOS time (INT 21h AH=2Dh)
  *     setdate mm/dd/yyyy     set the DOS date (INT 21h AH=2Bh)
  *     freeze hh:mm:ss <ms>   keep setting the DOS time to hh:mm:ss.00 every
@@ -32,6 +27,11 @@
  *     timers                 take every timer USER has left (and log how
  *                            many), to see what a program does without one
  *     freetimers             give them back
+ *     info                   log the active top-level window in detail:
+ *                            class data, client rectangle, children
+ *                            relative to it (font, edit state), scroll
+ *                            bars, every menu item's state
+ *     text                   log the whole text of the focus window
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -387,6 +387,68 @@ done:
 }
 #endif
 
+/* ---- time, messages, timers (for Clock's scenarios) ---- */
+
+static WORD dos_settime(WORD hm, WORD sc);
+#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+static WORD dos_setdate(WORD y, WORD md);
+#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+
+/* the next number in *s (decimal or hex), skipping what is not a digit */
+static WORD next_num(char **s, WORD base)
+{
+    char *p = *s;
+    WORD v;
+    while (*p && !((*p >= '0' && *p <= '9') ||
+                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
+        p++;
+    v = parse_num(p, base);
+    while ((*p >= '0' && *p <= '9') ||
+           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
+        p++;
+    *s = p;
+    return v;
+}
+
+static WORD set_time(char **s)
+{
+    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
+    if (**s == '.')
+        cs = next_num(s, 10);
+    return dos_settime((h << 8) | m, (sec << 8) | cs);
+}
+
+#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
+static void dump_menu(HMENU m, int depth)
+{
+    char text[64];
+    int i, k, n;
+    if (!m)
+        return;
+    n = GetMenuItemCount(m);
+    for (i = 0; i < n; i++) {
+        UINT st = GetMenuState(m, i, MF_BYPOSITION);
+        text[0] = 0;
+        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
+        out("MENU ");
+        for (k = 0; k < depth; k++)
+            out("  ");
+        out("id=");
+        outhex(GetMenuItemID(m, i), 4);
+        out(" state=");
+        outhex(st, 4);
+        out(" \"");
+        out(text);
+        out("\"\r\n");
+        if (st & MF_POPUP)
+            dump_menu(GetSubMenu(m, i), depth + 1);
+    }
+}
+#endif
+
+#define MAXTIMERS 64
+static UINT timer_ids[MAXTIMERS];
+static int ntimers;
 /* ---- info: one window in detail ---- */
 
 static void outkv(const char *k, int v)
@@ -552,68 +614,6 @@ static void text_of_focus(void)
     GlobalUnlock(h);
     GlobalFree(h);
 }
-/* ---- time, messages, timers (for Clock's scenarios) ---- */
-
-static WORD dos_settime(WORD hm, WORD sc);
-#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
-static WORD dos_setdate(WORD y, WORD md);
-#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
-
-/* the next number in *s (decimal or hex), skipping what is not a digit */
-static WORD next_num(char **s, WORD base)
-{
-    char *p = *s;
-    WORD v;
-    while (*p && !((*p >= '0' && *p <= '9') ||
-                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
-        p++;
-    v = parse_num(p, base);
-    while ((*p >= '0' && *p <= '9') ||
-           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
-        p++;
-    *s = p;
-    return v;
-}
-
-static WORD set_time(char **s)
-{
-    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
-    if (**s == '.')
-        cs = next_num(s, 10);
-    return dos_settime((h << 8) | m, (sec << 8) | cs);
-}
-
-#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
-static void dump_menu(HMENU m, int depth)
-{
-    char text[64];
-    int i, k, n;
-    if (!m)
-        return;
-    n = GetMenuItemCount(m);
-    for (i = 0; i < n; i++) {
-        UINT st = GetMenuState(m, i, MF_BYPOSITION);
-        text[0] = 0;
-        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
-        out("MENU ");
-        for (k = 0; k < depth; k++)
-            out("  ");
-        out("id=");
-        outhex(GetMenuItemID(m, i), 4);
-        out(" state=");
-        outhex(st, 4);
-        out(" \"");
-        out(text);
-        out("\"\r\n");
-        if (st & MF_POPUP)
-            dump_menu(GetSubMenu(m, i), depth + 1);
-    }
-}
-#endif
-
-#define MAXTIMERS 64
-static UINT timer_ids[MAXTIMERS];
-static int ntimers;
 
 /* ---- script ---- */
 
@@ -694,10 +694,6 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
-    } else if (same(l, "info")) {
-        info();
-    } else if (same(l, "text")) {
-        text_of_focus();
     } else if (same(l, "settime")) {
         char *s = arg;
         if (set_time(&s))
@@ -765,6 +761,10 @@ static void run_line(char *l)
         out("MENU system\r\n");
         dump_menu(GetSystemMenu(w, FALSE), 1);
 #endif
+    } else if (same(l, "info")) {
+        info();
+    } else if (same(l, "text")) {
+        text_of_focus();
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);

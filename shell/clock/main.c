@@ -2,7 +2,7 @@
  * main.c - Clock's window, menus, timer and CLOCK.INI.
  *
  * Observed on Windows 3.1 (SNAP.EXE dumps and screenshots, the CLOCK.INI
- * the original writes; ARCHITECTURE.md 15.x):
+ * the original writes; ARCHITECTURE.md 15.2):
  * - One window of class "Clock", style WS_OVERLAPPEDWINDOW |
  *   WS_CLIPSIBLINGS; with no title it is WS_BORDER | WS_THICKFRAME and has
  *   no menu, its window rectangle unchanged. Double-clicking the clock

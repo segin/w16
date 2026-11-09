@@ -5,7 +5,7 @@
  * control IDs and styles: COMMDLG's ChooseFont needs every control of its
  * standard dialog, so the hidden ones are here too) are the original's,
  * read as data from its resources and confirmed by SNAP.EXE dumps
- * (ARCHITECTURE.md 15.x). The icon is our own (tools/clockicon.py).
+ * (ARCHITECTURE.md 15.2). The icon is our own (tools/clockicon.py).
  */
 #include <windows.h>
 #include "clock.h"
