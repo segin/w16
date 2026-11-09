@@ -617,12 +617,14 @@ __C000H:        db 0
 ; fault_exit on KERNEL's exit stack and returns to the host, which
 ; resumes there; fault_exit calls fault_report (does not return).
 extern _fault_report            ; void __cdecl __far fault_report(void)
+extern _gp_handler              ; u16 __cdecl __far gp_handler(void)
 global _fault_regs
 segment _BSS
 global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
 _fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+gp_ip           resw 1
 segment _TEXT
 
 %macro FAULTENTRY 1
@@ -680,8 +682,37 @@ fault_exit:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        call far _gp_handler            ; a "__GP" table entry for CS:IP?
+        test ax, ax
+        jnz .gp
         call far _fault_report
 .hang:  jmp .hang
+; resume at the faulting CS:AX, the registers as they were (DS and ES
+; made 0 by gp_handler when not valid), on the faulting stack with the
+; error code and the faulting IP pushed (TK40, 3.1: [SP] = IP, [SP+2] =
+; the error code, flags 3202h: the arithmetic flags clear)
+.gp:    mov [gp_ip wrt DGROUP], ax
+        mov ss, [_fault_regs + 12 wrt DGROUP]
+        mov sp, [_fault_regs + 10 wrt DGROUP]
+        push word [_fault_regs + 2 wrt DGROUP]          ; error code
+        push word [_fault_regs + 4 wrt DGROUP]          ; faulting IP
+        mov ax, [_fault_regs + 8 wrt DGROUP]            ; flags: IF, DF, IOPL
+        and ax, 7600h                                   ; and NT kept, the
+        or al, 2                                        ; others clear (3.1)
+        push ax
+        push word [_fault_regs + 6 wrt DGROUP]          ; cs
+        push word [gp_ip wrt DGROUP]                    ; ip
+        push word [_fault_regs + 28 wrt DGROUP]         ; ds
+        mov es, [_fault_regs + 30 wrt DGROUP]
+        mov ax, [_fault_regs + 14 wrt DGROUP]
+        mov bx, [_fault_regs + 16 wrt DGROUP]
+        mov cx, [_fault_regs + 18 wrt DGROUP]
+        mov dx, [_fault_regs + 20 wrt DGROUP]
+        mov si, [_fault_regs + 22 wrt DGROUP]
+        mov di, [_fault_regs + 24 wrt DGROUP]
+        mov bp, [_fault_regs + 26 wrt DGROUP]
+        pop ds
+        iret
 
 ; ---------------------------------------------------------------------------
 ; Boot watchdog (fault.c): samples the interrupted CS:IP into a ring of 64
@@ -746,6 +777,12 @@ wd_fire:
         sti
         call far _wd_report
 .hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; The default signal handler (task.c, SetSigHandler): a RETF
+global sig_default
+sig_default:
+        retf
 
 ; ---------------------------------------------------------------------------
 ; K327 (HandleParamError, Schulman): register-based; USER's and GDI's

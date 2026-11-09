@@ -3,10 +3,13 @@
  * module and segment faulted, and the registers) and leave to DOS,
  * instead of DOSX's "Fault outside of MS-DOS Extender". A debugging aid
  * for the drop-in boot (tests/dropin.sh); Windows' own KERNEL hooks these
- * exceptions too (Pietrek, ch. 1), to handle them, which w16 does not
- * do yet.
+ * exceptions too (Pietrek, ch. 1), to handle them. w16 handles one kind:
+ * a fault inside a module's "__GP" range resumes at its recovery code
+ * (gp_handler below); the rest are reported.
  */
 #include "kernel.h"
+
+u32 KAPI GetProcAddress(u16 h, const char FAR *name);
 
 extern u16 __cdecl fault_regs[16];
 extern u16 __cdecl i21_ring[80];
@@ -75,6 +78,79 @@ static u16 lsl(u16 sel);
     "xor ax, ax" \
     "lsl ax, dx" \
     parm [dx] value [ax] modify exact [ax];
+
+/* ---- "__GP" tables (Schulman, Undocumented Windows ch. 5, _GP and
+   HasGPHandler): a module that validates parameters by letting a load
+   fault exports "__GP", a table of { code selector, low offset, high
+   offset, recovery offset } ending with a 0 selector; a fault at an
+   offset from low up to (not including) high resumes at the recovery
+   offset in the same segment. TK38 (3.1): KERNEL (35 entries, as
+   KERNEL.342), USER (121), GDI (69) have one, DISPLAY none;
+   HasGPHandler(seg:low ... seg:high-1) returns the recovery offset,
+   seg:high and seg:low-1 give 0. TK40 (3.1, a stand-in module named
+   PENWIN whose resident "__GP" covers a faulting load): the recovery
+   code gets the fault's registers, DS, ES and SS, SP 4 lower with the
+   faulting IP and then the error code pushed, flags 3202h
+   (kentry.asm, fault_exit). Only the resident name is looked at. */
+static u16 gp_find(u16 cs, u16 ip)
+{
+    module FAR *m;
+    u16 i;
+    u32 t;
+    const u16 FAR *e;
+    for (m = module_first; m; m = m->next)
+        for (i = 0; i < m->seg_count; i++)
+            if (m->seg[i].sel && (m->seg[i].sel | 7) == (cs | 7))
+                goto found;
+    return 0;
+found:
+    t = GetProcAddress(m->ne_sel, "__GP");
+    if (!t)
+        return 0;
+    for (e = (const u16 FAR *)t; e[0] && lsl(FP_SEG(e)) >= FP_OFF(e) + 7; e += 4)
+        if ((e[0] | 7) == (cs | 7) && ip >= e[1] && ip < e[2])
+            return e[3];
+    return 0;
+}
+
+/* KERNEL's own "__GP" (KERNEL.342): empty. 3.1's KERNEL lets its
+   string and validation functions fault and recovers through its table
+   (35 entries); w16's check pointers before using them (string.c,
+   kmisc.c), so it has no ranges to list. */
+u16 gp_table[4];
+#pragma aux gp_table "__GP"
+
+/* KERNEL.338 */
+u16 KAPI HasGPHandler(u32 addr)
+{
+    return gp_find((u16)(addr >> 16), (u16)addr);
+}
+
+static u16 seg_ok(u16 sel);
+#pragma aux seg_ok = \
+    "xor ax, ax" \
+    "verr dx" \
+    "jnz no" \
+    "inc ax" \
+    "no:" \
+    parm [dx] value [ax] modify exact [ax];
+
+/* called by fault_exit (kentry.asm): the recovery offset for a GP,
+   stack or not-present fault in a "__GP" range, else 0 */
+u16 __cdecl __far gp_handler(void)
+{
+    u16 *f = fault_regs, r;
+    if (f[0] != 0x0B && f[0] != 0x0C && f[0] != 0x0D)
+        return 0;
+    r = gp_find(f[3], f[2]);
+    if (r) {
+        if (f[14] && !seg_ok(f[14]))
+            f[14] = 0;
+        if (f[15] && !seg_ok(f[15]))
+            f[15] = 0;
+    }
+    return r;
+}
 
 /* " MODULE:n" for the module segment sel belongs to */
 void where(u16 sel)
