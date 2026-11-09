@@ -191,6 +191,7 @@ int WINAPI GetKeyboardType(int which)
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
     WORD __far *w = (WORD __far *)pv;
+    ulog("SystemParametersInfo\r\n");  /* TRACE */
     (void)ui, (void)ini;
     switch (what) {
     case SPI_GETBEEP: *w = 1; return TRUE;
@@ -231,14 +232,3 @@ int WINAPI WinHelp(HWND h, LPCSTR file, UINT cmd, DWORD data)
     return 0;                   /* UNVERIFIED: WINHELP.EXE is not started yet */
 }
 
-/* ---- menus: the minimum until menu.c (no menu bar drawn) ---- */
-int menu_bar_height(PWND w, int width)
-{
-    (void)w, (void)width;
-    return 0;
-}
-
-void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width)
-{
-    (void)hdc, (void)w, (void)x, (void)y, (void)width;
-}

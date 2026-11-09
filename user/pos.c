@@ -12,6 +12,7 @@
 #include "user.h"
 
 void refresh_dcs(void);
+void follow_icon_title(HWND h);
 void invalidate_screen(const RECT *rc);
 
 void calc_client(PWND w)
@@ -142,6 +143,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
         activate_window(h, FALSE);
+    if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
+        follow_icon_title(h);
     if (!(w = valid_wnd(h)))
         return TRUE;
     wp.x = w->rcWindow.left - px;
@@ -202,7 +205,9 @@ static void icon_place(PWND w, POINT *pt)
             (cy - sysmet[SM_CYICON]) / 2 - 2 + 6;
 }
 
-typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; } PLACE;
+typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
+HWND make_icon_title(HWND h);
+void move_icon_title(HWND t, HWND h);
 #define PLACEPROP MAKEINTATOM(0x7E16)   /* w16's private property */
 
 static PLACE *place_of(HWND h, BOOL create)
@@ -234,6 +239,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     PLACE *pl;
     if (!w)
         return FALSE;
+    ulogx("ShowWindow ", (WORD)h);
+    ulogx("  cmd ", cmd);
     wasvis = (w->style & WS_VISIBLE) != 0;
     switch (cmd) {
     case SW_HIDE:
@@ -272,8 +279,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON], sysmet[SM_CYICON],
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
                            (cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
-            if ((w = valid_wnd(h)) != 0)
+            if ((w = valid_wnd(h)) != 0) {
                 send_message(h, WM_SIZE, SIZE_MINIMIZED, 0);
+                if (pl && !pl->title && (w = valid_wnd(h)) != 0)
+                    pl->title = make_icon_title(h);
+            }
         } else if (!wasvis) {
             send_message(h, WM_SHOWWINDOW, TRUE, 0);
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW |
@@ -344,6 +354,10 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 }
             }
             r = pl ? pl->normal : w->rcWindow;
+            if (pl && pl->title) {
+                destroy_window(pl->title);
+                pl->title = 0;
+            }
             w->style &= ~(WS_MINIMIZE | WS_MAXIMIZE);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
@@ -420,6 +434,28 @@ BOOL WINAPI SetWindowPlacement(HWND h, const WINDOWPLACEMENT __far *p)
                        SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(h, p->showCmd);
     return TRUE;
+}
+
+/* a window going away: its placement record and icon title */
+void free_place(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    HLOCAL l;
+    if (!p)
+        return;
+    if (p->title && valid_wnd(p->title))
+        destroy_window(p->title);
+    l = (HLOCAL)RemoveProp(h, PLACEPROP);
+    if (l)
+        LocalFree(l);
+}
+
+/* a minimised window moved: its title follows */
+void follow_icon_title(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    if (p && p->title)
+        move_icon_title(p->title, h);
 }
 
 void WINAPI CloseWindow(HWND h)

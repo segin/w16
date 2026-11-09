@@ -32,15 +32,38 @@ static HMODULE module_of(HINSTANCE hinst)
     return hinst ? K_GETEXEPTR(hinst) : 0;
 }
 
+/* integer names: an atom value or "#nnnnn"; 0 for a string name */
+static WORD int_name(LPCSTR name)
+{
+    if (ISATOM(name))
+        return LOWORD((DWORD)name);
+    if (name[0] == '#') {
+        WORD v = 0;
+        LPCSTR p = name + 1;
+        while (*p >= '0' && *p <= '9')
+            v = v * 10 + (*p++ - '0');
+        if (!*p && v)
+            return v;
+    }
+    return 0;
+}
+
+static BOOL same_name(PCLS c, LPCSTR name)
+{
+    WORD v = int_name(name);
+    if (v)
+        return c->atom == v && (!c->name || v >= 0xC000u);
+    return c->name && !lstr_cmpi((LPCSTR)MAKELP(get_ds(), c->name), name);
+}
+
+/* classes are found by name, compared without regard to case, as atoms
+   are; an application's own (its module's) before the system's */
 PCLS find_class(LPCSTR name, HINSTANCE hinst)
 {
-    ATOM a = class_atom(name, FALSE);
     HMODULE m = module_of(hinst);
     PCLS c, sys = 0;
-    if (!a)
-        return 0;
     for (c = (PCLS)classes; c; c = (PCLS)c->next) {
-        if (c->atom != a)
+        if (!same_name(c, name))
             continue;
         if (c->hModule == m && m)
             return c;
@@ -58,8 +81,7 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
     HMODULE m = system ? 0 : module_of(wc->hInstance);
     ATOM a;
     for (c = (PCLS)classes; c; c = (PCLS)c->next)
-        if (c->atom == class_atom(wc->lpszClassName, FALSE) && c->atom &&
-            c->hModule == m && (!system || !c->hInstance))
+        if (same_name(c, wc->lpszClassName) && c->hModule == m && (!system || !c->hInstance))
             return 0;                   /* already registered by this module */
     a = class_atom(wc->lpszClassName, TRUE);
     if (!a)
@@ -68,6 +90,8 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
     if (!c)
         return 0;
     c->atom = a;
+    if (!int_name(wc->lpszClassName))
+        c->name = local_strdup(wc->lpszClassName);
     c->style = wc->style;
     c->lpfnWndProc = wc->lpfnWndProc;
     c->cbClsExtra = wc->cbClsExtra > 0 ? wc->cbClsExtra : 0;
@@ -89,7 +113,9 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
 
 ATOM WINAPI RegisterClass(const WNDCLASS __far *wc)
 {
-    PCLS c = register_class(wc, FALSE);
+    PCLS c;
+    ulog("RegisterClass\r\n");  /* TRACE */
+    c = register_class(wc, FALSE);
     return c ? c->atom : 0;
 }
 
@@ -106,6 +132,8 @@ BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
         }
     if (c->menuname)
         LocalFree((HLOCAL)c->menuname);
+    if (c->name)
+        LocalFree((HLOCAL)c->name);
     if (c->atom >= 0xC000u)
         DeleteAtom(c->atom);
     LocalFree((HLOCAL)c);
@@ -244,6 +272,9 @@ LONG WINAPI SetClassLong(HWND h, int i, LONG v)
 /* ---- the system classes ---- */
 extern LONG WINAPI DefWindowProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI DesktopWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI MenuWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI IconTitleWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 
 static void sysclass(LPCSTR name, UINT style, WNDPROC proc, int wndextra, HBRUSH br, LPCSTR cursor)
 {
@@ -266,5 +297,8 @@ void register_system_classes(void)
     /* styles, extra bytes and brushes as Windows 3.1 reports them (US2) */
     sysclass(MAKEINTRESOURCE(32769), CS_DBLCLKS, (WNDPROC)DesktopWndProc, 0,
              (HBRUSH)(COLOR_BACKGROUND + 1), IDC_ARROW);
-    sysclass(MAKEINTRESOURCE(32772), 0, (WNDPROC)DefWindowProc, 0, 0, IDC_ARROW);
+    sysclass(MAKEINTRESOURCE(32772), 0, (WNDPROC)IconTitleWndProc, 0, 0, IDC_ARROW);
+    sysclass(MAKEINTRESOURCE(32768), CS_SAVEBITS, (WNDPROC)MenuWndProc, 2, 0, NULL);
+    sysclass("MDICLIENT", 0, (WNDPROC)MDIClientWndProc, 16,
+             (HBRUSH)(COLOR_APPWORKSPACE + 1), IDC_ARROW);
 }

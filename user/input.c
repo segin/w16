@@ -160,6 +160,7 @@ void set_cursor_shape(HCURSOR h)
 HCURSOR WINAPI SetCursor(HCURSOR h)
 {
     HCURSOR old = hcurCurrent;
+    ulog("SetCursor\r\n");  /* TRACE */
     if (h != hcurCurrent)
         set_cursor_shape(h);
     return old;
@@ -167,6 +168,7 @@ HCURSOR WINAPI SetCursor(HCURSOR h)
 
 int WINAPI ShowCursor(BOOL show)
 {
+    ulog("ShowCursor\r\n");  /* TRACE */
     cursor_level += show ? 1 : -1;
     if ((show && cursor_level == 0) || (!show && cursor_level == -1))
         set_cursor_shape(hcurCurrent);

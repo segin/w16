@@ -205,11 +205,13 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
 
 HICON WINAPI LoadIcon(HINSTANCE hinst, LPCSTR name)
 {
+    ulog("LoadIcon\r\n");  /* TRACE */
     return load_icon_cursor(hinst, name, FALSE);
 }
 
 HCURSOR WINAPI LoadCursor(HINSTANCE hinst, LPCSTR name)
 {
+    ulog("LoadCursor\r\n");  /* TRACE */
     return (HCURSOR)load_icon_cursor(hinst, name, TRUE);
 }
 

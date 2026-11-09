@@ -131,7 +131,12 @@ static void init_metrics(void)
     GetTextMetrics(hdcScreen, &tm);
     SelectObject(hdcScreen, old);
     cySysChar = tm.tmHeight;
-    cxSysChar = tm.tmAveCharWidth;
+    {
+        /* UNVERIFIED formula: (width of the 52 letters / 26 + 1) / 2 gives
+           Windows 3.1's 8 for the VGA system font (US2) */
+        static char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        cxSysChar = (LOWORD(GetTextExtent(hdcScreen, letters, 52)) / 26 + 1) / 2;
+    }
     /* UNVERIFIED derivations, equal to the observed values with the VGA
        system font (16 pixels high): caption 20, menu 18 */
     sysmet[SM_CYCAPTION] = cySysChar + 4;
@@ -211,7 +216,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     diag("INITDONE=Lang Driver\r\n");
 
     hwndDesktop = create_window(0, MAKEINTRESOURCE(32769), NULL,
-                                WS_POPUP | WS_CLIPCHILDREN | WS_VISIBLE | WS_DISABLED,
+                                WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
                                 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN],
                                 0, 0, hInstUser, NULL);
     input_enable();
@@ -252,6 +257,7 @@ void WINAPI FinalUserInit(void)
 
 int WINAPI GetSystemMetrics(int i)
 {
+    ulog("GetSystemMetrics\r\n");  /* TRACE */
     return i >= 0 && i < SM_CMETRICS + 8 ? sysmet[i] : 0;
 }
 

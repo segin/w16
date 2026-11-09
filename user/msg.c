@@ -496,13 +496,20 @@ BOOL WINAPI GetInputState(void)
 
 UINT WINAPI RegisterWindowMessage(LPCSTR s)
 {
-    return AddAtom(s);
+    UINT r;
+    ulogx("RegisterWindowMessage ds ", get_ds());
+    ulog(s);
+    ulogx(" atomtable ", *(WORD __far *)MAKELP(get_ds(), 8));
+    r = AddAtom(s);
+    ulogx(" = ", r);
+    return r;
 }
 
 /* InitApp (USER.5): the task's queue */
 int WINAPI U_INITAPP(HINSTANCE hinst)
 {
     HQUEUE hq = cur_hq();
+    ulog("U_INITAPP\r\n");  /* TRACE */
     if (!hq) {
         hq = create_queue(GetCurrentTask(), 0);
         if (!hq)

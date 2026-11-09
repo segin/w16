@@ -21,6 +21,9 @@ LONG def_gettext(PWND w, int n, LPSTR buf);
 LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
+void menu_track_bar(HWND h, char key);
+void menu_track_point(HWND h, POINT pt);
+void menu_track_sys(HWND h);
 
 static HBITMAP bmClose, bmReduce, bmZoom, bmRestore, bmReduceD, bmZoomD, bmRestoreD;
 
@@ -346,6 +349,23 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     case SC_RESTORE:
         ShowWindow(h, SW_RESTORE);
         break;
+    case SC_KEYMENU:
+        if ((w->style & WS_CHILD) && w->hwndParent) {
+            send_message(top_level(h), WM_SYSCOMMAND, cmd, lp);
+            break;
+        }
+        menu_track_bar(h, (char)LOWORD(lp));
+        break;
+    case SC_MOUSEMENU: {
+        POINT pt;
+        pt.x = (int)LOWORD(lp);
+        pt.y = (int)HIWORD(lp);
+        if ((cmd & 0xF) == HTSYSMENU)
+            menu_track_sys(h);
+        else
+            menu_track_point(h, pt);
+        break;
+    }
     case SC_TASKLIST:
         WinExec("taskman.exe", SW_SHOWNORMAL);
         break;
@@ -394,10 +414,20 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NCLBUTTONDOWN:
         switch (wp) {
         case HTCAPTION:
-        case HTSYSMENU:
         case HTCLIENT:
             if (!(w->style & WS_CHILD) && h != hwndActive)
                 activate_window(h, TRUE);
+            break;
+        case HTSYSMENU:
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if (w->style & WS_SYSMENU)
+                send_message(h, WM_SYSCOMMAND, SC_MOUSEMENU | HTSYSMENU, lp);
+            break;
+        case HTMENU:
+            if (h != hwndActive)
+                activate_window(h, TRUE);
+            send_message(h, WM_SYSCOMMAND, SC_MOUSEMENU, lp);
             break;
         case HTMINBUTTON:
             send_message(h, WM_SYSCOMMAND, SC_MINIMIZE, lp);
@@ -426,7 +456,20 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_PAINTICON:
         return 0;
-    case WM_ICONERASEBKGND:
+    case WM_ICONERASEBKGND: {
+        /* the parent's background behind the icon */
+        PWND p = PW(w->hwndParent);
+        HBRUSH b = p && p->hwndParent ? ((PCLS)p->cls)->hbrBackground :
+                   (HBRUSH)(COLOR_BACKGROUND + 1);
+        RECT r;
+        GetClientRect(h, &r);
+        b = sys_brush(b);
+        if (b) {
+            UnrealizeObject(b);
+            FillRect((HDC)wp, &r, b);
+        }
+        return 1;
+    }
     case WM_ERASEBKGND: {
         HBRUSH b = ((PCLS)w->cls)->hbrBackground;
         RECT r;
@@ -461,6 +504,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SYSKEYDOWN:
         if (wp == VK_F4 && (HIWORD(lp) & KF_ALTDOWN))
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
+        return 0;
+    case WM_SYSKEYUP:
+        if ((wp == VK_MENU || wp == VK_F10) && !(w->style & WS_CHILD))
+            send_message(h, WM_SYSCOMMAND, SC_KEYMENU, 0);
         return 0;
     case WM_WINDOWPOSCHANGED: {
         WINDOWPOS __far *p = (WINDOWPOS __far *)lp;
@@ -516,6 +563,9 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SETFONT:
         return 0;
     case WM_SYSCHAR:
+        if (lp & 0x20000000L)
+            send_message(top_level(h), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)wp == ' ' &&
+                         (w->style & WS_CHILD) ? '-' : (BYTE)wp);
         return 0;
     }
     return 0;

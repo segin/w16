@@ -9,6 +9,7 @@
 #include "user.h"
 
 HWND hwndDesktop;
+void free_place(HWND h);
 
 PWND valid_wnd(HWND h)
 {
@@ -122,8 +123,15 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     BOOL show = FALSE;
     int sw = SW_SHOW;
 
-    if (!c)
+    if (!c) {
+        ulog("CreateWindow: no class ");
+        if (!ISATOM(clsname))
+            ulog(clsname);
+        ulogx("", LOWORD((DWORD)clsname));
         return 0;
+    }
+    ulogx("CreateWindow class atom ", c->atom);
+    ulogx("  style hi ", HIWORD(style));
     pw = parent ? valid_wnd(parent) : (PWND)0;
     if ((style & WS_CHILD) && !pw)
         return 0;
@@ -327,6 +335,7 @@ static void destroy_tree(HWND h)
     }
     if ((w = valid_wnd(h)) == 0)
         return;
+    free_place(h);
     send_message(h, WM_NCDESTROY, 0, 0);
     if ((w = valid_wnd(h)) == 0)
         return;

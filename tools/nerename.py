@@ -48,7 +48,7 @@ def main():
                 d[p + 1:p + 1 + n] = new.encode('latin-1')
                 break
         else:
-            sys.exit(f'{a.file}: does not import {old}')
+            print(f'{a.file}: does not import {old} (left alone)', file=sys.stderr)
     open(a.file, 'wb').write(d)
 
 

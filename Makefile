@@ -596,7 +596,9 @@ dos: $(DOS)/USTRACE.DLL
 # does not define gets a stub (tools/mkuserexp.py makes the export list and
 # the stubs from user/ordinals.txt and the objects' public names)
 USER_C   := $(wildcard user/*.c)
-USER_OBJ := $(USER_C:user/%.c=$(B)/user/u_%.o) $(B)/user/uentry.o
+# uentry.o first: its _NULL (class BEGDATA) must start DGROUP, the 16 bytes
+# of instance data KERNEL keeps there (the atom table pointer at 8, ...)
+USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o)
 UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
             -i=$(WATCOM)/h -i=$(WATCOM)/h/win
 $(B)/user/u_%.o: user/%.c user/user.h

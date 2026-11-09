@@ -139,6 +139,7 @@ typedef struct CLS {
     WORD   menuname;            /* local copy of a string menu name, or 0 */
     WORD   cwnd;                /* windows of the class */
     HMODULE hModule;
+    WORD   name;                /* local copy of a string name (0: integer atom) */
     /* class extra bytes follow */
 } CLS;
 typedef CLS __near *PCLS;

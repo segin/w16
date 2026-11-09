@@ -9,6 +9,14 @@
  */
 #include "user.h"
 
+static void paint_desktop(HRGN r)
+{
+    PWND d = PW(hwndDesktop);
+    HDC hdc = get_dc(hwndDesktop, FALSE, r, 0);
+    call_wnd(d, hwndDesktop, WM_ERASEBKGND, (WPARAM)hdc, 0);
+    release_dc(hwndDesktop, hdc);
+}
+
 static void need_paint(PWND w)
 {
     if (!(w->flags & WF_INPAINT)) {
@@ -41,6 +49,10 @@ static void add_update(PWND w, HRGN rgn, BOOL erase, BOOL children)
         RECT box;
         if (GetRgnBox(r, &box) == NULLREGION)
             goto kids;
+        if (!w->hwndParent) {
+            paint_desktop(r);
+            goto kids;
+        }
         if (!w->hrgnUpdate) {
             w->hrgnUpdate = CreateRectRgn(0, 0, 0, 0);
             G_MAKEOBJECTPRIVATE(w->hrgnUpdate, TRUE);

@@ -18,6 +18,7 @@
 #
 #   usage: tests/ustrace.sh [-k] [-t SECS] [-c CMD] [-i S:K=V]... [-f SRC=DST]... OUTDIR
 #     -k     boot w16's KRNL286.EXE instead of Microsoft's
+#     -u FILE  trace this USER.EXE (e.g. build/dos/USER.EXE, w16's) instead
 #     -t, -c, -i, -f as for tests/dropin.sh; OUTDIR must not exist; it
 #     receives trace.txt (decoded), the raw files, a screenshot (shot.png)
 #     and the dropin.sh report (boot.txt)
@@ -28,10 +29,11 @@ unset DISPLAY WAYLAND_DISPLAY
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
 specs=$root/.tools/wine/specs
-secs=60 kflag=-r extra=
-while getopts kt:c:i:f: opt; do
+secs=60 kflag=-r extra= user=
+while getopts kt:c:i:f:u: opt; do
     case $opt in
     k) kflag= ;;
+    u) user=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
     t) secs=$OPTARG ;;
     c) extra="$extra -c '$OPTARG'" ;;
     i) extra="$extra -i '$OPTARG'" ;;
@@ -53,7 +55,8 @@ gen() {   # NAME TARGET REALFILE MODID SPEC RET [--args ...]
     env WATCOM=/opt/watcom /opt/watcom/binl64/wlink @"$out/gen/$n.lnk" \
         name "$out/gen/$n.DLL" file "$out/gen/$n.o" >/dev/null
 }
-gen USER XUSR "$ref/USER.EXE" 0 user ''
+realuser=${user:-$ref/USER.EXE}
+gen USER XUSR "$realuser" 0 user ''
 mv "$out/gen/USER.DLL" "$out/gen/USER.EXE"
 gen GDX GDI "$ref/GDI.EXE" 1 gdi all
 # DISPLAY's cursor entries: argument layouts from the DDK documentation
@@ -66,7 +69,7 @@ gen MOUSX MOUSE "$ref/MOUSE.DRV" 4 mouse all
 gen SYSTEX SYSTEM "$ref/SYSTEM.DRV" 5 system all
 gen SOUNX SOUND "$ref/MMSOUND.DRV" 6 sound all
 gen COMX COMM "$ref/COMM.DRV" 7 comm all
-cp "$ref/USER.EXE" "$out/gen/XUSR.DLL"
+cp "$realuser" "$out/gen/XUSR.DLL"
 python3 "$root/tools/nerename.py" "$out/gen/XUSR.DLL" --module XUSR \
     --import GDI=GDX --import DISPLAY=DISPLAX --import KEYBOARD=KEYBOARX \
     --import MOUSE=MOUSX --import SYSTEM=SYSTEX --import SOUND=SOUNX --import COMM=COMX
