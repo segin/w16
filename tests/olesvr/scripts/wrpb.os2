@@ -1,0 +1,6 @@
+; Write embeds a new Paintbrush picture (Edit > Insert Object), returns
+; to Write and saves C:\OLE1.WRI (UI steps in wrpb.snap)
+run C:\SNAP.EXE
+wait 1000
+waitgone SNAP
+wait 2000

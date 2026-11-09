@@ -12,7 +12,7 @@
 #include <stdarg.h>
 
 static const char logname[] = "C:\\OS.LOG";
-static HHOOK hk_get, hk_call;
+static HHOOK hk_get, hk_call, hk_cbt;
 static HINSTANCE self;
 
 typedef struct { LPARAM lParam; WPARAM wParam; UINT message; HWND hwnd; } CWP;
@@ -105,6 +105,8 @@ static void flush(void)
 
 #define NWIN 256
 static HWND wh[NWIN];
+static BOOL dead[NWIN];                 /* destroyed (WH_CBT): a window that
+                                           gets its handle is a new one */
 static char wname[NWIN][40];
 static WORD nwin;
 
@@ -156,7 +158,7 @@ static void putwin(HWND h)
         return;
     }
     for (i = nwin; i-- > 0;)
-        if (wh[i] == h && !lstrcmp(wname[i], nm))
+        if (wh[i] == h && !dead[i] && !lstrcmp(wname[i], nm))
             break;
     if (i == (WORD)-1) {
         if (nwin < NWIN) {
@@ -220,7 +222,7 @@ static WORD sum16(const BYTE FAR *p, DWORD n)
    printable) up to a limit */
 static void putbytes(const BYTE FAR *p, DWORD n)
 {
-    DWORD i, m = n > 96 ? 96 : n;
+    DWORD i, m = n > 128 ? 96 : n;
     puts_(" len=");
     putdec(n, FALSE);
     puts_(" sum=");
@@ -465,6 +467,17 @@ LRESULT FAR PASCAL __loadds OsCallWndHook(int code, WPARAM wp, LPARAM lp)
     return CallNextHookEx(hk_call, code, wp, lp);
 }
 
+LRESULT FAR PASCAL __loadds OsCbtHook(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HCBT_DESTROYWND) {
+        WORD i;
+        for (i = 0; i < nwin; i++)
+            if (wh[i] == (HWND)wp)
+                dead[i] = TRUE;
+    }
+    return CallNextHookEx(hk_cbt, code, wp, lp);
+}
+
 /* ---- exports ---- */
 
 void FAR PASCAL __loadds OsSpyStart(void)
@@ -473,6 +486,8 @@ void FAR PASCAL __loadds OsSpyStart(void)
         hk_get = SetWindowsHookEx(WH_GETMESSAGE, (HOOKPROC)OsGetMsgHook, self, NULL);
     if (!hk_call)
         hk_call = SetWindowsHookEx(WH_CALLWNDPROC, (HOOKPROC)OsCallWndHook, self, NULL);
+    if (!hk_cbt)
+        hk_cbt = SetWindowsHookEx(WH_CBT, (HOOKPROC)OsCbtHook, self, NULL);
 }
 
 void FAR PASCAL __loadds OsSpyStop(void)
@@ -481,7 +496,9 @@ void FAR PASCAL __loadds OsSpyStop(void)
         UnhookWindowsHookEx(hk_get);
     if (hk_call)
         UnhookWindowsHookEx(hk_call);
-    hk_get = hk_call = NULL;
+    if (hk_cbt)
+        UnhookWindowsHookEx(hk_cbt);
+    hk_get = hk_call = hk_cbt = NULL;
 }
 
 void FAR PASCAL __loadds OsSetQuiet(BOOL q)

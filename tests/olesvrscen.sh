@@ -1,0 +1,69 @@
+#!/bin/sh
+# OLE server scenarios: each script of tests/olesvr/scripts (NAME.os2,
+# with NAME.os1 / NAME.snap / NAME.get when it has them) runs on the
+# reference Windows 3.1 with Microsoft's OLESVR.DLL and OLECLI.DLL, and
+# again with w16's OLESVR (build/dos/OLESVR.DLL) and, once the OLECLI
+# agent's build/dos/OLECLI.DLL exists, with w16's OLECLI against both
+# OLESVRs: the four combinations. The DDE logs (every WM_DDE_* message
+# and every callback into the servers, tests/olesvr/osspy.c), the files
+# the scenario saves and its screenshots must equal the reference's.
+#   usage: tests/olesvrscen.sh [-o OUTDIR] [-k] [NAME...]   (default: all)
+# -k keeps going on differences (the exit status still reports them).
+# OUTDIR defaults to a fresh build/olesvrscen-<date>-<time>.
+set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
+root=$(cd "$(dirname "$0")/.." && pwd)
+out=$root/build/olesvrscen-$(date +%Y%m%d-%H%M%S)
+while getopts o:k opt; do
+    case $opt in
+    o) out=$OPTARG ;;
+    k) ;;
+    *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+s=$root/tests/olesvr/scripts
+names=${*:-$(cd "$s" && ls *.os2 | sed 's/\.os2$//')}
+combos="ms-ms w16-ms"
+if [ -f "$root/build/dos/OLECLI.DLL" ]; then combos="$combos ms-w16 w16-w16"; fi
+mkdir -p "$out"
+echo "olesvrscen: $out"
+# every scenario in every combination, a few at a time
+for c in $combos; do
+    "$root/tests/olesvr/osobs.sh" "$out" "${c%-*}" "${c#*-}" $names > "$out/run-$c.txt" 2>&1 || true
+done
+status=0
+for n in $names; do
+    ref=$out/$n-ms-ms
+    for c in $combos; do
+        [ "$c" = ms-ms ] && continue
+        d=$out/$n-$c
+        result=ok
+        if [ ! -s "$ref/os.log" ] || [ ! -s "$d/os.log" ]; then
+            result="FAIL (no log)"
+        elif ! diff "$ref/os.log" "$d/os.log" > "$d/os.diff"; then
+            result="FAIL (DDE log differs: $d/os.diff)"
+        fi
+        if [ -f "$s/$n.get" ]; then
+            for f in $(cat "$s/$n.get"); do
+                b=$(basename "$f")
+                if ! cmp -s "$ref/$b" "$d/$b"; then result="FAIL ($b differs)"; fi
+            done
+        fi
+        for bmp in "$ref"/*.BMP; do
+            [ -f "$bmp" ] || continue
+            b=$(basename "$bmp")
+            if [ ! -f "$d/$b" ]; then
+                result="FAIL (no $b)"
+            elif command -v compare > /dev/null; then
+                px=$(compare -metric AE "$bmp" "$d/$b" "$d/${b%.BMP}-diff.png" 2>&1 | cut -d' ' -f1 | cut -d. -f1 || true)
+                [ "$px" = 0 ] || result="FAIL ($b: $px pixels differ)"
+            elif ! cmp -s "$bmp" "$d/$b"; then
+                result="FAIL ($b differs)"
+            fi
+        done
+        echo "== $n $c: $result"
+        [ "$result" = ok ] || status=1
+    done
+done
+exit $status

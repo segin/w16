@@ -12,3 +12,4 @@ export OSSETQUIET.5
 export OSGETMSGHOOK.6
 export OSCALLWNDHOOK.7
 export WEP.8 resident
+export OSCBTHOOK.9

@@ -78,12 +78,13 @@ echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
-[ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
+# the files asked for, also after a time-out (logs written so far)
 if [ -n "${REFRUN_OUT:-}" ]; then
     mkdir -p "$REFRUN_OUT"
     for f in "$work"/c/*.BMP; do [ -f "$f" ] && cp "$f" "$REFRUN_OUT/"; done
     for f in ${REFRUN_GET:-}; do [ -f "$work/c/$f" ] && cp "$work/c/$f" "$REFRUN_OUT/"; done
 fi
+[ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
 for log in "$work/c/WINDOWS/TK.LOG" "$work/c/TK.LOG"; do   # cwd varies
     [ -f "$log" ] && tr -d '\r' < "$log"
 done

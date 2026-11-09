@@ -38,18 +38,6 @@ static BOOL revoking, embedding, quitting;
 #define NFORCE 16
 static struct { char name[24]; int code; } force[NFORCE];
 static int nforce;
-static HGLOBAL lastdata;                /* what the last GetData returned */
-
-/* whether OLESVR freed the block the last GetData handed over: logged at
-   the next script step */
-static void check_lastdata(void)
-{
-    if (lastdata) {
-        P("  (last GetData block: size=%lu flags=%x)", GlobalSize(lastdata),
-          GlobalFlags(lastdata));
-        lastdata = NULL;
-    }
-}
 
 static int forced(const char *name, int normal)
 {
@@ -455,8 +443,6 @@ OLESTATUS CALLBACK __export ObjGetData(LPOLEOBJECT o, OLECLIPFORMAT cf, HANDLE F
     else
         RET("GetData", OLE_ERROR_FORMAT);
     *ph = h;
-    if (cf != CF_METAFILEPICT)
-        lastdata = h;
     RET("GetData", h ? OLE_OK : OLE_ERROR_MEMORY);
 }
 
@@ -561,7 +547,6 @@ static void step(char *l)
         return;
     P("OS1 step %s %s%s%s", (LPCSTR)l, (LPCSTR)arg, (LPCSTR)(lstrcmp(cls_name, "OS1Probe") ? " @" : ""),
       (LPCSTR)(lstrcmp(cls_name, "OS1Probe") ? cls_name : ""));
-    check_lastdata();
     if (!lstrcmpi(l, "wait")) {
         WORD ms = 0;
         while (*arg >= '0' && *arg <= '9')

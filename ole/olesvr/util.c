@@ -150,7 +150,8 @@ static BOOL by_handle(WORD cf)
 HGLOBAL data_block(WORD flags, WORD cf, HGLOBAL h)
 {
     DWORD n = by_handle(cf) ? 2 : (h ? GlobalSize(h) : 0);
-    HGLOBAL b = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 4);
+    /* zero-filled: Windows 3.1's are (the rounding of the block) */
+    HGLOBAL b = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 4);
     BYTE FAR *p = b ? (BYTE FAR *)GlobalLock(b) : NULL;
     if (!p)
         return NULL;

@@ -72,6 +72,8 @@ static void srv_free(SRV FARP *s)
         SetWindowLong(s->hwnd, 0, 0);
         DestroyWindow(s->hwnd);
     }
+    if (s->atom)
+        GlobalDeleteAtom(s->atom);
     mem_free(s->cls);
     mem_free(s);
 }
@@ -117,6 +119,9 @@ OLESTATUS FAR PASCAL __loadds OLEREGISTERSERVER(LPCSTR cls, LPOLESERVER lpsrv,
     s->inst = inst;
     s->use = use;
     s->cls = str_dup(cls);
+    /* the class name stays an atom while the server lives (observed: an
+       INITIATE spelt in other case sees the registered spelling) */
+    s->atom = GlobalAddAtom(cls);
     s->execute = reg_has(cls, "\\protocol\\StdExecute\\server");
     /* UNVERIFIED: the window's title and style (it is never shown) */
     s->hwnd = CreateWindow("SrvrWndClass", cls, WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
@@ -322,8 +327,8 @@ int cmd_args(char FARP *t, const char *kinds, char FARP *FARP *arg, char FARP *F
             arg[n] = ++p;
             while (*p && *p != '"')
                 p++;
-            if (!*p)
-                return -1;
+            if (!*p || (p[1] != ',' && p[1] != ')'))
+                return -1;              /* observed: "D""14" is refused */
             *p++ = 0;
         } else if (*kinds == 'b') {
             if (!tok_ieq(p, "TRUE") && !tok_ieq(p, "FALSE"))
@@ -517,9 +522,11 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (!c->terminating || !c->term_posted)
             PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
         conv_remove(&s->convs, client);
+        /* observed: the end of a system conversation lets the server go
+           only when it is an OLE_SERVER_MULTI one without documents */
         if (s->revoking)
             srv_try_finish(s);
-        else if (!ndocs(s))
+        else if (s->use == OLE_SERVER_MULTI && !ndocs(s))
             srv_check_release(s);
         return 0;
     case WM_DDE_ACK:
@@ -541,8 +548,16 @@ LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_DDE_INITIATE: {
         ATOM app = LOWORD(lp), topic = HIWORD(lp);
-        if (s->revoking || !app || app != find_atom(s->cls) || !topic)
+        DOC FARP *d, FARP *n;
+        if (s->revoking || !app || app != s->atom || !topic)
             return 0;
+        /* a document topic: the documents (child windows) answer, oldest
+           first, as observed */
+        for (d = s->docs; d; d = n) {
+            n = d->next;
+            if (d->atom == topic && d->hwnd)
+                SendMessage(d->hwnd, WM_DDE_INITIATE, wp, lp);
+        }
         /* observed: an OLE_SERVER_MULTI server (one document per
            instance) that has a document does not answer, so that the
            client starts another instance */

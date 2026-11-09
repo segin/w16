@@ -95,6 +95,7 @@ typedef struct SRV {
     QMSG FARP *queue;
     BOOL blocked, revoking, released, execute;
     BOOL busy;                          /* inside OleRevokeServer */
+    ATOM atom;                          /* the class name */
     char FARP *cls;
 } SRV;
 

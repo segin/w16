@@ -65,7 +65,10 @@ DOC FARP *doc_new(SRV FARP *s, const char FARP *name, LPOLESERVERDOC lpdoc)
     d->name = str_dup(name ? name : "");
     d->atom = name && *name ? GlobalAddAtom(name) : 0;
     /* UNVERIFIED: the window's title and style (it is never shown) */
-    d->hwnd = CreateWindow("DocWndClass", name, WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
+    /* a child of the server's window, which passes it the INITIATEs for
+       document topics (in the order of the documents: observed, the
+       oldest answers first) */
+    d->hwnd = CreateWindow("DocWndClass", name, WS_CHILD, 0, 0, 0, 0, s->hwnd, NULL,
                            svr_inst, NULL);
     if (!d->name || !d->hwnd) {
         if (d->hwnd)
@@ -715,7 +718,7 @@ LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DDE_INITIATE: {
         ATOM app = LOWORD(lp), topic = HIWORD(lp);
         SRV FARP *s = d->srv;
-        if (d->revoking || s->revoking || !app || app != GlobalFindAtom(s->cls) ||
+        if (d->revoking || s->revoking || !app || app != s->atom ||
             topic != d->atom || !topic)
             return 0;
         if (!conv_add(&d->convs, (HWND)wp))
