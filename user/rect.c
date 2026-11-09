@@ -151,10 +151,23 @@ void WINAPI InvertRect(HDC hdc, const RECT __far *r)
 
 void WINAPI DrawFocusRect(HDC hdc, const RECT __far *r)
 {
-    HBRUSH old = SelectObject(hdc, hbrGray);
+    /* the dots on the screen's squares where x + y is even (US4): the
+       gray pattern the other way round from the one GrayString uses,
+       patterns being aligned to the screen */
+    static HBRUSH dots;
+    HBRUSH old;
     int w = r->right - r->left, h = r->bottom - r->top;
-    PatBlt(hdc, r->left, r->top, w, 1, PATINVERT);
-    PatBlt(hdc, r->left, r->bottom - 1, w, 1, PATINVERT);
+    if (!dots) {
+        static WORD bits[8] = { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55 };
+        HBITMAP b = CreateBitmap(8, 8, 1, 1, bits);
+        dots = CreatePatternBrush(b);
+        DeleteObject(b);
+        G_MAKEOBJECTPRIVATE(dots, TRUE);
+    }
+    old = SelectObject(hdc, dots);
+    /* the corners left out (US4) */
+    PatBlt(hdc, r->left + 1, r->top, w - 2, 1, PATINVERT);
+    PatBlt(hdc, r->left + 1, r->bottom - 1, w - 2, 1, PATINVERT);
     PatBlt(hdc, r->left, r->top + 1, 1, h - 2, PATINVERT);
     PatBlt(hdc, r->right - 1, r->top + 1, 1, h - 2, PATINVERT);
     SelectObject(hdc, old);
