@@ -35,6 +35,7 @@ static u16 filecdr_task;
    end of ExitWindows (Pietrek). UNVERIFIED: the exit code. */
 void KAPI ExitKernel(void)
 {
+    trace_print();                      /* [w16] trace, if any */
     kexit_to_dos(0);
 }
 

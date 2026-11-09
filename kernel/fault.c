@@ -247,3 +247,21 @@ void __cdecl k327_note(u16 err, u16 ip, u16 cs)
     where(cs);
     kputs("\r\n");
 }
+
+/* INT 21h AH=4Ch with no current task (kentry.asm): the KERNEL process
+   itself ends. While booting Windows, say from where (the stack holds
+   AX, DS, then the INT's IRET frame: IP, CS, FLAGS). */
+void __cdecl dos_exit_note(u16 FAR *sp)
+{
+    if (!winboot_active)
+        return;
+    kputs("w16: INT 21h AH=4Ch with no task, from ");
+    kputhex(sp[3]);
+    kputs(":");
+    kputhex(sp[2]);
+    where(sp[3]);
+    kputs(" AX=");
+    kputhex(sp[0]);
+    kputs("\r\n");
+    trace_print();
+}

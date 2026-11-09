@@ -35,6 +35,7 @@ extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
 extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
+extern _dos_exit_note           ; fault.c
 
 segment _DATA
 global _old21
@@ -131,6 +132,19 @@ int21_handler:
         pop bx
         pop ds
         jne task_exit_al
+        ; no task: the process ends (a debugging note while booting
+        ; Windows: who ended it)
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, sp
+        push ss
+        push ax
+        call far _dos_exit_note         ; void __cdecl dos_exit_note(u16 far *)
+        add sp, 4
+        pop ax
+        pop ds
 .chain:
         sub sp, 4                       ; room for the far jump target
         push bp

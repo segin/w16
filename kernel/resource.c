@@ -247,25 +247,54 @@ static u16 mem_flags(module FAR *m, u16 r)
 /* ---- loading and freeing modules (loader.c) ---- */
 
 /* Every type gets the default handler; PRELOAD resources are read (they
-   get a handle, usage 0, flag 0004h not set: observed). Not cursors and
-   icons (RT_CURSOR, RT_ICON): observed (TK28), a PRELOAD FIXED cursor's
-   block is already in the display format USER's handler makes, which
-   the program installs only later (InitApp); so they wait for their
-   first LoadResource. UNVERIFIED: whether Windows reads them at load
-   time some other way. */
+   get a handle, usage 0, flag 0004h not set: observed). Cursors and
+   icons (RT_CURSOR, RT_ICON) go through USER's DIB handlers, which a
+   module loaded after USER gets (below): observed, a program's PRELOAD
+   cursor (TK28) and a DLL's PRELOAD icons (MAIN.CPL, TK30) come out in
+   USER's format. Before USER is there (the drivers), they wait for
+   their first LoadResource, by when USER has given the module its
+   handlers (the display driver's cursors, TK27). UNVERIFIED: the
+   mechanism itself. */
 void rsrc_init(module FAR *m)
 {
     u16 t, k;
-    for (t = type_first(m); t; t = type_next(m, t))
+    module FAR *user = module_find("USER");
+    u32 dibcur = 0, dibicon = 0;
+
+    /* Once USER is there, a new module's icons and cursors get USER's
+       DIB handlers (LoadDIBIconHandler, LoadDIBCursorHandler: USER.357,
+       356; Schulman): observed on 3.1 (TK30), a DLL's icon (MAIN.CPL's)
+       comes from LoadIcon in USER's format, and nothing but USER's
+       InitApp installs handlers for a program. UNVERIFIED: that KERNEL
+       does it this way. */
+    if (user && user != m) {
+        u16 sel, off;
+        int is_const;
+        if (module_entry(user, 356, &sel, &off, &is_const) && !is_const)
+            dibcur = ((u32)sel << 16) | off;
+        if (module_entry(user, 357, &sel, &off, &is_const) && !is_const)
+            dibicon = ((u32)sel << 16) | off;
+    }
+    for (t = type_first(m); t; t = type_next(m, t)) {
         TYPE(m, t)->reserved = (u32)(void __far *)DefResourceHandler;
+        if (TYPE(m, t)->type_id == (0x8000 | 1) && dibcur)
+            TYPE(m, t)->reserved = dibcur;
+        if (TYPE(m, t)->type_id == (0x8000 | 3) && dibicon)
+            TYPE(m, t)->reserved = dibicon;
+    }
     for (t = type_first(m); t; t = type_next(m, t))
         for (k = 0; k < TYPE(m, t)->count; k++) {
             u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
             NAME(m, r)->handle = NAME(m, r)->usage = 0;
             NAME(m, r)->flags &= ~RNF_LOADED;
-            if ((NAME(m, r)->flags & RNF_PRELOAD) &&
-                TYPE(m, t)->type_id != (0x8000 | 1) && TYPE(m, t)->type_id != (0x8000 | 3))
+            if (!(NAME(m, r)->flags & RNF_PRELOAD))
+                continue;
+            if (TYPE(m, t)->type_id == (0x8000 | 1) || TYPE(m, t)->type_id == (0x8000 | 3)) {
+                if (dibcur && dibicon)  /* USER's handler converts them */
+                    NAME(m, r)->handle = call_handler(m, t, 0, m->ne_sel, r);
+            } else {
                 NAME(m, r)->handle = DefResourceHandler(0, m->ne_sel, r);
+            }
         }
 }
 

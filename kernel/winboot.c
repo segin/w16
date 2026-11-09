@@ -317,5 +317,9 @@ u16 winboot(void)
     /* the watchdog keeps running: a debugging aid, it reports where the
        system is after SECONDS without a boot log line */
     task_boot_tdb_end();
-    return task_boot();
+    {
+        u16 rc = task_boot();           /* back when the last task ends */
+        trace_print();
+        return rc;
+    }
 }
