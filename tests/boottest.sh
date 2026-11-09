@@ -77,8 +77,24 @@ fails=0
 # boot NAME [dropin.sh options...]: one boot, screenshot NAME.png, log NAME.txt
 boot() {
     name=$1; shift
-    "$root/tests/dropin.sh" -t "$secs" -i w16:watchdog=0 -s "$out/$name.png" "$@" \
-        > "$out/$name.txt" 2>&1 || true
+    tries=0
+    while :; do
+        "$root/tests/dropin.sh" -t "$secs" -i w16:watchdog=0 -s "$out/$name.png" "$@" \
+            > "$out/$name.txt" 2>&1 || true
+        # A screenshot of one colour means the hidden X display or the
+        # window capture failed (seen under heavy load), not that Windows
+        # drew nothing: Windows' screen is never a single colour here.
+        # Boot again, up to two more times.
+        blank "$out/$name.png" || break
+        tries=$((tries + 1))
+        [ $tries -le 2 ] || { echo "warning: $name: screenshot still blank after $tries tries" >&2; break; }
+        mv "$out/$name.png" "$out/$name.blank$tries.png" 2>/dev/null || true
+    done
+}
+# blank FILE: true when the image is missing or has a single colour
+blank() {
+    [ -f "$1" ] || return 0
+    [ "$(magick identify -format '%k' "$1" 2>/dev/null)" = 1 ]
 }
 # booted NAME: the boot completed and Windows was still running when the
 # screen was taken (KERNEL prints "w16: back to DOS" when Windows ends)
