@@ -45,6 +45,9 @@
 #              closed with Enter and Esc by real keys, then the File and
 #              Help menus must open (tests/scripts/input/about.txt); w16's
 #              USER, GDI, SHELL and PROGMAN on w16's KRNL286
+#   dragoff    real input: Program Manager dragged partly off the right,
+#              left and bottom edges; w16 USER+GDI vs Microsoft's: 0 pixels
+#   dragoffk   the same on w16's KRNL286
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -72,7 +75,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -270,6 +273,28 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else
             echo "FAIL about: screens missing ($d)"; fails=$((fails + 1))
         fi ;;
+    dragoff|dragoffk)
+        # real input: Program Manager dragged by its caption partly off the
+        # right, left and bottom edges (tests/scripts/input/dragoff.txt);
+        # w16's USER and GDI (dragoffk: on w16's KRNL286 too) against
+        # all-Microsoft; every screen must be identical
+        scr=$root/tests/scripts/input/dragoff.txt
+        [ -d "$out/dragoff-ref" ] || "$root/tests/inputrun.sh" -b 25 -t 70 "$scr" "$out/dragoff-ref" -r \
+            > "$out/dragoff-ref.txt" 2>&1 || true
+        if [ $c = dragoff ]; then k=-r; else k=; fi
+        "$root/tests/inputrun.sh" -b 25 -t 70 "$scr" "$out/$c-w16" $k \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-right-moving 02-right 03-left-moving 04-left 05-bottom-moving 06-bottom; do
+            if [ ! -f "$out/$c-w16/$s.png" ] || [ ! -f "$out/dragoff-ref/$s.png" ]; then
+                r="no $s screen"; break
+            fi
+            n=$(magick compare -metric AE "$out/$c-w16/$s.png" "$out/dragoff-ref/$s.png" "$out/$c-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ ($out/$c-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
+        else echo "FAIL $c: $r"; fails=$((fails + 1)); fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
