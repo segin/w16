@@ -34,7 +34,7 @@ extern WORD FAR PASCAL AllocCStoDSAlias(WORD sel);   /* KERNEL.170 */
 extern void __cdecl hook_setup(WORD alias, WORD dgroup);
 extern WORD __cdecl hook_install(WORD alias, WORD intno);
 extern void __cdecl hook_remove(WORD alias, WORD intno);
-extern WORD __cdecl bufsel, bufpos, dropped, n1680, sel40;
+extern WORD __cdecl bufsel, bufpos, dropped, n1680, sel40, lsl06;
 extern BYTE __cdecl f21[32], f31[32];
 extern WORD __cdecl watchcs, blksel, blkoff, snapsel, nsnap, blk_dx, blk_ax, linsel;
 extern void __cdecl snap_now(WORD off);
@@ -217,7 +217,8 @@ static void flush(void)
         windows_now();
         snaps_done++;
     }
-    wsprintf(line, "-- dropped %u idle %u\r\n", dropped, n1680);
+    wsprintf(line, "-- dropped %u idle %u, limit at the last INT 31h 0006h %04X\r\n",
+             dropped, n1680, lsl06);
     out(line);
     lclose();
 }

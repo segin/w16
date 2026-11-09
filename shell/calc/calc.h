@@ -8,7 +8,7 @@
  * the original Calculator's quickly; see tests/calcscenarios.sh.
  *
  * Every behaviour here was observed on Windows 3.1's CALC.EXE with
- * scripted input (tests/apps/ca1.c, CA1); ARCHITECTURE.md 15.1 has the
+ * scripted input (tests/apps/ca1.c, CA1); ARCHITECTURE.md 15.2 has the
  * findings. Button IDs are Calculator's own (its accelerator table, read
  * as data).
  */

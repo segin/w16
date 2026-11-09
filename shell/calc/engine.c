@@ -1,7 +1,7 @@
 /*
  * engine.c - w16 Calculator: what the keys do.
  *
- * Observed on Windows 3.1 (CA1 runs, ARCHITECTURE.md 15.1):
+ * Observed on Windows 3.1 (CA1 runs, ARCHITECTURE.md 15.2):
  *  - The current number x is typed digit by digit or is the last result.
  *    A binary operator shows its left operand (or the result of what it
  *    completed), and x becomes 0 until a number is entered; Edit > Copy

@@ -1,0 +1,21 @@
+; NP4: .LOG and Time/Date (F5), the clock at 09:05
+; time
+; files LOG.TXT
+; get LOG.TXT
+; log
+run NOTEPAD.EXE C:\LOG.TXT
+wait 2500
+info
+text
+snap C:\LOG.BMP
+key 74
+wait 300
+text
+snap C:\F5.BMP
+close
+wait 1000
+dump
+snap C:\LOGQ.BMP
+char y
+wait 1000
+dump

@@ -27,6 +27,14 @@
 #              doing the same                       must be 0
 #   winoldapk  the same on w16's KRNL286            must be 0
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
+#   allw16full every w16 part at once: WIN.COM, DOSX, KRNL286, USER, GDI,
+#              PROGMAN, WINOLDAP, WIN87EM and the four fonts: must boot
+#              (no pixel comparison: w16's PROGMAN and fonts differ)
+#   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
+#              the virtual display, through the drivers' event procedures)
+#              all through the boot and after, then a menu by keyboard:
+#              w16's USER and GDI on w16's KRNL286 against all-Microsoft
+#              under the same input; the screens after must be identical
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
 # "INITDONE=Final USER" fails whatever the pixels say.
@@ -49,7 +57,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk tree}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk tree allw16full input}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 fails=0
@@ -138,6 +146,31 @@ for c in $cases; do
         else
             echo "FAIL tree: see $out/tree.txt"; fails=$((fails + 1))
         fi ;;
+    allw16full)
+        fon=$root/build/fonts
+        boot allw16full -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
+            -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+            -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON"
+        if booted allw16full; then echo "ok   allw16full: boots"
+        else echo "FAIL allw16full: did not boot (see $out/allw16full.txt)"; fails=$((fails + 1)); fi ;;
+    input)
+        scr=$root/tests/scripts/input/bootinput.txt
+        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-w16" \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-booted 02-menu 03-closed; do
+            if [ ! -f "$out/input-w16/$s.png" ] || [ ! -f "$out/input-ref/$s.png" ]; then
+                r="no $s screen"; break
+            fi
+            n=$(magick compare -metric AE "$out/input-w16/$s.png" "$out/input-ref/$s.png" "$out/input-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ ($out/input-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   input: 0 pixels"
+        else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done

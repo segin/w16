@@ -1055,6 +1055,9 @@ static void run_menu(MLOOP *l)
         switch (msg.message) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            /* the characters for mnemonics come from here: without this a
+               menu opened from the keyboard ignored its item letters */
+            TranslateMessage(&msg);
             menu_key(l, msg.wParam);
             continue;
         case WM_CHAR:
