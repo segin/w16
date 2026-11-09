@@ -105,7 +105,7 @@ gdi_unimpl_entry:
         pusha
         mov ax, DGROUP
         mov ds, ax
-        push word [bp + 2]
+        push word [bp + 4]
         call far _gdi_unimpl
         add sp, 2
         popa

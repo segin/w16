@@ -44,7 +44,7 @@ void __cdecl __far gdi_unimpl(WORD ord)
 {
     if (ord < 512 && !(unimpl_seen[ord >> 4] & (1 << (ord & 15)))) {
         unimpl_seen[ord >> 4] |= 1 << (ord & 15);
-        gdi_loghex("unimplemented GDI ordinal (decimal in hex)", ord);
+        gdi_loghex("unimplemented GDI ordinal (hex)", ord);
     }
 }
 
