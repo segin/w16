@@ -426,6 +426,17 @@ BOOL WINAPI GrayString(HDC hdc, HBRUSH br, GRAYSTRINGPROC f, LPARAM data, int n,
         ((BOOL (__far __pascal *)(HDC, LPARAM, int))f)(mem, data, n);
     else
         TextOut(mem, 0, 0, (LPCSTR)data, n);
+    /* the pattern kept aligned with the screen: text pixels stay where
+       x + y is even (US4's disabled buttons) */
+    {
+        DWORD org = GetDCOrg(hdc);
+        POINT pt;
+        pt.x = x;
+        pt.y = y;
+        LPtoDP(hdc, &pt, 1);
+        UnrealizeObject(hbrGray);
+        SetBrushOrg(mem, (LOWORD(org) + HIWORD(org) + pt.x + pt.y) & 1, 0);
+    }
     ob = SelectObject(mem, hbrGray);
     PatBlt(mem, 0, 0, cx, cy, 0x00FA0089L);     /* DPo: gray the text */
     SelectObject(mem, ob);

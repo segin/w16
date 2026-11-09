@@ -388,11 +388,19 @@ void draw_icon(HDC hdc, int x, int y, HICON hi)
     andsize = (DWORD)h->wbytes * h->cy;
     band = CreateBitmap(h->cx, h->cy, 1, 1, p + sizeof(ICONHDR));
     bxor = CreateBitmap(h->cx, h->cy, h->planes, h->bpp, p + sizeof(ICONHDR) + andsize);
-    old = SelectObject(hdcMem, band);
-    BitBlt(hdc, x, y, h->cx, h->cy, hdcMem, 0, 0, SRCAND);
-    SelectObject(hdcMem, bxor);
-    BitBlt(hdc, x, y, h->cx, h->cy, hdcMem, 0, 0, SRCINVERT);
-    SelectObject(hdcMem, old);
+    /* the masks go through black and white whatever the DC's colours
+       (w16's Program Manager draws its icons with a highlight background
+       colour left in the DC: Windows 3.1's icons stay right) */
+    {
+        COLORREF tc = SetTextColor(hdc, RGB(0, 0, 0)), bc = SetBkColor(hdc, RGB(255, 255, 255));
+        old = SelectObject(hdcMem, band);
+        BitBlt(hdc, x, y, h->cx, h->cy, hdcMem, 0, 0, SRCAND);
+        SelectObject(hdcMem, bxor);
+        BitBlt(hdc, x, y, h->cx, h->cy, hdcMem, 0, 0, SRCINVERT);
+        SelectObject(hdcMem, old);
+        SetTextColor(hdc, tc);
+        SetBkColor(hdc, bc);
+    }
     DeleteObject(band);
     DeleteObject(bxor);
     GlobalUnlock((HGLOBAL)hi);

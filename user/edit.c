@@ -185,8 +185,8 @@ static void paint(HWND h, PED e, HDC hdc)
     int lh = line_height(h, e);
     GetClientRect(h, &r);
     FillRect(hdc, &r, b ? b : sysbrush[COLOR_WINDOW]);
-    if (!IsWindowEnabled(h))
-        SetTextColor(hdc, syscolor[COLOR_GRAYTEXT]);
+    /* a disabled edit control's text is drawn as usual (US4) */
+    SetTextColor(hdc, syscolor[COLOR_WINDOWTEXT]);
     {
         int line, nlines = (estyle(h) & ES_MULTILINE) ? line_count(e) : 1;
         for (line = (estyle(h) & ES_MULTILINE) ? e->topline : 0; line < nlines; line++) {
@@ -334,7 +334,8 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         e = (PED)LocalAlloc(LPTR, sizeof(ED));
         if (!e)
             return 0;
-        e->text = (WORD)LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, 32);
+        /* fixed: e->text is used as the pointer (a moveable handle is not one) */
+        e->text = (WORD)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, 32);
         e->size = 32;
         e->parent = GetParent(h);
         if (estyle(h) & ES_PASSWORD)

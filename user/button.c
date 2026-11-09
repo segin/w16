@@ -65,12 +65,38 @@ static void fillc(HDC hdc, int x, int y, int cx, int cy, int color)
 }
 
 /* the text of a button or static with its mnemonic, in rc */
+static HFONT gray_font;
+
+/* GrayString's output function for a label: DrawText in the bitmap */
+static BOOL CALLBACK __loadds gray_out(HDC hdc, LPARAM data, int n)
+{
+    RECT r;
+    SetRect(&r, 0, 0, LOWORD(n), 32767);
+    SelectObject(hdc, gray_font);
+    DrawText(hdc, (LPCSTR)data, -1, &r, DT_SINGLELINE | DT_LEFT | DT_TOP);
+    return TRUE;
+}
+
+/* a disabled control's text is grayed with GrayString's checkerboard,
+   not drawn in COLOR_GRAYTEXT (US4: "Radio 3", the "Gray" button) */
 static void draw_label(HWND h, HDC hdc, RECT *rc, UINT fmt, BOOL gray)
 {
     char text[256];
     GetWindowText(h, text, sizeof text);
-    if (gray)
-        SetTextColor(hdc, syscolor[COLOR_GRAYTEXT]);
+    if (gray) {
+        RECT c;
+        int x, y;
+        SetRect(&c, 0, 0, 0, 0);
+        DrawText(hdc, text, -1, &c, DT_CALCRECT | DT_SINGLELINE);
+        x = (fmt & DT_CENTER) ? (rc->left + rc->right - c.right) / 2 :
+            (fmt & DT_RIGHT) ? rc->right - c.right : rc->left;
+        y = (fmt & DT_VCENTER) ? (rc->top + rc->bottom - c.bottom) / 2 : rc->top;
+        gray_font = (HFONT)SelectObject(hdc, GetStockObject(SYSTEM_FONT));
+        SelectObject(hdc, gray_font);
+        GrayString(hdc, NULL, (GRAYSTRINGPROC)gray_out, (LPARAM)(LPSTR)text, c.right, x, y,
+                   c.right, c.bottom);
+        return;
+    }
     DrawText(hdc, text, -1, rc, fmt);
 }
 
@@ -170,7 +196,10 @@ static void paint_check(HWND h, HDC hdc)
         SelectObject(hdcMem, old);
     }
     t = r;
-    t.left += 13 + cxSysChar / 2;           /* UNVERIFIED gap */
+    /* the text one pixel lower and 5 right of the box (US4: a 20-pixel
+       high check box, system font; UNVERIFIED as a rule) */
+    t.left += 13 + cxSysChar / 2 + 1;
+    t.top += 2;
     SetBkMode(hdc, TRANSPARENT);
     draw_label(h, hdc, &t, DT_VCENTER | DT_SINGLELINE | DT_LEFT, !IsWindowEnabled(h));
     if (s & ST_FOCUS) {
@@ -207,10 +236,16 @@ static void paint_group(HWND h, HDC hdc)
     if (text[0]) {
         SetRect(&t, 0, 0, 0, 0);
         DrawText(hdc, text, -1, &t, DT_CALCRECT | DT_SINGLELINE);
-        OffsetRect(&t, r.left + cxSysChar - 2, r.top);   /* UNVERIFIED */
-        t.right += 2;
-        FillRect(hdc, &t, bg);
-        t.left++;
+        /* the text 9 pixels in and 2 down, the line cleared 2 pixels
+           before and after it (US4, system font; UNVERIFIED for others) */
+        OffsetRect(&t, r.left + 9, r.top + 2);
+        {
+            RECT e = t;
+            e.left -= 2;
+            e.right += 2;
+            e.top = r.top;
+            FillRect(hdc, &e, bg);
+        }
         SetBkMode(hdc, TRANSPARENT);
         draw_label(h, hdc, &t, DT_SINGLELINE | DT_LEFT, !IsWindowEnabled(h));
     }

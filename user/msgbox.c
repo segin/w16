@@ -10,7 +10,10 @@
  *     units (rounded up), 22 below the icon or text, 10 above the bottom;
  *   - the dialog centred on the screen (the class aligns its left edge to
  *     8 pixels: CS_BYTEALIGNWINDOW).
- * UNVERIFIED: the wrapping width (half the screen here), the layout
+ *   - the text wrapped so that the box is at most 5/8 of the screen wide
+ *     (US4's fourth box: a 297-pixel line, "be" not fitting after it,
+ *     in a box 396 wide; UNVERIFIED as the rule).
+ * UNVERIFIED: the layout
  * without an icon, the button order and texts for every MB_ type beyond
  * those seen, and the ±1 pixel of the buttons' centring.
  */
@@ -69,7 +72,8 @@ int WINAPI MessageBox(HWND owner, LPCSTR text, LPCSTR caption, UINT type)
     /* the text's size */
     hdc = GetDC(0);
     SelectObject(hdc, GetStockObject(SYSTEM_FONT));
-    SetRect(&tr, 0, 0, sysmet[SM_CXSCREEN] / 2, 0);
+    SetRect(&tr, 0, 0, sysmet[SM_CXSCREEN] * 5 / 8 - 2 * (sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER]) -
+            (icon ? 68 : 18) - 16, 0);
     DrawText(hdc, text, -1, &tr, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX | DT_EXPANDTABS);
     ReleaseDC(0, hdc);
     textw = tr.right;
