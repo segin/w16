@@ -7,6 +7,7 @@ w16 repository's LICENSE):
 
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
+  CONTROL.EXE             Control Panel
   SYSTEM\KRNL286.EXE      KERNEL
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
@@ -29,7 +30,9 @@ overwriting the files above:
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS
                           programs WINOLDAP.MOD, DSWAP.EXE and the
-                          VGACOLOR.2GR grabber
+                          VGACOLOR.2GR grabber; for Control Panel its
+                          applets MAIN.CPL, DRIVERS.CPL, SND.CPL and
+                          CPWIN386.CPL
 
 Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
 it is there and w16's KRNL286.EXE only when it is not.

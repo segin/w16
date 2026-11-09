@@ -850,12 +850,12 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 # tests/w16tree.sh boots it. build/dos stays as it is.
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
-W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CONTROL.EXE $(W16)/README.TXT \
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
 all: install-tree
-$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CONTROL.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16)/README.TXT: win/README.TXT

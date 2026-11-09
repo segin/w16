@@ -849,3 +849,43 @@ Known differences and gaps, roughly in the order they block the boot:
 Our KERNEL (KRNL286-shaped) would need, for Enhanced mode: the 386 build (KRNL386 entry points and 32-bit heap), the vendor-API LDT handling above, the 1684h API users (SHELL etc.), and WinFlags' WF_ENHANCED paths; not started.
 
 ZOI: the VMM's limits are the architecture's: 8192 LDT descriptors (64 KB), the XMS block (64 MB with XMS 2.0), a 64 KB ring-0 stack bounding the nesting depth of nested calls; nothing else is fixed. UNVERIFIED items are marked in the text above and in the code.
+
+## 14. Control Panel
+
+CONTROL.EXE (`shell/control`) and the applet DLLs (`shell/cpl`), as drop-in replacements for Windows 3.1's: with ours copied over Microsoft's in a scratch copy of the reference install, the windows must look the same pixel for pixel (apart from w16's own icon art, `tools/cplicons.py`) and every INI file must come out byte-identical. Microsoft's files are only run and observed: SNAP.EXE scripts (`tests/cpobs.sh` for one-off probes), the applet probe CP1 (`tests/apps/cp1.c`: a CPL that logs every CPlApplet call, its parameters, the window it was given, and answers as `C:\CP1.INI` says), dialog templates, menus and strings read as data with `tools/resdump.py`. `tests/cplscenarios.sh` runs each scenario of `tests/scripts/cpl/` on the original and on ours and compares CONTROL.INI, WIN.INI, SYSTEM.INI, the CP1 log and every screenshot (`tests/scripts/cpl.baseline`).
+
+### 14.1 Who is where (Windows 3.1, Standard mode)
+
+| Applet | File | Notes |
+|---|---|---|
+| Color, Fonts, Ports, Mouse, Desktop, Keyboard, Printers, International, Date/Time | SYSTEM\MAIN.CPL (module MAINCPL) | 9 applets, in that order |
+| Drivers | SYSTEM\DRIVERS.CPL | |
+| Sound | SYSTEM\SND.CPL | |
+| 386 Enhanced | SYSTEM\CPWIN386.CPL | not shown in Standard mode (its CPL_INIT declines, UNVERIFIED which call) |
+| MIDI Mapper | MIDIMAP.DRV (installable driver, exports CPLAPPLET) | not shown in the reference install's Standard mode |
+
+MOUSE.DRV exports CPLAPPLET as ordinal 6: the Mouse applet calls it with 5 first and shows its own dialog only when it returns FALSE (DDAG, "CplApplet").
+
+### 14.2 CONTROL.EXE (observed)
+
+- **Windows.** Frame class `CtlPanelClass`, caption "Control Panel", WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_CLIPCHILDREN. Children: the icon list, class `lb`, ID 14h, WS_BORDER | 0711h (+ WS_VSCROLL when needed); the status line, class `Text`, ID 15h, WS_BORDER. Both hang one pixel over the frame's client edge (at client -1,-1, so their borders fall on the frame's inner line); the list's bottom border is the status line's top border. The status line is the 10-point font's height + 6 (+ borders: 24 on VGA), a sunken box 8 pixels in from the sides and 2 from top and bottom, text 3 pixels in, 1 down.
+- **Icons.** Names in 8-point MS Sans Serif. Cell width = the widest name; height = SM_CYICON + 6 + font height (51 on VGA); icon 6 pixels below the cell top, centred; the name below it, centred, the selected one on COLOR_HIGHLIGHT exactly as wide as its text. Row by row; (list width - SM_CXBORDER - SM_CXVSCROLL) / cell width columns, whether or not the scroll bar shows.
+- **Loading order**: SYSTEM\MAIN.CPL, then each [MMCPL] entry of CONTROL.INI (other than NumApps, X, Y, W, H; the value is a path), then the other SYSTEM\*.CPL in directory order. Calls: CPL_INIT (the whole LONG; 0 = unload), CPL_GETCOUNT (low word only), per applet CPL_NEWINQUIRE into a buffer whose dwSize is cleared first (the rest is left over from the previous applet): if the applet set dwSize its answer is used whatever it returned, else CPL_INQUIRE follows (MAIN.CPL takes that path). The window exists, visible at its old or default size, during CPL_INIT.
+- **Choosing an applet** (Enter, double click, the Settings menu): the list selects it, then CPL_SELECT and CPL_DBLCLK (applet, lData). Moving the selection sends nothing. **Closing**: X/Y/W/H written, the window hidden, CPL_STOP for each applet (last first), CPL_EXIT.
+- **Settings menu**: "<name>...", inserted before the separator and Exit; a name without '&' gets its first letter as mnemonic. Menu IDs of the Help items and F1 come from the original's menu resource.
+- **CONTROL.INI [MMCPL]**: NumApps=<applets> when loaded; X=, Y=, W=, H= (the normal rectangle) on close. At start: X/Y/W/H (default 0, 0, 430, 240 on 640x480; UNVERIFIED how it scales). If NumApps differs from the saved value and the icons do not fit, the window becomes 6 columns wide (fewer if the screen is too narrow) and as tall as the rows need (at most the screen); width = columns x cell + SM_CXVSCROLL - 1 + 2 SM_CXFRAME, height = rows x cell + status line - 1 + 2 SM_CYFRAME + SM_CYCAPTION + SM_CYMENU (one more than AdjustWindowRect gives).
+- **Command line**: `CONTROL <name>` (any case, without '&'): the panel is shown, disabled during the applet, and closes afterwards. `CONTROL <file>.CPL`: only that file, no window (hwnd NULL in every call), CPL_DBLCLK on its first applet, no CPL_STOP/CPL_EXIT. Anything else: the normal panel.
+- **Help**: Contents/Search/How to Use Help on CONTROL.HLP; About is SHELL's ShellAbout. F1 on an applet: its NEWCPLINFO help file and context, else CONTROL.HLP (UNVERIFIED: the original's choice here).
+
+### 14.3 MAIN.CPL applets (observed; w16 status)
+
+- **Keyboard** (done). WIN.INI [windows] KeyboardDelay (0..3; the bar runs Long to Short, position 3 - delay) and KeyboardSpeed (0..31). OK writes both; Cancel nothing.
+- **Mouse** (done). MouseThreshold1/MouseThreshold2/MouseSpeed from seven settings 0 0 0, 10 0 1, 7 0 1, 4 0 1, 4 12 2, 4 9 2, 4 6 2, always written on OK (the current values when the bar did not move); the bar starts at the slowest setting not faster than the current one (UNVERIFIED beyond the points tried). DoubleClickSpeed 100..900, 16 per step. Home is the Fast end of both bars. SwapMouseButtons=yes/no when changed (a plain BS_CHECKBOX; the L and R labels swap). MouseTrails written as the box is clicked (7, or -7 when off), put back by Cancel.
+- **Color** (not yet). OK writes all 21 WIN.INI [colors] keys in the order Background, AppWorkspace, Window, WindowText, Menu, MenuText, ActiveTitle, InactiveTitle, TitleText, ActiveBorder, InactiveBorder, WindowFrame, Scrollbar, ButtonFace, ButtonShadow, ButtonText, GrayText, Hilight, HilightText, InactiveTitleText, ButtonHilight, as "R G B" of the current colours (also when nothing changed). CONTROL.INI [color schemes] values list the same 21 colours as hex 0xBBGGRR in that order; [current] color schemes=<name>, empty after a colour was changed by hand. The scheme combo box is owner-drawn, unsorted, "Windows Default" first, items "name=values". Removing a scheme selects the next one. Save Scheme and Remove Scheme start disabled. The dialog opens collapsed; "Color Palette >>" widens it. One basic colour (row 0, column 1) is 130 130 130; the rest of the 48 and the Custom Color Selector (HLS 0..240) are still to be measured.
+- **Desktop, International, Date/Time, Fonts, Ports, Printers**: not yet; their dialog templates are in the original MAIN.CPL (resdump), CONTROL.INI [Patterns] holds the pattern list.
+
+### 14.4 Results
+
+`tests/cplscenarios.sh` (19 scenarios): CONTROL.EXE over Microsoft's, with MAIN.CPL and the CP1 probe in every configuration tried (11 applets; 14 with a very long name; 31, 51 with scroll bar, saved and changed geometry, [MMCPL], both command-line forms, the CPL_NEWINQUIRE variants): 0 pixels and identical INI files and CP1 logs. w16's MAIN.CPL (Keyboard, Mouse): identical INI files; the screenshots differ only in icon art. `make boot-test` case `control`: w16's CONTROL.EXE as the shell on w16's KRNL286, 0 pixels against Microsoft's on Microsoft's.
+
+ZOI: no fixed limit on applets, applet DLLs or [MMCPL] entries (arrays grow); the Settings menu takes as many items as USER allows.
