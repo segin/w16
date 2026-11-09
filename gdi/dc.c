@@ -304,6 +304,26 @@ NPRGN dc_rao(NPDC dc)
             rgn_combine(dc->hRao, dc->hRao, vis, RGN_AND);
         } else
             rgn_copy(dc->hRao, vis);
+        /* never past the device's surface (the screen, or the selected
+           bitmap): drivers do not clip to it themselves, and output past
+           x = 639 would wrap into the next scan line */
+        {
+            int w, h;
+            HRGN surf;
+            if (dc->flags & DCF_MEMORY) {
+                LPPBITMAP pb = dc->lpPDevice;
+                w = pb->bmWidth;
+                h = pb->bmHeight;
+            } else {
+                w = dc->dev->info.dpHorzRes;
+                h = dc->dev->info.dpVertRes;
+            }
+            surf = rgn_new(0, 0, w, h);
+            if (surf) {
+                rgn_combine(dc->hRao, dc->hRao, surf, RGN_AND);
+                obj_free(surf);
+            }
+        }
         dc->raoValid = 1;
     }
     return rgn_ptr(dc->hRao);

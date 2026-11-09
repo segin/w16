@@ -1,0 +1,32 @@
+; drag Program Manager by its caption partly off the right, left and
+; bottom edges of the screen; shots while the frame shows and after
+; (tests/inputrun.sh; boot-test case dragoff)
+click 1
+sleep 1
+home
+move 150 31
+sleep 0.5
+down 1
+sleep 0.5
+move 300 0
+sleep 1
+shot 01-right-moving
+up 1
+sleep 2
+shot 02-right
+down 1
+sleep 0.5
+move -600 0
+sleep 1
+shot 03-left-moving
+up 1
+sleep 2
+shot 04-left
+down 1
+sleep 0.5
+move 200 350
+sleep 1
+shot 05-bottom-moving
+up 1
+sleep 2
+shot 06-bottom
