@@ -21,6 +21,20 @@
  *                            relative to it (font, edit state), scroll
  *                            bars, every menu item's state
  *     text                   log the whole text of the focus window
+ *     settime hh:mm:ss[.cc]  set the DOS time (INT 21h AH=2Dh)
+ *     setdate mm/dd/yyyy     set the DOS date (INT 21h AH=2Bh)
+ *     freeze hh:mm:ss <ms>   keep setting the DOS time to hh:mm:ss.00 every
+ *                            50 ms for <ms> ms: a clock shows a known time
+ *     syscmd <hex>           post WM_SYSCOMMAND <hex> to the active window
+ *     movewin x y cx cy      MoveWindow the active window (decimal)
+ *     post <msg> <wp> <lp>   post a message (hex) to the active window
+ *     send <msg> <wp> <lp>   send it and log the result
+ *     timers                 take every timer USER has left (and log how
+ *                            many), to see what a program does without one
+ *     freetimers             give them back
+ *     target <class>         send commands to that class's window rather
+ *                            than the focus's (Windows 2.x, where SNAP2
+ *                            cannot see the focus)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -130,13 +144,18 @@ static HWND target(void)
 
 /* The top-level window of the focus: Windows 2.x answers GetActiveWindow
    per task, and SNAP has no window of its own (observed). */
+static char target_class[32];           /* the "target" command's */
+
 static HWND top_window(void)
 {
-    HWND h = GetFocus(), p;
+    HWND h, p;
+    if (target_class[0] && (h = FindWindow(target_class, NULL)) != NULL)
+        return h;
+    h = GetFocus();
     if (!h)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
-        return FindWindow("Progman", NULL);
+        return FindWindow(target_class[0] ? target_class : "Progman", NULL);
     /* up to the first window that is not a child: GetParent of a dialog
        is its owner, which is not where its commands go */
     while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
@@ -541,6 +560,68 @@ static void text_of_focus(void)
     GlobalUnlock(h);
     GlobalFree(h);
 }
+/* ---- time, messages, timers (for Clock's scenarios) ---- */
+
+static WORD dos_settime(WORD hm, WORD sc);
+#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+static WORD dos_setdate(WORD y, WORD md);
+#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+
+/* the next number in *s (decimal or hex), skipping what is not a digit */
+static WORD next_num(char **s, WORD base)
+{
+    char *p = *s;
+    WORD v;
+    while (*p && !((*p >= '0' && *p <= '9') ||
+                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
+        p++;
+    v = parse_num(p, base);
+    while ((*p >= '0' && *p <= '9') ||
+           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
+        p++;
+    *s = p;
+    return v;
+}
+
+static WORD set_time(char **s)
+{
+    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
+    if (**s == '.')
+        cs = next_num(s, 10);
+    return dos_settime((h << 8) | m, (sec << 8) | cs);
+}
+
+#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
+static void dump_menu(HMENU m, int depth)
+{
+    char text[64];
+    int i, k, n;
+    if (!m)
+        return;
+    n = GetMenuItemCount(m);
+    for (i = 0; i < n; i++) {
+        UINT st = GetMenuState(m, i, MF_BYPOSITION);
+        text[0] = 0;
+        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
+        out("MENU ");
+        for (k = 0; k < depth; k++)
+            out("  ");
+        out("id=");
+        outhex(GetMenuItemID(m, i), 4);
+        out(" state=");
+        outhex(st, 4);
+        out(" \"");
+        out(text);
+        out("\"\r\n");
+        if (st & MF_POPUP)
+            dump_menu(GetSubMenu(m, i), depth + 1);
+    }
+}
+#endif
+
+#define MAXTIMERS 64
+static UINT timer_ids[MAXTIMERS];
+static int ntimers;
 
 /* ---- script ---- */
 
@@ -625,6 +706,78 @@ static void run_line(char *l)
         info();
     } else if (same(l, "text")) {
         text_of_focus();
+    } else if (same(l, "settime")) {
+        char *s = arg;
+        if (set_time(&s))
+            out(" -> failed");
+    } else if (same(l, "setdate")) {
+        char *s = arg;
+        WORD m = next_num(&s, 10), d = next_num(&s, 10), y = next_num(&s, 10);
+        if (dos_setdate(y, (m << 8) | d))
+            out(" -> failed");
+    } else if (same(l, "freeze")) {
+        char *s = arg;
+        WORD i, n;
+        set_time(&s);
+        n = next_num(&s, 10) / 50;
+        for (i = 0; i < n; i++) {
+            s = arg;
+            set_time(&s);
+            pump(50);
+        }
+        s = arg;
+        set_time(&s);
+    } else if (same(l, "syscmd")) {
+        PostMessage(top_window(), WM_SYSCOMMAND, parse_num(arg, 16), 0);
+        pump(300);
+    } else if (same(l, "movewin")) {
+        char *s = arg;
+        int x = next_num(&s, 10), y = next_num(&s, 10);
+        int cx = next_num(&s, 10), cy = next_num(&s, 10);
+        MoveWindow(top_window(), x, y, cx, cy, TRUE);
+        pump(300);
+    } else if (same(l, "post") || same(l, "send")) {
+        char *s = arg;
+        WORD msg = next_num(&s, 16), wp = next_num(&s, 16), lh, ll;
+        LONG r;
+        ll = next_num(&s, 16);
+        lh = 0;
+        if (*s == ':') {                /* lp as hi:lo */
+            lh = ll;
+            ll = next_num(&s, 16);
+        }
+        if (l[0] == 'p') {
+            PostMessage(top_window(), msg, wp, MAKELONG(ll, lh));
+        } else {
+            r = SendMessage(top_window(), msg, wp, MAKELONG(ll, lh));
+            out(" -> ");
+            outhex(r, 8);
+        }
+        pump(300);
+    } else if (same(l, "target")) {
+        int i;
+        for (i = 0; arg[i] && i < (int)sizeof target_class - 1; i++)
+            target_class[i] = arg[i];
+        target_class[i] = 0;
+    } else if (same(l, "timers")) {
+        UINT id;
+        while (ntimers < MAXTIMERS && (id = SetTimer(NULL, 0, 60000u, NULL)) != 0)
+            timer_ids[ntimers++] = id;
+        out(" -> ");
+        outint(ntimers);
+    } else if (same(l, "freetimers")) {
+        while (ntimers)
+            KillTimer(NULL, timer_ids[--ntimers]);
+#ifndef SNAP_WIN2
+    } else if (same(l, "dumpmenu")) {
+        /* the active window's menu bar and system menu: each item's
+           ID, state flags and text */
+        HWND w = top_window();
+        out("\r\n");
+        dump_menu(GetMenu(w), 0);
+        out("MENU system\r\n");
+        dump_menu(GetSystemMenu(w, FALSE), 1);
+#endif
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);

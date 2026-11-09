@@ -11,6 +11,7 @@
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
+# REFRUN_GDLOG=1: log every GDI call to C:\GD.LOG (see below).
 # REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
 # flags); REFRUN_FPU=false then runs without a coprocessor.
 # Standard mode (/S) on a 386 or later runs KRNL386.EXE; KRNL286.EXE only
@@ -35,6 +36,20 @@ for f in ${REFRUN_FILES:-}; do
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
+if [ -n "${REFRUN_GDLOG:-}" ]; then
+    # REFRUN_GDLOG=1: record every GDI call in C:\GD.LOG (GD2, `make
+    # gdprobes`, in front of the GDI renamed GDJ, as tests/gdiboot.sh -L;
+    # REFRUN_GET=GD.LOG fetches it)
+    sys=$work/c/WINDOWS/SYSTEM
+    cp "$sys/GDI.EXE" "$sys/GDJ.DLL"
+    python3 "$root/tools/nerename.py" "$sys/GDJ.DLL" --module GDJ
+    python3 "$root/tools/ne2res.py" "$sys/GDI.EXE" "$work/gdi.res"
+    b=$root/build/gdi
+    (cd "$root" && PATH=${WATCOM:-/opt/watcom}/binl64:$PATH WATCOM=${WATCOM:-/opt/watcom} \
+        wlink @$b/gd2.lnk name "$sys/GDI.EXE" libpath ${WATCOM:-/opt/watcom}/lib286/win \
+        $( [ -s "$work/gdi.res" ] && echo option resource="$work/gdi.res" ) \
+        file { $b/gdlog.o $b/gd2stubs.o $b/gd2log.o }) >/dev/null
+fi
 if [ -n "${REFRUN_SHELL:-}" ]; then
     # REFRUN_SHELL=PROG: PROG is the shell and our program starts from
     # WIN.INI's load= line (to test a program as the Windows shell)
