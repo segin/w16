@@ -23,8 +23,8 @@ u32  dos_rw(u16 ah, u16 fh, u16 sel, u16 off, u32 n); /* FFFFFFFF on error */
 int  file_canon(const char FAR *name, char *out, u16 *err);
 int  file_has_path(const char FAR *name);
 const char FAR *file_env(const char *name);     /* task environment */
-u16  KAPI GetWindowsDirectory(char FAR *buf, u16 n);
-u16  KAPI GetSystemDirectory(char FAR *buf, u16 n);
+u16  KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n);
+u16  KAPI_ES GetSystemDirectory(char FAR *buf, u16 n);
 
 /* huge buffers: byte off of the block starting at selector sel */
 u8 FAR *huge_at(u16 sel, u32 off);

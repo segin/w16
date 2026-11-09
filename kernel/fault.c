@@ -24,6 +24,31 @@ extern void __far fault_entry_0Eh(void);
 #pragma aux fault_entry_0Dh "*"
 #pragma aux fault_entry_0Eh "*"
 
+/* Back to text mode before a report goes to the screen, as Windows'
+   own KERNEL does before "Error loading ..." (Pietrek, TextMode: USER's
+   DisableOEMLayer if it can, else INT 10h AX=0003h). w16 uses INT 10h
+   (in real mode, through DPMI 0300h): KERNEL leaves to DOS right after,
+   so the display driver's state is not needed any more. */
+void text_mode(void)
+{
+    static struct {
+        u32 edi, esi, ebp, res, ebx, edx, ecx, eax;
+        u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
+    } rmc;
+    regs16 r;
+    if (!winboot_active || !module_find("DISPLAY"))
+        return;
+    kmemset(&rmc, 0, sizeof rmc);
+    rmc.eax = 0x0003;
+    r.ax = 0x0300;
+    r.bx = 0x10;
+    r.cx = 0;
+    r.di = FP_OFF((void FAR *)&rmc);
+    r.es = FP_SEG((void FAR *)&rmc);
+    r.ds = 0;
+    dpmi31(&r);
+}
+
 static void hook(u8 n, void (__far *h)(void))
 {
     regs16 r;
@@ -113,6 +138,7 @@ void __cdecl fault_report(void)
 {
     u16 *f = fault_regs, pos = i21_pos;
     kmemcpy(ring, i21_ring, sizeof ring);
+    text_mode();
     kputs("w16: exception ");
     kputhex(f[0]);
     kputs(" at ");
@@ -216,6 +242,7 @@ void __cdecl wd_report(void)
     u16 i, j, pos = wd_pos, ipos = i21_pos;
     kmemcpy(ring, i21_ring, sizeof ring);
     kmemcpy(s, wd_samples, sizeof s);
+    text_mode();
     kputs("w16: no boot progress; timer samples (CS:IP, most recent last):\r\n");
     for (i = 0; i < 64; i++) {
         j = ((pos + 4 + i * 4) & 255) / 2;
@@ -246,4 +273,22 @@ void __cdecl k327_note(u16 err, u16 ip, u16 cs)
     kputhex(ip);
     where(cs);
     kputs("\r\n");
+}
+
+/* INT 21h AH=4Ch with no current task (kentry.asm): the KERNEL process
+   itself ends. While booting Windows, say from where (the stack holds
+   AX, DS, then the INT's IRET frame: IP, CS, FLAGS). */
+void __cdecl dos_exit_note(u16 FAR *sp)
+{
+    if (!winboot_active)
+        return;
+    kputs("w16: INT 21h AH=4Ch with no task, from ");
+    kputhex(sp[3]);
+    kputs(":");
+    kputhex(sp[2]);
+    where(sp[3]);
+    kputs(" AX=");
+    kputhex(sp[0]);
+    kputs("\r\n");
+    trace_print();
 }

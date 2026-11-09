@@ -16,7 +16,7 @@ WLINK   := wlink
 
 INC     := -Iinclude -Ikernel
 # KERNEL: large model, SS != DS, 286, no stack checks, no default libraries
-KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC)
+KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC) -I$(B)/kernel
 # bootstrap: small model, 8086, real mode
 BCFLAGS := -q -bt=dos -ms -0 -s -zl -ox -wx -we $(INC)
 # test applications: large model Windows programs, no C runtime
@@ -39,7 +39,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -57,7 +57,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 
 .SECONDARY:
 
-.PHONY: all host dos shell shell2 test clean
+.PHONY: all host dos shell shell2 test clean install-tree
 all: host dos shell
 
 host: $(B)/host/nedump
@@ -87,13 +87,16 @@ $(B)/boot/boot.exe: $(BOBJS)
 $(B)/kernel/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
-$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(B)/kernel/kapi.h: tools/kapiprag.py kernel/*.c kernel/*.h
+	@mkdir -p $(@D)
+	python3 tools/kapiprag.py $@ kernel/*.c kernel/*.h
+$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
 KBOOT_C := winboot dosx kmisc selector fault
-$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
@@ -230,6 +233,61 @@ $(DOS)/TK28.EXE: $(B)/tests/start.o $(B)/tests/tk28.o $(B)/tests/tk28.res tests/
 	$(WLINK) @tests/apps/tk28.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk28.map option resource=$(B)/tests/tk28.res \
 	    file { $(B)/tests/start.o $(B)/tests/tk28.o }
+
+# TK29.EXE: module usage counts under Windows
+$(B)/tests/tk29.o: tests/apps/tk29ref.h tests/apps/tklog.h
+$(DOS)/TK29.EXE: $(B)/tests/start.o $(B)/tests/tk29.o tests/apps/app.lnk tests/apps/tk29.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk29.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk29.map file { $(B)/tests/start.o $(B)/tests/tk29.o }
+
+# TK30.EXE: resource handlers of DLLs
+$(B)/tests/tk30.o: tests/apps/tk30ref.h tests/apps/tklog.h
+$(DOS)/TK30.EXE: $(B)/tests/start.o $(B)/tests/tk30.o tests/apps/app.lnk tests/apps/tk30.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk30.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk30.map file { $(B)/tests/start.o $(B)/tests/tk30.o }
+
+# TK31.EXE: which registers KERNEL's exports keep (tk31s.asm)
+$(B)/tests/tk31.o: tests/apps/tk31ref.h tests/apps/tklog.h
+$(DOS)/TK31.EXE: $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o tests/apps/app.lnk tests/apps/tk31.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk31.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk31.map file { $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o }
+
+# TK32.EXE: the task-exit signal (tk32s.asm)
+$(B)/tests/tk32.o: tests/apps/tk32ref.h tests/apps/tklog.h
+$(DOS)/TK32.EXE: $(B)/tests/start.o $(B)/tests/tk32.o $(B)/tests/tk32s.o tests/apps/app.lnk tests/apps/tk32.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk32.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk32.map file { $(B)/tests/start.o $(B)/tests/tk32.o $(B)/tests/tk32s.o }
+
+# TK33.EXE: stands in for WINOLDAP.MOD (how KERNEL starts DOS programs)
+$(B)/tests/tk33.o: tests/apps/tk33ref.h tests/apps/tklog.h
+$(DOS)/TK33.EXE: $(B)/tests/start.o $(B)/tests/tk33.o tests/apps/app.lnk tests/apps/tk33.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk33.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk33.map file { $(B)/tests/start.o $(B)/tests/tk33.o }
+
+# TK34.EXE: WinOldApCall, KERNEL.151 (tk34s.asm)
+$(B)/tests/tk34.o: tests/apps/tk34ref.h tests/apps/tklog.h
+$(DOS)/TK34.EXE: $(B)/tests/start.o $(B)/tests/tk34.o $(B)/tests/tk34s.o tests/apps/app.lnk tests/apps/tk34.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk34.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk34.map file { $(B)/tests/start.o $(B)/tests/tk34.o $(B)/tests/tk34s.o }
+
+# TK35.EXE: a task's directory and windir (logs to C:\TK35.LOG)
+$(DOS)/TK35.EXE: $(B)/tests/start.o $(B)/tests/tk35.o tests/apps/app.lnk tests/apps/tk35.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk35.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk35.map file { $(B)/tests/start.o $(B)/tests/tk35.o }
+
+# TK36.EXE: the volume label through the DOS extender
+$(B)/tests/tk36.o: tests/apps/tk36ref.h tests/apps/tklog.h
+$(DOS)/TK36.EXE: $(B)/tests/start.o $(B)/tests/tk36.o tests/apps/app.lnk tests/apps/tk36.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk36.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk36.map file { $(B)/tests/start.o $(B)/tests/tk36.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
@@ -699,3 +757,86 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 	    option map=$(B)/winoldap/winoldap.map \
 	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
 	python3 tools/nemark.py $@ 3.10
+
+# ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
+# programs only, each where Windows 3.1 keeps it (the reference install:
+# WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
+# win/README.TXT says what to copy in from one's own Windows to boot it.
+# tests/w16tree.sh boots it. build/dos stays as it is.
+W16     := $(B)/w16
+W16SYS  := $(W16)/SYSTEM
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
+           $(FONS:$(FNT)/%=$(W16SYS)/%)
+install-tree: $(W16TREE)
+all: install-tree
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16)/README.TXT: win/README.TXT
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL: $(W16SYS)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+
+# ---- USER (user/; ARCHITECTURE.md 10) and its probes ----
+# US1: USTRACE.DLL, the call recorder behind the forwarding modules that
+# tools/mkinterpose.py generates (tests/ustrace.sh)
+UCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/%.o: tests/user/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(UCFLAGS) -fo=$@ $<
+$(B)/user/%.o: tests/user/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USTRACE.DLL: $(B)/user/usentry.o $(B)/user/ustrace.o tests/user/ustrace.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/user/ustrace.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/ustrace.map file { $(B)/user/usentry.o $(B)/user/ustrace.o }
+dos: $(DOS)/USTRACE.DLL
+# w16's USER.EXE: user/*.c and user/uentry.asm; every ordinal the C code
+# does not define gets a stub (tools/mkuserexp.py makes the export list and
+# the stubs from user/ordinals.txt and the objects' public names)
+USER_C   := $(wildcard user/*.c)
+# uentry.o first: its _NULL (class BEGDATA) must start DGROUP, the 16 bytes
+# of instance data KERNEL keeps there (the atom table pointer at 8, ...)
+USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o)
+UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/u_%.o: user/%.c user/user.h
+	@mkdir -p $(@D)
+	$(WCC) $(UUCFLAGS) -fo=$@ $<
+$(B)/user/uentry.o: user/uentry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/user/stubs.asm $(B)/user/exports.lnk &: $(USER_OBJ) user/ordinals.txt tools/mkuserexp.py
+	python3 tools/mkuserexp.py user/ordinals.txt $(B)/user/exports.lnk $(B)/user/stubs.asm $(USER_OBJ)
+$(B)/user/stubs.o: $(B)/user/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USER.EXE: $(USER_OBJ) $(B)/user/stubs.o $(B)/user/exports.lnk user/user.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @user/user.lnk @$(B)/user/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/user.map file { $(USER_OBJ) $(B)/user/stubs.o }
+user: $(DOS)/USER.EXE
+dos: $(DOS)/USER.EXE
+.PHONY: user
+
+# US2: USER's values and pure functions (tests/apps/us2.c), run as the shell
+$(B)/tests/us2.o: tests/apps/us2ref.h tests/apps/tklog.h
+$(DOS)/US2.EXE: $(B)/tests/start.o $(B)/tests/us2.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us2.map file { $(B)/tests/start.o $(B)/tests/us2.o }
+dos: $(DOS)/US2.EXE
+# US3: DrawText's layout (tests/apps/us3.c)
+$(B)/tests/us3.o: tests/apps/us3ref.h tests/apps/tklog.h
+$(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
+dos: $(DOS)/US3.EXE

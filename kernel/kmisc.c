@@ -35,6 +35,7 @@ static u16 filecdr_task;
    end of ExitWindows (Pietrek). UNVERIFIED: the exit code. */
 void KAPI ExitKernel(void)
 {
+    trace_print();                      /* [w16] trace, if any */
     kexit_to_dos(0);
 }
 
@@ -142,7 +143,7 @@ u16 KAPI GetCodeInfo(u32 proc, u16 FAR *info)
 
 /* GetExeVersion (KERNEL.105): the expected Windows version of the
    current task (TDB 1Ah); while booting, KERNEL's own (UNVERIFIED). */
-u16 KAPI GetExeVersion(void)
+u16 KAPI_ES GetExeVersion(void)
 {
     if (cur_task)
         return TW(cur_task, TDB_VERSION);
@@ -151,7 +152,7 @@ u16 KAPI GetExeVersion(void)
 
 /* SetErrorMode (KERNEL.107): the task's error mode (TDB 18h); returns
    the previous one. */
-u16 KAPI SetErrorMode(u16 mode)
+u16 KAPI_ES SetErrorMode(u16 mode)
 {
     u16 old;
     if (!cur_task) {
@@ -221,6 +222,50 @@ u32 KAPI GetCurPID(u32 dw)
 {
     (void)dw;
     return 0;
+}
+
+/* WinOldApCall (KERNEL.151): WINOLDAP.MOD's; no source describes it.
+   TK34 (3.1, Standard mode): one word popped. 1 and 2 give AX=the
+   argument and DX=a selector of KERNEL's PSP (base = the PSP, limit
+   100h; WINOLDAP.MOD calls it with 1 first); 0 gives AX and DX
+   selectors of real-mode memory after KERNEL's PSP (DX: base PSP+100h,
+   limit FFFFh; AX: base PSP+1100h, limit 0Fh), meaning unknown (TODO:
+   logged, 0 returned). */
+u32 KAPI WinOldApCall(u16 fn)
+{
+    kputs("w16: WinOldApCall ");
+    kputhex(fn);
+    kputs("\r\n");
+    if (fn == 0)
+        return 0;
+    return ((u32)psp_sel << 16) | fn;
+}
+
+/* RegisterWinOldApHook (KERNEL.343) and GetWinOldApHooks (344):
+   WINOLDAP.MOD's. TK34 (3.1): 343 pops three words and returns AX=1;
+   344 takes none and returns DX:AX = 0 before any 343, afterwards a far
+   pointer from 343's words (all words equal in the probe: which two is
+   not known). TODO: logged; 343's last two words kept as the far
+   pointer (UNVERIFIED which two). */
+static u32 woa_hook;
+
+u16 KAPI RegisterWinOldApHook(u16 a, u16 b, u16 c)
+{
+    kputs("w16: RegisterWinOldApHook ");
+    kputhex(a);
+    kputs(" ");
+    kputhex(b);
+    kputs(" ");
+    kputhex(c);
+    kputs("\r\n");
+    woa_hook = ((u32)b << 16) | c;
+    return 1;
+}
+
+u32 KAPI GetWinOldApHooks(void)
+{
+    kputs("w16: GetWinOldApHooks\r\n");
+    return woa_hook;
 }
 
 /* IsWinOldApTask (KERNEL.158): w16 has no WINOLDAP yet. */
@@ -320,7 +365,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     return off + n - 1 <= lsl(sel);     /* UNVERIFIED: expand-down */
 }
 
-u16 KAPI IsBadReadPtr(void FAR *p, u16 n)
+u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
 {
     return !range_ok(FP_SEG(p), FP_OFF(p), n, 0);
 }
@@ -393,7 +438,7 @@ char FAR * KAPI lstrcpyn(char FAR *dst, const char FAR *src, u16 n)
 
 /* GetAppCompatFlags (KERNEL.354): Schulman: TDB 4Eh of the task (0: the
    current one). w16 does not fill that field yet, so 0. */
-u32 KAPI GetAppCompatFlags(u16 htask)
+u32 KAPI_ES GetAppCompatFlags(u16 htask)
 {
     if (!htask)
         htask = cur_task;

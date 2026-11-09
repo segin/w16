@@ -15,7 +15,8 @@
 #     -t SECS    run time limit (default 60)
 #     -f SRC=DST copy SRC to C:\DST as well (repeatable), e.g. a test
 #                program; DST "-" deletes SRC (a path under C:\) instead
-#     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable)
+#     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable);
+#                -i WIN.INI:S:K=V edits WIN.INI instead
 #     -s PNG     also take a screenshot after SECS seconds (DOSBox on a
 #                virtual X display, xvfb-run, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
@@ -23,8 +24,12 @@
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
 #                Microsoft's DOSX.EXE; -X FILE: that file as DOSX.EXE
 #     -p CPU     run in DOSBox-X with cputype=CPU (286: an emulated 80286,
-#                KRNL286 and the 286 paths of the DOS extender)
+#                KRNL286 and the 286 paths of the DOS extender; 386x:
+#                DOSBox-X as a 386, which checks segment limits)
 #     -w         use w16's WIN.COM (build/dos/WIN.COM) instead of Windows 3.1's
+# A plain WIN (without /S) in the scratch copy picks 386 Enhanced mode on
+# a 386 and stops with "Cannot find or load required file KRNL386.EXE",
+# since KRNL386.EXE is deleted there: that is how 3.1 picks its mode.
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
 # seconds, our KERNEL reports where the processor was and exits (-i
 # w16:watchdog=0 turns that off).
@@ -83,7 +88,11 @@ printf '%s\n' "$files" | while IFS= read -r f; do
 done
 printf '%s\n' "$inis" | while IFS= read -r f; do
     [ -n "$f" ] || continue
-    python3 - "$work/c/WINDOWS/SYSTEM.INI" "$f" <<'PY'
+    case $f in
+    WIN.INI:*) ini=WIN.INI f=${f#WIN.INI:} ;;
+    *) ini=SYSTEM.INI ;;
+    esac
+    python3 - "$work/c/WINDOWS/$ini" "$f" <<'PY'
 import sys
 path, spec = sys.argv[1], sys.argv[2]
 sec, kv = spec.split(':', 1)
@@ -113,6 +122,7 @@ done
 emu="dosbox -noconsole" xdos=
 if [ -n "$usex" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false"
+    [ "$cpu" = 386x ] && cpu=386
 fi
 common="[dosbox]
 $xdos
@@ -134,13 +144,13 @@ echo WINEXIT >> C:\\OUT.TXT
 exit"
 if [ -z "$shot" ]; then
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
-    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$secs" \
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
         $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 else
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
 sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$work/s.png"

@@ -35,6 +35,8 @@ extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
 extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
+extern _dos_exit_note           ; fault.c
+extern _task_signal_exit        ; task.c
 
 segment _DATA
 global _old21
@@ -106,6 +108,31 @@ int21_handler:
         pop ds
         cmp ah, 4Ch
         je .exit
+        cmp ah, 1Ah
+        jne .not1a
+        ; set DTA: the running task's (TDB 62h), then to DOS as before
+        push ds
+        push bx
+        push dx
+        mov bx, DGROUP
+        mov ds, bx
+        mov bx, [_cur_task wrt DGROUP]
+        or bx, bx
+        jz .dta0
+        pop dx
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 6]              ; the caller's DS
+        mov ds, bx
+        pop word [64h]
+        mov [62h], dx
+        pop bp
+.dta0:  pop dx
+        pop bx
+        pop ds
+        jmp .chain
+.not1a:
         cmp ah, 51h
         je .pdb
         cmp ah, 62h
@@ -131,6 +158,19 @@ int21_handler:
         pop bx
         pop ds
         jne task_exit_al
+        ; no task: the process ends (a debugging note while booting
+        ; Windows: who ended it)
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, sp
+        push ss
+        push ax
+        call far _dos_exit_note         ; void __cdecl dos_exit_note(u16 far *)
+        add sp, 4
+        pop ax
+        pop ds
 .chain:
         sub sp, 4                       ; room for the far jump target
         push bp
@@ -204,6 +244,14 @@ task_tramp:
 ; AL = exit code. Leaves the task's stack for KERNEL's exit stack and ends
 ; the task there (task_exit_c does not return).
 task_exit_al:
+        ; first, on the task's own stack, the task's signal procedure
+        ; (USER's, TDB 2Ah) hears that it ends (task.c, Pietrek: ExitCall)
+        sti
+        mov bx, DGROUP
+        mov ds, bx
+        push ax
+        call far _task_signal_exit
+        pop ax
         mov bx, DGROUP
         mov ds, bx
         mov ss, bx
@@ -227,7 +275,7 @@ unimpl_entry:
         mov ax, 0FFh                    ; no task yet (a DLL's LibMain)
         call far kexit_to_dos_          ; Watcom register convention
 .task:
-        mov al, 0FFh
+        mov ax, 4CFFh                   ; as if INT 21h AX=4CFFh
         jmp task_exit_al
 
 ; ---------------------------------------------------------------------------
@@ -311,6 +359,7 @@ LOCALAPI GETATOMHANDLE, AHANDLE, 1      ; KERNEL.73
 LOCALAPI LOCALSHRINK,  LSHRINK,  2      ; KERNEL.121
 LOCALAPI LOCALCOUNTFREE, LCOUNTFREE, 0  ; KERNEL.161
 LOCALAPI LOCALHEAPSIZE, LHEAPSIZE, 0    ; KERNEL.162
+LOCALAPI LOCALHANDLEDELTA, LHDELTA, 1   ; KERNEL.310
 
 ; ---------------------------------------------------------------------------
 ; u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
@@ -838,4 +887,32 @@ GETDOSENVIRONMENT:
         call far GDENV
         pop es
         pop bx
+        retf
+
+; ---------------------------------------------------------------------------
+; u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q)
+; Call a task signal procedure as KERNEL does (Schulman, SetTaskSignalProc:
+; Pascal (hTaskOrModule, wCode, DI, hInstance, hQueue), BX = wCode).
+global _sig_call
+_sig_call:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        push word [bp + 10]             ; hTask or hModule
+        push word [bp + 12]             ; code
+        push word [bp + 14]             ; DI
+        push word [bp + 16]             ; hInstance
+        push word [bp + 18]             ; queue
+        mov bx, [bp + 12]
+        mov di, [bp + 14]
+        call far [bp + 6]
+        lea sp, [bp - 8]
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
         retf
