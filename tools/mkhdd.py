@@ -3,7 +3,7 @@
 
 One active FAT16 partition, formatted with mtools, booting the DOS whose
 system files and boot sector are given (in w16: MS-DOS 4.00 built from
-Microsoft's MIT-licensed source, see tests/msdos-build.sh). The MBR is
+Microsoft's MIT-licensed source, see tools/msdos-build.sh). The MBR is
 w16's own (tools/dos/mbr.asm).
 
 usage: mkhdd.py OUT.IMG --mbr MBR.BIN --boot MSBOOT.BIN --io IO.SYS

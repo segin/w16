@@ -1,0 +1,14 @@
+# USTRACE.DLL, probe US1's recorder (tests/user/ustrace.c)
+format windows dll
+option quiet
+option modname=USTRACE
+option start=usentry
+option heapsize=1k
+option description 'w16 US1 call recorder'
+segment type code fixed preload
+segment type data fixed preload
+library windows.lib
+export TRREC.1
+export TRRET.2
+export TRFLUSH.3
+import GETEXEPTR KERNEL.133
