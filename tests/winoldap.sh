@@ -14,8 +14,8 @@
 #   - C:\WC.LOG, what the DOS program WC1.COM was given (tests/dos/wc1.asm);
 #   - the screenshots, pixel by pixel, with the bottom-left corner of the
 #     Windows screens (where the DOS programs' icons are: w16 draws its own,
-#     ARCHITECTURE.md 6.8) masked, and up to 40 pixels allowed on the text
-#     screens (the blinking cursor).
+#     ARCHITECTURE.md 6.8) masked; up to 40 pixels may differ on any
+#     screen (a blinking cursor or edit caret).
 #
 #   usage: tests/winoldap.sh [-o DIR] [-m WINOLDAP.MOD] [-k KRNL286.EXE] [SCENARIO...]
 #     -o DIR   keep everything in DIR (new): DIR/NAME/{ms,w16}/*.png ...
@@ -116,7 +116,7 @@ for n in $names; do
         if [ "$size" = 640x480 ]; then
             magick "$f" -fill black -draw 'rectangle 0,400 199,479' "$work/$n/diff/a.png"
             magick "$g" -fill black -draw 'rectangle 0,400 199,479' "$work/$n/diff/b.png"
-            limit=0
+            limit=40
         else
             cp "$f" "$work/$n/diff/a.png"
             cp "$g" "$work/$n/diff/b.png"
