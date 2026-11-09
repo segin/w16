@@ -999,6 +999,16 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US6: EM_GETTHUMB (tests/apps/us6.c)
+$(B)/tests/us6.o: tests/apps/us6ref.h tests/apps/tklog.h
+$(B)/tests/mevent.o: tests/apps/mevent.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/US6.EXE: $(B)/tests/start.o $(B)/tests/us6.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us6.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us6.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us6.map file { $(B)/tests/start.o $(B)/tests/us6.o $(B)/tests/mevent.o }
+dos: $(DOS)/US6.EXE
 # US4: a gallery of USER's drawing, saved as BMPs (tests/apps/us4.c, us4.rc;
 # tests/userscreens.sh)
 $(B)/tests/us4.res: tests/apps/us4.rc
