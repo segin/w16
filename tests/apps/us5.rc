@@ -1,0 +1,23 @@
+/* us5.rc - probe US5's menu: Program Manager's bar texts (tests/apps/us5.c) */
+#include <windows.h>
+
+1 MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open", 1
+        MENUITEM "E&xit", 2
+    END
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Auto Arrange", 3
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&Cascade", 4
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents", 5
+    END
+END

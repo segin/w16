@@ -274,6 +274,14 @@ extern LONG WINAPI DesktopWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI MenuWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI IconTitleWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI ButtonWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI StaticWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI EditWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI ListBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI ComboLBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI ComboBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI ScrollBarWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI DefDlgProc(HWND, UINT, WPARAM, LPARAM);
 
 static void sysclass(LPCSTR name, UINT style, WNDPROC proc, int wndextra, HBRUSH br, LPCSTR cursor)
 {
@@ -298,6 +306,14 @@ void register_system_classes(void)
              (HBRUSH)(COLOR_BACKGROUND + 1), IDC_ARROW);
     sysclass(MAKEINTRESOURCE(32772), 0, (WNDPROC)IconTitleWndProc, 0, 0, IDC_ARROW);
     sysclass(MAKEINTRESOURCE(32768), CS_SAVEBITS, (WNDPROC)MenuWndProc, 2, 0, NULL);
-    sysclass("MDICLIENT", 0, (WNDPROC)MDIClientWndProc, 16,
+    sysclass("Button", 0x008B, (WNDPROC)ButtonWndProc, 3, 0, IDC_ARROW);
+    sysclass("Edit", 0x0088, (WNDPROC)EditWndProc, 6, 0, IDC_IBEAM);
+    sysclass("Static", 0x0080, (WNDPROC)StaticWndProc, 6, 0, IDC_ARROW);
+    sysclass("ListBox", 0x0088, (WNDPROC)ListBoxWndProc, 2, 0, IDC_ARROW);
+    sysclass("ScrollBar", 0x008B, (WNDPROC)ScrollBarWndProc, 10, 0, IDC_ARROW);
+    sysclass("ComboBox", 0x0088, (WNDPROC)ComboBoxWndProc, 2, 0, IDC_ARROW);
+    sysclass("ComboLBox", 0x0808, (WNDPROC)ComboLBoxWndProc, 2, 0, IDC_ARROW);
+    sysclass(MAKEINTRESOURCE(32770), 0x2808, (WNDPROC)DefDlgProc, DLGWINDOWEXTRA, 0, IDC_ARROW);
+    sysclass("MDIClient", 0, (WNDPROC)MDIClientWndProc, 16,
              (HBRUSH)(COLOR_APPWORKSPACE + 1), IDC_ARROW);
 }

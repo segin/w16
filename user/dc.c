@@ -98,10 +98,15 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
     if (clipchildren) {
         for (s = w->hwndChild; s; s = PW(s)->hwndNext) {
             PWND sw = PW(s);
+            RECT c;
             if (!(sw->style & WS_VISIBLE))
                 continue;
-            SetRectRgn(hrgnTmp1, sw->rcWindow.left, sw->rcWindow.top,
-                       sw->rcWindow.right, sw->rcWindow.bottom);
+            /* a child shows only inside its parent's client area: one
+               placed partly outside (w16's Program Manager puts its MDI
+               client at -1,-1) must not hide the parent's frame */
+            if (!IntersectRect(&c, &sw->rcWindow, &w->rcClient))
+                continue;
+            SetRectRgn(hrgnTmp1, c.left, c.top, c.right, c.bottom);
             CombineRgn(r, r, hrgnTmp1, RGN_DIFF);
         }
     }

@@ -792,3 +792,24 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US4: a gallery of USER's drawing, saved as BMPs (tests/apps/us4.c, us4.rc;
+# tests/userscreens.sh)
+$(B)/tests/us4.res: tests/apps/us4.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US4.EXE: $(B)/tests/start.o $(B)/tests/us4.o $(B)/tests/us4.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us4.map option resource=$(B)/tests/us4.res \
+	    file { $(B)/tests/start.o $(B)/tests/us4.o }
+dos: $(DOS)/US4.EXE
+# US5: where menu-bar items go (tests/apps/us5.c, us5.rc)
+$(B)/tests/us5.res: tests/apps/us5.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
+	    file { $(B)/tests/start.o $(B)/tests/us5.o }
+dos: $(DOS)/US5.EXE

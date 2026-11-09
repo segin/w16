@@ -506,7 +506,10 @@ static int item_text_width(HDC hdc, PMITEM it)
 }
 
 /* lay out the bar for a width; returns its height without the line under it */
-static int layout_bar(PMENU m, int width)
+/* align: the window's class has CS_BYTEALIGNCLIENT (probe US5: then the
+   items start on 8-pixel boundaries, rounded to the nearest; Program
+   Manager's frame class has it) */
+static int layout_bar(PMENU m, int width, BOOL align)
 {
     HDC hdc = hdcScreen;
     HFONT old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
@@ -514,18 +517,19 @@ static int layout_bar(PMENU m, int width)
     UINT i;
     for (i = 0; i < m->count; i++) {
         PMITEM it = item_at(m, i);
-        /* the text's width to the nearest character cell, plus a cell on
-           each side: Program Manager's File, Options, Window (text 24, 50,
-           52 pixels) take 40, 64, 72 on Windows 3.1 (measured; the rule
-           is UNVERIFIED beyond these) */
+        /* the text's width plus a system-font cell (8 pixels) on each side
+           (US5: File, Options, Window, Help with texts of 24, 50, 52, 30
+           pixels start 0, 40, 106, 174 pixels into the bar) */
         int cc = cxSysCharMenu();
-        int w = (item_text_width(hdc, it) + cc / 2) / cc * cc + 2 * cc;
+        int w = item_text_width(hdc, it) + 2 * cc;
         if (x + w > width && x > 0) {
             x = 0;
             y += h;
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
+        if (align)
+            x = (x + 4) / 8 * 8;
     }
     SelectObject(hdc, old);
     m->cx = width;
@@ -538,7 +542,8 @@ int menu_bar_height(PWND w, int width)
     PMENU m = valid_menu((HMENU)w->hMenu);
     if (!m)
         return 0;
-    return layout_bar(m, width) + sysmet[SM_CYBORDER];
+    return layout_bar(m, width, (((PCLS)w->cls)->style & CS_BYTEALIGNCLIENT) != 0) +
+           sysmet[SM_CYBORDER];
 }
 
 /* draw a menu item's text with its mnemonic underlined, tabbed text
@@ -585,7 +590,7 @@ void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width)
     RECT r;
     if (!m)
         return;
-    layout_bar(m, width);
+    layout_bar(m, width, (((PCLS)w->cls)->style & CS_BYTEALIGNCLIENT) != 0);
     m->hwnd = (HWND)(WORD)w;
     old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     SetRect(&r, x, y, x + width, y + m->cy);

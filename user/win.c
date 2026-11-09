@@ -9,6 +9,28 @@
 #include "user.h"
 
 HWND hwndDesktop;
+
+/* CS_BYTEALIGNCLIENT: the client area's left edge goes to the nearest
+   multiple of 8 on screen (probe US5: asked for x 10 and 333, Windows 3.1
+   put such windows at 12 and 332, their client areas at 16 and 336) */
+void byte_align(PWND w)
+{
+    int dx;
+    WORD cs = ((PCLS)w->cls)->style;
+    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & WS_CHILD))
+        return;
+    /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
+       message boxes are at 136, 168, 120 where centring gives 137, 169,
+       122) */
+    if (cs & CS_BYTEALIGNCLIENT)
+        dx = (w->rcClient.left + 4) / 8 * 8 - w->rcClient.left;
+    else
+        dx = (w->rcWindow.left + 4) / 8 * 8 - w->rcWindow.left;
+    if (dx) {
+        OffsetRect(&w->rcWindow, dx, 0);
+        OffsetRect(&w->rcClient, dx, 0);
+    }
+}
 void free_place(HWND h);
 
 PWND valid_wnd(HWND h)
@@ -237,6 +259,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     calc_client(w);
+    byte_align(w);
     r = send_message(h, WM_CREATE, 0, (LPARAM)(CREATESTRUCT __far *)&cs);
     if (!valid_wnd(h))
         return 0;

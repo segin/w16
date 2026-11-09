@@ -398,10 +398,11 @@ static void title_place(HWND t, PWND w)
     DrawText(hdc, text, -1, &r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
     SelectObject(hdc, old);
     {
-        int cx = r.right - r.left + 2;
-        /* one pixel left of centred: measured (Accessories, Games, StartUp
-           under Program Manager), UNVERIFIED as a rule */
-        int x = (w->rcWindow.left + w->rcWindow.right) / 2 - cx / 2 - 1;
+        /* the text's width plus 4, centred under the icon (Windows 3.1:
+           "Accessories", 57 pixels, under the icon at 93-129 is a title
+           window at 81-142, 13 high: SNAP's window dump) */
+        int cx = r.right - r.left + 4;
+        int x = (w->rcWindow.left + w->rcWindow.right) / 2 - cx / 2;
         int y = w->rcWindow.bottom;
         if (w->style & WS_CHILD) {
             x -= p->rcClient.left;
@@ -417,7 +418,7 @@ HWND make_icon_title(HWND h)
     HWND t;
     if (!w)
         return 0;
-    t = create_window(0, MAKEINTRESOURCE(32772), NULL,
+    t = create_window(WS_EX_NOPARENTNOTIFY, MAKEINTRESOURCE(32772), NULL,
                       ((w->style & WS_CHILD) ? WS_CHILD : WS_POPUP) | WS_CLIPSIBLINGS,
                       0, 0, 0, 0, (w->style & WS_CHILD) ? w->hwndParent : h, 0,
                       hInstUser, NULL);
@@ -454,6 +455,7 @@ LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             GetWindowText(w->hwndOwner, text, sizeof text);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
+            InflateRect(&r, -1, 0);
             DrawText(hdc, text, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
             SelectObject(hdc, old);
         }
