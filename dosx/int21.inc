@@ -100,7 +100,9 @@ i21class:
         db I_0A
  %elif n = 0Ch
         db I_0C
- %elif n = 0Fh || n = 10h || n = 11h || n = 12h || n = 13h || n = 14h || n = 15h || n = 16h || n = 17h || n = 21h || n = 22h || n = 23h || n = 24h || n = 27h || n = 28h
+ %elif n = 11h || n = 12h
+        db I_FCBD               ; FCB search: translated (TK36)
+ %elif n = 0Fh || n = 10h || n = 13h || n = 14h || n = 15h || n = 16h || n = 17h || n = 21h || n = 22h || n = 23h || n = 24h || n = 27h || n = 28h
         db I_SCR
  %elif n = 60h
         db I_60
