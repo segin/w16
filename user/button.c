@@ -109,7 +109,9 @@ static void paint_push(HWND h, HDC hdc)
 {
     RECT r, t;
     BYTE s = state(h);
-    BOOL def = btype(h) == BS_DEFPUSHBUTTON;
+    /* a push button with the focus has the default button's border too
+       (US4: Push focused, OK still bold) */
+    BOOL def = btype(h) == BS_DEFPUSHBUTTON || (state(h) & ST_FOCUS);
     BOOL pushed = (s & ST_PUSHED) != 0;
     int b = def ? 2 : 1, x0, y0, x1, y1, i;
     char text[256];
@@ -147,6 +149,7 @@ static void paint_push(HWND h, HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, syscolor[COLOR_BTNTEXT]);
     t = r;
+    t.right -= 2;               /* centred left of the shadow (US4) */
     if (pushed)
         OffsetRect(&t, 1, 1);
     draw_label(h, hdc, &t, DT_CENTER | DT_VCENTER | DT_SINGLELINE, !IsWindowEnabled(h));

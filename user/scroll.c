@@ -59,9 +59,11 @@ static void draw_thumb(HDC hdc, int x, int y, int cx, int cy)
     fillc(hdc, x + 1, y + 1, cx - 2, cy - 2, COLOR_BTNFACE);
     fillc(hdc, x + 1, y + 1, cx - 3, 1, COLOR_BTNHIGHLIGHT);
     fillc(hdc, x + 1, y + 1, 1, cy - 3, COLOR_BTNHIGHLIGHT);
-    fillc(hdc, x + cx - 3, y + 1, 2, cy - 2, COLOR_BTNSHADOW);
-    fillc(hdc, x + 1, y + cy - 3, cx - 2, 2, COLOR_BTNSHADOW);
-    fillc(hdc, x + cx - 2, y + 1, 1, 1, COLOR_BTNSHADOW);
+    /* a two-pixel shadow whose inner line starts a pixel later (US4) */
+    fillc(hdc, x + cx - 2, y + 1, 1, cy - 2, COLOR_BTNSHADOW);
+    fillc(hdc, x + cx - 3, y + 2, 1, cy - 3, COLOR_BTNSHADOW);
+    fillc(hdc, x + 1, y + cy - 2, cx - 2, 1, COLOR_BTNSHADOW);
+    fillc(hdc, x + 2, y + cy - 3, cx - 3, 1, COLOR_BTNSHADOW);
 }
 
 int thumb_pos(int len, int arrow, SBINFO *s)
@@ -69,7 +71,9 @@ int thumb_pos(int len, int arrow, SBINFO *s)
     int travel = len - 2 * arrow + 2 - arrow;
     if (s->max <= s->min || travel <= 0)
         return arrow - 1;
-    return arrow - 1 + (int)((long)travel * (s->pos - s->min) / (s->max - s->min));
+    /* rounded to the nearest (US4: 45.5 pixels went to 46) */
+    return arrow - 1 + (int)(((long)travel * (s->pos - s->min) * 2 + (s->max - s->min)) /
+                             (2L * (s->max - s->min)));
 }
 
 /* a bar in rc of hdc */

@@ -274,6 +274,14 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     if (!valid_wnd(h))
         return 0;
     lb = lb_of(h);
+    if (msg == WM_NCCREATE && (GetWindowLong(h, GWL_STYLE) & WS_BORDER)) {
+        /* the border goes outside the rectangle asked for: the items get
+           all of it (US4: a list box at 33,188 70x80 had its frame at
+           32,187 72x82; UNVERIFIED for other parents than a dialog) */
+        PWND w = valid_wnd(h);
+        InflateRect(&w->rcWindow, sysmet[SM_CXBORDER], sysmet[SM_CYBORDER]);
+        return DefWindowProc(h, msg, wp, lp);
+    }
     if (msg == WM_CREATE) {
         lb = (PLB)LocalAlloc(LPTR, sizeof(LB));
         if (!lb)

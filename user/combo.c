@@ -149,7 +149,7 @@ static void layout(HWND h, PCB c)
             MoveWindow(c->edit, 0, 0, r.right, eh, TRUE);
         if (c->list)
             /* indented 8, its top line on the edit's bottom line (US4) */
-            MoveWindow(c->list, 8, eh - 1, r.right - 8, r.bottom - eh + 1, TRUE);
+            MoveWindow(c->list, 8, eh - 1, r.right - 8, r.bottom - eh + 2, TRUE);
     } else if (c->edit)
         MoveWindow(c->edit, 0, 0, r.right - sysmet[SM_CXVSCROLL], eh, TRUE);
 }
