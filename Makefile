@@ -575,3 +575,20 @@ test: dos
 
 clean:
 	rm -rf $(B)
+
+# ---- USER (user/; ARCHITECTURE.md 10) and its probes ----
+# US1: USTRACE.DLL, the call recorder behind the forwarding modules that
+# tools/mkinterpose.py generates (tests/ustrace.sh)
+UCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/%.o: tests/user/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(UCFLAGS) -fo=$@ $<
+$(B)/user/%.o: tests/user/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USTRACE.DLL: $(B)/user/usentry.o $(B)/user/ustrace.o tests/user/ustrace.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/user/ustrace.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/ustrace.map file { $(B)/user/usentry.o $(B)/user/ustrace.o }
+dos: $(DOS)/USTRACE.DLL
