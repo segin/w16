@@ -11,12 +11,16 @@ place WFS_Frame 0 0 330 480
 wait 1000
 snap C:\BEFORE.BMP
 dump
-dragitem 5 480 300
+key 09
+wait 500
+dragitem 6 480 200
 wait 2000
 snap C:\DROP1.BMP
 place WFS_Frame 0 0 330 480
 wait 500
-dragitem 11 420 340
+key 09
+wait 500
+dragitem 11 400 215
 wait 2000
 snap C:\DROP2.BMP
 dump

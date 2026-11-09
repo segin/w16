@@ -5,6 +5,8 @@ run WINFILE.EXE
 wait 4000
 snap C:\FM.BMP
 dump
+key 09
+wait 500
 dblitem 11
 wait 3000
 snap C:\OPENTXT.BMP
