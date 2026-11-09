@@ -594,13 +594,18 @@ $(DOS)/TDDE.EXE: $(B)/tests/start.o $(B)/tests/tdde.o tests/apps/app.lnk
 	    option map=$(B)/tests/tdde.map file { $(B)/tests/start.o $(B)/tests/tdde.o }
 
 # SNAP2.EXE: SNAP for Windows 2.x (marked 2.0)
-$(B)/tests/snap2.o: tests/apps/snap.c
+$(B)/tests/snap2.o: tests/apps/snap.c tests/apps/snap.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -dSNAP_WIN2 -fo=$@ $<
-$(DOS)/SNAP2.EXE: $(B)/tests/start.o $(B)/tests/snap2.o tests/apps/app.lnk tools/nemark.py
+$(B)/tests/snap2.res: tests/apps/snap.rc tests/apps/snap.h $(B)/tests/snap.ico
+	$(WRC) -q -r -bt=windows -dSNAP_WIN2 -i=$(WATCOM)/h/win -i=tests/apps -i=$(B)/tests \
+	    -fo=$@ $<
+$(DOS)/SNAP2.EXE: $(B)/tests/start.o $(B)/tests/snap2.o $(B)/tests/snap2.res tests/apps/app.lnk \
+                  tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/snap2.map file { $(B)/tests/start.o $(B)/tests/snap2.o }
+	    option map=$(B)/tests/snap2.map option resource=$(B)/tests/snap2.res \
+	    file { $(B)/tests/start.o $(B)/tests/snap2.o }
 	python3 tools/nemark.py $@ 2.0
 
 # TW2.EXE: the Windows 2.x probe, marked as a Windows 2.0 program
@@ -611,10 +616,18 @@ $(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nem
 	    option map=$(B)/tests/tw2.map file { $(B)/tests/start.o $(B)/tests/tw2.o }
 	python3 tools/nemark.py $@ 2.0
 
-$(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
+# SNAP.EXE: its icon (tools/snapicon.py) and the interactive window
+$(B)/tests/snap.ico: tools/snapicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 -B tools/snapicon.py $@
+$(B)/tests/snap.o: tests/apps/snap.h
+$(B)/tests/snap.res: tests/apps/snap.rc tests/apps/snap.h $(B)/tests/snap.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=tests/apps -i=$(B)/tests -fo=$@ $<
+$(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o $(B)/tests/snap.res tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/snap.map file { $(B)/tests/start.o $(B)/tests/snap.o }
+	    option map=$(B)/tests/snap.map option resource=$(B)/tests/snap.res \
+	    file { $(B)/tests/start.o $(B)/tests/snap.o }
 
 # ---- DOS test tools ----
 $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
