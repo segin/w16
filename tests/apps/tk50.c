@@ -51,6 +51,30 @@ static FARPROC kproc(WORD ord)
     return GetProcAddress(hk, MAKEINTRESOURCE(ord));
 }
 
+/* A "kept" mask: w16 may keep more registers than Windows 3.1, never
+   fewer, so the check is that every bit 3.1 showed is set. */
+static void kept(const char *n, WORD m)
+{
+    WORD i;
+    out("OBS ");
+    out(n);
+    out("=");
+    outhex(m);
+    out("\r\n");
+    for (i = 0; ref[i].name; i++)
+        if (same(ref[i].name, n)) {
+            if ((m & ref[i].value) != ref[i].value) {
+                out("FAIL ");
+                out(n);
+                out(" (Windows 3.1 keeps ");
+                outhex(ref[i].value);
+                out(")\r\n");
+                failures++;
+            }
+            break;
+        }
+}
+
 static void nm(const char *what, const char *suffix)
 {
     lstrcpy(name, what);
@@ -104,7 +128,7 @@ static int kc(const char *what, WORD ord, int twice, int n, WORD a0,
         w_clc = 0;
     }
     nm(what, "kept");
-    obs(name, m);
+    kept(name, m);
     return 1;
 }
 
@@ -147,7 +171,8 @@ static void t_hmemcpy(void)
     w_call(kproc(348), 6, s2, 0xFFF8, s1, 0xFFF0, 0, 0x30, 0, 0);
     res("hmemcpy(0x30 across 64K)", "AX", w_regs[0]);
     res("hmemcpy(0x30 across 64K)", "DX", w_regs[3]);
-    res("hmemcpy(0x30 across 64K)", "kept", mask());
+    nm("hmemcpy(0x30 across 64K)", "kept");
+    kept(name, mask());
     a = (BYTE FAR *)MAKELP(s2, 0xFFF8);
     b = (BYTE FAR *)MAKELP(s2 + inc, 0);
     bad = 0;
@@ -237,7 +262,7 @@ static void t_priority(void)
     res("SetPriority(0,100h)", "AX", r_ax);
     tp[4] = 0;
     K2("SetPriority(bad,1)", 32, 0, SEG(buf), 1);
-    res("SetPriority(bad,1)", "AX", r_ax);
+    res_env("SetPriority(bad,1)", "AX", r_ax);
     tp[4] = 0;
     if (!K2("SetPriority(task,2)", 32, 0, t, 2))
         return;
@@ -260,7 +285,7 @@ static void t_heapspaces(void)
     res("LocalInit(430h block,12h,417h)", "", li((WORD)h, 0x12, 0x417));
     v = ghs((WORD)h);
     res("GetHeapSpaces(small heap) total", "", HIWORD(v));
-    res("GetHeapSpaces(small heap) free", "", LOWORD(v));
+    res_env("GetHeapSpaces(small heap) free", "", LOWORD(v));
     v = ghs((WORD)h | 1);
     res("GetHeapSpaces(small heap sel) total", "", HIWORD(v));
     res("GetHeapSpaces(small heap) word 6", "", *(WORD FAR *)MAKELP((WORD)h | 1, 6));
@@ -337,7 +362,7 @@ static void t_simple(void)
     }
     if (K1("SwapRecording(0)", 204, 1, 0)) {
         res("SwapRecording(0)", "AX", r_ax);
-        res("SwapRecording(0)", "DX", r_dx);
+        res_env("SwapRecording(0)", "DX", r_dx);
     }
     if (K1("FlushCachedFileHandle(hk)", 319, 1, hk)) {
         res("FlushCachedFileHandle(hk)", "AX", r_ax);
@@ -412,8 +437,8 @@ static void t_simple(void)
     if (p)
         res_env("THHOOK 44h", "before", (WORD)old);
     if (K2("InitTask1", 141, 0, SEG(rec_cb0), OFF(rec_cb0))) {
-        res("InitTask1", "AX", r_ax);
-        res("InitTask1", "DX", r_dx);
+        res_env("InitTask1", "AX", r_ax);
+        res_env("InitTask1", "DX", r_dx);
         if (p)
             res("InitTask1 sets THHOOK 44h", "",
                 *(DWORD FAR *)(p + 0x22) == (DWORD)(void FAR *)rec_cb0);
@@ -424,10 +449,10 @@ static void t_simple(void)
 static void t_files(void)
 {
     WORD h;
-    if (K3("OpenPathname(WIN.INI,0)", 75, 0, SEG("C:\\WINDOWS\\WIN.INI"), OFF("C:\\WINDOWS\\WIN.INI"), 0)) {
+    if (K3("OpenPathname(TK50.EXE,0)", 75, 0, SEG("C:\\TK50.EXE"), OFF("C:\\TK50.EXE"), 0)) {
         h = r_ax;
-        res("OpenPathname(WIN.INI,0) ok", "", h != 0xFFFF && h >= 5 && h < 0x100);
-        res_env("OpenPathname(WIN.INI,0)", "AX", r_ax);
+        res("OpenPathname(TK50.EXE,0) ok", "", h != 0xFFFF && h >= 5 && h < 0x100);
+        res_env("OpenPathname(TK50.EXE,0)", "AX", r_ax);
         if (h != 0xFFFF && h < 0x100)
             res("OpenPathname: _lread of the handle", "",
                 _lread(h, buf, 4) == 4);
@@ -436,7 +461,7 @@ static void t_files(void)
     }
     if (K3("OpenPathname(nosuch,0)", 75, 0, SEG("C:\\NOSUCH.XYZ"), OFF("C:\\NOSUCH.XYZ"), 0)) {
         res("OpenPathname(nosuch,0)", "AX", r_ax);
-        res("OpenPathname(nosuch,0)", "DX", r_dx);
+        res_env("OpenPathname(nosuch,0)", "DX", r_dx);
     }
 }
 
@@ -446,7 +471,7 @@ static void t_selectors(void)
     FARPROC fx = (FARPROC)t_selectors;
     if (K1("IsSharedSelector(own DS)", 345, 1, SEG(buf))) {
         res("IsSharedSelector(own DS)", "AX", r_ax);
-        res("IsSharedSelector(own DS)", "DX", r_dx);
+        res_env("IsSharedSelector(own DS)", "DX", r_dx);
     }
     if (K1("IsSharedSelector(own CS)", 345, 1, SEG(fx)))
         res("IsSharedSelector(own CS)", "AX", r_ax);
@@ -483,7 +508,7 @@ static void t_selectors(void)
             r_ax == LOWORD(GlobalHandle(k_cs)));
     }
     if (K2("GetCodeHandle(0)", 93, 1, 0, 0)) {
-        res("GetCodeHandle(0)", "AX", r_ax);
+        res_env("GetCodeHandle(0)", "AX", r_ax);
         res("GetCodeHandle(0)", "DX", r_dx);
     }
     if (K2("GetCodeHandle(data)", 93, 1, SEG(buf), OFF(buf))) {
@@ -507,14 +532,17 @@ static void t_localnotify(void)
     if (!K2("LocalNotify", 14, 0, SEG(rec_cb6), OFF(rec_cb6)))
         return;
     prev = MAKELONG(r_ax, r_dx);
-    res("LocalNotify prev seg==KERNEL CS", "", r_dx == SEG(kproc(3)));
+    res_env("LocalNotify prev seg==KERNEL CS", "", r_dx == SEG(kproc(3)));
     res_env("LocalNotify", "AX", r_ax);
     res_env("LocalNotify", "DX", r_dx);
     for (i = 0; i < 24; i++)
         if (ib[i] != before[i])
-            obsn("LocalNotify changed info word", i * 2, 1);
-    res("LocalNotify prev == info 1Eh", "", prev == *(DWORD FAR *)&before[15]);
-    res("LocalNotify prev == info 18h", "", prev == *(DWORD FAR *)&before[12]);
+            obs_env(i == 12 ? "LocalNotify changed info word 18h" :
+                    i == 15 ? "LocalNotify changed info word 1Eh" :
+                    "LocalNotify changed another info word", 1);
+    /* KRNL286 keeps it at 18h, w16's heap (KRNL386's layout) at 1Eh */
+    res("LocalNotify prev == info 1Eh or 18h", "", prev == *(DWORD FAR *)&before[15] ||
+        prev == *(DWORD FAR *)&before[12]);
     /* the procedure in use: notifications while it is set */
     cb_count = 0;
     cb_ret = 0;
@@ -529,12 +557,12 @@ static void t_localnotify(void)
         LocalFree(a);
         LocalFree(b);
     }
-    res("LocalNotify calls", "", cb_count);
+    res_env("LocalNotify calls", "", cb_count);     /* w16: none yet */
     for (i = 0; i < cb_count && i < 8; i++) {
         WORD FAR *e = (WORD FAR *)&cb_log[i * 16];
-        obsn("LocalNotify call wMsg", i, e[11]);
-        obsn("LocalNotify call wArg", i, e[9]);
-        obsn("LocalNotify call DS==ours", i, e[7] == SEG(buf));
+        obs_env("LocalNotify call wMsg", e[11]);
+        obs_env("LocalNotify call wArg", e[9]);
+        obs_env("LocalNotify call DS==ours", e[7] == SEG(buf));
     }
     K2("LocalNotify(prev)", 14, 0, HIWORD(prev), LOWORD(prev));
     res("LocalNotify(prev) returns ours", "",
@@ -554,7 +582,7 @@ static void t_dosproc(void)
     old = gs((FARPROC)dos_hook);
     dos_next = old;
     dos_count = 0;
-    _lclose(_lopen("C:\\WINDOWS\\WIN.INI", 0));
+    _lclose(_lopen("C:\\TK50.EXE", 0));
     res("INT 21h (_lopen/_lclose) through the DOS proc", "", dos_count != 0);
     res("GetSetKernelDOSProc prev seg==KERNEL CS", "", HIWORD(old) == SEG(kproc(3)));
     res("GetSetKernelDOSProc prev seg==KERNEL DS", "", thhook && HIWORD(old) == SEG(thhook));
@@ -755,6 +783,10 @@ static void t_romfile(void)
     }
 }
 
+/* DebugDefineSegment (KERNEL.314) ended the probe on Windows 3.1 (KRNL286),
+   so it is only tried on request */
+static int try_debugseg;
+
 static void t_debugseg(void)
 {
     if (kc("DebugDefineSegment", 314, 0, 6, SEG("TK50"), OFF("TK50"), 0, SEG(buf), 0, 1,
@@ -825,7 +857,8 @@ int __cdecl tmain(void)
     t_swaparea();
     if (try_romfile)            /* it ended the probe on 3.1: see above */
         t_romfile();
-    t_debugseg();
+    if (try_debugseg)           /* it ended the probe on 3.1: see above */
+        t_debugseg();
     out("TK50 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

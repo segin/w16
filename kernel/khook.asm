@@ -260,3 +260,10 @@ LOCALNOTIFY:
         pop ds
         pop bp
         retf 4
+
+; DebugDefineSegment (KERNEL.314): Schulman: tells a system debugger
+; (INT 41h) about a segment; six words. UNVERIFIED: the call TK50 tried
+; ended the probe on 3.1; w16 has no system debugger to tell.
+global DEBUGDEFINESEGMENT
+DEBUGDEFINESEGMENT:
+        retf 12
