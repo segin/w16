@@ -16,6 +16,13 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     drag x1 y1 x2 y2       press the left button at screen (x1,y1), move
+ *                            to (x2,y2) and release it (journal playback)
+ *     click x y / dblclick x y   left-button clicks at screen (x,y)
+ *     dragitem n x y         drag item n of the list box with the focus
+ *                            (else the active window's rightmost one) to
+ *                            screen (x,y); dblitem n double-clicks it
+ *     place CLASS x y cx cy  move the top-level window of that class
  *     settime hh:mm:ss[.cc]  set the DOS time (INT 21h AH=2Dh)
  *     setdate mm/dd/yyyy     set the DOS date (INT 21h AH=2Bh)
  *     freeze hh:mm:ss <ms>   keep setting the DOS time to hh:mm:ss.00 every
@@ -27,13 +34,6 @@
  *     timers                 take every timer USER has left (and log how
  *                            many), to see what a program does without one
  *     freetimers             give them back
- *     drag x1 y1 x2 y2       press the left button at screen (x1,y1), move
- *                            to (x2,y2) and release it (journal playback)
- *     click x y / dblclick x y   left-button clicks at screen (x,y)
- *     dragitem n x y         drag item n of the list box with the focus
- *                            (else the active window's rightmost one) to
- *                            screen (x,y); dblitem n double-clicks it
- *     place CLASS x y cx cy  move the top-level window of that class
  *     info                   log the active top-level window in detail:
  *                            class data, client rectangle, children
  *                            relative to it (font, edit state), scroll
@@ -394,68 +394,6 @@ done:
 }
 #endif
 
-/* ---- time, messages, timers (for Clock's scenarios) ---- */
-
-static WORD dos_settime(WORD hm, WORD sc);
-#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
-static WORD dos_setdate(WORD y, WORD md);
-#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
-
-/* the next number in *s (decimal or hex), skipping what is not a digit */
-static WORD next_num(char **s, WORD base)
-{
-    char *p = *s;
-    WORD v;
-    while (*p && !((*p >= '0' && *p <= '9') ||
-                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
-        p++;
-    v = parse_num(p, base);
-    while ((*p >= '0' && *p <= '9') ||
-           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
-        p++;
-    *s = p;
-    return v;
-}
-
-static WORD set_time(char **s)
-{
-    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
-    if (**s == '.')
-        cs = next_num(s, 10);
-    return dos_settime((h << 8) | m, (sec << 8) | cs);
-}
-
-#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
-static void dump_menu(HMENU m, int depth)
-{
-    char text[64];
-    int i, k, n;
-    if (!m)
-        return;
-    n = GetMenuItemCount(m);
-    for (i = 0; i < n; i++) {
-        UINT st = GetMenuState(m, i, MF_BYPOSITION);
-        text[0] = 0;
-        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
-        out("MENU ");
-        for (k = 0; k < depth; k++)
-            out("  ");
-        out("id=");
-        outhex(GetMenuItemID(m, i), 4);
-        out(" state=");
-        outhex(st, 4);
-        out(" \"");
-        out(text);
-        out("\"\r\n");
-        if (st & MF_POPUP)
-            dump_menu(GetSubMenu(m, i), depth + 1);
-    }
-}
-#endif
-
-#define MAXTIMERS 64
-static UINT timer_ids[MAXTIMERS];
-static int ntimers;
 #ifndef SNAP_WIN2
 /* ---- mouse input: a WH_JOURNALPLAYBACK hook (SDK 3.1) plays back
    button and move events at screen coordinates ---- */
@@ -606,6 +544,69 @@ static char *word(char *p, int *v)
     return p;
 }
 #endif
+
+/* ---- time, messages, timers (for Clock's scenarios) ---- */
+
+static WORD dos_settime(WORD hm, WORD sc);
+#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+static WORD dos_setdate(WORD y, WORD md);
+#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+
+/* the next number in *s (decimal or hex), skipping what is not a digit */
+static WORD next_num(char **s, WORD base)
+{
+    char *p = *s;
+    WORD v;
+    while (*p && !((*p >= '0' && *p <= '9') ||
+                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
+        p++;
+    v = parse_num(p, base);
+    while ((*p >= '0' && *p <= '9') ||
+           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
+        p++;
+    *s = p;
+    return v;
+}
+
+static WORD set_time(char **s)
+{
+    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
+    if (**s == '.')
+        cs = next_num(s, 10);
+    return dos_settime((h << 8) | m, (sec << 8) | cs);
+}
+
+#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
+static void dump_menu(HMENU m, int depth)
+{
+    char text[64];
+    int i, k, n;
+    if (!m)
+        return;
+    n = GetMenuItemCount(m);
+    for (i = 0; i < n; i++) {
+        UINT st = GetMenuState(m, i, MF_BYPOSITION);
+        text[0] = 0;
+        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
+        out("MENU ");
+        for (k = 0; k < depth; k++)
+            out("  ");
+        out("id=");
+        outhex(GetMenuItemID(m, i), 4);
+        out(" state=");
+        outhex(st, 4);
+        out(" \"");
+        out(text);
+        out("\"\r\n");
+        if (st & MF_POPUP)
+            dump_menu(GetSubMenu(m, i), depth + 1);
+    }
+}
+#endif
+
+#define MAXTIMERS 64
+static UINT timer_ids[MAXTIMERS];
+static int ntimers;
 /* ---- info: one window in detail ---- */
 
 static void outkv(const char *k, int v)
@@ -851,6 +852,51 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+#ifndef SNAP_WIN2
+    } else if (same(l, "drag") || same(l, "click") || same(l, "dblclick") ||
+               same(l, "dragitem") || same(l, "dblitem")) {
+        int a, b, c, d;
+        char *q = word(arg, &a);
+        q = word(q, &b);
+        q = word(q, &c);
+        word(q, &d);
+        if (same(l, "drag")) {
+            drag(a, b, c, d);
+        } else if (same(l, "click") || same(l, "dblclick")) {
+            click(a, b, same(l, "dblclick"));
+        } else {
+            POINT pt;
+            if (!item_point(a, &pt))
+                out(" -> no list box item");
+            else if (same(l, "dragitem"))
+                drag(pt.x, pt.y, b, c);
+            else
+                click(pt.x, pt.y, 1);
+        }
+        pump(500);
+    } else if (same(l, "place")) {
+        /* place CLASS x y cx cy: move a top-level window */
+        char *cls = arg;
+        int a, b, c, d;
+        char *q = arg;
+        HWND w;
+        while (*q && *q != ' ')
+            q++;
+        if (*q)
+            *q++ = 0;
+        q = word(q, &a);
+        q = word(q, &b);
+        q = word(q, &c);
+        word(q, &d);
+        w = FindWindow(cls, NULL);
+        if (w) {
+            ShowWindow(w, SW_SHOWNORMAL);
+            MoveWindow(w, a, b, c, d, TRUE);
+        } else {
+            out(" -> no window");
+        }
+        pump(500);
+#endif
     } else if (same(l, "settime")) {
         char *s = arg;
         if (set_time(&s))
@@ -917,50 +963,6 @@ static void run_line(char *l)
         dump_menu(GetMenu(w), 0);
         out("MENU system\r\n");
         dump_menu(GetSystemMenu(w, FALSE), 1);
-#ifndef SNAP_WIN2
-    } else if (same(l, "drag") || same(l, "click") || same(l, "dblclick") ||
-               same(l, "dragitem") || same(l, "dblitem")) {
-        int a, b, c, d;
-        char *q = word(arg, &a);
-        q = word(q, &b);
-        q = word(q, &c);
-        word(q, &d);
-        if (same(l, "drag")) {
-            drag(a, b, c, d);
-        } else if (same(l, "click") || same(l, "dblclick")) {
-            click(a, b, same(l, "dblclick"));
-        } else {
-            POINT pt;
-            if (!item_point(a, &pt))
-                out(" -> no list box item");
-            else if (same(l, "dragitem"))
-                drag(pt.x, pt.y, b, c);
-            else
-                click(pt.x, pt.y, 1);
-        }
-        pump(500);
-    } else if (same(l, "place")) {
-        /* place CLASS x y cx cy: move a top-level window */
-        char *cls = arg;
-        int a, b, c, d;
-        char *q = arg;
-        HWND w;
-        while (*q && *q != ' ')
-            q++;
-        if (*q)
-            *q++ = 0;
-        q = word(q, &a);
-        q = word(q, &b);
-        q = word(q, &c);
-        word(q, &d);
-        w = FindWindow(cls, NULL);
-        if (w) {
-            ShowWindow(w, SW_SHOWNORMAL);
-            MoveWindow(w, a, b, c, d, TRUE);
-        } else {
-            out(" -> no window");
-        }
-        pump(500);
 #endif
     } else if (same(l, "info")) {
         info();
