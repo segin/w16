@@ -113,6 +113,16 @@ static int g_gui;                       /* the interactive window is up */
 static HWND g_dlg;
 static void gui_emit(const char FAR *s, WORD n);
 static void gui_flush(void);
+
+/* WM_NULL does nothing, so the interactive window's loops drop it rather
+   than dispatch it. Seen on w16's USER: EndDialog posts WM_NULL to wake
+   the modal loop of a common dialog, the dialog is destroyed before it is
+   read, and dispatching it later to the freed handle (which IsWindow
+   still took) destroyed SNAP's window. */
+static int gui_skip(const MSG FAR *m)
+{
+    return m->message == WM_NULL;
+}
 #endif
 
 /* Everything a command logs: TK.LOG in script mode, the log pane in the
@@ -148,6 +158,8 @@ static void pump(DWORD ms)
     do {
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 #ifndef SNAP_WIN2
+            if (g_gui && gui_skip(&msg))
+                continue;
             if (g_gui && g_dlg && IsDialogMessage(g_dlg, &msg))
                 continue;
 #endif
@@ -1350,13 +1362,19 @@ static void not_busy(void)
 static void gui_line(char *l)
 {
     int hide = verb_is(l, "snap") && IsWindowVisible(g_dlg);
+    HWND act = GetActiveWindow();
     if (hide) {
         ShowWindow(g_dlg, SW_HIDE);
         pump(500);                      /* the windows beneath repaint */
     }
     run_line(l);
-    if (hide)
+    if (hide) {
         ShowWindow(g_dlg, SW_SHOWNA);
+        /* the activation stays where it was (a script's next line acts
+           on it) */
+        if (act && act != g_dlg && IsWindow(act) && GetActiveWindow() != act)
+            SetActiveWindow(act);
+    }
     gui_flush();
 }
 
@@ -1845,6 +1863,8 @@ static int gui(const char *why)
     gui_flush();
     SetFocus(g_cmd);
     while (GetMessage(&m, NULL, 0, 0)) {
+        if (gui_skip(&m))
+            continue;
         if (!g_dlg || !IsDialogMessage(g_dlg, &m)) {
             TranslateMessage(&m);
             DispatchMessage(&m);
