@@ -32,9 +32,6 @@
  *     timers                 take every timer USER has left (and log how
  *                            many), to see what a program does without one
  *     freetimers             give them back
- *     target <class>         send commands to that class's window rather
- *                            than the focus's (Windows 2.x, where SNAP2
- *                            cannot see the focus)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -144,18 +141,13 @@ static HWND target(void)
 
 /* The top-level window of the focus: Windows 2.x answers GetActiveWindow
    per task, and SNAP has no window of its own (observed). */
-static char target_class[32];           /* the "target" command's */
-
 static HWND top_window(void)
 {
-    HWND h, p;
-    if (target_class[0] && (h = FindWindow(target_class, NULL)) != NULL)
-        return h;
-    h = GetFocus();
+    HWND h = GetFocus(), p;
     if (!h)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
-        return FindWindow(target_class[0] ? target_class : "Progman", NULL);
+        return FindWindow("Progman", NULL);
     /* up to the first window that is not a child: GetParent of a dialog
        is its owner, which is not where its commands go */
     while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
@@ -754,11 +746,6 @@ static void run_line(char *l)
             outhex(r, 8);
         }
         pump(300);
-    } else if (same(l, "target")) {
-        int i;
-        for (i = 0; arg[i] && i < (int)sizeof target_class - 1; i++)
-            target_class[i] = arg[i];
-        target_class[i] = 0;
     } else if (same(l, "timers")) {
         UINT id;
         while (ntimers < MAXTIMERS && (id = SetTimer(NULL, 0, 60000u, NULL)) != 0)

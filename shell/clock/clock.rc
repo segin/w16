@@ -37,7 +37,6 @@ BEGIN
     IDS_TOPMOST "Always on &Top"
 END
 
-#ifndef W16_WIN2
 /* ChooseFont's template: only the face list, OK, Cancel and the sample
    show; the style, size, effects and script controls sit off the dialog.
    (CONTROL makes a control visible unless told NOT WS_VISIBLE.) */
@@ -65,30 +64,3 @@ BEGIN
     CONTROL "", 1093, "Static", 0x50000081L, 195, 95, 12, 5
     CONTROL "AaBbYyZz", 1092, "Static", 0x40020081L | NOT WS_VISIBLE, 14, 79, 149, 37
 END
-#else
-/* Windows 2.x has no combo boxes and no ChooseFont: the same layout with
-   an edit control over a list box (compat2.c fills it) */
-IDD_FONT DIALOG 17, 71, 171, 129
-STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
-CAPTION "Font"
-BEGIN
-    CONTROL "&Font:", 1088, "Static", 0x50020000L, 6, 3, 40, 8
-    CONTROL "", 1152, "Edit", 0x50810080L, 6, 12, 94, 12
-    CONTROL "", 1136, "ListBox", 0x50A10003L, 6, 24, 94, 42
-    CONTROL "OK", IDOK, "Button", 0x50030001L, 128, 10, 40, 14
-    CONTROL "Cancel", IDCANCEL, "Button", 0x50030000L, 128, 27, 40, 14
-    CONTROL "Sample", 1073, "Button", 0x50020007L, 8, 70, 160, 49
-    CONTROL "AaBbYyZz", 1092, "Static", 0x50020001L, 14, 79, 149, 37
-END
-
-IDD_ABOUT2 DIALOG 17, 15, 162, 80
-STYLE WS_POPUP | WS_DLGFRAME
-BEGIN
-    CONTROL "w16", -1, "Static", 0x50020001L, 0, 5, 161, 8
-    CONTROL "Clock", -1, "Static", 0x50020001L, 0, 15, 161, 8
-    CONTROL "Version 3.1 (for Windows 2.x)", -1, "Static", 0x50020001L, 0, 34, 161, 8
-    CONTROL "MIT licence", -1, "Static", 0x50020001L, 0, 47, 161, 9
-    CONTROL "OK", IDOK, "Button", 0x50030001L, 65, 60, 32, 14
-    CONTROL IDI_CLOCK, -1, "Static", 0x50020003L, 14, 13, 19, 26
-END
-#endif

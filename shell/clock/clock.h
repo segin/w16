@@ -9,19 +9,15 @@
  * REFRUN_GDLOG=1, tools/gdcalls.py). tests/clockscenarios.sh compares
  * ours with it.
  *
- * Built medium model, no C runtime, in two builds from this source: the
- * Windows 3.x one and W16_WIN2, for Windows 2.x (compat2.h).
+ * Built medium model, no C runtime; Windows 3.1 only.
  */
 #ifndef CLOCK_H
 #define CLOCK_H
 
 #include <windows.h>
-#ifndef W16_WIN2
 #include <shellapi.h>
 /* SHELL.DLL's About box (not in OpenWatcom's shellapi.h) */
 int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
-#endif
-#include "compat2.h"
 
 /* ---- resources and commands ---- */
 /* the Settings menu's command IDs and the system menu's Always on Top are
@@ -38,7 +34,6 @@ int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDI_CLOCK           1
 #define IDM_MENU            1
 #define IDD_FONT            100         /* the Font dialog (ChooseFont template) */
-#define IDD_ABOUT2          101         /* the 2.x build's About box */
 
 #define IDS_APPNAME         2           /* "Clock" */
 #define IDS_NOTIMER         6

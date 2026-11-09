@@ -839,13 +839,11 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
-# ---- shell: CLOCK.EXE (shell/clock), the same two builds ----
-CLOCK_OBJ := start main face digital intl fontdlg util compat2
+# ---- shell: CLOCK.EXE (shell/clock), Windows 3.1 only ----
+CLOCK_OBJ := start main face digital intl fontdlg util
 SHELL_CK  := $(B)/shell/start.o $(patsubst %,$(B)/shell/clock/%.o,$(filter-out start,$(CLOCK_OBJ)))
-SHELL_CK2 := $(patsubst $(B)/shell/%,$(B)/shell2/%,$(SHELL_CK))
-CLOCK_H   := shell/clock/clock.h shell/clock/compat2.h
+CLOCK_H   := shell/clock/clock.h
 shell: $(DOS)/CLOCK.EXE
-shell2: $(WIN2)/CLOCK.EXE
 $(B)/shell/clock/clock.ico: tools/clockicon.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 tools/clockicon.py $@
@@ -864,20 +862,6 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	    option map=$(B)/shell/clock/clock.map \
 	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
 	python3 tools/nemark.py $@ 3.10
-$(B)/shell2/clock/face.o: $(B)/shell/clock/circle.h
-$(B)/shell2/clock/%.o: shell/clock/%.c $(CLOCK_H)
-	@mkdir -p $(@D)
-	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -i=$(B)/shell/clock -fo=$@ $<
-$(B)/shell2/clock/clock.res: shell/clock/clock.rc $(CLOCK_H) $(B)/shell/clock/clock.ico
-	@mkdir -p $(@D)
-	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/clock \
-	    -i=$(B)/shell/clock -fo=$@ $<
-$(WIN2)/CLOCK.EXE: $(SHELL_CK2) $(B)/shell2/clock/clock.res shell/clock/clock2.lnk tools/nemark.py
-	@mkdir -p $(@D)
-	$(WLINK) @shell/clock/clock2.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/shell2/clock/clock.map \
-	    option resource=$(B)/shell2/clock/clock.res file { $(SHELL_CK2) }
-	python3 tools/nemark.py $@ 2.0
 
 test: dos fonts
 	tests/run-tests.sh

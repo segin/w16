@@ -74,42 +74,16 @@ void digi_reset(void)
    the size list shows the date's) */
 static HFONT make_font(int h)
 {
-#ifndef W16_WIN2
     g_lf.lfHeight = -h;
-#else
-    g_lf.lfHeight = h;                  /* 2.x: the cell height */
-#endif
     return CreateFontIndirect(&g_lf);
 }
-
-/* Windows 2.x: a face asked for at a height it has no raster font for
-   comes out as a vector font (Modern), stretched; come down to one */
-#ifdef W16_WIN2
-static BOOL face_ok(HDC dc, HFONT f)
-{
-    char face[LF_FACESIZE];
-    int i;
-    HFONT old = SelectObject(dc, f);
-    GetTextFace(dc, sizeof face, face);
-    SelectObject(dc, old);
-    for (i = 0; face[i] && (face[i] | 0x20) == (g_lf.lfFaceName[i] | 0x20); i++)
-        ;
-    return face[i] == g_lf.lfFaceName[i];
-}
-#define raster_ok(dc) face_ok(dc, tfont)
-#define date_raster_ok(dc) face_ok(dc, dfont)
-#else
-#define raster_ok(dc) TRUE
-#endif
 
 static void layout(HDC dc, const CLOCKTIME *t)
 {
     HFONT old;
     DWORD de = 0;
-#ifndef W16_WIN2
     HFONT f;
     DWORD e;
-#endif
     int w, h, cap, k, sl = s_len(g_sep);
     char date[32];
 
@@ -138,7 +112,6 @@ static void layout(HDC dc, const CLOCKTIME *t)
     tfont = dfont = NULL;
     w = icon ? ccx - 8 : ccx * 7 / 8;
     cap = withdate ? ccy * 3 / 8 : ccy * 7 / 8;
-#ifndef W16_WIN2
     f = make_font(1000);
     old = SelectObject(dc, f);
     e = GetTextExtent(dc, meas, nmeas);
@@ -149,11 +122,6 @@ static void layout(HDC dc, const CLOCKTIME *t)
     DeleteObject(f);
     if (h > cap)
         h = cap;
-#else
-    /* Windows 2.x has raster fonts only: no height-1000 font to scale
-       from; start from the largest height allowed and come down */
-    h = cap < 24 ? cap : 24;            /* Helv's largest; GDI 2.x would stretch it */
-#endif
     for (;;) {
         tfont = make_font(h);
         old = SelectObject(dc, tfont);
@@ -164,24 +132,19 @@ static void layout(HDC dc, const CLOCKTIME *t)
             tcy = HIWORD(x);
         }
         SelectObject(dc, old);
-        if ((ext[nmeas] <= w && raster_ok(dc)) || h <= 2)
+        if (ext[nmeas] <= w || h <= 2)
             break;
         DeleteObject(tfont);
         h -= 2;
     }
     height = h;
-#ifndef W16_WIN2
     embossed = !icon && h >= 54;        /* UNVERIFIED: 53 is flat, 54 embossed */
-#else
-    embossed = FALSE;
-#endif
     if (bm)
         DeleteObject(bm);
     bmcx = ext[2];
     bm = CreateDiscardableBitmap(dc, embossed ? ext[2] + 4 : ext[2], tcy);
     dcy = 0;
     if (withdate) {
-#ifndef W16_WIN2
         int hd = MulDiv(1000, w, LOWORD(de));
         if (hd > h * 3 / 4)
             hd = h * 3 / 4;
@@ -189,19 +152,6 @@ static void layout(HDC dc, const CLOCKTIME *t)
         old = SelectObject(dc, dfont);
         de = GetTextExtent(dc, date, s_len(date));
         SelectObject(dc, old);
-#else
-        int hd = h * 3 / 4;
-        for (;;) {
-            dfont = make_font(hd);
-            old = SelectObject(dc, dfont);
-            de = GetTextExtent(dc, date, s_len(date));
-            SelectObject(dc, old);
-            if (((int)LOWORD(de) <= w && date_raster_ok(dc)) || hd <= 2)
-                break;
-            DeleteObject(dfont);
-            hd--;
-        }
-#endif
         dcx = LOWORD(de);
         dcy = HIWORD(de);
     }

@@ -97,11 +97,7 @@ static void erase(HDC dc)
     RECT rc;
     HBRUSH b;
     SetBkMode(dc, OPAQUE);
-#ifndef W16_WIN2
     b = CreateSolidBrush(GetNearestColor(dc, GetSysColor(COLOR_BTNFACE)));
-#else
-    b = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));   /* 2.x: nearest is white */
-#endif
     GetClientRect(g_wnd, &rc);
     FillRect(dc, &rc, b);
     DeleteObject(b);
@@ -150,11 +146,7 @@ static void load_settings(RECT *pos, BOOL *havepos, BOOL *maximized)
        (UNVERIFIED: what the original takes from a face read back) */
     g_lf.lfWeight = FW_NORMAL;
     g_lf.lfPitchAndFamily = VARIABLE_PITCH | FF_SWISS;
-#ifndef W16_WIN2
     s_cpy(g_lf.lfFaceName, "arial", LF_FACESIZE);
-#else
-    s_cpy(g_lf.lfFaceName, "Helv", LF_FACESIZE);   /* 2.x has no Arial */
-#endif
     if (GetPrivateProfileString(s_sect, "sFont", "", buf, sizeof buf, s_ini))
         s_cpy(g_lf.lfFaceName, buf, LF_FACESIZE);
 }
@@ -189,16 +181,12 @@ static void save_settings(void)
     }
     buf[n] = 0;
     WritePrivateProfileString(s_sect, "Options", buf, s_ini);
-#ifdef W16_WIN2
-    ck_restored_rect(g_wnd, &rc);
-#else
     {
         WINDOWPLACEMENT wp;
         wp.length = sizeof wp;
         GetWindowPlacement(g_wnd, &wp);
         rc = wp.rcNormalPosition;
     }
-#endif
     n = 0;
     put_num(buf, &n, rc.left);
     buf[n++] = ',';
@@ -239,10 +227,8 @@ static void set_menu_checks(void)
     EnableMenuItem(menu, IDM_SETFONT, g_opt.analog ? MF_GRAYED | MF_DISABLED : MF_ENABLED);
     CheckMenuItem(menu, IDM_SECONDS, g_opt.noseconds ? MF_UNCHECKED : MF_CHECKED);
     CheckMenuItem(menu, IDM_DATE, g_opt.nodate ? MF_UNCHECKED : MF_CHECKED);
-#ifndef W16_WIN2
     CheckMenuItem(GetSystemMenu(g_wnd, FALSE), IDM_TOPMOST,
                   g_opt.topmost ? MF_CHECKED : MF_UNCHECKED);
-#endif
 }
 
 #define TITLE_STYLES (WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
@@ -265,10 +251,8 @@ static void set_notitle(BOOL on)
 static void set_topmost(BOOL on)
 {
     g_opt.topmost = on;
-#ifndef W16_WIN2
     SetWindowPos(g_wnd, on ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE);
-#endif
     set_menu_checks();
 }
 
@@ -290,11 +274,7 @@ static void relayout(void)
 
 static void about(void)
 {
-#ifdef W16_WIN2
-    ck_about(g_wnd);
-#else
     ShellAbout(g_wnd, s_app, "", LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_CLOCK)));
-#endif
 }
 
 static void command(UINT id)
@@ -411,15 +391,7 @@ LRESULT FAR PASCAL __export ClockWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         EndPaint(w, &ps);
         return 0;
     }
-    case WM_MOVE:
-#ifdef W16_WIN2
-        ck_track_rect(w);
-#endif
-        break;
     case WM_SIZE:
-#ifdef W16_WIN2
-        ck_track_rect(w);
-#endif
         face_size(LOWORD(lp), HIWORD(lp));
         digi_size(NULL, LOWORD(lp), HIWORD(lp));
         if (started) {
@@ -526,7 +498,7 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     wc.lpszClassName = s_class;
     if (!RegisterClass(&wc))
         return 0;
-    menu = ck_load_menu(inst, MAKEINTRESOURCE(IDM_MENU));
+    menu = LoadMenu(inst, MAKEINTRESOURCE(IDM_MENU));
 
     if (!havepos) {
         /* UNVERIFIED: the original's default is 0,0,208,226 at 640x480,
@@ -552,14 +524,12 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
         DestroyWindow(g_wnd);
         return 0;
     }
-#ifndef W16_WIN2
     {
         HMENU sys = GetSystemMenu(g_wnd, FALSE);
         LoadString(inst, IDS_TOPMOST, text, sizeof text);
         AppendMenu(sys, MF_SEPARATOR, 0, NULL);
         AppendMenu(sys, MF_STRING, IDM_TOPMOST, text);
     }
-#endif
     set_menu_checks();
     set_title();
     if (g_opt.topmost)
