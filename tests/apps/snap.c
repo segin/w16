@@ -27,6 +27,13 @@
  *     timers                 take every timer USER has left (and log how
  *                            many), to see what a program does without one
  *     freetimers             give them back
+ *     drag x1 y1 x2 y2       press the left button at screen (x1,y1), move
+ *                            to (x2,y2) and release it (journal playback)
+ *     click x y / dblclick x y   left-button clicks at screen (x,y)
+ *     dragitem n x y         drag item n of the list box with the focus
+ *                            (else the active window's rightmost one) to
+ *                            screen (x,y); dblitem n double-clicks it
+ *     place CLASS x y cx cy  move the top-level window of that class
  *     info                   log the active top-level window in detail:
  *                            class data, client rectangle, children
  *                            relative to it (font, edit state), scroll
@@ -449,6 +456,156 @@ static void dump_menu(HMENU m, int depth)
 #define MAXTIMERS 64
 static UINT timer_ids[MAXTIMERS];
 static int ntimers;
+#ifndef SNAP_WIN2
+/* ---- mouse input: a WH_JOURNALPLAYBACK hook (SDK 3.1) plays back
+   button and move events at screen coordinates ---- */
+
+#define NEV 64
+static EVENTMSG ev[NEV];
+static int nev, cur;
+static HOOKPROC hk, thunk;
+static int playing;
+
+static int waited = -1;
+
+LRESULT CALLBACK __export Playback(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_GETNEXT) {
+        EVENTMSG FAR *e = (EVENTMSG FAR *)lp;
+        *e = ev[cur];
+        e->time = GetTickCount();
+        /* USER asks again for the same event while it waits: the delay
+           counts only the first time */
+        if (cur && cur != waited && ev[cur].message == WM_MOUSEMOVE) {
+            waited = cur;
+            return 50;
+        }
+        return 0;
+    }
+    if (code == HC_SKIP) {
+        if (++cur >= nev) {
+            UnhookWindowsHook(WH_JOURNALPLAYBACK, thunk);
+            playing = 0;
+        }
+        return 0;
+    }
+    return DefHookProc(code, wp, lp, &hk);
+}
+
+static void add(UINT m, int x, int y)
+{
+    if (nev < NEV) {
+        ev[nev].message = m;
+        ev[nev].paramL = x;
+        ev[nev].paramH = y;
+        ev[nev].time = 0;
+        nev++;
+    }
+}
+
+static void play(void)
+{
+    DWORD end = GetTickCount() + 10000;
+    cur = 0;
+    waited = -1;
+    playing = 1;
+    if (!thunk)
+        thunk = (HOOKPROC)MakeProcInstance((FARPROC)Playback, (HINSTANCE)init_regs[I_DI]);
+    hk = SetWindowsHook(WH_JOURNALPLAYBACK, thunk);
+    while (playing && (long)(GetTickCount() - end) < 0)
+        pump(50);
+    nev = 0;
+}
+
+static void drag(int x1, int y1, int x2, int y2)
+{
+    int i;
+    add(WM_MOUSEMOVE, x1, y1);
+    add(WM_LBUTTONDOWN, x1, y1);
+    /* a few small steps first, as a hand moves: programs start a drag
+       once the mouse has left a small square around the press */
+    add(WM_MOUSEMOVE, x1 + 1, y1);
+    add(WM_MOUSEMOVE, x1 + 3, y1 + 1);
+    add(WM_MOUSEMOVE, x1 + 6, y1 + 3);
+    for (i = 1; i <= 16; i++)
+        add(WM_MOUSEMOVE, x1 + 6 + (x2 - x1 - 6) * i / 16, y1 + 3 + (y2 - y1 - 3) * i / 16);
+    add(WM_MOUSEMOVE, x2, y2);
+    add(WM_LBUTTONUP, x2, y2);
+    play();
+}
+
+static void click(int x, int y, int twice)
+{
+    add(WM_MOUSEMOVE, x, y);
+    add(WM_LBUTTONDOWN, x, y);
+    add(WM_LBUTTONUP, x, y);
+    if (twice) {
+        add(WM_LBUTTONDOWN, x, y);
+        add(WM_LBUTTONUP, x, y);
+    }
+    play();
+}
+
+/* the visible list box furthest to the right in a window (File
+   Manager's directory pane) */
+static HWND best_lb;
+static int best_x;
+
+BOOL CALLBACK __export FindLb(HWND w, LPARAM lp)
+{
+    char cls[16];
+    RECT r;
+    (void)lp;
+    GetClassName(w, cls, sizeof cls);
+    GetWindowRect(w, &r);
+    if (!lstrcmpi(cls, "ListBox") && IsWindowVisible(w) && (!best_lb || r.left > best_x)) {
+        best_lb = w;
+        best_x = r.left;
+    }
+    return TRUE;
+}
+
+/* a point in item n of the list box with the focus, or else of the
+   active window's rightmost list box: 20 pixels in, half way down */
+static int item_point(int n, POINT *pt)
+{
+    HWND lb = GetFocus();
+    RECT r;
+    char cls[16];
+    cls[0] = 0;
+    if (lb)
+        GetClassName(lb, cls, sizeof cls);
+    if (lstrcmpi(cls, "ListBox")) {
+        best_lb = NULL;
+        EnumChildWindows(top_window(), (WNDENUMPROC)MakeProcInstance((FARPROC)FindLb,
+                         (HINSTANCE)init_regs[I_DI]), 0);
+        lb = best_lb;
+    }
+    if (!lb || SendMessage(lb, LB_GETITEMRECT, n, (LPARAM)(RECT FAR *)&r) == LB_ERR)
+        return 0;
+    pt->x = r.left + 20;
+    pt->y = (r.top + r.bottom) / 2;
+    ClientToScreen(lb, pt);
+    return 1;
+}
+
+static char *word(char *p, int *v)
+{
+    int neg = 0;
+    while (*p == ' ')
+        p++;
+    if (*p == '-') {
+        neg = 1;
+        p++;
+    }
+    *v = (int)parse_num(p, 10);
+    if (neg)
+        *v = -*v;
+    while (*p && *p != ' ')
+        p++;
+    return p;
+}
+#endif
 /* ---- info: one window in detail ---- */
 
 static void outkv(const char *k, int v)
@@ -760,6 +917,50 @@ static void run_line(char *l)
         dump_menu(GetMenu(w), 0);
         out("MENU system\r\n");
         dump_menu(GetSystemMenu(w, FALSE), 1);
+#ifndef SNAP_WIN2
+    } else if (same(l, "drag") || same(l, "click") || same(l, "dblclick") ||
+               same(l, "dragitem") || same(l, "dblitem")) {
+        int a, b, c, d;
+        char *q = word(arg, &a);
+        q = word(q, &b);
+        q = word(q, &c);
+        word(q, &d);
+        if (same(l, "drag")) {
+            drag(a, b, c, d);
+        } else if (same(l, "click") || same(l, "dblclick")) {
+            click(a, b, same(l, "dblclick"));
+        } else {
+            POINT pt;
+            if (!item_point(a, &pt))
+                out(" -> no list box item");
+            else if (same(l, "dragitem"))
+                drag(pt.x, pt.y, b, c);
+            else
+                click(pt.x, pt.y, 1);
+        }
+        pump(500);
+    } else if (same(l, "place")) {
+        /* place CLASS x y cx cy: move a top-level window */
+        char *cls = arg;
+        int a, b, c, d;
+        char *q = arg;
+        HWND w;
+        while (*q && *q != ' ')
+            q++;
+        if (*q)
+            *q++ = 0;
+        q = word(q, &a);
+        q = word(q, &b);
+        q = word(q, &c);
+        word(q, &d);
+        w = FindWindow(cls, NULL);
+        if (w) {
+            ShowWindow(w, SW_SHOWNORMAL);
+            MoveWindow(w, a, b, c, d, TRUE);
+        } else {
+            out(" -> no window");
+        }
+        pump(500);
 #endif
     } else if (same(l, "info")) {
         info();
