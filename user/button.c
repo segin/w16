@@ -164,7 +164,7 @@ static void paint_push(HWND h, HDC hdc)
         SetRect(&c, t.left + (t.right - t.left - w) / 2 - 2, t.top + (t.bottom - t.top - hh) / 2 - 1,
                 0, 0);
         c.right = c.left + w + 4;
-        c.bottom = c.top + hh + 2;
+        c.bottom = c.top + hh + 3;          /* US4: 19 high with the system font */
         dotted_rect(hdc, &c);
     }
 }
@@ -239,9 +239,9 @@ static void paint_group(HWND h, HDC hdc)
     if (text[0]) {
         SetRect(&t, 0, 0, 0, 0);
         DrawText(hdc, text, -1, &t, DT_CALCRECT | DT_SINGLELINE);
-        /* the text 9 pixels in and 2 down, the line cleared 2 pixels
+        /* the text 9 pixels in and 3 down, the line cleared 2 pixels
            before and after it (US4, system font; UNVERIFIED for others) */
-        OffsetRect(&t, r.left + 9, r.top + 2);
+        OffsetRect(&t, r.left + 9, r.top + 3);
         {
             RECT e = t;
             e.left -= 2;

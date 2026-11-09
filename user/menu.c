@@ -812,6 +812,7 @@ typedef struct MLOOP {
 } MLOOP;
 
 void sysbox_rect(PWND w, RECT *r);
+extern HWND hwndSysMenuOpen;
 
 static void invert_sysbox(MLOOP *l)
 {
@@ -821,6 +822,7 @@ static void invert_sysbox(MLOOP *l)
     if (!w || !(w->style & WS_SYSMENU) || (w->style & WS_MINIMIZE))
         return;
     sysbox_rect(w, &r);
+    hwndSysMenuOpen = hwndSysMenuOpen ? 0 : l->owner;   /* for repaints */
     hdc = get_dc(l->owner, TRUE, 0, 0);
     InvertRect(hdc, &r);
     release_dc(l->owner, hdc);

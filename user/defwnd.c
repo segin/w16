@@ -123,6 +123,8 @@ static void caption_rect(PWND w, RECT *r)
 
 /* the system-menu box, window coordinates: inverted while the system
    menu is open (US4) */
+HWND hwndSysMenuOpen;          /* its system menu is open: its box inverted */
+
 void sysbox_rect(PWND w, RECT *r)
 {
     RECT c;
@@ -168,7 +170,16 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
     if (w->style & WS_SYSMENU) {
         int s = sysmet[SM_CXSIZE];
         blt_bitmap(hdc, bmClose, t.left, t.top, (w->style & WS_CHILD) ? s : 0, s, t.bottom - t.top);
-        fill(hdc, t.left + s, r.top, 1, r.bottom - r.top, COLOR_WINDOWFRAME);
+        if ((HWND)(WORD)w == hwndSysMenuOpen) {
+            RECT b;
+            SetRect(&b, t.left, t.top, t.left + s, t.bottom);
+            InvertRect(hdc, &b);
+        }
+        /* in a dialog frame the white top line runs over it (US4) */
+        {
+            int d = has_dlgframe(w) && !has_thick(w);
+            fill(hdc, t.left + s, r.top + d, 1, r.bottom - r.top - d, COLOR_WINDOWFRAME);
+        }
         t.left += s + 1;
     }
     bx = t.right;

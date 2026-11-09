@@ -82,13 +82,25 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     int len = vert ? rc->bottom - rc->top : rc->right - rc->left;
     int thick = vert ? rc->right - rc->left : rc->bottom - rc->top;
     int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
-    int t;
+    int t, ath = thick;         /* the arrows' thickness */
     load_arrows();
     if (len < 2 * arrow)
         arrow = len / 2;
+    /* a bar thicker than the arrows: they keep their size at the near
+       side, black beside them to the far edge; the shaft and the thumb
+       take the whole thickness (US4: 18-pixel scroll-bar controls) */
+    if (vert && thick > sysmet[SM_CXVSCROLL]) {
+        ath = sysmet[SM_CXVSCROLL];
+        fillc(hdc, rc->left + ath, rc->top, thick - ath, arrow, COLOR_WINDOWFRAME);
+        fillc(hdc, rc->left + ath, rc->bottom - arrow, thick - ath, arrow, COLOR_WINDOWFRAME);
+    } else if (!vert && thick > sysmet[SM_CYHSCROLL]) {
+        ath = sysmet[SM_CYHSCROLL];
+        fillc(hdc, rc->left, rc->top + ath, arrow, thick - ath, COLOR_WINDOWFRAME);
+        fillc(hdc, rc->right - arrow, rc->top + ath, arrow, thick - ath, COLOR_WINDOWFRAME);
+    }
     if (vert) {
-        blt(hdc, rc->left, rc->top, thick, arrow, bmArrow[0]);
-        blt(hdc, rc->left, rc->bottom - arrow, thick, arrow, bmArrow[1]);
+        blt(hdc, rc->left, rc->top, ath, arrow, bmArrow[0]);
+        blt(hdc, rc->left, rc->bottom - arrow, ath, arrow, bmArrow[1]);
         fillc(hdc, rc->left, rc->top + arrow, thick, len - 2 * arrow, COLOR_SCROLLBAR);
         fillc(hdc, rc->left, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
         fillc(hdc, rc->right - 1, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
@@ -97,8 +109,8 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
             draw_thumb(hdc, rc->left, rc->top + t, thick, arrow);
         }
     } else {
-        blt(hdc, rc->left, rc->top, arrow, thick, bmArrow[3]);
-        blt(hdc, rc->right - arrow, rc->top, arrow, thick, bmArrow[2]);
+        blt(hdc, rc->left, rc->top, arrow, ath, bmArrow[3]);
+        blt(hdc, rc->right - arrow, rc->top, arrow, ath, bmArrow[2]);
         fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, thick, COLOR_SCROLLBAR);
         fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
         fillc(hdc, rc->left + arrow, rc->bottom - 1, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
@@ -147,7 +159,7 @@ void nc_draw_scrollbars(HDC hdc, PWND w)
         draw_scrollbar(hdc, &h, FALSE, &s->h);
     if ((w->style & WS_VSCROLL) && (w->style & WS_HSCROLL)) {
         /* the corner between them */
-        fillc(hdc, v.left + 1, h.top + 1, v.right - v.left - 1, h.bottom - h.top - 1, COLOR_BTNFACE);
+        fillc(hdc, v.left + 1, h.top + 1, v.right - v.left - 2, h.bottom - h.top - 2, COLOR_BTNFACE);
     }
 }
 
