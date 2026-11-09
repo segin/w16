@@ -1,0 +1,12 @@
+wait 4000
+changed
+wait 1000
+saveddoc
+wait 1000
+saved
+wait 1000
+renamedoc C:\REN.OS1
+wait 1000
+revertdoc
+wait 1000
+version

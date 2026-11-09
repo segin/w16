@@ -946,3 +946,27 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- OLESVR (ole/olesvr/; ARCHITECTURE.md 16) and its probes ----
+# OS1 (a logging OLE server), OS2 (driver: OLE and raw DDE client) and
+# OSSPY.DLL (system-wide DDE spy, shared log C:\OS.LOG); tests/olesvrscen.sh
+OSPROBES := $(DOS)/OSSPY.DLL $(DOS)/OS1.EXE $(DOS)/OS2.EXE
+osprobes: $(OSPROBES)
+dos: $(OSPROBES)
+.PHONY: osprobes
+$(B)/olesvr/tests/osspy.o: tests/olesvr/osspy.c tests/olesvr/osspy.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(B)/olesvr/tests/%.o: tests/olesvr/%.c tests/olesvr/osspy.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/OSSPY.DLL: $(B)/tests/dllstart.o $(B)/olesvr/tests/osspy.o tests/apps/dll.lnk tests/olesvr/osspy.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/olesvr/osspy.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/olesvr/tests/osspy.map \
+	    file { $(B)/tests/dllstart.o $(B)/olesvr/tests/osspy.o }
+$(DOS)/OS1.EXE $(DOS)/OS2.EXE: $(DOS)/OS%.EXE: $(B)/tests/start.o $(B)/olesvr/tests/os%.o \
+                tests/apps/app.lnk tests/olesvr/os.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/olesvr/os.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/olesvr/tests/os$*.map file { $(B)/tests/start.o $(B)/olesvr/tests/os$*.o }

@@ -1,0 +1,14 @@
+# wlink directives for OSSPY.DLL (tests/olesvr/osspy.c), the DDE spy of
+# the OLESVR probes
+@tests/apps/dll.lnk
+option modname=OSSPY
+option description 'w16 OLESVR probes: DDE spy'
+segment type code fixed preload
+export OSSPYSTART.1
+export OSSPYSTOP.2
+export _OsPrintf.3
+export OSDUMPDATA.4
+export OSSETQUIET.5
+export OSGETMSGHOOK.6
+export OSCALLWNDHOOK.7
+export WEP.8 resident

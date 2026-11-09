@@ -1,0 +1,12 @@
+# wlink directives for the OLESVR probe programs OS1, OS2 (tests/olesvr),
+# with their imports from OSSPY.DLL (tests/olesvr/osspy.lnk)
+@tests/apps/app.lnk
+option stack=16k
+import OSSPYSTART OSSPY.1
+import OSSPYSTOP OSSPY.2
+import _OsPrintf OSSPY.3
+import OSDUMPDATA OSSPY.4
+import OSSETQUIET OSSPY.5
+library olesvr.lib
+library olecli.lib
+library shell.lib

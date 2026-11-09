@@ -1,0 +1,20 @@
+; embed an OS1Probe object through OLECLI and exercise it
+regdump PBrush
+regdump Package
+regdump SoundRec
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OS1Probe\protocol\StdFileEditing\verb\0=Edit
+reg OS1Probe\protocol\StdExecute\server=C:\OS1.EXE
+doc OS2DOC
+create OS1Probe
+query
+update
+activate 0
+setdata Native hello
+request 3
+close
+savestream
+delete
+revokedoc
+wait 1000

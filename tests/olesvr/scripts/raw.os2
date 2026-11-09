@@ -1,0 +1,86 @@
+; OS1 driven with raw DDE: the system topic's commands and the document
+; topic's items, including malformed and unknown ones
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding
+wait 2000
+init OS1Probe System
+term
+init OS1Probe OLEsystem
+term
+init OS1Probe *
+term
+init * OLEsystem
+term
+init * *
+term
+init os1probe olesystem
+exec [StdNewDocument("OS1Probe","RAWDOC")]
+exec [StdNewDocument("OS1Probe","RAWDOC")]
+exec [StdNewDocument("Other","RAW2")]
+exec [StdNewFromTemplate("OS1Probe","RAWT","C:\T.OS1")]
+exec [StdEditDocument("RAWE")]
+exec [StdOpenDocument("C:\RAWO.OS1")]
+exec [StdShowItem("RAWDOC","item1")]
+exec [StdShowItem("RAWDOC","item1",FALSE)]
+exec [StdDoVerbItem("item1",0,TRUE,TRUE)]
+exec [Bogus]
+exec [MyCommand(1,"two")]
+exec [StdNewDocument("OS1Probe", "RAWS")][StdShowItem("RAWS","")]
+exec StdNewDocument("OS1Probe","RAWN")
+exec [StdNewDocument(OS1Probe,RAWQ)]
+exec [stdnewdocument("OS1Probe","RAWL")]
+exec [StdCloseDocument("RAWE")]
+exec [StdCloseDocument]
+req StdDocumentName CF_TEXT
+req StdDocumentName 1
+req Native Native
+poke StdHostNames 1 hello
+term
+init OS1Probe RAWDOC
+req StdDocumentName 1
+req StdDocumentName Native
+req item1 Native
+req item1 OwnerLink
+req item1 ObjectLink
+req item1 3
+req item1 1
+req item1 2
+req item1 8
+req "" Native
+poke StdHostNames 1 RawClient
+poke StdHostNames Native RawClient
+poke StdDocDimensions 1 x
+poke StdColorScheme 1 x
+poke StdTargetDevice 1 x
+poke item1 Native pokedata
+poke item1 1 poketext
+advise item1 Native 32768
+advise item1 3 32768
+advise item1/Change Native 32768
+advise item1/Save Native 32768
+advise item1/Close Native 32768
+advise item1/Change 3 49152
+advise item1/Bogus Native 32768
+advise StdDocumentName 1 32768
+advise item2 1 0
+unadvise item1/Change Native
+unadvise item1 Native
+unadvise item9 Native
+exec [StdShowItem("item1")]
+exec [StdShowItem("item1",FALSE)]
+exec [StdShowItem("item1",TRUE)]
+exec [StdDoVerbItem("item1",0,TRUE,FALSE)]
+exec [StdDoVerbItem("item1",1,FALSE,FALSE)]
+exec [StdDoVerbItem("item1")]
+exec [StdDoVerbItem("item1",2)]
+exec [StdShowItem("item7")]
+exec [MyDocCommand("x")]
+exec [StdCloseDocument]
+wait 1000
+term
+init OS1Probe System
+exec [StdExit]
+wait 2000
+term
+waitgone OS1
