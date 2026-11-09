@@ -62,7 +62,7 @@ open(sys.argv[3], 'wb').write((line * (n // len(line) + 1))[:n])" "$size" "$len"
             /msg 0477/ { mark = substr($4, 4); next }
             /block/    { cmd = $8 $7; topic = (cmd == "0001" ? $12 $11 $10 $9 : "-"); cb = hex($6 $5)
                          printf "%smark %s cmd %s topic %s", sep, mark, cmd, topic; sep = "\n"; next }
-            /text/     { if (hex(substr($3, 2)) >= cb) next
+            /text/     { o = hex(substr($3, 2)); if (o < 16 || o >= cb) next
                          sub(/^HELP text @[0-9A-F]+ /, ""); printf " %s", $0 }
             END { print "" }' > "$d/requests.txt"
         # the log without SNAP's own progress lines and window handles

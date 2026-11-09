@@ -150,8 +150,14 @@ HWND make_edit(BOOL wrap)
                           WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_NOHIDESEL |
                           (wrap ? 0 : ES_AUTOHSCROLL),
                           0, 0, 0, 0, g_main, (HMENU)IDC_EDIT, edit_ds(), NULL);
-    if (e)
+    if (e) {
         SendMessage(e, WM_SETFONT, (WPARAM)GetStockObject(SYSTEM_FIXED_FONT), 0);
+        /* observed: the original takes typing and pasting past 30000
+           characters (and past its 51K load limit), which USER's default
+           limit stops; so the limit is lifted. UNVERIFIED: the value the
+           original passes (0 here: no limit beyond the segment) */
+        SendMessage(e, EM_LIMITTEXT, 0, 0);
+    }
     return e;
 }
 

@@ -33,7 +33,7 @@ void help(UINT cmd)
         break;
     case IDM_HELPHELP:
         asked = TRUE;
-        WinHelp(g_main, file, HELP_HELPONHELP, 0);
+        WinHelp(g_main, NULL, HELP_HELPONHELP, 0);   /* observed: no file */
         break;
     case 0:
         if (asked)
