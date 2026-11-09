@@ -763,6 +763,53 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CALC.EXE, in two builds from one source tree (as PROGMAN) ----
+#   $(DOS)/CALC.EXE    Windows 3.x build: x87 code with emulator fixups
+#                      (-fpi, WIN87EM)
+#   $(WIN2)/CALC.EXE   Windows 2.x build (W16_WIN2: 8086, fixed segments,
+#                      coprocessor code: 2.11 has no WIN87EM)
+CALC_SRC := main draw engine fmt paste fpu stat clip help compat2
+CALC_OBJ := $(B)/shell/start.o $(CALC_SRC:%=$(B)/shell/calc/%.o) $(B)/shell/calc/fixrqq.o
+CALC_OBJ2 := $(B)/shell2/start.o $(CALC_SRC:%=$(B)/shell2/calc/%.o)
+CALC_HDR := shell/calc/calc.h shell/calc/ui.h shell/calc/compat2.h
+shell: $(DOS)/CALC.EXE
+shell2: $(WIN2)/CALC.EXE
+$(B)/shell/calc/%.o: shell/calc/%.c $(CALC_HDR)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fpi -fo=$@ $<
+$(B)/shell/calc/fixrqq.o: tests/apps/fixrqq.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/res/calc.ico: tools/mkcalcicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcalcicon.py $@
+$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CALC.EXE: $(CALC_OBJ) $(B)/shell/calc/calc.res shell/calc/calc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/calc/calc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/calc/calc.map \
+	    option resource=$(B)/shell/calc/calc.res file { $(CALC_OBJ) }
+$(B)/shell2/calc/%.o: shell/calc/%.c $(CALC_HDR)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -0 -fpi87 -dW16_WIN2 -fo=$@ $<
+$(B)/shell2/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+$(WIN2)/CALC.EXE: $(CALC_OBJ2) $(B)/shell2/calc/calc.res shell/calc/calc2.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/calc/calc2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell2/calc/calc.map \
+	    option resource=$(B)/shell2/calc/calc.res file { $(CALC_OBJ2) }
+	python3 tools/nemark.py $@ 2.0
+# the engine on the host (tools/calchost; tests/calcscenarios.sh)
+$(B)/host/calchost: tools/calchost/calchost.c tools/calchost/fpu_host.c shell/calc/engine.c \
+                    shell/calc/fmt.c shell/calc/paste.c shell/calc/calc.h shell/calc/accel.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O0 -mfpmath=387 -o $@ tools/calchost/calchost.c tools/calchost/fpu_host.c \
+	    shell/calc/engine.c shell/calc/fmt.c shell/calc/paste.c
+
 test: dos fonts
 	tests/run-tests.sh
 

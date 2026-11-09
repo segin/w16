@@ -1,0 +1,259 @@
+/*
+ * calc.rc - w16 Calculator resources.
+ *
+ * The menu, accelerators, dialog layouts and button labels are Windows
+ * 3.1 Calculator's as observed (its resources read as data with
+ * tools/resdump.py, and SNAP window dumps). The icon is our own artwork
+ * (tools/mkcalcicon.py), and so is the About text.
+ */
+#include <windows.h>
+#include "calc.h"
+
+SC ICON "calc.ico"
+
+SM MENU
+BEGIN
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Copy\tCtrl+C",               IDM_COPY
+        MENUITEM "&Paste\tCtrl+V",              IDM_PASTE
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Scientific",                 IDM_SCIENTIFIC
+        MENUITEM "S&tandard",                   IDM_STANDARD
+    END
+    POPUP "&Help", HELP
+    BEGIN
+        MENUITEM "&Contents",                   IDM_HELPCONTENTS
+        MENUITEM "&Search for Help On...",      IDM_HELPSEARCH
+        MENUITEM "&How to Use Help",            IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Calculator...",        IDM_ABOUT
+    END
+END
+
+SC DIALOG 310, 65, 240, 158
+STYLE WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CLASS "SciCalc"
+CAPTION "Calculator"
+BEGIN
+    CONTROL "Hex", IDC_HEX, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 8, 24, 28, 10
+    CONTROL "Dec", IDC_DEC, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 36, 24, 28, 10
+    CONTROL "Oct", IDC_OCT, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 64, 24, 28, 10
+    CONTROL "Bin", IDC_BIN, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 92, 24, 28, 10
+    CONTROL "", IDC_SIZE1, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 134, 24, 36, 10
+    CONTROL "", IDC_SIZE2, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 170, 24, 30, 10
+    CONTROL "", IDC_SIZE3, "Button", BS_RADIOBUTTON | WS_CHILD | WS_VISIBLE, 204, 24, 30, 10
+    CONTROL "Hyp", IDC_HYP, "Button", BS_AUTOCHECKBOX | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 130, 40, 30, 10
+    CONTROL "Inv", IDC_INV, "Button", BS_AUTOCHECKBOX | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 92, 40, 30, 10
+    CONTROL "", IDD_STATTEXT, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 170, 41, 16, 9
+    CONTROL "", IDD_MEMSCI, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 196, 41, 12, 9
+    CONTROL "", IDD_MEMSTD, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 100, 24, 11, 9
+    CONTROL "", IDD_PARENS, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 218, 41, 16, 10
+    CONTROL "", IDD_DISPSCI, "Static", SS_RIGHT | WS_GROUP | WS_CHILD | WS_VISIBLE, 100, 6, 128, 8
+    CONTROL "", IDD_DISPSTD, "Static", SS_RIGHT | WS_GROUP | WS_CHILD | WS_VISIBLE, 25, 6, 93, 8
+END
+
+SB DIALOG 80, 80, 146, 86
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_SETFONT
+CAPTION "Statistics Box"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDD_STATLIST, "ListBox", LBS_NOTIFY | WS_VSCROLL | WS_BORDER | WS_CHILD | WS_VISIBLE, 3, 3, 140, 50
+    CONTROL "&RET", IDD_RET, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 4, 58, 28, 14
+    CONTROL "&LOAD", IDD_LOAD, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 40, 58, 28, 14
+    CONTROL "&CD", IDD_CD, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 76, 58, 28, 14
+    CONTROL "C&AD", IDD_CAD, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 112, 58, 28, 14
+    CONTROL "n=", IDD_STATNL, "Static", SS_CENTER | WS_GROUP | WS_CHILD | WS_VISIBLE, 66, 76, 8, 8
+    CONTROL "0", IDD_STATN, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 74, 76, 32, 8
+END
+
+STRINGTABLE
+BEGIN
+    0, "Sta"
+    1, "Ave"
+    2, "Sum"
+    3, "s"
+    4, "Dat"
+    5, "F-E"
+    6, "dms"
+    7, "sin"
+    8, "cos"
+    9, "tan"
+    10, "("
+    11, "Exp"
+    12, "x^y"
+    13, "x^3"
+    14, "x^2"
+    15, ")"
+    16, "ln"
+    17, "log"
+    18, "n!"
+    19, "1/x"
+    20, "MC"
+    21, "MR"
+    22, "MS"
+    23, "M+"
+    24, "PI"
+    25, "7"
+    26, "4"
+    27, "1"
+    28, "0"
+    29, "A"
+    30, "8"
+    31, "5"
+    32, "2"
+    33, "+/-"
+    34, "B"
+    35, "9"
+    36, "6"
+    37, "3"
+    38, "."
+    39, "C"
+    40, "/"
+    41, "*"
+    42, "-"
+    43, "+"
+    44, "D"
+    45, "Mod"
+    46, "Or"
+    47, "Lsh"
+    48, "sqrt"
+    49, "%"
+    50, "1/x"
+    51, "="
+    52, "E"
+    53, "And"
+    54, "Xor"
+    55, "Not"
+    56, "Int"
+    57, "F"
+    58, "C"
+    59, "CE"
+    60, "Back"
+    61, "Dword"
+    62, "Word"
+    63, "Byte"
+    64, "Deg"
+    65, "Rad"
+    66, "Grad"
+    67, "Cannot divide by zero."
+    68, "Invalid value for this function."
+    69, "Result of function is undefined."
+    70, "Result is too large to store."
+    71, "Result is too small to store."
+    72, "calc.hlp"
+    73, "Cannot open the Clipboard because it is being used by another application. Quit that application, and then try again."
+    74, "Not enough memory available for the data.\n\nQuit one or more applications to increase available memory, and then try again."
+    75, "stat"
+    76, "Calculator"
+    77, "w16 Calculator"
+END
+
+SA ACCELERATORS
+BEGIN
+    "A", 65, VIRTKEY
+    "B", 66, VIRTKEY
+    "C", 67, VIRTKEY
+    "D", 68, VIRTKEY
+    "E", 69, VIRTKEY
+    "F", 70, VIRTKEY
+    "0", 48, ASCII
+    "1", 49, ASCII
+    "2", 50, ASCII
+    "3", 51, ASCII
+    "4", 52, ASCII
+    "5", 53, ASCII
+    "6", 54, ASCII
+    "7", 55, ASCII
+    "8", 56, ASCII
+    "9", 57, ASCII
+    "!", 105, ASCII
+    "S", 98, VIRTKEY
+    "O", 99, VIRTKEY
+    "T", 100, VIRTKEY
+    "R", 106, VIRTKEY
+    "Y", 95, VIRTKEY
+    "#", 104, ASCII
+    "@", 103, ASCII
+    "M", 107, VIRTKEY
+    "N", 101, VIRTKEY
+    "L", 102, VIRTKEY
+    "V", 109, VIRTKEY
+    "X", 116, VIRTKEY
+    "I", 125, VIRTKEY
+    "H", 126, VIRTKEY
+    "P", 110, VIRTKEY
+    "K", 303, VIRTKEY, SHIFT, CONTROL
+    VK_LEFT, 83, VIRTKEY
+    VK_BACK, 83, VIRTKEY
+    VK_DELETE, 82, VIRTKEY
+    VK_ESCAPE, 81, VIRTKEY
+    VK_F1, 65535, VIRTKEY
+    VK_F2, 127, VIRTKEY
+    VK_F3, 128, VIRTKEY
+    VK_F4, 129, VIRTKEY
+    VK_F5, 124, VIRTKEY
+    VK_F6, 123, VIRTKEY
+    VK_F7, 122, VIRTKEY
+    VK_F8, 121, VIRTKEY
+    VK_F9, 80, VIRTKEY
+    "^S", 84, ASCII
+    "^M", 114, ASCII
+    "^P", 115, ASCII
+    "^L", 112, ASCII
+    "^R", 113, ASCII
+    "^A", 117, ASCII
+    "^T", 118, ASCII
+    "^D", 119, ASCII
+    "/", 90, ASCII
+    "*", 91, ASCII
+    "%", 94, ASCII
+    "-", 93, ASCII
+    "=", 111, ASCII
+    "+", 92, ASCII
+    VK_ADD, 92, VIRTKEY
+    "&", 86, ASCII
+    "|", 87, ASCII
+    "~", 97, ASCII
+    "^", 88, ASCII
+    "(", 40, ASCII
+    ")", 41, ASCII
+    ";", 96, ASCII
+    "<", 89, ASCII
+    ".", 85, ASCII
+    ",", 85, ASCII
+    VK_RETURN, 111, VIRTKEY
+    VK_INSERT, 120, VIRTKEY
+    "^C", 300, ASCII
+    "^V", 301, ASCII
+    VK_INSERT, 300, VIRTKEY, CONTROL
+    VK_INSERT, 301, VIRTKEY, SHIFT
+END
+
+1 VERSIONINFO
+FILEVERSION 3, 10, 0, 0
+PRODUCTVERSION 3, 10, 0, 0
+FILEOS 0x00010001L
+FILETYPE 0x1L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName", "the w16 contributors\0"
+            VALUE "FileDescription", "w16 Calculator\0"
+            VALUE "FileVersion", "3.10\0"
+            VALUE "InternalName", "Calc\0"
+            VALUE "LegalCopyright", "Copyright (c) 2026 the w16 contributors (MIT licence)\0"
+            VALUE "OriginalFilename", "CALC.EXE\0"
+            VALUE "ProductName", "w16\0"
+            VALUE "ProductVersion", "3.10\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

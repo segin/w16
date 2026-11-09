@@ -21,6 +21,9 @@
  */
 #include "calc.h"
 
+/* the inline assembly assigns the results */
+#pragma disable_message(200)
+
 #ifndef W16_WIN2
 extern void far pascal FPMATH(void);    /* WIN87EM.1, register interface */
 #endif

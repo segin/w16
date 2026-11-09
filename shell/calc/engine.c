@@ -797,7 +797,6 @@ static void trig(int id)
 static void factorial(void)
 {
     double v = operand(), r = 1;
-    int n;
     if (v < 0) {
         set_error(ERR_INVALID);
         return;
@@ -806,8 +805,11 @@ static void factorial(void)
         set_error(ERR_BIG);
         return;
     }
-    for (n = 2; n <= (int)v; n++)
-        r *= n;
+    {
+        double k;
+        for (k = 2; k <= v; k += 1)
+            r *= k;
+    }
     result(r);
 }
 
