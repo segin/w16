@@ -32,6 +32,10 @@
 #   allw16full every w16 part at once: WIN.COM, DOSX, KRNL286, USER, GDI,
 #              PROGMAN, WINOLDAP, WIN87EM and the four fonts: must boot
 #              (no pixel comparison: w16's PROGMAN and fonts differ)
+#   allw16input every w16 part at once (WIN.COM, DOSX, KRNL286, USER, GDI,
+#              PROGMAN, NOTEPAD, WINOLDAP, WIN87EM, fonts) with real input
+#              after the boot (tests/scripts/input/menus.txt): the Help menu
+#              must open from the keyboard and the pointer must move
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -59,7 +63,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -162,6 +166,26 @@ for c in $cases; do
             -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON"
         if booted allw16full; then echo "ok   allw16full: boots"
         else echo "FAIL allw16full: did not boot (see $out/allw16full.txt)"; fails=$((fails + 1)); fi ;;
+    allw16input)
+        fon=$root/build/fonts
+        "$root/tests/inputrun.sh" -b 30 -t 90 "$root/tests/scripts/input/menus.txt" "$out/allw16input" \
+            -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE" \
+            -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
+            -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+            -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+            > "$out/allw16input.txt" 2>&1 || true
+        d=$out/allw16input
+        if [ -f "$d/01-menu.png" ] && [ -f "$d/02-help.png" ] && [ -f "$d/03-moved.png" ]; then
+            h=$(magick compare -metric AE "$d/01-menu.png" "$d/02-help.png" /dev/null 2>&1 >/dev/null || true)
+            m=$(magick compare -metric AE "$d/01-menu.png" "$d/03-moved.png" /dev/null 2>&1 >/dev/null || true)
+            h=${h%%[. ]*} m=${m%%[. ]*}
+            if [ "${h:-0}" -gt 1000 ] && [ "${m:-0}" -gt 0 ]; then echo "ok   allw16input: menus and pointer respond"
+            else echo "FAIL allw16input: input had no effect (help menu $h pixels, pointer $m; $d)"; fails=$((fails + 1)); fi
+        else
+            echo "FAIL allw16input: screens missing ($d)"; fails=$((fails + 1))
+        fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
