@@ -25,6 +25,7 @@ WORD input_pending;
 BYTE keystate[256];             /* the driver's async state (KEYBOARD.Enable) */
 static BYTE qkeystate[256];     /* GetKeyState's: as of the last message */
 POINT ptCursor;
+WORD lastkey;                   /* the last key pressed: Alt alone opens the menu */
 HWND hwndCapture, hwndFocus, hwndActive;
 HQUEUE hqInput;
 static HCURSOR hcurCurrent;
@@ -362,21 +363,56 @@ static HWND mouse_target(POINT pt, int *hit)
     return h;
 }
 
+/* would a GetMessage/PeekMessage with this filter take the event (as
+   message m1 or m2, for target)? */
+static BOOL wanted(UINT m1, UINT m2, HWND target, HWND hf, UINT lo, UINT hi)
+{
+    if (!in_filter_ok(m1, lo, hi) && !in_filter_ok(m2, lo, hi) &&
+        !in_filter_ok(m1 + 2, lo, hi))          /* the double-click form */
+        return FALSE;
+    if (hf && target != hf && !IsChild(hf, target))
+        return FALSE;
+    return TRUE;
+}
+
+/* take event number at (from the head) if it is still e (a nested
+   reader may have taken it), closing the gap; FALSE: it was not */
+static BOOL consume(WORD at, const SYSEV *e)
+{
+    WORD f = irq_off(), i;
+    SYSEV *q;
+    BOOL ok = at < sq_count;
+    if (ok) {
+        q = &sysq[(sq_head + at) % NSYSQ];
+        ok = q->msg == e->msg && q->time == e->time && q->lParam == e->lParam &&
+             q->wParam == e->wParam;
+    }
+    if (ok) {
+        for (i = at; i > 0; i--)        /* the ones before it move up one */
+            sysq[(sq_head + i) % NSYSQ] = sysq[(sq_head + i - 1) % NSYSQ];
+        sq_head = (sq_head + 1) % NSYSQ;
+        sq_count--;
+    }
+    irq_restore(f);
+    return ok;
+}
+
 BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far *m)
 {
     SYSEV e;
     HWND target;
     PWND w;
     int hit = HTCLIENT;
-    WORD f;
-    for (;;) {
+    WORD f, at = 0;             /* the event looked at, from the head */
+    for (;; at++) {
         f = irq_off();
-        if (!sq_count) {
-            input_pending = 0;
+        if (at >= sq_count) {
+            if (!sq_count)
+                input_pending = 0;
             irq_restore(f);
             return FALSE;
         }
-        e = sysq[sq_head];
+        e = sysq[(sq_head + at) % NSYSQ];
         irq_restore(f);
         if (e.msg >= WM_MOUSEFIRST && e.msg <= WM_MOUSELAST) {
             POINT pt;
@@ -384,20 +420,58 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
             pt.y = HIWORD(e.lParam);
             target = mouse_target(pt, &hit);
             w = valid_wnd(target);
-            if (w && w->hq != hq) {
+            /* another task's window takes it from there; the desktop's
+               (no queue: it belongs to no task) whoever reads first. A
+               mouse event over the desktop used to stay at the head for
+               ever, and with it all input behind it: the pointer moved,
+               nothing else did */
+            if (w && w->hq && w->hq != hq) {
                 set_wakebit(w->hq, QS_MOUSE);
                 return FALSE;
+            }
+            /* an event the caller's filter does not take stays where it
+               is (it used to be thrown away: keys typed while a program
+               peeked for mouse messages were lost) */
+            if (!wanted(e.msg, e.msg + WM_NCMOUSEMOVE - WM_MOUSEMOVE, target, hf, lo, hi))
+                continue;
+            /* PM_NOREMOVE: the message it would be, the event left in
+               place (it used to be taken: the idle check of a dialog's
+               modal loop, a PeekMessage, ate keys and clicks) */
+            if (!remove) {
+                if (!w)
+                    continue;
+                if (!hwndCapture)
+                    hit = (int)send_message(target, WM_NCHITTEST, 0, e.lParam);
+                m->hwnd = target;
+                m->time = e.time;
+                m->pt = pt;
+                if (hit != HTCLIENT) {
+                    m->message = e.msg + WM_NCMOUSEMOVE - WM_MOUSEMOVE;
+                    m->wParam = hit;
+                    m->lParam = e.lParam;
+                } else {
+                    POINT c = pt;
+                    if (valid_wnd(target))
+                        ScreenToClient(target, &c);
+                    m->message = e.msg;
+                    m->wParam = 0;
+                    m->lParam = MAKELONG(c.x, c.y);
+                }
+                return TRUE;
+            }
+            /* consumed before anything is sent: a window procedure that
+               reads messages meanwhile must not get the same event */
+            {
+                BOOL took = consume(at, &e);
+                at = (WORD)-1;          /* from the head again either way */
+                if (!took)
+                    continue;
             }
             if (w && !hwndCapture) {
                 hit = (int)send_message(target, WM_NCHITTEST, 0, e.lParam);
                 if (!valid_wnd(target))
                     hit = HTNOWHERE;
             }
-            /* consume */
-            f = irq_off();
-            sq_head = (sq_head + 1) % NSYSQ;
-            sq_count--;
-            irq_restore(f);
             if (!w)
                 continue;
             if (e.msg != WM_MOUSEMOVE) {
@@ -454,19 +528,33 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
         } else {
             target = key_target();
             w = valid_wnd(target);
-            if (w && w->hq != hq) {
+            if (w && w->hq && w->hq != hq) {
                 set_wakebit(w->hq, QS_KEY);
                 return FALSE;
             }
-            f = irq_off();
-            sq_head = (sq_head + 1) % NSYSQ;
-            sq_count--;
-            irq_restore(f);
+            if (!wanted(e.msg, e.msg, w ? target : hwndActive, hf, lo, hi))
+                continue;
+            if (!remove) {
+                m->hwnd = w ? target : hwndActive;
+                m->message = e.msg;
+                m->wParam = e.wParam;
+                m->lParam = e.lParam;
+                m->time = e.time;
+                m->pt = ptCursor;
+                return TRUE;
+            }
+            {
+                BOOL took = consume(at, &e);
+                at = (WORD)-1;          /* from the head again either way */
+                if (!took)
+                    continue;
+            }
             {
                 BYTE vk = (BYTE)e.wParam;
                 if (e.lParam & 0x80000000L)
                     qkeystate[vk] &= ~0x80;
                 else {
+                    lastkey = vk;
                     if (!(qkeystate[vk] & 0x80))
                         qkeystate[vk] ^= 1;
                     qkeystate[vk] |= 0x80;
@@ -490,7 +578,6 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
         }
         if (!in_filter_ok(m->message, lo, hi) || (hf && m->hwnd != hf && !IsChild(hf, m->hwnd)))
             continue;                   /* UNVERIFIED: Windows keeps it for later */
-        (void)remove;
         return TRUE;
     }
 }

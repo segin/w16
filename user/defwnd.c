@@ -22,6 +22,7 @@ LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
+LRESULT WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
 
@@ -367,6 +368,7 @@ LONG nc_hittest(PWND w, POINT pt)
 }
 
 /* ---- DefWindowProc ---- */
+extern WORD lastkey;            /* the last key pressed (input.c) */
 static LONG def_ctlcolor(HDC hdc, int type)
 {
     if (type == CTLCOLOR_SCROLLBAR) {
@@ -579,7 +581,9 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
         return 0;
     case WM_SYSKEYUP:
-        if ((wp == VK_MENU || wp == VK_F10) && !(w->style & WS_CHILD))
+        /* Alt or F10 pressed and released alone (Alt+F4 must not then
+           enter the menu: it took the next keys) */
+        if ((wp == VK_MENU || wp == VK_F10) && wp == lastkey && !(w->style & WS_CHILD))
             send_message(h, WM_SYSCOMMAND, SC_KEYMENU, 0);
         return 0;
     case WM_WINDOWPOSCHANGED: {
@@ -636,9 +640,22 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SETFONT:
         return 0;
     case WM_SYSCHAR:
-        if (lp & 0x20000000L)
-            send_message(top_level(h), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)wp == ' ' &&
-                         (w->style & WS_CHILD) ? '-' : (BYTE)wp);
+        /* Alt+Space: the top-level window's system menu, from any of
+           its children (the reference opens Program Manager's with the
+           focus in a group); Alt+-: the MDI child's around the focus */
+        if (lp & 0x20000000L) {
+            if ((BYTE)wp == '-') {
+                HWND c;
+                for (c = h; c && valid_wnd(c); c = PW(c)->hwndParent)
+                    if (PW(c)->hwndParent && valid_wnd(PW(c)->hwndParent) &&
+                        ((PCLS)PW(PW(c)->hwndParent)->cls)->lpfnWndProc ==
+                        (WNDPROC)MDIClientWndProc) {
+                        menu_track_bar(c, ' ');
+                        return 0;
+                    }
+            }
+            send_message(top_level(h), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)wp);
+        }
         return 0;
     }
     return 0;

@@ -399,8 +399,8 @@ BOOL destroy_window(HWND h)
                        SWP_NOSIZE | SWP_NOZORDER);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    if (h == hwndCapture || IsChild(h, hwndCapture))
-        hwndCapture = 0;
+    if (hwndCapture && (h == hwndCapture || IsChild(h, hwndCapture)))
+        ReleaseCapture();       /* the input queue goes back with it */
     destroy_tree(h);
     if (hwndFocus && !valid_wnd(hwndFocus))
         hwndFocus = 0;
