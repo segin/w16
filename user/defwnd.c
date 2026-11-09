@@ -121,6 +121,15 @@ static void caption_rect(PWND w, RECT *r)
     r->bottom = r->top + sysmet[SM_CYCAPTION];
 }
 
+/* the system-menu box, window coordinates: inverted while the system
+   menu is open (US4) */
+void sysbox_rect(PWND w, RECT *r)
+{
+    RECT c;
+    caption_rect(w, &c);
+    SetRect(r, c.left + 1, c.top + 1, c.left + 1 + sysmet[SM_CXSIZE], c.bottom - 1);
+}
+
 static void blt_bitmap(HDC hdc, HBITMAP bm, int x, int y, int sx, int cx, int cy)
 {
     HBITMAP old = SelectObject(hdcMem, bm);
@@ -247,6 +256,10 @@ static void draw_frame(HDC hdc, PWND w, BOOL active)
     }
 }
 
+void nc_draw_scrollbars(HDC hdc, PWND w);
+void window_scrollbar_rects(PWND w, RECT *v, RECT *h);
+void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt);
+
 void nc_paint(HWND h, HRGN rgn, BOOL active)
 {
     PWND w = valid_wnd(h);
@@ -265,11 +278,16 @@ void nc_paint(HWND h, HRGN rgn, BOOL active)
     if (has_caption(w))
         draw_caption(hdc, w, active);
     if (has_menu(w)) {
-        int fx, fy, top;
+        /* as wide as the frame's inside, over the vertical scroll bar
+           too (US4) */
+        int fx, fy, top, mw;
         frame_size(w, &fx, &fy);
-        top = cr.top - menu_bar_height(w, cr.right - cr.left);
-        menu_draw_bar(hdc, w, cr.left, top, cr.right - cr.left);
+        mw = w->rcWindow.right - w->rcWindow.left - 2 * fx;
+        top = cr.top - menu_bar_height(w, mw);
+        menu_draw_bar(hdc, w, cr.left, top, mw);
     }
+    if (w->style & (WS_VSCROLL | WS_HSCROLL))
+        nc_draw_scrollbars(hdc, w);
     release_dc(h, hdc);
     (void)rgn;
 }
@@ -452,6 +470,22 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 activate_window(h, TRUE);
             send_message(h, WM_SYSCOMMAND, SC_MOUSEMENU, lp);
             break;
+        case HTVSCROLL:
+        case HTHSCROLL: {
+            RECT v, hz;
+            POINT pt;
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if (!(w = valid_wnd(h)))
+                return 0;
+            window_scrollbar_rects(w, &v, &hz);
+            OffsetRect(&v, w->rcWindow.left, w->rcWindow.top);
+            OffsetRect(&hz, w->rcWindow.left, w->rcWindow.top);
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            track_scrollbar(h, h, wp == HTVSCROLL ? SB_VERT : SB_HORZ, wp == HTVSCROLL ? &v : &hz, pt);
+            break;
+        }
         case HTMINBUTTON:
             send_message(h, WM_SYSCOMMAND, SC_MINIMIZE, lp);
             break;

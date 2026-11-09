@@ -120,13 +120,15 @@ static SBS __near *sbs_of(PWND w, BOOL create)
 
 void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
 {
-    /* window coordinates; they overlap the frame's inner line by one */
+    /* window coordinates: right of and below the client area, their
+       outer lines on the frame's (or menu bar's) black lines, the two
+       bars sharing a line (US4) */
     RECT c = w->rcClient;
     OffsetRect(&c, -w->rcWindow.left, -w->rcWindow.top);
-    SetRect(v, c.right - sysmet[SM_CXBORDER], c.top - sysmet[SM_CYBORDER],
-            c.right + sysmet[SM_CXVSCROLL] - sysmet[SM_CXBORDER], c.bottom + sysmet[SM_CYBORDER]);
-    SetRect(h, c.left - sysmet[SM_CXBORDER], c.bottom - sysmet[SM_CYBORDER],
-            c.right + sysmet[SM_CXBORDER], c.bottom + sysmet[SM_CYHSCROLL] - sysmet[SM_CYBORDER]);
+    SetRect(v, c.right, c.top - sysmet[SM_CYBORDER],
+            c.right + sysmet[SM_CXVSCROLL], c.bottom + sysmet[SM_CYBORDER]);
+    SetRect(h, c.left - sysmet[SM_CXBORDER], c.bottom,
+            c.right + sysmet[SM_CXBORDER], c.bottom + sysmet[SM_CYHSCROLL]);
 }
 
 /* called by nc_paint with the window DC */

@@ -35,6 +35,7 @@ typedef struct MENU {
     WORD   flags;               /* MENU_POPUP, MENU_SYSMENU */
     HWND   hwnd;                /* the window it is the bar or popup of */
     int    cx, cy;              /* laid-out size */
+    int    tabx;                /* a popup's accelerator column */
 } MENU;
 typedef MENU __near *PMENU;
 #define MENU_MAGIC   0x554D
@@ -480,6 +481,20 @@ HMENU WINAPI GetSystemMenu(HWND h, BOOL revert)
     return (HMENU)w->hSysMenu;
 }
 
+/* the system menu's items enabled for the window's state, before
+   WM_INITMENU (US4: a normal window's Restore is grayed; the others
+   UNVERIFIED) */
+static void sysmenu_states(PWND w, HMENU m)
+{
+    DWORD s = w->style;
+    BOOL mm = (s & (WS_MINIMIZE | WS_MAXIMIZE)) != 0;
+    EnableMenuItem(m, SC_RESTORE, mm ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, SC_MOVE, (s & WS_MAXIMIZE) ? MF_GRAYED : MF_ENABLED);
+    EnableMenuItem(m, SC_SIZE, (!(s & WS_THICKFRAME) || mm) ? MF_GRAYED : MF_ENABLED);
+    EnableMenuItem(m, SC_MINIMIZE, (!(s & WS_MINIMIZEBOX) || (s & WS_MINIMIZE)) ? MF_GRAYED : MF_ENABLED);
+    EnableMenuItem(m, SC_MAXIMIZE, (!(s & WS_MAXIMIZEBOX) || (s & WS_MAXIMIZE)) ? MF_GRAYED : MF_ENABLED);
+}
+
 /* ---- the menu bar ---- */
 static void text_of(PMITEM it, char *buf, int n)
 {
@@ -561,11 +576,10 @@ static void draw_item_text(HDC hdc, PMITEM it, int x, int y, int right)
         DrawText(hdc, buf, (int)(tab - buf), &r, DT_SINGLELINE | DT_NOCLIP);
     }
     if (*tab) {
+        /* the accelerator, from x 'right' (a popup's tab column) */
         RECT r;
-        int w;
         tab++;
-        w = LOWORD(GetTextExtent(hdc, tab, lstr_len(tab)));
-        SetRect(&r, right - w, y, right, y + cySysChar);
+        SetRect(&r, right, y, 0x7FFF, y + cySysChar);
         DrawText(hdc, tab, -1, &r, DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
     }
 }
@@ -613,7 +627,18 @@ int cxSysCharMenu(void)
     return LOWORD(GetDialogBaseUnits());
 }
 
-/* ---- popup menus ---- */
+/* ---- popup menus ----
+   Measured (US4: a File menu with a check mark, a separator, a grayed
+   item and an accelerator; the system menu): a black frame and a one-pixel
+   shadow right and below it, starting a pixel in; items SM_CYMENU high,
+   separators 7 with their line 3 down; the text 15 pixels in, the
+   accelerators left-aligned 8 pixels after the widest text, 14 pixels
+   from the right edge. UNVERIFIED: the margins as rules, the shadow's
+   colour (light gray over white here) and the width of a menu without
+   accelerators (the same 14 assumed). */
+#define POP_LEFT    15
+#define POP_GAP     8
+#define POP_RIGHT   14
 typedef struct POPUP {
     HMENU  menu;
     HWND   hwnd;                /* its window (class #32768) */
@@ -630,7 +655,7 @@ static void layout_popup(PMENU m)
     for (i = 0; i < m->count; i++) {
         PMITEM it = item_at(m, i);
         char buf[128], *tab;
-        int h = (it->flags & MF_SEPARATOR) ? cySysChar / 2 : cySysChar;
+        int h = (it->flags & MF_SEPARATOR) ? cySysChar / 2 - 1 : sysmet[SM_CYMENU];
         text_of(it, buf, sizeof buf);
         for (tab = buf; *tab && *tab != '\t'; tab++)
             ;
@@ -647,8 +672,9 @@ static void layout_popup(PMENU m)
         SetRect(&it->rc, 0, y, 0, y + h);
         y += h;
     }
-    m->cx = wmax + 2 * cxSysCharMenu() + (tabmax ? tabmax + 2 * cxSysCharMenu() : 0) + 2;
+    m->cx = POP_LEFT + wmax + (tabmax ? POP_GAP + tabmax : 0) + POP_RIGHT + 2;
     m->cy = y + 2;
+    m->tabx = POP_LEFT + wmax + POP_GAP;
     for (i = 0; i < m->count; i++) {
         PMITEM it = item_at(m, i);
         it->rc.left = 1;
@@ -663,6 +689,7 @@ static HBITMAP bmCheck;
 static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
 {
     RECT r = it->rc;
+    BOOL grayhil = hil && (it->flags & MF_GRAYED);
     if (it->flags & MF_SEPARATOR) {
         HBRUSH ob;
         FillRect(hdc, &r, sysbrush[COLOR_MENU]);
@@ -680,13 +707,48 @@ static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
             bmCheck = LoadBitmap(0, MAKEINTRESOURCE(OBM_CHECK));
         {
             HBITMAP old = SelectObject(hdcMem, bmCheck);
-            BitBlt(hdc, r.left, r.top + (r.bottom - r.top - 14) / 2, 14, 14, hdcMem, 0, 0,
-                   hil ? NOTSRCCOPY : SRCCOPY);
+            COLORREF tc = SetTextColor(hdc, syscolor[hil ? COLOR_HIGHLIGHTTEXT : COLOR_MENUTEXT]);
+            COLORREF bc = SetBkColor(hdc, syscolor[hil ? COLOR_HIGHLIGHT : COLOR_MENU]);
+            BitBlt(hdc, r.left, r.top + (r.bottom - r.top - 14) / 2, 14, 14, hdcMem, 0, 0, SRCCOPY);
+            SetTextColor(hdc, tc);
+            SetBkColor(hdc, bc);
             SelectObject(hdcMem, old);
         }
     }
-    draw_item_text(hdc, it, r.left + cxSysCharMenu(), r.top, r.right - cxSysCharMenu());
-    (void)m;
+    if (grayhil) {
+        /* a grayed item under the highlight: its text in the highlight
+           text colour through GrayString's checkerboard (US4: the system
+           menu's Restore) */
+        HDC mem = CreateCompatibleDC(hdc);
+        int cx = r.right - r.left, cy = r.bottom - r.top;
+        HBITMAP bm = CreateBitmap(cx, cy, 1, 1, NULL), ob = SelectObject(mem, bm);
+        HFONT of = SelectObject(mem, GetStockObject(SYSTEM_FONT));
+        HBRUSH obr;
+        DWORD org = GetDCOrg(hdc);
+        PatBlt(mem, 0, 0, cx, cy, WHITENESS);
+        SetBkMode(mem, TRANSPARENT);
+        SetTextColor(mem, RGB(0, 0, 0));
+        draw_item_text(mem, it, POP_LEFT, 0, m->tabx);
+        UnrealizeObject(hbrGray);
+        SetBrushOrg(mem, (LOWORD(org) + HIWORD(org) + r.left + r.top) & 1, 0);
+        obr = SelectObject(mem, hbrGray);
+        PatBlt(mem, 0, 0, cx, cy, 0x00FA0089L);     /* DPo */
+        SelectObject(mem, obr);
+        {
+            COLORREF tc = SetTextColor(hdc, RGB(0, 0, 0)), bc = SetBkColor(hdc, RGB(255, 255, 255));
+            obr = SelectObject(hdc, sysbrush[COLOR_HIGHLIGHTTEXT]);
+            BitBlt(hdc, r.left, r.top, cx, cy, mem, 0, 0, 0x00B8074AL);   /* PSDPxax */
+            SelectObject(hdc, obr);
+            SetTextColor(hdc, tc);
+            SetBkColor(hdc, bc);
+        }
+        SelectObject(mem, of);
+        SelectObject(mem, ob);
+        DeleteObject(bm);
+        DeleteDC(mem);
+        return;
+    }
+    draw_item_text(hdc, it, r.left + POP_LEFT, r.top, r.left + m->tabx);
 }
 
 LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -702,6 +764,15 @@ LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             UINT i;
             RECT r;
             GetClientRect(h, &r);
+            /* the shadow, its corner pixels left as they were */
+            r.right--;
+            r.bottom--;
+            {
+                HBRUSH ob = SelectObject(hdc, sysbrush[COLOR_BTNFACE]);
+                PatBlt(hdc, r.right, 1, 1, r.bottom, PATCOPY);
+                PatBlt(hdc, 1, r.bottom, r.right, 1, PATCOPY);
+                SelectObject(hdc, ob);
+            }
             FrameRect(hdc, &r, sysbrush[COLOR_WINDOWFRAME]);
             for (i = 0; i < m->count; i++) {
                 PMITEM it = item_at(m, i);
@@ -715,6 +786,8 @@ LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND: {
         RECT r;
         GetClientRect(h, &r);
+        r.right--;
+        r.bottom--;
         FillRect((HDC)wp, &r, sysbrush[COLOR_MENU]);
         return 1;
     }
@@ -738,8 +811,25 @@ typedef struct MLOOP {
     BOOL   done;
 } MLOOP;
 
+void sysbox_rect(PWND w, RECT *r);
+
+static void invert_sysbox(MLOOP *l)
+{
+    PWND w = valid_wnd(l->owner);
+    RECT r;
+    HDC hdc;
+    if (!w || !(w->style & WS_SYSMENU) || (w->style & WS_MINIMIZE))
+        return;
+    sysbox_rect(w, &r);
+    hdc = get_dc(l->owner, TRUE, 0, 0);
+    InvertRect(hdc, &r);
+    release_dc(l->owner, hdc);
+}
+
 static void close_popup(MLOOP *l)
 {
+    if (l->sysmenu && l->hwndPopup)
+        invert_sysbox(l);
     if (l->hwndPopup) {
         DestroyWindow(l->hwndPopup);
         l->hwndPopup = 0;
@@ -793,7 +883,7 @@ static void open_popup(MLOOP *l, HMENU popup, int x, int y)
         y = sysmet[SM_CYSCREEN] - m->cy;
     l->popup = popup;
     l->sel = -1;
-    l->hwndPopup = create_window(0, MAKEINTRESOURCE(32768), NULL, WS_POPUP, x, y, m->cx, m->cy,
+    l->hwndPopup = create_window(0, MAKEINTRESOURCE(32768), NULL, WS_POPUP, x, y, m->cx + 1, m->cy + 1,
                                  l->owner, 0, hInstUser, NULL);
     if (l->hwndPopup) {
         SetWindowWord(l->hwndPopup, 0, (WORD)popup);
@@ -821,8 +911,11 @@ static void select_bar(MLOOP *l, int i, BOOL open)
         if (open) {
             RECT r;
             GetWindowRect(l->owner, &r);
+            /* on the caption's lower line (US4) */
             open_popup(l, l->bar, r.left + sysmet[SM_CXFRAME],
-                       r.top + sysmet[SM_CYFRAME] - 1 + sysmet[SM_CYCAPTION]);
+                       r.top + sysmet[SM_CYFRAME] - 2 + sysmet[SM_CYCAPTION]);
+            if (l->hwndPopup)
+                invert_sysbox(l);
         }
         return;
     }
@@ -851,7 +944,7 @@ static void select_bar(MLOOP *l, int i, BOOL open)
     if (open && i >= 0 && (item_at(m, i)->flags & MF_POPUP)) {
         RECT r;
         bar_rect(l, i, &r);
-        open_popup(l, (HMENU)item_at(m, i)->id, r.left, r.bottom + sysmet[SM_CYBORDER]);
+        open_popup(l, (HMENU)item_at(m, i)->id, r.left, r.bottom);   /* on the bar's line */
     }
 }
 
@@ -1044,8 +1137,10 @@ void menu_track_bar(HWND h, char key)
     if (key == ' ' || (!bar && (w->style & WS_SYSMENU))) {
         l.bar = GetSystemMenu(h, FALSE);
         l.sysmenu = TRUE;
+        sysmenu_states(w, l.bar);
         send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
         select_bar(&l, 0, TRUE);
+        select_popup_item(&l, 0);       /* from the keyboard: the first item (US4) */
     } else if (bar) {
         send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
         if (key) {
@@ -1055,6 +1150,8 @@ void menu_track_bar(HWND h, char key)
                 return;
             }
             select_bar(&l, i, TRUE);
+            if (l.popup)
+                select_popup_item(&l, 0);
         } else
             select_bar(&l, 0, FALSE);
     } else
@@ -1121,6 +1218,7 @@ void menu_track_sys(HWND h)
     l.sel = -1;
     l.bar = GetSystemMenu(h, FALSE);
     l.sysmenu = TRUE;
+    sysmenu_states(PW(h), l.bar);
     send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
     select_bar(&l, 0, TRUE);
     run_menu(&l);

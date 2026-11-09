@@ -145,11 +145,11 @@ static void paint_push(HWND h, HDC hdc)
     }
     GetWindowText(h, text, sizeof text);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, IsWindowEnabled(h) ? syscolor[COLOR_BTNTEXT] : syscolor[COLOR_GRAYTEXT]);
+    SetTextColor(hdc, syscolor[COLOR_BTNTEXT]);
     t = r;
     if (pushed)
         OffsetRect(&t, 1, 1);
-    DrawText(hdc, text, -1, &t, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    draw_label(h, hdc, &t, DT_CENTER | DT_VCENTER | DT_SINGLELINE, !IsWindowEnabled(h));
     if (s & ST_FOCUS) {
         RECT c;
         int w, hh;
