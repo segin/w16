@@ -592,9 +592,28 @@ $(B)/gdi/gdlog.o: tests/gdi/gdlog.asm tests/gdi/gdlog.inc
 	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
 $(B)/gdi/gd1log.o: tests/gdi/gdlog.c
 	@mkdir -p $(@D)
-	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY '-dGDL_FILE="C:\\GD1.LOG"' -fo=$@ $<
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY -dGDL_TAG='"D"' -fo=$@ $<
 $(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/gd1.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/gdi/gd1.map \
 	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
+# GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
+# GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
+# X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
+# tests/gdi/gdi.spec
+gdprobes: $(DOS)/GD2.EXE
+$(B)/gdi/gd2stubs.asm $(B)/gdi/gd2.lnk &: tests/gdi/gdi.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py --wine --only docs/exports/GDI.txt tests/gdi/gdi.spec GDJ $(B)/gdi/gd2stubs.asm \
+	    $(B)/gdi/gd2.lnk GDI 'GDI (w16 GD2: logging stand-in)'
+$(B)/gdi/gd2stubs.o: $(B)/gdi/gd2stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd2log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_GDI -dGDL_TAG='"G"' -fo=$@ $<
+$(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/gd2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd2.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o }

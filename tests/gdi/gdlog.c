@@ -28,8 +28,11 @@ extern u16 __cdecl gdl_count;
 extern struct ent __cdecl gdl_tab[];
 extern void __cdecl far gdl_append(const char far *path, const char far *buf, u16 len);
 
-#ifndef GDL_FILE
-#define GDL_FILE "C:\\GDLOG.TXT"
+/* GD1 and GD2 write one file, C:\\GD.LOG, each record flushed at once so
+   that their records interleave in call order; GDL_TAG marks whose */
+#define GDL_FILE "C:\\GD.LOG"
+#ifndef GDL_TAG
+#define GDL_TAG "?"
 #endif
 
 static char buf[4096];
@@ -220,6 +223,13 @@ static u16 far *argp(u16 far *args, const char *spec, int k)
 #define L(k) (*(u32 far *)argp(args, e->args, k))
 #define P(k) ((void far *)ptr(argp(args, e->args, k)))
 
+static int same(const char far *a, const char *b)
+{
+    while (*a && *a == *b)
+        a++, b++;
+    return *a == *b;
+}
+
 #ifdef GD_DISPLAY
 /* a PDEVICE (first word nonzero) or a PBITMAP (first word 0) */
 static void pdev(const char *label, void far *p)
@@ -240,12 +250,6 @@ static void drawmode(void far *p)
     dump("dm", p, 32);
 }
 
-static int same(const char far *a, const char *b)
-{
-    while (*a && *a == *b)
-        a++, b++;
-    return *a == *b;
-}
 
 static void enter_detail(struct ent *e, u16 far *args)
 {
@@ -352,13 +356,88 @@ static void exit_detail(struct ent *e, u16 far *args, u32 r)
     }
 }
 #else
-static void enter_detail(struct ent *e, u16 far *args) { (void)e; (void)args; }
-static void exit_detail(struct ent *e, u16 far *args, u32 r) { (void)e; (void)args; (void)r; }
+/* GD2: GDI's own interface (Windows 3.1 SDK reference for the
+   documented functions; parameter types from Wine's gdi.spec) */
+static void enter_detail(struct ent *e, u16 far *args)
+{
+    const char far *n = e->name;
+    if (same(n, "TEXTOUT")) {
+        str("str", P(3), (int)W(4));
+    } else if (same(n, "EXTTEXTOUT")) {
+        int c = (int)W(6);
+        rect("rect", P(4));
+        str("str", P(5), c);
+    } else if (same(n, "GETTEXTEXTENT")) {
+        str("str", P(1), (int)W(2));
+    } else if (same(n, "CREATEFONTINDIRECT")) {
+        dump("lf", P(0), 50);
+        str("face", (char far *)P(0) + 18, -1);
+    } else if (same(n, "CREATEBRUSHINDIRECT") || same(n, "CREATEPENINDIRECT")) {
+        dump("in", P(0), 10);
+    } else if (same(n, "CREATEDC") || same(n, "CREATEIC")) {
+        str("driver", P(0), -1);
+        str("device", P(1), -1);
+        str("output", P(2), -1);
+    } else if (same(n, "ADDFONTRESOURCE")) {
+        str("file", P(0), -1);
+    } else if (same(n, "SETDIBITS") || same(n, "GETDIBITS")) {
+        dump("bmi", P(5), 40);
+    } else if (same(n, "STRETCHDIBITS")) {
+        dump("bmi", P(10), 40);
+    } else if (same(n, "SETDIBITSTODEVICE")) {
+        dump("bmi", P(10), 40);
+    } else if (same(n, "CREATEDIBITMAP")) {
+        dump("bmih", P(1), 40);
+        dump("bmi", P(4), 40);
+    } else if (same(n, "CREATEBITMAP")) {
+        dump("bits", P(4), 32);
+    } else if (same(n, "SETBITMAPBITS")) {
+        dump("bits", P(2), 32);
+    } else if (same(n, "CREATEPALETTE")) {
+        dump("pal", P(0), 4 + 4 * 20);
+    } else if (same(n, "SETRECTRGN") || same(n, "FASTWINDOWFRAME")) {
+        rect("rect", P(1));
+    } else if (same(n, "CREATERECTRGNINDIRECT")) {
+        rect("rect", P(0));
+    } else if (same(n, "POLYGON") || same(n, "POLYLINE")) {
+        dumpw("pts", P(1), W(2) * 2 < 200 ? W(2) * 2 : 200);
+    } else if (same(n, "DPTOLP") || same(n, "LPTODP")) {
+        dumpw("pts", P(1), W(2) * 2 < 64 ? W(2) * 2 : 64);
+    } else if (same(n, "ESCAPE")) {
+        dump("in", P(3), 16);
+    }
+}
+
+static void exit_detail(struct ent *e, u16 far *args, u32 r)
+{
+    const char far *n = e->name;
+    if (same(n, "GETTEXTMETRICS")) {
+        dump("tm", P(1), 31);
+    } else if (same(n, "GETOBJECT")) {
+        dump("obj", P(2), (int)W(1) > 0 && W(1) < 64 ? W(1) : 16);
+    } else if (same(n, "GETCLIPBOX") || same(n, "GETRGNBOX") || same(n, "GETBOUNDSRECT")) {
+        rect("rect", P(1));
+    } else if (same(n, "GETCHARWIDTH")) {
+        int c = W(2) - W(1) + 1;
+        dumpw("widths", P(3), c > 0 && c < 256 ? c : 1);
+    } else if (same(n, "GETTEXTFACE")) {
+        str("face", P(2), -1);
+    } else if (same(n, "DPTOLP") || same(n, "LPTODP")) {
+        dumpw("pts", P(1), W(2) * 2 < 64 ? W(2) * 2 : 64);
+    } else if (same(n, "GETSYSTEMPALETTEENTRIES")) {
+        dump("pal", P(3), W(2) * 4 < 64 ? W(2) * 4 : 64);
+    } else if (same(n, "GETDIBITS")) {
+        dump("bmi", P(5), 40);
+    } else if (same(n, "GETCURLOGFONT")) {
+        (void)r;
+    }
+}
 #endif
 
 void __cdecl far gdl_init(void)
 {
-    put("# log start");
+    put("# log start ");
+    put(GDL_TAG);
     nl();
     flush();
 }
@@ -375,6 +454,7 @@ u16 __cdecl far gdl_enter(u16 idx, u16 far *frame)
     busy = 1;
     seq++;
     indent();
+    put(GDL_TAG);
     putc_('>');
     hex(seq, 6);
     putc_(' ');
@@ -407,11 +487,9 @@ u16 __cdecl far gdl_enter(u16 idx, u16 far *frame)
     if (e->mode == 0)
         enter_detail(e, args);
     busy = 0;
-    if (e->mode != 0 || depth >= SIDE) {
-        if (!depth)
-            flush();
+    flush();
+    if (e->mode != 0 || depth >= SIDE)
         return 0;
-    }
     side[depth].ip = frame[0];
     side[depth].cs = frame[1];
     side[depth].idx = idx;
@@ -429,6 +507,7 @@ u32 __cdecl far gdl_exit(u32 r)
     e = &gdl_tab[side[depth].idx];
     busy = 1;
     indent();
+    put(GDL_TAG);
     putc_('<');
     hex(side[depth].seq, 6);
     putc_(' ');
@@ -438,7 +517,6 @@ u32 __cdecl far gdl_exit(u32 r)
     nl();
     exit_detail(e, side[depth].a, r);
     busy = 0;
-    if (!depth)
-        flush();
+    flush();
     return ((u32)side[depth].cs << 16) | side[depth].ip;
 }

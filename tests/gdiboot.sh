@@ -14,7 +14,10 @@
 #     -l         log the display driver interface: GD1.DRV (make gdprobes;
 #                linked here with VGA.DRV's resources) as
 #                display.drv, in front of VGA.DRV renamed VGAREAL; the log
-#                is C:\GD1.LOG (copied to the -d directory)
+#                is C:\GD.LOG (copied to the -d directory)
+#     -L         log GDI's own interface: GD2 (make gdprobes; linked here
+#                with that GDI's resources) as GDI.EXE in front of the GDI
+#                (ours, or Microsoft's with -r) renamed GDJ; also C:\GD.LOG, the two interleaved
 #     -c CMD     the command line (default "WIN /S /B")
 #     -t SECS    run time (default 45)
 #     -f SRC=DST copy SRC to C:\DST as well (repeatable)
@@ -22,7 +25,7 @@
 #     -s         take a screenshot after SECS seconds (DOSBox on a virtual
 #                X display, xvfb-run, never the user's desktop)
 #     -d DIR     where results go (default: a temp dir, printed); gets
-#                OUT.TXT, BOOTLOG.TXT, GD1.LOG, screen.png
+#                OUT.TXT, BOOTLOG.TXT, GD.LOG, screen.png
 #     -C PNG     compare the screenshot with PNG (ImageMagick AE count;
 #                diff.png in DIR)
 set -eu
@@ -30,13 +33,14 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 gdi=$root/build/dos/GDI.EXE
-cmd='WIN /S /B' secs=45 shot= out= useref= ourk= log= files= inis= cmpwith=
-while getopts g:rklc:t:f:i:sd:C: opt; do
+cmd='WIN /S /B' secs=45 shot= out= useref= ourk= log= glog= files= inis= cmpwith=
+while getopts g:rklLc:t:f:i:sd:C: opt; do
     case $opt in
     g) gdi=$OPTARG ;;
     r) useref=1 ;;
     k) ourk=1 ;;
     l) log=1 ;;
+    L) glog=1 ;;
     c) cmd=$OPTARG ;;
     t) secs=$OPTARG ;;
     f) files="$files
@@ -75,6 +79,15 @@ if [ -n "$log" ]; then
         option resource="$work/vga.res" file { $b/gdlog.o $b/gd1stubs.o $b/gd1log.o }) >/dev/null
     inis="$inis
 boot:display.drv=GD1.DRV"
+fi
+if [ -n "$glog" ]; then
+    # GD2 as GDI.EXE in front of the GDI that would have run, renamed GDJ
+    python3 "$root/tools/nerename.py" "$sys/GDI.EXE" "$sys/GDJ.DLL" GDJ
+    python3 "$root/tools/ne2res.py" "$sys/GDI.EXE" "$work/gdi.res"
+    b=$root/build/gdi
+    (cd "$root" && PATH=${WATCOM:-/opt/watcom}/binl64:$PATH WATCOM=${WATCOM:-/opt/watcom} \
+        wlink @$b/gd2.lnk name "$sys/GDI.EXE" libpath ${WATCOM:-/opt/watcom}/lib286/win \
+        option resource="$work/gdi.res" file { $b/gdlog.o $b/gd2stubs.o $b/gd2log.o }) >/dev/null
 fi
 printf '%s\n' "$files" | while IFS= read -r f; do
     [ -n "$f" ] || continue
@@ -147,7 +160,7 @@ SH
     xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh" || true
     [ -f "$work/s.png" ] && cp "$work/s.png" "$out/screen.png"
 fi
-for f in OUT.TXT WINDOWS/BOOTLOG.TXT GD1.LOG; do
+for f in OUT.TXT WINDOWS/BOOTLOG.TXT GD.LOG; do
     [ -f "$work/c/$f" ] && tr -d '\r' < "$work/c/$f" > "$out/$(basename "$f")"
 done
 echo "== results in $out"
@@ -159,7 +172,7 @@ echo "== summary"
 if has '^LoadSuccess = GDI.EXE'; then echo "GDI: initialised"; elif has '^LoadStart = GDI.EXE'; then echo "GDI: initialisation failed or did not return"; else echo "GDI: not reached"; fi
 if has '^LoadSuccess = USER.EXE'; then echo "USER: initialised"; elif has '^LoadStart = USER.EXE'; then echo "USER: initialisation did not return"; else echo "USER: not reached"; fi
 if has '^INITDONE=Final USER'; then echo "boot: complete (shell started)"; fi
-[ -f "$out/GD1.LOG" ] && echo "GD1.LOG: $(grep -c '^ *>' "$out/GD1.LOG") calls"
+[ -f "$out/GD.LOG" ] && echo "GD.LOG: $(grep -c '^ *D>' "$out/GD.LOG") display driver calls, $(grep -c '^ *G>' "$out/GD.LOG") GDI calls"
 if [ -n "$cmpwith" ] && [ -f "$out/screen.png" ]; then
     d=$(magick compare -metric AE "$cmpwith" "$out/screen.png" "$out/diff.png" 2>&1 || true)
     echo "screen: $d pixels differ from $cmpwith"
