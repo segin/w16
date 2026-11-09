@@ -173,3 +173,40 @@ v_out:  push si
         mov ax, [bp+F_ES]
         call cpout
 .r:     ret
+
+; op_int15 (ring 0, from int15_stub): INT 15h from protected mode. AH=C0h
+; (system configuration) returns ES:BX pointing at a table in the BIOS:
+; ES becomes a selector for it (MOUSE.DRV reads the feature bytes there
+; to look for a PS/2 mouse port). Microsoft's DOSX has its own INT 15h
+; handler too (DX1: vector 15h); what else it translates is UNVERIFIED.
+op_int15:
+        sub sp, R_SIZE
+        mov bx, sp
+        call rs_from_frame
+        call ring3sp
+        mov ax, [es:si+K_FL]
+        mov [bx+R_FL], ax
+        mov ax, [imgseg]
+        mov [bx+R_DS], ax
+        mov ax, [bp+F_ES]
+        mov [bx+R_ES], ax
+        push ss
+        pop es
+        mov ax, 1500h
+        xor cx, cx
+        call r0_rmcall
+        cmp byte [bp+F_AX+1], 0C0h
+        jne .d
+        test word [bx+R_FL], FL_CF
+        jnz .d
+        mov ax, [bx+R_ES]
+        call segmap
+        mov [bp+F_ES], ax
+.d:     call rs_to_frame
+        call ring3sp
+        mov ax, [bx+R_FL]
+        and ax, FL_ARITH
+        and word [es:si+K_FL], ~FL_ARITH
+        or [es:si+K_FL], ax
+        add sp, R_SIZE
+        ret

@@ -18,7 +18,7 @@ fx_names        db 'EC=', 1, ' CS=', 1, ' IP=', 1, ' AX=', 1, ' BX=', 1, ' CX=',
 s_krnl386       db 'KRNL386.EXE', 0
 s_krnl286       db 'KRNL286.EXE', 0
 
-optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10
+optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10, op_int15
 OP_COUNT        equ ($ - optab) / 2
 
 ; variables

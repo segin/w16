@@ -121,6 +121,7 @@ OP_INT31        equ 1
 OP_INT21        equ 2
 OP_EXCDEF       equ 3   ; arg = stub return address: default exception n
 OP_INT10        equ 4
+OP_INT15        equ 5
 
 FL_CF   equ 0001h
 FL_IF   equ 0200h
