@@ -126,6 +126,8 @@ static int line_height(HWND h, PED e)
     GetTextMetrics(hdc, &tm);
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
+    /* UNVERIFIED: Windows 3.1 highlights a selection in MS Sans Serif 8
+       (13 high) over 14 rows (US4's Run dialog); the rule is not known */
     return tm.tmHeight;
 }
 
@@ -200,11 +202,27 @@ static void paint(HWND h, PED e, HDC hdc)
             /* before, inside, after the selection */
             if (showsel && s1 > s0 && s0 < z && s1 > a) {
                 WORD p = s0 > a ? s0 : a, q = s1 < z ? s1 : z;
+                int xp = x + text_x(hdc, e, a, p - a), xq = xp + text_x(hdc, e, p, q - p);
                 draw_run(hdc, e, x, y, a, p - a, FALSE);
-                x += text_x(hdc, e, a, p - a);
-                draw_run(hdc, e, x, y, p, q - p, TRUE);
-                x += text_x(hdc, e, p, q - p);
-                draw_run(hdc, e, x, y, q, z - q, FALSE);
+                draw_run(hdc, e, xq, y, q, z - q, FALSE);
+                /* the selection: its background a pixel wider than the
+                   text (US4: "notepad" selected in MS Sans Serif, 47
+                   pixels for text 46) */
+                {
+                    RECT b;
+                    SetRect(&b, xp, y, xq + 1, y + lh);
+                    FillRect(hdc, &b, sysbrush[COLOR_HIGHLIGHT]);
+                    SetBkMode(hdc, TRANSPARENT);
+                    SetTextColor(hdc, syscolor[COLOR_HIGHLIGHTTEXT]);
+                    if (e->password) {
+                        char buf[64];
+                        WORD i;
+                        for (i = 0; i < q - p && i < sizeof buf; i++)
+                            buf[i] = e->password;
+                        TextOut(hdc, xp, y, buf, i);
+                    } else
+                        TextOut(hdc, xp, y, text(e) + p, q - p);
+                }
             } else {
                 if (!IsWindowEnabled(h)) {
                     SetBkMode(hdc, TRANSPARENT);

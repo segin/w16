@@ -49,7 +49,8 @@ static void show_list(HWND h, PCB c, BOOL show)
     if (show) {
         GetWindowRect(h, &r);
         notify(h, CBN_DROPDOWN);
-        set_window_pos(c->list, HWND_TOP, r.left, r.top + EH(c),
+        /* its top line on the box's bottom line (US4) */
+        set_window_pos(c->list, HWND_TOP, r.left, r.top + EH(c) - 1,
                        r.right - r.left, c->droph, SWP_SHOWWINDOW | SWP_NOACTIVATE);
         SetCapture(h);
     } else {

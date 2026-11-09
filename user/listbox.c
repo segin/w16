@@ -268,6 +268,25 @@ static int hit(HWND h, PLB lb, int y)
     return i < lb->count ? i : -1;
 }
 
+/* without LBS_NOINTEGRALHEIGHT the box shrinks to whole items (US4: a
+   simple combo box's list 50 pixels high, three items and its border,
+   where 57 were asked for) */
+static void integral(HWND h, PLB lb)
+{
+    RECT r;
+    PWND w = valid_wnd(h);
+    int extra;
+    if (!w || (lbstyle(h) & LBS_NOINTEGRALHEIGHT) || lb->itemh <= 0 ||
+        (lbstyle(h) & LBS_OWNERDRAWVARIABLE))
+        return;
+    GetClientRect(h, &r);
+    extra = r.bottom % lb->itemh;
+    if (extra && r.bottom > lb->itemh)
+        set_window_pos(h, 0, 0, 0, w->rcWindow.right - w->rcWindow.left,
+                       w->rcWindow.bottom - w->rcWindow.top - extra,
+                       SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PLB lb;
@@ -301,6 +320,7 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             send_message(lb->owner, WM_MEASUREITEM, mi.CtlID, (LPARAM)(MEASUREITEMSTRUCT __far *)&mi);
             lb->itemh = mi.itemHeight;
         }
+        integral(h, lb);
         update_scroll(h, lb);
         return 0;
     }
@@ -351,6 +371,7 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         notify(h, lb, LBN_KILLFOCUS);
         return 0;
     case WM_SIZE:
+        integral(h, lb);
         update_scroll(h, lb);
         return 0;
     case WM_GETDLGCODE:
