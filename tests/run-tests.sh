@@ -133,4 +133,10 @@ done
 # then hung there, w16 faults.
 DOSRUN_FPU=true
 run TK6N 0
+
+# w16's WIN.COM against Windows 3.1's (needs the reference install)
+if [ -f "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.COM" ]; then
+    echo "== WIN.COM (tests/wincom.sh)"
+    "$root/tests/wincom.sh" || status=1
+fi
 exit $status
