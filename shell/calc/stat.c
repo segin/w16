@@ -118,7 +118,9 @@ void stat_open(void)
     }
     if (!stat_proc)
         stat_proc = MakeProcInstance((FARPROC)StatDlgProc, g_hinst);
-    g_statbox = CreateDialog(g_hinst, "SB", g_wnd, (DLGPROC)stat_proc);
+    /* no owner (observed: the box sits at its template position on the
+       screen, not relative to Calculator) */
+    g_statbox = CreateDialog(g_hinst, "SB", NULL, (DLGPROC)stat_proc);
     if (!g_statbox)
         return;
     nvals = 0;

@@ -255,6 +255,15 @@ LRESULT CALLBACK __export CalcWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_COMMAND:
         on_command(w, wp, lp);
         return 0;
+    case WM_INITMENUPOPUP:
+        /* Paste only with text on the clipboard (observed) */
+        EnableMenuItem((HMENU)wp, IDM_PASTE,
+                       IsClipboardFormatAvailable(CF_TEXT) ? MF_ENABLED : MF_GRAYED);
+        break;
+    case WM_SETFOCUS:
+        /* the focus stays on the window itself (observed: no control
+           shows the focus after RET) */
+        return 0;
     case WM_MENUSELECT:
         help_menuselect(wp, lp);
         break;

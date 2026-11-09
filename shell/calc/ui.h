@@ -6,9 +6,9 @@
 
 /* client sizes (VGA, observed) */
 #define SCI_CX  480
-#define SCI_CY  297
+#define SCI_CY  298
 #define STD_CX  259
-#define STD_CY  229
+#define STD_CY  230
 
 extern HINSTANCE g_hinst;
 extern HWND g_wnd, g_statbox;

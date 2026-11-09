@@ -23,7 +23,7 @@ BEGIN
         MENUITEM "&Scientific",                 IDM_SCIENTIFIC
         MENUITEM "S&tandard",                   IDM_STANDARD
     END
-    POPUP "&Help", HELP
+    POPUP "&Help"
     BEGIN
         MENUITEM "&Contents",                   IDM_HELPCONTENTS
         MENUITEM "&Search for Help On...",      IDM_HELPSEARCH

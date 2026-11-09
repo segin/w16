@@ -12,7 +12,7 @@
  *    192,42-232,68; C, CE, Back at x 6, 60, 114 (50 x 28) y 40; the
  *    6 x 4 keys at x 6 + 42c, y 72 + 36r, 38 x 28.
  * Keys are rounded rectangles outlined in the key's colour (red, blue,
- * magenta, dark cyan, black) with the label in that colour, centred.
+ * magenta, dark cyan, black) with the label centred (text_color).
  * Labels are the string table's (strings 0-63).
  */
 #include <windows.h>
@@ -27,8 +27,8 @@
 
 /* rounded corners: the ellipse of RoundRect, UNVERIFIED (measured
    corners: 4, 3, 2, 1, 1, 1 pixels in from the straight edges) */
-#define ROUND_W     12
-#define ROUND_H     12
+#define ROUND_W     10
+#define ROUND_H     18
 
 typedef struct {
     int id;             /* command */
@@ -95,6 +95,22 @@ static void frame(HDC dc, int l, int t, int r, int b)
     Rectangle(dc, l, t, r, b);
 }
 
+/* observed: the label is in the outline's colour for the digits (with
+   +/-, the point, PI and A-F), the memory keys and C, CE, Back; black
+   for the others */
+static COLORREF text_color(const KEY *k)
+{
+    int id = k->id;
+    if ((id >= IDC_0 && id <= IDC_0 + 9) || (id >= IDC_A && id <= IDC_A + 5) ||
+        id == IDC_SIGN || id == IDC_POINT || id == IDC_PI)
+        return C_BLUE;
+    if (id >= IDC_MC && id <= IDC_MPLUS)
+        return C_MAGENTA;
+    if (id == IDC_CLEAR || id == IDC_CE || id == IDC_BACK)
+        return C_RED;
+    return C_BLACK;
+}
+
 static void draw_key(HDC dc, const KEY *k, const RECT *r)
 {
     char label[16];
@@ -106,7 +122,7 @@ static void draw_key(HDC dc, const KEY *k, const RECT *r)
     SelectObject(dc, old);
     DeleteObject(pen);
     n = LoadString(g_hinst, IDS_FIRSTKEY + k->str, label, sizeof label);
-    SetTextColor(dc, colors[(int)k->col]);
+    SetTextColor(dc, text_color(k));
     ext = GetTextExtent(dc, label, n);
     TextOut(dc, r->left + (r->right - r->left - (int)LOWORD(ext)) / 2,
             r->top + (r->bottom - r->top - (int)HIWORD(ext)) / 2, label, n);
