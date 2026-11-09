@@ -78,6 +78,7 @@ run_one() {   # run_one DIR OPTIONS COMMANDS
         printf '[dos]\nxms=%s\nems=%s\n' "$xms" "$ems"
         printf '[mixer]\nnosound=true\n[speaker]\npcspeaker=false\n'
         printf '[log]\nlogfile=%s/trace.log\n' "$d"
+        printf '[serial]\nserial1=file file:%s/com1.txt\n' "$d"     # w16's VMM traces here
         for c in ${VXOBS_LOG:-}; do printf '%s=true\n' "$c"; done   # e.g. "files exec"
         printf '[autoexec]\nmount c "%s/c"\nc:\ncd \\WINDOWS\nCLS\n' "$d"
         printf '%s\n' "$cmds" | tr ';' '\n'
@@ -108,7 +109,7 @@ for n in $names; do
     done
     if [ -n "$outdir" ]; then
         mkdir -p "$outdir/$n"
-        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log; do
+        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log "$work/$n"/com1.txt; do
             [ -f "$f" ] && cp "$f" "$outdir/$n/"
         done
     fi
