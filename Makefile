@@ -946,3 +946,45 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- Control Panel: CONTROL.EXE (shell/control) and the applet DLLs
+# (shell/cpl); ARCHITECTURE.md 14. CP1.CPL is the applet probe
+# (tests/apps/cp1.c, tests/cpobs.sh).
+# applets: large model, SS != DS (a DLL), 286
+CPCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win -ishell/cpl
+dos: $(DOS)/CP1.CPL
+$(B)/shell/cpl/libentry.o: shell/cpl/libentry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/tests/cp1/cp1.o: tests/apps/cp1.c shell/cpl/cpl.h
+	@mkdir -p $(@D)
+	$(WCC) $(CPCFLAGS) -fo=$@ $<
+$(B)/tests/cp1/cp1-1.ico: tests/apps/cp1icons.py tools/mkicons.py
+	python3 tests/apps/cp1icons.py $(@D)
+$(B)/tests/cp1/cp1.res: tests/apps/cp1.rc $(B)/tests/cp1/cp1-1.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/tests/cp1 -fo=$@ $<
+$(DOS)/CP1.CPL: $(B)/shell/cpl/libentry.o $(B)/tests/cp1/cp1.o $(B)/tests/cp1/cp1.res tests/apps/cp1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/cp1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cp1/cp1.map option resource=$(B)/tests/cp1/cp1.res \
+	    file { $(B)/shell/cpl/libentry.o $(B)/tests/cp1/cp1.o }
+# CONTROL.EXE: medium model like the other shell programs (shell/start.asm)
+CPICONS := $(B)/shell/cpl/res/control.ico
+dos: $(DOS)/CONTROL.EXE
+$(CPICONS) &: tools/cplicons.py tools/mkicons.py
+	python3 tools/cplicons.py $(B)/shell/cpl/res
+$(B)/shell/control/%.o: shell/control/%.c shell/control/control.h shell/cpl/cpl.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/control/control.res: shell/control/control.rc shell/control/control.h $(CPICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/control -i=$(B)/shell/cpl/res \
+	    -fo=$@ $<
+$(DOS)/CONTROL.EXE: $(B)/shell/start.o $(B)/shell/control/control.o \
+                    $(B)/shell/control/control.res shell/control/control.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/control/control.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/control/control.map \
+	    option resource=$(B)/shell/control/control.res \
+	    file { $(B)/shell/start.o $(B)/shell/control/control.o }

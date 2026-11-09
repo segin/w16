@@ -1,0 +1,8 @@
+;! cp1
+;! file cp1-nq3.ini CP1.INI
+; CPL_NEWINQUIRE returning 0 without setting dwSize: CPL_INQUIRE follows
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+close
+wait 2000

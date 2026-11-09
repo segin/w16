@@ -1,0 +1,9 @@
+# CP1.CPL (tests/apps/cp1.c): a Control Panel applet probe
+format windows dll
+option quiet
+option start=libentry
+option heapsize=1k
+option map
+option modname=CP1
+library windows.lib
+export CPLAPPLET.1

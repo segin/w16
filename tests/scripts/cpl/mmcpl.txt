@@ -1,0 +1,9 @@
+;! ini WINDOWS/CONTROL.INI MMCPL:Probe=C:\CP1.CPL
+;! build CP1.CPL CP1.CPL
+; a third-party applet named in CONTROL.INI [MMCPL]: loaded after
+; MAIN.CPL, before the SYSTEM directory's other .CPL files
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+close
+wait 2000
