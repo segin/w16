@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """mkpif - make a PIF for tests from an existing one (e.g. the reference
 install's _DEFAULT.PIF), setting the fields of the published PIF format
-that Windows 3.1's WINOLDAP.MOD reads (ARCHITECTURE.md 9.6):
+that Windows 3.1's WINOLDAP.MOD reads (ARCHITECTURE.md 9.7):
 
   02h title (30 bytes)     20h max/min memory (KB)   24h program (63)
   63h flags                65h start-up directory    A5h parameters (64)

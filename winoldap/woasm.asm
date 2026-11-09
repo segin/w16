@@ -1,4 +1,4 @@
-; woasm.asm - w16 WINOLDAP.MOD: the register-level calls (ARCHITECTURE.md 9.6).
+; woasm.asm - w16 WINOLDAP.MOD: the register-level calls (ARCHITECTURE.md 9.7).
 ;
 ; WINOLDAP talks to the Standard-mode task switcher (WIN.COM's INT 2Fh
 ; handler, WSWAP.EXE, DSWAP.EXE, DOSX.EXE) through INT 2Fh and DPMI; these

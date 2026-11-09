@@ -1,6 +1,6 @@
 /*
  * winoldap.c - w16's WINOLDAP.MOD: running DOS programs from Standard-mode
- * Windows (ARCHITECTURE.md 9.6). MIT licence (LICENSE).
+ * Windows (ARCHITECTURE.md 9.7). MIT licence (LICENSE).
  *
  * Everything here was observed black-box on Windows 3.1 (tests/worun.sh,
  * the WO probes; Microsoft's WINOLDAP.MOD, WSWAP.EXE and DSWAP.EXE were
@@ -21,6 +21,7 @@
 /* KERNEL / USER exports not in OpenWatcom's windows.h */
 extern void FAR PASCAL DisableOEMLayer(void);   /* USER.4 */
 extern void FAR PASCAL EnableOEMLayer(void);    /* USER.3 */
+extern void FAR PASCAL WinOldApCall(WORD mode);   /* KERNEL.151 (Schulman ch. 5) */
 
 /* woasm.asm */
 extern DWORD __cdecl woa_block(void);
@@ -29,12 +30,16 @@ extern DWORD __cdecl woa_selbase(WORD sel);
 extern void __cdecl woa_switch(void);
 extern WORD __cdecl woa_memtop(void);
 extern DWORD __cdecl woa_diskfree(int drive);
+/* shell/start.asm */
+extern int __cdecl dos_chdir(const char FAR *path);
+extern void __cdecl dos_setdrive(int drive);
 
-/* ---- WIN.COM's switcher block (offsets observed, ARCHITECTURE.md 9.6) ---- */
+/* ---- WIN.COM's switcher block (offsets observed, ARCHITECTURE.md 9.7) ---- */
 #define B_TAIL      0x005       /* the program's command tail: length, text, CR */
 #define B_GRABBER   0x087       /* the 286 grabber's path */
 #define B_SWAPDIR   0x0D7       /* swap directories (WIN.COM) */
 #define B_SWAPDIR2  0x11B
+#define B_172       0x172       /* WSWAP: 08h when the switch failed */
 #define B_173       0x173       /* FFFFh as a switch starts */
 #define B_177       0x177
 #define B_178       0x178       /* bit 08h: Ctrl+Esc (run the Task List) */
@@ -63,6 +68,7 @@ static char dosx_path[80];      /* what B_PROGRAM held before we wrote it */
 
 static HINSTANCE hinst;
 static HWND hwnd;
+static HWND first_active;      /* the active window as we started */
 static int rec = -1;            /* our record */
 static char title[NAME_MAX + 2];
 static char program[128];       /* full path */
@@ -90,8 +96,13 @@ static void disk_message(char drive, WORD kb)
     LoadString(hinst, IDS_NODISK, sbuf, sizeof sbuf);
     for (p = sbuf; *p && *p != 'X'; p++)
         ;
-    if (*p)
-        *p = drive;
+    if (*p) {               /* the letter stands 16 blanks into the field */
+        *p = ' ';
+        for (i = 1; i < 16 && p[i] == ' '; i++)
+            ;
+        if (i == 16)
+            p[16] = drive;
+    }
     for (p = sbuf; *p && *p != ':'; p++)
         ;
     if (*p) {
@@ -255,20 +266,38 @@ static void to_front(int r)
     w[R_NEXT] = (BYTE)r;
 }
 
-/* the Windows application the user leaves: one record, kept up to date */
+/* the Windows application the user leaves: one record, made when the
+   first DOS program starts (the active window's title and handle) and not
+   changed afterwards (WO2: a resume or a second program leaves it) */
 static void windows_record(void)
 {
-    HWND a = GetActiveWindow(), o;
+    HWND a, o;
     int r;
     char t[NAME_MAX + 1];
-    while (a && (o = GetParent(a)) != NULL)
-        a = o;
-    if (!a || a == hwnd)
-        return;
     for (r = 0; r < R_WINDOWS; r++)
         if (recp(r)[R_KIND] == 0x28)
-            break;
-    if (r == R_WINDOWS) {
+            return;
+    /* the window that was active when this task started (with a PIF's
+       Parameters dialog in between, Windows 3.1's still names Program
+       Manager: WO2) */
+    a = (first_active && IsWindow(first_active)) ? first_active : GetActiveWindow();
+    while (a && (o = GetParent(a)) != NULL)
+        a = o;
+    if (a == hwnd || (a && (!IsWindowVisible(a) || !GetWindowTextLength(a))))
+        a = NULL;
+    /* else the first visible, titled top-level window in Z order (File >
+       Run: Windows 3.1's names Program Manager, not the Run dialog) */
+    for (o = GetWindow(GetDesktopWindow(), GW_CHILD); !a && o; o = GetWindow(o, GW_HWNDNEXT))
+        if (o != hwnd && IsWindowVisible(o) && GetWindowTextLength(o) &&
+            !(GetWindowLong(o, GWL_STYLE) & WS_CHILD))
+            a = o;
+    /* Windows 3.1's WINOLDAP looks for another window here and never
+       finds one when the shell has no window (it stops, ARCHITECTURE.md
+       9.7); WSWAP needs a Windows application in its list to come back
+       to, so w16 enters the desktop then */
+    if (!a)
+        a = GetDesktopWindow();
+    {
         r = free_record();
         if (r < 0)
             return;
@@ -282,11 +311,10 @@ static void windows_record(void)
         recp(R_WINDOWS)[R_NEXT] = (BYTE)r;
         blk[B_COUNT]++;
     }
-    if (*(WORD FAR *)(recp(r) + R_HWND) != (WORD)a) {
-        GetWindowText(a, t, sizeof t);
-        set_name(recp(r), t);
-        *(WORD FAR *)(recp(r) + R_HWND) = (WORD)a;
-    }
+    t[0] = 0;
+    GetWindowText(a, t, sizeof t);
+    set_name(recp(r), t);
+    *(WORD FAR *)(recp(r) + R_HWND) = (WORD)a;
 }
 
 static void write_tail(void)
@@ -306,9 +334,24 @@ static void put_string(int off, const char *s, int max)
     blk[off + i] = 0;
 }
 
+/* debugging aid: when C:\WOA.DBG exists, each switch appends the block
+   (540h bytes, binary) to it, for tools/woblk.py-style comparisons with
+   WO2's snapshots when Windows does not come back to flush them */
+static void debug_block(void)
+{
+    OFSTRUCT of;
+    HFILE f = OpenFile("C:\\WOA.DBG", &of, OF_WRITE);
+    if (f == HFILE_ERROR)
+        return;
+    _llseek(f, 0, 2);
+    _lwrite(f, (LPCSTR)blk, 0x540);
+    _lclose(f);
+}
+
 /* ---- the switch ---- */
 static void do_switch(void)
 {
+    blk[B_172] = 0;                 /* (00h as each switch starts: WO2) */
     blk[B_173] = blk[B_173 + 1] = 0xFF;
     blk[B_178] &= ~0x08;
     blk[B_17E] = R_WINDOWS;
@@ -318,7 +361,6 @@ static void do_switch(void)
         blk[B_17A] = R_WINDOWS;
         blk[B_17A + 1] = 0x10;
         blk[B_17A + 3] = 0x01;
-        *(DWORD FAR *)(blk + B_LINEAR) = linear;
         put_string(B_PROGRAM, program, 80);
     } else
         put_string(B_PROGRAM, dosx_path, 80);
@@ -345,15 +387,72 @@ static void do_switch(void)
         blk[B_COUNT]++;
     } else
         to_front(rec);
+    /* the buffer WSWAP keeps Windows' low memory in while the program
+       runs: allocated for each switch and freed after it, as Windows 3.1's
+       (its INT 31h 0006h comes before every INT 2Fh 4B80h, and the address
+       at 185h changes between switches). 8A000h bytes were observed with
+       640 KB of conventional memory, i.e. all of it above 1600h:0;
+       UNVERIFIED how Windows 3.1 sizes it */
+    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_SHARE, (DWORD)(woa_memtop() - 0x1600) << 4);
+    if (!hbuf) {
+        message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
+        if (!started) {
+            ended = TRUE;
+            DestroyWindow(hwnd);
+        }
+        return;
+    }
+    linear = woa_selbase(SELECTOROF(GlobalLock(hbuf)));
+    *(DWORD FAR *)(blk + B_LINEAR) = linear;
     started = TRUE;
+    debug_block();
     DisableOEMLayer();
     woa_switch();
     EnableOEMLayer();
+    GlobalUnlock(hbuf);
+    GlobalFree(hbuf);
+    hbuf = NULL;
+    if (blk[B_172] && recp(rec)[R_KIND] != 0x80) {
+        /* the switch failed (172h = 08h with no room for the swap file,
+           after the disk-space warning): Windows 3.1's WINOLDAP ends then
+           and its icon goes. UNVERIFIED: what it does with the record;
+           w16 gives it back */
+        int p = R_WINDOWS, guard;
+        for (guard = 0; guard < NREC; guard++) {
+            BYTE FAR *q = recp(p);
+            if (q[R_NEXT] == rec) {
+                q[R_NEXT] = recp(rec)[R_NEXT];
+                break;
+            }
+            p = q[R_NEXT];
+            if (p >= NREC)
+                break;
+        }
+        recp(rec)[R_FLAGS] = 0;
+        recp(rec)[R_KIND] = 0x80;
+        recp(rec)[R_SESSION] = recp(rec)[R_2C] = recp(rec)[R_2D] = 0;
+        if (blk[B_COUNT])
+            blk[B_COUNT]--;
+    }
     if (recp(rec)[R_KIND] == 0x80) {            /* the program has ended */
         ended = TRUE;
         *(WORD FAR *)(recp(rec) + R_HWND) = 0xFFFF;
         DestroyWindow(hwnd);
         return;
+    }
+    /* swapped out: WSWAP left at 17Eh the record to come back to; for a
+       Windows application, activate its window with our icon next in Z
+       order, so that USER's Alt+Tab from there comes back to this program
+       (as with Windows 3.1: with two prompts swapped out, Alt+Tab returned
+       to the one left last) */
+    {
+        int t = blk[B_17E];
+        BringWindowToTop(hwnd);
+        if (t < R_WINDOWS && recp(t)[R_KIND] == 0x28) {
+            HWND w = (HWND)*(WORD FAR *)(recp(t) + R_HWND);
+            if (IsWindow(w))
+                SetActiveWindow(w);
+        }
     }
     if (blk[B_178] & 0x08)                      /* Ctrl+Esc */
         WinExec("TASKMAN.EXE", SW_SHOWNORMAL);
@@ -385,6 +484,9 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         break;
+    case WM_TIMER:
+        KillTimer(h, 1);
+        /* fall through */
     case WM_USER:
         if (!ended)
             do_switch();
@@ -422,6 +524,7 @@ static BOOL setup(LPSTR cmd)
 {
     char path[128], args[130], name[80];
     char pifpath[128];
+    BOOL from_pif;
     DWORD b;
     int i, n;
 
@@ -489,6 +592,7 @@ static BOOL setup(LPSTR cmd)
         }
         lstrcpy(tail, args[0] ? args : pif.params);
     }
+    from_pif = !args[0];
     if (!title[0]) {
         stem(has_ext(path, ".PIF") ? pif.program : path, title, sizeof title);
         AnsiUpper(title);
@@ -500,6 +604,27 @@ static BOOL setup(LPSTR cmd)
             return FALSE;
         lstrcpy(tail, param_buf);
     }
+    /* parameters from the PIF (or its "?" dialog) get a leading blank, as
+       DOS command tails have; arguments given to WinExec are passed as
+       they are (WO2: " a b" and "hello world") */
+    if (from_pif && tail[0] && tail[0] != ' ') {
+        char t2[130];
+        t2[0] = ' ';
+        lstrcpyn(t2 + 1, tail, sizeof t2 - 1);
+        lstrcpy(tail, t2);
+    }
+    /* the PIF's start-up directory becomes the current one (WC1 under
+       Windows 3.1 found itself in it); the switch block has no field for
+       it */
+    trim(pif.directory);
+    if (pif.directory[0]) {
+        if (pif.directory[1] == ':')
+            dos_setdrive((pif.directory[0] | 0x20) - 'a');
+        if (dos_chdir(pif.directory)) {
+            message(IDS_NODIR, MB_OK | MB_ICONEXCLAMATION);
+            return FALSE;
+        }
+    }
 
     /* the icon (Windows 3.1's shows while its later messages are up) */
     hwnd = CreateWindow("WOA", title,
@@ -508,6 +633,14 @@ static BOOL setup(LPSTR cmd)
     if (!hwnd)
         return FALSE;
     ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+
+    /* KERNEL closes the files it keeps open (module files): Windows 3.1's
+       WINOLDAP does it here (DOSBox-X file log: they all close after the
+       program is checked, before the grabber is looked for; Schulman: what
+       WinOldApCall does for a mode other than 0). Without it DOS ran out of
+       file handles for WSWAP at the second switch ("Fatal exit! Windows
+       cannot be swapped back"). */
+    WinOldApCall(1);
 
     /* the grabber: SYSTEM.INI [boot] 286grabber= */
     GetPrivateProfileString("boot", "286grabber", "", name, sizeof name, "SYSTEM.INI");
@@ -524,23 +657,14 @@ static BOOL setup(LPSTR cmd)
         if (d >= 'a' && d <= 'z')
             d -= 'a' - 'A';
         if (d >= 'A' && d <= 'Z' && woa_diskfree(d - 'A' + 1) < need) {
+            /* a warning: Windows 3.1's switches all the same (WO2) */
             disk_message(d, (WORD)((need + 1023) >> 10));
-            return FALSE;
         }
     }
     if (free_record() < 0) {
         message(IDS_TOOMANY, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
-    /* the buffer WSWAP keeps Windows' low memory in while the program runs
-       (observed: 8A000h bytes with 640 KB of conventional memory, i.e. all
-       of it above 1600h:0; UNVERIFIED how Windows 3.1 sizes it) */
-    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_SHARE, (DWORD)(woa_memtop() - 0x1600) << 4);
-    if (!hbuf) {
-        message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
-        return FALSE;
-    }
-    linear = woa_selbase(SELECTOROF(GlobalLock(hbuf)));
     return TRUE;
 }
 
@@ -551,6 +675,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     (void)show;
 
     hinst = hi;
+    first_active = GetActiveWindow();
     if (!hprev) {
         wc.style = 0;
         wc.lpfnWndProc = WndProc;
@@ -570,7 +695,11 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
         }
         return 0;
     }
-    do_switch();
+    /* switch from the message loop, a timer tick later, so that WinExec
+       returns and its caller runs first (as with Windows 3.1's WINOLDAP:
+       a shell's log line after WinExec comes before the DOS program runs) */
+    if (!SetTimer(hwnd, 1, 50, NULL))
+        PostMessage(hwnd, WM_USER, 0, 0);
     while (!ended && GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);

@@ -659,7 +659,7 @@ test: dos fonts
 clean:
 	rm -rf $(B)
 
-# ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.6) ----
+# ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
 # WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
 WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
 woprobes: $(WOPROBES)

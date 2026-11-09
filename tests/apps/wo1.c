@@ -1,6 +1,6 @@
 /*
  * wo1.c - WO1: a logging stand-in for WINDOWS\SYSTEM\WINOLDAP.MOD
- * (black-box probe for w16's WINOLDAP.MOD, ARCHITECTURE.md 9.6).
+ * (black-box probe for w16's WINOLDAP.MOD, ARCHITECTURE.md 9.7).
  *
  * Built as an NE module named WINOLDAP with the same exports (WNDPROC @1,
  * DIALOGPROC @2) and copied over WINOLDAP.MOD in a scratch install

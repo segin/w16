@@ -1,6 +1,6 @@
 /*
  * wo2.c - WO2.EXE, a protected-mode interrupt spy for the WINOLDAP work
- * (ARCHITECTURE.md 9.6). Black-box observation of Windows 3.1 Standard
+ * (ARCHITECTURE.md 9.7). Black-box observation of Windows 3.1 Standard
  * mode: started from WIN.INI load= (tests/worun.sh -n windows:load=C:\WO2.EXE),
  * it chains protected-mode INT 2Fh, INT 31h and (some functions of) INT 21h
  * through DPMI (INT 31h 0204h/0205h, wo2s.asm) and records every call made

@@ -1,9 +1,9 @@
 #!/bin/sh
 # Run Windows 3.1 Standard mode headless with a scripted keyboard, for the
-# WINOLDAP work (ARCHITECTURE.md 9.6): DOS programs started from Windows.
+# WINOLDAP work (ARCHITECTURE.md 9.7): DOS programs started from Windows.
 #
 # A scratch copy of the reference install (.tools/ref/win31/cdrive) runs
-# "WIN /S" in DOSBox-X on a virtual X display (xvfb-run; never the user's
+# "WIN /S" in DOSBox-X on a virtual X display (Xvfb; never the user's
 # desktop). Real key presses go to the emulator window (xdotool), so the
 # DOS session, Alt+Tab and Ctrl+Esc are driven as a user would.
 #
@@ -93,9 +93,14 @@ dosbox-x) run="dosbox-x -fastlaunch -conf $out/dosbox.conf${logs:+ -log-int21 -l
 esac
 cat > "$out/drive.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $tmax $run >"$out/emu.txt" 2>&1 &
-pid=\$!
-sleep 2
+for t in 1 2 3 4 5; do       # the emulator sometimes cannot open the display
+    SDL_AUDIODRIVER=dummy timeout $tmax $run >"$out/emu.txt" 2>&1 &
+    pid=\$!
+    sleep 2
+    kill -0 \$pid 2>/dev/null && break
+    grep -q "Couldn't open X11 display" "$out/emu.txt" || break
+    sleep \$t
+done
 wid=
 for i in 1 2 3 4 5 6 7 8 9 10; do
     wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
@@ -122,7 +127,16 @@ chmod +x "$out/drive.sh"
 for try in 1 2 3 4 5; do   # parallel runs: pick a free display number
     n=$(( $(od -An -N2 -tu2 /dev/urandom) % 800 + 200 ))
     while [ -e /tmp/.X$n-lock ] || [ -e /tmp/.X11-unix/X$n ]; do n=$((n + 1)); done
-    xvfb-run -n $n -s '-screen 0 1024x768x24' "$out/drive.sh" || true
+    # our own Xvfb (no xvfb-run: its authority file setup failed now and
+    # then with several runs at once); local connections only
+    Xvfb :$n -screen 0 1024x768x24 -nolisten tcp > "$out/xvfb.txt" 2>&1 &
+    xpid=$!
+    i=0
+    while [ ! -e /tmp/.X11-unix/X$n ] && [ $i -lt 50 ] && kill -0 $xpid 2>/dev/null; do
+        sleep 0.2; i=$((i + 1))
+    done
+    DISPLAY=:$n "$out/drive.sh" || true
+    kill $xpid 2>/dev/null; wait $xpid 2>/dev/null || true
     grep -q "Couldn't open X11 display\|X connection to .* broken" "$out/emu.txt" 2>/dev/null || break
     echo "worun: X display :$n failed, retrying" >&2
     rm -f "$out"/*.png; sleep $try

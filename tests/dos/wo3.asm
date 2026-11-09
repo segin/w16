@@ -1,6 +1,6 @@
 ; wo3.asm - WO3.COM: a real-mode INT 21h and INT 2Fh spy to put between
 ; two programs of the Windows chain (black-box probe for w16's WINOLDAP.MOD,
-; ARCHITECTURE.md 9.6). Copy it over the program to watch (e.g.
+; ARCHITECTURE.md 9.7). Copy it over the program to watch (e.g.
 ; SYSTEM\DOSX.EXE) and the real program to the same name with the last
 ; letter replaced by "_" (DOSX.EX_). WO3 hooks INT 21h and INT 2Fh, runs
 ; the real program with its own command tail, FCBs and environment, and
