@@ -74,14 +74,28 @@ CONF
     cat > "$d/shot.sh" <<SH
 #!/bin/sh
 SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >"$d/dosbox.log" 2>&1 &
-sleep $secs
+pid=\$!
+sleep 3
+# DOSBox-X gone already: it found no display (another Xvfb took ours); retry
+kill -0 \$pid 2>/dev/null || exit 7
+sleep $((secs - 3))
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$d/s.png"
 wait
 SH
     chmod +x "$d/shot.sh"
-    # a display number of our own (other tests may run Xvfb at the same time)
-    xvfb-run -a -n $((300 + $$ % 4000)) -s '-screen 0 1024x768x24' "$d/shot.sh" >/dev/null 2>&1 || true
+    # a display number of our own (other tests may run Xvfb at the same
+    # time and xvfb-run -a can collide): a free one, and up to 5 tries
+    try=0
+    while [ $try -lt 5 ]; do
+        n=$((300 + ($$ * 7 + try * 131) % 4000))
+        while [ -e /tmp/.X$n-lock ] || [ -e /tmp/.X11-unix/X$n ]; do n=$((n + 1)); done
+        rc=0
+        xvfb-run -n $n -s '-screen 0 1024x768x24' "$d/shot.sh" >/dev/null 2>&1 || rc=$?
+        [ $rc = 7 ] || [ $rc = 1 -a ! -s "$d/dosbox.log" ] || break
+        try=$((try + 1))
+        sleep 1
+    done
     [ -f "$d/s.png" ] && cp "$d/s.png" "$out/$1.png"
     [ -f "$d/c/WINDOWS/BOOTLOG.TXT" ] && tr -d '\r' < "$d/c/WINDOWS/BOOTLOG.TXT" > "$out/$1-bootlog.txt"
     [ -f "$d/c/OUT.TXT" ] && tr -d '\r' < "$d/c/OUT.TXT" > "$out/$1-out.txt"

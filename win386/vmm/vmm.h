@@ -150,6 +150,10 @@ u32 xbuf_size(void);
 /* dosx.c: INT 21h from protected mode */
 void dos_pm(struct cregs *r);
 void video_pm(struct cregs *r);
+
+/* vxdapi.c */
+void vxdapi_get(struct cregs *r, u32 *sel, u32 *off);
+void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs);
 int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);

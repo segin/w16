@@ -248,6 +248,13 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     v.es = es < 0 ? 0 : es;
     v.eflags = pm.eflags;
     v86_int(&v, vec);
+    if (dpmi_verbose && vec == 0x21 && ds >= 0) {
+        u32 ah = (AX(&pm) >> 8) & 0xFF;
+        if (ah == 0x3D || ah == 0x3C || ah == 0x4E || ah == 0x43 || ah == 0x5B || ah == 0x41)
+            trace("{%s cf=%d ax=%x}", (char *)(((u32)ds << 4) + DX(&pm)), v.eflags & 1, v.eax & 0xFFFF);
+        else if (ah == 0x6C)
+            trace("{%s cf=%d ax=%x}", (char *)(((u32)ds << 4) + SI(&pm)), v.eflags & 1, v.eax & 0xFFFF);
+    }
     *r = pm;
     r->eax = v.eax; r->ebx = v.ebx; r->ecx = v.ecx; r->edx = v.edx;
     r->esi = v.esi; r->edi = v.edi; r->ebp = v.ebp;
@@ -612,10 +619,13 @@ int int2f_pm(struct cregs *r)
     case 0x1686:                        /* in protected mode */
         SETW(r->eax, 0);
         return 1;
-    case 0x1684:                        /* PM API entry: none yet */
-        SETW(r->edi, 0);
-        r->es = 0;
+    case 0x1684: {                      /* PM API entry (vxdapi.c) */
+        u32 sel, off;
+        vxdapi_get(r, &sel, &off);
+        SETW(r->edi, off);
+        r->es = sel;
         return 1;
+    }
     case 0x168A: {                      /* vendor entry: "MS-DOS" only */
         const char *p = (const char *)(sel_base(r->ds) + reg_ofs(r, r->esi));
         if (p[0] == 'M' && p[1] == 'S' && p[2] == '-' && p[3] == 'D' && p[4] == 'O'
@@ -696,6 +706,11 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         if (index == 0x21) { dos_pm(r); return; }
         if (index == 0x10) { video_pm(r); return; }
         pm_v86_reflect(r, index, index >= 8 && index < 16);
+        return;
+    }
+    if (index >= PMBP_API && index < PMBP_COUNT) {
+        u32 ip = pm_pop(r), cs = pm_pop(r);
+        vxdapi_call(r, index, ip, cs);
         return;
     }
     if (index == PMBP_IRQRET) {
