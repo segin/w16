@@ -981,6 +981,11 @@ W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# Calculator (ARCHITECTURE.md 15.1)
+install-tree: $(W16)/CALC.EXE
+$(W16)/CALC.EXE: $(DOS)/CALC.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
