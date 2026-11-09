@@ -9,7 +9,7 @@
 ; KERNEL's exit code.
 ;
 ; Behaviour follows Windows 3.1's DOSX as observed black-box with the DX
-; probes (tests/dos/dx*.asm, tests/dosxtest.sh; ARCHITECTURE.md 9.5),
+; probes (tests/dos/dx*.asm, tests/dosxtest.sh; ARCHITECTURE.md 9.6),
 ; and the published specifications:
 ;   DPMI Specification 0.9 (INT 2Fh 1687h, INT 31h, the exception frame)
 ;   XMS Specification 2.0/3.0 (functions 00h, 05h-0Ch, 0Eh)

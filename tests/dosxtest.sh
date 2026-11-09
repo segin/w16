@@ -6,7 +6,7 @@
 # of the reference install (.tools/ref/win31/cdrive) gets it as
 # WINDOWS\SYSTEM\KRNL286.EXE, KRNL386.EXE is removed, and "WIN /S" runs
 # in headless DOSBox: Microsoft's WIN.COM and WSWAP.EXE start the DOSX
-# under test, which starts the probe (ARCHITECTURE.md 9.4, 9.5). For the
+# under test, which starts the probe (ARCHITECTURE.md 9.4, 9.6). For the
 # w16 runs, build/dos/DOSX.EXE replaces WINDOWS\SYSTEM\DOSX.EXE.
 #
 #   usage: tests/dosxtest.sh [options] [PROBE...]   (default: all DX probes)
@@ -19,7 +19,7 @@
 # DOSXTEST_DOSX=FILE: use FILE as w16's DOSX (e.g. build/dos/DOSXT.EXE).
 # Prints each run's log (C:\DXn.LOG, then WIN's output and errorlevel),
 # then the differences between the two DOSXes. Lines that are expected to
-# differ are not filtered: the diff is for reading (ARCHITECTURE.md 9.5
+# differ are not filtered: the diff is for reading (ARCHITECTURE.md 9.6
 # lists the known differences). Exits 0 when every run produced a log.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop

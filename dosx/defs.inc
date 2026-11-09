@@ -34,7 +34,7 @@ G_HDS   equ 0D8h        ; the first 256 bytes of host data (DPL 3)
 G_HC0B  equ 0E0h        ; host code (DPL 0), as Microsoft's
 GDT_ENTRIES equ 24h     ; limit 011Fh, as observed
 
-; LDT layout at a client's start (DX1, DX2; ARCHITECTURE.md 9.5)
+; LDT layout at a client's start (DX1, DX2; ARCHITECTURE.md 9.6)
 LDT_LIMIT       equ 0FFEFh      ; 8190 descriptors
 LDT_SEGTOP      equ 4Fh         ; segment descriptors (0002h) from here down
 LDT_SCRA        equ 50h         ; 0287h: host scratch (ring 3)

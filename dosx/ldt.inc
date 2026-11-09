@@ -1,7 +1,7 @@
 ; ldt.inc - the LDT (ring 0, DS = G_HD0).
 ;
 ; Layout and allocation as observed with Microsoft's DOSX (DX1, DX2;
-; ARCHITECTURE.md 9.5):
+; ARCHITECTURE.md 9.6):
 ;   - 8190 descriptors (limit 0FFEFh), reachable by the client through
 ;     the vendor entry's alias 009Bh;
 ;   - descriptors 01h-4Fh are for INT 31h 0002h (segment to descriptor),

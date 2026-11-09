@@ -5,7 +5,7 @@
 ; (tbuf), and gives back selectors where DOS gives back segments.
 ; Functions: Ralf Brown's/the MS-DOS Programmer's Reference argument
 ; lists; which ones DOSX translates, and how, follows Microsoft's DOSX
-; where observed (DX4; ARCHITECTURE.md 9.5) and is otherwise UNVERIFIED.
+; where observed (ARCHITECTURE.md 9.6) and is otherwise UNVERIFIED.
 ; Memory functions 48h-4Ah allocate extended memory (TK18, DX2).
 ;
 ; Each handler gets BX = a real-mode structure filled with the client's

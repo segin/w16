@@ -484,7 +484,7 @@ $(DOS)/WINENV.COM: tests/dos/winenv.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
-# DOSX.EXE: w16's Standard-mode DOS extender (dosx/, ARCHITECTURE.md 9.5)
+# DOSX.EXE: w16's Standard-mode DOS extender (dosx/, ARCHITECTURE.md 9.6)
 $(DOS)/DOSX.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I . -o $@ $<
