@@ -1,0 +1,3 @@
+run WINFILE.EXE
+wait 5000
+snap C:\WINFILE.BMP

@@ -1,0 +1,3 @@
+run SOL.EXE
+wait 4000
+snap C:\SOL.BMP

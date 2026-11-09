@@ -731,6 +731,79 @@ boot-test: dos install-tree
 clean:
 	rm -rf $(B)
 
+# ---- GD1, GD2: logging stand-ins for GDI's interfaces (tests/gdi; probes,
+# not in make test; ARCHITECTURE.md 11). GD1.DRV is a DISPLAY driver that
+# records every call and forwards it to VGA.DRV renamed VGAREAL
+# (tests/gdi/gdtrace.sh makes that copy in a scratch install).
+gdprobes: $(DOS)/GD1.DRV
+$(B)/gdi/gd1stubs.asm $(B)/gdi/gd1.lnk &: tests/gdi/display.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py tests/gdi/display.spec VGAREAL $(B)/gdi/gd1stubs.asm \
+	    $(B)/gdi/gd1.lnk DISPLAY 'DISPLAY : 100, 96, 96 : VGA Color Display'
+$(B)/gdi/gd1stubs.o: $(B)/gdi/gd1stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gdlog.o: tests/gdi/gdlog.asm tests/gdi/gdlog.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd1log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY -dGDL_TAG='"D"' -fo=$@ $<
+$(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/gd1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd1.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
+# GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
+# GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
+# X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
+# tests/gdi/gdi.spec
+gdprobes: $(DOS)/GD2.EXE
+$(B)/gdi/gd2stubs.asm $(B)/gdi/gd2.lnk &: tests/gdi/gdi.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py --wine --only docs/exports/GDI.txt tests/gdi/gdi.spec GDJ $(B)/gdi/gd2stubs.asm \
+	    $(B)/gdi/gd2.lnk GDI 'GDI (w16 GD2: logging stand-in)'
+$(B)/gdi/gd2stubs.o: $(B)/gdi/gd2stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd2log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_GDI -dGDL_TAG='"G"' -fo=$@ $<
+$(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/gd2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd2.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o }
+
+# ---- GDI.EXE: w16's GDI (gdi/; ARCHITECTURE.md 11) ----
+# large model, SS != DS, byte-packed structures (the DDK's), 286
+GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
+GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/object.o \
+           $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
+           $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o
+gdi: $(DOS)/GDI.EXE
+dos: $(DOS)/GDI.EXE
+$(B)/gdi/exports.lnk $(B)/gdi/stubs.asm &: tools/mkgdiexp.py tools/mkgdlog.py \
+        docs/exports/GDI.txt tests/gdi/gdi.spec $(wildcard gdi/*.c)
+	@mkdir -p $(@D)
+	python3 tools/mkgdiexp.py $(B)/gdi/exports.lnk $(B)/gdi/stubs.asm
+$(B)/gdi/stubs.o: $(B)/gdi/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.c gdi/gdi.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(DOS)/GDI.EXE: $(GOBJS) gdi/gdi.lnk $(B)/gdi/exports.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @gdi/gdi.lnk @$(B)/gdi/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gdi.map file { $(GOBJS) }
+	python3 tools/nemark.py $@ 3.10
+# GD3.EXE: the drawing probe (tests/apps/gd3.c), as the shell
+gdprobes: $(DOS)/GD3.EXE
+$(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/apps/gd3.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).

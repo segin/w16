@@ -1,0 +1,10 @@
+run WRITE.EXE
+wait 3000
+type Hello, world! The quick brown fox jumps over the lazy dog.
+wait 500
+snap C:\WRITE.BMP
+menu c
+wait 300
+snap C:\WRCHAR.BMP
+key 1B
+key 1B

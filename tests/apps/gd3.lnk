@@ -1,0 +1,4 @@
+# GD3.EXE (tests/apps/gd3.c): the drawing probe
+@tests/apps/app.lnk
+import WAITEVENT KERNEL.30
+import INITAPP USER.5

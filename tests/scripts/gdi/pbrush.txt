@@ -1,0 +1,3 @@
+run PBRUSH.EXE
+wait 4000
+snap C:\PBRUSH.BMP

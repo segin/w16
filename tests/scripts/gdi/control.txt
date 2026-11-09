@@ -1,0 +1,3 @@
+run CONTROL.EXE
+wait 4000
+snap C:\CONTROL.BMP

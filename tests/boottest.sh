@@ -12,6 +12,9 @@
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
 #   userk      w16's USER on w16's KRNL286         must be 0
+#   gdi        w16's GDI on Microsoft's KRNL286    must be 0
+#   gdik       w16's GDI on w16's KRNL286          must be 0
+#   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
@@ -35,8 +38,9 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk tree}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi tree}
 user=$root/build/dos/USER.EXE
+gdi=$root/build/dos/GDI.EXE
 fails=0
 
 # boot NAME [dropin.sh options...]: one boot, screenshot NAME.png, log NAME.txt
@@ -79,6 +83,12 @@ for c in $cases; do
             check user user ref ;;
     userk)  ref; boot userk -f "$user=WINDOWS/SYSTEM/USER.EXE"
             check userk userk ref ;;
+    gdi)    ref; boot gdi -r -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+            check gdi gdi ref ;;
+    gdik)   ref; boot gdik -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+            check gdik gdik ref ;;
+    usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+            check usergdi usergdi ref ;;
     tree)
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"
