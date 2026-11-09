@@ -27,7 +27,7 @@ static int clip_to(NPRGN rao, WORD k, int *l, int *t, int *r, int *b)
 }
 
 /* the driver BitBlt over the clip region; dest rect in screen coords */
-static void blt_out(NPDC dc, int x, int y, int w, int h, NPDC src, int sx, int sy, DWORD rop)
+static void blt_out(NPDC dc, int x, int y, int w, int h, DC __far *src, int sx, int sy, DWORD rop)
 {
     NPRGN rao = dc_rao(dc);
     DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];

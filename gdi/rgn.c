@@ -220,7 +220,7 @@ static int y_edges(NPRGN a, NPRGN b, int *ys)
 
 int rgn_combine(HRGN dst, HRGN ha, HRGN hb, int mode)
 {
-    NPRGN a = rgn_ptr(ha), b = mode == RGN_COPY ? 0 : rgn_ptr(hb), d;
+    NPRGN a = rgn_ptr(ha), b = mode == RGN_COPY ? (NPRGN)0 : rgn_ptr(hb), d;
     HLOCAL hy, hiv, hout;
     int *ys, *iva, *ivb, *ivc, *prev;
     RECT NEAR *out;

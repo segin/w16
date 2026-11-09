@@ -29,10 +29,50 @@ NPFONT fonts;
 #define RT_FONTDIR 7
 #define RT_FONT 8
 
+/* the module's FONTDIR resource. Its name varies (VGASYS.FON: the
+   integer 40h), so look it up in the resource table of the module
+   database, KERNEL's in-memory copy of the NE header (Pietrek ch. 3; the
+   NE format) */
+static HRSRC find_fontdir(HINSTANCE h)
+{
+    HMODULE hm = GetModuleHandle((LPCSTR)MAKELP(0, h));
+    BYTE __far *ne = hm ? GlobalLock(hm) : 0;
+    BYTE __far *rt, *p;
+    HRSRC r = 0;
+    if (ne && ne[0] == 'N' && ne[1] == 'E' && *(WORD __far *)(ne + 0x24) != *(WORD __far *)(ne + 0x26)) {
+        rt = ne + *(WORD __far *)(ne + 0x24);
+        p = rt + 2;
+        while (*(WORD __far *)p) {
+            WORD type = *(WORD __far *)p, cnt = *(WORD __far *)(p + 2);
+            if (type == (0x8000 | RT_FONTDIR) && cnt) {
+                WORD id = *(WORD __far *)(p + 8 + 6);
+                if (id & 0x8000)
+                    r = FindResource(h, MAKEINTRESOURCE(id & 0x7FFF), MAKEINTRESOURCE(RT_FONTDIR));
+                else {
+                    char name[64];
+                    BYTE __far *q = rt + id;
+                    int k, n = q[0] < 63 ? q[0] : 63;
+                    for (k = 0; k < n; k++)
+                        name[k] = q[1 + k];
+                    name[n] = 0;
+                    r = FindResource(h, name, MAKEINTRESOURCE(RT_FONTDIR));
+                }
+                break;
+            }
+            p += 8 + 12 * cnt;
+        }
+    }
+    if (ne)
+        GlobalUnlock(hm);
+    if (!r)
+        r = FindResource(h, "FONTDIR", MAKEINTRESOURCE(RT_FONTDIR));
+    return r;
+}
+
 /* read the FONTDIR of a module: one entry per font */
 static int font_add_module(HINSTANCE h, LPCSTR file)
 {
-    HRSRC r = FindResource(h, "FONTDIR", MAKEINTRESOURCE(RT_FONTDIR));
+    HRSRC r = find_fontdir(h);
     HGLOBAL g;
     BYTE __far *p;
     WORD n, i;
@@ -77,6 +117,9 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         f->next = fonts;
         fonts = f;
         added++;
+        gdi_log("font: ");
+        gdi_log(f->face);
+        gdi_loghex(" height", f->height);
         p = (BYTE __far *)face;
         while (*p)
             p++;
@@ -119,7 +162,7 @@ int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
 
 BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
 {
-    NPFONT NEAR *pp = &fonts;
+    NPFONT *pp = &fonts;
     HINSTANCE h = 0;
     int found = 0;
     while (*pp) {
@@ -130,6 +173,10 @@ BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
             if (f->hRes) {
                 GlobalUnlock(f->hRes);
                 FreeResource(f->hRes);
+            }
+            if (f->hMem) {
+                GlobalUnlock(f->hMem);
+                GlobalFree(f->hMem);
             }
             LocalFree((HLOCAL)f);
             found = 1;
@@ -146,15 +193,17 @@ BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
 
 static void substitute(LPCSTR face, char *out)
 {
+    char name[LF_FACESIZE];
     int i;
     for (i = 0; i < LF_FACESIZE - 1 && face[i]; i++)
-        out[i] = face[i];
-    out[i] = 0;
-    if (out[0])
-        GetProfileString("FontSubstitutes", face, out, out, LF_FACESIZE);
+        name[i] = face[i];
+    name[i] = 0;
+    out[0] = 0;
+    if (name[0])
+        GetProfileString("FontSubstitutes", name, name, out, LF_FACESIZE);
 }
 
-static long penalty(NPFONT f, const LOGFONT NEAR *lf, const char *face)
+static long penalty(NPFONT f, const LOGFONT __far *lf, const char *face)
 {
     long p = 0;
     int want, have, d;
@@ -190,7 +239,7 @@ static long penalty(NPFONT f, const LOGFONT NEAR *lf, const char *face)
     return p;
 }
 
-static NPFONT font_map(const LOGFONT NEAR *lf)
+static NPFONT font_map(const LOGFONT __far *lf)
 {
     char face[LF_FACESIZE];
     NPFONT f, best = 0;
@@ -206,22 +255,69 @@ static NPFONT font_map(const LOGFONT NEAR *lf)
     return best;
 }
 
-/* the font resource, locked, dfBitsPointer set */
+/* The font as the driver gets it: a .FNT image at offset 0 of its own
+   segment, FONTINFO at 42h, dfBitsPointer = selector:dfBitsOffset.
+   VGA.DRV sets RC_BIGFONT, so GDI hands it Windows 3.x fonts only (DDK,
+   GDIINFO): a 2.x raster font is converted. Observed (GD1, the System
+   font): dfFlags 2 (DFF_PROPORTIONAL), the 3.x header fields zero, the
+   character table of 3.x entries (width, 32-bit offset) at 94h, the bits
+   right after it (dfBitsOffset 5DAh for 225 + 1 characters) and the face
+   name moved by as much (dfFace 171Ah). */
 static LPFONTINFO font_info(NPFONT f)
 {
-    if (!f->fi) {
-        HRSRC r = FindResource(f->hMod, MAKEINTRESOURCE(f->resId), MAKEINTRESOURCE(RT_FONT));
-        BYTE __far *p;
-        if (!r)
+    HRSRC r;
+    BYTE __far *p, __far *base;
+    LPFONTINFO fi;
+    if (f->fi)
+        return f->fi;
+    r = FindResource(f->hMod, MAKEINTRESOURCE(f->resId), MAKEINTRESOURCE(RT_FONT));
+    if (!r)
+        return 0;
+    f->hRes = LoadResource(f->hMod, r);
+    p = f->hRes ? LockResource(f->hRes) : 0;
+    if (!p)
+        return 0;
+    base = p;
+    fi = (LPFONTINFO)(p + 0x42);
+    if (*(WORD __far *)p < 0x300 && !(fi->dfType & 1)) {
+        WORD n = fi->dfLastChar - fi->dfFirstChar + 2, i;
+        DWORD oldBits = fi->dfBitsOffset, size = SizeofResource(f->hMod, r);
+        DWORD newBits = 0x94 + (DWORD)n * 6, newSize;
+        long delta = (long)newBits - (long)oldBits;
+        WORD __far *ot = (WORD __far *)(p + 0x76);
+        BYTE __far *q;
+        LPFONTINFO nf;
+        if (*(DWORD __far *)(p + 2) && *(DWORD __far *)(p + 2) < size)
+            size = *(DWORD __far *)(p + 2);
+        newSize = size + delta;
+        f->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, newSize);
+        q = f->hMem ? GlobalLock(f->hMem) : 0;
+        if (!q)
             return 0;
-        f->hRes = LoadResource(f->hMod, r);
-        p = f->hRes ? LockResource(f->hRes) : 0;
-        if (!p)
-            return 0;
-        f->fi = (LPFONTINFO)(p + 0x42);
-        f->fi->dfBitsPointer = MAKELP(SELECTOROF(p), OFFSETOF(p) + (WORD)f->fi->dfBitsOffset);
+        mem_copy(q, p, 0x76);
+        *(WORD __far *)q = 0x300;
+        *(DWORD __far *)(q + 2) = newSize;
+        nf = (LPFONTINFO)(q + 0x42);
+        *(DWORD __far *)(q + 0x76) = (fi->dfPitchAndFamily & 1) ? 2 : 1;
+        for (i = 0; i < n; i++) {
+            *(WORD __far *)(q + 0x94 + i * 6) = ot[i * 2];
+            *(DWORD __far *)(q + 0x94 + i * 6 + 2) = ot[i * 2 + 1] + delta;
+        }
+        mem_copy(q + (WORD)newBits, p + (WORD)oldBits, (WORD)(size - oldBits));
+        nf->dfBitsOffset = newBits;
+        if (nf->dfFace >= oldBits)
+            nf->dfFace += delta;
+        if (nf->dfDevice >= oldBits)
+            nf->dfDevice += delta;
+        GlobalUnlock(f->hRes);
+        FreeResource(f->hRes);
+        f->hRes = 0;
+        base = q;
+        fi = nf;
     }
-    return f->fi;
+    fi->dfBitsPointer = MAKELP(SELECTOROF(base), OFFSETOF(base) + (WORD)fi->dfBitsOffset);
+    f->fi = fi;
+    return fi;
 }
 
 NPFONT font_realize(NPDC dc)
@@ -240,6 +336,11 @@ NPFONT font_realize(NPDC dc)
     f = font_map(&lf);
     if (!f)
         return 0;
+    gdi_log("font_realize: ");
+    gdi_log(lf.lfFaceName);
+    gdi_loghex(" -> height", f->height);
+    gdi_log(f->face);
+    gdi_log("\r\n");
     fi = font_info(f);
     if (!fi)
         return 0;

@@ -51,7 +51,7 @@ static void dc_link(HDC h)
 
 static void dc_unlink(HDC h)
 {
-    DCLINK NEAR *NEAR *pp;
+    DCLINK NEAR **pp;
     for (pp = &dcs; *pp; pp = &(*pp)->next)
         if ((*pp)->h == h) {
             DCLINK NEAR *l = *pp;
@@ -223,7 +223,7 @@ HDC GDIAPI CreateIC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __fa
 
 HDC GDIAPI CreateCompatibleDC(HDC hdc)                             /* GDI.52 */
 {
-    NPDC src = hdc ? dc_get(hdc) : 0;
+    NPDC src = hdc ? dc_get(hdc) : (NPDC)0;
     NPDEVICE d = src ? src->dev : display;
     HDC h;
     NPDC dc;

@@ -80,7 +80,7 @@ fail:
 
 void dev_close(NPDEVICE d)
 {
-    NPDEVICE NEAR *pp;
+    NPDEVICE *pp;
     if (!d || --d->refs)
         return;
     if (d == display) {                 /* the display stays enabled */

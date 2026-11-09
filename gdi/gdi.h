@@ -498,6 +498,7 @@ typedef struct FONTENT {
     HINSTANCE hMod;                     /* the .FON module */
     WORD resId;
     HGLOBAL hRes;
+    HGLOBAL hMem;                       /* a 2.x font made 3.x */
     LPFONTINFO fi;                      /* locked, dfBitsPointer set */
     char face[LF_FACESIZE];
     short height, avgWidth, weight;
