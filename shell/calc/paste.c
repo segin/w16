@@ -4,7 +4,7 @@
  *
  * Calculator's Help (CALC.HLP, "Using Calculator with the Clipboard")
  * documents the codes :c :e :m :p :q :r and \. Observed (CA1 paste
- * probes, ARCHITECTURE.md 15.2):
+ * probes, ARCHITECTURE.md 15.3):
  *  - each character goes through the keyboard's table (accel.h), letters
  *    in either case; blanks, line ends and unknown characters are skipped;
  *  - ':' and a digit n is the function key Fn (":9" is +/-, ":5" Hex);

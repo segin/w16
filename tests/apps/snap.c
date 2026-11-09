@@ -16,6 +16,17 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     settime hh:mm:ss[.cc]  set the DOS time (INT 21h AH=2Dh)
+ *     setdate mm/dd/yyyy     set the DOS date (INT 21h AH=2Bh)
+ *     freeze hh:mm:ss <ms>   keep setting the DOS time to hh:mm:ss.00 every
+ *                            50 ms for <ms> ms: a clock shows a known time
+ *     syscmd <hex>           post WM_SYSCOMMAND <hex> to the active window
+ *     movewin x y cx cy      MoveWindow the active window (decimal)
+ *     post <msg> <wp> <lp>   post a message (hex) to the active window
+ *     send <msg> <wp> <lp>   send it and log the result
+ *     timers                 take every timer USER has left (and log how
+ *                            many), to see what a program does without one
+ *     freetimers             give them back
  *     info                   log the active top-level window in detail:
  *                            class data, client rectangle, children
  *                            relative to it (font, edit state), scroll
@@ -376,6 +387,68 @@ done:
 }
 #endif
 
+/* ---- time, messages, timers (for Clock's scenarios) ---- */
+
+static WORD dos_settime(WORD hm, WORD sc);
+#pragma aux dos_settime = "mov ah, 2Dh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+static WORD dos_setdate(WORD y, WORD md);
+#pragma aux dos_setdate = "mov ah, 2Bh" "int 21h" "xor ah, ah" parm [cx] [dx] value [ax];
+
+/* the next number in *s (decimal or hex), skipping what is not a digit */
+static WORD next_num(char **s, WORD base)
+{
+    char *p = *s;
+    WORD v;
+    while (*p && !((*p >= '0' && *p <= '9') ||
+                   (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f')))))
+        p++;
+    v = parse_num(p, base);
+    while ((*p >= '0' && *p <= '9') ||
+           (base == 16 && ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))))
+        p++;
+    *s = p;
+    return v;
+}
+
+static WORD set_time(char **s)
+{
+    WORD h = next_num(s, 10), m = next_num(s, 10), sec = next_num(s, 10), cs = 0;
+    if (**s == '.')
+        cs = next_num(s, 10);
+    return dos_settime((h << 8) | m, (sec << 8) | cs);
+}
+
+#ifndef SNAP_WIN2                       /* 3.x calls: GetMenuItemCount... */
+static void dump_menu(HMENU m, int depth)
+{
+    char text[64];
+    int i, k, n;
+    if (!m)
+        return;
+    n = GetMenuItemCount(m);
+    for (i = 0; i < n; i++) {
+        UINT st = GetMenuState(m, i, MF_BYPOSITION);
+        text[0] = 0;
+        GetMenuString(m, i, text, sizeof text, MF_BYPOSITION);
+        out("MENU ");
+        for (k = 0; k < depth; k++)
+            out("  ");
+        out("id=");
+        outhex(GetMenuItemID(m, i), 4);
+        out(" state=");
+        outhex(st, 4);
+        out(" \"");
+        out(text);
+        out("\"\r\n");
+        if (st & MF_POPUP)
+            dump_menu(GetSubMenu(m, i), depth + 1);
+    }
+}
+#endif
+
+#define MAXTIMERS 64
+static UINT timer_ids[MAXTIMERS];
+static int ntimers;
 /* ---- info: one window in detail ---- */
 
 static void outkv(const char *k, int v)
@@ -621,6 +694,73 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+    } else if (same(l, "settime")) {
+        char *s = arg;
+        if (set_time(&s))
+            out(" -> failed");
+    } else if (same(l, "setdate")) {
+        char *s = arg;
+        WORD m = next_num(&s, 10), d = next_num(&s, 10), y = next_num(&s, 10);
+        if (dos_setdate(y, (m << 8) | d))
+            out(" -> failed");
+    } else if (same(l, "freeze")) {
+        char *s = arg;
+        WORD i, n;
+        set_time(&s);
+        n = next_num(&s, 10) / 50;
+        for (i = 0; i < n; i++) {
+            s = arg;
+            set_time(&s);
+            pump(50);
+        }
+        s = arg;
+        set_time(&s);
+    } else if (same(l, "syscmd")) {
+        PostMessage(top_window(), WM_SYSCOMMAND, parse_num(arg, 16), 0);
+        pump(300);
+    } else if (same(l, "movewin")) {
+        char *s = arg;
+        int x = next_num(&s, 10), y = next_num(&s, 10);
+        int cx = next_num(&s, 10), cy = next_num(&s, 10);
+        MoveWindow(top_window(), x, y, cx, cy, TRUE);
+        pump(300);
+    } else if (same(l, "post") || same(l, "send")) {
+        char *s = arg;
+        WORD msg = next_num(&s, 16), wp = next_num(&s, 16), lh, ll;
+        LONG r;
+        ll = next_num(&s, 16);
+        lh = 0;
+        if (*s == ':') {                /* lp as hi:lo */
+            lh = ll;
+            ll = next_num(&s, 16);
+        }
+        if (l[0] == 'p') {
+            PostMessage(top_window(), msg, wp, MAKELONG(ll, lh));
+        } else {
+            r = SendMessage(top_window(), msg, wp, MAKELONG(ll, lh));
+            out(" -> ");
+            outhex(r, 8);
+        }
+        pump(300);
+    } else if (same(l, "timers")) {
+        UINT id;
+        while (ntimers < MAXTIMERS && (id = SetTimer(NULL, 0, 60000u, NULL)) != 0)
+            timer_ids[ntimers++] = id;
+        out(" -> ");
+        outint(ntimers);
+    } else if (same(l, "freetimers")) {
+        while (ntimers)
+            KillTimer(NULL, timer_ids[--ntimers]);
+#ifndef SNAP_WIN2
+    } else if (same(l, "dumpmenu")) {
+        /* the active window's menu bar and system menu: each item's
+           ID, state flags and text */
+        HWND w = top_window();
+        out("\r\n");
+        dump_menu(GetMenu(w), 0);
+        out("MENU system\r\n");
+        dump_menu(GetSystemMenu(w, FALSE), 1);
+#endif
     } else if (same(l, "info")) {
         info();
     } else if (same(l, "text")) {

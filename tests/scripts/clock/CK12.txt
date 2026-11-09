@@ -1,0 +1,9 @@
+; start from CLOCK.INI: analog, no seconds, on top, placed
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+snap C:\P1.BMP
+dump
+dumpmenu
+close
+wait 1000

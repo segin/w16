@@ -8,6 +8,7 @@ w16 repository's LICENSE):
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
+  CLOCK.EXE               Clock
   SYSTEM\KRNL286.EXE      KERNEL
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation

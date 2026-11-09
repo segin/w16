@@ -1,0 +1,19 @@
+; first start (no CLOCK.INI): digital; the menus
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+snap C:\D1.BMP
+dump
+dumpmenu
+menu s
+freeze 10:09:30.50 800
+snap C:\MSET.BMP
+key 1B
+key 1B
+menu  
+freeze 10:09:30.50 800
+snap C:\MSYS.BMP
+key 1B
+key 1B
+close
+wait 1000
