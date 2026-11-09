@@ -1,0 +1,6 @@
+# TK32.EXE (tests/apps/tk32.c, tk32s.asm): the task-exit signal
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import K_SETTASKSIGNALPROC KERNEL.38
+import U_INITAPP USER.5
+import K_GETTASKQUEUE KERNEL.35

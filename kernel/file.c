@@ -599,7 +599,7 @@ u16 KAPI GetTempFileName(u8 drive, const char FAR *prefix, u16 unique,
    emulator's own drive) 3, 26 and up 0. UNVERIFIED: w16 asks DOS (IOCTL
    4409h remote, 4408h removable) and the BIOS equipment word's floppy
    count for A: and B: (which fits what 3.1 gave). */
-u16 KAPI GetDriveType(u16 drive)                                /* KERNEL.136 */
+u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136 */
 {
     regs16 r;
     if (drive >= 26)
@@ -627,7 +627,7 @@ u16 KAPI GetDriveType(u16 drive)                                /* KERNEL.136 */
 static u16 handle_count = 20;
 
 /* observed: the count only grows, from 20 up to 255 */
-u16 KAPI SetHandleCount(u16 n)                                  /* KERNEL.199 */
+u16 KAPI_ES SetHandleCount(u16 n)                                  /* KERNEL.199 */
 {
     regs16 r;
     if (n > 255)

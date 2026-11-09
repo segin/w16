@@ -219,6 +219,25 @@ static void set_psp(u16 pdb)
     rm_int(0x21, 0x5000, seg_of(pdb), 0, 0);
 }
 
+/* The task's DTA (TDB 62h) becomes the DOS extender's: DOSX keeps one
+   protected-mode DTA, set by INT 21h AH=1Ah, and copies FindFirst's
+   results there. w16's INT 21h hook records each task's (kentry.asm);
+   the switch sets it back. (Without this File Manager listed another
+   task's buffer as its directory.) */
+static void set_dta(u16 t)
+{
+    regs16 r;
+    u16 off = TW(t, TDB_DTA), sel = TW(t, TDB_DTA + 2);
+    if (!sel)
+        return;
+    r.ax = 0x1A00;
+    r.dx = off;
+    r.ds = sel;
+    r.es = 0;
+    r.bx = r.cx = r.si = r.di = 0;
+    dos21(&r);
+}
+
 static u16 dos(u16 ax, u16 dx, u16 ds)
 {
     regs16 r;
@@ -344,6 +363,7 @@ static void switch_to(u16 t)
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
+    set_dta(t);
     restore_dir(t, from);
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
@@ -560,6 +580,7 @@ u16 task_boot(void)
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
+    set_dta(t);
     restore_dir(t, 0);
     in_sched = 0;
     task_switch((u16 FAR *)boot_sssp, TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));
@@ -709,7 +730,7 @@ void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 
 /* Low word: Windows version, major in the low byte (3.10 -> 0A03h).
    High word: DOS version, major in the high byte. */
-u32 KAPI GetVersion(void)                                     /* KERNEL.3 */
+u32 KAPI_ES GetVersion(void)                                     /* KERNEL.3 */
 {
     regs16 r;
     r.ax = 0x3000;
@@ -772,14 +793,14 @@ u16 KAPI GetTaskQueue(u16 htask)                              /* KERNEL.35 */
 }
 
 /* Observed: AX = the current task, DX = the first task in the list. */
-u32 KAPI GetCurrentTask(void)                                 /* KERNEL.36 */
+u32 KAPI_ES GetCurrentTask(void)                                 /* KERNEL.36 */
 {
     return ((u32)task_head << 16) | cur_task;
 }
 
 /* AX = the current task's PDB, DX = KERNEL's own PSP (observed: also
    what a task's PDB has as its parent). */
-u32 KAPI GetCurrentPDB(void)                                  /* KERNEL.37 */
+u32 KAPI_ES GetCurrentPDB(void)                                  /* KERNEL.37 */
 {
     return ((u32)psp_sel << 16) | (cur_task ? cur_pdb : psp_sel);
 }
@@ -811,7 +832,7 @@ u32 KAPI GDEnv(void)
     return (u32)*(u16 FAR *)MK_FP(pdb, 0x2C) << 16;
 }
 
-u32 KAPI GetWinFlags(void)                                    /* KERNEL.132 */
+u32 KAPI_ES GetWinFlags(void)                                    /* KERNEL.132 */
 {
     return get_winflags();
 }
@@ -825,13 +846,13 @@ void KAPI DirectedYield(u16 htask)                            /* KERNEL.150 */
     OldYield();
 }
 
-u16 KAPI GetNumTasks(void)                                    /* KERNEL.152 */
+u16 KAPI_ES GetNumTasks(void)                                    /* KERNEL.152 */
 {
     return num_tasks;
 }
 
 /* Observed: the hInstance (even), not DS. */
-u16 KAPI GetTaskDS(void)                                      /* KERNEL.155 */
+u16 KAPI_ES GetTaskDS(void)                                      /* KERNEL.155 */
 {
     return cur_task ? TW(cur_task, TDB_HINST) : 0;
 }
@@ -884,4 +905,42 @@ void task_boot_tdb_end(void)
     }
     boot_tdb = 0;
     GlobalFree(t);
+}
+
+/* ---- signals to USER ----
+   Pietrek (ch. 3, ExitCall; Schulman, SetTaskSignalProc): when a task
+   ends, KERNEL first calls the task's signal procedure (TDB 2Ah, which
+   USER's InitApp sets to its SignalProc) with code 20h, on the task's
+   stack, before freeing anything; USER then destroys the task's windows,
+   queue and the like (AppExit). A DLL that is loaded or freed while USER
+   is there gets USER's SignalProc (USER.314) called directly with 40h or
+   80h and the hModule. Observed on 3.1 (TK32, a task that ends with
+   INT 21h AX=4C00h): BX = 20h, DI = the third argument = 4C00h (the AX
+   of the exit call), hInstance = the task's, hQueue = its queue.
+   UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
+extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
+
+void __cdecl task_signal_exit(u16 ax)
+{
+    u16 t = cur_task;
+    u32 p;
+    taskx FAR *x;
+    if (!t || (boot_tdb && t == boot_tdb))
+        return;
+    p = *(u32 FAR *)MK_FP(t, 0x2A);
+    if (!p)
+        return;
+    *(u32 FAR *)MK_FP(t, 0x2A) = 0;     /* once */
+    x = tx_of(t);
+    sig_call(p, t, 0x20, ax, x ? x->dg_hnd : 0, TW(t, TDB_QUEUE));
+}
+
+void module_signal(u16 hmod, u16 code)
+{
+    module FAR *u = module_find("USER");
+    u16 sel, off;
+    int is_const;
+    if (!u || u->ne_sel == hmod || !module_entry(u, 314, &sel, &off, &is_const) || is_const)
+        return;
+    sig_call(((u32)sel << 16) | off, hmod, code, 0, 0, 0);
 }

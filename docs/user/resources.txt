@@ -1,0 +1,30 @@
+# USER resources: 29
+GROUP_CURSOR  32646        32  moveable preload discardable     32x32#1
+GROUP_CURSOR  100          32  moveable preload discardable     32x32#4
+GROUP_ICON    32647        48  moveable preload discardable     32x32/1bpp#2 32x32/4bpp#3
+MENU          1           128  moveable preload discardable     
+MENU          2           128  moveable preload discardable     
+DIALOG        1            96  moveable discardable             style 90400000 4 controls, 141x67 dialog units
+DIALOG        9           112  moveable discardable             style 80C800C0 3 controls, 116x104 dialog units
+DIALOG        10          144  moveable discardable             style 80C800C0 4 controls, 200x52 dialog units
+DIALOG        101         288  moveable discardable             style 80C800C0 7 controls, 169x79 dialog units
+DIALOG        100         160  moveable discardable             style 80C800C0 4 controls, 174x30 dialog units
+STRING        1           208  moveable preload discardable     16 strings
+STRING        6           128  moveable preload discardable     16 strings
+STRING        7           320  moveable preload discardable     16 strings
+STRING        5           224  moveable preload discardable     16 strings
+STRING        2            80  moveable preload discardable     8 strings
+STRING        3           176  moveable preload discardable     16 strings
+STRING        4           224  moveable preload discardable     9 strings
+STRING        13          160  moveable preload discardable     8 strings
+STRING        8            32  moveable preload discardable     1 strings
+STRING        14           64  moveable preload discardable     1 strings
+STRING        17          256  moveable preload discardable     4 strings
+STRING        18          144  moveable preload discardable     6 strings
+STRING        21          192  moveable preload discardable     7 strings
+STRING        33          192  moveable preload discardable     5 strings
+VERSION       1           480  moveable                         
+CURSOR        1           320  moveable preload discardable     32x32 1bpp hotspot 14,16
+CURSOR        4           320  moveable preload discardable     32x32 1bpp hotspot 15,15
+ICON          2           304  moveable preload discardable     32x32 1bpp
+ICON          3           752  moveable preload discardable     32x32 4bpp

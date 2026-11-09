@@ -1,0 +1,44 @@
+/* us4.rc - resources of probe US4 (tests/apps/us4.c): dialogs with every
+   standard control, laid out in dialog units */
+#include <windows.h>
+
+1 DIALOG 10, 10, 220, 150
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE
+CAPTION "Controls"
+BEGIN
+    PUSHBUTTON      "&Push", 101, 160, 6, 50, 14
+    DEFPUSHBUTTON   "OK", IDOK, 160, 24, 50, 14
+    PUSHBUTTON      "Gray", 102, 160, 42, 50, 14, WS_DISABLED
+    CHECKBOX        "&Check box", 103, 6, 6, 60, 10
+    CONTROL         "Checked", 104, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 6, 18, 60, 10
+    CONTROL         "Three state", 105, "Button", BS_AUTO3STATE | WS_TABSTOP, 6, 30, 60, 10
+    GROUPBOX        "Group", 106, 70, 4, 80, 46
+    RADIOBUTTON     "Radio &1", 107, 76, 14, 60, 10, WS_GROUP
+    RADIOBUTTON     "Radio 2", 108, 76, 26, 60, 10
+    RADIOBUTTON     "Radio 3", 109, 76, 38, 60, 10, WS_DISABLED
+    LTEXT           "Left text", 110, 6, 54, 60, 8
+    CTEXT           "Centred", 111, 70, 54, 60, 8
+    RTEXT           "Right", 112, 130, 54, 30, 8
+    EDITTEXT        113, 6, 66, 90, 12, ES_AUTOHSCROLL
+    LISTBOX         114, 6, 82, 70, 40, LBS_STANDARD
+    CONTROL         "", 115, "ComboBox", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 82, 82, 70, 50
+    CONTROL         "", 116, "ComboBox", CBS_SIMPLE | WS_TABSTOP, 82, 98, 70, 40
+    SCROLLBAR       117, 160, 62, 50, 9
+    SCROLLBAR       118, 200, 76, 9, 40, SBS_VERT
+    CONTROL         "", 120, "Static", SS_BLACKFRAME, 6, 126, 30, 16
+    CONTROL         "", 121, "Static", SS_GRAYRECT, 40, 126, 30, 16
+    EDITTEXT        122, 100, 66, 50, 12, WS_DISABLED
+END
+
+2 DIALOG 30, 30, 160, 70
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE
+CAPTION "Run"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "&Command Line:", -1, 6, 8, 60, 8
+    EDITTEXT        201, 6, 20, 100, 12, ES_AUTOHSCROLL
+    CHECKBOX        "Run &Minimized", 202, 6, 38, 70, 10
+    DEFPUSHBUTTON   "OK", IDOK, 114, 6, 40, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 114, 24, 40, 14
+    PUSHBUTTON      "&Help", 203, 114, 42, 40, 14
+END

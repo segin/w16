@@ -6,6 +6,7 @@
  *     run <command line>     WinExec it (SW_SHOWNORMAL)
  *     wait <ms>              keep dispatching messages for <ms> ms
  *     menu <letter>          open the active window's menu (Alt+letter)
+ *     close                  post WM_SYSCOMMAND SC_CLOSE to the active window
  *     childcmd <hex>         post WM_SYSCOMMAND to the active MDI child
  *     cmd <decimal id>       post WM_COMMAND id to the active window (for
  *                            testing our own programs, whose IDs we know)
@@ -404,6 +405,14 @@ static void run_line(char *l)
         if (!PostMessage(w, WM_COMMAND, parse_num(arg, 10), 0))
             out(" (post failed)");
         pump(300);
+    } else if (same(l, "close")) {
+        /* WM_SYSCOMMAND SC_CLOSE to the active top-level window */
+        HWND w = top_window();
+        if (w)
+            PostMessage(w, WM_SYSCOMMAND, SC_CLOSE, 0);
+        else
+            out(" -> no window");
+        pump(500);
     } else if (same(l, "childcmd")) {
         /* WM_SYSCOMMAND to the active MDI child (its window menu), e.g.
            F030 maximize, F060 close */

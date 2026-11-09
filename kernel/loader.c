@@ -502,7 +502,9 @@ static u16 entry_ds(module FAR *m);
    TKDLL and TKDLB, where TKDLL imports TKDLB, gave 1 for both; a second
    instance 2 for both). Freeing takes one use from each, and the DLLs
    that reach 0 are freed (WEP first). Pietrek describes the same
-   (IncExeUsage, DecExeUsage). KERNEL is not counted. */
+   (IncExeUsage, DecExeUsage). KERNEL is counted too (observed under a
+   booted 3.1, TK29: 11 at the shell, one more with every DLL loaded,
+   whatever it imports), but never freed. */
 static u16 walk_gen;            /* marks modules already counted */
 static u16 load_depth;          /* nested load_file calls */
 
@@ -510,7 +512,7 @@ static void closure_walk(module FAR *m, int delta)
 {
     u16 i, n;
     module FAR *d;
-    if (m == module_first || m->walk == walk_gen)
+    if (m->walk == walk_gen)
         return;
     m->walk = walk_gen;
     if (delta > 0)
@@ -550,6 +552,7 @@ static void sweep(void)
         if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m)) {
             if (NE_HDR(m)->flags & MDBF_WEP)
                 call_wep(m);
+            module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP */
             destroy(m);
             m = module_first;
             continue;
@@ -932,8 +935,10 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
        0 makes LoadLibrary return 0, and the DLL's WEP runs before it is
        freed. A DLL without DGROUP gets DS = DX = DI = its hModule.
        UNVERIFIED: WEP's argument after a failed initialisation (0 here). */
-    if (h.flags & NEF_LIBRARY)
+    if (h.flags & NEF_LIBRARY) {
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
+        module_signal(m->ne_sel, 0x40); /* Pietrek: before its init */
+    }
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
         if (!defer_add(m->ne_sel)) {
             *err = LE_NOMEM;
@@ -1147,6 +1152,46 @@ int module_init_dll(u16 hmod)
                     module_instance(m), 0, 0) != 0;
 }
 
+/* A DOS program (a file that is not a Windows module): Windows starts
+   WINOLDAP.MOD from the system directory in its place (Standard mode;
+   WINOA386.MOD in 386 Enhanced mode; Pietrek). Observed on 3.1 (TK33,
+   in WINOLDAP.MOD's place, for WinExec("COMMAND.COM /C ECHO HI")): its
+   command tail is the DOS program's tail, a NUL, then the program's name
+   as given ("/C ECHO HI\0COMMAND.COM", length byte 16h, followed by
+   0Ah), nCmdShow as given, hPrevInstance 0. UNVERIFIED: the 0Ah, a name
+   with a path, a .PIF, tails longer than 127 bytes (Pietrek: the PDB
+   then grows); the TDB's WINOLDAP flag (Pietrek: TDB 16h bit 0) is not
+   set yet. */
+u16 KAPI LoadModule(const char FAR *name, void FAR *params);
+
+static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
+{
+    static char woa[DOS_PATHMAX + 16];
+    static u8 tail[0x100];
+    loadparms np;
+    const u8 FAR *t = lp->cmd;
+    u16 n = 0, i, k;
+
+    k = t ? t[0] : 0;
+    for (i = 0; i < k && n < sizeof tail - 3; i++)
+        tail[1 + n++] = t[1 + i];
+    tail[1 + n++] = 0;
+    for (i = 0; name[i] && n < sizeof tail - 3; i++)
+        tail[1 + n++] = name[i];
+    tail[0] = (u8)(n > 0xFF ? 0xFF : n);
+    tail[1 + n] = '\n';
+    n = kstrlen(sys_dir);
+    kmemcpy(woa, sys_dir, n);
+    if (n && woa[n - 1] != '\\')
+        woa[n++] = '\\';
+    kmemcpy(woa + n, "WINOLDAP.MOD", 13);
+    np.env = lp->env;
+    np.cmd = tail;
+    np.show = lp->show;
+    np.reserved = 0;
+    return LoadModule(woa, &np);
+}
+
 /* Observed on Windows 3.1 (tk5.c, tk15.c): for a DLL the same as
    LoadLibrary; with the parameter block -1 (what LoadLibrary passes,
    Pietrek) a program gives 5. A program starts a task: a new module,
@@ -1177,6 +1222,8 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
     if (m)
         uses(m, 1);
     sweep();
+    if (!m && err == LE_BADFORMAT && winboot_active && lp)
+        return start_oldapp(name, lp);
     if (!m)
         return err;
     if (m->flags & NEF_LIBRARY)
@@ -1279,12 +1326,12 @@ static u16 copy_dir(const char *dir, char FAR *buf, u16 n)
     return len;
 }
 
-u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n)             /* KERNEL.134 */
+u16 KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n)             /* KERNEL.134 */
 {
     return copy_dir(win_dir, buf, n);
 }
 
-u16 KAPI GetSystemDirectory(char FAR *buf, u16 n)              /* KERNEL.135 */
+u16 KAPI_ES GetSystemDirectory(char FAR *buf, u16 n)              /* KERNEL.135 */
 {
     return copy_dir(sys_dir, buf, n);
 }

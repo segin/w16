@@ -2,7 +2,7 @@
 # Run a program under the reference Windows/386 2.11 on real DOS, headless
 # (black-box observation). Windows/386 needs a real DOS (it patches DOS's
 # internal data), so this builds a hard disk image with MS-DOS 4.00 built
-# from Microsoft's MIT-licensed source (tests/msdos-build.sh), the
+# from Microsoft's MIT-licensed source (tools/msdos-build.sh), the
 # Windows/386 install (tests/w386setup.sh), and the program; boots it in
 # DOSBox-X; and afterwards prints the program's TK.LOG from the image.
 #   usage: tests/w386run.sh PROGRAM.EXE [extra files...]
@@ -18,7 +18,7 @@ unset DISPLAY WAYLAND_DISPLAY
 root=$(cd "$(dirname "$0")/.." && pwd)
 dos=$root/.tools/msdos/build/src
 win=$root/.tools/ref/w386/cdrive/WIN386
-[ -f "$dos/BIOS/IO.SYS" ] || { echo "MS-DOS 4.00 not built (tests/msdos-build.sh)" >&2; exit 2; }
+[ -f "$dos/BIOS/IO.SYS" ] || { echo "MS-DOS 4.00 not built (tools/msdos-build.sh)" >&2; exit 2; }
 [ -f "$win/WIN386.EXE" ] || { echo "Windows/386 not installed (tests/w386setup.sh)" >&2; exit 2; }
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 prog=$1; shift

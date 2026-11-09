@@ -1,0 +1,56 @@
+# wlink directives for w16's USER.EXE (user/; ARCHITECTURE.md 10). The
+# exports and stubs come from tools/mkuserexp.py (build/user/exports.lnk);
+# objects and the output name from the Makefile.
+format windows dll
+option modname=USER
+option description 'w16 USER'
+option start=libentry
+option heapsize=4k
+option quiet
+segment type code fixed preload
+# moveable, as Windows 3.1's USER has it: the local heap grows (US4: the
+# fourth dialog's controls failed in a fixed 7K one)
+segment type data moveable preload
+library windows.lib
+# KERNEL
+import K_FATALEXIT KERNEL.1
+import K_EXITKERNEL KERNEL.2
+import K_WAITEVENT KERNEL.30
+import K_POSTEVENT KERNEL.31
+import K_SETTASKQUEUE KERNEL.34
+import K_GETTASKQUEUE KERNEL.35
+import K_SETTASKSIGNALPROC KERNEL.38
+import K_OLDYIELD KERNEL.117
+import K_GETEXEPTR KERNEL.133
+import K_DIRECTEDYIELD KERNEL.150
+import K_GETTASKDS KERNEL.155
+import K_GETEXPWINVER KERNEL.167
+import K_DIAGOUTPUT KERNEL.340
+# GDI
+import G_SELECTVISRGN GDI.105
+import G_SETDCORG GDI.117
+import G_INQUIREVISRGN GDI.131
+import G_GETDCSTATE GDI.179
+import G_SETDCSTATE GDI.180
+import G_FINALGDIINIT GDI.405
+import G_GDITASKTERMINATION GDI.460
+import G_ISGDIOBJECT GDI.462
+import G_MAKEOBJECTPRIVATE GDI.463
+# SYSTEM
+import S_CREATESYSTEMTIMER SYSTEM.2
+import S_KILLSYSTEMTIMER SYSTEM.3
+import S_ENABLESYSTEMTIMERS SYSTEM.4
+import S_GETSYSTEMMSECCOUNT SYSTEM.6
+# KEYBOARD, MOUSE, DISPLAY
+import KB_INQUIRE KEYBOARD.1
+import KB_ENABLE KEYBOARD.2
+import KB_DISABLE KEYBOARD.3
+import KB_TOASCII KEYBOARD.4
+import KB_SETSPEED KEYBOARD.7
+import MS_INQUIRE MOUSE.1
+import MS_ENABLE MOUSE.2
+import MS_DISABLE MOUSE.3
+import D_INQUIRE DISPLAY.101
+import D_SETCURSOR DISPLAY.102
+import D_MOVECURSOR DISPLAY.103
+import D_CHECKCURSOR DISPLAY.104

@@ -92,6 +92,12 @@ void kputdec(u16 v)
 void kexit_to_dos(u8 code)
 {
     regs16 r;
+    if (winboot_active) {               /* a debugging aid */
+        kputs("w16: back to DOS, code ");
+        kputhex(code);
+        kputs("\r\n");
+        trace_print();
+    }
     r.ds = r.es = 0;
     if (old21) {
         r.ax = 0x0205;

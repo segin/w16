@@ -902,3 +902,17 @@ u16 KAPI LShrink(u16 ds, u16 hseg, u16 cb)
         ds = hseg | 1;      /* a handle or selector: UNVERIFIED */
     return (u16)(local_spaces(ds) >> 16);
 }
+
+/* LocalHandleDelta (KERNEL.310, SDK): the number of handles a new handle
+   table of the caller's heap gets; a nonzero argument sets it first.
+   Returns the value in effect. (Write asks for it with GetProcAddress
+   and faulted when w16 did not export it.) UNVERIFIED: limits. */
+u16 KAPI LHDelta(u16 ds, u16 n)
+{
+    lheap hp;
+    if (!heap_of(ds, &hp))
+        return 0;
+    if (n)
+        I(&hp, LI_HDELTA) = n;
+    return I(&hp, LI_HDELTA);
+}
