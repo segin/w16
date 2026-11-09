@@ -154,6 +154,89 @@ static WORD pick(const BYTE __far *dir, BOOL cursor)
     return best;
 }
 
+/* RT_ICON/RT_CURSOR data as LoadResource gives it: the DIB of the file,
+   or already a device-format block when the module's resource handler is
+   USER's (LoadDIBIconHandler/LoadDIBCursorHandler below, which w16's
+   KERNEL installs for every module loaded after USER, as 3.1's does: 9.4) */
+static BOOL is_dib(const BYTE __far *p, BOOL cursor)
+{
+    return *(const DWORD __far *)(p + (cursor ? 4 : 0)) == sizeof(BITMAPINFOHEADER);
+}
+
+static HGLOBAL block_from_resource(const BYTE __far *p, WORD size, BOOL cursor)
+{
+    HGLOBAL g;
+    WORD n;
+    if (!p)
+        return 0;
+    if (is_dib(p, cursor))
+        return make_block(p, cursor);
+    n = (WORD)GlobalSize(GlobalHandle(FP_SEG(p)));
+    if (size && size < n)
+        n = size;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, n);
+    if (g) {
+        fmemcpy(GlobalLock(g), p, n);
+        GlobalUnlock(g);
+    }
+    return g;
+}
+
+/* The resource handlers (USER.356, 357; KERNEL calls them as
+   handler(hMem, hModule, hResInfo), SetResourceHandler's interface, 3.1
+   SDK): read the resource's DIB from the file and return a discardable
+   block in device format (TK26: 3.1's icon blocks are discardable, 0100h).
+   hMem is the discarded block to reuse, or 0. */
+static HGLOBAL dib_handler(HGLOBAL hmem, HMODULE mod, HRSRC res, BOOL cursor)
+{
+    DWORD size = SizeofResource(mod, res);
+    HGLOBAL raw, blk;
+    HFILE f;
+    BYTE __far *p, __far *q;
+    DWORD n;
+    if (!size)
+        return 0;
+    raw = GlobalAlloc(GMEM_MOVEABLE, size);
+    if (!raw)
+        return 0;
+    p = (BYTE __far *)GlobalLock(raw);
+    f = AccessResource(mod, res);
+    if (f == HFILE_ERROR || _lread(f, p, (UINT)size) != (UINT)size) {
+        if (f != HFILE_ERROR)
+            _lclose(f);
+        GlobalUnlock(raw);
+        GlobalFree(raw);
+        return 0;
+    }
+    _lclose(f);
+    blk = is_dib(p, cursor) ? make_block(p, cursor) : 0;
+    GlobalUnlock(raw);
+    GlobalFree(raw);
+    if (!blk)
+        return 0;
+    n = GlobalSize(blk);
+    if (hmem && GlobalReAlloc(hmem, n, GMEM_MOVEABLE)) {
+        q = (BYTE __far *)GlobalLock(hmem);
+        fmemcpy(q, GlobalLock(blk), (WORD)n);
+        GlobalUnlock(hmem);
+        GlobalUnlock(blk);
+        GlobalFree(blk);
+        return hmem;
+    }
+    GlobalReAlloc(blk, 0, GMEM_MODIFY | GMEM_DISCARDABLE);
+    return blk;
+}
+
+HGLOBAL WINAPI U_LOADDIBICONHANDLER(HGLOBAL hmem, HMODULE mod, HRSRC res)
+{
+    return dib_handler(hmem, mod, res, FALSE);
+}
+
+HGLOBAL WINAPI U_LOADDIBCURSORHANDLER(HGLOBAL hmem, HMODULE mod, HRSRC res)
+{
+    return dib_handler(hmem, mod, res, TRUE);
+}
+
 HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
 {
     HMODULE mod;
@@ -186,7 +269,8 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
     if (!r)
         return 0;
     gi = LoadResource(mod, r);
-    h = make_block((const BYTE __far *)LockResource(gi), cursor);
+    h = block_from_resource((const BYTE __far *)LockResource(gi), (WORD)SizeofResource(mod, r),
+                            cursor);
     GlobalUnlock(gi);
     FreeResource(gi);
     if (!h)
