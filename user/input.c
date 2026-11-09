@@ -37,6 +37,7 @@ HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
 static int cursor_level;        /* ShowCursor's count */
 static RECT __far rcClip;
+static int __far mthresh1 = 2, __far mthresh2, __far mspeed = 1;   /* acceleration */
 
 static DWORD lastclick_time;
 static POINT lastclick_pt;
@@ -109,8 +110,23 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
             x = (int)(((DWORD)bx * sysmet[SM_CXSCREEN]) >> 16);
             y = (int)(((DWORD)cx * sysmet[SM_CYSCREEN]) >> 16);
         } else {
-            x += (int)bx;
-            y += (int)cx;
+            /* acceleration (WIN.INI MouseThreshold1/2, MouseSpeed: 2, 0
+               and 1 on 3.1 as SPI_GETMOUSE reports them, US2): past the
+               first threshold the motion doubles, past the second with
+               speed 2 it doubles again. UNVERIFIED: whether either axis
+               past a threshold scales both (taken here) */
+            int dx = (int)bx, dy = (int)cx, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+            int m = ax > ay ? ax : ay;
+            if (mspeed >= 1 && m > mthresh1) {
+                dx *= 2;
+                dy *= 2;
+                if (mspeed >= 2 && m > mthresh2) {
+                    dx *= 2;
+                    dy *= 2;
+                }
+            }
+            x += dx;
+            y += dy;
         }
         if (x < rcClip.left) x = rcClip.left;
         if (x >= rcClip.right) x = rcClip.right - 1;
@@ -137,6 +153,9 @@ void input_init(void)
     ptCursor.x = sysmet[SM_CXSCREEN] / 2;
     ptCursor.y = sysmet[SM_CYSCREEN] / 2;
     dblclk_time = GetProfileInt("windows", "DoubleClickSpeed", 452);
+    mthresh1 = GetProfileInt("windows", "MouseThreshold1", 2);
+    mthresh2 = GetProfileInt("windows", "MouseThreshold2", 0);
+    mspeed = GetProfileInt("windows", "MouseSpeed", 1);
     /* the display's cursor procedure, as fast as the system timer goes
        (US1: CreateSystemTimer(0, DISPLAY.CheckCursor)) */
     S_CREATESYSTEMTIMER(0, (FARPROC)D_CHECKCURSOR);
