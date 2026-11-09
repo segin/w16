@@ -217,8 +217,10 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         return g && group_replace_named(g, arg(a, 0));
     }
     if (!s_icmp(name, "ExitProgman")) {
-        /* ignored when Program Manager is the shell (SDK) */
-        if (!g_isshell) {
+        /* ignored when Program Manager is the shell (SDK), and under
+           [Restrictions] NoClose (observed: Program Manager stayed; the
+           other restrictions do not apply to DDE) */
+        if (!g_isshell && !g_noclose) {
             if (arg_int(a, 0))
                 SendMessage(frame, WM_CLOSE, 0, 0);
             else

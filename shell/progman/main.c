@@ -15,6 +15,8 @@ HINSTANCE g_hinst;
 HWND g_frame, g_client;
 BOOL g_autoarrange, g_minonrun, g_savesettings = TRUE;
 BOOL g_isshell;                         /* SYSTEM.INI shell= is us */
+BOOL g_norun, g_noclose, g_nosave, g_nofilemenu;   /* [Restrictions] */
+UINT g_editlevel;
 char g_ini[] = "PROGMAN.INI";
 
 static char cls_frame[] = "Progman";
@@ -32,19 +34,21 @@ static DWORD menu_closed_at;            /* GetTickCount when the menu closed */
 
 /* ---- settings ---- */
 
-/* The options as loaded: observed, the original writes an option only
-   when it changed (an untouched PROGMAN.INI keeps no such keys). */
-static BOOL loaded_autoarrange, loaded_minonrun, loaded_savesettings;
+/* Options > Auto Arrange, Minimize on Use, Save Settings on Exit:
+   observed, toggling one writes its key at once ("1" or "0"; an
+   untouched PROGMAN.INI has none of them) and Order= without leading
+   blank, even under NoSaveSettings (tests/scripts/pm/restrict*.txt). */
+static void write_order(BOOL leading);
 
 static BOOL ini_bool(const char *key, BOOL def)
 {
     return GetPrivateProfileInt(s_settings, key, def, g_ini) != 0;
 }
 
-static void ini_put_bool(const char *key, BOOL v, BOOL loaded)
+static void ini_put_option(const char *key, BOOL v)
 {
-    if (v != loaded)
-        WritePrivateProfileString(s_settings, key, v ? "1" : "0", g_ini);
+    WritePrivateProfileString(s_settings, key, v ? "1" : "0", g_ini);
+    write_order(FALSE);
 }
 
 static void group_key(char *key, int n)     /* "GroupN": N fits an int */
@@ -198,16 +202,16 @@ static void start_session(void)
     mem_free(name);
 }
 
-static void save_settings(void)
+/* Window=, Order= and the groups: on exit with Save Settings on Exit, and
+   at once with Shift+File>Exit. Observed: never under NoSaveSettings, not
+   on exit nor with Shift. */
+static void save_settings(BOOL now)
 {
     char buf[48];                       /* four ints and a digit */
     WINDOWPLACEMENT wp;
     RECT *r = &wp.rcNormalPosition;
 
-    ini_put_bool("AutoArrange", g_autoarrange, loaded_autoarrange);
-    ini_put_bool("MinOnRun", g_minonrun, loaded_minonrun);
-    ini_put_bool("SaveSettings", g_savesettings, loaded_savesettings);
-    if (!g_savesettings)
+    if (g_nosave || (!g_savesettings && !now))
         return;
 
     wp.length = sizeof wp;
@@ -230,6 +234,79 @@ static void check(int id, BOOL on)
     CheckMenuItem(GetMenu(g_frame), id, MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED));
 }
 
+/* ---- PROGMAN.INI [Restrictions] ----
+ * Observed on Windows 3.1 (tests/scripts/pm/restrict*.txt). A key is on
+ * when GetPrivateProfileInt gives non-zero ("1", "2", "-1", " 1"; "yes"
+ * is 0, off); EditLevel counts from 1 up (9 acts as 4).
+ *   NoRun           File > Run grayed.
+ *   NoClose         File > Exit and the system menu's Close grayed; Close,
+ *                   Alt+F4 and DDE ExitProgman do nothing. Windows can still
+ *                   end (ExitWindows from another program).
+ *   NoSaveSettings  Options > Save Settings on Exit grayed and unchecked;
+ *                   Window=, Order= and the groups are not saved, on exit or
+ *                   with Shift+Exit (options toggled are still written).
+ *   NoFileMenu      no File menu; its accelerators (F7, F8, Del, Alt+Enter)
+ *                   do nothing, Enter still opens.
+ *   EditLevel=1     no groups created, deleted or changed: File > New goes
+ *                   straight to Program Item Properties in an open group
+ *                   and is grayed for a minimized one; Delete is grayed for
+ *                   a group; Program Group Properties shows everything
+ *                   disabled (OK too; Cancel is the default button).
+ *   EditLevel=2     also no items created, deleted, moved or copied: New,
+ *                   Move, Copy, Delete grayed.
+ *   EditLevel=3     also the command line: in Program Item Properties the
+ *                   Command Line and Browse are disabled.
+ *   EditLevel=4     nothing changes: Program Item Properties all disabled
+ *                   but Cancel (the default) and Help.
+ * DDE commands are not restricted (CreateGroup, AddItem, DeleteItem,
+ * DeleteGroup answered as without restrictions), nor are files dropped
+ * from File Manager (added under EditLevel 2). */
+static void read_restrictions(void)
+{
+    static char s_restr[] = "Restrictions";
+    g_norun = GetPrivateProfileInt(s_restr, "NoRun", 0, g_ini) != 0;
+    g_noclose = GetPrivateProfileInt(s_restr, "NoClose", 0, g_ini) != 0;
+    g_nosave = GetPrivateProfileInt(s_restr, "NoSaveSettings", 0, g_ini) != 0;
+    g_nofilemenu = GetPrivateProfileInt(s_restr, "NoFileMenu", 0, g_ini) != 0;
+    g_editlevel = GetPrivateProfileInt(s_restr, "EditLevel", 0, g_ini);
+}
+
+/* The File menu's state for the active group. Observed (also without
+   restrictions): Move and Copy are grayed unless an open group has a
+   selected item; Open is grayed in an open group without items. */
+static void file_menu_state(HMENU m)
+{
+    HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
+    BOOL iconic = g && IsIconic(g);
+    BOOL item = g && !iconic && group_selected_name(g) != NULL;
+    BOOL grayed[7];
+    static const UINT ids[7] = { IDM_NEW, IDM_OPEN, IDM_MOVE, IDM_COPY, IDM_DELETE,
+                                 IDM_RUN, IDM_EXIT };
+    int i;
+    grayed[0] = g_editlevel >= 2 || (g_editlevel >= 1 && (!g || iconic));
+    grayed[1] = g && !iconic && !item;
+    grayed[2] = grayed[3] = g_editlevel >= 2 || !item;
+    grayed[4] = g_editlevel >= 2 || (g_editlevel >= 1 && !item);
+    grayed[5] = g_norun;
+    grayed[6] = g_noclose;
+    for (i = 0; i < 7; i++)
+        EnableMenuItem(m, ids[i], MF_BYCOMMAND | (grayed[i] ? MF_GRAYED : MF_ENABLED));
+}
+
+/* May this command run? (Accelerators reach us whatever the menu shows.) */
+static BOOL allowed(HWND hwnd, WORD id)
+{
+    HMENU m = GetMenu(hwnd);
+    UINT st;
+    if (id < IDM_NEW || id > IDM_EXIT)
+        return TRUE;
+    if (g_nofilemenu)                   /* observed: only Enter still works */
+        return id == IDM_OPEN;
+    file_menu_state(GetSubMenu(m, MENU_FILE));
+    st = GetMenuState(m, id, MF_BYCOMMAND);
+    return st == (UINT)-1 || !(st & (MF_GRAYED | MF_DISABLED));
+}
+
 /* ---- commands ---- */
 
 #ifdef PM_DEBUGLOG
@@ -243,6 +320,8 @@ static void command(HWND hwnd, WORD id)
     dbg("WM_COMMAND", id);
 #endif
 
+    if (!allowed(hwnd, id))
+        return;
     switch (id) {
     case IDM_OPEN:
         if (active)
@@ -252,21 +331,31 @@ static void command(HWND hwnd, WORD id)
         run_dialog(hwnd, (FARPROC)RunDlgProc, IDD_RUN);
         break;
     case IDM_EXIT:
-        SendMessage(hwnd, WM_CLOSE, 0, 0);
+        /* observed: with Shift held, the settings are saved and Program
+           Manager stays (UNVERIFIED: also with Save Settings on Exit off) */
+        if (GetKeyState(VK_SHIFT) < 0)
+            save_settings(TRUE);
+        else
+            SendMessage(hwnd, WM_CLOSE, 0, 0);
         break;
     case IDM_AUTOARRANGE:
         g_autoarrange = !g_autoarrange;
         check(id, g_autoarrange);
+        ini_put_option("AutoArrange", g_autoarrange);
         if (g_autoarrange && active)
             group_arrange(active);
         break;
     case IDM_MINONRUN:
         g_minonrun = !g_minonrun;
         check(id, g_minonrun);
+        ini_put_option("MinOnRun", g_minonrun);
         break;
     case IDM_SAVESETTINGS:
+        if (g_nosave)
+            break;
         g_savesettings = !g_savesettings;
         check(id, g_savesettings);
+        ini_put_option("SaveSettings", g_savesettings);
         break;
     case IDM_CASCADE:
         SendMessage(g_client, WM_MDICASCADE, 0, 0);
@@ -345,8 +434,16 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         window_menu = GetSubMenu(GetMenu(hwnd), MENU_WINDOW);
         cc.hWindowMenu = window_menu;
         cc.idFirstChild = IDM_FIRSTCHILD;
+        /* observed: with group icons below its visible area the MDI
+           client has a vertical scroll bar (style 52A00000h), so it is
+           made with MDI's scroll bars (UNVERIFIED: that the original asks
+           for both; MDI shows each only when needed) */
         g_client = CreateWindow(MDI_CLIENT_CLASS, NULL,
-                                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_BORDER,
+                                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_BORDER
+#ifndef W16_WIN2
+                                | WS_HSCROLL | WS_VSCROLL
+#endif
+                                ,
                                 0, 0, 0, 0, hwnd, (HMENU)1, g_hinst, (LPVOID)&cc);
         return g_client ? 0 : -1;
     }
@@ -360,6 +457,17 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_COMMAND:
         command(hwnd, wp);
         return 0;
+    case WM_INITMENU:
+    case WM_INITMENUPOPUP: {
+        LRESULT r = DefFrameProc(hwnd, g_client, msg, wp, lp);
+        if (msg == WM_INITMENUPOPUP && HIWORD(lp)) {     /* a system menu */
+            if (g_noclose && (HMENU)wp == GetSystemMenu(hwnd, FALSE))
+                EnableMenuItem((HMENU)wp, SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);
+        } else if (!g_nofilemenu) {
+            file_menu_state(GetSubMenu(GetMenu(hwnd), MENU_FILE));
+        }
+        return r;
+    }
     case WM_MENUSELECT:
         help_menu_select(wp, lp);
         if (LOWORD(lp) == 0xFFFF && !HIWORD(lp)) {      /* the menu closed */
@@ -370,6 +478,8 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         }
         break;
     case WM_SYSCOMMAND:
+        if ((wp & 0xFFF0) == SC_CLOSE && g_noclose && !menu_child)
+            return 0;
         if ((wp & 0xFFF0) != SC_KEYMENU && (wp & 0xFFF0) != SC_MOUSEMENU) {
             HWND child = menu_child;
             menu_child = NULL;
@@ -385,6 +495,8 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_DDE_ACK:
         return dde_message(hwnd, msg, wp, lp);
     case WM_CLOSE:
+        if (g_noclose)                  /* observed: nothing happens */
+            return 0;
         /* Observed: as the shell, Program Manager asks first, in a
            system-modal box "Exit Windows" / "This will end your Windows
            session." (OK, Cancel, information icon), then ends the
@@ -392,11 +504,11 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         if (g_isshell) {
             if (run_dialog(hwnd, (FARPROC)ExitWinDlgProc, IDD_EXITWIN) != IDOK)
                 return 0;
-            save_settings();
+            save_settings(FALSE);
             ExitWindows(0, 0);          /* returns if an application refused */
             return 0;
         }
-        save_settings();
+        save_settings(FALSE);
         DestroyWindow(hwnd);
         return 0;
     case WM_QUERYENDSESSION:
@@ -476,9 +588,9 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     g_autoarrange = ini_bool("AutoArrange", FALSE);
     g_minonrun = ini_bool("MinOnRun", FALSE);
     g_savesettings = ini_bool("SaveSettings", TRUE);
-    loaded_autoarrange = g_autoarrange;
-    loaded_minonrun = g_minonrun;
-    loaded_savesettings = g_savesettings;
+    read_restrictions();
+    if (g_nosave)                       /* observed: shown unchecked */
+        g_savesettings = FALSE;
     if (GetPrivateProfileString(s_settings, "Window", "", buf, sizeof buf, g_ini)) {
         int l = s_atoi(&p), t = s_atoi(&p), r = s_atoi(&p), b = s_atoi(&p);
         wshow = s_atoi(&p);
@@ -511,6 +623,14 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     check(IDM_AUTOARRANGE, g_autoarrange);
     check(IDM_MINONRUN, g_minonrun);
     check(IDM_SAVESETTINGS, g_savesettings);
+    if (g_nosave)
+        EnableMenuItem(GetMenu(g_frame), IDM_SAVESETTINGS, MF_BYCOMMAND | MF_GRAYED);
+    if (g_noclose)
+        EnableMenuItem(GetSystemMenu(g_frame, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);
+    if (g_nofilemenu) {                 /* observed: the menu is gone */
+        DeleteMenu(GetMenu(g_frame), MENU_FILE, MF_BYPOSITION);
+        DrawMenuBar(g_frame);
+    }
 
     /* Window= ends with a show command (observed: 1 = SW_SHOWNORMAL). The
        one Windows passes us wins if it asks for minimized. */

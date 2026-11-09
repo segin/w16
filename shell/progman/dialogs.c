@@ -196,7 +196,9 @@ BOOL CALLBACK __export AboutDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         /* free memory as ShellAbout shows it: "<n> KB Free", with
            thousands separators */
         {
-            DWORD k = GetFreeSpace(0) / 1024;
+            /* GetFreeSpace is not in 2.11 (docs/exports/KERNEL.txt): the
+               largest free block instead */
+            DWORD k = GlobalCompact(0) / 1024;
             char d[12];
             int n = 0, c = 0;
             do {
@@ -365,6 +367,28 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
 /* The group being edited by Properties, or NULL for File > New. */
 static HWND props_group;
 
+/* [Restrictions] EditLevel in the Properties dialogs (observed, see
+   main.c): the listed controls disabled; if OK is among them, Cancel
+   becomes the default button and has the focus. FALSE then: the dialog
+   procedure must not set the focus itself. */
+static BOOL restrict_dialog(HWND dlg, const int *ids, int n)
+{
+    BOOL ok_off = FALSE;
+    int i;
+    for (i = 0; i < n; i++) {
+        EnableWindow(GetDlgItem(dlg, ids[i]), FALSE);
+        if (ids[i] == IDOK)
+            ok_off = TRUE;
+    }
+    if (ok_off) {
+        SendDlgItemMessage(dlg, IDOK, BM_SETSTYLE, BS_PUSHBUTTON, TRUE);
+        SendMessage(dlg, DM_SETDEFID, IDCANCEL, 0);
+        SendDlgItemMessage(dlg, IDCANCEL, BM_SETSTYLE, BS_DEFPUSHBUTTON, TRUE);
+        SetFocus(GetDlgItem(dlg, IDCANCEL));
+    }
+    return !ok_off;
+}
+
 /* A new group (New Program Group, DDE CreateGroup): its file (as typed,
    or made from the name), its PROGMAN.INI entry, its window. */
 HWND create_group_named(const char FAR *name, const char FAR *file)
@@ -407,8 +431,11 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
     switch (msg) {
     case WM_INITDIALOG:
         if (props_group) {              /* observed: name and file shown */
+            static const int locked[] = { IDC_DESC, IDC_GROUPFILE, IDOK };
             SetDlgItemText(dlg, IDC_DESC, group_name(props_group));
             SetDlgItemText(dlg, IDC_GROUPFILE, group_path(props_group));
+            if (g_editlevel >= 1)       /* no group changes */
+                return restrict_dialog(dlg, locked, 3);
         } else {
             EnableWindow(GetDlgItem(dlg, IDOK), FALSE);   /* observed */
         }
@@ -880,6 +907,15 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
             itemprops_free(&ip);
             /* select the description, as a dialog does for its first edit */
             SendDlgItemMessage(dlg, IDC_DESC, EM_SETSEL, 0, MAKELPARAM(0, 0x7FFF));
+            if (g_editlevel >= 4) {     /* nothing may change */
+                static const int locked[] = { IDC_DESC, IDC_CMDLINE, IDC_WORKDIR, IDC_HOTKEY,
+                                              IDC_ITEMMIN, IDOK, IDC_BROWSE, IDC_CHANGEICON };
+                return restrict_dialog(dlg, locked, 8);
+            }
+            if (g_editlevel >= 3) {     /* not the command line */
+                static const int locked[] = { IDC_CMDLINE, IDC_BROWSE };
+                restrict_dialog(dlg, locked, 2);
+            }
             return TRUE;
         }
         /* observed for a new item: OK and Change Icon start disabled, and
@@ -1000,7 +1036,15 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
 
 void cmd_new(HWND frame)
 {
+    HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
     props_group = NULL;
+    if (g_editlevel >= 2)
+        return;
+    if (g_editlevel == 1) {             /* observed: items only, no question */
+        if (g && !IsIconic(g))
+            run_dialog(frame, (FARPROC)ItemPropsDlgProc, IDD_ITEMPROPS);
+        return;
+    }
     if (run_dialog(frame, (FARPROC)NewDlgProc, IDD_NEW) != IDOK)
         return;
     if (new_choice == IDC_NEWGROUP)
@@ -1107,7 +1151,7 @@ BOOL CALLBACK __export MoveCopyDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 void cmd_movecopy(HWND frame, BOOL copy_only)
 {
     HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
-    if (!g || IsIconic(g) || !group_selected_name(g))
+    if (!g || IsIconic(g) || !group_selected_name(g) || g_editlevel >= 2)
         return;
     mc_from = g;
     mc_copy = copy_only;
@@ -1156,12 +1200,16 @@ void cmd_delete(HWND frame)
     LPCSTR name;
     if (!g)
         return;
+    if (g_editlevel >= 2)
+        return;
     if (!IsIconic(g) && (name = group_selected_name(g)) != NULL) {
         if (ask(frame, IDS_DELETE, IDS_DELITEM, name, MB_YESNO | MB_ICONEXCLAMATION) == IDYES &&
             !group_delete_selected(g))
             message(frame, IDS_CANTWRITE, group_path(g));
         return;
     }
+    if (g_editlevel >= 1)               /* no group deleted */
+        return;
     if (ask(frame, IDS_DELETE, IDS_DELGROUP, group_name(g), MB_YESNO | MB_ICONEXCLAMATION) == IDYES)
         delete_group(g);
 }
