@@ -802,7 +802,7 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         /* the DPMI 0.9 exception frame: return address, error code, IP,
          * CS, FLAGS, SP, SS (words for a 16-bit client) */
         struct cregs o = *r;
-        if (dpmi_verbose) trace("[EXC %x err %x at %x:%x cr2 %x]", vec, err, r->cs, r->eip, get_cr2());
+        if (dpmi_verbose || (vec != 0x0B && vec != 6)) trace("[EXC %x err %x at %x:%x cr2 %x ds %x es %x fs %x gs %x ss:sp %x:%x ax %x bx %x nest %d]", vec, err, r->cs, r->eip, get_cr2(), r->ds, r->es, r->fs, r->gs, r->ss, r->esp, r->eax, r->ebx, exec_depth());
         pm_push(r, o.ss);
         pm_push(r, o.esp);
         pm_push(r, o.eflags);

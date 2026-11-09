@@ -141,7 +141,8 @@ extern u8 *ldt;
 extern u32 ldt_limit;
 
 void exec_v86(struct cregs *v);            /* run client code until REFRET/IRQRET */
-void exec_return(struct cregs *r);         /* that breakpoint: back to exec_v86's caller */
+void exec_return(struct cregs *r);
+int exec_depth(void);         /* that breakpoint: back to exec_v86's caller */
 void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
 void v86_farcall(struct cregs *v, int iret);
 u32 xbuf_lin(void);                        /* the transfer buffer */

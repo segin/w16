@@ -90,9 +90,10 @@ SH
     while [ $try -lt 5 ]; do
         n=$((300 + ($$ * 7 + try * 131) % 4000))
         while [ -e /tmp/.X$n-lock ] || [ -e /tmp/.X11-unix/X$n ]; do n=$((n + 1)); done
-        rc=0
-        xvfb-run -n $n -s '-screen 0 1024x768x24' "$d/shot.sh" >/dev/null 2>&1 || rc=$?
-        [ $rc = 7 ] || [ $rc = 1 -a ! -s "$d/dosbox.log" ] || break
+        xvfb-run -n $n -s '-screen 0 1024x768x24' "$d/shot.sh" >>"$d/xvfb.log" 2>&1 || echo "try $try display $n: $?" >>"$d/xvfb.log"
+        # DOSBox-X ran unless it found no X display
+        [ -s "$d/dosbox.log" ] && ! grep -q "open X11 display" "$d/dosbox.log" && break
+        rm -f "$d/s.png" "$d/dosbox.log"
         try=$((try + 1))
         sleep 1
     done
@@ -100,6 +101,7 @@ SH
     [ -f "$d/c/WINDOWS/BOOTLOG.TXT" ] && tr -d '\r' < "$d/c/WINDOWS/BOOTLOG.TXT" > "$out/$1-bootlog.txt"
     [ -f "$d/c/OUT.TXT" ] && tr -d '\r' < "$d/c/OUT.TXT" > "$out/$1-out.txt"
     [ -f "$d/com1.txt" ] && cp "$d/com1.txt" "$out/$1-com1.txt"
+    [ -f "$d/xvfb.log" ] && cp "$d/xvfb.log" "$out/$1-xvfb.log"
     [ -n "${WIN386_KEEP:-}" ] && echo "kept $d" || rm -rf "$d"
 }
 
