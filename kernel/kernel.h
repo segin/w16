@@ -256,6 +256,7 @@ void task_start(u16 t);
 void task_set_env(u16 t, u16 env);
 u16  task_boot(void);
 u16  task_boot_tdb(void);
+void module_signal(u16 hmod, u16 code);   /* USER's SignalProc: 40h, 80h */
 void task_boot_tdb_end(void);
 u16  task_pdb(void);                    /* the running task's PDB, or 0 */
 module FAR *task_module(void);          /* the running task's, or NULL */

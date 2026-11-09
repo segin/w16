@@ -552,6 +552,7 @@ static void sweep(void)
         if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m)) {
             if (NE_HDR(m)->flags & MDBF_WEP)
                 call_wep(m);
+            module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP */
             destroy(m);
             m = module_first;
             continue;
@@ -934,8 +935,10 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
        0 makes LoadLibrary return 0, and the DLL's WEP runs before it is
        freed. A DLL without DGROUP gets DS = DX = DI = its hModule.
        UNVERIFIED: WEP's argument after a failed initialisation (0 here). */
-    if (h.flags & NEF_LIBRARY)
+    if (h.flags & NEF_LIBRARY) {
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
+        module_signal(m->ne_sel, 0x40); /* Pietrek: before its init */
+    }
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
         if (!defer_add(m->ne_sel)) {
             *err = LE_NOMEM;

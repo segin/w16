@@ -15,11 +15,15 @@
 #     -t SECS    run time limit (default 60)
 #     -f SRC=DST copy SRC to C:\DST as well (repeatable), e.g. a test
 #                program; DST "-" deletes SRC (a path under C:\) instead
-#     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable)
+#     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable);
+#                -i WIN.INI:S:K=V edits WIN.INI instead
 #     -s PNG     also take a screenshot after SECS seconds (DOSBox on a
 #                virtual X display, xvfb-run, never the user's desktop)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
+# A plain WIN (without /S) in the scratch copy picks 386 Enhanced mode on
+# a 386 and stops with "Cannot find or load required file KRNL386.EXE",
+# since KRNL386.EXE is deleted there: that is how 3.1 picks its mode.
 #     -x CPU     run in DOSBox-X (which checks segment limits) emulating CPU
 #                (386, or 286 for a real 80286) instead of DOSBox
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
@@ -74,7 +78,11 @@ printf '%s\n' "$files" | while IFS= read -r f; do
 done
 printf '%s\n' "$inis" | while IFS= read -r f; do
     [ -n "$f" ] || continue
-    python3 - "$work/c/WINDOWS/SYSTEM.INI" "$f" <<'PY'
+    case $f in
+    WIN.INI:*) ini=WIN.INI f=${f#WIN.INI:} ;;
+    *) ini=SYSTEM.INI ;;
+    esac
+    python3 - "$work/c/WINDOWS/$ini" "$f" <<'PY'
 import sys
 path, spec = sys.argv[1], sys.argv[2]
 sec, kv = spec.split(':', 1)

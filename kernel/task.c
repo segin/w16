@@ -885,3 +885,39 @@ void task_boot_tdb_end(void)
     boot_tdb = 0;
     GlobalFree(t);
 }
+
+/* ---- signals to USER ----
+   Pietrek (ch. 3, ExitCall; Schulman, SetTaskSignalProc): when a task
+   ends, KERNEL first calls the task's signal procedure (TDB 2Ah, which
+   USER's InitApp sets to its SignalProc) with code 20h, on the task's
+   stack, before freeing anything; USER then destroys the task's windows,
+   queue and the like (AppExit). A DLL that is loaded or freed while USER
+   is there gets USER's SignalProc (USER.314) called directly with 40h or
+   80h and the hModule. UNVERIFIED: the DI argument (FFFFh as on a fault)
+   and the order relative to the DLL's own initialisation and WEP. */
+extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
+
+void __cdecl task_signal_exit(void)
+{
+    u16 t = cur_task;
+    u32 p;
+    taskx FAR *x;
+    if (!t || (boot_tdb && t == boot_tdb))
+        return;
+    p = *(u32 FAR *)MK_FP(t, 0x2A);
+    if (!p)
+        return;
+    *(u32 FAR *)MK_FP(t, 0x2A) = 0;     /* once */
+    x = tx_of(t);
+    sig_call(p, t, 0x20, 0xFFFF, x ? x->dg_hnd : 0, TW(t, TDB_QUEUE));
+}
+
+void module_signal(u16 hmod, u16 code)
+{
+    module FAR *u = module_find("USER");
+    u16 sel, off;
+    int is_const;
+    if (!u || u->ne_sel == hmod || !module_entry(u, 314, &sel, &off, &is_const) || is_const)
+        return;
+    sig_call(((u32)sel << 16) | off, hmod, code, 0, 0, 0);
+}
