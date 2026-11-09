@@ -33,7 +33,8 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
-           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o
+           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o \
+           $(B)/kernel/toolhelp.o $(B)/kernel/khook.o $(B)/kernel/kmisc2.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
@@ -95,7 +96,7 @@ $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
-KBOOT_C := winboot dosx kmisc selector fault
+KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
@@ -281,6 +282,27 @@ $(DOS)/TK35.EXE: $(B)/tests/start.o $(B)/tests/tk35.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk35.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk35.map file { $(B)/tests/start.o $(B)/tests/tk35.o }
+
+# TK50.EXE: the KERNEL exports w16 lacked, at register level (tk50s.asm)
+$(B)/tests/tk50.o: tests/apps/tk50ref.h tests/apps/tk50ref286.h tests/apps/tklog.h
+$(DOS)/TK50.EXE: $(B)/tests/start.o $(B)/tests/tk50.o $(B)/tests/tk50s.o tests/apps/app.lnk tests/apps/tk50.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk50.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk50.map file { $(B)/tests/start.o $(B)/tests/tk50.o $(B)/tests/tk50s.o }
+
+# TK51.EXE: THHOOK, ToolHelpHook and TOOLHELP.DLL (tk51s.asm, tk50s.asm);
+# TK51C.EXE, the program it starts, only ends
+$(B)/tests/tk51.o: tests/apps/tk51ref.h tests/apps/tklog.h
+$(DOS)/TK51.EXE: $(B)/tests/start.o $(B)/tests/tk51.o $(B)/tests/tk51s.o $(B)/tests/tk50s.o \
+                tests/apps/app.lnk tests/apps/tk51.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk51.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk51.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk51.o $(B)/tests/tk51s.o $(B)/tests/tk50s.o }
+$(DOS)/TK51C.EXE: $(B)/tests/start.o $(B)/tests/tk51c.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk51c.map file { $(B)/tests/start.o $(B)/tests/tk51c.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
