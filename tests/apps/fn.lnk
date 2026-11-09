@@ -1,0 +1,4 @@
+# wlink directives for the FN* font probes: app.lnk with a larger stack
+# (GDI enumerates fonts, TrueType ones too, on the caller's stack)
+@tests/apps/app.lnk
+option stack=16k
