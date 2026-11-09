@@ -1,0 +1,58 @@
+; NP3: open from the command line, edit, Save, Save As (new name, then
+; over an existing file), New, a NUL byte, a lower-case name
+; files SMALL.TXT BIN.DAT FOX.TXT
+; get SMALL.TXT OUT1.TXT FOX.TXT
+; log
+run NOTEPAD.EXE C:\SMALL.TXT
+wait 2500
+info
+text
+snap C:\SMALL.BMP
+type Added
+menu f
+char s
+wait 1000
+dump
+menu f
+char n
+wait 800
+type abc
+key 0D
+type second line
+menu f
+char s
+wait 1500
+dump
+snap C:\SAVEAS.BMP
+type C:\OUT1.TXT
+key 0D
+wait 1500
+dump
+snap C:\SAVED.BMP
+type x
+menu f
+char a
+wait 1500
+dump
+type C:\FOX.TXT
+key 0D
+wait 1000
+dump
+snap C:\OVERW.BMP
+char y
+wait 1000
+dump
+close
+wait 800
+run NOTEPAD.EXE C:\BIN.DAT
+wait 2500
+dump
+text
+close
+wait 800
+run NOTEPAD.EXE c:\small.txt
+wait 2500
+dump
+snap C:\LOWER.BMP
+close
+wait 800

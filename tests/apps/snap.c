@@ -23,6 +23,11 @@
  *                            (else the active window's rightmost one) to
  *                            screen (x,y); dblitem n double-clicks it
  *     place CLASS x y cx cy  move the top-level window of that class
+ *     info                   log the active top-level window in detail:
+ *                            class data, client rectangle, children
+ *                            relative to it (font, edit state), scroll
+ *                            bars, every menu item's state
+ *     text                   log the whole text of the focus window
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -528,10 +533,175 @@ static char *word(char *p, int *v)
     return p;
 }
 #endif
+/* ---- info: one window in detail ---- */
+
+static void outkv(const char *k, int v)
+{
+    out(" ");
+    out(k);
+    out("=");
+    outint(v);
+}
+
+static void info_font(HWND w)
+{
+    HFONT f = (HFONT)SendMessage(w, WM_GETFONT, 0, 0);
+    LOGFONT lf;
+    if (!f) {
+        out(" font=system");
+        return;
+    }
+    GetObject(f, sizeof lf, (LPSTR)&lf);
+    out(" font=\"");
+    out(lf.lfFaceName);
+    out("\"");
+    outkv("h", lf.lfHeight);
+    outkv("w", lf.lfWidth);
+    outkv("wt", lf.lfWeight);
+    outkv("pf", lf.lfPitchAndFamily);
+}
+
+static void info_menu(HMENU m, int depth)
+{
+    int n = GetMenuItemCount(m), k, i;
+    char t[64];
+    for (k = 0; k < n; k++) {
+        UINT id = GetMenuItemID(m, k);
+        UINT st = GetMenuState(m, k, MF_BYPOSITION);
+        GetMenuString(m, k, t, sizeof t, MF_BYPOSITION);
+        out("MENU ");
+        for (i = 0; i < depth; i++)
+            out("  ");
+        out("\"");
+        out(t);
+        out("\"");
+        outkv("id", (int)id);
+        out(" state=");
+        outhex(st, 4);
+        out("\r\n");
+        if (id == (UINT)-1)
+            info_menu(GetSubMenu(m, k), depth + 1);
+    }
+}
+
+static void info(void)
+{
+    HWND w = top_window(), c;
+    RECT r;
+    POINT p;
+    char cls[64];
+    int lo, hi;
+    if (!w) {
+        out(" -> no window");
+        return;
+    }
+    out("\r\n");
+    GetClassName(w, cls, sizeof cls);
+    out("INFO class=\"");
+    out(cls);
+    out("\" clsstyle=");
+    outhex(GetClassWord(w, GCW_STYLE), 4);
+    outkv("wndextra", GetClassWord(w, GCW_CBWNDEXTRA));
+    outkv("clsextra", GetClassWord(w, GCW_CBCLSEXTRA));
+    out(" brush=");
+    outhex(GetClassWord(w, GCW_HBRBACKGROUND), 4);
+    out(" icon=");
+    outhex(GetClassWord(w, GCW_HICON), 4);
+    out(" cursor=");
+    outhex(GetClassWord(w, GCW_HCURSOR), 4);
+    out(" hinst=");
+    outhex(GetWindowWord(w, GWW_HINSTANCE), 4);
+    GetClientRect(w, &r);
+    outkv("clientw", r.right);
+    outkv("clienth", r.bottom);
+    p.x = p.y = 0;
+    ClientToScreen(w, &p);
+    outkv("clientx", p.x);
+    outkv("clienty", p.y);
+    GetScrollRange(w, SB_VERT, &lo, &hi);
+    outkv("vmin", lo);
+    outkv("vmax", hi);
+    outkv("vpos", GetScrollPos(w, SB_VERT));
+    GetScrollRange(w, SB_HORZ, &lo, &hi);
+    outkv("hmin", lo);
+    outkv("hmax", hi);
+    outkv("hpos", GetScrollPos(w, SB_HORZ));
+    info_font(w);
+    out("\r\n");
+    for (c = GetWindow(w, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
+        GetClassName(c, cls, sizeof cls);
+        GetWindowRect(c, &r);
+        ScreenToClient(w, (POINT FAR *)&r.left);
+        ScreenToClient(w, (POINT FAR *)&r.right);
+        out("INFO   child class=\"");
+        out(cls);
+        out("\" id=");
+        outhex(GetWindowWord(c, GWW_ID), 4);
+        out(" style=");
+        outhex(GetWindowLong(c, GWL_STYLE), 8);
+        outkv("x", r.left);
+        outkv("y", r.top);
+        outkv("w", r.right - r.left);
+        outkv("h", r.bottom - r.top);
+        out(" hinst=");
+        outhex(GetWindowWord(c, GWW_HINSTANCE), 4);
+        info_font(c);
+        if (!lstrcmpi(cls, "Edit")) {
+            DWORD sel = SendMessage(c, EM_GETSEL, 0, 0);
+            SendMessage(c, EM_GETRECT, 0, (LPARAM)(RECT FAR *)&r);
+            outkv("fl", r.left);
+            outkv("ft", r.top);
+            outkv("fr", r.right);
+            outkv("fb", r.bottom);
+            outkv("lines", (int)SendMessage(c, EM_GETLINECOUNT, 0, 0));
+            outkv("selstart", LOWORD(sel));
+            outkv("selend", HIWORD(sel));
+            outkv("modify", (int)SendMessage(c, EM_GETMODIFY, 0, 0));
+            outkv("len", (int)SendMessage(c, WM_GETTEXTLENGTH, 0, 0));
+#ifndef SNAP_WIN2
+            outkv("first", (int)SendMessage(c, EM_GETFIRSTVISIBLELINE, 0, 0));
+#endif
+            outkv("canundo", (int)SendMessage(c, EM_CANUNDO, 0, 0));
+            {   /* EM_GETTHUMB (WM_USER+14): "internal" in the 3.1 DDK's
+                   WINDOWS.H (Schulman, Undocumented Windows, ch. 7) */
+                DWORD th = SendMessage(c, WM_USER + 14, 0, 0);
+                outkv("vthumb", LOWORD(th));
+                outkv("hthumb", HIWORD(th));
+                /* the same code as a scroll request */
+                outkv("vsthumb", (int)SendMessage(c, WM_VSCROLL, WM_USER + 14, 0));
+                outkv("hsthumb", (int)SendMessage(c, WM_HSCROLL, WM_USER + 14, 0));
+            }
+        }
+        out("\r\n");
+    }
+    if (GetMenu(w))
+        info_menu(GetMenu(w), 0);
+}
+
+/* The whole text of the focus window, into the log. */
+static void text_of_focus(void)
+{
+    HWND w = target();
+    WORD n = w ? (WORD)SendMessage(w, WM_GETTEXTLENGTH, 0, 0) : 0;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (DWORD)n + 1);
+    LPSTR p = h ? GlobalLock(h) : NULL;
+    if (!p) {
+        out(" -> failed");
+        return;
+    }
+    SendMessage(w, WM_GETTEXT, n + 1, (LPARAM)p);
+    out(" len=");
+    outint(n);
+    out("\r\nTEXT[");
+    log_write(p, n);
+    out("]");
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
 
 /* ---- script ---- */
 
-static char script[4096];
+static char script[16384];
 
 static void run_line(char *l)
 {
@@ -653,6 +823,10 @@ static void run_line(char *l)
         }
         pump(500);
 #endif
+    } else if (same(l, "info")) {
+        info();
+    } else if (same(l, "text")) {
+        text_of_focus();
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);

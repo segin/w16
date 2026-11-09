@@ -78,6 +78,12 @@ static void diag_write(const char FAR *s)
     dos(0x3E00, fh, 0, 0, 0, &cf);
 }
 
+/* DiagQuery (KERNEL.339, toolhelp.c): writing BOOTLOG.TXT? */
+int diag_query(void)
+{
+    return diag;
+}
+
 static void diag_init(void)
 {
     int cf;
@@ -301,6 +307,7 @@ u16 winboot(void)
     tail[1 + n - i] = '\r';
     diag_load_start(shell);
     m = module_load_program_init(shell, &err, &libinit);
+    thhook_set_shell(m ? m->ne_sel : 0);   /* THHOOK 28h (toolhelp.c) */
     ad = m ? NE_HDR(m)->auto_data : 0;
     if (m && (!ad || ad > m->seg_count ||
               !task_create(m, m->seg[ad - 1].sel, m->seg[ad - 1].hnd, 0,

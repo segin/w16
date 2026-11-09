@@ -20,6 +20,7 @@ typedef struct ED {
     WORD   sel0, sel1;          /* selection; sel1 is the caret */
     WORD   first;               /* first visible character (single line) */
     int    topline;             /* first visible line (multi-line) */
+    int    xoff;                /* pixels scrolled off at the left (multi-line) */
     WORD   limit;
     HFONT  font;
     WORD   focus;
@@ -113,6 +114,8 @@ static int line_of(PED e, WORD pos)
     return n;
 }
 
+#define EM_GETTHUMB (WM_USER + 14)
+
 static int line_count(PED e)
 {
     return line_of(e, e->len) + 1;
@@ -195,7 +198,7 @@ static void paint(HWND h, PED e, HDC hdc)
             WORD st = (estyle(h) & ES_MULTILINE) ? line_start(e, line) : e->first;
             WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : e->len - e->first;
             int y = (estyle(h) & ES_MULTILINE) ? (line - e->topline) * lh : inset(h, e);
-            int x = inset(h, e);
+            int x = inset(h, e) - ((estyle(h) & ES_MULTILINE) ? e->xoff : 0);
             WORD a = st, z = st + n;
             if (y > r.bottom)
                 break;
@@ -256,6 +259,8 @@ static void place_caret(HWND h, PED e)
     } else
         st = e->first;
     x = inset(h, e) + (e->sel1 > st ? text_x(hdc, e, st, e->sel1 - st) : 0);
+    if (estyle(h) & ES_MULTILINE)
+        x -= e->xoff;
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
     SetCaretPos(x, y);
@@ -286,6 +291,99 @@ static void scroll_to_caret(HWND h, PED e)
     }
 }
 
+/* ---- scrolling a multi-line control (probe US6, Windows 3.1):
+   its scroll bars always run 0-100; the vertical one's position is the
+   first visible line * 100 / (lines - 1), and the first visible line
+   goes down to the last line; WM_VSCROLL's SB_THUMBTRACK and
+   SB_THUMBPOSITION take a position on that scale (40 of 51 lines: line
+   20); a page is the lines shown less one; EM_LINESCROLL's low word is
+   lines, its high word characters. The control notifies EN_VSCROLL
+   (and EN_HSCROLL after EM_LINESCROLL) once the position has changed;
+   not while the thumb is tracked. UNVERIFIED: the horizontal scale (here
+   the widest line's width is 100) and the width of a character step
+   (here the font's average width). ---- */
+static int char_w(HWND h, PED e)
+{
+    HDC hdc = GetDC(h);
+    TEXTMETRIC tm;
+    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    GetTextMetrics(hdc, &tm);
+    SelectObject(hdc, old);
+    ReleaseDC(h, hdc);
+    return tm.tmAveCharWidth > 0 ? tm.tmAveCharWidth : 1;
+}
+
+static int widest(HWND h, PED e)
+{
+    HDC hdc = GetDC(h);
+    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    int line, n = line_count(e), w = 0;
+    for (line = 0; line < n; line++) {
+        WORD st = line_start(e, line);
+        int x = text_x(hdc, e, st, line_len(e, st));
+        if (x > w)
+            w = x;
+    }
+    SelectObject(hdc, old);
+    ReleaseDC(h, hdc);
+    return w;
+}
+
+static void set_scrollbars(HWND h, PED e)
+{
+    DWORD s = estyle(h);
+    int n;
+    if (!(s & ES_MULTILINE))
+        return;
+    n = line_count(e);
+    if (s & WS_VSCROLL) {
+        SetScrollRange(h, SB_VERT, 0, 100, FALSE);
+        SetScrollPos(h, SB_VERT, n > 1 ? (int)((long)e->topline * 100 / (n - 1)) : 0, TRUE);
+    }
+    if (s & WS_HSCROLL) {
+        int w = widest(h, e);
+        SetScrollRange(h, SB_HORZ, 0, 100, FALSE);
+        SetScrollPos(h, SB_HORZ, w > 0 ? (int)((long)e->xoff * 100 / w) : 0, TRUE);
+    }
+}
+
+/* scroll to first line top and left offset xoff; notify as asked (when
+   something moved, or always with force) */
+static void scroll_to(HWND h, PED e, int top, int xoff, BOOL nv, BOOL nh, BOOL force)
+{
+    int n = line_count(e);
+    if (top > n - 1)
+        top = n - 1;
+    if (top < 0)
+        top = 0;
+    if (xoff < 0)
+        xoff = 0;
+    if (top != e->topline || xoff != e->xoff) {
+        e->topline = top;
+        e->xoff = xoff;
+        HideCaret(h);
+        InvalidateRect(h, NULL, TRUE);
+        place_caret(h, e);
+        ShowCaret(h);
+        set_scrollbars(h, e);
+    } else if (!force)
+        nv = nh = FALSE;
+    if (nv)
+        notify(h, e, EN_VSCROLL);
+    if (nh)
+        notify(h, e, EN_HSCROLL);
+}
+
+static int visible_lines(HWND h, PED e)
+{
+    RECT r;
+    int lh = line_height(h, e);
+    GetClientRect(h, &r);
+    /* UNVERIFIED: 3 rows kept out (US6: an 82-row client area of
+       16-pixel lines pages by 3, so 4 lines count as shown) */
+    return lh > 0 ? (r.bottom - 3) / lh : 1;
+}
+
 static void refresh(HWND h, PED e)
 {
     /* invalidated, not painted now: a dialog's focus goes to its edit
@@ -297,6 +395,7 @@ static void refresh(HWND h, PED e)
     InvalidateRect(h, NULL, TRUE);
     place_caret(h, e);
     ShowCaret(h);
+    set_scrollbars(h, e);
 }
 
 static void replace_sel(HWND h, PED e, LPCSTR s)
@@ -335,7 +434,8 @@ static WORD pos_from_x(HWND h, PED e, int x, int y)
         n = e->len - st;
     }
     for (i = 0; i < n; i++)
-        if (inset(h, e) + text_x(hdc, e, st, i + 1) - (text_x(hdc, e, st + i, 1) / 2) > x)
+        if (inset(h, e) - ((estyle(h) & ES_MULTILINE) ? e->xoff : 0) +
+            text_x(hdc, e, st, i + 1) - (text_x(hdc, e, st + i, 1) / 2) > x)
             break;
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
@@ -573,11 +673,49 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_GETFIRSTVISIBLELINE:
         return (estyle(h) & ES_MULTILINE) ? e->topline : e->first;
     case EM_LINESCROLL:
-        e->topline += (int)HIWORD(lp);
-        if (e->topline < 0)
-            e->topline = 0;
-        InvalidateRect(h, NULL, TRUE);
+        if (estyle(h) & ES_MULTILINE)
+            scroll_to(h, e, e->topline + (int)LOWORD(lp), e->xoff + (int)HIWORD(lp) * char_w(h, e),
+                      TRUE, TRUE, FALSE);
         return 1;
+    case WM_VSCROLL:
+    case WM_HSCROLL: {
+        BOOL v = msg == WM_VSCROLL;
+        int n = line_count(e), page = visible_lines(h, e) - 1, cw = char_w(h, e), top = e->topline,
+            x = e->xoff, pos = (int)LOWORD(lp);
+        if (!(estyle(h) & ES_MULTILINE))
+            return 0;
+        if (page < 1)
+            page = 1;
+        switch (wp) {
+        case SB_LINEUP: if (v) top--; else x -= cw; break;
+        case SB_LINEDOWN: if (v) top++; else x += cw; break;
+        case SB_PAGEUP: if (v) top -= page; else x -= 8 * cw; break;
+        case SB_PAGEDOWN: if (v) top += page; else x += 8 * cw; break;
+        case SB_TOP: if (v) top = 0; else x = 0; break;
+        case SB_BOTTOM: if (v) top = n - 1; else x = widest(h, e); break;
+        case SB_THUMBTRACK:
+        case SB_THUMBPOSITION:
+            if (v)
+                top = (int)((long)pos * (n - 1) / 100);
+            else
+                x = (int)((long)pos * widest(h, e) / 100);
+            break;
+        default:
+            return 0;
+        }
+        /* SB_THUMBPOSITION notifies even when the thumb ended where it
+           was tracked to (US6) */
+        scroll_to(h, e, top, x, v && wp != SB_THUMBTRACK, !v && wp != SB_THUMBTRACK,
+                  wp == SB_THUMBPOSITION);
+        return 0;
+    }
+    case EM_GETTHUMB:
+        /* WM_USER+14, internal in the 3.1 DDK's WINDOWS.H (Schulman ch.
+           7 lists it): probe US6 got 0 from Windows 3.1's edit control
+           every time - scrolled, after thumb messages, from inside
+           EN_VSCROLL/EN_HSCROLL, and while the thumb was dragged with
+           mouse_event input */
+        return 0;
     case EM_GETRECT:
         GetClientRect(h, (RECT __far *)lp);
         return 0;

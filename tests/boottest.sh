@@ -17,7 +17,26 @@
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
+#   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
+#              (tests/win386.sh: Microsoft's KRNL386 and the rest, against
+#              Microsoft's WIN386.EXE; both must reach Final USER init).
+#              Not in the default set yet: w16's boot is intermittent (an
+#              occasional #GP in a hardware interrupt handler, ARCHITECTURE.md
+#              12.3); run it by name: tests/boottest.sh win386
+#   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
+#              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
+#              screen and Windows comes back; against Microsoft's WINOLDAP
+#              doing the same                       must be 0
+#   winoldapk  the same on w16's KRNL286            must be 0
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
+#   allw16full every w16 part at once: WIN.COM, DOSX, KRNL286, USER, GDI,
+#              PROGMAN, WINOLDAP, WIN87EM and the four fonts: must boot
+#              (no pixel comparison: w16's PROGMAN and fonts differ)
+#   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
+#              the virtual display, through the drivers' event procedures)
+#              all through the boot and after, then a menu by keyboard:
+#              w16's USER and GDI on w16's KRNL286 against all-Microsoft
+#              under the same input; the screens after must be identical
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
 # "INITDONE=Final USER" fails whatever the pixels say.
@@ -40,7 +59,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi shell shellk tree}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -76,6 +95,24 @@ check() {
 refdone=
 ref() { [ -n "$refdone" ] || { boot ref -r; refdone=1; }; }
 
+# the WINOLDAP cases: a PIF for COMMAND.COM /C ECHO HI, started by WIN.INI run=
+woa=$root/build/dos/WINOLDAP.MOD
+woaref=
+woafiles() {
+    [ -f "$out/HI.PIF" ] && return
+    refwin=$root/.tools/ref/win31/cdrive/WINDOWS
+    python3 "$root/tools/mkpif.py" "$refwin/_DEFAULT.PIF" "$out/HI.PIF" \
+        'title=Echo Hi' 'program=COMMAND.COM' 'params=/C ECHO HI'
+    cp "$refwin/WIN.INI" "$out/WIN.INI"
+    python3 "$root/tests/scripts/iniset.py" "$out/WIN.INI" 'windows:run=C:\HI.PIF'
+}
+woaref() {
+    [ -n "$woaref" ] && return
+    woafiles
+    boot woaref -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+    woaref=1
+}
+
 for c in $cases; do
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
@@ -96,12 +133,51 @@ for c in $cases; do
             check shell shell ref ;;
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shellk shellk ref ;;
+    win386)
+        if "$root/tests/win386.sh" -t "$secs" -o "$out/win386" > "$out/win386.txt" 2>&1 \
+           && grep -q '^INITDONE=Final USER' "$out/win386/w16-bootlog.txt" \
+           && grep -q '^INITDONE=Final USER' "$out/win386/ms-bootlog.txt"; then
+            echo "ok   win386: 0 pixels"
+        else
+            echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
+        fi ;;
+    winoldap)  woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+                   -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
+               check winoldap winoldap woaref ;;
+    winoldapk) woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+                   -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
+               check winoldapk winoldapk woaref ;;
     tree)
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"
         else
             echo "FAIL tree: see $out/tree.txt"; fails=$((fails + 1))
         fi ;;
+    allw16full)
+        fon=$root/build/fonts
+        boot allw16full -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
+            -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+            -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON"
+        if booted allw16full; then echo "ok   allw16full: boots"
+        else echo "FAIL allw16full: did not boot (see $out/allw16full.txt)"; fails=$((fails + 1)); fi ;;
+    input)
+        scr=$root/tests/scripts/input/bootinput.txt
+        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-w16" \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-booted 02-menu 03-closed; do
+            if [ ! -f "$out/input-w16/$s.png" ] || [ ! -f "$out/input-ref/$s.png" ]; then
+                r="no $s screen"; break
+            fi
+            n=$(magick compare -metric AE "$out/input-w16/$s.png" "$out/input-ref/$s.png" "$out/input-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ ($out/input-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   input: 0 pixels"
+        else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done

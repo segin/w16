@@ -1,0 +1,26 @@
+; Run Notepad from Program Manager, type, close it (tests/inputrun.sh)
+key alt+f
+key r
+sleep 4
+type notepad
+key Return
+sleep 8
+shot 01-notepad
+type hello
+sleep 1
+shot 02-typed
+key alt+F4
+sleep 2
+shot 03-save
+key n
+sleep 2
+shot 04-closed
+key alt+space
+sleep 1
+shot 05-sysmenu
+key Escape
+sleep 1
+key alt+h
+sleep 1
+shot 06-help
+key Escape

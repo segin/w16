@@ -108,7 +108,7 @@ static void set_text(PWND w, LPCSTR s)
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
    frame off screen) */
-static void minmax(PWND w, MINMAXINFO __far *mm)
+void minmax(PWND w, MINMAXINFO __far *mm)
 {
     int cxf = sysmet[SM_CXFRAME], cyf = sysmet[SM_CYFRAME];
     if (!(w->style & WS_THICKFRAME)) {
@@ -399,8 +399,8 @@ BOOL destroy_window(HWND h)
                        SWP_NOSIZE | SWP_NOZORDER);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    if (h == hwndCapture || IsChild(h, hwndCapture))
-        hwndCapture = 0;
+    if (hwndCapture && (h == hwndCapture || IsChild(h, hwndCapture)))
+        ReleaseCapture();       /* the input queue goes back with it */
     destroy_tree(h);
     if (hwndFocus && !valid_wnd(hwndFocus))
         hwndFocus = 0;

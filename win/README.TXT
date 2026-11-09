@@ -7,6 +7,7 @@ w16 repository's LICENSE):
 
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
+  NOTEPAD.EXE             Notepad
   SYSTEM\KRNL286.EXE      KERNEL
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
@@ -40,6 +41,10 @@ overwriting the files above:
 
 Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
 it is there and w16's KRNL286.EXE only when it is not.
+
+Notepad also needs COMMDLG.DLL (SYSTEM) for its Open, Save As, Find and
+Print Setup dialogs, and uses your NOTEPAD.HLP (Windows directory) for
+Help; w16 ships no help text.
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.

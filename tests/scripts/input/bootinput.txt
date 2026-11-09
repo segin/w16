@@ -1,0 +1,143 @@
+; real input all through the boot and after (tests/inputrun.sh -b 1;
+; tests/boottest.sh case input): pointer motion and Shift presses while
+; USER initialises and Program Manager starts, then a menu by keyboard
+; and the pointer moved over the desktop
+; the first click makes DOSBox take the mouse (until then it sends none)
+click 1
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+sleep 10
+shot 01-booted
+home
+move 150 200
+sleep 1
+key alt+f
+sleep 2
+shot 02-menu
+key Escape
+key Escape
+sleep 1
+shot 03-closed
