@@ -1,0 +1,14 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Mouse: Home on the tracking bar (fastest: 4 6 2), End on the double
+; click bar (slowest: 900)
+run CONTROL.EXE MOUSE
+wait 4000
+key 24
+wait 300
+key 09
+wait 300
+key 23
+wait 300
+snap M1.BMP
+key 0D
+wait 2000

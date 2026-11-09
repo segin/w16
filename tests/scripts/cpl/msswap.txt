@@ -1,0 +1,21 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI windows:MouseTrails=7
+; Mouse: swap the buttons, turn trails off (MouseTrails=-7); OK. Then
+; swap back in a second session: SwapMouseButtons=no
+run CONTROL.EXE MOUSE
+wait 4000
+alt s
+wait 300
+alt t
+wait 300
+snap M1.BMP
+key 0D
+wait 2000
+run CONTROL.EXE MOUSE
+wait 3000
+alt s
+wait 300
+alt t
+wait 300
+key 0D
+wait 2000

@@ -17,6 +17,11 @@ mainwin/M1 1444
 mainwin/S0 2972
 mainwin/S1 2972
 mmcpl/S0 0
+msends/M1 227
+msmove/M0 201
+msmove/M1 201
+msstart/M0 201
+msswap/M1 201
 newinq/M1 0
 newinq/S0 0
 newinq3/S0 0

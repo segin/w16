@@ -47,6 +47,9 @@ static void not_yet(HWND parent, int applet)
 static void run(HWND parent, int applet)
 {
     switch (applet) {
+    case AP_MOUSE:
+        mouse_applet(parent);
+        break;
     case AP_KEYBOARD:
         keyboard_applet(parent);
         break;

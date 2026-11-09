@@ -60,3 +60,29 @@ BEGIN
     CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 130, 28, 36, 14
     CONTROL "&Help", IDC_HELP, "button", 0x50030000, 130, 48, 36, 14
 END
+DLG_MOUSE DIALOG 10, 10, 200, 108
+STYLE 0x80C800C0
+CAPTION "Mouse"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Mouse Tracking Speed", -1, "button", 0x50000007, 4, 4, 96, 36
+    CONTROL "Slow", -1, "static", 0x50020000, 6, 16, 44, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 54, 16, 44, 9
+    CONTROL "", IDC_MS_TRACK, "scrollbar", 0x50030000, 6, 26, 92, 12
+    CONTROL "&Double Click Speed", -1, "button", 0x50000007, 4, 44, 96, 60
+    CONTROL "Slow", -1, "static", 0x50020000, 6, 56, 44, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 54, 56, 44, 9
+    CONTROL "", IDC_MS_DBLCLK, "scrollbar", 0x50030000, 6, 66, 92, 12
+    CONTROL "", IDC_MS_TEST, "static", 0x50000007, 31, 80, 36, 16
+    CONTROL "TEST", -1, "static", 0x50020081, 33, 84, 32, 9
+    CONTROL "&Swap Left/Right Buttons", IDC_MS_SWAP, "button", 0x50030002, 104, 78, 158, 12
+    CONTROL "Mouse &Trails", IDC_MS_TRAILS, "button", 0x50030003, 104, 92, 158, 12
+    CONTROL "", IDC_MS_BOX, "static", 0x50000007, 108, 21, 42, 50
+    CONTROL "", IDC_MS_LBOX, "static", 0x50000007, 108, 21, 21, 14
+    CONTROL "", IDC_MS_RBOX, "static", 0x50000007, 129, 21, 21, 14
+    CONTROL "L", IDC_MS_L, "static", 0x50020081, 109, 24, 19, 8
+    CONTROL "R", IDC_MS_R, "static", 0x50020081, 130, 24, 19, 8
+    CONTROL "OK", IDOK, "button", 0x50030001, 160, 4, 36, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 160, 20, 36, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 160, 40, 36, 14
+END

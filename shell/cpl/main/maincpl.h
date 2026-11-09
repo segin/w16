@@ -55,6 +55,7 @@
 #define DLG_KEYBOARD        5
 #define DLG_MOUSE           6
 
+
 /* common control IDs */
 #define IDC_HELP            119
 
@@ -62,6 +63,18 @@
 #define IDC_KB_TEST         600
 #define IDC_KB_SPEED        601
 #define IDC_KB_DELAY        603
+
+/* Mouse */
+#define IDC_MS_SWAP         500
+#define IDC_MS_L            503
+#define IDC_MS_R            504
+#define IDC_MS_BOX          505
+#define IDC_MS_LBOX         506
+#define IDC_MS_RBOX         507
+#define IDC_MS_TRAILS       509
+#define IDC_MS_TEST         529
+#define IDC_MS_DBLCLK       531
+#define IDC_MS_TRACK        532
 
 /* the spin control class of the original ("cpArrow"): a narrow box with
    an up and a down arrow, which sends its parent WM_VSCROLL SB_LINEUP or
@@ -76,5 +89,6 @@ void cpl_help(HWND dlg, int applet);
 
 /* applets */
 void keyboard_applet(HWND parent);
+void mouse_applet(HWND parent);
 
 #endif

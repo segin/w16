@@ -991,7 +991,7 @@ $(DOS)/CONTROL.EXE: $(B)/shell/start.o $(B)/shell/control/control.o \
 	    file { $(B)/shell/start.o $(B)/shell/control/control.o }
 # MAIN.CPL (shell/cpl/main): the applets of the original's MAIN.CPL
 MAINCPL_O := $(B)/shell/cpl/libentry.o $(B)/shell/cpl/main/main.o \
-             $(B)/shell/cpl/main/keyboard.o
+             $(B)/shell/cpl/main/keyboard.o $(B)/shell/cpl/main/mouse.o
 dos: $(DOS)/MAIN.CPL
 $(B)/shell/cpl/main/%.o: shell/cpl/main/%.c shell/cpl/main/maincpl.h shell/cpl/cpl.h
 	@mkdir -p $(@D)

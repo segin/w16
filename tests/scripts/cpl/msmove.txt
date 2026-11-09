@@ -1,0 +1,15 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Mouse: tracking one step faster (4 12 2), double click one step slower
+; (452 -> 468); OK
+run CONTROL.EXE MOUSE
+wait 4000
+snap M0.BMP
+key 27
+wait 300
+key 09
+wait 300
+key 25
+wait 300
+snap M1.BMP
+key 0D
+wait 2000
