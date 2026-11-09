@@ -45,6 +45,23 @@ Every piece of knowledge in w16 must have a recorded source. When a fact, struct
 | Test-only tools (DOSBox, HDPMI16, the user-supplied reference Windows copies) | **Not shipped** | Used to build and test only; kept out of the repository (`.tools/`). |
 | Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not licensed by MIT. Use only to describe compatibility, never as the product's name. |
 
+**Format facts versus data (the user's rule, 2026-11-09).** Windows' file formats may be parsed: NE, LE and W3 headers, import and export tables, resource tables, and the structure of resources. What a compatible replacement needs to look and behave identically may be reproduced in w16's own source files. Wine follows the same practice. This covers:
+- dialog-template layouts: control positions, IDs, classes and styles;
+- menu structures and command IDs;
+- accelerator tables;
+- user-visible UI text: labels, menu items, messages and error texts;
+- icon, cursor and bitmap dimensions;
+- export names and ordinals;
+- the observed contents of INI files.
+
+These are written in w16's own `.rc` and source files.
+
+What may **not** be copied out of Microsoft files:
+- **Code, of any kind.**
+- **Artwork:** bitmaps, icons, cursors and font glyphs. w16 draws its own.
+- **Data tables and constants beyond the interface,** even when they are only numbers. Example: Clock's circle table. Such values are computed, then corrected by black-box observation (screen pixels, GDI call logs), with the evidence recorded. Any copied data is removed from git history before merging.
+- **Microsoft branding:** product names, copyright lines and logos. These are never presented as w16's own. A Microsoft branding string in a UI is used only with the user's explicit decision for that string.
+
 Notes:
 - The MIT licence on the MS-DOS repository has no explicit patent grant. Any relevant patents from the 1980s and early 1990s have expired.
 - MS-DOS 4.0 was co-developed with IBM, and IBM copyright notices appear in its sources. Microsoft published it under MIT, and the project relies on that in good faith.
