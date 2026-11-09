@@ -1,0 +1,18 @@
+; WR1: a new document: type a line, Save As C:\WR1.WRI (the Save As
+; dialog's layout, the saved file, WIN.INI [MSWrite] Backup=0)
+run WRITE.EXE
+wait 3000
+snap C:\S1.BMP
+type Hello world
+wait 500
+snap C:\S2.BMP
+menu f
+char a
+wait 1500
+snap C:\S3.BMP
+type C:\WR1.WRI
+key 0D
+wait 2000
+snap C:\S4.BMP
+close
+wait 1000

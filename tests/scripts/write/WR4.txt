@@ -1,0 +1,57 @@
+; WR4: Indents, Tabs and Page Layout dialogs (values typed in)
+run WRITE.EXE
+wait 3000
+type para one indented
+menu p
+char i
+wait 800
+snap C:\I1.BMP
+dump
+type 1
+key 09
+type -0.5
+key 09
+type 0.25
+key 0D
+wait 800
+key 0D
+type tab	test
+menu d
+char t
+wait 800
+snap C:\T1.BMP
+type 1.5
+key 09
+key 09
+type 3
+key 09
+char
+key 0D
+wait 800
+key 0D
+type after tabs
+menu d
+char p
+wait 800
+snap C:\L1.BMP
+dump
+type 2
+key 09
+type 1.5
+key 09
+type 1
+key 09
+type 0.75
+key 09
+type 1.25
+key 0D
+wait 800
+snap C:\L2.BMP
+menu f
+char a
+wait 1500
+type C:\WR4.WRI
+key 0D
+wait 2000
+close
+wait 1000

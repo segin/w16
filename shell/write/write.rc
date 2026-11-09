@@ -1,0 +1,480 @@
+/*
+ * write.rc - w16 Write resources.
+ *
+ * Menus, accelerators, dialog layouts, control IDs and the plain UI
+ * strings match Windows 3.1's Write as observed (its resource templates
+ * read as data with tools/nerc.py, and SNAP.EXE screenshots). The icon is
+ * our own (tools/mkwriteicon.py). Strings that name Microsoft products
+ * are our own wording.
+ */
+#include <windows.h>
+#include "write.h"
+
+/* the original's dialogs: modal frame, popup, caption, system menu; the
+   3.x build gives them the 8-point "Helv" font as the original does */
+#define WR_DLGSTYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+
+IDI_WRITE ICON "write.ico"
+
+MW_MENU MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New", IDM_NEW
+        MENUITEM "&Open...", IDM_OPEN
+        MENUITEM "&Save", IDM_SAVE
+        MENUITEM "Save &As...", IDM_SAVEAS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...", IDM_PRINT
+        MENUITEM "P&rint Setup...", IDM_PRINTSETUP
+        MENUITEM "R&epaginate...", IDM_REPAGINATE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z", IDM_UNDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X", IDM_CUT
+        MENUITEM "&Copy\tCtrl+C", IDM_COPY
+        MENUITEM "&Paste\tCtrl+V", IDM_PASTE
+#ifndef W16_WIN2
+        MENUITEM "Paste Sp&ecial...", IDM_PASTESPECIAL
+        MENUITEM "Paste &Link", IDM_PASTELINK
+        MENUITEM SEPARATOR
+        MENUITEM "Lin&ks...", IDM_LINKS
+        MENUITEM "&Object...", IDM_OBJECT
+        MENUITEM "&Insert Object...", IDM_INSERTOBJ
+#endif
+        MENUITEM SEPARATOR
+        MENUITEM "&Move Picture", IDM_MOVEPICT
+        MENUITEM "&Size Picture", IDM_SIZEPICT
+    END
+    POPUP "Fi&nd"
+    BEGIN
+        MENUITEM "&Find...", IDM_FIND
+        MENUITEM "Repeat &Last Find\tF3", IDM_FINDAGAIN
+        MENUITEM "R&eplace...", IDM_REPLACE
+        MENUITEM SEPARATOR
+        MENUITEM "&Go To Page...\tF4", IDM_GOTO
+    END
+    POPUP "&Character"
+    BEGIN
+        MENUITEM "Re&gular\tF5", IDM_REGULAR
+        MENUITEM SEPARATOR
+        MENUITEM "&Bold\tCtrl+B", IDM_BOLD
+        MENUITEM "&Italic\tCtrl+I", IDM_ITALIC
+        MENUITEM "&Underline\tCtrl+U", IDM_UNDERLINE
+        MENUITEM "Su&perscript", IDM_SUPER
+        MENUITEM "Subs&cript", IDM_SUB
+        MENUITEM SEPARATOR
+        MENUITEM "&Reduce Font", IDM_REDUCE
+        MENUITEM "&Enlarge Font", IDM_ENLARGE
+        MENUITEM SEPARATOR
+        MENUITEM "&Fonts...", IDM_FONTS
+    END
+    POPUP "&Paragraph"
+    BEGIN
+        MENUITEM "&Normal", IDM_NORMAL
+        MENUITEM SEPARATOR
+        MENUITEM "&Left", IDM_LEFT
+        MENUITEM "&Centered", IDM_CENTER
+        MENUITEM "&Right", IDM_RIGHT
+        MENUITEM "&Justified", IDM_JUSTIFY
+        MENUITEM SEPARATOR
+        MENUITEM "&Single Space", IDM_SINGLE
+        MENUITEM "&1 1/2 Space", IDM_ONEHALF
+        MENUITEM "&Double Space", IDM_DOUBLE
+        MENUITEM SEPARATOR
+        MENUITEM "&Indents...", IDM_INDENTS
+    END
+    POPUP "&Document"
+    BEGIN
+        MENUITEM "&Header...", IDM_HEADER
+        MENUITEM "&Footer...", IDM_FOOTER
+        MENUITEM SEPARATOR
+        MENUITEM "&Ruler On", IDM_RULER
+        MENUITEM "&Tabs...", IDM_TABS
+        MENUITEM SEPARATOR
+        MENUITEM "&Page Layout...", IDM_PAGELAYOUT
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents", IDM_HELPCONTENTS
+        MENUITEM "&Search for Help on...", IDM_HELPSEARCH
+        MENUITEM "&How to Use Help", IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Write...", IDM_ABOUT
+    END
+END
+
+/* observed (MW_ACCTB): F1 sends 62192 (F2F0h), which no menu item has;
+   F2 Copy (UNVERIFIED purpose, as observed), F3-F8 as the menu shows */
+MW_ACCTB ACCELERATORS
+BEGIN
+    VK_F1, 62192, VIRTKEY
+    VK_F2, IDM_COPY, VIRTKEY
+    VK_F3, IDM_FINDAGAIN, VIRTKEY
+    VK_F4, IDM_GOTO, VIRTKEY
+    VK_F5, IDM_REGULAR, VIRTKEY
+    VK_F6, IDM_BOLD, VIRTKEY
+    VK_F7, IDM_ITALIC, VIRTKEY
+    VK_F8, IDM_UNDERLINE, VIRTKEY
+    "^B", IDM_BOLD
+    "^I", IDM_ITALIC
+    "^U", IDM_UNDERLINE
+    "^Z", IDM_UNDO
+    "^X", IDM_CUT
+    "^C", IDM_COPY
+    "^V", IDM_PASTE
+END
+
+STRINGTABLE
+BEGIN
+    IDS_UNDO, "&Undo "
+    IDS_EDITING, "Editing"
+    IDS_FORMATTING, "Formatting"
+    IDS_TYPING, "Typing"
+    IDS_RULERON, "&Ruler On"
+    IDS_RULEROFF, "&Ruler Off"
+    IDS_HELPFILE, "WRITE.HLP"
+    IDS_PAGE, "page"
+    IDS_LOADING, "Loading..."
+    IDS_REPLACEEXIST, "Replace Existing %s?"
+    IDS_TEXTDOC, "Text document"
+    IDS_WORDDOC, "Word for DOS document"
+    IDS_OPENTITLE, "Open"
+    IDS_SAVEASTITLE, "Save As"
+    IDS_EXTWRI, "WRI"
+    IDS_EXTDOC, "DOC"
+    IDS_EXTTXT, "TXT"
+    IDS_FLTTXT, "Text Files (*.TXT)"
+    IDS_FLTWRI, "Write Files (*.WRI)"
+    IDS_FLTDOC, "Word for DOS (*.DOC)"
+    IDS_FLTDOCTXT, "Word for DOS/Txt Only (*.DOC)"
+    IDS_FLTWRI30, "3.0 Write (*.WRI)"
+    IDS_FLTALL, "All Files (*.*)"
+    IDS_BACKUP, "&Backup"
+    IDS_SEARCHDONE, "Search operation complete."
+    IDS_NOTFOUND, "Text not found."
+    IDS_NOREPLACE, "No replacements were made."
+    IDS_CONVERTQ, "%s\nDo you want to convert this file to Write format?"
+    IDS_READONLY, "The file is read-only.\n\nUse a different filename."
+    IDS_CORRUPT, "This document is corrupt and cannot be accessed."
+    IDS_BADNAME, "%s\nThis filename is not valid."
+    IDS_CANTREAD, "%s\nCannot read this file.\n\nEither something has happened to the network or possibly the file has been renamed or moved."
+    IDS_DAMAGED, "The document you are opening may be damaged. Write may not run correctly if this document is opened.\n\nDo you want open this document?"
+    IDS_NOPAGE, "No such page."
+    IDS_NOTNUMBER, "Not a valid number."
+    IDS_FONTSIZE, "You can only specify a font size between 4 and 127 points."
+    IDS_WHOLENUMBER, "You can only specify a whole number between 1 and 32767."
+    IDS_BADMEASURE, "Measurement not in expected range.\n\nPlease enter a valid positive number."
+    IDS_MEASUREPOS, "Measurement must be a number larger than zero."
+    IDS_MARGINSBIG, "The margin values are too large and don't fit the dimensions of the page.\n\nEnter a smaller number to decrease the margins."
+    IDS_NOTFOUNDFILE, "%s\nFile not found.\n\nPlease verify that the correct path and filename are given."
+    IDS_SAVECHANGES, "%s\nThis document has changed.\n\nSave current changes?"
+    IDS_NOMEMORY, "Not enough memory for Write to complete this operation.\n\nQuit one or more applications to increase available memory, and then try again."
+    IDS_NOPATH, "Path does not exist.\n\nPlease verify that the correct path is given."
+    IDS_CANTSAVE, "Cannot save file.\n\nMake sure that the file or disk is not damaged."
+    IDS_PAGE1, "Page 1"
+    IDS_WRITE, "Write"
+    IDS_UNTITLED, "(Untitled)"
+    IDS_HEADERNAME, "HEADER"
+    IDS_FOOTERNAME, "FOOTER"
+    IDS_INCH, "\""
+    IDS_CM, " cm"
+END
+
+IDD_CONVERT DIALOG 22, 22, 220, 60
+STYLE WR_DLGSTYLE
+CAPTION "Write"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    ICON 32515, -1, 15, 8, 0, 0
+    CONTROL "", 99, "Static", 0x50020001L, 35, 14, 180, 20
+    CONTROL "&Convert", 1, "Button", 0x50030001L, 25, 39, 48, 14
+    CONTROL "&No Conversion", 7, "Button", 0x50030000L, 81, 39, 65, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 155, 39, 40, 14
+END
+
+IDD_PRINTING DIALOG 20, 20, 90, 64
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Write"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Now Printing", -1, "Static", 0x50020001L, 0, 8, 90, 8
+    CONTROL "", 100, "Static", 0x50020081L, 0, 18, 90, 8
+    CONTROL "Cancel", 2, "Button", 0x50030001L, 29, 44, 32, 14
+END
+
+IDD_REPAGINATE DIALOG 90, 100, 155, 45
+STYLE WR_DLGSTYLE
+CAPTION "Repaginate Document"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Confirm Page &Breaks", 3, "Button", 0x50030002L, 5, 15, 100, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 110, 5, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 110, 25, 40, 14
+END
+
+IDD_REPAGINATING DIALOG 15, 50, 94, 50
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Write"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Repaginating", -1, "Static", 0x50020001L, 5, 5, 84, 8
+    CONTROL "document", -1, "Static", 0x50020001L, 5, 14, 84, 8
+    CONTROL "Cancel", 2, "Button", 0x50030001L, 27, 28, 40, 14
+END
+
+IDD_CONFIRMBREAK DIALOG 90, 120, 192, 50
+STYLE WR_DLGSTYLE
+CAPTION "Repaginating Document"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Use up and down buttons", -1, "Static", 0x50020000L, 5, 5, 92, 8
+    CONTROL "to move page break", -1, "Static", 0x50020000L, 5, 14, 72, 8
+    CONTROL "if necessary,", -1, "Static", 0x50020000L, 5, 23, 52, 8
+    CONTROL "then confirm.", -1, "Static", 0x50020000L, 5, 32, 52, 8
+    CONTROL "&Up", 5, "Button", 0x50030000L, 102, 8, 40, 14
+    CONTROL "&Down", 6, "Button", 0x50030000L, 102, 28, 40, 14
+    CONTROL "&Confirm", 1, "Button", 0x50030001L, 147, 8, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 147, 28, 40, 14
+END
+
+IDD_KEEPBREAK DIALOG 90, 100, 135, 58
+STYLE WR_DLGSTYLE
+CAPTION "Repaginating Document"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    ICON 32515, -1, 5, 5, 0, 0
+    CONTROL "Would you like to keep", -1, "Static", 0x50020000L, 30, 7, 92, 12
+    CONTROL "this existing page break?", -1, "Static", 0x50020000L, 30, 19, 100, 12
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 7, 35, 35, 14
+    CONTROL "&Keep", 1, "Button", 0x50030001L, 49, 35, 35, 14
+    CONTROL "&Remove", 4, "Button", 0x50030000L, 91, 35, 35, 14
+END
+
+IDD_FIND DIALOG 30, 73, 236, 62
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Find"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 8, 42, 8
+    CONTROL "", 7, "Edit", 0x50830080L, 47, 7, 128, 12
+    CONTROL "Match &Whole Word Only", 5, "Button", 0x50030002L, 4, 26, 100, 12
+    CONTROL "Match &Case", 6, "Button", 0x50010002L, 4, 42, 64, 12
+    CONTROL "&Find Next", 1, "Button", 0x50030001L, 182, 5, 50, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 182, 23, 50, 14
+END
+
+IDD_REPLACE DIALOG 36, 44, 257, 80
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Replace"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 9, 48, 8
+    CONTROL "", 7, "Edit", 0x50830080L, 54, 7, 114, 12
+    CONTROL "Re&place With:", -1, "Static", 0x50000000L, 4, 26, 48, 8
+    CONTROL "", 8, "Edit", 0x50830080L, 54, 24, 114, 12
+    CONTROL "Match &Whole Word Only", 5, "Button", 0x50030002L, 5, 46, 104, 12
+    CONTROL "Match &Case", 6, "Button", 0x50010002L, 5, 62, 59, 12
+    CONTROL "&Find Next", 1, "Button", 0x50030001L, 174, 4, 77, 14
+    CONTROL "&Replace", 9, "Button", 0x50030000L, 174, 21, 77, 14
+    CONTROL "Replace &All", 4, "Button", 0x50030000L, 174, 38, 77, 14
+    CONTROL "C&lose", 2, "Button", 0x50030000L, 174, 55, 77, 14
+END
+
+IDD_GOTO DIALOG 87, 63, 95, 40
+STYLE WR_DLGSTYLE
+CAPTION "Go To"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Page Number:", -1, "Static", 0x50020000L, 5, 7, 55, 12
+    CONTROL "", 3, "Edit", 0x50810080L, 69, 5, 21, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 5, 22, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 50, 22, 40, 14
+END
+
+IDD_FONTS2 DIALOG 80, 36, 180, 100
+STYLE WR_DLGSTYLE
+CAPTION "Fonts"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "Font &Name:", -1, "Static", 0x50020000L, 5, 5, 45, 12
+    CONTROL "", 3, "Edit", 0x50810080L, 5, 16, 125, 12
+    CONTROL "&Fonts:", -1, "Static", 0x50020000L, 5, 33, 24, 12
+    CONTROL "", 4, "Listbox", 0x50A10003L, 5, 47, 105, 48
+    CONTROL "&Sizes:", -1, "Static", 0x50020000L, 115, 41, 24, 12
+    CONTROL "", 6, "Listbox", 0x50A10003L, 115, 55, 24, 40
+    CONTROL "&Point", -1, "Static", 0x50020000L, 144, 61, 20, 12
+    CONTROL "", 5, "Edit", 0x50810080L, 144, 83, 30, 12
+    CONTROL "Size:", -1, "Static", 0x50020000L, 144, 70, 20, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 135, 5, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 135, 25, 40, 14
+END
+
+IDD_INDENTS DIALOG 28, 36, 150, 52
+STYLE WR_DLGSTYLE
+CAPTION "Indents"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Left Indent:", -1, "Static", 0x50020000L, 3, 7, 48, 12
+    CONTROL "", 3, "Edit", 0x50810080L, 56, 5, 40, 12
+    CONTROL "&First Line:", -1, "Static", 0x50020000L, 3, 22, 44, 12
+    CONTROL "", 4, "Edit", 0x50810080L, 56, 20, 40, 12
+    CONTROL "&Right Indent:", -1, "Static", 0x50020000L, 3, 37, 52, 12
+    CONTROL "", 5, "Edit", 0x50810080L, 56, 35, 40, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 105, 8, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 105, 27, 40, 14
+END
+
+IDD_HEADER DIALOG 80, 110, 228, 42
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Page Header"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Distance from Top:", -1, "Static", 0x50020000L, 5, 7, 70, 12
+    CONTROL "", 5, "Edit", 0x50810080L, 85, 5, 33, 12
+    CONTROL "&Print on First Page", 6, "Button", 0x50030002L, 133, 5, 90, 12
+    CONTROL "&Insert Page #", 3, "Button", 0x50030000L, 12, 22, 64, 14
+    CONTROL "&Clear", 4, "Button", 0x50030000L, 88, 22, 30, 14
+    CONTROL "&Return to Document", 1, "Button", 0x50030001L, 130, 22, 85, 14
+END
+
+IDD_FOOTER DIALOG 80, 110, 228, 42
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Page Footer"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Distance from Bottom:", -1, "Static", 0x50020000L, 5, 7, 80, 12
+    CONTROL "", 5, "Edit", 0x50810080L, 95, 5, 33, 12
+    CONTROL "&Print on First Page", 6, "Button", 0x50030002L, 133, 5, 90, 12
+    CONTROL "&Insert Page #", 3, "Button", 0x50030000L, 12, 22, 64, 14
+    CONTROL "&Clear", 4, "Button", 0x50030000L, 88, 22, 30, 14
+    CONTROL "&Return to Document", 1, "Button", 0x50030001L, 130, 22, 85, 14
+END
+
+IDD_TABS DIALOG 26, 41, 278, 97
+STYLE WR_DLGSTYLE
+CAPTION "Tabs"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Positions:", -1, "Static", 0x50020000L, 3, 7, 40, 12
+    CONTROL "", 4, "Edit", 0x50830080L, 45, 5, 38, 12
+    CONTROL "&Decimal:", -1, "Static", 0x50020000L, 3, 22, 40, 12
+    CONTROL ".", 16, "Button", 0x50030002L, 51, 20, 18, 12
+    CONTROL "", 5, "Edit", 0x50830080L, 83, 5, 38, 12
+    CONTROL ".", 17, "Button", 0x50030002L, 89, 20, 18, 12
+    CONTROL "", 6, "Edit", 0x50830080L, 121, 5, 38, 12
+    CONTROL ".", 18, "Button", 0x50030002L, 127, 20, 18, 12
+    CONTROL "", 7, "Edit", 0x50830080L, 159, 5, 38, 12
+    CONTROL ".", 19, "Button", 0x50030002L, 165, 20, 18, 12
+    CONTROL "", 8, "Edit", 0x50830080L, 197, 5, 38, 12
+    CONTROL ".", 20, "Button", 0x50030002L, 203, 20, 18, 12
+    CONTROL "", 9, "Edit", 0x50830080L, 235, 5, 38, 12
+    CONTROL ".", 21, "Button", 0x50030002L, 241, 20, 18, 12
+    CONTROL "&Positions:", -1, "Static", 0x50020000L, 3, 42, 40, 12
+    CONTROL "", 10, "Edit", 0x50830080L, 45, 40, 38, 12
+    CONTROL "&Decimal:", -1, "Static", 0x50020000L, 3, 57, 40, 12
+    CONTROL ".", 22, "Button", 0x50030002L, 51, 55, 18, 12
+    CONTROL "", 11, "Edit", 0x50830080L, 83, 40, 38, 12
+    CONTROL ".", 23, "Button", 0x50030002L, 89, 55, 18, 12
+    CONTROL "", 12, "Edit", 0x50830080L, 121, 40, 38, 12
+    CONTROL ".", 24, "Button", 0x50030002L, 127, 55, 18, 12
+    CONTROL "", 13, "Edit", 0x50830080L, 159, 40, 38, 12
+    CONTROL ".", 25, "Button", 0x50030002L, 165, 55, 18, 12
+    CONTROL "", 14, "Edit", 0x50830080L, 197, 40, 38, 12
+    CONTROL ".", 26, "Button", 0x50030002L, 203, 55, 18, 12
+    CONTROL "", 15, "Edit", 0x50830080L, 235, 40, 38, 12
+    CONTROL ".", 27, "Button", 0x50030002L, 241, 55, 18, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 20, 75, 50, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 90, 75, 50, 14
+    CONTROL "Clear &All", 3, "Button", 0x50030000L, 160, 75, 50, 14
+END
+
+IDD_PAGELAYOUT DIALOG 26, 30, 180, 110
+STYLE WR_DLGSTYLE
+CAPTION "Page Layout"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    CONTROL "&Start Page Numbers At:", -1, "Static", 0x50020000L, 5, 7, 88, 12
+    CONTROL "", 3, "Edit", 0x50810080L, 95, 5, 30, 12
+    CONTROL "Margins:", -1, "Static", 0x50020000L, 5, 33, 40, 12
+    CONTROL "&Left:", -1, "Static", 0x50020000L, 12, 48, 20, 12
+    CONTROL "", 4, "Edit", 0x50810080L, 35, 46, 40, 12
+    CONTROL "&Right:", -1, "Static", 0x50020000L, 85, 48, 30, 12
+    CONTROL "", 5, "Edit", 0x50810080L, 117, 46, 40, 12
+    CONTROL "&Top:", -1, "Static", 0x50020000L, 12, 65, 20, 12
+    CONTROL "", 6, "Edit", 0x50810080L, 35, 63, 40, 12
+    CONTROL "&Bottom:", -1, "Static", 0x50020000L, 85, 65, 30, 12
+    CONTROL "", 7, "Edit", 0x50810080L, 117, 63, 40, 12
+    CONTROL "Measurements:", -1, "Static", 0x50020000L, 5, 84, 63, 12
+    CONTROL "&inch", 8, "Button", 0x50030004L, 12, 94, 27, 12
+    CONTROL "&cm", 9, "Button", 0x50000004L, 44, 94, 26, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 135, 5, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 135, 23, 40, 14
+END
+
+IDD_MARGINS DIALOG 50, 20, 235, 65
+STYLE WR_DLGSTYLE
+CAPTION "Write"
+#ifndef W16_WIN2
+FONT 8, "Helv"
+#endif
+BEGIN
+    ICON 32515, -1, 5, 5, 0, 0
+    CONTROL "Current printer cannot print outside these margins", -1, "Static", 0x50020000L, 30, 5, 200, 12
+    CONTROL "Left:", -1, "Static", 0x50020000L, 30, 17, 20, 12
+    CONTROL "", 3, "Static", 0x50020000L, 60, 17, 40, 12
+    CONTROL "Right:", -1, "Static", 0x50020000L, 130, 17, 24, 12
+    CONTROL "", 4, "Static", 0x50020000L, 168, 17, 40, 12
+    CONTROL "Top:", -1, "Static", 0x50020000L, 30, 29, 16, 12
+    CONTROL "", 5, "Static", 0x50020000L, 60, 29, 40, 12
+    CONTROL "Bottom:", -1, "Static", 0x50020000L, 130, 29, 28, 12
+    CONTROL "", 6, "Static", 0x50020000L, 168, 29, 40, 12
+    CONTROL "OK", 1, "Button", 0x50010001L, 97, 44, 40, 14
+END
+
+#ifdef W16_WIN2
+/* the 2.x build's Open / Save As (no COMMDLG on 2.x) */
+IDD_OPEN2 DIALOG 20, 20, 180, 44
+STYLE WR_DLGSTYLE
+CAPTION "Write"
+BEGIN
+    CONTROL "File &Name:", -1, "Static", 0x50020000L, 5, 7, 45, 10
+    CONTROL "", 3, "Edit", 0x50810080L, 52, 5, 123, 12
+    CONTROL "OK", 1, "Button", 0x50030001L, 40, 24, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x50030000L, 100, 24, 40, 14
+END
+#endif

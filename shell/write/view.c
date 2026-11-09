@@ -1,0 +1,1202 @@
+/*
+ * view.c - w16 Write: the document window. Lines, painting, the caret,
+ * the selection, scrolling, mouse and keyboard.
+ *
+ * Observed on 3.1 (WR1-WR4 screenshots): text for left indent 0 starts
+ * XP0 pixels into the document window, the first line YP0 below its top;
+ * the caret is Write's own (the original imports no caret calls), a
+ * 2-pixel bar the height of the line, blinking at the caret blink rate;
+ * the end of the document shows the end mark (character A4h in the last
+ * text's font) after the last character.
+ */
+#include "write.h"
+
+#define XP0         20                  /* calibrated, WR1 */
+#define YP0         4
+#define CARET_W     2
+#define TIMER_CARET 1
+
+HWND g_docwnd;
+DWORD g_selFirst, g_selLim;
+ATOM32 g_insChp;
+BOOL g_insChpValid;
+
+static DWORD cpTop;                     /* first cp of the top line */
+static DWORD selAnchor;                 /* the fixed end while extending */
+static BOOL caretOn, caretShown, caretDefer;
+static int caretX, caretY, caretH;
+static int dpiX = 96, dpiY = 96;
+static int xpScroll;                    /* horizontal scroll, pixels */
+static BOOL dragging;
+
+/* ---- fonts: a growable cache keyed by the decoded CHP ---- */
+typedef struct {
+    WORD ftc;
+    BYTE hps, bold, italic, underline;
+    HFONT h;
+    int ascent, descent, height, overhang;  /* ascent includes the external leading */
+    int tmAscent;
+    int width[256];
+} FONTC;
+
+/* each entry its own fixed local block (never moves); the table of
+   pointers grows as needed */
+static FONTC **fonttab;
+static int nfonts;
+
+static FONTC *font_for(const CHPX *c)
+{
+    FONTC *f, **t;
+    int i;
+    LOGFONT lf;
+    HDC dc;
+    TEXTMETRIC tm;
+    FFN FAR *ffn;
+    for (i = 0; i < nfonts; i++) {
+        f = fonttab[i];
+        if (f->ftc == c->ftc && f->hps == c->hps && f->bold == c->bold &&
+            f->italic == c->italic && f->underline == c->underline)
+            return f;
+    }
+    f = (FONTC *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(FONTC));
+    if (!f)
+        return nfonts ? fonttab[0] : NULL;
+    t = (FONTC **)(fonttab ? LocalReAlloc((HLOCAL)fonttab, (nfonts + 1) * sizeof(FONTC *), LMEM_MOVEABLE)
+                           : LocalAlloc(LMEM_FIXED, sizeof(FONTC *)));
+    if (!t) {
+        LocalFree((HLOCAL)f);
+        return nfonts ? fonttab[0] : NULL;
+    }
+    fonttab = t;
+    fonttab[nfonts++] = f;
+    f->ftc = c->ftc;
+    f->hps = c->hps;
+    f->bold = c->bold;
+    f->italic = c->italic;
+    f->underline = c->underline;
+    m_set(&lf, 0, sizeof lf);
+    lf.lfHeight = -MulDiv(c->hps, dpiY, 144);
+    lf.lfWeight = c->bold ? FW_BOLD : FW_NORMAL;
+    lf.lfItalic = c->italic;
+    lf.lfUnderline = c->underline;
+    ffn = font_get(&g_doc, c->ftc);
+    lf.lfPitchAndFamily = ffn->ffid;
+    s_cpy(lf.lfFaceName, ffn->name, LF_FACESIZE);
+    f->h = CreateFontIndirect(&lf);
+    dc = GetDC(g_docwnd);
+    SelectObject(dc, f->h);
+    GetTextMetrics(dc, &tm);
+    GetCharWidth(dc, 0, 255, f->width);
+    SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    ReleaseDC(g_docwnd, dc);
+    /* the external leading goes above the text (WR8: 12-point Arial,
+       ascent 15 + leading 1) */
+    f->ascent = tm.tmAscent + tm.tmExternalLeading;
+    f->tmAscent = tm.tmAscent;
+    f->descent = tm.tmDescent;
+    f->height = tm.tmHeight + tm.tmExternalLeading;
+    f->overhang = tm.tmOverhang;
+    return f;
+}
+
+static void fonts_free(void)
+{
+    int i;
+    for (i = 0; i < nfonts; i++) {
+        DeleteObject(fonttab[i]->h);
+        LocalFree((HLOCAL)fonttab[i]);
+    }
+    if (fonttab)
+        LocalFree((HLOCAL)fonttab);
+    fonttab = NULL;
+    nfonts = 0;
+}
+
+/* the raise of super- and subscripts: 4 pixels for hpsPos 4 at 10 and
+   at 24 points (WR8). UNVERIFIED: the formula; a pixel per half point
+   at 96 dpi fits what was seen */
+static int pos_px(int hpsPos)
+{
+    return MulDiv(hpsPos, dpiY, 96);
+}
+
+static int tw2px(long tw)
+{
+    return (int)((tw * dpiX + (tw >= 0 ? 720 : -720)) / 1440);
+}
+
+/* ---- line layout ---- */
+
+typedef struct {
+    DWORD cpFirst, cpLim;               /* cpLim includes a CR LF */
+    DWORD para;
+    int xLeft;                          /* first character, doc pixels */
+    int width;                          /* drawn width */
+    int height, ascent;
+    int nspaces, extra;                 /* justification */
+    BOOL endMark;                       /* the document's end is here */
+    BOOL paraEnd;                       /* last line of its paragraph */
+    BOOL picture;                       /* a picture paragraph */
+} LINE;
+
+static SEPX sep;
+
+static void props_at(DWORD cp, CHPX *c)
+{
+    DWORD f, l;
+    ATOM32 a;
+    run_at(&g_doc, cp, &f, &l, &a);
+    chp_decode(&g_doc, a, c);
+}
+
+/* the width of one character at x (tabs need the position) */
+static int tab_stop(const PAPX *p, int x, int xIndent0)
+{
+    int i, t;
+    for (i = 0; i < p->ntabs; i++) {
+        t = xIndent0 + tw2px(p->tab[i].dxa);
+        if (t > x)
+            return t;
+    }
+    /* default stops every half inch from the margin (UNVERIFIED) */
+    t = tw2px(720);
+    return xIndent0 + ((x - xIndent0) / t + 1) * t;
+}
+
+/* Lay out the line that starts at cp (a line start). */
+static void layout_line(DWORD cp, LINE *ln)
+{
+    DWORD pf, pl, pi, c, brk = 0, lim;
+    ATOM32 pa;
+    PAPX pap;
+    int x, xStart, xMax, xBrk = 0, spaces = 0, spacesBrk = 0;
+    int asc = 0, desc = 0, ht = 0;
+    CHPX chp;
+    FONTC *f = NULL;
+    DWORD runLim = 0, runFirst;
+    ATOM32 ra;
+    BOOL haveBrk = FALSE;
+    pi = para_at(&g_doc, cp, &pf, &pl, &pa);
+    pap_decode(&g_doc, pa, &pap);
+    ln->cpFirst = cp;
+    ln->para = pi;
+    ln->picture = FALSE;
+    if (pap.fGraphics && pl <= g_doc.cpMac) {
+        /* a picture: the whole paragraph, one line its height
+           (UNVERIFIED: the original splits tall pictures into bands) */
+        PICT pic;
+        pict_read(pf, pl, &pic);
+        ln->cpFirst = pf;
+        ln->cpLim = pl;
+        ln->picture = TRUE;
+        ln->paraEnd = TRUE;
+        ln->endMark = FALSE;
+        ln->xLeft = XP0 + tw2px((long)pap.dxaLeft + pic.dxaOffset);
+        /* sizes rounded to pixels; pictures start a pixel left of where
+           text does (WR7: 608 x 295 twips show as 41 x 20 at x 27, text
+           at 28; UNVERIFIED: why) */
+        ln->xLeft--;
+        ln->width = tw2px(MulDiv(pic.dxaSize, pic.mx, 1000));
+        ln->height = ln->ascent = MulDiv(MulDiv(pic.dyaSize, pic.my, 1000), dpiY, 1440);
+        ln->nspaces = ln->extra = 0;
+        return;
+    }
+    xStart = XP0 + tw2px(pap.dxaLeft + (cp == pf ? pap.dxaLeft1 : 0));
+    if (xStart < XP0)
+        xStart = XP0;
+    xMax = XP0 + tw2px((long)sep.dxaText - pap.dxaRight);
+    x = xStart;
+    lim = pl > g_doc.cpMac ? g_doc.cpMac : pl;      /* text of the paragraph */
+    ln->endMark = FALSE;
+    ln->paraEnd = FALSE;
+    for (c = cp; c < lim; c++) {
+        BYTE ch = doc_ch(&g_doc, c);
+        int w;
+        if (c >= runLim) {
+            run_at(&g_doc, c, &runFirst, &runLim, &ra);
+            chp_decode(&g_doc, ra, &chp);
+            f = font_for(&chp);
+            if (f) {
+                int up = pos_px(chp.hpsPos);
+                if (f->ascent + up > asc)
+                    asc = f->ascent + up;
+                if (f->descent - up > desc)
+                    desc = f->descent - up;
+            }
+        }
+        if (ch == '\r' || ch == '\n') {
+            if (c + 1 < lim && ch == '\r' && doc_ch(&g_doc, c + 1) == '\n')
+                c++;
+            c++;
+            ln->paraEnd = TRUE;
+            break;
+        }
+        if (ch == '\t')
+            w = tab_stop(&pap, x, XP0) - x;
+        else
+            w = f ? f->width[ch] : 8;
+        if (x + w > xMax && c > cp && ch != ' ') {
+            if (haveBrk) {
+                c = brk;
+                x = xBrk;
+                spaces = spacesBrk;
+            }
+            break;
+        }
+        x += w;
+        if (ch == ' ') {
+            spaces++;
+            brk = c + 1;
+            xBrk = x - w;               /* trailing blanks do not count */
+            spacesBrk = spaces - 1;
+            haveBrk = TRUE;
+        }
+    }
+    if (c >= lim) {
+        if (pl > g_doc.cpMac) {         /* the end paragraph: end mark */
+            ln->endMark = TRUE;
+            c = pl;                     /* the virtual mark */
+        }
+        ln->paraEnd = TRUE;
+    }
+    if (!f) {                           /* empty line: the properties there */
+        props_at(cp ? cp - (cp == g_doc.cpMac && cp > 0) : 0, &chp);
+        if (g_doc.cpMac == 0)
+            chp_decode(&g_doc, g_insChpValid ? g_insChp : g_doc.chpNew, &chp);
+        f = font_for(&chp);
+        if (f) {
+            asc = f->ascent;
+            desc = f->descent;
+        }
+    }
+    ln->cpLim = c;
+    /* the end mark's line is at least 13 above and 3 below its baseline
+       (WR3: after 8-point text, ascent 11, the mark sits as with 10
+       points; UNVERIFIED: where the minimum comes from) */
+    if (ln->endMark) {
+        if (asc < 13)
+            asc = 13;
+        if (desc < 3)
+            desc = 3;
+    }
+    /* A line is as tall as its highest ascent (with external leading)
+       plus its deepest descent; 1 1/2 and double spacing make it the
+       spacing's height (360 and 480 twips: 24 and 32 pixels), the space
+       added above the text (WR8 at 10 points, WR3 at 8; UNVERIFIED:
+       fonts taller than the spacing) */
+    ht = pap.dyaLine > 240 ? tw2px(pap.dyaLine) - asc - desc : 0;
+    if (ht < 0)
+        ht = 0;
+    ln->ascent = asc + ht;
+    ln->height = asc + desc + ht;
+    ln->width = x - xStart;
+    ln->nspaces = 0;
+    ln->extra = 0;
+    switch (pap.jc) {
+    case 1:
+        xStart += (xMax - xStart - ln->width) / 2;
+        break;
+    case 2:
+        xStart = xMax - ln->width;
+        break;
+    case 3:
+        if (!ln->paraEnd && spaces) {
+            ln->nspaces = spaces;
+            ln->extra = xMax - xStart - ln->width;
+        }
+        break;
+    }
+    ln->xLeft = xStart;
+}
+
+/* the start of the line before the one starting at cp */
+static DWORD line_before(DWORD cp)
+{
+    DWORD pf, pl, s, last;
+    ATOM32 pa;
+    LINE ln;
+    if (cp == 0)
+        return 0;
+    para_at(&g_doc, cp - 1, &pf, &pl, &pa);
+    for (s = last = pf; s < cp;) {
+        last = s;
+        layout_line(s, &ln);
+        if (ln.cpLim <= s)
+            break;
+        s = ln.cpLim;
+    }
+    return last;
+}
+
+/* the start of the line containing cp */
+static DWORD line_start(DWORD cp)
+{
+    DWORD pf, pl, s;
+    ATOM32 pa;
+    LINE ln;
+    para_at(&g_doc, cp, &pf, &pl, &pa);
+    for (s = pf;;) {
+        layout_line(s, &ln);
+        if (ln.cpLim > cp || ln.endMark || ln.cpLim <= s)
+            return s;
+        s = ln.cpLim;
+    }
+}
+
+/* ---- the visible lines ---- */
+
+static HLOCAL hlines;
+static int nlines;
+
+static LINE *lines(void)
+{
+    return (LINE *)LocalLock(hlines);
+}
+
+void view_layout(void)
+{
+    RECT r;
+    int y;
+    DWORD cp = cpTop;
+    LINE ln, *l;
+    sep_decode(&g_doc, &sep);
+    GetClientRect(g_docwnd, &r);
+    nlines = 0;
+    for (y = YP0; y < r.bottom;) {
+        HLOCAL h;
+        layout_line(cp, &ln);
+        h = hlines ? LocalReAlloc(hlines, (nlines + 1) * sizeof(LINE), LMEM_MOVEABLE)
+                   : LocalAlloc(LMEM_MOVEABLE, sizeof(LINE));
+        if (!h)
+            break;
+        hlines = h;
+        l = lines();
+        l[nlines++] = ln;
+        LocalUnlock(hlines);
+        y += ln.height;
+        if (ln.endMark || ln.cpLim <= cp)
+            break;
+        cp = ln.cpLim;
+    }
+}
+
+/* doc pixel x of cp within line ln */
+static int x_of(const LINE *ln, DWORD cp)
+{
+    DWORD c, runLim = 0, rf;
+    ATOM32 ra;
+    CHPX chp;
+    FONTC *f = NULL;
+    PAPX pap;
+    DWORD pf, pl;
+    ATOM32 pa;
+    int x = ln->xLeft, sp = 0;
+    para_at(&g_doc, ln->cpFirst, &pf, &pl, &pa);
+    pap_decode(&g_doc, pa, &pap);
+    for (c = ln->cpFirst; c < cp && c < ln->cpLim && c < g_doc.cpMac; c++) {
+        BYTE ch = doc_ch(&g_doc, c);
+        if (c >= runLim) {
+            run_at(&g_doc, c, &rf, &runLim, &ra);
+            chp_decode(&g_doc, ra, &chp);
+            f = font_for(&chp);
+        }
+        if (ch == '\r' || ch == '\n')
+            break;
+        if (ch == '\t')
+            x = tab_stop(&pap, x, XP0);
+        else
+            x += f ? f->width[ch] : 8;
+        if (ch == ' ' && ln->nspaces) {
+            x += ln->extra / ln->nspaces + (sp < ln->extra % ln->nspaces);
+            sp++;
+        }
+    }
+    return x;
+}
+
+/* ---- the caret ---- */
+
+static void caret_draw(void)
+{
+    HDC dc;
+    RECT r;
+    if (!caretShown)
+        return;
+    dc = GetDC(g_docwnd);
+    SetRect(&r, caretX - xpScroll, caretY, caretX - xpScroll + CARET_W, caretY + caretH);
+    InvertRect(dc, &r);
+    ReleaseDC(g_docwnd, dc);
+    caretOn = !caretOn;
+}
+
+static void caret_hide(void)
+{
+    if (caretOn)
+        caret_draw();
+}
+
+/* place the caret at g_selFirst when the selection is empty */
+static void caret_place(void)
+{
+    LINE *l;
+    int i, y = YP0;
+    caret_hide();
+    caretShown = FALSE;
+    if (g_selFirst != g_selLim || GetFocus() != g_docwnd)
+        return;
+    l = lines();
+    for (i = 0; i < nlines; i++) {
+        if (g_selFirst >= l[i].cpFirst &&
+            (g_selFirst < l[i].cpLim || l[i].endMark ||
+             (g_selFirst == l[i].cpLim && i + 1 == nlines && !l[i].paraEnd))) {
+            caretX = x_of(&l[i], g_selFirst) - CARET_W + 1;   /* WR1 */
+            caretY = y;
+            caretH = l[i].height;
+            caretShown = TRUE;
+            break;
+        }
+        y += l[i].height;
+    }
+    LocalUnlock(hlines);
+    if (caretShown && !caretDefer)
+        caret_draw();
+}
+
+/* after typing the caret stays off until the next blink (WR1: the
+   original's caret is not seen after text was typed) */
+static void caret_defer(void)
+{
+    caretDefer = TRUE;
+    if (GetFocus() == g_docwnd)
+        SetTimer(g_docwnd, TIMER_CARET, GetCaretBlinkTime(), NULL);
+}
+
+/* ---- painting ---- */
+
+/* The end mark: a 6 x 6 currency-sign shape (a ring with four corner
+   ticks), its bottom row 5 pixels above the baseline, at the text's x
+   one pixel right of the position (observed with Arial 10, WR1, WR8;
+   its place for other sizes UNVERIFIED).
+   Drawn from this table: our own rendering of the sign. */
+static void end_mark(HDC dc, int x, int base)
+{
+    static const BYTE rows[6] = { 0x33, 0x1E, 0x12, 0x12, 0x1E, 0x33 };  /* bit 5 = left */
+    HBRUSH b = GetStockObject(BLACK_BRUSH);
+    int r, c;
+    for (r = 0; r < 6; r++)
+        for (c = 0; c < 6; c++)
+            if (rows[r] & (0x20 >> c)) {
+                RECT q;
+                SetRect(&q, x + 1 + c, base - 10 + r, x + 2 + c, base - 9 + r);
+                FillRect(dc, &q, b);
+            }
+}
+
+/* the page-break mark: a 7 x 5 double chevron in the left margin at the
+   first line of each page in the page table, its bottom row a pixel
+   above the baseline (WR2: README.WRI's page 1). Our own drawing. */
+static void page_mark(HDC dc, int x, int base)
+{
+    static const BYTE rows[5] = { 0x6C, 0x36, 0x1B, 0x36, 0x6C };  /* bit 6 = left */
+    HBRUSH b = GetStockObject(BLACK_BRUSH);
+    int r, c;
+    for (r = 0; r < 5; r++)
+        for (c = 0; c < 7; c++)
+            if (rows[r] & (0x40 >> c)) {
+                RECT q;
+                SetRect(&q, x + c, base - 6 + r, x + c + 1, base - 5 + r);
+                FillRect(dc, &q, b);
+            }
+}
+
+static BOOL page_starts(DWORD cp)
+{
+    DWORD i;
+    for (i = 0; i < g_doc.npages; i++) {
+        struct { WORD pgn, pad; DWORD cp; } e;
+        hm_get(&g_doc.pgtb, i * 8, &e, 8);
+        if (e.cp == cp)
+            return TRUE;
+        if (e.cp > cp)
+            break;
+    }
+    return FALSE;
+}
+
+static void paint_line(HDC dc, const LINE *ln, int y)
+{
+    if (page_starts(ln->cpFirst))
+        page_mark(dc, -xpScroll, y + ln->ascent);
+    if (ln->picture) {
+        PICT pic;
+        pict_read(ln->cpFirst, ln->cpLim, &pic);
+        pict_draw(dc, &pic, ln->xLeft - xpScroll, y, ln->width, ln->height);
+        return;
+    }
+    {
+    DWORD c = ln->cpFirst, lim = ln->cpLim, rf, rl;
+    ATOM32 ra;
+    CHPX chp;
+    FONTC *f;
+    PAPX pap;
+    DWORD pf, pl;
+    ATOM32 pa;
+    int x = ln->xLeft - xpScroll, sp = 0;
+    char buf[128];
+    para_at(&g_doc, c, &pf, &pl, &pa);
+    pap_decode(&g_doc, pa, &pap);
+    if (lim > g_doc.cpMac)
+        lim = g_doc.cpMac;
+    while (c < lim) {
+        WORD n = 0;
+        int up;
+        run_at(&g_doc, c, &rf, &rl, &ra);
+        chp_decode(&g_doc, ra, &chp);
+        f = font_for(&chp);
+        if (!f)
+            return;
+        SelectObject(dc, f->h);
+        up = pos_px(chp.hpsPos);
+        /* a piece: same run, no tab, no paragraph mark */
+        while (c + n < lim && c + n < rl && n < sizeof buf) {
+            BYTE ch = doc_ch(&g_doc, c + n);
+            if (ch == '\t' || ch == '\r' || ch == '\n')
+                break;
+            buf[n++] = ch;
+        }
+        if (n) {
+            int w = 0, i, nsp = 0;
+            for (i = 0; i < n; i++) {
+                w += f->width[(BYTE)buf[i]];
+                if (buf[i] == ' ')
+                    nsp++;
+            }
+            if (ln->nspaces && nsp) {
+                int ex = 0, k;
+                for (k = 0; k < nsp; k++, sp++)
+                    ex += ln->extra / ln->nspaces + (sp < ln->extra % ln->nspaces);
+                SetTextJustification(dc, ex, nsp);
+                w += ex;
+            }
+            TextOut(dc, x, y + ln->ascent - f->tmAscent - up, buf, n);
+            if (ln->nspaces && nsp)
+                SetTextJustification(dc, 0, 0);
+            x += w;
+            c += n;
+            continue;
+        }
+        {
+            BYTE ch = doc_ch(&g_doc, c);
+            if (ch == '\t')
+                x = tab_stop(&pap, x + xpScroll, XP0) - xpScroll;
+            c++;
+        }
+    }
+    if (ln->endMark)
+        end_mark(dc, x, y + ln->ascent);
+    }
+}
+
+/* invert the selected part of each visible line */
+static void paint_sel(HDC dc)
+{
+    LINE *l;
+    int i, y = YP0;
+    RECT r, cr;
+    if (g_selFirst == g_selLim)
+        return;
+    GetClientRect(g_docwnd, &cr);
+    l = lines();
+    for (i = 0; i < nlines; i++) {
+        DWORD a = g_selFirst > l[i].cpFirst ? g_selFirst : l[i].cpFirst;
+        DWORD b = g_selLim < l[i].cpLim ? g_selLim : l[i].cpLim;
+        if (a < b) {
+            int x1 = x_of(&l[i], a), x2;
+            if (b >= l[i].cpLim && l[i].paraEnd && g_selLim > l[i].cpLim - 1)
+                x2 = x_of(&l[i], b) + 6; /* the paragraph mark (UNVERIFIED width) */
+            else
+                x2 = x_of(&l[i], b);
+            SetRect(&r, x1 - xpScroll, y, x2 - xpScroll, y + l[i].height);
+            InvertRect(dc, &r);
+        }
+        y += l[i].height;
+    }
+    LocalUnlock(hlines);
+}
+
+static void paint(HWND w)
+{
+    PAINTSTRUCT ps;
+    HDC dc = BeginPaint(w, &ps);
+    LINE *l;
+    int i, y = YP0;
+    caretOn = FALSE;
+    SetBkMode(dc, TRANSPARENT);
+    l = lines();
+    for (i = 0; i < nlines; i++) {
+        if (y + l[i].height > ps.rcPaint.top && y < ps.rcPaint.bottom)
+            paint_line(dc, &l[i], y);
+        y += l[i].height;
+    }
+    LocalUnlock(hlines);
+    paint_sel(dc);
+    SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    EndPaint(w, &ps);
+    if (caretShown)
+        caret_draw();
+}
+
+/* ---- scroll bars and the page number ---- */
+
+static void vscroll_update(void)
+{
+    int pos = g_doc.cpMac ? (int)((cpTop * 100) / (g_doc.cpMac + 2)) : 0;
+    SetScrollPos(g_vscroll, SB_CTL, pos, TRUE);
+}
+
+void view_update_pageinfo(void)
+{
+    InvalidateRect(g_pageinfo, NULL, TRUE);
+}
+
+/* the page number shown: from the page table (after Repaginate), else
+   the first page number */
+static WORD page_of(DWORD cp)
+{
+    DWORD i;
+    WORD pgn = sep.pgnFirst;
+    for (i = 0; i < g_doc.npages; i++) {
+        struct { WORD pgn, pad; DWORD cp; } e;
+        hm_get(&g_doc.pgtb, i * 8, &e, 8);
+        if (e.cp > cp)
+            break;
+        pgn = e.pgn;
+    }
+    return pgn;
+}
+
+LRESULT FAR PASCAL __export PageInfoWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
+{
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(w, &ps);
+        RECT r;
+        char s[24], num[12];
+        GetClientRect(w, &r);
+        /* observed with other colour schemes (WR6): white text on the
+           window frame colour */
+        {
+            HBRUSH b = CreateSolidBrush(GetSysColor(COLOR_WINDOWFRAME));
+            FillRect(dc, &r, b);
+            DeleteObject(b);
+        }
+        SetTextColor(dc, RGB(255, 255, 255));
+        SetBkColor(dc, GetSysColor(COLOR_WINDOWFRAME));
+        load_str(IDS_PAGE1, s, sizeof s);           /* "Page 1" */
+        if (s_len(s) > 1)
+            s[s_len(s) - 1] = 0;                    /* "Page " */
+        s_utoa(num, page_of(cpTop));
+        s_cat(s, num, sizeof s);
+        TextOut(dc, 6, -1, s, s_len(s));            /* calibrated, WR1 */
+        EndPaint(w, &ps);
+        return 0;
+    }
+    return DefWindowProc(w, msg, wp, lp);
+}
+
+/* ---- positions ---- */
+
+/* the cp nearest to doc point (x, y) */
+static DWORD cp_from_point(int x, int y)
+{
+    LINE *l;
+    int i, yy = YP0;
+    DWORD cp = g_doc.cpMac, c;
+    l = lines();
+    for (i = 0; i < nlines; i++) {
+        if (y < yy + l[i].height || i + 1 == nlines) {
+            DWORD lim = l[i].cpLim;
+            if (l[i].paraEnd && lim > l[i].cpFirst && !l[i].endMark)
+                lim -= 2;               /* before the paragraph mark */
+            if (lim > g_doc.cpMac)
+                lim = g_doc.cpMac;
+            cp = l[i].cpFirst;
+            for (c = l[i].cpFirst; c < lim; c++) {
+                int x1 = x_of(&l[i], c), x2 = x_of(&l[i], c + 1);
+                if (x < (x1 + x2) / 2)
+                    break;
+                cp = c + 1;
+            }
+            if (cp > lim)
+                cp = lim;
+            break;
+        }
+        yy += l[i].height;
+    }
+    LocalUnlock(hlines);
+    return cp;
+}
+
+/* is cp on screen? */
+static BOOL visible(DWORD cp)
+{
+    LINE *l;
+    RECT r;
+    int i, y = YP0;
+    BOOL in = FALSE;
+    GetClientRect(g_docwnd, &r);
+    l = lines();
+    for (i = 0; i < nlines; i++) {
+        if (y + l[i].height > r.bottom)
+            break;
+        if (cp >= l[i].cpFirst && (cp < l[i].cpLim || l[i].endMark)) {
+            in = TRUE;
+            break;
+        }
+        y += l[i].height;
+    }
+    LocalUnlock(hlines);
+    return in;
+}
+
+static void redraw(void)
+{
+    view_layout();
+    InvalidateRect(g_docwnd, NULL, TRUE);
+    vscroll_update();
+    view_update_pageinfo();
+}
+
+void view_scroll_to_caret(void)
+{
+    DWORD cp = g_selLim > g_selFirst && g_selLim != selAnchor ? g_selLim : g_selFirst;
+    if (cp < cpTop) {
+        cpTop = line_start(cp);
+        redraw();
+        return;
+    }
+    if (!visible(cp)) {
+        /* make the caret's line the last full one: from its start, back
+           up while the lines still fit */
+        RECT r;
+        int h = 0;
+        DWORD s = line_start(cp);
+        LINE ln;
+        GetClientRect(g_docwnd, &r);
+        layout_line(s, &ln);
+        h = ln.height;
+        while (s > 0) {
+            DWORD p = line_before(s);
+            layout_line(p, &ln);
+            if (YP0 + h + ln.height > r.bottom)
+                break;
+            h += ln.height;
+            s = p;
+        }
+        cpTop = s;
+        redraw();
+    }
+}
+
+void view_select(DWORD first, DWORD lim, BOOL show)
+{
+    HDC dc;
+    if (lim > g_doc.cpMac)
+        lim = g_doc.cpMac;
+    if (first > lim)
+        first = lim;
+    caret_hide();
+    dc = GetDC(g_docwnd);
+    paint_sel(dc);                      /* remove the old highlight */
+    g_selFirst = first;
+    g_selLim = lim;
+    g_insChpValid = FALSE;
+    if (show)
+        view_scroll_to_caret();
+    paint_sel(dc);
+    ReleaseDC(g_docwnd, dc);
+    caret_place();
+}
+
+void view_reset(void)
+{
+    cpTop = 0;
+    g_selFirst = g_selLim = selAnchor = 0;
+    xpScroll = 0;
+    g_insChpValid = FALSE;
+    fonts_free();
+    redraw();
+    caret_place();
+}
+
+/* text changed from cp on: lay out again and repaint */
+void view_changed(DWORD cp)
+{
+    (void)cp;
+    if (cpTop > g_doc.cpMac)
+        cpTop = line_start(g_doc.cpMac);
+    else
+        cpTop = line_start(cpTop);
+    caret_hide();
+    redraw();
+    view_scroll_to_caret();
+    UpdateWindow(g_docwnd);
+    caret_place();
+}
+
+/* ---- editing keys ---- */
+
+void sel_props(CHPX *c)
+{
+    DWORD cp = g_selFirst;
+    if (g_selFirst == g_selLim && g_insChpValid) {
+        chp_decode(&g_doc, g_insChp, c);
+        return;
+    }
+    if (g_selFirst == g_selLim) {
+        /* typing continues the character before; at a paragraph start
+           the one after (UNVERIFIED) */
+        if (cp > 0 && doc_ch(&g_doc, cp - 1) != '\n')
+            cp--;
+        else if (cp >= g_doc.cpMac && cp > 0)
+            cp--;
+    }
+    props_at(cp, c);
+}
+
+static ATOM32 typing_chp(void)
+{
+    CHPX c;
+    if (g_insChpValid)
+        return g_insChp;
+    sel_props(&c);
+    return chp_atom(&g_doc, &c);
+}
+
+static void replace_sel(const char FAR *s, DWORD n)
+{
+    ATOM32 a = typing_chp();
+    DWORD cp = g_selFirst;
+    BOOL keep = g_insChpValid;
+    ATOM32 ins = g_insChp;
+    if (g_selLim > g_selFirst)
+        doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
+    doc_insert(&g_doc, cp, s, n, a);
+    g_selFirst = g_selLim = selAnchor = cp + n;
+    g_insChpValid = keep;
+    g_insChp = ins;
+    view_changed(cp);
+}
+
+void view_char(WORD ch)
+{
+    char s[2];
+    caret_defer();
+    if (ch == '\b') {
+        if (g_selLim > g_selFirst) {
+            doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
+            g_selLim = selAnchor = g_selFirst;
+        } else if (g_selFirst > 0) {
+            DWORD n = 1;
+            if (g_selFirst >= 2 && doc_ch(&g_doc, g_selFirst - 1) == '\n' &&
+                doc_ch(&g_doc, g_selFirst - 2) == '\r')
+                n = 2;
+            g_selFirst -= n;
+            doc_delete(&g_doc, g_selFirst, n);
+            g_selLim = selAnchor = g_selFirst;
+        }
+        view_changed(g_selFirst);
+        return;
+    }
+    if (ch == '\r') {
+        replace_sel("\r\n", 2);
+        return;
+    }
+    if (ch < ' ' && ch != '\t')
+        return;
+    s[0] = (char)ch;
+    replace_sel(s, 1);
+}
+
+static DWORD next_cp(DWORD cp)
+{
+    if (cp >= g_doc.cpMac)
+        return g_doc.cpMac;
+    if (doc_ch(&g_doc, cp) == '\r' && cp + 1 < g_doc.cpMac && doc_ch(&g_doc, cp + 1) == '\n')
+        return cp + 2;
+    return cp + 1;
+}
+
+static DWORD prev_cp(DWORD cp)
+{
+    if (cp == 0)
+        return 0;
+    if (cp >= 2 && doc_ch(&g_doc, cp - 1) == '\n' && doc_ch(&g_doc, cp - 2) == '\r')
+        return cp - 2;
+    return cp - 1;
+}
+
+/* the cp in the line starting at s nearest to doc x */
+static DWORD cp_at_x(DWORD s, int x)
+{
+    LINE ln;
+    DWORD c, cp = s, lim;
+    layout_line(s, &ln);
+    lim = ln.cpLim;
+    if (ln.paraEnd && !ln.endMark && lim >= 2)
+        lim -= 2;
+    if (lim > g_doc.cpMac)
+        lim = g_doc.cpMac;
+    for (c = s; c < lim; c++) {
+        int x1 = x_of(&ln, c), x2 = x_of(&ln, c + 1);
+        if (x < (x1 + x2) / 2)
+            break;
+        cp = c + 1;
+    }
+    return cp;
+}
+
+/* A window down: the line that was only partly visible (or the first
+   below) becomes the top one (WR2: Page Down in README.WRI). Up: back
+   by the lines that fit in the window (UNVERIFIED). */
+static void page_move(BOOL down)
+{
+    RECT r;
+    LINE ln;
+    int h = 0;
+    GetClientRect(g_docwnd, &r);
+    for (;;) {
+        DWORD p = down ? cpTop : line_before(cpTop);
+        if (!down && cpTop == 0)
+            break;
+        layout_line(p, &ln);
+        if ((down && ln.endMark) || h + ln.height > r.bottom - YP0)
+            break;
+        h += ln.height;
+        cpTop = down ? ln.cpLim : p;
+    }
+}
+
+void view_key(WPARAM vk)
+{
+    BOOL shift = GetKeyState(VK_SHIFT) < 0, ctrl = GetKeyState(VK_CONTROL) < 0;
+    DWORD cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
+    DWORD to = cp;
+    LINE ln;
+    caretDefer = FALSE;
+    switch (vk) {
+    case VK_LEFT:
+        if (!shift && g_selFirst != g_selLim)
+            to = g_selFirst;
+        else
+            to = prev_cp(cp);
+        break;
+    case VK_RIGHT:
+        if (!shift && g_selFirst != g_selLim)
+            to = g_selLim;
+        else
+            to = next_cp(cp);
+        break;
+    case VK_UP:
+    case VK_DOWN: {
+        DWORD s = line_start(cp);
+        int x;
+        layout_line(s, &ln);
+        x = x_of(&ln, cp);
+        if (vk == VK_UP) {
+            if (s == 0)
+                return;
+            to = cp_at_x(line_before(s), x);
+        } else {
+            if (ln.endMark)
+                return;
+            to = cp_at_x(ln.cpLim, x);
+        }
+        break;
+    }
+    case VK_HOME:
+        to = ctrl ? 0 : line_start(cp);
+        break;
+    case VK_END:
+        if (ctrl) {
+            to = g_doc.cpMac;
+        } else {
+            layout_line(line_start(cp), &ln);
+            to = ln.cpLim;
+            if (ln.paraEnd && !ln.endMark)
+                to -= 2;
+            if (to > g_doc.cpMac)
+                to = g_doc.cpMac;
+        }
+        break;
+    case VK_DELETE:
+        if (g_selLim > g_selFirst) {
+            if (shift) {
+                cmd_cut_copy(TRUE);
+                return;
+            }
+            doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
+        } else if (g_selFirst < g_doc.cpMac) {
+            doc_delete(&g_doc, g_selFirst, next_cp(g_selFirst) - g_selFirst);
+        }
+        g_selLim = selAnchor = g_selFirst;
+        view_changed(g_selFirst);
+        return;
+    case VK_INSERT:
+        if (shift)
+            cmd_paste();
+        else if (ctrl)
+            cmd_cut_copy(FALSE);
+        return;
+    case VK_PRIOR:
+    case VK_NEXT:
+        page_move(vk == VK_NEXT);
+        redraw();
+        to = cpTop;
+        break;
+    default:
+        return;
+    }
+    if (shift) {
+        if (to < selAnchor)
+            view_select(to, selAnchor, TRUE);
+        else
+            view_select(selAnchor, to, TRUE);
+    } else {
+        selAnchor = to;
+        view_select(to, to, TRUE);
+    }
+}
+
+/* ---- the window ---- */
+
+static void vscroll(WPARAM code, int pos)
+{
+    LINE ln;
+    switch (code) {
+    case SB_LINEUP:
+        if (cpTop == 0)
+            return;
+        cpTop = line_before(cpTop);
+        break;
+    case SB_LINEDOWN:
+        layout_line(cpTop, &ln);
+        if (ln.endMark)
+            return;
+        cpTop = ln.cpLim;
+        break;
+    case SB_PAGEUP:
+    case SB_PAGEDOWN:
+        page_move(code == SB_PAGEDOWN);
+        break;
+    case SB_THUMBPOSITION:
+        cpTop = line_start((DWORD)pos * (g_doc.cpMac + 2) / 100);
+        if (cpTop > g_doc.cpMac)
+            cpTop = line_start(g_doc.cpMac);
+        break;
+    default:
+        return;
+    }
+    caret_hide();
+    redraw();
+    UpdateWindow(g_docwnd);
+    caret_place();
+}
+
+LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_CREATE: {
+        HDC dc = GetDC(w);
+        dpiX = GetDeviceCaps(dc, LOGPIXELSX);
+        dpiY = GetDeviceCaps(dc, LOGPIXELSY);
+        ReleaseDC(w, dc);
+        g_docwnd = w;
+        return 0;
+    }
+    case WM_PAINT:
+        paint(w);
+        return 0;
+    case WM_SIZE:
+        if (g_doc.paras.h) {
+            caret_hide();
+            view_layout();
+            caret_place();
+        }
+        return 0;
+    case WM_SETFOCUS:
+        SetTimer(w, TIMER_CARET, GetCaretBlinkTime(), NULL);
+        caret_place();
+        return 0;
+    case WM_KILLFOCUS:
+        KillTimer(w, TIMER_CARET);
+        caret_hide();
+        caretShown = FALSE;
+        return 0;
+    case WM_TIMER:
+        caretDefer = FALSE;
+        if (caretShown)
+            caret_draw();
+        return 0;
+    case WM_KEYDOWN:
+        view_key(wp);
+        return 0;
+    case WM_CHAR:
+        view_char(wp);
+        return 0;
+    case WM_LBUTTONDOWN: {
+        DWORD cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
+        SetFocus(w);
+        if (wp & MK_SHIFT) {
+            view_select(cp < selAnchor ? cp : selAnchor, cp < selAnchor ? selAnchor : cp, FALSE);
+        } else {
+            selAnchor = cp;
+            view_select(cp, cp, FALSE);
+        }
+        SetCapture(w);
+        dragging = TRUE;
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+        if (dragging) {
+            DWORD cp = cp_from_point((int)LOWORD(lp) + xpScroll, (int)HIWORD(lp));
+            view_select(cp < selAnchor ? cp : selAnchor, cp < selAnchor ? selAnchor : cp, FALSE);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (dragging) {
+            ReleaseCapture();
+            dragging = FALSE;
+        }
+        return 0;
+    case WM_DROPFILES:
+        return SendMessage(g_frame, msg, wp, lp);
+    case WM_VSCROLL:
+        vscroll(wp, LOWORD(lp));
+        return 0;
+    case WM_DESTROY:
+        fonts_free();
+        return 0;
+    }
+    return DefWindowProc(w, msg, wp, lp);
+}
+
+BOOL view_register(HINSTANCE hi)
+{
+    WNDCLASS wc;
+    m_set(&wc, 0, sizeof wc);
+    wc.lpfnWndProc = DocWndProc;
+    wc.hInstance = hi;
+    wc.hCursor = LoadCursor(NULL, IDC_IBEAM);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.lpszClassName = "MSWRITE_DOC";
+    wc.style = CS_DBLCLKS;
+    if (!RegisterClass(&wc))
+        return FALSE;
+    wc.lpfnWndProc = PageInfoWndProc;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = GetStockObject(BLACK_BRUSH);
+    wc.lpszClassName = "MSWRITE_PAGEINFO";
+    wc.style = 0;
+    return RegisterClass(&wc);
+}

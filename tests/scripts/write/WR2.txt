@@ -1,0 +1,23 @@
+; WR2: open Microsoft's README.WRI and WININI.WRI and save each unchanged:
+; the saved files must equal the inputs (the original round-trips them;
+; only the bytes it leaves undefined differ, tools/wri.py cmp)
+; files: README.WRI WININI.WRI
+run WRITE.EXE C:\README.WRI
+wait 4000
+snap C:\R1.BMP
+key 22
+wait 1000
+snap C:\R2.BMP
+menu f
+char s
+wait 3000
+close
+wait 1500
+run WRITE.EXE C:\WININI.WRI
+wait 3000
+snap C:\W1.BMP
+menu f
+char s
+wait 3000
+close
+wait 1500

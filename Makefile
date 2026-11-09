@@ -757,6 +757,53 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15), two builds
+# like PROGMAN.EXE: $(DOS)/WRITE.EXE for 3.x, $(WIN2)/WRITE.EXE for 2.x
+WR_C     := main doc wrifile view cmds pict util compat2
+SHELL_WR := $(B)/shell/start.o $(B)/shell/write/i4.o $(WR_C:%=$(B)/shell/write/%.o)
+SHELL_WR2 := $(patsubst $(B)/shell/%,$(B)/shell2/%,$(SHELL_WR))
+shell: $(DOS)/WRITE.EXE
+shell2: $(WIN2)/WRITE.EXE
+$(B)/shell/write/%.o: shell/write/%.c shell/write/write.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/write/i4.o: shell/write/i4.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/write/write.ico: tools/mkwriteicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkwriteicon.py $@
+$(B)/shell/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/write -i=$(B)/shell/write -fo=$@ $<
+$(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/write/write.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/write/write.map \
+	    option resource=$(B)/shell/write/write.res file { $(SHELL_WR) }
+	python3 tools/nemark.py $@ 3.10
+$(B)/shell2/write/%.o: shell/write/%.c shell/write/write.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -fo=$@ $<
+$(B)/shell2/write/i4.o: $(B)/shell/write/i4.o
+	@mkdir -p $(@D)
+	cp $< $@
+$(B)/shell2/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/write -i=$(B)/shell/write \
+	    -fo=$@ $<
+$(WIN2)/WRITE.EXE: $(SHELL_WR2) $(B)/shell2/write/write.res shell/write/write2.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/write/write2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell2/write/write.map \
+	    option resource=$(B)/shell2/write/write.res file { $(SHELL_WR2) }
+	python3 tools/nemark.py $@ 2.0
+# WRMET.EXE: probe WR9, the font metrics Write's layout depends on
+dos: $(DOS)/WRMET.EXE
+$(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wrmet.map file { $(B)/tests/start.o $(B)/tests/wrmet.o }
+
 test: dos fonts
 	tests/run-tests.sh
 

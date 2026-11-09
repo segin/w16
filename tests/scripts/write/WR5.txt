@@ -1,0 +1,35 @@
+; WR5: re-save SYSINI.WRI (the SETB file number becomes 2); explicit
+; Left after Centered paragraphs (stored as 1 byte, not as the default)
+; files: SYSINI.WRI
+run WRITE.EXE C:\SYSINI.WRI
+wait 4000
+menu f
+char s
+wait 3000
+close
+wait 1500
+run WRITE.EXE
+wait 3000
+menu p
+char c
+type one
+key 0D
+menu p
+char l
+type two
+key 0D
+menu p
+char c
+type three
+key 0D
+menu p
+char l
+type four
+menu f
+char a
+wait 1500
+type C:\WR5.WRI
+key 0D
+wait 2000
+close
+wait 1000

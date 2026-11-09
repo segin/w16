@@ -18,6 +18,8 @@
  *     dump                   log every window: class, text, style, rect
  *     clipbmp <file.bmp>     put a .BMP on the clipboard (CF_DIB, CF_BITMAP)
  *     clipmf                 put a small metafile picture on the clipboard
+ *     class <name>           Windows 2.x: the window class "cmd" and "close"
+ *                            go to (default Progman)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -125,6 +127,9 @@ static HWND target(void)
     return h ? h : GetActiveWindow();
 }
 
+/* the class top_window falls back to on Windows 2.x ("class <name>") */
+static char top_class[32] = "Progman";
+
 /* The top-level window of the focus: Windows 2.x answers GetActiveWindow
    per task, and SNAP has no window of its own (observed). */
 static HWND top_window(void)
@@ -133,7 +138,7 @@ static HWND top_window(void)
     if (!h)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
-        return FindWindow("Progman", NULL);
+        return FindWindow(top_class, NULL);
     /* up to the first window that is not a child: GetParent of a dialog
        is its owner, which is not where its commands go */
     while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
@@ -484,6 +489,10 @@ static void run_line(char *l)
         if (!PostMessage(w, WM_COMMAND, parse_num(arg, 10), 0))
             out(" (post failed)");
         pump(300);
+    } else if (same(l, "class")) {
+        /* Windows 2.x: the class whose window gets "cmd" and "close"
+           when SNAP cannot see the active window (default Progman) */
+        lstrcpy(top_class, arg);
     } else if (same(l, "close")) {
         /* WM_SYSCOMMAND SC_CLOSE to the active top-level window */
         HWND w = top_window();
