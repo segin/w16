@@ -15,6 +15,8 @@
 #     home              move the pointer far up and left (it stops at 0,0)
 #     move DX DY        relative pointer motion (X pixels; see the shots
 #                       for where Windows put it)
+#     jiggle N          N quick small pointer motions back and forth (a
+#                       stream of mouse interrupts)
 #     click [N]         press and release button N (1 left, 3 right)
 #     down N / up N     press or release button N
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
@@ -65,6 +67,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     ''|';'*) continue ;;
     home) for i in 1 2 3 4 5 6 7 8; do xdotool mousemove_relative -- -100 -100; sleep 0.05; done ;;
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
+    jiggle) i=0; while [ \$i -lt "\$a" ]; do xdotool mousemove_relative -- 7 5; xdotool mousemove_relative -- -7 -5; i=\$((i + 1)); done ;;
     click) xdotool click "\${a:-1}" ;;
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;

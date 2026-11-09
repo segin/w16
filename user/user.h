@@ -204,17 +204,17 @@ void timer_init(void);
 void kill_queue_timers(HQUEUE hq);
 void kill_window_timers(HWND h);
 BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
-extern volatile DWORD tickcount;
+extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment */
 
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
-extern BYTE keystate[256];
-extern POINT ptCursor;
+extern BYTE __far keystate[256];
+extern POINT __far ptCursor;
 extern HWND hwndCapture, hwndFocus, hwndActive;
-extern HQUEUE hqInput;          /* the queue input goes to (the active window's) */
-extern WORD input_pending;
+extern HQUEUE __far hqInput;          /* the queue input goes to (the active window's) */
+extern WORD __far input_pending;
 void set_cursor_shape(HCURSOR h);
 void set_focus(HWND h);
 void activate_window(HWND h, BOOL mouse);

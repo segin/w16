@@ -19,18 +19,24 @@ typedef struct SYSEV {
     DWORD time;
 } SYSEV;
 
-static SYSEV sysq[NSYSQ];
-static volatile WORD sq_head, sq_count;
-WORD input_pending;
-BYTE keystate[256];             /* the driver's async state (KEYBOARD.Enable) */
+/* What the event procedures touch at interrupt time lives in far data
+   (class FAR_DATA, a fixed segment: user/user.lnk), not in the data
+   segment, which is moveable and moves when the local heap grows; an
+   interrupt arriving while it is being copied would write into the old
+   copy. Windows 3.1's USER has a small fixed data segment besides its
+   moveable one too (segment 44: 10.1). */
+static SYSEV __far sysq[NSYSQ];
+static volatile WORD __far sq_head, __far sq_count;
+WORD __far input_pending;
+BYTE __far keystate[256];       /* the driver's async state (KEYBOARD.Enable) */
 static BYTE qkeystate[256];     /* GetKeyState's: as of the last message */
-POINT ptCursor;
+POINT __far ptCursor;
 WORD lastkey;                   /* the last key pressed: Alt alone opens the menu */
 HWND hwndCapture, hwndFocus, hwndActive;
-HQUEUE hqInput;
+HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
 static int cursor_level;        /* ShowCursor's count */
-static RECT rcClip;
+static RECT __far rcClip;
 
 static DWORD lastclick_time;
 static POINT lastclick_pt;
