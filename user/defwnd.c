@@ -369,7 +369,7 @@ LONG nc_hittest(PWND w, POINT pt)
 }
 
 /* the next visible, enabled top-level window after cur, activated */
-static void switch_window(HWND cur, BOOL tobottom)
+void switch_window(HWND cur, BOOL tobottom)
 {
     HWND t, first = 0;
     for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {

@@ -225,9 +225,64 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
     return FALSE;
 }
 
+/* WinHelp (probe US7 with tests/apps/thelp.c as WINHELP.EXE on 3.1, and
+   the requests of Program Manager and Notepad): the help window is the
+   window of class MS_WINHELP; when there is none, WINHELP.EXE is started
+   with "-x" - except for HELP_QUIT, which then sends nothing. Each request
+   is the registered message "WM_WINHELP" sent to it, wParam the caller's
+   window, lParam's low word a shared global block:
+     WORD cbData, WORD command, DWORD topic (HELP_CONTEXT's number, else
+     0), DWORD reserved (0), WORD offset of the help file's name (16),
+     WORD offset of the data (0 if none), the file name, the data
+   (a key: the string; HELP_MULTIKEY, HELP_SETWINPOS: the structure, its
+   first word its size). UNVERIFIED: the return values (TRUE here), the
+   topic word for key commands (3.1 left garbage there). Notepad shows
+   "Not enough memory" when HELP_QUIT on exit returns FALSE. */
 int WINAPI WinHelp(HWND h, LPCSTR file, UINT cmd, DWORD data)
 {
-    (void)h, (void)file, (void)cmd, (void)data;
-    return 0;                   /* UNVERIFIED: WINHELP.EXE is not started yet */
+    UINT msg = RegisterWindowMessage("WM_WINHELP");
+    HWND hw = FindWindow("MS_WINHELP", NULL);
+    WORD nf, nd = 0, cb;
+    HGLOBAL g;
+    BYTE __far *p;
+    if (!hw) {
+        if (cmd == HELP_QUIT)
+            return TRUE;
+        WinExec("winhelp.exe -x", SW_SHOW);
+        hw = FindWindow("MS_WINHELP", NULL);
+        if (!hw)
+            return FALSE;
+    }
+    nf = file ? lstr_len(file) + 1 : 0;
+    switch (cmd) {
+    case HELP_KEY:
+    case HELP_PARTIALKEY:
+    case HELP_COMMAND:
+        nd = data ? lstr_len((LPCSTR)data) + 1 : 0;
+        break;
+    case HELP_MULTIKEY:
+    case HELP_SETWINPOS:
+        nd = data ? *(const WORD __far *)data : 0;
+        break;
+    }
+    cb = 16 + nf + nd;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, cb);
+    if (!g)
+        return FALSE;
+    p = (BYTE __far *)GlobalLock(g);
+    *(WORD __far *)(p + 0) = cb;
+    *(WORD __far *)(p + 2) = cmd;
+    if (cmd == HELP_CONTEXT || cmd == HELP_SETCONTENTS || cmd == HELP_CONTEXTPOPUP)
+        *(DWORD __far *)(p + 4) = data;
+    *(WORD __far *)(p + 12) = nf ? 16 : 0;
+    *(WORD __far *)(p + 14) = nd ? 16 + nf : 0;
+    if (nf)
+        fmemcpy(p + 16, file, nf);
+    if (nd)
+        fmemcpy(p + 16 + nf, (const void __far *)data, nd);
+    GlobalUnlock(g);
+    SendMessage(hw, msg, (WPARAM)h, MAKELONG(g, 0));
+    GlobalFree(g);
+    return TRUE;
 }
 

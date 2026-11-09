@@ -119,6 +119,7 @@ typedef WND __near *PWND;
 #define WF_SENTCREATE   0x0100
 #define WF_HASPOS       0x0200  /* SetWindowPlacement: restored rect known */
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
+#define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
 
 #define PW(h)   ((PWND)(WORD)(h))
 PWND valid_wnd(HWND h);         /* NULL if h is not a live window */

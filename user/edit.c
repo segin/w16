@@ -21,6 +21,9 @@ typedef struct ED {
     WORD   first;               /* first visible character (single line) */
     int    topline;             /* first visible line (multi-line) */
     int    xoff;                /* pixels scrolled off at the left (multi-line) */
+    WORD   multi;               /* ES_MULTILINE */
+    WORD   ntabs;               /* EM_SETTABSTOPS: 0 the default */
+    WORD   tabs;                /* local block of ntabs stops, in dialog units */
     WORD   limit;
     HFONT  font;
     WORD   focus;
@@ -142,16 +145,79 @@ static int inset(HWND h, PED e)
     RECT r;
     int d;
     if (GetWindowLong(h, GWL_STYLE) & ES_MULTILINE)
-        return 1;
+        return 0;               /* Notepad's text at its edit's left edge (3.1) */
     GetClientRect(h, &r);
     d = (r.bottom - r.top - line_height(h, e)) / 2;
     return d > 0 ? d : 0;
+}
+
+/* A multi-line control expands tabs (3.1 SDK, EM_SETTABSTOPS: stops
+   in dialog units, every 32 by default, i.e. 8 average characters of the
+   system font): the stops in pixels for GetTabbedTextExtent/
+   TabbedTextOut, into buf; returns their number */
+static int tab_stops(PED e, int *buf, int max)
+{
+    int bx = LOWORD(GetDialogBaseUnits()), i, n = 0;
+    if (!e->ntabs || !e->tabs) {
+        buf[0] = 32 * bx / 4;
+        return 1;
+    }
+    for (i = 0; i < (int)e->ntabs && i < max; i++, n++)
+        buf[i] = ((int __near *)e->tabs)[i] * bx / 4;
+    return n;
+}
+
+static int line_start_of(PED e, WORD pos)
+{
+    return line_start(e, line_of(e, pos));
+}
+
+/* the width from the start of pos's line to pos, tabs expanded */
+static int tabbed_x(HDC hdc, PED e, WORD pos)
+{
+    int stops[16], n;
+    WORD ls = line_start_of(e, pos);
+    int *sp = stops;
+    if (pos <= ls)
+        return 0;
+    if (e->ntabs > 16) {
+        sp = (int *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+        if (!sp)
+            sp = stops;
+    }
+    n = tab_stops(e, sp, sp == stops ? 16 : e->ntabs);
+    n = LOWORD(GetTabbedTextExtent(hdc, text(e) + ls, pos - ls, n, sp));
+    if (sp != stops)
+        LocalFree((HLOCAL)sp);
+    return n;
+}
+
+/* text at x; tabs expanded from origin (the line's left) in a
+   multi-line control */
+static void out_text(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, int origin)
+{
+    if ((estyle(h) & ES_MULTILINE) && !e->password) {
+        int stops[16], k;
+        int *sp = stops;
+        if (e->ntabs > 16) {
+            sp = (int *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+            if (!sp)
+                sp = stops;
+        }
+        k = tab_stops(e, sp, sp == stops ? 16 : e->ntabs);
+        TabbedTextOut(hdc, x, y, text(e) + start, n, k, sp, origin);
+        if (sp != stops)
+            LocalFree((HLOCAL)sp);
+    } else
+        TextOut(hdc, x, y, text(e) + start, n);
 }
 
 static int text_x(HDC hdc, PED e, WORD start, WORD n)
 {
     if (!n)
         return 0;
+    if (e->multi && !e->password)
+        return tabbed_x(hdc, e, start + n) - tabbed_x(hdc, e, start);
     if (e->password) {
         char buf[64];
         WORD i;
@@ -162,7 +228,7 @@ static int text_x(HDC hdc, PED e, WORD start, WORD n)
     return LOWORD(GetTextExtent(hdc, text(e) + start, n));
 }
 
-static void draw_run(HDC hdc, PED e, int x, int y, WORD start, WORD n, BOOL sel)
+static void draw_run(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, BOOL sel, int origin)
 {
     if (!n)
         return;
@@ -176,7 +242,7 @@ static void draw_run(HDC hdc, PED e, int x, int y, WORD start, WORD n, BOOL sel)
             buf[i] = e->password;
         TextOut(hdc, x, y, buf, n < sizeof buf ? n : sizeof buf);
     } else
-        TextOut(hdc, x, y, text(e) + start, n);
+        out_text(hdc, h, e, x, y, start, n, origin);
 }
 
 static void paint(HWND h, PED e, HDC hdc)
@@ -206,8 +272,8 @@ static void paint(HWND h, PED e, HDC hdc)
             if (showsel && s1 > s0 && s0 < z && s1 > a) {
                 WORD p = s0 > a ? s0 : a, q = s1 < z ? s1 : z;
                 int xp = x + text_x(hdc, e, a, p - a), xq = xp + text_x(hdc, e, p, q - p);
-                draw_run(hdc, e, x, y, a, p - a, FALSE);
-                draw_run(hdc, e, xq, y, q, z - q, FALSE);
+                draw_run(hdc, h, e, x, y, a, p - a, FALSE, x);
+                draw_run(hdc, h, e, xq, y, q, z - q, FALSE, x);
                 /* the selection: its background a pixel wider than the
                    text (US4: "notepad" selected in MS Sans Serif, 47
                    pixels for text 46) */
@@ -224,17 +290,17 @@ static void paint(HWND h, PED e, HDC hdc)
                             buf[i] = e->password;
                         TextOut(hdc, xp, y, buf, i);
                     } else
-                        TextOut(hdc, xp, y, text(e) + p, q - p);
+                        out_text(hdc, h, e, xp, y, p, q - p, x);
                 }
             } else {
                 if (!IsWindowEnabled(h)) {
                     SetBkMode(hdc, TRANSPARENT);
                     if (e->password)
-                        draw_run(hdc, e, x, y, a, z - a, FALSE);
+                        draw_run(hdc, h, e, x, y, a, z - a, FALSE, x);
                     else
-                        TextOut(hdc, x, y, text(e) + a, z - a);
+                        out_text(hdc, h, e, x, y, a, z - a, x);
                 } else
-                    draw_run(hdc, e, x, y, a, z - a, FALSE);
+                    draw_run(hdc, h, e, x, y, a, z - a, FALSE, x);
             }
         }
     }
@@ -455,6 +521,7 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         /* fixed: e->text is used as the pointer (a moveable handle is not one) */
         e->text = (WORD)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, 32);
         e->size = 32;
+        e->multi = (estyle(h) & ES_MULTILINE) != 0;
         e->parent = GetParent(h);
         if (estyle(h) & ES_PASSWORD)
             e->password = '*';
@@ -470,6 +537,8 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return DefWindowProc(h, msg, wp, lp);
     switch (msg) {
     case WM_NCDESTROY:
+        if (e->tabs)
+            LocalFree((HLOCAL)e->tabs);
         LocalFree((HLOCAL)e->text);
         LocalFree((HLOCAL)e);
         SetWindowWord(h, 0, 0);
@@ -505,7 +574,10 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return e->len;
     case WM_SETFOCUS:
         e->focus = 1;
-        CreateCaret(h, 0, 1, line_height(h, e));
+        /* two pixels wide in Notepad's multi-line control, one in the
+           Run dialog's single-line one (3.1; UNVERIFIED which of style
+           and font decides) */
+        CreateCaret(h, 0, e->multi ? 2 : 1, line_height(h, e));
         place_caret(h, e);
         ShowCaret(h);
         InvalidateRect(h, NULL, TRUE);
@@ -709,6 +781,30 @@ LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                   wp == SB_THUMBPOSITION);
         return 0;
     }
+    case EM_SETTABSTOPS:
+        /* wParam stops at lParam (dialog units); 0: the default, 1: a
+           stop every that many (3.1 SDK) */
+        if (e->tabs)
+            LocalFree((HLOCAL)e->tabs);
+        e->tabs = 0;
+        e->ntabs = 0;
+        if (!(estyle(h) & ES_MULTILINE))
+            return FALSE;
+        if (wp && lp) {
+            WORD i, n = wp;
+            int __near *t;
+            /* one value: a stop every that many units (TabbedTextOut
+               repeats a single stop) */
+            e->tabs = (WORD)LocalAlloc(LPTR, n * sizeof(int));
+            if (!e->tabs)
+                return FALSE;
+            t = (int __near *)e->tabs;
+            for (i = 0; i < n; i++)
+                t[i] = ((int __far *)lp)[i];
+            e->ntabs = n;
+        }
+        InvalidateRect(h, NULL, TRUE);
+        return TRUE;
     case EM_GETTHUMB:
         /* WM_USER+14, internal in the 3.1 DDK's WINDOWS.H (Schulman ch.
            7 lists it): probe US6 got 0 from Windows 3.1's edit control

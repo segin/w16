@@ -1163,6 +1163,13 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US7: WinHelp and WINHELP.EXE (tests/apps/us7.c)
+$(B)/tests/us7.o: tests/apps/us7ref.h tests/apps/tklog.h
+$(DOS)/US7.EXE: $(B)/tests/start.o $(B)/tests/us7.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us7.map file { $(B)/tests/start.o $(B)/tests/us7.o }
+dos: $(DOS)/US7.EXE
 # US6: EM_GETTHUMB (tests/apps/us6.c)
 $(B)/tests/us6.o: tests/apps/us6ref.h tests/apps/tklog.h
 $(B)/tests/mevent.o: tests/apps/mevent.asm

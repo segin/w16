@@ -194,6 +194,32 @@ LRESULT WINAPI CallWindowProc(FARPROC f, HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return call_wndproc((WNDPROC)f, w ? (WORD)w->hInstance : 0, h, msg, wp, lp);
 }
 
+/* DestroyWindow: the messages posted to the window and not yet read go
+   (3.1 does not deliver them; a WM_NULL that EndDialog posted to wake a
+   common dialog's modal loop outlived the dialog, its handle was reused
+   by SNAP's next window, and the message reached that) */
+void purge_window_msgs(HQUEUE hq, HWND h)
+{
+    QUEUE __far *q;
+    WORD i, k, f;
+    if (!hq)
+        return;
+    q = q_of(hq);
+    f = irq_off();
+    for (i = k = 0; i < q->count; i++) {
+        QMSG __far *m = &q->msgs[(q->head + i) % q->size];
+        if (m->msg.hwnd == h)
+            continue;
+        if (k != i)
+            q->msgs[(q->head + k) % q->size] = *m;
+        k++;
+    }
+    q->count = k;
+    if (!k)
+        q->wakebits &= ~QS_POSTMESSAGE;
+    irq_restore(f);
+}
+
 static void receive_sent(HQUEUE hq)
 {
     QUEUE __far *q;

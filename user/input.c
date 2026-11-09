@@ -31,7 +31,8 @@ WORD __far input_pending;
 BYTE __far keystate[256];       /* the driver's async state (KEYBOARD.Enable) */
 static BYTE qkeystate[256];     /* GetKeyState's: as of the last message */
 POINT __far ptCursor;
-WORD lastkey;                   /* the last key pressed: Alt alone opens the menu */
+WORD lastkey;
+void switch_window(HWND cur, BOOL tobottom);                   /* the last key pressed: Alt alone opens the menu */
 HWND hwndCapture, hwndFocus, hwndActive;
 HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
@@ -202,6 +203,22 @@ int WINAPI ShowCursor(BOOL show)
 void WINAPI GetCursorPos(POINT __far *p)
 {
     *p = ptCursor;
+}
+
+/* A window appeared, went or moved where the pointer is: a mouse move
+   where it stands, so the window now under it sets the cursor (3.1: the
+   I-beam came up over Notepad's new edit control without the mouse
+   moving; an hourglass left by a program that had finished stayed until
+   the mouse moved). UNVERIFIED: the events 3.1 queues for it. */
+void pointer_changed(const RECT *r)
+{
+    POINT p;
+    WORD f = irq_off();
+    p.x = ptCursor.x;
+    p.y = ptCursor.y;
+    irq_restore(f);
+    if (!r || PtInRect(r, p))
+        push_event(WM_MOUSEMOVE, 0, MAKELONG(p.x, p.y));
 }
 
 void WINAPI SetCursorPos(int x, int y)
@@ -586,8 +603,17 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                 }
             }
             if (!w) {
-                if (!hwndActive)
+                if (!hwndActive) {
+                    /* nothing active (the active program ended and no
+                       window could take over): Alt+Tab and Alt+Esc
+                       still switch, Ctrl+Esc still opens the Task List */
+                    BYTE vk = (BYTE)e.wParam;
+                    if (e.msg == WM_SYSKEYDOWN && (vk == VK_TAB || vk == VK_ESCAPE))
+                        switch_window(0, FALSE);
+                    else if (e.msg == WM_KEYDOWN && vk == VK_ESCAPE && (qkeystate[VK_CONTROL] & 0x80))
+                        WinExec("taskman.exe", SW_SHOWNORMAL);
                     continue;
+                }
                 target = hwndActive;
                 if (e.msg == WM_KEYDOWN)
                     e.msg = WM_SYSKEYDOWN;

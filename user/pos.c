@@ -13,6 +13,7 @@
 
 void refresh_dcs(void);
 void byte_align(PWND w);
+void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
 void invalidate_screen(const RECT *rc);
 
@@ -154,12 +155,34 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
               !(flags & SWP_NOZORDER) || (flags & SWP_FRAMECHANGED);
     refresh_dcs();
+    /* (not for popup menus: a menu opened under the pointer from the
+       keyboard keeps its first item selected) */
+    if (changed && (wasvis || nowvis) && GetClassWord(h, GCW_ATOM) != 32768) {
+        pointer_changed(&oldwin);
+        if (!EqualRect(&oldwin, &w->rcWindow))
+            pointer_changed(&w->rcWindow);
+    }
     if (changed && !(flags & SWP_NOREDRAW)) {
         /* what was under the old place, and the window in its new one */
         if (wasvis)
             invalidate_screen(&oldwin);
         if (nowvis)
             invalidate_screen(&w->rcWindow);
+    }
+    if ((flags & SWP_SHOWWINDOW) && (w->flags & WF_SENDSIZE)) {
+        /* the WM_SIZE and WM_MOVE CreateWindow held back */
+        PWND pw = (w->style & WS_CHILD) ? PW(w->hwndParent) : (PWND)0;
+        w->flags &= ~WF_SENDSIZE;
+        send_message(h, WM_SIZE, (w->style & WS_MINIMIZE) ? SIZE_MINIMIZED :
+                     (w->style & WS_MAXIMIZE) ? SIZE_MAXIMIZED : SIZE_RESTORED,
+                     MAKELONG(w->rcClient.right - w->rcClient.left,
+                              w->rcClient.bottom - w->rcClient.top));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+        send_message(h, WM_MOVE, 0, MAKELONG(w->rcClient.left - (pw ? pw->rcClient.left : 0),
+                                             w->rcClient.top - (pw ? pw->rcClient.top : 0)));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
     }
     if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
         activate_window(h, FALSE);

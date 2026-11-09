@@ -32,6 +32,7 @@ void byte_align(PWND w)
     }
 }
 void free_place(HWND h);
+void purge_window_msgs(HQUEUE hq, HWND h);
 
 PWND valid_wnd(HWND h)
 {
@@ -197,8 +198,12 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             if (cy != CW_USEDEFAULT && cy)
                 sw = cy;                /* y of CW_USEDEFAULT: the show command */
             if (cx == CW_USEDEFAULT) {
-                cx = sysmet[SM_CXSCREEN] * 3 / 4;
-                cy = sysmet[SM_CYSCREEN] * 3 / 4;
+                /* the screen's width less two frames, down to the row of
+                   icons (Notepad started first on 3.1: 632x408 at 0,0 on
+                   640x480, then moved to x 4 by CS_BYTEALIGNCLIENT;
+                   UNVERIFIED for later, cascaded ones) */
+                cx = sysmet[SM_CXSCREEN] - x - 2 * sysmet[SM_CXFRAME];
+                cy = sysmet[SM_CYSCREEN] - y - sysmet[SM_CYICONSPACING];
             }
         } else if (cx == CW_USEDEFAULT) {
             cx = sysmet[SM_CXSCREEN] * 3 / 4;
@@ -268,7 +273,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     w->flags |= WF_CREATED;
-    if (!(style & WS_CHILD) || 1) {
+    /* a window made invisible gets WM_SIZE and WM_MOVE when it is first
+       shown (3.1 trace: Notepad's main window got none in CreateWindow;
+       its WM_SIZE handler places its edit control, which did not exist
+       yet, so w16's early WM_SIZE left the edit at 0,0 instead of 8,2) */
+    if (!(style & WS_VISIBLE))
+        w->flags |= WF_SENDSIZE;
+    else {
         send_message(h, WM_SIZE, SIZE_RESTORED,
                      MAKELONG(w->rcClient.right - w->rcClient.left,
                               w->rcClient.bottom - w->rcClient.top));
@@ -360,6 +371,7 @@ static void destroy_tree(HWND h)
     send_message(h, WM_NCDESTROY, 0, 0);
     if ((w = valid_wnd(h)) == 0)
         return;
+    purge_window_msgs(w->hq, h);
     unlink_window(w);
     free_window(w);
 }
