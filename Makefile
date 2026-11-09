@@ -505,6 +505,7 @@ WCPROBES := $(DOS)/WC1.COM $(DOS)/WC2.COM $(DOS)/WC3.COM $(DOS)/WC3B.COM \
             $(DOS)/WC4.COM $(DOS)/WC5.COM $(DOS)/WC6.COM $(DOS)/WC7.COM \
             $(DOS)/WC8.COM $(DOS)/WC9.EXE
 wcprobes: $(WCPROBES)
+dos: $(WCPROBES)
 $(DOS)/WC%.COM: tests/dos/wc%.asm tests/dos/wclib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
