@@ -57,7 +57,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 
 .SECONDARY:
 
-.PHONY: all host dos shell shell2 test clean
+.PHONY: all host dos shell shell2 test clean install-tree
 all: host dos shell
 
 host: $(B)/host/nedump
@@ -709,3 +709,28 @@ test: dos fonts
 
 clean:
 	rm -rf $(B)
+
+# ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
+# programs only, each where Windows 3.1 keeps it (the reference install:
+# WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
+# win/README.TXT says what to copy in from one's own Windows to boot it.
+# tests/w16tree.sh boots it. build/dos stays as it is.
+W16     := $(B)/w16
+W16SYS  := $(W16)/SYSTEM
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
+           $(FONS:$(FNT)/%=$(W16SYS)/%)
+install-tree: $(W16TREE)
+all: install-tree
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16)/README.TXT: win/README.TXT
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL: $(W16SYS)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
