@@ -96,12 +96,12 @@ static void disk_message(char drive, WORD kb)
     LoadString(hinst, IDS_NODISK, sbuf, sizeof sbuf);
     for (p = sbuf; *p && *p != 'X'; p++)
         ;
-    if (*p) {               /* the letter stands 16 blanks into the field */
+    if (*p) {               /* the letter stands 20 blanks (measured on the screen) into the field */
         *p = ' ';
-        for (i = 1; i < 16 && p[i] == ' '; i++)
+        for (i = 1; i < 20 && p[i] == ' '; i++)
             ;
-        if (i == 16)
-            p[16] = drive;
+        if (i == 20)
+            p[20] = drive;
     }
     for (p = sbuf; *p && *p != ':'; p++)
         ;
@@ -379,8 +379,9 @@ static void do_switch(void)
         *(WORD FAR *)(r + R_HWND) = (WORD)hwnd;
         r[R_1F] = 0x80;
         /* 08h: DSWAP shows its MS-DOS Prompt banner (set for
-           COMMAND.COM, not for other programs: WO2) */
-        r[R_FLAGS] = lstrcmpi(base_name(program), "COMMAND.COM") ? 0x04 : 0x0C;
+           COMMAND.COM without parameters, not for other programs nor for
+           COMMAND /C ...: WO2, boot-test) */
+        r[R_FLAGS] = (lstrcmpi(base_name(program), "COMMAND.COM") || tail[0]) ? 0x04 : 0x0C;
         r[R_KIND] = 0x00;
         r[R_NEXT] = recp(R_WINDOWS)[R_NEXT];
         recp(R_WINDOWS)[R_NEXT] = (BYTE)rec;
@@ -393,7 +394,7 @@ static void do_switch(void)
        at 185h changes between switches). 8A000h bytes were observed with
        640 KB of conventional memory, i.e. all of it above 1600h:0;
        UNVERIFIED how Windows 3.1 sizes it */
-    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_SHARE, (DWORD)(woa_memtop() - 0x1600) << 4);
+    hbuf = GlobalAlloc(GMEM_MOVEABLE, (DWORD)(woa_memtop() - 0x1600) << 4);
     if (!hbuf) {
         message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
         if (!started) {
@@ -445,7 +446,7 @@ static void do_switch(void)
        order, so that USER's Alt+Tab from there comes back to this program
        (as with Windows 3.1: with two prompts swapped out, Alt+Tab returned
        to the one left last) */
-    {
+    if (!(blk[B_178] & 0x08)) {     /* (after Ctrl+Esc: the Task List) */
         int t = blk[B_17E];
         BringWindowToTop(hwnd);
         if (t < R_WINDOWS && recp(t)[R_KIND] == 0x28) {
@@ -544,9 +545,21 @@ static BOOL setup(LPSTR cmd)
         return FALSE;
     }
     blk = (BYTE FAR *)MAKELP(woa_segsel(HIWORD(b)), LOWORD(b));
-    for (i = 0; i < 79 && blk[B_PROGRAM + i]; i++)
-        dosx_path[i] = blk[B_PROGRAM + i];
-    dosx_path[i] = 0;
+    /* what to put back at 189h when resuming: DOSX's path as WIN.COM
+       wrote it. A second instance finds another program's path there;
+       Windows 3.1's then still writes DOSX's (WO2): w16 takes it from the
+       block when it is DOSX's, else from an earlier instance (new instances
+       get a copy of the first one's data), else builds it as WIN.COM does
+       (lower-case "system") */
+    if (!dosx_path[0]) {
+        for (i = 0; i < 79 && blk[B_PROGRAM + i]; i++)
+            dosx_path[i] = blk[B_PROGRAM + i];
+        dosx_path[i] = 0;
+        if (!has_ext(dosx_path, "\\DOSX.EXE")) {
+            GetWindowsDirectory(dosx_path, sizeof dosx_path - 18);
+            lstrcat(dosx_path, "\\system\\dosx.exe");
+        }
+    }
 
     /* the PIF: the one given, else NAME.PIF beside the program, NAME.PIF
        on the search path, _DEFAULT.PIF (the order Windows 3.1 opens them) */
