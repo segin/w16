@@ -383,6 +383,8 @@ static BOOL posted_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MS
     return FALSE;
 }
 
+void idle_cursor_check(HQUEUE hq);
+
 static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOOL wait)
 {
     HQUEUE hq = cur_hq();
@@ -421,8 +423,11 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         }
         q = q_of(hq);
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
-        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending)
-            K_WAITEVENT(0);
+        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending) {
+            idle_cursor_check(hq);
+            if (!input_pending)
+                K_WAITEVENT(0);
+        }
         else if (input_pending && !(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)))
             K_OLDYIELD();
     }

@@ -41,6 +41,11 @@
 #              active window, Program Manager's caption inactive; w16's
 #              USER and GDI on w16's KRNL286
 #   runfrontk  the same with Microsoft's USER on w16's KRNL286
+#   tabs       Notepad from File > Run, text typed with tabs, closed
+#              (tests/scripts/input/tabs.txt); w16's USER and GDI on
+#              Microsoft's KRNL286 against all-Microsoft: identical screens
+#   alttab     Alt+Tab between Program Manager and Notepad, Notepad closed,
+#              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
 #   about      Help > About Program Manager (SHELL's ShellAbout) opened and
 #              closed with Enter and Esc by real keys, then the File and
 #              Help menus must open (tests/scripts/input/about.txt); w16's
@@ -75,7 +80,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk tabs alttab}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -258,6 +263,22 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
 " "$out/$c/01-run.png" 2>&1 || echo "no screen")
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
+    tabs|alttab)
+        "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r \
+            > "$out/$c-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/$c-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/$c-w16/$s" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/$c-w16/$s" "$f" "$out/$c-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
+        else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
     about)
         "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/about.txt" "$out/about" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \

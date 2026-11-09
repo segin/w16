@@ -36,6 +36,7 @@ void switch_window(HWND cur, BOOL tobottom);                   /* the last key p
 HWND hwndCapture, hwndFocus, hwndActive;
 HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
+static HCURSOR hcurSetByMsg;    /* the cursor the last WM_SETCURSOR left */
 static int cursor_level;        /* ShowCursor's count */
 static RECT __far rcClip;
 static int __far mthresh1 = 2, __far mthresh2, __far mspeed = 1;   /* acceleration */
@@ -219,6 +220,23 @@ void pointer_changed(const RECT *r)
     irq_restore(f);
     if (!r || PtInRect(r, p))
         push_event(WM_MOUSEMOVE, 0, MAKELONG(p.x, p.y));
+}
+
+/* A task about to wait for messages: if the cursor is not what the window
+   under it last chose (a program changed it - an hourglass while busy -
+   and has gone idle), that window gets to choose again (3.1 showed
+   Notepad's I-beam as soon as it was ready, the mouse untouched;
+   UNVERIFIED how 3.1 decides when) */
+void idle_cursor_check(HQUEUE hq)
+{
+    HWND w;
+    if (hcurCurrent == hcurSetByMsg || hwndCapture)
+        return;
+    w = WindowFromPoint(ptCursor);
+    if (w && valid_wnd(w) && PW(w)->hq == hq) {
+        hcurSetByMsg = hcurCurrent;     /* once per change */
+        pointer_changed(NULL);
+    }
 }
 
 void WINAPI SetCursorPos(int x, int y)
@@ -528,8 +546,10 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                         continue;
                 }
             }
-            if (valid_wnd(target))
+            if (valid_wnd(target)) {
                 send_message(target, WM_SETCURSOR, target, MAKELONG(hit, e.msg));
+                hcurSetByMsg = hcurCurrent;
+            }
             m->hwnd = target;
             m->time = e.time;
             m->pt = pt;

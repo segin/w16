@@ -6,7 +6,8 @@ sleep 3
 type notepad
 key Return
 sleep 8
-shot 01-notepad
+; (not compared: the caret blinks and the cursor settles at its own pace)
+shot x1-notepad
 key alt+Tab
 sleep 2
 shot 02-alttab-pm

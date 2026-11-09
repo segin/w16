@@ -78,11 +78,12 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
     while (p->hwndParent) {
         PWND parent = PW(p->hwndParent);
         BOOL clipsib = (p->style & WS_CLIPSIBLINGS) || !(p->style & WS_CHILD);
-        if (parent->hwndParent) {           /* the desktop is the screen */
-            SetRectRgn(hrgnTmp1, parent->rcClient.left, parent->rcClient.top,
-                       parent->rcClient.right, parent->rcClient.bottom);
-            CombineRgn(r, r, hrgnTmp1, RGN_AND);
-        }
+        /* cut to the parent's client area; for a top-level window the
+           desktop's, the screen (Windows 3.1's USER does: the GDI agent
+           saw its visible regions end at the screen's edges) */
+        SetRectRgn(hrgnTmp1, parent->rcClient.left, parent->rcClient.top,
+                   parent->rcClient.right, parent->rcClient.bottom);
+        CombineRgn(r, r, hrgnTmp1, RGN_AND);
         if (clipsib) {
             for (s = parent->hwndChild; s && s != (HWND)(WORD)p; s = PW(s)->hwndNext) {
                 PWND sw = PW(s);

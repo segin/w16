@@ -543,8 +543,13 @@ static int layout_bar(PMENU m, int width, BOOL align)
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
-        if (align)
+        if (align) {
+            /* the item reaches to where the next one starts (Program
+               Manager's Help item highlighted on 3.1: 2 pixels wider than
+               its text plus margins) */
             x = (x + 4) / 8 * 8;
+            it->rc.right = x;
+        }
     }
     SelectObject(hdc, old);
     m->cx = width;
