@@ -31,7 +31,8 @@ name=$(basename "$exe" | tr a-z A-Z)
 cp "$exe" "$work/c/$name"
 for f in ${REFRUN_FILES:-}; do
     case $f in
-    *=*) cp "${f%%=*}" "$work/c/${f#*=}" ;;          # src=path/under/C
+    *=*) mkdir -p "$(dirname "$work/c/${f#*=}")"           # src=path/under/C
+         cp "${f%%=*}" "$work/c/${f#*=}" ;;
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
