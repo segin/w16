@@ -399,8 +399,10 @@ static void title_place(HWND t, PWND w)
     SelectObject(hdc, old);
     {
         int cx = r.right - r.left + 2;
-        int x = (w->rcWindow.left + w->rcWindow.right) / 2 - cx / 2;
-        int y = w->rcWindow.bottom + 1;
+        /* one pixel left of centred: measured (Accessories, Games, StartUp
+           under Program Manager), UNVERIFIED as a rule */
+        int x = (w->rcWindow.left + w->rcWindow.right) / 2 - cx / 2 - 1;
+        int y = w->rcWindow.bottom;
         if (w->style & WS_CHILD) {
             x -= p->rcClient.left;
             y -= p->rcClient.top;
@@ -452,7 +454,6 @@ LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             GetWindowText(w->hwndOwner, text, sizeof text);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
-            r.left++;
             DrawText(hdc, text, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
             SelectObject(hdc, old);
         }

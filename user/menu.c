@@ -514,7 +514,12 @@ static int layout_bar(PMENU m, int width)
     UINT i;
     for (i = 0; i < m->count; i++) {
         PMITEM it = item_at(m, i);
-        int w = item_text_width(hdc, it) + 2 * cxSysCharMenu();
+        /* the text's width to the nearest character cell, plus a cell on
+           each side: Program Manager's File, Options, Window (text 24, 50,
+           52 pixels) take 40, 64, 72 on Windows 3.1 (measured; the rule
+           is UNVERIFIED beyond these) */
+        int cc = cxSysCharMenu();
+        int w = (item_text_width(hdc, it) + cc / 2) / cc * cc + 2 * cc;
         if (x + w > width && x > 0) {
             x = 0;
             y += h;

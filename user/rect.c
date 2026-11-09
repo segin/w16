@@ -217,6 +217,21 @@ static void draw_line(HDC hdc, int x, int y, LPCSTR s, int n, BOOL prefix, BOOL 
     }
 }
 
+/* DrawText, laid out as Windows 3.1 does (probe US3, tests/apps/us3.c):
+   - centring rounds down (an odd remainder goes right of the text, also
+     when the text is wider than the rectangle);
+   - DT_WORDBREAK breaks only at blanks: a word wider than the rectangle
+     stays whole on its line (clipped) and widens DT_CALCRECT's result; a
+     line ending at a break is measured with the blank it broke at, which
+     moves centred and right-aligned lines by that blank;
+   - with DT_SINGLELINE, DT_VCENTER/DT_BOTTOM move the text down by the
+     difference of heights (halved toward zero for DT_VCENTER) and the
+     value returned, and DT_CALCRECT's height, include that offset. */
+static int floor_half(int v)
+{
+    return v >= 0 ? v / 2 : -((-v + 1) / 2);
+}
+
 int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
 {
     TEXTMETRIC tm;
@@ -232,17 +247,18 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
         tabw = 8 * tm.tmAveCharWidth;
     y = r->top;
     if (fmt & DT_SINGLELINE) {
-        int w = text_width(hdc, s, n, prefix, tabs, tabw), x;
+        int w = text_width(hdc, s, n, prefix, tabs, tabw), x, dy = 0;
         if (fmt & DT_VCENTER)
-            y = r->top + (r->bottom - r->top - lh) / 2;
+            dy = (r->bottom - r->top - lh) / 2;
         else if (fmt & DT_BOTTOM)
-            y = r->bottom - lh;
-        x = (fmt & DT_CENTER) ? r->left + (width - w) / 2 :
+            dy = r->bottom - r->top - lh;
+        y += dy;
+        x = (fmt & DT_CENTER) ? r->left + floor_half(width - w) :
             (fmt & DT_RIGHT) ? r->right - w : r->left;
         if (fmt & DT_CALCRECT) {
             r->right = r->left + w;
-            r->bottom = r->top + lh;
-            return lh;
+            r->bottom = r->top + dy + lh;
+            return dy + lh;
         }
         if (!(fmt & DT_NOCLIP)) {
             SaveDC(hdc);
@@ -251,9 +267,9 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
         draw_line(hdc, x, y, s, n, prefix, tabs, tabw);
         if (!(fmt & DT_NOCLIP))
             RestoreDC(hdc, -1);
-        return lh;
+        return dy + lh;
     }
-    /* several lines, breaking at CR/LF and, with DT_WORDBREAK, at blanks */
+    /* several lines, at CR/LF and, with DT_WORDBREAK, at blanks */
     {
         int i = 0, maxw = 0;
         if (!(fmt & DT_NOCLIP) && !(fmt & DT_CALCRECT)) {
@@ -261,35 +277,64 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
             IntersectClipRect(hdc, r->left, r->top, r->right, r->bottom);
         }
         while (i < n) {
-            int start = i, end = i, last = -1, w, x;
-            while (end < n && s[end] != '\r' && s[end] != '\n') {
-                if ((fmt & DT_WORDBREAK) && s[end] == ' ')
-                    last = end;
-                if ((fmt & DT_WORDBREAK) &&
-                    text_width(hdc, s + start, end - start + 1, prefix, tabs, tabw) > width &&
-                    end > start) {
-                    if (last > start)
-                        end = last;
-                    break;
-                }
+            int start = i, end = i, w, mw, x;
+            BOOL broke = FALSE;
+            while (end < n && s[end] != '\r' && s[end] != '\n')
                 end++;
+            if (fmt & DT_WORDBREAK) {
+                /* the longest run of whole words that fits */
+                /* when even the first word does not fit, the line ends
+                   after it and the next one starts with the blank (US3:
+                   "Clipboard Viewer" in 40 pixels of the system font
+                   gives three lines) */
+                int k, fit = -1, first = -1;
+                for (k = start; k <= end; k++) {
+                    if (k == end || s[k] == ' ') {
+                        if (first < 0)
+                            first = k;
+                        if (text_width(hdc, s + start, k - start, prefix, tabs, tabw) <= width)
+                            fit = k;
+                        else
+                            break;
+                    }
+                }
+                /* ... but only when drawing centred or right-aligned text:
+                   DT_CALCRECT and left-aligned text break there as at any
+                   blank (US3) */
+                if (fit < 0 && !(fmt & DT_CALCRECT) && (fmt & (DT_CENTER | DT_RIGHT)))
+                    end = first;
+                else if (fit < 0 && first < end) {
+                    end = first;
+                    broke = TRUE;
+                } else if (fit >= 0 && fit < end) {
+                    end = fit;
+                    broke = TRUE;
+                }
             }
             w = text_width(hdc, s + start, end - start, prefix, tabs, tabw);
-            if (w > maxw)
-                maxw = w;
-            x = (fmt & DT_CENTER) ? r->left + (width - w) / 2 :
-                (fmt & DT_RIGHT) ? r->right - w : r->left;
+            /* measured with the blank it broke at */
+            mw = broke ? text_width(hdc, s + start, end - start + 1, prefix, tabs, tabw) : w;
+            /* centred and right-aligned lines count the blank only while
+               it still fits (US3: "a b c d e f g h" in 75 pixels) */
+            if (mw > width && (fmt & (DT_CENTER | DT_RIGHT)))
+                mw = w;
+            if (mw > maxw)
+                maxw = mw;
+            x = (fmt & DT_CENTER) ? r->left + floor_half(width - mw) :
+                (fmt & DT_RIGHT) ? r->right - mw : r->left;
             if (!(fmt & DT_CALCRECT))
                 draw_line(hdc, x, y, s + start, end - start, prefix, tabs, tabw);
             y += lh;
             total += lh;
             i = end;
-            if (i < n && s[i] == ' ' && (fmt & DT_WORDBREAK))
+            if (broke)
                 i++;
-            if (i < n && s[i] == '\r')
-                i++;
-            if (i < n && s[i] == '\n')
-                i++;
+            else {
+                if (i < n && s[i] == '\r')
+                    i++;
+                if (i < n && s[i] == '\n')
+                    i++;
+            }
         }
         if (fmt & DT_CALCRECT) {
             r->right = r->left + maxw;

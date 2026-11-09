@@ -276,7 +276,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 icon_place(w, &pt);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
-            set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON], sysmet[SM_CYICON],
+            set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
                            (cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
             if ((w = valid_wnd(h)) != 0) {

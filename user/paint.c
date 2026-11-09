@@ -272,7 +272,9 @@ BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
         return FALSE;
     }
     m->hwnd = h;
-    m->message = WM_PAINT;
+    /* a minimised window of a class with an icon gets WM_PAINTICON, which
+       DefWindowProc answers by drawing the icon (3.1 SDK) */
+    m->message = ((PW(h)->style & WS_MINIMIZE) && ((PCLS)PW(h)->cls)->hIcon) ? WM_PAINTICON : WM_PAINT;
     m->wParam = 0;
     m->lParam = 0;
     m->time = GetTickCount();
@@ -313,7 +315,8 @@ HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
     DeleteObject(upd);
     ps->fErase = TRUE;
     if (erase)
-        ps->fErase = !send_message(h, WM_ERASEBKGND, (WPARAM)ps->hdc, 0);
+        ps->fErase = !send_message(h, ((w->style & WS_MINIMIZE) && ((PCLS)w->cls)->hIcon) ?
+                                   WM_ICONERASEBKGND : WM_ERASEBKGND, (WPARAM)ps->hdc, 0);
     ps->fRestore = 0;
     ps->fIncUpdate = 0;
     return ps->hdc;

@@ -626,3 +626,10 @@ $(DOS)/US2.EXE: $(B)/tests/start.o $(B)/tests/us2.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us2.map file { $(B)/tests/start.o $(B)/tests/us2.o }
 dos: $(DOS)/US2.EXE
+# US3: DrawText's layout (tests/apps/us3.c)
+$(B)/tests/us3.o: tests/apps/us3ref.h tests/apps/tklog.h
+$(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
+dos: $(DOS)/US3.EXE

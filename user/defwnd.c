@@ -449,13 +449,20 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         BeginPaint(h, &ps);
         if ((w->style & WS_MINIMIZE) && ((PCLS)w->cls)->hIcon) {
             send_message(h, WM_ICONERASEBKGND, (WPARAM)ps.hdc, 0);
-            DrawIcon(ps.hdc, 0, 0, ((PCLS)w->cls)->hIcon);
+            ulogx("paint icon ", (WORD)((PCLS)w->cls)->hIcon);  /* TRACE */
+            DrawIcon(ps.hdc, 2, 2, ((PCLS)w->cls)->hIcon);
         }
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_PAINTICON:
+    case WM_PAINTICON: {
+        PAINTSTRUCT ps;
+        BeginPaint(h, &ps);
+        if (((PCLS)w->cls)->hIcon)
+            DrawIcon(ps.hdc, 2, 2, ((PCLS)w->cls)->hIcon);
+        EndPaint(h, &ps);
         return 0;
+    }
     case WM_ICONERASEBKGND: {
         /* the parent's background behind the icon */
         PWND p = PW(w->hwndParent);

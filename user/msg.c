@@ -447,7 +447,7 @@ LONG WINAPI DispatchMessage(const MSG __far *m)
     if (!w)
         return 0;
     r = call_wnd(w, m->hwnd, m->message, m->wParam, m->lParam);
-    if (m->message == WM_PAINT && (w = valid_wnd(m->hwnd)) != 0 &&
+    if ((m->message == WM_PAINT || m->message == WM_PAINTICON) && (w = valid_wnd(m->hwnd)) != 0 &&
         (w->hrgnUpdate || (w->flags & WF_INTERNALPAINT))) {
         /* the window did not paint: validate it, as Windows does after
            sending it WM_NCPAINT/WM_ERASEBKGND (UNVERIFIED which of those) */
