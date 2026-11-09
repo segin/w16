@@ -946,3 +946,40 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- OLE (ARCHITECTURE.md 16): OLECLI.DLL (ole/olecli/) and its probes ----
+# OC1.EXE: scripted OLE client probe; OCSPY.DLL: its log and DDE spy
+# (tests/olescenarios.sh, tests/ole/*.txt)
+OCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/ole/i4.o: ole/olecli/i4.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/%.o: tests/ole/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(OCFLAGS) -fo=$@ $<
+$(B)/ole/dllstart.o: tests/apps/dllstart.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/ocfault.o: tests/ole/ocfault.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/OCSPY.DLL: $(B)/ole/dllstart.o $(B)/ole/ocspy.o $(B)/ole/ocfault.o $(B)/ole/i4.o tests/ole/ocspy.lnk tests/apps/dll.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/ole/ocspy.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/ocspy.map file { $(B)/ole/dllstart.o $(B)/ole/ocspy.o $(B)/ole/ocfault.o $(B)/ole/i4.o } \
+	    library toolhelp.lib
+$(DOS)/OC1.EXE: $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/oc1.map option stack=40k file { $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o } \
+	    library olecli.lib library shell.lib import SPYLOG OCSPY.1 import SPYSTART OCSPY.2 \
+	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4
+$(DOS)/OCSRV.EXE: $(B)/tests/start.o $(B)/ole/ocsrv.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/ocsrv.map file { $(B)/tests/start.o $(B)/ole/ocsrv.o } \
+	    import SPYLOG OCSPY.1
+oleprobes: $(DOS)/OC1.EXE $(DOS)/OCSPY.DLL $(DOS)/OCSRV.EXE
+dos: oleprobes
+.PHONY: oleprobes

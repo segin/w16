@@ -1,0 +1,28 @@
+; error paths and render options
+spy
+doc 0 OCDOC
+doc 1 OCDOC
+doc 2 OTHER
+use 0
+create 0 NoSuchClass x0 draw 0
+clipclear
+qclip StdFileEditing draw 0
+qclip Static draw 0
+qlink StdFileEditing draw 0
+fromfile 0 PBrush C:\NOFILE.BMP - x1 draw 0
+linkfile 0 PBrush C:\NOFILE.BMP - x2 draw 0
+create 0 PBrush x3 format CF_DIB
+querytype 0
+getdata 0 CF_DIB
+getdata 0 CF_METAFILEPICT
+close 0
+getdata 0 CF_DIB
+save 0 C:\X0.BIN
+delete 0
+create 1 PBrush x4 none 0
+close 1
+save 1 C:\X1.BIN
+draw 1 C:\D1.BMP 50 50
+delete 1
+revokedoc 2
+revokedoc 0

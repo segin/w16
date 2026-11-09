@@ -1,0 +1,17 @@
+; a new embedded Paintbrush object: create, query, update, close, save, draw
+spy
+version
+isdcmeta
+doc 0 OCDOC
+create 0 PBrush obj0 draw 0
+wins
+wait 1000
+querytype 0
+bounds 0
+enumfmts 0
+update 0
+close 0
+save 0 C:\O0.BIN
+draw 0 C:\D0.BMP 100 80
+delete 0
+revokedoc 0
