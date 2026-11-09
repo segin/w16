@@ -40,6 +40,8 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
+# DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
+DXPROBES := DX1 DX2 DX4 DX5 DX8
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
@@ -687,7 +689,7 @@ $(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
 
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
-DXPROBES := DX1 DX2 DX4 DX5 DX8
+# (DXPROBES is set at the top, before the dos target expands it)
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
