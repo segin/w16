@@ -1,0 +1,7 @@
+; Write embeds a new Paintbrush picture, returns to Write, edits the
+; object again (Edit > Object > Edit), updates, returns and saves
+; C:\OLE2.WRI (UI steps in wredit.snap)
+run C:\SNAP.EXE
+wait 1000
+waitgone SNAP
+wait 2000

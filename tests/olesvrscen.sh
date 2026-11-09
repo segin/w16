@@ -32,6 +32,16 @@ echo "olesvrscen: $out"
 for c in $combos; do
     "$root/tests/olesvr/osobs.sh" "$out" "${c%-*}" "${c#*-}" $names > "$out/run-$c.txt" 2>&1 || true
 done
+# what is compared: the log without OS1's waits (its script runs from a
+# timer, so where those lines fall depends on timing) and the files saved,
+# with the identifiers clients make from the time masked (osnorm.py)
+for n in $names; do
+    get=
+    if [ -f "$s/$n.get" ]; then get=$(cat "$s/$n.get"); fi
+    for c in $combos; do
+        python3 "$root/tests/olesvr/osnorm.py" "$out/$n-$c" $get
+    done
+done
 status=0
 for n in $names; do
     ref=$out/$n-ms-ms
@@ -41,13 +51,15 @@ for n in $names; do
         result=ok
         if [ ! -s "$ref/os.log" ] || [ ! -s "$d/os.log" ]; then
             result="FAIL (no log)"
-        elif ! diff "$ref/os.log" "$d/os.log" > "$d/os.diff"; then
+        elif ! diff "$ref/os.cmp" "$d/os.cmp" > "$d/os.diff"; then
             result="FAIL (DDE log differs: $d/os.diff)"
         fi
         if [ -f "$s/$n.get" ]; then
             for f in $(cat "$s/$n.get"); do
                 b=$(basename "$f")
-                if ! cmp -s "$ref/$b" "$d/$b"; then result="FAIL ($b differs)"; fi
+                if [ ! -f "$ref/$b.norm" ] || ! cmp -s "$ref/$b.norm" "$d/$b.norm"; then
+                    result="FAIL ($b differs)"
+                fi
             done
         fi
         for bmp in "$ref"/*.BMP; do

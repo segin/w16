@@ -1,0 +1,32 @@
+; Paintbrush as a link server and the other servers of Windows 3.1
+; (Packager, Sound Recorder) as embedding servers, through OLECLI
+doc OS2PB
+linkfile PBrush C:\WINDOWS\ARCADE.BMP
+query
+update
+activate 0
+wait 3000
+update
+close
+reconnect
+update
+close
+delete
+embfile PBrush C:\WINDOWS\ARCADE.BMP
+query
+close
+savestream
+delete
+create Package
+wait 3000
+close
+delete
+create SoundRec
+wait 3000
+close
+delete
+revokedoc
+wait 3000
+waitgone PBRUSH
+waitgone PACKAGER
+waitgone SOUNDREC
