@@ -19,6 +19,9 @@ def main():
     d = open(sys.argv[1], 'rb').read()
     ne = struct.unpack_from('<I', d, 0x3C)[0]
     rt = ne + struct.unpack_from('<H', d, ne + 0x24)[0]
+    if rt == ne + struct.unpack_from('<H', d, ne + 0x26)[0]:
+        open(sys.argv[2], 'wb').close()          # no resources
+        return
     shift = struct.unpack_from('<H', d, rt)[0]
     p = rt + 2
 

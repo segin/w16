@@ -617,3 +617,29 @@ $(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/
 	$(WLINK) @$(B)/gdi/gd2.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/gdi/gd2.map \
 	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o }
+
+# ---- GDI.EXE: w16's GDI (gdi/; ARCHITECTURE.md 11) ----
+# large model, SS != DS, byte-packed structures (the DDK's), 286
+GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=112 -wcd=201 -Igdi
+GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/object.o \
+           $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
+           $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o
+gdi: $(DOS)/GDI.EXE
+dos: $(DOS)/GDI.EXE
+$(B)/gdi/exports.lnk $(B)/gdi/stubs.asm &: tools/mkgdiexp.py tools/mkgdlog.py \
+        docs/exports/GDI.txt tests/gdi/gdi.spec $(wildcard gdi/*.c)
+	@mkdir -p $(@D)
+	python3 tools/mkgdiexp.py $(B)/gdi/exports.lnk $(B)/gdi/stubs.asm
+$(B)/gdi/stubs.o: $(B)/gdi/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.c gdi/gdi.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(DOS)/GDI.EXE: $(GOBJS) gdi/gdi.lnk $(B)/gdi/exports.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @gdi/gdi.lnk @$(B)/gdi/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gdi.map file { $(GOBJS) }
+	python3 tools/nemark.py $@ 3.10

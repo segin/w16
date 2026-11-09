@@ -87,7 +87,8 @@ if [ -n "$glog" ]; then
     b=$root/build/gdi
     (cd "$root" && PATH=${WATCOM:-/opt/watcom}/binl64:$PATH WATCOM=${WATCOM:-/opt/watcom} \
         wlink @$b/gd2.lnk name "$sys/GDI.EXE" libpath ${WATCOM:-/opt/watcom}/lib286/win \
-        option resource="$work/gdi.res" file { $b/gdlog.o $b/gd2stubs.o $b/gd2log.o }) >/dev/null
+        $( [ -s "$work/gdi.res" ] && echo option resource="$work/gdi.res" ) \
+        file { $b/gdlog.o $b/gd2stubs.o $b/gd2log.o }) >/dev/null
 fi
 printf '%s\n' "$files" | while IFS= read -r f; do
     [ -n "$f" ] || continue
@@ -160,7 +161,7 @@ SH
     xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh" || true
     [ -f "$work/s.png" ] && cp "$work/s.png" "$out/screen.png"
 fi
-for f in OUT.TXT WINDOWS/BOOTLOG.TXT GD.LOG; do
+for f in OUT.TXT WINDOWS/BOOTLOG.TXT GD.LOG W16GDI.LOG; do
     [ -f "$work/c/$f" ] && tr -d '\r' < "$work/c/$f" > "$out/$(basename "$f")"
 done
 echo "== results in $out"

@@ -1,0 +1,14 @@
+# wlink directives for GDI.EXE (gdi/; ARCHITECTURE.md 11). Object files,
+# the output name and the export table (build/gdi/exports.lnk, made by
+# tools/mkgdiexp.py) come from the Makefile. Ordinals and names are the
+# real module's (docs/exports/GDI.txt).
+format windows dll
+option modname=GDI
+option description 'w16 Graphics Device Interface'
+option start=gdi_libentry
+option quiet
+option map
+option heapsize=10000
+segment type code fixed preload
+segment type data moveable preload
+library windows.lib
