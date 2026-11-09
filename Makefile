@@ -871,6 +871,47 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
+# ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
+# WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
+WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
+woprobes: $(WOPROBES)
+$(B)/tests/wo2s.o: tests/apps/wo2s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO2.EXE: $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o tests/apps/app.lnk tests/apps/wo2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo2.map file { $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o }
+$(B)/tests/wo1s.o: tests/apps/wo1s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO1.MOD: $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o tests/apps/app.lnk tests/apps/wo1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo1.map file { $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o }
+$(DOS)/WO%.COM: tests/dos/wo%.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
+# ---- WINOLDAP.MOD: w16's Standard-mode DOS application support ----
+WOA_OBJS := $(B)/shell/start.o $(B)/winoldap/winoldap.o $(B)/winoldap/woasm.o
+dos: $(DOS)/WINOLDAP.MOD
+$(B)/winoldap/%.o: winoldap/%.c winoldap/winoldap.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/winoldap/woasm.o: winoldap/woasm.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/winoldap/winoldap.res: winoldap/winoldap.rc winoldap/winoldap.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=winoldap -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @winoldap/winoldap.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/winoldap/winoldap.map \
+	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
+	python3 tools/nemark.py $@ 3.10
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
