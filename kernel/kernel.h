@@ -79,6 +79,7 @@ void diag_load_end(const char FAR *name, u16 rc);
 
 /* ---- fault.c ---- */
 void fault_init(void);
+void text_mode(void);
 void wd_start(u16 seconds);
 void wd_progress(void);
 void wd_stop(void);

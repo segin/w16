@@ -208,6 +208,7 @@ int winboot_wanted(void)
 
 static void boot_fail(const char FAR *name)
 {
+    text_mode();
     kputs("\r\n\r\nError loading ");
     kputs(name);
     kputs("\r\n");
