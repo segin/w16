@@ -472,8 +472,13 @@ GETTASKQUEUEES:
 ; not: under DOSX, KERNEL's first version, which called INT 31h on the
 ; moving stack, returned through zeros - observed with TK19 as the shell
 ; in tests/dropin.sh.) The caller frees the old memory afterwards.
+; Interrupts stay off from before the copy until the new base is set: an
+; interrupt handler (the mouse's or keyboard's, USER's event code) may
+; write into the segment being moved, which would be lost in the old
+; copy, and must not run on this stack. UNVERIFIED: how 3.1's KRNL286
+; does it. The stack only holds the INT 31h call's frame then; 1 KB.
 segment _BSS
-move_stack      resb 256
+move_stack      resb 1024
 move_stack_top:
 segment _TEXT
 global _seg_move
@@ -490,13 +495,13 @@ _seg_move:
         mov ax, [bp + 10]               ; nwords
         mov ds, [bp + 6]
         mov es, [bp + 8]
+        pushf                           ; the caller's interrupt flag
         ; onto KERNEL's stack (SS:SP kept in DI:SI)
         mov si, sp
         mov di, ss
         cli
         mov ss, [cs:dgroup_word]
         mov sp, move_stack_top wrt DGROUP
-        sti
         push si
         push di
         push cx
@@ -510,10 +515,9 @@ _seg_move:
         int 31h
         pop di
         pop si
-        cli
         mov ss, di                      ; sel, now at its new base, or SS
         mov sp, si
-        sti
+        popf
         pop es
         pop ds
         pop di
