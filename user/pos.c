@@ -131,6 +131,22 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         w->style &= ~WS_VISIBLE;
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
+        /* the active window hidden, by ShowWindow or SetWindowPos: the
+           next visible, enabled top-level window becomes active, or none.
+           Program Manager hides its Run dialog with SetWindowPos before
+           WinExec (US1-style trace on 3.1); the dialog stayed "active"
+           while hidden, so when it ended it gave the activation back to
+           Program Manager over the program just started */
+        if (h == hwndActive) {
+            HWND t;
+            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
+                if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED) &&
+                    !(PW(t)->style & WS_CHILD))
+                    break;
+            activate_window(t, FALSE);
+            if (!(w = valid_wnd(h)))
+                return FALSE;
+        }
     }
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
@@ -251,13 +267,6 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             return FALSE;
         send_message(h, WM_SHOWWINDOW, FALSE, 0);
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
-        if (h == hwndActive && (w = valid_wnd(h)) != 0) {
-            HWND t;
-            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
-                if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED))
-                    break;
-            activate_window(t, FALSE);
-        }
         return wasvis;
     case SW_SHOWMINIMIZED:
     case SW_MINIMIZE:

@@ -1,0 +1,3 @@
+# TK46.EXE (tests/apps/tk46.c, tk46s.asm): INT 15h C207h with a protected-mode handler
+@tests/apps/app.lnk
+import U_INITAPP USER.5

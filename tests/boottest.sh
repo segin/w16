@@ -36,6 +36,11 @@
 #              PROGMAN, NOTEPAD, WINOLDAP, WIN87EM, fonts) with real input
 #              after the boot (tests/scripts/input/menus.txt): the Help menu
 #              must open from the keyboard and the pointer must move
+#   runfront   Program Manager's File > Run starts Notepad with real keys
+#              (tests/scripts/input/runfront.txt): Notepad must end up the
+#              active window, Program Manager's caption inactive; w16's
+#              USER and GDI on w16's KRNL286
+#   runfrontk  the same with Microsoft's USER on w16's KRNL286
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -63,7 +68,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -186,6 +191,23 @@ for c in $cases; do
         else
             echo "FAIL allw16input: screens missing ($d)"; fails=$((fails + 1))
         fi ;;
+    runfront|runfrontk)
+        if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+        else set --; fi
+        "$root/tests/inputrun.sh" -b 25 -t 60 "$root/tests/scripts/input/runfront.txt" "$out/$c" "$@" \
+            > "$out/$c.txt" 2>&1 || true
+        # Notepad's caption (top left) the active colour, Program Manager's
+        # (its right part, beyond Notepad) not
+        r=$(python3 -c "
+from PIL import Image
+import sys
+im = Image.open(sys.argv[1]).convert('RGB')
+np, pm = im.getpixel((200, 8)), im.getpixel((500, 60))
+navy = lambda p: p[0] < 40 and p[1] < 40 and p[2] > 100
+print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm))
+" "$out/$c/01-run.png" 2>&1 || echo "no screen")
+        if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
+        else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
