@@ -575,3 +575,26 @@ test: dos
 
 clean:
 	rm -rf $(B)
+
+# ---- GD1, GD2: logging stand-ins for GDI's interfaces (tests/gdi; probes,
+# not in make test; ARCHITECTURE.md 11). GD1.DRV is a DISPLAY driver that
+# records every call and forwards it to VGA.DRV renamed VGAREAL
+# (tests/gdi/gdtrace.sh makes that copy in a scratch install).
+gdprobes: $(DOS)/GD1.DRV
+$(B)/gdi/gd1stubs.asm $(B)/gdi/gd1.lnk &: tests/gdi/display.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py tests/gdi/display.spec VGAREAL $(B)/gdi/gd1stubs.asm \
+	    $(B)/gdi/gd1.lnk DISPLAY 'DISPLAY : 100, 96, 96 : VGA Color Display'
+$(B)/gdi/gd1stubs.o: $(B)/gdi/gd1stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gdlog.o: tests/gdi/gdlog.asm tests/gdi/gdlog.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd1log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY '-dGDL_FILE="C:\\GD1.LOG"' -fo=$@ $<
+$(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/gd1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd1.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
