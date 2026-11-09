@@ -52,15 +52,23 @@ static void font_units(HFONT f, int *cx, int *cy)
     SelectObject(hdcScreen, old);
 }
 
+/* v * u / d rounded to the nearest, as MulDiv (US4: a Run dialog with
+   base units 7 x 13 puts x 6, y 20 at 11, 33) */
+static int du(int v, int u, int d)
+{
+    long p = (long)v * u;
+    return (int)(p >= 0 ? (p + d / 2) / d : -((-p + d / 2) / d));
+}
+
 void WINAPI MapDialogRect(HWND h, RECT __far *r)
 {
     int cx = GetWindowWord(h, DW_CX), cy = GetWindowWord(h, DW_CY);
     if (!cx)
         cx = cxSysChar, cy = cySysChar;
-    r->left = r->left * cx / 4;
-    r->right = r->right * cx / 4;
-    r->top = r->top * cy / 8;
-    r->bottom = r->bottom * cy / 8;
+    r->left = du(r->left, cx, 4);
+    r->right = du(r->right, cx, 4);
+    r->top = du(r->top, cy, 8);
+    r->bottom = du(r->bottom, cy, 8);
 }
 
 /* ---- the dialog manager ---- */
@@ -255,7 +263,9 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         }
     }
     font_units(font, &ux, &uy);
-    SetRect(&r, x * ux / 4, y * uy / 8, (x + cx) * ux / 4, (y + cy) * uy / 8);
+    SetRect(&r, du(x, ux, 4), du(y, uy, 8), 0, 0);
+    r.right = r.left + du(cx, ux, 4);
+    r.bottom = r.top + du(cy, uy, 8);
     /* the window rectangle around that client area */
     {
         int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
@@ -327,8 +337,8 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             q = skip_sz(q, &text);
         {
             BYTE extra = *q++;
-            c = create_window(0, icls, text, is | WS_CHILD, ix * ux / 4, iy * uy / 8,
-                              icx * ux / 4, icy * uy / 8, h, (HMENU)id, hinst,
+            c = create_window(0, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
+                              du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, hinst,
                               extra ? (void __far *)q : NULL);
             q += extra;
         }

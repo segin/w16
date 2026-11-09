@@ -8,7 +8,9 @@ option start=libentry
 option heapsize=4k
 option quiet
 segment type code fixed preload
-segment type data fixed preload
+# moveable, as Windows 3.1's USER has it: the local heap grows (US4: the
+# fourth dialog's controls failed in a fixed 7K one)
+segment type data moveable preload
 library windows.lib
 # KERNEL
 import K_FATALEXIT KERNEL.1

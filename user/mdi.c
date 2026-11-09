@@ -455,7 +455,10 @@ LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             GetWindowText(w->hwndOwner, text, sizeof text);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
-            InflateRect(&r, -1, 0);
+            /* the text one pixel in from the left (Program Manager's
+               icon titles, pixel-compared) */
+            r.left += 1;
+            r.right -= 3;
             DrawText(hdc, text, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
             SelectObject(hdc, old);
         }

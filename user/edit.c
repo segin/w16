@@ -129,6 +129,20 @@ static int line_height(HWND h, PED e)
     return tm.tmHeight;
 }
 
+/* where the text starts inside a single-line edit: half the room the
+   font leaves, both across and down (US4: 3 pixels in a 24-pixel high
+   control with the system font; UNVERIFIED across as a rule) */
+static int inset(HWND h, PED e)
+{
+    RECT r;
+    int d;
+    if (GetWindowLong(h, GWL_STYLE) & ES_MULTILINE)
+        return 1;
+    GetClientRect(h, &r);
+    d = (r.bottom - r.top - line_height(h, e)) / 2;
+    return d > 0 ? d : 0;
+}
+
 static int text_x(HDC hdc, PED e, WORD start, WORD n)
 {
     if (!n)
@@ -178,8 +192,8 @@ static void paint(HWND h, PED e, HDC hdc)
         for (line = (estyle(h) & ES_MULTILINE) ? e->topline : 0; line < nlines; line++) {
             WORD st = (estyle(h) & ES_MULTILINE) ? line_start(e, line) : e->first;
             WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : e->len - e->first;
-            int y = (estyle(h) & ES_MULTILINE) ? (line - e->topline) * lh : 0;
-            int x = 1;
+            int y = (estyle(h) & ES_MULTILINE) ? (line - e->topline) * lh : inset(h, e);
+            int x = inset(h, e);
             WORD a = st, z = st + n;
             if (y > r.bottom)
                 break;
@@ -210,7 +224,7 @@ static void place_caret(HWND h, PED e)
 {
     HDC hdc;
     HFONT old;
-    int x, y = 0, lh;
+    int x, y = inset(h, e), lh;
     WORD st;
     if (!e->focus)
         return;
@@ -223,7 +237,7 @@ static void place_caret(HWND h, PED e)
         y = (line - e->topline) * lh;
     } else
         st = e->first;
-    x = 1 + (e->sel1 > st ? text_x(hdc, e, st, e->sel1 - st) : 0);
+    x = inset(h, e) + (e->sel1 > st ? text_x(hdc, e, st, e->sel1 - st) : 0);
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
     SetCaretPos(x, y);
@@ -256,10 +270,13 @@ static void scroll_to_caret(HWND h, PED e)
 
 static void refresh(HWND h, PED e)
 {
+    /* invalidated, not painted now: a dialog's focus goes to its edit
+       control (selecting its text) while the dialog itself is still to be
+       painted, and the dialog, without WS_CLIPCHILDREN, would paint over
+       it (US4's Run dialog) */
     scroll_to_caret(h, e);
     HideCaret(h);
     InvalidateRect(h, NULL, TRUE);
-    UpdateWindow(h);
     place_caret(h, e);
     ShowCaret(h);
 }
@@ -300,7 +317,7 @@ static WORD pos_from_x(HWND h, PED e, int x, int y)
         n = e->len - st;
     }
     for (i = 0; i < n; i++)
-        if (1 + text_x(hdc, e, st, i + 1) - (text_x(hdc, e, st + i, 1) / 2) > x)
+        if (inset(h, e) + text_x(hdc, e, st, i + 1) - (text_x(hdc, e, st + i, 1) / 2) > x)
             break;
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
