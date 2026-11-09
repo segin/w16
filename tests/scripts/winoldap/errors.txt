@@ -1,0 +1,27 @@
+# error cases from File > Run: a program that is not there, then the
+# MS-DOS Prompt without a 286 grabber (VGACOLOR.2GR removed)
+# opts: rm=WINDOWS/SYSTEM/VGACOLOR.2GR
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\NOPE.COM
+key Return
+sleep 5
+shot nofile
+key Return
+sleep 3
+shot nofile2
+key Right Right Right Right
+sleep 1
+key Return
+sleep 6
+shot nograbber
+key Return
+sleep 4
+shot after
+key alt+F4
+sleep 3
+key Return
+sleep 8
