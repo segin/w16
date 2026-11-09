@@ -95,7 +95,7 @@ if [ -n "$shots" ]; then
         REFRUN_FILES="$files" REFRUN_OUT="$tmp/$who" "$root/tests/refrun.sh" \
             "$dos/SNAP.EXE" /S > "$tmp/$who/log.txt" 2>&1 || true
         # the window dumps (rectangles, styles, classes, text)
-        grep -v -e '-> ' -e '^SNAP' -e '^WINEXIT' "$tmp/$who/log.txt" > "$tmp/$who/dump.txt" || true
+        grep -a -v -e '-> ' -e '^SNAP' -e '^WINEXIT' "$tmp/$who/log.txt" > "$tmp/$who/dump.txt" || true
         cp "$tmp/$who/log.txt" "$shots/snap-$who.txt"
     done
     if cmp -s "$tmp/ref/dump.txt" "$tmp/w16/dump.txt"; then
