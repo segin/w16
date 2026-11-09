@@ -748,6 +748,7 @@ Sources (§3): the Windows 3.1 SDK reference; the Windows 3.1 DDK documentation,
 
 ### 11.4 Results
 
+- `make boot-test` (`tests/boottest.sh`) has the cases `gdi` (w16's GDI on Microsoft's KRNL286), `gdik` (on w16's KRNL286) and `usergdi` (w16's USER and GDI on w16's KRNL286), each compared with the all-Microsoft boot.
 - `tests/gdiboot.sh -s -C build/gdiref/ms/screen.png` (w16's GDI with Microsoft's KERNEL, USER, VGA.DRV and fonts): Program Manager at 45 s is **pixel-identical** to the reference (AE 0), BOOTLOG.TXT has the same lines. With w16's KRNL286 as well (`-k`): pixel-identical too.
 - The boot hits no unimplemented export (`[w16] gdilog=1` in SYSTEM.INI makes w16's GDI write `C:\W16GDI.LOG`: unimplemented ordinals, the display Enable, the font table and mapping).
 - w16's own PROGMAN.EXE as the shell: the screen with w16's GDI is pixel-identical to the same shell on Microsoft's GDI. w16's USER (§10) with w16's GDI (`tests/userboot.sh -f build/dos/GDI.EXE=WINDOWS/SYSTEM/GDI.EXE`) gives the same screen as w16's USER on Microsoft's GDI (AE 0).
