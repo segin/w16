@@ -16,6 +16,22 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     ckey <mods> <vk-hex>   a key press with modifiers held: mods is any
+ *                            of c (Ctrl), s (Shift), a (Alt) (the
+ *                            keyboard state is set around the message)
+ *     clippic <w> <h>        put a w x h test picture (CF_BITMAP, the
+ *                            display's format, drawn the same each time)
+ *                            on the clipboard
+ *     cliptext <text>        put <text> on the clipboard (CF_TEXT)
+ *     click <x> <y>          left button down and up at client point x, y
+ *                            of the window with the focus
+ *     drag <x0> <y0> <x1> <y1>  button down at x0, y0, move, up at x1, y1
+ *     dblclk <x> <y>         a double click there
+ *     blink <ms>             SetCaretBlinkTime (a long time keeps carets
+ *                            from blinking between screenshots)
+ *     cbsel <id-hex> <n>     select entry n of combo box <id> in the
+ *                            focus's dialog and tell the dialog
+ *                            (CBN_SELCHANGE), as choosing it does
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -280,6 +296,8 @@ static void dump_tree(HWND w, int depth)
         outint(r.top); out(",");
         outint(r.right); out(",");
         outint(r.bottom);
+        out(" cstyle=");                /* the class style */
+        outhex(GetClassWord(w, GCW_STYLE), 4);
         out("\r\n");
 #ifndef SNAP_WIN2
         {   /* the entries of list and combo boxes */
@@ -371,6 +389,174 @@ done:
 }
 #endif
 
+/* ---- input with modifiers, mouse, clipboard ---- */
+
+/* the next number of a blank-separated argument list; *s moves past it */
+static WORD next_num(char **s, WORD base)
+{
+    WORD v;
+    while (**s == ' ')
+        (*s)++;
+    v = parse_num(*s, base);
+    while (**s && **s != ' ')
+        (*s)++;
+    return v;
+}
+
+static void ckey(char *arg)
+{
+    static BYTE ks[256], save[256];
+    char *m = arg;
+    WORD vk;
+    int i;
+    while (*arg && *arg != ' ')
+        arg++;
+    vk = next_num(&arg, 16);
+    GetKeyboardState(save);
+    for (i = 0; i < 256; i++)
+        ks[i] = save[i];
+    for (; *m && *m != ' '; m++) {
+        if (*m == 'c')
+            ks[VK_CONTROL] |= 0x80;
+        else if (*m == 's')
+            ks[VK_SHIFT] |= 0x80;
+        else if (*m == 'a')
+            ks[VK_MENU] |= 0x80;
+    }
+    SetKeyboardState(ks);
+    PostMessage(target(), ks[VK_MENU] & 0x80 ? WM_SYSKEYDOWN : WM_KEYDOWN, vk,
+                ks[VK_MENU] & 0x80 ? 0x20000001L : 1L);
+    pump(200);
+    PostMessage(target(), ks[VK_MENU] & 0x80 ? WM_SYSKEYUP : WM_KEYUP, vk,
+                ks[VK_MENU] & 0x80 ? 0xE0000001L : 0xC0000001L);
+    pump(100);
+    SetKeyboardState(save);
+    pump(100);
+}
+
+/* a deterministic picture: white, a black frame, a gray ellipse, a
+   diagonal, so that pasted pictures can be told apart and compared */
+static void clippic(char *arg)
+{
+    int w = next_num(&arg, 10), h = next_num(&arg, 10);
+    HDC scr = GetDC(NULL), mem = CreateCompatibleDC(scr);
+    HBITMAP bm = CreateCompatibleBitmap(scr, w, h), old;
+    ReleaseDC(NULL, scr);
+    if (!mem || !bm) {
+        out(" -> no bitmap");
+        return;
+    }
+    old = SelectObject(mem, bm);
+    PatBlt(mem, 0, 0, w, h, WHITENESS);
+    SelectObject(mem, GetStockObject(GRAY_BRUSH));
+    Ellipse(mem, w / 4, h / 4, w - 2, h - 2);
+    SelectObject(mem, GetStockObject(NULL_BRUSH));
+    Rectangle(mem, 0, 0, w, h);
+    MoveTo(mem, 0, 0);
+    LineTo(mem, w, h);
+    SelectObject(mem, GetStockObject(WHITE_BRUSH));
+    SelectObject(mem, old);
+    DeleteDC(mem);
+    if (!OpenClipboard(NULL)) {
+        out(" -> clipboard busy");
+        DeleteObject(bm);
+        return;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_BITMAP, bm);
+    CloseClipboard();
+}
+
+static void cliptext(const char *text)
+{
+    WORD n = 0;
+    HGLOBAL h;
+    char FAR *p;
+    while (text[n])
+        n++;
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
+    if (!h || !OpenClipboard(NULL)) {
+        out(" -> failed");
+        return;
+    }
+    p = GlobalLock(h);
+    for (; n != (WORD)-1; n--)
+        p[n] = text[n];
+    GlobalUnlock(h);
+    EmptyClipboard();
+    SetClipboardData(CF_TEXT, h);
+    CloseClipboard();
+}
+
+/* mouse messages to the window under the screen point x, y */
+static void mouse(UINT msg, int x, int y)
+{
+    POINT pt;
+    HWND w;
+    pt.x = x;
+    pt.y = y;
+    w = WindowFromPoint(pt);
+    if (!w) {
+        out(" -> no window");
+        return;
+    }
+    ScreenToClient(w, &pt);
+    PostMessage(w, msg, msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP ? 0 : MK_LBUTTON,
+                MAKELPARAM(pt.x, pt.y));
+    pump(100);
+}
+
+static void click(char *arg, int kind)
+{
+    int x = next_num(&arg, 10), y = next_num(&arg, 10);
+    mouse(WM_LBUTTONDOWN, x, y);
+    mouse(WM_LBUTTONUP, x, y);
+    if (kind) {
+        mouse(WM_LBUTTONDBLCLK, x, y);
+        mouse(WM_LBUTTONUP, x, y);
+    }
+    pump(200);
+}
+
+static void drag(char *arg)
+{
+    int x0 = next_num(&arg, 10), y0 = next_num(&arg, 10);
+    int x1 = next_num(&arg, 10), y1 = next_num(&arg, 10);
+    POINT pt;
+    HWND w;
+    pt.x = x0;
+    pt.y = y0;
+    w = WindowFromPoint(pt);
+    if (!w)
+        return;
+    ScreenToClient(w, &pt);
+    PostMessage(w, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(pt.x, pt.y));
+    pump(100);
+    pt.x = x1;                          /* the window keeps the capture */
+    pt.y = y1;
+    ScreenToClient(w, &pt);
+    PostMessage(w, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(pt.x, pt.y));
+    pump(100);
+    PostMessage(w, WM_LBUTTONUP, 0, MAKELPARAM(pt.x, pt.y));
+    pump(200);
+}
+
+static void cbsel(char *arg)
+{
+    WORD id = next_num(&arg, 16), n = next_num(&arg, 10);
+    HWND dlg = target(), cb;
+    while (dlg && (GetWindowLong(dlg, GWL_STYLE) & WS_CHILD))
+        dlg = GetParent(dlg);
+    cb = dlg ? GetDlgItem(dlg, id) : NULL;
+    if (!cb) {
+        out(" -> no such control");
+        return;
+    }
+    SendMessage(cb, CB_SETCURSEL, n, 0);
+    SendMessage(dlg, WM_COMMAND, id, MAKELPARAM(cb, CBN_SELCHANGE));
+    pump(200);
+}
+
 /* ---- script ---- */
 
 static char script[4096];
@@ -450,6 +636,22 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+    } else if (same(l, "ckey")) {
+        ckey(arg);
+    } else if (same(l, "clippic")) {
+        clippic(arg);
+    } else if (same(l, "cliptext")) {
+        cliptext(arg);
+    } else if (same(l, "click")) {
+        click(arg, 0);
+    } else if (same(l, "dblclk")) {
+        click(arg, 1);
+    } else if (same(l, "blink")) {
+        SetCaretBlinkTime(parse_num(arg, 10));
+    } else if (same(l, "cbsel")) {
+        cbsel(arg);
+    } else if (same(l, "drag")) {
+        drag(arg);
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);
