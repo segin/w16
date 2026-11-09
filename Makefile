@@ -839,6 +839,46 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CLOCK.EXE (shell/clock), the same two builds ----
+CLOCK_OBJ := start main face digital intl fontdlg util compat2
+SHELL_CK  := $(B)/shell/start.o $(patsubst %,$(B)/shell/clock/%.o,$(filter-out start,$(CLOCK_OBJ)))
+SHELL_CK2 := $(patsubst $(B)/shell/%,$(B)/shell2/%,$(SHELL_CK))
+CLOCK_H   := shell/clock/clock.h shell/clock/compat2.h
+shell: $(DOS)/CLOCK.EXE
+shell2: $(WIN2)/CLOCK.EXE
+$(B)/shell/clock/clock.ico: tools/clockicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/clockicon.py $@
+$(B)/shell/clock/circle.h: tools/clocktable.py
+	@mkdir -p $(@D)
+	python3 tools/clocktable.py $@
+$(B)/shell/clock/face.o: $(B)/shell/clock/circle.h
+$(B)/shell/clock/%.o: shell/clock/%.c $(CLOCK_H)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -i=$(B)/shell/clock -fo=$@ $<
+$(B)/shell/clock/clock.res: shell/clock/clock.rc $(CLOCK_H) $(B)/shell/clock/clock.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/clock -i=$(B)/shell/clock -fo=$@ $<
+$(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/clock/clock.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/clock/clock.map \
+	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
+	python3 tools/nemark.py $@ 3.10
+$(B)/shell2/clock/face.o: $(B)/shell/clock/circle.h
+$(B)/shell2/clock/%.o: shell/clock/%.c $(CLOCK_H)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -i=$(B)/shell/clock -fo=$@ $<
+$(B)/shell2/clock/clock.res: shell/clock/clock.rc $(CLOCK_H) $(B)/shell/clock/clock.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/clock \
+	    -i=$(B)/shell/clock -fo=$@ $<
+$(WIN2)/CLOCK.EXE: $(SHELL_CK2) $(B)/shell2/clock/clock.res shell/clock/clock2.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/clock/clock2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell2/clock/clock.map \
+	    option resource=$(B)/shell2/clock/clock.res file { $(SHELL_CK2) }
+	python3 tools/nemark.py $@ 2.0
+
 test: dos fonts
 	tests/run-tests.sh
 
@@ -973,12 +1013,12 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 # tests/w16tree.sh boots it. build/dos stays as it is.
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
-W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
 all: install-tree
-$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16)/README.TXT: win/README.TXT
