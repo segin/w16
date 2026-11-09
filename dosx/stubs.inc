@@ -59,6 +59,58 @@ int15_stub:
         call (G_GATE | 3):0
         iret
 
+int13_stub:
+        cli
+        push 0
+        push OP_INT13
+        call (G_GATE | 3):0
+        iret
+
+int33_stub:
+        cli
+        push 0
+        push OP_INT33
+        call (G_GATE | 3):0
+        iret
+
+; INT 25h/26h return with RETF and leave the flags on the stack
+int25_stub:
+        cli
+        push 25h
+        push OP_INT2526
+        call (G_GATE | 3):0
+        jmp abs_ret
+int26_stub:
+        cli
+        push 26h
+        push OP_INT2526
+        call (G_GATE | 3):0
+abs_ret:
+        push bp
+        mov bp, sp
+        push word [bp+6]
+        popf
+        pop bp
+        retf
+
+; INT 4Bh: Microsoft's DOSX answers the Virtual DMA Services' "get
+; version" (AX=8102h) itself: AX=0100h, BX=0002h, CX=0001h, DX=0008h,
+; CF clear (DX8 vds8102; UNVERIFIED what the other VDS functions do:
+; they go to real mode)
+int4b_stub:
+        cmp ax, 8102h
+        jne .chain
+        mov ax, 0100h
+        mov bx, 0002h
+        mov cx, 0001h
+        mov dx, 0008h
+        push bp
+        mov bp, sp
+        and byte [bp+6], ~FL_CF
+        pop bp
+        iret
+.chain: jmp refstub_tab + 4Bh * 3
+
 int31_stub:
         cli
         push 0

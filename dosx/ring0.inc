@@ -740,7 +740,8 @@ r0_client_start:
         iret
 
 ; vectors_init: the default protected-mode interrupt handlers (the
-; ring-3 stubs; INT 10h, 15h, 21h, 2Fh and 31h are DOSX's own; 01h, 03h, 30h and
+; ring-3 stubs; INT 10h, 13h, 15h, 21h, 25h, 26h, 2Fh, 31h and 33h are
+; DOSX's own; 01h, 03h, 30h and
 ; 41h just return, as with Microsoft's DOSX: DX1 pmvec lines) and
 ; exception handlers, and the IDT
 vectors_init:
@@ -754,6 +755,11 @@ vectors_init:
         jb .pv
         mov word [pmvec+10h*4], int10_stub
         mov word [pmvec+15h*4], int15_stub
+        mov word [pmvec+13h*4], int13_stub
+        mov word [pmvec+25h*4], int25_stub
+        mov word [pmvec+26h*4], int26_stub
+        mov word [pmvec+33h*4], int33_stub
+        mov word [pmvec+4Bh*4], int4b_stub
         mov word [pmvec+21h*4], int21_stub
         mov word [pmvec+2Fh*4], int2f_stub
         mov word [pmvec+31h*4], int31_stub

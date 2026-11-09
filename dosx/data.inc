@@ -19,6 +19,7 @@ s_krnl386       db 'KRNL386.EXE', 0
 s_krnl286       db 'KRNL286.EXE', 0
 
 optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10, op_int15
+                dw op_int13, op_int2526, op_int33
 OP_COUNT        equ ($ - optab) / 2
 
 ; variables
@@ -102,6 +103,14 @@ lc_dst          dd 0
 lc_n            dw 0
 exit_ax         dw 0
 pending_msg     dw 0
+did1605         db 0
+bios_vec        db 0
+                db 0
+abs_pkt         dw 0
+abs_sel         dw 0
+abs_off         dw 0
+abs_len         dw 0
+abs_tb          dw 0
 exc_sp          dw 0
 rmx_depth       dw 0                    ; real-mode callbacks/hooks active
 fx_vals:

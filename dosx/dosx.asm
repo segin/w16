@@ -68,6 +68,7 @@ img_start:
 %include "dosx/int31.inc"
 %include "dosx/int21.inc"
 %include "dosx/int10.inc"
+%include "dosx/intbios.inc"
 %include "dosx/stubs.inc"
 %include "dosx/data.inc"
 

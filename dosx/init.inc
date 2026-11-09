@@ -25,6 +25,26 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         mov [imglin], ax
         mov [imglin+2], dx
         call patch_segs
+        ; the Windows start-up broadcast, before XMS (as Microsoft's DOSX:
+        ; INT 2Fh 1605h with DX=1, standard mode, DI=030Ah, ES:BX = DS:SI =
+        ; 0, CX = 0; WC3 between WSWAP and DOSX). A TSR that answers with
+        ; CX other than 0 does not want Windows to run. UNVERIFIED: what
+        ; Microsoft's DOSX does then, and with an ES:BX chain of instance
+        ; data (w16's ignores both).
+        push ds
+        xor bx, bx
+        mov es, bx
+        mov ds, bx
+        xor si, si
+        xor cx, cx
+        mov dx, 1
+        mov di, 030Ah
+        mov ax, 1605h
+        int 2Fh
+        pop ds
+        push ds
+        pop es
+        mov byte [did1605], 1
         call xms_init
         jnc .memok
         mov dx, msg_nomem
@@ -605,7 +625,13 @@ cleanup:
         cmp byte [client_active], 0
         je .nc
         call client_rm_reset
-.nc:    call hooks_remove
+.nc:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
+        cmp byte [did1605], 0
+        je .nc2
+        mov dx, 1
+        mov ax, 1606h
+        int 2Fh
+.nc2:   call hooks_remove
         cmp byte [xms_ok], 0
         je .d
 
