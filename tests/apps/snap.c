@@ -16,6 +16,14 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     move <x> <y> <cx> <cy> MoveWindow the active top-level window
+ *     mdown <x> <y>          real (journalled) mouse input at screen
+ *     mmove <x> <y>          position x,y: left button down, a move, the
+ *     mup <x> <y>            button up. Moves are played in steps from
+ *                            the last position, so drag loops see them.
+ *     kdown <vk-hex>         a real (journalled) key down / up, so that
+ *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
+ *     cursor                 log the current cursor: arrow, no, or other
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -371,6 +379,83 @@ done:
 }
 #endif
 
+/* ---- real input: a journal playback hook ----
+ * Mouse and key events go through WH_JOURNALPLAYBACK (documented in the
+ * SDK), so they reach the system as hardware input does: the cursor
+ * moves, drag loops (File Manager's) and GetKeyState see them. The hook
+ * is installed for one command's events and removed when they are done. */
+
+#define MAXEV 32
+static EVENTMSG evq[MAXEV];
+static int evn, evat;
+static BOOL ev_done;
+static int mouse_x = 320, mouse_y = 240;
+static HOOKPROC old_hook;
+
+DWORD FAR PASCAL __export __loadds JournalProc(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_GETNEXT) {
+        EVENTMSG FAR *e = (EVENTMSG FAR *)lp;
+        if (evat < evn) {
+            *e = evq[evat];
+            e->time = GetTickCount();
+        }
+        return 0;
+    }
+    if (code == HC_SKIP) {
+        if (++evat >= evn)
+            ev_done = TRUE;
+        return 0;
+    }
+    return DefHookProc(code, wp, lp, &old_hook);
+}
+
+static void ev_add(UINT msg, WORD l, WORD h)
+{
+    if (evn < MAXEV) {
+        evq[evn].message = msg;
+        evq[evn].paramL = l;
+        evq[evn].paramH = h;
+        evq[evn].time = 0;
+        evn++;
+    }
+}
+
+static void ev_play(void)
+{
+    DWORD end = GetTickCount() + 5000;
+    if (!evn)
+        return;
+    evat = 0;
+    ev_done = FALSE;
+    old_hook = SetWindowsHook(WH_JOURNALPLAYBACK, (HOOKPROC)JournalProc);
+    while (!ev_done && (long)(GetTickCount() - end) < 0)
+        pump(20);
+    UnhookWindowsHook(WH_JOURNALPLAYBACK, (HOOKPROC)JournalProc);
+    if (!ev_done)
+        out(" -> not all played");
+    evn = 0;
+}
+
+static void mouse_to(int x, int y)       /* moves in steps from the last */
+{
+    int i, x0 = mouse_x, y0 = mouse_y;
+    for (i = 1; i <= 8; i++)
+        ev_add(WM_MOUSEMOVE, x0 + (x - x0) * i / 8, y0 + (y - y0) * i / 8);
+    mouse_x = x;
+    mouse_y = y;
+}
+
+static void mouse_args(const char *arg, int *x, int *y)
+{
+    *x = parse_num(arg, 10);
+    while (*arg && *arg != ' ')
+        arg++;
+    while (*arg == ' ')
+        arg++;
+    *y = parse_num(arg, 10);
+}
+
 /* ---- script ---- */
 
 static char script[4096];
@@ -450,6 +535,55 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+    } else if (same(l, "mdown") || same(l, "mmove") || same(l, "mup")) {
+        int x, y;
+        mouse_args(arg, &x, &y);
+        mouse_to(x, y);
+        if (same(l, "mdown"))
+            ev_add(WM_LBUTTONDOWN, x, y);
+        else if (same(l, "mup"))
+            ev_add(WM_LBUTTONUP, x, y);
+        ev_play();
+        pump(300);
+    } else if (same(l, "kdown") || same(l, "kup")) {
+        WORD vk = parse_num(arg, 16);
+        /* paramL: virtual key, scan code in the high byte (Shift 2A,
+           Ctrl 1D; others 0) */
+        WORD scan = vk == VK_SHIFT ? 0x2A : vk == VK_CONTROL ? 0x1D : 0;
+        ev_add(same(l, "kdown") ? WM_KEYDOWN : WM_KEYUP, vk | (scan << 8), 1);
+        ev_play();
+        pump(100);
+    } else if (same(l, "move")) {
+        int v[4], i;
+        const char *a = arg;
+        HWND w = top_window();
+        for (i = 0; i < 4; i++) {
+            v[i] = parse_num(a, 10);
+            while (*a && *a != ' ')
+                a++;
+            while (*a == ' ')
+                a++;
+        }
+        if (w)
+            MoveWindow(w, v[0], v[1], v[2], v[3], TRUE);
+        pump(300);
+    } else if (same(l, "cursor")) {
+        HCURSOR c = GetCursor();
+        POINT pt;
+        GetCursorPos(&pt);
+        out(" -> at ");
+        outint(pt.x);
+        out(",");
+        outint(pt.y);
+        out(" ");
+        if (c == LoadCursor(NULL, IDC_ARROW))
+            out("arrow");
+        else if (!c)
+            out("none");
+        else {
+            out("other ");
+            outhex((WORD)c, 4);
+        }
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);
