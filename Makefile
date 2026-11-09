@@ -545,7 +545,7 @@ FONTC   := python3 tools/fontc.py
 FONTINFO = --info CompanyName=w16 --info FileVersion=3.10 --info ProductVersion=3.10 \
            --info "LegalCopyright=Copyright (c) 2026 the w16 contributors, MIT licence" \
            --info ProductName=w16
-FONS    := $(FNT)/VGASYS.FON
+FONS    := $(FNT)/VGASYS.FON $(FNT)/VGAFIX.FON $(FNT)/VGAOEM.FON
 SSERIFE_SRC := $(foreach p,8 10 12 14 18 24,fonts/sserife$(p).txt)
 .PHONY: fonts
 fonts: $(FONS)
