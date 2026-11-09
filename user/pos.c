@@ -138,11 +138,13 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
            while hidden, so when it ended it gave the activation back to
            Program Manager over the program just started */
         if (h == hwndActive) {
-            HWND t;
-            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
-                if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED) &&
-                    !(PW(t)->style & WS_CHILD))
-                    break;
+            HWND t = w->hwndOwner;
+            /* its owner first, if it can take it, else the next one */
+            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
+                for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
+                    if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED) &&
+                        !(PW(t)->style & WS_CHILD))
+                        break;
             activate_window(t, FALSE);
             if (!(w = valid_wnd(h)))
                 return FALSE;

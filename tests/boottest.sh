@@ -41,6 +41,10 @@
 #              active window, Program Manager's caption inactive; w16's
 #              USER and GDI on w16's KRNL286
 #   runfrontk  the same with Microsoft's USER on w16's KRNL286
+#   about      Help > About Program Manager (SHELL's ShellAbout) opened and
+#              closed with Enter and Esc by real keys, then the File and
+#              Help menus must open (tests/scripts/input/about.txt); w16's
+#              USER, GDI, SHELL and PROGMAN on w16's KRNL286
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -68,7 +72,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -251,6 +255,21 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
 " "$out/$c/01-run.png" 2>&1 || echo "no screen")
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
+    about)
+        "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/about.txt" "$out/about" \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+            > "$out/about.txt" 2>&1 || true
+        d=$out/about
+        if [ -f "$d/02-closed-enter.png" ] && [ -f "$d/03-menu.png" ] && [ -f "$d/04-after-esc.png" ]; then
+            a=$(magick compare -metric AE "$d/02-closed-enter.png" "$d/03-menu.png" /dev/null 2>&1 >/dev/null || true)
+            b=$(magick compare -metric AE "$d/02-closed-enter.png" "$d/04-after-esc.png" /dev/null 2>&1 >/dev/null || true)
+            a=${a%%[. ]*} b=${b%%[. ]*}
+            if [ "${a:-0}" -gt 1000 ] && [ "${b:-0}" -gt 1000 ]; then echo "ok   about: menus respond after the About box"
+            else echo "FAIL about: menus did not open after the About box (File $a, Help $b pixels; $d)"; fails=$((fails + 1)); fi
+        else
+            echo "FAIL about: screens missing ($d)"; fails=$((fails + 1))
+        fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
