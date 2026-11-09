@@ -157,6 +157,7 @@ typedef struct {
     int nfdig;
     int point;                      /* entry: decimal point typed (kept after the entry) */
     int lastzero;                   /* the last key typed was the digit 0 */
+    int prevzero;                   /* lastzero before the current key */
     int expmode, expneg, expdigits; /* entry: exponent */
     int expval;
     double mant;                    /* entry: mantissa value */

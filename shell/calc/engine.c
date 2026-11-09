@@ -80,6 +80,12 @@ static double apply(double a, int op, double b)
         }
         return fp_fmod(a, b);
     case IDC_PWR:
+        /* Inv counts when the operation is done (observed: Inv used by
+           a function in between gives the plain power) */
+        if (g.inv) {
+            g.inv = 0;
+            return apply(a, IDC_PWR + 1000, b);
+        }
         return calc_pow(a, b);
     case IDC_PWR + 1000:                /* Inv x^y: the b-th root */
         if (b == 0 || a < 0) {
@@ -87,7 +93,13 @@ static double apply(double a, int op, double b)
             return 0;
         }
         return calc_pow(a, 1 / b);
-    case IDC_AND: case IDC_OR: case IDC_XOR: case IDC_LSH: case IDC_LSH + 1000: {
+    case IDC_LSH:
+        if (g.inv) {
+            g.inv = 0;
+            return apply(a, IDC_LSH + 1000, b);
+        }
+        /* fall through */
+    case IDC_AND: case IDC_OR: case IDC_XOR: case IDC_LSH + 1000: {
         U32 u, v, r;
         int n;
         if (!bits_ok(a) || !bits_ok(b)) {
@@ -110,7 +122,7 @@ static double apply(double a, int op, double b)
             while (n--)
                 r = op == IDC_LSH ? r << 1 : (r >> 1) | (r & (U32)0x80000000UL);
         }
-        return g.radix == 10 ? from_bits(r) : (double)r;
+        return from_bits(r);            /* signed in every radix (observed) */
     }
     }
     return b;
@@ -356,7 +368,7 @@ static void digit(int d)
         g.expdigits++;
         g.lastzero = d == 0;
         if (g.expval > 307) {
-            set_error(ERR_BIG);
+            set_error(g.expneg ? ERR_SMALL : ERR_BIG);
             return;
         }
         entry_value();
@@ -449,7 +461,7 @@ static void exponent(void)
     if (g.expmode)
         return;
     g.mant = g.x;
-    g.mantzero = g.lastzero;
+    g.mantzero = g.prevzero;
     if (g.mant == 0) {
         g.mant = 1;
         g.mantzero = 0;
@@ -539,9 +551,7 @@ static void binop(int op)
     g.entering = 0;
     g.expmode = 0;
     g.xfixed = 0;
-    if (g.inv && (op == IDC_PWR || op == IDC_LSH))
-        op += 1000;
-    g.inv = g.hyp = 0;
+    /* observed: an operator leaves Inv and Hyp set ("8.8659iy47hs=" is 8.8659^asinh 47) */
     if (g.opjust && f->n > 0) {
         f->op[f->n - 1] = op;
         return;
@@ -928,7 +938,7 @@ static void function(int id)
             set_error(ERR_BIG);
             return;
         }
-        r = g.radix == 10 ? from_bits(~fp_lowbits(v)) : (double)(~fp_lowbits(v));
+        r = from_bits(~fp_lowbits(v));
         break;
     case IDC_PI:
         if (g.radix != 10)
@@ -1110,6 +1120,10 @@ void calc_command(int id)
 {
     if (id != IDC_LPAREN)
         g.parens = 0;
+    /* the typed-zero rule holds only while the last key was the digit 0 */
+    g.prevzero = g.lastzero;
+    if (id != IDC_0)
+        g.lastzero = 0;
     if (g.err) {
         if (id == IDC_CLEAR) {
             calc_clear();
