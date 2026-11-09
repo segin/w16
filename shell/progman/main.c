@@ -293,7 +293,7 @@ static void command(HWND hwnd, WORD id)
         pm_exec(hwnd, "WINTUTOR.EXE", NULL, FALSE);
         break;
     case IDM_ABOUT:
-        run_dialog(hwnd, (FARPROC)AboutDlgProc, IDD_ABOUT);
+        cmd_about(hwnd);
         break;
     case IDM_NEW:
         cmd_new(hwnd);

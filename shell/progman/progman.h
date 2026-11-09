@@ -16,6 +16,11 @@
 #include <shellapi.h>
 #include "compat2.h"
 
+#ifndef W16_WIN2
+/* SHELL.DLL (Windows 3.1 SDK), not declared in every shellapi.h */
+int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
+#endif
+
 /* ---- resource and command IDs (our own numbering) ---- */
 #define IDM_MAIN            1
 #define IDA_MAIN            1
@@ -100,6 +105,7 @@
 #define IDC_MC_ITEM         0x75
 #define IDC_MC_TO           0x76
 #define IDC_EXITICON        200
+#define IDC_ABOUTMEM        201         /* 2.x About: free memory */
 #ifndef LBS_DISABLENOSCROLL             /* Windows 3.1; not in every header */
 #define LBS_DISABLENOSCROLL 0x1000L
 #endif
@@ -136,6 +142,7 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_FILTER_PROGRAMS 20
 #define IDS_FILTER_ICONS    21
 #define IDS_FILENOTFOUND    22
+#define IDS_ABOUTMEM        23
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -210,7 +217,8 @@ void delete_group(HWND g);
 BOOL CALLBACK __export MoveCopyDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export ExitWinDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL CALLBACK __export RunDlgProc(HWND, UINT, WPARAM, LPARAM);
-BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);
+BOOL CALLBACK __export AboutDlgProc(HWND, UINT, WPARAM, LPARAM);  /* 2.x */
+void cmd_about(HWND frame);
 int  run_dialog(HWND owner, FARPROC proc, int id);
 LPSTR dlg_text(HWND dlg, int id);       /* a control's text, new string */
 

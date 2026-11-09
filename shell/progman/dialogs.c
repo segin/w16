@@ -165,11 +165,63 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     return FALSE;
 }
 
+/* Help > About. Observed (tests/apps/snap.c shellabout, and the
+   original's About box dumped): the original calls SHELL's ShellAbout
+   with its name, "Program Manager" (the box's caption "About Program
+   Manager" and first line "Microsoft Windows Program Manager" are
+   SHELL's doing; a name with '#' would set the caption itself), no other
+   text (the line under the copyright is empty) and no icon (its icon is
+   pixel for pixel the one ShellAbout shows for NULL). UNVERIFIED: whether
+   the original passes "" or NULL for the other text; both show the same.
+   The Windows 2.x build has no SHELL.DLL: a dialog of its own. */
+void cmd_about(HWND frame)
+{
+#ifdef W16_WIN2
+    run_dialog(frame, (FARPROC)AboutDlgProc, IDD_ABOUT);
+#else
+    char name[32];
+    LoadString(g_hinst, IDS_APPNAME, name, sizeof name);
+    ShellAbout(frame, name, NULL, NULL);
+#endif
+}
+
+#ifdef W16_WIN2
 BOOL CALLBACK __export AboutDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
+    char kb[12], fmt[24], text[40];
+    int i, j;
     (void)lp;
     switch (msg) {
     case WM_INITDIALOG:
+        /* free memory as ShellAbout shows it: "<n> KB Free", with
+           thousands separators */
+        {
+            DWORD k = GetFreeSpace(0) / 1024;
+            char d[12];
+            int n = 0, c = 0;
+            do {
+                d[n++] = (char)('0' + (int)(k % 10));
+                k /= 10;
+            } while (k);
+            for (i = 0; n > 0; i++) {
+                kb[c++] = d[--n];
+                if (n && n % 3 == 0)
+                    kb[c++] = ',';
+            }
+            kb[c] = 0;
+        }
+        LoadString(g_hinst, IDS_ABOUTMEM, fmt, sizeof fmt);
+        for (i = j = 0; fmt[i] && j < (int)sizeof text - 12; i++) {
+            if (fmt[i] == '%' && fmt[i + 1] == 's') {
+                s_cpy(text + j, kb, sizeof text - j);
+                j += s_len(kb);
+                i++;
+            } else {
+                text[j++] = fmt[i];
+            }
+        }
+        text[j] = 0;
+        SetDlgItemText(dlg, IDC_ABOUTMEM, text);
         return TRUE;
     case WM_COMMAND:
         if (wp == IDOK || wp == IDCANCEL) {
@@ -180,6 +232,7 @@ BOOL CALLBACK __export AboutDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     }
     return FALSE;
 }
+#endif
 
 /* ---- File > New ---- */
 

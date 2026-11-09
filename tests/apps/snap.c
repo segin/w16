@@ -21,9 +21,20 @@
  *     mmove <x> <y>          position x,y: left button down, a move, the
  *     mup <x> <y>            button up. Moves are played in steps from
  *                            the last position, so drag loops see them.
+ *     mclick <x> <y>         a click (down and up in one go)
  *     kdown <vk-hex>         a real (journalled) key down / up, so that
  *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
  *     cursor                 log the current cursor: arrow, no, or other
+ *     copyfile <from> <to>   copy a file (to catch it mid-session)
+ *     blank <l> <t> <r> <b>  paint a screen rectangle black, to keep
+ *                            changing content (free memory) out of the
+ *                            next snap
+ *     shellabout <file> <app>|<other>   call SHELL's ShellAbout with these
+ *                            strings (no icon; "-" for a NULL other),
+ *                            dump its windows, save the screen as <file>
+ *                            and close it with OK (3.x only)
+ *     associcon <path>       log what SHELL's ExtractAssociatedIcon gives
+ *                            for <path>: icon file, index (3.x only)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -399,8 +410,14 @@ DWORD FAR PASCAL __export __loadds JournalProc(int code, WPARAM wp, LPARAM lp)
         if (evat < evn) {
             *e = evq[evat];
             e->time = GetTickCount();
+            return 0;
         }
-        return 0;
+        /* all played: no input yet (a delay), so that a program's
+           PeekMessage loop finds none and yields to SNAP, which removes
+           the hook */
+        *e = evq[evn - 1];
+        e->time = GetTickCount();
+        return 2;
     }
     if (code == HC_SKIP) {
         if (++evat >= evn)
@@ -454,6 +471,98 @@ static void mouse_args(const char *arg, int *x, int *y)
     while (*arg == ' ')
         arg++;
     *y = parse_num(arg, 10);
+}
+
+#ifndef SNAP_WIN2
+/* ShellAbout, looked up at run time; the box is modal, so a timer dumps
+   and photographs it and presses OK */
+typedef int (FAR PASCAL *SHELLABOUT)(HWND, LPCSTR, LPCSTR, HICON);
+static char about_file[64];
+
+void FAR PASCAL __export __loadds AboutTimer(HWND w, UINT m, UINT id, DWORD t)
+{
+    HWND a = GetActiveWindow();
+    (void)w; (void)m; (void)t;
+    KillTimer(NULL, id);
+    out("\r\n");
+    dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);
+    if (!snap(about_file))
+        out("SNAP shellabout snap failed\r\n");
+    if (a)
+        PostMessage(a, WM_COMMAND, IDOK, 0);
+}
+
+static void shell_about(char *arg)
+{
+    HINSTANCE lib = LoadLibrary("SHELL.DLL");
+    SHELLABOUT fn = (UINT)lib > 32 ? (SHELLABOUT)GetProcAddress(lib, "ShellAbout") : NULL;
+    char *app = arg, *other;
+    int i = 0;
+    while (*app && *app != ' ')
+        about_file[i++] = *app++;
+    about_file[i] = 0;
+    while (*app == ' ')
+        app++;
+    for (other = app; *other && *other != '|'; other++)
+        ;
+    if (*other)
+        *other++ = 0;
+    if (!fn) {
+        out(" -> no ShellAbout");
+        return;
+    }
+    SetTimer(NULL, 0, 1500, (TIMERPROC)AboutTimer);
+    fn(NULL, app, same(other, "-") ? NULL : other, NULL);
+    FreeLibrary(lib);
+}
+
+typedef HICON (FAR PASCAL *EXTRACTASSOC)(HINSTANCE, LPSTR, UINT FAR *);
+
+static void assoc_icon(char *arg)
+{
+    static char path[260];
+    HINSTANCE lib = LoadLibrary("SHELL.DLL");
+    EXTRACTASSOC fn = (UINT)lib > 32 ? (EXTRACTASSOC)GetProcAddress(lib, "ExtractAssociatedIcon") : NULL;
+    UINT index = 0;
+    HICON h;
+    lstrcpy(path, arg);
+    if (!fn) {
+        out(" -> no ExtractAssociatedIcon");
+        return;
+    }
+    h = fn((HINSTANCE)init_regs[I_DI], path, &index);
+    out(" -> \"");
+    out(path);
+    out("\" index ");
+    outint(index);
+    out(h ? " icon" : " no icon");
+    if (h)
+        DestroyIcon(h);
+    FreeLibrary(lib);
+}
+#endif
+
+static void copy_file(char *arg)
+{
+    static char buf[512];
+    char *to = arg;
+    HFILE a, b;
+    int n;
+    while (*to && *to != ' ')
+        to++;
+    if (*to)
+        *to++ = 0;
+    a = _lopen(arg, OF_READ);
+    b = a == HFILE_ERROR ? HFILE_ERROR : _lcreat(to, 0);
+    if (b == HFILE_ERROR) {
+        out(" -> failed");
+    } else {
+        while ((n = _lread(a, buf, sizeof buf)) > 0)
+            _lwrite(b, buf, n);
+        _lclose(b);
+    }
+    if (a != HFILE_ERROR)
+        _lclose(a);
 }
 
 /* ---- script ---- */
@@ -545,6 +654,14 @@ static void run_line(char *l)
             ev_add(WM_LBUTTONUP, x, y);
         ev_play();
         pump(300);
+    } else if (same(l, "mclick")) {
+        int x, y;
+        mouse_args(arg, &x, &y);
+        mouse_to(x, y);
+        ev_add(WM_LBUTTONDOWN, x, y);
+        ev_add(WM_LBUTTONUP, x, y);
+        ev_play();
+        pump(300);
     } else if (same(l, "kdown") || same(l, "kup")) {
         WORD vk = parse_num(arg, 16);
         /* paramL: virtual key, scan code in the high byte (Shift 2A,
@@ -567,6 +684,27 @@ static void run_line(char *l)
         if (w)
             MoveWindow(w, v[0], v[1], v[2], v[3], TRUE);
         pump(300);
+#ifndef SNAP_WIN2
+    } else if (same(l, "shellabout")) {
+        shell_about(arg);
+    } else if (same(l, "associcon")) {
+        assoc_icon(arg);
+#endif
+    } else if (same(l, "blank")) {
+        int v[4], i;
+        const char *a = arg;
+        HDC dc = GetDC(NULL);
+        for (i = 0; i < 4; i++) {
+            v[i] = parse_num(a, 10);
+            while (*a && *a != ' ')
+                a++;
+            while (*a == ' ')
+                a++;
+        }
+        PatBlt(dc, v[0], v[1], v[2] - v[0], v[3] - v[1], BLACKNESS);
+        ReleaseDC(NULL, dc);
+    } else if (same(l, "copyfile")) {
+        copy_file(arg);
     } else if (same(l, "cursor")) {
         HCURSOR c = GetCursor();
         POINT pt;

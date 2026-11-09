@@ -1,0 +1,16 @@
+run PROGMAN.EXE
+wait 3000
+; Help > About Program Manager: SHELL's ShellAbout box (free memory and
+; resources blanked: they differ from run to run)
+menu h
+char a
+wait 2000
+dump
+blank 319 334 450 368
+snap C:\A1.BMP
+key 0D
+wait 1000
+snap C:\A2.BMP
+menu f
+char x
+wait 1500

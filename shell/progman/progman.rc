@@ -137,6 +137,7 @@ BEGIN
     IDS_FILTER_PROGRAMS, "Programs|*.exe;*.pif;*.com;*.bat|All Files (*.*)|*.*|"
     IDS_FILTER_ICONS,   "Icon Files|*.ico;*.exe;*.dll|Programs (*.exe)|*.exe|Libraries (*.dll)|*.dll|Icons (*.ico)|*.ico|All Files (*.*)|*.*|"
     IDS_FILENOTFOUND,   "%s\nFile not found."
+    IDS_ABOUTMEM,       "%s KB Free"
 END
 
 /* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */
@@ -246,24 +247,24 @@ BEGIN
     PUSHBUTTON      "&Help", IDC_HELPBTN, 165, 61, 40, 14
 END
 
-/* Our own About box (the original's comes from SHELL.DLL's ShellAbout);
-   same frame size, 220 x 158 units. */
-IDD_ABOUT DIALOG 23, 20, 220, 158
+/* The Windows 2.x build's About box (3.x uses SHELL's ShellAbout, as the
+   original does). Laid out after ShellAbout's: the program's name and
+   version, then the free memory. */
+#ifdef W16_WIN2
+IDD_ABOUT DIALOG 23, 20, 220, 96
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "About Program Manager"
-#ifndef W16_WIN2
-FONT 8, "MS Sans Serif"
-#endif
 BEGIN
-#ifndef W16_WIN2
-    ICON            IDI_PROGMAN, -1, 10, 5, 18, 20
-#endif
-    LTEXT           "w16 Program Manager", -1, 45, 5, 127, 10, SS_NOPREFIX
-    LTEXT           "Version 3.1", -1, 45, 15, 100, 10, SS_NOPREFIX
+    LTEXT           "w16 Program Manager", -1, 45, 8, 127, 10, SS_NOPREFIX
+    LTEXT           "Version 3.1", -1, 45, 18, 100, 10, SS_NOPREFIX
     LTEXT           "A clean-room reimplementation, part of w16.", -1,
-                    45, 25, 145, 20, SS_NOPREFIX
-    DEFPUSHBUTTON   "OK", IDOK, 177, 5, 40, 14
+                    45, 28, 145, 20, SS_NOPREFIX
+    LTEXT           "Windows 2.x", -1, 45, 56, 120, 10, SS_NOPREFIX
+    LTEXT           "Memory:", -1, 45, 66, 60, 10, SS_NOPREFIX
+    LTEXT           "", IDC_ABOUTMEM, 110, 66, 90, 10, SS_NOPREFIX
+    DEFPUSHBUTTON   "OK", IDOK, 177, 8, 36, 14
 END
+#endif
 
 /* Move/Copy Program Item (observed: 200 x 64 units, IDs 115/117/99/116/
    99/118/1/2/126; caption and first label set by the program) */
