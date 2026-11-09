@@ -1,0 +1,54 @@
+; FindText and ReplaceText: the dialogs, what the owner hears
+; a: Find, with text, Find Next twice (case, whole word, up), then Cancel
+cd1 find what=hello flags=1 hook=1
+; b: Find, help shown, no up/down, match case hidden
+cd1 find what=hello flags=4884 hook=1
+; c: Replace: Find Next, Replace, Replace All, Cancel
+cd1 replace what=abc with=xyz flags=0 hook=1
+; d: Replace with nothing to find: buttons disabled; type, then close
+cd1 replace flags=80 hook=1
+; e: errors: zero length, no owner
+cd1 find what=x wlen=0
+cd1 find what=x owner=0
+cd1 err
+wait 3000
+snap C:\A1.BMP
+dump
+key 0D
+wait 500
+alt c
+wait 300
+alt w
+wait 300
+alt u
+wait 300
+snap C:\A2.BMP
+key 0D
+wait 500
+key 1B
+wait 1500
+; b
+snap C:\B1.BMP
+dump
+key 1B
+wait 1500
+; c
+snap C:\C1.BMP
+dump
+key 0D
+wait 500
+alt r
+wait 500
+alt a
+wait 500
+key 1B
+wait 1500
+; d
+snap C:\D1.BMP
+dump
+type foo
+wait 500
+snap C:\D2.BMP
+dump
+key 1B
+wait 1500

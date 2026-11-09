@@ -1,0 +1,56 @@
+; GetOpenFileName: the lists with the focus and selections, the combo
+; boxes dropped down, the Help button, Read Only checked
+cd1 open filter=Text~Files~(*.TXT)|*.txt|Bitmaps|*.bmp;*.pcx|All~Files~(*.*)|*.* index=3 flags=11 hook=1 ftitle=20
+wait 3000
+; the file list with the focus, an item selected
+key 09
+wait 300
+key 28
+wait 300
+key 28
+wait 500
+snap C:\O1.BMP
+; the folder list with the focus
+key 09
+wait 300
+key 28
+wait 500
+snap C:\O2.BMP
+key 26
+wait 300
+key 26
+wait 500
+snap C:\O3.BMP
+; the types list dropped down
+alt t
+wait 300
+key 73
+wait 800
+snap C:\O4.BMP
+key 26
+wait 300
+key 0D
+wait 800
+snap C:\O5.BMP
+; the drives list dropped down
+alt v
+wait 300
+key 73
+wait 800
+snap C:\O6.BMP
+key 1B
+wait 500
+snap C:\O7.BMP
+; into the system folder by double Enter on it
+alt d
+wait 300
+key 28
+wait 300
+key 28
+wait 300
+key 0D
+wait 1000
+snap C:\O8.BMP
+dump
+key 1B
+wait 1000

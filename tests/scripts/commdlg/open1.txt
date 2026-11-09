@@ -1,0 +1,13 @@
+; GetOpenFileName: plain, with a filter of two types, then Cancel
+cd1 open filter=Text~Files~(*.TXT)|*.txt|All~Files~(*.*)|*.* index=1 flags=0 hook=1
+cd1 open filter=Text~Files~(*.TXT)|*.txt|All~Files~(*.*)|*.* index=2 flags=10 file=foo.bar ftitle=40 hook=1
+wait 3000
+snap C:\O1.BMP
+dump
+key 1B
+wait 1500
+snap C:\O2.BMP
+dump
+type win.ini
+key 0D
+wait 1000

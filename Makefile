@@ -946,3 +946,6 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# COMMDLG.DLL and its probe (shell/commdlg/commdlg.mk)
+include shell/commdlg/commdlg.mk

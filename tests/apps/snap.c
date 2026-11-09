@@ -16,6 +16,9 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     focus                  log the window with the focus
+ *     click <x> <y>          post a left click at a screen point (also
+ *                            dblclick), to the window there
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -450,6 +453,47 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+    } else if (same(l, "focus")) {
+        /* which window has the focus: class, ID, text */
+        HWND f = GetFocus();
+        char cls[32], text[64];
+        cls[0] = text[0] = 0;
+        if (f) {
+            GetClassName(f, cls, sizeof cls);
+            SendMessage(f, WM_GETTEXT, sizeof text, (LPARAM)(LPSTR)text);
+        }
+        out(" -> ");
+        out(cls);
+        out(" id=");
+        outhex(f ? GetWindowWord(f, GWW_ID) : 0, 4);
+        out(" \"");
+        out(text);
+        out("\"");
+    } else if (same(l, "click") || same(l, "dblclick")) {
+        /* click <x> <y>: a left click at screen point x,y, posted to the
+           window there (client coordinates) */
+        POINT pt;
+        HWND w;
+        char *y = arg;
+        while (*y && *y != ' ')
+            y++;
+        pt.x = parse_num(arg, 10);
+        pt.y = parse_num(*y ? y + 1 : y, 10);
+        w = WindowFromPoint(pt);
+        if (w) {
+            LPARAM lp;
+            ScreenToClient(w, &pt);
+            lp = MAKELPARAM(pt.x, pt.y);
+            PostMessage(w, WM_LBUTTONDOWN, MK_LBUTTON, lp);
+            PostMessage(w, WM_LBUTTONUP, 0, lp);
+            if (same(l, "dblclick")) {
+                PostMessage(w, WM_LBUTTONDBLCLK, MK_LBUTTON, lp);
+                PostMessage(w, WM_LBUTTONUP, 0, lp);
+            }
+        } else {
+            out(" -> no window");
+        }
+        pump(300);
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);

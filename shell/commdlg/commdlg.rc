@@ -1,0 +1,357 @@
+/*
+ * commdlg.rc - w16 COMMDLG.DLL's resources.
+ *
+ * The dialog layouts, control IDs and styles and the strings are Windows
+ * 3.1's COMMDLG's (format facts read from its resources, tools/nedlg.py;
+ * applications that bring their own templates rely on the IDs, and the
+ * dialogs must look the same). The pictures are w16's own
+ * (tools/mkcdart.py).
+ *
+ * The Windows 2.x build has no combo boxes and no owner-drawn list boxes
+ * in USER: its dialogs use our classes CdCombo and CdList instead
+ * (cd2ctl.c).
+ */
+#include <windows.h>
+#include "cdlgs.h"
+
+#ifdef W16_WIN2
+#define CD_COMBO        "CdCombo"
+#define CD_LIST         "CdList"
+#else
+#define CD_COMBO        "ComboBox"
+#define CD_LIST         "ListBox"
+#endif
+
+BMP_DRIVES      BITMAP  "drives.bmp"
+BMP_FONTTYPE    BITMAP  "fonttype.bmp"
+BMP_CROSS       BITMAP  "cross.bmp"
+BMP_ARROW       BITMAP  "arrow.bmp"
+ICO_PORTRAIT    ICON    "portrait.ico"
+ICO_LANDSCAPE   ICON    "landscape.ico"
+
+DLG_OPEN DIALOG 36, 24, 264, 134
+STYLE 0x80C800C0L
+CAPTION "Open"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "File &Name:", 0x0442, "Static", 0x50020000L, 6, 6, 76, 9
+    CONTROL "", 0x0480, "Edit", 0x50810480L, 6, 16, 90, 12
+    CONTROL "", 0x0460, CD_LIST, 0x50A11053L, 6, 32, 90, 68
+    CONTROL "&Directories:", -1, "Static", 0x50020000L, 110, 6, 92, 9
+    CONTROL "", 0x0440, "Static", 0x50020080L, 110, 18, 92, 9
+    CONTROL "", 0x0461, CD_LIST, 0x50A11053L, 110, 32, 92, 68
+    CONTROL "List Files of &Type:", 0x0441, "Static", 0x50020000L, 6, 104, 90, 9
+    CONTROL "", 0x0470, CD_COMBO, 0x50A10043L, 6, 114, 90, 36
+    CONTROL "Dri&ves:", 0x0443, "Static", 0x50020000L, 110, 104, 92, 9
+    CONTROL "", 0x0471, CD_COMBO, 0x50A10353L, 110, 114, 92, 68
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 208, 6, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 208, 24, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 208, 46, 50, 14
+    CONTROL "&Read Only", 0x0410, "Button", 0x50030003L, 208, 68, 50, 12
+END
+
+DLG_MULTIOPEN DIALOG 36, 24, 264, 134
+STYLE 0x80C800C0L
+CAPTION "Open"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "File &Name:", 0x0442, "Static", 0x50020000L, 6, 6, 76, 10
+    CONTROL "", 0x0480, "Edit", 0x50810480L, 6, 16, 90, 12
+    CONTROL "", 0x0460, CD_LIST, 0x50A11853L, 6, 32, 90, 68
+    CONTROL "&Directories:", -1, "Static", 0x50020000L, 110, 6, 92, 9
+    CONTROL "", 0x0440, "Static", 0x50020080L, 110, 16, 92, 9
+    CONTROL "", 0x0461, CD_LIST, 0x50A11053L, 110, 32, 92, 68
+    CONTROL "List Files of &Type:", 0x0441, "Static", 0x50020000L, 6, 102, 90, 9
+    CONTROL "", 0x0470, CD_COMBO, 0x50A10043L, 6, 112, 90, 36
+    CONTROL "Dri&ves:", 0x0443, "Static", 0x50020000L, 110, 102, 92, 9
+    CONTROL "", 0x0471, CD_COMBO, 0x50A10353L, 110, 112, 92, 68
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 208, 6, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 208, 24, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 208, 46, 50, 14
+    CONTROL "&Read Only", 0x0410, "Button", 0x50030003L, 208, 68, 50, 12
+END
+
+DLG_PRINT DIALOG 36, 52, 225, 130
+STYLE 0x80C800C0L
+CAPTION "Print"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Printer:", 0x0445, "Static", 0x50020000L, 4, 4, 40, 8
+    CONTROL "System Default", 0x0440, "Static", 0x50020000L, 44, 4, 120, 18
+    CONTROL "Print Range", 0x0430, "Button", 0x50000007L, 4, 27, 132, 67
+    CONTROL "&All", 0x0420, "Button", 0x50030004L, 10, 39, 76, 12
+    CONTROL "S&election", 0x0421, "Button", 0x50000004L, 10, 52, 76, 12
+    CONTROL "&Pages", 0x0422, "Button", 0x50000004L, 10, 65, 76, 12
+    CONTROL "&From:", 0x0441, "Static", 0x50020002L, 24, 80, 24, 9
+    CONTROL "", 0x0480, "Edit", 0x50810002L, 52, 78, 26, 12
+    CONTROL "&To:", 0x0442, "Static", 0x50020002L, 82, 80, 16, 9
+    CONTROL "", 0x0481, "Edit", 0x50810002L, 102, 78, 26, 12
+    CONTROL "Print &Quality:", 0x0443, "Static", 0x50020000L, 4, 100, 50, 9
+    CONTROL "", 0x0470, CD_COMBO, 0x50A20003L, 55, 98, 81, 36
+    CONTROL "&Copies:", 0x0444, "Static", 0x50020000L, 153, 100, 29, 9
+    CONTROL "", 0x0482, "Edit", 0x50810002L, 184, 98, 26, 12
+    CONTROL "Print to Fi&le", 0x0410, "Button", 0x50030003L, 4, 113, 120, 12
+    CONTROL "Collate Cop&ies", 0x0411, "Button", 0x50030003L, 153, 113, 67, 12
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 170, 4, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 170, 21, 50, 14
+    CONTROL "&Setup...", 0x0400, "Button", 0x50030000L, 170, 41, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 170, 75, 50, 14
+END
+
+DLG_PRNSETUP DIALOG 30, 23, 287, 122
+STYLE 0x80C800C0L
+CAPTION "Print Setup"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Printer", 0x0432, "Button", 0x50000007L, 4, 6, 224, 66
+    CONTROL "(No Default Printer)", 0x0440, "Static", 0x50020000L, 18, 30, 208, 9
+    CONTROL "&Default Printer", 0x0422, "Button", 0x50030004L, 8, 16, 218, 12
+    CONTROL "Specific &Printer:", 0x0423, "Button", 0x50000004L, 8, 42, 218, 12
+    CONTROL "", 0x0470, CD_COMBO, 0x50A20003L, 18, 56, 208, 80
+    CONTROL "Orientation", 0x0430, "Button", 0x50000007L, 4, 74, 91, 46
+    CONTROL "", 0x043C, "Static", 0x50000003L, 12, 92, 24, 16
+    CONTROL "Po&rtrait", 0x0420, "Button", 0x50030004L, 40, 86, 53, 12
+    CONTROL "&Landscape", 0x0421, "Button", 0x50000004L, 40, 102, 53, 12
+    CONTROL "Paper", 0x0431, "Button", 0x50020007L, 100, 74, 128, 46
+    CONTROL "Si&ze:", 0x0441, "Static", 0x50020000L, 104, 88, 26, 9
+    CONTROL "", 0x0471, CD_COMBO, 0x50A10003L, 134, 86, 92, 80
+    CONTROL "&Source:", 0x0442, "Static", 0x50020000L, 104, 104, 28, 9
+    CONTROL "", 0x0472, CD_COMBO, 0x50A10003L, 134, 102, 92, 80
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 232, 4, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 232, 20, 50, 14
+    CONTROL "&Options...", 0x0400, "Button", 0x50030000L, 232, 40, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 232, 56, 50, 14
+END
+
+DLG_FIND DIALOG 30, 73, 236, 62
+STYLE 0x80C800C0L
+CAPTION "Find"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 8, 42, 8
+    CONTROL "", 0x0480, "Edit", 0x50830080L, 47, 7, 128, 12
+    CONTROL "Match &Whole Word Only", 0x0410, "Button", 0x50030003L, 4, 26, 100, 12
+    CONTROL "Match &Case", 0x0411, "Button", 0x50010003L, 4, 42, 64, 12
+    CONTROL "Direction", 0x0430, "Button", 0x50000007L, 107, 26, 68, 28
+    CONTROL "&Up", 0x0420, "Button", 0x50030009L, 111, 38, 20, 12
+    CONTROL "&Down", 0x0421, "Button", 0x50010009L, 138, 38, 30, 12
+    CONTROL "&Find Next", 0x0001, "Button", 0x50030001L, 182, 5, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 182, 23, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 182, 45, 50, 14
+END
+
+DLG_REPLACE DIALOG 36, 44, 230, 94
+STYLE 0x80C800C0L
+CAPTION "Replace"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 9, 48, 8
+    CONTROL "", 0x0480, "Edit", 0x50830080L, 54, 7, 114, 12
+    CONTROL "Re&place With:", -1, "Static", 0x50000000L, 4, 26, 48, 8
+    CONTROL "", 0x0481, "Edit", 0x50830080L, 54, 24, 114, 12
+    CONTROL "Match &Whole Word Only", 0x0410, "Button", 0x50030003L, 5, 46, 104, 12
+    CONTROL "Match &Case", 0x0411, "Button", 0x50010003L, 5, 62, 59, 12
+    CONTROL "&Find Next", 0x0001, "Button", 0x50030001L, 174, 4, 50, 14
+    CONTROL "&Replace", 0x0400, "Button", 0x50030000L, 174, 21, 50, 14
+    CONTROL "Replace &All", 0x0401, "Button", 0x50030000L, 174, 38, 50, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 174, 55, 50, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 174, 75, 50, 14
+END
+
+CHOOSECOLOR DIALOG 2, 0, 298, 184
+STYLE 0x80C800C0L
+CAPTION "Color"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Basic Colors:", -1, "Static", 0x50020000L, 4, 4, 140, 9
+    CONTROL "", 0x02D0, "Static", 0x5003000BL, 4, 14, 140, 86
+    CONTROL "&Custom Colors:", -1, "Static", 0x50020000L, 4, 106, 140, 9
+    CONTROL "", 0x02D1, "Static", 0x5003000BL, 4, 116, 140, 28
+    CONTROL "&Define Custom Colors...", 0x02CF, "Button", 0x50030000L, 4, 150, 140, 14
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 4, 166, 44, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 52, 166, 44, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 100, 166, 44, 14
+    CONTROL "", 0x02C6, "Static", 0x50000007L, 152, 4, 118, 116
+    CONTROL "", 0x02BE, "Static", 0x5000000BL, 280, 4, 8, 116
+    CONTROL "", 0x02C5, "Static", 0x50000007L, 152, 124, 40, 26
+    CONTROL "&o", 0x02C9, "Button", 0x50030000L, 300, 200, 4, 14
+    CONTROL "Color|", -1, "Static", 0x50020002L, 152, 151, 20, 9
+    CONTROL "S&olid", -1, "Static", 0x50020000L, 172, 151, 20, 9
+    CONTROL "&Hue:", 0x02D3, "Static", 0x50020002L, 194, 126, 20, 9
+    CONTROL "", 0x02BF, "Edit", 0x50830000L, 216, 124, 18, 12
+    CONTROL "&Sat:", 0x02D4, "Static", 0x50020002L, 194, 140, 20, 9
+    CONTROL "", 0x02C0, "Edit", 0x50830000L, 216, 138, 18, 12
+    CONTROL "&Lum:", 0x02D5, "Static", 0x50020002L, 194, 154, 20, 9
+    CONTROL "", 0x02C1, "Edit", 0x50830000L, 216, 152, 18, 12
+    CONTROL "&Red:", 0x02D6, "Static", 0x50020002L, 243, 126, 24, 9
+    CONTROL "", 0x02C2, "Edit", 0x50830000L, 269, 124, 18, 12
+    CONTROL "&Green:", 0x02D7, "Static", 0x50020002L, 243, 140, 24, 9
+    CONTROL "", 0x02C3, "Edit", 0x50830000L, 269, 138, 18, 12
+    CONTROL "Bl&ue:", 0x02D8, "Static", 0x50020002L, 243, 154, 24, 9
+    CONTROL "", 0x02C4, "Edit", 0x50830000L, 269, 152, 18, 12
+    CONTROL "&Add to Custom Colors", 0x02C8, "Button", 0x50030000L, 152, 166, 142, 14
+END
+
+DLG_FONT DIALOG 13, 54, 264, 147
+STYLE 0x80C800C0L
+CAPTION "Font"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Font:", 0x0440, "Static", 0x50020000L, 6, 3, 40, 9
+    CONTROL "", 0x0470, CD_COMBO, 0x50210B51L, 6, 13, 94, 54
+    CONTROL "Font St&yle:", 0x0441, "Static", 0x50020000L, 108, 3, 44, 9
+    CONTROL "", 0x0471, CD_COMBO, 0x50210801L, 108, 13, 64, 54
+    CONTROL "&Size:", 0x0442, "Static", 0x50020000L, 179, 3, 30, 9
+    CONTROL "", 0x0472, CD_COMBO, 0x50210B11L, 179, 13, 32, 54
+    CONTROL "OK", 0x0001, "Button", 0x50030001L, 218, 6, 40, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x50030000L, 218, 23, 40, 14
+    CONTROL "&Apply", 0x0402, "Button", 0x50030000L, 218, 40, 40, 14
+    CONTROL "&Help", 0x040E, "Button", 0x50030000L, 218, 57, 40, 14
+    CONTROL "Effects", 0x0430, "Button", 0x50020007L, 6, 72, 84, 34
+    CONTROL "Stri&keout", 0x0410, "Button", 0x50010003L, 10, 82, 49, 10
+    CONTROL "&Underline", 0x0411, "Button", 0x50000003L, 10, 94, 51, 10
+    CONTROL "&Color:", 0x0443, "Static", 0x50020000L, 6, 110, 30, 9
+    CONTROL "", 0x0473, CD_COMBO, 0x50A10253L, 6, 120, 84, 100
+    CONTROL "Sample", 0x0431, "Button", 0x50020007L, 98, 72, 160, 49
+    CONTROL "", 0x0445, "Static", 0x50000081L, 98, 124, 160, 20
+    CONTROL "AaBbYyZz", 0x0444, "Static", 0x40020081L | NOT WS_VISIBLE, 104, 81, 149, 37
+END
+
+STRINGTABLE
+BEGIN
+    256, "File Exists"
+    257, "%s\nThis file already exists.\n\nReplace existing file?"
+    258, "Exiting"
+    259, "Do you really want to exit?"
+    384, "Open"
+    385, "Save As"
+    386, "Save File as &Type:"
+    387, "Drive %c: does not exist.\n\nPlease verify that the correct drive is given."
+    388, "Cannot read drive %c:.\n\nPlease verify the drive door is closed and that the disk is formatted and free of errors."
+    389, "A different disk is expected in drive %c:.\n\nPlease insert the appropriate disk."
+    390, "The disk in drive %c: is not formatted.\n\nPlease insert a formatted disk and try this operation again."
+    391, "%s\nCannot find this file.\n\nPlease verify that the correct path and filename are given."
+    392, "%s\nPath does not exist.\n\nPlease verify that the correct path is given."
+    393, "%s\nThis filename is not valid."
+    394, "%s\nThis file is already in use.\n\nUse a new filename or close the file in use by another application."
+    395, "%s\nCannot access this file.\n\nPlease verify security privileges on the network drive."
+    396, "%s\nThis file exists and is read-only.\nUse a different filename."
+    397, "%s\nDOS critical error.\nCannot access file."
+    398, "%s\nThis filename is a reserved device name.\n\nUse a different filename."
+    399, "Disk %c: is write-protected.\nA file cannot be saved on a write-protected disk."
+    400, "Not enough disk space on drive %c:.\n\nDelete one or more files on this disk to increase available space or use a different disk."
+    401, "%s\nToo many files already open.\n\nClose one or more applications or files, and try again."
+    402, "%s\nThis file does not exist.\n\nCreate the file?"
+    403, "%s\nThis file is on a network drive with create but no modify privileges.\n\nAsk the administrator of this network to change this condition."
+    404, "Cannot select drive %c:."
+    768, "FileOpen"
+    769, "FileSave"
+    770, "ExitChanges"
+    771, "ChooseColor"
+    772, "FindText"
+    773, "ReplaceText"
+    774, "FormatChar"
+    775, "FontInfo"
+    776, "PrintDlg"
+    777, "PrintSetupDlg"
+    778, "MultiFileOpen"
+    1037, "Close"
+    1040, "Black"
+    1041, "Maroon"
+    1042, "Green"
+    1043, "Olive"
+    1044, "Navy"
+    1045, "Purple"
+    1046, "Teal"
+    1047, "Gray"
+    1048, "Silver"
+    1049, "Red"
+    1050, "Lime"
+    1051, "Yellow"
+    1052, "Blue"
+    1053, "Fuschia"
+    1054, "Aqua"
+    1055, "White"
+    1056, "DlgInstData"
+    1072, "High"
+    1073, "Medium"
+    1074, "Low"
+    1075, "Draft"
+    1088, "Printer:  "
+    1089, "Default Printer ("
+    1090, "%s on %s (%s)"
+    1091, "ExtDeviceMode"
+    1092, "DeviceMode"
+    1093, "DeviceCapabilities"
+    1094, "(currently %s)"
+    1095, "%s on %s%s"
+    1096, "Print Setup"
+    1098, "Size must be a number."
+    1099, "Size must be between %d and %d points."
+    1100, "This font style is imitated for the display. The closest matching style will be used for printing."
+    1101, "This is a TrueType font. This same font will be used on both your printer and your screen."
+    1102, "This is a printer font.  The closest matching Windows font will be used on your screen."
+    1103, "This is a screen font.  The closest matching printer font will be used for printing."
+    1104, "The 'From' value is below the minimum page."
+    1105, "The 'From' value is above the maximum page."
+    1106, "The 'To' value is below the minimum page."
+    1107, "The 'To' value is above the maximum page."
+    1108, "The 'From' field contains non-numeric characters or a number greater than 65535."
+    1109, "The 'To' field contains non-numeric characters or a number greater than 65535."
+    1110, "The 'From' and 'To' fields are empty and the Pages button is pressed."
+    1111, "The 'Copies' field is empty."
+    1112, "The 'Copies' field contains non-numeric characters."
+    1113, "The 'Copies' field must contain a positive value."
+    1114, "No default printer\n\nUse Control Panel to install and select a default printer"
+    1115, "%s driver file %s not found.  Please reinstall through Control Panel or choose another printer."
+    1153, "Letter 8 1/2 x 11 in"
+    1154, "Letter Small 8 1/2 x 11 in"
+    1155, "Tabloid 11 x 17 in"
+    1156, "Ledger 17 x 11 in"
+    1157, "Legal 8 1/2 x 14 in"
+    1158, "Statement 5 1/2 x 8 1/2 in"
+    1159, "Executive 7 1/2 x 10 in"
+    1160, "A3 297 x 420 mm"
+    1161, "A4 210 x 297 mm"
+    1162, "A4 Small 210 x 297 mm"
+    1163, "A5 148 x 210 mm"
+    1164, "B4 250 x 354"
+    1165, "B5 182 x 257 mm"
+    1166, "Folio 8 1/2 x 13 in"
+    1167, "Quarto 215 x 275 mm"
+    1168, "10x14 in"
+    1169, "11x17 in"
+    1170, "Note 8 1/2 x 11 in"
+    1171, "Envelope #9 3 7/8 x 8 7/8 in"
+    1172, "Envelope #10 4 1/8 x 9 1/2 in"
+    1173, "Envelope #11 4 1/2 x 10 3/8 in"
+    1174, "Envelope #12 4 \276 x 11 in"
+    1175, "Envelope #14 5 x 11 1/2 in"
+    1176, "C size sheet"
+    1177, "D size sheet"
+    1178, "E size sheet"
+    1179, "Envelope DL 110 x 220 mm"
+    1180, "Envelope C5 162 x 229 mm"
+    1181, "Envelope C3 324 x 458 mm"
+    1182, "Envelope C4 229 x 324 mm"
+    1183, "Envelope C6 114 x 162 mm"
+    1184, "Envelope C65 114 x 229 mm"
+    1185, "Envelope B4 250 x 353 mm"
+    1186, "Envelope B5 176 x 250 mm"
+    1187, "Envelope B6 176 x 125 mm"
+    1188, "Envelope 110 x 230 mm"
+    1189, "Envelope Monarch 3 7/8 x 7 1/2 in"
+    1190, "6 3/4 Envelope 3 5/8 x 6 1/2 in"
+    1191, "US Std Fanfold 14 7/8 x 11 in"
+    1192, "German Std Fanfold 8 1/2 x 12 in"
+    1193, "German Legal Fanfold 8 1/2 x 13 in"
+    1280, "Fonts"
+    1281, "There are no fonts installed;\r\nRun Control Panel to install fonts."
+    1282, "Invalid font name.\nChoose a font from the list of fonts."
+    1283, "Invalid font style.\nChoose a style from the list of styles."
+    1284, "Regular"
+    1285, "Bold"
+    1286, "Italic"
+    1287, "Bold Italic"
+    1408, "User Defined Size"
+END

@@ -1,0 +1,12 @@
+; observation: what the dialog sees when F4 is pressed in the types combo
+cd1 open filter=Text~Files~(*.TXT)|*.txt|Bitmaps|*.bmp;*.pcx|All~Files~(*.*)|*.* index=3 flags=31 hook=9
+wait 3000
+alt t
+wait 500
+key 73
+wait 800
+snap C:\O3.BMP
+key 1B
+wait 1000
+key 1B
+wait 1000
