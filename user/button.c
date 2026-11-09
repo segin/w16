@@ -109,7 +109,9 @@ static void paint_push(HWND h, HDC hdc)
 {
     RECT r, t;
     BYTE s = state(h);
-    BOOL def = btype(h) == BS_DEFPUSHBUTTON;
+    /* a push button with the focus has the default button's border too
+       (US4: Push focused, OK still bold) */
+    BOOL def = btype(h) == BS_DEFPUSHBUTTON || (state(h) & ST_FOCUS);
     BOOL pushed = (s & ST_PUSHED) != 0;
     int b = def ? 2 : 1, x0, y0, x1, y1, i;
     char text[256];
@@ -145,11 +147,12 @@ static void paint_push(HWND h, HDC hdc)
     }
     GetWindowText(h, text, sizeof text);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, IsWindowEnabled(h) ? syscolor[COLOR_BTNTEXT] : syscolor[COLOR_GRAYTEXT]);
+    SetTextColor(hdc, syscolor[COLOR_BTNTEXT]);
     t = r;
+    t.right -= 2;               /* centred left of the shadow (US4) */
     if (pushed)
         OffsetRect(&t, 1, 1);
-    DrawText(hdc, text, -1, &t, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    draw_label(h, hdc, &t, DT_CENTER | DT_VCENTER | DT_SINGLELINE, !IsWindowEnabled(h));
     if (s & ST_FOCUS) {
         RECT c;
         int w, hh;
@@ -161,7 +164,7 @@ static void paint_push(HWND h, HDC hdc)
         SetRect(&c, t.left + (t.right - t.left - w) / 2 - 2, t.top + (t.bottom - t.top - hh) / 2 - 1,
                 0, 0);
         c.right = c.left + w + 4;
-        c.bottom = c.top + hh + 2;
+        c.bottom = c.top + hh + 3;          /* US4: 19 high with the system font */
         dotted_rect(hdc, &c);
     }
 }
@@ -236,9 +239,9 @@ static void paint_group(HWND h, HDC hdc)
     if (text[0]) {
         SetRect(&t, 0, 0, 0, 0);
         DrawText(hdc, text, -1, &t, DT_CALCRECT | DT_SINGLELINE);
-        /* the text 9 pixels in and 2 down, the line cleared 2 pixels
+        /* the text 9 pixels in and 3 down, the line cleared 2 pixels
            before and after it (US4, system font; UNVERIFIED for others) */
-        OffsetRect(&t, r.left + 9, r.top + 2);
+        OffsetRect(&t, r.left + 9, r.top + 3);
         {
             RECT e = t;
             e.left -= 2;
