@@ -950,4 +950,6 @@ w16's Clock matches Windows 3.1's (`make shell` → `build/dos/CLOCK.EXE`; `make
 
 **Results** (`tests/clockscenarios.sh`, CK1–CK16 on the reference 3.1 at frozen times; `tests/scripts/clock.baseline`): every screenshot pixel-identical to the original's, CLOCK.INI byte-identical, window and menu dumps identical, except the About box (our icon art; the free-memory figure varies by run) and a caret blink in the Font dialog. Under w16's GDI the digital face would differ (no TrueType yet; compared here on Microsoft's GDI).
 
+**Real input** (`tests/clockinput.sh`, `tests/scripts/input/clock.txt` through the USER work's `tests/inputrun.sh`: xdotool into DOSBox on Xvfb, Clock as the shell): double-click to no title, drag by the face, double-click back, Settings by keyboard, Always on Top and minimize/restore from the system menu behave as the original's, and CLOCK.INI (moved position, analog, on top) is byte-identical; the screenshots differ only in the time shown (DOSBox 0.74 cannot hold it).
+
 UNVERIFIED (marked in the code): the 60 s icon timer; how the original activates its first instance; the exact emboss threshold (53 flat, 54 embossed); dots at s > 2 vs m ≥ 64 (the same at 640×480); the default size formula off VGA; AM/PM-less measure strings; whether 640 in the mark size is HORZRES.
