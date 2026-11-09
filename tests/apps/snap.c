@@ -16,6 +16,8 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     clipbmp <file.bmp>     put a .BMP on the clipboard (CF_DIB, CF_BITMAP)
+ *     clipmf                 put a small metafile picture on the clipboard
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -371,6 +373,83 @@ done:
 }
 #endif
 
+#ifndef SNAP_WIN2
+/* ---- clipboard sources for pasting pictures (Write's probes) ---- */
+
+/* clipbmp <file.bmp>: the file's DIB as CF_DIB and as a device-dependent
+   CF_BITMAP (3.1 converts neither into the other) */
+static int clip_bmp(const char *file)
+{
+    HFILE f = _lopen(file, OF_READ);
+    LONG size;
+    HGLOBAL h;
+    BYTE FAR *p;
+    BITMAPINFOHEADER FAR *bi;
+    HBITMAP bm;
+    HDC dc;
+    int ncol;
+    if (f == HFILE_ERROR)
+        return 0;
+    size = _llseek(f, 0, 2) - sizeof(BITMAPFILEHEADER);
+    _llseek(f, sizeof(BITMAPFILEHEADER), 0);
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, size);
+    if (!h) {
+        _lclose(f);
+        return 0;
+    }
+    p = (BYTE FAR *)GlobalLock(h);
+    _lread(f, p, (UINT)size);                  /* small test pictures */
+    _lclose(f);
+    bi = (BITMAPINFOHEADER FAR *)p;
+    ncol = bi->biClrUsed ? (int)bi->biClrUsed : bi->biBitCount <= 8 ? 1 << bi->biBitCount : 0;
+    dc = GetDC(NULL);
+    bm = CreateDIBitmap(dc, bi, CBM_INIT, p + bi->biSize + ncol * sizeof(RGBQUAD),
+                        (BITMAPINFO FAR *)bi, DIB_RGB_COLORS);
+    ReleaseDC(NULL, dc);
+    GlobalUnlock(h);
+    if (!OpenClipboard(NULL))
+        return 0;
+    EmptyClipboard();
+    SetClipboardData(CF_DIB, h);
+    if (bm)
+        SetClipboardData(CF_BITMAP, bm);
+    CloseClipboard();
+    return 1;
+}
+
+/* clipmf: a small metafile picture (a rectangle and an ellipse),
+   MM_ANISOTROPIC, 2 x 1 inches (in HIMETRIC: 5080 x 2540) */
+static int clip_mf(void)
+{
+    HDC mdc = CreateMetaFile(NULL);
+    HMETAFILE mf;
+    HGLOBAL h;
+    METAFILEPICT FAR *mp;
+    if (!mdc)
+        return 0;
+    SetWindowOrg(mdc, 0, 0);
+    SetWindowExt(mdc, 200, 100);
+    Rectangle(mdc, 10, 10, 190, 90);
+    Ellipse(mdc, 40, 20, 160, 80);
+    mf = CloseMetaFile(mdc);
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(METAFILEPICT));
+    if (!mf || !h)
+        return 0;
+    mp = (METAFILEPICT FAR *)GlobalLock(h);
+    mp->mm = MM_ANISOTROPIC;
+    mp->xExt = 5080;
+    mp->yExt = 2540;
+    mp->hMF = mf;
+    GlobalUnlock(h);
+    if (!OpenClipboard(NULL))
+        return 0;
+    EmptyClipboard();
+    SetClipboardData(CF_METAFILEPICT, h);
+    CloseClipboard();
+    return 1;
+}
+#endif
+
 /* ---- script ---- */
 
 static char script[4096];
@@ -450,6 +529,16 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
+#ifndef SNAP_WIN2
+    } else if (same(l, "clipbmp")) {
+        if (!clip_bmp(arg))
+            out(" -> failed");
+        pump(200);
+    } else if (same(l, "clipmf")) {
+        if (!clip_mf())
+            out(" -> failed");
+        pump(200);
+#endif
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);
