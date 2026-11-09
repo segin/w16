@@ -45,6 +45,13 @@ int21_stub:
         call (G_GATE | 3):0
         iret
 
+int10_stub:
+        cli
+        push 0
+        push OP_INT10
+        call (G_GATE | 3):0
+        iret
+
 int31_stub:
         cli
         push 0

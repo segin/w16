@@ -65,7 +65,7 @@ dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
-     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM)
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -493,6 +493,12 @@ $(DOS)/DOSX.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
 $(DOS)/DOSXT.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
 	@mkdir -p $(@D)
 	$(NASM) -f bin -dTRACE -I . -o $@ $<
+
+# DX6.EXE: a Windows program dumping the GDT/IDT (run as the shell)
+$(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
 
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
 DXPROBES := DX1 DX2 DX5

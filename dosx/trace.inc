@@ -22,6 +22,40 @@ TRC_RECS        equ 8192
 
 ; trc: AX = kind, BP = a gate/exception frame, trc_x = 4 more words
 trc:
+%ifdef TRC4
+        push ds
+        push bx
+        mov bx, G_HD0
+        mov ds, bx
+        pop bx
+        pop ds
+        ret
+%endif
+%ifdef TRC5
+        add word [ss:msgbuf+200], 1
+        ret
+%endif
+%ifdef TRCT
+        push cx
+        mov cx, TRCT
+.dl:    loop .dl
+        pop cx
+        ret
+%endif
+%ifdef TRCH
+        push ds
+        push bx
+        mov bx, G_HD0
+        mov ds, bx
+%ifdef TRCHM
+        add word [msgbuf+200], 1
+%else
+        add word [trc_n], 1
+%endif
+        pop bx
+        pop ds
+        ret
+%endif
         pusha
         push es
         push ds
@@ -109,6 +143,14 @@ trc_gate:
 trc_flush:
         cmp word [rmx_depth], 0  ; not while real-mode code (DOS) is
         jne .ret                 ; waiting for this to return
+        push es
+        push si
+        les si, [bp+F_SP3]       ; only after INT 31h: after an interrupt
+        mov si, [es:si+K_OP]     ; DOS's caller may be anywhere, after
+        cmp si, OP_INT31         ; INT 21h the client may ask for DOS's
+        pop si                   ; extended error (59h)
+        pop es
+        jne .ret
         pusha
         push es
         mov ax, [trc_n]
@@ -268,7 +310,9 @@ trc_stage       times 32 * 32 db 0
         push ax
         mov ax, 8000h
         call trc_gate
+%ifndef NOFLUSH
         call trc_flush
+%endif
         pop ax
 %endif
 %endmacro
