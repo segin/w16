@@ -28,22 +28,13 @@
    for one, must not give its caller back an ES holding the freed
    selector. kapi.h (tools/kapiprag.py, at build time) gives every KAPI
    and KAPI_ES function a convention that changes only AX, DX and ES, so
-   the compiler saves BX and CX; __saveregs saves ES. UNVERIFIED: the
-   carry flag, which 3.1 also keeps in some exports. */
+   the compiler saves BX and CX; __saveregs saves ES. Where 3.1 leaves
+   something its callers use in CX (GlobalLock, the local heap: TK43),
+   kentry.asm's export thunks set it. UNVERIFIED: the carry flag, which
+   3.1 also keeps in some exports. */
 #pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx es]
 #include "kapi.h"
 
-/* Exported APIs keep every register but DX:AX (and DS, SI, DI, BP, as
-   any Pascal procedure keeps): observed on Windows 3.1 (TK24, TK31),
-   KERNEL's exports keep BX, CX and ES, and Microsoft's own modules rely
-   on it (Write after GetVersion, MOUSE.DRV after GetDOSEnvironment).
-   kapi.h (tools/kapiprag.py, at build time) gives every KAPI function
-   this convention; the compiler then saves what a function changes (ES
-   too: -r in KCFLAGS). Calls through pointers to other modules' code
-   keep the ordinary Pascal convention. UNVERIFIED: the carry flag,
-   which 3.1 also keeps in some exports. */
-#pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx]
-#include "kapi.h"
 #define NULL    ((void *)0)
 
 #define MK_FP(s, o)  ((void __far *)(((u32)(u16)(s) << 16) | (u16)(o)))

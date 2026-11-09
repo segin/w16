@@ -33,6 +33,8 @@
  */
 #include "kernel.h"
 
+void sig_default_set(u16 t);
+
 /* InitTask's stack limit lies this far above the lowest address of the
    stack (observed on Windows 3.1: SP - limit = stack size - 96h). */
 #define STACK_SLOP      0x0096
@@ -487,6 +489,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     save_dir(t);
     TW(t, TDB_LIBINIT) = libinit;
     TW(t, TDB_ALIAS) = alias;
+    sig_default_set(t);
     procinst_init_tdb(t);
     for (i = 0; i < 8 && m->name[i]; i++)
         TB(t, TDB_NAME + i) = (u8)m->name[i];
@@ -912,6 +915,42 @@ void task_boot_tdb_end(void)
     }
     boot_tdb = 0;
     GlobalFree(t);
+}
+
+/* ---- SetSigHandler (KERNEL.140; Schulman, Undocumented Windows ch. 5,
+   DoSignal: the handler is at TDB 26h, the default one a RETF in KERNEL).
+   TK38 (3.1): SetSigHandler(proc, lpOldProc, lpOldType, type, 1) returns
+   0, stores the old handler and type, and puts the type at TDB 24h and
+   the handler at 26h; a task starts with type 0 and KERNEL's default
+   handler; a NULL handler puts the default one back. UNVERIFIED: the
+   fifth argument (1 in every call seen), and what the default handler
+   pops (w16: nothing, a plain RETF as Schulman says). ---- */
+#define TDB_SIGTYPE     0x24
+#define TDB_SIGPROC     0x26
+extern void __far sig_default(void);
+#pragma aux sig_default "*"
+
+void sig_default_set(u16 t)
+{
+    TW(t, TDB_SIGTYPE) = 0;
+    *(u32 FAR *)MK_FP(t, TDB_SIGPROC) = (u32)(void __far *)sig_default;
+}
+
+u16 KAPI SetSigHandler(u32 proc, u32 FAR *old, u16 FAR *oldtype, u16 type, u16 one)
+{
+    u16 t = cur_task;
+    (void)one;
+    if (!t)
+        return 0;
+    if (old)
+        *old = *(u32 FAR *)MK_FP(t, TDB_SIGPROC);
+    if (oldtype)
+        *oldtype = TW(t, TDB_SIGTYPE);
+    if (!proc)
+        proc = (u32)(void __far *)sig_default;
+    *(u32 FAR *)MK_FP(t, TDB_SIGPROC) = proc;
+    TW(t, TDB_SIGTYPE) = type;
+    return 0;
 }
 
 /* ---- signals to USER ----
