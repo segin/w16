@@ -253,78 +253,110 @@ static void fill_polygon(SPANS *s, POINT NEAR *p, int n, int winding)
 
 /* ---- ellipses: the inside and the outline ---- */
 
-/* x half-width of the ellipse in box l..r (exclusive) at row y */
+/* The pixels of an ellipse in the box l, t, r, b (right and bottom
+   exclusive), row y: [*x0, *x1] inclusive. Fitted to 3.1's outlines (GD3:
+   the 60 x 30, 7 x 5 and 20 x 20 ellipses): pixel (x, y) is in when
+   ((x - cx) / a)^2 + ((y - cy) / b)^2 <= 1.02 with cx, cy the box's centre
+   pixel position ((l + r - 1) / 2) and a, b half its width and height. This
+   reproduces the 7 x 5 and 20 x 20 ones exactly and the 60 x 30 one but
+   for its top and bottom rows (one pixel wider each side). UNVERIFIED: 3.1
+   seems to step through the quadrant incrementally. */
 static void ellipse_row(int l, int t, int r, int b, int y, int *x0, int *x1)
 {
-    /* centre and radii in half pixels: UNVERIFIED (3.1's own points) */
-    long a2 = (long)(r - l - 1), b2 = (long)(b - t - 1);
-    long cy2 = (long)(t + b - 1);          /* 2 * centre y */
-    long dy = 2L * y - cy2;                /* 2 * (y - cy) */
-    long num, lo, hi, mid;
-    if (b2 <= 0 || a2 <= 0) {
+    long A = r - l, B = b - t;             /* 2a, 2b */
+    long Y = 2L * y - (t + b - 1);         /* 2 (y - cy) */
+    long num, lim, lo, hi, mid;
+    if (A <= 0 || B <= 0) {
         *x0 = l;
-        *x1 = r;
+        *x1 = r - 1;
         return;
     }
-    /* largest dx (in half pixels) with (dx/a2)^2 + (dy/b2)^2 <= 1 */
-    num = b2 * b2 - dy * dy;
+    /* (X / A)^2 + (Y / B)^2 <= 1.02, X = 2 (x - cx): X^2 <= A^2 (1.02 B^2 - Y^2) / B^2 */
+    num = (102L * B * B) / 100 - Y * Y;
     if (num < 0) {
-        *x0 = *x1 = (l + r) / 2;
+        *x0 = 1;
+        *x1 = 0;
         return;
     }
-    /* lo = floor(a2 * sqrt(num) / b2), in 32-bit integers */
-    {
-        unsigned long lim = (unsigned long)(num / b2 * a2 + num % b2 * a2 / b2);
-        lim = lim / b2 * a2 + lim % b2 * a2 / b2;
-        lo = 0;
-        hi = a2;
-        while (lo < hi) {
-            mid = (lo + hi + 1) / 2;
-            if ((unsigned long)mid * mid <= lim)
-                lo = mid;
-            else
-                hi = mid - 1;
-        }
+    lim = num / B * A + num % B * A / B;
+    lim = lim / B * A + lim % B * A / B;
+    lo = 0;
+    hi = A + 1;
+    while (lo < hi) {
+        mid = (lo + hi + 1) / 2;
+        if ((unsigned long)mid * mid <= (unsigned long)lim)
+            lo = mid;
+        else
+            hi = mid - 1;
     }
-    *x0 = (int)((l + r - 1 - lo + 1) / 2);
-    *x1 = (int)((l + r - 1 + lo) / 2 + 1);
+    /* x with |2x - (l + r - 1)| <= lo */
+    *x0 = (int)((l + r - 1 - lo + 1) >> 1);
+    *x1 = (int)((l + r - 1 + lo) >> 1);
+    if (*x0 < l)
+        *x0 = l;
+    if (*x1 > r - 1)
+        *x1 = r - 1;
 }
 
-static void ellipse_fill(SPANS *s, int l, int t, int r, int b, int inset)
+/* the inside, as 3.1 fills it: rows t .. b-2, spans [x0, x1) */
+static void ellipse_fill(SPANS *s, int l, int t, int r, int b)
 {
     int y;
-    for (y = t + inset; y < b - inset; y++) {
+    for (y = t; y < b - 1; y++) {
         int xs[2];
         ellipse_row(l, t, r, b, y, &xs[0], &xs[1]);
-        xs[0] += inset;
-        xs[1] -= inset;
         if (xs[0] < xs[1])
             spans_row(s, y, xs, 2);
     }
 }
 
-/* the outline as a closed polyline through the edge pixels */
+/* the outline: per row the pixels between this row's end and the
+   neighbouring row's, as runs joined diagonally (3.1's outline polyline
+   is made of such runs) */
 static void ellipse_outline(NPDC dc, int l, int t, int r, int b)
 {
-    int h = b - t, y, n = 0;
+    int h = b - t, y, n = 0, half = t + (h - 1) / 2;
     HLOCAL hp = LocalAlloc(LMEM_FIXED, (4 * h + 8) * sizeof(POINT));
     POINT NEAR *p;
-    if (!hp)
+    int x0, x1, px0, px1, nx0, nx1;
+    if (!hp || h <= 0)
         return;
     p = (POINT NEAR *)hp;
-    for (y = t; y < b; y++) {                  /* right side, down */
-        int x0, x1;
+    ellipse_row(l, t, r, b, t, &x0, &x1);
+    p[n].x = x0; p[n].y = t; n++;
+    p[n].x = x1; p[n].y = t; n++;
+    px1 = x1;
+    for (y = t + 1; y < b - 1; y++) {              /* right side, down */
         ellipse_row(l, t, r, b, y, &x0, &x1);
-        p[n].x = x1 - 1;
-        p[n].y = y;
-        n++;
+        if (y <= half) {
+            int from = px1 + 1 <= x1 ? px1 + 1 : x1;
+            p[n].x = from; p[n].y = y; n++;
+            if (x1 != from) { p[n].x = x1; p[n].y = y; n++; }
+        } else {
+            ellipse_row(l, t, r, b, y + 1, &nx0, &nx1);
+            p[n].x = x1; p[n].y = y; n++;
+            if (nx1 + 1 < x1) { p[n].x = nx1 + 1; p[n].y = y; n++; }
+        }
+        px1 = x1;
     }
-    for (y = b - 1; y >= t; y--) {             /* left side, up */
-        int x0, x1;
-        ellipse_row(l, t, r, b, y, &x0, &x1);
-        p[n].x = x0;
-        p[n].y = y;
-        n++;
+    if (b - 1 > t) {
+        ellipse_row(l, t, r, b, b - 1, &x0, &x1);
+        p[n].x = x1; p[n].y = b - 1; n++;
+        p[n].x = x0; p[n].y = b - 1; n++;
+        px0 = x0;
+        for (y = b - 2; y > t; y--) {              /* left side, up */
+            ellipse_row(l, t, r, b, y, &x0, &x1);
+            if (y > half) {
+                int from = px0 - 1 >= x0 ? px0 - 1 : x0;
+                p[n].x = from; p[n].y = y; n++;
+                if (x0 != from) { p[n].x = x0; p[n].y = y; n++; }
+            } else {
+                ellipse_row(l, t, r, b, y - 1, &nx0, &nx1);
+                p[n].x = x0; p[n].y = y; n++;
+                if (nx0 - 1 > x0) { p[n].x = nx0 - 1; p[n].y = y; n++; }
+            }
+            px0 = x0;
+        }
     }
     p[n++] = p[0];
     out_polyline(dc, (POINT __far *)p, n);
@@ -530,16 +562,12 @@ BOOL GDIAPI Ellipse(HDC hdc, int l, int t, int r, int b)          /* GDI.24 */
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
     nopen = pen_null(dc);
-    if (nopen) {
-        rc.right--;
-        rc.bottom--;
-    }
     if (rc.left >= rc.right || rc.top >= rc.bottom)
         return TRUE;
     if (!brush_hollow(dc)) {
         SPANS s;
         spans_begin(&s, dc, 0);
-        ellipse_fill(&s, rc.left, rc.top, rc.right, rc.bottom, nopen ? 0 : 1);
+        ellipse_fill(&s, rc.left, rc.top, rc.right, rc.bottom);
         spans_end(&s);
     }
     if (!nopen)
@@ -585,7 +613,7 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
                 ey = rc.top + h / 2;
             ellipse_row(rc.left, rc.top, rc.left + w, rc.top + h, ey, &x0, &x1);
             xs[0] = rc.left + (x0 - rc.left) + !nopen;
-            xs[1] = rc.right - (rc.left + w - x1) - !nopen;
+            xs[1] = rc.right - (rc.left + w - (x1 + 1)) - !nopen;
             if (xs[0] < xs[1])
                 spans_row(&s, y, xs, 2);
         }
@@ -605,7 +633,7 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
             else
                 ey = rc.top + h / 2;
             ellipse_row(rc.left, rc.top, rc.left + w, rc.top + h, ey, &x0, &x1);
-            p[n].x = rc.right - 1 - (rc.left + w - x1);
+            p[n].x = rc.right - 1 - (rc.left + w - (x1 + 1));
             p[n].y = y;
             n++;
         }
@@ -676,7 +704,7 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
         for (y = rc.bottom - 1; y >= rc.top; y--) {     /* right side, up */
             int x0, x1;
             ellipse_row(rc.left, rc.top, rc.right, rc.bottom, y, &x0, &x1);
-            o[m].x = x1 - 1; o[m].y = y; m++;
+            o[m].x = x1; o[m].y = y; m++;
         }
         for (y = rc.top; y < rc.bottom; y++) {          /* left side, down */
             int x0, x1;
@@ -754,9 +782,9 @@ static HRGN rgn_from_rows(int t, int b, int l, int r, int kind)
         int x0, x1;
         ellipse_row(l, t, r, b, y, &x0, &x1);
         (void)kind;
-        if (x0 >= x1)
+        if (x0 > x1)
             continue;
-        rgn_set_rect(row, x0, y, x1, y + 1);
+        rgn_set_rect(row, x0, y, x1 + 1, y + 1);
         rgn_combine(h, h, row, RGN_OR);
     }
     obj_free(row);
