@@ -250,7 +250,7 @@ unimpl_entry:
         mov ax, 0FFh                    ; no task yet (a DLL's LibMain)
         call far kexit_to_dos_          ; Watcom register convention
 .task:
-        mov al, 0FFh
+        mov ax, 4CFFh                   ; as if INT 21h AX=4CFFh
         jmp task_exit_al
 
 ; ---------------------------------------------------------------------------

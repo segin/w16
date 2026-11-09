@@ -893,11 +893,13 @@ void task_boot_tdb_end(void)
    stack, before freeing anything; USER then destroys the task's windows,
    queue and the like (AppExit). A DLL that is loaded or freed while USER
    is there gets USER's SignalProc (USER.314) called directly with 40h or
-   80h and the hModule. UNVERIFIED: the DI argument (FFFFh as on a fault)
-   and the order relative to the DLL's own initialisation and WEP. */
+   80h and the hModule. Observed on 3.1 (TK32, a task that ends with
+   INT 21h AX=4C00h): BX = 20h, DI = the third argument = 4C00h (the AX
+   of the exit call), hInstance = the task's, hQueue = its queue.
+   UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
 extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
 
-void __cdecl task_signal_exit(void)
+void __cdecl task_signal_exit(u16 ax)
 {
     u16 t = cur_task;
     u32 p;
@@ -909,7 +911,7 @@ void __cdecl task_signal_exit(void)
         return;
     *(u32 FAR *)MK_FP(t, 0x2A) = 0;     /* once */
     x = tx_of(t);
-    sig_call(p, t, 0x20, 0xFFFF, x ? x->dg_hnd : 0, TW(t, TDB_QUEUE));
+    sig_call(p, t, 0x20, ax, x ? x->dg_hnd : 0, TW(t, TDB_QUEUE));
 }
 
 void module_signal(u16 hmod, u16 code)
