@@ -4,8 +4,8 @@
  * does to the path and index it is given) and InternalExtractIcon (what
  * Program Manager's Change Icon uses). Each icon is logged as the 12-byte
  * header of its block and a checksum of the whole block (the block's
- * layout: ARCHITECTURE.md 6.11). Files: tests/shellprobe.sh -f ... (see
- * tests/shellprobe.sh's SH6 line in tests/shellprobes.txt).
+ * layout: ARCHITECTURE.md 6.11). tests/shellprobe.sh SH6 provides the
+ * files it reads (tools/mkshfiles.py).
  */
 #include <windows.h>
 

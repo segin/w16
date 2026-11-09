@@ -11,7 +11,9 @@
 #                'DEL C:\WINDOWS\REG.DAT'
 # Each mode's TK.LOG goes to DIR/<mode>.log (s.log, 3.log), and whatever the
 # probe left at C:\ as R*.DAT (REG.DAT snapshots), *.BMP and SH*.TXT to
-# DIR/<mode>/. Exit status: the number of FAIL lines.
+# DIR/<mode>/. Each probe gets the files and environment it needs (SH5.EXE
+# for SH4 and SH11, icon files for SH6 from tools/mkshfiles.py, variables
+# for SH7; SH12 runs without REG.DAT). Exit status: the number of FAIL lines.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,6 +34,23 @@ probe=${1:?probe name, e.g. SH1}
 [ -n "$out" ] || out=$root/build/shprobe/$probe-$( [ -n "$w16" ] && echo w16 || echo ref)
 rm -rf "$out"; mkdir -p "$out"
 [ -n "$w16" ] && files="$files $root/build/dos/SHELL.DLL=WINDOWS/SYSTEM/SHELL.DLL"
+# what each probe needs besides itself
+d=$root/build/dos
+case $probe in
+SH4)  files="$files $d/SH5.EXE=SH5.EXE" ;;
+SH6)  python3 -B "$root/tools/mkshfiles.py" "$root/build/shell/res" "$out/files"
+      files="$files $out/files/SHI.ICO=SHI.ICO $out/files/SHI2.ICO=SHI2.ICO $out/files/SHX.XYZ=SHX.XYZ"
+      files="$files $d/WINENV.COM=SHD.COM $d/DOSX.EXE=SHMZ.EXE" ;;
+SH7)  pre="$pre
+SET W16A=alpha
+SET W16B=Bee
+SET W16E=x=y
+SET W16L=0123456789012345678901234567890123456789012345678901234567890123456789" ;;
+SH11) files="$files $d/SH5.EXE=SH5.EXE $d/SH5.EXE=NOPEDIR/NOPE.EXE $d/SH5.EXE=NOPEDIR/NOPE3.EXE" ;;
+SH12) pre="$pre
+DEL C:\\WINDOWS\\REG.DAT" ;;
+SH13) modes=${modes%% *} ;;           # File Manager's layout: Standard mode only
+esac
 get=
 for n in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do
     get="$get R$n.DAT"

@@ -101,6 +101,10 @@ static void init(HWND dlg, ABOUT __far *a)
     SetDlgItemText(dlg, IDC_RES, t);
     ShowWindow(GetDlgItem(dlg, IDC_SMARTLABEL), SW_HIDE);
 
+    /* the icon control is icon-sized (SH8: 32x32 even when hidden; the
+       template's units cannot give 32 pixels high) */
+    SetWindowPos(GetDlgItem(dlg, IDC_ABICON), NULL, 0, 0, GetSystemMetrics(SM_CXICON),
+                 GetSystemMetrics(SM_CYICON), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     if (a->icon)
         SendDlgItemMessage(dlg, IDC_ABICON, STM_SETICON_31, (WPARAM)a->icon, 0);
     else

@@ -12,9 +12,6 @@
 #include "shell.h"
 
 BMP_LOGO BITMAP "shlogo.bmp"
-/* the icon control starts with an icon of its own (w16 art, Program
-   Manager's stock icon 8), so that USER makes it icon-sized */
-ABOUTICON ICON "stock08.ico"
 
 /* ShellAbout's dialog: the caption and IDC_LINE1 are wsprintf formats */
 DLG_ABOUT DIALOG 19, 20, 220, 158
@@ -22,7 +19,7 @@ STYLE DS_MODALFRAME | WS_POPUP | WS_CLIPSIBLINGS | WS_CAPTION | WS_SYSMENU
 CAPTION "About %s"
 FONT 8, "MS Sans Serif"
 BEGIN
-    CONTROL "ABOUTICON", IDC_ABICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 10, 3, 18, 20
+    CONTROL "", IDC_ABICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 10, 3, 18, 20
     CONTROL "w16 %s", IDC_LINE1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 5, 127, 10   /* BRANDING */
     CONTROL "", IDC_VERSION, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 15, 100, 10
     CONTROL "Copyright \251 the w16 contributors", -1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 25, 145, 10   /* BRANDING */
@@ -100,5 +97,5 @@ BEGIN
     IDS_FOUND,       "(found)"
     IDS_NOTFOUND,    "(not found)"
     IDS_NOCOMMDLG,   "Cannot load COMMDLG.DLL"
-    IDS_CLOSENOOPEN, "\nSHELL.DLL: RegCloseKey called with no corresponding RegOpenKey"
+    IDS_CLOSENOOPEN, "\r\nSHELL.DLL: RegCloseKey called with no corresponding RegOpenKey"
 END

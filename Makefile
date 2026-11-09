@@ -1110,8 +1110,8 @@ $(B)/shelldll/%.o: shell/shelldll/%.c shell/shelldll/shell.h
 $(B)/shelldll/shlogo.bmp: tools/mkaboutlogo.py tools/mklogo.py
 	@mkdir -p $(@D)
 	python3 -B tools/mkaboutlogo.py $@
-$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp $(ICONS)
-	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll -i=$(B)/shell/res \
+$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll \
 	    -fo=$@ $<
 $(DOS)/SHELL.DLL: $(SHDLL_O) $(B)/shelldll/shell.res shell/shelldll/shell.lnk tools/nenoname.py
 	@mkdir -p $(@D)
