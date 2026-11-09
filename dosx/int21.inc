@@ -250,7 +250,25 @@ cpout:  push ds
 ; clamp: CX = at most what segment AX holds from offset SI; CF if SI is
 ; beyond its limit
 clamp:  push dx
-        lsl dx, ax
+        cmp byte [is386], 0
+        je .w16
+        ; a 386 limit may be above 64 KB: then every offset is in it
+        cpu 386
+        push edx
+        lsl edx, ax
+        jnz .f386
+        test edx, 0FFFF0000h
+        pop edx
+        cpu 286
+        jz .w16
+        pop dx
+        clc
+        ret
+.f386:  cpu 386
+        pop edx
+        cpu 286
+        jmp .f
+.w16:   lsl dx, ax
         jnz .f
         sub dx, si
         jb .f

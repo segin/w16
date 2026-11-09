@@ -16,6 +16,7 @@
 #     -t SECS    time limit per run (default 60)
 #     -o DIR     keep the logs in DIR (default build/dosxtest)
 #     -q         print only the diff and the verdict
+# DOSXTEST_DOSX=FILE: use FILE as w16's DOSX (e.g. build/dos/DOSXT.EXE).
 # Prints each run's log (C:\DXn.LOG, then WIN's output and errorlevel),
 # then the differences between the two DOSXes. Lines that are expected to
 # differ are not filtered: the diff is for reading (ARCHITECTURE.md 9.5
@@ -56,7 +57,7 @@ run() {   # run PROBE HOST -> $out/PROBE.HOST.log
     rm -f "$sys/KRNL386.EXE"
     cp "$root/build/dos/$probe.COM" "$sys/KRNL286.EXE"
     if [ "$host" = w16 ]; then
-        cp "$root/build/dos/DOSX.EXE" "$sys/DOSX.EXE"
+        cp "${DOSXTEST_DOSX:-$root/build/dos/DOSX.EXE}" "$sys/DOSX.EXE"
     fi
     if [ "$cpu" = 286 ]; then
         emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" cputype=286

@@ -58,6 +58,7 @@ iret_stub:
 ; where ring-3 code DOSX called (exception handlers, callbacks, interrupt
 ; handlers for real-mode interrupts) comes back to
 ret3_stub:
+        cli                     ; ring 0 runs with interrupts disabled
         call (G_GATER | 3):0
 
 ; INT 2Fh in protected mode: 1686h answers 0 (in protected mode), 168Ah

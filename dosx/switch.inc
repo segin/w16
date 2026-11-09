@@ -439,6 +439,7 @@ r0_call3:
 
 ; ret3_entry: ring 3 entered G_GATER: SP = the TSS's SP0 - 8
 ret3_entry:
+        cli
         add sp, 8               ; [sp] = context, [sp+2] = old SP0
         push bx
         push bp

@@ -29,7 +29,11 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         jnc .memok
         mov dx, msg_nomem
         jmp fail_msg
-.memok: call tables_init
+.memok:
+%ifdef TRACE
+        call trc_create
+%endif
+        call tables_init
         call hooks_install
         ; keep only what stays resident: PSP + image + its data
         mov es, [psp_seg]
@@ -178,6 +182,11 @@ xms_init:
         mov [ldt_lin], ax
         mov [ldt_lin+2], dx
         inc dx
+%ifdef TRACE
+        mov [trc_lin], ax       ; the trace buffer between LDT and pool
+        mov [trc_lin+2], dx
+        add dx, TRC_SIZE >> 16
+%endif
         mov [pool_lin], ax
         mov [pool_lin+2], dx
         clc
@@ -300,6 +309,10 @@ tables_init:
         call gdt_set
         mov bx, G_SCR3
         call gdt_set
+%ifdef TRACE
+        mov bx, G_TRC
+        call gdt_set
+%endif
         mov ax, tss
         call base_img
         mov cx, 2Bh
@@ -581,6 +594,7 @@ cleanup:
 .nc:    call hooks_remove
         cmp byte [xms_ok], 0
         je .d
+
         mov ah, 06h
         call far [xms]
         mov dx, [xms_h]

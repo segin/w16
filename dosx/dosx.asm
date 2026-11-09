@@ -59,6 +59,7 @@ mz:     db 'MZ'
         section .text follows=.hdr vstart=0
 img_start:
 
+%include "dosx/trace.inc"
 %include "dosx/init.inc"
 %include "dosx/switch.inc"
 %include "dosx/ring0.inc"

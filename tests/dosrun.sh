@@ -7,14 +7,20 @@
 # DOSRUN_PRE = DOS commands (one per line) run first, e.g. SET PATH=...
 # DOSRUN_X=1: DOSBox-X instead of DOSBox (as tests/refrun.sh REFRUN_X);
 # DOSRUN_FPU=false then runs without a coprocessor.
+# DOSRUN_DPMI=dosx: no HDPMI16 (the command starts w16's DOSX.EXE itself).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 dir=$(cd "$1" && pwd); shift
 hdpmi="$root/.tools/hx/hxrt/BIN/HDPMI16.EXE"
-[ -f "$hdpmi" ] || { echo "missing $hdpmi (run tools/fetch-hdpmi.sh)" >&2; exit 2; }
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
-cp "$hdpmi" "$work/"
+if [ "${DOSRUN_DPMI:-hdpmi}" = dosx ]; then
+    loadhost=
+else
+    [ -f "$hdpmi" ] || { echo "missing $hdpmi (run tools/fetch-hdpmi.sh)" >&2; exit 2; }
+    cp "$hdpmi" "$work/"
+    loadhost='d:\HDPMI16.EXE -r > NUL'
+fi
 conf="$work/dosbox.conf"
 if [ -n "${DOSRUN_X:-}" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" xcpu="fpu=${DOSRUN_FPU:-true}"
@@ -40,7 +46,7 @@ pcspeaker=false
 mount c "$dir"
 mount d "$work"
 c:
-d:\\HDPMI16.EXE -r > NUL
+$loadhost
 ${DOSRUN_PRE:-}
 $* > C:\\OUT.TXT
 if errorlevel 1 goto fail

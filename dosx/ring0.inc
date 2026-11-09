@@ -92,10 +92,19 @@ exc_entry:
         mov [bp+E_ERR], dx
         jmp .exc
 .noerr: mov word [bp+E_ERR], 0
-.exc:   test byte [bp+E_CS], 3
+.exc:
+%ifdef TRACE
+        call trc_exc
+%endif
+        test byte [bp+E_CS], 3
         jz near host_fault
         jmp exc_deliver
-.soft:  test byte [bp+E_CS], 3
+.soft:
+%ifdef TRACE
+        mov word [bp+E_ERR], 0FFFFh
+        call trc_exc
+%endif
+        test byte [bp+E_CS], 3
         jz near host_fault
         ; deliver as an interrupt to pmvec[n] on the interrupted stack
         les di, [bp+E_SP]
@@ -120,6 +129,24 @@ exc_exit:
         POP_FSGS
         add sp, 2
         iret
+
+%ifdef TRACE
+trc_exc:
+        push ax
+        mov ax, [bp+E_IP]
+        mov [trc_x], ax
+        mov ax, [bp+E_CS]
+        mov [trc_x+2], ax
+        mov ax, [bp+E_ERR]
+        mov [trc_x+4], ax
+        mov ax, [bp+E_FL]
+        mov [trc_x+6], ax
+        mov ax, bx
+        or ah, 1
+        call trc
+        pop ax
+        ret
+%endif
 
 ; is_softint: BX = vector; the frame (without an error code) would have
 ; IP at [bp+E_ERR+2], CS at [bp+E_ERR+4]: is the instruction before
@@ -274,6 +301,7 @@ host_fault:
 ; ---------------------------------------------------------------------------
 ; the call gate (G_GATE): ring-3 stubs push an argument and an operation
 gate_entry:
+        cli
         PUSH_FSGS
         push ds
         push es
@@ -287,7 +315,9 @@ gate_entry:
         cmp bx, OP_COUNT
         jae gate_exit
         shl bx, 1
+        TRACE_GATE
         call [optab+bx]
+        TRACE_RESULT
 gate_exit:
         add word [bp+F_SP3], 4  ; the operation and argument words
         popa
@@ -581,6 +611,11 @@ r0_terminate:
         cli
         mov ah, 4Ch
         mov [exit_ax], ax
+%ifdef TRACE
+        mov word [rmx_depth], 0
+        mov word [trc_batch], 1
+        call trc_flush
+%endif
         mov ax, G_HD0
         mov ds, ax
         mov es, ax
@@ -759,6 +794,7 @@ idt_from_pmvec:
 r0_rmx:
         mov bp, sp
         cld
+        inc word [rmx_depth]
         cmp byte [bp+R_SIZE], 0
         jne near .hook
         ; a callback: its record
@@ -890,6 +926,7 @@ r0_rmx:
         mov [bp+R_EBP], ax
         mov sp, bp
 .back:  mov sp, bp
+        dec word [rmx_depth]
         call to_rm
         jmp rmx_resume
 
