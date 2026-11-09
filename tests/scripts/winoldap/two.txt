@@ -1,0 +1,42 @@
+# two MS-DOS Prompts: start one, Alt+Tab to Windows, start another from
+# File > Run, switch between them, exit both
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 8
+shot p1
+key alt+Tab
+sleep 8
+shot w1
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\WINDOWS\DOSPRMPT.PIF
+key Return
+sleep 8
+shot p2
+type echo second
+key Return
+key alt+Tab
+sleep 8
+shot w2
+key alt+Tab
+sleep 8
+shot p3
+type exit
+key Return
+sleep 8
+shot w3
+key alt+Tab
+sleep 8
+shot p4
+type exit
+key Return
+sleep 8
+shot w4
+key alt+F4
+sleep 3
+key Return
+sleep 8

@@ -916,3 +916,23 @@ u16 KAPI LHDelta(u16 ds, u16 n)
         I(&hp, LI_HDELTA) = n;
     return I(&hp, LI_HDELTA);
 }
+
+/* LocalNotify (KERNEL.14, Windows 2.x SDK): the heap's notification
+   procedure, in the information block; returns the previous one.
+   Observed on 3.1 (tests/apps/tk50.c): KRNL286 keeps it at 18h of its
+   information block (w16's block has KRNL386's layout: 1Eh), the
+   default is a procedure in KERNEL. KERNEL then calls it with (wMsg,
+   hMem, wArg): LN_OUTOFMEM (0, wArg = the bytes it needs) before growing
+   the heap, LN_DISCARD (2) before discarding a block. UNVERIFIED: w16
+   does not call it yet. */
+u32 KAPI LNotify(u16 ds, u32 proc)
+{
+    lheap hp;
+    u32 FAR *p, old;
+    if (!heap_of(ds, &hp))
+        return 0;
+    p = (u32 FAR *)MK_FP(hp.seg, hp.info + LI_NOTIFY);
+    old = *p;
+    *p = proc;
+    return old;
+}

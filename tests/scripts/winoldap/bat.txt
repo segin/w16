@@ -1,0 +1,17 @@
+# File > Run "C:\T.BAT x y": a batch file (it echoes and runs C:\WC1.COM)
+# opts: files=WC1 bat wait
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\T.BAT x y
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

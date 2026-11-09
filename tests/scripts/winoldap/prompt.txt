@@ -1,0 +1,39 @@
+# MS-DOS Prompt from Program Manager: a command, Alt+Tab to Windows and
+# back, Ctrl+Esc (Task List), Alt+Esc, exit, end Windows
+sleep 32
+shot pm
+key Right Right Right Right
+sleep 1
+key Return
+sleep 8
+shot dos1
+type ver
+key Return
+sleep 2
+shot dos2
+key alt+Tab
+sleep 10
+shot win1
+key alt+Tab
+sleep 8
+shot dos3
+key ctrl+Escape
+sleep 10
+shot tasklist
+key Escape
+sleep 3
+key alt+Escape
+sleep 3
+shot win2
+key alt+Tab
+sleep 8
+shot dos4
+type exit
+key Return
+sleep 10
+shot back
+key alt+F4
+sleep 3
+shot endwin
+key Return
+sleep 8

@@ -123,6 +123,9 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
     total = (u32)o_lf + 1 + LF_HEAD - 1 + plen + 1;
     if (total > 0xFFF0UL || !galloc(GMEM_FIXED, total, 0, &sel))
         return 0;
+    /* observed on 3.1 (tests/apps/tk51.c, TOOLHELP's GlobalEntryHandle):
+       a module table is its own owner; TOOLHELP then calls it GT_MODULE */
+    FarSetOwner(sel, sel);
     t = MK_FP(sel, 0);
     h = (ne_header FAR *)t;
 

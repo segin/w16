@@ -565,6 +565,7 @@ static void sweep(void)
 static void destroy(module FAR *m)
 {
     u16 i;
+    th_delmodule(m);                    /* toolhelp.c: 65h, 52h each */
     mod_unlink(m);
     for (i = 0; i < m->seg_count; i++)
         if (m->seg[i].hnd)
@@ -926,6 +927,7 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     for (i = 0; i < h.seg_count; i++)
         if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
             gset_code(m->seg[i].sel);
+    th_loadsegs(m);                     /* toolhelp.c: 50h each */
     rsrc_init(m);
 
     /* A DLL's initialisation, on the caller's stack. Observed on Windows
@@ -939,6 +941,9 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
         module_signal(m->ne_sel, 0x40); /* Pietrek: before its init */
     }
+    if ((h.flags & NEF_LIBRARY) && !(h.cs && h.cs <= h.seg_count && defer_sel))
+        th_startdll(m, h.cs && h.cs <= h.seg_count ? m->seg[h.cs - 1].sel : 0,
+                    h.cs && h.cs <= h.seg_count ? h.ip : 0);   /* 64h */
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
         if (!defer_add(m->ne_sel)) {
             *err = LE_NOMEM;
@@ -1148,6 +1153,7 @@ int module_init_dll(u16 hmod)
     h = NE_HDR(m);
     if (!h->cs || h->cs > m->seg_count)
         return 1;
+    th_startdll(m, m->seg[h->cs - 1].sel, h->ip);     /* toolhelp.c: 64h */
     return mod_call(m->seg[h->cs - 1].sel, h->ip, entry_ds(m), h->heap_size,
                     module_instance(m), 0, 0) != 0;
 }

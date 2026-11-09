@@ -269,6 +269,20 @@ void __cdecl task_exit_c(u16 code);
 void KAPI OldYield(void);
 u32  KAPI_ES GetCurrentTask(void);
 u16  get_winflags(void);
+/* ---- toolhelp.c: THHOOK and the notification hooks ---- */
+void thhook_sync(void);
+void thhook_set_shell(u16 hmod);
+int  th_hooked(void);
+void th_outstr(const char FAR *s);
+void th_loadsegs(module FAR *m);
+void th_startdll(module FAR *m, u16 cs, u16 ip);
+void th_delmodule(module FAR *m);
+void th_task_out(void);
+void th_task_in(void);
+void th_task_exit(u16 code);
+void th_logerror(u16 err, void FAR *info);
+void th_logparamerror(u16 err, void FAR *proc, void FAR *param);
+u32  fatal_exit_hook(void);
 #define WF_PMODE        0x0001
 #define WF_CPU286       0x0002
 #define WF_CPU386       0x0004

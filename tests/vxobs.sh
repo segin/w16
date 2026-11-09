@@ -79,8 +79,8 @@ run_one() {   # run_one DIR OPTIONS COMMANDS
         printf '[dos]\nxms=%s\nems=%s\n' "$xms" "$ems"
         printf '[mixer]\nnosound=true\n[speaker]\npcspeaker=false\n'
         printf '[log]\nlogfile=%s/trace.log\n' "$d"
-        printf '[serial]\nserial1=file file:%s/com1.txt\n' "$d"     # w16's VMM traces here
         for c in ${VXOBS_LOG:-}; do printf '%s=true\n' "$c"; done   # e.g. "files exec"
+        printf '[serial]\nserial1=file file:%s/com1.txt\n' "$d"     # w16's VMM traces here
         printf '[autoexec]\nmount c "%s/c"\nc:\ncd \\WINDOWS\nCLS\n' "$d"
         printf '%s\n' "$cmds" | tr ';' '\n'
         printf 'exit\n'

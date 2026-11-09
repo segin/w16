@@ -1,0 +1,56 @@
+/* winoldap.rc - w16 WINOLDAP.MOD resources. The message texts and the
+   Parameters dialog are Windows 3.1's wording and layout (ARCHITECTURE.md
+   6.8: standard UI text matches 1:1), as listed by tools/neres.py; the
+   icon is w16's own (PROGMAN's stock DOS-prompt icon, tools/stockicons.py). */
+#include <windows.h>
+#include "winoldap.h"
+
+1 ICON "stock09.ico"
+
+IDD_PARAMS DIALOG 55, 100, 206, 48
+STYLE DS_SYSMODAL | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+BEGIN
+    CONTROL "Parameters", 20, "STATIC", SS_RIGHT | WS_CHILD | WS_VISIBLE | WS_GROUP, 4, 8, 40, 8
+    CONTROL "", IDC_PARAMS, "EDIT", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP, 48, 6, 154, 12
+    CONTROL "OK", IDOK, "BUTTON", BS_DEFPUSHBUTTON | WS_CHILD | WS_VISIBLE | WS_TABSTOP, 87, 24, 32, 14
+END
+
+STRINGTABLE
+BEGIN
+    1  "Insufficient memory to run the application.\n\n\nQuit one or more Windows applications to increase available memory, and try again."
+    3  "Insufficient memory to run the application.\n\n\nCheck the memory requirements in the program information file (PIF) and change if necessary."
+    4  "Another application is using the communication port. Characters may be lost if you decide to start your application now.\n\nDo you want to start your application?"
+    5  "Cannot run the application.\n\nQuit one or more Windows applications to increase available memory, and try again."
+    6  "The HIMEM.SYS file is not loaded.\n\nQuit Windows, change the CONFIG.SYS file to load HIMEM.SYS, and then restart your computer."
+    7  "Insufficient extended memory to run the application.\n\nCheck the memory requirements in the program information file (PIF) and change if necessary."
+    9  "Insufficient disk space on drive\n\nX                                 \n\nDesired disk space:               \n\nDelete one or more files to increase available disk space."
+    11 "Cannot find the file WINOLDAP.GRB.\n\nMake sure that the file is in the path defined by '286grabber=' value in SYSTEM.INI."
+    14 "Cannot resume running the application.\n\nRestart the application."
+    15 "Cannot find information needed to run Windows applications.\n\nRestart Windows."
+    16 "Cannot find the specified file.\n\nMake sure that the path and filename are correct."
+    17 "The path you specified does not exist.\n\nMake sure that the path is correct."
+    18 "The executable file cannot be accessed.\n\nMake sure that the file attributes are correct."
+    19 "Insufficient memory to run the application.\n\nQuit one or more Windows applications to increase available memory, and try again."
+    20 "Cannot run the application."
+    21 "Cannot run the application."
+    22 "Cannot run the application."
+    32 "Another application is using the communication ports. Characters may be lost if you decide to restart your application now.\n\nDo you want to restart your application?"
+    33 "Cannot copy to the Clipboard.\n\nAnother application is using the Clipboard. Wait until it is done before copying."
+    35 "Cannot paste from the Clipboard.\n\nYou can paste only text from the Clipboard."
+    36 "Cannot paste.\n\nQuit one or more Windows applications to increase available memory, and try again."
+    37 "Cannot paste.\n\nDelete one or more files to increase available disk space, and try again."
+    38 "&Paste"
+    39 "Application still active.\n\nQuit the application before quitting Windows."
+    40 "Application still active. \n\r\rTo quit the application, choose OK."
+    41 "Cannot run a non-Windows application from the second instance of Windows;\n\nexit this instance of Windows and run your application from the original instance."
+    42 "Switching..."
+    43 "Insufficient memory."
+    44 "Cannot find the specified file.\n\nMake sure the path and filename are correct."
+    45 "Start-up directory not found.\n\nCheck the application's program information file (PIF) to ensure the directory is correctly specified."
+    55 "Standard-mode switcher is not running. Cannot start application."
+    56 "Too many non-Windows applications. Cannot start application."
+    57 "The switch has been prevented.\n\nCannot start application."
+    58 "The switch has been prevented.\n\nCannot switch to application."
+    59 "The switch has been prevented\n\nbecause of network activity."
+    60 "More Windows Applications"
+END

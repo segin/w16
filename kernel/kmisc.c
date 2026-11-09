@@ -197,18 +197,33 @@ u32 KAPI FileCdr(u32 proc)
 }
 
 /* GetHeapSpaces (KERNEL.138): Schulman: for an hModule or hInstance, the
-   local heap's total (HIWORD) and free (LOWORD) bytes. */
+   local heap's total (HIWORD) and free (LOWORD) bytes. Observed on 3.1
+   (tests/apps/tk51.c, USER's heaps under KRNL286): "total" is the most
+   the heap could span, FFFFh less the offset of its information block
+   (word 6 of the segment: USER's DGROUP, pHeap AE4h: F51Bh; a heap in a
+   430h-byte block, pHeap 24h: FFDBh), and "free" is that less the bytes
+   in use. USER's GetFreeSystemResources computes its percentages from
+   these and divided by zero (overflow) with w16's first version, which
+   gave the heap's present span. */
 u32 KAPI GetHeapSpaces(u16 h)
 {
     module FAR *m = module_of(h);
-    u16 ad;
+    u16 ad, ph, total, used;
+    u32 sp;
     if (m && (h | 1) == (m->ne_sel | 1)) {
         ad = NE_HDR(m)->auto_data;
         if (!ad || ad > m->seg_count)
             return 0;
         h = m->seg[ad - 1].sel;
     }
-    return local_spaces(h | 1);
+    h |= 1;
+    sp = local_spaces(h);
+    if (!sp)
+        return 0;
+    ph = *(u16 FAR *)MK_FP(h, 6);
+    total = 0xFFFF - ph;
+    used = (u16)(sp >> 16) - (u16)sp;
+    return ((u32)total << 16) | (u16)(total - used);
 }
 
 /* DoSignal (KERNEL.139): Schulman: KEYBOARD's Ctrl-Break, sent to the
@@ -311,18 +326,16 @@ u16 KAPI IsRomModule(u16 h)
 }
 
 /* LogError (KERNEL.324), LogParamError (325): the debugging KERNEL
-   reports these; the retail one does nothing (Pietrek). */
+   reports these; the retail one passes them on to the notification hook
+   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek). */
 void KAPI LogError(u16 err, void FAR *info)
 {
-    (void)err;
-    (void)info;
+    th_logerror(err, info);
 }
 
 void KAPI LogParamError(u16 err, void FAR *proc, void FAR *param)
 {
-    (void)err;
-    (void)proc;
-    (void)param;
+    th_logparamerror(err, proc, param);
 }
 
 /* ---- pointer validation (KERNEL.334-337, 346, 347; SDK) ---- */

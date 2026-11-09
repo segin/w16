@@ -1,0 +1,16 @@
+# wlink directives for WINOLDAP.MOD (objects and output come from the
+# Makefile). Module name and export ordinals are Windows 3.1's
+# (tools/neinfo.py): WNDPROC @1, DIALOGPROC @2.
+format windows
+option quiet
+option start=start
+option stack=4608
+option heapsize=800
+option modname=WINOLDAP
+option description 'w16 Non-Windows application component for standard mode'
+library windows.lib
+import DISABLEOEMLAYER USER.4
+import ENABLEOEMLAYER USER.3
+export WNDPROC.1
+export DIALOGPROC.2
+import WINOLDAPCALL KERNEL.151
