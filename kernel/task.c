@@ -352,10 +352,39 @@ static void idle(void)
     rm_int(0x2F, 0x1689, 1, 0, 0);      /* Windows kernel idle */
 }
 
+/* [w16] schedlog=1 (winboot.c): every switch is printed, with what
+   asked for it (a debugging aid) */
+u16 sched_log;
+static const char *sched_why = "";
+
+static void log_name(u16 t)
+{
+    char n[9];
+    u16 i;
+    if (!t) {
+        kputs("-");
+        return;
+    }
+    for (i = 0; i < 8 && TB(t, TDB_NAME + i); i++)
+        n[i] = TB(t, TDB_NAME + i);
+    n[i] = 0;
+    kputs(n);
+}
+
 static void switch_to(u16 t)
 {
     u16 from = cur_task;
     static u16 have87 = 0xFFFF;
+
+    if (sched_log) {
+        kputs("w16 sw ");
+        log_name(from);
+        kputs(" -> ");
+        log_name(t);
+        kputs(" (");
+        kputs(sched_why);
+        kputs(")\r\n");
+    }
 
     if (have87 == 0xFFFF)
         have87 = (get_winflags() & WF_80x87) != 0;
@@ -566,12 +595,14 @@ void task_set_env(u16 t, u16 env)
 }
 
 /* Start the new task t from a running task: it runs until it yields
-   (observed: LoadModule returned after the new task's first Yield). */
+   (observed: LoadModule returned after the new task's first Yield).
+   Through Yield, as 3.1's CloseApplEnv (Pietrek ch. 3). */
 void task_start(u16 t)
 {
     (void)t;
+    sched_why = "start";
     if (cur_task)
-        OldYield();
+        Yield();
 }
 
 /* Run the tasks (from KERNEL's own stack, after the first task is made);
@@ -747,11 +778,37 @@ u32 KAPI_ES GetVersion(void)                                     /* KERNEL.3 */
     return ((u32)(((r.ax & 0xFF) << 8) | (r.ax >> 8)) << 16) | 0x0A03;
 }
 
-/* Without a message queue (no USER yet) Yield is OldYield (Pietrek). */
+/* Yield (Pietrek ch. 6, Yield and UserYield): with a message queue it
+   is USER's UserYield (USER.332), which answers the inter-task
+   SendMessages waiting for the task before and after OldYield; without
+   one (no USER yet) it is OldYield. LoadModule starts a new task with
+   Yield (Pietrek ch. 3, CloseApplEnv): so the starting task answers the
+   new one's SendMessages (activation) while it waits, as on 3.1 (the
+   USER agent's trace: Notepad started from Program Manager's File > Run
+   reaches GetMessage before Program Manager's EndDialog runs); with a
+   plain OldYield Program Manager went on and activated itself again. */
+typedef void (__far __pascal *voidproc)(void);
+
 void KAPI Yield(void)                                         /* KERNEL.29 */
 {
-    if (cur_task)
-        TW(cur_task, TDB_YIELDTO) = 0;
+    static u32 user_yield;
+    if (!cur_task)
+        return;
+    TW(cur_task, TDB_YIELDTO) = 0;
+    sched_why = "Yield";
+    if (TW(cur_task, TDB_QUEUE)) {
+        if (!user_yield) {
+            module FAR *u = module_find("USER");
+            u16 sel, off;
+            int is_const;
+            if (u && module_entry(u, 332, &sel, &off, &is_const) && !is_const)
+                user_yield = ((u32)sel << 16) | off;
+        }
+        if (user_yield) {
+            ((voidproc)user_yield)();
+            return;
+        }
+    }
     OldYield();
 }
 
@@ -769,6 +826,7 @@ u16 KAPI WaitEvent(u16 htask)                                 /* KERNEL.30 */
         }
         if (t != cur_task || t == boot_tdb)
             return 0;           /* UNVERIFIED: another task's, the boot's */
+        sched_why = "WaitEvent";
         reschedule();
     }
 }
@@ -831,6 +889,7 @@ void KAPI OldYield(void)                                      /* KERNEL.117 */
     TW(t, TDB_EVENTS)++;
     reschedule();
     TW(t, TDB_EVENTS)--;
+    sched_why = "OldYield";
 }
 
 /* GetDOSEnvironment: the environment (every task shares KERNEL's). */
@@ -853,6 +912,7 @@ void KAPI DirectedYield(u16 htask)                            /* KERNEL.150 */
 {
     if (cur_task)
         TW(cur_task, TDB_YIELDTO) = task_of(htask);
+    sched_why = "DirectedYield";
     OldYield();
 }
 

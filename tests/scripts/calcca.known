@@ -1,5 +1,5 @@
 # results of tests/calcscenarios.sh that differ from the original and are
-# accepted for now (ARCHITECTURE.md 15.2 "Not matched"): script, test line
+# accepted for now (ARCHITECTURE.md 15.3 "Not matched"): script, test line
 behaviour c 709in
 behaviour c 710in
 behaviour c 1xN12=
@@ -103,7 +103,6 @@ r1sci w c 1x10(657.0934%6x38)o&1xN37=
 r1sci z c 0.000000003632(9135956&0.00008
 r1sci w c 804.21621pb=
 r1sci z c 384.792%208.60hs(94L43)N=
-r1sci u c 701.8im#==
 r1sci z c 71il(930y34.02672)=
 r1sci u c 40(1/305.21188)(623y6x29)y153=
 r1sci u c 211.86396(344.6y48227505)(52+7
