@@ -14,8 +14,11 @@
  *   segment (the edit window's instance is Notepad's).
  *   The frame's scroll bars follow the edit control: their positions are
  *   what the edit control answers to WM_VSCROLL / WM_HSCROLL with the code
- *   EM_GETTHUMB (WM_USER + 14), observed equal at every step; scroll bar
- *   requests on the frame go on to the edit control. Word Wrap hides the
+ *   EM_GETTHUMB (WM_USER + 14), taken when the edit control reports that
+ *   it scrolled (EN_HSCROLL / EN_VSCROLL; observed: after typing a long
+ *   line the original's bar shows 60 where the edit control by then says
+ *   59, the value it had at its last scroll); scroll bar requests on the
+ *   frame go on to the edit control. Word Wrap hides the
  *   horizontal bar (range 0..0).
  *   Title "Notepad - " followed by "(Untitled)" or the file's name.
  *   Menu items are enabled when a menu opens: Undo if the edit control can
@@ -309,7 +312,7 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (LOWORD(wp) == IDC_EDIT && (HWND)LOWORD(lp) == g_edit) {
             if ((HIWORD(lp) == EN_ERRSPACE || HIWORD(lp) == EN_MAXTEXT) && !file_is_loading())
                 msg_box(hwnd, IDS_NOMEMORY, NULL, MB_OK | MB_ICONEXCLAMATION);
-            else
+            else if (HIWORD(lp) == EN_HSCROLL || HIWORD(lp) == EN_VSCROLL)
                 sync_scroll();
             return 0;
         }
@@ -419,8 +422,6 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        if (msg.hwnd == g_edit)         /* keys and the mouse may scroll */
-            sync_scroll();
     }
     return (int)msg.wParam;
 }
