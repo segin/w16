@@ -1,0 +1,416 @@
+# USER (SYSTEM\USER.EXE): entry table, 413 entries; flags 8301, automatic data segment 45
+# ordinal  name  where-named  segment  entry-flags (1 exported, 2 shared data)
+    1  MESSAGEBOX                   nonres  CODE  1 fixed preload        03
+    2  OLDEXITWINDOWS               nonres  CODE  3 discardable preload  03
+    3  ENABLEOEMLAYER               nonres  CODE  5 discardable preload  03
+    4  DISABLEOEMLAYER              nonres  CODE  5 discardable preload  03
+    5  INITAPP                      nonres  CODE  5 discardable preload  03
+    6  POSTQUITMESSAGE              nonres  CODE  1 fixed preload        03
+    7  EXITWINDOWS                  nonres  CODE  5 discardable preload  03
+    8  WEP                          res     CODE  3 discardable preload  03
+   10  SETTIMER                     nonres  CODE  1 fixed preload        03
+   11  BEAR11                       nonres  CODE  1 fixed preload        03
+   12  KILLTIMER                    nonres  CODE  1 fixed preload        03
+   13  GETTICKCOUNT                 nonres  CODE  1 fixed preload        03
+   14  GETTIMERRESOLUTION           nonres  CODE  1 fixed preload        01
+   15  GETCURRENTTIME               nonres  CODE  1 fixed preload        03
+   16  CLIPCURSOR                   nonres  CODE  1 fixed preload        03
+   17  GETCURSORPOS                 nonres  CODE  1 fixed preload        03
+   18  SETCAPTURE                   nonres  CODE  1 fixed preload        03
+   19  RELEASECAPTURE               nonres  CODE  1 fixed preload        03
+   20  SETDOUBLECLICKTIME           nonres  CODE  1 fixed preload        03
+   21  GETDOUBLECLICKTIME           nonres  CODE  1 fixed preload        03
+   22  SETFOCUS                     nonres  CODE  1 fixed preload        03
+   23  GETFOCUS                     nonres  CODE  1 fixed preload        03
+   24  REMOVEPROP                   nonres  CODE 13 discardable preload  03
+   25  GETPROP                      nonres  CODE  1 fixed preload        03
+   26  SETPROP                      nonres  CODE 13 discardable preload  03
+   27  ENUMPROPS                    nonres  CODE 13 discardable preload  03
+   28  CLIENTTOSCREEN               nonres  CODE  1 fixed preload        03
+   29  SCREENTOCLIENT               nonres  CODE  1 fixed preload        03
+   30  WINDOWFROMPOINT              nonres  CODE  1 fixed preload        03
+   31  ISICONIC                     nonres  CODE  1 fixed preload        03
+   32  GETWINDOWRECT                nonres  CODE  1 fixed preload        03
+   33  GETCLIENTRECT                nonres  CODE  1 fixed preload        03
+   34  ENABLEWINDOW                 nonres  CODE  1 fixed preload        03
+   35  ISWINDOWENABLED              nonres  CODE  1 fixed preload        03
+   36  GETWINDOWTEXT                nonres  CODE  1 fixed preload        03
+   37  SETWINDOWTEXT                nonres  CODE  1 fixed preload        03
+   38  GETWINDOWTEXTLENGTH          nonres  CODE  1 fixed preload        03
+   39  BEGINPAINT                   nonres  CODE  1 fixed preload        03
+   40  ENDPAINT                     nonres  CODE  1 fixed preload        03
+   41  CREATEWINDOW                 nonres  CODE  8 discardable preload  03
+   42  SHOWWINDOW                   nonres  CODE 14 discardable preload  03
+   43  CLOSEWINDOW                  nonres  CODE 14 discardable preload  03
+   44  OPENICON                     nonres  CODE 14 discardable preload  03
+   45  BRINGWINDOWTOTOP             nonres  CODE  7 discardable preload  03
+   46  GETPARENT                    nonres  CODE  2 discardable preload  03
+   47  ISWINDOW                     nonres  CODE  1 fixed preload        03
+   48  ISCHILD                      nonres  CODE  1 fixed preload        03
+   49  ISWINDOWVISIBLE              nonres  CODE  1 fixed preload        03
+   50  FINDWINDOW                   nonres  CODE  6 discardable preload  03
+   51  BEAR51                       nonres  CODE  1 fixed preload        03
+   52  ANYPOPUP                     nonres  CODE 14 discardable preload  03
+   53  DESTROYWINDOW                nonres  CODE  8 discardable preload  03
+   54  ENUMWINDOWS                  nonres  CODE  1 fixed preload        03
+   55  ENUMCHILDWINDOWS             nonres  CODE  1 fixed preload        03
+   56  MOVEWINDOW                   nonres  CODE  7 discardable preload  03
+   57  REGISTERCLASS                nonres  CODE  8 discardable preload  03
+   58  GETCLASSNAME                 nonres  CODE  8 discardable preload  03
+   59  SETACTIVEWINDOW              nonres  CODE  1 fixed preload        03
+   60  GETACTIVEWINDOW              nonres  CODE  1 fixed preload        03
+   61  SCROLLWINDOW                 nonres  CODE 13 discardable preload  03
+   62  SETSCROLLPOS                 nonres  CODE 18 discardable preload  03
+   63  GETSCROLLPOS                 nonres  CODE 18 discardable preload  03
+   64  SETSCROLLRANGE               nonres  CODE 18 discardable preload  03
+   65  GETSCROLLRANGE               nonres  CODE 18 discardable preload  03
+   66  GETDC                        nonres  CODE  1 fixed preload        03
+   67  GETWINDOWDC                  nonres  CODE  1 fixed preload        03
+   68  RELEASEDC                    nonres  CODE  1 fixed preload        03
+   69  SETCURSOR                    nonres  CODE  1 fixed preload        03
+   70  SETCURSORPOS                 nonres  CODE  1 fixed preload        03
+   71  SHOWCURSOR                   nonres  CODE  1 fixed preload        03
+   72  SETRECT                      nonres  CODE  1 fixed preload        03
+   73  SETRECTEMPTY                 nonres  CODE  1 fixed preload        03
+   74  COPYRECT                     nonres  CODE  1 fixed preload        03
+   75  ISRECTEMPTY                  nonres  CODE  1 fixed preload        03
+   76  PTINRECT                     nonres  CODE  1 fixed preload        03
+   77  OFFSETRECT                   nonres  CODE  1 fixed preload        03
+   78  INFLATERECT                  nonres  CODE  1 fixed preload        03
+   79  INTERSECTRECT                nonres  CODE  1 fixed preload        03
+   80  UNIONRECT                    nonres  CODE  1 fixed preload        03
+   81  FILLRECT                     nonres  CODE  1 fixed preload        03
+   82  INVERTRECT                   nonres  CODE  1 fixed preload        03
+   83  FRAMERECT                    nonres  CODE  1 fixed preload        03
+   84  DRAWICON                     nonres  CODE 13 discardable preload  03
+   85  DRAWTEXT                     nonres  CODE  6 discardable preload  03
+   86  BEAR86                       nonres  CODE 13 discardable preload  03
+   87  DIALOGBOX                    nonres  CODE 25 discardable          03
+   88  ENDDIALOG                    nonres  CODE 25 discardable          03
+   89  CREATEDIALOG                 nonres  CODE 24 discardable          03
+   90  ISDIALOGMESSAGE              nonres  CODE 25 discardable          03
+   91  GETDLGITEM                   nonres  CODE 25 discardable          03
+   92  SETDLGITEMTEXT               nonres  CODE 25 discardable          03
+   93  GETDLGITEMTEXT               nonres  CODE 25 discardable          03
+   94  SETDLGITEMINT                nonres  CODE 25 discardable          03
+   95  GETDLGITEMINT                nonres  CODE 25 discardable          03
+   96  CHECKRADIOBUTTON             nonres  CODE 25 discardable          03
+   97  CHECKDLGBUTTON               nonres  CODE 25 discardable          03
+   98  ISDLGBUTTONCHECKED           nonres  CODE 25 discardable          03
+   99  DLGDIRSELECT                 nonres  CODE 37 discardable          03
+  100  DLGDIRLIST                   nonres  CODE 37 discardable          03
+  101  SENDDLGITEMMESSAGE           nonres  CODE 25 discardable          03
+  102  ADJUSTWINDOWRECT             nonres  CODE  2 discardable preload  03
+  103  MAPDIALOGRECT                nonres  CODE 25 discardable          03
+  104  MESSAGEBEEP                  nonres  CODE  1 fixed preload        03
+  105  FLASHWINDOW                  nonres  CODE  6 discardable preload  03
+  106  GETKEYSTATE                  nonres  CODE  1 fixed preload        03
+  107  DEFWINDOWPROC                nonres  CODE  1 fixed preload        03
+  108  GETMESSAGE                   nonres  CODE  1 fixed preload        03
+  109  PEEKMESSAGE                  nonres  CODE  1 fixed preload        03
+  110  POSTMESSAGE                  nonres  CODE  1 fixed preload        03
+  111  SENDMESSAGE                  nonres  CODE  1 fixed preload        03
+  112  WAITMESSAGE                  nonres  CODE  1 fixed preload        03
+  113  TRANSLATEMESSAGE             nonres  CODE  1 fixed preload        03
+  114  DISPATCHMESSAGE              nonres  CODE  1 fixed preload        03
+  115  REPLYMESSAGE                 nonres  CODE  1 fixed preload        03
+  116  POSTAPPMESSAGE               nonres  CODE  1 fixed preload        03
+  118  REGISTERWINDOWMESSAGE        nonres  CODE  1 fixed preload        03
+  119  GETMESSAGEPOS                nonres  CODE  1 fixed preload        03
+  120  GETMESSAGETIME               nonres  CODE  1 fixed preload        03
+  121  SETWINDOWSHOOK               nonres  CODE  1 fixed preload        03
+  122  CALLWINDOWPROC               nonres  CODE  1 fixed preload        03
+  123  CALLMSGFILTER                nonres  CODE  1 fixed preload        03
+  124  UPDATEWINDOW                 nonres  CODE  1 fixed preload        03
+  125  INVALIDATERECT               nonres  CODE  1 fixed preload        03
+  126  INVALIDATERGN                nonres  CODE  1 fixed preload        03
+  127  VALIDATERECT                 nonres  CODE  1 fixed preload        03
+  128  VALIDATERGN                  nonres  CODE  1 fixed preload        03
+  129  GETCLASSWORD                 nonres  CODE  2 discardable preload  03
+  130  SETCLASSWORD                 nonres  CODE  2 discardable preload  03
+  131  GETCLASSLONG                 nonres  CODE  2 discardable preload  03
+  132  SETCLASSLONG                 nonres  CODE  2 discardable preload  03
+  133  GETWINDOWWORD                nonres  CODE  2 discardable preload  03
+  134  SETWINDOWWORD                nonres  CODE  2 discardable preload  03
+  135  GETWINDOWLONG                nonres  CODE  2 discardable preload  03
+  136  SETWINDOWLONG                nonres  CODE  2 discardable preload  03
+  137  OPENCLIPBOARD                nonres  CODE 39 discardable          03
+  138  CLOSECLIPBOARD               nonres  CODE 39 discardable          03
+  139  EMPTYCLIPBOARD               nonres  CODE 39 discardable          03
+  140  GETCLIPBOARDOWNER            nonres  CODE 39 discardable          03
+  141  SETCLIPBOARDDATA             nonres  CODE 39 discardable          03
+  142  GETCLIPBOARDDATA             nonres  CODE 39 discardable          03
+  143  COUNTCLIPBOARDFORMATS        nonres  CODE 39 discardable          03
+  144  ENUMCLIPBOARDFORMATS         nonres  CODE 39 discardable          03
+  145  REGISTERCLIPBOARDFORMAT      nonres  CODE  1 fixed preload        03
+  146  GETCLIPBOARDFORMATNAME       nonres  CODE 39 discardable          03
+  147  SETCLIPBOARDVIEWER           nonres  CODE 39 discardable          03
+  148  GETCLIPBOARDVIEWER           nonres  CODE 39 discardable          03
+  149  CHANGECLIPBOARDCHAIN         nonres  CODE 39 discardable          03
+  150  LOADMENU                     nonres  CODE  9 discardable preload  03
+  151  CREATEMENU                   nonres  CODE  9 discardable preload  03
+  152  DESTROYMENU                  nonres  CODE  9 discardable preload  03
+  153  CHANGEMENU                   nonres  CODE  9 discardable preload  03
+  154  CHECKMENUITEM                nonres  CODE  9 discardable preload  03
+  155  ENABLEMENUITEM               nonres  CODE  9 discardable preload  03
+  156  GETSYSTEMMENU                nonres  CODE  9 discardable preload  03
+  157  GETMENU                      nonres  CODE  9 discardable preload  03
+  158  SETMENU                      nonres  CODE  9 discardable preload  03
+  159  GETSUBMENU                   nonres  CODE  9 discardable preload  03
+  160  DRAWMENUBAR                  nonres  CODE 10 discardable preload  03
+  161  GETMENUSTRING                nonres  CODE  9 discardable preload  03
+  162  HILITEMENUITEM               nonres  CODE 19 discardable preload  03
+  163  CREATECARET                  nonres  CODE 13 discardable preload  03
+  164  DESTROYCARET                 nonres  CODE 13 discardable preload  03
+  165  SETCARETPOS                  nonres  CODE 13 discardable preload  03
+  166  HIDECARET                    nonres  CODE 13 discardable preload  03
+  167  SHOWCARET                    nonres  CODE 13 discardable preload  03
+  168  SETCARETBLINKTIME            nonres  CODE  3 discardable preload  03
+  169  GETCARETBLINKTIME            nonres  CODE 13 discardable preload  03
+  170  ARRANGEICONICWINDOWS         nonres  CODE  4 discardable preload  03
+  171  WINHELP                      nonres  CODE  2 discardable preload  03
+  172  SWITCHTOTHISWINDOW           nonres  CODE 23 discardable          03
+  173  LOADCURSOR                   nonres  CODE 12 discardable preload  03
+  174  LOADICON                     nonres  CODE 12 discardable preload  03
+  175  LOADBITMAP                   nonres  CODE 12 discardable preload  03
+  176  LOADSTRING                   nonres  CODE 12 discardable preload  03
+  177  LOADACCELERATORS             nonres  CODE 12 discardable preload  03
+  178  TRANSLATEACCELERATOR         nonres  CODE 19 discardable preload  03
+  179  GETSYSTEMMETRICS             nonres  CODE  1 fixed preload        03
+  180  GETSYSCOLOR                  nonres  CODE  1 fixed preload        03
+  181  SETSYSCOLORS                 nonres  CODE 41 discardable          03
+  182  BEAR182                      nonres  CODE  1 fixed preload        03
+  183  GETCARETPOS                  nonres  CODE 13 discardable preload  03
+  184  QUERYSENDMESSAGE             nonres  CODE  1 fixed preload        03
+  185  GRAYSTRING                   nonres  CODE 10 discardable preload  03
+  186  SWAPMOUSEBUTTON              nonres  CODE  1 fixed preload        01
+  187  ENDMENU                      nonres  CODE  9 discardable preload  03
+  188  SETSYSMODALWINDOW            nonres  CODE  1 fixed preload        03
+  189  GETSYSMODALWINDOW            nonres  CODE  1 fixed preload        03
+  190  GETUPDATERECT                nonres  CODE  1 fixed preload        03
+  191  CHILDWINDOWFROMPOINT         nonres  CODE  1 fixed preload        03
+  192  INSENDMESSAGE                nonres  CODE  1 fixed preload        03
+  193  ISCLIPBOARDFORMATAVAILABLE   nonres  CODE 39 discardable          03
+  194  DLGDIRSELECTCOMBOBOX         nonres  CODE 37 discardable          03
+  195  DLGDIRLISTCOMBOBOX           nonres  CODE 37 discardable          03
+  196  TABBEDTEXTOUT                nonres  CODE  6 discardable preload  03
+  197  GETTABBEDTEXTEXTENT          nonres  CODE  6 discardable preload  03
+  198  CASCADECHILDWINDOWS          nonres  CODE 15 discardable preload  03
+  199  TILECHILDWINDOWS             nonres  CODE 15 discardable preload  03
+  200  OPENCOMM                     nonres  CODE 40 discardable          03
+  201  SETCOMMSTATE                 nonres  CODE 40 discardable          03
+  202  GETCOMMSTATE                 nonres  CODE 40 discardable          03
+  203  GETCOMMERROR                 nonres  CODE 40 discardable          03
+  204  READCOMM                     nonres  CODE 40 discardable          03
+  205  WRITECOMM                    nonres  CODE 40 discardable          03
+  206  TRANSMITCOMMCHAR             nonres  CODE 40 discardable          03
+  207  CLOSECOMM                    nonres  CODE 40 discardable          03
+  208  SETCOMMEVENTMASK             nonres  CODE 40 discardable          03
+  209  GETCOMMEVENTMASK             nonres  CODE 40 discardable          03
+  210  SETCOMMBREAK                 nonres  CODE 40 discardable          03
+  211  CLEARCOMMBREAK               nonres  CODE 40 discardable          03
+  212  UNGETCOMMCHAR                nonres  CODE 40 discardable          03
+  213  BUILDCOMMDCB                 nonres  CODE 40 discardable          03
+  214  ESCAPECOMMFUNCTION           nonres  CODE 40 discardable          03
+  215  FLUSHCOMM                    nonres  CODE 40 discardable          03
+  216  USERSEEUSERDO                nonres  CODE 41 discardable          03
+  217  LOOKUPMENUHANDLE             nonres  CODE  9 discardable preload  03
+  218  DIALOGBOXINDIRECT            nonres  CODE 25 discardable          03
+  219  CREATEDIALOGINDIRECT         nonres  CODE 24 discardable          03
+  220  LOADMENUINDIRECT             nonres  CODE  9 discardable preload  03
+  221  SCROLLDC                     nonres  CODE 13 discardable preload  03
+  222  GETKEYBOARDSTATE             nonres  CODE  1 fixed preload        03
+  223  SETKEYBOARDSTATE             nonres  CODE  1 fixed preload        03
+  224  GETWINDOWTASK                nonres  CODE  1 fixed preload        03
+  225  ENUMTASKWINDOWS              nonres  CODE  1 fixed preload        03
+  226  LOCKINPUT                    nonres  CODE  1 fixed preload        03
+  227  GETNEXTDLGGROUPITEM          nonres  CODE 19 discardable preload  03
+  228  GETNEXTDLGTABITEM            nonres  CODE 19 discardable preload  03
+  229  GETTOPWINDOW                 nonres  CODE  2 discardable preload  03
+  230  GETNEXTWINDOW                nonres  CODE  2 discardable preload  03
+  231  GETSYSTEMDEBUGSTATE          nonres  CODE  1 fixed preload        03
+  232  SETWINDOWPOS                 nonres  CODE  7 discardable preload  03
+  233  SETPARENT                    nonres  CODE 14 discardable preload  03
+  234  UNHOOKWINDOWSHOOK            nonres  CODE  1 fixed preload        03
+  235  DEFHOOKPROC                  nonres  CODE  1 fixed preload        03
+  236  GETCAPTURE                   nonres  CODE  1 fixed preload        03
+  237  GETUPDATERGN                 nonres  CODE  1 fixed preload        03
+  238  EXCLUDEUPDATERGN             nonres  CODE  1 fixed preload        03
+  239  DIALOGBOXPARAM               nonres  CODE 25 discardable          03
+  240  DIALOGBOXINDIRECTPARAM       nonres  CODE 25 discardable          03
+  241  CREATEDIALOGPARAM            nonres  CODE 24 discardable          03
+  242  CREATEDIALOGINDIRECTPARAM    nonres  CODE 24 discardable          03
+  243  GETDIALOGBASEUNITS           nonres  CODE 25 discardable          03
+  244  EQUALRECT                    nonres  CODE  1 fixed preload        03
+  245  ENABLECOMMNOTIFICATION       nonres  CODE 40 discardable          03
+  246  EXITWINDOWSEXEC              nonres  CODE  5 discardable preload  03
+  247  GETCURSOR                    nonres  CODE  1 fixed preload        03
+  248  GETOPENCLIPBOARDWINDOW       nonres  CODE 39 discardable          03
+  249  GETASYNCKEYSTATE             nonres  CODE  1 fixed preload        03
+  250  GETMENUSTATE                 nonres  CODE  9 discardable preload  03
+  251  SENDDRIVERMESSAGE            nonres  CODE  2 discardable preload  03
+  252  OPENDRIVER                   nonres  CODE 41 discardable          03
+  253  CLOSEDRIVER                  nonres  CODE 41 discardable          03
+  254  GETDRIVERMODULEHANDLE        nonres  CODE 41 discardable          03
+  255  DEFDRIVERPROC                nonres  CODE  2 discardable preload  03
+  256  GETDRIVERINFO                nonres  CODE  2 discardable preload  03
+  257  GETNEXTDRIVER                nonres  CODE  2 discardable preload  03
+  258  MAPWINDOWPOINTS              nonres  CODE  1 fixed preload        03
+  259  BEGINDEFERWINDOWPOS          nonres  CODE  7 discardable preload  03
+  260  DEFERWINDOWPOS               nonres  CODE  7 discardable preload  03
+  261  ENDDEFERWINDOWPOS            nonres  CODE  7 discardable preload  03
+  262  GETWINDOW                    nonres  CODE  2 discardable preload  03
+  263  GETMENUITEMCOUNT             nonres  CODE  9 discardable preload  03
+  264  GETMENUITEMID                nonres  CODE  9 discardable preload  03
+  265  SHOWOWNEDPOPUPS              nonres  CODE 14 discardable preload  03
+  266  SETMESSAGEQUEUE              nonres  CODE  1 fixed preload        03
+  267  SHOWSCROLLBAR                nonres  CODE 18 discardable preload  03
+  268  GLOBALADDATOM                nonres  CODE  1 fixed preload        03
+  269  GLOBALDELETEATOM             nonres  CODE  1 fixed preload        03
+  270  GLOBALFINDATOM               nonres  CODE  1 fixed preload        03
+  271  GLOBALGETATOMNAME            nonres  CODE  1 fixed preload        03
+  272  ISZOOMED                     nonres  CODE  1 fixed preload        03
+  273  CONTROLPANELINFO             nonres  CODE 41 discardable          03
+  274  GETNEXTQUEUEWINDOW           nonres  CODE 23 discardable          03
+  275  REPAINTSCREEN                nonres  CODE  1 fixed preload        03
+  276  LOCKMYTASK                   nonres  CODE  1 fixed preload        03
+  277  GETDLGCTRLID                 nonres  CODE 25 discardable          03
+  278  GETDESKTOPHWND               nonres  CODE  1 fixed preload        03
+  279  OLDSETDESKPATTERN            nonres  CODE 41 discardable          03
+  280  SETSYSTEMMENU                nonres  CODE  9 discardable preload  03
+  282  SELECTPALETTE                nonres  CODE  6 discardable preload  03
+  283  REALIZEPALETTE               nonres  CODE  6 discardable preload  03
+  284  GETFREESYSTEMRESOURCES       nonres  CODE 41 discardable          03
+  285  BEAR285                      nonres  CODE 41 discardable          03
+  286  GETDESKTOPWINDOW             nonres  CODE  1 fixed preload        03
+  287  GETLASTACTIVEPOPUP           nonres  CODE  2 discardable preload  03
+  288  GETMESSAGEEXTRAINFO          nonres  CODE  1 fixed preload        03
+  289  KEYBD_EVENT                  nonres  CODE  1 fixed preload        03
+  290  REDRAWWINDOW                 nonres  CODE  1 fixed preload        03
+  291  SETWINDOWSHOOKEX             nonres  CODE  1 fixed preload        03
+  292  UNHOOKWINDOWSHOOKEX          nonres  CODE  1 fixed preload        03
+  293  CALLNEXTHOOKEX               nonres  CODE  1 fixed preload        03
+  294  LOCKWINDOWUPDATE             nonres  CODE 13 discardable preload  03
+  299  MOUSE_EVENT                  nonres  CODE  1 fixed preload        03
+  301  BOZOSLIVEHERE                nonres  CODE 26 discardable          03
+  306  BEAR306                      nonres  CODE 10 discardable preload  03
+  308  DEFDLGPROC                   nonres  CODE 25 discardable          03
+  309  GETCLIPCURSOR                nonres  CODE  1 fixed preload        03
+  314  SIGNALPROC                   nonres  CODE  1 fixed preload        03
+  319  SCROLLWINDOWEX               nonres  CODE 13 discardable preload  03
+  320  SYSERRORBOX                  nonres  CODE  1 fixed preload        03
+  321  SETEVENTHOOK                 nonres  CODE  1 fixed preload        03
+  322  WINOLDAPPHACKOMATIC          nonres  CODE 41 discardable          03
+  323  GETMESSAGE2                  nonres  CODE  1 fixed preload        03
+  324  FILLWINDOW                   nonres  CODE  1 fixed preload        03
+  325  PAINTRECT                    nonres  CODE  1 fixed preload        03
+  326  GETCONTROLBRUSH              nonres  CODE  6 discardable preload  03
+  331  ENABLEHARDWAREINPUT          nonres  CODE  1 fixed preload        01
+  332  USERYIELD                    nonres  CODE  1 fixed preload        03
+  333  ISUSERIDLE                   nonres  CODE  1 fixed preload        03
+  334  GETQUEUESTATUS               nonres  CODE  1 fixed preload        03
+  335  GETINPUTSTATE                nonres  CODE  1 fixed preload        03
+  336  LOADCURSORICONHANDLER        nonres  CODE 12 discardable preload  03
+  337  GETMOUSEEVENTPROC            nonres  CODE  1 fixed preload        03
+  341  _FFFE_FARFRAME               nonres  CODE  1 fixed preload        03
+  343  GETFILEPORTNAME              nonres  CODE  1 fixed preload        03
+  356  LOADDIBCURSORHANDLER         nonres  CODE 12 discardable preload  03
+  357  LOADDIBICONHANDLER           nonres  CODE 12 discardable preload  03
+  358  ISMENU                       nonres  CODE  9 discardable preload  03
+  359  GETDCEX                      nonres  CODE  1 fixed preload        03
+  362  DCHOOK                       nonres  CODE  1 fixed preload        03
+  368  COPYICON                     nonres  CODE 12 discardable preload  03
+  369  COPYCURSOR                   nonres  CODE 12 discardable preload  03
+  370  GETWINDOWPLACEMENT           nonres  CODE 14 discardable preload  03
+  371  SETWINDOWPLACEMENT           nonres  CODE 14 discardable preload  03
+  372  GETINTERNALICONHEADER        nonres  CODE 12 discardable preload  03
+  373  SUBTRACTRECT                 nonres  CODE  1 fixed preload        03
+  400  FINALUSERINIT                nonres  CODE  3 discardable preload  03
+  402  GETPRIORITYCLIPBOARDFORMAT   nonres  CODE 39 discardable          03
+  403  UNREGISTERCLASS              nonres  CODE  8 discardable preload  03
+  404  GETCLASSINFO                 nonres  CODE  8 discardable preload  03
+  406  CREATECURSOR                 nonres  CODE 12 discardable preload  03
+  407  CREATEICON                   nonres  CODE 12 discardable preload  03
+  408  CREATECURSORICONINDIRECT     nonres  CODE 12 discardable preload  03
+  410  INSERTMENU                   nonres  CODE  9 discardable preload  03
+  411  APPENDMENU                   nonres  CODE  9 discardable preload  03
+  412  REMOVEMENU                   nonres  CODE  9 discardable preload  03
+  413  DELETEMENU                   nonres  CODE  9 discardable preload  03
+  414  MODIFYMENU                   nonres  CODE  9 discardable preload  03
+  415  CREATEPOPUPMENU              nonres  CODE  9 discardable preload  03
+  416  TRACKPOPUPMENU               nonres  CODE  9 discardable preload  03
+  417  GETMENUCHECKMARKDIMENSIONS   nonres  CODE  9 discardable preload  03
+  418  SETMENUITEMBITMAPS           nonres  CODE  9 discardable preload  03
+  420  _WSPRINTF                    nonres  CODE 16 discardable preload  03
+  421  WVSPRINTF                    nonres  CODE 16 discardable preload  03
+  422  DLGDIRSELECTEX               nonres  CODE 37 discardable          03
+  423  DLGDIRSELECTCOMBOBOXEX       nonres  CODE 37 discardable          03
+  430  LSTRCMP                      nonres  CODE 11 discardable preload  03
+  431  ANSIUPPER                    nonres  CODE 11 discardable preload  03
+  432  ANSILOWER                    nonres  CODE 11 discardable preload  03
+  433  ISCHARALPHA                  nonres  CODE 11 discardable preload  03
+  434  ISCHARALPHANUMERIC           nonres  CODE 11 discardable preload  03
+  435  ISCHARUPPER                  nonres  CODE 11 discardable preload  03
+  436  ISCHARLOWER                  nonres  CODE 11 discardable preload  03
+  437  ANSIUPPERBUFF                nonres  CODE 11 discardable preload  03
+  438  ANSILOWERBUFF                nonres  CODE 11 discardable preload  03
+  445  DEFFRAMEPROC                 nonres  CODE 15 discardable preload  03
+  447  DEFMDICHILDPROC              nonres  CODE 15 discardable preload  03
+  451  TRANSLATEMDISYSACCEL         nonres  CODE 15 discardable preload  03
+  452  CREATEWINDOWEX               nonres  CODE  8 discardable preload  03
+  454  ADJUSTWINDOWRECTEX           nonres  CODE  2 discardable preload  03
+  455  GETICONID                    nonres  CODE 12 discardable preload  03
+  456  LOADICONHANDLER              nonres  CODE 12 discardable preload  03
+  457  DESTROYICON                  nonres  CODE 12 discardable preload  03
+  458  DESTROYCURSOR                nonres  CODE 12 discardable preload  03
+  459  DUMPICON                     nonres  CODE 12 discardable preload  03
+  460  GETINTERNALWINDOWPOS         nonres  CODE 14 discardable preload  03
+  461  SETINTERNALWINDOWPOS         nonres  CODE 14 discardable preload  03
+  462  CALCCHILDSCROLL              nonres  CODE 15 discardable preload  03
+  463  SCROLLCHILDREN               nonres  CODE 15 discardable preload  03
+  464  DRAGOBJECT                   nonres  CODE 14 discardable preload  03
+  465  DRAGDETECT                   nonres  CODE 14 discardable preload  03
+  466  DRAWFOCUSRECT                nonres  CODE  1 fixed preload        03
+  470  STRINGFUNC                   nonres  CODE 11 discardable preload  03
+  471  LSTRCMPI                     nonres  CODE 11 discardable preload  03
+  472  ANSINEXT                     nonres  CODE 11 discardable preload  03
+  473  ANSIPREV                     nonres  CODE 11 discardable preload  03
+  480  GETUSERLOCALOBJTYPE          nonres  CODE  1 fixed preload        03
+  481  HARDWARE_EVENT               nonres  CODE  1 fixed preload        03
+  482  ENABLESCROLLBAR              nonres  CODE 18 discardable preload  03
+  483  SYSTEMPARAMETERSINFO         nonres  CODE 41 discardable          03
+  484  __GP                         res     CODE  1 fixed preload        03
+  499  WNETERRORTEXT                nonres  CODE 22 discardable          03
+  501  WNETOPENJOB                  nonres  CODE 22 discardable          03
+  502  WNETCLOSEJOB                 nonres  CODE 22 discardable          03
+  503  WNETABORTJOB                 nonres  CODE 22 discardable          03
+  504  WNETHOLDJOB                  nonres  CODE 22 discardable          03
+  505  WNETRELEASEJOB               nonres  CODE 22 discardable          03
+  506  WNETCANCELJOB                nonres  CODE 22 discardable          03
+  507  WNETSETJOBCOPIES             nonres  CODE 22 discardable          03
+  508  WNETWATCHQUEUE               nonres  CODE 22 discardable          03
+  509  WNETUNWATCHQUEUE             nonres  CODE 22 discardable          03
+  510  WNETLOCKQUEUEDATA            nonres  CODE 22 discardable          03
+  511  WNETUNLOCKQUEUEDATA          nonres  CODE 22 discardable          03
+  512  WNETGETCONNECTION            nonres  CODE 22 discardable          03
+  513  WNETGETCAPS                  nonres  CODE 22 discardable          03
+  514  WNETDEVICEMODE               nonres  CODE 22 discardable          03
+  515  WNETBROWSEDIALOG             nonres  CODE 22 discardable          03
+  516  WNETGETUSER                  nonres  CODE 22 discardable          03
+  517  WNETADDCONNECTION            nonres  CODE 22 discardable          03
+  518  WNETCANCELCONNECTION         nonres  CODE 22 discardable          03
+  519  WNETGETERROR                 nonres  CODE 22 discardable          03
+  520  WNETGETERRORTEXT             nonres  CODE 22 discardable          03
+  521  WNETENABLE                   nonres  CODE 22 discardable          03
+  522  WNETDISABLE                  nonres  CODE 22 discardable          03
+  523  WNETRESTORECONNECTION        nonres  CODE 22 discardable          03
+  524  WNETWRITEJOB                 nonres  CODE 22 discardable          03
+  525  WNETCONNECTDIALOG            nonres  CODE 22 discardable          03
+  526  WNETDISCONNECTDIALOG         nonres  CODE 22 discardable          03
+  527  WNETCONNECTIONDIALOG         nonres  CODE 22 discardable          03
+  528  WNETVIEWQUEUEDIALOG          nonres  CODE 22 discardable          03
+  529  WNETPROPERTYDIALOG           nonres  CODE 22 discardable          03
+  530  WNETGETDIRECTORYTYPE         nonres  CODE 22 discardable          03
+  531  WNETDIRECTORYNOTIFY          nonres  CODE 22 discardable          03
+  532  WNETGETPROPERTYTEXT          nonres  CODE 22 discardable          03
+
