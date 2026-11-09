@@ -401,6 +401,14 @@ void v86_farcall(struct cregs *v, int iret)
     exec_v86(v);
 }
 
+int exec_depth(void)
+{
+    int n = 0;
+    struct execctx *c;
+    for (c = cur_exec; c; c = c->prev) n++;
+    return n;
+}
+
 void exec_return(struct cregs *r)
 {
     if (!cur_exec) panic("return breakpoint outside a nested call at %x:%x", r->cs, r->eip);
