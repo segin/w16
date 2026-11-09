@@ -1,0 +1,40 @@
+class Notepad
+run C:\NOTEPAD.EXE C:\SMALL.TXT
+wait 5000
+info
+snap C:\MAIN.DDB
+type Hello
+cmd 12
+wait 500
+text
+snap C:\TIMEDATE.DDB
+cmd 3
+wait 2000
+snap C:\FIND.DDB
+type two
+key 0D
+wait 1500
+info
+snap C:\FOUND.DDB
+cmd 2
+wait 2000
+snap C:\SAVEAS.DDB
+type C:\OUT.TXT
+key 0D
+wait 2000
+cmd 27
+wait 1000
+info
+snap C:\WRAP.DDB
+cmd 10
+wait 2000
+snap C:\OPEN.DDB
+key 1B
+wait 1000
+cmd 11
+wait 1500
+snap C:\ABOUT.DDB
+key 0D
+wait 1000
+cmd 28
+wait 2000

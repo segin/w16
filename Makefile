@@ -957,7 +957,7 @@ shell: $(DOS)/NOTEPAD.EXE
 shell2: $(WIN2)/NOTEPAD.EXE
 $(B)/shell/res/notepad.ico: tools/npicon.py tools/mkicons.py
 	@mkdir -p $(@D)
-	python3 tools/npicon.py $@
+	python3 -B tools/npicon.py $@
 $(B)/shell/notepad/%.o: shell/notepad/%.c shell/notepad/notepad.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
