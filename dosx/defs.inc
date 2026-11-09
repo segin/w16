@@ -42,9 +42,12 @@ LDT_SCRB        equ 51h         ; 028Fh: host scratch
 LDT_RES_END     equ 5Ah         ; 02D7h: the first free descriptor
 LDT_COUNT       equ 1FFEh       ; descriptors in the LDT (limit 0FFEFh)
 
+LDT_EXC         equ 58h         ; 02C7h: the exception handlers' stack
+
 ; selectors with RPL 3
 S_SCRA  equ LDT_SCRA * 8 + 7
 S_SCRB  equ LDT_SCRB * 8 + 7
+EXC_SEL equ LDT_EXC * 8 + 7
 
 ; the DPMI real-mode call structure (DPMI 0.9, INT 31h 0300h)
 R_EDI   equ 00h
@@ -138,6 +141,7 @@ H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
 INIT_STACK      equ 400h
+CB_STATIC       equ 16      ; callback records in DOSX's own data
 
 ; arena block header (16 bytes before each block, in extended memory)
 A_SIZE  equ 0           ; dword: data bytes

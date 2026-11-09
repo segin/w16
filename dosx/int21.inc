@@ -226,14 +226,35 @@ cpout:  push ds
         push si
         push di
         push cx
-        verw ax
-        jnz .f
-        push si
+        verr ax                 ; readable is enough: KERNEL reads a code
+        jnz .f                  ; segment from its file with DS = that
+        push si                 ; segment (Microsoft's DOSX lets it)
         mov si, di
         call clamp
         pop si
         jc .f
-        mov es, ax
+        verw ax
+        jz .w
+        ; not writable (code): through a data alias of an LDT selector
+        test al, 4
+        jz .f
+        push ax
+        push bx
+        push dx
+        push cx
+        mov bx, ax
+        call desc_base
+        push di
+        mov di, G_SCR2
+        mov cx, 0FFFFh
+        call gdt_base_lin
+        pop di
+        pop cx
+        pop dx
+        pop bx
+        pop ax
+        mov ax, G_SCR2
+.w:     mov es, ax
         push ss
         pop ds
         rep movsb

@@ -473,7 +473,10 @@ rmcall: sub sp, R_SIZE
 
 ; 0303h: a real-mode callback for the procedure DS:SI with the
 ; structure ES:DI -> CX:DX. No fixed limit (Microsoft's DOSX gives 16:
-; DX2 cb_count); the addresses are cb_seg - i : cb_off + 16 * i.
+; DX2 cb_count); the addresses are cb_seg - i : cb_off + 16 * i. The
+; first 16 records are DOSX's own (a client such as KERNEL may have taken
+; all extended memory before COMM.DRV asks for its callback), further
+; ones live in extended memory.
 d_cballoc:
         xor ax, ax
 .f:     cmp ax, [cb_cap]
@@ -525,6 +528,15 @@ d_cbfree:
 cb_rec: push ax
         push dx
         push cx
+        cmp ax, CB_STATIC
+        jae .ext
+        mov di, ax
+        shl di, 3
+        add di, cb_static
+        push ss
+        pop es
+        jmp .r
+.ext:   sub ax, CB_STATIC
         mov di, ax
         shl di, 3
         mov ax, [cb_lin]
@@ -536,7 +548,7 @@ cb_rec: push ax
         pop di
         mov ax, G_SCR0
         mov es, ax
-        pop cx
+.r:     pop cx
         pop dx
         pop ax
         ret
@@ -554,6 +566,7 @@ cb_grow:
         jbe .f
 .ok:    mov [cb_newcap], ax
         mov bx, ax
+        sub bx, CB_STATIC
         shl bx, 3
         xor cx, cx
         call arena_alloc
@@ -572,11 +585,13 @@ cb_grow:
         mov es, ax
         xor di, di
         mov cx, [cb_newcap]
+        sub cx, CB_STATIC
         shl cx, 2
         xor ax, ax
         rep stosw
         ; copy the old records
         mov cx, [cb_cap]
+        sub cx, CB_STATIC
         jcxz .new
         shl cx, 3
         xor si, si

@@ -98,6 +98,7 @@ lc_dst          dd 0
 lc_n            dw 0
 exit_ax         dw 0
 pending_msg     dw 0
+exc_sp          dw 0
 rmx_depth       dw 0                    ; real-mode callbacks/hooks active
 fx_vals:
 fx_ec           dw 0

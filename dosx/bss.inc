@@ -12,6 +12,7 @@ excvec          resd 32
 rmorig          resd 256
 rmhooked        resb 256
 cbsel           resw CBSEL_MAX
+cb_static       resb CB_STATIC * 8
 ktail           resb 130
 kpath           resb 144
 epb             resb 14

@@ -188,28 +188,35 @@ is_softint:
 exc_deliver:
         sub sp, C_SIZE
         mov si, sp              ; the context
-        mov ax, [h3_top]
+        ; the frame on the exception stack (EXC_SEL, 4 KB), as Microsoft's
+        ; DOSX: SS = 02C7h, SP = 0FECh for the first one (DX5 F00D).
+        ; Nested exceptions get the room below.
+        mov ax, [exc_sp]
         push ax
-        sub word [h3_top], H3_CHUNK
         sub ax, 16
-        mov di, ax              ; the DPMI frame
-        mov word [di], ret3_stub
-        mov word [di+2], G_HC3 | 3
+        mov di, ax
+        sub word [exc_sp], 100h
+        push es
+        mov ax, EXC_SEL
+        mov es, ax
+        mov word [es:di], ret3_stub
+        mov word [es:di+2], G_HC3 | 3
         mov ax, [bp+E_ERR]
-        mov [di+4], ax
+        mov [es:di+4], ax
         mov ax, [bp+E_IP]
-        mov [di+6], ax
+        mov [es:di+6], ax
         mov ax, [bp+E_CS]
-        mov [di+8], ax
+        mov [es:di+8], ax
         mov ax, [bp+E_FL]
-        mov [di+10], ax
+        mov [es:di+10], ax
         mov ax, [bp+E_SP]
-        mov [di+12], ax
+        mov [es:di+12], ax
         mov ax, [bp+E_SS]
-        mov [di+14], ax
+        mov [es:di+14], ax
+        pop es
         push di
         mov [si+C_SP], di
-        mov word [si+C_SS], G_HD3 | 3
+        mov word [si+C_SS], EXC_SEL
         shl bx, 2
         mov ax, [excvec+bx]
         mov [si+C_IP], ax
@@ -222,17 +229,19 @@ exc_deliver:
         mov bx, si
         call r0_call3
         pop di
-        pop word [h3_top]
+        pop word [exc_sp]
         call ctx_to_frame
-        mov ax, [di+6]
+        mov ax, EXC_SEL
+        mov es, ax
+        mov ax, [es:di+6]
         mov [bp+E_IP], ax
-        mov ax, [di+8]
+        mov ax, [es:di+8]
         mov [bp+E_CS], ax
-        mov ax, [di+10]
+        mov ax, [es:di+10]
         mov [bp+E_FL], ax
-        mov ax, [di+12]
+        mov ax, [es:di+12]
         mov [bp+E_SP], ax
-        mov ax, [di+14]
+        mov ax, [es:di+14]
         mov [bp+E_SS], ax
         mov sp, bp
         jmp exc_exit
@@ -640,9 +649,26 @@ r0_client_start:
         mov byte [client_active], 1
         call ldt_init
         call arena_init
+        ; the exception stack: 4 KB of extended memory (Microsoft's is
+        ; a 4 KB block there too, selector 02C7h, base 145020h: DX1, DX5)
+        xor cx, cx
+        mov bx, 1000h
+        call arena_alloc
+        add ax, A_HDR
+        adc dx, 0
+        mov bx, EXC_SEL
+        mov cx, 0FFFh
+        call desc_lin
+        mov word [exc_sp], 0FFCh
         call vectors_init
-        mov word [cb_cap], 0
+        mov word [cb_cap], CB_STATIC
         mov word [cb_depth], 0
+        push ds
+        pop es
+        mov di, cb_static
+        mov cx, CB_STATIC * 4
+        xor ax, ax
+        rep stosw
         ; selectors, in Microsoft's order (TK18: DS 027F, environment
         ; 02D7, PSP 02DF, CS 02E7)
         mov ax, [c_ds]
