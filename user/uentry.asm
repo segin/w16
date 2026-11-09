@@ -172,3 +172,36 @@ __I4M:
         pop di
         pop si
         retf
+
+; __I4D: signed 32-bit divide, DX:AX / CX:BX: quotient in DX:AX, remainder
+; (with the dividend's sign) in CX:BX, through __U4D
+global __I4D
+__I4D:
+        push si
+        xor si, si
+        test dx, dx
+        jns .p1
+        neg dx
+        neg ax
+        sbb dx, 0
+        xor si, 3               ; bit 0: quotient negative, bit 1: remainder
+.p1:    test cx, cx
+        jns .p2
+        neg cx
+        neg bx
+        sbb cx, 0
+        xor si, 1
+.p2:    push cs
+        call __U4D
+        test si, 1
+        jz .q
+        neg dx
+        neg ax
+        sbb dx, 0
+.q:     test si, 2
+        jz .r
+        neg cx
+        neg bx
+        sbb cx, 0
+.r:     pop si
+        retf

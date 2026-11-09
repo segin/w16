@@ -1,0 +1,3 @@
+run WINMINE.EXE
+wait 3000
+snap C:\WINMINE.BMP

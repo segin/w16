@@ -513,7 +513,13 @@ int WINAPI U_INITAPP(HINSTANCE hinst)
     }
     {
         extern LONG WINAPI U_SIGNALPROC(HANDLE, WORD, WORD, HINSTANCE, HQUEUE);
+        extern HGLOBAL WINAPI U_LOADDIBICONHANDLER(HGLOBAL, HMODULE, HRSRC);
+        extern HGLOBAL WINAPI U_LOADDIBCURSORHANDLER(HGLOBAL, HMODULE, HRSRC);
         K_SETTASKSIGNALPROC(0, (FARPROC)U_SIGNALPROC);
+        /* the program's icons and cursors load through USER's DIB
+           handlers (Pietrek; 9.4: TK28, TK30) */
+        SetResourceHandler(hinst, RT_ICON, (RSRCHDLRPROC)U_LOADDIBICONHANDLER);
+        SetResourceHandler(hinst, RT_CURSOR, (RSRCHDLRPROC)U_LOADDIBCURSORHANDLER);
     }
     q_of(hq)->hinst = hinst;
     q_of(hq)->expwinver = K_GETEXPWINVER(K_GETEXEPTR(hinst));

@@ -7,3 +7,4 @@
 *.err
 *.map
 /.claude/
+__pycache__/

@@ -40,7 +40,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK50 TK51 TK51C TK52
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -316,6 +316,13 @@ $(DOS)/TK36.EXE: $(B)/tests/start.o $(B)/tests/tk36.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk36.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk36.map file { $(B)/tests/start.o $(B)/tests/tk36.o }
+
+# TK37.EXE: who sets a module's icon and cursor handlers
+$(B)/tests/tk37.o: tests/apps/tk37ref.h tests/apps/tklog.h
+$(DOS)/TK37.EXE: $(B)/tests/start.o $(B)/tests/tk37.o tests/apps/app.lnk tests/apps/tk37.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk37.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk37.map file { $(B)/tests/start.o $(B)/tests/tk37.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
@@ -646,6 +653,45 @@ $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/fn$*.map file { $(B)/tests/start.o $(B)/tests/fn$*.o }
 
+# ---- win386: w16's WIN386.EXE (386 Enhanced mode; ARCHITECTURE.md 12) ----
+# The real-mode loader (16-bit C and nasm, an MZ program) followed by a W3
+# table of LE modules: for now the VMM ("WIN386", 32-bit C and nasm, linked
+# by wlink as a VxD). tools/mkw3.py puts them together.
+W386     := $(B)/win386
+W386INC  := win386/include
+W386LDR  := $(W386)/ldr.o $(W386)/ldrasm.o
+W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o
+W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h
+.PHONY: win386
+win386: $(W386)/WIN386.EXE
+$(W386)/ldr.o: win386/ldr/ldr.c $(W386HDRS)
+	@mkdir -p $(@D)
+	$(WCC) -q -zq -bt=dos -ms -3 -s -os -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(W386)/ldrasm.o: win386/ldr/ldrasm.asm $(W386HDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(W386)/%.o: win386/vmm/%.c $(W386HDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(W386)/%.o: win386/vmm/%.asm $(W386HDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(W386)/WIN386L.EXE: $(W386LDR)
+	$(WLINK) option quiet format dos name $@ option map=$(W386)/ldr.map option stack=4096 \
+	    libpath $(WATCOM)/lib286/dos libpath $(WATCOM)/lib286 file { $(W386LDR) }
+$(W386)/VMM.386: $(W386VMM) win386/vmm/vmm.lnk
+	$(WLINK) @win386/vmm/vmm.lnk name $@ option map=$(W386)/vmm.map file { $(W386VMM) }
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 tools/mkw3.py
+	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386
+
+# VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM
+vxprobes: $(VXPROBES)
+dos: $(VXPROBES)
+$(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
@@ -752,6 +798,79 @@ boot-test: dos install-tree
 clean:
 	rm -rf $(B)
 
+# ---- GD1, GD2: logging stand-ins for GDI's interfaces (tests/gdi; probes,
+# not in make test; ARCHITECTURE.md 11). GD1.DRV is a DISPLAY driver that
+# records every call and forwards it to VGA.DRV renamed VGAREAL
+# (tests/gdi/gdtrace.sh makes that copy in a scratch install).
+gdprobes: $(DOS)/GD1.DRV
+$(B)/gdi/gd1stubs.asm $(B)/gdi/gd1.lnk &: tests/gdi/display.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py tests/gdi/display.spec VGAREAL $(B)/gdi/gd1stubs.asm \
+	    $(B)/gdi/gd1.lnk DISPLAY 'DISPLAY : 100, 96, 96 : VGA Color Display'
+$(B)/gdi/gd1stubs.o: $(B)/gdi/gd1stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gdlog.o: tests/gdi/gdlog.asm tests/gdi/gdlog.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd1log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY -dGDL_TAG='"D"' -fo=$@ $<
+$(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/gd1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd1.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
+# GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
+# GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
+# X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
+# tests/gdi/gdi.spec
+gdprobes: $(DOS)/GD2.EXE
+$(B)/gdi/gd2stubs.asm $(B)/gdi/gd2.lnk &: tests/gdi/gdi.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py --wine --only docs/exports/GDI.txt tests/gdi/gdi.spec GDJ $(B)/gdi/gd2stubs.asm \
+	    $(B)/gdi/gd2.lnk GDI 'GDI (w16 GD2: logging stand-in)'
+$(B)/gdi/gd2stubs.o: $(B)/gdi/gd2stubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/gd2log.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_GDI -dGDL_TAG='"G"' -fo=$@ $<
+$(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/gd2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gd2.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o }
+
+# ---- GDI.EXE: w16's GDI (gdi/; ARCHITECTURE.md 11) ----
+# large model, SS != DS, byte-packed structures (the DDK's), 286
+GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
+GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/object.o \
+           $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
+           $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o
+gdi: $(DOS)/GDI.EXE
+dos: $(DOS)/GDI.EXE
+$(B)/gdi/exports.lnk $(B)/gdi/stubs.asm &: tools/mkgdiexp.py tools/mkgdlog.py \
+        docs/exports/GDI.txt tests/gdi/gdi.spec $(wildcard gdi/*.c)
+	@mkdir -p $(@D)
+	python3 tools/mkgdiexp.py $(B)/gdi/exports.lnk $(B)/gdi/stubs.asm
+$(B)/gdi/stubs.o: $(B)/gdi/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/gdi/%.o: gdi/%.c gdi/gdi.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(DOS)/GDI.EXE: $(GOBJS) gdi/gdi.lnk $(B)/gdi/exports.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @gdi/gdi.lnk @$(B)/gdi/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/gdi.map file { $(GOBJS) }
+	python3 tools/nemark.py $@ 3.10
+# GD3.EXE: the drawing probe (tests/apps/gd3.c), as the shell
+gdprobes: $(DOS)/GD3.EXE
+$(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/apps/gd3.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
@@ -834,3 +953,24 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US4: a gallery of USER's drawing, saved as BMPs (tests/apps/us4.c, us4.rc;
+# tests/userscreens.sh)
+$(B)/tests/us4.res: tests/apps/us4.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US4.EXE: $(B)/tests/start.o $(B)/tests/us4.o $(B)/tests/us4.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us4.map option resource=$(B)/tests/us4.res \
+	    file { $(B)/tests/start.o $(B)/tests/us4.o }
+dos: $(DOS)/US4.EXE
+# US5: where menu-bar items go (tests/apps/us5.c, us5.rc)
+$(B)/tests/us5.res: tests/apps/us5.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
+	    file { $(B)/tests/start.o $(B)/tests/us5.o }
+dos: $(DOS)/US5.EXE

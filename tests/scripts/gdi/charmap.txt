@@ -1,0 +1,3 @@
+run CHARMAP.EXE
+wait 3000
+snap C:\CHARMAP.BMP

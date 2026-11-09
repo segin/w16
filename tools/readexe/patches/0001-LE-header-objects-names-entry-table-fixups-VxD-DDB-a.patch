@@ -1,0 +1,1088 @@
+From 8ea8348ef1970b3793f61744c1177d84f1bea4b0 Mon Sep 17 00:00:00 2001
+From: Kirn Gill II <segin2005@gmail.com>
+Date: Sun, 8 Nov 2026 20:26:08 -0600
+Subject: [PATCH] LE: header, objects, names, entry table, fixups; VxD DDB and
+ INT 20h service IDs; W3 modules
+
+Parse the Linear Executable format (LE; LX headers too, without loading LX
+pages): the header (fixed: the data pages offset at 0x80 was missing, and the
+module flag bits), the object table and object page table, resident and
+non-resident names, the entry table, imported modules, and the fixup page
+and record tables (-v lists every record). For Windows VxDs, print the
+Device Descriptor Block found through the *_DDB export, with its pointers
+resolved through the internal fixups, and with -s the dynamic-link service
+IDs that follow INT 20h in executable objects. For W3 files (WIN386.EXE),
+dump each module in the W3 table (-m selects one).
+
+Sources: IBM's LX format description, the Windows 3.1 DDK's documentation
+of the DDB and of the INT 20h dynamic-link convention; checked against the
+Windows 3.1 VxDs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md |   4 +-
+ le.h      | 278 +++++++++++++++++-------
+ readexe.c | 638 ++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 828 insertions(+), 92 deletions(-)
+
+diff --git a/README.md b/README.md
+index 59104ef..31529cc 100644
+--- a/README.md
++++ b/README.md
+@@ -10,11 +10,13 @@ Travis CI status: [![Build Status](https://travis-ci.com/segin/readexe.svg?branc
+ |-|-|-|
+ |✅|`MZ`|MS-DOS Executable|
+ |❕|`NE`|16-bit New Executable|
+-|❌|`LE`/`LX`|32-bit Linear Executable (.vxd/.386)|
++|❕|`LE`/`LX`|32-bit Linear Executable (.vxd/.386); W3 (WIN386.EXE) modules|
+ |❌|`PE`|32/64-bit Portable Executable|
+ 
+ NE format is the current work-in-progress.
+ 
++LE support prints the header, object table (and with `-v` the object page map and every fixup record), resident and non-resident names, entry table, imported modules and a fixup summary. For a Windows virtual device driver (VxD) it also prints the Device Descriptor Block found through the exported `*_DDB` entry (device name, ID, version, init order, control procedure, V86/PM API procedures, service table and count), and with `-s` the VxD service calls: the dword device/service IDs that follow each `INT 20h` in executable objects. For a W3 file (Windows 3.x `WIN386.EXE`) every module of the W3 table is dumped this way (`-m NAME` selects one). LX object pages (offset-based page table) are not loaded yet.
++
+ ## Building
+ 
+ `readexe` uses the GNU Autotools (for now) to build. You'll need to generate the distributed build artifacts (the `configure` script itself, et. al.) before you can use them. Use the include `autogen.sh` script to generate the build artifacts. You can build `readexe` using the following: 
+diff --git a/le.h b/le.h
+index 7b62938..0bb5c42 100644
+--- a/le.h
++++ b/le.h
+@@ -1,107 +1,128 @@
+-/* readexe - Prints EXE info a la objdump/dumpbin/efd 
++/* readexe - Prints EXE info a la objdump/dumpbin/efd
+  * le.h - Structure information for 32-bit Linear Executable format
+  * Copyright © 2019 Kirn Gill II <segin2005@gmail.com>
+- * 
++ *
+  * Permission to use, copy, modify, and/or distribute this software for
+  * any purpose with or without fee is hereby granted, provided that the
+  * above copyright notice and this permission notice appear in all copies.
+- * 
++ *
+  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+- * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES 
+- * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE 
+- * FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY 
+- * DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER 
+- * IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING 
++ * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
++ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE
++ * FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
++ * DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER
++ * IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++/* Sources for the layouts below:
++ *  - IBM, "LX - Linear eXecutable Module Format Description" (1992), the
++ *    published description of the LX format, of which LE is the older
++ *    variant used by Windows 3.x/95 virtual device drivers (VxDs). The
++ *    header, object table, entry table, name tables and fixup records are
++ *    shared between LE and LX; LE differs in the object page table entry
++ *    (4 bytes: 24-bit page number + flags) and in using the "last page
++ *    size" field where LX has the page offset shift.
++ *  - Open Watcom Linker Guide, "The LE/LX executable file format" options
++ *    (Open Watcom documents and produces LE executables for DOS extenders
++ *    and VxDs).
++ *  - Microsoft Windows 3.1 DDK, Virtual Device Adaptation Guide: the Device
++ *    Descriptor Block (VxD_Desc_Block) and the INT 20h dynamic link
++ *    convention (VMMcall/VxDcall: INT 20h followed by a dword whose high
++ *    word is the device ID and low word the service number; bit 15 of the
++ *    service number set means VxDjmp).
++ *  - The Windows-specific fields at 0xB8..0xC3 (VxD version resource, device
++ *    ID, DDK version) were checked against the Windows 3.1 VxDs: e.g. the
++ *    INT13 module in WIN386.EXE has device ID 0x0020 and DDK version 0x030A
++ *    there, matching its DDB.
++ */
++
+ #ifndef LE_H
+ #define LE_H
+ 
+ #include <stdint.h>
+ 
+-struct exe_le_header { 
+-    char        magic[2]; /* "LE" or "LX" */
+-    uint8_t     byteOrder;
+-    uint8_t     wordOrder;
+-    uint32_t    level;
+-    uint16_t    cpuType;
+-    uint16_t    osType;
+-    uint32_t    version;
+-    union {
++struct exe_le_header {
++    char        magic[2]; /* "LE" or "LX" */             /* 0x00 */
++    uint8_t     byteOrder;                               /* 0x02 */
++    uint8_t     wordOrder;                               /* 0x03 */
++    uint32_t    level;                                   /* 0x04 */
++    uint16_t    cpuType;                                 /* 0x08 */
++    uint16_t    osType;                                  /* 0x0A */
++    uint32_t    version;                                 /* 0x0C */
++    union {                                              /* 0x10 */
+         uint32_t flags;
+         struct {
+-            uint32_t    _reserved1       : 1;
+-            uint32_t    libInit          : 1;
++            uint32_t    _reserved1       : 2;
++            uint32_t    libInit          : 1;   /* per-process library initialization */
+             uint32_t    _reserved2       : 1;
+             uint32_t    noInternalFixups : 1;
+             uint32_t    noExternalFixups : 1;
+             uint32_t    _reserved3       : 2;
+             uint32_t    pmIncompat       : 1;
+-            uint32_t    pmCompat         : 1;
+-            uint32_t    usesPM           : 1;
+-            uint32_t    _reserved4       : 2;
+-            uint32_t    moduleNotLoaded  : 1;
+-            uint32_t    _reserved5       : 2;
+-            uint32_t    libraryModule    : 1;
+-            uint32_t    _reserved6       : 7;
+-            uint32_t    protectedLibrary : 1;
+-            uint32_t    deviceDriver     : 1;
+-            uint32_t    _reserved7       : 7;
++            uint32_t    pmCompat         : 1;   /* both set: uses PM */
++            uint32_t    _reserved4       : 3;
++            uint32_t    moduleNotLoaded  : 1;   /* errors at link time */
++            uint32_t    _reserved5       : 1;
++            uint32_t    moduleType       : 3;   /* see exe_le_moduletypes */
++            uint32_t    _reserved6       : 12;
++            uint32_t    libTerm          : 1;   /* per-process library termination */
++            uint32_t    _reserved7       : 1;
+         };
+     };
+-    uint32_t    pages;
+-    uint32_t    startingObject;
+-    uint32_t    entryPoint;
+-    uint32_t    stackObject;
+-    uint32_t    stackPointer;
+-    uint32_t    pageSize;
+-    union {
+-        uint32_t    lastPage;   /* LE */
++    uint32_t    pages;                                   /* 0x14 */
++    uint32_t    startingObject;                          /* 0x18 */
++    uint32_t    entryPoint;                              /* 0x1C */
++    uint32_t    stackObject;                             /* 0x20 */
++    uint32_t    stackPointer;                            /* 0x24 */
++    uint32_t    pageSize;                                /* 0x28 */
++    union {                                              /* 0x2C */
++        uint32_t    lastPage;   /* LE: bytes on the last page */
+         uint32_t    pageShift;  /* LX */
+     };
+-    uint32_t    fixupSize;
+-    uint32_t    fixupChecksum;
+-    uint32_t    loaderSize;
+-    uint32_t    loaderChecksum;
+-    uint32_t    objectTableOffset;
+-    uint32_t    objectCount;
+-    uint32_t    objectMapOffset;
+-    uint32_t    idataMapOffset;
+-    uint32_t    resourceOffset;
+-    uint32_t    resourceCount;
+-    uint32_t    resourceNameOffset;
+-    uint32_t    entryTableOffset;
+-    uint32_t    moduleDirectiveOffset;
+-    uint32_t    moduleDirectiveCount;
+-    uint32_t    fixupPageTableOffset;
+-    uint32_t    fixupRecordTableOffset;
+-    uint32_t    importModuleNameTableOffset;
+-    uint32_t    importModuleNameTableCount;
+-    uint32_t    importProcNameTableOffset;
+-    uint32_t    pageChecksumTableOffset;
+-    uint32_t    preloadPageCount;
+-    uint32_t    nonresidentNameTableOffset;
+-    uint32_t    nonresidentNameTableSize;
+-    uint32_t    nonresidentNameTableChecksum;
+-    uint32_t    autodataObject;
+-    uint32_t    debugSymbolsfOffset;
+-    uint32_t    debugSymbolsfSize;
+-    uint32_t    instancePagePreloadCount;
+-    uint32_t    instancePageDemandLoadCount;
+-    uint32_t    heapSize;
+-    uint32_t    stackSize;
+-    union {
++    uint32_t    fixupSize;                               /* 0x30 */
++    uint32_t    fixupChecksum;                           /* 0x34 */
++    uint32_t    loaderSize;                              /* 0x38 */
++    uint32_t    loaderChecksum;                          /* 0x3C */
++    uint32_t    objectTableOffset;                       /* 0x40, from LE header */
++    uint32_t    objectCount;                             /* 0x44 */
++    uint32_t    objectMapOffset;                         /* 0x48, object page table */
++    uint32_t    idataMapOffset;                          /* 0x4C, iterated pages */
++    uint32_t    resourceOffset;                          /* 0x50 */
++    uint32_t    resourceCount;                           /* 0x54 */
++    uint32_t    resourceNameOffset;                      /* 0x58, resident name table */
++    uint32_t    entryTableOffset;                        /* 0x5C */
++    uint32_t    moduleDirectiveOffset;                   /* 0x60 */
++    uint32_t    moduleDirectiveCount;                    /* 0x64 */
++    uint32_t    fixupPageTableOffset;                    /* 0x68 */
++    uint32_t    fixupRecordTableOffset;                  /* 0x6C */
++    uint32_t    importModuleNameTableOffset;             /* 0x70 */
++    uint32_t    importModuleNameTableCount;              /* 0x74 */
++    uint32_t    importProcNameTableOffset;               /* 0x78 */
++    uint32_t    pageChecksumTableOffset;                 /* 0x7C */
++    uint32_t    dataPagesOffset;                         /* 0x80, from start of file */
++    uint32_t    preloadPageCount;                        /* 0x84 */
++    uint32_t    nonresidentNameTableOffset;              /* 0x88, from start of file */
++    uint32_t    nonresidentNameTableSize;                /* 0x8C */
++    uint32_t    nonresidentNameTableChecksum;            /* 0x90 */
++    uint32_t    autodataObject;                          /* 0x94 */
++    uint32_t    debugSymbolsfOffset;                     /* 0x98 */
++    uint32_t    debugSymbolsfSize;                       /* 0x9C */
++    uint32_t    instancePagePreloadCount;                /* 0xA0 */
++    uint32_t    instancePageDemandLoadCount;             /* 0xA4 */
++    uint32_t    heapSize;                                /* 0xA8 */
++    uint32_t    stackSize;                               /* 0xAC */
++    union {                                              /* 0xB0 */
+         uint8_t lxReserved[20];
+-        struct  { 
++        struct  {
+             uint8_t leReserved[8];
+-            uint32_t windowsResourceOffset;
+-            uint32_t windowsResourceSize;
+-            uint32_t windowsDeviceID;
+-            uint32_t windowsDDKVersion;
++            uint32_t windowsResourceOffset;              /* 0xB8, VxD version resource */
++            uint32_t windowsResourceSize;                /* 0xBC */
++            uint16_t windowsDeviceID;                    /* 0xC0 */
++            uint16_t windowsDDKVersion;                  /* 0xC2 */
+         };
+     };
+-};
++};                                                       /* 0xC4 bytes */
+ 
+ enum exe_le_header_cputypes {
+     CPU_286 = 1,
+@@ -112,7 +133,112 @@ enum exe_le_header_cputypes {
+ 
+ enum exe_le_ostypes {
+     LE_OS_OS2 = 1,
+-    LE_OS_WINDOWS = 4
++    LE_OS_WINDOWS,
++    LE_OS_DOS4,
++    LE_OS_WIN386
++};
++
++enum exe_le_moduletypes {   /* flags bits 15-17 */
++    LE_MOD_PROGRAM = 0,
++    LE_MOD_LIBRARY = 1,
++    LE_MOD_PROTLIBRARY = 3,
++    LE_MOD_PDD = 4,
++    LE_MOD_VDD = 5
++};
++
++/* Object table entry */
++struct exe_le_object {
++    uint32_t    virtualSize;
++    uint32_t    relocBase;
++    uint32_t    flags;
++    uint32_t    pageMapIndex;   /* 1-based index into the object page table */
++    uint32_t    pageMapCount;
++    uint32_t    _reserved;
++};
++
++enum exe_le_objflags {
++    LEOBJ_READ       = 0x0001,
++    LEOBJ_WRITE      = 0x0002,
++    LEOBJ_EXEC       = 0x0004,
++    LEOBJ_RESOURCE   = 0x0008,
++    LEOBJ_DISCARD    = 0x0010,
++    LEOBJ_SHARED     = 0x0020,
++    LEOBJ_PRELOAD    = 0x0040,
++    LEOBJ_INVALID    = 0x0080,
++    LEOBJ_ZEROFILL   = 0x0100,  /* with 0x0200: resident and contiguous */
++    LEOBJ_RESIDENT   = 0x0200,
++    LEOBJ_LONGLOCK   = 0x0400,  /* resident and long-lockable */
++    LEOBJ_ALIAS1616  = 0x1000,
++    LEOBJ_BIG        = 0x2000,  /* 32-bit default (USE32) */
++    LEOBJ_CONFORMING = 0x4000,
++    LEOBJ_IOPL       = 0x8000
+ };
+ 
++/* LE object page table entry; the page number is stored high byte first */
++struct exe_le_objpage {
++    uint8_t     pageHigh;
++    uint8_t     pageMid;
++    uint8_t     pageLow;
++    uint8_t     flags;          /* 0 legal physical page, 1 iterated, 2 invalid, 3 zero-filled */
++};
++
++/* Entry table bundle types */
++enum exe_le_bundletypes {
++    LE_BUNDLE_UNUSED = 0,
++    LE_BUNDLE_16BIT = 1,
++    LE_BUNDLE_286GATE = 2,
++    LE_BUNDLE_32BIT = 3,
++    LE_BUNDLE_FORWARDER = 4
++};
++
++/* Fixup record: source byte */
++#define LE_FIXSRC_TYPEMASK  0x0F
++#define LE_FIXSRC_BYTE      0x00
++#define LE_FIXSRC_SEL16     0x02
++#define LE_FIXSRC_PTR1616   0x03
++#define LE_FIXSRC_OFF16     0x05
++#define LE_FIXSRC_PTR1632   0x06
++#define LE_FIXSRC_OFF32     0x07
++#define LE_FIXSRC_REL32     0x08
++#define LE_FIXSRC_ALIAS     0x10
++#define LE_FIXSRC_LIST      0x20
++
++/* Fixup record: target flags byte */
++#define LE_FIXTGT_TYPEMASK  0x03
++#define LE_FIXTGT_INTERNAL  0x00
++#define LE_FIXTGT_IMPORD    0x01
++#define LE_FIXTGT_IMPNAME   0x02
++#define LE_FIXTGT_ENTRY     0x03
++#define LE_FIXTGT_ADDITIVE  0x04
++#define LE_FIXTGT_OFF32     0x10
++#define LE_FIXTGT_ADD32     0x20
++#define LE_FIXTGT_OBJ16     0x40
++#define LE_FIXTGT_ORD8      0x80
++
++/* Windows 3.x VxD Device Descriptor Block (VxD_Desc_Block), the structure a
++ * VxD exports as <name>_DDB. Source: Windows 3.1 DDK, Virtual Device
++ * Adaptation Guide; layout confirmed against the Windows 3.1 VxDs (the
++ * name field holds the blank-padded device name, the SDK version 030Ah). */
++struct vxd_ddb {
++    uint32_t    next;               /* 0x00 link, filled by the VMM */
++    uint16_t    sdkVersion;         /* 0x04 */
++    uint16_t    deviceID;           /* 0x06 Undefined_Device_ID (0) if none */
++    uint8_t     versionMajor;       /* 0x08 */
++    uint8_t     versionMinor;       /* 0x09 */
++    uint16_t    flags;              /* 0x0A */
++    char        name[8];            /* 0x0C blank padded */
++    uint32_t    initOrder;          /* 0x14 */
++    uint32_t    controlProc;        /* 0x18 */
++    uint32_t    v86APIProc;         /* 0x1C */
++    uint32_t    pmAPIProc;          /* 0x20 */
++    uint32_t    v86APICSIP;         /* 0x24 filled by the VMM */
++    uint32_t    pmAPICSIP;          /* 0x28 filled by the VMM */
++    uint32_t    referenceData;      /* 0x2C from the real-mode init */
++    uint32_t    serviceTablePtr;    /* 0x30 */
++    uint32_t    serviceTableSize;   /* 0x34 number of services */
++};                                  /* 0x38 bytes */
++
++#define VXD_INT20_OPCODE    0x20CD  /* bytes CD 20 */
++#define VXD_INT20_JMPFLAG   0x8000  /* VxDjmp rather than VxDcall */
++
+ #endif /* LE_H */
+diff --git a/readexe.c b/readexe.c
+index e2fa0f7..36fc3b8 100644
+--- a/readexe.c
++++ b/readexe.c
+@@ -23,6 +23,7 @@
+ #include <unistd.h>
+ #include <limits.h>
+ #include <errno.h>
++#include <strings.h>
+ #include <fcntl.h>
+ #include <err.h> /* -I. or such for platforms without err.h */
+ 
+@@ -53,6 +54,19 @@ struct THIS {
+     struct exe_le_header *le;               /* Linear Executable (LE/LX) header */
+     struct exe_w3_header *w3;               /* W3 header */
+     int wx_modcount;                        /* W3/W4 LE module count */
++    uint32_t le_base;                       /* file offset of the LE header */
++    uint32_t le_nrbase;                     /* added to the LE non-resident name table offset */
++    uint8_t *le_ldrbuf;                     /* LE header, loader and fixup sections */
++    uint32_t le_ldrlen;
++    struct exe_le_object *le_objs;          /* LE object table */
++    uint8_t **le_objimg;                    /* each LE object's pages, loaded */
++    struct { uint32_t obj, off, tobj, toff; } *le_fix;  /* internal 32-bit fixups applied */
++    uint32_t le_nfix;
++    uint16_t le_ddb_ordinal;                /* entry of the VxD's *_DDB export */
++    char le_ddb_name[256];
++    int verbose;                            /* -v: page map and every fixup record */
++    int services;                           /* -s: VxD service calls (INT 20h) */
++    char *w3module;                         /* -m: only this W3 module */
+ };
+ 
+ void read_ne_exe(struct THIS *this);
+@@ -61,7 +75,24 @@ void read_ne_modules_import(struct THIS *this);
+ void read_next_header(struct THIS *this);
+ void read_ne_header(struct THIS *this);
+ void get_ne_modules_count(struct THIS *this);
++int read_at(struct THIS *this, uint32_t off, void *buf, uint32_t len);
++uint8_t *le_ldr(struct THIS *this, uint32_t off, uint32_t len);
+ void read_le_header(struct THIS *this);
++uint32_t le_page_number(struct THIS *this, uint32_t idx, uint8_t *flags);
++void load_le_objects(struct THIS *this);
++void read_le_objects(struct THIS *this);
++void read_le_name_table(struct THIS *this, uint8_t *p, uint32_t len, const char *title);
++void read_le_names(struct THIS *this);
++int walk_le_entries(struct THIS *this, uint16_t want, uint16_t *obj_out, uint32_t *off_out);
++void read_le_entries(struct THIS *this);
++char *le_import_module_name(struct THIS *this, uint16_t modord, char *buf, size_t size);
++void read_le_imports(struct THIS *this);
++void read_le_fixups(struct THIS *this);
++void print_le_ptr(struct THIS *this, uint32_t obj, uint32_t at, const char *label);
++void read_le_ddb(struct THIS *this);
++void read_le_int20(struct THIS *this);
++void free_le(struct THIS *this);
++void read_le_at(struct THIS *this, uint32_t base, uint32_t nrbase);
+ void read_le_exe(struct THIS *this);
+ void read_w3_exe(struct THIS *this);
+ void read_mz_reloc(struct THIS *this);
+@@ -312,20 +343,573 @@ void read_ne_header(struct THIS *this) {
+     printf("Windows version:\t\t%"PRIu8".%"PRIu8" (0x%04"PRIx16")\n", this->ne->windowsVersionMajor, this->ne->windowsVersionMinor, this->ne->windowsVersion);
+ }
+ 
++/* Read len bytes at file offset off. Returns 1 on success. */
++int read_at(struct THIS *this, uint32_t off, void *buf, uint32_t len) {
++    if (fseek(this->fd, off, SEEK_SET)) {
++        warn("Cannot seek in %s", this->fname);
++        return 0;
++    }
++    if (fread(buf, 1, len, this->fd) != len) {
++        if (ferror(this->fd)) warn("Cannot read %s", this->fname);
++        if (feof(this->fd)) warnx("Unexpected end of file: %s", this->fname);
++        return 0;
++    }
++    return 1;
++}
++
++/* Bytes of the loader/fixup sections, which are addressed from the LE header. */
++uint8_t *le_ldr(struct THIS *this, uint32_t off, uint32_t len) {
++    if (off > this->le_ldrlen || len > this->le_ldrlen - off) return NULL;
++    return this->le_ldrbuf + off;
++}
++
+ void read_le_header(struct THIS *this) {
+-    char *msg = "";
++    struct exe_le_header *le = this->le;
++    char *msg;
++
++    printf("Linear Executable with magic:\t%c%c\n", le->magic[0], le->magic[1]);
++    printf("Byte order, word order:\t\t%s, %s\n", le->byteOrder ? "big endian" : "little endian", le->wordOrder ? "big endian" : "little endian");
++    printf("Format level:\t\t\t0x%08"PRIx32"\n", le->level);
++    switch(le->cpuType) {
++        case CPU_286: msg = "80286"; break;
++        case CPU_386: msg = "80386"; break;
++        case CPU_486: msg = "80486"; break;
++        case CPU_586: msg = "80586"; break;
++        default:      msg = "Unknown"; break;
++    }
++    printf("CPU type:\t\t\t%s (0x%04"PRIx16")\n", msg, le->cpuType);
++    switch(le->osType) {
++        case LE_OS_OS2:     msg = "OS/2"; break;
++        case LE_OS_WINDOWS: msg = "Windows"; break;
++        case LE_OS_DOS4:    msg = "DOS 4.x"; break;
++        case LE_OS_WIN386:  msg = "Windows 386 (VxD)"; break;
++        default:            msg = "Unknown"; break;
++    }
++    printf("Target operating system:\t%s (0x%04"PRIx16")\n", msg, le->osType);
++    printf("Module version:\t\t\t0x%08"PRIx32"\n", le->version);
++    switch(le->moduleType) {
++        case LE_MOD_PROGRAM:     msg = "Program"; break;
++        case LE_MOD_LIBRARY:     msg = "Library"; break;
++        case LE_MOD_PROTLIBRARY: msg = "Protected memory library"; break;
++        case LE_MOD_PDD:         msg = "Physical device driver"; break;
++        case LE_MOD_VDD:         msg = "Virtual device driver"; break;
++        default:                 msg = "Unknown"; break;
++    }
++    printf("Module flags:\t\t\t0x%08"PRIx32"\n", le->flags);
++    printf(" - Module type:\t\t\t%s\n", msg);
++    printf(" - Per-process init/term:\t%s/%s\n", le->libInit ? "true" : "false", le->libTerm ? "true" : "false");
++    printf(" - Internal fixups removed:\t%s\n", le->noInternalFixups ? "true" : "false");
++    printf(" - External fixups removed:\t%s\n", le->noExternalFixups ? "true" : "false");
++    printf(" - Not loadable (link errors):\t%s\n", le->moduleNotLoaded ? "true" : "false");
++    printf("Memory pages:\t\t\t%"PRIu32"\n", le->pages);
++    printf("Initial EIP (entrypoint):\t%"PRIu32":%08"PRIx32"\n", le->startingObject, le->entryPoint);
++    printf("Initial ESP (stack):\t\t%"PRIu32":%08"PRIx32"\n", le->stackObject, le->stackPointer);
++    printf("Page size:\t\t\t0x%08"PRIx32"\n", le->pageSize);
++    if (le->magic[1] == 'X')
++        printf("Page offset shift:\t\t%"PRIu32"\n", le->pageShift);
++    else
++        printf("Bytes on last page:\t\t0x%08"PRIx32"\n", le->lastPage);
++    printf("Fixup section size:\t\t0x%08"PRIx32"\n", le->fixupSize);
++    printf("Loader section size:\t\t0x%08"PRIx32"\n", le->loaderSize);
++    printf("Object table:\t\t\t0x%08"PRIx32" (%"PRIu32" objects)\n", le->objectTableOffset, le->objectCount);
++    printf("Object page table:\t\t0x%08"PRIx32"\n", le->objectMapOffset);
++    printf("Iterated pages:\t\t\t0x%08"PRIx32"\n", le->idataMapOffset);
++    printf("Resource table:\t\t\t0x%08"PRIx32" (%"PRIu32" entries)\n", le->resourceOffset, le->resourceCount);
++    printf("Resident name table:\t\t0x%08"PRIx32"\n", le->resourceNameOffset);
++    printf("Entry table:\t\t\t0x%08"PRIx32"\n", le->entryTableOffset);
++    printf("Module directives:\t\t0x%08"PRIx32" (%"PRIu32" entries)\n", le->moduleDirectiveOffset, le->moduleDirectiveCount);
++    printf("Fixup page table:\t\t0x%08"PRIx32"\n", le->fixupPageTableOffset);
++    printf("Fixup record table:\t\t0x%08"PRIx32"\n", le->fixupRecordTableOffset);
++    printf("Import module table:\t\t0x%08"PRIx32" (%"PRIu32" modules)\n", le->importModuleNameTableOffset, le->importModuleNameTableCount);
++    printf("Import procedure table:\t\t0x%08"PRIx32"\n", le->importProcNameTableOffset);
++    printf("Data pages:\t\t\t0x%08"PRIx32" (File offset)\n", le->dataPagesOffset);
++    printf("Preload pages:\t\t\t%"PRIu32"\n", le->preloadPageCount);
++    printf("Non-resident name table:\t0x%08"PRIx32" (File offset 0x%08"PRIx32", %"PRIu32" bytes)\n", le->nonresidentNameTableOffset, le->nonresidentNameTableOffset + this->le_nrbase, le->nonresidentNameTableSize);
++    printf("Automatic data object:\t\t%"PRIu32"\n", le->autodataObject);
++    printf("Debug information:\t\t0x%08"PRIx32" (%"PRIu32" bytes)\n", le->debugSymbolsfOffset, le->debugSymbolsfSize);
++    printf("Heap size, stack size:\t\t0x%08"PRIx32", 0x%08"PRIx32"\n", le->heapSize, le->stackSize);
++    if (le->magic[1] == 'E') {
++        printf("VxD version resource:\t\t0x%08"PRIx32" (%"PRIu32" bytes)\n", le->windowsResourceOffset, le->windowsResourceSize);
++        printf("VxD device ID:\t\t\t0x%04"PRIx16"\n", le->windowsDeviceID);
++        printf("VxD DDK version:\t\t%"PRIu8".%02"PRIu8" (0x%04"PRIx16")\n", (uint8_t) (le->windowsDDKVersion >> 8), (uint8_t) le->windowsDDKVersion, le->windowsDDKVersion);
++    }
++}
++
++/* Physical page number (1-based) of entry idx (1-based) in the object page table. */
++uint32_t le_page_number(struct THIS *this, uint32_t idx, uint8_t *flags) {
++    uint8_t *p;
++
++    if (this->le->magic[1] == 'X') {
++        /* LX: dword file offset (shifted), word size, word flags. Not a page number. */
++        if (!(p = le_ldr(this, this->le->objectMapOffset + (idx - 1) * 8, 8))) return 0;
++        if (flags) *flags = p[6];
++        return idx;
++    }
++    if (!(p = le_ldr(this, this->le->objectMapOffset + (idx - 1) * 4, 4))) return 0;
++    if (flags) *flags = p[3];
++    return ((uint32_t) p[0] << 16) | ((uint32_t) p[1] << 8) | p[2];
++}
++
++/* Load every object's pages into memory, for the DDB and the INT 20h sites. */
++void load_le_objects(struct THIS *this) {
++    struct exe_le_header *le = this->le;
++    uint32_t i, j, page, size, off;
++    uint8_t pflags;
++
++    if (!(this->le_objimg = calloc(le->objectCount, sizeof(uint8_t *)))) err(1, "Cannot allocate memory");
++    for (i = 0; i < le->objectCount; i++) {
++        struct exe_le_object *o = &this->le_objs[i];
++        uint32_t span = o->pageMapCount * le->pageSize;
++        if (span < o->virtualSize) span = o->virtualSize;
++        if (!(this->le_objimg[i] = calloc(1, span + 4))) err(1, "Cannot allocate memory");
++        if (le->magic[1] == 'X') continue;  /* LX page offsets are not handled */
++        for (j = 0; j < o->pageMapCount; j++) {
++            page = le_page_number(this, o->pageMapIndex + j, &pflags);
++            if (!page || pflags) continue;  /* zero-filled, invalid or iterated */
++            size = (page == le->pages) ? le->lastPage : le->pageSize;
++            off = le->dataPagesOffset + (page - 1) * le->pageSize;
++            read_at(this, off, this->le_objimg[i] + j * le->pageSize, size);
++        }
++    }
++}
++
++void read_le_objects(struct THIS *this) {
++    struct exe_le_header *le = this->le;
++    uint32_t i, j, page;
++    uint8_t pflags;
++    uint8_t *p;
++
++    if (!(p = le_ldr(this, le->objectTableOffset, le->objectCount * sizeof(struct exe_le_object)))) {
++        warnx("Object table is outside the loader section: %s", this->fname);
++        return;
++    }
++    if (!(this->le_objs = malloc(le->objectCount * sizeof(struct exe_le_object) + 1))) err(1, "Cannot allocate memory");
++    memcpy(this->le_objs, p, le->objectCount * sizeof(struct exe_le_object));
++    printf(
++        "\n\n"
++        "Objects:\n"
++        "  #  VirtSize  RelocBase Flags     Pages (first)\n"
++        "---------------------------------------------------\n"
++    );
++    for (i = 0; i < le->objectCount; i++) {
++        struct exe_le_object *o = &this->le_objs[i];
++        printf("  %"PRIu32"  %08"PRIx32"  %08"PRIx32"  %08"PRIx32"  %"PRIu32" (%"PRIu32")  %s%s%s%s%s%s%s%s%s%s%s%s\n",
++            i + 1, o->virtualSize, o->relocBase, o->flags, o->pageMapCount, o->pageMapIndex,
++            (o->flags & LEOBJ_READ) ? "READ " : "",
++            (o->flags & LEOBJ_WRITE) ? "WRITE " : "",
++            (o->flags & LEOBJ_EXEC) ? "EXEC " : "",
++            (o->flags & LEOBJ_RESOURCE) ? "RESOURCE " : "",
++            (o->flags & LEOBJ_DISCARD) ? "DISCARD " : "",
++            (o->flags & LEOBJ_SHARED) ? "SHARED " : "",
++            (o->flags & LEOBJ_PRELOAD) ? "PRELOAD " : "",
++            (o->flags & LEOBJ_INVALID) ? "INVALID " : "",
++            ((o->flags & (LEOBJ_ZEROFILL | LEOBJ_RESIDENT)) == LEOBJ_ZEROFILL) ? "ZEROFILL " :
++                ((o->flags & (LEOBJ_ZEROFILL | LEOBJ_RESIDENT)) == LEOBJ_RESIDENT) ? "RESIDENT " :
++                ((o->flags & (LEOBJ_ZEROFILL | LEOBJ_RESIDENT)) ? "CONTIGUOUS " : ""),
++            (o->flags & LEOBJ_LONGLOCK) ? "LONGLOCKABLE " : "",
++            (o->flags & LEOBJ_BIG) ? "USE32 " : "USE16 ",
++            (o->flags & LEOBJ_IOPL) ? "IOPL " : "");
++        if (this->verbose)
++            for (j = 0; j < o->pageMapCount; j++) {
++                page = le_page_number(this, o->pageMapIndex + j, &pflags);
++                printf("       page map %"PRIu32": page %"PRIu32", flags 0x%02"PRIx8" (file offset 0x%08"PRIx32")\n",
++                    o->pageMapIndex + j, page, pflags, le->dataPagesOffset + (page - 1) * le->pageSize);
++            }
++    }
++}
++
++/* Print a resident or nonresident name table; remember a name ending in _DDB. */
++void read_le_name_table(struct THIS *this, uint8_t *p, uint32_t len, const char *title) {
++    uint32_t i = 0;
++    uint8_t n;
++    uint16_t ord;
++    char name[256];
++
++    printf("\n\n%s:\n", title);
++    while (i < len && (n = p[i])) {
++        if (i + 1 + n + 2 > len) break;
++        memcpy(name, p + i + 1, n);
++        name[n] = '\0';
++        ord = (uint16_t) (p[i + 1 + n] | (p[i + 2 + n] << 8));
++        printf("  [%3"PRIu16"] %s\n", ord, name);
++        if (n > 4 && !strcmp(name + n - 4, "_DDB") && ord) {
++            this->le_ddb_ordinal = ord;
++            snprintf(this->le_ddb_name, sizeof(this->le_ddb_name), "%s", name);
++        }
++        i += 1 + n + 2;
++    }
++}
++
++void read_le_names(struct THIS *this) {
++    struct exe_le_header *le = this->le;
++    uint8_t *p, *nr;
++    uint32_t len;
++
++    if ((p = le_ldr(this, le->resourceNameOffset, 1))) {
++        len = this->le_ldrlen - le->resourceNameOffset;
++        read_le_name_table(this, p, len, "Resident names");
++    }
++    if (this->le_nrbase) {
++        /* Observed in WIN386.EXE: the modules' non-resident name tables were
++         * not carried into the W3 container (the offsets point past the
++         * module's data, where there are no names). */
++        printf("\n\nNon-resident names:\n  (not carried in the W3 container)\n");
++    } else if (le->nonresidentNameTableOffset && le->nonresidentNameTableSize) {
++        if (!(nr = malloc(le->nonresidentNameTableSize))) err(1, "Cannot allocate memory");
++        if (read_at(this, le->nonresidentNameTableOffset + this->le_nrbase, nr, le->nonresidentNameTableSize))
++            read_le_name_table(this, nr, le->nonresidentNameTableSize, "Non-resident names");
++        free(nr);
++    }
++}
++
++/* Walk the entry table; print it, and find the object and offset of an ordinal. */
++int walk_le_entries(struct THIS *this, uint16_t want, uint16_t *obj_out, uint32_t *off_out) {
++    uint8_t *p;
++    uint32_t i, end;
++    uint16_t ord = 1, obj;
++    uint8_t count, type, eflags;
++    uint32_t off;
++    int k;
++
++    if (!(p = le_ldr(this, this->le->entryTableOffset, 1))) return 0;
++    end = this->le_ldrlen - this->le->entryTableOffset;
++    i = 0;
++    while (i < end && (count = p[i])) {
++        if (i + 2 > end) break;
++        type = p[i + 1] & 0x7F;
++        i += 2;
++        if (type == LE_BUNDLE_UNUSED) { ord += count; continue; }
++        if (i + 2 > end) break;
++        obj = (uint16_t) (p[i] | (p[i + 1] << 8));
++        i += 2;
++        for (k = 0; k < count; k++, ord++) {
++            switch (type) {
++                case LE_BUNDLE_16BIT:
++                    if (i + 3 > end) return 0;
++                    eflags = p[i]; off = p[i + 1] | (p[i + 2] << 8); i += 3; break;
++                case LE_BUNDLE_286GATE:
++                    if (i + 5 > end) return 0;
++                    eflags = p[i]; off = p[i + 1] | (p[i + 2] << 8); i += 5; break;
++                case LE_BUNDLE_32BIT:
++                    if (i + 5 > end) return 0;
++                    eflags = p[i];
++                    off = (uint32_t) p[i + 1] | ((uint32_t) p[i + 2] << 8) | ((uint32_t) p[i + 3] << 16) | ((uint32_t) p[i + 4] << 24);
++                    i += 5; break;
++                default:
++                    warnx("Unknown entry table bundle type %"PRIu8" in %s", type, this->fname);
++                    return 0;
++            }
++            if (!want)
++                printf("  [%3"PRIu16"] %"PRIu16":%08"PRIx32" %s%s%s\n", ord, obj, off,
++                    (eflags & 1) ? "EXPORTED " : "",
++                    (eflags & 2) ? "SHARED-DATA " : "",
++                    type == LE_BUNDLE_16BIT ? "16-bit" : type == LE_BUNDLE_286GATE ? "286 call gate" : "32-bit");
++            else if (want == ord) {
++                *obj_out = obj;
++                *off_out = off;
++                return 1;
++            }
++        }
++    }
++    return 0;
++}
++
++void read_le_entries(struct THIS *this) {
++    printf(
++        "\n\n"
++        "Entry table:\n"
++    );
++    walk_le_entries(this, 0, NULL, NULL);
++}
++
++char *le_import_module_name(struct THIS *this, uint16_t modord, char *buf, size_t size) {
++    uint8_t *p;
++    uint32_t i = 0;
++    uint16_t k;
++
++    snprintf(buf, size, "module#%"PRIu16, modord);
++    if (!(p = le_ldr(this, this->le->importModuleNameTableOffset, 1))) return buf;
++    for (k = 1; k < modord; k++) {
++        if (!le_ldr(this, this->le->importModuleNameTableOffset + i, 1)) return buf;
++        i += 1 + p[i];
++    }
++    if (le_ldr(this, this->le->importModuleNameTableOffset + i, 1 + p[i]))
++        snprintf(buf, size, "%.*s", p[i], p + i + 1);
++    return buf;
++}
++
++void read_le_imports(struct THIS *this) {
++    char name[256];
++    uint32_t k;
++
++    printf(
++        "\n\n"
++        "Imported modules:\n"
++        "-----------------\n"
++    );
++    if (!this->le->importModuleNameTableCount) printf("  (none)\n");
++    for (k = 1; k <= this->le->importModuleNameTableCount; k++)
++        printf("  [%2"PRIu32"]: %s\n", k, le_import_module_name(this, (uint16_t) k, name, sizeof(name)));
++}
++
++/* Parse every fixup record. Internal 32-bit offset fixups are applied to the
++ * in-memory object images as object-relative values, and remembered, so the
++ * DDB's pointer fields can be shown as object:offset. */
++void read_le_fixups(struct THIS *this) {
++    struct exe_le_header *le = this->le;
++    uint32_t page, start, end, i, srccount, k;
++    uint8_t *fpt, *rec, src, flg;
++    int16_t srcoff;
++    uint32_t tobj, toff, add, ordinal;
++    uint16_t modord;
++    uint32_t counts[4] = {0, 0, 0, 0};
++    uint32_t obj, pageinobj;
++    uint16_t srcoffs[256];
++    char name[256];
++
++    if (!(fpt = le_ldr(this, le->fixupPageTableOffset, (le->pages + 1) * 4))) {
++        warnx("Fixup page table is outside the fixup section: %s", this->fname);
++        return;
++    }
++    if (this->verbose) printf("\n\nFixup records:\n");
++    for (page = 1; page <= le->pages; page++) {
++        start = fpt[(page - 1) * 4] | (fpt[(page - 1) * 4 + 1] << 8) | (fpt[(page - 1) * 4 + 2] << 16) | ((uint32_t) fpt[(page - 1) * 4 + 3] << 24);
++        end = fpt[page * 4] | (fpt[page * 4 + 1] << 8) | (fpt[page * 4 + 2] << 16) | ((uint32_t) fpt[page * 4 + 3] << 24);
++        if (end <= start) continue;
++        if (!(rec = le_ldr(this, le->fixupRecordTableOffset + start, end - start))) {
++            warnx("Fixup records for page %"PRIu32" are outside the fixup section: %s", page, this->fname);
++            continue;
++        }
++        /* Which object holds this page? */
++        obj = 0; pageinobj = 0;
++        for (k = 0; k < le->objectCount; k++)
++            if (page >= this->le_objs[k].pageMapIndex && page < this->le_objs[k].pageMapIndex + this->le_objs[k].pageMapCount) {
++                obj = k + 1;
++                pageinobj = page - this->le_objs[k].pageMapIndex;
++            }
++        i = 0;
++        while (i + 2 <= end - start) {
++            src = rec[i]; flg = rec[i + 1]; i += 2;
++            srccount = 0;
++            if (src & LE_FIXSRC_LIST) { srccount = rec[i]; i += 1; srcoff = 0; }
++            else { srcoff = (int16_t) (rec[i] | (rec[i + 1] << 8)); i += 2; }
++            tobj = toff = add = ordinal = 0; modord = 0;
++            switch (flg & LE_FIXTGT_TYPEMASK) {
++                case LE_FIXTGT_INTERNAL:
++                    if (flg & LE_FIXTGT_OBJ16) { tobj = rec[i] | (rec[i + 1] << 8); i += 2; } else tobj = rec[i++];
++                    if ((src & LE_FIXSRC_TYPEMASK) != LE_FIXSRC_SEL16) {
++                        if (flg & LE_FIXTGT_OFF32) { toff = rec[i] | (rec[i + 1] << 8) | (rec[i + 2] << 16) | ((uint32_t) rec[i + 3] << 24); i += 4; }
++                        else { toff = rec[i] | (rec[i + 1] << 8); i += 2; }
++                    }
++                    break;
++                case LE_FIXTGT_IMPORD:
++                    if (flg & LE_FIXTGT_OBJ16) { modord = rec[i] | (rec[i + 1] << 8); i += 2; } else modord = rec[i++];
++                    if (flg & LE_FIXTGT_ORD8) ordinal = rec[i++];
++                    else if (flg & LE_FIXTGT_OFF32) { ordinal = rec[i] | (rec[i + 1] << 8) | (rec[i + 2] << 16) | ((uint32_t) rec[i + 3] << 24); i += 4; }
++                    else { ordinal = rec[i] | (rec[i + 1] << 8); i += 2; }
++                    break;
++                case LE_FIXTGT_IMPNAME:
++                    if (flg & LE_FIXTGT_OBJ16) { modord = rec[i] | (rec[i + 1] << 8); i += 2; } else modord = rec[i++];
++                    if (flg & LE_FIXTGT_OFF32) { ordinal = rec[i] | (rec[i + 1] << 8) | (rec[i + 2] << 16) | ((uint32_t) rec[i + 3] << 24); i += 4; }
++                    else { ordinal = rec[i] | (rec[i + 1] << 8); i += 2; }
++                    break;
++                case LE_FIXTGT_ENTRY:
++                    if (flg & LE_FIXTGT_OBJ16) { ordinal = rec[i] | (rec[i + 1] << 8); i += 2; } else ordinal = rec[i++];
++                    break;
++            }
++            if (flg & LE_FIXTGT_ADDITIVE) {
++                if (flg & LE_FIXTGT_ADD32) { add = rec[i] | (rec[i + 1] << 8) | (rec[i + 2] << 16) | ((uint32_t) rec[i + 3] << 24); i += 4; }
++                else { add = rec[i] | (rec[i + 1] << 8); i += 2; }
++            }
++            if (srccount) {
++                for (k = 0; k < srccount; k++) {
++                    srcoffs[k & 0xFF] = (uint16_t) (rec[i] | (rec[i + 1] << 8));
++                    i += 2;
++                }
++            } else {
++                srccount = 1;
++                srcoffs[0] = (uint16_t) srcoff;
++            }
++            counts[flg & LE_FIXTGT_TYPEMASK] += srccount;
++            for (k = 0; k < srccount && k < 256; k++) {
++                srcoff = (int16_t) srcoffs[k];
++                if (this->verbose) {
++                    printf("  page %3"PRIu32" +%04"PRIx16" src 0x%02"PRIx8" flags 0x%02"PRIx8" -> ", page, (uint16_t) srcoff, src, flg);
++                    switch (flg & LE_FIXTGT_TYPEMASK) {
++                        case LE_FIXTGT_INTERNAL: printf("%"PRIu32":%08"PRIx32, tobj, toff); break;
++                        case LE_FIXTGT_IMPORD:   printf("%s.%"PRIu32, le_import_module_name(this, modord, name, sizeof(name)), ordinal); break;
++                        case LE_FIXTGT_IMPNAME:  printf("%s.@0x%"PRIx32, le_import_module_name(this, modord, name, sizeof(name)), ordinal); break;
++                        case LE_FIXTGT_ENTRY:    printf("entry %"PRIu32, ordinal); break;
++                    }
++                    if (flg & LE_FIXTGT_ADDITIVE) printf(" +0x%"PRIx32, add);
++                    printf("\n");
++                }
++                /* Apply a 32-bit internal offset fixup to our object image (object-relative). */
++                if (obj && (flg & LE_FIXTGT_TYPEMASK) == LE_FIXTGT_INTERNAL && (src & LE_FIXSRC_TYPEMASK) == LE_FIXSRC_OFF32) {
++                    int32_t at = (int32_t) (pageinobj * le->pageSize) + srcoff;
++                    struct exe_le_object *o = &this->le_objs[obj - 1];
++                    if (at >= 0 && (uint32_t) at + 4 <= o->pageMapCount * le->pageSize + 4 && this->le_objimg && this->le_objimg[obj - 1]) {
++                        uint8_t *d = this->le_objimg[obj - 1] + at;
++                        d[0] = (uint8_t) toff; d[1] = (uint8_t) (toff >> 8); d[2] = (uint8_t) (toff >> 16); d[3] = (uint8_t) (toff >> 24);
++                        if (this->le_nfix % 256 == 0)
++                            if (!(this->le_fix = realloc(this->le_fix, (this->le_nfix + 256) * sizeof(*this->le_fix)))) err(1, "Cannot allocate memory");
++                        this->le_fix[this->le_nfix].obj = obj;
++                        this->le_fix[this->le_nfix].off = (uint32_t) at;
++                        this->le_fix[this->le_nfix].tobj = tobj;
++                        this->le_fix[this->le_nfix].toff = toff;
++                        this->le_nfix++;
++                    }
++                }
++            }
++        }
++    }
++    printf("\n\nFixups:\t\t\t\t%"PRIu32" internal, %"PRIu32" import by ordinal, %"PRIu32" import by name, %"PRIu32" internal entry\n",
++        counts[0], counts[1], counts[2], counts[3]);
++}
++
++/* An object-relative pointer field: shows obj:offset when an internal fixup targets it. */
++void print_le_ptr(struct THIS *this, uint32_t obj, uint32_t at, const char *label) {
++    uint32_t k;
++    uint8_t *d = this->le_objimg[obj - 1] + at;
++    uint32_t v = d[0] | (d[1] << 8) | (d[2] << 16) | ((uint32_t) d[3] << 24);
++
++    for (k = 0; k < this->le_nfix; k++)
++        if (this->le_fix[k].obj == obj && this->le_fix[k].off == at) {
++            printf("%s%"PRIu32":%08"PRIx32"\n", label, this->le_fix[k].tobj, this->le_fix[k].toff);
++            return;
++        }
++    if (v) printf("%s0x%08"PRIx32" (no fixup)\n", label, v);
++    else printf("%snone\n", label);
++}
++
++void read_le_ddb(struct THIS *this) {
++    uint16_t obj;
++    uint32_t off;
++    struct vxd_ddb ddb;
++    struct exe_le_object *o;
++
++    if (!this->le_ddb_ordinal) {
++        /* Without the names (a W3 module), try the first export: a VxD
++         * exports its DDB and normally nothing else. Accepted only if it
++         * looks like a DDB (see below). */
++        if (!this->le_nrbase) return;
++        this->le_ddb_ordinal = 1;
++        snprintf(this->le_ddb_name, sizeof(this->le_ddb_name), "first export");
++    }
++    if (!walk_le_entries(this, this->le_ddb_ordinal, &obj, &off) || !obj || obj > this->le->objectCount) {
++        warnx("%s: entry %"PRIu16" not found", this->le_ddb_name, this->le_ddb_ordinal);
++        return;
++    }
++    o = &this->le_objs[obj - 1];
++    if (off + sizeof(struct vxd_ddb) > o->pageMapCount * this->le->pageSize) {
++        warnx("%s lies outside its object", this->le_ddb_name);
++        return;
++    }
++    memcpy(&ddb, this->le_objimg[obj - 1] + off, sizeof(ddb));
++    if ((ddb.sdkVersion >> 8) != 3 && (ddb.sdkVersion >> 8) != 4) {
++        printf("\n\nNo VxD Device Descriptor Block found (%s has SDK version 0x%04"PRIx16")\n", this->le_ddb_name, ddb.sdkVersion);
++        return;
++    }
++    printf("\n\nVxD Device Descriptor Block (%s, entry %"PRIu16" at %"PRIu16":%08"PRIx32"):\n", this->le_ddb_name, this->le_ddb_ordinal, obj, off);
++    printf("  Device name:\t\t\t\"%.8s\"\n", ddb.name);
++    printf("  SDK version:\t\t\t%"PRIu8".%02"PRIu8" (0x%04"PRIx16")\n", (uint8_t) (ddb.sdkVersion >> 8), (uint8_t) ddb.sdkVersion, ddb.sdkVersion);
++    printf("  Device ID:\t\t\t0x%04"PRIx16"%s\n", ddb.deviceID, ddb.deviceID ? "" : " (Undefined_Device_ID)");
++    printf("  Device version:\t\t%"PRIu8".%02"PRIu8"\n", ddb.versionMajor, ddb.versionMinor);
++    printf("  Flags:\t\t\t0x%04"PRIx16"\n", ddb.flags);
++    printf("  Init order:\t\t\t0x%08"PRIx32"\n", ddb.initOrder);
++    print_le_ptr(this, obj, off + 0x18, "  Control procedure:\t\t");
++    print_le_ptr(this, obj, off + 0x1C, "  V86 API procedure:\t\t");
++    print_le_ptr(this, obj, off + 0x20, "  PM API procedure:\t\t");
++    printf("  V86 API CS:IP:\t\t%04"PRIx16":%04"PRIx16"\n", (uint16_t) (ddb.v86APICSIP >> 16), (uint16_t) ddb.v86APICSIP);
++    printf("  PM API CS:IP:\t\t\t%04"PRIx16":%04"PRIx16"\n", (uint16_t) (ddb.pmAPICSIP >> 16), (uint16_t) ddb.pmAPICSIP);
++    printf("  Reference data:\t\t0x%08"PRIx32"\n", ddb.referenceData);
++    print_le_ptr(this, obj, off + 0x30, "  Service table:\t\t");
++    printf("  Services:\t\t\t%"PRIu32"\n", ddb.serviceTableSize);
++}
++
++/* VxD dynamic links: INT 20h (CD 20) followed by a dword, the device ID in
++ * the high word and the service number in the low word (bit 15: VxDjmp).
++ * Only executable objects are searched, and only the dword that follows
++ * the two opcode bytes is read; the code itself is not decoded, so a CD 20
++ * pair inside other data would also be listed. */
++void read_le_int20(struct THIS *this) {
++    uint32_t i, j, n = 0;
++    uint8_t *d;
++
++    printf("\n\nVxD service calls (INT 20h dynamic links):\n");
++    for (i = 0; i < this->le->objectCount; i++) {
++        struct exe_le_object *o = &this->le_objs[i];
++        if (!(o->flags & LEOBJ_EXEC)) continue;
++        d = this->le_objimg[i];
++        for (j = 0; j + 6 <= o->virtualSize; j++)
++            if (d[j] == 0xCD && d[j + 1] == 0x20) {
++                uint16_t svc = (uint16_t) (d[j + 2] | (d[j + 3] << 8));
++                uint16_t dev = (uint16_t) (d[j + 4] | (d[j + 5] << 8));
++                printf("  %"PRIu32":%08"PRIx32"  device 0x%04"PRIx16" service 0x%04"PRIx16" %s\n", i + 1, j, dev, (uint16_t) (svc & ~VXD_INT20_JMPFLAG), (svc & VXD_INT20_JMPFLAG) ? "jmp" : "call");
++                n++;
++                j += 5;
++            }
++    }
++    printf("  %"PRIu32" sites\n", n);
++}
++
++void free_le(struct THIS *this) {
++    uint32_t i;
++
++    if (this->le_objimg) {
++        for (i = 0; i < this->le->objectCount; i++) free(this->le_objimg[i]);
++        free(this->le_objimg);
++    }
++    free(this->le_objs);
++    free(this->le_ldrbuf);
++    free(this->le_fix);
++    free(this->le);
++    this->le_objimg = NULL;
++    this->le_objs = NULL;
++    this->le_ldrbuf = NULL;
++    this->le_fix = NULL;
++    this->le = NULL;
++    this->le_nfix = 0;
++    this->le_ddb_ordinal = 0;
++    this->le_ddb_name[0] = '\0';
++}
++
++/* Read the LE module whose header is at file offset base. nrbase is added to
++ * the non-resident name table offset: 0 in a stand-alone file, where that
++ * offset is from the start of the file, and the module's offset in a W3
++ * container (WIN386.EXE), where it is from the module's start (observed: the
++ * data page offset is from the start of WIN386.EXE, the non-resident name
++ * offset from the module). */
++void read_le_at(struct THIS *this, uint32_t base, uint32_t nrbase) {
++    uint32_t len;
++
++    if (!(this->le = (struct exe_le_header *) malloc(sizeof(struct exe_le_header)))) err(1, "Cannot allocate memory");
++    if (!read_at(this, base, this->le, sizeof(struct exe_le_header))) { free_le(this); return; }
++    this->le_base = base;
++    this->le_nrbase = nrbase;
++    /* The loader and fixup sections follow the header and are addressed from it. */
++    len = this->le->fixupPageTableOffset + this->le->fixupSize;
++    if (len < this->le->objectTableOffset + this->le->loaderSize) len = this->le->objectTableOffset + this->le->loaderSize;
++    if (len < sizeof(struct exe_le_header)) len = sizeof(struct exe_le_header);
++    if (!(this->le_ldrbuf = calloc(1, len + 1))) err(1, "Cannot allocate memory");
++    this->le_ldrlen = len;
++    if (!read_at(this, base, this->le_ldrbuf, len)) { free_le(this); return; }
++    read_le_header(this);
++    read_le_objects(this);
++    if (this->le_objs) {
++        load_le_objects(this);
++        read_le_names(this);
++        read_le_entries(this);
++        read_le_imports(this);
++        read_le_fixups(this);
++        read_le_ddb(this);
++        if (this->services) read_le_int20(this);
++    }
++    free_le(this);
+ }
+ 
+ void read_le_exe(struct THIS *this) {
+-    if ((this->le = (struct exe_le_header *) malloc(sizeof(struct exe_le_header)))) { 
+-        fseek(this->fd, this->mzx->nextHeader, SEEK_SET);
+-        if (fread(this->le, 1, sizeof(struct exe_le_header), this->fd)!= sizeof(struct exe_le_header)) {
+-            if (ferror(this->fd)) warn("Cannot read %s", this->fname);
+-            if (feof(this->fd)) warnx("Unexpected end of file: %s", this->fname);
+-        } else
+-            printf("Linear Executable format is a WIP. No output code yet.\n");
+-    } else err(1, "Cannot allocate memory");
+-    return;
++    read_le_at(this, this->mzx->nextHeader, 0);
+ }
+ 
+ void read_w3_exe(struct THIS *this) {
+@@ -349,7 +933,19 @@ void read_w3_exe(struct THIS *this) {
+                     if (ferror(this->fd)) warn("Cannot read %s", this->fname);
+                     if (feof(this->fd)) warnx("Unexpected end of file: %s", this->fname);
+                 } else 
+-                    printf("  [%02x] \"%s\"     0x%08"PRIx32"  0x%08"PRIx32" (%"PRIu32" bytes)\n", i, mod.name, mod.offset, mod.size, mod.size);
++                    printf("  [%02x] \"%.8s\"     0x%08"PRIx32"  0x%08"PRIx32" (%"PRIu32" bytes)\n", i, mod.name, mod.offset, mod.size, mod.size);
++            for(int i=0; i<this->wx_modcount; i++) {
++                char name[9];
++                int n;
++                if (!read_at(this, this->mzx->nextHeader + sizeof(struct exe_w3_header) + i * sizeof(struct exe_w3_modentry), &mod, sizeof(mod))) break;
++                memcpy(name, mod.name, 8);
++                for (n = 8; n > 0 && (name[n - 1] == ' ' || name[n - 1] == '\0'); n--) ;
++                name[n] = '\0';
++                if (this->w3module && strcasecmp(this->w3module, name)) continue;
++                printf("\n\n");
++                printf("W3 module [%02x] %s: Linear Executable header at offset 0x%08"PRIx32"\n", i, name, mod.offset);
++                read_le_at(this, mod.offset, mod.offset);
++            }
+         }
+     } else err(1, "Cannot allocate memory");
+     return; 
+@@ -401,7 +997,7 @@ struct THIS *init_this(void) {
+ 
+ void destroy_this(struct THIS *this) {
+     if (this->w3) free(this->w3);
+-        if (this->le) free(this->le);
++    if (this->le) free_le(this);
+     if (this->nemods) free(this->nemods);
+     if (this->nesegs) free(this->nesegs);
+     if (this->ne) free(this->ne);
+@@ -432,9 +1028,12 @@ void display_help(struct THIS *this) {
+     printf(
+         "readexe: Displays information on various Microsoft EXE formats.\n"
+         "Version "VERSION"\n\n"
+-        "  Usage: readexe [-h] [-n offset] EXEFILE.EXE\n\n"
++        "  Usage: readexe [-h] [-v] [-s] [-m module] [-n offset] EXEFILE.EXE\n\n"
+         "  -n\tManually specify offset to next header.\n"
+             "\toffset is read as decimal unless prefixed 0x/0X.\n"
++        "  -v\tVerbose: LE object page map and every fixup record.\n"
++        "  -s\tList VxD service calls (INT 20h dynamic links) in LE code.\n"
++        "  -m\tIn a W3 file (WIN386.EXE), dump only the named module.\n"
+         "  -h\tDisplay this help.\n\n"
+         "Report bugs at https://github.com/segin/readexe\n"
+     );
+@@ -459,12 +1058,21 @@ int main(int argc, char *argv[]) {
+         warnx("Not enough arguments.");
+         display_help(this);
+     }
+-    while((option = getopt(argc, argv, "hn:")) != -1) {
++    while((option = getopt(argc, argv, "hvsm:n:")) != -1) {
+         switch(option) {
+             case 'h':
+             case '?':
+                 display_help(this);
+                 break;
++            case 'v':
++                this->verbose = 1;
++                break;
++            case 's':
++                this->services = 1;
++                break;
++            case 'm':
++                this->w3module = optarg;
++                break;
+             case 'n':
+                 noffset = strtoul(optarg, &endptr, 0);
+                 if (*endptr != '\0' || (noffset == ULONG_MAX && errno == ERANGE)) err(1, "Invalid value: %s\n", optarg);
+@@ -487,7 +1095,7 @@ int main(int argc, char *argv[]) {
+     } else {
+         if (    ((this->mz->magic[0] == 'M') && (this->mz->magic[1] == 'Z')) 
+             ||  ((this->mz->magic[1] == 'M') && (this->mz->magic[0] == 'Z')) ) {
+-            printf("%s:\n", argv[1]);
++            printf("%s:\n", this->fname);
+             printf("DOS executable with magic:\t%c%c (0x%"PRIx8"%"PRIx8")\n", this->mz->magic[0], this->mz->magic[1], this->mz->magic[1], this->mz->magic[0]);
+             printf("Number of executable pages:\t0x%04"PRIx16" (%"PRIu32"+ bytes)\n", this->mz->pageCount, ((this->mz->pageCount - 1) * mz_page_size));
+             printf("Size of final page:\t\t0x%08"PRIx16" (%"PRIu16" bytes)\n", this->mz->lastPageSize, this->mz->lastPageSize);
+-- 
+2.56.0
+

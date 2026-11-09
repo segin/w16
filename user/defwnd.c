@@ -62,8 +62,9 @@ static void frame_size(PWND w, int *cx, int *cy)
         *cx = sysmet[SM_CXFRAME];
         *cy = sysmet[SM_CYFRAME];
     } else if (has_dlgframe(w)) {
-        *cx = sysmet[SM_CXDLGFRAME];
-        *cy = sysmet[SM_CYDLGFRAME];
+        /* a black line and the dialog frame (US4) */
+        *cx = sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER];
+        *cy = sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER];
     } else if (w->style & WS_BORDER) {
         *cx = sysmet[SM_CXBORDER];
         *cy = sysmet[SM_CYBORDER];
@@ -77,13 +78,21 @@ void nc_calcsize(PWND w, RECT *r)
     if (w->style & WS_MINIMIZE)
         return;
     frame_size(w, &fx, &fy);
-    if (has_caption(w)) {
-        /* the caption's upper line is the frame's inner line */
-        r->top += sysmet[SM_CYCAPTION] - sysmet[SM_CYBORDER];
-        if (!fy)
-            r->top += sysmet[SM_CYBORDER];
+    if (has_caption(w) && has_dlgframe(w) && !has_thick(w)) {
+        /* a dialog frame: the caption, its top line white and one row
+           into the frame (US4: client 24 below the top, 5 inside the
+           other edges) */
+        InflateRect(r, -fx, -fy);
+        r->top += sysmet[SM_CYCAPTION] + sysmet[SM_CYDLGFRAME] - fy;
+    } else {
+        if (has_caption(w)) {
+            /* the caption's upper line is the frame's inner line */
+            r->top += sysmet[SM_CYCAPTION] - sysmet[SM_CYBORDER];
+            if (!fy)
+                r->top += sysmet[SM_CYBORDER];
+        }
+        InflateRect(r, -fx, -fy);
     }
-    InflateRect(r, -fx, -fy);
     if (has_menu(w))
         r->top += menu_bar_height(w, r->right - r->left) ;
     if (w->style & WS_VSCROLL)
@@ -103,6 +112,11 @@ static void caption_rect(PWND w, RECT *r)
     frame_size(w, &fx, &fy);
     r->left = fx ? fx - sysmet[SM_CXBORDER] : 0;
     r->top = fy ? fy - sysmet[SM_CYBORDER] : 0;
+    if (has_dlgframe(w) && !has_thick(w)) {
+        r->left = fx;
+        r->right = w->rcWindow.right - w->rcWindow.left - fx;
+        r->top = 1 + sysmet[SM_CYDLGFRAME] - sysmet[SM_CYBORDER];
+    }
     r->right = w->rcWindow.right - w->rcWindow.left - r->left;
     r->bottom = r->top + sysmet[SM_CYCAPTION];
 }
@@ -128,11 +142,16 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
     char title[128];
     caption_rect(w, &r);
     load_frame_bitmaps();
-    /* the black lines above and below, and at the ends */
-    fill(hdc, r.left, r.top, r.right - r.left, 1, COLOR_WINDOWFRAME);
-    fill(hdc, r.left, r.bottom - 1, r.right - r.left, 1, COLOR_WINDOWFRAME);
-    fill(hdc, r.left, r.top, 1, r.bottom - r.top, COLOR_WINDOWFRAME);
-    fill(hdc, r.right - 1, r.top, 1, r.bottom - r.top, COLOR_WINDOWFRAME);
+    /* the black lines above and below, and at the ends (white above and
+       at the ends in a dialog frame: US4) */
+    {
+        int edge = (has_dlgframe(w) && !has_thick(w)) ? COLOR_WINDOW : COLOR_WINDOWFRAME;
+        fill(hdc, r.left, r.top, r.right - r.left, 1, edge);
+        fill(hdc, r.left, r.top, 1, r.bottom - r.top, edge);
+        fill(hdc, r.right - 1, r.top, 1, r.bottom - r.top, edge);
+        fill(hdc, r.left + (edge == COLOR_WINDOW), r.bottom - 1,
+             r.right - r.left - 2 * (edge == COLOR_WINDOW), 1, COLOR_WINDOWFRAME);
+    }
     t.left = r.left + 1;
     t.top = r.top + 1;
     t.right = r.right - 1;
@@ -215,12 +234,16 @@ static void draw_frame(HDC hdc, PWND w, BOOL active)
         fill(hdc, 1, cy - m - 1, fx - 1, 1, COLOR_WINDOWFRAME);
         fill(hdc, cx - fx, cy - m - 1, fx - 1, 1, COLOR_WINDOWFRAME);
     } else {
-        /* dialog frame: UNVERIFIED colours (to be measured) */
+        /* dialog frame (US4, a message box): the active caption colour
+           (UNVERIFIED for an inactive one), 3 rows at the top, 4 pixels
+           elsewhere */
         int b = active ? COLOR_ACTIVECAPTION : COLOR_INACTIVECAPTION;
-        fill(hdc, 1, 1, cx - 2, fy - 1, b);
-        fill(hdc, 1, cy - fy, cx - 2, fy - 1, b);
-        fill(hdc, 1, 1, fx - 1, cy - 2, b);
-        fill(hdc, cx - fx, 1, fx - 1, cy - 2, b);
+        int d = sysmet[SM_CXDLGFRAME];
+        fill(hdc, 1, 1, cx - 2, d - 1, b);
+        fill(hdc, 1, cy - 1 - d, cx - 2, d, b);
+        fill(hdc, 1, 1, d, cy - 2, b);
+        fill(hdc, cx - 1 - d, 1, d, cy - 2, b);
+
     }
 }
 

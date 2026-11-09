@@ -1,0 +1,43 @@
+; w386.inc - offsets in struct w386_info (w386.h); keep the two in step.
+; win386/vmm checks the sizes at compile time.
+I_MAGIC         equ 0
+I_XMS_PHYS      equ 4
+I_XMS_SIZE      equ 8
+I_PT_COUNT      equ 12
+I_IMG_OFF       equ 16
+I_IMG_SIZE      equ 20
+I_ENTRY_LIN     equ 24
+I_INFO_LIN      equ 28
+I_LDR_CS        equ 32
+I_LDR_DS        equ 34
+I_V86_IP        equ 36
+I_V86_CS        equ 38
+I_V86_SP        equ 40
+I_V86_SS        equ 42
+I_V86_DS        equ 44
+I_V86_ES        equ 46
+I_V86_FLAGS     equ 48
+I_BP_OFF        equ 52
+I_BP_COUNT      equ 54
+I_RM_TRAMP      equ 56
+I_REFSTK_SEG    equ 58
+I_REFSTK_TOP    equ 60
+I_PSP           equ 62
+I_EXIT_CODE     equ 64
+I_RET_SS        equ 66
+I_RET_SP        equ 68
+I_CONV_FREE     equ 70
+I_PIC1          equ 74
+I_PIC2          equ 75
+I_LOG_PORT      equ 76
+I_MEM_KB        equ 80
+I_PMBP_OFF      equ 84
+I_PMBP_COUNT    equ 86
+I_SDA_LIN       equ 88
+I_XBUF_SEG      equ 92
+I_XBUF_SIZE     equ 94
+I_TRACE         equ 96
+I_SIZE          equ 100
+
+BP_EXIT         equ 0
+BP_COUNT        equ 64
