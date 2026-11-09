@@ -1406,7 +1406,6 @@ show_logo:
         mov [lg_bmp], si
         mov ax, 0012h                   ; VGA 640 x 480, 16 colours
         int 10h
-        mov byte [logo_up], 1
         ; palette registers 0-15 -> DAC 0-15, then the bitmap's colours
         push cs
         pop es
@@ -1654,7 +1653,6 @@ line_out:
 
 ; ---- start-up data ----
 want_386:   db 0
-logo_up:    db 0
 want_std:   db 0
 want_real:  db 0
 want_help:  db 0
