@@ -1,0 +1,12 @@
+# wlink directives for the Windows 2.x build of CARDFILE.EXE. Real-mode
+# Windows moves and discards segments; keeping them fixed avoids the
+# bookkeeping that needs.
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=8k
+option description 'w16 Cardfile'
+segment class 'CODE' fixed preload
+segment class 'DATA' fixed preload
+library windows.lib

@@ -757,6 +757,44 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- CARDFILE.EXE (shell/cardfile; ARCHITECTURE.md 15): two builds from
+# one source tree, as for Program Manager: $(DOS)/CARDFILE.EXE (3.x) and
+# $(WIN2)/CARDFILE.EXE (W16_WIN2, marked 2.0) ----
+CF_NAMES := main cards cardwnd crd dialogs filedlg edit print ole help util compat2
+SHELL_CF  := $(B)/shell/start.o $(CF_NAMES:%=$(B)/shell/cardfile/%.o)
+SHELL_CF2 := $(B)/shell2/start.o $(CF_NAMES:%=$(B)/shell2/cardfile/%.o)
+CF_HDRS  := shell/cardfile/cardfile.h shell/cardfile/compat2.h
+shell: $(DOS)/CARDFILE.EXE
+shell2: $(WIN2)/CARDFILE.EXE
+$(B)/shell/cardfile/%.o: shell/cardfile/%.c $(CF_HDRS)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell2/cardfile/%.o: shell/cardfile/%.c $(CF_HDRS)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -fo=$@ $<
+$(B)/shell/res/cardfile.ico: tools/mkcardicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcardicon.py $@
+$(B)/shell/cardfile/cardfile.res: shell/cardfile/cardfile.rc $(CF_HDRS) $(B)/shell/res/cardfile.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/cardfile -i=$(B)/shell/res -fo=$@ $<
+$(B)/shell2/cardfile/cardfile.res: shell/cardfile/cardfile.rc $(CF_HDRS) $(B)/shell/res/cardfile.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/cardfile \
+	    -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CARDFILE.EXE: $(SHELL_CF) $(B)/shell/cardfile/cardfile.res shell/cardfile/cardfile.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cardfile/cardfile.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/cardfile/cardfile.map \
+	    option resource=$(B)/shell/cardfile/cardfile.res file { $(SHELL_CF) }
+$(WIN2)/CARDFILE.EXE: $(SHELL_CF2) $(B)/shell2/cardfile/cardfile.res shell/cardfile/cardfile2.lnk \
+                      tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cardfile/cardfile2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell2/cardfile/cardfile.map \
+	    option resource=$(B)/shell2/cardfile/cardfile.res file { $(SHELL_CF2) }
+	python3 tools/nemark.py $@ 2.0
+
 test: dos fonts
 	tests/run-tests.sh
 

@@ -1,0 +1,34 @@
+; CF1: Cardfile's first screens, windows and a simple file
+run CARDFILE.EXE
+wait 3000
+snap C:\S01.BMP
+dump
+type Hello World
+wait 300
+snap C:\S02.BMP
+key 75
+wait 500
+snap C:\S03.BMP
+dump
+type Smith, John
+key 0D
+wait 500
+snap C:\S04.BMP
+key 76
+wait 500
+type Adams
+key 0D
+wait 500
+type Second card body
+snap C:\S05.BMP
+menu v
+char l
+wait 500
+snap C:\S06.BMP
+dump
+menu v
+char c
+wait 500
+key 21
+wait 300
+snap C:\S07.BMP
