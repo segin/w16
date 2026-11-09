@@ -8,8 +8,8 @@ tss             resb 2Ch
 ldt_bm          resb 1024               ; one bit per LDT descriptor
 pmvec           resd 256
 excvec          resd 32
-rmorig          resd 256
-rmhooked        resb 256
+rmorig          resd NHOOK
+rmhooked        resb NHOOK
 cbsel           resw CBSEL_MAX
 cb_static       resb CB_STATIC * 8
 rm_dta          resb 128

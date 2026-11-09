@@ -656,14 +656,18 @@ client_rm_reset:
 .l:     cmp byte [rmhooked+bx], 0
         je .n
         mov byte [rmhooked+bx], 0
-        mov si, bx
+        mov di, bx
+        shl di, 2
+        mov al, [hook_vecs+bx]
+        xor ah, ah
+        mov si, ax
         shl si, 2
-        mov ax, [rmorig+si]
+        mov ax, [rmorig+di]
         mov [es:si], ax
-        mov ax, [rmorig+si+2]
+        mov ax, [rmorig+di+2]
         mov [es:si+2], ax
 .n:     inc bx
-        cmp bx, 256
+        cmp bx, NHOOK
         jb .l
         sti
         mov es, [c_psp]

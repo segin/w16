@@ -379,9 +379,15 @@ r0_reflect:
         mov [bx+R_ES], ax
         pop ax
         ; a vector DOSX hooked for the client goes to its previous owner
-        mov cl, ah
-        xor ch, ch
-        mov di, cx
+        push bx
+        push si
+        mov bl, ah
+        xor bh, bh
+        call hook_slot
+        mov di, si
+        pop si
+        pop bx
+        jc .int
         cmp byte [rmhooked+di], 0
         je .int
         shl di, 2
@@ -797,12 +803,12 @@ vectors_init:
         jb .i1
         ; nothing hooked in real mode
         mov di, rmhooked
-        mov cx, 128
+        mov cx, NHOOK
         xor ax, ax
         push es
         push ds
         pop es
-        rep stosw
+        rep stosb
         pop es
         ret
 

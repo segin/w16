@@ -264,14 +264,17 @@ d_specific:
 d_getrm:
         mov bl, [bp+F_BX]
         xor bh, bh
-        mov si, bx
-        shl si, 2
-        cmp byte [rmhooked+bx], 0
+        call hook_slot
+        jc .ivt
+        cmp byte [rmhooked+si], 0
         je .ivt
+        shl si, 2
         mov ax, [rmorig+si]
         mov dx, [rmorig+si+2]
         jmp .r
-.ivt:   mov ax, G_ZERO
+.ivt:   mov si, bx
+        shl si, 2
+        mov ax, G_ZERO
         mov es, ax
         mov ax, [es:si]
         mov dx, [es:si+2]
@@ -282,17 +285,20 @@ d_getrm:
 d_setrm:
         mov bl, [bp+F_BX]
         xor bh, bh
-        mov si, bx
-        shl si, 2
         mov ax, [bp+F_DX]
         mov dx, [bp+F_CX]
-        cmp byte [rmhooked+bx], 0
+        call hook_slot
+        jc .ivt
+        cmp byte [rmhooked+si], 0
         je .ivt
+        shl si, 2
         mov [rmorig+si], ax
         mov [rmorig+si+2], dx
         clc
         ret
-.ivt:   mov cx, G_ZERO
+.ivt:   mov si, bx
+        shl si, 2
+        mov cx, G_ZERO
         mov es, cx
         mov [es:si], ax
         mov [es:si+2], dx
@@ -384,6 +390,11 @@ set_pmvec:
         ja .d
 .hk:    mov ax, G_ZERO
         mov es, ax
+        push di
+        push si
+        call hook_slot          ; (it is one of them)
+        mov di, si
+        pop si
         ; the default?
         cmp cx, G_HC3 | 3
         jne .hook
@@ -395,28 +406,31 @@ set_pmvec:
         add ax, refstub_tab
         cmp dx, ax
         jne .hook
-        cmp byte [rmhooked+bx], 0
-        je .d
-        mov byte [rmhooked+bx], 0
-        mov ax, [rmorig+si]
+        cmp byte [rmhooked+di], 0
+        je .d0
+        mov byte [rmhooked+di], 0
+        shl di, 2
+        mov ax, [rmorig+di]
         mov [es:si], ax
-        mov ax, [rmorig+si+2]
+        mov ax, [rmorig+di+2]
         mov [es:si+2], ax
-        jmp .d
-.hook:  cmp byte [rmhooked+bx], 0
-        jne .d
-        mov ax, [es:si]
-        mov [rmorig+si], ax
-        mov ax, [es:si+2]
-        mov [rmorig+si+2], ax
-        mov ax, bx
+        jmp .d0
+.hook:  cmp byte [rmhooked+di], 0
+        jne .d0
+        mov byte [rmhooked+di], 1
+        mov ax, di
         mov cx, 3
         mul cx
         add ax, rmhook_tab
+        shl di, 2
+        mov cx, [es:si]
+        mov [rmorig+di], cx
+        mov cx, [es:si+2]
+        mov [rmorig+di+2], cx
         mov [es:si], ax
         mov ax, [imgseg]
         mov [es:si+2], ax
-        mov byte [rmhooked+bx], 1
+.d0:    pop di
 .d:     pop es
         pop si
         pop cx

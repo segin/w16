@@ -145,6 +145,7 @@ RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
 INIT_STACK      equ 200h
 CB_ENTRIES      equ 16      ; real-mode entry points for callbacks
+NHOOK           equ 19      ; hookable real-mode vectors (hook_vecs)
 CB_STATIC       equ 16      ; callback records in DOSX's own data
 
 ; arena block header (16 bytes before each block, in extended memory)

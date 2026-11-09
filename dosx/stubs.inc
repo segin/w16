@@ -9,9 +9,36 @@ excstub_tab:
 
 ; real-mode interrupt hooks (real mode)
 rmhook_tab:
-%rep 256
+%rep NHOOK
         call rmhook_common
 %endrep
+
+; the real-mode interrupts the client can take over in protected mode
+; (DPMI 0.9: the hardware interrupts, 1Ch, 23h, 24h), one rmhook_tab
+; entry, rmorig and rmhooked slot each
+hook_vecs       db 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 0Fh, 1Ch, 23h, 24h
+                db 70h, 71h, 72h, 73h, 74h, 75h, 76h, 77h
+%if $ - hook_vecs != NHOOK
+%error "hook_vecs and NHOOK disagree"
+%endif
+
+; hook_slot: BX = vector -> SI = its slot, CF if it is not one of them
+hook_slot:
+        push ax
+        xor si, si
+.l:     cmp si, NHOOK
+        jae .f
+        mov al, [cs:hook_vecs+si]
+        cmp al, bl
+        je .ok
+        inc si
+        jmp .l
+.ok:    pop ax
+        clc
+        ret
+.f:     pop ax
+        stc
+        ret
 
 ; ---------------------------------------------------------------------------
 ; ring 3 (CS = G_HC3)

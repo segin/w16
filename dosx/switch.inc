@@ -321,8 +321,9 @@ cb_common:
         mov byte [cs:x_kind], 0
         jmp rmx_common
 
-; rmhook_tab: 256 entries "call rmhook_common"; IVT[n] points at entry n
-; while the client handles real-mode interrupt n in protected mode
+; rmhook_tab: an entry "call rmhook_common" per hookable vector
+; (hook_vecs); IVT[n] points at n's entry while the client handles
+; real-mode interrupt n in protected mode
 rmhook_common:
         pushf
         cli
@@ -335,6 +336,10 @@ rmhook_common:
         div dl
         pop dx
         xor ah, ah
+        push bx
+        mov bx, ax
+        mov al, [cs:hook_vecs+bx]
+        pop bx
         mov [cs:x_idx], ax
         mov byte [cs:x_kind], 1
         ; fall through
