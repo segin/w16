@@ -135,12 +135,12 @@ FL_NT   equ 4000h
 FL_ARITH equ 08D5h          ; OF SF ZF AF PF CF
 
 ; stacks and buffers (bytes)
-HS_SIZE         equ 2800h   ; ring 0 and real-mode host stack
+HS_SIZE         equ 1800h   ; ring 0 and real-mode host stack
 H3_SIZE         equ 1800h   ; ring-3 host stack (callbacks, exceptions)
 H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
-INIT_STACK      equ 400h
+INIT_STACK      equ 200h
 CB_ENTRIES      equ 16      ; real-mode entry points for callbacks
 CB_STATIC       equ 16      ; callback records in DOSX's own data
 

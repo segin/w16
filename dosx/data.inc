@@ -39,6 +39,8 @@ emb_kb          dw 0
 emb_lin         dd 0
 emb_end         dd 0
 ldt_lin         dd 0
+idt_lin         dd 0
+h3_lin          dd 0
 pool_lin        dd 0
 pool_last       dd 0
 old2f           dd 0

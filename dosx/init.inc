@@ -181,7 +181,15 @@ xms_init:
         mov dx, [emb_lin+2]
         mov [ldt_lin], ax
         mov [ldt_lin+2], dx
-        inc dx
+        inc dx                  ; the IDT (as Microsoft's: in extended
+        mov [idt_lin], ax       ; memory, DX1 idt_base)
+        mov [idt_lin+2], dx
+        add ax, 800h
+        adc dx, 0
+        mov [h3_lin], ax        ; the ring-3 host stack (G_HD3)
+        mov [h3_lin+2], dx
+        add ax, H3_SIZE
+        adc dx, 0
 %ifdef TRACE
         mov [trc_lin], ax       ; the trace buffer between LDT and pool
         mov [trc_lin+2], dx
@@ -219,8 +227,8 @@ tables_init:
         mov ax, 0F2h
         call gdt_set
         mov bx, G_IDT
-        mov ax, idt
-        call base_img
+        mov si, [idt_lin]
+        mov dx, [idt_lin+2]
         mov cx, 7FFh
         mov ax, 0F2h
         call gdt_set
@@ -277,9 +285,6 @@ tables_init:
         xor ax, ax
         call base_img
         mov cx, 0FFFFh
-        mov bx, G_HD3
-        mov ax, 0F2h
-        call gdt_set
         mov bx, G_HC3
         mov ax, 0FAh
         call gdt_set
@@ -298,6 +303,11 @@ tables_init:
         mov bx, G_HDS
         mov cx, 0FFh
         mov ax, 0F2h
+        call gdt_set
+        mov bx, G_HD3           ; the ring-3 host stack, in extended memory
+        mov si, [h3_lin]
+        mov dx, [h3_lin+2]
+        mov cx, 0FFFFh
         call gdt_set
         mov bx, G_SCR0
         mov cx, 0FFFFh
@@ -336,10 +346,10 @@ tables_init:
         mov [gdtr+2], si
         mov [gdtr+4], dx
         mov word [idtr], 7FFh
-        mov ax, idt
-        call base_img
-        mov [idtr+2], si
-        mov [idtr+4], dx
+        mov ax, [idt_lin]
+        mov [idtr+2], ax
+        mov ax, [idt_lin+2]
+        mov [idtr+4], ax
         mov word [rmidtr], 3FFh
         ; TSS: ring 0 stack
         mov di, tss
@@ -349,7 +359,7 @@ tables_init:
         mov word [tss+2], hs_stack_top
         mov word [tss+4], G_HD0
         mov word [hs_top], hs_stack_top
-        mov word [h3_top], h3_stack_top
+        mov word [h3_top], H3_SIZE
         mov word [tb_top], tbuf + TB_SIZE
         ; real-mode callbacks: entry 0's canonical address (cb_entries;
         ; the entries are a paragraph apart, so entry e is cb_seg + e)
