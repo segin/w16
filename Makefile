@@ -970,3 +970,21 @@ $(DOS)/OS1.EXE $(DOS)/OS2.EXE: $(DOS)/OS%.EXE: $(B)/tests/start.o $(B)/olesvr/te
 	@mkdir -p $(@D)
 	$(WLINK) @tests/olesvr/os.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/olesvr/tests/os$*.map file { $(B)/tests/start.o $(B)/olesvr/tests/os$*.o }
+# OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
+# SS != DS (it runs on its callers' stacks)
+OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+OSVOBJS   := $(B)/olesvr/entry.o $(B)/olesvr/util.o $(B)/olesvr/svr.o $(B)/olesvr/doc.o
+olesvr: $(DOS)/OLESVR.DLL
+dos: $(DOS)/OLESVR.DLL
+.PHONY: olesvr
+$(B)/olesvr/%.o: ole/olesvr/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/olesvr/%.o: ole/olesvr/%.c ole/olesvr/olesvr.h
+	@mkdir -p $(@D)
+	$(WCC) $(OSVCFLAGS) -fo=$@ $<
+$(DOS)/OLESVR.DLL: $(OSVOBJS) ole/olesvr/olesvr.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @ole/olesvr/olesvr.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/olesvr/olesvr.map file { $(OSVOBJS) }
+	python3 tools/nemark.py $@ 3.10

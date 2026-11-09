@@ -1,0 +1,23 @@
+; two links to the same document and an embedding from the same server;
+; the server's script (multi.os1) notifies, revokes an object and finally
+; revokes itself while clients are connected
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg .os1=OS1Probe
+doc OS2MULTI
+linkfile OS1Probe C:\LNK.OS1 item1
+activate 0
+linkfile OS1Probe C:\LNK.OS1 item2
+activate 0
+linkfile OS1Probe C:\LNK.OS1 item1
+activate 0
+create OS1Probe
+wait 16000
+obj 0
+update
+obj 3
+update
+wait 3000
+revokedoc
+wait 3000
+waitgone OS1

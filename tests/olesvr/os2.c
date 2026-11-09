@@ -445,10 +445,11 @@ static void step(char *l)
         } else if (!lstrcmpi(l, "term")) {
             got = FALSE;
             if (server) {
-                PostMessage(server, WM_DDE_TERMINATE, (WPARAM)me, 0);
+                HWND s = server;
+                server = NULL;          /* its TERMINATE is the answer */
+                PostMessage(s, WM_DDE_TERMINATE, (WPARAM)me, 0);
                 pump(3000, &got);
             }
-            server = NULL;
         } else if (!lstrcmpi(l, "ackdata")) {
             ackmode = !lstrcmpi(arg, "off") ? 1 : !lstrcmpi(arg, "busy") ? 2 : 0;
         } else

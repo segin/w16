@@ -4,14 +4,6 @@ reg OS1Probe=OS1 Probe
 reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
 run C:\OS1.EXE -Embedding
 wait 2000
-init OS1Probe System
-term
-init OS1Probe OLEsystem
-term
-init OS1Probe *
-term
-init * OLEsystem
-term
 init * *
 term
 init os1probe olesystem

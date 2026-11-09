@@ -38,6 +38,18 @@ static BOOL revoking, embedding, quitting;
 #define NFORCE 16
 static struct { char name[24]; int code; } force[NFORCE];
 static int nforce;
+static HGLOBAL lastdata;                /* what the last GetData returned */
+
+/* whether OLESVR freed the block the last GetData handed over: logged at
+   the next script step */
+static void check_lastdata(void)
+{
+    if (lastdata) {
+        P("  (last GetData block: size=%lu flags=%x)", GlobalSize(lastdata),
+          GlobalFlags(lastdata));
+        lastdata = NULL;
+    }
+}
 
 static int forced(const char *name, int normal)
 {
@@ -443,6 +455,8 @@ OLESTATUS CALLBACK __export ObjGetData(LPOLEOBJECT o, OLECLIPFORMAT cf, HANDLE F
     else
         RET("GetData", OLE_ERROR_FORMAT);
     *ph = h;
+    if (cf != CF_METAFILEPICT)
+        lastdata = h;
     RET("GetData", h ? OLE_OK : OLE_ERROR_MEMORY);
 }
 
@@ -545,7 +559,9 @@ static void step(char *l)
         *arg++ = 0;
     if (!*l || *l == ';')
         return;
-    P("OS1 step %s %s", (LPCSTR)l, (LPCSTR)arg);
+    P("OS1 step %s %s%s%s", (LPCSTR)l, (LPCSTR)arg, (LPCSTR)(lstrcmp(cls_name, "OS1Probe") ? " @" : ""),
+      (LPCSTR)(lstrcmp(cls_name, "OS1Probe") ? cls_name : ""));
+    check_lastdata();
     if (!lstrcmpi(l, "wait")) {
         WORD ms = 0;
         while (*arg >= '0' && *arg <= '9')
@@ -604,6 +620,83 @@ static void step(char *l)
         revoking = TRUE;
         r = OleRevokeServer(lhsrv);
         P("  OleRevokeServer -> %d %s", r, (const char FAR *)stname(r));
+    } else if (!lstrcmpi(l, "bad")) {
+        /* invalid arguments that cannot fault: null and stale handles */
+        LHSERVER lh2 = 0;
+        LHSERVERDOC ld2 = 0;
+        BOOL more = 77;
+        docs[NDOC - 1].d.lpvtbl = docs[NDOC - 2].d.lpvtbl = &docvt;
+        docs[NDOC - 1].n = 901;
+        docs[NDOC - 2].n = 902;
+        r = OleRegisterServer(cls_name, &srv, &lh2, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer same class -> %d %s lh=%s", r, (const char FAR *)stname(r),
+          lh2 ? "nz" : "0");
+        if (r == OLE_OK)
+            P("  OleRevokeServer it -> %d", OleRevokeServer(lh2));
+        lh2 = 0;
+        r = OleRegisterServer("OS1NotInRegDB", &srv, &lh2, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer unregistered class -> %d %s lh=%s", r,
+          (const char FAR *)stname(r), lh2 ? "nz" : "0");
+        if (r == OLE_OK)
+            P("  OleRevokeServer it -> %d", OleRevokeServer(lh2));
+        lh2 = 0;
+        r = OleRegisterServer("", &srv, &lh2, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer \"\" -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServer(NULL, &srv, &lh2, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer NULL -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServer(cls_name, NULL, &lh2, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer lpsrv NULL -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServer(cls_name, &srv, NULL, inst, OLE_SERVER_MULTI);
+        P("  OleRegisterServer lplh NULL -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServer("OS1Probe", &srv, &lh2, inst, (OLE_SERVER_USE)7);
+        P("  OleRegisterServer use=7 -> %d %s", r, (const char FAR *)stname(r));
+        if (r == OLE_OK)
+            P("  OleRevokeServer it -> %d", OleRevokeServer(lh2));
+        P("  OleRevokeServer(0) -> %d", OleRevokeServer(0));
+        P("  OleBlockServer(0) -> %d", OleBlockServer(0));
+        P("  OleUnblockServer(0) -> %d more=%d", OleUnblockServer(0, &more), more);
+        P("  OleUnblockServer(lh, NULL) -> %d", OleUnblockServer(lhsrv, NULL));
+        P("  OleRegisterServerDoc(0) -> %d", OleRegisterServerDoc(0, "X", &docs[0].d, &ld2));
+        r = OleRegisterServerDoc(lhsrv, NULL, &docs[NDOC - 1].d, &ld2);
+        P("  OleRegisterServerDoc name NULL -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServerDoc(lhsrv, "BADDOC", NULL, &ld2);
+        P("  OleRegisterServerDoc lpdoc NULL -> %d %s", r, (const char FAR *)stname(r));
+        r = OleRegisterServerDoc(lhsrv, "BADDOC", &docs[NDOC - 1].d, NULL);
+        P("  OleRegisterServerDoc lplh NULL -> %d %s", r, (const char FAR *)stname(r));
+        ld2 = 0;
+        r = OleRegisterServerDoc(lhsrv, "", &docs[NDOC - 1].d, &ld2);
+        P("  OleRegisterServerDoc \"\" -> %d %s lh=%s", r, (const char FAR *)stname(r),
+          ld2 ? "nz" : "0");
+        if (r == OLE_OK)
+            P("  OleRevokeServerDoc it -> %d", OleRevokeServerDoc(ld2));
+        ld2 = 0;
+        r = OleRegisterServerDoc(lhsrv, "DUPDOC", &docs[NDOC - 1].d, &ld2);
+        P("  OleRegisterServerDoc DUPDOC -> %d lh=%s", r, ld2 ? "nz" : "0");
+        {
+            LHSERVERDOC ld3 = 0;
+            r = OleRegisterServerDoc(lhsrv, "DUPDOC", &docs[NDOC - 2].d, &ld3);
+            P("  OleRegisterServerDoc DUPDOC again -> %d lh=%s same=%d", r, ld3 ? "nz" : "0",
+              ld3 == ld2);
+            if (r == OLE_OK && ld3 != ld2)
+                P("  OleRevokeServerDoc it -> %d", OleRevokeServerDoc(ld3));
+        }
+        if (ld2) {
+            P("  OleRevokeServerDoc DUPDOC -> %d", OleRevokeServerDoc(ld2));
+            P("  OleRevokeServerDoc DUPDOC again -> %d", OleRevokeServerDoc(ld2));
+            P("  OleRenameServerDoc stale -> %d", OleRenameServerDoc(ld2, "Y"));
+            P("  OleSavedServerDoc stale -> %d", OleSavedServerDoc(ld2));
+            P("  OleRevertServerDoc stale -> %d", OleRevertServerDoc(ld2));
+        }
+        P("  OleRevokeServerDoc(0) -> %d", OleRevokeServerDoc(0));
+        P("  OleRenameServerDoc(0) -> %d", OleRenameServerDoc(0, "Y"));
+        P("  OleSavedServerDoc(0) -> %d", OleSavedServerDoc(0));
+        P("  OleRevertServerDoc(0) -> %d", OleRevertServerDoc(0));
+        P("  OleRevokeObject(NULL) -> %d", OleRevokeObject(NULL));
+        if (curdoc()) {
+            P("  OleRenameServerDoc NULL name -> %d", OleRenameServerDoc(curdoc()->lh, NULL));
+            P("  OleRenameServerDoc same name -> %d",
+              OleRenameServerDoc(curdoc()->lh, curdoc()->name));
+        }
     } else if (!lstrcmpi(l, "version")) {
         DWORD v = OleQueryServerVersion();
         P("  OleQueryServerVersion -> %lx", v);

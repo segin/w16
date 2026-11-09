@@ -1,0 +1,20 @@
+; advises and the server's notifications, seen by a raw DDE client:
+; notify.os1 changes, saves, closes, renames, revokes an object and
+; finally the server while the client is connected
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding /S C:\NTF.OS1
+wait 2000
+init OS1Probe C:\NTF.OS1
+advise i1 Native 32768
+advise i1/Change 3 16384
+advise i1/Save Native 0
+advise i1/Close Native 0
+advise i2/Change Native 0
+advise /Save Native 0
+advise StdDocumentName Binary 0
+advise StdDocumentName 1 0
+req i3 Native
+wait 25000
+term
+wait 2000

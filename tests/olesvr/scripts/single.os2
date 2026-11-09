@@ -1,0 +1,61 @@
+; OLE_SERVER_SINGLE: several documents in one instance; the system
+; topic's command parser (OS1 /S, raw DDE)
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding /S
+wait 2000
+init OS1Probe *
+term
+init * OLEsystem
+term
+init OS1Probe olesystem
+exec [StdNewDocument("OS1Probe","D1")]
+exec [StdNewDocument("OS1Probe","D1")]
+exec [StdNewDocument("Other","D2")]
+exec [StdNewFromTemplate("OS1Probe","D3","C:\T.OS1")]
+exec [StdEditDocument("D4")]
+exec [StdOpenDocument("C:\RAWO.OS1")]
+exec [StdOpenDocument("D1")]
+exec [StdEditDocument("D1")]
+exec [StdNewDocument("OS1Probe", "D5")][StdShowItem("D5","")]
+exec [StdNewDocument("OS1Probe","D6")] [StdShowItem("D6","")]
+exec StdNewDocument("OS1Probe","D7")
+exec [StdNewDocument(OS1Probe,D8)]
+exec [stdnewdocument("OS1Probe","D9")]
+exec [ StdNewDocument ( "OS1Probe" , "D10" ) ]
+exec [StdNewDocument("OS1Probe","D11"
+exec [StdNewDocument("OS1Probe","D12")
+exec [StdNewDocument("OS1Probe")]
+exec [StdNewDocument("OS1Probe","D13","x")]
+exec [StdNewDocument("OS1Probe","D""14")]
+exec [StdNewDocument("OS1Probe","")]
+exec [StdNewDocument]
+exec []
+exec
+exec [StdShowItem("D1")]
+exec [StdShowItem("D1","i1",TRUE)]
+exec [StdShowItem("NoDoc","i1")]
+exec [StdCloseDocument("D1")]
+exec [StdExit("x")]
+term
+init OS1Probe D1
+exec [StdShowItem("i1")][StdShowItem("i2")]
+exec [StdDoVerbItem("i1",0,FALSE,TRUE)][StdShowItem("i2",TRUE)]
+exec [StdDoVerbItem("i1",65535,1,0)]
+exec [StdDoVerbItem("i1",-1,TRUE,TRUE)]
+exec [StdDoVerbItem(i1,3,TRUE,TRUE)]
+exec [StdShowItem("i1",1)]
+exec [StdShowItem("i1",0)]
+exec [StdShowItem("i1",true)]
+exec [StdShowItem("i1",YES)]
+exec [StdCloseDocument("D1")]
+exec [StdCloseDocument]
+wait 1000
+term
+init OS1Probe D4
+term
+init OS1Probe OLEsystem
+exec [StdExit]
+wait 2000
+term
+waitgone OS1

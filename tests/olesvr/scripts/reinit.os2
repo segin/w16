@@ -1,0 +1,34 @@
+; when does the system topic stop answering? one server started with
+; -Embedding, one without
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OS2Probe=OS2 Probe
+run C:\OS1.EXE -Embedding
+wait 2000
+init OS1Probe OLEsystem
+term
+wait 500
+init OS1Probe OLEsystem
+term
+init OS1Probe System
+term
+run C:\OS1.EXE /C:OS2Probe
+wait 2000
+init OS2Probe OLEsystem
+term
+wait 500
+init OS2Probe OLEsystem
+exec [StdNewDocument("OS2Probe","D1")]
+term
+init OS2Probe OLEsystem
+term
+init OS2Probe D1
+term
+init OS2Probe OLEsystem
+term
+init OS2Probe System
+exec [StdExit]
+wait 2000
+term
+init OS1Probe OLEsystem
+term
