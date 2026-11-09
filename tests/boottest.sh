@@ -15,6 +15,9 @@
 #   gdi        w16's GDI on Microsoft's KRNL286    must be 0
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
+#   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
+#              (tests/win386.sh: Microsoft's KRNL386 and the rest, against
+#              Microsoft's WIN386.EXE; both must reach Final USER init)
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
@@ -38,7 +41,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi tree}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi win386 tree}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 fails=0
@@ -89,6 +92,14 @@ for c in $cases; do
             check gdik gdik ref ;;
     usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
             check usergdi usergdi ref ;;
+    win386)
+        if "$root/tests/win386.sh" -t "$secs" -o "$out/win386" > "$out/win386.txt" 2>&1 \
+           && grep -q '^INITDONE=Final USER' "$out/win386/w16-bootlog.txt" \
+           && grep -q '^INITDONE=Final USER' "$out/win386/ms-bootlog.txt"; then
+            echo "ok   win386: 0 pixels"
+        else
+            echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
+        fi ;;
     tree)
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"

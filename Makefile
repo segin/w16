@@ -768,7 +768,7 @@ test: dos fonts
 # boot real Windows 3.1 on w16's parts and compare each screen with the
 # reference (tests/boottest.sh); run after every merge: make test does not
 # boot Windows
-boot-test: dos install-tree
+boot-test: dos install-tree win386
 	tests/boottest.sh
 .PHONY: boot-test
 

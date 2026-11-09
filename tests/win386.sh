@@ -118,7 +118,7 @@ status=1
 if [ -z "$norefrun" ] && [ -f "$out/w16.png" ] && [ -f "$out/ms.png" ]; then
     diffpx=$(compare -metric AE "$out/w16.png" "$out/ms.png" "$out/diff.png" 2>&1 || true)
     echo "== screenshots: $out/w16.png $out/ms.png; differing pixels: $diffpx"
-    [ "$diffpx" = 0 ] && status=0
+    [ "${diffpx%% *}" = 0 ] && status=0      # compare prints "0 (0)"
 else
     echo "== screenshot: $out/w16.png"
 fi

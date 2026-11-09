@@ -9,8 +9,8 @@
  * Stage 1: one client; protected mode runs at ring 3 with IOPL 3 (so CLI,
  * STI and port I/O act directly: one VM only); interrupts the client has
  * not hooked are reflected to V86 mode, with DS and ES translated when
- * their selectors map conventional memory on a paragraph boundary (no
- * buffer copying yet: ARCHITECTURE.md 12.4).
+ * their selectors map conventional memory on a paragraph boundary (INT
+ * 21h and INT 10h calls with other pointers: dosx.c).
  */
 #include "vmm.h"
 
