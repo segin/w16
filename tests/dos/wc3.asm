@@ -18,7 +18,9 @@
         cpu 8086
         org 100h
 
+%ifndef MAXPER
 MAXPER  equ 6
+%endif
 %ifndef DXAXOFF
 %define DXAXOFF 0                       ; dump DX:AX+DXAXOFF
 %endif
