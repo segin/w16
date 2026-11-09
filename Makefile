@@ -592,3 +592,35 @@ $(DOS)/USTRACE.DLL: $(B)/user/usentry.o $(B)/user/ustrace.o tests/user/ustrace.l
 	$(WLINK) @tests/user/ustrace.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/user/ustrace.map file { $(B)/user/usentry.o $(B)/user/ustrace.o }
 dos: $(DOS)/USTRACE.DLL
+# w16's USER.EXE: user/*.c and user/uentry.asm; every ordinal the C code
+# does not define gets a stub (tools/mkuserexp.py makes the export list and
+# the stubs from user/ordinals.txt and the objects' public names)
+USER_C   := $(wildcard user/*.c)
+USER_OBJ := $(USER_C:user/%.c=$(B)/user/u_%.o) $(B)/user/uentry.o
+UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/u_%.o: user/%.c user/user.h
+	@mkdir -p $(@D)
+	$(WCC) $(UUCFLAGS) -fo=$@ $<
+$(B)/user/uentry.o: user/uentry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/user/stubs.asm $(B)/user/exports.lnk &: $(USER_OBJ) user/ordinals.txt tools/mkuserexp.py
+	python3 tools/mkuserexp.py user/ordinals.txt $(B)/user/exports.lnk $(B)/user/stubs.asm $(USER_OBJ)
+$(B)/user/stubs.o: $(B)/user/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USER.EXE: $(USER_OBJ) $(B)/user/stubs.o $(B)/user/exports.lnk user/user.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @user/user.lnk @$(B)/user/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/user.map file { $(USER_OBJ) $(B)/user/stubs.o }
+user: $(DOS)/USER.EXE
+dos: $(DOS)/USER.EXE
+.PHONY: user
+
+# US2: USER's values and pure functions (tests/apps/us2.c), run as the shell
+$(B)/tests/us2.o: tests/apps/us2ref.h tests/apps/tklog.h
+$(DOS)/US2.EXE: $(B)/tests/start.o $(B)/tests/us2.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us2.map file { $(B)/tests/start.o $(B)/tests/us2.o }
+dos: $(DOS)/US2.EXE
