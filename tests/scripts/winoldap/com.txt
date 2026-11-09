@@ -1,0 +1,18 @@
+# File > Run "C:\WC1.COM hello  world": a .COM without a PIF (_DEFAULT.PIF);
+# WC1 records what the DOS program gets (C:\WC.LOG), waits 4 s (WCWAIT.TXT)
+# opts: files=WC1 wait
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\WC1.COM hello  world
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

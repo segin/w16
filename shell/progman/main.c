@@ -416,7 +416,10 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 static BOOL register_frame(void)
 {
     WNDCLASS wc;
-    wc.style = 0;
+    /* 3.1's frame class has CS_BYTEALIGNCLIENT (observed: GetClassWord
+       GCW_STYLE = 1000h); it puts the client area and the menu bar on
+       8-pixel boundaries (ARCHITECTURE.md 10.4) */
+    wc.style = CS_BYTEALIGNCLIENT;
     wc.lpfnWndProc = FrameWndProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;

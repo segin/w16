@@ -33,13 +33,14 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/thunk.o $(B)/kernel/task.o $(B)/kernel/local.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
-           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o
+           $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o \
+           $(B)/kernel/toolhelp.o $(B)/kernel/khook.o $(B)/kernel/kmisc2.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -95,7 +96,7 @@ $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
-KBOOT_C := winboot dosx kmisc selector fault
+KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
@@ -281,6 +282,33 @@ $(DOS)/TK35.EXE: $(B)/tests/start.o $(B)/tests/tk35.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk35.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk35.map file { $(B)/tests/start.o $(B)/tests/tk35.o }
+
+# TK2.EXE: an import KERNEL does not have (KERNEL.27, tk2.lnk)
+$(DOS)/TK2.EXE: $(B)/tests/start.o $(B)/tests/tk2.o tests/apps/app.lnk tests/apps/tk2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk2.map file { $(B)/tests/start.o $(B)/tests/tk2.o }
+
+# TK50.EXE: the KERNEL exports w16 lacked, at register level (tk50s.asm)
+$(B)/tests/tk50.o: tests/apps/tk50ref.h tests/apps/tk50ref286.h tests/apps/tklog.h
+$(DOS)/TK50.EXE: $(B)/tests/start.o $(B)/tests/tk50.o $(B)/tests/tk50s.o tests/apps/app.lnk tests/apps/tk50.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk50.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk50.map file { $(B)/tests/start.o $(B)/tests/tk50.o $(B)/tests/tk50s.o }
+
+# TK51.EXE: THHOOK, ToolHelpHook and TOOLHELP.DLL (tk51s.asm, tk50s.asm);
+# TK51C.EXE, the program it starts, only ends
+$(B)/tests/tk51.o: tests/apps/tk51ref.h tests/apps/tklog.h
+$(DOS)/TK51.EXE: $(B)/tests/start.o $(B)/tests/tk51.o $(B)/tests/tk51s.o $(B)/tests/tk50s.o \
+                tests/apps/app.lnk tests/apps/tk51.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk51.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk51.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk51.o $(B)/tests/tk51s.o $(B)/tests/tk50s.o }
+$(DOS)/TK51C.EXE: $(B)/tests/start.o $(B)/tests/tk51c.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk51c.map file { $(B)/tests/start.o $(B)/tests/tk51c.o }
 
 # TK36.EXE: the volume label through the DOS extender
 $(B)/tests/tk36.o: tests/apps/tk36ref.h tests/apps/tklog.h
@@ -843,6 +871,47 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
+# ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
+# WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
+WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
+woprobes: $(WOPROBES)
+$(B)/tests/wo2s.o: tests/apps/wo2s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO2.EXE: $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o tests/apps/app.lnk tests/apps/wo2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo2.map file { $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o }
+$(B)/tests/wo1s.o: tests/apps/wo1s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO1.MOD: $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o tests/apps/app.lnk tests/apps/wo1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo1.map file { $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o }
+$(DOS)/WO%.COM: tests/dos/wo%.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
+# ---- WINOLDAP.MOD: w16's Standard-mode DOS application support ----
+WOA_OBJS := $(B)/shell/start.o $(B)/winoldap/winoldap.o $(B)/winoldap/woasm.o
+dos: $(DOS)/WINOLDAP.MOD
+$(B)/winoldap/%.o: winoldap/%.c winoldap/winoldap.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/winoldap/woasm.o: winoldap/woasm.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/winoldap/winoldap.res: winoldap/winoldap.rc winoldap/winoldap.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=winoldap -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @winoldap/winoldap.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/winoldap/winoldap.map \
+	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
+	python3 tools/nemark.py $@ 3.10
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
