@@ -598,3 +598,21 @@ $(DOS)/WO%.COM: tests/dos/wo%.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
 
+# ---- WINOLDAP.MOD: w16's Standard-mode DOS application support ----
+WOA_OBJS := $(B)/shell/start.o $(B)/winoldap/winoldap.o $(B)/winoldap/woasm.o
+dos: $(DOS)/WINOLDAP.MOD
+$(B)/winoldap/%.o: winoldap/%.c winoldap/winoldap.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/winoldap/woasm.o: winoldap/woasm.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/winoldap/winoldap.res: winoldap/winoldap.rc winoldap/winoldap.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=winoldap -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @winoldap/winoldap.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/winoldap/winoldap.map \
+	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
+	python3 tools/nemark.py $@ 3.10
