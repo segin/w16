@@ -40,7 +40,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -303,6 +303,13 @@ $(DOS)/TK51C.EXE: $(B)/tests/start.o $(B)/tests/tk51c.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk51c.map file { $(B)/tests/start.o $(B)/tests/tk51c.o }
+
+# TK36.EXE: the volume label through the DOS extender
+$(B)/tests/tk36.o: tests/apps/tk36ref.h tests/apps/tklog.h
+$(DOS)/TK36.EXE: $(B)/tests/start.o $(B)/tests/tk36.o tests/apps/app.lnk tests/apps/tk36.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk36.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk36.map file { $(B)/tests/start.o $(B)/tests/tk36.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
@@ -728,6 +735,13 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 
 test: dos fonts
 	tests/run-tests.sh
+
+# boot real Windows 3.1 on w16's parts and compare each screen with the
+# reference (tests/boottest.sh); run after every merge: make test does not
+# boot Windows
+boot-test: dos install-tree
+	tests/boottest.sh
+.PHONY: boot-test
 
 clean:
 	rm -rf $(B)

@@ -224,6 +224,50 @@ u32 KAPI GetCurPID(u32 dw)
     return 0;
 }
 
+/* WinOldApCall (KERNEL.151): WINOLDAP.MOD's; no source describes it.
+   TK34 (3.1, Standard mode): one word popped. 1 and 2 give AX=the
+   argument and DX=a selector of KERNEL's PSP (base = the PSP, limit
+   100h; WINOLDAP.MOD calls it with 1 first); 0 gives AX and DX
+   selectors of real-mode memory after KERNEL's PSP (DX: base PSP+100h,
+   limit FFFFh; AX: base PSP+1100h, limit 0Fh), meaning unknown (TODO:
+   logged, 0 returned). */
+u32 KAPI WinOldApCall(u16 fn)
+{
+    kputs("w16: WinOldApCall ");
+    kputhex(fn);
+    kputs("\r\n");
+    if (fn == 0)
+        return 0;
+    return ((u32)psp_sel << 16) | fn;
+}
+
+/* RegisterWinOldApHook (KERNEL.343) and GetWinOldApHooks (344):
+   WINOLDAP.MOD's. TK34 (3.1): 343 pops three words and returns AX=1;
+   344 takes none and returns DX:AX = 0 before any 343, afterwards a far
+   pointer from 343's words (all words equal in the probe: which two is
+   not known). TODO: logged; 343's last two words kept as the far
+   pointer (UNVERIFIED which two). */
+static u32 woa_hook;
+
+u16 KAPI RegisterWinOldApHook(u16 a, u16 b, u16 c)
+{
+    kputs("w16: RegisterWinOldApHook ");
+    kputhex(a);
+    kputs(" ");
+    kputhex(b);
+    kputs(" ");
+    kputhex(c);
+    kputs("\r\n");
+    woa_hook = ((u32)b << 16) | c;
+    return 1;
+}
+
+u32 KAPI GetWinOldApHooks(void)
+{
+    kputs("w16: GetWinOldApHooks\r\n");
+    return woa_hook;
+}
+
 /* IsWinOldApTask (KERNEL.158): w16 has no WINOLDAP yet. */
 u16 KAPI IsWinOldApTask(u16 htask)
 {
