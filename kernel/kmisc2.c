@@ -236,6 +236,12 @@ u32 KAPI GetCodeHandle(u32 proc)
             return 0;
         return ((u32)m->seg[lo - 1].sel << 16) | m->seg[lo - 1].hnd;
     }
+    if (m) {                    /* KERNEL's segments are not in the heap */
+        u16 i;
+        for (i = 0; i < m->seg_count; i++)
+            if ((m->seg[i].sel | 3) == (hi | 3))
+                return ((u32)m->seg[i].sel << 16) | m->seg[i].hnd;
+    }
     gh = GlobalHandle(hi);
     if (!(u16)gh)
         return 0;
@@ -253,4 +259,79 @@ u16 KAPI OpenPathname(const char FAR *path, u16 mode)
     r.es = 0;
     r.bx = r.cx = r.si = r.di = 0;
     return dos21(&r) ? 0xFFFF : r.ax;
+}
+
+/* PatchCodeHandle (KERNEL.110): Schulman: patch the prologues of the
+   exported procedures in a code segment, as the loader does. Observed
+   (TK50): for a program's code segment AX = its handle, DX = its
+   selector, and an exported "push ds / pop ax / nop" prologue reads "nop
+   nop nop" afterwards; 0 gives DX:AX = 0. w16's loader patches every
+   exported prologue when it loads the module (loader.c), so nothing is
+   left to do here. */
+u32 KAPI PatchCodeHandle(u16 h)
+{
+    u32 gh;
+    if (!h)
+        return 0;
+    gh = GlobalHandle(h);
+    if (!(u16)gh)
+        return 0;
+    return gh;
+}
+
+/* SetSwapAreaSize (KERNEL.106, SDK): AX = the paragraphs granted for
+   code, DX = the most there could be. Observed under KRNL286 (TK50): (0)
+   gave 0, FFFFh; (100h) 100h, FFFDh (KRNL386: 100h, 0); code is never
+   swapped here. UNVERIFIED: DX in general (w16: FFFFh), larger requests. */
+u32 KAPI SetSwapAreaSize(u16 paras)
+{
+    return 0xFFFF0000UL | paras;
+}
+
+/* ---- ending a program ---- */
+
+u32 KAPI GetProcAddress(u16 h, const char FAR *name);
+typedef u16 (__far __pascal *syserrbox_fn)(const char FAR *msg,
+                                           const char FAR *title,
+                                           u16 b1, u16 b2, u16 b3);
+
+/* FatalAppExit (KERNEL.137, SDK): observed on 3.1 (tests/apps/tk52.c,
+   screenshots, as the shell): with a message queue the program gets the
+   box USER's SysErrorBox (USER.320) draws for (msg, "Application Error",
+   0, 8000h | 8, 0), one "Close" button (button code 8: the same box with
+   another title, TK52 's'); it does not return, and the program ends
+   once the box is closed. Without a queue no box appeared and Windows
+   (the program was the shell) ended. UNVERIFIED: the exit code (w16:
+   FFh, as FatalExit), fuAction (ignored), what happens without USER. */
+void KAPI FatalAppExit(u16 action, const char FAR *msg)
+{
+    regs16 r;
+    module FAR *u = module_find("USER");
+    (void)action;
+    if (u && cur_task && *(u16 FAR *)MK_FP(cur_task, 0x20)) {
+        syserrbox_fn box = (syserrbox_fn)GetProcAddress(u->ne_sel,
+                                                        (const char FAR *)MK_FP(0, 320));
+        if (box)
+            box(msg ? msg : "", "Application Error", 0, 0x8008, 0);
+    }
+    r.ax = 0x4CFF;              /* ends the task through our INT 21h hook */
+    r.ds = r.es = 0;
+    r.bx = r.cx = r.dx = r.si = r.di = 0;
+    dos21(&r);
+}
+
+/* UndefDynlink (KERNEL.120): Schulman: what a call to an import that
+   could not be resolved reaches. Observed (TK52): the FatalAppExit box
+   with "Call to Undefined Dynalink". */
+void KAPI UndefDynlink(void)
+{
+    FatalAppExit(0, "Call to Undefined Dynalink");
+}
+
+/* DebugBreak (KERNEL.203, SDK): a breakpoint for a debugger. Observed
+   (TK52): with no debugger the retail KERNEL returns and the program
+   goes on. UNVERIFIED: what a debugger (TOOLHELP's InterruptRegister)
+   gets; w16 raises nothing. */
+void KAPI DebugBreak(void)
+{
 }

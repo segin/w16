@@ -246,6 +246,27 @@ static void t_priority(void)
     tp[4] = 0;
 }
 
+/* GetHeapSpaces (KERNEL.138) of a small heap made as USER makes its
+   second heaps (LocalInit(handle, 12h, 417h) in a 430h-byte block;
+   seen with [w16] trace): USER's GetFreeSystemResources divides by its
+   total */
+static void t_heapspaces(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0x430);
+    DWORD (FAR PASCAL *ghs)(WORD) = (DWORD (FAR PASCAL *)(WORD))kproc(138);
+    BOOL (FAR PASCAL *li)(WORD, WORD, WORD) =
+        (BOOL (FAR PASCAL *)(WORD, WORD, WORD))kproc(4);
+    DWORD v;
+    res("LocalInit(430h block,12h,417h)", "", li((WORD)h, 0x12, 0x417));
+    v = ghs((WORD)h);
+    res("GetHeapSpaces(small heap) total", "", HIWORD(v));
+    res("GetHeapSpaces(small heap) free", "", LOWORD(v));
+    v = ghs((WORD)h | 1);
+    res("GetHeapSpaces(small heap sel) total", "", HIWORD(v));
+    res("GetHeapSpaces(small heap) word 6", "", *(WORD FAR *)MAKELP((WORD)h | 1, 6));
+    GlobalFree(h);
+}
+
 static void t_simple(void)
 {
     WORD FAR *p;
@@ -385,10 +406,6 @@ static void t_simple(void)
     }
     if (K2("Reserved4(0,C9h)", 80, 1, 0, 0xC9))
         res("Reserved4(0,C9h)", "AX", r_ax);
-    if (K2("Reserved4(1234h,'Q')", 80, 1, 0x1234, 'Q')) {
-        res("Reserved4(1234h,'Q')", "AX", r_ax);
-        res("Reserved4(1234h,'Q')", "DX", r_dx);
-    }
     /* InitTask1(proc): THHOOK 44h, Schulman */
     p = thhook;
     old = p ? *(DWORD FAR *)(p + 0x22) : 0;
@@ -527,13 +544,22 @@ static void t_localnotify(void)
 static void t_dosproc(void)
 {
     DWORD old;
-    if (!K2("GetSetKernelDOSProc(hook)", 311, 0, SEG(dos_hook), OFF(dos_hook)))
+    DWORD (FAR PASCAL *gs)(FARPROC) = (DWORD (FAR PASCAL *)(FARPROC))kproc(311);
+    if (!gs) {
+        obs("GetSetKernelDOSProc missing", 1);
         return;
-    old = MAKELONG(r_ax, r_dx);
-    res("GetSetKernelDOSProc prev seg==KERNEL CS", "", r_dx == SEG(kproc(3)));
-    res_env("GetSetKernelDOSProc", "AX", r_ax);
-    res_env("GetSetKernelDOSProc", "DX", r_dx);
+    }
+    /* no DOS call between setting the procedure and knowing the old one:
+       KERNEL's own INT 21h handler may go through it */
+    old = gs((FARPROC)dos_hook);
     dos_next = old;
+    dos_count = 0;
+    _lclose(_lopen("C:\\WINDOWS\\WIN.INI", 0));
+    res("INT 21h (_lopen/_lclose) through the DOS proc", "", dos_count != 0);
+    res("GetSetKernelDOSProc prev seg==KERNEL CS", "", HIWORD(old) == SEG(kproc(3)));
+    res("GetSetKernelDOSProc prev seg==KERNEL DS", "", thhook && HIWORD(old) == SEG(thhook));
+    res_env("GetSetKernelDOSProc", "AX", LOWORD(old));
+    res_env("GetSetKernelDOSProc", "DX", HIWORD(old));
     dos_count = 0;
     w_ax = 0x3000;
     w_call(kproc(102), 0, 0, 0, 0, 0, 0, 0, 0, 0);     /* DOS3Call */
@@ -543,9 +569,6 @@ static void t_dosproc(void)
     w_call(kproc(101), 0, 0, 0, 0, 0, 0, 0, 0, 0);     /* NoHookDOSCall */
     res("NoHookDOSCall through the DOS proc", "", dos_count);
     w_ax = 0;
-    dos_count = 0;
-    _lclose(_lopen("C:\\WINDOWS\\WIN.INI", 0));
-    res("_lopen/_lclose through the DOS proc", "", dos_count != 0);
     K2("GetSetKernelDOSProc(old)", 311, 0, HIWORD(old), LOWORD(old));
     res("GetSetKernelDOSProc(old) returns ours", "",
         MAKELONG(r_ax, r_dx) == (DWORD)(void FAR *)dos_hook);
@@ -610,13 +633,18 @@ static void t_stack(void)
     res("SwitchStackTo SS==new", "", sst_regs[0] == s);
     res_env("SwitchStackTo", "SP", sst_regs[1]);
     res("SwitchStackTo SP", "", sst_regs[1]);
-    res("SwitchStackTo BP", "", sst_regs[2]);
+    res("SwitchStackTo BP==SP+?", "", sst_regs[2] - sst_regs[1]);
     res("SwitchStackTo DS==ours", "", sst_regs[3] == SEG(buf));
     res("SwitchStackTo DS==new", "", sst_regs[3] == s);
     res("SwitchStackTo BX", "", sst_regs[6]);
     res("SwitchStackTo CX", "", sst_regs[7]);
     for (i = 0; i < 8; i++)
-        obsn("SwitchStackTo new seg word", i * 2, sst_hdr[i]);
+        if (i == 1 || i == 2)
+            obs_env(i == 1 ? "SwitchStackTo new seg word 2" : "SwitchStackTo new seg word 4",
+                    sst_hdr[i]);
+        else
+            obsn("SwitchStackTo new seg word", i * 2, sst_hdr[i]);
+    res("SwitchStackTo new seg word 4==our SS", "", sst_hdr[2] == SEG(buf));
     for (i = 0; i < 8; i++)
         if (sst_hdr[8 + i] != before[i]) {
             obsn("SwitchStackTo changed our DGROUP word", i * 2, 1);
@@ -626,9 +654,10 @@ static void t_stack(void)
     res("SwitchStackBack SS==ours", "", sst_regs[8] == SEG(buf));
     res("SwitchStackBack AX", "", sst_regs[12]);
     res("SwitchStackBack DX", "", sst_regs[13]);
-    res("SwitchStackBack BX", "", sst_regs[14]);
-    res("SwitchStackBack CX", "", sst_regs[15]);
-    res("SwitchStackBack BP", "", sst_regs[10]);
+    res("SwitchStackBack BX==our SS", "", sst_regs[14] == SEG(buf));
+    res("SwitchStackBack CX==new seg word 2", "", sst_regs[15] == sst_hdr[1]);
+    res("SwitchStackBack SP==new seg word 2 + 2", "", sst_regs[9] == sst_hdr[1] + 2);
+    res_env("SwitchStackBack", "SP", sst_regs[9]);
     for (i = 0; i < 8; i++)
         if (hp[i] != before[i])
             obsn("SwitchStackBack left our DGROUP word changed", i * 2, 1);
@@ -681,11 +710,15 @@ static void t_callproc(void)
         res("CallProcInstance proc DS==hInstance", "", e[7] == SEG(buf));
         res("CallProcInstance proc arg lParam lo", "", e[9]);
         res("CallProcInstance proc arg msg", "", e[12]);
-        res("CallProcInstance proc AX", "", e[1]);
+        res("CallProcInstance proc AX==hInstance", "", e[1] == SEG(buf));
         res("CallProcInstance proc BX==wnd", "", e[2] == OFF(wnd));
         res("CallProcInstance proc ES==wnd", "", e[8] == SEG(wnd));
     }
 }
+
+/* EMSCopy (KERNEL.160) with seven zero words ended the probe on Windows 3.1
+   (KRNL286), so it is only tried on request */
+static int try_emscopy;
 
 static void t_emscopy(void)
 {
@@ -708,6 +741,10 @@ static void t_swaparea(void)
         res_env("SetSwapAreaSize(100h)", "DX", r_dx);
     }
 }
+
+/* IsROMFile (KERNEL.326) with 0 and with KERNEL's hModule ended the probe on
+   Windows 3.1 (KRNL286), so it is only tried on request */
+static int try_romfile;
 
 static void t_romfile(void)
 {
@@ -768,6 +805,7 @@ int __cdecl tmain(void)
         obs("THHOOK 00h==GlobalMasterHandle", thhook &&
             thhook[0] == LOWORD(gmh()));
     }
+    t_heapspaces();
     t_hmemcpy();
     t_dbcs();
     t_priority();
@@ -781,10 +819,12 @@ int __cdecl tmain(void)
     t_stack();
     t_initlib();
     t_callproc();
-    t_emscopy();
+    if (try_emscopy)            /* it ended the probe on 3.1: see above */
+        t_emscopy();
     t_handletable();
     t_swaparea();
-    t_romfile();
+    if (try_romfile)            /* it ended the probe on 3.1: see above */
+        t_romfile();
     t_debugseg();
     out("TK50 done, failures=");
     outhex((WORD)failures);

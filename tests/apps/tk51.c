@@ -451,6 +451,72 @@ static void t_stack(void)
         st_run();
 }
 
+/* what SystemHeapInfo builds on: KERNEL's GetHeapSpaces and USER's
+   GetFreeSystemResources (USER.284) */
+static void t_heaps(void)
+{
+    DWORD (FAR PASCAL *ghs)(WORD) = (DWORD (FAR PASCAL *)(WORD))kproc(138);
+    WORD (FAR PASCAL *gfsr)(WORD) = (WORD (FAR PASCAL *)(WORD))
+        GetProcAddress(GetModuleHandle("USER"), MAKEINTRESOURCE(284));
+    DWORD v;
+    v = ghs(GetModuleHandle("USER"));
+    obs_env("GetHeapSpaces(USER) free", LOWORD(v));
+    obs_env("GetHeapSpaces(USER) total", HIWORD(v));
+    v = ghs(GetModuleHandle("GDI"));
+    obs_env("GetHeapSpaces(GDI) free", LOWORD(v));
+    obs_env("GetHeapSpaces(GDI) total", HIWORD(v));
+    {
+        P2 gfirst = (P2)tproc("GlobalFirst"), gnext = (P2)tproc("GlobalNext");
+        GLOBALENTRY ge;
+        BOOL more;
+        WORD u = GetModuleHandle("USER"), n = 0;
+        ge.dwSize = sizeof ge;
+        for (more = gfirst(&ge, GLOBAL_ALL); more && n < 8000; more = gnext(&ge, GLOBAL_ALL), n++)
+            if (ge.dwBlockSize == 0x430 || ge.dwBlockSize == 0x440) {
+                v = ghs(ge.hBlock);
+                obs_env("430h block", ge.hBlock);
+                obs_env("430h block owner", ge.hOwner);
+                obs_env("430h block owner is USER", ge.hOwner == u);
+                obs_env("430h block GetHeapSpaces total", HIWORD(v));
+                obs_env("430h block GetHeapSpaces free", LOWORD(v));
+                obs_env("430h block word 6", *(WORD FAR *)MAKELP(ge.hBlock | 1, 6));
+            }
+    }
+    {
+        /* USER's DGROUP and its heap's information block */
+        P1 mfirst = (P1)tproc("ModuleFirst");
+        P3 gem = (P3)tproc("GlobalEntryModule");
+        GLOBALENTRY ge;
+        WORD s, ph, i;
+        (void)mfirst;
+        ge.dwSize = sizeof ge;
+        if (gem(&ge, GetModuleHandle("USER"), 0) == 0)
+            ge.hBlock = 0;
+        for (i = 0; i < 64 && ge.wType != GT_DGROUP; i++) {
+            ge.dwSize = sizeof ge;
+            if (!gem(&ge, GetModuleHandle("USER"), i))
+                ge.wType = 0;
+        }
+        if (ge.wType == GT_DGROUP) {
+            s = ge.hBlock | 1;
+            v = ghs(ge.hBlock);
+            obs_env("USER DGROUP GlobalSize", (WORD)GlobalSize(ge.hBlock));
+            obs_env("USER DGROUP GetHeapSpaces total", HIWORD(v));
+            obs_env("USER DGROUP GetHeapSpaces free", LOWORD(v));
+            ph = *(WORD FAR *)MAKELP(s, 6);
+            obs_env("USER DGROUP pHeap", ph);
+            dump("USER heap info", s, ph, 0x18);
+            dump("USER DGROUP header", s, 0, 8);
+        }
+    }
+    out("GetFreeSystemResources\r\n");
+    if (gfsr) {
+        obs_env("GetFreeSystemResources(0)", gfsr(0));
+        obs_env("GetFreeSystemResources(1)", gfsr(1));
+        obs_env("GetFreeSystemResources(2)", gfsr(2));
+    }
+}
+
 static void t_misc(void)
 {
     P1 mmi = (P1)tproc("MemManInfo"), shi = (P1)tproc("SystemHeapInfo");
@@ -620,6 +686,8 @@ int __cdecl tmain(void)
         t_tasks();
         out("stack\r\n");
         t_stack();
+        out("heaps\r\n");
+        t_heaps();
         out("misc\r\n");
         t_misc();
         out("notify\r\n");

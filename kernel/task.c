@@ -299,13 +299,15 @@ static void list_unlink(u16 t)
     u16 x;
     if (task_head == t) {
         task_head = TW(t, TDB_NEXT);
+        thhook_sync();
         return;
     }
     for (x = task_head; x; x = TW(x, TDB_NEXT))
         if (TW(x, TDB_NEXT) == t) {
             TW(x, TDB_NEXT) = TW(t, TDB_NEXT);
-            return;
+            break;
         }
+    thhook_sync();
 }
 
 /* In front of the first task whose priority is not below t's. */
@@ -320,6 +322,7 @@ static void list_insert(u16 t)
         TW(prev, TDB_NEXT) = t;
     else
         task_head = t;
+    thhook_sync();
 }
 
 /* Behind the other tasks of its priority. */
@@ -356,6 +359,7 @@ static void switch_to(u16 t)
         have87 = (get_winflags() & WF_80x87) != 0;
     list_requeue(t);
     if (from) {
+        th_task_out();                  /* toolhelp.c: 0Dh */
         save_dir(from);
         if (have87)
             fpu_save((u16 FAR *)MK_FP(from, TDB_FPCW));
@@ -370,6 +374,7 @@ static void switch_to(u16 t)
     in_sched = 0;
     task_switch(from ? (u16 FAR *)MK_FP(from, TDB_SSSP) : NULL,
                 TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));
+    th_task_in();                       /* back in `from`: 0Eh */
 }
 
 /* Run the next task with an event; returns when the caller is run again
@@ -807,8 +812,10 @@ u32 KAPI_ES GetCurrentPDB(void)                                  /* KERNEL.37 */
 
 void KAPI OutputDebugString(const char FAR *s)                /* KERNEL.115 */
 {
-    if (s)
+    if (s) {
+        th_outstr(s);                   /* toolhelp.c: 12h */
         kputs(s);
+    }
 }
 
 /* Pietrek: an event for the caller while the scheduler looks, so it
@@ -927,6 +934,7 @@ void __cdecl task_signal_exit(u16 ax)
     taskx FAR *x;
     if (!t || (boot_tdb && t == boot_tdb))
         return;
+    th_task_exit(ax);                   /* toolhelp.c: 62h, BL = AL */
     p = *(u32 FAR *)MK_FP(t, 0x2A);
     if (!p)
         return;
@@ -943,4 +951,28 @@ void module_signal(u16 hmod, u16 code)
     if (!u || u->ne_sel == hmod || !module_entry(u, 314, &sel, &off, &is_const) || is_const)
         return;
     sig_call(((u32)sel << 16) | off, hmod, code, 0, 0, 0);
+}
+
+/* SetPriority (KERNEL.32): Schulman: the priority byte at TDB 08h, the
+   task list sorted by it. Observed on 3.1 (tests/apps/tk50.c): the low
+   byte of the second argument is added to the priority in 8 bits (10 +
+   7Fh wraps to -119), the sum is clamped to -32..15 and returned
+   (sign-extended in AX); 0 means the current task. Changes BX, CX, DX
+   and ES on 3.1. UNVERIFIED: a handle that is not a task (3.1 returned 1
+   for the program's DS and 1; w16 returns 0 and changes nothing). */
+u16 KAPI SetPriority(u16 htask, u16 delta)
+{
+    u16 t = htask ? task_of(htask) : cur_task;
+    signed char p;
+    if (!t)
+        return 0;
+    p = (signed char)(u8)(TB(t, TDB_PRIO) + (u8)delta);
+    if (p < -32)
+        p = -32;
+    if (p > 15)
+        p = 15;
+    TB(t, TDB_PRIO) = (u8)p;
+    list_unlink(t);
+    list_insert(t);
+    return (u16)(int)p;
 }

@@ -18,8 +18,7 @@
  *   0, 08h TopPDB (KERNEL's PSP), 0Ah HeadPDB (with one task: its PDB),
  *   0Ch 0, 0Eh HeadTDB, 10h CurTDB, 12h LoadTDB (0), 14h LockTDB (0),
  *   16h SelTableLen (3FFCh), 18h SelTableStart (dword, 72h), 24h hGDI,
- *   26h hUSER, 28h the shell's module, 44h InitTask1's procedure
- *   (Schulman's "Dressed for Success"). KRNL286 puts hGDI, hUSER and the
+ *   26h hUSER, 28h the shell's module. KRNL286 puts hGDI, hUSER and the
  *   shell 4 bytes before where Schulman has them for KRNL386.
  *   UNVERIFIED: the other words (1Ch, 20h, 2Eh-3Ch, ...: values with no
  *   known meaning, left 0 here), HeadPDB with several tasks (w16: the
@@ -51,9 +50,6 @@ u32  KAPI GlobalMasterHandle(void);
 u16  KAPI IsTaskLocked(void);
 extern u16 __cdecl ptrace_call(u32 proc, u16 ax, u16 bx, u16 cx, u16 dx,
                                u16 si, u16 di, u16 es);
-extern u32 dos_proc;
-extern void __far kdos_default(void);
-#pragma aux kdos_default "_*"
 int  diag_query(void);                  /* winboot.c */
 
 /* THHOOK: KERNEL.332, a data entry */
@@ -74,7 +70,6 @@ u16 thhook_w[0x50];
 #define TH_HGDI         0x12
 #define TH_HUSER        0x13
 #define TH_HSHELL       0x14
-#define TH_DRESSED      0x22            /* dword: InitTask1 */
 
 static u32 hook_th;                     /* ToolHelpHook */
 static u32 hook_pt;                     /* RegisterPtrace */
@@ -227,7 +222,7 @@ void KAPI RegisterPtrace(u32 proc)
 }
 
 /* FatalExitHook (KERNEL.318): returns the previous procedure. */
-u32 KAPI FatalExitHook(u32 proc)
+u32 KAPI_ES FatalExitHook(u32 proc)
 {
     u32 old = fatal_hook;
     fatal_hook = proc;
@@ -239,20 +234,34 @@ u32 fatal_exit_hook(void)
     return fatal_hook;
 }
 
-/* InitTask1 (KERNEL.141): stores the procedure in THHOOK 44h (observed).
-   UNVERIFIED: Schulman: called as part of a task's start-up if set; w16
-   does not call it. */
+/* InitTask1 (KERNEL.141): Schulman: sets the procedure a task's start-up
+   would call ("Dressed for Success"). Observed under KRNL286: not in
+   THHOOK 44h (that is KRNL386's place), and AX comes back changed.
+   UNVERIFIED: where KRNL286 keeps it, and whether anything calls it
+   (w16 keeps it and calls nothing). */
+static u32 dressed;
+
 void KAPI InitTask1(u32 proc)
 {
-    *(u32 *)&thhook_w[TH_DRESSED] = proc;
+    dressed = proc;
 }
 
-/* GetSetKernelDOSProc (KERNEL.311): the procedure DOS3Call goes through
-   (khook.asm); returns the previous one, at first KERNEL's own. */
-u32 KAPI GetSetKernelDOSProc(u32 proc)
+/* GetSetKernelDOSProc (KERNEL.311): the INT 21h procedure KERNEL hands
+   DOS calls on to; returns the previous one. Observed on 3.1 (TK50): at
+   first the DOS extender's (0053:02D2 under DOSX); KERNEL's own INT 21h
+   handler, DOS3Call and NoHookDOSCall all go through the new one. In
+   w16 that is old21, where kentry.asm's INT 21h hook chains to. */
+static u16 cli_save(void);
+#pragma aux cli_save = "pushf" "pop ax" "cli" value [ax] modify exact [ax];
+static void flags_restore(u16 f);
+#pragma aux flags_restore = "push ax" "popf" parm [ax] modify exact [];
+
+u32 KAPI_ES GetSetKernelDOSProc(u32 proc)
 {
-    u32 old = dos_proc ? dos_proc : (u32)(void FAR *)kdos_default;
-    dos_proc = proc;
+    u16 f = cli_save();             /* no INT 21h through half a pointer */
+    u32 old = old21;
+    old21 = proc;
+    flags_restore(f);
     return old;
 }
 

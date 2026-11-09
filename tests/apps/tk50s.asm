@@ -205,6 +205,8 @@ _dos_hook:
         mov ax, DGROUP
         mov ds, ax
         inc word [_dos_count wrt DGROUP]
+        cmp word [_dos_next + 2 wrt DGROUP], 0
+        je .plain
         mov ax, [_dos_next wrt DGROUP]
         mov [bp + 4], ax
         mov ax, [_dos_next + 2 wrt DGROUP]
@@ -214,6 +216,13 @@ _dos_hook:
         pop bp
         popf
         retf
+.plain: pop ax                  ; no previous procedure known yet: DOS
+        pop ds
+        pop bp
+        popf
+        add sp, 4
+        int 21h
+        retf 2
 
         REC _rec_cb10, 10
 
@@ -273,7 +282,6 @@ _sst_test:
         push word [bp + 14]
         push word [bp + 16]
         push word [bp + 18]
-        mov bp, 7777h
         mov bx, 2222h
         mov cx, 3333h
         call far [sst_to wrt DGROUP]
