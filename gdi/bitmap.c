@@ -362,3 +362,51 @@ HBITMAP GDIAPI CreateDIBitmap(HDC hdc, const void __far *bmih, DWORD init,
         SetDIBits(hdc, hb, 0, h, bits, bmi, usage);
     return hb;
 }
+
+/* SetDIBitsToDevice: the driver's DIBScreenBlt (ordinal 21) draws scan
+   lines iScan .. iScan + cScans - 1 of the DIB with the top one at X, Y
+   (DDK); the source rectangle (from the DIB's bottom left) and the
+   destination are made a clip rectangle, cut by the composite region.
+   UNVERIFIED: 3.1's own arithmetic and the band it passes. */
+int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int ys,
+                             WORD start, WORD n, void __far *bits, void __far *bmi,
+                             WORD usage)                           /* GDI.443 */
+{
+    NPDC dc = dc_out(hdc);
+    BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
+    void __far *bi;
+    DRVSETDIBTODEV fn;
+    NPRGN rao;
+    int p[2], X, Y;
+    RECT d;
+    WORD k;
+    if (!dc || !bmi || !bits)
+        return 0;
+    fn = (DRVSETDIBTODEV)dc->dev->fn[DRV_SETDIBITSTODEVICE];
+    if (!fn)
+        return 0;
+    bi = dib_info(bmi, usage, info);
+    p[0] = x;
+    p[1] = y;
+    dc_lp_to_dp(dc, p, 1);
+    d.left = p[0] + dc->dcOrg.x;
+    d.top = p[1] + dc->dcOrg.y;
+    d.right = d.left + cx;
+    d.bottom = d.top + cy;
+    X = d.left - xs;
+    Y = d.top + ys + cy - (int)start - (int)n;
+    rao = dc_rao(dc);
+    for (k = 0; k < rao->n; k++) {
+        RECT c = rao->r[k];
+        if (c.left < d.left) c.left = d.left;
+        if (c.top < d.top) c.top = d.top;
+        if (c.right > d.right) c.right = d.right;
+        if (c.bottom > d.bottom) c.bottom = d.bottom;
+        if (c.left >= c.right || c.top >= c.bottom)
+            continue;
+        fn(dc->lpPDevice, X, Y, start, n, &c, &dc->dm, bits, bi, 0);
+        rao = rgn_ptr(dc->hRao);
+    }
+    dc_update_bounds(dc, d.left, d.top, d.right, d.bottom);
+    return n;
+}
