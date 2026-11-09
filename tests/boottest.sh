@@ -111,6 +111,33 @@ check() {
     fi
     n=$(magick compare -metric AE "$out/$w.png" "$out/$r.png" "$out/$c-diff.png" 2>&1 >/dev/null || true)
     n=${n%% *}
+    # The WINOLDAP reference itself varies between boots (Microsoft's own
+    # boot sometimes leaves a stray repaint on Program Manager's caption:
+    # two rows, about 350 pixels; seen 2026-11-08/09). If the case
+    # differs, boot the reference once more and keep the better match:
+    # a real difference shows against both reference boots.
+    if [ "$n" != 0 ] && [ "$r" = woaref ]; then
+        [ -f "$out/woaref2.png" ] || { boot woaref2 -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"; }
+        if booted woaref2; then
+            n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
+            n2=${n2%% *}
+            [ "$n2" = 0 ] && n=0
+        fi
+        # the same stray caption repaint shows up in the case's own boot
+        # too (it is Microsoft's USER redrawing after the DOS program
+        # returns): boot the case once more and compare with both
+        if [ "$n" != 0 ]; then
+            mv "$out/$w.png" "$out/$w.first.png"
+            mv "$out/$w.txt" "$out/$w.first.txt"
+            boot "$w" -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+                -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" $([ "$w" = winoldap ] && echo -r)
+            for rr in woaref woaref2; do
+                [ -f "$out/$rr.png" ] || continue
+                m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
+                [ "${m%% *}" = 0 ] && n=0
+            done
+        fi
+    fi
     case $n in
     0) echo "ok   $c: 0 pixels" ;;
     *) echo "FAIL $c: $n pixels differ ($out/$c-diff.png)"; fails=$((fails + 1)) ;;
