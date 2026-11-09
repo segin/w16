@@ -12,10 +12,6 @@
  * ARCHITECTURE.md 9.2 floating-point findings) and masks every exception:
  * the calculator checks results itself.
  *
- * The Windows 2.x build has no WIN87EM; it is built for a coprocessor
- * (-fpi87) and fp_init does FINIT itself (compat2.c says when there is no
- * coprocessor).
- *
  * tools/calchost/fpu_host.c is the same set of helpers for the host (GCC,
  * x87 long double), used to test the engine against the original's logs.
  */
@@ -24,9 +20,7 @@
 /* the inline assembly assigns the results */
 #pragma disable_message(200)
 
-#ifndef W16_WIN2
 extern void far pascal FPMATH(void);    /* WIN87EM.1, register interface */
-#endif
 
 static const short ten = 10;
 static const double quarter_ulp = 1.3552527156068805425e-20;     /* 2^-66 */
@@ -34,7 +28,6 @@ static short cw_save, cw_tmp;
 
 void fp_init(void)
 {
-#ifndef W16_WIN2
     _asm {
         push si
         push di
@@ -43,11 +36,6 @@ void fp_init(void)
         pop di
         pop si
     }
-#else
-    _asm {
-        finit
-    }
-#endif
     cw_tmp = 0x133F;                    /* extended precision, nearest, all masked */
     _asm {
         fldcw cw_tmp

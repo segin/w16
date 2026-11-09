@@ -7,16 +7,12 @@
  * tests/calcscenarios.sh): F1 and Help > Contents: HELP_INDEX; Search for
  * Help On: HELP_PARTIALKEY ""; How to Use Help: HELP_HELPONHELP; F1 on a
  * menu item: nothing; closing Calculator: HELP_QUIT.
- * Windows 2.x has no WinHelp (compat2.c).
  */
 #include <windows.h>
 #include "calc.h"
 #include "ui.h"
-#ifndef W16_WIN2
 /* SHELL.22 (not in the headers we have) */
 int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
-#endif
-#include "compat2.h"
 
 static char help_file[16];
 
