@@ -406,6 +406,19 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     return TRUE;
 }
 
+/* USER.332, UserYield: what KERNEL's Yield is for a task with a queue
+   (Pietrek ch. 6): the inter-task SendMessages waiting for the task are
+   answered before it gives up the processor and again when it gets it
+   back, so no sender stays blocked on a task that is only yielding.
+   (A stub here used to make every Yield of such a task do nothing.) */
+void WINAPI U_USERYIELD(void)
+{
+    HQUEUE hq = cur_hq();
+    receive_sent(hq);
+    K_OLDYIELD();
+    receive_sent(cur_hq());
+}
+
 BOOL WINAPI GetMessage(MSG __far *m, HWND h, UINT lo, UINT hi)
 {
     get_message(m, h, lo, hi, PM_REMOVE, TRUE);

@@ -40,12 +40,14 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK50 TK51 TK51C TK52
+# DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
+DXPROBES := DX1 DX2 DX4 DX5 DX8
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
@@ -373,6 +375,41 @@ $(DOS)/TK43.EXE: $(B)/tests/start.o $(B)/tests/tk43.o $(B)/tests/tk31s.o tests/a
 	$(WLINK) @tests/apps/tk43.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk43.map file { $(B)/tests/start.o $(B)/tests/tk43.o $(B)/tests/tk31s.o }
 
+# TK44.EXE: where keyboard interrupts go after the boot (tk44s.asm)
+$(B)/tests/tk44.o: tests/apps/tk44ref.h tests/apps/tklog.h
+$(DOS)/TK44.EXE: $(B)/tests/start.o $(B)/tests/tk44.o $(B)/tests/tk44s.o tests/apps/app.lnk tests/apps/tk44.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk44.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk44.map file { $(B)/tests/start.o $(B)/tests/tk44.o $(B)/tests/tk44s.o }
+
+# TK45.EXE: the PICs while Windows is idle
+$(B)/tests/tk45.o: tests/apps/tk45ref.h tests/apps/tklog.h
+$(DOS)/TK45.EXE: $(B)/tests/start.o $(B)/tests/tk45.o tests/apps/app.lnk tests/apps/tk45.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk45.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk45.map file { $(B)/tests/start.o $(B)/tests/tk45.o }
+
+# TK46.EXE: INT 15h C207h with a protected-mode handler (tk46s.asm)
+$(B)/tests/tk46.o: tests/apps/tk46ref.h tests/apps/tklog.h
+$(DOS)/TK46.EXE: $(B)/tests/start.o $(B)/tests/tk46.o $(B)/tests/tk46s.o tests/apps/app.lnk tests/apps/tk46.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk46.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk46.map file { $(B)/tests/start.o $(B)/tests/tk46.o $(B)/tests/tk46s.o }
+
+# TK47.EXE: INT 15h C207h with a code selector below 1 MB (tk47s.asm)
+$(B)/tests/tk47.o: tests/apps/tk47ref.h tests/apps/tklog.h
+$(DOS)/TK47.EXE: $(B)/tests/start.o $(B)/tests/tk47.o $(B)/tests/tk47s.o tests/apps/app.lnk tests/apps/tk47.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk47.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk47.map file { $(B)/tests/start.o $(B)/tests/tk47.o $(B)/tests/tk47s.o }
+
+# TK48.EXE: INT 15h C2xxh and INT 33h from protected mode
+$(B)/tests/tk48.o: tests/apps/tk48ref.h tests/apps/tklog.h
+$(DOS)/TK48.EXE: $(B)/tests/start.o $(B)/tests/tk48.o tests/apps/app.lnk tests/apps/tk48.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk48.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk48.map file { $(B)/tests/start.o $(B)/tests/tk48.o }
+
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
 $(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tk16ref286.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
@@ -629,6 +666,12 @@ $(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o $(B)/tests/snap.res tests/
 	    option map=$(B)/tests/snap.map option resource=$(B)/tests/snap.res \
 	    file { $(B)/tests/start.o $(B)/tests/snap.o }
 
+# CA1.EXE: drives Calculator and records its display (tests/calcscenarios.sh)
+$(DOS)/CA1.EXE: $(B)/tests/start.o $(B)/tests/ca1.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/ca1.map file { $(B)/tests/start.o $(B)/tests/ca1.o }
+
 # ---- DOS test tools ----
 $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 	@mkdir -p $(@D)
@@ -665,7 +708,7 @@ $(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
 
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
-DXPROBES := DX1 DX2 DX4 DX5 DX8
+# (DXPROBES is set at the top, before the dos target expands it)
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
@@ -852,6 +895,36 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CALC.EXE (shell/calc; ARCHITECTURE.md 15.3): x87 code with
+# emulator fixups (-fpi, WIN87EM) ----
+CALC_SRC := main draw engine fmt paste fpu stat clip help
+CALC_OBJ := $(B)/shell/start.o $(CALC_SRC:%=$(B)/shell/calc/%.o) $(B)/shell/calc/fixrqq.o
+CALC_HDR := shell/calc/calc.h shell/calc/ui.h
+shell: $(DOS)/CALC.EXE
+$(B)/shell/calc/%.o: shell/calc/%.c $(CALC_HDR)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fpi -fo=$@ $<
+$(B)/shell/calc/fixrqq.o: tests/apps/fixrqq.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/res/calc.ico: tools/mkcalcicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcalcicon.py $@
+$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CALC.EXE: $(CALC_OBJ) $(B)/shell/calc/calc.res shell/calc/calc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/calc/calc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/calc/calc.map \
+	    option resource=$(B)/shell/calc/calc.res file { $(CALC_OBJ) }
+# the engine on the host (tools/calchost; tests/calcscenarios.sh)
+$(B)/host/calchost: tools/calchost/calchost.c tools/calchost/fpu_host.c shell/calc/engine.c \
+                    shell/calc/fmt.c shell/calc/paste.c shell/calc/calc.h shell/calc/accel.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O0 -mfpmath=387 -o $@ tools/calchost/calchost.c tools/calchost/fpu_host.c \
+	    shell/calc/engine.c shell/calc/fmt.c shell/calc/paste.c
+
 # ---- shell: CLOCK.EXE (shell/clock), Windows 3.1 only ----
 CLOCK_OBJ := start main face digital intl fontdlg util
 SHELL_CK  := $(B)/shell/start.o $(patsubst %,$(B)/shell/clock/%.o,$(filter-out start,$(CLOCK_OBJ)))
@@ -1014,6 +1087,11 @@ W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT 
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# Calculator (ARCHITECTURE.md 15.3)
+install-tree: $(W16)/CALC.EXE
+$(W16)/CALC.EXE: $(DOS)/CALC.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
