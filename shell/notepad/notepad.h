@@ -8,9 +8,8 @@
  * dialog, string and accelerator resources read as data
  * (tools/nerdump.py). ARCHITECTURE.md 15.1 has the findings.
  *
- * Two builds from this source: the 3.x build (COMMDLG, WinHelp,
- * ShellAbout, drag and drop) and the Windows 2.x build (W16_WIN2: own
- * Open, Save As and Find dialogs, no help). Medium model, no C runtime.
+ * Windows 3.1 only (COMMDLG, WinHelp, ShellAbout, drag and drop).
+ * Medium model, no C runtime.
  */
 #ifndef NOTEPAD_H
 #define NOTEPAD_H
@@ -44,22 +43,11 @@
 /* ---- resources ---- */
 #define IDI_NOTEPAD         1
 #define IDM_MENU            1
-#define IDD_OPEN2           1           /* 2.x build: File Open */
-#define IDD_SAVEAS2         2           /* 2.x build: File Save As */
-#define IDD_FIND2           9           /* 2.x build: Find */
-#define IDD_ABOUT2          10          /* 2.x build: About */
 #define IDD_PRINTING        12
 #define IDD_PAGESETUP       14
 
 /* control IDs (the original's) */
 #define IDC_EDIT            15          /* the edit window */
-#define IDC_FNAME           15          /* 2.x dialogs: file name */
-#define IDC_FILES           16
-#define IDC_DIRS            17
-#define IDC_PATH            18
-#define IDC_FWD             10          /* 2.x Find: Forward, Backward */
-#define IDC_BACK            11
-#define IDC_CASE            12
 #define IDC_PRINTFILE       20          /* Printing: the file */
 #define IDC_HEADER          30
 #define IDC_FOOTER          31
@@ -108,7 +96,6 @@
 #define IDS_SAVETITLE       47
 #define IDS_QUERYEND        48
 #define IDS_NODRIVER        50
-#define IDS_ABOUT2          60          /* 2.x build: About text (ours) */
 
 /* A DOS path: DOS bounds it (OFSTRUCT holds 128). */
 #define DOS_PATH            144
@@ -150,12 +137,6 @@ BOOL can_print(void);
 
 /* ---- help.c ---- */
 void help(UINT cmd);
-
-/* ---- dlg2.c (2.x build) ---- */
-BOOL open_dialog2(char *file, BOOL save);
-void find_dialog2(void);
-void about_dialog2(void);
-HMENU load_menu2(void);
 
 /* ---- util.c ---- */
 LPSTR mem_alloc(DWORD n);

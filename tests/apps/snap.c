@@ -21,8 +21,6 @@
  *                            relative to it (font, edit state), scroll
  *                            bars, every menu item's state
  *     text                   log the whole text of the focus window
- *     class <name>           Windows 2.x: the class of the window that
- *                            gets commands (default Progman)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -132,15 +130,13 @@ static HWND target(void)
 
 /* The top-level window of the focus: Windows 2.x answers GetActiveWindow
    per task, and SNAP has no window of its own (observed). */
-static char top_class[32] = "Progman";  /* "class": the 2.x fallback */
-
 static HWND top_window(void)
 {
     HWND h = GetFocus(), p;
     if (!h)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
-        return FindWindow(top_class, NULL);
+        return FindWindow("Progman", NULL);
     /* up to the first window that is not a child: GetParent of a dialog
        is its owner, which is not where its commands go */
     while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
@@ -625,13 +621,6 @@ static void run_line(char *l)
            the context bit (29) set */
         PostMessage(target(), WM_SYSCHAR, (BYTE)arg[0], 0x20000001L);
         pump(200);
-    } else if (same(l, "class")) {
-        /* the class whose window gets commands when Windows 2.x does
-           not say which window is active (default "Progman") */
-        int i;
-        for (i = 0; arg[i] && i < (int)sizeof top_class - 1; i++)
-            top_class[i] = arg[i];
-        top_class[i] = 0;
     } else if (same(l, "info")) {
         info();
     } else if (same(l, "text")) {

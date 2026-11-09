@@ -11,7 +11,6 @@
  *   on exit (after help was asked for): HELP_QUIT;
  * all naming "notepad.hlp" (the original's string 34, in small letters).
  * F1 on a menu item, in Page Setup, Find or Open asks for nothing.
- * Windows 2.x has no WinHelp: the 2.x build has no Help menu.
  */
 #include "notepad.h"
 
@@ -19,7 +18,6 @@ static BOOL asked;                      /* WinHelp was asked something */
 
 void help(UINT cmd)
 {
-#ifndef W16_WIN2
     char file[16];
     LoadString(g_hinst, IDS_HELPFILE, file, sizeof file);
     switch (cmd) {
@@ -40,8 +38,4 @@ void help(UINT cmd)
             WinHelp(g_main, file, HELP_QUIT, 0);
         break;
     }
-#else
-    (void)cmd;
-    (void)asked;
-#endif
 }

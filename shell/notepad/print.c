@@ -19,9 +19,7 @@
  * Printing dialog's text and the /P flow's messages.
  */
 #include "notepad.h"
-#ifndef W16_WIN2
 #include <commdlg.h>
-#endif
 
 #define STR_MAX     64
 
@@ -29,9 +27,7 @@ static char header[STR_MAX], footer[STR_MAX];
 static char margin[4][16];              /* left, right, top, bottom */
 static BOOL setup_loaded;
 
-#ifndef W16_WIN2
 static HGLOBAL dev_mode, dev_names;     /* from Print Setup */
-#endif
 
 static void load_setup(void)
 {
@@ -154,17 +150,14 @@ static BOOL default_printer(char *buf, int size, char **name, char **drv, char *
 BOOL can_print(void)
 {
     char buf[128], *n, *d, *p;
-#ifndef W16_WIN2
     if (dev_names)
         return TRUE;
-#endif
     return default_printer(buf, sizeof buf, &n, &d, &p);
 }
 
 static HDC printer_dc(void)
 {
     char buf[128], *n, *d, *p;
-#ifndef W16_WIN2
     if (dev_names) {
         DEVNAMES FAR *dn = (DEVNAMES FAR *)GlobalLock(dev_names);
         LPSTR base = (LPSTR)dn;
@@ -176,7 +169,6 @@ static HDC printer_dc(void)
         GlobalUnlock(dev_names);
         return dc;
     }
-#endif
     if (!default_printer(buf, sizeof buf, &n, &d, &p))
         return NULL;
     return CreateDC(d, n, p, NULL);
@@ -184,7 +176,6 @@ static HDC printer_dc(void)
 
 void print_setup(void)
 {
-#ifndef W16_WIN2
     PRINTDLG pd;
     BYTE FAR *z = (BYTE FAR *)&pd;
     unsigned i;
@@ -202,7 +193,6 @@ void print_setup(void)
         dev_mode = pd.hDevMode;         /* PrintDlg may have made them */
         dev_names = pd.hDevNames;
     }
-#endif
 }
 
 /* ---- printing ---- */

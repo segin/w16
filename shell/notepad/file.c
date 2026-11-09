@@ -32,10 +32,8 @@
  *     [intl] (see time_date).
  */
 #include "notepad.h"
-#ifndef W16_WIN2
 #include <commdlg.h>
 #include <shellapi.h>
-#endif
 
 static BOOL loading;                    /* no EN_ERRSPACE message now */
 
@@ -198,7 +196,7 @@ static BOOL set_text(LPSTR text, WORD len)
     text[len] = 0;
     loading = TRUE;
     SendMessage(g_edit, WM_SETTEXT, 0, (LPARAM)text);
-    ok = text_length() == len;          /* 2.x: WM_SETTEXT returns nothing useful */
+    ok = text_length() == len;
     loading = FALSE;
     if (!ok)
         SetWindowText(g_edit, "");
@@ -296,7 +294,6 @@ BOOL file_is_loading(void)
 
 /* ---- the common dialogs ---- */
 
-#ifndef W16_WIN2
 /* "Text Files (*.TXT)", "*.txt", "All Files (*.*)", "*.*" */
 static int make_filter(char *f, int size)
 {
@@ -334,9 +331,6 @@ static BOOL file_dialog(char *file, BOOL save)
     ok = save ? GetSaveFileName(&ofn) : GetOpenFileName(&ofn);
     return ok;
 }
-#else
-#define file_dialog(file, save)     open_dialog2(file, save)
-#endif
 
 void file_open(void)
 {
@@ -348,7 +342,6 @@ void file_open(void)
         file_load(file, FALSE);
 }
 
-#ifndef W16_WIN2
 void file_drop(HANDLE hdrop)
 {
     char file[DOS_PATH];
@@ -357,7 +350,6 @@ void file_drop(HANDLE hdrop)
     if (file_query_save())
         file_load(file, FALSE);
 }
-#endif
 
 /* ---- saving ---- */
 

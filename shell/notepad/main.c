@@ -24,7 +24,6 @@
  *   Several copies may run at once.
  */
 #include "notepad.h"
-#ifndef W16_WIN2
 #include <shellapi.h>
 #include <commdlg.h>
 #ifndef FINDMSGSTRING                   /* the SDK's name; not in every header */
@@ -32,7 +31,6 @@
 #endif
 /* SHELL.22 (SDK: ShellAbout); not declared in OpenWatcom's shellapi.h */
 int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
-#endif
 
 HINSTANCE g_hinst;
 HWND g_main, g_edit;
@@ -67,16 +65,7 @@ void set_title(void)
     int n = LoadString(g_hinst, IDS_TITLEPREFIX, title, sizeof title);
     if (g_file[0]) {
         s_cpy(title + n, s_basename(g_file), sizeof title - n);
-#ifndef W16_WIN2
         AnsiUpper(title + n);
-#else
-        {
-            char *c;
-            for (c = title + n; *c; c++)
-                if (*c >= 'a' && *c <= 'z')
-                    *c -= 'a' - 'A';
-        }
-#endif
     } else {
         LoadString(g_hinst, IDS_UNTITLED, title + n, sizeof title - n);
     }
@@ -211,12 +200,6 @@ static void init_menu(HMENU m)
     enable(m, IDM_PASTE, IsClipboardFormatAvailable(CF_TEXT));
     enable(m, IDM_PRINT, can_print());
     CheckMenuItem(m, IDM_WORDWRAP, MF_BYCOMMAND | (g_wrap ? MF_CHECKED : MF_UNCHECKED));
-#ifdef W16_WIN2
-    /* Windows 2.x has no WinHelp */
-    enable(m, IDM_HELPCONTENTS, FALSE);
-    enable(m, IDM_HELPSEARCH, FALSE);
-    enable(m, IDM_HELPHELP, FALSE);
-#endif
 }
 
 /* ---- commands ---- */
@@ -278,15 +261,11 @@ static void command(WORD id)
         help(id);
         break;
     case IDM_ABOUT:
-#ifndef W16_WIN2
         {
             char name[32];
             LoadString(g_hinst, IDS_APPNAME, name, sizeof name);
             ShellAbout(g_main, name, "", LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_NOTEPAD)));
         }
-#else
-        about_dialog2();
-#endif
         break;
     }
     sync_scroll();
@@ -304,9 +283,7 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return -1;
         SetScrollRange(hwnd, SB_VERT, 0, 100, FALSE);
         SetScrollRange(hwnd, SB_HORZ, 0, 100, FALSE);
-#ifndef W16_WIN2
         DragAcceptFiles(hwnd, TRUE);
-#endif
         return 0;
     case WM_SIZE:
         if (wp != SIZE_MINIMIZED) {
@@ -338,11 +315,9 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         command((WORD)wp);
         return 0;
-#ifndef W16_WIN2
     case WM_DROPFILES:
         file_drop((HANDLE)wp);
         return 0;
-#endif
     case WM_CLOSE:
         if (file_query_save())
             DestroyWindow(hwnd);
@@ -351,16 +326,12 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return file_query_save();
     case WM_DESTROY:
         help(0);                        /* HELP_QUIT */
-#ifndef W16_WIN2
         DragAcceptFiles(hwnd, FALSE);
-#endif
         PostQuitMessage(0);
         return 0;
     default:
-#ifndef W16_WIN2
         if (msg == g_findmsg && g_findmsg)
             return find_message(lp);
-#endif
         break;
     }
     return DefWindowProc(hwnd, msg, wp, lp);
@@ -374,18 +345,10 @@ static BOOL register_class(HINSTANCE hinst)
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hInstance = hinst;
-#ifndef W16_WIN2
     wc.hIcon = LoadIcon(hinst, MAKEINTRESOURCE(IDI_NOTEPAD));
-#else
-    wc.hIcon = NULL;                    /* 2.x cannot read 3.x icons */
-#endif
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-#ifndef W16_WIN2
     wc.lpszMenuName = MAKEINTRESOURCE(IDM_MENU);
-#else
-    wc.lpszMenuName = NULL;             /* load_menu2 builds it */
-#endif
     wc.lpszClassName = cls_main;
     return RegisterClass(&wc);
 }
@@ -420,17 +383,11 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     if (!hprev && !register_class(hinst))
         return 1;
     g_accel = LoadAccelerators(hinst, "MAINACC");
-#ifndef W16_WIN2
     g_findmsg = RegisterWindowMessage(FINDMSGSTRING);
-#endif
     LoadString(hinst, IDS_APPNAME, title, sizeof title);
     if (!CreateWindow(cls_main, title, WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL,
                       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL,
-#ifdef W16_WIN2
-                      load_menu2(),
-#else
                       NULL,
-#endif
                       hinst, NULL))
         return 1;
     set_title();
@@ -456,10 +413,8 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     UpdateWindow(g_main);
 
     while (GetMessage(&msg, NULL, 0, 0)) {
-#ifndef W16_WIN2
         if (g_finddlg && IsDialogMessage(g_finddlg, &msg))
             continue;
-#endif
         if (!TranslateAccelerator(g_main, g_accel, &msg)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);

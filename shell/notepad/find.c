@@ -6,33 +6,20 @@
  * box empty at first (later, the last text). Find Next selects the next
  * match after the selection (Up: before it); none: "Cannot find "%%""
  * with the information icon. The dialog stays up.
- *
- * Windows 2.x has no COMMDLG: its build asks with a dialog of its own
- * (dlg2.c), and both builds search the same way.
  */
 #include "notepad.h"
-#ifndef W16_WIN2
 #include <commdlg.h>
-#endif
 
 UINT g_findmsg;
 HWND g_finddlg;
 static char what[128];                  /* the text to find */
 static BOOL down = TRUE, match_case;
 
-#ifndef W16_WIN2
 static FINDREPLACE fr;
-#endif
 
 static char lower(char c)
 {
-#ifndef W16_WIN2
     return (char)(DWORD)AnsiLower((LPSTR)(DWORD)(BYTE)c);
-#else
-    /* 2.x: AnsiUpper/AnsiLower were seen to corrupt the string they were
-       given (observed on Windows/386 2.11); ASCII only */
-    return (c >= 'A' && c <= 'Z') ? (char)(c + 'a' - 'A') : c;
-#endif
 }
 
 static BOOL same_at(const char FAR *t, const char *w)
@@ -80,7 +67,6 @@ static void search(HWND owner)
     }
 }
 
-#ifndef W16_WIN2
 
 void find_dialog(void)
 {
@@ -115,29 +101,6 @@ LRESULT find_message(LPARAM lp)
     return 0;
 }
 
-#else
-
-/* the 2.x dialog's answers */
-void find_set(const char FAR *w, BOOL d, BOOL mc)
-{
-    s_cpy(what, w, sizeof what);
-    down = d;
-    match_case = mc;
-}
-
-void find_get(char FAR *w, int size, BOOL *d, BOOL *mc)
-{
-    s_cpy(w, what, size);
-    *d = down;
-    *mc = match_case;
-}
-
-void find_dialog(void)
-{
-    find_dialog2();
-}
-
-#endif
 
 /* F3: the last search again; nothing searched for yet, the Find dialog
    (UNVERIFIED: what the original does then) */
@@ -150,9 +113,3 @@ void find_next(void)
     search(g_finddlg ? g_finddlg : g_main);
 }
 
-#ifdef W16_WIN2
-void find_search2(HWND owner)
-{
-    search(owner);
-}
-#endif

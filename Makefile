@@ -1016,14 +1016,10 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
 
-# ---- shell: NOTEPAD.EXE, in two builds from one source tree (as PROGMAN) ----
-#   $(DOS)/NOTEPAD.EXE    Windows 3.x build (COMMDLG, WinHelp, ShellAbout)
-#   $(WIN2)/NOTEPAD.EXE   Windows 2.x build (W16_WIN2, marked 2.0)
-NP_SRC  := main file find print help dlg2 util
+# ---- shell: NOTEPAD.EXE (Windows 3.1; shell/notepad, ARCHITECTURE.md 15.1) ----
+NP_SRC  := main file find print help util
 SHELL_NP  := $(B)/shell/start.o $(NP_SRC:%=$(B)/shell/notepad/%.o)
-SHELL_NP2 := $(B)/shell2/start.o $(NP_SRC:%=$(B)/shell2/notepad/%.o)
 shell: $(DOS)/NOTEPAD.EXE
-shell2: $(WIN2)/NOTEPAD.EXE
 $(B)/shell/res/notepad.ico: tools/npicon.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 -B tools/npicon.py $@
@@ -1038,18 +1034,6 @@ $(DOS)/NOTEPAD.EXE: $(SHELL_NP) $(B)/shell/notepad/notepad.res shell/notepad/not
 	$(WLINK) @shell/notepad/notepad.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/shell/notepad/notepad.map \
 	    option resource=$(B)/shell/notepad/notepad.res file { $(SHELL_NP) }
-$(B)/shell2/notepad/%.o: shell/notepad/%.c shell/notepad/notepad.h
-	@mkdir -p $(@D)
-	$(WCC) $(SCFLAGS) -0 -dW16_WIN2 -fo=$@ $<
-$(B)/shell2/notepad/notepad.res: shell/notepad/notepad.rc shell/notepad/notepad.h $(B)/shell/res/notepad.ico
-	@mkdir -p $(@D)
-	$(WRC) -q -r -bt=windows -dW16_WIN2 -i=$(WATCOM)/h/win -i=shell/notepad -i=$(B)/shell/res -fo=$@ $<
-$(WIN2)/NOTEPAD.EXE: $(SHELL_NP2) $(B)/shell2/notepad/notepad.res shell/notepad/notepad2.lnk tools/nemark.py
-	@mkdir -p $(@D)
-	$(WLINK) @shell/notepad/notepad2.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/shell2/notepad/notepad.map \
-	    option resource=$(B)/shell2/notepad/notepad.res file { $(SHELL_NP2) }
-	python3 tools/nemark.py $@ 2.0
 install-tree: $(W16)/NOTEPAD.EXE
 $(W16)/NOTEPAD.EXE: $(DOS)/NOTEPAD.EXE
 	@mkdir -p $(@D)

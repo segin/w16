@@ -4,8 +4,7 @@
  * The menu, accelerators, messages and the Page Setup and Printing
  * dialogs match Windows 3.1's Notepad as observed (its resources read as
  * data with tools/nerdump.py, its windows with SNAP). Command, control and
- * string IDs are the original's. The icon and the 2.x build's About box
- * are our own.
+ * string IDs are the original's. The icon is our own.
  */
 #include <windows.h>
 #include "notepad.h"
@@ -117,9 +116,7 @@ END
 IDD_PAGESETUP DIALOG 10, 10, 162, 95
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Page Setup"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     LTEXT           "&Header:", -1, 7, 6, 37, 10
     EDITTEXT        IDC_HEADER, 45, 6, 60, 12, ES_AUTOHSCROLL | WS_GROUP
@@ -142,71 +139,10 @@ END
 IDD_PRINTING DIALOG 20, 20, 90, 64
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Notepad"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     DEFPUSHBUTTON   "Cancel", IDCANCEL, 29, 44, 32, 14, WS_GROUP
     CTEXT           "Now Printing", -1, 0, 8, 90, 8
     CTEXT           "", IDC_PRINTFILE, 0, 18, 90, 8, SS_NOPREFIX
 END
 
-#ifdef W16_WIN2
-/* Windows 2.x: the original's File Open, File Save As and Find templates
-   (1, 2, 9), from before COMMDLG took their place; Open and Save As
-   widened for 2.x's wider system font */
-IDD_OPEN2 DIALOG 50, 30, 200, 130
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "File Open"
-BEGIN
-    LTEXT           "File&name:", -1, 6, 7, 44, 12
-    EDITTEXT        IDC_FNAME, 52, 5, 84, 12, ES_AUTOHSCROLL | ES_OEMCONVERT | WS_GROUP
-    LTEXT           "Directory:", -1, 6, 19, 44, 12
-    LTEXT           "", IDC_PATH, 52, 19, 140, 12, SS_NOPREFIX
-    LTEXT           "&Files:", -1, 6, 32, 32, 10
-    LISTBOX         IDC_FILES, 6, 44, 64, 80, LBS_NOTIFY | LBS_SORT | WS_VSCROLL | WS_BORDER | WS_GROUP | WS_TABSTOP
-    LTEXT           "&Directories:", -1, 76, 32, 60, 10
-    LISTBOX         IDC_DIRS, 76, 44, 60, 80, LBS_NOTIFY | LBS_SORT | WS_VSCROLL | WS_BORDER | WS_GROUP | WS_TABSTOP
-    DEFPUSHBUTTON   "OK", IDOK, 144, 4, 50, 14, WS_GROUP
-    PUSHBUTTON      "Cancel", IDCANCEL, 144, 21, 50, 14, WS_GROUP
-END
-
-IDD_SAVEAS2 DIALOG 50, 30, 200, 110
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "File Save As"
-BEGIN
-    LTEXT           "File&name:", -1, 5, 7, 44, 10
-    EDITTEXT        IDC_FNAME, 51, 5, 84, 12, ES_AUTOHSCROLL | ES_OEMCONVERT | WS_GROUP
-    LTEXT           "Directory:", -1, 5, 22, 44, 12, SS_NOPREFIX
-    LTEXT           "", IDC_PATH, 51, 22, 140, 12, SS_NOPREFIX | NOT WS_GROUP
-    LTEXT           "&Directories:", -1, 5, 35, 60, 12
-    LISTBOX         IDC_DIRS, 5, 48, 70, 60, LBS_NOTIFY | LBS_SORT | WS_VSCROLL | WS_BORDER | WS_GROUP | WS_TABSTOP
-    DEFPUSHBUTTON   "OK", IDOK, 144, 4, 50, 14, WS_GROUP
-    PUSHBUTTON      "Cancel", IDCANCEL, 144, 21, 50, 14, WS_GROUP
-END
-
-IDD_FIND2 DIALOG 17, 34, 199, 65
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Find"
-BEGIN
-    LTEXT           "&Find What:", -1, 5, 5, 45, 12
-    EDITTEXT        IDC_FNAME, 47, 4, 140, 12, WS_GROUP
-    CONTROL         "&Match Upper/Lowercase", IDC_CASE, "Button", BS_CHECKBOX | WS_GROUP | WS_TABSTOP, 5, 21, 113, 12
-    GROUPBOX        "", -1, 5, 33, 127, 24
-    CONTROL         "F&orward", IDC_FWD, "Button", BS_RADIOBUTTON | WS_GROUP | WS_TABSTOP, 10, 40, 54, 12
-    CONTROL         "&Backward", IDC_BACK, "Button", BS_RADIOBUTTON, 69, 40, 54, 12
-    DEFPUSHBUTTON   "OK", IDOK, 150, 21, 35, 14, WS_GROUP
-    PUSHBUTTON      "Cancel", IDCANCEL, 150, 41, 35, 14, WS_GROUP
-END
-
-/* our own About box for 2.x (3.x: SHELL's ShellAbout, as the original) */
-IDD_ABOUT2 DIALOG 25, 23, 184, 60
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "About Notepad"
-BEGIN
-    CTEXT           "w16 Notepad", -1, 0, 5, 184, 8, SS_NOPREFIX
-    CTEXT           "Version 3.1", -1, 0, 15, 184, 8, SS_NOPREFIX
-    CTEXT           "A clean-room reimplementation, part of w16.", -1, 0, 28, 184, 8, SS_NOPREFIX
-    DEFPUSHBUTTON   "OK", IDOK, 76, 41, 32, 14
-END
-#endif
