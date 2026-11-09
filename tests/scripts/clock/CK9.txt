@@ -1,0 +1,15 @@
+; Always on Top
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+syscmd 5
+wait 300
+dump
+dumpmenu
+menu  
+freeze 10:09:30.50 800
+snap C:\T1.BMP
+key 1B
+key 1B
+close
+wait 1000

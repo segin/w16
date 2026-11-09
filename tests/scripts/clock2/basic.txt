@@ -1,0 +1,50 @@
+; w16's Clock (2.x build) on Windows/386 2.11: digital, analog,
+; minimized, no title, the Font and About dialogs, CLOCK.INI
+setdate 03/14/1993
+run C:\CLOCK.EXE
+wait 3000
+target Clock
+freeze 10:09:30.50 2000
+snap C:\D1.DDB
+cmd 1
+freeze 10:09:30.50 2000
+snap C:\A1.DDB
+cmd 7
+cmd 2
+freeze 10:09:30.50 2000
+snap C:\D2.DDB
+cmd 7
+syscmd F020
+freeze 10:09:30.50 2000
+snap C:\I1.DDB
+syscmd F120
+cmd 1
+syscmd F020
+freeze 10:09:30.50 2000
+snap C:\I2.DDB
+syscmd F120
+cmd 2
+cmd 3
+wait 2000
+snap C:\F1.DDB
+target #32770
+cmd 2
+target Clock
+wait 1000
+cmd 4
+wait 2000
+snap C:\B1.DDB
+target #32770
+cmd 1
+target Clock
+wait 1000
+cmd 6
+freeze 10:09:30.50 2000
+snap C:\N1.DDB
+send 0084 0 64:64
+cmd 6
+movewin 40 30 300 200
+freeze 10:09:30.50 2000
+snap C:\D3.DDB
+close
+wait 2000
