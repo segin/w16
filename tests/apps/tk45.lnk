@@ -1,0 +1,3 @@
+# TK45.EXE (tests/apps/tk45.c): the PICs while Windows is idle
+@tests/apps/app.lnk
+import U_INITAPP USER.5
