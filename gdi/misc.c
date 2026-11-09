@@ -85,8 +85,10 @@ HPALETTE GDIAPI GDISelectPalette(HDC hdc, HPALETTE h, BOOL bk)     /* GDI.361 */
     return old;
 }
 
-/* a non-palette device (VGA: no RC_PALETTE) maps nothing */
-WORD GDIAPI GDIRealizePalette(HDC hdc)                             /* GDI.362 */
+/* a non-palette device (VGA: no RC_PALETTE) maps nothing. A DWORD
+   (Schulman: DWORD GdiRealizePalette): 3.1 returned 0 in DX:AX, and USER
+   took a nonzero DX as a palette change (GD2, Calculator's menu) */
+DWORD GDIAPI GDIRealizePalette(HDC hdc)                            /* GDI.362 */
 {
     (void)hdc;
     return 0;

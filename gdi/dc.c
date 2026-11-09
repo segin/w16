@@ -1120,7 +1120,9 @@ WORD GDIAPI SetBoundsRect(HDC hdc, const RECT __far *rc, WORD flags) /* GDI.193 
     WORD r;
     if (!dc)
         return 0;
-    r = (dc->bounds.left >= dc->bounds.right) ? 1 : 3;
+    /* GD2: USER's SetBoundsRect(hdc, NULL, 8003h) returned 8005h (empty)
+       or 8007h: its 8000h, DCB_ENABLE and DCB_RESET/DCB_SET */
+    r = ((dc->bounds.left >= dc->bounds.right) ? 1 : 3) | 4 | (flags & 0x8000);
     if (flags & 1)
         dc->bounds.left = dc->bounds.top = dc->bounds.right = dc->bounds.bottom = 0;
     if ((flags & 2) && rc) {
