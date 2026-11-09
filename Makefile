@@ -575,3 +575,26 @@ test: dos
 
 clean:
 	rm -rf $(B)
+
+# ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.6) ----
+# WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
+WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
+woprobes: $(WOPROBES)
+$(B)/tests/wo2s.o: tests/apps/wo2s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO2.EXE: $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o tests/apps/app.lnk tests/apps/wo2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo2.map file { $(B)/tests/start.o $(B)/tests/wo2.o $(B)/tests/wo2s.o }
+$(B)/tests/wo1s.o: tests/apps/wo1s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/WO1.MOD: $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o tests/apps/app.lnk tests/apps/wo1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/wo1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/wo1.map file { $(B)/tests/start.o $(B)/tests/wo1.o $(B)/tests/wo1s.o }
+$(DOS)/WO%.COM: tests/dos/wo%.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
