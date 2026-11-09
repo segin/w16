@@ -1,0 +1,82 @@
+/* vxdapi.c - w16 VMM: the protected-mode API entry points of the virtual
+ * devices (INT 2Fh AX=1684h), ARCHITECTURE.md 12.5.
+ *
+ * Windows 3.1 hands out a PM entry for exactly the devices whose DDB
+ * declares a PM API procedure (observed with VX1, ARCHITECTURE.md 12.2):
+ * VPICD, VTD, Reboot, VDD, VMD, VKD, VCD, SHELL, PageFile and VTDAPI. w16
+ * gives the same set. Each entry is a HLT in the host's ring-3 breakpoint
+ * segment, called far by the client; the device's handler gets the
+ * client's registers.
+ *
+ * Until each device's API is implemented (from the DDK documentation and
+ * what VX3 records under Windows 3.1), a call is logged to the trace with
+ * its registers and fails with carry set: the log is how the calls USER
+ * and the drivers make are found (the host's side of the black box).
+ */
+#include "vmm.h"
+
+struct vxdapi {
+    u16 id;
+    const char *name;
+    void (*fn)(struct cregs *r);
+    u16 ver_ax, ver_bx;     /* function 0, as VX3 saw it under Windows 3.1 */
+    u16 ver_cf;
+};
+
+static void api_default(struct cregs *r);
+
+static const struct vxdapi apis[] = {
+    /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
+     * (carry set), SHELL's BX is 1000h */
+    { 0x0003, "VPICD",    api_default, 0x030A, 0, 0 },
+    { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
+    { 0x0009, "Reboot",   api_default, 0x0000, 0, 1 },
+    { 0x000A, "VDD",      api_default, 0x030A, 0, 0 },
+    { 0x000C, "VMD",      api_default, 0x0300, 0, 0 },
+    { 0x000D, "VKD",      api_default, 0x0200, 0, 0 },
+    { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
+    { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
+    { 0x0021, "PageFile", api_default, 0x010A, 0, 0 },
+    { 0x0442, "VTDAPI",   api_default, 0x0001, 0, 0 },
+};
+#define NAPIS (sizeof(apis) / sizeof(apis[0]))
+
+static u32 cur_api;
+
+static void api_default(struct cregs *r)
+{
+    trace("VxD API %s (%x): ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> not implemented\n",
+          apis[cur_api].name, apis[cur_api].id, AX(r), BX(r), CX(r), DX(r), SI(r), DI(r), r->ds, r->es);
+    r->eflags |= EFL_CF;
+}
+
+/* INT 2Fh 1684h in protected mode: the entry for device BX, or 0:0 */
+void vxdapi_get(struct cregs *r, u32 *sel, u32 *off)
+{
+    u32 i;
+    for (i = 0; i < NAPIS; i++)
+        if (apis[i].id == BX(r)) {
+            *sel = SEL_PMBP;
+            *off = PMBP_API + i;
+            return;
+        }
+    *sel = *off = 0;
+}
+
+/* A far call to entry index (PMBP_API + n) */
+void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
+{
+    u32 n = index - PMBP_API;
+    r->eip = retip;
+    r->cs = retcs;
+    if (n >= NAPIS) { r->eflags |= EFL_CF; return; }
+    cur_api = n;
+    if (AX(r) == 0) {               /* get version */
+        SETW(r->eax, apis[n].ver_ax);
+        SETW(r->ebx, apis[n].ver_bx);
+        if (apis[n].ver_cf) r->eflags |= EFL_CF; else r->eflags &= ~EFL_CF;
+        trace("VxD API %s: get version\n", apis[n].name);
+        return;
+    }
+    apis[n].fn(r);
+}

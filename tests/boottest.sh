@@ -15,6 +15,12 @@
 #   gdi        w16's GDI on Microsoft's KRNL286    must be 0
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
+#   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
+#              (tests/win386.sh: Microsoft's KRNL386 and the rest, against
+#              Microsoft's WIN386.EXE; both must reach Final USER init).
+#              Not in the default set yet: w16's boot is intermittent (an
+#              occasional #GP in a hardware interrupt handler, ARCHITECTURE.md
+#              12.3); run it by name: tests/boottest.sh win386
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -112,6 +118,14 @@ for c in $cases; do
             check gdik gdik ref ;;
     usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
             check usergdi usergdi ref ;;
+    win386)
+        if "$root/tests/win386.sh" -t "$secs" -o "$out/win386" > "$out/win386.txt" 2>&1 \
+           && grep -q '^INITDONE=Final USER' "$out/win386/w16-bootlog.txt" \
+           && grep -q '^INITDONE=Final USER' "$out/win386/ms-bootlog.txt"; then
+            echo "ok   win386: 0 pixels"
+        else
+            echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
+        fi ;;
     winoldap)  woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldap winoldap woaref ;;
