@@ -143,7 +143,7 @@ u16 KAPI GetCodeInfo(u32 proc, u16 FAR *info)
 
 /* GetExeVersion (KERNEL.105): the expected Windows version of the
    current task (TDB 1Ah); while booting, KERNEL's own (UNVERIFIED). */
-u16 KAPI GetExeVersion(void)
+u16 KAPI_ES GetExeVersion(void)
 {
     if (cur_task)
         return TW(cur_task, TDB_VERSION);
@@ -152,7 +152,7 @@ u16 KAPI GetExeVersion(void)
 
 /* SetErrorMode (KERNEL.107): the task's error mode (TDB 18h); returns
    the previous one. */
-u16 KAPI SetErrorMode(u16 mode)
+u16 KAPI_ES SetErrorMode(u16 mode)
 {
     u16 old;
     if (!cur_task) {
@@ -321,7 +321,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     return off + n - 1 <= lsl(sel);     /* UNVERIFIED: expand-down */
 }
 
-u16 KAPI IsBadReadPtr(void FAR *p, u16 n)
+u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
 {
     return !range_ok(FP_SEG(p), FP_OFF(p), n, 0);
 }
@@ -394,7 +394,7 @@ char FAR * KAPI lstrcpyn(char FAR *dst, const char FAR *src, u16 n)
 
 /* GetAppCompatFlags (KERNEL.354): Schulman: TDB 4Eh of the task (0: the
    current one). w16 does not fill that field yet, so 0. */
-u32 KAPI GetAppCompatFlags(u16 htask)
+u32 KAPI_ES GetAppCompatFlags(u16 htask)
 {
     if (!htask)
         htask = cur_task;

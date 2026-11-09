@@ -371,7 +371,7 @@ u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
 /* Observed: returns the length copied; at most n - 1 characters and a
    NUL; nothing written for n = 0; an unknown handle gives 0 and an empty
    string. */
-u16 KAPI GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
+u16 KAPI_ES GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
 {
     module FAR *m = module_of(h);
     u16 i;

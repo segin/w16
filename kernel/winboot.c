@@ -37,7 +37,7 @@ static char logpath[DOS_PATHMAX + 16];
 int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
                                  const char FAR *def, char FAR *buf, u16 n,
                                  const char FAR *file);
-u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n);
+u16 KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n);
 u16 KAPI LoadLibrary(const char FAR *name);
 u32 KAPI GetProcAddress(u16 h, const char FAR *name);
 u16 KAPI GetModuleHandle(const char FAR *name);

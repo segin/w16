@@ -709,7 +709,7 @@ void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 
 /* Low word: Windows version, major in the low byte (3.10 -> 0A03h).
    High word: DOS version, major in the high byte. */
-u32 KAPI GetVersion(void)                                     /* KERNEL.3 */
+u32 KAPI_ES GetVersion(void)                                     /* KERNEL.3 */
 {
     regs16 r;
     r.ax = 0x3000;
@@ -772,14 +772,14 @@ u16 KAPI GetTaskQueue(u16 htask)                              /* KERNEL.35 */
 }
 
 /* Observed: AX = the current task, DX = the first task in the list. */
-u32 KAPI GetCurrentTask(void)                                 /* KERNEL.36 */
+u32 KAPI_ES GetCurrentTask(void)                                 /* KERNEL.36 */
 {
     return ((u32)task_head << 16) | cur_task;
 }
 
 /* AX = the current task's PDB, DX = KERNEL's own PSP (observed: also
    what a task's PDB has as its parent). */
-u32 KAPI GetCurrentPDB(void)                                  /* KERNEL.37 */
+u32 KAPI_ES GetCurrentPDB(void)                                  /* KERNEL.37 */
 {
     return ((u32)psp_sel << 16) | (cur_task ? cur_pdb : psp_sel);
 }
@@ -811,7 +811,7 @@ u32 KAPI GDEnv(void)
     return (u32)*(u16 FAR *)MK_FP(pdb, 0x2C) << 16;
 }
 
-u32 KAPI GetWinFlags(void)                                    /* KERNEL.132 */
+u32 KAPI_ES GetWinFlags(void)                                    /* KERNEL.132 */
 {
     return get_winflags();
 }
@@ -825,13 +825,13 @@ void KAPI DirectedYield(u16 htask)                            /* KERNEL.150 */
     OldYield();
 }
 
-u16 KAPI GetNumTasks(void)                                    /* KERNEL.152 */
+u16 KAPI_ES GetNumTasks(void)                                    /* KERNEL.152 */
 {
     return num_tasks;
 }
 
 /* Observed: the hInstance (even), not DS. */
-u16 KAPI GetTaskDS(void)                                      /* KERNEL.155 */
+u16 KAPI_ES GetTaskDS(void)                                      /* KERNEL.155 */
 {
     return cur_task ? TW(cur_task, TDB_HINST) : 0;
 }

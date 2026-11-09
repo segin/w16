@@ -1281,12 +1281,12 @@ static u16 copy_dir(const char *dir, char FAR *buf, u16 n)
     return len;
 }
 
-u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n)             /* KERNEL.134 */
+u16 KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n)             /* KERNEL.134 */
 {
     return copy_dir(win_dir, buf, n);
 }
 
-u16 KAPI GetSystemDirectory(char FAR *buf, u16 n)              /* KERNEL.135 */
+u16 KAPI_ES GetSystemDirectory(char FAR *buf, u16 n)              /* KERNEL.135 */
 {
     return copy_dir(sys_dir, buf, n);
 }

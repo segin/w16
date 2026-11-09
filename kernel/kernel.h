@@ -18,6 +18,32 @@
 
 #define FAR     __far
 #define KAPI    __far __pascal __loadds
+#define KAPI_ES __far __pascal __loadds __saveregs
+
+/* The registers KERNEL's exports keep. Observed on Windows 3.1 (TK24,
+   TK31): besides what any Pascal procedure keeps (SI, DI, BP, DS), they
+   keep BX and CX in most cases and ES in some (KAPI_ES: those observed
+   to), and Microsoft's own modules rely on it (Write after GetVersion,
+   MOUSE.DRV after GetDOSEnvironment). Not ES in the others: GlobalFree,
+   for one, must not give its caller back an ES holding the freed
+   selector. kapi.h (tools/kapiprag.py, at build time) gives every KAPI
+   and KAPI_ES function a convention that changes only AX, DX and ES, so
+   the compiler saves BX and CX; __saveregs saves ES. UNVERIFIED: the
+   carry flag, which 3.1 also keeps in some exports. */
+#pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx es]
+#include "kapi.h"
+
+/* Exported APIs keep every register but DX:AX (and DS, SI, DI, BP, as
+   any Pascal procedure keeps): observed on Windows 3.1 (TK24, TK31),
+   KERNEL's exports keep BX, CX and ES, and Microsoft's own modules rely
+   on it (Write after GetVersion, MOUSE.DRV after GetDOSEnvironment).
+   kapi.h (tools/kapiprag.py, at build time) gives every KAPI function
+   this convention; the compiler then saves what a function changes (ES
+   too: -r in KCFLAGS). Calls through pointers to other modules' code
+   keep the ordinary Pascal convention. UNVERIFIED: the carry flag,
+   which 3.1 also keeps in some exports. */
+#pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx]
+#include "kapi.h"
 #define NULL    ((void *)0)
 
 #define MK_FP(s, o)  ((void __far *)(((u32)(u16)(s) << 16) | (u16)(o)))
@@ -115,7 +141,7 @@ u32  gsize_of_sel(u16 sel);
 u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
 u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
-u32  KAPI GlobalHandle(u16 sel);
+u32  KAPI_ES GlobalHandle(u16 sel);
 u16  galloc_dos(u32 size, u16 owner, u16 *seg);
 u16  galias_code(u16 sel, u16 owner);
 void gfree_owner(u16 owner);
@@ -239,7 +265,7 @@ u16  task_prev_instance(module FAR *m);
 void __cdecl inittask_c(regs16 FAR *r);
 void __cdecl task_exit_c(u16 code);
 void KAPI OldYield(void);
-u32  KAPI GetCurrentTask(void);
+u32  KAPI_ES GetCurrentTask(void);
 u16  get_winflags(void);
 #define WF_PMODE        0x0001
 #define WF_CPU286       0x0002

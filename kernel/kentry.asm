@@ -325,6 +325,7 @@ LOCALAPI GETATOMHANDLE, AHANDLE, 1      ; KERNEL.73
 LOCALAPI LOCALSHRINK,  LSHRINK,  2      ; KERNEL.121
 LOCALAPI LOCALCOUNTFREE, LCOUNTFREE, 0  ; KERNEL.161
 LOCALAPI LOCALHEAPSIZE, LHEAPSIZE, 0    ; KERNEL.162
+LOCALAPI LOCALHANDLEDELTA, LHDELTA, 1   ; KERNEL.310
 
 ; ---------------------------------------------------------------------------
 ; u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,

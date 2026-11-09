@@ -16,7 +16,7 @@ WLINK   := wlink
 
 INC     := -Iinclude -Ikernel
 # KERNEL: large model, SS != DS, 286, no stack checks, no default libraries
-KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC)
+KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC) -I$(B)/kernel
 # bootstrap: small model, 8086, real mode
 BCFLAGS := -q -bt=dos -ms -0 -s -zl -ox -wx -we $(INC)
 # test applications: large model Windows programs, no C runtime
@@ -39,7 +39,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -86,13 +86,16 @@ $(B)/boot/boot.exe: $(BOBJS)
 $(B)/kernel/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
-$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(B)/kernel/kapi.h: tools/kapiprag.py kernel/*.c kernel/*.h
+	@mkdir -p $(@D)
+	python3 tools/kapiprag.py $@ kernel/*.c kernel/*.h
+$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
 KBOOT_C := winboot dosx kmisc selector fault
-$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
@@ -243,6 +246,13 @@ $(DOS)/TK30.EXE: $(B)/tests/start.o $(B)/tests/tk30.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk30.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk30.map file { $(B)/tests/start.o $(B)/tests/tk30.o }
+
+# TK31.EXE: which registers KERNEL's exports keep (tk31s.asm)
+$(B)/tests/tk31.o: tests/apps/tk31ref.h tests/apps/tklog.h
+$(DOS)/TK31.EXE: $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o tests/apps/app.lnk tests/apps/tk31.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk31.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk31.map file { $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c

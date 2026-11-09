@@ -258,7 +258,7 @@ u16 KAPI AllocSelectorArray(u16 n)                            /* KERNEL.206 */
     return s;
 }
 
-u32 KAPI GetSelectorBase(u16 sel)                             /* KERNEL.186 */
+u32 KAPI_ES GetSelectorBase(u16 sel)                             /* KERNEL.186 */
 {
     desc8 d;
     return get_desc(sel, &d) ? d_base(&d) : 0;

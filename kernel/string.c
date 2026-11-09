@@ -11,7 +11,7 @@
  */
 #include "kernel.h"
 
-char FAR * KAPI lstrcpy(char FAR *d, const char FAR *s)      /* KERNEL.88 */
+char FAR * KAPI_ES lstrcpy(char FAR *d, const char FAR *s)      /* KERNEL.88 */
 {
     char FAR *r = d;
     if (!d)
@@ -25,7 +25,7 @@ char FAR * KAPI lstrcpy(char FAR *d, const char FAR *s)      /* KERNEL.88 */
     return r;
 }
 
-char FAR * KAPI lstrcat(char FAR *d, const char FAR *s)      /* KERNEL.89 */
+char FAR * KAPI_ES lstrcat(char FAR *d, const char FAR *s)      /* KERNEL.89 */
 {
     char FAR *r = d;
     if (!d)
@@ -39,7 +39,7 @@ char FAR * KAPI lstrcat(char FAR *d, const char FAR *s)      /* KERNEL.89 */
     return r;
 }
 
-u16 KAPI lstrlen(const char FAR *s)                           /* KERNEL.90 */
+u16 KAPI_ES lstrlen(const char FAR *s)                           /* KERNEL.90 */
 {
     return s ? kstrlen(s) : 0;
 }

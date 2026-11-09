@@ -127,13 +127,13 @@ echo WINEXIT >> C:\\OUT.TXT
 exit"
 if [ -z "$shot" ]; then
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
-    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$secs" \
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
         $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 else
     printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
 sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$work/s.png"
