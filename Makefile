@@ -714,6 +714,13 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 test: dos fonts
 	tests/run-tests.sh
 
+# boot real Windows 3.1 on w16's parts and compare each screen with the
+# reference (tests/boottest.sh); run after every merge: make test does not
+# boot Windows
+boot-test: dos install-tree
+	tests/boottest.sh
+.PHONY: boot-test
+
 clean:
 	rm -rf $(B)
 
