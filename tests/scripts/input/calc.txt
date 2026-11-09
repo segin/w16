@@ -1,11 +1,11 @@
-; Run w16's Calculator (C:\CALC.EXE) from Program Manager and use it with
-; real keys (tests/inputrun.sh SCRIPT OUT -f build/dos/CALC.EXE=CALC.EXE)
+; Run Calculator (CALC from the path) from Program Manager and use it with
+; real keys; w16's: tests/inputrun.sh SCRIPT OUT -f build/dos/CALC.EXE=WINDOWS/CALC.EXE
 key alt+f
 key r
 sleep 2
 shot 00-run
 sleep 4
-type c:\calc.exe
+type calc
 key Return
 sleep 8
 shot 01-calc
