@@ -45,7 +45,7 @@ DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK3
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
@@ -616,6 +616,12 @@ $(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/snap.map file { $(B)/tests/start.o $(B)/tests/snap.o }
 
+# CA1.EXE: drives Calculator and records its display (tests/calcscenarios.sh)
+$(DOS)/CA1.EXE: $(B)/tests/start.o $(B)/tests/ca1.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/ca1.map file { $(B)/tests/start.o $(B)/tests/ca1.o }
+
 # ---- DOS test tools ----
 $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
 	@mkdir -p $(@D)
@@ -839,6 +845,36 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CALC.EXE (shell/calc; ARCHITECTURE.md 15.3): x87 code with
+# emulator fixups (-fpi, WIN87EM) ----
+CALC_SRC := main draw engine fmt paste fpu stat clip help
+CALC_OBJ := $(B)/shell/start.o $(CALC_SRC:%=$(B)/shell/calc/%.o) $(B)/shell/calc/fixrqq.o
+CALC_HDR := shell/calc/calc.h shell/calc/ui.h
+shell: $(DOS)/CALC.EXE
+$(B)/shell/calc/%.o: shell/calc/%.c $(CALC_HDR)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fpi -fo=$@ $<
+$(B)/shell/calc/fixrqq.o: tests/apps/fixrqq.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/res/calc.ico: tools/mkcalcicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcalcicon.py $@
+$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CALC.EXE: $(CALC_OBJ) $(B)/shell/calc/calc.res shell/calc/calc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/calc/calc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/calc/calc.map \
+	    option resource=$(B)/shell/calc/calc.res file { $(CALC_OBJ) }
+# the engine on the host (tools/calchost; tests/calcscenarios.sh)
+$(B)/host/calchost: tools/calchost/calchost.c tools/calchost/fpu_host.c shell/calc/engine.c \
+                    shell/calc/fmt.c shell/calc/paste.c shell/calc/calc.h shell/calc/accel.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O0 -mfpmath=387 -o $@ tools/calchost/calchost.c tools/calchost/fpu_host.c \
+	    shell/calc/engine.c shell/calc/fmt.c shell/calc/paste.c
+
 # ---- shell: CLOCK.EXE (shell/clock), Windows 3.1 only ----
 CLOCK_OBJ := start main face digital intl fontdlg util
 SHELL_CK  := $(B)/shell/start.o $(patsubst %,$(B)/shell/clock/%.o,$(filter-out start,$(CLOCK_OBJ)))
@@ -1001,6 +1037,11 @@ W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT 
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# Calculator (ARCHITECTURE.md 15.3)
+install-tree: $(W16)/CALC.EXE
+$(W16)/CALC.EXE: $(DOS)/CALC.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
