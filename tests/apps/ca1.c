@@ -7,10 +7,12 @@
  *     wait <ms>              keep dispatching messages for <ms> ms
  *     ; ...                  comment (not logged)
  *     # ...                  copied to the log as it is (a section label)
+ *     statdump               log the Statistics Box: "#STAT n=<n> <entries> sel=<n+1>"
  *     anything else          a test line, see below
  * A test line is a sequence of inputs, sent in order to the Calculator
  * window (blanks are ignored):
  *     {n}                    post WM_COMMAND n (a button's ID)
+ *     {Sn}                   post WM_COMMAND n to the Statistics Box
  *     <XX>                   post WM_KEYDOWN + WM_KEYUP, virtual key XX (hex)
  *     [x,y]                  post a left click at client point x,y
  *     'c                     post WM_CHAR c
@@ -158,7 +160,7 @@ static void post_cmd(WORD id)
 
 static void put_clip(const char *s, int n)
 {
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 1);
     char FAR *p;
     int i;
     if (!h)
@@ -230,7 +232,17 @@ static void test_line(const char *l)
         int i;
         if (c == ' ')
             continue;
-        if (c == '{') {
+        if (c == '{' && *p == 'S') {
+            HWND sb = FindWindow(NULL, "Statistics Box");
+            WORD id;
+            p++;
+            id = num(&p, 10);
+            if (*p == '}')
+                p++;
+            if (sb)
+                PostMessage(sb, WM_COMMAND, id, 0);
+            settle();
+        } else if (c == '{') {
             WORD id = num(&p, 10);
             if (*p == '}')
                 p++;
@@ -312,8 +324,45 @@ static void test_line(const char *l)
     out("\r\n");
 }
 
+/* the Statistics Box: "STAT n=<text> <entry>,<entry>,... sel=<n>" */
+static void stat_dump(void)
+{
+    HWND sb = FindWindow(NULL, "Statistics Box"), lb;
+    char t[80];
+    LONG n, k, sel;
+    out("#STAT ");
+    if (!sb) {
+        out("none\r\n");
+        return;
+    }
+    t[0] = 0;
+    SendDlgItemMessage(sb, 408, WM_GETTEXT, sizeof t, (LPARAM)(LPSTR)t);
+    out("n=");
+    out(t);
+    out(" ");
+    lb = GetDlgItem(sb, 407);
+    n = SendMessage(lb, LB_GETCOUNT, 0, 0);
+    sel = SendMessage(lb, LB_GETCURSEL, 0, 0);
+    for (k = 0; k < n && k < 40; k++) {
+        t[0] = 0;
+        if (SendMessage(lb, LB_GETTEXTLEN, (WPARAM)k, 0) < (LONG)sizeof t)
+            SendMessage(lb, LB_GETTEXT, (WPARAM)k, (LPARAM)(LPSTR)t);
+        out(t);
+        out(",");
+    }
+    out(" sel=");
+    t[0] = (char)('0' + (int)(sel + 1) % 10);
+    t[1] = 0;
+    out(t);
+    out("\r\n");
+}
+
 static void run_line(char *l)
 {
+    if (same(l, "statdump")) {
+        stat_dump();
+        return;
+    }
     if (same(l, "run ")) {
         int i;
         tklog("CA1 run\r\n");
