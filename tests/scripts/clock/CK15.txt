@@ -1,0 +1,26 @@
+; another colour scheme
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+snap C:\C1.BMP
+cmd 1
+freeze 10:09:30.50 1500
+snap C:\C2.BMP
+syscmd F020
+freeze 10:09:30.50 1500
+snap C:\C3.BMP
+syscmd F120
+cmd 2
+freeze 10:09:30.50 1500
+syscmd F020
+freeze 10:09:30.50 1500
+snap C:\C4.BMP
+syscmd F120
+movewin 0 0 400 300
+freeze 10:09:30.50 1500
+snap C:\C5.BMP
+cmd 6
+freeze 10:09:30.50 1500
+snap C:\C6.BMP
+close
+wait 1000
