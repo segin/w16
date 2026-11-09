@@ -549,8 +549,8 @@ w16's DOSX.EXE is `dosx/` (NASM, `nasm -f bin`, one 64 KB segment with a hand-ma
 
 **Results.**
 - `WIN /S` (`tests/dropin.sh`), 386 (DOSBox): Microsoft's KRNL286 on our DOSX reaches Program Manager pixel-identical to Microsoft's DOSX (`-r -x`); so does w16's KRNL286 on our DOSX (`-x`), and the all-w16 start chain, our WIN.COM → Microsoft's WSWAP → our DOSX → our KRNL286 (`-w -x`), each compared with ImageMagick `compare -metric AE`: 0 pixels.
-- 80286 (`-p 286`, DOSBox-X cputype=286, mode switches back to real mode by processor reset): Microsoft's KRNL286 on our DOSX boots to Program Manager, `boot: complete`, as on Microsoft's DOSX.
-- The test suite (35 programs, also the DOSBox-X floating-point runs) passes on our DOSX as on HDPMI16.
+- 80286 (`-p 286`, DOSBox-X cputype=286, mode switches back to real mode by processor reset): Microsoft's KRNL286 on our DOSX boots to Program Manager pixel-identical to Microsoft's DOSX. w16's KRNL286 on our DOSX boots there too (`-x -p 286 -i w16:watchdog=0`, `boot: complete`).
+- The test suite (35 programs, also the DOSBox-X floating-point runs) passes on our DOSX as on HDPMI16 (`make test` still uses HDPMI16).
 - DX1 and DX2 under both DOSXes: every descriptor-management result matches (selectors handed out and their order, the free chain, the descriptors' bytes, the failures), the protected-mode entry state matches (CS 02E7, DS=SS 027F, ES 02DF with limit 0100h, environment 02D7, CPL 3, IOPL 3, GDT/IDT limits, LDTR 0038, TR 0088, the GDT entries a ring-3 program can see); the differences are listed below.
 
 **What Microsoft's DOSX does** (values under DOSBox, memsize=16; DX probe lines in brackets):
