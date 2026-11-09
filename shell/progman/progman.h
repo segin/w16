@@ -143,12 +143,16 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_FILTER_ICONS    21
 #define IDS_FILENOTFOUND    22
 #define IDS_ABOUTMEM        23
+#define IDS_INVALIDPATH     24
+#define IDS_NOASSOC         25
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
 extern HWND g_frame, g_client;
 extern BOOL g_autoarrange, g_minonrun, g_savesettings, g_isshell;
 extern char g_ini[];                    /* "PROGMAN.INI" */
+extern BOOL g_norun, g_noclose, g_nosave, g_nofilemenu;    /* [Restrictions] */
+extern UINT g_editlevel;
 
 /* ---- group.c ----
  * Zero-One-Infinity: no fixed limits on groups, items, or string lengths;

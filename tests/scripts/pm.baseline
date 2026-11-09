@@ -17,6 +17,14 @@ delete/D3 857
 delete/D4 1440
 delitem/C1 874
 delitem/C2 874
+dragdrop/DA1 0
+dragdrop/DA2 0
+dragdrop/DA3 0
+dragdrop/DA4 0
+dragdrop/DA5 0
+dragdrop2/DB1 0
+dragdrop2/DB2 0
+dragdrop3/DC1 0
 grpfile/G1 1166
 maxclose/Z1 0
 maxclose/Z2 0

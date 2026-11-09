@@ -1,0 +1,39 @@
+; Files dropped from File Manager with Auto Arrange on: a file dropped on
+; an item, one on the group's caption; the group is arranged after each.
+;pre MD C:\PMDROP
+;pre COPY C:\WINDOWS\CALC.EXE C:\PMDROP\CALC.EXE
+;pre COPY C:\WINDOWS\NOTEPAD.EXE C:\PMDROP\NOTEPAD.EXE
+;pre COPY C:\WINDOWS\WRITE.EXE C:\PMDROP\WRITE.EXE
+;pre ECHO hello> C:\PMDROP\README.TXT
+;pre ECHO data> C:\PMDROP\DATA.XYZ
+run WINFILE.EXE
+wait 3000
+move 0 0 640 250
+wait 500
+mclick 60 113
+wait 1500
+run PROGMAN.EXE
+wait 3000
+move 0 250 640 230
+wait 500
+menu o
+char a
+wait 1000
+; Notepad on File Manager's icon
+mdown 300 145
+mmove 300 170
+mmove 40 340
+mup 40 340
+wait 2000
+snap C:\DB1.BMP
+; README.TXT on Main's caption
+mdown 300 161
+mmove 300 186
+mmove 210 300
+mup 210 300
+wait 2000
+snap C:\DB2.BMP
+close
+wait 1500
+close
+wait 1500
