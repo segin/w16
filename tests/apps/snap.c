@@ -26,6 +26,7 @@
  *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
  *     cursor                 log the current cursor: arrow, no, or other
  *     copyfile <from> <to>   copy a file (to catch it mid-session)
+ *     exitwin                ExitWindows; logs it if an application refused
  *     blank <l> <t> <r> <b>  paint a screen rectangle black, to keep
  *                            changing content (free memory) out of the
  *                            next snap
@@ -703,6 +704,9 @@ static void run_line(char *l)
         }
         PatBlt(dc, v[0], v[1], v[2] - v[0], v[3] - v[1], BLACKNESS);
         ReleaseDC(NULL, dc);
+    } else if (same(l, "exitwin")) {
+        if (!ExitWindows(0, 0))
+            out(" -> refused");
     } else if (same(l, "copyfile")) {
         copy_file(arg);
     } else if (same(l, "cursor")) {
