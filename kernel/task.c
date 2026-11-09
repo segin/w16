@@ -219,6 +219,25 @@ static void set_psp(u16 pdb)
     rm_int(0x21, 0x5000, seg_of(pdb), 0, 0);
 }
 
+/* The task's DTA (TDB 62h) becomes the DOS extender's: DOSX keeps one
+   protected-mode DTA, set by INT 21h AH=1Ah, and copies FindFirst's
+   results there. w16's INT 21h hook records each task's (kentry.asm);
+   the switch sets it back. (Without this File Manager listed another
+   task's buffer as its directory.) */
+static void set_dta(u16 t)
+{
+    regs16 r;
+    u16 off = TW(t, TDB_DTA), sel = TW(t, TDB_DTA + 2);
+    if (!sel)
+        return;
+    r.ax = 0x1A00;
+    r.dx = off;
+    r.ds = sel;
+    r.es = 0;
+    r.bx = r.cx = r.si = r.di = 0;
+    dos21(&r);
+}
+
 static u16 dos(u16 ax, u16 dx, u16 ds)
 {
     regs16 r;
@@ -344,6 +363,7 @@ static void switch_to(u16 t)
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
+    set_dta(t);
     restore_dir(t, from);
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
@@ -560,6 +580,7 @@ u16 task_boot(void)
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
+    set_dta(t);
     restore_dir(t, 0);
     in_sched = 0;
     task_switch((u16 FAR *)boot_sssp, TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));

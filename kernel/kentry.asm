@@ -108,6 +108,31 @@ int21_handler:
         pop ds
         cmp ah, 4Ch
         je .exit
+        cmp ah, 1Ah
+        jne .not1a
+        ; set DTA: the running task's (TDB 62h), then to DOS as before
+        push ds
+        push bx
+        push dx
+        mov bx, DGROUP
+        mov ds, bx
+        mov bx, [_cur_task wrt DGROUP]
+        or bx, bx
+        jz .dta0
+        pop dx
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 6]              ; the caller's DS
+        mov ds, bx
+        pop word [64h]
+        mov [62h], dx
+        pop bp
+.dta0:  pop dx
+        pop bx
+        pop ds
+        jmp .chain
+.not1a:
         cmp ah, 51h
         je .pdb
         cmp ah, 62h
