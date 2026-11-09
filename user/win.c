@@ -22,10 +22,13 @@ void byte_align(PWND w)
     /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
        message boxes are at 136, 168, 120 where centring gives 137, 169,
        122) */
+    /* nearest multiple of 8 also left of the screen: (x + 4) & ~7 (C's
+       division rounds towards zero, which put a window dragged partly off
+       the left edge 8 pixels right of where Windows 3.1 puts it) */
     if (cs & CS_BYTEALIGNCLIENT)
-        dx = (w->rcClient.left + 4) / 8 * 8 - w->rcClient.left;
+        dx = ((w->rcClient.left + 4) & ~7) - w->rcClient.left;
     else
-        dx = (w->rcWindow.left + 4) / 8 * 8 - w->rcWindow.left;
+        dx = ((w->rcWindow.left + 4) & ~7) - w->rcWindow.left;
     if (dx) {
         OffsetRect(&w->rcWindow, dx, 0);
         OffsetRect(&w->rcClient, dx, 0);
