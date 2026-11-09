@@ -32,6 +32,9 @@
 
 /* ---- output helpers (screen coordinates) ---- */
 
+static int wide_polyline(NPDC dc, POINT __far *p, int n, int w);
+static int pen_width(NPDC dc);
+
 static int out_polyline(NPDC dc, POINT __far *p, int n)
 {
     DRVOUTPUT fn = (DRVOUTPUT)dc->dev->fn[DRV_OUTPUT];
@@ -42,6 +45,8 @@ static int out_polyline(NPDC dc, POINT __far *p, int n)
     int i;
     if (n < 2 || !pen)
         return 0;
+    if (pen_width(dc) > 1)
+        return wide_polyline(dc, p, n, pen_width(dc));
     box.left = box.right = p[0].x;
     box.top = box.bottom = p[0].y;
     for (i = 1; i < n; i++) {
@@ -198,7 +203,7 @@ static int round_div(long num, long den)
 }
 
 /* fill a polygon (screen coordinates), rows top..bottom-1 */
-static void fill_polygon(SPANS *s, POINT NEAR *p, int n, int winding)
+static void fill_polygon(SPANS *s, POINT __far *p, int n, int winding)
 {
     int ymin = p[0].y, ymax = p[0].y, y, i, j;
     int xs[2 * 64], dirs[2 * 64];
@@ -361,6 +366,62 @@ static void ellipse_outline(NPDC dc, int l, int t, int r, int b)
     p[n++] = p[0];
     out_polyline(dc, (POINT __far *)p, n);
     LocalFree(hp);
+}
+
+/* ---- wide pens: UNVERIFIED geometry (3.1's not observed in detail) ----
+   each segment a filled quadrilateral w wide, each vertex a filled disc
+   w across, drawn as scan lines with the pen */
+
+static long isqrt(long v)
+{
+    long r = 0, b = 1L << 30;
+    if (v <= 0)
+        return 0;
+    while (b > v)
+        b >>= 2;
+    while (b) {
+        if (v >= r + b) {
+            v -= r + b;
+            r = (r >> 1) + b;
+        } else
+            r >>= 1;
+        b >>= 2;
+    }
+    return r;
+}
+
+static int wide_polyline(NPDC dc, POINT __far *p, int n, int w)
+{
+    SPANS s;
+    int i, y;
+    spans_begin(&s, dc, 1);
+    for (i = 0; i + 1 < n; i++) {
+        long dx = p[i + 1].x - p[i].x, dy = p[i + 1].y - p[i].y;
+        long len = isqrt(dx * dx + dy * dy);
+        POINT q[4];
+        int ox, oy;
+        if (!len)
+            continue;
+        ox = (int)((-dy * w + len) / (2 * len));
+        oy = (int)((dx * w + len) / (2 * len));
+        q[0].x = p[i].x + ox;     q[0].y = p[i].y + oy;
+        q[1].x = p[i + 1].x + ox; q[1].y = p[i + 1].y + oy;
+        q[2].x = p[i + 1].x - ox; q[2].y = p[i + 1].y - oy;
+        q[3].x = p[i].x - ox;     q[3].y = p[i].y - oy;
+        fill_polygon(&s, q, 4, 1);
+    }
+    for (i = 0; i < n; i++) {
+        int l = p[i].x - w / 2, t = p[i].y - w / 2;
+        for (y = t; y < t + w; y++) {
+            int xs[2];
+            ellipse_row(l, t, l + w, t + w, y, &xs[0], &xs[1]);
+            xs[1]++;
+            if (xs[0] < xs[1])
+                spans_row(&s, y, xs, 2);
+        }
+    }
+    spans_end(&s);
+    return 1;
 }
 
 /* ---- API ---- */
