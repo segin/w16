@@ -21,6 +21,11 @@
 #              Not in the default set yet: w16's boot is intermittent (an
 #              occasional #GP in a hardware interrupt handler, ARCHITECTURE.md
 #              12.3); run it by name: tests/boottest.sh win386
+#   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
+#              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
+#              screen and Windows comes back; against Microsoft's WINOLDAP
+#              doing the same                       must be 0
+#   winoldapk  the same on w16's KRNL286            must be 0
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
@@ -44,7 +49,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi tree}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk tree}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 fails=0
@@ -79,6 +84,24 @@ check() {
 refdone=
 ref() { [ -n "$refdone" ] || { boot ref -r; refdone=1; }; }
 
+# the WINOLDAP cases: a PIF for COMMAND.COM /C ECHO HI, started by WIN.INI run=
+woa=$root/build/dos/WINOLDAP.MOD
+woaref=
+woafiles() {
+    [ -f "$out/HI.PIF" ] && return
+    refwin=$root/.tools/ref/win31/cdrive/WINDOWS
+    python3 "$root/tools/mkpif.py" "$refwin/_DEFAULT.PIF" "$out/HI.PIF" \
+        'title=Echo Hi' 'program=COMMAND.COM' 'params=/C ECHO HI'
+    cp "$refwin/WIN.INI" "$out/WIN.INI"
+    python3 "$root/tests/scripts/iniset.py" "$out/WIN.INI" 'windows:run=C:\HI.PIF'
+}
+woaref() {
+    [ -n "$woaref" ] && return
+    woafiles
+    boot woaref -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+    woaref=1
+}
+
 for c in $cases; do
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
@@ -103,6 +126,12 @@ for c in $cases; do
         else
             echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
         fi ;;
+    winoldap)  woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+                   -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
+               check winoldap winoldap woaref ;;
+    winoldapk) woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+                   -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
+               check winoldapk winoldapk woaref ;;
     tree)
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"

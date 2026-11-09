@@ -237,7 +237,9 @@ _task_switch:
 ; popped; the far address of its entry point is next on the stack, at its
 ; initial SP. AX = 0 at a task's entry (observed on Windows 3.1).
 global task_tramp
+extern task_start_hook          ; khook.asm: the task-start notification
 task_tramp:
+        call far task_start_hook
         xor ax, ax
         retf
 

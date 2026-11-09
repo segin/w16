@@ -1,0 +1,16 @@
+# no swap directory: no TEMP and no hard disk, so the swap directory is
+# A:\ (WIN.COM, ARCHITECTURE.md 9.5) and there is no room for the program
+# opts: notemp
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 6
+shot nodisk
+key Return
+sleep 4
+shot after
+key alt+F4
+sleep 3
+key Return
+sleep 8
