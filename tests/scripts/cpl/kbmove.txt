@@ -1,0 +1,21 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Keyboard: the delay bar one step to Short, the rate bar five steps to
+; Slow, OK: WIN.INI KeyboardDelay=1, KeyboardSpeed=26
+run CONTROL.EXE KEYBOARD
+wait 4000
+snap K0.BMP
+key 27
+wait 300
+key 09
+wait 300
+key 25
+key 25
+key 25
+key 25
+key 25
+wait 300
+key 09
+wait 300
+snap K1.BMP
+key 0D
+wait 2000

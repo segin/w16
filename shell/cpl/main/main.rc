@@ -1,0 +1,62 @@
+/* main.rc - w16 MAIN.CPL resources. Dialog layouts follow the Windows 3.1
+   MAIN.CPL dialog templates (positions, IDs, styles: format facts read
+   with tools/resdump.py); the labels are the original's plain UI text;
+   the icons are w16's own (tools/cplicons.py). */
+#include <windows.h>
+#include "maincpl.h"
+
+IDI_COLOR    ICON "color.ico"
+IDI_FONTS    ICON "fonts.ico"
+IDI_PORTS    ICON "ports.ico"
+IDI_MOUSE    ICON "mouse.ico"
+IDI_DESKTOP  ICON "desktop.ico"
+IDI_KEYBOARD ICON "keyboard.ico"
+IDI_PRINTERS ICON "printers.ico"
+IDI_INTL     ICON "intl.ico"
+IDI_DATETIME ICON "datetime.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_NOMEM,          "Not enough memory available for this task.\n\nQuit one or more applications to increase available memory, and then try again."
+    IDS_CONTROLPANEL,   "Control Panel"
+    IDS_NAME_COLOR,     "&Color"
+    IDS_NAME_PRINTERS,  "&Printers"
+    IDS_NAME_FONTS,     "&Fonts"
+    IDS_NAME_INTL,      "&International"
+    IDS_NAME_PORTS,     "P&orts"
+    IDS_NAME_KEYBOARD,  "&Keyboard"
+    IDS_NAME_MOUSE,     "&Mouse"
+    IDS_NAME_DATETIME,  "Date/&Time"
+    IDS_NAME_DESKTOP,   "&Desktop"
+    600, "Changes the Windows screen colors"
+    601, "Installs and removes printers, and sets printing options"
+    602, "Adds and removes fonts and sets TrueType options"
+    603, "Specifies international settings"
+    604, "Specifies communications settings for serial ports"
+    605, "Specifies the keyboard repeat rate and delay"
+    606, "Changes settings for your mouse"
+    607, "Changes the date and time of your computer's clock"
+    608, "Changes the look of your desktop"
+    IDS_NOTYET,         "This applet is not part of w16 yet."
+END
+
+DLG_KEYBOARD DIALOG 6, 0, 170, 116
+STYLE 0x80C800C0
+CAPTION "Keyboard"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Keyboard Speed", -1, "button", 0x50000007, 6, 6, 120, 103
+    CONTROL "&Delay Before First Repeat", -1, "static", 0x50020000, 10, 17, 100, 9
+    CONTROL "Long", -1, "static", 0x50020000, 10, 26, 50, 9
+    CONTROL "Short", -1, "static", 0x50020002, 73, 26, 50, 9
+    CONTROL "", IDC_KB_DELAY, "scrollbar", 0x50010000, 10, 35, 112, 12
+    CONTROL "&Repeat Rate", -1, "static", 0x50020000, 10, 50, 50, 9
+    CONTROL "Slow", -1, "static", 0x50020000, 10, 59, 50, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 72, 59, 50, 9
+    CONTROL "", IDC_KB_SPEED, "scrollbar", 0x50010000, 10, 68, 112, 12
+    CONTROL "&Test:", -1, "static", 0x50020000, 10, 83, 50, 9
+    CONTROL "", IDC_KB_TEST, "edit", 0x50810000, 10, 93, 112, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 130, 10, 36, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 130, 28, 36, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 130, 48, 36, 14
+END

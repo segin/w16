@@ -11,6 +11,11 @@ cmdname/S0 0
 cmdname/S1 0
 grow/S0 0
 grow/S1 0
+kbmove/K0 546
+kbmove/K1 560
+mainwin/M1 1444
+mainwin/S0 2972
+mainwin/S1 2972
 mmcpl/S0 0
 newinq/M1 0
 newinq/S0 0

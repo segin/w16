@@ -970,7 +970,8 @@ $(DOS)/CP1.CPL: $(B)/shell/cpl/libentry.o $(B)/tests/cp1/cp1.o $(B)/tests/cp1/cp
 	    option map=$(B)/tests/cp1/cp1.map option resource=$(B)/tests/cp1/cp1.res \
 	    file { $(B)/shell/cpl/libentry.o $(B)/tests/cp1/cp1.o }
 # CONTROL.EXE: medium model like the other shell programs (shell/start.asm)
-CPICONS := $(B)/shell/cpl/res/control.ico
+CPICONS := $(patsubst %,$(B)/shell/cpl/res/%.ico,control color fonts ports mouse \
+             desktop keyboard printers intl datetime drivers sound enh386)
 dos: $(DOS)/CONTROL.EXE
 $(CPICONS) &: tools/cplicons.py tools/mkicons.py
 	python3 tools/cplicons.py $(B)/shell/cpl/res
@@ -988,3 +989,19 @@ $(DOS)/CONTROL.EXE: $(B)/shell/start.o $(B)/shell/control/control.o \
 	    option map=$(B)/shell/control/control.map \
 	    option resource=$(B)/shell/control/control.res \
 	    file { $(B)/shell/start.o $(B)/shell/control/control.o }
+# MAIN.CPL (shell/cpl/main): the applets of the original's MAIN.CPL
+MAINCPL_O := $(B)/shell/cpl/libentry.o $(B)/shell/cpl/main/main.o \
+             $(B)/shell/cpl/main/keyboard.o
+dos: $(DOS)/MAIN.CPL
+$(B)/shell/cpl/main/%.o: shell/cpl/main/%.c shell/cpl/main/maincpl.h shell/cpl/cpl.h
+	@mkdir -p $(@D)
+	$(WCC) $(CPCFLAGS) -fo=$@ $<
+$(B)/shell/cpl/main/main.res: shell/cpl/main/main.rc shell/cpl/main/maincpl.h $(CPICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/cpl/main -i=shell/cpl \
+	    -i=$(B)/shell/cpl/res -fo=$@ $<
+$(DOS)/MAIN.CPL: $(MAINCPL_O) $(B)/shell/cpl/main/main.res shell/cpl/main/main.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cpl/main/main.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/cpl/main/main.map \
+	    option resource=$(B)/shell/cpl/main/main.res file { $(MAINCPL_O) }

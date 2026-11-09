@@ -1,0 +1,10 @@
+# wlink directives for MAIN.CPL (objects and output come from the Makefile)
+format windows dll
+option quiet
+option start=libentry
+option heapsize=2k
+option modname=MAINCPL
+option description 'w16 Control Panel applets'
+library windows.lib
+export CPLAPPLET.1
+export WEP resident
