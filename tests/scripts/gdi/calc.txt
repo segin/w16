@@ -1,0 +1,8 @@
+run CALC.EXE
+wait 3000
+snap C:\CALC.BMP
+menu v
+wait 300
+char s
+wait 1000
+snap C:\CALCSCI.BMP

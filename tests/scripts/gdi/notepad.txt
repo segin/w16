@@ -1,0 +1,10 @@
+run NOTEPAD.EXE
+wait 3000
+type Hello, world! The quick brown fox.
+wait 500
+snap C:\NOTEPAD.BMP
+menu e
+wait 300
+snap C:\NPEDIT.BMP
+key 1B
+key 1B
