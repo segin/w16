@@ -595,6 +595,8 @@ static void dpmi_call(struct cregs *r)
 /* ---- INT 2Fh in protected mode ---- */
 int int2f_pm(struct cregs *r)
 {
+    if (dpmi_verbose && (AX(r) >> 8) == 0x16 && AX(r) != 0x1689 && AX(r) != 0x1680)
+        trace("[2F:%x bx=%x]", AX(r), BX(r));
     switch (AX(r)) {
     case 0x1600:
         SETW(r->eax, 0x0A03);
