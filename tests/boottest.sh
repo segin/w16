@@ -15,6 +15,8 @@
 #   gdi        w16's GDI on Microsoft's KRNL286    must be 0
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
+#   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
+#   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
 #              (tests/win386.sh: Microsoft's KRNL386 and the rest, against
 #              Microsoft's WIN386.EXE; both must reach Final USER init).
@@ -61,9 +63,10 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk tree allw16full input allw16input}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
+shell=$root/build/dos/SHELL.DLL
 fails=0
 
 # boot NAME [dropin.sh options...]: one boot, screenshot NAME.png, log NAME.txt
@@ -130,6 +133,10 @@ for c in $cases; do
             check gdik gdik ref ;;
     usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
             check usergdi usergdi ref ;;
+    shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
+            check shell shell ref ;;
+    shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
+            check shellk shellk ref ;;
     win386)
         if "$root/tests/win386.sh" -t "$secs" -o "$out/win386" > "$out/win386.txt" 2>&1 \
            && grep -q '^INITDONE=Final USER' "$out/win386/w16-bootlog.txt" \

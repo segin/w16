@@ -1034,7 +1034,7 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
 W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
-           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
 # Calculator (ARCHITECTURE.md 15.3)
@@ -1049,7 +1049,7 @@ $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
-$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL: $(W16SYS)/%: $(DOS)/%
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
@@ -1145,6 +1145,49 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
 
+# ---- SHELL.DLL probes (tests/apps/shN.c; ARCHITECTURE.md 13): run as the
+# shell on Windows 3.1 and with w16's SHELL.DLL (tests/shellprobe.sh)
+SHPROBES := SH1 SH2 SH3 SH4 SH5 SH6 SH7 SH8 SH9 SH10 SH11 SH12 SH13
+$(B)/tests/sh%.o: tests/apps/sh%.c tests/apps/sh%ref.h tests/apps/shprobe.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/SH%.EXE: $(B)/tests/start.o $(B)/tests/sh%.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/sh$*.map file { $(B)/tests/start.o $(B)/tests/sh$*.o } \
+	    library shell.lib
+shprobes: $(SHPROBES:%=$(DOS)/%.EXE)
+dos: shprobes
+.PHONY: shprobes
+
+# ---- SHELL.DLL: w16's shell library (shell/shelldll/; ARCHITECTURE.md 13).
+# Windows 3.x only: Windows 2.x has no SHELL.DLL. Large model, SS != DS.
+SHCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=SHELL_TEXT \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+SHDLL_C  := util reg drag env hook icon exec about misc
+SHDLL_O  := $(B)/shelldll/entry.o $(B)/shelldll/i4.o $(SHDLL_C:%=$(B)/shelldll/%.o)
+$(B)/shelldll/%.o: shell/shelldll/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shelldll/%.o: shell/shelldll/%.c shell/shelldll/shell.h
+	@mkdir -p $(@D)
+	$(WCC) $(SHCFLAGS) -fo=$@ $<
+$(B)/shelldll/shlogo.bmp: tools/mkaboutlogo.py tools/mklogo.py
+	@mkdir -p $(@D)
+	python3 -B tools/mkaboutlogo.py $@
+$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll \
+	    -fo=$@ $<
+$(DOS)/SHELL.DLL: $(SHDLL_O) $(B)/shelldll/shell.res shell/shelldll/shell.lnk tools/nenoname.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/shelldll/shell.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shelldll/shell.map \
+	    option resource=$(B)/shelldll/shell.res file { $(SHDLL_O) }
+	python3 tools/nenoname.py $@ 104-128
+	python3 tools/nemark.py $@ 3.10
+shelldll: $(DOS)/SHELL.DLL
+dos: $(DOS)/SHELL.DLL
+.PHONY: shelldll
 # ---- shell: NOTEPAD.EXE (Windows 3.1; shell/notepad, ARCHITECTURE.md 15.1) ----
 NP_SRC  := main file find print help util
 SHELL_NP  := $(B)/shell/start.o $(NP_SRC:%=$(B)/shell/notepad/%.o)
