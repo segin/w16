@@ -321,6 +321,19 @@ cb_common:
         mov byte [cs:x_kind], 0
         jmp rmx_common
 
+; ps2_entry: what the BIOS gets as the pointing-device handler (INT 15h
+; C207h) when the client gave a protected-mode one (op_int15). The BIOS
+; far-calls it with four words on the stack; the client's handler gets
+; them the same way (r0_rmx, kind 2), and this returns with RETF.
+ps2_entry:
+        pushf
+        cli
+        mov [cs:x_ax], ax
+        pop word [cs:x_fl]
+        mov word [cs:x_idx], 0
+        mov byte [cs:x_kind], 2
+        jmp rmx_common
+
 ; rmhook_tab: an entry "call rmhook_common" per hookable vector
 ; (hook_vecs); IVT[n] points at n's entry while the client handles
 ; real-mode interrupt n in protected mode
@@ -415,7 +428,9 @@ rmx_resume:
         push word [si+R_FL]
         push word [si+R_CS]
         push word [si+R_IP]
-.hook:  push word [si+R_DS]
+.hook:  cmp byte [si+R_SIZE], 2
+        je .far
+        push word [si+R_DS]
         push word [si+R_ESI]
         mov ax, [si+R_EAX]
         mov bx, [si+R_EBX]
@@ -427,6 +442,20 @@ rmx_resume:
         pop si
         pop ds
         iret
+.far:   push word [si+R_FL]             ; the pointing-device handler:
+        push word [si+R_DS]             ; back to the BIOS with RETF
+        push word [si+R_ESI]
+        mov ax, [si+R_EAX]
+        mov bx, [si+R_EBX]
+        mov cx, [si+R_ECX]
+        mov dx, [si+R_EDX]
+        mov di, [si+R_EDI]
+        mov bp, [si+R_EBP]
+        mov es, [si+R_ES]
+        pop si
+        pop ds
+        popf
+        retf
 
 ; ---------------------------------------------------------------------------
 ; r0_call3: run ring-3 code from ring 0 and come back when it enters the
