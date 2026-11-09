@@ -191,7 +191,6 @@ int WINAPI GetKeyboardType(int which)
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
     WORD __far *w = (WORD __far *)pv;
-    ulog("SystemParametersInfo\r\n");  /* TRACE */
     (void)ui, (void)ini;
     switch (what) {
     case SPI_GETBEEP: *w = 1; return TRUE;

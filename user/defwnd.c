@@ -449,7 +449,6 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         BeginPaint(h, &ps);
         if ((w->style & WS_MINIMIZE) && ((PCLS)w->cls)->hIcon) {
             send_message(h, WM_ICONERASEBKGND, (WPARAM)ps.hdc, 0);
-            ulogx("paint icon ", (WORD)((PCLS)w->cls)->hIcon);  /* TRACE */
             DrawIcon(ps.hdc, 2, 2, ((PCLS)w->cls)->hIcon);
         }
         EndPaint(h, &ps);
@@ -505,7 +504,6 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_QUERYOPEN:
         return 1;
     case WM_SYSCOMMAND:
-        ulogx("WM_SYSCOMMAND ", wp);
         sys_command(h, w, wp, lp);
         return 0;
     case WM_SYSKEYDOWN:

@@ -336,7 +336,6 @@ void update_window(HWND h, BOOL children)
     HWND c;
     if (!w || !(w->style & WS_VISIBLE))
         return;
-    ulogx("update_window flags ", (WORD)w->flags);
     if (w->flags & WF_INPAINT) {
         if (w->hq == cur_hq() || !booted)
             send_message(h, WM_PAINT, 0, 0);

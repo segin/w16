@@ -123,7 +123,6 @@ LPSTR WINAPI AnsiLower(LPSTR s)
 UINT WINAPI AnsiUpperBuff(LPSTR s, UINT n)
 {
     UINT i;
-    ulog("AnsiUpperBuff\r\n");  /* TRACE */
     if (!n)
         n = 0x10000L > 0xFFFF ? 0xFFFF : 0;     /* 0 means 64K (3.1 SDK) */
     for (i = 0; i < n; i++)
@@ -378,7 +377,6 @@ int WINAPI LoadString(HINSTANCE hinst, UINT id, LPSTR buf, int n)
     const BYTE __far *p;
     UINT i;
     int len = 0;
-    ulog("LoadString\r\n");  /* TRACE */
     if (n <= 0 || !buf)
         return 0;
     r = FindResource(hinst, MAKEINTRESOURCE((id >> 4) + 1), RT_STRING);

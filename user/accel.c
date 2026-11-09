@@ -9,7 +9,6 @@
 HACCEL WINAPI LoadAccelerators(HINSTANCE hinst, LPCSTR name)
 {
     HRSRC r = FindResource(hinst, name, RT_ACCELERATOR);
-    ulog("LoadAccelerators\r\n");  /* TRACE */
     return r ? (HACCEL)LoadResource(hinst, r) : 0;
 }
 
@@ -55,9 +54,6 @@ int WINAPI TranslateAccelerator(HWND h, HACCEL ha, MSG __far *m)
             if (match) {
                 HMENU menu;
                 UINT state;
-                ulogx("accelerator key ", key);
-                ulogx("  message ", m->message);
-                ulogx("  command ", cmd);
                 menu = GetMenu(h);
                 state = menu ? GetMenuState(menu, cmd, MF_BYCOMMAND) : (UINT)-1;
                 if (state == (UINT)-1 || !(state & (MF_GRAYED | MF_DISABLED))) {

@@ -257,7 +257,6 @@ void WINAPI FinalUserInit(void)
 
 int WINAPI GetSystemMetrics(int i)
 {
-    ulog("GetSystemMetrics\r\n");  /* TRACE */
     return i >= 0 && i < SM_CMETRICS + 8 ? sysmet[i] : 0;
 }
 

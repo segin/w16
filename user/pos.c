@@ -239,8 +239,6 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     PLACE *pl;
     if (!w)
         return FALSE;
-    ulogx("ShowWindow ", (WORD)h);
-    ulogx("  cmd ", cmd);
     wasvis = (w->style & WS_VISIBLE) != 0;
     switch (cmd) {
     case SW_HIDE:

@@ -61,7 +61,6 @@ HOOKPROC WINAPI SetWindowsHook(int type, HOOKPROC proc)
 {
     WORD *c = chain(type);
     PHOOK prev = c && *c ? (PHOOK)*c : (PHOOK)0;
-    ulog("SetWindowsHook\r\n");  /* TRACE */
     if (!add_hook(type, proc, 0, 0, TRUE))
         return 0;
     return prev ? prev->proc : 0;

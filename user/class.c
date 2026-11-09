@@ -114,7 +114,6 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
 ATOM WINAPI RegisterClass(const WNDCLASS __far *wc)
 {
     PCLS c;
-    ulog("RegisterClass\r\n");  /* TRACE */
     c = register_class(wc, FALSE);
     return c ? c->atom : 0;
 }

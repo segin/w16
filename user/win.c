@@ -130,8 +130,6 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         ulogx("", LOWORD((DWORD)clsname));
         return 0;
     }
-    ulogx("CreateWindow class atom ", c->atom);
-    ulogx("  style hi ", HIWORD(style));
     pw = parent ? valid_wnd(parent) : (PWND)0;
     if ((style & WS_CHILD) && !pw)
         return 0;
