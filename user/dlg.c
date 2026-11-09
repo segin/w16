@@ -415,6 +415,8 @@ static int modal_loop(HWND h, HWND owner)
     if (owner && valid_wnd(owner)) {
         ownerwas = !EnableWindow(owner, FALSE);
     }
+    /* bit 1: EndDialog enables the owner again (it was enabled before) */
+    SetWindowWord(h, DW_MODAL, ownerwas ? 3 : 1);
     ShowWindow(h, SW_SHOWNORMAL);
     UpdateWindow(h);
     while (valid_wnd(h) && !GetWindowWord(h, DW_ENDED)) {
@@ -491,6 +493,15 @@ void WINAPI EndDialog(HWND h, int code)
     SetWindowWord(h, DW_ENDCODE, code);
     if (!GetWindowWord(h, DW_MODAL))
         return;
+    /* the owner enabled before the dialog hides, so the activation goes
+       back to it (ShellAbout's dialog left Program Manager inactive and
+       deaf otherwise); a dialog its program hid already (Program
+       Manager's Run, before WinExec) is not active and gives nothing */
+    {
+        PWND w = valid_wnd(h);
+        if ((GetWindowWord(h, DW_MODAL) & 2) && w && w->hwndOwner && valid_wnd(w->hwndOwner))
+            EnableWindow(w->hwndOwner, TRUE);
+    }
     ShowWindow(h, SW_HIDE);
     PostMessage(h, WM_NULL, 0, 0);      /* wake the modal loop */
 }
