@@ -960,7 +960,7 @@ void module_signal(u16 hmod, u16 code)
    (sign-extended in AX); 0 means the current task. Changes BX, CX, DX
    and ES on 3.1. UNVERIFIED: a handle that is not a task (3.1 returned 1
    for the program's DS and 1; w16 returns 0 and changes nothing). */
-u16 KAPI SetPriority(u16 htask, u16 delta)
+u16 KAPI KSetPriority(u16 htask, u16 delta)
 {
     u16 t = htask ? task_of(htask) : cur_task;
     signed char p;

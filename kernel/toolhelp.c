@@ -266,7 +266,7 @@ u32 KAPI_ES GetSetKernelDOSProc(u32 proc)
 }
 
 /* DiagQuery (KERNEL.339): whether Windows writes BOOTLOG.TXT (WIN /B). */
-u16 KAPI DiagQuery(void)
+u16 KAPI KDiagQuery(void)
 {
     return diag_query() != 0;
 }

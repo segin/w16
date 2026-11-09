@@ -267,3 +267,45 @@ LOCALNOTIFY:
 global DEBUGDEFINESEGMENT
 DEBUGDEFINESEGMENT:
         retf 12
+
+; ---------------------------------------------------------------------------
+; Exports in C that keep more registers than a KAPI function does, because
+; Windows 3.1 keeps them (tests/apps/tk50.c, "kept" in tk50ref.h): the
+; wrapper keeps BX, CX, ES and the flags, and DX unless the result is a
+; DWORD. KEEPREGS exported-name, c-function, argument bytes, keep-DX
+%macro KEEPREGS 4
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        pushf
+        push bx
+        push cx
+        push dx
+        push es
+%assign i %3 / 2
+%rep %3 / 2
+        push word [bp + 4 + 2 * i]
+%assign i i - 1
+%endrep
+        call far %2
+        pop es
+%if %4
+        pop dx
+%else
+        add sp, 2
+%endif
+        pop cx
+        pop bx
+        popf
+        pop bp
+        retf %3
+%endmacro
+
+KEEPREGS SETPRIORITY,      KSETPRIORITY,      4, 1  ; KERNEL.32
+KEEPREGS DIAGQUERY,        KDIAGQUERY,        0, 1  ; KERNEL.339
+KEEPREGS SWAPRECORDING,    KSWAPRECORDING,    2, 1  ; KERNEL.204
+KEEPREGS OPENPATHNAME,     KOPENPATHNAME,     6, 1  ; KERNEL.75
+KEEPREGS ISSHAREDSELECTOR, KISSHAREDSELECTOR, 2, 1  ; KERNEL.345
+KEEPREGS GETCODEHANDLE,    KGETCODEHANDLE,    4, 0  ; KERNEL.93

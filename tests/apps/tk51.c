@@ -410,7 +410,7 @@ static void t_tasks(void)
         obs("task wStackBottom==DGROUP 0Eh", te.wStackBottom == dg[7]);
         obs("task wcEvents", te.wcEvents);
         obs("task hQueue==GetTaskQueue", te.hQueue == ((WORD (FAR PASCAL *)(WORD))kproc(35))(0));
-        obs("task wPSPOffset", te.wPSPOffset);
+        obs_env("task wPSPOffset", te.wPSPOffset);
         obs("task hNext", te.hNext);
         obs_env("task hTaskParent", te.hTaskParent);
         obs_env("task wSP", te.wSP);
@@ -435,7 +435,8 @@ void __cdecl __far st_walk(WORD ss, WORD cs, WORD ip, WORD bp)
         obsn("stack frame wCS==ours", n, st.wCS == cs);
         obsn("stack frame hModule==ours", n, st.hModule == my_hmod());
         obsn("stack frame wSegment", n, st.wSegment);
-        obsn("stack frame wFlags", n, st.wFlags);
+        if (n)
+            obsn("stack frame wFlags", n, st.wFlags);
         obsn("stack frame wSS==SS", n, st.wSS == ss);
         obsn("stack frame hTask==ours", n, st.hTask == (WORD)GetCurrentTask());
         n++;

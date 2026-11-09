@@ -58,6 +58,7 @@ run TK13 0
 run TK17 0
 run TK17A 0
 run TK19 0
+run TK50 0
 run TK2 255 "w16: call to unimplemented KERNEL.27"
 
 # TK5 (DLL loading) and TK11 (module tables), laid out like the reference

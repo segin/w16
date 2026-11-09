@@ -145,7 +145,7 @@ u32 KAPI LimitEmsPages(u32 kb)
 }
 
 /* SwapRecording (KERNEL.204): AX = 0 (DX: unrelated, 0167h). */
-u16 KAPI SwapRecording(u16 flag)
+u16 KAPI KSwapRecording(u16 flag)
 {
     (void)flag;
     return 0;
@@ -211,7 +211,7 @@ u32 KAPI KAnsiLower(u32 p)
 /* IsSharedSelector (KERNEL.345): whether the selector belongs to a DLL.
    Observed: 1 for KERNEL's code and data, KERNEL's and USER's hModule;
    0 for a program's DS and CS and for an hTask. (3.1 faults on 0.) */
-u16 KAPI IsSharedSelector(u16 sel)
+u16 KAPI KIsSharedSelector(u16 sel)
 {
     u16 h = GetExePtr(sel);
     module FAR *m = h ? module_of(h) : NULL;
@@ -223,7 +223,7 @@ u16 KAPI IsSharedSelector(u16 sel)
    (observed, also for a data address); MAKELONG(segment number, hModule)
    names segment n of the module (Schulman). 0 gives DX = 0. w16 loads
    every segment with its module, so nothing is loaded here. */
-u32 KAPI GetCodeHandle(u32 proc)
+u32 KAPI KGetCodeHandle(u32 proc)
 {
     u16 hi = (u16)(proc >> 16), lo = (u16)proc;
     module FAR *m;
@@ -240,7 +240,7 @@ u32 KAPI GetCodeHandle(u32 proc)
         u16 i;
         for (i = 0; i < m->seg_count; i++)
             if ((m->seg[i].sel | 3) == (hi | 3))
-                return ((u32)m->seg[i].sel << 16) | m->seg[i].hnd;
+                return ((u32)m->seg[i].sel << 16) | (u16)GlobalHandle(hi);
     }
     gh = GlobalHandle(hi);
     if (!(u16)gh)
@@ -250,7 +250,7 @@ u32 KAPI GetCodeHandle(u32 proc)
 
 /* OpenPathname (KERNEL.75): Schulman: DOS open (INT 21h 3Dh) with the
    access mode; observed: AX = the DOS handle, FFFFh if it fails. */
-u16 KAPI OpenPathname(const char FAR *path, u16 mode)
+u16 KAPI KOpenPathname(const char FAR *path, u16 mode)
 {
     regs16 r;
     r.ax = 0x3D00 | (mode & 0xFF);
