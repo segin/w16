@@ -20,6 +20,7 @@ HBRUSH sys_brush(HBRUSH b);
 #define MDI_COUNT     6
 #define MDI_MAXED     8
 #define MDI_FRAMETEXT 10        /* local copy of the frame's own title */
+#define MDI_SCROLL    12        /* the WS_VSCROLL/WS_HSCROLL it was made with */
 
 static HWND client_of(HWND child)
 {
@@ -115,6 +116,17 @@ LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (cc) {
             SetWindowWord(h, MDI_WINMENU, (WORD)cc->hWindowMenu);
             SetWindowWord(h, MDI_FIRSTID, cc->idFirstChild);
+        }
+        /* its scroll bars show only when children go past its edges:
+           none at first (Program Manager's MDI client has the styles
+           and no bars) */
+        {
+            PWND w = valid_wnd(h);
+            if (w && (w->style & (WS_VSCROLL | WS_HSCROLL))) {
+                SetWindowWord(h, MDI_SCROLL, HIWORD(w->style & (WS_VSCROLL | WS_HSCROLL)));
+                w->style &= ~(WS_VSCROLL | WS_HSCROLL);
+                calc_client(w);
+            }
         }
         return 0;
     }
