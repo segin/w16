@@ -141,6 +141,7 @@ H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
 INIT_STACK      equ 400h
+CB_ENTRIES      equ 16      ; real-mode entry points for callbacks
 CB_STATIC       equ 16      ; callback records in DOSX's own data
 
 ; arena block header (16 bytes before each block, in extended memory)

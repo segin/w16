@@ -1,6 +1,6 @@
 ; data.inc - initialised data.
 
-patch_tab       dw to_rm.seg, cb_entry.seg, 0
+patch_tab       dw to_rm.seg, cb_c0.seg, 0
 
 msg_nomem       db 13, 10, '  Insufficient extended memory to run Windows in standard mode.'
                 db 13, 10, 13, 10, '  Increase the amount of available extended memory.'
@@ -78,6 +78,8 @@ r286_sp         dw 0
 x_ax            dw 0
 x_fl            dw 0
 x_idx           dw 0
+x_i             dw 0
+x_cs            dw 0
 x_ss            dw 0
 x_sp            dw 0
 cb_off          dw 0

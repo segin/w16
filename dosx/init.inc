@@ -351,20 +351,24 @@ tables_init:
         mov word [hs_top], hs_stack_top
         mov word [h3_top], h3_stack_top
         mov word [tb_top], tbuf + TB_SIZE
-        ; real-mode callbacks: their canonical address (see cb_entry)
-        mov ax, cb_entry
+        ; real-mode callbacks: entry 0's canonical address (cb_entries;
+        ; the entries are a paragraph apart, so entry e is cb_seg + e)
+        mov ax, cb_entries
         mov dx, ax
         and ax, 0Fh
         mov [cb_off], ax
         shr dx, 4
         add dx, [imgseg]
         mov [cb_seg], dx
-        ; as many as real-mode addresses allow: the segment must not
-        ; go below 0, the offset not beyond 0FFFFh
-        inc dx
-        cmp dx, 1000h
-        jbe .cbm
-        mov dx, 1000h
+        ; as many as real-mode addresses allow: i up to min(4095, cb_seg)
+        ; (the segment must not go below 0, the offset not beyond
+        ; 0FFFFh), times the 16 entries
+        cmp dx, 0FFFh
+        jbe .cbi
+        mov dx, 0FFFh
+.cbi:   inc dx
+        shl dx, 4
+        dec dx                  ; (at most 0FFFFh)
 .cbm:   mov [cb_max], dx
         ret
 

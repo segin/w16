@@ -148,7 +148,26 @@ trc_flush:
         les si, [bp+F_SP3]       ; only after INT 31h: after an interrupt
         mov si, [es:si+K_OP]     ; DOS's caller may be anywhere, after
         cmp si, OP_INT31         ; INT 21h the client may ask for DOS's
-        pop si                   ; extended error (59h)
+%ifdef TRC_ANY                   ; extended error (59h)
+        je .any                  ; -dTRC_ANY: also after INT 21h and
+        cmp si, OP_INT21         ; reflected software interrupts
+        je .any
+        cmp si, OP_REFLECT
+        jne .any
+        les si, [bp+F_SP3]
+        mov si, [es:si+K_ARG]
+        sub si, refstub_tab + 3 + 8 * 3
+        cmp si, 8 * 3            ; 08h-0Fh: IRQ 0-7
+        jb .irq
+        sub si, (70h - 8) * 3
+        cmp si, 8 * 3            ; 70h-77h: IRQ 8-15
+        jb .irq
+        xor si, si               ; ZF: flush
+        jmp .any
+.irq:   or si, 1                 ; NZ
+.any:
+%endif
+        pop si
         pop es
         jne .ret
         pusha

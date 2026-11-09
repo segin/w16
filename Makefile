@@ -65,7 +65,7 @@ dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
-     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -500,8 +500,17 @@ $(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
 
+# DX7.EXE + DXD.COM: a DOS program started from Standard mode (tests/dosapp.sh)
+$(DOS)/DX7.EXE: $(B)/tests/start.o $(B)/tests/dx7.o tests/apps/app.lnk tests/apps/dx7.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/dx7.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx7.map file { $(B)/tests/start.o $(B)/tests/dx7.o }
+$(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
-DXPROBES := DX1 DX2 DX5
+DXPROBES := DX1 DX2 DX4 DX5
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
