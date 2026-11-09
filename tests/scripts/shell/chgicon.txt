@@ -1,0 +1,20 @@
+; Program Manager's Change Icon: the icons of the selected item's program
+; (ExtractIcon, InternalExtractIcon), then of MORICONS.DLL
+run PROGMAN.EXE
+wait 3000
+menu f
+char p
+wait 500
+alt i
+wait 1500
+snap C:\ICONS1.BMP
+dump
+alt f
+type C:\WINDOWS\MORICONS.DLL
+alt s
+wait 1500
+snap C:\ICONS2.BMP
+key 1B
+wait 300
+key 1B
+wait 300

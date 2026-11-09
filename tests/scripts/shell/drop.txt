@@ -1,0 +1,22 @@
+; File Manager drag and drop onto Program Manager (DragAcceptFiles,
+; DragQueryFile, DragQueryPoint, DragFinish, ExtractAssociatedIcon):
+; Program Manager on the right, File Manager on the left; two files of
+; the Windows directory are dragged into the active group
+run PROGMAN.EXE
+wait 3000
+place Progman 330 0 310 480
+run WINFILE.EXE
+wait 4000
+place WFS_Frame 0 0 330 480
+wait 1000
+snap C:\BEFORE.BMP
+dump
+dragitem 5 480 300
+wait 2000
+snap C:\DROP1.BMP
+place WFS_Frame 0 0 330 480
+wait 500
+dragitem 11 420 340
+wait 2000
+snap C:\DROP2.BMP
+dump
