@@ -281,6 +281,10 @@ u16 winboot(void)
                             sysini);
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
+    {
+        extern u16 sched_log;
+        sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
+    }
     if (take_switch_b())
         diag_init();
     booting = 1;
