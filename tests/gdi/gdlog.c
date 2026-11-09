@@ -376,6 +376,7 @@ static void enter_detail(struct ent *e, u16 far *args)
         dump("in", P(0), 10);
     } else if (same(n, "CREATEDC") || same(n, "CREATEIC")) {
         str("driver", P(0), -1);
+        dump("driver bytes", P(0), 16);
         str("device", P(1), -1);
         str("output", P(2), -1);
     } else if (same(n, "ADDFONTRESOURCE")) {
@@ -411,7 +412,9 @@ static void enter_detail(struct ent *e, u16 far *args)
 static void exit_detail(struct ent *e, u16 far *args, u32 r)
 {
     const char far *n = e->name;
-    if (same(n, "GETTEXTMETRICS")) {
+    if (same(n, "CREATEDC") || same(n, "CREATEIC")) {
+        dump("driver", P(0), 16);           /* does GDI write into it? */
+    } else if (same(n, "GETTEXTMETRICS")) {
         dump("tm", P(1), 31);
     } else if (same(n, "GETOBJECT")) {
         dump("obj", P(2), (int)W(1) > 0 && W(1) < 64 ? W(1) : 16);

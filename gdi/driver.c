@@ -28,16 +28,16 @@ NPDEVICE dev_open(LPCSTR name)
             d->refs++;
             return d;
         }
-    h = GetModuleHandle(name);
-    if (!h) {
-        for (n = 0; name[n] && n < 20; n++)
-            file[n] = name[n];
-        file[n] = 0;
-        lstrcat(file, ".DRV");
-        h = LoadLibrary(file);
-        if (h < 32)
-            return 0;
-    }
+    /* GD2: 3.1 loads "<name>.drv" (BOOTLOG: LoadStart = DISPLAY.drv at
+       USER's INIT=Display) from a copy: the caller's buffer was the same
+       before and after CreateDC */
+    for (n = 0; name[n] && n < 20; n++)
+        file[n] = name[n];
+    file[n] = 0;
+    lstrcat(file, ".drv");
+    h = LoadLibrary(file);
+    if (h < 32)
+        return 0;
     d = (NPDEVICE)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(DEVICE));
     if (!d)
         return 0;

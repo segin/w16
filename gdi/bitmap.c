@@ -364,10 +364,9 @@ HBITMAP GDIAPI CreateDIBitmap(HDC hdc, const void __far *bmih, DWORD init,
 }
 
 /* SetDIBitsToDevice: the driver's DIBScreenBlt (ordinal 21) draws scan
-   lines iScan .. iScan + cScans - 1 of the DIB with the top one at X, Y
-   (DDK); the source rectangle (from the DIB's bottom left) and the
-   destination are made a clip rectangle, cut by the composite region.
-   UNVERIFIED: 3.1's own arithmetic and the band it passes. */
+   lines iScan .. iScan + cScans - 1 of the DIB placed with its top left at
+   X, Y; the destination rectangle is the clip rectangle, cut by the
+   composite region (as 3.1 passed them, GD1 with WinMine). */
 int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int ys,
                              WORD start, WORD n, void __far *bits, void __far *bmi,
                              WORD usage)                           /* GDI.443 */
@@ -394,7 +393,9 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
     d.right = d.left + cx;
     d.bottom = d.top + cy;
     X = d.left - xs;
-    Y = d.top + ys + cy - (int)start - (int)n;
+    /* GD1: 3.1 passed Y for the top of the whole DIB (biHeight lines; WinMine's
+       digits: Y = -158 for a 23-line band of a 276-line DIB at y 95) */
+    Y = d.top + ys + cy - (int)((BITMAPINFOHEADER __far *)bi)->biHeight;
     rao = dc_rao(dc);
     for (k = 0; k < rao->n; k++) {
         RECT c = rao->r[k];
