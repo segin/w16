@@ -16,7 +16,7 @@ WLINK   := wlink
 
 INC     := -Iinclude -Ikernel
 # KERNEL: large model, SS != DS, 286, no stack checks, no default libraries
-KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC)
+KCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=_TEXT $(INC) -I$(B)/kernel
 # bootstrap: small model, 8086, real mode
 BCFLAGS := -q -bt=dos -ms -0 -s -zl -ox -wx -we $(INC)
 # test applications: large model Windows programs, no C runtime
@@ -39,7 +39,7 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
@@ -57,14 +57,15 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 
 .SECONDARY:
 
-.PHONY: all host dos shell shell2 test clean
+.PHONY: all host dos shell shell2 test clean install-tree
 all: host dos shell
 
 host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
-     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE)
+     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -86,13 +87,16 @@ $(B)/boot/boot.exe: $(BOBJS)
 $(B)/kernel/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
-$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(B)/kernel/kapi.h: tools/kapiprag.py kernel/*.c kernel/*.h
+	@mkdir -p $(@D)
+	python3 tools/kapiprag.py $@ kernel/*.c kernel/*.h
+$(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -fo=$@ $<
 # KERNEL's code outgrew one segment: the Windows boot and the exports for
 # Microsoft's modules go in a second code segment, BOOT_TEXT
 KBOOT_C := winboot dosx kmisc selector fault
-$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h
+$(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
@@ -229,6 +233,54 @@ $(DOS)/TK28.EXE: $(B)/tests/start.o $(B)/tests/tk28.o $(B)/tests/tk28.res tests/
 	$(WLINK) @tests/apps/tk28.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk28.map option resource=$(B)/tests/tk28.res \
 	    file { $(B)/tests/start.o $(B)/tests/tk28.o }
+
+# TK29.EXE: module usage counts under Windows
+$(B)/tests/tk29.o: tests/apps/tk29ref.h tests/apps/tklog.h
+$(DOS)/TK29.EXE: $(B)/tests/start.o $(B)/tests/tk29.o tests/apps/app.lnk tests/apps/tk29.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk29.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk29.map file { $(B)/tests/start.o $(B)/tests/tk29.o }
+
+# TK30.EXE: resource handlers of DLLs
+$(B)/tests/tk30.o: tests/apps/tk30ref.h tests/apps/tklog.h
+$(DOS)/TK30.EXE: $(B)/tests/start.o $(B)/tests/tk30.o tests/apps/app.lnk tests/apps/tk30.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk30.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk30.map file { $(B)/tests/start.o $(B)/tests/tk30.o }
+
+# TK31.EXE: which registers KERNEL's exports keep (tk31s.asm)
+$(B)/tests/tk31.o: tests/apps/tk31ref.h tests/apps/tklog.h
+$(DOS)/TK31.EXE: $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o tests/apps/app.lnk tests/apps/tk31.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk31.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk31.map file { $(B)/tests/start.o $(B)/tests/tk31.o $(B)/tests/tk31s.o }
+
+# TK32.EXE: the task-exit signal (tk32s.asm)
+$(B)/tests/tk32.o: tests/apps/tk32ref.h tests/apps/tklog.h
+$(DOS)/TK32.EXE: $(B)/tests/start.o $(B)/tests/tk32.o $(B)/tests/tk32s.o tests/apps/app.lnk tests/apps/tk32.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk32.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk32.map file { $(B)/tests/start.o $(B)/tests/tk32.o $(B)/tests/tk32s.o }
+
+# TK33.EXE: stands in for WINOLDAP.MOD (how KERNEL starts DOS programs)
+$(B)/tests/tk33.o: tests/apps/tk33ref.h tests/apps/tklog.h
+$(DOS)/TK33.EXE: $(B)/tests/start.o $(B)/tests/tk33.o tests/apps/app.lnk tests/apps/tk33.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk33.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk33.map file { $(B)/tests/start.o $(B)/tests/tk33.o }
+
+# TK34.EXE: WinOldApCall, KERNEL.151 (tk34s.asm)
+$(B)/tests/tk34.o: tests/apps/tk34ref.h tests/apps/tklog.h
+$(DOS)/TK34.EXE: $(B)/tests/start.o $(B)/tests/tk34.o $(B)/tests/tk34s.o tests/apps/app.lnk tests/apps/tk34.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk34.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk34.map file { $(B)/tests/start.o $(B)/tests/tk34.o $(B)/tests/tk34s.o }
+
+# TK35.EXE: a task's directory and windir (logs to C:\TK35.LOG)
+$(DOS)/TK35.EXE: $(B)/tests/start.o $(B)/tests/tk35.o tests/apps/app.lnk tests/apps/tk35.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk35.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk35.map file { $(B)/tests/start.o $(B)/tests/tk35.o }
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
@@ -483,6 +535,37 @@ $(DOS)/WINENV.COM: tests/dos/winenv.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# DOSX.EXE: w16's Standard-mode DOS extender (dosx/, ARCHITECTURE.md 9.6)
+$(DOS)/DOSX.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I . -o $@ $<
+
+# DOSXT.EXE: the same with the trace buffer (dosx/trace.inc)
+$(DOS)/DOSXT.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -dTRACE -I . -o $@ $<
+
+# DX6.EXE: a Windows program dumping the GDT/IDT (run as the shell)
+$(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
+
+# DX7.EXE + DXD.COM: a DOS program started from Standard mode (tests/dosapp.sh)
+$(DOS)/DX7.EXE: $(B)/tests/start.o $(B)/tests/dx7.o tests/apps/app.lnk tests/apps/dx7.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/dx7.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx7.map file { $(B)/tests/start.o $(B)/tests/dx7.o }
+$(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
+# DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
+DXPROBES := DX1 DX2 DX4 DX5 DX8
+$(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
 # TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
 $(DOS)/TK18.COM: tests/dos/tk18.asm
 	@mkdir -p $(@D)
@@ -518,12 +601,63 @@ $(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/wc9.map file { $(B)/tests/start.o $(B)/tests/wc9.o }
 
+# FN1.EXE: the font metrics probe; FN2.EXE: a window showing every
+# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9)
+FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE
+fnprobes: $(FNPROBES)
+dos: $(FNPROBES)
+$(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/fn$*.map file { $(B)/tests/start.o $(B)/tests/fn$*.o }
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 $(B)/hdd/MBR.BIN: tools/dos/mbr.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
+
+# ---- fonts: w16's own raster fonts (fonts/*.txt; ARCHITECTURE.md 6.9) ----
+# tools/fontc.py compiles each glyph source into a .FNT and packages them as
+# a .FON (a resource-only NE DLL). Module names, descriptions (their
+# "FONTRES aspect,logpixelsx,logpixelsy : " prefix), resource IDs and
+# version numbers follow Windows 3.1's files; the free text is our own.
+FNT     := $(B)/fonts
+FONTC   := python3 tools/fontc.py
+FONTINFO = --info CompanyName=w16 --info FileVersion=3.10 --info ProductVersion=3.10 \
+           --info "LegalCopyright=Copyright (c) 2026 the w16 contributors, MIT licence" \
+           --info ProductName=w16
+FONS    := $(FNT)/VGASYS.FON $(FNT)/VGAFIX.FON $(FNT)/VGAOEM.FON $(FNT)/SSERIFE.FON
+SSERIFE_SRC := $(foreach p,8 10 12 14 18 24,fonts/sserife$(p).txt)
+.PHONY: fonts
+fonts: $(FONS)
+all: fonts
+$(FNT)/VGASYS.FON: fonts/vgasys.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module FONTS --desc "FONTRES 100,96,96 : System (w16)" $(FONTINFO) \
+	    --info "FileDescription=System font (VGA res)" --info InternalName=FONTS \
+	    --info OriginalFilename=VGASYS.FON 31=$<
+$(FNT)/VGAFIX.FON: fonts/vgafix.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module FIXFONTS --desc "FONTRES 100,96,96 : Fixedsys (w16)" $(FONTINFO) \
+	    --info "FileDescription=Fixedsys font (VGA res)" --info InternalName=FIXFONTS \
+	    --info OriginalFilename=VGAFIX.FON 31=$<
+$(FNT)/VGAOEM.FON: fonts/vgaoem.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module OEMFONTS --desc "FONTRES 100,96,96 : Terminal (US) (w16)" $(FONTINFO) \
+	    --info "FileDescription=Terminal font, code page 437 (VGA res)" --info InternalName=OEMFONTS \
+	    --info OriginalFilename=VGAOEM.FON 30=$<
+# the description after the colon is the [fonts] key Control Panel writes
+# to WIN.INI, so it is Windows 3.1's
+$(FNT)/SSERIFE.FON: $(SSERIFE_SRC) tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module SSERIFE \
+	    --desc "FONTRES 100,96,96 : MS Sans Serif 8,10,12,14,18,24 (VGA res)" $(FONTINFO) \
+	    --info "FileDescription=MS Sans Serif font (VGA res)" --info InternalName=SSERIFE \
+	    --info OriginalFilename=SSERIFE.FON \
+	    84=fonts/sserife8.txt 85=fonts/sserife10.txt 86=fonts/sserife12.txt \
+	    87=fonts/sserife14.txt 88=fonts/sserife18.txt 89=fonts/sserife24.txt
 
 # ---- shell: PROGMAN.EXE, in two builds from one source tree ----
 #   $(DOS)/PROGMAN.EXE    Windows 3.x build (marked 3.0, uses MDI etc.)
@@ -570,7 +704,7 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
-test: dos
+test: dos fonts
 	tests/run-tests.sh
 
 clean:
@@ -649,3 +783,85 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
+# ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
+# programs only, each where Windows 3.1 keeps it (the reference install:
+# WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
+# win/README.TXT says what to copy in from one's own Windows to boot it.
+# tests/w16tree.sh boots it. build/dos stays as it is.
+W16     := $(B)/w16
+W16SYS  := $(W16)/SYSTEM
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
+           $(FONS:$(FNT)/%=$(W16SYS)/%)
+install-tree: $(W16TREE)
+all: install-tree
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16)/README.TXT: win/README.TXT
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL: $(W16SYS)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
+$(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+
+# ---- USER (user/; ARCHITECTURE.md 10) and its probes ----
+# US1: USTRACE.DLL, the call recorder behind the forwarding modules that
+# tools/mkinterpose.py generates (tests/ustrace.sh)
+UCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/%.o: tests/user/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(UCFLAGS) -fo=$@ $<
+$(B)/user/%.o: tests/user/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USTRACE.DLL: $(B)/user/usentry.o $(B)/user/ustrace.o tests/user/ustrace.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/user/ustrace.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/ustrace.map file { $(B)/user/usentry.o $(B)/user/ustrace.o }
+dos: $(DOS)/USTRACE.DLL
+# w16's USER.EXE: user/*.c and user/uentry.asm; every ordinal the C code
+# does not define gets a stub (tools/mkuserexp.py makes the export list and
+# the stubs from user/ordinals.txt and the objects' public names)
+USER_C   := $(wildcard user/*.c)
+# uentry.o first: its _NULL (class BEGDATA) must start DGROUP, the 16 bytes
+# of instance data KERNEL keeps there (the atom table pointer at 8, ...)
+USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o)
+UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/user/u_%.o: user/%.c user/user.h
+	@mkdir -p $(@D)
+	$(WCC) $(UUCFLAGS) -fo=$@ $<
+$(B)/user/uentry.o: user/uentry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/user/stubs.asm $(B)/user/exports.lnk &: $(USER_OBJ) user/ordinals.txt tools/mkuserexp.py
+	python3 tools/mkuserexp.py user/ordinals.txt $(B)/user/exports.lnk $(B)/user/stubs.asm $(USER_OBJ)
+$(B)/user/stubs.o: $(B)/user/stubs.asm
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/USER.EXE: $(USER_OBJ) $(B)/user/stubs.o $(B)/user/exports.lnk user/user.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @user/user.lnk @$(B)/user/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/user/user.map file { $(USER_OBJ) $(B)/user/stubs.o }
+user: $(DOS)/USER.EXE
+dos: $(DOS)/USER.EXE
+.PHONY: user
+
+# US2: USER's values and pure functions (tests/apps/us2.c), run as the shell
+$(B)/tests/us2.o: tests/apps/us2ref.h tests/apps/tklog.h
+$(DOS)/US2.EXE: $(B)/tests/start.o $(B)/tests/us2.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us2.map file { $(B)/tests/start.o $(B)/tests/us2.o }
+dos: $(DOS)/US2.EXE
+# US3: DrawText's layout (tests/apps/us3.c)
+$(B)/tests/us3.o: tests/apps/us3ref.h tests/apps/tklog.h
+$(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
+dos: $(DOS)/US3.EXE

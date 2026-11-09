@@ -68,7 +68,8 @@ if [ -n "$ourk" ]; then
 w16:watchdog=0"
 fi
 if [ -n "$log" ]; then
-    python3 "$root/tools/nerename.py" "$sys/VGA.DRV" "$sys/VGAREAL.DLL" VGAREAL
+    cp "$sys/VGA.DRV" "$sys/VGAREAL.DLL"
+    python3 "$root/tools/nerename.py" "$sys/VGAREAL.DLL" --module VGAREAL
     # GDI and USER load the display driver's resources (stock fonts,
     # configuration, cursors, bitmaps) from the module DISPLAY: link
     # VGA.DRV's into this scratch copy of GD1 (tools/ne2res.py)
@@ -82,7 +83,8 @@ boot:display.drv=GD1.DRV"
 fi
 if [ -n "$glog" ]; then
     # GD2 as GDI.EXE in front of the GDI that would have run, renamed GDJ
-    python3 "$root/tools/nerename.py" "$sys/GDI.EXE" "$sys/GDJ.DLL" GDJ
+    cp "$sys/GDI.EXE" "$sys/GDJ.DLL"
+    python3 "$root/tools/nerename.py" "$sys/GDJ.DLL" --module GDJ
     python3 "$root/tools/ne2res.py" "$sys/GDI.EXE" "$work/gdi.res"
     b=$root/build/gdi
     (cd "$root" && PATH=${WATCOM:-/opt/watcom}/binl64:$PATH WATCOM=${WATCOM:-/opt/watcom} \

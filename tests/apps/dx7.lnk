@@ -1,0 +1,3 @@
+# DX7.EXE (tests/apps/dx7.c): a DOS program from Standard mode
+@tests/apps/app.lnk
+import U_INITAPP USER.5

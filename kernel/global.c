@@ -1566,7 +1566,7 @@ u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 
 /* Returns the handle in the low word and the selector in the high word;
    0 for a discarded block (observed). */
-u32 KAPI GlobalHandle(u16 sel)                                /* KERNEL.21 */
+u32 KAPI_ES GlobalHandle(u16 sel)                                /* KERNEL.21 */
 {
     u16 a;
     alias FAR *p;

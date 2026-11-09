@@ -37,7 +37,7 @@ static char logpath[DOS_PATHMAX + 16];
 int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
                                  const char FAR *def, char FAR *buf, u16 n,
                                  const char FAR *file);
-u16 KAPI GetWindowsDirectory(char FAR *buf, u16 n);
+u16 KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n);
 u16 KAPI LoadLibrary(const char FAR *name);
 u32 KAPI GetProcAddress(u16 h, const char FAR *name);
 u16 KAPI GetModuleHandle(const char FAR *name);
@@ -175,6 +175,8 @@ static void print_modmap(void)
     for (m = module_first; m; m = m->next) {
         kputs("w16: ");
         kputs(m->name);
+        kputs(" rec=");
+        kputhex(m->self);
         kputs(" hmod=");
         kputhex(m->ne_sel);
         for (i = 0; i < m->seg_count; i++) {
@@ -183,6 +185,8 @@ static void print_modmap(void)
             kputs("=");
             kputhex(m->seg[i].sel);
         }
+        kputs(" ");
+        kputs(m->path);
         kputs("\r\n");
     }
 }
@@ -204,10 +208,13 @@ int winboot_wanted(void)
 
 static void boot_fail(const char FAR *name)
 {
+    text_mode();
     kputs("\r\n\r\nError loading ");
     kputs(name);
     kputs("\r\n");
     trace_print();                      /* w16's [w16] trace, if any */
+    if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
+        print_modmap();
     kexit_to_dos(1);                    /* UNVERIFIED: the exit code */
 }
 
@@ -311,5 +318,9 @@ u16 winboot(void)
     /* the watchdog keeps running: a debugging aid, it reports where the
        system is after SECONDS without a boot log line */
     task_boot_tdb_end();
-    return task_boot();
+    {
+        u16 rc = task_boot();           /* back when the last task ends */
+        trace_print();
+        return rc;
+    }
 }
