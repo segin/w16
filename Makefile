@@ -961,6 +961,12 @@ W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# Cardfile (shell/cardfile), in the Windows directory as on 3.1
+W16TREE += $(W16)/CARDFILE.EXE
+install-tree: $(W16)/CARDFILE.EXE
+$(W16)/CARDFILE.EXE: $(DOS)/CARDFILE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)

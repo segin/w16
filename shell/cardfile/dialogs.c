@@ -383,18 +383,19 @@ static void dial_guess(void)
         for (i = LOWORD(sel); i < HIWORD(sel) && j < sizeof dial_number - 1; i++)
             dial_number[j++] = t[i];
     } else {
-        for (i = 0; t[i] && !(t[i] >= '0' && t[i] <= '9'); i++)
+        /* "Ann (555) 123-4567 home" offers "(555)123-4567" (autodial
+           scenario): from the first digit or "(", the digits and
+           punctuation, blanks left out, up to anything else.
+           UNVERIFIED: which punctuation counts. */
+        for (i = 0; t[i] && !(t[i] >= '0' && t[i] <= '9') && t[i] != '('; i++)
             ;
         for (; t[i] && j < sizeof dial_number - 1; i++) {
             char c = t[i];
-            if ((c >= '0' && c <= '9') || c == '-' || c == '(' || c == ')' || c == ' ' ||
-                c == ',')
+            if ((c >= '0' && c <= '9') || c == '-' || c == '(' || c == ')' || c == ',')
                 dial_number[j++] = c;
-            else
+            else if (c != ' ')
                 break;
         }
-        while (j && dial_number[j - 1] == ' ')
-            j--;
     }
     dial_number[j] = 0;
     LocalUnlock(h);
@@ -539,6 +540,7 @@ void dlg_autodial(void)
     int r;
     dial_load();
     dial_guess();
+    dial_expanded = FALSE;              /* Setup starts closed each time */
     p = MakeProcInstance((FARPROC)DialDlgProc, g_hinst);
     r = DialogBox(g_hinst, MAKEINTRESOURCE(IDD_AUTODIAL), g_frame, (DLGPROC)p);
     FreeProcInstance(p);

@@ -296,7 +296,11 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
             if (!f_write(f, tail, sizeof tail))
                 return (DWORD)-1;
         } else if (p->kind == PIC_BITMAP && p->bmp) {
-            DWORD id = g_lastobj++;
+            /* a 3.0 file's picture saved as 3.1 got number 2 and left
+               the counter at 3, opened afresh or not (CF8, CF12).
+               UNVERIFIED: with more than one picture. */
+            DWORD id = g_lastobj + 2;
+            g_lastobj += 3;
             if (!wr_word(f, 1) || !f_write(f, &id, 4) || !write_static_bitmap(f, p))
                 return (DWORD)-1;
         } else

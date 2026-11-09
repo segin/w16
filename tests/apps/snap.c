@@ -27,6 +27,9 @@
  *                            of the window with the focus
  *     drag <x0> <y0> <x1> <y1>  button down at x0, y0, move, up at x1, y1
  *     dblclk <x> <y>         a double click there
+ *     class <name>           the class of the window "cmd" and "menu" go
+ *                            to when none of ours is active (Windows 2.x;
+ *                            default Progman)
  *     blink <ms>             SetCaretBlinkTime (a long time keeps carets
  *                            from blinking between screenshots)
  *     cbsel <id-hex> <n>     select entry n of combo box <id> in the
@@ -139,6 +142,10 @@ static HWND target(void)
     return h ? h : GetActiveWindow();
 }
 
+/* the window "cmd" and "menu" go to when no window of ours is active
+   (Windows 2.x); "class NAME" changes it */
+static char fallback_class[32] = "Progman";
+
 /* The top-level window of the focus: Windows 2.x answers GetActiveWindow
    per task, and SNAP has no window of its own (observed). */
 static HWND top_window(void)
@@ -147,7 +154,7 @@ static HWND top_window(void)
     if (!h)
         h = GetActiveWindow();
     if (!h)                             /* Windows 2.x: not our task's */
-        return FindWindow("Progman", NULL);
+        return FindWindow(fallback_class, NULL);
     /* up to the first window that is not a child: GetParent of a dialog
        is its owner, which is not where its commands go */
     while ((GetWindowLong(h, GWL_STYLE) & WS_CHILD) && (p = GetParent(h)) != NULL)
@@ -646,6 +653,11 @@ static void run_line(char *l)
         click(arg, 0);
     } else if (same(l, "dblclk")) {
         click(arg, 1);
+    } else if (same(l, "class")) {
+        int i;
+        for (i = 0; arg[i] && i < (int)sizeof fallback_class - 1; i++)
+            fallback_class[i] = arg[i];
+        fallback_class[i] = 0;
     } else if (same(l, "blink")) {
         SetCaretBlinkTime(parse_num(arg, 10));
     } else if (same(l, "cbsel")) {

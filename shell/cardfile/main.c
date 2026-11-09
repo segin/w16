@@ -348,8 +348,16 @@ void do_command(WORD id)
     case IDM_SAVEAS:
         s_cpy(path, g_path, sizeof path);
         fmt = g_fmt;
-        if (file_dialog(FD_SAVEAS, path, &fmt))
-            file_save(path, fmt);
+        if (!file_dialog(FD_SAVEAS, path, &fmt))
+            break;
+#ifndef W16_WIN2
+        /* the 3.0 type always asks first, pictures or not; No saves
+           nothing (CF13) */
+        if (fmt == FMT_MGC &&
+            msg_box(IDS_SAVE30, NULL, MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
+            break;
+#endif
+        file_save(path, fmt);
         break;
     case IDM_MERGE:
         path[0] = 0;
