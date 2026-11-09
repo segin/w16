@@ -83,11 +83,13 @@ I_DSSI  equ 33          ; DS:SI out (63h)
 I_65    equ 34
 I_6C    equ 35
 I_FCBD  equ 36          ; FCB functions with DTA results (11h, 12h)
+I_SCR   equ 37          ; not translated: pointers to an empty buffer
 
 i21h:   dw h_plain, h_dxz, h_09, h_0a, h_0c, h_fcb, h_1a, h_2f, h_25
         dw h_35, h_dxseg, h_29, h_38, h_3f, h_40, h_44, h_47, h_48, h_49
         dw h_4a, h_4b, h_4c, h_4e, h_4f, h_50, h_bxseg, h_esbx, h_dsbx
         dw h_56, h_5a, h_5e, h_5f, h_60, h_dssi, h_65, h_6c, h_fcbd
+        dw h_scr
 
 i21class:
 %assign n 0
@@ -98,13 +100,15 @@ i21class:
         db I_0A
  %elif n = 0Ch
         db I_0C
- %elif n = 0Fh || n = 10h || n = 13h || n = 14h || n = 15h || n = 16h || n = 17h || n = 21h || n = 22h || n = 23h || n = 24h || n = 27h || n = 28h
-        db I_FCB
- %elif n = 11h || n = 12h
-        db I_FCBD
+ %elif n = 0Fh || n = 10h || n = 11h || n = 12h || n = 13h || n = 14h || n = 15h || n = 16h || n = 17h || n = 21h || n = 22h || n = 23h || n = 24h || n = 27h || n = 28h
+        db I_SCR
+ %elif n = 60h
+        db I_60
+ %elif n = 65h
+        db I_65
  %elif n = 1Ah
         db I_1A
- %elif n = 1Bh || n = 1Ch || n = 1Fh || n = 32h
+ %elif n = 1Bh || n = 1Ch || n = 32h
         db I_DSBX
  %elif n = 25h
         db I_25
@@ -156,12 +160,6 @@ i21class:
         db I_5E
  %elif n = 5Fh
         db I_5F
- %elif n = 60h
-        db I_60
- %elif n = 63h
-        db I_DSSI
- %elif n = 65h
-        db I_65
  %elif n = 6Ch
         db I_6C
  %else
@@ -382,13 +380,15 @@ h_09:   mov ax, [bp+F_DS]
         jnz bad_ptr
         sub cx, [bp+F_DX]
         jb bad_ptr
-        inc cx
+        inc cx                  ; 0: 64 KB
         push cx
         call tb_left
         pop ax
+        dec ax
         cmp cx, ax
         jbe .n
         mov cx, ax
+        inc cx
 .n:     call tb_alloc
         jc bad_ptr
         mov si, [bp+F_DX]
@@ -466,6 +466,42 @@ h_fcbd: call rm_dta_set
         call fcb_out
         mov cx, 44
         call dta_out
+        clc
+        ret
+
+; Functions Microsoft's DOSX does not translate (DX4: the FCB functions
+; fail with AL=FFh; DOS got the selector values as segments there): DOS
+; gets an empty buffer instead of the client's memory and nothing comes
+; back. (Microsoft's DOSX leaves DOS to read and write wherever the
+; selector values point in real mode; w16's does not.) 60h and 65h are
+; not translated by Microsoft's either (60h fails with error 2, 65h leaves
+; the client's buffer alone), but w16's KERNEL uses them, so w16's DOSX
+; does translate them: a deliberate superset.
+h_scr:  mov cx, 100h
+        call tb_alloc
+        jc bad_ptr
+        push di
+        push es
+        push ss
+        pop es
+        xor ax, ax
+        push cx
+        shr cx, 1
+        rep stosw
+        pop cx
+        pop es
+        pop di
+        mov [bx+R_EDX], di
+        mov [bx+R_ESI], di
+        lea ax, [di+80h]
+        mov [bx+R_EDI], ax
+        call dos
+        mov ax, [bp+F_DX]
+        mov [bx+R_EDX], ax
+        mov ax, [bp+F_SI]
+        mov [bx+R_ESI], ax
+        mov ax, [bp+F_DI]
+        mov [bx+R_EDI], ax
         clc
         ret
 
@@ -811,8 +847,10 @@ h_48:   mov cx, [bp+F_BX]
         cmp di, 0
         je .t
         inc cx
-.t:     call ldt_alloc
+.t:     inc cx                  ; and one for the header after the block
+        call ldt_alloc          ; (Microsoft's: DX2 desc_pm48_2800_3)
         jc .nosel
+        dec cx
         mov [m48_sel], ax
         push cx
         mov ax, [m48_hdr]
@@ -828,6 +866,21 @@ h_48:   mov cx, [bp+F_BX]
         add ax, A_HDR
         adc dx, 0
         call tiles_set
+        ; the extra descriptor (allocated with the tiles): the header
+        ; after the block
+        push cx
+        mov ax, [m48_hdr]
+        mov dx, [m48_hdr+2]
+        call hdr_map
+        inc word [es:A_NSEL]
+        or word [es:A_FLAGS], 4
+        call a_next
+        pop cx
+        shl cx, 3
+        mov bx, [m48_sel]
+        add bx, cx
+        mov cx, A_HDR - 1
+        call desc_lin
         mov ax, [m48_sel]
         mov [bp+F_AX], ax
         call clr_cf
@@ -848,6 +901,68 @@ h_48:   mov cx, [bp+F_BX]
         mov word [bp+F_AX], 8
         call set_cf
         stc
+        ret
+
+; x48_set: the block at m48_hdr (ES mapped, A_NSEL = its tiles) gets the
+; descriptor after its tiles for the header that follows it, if that one
+; is free (A_FLAGS bit 2, A_NSEL counts it then)
+x48_set:
+        push ax
+        push bx
+        push cx
+        push dx
+        mov ax, [m48_hdr]
+        mov dx, [m48_hdr+2]
+        call hdr_map
+        test word [es:A_FLAGS], 4
+        jnz .d
+        mov bx, [es:A_NSEL]
+        shl bx, 3
+        add bx, [es:A_SEL]
+        mov ax, bx
+        shr ax, 3
+        cmp ax, LDT_COUNT
+        jae .d
+        call bm_test
+        jnz .d
+        mov cx, 1
+        call ldt_claim
+        mov ax, [m48_hdr]
+        mov dx, [m48_hdr+2]
+        call hdr_map
+        inc word [es:A_NSEL]
+        or word [es:A_FLAGS], 4
+        call a_next
+        mov cx, A_HDR - 1
+        call desc_lin
+.d:     pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+; x48_drop: the reverse, before resizing
+x48_drop:
+        push ax
+        push bx
+        push dx
+        mov ax, [m48_hdr]
+        mov dx, [m48_hdr+2]
+        call hdr_map
+        test word [es:A_FLAGS], 4
+        jz .d
+        and word [es:A_FLAGS], ~4
+        dec word [es:A_NSEL]
+        mov bx, [es:A_NSEL]
+        shl bx, 3
+        add bx, [es:A_SEL]
+        call ldt_free
+.d:     mov ax, [m48_hdr]
+        mov dx, [m48_hdr+2]
+        call hdr_map
+        pop dx
+        pop bx
+        pop ax
         ret
 
 ; m48_find: the frame's ES = a selector from 48h -> DX:AX = its header,
@@ -884,8 +999,12 @@ h_49:   call m48_find
         mov word [es:A_NSEL], 0
         push ax
         push dx
+        mov ax, cx              ; the last first, so the first is at the
+        dec ax                  ; head of the free chain afterwards
+        shl ax, 3
+        add bx, ax
 .fs:    call ldt_free
-        add bx, 8
+        sub bx, 8
         loop .fs
         pop dx
         pop ax
@@ -907,6 +1026,7 @@ h_4a:   call m48_find
         jc h_49.f
         mov [m48_hdr], ax
         mov [m48_hdr+2], dx
+        call x48_drop
         mov cx, [bp+F_BX]
         or cx, cx
         jz .fail
@@ -977,10 +1097,12 @@ h_4a:   call m48_find
         add ax, A_HDR
         adc dx, 0
         call tiles_set
+        call x48_set
         call clr_cf
         stc
         ret
-.fail:  mov ax, [m48_hdr]
+.fail:  call x48_set
+        mov ax, [m48_hdr]
         mov dx, [m48_hdr+2]
         call hdr_map
         mov ax, [es:A_SIZE]
@@ -1115,7 +1237,9 @@ h_4c:   mov al, [bp+F_AX]
         jmp r0_terminate
 
 ; 4Eh/4Fh: find first/next, the result in the client's DTA (43 bytes)
-h_4e:   call rm_dta_set
+h_4e:   mov cx, 43
+        call dta_in
+        call rm_dta_set
         jmp h_dxz_dta
 h_4f:   mov cx, 43
         call dta_in

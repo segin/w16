@@ -264,14 +264,17 @@ d_specific:
 d_getrm:
         mov bl, [bp+F_BX]
         xor bh, bh
-        mov si, bx
-        shl si, 2
-        cmp byte [rmhooked+bx], 0
+        call hook_slot
+        jc .ivt
+        cmp byte [rmhooked+si], 0
         je .ivt
+        shl si, 2
         mov ax, [rmorig+si]
         mov dx, [rmorig+si+2]
         jmp .r
-.ivt:   mov ax, G_ZERO
+.ivt:   mov si, bx
+        shl si, 2
+        mov ax, G_ZERO
         mov es, ax
         mov ax, [es:si]
         mov dx, [es:si+2]
@@ -282,17 +285,20 @@ d_getrm:
 d_setrm:
         mov bl, [bp+F_BX]
         xor bh, bh
-        mov si, bx
-        shl si, 2
         mov ax, [bp+F_DX]
         mov dx, [bp+F_CX]
-        cmp byte [rmhooked+bx], 0
+        call hook_slot
+        jc .ivt
+        cmp byte [rmhooked+si], 0
         je .ivt
+        shl si, 2
         mov [rmorig+si], ax
         mov [rmorig+si+2], dx
         clc
         ret
-.ivt:   mov cx, G_ZERO
+.ivt:   mov si, bx
+        shl si, 2
+        mov cx, G_ZERO
         mov es, cx
         mov [es:si], ax
         mov [es:si+2], dx
@@ -384,6 +390,11 @@ set_pmvec:
         ja .d
 .hk:    mov ax, G_ZERO
         mov es, ax
+        push di
+        push si
+        call hook_slot          ; (it is one of them)
+        mov di, si
+        pop si
         ; the default?
         cmp cx, G_HC3 | 3
         jne .hook
@@ -395,28 +406,31 @@ set_pmvec:
         add ax, refstub_tab
         cmp dx, ax
         jne .hook
-        cmp byte [rmhooked+bx], 0
-        je .d
-        mov byte [rmhooked+bx], 0
-        mov ax, [rmorig+si]
+        cmp byte [rmhooked+di], 0
+        je .d0
+        mov byte [rmhooked+di], 0
+        shl di, 2
+        mov ax, [rmorig+di]
         mov [es:si], ax
-        mov ax, [rmorig+si+2]
+        mov ax, [rmorig+di+2]
         mov [es:si+2], ax
-        jmp .d
-.hook:  cmp byte [rmhooked+bx], 0
-        jne .d
-        mov ax, [es:si]
-        mov [rmorig+si], ax
-        mov ax, [es:si+2]
-        mov [rmorig+si+2], ax
-        mov ax, bx
+        jmp .d0
+.hook:  cmp byte [rmhooked+di], 0
+        jne .d0
+        mov byte [rmhooked+di], 1
+        mov ax, di
         mov cx, 3
         mul cx
         add ax, rmhook_tab
+        shl di, 2
+        mov cx, [es:si]
+        mov [rmorig+di], cx
+        mov cx, [es:si+2]
+        mov [rmorig+di+2], cx
         mov [es:si], ax
         mov ax, [imgseg]
         mov [es:si+2], ax
-        mov byte [rmhooked+bx], 1
+.d0:    pop di
 .d:     pop es
         pop si
         pop cx
@@ -472,8 +486,11 @@ rmcall: sub sp, R_SIZE
         ret
 
 ; 0303h: a real-mode callback for the procedure DS:SI with the
-; structure ES:DI -> CX:DX. No fixed limit (Microsoft's DOSX gives 16:
-; DX2 cb_count); the addresses are cb_seg - i : cb_off + 16 * i. The
+; structure ES:DI -> CX:DX. Callback c = 16 i + e gets the address
+; (cb_seg + e - i):(cb_off + 16 i): entry e of cb_entries, written with
+; segment and offset shifted by i paragraphs. How many there can be is
+; what real-mode addresses allow (see tables_init), not a table size
+; (Microsoft's DOSX gives 16: DX2 cb_count). The
 ; first 16 records are DOSX's own (a client such as KERNEL may have taken
 ; all extended memory before COMM.DRV asks for its callback), further
 ; ones live in extended memory.
@@ -497,7 +514,10 @@ d_cballoc:
         mov [es:di+4], bx
         mov bx, [bp+F_ES]
         mov [es:di+6], bx
-        mov bx, [cb_seg]
+        mov bx, ax
+        and bx, CB_ENTRIES - 1  ; e
+        add bx, [cb_seg]
+        shr ax, 4               ; i
         sub bx, ax
         mov [bp+F_CX], bx
         shl ax, 4
@@ -507,16 +527,21 @@ d_cballoc:
 .r:     ret
 ; 0304h: CX:DX = a callback's address
 d_cbfree:
-        mov ax, [cb_seg]
-        sub ax, [bp+F_CX]
+        mov ax, [bp+F_DX]       ; i = (DX - cb_off) / 16
+        sub ax, [cb_off]
         jb .f
+        test al, 0Fh
+        jnz .f
+        shr ax, 4
+        mov bx, [bp+F_CX]       ; e = CX - cb_seg + i
+        sub bx, [cb_seg]
+        add bx, ax
+        cmp bx, CB_ENTRIES
+        jae .f
+        shl ax, 4
+        add ax, bx              ; c = 16 i + e
         cmp ax, [cb_cap]
         jae .f
-        mov bx, ax
-        shl bx, 4
-        add bx, [cb_off]
-        cmp bx, [bp+F_DX]
-        jne .f
         call cb_rec
         mov word [es:di+2], 0   ; freeing twice succeeds (DX2 cb304_again)
         clc
@@ -537,17 +562,19 @@ cb_rec: push ax
         pop es
         jmp .r
 .ext:   sub ax, CB_STATIC
-        mov di, ax
-        shl di, 3
-        mov ax, [cb_lin]
-        mov dx, [cb_lin+2]
-        push di
+        xor dx, dx              ; DX:AX = (c - 16) * 8
+        mov cx, 3
+.sh:    shl ax, 1
+        rcl dx, 1
+        loop .sh
+        add ax, [cb_lin]
+        adc dx, [cb_lin+2]
         mov di, G_SCR0
         mov cx, 0FFFFh
         call gdt_base_lin
-        pop di
         mov ax, G_SCR0
         mov es, ax
+        xor di, di
 .r:     pop cx
         pop dx
         pop ax
@@ -567,8 +594,13 @@ cb_grow:
 .ok:    mov [cb_newcap], ax
         mov bx, ax
         sub bx, CB_STATIC
-        shl bx, 3
         xor cx, cx
+        shl bx, 1
+        rcl cx, 1
+        shl bx, 1
+        rcl cx, 1
+        shl bx, 1
+        rcl cx, 1
         call arena_alloc
         jc .f
         push ax
@@ -578,23 +610,17 @@ cb_grow:
         adc dx, 0
         mov [cb_newlin], ax
         mov [cb_newlin+2], dx
-        mov di, G_SCR0
-        mov cx, 0FFFFh
-        call gdt_base_lin
-        mov ax, G_SCR0
-        mov es, ax
-        xor di, di
-        mov cx, [cb_newcap]
-        sub cx, CB_STATIC
-        shl cx, 2
-        xor ax, ax
-        rep stosw
-        ; copy the old records
+        ; copy the old records (SI:CX bytes)
         mov cx, [cb_cap]
         sub cx, CB_STATIC
         jcxz .new
-        shl cx, 3
         xor si, si
+        shl cx, 1
+        rcl si, 1
+        shl cx, 1
+        rcl si, 1
+        shl cx, 1
+        rcl si, 1
         mov ax, [cb_lin]
         mov dx, [cb_lin+2]
         mov bx, [cb_newlin]
@@ -611,7 +637,20 @@ cb_grow:
         mov [cb_lin], ax
         mov ax, [cb_newlin+2]
         mov [cb_lin+2], ax
-        mov ax, [cb_newcap]
+        ; clear the new records
+        mov ax, [cb_cap]
+.clr:   cmp ax, [cb_newcap]
+        jae .cd
+        mov dx, ax
+        mov [cb_cap], dx        ; (cb_rec reads the new table)
+        call cb_rec
+        mov word [es:di], 0
+        mov word [es:di+2], 0
+        mov word [es:di+4], 0
+        mov word [es:di+6], 0
+        inc ax
+        jmp .clr
+.cd:    mov ax, [cb_newcap]
         mov [cb_cap], ax
         pop ax
         clc
@@ -664,57 +703,125 @@ d_meminfo:
 ; 0501h: BX:CX bytes -> BX:CX = linear address, SI:DI = handle (the
 ; header's address). Failure leaves AX alone (DX2 m501_huge).
 d_memalloc:
+        ; Microsoft's DOSX takes two descriptors for every block and
+        ; gives the first one's selector as the handle, in SI and DI (DX2
+        ; m501_*: 8347h, 8357h, ...; DX4); w16's does the same, so the
+        ; selectors given out after it are the same too. The first
+        ; describes the block, the second its header.
+        mov cx, 2
+        call ldt_alloc
+        jc .r
+        mov [m48_sel], ax
         mov bx, [bp+F_CX]
         mov cx, [bp+F_BX]
         call arena_alloc
-        jc .r
-        mov [bp+F_DI], ax
-        mov [bp+F_SI], dx
+        jc .nomem
+        push ax
+        push dx
+        call hdr_map
+        mov ax, [m48_sel]
+        mov [es:A_SEL], ax
+        or word [es:A_FLAGS], 2
+        pop dx
+        pop ax
         add ax, A_HDR
         adc dx, 0
         mov [bp+F_CX], ax
         mov [bp+F_BX], dx
+        mov cx, 0FFFFh
+        mov bx, [m48_sel]
+        call desc_lin
+        add bx, 8
+        sub ax, A_HDR
+        sbb dx, 0
+        mov cx, A_HDR - 1
+        call desc_lin
+        mov ax, [m48_sel]
+        mov [bp+F_DI], ax
+        mov [bp+F_SI], ax
         clc
+        ret
+.nomem: mov bx, [m48_sel]
+        call ldt_free
+        add bx, 8
+        call ldt_free
+        stc
 .r:     ret
-; 0502h: SI:DI = handle. (Microsoft's DOSX faults on a bad handle,
-; DX5 0502h; here it fails.)
-d_memfree:
-        mov ax, [bp+F_DI]
-        mov dx, [bp+F_SI]
-        call arena_check
-        jc .r
-        cmp word [es:A_NSEL], 0
+
+; mh_find: SI = DI = a 0501h handle -> DX:AX = its header (ES mapped);
+; CF if it is not one
+mh_find:
+        mov bx, [bp+F_DI]
+        cmp bx, [bp+F_SI]
         jne .f
-        call arena_free
+        test bl, 4
+        jz .f
+        call desc_base
+        jc .f
+        sub ax, A_HDR
+        sbb dx, 0
+        push ax
+        push dx
+        call arena_check
+        pop dx
+        pop ax
+        jc .f
+        test word [es:A_FLAGS], 2
+        jz .f
+        cmp [es:A_SEL], bx
+        jne .f
         clc
         ret
 .f:     stc
-.r:     ret
-; 0503h: SI:DI = handle, BX:CX = the new size; it may move. (Microsoft's
-; DOSX faults on every resize tried, DX5 F006/F007.)
-d_memresize:
-        mov ax, [bp+F_DI]
-        mov dx, [bp+F_SI]
-        call arena_check
+        ret
+
+; 0502h: SI:DI = handle. (Microsoft's DOSX faults on a bad handle,
+; DX5 0502h; here it fails.)
+d_memfree:
+        call mh_find
         jc .r
-        cmp word [es:A_NSEL], 0
-        jne .f
+        push bx
+        call arena_free
+        pop bx
+        add bx, 8               ; the second first: the first ends up at
+        call ldt_free           ; the head of the free chain (DX2
+        sub bx, 8               ; m501_800_after_free)
+        call ldt_free
+        clc
+.r:     ret
+; 0503h: SI:DI = handle, BX:CX = the new size; it may move; the handle
+; stays. (Microsoft's DOSX faults on every resize tried, DX5 F006/F007.)
+d_memresize:
+        call mh_find
+        jc .r
+        push bx
         mov bx, [bp+F_CX]
         mov cx, [bp+F_BX]
         mov byte [a_move], 1
         call arena_resize
         mov byte [a_move], 0
+        pop bx
         jc .r
-        mov [bp+F_DI], ax
-        mov [bp+F_SI], dx
+        push ax
+        push dx
+        call hdr_map
+        mov [es:A_SEL], bx
+        or word [es:A_FLAGS], 2
+        pop dx
+        pop ax
         add ax, A_HDR
         adc dx, 0
         mov [bp+F_CX], ax
         mov [bp+F_BX], dx
+        mov cx, 0FFFFh
+        call desc_lin
+        add bx, 8
+        sub ax, A_HDR
+        sbb dx, 0
+        mov cx, A_HDR - 1
+        call desc_lin
         clc
 .r:     ret
-.f:     stc
-        ret
 
 ; 0604h: 4 KB pages (DX5: BX:CX = 0000:1000)
 d_pagesize:

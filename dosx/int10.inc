@@ -104,6 +104,19 @@ op_int10:
         mov dx, R_EDI
         mov si, F_DI
         call v_out
+        ; the table starts with a far pointer to the static
+        ; functionality table: its segment becomes a selector (DX8 v1b:
+        ; Microsoft's does so)
+        push es
+        mov es, [bp+F_ES]
+        mov di, [bp+F_DI]
+        mov ax, [es:di+2]
+        pop es
+        call segmap
+        push es
+        mov es, [bp+F_ES]
+        mov [es:di+2], ax
+        pop es
 .done:  call rs_to_frame
         call ring3sp
         mov ax, [bx+R_FL]

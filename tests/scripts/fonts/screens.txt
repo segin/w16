@@ -1,0 +1,50 @@
+; tests/fonts.sh: screens drawn in the System and MS Sans Serif fonts,
+; taken with Windows 3.1's fonts and with w16's (a SNAP.EXE script)
+run PROGMAN.EXE
+wait 3000
+snap C:\PM.BMP
+dump
+menu f
+wait 500
+snap C:\MENU.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char r
+wait 800
+type NOTEPAD.EXE
+wait 300
+snap C:\RUN.BMP
+dump
+key 1B
+wait 500
+menu f
+char p
+wait 800
+snap C:\PROPS.BMP
+dump
+key 1B
+wait 500
+run NOTEPAD.EXE
+wait 1500
+type The quick brown fox jumps over the lazy dog. 0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+wait 500
+snap C:\NOTEPAD.BMP
+dump
+menu h
+char a
+wait 800
+snap C:\ABOUT.BMP
+dump
+key 1B
+wait 300
+run CONTROL.EXE
+wait 2000
+snap C:\CONTROL.BMP
+dump
+key 27
+key 0D
+wait 2000
+snap C:\CPFONTS.BMP
+dump

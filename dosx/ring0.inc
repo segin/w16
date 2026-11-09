@@ -379,9 +379,15 @@ r0_reflect:
         mov [bx+R_ES], ax
         pop ax
         ; a vector DOSX hooked for the client goes to its previous owner
-        mov cl, ah
-        xor ch, ch
-        mov di, cx
+        push bx
+        push si
+        mov bl, ah
+        xor bh, bh
+        call hook_slot
+        mov di, si
+        pop si
+        pop bx
+        jc .int
         cmp byte [rmhooked+di], 0
         je .int
         shl di, 2
@@ -631,7 +637,7 @@ r0_terminate:
         mov ss, ax
         mov sp, hs_stack_top
         mov word [hs_top], hs_stack_top
-        mov word [h3_top], h3_stack_top
+        mov word [h3_top], H3_SIZE
         mov word [tss+2], hs_stack_top
         mov word [tb_top], tbuf + TB_SIZE
         call to_rm
@@ -740,7 +746,8 @@ r0_client_start:
         iret
 
 ; vectors_init: the default protected-mode interrupt handlers (the
-; ring-3 stubs; INT 10h, 15h, 21h, 2Fh and 31h are DOSX's own; 01h, 03h, 30h and
+; ring-3 stubs; INT 10h, 13h, 15h, 21h, 25h, 26h, 2Fh, 31h and 33h are
+; DOSX's own; 01h, 03h, 30h and
 ; 41h just return, as with Microsoft's DOSX: DX1 pmvec lines) and
 ; exception handlers, and the IDT
 vectors_init:
@@ -754,6 +761,11 @@ vectors_init:
         jb .pv
         mov word [pmvec+10h*4], int10_stub
         mov word [pmvec+15h*4], int15_stub
+        mov word [pmvec+13h*4], int13_stub
+        mov word [pmvec+25h*4], int25_stub
+        mov word [pmvec+26h*4], int26_stub
+        mov word [pmvec+33h*4], int33_stub
+        mov word [pmvec+4Bh*4], int4b_stub
         mov word [pmvec+21h*4], int21_stub
         mov word [pmvec+2Fh*4], int2f_stub
         mov word [pmvec+31h*4], int31_stub
@@ -772,14 +784,18 @@ vectors_init:
         ; IDT: 00h-1Fh to ring 0, the rest to the handlers
         xor bx, bx
         mov ax, excstub_tab
-.i0:    mov [idt+bx], ax
-        mov word [idt+bx+2], G_HC0
-        mov word [idt+bx+4], 0E600h
-        mov word [idt+bx+6], 0
+        push es
+        mov cx, G_IDT
+        mov es, cx
+.i0:    mov [es:bx], ax
+        mov word [es:bx+2], G_HC0
+        mov word [es:bx+4], 0E600h
+        mov word [es:bx+6], 0
         add ax, 3
         add bx, 8
         cmp bx, 20h * 8
         jb .i0
+        pop es
         mov cx, 20h
 .i1:    call idt_from_pmvec
         inc cx
@@ -787,12 +803,12 @@ vectors_init:
         jb .i1
         ; nothing hooked in real mode
         mov di, rmhooked
-        mov cx, 128
+        mov cx, NHOOK
         xor ax, ax
         push es
         push ds
         pop es
-        rep stosw
+        rep stosb
         pop es
         ret
 
@@ -805,12 +821,16 @@ idt_from_pmvec:
         shl bx, 2
         mov si, cx
         shl si, 3
+        push es
+        mov ax, G_IDT
+        mov es, ax
         mov ax, [pmvec+bx]
-        mov [idt+si], ax
+        mov [es:si], ax
         mov ax, [pmvec+bx+2]
-        mov [idt+si+2], ax
-        mov word [idt+si+4], 0E600h
-        mov word [idt+si+6], 0
+        mov [es:si+2], ax
+        mov word [es:si+4], 0E600h
+        mov word [es:si+6], 0
+        pop es
         pop ax
         pop si
         pop bx
@@ -863,12 +883,16 @@ r0_rmx:
         sub word [h3_top], H3_CHUNK
         sub ax, 6
         mov di, ax
-        mov word [di], ret3_stub
-        mov word [di+2], G_HC3 | 3
+        push es
+        mov cx, G_HD3
+        mov es, cx
+        mov word [es:di], ret3_stub
+        mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
         and cx, ~(FL_IF | FL_TF)
         or cx, FL_IOPL
-        mov [di+4], cx
+        mov [es:di+4], cx
+        pop es
         mov [si+C_SP], di
         mov word [si+C_SS], G_HD3 | 3
         mov [si+C_FL], cx
@@ -909,12 +933,16 @@ r0_rmx:
         sub word [h3_top], H3_CHUNK
         sub ax, 6
         mov di, ax
-        mov word [di], ret3_stub
-        mov word [di+2], G_HC3 | 3
+        push es
+        mov cx, G_HD3
+        mov es, cx
+        mov word [es:di], ret3_stub
+        mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
         and cx, ~(FL_IF | FL_TF)
         or cx, FL_IOPL
-        mov [di+4], cx
+        mov [es:di+4], cx
+        pop es
         mov [si+C_SP], di
         mov word [si+C_SS], G_HD3 | 3
         mov [si+C_FL], cx

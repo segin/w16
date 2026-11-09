@@ -65,7 +65,7 @@ dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
-     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -551,8 +551,17 @@ $(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
 
+# DX7.EXE + DXD.COM: a DOS program started from Standard mode (tests/dosapp.sh)
+$(DOS)/DX7.EXE: $(B)/tests/start.o $(B)/tests/dx7.o tests/apps/app.lnk tests/apps/dx7.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/dx7.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx7.map file { $(B)/tests/start.o $(B)/tests/dx7.o }
+$(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
-DXPROBES := DX1 DX2 DX5
+DXPROBES := DX1 DX2 DX4 DX5 DX8
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
@@ -592,12 +601,63 @@ $(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/wc9.map file { $(B)/tests/start.o $(B)/tests/wc9.o }
 
+# FN1.EXE: the font metrics probe; FN2.EXE: a window showing every
+# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9)
+FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE
+fnprobes: $(FNPROBES)
+dos: $(FNPROBES)
+$(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/fn$*.map file { $(B)/tests/start.o $(B)/tests/fn$*.o }
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 $(B)/hdd/MBR.BIN: tools/dos/mbr.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
+
+# ---- fonts: w16's own raster fonts (fonts/*.txt; ARCHITECTURE.md 6.9) ----
+# tools/fontc.py compiles each glyph source into a .FNT and packages them as
+# a .FON (a resource-only NE DLL). Module names, descriptions (their
+# "FONTRES aspect,logpixelsx,logpixelsy : " prefix), resource IDs and
+# version numbers follow Windows 3.1's files; the free text is our own.
+FNT     := $(B)/fonts
+FONTC   := python3 tools/fontc.py
+FONTINFO = --info CompanyName=w16 --info FileVersion=3.10 --info ProductVersion=3.10 \
+           --info "LegalCopyright=Copyright (c) 2026 the w16 contributors, MIT licence" \
+           --info ProductName=w16
+FONS    := $(FNT)/VGASYS.FON $(FNT)/VGAFIX.FON $(FNT)/VGAOEM.FON $(FNT)/SSERIFE.FON
+SSERIFE_SRC := $(foreach p,8 10 12 14 18 24,fonts/sserife$(p).txt)
+.PHONY: fonts
+fonts: $(FONS)
+all: fonts
+$(FNT)/VGASYS.FON: fonts/vgasys.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module FONTS --desc "FONTRES 100,96,96 : System (w16)" $(FONTINFO) \
+	    --info "FileDescription=System font (VGA res)" --info InternalName=FONTS \
+	    --info OriginalFilename=VGASYS.FON 31=$<
+$(FNT)/VGAFIX.FON: fonts/vgafix.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module FIXFONTS --desc "FONTRES 100,96,96 : Fixedsys (w16)" $(FONTINFO) \
+	    --info "FileDescription=Fixedsys font (VGA res)" --info InternalName=FIXFONTS \
+	    --info OriginalFilename=VGAFIX.FON 31=$<
+$(FNT)/VGAOEM.FON: fonts/vgaoem.txt tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module OEMFONTS --desc "FONTRES 100,96,96 : Terminal (US) (w16)" $(FONTINFO) \
+	    --info "FileDescription=Terminal font, code page 437 (VGA res)" --info InternalName=OEMFONTS \
+	    --info OriginalFilename=VGAOEM.FON 30=$<
+# the description after the colon is the [fonts] key Control Panel writes
+# to WIN.INI, so it is Windows 3.1's
+$(FNT)/SSERIFE.FON: $(SSERIFE_SRC) tools/fontc.py
+	@mkdir -p $(@D)
+	$(FONTC) fon $@ --module SSERIFE \
+	    --desc "FONTRES 100,96,96 : MS Sans Serif 8,10,12,14,18,24 (VGA res)" $(FONTINFO) \
+	    --info "FileDescription=MS Sans Serif font (VGA res)" --info InternalName=SSERIFE \
+	    --info OriginalFilename=SSERIFE.FON \
+	    84=fonts/sserife8.txt 85=fonts/sserife10.txt 86=fonts/sserife12.txt \
+	    87=fonts/sserife14.txt 88=fonts/sserife18.txt 89=fonts/sserife24.txt
 
 # ---- shell: PROGMAN.EXE, in two builds from one source tree ----
 #   $(DOS)/PROGMAN.EXE    Windows 3.x build (marked 3.0, uses MDI etc.)
@@ -644,7 +704,7 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
-test: dos
+test: dos fonts
 	tests/run-tests.sh
 
 clean:

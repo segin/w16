@@ -1,6 +1,6 @@
 ; data.inc - initialised data.
 
-patch_tab       dw to_rm.seg, cb_entry.seg, 0
+patch_tab       dw to_rm.seg, cb_c0.seg, 0
 
 msg_nomem       db 13, 10, '  Insufficient extended memory to run Windows in standard mode.'
                 db 13, 10, 13, 10, '  Increase the amount of available extended memory.'
@@ -19,6 +19,7 @@ s_krnl386       db 'KRNL386.EXE', 0
 s_krnl286       db 'KRNL286.EXE', 0
 
 optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10, op_int15
+                dw op_int13, op_int2526, op_int33
 OP_COUNT        equ ($ - optab) / 2
 
 ; variables
@@ -39,6 +40,8 @@ emb_kb          dw 0
 emb_lin         dd 0
 emb_end         dd 0
 ldt_lin         dd 0
+idt_lin         dd 0
+h3_lin          dd 0
 pool_lin        dd 0
 pool_last       dd 0
 old2f           dd 0
@@ -78,6 +81,8 @@ r286_sp         dw 0
 x_ax            dw 0
 x_fl            dw 0
 x_idx           dw 0
+x_i             dw 0
+x_cs            dw 0
 x_ss            dw 0
 x_sp            dw 0
 cb_off          dw 0
@@ -98,6 +103,14 @@ lc_dst          dd 0
 lc_n            dw 0
 exit_ax         dw 0
 pending_msg     dw 0
+did1605         db 0
+bios_vec        db 0
+                db 0
+abs_pkt         dw 0
+abs_sel         dw 0
+abs_off         dw 0
+abs_len         dw 0
+abs_tb          dw 0
 exc_sp          dw 0
 rmx_depth       dw 0                    ; real-mode callbacks/hooks active
 fx_vals:

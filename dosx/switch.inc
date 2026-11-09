@@ -281,12 +281,20 @@ gdt_base_lin:
 ; (INT 31h 0303h) and real-mode interrupts the client handles in
 ; protected mode.
 ;
-; A callback's real-mode address is (cb_seg - i):(cb_off + 16 * i) for
-; callback i: every one of them is cb_entry, and the segment tells them
-; apart, so the number of callbacks is not limited by a table of entry
-; points.
-cb_entry:
-        push cs
+; Callback c = 16 i + e is entry e of cb_entries (16 entries, one per
+; paragraph, each "call cb_c0") reached as (cb_seg + e - i):(cb_off +
+; 16 i): the offset tells i, then the segment tells e. Every one of
+; those addresses is DOSX's own code, so the number of callbacks is
+; bounded only by how many segment:offset pairs reach these 16 entries:
+; 16 x min(4096, cb_seg + 1) (the offset must stay below 10000h, the
+; segment at or above 0), 36000 or so where DOSX is loaded.
+        align 16
+cb_entries:
+%rep CB_ENTRIES
+        call cb_c0
+        align 16
+%endrep
+cb_c0:  push cs
         db 0EAh                 ; jmp far image:cb_common
         dw cb_common
 .seg:   dw 0
@@ -296,15 +304,26 @@ cb_common:
         cli
         mov [cs:x_ax], ax
         pop word [cs:x_fl]
-        pop ax                  ; the segment it was called with
-        neg ax
-        add ax, [cs:cb_seg]
+        pop word [cs:x_cs]      ; the segment it was called with
+        pop ax                  ; the return offset: cb_off + 16 i + 3
+        sub ax, [cs:cb_off]
+        sub ax, 3
+        shr ax, 4
+        mov [cs:x_i], ax
+        add ax, [cs:x_cs]       ; e = CS - cb_seg + i
+        sub ax, [cs:cb_seg]
+        push ax
+        mov ax, [cs:x_i]
+        shl ax, 4
         mov [cs:x_idx], ax
+        pop ax
+        add [cs:x_idx], ax
         mov byte [cs:x_kind], 0
         jmp rmx_common
 
-; rmhook_tab: 256 entries "call rmhook_common"; IVT[n] points at entry n
-; while the client handles real-mode interrupt n in protected mode
+; rmhook_tab: an entry "call rmhook_common" per hookable vector
+; (hook_vecs); IVT[n] points at n's entry while the client handles
+; real-mode interrupt n in protected mode
 rmhook_common:
         pushf
         cli
@@ -317,6 +336,10 @@ rmhook_common:
         div dl
         pop dx
         xor ah, ah
+        push bx
+        mov bx, ax
+        mov al, [cs:hook_vecs+bx]
+        pop bx
         mov [cs:x_idx], ax
         mov byte [cs:x_kind], 1
         ; fall through

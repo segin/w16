@@ -25,6 +25,26 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         mov [imglin], ax
         mov [imglin+2], dx
         call patch_segs
+        ; the Windows start-up broadcast, before XMS (as Microsoft's DOSX:
+        ; INT 2Fh 1605h with DX=1, standard mode, DI=030Ah, ES:BX = DS:SI =
+        ; 0, CX = 0; WC3 between WSWAP and DOSX). A TSR that answers with
+        ; CX other than 0 does not want Windows to run. UNVERIFIED: what
+        ; Microsoft's DOSX does then, and with an ES:BX chain of instance
+        ; data (w16's ignores both).
+        push ds
+        xor bx, bx
+        mov es, bx
+        mov ds, bx
+        xor si, si
+        xor cx, cx
+        mov dx, 1
+        mov di, 030Ah
+        mov ax, 1605h
+        int 2Fh
+        pop ds
+        push ds
+        pop es
+        mov byte [did1605], 1
         call xms_init
         jnc .memok
         mov dx, msg_nomem
@@ -181,7 +201,15 @@ xms_init:
         mov dx, [emb_lin+2]
         mov [ldt_lin], ax
         mov [ldt_lin+2], dx
-        inc dx
+        inc dx                  ; the IDT (as Microsoft's: in extended
+        mov [idt_lin], ax       ; memory, DX1 idt_base)
+        mov [idt_lin+2], dx
+        add ax, 800h
+        adc dx, 0
+        mov [h3_lin], ax        ; the ring-3 host stack (G_HD3)
+        mov [h3_lin+2], dx
+        add ax, H3_SIZE
+        adc dx, 0
 %ifdef TRACE
         mov [trc_lin], ax       ; the trace buffer between LDT and pool
         mov [trc_lin+2], dx
@@ -219,8 +247,8 @@ tables_init:
         mov ax, 0F2h
         call gdt_set
         mov bx, G_IDT
-        mov ax, idt
-        call base_img
+        mov si, [idt_lin]
+        mov dx, [idt_lin+2]
         mov cx, 7FFh
         mov ax, 0F2h
         call gdt_set
@@ -277,9 +305,6 @@ tables_init:
         xor ax, ax
         call base_img
         mov cx, 0FFFFh
-        mov bx, G_HD3
-        mov ax, 0F2h
-        call gdt_set
         mov bx, G_HC3
         mov ax, 0FAh
         call gdt_set
@@ -298,6 +323,11 @@ tables_init:
         mov bx, G_HDS
         mov cx, 0FFh
         mov ax, 0F2h
+        call gdt_set
+        mov bx, G_HD3           ; the ring-3 host stack, in extended memory
+        mov si, [h3_lin]
+        mov dx, [h3_lin+2]
+        mov cx, 0FFFFh
         call gdt_set
         mov bx, G_SCR0
         mov cx, 0FFFFh
@@ -336,10 +366,10 @@ tables_init:
         mov [gdtr+2], si
         mov [gdtr+4], dx
         mov word [idtr], 7FFh
-        mov ax, idt
-        call base_img
-        mov [idtr+2], si
-        mov [idtr+4], dx
+        mov ax, [idt_lin]
+        mov [idtr+2], ax
+        mov ax, [idt_lin+2]
+        mov [idtr+4], ax
         mov word [rmidtr], 3FFh
         ; TSS: ring 0 stack
         mov di, tss
@@ -349,22 +379,26 @@ tables_init:
         mov word [tss+2], hs_stack_top
         mov word [tss+4], G_HD0
         mov word [hs_top], hs_stack_top
-        mov word [h3_top], h3_stack_top
+        mov word [h3_top], H3_SIZE
         mov word [tb_top], tbuf + TB_SIZE
-        ; real-mode callbacks: their canonical address (see cb_entry)
-        mov ax, cb_entry
+        ; real-mode callbacks: entry 0's canonical address (cb_entries;
+        ; the entries are a paragraph apart, so entry e is cb_seg + e)
+        mov ax, cb_entries
         mov dx, ax
         and ax, 0Fh
         mov [cb_off], ax
         shr dx, 4
         add dx, [imgseg]
         mov [cb_seg], dx
-        ; as many as real-mode addresses allow: the segment must not
-        ; go below 0, the offset not beyond 0FFFFh
-        inc dx
-        cmp dx, 1000h
-        jbe .cbm
-        mov dx, 1000h
+        ; as many as real-mode addresses allow: i up to min(4095, cb_seg)
+        ; (the segment must not go below 0, the offset not beyond
+        ; 0FFFFh), times the 16 entries
+        cmp dx, 0FFFh
+        jbe .cbi
+        mov dx, 0FFFh
+.cbi:   inc dx
+        shl dx, 4
+        dec dx                  ; (at most 0FFFFh)
 .cbm:   mov [cb_max], dx
         ret
 
@@ -591,7 +625,13 @@ cleanup:
         cmp byte [client_active], 0
         je .nc
         call client_rm_reset
-.nc:    call hooks_remove
+.nc:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
+        cmp byte [did1605], 0
+        je .nc2
+        mov dx, 1
+        mov ax, 1606h
+        int 2Fh
+.nc2:   call hooks_remove
         cmp byte [xms_ok], 0
         je .d
 
@@ -616,14 +656,18 @@ client_rm_reset:
 .l:     cmp byte [rmhooked+bx], 0
         je .n
         mov byte [rmhooked+bx], 0
-        mov si, bx
+        mov di, bx
+        shl di, 2
+        mov al, [hook_vecs+bx]
+        xor ah, ah
+        mov si, ax
         shl si, 2
-        mov ax, [rmorig+si]
+        mov ax, [rmorig+di]
         mov [es:si], ax
-        mov ax, [rmorig+si+2]
+        mov ax, [rmorig+di+2]
         mov [es:si+2], ax
 .n:     inc bx
-        cmp bx, 256
+        cmp bx, NHOOK
         jb .l
         sti
         mov es, [c_psp]

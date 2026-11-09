@@ -9,9 +9,36 @@ excstub_tab:
 
 ; real-mode interrupt hooks (real mode)
 rmhook_tab:
-%rep 256
+%rep NHOOK
         call rmhook_common
 %endrep
+
+; the real-mode interrupts the client can take over in protected mode
+; (DPMI 0.9: the hardware interrupts, 1Ch, 23h, 24h), one rmhook_tab
+; entry, rmorig and rmhooked slot each
+hook_vecs       db 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 0Fh, 1Ch, 23h, 24h
+                db 70h, 71h, 72h, 73h, 74h, 75h, 76h, 77h
+%if $ - hook_vecs != NHOOK
+%error "hook_vecs and NHOOK disagree"
+%endif
+
+; hook_slot: BX = vector -> SI = its slot, CF if it is not one of them
+hook_slot:
+        push ax
+        xor si, si
+.l:     cmp si, NHOOK
+        jae .f
+        mov al, [cs:hook_vecs+si]
+        cmp al, bl
+        je .ok
+        inc si
+        jmp .l
+.ok:    pop ax
+        clc
+        ret
+.f:     pop ax
+        stc
+        ret
 
 ; ---------------------------------------------------------------------------
 ; ring 3 (CS = G_HC3)
@@ -58,6 +85,58 @@ int15_stub:
         push OP_INT15
         call (G_GATE | 3):0
         iret
+
+int13_stub:
+        cli
+        push 0
+        push OP_INT13
+        call (G_GATE | 3):0
+        iret
+
+int33_stub:
+        cli
+        push 0
+        push OP_INT33
+        call (G_GATE | 3):0
+        iret
+
+; INT 25h/26h return with RETF and leave the flags on the stack
+int25_stub:
+        cli
+        push 25h
+        push OP_INT2526
+        call (G_GATE | 3):0
+        jmp abs_ret
+int26_stub:
+        cli
+        push 26h
+        push OP_INT2526
+        call (G_GATE | 3):0
+abs_ret:
+        push bp
+        mov bp, sp
+        push word [bp+6]
+        popf
+        pop bp
+        retf
+
+; INT 4Bh: Microsoft's DOSX answers the Virtual DMA Services' "get
+; version" (AX=8102h) itself: AX=0100h, BX=0002h, CX=0001h, DX=0008h,
+; CF clear (DX8 vds8102; UNVERIFIED what the other VDS functions do:
+; they go to real mode)
+int4b_stub:
+        cmp ax, 8102h
+        jne .chain
+        mov ax, 0100h
+        mov bx, 0002h
+        mov cx, 0001h
+        mov dx, 0008h
+        push bp
+        mov bp, sp
+        and byte [bp+6], ~FL_CF
+        pop bp
+        iret
+.chain: jmp refstub_tab + 4Bh * 3
 
 int31_stub:
         cli

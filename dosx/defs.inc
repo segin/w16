@@ -125,6 +125,9 @@ OP_INT21        equ 2
 OP_EXCDEF       equ 3   ; arg = stub return address: default exception n
 OP_INT10        equ 4
 OP_INT15        equ 5
+OP_INT13        equ 6
+OP_INT2526      equ 7
+OP_INT33        equ 8
 
 FL_CF   equ 0001h
 FL_IF   equ 0200h
@@ -135,12 +138,14 @@ FL_NT   equ 4000h
 FL_ARITH equ 08D5h          ; OF SF ZF AF PF CF
 
 ; stacks and buffers (bytes)
-HS_SIZE         equ 2800h   ; ring 0 and real-mode host stack
+HS_SIZE         equ 1800h   ; ring 0 and real-mode host stack
 H3_SIZE         equ 1800h   ; ring-3 host stack (callbacks, exceptions)
 H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
-INIT_STACK      equ 400h
+INIT_STACK      equ 200h
+CB_ENTRIES      equ 16      ; real-mode entry points for callbacks
+NHOOK           equ 19      ; hookable real-mode vectors (hook_vecs)
 CB_STATIC       equ 16      ; callback records in DOSX's own data
 
 ; arena block header (16 bytes before each block, in extended memory)

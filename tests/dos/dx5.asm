@@ -23,6 +23,7 @@
 ;   F00D       a GP fault with a handler (0203h) that skips the instruction:
 ;              logs the exception frame and the stack it ran on
 ;   F00E       software INT 0Dh (as an interrupt, not a fault)
+;   F010       INT 31h 0501h twice (1 and 1000h bytes), 0502h on the second
 ;   F00F       a GP fault in a handler-less program after hooking INT 0Dh
 ;              with 0205h: does the interrupt handler see the fault?
 
@@ -108,6 +109,7 @@ special:
 
 jt:     dw t_gp, t_div, t_ud, t_exit1, t_exitff, t_rmexit, t_503s, t_503g
         dw t_4ag, t_4as, done, t_ss, t_alloc0, t_gph, t_int0d, t_gpint
+        dw t_free2
 jtend:
 
 t_gp:   mov ax, 0FFF0h
@@ -210,6 +212,21 @@ t_ss:   mov ax, 0
         push ax
         push ax
         NOTE 'after stack fault'
+        jmp done
+t_free2:
+        xor bx, bx
+        mov cx, 1
+        mov ax, 0501h
+        int 31h
+        REGS 'alloc1'
+        xor bx, bx
+        mov cx, 1000h
+        mov ax, 0501h
+        int 31h
+        REGS 'alloc2'
+        mov ax, 0502h
+        int 31h
+        REGS 'free2'
         jmp done
 t_alloc0:
         xor cx, cx

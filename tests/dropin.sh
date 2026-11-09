@@ -23,9 +23,9 @@
 #     -r         run the reference KERNEL instead (for comparison)
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
 #                Microsoft's DOSX.EXE; -X FILE: that file as DOSX.EXE
-#     -p 286     run on an emulated 80286 (DOSBox-X, cputype=286): KRNL286
-#                and the 286 paths of the DOS extender; -p 386x: DOSBox-X
-#                as a 386 (it checks segment limits, plain DOSBox does not)
+#     -p CPU     run in DOSBox-X with cputype=CPU (286: an emulated 80286,
+#                KRNL286 and the 286 paths of the DOS extender; 386x:
+#                DOSBox-X as a 386, which checks segment limits)
 #     -w         use w16's WIN.COM (build/dos/WIN.COM) instead of Windows 3.1's
 # A plain WIN (without /S) in the scratch copy picks 386 Enhanced mode on
 # a 386 and stops with "Cannot find or load required file KRNL386.EXE",
@@ -42,7 +42,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 files= inis='w16:watchdog=15'
+cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= inis='w16:watchdog=15'
 while getopts k:c:t:f:i:s:o:rxX:wp: opt; do
     case $opt in
     k) kernel=$OPTARG ;;
@@ -57,7 +57,7 @@ $OPTARG" ;;
     r) useref=1 ;;
     x) dosx=$root/build/dos/DOSX.EXE ;;
     X) dosx=$OPTARG ;;
-    p) cpu=$OPTARG ;;
+    p) cpu=$OPTARG usex=1 ;;
     w) files="$files
 $root/build/dos/WIN.COM=WINDOWS/WIN.COM" ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
@@ -120,7 +120,7 @@ open(path, 'wb').write('\r\n'.join(out).encode('latin-1'))
 PY
 done
 emu="dosbox -noconsole" xdos=
-if [ "$cpu" != 386 ]; then
+if [ -n "$usex" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false"
     [ "$cpu" = 386x ] && cpu=386
 fi
