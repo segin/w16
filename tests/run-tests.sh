@@ -139,4 +139,9 @@ if [ -f "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.COM" ]; then
     echo "== WIN.COM (tests/wincom.sh)"
     "$root/tests/wincom.sh" || status=1
 fi
+# w16's fonts against Windows 3.1's metrics (needs the reference install)
+if [ -f "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.COM" ] && [ -f "$root/build/fonts/VGASYS.FON" ]; then
+    echo "== fonts (tests/fonts.sh -q)"
+    "$root/tests/fonts.sh" -q || status=1
+fi
 exit $status
