@@ -1152,6 +1152,46 @@ int module_init_dll(u16 hmod)
                     module_instance(m), 0, 0) != 0;
 }
 
+/* A DOS program (a file that is not a Windows module): Windows starts
+   WINOLDAP.MOD from the system directory in its place (Standard mode;
+   WINOA386.MOD in 386 Enhanced mode; Pietrek). Observed on 3.1 (TK33,
+   in WINOLDAP.MOD's place, for WinExec("COMMAND.COM /C ECHO HI")): its
+   command tail is the DOS program's tail, a NUL, then the program's name
+   as given ("/C ECHO HI\0COMMAND.COM", length byte 16h, followed by
+   0Ah), nCmdShow as given, hPrevInstance 0. UNVERIFIED: the 0Ah, a name
+   with a path, a .PIF, tails longer than 127 bytes (Pietrek: the PDB
+   then grows); the TDB's WINOLDAP flag (Pietrek: TDB 16h bit 0) is not
+   set yet. */
+u16 KAPI LoadModule(const char FAR *name, void FAR *params);
+
+static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
+{
+    static char woa[DOS_PATHMAX + 16];
+    static u8 tail[0x100];
+    loadparms np;
+    const u8 FAR *t = lp->cmd;
+    u16 n = 0, i, k;
+
+    k = t ? t[0] : 0;
+    for (i = 0; i < k && n < sizeof tail - 3; i++)
+        tail[1 + n++] = t[1 + i];
+    tail[1 + n++] = 0;
+    for (i = 0; name[i] && n < sizeof tail - 3; i++)
+        tail[1 + n++] = name[i];
+    tail[0] = (u8)(n > 0xFF ? 0xFF : n);
+    tail[1 + n] = '\n';
+    n = kstrlen(sys_dir);
+    kmemcpy(woa, sys_dir, n);
+    if (n && woa[n - 1] != '\\')
+        woa[n++] = '\\';
+    kmemcpy(woa + n, "WINOLDAP.MOD", 13);
+    np.env = lp->env;
+    np.cmd = tail;
+    np.show = lp->show;
+    np.reserved = 0;
+    return LoadModule(woa, &np);
+}
+
 /* Observed on Windows 3.1 (tk5.c, tk15.c): for a DLL the same as
    LoadLibrary; with the parameter block -1 (what LoadLibrary passes,
    Pietrek) a program gives 5. A program starts a task: a new module,
@@ -1182,6 +1222,8 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
     if (m)
         uses(m, 1);
     sweep();
+    if (!m && err == LE_BADFORMAT && winboot_active && lp)
+        return start_oldapp(name, lp);
     if (!m)
         return err;
     if (m->flags & NEF_LIBRARY)
