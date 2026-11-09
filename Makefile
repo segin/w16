@@ -560,6 +560,14 @@ $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/fn$*.map file { $(B)/tests/start.o $(B)/tests/fn$*.o }
 
+# VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM
+vxprobes: $(VXPROBES)
+dos: $(VXPROBES)
+$(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+
 $(DOS)/POWEROFF.COM: tools/dos/poweroff.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
