@@ -318,13 +318,14 @@ INITTASK:
 ; the caller's DS as an extra first argument, followed by copies of the
 ; caller's NARGS word arguments, and restore DS on return.
 ;   LOCALAPI exported-name, c-function, nargs
-%macro LOCALAPI 3
+%macro LOCALAPI 3-4 L_NONE
 extern %2
 global %1
 %1:
         push bp
         mov bp, sp
         push ds
+        push es
         push ds
 %assign i %3
 %rep %3
@@ -332,20 +333,34 @@ global %1
 %assign i i - 1
 %endrep
         call far %2
+        %4
+        pop es
         pop ds
         pop bp
         retf 2 * %3
 %endmacro
+; What the local-heap functions leave in CX (TK43, 3.1: LocalAlloc,
+; LocalReAlloc, LocalLock, LocalUnlock, LocalSize and LocalFlags the
+; result, = AX; LocalFree 1; ES kept by all; GDI relies on CX: it did
+; not start when LocalAlloc kept CX)
+%macro L_NONE 0
+%endmacro
+%macro L_CXAX 0
+        mov cx, ax
+%endmacro
+%macro L_CX1 0
+        mov cx, 1
+%endmacro
 
 LOCALAPI LOCALINIT,    LINIT,    3      ; KERNEL.4
-LOCALAPI LOCALALLOC,   LALLOC,   2      ; KERNEL.5
-LOCALAPI LOCALREALLOC, LREALLOC, 3      ; KERNEL.6
-LOCALAPI LOCALFREE,    LFREE,    1      ; KERNEL.7
-LOCALAPI LOCALLOCK,    LLOCK,    1      ; KERNEL.8
-LOCALAPI LOCALUNLOCK,  LUNLOCK,  1      ; KERNEL.9
-LOCALAPI LOCALSIZE,    LSIZE,    1      ; KERNEL.10
+LOCALAPI LOCALALLOC,   LALLOC,   2, L_CXAX      ; KERNEL.5
+LOCALAPI LOCALREALLOC, LREALLOC, 3, L_CXAX      ; KERNEL.6
+LOCALAPI LOCALFREE,    LFREE,    1, L_CX1      ; KERNEL.7
+LOCALAPI LOCALLOCK,    LLOCK,    1, L_CXAX      ; KERNEL.8
+LOCALAPI LOCALUNLOCK,  LUNLOCK,  1, L_CXAX      ; KERNEL.9
+LOCALAPI LOCALSIZE,    LSIZE,    1, L_CXAX      ; KERNEL.10
 LOCALAPI LOCALHANDLE,  LHANDLE,  1      ; KERNEL.11
-LOCALAPI LOCALFLAGS,   LFLAGS,   1      ; KERNEL.12
+LOCALAPI LOCALFLAGS,   LFLAGS,   1, L_CXAX      ; KERNEL.12
 LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
 ; Other APIs that need the caller's DS (procinst.c)
 LOCALAPI MAKEPROCINSTANCE, MPI, 3       ; KERNEL.51
@@ -781,6 +796,65 @@ wd_fire:
         sti
         call far _wd_report
 .hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; Global-heap exports with the registers 3.1 leaves (TK43, KRNL286, a
+; moveable, a fixed and a discardable block): GlobalLock keeps BX and
+; returns the selector in CX as well as in DX (GDI relies on CX: it did
+; not start when CX was kept), ES = 0; GlobalUnlock keeps BX, CX = 0,
+; ES = 0; GlobalFlags CX = the flags (= AX), DX = the selector, ES = 0;
+; GlobalFree CX = DX = 0, ES = 0; GlobalReAlloc CX = the handle (= AX),
+; ES = 0; GlobalSize ES = 0. (BX after GlobalSize, GlobalFlags,
+; GlobalReAlloc and GlobalFree, CX after GlobalSize and DX after
+; GlobalUnlock and GlobalReAlloc hold other values on 3.1, not copied.)
+; The C functions do the work.
+;   GHEAPAPI exported-name, c-function, nargs, after
+%macro GHEAPAPI 4
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        push bx
+%assign i %3
+%rep %3
+        push word [bp + 4 + 2 * i]
+%assign i i - 1
+%endrep
+        call far %2
+        %4
+        push 0
+        pop es
+        pop bx
+        pop bp
+        retf 2 * %3
+%endmacro
+%macro AFTER_LOCK 0
+        mov cx, dx
+%endmacro
+%macro AFTER_UNLOCK 0
+        xor cx, cx
+%endmacro
+%macro AFTER_FLAGS 0
+        mov cx, ax
+        mov dx, [bp + 6]
+        or dx, 1
+%endmacro
+%macro AFTER_FREE 0
+        xor cx, cx
+        xor dx, dx
+%endmacro
+%macro AFTER_NONE 0
+%endmacro
+%macro AFTER_REALLOC 0
+        mov cx, ax
+%endmacro
+GHEAPAPI GLOBALLOCKX,    GLOBALLOCK,    1, AFTER_LOCK
+GHEAPAPI GLOBALUNLOCKX,  GLOBALUNLOCK,  1, AFTER_UNLOCK
+GHEAPAPI GLOBALFLAGSX,   GLOBALFLAGS,   1, AFTER_FLAGS
+GHEAPAPI GLOBALFREEX,    GLOBALFREE,    1, AFTER_FREE
+GHEAPAPI GLOBALSIZEX,    GLOBALSIZE,    1, AFTER_NONE
+GHEAPAPI GLOBALREALLOCX, GLOBALREALLOC, 4, AFTER_REALLOC
 
 ; ---------------------------------------------------------------------------
 ; The default signal handler (task.c, SetSigHandler): a RETF
