@@ -180,7 +180,12 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
     tm->tmBreakChar = fi->dfBreakChar + fi->dfFirstChar;
     tm->tmPitchAndFamily = fi->dfPitchAndFamily;
     tm->tmCharSet = fi->dfCharSet;
-    tm->tmOverhang = 0;
+    tm->tmOverhang = dc->xform.txfOverhang;
+    if (dc->xform.txfOverhang) {          /* emboldened: UNVERIFIED metrics */
+        tm->tmWeight = dc->xform.txfWeight;
+        tm->tmAveCharWidth += dc->xform.txfOverhang;
+        tm->tmMaxCharWidth += dc->xform.txfOverhang;
+    }
     tm->tmDigitizedAspectX = fi->dfHorizRes;
     tm->tmDigitizedAspectY = fi->dfVertRes;
     if (dc->mapMode != 1) {

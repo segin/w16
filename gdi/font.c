@@ -351,7 +351,16 @@ NPFONT font_realize(NPDC dc)
     dc->xform.txfHeight = fi->dfPixHeight;
     dc->xform.txfWidth = fi->dfAvgWidth;
     dc->xform.txfWeight = fi->dfWeight;
-    /* UNVERIFIED: simulated attributes (underline, strike-out, italic,
-       bold) and their accelerator bits */
+    /* bold by the driver (dpText TC_EA_DOUBLE: doubling the weight):
+       3.1's dialogs show MS Sans Serif 8 bold, which SSERIFE.FON lacks.
+       UNVERIFIED: the threshold, and the TEXTXFORM 3.1 passes (weight,
+       accelerator bit, overhang 1) */
+    if (lf.lfWeight >= 600 && fi->dfWeight < 600 &&
+        (dc->dev->info.dpText & 0x0200)) {
+        dc->xform.txfWeight = 700;
+        dc->xform.txfAccelerator |= 0x0200;
+        dc->xform.txfOverhang = 1;
+    }
+    /* UNVERIFIED: simulated underline, strike-out, italic */
     return f;
 }
