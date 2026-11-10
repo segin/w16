@@ -119,6 +119,7 @@ boot() {
         # Boot again, up to two more times.
         blank "$out/$name.png" || break
         tries=$((tries + 1))
+        retried "$name" blank-screenshot "try $tries"
         [ $tries -le 2 ] || { echo "warning: $name: screenshot still blank after $tries tries" >&2; break; }
         mv "$out/$name.png" "$out/$name.blank$tries.png" 2>/dev/null || true
     done
@@ -128,6 +129,18 @@ blank() {
     [ -f "$1" ] || return 0
     [ "$(magick identify -format '%k' "$1" 2>/dev/null)" = 1 ]
 }
+# retried CASE KIND DETAIL: record a retry. Every retry is printed, kept in
+# this run's retries.txt and appended to build/boottest-retries.log, which
+# outlives runs: a case that keeps needing retries is a bug to investigate
+# (an intermittent real bug looks exactly like a flaky test), not noise.
+retrylog=$root/build/boottest-retries.log
+retried() {
+    line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null) $1 $2 $3"
+    echo "RETRY $1: $2 ($3)"
+    echo "$line" >> "$out/retries.txt"
+    echo "$line" >> "$retrylog"
+}
+
 # booted NAME: the boot completed and Windows was still running when the
 # screen was taken (KERNEL prints "w16: back to DOS" when Windows ends)
 booted() { grep -q '^boot: complete' "$out/$1.txt" && ! grep -q 'back to DOS' "$out/$1.txt"; }
@@ -149,11 +162,12 @@ check() {
     # differs, boot the reference once more and keep the better match:
     # a real difference shows against both reference boots.
     if [ "$n" != 0 ] && [ "$r" = woaref ]; then
+        n1=$n
         [ -f "$out/woaref2.png" ] || { boot woaref2 -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"; }
         if booted woaref2; then
             n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
             n2=${n2%% *}
-            [ "$n2" = 0 ] && n=0
+            [ "$n2" = 0 ] && { n=0; retried "$c" woaref-second-boot "first reference differed by $n1 pixels"; }
         fi
         # the same stray caption repaint shows up in the case's own boot
         # too (it is Microsoft's USER redrawing after the DOS program
@@ -168,6 +182,7 @@ check() {
                 m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
                 [ "${m%% *}" = 0 ] && n=0
             done
+            [ "$n" = 0 ] && retried "$c" case-second-boot "first boot differed by $n1 pixels"
         fi
     fi
     case $n in
@@ -416,5 +431,14 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done
+# retries: this run's, and cases that have needed them repeatedly
+if [ -s "$out/retries.txt" ]; then
+    echo "boottest: $(wc -l < "$out/retries.txt") retr$( [ "$(wc -l < "$out/retries.txt")" = 1 ] && echo y || echo ies) this run (see $out/retries.txt)"
+fi
+if [ -s "$retrylog" ]; then
+    awk '{print $4}' "$retrylog" | sort | uniq -c | while read n c; do
+        [ "$n" -ge 3 ] && echo "WARNING: $c has needed a retry $n times so far ($retrylog): investigate, it may be an intermittent bug"
+    done
+fi
 echo "boottest: $fails failure(s); results in $out"
 exit "$fails"
