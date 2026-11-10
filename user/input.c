@@ -366,8 +366,6 @@ void activate_window(HWND h, BOOL mouse)
 {
     HWND old = hwndActive;
     PWND w = valid_wnd(h);
-    ulogx("DBG activate ", (WORD)h);
-    if (w) { char b[40]; GetClassName(h, b, sizeof b); ulog(b); ulog("\r\n"); }
     if (h == old)
         return;
     if (h && !w)
