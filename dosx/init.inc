@@ -62,6 +62,10 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         int 21h
         push ds
         pop es
+        mov ah, 0Fh                     ; the video mode, set back at the end
+        int 10h
+        and al, 7Fh
+        mov [video_mode], al
         call run_kernel
         mov [exit_code], al
         mov dx, [pending_msg]
@@ -625,7 +629,19 @@ cleanup:
         cmp byte [client_active], 0
         je .nc
         call client_rm_reset
-.nc:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
+.nc:    ; the video mode DOSX found, if the client left another (Windows
+        ; with w16's USER ended in graphics mode; with Microsoft's DOSX
+        ; the DOS prompt came back in text mode all the same. UNVERIFIED:
+        ; whether Microsoft's sets it also when it is the same)
+        mov ah, 0Fh
+        int 10h
+        and al, 7Fh
+        cmp al, [video_mode]
+        je .vm
+        mov al, [video_mode]
+        xor ah, ah
+        int 10h
+.vm:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
         cmp byte [did1605], 0
         je .nc2
         mov dx, 1

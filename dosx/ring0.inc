@@ -642,6 +642,12 @@ r0_terminate:
         mov word [tb_top], tbuf + TB_SIZE
         call to_rm
         call client_rm_reset
+        ; the client's own PSP current again: KERNEL makes its tasks' PDBs
+        ; DOS's current PSP (INT 21h 50h), and DOS ends the current one
+        ; and returns to its parent (here a selector, not a segment)
+        mov bx, [c_psp]
+        mov ah, 50h
+        int 21h
 
         mov ax, [exit_ax]
         int 21h

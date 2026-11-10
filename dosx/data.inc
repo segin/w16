@@ -30,6 +30,7 @@ cpu_type        db 0
 is386           db 0
 xms_ok          db 0
 exit_code       db 0
+video_mode      db 3            ; the BIOS video mode when DOSX started
 client_active   db 0
 x_kind          db 0
 a_move          db 0
