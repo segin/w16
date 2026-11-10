@@ -57,6 +57,10 @@
 #              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
 #   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
+#   icons      Notepad, Calculator, Clock, Character Map and Paintbrush
+#              minimised, Accessories opened, Program Manager minimised,
+#              Alt+Esc from icon to icon (tests/scripts/input/icons.txt):
+#              w16 USER+GDI vs Microsoft's, Clock's icon left out
 #   about      Help > About Program Manager (SHELL's ShellAbout) opened and
 #              closed with Enter and Esc by real keys, then the File and
 #              Help menus must open (tests/scripts/input/about.txt); w16's
@@ -91,7 +95,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -313,6 +317,26 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    icons)
+        # Clock's icon shows the time (and its digits are GDI's font
+        # matching): left out of the comparison
+        "$root/tests/inputrun.sh" -b 25 -t 170 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r \
+            > "$out/icons-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 25 -t 170 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/icons-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/icons-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/icons-w16/$s" ] || { r="no $s"; break; }
+            magick "$f" -fill black -draw "rectangle 160,400 220,445" "$out/icons-a.png"
+            magick "$out/icons-w16/$s" -fill black -draw "rectangle 160,400 220,445" "$out/icons-b.png"
+            n=$(magick compare -metric AE "$out/icons-b.png" "$out/icons-a.png" "$out/icons-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/icons-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   icons: 0 pixels (Clock's icon left out)"
+        else echo "FAIL icons: $r ($out)"; fails=$((fails + 1)); fi ;;
     about)
         "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/about.txt" "$out/about" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
