@@ -36,6 +36,9 @@
 #              PROGMAN, NOTEPAD, WINOLDAP, WIN87EM, fonts) with real input
 #              after the boot (tests/scripts/input/menus.txt): the Help menu
 #              must open from the keyboard and the pointer must move
+#   allw16bootinput the same, with the mouse moved and clicked and keys
+#              pressed all through the boot as well, from the logo on
+#              (tests/scripts/input/bootmenus.txt)
 #   runfront   Program Manager's File > Run starts Notepad with real keys
 #              (tests/scripts/input/runfront.txt): Notepad must end up the
 #              active window, Program Manager's caption inactive; w16's
@@ -82,7 +85,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -228,25 +231,27 @@ for c in $cases; do
             -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON"
         if booted allw16full; then echo "ok   allw16full: boots"
         else echo "FAIL allw16full: did not boot (see $out/allw16full.txt)"; fails=$((fails + 1)); fi ;;
-    allw16input)
+    allw16input|allw16bootinput)
         fon=$root/build/fonts
-        "$root/tests/inputrun.sh" -b 30 -t 90 "$root/tests/scripts/input/menus.txt" "$out/allw16input" \
+        if [ $c = allw16input ]; then set -- -b 30 -t 90 "$root/tests/scripts/input/menus.txt"
+        else set -- -b 1 -t 150 "$root/tests/scripts/input/bootmenus.txt"; fi
+        "$root/tests/inputrun.sh" "$@" "$out/$c" \
             -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
             -f "$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE" \
             -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
             -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
             -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
-            > "$out/allw16input.txt" 2>&1 || true
-        d=$out/allw16input
+            > "$out/$c.txt" 2>&1 || true
+        d=$out/$c
         if [ -f "$d/01-menu.png" ] && [ -f "$d/02-help.png" ] && [ -f "$d/03-moved.png" ]; then
             h=$(magick compare -metric AE "$d/01-menu.png" "$d/02-help.png" /dev/null 2>&1 >/dev/null || true)
             m=$(magick compare -metric AE "$d/01-menu.png" "$d/03-moved.png" /dev/null 2>&1 >/dev/null || true)
             h=${h%%[. ]*} m=${m%%[. ]*}
-            if [ "${h:-0}" -gt 1000 ] && [ "${m:-0}" -gt 0 ]; then echo "ok   allw16input: menus and pointer respond"
-            else echo "FAIL allw16input: input had no effect (help menu $h pixels, pointer $m; $d)"; fails=$((fails + 1)); fi
+            if [ "${h:-0}" -gt 1000 ] && [ "${m:-0}" -gt 0 ]; then echo "ok   $c: menus and pointer respond"
+            else echo "FAIL $c: input had no effect (help menu $h pixels, pointer $m; $d)"; fails=$((fails + 1)); fi
         else
-            echo "FAIL allw16input: screens missing ($d)"; fails=$((fails + 1))
+            echo "FAIL $c: screens missing ($d)"; fails=$((fails + 1))
         fi ;;
     runfront|runfrontk)
         if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"

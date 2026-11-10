@@ -23,6 +23,8 @@
 #     type TEXT         type text
 #     sleep S           wait S seconds (fractions allowed)
 #     shot NAME         screenshot OUTDIR/NAME.png
+# INPUTRUN_NOLOCK=1 in the environment: autolock=false (no click needed
+# for the mouse).
 # OUTDIR (new) gets the shots, the scratch drive (c/), DOSBox's log and the
 # script's own log (input.log).
 set -eu
@@ -48,6 +50,11 @@ out=$(cd "$out" && pwd)
 work=$out/work
 [ -f "$work/dosbox.conf" ] || { echo "dropin.sh did not prepare $work (bad options?)" >&2; exit 2; }
 rm -f "$work/c/WINDOWS/BOOTLOG.TXT" "$work/c/OUT.TXT"
+# INPUTRUN_NOLOCK=1: DOSBox's autolock=false, as an interactive session
+# may have it: the mouse moves without a click capturing it first
+if [ -n "${INPUTRUN_NOLOCK:-}" ]; then
+    sed -i 's/^\[sdl\]$/[sdl]\nautolock=false/' "$work/dosbox.conf"
+fi
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
