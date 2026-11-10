@@ -130,6 +130,12 @@ move -30 -20
 key shift
 sleep 0.3
 sleep 10
+; the pointer home before the first screen: where the moves made during
+; the boot leave it depends on when MOUSE is enabled, which differs with
+; the boot's speed (Windows 3.1 itself ends at 320,240 or 260,200 from
+; the same input as its boot is quicker or slower)
+home
+sleep 1
 shot 01-booted
 home
 move 150 200
