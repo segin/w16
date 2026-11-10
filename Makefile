@@ -1174,6 +1174,13 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US8: USER's WNet functions without a network (tests/apps/us8.c)
+$(B)/tests/us8.o: tests/apps/us8ref.h tests/apps/tklog.h
+$(DOS)/US8.EXE: $(B)/tests/start.o $(B)/tests/us8.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us8.map file { $(B)/tests/start.o $(B)/tests/us8.o }
+dos: $(DOS)/US8.EXE
 # US7: WinHelp and WINHELP.EXE (tests/apps/us7.c)
 $(B)/tests/us7.o: tests/apps/us7ref.h tests/apps/tklog.h
 $(DOS)/US7.EXE: $(B)/tests/start.o $(B)/tests/us7.o tests/apps/app.lnk

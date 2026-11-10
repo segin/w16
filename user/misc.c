@@ -319,3 +319,203 @@ HWND WINAPI GetSysModalWindow(void)
         hwndSysModal = 0;
     return hwndSysModal;
 }
+
+/* ---- the network functions (USER.499-532) without a network driver:
+   WNetGetCaps 0 for every index, every other one WN_NOT_SUPPORTED (1)
+   with its buffers untouched (US8 on Windows 3.1: caps 0-12 and FFFFh,
+   WNetGetConnection of A:, C:, D:, Z:, WNetGetUser, WNetGetError,
+   WNetGetDirectoryType, Add/Cancel/RestoreConnection, WNetGetErrorText).
+   UNVERIFIED for the print-queue and dialog ones. They were stubs
+   returning 0, WN_SUCCESS: File Manager took every drive A-Z for a
+   connected network drive. WNetEnable/WNetDisable (521, 522; arguments
+   unknown) stay stubs. WNetGetUser(szUser, lpSize) pops 8 bytes (3.1 DDK;
+   Wine's 12 left US8's stack four bytes off on w16, not on 3.1). ---- */
+#ifndef WN_NOT_SUPPORTED
+#define WN_NOT_SUPPORTED 1
+#endif
+
+WORD WINAPI U_WNETERRORTEXT(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETOPENJOB(DWORD d0, DWORD d1, DWORD d2, WORD w)
+{
+    (void)d0; (void)d1; (void)d2; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCLOSEJOB(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETABORTJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETHOLDJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETRELEASEJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCANCELJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETSETJOBCOPIES(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETWATCHQUEUE(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETUNWATCHQUEUE(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETLOCKQUEUEDATA(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETUNLOCKQUEUEDATA(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETCONNECTION(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETCAPS(WORD w)
+{
+    (void)w;
+    return 0;
+}
+
+WORD WINAPI U_WNETDEVICEMODE(WORD w)
+{
+    (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETBROWSEDIALOG(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETUSER(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETADDCONNECTION(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCANCELCONNECTION(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETERROR(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETERRORTEXT(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETRESTORECONNECTION(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETWRITEJOB(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCONNECTDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETDISCONNECTDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCONNECTIONDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETVIEWQUEUEDIALOG(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETPROPERTYDIALOG(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETDIRECTORYTYPE(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETDIRECTORYNOTIFY(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETPROPERTYTEXT(DWORD d0, DWORD d1, DWORD d2, DWORD d3)
+{
+    (void)d0; (void)d1; (void)d2; (void)d3;
+    return WN_NOT_SUPPORTED;
+}
