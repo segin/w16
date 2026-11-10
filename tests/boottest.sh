@@ -348,7 +348,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         for f in "$out/$c-ref"/[0-9]*.png; do
             s=$(basename "$f")
             [ -f "$out/$c-w16/$s" ] || { r="no $s"; break; }
-            n=$(magick compare -metric AE "$out/$c-w16/$s" "$f" "$out/$c-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            # Notepad's caret blinks on through its Help menu (helpmenus
+            # 03): its place left out
+            m="rectangle 0,0 0,0"
+            [ "$c" = helpmenus ] && m="rectangle 14,42 20,61"
+            magick "$f" -fill black -draw "$m" "$out/$c-a.png"
+            magick "$out/$c-w16/$s" -fill black -draw "$m" "$out/$c-b.png"
+            n=$(magick compare -metric AE "$out/$c-b.png" "$out/$c-a.png" "$out/$c-${s%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
         done
