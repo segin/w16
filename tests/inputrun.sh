@@ -13,6 +13,10 @@
 #     -t SECS  total run time (default 120)
 # SCRIPT lines (blank and ';' lines ignored):
 #     home              move the pointer far up and left (it stops at 0,0)
+#     center            put the X pointer over the middle of DOSBox's window
+#                       (with INPUTRUN_NOLOCK=1 DOSBox only sees motion while
+#                       the X pointer is over its window: after "home" it may
+#                       have left it, and further motion is lost)
 #     move DX DY        relative pointer motion (X pixels; see the shots
 #                       for where Windows put it)
 #     jiggle N          N quick small pointer motions back and forth (a
@@ -79,6 +83,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     case "\$cmd" in
     ''|';'*) continue ;;
     home) for i in 1 2 3 4 5 6 7 8; do xdotool mousemove_relative -- -100 -100; sleep 0.05; done ;;
+    center) xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2)) ;;
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
     jiggle) i=0; while [ \$i -lt "\$a" ]; do xdotool mousemove_relative -- 7 5; xdotool mousemove_relative -- -7 -5; i=\$((i + 1)); done ;;
     click) xdotool click "\${a:-1}" ;;
