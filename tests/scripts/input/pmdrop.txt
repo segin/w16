@@ -1,0 +1,49 @@
+; Program Manager under real input (tests/boottest.sh pmdrop): a file of
+; File Manager's directory pane (APPS.HLP) dragged into the Main group with
+; the mouse, as shdrop.txt does; then File Manager closed and Windows ended
+; from Program Manager (File > Exit Windows, OK), so MAIN.GRP is saved
+key alt+f
+key r
+sleep 4
+type winfile
+key Return
+sleep 10
+shot 01-winfile
+key alt+space
+sleep 1
+key s
+sleep 1
+key Right
+key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
+key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
+key Return
+sleep 2
+shot 02-narrow
+click 1
+sleep 1
+home
+move 135 106
+sleep 1
+shot 03-pointer
+down 1
+sleep 0.5
+move 5 2
+sleep 0.5
+move 10 2
+sleep 0.5
+move 15 3
+sleep 0.5
+move 15 3
+sleep 1
+shot 04-dragging
+up 1
+sleep 3
+shot 05-dropped
+key alt+f
+key x
+sleep 3
+key alt+f
+key x
+sleep 2
+key Return
+sleep 8

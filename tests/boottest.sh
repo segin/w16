@@ -83,6 +83,11 @@
 #   dragoff    real input: Program Manager dragged partly off the right,
 #              left and bottom edges; w16 USER+GDI vs Microsoft's: 0 pixels
 #   dragoffk   the same on w16's KRNL286
+#   pmdrop     real input: a file dragged from File Manager into a Program
+#              Manager group, Windows ended from Program Manager
+#              (tests/scripts/input/pmdrop.txt); w16's PROGMAN, then w16's
+#              PROGMAN and SHELL, against all-Microsoft: the screens and the
+#              saved MAIN.GRP must be identical
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -110,7 +115,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons winfile}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -413,6 +418,31 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         fi
         if [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
+    pmdrop)
+        scr=$root/tests/scripts/input/pmdrop.txt
+        "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-ref" -r > "$out/pmdrop-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-pm" -r \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
+            > "$out/pmdrop-sh.txt" 2>&1 || true
+        r=ok
+        grp=work/c/WINDOWS/MAIN.GRP
+        if ! grep -aq "C:.WINDOWS.APPS.HLP" "$out/pmdrop-ref/$grp" 2>/dev/null; then
+            r="the reference did not add the item ($out/pmdrop-ref)"
+        fi
+        for k in pm sh; do
+            [ "$r" = ok ] || break
+            cmp -s "$out/pmdrop-ref/$grp" "$out/pmdrop-$k/$grp" || { r="$k: MAIN.GRP differs"; break; }
+            for s in 04-dragging 05-dropped; do
+                [ -f "$out/pmdrop-$k/$s.png" ] || { r="$k: no $s"; break; }
+                n=$(magick compare -metric AE "$out/pmdrop-$k/$s.png" "$out/pmdrop-ref/$s.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+        done
+        if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL)"
+        else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
