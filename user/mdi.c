@@ -33,6 +33,8 @@ static HWND active_child(HWND client)
     return (HWND)GetWindowWord(client, MDI_ACTIVE);
 }
 
+static BOOL mdi_creating;       /* WM_MDICREATE under way */
+
 static void child_activate(HWND client, HWND child)
 {
     HWND old = active_child(client);
@@ -47,7 +49,13 @@ static void child_activate(HWND client, HWND child)
         set_window_pos(child, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         send_message(child, WM_NCACTIVATE, TRUE, 0);
         send_message(child, WM_MDIACTIVATE, TRUE, MAKELONG(child, old));
-        if (top_level(client) == hwndActive)
+        /* the focus to the child when the frame is active - but not as
+           WM_MDICREATE makes it (3.1: File Manager's directory window,
+           made with the frame active, did not get the focus; its tree
+           had it from the program's own SetFocus. w16 then took it to the
+           child, whose WM_SETFOCUS handler put it back, and File Manager
+           went on to read the root of the drive) */
+        if (top_level(client) == hwndActive && !mdi_creating)
             set_focus(child);
     }
 }
@@ -64,28 +72,40 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
     BOOL vis = TRUE;
     if (!cw)
         return 0;
-    if (x == (int)CW_USEDEFAULT) {
-        /* cascade: UNVERIFIED step (caption height plus frame) */
-        int step = sysmet[SM_CYCAPTION] + sysmet[SM_CYFRAME] - 1;
-        x = y = (n % 8) * step;
-    }
-    if (cx == (int)CW_USEDEFAULT) {
-        cx = (cw->rcClient.right - cw->rcClient.left) * 3 / 4;
-        cy = (cw->rcClient.bottom - cw->rcClient.top) * 3 / 4;
+    {
+        /* the default place and size: with step the cascade's (22), the
+           client's height holds k = height / (3 step) steps; the size is
+           the client's less k steps each way, the n-th child k-cycling
+           down and right by a step (Windows 3.1: File Manager's first
+           directory window in a 632 x 411 client, 500 x 279 at 0,0;
+           the formula is also Wine's, its 16-bit MDI) */
+        int step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER];
+        int w = cw->rcClient.right - cw->rcClient.left, ht = cw->rcClient.bottom - cw->rcClient.top;
+        int k = ht / (3 * step);
+        if (x == (int)CW_USEDEFAULT)
+            x = y = step * (n % (k + 1));
+        if (cx == (int)CW_USEDEFAULT) {
+            cx = w - step * k;
+            cy = ht - step * k;
+        }
     }
     style &= ~(WS_VISIBLE | WS_MAXIMIZE | WS_MINIMIZE);
+    mdi_creating = TRUE;
     h = create_window(0, mc->szClass, mc->szTitle, style, x, y, cx, cy, client, (HMENU)id,
                       mc->hOwner, (void __far *)mc);
-    if (!h)
+    if (!h) {
+        mdi_creating = FALSE;
         return 0;
+    }
     SetWindowWord(client, MDI_COUNT, n + 1);
     if (mc->style & WS_MINIMIZE)
         ShowWindow(h, SW_SHOWMINNOACTIVE);
     else if (mc->style & WS_MAXIMIZE)
         ShowWindow(h, SW_SHOWMAXIMIZED);
     else if (vis)
-        ShowWindow(h, SW_SHOWNOACTIVATE);
+        ShowWindow(h, SW_SHOW);         /* WM_CHILDACTIVATE activates it */
     child_activate(client, h);
+    mdi_creating = FALSE;
     return h;
 }
 

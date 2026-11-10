@@ -184,6 +184,13 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
         activate_window(h, FALSE);
+    /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
+       DefMDIChildProc turns into the MDI child's activation (3.1, File
+       Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
+       WM_CHILDACTIVATE as it is shown). UNVERIFIED: on moves and sizes
+       without SWP_NOACTIVATE too, as the SDK says */
+    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
+        send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
     if (!(w = valid_wnd(h)))
