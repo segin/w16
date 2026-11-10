@@ -1060,9 +1060,8 @@ static void run_menu(MLOOP *l)
        cursor, US2) */
     menu_mode++;
     SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
-    /* and no caret (3.1: Notepad's caret gone while its Help menu is up;
-       UNVERIFIED that it is hidden rather than caught off in its blink) */
-    HideCaret(0);
+    /* the caret goes on blinking (3.1: Notepad's caret seen both on and
+       off while its Help menu is up) */
     while (!l->done) {
         if (!GetMessage(&msg, 0, 0, 0)) {
             PostQuitMessage(msg.wParam);
@@ -1142,7 +1141,6 @@ static void run_menu(MLOOP *l)
     if (oldcap)
         SetCapture(oldcap);
     menu_mode--;
-    ShowCaret(0);
     if (l->result && valid_wnd(l->owner))
         PostMessage(l->owner, l->resultsys ? WM_SYSCOMMAND : WM_COMMAND, l->result, 0);
 }
