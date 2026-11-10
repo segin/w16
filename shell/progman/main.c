@@ -271,40 +271,52 @@ static void read_restrictions(void)
     g_editlevel = GetPrivateProfileInt(s_restr, "EditLevel", 0, g_ini);
 }
 
-/* The File menu's state for the active group. Observed (also without
-   restrictions): Move and Copy are grayed unless an open group has a
-   selected item; Open is grayed in an open group without items. */
-static void file_menu_state(HMENU m)
+/* Is File menu command id grayed for the active group? Observed (also
+   without restrictions): Move and Copy are grayed unless an open group
+   has a selected item; Open is grayed in an open group without items. */
+static BOOL file_grayed(WORD id)
 {
     HWND g = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
     BOOL iconic = g && IsIconic(g);
     BOOL item = g && !iconic && group_selected_name(g) != NULL;
-    BOOL grayed[7];
+    switch (id) {
+    case IDM_NEW:    return g_editlevel >= 2 || (g_editlevel >= 1 && (!g || iconic));
+    case IDM_OPEN:   return g && !iconic && !item;
+    case IDM_MOVE:
+    case IDM_COPY:   return g_editlevel >= 2 || !item;
+    case IDM_DELETE: return g_editlevel >= 2 || (g_editlevel >= 1 && !item);
+    case IDM_RUN:    return g_norun;
+    case IDM_EXIT:   return g_noclose;
+    }
+    return FALSE;
+}
+
+static void file_menu_state(HMENU m)
+{
     static const UINT ids[7] = { IDM_NEW, IDM_OPEN, IDM_MOVE, IDM_COPY, IDM_DELETE,
                                  IDM_RUN, IDM_EXIT };
     int i;
-    grayed[0] = g_editlevel >= 2 || (g_editlevel >= 1 && (!g || iconic));
-    grayed[1] = g && !iconic && !item;
-    grayed[2] = grayed[3] = g_editlevel >= 2 || !item;
-    grayed[4] = g_editlevel >= 2 || (g_editlevel >= 1 && !item);
-    grayed[5] = g_norun;
-    grayed[6] = g_noclose;
     for (i = 0; i < 7; i++)
-        EnableMenuItem(m, ids[i], MF_BYCOMMAND | (grayed[i] ? MF_GRAYED : MF_ENABLED));
+        EnableMenuItem(m, ids[i], MF_BYCOMMAND | (file_grayed(ids[i]) ? MF_GRAYED : MF_ENABLED));
 }
 
-/* May this command run? (Accelerators reach us whatever the menu shows.) */
-static BOOL allowed(HWND hwnd, WORD id)
+/* May this command run under [Restrictions]? (Accelerators reach us
+   whatever the menu shows; EditLevel 1 is checked by the commands.) */
+static BOOL allowed(WORD id)
 {
-    HMENU m = GetMenu(hwnd);
-    UINT st;
     if (id < IDM_NEW || id > IDM_EXIT)
         return TRUE;
     if (g_nofilemenu)                   /* observed: only Enter still works */
         return id == IDM_OPEN;
-    file_menu_state(GetSubMenu(m, MENU_FILE));
-    st = GetMenuState(m, id, MF_BYCOMMAND);
-    return st == (UINT)-1 || !(st & (MF_GRAYED | MF_DISABLED));
+    switch (id) {                       /* the rest is the commands' own */
+    case IDM_NEW:
+    case IDM_MOVE:
+    case IDM_COPY:
+    case IDM_DELETE: return g_editlevel < 2;
+    case IDM_RUN:    return !g_norun;
+    case IDM_EXIT:   return !g_noclose;
+    }
+    return TRUE;
 }
 
 /* ---- commands ---- */
@@ -320,7 +332,7 @@ static void command(HWND hwnd, WORD id)
     dbg("WM_COMMAND", id);
 #endif
 
-    if (!allowed(hwnd, id))
+    if (!allowed(id))
         return;
     switch (id) {
     case IDM_OPEN:
