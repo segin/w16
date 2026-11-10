@@ -297,7 +297,15 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         if (o && !(style & DS_ABSALIGN))
             OffsetRect(&r, o->rcClient.left, o->rcClient.top);
     }
-    /* kept on the screen (US4: the dialog at y 10 units starts at 0) */
+    /* kept on the screen (US4: the dialog at y 10 units starts at 0;
+       Calculator's, 240 x 158 units at 310,65, comes up on 3.1 at
+       154,110, against the screen's right and bottom edges. UNVERIFIED:
+       w16 puts it at 150,106 - its window is 4 pixels wider and taller
+       than 3.1's, unexplained) */
+    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN])
+        OffsetRect(&r, sysmet[SM_CXSCREEN] - r.right, 0);
+    if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
+        OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)

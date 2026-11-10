@@ -107,6 +107,41 @@ void nc_calcsize(PWND w, RECT *r)
         r->right = r->left;
 }
 
+/* AdjustWindowRectEx (USER.454) / AdjustWindowRect (USER.102): the
+   window rectangle for a client rectangle, nc_calcsize the other way
+   round, with a one-line menu bar when menu is set (3.1 SDK; scroll
+   bars not counted). Calculator sizes itself with it: 259 x 230 client,
+   WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX and a menu, 261 x 270 on 3.1. */
+void WINAPI AdjustWindowRectEx(RECT FAR *r, DWORD style, BOOL menu, DWORD exstyle)
+{
+    /* nc_calcsize's rules on the style alone (its WND is a near pointer
+       into USER's segment) */
+    BOOL caption = (style & WS_CAPTION) == WS_CAPTION, thick = (style & WS_THICKFRAME) != 0;
+    BOOL dlg = (style & WS_CAPTION) == WS_DLGFRAME || (exstyle & WS_EX_DLGMODALFRAME);
+    int fx = 0, fy = 0, top;
+    if (thick)
+        fx = sysmet[SM_CXFRAME], fy = sysmet[SM_CYFRAME];
+    else if (dlg)
+        fx = sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER], fy = sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER];
+    else if (style & WS_BORDER)
+        fx = sysmet[SM_CXBORDER], fy = sysmet[SM_CYBORDER];
+    if (caption && dlg && !thick)
+        top = sysmet[SM_CYCAPTION] + sysmet[SM_CYDLGFRAME];
+    else
+        top = fy + (caption ? sysmet[SM_CYCAPTION] - sysmet[SM_CYBORDER] + (fy ? 0 : sysmet[SM_CYBORDER]) : 0);
+    r->left -= fx;
+    r->right += fx;
+    r->bottom += fy;
+    r->top -= top;
+    if (menu)
+        r->top -= sysmet[SM_CYMENU] + sysmet[SM_CYBORDER];
+}
+
+void WINAPI AdjustWindowRect(RECT FAR *r, DWORD style, BOOL menu)
+{
+    AdjustWindowRectEx(r, style, menu, 0);
+}
+
 /* caption rectangle, window coordinates (including its two black lines) */
 static void caption_rect(PWND w, RECT *r)
 {
