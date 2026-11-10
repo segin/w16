@@ -495,7 +495,9 @@ if [ -s "$out/retries.txt" ]; then
 fi
 if [ -s "$retrylog" ]; then
     awk '{print $4}' "$retrylog" | sort | uniq -c | while read n c; do
-        [ "$n" -ge 3 ] && echo "WARNING: $c has needed a retry $n times so far ($retrylog): investigate, it may be an intermittent bug"
+        if [ "$n" -ge 3 ]; then
+            echo "WARNING: $c has needed a retry $n times so far ($retrylog): investigate, it may be an intermittent bug"
+        fi
     done
 fi
 echo "boottest: $fails failure(s); results in $out"
