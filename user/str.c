@@ -12,10 +12,23 @@
  */
 #include "user.h"
 
+/* overlapping blocks are fine (memmove): a list box makes room for an
+   item by moving those after it up one place in the same block, which a
+   forward copy smeared over the rest (File Manager's sorted owner-drawn
+   file list: every item after the insertion point became the same one,
+   its WM_COMPAREITEM then got stale data, and on w16's KERNEL its lstrcat
+   faulted, back to DOS) */
 void fmemcpy(void __far *d, const void __far *s, WORD n)
 {
     BYTE __far *dd = (BYTE __far *)d;
     const BYTE __far *ss = (const BYTE __far *)s;
+    if (FP_SEG(dd) == FP_SEG(ss) && FP_OFF(dd) > FP_OFF(ss) && FP_OFF(dd) - FP_OFF(ss) < n) {
+        dd += n;
+        ss += n;
+        while (n--)
+            *--dd = *--ss;
+        return;
+    }
     while (n--)
         *dd++ = *ss++;
 }
