@@ -669,6 +669,7 @@ HWND group_load(const char FAR *grpfile, int ininum)
        to the bottom), so loading in Order= sequence rebuilds the saved
        z-order */
     SetWindowPos(g->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    group_rescroll(g->hwnd);
     return g->hwnd;
 }
 
@@ -998,6 +999,93 @@ static int grid_cols(HWND hwnd)
     return cols < 1 ? 1 : cols;
 }
 
+/* Scroll bars: a group whose items reach outside its client area gets a
+   bar for that direction, its range from the items' extent less the
+   client area, at position 0 (Windows 3.1: Accessories, 416 x 202, its
+   third row cut off, shows a vertical bar with the thumb at the top and
+   no horizontal one; w16 showed none). Scrolling moves the items, as
+   USER's ScrollChildren moves MDI children; the range is worked out
+   again when it ends. UNVERIFIED: the range's exact ends, the step of
+   the arrows (8 pixels here) and of a page (the client area). */
+static BOOL in_rescroll;
+
+void group_rescroll(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    RECT c, u, r;
+    HDC dc;
+    WORD i;
+    int bar;
+    if (!g || IsIconic(hwnd) || in_rescroll)
+        return;
+    in_rescroll = TRUE;
+    GetClientRect(hwnd, &c);
+    u = c;
+    dc = GetDC(hwnd);
+    for (i = 0; i < g->nz; i++) {
+        item FAR *t = g->z[i];
+        title_rect(dc, t, &r);
+        UnionRect(&u, &u, &r);
+        SetRect(&r, t->x + ICON_DX, t->y + ICON_DY, t->x + ICON_DX + 32, t->y + ICON_DY + 32);
+        UnionRect(&u, &u, &r);
+    }
+    ReleaseDC(hwnd, dc);
+    for (bar = SB_HORZ; bar <= SB_VERT; bar++) {
+        int lo = bar == SB_HORZ ? u.left : u.top;
+        int hi = bar == SB_HORZ ? u.right - c.right : u.bottom - c.bottom;
+        if (lo < 0 || hi > 0) {
+            SetScrollRange(hwnd, bar, lo, hi, FALSE);
+            SetScrollPos(hwnd, bar, 0, TRUE);
+        } else
+            SetScrollRange(hwnd, bar, 0, 0, TRUE);      /* hides it */
+    }
+    in_rescroll = FALSE;
+    /* a bar shown or hidden changed the client area: once more */
+    GetClientRect(hwnd, &r);
+    if (r.right != c.right || r.bottom != c.bottom)
+        group_rescroll(hwnd);
+}
+
+static void group_scroll(HWND hwnd, int bar, WPARAM code, int thumb)
+{
+    group FAR *g = grp_of(hwnd);
+    int lo, hi, pos, np, d;
+    RECT c;
+    WORD i;
+    if (!g)
+        return;
+    GetScrollRange(hwnd, bar, &lo, &hi);
+    pos = GetScrollPos(hwnd, bar);
+    GetClientRect(hwnd, &c);
+    switch (code) {
+    case SB_LINEUP:        np = pos - 8; break;
+    case SB_LINEDOWN:      np = pos + 8; break;
+    case SB_PAGEUP:        np = pos - (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_PAGEDOWN:      np = pos + (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_TOP:           np = lo; break;
+    case SB_BOTTOM:        np = hi; break;
+    case SB_THUMBPOSITION: np = thumb; break;
+    case SB_ENDSCROLL:     group_rescroll(hwnd); return;
+    default:               return;
+    }
+    if (np < lo)
+        np = lo;
+    if (np > hi)
+        np = hi;
+    d = np - pos;
+    if (!d)
+        return;
+    for (i = 0; i < g->nz; i++) {
+        if (bar == SB_HORZ)
+            g->z[i]->x -= d;
+        else
+            g->z[i]->y -= d;
+    }
+    SetScrollPos(hwnd, bar, np, TRUE);
+    ScrollWindow(hwnd, bar == SB_HORZ ? -d : 0, bar == SB_VERT ? -d : 0, NULL, NULL);
+    UpdateWindow(hwnd);
+}
+
 /* Arrange Icons: the observed grid, as many columns as fit. */
 void group_arrange(HWND hwnd)
 {
@@ -1012,6 +1100,7 @@ void group_arrange(HWND hwnd)
         t->y = (i / cols) * CY_SPACING;
     }
     InvalidateRect(hwnd, NULL, TRUE);
+    group_rescroll(hwnd);
 }
 
 /* The first grid cell, in reading order, that no item occupies
@@ -1432,6 +1521,7 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
     if (g_autoarrange)
         group_arrange(hwnd);
     invalidate_item(hwnd, t);
+    group_rescroll(hwnd);
     return TRUE;
 }
 
@@ -1525,6 +1615,7 @@ static void remove_item(HWND hwnd, group FAR *g, item FAR *t)
     if (g->sel == t)
         g->sel = g->nz ? g->z[0] : NULL;
     invalidate_item(hwnd, g->sel);
+    group_rescroll(hwnd);
 }
 
 /* File > Move and File > Copy (observed): the item arrives in `to` on top
@@ -1557,6 +1648,7 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     if (g_autoarrange)
         group_arrange(to);
     invalidate_item(to, u);
+    group_rescroll(to);
     if (copy_only)
         return TRUE;
     remove_item(from, src, t);
@@ -1790,7 +1882,13 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_SIZE:
         if (g && g_autoarrange && wp != SIZE_MINIMIZED)
             group_arrange(hwnd);
+        else if (g && wp != SIZE_MINIMIZED)
+            group_rescroll(hwnd);
         break;
+    case WM_HSCROLL:
+    case WM_VSCROLL:
+        group_scroll(hwnd, msg == WM_HSCROLL ? SB_HORZ : SB_VERT, wp, (short)LOWORD(lp));
+        return 0;
     case WM_LBUTTONDOWN:
         SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)hwnd, 0);
         if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL)

@@ -187,6 +187,7 @@ void group_destroy_all(void);
 int  group_ininum(HWND hwnd);           /* GroupN number, 0 if none */
 BOOL group_open_selected(HWND hwnd);
 void group_arrange(HWND hwnd);
+void group_rescroll(HWND hwnd);
 LRESULT CALLBACK __export GroupWndProc(HWND, UINT, WPARAM, LPARAM);
 
 /* ---- main.c: PROGMAN.INI [Groups] and Order= ---- */
