@@ -45,6 +45,11 @@
 #              (tests/scripts/input/bootnolock.txt), $NOLOCK_RUNS times
 #              (default 5): each time the Help menu must open and the
 #              pointer reach the top left corner
+#   exitwin    File > Exit Windows > OK in Program Manager with real keys
+#              (tests/scripts/input/exitwin.txt), every w16 part (WIN.COM,
+#              DOSX, KRNL286, USER, GDI, SHELL, PROGMAN) against all of
+#              Microsoft's: the DOS prompt must come back, in text mode,
+#              the same screen up to the cursor (40 pixels)
 #   runfront   Program Manager's File > Run starts Notepad with real keys
 #              (tests/scripts/input/runfront.txt): Notepad must end up the
 #              active window, Program Manager's caption inactive; w16's
@@ -95,7 +100,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -284,6 +289,24 @@ for c in $cases; do
         done
         if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
+    exitwin)
+        scr=$root/tests/scripts/input/exitwin.txt
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-ref" -r \
+            > "$out/exitwin-ref.txt" 2>&1 || true
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-w16" \
+            -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+            > "$out/exitwin-w16.txt" 2>&1 || true
+        a=$out/exitwin-w16/02-dos.png b=$out/exitwin-ref/02-dos.png
+        if [ -f "$a" ] && [ -f "$b" ]; then
+            sz=$(magick identify -format '%wx%h' "$a" 2>/dev/null)
+            n=$(magick compare -metric AE "$a" "$b" "$out/exitwin-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            if [ "$sz" = 640x400 ] && [ "${n:-99999}" -le 40 ]; then echo "ok   exitwin: back at the DOS prompt in text mode ($n pixels)"
+            else echo "FAIL exitwin: screen $sz, $n pixels off Microsoft's ($out/exitwin-w16)"; fails=$((fails + 1)); fi
+        else
+            echo "FAIL exitwin: screens missing ($out/exitwin-w16)"; fails=$((fails + 1))
+        fi ;;
     runfront|runfrontk)
         if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
         else set --; fi

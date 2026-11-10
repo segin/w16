@@ -88,11 +88,16 @@ void kputdec(u16 v)
     kputs(b + i);
 }
 
+/* [w16] exitmsg=1 (winboot.c; tests/dropin.sh sets it): "back to DOS"
+   is printed when Windows ends. 3.1 prints nothing on a normal exit,
+   and the screen may still be in graphics mode then. */
+u16 exit_msg;
+
 /* Restore the INT 21h vector and terminate the DOS process. */
 void kexit_to_dos(u8 code)
 {
     regs16 r;
-    if (winboot_active) {               /* a debugging aid */
+    if (winboot_active && exit_msg) {   /* a debugging aid */
         kputs("w16: back to DOS, code ");
         kputhex(code);
         kputs("\r\n");
