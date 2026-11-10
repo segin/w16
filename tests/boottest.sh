@@ -39,6 +39,12 @@
 #   allw16bootinput the same, with the mouse moved and clicked and keys
 #              pressed all through the boot as well, from the logo on
 #              (tests/scripts/input/bootmenus.txt)
+#   allw16nolock every w16 part with DOSBox's autolock=false (motion
+#              arrives without a click, as in an interactive session) and
+#              heavy mouse motion from mid-boot on
+#              (tests/scripts/input/bootnolock.txt), $NOLOCK_RUNS times
+#              (default 5): each time the Help menu must open and the
+#              pointer reach the top left corner
 #   runfront   Program Manager's File > Run starts Notepad with real keys
 #              (tests/scripts/input/runfront.txt): Notepad must end up the
 #              active window, Program Manager's caption inactive; w16's
@@ -85,7 +91,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -253,6 +259,27 @@ for c in $cases; do
         else
             echo "FAIL $c: screens missing ($d)"; fails=$((fails + 1))
         fi ;;
+    allw16nolock)
+        fon=$root/build/fonts
+        k=1 bad=0 runs=${NOLOCK_RUNS:-5}
+        while [ $k -le $runs ]; do
+            INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b 16 -t 120 \
+                "$root/tests/scripts/input/bootnolock.txt" "$out/$c-$k" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/$c-$k.txt" 2>&1 || true
+            d=$out/$c-$k
+            h=$(magick compare -metric AE "$d/01-help.png" "$d/02-home.png" /dev/null 2>&1 >/dev/null || true)
+            p=$(magick "$d/02-home.png" -crop 3x3+0+0 -format '%[fx:minima.r]' info: 2>/dev/null || echo none)
+            h=${h%%[. ]*}
+            if [ "${h:-0}" -gt 1000 ] && [ "$p" = 0 ]; then :; else
+                echo "     $c run $k: help menu $h pixels, pointer corner $p ($d)"; bad=$((bad + 1)); fi
+            k=$((k + 1))
+        done
+        if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
+        else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
     runfront|runfrontk)
         if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
         else set --; fi
