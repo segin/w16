@@ -43,8 +43,15 @@
 #              arrives without a click, as in an interactive session) and
 #              heavy mouse motion from mid-boot on
 #              (tests/scripts/input/bootnolock.txt), $NOLOCK_RUNS times
-#              (default 5): each time the Help menu must open and the
-#              pointer reach the top left corner
+#              (default 6), the motion from second 10, 12, ... 20 in turn
+#              (or from second $NOLOCK_BOOT every time): the gap DOSX
+#              guards (a PS/2 packet before MOUSE.DRV takes INT 74h) moves
+#              with the boot's timing; with the guard taken out the pointer
+#              stuck at 10 and 20 (and 16 before). Each time the Help menu must open and the
+#              pointer move when moved after the boot (the X pointer put
+#              over the window's middle first: with autolock=false DOSBox
+#              sees no motion while it is outside, so the final position
+#              is not checked, only that the pointer responds)
 #   exitwin    File > Exit Windows > OK in Program Manager with real keys
 #              (tests/scripts/input/exitwin.txt), every w16 part (WIN.COM,
 #              DOSX, KRNL286, USER, GDI, SHELL, PROGMAN) against all of
@@ -288,9 +295,10 @@ for c in $cases; do
         fi ;;
     allw16nolock)
         fon=$root/build/fonts
-        k=1 bad=0 runs=${NOLOCK_RUNS:-5}
+        k=1 bad=0 runs=${NOLOCK_RUNS:-6}
         while [ $k -le $runs ]; do
-            INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b 16 -t 120 \
+            b=${NOLOCK_BOOT:-$((10 + (k - 1) % 6 * 2))}
+            INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b "$b" -t 120 \
                 "$root/tests/scripts/input/bootnolock.txt" "$out/$c-$k" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
@@ -298,11 +306,13 @@ for c in $cases; do
                 -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
                 > "$out/$c-$k.txt" 2>&1 || true
             d=$out/$c-$k
-            h=$(magick compare -metric AE "$d/01-help.png" "$d/02-home.png" /dev/null 2>&1 >/dev/null || true)
-            p=$(magick "$d/02-home.png" -crop 3x3+0+0 -format '%[fx:minima.r]' info: 2>/dev/null || echo none)
-            h=${h%%[. ]*}
-            if [ "${h:-0}" -gt 1000 ] && [ "$p" = 0 ]; then :; else
-                echo "     $c run $k: help menu $h pixels, pointer corner $p ($d)"; bad=$((bad + 1)); fi
+            h=$(magick compare -metric AE "$d/01-help.png" "$d/02-before.png" /dev/null 2>&1 >/dev/null || true)
+            p=$(magick compare -metric AE "$d/02-before.png" "$d/03-after.png" /dev/null 2>&1 >/dev/null || true)
+            h=${h%%[. ]*} p=${p%%[. ]*}
+            # the arrow's old and new places: 84 pixels when observed
+            # (more than a blink of a caret)
+            if [ "${h:-0}" -gt 1000 ] && [ "${p:-0}" -gt 40 ]; then :; else
+                echo "     $c run $k (motion from second $b): help menu $h pixels, pointer moved $p pixels ($d)"; bad=$((bad + 1)); fi
             k=$((k + 1))
         done
         if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
