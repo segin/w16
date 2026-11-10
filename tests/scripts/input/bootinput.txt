@@ -135,6 +135,11 @@ sleep 10
 ; the boot's speed (Windows 3.1 itself ends at 320,240 or 260,200 from
 ; the same input as its boot is quicker or slower)
 home
+sleep 3
+; again: a slower boot may not have enabled its mouse yet the first time
+; (build/boottest-145116: Microsoft's own reference stayed at 320,240
+; while ours had gone home)
+home
 sleep 1
 shot 01-booted
 home
