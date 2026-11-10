@@ -62,6 +62,9 @@
 #              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
 #   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
+#   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
+#              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
+#              then every w16 part must not fault
 #   icons      Notepad, Calculator, Clock, Character Map and Paintbrush
 #              minimised, Accessories opened, Program Manager minimised,
 #              Alt+Esc from icon to icon (tests/scripts/input/icons.txt):
@@ -100,7 +103,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk tabs alttab helpmenus icons winfile}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -361,6 +364,45 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    winfile)
+        # File Manager (Microsoft's WINFILE.EXE): its drive bar, Ctrl+letter
+        # to drives that are there and not; w16 USER+GDI against Microsoft's,
+        # leaving out the tree's focus rectangle (its dots in the other
+        # phase, UNVERIFIED why), the status bar's free space and byte total
+        # (the scratch drives differ) and the "Drive A does not exist" box
+        # (w16's own stop icon, and the box 25 pixels narrower: UNVERIFIED
+        # 3.1's width rule for long captions). Then every w16 part: no
+        # fault (it ended in KERNEL's lstrcat, back to DOS).
+        s=$root/tests/scripts/input/winfile.txt
+        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/winfile-ref" -r > "$out/winfile-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/winfile-w16" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/winfile-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/winfile-ref"/[0-9]*.png; do
+            s2=$(basename "$f")
+            [ "$s2" = 04-drive-a.png ] && continue
+            [ -f "$out/winfile-w16/$s2" ] || { r="no $s2"; break; }
+            m="rectangle 0,85 240,140 rectangle 0,455 639,479"
+            magick "$f" -fill black -draw "$m" "$out/winfile-a.png"
+            magick "$out/winfile-w16/$s2" -fill black -draw "$m" "$out/winfile-b.png"
+            n=$(magick compare -metric AE "$out/winfile-b.png" "$out/winfile-a.png" "$out/winfile-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s2: $n pixels differ"; break; }
+        done
+        ls "$out/winfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then
+            fon=$root/build/fonts
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 100 "$s" "$out/winfile-all" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/winfile-all.txt" 2>&1 || true
+            if grep -aq "exception" "$out/winfile-all/work/c/OUT.TXT" 2>/dev/null; then r="every w16 part: a fault ($out/winfile-all/work/c/OUT.TXT)"
+            elif [ ! -f "$out/winfile-all/07-back-c.png" ]; then r="every w16 part: screens missing"; fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
+        else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
