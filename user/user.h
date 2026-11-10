@@ -46,12 +46,14 @@ extern void  __far __pascal G_SETDCSTATE(HDC, HDC);                  /* 180 */
 extern void  __far __pascal G_MAKEOBJECTPRIVATE(HANDLE, BOOL);       /* 463 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
 extern void  __far __pascal G_FINALGDIINIT(HBRUSH);                  /* 405 */
+extern int   __far __pascal G_DEATH(HDC);                            /* 121 */
 extern HRGN  __far __pascal G_INQUIREVISRGN(HDC);                    /* 131 */
 extern void  __far __pascal G_GDITASKTERMINATION(HTASK);             /* 460 */
 /* SYSTEM */
 extern WORD  __far __pascal S_CREATESYSTEMTIMER(WORD, FARPROC);      /* 2 */
 extern WORD  __far __pascal S_KILLSYSTEMTIMER(WORD);                 /* 3 */
 extern void  __far __pascal S_ENABLESYSTEMTIMERS(void);              /* 4 */
+extern void  __far __pascal S_DISABLESYSTEMTIMERS(void);             /* 5 */
 extern DWORD __far __pascal S_GETSYSTEMMSECCOUNT(void);              /* 6 */
 /* KEYBOARD, MOUSE, DISPLAY (the driver interfaces of the 3.1 DDK) */
 extern WORD  __far __pascal KB_INQUIRE(void __far *);                /* 1 */
@@ -119,6 +121,7 @@ typedef WND __near *PWND;
 #define WF_SENTCREATE   0x0100
 #define WF_HASPOS       0x0200  /* SetWindowPlacement: restored rect known */
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
+#define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
 
 #define PW(h)   ((PWND)(WORD)(h))
 PWND valid_wnd(HWND h);         /* NULL if h is not a live window */
@@ -204,17 +207,17 @@ void timer_init(void);
 void kill_queue_timers(HQUEUE hq);
 void kill_window_timers(HWND h);
 BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
-extern volatile DWORD tickcount;
+extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment */
 
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
-extern BYTE keystate[256];
-extern POINT ptCursor;
+extern BYTE __far keystate[256];
+extern POINT __far ptCursor;
 extern HWND hwndCapture, hwndFocus, hwndActive;
-extern HQUEUE hqInput;          /* the queue input goes to (the active window's) */
-extern WORD input_pending;
+extern HQUEUE __far hqInput;          /* the queue input goes to (the active window's) */
+extern WORD __far input_pending;
 void set_cursor_shape(HCURSOR h);
 void set_focus(HWND h);
 void activate_window(HWND h, BOOL mouse);

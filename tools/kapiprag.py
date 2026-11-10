@@ -7,15 +7,19 @@ keep BX, CX and ES as well as what any Pascal procedure keeps, and
 Microsoft's modules rely on it (Write after GetVersion, MOUSE.DRV after
 GetDOSEnvironment). OpenWatcom's Pascal convention lets a procedure
 change AX, BX, CX, DX and ES. This writes, for every function defined
-or declared with KAPI in the sources, a pragma giving it the convention
-kapi_conv (kernel.h): Pascal that changes only AX, DX and ES, so that the
-compiler saves BX and CX (KAPI_ES functions save ES too)."""
+or declared with KAPI or KAPI_ES in the sources, a pragma giving it the
+convention kapi_conv (kernel.h): Pascal that changes only AX, DX and ES,
+so that the compiler saves BX and CX (KAPI_ES functions save ES too).
+The exports whose callers rely on other values in CX (GlobalLock, the
+local-heap functions: TK43) set them in kentry.asm's export thunks;
+with those, giving the convention to every export (not only KAPI_ES)
+boots Windows pixel-identically (earlier GDI did not start)."""
 import re
 import sys
 
 out, srcs = sys.argv[1], sys.argv[2:]
 names = set()
-pat = re.compile(r'\bKAPI_ES\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(')
+pat = re.compile(r'\bKAPI(?:_ES)?\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(')
 for p in srcs:
     names.update(pat.findall(open(p, encoding='latin-1').read()))
 with open(out, 'w') as f:

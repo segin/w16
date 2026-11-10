@@ -33,6 +33,8 @@ static HWND active_child(HWND client)
     return (HWND)GetWindowWord(client, MDI_ACTIVE);
 }
 
+static BOOL mdi_creating;       /* WM_MDICREATE under way */
+
 static void child_activate(HWND client, HWND child)
 {
     HWND old = active_child(client);
@@ -47,7 +49,13 @@ static void child_activate(HWND client, HWND child)
         set_window_pos(child, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         send_message(child, WM_NCACTIVATE, TRUE, 0);
         send_message(child, WM_MDIACTIVATE, TRUE, MAKELONG(child, old));
-        if (top_level(client) == hwndActive)
+        /* the focus to the child when the frame is active - but not as
+           WM_MDICREATE makes it (3.1: File Manager's directory window,
+           made with the frame active, did not get the focus; its tree
+           had it from the program's own SetFocus. w16 then took it to the
+           child, whose WM_SETFOCUS handler put it back, and File Manager
+           went on to read the root of the drive) */
+        if (top_level(client) == hwndActive && !mdi_creating)
             set_focus(child);
     }
 }
@@ -64,28 +72,40 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
     BOOL vis = TRUE;
     if (!cw)
         return 0;
-    if (x == (int)CW_USEDEFAULT) {
-        /* cascade: UNVERIFIED step (caption height plus frame) */
-        int step = sysmet[SM_CYCAPTION] + sysmet[SM_CYFRAME] - 1;
-        x = y = (n % 8) * step;
-    }
-    if (cx == (int)CW_USEDEFAULT) {
-        cx = (cw->rcClient.right - cw->rcClient.left) * 3 / 4;
-        cy = (cw->rcClient.bottom - cw->rcClient.top) * 3 / 4;
+    {
+        /* the default place and size: with step the cascade's (22), the
+           client's height holds k = height / (3 step) steps; the size is
+           the client's less k steps each way, the n-th child k-cycling
+           down and right by a step (Windows 3.1: File Manager's first
+           directory window in a 632 x 411 client, 500 x 279 at 0,0;
+           the formula is also Wine's, its 16-bit MDI) */
+        int step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER];
+        int w = cw->rcClient.right - cw->rcClient.left, ht = cw->rcClient.bottom - cw->rcClient.top;
+        int k = ht / (3 * step);
+        if (x == (int)CW_USEDEFAULT)
+            x = y = step * (n % (k + 1));
+        if (cx == (int)CW_USEDEFAULT) {
+            cx = w - step * k;
+            cy = ht - step * k;
+        }
     }
     style &= ~(WS_VISIBLE | WS_MAXIMIZE | WS_MINIMIZE);
+    mdi_creating = TRUE;
     h = create_window(0, mc->szClass, mc->szTitle, style, x, y, cx, cy, client, (HMENU)id,
                       mc->hOwner, (void __far *)mc);
-    if (!h)
+    if (!h) {
+        mdi_creating = FALSE;
         return 0;
+    }
     SetWindowWord(client, MDI_COUNT, n + 1);
     if (mc->style & WS_MINIMIZE)
         ShowWindow(h, SW_SHOWMINNOACTIVE);
     else if (mc->style & WS_MAXIMIZE)
         ShowWindow(h, SW_SHOWMAXIMIZED);
     else if (vis)
-        ShowWindow(h, SW_SHOWNOACTIVATE);
+        ShowWindow(h, SW_SHOW);         /* WM_CHILDACTIVATE activates it */
     child_activate(client, h);
+    mdi_creating = FALSE;
     return h;
 }
 
@@ -105,6 +125,114 @@ static void mdi_destroy(HWND client, HWND child)
     }
     DestroyWindow(child);
     SetWindowWord(client, MDI_COUNT, GetWindowWord(client, MDI_COUNT) - 1);
+}
+
+void WINAPI U_SCROLLCHILDREN(HWND h, UINT msg, WPARAM wp, LPARAM lp);
+void WINAPI CalcChildScroll(HWND h, WORD sb);
+
+/* Window > Cascade and Tile (WM_MDICASCADE, WM_MDITILE), as Windows 3.1
+   arranges Program Manager's groups (tests/scripts/user/mditile.txt:
+   StartUp, Main and Games open, Games active, Accessories minimised, in
+   a 504x290 client area):
+   - the visible children that are not minimised take part; the row of
+     icons at the bottom (SM_CYICONSPACING) is left out of the area when
+     there are minimised ones;
+   - cascade: the children from the bottom of the Z order up, the active
+     one last; the i-th at i steps of 22 (SM_CYCAPTION + 2) right and
+     down, all the size of the area less n steps: StartUp at 0,0, Main
+     at 22,22, Games at 44,44, all 438x152; the Z order stays;
+   - tile (vertical, the default): the active child first, then the
+     others from the top; floor(sqrt(n)) rows of n / rows columns (the
+     extra ones in the last rows): Games, Main, StartUp as three columns
+     of 168x218.
+   UNVERIFIED beyond that sample: the step's derivation, the order of
+   extra windows, MDITILE_HORIZONTAL (rows and columns swapped here). A
+   maximised child is restored first. */
+static void arrange(HWND client, BOOL tile, WPARAM how)
+{
+    PWND cw = valid_wnd(client);
+    HWND *list, s, act = active_child(client);
+    int n = 0, i, step, icons = 0;
+    RECT c;
+    if (!cw)
+        return;
+    if (act && IsZoomed(act))
+        ShowWindow(act, SW_RESTORE);
+    if (act && (!valid_wnd(act) || !(PW(act)->style & WS_VISIBLE)))
+        act = 0;
+    for (s = cw->hwndChild; s; s = PW(s)->hwndNext)
+        n++;
+    list = (HWND *)LocalAlloc(LPTR, (n + 1) * sizeof(HWND));
+    if (!list)
+        return;
+    n = 0;
+    if (act && IsIconic(act)) {
+        icons = 1;
+        act = 0;
+    }
+    if (tile && act)
+        list[n++] = act;
+    for (s = cw->hwndChild; s; s = PW(s)->hwndNext) {
+        PWND sw = PW(s);
+        if (sw->hwndOwner || !(sw->style & WS_VISIBLE) || s == act)
+            continue;
+        if (sw->style & WS_MINIMIZE) {
+            icons = 1;
+            continue;
+        }
+        list[n++] = s;
+    }
+    if (!tile) {
+        /* from the bottom up, the active one last */
+        for (i = 0; i < n / 2; i++) {
+            HWND t = list[i];
+            list[i] = list[n - 1 - i];
+            list[n - 1 - i] = t;
+        }
+        if (act)
+            list[n++] = act;
+    }
+    if (!n) {
+        LocalFree((HLOCAL)list);
+        return;
+    }
+    GetClientRect(client, &c);
+    if (icons)
+        c.bottom -= sysmet[SM_CYICONSPACING];
+    if (c.bottom < sysmet[SM_CYCAPTION])
+        c.bottom = sysmet[SM_CYCAPTION];
+    if (!tile) {
+        int w, h;
+        step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER];
+        w = c.right - n * step;
+        h = c.bottom - n * step;
+        if (w < sysmet[SM_CXMIN]) w = sysmet[SM_CXMIN];
+        if (h < sysmet[SM_CYMIN]) h = sysmet[SM_CYMIN];
+        for (i = 0; i < n; i++)
+            set_window_pos(list[i], 0, i * step, i * step, w, h, SWP_NOACTIVATE | SWP_NOZORDER);
+    } else {
+        int rows = 1, k = 0, row;
+        BOOL horz = (how & MDITILE_HORIZONTAL) != 0;
+        while ((rows + 1) * (rows + 1) <= n)
+            rows++;
+        for (row = 0; row < rows; row++) {
+            int cols = n / rows + (row >= rows - n % rows ? 1 : 0), col;
+            for (col = 0; col < cols && k < n; col++, k++) {
+                int x0, x1, y0, y1;
+                if (!horz) {
+                    x0 = c.right * col / cols; x1 = c.right * (col + 1) / cols;
+                    y0 = c.bottom * row / rows; y1 = c.bottom * (row + 1) / rows;
+                } else {
+                    y0 = c.bottom * col / cols; y1 = c.bottom * (col + 1) / cols;
+                    x0 = c.right * row / rows; x1 = c.right * (row + 1) / rows;
+                }
+                set_window_pos(list[k], 0, x0, y0, x1 - x0, y1 - y0,
+                               SWP_NOACTIVATE | SWP_NOZORDER);
+            }
+        }
+    }
+    LocalFree((HLOCAL)list);
+    CalcChildScroll(client, SB_BOTH);
 }
 
 LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -152,21 +280,26 @@ LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         HWND cur = wp ? (HWND)wp : active_child(h), s, last = 0;
         if (!cur)
             return 0;
-        if (lp) {           /* previous: the next one after it in Z order */
+        /* next: the child under it in Z order, the current one going to
+           the bottom (Windows 3.1, tests/scripts/user/mditile.txt: from
+           Main over StartUp, Games, Accessories, two Ctrl+F6 activate
+           StartUp, then Games, leaving Games, Accessories, Main,
+           StartUp); previous: the bottom one (UNVERIFIED) */
+        if (!lp) {
             s = GetWindow(cur, GW_HWNDNEXT);
             while (s && (GetWindow(s, GW_OWNER) || GetClassWord(s, -32) == 32772))
                 s = GetWindow(s, GW_HWNDNEXT);
-            if (s)
+            if (s) {
                 child_activate(h, s);
-        } else {            /* the bottom one */
-            for (s = GetWindow(h, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
-                if (!GetWindow(s, GW_OWNER) && GetClassWord(s, -32) != 32772)
-                    last = s;
-            if (last && last != cur) {
-                child_activate(h, last);
                 set_window_pos(cur, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE |
                                SWP_NOACTIVATE);
             }
+        } else {
+            for (s = GetWindow(h, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
+                if (!GetWindow(s, GW_OWNER) && GetClassWord(s, -32) != 32772)
+                    last = s;
+            if (last && last != cur)
+                child_activate(h, last);
         }
         return 0;
     }
@@ -185,10 +318,17 @@ LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return (LONG)(WORD)old;
     }
     case WM_MDICASCADE:
+        arrange(h, FALSE, wp);
+        return 1;
     case WM_MDITILE:
-        return 0;               /* UNVERIFIED: not yet */
+        arrange(h, TRUE, wp);
+        return 1;
     case WM_MDIICONARRANGE:
         ArrangeIconicWindows(h);
+        return 0;
+    case WM_HSCROLL:
+    case WM_VSCROLL:
+        U_SCROLLCHILDREN(h, msg, wp, lp);
         return 0;
     case WM_SETFOCUS: {
         HWND a = active_child(h);
@@ -262,6 +402,11 @@ LRESULT WINAPI DefMDIChildProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     HWND client = client_of(h);
     switch (msg) {
+    case WM_WINDOWPOSCHANGED:
+        /* moved or sized: the client's scroll bars follow */
+        if (client && !IsZoomed(h))
+            CalcChildScroll(client, SB_BOTH);
+        break;
     case WM_SETFOCUS:
         if (client && active_child(client) != h)
             child_activate(client, h);
@@ -341,9 +486,85 @@ BOOL WINAPI TranslateMDISysAccel(HWND client, MSG __far *m)
     return FALSE;
 }
 
+/* The MDI client's scroll bars (made with WS_HSCROLL/WS_VSCROLL, kept in
+   MDI_SCROLL): shown while children reach past its edges; the range runs
+   over the children's extent and the client area, the position 0 being
+   where the children are now (UNVERIFIED: Windows 3.1's exact ranges and
+   which children count - here the visible, not minimised ones). */
 void WINAPI CalcChildScroll(HWND h, WORD sb)
 {
-    (void)h, (void)sb;          /* UNVERIFIED: no scroll bars yet */
+    PWND w = valid_wnd(h);
+    WORD want = (WORD)GetWindowWord(h, MDI_SCROLL);
+    RECT u, c;
+    HWND s;
+    int bar;
+    if (!w || !want)
+        return;
+    GetClientRect(h, &c);
+    u = c;
+    for (s = w->hwndChild; s; s = PW(s)->hwndNext) {
+        PWND sw = PW(s);
+        RECT r = sw->rcWindow;
+        if (!(sw->style & WS_VISIBLE) || (sw->style & WS_MINIMIZE) || sw->hwndOwner)
+            continue;
+        OffsetRect(&r, -w->rcClient.left, -w->rcClient.top);
+        UnionRect(&u, &u, &r);
+    }
+    for (bar = SB_HORZ; bar <= SB_VERT; bar++) {
+        int lo = bar == SB_HORZ ? u.left : u.top;
+        int hi = bar == SB_HORZ ? u.right - c.right : u.bottom - c.bottom;
+        DWORD style = bar == SB_HORZ ? WS_HSCROLL : WS_VSCROLL;
+        if (sb != SB_BOTH && sb != (WORD)bar)
+            continue;
+        if (!(want & HIWORD(style)))
+            continue;
+        if (lo < 0 || hi > 0) {
+            SetScrollRange(h, bar, lo, hi, FALSE);
+            SetScrollPos(h, bar, 0, FALSE);
+            if (!(PW(h)->style & style))
+                ShowScrollBar(h, bar, TRUE);
+            else
+                RedrawWindow(h, NULL, NULL, RDW_FRAME | RDW_INVALIDATE);
+        } else if (PW(h)->style & style)
+            ShowScrollBar(h, bar, FALSE);
+    }
+}
+
+/* USER.463: the MDI client's WM_HSCROLL/WM_VSCROLL - the children move */
+void WINAPI U_SCROLLCHILDREN(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    int bar = msg == WM_VSCROLL ? SB_VERT : SB_HORZ, lo, hi, pos, np;
+    RECT c;
+    if (!valid_wnd(h))
+        return;
+    GetScrollRange(h, bar, &lo, &hi);
+    pos = GetScrollPos(h, bar);
+    GetClientRect(h, &c);
+    switch (wp) {
+    case SB_LINEUP: np = pos - 8; break;
+    case SB_LINEDOWN: np = pos + 8; break;
+    case SB_PAGEUP: np = pos - (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_PAGEDOWN: np = pos + (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_TOP: np = lo; break;
+    case SB_BOTTOM: np = hi; break;
+    case SB_THUMBTRACK:
+    case SB_THUMBPOSITION: np = (int)LOWORD(lp); break;
+    case SB_ENDSCROLL:
+        CalcChildScroll(h, bar);
+        return;
+    default: return;
+    }
+    if (np < lo)
+        np = lo;
+    if (np > hi)
+        np = hi;
+    if (np == pos)
+        return;
+    SetScrollPos(h, bar, np, TRUE);
+    if (bar == SB_VERT)
+        ScrollWindow(h, 0, pos - np, NULL, NULL);
+    else
+        ScrollWindow(h, pos - np, 0, NULL, NULL);
 }
 
 /* minimised children in rows along the bottom (UNVERIFIED spacing) */
@@ -468,9 +689,12 @@ LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
             /* the text one pixel in from the left (Program Manager's
-               icon titles, pixel-compared) */
+               icon titles, pixel-compared), centred in one pixel more than
+               the text's width: Paintbrush's second line "(Untitled)",
+               an odd number of pixels narrower, lands half a pixel right
+               (3.1, pixel-compared) */
             r.left += 1;
-            r.right -= 3;
+            r.right -= 2;
             DrawText(hdc, text, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
             SelectObject(hdc, old);
         }

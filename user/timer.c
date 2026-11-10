@@ -27,7 +27,7 @@ typedef struct TIMER {
 typedef TIMER __near *PTIMER;
 
 static WORD timers;
-volatile DWORD tickcount;
+volatile DWORD __far tickcount;
 static WORD systimer;
 
 void __far __pascal __loadds timer_tick(void)

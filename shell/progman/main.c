@@ -324,7 +324,11 @@ static void command(HWND hwnd, WORD id)
         return;
     switch (id) {
     case IDM_OPEN:
-        if (active)
+        /* a minimised group: restored (3.1: Ctrl+Tab to the Accessories
+           icon, then Enter, opens the group) */
+        if (active && IsIconic(active))
+            SendMessage(g_client, WM_MDIRESTORE, (WPARAM)active, 0);
+        else if (active)
             group_open_selected(active);
         break;
     case IDM_RUN:

@@ -1,0 +1,24 @@
+; tabs in a multi-line edit control: Notepad, a line with tabs
+; (tests/inputrun.sh; boot-test case tabs)
+key alt+f
+key r
+sleep 3
+type notepad
+key Return
+sleep 8
+type ab
+key Tab
+type cd
+key Tab
+key Tab
+type e
+key Return
+key Tab
+type f
+sleep 2
+shot 01-tabs
+key alt+F4
+sleep 2
+key n
+sleep 2
+shot 02-closed

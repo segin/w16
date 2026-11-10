@@ -32,7 +32,8 @@
 # since KRNL386.EXE is deleted there: that is how 3.1 picks its mode.
 # SYSTEM.INI gets [w16] watchdog=15: if the boot makes no progress for 15
 # seconds, our KERNEL reports where the processor was and exits (-i
-# w16:watchdog=0 turns that off).
+# w16:watchdog=0 turns that off). It also gets [w16] exitmsg=1: KERNEL prints
+# "w16: back to DOS, code N" when Windows ends (tests look for it).
 #
 # Prints KERNEL's messages (C:\OUT.TXT: WIN's standard output), the boot
 # log, and a summary: which modules loaded, whether USER's initialisation
@@ -42,7 +43,8 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= inis='w16:watchdog=15'
+cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= inis='w16:watchdog=15
+w16:exitmsg=1'
 while getopts k:c:t:f:i:s:o:rxX:wp: opt; do
     case $opt in
     k) kernel=$OPTARG ;;

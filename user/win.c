@@ -17,21 +17,27 @@ void byte_align(PWND w)
 {
     int dx;
     WORD cs = ((PCLS)w->cls)->style;
-    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & WS_CHILD))
+    /* not an icon (3.1: Notepad's, CS_BYTEALIGNCLIENT, minimised at 21
+       like the rest; w16 had it at 24) */
+    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & (WS_CHILD | WS_MINIMIZE)))
         return;
     /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
        message boxes are at 136, 168, 120 where centring gives 137, 169,
        122) */
+    /* nearest multiple of 8 also left of the screen: (x + 4) & ~7 (C's
+       division rounds towards zero, which put a window dragged partly off
+       the left edge 8 pixels right of where Windows 3.1 puts it) */
     if (cs & CS_BYTEALIGNCLIENT)
-        dx = (w->rcClient.left + 4) / 8 * 8 - w->rcClient.left;
+        dx = ((w->rcClient.left + 4) & ~7) - w->rcClient.left;
     else
-        dx = (w->rcWindow.left + 4) / 8 * 8 - w->rcWindow.left;
+        dx = ((w->rcWindow.left + 4) & ~7) - w->rcWindow.left;
     if (dx) {
         OffsetRect(&w->rcWindow, dx, 0);
         OffsetRect(&w->rcClient, dx, 0);
     }
 }
 void free_place(HWND h);
+void purge_window_msgs(HQUEUE hq, HWND h);
 
 PWND valid_wnd(HWND h)
 {
@@ -108,7 +114,7 @@ static void set_text(PWND w, LPCSTR s)
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
    frame off screen) */
-static void minmax(PWND w, MINMAXINFO __far *mm)
+void minmax(PWND w, MINMAXINFO __far *mm)
 {
     int cxf = sysmet[SM_CXFRAME], cyf = sysmet[SM_CYFRAME];
     if (!(w->style & WS_THICKFRAME)) {
@@ -197,8 +203,12 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             if (cy != CW_USEDEFAULT && cy)
                 sw = cy;                /* y of CW_USEDEFAULT: the show command */
             if (cx == CW_USEDEFAULT) {
-                cx = sysmet[SM_CXSCREEN] * 3 / 4;
-                cy = sysmet[SM_CYSCREEN] * 3 / 4;
+                /* the screen's width less two frames, down to the row of
+                   icons (Notepad started first on 3.1: 632x408 at 0,0 on
+                   640x480, then moved to x 4 by CS_BYTEALIGNCLIENT;
+                   UNVERIFIED for later, cascaded ones) */
+                cx = sysmet[SM_CXSCREEN] - x - 2 * sysmet[SM_CXFRAME];
+                cy = sysmet[SM_CYSCREEN] - y - sysmet[SM_CYICONSPACING];
             }
         } else if (cx == CW_USEDEFAULT) {
             cx = sysmet[SM_CXSCREEN] * 3 / 4;
@@ -268,7 +278,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     w->flags |= WF_CREATED;
-    if (!(style & WS_CHILD) || 1) {
+    /* a window made invisible gets WM_SIZE and WM_MOVE when it is first
+       shown (3.1 trace: Notepad's main window got none in CreateWindow;
+       its WM_SIZE handler places its edit control, which did not exist
+       yet, so w16's early WM_SIZE left the edit at 0,0 instead of 8,2) */
+    if (!(style & WS_VISIBLE))
+        w->flags |= WF_SENDSIZE;
+    else {
         send_message(h, WM_SIZE, SIZE_RESTORED,
                      MAKELONG(w->rcClient.right - w->rcClient.left,
                               w->rcClient.bottom - w->rcClient.top));
@@ -360,6 +376,7 @@ static void destroy_tree(HWND h)
     send_message(h, WM_NCDESTROY, 0, 0);
     if ((w = valid_wnd(h)) == 0)
         return;
+    purge_window_msgs(w->hq, h);
     unlink_window(w);
     free_window(w);
 }
@@ -399,8 +416,8 @@ BOOL destroy_window(HWND h)
                        SWP_NOSIZE | SWP_NOZORDER);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    if (h == hwndCapture || IsChild(h, hwndCapture))
-        hwndCapture = 0;
+    if (hwndCapture && (h == hwndCapture || IsChild(h, hwndCapture)))
+        ReleaseCapture();       /* the input queue goes back with it */
     destroy_tree(h);
     if (hwndFocus && !valid_wnd(hwndFocus))
         hwndFocus = 0;

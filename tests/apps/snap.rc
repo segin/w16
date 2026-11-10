@@ -1,0 +1,53 @@
+/*
+ * snap.rc - SNAP.EXE's resources: its icon (our own art, tools/snapicon.py)
+ * and, in the Windows 3.1 build, the interactive window (snap.c, "GUI
+ * mode"): a dialog template of class SnapWindow used as the main window,
+ * and its menu. The log pane is not in the template: snap.c makes it
+ * with a data segment of its own. SNAP2.EXE (SNAP_WIN2) carries the icon
+ * only: Windows 2.x's LoadIcon cannot read a 3.x icon, but w16's 2.x
+ * Program Manager reads it itself.
+ */
+#include <windows.h>
+#include "snap.h"
+
+SNAP ICON "snap.ico"
+
+#ifndef SNAP_WIN2
+SNAP MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open Script...", IDM_OPEN
+        MENUITEM "&Save Log...", IDM_SAVE
+        MENUITEM "&Clear Log", IDM_CLEAR
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Commands", IDM_COMMANDS
+        MENUITEM SEPARATOR
+        MENUITEM "&About SNAP...", IDM_ABOUT
+    END
+END
+
+/* positions are redone by snap.c's layout() whenever the window is sized */
+SNAP DIALOG 24, 24, 300, 190
+STYLE WS_OVERLAPPEDWINDOW
+CAPTION "SNAP"
+MENU SNAP
+CLASS "SnapWindow"
+FONT 8, "Helv"
+BEGIN
+    LTEXT           "&Command:", IDC_CMDLABEL, 4, 6, 36, 8
+    EDITTEXT        IDC_CMD, 42, 4, 196, 12, ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "E&xecute", IDOK, 244, 3, 52, 14
+    LTEXT           "Target:", IDC_TGTLABEL, 4, 22, 36, 8
+    LTEXT           "(none)", IDC_TARGET, 42, 22, 196, 8, SS_NOPREFIX
+    PUSHBUTTON      "&Pick", IDC_PICK, 244, 19, 52, 14
+    PUSHBUTTON      "&Snap", IDC_SNAP, 4, 37, 46, 14
+    PUSHBUTTON      "&Dump", IDC_DUMP, 54, 37, 46, 14
+    PUSHBUTTON      "&Info", IDC_INFO, 104, 37, 46, 14
+    PUSHBUTTON      "&Run...", IDC_RUN, 154, 37, 46, 14
+END
+#endif

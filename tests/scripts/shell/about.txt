@@ -1,0 +1,40 @@
+; ShellAbout from four programs: each one's Help > About
+run NOTEPAD.EXE
+wait 3000
+menu h
+char a
+wait 1500
+snap C:\NOTEPAD.BMP
+dump
+key 0D
+wait 500
+close
+wait 1000
+run CALC.EXE
+wait 3000
+menu h
+char a
+wait 1500
+snap C:\CALC.BMP
+key 0D
+wait 500
+close
+wait 1000
+run WINFILE.EXE
+wait 4000
+menu h
+char a
+wait 1500
+snap C:\WINFILE.BMP
+key 0D
+wait 500
+close
+wait 1000
+run PROGMAN.EXE
+wait 3000
+menu h
+char a
+wait 1500
+snap C:\PROGMAN.BMP
+key 0D
+wait 500

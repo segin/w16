@@ -543,8 +543,13 @@ static int layout_bar(PMENU m, int width, BOOL align)
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
-        if (align)
+        if (align) {
+            /* the item reaches to where the next one starts (Program
+               Manager's Help item highlighted on 3.1: 2 pixels wider than
+               its text plus margins) */
             x = (x + 4) / 8 * 8;
+            it->rc.right = x;
+        }
     }
     SelectObject(hdc, old);
     m->cx = width;
@@ -1043,10 +1048,20 @@ static void menu_char(MLOOP *l, char c)
 }
 
 /* the loop: messages for the menu are read here; others are passed on */
+extern int menu_mode;
+
 static void run_menu(MLOOP *l)
 {
     MSG msg;
     HWND oldcap = GetCapture();
+    /* the arrow while a menu is up, whatever the window under it chose
+       (3.1: the arrow over Notepad's Help menu, opened from the keyboard
+       with the pointer over the edit control; the menu class has no
+       cursor, US2) */
+    menu_mode++;
+    SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
+    /* the caret goes on blinking (3.1: Notepad's caret seen both on and
+       off while its Help menu is up) */
     while (!l->done) {
         if (!GetMessage(&msg, 0, 0, 0)) {
             PostQuitMessage(msg.wParam);
@@ -1055,6 +1070,9 @@ static void run_menu(MLOOP *l)
         switch (msg.message) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            /* the characters for mnemonics come from here: without this a
+               menu opened from the keyboard ignored its item letters */
+            TranslateMessage(&msg);
             menu_key(l, msg.wParam);
             continue;
         case WM_CHAR:
@@ -1091,6 +1109,11 @@ static void run_menu(MLOOP *l)
                     if (PtInRect(&r, pt)) {
                         if (msg.message == WM_LBUTTONDOWN || msg.message == WM_NCLBUTTONDOWN)
                             select_bar(l, i, TRUE);
+                        else if (l->popup && l->sel < 0)
+                            /* released on the bar item: the popup's first
+                               item selected, as from the keyboard (3.1,
+                               Program Manager's Help clicked) */
+                            select_popup_item(l, 0);
                         break;
                     }
                 }
@@ -1117,6 +1140,7 @@ static void run_menu(MLOOP *l)
         send_message(l->owner, WM_MENUSELECT, 0, MAKELONG(0xFFFF, 0));
     if (oldcap)
         SetCapture(oldcap);
+    menu_mode--;
     if (l->result && valid_wnd(l->owner))
         PostMessage(l->owner, l->resultsys ? WM_SYSCOMMAND : WM_COMMAND, l->result, 0);
 }
@@ -1136,7 +1160,10 @@ void menu_track_bar(HWND h, char key)
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
     bar = valid_menu(l.bar);
-    if (key == ' ' || (!bar && (w->style & WS_SYSMENU))) {
+    /* Alt+Space, or Alt (F10) alone in a window without a menu bar: the
+       system menu. Alt+letter without a menu bar used to open it as well,
+       so Alt+H in a dialog or in Clock put up the system menu */
+    if (key == ' ' || (!bar && !key && (w->style & WS_SYSMENU))) {
         l.bar = GetSystemMenu(h, FALSE);
         l.sysmenu = TRUE;
         sysmenu_states(w, l.bar);
@@ -1156,8 +1183,11 @@ void menu_track_bar(HWND h, char key)
                 select_popup_item(&l, 0);
         } else
             select_bar(&l, 0, FALSE);
-    } else
+    } else {
+        if (key)
+            MessageBeep(0);
         return;
+    }
     run_menu(&l);
 }
 

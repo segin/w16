@@ -1,0 +1,10 @@
+; Program Manager's File > Exit Windows, then OK (tests/boottest.sh cases
+; exitwin*: Windows must end and the DOS prompt come back in text mode)
+key alt+f
+sleep 1
+key x
+sleep 2
+shot 01-confirm
+key Return
+sleep 8
+shot 02-dos

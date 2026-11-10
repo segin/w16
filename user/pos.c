@@ -13,7 +13,9 @@
 
 void refresh_dcs(void);
 void byte_align(PWND w);
+void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
+HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
 
 void calc_client(PWND w)
@@ -131,11 +133,33 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         w->style &= ~WS_VISIBLE;
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
+        /* the active window hidden, by ShowWindow or SetWindowPos: the
+           next visible, enabled top-level window becomes active, or none.
+           Program Manager hides its Run dialog with SetWindowPos before
+           WinExec (US1-style trace on 3.1); the dialog stayed "active"
+           while hidden, so when it ended it gave the activation back to
+           Program Manager over the program just started */
+        if (h == hwndActive) {
+            HWND t = w->hwndOwner;
+            /* its owner first, if it can take it, else the next one */
+            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
+                t = next_to_activate(h);
+            activate_window(t, FALSE);
+            if (!(w = valid_wnd(h)))
+                return FALSE;
+        }
     }
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
               !(flags & SWP_NOZORDER) || (flags & SWP_FRAMECHANGED);
     refresh_dcs();
+    /* (not for popup menus: a menu opened under the pointer from the
+       keyboard keeps its first item selected) */
+    if (changed && (wasvis || nowvis) && GetClassWord(h, GCW_ATOM) != 32768) {
+        pointer_changed(&oldwin);
+        if (!EqualRect(&oldwin, &w->rcWindow))
+            pointer_changed(&w->rcWindow);
+    }
     if (changed && !(flags & SWP_NOREDRAW)) {
         /* what was under the old place, and the window in its new one */
         if (wasvis)
@@ -143,8 +167,30 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (nowvis)
             invalidate_screen(&w->rcWindow);
     }
+    if ((flags & SWP_SHOWWINDOW) && (w->flags & WF_SENDSIZE)) {
+        /* the WM_SIZE and WM_MOVE CreateWindow held back */
+        PWND pw = (w->style & WS_CHILD) ? PW(w->hwndParent) : (PWND)0;
+        w->flags &= ~WF_SENDSIZE;
+        send_message(h, WM_SIZE, (w->style & WS_MINIMIZE) ? SIZE_MINIMIZED :
+                     (w->style & WS_MAXIMIZE) ? SIZE_MAXIMIZED : SIZE_RESTORED,
+                     MAKELONG(w->rcClient.right - w->rcClient.left,
+                              w->rcClient.bottom - w->rcClient.top));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+        send_message(h, WM_MOVE, 0, MAKELONG(w->rcClient.left - (pw ? pw->rcClient.left : 0),
+                                             w->rcClient.top - (pw ? pw->rcClient.top : 0)));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+    }
     if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
         activate_window(h, FALSE);
+    /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
+       DefMDIChildProc turns into the MDI child's activation (3.1, File
+       Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
+       WM_CHILDACTIVATE as it is shown). UNVERIFIED: on moves and sizes
+       without SWP_NOACTIVATE too, as the SDK says */
+    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
+        send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
     if (!(w = valid_wnd(h)))
@@ -213,6 +259,7 @@ static void icon_place(PWND w, POINT *pt)
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
 HWND make_icon_title(HWND h);
 void move_icon_title(HWND t, HWND h);
+HWND next_to_activate(HWND h);
 #define PLACEPROP MAKEINTATOM(0x7E16)   /* w16's private property */
 
 static PLACE *place_of(HWND h, BOOL create)
@@ -251,13 +298,6 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             return FALSE;
         send_message(h, WM_SHOWWINDOW, FALSE, 0);
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
-        if (h == hwndActive && (w = valid_wnd(h)) != 0) {
-            HWND t;
-            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
-                if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED))
-                    break;
-            activate_window(t, FALSE);
-        }
         return wasvis;
     case SW_SHOWMINIMIZED:
     case SW_MINIMIZE:
@@ -283,9 +323,31 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
                            (cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
             if ((w = valid_wnd(h)) != 0) {
-                send_message(h, WM_SIZE, SIZE_MINIMIZED, 0);
+                /* with the icon's client size, as from WM_WINDOWPOSCHANGED
+                   (it was 0 x 0: w16's Clock sized its icon's digits to
+                   it, and they came out huge and cut off) */
+                send_message(h, WM_SIZE, SIZE_MINIMIZED,
+                             MAKELONG(w->rcClient.right - w->rcClient.left,
+                                      w->rcClient.bottom - w->rcClient.top));
                 if (pl && !pl->title && (w = valid_wnd(h)) != 0)
                     pl->title = make_icon_title(h);
+            }
+            /* SW_MINIMIZE (Alt+Space N, the minimise box): the next
+               top-level window becomes active (3.1 SDK; on 3.1 Program
+               Manager is active again after Notepad is minimised - w16
+               left Notepad's icon active, and the keys went to it). The
+               minimised window goes to the bottom of the Z order: with
+               Notepad, Calculator, Clock, Character Map and Paintbrush
+               minimised in that order, minimising Program Manager makes
+               Notepad's icon active, and Alt+Esc then goes Calculator,
+               Clock (observed on 3.1) */
+            if (cmd == SW_MINIMIZE && h == hwndActive && (w = valid_wnd(h)) != 0 &&
+                !(w->style & WS_CHILD)) {
+                HWND t;
+                set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                t = next_to_activate(h);
+                if (t)
+                    activate_window(t, FALSE);
             }
         } else if (!wasvis) {
             send_message(h, WM_SHOWWINDOW, TRUE, 0);
@@ -439,6 +501,27 @@ BOOL WINAPI SetWindowPlacement(HWND h, const WINDOWPLACEMENT __far *p)
     return TRUE;
 }
 
+/* the window to activate when h stops being the active one: the first
+   visible, enabled top-level window in Z order other than h, not an icon
+   title (#32772, a popup owned by a minimised window), one that is not
+   minimised first. UNVERIFIED: 3.1's order of preference */
+HWND next_to_activate(HWND h)
+{
+    HWND t, icon = 0;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
+        PWND tw = PW(t);
+        if (t == h || !(tw->style & WS_VISIBLE) || (tw->style & (WS_DISABLED | WS_CHILD)))
+            continue;
+        if (tw->hwndOwner && valid_wnd(tw->hwndOwner) && (PW(tw->hwndOwner)->style & WS_MINIMIZE))
+            continue;
+        if (!(tw->style & WS_MINIMIZE))
+            return t;
+        if (!icon)
+            icon = t;
+    }
+    return icon;
+}
+
 /* a window going away: its placement record and icon title */
 void free_place(HWND h)
 {
@@ -451,6 +534,15 @@ void free_place(HWND h)
     l = (HLOCAL)RemoveProp(h, PLACEPROP);
     if (l)
         LocalFree(l);
+}
+
+/* a minimised window activated, deactivated or renamed: its title
+   repainted whole */
+void redraw_icon_title(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    if (p && p->title && valid_wnd(p->title))
+        RedrawWindow(p->title, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
 }
 
 /* a minimised window moved: its title follows */
