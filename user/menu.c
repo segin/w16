@@ -1048,10 +1048,21 @@ static void menu_char(MLOOP *l, char c)
 }
 
 /* the loop: messages for the menu are read here; others are passed on */
+extern int menu_mode;
+
 static void run_menu(MLOOP *l)
 {
     MSG msg;
     HWND oldcap = GetCapture();
+    /* the arrow while a menu is up, whatever the window under it chose
+       (3.1: the arrow over Notepad's Help menu, opened from the keyboard
+       with the pointer over the edit control; the menu class has no
+       cursor, US2) */
+    menu_mode++;
+    SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
+    /* and no caret (3.1: Notepad's caret gone while its Help menu is up;
+       UNVERIFIED that it is hidden rather than caught off in its blink) */
+    HideCaret(0);
     while (!l->done) {
         if (!GetMessage(&msg, 0, 0, 0)) {
             PostQuitMessage(msg.wParam);
@@ -1099,6 +1110,11 @@ static void run_menu(MLOOP *l)
                     if (PtInRect(&r, pt)) {
                         if (msg.message == WM_LBUTTONDOWN || msg.message == WM_NCLBUTTONDOWN)
                             select_bar(l, i, TRUE);
+                        else if (l->popup && l->sel < 0)
+                            /* released on the bar item: the popup's first
+                               item selected, as from the keyboard (3.1,
+                               Program Manager's Help clicked) */
+                            select_popup_item(l, 0);
                         break;
                     }
                 }
@@ -1125,6 +1141,8 @@ static void run_menu(MLOOP *l)
         send_message(l->owner, WM_MENUSELECT, 0, MAKELONG(0xFFFF, 0));
     if (oldcap)
         SetCapture(oldcap);
+    menu_mode--;
+    ShowCaret(0);
     if (l->result && valid_wnd(l->owner))
         PostMessage(l->owner, l->resultsys ? WM_SYSCOMMAND : WM_COMMAND, l->result, 0);
 }
@@ -1144,7 +1162,10 @@ void menu_track_bar(HWND h, char key)
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
     bar = valid_menu(l.bar);
-    if (key == ' ' || (!bar && (w->style & WS_SYSMENU))) {
+    /* Alt+Space, or Alt (F10) alone in a window without a menu bar: the
+       system menu. Alt+letter without a menu bar used to open it as well,
+       so Alt+H in a dialog or in Clock put up the system menu */
+    if (key == ' ' || (!bar && !key && (w->style & WS_SYSMENU))) {
         l.bar = GetSystemMenu(h, FALSE);
         l.sysmenu = TRUE;
         sysmenu_states(w, l.bar);
@@ -1164,8 +1185,11 @@ void menu_track_bar(HWND h, char key)
                 select_popup_item(&l, 0);
         } else
             select_bar(&l, 0, FALSE);
-    } else
+    } else {
+        if (key)
+            MessageBeep(0);
         return;
+    }
     run_menu(&l);
 }
 

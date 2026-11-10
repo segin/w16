@@ -46,6 +46,8 @@
 #              Microsoft's KRNL286 against all-Microsoft: identical screens
 #   alttab     Alt+Tab between Program Manager and Notepad, Notepad closed,
 #              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
+#   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
+#              Notepad's (tests/scripts/input/helpmenus.txt): the same
 #   about      Help > About Program Manager (SHELL's ShellAbout) opened and
 #              closed with Enter and Esc by real keys, then the File and
 #              Help menus must open (tests/scripts/input/about.txt); w16's
@@ -80,7 +82,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk tabs alttab}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input runfront runfrontk about dragoff dragoffk tabs alttab helpmenus}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -263,7 +265,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
 " "$out/$c/01-run.png" 2>&1 || echo "no screen")
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
-    tabs|alttab)
+    tabs|alttab|helpmenus)
         "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r \
             > "$out/$c-ref.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \

@@ -286,3 +286,25 @@ int WINAPI WinHelp(HWND h, LPCSTR file, UINT cmd, DWORD data)
     return TRUE;
 }
 
+
+/* SetSysModalWindow/GetSysModalWindow (3.1 SDK): the window recorded.
+   UNVERIFIED: 3.1 also keeps input and activation to it (Pietrek ch. 7:
+   hQSysModal comes first when USER wakes a queue for input); w16 only
+   records it and activates it. */
+static HWND hwndSysModal;
+
+HWND WINAPI SetSysModalWindow(HWND h)
+{
+    HWND old = hwndSysModal;
+    hwndSysModal = valid_wnd(h) ? h : 0;
+    if (hwndSysModal)
+        SetActiveWindow(top_level(hwndSysModal));
+    return old;
+}
+
+HWND WINAPI GetSysModalWindow(void)
+{
+    if (hwndSysModal && !valid_wnd(hwndSysModal))
+        hwndSysModal = 0;
+    return hwndSysModal;
+}

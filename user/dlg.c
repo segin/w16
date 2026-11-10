@@ -141,7 +141,10 @@ LRESULT WINAPI DefDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CHARTOITEM:
     case WM_QUERYDRAGICON:
     case WM_INITDIALOG:
-        if (handled || msg == WM_INITDIALOG)
+        /* without a dialog procedure: TRUE, the focus as usual */
+        if (msg == WM_INITDIALOG)
+            return GetWindowLong(h, DW_PROC) ? r : TRUE;
+        if (handled)
             return r;
         break;
     default:
@@ -354,8 +357,11 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     }
     if (font)
         send_message(h, WM_SETFONT, (WPARAM)font, FALSE);
-    if (call_wndproc((WNDPROC)proc, (WORD)hinst, h, WM_INITDIALOG, (WPARAM)focus, param) &&
-        valid_wnd(h)) {
+    /* WM_INITDIALOG goes to the window, so a dialog of its own class
+       (Calculator: CLASS "SciCalc", no dialog procedure) gets it in its
+       class's procedure; DefDlgProc hands it on to the dialog procedure.
+       It was called straight, NULL included: a GP fault in USER */
+    if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
         if (focus)
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
     }

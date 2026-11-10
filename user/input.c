@@ -37,6 +37,7 @@ HWND hwndCapture, hwndFocus, hwndActive;
 HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
 static HCURSOR hcurSetByMsg;    /* the cursor the last WM_SETCURSOR left */
+int menu_mode;                  /* menu loops running: the arrow stays */
 static int cursor_level;        /* ShowCursor's count */
 static RECT __far rcClip;
 static int __far mthresh1 = 2, __far mthresh2, __far mspeed = 1;   /* acceleration */
@@ -230,7 +231,7 @@ void pointer_changed(const RECT *r)
 void idle_cursor_check(HQUEUE hq)
 {
     HWND w;
-    if (hcurCurrent == hcurSetByMsg || hwndCapture)
+    if (hcurCurrent == hcurSetByMsg || hwndCapture || menu_mode)
         return;
     w = WindowFromPoint(ptCursor);
     if (w && valid_wnd(w) && PW(w)->hq == hq) {
@@ -365,6 +366,8 @@ void activate_window(HWND h, BOOL mouse)
 {
     HWND old = hwndActive;
     PWND w = valid_wnd(h);
+    ulogx("DBG activate ", (WORD)h);
+    if (w) { char b[40]; GetClassName(h, b, sizeof b); ulog(b); ulog("\r\n"); }
     if (h == old)
         return;
     if (h && !w)
@@ -546,7 +549,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                         continue;
                 }
             }
-            if (valid_wnd(target)) {
+            if (valid_wnd(target) && !menu_mode) {
                 send_message(target, WM_SETCURSOR, target, MAKELONG(hit, e.msg));
                 hcurSetByMsg = hcurCurrent;
             }
