@@ -66,7 +66,11 @@ static void add_update(PWND w, HRGN rgn, BOOL erase, BOOL children)
         need_paint(w);
     }
 kids:
-    if (children)
+    /* a minimised window's children are not shown (3.1: only the icon,
+       or what the window paints itself; Notepad's edit control, Program
+       Manager's groups and Character Map's controls were painted over
+       their icons) */
+    if (children && !(w->style & WS_MINIMIZE))
         for (c = w->hwndChild; c; c = PW(c)->hwndNext) {
             PWND cw = PW(c);
             RECT rc;
@@ -250,6 +254,8 @@ static HWND find_paint(HWND h, HQUEUE hq)
         return 0;
     if (w->hq == hq && (w->flags & WF_INPAINT))
         return h;
+    if (w->style & WS_MINIMIZE)
+        return 0;
     for (c = w->hwndChild; c; c = PW(c)->hwndNext)
         if ((r = find_paint(c, hq)) != 0)
             return r;
@@ -345,7 +351,7 @@ void update_window(HWND h, BOOL children)
             EndPaint(h, &ps);
         }
     }
-    if (children && (w = valid_wnd(h)) != 0)
+    if (children && (w = valid_wnd(h)) != 0 && !(w->style & WS_MINIMIZE))
         for (c = w->hwndChild; c; c = PW(c)->hwndNext)
             update_window(c, TRUE);
 }

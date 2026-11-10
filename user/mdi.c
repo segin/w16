@@ -669,9 +669,12 @@ LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
             /* the text one pixel in from the left (Program Manager's
-               icon titles, pixel-compared) */
+               icon titles, pixel-compared), centred in one pixel more than
+               the text's width: Paintbrush's second line "(Untitled)",
+               an odd number of pixels narrower, lands half a pixel right
+               (3.1, pixel-compared) */
             r.left += 1;
-            r.right -= 3;
+            r.right -= 2;
             DrawText(hdc, text, -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
             SelectObject(hdc, old);
         }

@@ -388,6 +388,13 @@ void activate_window(HWND h, BOOL mouse)
     send_message(h, WM_NCACTIVATE, TRUE, 0);
     send_message(h, WM_ACTIVATE, mouse ? WA_CLICKACTIVE : WA_ACTIVE,
                  MAKELONG(old, (w->style & WS_MINIMIZE) ? 1 : 0));
+    /* the focus stays inside the active window or goes: an icon made
+       active keeps none (DefWindowProc gives it the focus only when not
+       minimised), and the keys go to the icon as WM_SYSKEYDOWN. It used
+       to stay in the window before: with Program Manager minimised and
+       Notepad's icon active, Alt+Esc went to Program Manager */
+    if (hwndFocus && hwndActive == h && hwndFocus != h && !IsChild(h, hwndFocus))
+        set_focus(0);
     (void)mouse;
 }
 

@@ -17,7 +17,9 @@ void byte_align(PWND w)
 {
     int dx;
     WORD cs = ((PCLS)w->cls)->style;
-    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & WS_CHILD))
+    /* not an icon (3.1: Notepad's, CS_BYTEALIGNCLIENT, minimised at 21
+       like the rest; w16 had it at 24) */
+    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & (WS_CHILD | WS_MINIMIZE)))
         return;
     /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
        message boxes are at 136, 168, 120 where centring gives 137, 169,

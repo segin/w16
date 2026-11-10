@@ -42,6 +42,9 @@ static void load_frame_bitmaps(void)
     bmRestoreD = LoadBitmap(0, MAKEINTRESOURCE(OBM_RESTORED));
 }
 
+void follow_icon_title(HWND h);
+void redraw_icon_title(HWND h);
+
 /* ---- frame geometry ---- */
 static BOOL has_thick(PWND w)   { return (w->style & WS_THICKFRAME) && !(w->style & WS_MINIMIZE); }
 static BOOL has_dlgframe(PWND w)
@@ -421,7 +424,9 @@ void switch_window(HWND cur, BOOL tobottom)
     /* Alt+Tab takes the window under the current one: the bottom of the
        others goes on top when cur stays put (UNVERIFIED order) */
     activate_window(first, FALSE);
-    if (IsIconic(first))
+    /* Alt+Tab restores an icon; Alt+Esc only activates it (3.1: Alt+Esc
+       from Notepad's icon to Calculator's leaves both minimised) */
+    if (IsIconic(first) && !tobottom)
         ShowWindow(first, SW_RESTORE);
 }
 
@@ -526,6 +531,11 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             w->flags &= ~WF_ACTIVEFRAME;
         if (is_visible(w))
             nc_paint(h, 0, wp != 0);
+        /* a minimised window's title under the icon: its colours follow
+           (it was repainted only where something had covered it, so
+           old highlighting stayed) */
+        if (w->style & WS_MINIMIZE)
+            redraw_icon_title(h);
         return 1;
     case WM_NCDESTROY:
         return 0;
@@ -644,6 +654,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         def_settext(w, (LPCSTR)lp);
         if (has_caption(w) && is_visible(w))
             nc_paint(h, 0, (w->flags & WF_ACTIVEFRAME) != 0);
+        if (w->style & WS_MINIMIZE) {
+            follow_icon_title(h);       /* sized to the new text */
+            redraw_icon_title(h);
+        }
         return 1;
     case WM_GETTEXT:
         return def_gettext(w, wp, (LPSTR)lp);
