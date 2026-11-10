@@ -46,12 +46,14 @@ extern void  __far __pascal G_SETDCSTATE(HDC, HDC);                  /* 180 */
 extern void  __far __pascal G_MAKEOBJECTPRIVATE(HANDLE, BOOL);       /* 463 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
 extern void  __far __pascal G_FINALGDIINIT(HBRUSH);                  /* 405 */
+extern int   __far __pascal G_DEATH(HDC);                            /* 121 */
 extern HRGN  __far __pascal G_INQUIREVISRGN(HDC);                    /* 131 */
 extern void  __far __pascal G_GDITASKTERMINATION(HTASK);             /* 460 */
 /* SYSTEM */
 extern WORD  __far __pascal S_CREATESYSTEMTIMER(WORD, FARPROC);      /* 2 */
 extern WORD  __far __pascal S_KILLSYSTEMTIMER(WORD);                 /* 3 */
 extern void  __far __pascal S_ENABLESYSTEMTIMERS(void);              /* 4 */
+extern void  __far __pascal S_DISABLESYSTEMTIMERS(void);             /* 5 */
 extern DWORD __far __pascal S_GETSYSTEMMSECCOUNT(void);              /* 6 */
 /* KEYBOARD, MOUSE, DISPLAY (the driver interfaces of the 3.1 DDK) */
 extern WORD  __far __pascal KB_INQUIRE(void __far *);                /* 1 */
