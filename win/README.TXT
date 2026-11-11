@@ -24,7 +24,7 @@ REG.DAT (the registration database) may be copied too; without one,
 w16's SHELL.DLL makes an empty one and fills it from WIN.INI's
 [embedding] section, as Windows 3.1 does.
 
-It is not a complete Windows yet. To boot it (Standard mode, WIN /S),
+w16 is not complete yet. To boot it (Standard mode, WIN /S),
 copy these from your own Windows 3.1 installation into the same places
 (Windows directory or its SYSTEM subdirectory, as there), without
 overwriting the files above:
