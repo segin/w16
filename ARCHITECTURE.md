@@ -297,6 +297,8 @@ The advance width of every character is in the `widths` lines of each source (fr
 
 For now, w16 targets **VGA (640×480, 16 colours, 96 dpi) only**: `VGA.DRV`, the VGA grabber (`VGA.3GR`/`VGA.2GR`) and the VGA font sets. SuperVGA, 8514/A (120 dpi), EGA and CGA display drivers and their font sets are deferred. Nothing in the design should assume VGA in a way that would prevent adding them later; for example, metrics come from the display driver and are never hard-coded.
 
+**w16's VGA driver** lives in `drivers/vga/` (not implemented yet; w16 runs Microsoft's `VGA.DRV`). What exists is its graphics: the display driver carries the bitmaps, icons and cursors USER draws the interface with (`OBM_*` frame pieces, `OIC_*` message-box icons, `OCR_*` cursors). `drivers/vga/resources.md` lists every resource of the reference driver with its ID, size, format, cell layout and hot spot (format facts, `tools/vgainv.py`, headers only); `drivers/vga/art/` holds w16's own art for each, drawn as text and built by `make vgaart` (`tools/vgaart.py`) into `.BMP`/`.ICO`/`.CUR` files under `build/vga/`.
+
 ### 6.11 Design Note: Undocumented Layouts Are Part of the Contract
 
 Programs from the period depend on some internal data layouts that the SDK never documented. When w16's own programs or observed applications rely on one, w16's modules must reproduce it exactly. Known so far:

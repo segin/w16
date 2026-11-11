@@ -1293,3 +1293,14 @@ install-tree: $(W16)/NOTEPAD.EXE
 $(W16)/NOTEPAD.EXE: $(DOS)/NOTEPAD.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+
+# ---- the w16 VGA display driver's graphics (drivers/vga; no driver code
+# yet): the OBM_ bitmaps, OIC_ icons and OCR_ cursors as .BMP/.ICO/.CUR
+# under build/vga, drawn as text in drivers/vga/art (tools/vgaart.py)
+VGAART_SRC := $(wildcard drivers/vga/art/*.txt)
+vgaart: $(B)/vga/.stamp
+$(B)/vga/.stamp: $(VGAART_SRC) tools/vgaart.py
+	@mkdir -p $(@D)
+	python3 -B tools/vgaart.py build drivers/vga/art $(B)/vga
+	@touch $@
+.PHONY: vgaart
