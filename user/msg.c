@@ -384,6 +384,8 @@ static BOOL posted_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MS
 }
 
 void idle_cursor_check(HQUEUE hq);
+void journal_poll(void);
+BOOL journal_active(void);
 
 static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOOL wait)
 {
@@ -396,6 +398,7 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         q = q_of(hq);
         q->changebits = 0;
         receive_sent(hq);
+        journal_poll();         /* WH_JOURNALPLAYBACK's next event, if due */
         if (posted_message(hq, hf, lo, hi, remove, m))
             break;
         q = q_of(hq);
@@ -425,7 +428,10 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
         if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending) {
             idle_cursor_check(hq);
-            if (!input_pending)
+            /* a playback's events come by polling: no sleep meanwhile */
+            if (journal_active())
+                K_OLDYIELD();
+            else if (!input_pending)
                 K_WAITEVENT(0);
         }
         else if (input_pending && !(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)))
@@ -476,6 +482,10 @@ void WINAPI WaitMessage(void)
         if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE | PM_NOYIELD))
             return;
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
+        if (journal_active()) {         /* playback input comes by polling */
+            K_OLDYIELD();
+            continue;
+        }
         K_WAITEVENT(0);
     }
 }

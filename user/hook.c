@@ -149,3 +149,10 @@ void shell_notify(int code, HWND h)
 {
     call_hook(WH_SHELL, code, (WPARAM)h, 0);
 }
+
+/* a hook of this type is set (for any task) */
+BOOL hook_set(int type)
+{
+    WORD *c = chain(type);
+    return c && *c;
+}

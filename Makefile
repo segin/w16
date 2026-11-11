@@ -1174,6 +1174,14 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US9: DragObject and DragDetect (tests/apps/us9.c)
+$(B)/tests/us9.o: tests/apps/us9ref.h tests/apps/tklog.h tests/apps/shprobe.h
+$(DOS)/US9.EXE: $(B)/tests/start.o $(B)/tests/us9.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us9.map file { $(B)/tests/start.o $(B)/tests/us9.o } \
+	    library shell.lib import DragObject USER.464 import DragDetect USER.465
+dos: $(DOS)/US9.EXE
 # US8: USER's WNet functions without a network (tests/apps/us8.c)
 $(B)/tests/us8.o: tests/apps/us8ref.h tests/apps/tklog.h
 $(DOS)/US8.EXE: $(B)/tests/start.o $(B)/tests/us8.o tests/apps/app.lnk

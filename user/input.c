@@ -150,6 +150,70 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
     if (ax & 0x40) { keystate[VK_MBUTTON] &= ~0x80; push_event(WM_MBUTTONUP, 0, MAKELONG(x, y)); }
 }
 
+/* ---- WH_JOURNALPLAYBACK (3.1 SDK): while such a hook is set, input
+   comes from it. HC_GETNEXT fills an EVENTMSG (message, paramL, paramH:
+   the screen point, or virtual key and scan code in paramL); a non-zero
+   answer is a wait in milliseconds before the event, asked again while
+   waiting (US9 and the SHELL probes play their drags so); HC_SKIP moves
+   on. Polled at task time from GetMessage/PeekMessage. UNVERIFIED: real
+   input is not shut out meanwhile. ---- */
+static BOOL jwaiting;
+static DWORD jdue;
+
+BOOL journal_active(void)
+{
+    extern BOOL hook_set(int type);
+    return hook_set(WH_JOURNALPLAYBACK);
+}
+
+void journal_poll(void)
+{
+    extern LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp);
+    EVENTMSG ev;
+    LRESULT r;
+    if (!journal_active()) {
+        jwaiting = FALSE;
+        return;
+    }
+    fmemset(&ev, 0, sizeof ev);
+    r = call_hook(WH_JOURNALPLAYBACK, HC_GETNEXT, 0, (LPARAM)(EVENTMSG __far *)&ev);
+    if (r > 0 && !jwaiting) {
+        jwaiting = TRUE;
+        jdue = GetTickCount() + r;
+        return;
+    }
+    if (jwaiting && (long)(GetTickCount() - jdue) < 0)
+        return;
+    jwaiting = FALSE;
+    if (ev.message >= WM_MOUSEFIRST && ev.message <= WM_MOUSELAST) {
+        int x = (int)ev.paramL, y = (int)ev.paramH;
+        if (x < rcClip.left) x = rcClip.left;
+        if (x >= rcClip.right) x = rcClip.right - 1;
+        if (y < rcClip.top) y = rcClip.top;
+        if (y >= rcClip.bottom) y = rcClip.bottom - 1;
+        if (x != ptCursor.x || y != ptCursor.y) {
+            ptCursor.x = x;
+            ptCursor.y = y;
+            D_MOVECURSOR(x, y);
+            push_event(WM_MOUSEMOVE, 0, MAKELONG(x, y));
+        }
+        switch (ev.message) {
+        case WM_LBUTTONDOWN: keystate[VK_LBUTTON] |= 0x80; break;
+        case WM_LBUTTONUP: keystate[VK_LBUTTON] &= ~0x80; break;
+        case WM_RBUTTONDOWN: keystate[VK_RBUTTON] |= 0x80; break;
+        case WM_RBUTTONUP: keystate[VK_RBUTTON] &= ~0x80; break;
+        case WM_MBUTTONDOWN: keystate[VK_MBUTTON] |= 0x80; break;
+        case WM_MBUTTONUP: keystate[VK_MBUTTON] &= ~0x80; break;
+        }
+        if (ev.message != WM_MOUSEMOVE)
+            push_event(ev.message, 0, MAKELONG(x, y));
+    } else if (ev.message >= WM_KEYFIRST && ev.message <= WM_KEYLAST) {
+        BOOL up = ev.message == WM_KEYUP || ev.message == WM_SYSKEYUP;
+        KBD_EVENT((ev.paramL & 0xFF) | (up ? 0x8000 : 0), (ev.paramL >> 8) & 0xFF, 0, 0);
+    }
+    call_hook(WH_JOURNALPLAYBACK, HC_SKIP, 0, 0);
+}
+
 void input_init(void)
 {
     SetRect(&rcClip, 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN]);
@@ -184,6 +248,12 @@ void set_cursor_shape(HCURSOR h)
         D_SETCURSOR(0);
     if (h)
         GlobalUnlock(h);
+}
+
+/* USER.247 (it was a stub answering 0) */
+HCURSOR WINAPI GetCursor(void)
+{
+    return hcurCurrent;
 }
 
 HCURSOR WINAPI SetCursor(HCURSOR h)
