@@ -108,7 +108,7 @@ BEGIN
     IDS_FILTERALL,      "All Files (*.*)"
     IDS_OPENTITLE,      "Open"
     IDS_SAVETITLE,      "Save As"
-    IDS_QUERYEND,       "You cannot quit Windows because the Save As dialog\nbox in Notepad is open. Switch to Notepad, close this\ndialog box, and then try quitting Windows again."
+    IDS_QUERYEND,       "You cannot quit w16 because the Save As dialog\nbox in Notepad is open. Switch to Notepad, close this\ndialog box, and then try quitting w16 again."
     IDS_NODRIVER,       "Cannot load the driver for your printer.\nThere may not be enough memory, or the printer-driver file is missing.  \n\nReinstall your printer, or quit one or more applications to increase available memory, and then try again."
 END
 
