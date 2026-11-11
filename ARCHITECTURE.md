@@ -952,7 +952,7 @@ A complete replacement for WIN386.EXE provides the VMM and every VxD that the or
   - IFSMGR (0484h), VFAT (0486h), VCACHE (048Bh), IOS (0010h; it takes BLOCKDEV's ID): 32-bit file and disk access;
   - VSHARE (0483h), VXDLDR (0027h), VPMTD (003Ah);
   - VCOMM (002Bh), SERIAL and LPT.
-- **In a networked install** (not in our reference copy; see §19): the redirector, server, NDIS and protocol VxDs.
+- **In a networked install** (not in our reference copy; a networked WfW 3.11 reference is in progress, not merged yet): the redirector, server, NDIS and protocol VxDs.
 
 **The boot set.** The VMM itself calls into VPICD, VTD, V86MMGR, PageSwap, VMCPD, VNETBIOS, DOSMGR and SHELL. The VxDs that do work during Sys_Critical_Init, Device_Init and Init_Complete add VDD, VKD, BLOCKDEV, VDMAD and PageFile. Of the VMM's 242 services, 199 are called by some module.
 
