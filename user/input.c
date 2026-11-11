@@ -116,18 +116,15 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
             /* acceleration (WIN.INI MouseThreshold1/2, MouseSpeed: 2, 0
                and 1 on 3.1 as SPI_GETMOUSE reports them, US2): past the
                first threshold the motion doubles, past the second with
-               speed 2 it doubles again. UNVERIFIED: whether either axis
-               past a threshold scales both (taken here) */
+               speed 2 it doubles again - each axis by its own motion
+               (3.1: File Manager's drag of 5,2 10,2 15,3 15,3 mickeys
+               dropped 4 pixels higher than w16's when either axis past
+               the threshold doubled both) */
             int dx = (int)bx, dy = (int)cx, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
-            int m = ax > ay ? ax : ay;
-            if (mspeed >= 1 && m > mthresh1) {
-                dx *= 2;
-                dy *= 2;
-                if (mspeed >= 2 && m > mthresh2) {
-                    dx *= 2;
-                    dy *= 2;
-                }
-            }
+            if (mspeed >= 1 && ax > mthresh1)
+                dx *= (mspeed >= 2 && ax > mthresh2) ? 4 : 2;
+            if (mspeed >= 1 && ay > mthresh1)
+                dy *= (mspeed >= 2 && ay > mthresh2) ? 4 : 2;
             x += dx;
             y += dy;
         }
@@ -612,13 +609,37 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
             }
             if (!w)
                 continue;
+            if ((e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN) &&
+                hit == HTCLIENT) {
+                /* a click on a child: WM_PARENTNOTIFY up its parents (3.1
+                   SDK; before WM_MOUSEACTIVATE, as File Manager's
+                   directory window and frame got it on 3.1 - it starts its
+                   drag from there) */
+                HWND c = target;
+                PWND cw;
+                while ((cw = valid_wnd(c)) != 0 && (cw->style & WS_CHILD) &&
+                       !(cw->exstyle & WS_EX_NOPARENTNOTIFY) && cw->hwndParent) {
+                    HWND p = cw->hwndParent;
+                    POINT pc = pt;
+                    ScreenToClient(p, &pc);
+                    send_message(p, WM_PARENTNOTIFY, e.msg, MAKELONG(pc.x, pc.y));
+                    c = p;
+                }
+                if (!valid_wnd(target))
+                    continue;
+            }
             if (e.msg != WM_MOUSEMOVE) {
                 /* activation on a click */
+                /* WM_MOUSEACTIVATE whenever the window clicked is not the
+                   active one - a child of the active window included (3.1:
+                   File Manager's file list passed it up to the directory
+                   window and the frame); activation only for another
+                   top-level window */
                 HWND top = top_level(target);
-                if (top && top != hwndActive && top != hwndDesktop) {
+                if (top && target != hwndActive && top != hwndDesktop) {
                     int r = (int)send_message(target, WM_MOUSEACTIVATE, top,
                                               MAKELONG(hit, e.msg));
-                    if (r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT)
+                    if (top != hwndActive && r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT)
                         activate_window(top, TRUE);
                     if (r == MA_ACTIVATEANDEAT || r == MA_NOACTIVATEANDEAT)
                         continue;
