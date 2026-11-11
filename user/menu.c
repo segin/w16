@@ -538,8 +538,11 @@ static int layout_bar(PMENU m, int width, BOOL align)
         int cc = cxSysCharMenu();
         int w = item_text_width(hdc, it) + 2 * cc;
         if (x + w > width && x > 0) {
+            /* a further row one pixel more down (3.1: File Manager made
+               narrow, its bar on two rows, the second's text 19 pixels
+               below the first's, the bar 37 high) */
             x = 0;
-            y += h;
+            y += h + sysmet[SM_CYBORDER];
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
