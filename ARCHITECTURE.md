@@ -930,6 +930,43 @@ ZOI: the VMM's limits are the architecture's: 8192 LDT descriptors (64 KB), the 
 
 `vxdapi.c` hands out protected-mode entries for exactly Windows 3.1's set (VPICD, VTD, Reboot, VDD, VMD, VKD, VCD, SHELL, PageFile, VTDAPI; ARCHITECTURE 12.2) as HLT breakpoints in the host's ring-3 segment. VX3 (`tests/apps/vx3.c`, run as the shell with `tests/refrun.sh VX3.EXE /3`) recorded function 0 of each under Windows 3.1: AX=030Ah for VPICD, VTD, VDD, VCD, SHELL (BX=1000h); VMD 0300h, VKD 0200h, PageFile 010Ah, VTDAPI 0001h; Reboot has none (carry set). w16 returns these. Every other function is traced with its registers and fails with carry set; during the boot to Program Manager only these come: VPICD 0 (version), VMD AX=0100h, VDD AX=000Ch, Reboot AX=0201h (ES:DI a KERNEL address: UNVERIFIED, presumably the Ctrl+Alt+Del handler). None of them blocks the boot; their meanings and results under Windows 3.1 are the next probe's work (they change state, so VX3 does not replay them blindly). No V86 API entries yet (Windows 3.1 has VPICD, VTD, VMD, DOSMGR).
 
+### 12.6 The VxDs w16 needs
+
+A complete replacement for WIN386.EXE provides the VMM and every VxD that the original bundles, under the same W3 module names and device IDs. SYSTEM.INI loads them by their W3 module names (`*vddvga`, `*wshell`); third-party `.386` files and programs reach them by device ID (VxD service calls, INT 2Fh AX=1684h) and through the services they export. The sources are `docs/win386-vxds.md` (the W3 and LE tables, read with readexe) and `docs/win386-services.md` (who calls which service).
+
+**Windows 3.1's WIN386.EXE: the VMM plus 28 built-in VxDs**
+
+| Group | VxDs (device ID) | Role |
+|---|---|---|
+| Core | VMM (0001h), VPICD (0003h), VTD (0005h), V86MMGR (0006h), DOSMGR (0015h), VDMAD (0004h) | VMs, interrupts, timer, V86 memory, DOS, DMA |
+| Devices | VDD (000Ah, W3 module VDDVGA), VKD (000Dh), VMD (000Ch), VCD (000Eh), VFD (001Bh), EBIOS (0012h), PARITY (0008h), Reboot (0009h), BIOSXLAT (0013h) | display, keyboard, mouse, COM ports, floppy, BIOS |
+| Disk and paging | BLOCKDEV (0010h), INT13 (0020h), WDCTRL (no ID), PageSwap (0007h), PageFile (0021h) | FastDisk, the swap file |
+| Shell and DOS sessions | SHELL (0017h, W3 module WSHELL), VMPOLL (0018h), VMCPD (0011h) | DOS windows, idle detection, the coprocessor |
+| Network and other | VNETBIOS (0014h), DOSNET (001Ah), COMBUFF, CDPSCSI, QEMMFix (no IDs) | NetBIOS, network redirector support, workarounds |
+
+**Loaded by default from a file:** VTDAPI.386 (0442h, the timer API for MMSYSTEM).
+
+**Windows for Workgroups 3.11 adds:**
+- **Built in:** VPD (000Fh, printer) and VWC (no ID).
+- **External `.386` files:**
+  - IFSMGR (0484h), VFAT (0486h), VCACHE (048Bh), IOS (0010h; it takes BLOCKDEV's ID): 32-bit file and disk access;
+  - VSHARE (0483h), VXDLDR (0027h), VPMTD (003Ah);
+  - VCOMM (002Bh), SERIAL and LPT.
+- **In a networked install** (not in our reference copy; see §19): the redirector, server, NDIS and protocol VxDs.
+
+**The boot set.** The VMM itself calls into VPICD, VTD, V86MMGR, PageSwap, VMCPD, VNETBIOS, DOSMGR and SHELL. The VxDs that do work during Sys_Critical_Init, Device_Init and Init_Complete add VDD, VKD, BLOCKDEV, VDMAD and PageFile. Of the VMM's 242 services, 199 are called by some module.
+
+**Two routes:**
+1. **Our VMM loads Microsoft's VxDs.** It must then provide all 199 called services with exactly the documented behaviour.
+2. **w16 also replaces the VxDs.** The service set narrows to what our own VxDs use, but every service number must still exist for third-party `.386` files.
+
+Each piece's route is recorded here as it is built.
+
+**Where w16 stands** (2026-11-11):
+- **Built:** a VMM with paging, a V86 monitor, the observed INT 2Fh 16xxh answers and a 32-bit DPMI host.
+- **API entries** for the ten VxDs Windows 3.1 exposes to programs (§12.5).
+- **Not yet:** real VxDs. The VxD loader comes next: init-order control messages and INT 20h dynamic linking (§12.4).
+
 ## 13. SHELL
 
 `SHELL.DLL` (module SHELL) is the shell library of Windows 3.1: the registration database, drag and drop for receivers, `ShellExecute`/`FindExecutable`, icon extraction, the About box, environment substitution, and the shell hook. w16's is `shell/shelldll/` (`make shelldll`: `build/dos/SHELL.DLL`, also `build/w16/SYSTEM/SHELL.DLL`). It is a drop-in replacement: copied over `WINDOWS\SYSTEM\SHELL.DLL` it serves Microsoft's Program Manager, File Manager and applets. Windows 2.x has no SHELL.DLL (§8), so there is no 2.x build.
