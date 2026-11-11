@@ -1085,6 +1085,23 @@ static void run_menu(MLOOP *l)
         case WM_KEYUP:
         case WM_SYSKEYUP:
             continue;
+        case WM_LBUTTONDBLCLK:
+        case WM_NCLBUTTONDBLCLK:
+            /* a double click on the system box while its menu is up: the
+               menu ends, then SC_CLOSE (3.1: nothing of the menu stays).
+               It went to DefWindowProc inside the loop, so the window
+               closed - Program Manager's Exit dialog - under a menu that
+               stayed up and live */
+            if (l->sysmenu && valid_wnd(l->owner) &&
+                (int)send_message(l->owner, WM_NCHITTEST, 0, MAKELONG(msg.pt.x, msg.pt.y)) == HTSYSMENU) {
+                l->result = SC_CLOSE;
+                l->resultsys = TRUE;
+                l->done = TRUE;
+                continue;
+            }
+            /* elsewhere: a press like any other */
+            msg.message = msg.message == WM_LBUTTONDBLCLK ? WM_LBUTTONDOWN : WM_NCLBUTTONDOWN;
+            /* fall through */
         case WM_LBUTTONDOWN:
         case WM_NCLBUTTONDOWN:
         case WM_LBUTTONUP:
