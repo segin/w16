@@ -69,6 +69,8 @@
 #              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
 #   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
+#   pmclose    Program Manager's system box double-clicked: the Exit dialog in
+#              front and system modal, no menu left (pmclose.txt)
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -118,7 +120,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -455,6 +457,46 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         done
         if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
+    pmclose)
+        # Program Manager's system box double-clicked: its Exit dialog in
+        # front, active and system modal (a click on Program Manager does
+        # nothing), no menu left behind; Esc closes it. w16 USER+GDI
+        # (Microsoft's Program Manager), and w16's Program Manager on
+        # them, against all-Microsoft; the dialog's inside left out (w16's
+        # dialog is a pixel to the right, UNVERIFIED why), and w16's own
+        # group-icon pictures; the dialog's caption must be there
+        scr=$root/tests/scripts/input/pmclose.txt
+        "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-ref" -r > "$out/pmclose-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmclose-us.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmclose-pm.txt" 2>&1 || true
+        r=ok
+        for k in us pm; do
+            for s in 01-dialog 02-clicked 03-cancelled; do
+                [ -f "$out/pmclose-$k/$s.png" ] && [ -f "$out/pmclose-ref/$s.png" ] || { r="$k: no $s"; break; }
+                m="rectangle 0,0 0,0"
+                [ $s != 03-cancelled ] && m="rectangle 168,182 472,300"
+                [ $k = pm ] && m="$m rectangle 60,310 300,342"
+                magick "$out/pmclose-ref/$s.png" -fill black -draw "$m" "$out/pmclose-a.png"
+                magick "$out/pmclose-$k/$s.png" -fill black -draw "$m" "$out/pmclose-b.png"
+                n=$(magick compare -metric AE "$out/pmclose-b.png" "$out/pmclose-a.png" "$out/pmclose-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+            # the dialog's active caption, 250 pixels or more of it
+            c=$(python3 -c "
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('RGB')
+print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) for y in range(180, 200)))
+" "$out/pmclose-$k/02-clicked.png" 2>/dev/null || echo 0)
+            [ "${c:-0}" -ge 250 ] || { r="$k: no dialog in front after the click"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   pmclose: Exit dialog in front and modal, no menu left (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL pmclose: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmitems)
         # an item dragged within Program Manager's Main group, then the
         # minimised Accessories group restored (in front, active):
