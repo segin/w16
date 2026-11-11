@@ -851,6 +851,10 @@ static void title_rect(HDC dc, item FAR *t, RECT *r)
         SelectObject(dc, old);
 }
 
+#ifndef W16_WIN2
+static BOOL dragging_item(HWND hwnd, item FAR *t);
+#endif
+
 static void paint(HWND hwnd, group FAR *g)
 {
     PAINTSTRUCT ps;
@@ -866,6 +870,10 @@ static void paint(HWND hwnd, group FAR *g)
         item FAR *t = g->z[i];
         RECT r;
         BOOL hi = active && t == g->sel;
+#ifndef W16_WIN2
+        if (dragging_item(hwnd, t))
+            continue;
+#endif
         DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->hicon);
         title_rect(dc, t, &r);
         SetBkMode(dc, hi ? OPAQUE : TRANSPARENT);
@@ -1670,7 +1678,7 @@ static void remove_item(HWND hwnd, group FAR *g, item FAR *t)
 /* File > Move and File > Copy (observed): the item arrives in `to` on top
    of the z-order, in the first free grid cell, its data at the end, and
    is selected there; Move then removes it from `from`. */
-BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
+static BOOL transfer(HWND from, HWND to, BOOL copy_only, const POINT *at)
 {
     group FAR *src = grp_of(from), FAR *dst = grp_of(to);
     item FAR *t, FAR *u;
@@ -1681,7 +1689,11 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     u = clone_item(t);
     if (!u)
         return FALSE;
-    free_cell(to, dst, &u->x, &u->y);
+    if (at) {
+        u->x = at->x;
+        u->y = at->y;
+    } else
+        free_cell(to, dst, &u->x, &u->y);
     for (k = dst->nz; k > 0; k--)
         dst->z[k] = dst->z[k - 1];
     dst->z[0] = u;
@@ -1704,6 +1716,100 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     free_item(t);
     return write_group(src);
 }
+
+BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
+{
+    return transfer(from, to, copy_only, NULL);
+}
+
+#ifndef W16_WIN2
+/* ---- dragging items (3.x) ----
+   As Windows 3.1's Program Manager does it (observed through USER's
+   exports, real mouse input): a press on an item notes a square around
+   the point, 2 pixels each way (half SM_CXDOUBLECLK/SM_CYDOUBLECLK); a
+   move with the button down out of it starts USER's DragObject(MDI
+   client, the group, 1, ...) with the item's icon as the cursor; Ctrl
+   held copies. The groups answer WM_QUERYDROPOBJECT for such a drag and
+   take WM_DROPOBJECT: the item moves (or is copied) with its icon
+   centred on the drop point, in the same group or another; while it is
+   dragged it is not drawn in its place. DragObject's result is 1.
+   UNVERIFIED: the copy rule's key test and the exact place in another
+   group; Program Manager's own block arguments (its item and group) are
+   kept here instead. */
+extern DWORD FAR PASCAL DragObject(HWND, HWND, WORD, WORD, WORD, HCURSOR);
+
+static RECT drag_rc;            /* the square of the last press */
+static POINT drag_from;         /* the press, in the group's client area */
+static HWND drag_src;           /* the group a drag of ours comes from */
+static BOOL drag_copy;
+
+/* the item a drag of ours takes: not drawn in its group meanwhile (3.1) */
+static BOOL dragging_item(HWND hwnd, item FAR *t)
+{
+    group FAR *g = grp_of(hwnd);
+    return drag_src == hwnd && g && t == g->sel;
+}
+
+static void drag_press(HWND hwnd, int x, int y)
+{
+    drag_from.x = x;
+    drag_from.y = y;
+    SetRect(&drag_rc, x, y, x, y);
+    InflateRect(&drag_rc, GetSystemMetrics(SM_CXDOUBLECLK) / 2, GetSystemMetrics(SM_CYDOUBLECLK) / 2);
+    (void)hwnd;
+}
+
+static void drag_move(HWND hwnd, group FAR *g, int x, int y)
+{
+    POINT p;
+    p.x = x;
+    p.y = y;
+    if (IsRectEmpty(&drag_rc) || PtInRect(&drag_rc, p) || !g->sel)
+        return;
+    SetRectEmpty(&drag_rc);
+    drag_copy = GetKeyState(VK_CONTROL) < 0;
+    drag_src = hwnd;
+    invalidate_item(hwnd, g->sel);
+    UpdateWindow(hwnd);
+    DragObject(g_client, hwnd, 1, 0, 0, g->sel->hicon);
+    drag_src = NULL;
+    if (g->sel)
+        invalidate_item(hwnd, g->sel);
+}
+
+/* WM_DROPOBJECT of one of our drags on group hwnd: lp the DRAGINFO
+   (USER's block: x, y in our client area at words 5 and 6) */
+static LRESULT drag_drop(HWND hwnd, group FAR *g, LPARAM lp)
+{
+    const int FAR *info = (const int FAR *)lp;
+    POINT at;
+    group FAR *src = grp_of(drag_src);
+    item FAR *t;
+    if (!src || !src->sel)
+        return 0;
+    t = src->sel;
+    /* the icon centred on the drop point (3.1: Read Me dropped at
+       294,138 has its icon's square at 276,120, 36 pixels wide) */
+    at.x = info[5] - GetSystemMetrics(SM_CXICON) / 2 - ICON_DX;
+    at.y = info[6] - GetSystemMetrics(SM_CYICON) / 2 - ICON_DY;
+    if (hwnd == drag_src) {
+        if (drag_copy)
+            transfer(drag_src, hwnd, TRUE, &at);
+        else {
+            invalidate_item(hwnd, t);
+            t->x = at.x;
+            t->y = at.y;
+            write_group(g);
+            if (g_autoarrange)
+                group_arrange(hwnd);
+            invalidate_item(hwnd, t);
+            group_rescroll(hwnd);
+        }
+    } else
+        transfer(drag_src, hwnd, drag_copy, &at);
+    return 1;
+}
+#endif
 
 /* Start every item of the group, as Windows does with StartUp. Each
    item runs as its Properties say (working directory, Run Minimized).
@@ -2155,9 +2261,30 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         return 0;
     case WM_LBUTTONDOWN:
         SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)hwnd, 0);
-        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL)
+        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL) {
             select_item(hwnd, g, t);
+#ifndef W16_WIN2
+            drag_press(hwnd, (short)LOWORD(lp), (short)HIWORD(lp));
+#endif
+        }
         return 0;
+#ifndef W16_WIN2
+    case WM_MOUSEMOVE:
+        if (g && (wp & MK_LBUTTON))
+            drag_move(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp));
+        return 0;
+    case WM_LBUTTONUP:
+        SetRectEmpty(&drag_rc);
+        return 0;
+    case 0x022B:                        /* WM_QUERYDROPOBJECT */
+        if (drag_src && g)
+            return 1;
+        break;
+    case 0x022A:                        /* WM_DROPOBJECT */
+        if (drag_src && g)
+            return drag_drop(hwnd, g, lp);
+        break;
+#endif
     case WM_LBUTTONDBLCLK:
         if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL) {
             select_item(hwnd, g, t);

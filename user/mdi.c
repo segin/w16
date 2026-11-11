@@ -345,7 +345,11 @@ LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                        sysmet[SM_CYBORDER], r.right + 2 * sysmet[SM_CXFRAME],
                        r.bottom + 2 * sysmet[SM_CYFRAME] + sysmet[SM_CYCAPTION] - sysmet[SM_CYBORDER],
                        TRUE);
-        }
+        } else if (wp != SIZE_MINIMIZED)
+            /* the bars follow the area (3.1: File Manager made narrower
+               than its directory window shows a horizontal bar, thumb at
+               the left) */
+            CalcChildScroll(h, SB_BOTH);
         break;
     }
     }

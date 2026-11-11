@@ -116,18 +116,15 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
             /* acceleration (WIN.INI MouseThreshold1/2, MouseSpeed: 2, 0
                and 1 on 3.1 as SPI_GETMOUSE reports them, US2): past the
                first threshold the motion doubles, past the second with
-               speed 2 it doubles again. UNVERIFIED: whether either axis
-               past a threshold scales both (taken here) */
+               speed 2 it doubles again - each axis by its own motion
+               (3.1: File Manager's drag of 5,2 10,2 15,3 15,3 mickeys
+               dropped 4 pixels higher than w16's when either axis past
+               the threshold doubled both) */
             int dx = (int)bx, dy = (int)cx, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
-            int m = ax > ay ? ax : ay;
-            if (mspeed >= 1 && m > mthresh1) {
-                dx *= 2;
-                dy *= 2;
-                if (mspeed >= 2 && m > mthresh2) {
-                    dx *= 2;
-                    dy *= 2;
-                }
-            }
+            if (mspeed >= 1 && ax > mthresh1)
+                dx *= (mspeed >= 2 && ax > mthresh2) ? 4 : 2;
+            if (mspeed >= 1 && ay > mthresh1)
+                dy *= (mspeed >= 2 && ay > mthresh2) ? 4 : 2;
             x += dx;
             y += dy;
         }
@@ -148,6 +145,70 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
     if (ax & 0x10) { keystate[VK_RBUTTON] &= ~0x80; push_event(WM_RBUTTONUP, 0, MAKELONG(x, y)); }
     if (ax & 0x20) { keystate[VK_MBUTTON] |= 0x80; push_event(WM_MBUTTONDOWN, 0, MAKELONG(x, y)); }
     if (ax & 0x40) { keystate[VK_MBUTTON] &= ~0x80; push_event(WM_MBUTTONUP, 0, MAKELONG(x, y)); }
+}
+
+/* ---- WH_JOURNALPLAYBACK (3.1 SDK): while such a hook is set, input
+   comes from it. HC_GETNEXT fills an EVENTMSG (message, paramL, paramH:
+   the screen point, or virtual key and scan code in paramL); a non-zero
+   answer is a wait in milliseconds before the event, asked again while
+   waiting (US9 and the SHELL probes play their drags so); HC_SKIP moves
+   on. Polled at task time from GetMessage/PeekMessage. UNVERIFIED: real
+   input is not shut out meanwhile. ---- */
+static BOOL jwaiting;
+static DWORD jdue;
+
+BOOL journal_active(void)
+{
+    extern BOOL hook_set(int type);
+    return hook_set(WH_JOURNALPLAYBACK);
+}
+
+void journal_poll(void)
+{
+    extern LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp);
+    EVENTMSG ev;
+    LRESULT r;
+    if (!journal_active()) {
+        jwaiting = FALSE;
+        return;
+    }
+    fmemset(&ev, 0, sizeof ev);
+    r = call_hook(WH_JOURNALPLAYBACK, HC_GETNEXT, 0, (LPARAM)(EVENTMSG __far *)&ev);
+    if (r > 0 && !jwaiting) {
+        jwaiting = TRUE;
+        jdue = GetTickCount() + r;
+        return;
+    }
+    if (jwaiting && (long)(GetTickCount() - jdue) < 0)
+        return;
+    jwaiting = FALSE;
+    if (ev.message >= WM_MOUSEFIRST && ev.message <= WM_MOUSELAST) {
+        int x = (int)ev.paramL, y = (int)ev.paramH;
+        if (x < rcClip.left) x = rcClip.left;
+        if (x >= rcClip.right) x = rcClip.right - 1;
+        if (y < rcClip.top) y = rcClip.top;
+        if (y >= rcClip.bottom) y = rcClip.bottom - 1;
+        if (x != ptCursor.x || y != ptCursor.y) {
+            ptCursor.x = x;
+            ptCursor.y = y;
+            D_MOVECURSOR(x, y);
+            push_event(WM_MOUSEMOVE, 0, MAKELONG(x, y));
+        }
+        switch (ev.message) {
+        case WM_LBUTTONDOWN: keystate[VK_LBUTTON] |= 0x80; break;
+        case WM_LBUTTONUP: keystate[VK_LBUTTON] &= ~0x80; break;
+        case WM_RBUTTONDOWN: keystate[VK_RBUTTON] |= 0x80; break;
+        case WM_RBUTTONUP: keystate[VK_RBUTTON] &= ~0x80; break;
+        case WM_MBUTTONDOWN: keystate[VK_MBUTTON] |= 0x80; break;
+        case WM_MBUTTONUP: keystate[VK_MBUTTON] &= ~0x80; break;
+        }
+        if (ev.message != WM_MOUSEMOVE)
+            push_event(ev.message, 0, MAKELONG(x, y));
+    } else if (ev.message >= WM_KEYFIRST && ev.message <= WM_KEYLAST) {
+        BOOL up = ev.message == WM_KEYUP || ev.message == WM_SYSKEYUP;
+        KBD_EVENT((ev.paramL & 0xFF) | (up ? 0x8000 : 0), (ev.paramL >> 8) & 0xFF, 0, 0);
+    }
+    call_hook(WH_JOURNALPLAYBACK, HC_SKIP, 0, 0);
 }
 
 void input_init(void)
@@ -184,6 +245,12 @@ void set_cursor_shape(HCURSOR h)
         D_SETCURSOR(0);
     if (h)
         GlobalUnlock(h);
+}
+
+/* USER.247 (it was a stub answering 0) */
+HCURSOR WINAPI GetCursor(void)
+{
+    return hcurCurrent;
 }
 
 HCURSOR WINAPI SetCursor(HCURSOR h)
@@ -542,13 +609,37 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
             }
             if (!w)
                 continue;
+            if ((e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN) &&
+                hit == HTCLIENT) {
+                /* a click on a child: WM_PARENTNOTIFY up its parents (3.1
+                   SDK; before WM_MOUSEACTIVATE, as File Manager's
+                   directory window and frame got it on 3.1 - it starts its
+                   drag from there) */
+                HWND c = target;
+                PWND cw;
+                while ((cw = valid_wnd(c)) != 0 && (cw->style & WS_CHILD) &&
+                       !(cw->exstyle & WS_EX_NOPARENTNOTIFY) && cw->hwndParent) {
+                    HWND p = cw->hwndParent;
+                    POINT pc = pt;
+                    ScreenToClient(p, &pc);
+                    send_message(p, WM_PARENTNOTIFY, e.msg, MAKELONG(pc.x, pc.y));
+                    c = p;
+                }
+                if (!valid_wnd(target))
+                    continue;
+            }
             if (e.msg != WM_MOUSEMOVE) {
                 /* activation on a click */
+                /* WM_MOUSEACTIVATE whenever the window clicked is not the
+                   active one - a child of the active window included (3.1:
+                   File Manager's file list passed it up to the directory
+                   window and the frame); activation only for another
+                   top-level window */
                 HWND top = top_level(target);
-                if (top && top != hwndActive && top != hwndDesktop) {
+                if (top && target != hwndActive && top != hwndDesktop) {
                     int r = (int)send_message(target, WM_MOUSEACTIVATE, top,
                                               MAKELONG(hit, e.msg));
-                    if (r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT)
+                    if (top != hwndActive && r != MA_NOACTIVATE && r != MA_NOACTIVATEANDEAT)
                         activate_window(top, TRUE);
                     if (r == MA_ACTIVATEANDEAT || r == MA_NOACTIVATEANDEAT)
                         continue;

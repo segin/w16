@@ -69,6 +69,9 @@
 #              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
 #   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
+#   pmitems    an item dragged in Program Manager's Main group, the minimised
+#              Accessories group restored (tests/scripts/input/pmitems.txt):
+#              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
 #              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
 #              then every w16 part must not fault
@@ -115,7 +118,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -426,23 +429,66 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             > "$out/pmdrop-sh.txt" 2>&1 || true
+        # w16's USER and GDI under Microsoft's File Manager and Program
+        # Manager (DragObject, DumpIcon): the file's focus rectangle left
+        # out, its dots in the other phase (GDI's pattern origin)
+        "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true
         r=ok
         grp=work/c/WINDOWS/MAIN.GRP
         if ! grep -aq "C:.WINDOWS.APPS.HLP" "$out/pmdrop-ref/$grp" 2>/dev/null; then
             r="the reference did not add the item ($out/pmdrop-ref)"
         fi
-        for k in pm sh; do
+        for k in pm sh us; do
             [ "$r" = ok ] || break
             cmp -s "$out/pmdrop-ref/$grp" "$out/pmdrop-$k/$grp" || { r="$k: MAIN.GRP differs"; break; }
             for s in 04-dragging 05-dropped; do
                 [ -f "$out/pmdrop-$k/$s.png" ] || { r="$k: no $s"; break; }
-                n=$(magick compare -metric AE "$out/pmdrop-$k/$s.png" "$out/pmdrop-ref/$s.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                m="rectangle 0,0 0,0"
+                [ $k = us ] && m="rectangle 258,200 280,224"
+                magick "$out/pmdrop-$k/$s.png" -fill black -draw "$m" "$out/pmdrop-a.png"
+                magick "$out/pmdrop-ref/$s.png" -fill black -draw "$m" "$out/pmdrop-b.png"
+                n=$(magick compare -metric AE "$out/pmdrop-a.png" "$out/pmdrop-b.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
             done
         done
-        if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL)"
+        if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
+    pmitems)
+        # an item dragged within Program Manager's Main group, then the
+        # minimised Accessories group restored (in front, active):
+        # Microsoft's Program Manager on w16's USER and GDI pixel for
+        # pixel; w16's Program Manager on them with its own group-icon
+        # pictures left out (the row of icons at the bottom); MAIN.GRP
+        # identical to all-Microsoft's in both
+        scr=$root/tests/scripts/input/pmitems.txt
+        "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-ref" -r > "$out/pmitems-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmitems-us.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmitems-pm.txt" 2>&1 || true
+        r=ok
+        grp=work/c/WINDOWS/MAIN.GRP
+        cmp -s "$root/.tools/ref/win31/cdrive/WINDOWS/MAIN.GRP" "$out/pmitems-ref/$grp" && r="the reference did not move the item"
+        for k in us pm; do
+            [ "$r" = ok ] || break
+            cmp -s "$out/pmitems-ref/$grp" "$out/pmitems-$k/$grp" || { r="$k: MAIN.GRP differs"; break; }
+            for f in "$out/pmitems-ref"/[0-9]*.png; do
+                s=$(basename "$f")
+                [ -f "$out/pmitems-$k/$s" ] || { r="$k: no $s"; break; }
+                m="rectangle 0,0 0,0"
+                [ $k = pm ] && m="rectangle 60,310 300,342"
+                magick "$f" -fill black -draw "$m" "$out/pmitems-a.png"
+                magick "$out/pmitems-$k/$s" -fill black -draw "$m" "$out/pmitems-b.png"
+                n=$(magick compare -metric AE "$out/pmitems-b.png" "$out/pmitems-a.png" "$out/pmitems-$k-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+        done
+        if [ "$r" = ok ]; then echo "ok   pmitems: item moved, group restored in front; MAIN.GRP identical (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL pmitems: $r ($out)"; fails=$((fails + 1)); fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison

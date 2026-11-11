@@ -66,7 +66,7 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
 {
     PWND w = valid_wnd(h);
     RECT r0, r, shown;
-    POINT p0, mn, mx;
+    POINT p0, mn, mx, porig;
     MINMAXINFO mm;
     MSG m;
     int t;
@@ -86,15 +86,21 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
         return;
     mn = mm.ptMinTrackSize;
     mx = mm.ptMaxTrackSize;
+    GetCursorPos(&porig);
     if (keyboard) {
         POINT c;
         if (hit == HTCAPTION) {
             c.x = (r0.left + r0.right) / 2;
             c.y = r0.top + sysmet[SM_CYFRAME] + sysmet[SM_CYCAPTION] / 2;
         } else {
-            hit = HTBOTTOMRIGHT;
-            c.x = r0.right - 1;
-            c.y = r0.bottom - 1;
+            /* no edge yet: the first arrow picks one, a second at right
+               angles adds the other (a corner), neither moving it
+               (3.1, File Manager: Right then Left x5 took the right edge
+               in 45 pixels; Left, Down, Up x2 moved only the bottom).
+               UNVERIFIED: the pointer's place before that */
+            hit = 0;
+            c.x = (r0.left + r0.right) / 2;
+            c.y = (r0.top + r0.bottom) / 2;
         }
         SetCursorPos(c.x, c.y);
     }
@@ -129,10 +135,44 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
             switch (m.wParam) {
             case VK_ESCAPE: done = TRUE; break;
             case VK_RETURN: done = ok = TRUE; break;
-            case VK_LEFT: SetCursorPos(p.x - 8, p.y); break;
-            case VK_RIGHT: SetCursorPos(p.x + 8, p.y); break;
-            case VK_UP: SetCursorPos(p.x, p.y - 8); break;
-            case VK_DOWN: SetCursorPos(p.x, p.y + 8); break;
+            case VK_LEFT:
+            case VK_RIGHT:
+            case VK_UP:
+            case VK_DOWN: {
+                /* 9 pixels a press, either way (3.1: File Manager moved
+                   and sized by 9, 18, 27, 36 and 45) */
+                int dx = m.wParam == VK_LEFT ? -9 : m.wParam == VK_RIGHT ? 9 : 0;
+                int dy = m.wParam == VK_UP ? -9 : m.wParam == VK_DOWN ? 9 : 0;
+                if (keyboard && hit != HTCAPTION) {
+                    UINT add = m.wParam == VK_LEFT ? HTLEFT : m.wParam == VK_RIGHT ? HTRIGHT :
+                               m.wParam == VK_UP ? HTTOP : HTBOTTOM;
+                    BOOL horiz = dx != 0;
+                    BOOL have_h = hit == HTLEFT || hit == HTRIGHT || hit == HTTOPLEFT ||
+                                  hit == HTTOPRIGHT || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT;
+                    BOOL have_v = hit == HTTOP || hit == HTBOTTOM || hit == HTTOPLEFT ||
+                                  hit == HTTOPRIGHT || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT;
+                    if ((horiz && !have_h) || (!horiz && !have_v)) {
+                        /* an edge picked: the pointer goes to it */
+                        BOOL l = hit == HTLEFT || hit == HTTOPLEFT || hit == HTBOTTOMLEFT || add == HTLEFT;
+                        BOOL rt = hit == HTRIGHT || hit == HTTOPRIGHT || hit == HTBOTTOMRIGHT || add == HTRIGHT;
+                        BOOL tp = hit == HTTOP || hit == HTTOPLEFT || hit == HTTOPRIGHT || add == HTTOP;
+                        BOOL bt = hit == HTBOTTOM || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT || add == HTBOTTOM;
+                        hit = tp ? (l ? HTTOPLEFT : rt ? HTTOPRIGHT : HTTOP) :
+                              bt ? (l ? HTBOTTOMLEFT : rt ? HTBOTTOMRIGHT : HTBOTTOM) :
+                              l ? HTLEFT : HTRIGHT;
+                        /* the tracking goes on from here: the frame
+                           stays, the pointer is at the edge */
+                        p.x = l ? shown.left : rt ? shown.right - 1 : (shown.left + shown.right) / 2;
+                        p.y = tp ? shown.top : bt ? shown.bottom - 1 : (shown.top + shown.bottom) / 2;
+                        r0 = shown;
+                        p0 = p;
+                        SetCursorPos(p.x, p.y);
+                        break;
+                    }
+                }
+                SetCursorPos(p.x + dx, p.y + dy);
+                break;
+            }
             }
             break;
         case WM_LBUTTONDOWN:
@@ -160,6 +200,10 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     if (drawn)
         xor_frame(&shown, t);
     ReleaseCapture();
+    /* from the keyboard, the pointer goes back where it was (3.1: at the
+       screen's centre again after File Manager was sized) */
+    if (keyboard)
+        SetCursorPos(porig.x, porig.y);
     if (ok && !EqualRect(&shown, &r0) && (w = valid_wnd(h)) != 0) {
         RECT n = shown;
         if (w->style & WS_CHILD) {

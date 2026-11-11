@@ -740,6 +740,15 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_GETMINMAXINFO:
     case WM_CANCELMODE:
         return 0;
+    case 0x022A:                /* WM_DROPOBJECT ... WM_DRAGMOVE (drag.c) */
+    case 0x022B:
+    case 0x022C:
+    case 0x022D:
+    case 0x022E:
+    case 0x022F: {
+        extern LRESULT def_drag(PWND w, UINT msg);
+        return def_drag(w, msg);
+    }
     case WM_DRAWITEM:
         return 0;
     case WM_GETFONT:

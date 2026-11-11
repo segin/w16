@@ -191,16 +191,19 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         di.CtlType = ODT_LISTBOX;
         di.CtlID = GetWindowWord(h, GWW_ID);
         di.itemID = i;
+        /* the item drawn whole without ODS_FOCUS, then the focus item
+           again with ODA_FOCUS and ODS_FOCUS (3.1: File Manager's tree
+           draws its focus rectangle only then, and its file list draws
+           it once - both match only so) */
         di.itemAction = ODA_DRAWENTIRE;
-        di.itemState = (it->sel ? ODS_SELECTED : 0) | (lb->focus && i == lb->caret ? ODS_FOCUS : 0);
+        di.itemState = it->sel ? ODS_SELECTED : 0;
         di.hwndItem = h;
         di.hDC = hdc;
         di.rcItem = r;
         di.itemData = it->data;
         send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
-        /* the focus item again with ODA_FOCUS: File Manager draws its
-           focus rectangle (3.1: round "windows" in its tree) only then */
-        if ((di.itemState & ODS_FOCUS) && valid_wnd(h)) {
+        if (lb->focus && i == lb->caret && valid_wnd(h)) {
+            di.itemState |= ODS_FOCUS;
             di.itemAction = ODA_FOCUS;
             send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
         }
@@ -531,19 +534,92 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         int i = hit(h, lb, (int)LOWORD(lp), (int)HIWORD(lp));
         if (GetFocus() != h && GetParent(h) == lb->owner)
             SetFocus(h);
+        /* WM_LBTRACKPOINT (131h, Schulman ch. 7): the item and the point
+           to the owner first; a non-zero answer means it does the rest
+           (3.1: File Manager reads Shift and Ctrl here, selects, and
+           starts its drag itself, with the capture on its directory
+           window). UNVERIFIED: sent, not posted, and the answer's use
+           (Wine's list box does so) */
+        if (msg == WM_LBUTTONDOWN && GetParent(h) == lb->owner &&
+            send_message(lb->owner, 0x0131, (WPARAM)i, lp))
+            return 0;
+        if (!valid_wnd(h))
+            return 0;
+        /* the box takes the mouse while the button is down, before it
+           tells its owner of the change, the selection following the
+           pointer (3.1: File Manager's LBN_SELCHANGE starts its drag
+           only while its file list has the capture) */
+        if (msg == WM_LBUTTONDOWN && GetParent(h) == lb->owner && valid_wnd(h))
+            SetCapture(h);
         if (i < 0)
             return 0;
-        if (multi(h)) {
+        if ((lbstyle(h) & LBS_EXTENDEDSEL) && !(GetKeyState(VK_CONTROL) & 0x8000)) {
+            /* extended selection (3.1 SDK): a click selects that item
+               alone, Shift+click the range from the anchor */
+            int k, a = (GetKeyState(VK_SHIFT) & 0x8000) ? lb->anchor : i;
+            for (k = 0; k < lb->count; k++)
+                item(lb, k)->sel = (k >= a && k <= i) || (k <= a && k >= i);
+            if (!(GetKeyState(VK_SHIFT) & 0x8000))
+                lb->anchor = i;
+            lb->caret = i;
+            lb->cur = i;
+            make_visible(h, lb, i);
+            redraw(h);
+        } else if (multi(h)) {
             item(lb, i)->sel ^= 1;
             lb->caret = i;
+            lb->anchor = i;
             redraw(h);
         } else
             set_cur(h, lb, i);
         notify(h, lb, LBN_SELCHANGE);
         if (msg == WM_LBUTTONDBLCLK)
             notify(h, lb, LBN_DBLCLK);
+        /* extended style 2 (Schulman: WES_NOTIFYDRAG; Wine calls it
+           WS_EX_DRAGDETECT): a press that turns into a drag sends the
+           owner WM_BEGINDRAG (22Ch), 0 and 0 (File Manager does not use it).
+           UNVERIFIED: the parameters */
+        if (msg == WM_LBUTTONDOWN && (GetWindowLong(h, GWL_EXSTYLE) & 2) && valid_wnd(h)) {
+            extern BOOL WINAPI U_DRAGDETECT(HWND h, POINT __far *lp);
+            POINT pt;
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            ClientToScreen(h, &pt);
+            if (U_DRAGDETECT(h, &pt) && valid_wnd(h))
+                send_message(lb->owner, 0x022C, 0, 0);
+        }
         return 0;
     }
+    case WM_MOUSEMOVE:
+        if (GetCapture() == h && (wp & MK_LBUTTON)) {
+            RECT c;
+            POINT p;
+            int i;
+            GetClientRect(h, &c);
+            p.x = (int)LOWORD(lp);
+            p.y = (int)HIWORD(lp);
+            if (!PtInRect(&c, p))
+                return 0;       /* UNVERIFIED: 3.1 scrolls here */
+            i = hit(h, lb, p.x, p.y);
+            if (i < 0 || i == lb->caret)
+                return 0;
+            if (lbstyle(h) & LBS_EXTENDEDSEL) {
+                int k, a = lb->anchor;
+                for (k = 0; k < lb->count; k++)
+                    item(lb, k)->sel = (k >= a && k <= i) || (k <= a && k >= i);
+                lb->caret = lb->cur = i;
+                redraw(h);
+            } else if (multi(h))
+                return 0;
+            else
+                set_cur(h, lb, i);
+            notify(h, lb, LBN_SELCHANGE);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (GetCapture() == h)
+            ReleaseCapture();
+        return 0;
     case WM_KEYDOWN: {
         int i = lb->caret, rows = visible_rows(h, lb);
         /* LBS_WANTKEYBOARDINPUT: the owner first (WM_VKEYTOITEM: -2
@@ -727,9 +803,14 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if ((int)LOWORD(lp) == -1) {
             for (i = 0; i < lb->count; i++)
                 item(lb, i)->sel = wp != 0;
-        } else if ((int)LOWORD(lp) < lb->count)
+        } else if ((int)LOWORD(lp) < lb->count) {
             item(lb, LOWORD(lp))->sel = wp != 0;
-        else
+            /* selecting an item moves the caret (the focus rectangle)
+               to it (3.1: File Manager selects the file it was pressed
+               on with LB_SETSEL alone, and the rectangle is round it) */
+            if (wp)
+                lb->caret = (int)LOWORD(lp);
+        } else
             return LB_ERR;
         redraw(h);
         return 0;
