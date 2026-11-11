@@ -15,23 +15,25 @@
 
 typedef struct SBINFO {
     int min, max, pos;
-    WORD hidden;
+    WORD disabled;              /* shown with nothing to scroll (no thumb,
+                                   greyed arrows): sb_show_disabled */
 } SBINFO;
 
 typedef struct SBS {            /* a window's two bars (WND.scroll) */
     SBINFO v, h;
 } SBS;
 
-static HBITMAP bmArrow[8];      /* up, down, right, left, and pressed */
+static HBITMAP bmArrow[12];     /* up, down, right, left; pressed; greyed */
 
 static void load_arrows(void)
 {
-    static const WORD ids[8] = { OBM_UPARROW, OBM_DNARROW, OBM_RGARROW, OBM_LFARROW,
-                                 OBM_UPARROWD, OBM_DNARROWD, OBM_RGARROWD, OBM_LFARROWD };
+    static const WORD ids[12] = { OBM_UPARROW, OBM_DNARROW, OBM_RGARROW, OBM_LFARROW,
+                                  OBM_UPARROWD, OBM_DNARROWD, OBM_RGARROWD, OBM_LFARROWD,
+                                  32737, 32736, 32735, 32734 };   /* OBM_UPARROWI ... */
     int i;
     if (bmArrow[0])
         return;
-    for (i = 0; i < 8; i++)
+    for (i = 0; i < 12; i++)
         bmArrow[i] = LoadBitmap(0, MAKEINTRESOURCE(ids[i]));
 }
 
@@ -83,7 +85,9 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     int thick = vert ? rc->right - rc->left : rc->bottom - rc->top;
     int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
     int t, ath = thick;         /* the arrows' thickness */
+    int g = s->disabled && bmArrow[8] ? 8 : 0;      /* greyed arrows */
     load_arrows();
+    g = s->disabled && bmArrow[8] ? 8 : 0;
     if (len < 2 * arrow)
         arrow = len / 2;
     /* a bar thicker than the arrows: they keep their size at the near
@@ -99,9 +103,11 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
         fillc(hdc, rc->right - arrow, rc->top + ath, arrow, thick - ath, COLOR_WINDOWFRAME);
     }
     if (vert) {
-        blt(hdc, rc->left, rc->top, ath, arrow, bmArrow[0]);
-        blt(hdc, rc->left, rc->bottom - arrow, ath, arrow, bmArrow[1]);
-        fillc(hdc, rc->left, rc->top + arrow, thick, len - 2 * arrow, COLOR_SCROLLBAR);
+        blt(hdc, rc->left, rc->top, ath, arrow, bmArrow[g + 0]);
+        blt(hdc, rc->left, rc->bottom - arrow, ath, arrow, bmArrow[g + 1]);
+        /* disabled: a white shaft (3.1, File Manager's tree; UNVERIFIED
+           that it is the window colour) */
+        fillc(hdc, rc->left, rc->top + arrow, thick, len - 2 * arrow, g ? COLOR_WINDOW : COLOR_SCROLLBAR);
         fillc(hdc, rc->left, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
         fillc(hdc, rc->right - 1, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
         if (s->max > s->min && len > 3 * arrow - 2) {
@@ -109,9 +115,9 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
             draw_thumb(hdc, rc->left, rc->top + t, thick, arrow);
         }
     } else {
-        blt(hdc, rc->left, rc->top, arrow, ath, bmArrow[3]);
-        blt(hdc, rc->right - arrow, rc->top, arrow, ath, bmArrow[2]);
-        fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, thick, COLOR_SCROLLBAR);
+        blt(hdc, rc->left, rc->top, arrow, ath, bmArrow[g + 3]);
+        blt(hdc, rc->right - arrow, rc->top, arrow, ath, bmArrow[g + 2]);
+        fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, thick, g ? COLOR_WINDOW : COLOR_SCROLLBAR);
         fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
         fillc(hdc, rc->left + arrow, rc->bottom - 1, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
         if (s->max > s->min && len > 3 * arrow - 2) {
@@ -219,8 +225,11 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
 {
     PWND w;
     SBINFO *s = info(hwnd, bar, &w);
+    WORD was;
     if (!s)
         return;
+    was = s->disabled;
+    s->disabled = 0;
     s->min = min;
     s->max = max;
     if (s->pos < min)
@@ -241,7 +250,31 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
             return;
         }
     }
-    if (redraw)
+    /* a bar that was shown disabled is drawn again either way (File
+       Manager's file list, refilled, kept its greyed bar) */
+    if (redraw || was)
+        redraw_bar(hwnd, bar);
+}
+
+/* a window's bar shown with nothing to scroll: no thumb, the arrows
+   greyed (3.1: File Manager's tree, LBS_DISABLENOSCROLL, four items in
+   room for more, shows its vertical bar so) */
+void sb_show_disabled(HWND hwnd, int bar)
+{
+    PWND w;
+    SBINFO *s = info(hwnd, bar, &w);
+    DWORD f = bar == SB_VERT ? WS_VSCROLL : WS_HSCROLL;
+    if (!s || bar == SB_CTL)
+        return;
+    s->min = s->max = s->pos = 0;
+    if (s->disabled && (w->style & f))
+        return;
+    s->disabled = 1;
+    if (!(w->style & f)) {
+        w->style |= f;
+        set_window_pos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    } else
         redraw_bar(hwnd, bar);
 }
 

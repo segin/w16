@@ -40,12 +40,14 @@ W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
            TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
 # probes for the Windows boot (tests/dropin.sh); not in make test
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK50 TK51 TK51C TK52
+# DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
+DXPROBES := DX1 DX2 DX4 DX5 DX8
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
-WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP
+WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
             $(B)/shell/progman/group.o $(B)/shell/progman/dialogs.o \
             $(B)/shell/progman/util.o $(B)/shell/progman/hotkey.o \
@@ -65,7 +67,7 @@ host: $(B)/host/nedump
 dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
-     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) \
+     $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) $(DOS)/PENWIN.DLL $(DOS)/MS1.COM \
      $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
@@ -324,6 +326,101 @@ $(DOS)/TK37.EXE: $(B)/tests/start.o $(B)/tests/tk37.o tests/apps/app.lnk tests/a
 	$(WLINK) @tests/apps/tk37.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk37.map file { $(B)/tests/start.o $(B)/tests/tk37.o }
 
+# TK38.EXE: __GP tables, HasGPHandler, SetSigHandler
+$(B)/tests/tk38.o: tests/apps/tk38ref.h tests/apps/tklog.h
+$(DOS)/TK38.EXE: $(B)/tests/start.o $(B)/tests/tk38.o tests/apps/app.lnk tests/apps/tk38.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk38.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk38.map file { $(B)/tests/start.o $(B)/tests/tk38.o }
+
+# TK39.EXE: calls given a bad pointer (__GP recovery)
+$(B)/tests/tk39.o: tests/apps/tk39ref.h tests/apps/tklog.h
+$(DOS)/TK39.EXE: $(B)/tests/start.o $(B)/tests/tk39.o tests/apps/app.lnk tests/apps/tk39.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk39.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk39.map file { $(B)/tests/start.o $(B)/tests/tk39.o }
+
+# TK40.EXE and its PENWIN.DLL: the state a __GP recovery routine gets
+$(B)/tests/tk40.o: tests/apps/tk40ref.h tests/apps/tklog.h
+$(DOS)/TK40.EXE: $(B)/tests/start.o $(B)/tests/tk40.o tests/apps/app.lnk tests/apps/tk40.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk40.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk40.map file { $(B)/tests/start.o $(B)/tests/tk40.o }
+$(B)/tests/tk40d.o: tests/apps/tk40d.asm
+	@mkdir -p $(@D)
+	nasm -f obj -o $@ $<
+$(DOS)/PENWIN.DLL: $(B)/tests/tk40d.o tests/apps/tk40d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk40d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk40d.map file { $(B)/tests/tk40d.o }
+
+# TK41.EXE: what K327 (HandleParamError) does (tk41s.asm)
+$(B)/tests/tk41.o: tests/apps/tk41ref.h tests/apps/tklog.h
+$(DOS)/TK41.EXE: $(B)/tests/start.o $(B)/tests/tk41.o $(B)/tests/tk41s.o tests/apps/app.lnk tests/apps/tk41.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk41.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk41.map file { $(B)/tests/start.o $(B)/tests/tk41.o $(B)/tests/tk41s.o }
+
+# TK42.EXE: per-task interrupt vectors
+$(B)/tests/tk42.o: tests/apps/tk42ref.h tests/apps/tklog.h
+$(DOS)/TK42.EXE: $(B)/tests/start.o $(B)/tests/tk42.o tests/apps/app.lnk tests/apps/tk42.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk42.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk42.map file { $(B)/tests/start.o $(B)/tests/tk42.o }
+
+# TK43.EXE: BX, CX, ES after the global-heap calls (tk31s.asm)
+$(B)/tests/tk43.o: tests/apps/tk43ref.h tests/apps/tklog.h
+$(DOS)/TK43.EXE: $(B)/tests/start.o $(B)/tests/tk43.o $(B)/tests/tk31s.o tests/apps/app.lnk tests/apps/tk43.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk43.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk43.map file { $(B)/tests/start.o $(B)/tests/tk43.o $(B)/tests/tk31s.o }
+
+# TK44.EXE: where keyboard interrupts go after the boot (tk44s.asm)
+$(B)/tests/tk44.o: tests/apps/tk44ref.h tests/apps/tklog.h
+$(DOS)/TK44.EXE: $(B)/tests/start.o $(B)/tests/tk44.o $(B)/tests/tk44s.o tests/apps/app.lnk tests/apps/tk44.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk44.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk44.map file { $(B)/tests/start.o $(B)/tests/tk44.o $(B)/tests/tk44s.o }
+
+# TK45.EXE: the PICs while Windows is idle
+$(B)/tests/tk45.o: tests/apps/tk45ref.h tests/apps/tklog.h
+$(DOS)/TK45.EXE: $(B)/tests/start.o $(B)/tests/tk45.o tests/apps/app.lnk tests/apps/tk45.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk45.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk45.map file { $(B)/tests/start.o $(B)/tests/tk45.o }
+
+# TK46.EXE: INT 15h C207h with a protected-mode handler (tk46s.asm)
+$(B)/tests/tk46.o: tests/apps/tk46ref.h tests/apps/tklog.h
+$(DOS)/TK46.EXE: $(B)/tests/start.o $(B)/tests/tk46.o $(B)/tests/tk46s.o tests/apps/app.lnk tests/apps/tk46.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk46.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk46.map file { $(B)/tests/start.o $(B)/tests/tk46.o $(B)/tests/tk46s.o }
+
+# TK47.EXE: INT 15h C207h with a code selector below 1 MB (tk47s.asm)
+$(B)/tests/tk47.o: tests/apps/tk47ref.h tests/apps/tklog.h
+$(DOS)/TK47.EXE: $(B)/tests/start.o $(B)/tests/tk47.o $(B)/tests/tk47s.o tests/apps/app.lnk tests/apps/tk47.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk47.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk47.map file { $(B)/tests/start.o $(B)/tests/tk47.o $(B)/tests/tk47s.o }
+
+# TK48.EXE: INT 15h C2xxh and INT 33h from protected mode
+$(B)/tests/tk48.o: tests/apps/tk48ref.h tests/apps/tklog.h
+$(DOS)/TK48.EXE: $(B)/tests/start.o $(B)/tests/tk48.o tests/apps/app.lnk tests/apps/tk48.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk48.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk48.map file { $(B)/tests/start.o $(B)/tests/tk48.o }
+
+# TK49.EXE: writes out MS1.COM's log (tests/dos/ms1.asm)
+$(B)/tests/tk49.o: tests/apps/tk49ref.h tests/apps/tklog.h
+$(DOS)/TK49.EXE: $(B)/tests/start.o $(B)/tests/tk49.o tests/apps/app.lnk tests/apps/tk49.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk49.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk49.map file { $(B)/tests/start.o $(B)/tests/tk49.o }
+# MS1.COM: a real-mode TSR recording the PS/2 pointing-device calls (TK49 reads it)
+$(DOS)/MS1.COM: tests/dos/ms1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
 # TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
 $(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tk16ref286.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
@@ -545,13 +642,18 @@ $(DOS)/TDDE.EXE: $(B)/tests/start.o $(B)/tests/tdde.o tests/apps/app.lnk
 	    option map=$(B)/tests/tdde.map file { $(B)/tests/start.o $(B)/tests/tdde.o }
 
 # SNAP2.EXE: SNAP for Windows 2.x (marked 2.0)
-$(B)/tests/snap2.o: tests/apps/snap.c
+$(B)/tests/snap2.o: tests/apps/snap.c tests/apps/snap.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -dSNAP_WIN2 -fo=$@ $<
-$(DOS)/SNAP2.EXE: $(B)/tests/start.o $(B)/tests/snap2.o tests/apps/app.lnk tools/nemark.py
+$(B)/tests/snap2.res: tests/apps/snap.rc tests/apps/snap.h $(B)/tests/snap.ico
+	$(WRC) -q -r -bt=windows -dSNAP_WIN2 -i=$(WATCOM)/h/win -i=tests/apps -i=$(B)/tests \
+	    -fo=$@ $<
+$(DOS)/SNAP2.EXE: $(B)/tests/start.o $(B)/tests/snap2.o $(B)/tests/snap2.res tests/apps/app.lnk \
+                  tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/snap2.map file { $(B)/tests/start.o $(B)/tests/snap2.o }
+	    option map=$(B)/tests/snap2.map option resource=$(B)/tests/snap2.res \
+	    file { $(B)/tests/start.o $(B)/tests/snap2.o }
 	python3 tools/nemark.py $@ 2.0
 
 # TW2.EXE: the Windows 2.x probe, marked as a Windows 2.0 program
@@ -562,10 +664,24 @@ $(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nem
 	    option map=$(B)/tests/tw2.map file { $(B)/tests/start.o $(B)/tests/tw2.o }
 	python3 tools/nemark.py $@ 2.0
 
-$(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o tests/apps/app.lnk
+# SNAP.EXE: its icon (tools/snapicon.py) and the interactive window
+$(B)/tests/snap.ico: tools/snapicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 -B tools/snapicon.py $@
+$(B)/tests/snap.o: tests/apps/snap.h
+$(B)/tests/snap.res: tests/apps/snap.rc tests/apps/snap.h $(B)/tests/snap.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=tests/apps -i=$(B)/tests -fo=$@ $<
+$(DOS)/SNAP.EXE: $(B)/tests/start.o $(B)/tests/snap.o $(B)/tests/snap.res tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/snap.map file { $(B)/tests/start.o $(B)/tests/snap.o }
+	    option map=$(B)/tests/snap.map option resource=$(B)/tests/snap.res \
+	    file { $(B)/tests/start.o $(B)/tests/snap.o }
+
+# CA1.EXE: drives Calculator and records its display (tests/calcscenarios.sh)
+$(DOS)/CA1.EXE: $(B)/tests/start.o $(B)/tests/ca1.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/ca1.map file { $(B)/tests/start.o $(B)/tests/ca1.o }
 
 # ---- DOS test tools ----
 $(DOS)/KEYFEED.COM: tools/dos/keyfeed.asm
@@ -603,7 +719,7 @@ $(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
 
 # DXn.COM: DOS extender probes, run in the KERNEL slot (tests/dosxtest.sh)
-DXPROBES := DX1 DX2 DX4 DX5 DX8
+# (DXPROBES is set at the top, before the dos target expands it)
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
@@ -790,6 +906,60 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CALC.EXE (shell/calc; ARCHITECTURE.md 15.3): x87 code with
+# emulator fixups (-fpi, WIN87EM) ----
+CALC_SRC := main draw engine fmt paste fpu stat clip help
+CALC_OBJ := $(B)/shell/start.o $(CALC_SRC:%=$(B)/shell/calc/%.o) $(B)/shell/calc/fixrqq.o
+CALC_HDR := shell/calc/calc.h shell/calc/ui.h
+shell: $(DOS)/CALC.EXE
+$(B)/shell/calc/%.o: shell/calc/%.c $(CALC_HDR)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fpi -fo=$@ $<
+$(B)/shell/calc/fixrqq.o: tests/apps/fixrqq.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/res/calc.ico: tools/mkcalcicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcalcicon.py $@
+$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CALC.EXE: $(CALC_OBJ) $(B)/shell/calc/calc.res shell/calc/calc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/calc/calc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/calc/calc.map \
+	    option resource=$(B)/shell/calc/calc.res file { $(CALC_OBJ) }
+# the engine on the host (tools/calchost; tests/calcscenarios.sh)
+$(B)/host/calchost: tools/calchost/calchost.c tools/calchost/fpu_host.c shell/calc/engine.c \
+                    shell/calc/fmt.c shell/calc/paste.c shell/calc/calc.h shell/calc/accel.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O0 -mfpmath=387 -o $@ tools/calchost/calchost.c tools/calchost/fpu_host.c \
+	    shell/calc/engine.c shell/calc/fmt.c shell/calc/paste.c
+
+# ---- shell: CLOCK.EXE (shell/clock), Windows 3.1 only ----
+CLOCK_OBJ := start main face digital intl fontdlg util
+SHELL_CK  := $(B)/shell/start.o $(patsubst %,$(B)/shell/clock/%.o,$(filter-out start,$(CLOCK_OBJ)))
+CLOCK_H   := shell/clock/clock.h
+shell: $(DOS)/CLOCK.EXE
+$(B)/shell/clock/clock.ico: tools/clockicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/clockicon.py $@
+$(B)/shell/clock/circle.h: tools/clocktable.py
+	@mkdir -p $(@D)
+	python3 tools/clocktable.py $@
+$(B)/shell/clock/face.o: $(B)/shell/clock/circle.h
+$(B)/shell/clock/%.o: shell/clock/%.c $(CLOCK_H)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -i=$(B)/shell/clock -fo=$@ $<
+$(B)/shell/clock/clock.res: shell/clock/clock.rc $(CLOCK_H) $(B)/shell/clock/clock.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/clock -i=$(B)/shell/clock -fo=$@ $<
+$(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/clock/clock.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/clock/clock.map \
+	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
+	python3 tools/nemark.py $@ 3.10
+
 test: dos fonts
 	tests/run-tests.sh
 
@@ -924,18 +1094,23 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 # tests/w16tree.sh boots it. build/dos stays as it is.
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
-W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/README.TXT \
-           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL \
+W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# Calculator (ARCHITECTURE.md 15.3)
+install-tree: $(W16)/CALC.EXE
+$(W16)/CALC.EXE: $(DOS)/CALC.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
-$(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
+$(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
-$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL: $(W16SYS)/%: $(DOS)/%
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
@@ -999,6 +1174,30 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US8: USER's WNet functions without a network (tests/apps/us8.c)
+$(B)/tests/us8.o: tests/apps/us8ref.h tests/apps/tklog.h
+$(DOS)/US8.EXE: $(B)/tests/start.o $(B)/tests/us8.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us8.map file { $(B)/tests/start.o $(B)/tests/us8.o }
+dos: $(DOS)/US8.EXE
+# US7: WinHelp and WINHELP.EXE (tests/apps/us7.c)
+$(B)/tests/us7.o: tests/apps/us7ref.h tests/apps/tklog.h
+$(DOS)/US7.EXE: $(B)/tests/start.o $(B)/tests/us7.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us7.map file { $(B)/tests/start.o $(B)/tests/us7.o }
+dos: $(DOS)/US7.EXE
+# US6: EM_GETTHUMB (tests/apps/us6.c)
+$(B)/tests/us6.o: tests/apps/us6ref.h tests/apps/tklog.h
+$(B)/tests/mevent.o: tests/apps/mevent.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/US6.EXE: $(B)/tests/start.o $(B)/tests/us6.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us6.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us6.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us6.map file { $(B)/tests/start.o $(B)/tests/us6.o $(B)/tests/mevent.o }
+dos: $(DOS)/US6.EXE
 # US4: a gallery of USER's drawing, saved as BMPs (tests/apps/us4.c, us4.rc;
 # tests/userscreens.sh)
 $(B)/tests/us4.res: tests/apps/us4.rc
@@ -1020,3 +1219,69 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- SHELL.DLL probes (tests/apps/shN.c; ARCHITECTURE.md 13): run as the
+# shell on Windows 3.1 and with w16's SHELL.DLL (tests/shellprobe.sh)
+SHPROBES := SH1 SH2 SH3 SH4 SH5 SH6 SH7 SH8 SH9 SH10 SH11 SH12 SH13
+$(B)/tests/sh%.o: tests/apps/sh%.c tests/apps/sh%ref.h tests/apps/shprobe.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/SH%.EXE: $(B)/tests/start.o $(B)/tests/sh%.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/sh$*.map file { $(B)/tests/start.o $(B)/tests/sh$*.o } \
+	    library shell.lib
+shprobes: $(SHPROBES:%=$(DOS)/%.EXE)
+dos: shprobes
+.PHONY: shprobes
+
+# ---- SHELL.DLL: w16's shell library (shell/shelldll/; ARCHITECTURE.md 13).
+# Windows 3.x only: Windows 2.x has no SHELL.DLL. Large model, SS != DS.
+SHCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=SHELL_TEXT \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+SHDLL_C  := util reg drag env hook icon exec about misc
+SHDLL_O  := $(B)/shelldll/entry.o $(B)/shelldll/i4.o $(SHDLL_C:%=$(B)/shelldll/%.o)
+$(B)/shelldll/%.o: shell/shelldll/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shelldll/%.o: shell/shelldll/%.c shell/shelldll/shell.h
+	@mkdir -p $(@D)
+	$(WCC) $(SHCFLAGS) -fo=$@ $<
+$(B)/shelldll/shlogo.bmp: tools/mkaboutlogo.py tools/mklogo.py
+	@mkdir -p $(@D)
+	python3 -B tools/mkaboutlogo.py $@
+$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll \
+	    -fo=$@ $<
+$(DOS)/SHELL.DLL: $(SHDLL_O) $(B)/shelldll/shell.res shell/shelldll/shell.lnk tools/nenoname.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/shelldll/shell.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shelldll/shell.map \
+	    option resource=$(B)/shelldll/shell.res file { $(SHDLL_O) }
+	python3 tools/nenoname.py $@ 104-128
+	python3 tools/nemark.py $@ 3.10
+shelldll: $(DOS)/SHELL.DLL
+dos: $(DOS)/SHELL.DLL
+.PHONY: shelldll
+# ---- shell: NOTEPAD.EXE (Windows 3.1; shell/notepad, ARCHITECTURE.md 15.1) ----
+NP_SRC  := main file find print help util
+SHELL_NP  := $(B)/shell/start.o $(NP_SRC:%=$(B)/shell/notepad/%.o)
+shell: $(DOS)/NOTEPAD.EXE
+$(B)/shell/res/notepad.ico: tools/npicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 -B tools/npicon.py $@
+$(B)/shell/notepad/%.o: shell/notepad/%.c shell/notepad/notepad.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/notepad/notepad.res: shell/notepad/notepad.rc shell/notepad/notepad.h $(B)/shell/res/notepad.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/notepad -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/NOTEPAD.EXE: $(SHELL_NP) $(B)/shell/notepad/notepad.res shell/notepad/notepad.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/notepad/notepad.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/notepad/notepad.map \
+	    option resource=$(B)/shell/notepad/notepad.res file { $(SHELL_NP) }
+install-tree: $(W16)/NOTEPAD.EXE
+$(W16)/NOTEPAD.EXE: $(DOS)/NOTEPAD.EXE
+	@mkdir -p $(@D)
+	cp $< $@

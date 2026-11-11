@@ -1,0 +1,9 @@
+colors:Window=255 255 0
+colors:WindowText=128 0 0
+colors:ButtonFace=128 128 0
+colors:ButtonShadow=128 0 128
+colors:ButtonHilight=255 0 255
+colors:ButtonText=0 0 255
+colors:Hilight=0 255 0
+colors:WindowFrame=0 128 0
+colors:Background=128 128 128

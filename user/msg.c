@@ -194,6 +194,32 @@ LRESULT WINAPI CallWindowProc(FARPROC f, HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return call_wndproc((WNDPROC)f, w ? (WORD)w->hInstance : 0, h, msg, wp, lp);
 }
 
+/* DestroyWindow: the messages posted to the window and not yet read go
+   (3.1 does not deliver them; a WM_NULL that EndDialog posted to wake a
+   common dialog's modal loop outlived the dialog, its handle was reused
+   by SNAP's next window, and the message reached that) */
+void purge_window_msgs(HQUEUE hq, HWND h)
+{
+    QUEUE __far *q;
+    WORD i, k, f;
+    if (!hq)
+        return;
+    q = q_of(hq);
+    f = irq_off();
+    for (i = k = 0; i < q->count; i++) {
+        QMSG __far *m = &q->msgs[(q->head + i) % q->size];
+        if (m->msg.hwnd == h)
+            continue;
+        if (k != i)
+            q->msgs[(q->head + k) % q->size] = *m;
+        k++;
+    }
+    q->count = k;
+    if (!k)
+        q->wakebits &= ~QS_POSTMESSAGE;
+    irq_restore(f);
+}
+
 static void receive_sent(HQUEUE hq)
 {
     QUEUE __far *q;
@@ -357,6 +383,8 @@ static BOOL posted_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MS
     return FALSE;
 }
 
+void idle_cursor_check(HQUEUE hq);
+
 static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOOL wait)
 {
     HQUEUE hq = cur_hq();
@@ -395,8 +423,11 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         }
         q = q_of(hq);
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
-        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending)
-            K_WAITEVENT(0);
+        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending) {
+            idle_cursor_check(hq);
+            if (!input_pending)
+                K_WAITEVENT(0);
+        }
         else if (input_pending && !(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)))
             K_OLDYIELD();
     }
@@ -404,6 +435,19 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     q->msgtime = m->time;
     q->msgpos = MAKELONG(m->pt.x, m->pt.y);
     return TRUE;
+}
+
+/* USER.332, UserYield: what KERNEL's Yield is for a task with a queue
+   (Pietrek ch. 6): the inter-task SendMessages waiting for the task are
+   answered before it gives up the processor and again when it gets it
+   back, so no sender stays blocked on a task that is only yielding.
+   (A stub here used to make every Yield of such a task do nothing.) */
+void WINAPI U_USERYIELD(void)
+{
+    HQUEUE hq = cur_hq();
+    receive_sent(hq);
+    K_OLDYIELD();
+    receive_sent(cur_hq());
 }
 
 BOOL WINAPI GetMessage(MSG __far *m, HWND h, UINT lo, UINT hi)

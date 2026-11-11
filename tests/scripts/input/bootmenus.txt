@@ -1,0 +1,271 @@
+; mouse motion, clicks and keys all through the boot (from the logo
+; on: tests/inputrun.sh -b 1), then the checks of menus.txt: a menu by
+; mouse, the Help menu by keyboard, the pointer moved (tests/boottest.sh
+; case allw16bootinput: the screens must change)
+; the first click makes DOSBox take the mouse (until then it sends none)
+click 1
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+click 1
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+click 1
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+click 1
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+click 1
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+jiggle 5
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+click 1
+sleep 10
+click 1
+sleep 1
+home
+move 20 20
+click 1
+sleep 1.5
+shot 01-menu
+key Escape
+key Escape
+sleep 1
+key alt+h
+sleep 1.5
+shot 02-help
+key Escape
+key Escape
+home
+move 150 100
+sleep 1
+shot 03-moved

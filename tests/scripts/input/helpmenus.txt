@@ -1,0 +1,30 @@
+; Help menus: Program Manager by keyboard and by mouse, then Notepad
+; (tests/inputrun.sh; boot-test case helpmenus)
+click 1
+sleep 1
+key alt+h
+sleep 1.5
+shot 01-pm-help
+key Escape
+key Escape
+sleep 1
+home
+move 130 39
+click 1
+sleep 1.5
+shot 02-pm-help-mouse
+key Escape
+key Escape
+sleep 1
+key alt+f
+key r
+sleep 3
+type notepad
+key Return
+sleep 8
+key alt+h
+sleep 1.5
+shot 03-np-help
+key Escape
+key Escape
+sleep 1

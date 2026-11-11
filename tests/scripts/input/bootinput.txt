@@ -1,0 +1,154 @@
+; real input all through the boot and after (tests/inputrun.sh -b 1;
+; tests/boottest.sh case input): pointer motion and Shift presses while
+; USER initialises and Program Manager starts, then a menu by keyboard
+; and the pointer moved over the desktop
+; the first click makes DOSBox take the mouse (until then it sends none)
+click 1
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+move 30 20
+sleep 0.3
+move -30 -20
+key shift
+sleep 0.3
+sleep 10
+; the pointer home before the first screen: where the moves made during
+; the boot leave it depends on when MOUSE is enabled, which differs with
+; the boot's speed (Windows 3.1 itself ends at 320,240 or 260,200 from
+; the same input as its boot is quicker or slower)
+home
+sleep 3
+; again: a slower boot may not have enabled its mouse yet the first time
+; (build/boottest-145116: Microsoft's own reference stayed at 320,240
+; while ours had gone home)
+home
+sleep 1
+shot 01-booted
+home
+move 150 200
+sleep 1
+key alt+f
+sleep 2
+shot 02-menu
+key Escape
+key Escape
+sleep 1
+shot 03-closed

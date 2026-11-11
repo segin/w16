@@ -401,7 +401,7 @@
  513 WNETGETCAPS                  -    2
  514 WNETDEVICEMODE               -    2
  515 WNETBROWSEDIALOG             -    8
- 516 WNETGETUSER                  -    12
+ 516 WNETGETUSER                  -    8
  517 WNETADDCONNECTION            -    12
  518 WNETCANCELCONNECTION         -    6
  519 WNETGETERROR                 -    4

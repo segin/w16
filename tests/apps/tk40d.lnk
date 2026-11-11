@@ -1,0 +1,14 @@
+# PENWIN.DLL (tests/apps/tk40d.asm), TK40's stand-in module
+format windows dll
+option quiet
+option start=libentry
+option heapsize=1k
+option modname=PENWIN
+library windows.lib
+export WEP.1 resident
+export GPFAULT.2
+export SETBADSEL.3
+export RESULTS.4
+export __GP.5 resident
+export KCALL.6
+import K327 KERNEL.327

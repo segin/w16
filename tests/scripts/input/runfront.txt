@@ -1,0 +1,8 @@
+; File > Run notepad from Program Manager: Notepad must come to the front
+key alt+f
+key r
+sleep 3
+type notepad
+key Return
+sleep 8
+shot 01-run

@@ -642,6 +642,12 @@ r0_terminate:
         mov word [tb_top], tbuf + TB_SIZE
         call to_rm
         call client_rm_reset
+        ; the client's own PSP current again: KERNEL makes its tasks' PDBs
+        ; DOS's current PSP (INT 21h 50h), and DOS ends the current one
+        ; and returns to its parent (here a selector, not a segment)
+        mov bx, [c_psp]
+        mov ah, 50h
+        int 21h
 
         mov ax, [exit_ax]
         int 21h
@@ -842,6 +848,17 @@ idt_from_pmvec:
 r0_rmx:
         mov bp, sp
         cld
+%ifdef TRACE
+        push ax
+        mov ax, [bp+R_SIZE+2]
+        and ax, 0FFh
+        or ax, 0200h
+        cmp byte [bp+R_SIZE], 0
+        je .tk
+        add ax, 0100h           ; 03nnh: hook of vector nn
+.tk:    call trc
+        pop ax
+%endif
         inc word [rmx_depth]
         cmp byte [bp+R_SIZE], 0
         jne near .hook
@@ -889,7 +906,7 @@ r0_rmx:
         mov word [es:di], ret3_stub
         mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
-        and cx, ~(FL_IF | FL_TF)
+        and cx, ~(FL_IF | FL_TF | FL_NT)
         or cx, FL_IOPL
         mov [es:di+4], cx
         pop es
@@ -920,6 +937,8 @@ r0_rmx:
         mov sp, bp
         jmp .back
 .hook:  ; a real-mode interrupt the client handles in protected mode
+        cmp byte [bp+R_SIZE], 2
+        je near .ps2
         sub sp, C_SIZE
         mov si, sp
         mov bx, [bp+R_SIZE+2]
@@ -939,7 +958,7 @@ r0_rmx:
         mov word [es:di], ret3_stub
         mov word [es:di+2], G_HC3 | 3
         mov cx, [bp+R_FL]
-        and cx, ~(FL_IF | FL_TF)
+        and cx, ~(FL_IF | FL_TF | FL_NT)
         or cx, FL_IOPL
         mov [es:di+4], cx
         pop es
@@ -980,6 +999,81 @@ r0_rmx:
         mov [bp+R_EDI], ax
         mov ax, [si+C_BP]
         mov [bp+R_EBP], ax
+        mov sp, bp
+        jmp .back
+.ps2:   ; the BIOS called the pointing-device handler (ps2_entry): far
+        ; call the client's with the BIOS's four words, on the ring-3 host
+        ; stack, interrupts disabled as the BIOS has them. Not while the
+        ; client has not yet taken IRQ 12 (INT 74h) in protected mode: then
+        ; the packet is dropped. MOUSE.DRV enables the device (C200h) and
+        ; sets INT 74h after it; a packet that came in between (mouse
+        ; motion during the boot, in real mode, straight to the BIOS)
+        ; reached its handler before its INT 74h one was set, and IRQ 12
+        ; then stayed in service for good: the pointer never moved again
+        ; (1 boot in 5 with motion from second 16, autolock=false; never
+        ; with Microsoft's DOSX: tests/dos/ms1.asm, TK49).
+        cmp word [pmvec+74h*4+2], G_HC3 | 3
+        jne .ps2go
+        cmp word [pmvec+74h*4], refstub_tab + 74h * 3
+        je near .back
+.ps2go: sub sp, C_SIZE
+        mov si, sp
+        mov ax, [ps2_pm]
+        mov [si+C_IP], ax
+        mov ax, [ps2_pm+2]
+        mov [si+C_CS], ax
+        mov ax, [h3_top]
+        push ax
+        sub word [h3_top], H3_CHUNK
+        sub ax, 12
+        mov di, ax
+        push si
+        push ds
+        push es
+        call cb_stacksel        ; AX = a selector for the real-mode stack
+        mov cx, G_HD3
+        mov es, cx
+        mov word [es:di], ret3_stub
+        mov word [es:di+2], G_HC3 | 3
+        mov ds, ax
+        mov si, [bp+R_SP]
+        add si, 4               ; past the BIOS's return address
+        push di
+        add di, 4
+        mov cx, 4
+        rep movsw
+        pop di
+        pop es
+        pop ds
+        pop si
+        mov cx, [bp+R_FL]
+        and cx, ~(FL_IF | FL_TF)
+        or cx, FL_IOPL
+        mov [si+C_SP], di
+        mov word [si+C_SS], G_HD3 | 3
+        mov [si+C_FL], cx
+        mov ax, [bp+R_EAX]
+        mov [si+C_AX], ax
+        mov ax, [bp+R_EBX]
+        mov [si+C_BX], ax
+        mov ax, [bp+R_ECX]
+        mov [si+C_CX], ax
+        mov ax, [bp+R_EDX]
+        mov [si+C_DX], ax
+        mov ax, [bp+R_ESI]
+        mov [si+C_SI], ax
+        mov ax, [bp+R_EDI]
+        mov [si+C_DI], ax
+        mov ax, [bp+R_EBP]
+        mov [si+C_BP], ax
+        xor ax, ax
+        mov [si+C_DS], ax
+        mov [si+C_ES], ax
+        inc word [cb_depth]
+        mov bx, si
+        call r0_call3
+        dec word [cb_depth]
+        pop word [h3_top]
         mov sp, bp
 .back:  mov sp, bp
         dec word [rmx_depth]

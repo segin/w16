@@ -1,0 +1,49 @@
+; Clock as the shell, driven by real input (tests/inputrun.sh; compare the
+; run with Windows 3.1's CLOCK.EXE and with w16's, tests/clockinput.sh):
+; double-click for no title, drag the clock by its face, double-click back,
+; the Settings menu by keyboard (Analog), Always on Top from the system
+; menu, minimize and restore by keyboard
+click 1
+home
+move 45 55
+sleep 1
+shot start
+click 1
+click 1
+sleep 1.5
+shot notitle
+down 1
+move 30 20
+sleep 0.3
+move 30 20
+sleep 0.3
+up 1
+sleep 1.5
+shot dragged
+click 1
+click 1
+sleep 1.5
+shot title
+key alt+s
+sleep 0.5
+shot menu
+key a
+sleep 1.5
+shot analog
+key alt+space
+sleep 0.5
+shot sysmenu
+key t
+sleep 1
+key alt+space
+sleep 0.5
+key n
+sleep 2
+shot minimized
+key alt+space
+sleep 0.5
+key r
+sleep 2
+shot restored
+key alt+F4
+sleep 3

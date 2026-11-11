@@ -1,0 +1,10 @@
+# wlink directives for CLOCK.EXE (objects and output come from the Makefile)
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=4k
+option description 'w16 Clock'
+library windows.lib
+library shell.lib
+library commdlg.lib

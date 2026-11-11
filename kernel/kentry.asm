@@ -318,13 +318,14 @@ INITTASK:
 ; the caller's DS as an extra first argument, followed by copies of the
 ; caller's NARGS word arguments, and restore DS on return.
 ;   LOCALAPI exported-name, c-function, nargs
-%macro LOCALAPI 3
+%macro LOCALAPI 3-4 L_NONE
 extern %2
 global %1
 %1:
         push bp
         mov bp, sp
         push ds
+        push es
         push ds
 %assign i %3
 %rep %3
@@ -332,20 +333,34 @@ global %1
 %assign i i - 1
 %endrep
         call far %2
+        %4
+        pop es
         pop ds
         pop bp
         retf 2 * %3
 %endmacro
+; What the local-heap functions leave in CX (TK43, 3.1: LocalAlloc,
+; LocalReAlloc, LocalLock, LocalUnlock, LocalSize and LocalFlags the
+; result, = AX; LocalFree 1; ES kept by all; GDI relies on CX: it did
+; not start when LocalAlloc kept CX)
+%macro L_NONE 0
+%endmacro
+%macro L_CXAX 0
+        mov cx, ax
+%endmacro
+%macro L_CX1 0
+        mov cx, 1
+%endmacro
 
 LOCALAPI LOCALINIT,    LINIT,    3      ; KERNEL.4
-LOCALAPI LOCALALLOC,   LALLOC,   2      ; KERNEL.5
-LOCALAPI LOCALREALLOC, LREALLOC, 3      ; KERNEL.6
-LOCALAPI LOCALFREE,    LFREE,    1      ; KERNEL.7
-LOCALAPI LOCALLOCK,    LLOCK,    1      ; KERNEL.8
-LOCALAPI LOCALUNLOCK,  LUNLOCK,  1      ; KERNEL.9
-LOCALAPI LOCALSIZE,    LSIZE,    1      ; KERNEL.10
+LOCALAPI LOCALALLOC,   LALLOC,   2, L_CXAX      ; KERNEL.5
+LOCALAPI LOCALREALLOC, LREALLOC, 3, L_CXAX      ; KERNEL.6
+LOCALAPI LOCALFREE,    LFREE,    1, L_CX1      ; KERNEL.7
+LOCALAPI LOCALLOCK,    LLOCK,    1, L_CXAX      ; KERNEL.8
+LOCALAPI LOCALUNLOCK,  LUNLOCK,  1, L_CXAX      ; KERNEL.9
+LOCALAPI LOCALSIZE,    LSIZE,    1, L_CXAX      ; KERNEL.10
 LOCALAPI LOCALHANDLE,  LHANDLE,  1      ; KERNEL.11
-LOCALAPI LOCALFLAGS,   LFLAGS,   1      ; KERNEL.12
+LOCALAPI LOCALFLAGS,   LFLAGS,   1, L_CXAX      ; KERNEL.12
 LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
 ; Other APIs that need the caller's DS (procinst.c)
 LOCALAPI MAKEPROCINSTANCE, MPI, 3       ; KERNEL.51
@@ -472,8 +487,13 @@ GETTASKQUEUEES:
 ; not: under DOSX, KERNEL's first version, which called INT 31h on the
 ; moving stack, returned through zeros - observed with TK19 as the shell
 ; in tests/dropin.sh.) The caller frees the old memory afterwards.
+; Interrupts stay off from before the copy until the new base is set: an
+; interrupt handler (the mouse's or keyboard's, USER's event code) may
+; write into the segment being moved, which would be lost in the old
+; copy, and must not run on this stack. UNVERIFIED: how 3.1's KRNL286
+; does it. The stack only holds the INT 31h call's frame then; 1 KB.
 segment _BSS
-move_stack      resb 256
+move_stack      resb 1024
 move_stack_top:
 segment _TEXT
 global _seg_move
@@ -490,13 +510,13 @@ _seg_move:
         mov ax, [bp + 10]               ; nwords
         mov ds, [bp + 6]
         mov es, [bp + 8]
+        pushf                           ; the caller's interrupt flag
         ; onto KERNEL's stack (SS:SP kept in DI:SI)
         mov si, sp
         mov di, ss
         cli
         mov ss, [cs:dgroup_word]
         mov sp, move_stack_top wrt DGROUP
-        sti
         push si
         push di
         push cx
@@ -510,10 +530,9 @@ _seg_move:
         int 31h
         pop di
         pop si
-        cli
         mov ss, di                      ; sel, now at its new base, or SS
         mov sp, si
-        sti
+        popf
         pop es
         pop ds
         pop di
@@ -617,12 +636,14 @@ __C000H:        db 0
 ; fault_exit on KERNEL's exit stack and returns to the host, which
 ; resumes there; fault_exit calls fault_report (does not return).
 extern _fault_report            ; void __cdecl __far fault_report(void)
+extern _gp_handler              ; u16 __cdecl __far gp_handler(void)
 global _fault_regs
 segment _BSS
 global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
 _fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+gp_ip           resw 1
 segment _TEXT
 
 %macro FAULTENTRY 1
@@ -680,8 +701,37 @@ fault_exit:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        call far _gp_handler            ; a "__GP" table entry for CS:IP?
+        test ax, ax
+        jnz .gp
         call far _fault_report
 .hang:  jmp .hang
+; resume at the faulting CS:AX, the registers as they were (DS and ES
+; made 0 by gp_handler when not valid), on the faulting stack with the
+; error code and the faulting IP pushed (TK40, 3.1: [SP] = IP, [SP+2] =
+; the error code, flags 3202h: the arithmetic flags clear)
+.gp:    mov [gp_ip wrt DGROUP], ax
+        mov ss, [_fault_regs + 12 wrt DGROUP]
+        mov sp, [_fault_regs + 10 wrt DGROUP]
+        push word [_fault_regs + 2 wrt DGROUP]          ; error code
+        push word [_fault_regs + 4 wrt DGROUP]          ; faulting IP
+        mov ax, [_fault_regs + 8 wrt DGROUP]            ; flags: IF, DF, IOPL
+        and ax, 7600h                                   ; and NT kept, the
+        or al, 2                                        ; others clear (3.1)
+        push ax
+        push word [_fault_regs + 6 wrt DGROUP]          ; cs
+        push word [gp_ip wrt DGROUP]                    ; ip
+        push word [_fault_regs + 28 wrt DGROUP]         ; ds
+        mov es, [_fault_regs + 30 wrt DGROUP]
+        mov ax, [_fault_regs + 14 wrt DGROUP]
+        mov bx, [_fault_regs + 16 wrt DGROUP]
+        mov cx, [_fault_regs + 18 wrt DGROUP]
+        mov dx, [_fault_regs + 20 wrt DGROUP]
+        mov si, [_fault_regs + 22 wrt DGROUP]
+        mov di, [_fault_regs + 24 wrt DGROUP]
+        mov bp, [_fault_regs + 26 wrt DGROUP]
+        pop ds
+        iret
 
 ; ---------------------------------------------------------------------------
 ; Boot watchdog (fault.c): samples the interrupted CS:IP into a ring of 64
@@ -746,6 +796,71 @@ wd_fire:
         sti
         call far _wd_report
 .hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; Global-heap exports with the registers 3.1 leaves (TK43, KRNL286, a
+; moveable, a fixed and a discardable block): GlobalLock keeps BX and
+; returns the selector in CX as well as in DX (GDI relies on CX: it did
+; not start when CX was kept), ES = 0; GlobalUnlock keeps BX, CX = 0,
+; ES = 0; GlobalFlags CX = the flags (= AX), DX = the selector, ES = 0;
+; GlobalFree CX = DX = 0, ES = 0; GlobalReAlloc CX = the handle (= AX),
+; ES = 0; GlobalSize ES = 0. (BX after GlobalSize, GlobalFlags,
+; GlobalReAlloc and GlobalFree, CX after GlobalSize and DX after
+; GlobalUnlock and GlobalReAlloc hold other values on 3.1, not copied.)
+; The C functions do the work.
+;   GHEAPAPI exported-name, c-function, nargs, after
+%macro GHEAPAPI 4
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        push bx
+%assign i %3
+%rep %3
+        push word [bp + 4 + 2 * i]
+%assign i i - 1
+%endrep
+        call far %2
+        %4
+        push 0
+        pop es
+        pop bx
+        pop bp
+        retf 2 * %3
+%endmacro
+%macro AFTER_LOCK 0
+        mov cx, dx
+%endmacro
+%macro AFTER_UNLOCK 0
+        xor cx, cx
+%endmacro
+%macro AFTER_FLAGS 0
+        mov cx, ax
+        mov dx, [bp + 6]
+        or dx, 1
+%endmacro
+%macro AFTER_FREE 0
+        xor cx, cx
+        xor dx, dx
+%endmacro
+%macro AFTER_NONE 0
+%endmacro
+%macro AFTER_REALLOC 0
+        mov cx, ax
+%endmacro
+GHEAPAPI GLOBALLOCKX,    GLOBALLOCK,    1, AFTER_LOCK
+GHEAPAPI GLOBALUNLOCKX,  GLOBALUNLOCK,  1, AFTER_UNLOCK
+GHEAPAPI GLOBALFLAGSX,   GLOBALFLAGS,   1, AFTER_FLAGS
+GHEAPAPI GLOBALFREEX,    GLOBALFREE,    1, AFTER_FREE
+GHEAPAPI GLOBALSIZEX,    GLOBALSIZE,    1, AFTER_NONE
+GHEAPAPI GLOBALREALLOCX, GLOBALREALLOC, 4, AFTER_REALLOC
+
+; ---------------------------------------------------------------------------
+; The default signal handler (task.c, SetSigHandler): a RETF
+global sig_default
+sig_default:
+        retf
 
 ; ---------------------------------------------------------------------------
 ; K327 (HandleParamError, Schulman): register-based; USER's and GDI's

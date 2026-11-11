@@ -1,0 +1,64 @@
+; interactive session for hunting hangs (tests/inputrun.sh)
+click 1
+sleep 1
+; the File menu by mouse, closed with Escape
+home
+move 20 20
+click 1
+sleep 1
+shot 01-filemenu
+key Escape
+key Escape
+sleep 1
+; Run... notepad
+key alt+f
+key r
+sleep 2
+shot 02-run
+type notepad
+key Return
+sleep 5
+shot 03-notepad
+type hello
+sleep 1
+key alt+F4
+sleep 2
+shot 04-save
+key n
+sleep 2
+shot 05-closed
+; drag Program Manager by its caption
+home
+move 150 15
+down 1
+sleep 0.5
+move 30 20
+sleep 0.5
+move 10 10
+sleep 0.5
+up 1
+sleep 2
+shot 06-dragged
+; double-click the Accessories group icon
+home
+move 40 190
+click 1
+click 1
+sleep 3
+shot 07-accessories
+; the system menu by keyboard, then away
+key alt+space
+sleep 1
+shot 08-sysmenu
+key Escape
+key Escape
+sleep 1
+; is everything alive: menu by keyboard, pointer motion
+home
+move 100 100
+sleep 1
+key alt+h
+sleep 1
+shot 09-final
+key Escape
+key Escape

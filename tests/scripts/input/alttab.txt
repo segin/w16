@@ -1,0 +1,26 @@
+; Alt+Tab between Program Manager and Notepad, and back after Notepad
+; closes (tests/inputrun.sh; boot-test case alttab)
+key alt+f
+key r
+sleep 3
+type notepad
+key Return
+sleep 8
+; (not compared: the caret blinks and the cursor settles at its own pace)
+shot x1-notepad
+key alt+Tab
+sleep 2
+shot 02-alttab-pm
+key alt+Tab
+sleep 2
+shot 03-alttab-notepad
+key alt+F4
+sleep 3
+shot 04-closed
+key alt+Tab
+sleep 2
+key alt+h
+sleep 1.5
+shot 05-menu
+key Escape
+key Escape

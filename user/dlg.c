@@ -141,7 +141,10 @@ LRESULT WINAPI DefDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CHARTOITEM:
     case WM_QUERYDRAGICON:
     case WM_INITDIALOG:
-        if (handled || msg == WM_INITDIALOG)
+        /* without a dialog procedure: TRUE, the focus as usual */
+        if (msg == WM_INITDIALOG)
+            return GetWindowLong(h, DW_PROC) ? r : TRUE;
+        if (handled)
             return r;
         break;
     default:
@@ -294,7 +297,15 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         if (o && !(style & DS_ABSALIGN))
             OffsetRect(&r, o->rcClient.left, o->rcClient.top);
     }
-    /* kept on the screen (US4: the dialog at y 10 units starts at 0) */
+    /* kept on the screen (US4: the dialog at y 10 units starts at 0;
+       Calculator's, 240 x 158 units at 310,65, comes up on 3.1 at
+       154,110, against the screen's right and bottom edges. UNVERIFIED:
+       w16 puts it at 150,106 - its window is 4 pixels wider and taller
+       than 3.1's, unexplained) */
+    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN])
+        OffsetRect(&r, sysmet[SM_CXSCREEN] - r.right, 0);
+    if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
+        OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)
@@ -354,8 +365,11 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     }
     if (font)
         send_message(h, WM_SETFONT, (WPARAM)font, FALSE);
-    if (call_wndproc((WNDPROC)proc, (WORD)hinst, h, WM_INITDIALOG, (WPARAM)focus, param) &&
-        valid_wnd(h)) {
+    /* WM_INITDIALOG goes to the window, so a dialog of its own class
+       (Calculator: CLASS "SciCalc", no dialog procedure) gets it in its
+       class's procedure; DefDlgProc hands it on to the dialog procedure.
+       It was called straight, NULL included: a GP fault in USER */
+    if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
         if (focus)
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
     }
@@ -415,6 +429,8 @@ static int modal_loop(HWND h, HWND owner)
     if (owner && valid_wnd(owner)) {
         ownerwas = !EnableWindow(owner, FALSE);
     }
+    /* bit 1: EndDialog enables the owner again (it was enabled before) */
+    SetWindowWord(h, DW_MODAL, ownerwas ? 3 : 1);
     ShowWindow(h, SW_SHOWNORMAL);
     UpdateWindow(h);
     while (valid_wnd(h) && !GetWindowWord(h, DW_ENDED)) {
@@ -491,6 +507,15 @@ void WINAPI EndDialog(HWND h, int code)
     SetWindowWord(h, DW_ENDCODE, code);
     if (!GetWindowWord(h, DW_MODAL))
         return;
+    /* the owner enabled before the dialog hides, so the activation goes
+       back to it (ShellAbout's dialog left Program Manager inactive and
+       deaf otherwise); a dialog its program hid already (Program
+       Manager's Run, before WinExec) is not active and gives nothing */
+    {
+        PWND w = valid_wnd(h);
+        if ((GetWindowWord(h, DW_MODAL) & 2) && w && w->hwndOwner && valid_wnd(w->hwndOwner))
+            EnableWindow(w->hwndOwner, TRUE);
+    }
     ShowWindow(h, SW_HIDE);
     PostMessage(h, WM_NULL, 0, 0);      /* wake the modal loop */
 }

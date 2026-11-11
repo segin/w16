@@ -22,6 +22,8 @@ LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
+void track_window(HWND h, UINT hit, BOOL keyboard);
+LRESULT WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
 
@@ -39,6 +41,9 @@ static void load_frame_bitmaps(void)
     bmZoomD = LoadBitmap(0, MAKEINTRESOURCE(OBM_ZOOMD));
     bmRestoreD = LoadBitmap(0, MAKEINTRESOURCE(OBM_RESTORED));
 }
+
+void follow_icon_title(HWND h);
+void redraw_icon_title(HWND h);
 
 /* ---- frame geometry ---- */
 static BOOL has_thick(PWND w)   { return (w->style & WS_THICKFRAME) && !(w->style & WS_MINIMIZE); }
@@ -103,6 +108,41 @@ void nc_calcsize(PWND w, RECT *r)
         r->bottom = r->top;
     if (r->right < r->left)
         r->right = r->left;
+}
+
+/* AdjustWindowRectEx (USER.454) / AdjustWindowRect (USER.102): the
+   window rectangle for a client rectangle, nc_calcsize the other way
+   round, with a one-line menu bar when menu is set (3.1 SDK; scroll
+   bars not counted). Calculator sizes itself with it: 259 x 230 client,
+   WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX and a menu, 261 x 270 on 3.1. */
+void WINAPI AdjustWindowRectEx(RECT FAR *r, DWORD style, BOOL menu, DWORD exstyle)
+{
+    /* nc_calcsize's rules on the style alone (its WND is a near pointer
+       into USER's segment) */
+    BOOL caption = (style & WS_CAPTION) == WS_CAPTION, thick = (style & WS_THICKFRAME) != 0;
+    BOOL dlg = (style & WS_CAPTION) == WS_DLGFRAME || (exstyle & WS_EX_DLGMODALFRAME);
+    int fx = 0, fy = 0, top;
+    if (thick)
+        fx = sysmet[SM_CXFRAME], fy = sysmet[SM_CYFRAME];
+    else if (dlg)
+        fx = sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER], fy = sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER];
+    else if (style & WS_BORDER)
+        fx = sysmet[SM_CXBORDER], fy = sysmet[SM_CYBORDER];
+    if (caption && dlg && !thick)
+        top = sysmet[SM_CYCAPTION] + sysmet[SM_CYDLGFRAME];
+    else
+        top = fy + (caption ? sysmet[SM_CYCAPTION] - sysmet[SM_CYBORDER] + (fy ? 0 : sysmet[SM_CYBORDER]) : 0);
+    r->left -= fx;
+    r->right += fx;
+    r->bottom += fy;
+    r->top -= top;
+    if (menu)
+        r->top -= sysmet[SM_CYMENU] + sysmet[SM_CYBORDER];
+}
+
+void WINAPI AdjustWindowRect(RECT FAR *r, DWORD style, BOOL menu)
+{
+    AdjustWindowRectEx(r, style, menu, 0);
 }
 
 /* caption rectangle, window coordinates (including its two black lines) */
@@ -366,7 +406,32 @@ LONG nc_hittest(PWND w, POINT pt)
     return HTBORDER;
 }
 
+/* the next visible, enabled top-level window after cur, activated */
+void switch_window(HWND cur, BOOL tobottom)
+{
+    HWND t, first = 0;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
+        PWND tw = PW(t);
+        if (t == cur || tw->hwndOwner || !(tw->style & WS_VISIBLE) || (tw->style & WS_DISABLED))
+            continue;
+        if (!first)
+            first = t;
+    }
+    if (!first)
+        return;
+    if (tobottom && valid_wnd(cur))
+        set_window_pos(cur, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    /* Alt+Tab takes the window under the current one: the bottom of the
+       others goes on top when cur stays put (UNVERIFIED order) */
+    activate_window(first, FALSE);
+    /* Alt+Tab restores an icon; Alt+Esc only activates it (3.1: Alt+Esc
+       from Notepad's icon to Calculator's leaves both minimised) */
+    if (IsIconic(first) && !tobottom)
+        ShowWindow(first, SW_RESTORE);
+}
+
 /* ---- DefWindowProc ---- */
+extern WORD lastkey;            /* the last key pressed (input.c) */
 static LONG def_ctlcolor(HDC hdc, int type)
 {
     if (type == CTLCOLOR_SCROLLBAR) {
@@ -391,6 +456,12 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     switch (cmd & 0xFFF0) {
     case SC_CLOSE:
         send_message(h, WM_CLOSE, 0, 0);
+        break;
+    case SC_MOVE:
+        track_window(h, HTCAPTION, (cmd & 0xF) == 0);
+        break;
+    case SC_SIZE:
+        track_window(h, (cmd & 0xF) ? HTLEFT + (cmd & 0xF) - 1 : HTBOTTOMRIGHT, (cmd & 0xF) == 0);
         break;
     case SC_MINIMIZE:
         ShowWindow(h, SW_MINIMIZE);
@@ -460,12 +531,35 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             w->flags &= ~WF_ACTIVEFRAME;
         if (is_visible(w))
             nc_paint(h, 0, wp != 0);
+        /* a minimised window's title under the icon: its colours follow
+           (it was repainted only where something had covered it, so
+           old highlighting stayed) */
+        if (w->style & WS_MINIMIZE)
+            redraw_icon_title(h);
         return 1;
     case WM_NCDESTROY:
         return 0;
     case WM_NCLBUTTONDOWN:
         switch (wp) {
         case HTCAPTION:
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if ((w = valid_wnd(h)) != 0 && !(w->style & WS_MAXIMIZE))
+                send_message(h, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, lp);
+            break;
+        case HTLEFT:
+        case HTRIGHT:
+        case HTTOP:
+        case HTTOPLEFT:
+        case HTTOPRIGHT:
+        case HTBOTTOM:
+        case HTBOTTOMLEFT:
+        case HTBOTTOMRIGHT:
+            if (!(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, TRUE);
+            if ((w = valid_wnd(h)) != 0)
+                send_message(h, WM_SYSCOMMAND, SC_SIZE | (wp - HTLEFT + 1), lp);
+            break;
         case HTCLIENT:
             if (!(w->style & WS_CHILD) && h != hwndActive)
                 activate_window(h, TRUE);
@@ -560,6 +654,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         def_settext(w, (LPCSTR)lp);
         if (has_caption(w) && is_visible(w))
             nc_paint(h, 0, (w->flags & WF_ACTIVEFRAME) != 0);
+        if (w->style & WS_MINIMIZE) {
+            follow_icon_title(h);       /* sized to the new text */
+            redraw_icon_title(h);
+        }
         return 1;
     case WM_GETTEXT:
         return def_gettext(w, wp, (LPSTR)lp);
@@ -574,12 +672,24 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SYSCOMMAND:
         sys_command(h, w, wp, lp);
         return 0;
+    case WM_KEYDOWN:
+        /* Ctrl+Esc: the Task List (the system menu's Switch To...) */
+        if (wp == VK_ESCAPE && (GetKeyState(VK_CONTROL) & 0x8000))
+            send_message(top_level(h), WM_SYSCOMMAND, SC_TASKLIST, 0);
+        return 0;
     case WM_SYSKEYDOWN:
         if (wp == VK_F4 && (HIWORD(lp) & KF_ALTDOWN))
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
+        /* Alt+Tab, Alt+Esc: the next top-level window (Alt+Esc sends the
+           current one to the bottom). UNVERIFIED: Windows 3.1 shows the
+           window's title while Alt+Tab is held; here it switches at once */
+        else if ((wp == VK_TAB || wp == VK_ESCAPE) && (HIWORD(lp) & KF_ALTDOWN))
+            switch_window(top_level(h), wp == VK_ESCAPE);
         return 0;
     case WM_SYSKEYUP:
-        if ((wp == VK_MENU || wp == VK_F10) && !(w->style & WS_CHILD))
+        /* Alt or F10 pressed and released alone (Alt+F4 must not then
+           enter the menu: it took the next keys) */
+        if ((wp == VK_MENU || wp == VK_F10) && wp == lastkey && !(w->style & WS_CHILD))
             send_message(h, WM_SYSCOMMAND, SC_KEYMENU, 0);
         return 0;
     case WM_WINDOWPOSCHANGED: {
@@ -636,9 +746,22 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SETFONT:
         return 0;
     case WM_SYSCHAR:
-        if (lp & 0x20000000L)
-            send_message(top_level(h), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)wp == ' ' &&
-                         (w->style & WS_CHILD) ? '-' : (BYTE)wp);
+        /* Alt+Space: the top-level window's system menu, from any of
+           its children (the reference opens Program Manager's with the
+           focus in a group); Alt+-: the MDI child's around the focus */
+        if (lp & 0x20000000L) {
+            if ((BYTE)wp == '-') {
+                HWND c;
+                for (c = h; c && valid_wnd(c); c = PW(c)->hwndParent)
+                    if (PW(c)->hwndParent && valid_wnd(PW(c)->hwndParent) &&
+                        ((PCLS)PW(PW(c)->hwndParent)->cls)->lpfnWndProc ==
+                        (WNDPROC)MDIClientWndProc) {
+                        menu_track_bar(c, ' ');
+                        return 0;
+                    }
+            }
+            send_message(top_level(h), WM_SYSCOMMAND, SC_KEYMENU, (BYTE)wp);
+        }
         return 0;
     }
     return 0;
@@ -648,6 +771,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 LRESULT WINAPI DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_LBUTTONDBLCLK:
+        /* a double-click on the desktop: the Task List (3.1 User's Guide) */
+        WinExec("taskman.exe", SW_SHOWNORMAL);
+        return 0;
     case WM_ERASEBKGND: {
         RECT r;
         HBRUSH old;

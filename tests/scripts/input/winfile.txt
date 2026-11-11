@@ -1,0 +1,30 @@
+; File Manager's drive bar, then drives chosen with Ctrl+letter, existing
+; and not (tests/inputrun.sh; boot-test case winfile): File Manager is
+; the item selected in Program Manager's Main group when Windows starts.
+; On 3.1 in DOSBox the bar shows A, C and Z; A has no disk ("Drive A does
+; not exist."); D is not in the bar
+click 1
+sleep 1
+key Return
+sleep 6
+shot 01-winfile
+key ctrl+z
+sleep 3
+shot 02-drive-z
+key ctrl+c
+sleep 3
+shot 03-drive-c
+key ctrl+a
+sleep 3
+shot 04-drive-a
+key Return
+sleep 2
+shot 05-drive-a-ok
+key ctrl+d
+sleep 3
+shot 06-drive-d
+key Return
+sleep 2
+key ctrl+c
+sleep 3
+shot 07-back-c

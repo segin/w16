@@ -1,0 +1,26 @@
+; [Restrictions] NoClose=1: Exit and the system menu's Close grayed,
+; closing does nothing; Windows can still end.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoClose=1>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\S1.BMP
+key 1B
+key 1B
+wait 300
+menu  
+wait 500
+snap C:\S2.BMP
+key 1B
+key 1B
+wait 300
+close
+wait 1500
+menu f
+char x
+wait 1500
+snap C:\S3.BMP
+exitwin
+wait 3000
