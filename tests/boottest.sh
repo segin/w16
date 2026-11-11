@@ -248,7 +248,7 @@ for c in $cases; do
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shellk shellk ref ;;
     win386)
-        if "$root/tests/win386.sh" -t "$secs" -o "$out/win386" > "$out/win386.txt" 2>&1 \
+        if "$root/tests/win386.sh" -o "$out/win386" > "$out/win386.txt" 2>&1 \
            && grep -q '^INITDONE=Final USER' "$out/win386/w16-bootlog.txt" \
            && grep -q '^INITDONE=Final USER' "$out/win386/ms-bootlog.txt"; then
             echo "ok   win386: 0 pixels"

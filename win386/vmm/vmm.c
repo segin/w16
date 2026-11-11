@@ -541,6 +541,11 @@ void __cdecl trap(struct tframe *f)
         r->fs = f->fs & 0xFFFF; r->gs = f->gs & 0xFFFF;
     }
 
+    if (!(r->eflags & EFL_VM) && r->cs != SEL_PMBP) {
+        sysvm.last_cs = r->cs;
+        sysvm.last_ip = r->eip;
+        sysvm.last_ds = r->ds;
+    }
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
         int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;
