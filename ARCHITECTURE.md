@@ -66,6 +66,15 @@ Notes:
 - The MIT licence on the MS-DOS repository has no explicit patent grant. Any relevant patents from the 1980s and early 1990s have expired.
 - MS-DOS 4.0 was co-developed with IBM, and IBM copyright notices appear in its sources. Microsoft published it under MIT, and the project relies on that in good faith.
 
+**Branding: user-facing "Windows" is "w16" (the user's decision, 2026-11-10).** Wherever w16's own programs and modules show the product's name to a user (resource strings, menus, dialog captions and texts, message boxes, console messages), it says "w16" where Windows 3.1 says "Windows": Program Manager's Help > w16 Tutorial and File > Exit w16..., the Exit w16 dialog ("This will end your w16 session."), Notepad's can't-quit message, WINOLDAP's messages, WIN.COM's console messages and `/?` help, DOSX's and WIN386's fatal messages, and the install tree's README. Everything else in that text stays as observed. Unchanged:
+- functional identifiers other software matches: INI sections and keys (`[windows]`, `[NonWindowsApp]`, `windir`), class and module names, file and directory names (`WINDOWS\`, `WINDOWS\SYSTEM`), DDE and help-file names and topics;
+- the term "non-Windows application" (a DOS program, as in `[NonWindowsApp]` and PIF files) in WINOLDAP's messages;
+- text that names Microsoft's product or another version: Program Manager's Windows 2.x build's About box ("Windows 2.x", the system it runs on), the README's "your own Windows 3.1 installation" and "Windows directory";
+- the linker's DOS stub text ("This is a Windows executable") and module descriptions (`.def` DESCRIPTION);
+- comments, documentation, citations, developer tools' output and test probes that log or reproduce the original.
+
+Tests that compare with Microsoft's output read "w16" as "Windows" (`tests/wincom.sh`) or mask the rebranded text, so everything else is still compared.
+
 ## 4. Historical Findings: Multitasking MS-DOS 4.00 and Windows
 
 Source: `microsoft/MS-DOS`, directory `v4.0-ozzie/`, containing scanned product specs and beta disk images.
