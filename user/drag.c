@@ -81,6 +81,60 @@ static HCURSOR no_drop(void)
     return hcurNoDrop;
 }
 
+/* an icon given as the drag's cursor: a cursor of its mask and its image
+   made black and white - white where the image is white, black elsewhere
+   (Schulman ch. 6: 3.1 converts it, ColorToMonoIcon; Program Manager drags
+   its items with their icons so): white where the colour is light, more
+   than half the full intensity on average (yellow, cyan, light grey,
+   white), black elsewhere - UNVERIFIED beyond the Read Me item's pen. A
+   cursor is used as it is. */
+static HCURSOR mono_cursor(HCURSOR h)
+{
+    typedef struct { int hotx, hoty, cx, cy, wbytes; BYTE planes, bpp; } HDR;
+    HDR __far *p = h ? (HDR __far *)GlobalLock(h) : 0;
+    HCURSOR c = h;
+    if (!p)
+        return h;
+    if (p->planes * p->bpp > 1) {
+        int cx = p->cx, cy = p->cy;
+        WORD andsize = p->wbytes * cy;
+        DWORD xorsize = (DWORD)(((cx * p->bpp + 15) / 16) * 2) * cy * p->planes;
+        BYTE __far *bits = (BYTE __far *)p + sizeof(HDR);
+        HBITMAP col = CreateCompatibleBitmap(hdcScreen, cx, cy);
+        HBITMAP mono = CreateBitmap(cx, cy, 1, 1, NULL);
+        HDC dc1 = CreateCompatibleDC(hdcScreen), dc2 = CreateCompatibleDC(hdcScreen);
+        HGLOBAL hx = GlobalAlloc(GMEM_MOVEABLE, andsize);
+        BYTE __far *x = hx ? (BYTE __far *)GlobalLock(hx) : 0;
+        if (col && mono && dc1 && dc2 && x) {
+            HBITMAP o1, o2;
+            int i, j;
+            SetBitmapBits(col, xorsize, bits + andsize);
+            o1 = SelectObject(dc1, col);
+            o2 = SelectObject(dc2, mono);
+            fmemset(x, 0, andsize);
+            for (j = 0; j < cy; j++)
+                for (i = 0; i < cx; i++) {
+                    COLORREF k = GetPixel(dc1, i, j);
+                    if (GetRValue(k) + GetGValue(k) + GetBValue(k) > 3 * 128)
+                        x[j * p->wbytes + i / 8] |= (BYTE)(0x80 >> (i & 7));
+                }
+            SelectObject(dc1, o1);
+            SelectObject(dc2, o2);
+            c = CreateCursor(hInstUser, cx / 2, cy / 2, cx, cy, bits, x);
+        }
+        if (x)
+            GlobalUnlock(hx);
+        if (hx)
+            GlobalFree(hx);
+        if (dc1) DeleteDC(dc1);
+        if (dc2) DeleteDC(dc2);
+        if (col) DeleteObject(col);
+        if (mono) DeleteObject(mono);
+    }
+    GlobalUnlock(h);
+    return c ? c : h;
+}
+
 /* the first window at pt, from the deepest up through its parents
    within scope, that accepts: its handle, and info filled for it */
 static HWND query(HWND scope, HWND from, WORD flags, DRAGINFO __far *info, POINT pt)
@@ -144,6 +198,7 @@ DWORD WINAPI U_DRAGOBJECT(HWND scope, HWND from, WORD flags, WORD hOfstruct, WOR
     DWORD r = 0;
     MSG msg;
     POINT last;
+    HCURSOR madecur;
     if (!valid_wnd(from))
         return 0;
     if (!scope || !valid_wnd(scope))
@@ -162,6 +217,11 @@ DWORD WINAPI U_DRAGOBJECT(HWND scope, HWND from, WORD flags, WORD hOfstruct, WOR
     info->hOfstruct = hOfstruct;
     SetCapture(from);
     menu_mode++;                /* the cursor is the drag's (as in a menu) */
+    {
+        HCURSOR m = mono_cursor(hcur);
+        madecur = m != hcur ? m : 0;
+        hcur = m;
+    }
     SetCursor(hcur);
     GetCursorPos(&last);
     for (;;) {
@@ -198,6 +258,8 @@ DWORD WINAPI U_DRAGOBJECT(HWND scope, HWND from, WORD flags, WORD hOfstruct, WOR
         r = send_message(sink, WM_DROPOBJECT, (WPARAM)from, (LPARAM)info);
     }
     GlobalUnlock(hInfo);
+    if (madecur)
+        GlobalFree(madecur);
     return r;
 }
 
