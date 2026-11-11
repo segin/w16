@@ -86,6 +86,7 @@ struct vm {
     u16 refsp;              /* the reflection stack pointer (info->refstk_seg) */
     u16 psp_seg;
     u32 dsel;               /* the client's first DS selector */
+    u32 last_cs, last_ip, last_ds;  /* where the client last left protected mode */
     u32 pmvec_sel[256];     /* protected-mode interrupt vectors (0205h) */
     u32 pmvec_off[256];
     u32 excvec_sel[32];     /* exception handlers (0203h) */
