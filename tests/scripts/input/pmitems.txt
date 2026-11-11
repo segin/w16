@@ -1,0 +1,37 @@
+; Program Manager under real input (tests/boottest.sh pmitems): the Read
+; Me item of the Main group dragged with the mouse to an empty place in
+; the group; then the minimised Accessories group restored (Ctrl+Tab to
+; its icon, Enter), which must come up in front and active; then Windows
+; ended (File > Exit Windows, OK) so MAIN.GRP is saved
+click 1
+sleep 1
+home
+move 132 101
+sleep 1
+shot 01-pointer
+down 1
+sleep 0.5
+move 3 1
+sleep 0.5
+move 10 4
+sleep 0.5
+move 20 10
+sleep 0.5
+move 20 10
+sleep 1
+shot 02-dragging
+up 1
+sleep 2
+shot 03-moved
+key ctrl+Tab
+key ctrl+Tab
+key ctrl+Tab
+sleep 1
+key Return
+sleep 3
+shot 04-restored
+key alt+f
+key x
+sleep 2
+key Return
+sleep 8

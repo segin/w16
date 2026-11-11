@@ -432,6 +432,19 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 send_message(h, WM_SIZE, SIZE_RESTORED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
+            /* restored: activated and on top (3.1 SDK: SW_RESTORE and
+               SW_SHOWNORMAL activate; a Program Manager group restored
+               from its icon comes up in front, active). A child gets
+               WM_CHILDACTIVATE, which an MDI child turns into its
+               activation; w16 left it where it was in the Z order */
+            if ((w = valid_wnd(h)) != 0) {
+                if (!(w->style & WS_CHILD))
+                    activate_window(h, FALSE);
+                else {
+                    set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    send_message(h, WM_CHILDACTIVATE, 0, 0);
+                }
+            }
             return wasvis;
         }
         /* fall through */
