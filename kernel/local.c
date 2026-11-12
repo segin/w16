@@ -708,8 +708,16 @@ u16 KAPI LReAlloc(u16 ds, u16 h, u16 n, u16 flags)            /* KERNEL.6 */
            found while the old block still exists. */
         if (!resize_in_place(&hp, a, need)) {
             /* UNVERIFIED: compaction during this allocation may move
-               the block being resized; re-read its address afterwards */
+               the block being resized; re-read its address afterwards.
+               A discardable block may be discarded by it: then it stays
+               discarded and the call fails (observed, tests/apps/tk3.c
+               "full": 3.1 returned 0 with the block discarded; w16 copied
+               from FFFAh, KERNEL audit #7). */
             b = arena_alloc(&hp, need, 1, flags);
+            if (b && !W(ds, h + HE_ADDR)) {
+                release(&hp, b);        /* UNVERIFIED: 3.1 had no room */
+                b = 0;
+            }
             if (!b)
                 return 0;
             a = W(ds, h + HE_ADDR) - 6;

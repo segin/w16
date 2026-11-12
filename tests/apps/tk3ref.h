@@ -433,3 +433,7 @@
 { "full: GlobalHandle(DS)==hInstance", 0x0001 },
 { "full: GlobalSize(DGROUP) low", 0x0000 },
 { "full: GlobalSize(DGROUP) high", 0x0001 },
+{ "full: discardable grown, ret==h", 0x0000 },
+{ "full: discardable grown, ret==0", 0x0001 },
+{ "full: discardable grown, discarded", 0x0001 },
+{ "full: discardable grown, bytes 0,FF", 0x0000 },

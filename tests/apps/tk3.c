@@ -602,8 +602,18 @@ static WORD cur_ss(void);
    it to new selectors, leaving DS and SS on freed ones. */
 static void probe_full(void)
 {
-    HLOCAL h[80];
-    WORD n, i;
+    HLOCAL h[80], d, r, s[64];
+    WORD n, i, k;
+    BYTE FAR *q;
+    /* a discardable moveable block with a pattern, grown below once the
+       heap is full: room only by discarding, the block itself included */
+    d = LocalAlloc(LMEM_MOVEABLE | LMEM_DISCARDABLE, 0x100);
+    q = d ? (BYTE FAR *)LocalLock(d) : NULL;
+    if (q)
+        for (i = 0; i < 0x100; i++)
+            q[i] = (BYTE)(i + 1);
+    if (d)
+        LocalUnlock(d);
     for (n = 0; n < 80; n++)
         if ((h[n] = LocalAlloc(LMEM_FIXED, 0x400)) == 0)
             break;
@@ -613,6 +623,25 @@ static void probe_full(void)
     obs("full: GlobalHandle(DS)==hInstance", LOWORD(GlobalHandle(ds())) == hinst());
     obs("full: GlobalSize(DGROUP) low", LOWORD(GlobalSize(hinst())));
     obs("full: GlobalSize(DGROUP) high", HIWORD(GlobalSize(hinst())));
+    for (k = 0; k < 64; k++)            /* the last small pieces */
+        if ((s[k] = LocalAlloc(LMEM_MOVEABLE, 0x20)) == 0)
+            break;
+    /* a gap of eight of them: too small for the grown block, enough
+       with the block's own space */
+    for (i = 0; i < 8 && i < k; i++)
+        LocalFree(s[i]);
+    r = d ? LocalReAlloc(d, 0x180, LMEM_MOVEABLE) : 0;
+    obs("full: discardable grown, ret==h", r == d);
+    obs("full: discardable grown, ret==0", r == 0);
+    obs("full: discardable grown, discarded", d ? (LocalFlags(d) & LMEM_DISCARDED) != 0 : 0xFFFF);
+    q = d && !(LocalFlags(d) & LMEM_DISCARDED) ? (BYTE FAR *)LocalLock(d) : NULL;
+    obs("full: discardable grown, bytes 0,FF", q ? q[0] | (q[0xFF] << 8) : 0);
+    if (q)
+        LocalUnlock(d);
+    if (d)
+        LocalFree(d);
+    while (k > 8)
+        LocalFree(s[--k]);
     for (i = 0; i < n; i++)
         LocalFree(h[i]);
 }
