@@ -376,6 +376,8 @@ static void switch_to(u16 t)
     u16 from = cur_task;
     static u16 have87 = 0xFFFF;
 
+    heap_check("task switch", 0);
+
     if (sched_log) {
         kputs("w16 sw ");
         log_name(from);

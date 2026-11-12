@@ -220,6 +220,19 @@ void purge_window_msgs(HQUEUE hq, HWND h)
     irq_restore(f);
 }
 
+/* the reply given: straight to the sender (Pietrek, Windows Internals ch.
+   7: ReplyMessage DirectedYields to the sending task). Without it the
+   receiver went on and read input that was not for it: Program Manager,
+   answering the WM_NCACTIVATE a program just started sent its hidden Run
+   dialog, ended the dialog, became active for a moment and took the
+   Alt+Space N typed for the program (boot-test icons on a loaded machine;
+   3.1 never did) */
+static void reply_yield(HQUEUE from)
+{
+    if (from && from != cur_hq())
+        K_DIRECTEDYIELD(q_of(from)->task);
+}
+
 static void receive_sent(HQUEUE hq)
 {
     QUEUE __far *q;
@@ -237,10 +250,13 @@ static void receive_sent(HQUEUE hq)
         s->result = w ? call_wnd(w, s->hwnd, s->msg, s->wParam, s->lParam) : 0;
         q = q_of(hq);
         if (q->insend == (WORD)s && !s->done) {
+            HQUEUE from = s->from;
             s->done = 1;
-            set_wakebit(s->from, QS_SMRESULT);
-        }
-        q->insend = outer;
+            set_wakebit(from, QS_SMRESULT);
+            q->insend = outer;
+            reply_yield(from);
+        } else
+            q->insend = outer;
     }
 }
 
@@ -333,9 +349,11 @@ void WINAPI ReplyMessage(LRESULT r)
         return;
     s = (PSMSG)q_of(hq)->insend;
     if (!s->done) {
+        HQUEUE from = s->from;
         s->result = r;
         s->done = 1;
-        set_wakebit(s->from, QS_SMRESULT);
+        set_wakebit(from, QS_SMRESULT);
+        reply_yield(from);
     }
 }
 

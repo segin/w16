@@ -159,21 +159,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             restored = savebits_restore(h, &oldwin);
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
-        /* the active window hidden, by ShowWindow or SetWindowPos: the
-           next visible, enabled top-level window becomes active, or none.
-           Program Manager hides its Run dialog with SetWindowPos before
-           WinExec (US1-style trace on 3.1); the dialog stayed "active"
-           while hidden, so when it ended it gave the activation back to
-           Program Manager over the program just started */
-        if (h == hwndActive) {
-            HWND t = w->hwndOwner;
-            /* its owner first, if it can take it, else the next one */
-            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
-                t = next_to_activate(h);
-            activate_window(t, FALSE);
-            if (!(w = valid_wnd(h)))
-                return FALSE;
-        }
+        /* the active window hidden by SetWindowPos stays the active one
+           (ShowWindow(SW_HIDE) moves the activation, see there) */
     }
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
@@ -353,6 +340,29 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             return FALSE;
         send_message(h, WM_SHOWWINDOW, FALSE, 0);
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
+        /* the active window hidden by ShowWindow: its owner becomes
+           active if it can take it, else the next visible, enabled
+           top-level window, or none. SetWindowPos(SWP_HIDEWINDOW), with
+           or without SWP_NOACTIVATE, leaves the hidden window active on
+           3.1 (throwaway probe: an active popup hidden while its owner
+           was disabled, an icon of the same program shown: SetWindowPos
+           left the popup active, ShowWindow made the icon active; a new
+           window shown then was activated, and destroying the hidden
+           popup with nothing else shown gave the activation to its
+           enabled owner). Program Manager hides its Run dialog with
+           SetWindowPos before WinExec: w16 activated the next window
+           there, with the owner disabled an icon (Notepad's in the
+           boot-test icons), and keys typed before the program's window
+           came up (a loaded machine) went to that icon. UNVERIFIED:
+           3.1's next window (the probe's ShowWindow chose the icon over
+           another program's open window; next_to_activate prefers open
+           windows) */
+        if (h == hwndActive && (w = valid_wnd(h)) != 0) {
+            HWND t = w->hwndOwner;
+            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
+                t = next_to_activate(h);
+            activate_window(t, FALSE);
+        }
         return wasvis;
     case SW_SHOWMINIMIZED:
     case SW_MINIMIZE:

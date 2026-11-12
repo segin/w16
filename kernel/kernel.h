@@ -285,3 +285,11 @@ u32  fatal_exit_hook(void);
 extern u16 psp_sel;
 
 #endif
+
+/* global.c: [w16] heapcheck=1, the heaps checked at each heap call and
+   task switch (where: the API or event; caller: its CS:IP or 0) */
+extern u16 heap_check_on;
+extern u32 api_caller;
+void heap_check(const char *where, u32 caller);
+void local_heap_check(const char *where, u16 ds);
+void heap_fail(const char *why, const char *where, u32 caller, u16 bad, u16 lseg, u16 lbad);
