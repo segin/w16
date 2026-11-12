@@ -600,6 +600,8 @@ static WORD cur_ss(void);
    the same selector (Pietrek, LocalNotifyDefault: at most 64K less 16
    bytes). w16 once grew it to a full 64K, two selector tiles, and moved
    it to new selectors, leaving DS and SS on freed ones. */
+UINT WINAPI LocalHeapSize(void);     /* KERNEL.162, not in windows.h */
+
 static void probe_full(void)
 {
     HLOCAL h[80], d, r, s[64];
@@ -621,8 +623,11 @@ static void probe_full(void)
     obs("full: DS the same", cur_ds() == ds());
     obs("full: SS the same", cur_ss() == ds());
     obs("full: GlobalHandle(DS)==hInstance", LOWORD(GlobalHandle(ds())) == hinst());
-    obs("full: GlobalSize(DGROUP) low", LOWORD(GlobalSize(hinst())));
-    obs("full: GlobalSize(DGROUP) high", HIWORD(GlobalSize(hinst())));
+    /* the size it ends at depends on this program's data (KRNL286 FFF0h,
+       KRNL386 10000h or FEC0h as the probe changed); never more than 64K */
+    obs("full: GlobalSize(DGROUP) at most 10000h", GlobalSize(hinst()) <= 0x10000L);
+    obs_env("full: GlobalSize(DGROUP) low", LOWORD(GlobalSize(hinst())));
+    obs_env("full: GlobalSize(DGROUP) high", HIWORD(GlobalSize(hinst())));
     for (k = 0; k < 64; k++)            /* the last small pieces */
         if ((s[k] = LocalAlloc(LMEM_MOVEABLE, 0x20)) == 0)
             break;
@@ -644,6 +649,14 @@ static void probe_full(void)
         LocalFree(s[--k]);
     for (i = 0; i < n; i++)
         LocalFree(h[i]);
+    /* everything freed again: LocalShrink (Pietrek: compacts the heap to
+       fit its non-discardable blocks into the size asked for) */
+    /* recorded, not checked: w16 does not shrink yet (3.1, Standard:
+       3FEh, LocalHeapSize 3F4h, DGROUP 6A20h, back near the module's 1K
+       heap) */
+    obs_env("shrink: LocalShrink(0, 0)", LocalShrink(0, 0));
+    obs_env("shrink: LocalHeapSize after", LocalHeapSize());
+    obs_env("shrink: GlobalSize(DGROUP) after", LOWORD(GlobalSize(hinst())));
 }
 
 int __cdecl tmain(void)
