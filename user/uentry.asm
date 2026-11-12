@@ -4,9 +4,12 @@
 ; libentry: KERNEL calls a DLL's entry point with DI = hInstance, CX = the
 ;   local heap size, DS = its data segment, ES:SI = the command line (TK5,
 ;   ARCHITECTURE.md 9.2); USER makes its local heap and runs user_init.
-; call_wndproc: calls a window procedure with AX = the window's hInstance,
-;   as Windows does, so an exported procedure without a MakeProcInstance
-;   thunk finds its data segment (Pietrek, Windows Internals, ch. 4/7).
+; call_wndproc: calls a window procedure with AX = the window's hInstance
+;   and DS = ES = SS, as Windows does (Pietrek, Windows Internals, ch. 7:
+;   DispatchMessage and SendMessage), so an exported procedure without a
+;   MakeProcInstance thunk, or one with no prologue at all (w16's
+;   WINOLDAP, compiled -zWs), finds its data segment. USER's own class
+;   procedures are __loadds.
 ; keybd_event_entry / mouse_event_entry: the event procedures USER gives
 ;   the keyboard and mouse drivers (KEYBOARD.Enable, MOUSE.Enable); their
 ;   arguments come in registers (Windows 3.1 DDK, keyboard and mouse driver
@@ -68,6 +71,12 @@ _call_wndproc:
         push word [bp+20]       ; lParam high
         push word [bp+18]       ; lParam low
         mov ax, [bp+10]
+        or ax, ax
+        jnz .ax
+        mov ax, ss              ; (a timer procedure: AX = SS)
+.ax:    mov dx, ss              ; DS = ES = SS: the calling task's data
+        mov ds, dx              ; segment, for a procedure that is not
+        mov es, dx              ; exported properly (Pietrek ch. 7)
         call far [bp+6]
         pop ds
         pop di

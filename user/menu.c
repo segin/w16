@@ -766,7 +766,7 @@ static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
     draw_item_text(hdc, it, r.left + POP_LEFT, r.top, r.left + m->tabx);
 }
 
-LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_PAINT: {

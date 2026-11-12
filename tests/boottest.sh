@@ -78,6 +78,30 @@
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
 #   pmclose    Program Manager's system box double-clicked: the Exit dialog in
 #              front and system modal, no menu left (pmclose.txt)
+#   woados     MS-DOS Prompt from Program Manager's File > Run COMMAND.COM,
+#              VER, EXIT, then Exit Windows (tests/scripts/input/woados.txt;
+#              SYSTEM.INI [NonWindowsApp] SwapDisk=C:\WINDOWS\TEMP; with
+#              TEMP set by a batch file around WIN instead, w16's stack
+#              did not come back from the prompt, UNVERIFIED why): every w16 part but WIN.COM
+#              (UNVERIFIED why: with w16's WIN.COM, Windows ends when the
+#              prompt should start) against all of Microsoft's: the prompt
+#              in text mode, the same screens up to the cursor (40 pixels),
+#              Windows repainted as it was before, text mode at the end
+#   woadosbat  the same with TEMP set by a batch file around WIN
+#              (C:\WINDOWS\GO.BAT: SET TEMP=C:\WINDOWS\TEMP, WIN /S) and w16's
+#              WIN.COM as well, as an
+#              AUTOEXEC.BAT does. EXPECTED TO FAIL (reported as xfail, not
+#              counted): w16's stack does not come back from the prompt
+#              (EnableOEMLayer is never reached). Observed: the batch file
+#              alone (WIN /S, SwapDisk= in SYSTEM.INI) comes back; the
+#              harness's output redirect makes no difference (DROPIN_NOREDIR=1);
+#              Microsoft's stack comes back. With w16's WIN.COM (master
+#              05e0494, its swap-path fixes) it comes back too and Windows is
+#              as before; what fails now is the prompt's first screen: no
+#              "Type EXIT ..." banner above DOSBox's (UNVERIFIED why)
+#   pmkeys     Program Manager's arrow keys straight after it starts, then
+#              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
+#              w16 PROGMAN against Microsoft's; the group icons left out
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -108,6 +132,14 @@
 #              (tests/scripts/input/pmdrop.txt); w16's PROGMAN, then w16's
 #              PROGMAN and SHELL, against all-Microsoft: the screens and the
 #              saved MAIN.GRP must be identical
+#   mouse      w16's MOUSE.DRV (drivers/mouse) on Microsoft's KRNL286, DOSX,
+#              USER and GDI under real mouse input: the dragoff, pmitems,
+#              pmclose and helpmenus scripts (drags, clicks, a double
+#              click, menus), every screen against the same script with
+#              Microsoft's MOUSE.DRV                must be 0
+#   mouseall   every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+#              fonts) with w16's MOUSE.DRV against the same with
+#              Microsoft's MOUSE.DRV, the dragoff script: must be 0
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -135,7 +167,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -599,6 +631,69 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmclose: Exit dialog in front and modal, no menu left (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmclose: $r ($out)"; fails=$((fails + 1)); fi ;;
+    woados|woadosbat)
+        scr=$root/tests/scripts/input/woados.txt
+        fon=$root/build/fonts
+        wc=                             # woadosbat: w16's WIN.COM as well
+        if [ $c = woados ]; then set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        else
+            wc=-w
+            printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GO.BAT"
+            set -- -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT"
+        fi
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-ref" -r \
+            "$@" > "$out/$c-ref.txt" 2>&1 || true
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-w16" \
+            -x $wc "$@" \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+            -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+            -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+            > "$out/$c-w16.txt" 2>&1 || true
+        a=$out/$c-w16 b=$out/$c-ref r=ok
+        for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
+            f=${s%%:*} want=${s#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            if [ $f = 03-back ]; then       # Windows as it was before the prompt
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true)
+            else
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true)
+            fi
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        if [ $c = woadosbat ]; then     # expected to fail: see the case list
+            if [ "$r" = ok ]; then echo "ok   woadosbat: back from the prompt with TEMP from a batch file (it was expected to fail: take the mark off)"
+            else echo "xfail woadosbat: $r ($out/$c-w16; expected: TEMP from a batch file)"; fi
+        elif [ "$r" = ok ]; then echo "ok   woados: the MS-DOS Prompt in text mode and back, text mode after Exit Windows"
+        else echo "FAIL woados: $r ($out/woados-w16)"; fails=$((fails + 1)); fi ;;
+    pmkeys)
+        scr=$root/tests/scripts/input/pmkeys.txt
+        "$root/tests/inputrun.sh" -b 40 -t 60 "$scr" "$out/pmkeys-ref" -r > "$out/pmkeys-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 60 "$scr" "$out/pmkeys-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmkeys-us.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 40 -t 60 "$scr" "$out/pmkeys-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmkeys-pm.txt" 2>&1 || true
+        r=ok
+        for k in us pm; do
+            for s in 01-keys 02-click; do
+                [ -f "$out/pmkeys-$k/$s.png" ] && [ -f "$out/pmkeys-ref/$s.png" ] || { r="$k: no $s"; break; }
+                m="rectangle 0,0 0,0"
+                [ $k = pm ] && m="rectangle 60,310 300,342"
+                magick "$out/pmkeys-ref/$s.png" -fill black -draw "$m" "$out/pmkeys-a.png"
+                magick "$out/pmkeys-$k/$s.png" -fill black -draw "$m" "$out/pmkeys-b.png"
+                n=$(magick compare -metric AE "$out/pmkeys-b.png" "$out/pmkeys-a.png" "$out/pmkeys-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   pmkeys: arrow keys move Program Manager's selection from the start (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL pmkeys: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmitems)
         # an item dragged within Program Manager's Main group, then the
         # minimised Accessories group restored (in front, active):
@@ -706,6 +801,64 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   input: 0 pixels"
         else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
+    mouse)
+        # each script with Microsoft's MOUSE.DRV and with w16's; nothing
+        # else differs: no part of any screen is left out but Notepad's
+        # caret in helpmenus (it blinks on through the menu, its phase
+        # the run's timing)
+        mdrv=$root/build/dos/MOUSE.DRV
+        r=ok
+        for s in dragoff pmitems pmclose helpmenus; do
+            case $s in pmitems|pmclose) b=40 t=120 ;; *) b=25 t=80 ;; esac
+            scr=$root/tests/scripts/input/$s.txt
+            "$root/tests/inputrun.sh" -b $b -t $t "$scr" "$out/mouse-$s-ref" -r \
+                > "$out/mouse-$s-ref.txt" 2>&1 || true
+            "$root/tests/inputrun.sh" -b $b -t $t "$scr" "$out/mouse-$s-w16" -r \
+                -f "$mdrv=WINDOWS/SYSTEM/MOUSE.DRV" > "$out/mouse-$s-w16.txt" 2>&1 || true
+            ls "$out/mouse-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/mouse-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/mouse-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                m="rectangle 0,0 0,0"
+                [ $s = helpmenus ] && m="rectangle 14,42 20,61"
+                magick "$f" -fill black -draw "$m" "$out/mouse-a.png"
+                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-b.png"
+                n=$(magick compare -metric AE "$out/mouse-b.png" "$out/mouse-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        else echo "FAIL mouse: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mouseall)
+        fon=$root/build/fonts
+        scr=$root/tests/scripts/input/dragoff.txt
+        for k in ref w16; do
+            if [ $k = w16 ]; then set -- -f "$root/build/dos/MOUSE.DRV=WINDOWS/SYSTEM/MOUSE.DRV"; else set --; fi
+            "$root/tests/inputrun.sh" -b 30 -t 80 "$scr" "$out/mouseall-$k" "$@" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/mouseall-$k.txt" 2>&1 || true
+        done
+        r=ok
+        for s in 01-right-moving 02-right 03-left-moving 04-left 05-bottom-moving 06-bottom; do
+            if [ ! -f "$out/mouseall-w16/$s.png" ] || [ ! -f "$out/mouseall-ref/$s.png" ]; then
+                r="no $s screen"; break
+            fi
+            n=$(magick compare -metric AE "$out/mouseall-w16/$s.png" "$out/mouseall-ref/$s.png" "$out/mouseall-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ ($out/mouseall-$s-diff.png)"; break; }
+        done
+        # the drags must have moved Program Manager: the screens differ
+        if [ "$r" = ok ]; then
+            n=$(magick compare -metric AE "$out/mouseall-w16/02-right.png" "$out/mouseall-w16/04-left.png" null: 2>&1 || true)
+            [ "${n%% *}" != 0 ] || r="the drags did nothing"
+        fi
+        if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
+        else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done

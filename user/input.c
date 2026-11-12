@@ -235,6 +235,44 @@ void input_enable(void)
     set_cursor_shape(load_icon_cursor(0, IDC_ARROW, TRUE));
 }
 
+/* USER.4 and USER.3: WINOLDAP's screen switch around a DOS program in
+   Standard mode (Schulman ch. 6; Pietrek ch. 1). US10 on 3.1, Microsoft's
+   USER between forwarders: DisableOEMLayer is DISPLAY.SetCursor(NULL),
+   MOUSE.Disable, KEYBOARD.Disable, SYSTEM.DisableSystemTimers and GDI's
+   Death on the screen's DC (the display driver's Disable: BIOS mode 3);
+   EnableOEMLayer is GDI's Resurrection on it (mode 12h again),
+   SYSTEM.EnableSystemTimers, KEYBOARD.Enable, MOUSE.Enable, the whole
+   screen invalidated (windows then get WM_PAINT, erasing and their frames
+   in BeginPaint) and the cursor shape set again. UNVERIFIED: the drivers'
+   InternalBroadcastDriverMessage notices Schulman mentions (none of
+   w16's drivers needs them) */
+void input_disable(void)
+{
+    D_SETCURSOR(0);
+    MS_DISABLE();
+    KB_DISABLE();
+    S_DISABLESYSTEMTIMERS();
+}
+
+void WINAPI DisableOEMLayer(void)
+{
+    ulog("DisableOEMLayer\r\n");
+    input_disable();
+    G_DEATH(hdcScreen);
+}
+
+void WINAPI EnableOEMLayer(void)
+{
+    ulog("EnableOEMLayer\r\n");
+    G_RESURRECTION(hdcScreen, 0, 0, 0, 0, 0, 0);
+    S_ENABLESYSTEMTIMERS();
+    KB_ENABLE((FARPROC)keybd_event_entry, keystate);
+    MS_ENABLE((FARPROC)mouse_event_entry);
+    savebits_forget_all();
+    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    set_cursor_shape(hcurCurrent);
+}
+
 /* ---- the cursor ---- */
 void set_cursor_shape(HCURSOR h)
 {
@@ -399,9 +437,13 @@ void set_focus(HWND h)
     HWND old = hwndFocus;
     if (h == old)
         return;
+    /* GetFocus answers the new window already inside WM_KILLFOCUS (US12
+       on 3.1: A's WM_KILLFOCUS saw B, and 0 for SetFocus(NULL)) */
+    hwndFocus = h;
     if (old && valid_wnd(old))
         send_message(old, WM_KILLFOCUS, h, 0);
-    hwndFocus = h;
+    if (hwndFocus != h)     /* the old window moved it on (UNVERIFIED) */
+        return;
     if (h && valid_wnd(h))
         send_message(h, WM_SETFOCUS, old, 0);
 }
@@ -452,6 +494,12 @@ void activate_window(HWND h, BOOL mouse)
         return;
     }
     hqInput = w->hq;
+    {   /* the owner's last active popup (GetLastActivePopup) */
+        PWND o = w;
+        while (o->hwndOwner && valid_wnd(o->hwndOwner))
+            o = PW(o->hwndOwner);
+        o->hwndLastActive = h;
+    }
     set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (!old || !valid_wnd(old) || PW(old)->hq != w->hq)
         send_message(h, WM_ACTIVATEAPP, TRUE, 0);

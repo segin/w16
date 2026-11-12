@@ -381,7 +381,7 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
 
 /* ---- the SCROLLBAR class: its SBINFO in the window extra bytes
    (Windows 3.1's class has 10: US2) ---- */
-LRESULT WINAPI ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
     SBINFO *s;
