@@ -108,6 +108,14 @@
 #              (tests/scripts/input/pmdrop.txt); w16's PROGMAN, then w16's
 #              PROGMAN and SHELL, against all-Microsoft: the screens and the
 #              saved MAIN.GRP must be identical
+#   mouse      w16's MOUSE.DRV (drivers/mouse) on Microsoft's KRNL286, DOSX,
+#              USER and GDI under real mouse input: the dragoff, pmitems,
+#              pmclose and helpmenus scripts (drags, clicks, a double
+#              click, menus), every screen against the same script with
+#              Microsoft's MOUSE.DRV                must be 0
+#   mouseall   every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+#              fonts) with w16's MOUSE.DRV against the same with
+#              Microsoft's MOUSE.DRV, the dragoff script: must be 0
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -160,7 +168,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -253,6 +261,10 @@ refkey() {
                 if [ -f "$f" ]; then printf 'file '; sha256sum < "$f"; break; fi
             done
         done
+        # w16 files dropin.sh takes without naming them
+        case " $* " in *" -w "*) printf 'WIN.COM '; sha256sum < "$root/build/dos/WIN.COM" ;; esac
+        case " $* " in *" -x "*) printf 'DOSX.EXE '; sha256sum < "$root/build/dos/DOSX.EXE" ;; esac
+        case " $* " in *" -r "*) ;; *) printf 'KRNL286.EXE '; sha256sum < "$root/build/dos/KRNL286.EXE" ;; esac
         echo "code $k"
         codeof "$k"
     } > "$out/.key-$rn"
@@ -818,6 +830,66 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   input: 0 pixels"
         else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
+    mouse)
+        # each script with Microsoft's MOUSE.DRV and with w16's; nothing
+        # else differs: no part of any screen is left out but Notepad's
+        # caret in helpmenus (it blinks on through the menu, its phase
+        # the run's timing)
+        mdrv=$root/build/dos/MOUSE.DRV
+        r=ok
+        for s in dragoff pmitems pmclose helpmenus; do
+            case $s in pmitems|pmclose) b=40 t=120 ;; *) b=25 t=80 ;; esac
+            scr=$root/tests/scripts/input/$s.txt
+            refrun mouse-$s-ref mouse "$root/tests/inputrun.sh" -B -b $b -t $t "$scr" "$out/mouse-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/mouse-$s-ref/boot.png" -b $b -t $t "$scr" "$out/mouse-$s-w16" -r \
+                -f "$mdrv=WINDOWS/SYSTEM/MOUSE.DRV" > "$out/mouse-$s-w16.txt" 2>&1 || true
+            ls "$out/mouse-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/mouse-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/mouse-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                m="rectangle 0,0 0,0"
+                [ $s = helpmenus ] && m="rectangle 14,42 20,61"
+                magick "$f" -fill black -draw "$m" "$out/mouse-a.png"
+                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-b.png"
+                n=$(magick compare -metric AE "$out/mouse-b.png" "$out/mouse-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        else echo "FAIL mouse: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mouseall)
+        fon=$root/build/fonts
+        scr=$root/tests/scripts/input/dragoff.txt
+        # (both sides are w16's but for MOUSE.DRV: not cached)
+        for k in ref w16; do
+            if [ $k = w16 ]; then set -- -e "$out/mouseall-ref/boot.png" -b 30 -t 80 "$scr" "$out/mouseall-$k" \
+                -f "$root/build/dos/MOUSE.DRV=WINDOWS/SYSTEM/MOUSE.DRV"
+            else set -- -s -b 30 -t 80 "$scr" "$out/mouseall-$k"; fi
+            "$root/tests/inputrun.sh" "$@" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/mouseall-$k.txt" 2>&1 || true
+        done
+        r=ok
+        for s in 01-right-moving 02-right 03-left-moving 04-left 05-bottom-moving 06-bottom; do
+            if [ ! -f "$out/mouseall-w16/$s.png" ] || [ ! -f "$out/mouseall-ref/$s.png" ]; then
+                r="no $s screen"; break
+            fi
+            n=$(magick compare -metric AE "$out/mouseall-w16/$s.png" "$out/mouseall-ref/$s.png" "$out/mouseall-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ ($out/mouseall-$s-diff.png)"; break; }
+        done
+        # the drags must have moved Program Manager: the screens differ
+        if [ "$r" = ok ]; then
+            n=$(magick compare -metric AE "$out/mouseall-w16/02-right.png" "$out/mouseall-w16/04-left.png" null: 2>&1 || true)
+            [ "${n%% *}" != 0 ] || r="the drags did nothing"
+        fi
+        if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
+        else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
     echo "$c $(($(date +%s) - ct))" >> "$out/times.txt"

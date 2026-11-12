@@ -58,6 +58,7 @@
 #     waitexit MAX      wait until Windows has ended (WIN returned to the
 #                       DOS prompt: the autoexec's WINEXIT in C:\OUT.TXT, or
 #                       DOSBox exited), at most MAX seconds
+# With dropin.sh's -p CPU among the options the run is in DOSBox-X.
 # INPUTRUN_NOLOCK=1 in the environment: autolock=false (no click needed
 # for the mouse). INPUTRUN_STAY=1: DOSBox stays at the DOS prompt after
 # Windows ends.
@@ -109,10 +110,15 @@ if [ -n "${INPUTRUN_CAPTURE:-}" ]; then
     mkdir -p "$out/capture"
     printf '[dosbox]\ncaptures=%s\n' "$out/capture" >> "$work/dosbox.conf"
 fi
+# dropin.sh -p CPU prepared a DOSBox-X configuration ("quit warning" is
+# DOSBox-X's): run DOSBox-X then, on X11 (under Xvfb its SDL picked no
+# video driver by itself: "Couldn't open X11 display")
+emu="dosbox -noconsole"
+grep -q '^quit warning' "$work/dosbox.conf" && emu="env SDL_VIDEODRIVER=x11 SDL_VIDEO_DRIVER=x11 dosbox-x -nogui -fastlaunch"
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
-SDL_AUDIODRIVER=dummy timeout -k 10 $total dosbox -noconsole -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
+SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
 dpid=\$!
 if [ -n "${INPUTRUN_EARLY:-}$expect$settle" ]; then
     # as soon as the window is there (-b then counts from that)

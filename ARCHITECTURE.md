@@ -143,7 +143,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `SYSTEM.DRV` | SYSTEM | `system.drv` | Timer, system and hardware info | P0 |
 | `KEYBOARD.DRV` | KEYBOARD | `keyboard.drv` | Keyboard input, `ToAscii`, OEM/ANSI conversion | P0 |
 | `KBD*.DLL` (e.g. `KBDUS.DLL`) | KBD* | `[keyboard] keyboard.dll` | Keyboard layout tables | P1 |
-| `MOUSE.DRV` | MOUSE | `mouse.drv` | Mouse input | P0 |
+| `MOUSE.DRV` | MOUSE | `mouse.drv` | Mouse input (w16's: PS/2, `drivers/mouse/`, §6.7) | P0 |
 | `VGA.DRV` | DISPLAY | `display.drv` | GDI DDI display driver, 640×480×16 (other display drivers deferred, see §6.10) | P0 |
 | `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON` | — | `fonts.fon`, `fixedfon.fon`, `oemfonts.fon` | System, fixed and OEM fonts | P0 |
 | `SOUND.DRV` | SOUND | `sound.drv` | Legacy `OpenSound` API (speaker) | P1 |
@@ -226,6 +226,8 @@ Because w16 aims for 100% binary compatibility, **every w16 driver is a genuine 
 - Each w16 driver must also load and work on genuine Windows 3.1. This is a test requirement: drivers are validated on real Windows 3.1 as well as on w16.
 - Conversely, unmodified third-party Windows 3.1 drivers must work on w16.
 - No private w16-only driver interfaces. If w16 internals need something, it goes through the documented Windows mechanism (exports, `Escape`, `DriverProc` messages, VxD services).
+
+w16's drivers live under `drivers/`, one directory each with a README (what it is, the interface, what is verified). **`drivers/mouse/`: w16's `MOUSE.DRV`** (done, Standard mode), a PS/2-mouse driver in NASM (`make` builds `build/dos/MOUSE.DRV`): module MOUSE with Windows 3.1's eight ordinals (Inquire, Enable, Disable, MouseGetIntVect, GetSetMouseData, CplApplet, PowerEventProc, WEP). The PS/2 BIOS (INT 15h C2xxh) finds and configures the device as Windows 3.1's driver does (black-box trace, `tests/dos/ms2.asm`); IRQ 12 is taken in protected mode and the bytes read from the 8042 when it has them, the BIOS's C207h packet handler otherwise (DOSBox 0.74 emulates no auxiliary port: there every packet comes that way). `tests/mouseprobe.sh` (MD1, `tests/apps/md1.c`) compares Inquire's MOUSEINFO, the entry points' stack use and every event-procedure call (registers, interrupt flag) with Windows 3.1's driver under the same real input: identical. Acceleration and button swapping are USER's. Boot-test cases `mouse` and `mouseall`. Not verified: 386 Enhanced mode, the purpose of GetSetMouseData and PowerEventProc (`drivers/mouse/README.md`).
 
 ### 6.8 Design Note: UI Fidelity
 

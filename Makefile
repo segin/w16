@@ -1304,3 +1304,31 @@ $(B)/vga/.stamp: $(VGAART_SRC) tools/vgaart.py
 	python3 -B tools/vgaart.py build drivers/vga/art $(B)/vga
 	@touch $@
 .PHONY: vgaart
+
+# ---- MOUSE.DRV: w16's PS/2 mouse driver (drivers/mouse; README.md there)
+$(B)/mouse/mouse.o: drivers/mouse/mouse.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/MOUSE.DRV: $(B)/mouse/mouse.o drivers/mouse/mouse.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mouse.map \
+	    file { $(B)/mouse/mouse.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/MOUSE.DRV
+# MD1.EXE: the mouse driver's interface observed (tests/apps/md1.c; run by
+# tests/mouseprobe.sh with Windows 3.1's MOUSE.DRV and with w16's)
+$(B)/tests/md1.o: tests/apps/md1ref.h tests/apps/tklog.h
+$(DOS)/MD1.EXE: $(B)/tests/start.o $(B)/tests/md1.o $(B)/tests/md1s.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/md1.map file { $(B)/tests/start.o $(B)/tests/md1.o $(B)/tests/md1s.o }
+# MS2.COM: MS1 with INT 33h as well (tests/dos/ms2.asm; TK49 reads its log)
+$(DOS)/MS2.COM: tests/dos/ms2.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/MD1.EXE $(DOS)/MS2.COM
+# the install tree gets it too (build/w16/SYSTEM, win/README.TXT)
+install-tree: $(W16SYS)/MOUSE.DRV
+$(W16SYS)/MOUSE.DRV: $(DOS)/MOUSE.DRV
+	@mkdir -p $(@D)
+	cp $< $@

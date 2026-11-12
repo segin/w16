@@ -1,0 +1,22 @@
+# wlink directives for w16's MOUSE.DRV (drivers/mouse/). Object file and
+# output name come from the Makefile. Module name and ordinals as Windows
+# 3.1's MOUSE.DRV has them (its NE export table, docs/exports/MOUSE.txt).
+# The interrupt-time code and data are fixed: IRQ 12 can come at any time.
+format windows dll
+option modname=MOUSE
+option description 'w16 PS/2 mouse driver'
+option start=libentry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRE.1
+export ENABLE.2
+export DISABLE.3
+export MOUSEGETINTVECT.4
+export GETSETMOUSEDATA.5
+export CPLAPPLET.6
+export POWEREVENTPROC.7
+export WEP.8 resident
+import GETVERSION KERNEL.3
+import __0040H KERNEL.193

@@ -15,6 +15,9 @@ w16 repository's LICENSE):
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
                           About boxes)
+  SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
+                          serial, bus or InPort mouse, use your own
+                          Windows 3.1 MOUSE.DRV instead)
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -33,8 +36,8 @@ overwriting the files above:
                           group files, and any applications you want
   SYSTEM:                 USER.EXE, GDI.EXE, MMSYSTEM.DLL,
                           the drivers named in SYSTEM.INI's [boot]
-                          section (SYSTEM.DRV, KEYBOARD.DRV, MOUSE.DRV,
-                          VGA.DRV, MMSOUND.DRV, COMM.DRV, ...), the other
+                          section (SYSTEM.DRV, KEYBOARD.DRV, VGA.DRV,
+                          MMSOUND.DRV, COMM.DRV, ...), the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS
                           programs WINOLDAP.MOD, DSWAP.EXE and the
