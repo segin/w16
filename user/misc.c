@@ -89,6 +89,39 @@ static void caret_draw(void)
     caret_on ^= 1;
 }
 
+/* for savebits.c: where the caret shows on screen (FALSE: it does not) */
+BOOL caret_screen_rect(RECT *r)
+{
+    PWND w;
+    if (!hwndCaret || !caret_on || !(w = valid_wnd(hwndCaret)))
+        return FALSE;
+    SetRect(r, caret_x, caret_y, caret_x + caret_cx, caret_y + caret_cy);
+    OffsetRect(r, w->rcClient.left, w->rcClient.top);
+    return TRUE;
+}
+
+void caret_toggle(void)
+{
+    caret_draw();
+}
+
+/* the caret inverted again within screen rectangle rc, its state kept */
+void caret_invert_in(const RECT *rc)
+{
+    PWND w;
+    HDC hdc;
+    int sv;
+    if (!hwndCaret || !(w = valid_wnd(hwndCaret)))
+        return;
+    hdc = get_dc(hwndCaret, FALSE, 0, 0);
+    sv = SaveDC(hdc);
+    IntersectClipRect(hdc, rc->left - w->rcClient.left, rc->top - w->rcClient.top,
+                      rc->right - w->rcClient.left, rc->bottom - w->rcClient.top);
+    PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+    RestoreDC(hdc, sv);
+    release_dc(hwndCaret, hdc);
+}
+
 void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
 {
     DestroyCaret();
@@ -531,4 +564,72 @@ WORD WINAPI U_WNETGETPROPERTYTEXT(DWORD d0, DWORD d1, DWORD d2, DWORD d3)
 {
     (void)d0; (void)d1; (void)d2; (void)d3;
     return WN_NOT_SUPPORTED;
+}
+
+/* FlashWindow: the caption (or a minimised window's title) drawn the other
+   way, active or inactive, without changing which window is active; FALSE
+   puts back how it is. Returns whether it was drawn active before (SDK).
+   Write imports it. UNVERIFIED: 3.1 may send WM_NCACTIVATE instead of
+   drawing directly */
+void redraw_icon_title(HWND h);
+BOOL WINAPI FlashWindow(HWND h, BOOL invert)
+{
+    PWND w = valid_wnd(h);
+    BOOL was, now;
+    if (!w)
+        return FALSE;
+    was = (w->flags & WF_ACTIVEFRAME) != 0;
+    now = invert ? !was : (h == hwndActive);
+    if (now)
+        w->flags |= WF_ACTIVEFRAME;
+    else
+        w->flags &= ~WF_ACTIVEFRAME;
+    if (now != was && is_visible(w)) {
+        if (w->style & WS_MINIMIZE)
+            redraw_icon_title(h);
+        else
+            nc_paint(h, 0, now);
+    }
+    return was;
+}
+
+/* ---- global atoms (USER.268-271) and the palette front ends (282, 283):
+   OLECLI, OLESVR, DDEML and SHELL import them from USER. On 3.1 the
+   global atom table is a local atom table kept in a heap of USER's own
+   (USER's GlobalAddAtom sets DS to it and calls KERNEL's AddAtom:
+   Schulman, Undocumented Windows ch. 5; Pietrek, Windows Internals ch. 1,
+   GlobalInitAtom). w16 keeps it in USER's default data segment, where
+   RegisterWindowMessage and RegisterClipboardFormat put their atoms too
+   (UNVERIFIED: that 3.1's registered messages share the global table;
+   their values are C000h up either way) ---- */
+ATOM WINAPI GlobalAddAtom(LPCSTR s)
+{
+    return AddAtom(s);
+}
+
+ATOM WINAPI GlobalDeleteAtom(ATOM a)
+{
+    return DeleteAtom(a);
+}
+
+ATOM WINAPI GlobalFindAtom(LPCSTR s)
+{
+    return FindAtom(s);
+}
+
+UINT WINAPI GlobalGetAtomName(ATOM a, LPSTR buf, int n)
+{
+    return GetAtomName(a, buf, n);
+}
+
+/* UNVERIFIED: 3.1's USER may also track the foreground palette and send
+   WM_PALETTECHANGED; on VGA (no RC_PALETTE) nothing is ever mapped */
+HPALETTE WINAPI SelectPalette(HDC hdc, HPALETTE h, BOOL bk)
+{
+    return G_GDISELECTPALETTE(hdc, h, bk);
+}
+
+UINT WINAPI RealizePalette(HDC hdc)
+{
+    return LOWORD(G_GDIREALIZEPALETTE(hdc));
 }

@@ -889,8 +889,10 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case LB_SETTABSTOPS:
         return 1;
-    case LB_DIR:
-        return LB_ERR;          /* UNVERIFIED: not yet */
+    case LB_DIR: {
+        extern LRESULT lb_dir(HWND lb, UINT attr, LPCSTR spec);   /* dirlist.c */
+        return lb_dir(h, (UINT)wp, (LPCSTR)lp);
+    }
     case LB_GETHORIZONTALEXTENT:
         return lb->hext;
     }

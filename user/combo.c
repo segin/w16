@@ -323,6 +323,7 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     /* ---- CB_ messages: most are the list's ---- */
     case CB_ADDSTRING: return send_message(c->list, LB_ADDSTRING, wp, lp);
+    case CB_DIR: return send_message(c->list, LB_DIR, wp, lp);
     case CB_INSERTSTRING: return send_message(c->list, LB_INSERTSTRING, wp, lp);
     case CB_DELETESTRING: return send_message(c->list, LB_DELETESTRING, wp, lp);
     case CB_GETCOUNT: return send_message(c->list, LB_GETCOUNT, wp, lp);

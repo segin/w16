@@ -65,11 +65,25 @@ fi
 if [ -n "${INPUTRUN_NOLOCK:-}" ]; then
     sed -i 's/^\[sdl\]$/[sdl]\nautolock=false/' "$work/dosbox.conf"
 fi
+# INPUTRUN_EARLY=1: the script's -b counts from when DOSBox's window
+# appears, not from 3 seconds after DOSBox starts
+# INPUTRUN_CAPTURE=1: DOSBox's own screenshots (key ctrl+F5) go to
+# OUTDIR/capture: DOSBox's image of the emulated screen, not of the X
+# window (a stale X window shows only in the shots)
+if [ -n "${INPUTRUN_CAPTURE:-}" ]; then
+    mkdir -p "$out/capture"
+    printf '[dosbox]\ncaptures=%s\n' "$out/capture" >> "$work/dosbox.conf"
+fi
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
 SDL_AUDIODRIVER=dummy timeout -k 10 $total dosbox -noconsole -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
-sleep 3
+if [ -n "${INPUTRUN_EARLY:-}" ]; then
+    # as soon as the window is there (-b then counts from that)
+    i=0; while [ \$i -lt 100 ] && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
+else
+    sleep 3
+fi
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 echo "window \$wid" >> "$out/input.log"
 xdotool windowactivate --sync "\$wid" 2>/dev/null || xdotool windowfocus "\$wid" 2>/dev/null || true

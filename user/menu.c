@@ -738,7 +738,14 @@ static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
         SetTextColor(mem, RGB(0, 0, 0));
         draw_item_text(mem, it, POP_LEFT, 0, m->tabx);
         UnrealizeObject(hbrGray);
-        SetBrushOrg(mem, (LOWORD(org) + HIWORD(org) + r.left + r.top) & 1, 0);
+        /* the checkerboard starts at the item's corner, not the screen's:
+           Windows Write's grayed Undo under the highlight, its item at
+           49,42 on screen, had the other phase than w16 gave it from the
+           screen; the system menu's Restore (US4) sat at an even place.
+           UNVERIFIED: its shortcut (Ctrl+Z) was one pixel further right
+           on 3.1 than in the item's other states */
+        (void)org;
+        SetBrushOrg(mem, 0, 0);
         obr = SelectObject(mem, hbrGray);
         PatBlt(mem, 0, 0, cx, cy, 0x00FA0089L);     /* DPo */
         SelectObject(mem, obr);

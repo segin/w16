@@ -44,6 +44,8 @@ extern int   __far __pascal G_SELECTVISRGN(HDC, HRGN);               /* 105 */
 extern HDC   __far __pascal G_GETDCSTATE(HDC);                       /* 179 */
 extern void  __far __pascal G_SETDCSTATE(HDC, HDC);                  /* 180 */
 extern void  __far __pascal G_MAKEOBJECTPRIVATE(HANDLE, BOOL);       /* 463 */
+extern HPALETTE __far __pascal G_GDISELECTPALETTE(HDC, HPALETTE, BOOL); /* 361 */
+extern DWORD __far __pascal G_GDIREALIZEPALETTE(HDC);              /* 362 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
 extern void  __far __pascal G_FINALGDIINIT(HBRUSH);                  /* 405 */
 extern int   __far __pascal G_DEATH(HDC);                            /* 121 */
@@ -242,6 +244,8 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
                    int x, int y, int cx, int cy, HWND parent, HMENU menu,
                    HINSTANCE hinst, void __far *param);
 BOOL destroy_window(HWND h);
+void clip_window_destroyed(HWND h);     /* clip.c */
+void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags);
 BOOL is_visible(PWND w);                /* the window and its ancestors */
 void link_window(PWND w, HWND after);

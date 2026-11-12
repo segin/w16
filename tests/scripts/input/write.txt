@@ -1,0 +1,44 @@
+; Windows Write (Microsoft's WRITE.EXE, started by WIN.INI run=): a line
+; typed, the Character menu, the ruler, a second line, File > Exit and No
+; to saving (tests/inputrun.sh; boot-test case write). The pointer goes to
+; the screen's bottom right corner first, on the desktop under Write's
+; window, so that it is an arrow in every screen.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 1
+shot 01-start
+type Hello from w16
+sleep 1
+shot 02-typed
+key alt+c
+sleep 1.5
+shot 03-character
+key Escape
+key Escape
+sleep 0.5
+key alt+d
+sleep 0.5
+key r
+sleep 1.5
+shot 04-ruler
+key Return
+type Second line
+sleep 1
+shot 05-second
+key alt+f
+sleep 0.5
+key x
+sleep 1.5
+shot 06-save
+key n
+sleep 2
+shot 07-closed
