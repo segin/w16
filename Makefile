@@ -1327,3 +1327,8 @@ $(DOS)/MS2.COM: tests/dos/ms2.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/MD1.EXE $(DOS)/MS2.COM
+# the install tree gets it too (build/w16/SYSTEM, win/README.TXT)
+install-tree: $(W16SYS)/MOUSE.DRV
+$(W16SYS)/MOUSE.DRV: $(DOS)/MOUSE.DRV
+	@mkdir -p $(@D)
+	cp $< $@

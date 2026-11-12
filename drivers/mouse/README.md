@@ -149,11 +149,14 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
   Windows 3.1's, and Windows 3.1's with `SwapMouseButtons=1` is the same
   again.
 - `make boot-test` cases `mouse` (w16's MOUSE.DRV on Microsoft's
-  KRNL286, DOSX, USER, GDI, under the real-input scripts dragoff,
-  pmitems, pmclose and helpmenus, every screen against Microsoft's
+  KRNL286, DOSX, USER and GDI under the real-input scripts dragoff,
+  pmitems, pmclose and helpmenus: drags, clicks, a double click, menus;
+  every screen pixel-identical to the same script with Microsoft's
   MOUSE.DRV) and `mouseall` (every w16 part with w16's MOUSE.DRV against
-  every w16 part with Microsoft's, the dragoff script): written, NOT RUN
-  YET (see Notes).
+  every w16 part with Microsoft's, the dragoff script: identical).
+- DOSBox-X (`tests/dropin.sh -r -p 386`): Windows 3.1 boots with w16's
+  driver to a screen pixel-identical to Microsoft's driver's.
+- The install tree (`build/w16/SYSTEM/MOUSE.DRV`, boot-test `tree`).
 
 ## Not verified / not done
 
@@ -163,9 +166,11 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
 - Packets with motion and a button change together (above); why the
   second packet after Enable is lost, and whether it is when it carries
   a button change (it is, here).
-- The 8042 path against Windows 3.1's driver: only DOSBox (BIOS path)
-  runs the real-input comparisons; DOSBox-X (8042 path) is checked with
-  w16's driver alone.
+- The 8042 path with real input: DOSBox 0.74 has no aux port, and in
+  DOSBox-X xdotool's motion does not reach the guest under the harness
+  (with Microsoft's driver neither: the pointer stays put), so the
+  real-input comparisons all run the BIOS path. The 8042 path is
+  exercised only by booting in DOSBox-X.
 - A mouse plugged in after boot, a missing mouse (Inquire
   then says `msExist` 0; Windows 3.1's values in that case are not
   observed).
@@ -173,35 +178,3 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
   (a DOS mouse driver that used one sets it again itself).
 - The INT 33h query Windows 3.1's driver makes: not needed for a PS/2
   mouse, not made.
-
-## Notes: where this stands (work paused 2026-11-12)
-
-Done and decided:
-- Hardware path: the PS/2 BIOS (INT 15h C2xxh) for detection and setup,
-  the 8042 read directly in the protected-mode IRQ 12 handler, and the
-  BIOS's C207h packet handler as the second path (the only one in DOSBox
-  0.74, which emulates no aux port). The reasons are above.
-- Interface findings (MD1):
-  - MOUSEINFO is FFh FFh 2 30 2 2 0 0 0, and Inquire returns 10h.
-  - MouseGetIntVect returns 74h.
-  - CplApplet returns FALSE and takes 12 bytes.
-  - GetSetMouseData takes 8 bytes and returns 0002:0000.
-  - PowerEventProc takes 6 bytes and returns 0.
-  - The event procedure gets one change per call, DX = 2, SI = DI = 0,
-    with interrupts enabled. Mickeys are raw (no acceleration), buttons
-    are not swapped, the middle button is not reported, overflow bits
-    are ignored, and the second packet after Enable is lost.
-- `tests/mouseprobe.sh` passes: w16's driver and Windows 3.1's give
-  identical MD1 logs in DOSBox, and so does 3.1's with
-  SwapMouseButtons=1.
-
-Next:
-1. Run the boot-test cases `mouse` and `mouseall` (from a snapshot copy
-   of tests/boottest.sh), then `make test` and the full `make boot-test`.
-2. DOSBox-X with real input (the 8042 path). tests/inputrun.sh now runs
-   DOSBox-X when given dropin.sh's `-p 386`, but that is untested. Try
-   `tests/mouseprobe.sh -x` and a dragoff run there.
-3. Once the boot tests pass, add MOUSE.DRV to the install tree
-   (build/w16/SYSTEM and win/README.TXT's list).
-4. 386 Enhanced mode (WIN /3 with Microsoft's WIN386): not tried yet.
-5. Delete the scratch results in build/mobs (they are not in git).

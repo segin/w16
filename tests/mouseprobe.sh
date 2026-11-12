@@ -13,17 +13,17 @@
 #          events must be the ms run's
 # The TK.LOGs (OBS lines, except the "~" ones, and the event list) must be
 # identical.
-#   usage: tests/mouseprobe.sh [-o DIR] [-x]
-#     -x  DOSBox-X instead of DOSBox (tests/dropin.sh -p 386)
+#   usage: tests/mouseprobe.sh [-o DIR]
+# DOSBox only: in DOSBox-X, xdotool's motion does not reach the guest
+# under tests/inputrun.sh (drivers/mouse/README.md).
 # Exit status 0 when all three agree.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= emu=
-while getopts o:x opt; do
+out=
+while getopts o: opt; do
     case $opt in
     o) out=$OPTARG ;;
-    x) emu="-p 386" ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -35,7 +35,7 @@ md1=$root/build/dos/MD1.EXE
 drv=$root/build/dos/MOUSE.DRV
 run() {
     name=$1; shift
-    "$root/tests/inputrun.sh" -b 30 -t 100 "$scr" "$out/$name" -r $emu \
+    "$root/tests/inputrun.sh" -b 30 -t 100 "$scr" "$out/$name" -r \
         -f "$md1=MD1.EXE" -i 'boot:shell=C:\MD1.EXE' -i w16:md1secs=45 "$@" \
         > "$out/$name.txt" 2>&1 || true
     tr -d '\r' < "$out/$name/work/c/WINDOWS/TK.LOG" > "$out/$name.log" 2>/dev/null || : > "$out/$name.log"
