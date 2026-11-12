@@ -337,11 +337,6 @@ static u16 lar(u16 sel);
     "ok:" \
     parm [dx] value [ax] modify exact [ax];
 
-static u16 lsl(u16 sel);
-#pragma aux lsl = \
-    "xor ax, ax" \
-    "lsl ax, dx" \
-    parm [dx] value [ax] modify exact [ax];
 
 /* access rights byte (LAR's bits 8-15), 0 if not accessible */
 static u8 rights(u16 sel)
@@ -363,7 +358,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     }
     if (n == 0)
         return 1;
-    return off + n - 1 <= lsl(sel);     /* UNVERIFIED: expand-down */
+    return off + n - 1 <= sel_lim16(sel);     /* UNVERIFIED: expand-down */
 }
 
 u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
@@ -379,7 +374,7 @@ u16 KAPI IsBadWritePtr(void FAR *p, u16 n)
 u16 KAPI IsBadCodePtr(void FAR *p)
 {
     u8 ar = rights(FP_SEG(p));
-    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= lsl(FP_SEG(p)));
+    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= sel_lim16(FP_SEG(p)));
 }
 
 u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
@@ -387,7 +382,7 @@ u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
     u16 sel = FP_SEG(p), off = FP_OFF(p), lim, i;
     if (!range_ok(sel, off, 1, 0))
         return 1;
-    lim = lsl(sel);
+    lim = sel_lim16(sel);
     for (i = 0; i < max; i++) {
         if ((u32)off + i > lim)
             return 1;

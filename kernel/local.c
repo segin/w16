@@ -136,11 +136,6 @@ typedef struct lheap {
 #define I(hp, f) W((hp)->seg, (hp)->info + (f))
 
 /* limit of a selector (LSL); returns 0 if it is not accessible */
-static u16 sel_limit(u16 sel);
-#pragma aux sel_limit = \
-    "xor ax, ax" \
-    "lsl ax, dx" \
-    parm [dx] value [ax] modify exact [ax];
 
 static void kmemmove(u16 seg, u16 to, u16 from, u16 n)
 {
@@ -160,10 +155,10 @@ static void kmemmove(u16 seg, u16 to, u16 from, u16 n)
 static int heap_of(u16 seg, lheap *hp)
 {
     u16 info;
-    if (!seg || sel_limit(seg) < 0x0F)
+    if (!seg || sel_lim16(seg) < 0x0F)
         return 0;
     info = W(seg, 6);
-    if (!info || (u32)info + LI_SIZE > (u32)sel_limit(seg) + 1)
+    if (!info || (u32)info + LI_SIZE > (u32)sel_lim16(seg) + 1)
         return 0;
     hp->seg = seg;
     hp->info = info;
@@ -532,7 +527,7 @@ static u16 local_init(u16 seg, u16 start, u16 end)
 {
     lheap hp;
     u16 first, last, ia, fr;
-    u32 segsize = (u32)sel_limit(seg) + 1;
+    u32 segsize = (u32)sel_lim16(seg) + 1;
 
     if (!seg || segsize < 0x10)
         return 0;
@@ -962,7 +957,7 @@ const char *local_check(u16 seg, u16 *at)
     *at = 0;
     if (!heap_of(seg, &hp))
         return 0;                       /* no heap (yet): nothing to check */
-    lim = sel_limit(seg);
+    lim = sel_lim16(seg);
     first = I(&hp, LI_FIRST);
     last = I(&hp, LI_LAST);
     if (first & 3 || last & 3 || last <= first || (u32)last + SENTINEL_SIZE > (u32)lim + 1)

@@ -101,6 +101,16 @@ static u32 seg_limit(u16 sel)
     return is386() ? lsl32(sel) : lsl16(sel);
 }
 
+/* The highest 16-bit offset sel reaches: its limit, FFFFh where the
+   limit goes on past 64K (the first selector of a huge block on a 386:
+   a 16-bit LSL gives only the low word, which made offsets in the first
+   64K of a block over 64K look bad, KERNEL audit #6); 0 when LSL fails */
+u16 sel_lim16(u16 sel)
+{
+    u32 l = seg_limit(sel);
+    return l > 0xFFFFUL ? 0xFFFF : (u16)l;
+}
+
 /* LAR's view: access byte in the low byte, the flags nibble of byte 6
    (G, D, AVL) in bits 12-15; 0 when LAR fails. */
 static u16 seg_rights(u16 sel)

@@ -836,6 +836,34 @@ void dos_last(void)
 }
 
 
+#ifdef TK17A
+/* Pointer checks and string functions in the first 64K of a 96K block:
+   its first selector's limit goes past FFFFh on a 386 (17FFFh); w16 read
+   it with a 16-bit LSL (7FFFh) and called offsets beyond 7FFFh bad */
+static void huge_ptrs(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0x18000L);
+    char FAR *b = h ? (char FAR *)GlobalLock(h) : NULL;
+    char FAR *p;
+    if (!b) {
+        obs("hp: GlobalAlloc(18000h)", 0);
+        return;
+    }
+    p = b + 0x9000;
+    p[0] = 'x';
+    p[1] = 0;
+    obs("hp: IsBadReadPtr(9000h,10h)", IsBadReadPtr(p, 0x10));
+    obs("hp: IsBadWritePtr(9000h,10h)", IsBadWritePtr(p, 0x10));
+    obs("hp: IsBadStringPtr(9000h)", IsBadStringPtr(p, 0xFFFF));
+    obs("hp: IsBadReadPtr(FFF0h,10h)", IsBadReadPtr(b + 0xFFF0, 0x10));
+    obs("hp: lstrlen(9000h)", lstrlen(p));
+    obs("hp: lstrcpy(9100h, 9000h)==dst", lstrcpy(b + 0x9100, p) == b + 0x9100);
+    obs("hp: copied", (BYTE)b[0x9100]);
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
+#endif
+
 int __cdecl tmain(void)
 {
 #ifdef TK17A
@@ -849,6 +877,7 @@ int __cdecl tmain(void)
     /* TK17A: huge blocks, in a fresh program (TK17's earlier steps left
        Windows 3.1 unable to finish these) */
     huge_blocks();
+    huge_ptrs();
     lpa_more();
     dos_last();
 #else

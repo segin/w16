@@ -199,6 +199,7 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
               int is_kernel);
 
 extern module FAR *module_first;        /* KERNEL */
+u16 sel_lim16(u16 sel);                 /* selector.c: limit, at most FFFFh */
 void     module_register_kernel(const bootinfo FAR *bi);
 module FAR *module_load_program(const char FAR *path, u16 *err);
 module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit);
