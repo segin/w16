@@ -30,7 +30,7 @@ typedef struct {
     HBITMAP bm;
 } SAVED;
 
-static SAVED *saved;
+static SAVED __near *saved;
 static WORD nsaved, capsaved;
 
 static void drop(WORD i)
@@ -84,9 +84,9 @@ void savebits_show(HWND h)
     cy = rc.bottom - rc.top;
     if (nsaved == capsaved) {
         WORD cap = capsaved ? capsaved * 2 : 4;
-        SAVED *n = saved
-            ? (SAVED *)LocalReAlloc((HLOCAL)saved, cap * sizeof(SAVED), LMEM_MOVEABLE)
-            : (SAVED *)LocalAlloc(LMEM_FIXED, cap * sizeof(SAVED));
+        SAVED __near *n = saved
+            ? (SAVED __near *)LocalReAlloc((HLOCAL)saved, cap * sizeof(SAVED), LMEM_MOVEABLE)
+            : (SAVED __near *)LocalAlloc(LMEM_FIXED, cap * sizeof(SAVED));
         if (!n)
             return;
         saved = n;

@@ -169,7 +169,7 @@ static void arrange(HWND client, BOOL tile, WPARAM how)
         act = 0;
     for (s = cw->hwndChild; s; s = PW(s)->hwndNext)
         n++;
-    list = (HWND *)LocalAlloc(LPTR, (n + 1) * sizeof(HWND));
+    list = (HWND __near *)LocalAlloc(LPTR, (n + 1) * sizeof(HWND));
     if (!list)
         return;
     n = 0;
