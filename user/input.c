@@ -268,6 +268,7 @@ void WINAPI EnableOEMLayer(void)
     S_ENABLESYSTEMTIMERS();
     KB_ENABLE((FARPROC)keybd_event_entry, keystate);
     MS_ENABLE((FARPROC)mouse_event_entry);
+    savebits_forget_all();
     RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
     set_cursor_shape(hcurCurrent);
 }

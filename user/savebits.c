@@ -56,6 +56,15 @@ void savebits_forget(HWND h)
         drop((WORD)i);
 }
 
+/* every saved image (the screen came back after a switch to a DOS
+   program, EnableOEMLayer: what was saved is no longer what the screen
+   showed, and everything paints again) */
+void savebits_forget_all(void)
+{
+    while (nsaved)
+        drop(nsaved - 1);
+}
+
 /* the window is about to show at w->rcWindow */
 void savebits_show(HWND h)
 {
