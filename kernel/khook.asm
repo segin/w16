@@ -106,6 +106,21 @@ KBDRST:
 DOSIGNAL:
         retf
 
+; NetBIOSCall (KERNEL.103): INT 5Ch with the caller's ES:BX (an NCB).
+; Observed (tests/apps/tk50.c, KRNL286 in DOSBox, which has no NetBIOS):
+; every register kept, the NCB untouched. w16 does no more. UNVERIFIED:
+; with a NetBIOS present (DPMI hosts translate INT 5Ch NCBs; Schulman).
+global NETBIOSCALL
+NETBIOSCALL:
+        retf
+
+; EMSCopy (KERNEL.160): Schulman: a holdover from 2.x EMS support that
+; does nothing in 3.x, 14 bytes of arguments. UNVERIFIED: with seven
+; zero words it ended the probe on 3.1 (tests/apps/tk50.c).
+global EMSCOPY
+EMSCOPY:
+        retf 14
+
 ; CVWBreak (KERNEL.205): the keyboard interrupt handler jumps to it on
 ; Ctrl+Alt+SysReq once EnableKBSysReq asks for it (Schulman: "void FAR
 ; _interrupt"); it returns as an interrupt procedure. Called as a far

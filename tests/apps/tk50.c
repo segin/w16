@@ -384,6 +384,9 @@ static void t_simple(void)
         res("LogError(0,0)", "AX", r_ax);
         res("LogError(0,0)", "DX", r_dx);
     }
+    /* EMSCopy (160), Schulman: does nothing in 3.x, 14 bytes of
+       arguments. Not called: with seven zero words it ended the probe on
+       3.1 (KRNL286) */
     if (kc("LogParamError(0,0,0)", 325, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0)) {
         res("LogParamError(0,0,0)", "AX", r_ax);
         res("LogParamError(0,0,0)", "DX", r_dx);
@@ -614,6 +617,28 @@ static void t_dosproc(void)
     dos_count = 0;
     w_call(kproc(101), 0, 0, 0, 0, 0, 0, 0, 0, 0);     /* NoHookDOSCall */
     res("NoHookDOSCall through the DOS proc", "", dos_count);
+    /* NetBIOSCall (103): INT 5Ch with the caller's ES:BX (an NCB);
+       command 7Fh, which no NetBIOS knows (none in DOSBox) */
+    {
+        static BYTE ncb[64];
+        WORD i;
+        for (i = 0; i < sizeof ncb; i++)
+            ncb[i] = 0;
+        ncb[0] = 0x7F;
+        w_es = SEG(ncb);
+        w_bx = OFF(ncb);
+        w_ax = 0x1234;
+        if (kproc(103)) {
+            w_call(kproc(103), 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            res("NetBIOSCall(7Fh) left", "", w_popped);
+            res("NetBIOSCall(7Fh) kept", "", mask());
+            res("NetBIOSCall(7Fh) AX", "", w_regs[0]);
+            res("NetBIOSCall(7Fh) NCB retcode", "", ncb[1]);
+            res("NetBIOSCall(7Fh) NCB cmd", "", ncb[0]);
+        } else
+            res("NetBIOSCall missing", "", 1);
+        w_es = w_bx = 0;
+    }
     w_ax = 0;
     K2("GetSetKernelDOSProc(old)", 311, 0, HIWORD(old), LOWORD(old));
     res("GetSetKernelDOSProc(old) returns ours", "",

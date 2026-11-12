@@ -131,8 +131,8 @@ export SETHANDLECOUNT.199 resident
 export ISTASK.320 resident
 export _HREAD.349 resident
 export _HWRITE.350 resident
-export FARSETOWNER.403 resident
-export FARGETOWNER.404 resident
+export K403.403=FARSETOWNER resident
+export K404.404=FARGETOWNER resident
 # Selector services and the lock calls that are not GlobalLock
 # (kernel/selector.c)
 export ALLOCCSTODSALIAS.170 resident
@@ -164,6 +164,8 @@ export RESERVED1.77=KANSINEXT
 export RESERVED2.78=KANSIPREV
 export RESERVED5.87=KLSTRCMP
 export NOHOOKDOSCALL.101
+export NETBIOSCALL.103
+export EMSCOPY.160
 export GETCODEINFO.104
 export GETEXEVERSION.105
 export SETERRORMODE.107
