@@ -180,6 +180,8 @@
 # have names of their own; references shared by cases (ref, woaref,
 # woaref2, dragoff-ref) are made once under a lock per cache key, and
 # retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
+# The cases that took longest last time (build/boottest-times.txt, kept
+# by each run) start first; the output stays in case order.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -985,8 +987,20 @@ running() {
     for p in $pids; do kill -0 "$p" 2>/dev/null && r=$((r + 1)); done
     echo $r
 }
-for c in $cases; do
-    n=$((n + 1))
+# The longest cases start first (their times in the last run,
+# build/boottest-times.txt; a case not timed yet counts as long), so that
+# the run does not end with one long case alone; the output keeps the
+# case order. Each case is "N CASE": N its place in that order.
+timesfile=$root/build/boottest-times.txt
+order=$(i=0; for c in $cases; do
+    i=$((i + 1))
+    t=
+    [ -f "$timesfile" ] && t=$(awk -v c="$c" '$1 == c { t = $2 } END { print t }' "$timesfile")
+    echo "${t:-99999} $i $c"
+done | sort -k1,1nr -k2,2n | cut -d' ' -f2-)
+total=$(echo "$cases" | wc -w)
+echo "$order" | while read -r n c; do echo "$n $c"; done > "$out/.order"
+while read -r n c; do
     while [ "$(running)" -ge "$jobs" ]; do flush; sleep 1; done
     (
         # (cases use c, n and the like for their own purposes)
@@ -995,11 +1009,17 @@ for c in $cases; do
         runcase "$c" > "$out/.case-$_bt_n.out" 2>&1
         echo "$fails" > "$out/.case-$_bt_n.fails"
         refkeep
-    ) &
+    ) < /dev/null &
     pids="$pids $!"
-done
-while [ $next -le $n ]; do flush; [ $next -gt $n ] || sleep 1; done
+done < "$out/.order"
+while [ $next -le $total ]; do flush; [ $next -gt $total ] || sleep 1; done
 wait
+# this run's times for the next run's order (cases not run keep theirs)
+if [ -f "$timesfile" ]; then
+    awk 'NR == FNR { new[$1] = 1; print; next } !($1 in new)' "$out/times.txt" "$timesfile"
+else
+    cat "$out/times.txt"
+fi > "$timesfile.new.$$" && mv "$timesfile.new.$$" "$timesfile"
 # each case's time, and the references taken from the cache
 echo "boottest: seconds per case:"
 awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "(all)", t }' "$out/times.txt"
