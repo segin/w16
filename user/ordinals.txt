@@ -7,9 +7,9 @@
 # tools/mkuserexp.py makes the export list and the stubs from it.
 
    1 MESSAGEBOX                   -    12
-   2 OLDEXITWINDOWS               -    ?
-   3 ENABLEOEMLAYER               -    ?
-   4 DISABLEOEMLAYER              -    ?
+   2 OLDEXITWINDOWS               -    0
+   3 ENABLEOEMLAYER               -    0
+   4 DISABLEOEMLAYER              -    0
    5 INITAPP                      -    2
    6 POSTQUITMESSAGE              -    2
    7 EXITWINDOWS                  -    6
@@ -55,7 +55,7 @@
   48 ISCHILD                      -    4
   49 ISWINDOWVISIBLE              -    2
   50 FINDWINDOW                   -    8
-  51 BEAR51                       -    ?
+  51 BEAR51                       -    2
   52 ANYPOPUP                     -    0
   53 DESTROYWINDOW                -    2
   54 ENUMWINDOWS                  -    8
@@ -187,7 +187,7 @@
  181 SETSYSCOLORS                 -    10
  182 BEAR182                      -    4
  183 GETCARETPOS                  -    4
- 184 QUERYSENDMESSAGE             -    ?
+ 184 QUERYSENDMESSAGE             -    10
  185 GRAYSTRING                   -    22
  186 SWAPMOUSEBUTTON              -    2
  187 ENDMENU                      -    0
@@ -229,7 +229,7 @@
  223 SETKEYBOARDSTATE             -    4
  224 GETWINDOWTASK                -    2
  225 ENUMTASKWINDOWS              -    10
- 226 LOCKINPUT                    -    ?
+ 226 LOCKINPUT                    -    6
  227 GETNEXTDLGGROUPITEM          -    6
  228 GETNEXTDLGTABITEM            -    6
  229 GETTOPWINDOW                 -    2
@@ -277,9 +277,9 @@
  271 GLOBALGETATOMNAME            -    8
  272 ISZOOMED                     -    2
  273 CONTROLPANELINFO             -    8
- 274 GETNEXTQUEUEWINDOW           -    ?
- 275 REPAINTSCREEN                -    ?
- 276 LOCKMYTASK                   -    ?
+ 274 GETNEXTQUEUEWINDOW           -    4
+ 275 REPAINTSCREEN                -    0
+ 276 LOCKMYTASK                   -    2
  277 GETDLGCTRLID                 -    2
  278 GETDESKTOPHWND               -    0
  279 OLDSETDESKPATTERN            -    0
@@ -304,10 +304,10 @@
  309 GETCLIPCURSOR                -    4
  314 SIGNALPROC                   -    10
  319 SCROLLWINDOWEX               -    22
- 320 SYSERRORBOX                  -    ?
+ 320 SYSERRORBOX                  -    14
  321 SETEVENTHOOK                 -    4
- 322 WINOLDAPPHACKOMATIC          -    ?
- 323 GETMESSAGE2                  -    ?
+ 322 WINOLDAPPHACKOMATIC          -    4
+ 323 GETMESSAGE2                  -    14
  324 FILLWINDOW                   -    8
  325 PAINTRECT                    -    12
  326 GETCONTROLBRUSH              -    6
@@ -319,7 +319,7 @@
  336 LOADCURSORICONHANDLER        -    6
  337 GETMOUSEEVENTPROC            -    0
  341 _FFFE_FARFRAME               -    ?
- 343 GETFILEPORTNAME              -    ?
+ 343 GETFILEPORTNAME              -    4
  356 LOADDIBCURSORHANDLER         -    6
  357 LOADDIBICONHANDLER           -    6
  358 ISMENU                       -    2
@@ -329,7 +329,7 @@
  369 COPYCURSOR                   -    4
  370 GETWINDOWPLACEMENT           -    6
  371 SETWINDOWPLACEMENT           -    6
- 372 GETINTERNALICONHEADER        -    ?
+ 372 GETINTERNALICONHEADER        -    8
  373 SUBTRACTRECT                 -    12
  400 FINALUSERINIT                -    0
  402 GETPRIORITYCLIPBOARDFORMAT   -    6
@@ -381,8 +381,8 @@
  471 LSTRCMPI                     -    8
  472 ANSINEXT                     -    4
  473 ANSIPREV                     -    8
- 480 GETUSERLOCALOBJTYPE          -    ?
- 481 HARDWARE_EVENT               -    ?
+ 480 GETUSERLOCALOBJTYPE          -    2
+ 481 HARDWARE_EVENT               -    0
  482 ENABLESCROLLBAR              -    6
  483 SYSTEMPARAMETERSINFO         -    10
  499 WNETERRORTEXT                -    8
@@ -406,8 +406,8 @@
  518 WNETCANCELCONNECTION         -    6
  519 WNETGETERROR                 -    4
  520 WNETGETERRORTEXT             -    10
- 521 WNETENABLE                   -    ?
- 522 WNETDISABLE                  -    ?
+ 521 WNETENABLE                   -    0
+ 522 WNETDISABLE                  -    0
  523 WNETRESTORECONNECTION        -    6
  524 WNETWRITEJOB                 -    10
  525 WNETCONNECTDIALOG            -    4

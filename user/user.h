@@ -49,6 +49,7 @@ extern DWORD __far __pascal G_GDIREALIZEPALETTE(HDC);              /* 362 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
 extern void  __far __pascal G_FINALGDIINIT(HBRUSH);                  /* 405 */
 extern int   __far __pascal G_DEATH(HDC);                            /* 121 */
+extern BOOL  __far __pascal G_RESURRECTION(HDC, WORD, WORD, WORD, WORD, WORD, WORD); /* 122 */
 extern HRGN  __far __pascal G_INQUIREVISRGN(HDC);                    /* 131 */
 extern void  __far __pascal G_GDITASKTERMINATION(HTASK);             /* 460 */
 /* SYSTEM */
@@ -214,6 +215,7 @@ extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment *
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
+void input_disable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
 extern BYTE __far keystate[256];
 extern POINT __far ptCursor;
@@ -244,6 +246,7 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
 BOOL destroy_window(HWND h);
 void clip_window_destroyed(HWND h);     /* clip.c */
 void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
+void savebits_forget_all(void);
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags);
 BOOL is_visible(PWND w);                /* the window and its ancestors */
 void link_window(PWND w, HWND after);
