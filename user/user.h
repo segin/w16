@@ -47,6 +47,7 @@ extern void  __far __pascal G_MAKEOBJECTPRIVATE(HANDLE, BOOL);       /* 463 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
 extern void  __far __pascal G_FINALGDIINIT(HBRUSH);                  /* 405 */
 extern int   __far __pascal G_DEATH(HDC);                            /* 121 */
+extern BOOL  __far __pascal G_RESURRECTION(HDC, WORD, WORD, WORD, WORD, WORD, WORD); /* 122 */
 extern HRGN  __far __pascal G_INQUIREVISRGN(HDC);                    /* 131 */
 extern void  __far __pascal G_GDITASKTERMINATION(HTASK);             /* 460 */
 /* SYSTEM */
@@ -212,6 +213,7 @@ extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment *
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
+void input_disable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
 extern BYTE __far keystate[256];
 extern POINT __far ptCursor;

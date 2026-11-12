@@ -1174,6 +1174,14 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US10: DisableOEMLayer and EnableOEMLayer (tests/apps/us10.c)
+$(B)/tests/us10.o: tests/apps/us10ref.h tests/apps/tklog.h
+$(DOS)/US10.EXE: $(B)/tests/start.o $(B)/tests/us10.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us10.map file { $(B)/tests/start.o $(B)/tests/us10.o } \
+	    import EnableOEMLayer USER.3 import DisableOEMLayer USER.4
+dos: $(DOS)/US10.EXE
 # US9: DragObject and DragDetect (tests/apps/us9.c)
 $(B)/tests/us9.o: tests/apps/us9ref.h tests/apps/tklog.h tests/apps/shprobe.h
 $(DOS)/US9.EXE: $(B)/tests/start.o $(B)/tests/us9.o tests/apps/app.lnk

@@ -8,8 +8,8 @@
 
    1 MESSAGEBOX                   -    12
    2 OLDEXITWINDOWS               -    ?
-   3 ENABLEOEMLAYER               -    ?
-   4 DISABLEOEMLAYER              -    ?
+   3 ENABLEOEMLAYER               -    0
+   4 DISABLEOEMLAYER              -    0
    5 INITAPP                      -    2
    6 POSTQUITMESSAGE              -    2
    7 EXITWINDOWS                  -    6

@@ -172,10 +172,7 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
        SYSTEM.DisableSystemTimers, and GDI's Death on the screen's DC,
        which puts the display back in text mode. w16's USER skipped these
        and the graphics screen stayed up at the DOS prompt */
-    D_SETCURSOR(0);
-    MS_DISABLE();
-    KB_DISABLE();
-    S_DISABLESYSTEMTIMERS();
+    input_disable();
     G_DEATH(hdcScreen);
     /* KERNEL ends Windows (ExitKernel, KERNEL.2) with the code */
     {

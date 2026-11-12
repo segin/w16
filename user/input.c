@@ -235,6 +235,43 @@ void input_enable(void)
     set_cursor_shape(load_icon_cursor(0, IDC_ARROW, TRUE));
 }
 
+/* USER.4 and USER.3: WINOLDAP's screen switch around a DOS program in
+   Standard mode (Schulman ch. 6; Pietrek ch. 1). US10 on 3.1, Microsoft's
+   USER between forwarders: DisableOEMLayer is DISPLAY.SetCursor(NULL),
+   MOUSE.Disable, KEYBOARD.Disable, SYSTEM.DisableSystemTimers and GDI's
+   Death on the screen's DC (the display driver's Disable: BIOS mode 3);
+   EnableOEMLayer is GDI's Resurrection on it (mode 12h again),
+   SYSTEM.EnableSystemTimers, KEYBOARD.Enable, MOUSE.Enable, the whole
+   screen invalidated (windows then get WM_PAINT, erasing and their frames
+   in BeginPaint) and the cursor shape set again. UNVERIFIED: the drivers'
+   InternalBroadcastDriverMessage notices Schulman mentions (none of
+   w16's drivers needs them) */
+void input_disable(void)
+{
+    D_SETCURSOR(0);
+    MS_DISABLE();
+    KB_DISABLE();
+    S_DISABLESYSTEMTIMERS();
+}
+
+void WINAPI DisableOEMLayer(void)
+{
+    ulog("DisableOEMLayer\r\n");
+    input_disable();
+    G_DEATH(hdcScreen);
+}
+
+void WINAPI EnableOEMLayer(void)
+{
+    ulog("EnableOEMLayer\r\n");
+    G_RESURRECTION(hdcScreen, 0, 0, 0, 0, 0, 0);
+    S_ENABLESYSTEMTIMERS();
+    KB_ENABLE((FARPROC)keybd_event_entry, keystate);
+    MS_ENABLE((FARPROC)mouse_event_entry);
+    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    set_cursor_shape(hcurCurrent);
+}
+
 /* ---- the cursor ---- */
 void set_cursor_shape(HCURSOR h)
 {
