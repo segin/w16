@@ -654,6 +654,7 @@ global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
 _fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+in_fault        resb 1          ; set while a fault is being handled
 gp_ip           resw 1
 segment _TEXT
 
@@ -703,8 +704,21 @@ fault_common:
         mov [_fault_regs + 30 wrt DGROUP], es
         mov word [bp + 10], fault_exit
         mov word [bp + 12], cs
-        mov word [bp + 16], exit_stack_top wrt DGROUP
+        ; on the exit stack: a fault while on it (task_exit_c, the WEPs it
+        ; calls) goes on below the faulting SP, not over the frames in use
+        ; there (KERNEL audit #12); else from the top
+        mov ax, exit_stack_top wrt DGROUP
+        cmp word [bp + 18], DGROUP
+        jne .top
+        mov bx, [bp + 16]
+        cmp bx, exit_stack_top wrt DGROUP
+        ja .top
+        cmp bx, (exit_stack + 1024) wrt DGROUP
+        jb .top                         ; (no room left: from the top)
+        lea ax, [bx - 512]
+.top:   mov [bp + 16], ax
         mov word [bp + 18], DGROUP
+        mov bx, [_fault_regs + 16 wrt DGROUP]
         pop bp
         add sp, 2
         retf
@@ -712,9 +726,15 @@ fault_exit:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        ; a fault while one is being handled (fault_regs holds the second
+        ; one now): no recovery, reported as it is
+        cmp byte [in_fault wrt DGROUP], 0
+        jne .report
+        mov byte [in_fault wrt DGROUP], 1
         call far _gp_handler            ; a "__GP" table entry for CS:IP?
         test ax, ax
         jnz .gp
+.report:
         call far _fault_report
 .hang:  jmp .hang
 ; resume at the faulting CS:AX, the registers as they were (DS and ES
@@ -741,6 +761,7 @@ fault_exit:
         mov si, [_fault_regs + 22 wrt DGROUP]
         mov di, [_fault_regs + 24 wrt DGROUP]
         mov bp, [_fault_regs + 26 wrt DGROUP]
+        mov byte [in_fault wrt DGROUP], 0
         pop ds
         iret
 
