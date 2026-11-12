@@ -402,6 +402,64 @@ static void log_name(u16 t)
     kputs(n);
 }
 
+/* A task's vectors for INT 0, 2, 4, 6, 7, 3Eh and 75h (Pietrek: TDB
+   32h-4Dh). Observed (tests/apps/tk16.c "vec", 3.1): a task's INT 21h
+   25h for INT 0 shows in its TDB at once; a task started afterwards has
+   the vector as it was at the start, and its TDB says so; the first
+   task keeps its own. w16 had one vector for all tasks (KERNEL audit
+   #14). The TDB holds the task's vectors (kentry.asm writes the running
+   task's at 25h, and int_vec_cur, the vectors installed); a switch
+   installs the new task's that differ (DPMI 0205h). */
+static const u8 int_vec_no[7] = { 0x00, 0x02, 0x04, 0x06, 0x07, 0x3E, 0x75 };
+static u32 int_vec_default[7];
+u32 int_vec_cur[7];                     /* kentry.asm writes it too */
+static u16 int_vec_have;
+
+static void int_vec_init(void)
+{
+    regs16 r;
+    u16 i;
+    if (int_vec_have)
+        return;
+    for (i = 0; i < 7; i++) {
+        r.ax = 0x0204;
+        r.bx = int_vec_no[i];
+        r.ds = r.es = 0;
+        dpmi31(&r);
+        int_vec_default[i] = int_vec_cur[i] = ((u32)r.cx << 16) | r.dx;
+    }
+    int_vec_have = 1;
+}
+
+static void int_vec_tdb(u16 t)
+{
+    u16 i;
+    int_vec_init();
+    for (i = 0; i < 7; i++)
+        *(u32 FAR *)MK_FP(t, 0x32 + 4 * i) = int_vec_default[i];
+}
+
+static void int_vec_switch(u16 t)
+{
+    regs16 r;
+    u16 i;
+    u32 v;
+    if (!int_vec_have)
+        return;
+    for (i = 0; i < 7; i++) {
+        v = *(u32 FAR *)MK_FP(t, 0x32 + 4 * i);
+        if (v == int_vec_cur[i] || !v)
+            continue;
+        r.ax = 0x0205;
+        r.bx = int_vec_no[i];
+        r.cx = (u16)(v >> 16);
+        r.dx = (u16)v;
+        r.ds = r.es = 0;
+        dpmi31(&r);
+        int_vec_cur[i] = v;
+    }
+}
+
 static void switch_to(u16 t)
 {
     u16 from = cur_task;
@@ -432,6 +490,7 @@ static void switch_to(u16 t)
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
     set_dta(t);
+    int_vec_switch(t);
     restore_dir(t, from);
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
@@ -556,6 +615,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     for (i = 0; i < 8 && m->name[i]; i++)
         TB(t, TDB_NAME + i) = (u8)m->name[i];
     TW(t, TDB_SIG) = TDB_MAGIC;
+    int_vec_tdb(t);
 
     /* the start-up frame on the task's stack (kentry.asm, task_switch and
        task_tramp): its entry point, then the registers a task starts
@@ -653,6 +713,7 @@ u16 task_boot(void)
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
     set_dta(t);
+    int_vec_switch(t);
     restore_dir(t, 0);
     in_sched = 0;
     task_switch((u16 FAR *)boot_sssp, TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));

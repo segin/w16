@@ -36,6 +36,7 @@ extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
 extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
+extern _int_vec_cur             ; task.c: the vectors installed (TDB 32h)
 extern _dos_exit_note           ; fault.c
 extern _task_signal_exit        ; task.c
 
@@ -80,6 +81,7 @@ int3d_handler:
 
 ; AH=51h and 62h from a task return its PDB (observed on Windows 3.1,
 ; tests/apps/tk15.c: the selector GetCurrentPDB gives).
+vec_ints        db 00h, 02h, 04h, 06h, 07h, 3Eh, 75h   ; TDB 32h-4Dh
 global int21_handler
 int21_handler:
         ; record the call (AX, BX, DX, caller CS:IP) in a ring of 16 for
@@ -134,6 +136,40 @@ int21_handler:
         pop ds
         jmp .chain
 .not1a:
+        cmp ah, 25h
+        jne .not25
+        ; set vector: for INT 0, 2, 4, 6, 7, 3Eh, 75h the running task's
+        ; (TDB 32h-4Dh) and int_vec_cur too (task.c), then DOS as before
+        push bx
+        push cx
+        push si
+        push di
+        xor si, si
+.v25l:  cmp al, [cs:vec_ints + si]
+        je .v25f
+        inc si
+        cmp si, 7
+        jb .v25l
+        jmp .v25x
+.v25f:  mov cx, ds                      ; the caller's DS: the vector's CS
+        mov di, DGROUP
+        mov ds, di
+        shl si, 2
+        mov [_int_vec_cur + si wrt DGROUP], dx
+        mov [_int_vec_cur + si + 2 wrt DGROUP], cx
+        mov di, [_cur_task wrt DGROUP]
+        or di, di
+        jz .v25r
+        mov ds, di
+        mov [si + 32h], dx
+        mov [si + 34h], cx
+.v25r:  mov ds, cx
+.v25x:  pop di
+        pop si
+        pop cx
+        pop bx
+        jmp .chain
+.not25:
         cmp ah, 51h
         je .pdb
         cmp ah, 62h

@@ -6,9 +6,10 @@
  *   R  report and exit
  *   W  report, then Yield() until TK16 sets `go`, then exit
  *   H  report, with its handle counts (W_HC0, W_HC1), and exit
+ *   V  report, with its INT 0 vector and its TDB's 32h (W_V0, W_T32)
  */
 #define TK16_SLOTS  4
-#define TK16_SLOTW  56
+#define TK16_SLOTW  64
 
 typedef struct {
     WORD go;
@@ -41,5 +42,7 @@ enum {
                            selector is DS at entry */
     W_ITER,             /* its "ABAB..." array as it should be (TK16I has
                            it as an iterated record) */
-    W_COUNT
+    W_V0,               /* mode V: 2 words, INT 21h 35h for INT 0 */
+    W_T32 = W_V0 + 2,   /* mode V: 2 words, its TDB at 32h */
+    W_COUNT = W_T32 + 2
 };

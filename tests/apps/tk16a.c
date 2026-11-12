@@ -123,6 +123,17 @@ int __cdecl tmain(void)
     if (mode == 'W')
         for (n = 0; n < 400 && !sh->go; n++)
             K_YIELD();
+    if (mode == 'V') {
+        WORD q[8], t = (WORD)GetCurrentTask();
+        for (i = 0; i < 8; i++)
+            q[i] = 0;
+        q[0] = 0x3500;
+        dos_int21((WORD FAR *)q);
+        v[W_V0] = q[1];
+        v[W_V0 + 1] = q[7];
+        v[W_T32] = *(WORD FAR *)MAKELP(t, 0x32);
+        v[W_T32 + 1] = *(WORD FAR *)MAKELP(t, 0x34);
+    }
     if (mode == 'H') {
         v[W_HC0] = SetHandleCount(0);
         v[W_HC1] = SetHandleCount(30);

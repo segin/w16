@@ -343,6 +343,59 @@ static void second(void)
     wait_gone(h1);
 }
 
+static DWORD getvec(BYTE n)
+{
+    WORD r[8], i;
+    for (i = 0; i < 8; i++)
+        r[i] = 0;
+    r[0] = 0x3500 | n;
+    dos_int21((WORD FAR *)r);
+    return MAKELONG(r[1], r[7]);
+}
+
+static void setvec(BYTE n, DWORD v)
+{
+    WORD r[8], i;
+    for (i = 0; i < 8; i++)
+        r[i] = 0;
+    r[0] = 0x2500 | n;
+    r[3] = LOWORD(v);
+    r[6] = HIWORD(v);
+    dos_int21((WORD FAR *)r);
+}
+
+/* Pietrek (TDB): 32h-4Dh hold a task's vectors for INT 0, 2, 4, 6, 7,
+   3Eh and 75h. INT 0 set by this task with INT 21h 25h: what this task's
+   TDB says, and what a task started afterwards gets */
+static void vectors(void)
+{
+    char cmd[100];
+    WORD h, t = (WORD)GetCurrentTask();
+    DWORD v0 = getvec(0), mine = (DWORD)(void FAR *)renamed;
+
+    STEP("interrupt vectors");
+    reset();
+    obs("vec: TDB 32h==INT 0 at start", *(DWORD FAR *)MAKELP(t, 0x32) == v0);
+    setvec(0, mine);
+    obs("vec: INT 0 set", getvec(0) == mine);
+    obs("vec: TDB 32h==the new one", *(DWORD FAR *)MAKELP(t, 0x32) == mine);
+    obs("vec: TDB 32h==the old one", *(DWORD FAR *)MAKELP(t, 0x32) == v0);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'V', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("vec: TK16A > 32", h > 32);
+    obs("vec: TK16A's INT 0==ours", MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]) == mine);
+    obs("vec: TK16A's INT 0==the old one", MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]) == v0);
+    obs("vec: TK16A's TDB 32h==its INT 0",
+        MAKELONG(sh.v[0][W_T32], sh.v[0][W_T32 + 1]) == MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]));
+    obs("vec: ours after", getvec(0) == mine);
+    setvec(0, v0);
+    obs("vec: put back", getvec(0) == v0);
+    if (h > 32)
+        wait_gone(h);
+}
+
 /* TK16I: TK16A with its data segment stored iterated (NE segment flag
    0008h; tools/mkiterated.py) */
 static void iterated(void)
@@ -405,6 +458,7 @@ int __cdecl tmain(void)
     small();
     second();
     iterated();
+    vectors();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");
