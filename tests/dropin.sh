@@ -17,12 +17,33 @@
 #                program; DST "-" deletes SRC (a path under C:\) instead
 #     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable);
 #                -i WIN.INI:S:K=V edits WIN.INI instead
-#     -s PNG     also take a screenshot after SECS seconds (DOSBox on a
-#                virtual X display, xvfb-run, never the user's desktop);
-#                with DROPIN_SHOTS="T1 T2 ..." in the environment, also
+#     -s PNG     also take a screenshot (DOSBox on a virtual X display,
+#                tests/xvfb.sh, never the user's desktop) once Windows has
+#                settled: BOOTLOG.TXT has reached "INITDONE=Final USER"
+#                (with /B in the command line) and the screen has not
+#                changed for DROPIN_SETTLE seconds (default 5; screens
+#                compared every half second), at the latest after SECS
+#                seconds; DOSBox is then ended. DROPIN_FIXED=1 in the
+#                environment: the old way, the screenshot after SECS
+#                seconds whatever the screen does (for debugging).
+#                With DROPIN_SHOTS="T1 T2 ..." in the environment, also
 #                after T1, T2, ... seconds, as PNG with -T1 etc. before .png
+#                (those still to come when DOSBox is ended are not taken)
+#     -e PNG     with -s: the screen expected (another run's screenshot):
+#                the screenshot is taken as soon as the screen has been
+#                equal to PNG for 2 seconds (DROPIN_HOLD), instead of the
+#                settling above; if it never is, after SECS seconds as
+#                before, so a screen that differs is still taken at the
+#                time limit
+#     -W FILE    without -s: end the run as soon as C:\FILE (a path under
+#                C:\, e.g. a probe's log) exists and has not changed for 2
+#                seconds, at the latest after SECS seconds
+#     -n         only prepare the scratch drive (with -o) and dosbox.conf;
+#                do not start DOSBox
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
+# The report ends with "== shot: after N s (how)" for -s: settled,
+# matched (-e), limit (SECS reached), exited (DOSBox ended first), fixed.
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
@@ -47,9 +68,9 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= inis='w16:watchdog=15
+cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
 w16:exitmsg=1'
-while getopts k:c:t:f:i:s:o:rxX:wp: opt; do
+while getopts k:c:t:f:i:s:e:W:no:rxX:wp: opt; do
     case $opt in
     k) kernel=$OPTARG ;;
     c) cmd=$OPTARG ;;
@@ -59,6 +80,9 @@ $OPTARG" ;;
     i) inis="$inis
 $OPTARG" ;;
     s) shot=$OPTARG ;;
+    e) expect=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
+    n) prep=1 ;;
+    W) endfile=$OPTARG ;;
     o) keep=$OPTARG ;;
     r) useref=1 ;;
     x) dosx=$root/build/dos/DOSX.EXE ;;
@@ -149,25 +173,76 @@ cd \\WINDOWS
 $cmd > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit"
-if [ -z "$shot" ]; then
-    printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
+printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
+[ -z "$prep" ] || exit 0
+if [ -z "$shot" ] && [ -n "$endfile" ]; then
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
+        $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+    dpid=$! last= since=
+    while kill -0 "$dpid" 2>/dev/null; do
+        sleep 0.5
+        st=$(stat -c '%s %Y' "$work/c/$endfile" 2>/dev/null) || continue
+        if [ "$st" != "$last" ]; then last=$st since=$(date +%s); continue; fi
+        if [ $(($(date +%s) - since)) -ge 2 ]; then kill "$dpid" 2>/dev/null; break; fi
+    done
+    wait "$dpid" 2>/dev/null || true
+elif [ -z "$shot" ]; then
     SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
         $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 else
-    printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
+    # when to take the screenshot: fixed (after SECS), expect (the screen
+    # equal to -e's for DROPIN_HOLD seconds) or settle (USER's final init
+    # in the boot log, with /B, and the screen still for DROPIN_SETTLE)
+    mode=settle hold=${DROPIN_SETTLE:-5} bootlog=
+    [ -z "$expect" ] || mode=expect hold=${DROPIN_HOLD:-2}
+    [ -z "${DROPIN_FIXED:-}" ] || mode=fixed
+    case $(printf '%s' "$cmd" | tr a-z A-Z) in *' /B'*) bootlog=$work/c/WINDOWS/BOOTLOG.TXT ;; esac
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
 SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+dpid=\$! pids=
 for t in ${DROPIN_SHOTS:-}; do
     (sleep \$t; w=\$(xdotool search --name DOSBox 2>/dev/null | head -1); import -window "\${w:-root}" "$work/s-\$t.png") &
+    pids="\$pids \$!"
 done
-sleep $secs
-wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
-import -window "\${wid:-root}" "$work/s.png"
+grab() { w=\$(xdotool search --name DOSBox 2>/dev/null | head -1); timeout 30 import -window "\${w:-root}" "\$1" 2>/dev/null; }
+same() { [ "\$(magick compare -metric AE "\$1" "\$2" null: 2>&1 | cut -d' ' -f1)" = 0 ]; }
+t0=\$(date +%s) how=$mode
+if [ $mode = fixed ]; then
+    sleep $secs
+else
+    since= prevt=
+    rm -f "$work/prev.png"
+    while :; do
+        if [ \$((\$(date +%s) - t0)) -ge $secs ]; then how=limit; break; fi
+        if ! kill -0 \$dpid 2>/dev/null; then how=exited; break; fi
+        sleep 0.5
+        now=\$(date +%s)
+        grab "$work/cur.png" || continue
+        ok=
+        if [ $mode = expect ]; then
+            same "$work/cur.png" "$expect" && ok=\$now
+        elif [ -n "\$prevt" ] && { [ -z "$bootlog" ] || grep -aq 'INITDONE=Final USER' "$bootlog" 2>/dev/null; }; then
+            same "$work/cur.png" "$work/prev.png" && ok=\$prevt
+        fi
+        mv "$work/cur.png" "$work/prev.png"; prevt=\$now
+        if [ -z "\$ok" ]; then since=; continue; fi
+        [ -n "\$since" ] || since=\$ok
+        if [ \$((now - since)) -ge $hold ]; then
+            [ $mode = expect ] && how=matched || how=settled
+            break
+        fi
+    done
+    rm -f "$work/prev.png"
+fi
+grab "$work/s.png"
+echo "\$((\$(date +%s) - t0)) \$how" > "$work/shot.how"
+# DOSBox ended now, not at its time limit (the old way waits for that)
+[ $mode = fixed ] || kill \$dpid \$pids 2>/dev/null
 wait
 SH
     chmod +x "$work/shot.sh"
-    xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh" || true
+    "$root/tests/xvfb.sh" "$work/shot.sh" || true
     cp "$work/s.png" "$shot"
     for t in ${DROPIN_SHOTS:-}; do
         cp "$work/s-$t.png" "${shot%.png}-$t.png" 2>/dev/null || true
@@ -185,3 +260,4 @@ has() { [ -f "$log" ] && tr -d '\r' < "$log" | grep -qi "$1"; }
 if has '^LoadSuccess = USER.EXE'; then echo "USER: initialised"; elif has '^LoadStart = USER.EXE'; then echo "USER: initialisation did not return"; else echo "USER: not reached"; fi
 if has '^INIT=Final USER'; then echo "shell: loaded (Final USER init ran)"; elif has '^LoadStart = .*progman'; then echo "shell: load started"; else echo "shell: not reached"; fi
 if has '^INITDONE=Final USER'; then echo "boot: complete"; fi
+if [ -n "$shot" ] && [ -f "$work/shot.how" ]; then echo "== shot: after $(cut -d' ' -f1 "$work/shot.how") s ($(cut -d' ' -f2 "$work/shot.how"))"; fi

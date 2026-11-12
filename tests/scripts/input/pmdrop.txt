@@ -46,4 +46,4 @@ key alt+f
 key x
 sleep 2
 key Return
-sleep 8
+waitexit 60

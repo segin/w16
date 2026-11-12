@@ -1,0 +1,41 @@
+#!/bin/sh
+# Run a command on a virtual X display of its own (Xvfb, 1024x768x24),
+# never the user's desktop: tests/dropin.sh and tests/inputrun.sh start
+# DOSBox through this.
+#
+#   usage: tests/xvfb.sh COMMAND [ARGS...]
+#
+# The display number comes from Xvfb itself (-displayfd: the first free
+# one, chosen and taken by the server), so runs started at the same time
+# never share a display. xvfb-run -a picked a number by looking for lock
+# files in /tmp and then started Xvfb: two runs starting together could
+# pick the same number, one Xvfb failed and its run's DOSBox opened on the
+# other run's display, where "xdotool search --name DOSBox" could find
+# either window. xvfb-run also slept 3 seconds before the command; here
+# the command starts as soon as the server is ready. Xvfb is ended by its
+# PID afterwards. Exit status: COMMAND's.
+set -eu
+unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
+[ $# -ge 1 ] || { sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2; }
+d=$(mktemp -d "${TMPDIR:-/tmp}/w16xvfb.XXXXXX")
+Xvfb -displayfd 3 -screen 0 1024x768x24 -nolisten tcp 3> "$d/display" 2> "$d/err" &
+xpid=$!
+# the display number is written when the server accepts connections
+i=0
+while :; do
+    n=$(cat "$d/display" 2>/dev/null || true)
+    case $n in *[0-9]) break ;; esac
+    if ! kill -0 "$xpid" 2>/dev/null || [ $i -ge 600 ]; then
+        echo "xvfb.sh: Xvfb did not start: $(cat "$d/err")" >&2
+        kill "$xpid" 2>/dev/null || true
+        rm -rf "$d"
+        exit 2
+    fi
+    sleep 0.05; i=$((i + 1))
+done
+rc=0
+DISPLAY=:$n "$@" || rc=$?
+kill "$xpid" 2>/dev/null || true
+wait "$xpid" 2>/dev/null || true
+rm -rf "$d"
+exit "$rc"
