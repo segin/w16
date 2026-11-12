@@ -654,7 +654,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         python3 "$root/tests/scripts/iniset.py" "$out/write-WIN.INI" 'windows:run=WRITE.EXE'
         refrun write-ref write "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/write-ref" -r \
             -f "$out/write-WIN.INI=WINDOWS/WIN.INI"
-        "$root/tests/inputrun.sh" -e "$out/write-ref/boot.png" -m "rectangle 27,46 28,61" -b 25 -t 210 "$s" "$out/write-w16" -w -x \
+        "$root/tests/inputrun.sh" -e "$out/write-ref/boot.png" -m "rectangle 27,46 28,61" -E "$out/write-ref" \
+            -M "rectangle 27,46 28,61 rectangle 112,46 113,61 rectangle 112,82 113,97 rectangle 95,98 96,113 rectangle 213,280 276,311" -b 25 -t 210 "$s" "$out/write-w16" -w -x \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
             -f "$out/write-WIN.INI=WINDOWS/WIN.INI" > "$out/write-w16.txt" 2>&1 || true
