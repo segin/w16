@@ -361,6 +361,10 @@ static void destroy_tree(HWND h)
         return;
     w->flags |= WF_DESTROYING;
     clip_window_destroyed(h);       /* clip.c: WM_RENDERALLFORMATS first */
+    {
+        void savebits_forget(HWND h);
+        savebits_forget(h);
+    }
     send_message(h, WM_DESTROY, 0, 0);
     while ((w = valid_wnd(h)) != 0 && (c = w->hwndChild) != 0) {
         PWND cw = valid_wnd(c);

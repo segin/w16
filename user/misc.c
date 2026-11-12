@@ -89,6 +89,39 @@ static void caret_draw(void)
     caret_on ^= 1;
 }
 
+/* for savebits.c: where the caret shows on screen (FALSE: it does not) */
+BOOL caret_screen_rect(RECT *r)
+{
+    PWND w;
+    if (!hwndCaret || !caret_on || !(w = valid_wnd(hwndCaret)))
+        return FALSE;
+    SetRect(r, caret_x, caret_y, caret_x + caret_cx, caret_y + caret_cy);
+    OffsetRect(r, w->rcClient.left, w->rcClient.top);
+    return TRUE;
+}
+
+void caret_toggle(void)
+{
+    caret_draw();
+}
+
+/* the caret inverted again within screen rectangle rc, its state kept */
+void caret_invert_in(const RECT *rc)
+{
+    PWND w;
+    HDC hdc;
+    int sv;
+    if (!hwndCaret || !(w = valid_wnd(hwndCaret)))
+        return;
+    hdc = get_dc(hwndCaret, FALSE, 0, 0);
+    sv = SaveDC(hdc);
+    IntersectClipRect(hdc, rc->left - w->rcClient.left, rc->top - w->rcClient.top,
+                      rc->right - w->rcClient.left, rc->bottom - w->rcClient.top);
+    PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+    RestoreDC(hdc, sv);
+    release_dc(hwndCaret, hdc);
+}
+
 void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
 {
     DestroyCaret();

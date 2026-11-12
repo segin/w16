@@ -19,6 +19,9 @@ HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
 void invalidate_screen_except(const RECT *rc, const RECT *except);
 void invalidate_window_screen_rgn(HWND h, HRGN rgn);
+void savebits_show(HWND h);
+BOOL savebits_restore(HWND h, const RECT *oldwin);
+void savebits_forget(HWND h);
 
 void calc_client(PWND w)
 {
@@ -62,7 +65,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     PWND w = valid_wnd(h), parent;
     WINDOWPOS wp;
     RECT oldwin, oldcli;
-    BOOL wasvis, nowvis, changed;
+    BOOL wasvis, nowvis, changed, restored = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
     if (!w || h == hwndDesktop)
@@ -140,8 +143,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!(w = valid_wnd(h)))
             return FALSE;
     }
-    if (flags & SWP_SHOWWINDOW)
+    if (flags & SWP_SHOWWINDOW) {
+        /* CS_SAVEBITS: the screen under it kept (savebits.c) */
+        if (!(w->style & WS_CHILD) && (((PCLS)w->cls)->style & CS_SAVEBITS))
+            savebits_show(h);
         w->style |= WS_VISIBLE;
+    }
     if (flags & SWP_HIDEWINDOW) {
         w->style &= ~WS_VISIBLE;
         if (h == hwndFocus || IsChild(h, hwndFocus))
@@ -173,6 +180,10 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!EqualRect(&oldwin, &w->rcWindow))
             pointer_changed(&w->rcWindow);
     }
+    if (wasvis && nowvis && !EqualRect(&oldwin, &w->rcWindow))
+        savebits_forget(h);
+    if (wasvis && !nowvis)
+        restored = savebits_restore(h, &oldwin);
     if (changed && !(flags & SWP_NOREDRAW)) {
         if (nowvis && ((flags & SWP_NOZORDER) || !w->hwndParent ||
                        PW(w->hwndParent)->hwndChild == h)) {
@@ -195,8 +206,9 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             } else
                 invalidate(h, 0, 0, TRUE, TRUE, TRUE);
         } else {
-            /* what was under the old place, and the window in its new one */
-            if (wasvis)
+            /* what was under the old place (unless the image under it was
+               put back), and the window in its new one */
+            if (wasvis && !restored)
                 invalidate_screen(&oldwin);
             if (nowvis)
                 invalidate_screen(&w->rcWindow);

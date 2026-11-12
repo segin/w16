@@ -243,6 +243,7 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
                    HINSTANCE hinst, void __far *param);
 BOOL destroy_window(HWND h);
 void clip_window_destroyed(HWND h);     /* clip.c */
+void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags);
 BOOL is_visible(PWND w);                /* the window and its ancestors */
 void link_window(PWND w, HWND after);
