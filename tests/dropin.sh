@@ -22,7 +22,8 @@
 #                settled: BOOTLOG.TXT has reached "INITDONE=Final USER"
 #                (with /B in the command line) and the screen has not
 #                changed for DROPIN_SETTLE seconds (default 5; screens
-#                compared every half second), at the latest after SECS
+#                compared every half second; a one-colour frame, a failed
+#                capture, never counts as still), at the latest after SECS
 #                seconds; DOSBox is then ended. DROPIN_FIXED=1 in the
 #                environment: the old way, the screenshot after SECS
 #                seconds whatever the screen does (for debugging).
@@ -222,7 +223,8 @@ else
         ok=
         if [ $mode = expect ]; then
             same "$work/cur.png" "$expect" && ok=\$now
-        elif [ -n "\$prevt" ] && { [ -z "$bootlog" ] || grep -aq 'INITDONE=Final USER' "$bootlog" 2>/dev/null; }; then
+        elif [ -n "\$prevt" ] && { [ -z "$bootlog" ] || grep -aq 'INITDONE=Final USER' "$bootlog" 2>/dev/null; } &&
+             [ "\$(magick identify -format '%k' "$work/cur.png" 2>/dev/null)" != 1 ]; then
             same "$work/cur.png" "$work/prev.png" && ok=\$prevt
         fi
         mv "$work/cur.png" "$work/prev.png"; prevt=\$now

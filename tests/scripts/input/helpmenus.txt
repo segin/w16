@@ -1,14 +1,18 @@
 ; Help menus: Program Manager by keyboard and by mouse, then Notepad
 ; (tests/inputrun.sh; boot-test case helpmenus)
-; Shots of screens without a blinking caret wait for the screen to hold
-; still for as long as the fixed sleep before them was (settle 20 S): on a
-; loaded machine a repaint could still be under way after the sleep and
-; the shot caught it half done; shots with a caret keep their fixed delay
-; after the last key (the caret's blink phase)
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a blinking caret (matchnow NAME 20 S): the reference's run
+; keeps its fixed delay after the last key (the caret's phase); a w16 run
+; waits until its screen equals the reference's shot, caret phase and all
 click 1
 sleep 1
 key alt+h
-settle 20 1.5
+match 01-pm-help 20 1.5
 shot 01-pm-help
 key Escape
 key Escape
@@ -16,7 +20,7 @@ sleep 1
 home
 move 130 39
 click 1
-settle 20 1.5
+match 02-pm-help-mouse 20 1.5
 shot 02-pm-help-mouse
 key Escape
 key Escape
@@ -33,8 +37,7 @@ key Return
 waitmoved 0000aa 500 30
 settle 10
 key alt+h
-sleep 1.5
-shot 03-np-help
+matchnow 03-np-help 20 1.5
 key Escape
 key Escape
 sleep 1

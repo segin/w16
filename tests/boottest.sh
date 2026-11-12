@@ -165,10 +165,17 @@
 # a boot with nothing to compare with when Windows has settled (-s: Final
 # USER init in BOOTLOG.TXT, then 5 seconds unchanged); SECS stays the
 # limit, and a screen that never matches is taken then, as before. The
-# input cases' references keep their fixed boot wait (-b) and save the
-# screen the script starts from (boot.png); the w16 side starts its script
-# when its screen equals that one (inputrun.sh -e), or when settled (-s)
-# where the sides' boot screens differ by design. A session ends when its
+# input cases' references start their script when Windows has settled
+# with Program Manager (or the program the boot starts) up (inputrun.sh
+# -s: Final USER init, 5 s unchanged, not a blank capture, an active
+# caption), at -b at the latest, and save that screen (boot.png); the w16
+# side starts its script when its screen equals that one (-e), or when
+# settled (-s) where the sides' boot screens differ by design. A shot
+# that comes back blank (a failed capture) is taken again. Within the
+# scripts, "match NAME MAX STILL" before a shot makes the reference wait
+# for a still screen and the w16 side (-E the reference's run, -M the
+# parts the case leaves out) for the reference's screen, at most MAX
+# seconds. A session ends when its
 # script has run, not at its time limit. DROPIN_FIXED=1 and
 # INPUTRUN_FULL=1 give the old fixed timing (for debugging; they change
 # the references' keys).
@@ -567,7 +574,7 @@ runcase() {
         k=1 bad=0 runs=${NOLOCK_RUNS:-6}
         while [ $k -le $runs ]; do
             b=${NOLOCK_BOOT:-$((10 + (k - 1) % 6 * 2))}
-            INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b "$b" -t 120 \
+            INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b "$b" -t 240 \
                 "$root/tests/scripts/input/bootnolock.txt" "$out/$c-$k" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
@@ -588,8 +595,8 @@ runcase() {
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
     exitwin)
         scr=$root/tests/scripts/input/exitwin.txt
-        refrun exitwin-ref exitwin env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -B -b 30 -t 70 "$scr" "$out/exitwin-ref" -r
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 70 "$scr" "$out/exitwin-w16" \
+        refrun exitwin-ref exitwin env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 190 "$scr" "$out/exitwin-ref" -r
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 190 "$scr" "$out/exitwin-w16" \
             -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
             > "$out/exitwin-w16.txt" 2>&1 || true
@@ -606,7 +613,7 @@ runcase() {
     runfront|runfrontk)
         if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
         else set --; fi
-        "$root/tests/inputrun.sh" -s -b 25 -t 60 "$root/tests/scripts/input/runfront.txt" "$out/$c" "$@" \
+        "$root/tests/inputrun.sh" -s -b 25 -t 180 "$root/tests/scripts/input/runfront.txt" "$out/$c" "$@" \
             > "$out/$c.txt" 2>&1 || true
         # Notepad's caption (top left) the active colour, Program Manager's
         # (its right part, beyond Notepad) not
@@ -621,8 +628,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
     tabs|alttab|helpmenus)
-        refrun $c-ref $c "$root/tests/inputrun.sh" -B -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/$c-ref/boot.png" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \
+        refrun $c-ref $c "$root/tests/inputrun.sh" -s -b 25 -t 200 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/$c-ref/boot.png" -E "$out/$c-ref" -M "$([ $c != helpmenus ] && echo rectangle 0,0 0,0 || echo rectangle 14,42 20,61)" -b 25 -t 200 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
         r=ok
         for f in "$out/$c-ref"/[0-9]*.png; do
@@ -645,9 +652,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         s=$root/tests/scripts/input/write.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/write-WIN.INI"
         python3 "$root/tests/scripts/iniset.py" "$out/write-WIN.INI" 'windows:run=WRITE.EXE'
-        refrun write-ref write "$root/tests/inputrun.sh" -B -b 25 -t 90 "$s" "$out/write-ref" -r \
+        refrun write-ref write "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/write-ref" -r \
             -f "$out/write-WIN.INI=WINDOWS/WIN.INI"
-        "$root/tests/inputrun.sh" -e "$out/write-ref/boot.png" -m "rectangle 27,46 28,61" -b 25 -t 90 "$s" "$out/write-w16" -w -x \
+        "$root/tests/inputrun.sh" -e "$out/write-ref/boot.png" -m "rectangle 27,46 28,61" -b 25 -t 210 "$s" "$out/write-w16" -w -x \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
             -f "$out/write-WIN.INI=WINDOWS/WIN.INI" > "$out/write-w16.txt" 2>&1 || true
@@ -683,8 +690,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # 3.1's width rule for long captions). Then every w16 part: no
         # fault (it ended in KERNEL's lstrcat, back to DOS).
         s=$root/tests/scripts/input/winfile.txt
-        refrun winfile-ref winfile "$root/tests/inputrun.sh" -B -b 25 -t 90 "$s" "$out/winfile-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/winfile-ref/boot.png" -b 25 -t 90 "$s" "$out/winfile-w16" -r \
+        refrun winfile-ref winfile "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/winfile-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/winfile-ref/boot.png" -E "$out/winfile-ref" -M "rectangle 0,85 240,140 rectangle 0,455 639,479" -b 25 -t 210 "$s" "$out/winfile-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/winfile-w16.txt" 2>&1 || true
         r=ok
         for f in "$out/winfile-ref"/[0-9]*.png; do
@@ -701,7 +708,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/winfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then
             fon=$root/build/fonts
-            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 100 "$s" "$out/winfile-all" \
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 220 "$s" "$out/winfile-all" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
                 -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
@@ -714,16 +721,16 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
-        refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -B -b 40 -t 170 "$scr" "$out/pmdrop-ref" -r
-        "$root/tests/inputrun.sh" -s -b 40 -t 170 "$scr" "$out/pmdrop-pm" -r \
+        refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -s -b 40 -t 290 "$scr" "$out/pmdrop-ref" -r
+        "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-pm" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
-        "$root/tests/inputrun.sh" -s -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
+        "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-sh" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             > "$out/pmdrop-sh.txt" 2>&1 || true
         # w16's USER and GDI under Microsoft's File Manager and Program
         # Manager (DragObject, DumpIcon): the file's focus rectangle left
         # out, its dots in the other phase (GDI's pattern origin)
-        "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -b 40 -t 170 "$scr" "$out/pmdrop-us" -r \
+        "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -E "$out/pmdrop-ref" -M "rectangle 258,200 280,224" -b 40 -t 290 "$scr" "$out/pmdrop-us" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true
         r=ok
         grp=work/c/WINDOWS/MAIN.GRP
@@ -755,10 +762,10 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # dialog is a pixel to the right, UNVERIFIED why), and w16's own
         # group-icon pictures; the dialog's caption must be there
         scr=$root/tests/scripts/input/pmclose.txt
-        refrun pmclose-ref pmclose "$root/tests/inputrun.sh" -B -b 40 -t 70 "$scr" "$out/pmclose-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/pmclose-ref/boot.png" -b 40 -t 70 "$scr" "$out/pmclose-us" -r \
+        refrun pmclose-ref pmclose "$root/tests/inputrun.sh" -s -b 40 -t 190 "$scr" "$out/pmclose-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/pmclose-ref/boot.png" -E "$out/pmclose-ref" -M "rectangle 168,182 472,300" -b 40 -t 190 "$scr" "$out/pmclose-us" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmclose-us.txt" 2>&1 || true
-        "$root/tests/inputrun.sh" -s -b 40 -t 70 "$scr" "$out/pmclose-pm" -r \
+        "$root/tests/inputrun.sh" -s -E "$out/pmclose-ref" -M "rectangle 168,182 472,300 rectangle 60,310 300,342" -b 40 -t 190 "$scr" "$out/pmclose-pm" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmclose-pm.txt" 2>&1 || true
         r=ok
@@ -794,10 +801,10 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # pictures left out (the row of icons at the bottom); MAIN.GRP
         # identical to all-Microsoft's in both
         scr=$root/tests/scripts/input/pmitems.txt
-        refrun pmitems-ref pmitems "$root/tests/inputrun.sh" -B -b 40 -t 120 "$scr" "$out/pmitems-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/pmitems-ref/boot.png" -b 40 -t 120 "$scr" "$out/pmitems-us" -r \
+        refrun pmitems-ref pmitems "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/pmitems-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/pmitems-ref/boot.png" -E "$out/pmitems-ref" -b 40 -t 240 "$scr" "$out/pmitems-us" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmitems-us.txt" 2>&1 || true
-        "$root/tests/inputrun.sh" -s -b 40 -t 120 "$scr" "$out/pmitems-pm" -r \
+        "$root/tests/inputrun.sh" -s -E "$out/pmitems-ref" -M "rectangle 60,310 300,342" -b 40 -t 240 "$scr" "$out/pmitems-pm" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmitems-pm.txt" 2>&1 || true
         r=ok
@@ -823,8 +830,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
-        refrun icons-ref icons "$root/tests/inputrun.sh" -B -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/icons-ref/boot.png" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
+        refrun icons-ref icons "$root/tests/inputrun.sh" -s -b 25 -t 380 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/icons-ref/boot.png" -E "$out/icons-ref" -M "rectangle 160,400 220,445" -b 25 -t 380 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/icons-w16.txt" 2>&1 || true
         r=ok
         for f in "$out/icons-ref"/[0-9]*.png; do
@@ -840,7 +847,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         if [ "$r" = ok ]; then echo "ok   icons: 0 pixels (Clock's icon left out)"
         else echo "FAIL icons: $r ($out)"; fails=$((fails + 1)); fi ;;
     about)
-        "$root/tests/inputrun.sh" -s -b 25 -t 80 "$root/tests/scripts/input/about.txt" "$out/about" \
+        "$root/tests/inputrun.sh" -s -b 25 -t 200 "$root/tests/scripts/input/about.txt" "$out/about" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
             > "$out/about.txt" 2>&1 || true
@@ -860,9 +867,9 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's USER and GDI (dragoffk: on w16's KRNL286 too) against
         # all-Microsoft; every screen must be identical
         scr=$root/tests/scripts/input/dragoff.txt
-        refrun dragoff-ref dragoff "$root/tests/inputrun.sh" -B -b 25 -t 70 "$scr" "$out/dragoff-ref" -r
+        refrun dragoff-ref dragoff "$root/tests/inputrun.sh" -s -b 25 -t 190 "$scr" "$out/dragoff-ref" -r
         if [ $c = dragoff ]; then k=-r; else k=; fi
-        "$root/tests/inputrun.sh" -e "$out/dragoff-ref/boot.png" -b 25 -t 70 "$scr" "$out/$c-w16" $k \
+        "$root/tests/inputrun.sh" -e "$out/dragoff-ref/boot.png" -E "$out/dragoff-ref" -b 25 -t 190 "$scr" "$out/$c-w16" $k \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
         r=ok
         for s in 01-right-moving 02-right 03-left-moving 04-left 05-bottom-moving 06-bottom; do
@@ -877,8 +884,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         else echo "FAIL $c: $r"; fails=$((fails + 1)); fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
-        refrun input-ref input "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r
-        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-w16" \
+        refrun input-ref input "$root/tests/inputrun.sh" -b 1 -t 270 "$scr" "$out/input-ref" -r
+        "$root/tests/inputrun.sh" -b 1 -t 270 "$scr" "$out/input-w16" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
         r=ok
         for s in 01-booted 02-menu 03-closed; do
@@ -899,10 +906,10 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         mdrv=$root/build/dos/MOUSE.DRV
         r=ok
         for s in dragoff pmitems pmclose helpmenus; do
-            case $s in pmitems|pmclose) b=40 t=120 ;; *) b=25 t=80 ;; esac
+            case $s in pmitems|pmclose) b=40 t=240 ;; *) b=25 t=200 ;; esac
             scr=$root/tests/scripts/input/$s.txt
-            refrun mouse-$s-ref mouse "$root/tests/inputrun.sh" -B -b $b -t $t "$scr" "$out/mouse-$s-ref" -r
-            "$root/tests/inputrun.sh" -e "$out/mouse-$s-ref/boot.png" -b $b -t $t "$scr" "$out/mouse-$s-w16" -r \
+            refrun mouse-$s-ref mouse "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/mouse-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/mouse-$s-ref/boot.png" -E "$out/mouse-$s-ref" -M "$([ $s != helpmenus ] && echo rectangle 0,0 0,0 || echo rectangle 14,42 20,61)" -b $b -t $t "$scr" "$out/mouse-$s-w16" -r \
                 -f "$mdrv=WINDOWS/SYSTEM/MOUSE.DRV" > "$out/mouse-$s-w16.txt" 2>&1 || true
             ls "$out/mouse-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
             for f in "$out/mouse-$s-ref"/[0-9]*.png; do
@@ -925,7 +932,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         scr=$root/tests/scripts/input/dragoff.txt
         # (both sides are w16's but for MOUSE.DRV: not cached)
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/mouseall-ref/boot.png" -b 30 -t 80 "$scr" "$out/mouseall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/mouseall-ref/boot.png" -E "$out/mouseall-ref" -b 30 -t 80 "$scr" "$out/mouseall-$k" \
                 -f "$root/build/dos/MOUSE.DRV=WINDOWS/SYSTEM/MOUSE.DRV"
             else set -- -s -b 30 -t 80 "$scr" "$out/mouseall-$k"; fi
             "$root/tests/inputrun.sh" "$@" \

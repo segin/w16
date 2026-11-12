@@ -19,9 +19,16 @@
 #              uses it, never the shots
 #     -s       the boot wait ends as soon as BOOTLOG.TXT has reached
 #              "INITDONE=Final USER" and the screen has not changed for
-#              INPUTRUN_SETTLE seconds (default 5)
+#              INPUTRUN_SETTLE seconds (default 5), is not blank (one
+#              colour: a failed capture) and shows an active window
+#              (500 pixels of the active caption's blue: Program Manager
+#              up, not just a still screen)
 #     -B       screenshot OUTDIR/boot.png at the end of the boot wait (-e
 #              and -s take it too): the screen the script starts from
+#     -E DIR   the reference's run (DIR holds its shots): "match NAME"
+#              waits for DIR/NAME.png (see below)
+#     -M DRAW  with -E: -draw primitives painted black on both screens
+#              before "match" compares them (what the case leaves out)
 #     -t SECS  total run time limit (default 120): DOSBox is ended then at
 #              the latest. The run ends when the script has run to its end
 #              (its last shot taken: input.log then says "script done");
@@ -60,6 +67,23 @@
 #                       up while Program Manager adds a dropped item): give
 #                       STILL at least the time a fixed sleep there had
 #     shot NAME         screenshot OUTDIR/NAME.png
+#     match NAME MAX STILL  before "shot NAME": with -E, wait until the
+#                       screen equals the reference's NAME.png (-M's parts
+#                       left out) in shots for 1 s, at most MAX seconds,
+#                       then go on whatever it shows (the shot is compared
+#                       as before); without -E (the reference itself), or
+#                       when there is no such shot, "settle MAX STILL". So
+#                       a w16 run on a loaded host waits for the state the
+#                       reference reached, and a busy screen held still
+#                       (an hourglass) does not pass for it
+#     matchnow NAME MAX S  "shot NAME" for a screen with a blinking caret:
+#                       the reference sleeps S seconds (the caret's phase
+#                       then is that of S after the last key) and shoots;
+#                       a w16 run takes as the shot the first frame equal
+#                       to the reference's (the caret in the same phase),
+#                       or the last one after MAX seconds. Under load the emulated time
+#                       that passes in S host seconds varies, and with it
+#                       the caret's phase in a fixed-time shot
 #     waitexit MAX      wait until Windows has ended (WIN returned to the
 #                       DOS prompt: the autoexec's WINEXIT in C:\OUT.TXT, or
 #                       DOSBox exited), at most MAX seconds
@@ -72,12 +96,14 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-boot=25 total=120 expect= settle= bootshot= mask=
-while getopts b:e:m:sBt: opt; do
+boot=25 total=120 expect= settle= bootshot= mask= refdir= rmask=
+while getopts b:e:m:sBt:E:M: opt; do
     case $opt in
     b) boot=$OPTARG ;;
     e) expect=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") bootshot=1 ;;
     m) mask=$OPTARG ;;
+    E) refdir=$(cd "$OPTARG" && pwd) ;;
+    M) rmask=$OPTARG ;;
     s) settle=1 bootshot=1 ;;
     B) bootshot=1 ;;
     t) total=$OPTARG ;;
@@ -138,9 +164,25 @@ xdotool windowactivate --sync "\$wid" 2>/dev/null || xdotool windowfocus "\$wid"
 # the mouse in DOSBox)
 eval \$(xdotool getwindowgeometry --shell "\$wid")
 xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2))
+# blank PNG: one colour, or no image: the window capture failed (seen under
+# load: a black frame of a Windows that was running); never a real screen
+blank() { [ "\$(magick identify -format '%k' "\$1" 2>/dev/null || echo 1)" = 1 ]; }
+# active PNG: a window is active (500 pixels or more of the active caption
+# colour): Program Manager, or the program the boot starts, is up
+active() { [ "\$(python3 "$root/tests/scripts/shotpix.py" count "\$1" 0000aa 0 0 -1 -1)" -ge 500 ] 2>/dev/null; }
+# a shot that comes back blank is taken again (up to 3 more times, half a
+# second apart), and logged
 shot() {
-    if timeout 30 import -window "\$wid" "$out/\$1.png"; then echo "shot \$1" >> "$out/input.log"
-    else echo "shot \$1 FAILED" >> "$out/input.log"; fi
+    k=0
+    while :; do
+        if ! timeout 30 import -window "\$wid" "$out/\$1.png"; then echo "shot \$1 FAILED" >> "$out/input.log"; return; fi
+        blank "$out/\$1.png" || break
+        k=\$((k + 1))
+        echo "shot \$1 blank (capture \$k)" >> "$out/input.log"
+        [ \$k -le 3 ] || { echo "shot \$1 FAILED: blank" >> "$out/input.log"; return; }
+        sleep 0.5
+    done
+    echo "shot \$1" >> "$out/input.log"
 }
 # the boot wait: -b SECS, or until the screen equals -e's (2 s) or has
 # settled after USER's final init (-s), at most -b SECS
@@ -160,13 +202,19 @@ else
             same "$out/.boot-m.png" "$out/.boot-e.png" && ok=\$now
         elif [ -n "$expect" ]; then
             same "$out/.boot-b.png" "$expect" && ok=\$now
-        elif [ -n "\$prevt" ] && grep -aq 'INITDONE=Final USER' "$work/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null; then
+        elif [ -n "\$prevt" ] && grep -aq 'INITDONE=Final USER' "$work/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null &&
+             ! blank "$out/.boot-b.png"; then
             same "$out/.boot-b.png" "$out/.boot-a.png" && ok=\$prevt
         fi
         mv "$out/.boot-b.png" "$out/.boot-a.png"; prevt=\$now
         if [ -z "\$ok" ]; then since=; continue; fi
         [ -n "\$since" ] || since=\$ok
-        if [ \$((now - since)) -ge \$hold ]; then how=\$([ -n "$expect" ] && echo matched || echo settled); break; fi
+        if [ \$((now - since)) -ge \$hold ]; then
+            if [ -n "$expect" ]; then how=matched; break; fi
+            # settled: only with Program Manager (or the program) up
+            if active "$out/.boot-a.png"; then how=settled; break; fi
+            since=
+        fi
     done
     rm -f "$out/.boot-a.png" "$out/.boot-b.png" "$out/.boot-e.png" "$out/.boot-m.png"
     echo "boot wait: \$how after \$((\$(date +%s) - t0)) s" >> "$out/input.log"
@@ -183,7 +231,7 @@ settle() {
         sleep 0.7
         timeout 30 import -window "\$wid" "$out/.settle-b.png"
         n=\$(magick compare -metric AE "$out/.settle-a.png" "$out/.settle-b.png" null: 2>&1)
-        if [ "\${n%% *}" = 0 ]; then
+        if [ "\${n%% *}" = 0 ] && ! blank "$out/.settle-b.png"; then
             echo "settled after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
         fi
         if [ \$((\$(date +%s) - t0)) -ge "\$1" ]; then
@@ -194,6 +242,43 @@ settle() {
     rm -f "$out/.settle-a.png" "$out/.settle-b.png"
 }
 ms() { echo \$((\$(date +%s%N) / 1000000)); }
+# match NAME MAX STILL, matchnow NAME MAX S (see the top): hold is how
+# long the screen must equal the reference's (ms)
+matchnow() {
+    if [ -z "$refdir" ] || [ ! -f "$refdir/\$1.png" ]; then sleep "\$3"; shot "\$1"; return; fi
+    hold=0 keep=1 match "\$1" "\$2"
+    # the frame that matched (or the last one) is the shot: a new capture
+    # could catch the caret in its other phase
+    mv "$out/.match-a.png" "$out/\$1.png" && echo "shot \$1" >> "$out/input.log"
+}
+match() {
+    : \${hold:=1000}
+    if [ -z "$refdir" ] || [ ! -f "$refdir/\$1.png" ]; then settle "\$2" "\$3"; return; fi
+    t0=\$(date +%s)
+    m="$rmask"; [ -n "\$m" ] || m="rectangle 0,0 0,0"
+    magick "$refdir/\$1.png" -fill black -draw "\$m" "$out/.match-r.png"
+    since=
+    while :; do
+        timeout 30 import -window "\$wid" "$out/.match-a.png"
+        magick "$out/.match-a.png" -fill black -draw "\$m" "$out/.match-b.png"
+        n=\$(magick compare -metric AE "$out/.match-b.png" "$out/.match-r.png" null: 2>&1)
+        if [ "\${n%% *}" = 0 ]; then
+            [ -n "\$since" ] || since=\$(ms)
+            if [ \$((\$(ms) - since)) -ge "\$hold" ]; then
+                echo "matched \$1 after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+            fi
+        else
+            since=
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$2" ]; then
+            echo "\$1 not matched in \$2 s (\${n%% *} pixels off)" >> "$out/input.log"; break
+        fi
+        sleep 0.3
+    done
+    [ -n "\${keep:-}" ] || rm -f "$out/.match-a.png"
+    rm -f "$out/.match-b.png" "$out/.match-r.png"
+    hold= keep=
+}
 settlefor() {
     need=\$(awk "BEGIN { print int(\$2 * 1000) }")
     timeout 30 import -window "\$wid" "$out/.settle-a.png"
@@ -202,7 +287,7 @@ settlefor() {
         sleep 0.5
         timeout 30 import -window "\$wid" "$out/.settle-b.png"
         n=\$(magick compare -metric AE "$out/.settle-a.png" "$out/.settle-b.png" null: 2>&1)
-        if [ "\${n%% *}" = 0 ]; then
+        if [ "\${n%% *}" = 0 ] && ! blank "$out/.settle-b.png"; then
             if [ \$((\$(ms) - since)) -ge "\$need" ]; then
                 echo "settled (\$2 s still) after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
             fi
@@ -312,6 +397,8 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;
     settle) settle \$a \$b ;;
+    match) match \$a \$b ;;
+    matchnow) matchnow \$a \$b ;;
     waitpixel) waitpix is \$a \$b ;;
     waitnotpixel) waitpix not \$a \$b ;;
     waitcount) waitcount \$a \$b ;;
