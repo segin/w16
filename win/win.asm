@@ -68,6 +68,8 @@ SB_RC       equ 171h        ; Windows' exit code, written by WSWAP
 SB_ROWS     equ 177h        ; 19h: 25 (UNVERIFIED: screen rows?)
 SB_K1       equ 178h        ; 02h 70h 00h 30h (UNVERIFIED)
 SB_COUNT    equ 17Ch        ; counted down by SI=2, read by SI=4
+SB_17D      equ 17Dh        ; 1 when WSWAP ended to run a DOS program
+SB_17E      equ 17Eh        ; 0Fh; less 2 at each SI=3 (UNVERIFIED meaning)
 SB_K2       equ 17Dh        ; 00h 0Fh FFh FFh (UNVERIFIED)
 SB_DOSX     equ 189h        ; DOSX.EXE's full path, ASCIIZ
 SB_TASKS    equ 1F0h        ; 15 records of 32h bytes (the switcher's
@@ -165,17 +167,35 @@ sw_api:
         mov ax, sw_stub + 50h           ; as Windows 3.1 returns (UNVERIFIED
         mov si, sw_x                    ; what WSWAP does with it)
         iret
-.s4:    cmp si, 4
+.s4:    cmp si, 3
+        jne .s4b
+        ; WSWAP about to run a DOS program: Windows 3.1's WIN.COM (WC3)
+        ; took block byte 17Eh from 0Fh to 0Dh and answered AX = 020Dh
+        ; (AH the counter at 17Ch, AL the new 17Eh: the program's task
+        ; record, which WIN.COM marks free again afterwards, .std),
+        ; SI = 0B8Fh (UNVERIFIED what that is; w16 gives an offset in its
+        ; own code as for SI=2), DX unchanged. UNVERIFIED: the rule for
+        ; 17Eh beyond this one case (w16: less 2; taking the highest free
+        ; record instead made WSWAP report too little disk space). w16
+        ; answered as for no such function, and WSWAP ended Windows
+        ; instead of running the program
+        sub byte [cs:block + SB_17E], 2
+        mov al, [cs:block + SB_17E]
+        mov ah, [cs:block + SB_COUNT]
+        mov si, sw_stub
+        iret
+.s4b:   cmp si, 4
         jne .s6
-        ; WSWAP keeps the number of its swap file (~WOA<n>.TMP) at block
-        ; + 4F2h while it runs; after this call Windows 3.1's block has 0
-        ; there, and WSWAP started again (restart) begins afresh rather
-        ; than resuming (WC3 block dumps; UNVERIFIED that SI=4 is what
-        ; clears it)
-        mov word [cs:block + SB_SWAPID], 0
-        mov al, [cs:block + SB_COUNT]
-        xor ah, ah
-        mov si, 8
+        ; the word at 17Ch: the SI=2/SI=4 counter and the byte after it
+        ; (Windows 3.1, WSWAP starting a DOS program: AX = 0102h, block
+        ; 17Ch-17Dh 02 01; WC3). It leaves WSWAP's swap-file number at
+        ; 4F2h alone: w16 used to clear it here, and WSWAP, back from the
+        ; DOS program, ended Windows (it could not find Windows' swap
+        ; file); 3.1's block keeps it then. It is cleared before WSWAP is
+        ; started again for a restart (.again2 below)
+        mov ax, [cs:block + SB_COUNT]
+        mov di, block                   ; DI -> the block (3.1: 06C8h, as
+        mov si, 8                       ; SI=5's AX; w16 left DI alone)
         iret
 .s6:    cmp si, 6
         jne .s7
@@ -262,9 +282,53 @@ launch:
         int 10h
         pop ax
         jmp .code
-.std:   ; standard mode: WSWAP leaves Windows' exit code in the block; if
-        ; it did not end the way it should, Windows 3.1's WIN.COM exits
-        ; with FFh
+.std:   ; standard mode: a DOS program to run. WSWAP, asked by WINOLDAP
+        ; to start one (COMMAND.COM /C ...), swaps Windows out and ends,
+        ; leaving the program's path at 189h (where DOSX's was), its tail
+        ; at 05h, the counter at 17Ch not 0 (2) and 17Dh 1 (WC3 block
+        ; dumps on Windows 3.1: Z:\COMMAND.COM, " /C ECHO HI"); 3.1's
+        ; WIN.COM runs it and then WSWAP again, which swaps Windows back
+        ; in (its swap-file number kept at 4F2h). w16 took the ending
+        ; WSWAP for Windows' end. UNVERIFIED: the exact condition (w16:
+        ; the counter not 0 and 17Dh 1) and the environment the program
+        ; gets (w16: Windows')
+        cmp byte [block + SB_COUNT], 0
+        je .noapp
+        cmp byte [block + SB_17D], 1
+        jne .noapp
+        mov ax, [env_seg]
+        mov [exec_pb], ax
+        mov word [exec_pb + 2], block + SB_TAIL
+        mov [exec_pb + 4], cs
+        mov [exec_pb + 8], cs
+        mov [exec_pb + 12], cs
+        mov dx, block + SB_DOSX
+        mov bx, exec_pb
+        call exec
+        mov word [exec_pb + 2], exec_tail
+        ; the block as 3.1's WIN.COM leaves it for the next WSWAP (WC3: at
+        ; the end of the first run 16Fh 01, 17Ch 02, 17Eh 0Dh; at the start
+        ; of the next 02, 01, 0Eh, and the program's task record free
+        ; again: bytes 11h-13h 04 00 0E -> 00 80 0F (4F1h too went 0Dh ->
+        ; 0Eh: left to WSWAP). 178h
+        ; went from 02 to 0Ah as well, but its 08h is WINOLDAP's Ctrl+Esc
+        ; (the Task List): not done. UNVERIFIED meanings)
+        mov al, [block + SB_17E]
+        cmp al, SB_NTASKS - 1
+        jae .nrec
+        mov bl, SB_TASKLEN
+        mul bl
+        mov bx, ax
+        add bx, block + SB_TASKS
+        mov byte [bx + 11h], 0
+        mov byte [bx + TK_FLAG], 80h
+        inc byte [bx + 13h]
+.nrec:  mov byte [block + SB_17E], SB_NTASKS - 1
+        inc byte [block + 16Fh]
+        dec byte [block + SB_COUNT]
+        jmp .run
+.noapp: ; WSWAP leaves Windows' exit code in the block; if it did not end
+        ; the way it should, Windows 3.1's WIN.COM exits with FFh
         mov al, [block + SB_RC]
         cmp byte [block + SB_DONE], 0
         jne .code
@@ -284,6 +348,11 @@ launch:
         int 10h
         pop ax
 .again2:
+        ; WSWAP keeps the number of its swap file (~WOA<n>.TMP) at block
+        ; 4F2h; on 3.1 a WSWAP started again for a restart finds 0 there
+        ; and begins afresh rather than resuming the old file (WC3 block
+        ; dumps; UNVERIFIED which of WIN.COM or WSWAP clears it)
+        mov word [block + SB_SWAPID], 0
         mov byte [80h], 0               ; restarted Windows gets no tail
         mov byte [81h], 0Dh
         mov byte [block + SB_TAIL], 0
@@ -1044,20 +1113,37 @@ sft_link:
 
 ; The swap directories: SYSTEM.INI [NonWindowsApp] SwapDisk= if it is a
 ; directory, else the TEMP variable's if it is one, else the root of the
-; first hard disk (A:\ without one: SYSINI.WRI); each with a "\" at the
-; end. The second: TEMP's directory if it is one, else that root.
-; (Windows 3.1's second directory has quirks w16 does not copy: ARCHITECTURE
-; 9.5.)
+; first local drive; each with a "\" at the end. The second: that drive's
+; current directory (ARCHITECTURE 9.5).
+;
+; The drive: the first from A: that INT 21h 4409h (IOCTL: remote?) accepts
+; and 4408h (removable?) does not call removable. Windows 3.1's WIN.COM
+; asks 4408h/4409h there and no INT 13h (DOSBox-X's log); in DOSBox,
+; where 4409h fails for A: and B:, it chose C:, in DOSBox-X, where 4409h
+; answers for A: (no disk; 4408h fails), A:. It used to be INT 13h 08h's
+; first hard disk, A: without one, which in DOSBox (no BIOS hard disk)
+; gave A: where 3.1 gave C:, and the DOS prompt (WINOLDAP) could not swap.
+; UNVERIFIED: the remote and removable tests (neither emulator has one).
 swap_dirs:
-        mov ah, 08h                     ; BIOS: is there a hard disk?
-        mov dl, 80h                     ; (UNVERIFIED: how Windows 3.1's
-        int 13h                         ; WIN.COM decides; DOSBox-X with
-        push cs                         ; a mounted directory gives A:\)
+        push cs
         pop es
-        mov al, 'A'
-        jc .hd
-        test dl, dl
-        jz .hd
+        mov bl, 1
+.dr:    mov ax, 4409h
+        int 21h
+        jc .drn
+        test dh, 10h                    ; DX bit 12: remote
+        jnz .drn
+        mov ax, 4408h
+        int 21h
+        jc .dry                         ; no answer: not removable
+        test ax, ax
+        jz .drn                         ; 0: removable
+.dry:   mov al, bl
+        add al, 'A' - 1
+        jmp .hd
+.drn:   inc bl
+        cmp bl, 26
+        jbe .dr
         mov al, 'C'
 .hd:    mov di, root_dir
         stosb
@@ -1095,11 +1181,32 @@ swap_dirs:
         mov si, root_dir
 .s1:    mov di, block + SB_SWAP1
         call copy_slash
-        ; the second: TEMP's directory (not a root); Windows 3.1's WIN.COM,
-        ; when SwapDisk= did not give the first, puts the root's drive
-        ; letter on it and a second "\" at the end (C:\TMP: A:\TMP\\, seen
-        ; with WC4); else the root
+        ; the second, when that drive is the current one: its current
+        ; directory. Windows 3.1's in DOSBox: C:\WINDOWS\ started from
+        ; C:\WINDOWS, C:\TMP\ from C:\TMP, C:\A\ from C:\A, whatever TEMP
+        ; is; C:\ when started from Z:. Otherwise (DOSBox-X: the drive is
+        ; A:, the current one C:) TEMP's directory (not a root) with the
+        ; drive's letter on it and a second "\" when SwapDisk= did not give
+        ; the first (C:\TMP: A:\TMP\\, seen with WC4), else the root.
+        ; UNVERIFIED: the rule behind both (3.1's buffer after a failed
+        ; INT 21h 47h for A: in DOSBox-X?)
+        mov ah, 19h
+        int 21h
+        add al, 'A'
+        cmp al, [root_dir]
+        jne .nocwd
+        mov si, cwd_buf + 3
+        xor dl, dl
+        mov ah, 47h
+        int 21h
+        jc .nocwd
+        mov ax, [root_dir]
+        mov [cwd_buf], ax
+        mov byte [cwd_buf + 2], '\'
+        mov si, cwd_buf
         mov di, block + SB_SWAP2
+        jmp .s2
+.nocwd: mov di, block + SB_SWAP2
         mov si, temp_dir
         cmp byte [si], 0
         je .s2root
@@ -1669,6 +1776,7 @@ temp_dir:   times PATHMAX db 0
 swap_dir:   times PATHMAX db 0
 swap_ok:    db 0
 isdir_save: times 68 db 0
+cwd_buf:    times 68 db 0
 INIBUF      equ 512
 INILINE     equ 256
 ini_h:      dw 0

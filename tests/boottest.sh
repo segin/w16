@@ -28,6 +28,13 @@
 #              screen and Windows comes back; against Microsoft's WINOLDAP
 #              doing the same                       must be 0
 #   winoldapk  the same on w16's KRNL286            must be 0
+#   winoldapw  the same with w16's WIN.COM (Microsoft's KRNL286, WINOLDAP
+#              and the rest): WIN.COM runs the DOS program between two
+#              runs of WSWAP                         must be 0
+#   wincomswap the swap directories w16's WIN.COM gives WSWAP (switcher
+#              block D7h and 11Bh, WC4 as WSWAP.EXE) in DOSBox, started
+#              from C:\WINDOWS, C:\, C:\TMP with TEMP=C:\TMP and from Z:,
+#              against Windows 3.1's WIN.COM: equal
 #   tree       build/w16 as a whole (tests/w16tree.sh): must boot
 #   allw16full every w16 part at once: WIN.COM, DOSX, KRNL286, USER, GDI,
 #              PROGMAN, WINOLDAP, WIN87EM and the four fonts: must boot
@@ -128,7 +135,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -203,8 +210,9 @@ check() {
         if [ "$n" != 0 ]; then
             mv "$out/$w.png" "$out/$w.first.png"
             mv "$out/$w.txt" "$out/$w.first.txt"
-            boot "$w" -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
-                -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" $([ "$w" = winoldap ] && echo -r)
+            [ "$w" = winoldapw ] && set -- -w || set -- -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
+            boot "$w" -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" "$@" \
+                $([ "$w" != winoldapk ] && echo -r)
             for rr in woaref woaref2; do
                 [ -f "$out/$rr.png" ] || continue
                 m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
@@ -274,6 +282,26 @@ for c in $cases; do
     winoldapk) woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldapk winoldapk woaref ;;
+    winoldapw) woaref; boot winoldapw -r -w -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+               check winoldapw winoldapw woaref ;;
+    wincomswap)
+        # WC4 in WSWAP's place records the block; each scenario a batch file
+        r=ok
+        for t in 'WIN /S' 'CD \;C:\WINDOWS\WIN /S' 'MD C:\TMP;SET TEMP=C:\TMP;CD \TMP;C:\WINDOWS\WIN /S' \
+                 'Z:;C:\WINDOWS\WIN /S;C:'; do
+            printf '%s\n' "$t" | tr ';' '\n' | sed 's/$/\r/' > "$out/WCS.BAT"
+            for v in ms w16; do
+                rm -rf "$out/wcs-$v"
+                if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
+                "$root/tests/dropin.sh" -t 20 -o "$out/wcs-$v" "$@" -c 'C:\WCS' -f "$out/WCS.BAT=WCS.BAT" \
+                    -f "$root/build/dos/WC4.COM=WINDOWS/SYSTEM/WSWAP.EXE" > "$out/wcs-$v.txt" 2>&1 || true
+                python3 "$root/tests/scripts/swapdirs.py" "$out/wcs-$v/c/WC.LOG" > "$out/wcs-$v.dirs" 2>&1
+            done
+            cmp -s "$out/wcs-ms.dirs" "$out/wcs-w16.dirs" ||
+                { r="$t: $(cat "$out/wcs-w16.dirs"), 3.1: $(cat "$out/wcs-ms.dirs")"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   wincomswap: swap directories as 3.1's"
+        else echo "FAIL wincomswap: $r"; fails=$((fails + 1)); fi ;;
     tree)
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"
