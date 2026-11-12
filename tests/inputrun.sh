@@ -27,6 +27,7 @@
 #     type TEXT         type text
 #     sleep S           wait S seconds (fractions allowed)
 #     shot NAME         screenshot OUTDIR/NAME.png
+# With dropin.sh's -p CPU among the options the run is in DOSBox-X.
 # INPUTRUN_NOLOCK=1 in the environment: autolock=false (no click needed
 # for the mouse). INPUTRUN_STAY=1: DOSBox stays at the DOS prompt after
 # Windows ends.
@@ -65,10 +66,14 @@ fi
 if [ -n "${INPUTRUN_NOLOCK:-}" ]; then
     sed -i 's/^\[sdl\]$/[sdl]\nautolock=false/' "$work/dosbox.conf"
 fi
+# dropin.sh -p CPU prepared a DOSBox-X configuration ("quit warning" is
+# DOSBox-X's): run DOSBox-X then
+emu="dosbox -noconsole"
+grep -q '^quit warning' "$work/dosbox.conf" && emu="dosbox-x -nogui -fastlaunch"
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
-SDL_AUDIODRIVER=dummy timeout -k 10 $total dosbox -noconsole -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
+SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
 sleep 3
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 echo "window \$wid" >> "$out/input.log"
