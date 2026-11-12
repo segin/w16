@@ -80,6 +80,14 @@
 #              prompt should start) against all of Microsoft's: the prompt
 #              in text mode, the same screens up to the cursor (40 pixels),
 #              Windows repainted as it was before, text mode at the end
+#   woadosbat  the same with TEMP set by a batch file around WIN
+#              (C:\WINDOWS\GO.BAT: SET TEMP=C:\WINDOWS\TEMP, WIN /S), as an
+#              AUTOEXEC.BAT does. EXPECTED TO FAIL (reported as xfail, not
+#              counted): w16's stack does not come back from the prompt
+#              (EnableOEMLayer is never reached). Observed: the batch file
+#              alone (WIN /S, SwapDisk= in SYSTEM.INI) comes back; the
+#              harness's output redirect makes no difference (DROPIN_NOREDIR=1);
+#              Microsoft's stack comes back. UNVERIFIED why TEMP matters
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -140,7 +148,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write woados pmkeys}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write woados woadosbat pmkeys}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -549,34 +557,42 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmclose: Exit dialog in front and modal, no menu left (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmclose: $r ($out)"; fails=$((fails + 1)); fi ;;
-    woados)
+    woados|woadosbat)
         scr=$root/tests/scripts/input/woados.txt
         fon=$root/build/fonts
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-ref" -r \
-            -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' > "$out/woados-ref.txt" 2>&1 || true
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-w16" \
-            -x -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' \
+        if [ $c = woados ]; then set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        else
+            printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GO.BAT"
+            set -- -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT"
+        fi
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-ref" -r \
+            "$@" > "$out/$c-ref.txt" 2>&1 || true
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-w16" \
+            -x "$@" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
             -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
             -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
-            > "$out/woados-w16.txt" 2>&1 || true
-        a=$out/woados-w16 b=$out/woados-ref r=ok
+            > "$out/$c-w16.txt" 2>&1 || true
+        a=$out/$c-w16 b=$out/$c-ref r=ok
         for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
             f=${s%%:*} want=${s#*:}
             [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
             sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
             [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
             if [ $f = 03-back ]; then       # Windows as it was before the prompt
-                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/woados-$f-diff.png" 2>&1 >/dev/null || true)
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true)
             else
-                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/woados-$f-diff.png" 2>&1 >/dev/null || true)
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true)
             fi
             n=${n%%[. ]*}
             [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
         done
-        if [ "$r" = ok ]; then echo "ok   woados: the MS-DOS Prompt in text mode and back, text mode after Exit Windows"
+        if [ $c = woadosbat ]; then     # expected to fail: see the case list
+            if [ "$r" = ok ]; then echo "ok   woadosbat: back from the prompt with TEMP from a batch file (it was expected to fail: take the mark off)"
+            else echo "xfail woadosbat: $r ($out/$c-w16; expected: TEMP from a batch file)"; fi
+        elif [ "$r" = ok ]; then echo "ok   woados: the MS-DOS Prompt in text mode and back, text mode after Exit Windows"
         else echo "FAIL woados: $r ($out/woados-w16)"; fails=$((fails + 1)); fi ;;
     pmkeys)
         scr=$root/tests/scripts/input/pmkeys.txt
