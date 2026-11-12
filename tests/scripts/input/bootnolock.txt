@@ -4,6 +4,8 @@
 ; keyboard, then the X pointer over the window's middle and moved up and
 ; left (tests/boottest.sh case allw16nolock: the menu must open and the
 ; pointer move between the last two screens)
+; Shots wait for the screen to have held still as long as the old
+; sleep before them (settle 20 S), not a fixed time
 click 1
 jiggle 150
 click 1
@@ -41,17 +43,20 @@ key shift
 jiggle 150
 click 1
 key shift
-sleep 10
+; Windows up: Program Manager's caption active and the screen still (a
+; fixed 10 s was too short on a loaded host and the keys were lost)
+waitpixel 100 54 0000aa 90
+settle 20 2
 key alt+h
-sleep 1.5
+settle 20 1.5
 shot 01-help
 key Escape
 key Escape
 center
-sleep 1
+settle 20 1
 shot 02-before
 move -60 -40
 sleep 0.3
 move -60 -40
-sleep 1
+settle 20 1
 shot 03-after
