@@ -750,7 +750,11 @@ static int set_tiles(u16 s, u16 n, u32 lin, u32 size, int code)
     for (i = 0; i < n; i++) {
         u32 off = (u32)i << 16;
         u32 lim = size > off ? size - off - 1 : 0;
-        if (!dpmi_set_desc(s + i * sel_inc, lin + off, lim, code))
+        /* a 286 host takes no limit past FFFFh and left the descriptor
+           as it was: FFFFh then, all a 286 tile holds (KERNEL audit,
+           low) */
+        if (!dpmi_set_desc(s + i * sel_inc, lin + off, lim, code) &&
+            (lim <= 0xFFFFUL || !dpmi_set_desc(s + i * sel_inc, lin + off, 0xFFFF, code)))
             return 0;
     }
     return 1;
@@ -1504,7 +1508,10 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
         gf |= GA_DGROUP;
     if (db & DB_DISCCODE)
         gf |= GA_DISCCODE;
-    set_arena(a, 0, owner, AR(a)->size, (u8)gf, h);
+    /* a discarded block was moveable: its handle stays even, also when
+       the call named it by its selector (the arena got h | 1, which
+       made the block fixed; KERNEL audit, low) */
+    set_arena(a, 0, owner, AR(a)->size, (u8)gf, h & ~1u);
     AR(a)->lprev = AR(a)->lnext = 0;
     if (db & DB_DISC)
         lru_add(a, 1);
@@ -1520,6 +1527,7 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
 static u16 grow_tiles(u16 a, u16 h, u16 tot, u16 flags)
 {
     u16 os = h | 1, on = tiles((u32)AR(a)->size << 4), ns, nn, f, i;
+    u8 hold;
     u32 old = (u32)AR(a)->size << 4, bytes;
     int code = is_code(os);
 
@@ -1531,9 +1539,11 @@ static u16 grow_tiles(u16 a, u16 h, u16 tot, u16 flags)
     ns = dpmi_alloc_desc(nn);
     if (!ns)
         return 0;
-    AR(a)->count++;                     /* hold it while making room */
+    hold = AR(a)->count;                /* hold it while making room (not */
+    if (hold != 0xFF)                   /* past FFh: it wrapped to 0, and */
+        AR(a)->count++;                 /* the block could move; audit) */
     f = alloc_space(tot, lin_of(a) >= ONE_MB ? WHERE_ANY : WHERE_DOS, flags);
-    AR(a)->count--;
+    AR(a)->count = hold;
     if (!f) {
         for (i = 0; i < nn; i++)
             dpmi_free_desc(ns + i * sel_inc);
@@ -1646,11 +1656,14 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
             dpmi_free_desc(part);
         } else if (!(h & 1) || (flags & GMEM_MOVEABLE)) {
             u16 f;
+            u8 hold;
             if (AR(a)->count && !(h & 1))
                 return 0;               /* fixed with GlobalFix */
-            AR(a)->count++;             /* hold it while making room */
+            hold = AR(a)->count;        /* hold it while making room */
+            if (hold != 0xFF)           /* (not past FFh, as above) */
+                AR(a)->count++;
             f = alloc_space(tot, lin_of(a) >= ONE_MB ? WHERE_ANY : WHERE_DOS, flags);
-            AR(a)->count--;
+            AR(a)->count = hold;
             if (!f)
                 return 0;
             transplant(a, f);
