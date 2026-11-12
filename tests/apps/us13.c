@@ -192,13 +192,16 @@ static WORD misfit[3], fits, hgdi;
    the menu heap's and the string heap's (after a scan) */
 static void model(void)
 {
-    WORD u = 0xFFFF, g = pct(hgdi), i;
+    WORD u = 0xFFFF, g = pct(hgdi), i, found = 0;
     for (i = 0; i < nheaps; i++)
         if (heaps[i].name == 'D' || heaps[i].name == 'M' || heaps[i].name == 'S') {
             WORD p = pct((WORD)heaps[i].h | 1);
             if (p < u)
                 u = p;
+            found++;
         }
+    if (found != 3)
+        return;         /* (TOOLHELP did not show the three heaps) */
     misfit[0] += gfsr(0) != (u < g ? u : g);
     misfit[1] += gfsr(1) != g;
     misfit[2] += gfsr(2) != u;

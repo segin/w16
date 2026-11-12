@@ -402,9 +402,13 @@ static int grow(const lheap *hp, u16 need)
     if (!h || !old)
         return 0;
     size = ((old & ~31UL) + need + I(hp, LI_EXTRA) + GROW_SLOP + 31) & ~31UL;
-    /* UNVERIFIED: what Windows does when this passes 64K */
-    if (size > SEG_MAX)
-        size = SEG_MAX;
+    /* UNVERIFIED: what Windows does when this passes 64K. Asking for the
+       whole 64K made a block of 10010h bytes here (the global heap's
+       sizes round up): two tiles and a new selector, and the heap's old
+       one faulted at once (US13 filling USER's menu heap). FFF0h is the
+       most that stays one segment (KRNL286 then gives 10000h). */
+    if (size > SEG_MAX - 0x10)
+        size = SEG_MAX - 0x10;
     nl = (u16)((size - 1 - SENTINEL_SIZE) & ~3UL);
     if (size <= old || nl <= last || nl - last < need || !GlobalReAlloc(h, size, 0))
         return 0;
