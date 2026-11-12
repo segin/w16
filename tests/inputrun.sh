@@ -50,10 +50,15 @@
 #                       caption), at most MAX seconds
 #     waitcount RRGGBB X0 Y0 X1 Y1 MIN MAX  wait until two shots in a row
 #                       have MIN pixels of that colour outside the rectangle
-#     settle MAX        wait until the screen holds still (two shots 0.7 s
-#                       apart equal), at most MAX seconds: a started program
-#                       has drawn its window (on a loaded machine "sleep"
-#                       can be too short and the keys go to another window)
+#     settle MAX [STILL]  wait until the screen holds still (two shots 0.7 s
+#                       apart equal; with STILL, unchanged in every shot,
+#                       taken about every half second, for STILL seconds),
+#                       at most MAX seconds: a started program has drawn its
+#                       window (on a loaded machine "sleep" can be too short
+#                       and the keys go to another window). A busy program
+#                       can hold the screen still a moment (the hourglass
+#                       up while Program Manager adds a dropped item): give
+#                       STILL at least the time a fixed sleep there had
 #     shot NAME         screenshot OUTDIR/NAME.png
 #     waitexit MAX      wait until Windows has ended (WIN returned to the
 #                       DOS prompt: the autoexec's WINEXIT in C:\OUT.TXT, or
@@ -167,10 +172,12 @@ else
     echo "boot wait: \$how after \$((\$(date +%s) - t0)) s" >> "$out/input.log"
 fi
 [ -z "$bootshot" ] || shot boot
-# settle MAX: wait until the screen holds still (two screenshots 0.7 s
-# apart the same), at most MAX seconds
+# settle MAX [STILL]: wait until the screen holds still (two screenshots
+# 0.7 s apart the same; with STILL, no change for STILL seconds), at most
+# MAX seconds
 settle() {
     t0=\$(date +%s)
+    if [ -n "\${2:-}" ]; then settlefor "\$1" "\$2"; return; fi
     timeout 30 import -window "\$wid" "$out/.settle-a.png"
     while :; do
         sleep 0.7
@@ -183,6 +190,28 @@ settle() {
             echo "not settled in \$1 s" >> "$out/input.log"; break
         fi
         mv "$out/.settle-b.png" "$out/.settle-a.png"
+    done
+    rm -f "$out/.settle-a.png" "$out/.settle-b.png"
+}
+ms() { echo \$((\$(date +%s%N) / 1000000)); }
+settlefor() {
+    need=\$(awk "BEGIN { print int(\$2 * 1000) }")
+    timeout 30 import -window "\$wid" "$out/.settle-a.png"
+    since=\$(ms)
+    while :; do
+        sleep 0.5
+        timeout 30 import -window "\$wid" "$out/.settle-b.png"
+        n=\$(magick compare -metric AE "$out/.settle-a.png" "$out/.settle-b.png" null: 2>&1)
+        if [ "\${n%% *}" = 0 ]; then
+            if [ \$((\$(ms) - since)) -ge "\$need" ]; then
+                echo "settled (\$2 s still) after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+            fi
+        else
+            mv "$out/.settle-b.png" "$out/.settle-a.png"; since=\$(ms)
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$1" ]; then
+            echo "not settled in \$1 s" >> "$out/input.log"; break
+        fi
     done
     rm -f "$out/.settle-a.png" "$out/.settle-b.png"
 }
@@ -282,7 +311,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     sleep) sleep "\$a" ;;
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;
-    settle) settle "\$a" ;;
+    settle) settle \$a \$b ;;
     waitpixel) waitpix is \$a \$b ;;
     waitnotpixel) waitpix not \$a \$b ;;
     waitcount) waitcount \$a \$b ;;

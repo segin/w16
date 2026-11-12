@@ -2,12 +2,22 @@
 ; File Manager's directory pane (APPS.HLP) dragged into the Main group with
 ; the mouse, as shdrop.txt does; then File Manager closed and Windows ended
 ; from Program Manager (File > Exit Windows, OK), so MAIN.GRP is saved
+; Shots of screens without a blinking caret wait for the screen to hold
+; still for as long as the fixed sleep before them was (settle 20 S): on a
+; loaded machine a repaint could still be under way after the sleep and
+; the shot caught it half done; shots with a caret keep their fixed delay
+; after the last key (the caret's blink phase)
 key alt+f
 key r
-sleep 4
+; the Run dialog up (Program Manager's caption no longer active), then
+; the program's window active and drawn (as in icons.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type winfile
+markcolor 0000aa
 key Return
-sleep 10
+waitmoved 0000aa 500 30
+settle 20 2
 shot 01-winfile
 key alt+space
 sleep 1
@@ -17,13 +27,13 @@ key Right
 key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
 key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
 key Return
-sleep 2
+settle 20 2
 shot 02-narrow
 click 1
 sleep 1
 home
 move 135 106
-sleep 1
+settle 20 1
 shot 03-pointer
 down 1
 sleep 0.5
@@ -34,10 +44,10 @@ sleep 0.5
 move 15 3
 sleep 0.5
 move 15 3
-sleep 1
+settle 20 1
 shot 04-dragging
 up 1
-sleep 3
+settle 20 3
 shot 05-dropped
 key alt+f
 key x

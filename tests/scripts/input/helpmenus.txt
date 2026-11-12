@@ -1,9 +1,14 @@
 ; Help menus: Program Manager by keyboard and by mouse, then Notepad
 ; (tests/inputrun.sh; boot-test case helpmenus)
+; Shots of screens without a blinking caret wait for the screen to hold
+; still for as long as the fixed sleep before them was (settle 20 S): on a
+; loaded machine a repaint could still be under way after the sleep and
+; the shot caught it half done; shots with a caret keep their fixed delay
+; after the last key (the caret's blink phase)
 click 1
 sleep 1
 key alt+h
-sleep 1.5
+settle 20 1.5
 shot 01-pm-help
 key Escape
 key Escape
@@ -11,17 +16,22 @@ sleep 1
 home
 move 130 39
 click 1
-sleep 1.5
+settle 20 1.5
 shot 02-pm-help-mouse
 key Escape
 key Escape
 sleep 1
 key alt+f
 key r
-sleep 3
+; the Run dialog up (Program Manager's caption no longer active), then
+; the program's window active and drawn (as in icons.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type notepad
+markcolor 0000aa
 key Return
-sleep 8
+waitmoved 0000aa 500 30
+settle 10
 key alt+h
 sleep 1.5
 shot 03-np-help

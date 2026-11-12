@@ -1,6 +1,9 @@
 ; drag Program Manager by its caption partly off the right, left and
 ; bottom edges of the screen; shots while the frame shows and after
-; (tests/inputrun.sh; boot-test case dragoff)
+; (tests/inputrun.sh; boot-test case dragoff). Each shot waits for the
+; screen to have held still for as long as the fixed sleep before it was
+; (settle 20 S): on a loaded machine Program Manager's repaint after a
+; drop could still be under way 2 s later and the shot caught it half done
 click 1
 sleep 1
 home
@@ -9,24 +12,24 @@ sleep 0.5
 down 1
 sleep 0.5
 move 300 0
-sleep 1
+settle 20 1
 shot 01-right-moving
 up 1
-sleep 2
+settle 20 2
 shot 02-right
 down 1
 sleep 0.5
 move -600 0
-sleep 1
+settle 20 1
 shot 03-left-moving
 up 1
-sleep 2
+settle 20 2
 shot 04-left
 down 1
 sleep 0.5
 move 200 350
-sleep 1
+settle 20 1
 shot 05-bottom-moving
 up 1
-sleep 2
+settle 20 2
 shot 06-bottom

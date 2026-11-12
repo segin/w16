@@ -1,6 +1,11 @@
 ; Program Manager's system-menu box double-clicked (tests/boottest.sh
 ; pmclose): the Exit dialog comes up in front, system modal; a click on
 ; Program Manager's client area does nothing; Esc (Cancel) closes it
+; Shots of screens without a blinking caret wait for the screen to hold
+; still for as long as the fixed sleep before them was (settle 20 S): on a
+; loaded machine a repaint could still be under way after the sleep and
+; the shot caught it half done; shots with a caret keep their fixed delay
+; after the last key (the caret's blink phase)
 click 1
 sleep 1
 home
@@ -8,14 +13,14 @@ move 40 30
 sleep 1
 click 1
 click 1
-sleep 2
+settle 20 2
 shot 01-dialog
 home
 move 150 150
 sleep 1
 click 1
-sleep 1
+settle 20 1
 shot 02-clicked
 key Escape
-sleep 2
+settle 20 2
 shot 03-cancelled
