@@ -41,7 +41,16 @@ Suites (snapshot copies, tests/dos/notes/suite.sh REV OUT):
    (WIN87EM's or the default) touches the status word before or after the
    probe's FSTSW. A run with RUNTESTS_DPMI=dosx and one with HDPMI would
    tell whether the DPMI host's reflection matters.
-2. Boot test case input: 01-booted differs by 110 pixels (the pointer: 3.1
+2. (Update after the merge of master 5996cdf: in a failing run the boot
+   had finished, Program Manager drawn, before both "home"s, and w16's
+   pointer did not move at all afterwards: still in the middle at
+   01-booted and at 02-menu after "home; move 150 200", where 3.1's
+   moved; keys still worked. So mouse events stop reaching USER
+   (MOUSE_EVENT_C would move ptCursor even with the queue full):
+   intermittently MOUSE.DRV's events stop or are not passed on. Not the
+   boot's timing: waiting for the title bar before the homes did not
+   help. USER/MOUSE side.)
+   Boot test case input: 01-booted differs by 110 pixels (the pointer: 3.1
    ends at the top-left, w16 sometimes keeps it in the middle). 2 of 3
    runs fail on master too. Pointer motion during boot is lost now and
    then (USER/MOUSE side).
