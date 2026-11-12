@@ -51,9 +51,13 @@ int kstrnicmp_p(const char FAR *a, const u8 FAR *pstr)
 }
 
 /* Write to DOS standard output. */
+/* KERNEL's messages go to its own standard output: handle 1 of its PSP,
+   not of the running task's (where it may be a file the task opened;
+   KERNEL audit, low) */
 void kputs(const char FAR *s)
 {
     regs16 r;
+    kernel_psp(1);
     r.ax = 0x4000;
     r.bx = 1;
     r.cx = kstrlen(s);
@@ -61,6 +65,7 @@ void kputs(const char FAR *s)
     r.ds = FP_SEG(s);
     r.es = 0;
     dos21(&r);
+    kernel_psp(0);
 }
 
 void kputhex(u16 v)

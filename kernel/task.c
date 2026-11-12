@@ -767,10 +767,17 @@ void __cdecl task_exit_c(u16 code)
             *pp = x->next;
             break;
         }
-    in_sched = 0;
-    cur_task = 0;
+    /* the module and the DLLs it leaves go (their WEPs and the 80h
+       signal) with the ending task still the current one, as on 3.1
+       (Pietrek: ExitCall frees the module before the task's PDB and TDB);
+       it was 0 there (KERNEL audit, low; UNVERIFIED: what GetCurrentTask
+       gives in such a WEP on 3.1). No task switch meanwhile: the
+       ending task is off the list and would not come back */
+    in_sched = 1;
     if (m)
         module_end_instance(m, x->dg_hnd, x->dg_sel);
+    in_sched = 0;
+    cur_task = 0;
     set_psp(psp_sel);
     cur_pdb = 0;
     dpmi_free_desc(pdb);
@@ -858,9 +865,26 @@ void __cdecl inittask_c(regs16 FAR *r)
 
 /* ---- API ---- */
 
+void kernel_psp(int on)
+{
+    if (cur_pdb && cur_pdb != psp_sel)
+        set_psp(on ? psp_sel : cur_pdb);
+}
+
+static u16 ss_now(void);
+#pragma aux ss_now = "mov ax, ss" value [ax];
+
+/* FatalExitHook's procedure (toolhelp.c) hears of it first (Schulman:
+   "BOOL FAR PASCAL FatalExitHookCallback(WORD exitCode)", called
+   whenever an application calls FatalExit); it was never called
+   (KERNEL audit, low). UNVERIFIED: what its result changes; the task
+   ends either way. */
 void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 {
     regs16 r;
+    u32 hook = fatal_exit_hook();
+    if (hook)
+        mod_call((u16)(hook >> 16), (u16)hook, ss_now(), 0, 0, 1, code);
     kputs("w16: FatalExit ");
     kputhex(code);
     kputs("\r\n");

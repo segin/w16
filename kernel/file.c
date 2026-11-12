@@ -462,14 +462,24 @@ u16 KAPI _lclose(u16 fh)                                        /* KERNEL.81 */
     return dos_close(fh) ? 0 : HFILE_ERROR;
 }
 
+/* _lread and _lwrite stay in the buffer's segment (dos_rw goes on in the
+   next selector, as _hread does; for these that is some other block:
+   KERNEL audit, low). UNVERIFIED: what 3.1 does with a buffer that ends
+   past 64K. */
+static u32 seg_count(void FAR *buf, u16 n)
+{
+    u32 room = 0x10000UL - FP_OFF(buf);
+    return n > room ? room : n;
+}
+
 u16 KAPI _lread(u16 fh, void FAR *buf, u16 n)                   /* KERNEL.82 */
 {
-    return (u16)dos_rw(0x3F, fh, FP_SEG(buf), FP_OFF(buf), n);
+    return (u16)dos_rw(0x3F, fh, FP_SEG(buf), FP_OFF(buf), seg_count(buf, n));
 }
 
 u16 KAPI _lwrite(u16 fh, const void FAR *buf, u16 n)            /* KERNEL.86 */
 {
-    return (u16)dos_rw(0x40, fh, FP_SEG(buf), FP_OFF(buf), n);
+    return (u16)dos_rw(0x40, fh, FP_SEG(buf), FP_OFF(buf), seg_count((void FAR *)buf, n));
 }
 
 u32 KAPI _llseek(u16 fh, u32 off, u16 how)                      /* KERNEL.84 */

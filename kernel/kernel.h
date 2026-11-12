@@ -283,6 +283,8 @@ void th_task_exit(u16 code);
 void th_logerror(u16 err, void FAR *info);
 void th_logparamerror(u16 err, void FAR *proc, void FAR *param);
 u32  fatal_exit_hook(void);
+void kernel_psp(int on);                /* task.c: KERNEL's PSP current (1)
+                                           or the running task's again (0) */
 #define WF_PMODE        0x0001
 #define WF_CPU286       0x0002
 #define WF_CPU386       0x0004
