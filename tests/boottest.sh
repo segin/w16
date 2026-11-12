@@ -119,7 +119,32 @@
 #
 #   usage: tests/boottest.sh [-t SECS] [-o DIR] [CASE...]   (default: all)
 # Screens, diffs and logs go to DIR (default build/boottest-HHMMSS, a
-# new directory each run). Exit status: number of failed cases.
+# new directory each run). Exit status: number of failed cases. Each
+# case's time is printed at the end (and kept in DIR/times.txt).
+#
+# Reference cache. The all-Microsoft runs (the references: ref, woaref,
+# the CASE-ref runs of the input cases, wincomswap's 3.1 side) do not
+# change while nothing that makes them changes, so their results (screens,
+# logs, the input run's directory) are kept in build/refcache/NAME/KEY/ and
+# reused (refrun below). KEY is a hash of everything that determines them:
+# the run's command line (dropin.sh/inputrun.sh options, with this run's
+# paths taken out), the contents of every file named on it (input
+# scripts, PIFs, WIN.INIs, and the w16 files some reference runs use,
+# such as WC4.COM as WSWAP.EXE in wincomswap), DROPIN_* and INPUTRUN_*
+# in the environment, -t SECS, the reference install (each file's path,
+# size and time under .tools/ref/win31/cdrive), the emulator and tools
+# (path, size, time of dosbox, dosbox-x, Xvfb, magick, import, xdotool),
+# the harness (tests/dropin.sh, inputrun.sh, xvfb.sh, w16tree.sh,
+# scripts/*.py, and the reference-run code of this file between the
+# ">>> reference-run code" marks) and the text of the case (or function)
+# that makes the run. A result is stored only when it looks complete (a
+# boot that completed with a screen that is not blank; an input run whose
+# screens are not blank). In the scratch drive kept with an input run,
+# files equal to the reference install's are stored as links to it. Each
+# entry has key.txt, what its key was made from. BOOTTEST_REFRESH=1 in the
+# environment: run every reference again and replace what is stored.
+# The w16 side of a case is never cached. DIR/refcache.log says which
+# references came from the cache.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -141,6 +166,7 @@ gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
 fails=0
 
+# >>> reference-run code (part of every cached reference's key)
 # boot NAME [dropin.sh options...]: one boot, screenshot NAME.png, log NAME.txt
 boot() {
     name=$1; shift
@@ -164,6 +190,7 @@ blank() {
     [ -f "$1" ] || return 0
     [ "$(magick identify -format '%k' "$1" 2>/dev/null)" = 1 ]
 }
+# <<< reference-run code
 # retried CASE KIND DETAIL: record a retry. Every retry is printed, kept in
 # this run's retries.txt and appended to build/boottest-retries.log, which
 # outlives runs: a case that keeps needing retries is a bug to investigate
@@ -179,6 +206,115 @@ retried() {
 # booted NAME: the boot completed and Windows was still running when the
 # screen was taken (KERNEL prints "w16: back to DOS" when Windows ends)
 booted() { grep -q '^boot: complete' "$out/$1.txt" && ! grep -q 'back to DOS' "$out/$1.txt"; }
+
+# The reference cache (see the top of this file).
+refcache=$root/build/refcache
+reftree=$root/.tools/ref/win31/cdrive
+# what every reference's key shares: the reference install, the emulator
+# and tools, the harness scripts, the reference-run code of this file
+refbase=$( {
+    (cd "$reftree" && find . -type f -printf '%P %s %T@\n' | sort)
+    for t in dosbox dosbox-x Xvfb magick import xdotool; do
+        p=$(command -v "$t" 2>/dev/null) && stat -L -c "$t %n %s %Y" "$p"
+    done
+    (cd "$root/tests" && sha256sum dropin.sh inputrun.sh xvfb.sh w16tree.sh scripts/*.py 2>/dev/null)
+    sed -n '/^# >>> reference-run code/,/^# <<< reference-run code/p' "$0"
+} | sha256sum | cut -d' ' -f1)
+# codeof NAME: the text of case NAME (its whole branch, shared with the
+# cases on the same label) or of function NAME in this file
+codeof() {
+    awk -v n="$1" '
+        fn { print; if ($0 ~ /^}/) fn = 0; next }
+        index($0, n "()") == 1 { print; if ($0 !~ /}$/) fn = 1; next }
+        /^    [a-z0-9|]+\)/ {
+            if (on) exit
+            k = split(substr($1, 1, index($1, ")") - 1), l, "|")
+            for (i = 1; i <= k; i++) if (l[i] == n) on = 1
+        }
+        on && /^    esac/ { exit }
+        on { print }' "$0"
+}
+# refkey NAME CODE ARGS...: the key of reference run NAME made by ARGS in
+# case (or function) CODE; what it was made from goes to $out/.key-NAME
+refkey() {
+    {
+        echo "refcache 1 $1"
+        echo "base $refbase"
+        env | grep -E '^(DROPIN|INPUTRUN)_' | sort
+        echo "secs $secs"
+        k=$2; shift 2
+        for a in "$@"; do
+            printf 'arg %s\n' "$a" | sed "s|$out|@OUT@|g; s|$root|@ROOT@|g"
+            for f in "$a" "${a%%=*}"; do
+                if [ -f "$f" ]; then printf 'file '; sha256sum < "$f"; break; fi
+            done
+        done
+        echo "code $k"
+        codeof "$k"
+    } > "$out/.key-$rn"
+    sha256sum < "$out/.key-$rn" | cut -c1-16
+}
+# refok NAME: the reference run's result looks complete (worth keeping)
+refok() {
+    [ -f "$out/$1.txt" ] || return 1
+    if [ -f "$out/$1.png" ]; then booted "$1" && ! blank "$out/$1.png" || return 1; fi
+    if [ -f "$out/$1.dirs" ]; then [ -s "$out/$1.dirs" ] || return 1; fi
+    if [ -d "$out/$1" ] && [ -f "$out/$1/input.log" ]; then
+        ls "$out/$1"/*.png > /dev/null 2>&1 || return 1
+        for f in "$out/$1"/*.png; do ! blank "$f" || return 1; done
+    fi
+    return 0
+}
+# refrun NAME CODE boot [dropin.sh options...]
+# refrun NAME CODE COMMAND [ARGS...]
+#   a reference run, from the cache when it has it. NAME's results are
+#   $out/NAME.png and NAME.txt (boot), or whatever COMMAND makes of
+#   $out/NAME (a directory) and $out/NAME.* (its output goes to NAME.txt).
+#   CODE: the case (or function) whose text is part of the key. Parallel
+#   cases wanting the same run wait for one another (a lock per key); a
+#   run is made once per boottest run even with BOOTTEST_REFRESH=1.
+refrun() {
+    rn=$1 rc=$2; shift 2
+    rk=$(refkey "$rn" "$rc" "$@")
+    rd=$refcache/$rn/$rk
+    mkdir -p "$refcache/$rn"
+    exec 8> "$refcache/$rn/$rk.lock"
+    flock 8
+    if [ "$(cat "$out/.ref-$rn" 2>/dev/null)" = "$rk" ]; then
+        :
+    elif [ -z "${BOOTTEST_REFRESH:-}" ] && [ -d "$rd/files" ]; then
+        rm -rf "$out/$rn"
+        cp -a "$rd/files/." "$out/"
+        echo "$rn $rk from the cache" >> "$out/refcache.log"
+    else
+        rm -rf "$out/$rn" "$out/$rn".png "$out/$rn".txt
+        if [ "$1" = boot ]; then
+            shift; boot "$rn" "$@"
+        else
+            "$@" > "$out/$rn.txt" 2>&1 || true
+        fi
+        if refok "$rn"; then
+            t=$refcache/$rn/.new-$rk-$$
+            rm -rf "$t"; mkdir -p "$t/files"
+            for f in "$out/$rn" "$out/$rn".*; do [ -e "$f" ] && cp -a "$f" "$t/files/"; done
+            # the scratch drive: files as in the reference install become
+            # links to it
+            if [ -d "$t/files/$rn/work/c" ]; then
+                (cd "$t/files/$rn/work/c" && find . -type f) | while IFS= read -r f; do
+                    f=${f#./}
+                    if cmp -s "$t/files/$rn/work/c/$f" "$reftree/$f"; then ln -sf "$reftree/$f" "$t/files/$rn/work/c/$f"; fi
+                done
+            fi
+            cp "$out/.key-$rn" "$t/key.txt"
+            rm -rf "$rd"; mv "$t" "$rd"
+            echo "$rn $rk ran, stored" >> "$out/refcache.log"
+        else
+            echo "$rn $rk ran, NOT stored: incomplete (see $out/$rn.txt)" >> "$out/refcache.log"
+        fi
+    fi
+    echo "$rk" > "$out/.ref-$rn"
+    flock -u 8; exec 8>&-
+}
 
 # check CASE W16 REF: both must boot; the screens must be identical
 check() {
@@ -198,7 +334,7 @@ check() {
     # a real difference shows against both reference boots.
     if [ "$n" != 0 ] && [ "$r" = woaref ]; then
         n1=$n
-        [ -f "$out/woaref2.png" ] || { boot woaref2 -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"; }
+        [ -f "$out/woaref2.png" ] || refrun woaref2 check boot -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
         if booted woaref2; then
             n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
             n2=${n2%% *}
@@ -228,7 +364,7 @@ check() {
 }
 
 refdone=
-ref() { [ -n "$refdone" ] || { boot ref -r; refdone=1; }; }
+ref() { [ -n "$refdone" ] || { refrun ref ref boot -r; refdone=1; }; }
 
 # the WINOLDAP cases: a PIF for COMMAND.COM /C ECHO HI, started by WIN.INI run=
 woa=$root/build/dos/WINOLDAP.MOD
@@ -244,11 +380,12 @@ woafiles() {
 woaref() {
     [ -n "$woaref" ] && return
     woafiles
-    boot woaref -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+    refrun woaref woaref boot -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
     woaref=1
 }
 
 for c in $cases; do
+    ct=$(date +%s)
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
@@ -286,24 +423,28 @@ for c in $cases; do
                check winoldapw winoldapw woaref ;;
     wincomswap)
         # WC4 in WSWAP's place records the block; each scenario a batch file
+        # wcsrun NAME [dropin.sh options...]: run it, the directories to NAME.dirs
+        wcsrun() {
+            n=$1; shift
+            "$root/tests/dropin.sh" -t 20 -o "$out/$n" "$@" || true
+            python3 "$root/tests/scripts/swapdirs.py" "$out/$n/c/WC.LOG" > "$out/$n.dirs" 2>&1
+        }
         r=ok
         for t in 'WIN /S' 'CD \;C:\WINDOWS\WIN /S' 'MD C:\TMP;SET TEMP=C:\TMP;CD \TMP;C:\WINDOWS\WIN /S' \
                  'Z:;C:\WINDOWS\WIN /S;C:'; do
             printf '%s\n' "$t" | tr ';' '\n' | sed 's/$/\r/' > "$out/WCS.BAT"
-            for v in ms w16; do
-                rm -rf "$out/wcs-$v"
-                if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
-                "$root/tests/dropin.sh" -t 20 -o "$out/wcs-$v" "$@" -c 'C:\WCS' -f "$out/WCS.BAT=WCS.BAT" \
-                    -f "$root/build/dos/WC4.COM=WINDOWS/SYSTEM/WSWAP.EXE" > "$out/wcs-$v.txt" 2>&1 || true
-                python3 "$root/tests/scripts/swapdirs.py" "$out/wcs-$v/c/WC.LOG" > "$out/wcs-$v.dirs" 2>&1
-            done
+            set -- -c 'C:\WCS' -f "$out/WCS.BAT=WCS.BAT" -f "$root/build/dos/WC4.COM=WINDOWS/SYSTEM/WSWAP.EXE"
+            refrun wcs-ms wincomswap wcsrun wcs-ms -r "$@"
+            rm -rf "$out/wcs-w16"
+            wcsrun wcs-w16 -r -w "$@" > "$out/wcs-w16.txt" 2>&1
             cmp -s "$out/wcs-ms.dirs" "$out/wcs-w16.dirs" ||
                 { r="$t: $(cat "$out/wcs-w16.dirs"), 3.1: $(cat "$out/wcs-ms.dirs")"; break; }
         done
         if [ "$r" = ok ]; then echo "ok   wincomswap: swap directories as 3.1's"
         else echo "FAIL wincomswap: $r"; fails=$((fails + 1)); fi ;;
     tree)
-        if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" > "$out/tree.txt" 2>&1; then
+        ref
+        if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
             echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"
         else
             echo "FAIL tree: see $out/tree.txt"; fails=$((fails + 1))
@@ -365,8 +506,7 @@ for c in $cases; do
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
     exitwin)
         scr=$root/tests/scripts/input/exitwin.txt
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-ref" -r \
-            > "$out/exitwin-ref.txt" 2>&1 || true
+        refrun exitwin-ref exitwin env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-ref" -r
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-w16" \
             -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
@@ -399,8 +539,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
     tabs|alttab|helpmenus)
-        "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r \
-            > "$out/$c-ref.txt" 2>&1 || true
+        refrun $c-ref $c "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r
         "$root/tests/inputrun.sh" -b 25 -t 80 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
         r=ok
@@ -424,8 +563,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         s=$root/tests/scripts/input/write.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/write-WIN.INI"
         python3 "$root/tests/scripts/iniset.py" "$out/write-WIN.INI" 'windows:run=WRITE.EXE'
-        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/write-ref" -r \
-            -f "$out/write-WIN.INI=WINDOWS/WIN.INI" > "$out/write-ref.txt" 2>&1 || true
+        refrun write-ref write "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/write-ref" -r \
+            -f "$out/write-WIN.INI=WINDOWS/WIN.INI"
         "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/write-w16" -w -x \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
@@ -462,7 +601,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # 3.1's width rule for long captions). Then every w16 part: no
         # fault (it ended in KERNEL's lstrcat, back to DOS).
         s=$root/tests/scripts/input/winfile.txt
-        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/winfile-ref" -r > "$out/winfile-ref.txt" 2>&1 || true
+        refrun winfile-ref winfile "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/winfile-ref" -r
         "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/winfile-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/winfile-w16.txt" 2>&1 || true
         r=ok
@@ -493,7 +632,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
-        "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-ref" -r > "$out/pmdrop-ref.txt" 2>&1 || true
+        refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-ref" -r
         "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-pm" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
@@ -534,7 +673,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # dialog is a pixel to the right, UNVERIFIED why), and w16's own
         # group-icon pictures; the dialog's caption must be there
         scr=$root/tests/scripts/input/pmclose.txt
-        "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-ref" -r > "$out/pmclose-ref.txt" 2>&1 || true
+        refrun pmclose-ref pmclose "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-ref" -r
         "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-us" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmclose-us.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -b 40 -t 70 "$scr" "$out/pmclose-pm" -r \
@@ -573,7 +712,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # pictures left out (the row of icons at the bottom); MAIN.GRP
         # identical to all-Microsoft's in both
         scr=$root/tests/scripts/input/pmitems.txt
-        "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-ref" -r > "$out/pmitems-ref.txt" 2>&1 || true
+        refrun pmitems-ref pmitems "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-ref" -r
         "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-us" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmitems-us.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -b 40 -t 120 "$scr" "$out/pmitems-pm" -r \
@@ -602,8 +741,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
-        "$root/tests/inputrun.sh" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r \
-            > "$out/icons-ref.txt" 2>&1 || true
+        refrun icons-ref icons "$root/tests/inputrun.sh" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r
         "$root/tests/inputrun.sh" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/icons-w16.txt" 2>&1 || true
         r=ok
@@ -640,8 +778,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's USER and GDI (dragoffk: on w16's KRNL286 too) against
         # all-Microsoft; every screen must be identical
         scr=$root/tests/scripts/input/dragoff.txt
-        [ -d "$out/dragoff-ref" ] || "$root/tests/inputrun.sh" -b 25 -t 70 "$scr" "$out/dragoff-ref" -r \
-            > "$out/dragoff-ref.txt" 2>&1 || true
+        refrun dragoff-ref dragoff "$root/tests/inputrun.sh" -b 25 -t 70 "$scr" "$out/dragoff-ref" -r
         if [ $c = dragoff ]; then k=-r; else k=; fi
         "$root/tests/inputrun.sh" -b 25 -t 70 "$scr" "$out/$c-w16" $k \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
@@ -658,7 +795,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         else echo "FAIL $c: $r"; fails=$((fails + 1)); fi ;;
     input)
         scr=$root/tests/scripts/input/bootinput.txt
-        "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r > "$out/input-ref.txt" 2>&1 || true
+        refrun input-ref input "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-ref" -r
         "$root/tests/inputrun.sh" -b 1 -t 150 "$scr" "$out/input-w16" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
         r=ok
@@ -674,7 +811,14 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
+    echo "$c $(($(date +%s) - ct))" >> "$out/times.txt"
 done
+# each case's time, and the references taken from the cache
+echo "boottest: seconds per case:"
+awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "(all)", t }' "$out/times.txt"
+if [ -s "$out/refcache.log" ]; then
+    echo "boottest: references: $(grep -c 'from the cache' "$out/refcache.log") from the cache, $(grep -c ' ran, ' "$out/refcache.log") run ($out/refcache.log)"
+fi
 # retries: this run's, and cases that have needed them repeatedly
 if [ -s "$out/retries.txt" ]; then
     echo "boottest: $(wc -l < "$out/retries.txt") retr$( [ "$(wc -l < "$out/retries.txt")" = 1 ] && echo y || echo ies) this run (see $out/retries.txt)"

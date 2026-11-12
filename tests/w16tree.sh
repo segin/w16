@@ -5,7 +5,10 @@
 # left out), KRNL386.EXE is removed, and "WIN /S /B" runs in headless
 # DOSBox (tests/dropin.sh). Then the reference itself (Microsoft's files,
 # KRNL286) the same way. Both screens are saved and compared.
-#   usage: tests/w16tree.sh [-t SECS] [-o DIR]
+#   usage: tests/w16tree.sh [-t SECS] [-o DIR] [-R PNG]
+#     -R PNG  the reference's screen is PNG (a screenshot of the same
+#             reference boot made before, e.g. tests/boottest.sh's ref.png):
+#             no reference boot here
 # Passes when the w16 tree's boot completes (BOOTLOG.TXT reaches
 # INITDONE=Final USER); prints how many pixels differ from the reference
 # (w16's PROGMAN.EXE and fonts are not pixel-identical to Microsoft's:
@@ -14,9 +17,10 @@ set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 tree=$root/build/w16
-secs=60 out=$root/build/w16tree
-while getopts t:o: opt; do
+secs=60 out=$root/build/w16tree refpng=
+while getopts t:o:R: opt; do
     case $opt in
+    R) refpng=$OPTARG ;;
     t) secs=$OPTARG ;;
     o) out=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
@@ -34,7 +38,11 @@ for f in "$tree"/SYSTEM/*; do
 done
 "$root/tests/dropin.sh" -k "$tree/SYSTEM/KRNL286.EXE" -X "$tree/SYSTEM/DOSX.EXE" \
     -i w16:watchdog=0 -t "$secs" -s "$out/w16.png" "$@" > "$out/w16.log" 2>&1 || true
-"$root/tests/dropin.sh" -r -t "$secs" -s "$out/ref.png" > "$out/ref.log" 2>&1 || true
+if [ -n "$refpng" ]; then
+    cp "$refpng" "$out/ref.png"
+else
+    "$root/tests/dropin.sh" -r -t "$secs" -s "$out/ref.png" > "$out/ref.log" 2>&1 || true
+fi
 grep -a '^loaded:\|^USER:\|^shell:\|^boot:' "$out/w16.log" | cut -c1-200
 px=$(compare -metric AE "$out/ref.png" "$out/w16.png" "$out/diff.png" 2>&1 | cut -d' ' -f1 | cut -d. -f1 || true)
 echo "pixels differing from Windows 3.1's own files: $px ($out/w16.png, $out/ref.png, $out/diff.png)"
