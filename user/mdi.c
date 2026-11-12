@@ -106,6 +106,13 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
         ShowWindow(h, SW_SHOW);         /* WM_CHILDACTIVATE activates it */
     child_activate(client, h);
     mdi_creating = FALSE;
+    /* made, the active child gets the focus when the frame is active and
+       the focus is on the frame or the client (3.1: Program Manager's
+       groups, made after its frame took the focus, answer the arrow keys
+       straight away) - not before it is made (File Manager, above) */
+    if (top_level(client) == hwndActive && active_child(client) == h && !IsIconic(h) &&
+        (hwndFocus == client || hwndFocus == top_level(client)))
+        set_focus(h);
     return h;
 }
 
