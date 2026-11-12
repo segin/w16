@@ -104,5 +104,6 @@ int __cdecl tmain(void)
     if (mode == 'W')
         for (n = 0; n < 400 && !sh->go; n++)
             K_YIELD();
+    v[W_DONE] = 1;
     return 0;
 }

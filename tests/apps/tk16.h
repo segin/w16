@@ -28,5 +28,6 @@ enum {
     W_ENVPATH,          /* 4 words: the bytes after that */
     W_ENVPATH_END = W_ENVPATH + 3,
     W_ENV,              /* 8 words: the start of the environment */
-    W_COUNT = W_ENV + 8
+    W_DONE = W_ENV + 8, /* set as it returns from its main */
+    W_COUNT
 };

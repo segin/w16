@@ -245,6 +245,58 @@ static void twodata(void)
     obs("TK16C gone", GetModuleHandle("TK16C") == 0);
 }
 
+/* A copy of TK16A.EXE under another file name, started while TK16A
+   runs: the module is the same (its name is in the file), so it is a
+   second instance of it, on a DGROUP of its own (w16 started it on the
+   running instance's DGROUP) */
+static void renamed(void)
+{
+    char src[100], dst[100], cmd[120];
+    static char buf[1024];
+    HFILE fi, fo;
+    WORD h1, h2, n;
+
+    STEP("renamed copy");
+    reset();
+    lstrcpy(src, dir);
+    str(src + lstrlen(src), "TK16A.EXE");
+    lstrcpy(dst, dir);
+    str(dst + lstrlen(dst), "TK16R.EXE");
+    fi = _lopen(src, OF_READ);
+    fo = _lcreat(dst, 0);
+    if (fi != HFILE_ERROR && fo != HFILE_ERROR)
+        while ((n = _lread(fi, buf, sizeof buf)) != 0 && n != (WORD)HFILE_ERROR)
+            _lwrite(fo, buf, n);
+    if (fi != HFILE_ERROR)
+        _lclose(fi);
+    if (fo != HFILE_ERROR)
+        _lclose(fo);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 0);
+    h1 = K_WINEXEC(cmd, 1);
+    obs("renamed: TK16A > 32", h1 > 32);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16R.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 1);
+    h2 = K_WINEXEC(cmd, 1);
+    obs("renamed: TK16R", h2 > 32 ? 0x20 : h2);
+    obs("renamed: TK16R ran", sh.v[1][W_RAN]);
+    obs("renamed: TK16R hPrevInstance==TK16A's", sh.v[1][W_HPREV] == h1);
+    obs("renamed: TK16R hPrevInstance==0", sh.v[1][W_HPREV] == 0);
+    obs("renamed: TK16R hInstance!=TK16A's", h2 != h1);
+    obs("renamed: GetModuleHandle(TK16R)", GetModuleHandle("TK16R") != 0);
+    obs("renamed: GetModuleUsage(TK16A)", GetModuleUsage(GetModuleHandle("TK16A")));
+    obs("renamed: same module", GetModuleHandle((LPCSTR)MAKELP(0, h1)) ==
+                                GetModuleHandle((LPCSTR)MAKELP(0, h2)));
+    obs("renamed: GetNumTasks", K_GETNUMTASKS());
+    wait_gone(h1);
+    obs("renamed: TK16R finished", sh.v[1][W_DONE]);
+    obs("renamed: TK16A finished", sh.v[0][W_DONE]);
+    obs("renamed: TK16A gone", GetModuleHandle("TK16A") == 0);
+    dos(0x4100, dst, NULL);
+}
+
 int __cdecl tmain(void)
 {
     WORD n, i;
@@ -258,6 +310,7 @@ int __cdecl tmain(void)
     winexec();
     environment();
     twodata();
+    renamed();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

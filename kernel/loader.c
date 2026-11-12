@@ -817,12 +817,15 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     }
     mod_set_name(m);
 
-    /* One copy per module: a file whose module is already loaded (under
-       another file name) gives that module.
-       UNVERIFIED: Windows 3.1 compared the file's base name with the
-       loaded module names before opening anything (observed); what it
-       does when the module inside is called differently is not. */
-    for (dup = module_first; dup; dup = dup->next)
+    /* A library whose module is already loaded (under another file name)
+       gives that module. A program does not: observed (tests/apps/tk16.c,
+       "renamed"), a copy of a running program under another file name is
+       a module of its own on 3.1 (hPrevInstance 0, the first one's usage
+       still 1), with its own DGROUP; w16 started it on the running
+       instance's DGROUP. Windows 3.1 compares the file's base name with
+       the loaded module names before opening anything (observed).
+       UNVERIFIED: the library case. */
+    for (dup = module_first; dup && (m->flags & NEF_LIBRARY); dup = dup->next)
         if (kstricmp(dup->name, m->name) == 0) {
             f_close(fh);
             destroy(m);
