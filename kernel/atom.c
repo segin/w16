@@ -161,7 +161,8 @@ u16 KAPI AFIND(u16 ds, const char FAR *s)                       /* KERNEL.69 */
 
 u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
 {
-    char name[ATOM_MAXLEN + 1];
+    static char name[ATOM_MAXLEN + 1];     /* not on the caller's stack
+                                                  (KERNEL audit #16) */
     u16 atom, len, t, slot, prev, e, i;
     t = table_of(ds);
     if (atom_direct(s, &atom, &len))

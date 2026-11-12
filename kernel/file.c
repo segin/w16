@@ -270,15 +270,21 @@ int file_canon(const char FAR *name, char *out, u16 *err)
     return 1;
 }
 
+/* in KERNEL's data, not on the caller's stack: these paths made
+   OpenFile, the profiles and AddAtom take 600-900 bytes of it (KERNEL
+   audit #16); KERNEL does not yield in them, and none calls itself */
+static char jc_tmp[OFS_PATHMAX + 16], so_dir[OFS_PATHMAX];
+static char of_path[OFS_PATHMAX], of_given[OFS_PATHMAX], of_found[OFS_PATHMAX];
+
 static u16 join_canon(const char FAR *dir, const char FAR *name, char *out, u16 *err)
 {
-    char tmp[OFS_PATHMAX + 16];
+    char *tmp = jc_tmp;
     u16 n = 0;
-    while (*dir && n < sizeof tmp - 2)
+    while (*dir && n < sizeof jc_tmp - 2)
         tmp[n++] = *dir++;
     if (n && tmp[n - 1] != '\\')
         tmp[n++] = '\\';
-    while (*name && n < sizeof tmp - 1)
+    while (*name && n < sizeof jc_tmp - 1)
         tmp[n++] = *name++;
     tmp[n] = 0;
     return file_canon(tmp, out, err);
@@ -318,7 +324,7 @@ static void str_to(char FAR *d, const char *s)
    directory of the running task's program, the PATH directories. */
 static u16 search_open(const char FAR *name, u16 mode, char *found)
 {
-    char dir[OFS_PATHMAX];
+    char *dir = so_dir;
     const char FAR *p;
     module FAR *t;
     u16 fh, err, i, k;
@@ -326,13 +332,13 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
     for (k = 0; k < 4; k++) {
         switch (k) {
         case 0: dir[0] = '.'; dir[1] = 0; break;
-        case 1: GetWindowsDirectory(dir, sizeof dir); break;
-        case 2: GetSystemDirectory(dir, sizeof dir); break;
+        case 1: GetWindowsDirectory(dir, sizeof so_dir); break;
+        case 2: GetSystemDirectory(dir, sizeof so_dir); break;
         case 3:
             t = task_module();
             if (!t)
                 continue;
-            for (i = 0; t->path[i] && i < sizeof dir - 1; i++)
+            for (i = 0; t->path[i] && i < sizeof so_dir - 1; i++)
                 dir[i] = t->path[i];
             while (i && dir[i - 1] != '\\')
                 i--;
@@ -347,7 +353,7 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
         u16 n = 0;
         while (p[n] && p[n] != ';')
             n++;
-        if (n && n < sizeof dir) {
+        if (n && n < sizeof so_dir) {
             for (i = 0; i < n; i++)
                 dir[i] = p[i];
             dir[n] = 0;
@@ -364,7 +370,7 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
 
 u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.74 */
 {
-    char path[OFS_PATHMAX], given[OFS_PATHMAX];
+    char *path = of_path, *given = of_given;
     u16 fh, err, date, time, i;
     u16 mode = flags & 0xFF;
 
@@ -392,10 +398,10 @@ u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.
     } else if (file_has_path(name)) {
         fh = dos_open(path, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, &err);
     } else {
-        char found[OFS_PATHMAX];
+        char *found = of_found;
         fh = search_open(name, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, found);
         if (fh != HFILE_ERROR)
-            kmemcpy(path, found, sizeof path);
+            kmemcpy(path, found, sizeof of_path);
         else
             err = DOSE_NOFILE;
     }

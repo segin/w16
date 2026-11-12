@@ -117,16 +117,21 @@ static void normalise(pcache *pc)
 
 /* The full path of profile `file`: the Windows directory if it has no
    path. 0 if the name is not valid. */
+/* in KERNEL's data, not on the caller's stack: these paths made
+   OpenFile, the profiles and AddAtom take 600-900 bytes of it (KERNEL
+   audit #16); KERNEL does not yield in them, and none calls itself */
+static char rs_tmp[160], cf_win[128], api_path[128];
+
 static int resolve(const char FAR *file, char *path)
 {
-    char tmp[160];
+    char *tmp = rs_tmp;
     u16 n, err;
     if (file_has_path(file))
         return file_canon(file, path, &err);
     n = GetWindowsDirectory(tmp, 128);
     if (n && tmp[n - 1] != '\\')
         tmp[n++] = '\\';
-    while (*file && n < sizeof tmp - 1)
+    while (*file && n < sizeof rs_tmp - 1)
         tmp[n++] = *file++;
     tmp[n] = 0;
     return file_canon(tmp, path, &err);
@@ -144,7 +149,7 @@ static int same_path(const char *a, const char *b)
 /* the cache for a private profile: WIN.INI has its own */
 static pcache *cache_for(const char *path)
 {
-    char w[128];
+    char *w = cf_win;
     if (resolve("WIN.INI", w) && same_path(w, path))
         return &win_ini;
     return &priv_ini;
@@ -617,7 +622,7 @@ static int win_ini_path(char *path)
 
 u16 KAPI GetProfileInt(const char FAR *sec, const char FAR *key, u16 def)  /* KERNEL.57 */
 {
-    char path[128];
+    char *path = api_path;
     if (!win_ini_path(path))
         return def;
     return read_int(sec, key, def, path, &win_ini);
@@ -626,7 +631,7 @@ u16 KAPI GetProfileInt(const char FAR *sec, const char FAR *key, u16 def)  /* KE
 int KAPI GetProfileString(const char FAR *sec, const char FAR *key,
                           const char FAR *def, char FAR *buf, int n)  /* KERNEL.58 */
 {
-    char path[128];
+    char *path = api_path;
     if (!win_ini_path(path))
         return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
     return read_string(sec, key, def, buf, n, path, &win_ini);
@@ -635,7 +640,7 @@ int KAPI GetProfileString(const char FAR *sec, const char FAR *key,
 u16 KAPI WriteProfileString(const char FAR *sec, const char FAR *key,
                             const char FAR *val)                /* KERNEL.59 */
 {
-    char path[128];
+    char *path = api_path;
     if (!sec && !key && !val) {         /* observed: returns 0 */
         drop(&win_ini);
         return 0;
@@ -648,7 +653,7 @@ u16 KAPI WriteProfileString(const char FAR *sec, const char FAR *key,
 u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
                               const char FAR *file)             /* KERNEL.127 */
 {
-    char path[128];
+    char *path = api_path;
     if (!file || !resolve(file, path))
         return def;
     return read_int(sec, key, def, path, cache_for(path));
@@ -658,7 +663,7 @@ int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
                                  const char FAR *def, char FAR *buf, int n,
                                  const char FAR *file)          /* KERNEL.128 */
 {
-    char path[128];
+    char *path = api_path;
     if (!file || !resolve(file, path))
         return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
     return read_string(sec, key, def, buf, n, path, cache_for(path));
@@ -668,7 +673,7 @@ u16 KAPI WritePrivateProfileString(const char FAR *sec, const char FAR *key,
                                    const char FAR *val,
                                    const char FAR *file)        /* KERNEL.129 */
 {
-    char path[128];
+    char *path = api_path;
     if (!sec && !key && !val) {         /* observed: returns 0 */
         drop(&priv_ini);
         return 0;
