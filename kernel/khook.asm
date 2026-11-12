@@ -94,6 +94,59 @@ _DEBUGOUTPUT:
         retf
 A20PROC:                        ; KERNEL.165
         retf 2
+
+; KbdRst (KERNEL.123): Schulman: KEYBOARD.DRV's INT 9 handler calls it;
+; in 3.x it does nothing. DoSignal (KERNEL.139): Schulman: KEYBOARD's
+; Ctrl-Break, for the focus task's signal procedure (w16: nothing yet).
+; Observed (tests/apps/tk50.c, KRNL286): both keep every register, AX
+; and DX included. (They were C functions returning with AX = KERNEL's
+; data selector, inside the keyboard interrupt.)
+global KBDRST, DOSIGNAL
+KBDRST:
+DOSIGNAL:
+        retf
+
+; CVWBreak (KERNEL.205): the keyboard interrupt handler jumps to it on
+; Ctrl+Alt+SysReq once EnableKBSysReq asks for it (Schulman: "void FAR
+; _interrupt"); it returns as an interrupt procedure. Called as a far
+; procedure on 3.1 it ended the probe (tests/apps/tk50.c). UNVERIFIED
+; beyond that: w16 has no debugger to break into, so it only returns.
+global CVWBREAK
+CVWBREAK:
+        iret
+
+; LogError (KERNEL.324), LogParamError (325): kmisc.c, with AX and DX
+; kept as on 3.1 (observed, tests/apps/tk50.c)
+extern LOGERROR_, LOGPARAMERROR_
+global LOGERROR, LOGPARAMERROR
+LOGERROR:
+        push ax
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 14]             ; err
+        push word [bp + 12]             ; info
+        push word [bp + 10]
+        call far LOGERROR_
+        pop bp
+        pop dx
+        pop ax
+        retf 6
+LOGPARAMERROR:
+        push ax
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 18]             ; err
+        push word [bp + 16]             ; proc
+        push word [bp + 14]
+        push word [bp + 12]             ; param
+        push word [bp + 10]
+        call far LOGPARAMERROR_
+        pop bp
+        pop dx
+        pop ax
+        retf 10
 ; K329 (KERNEL.329), Schulman's DebugFillBuffer(lpBuf, n): the retail
 ; KERNEL leaves the buffer as it is (observed).
 K329:

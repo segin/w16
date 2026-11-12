@@ -168,16 +168,8 @@ u16 KAPI_ES SetErrorMode(u16 mode)
 /* GlobalPageLock / GlobalPageUnlock (191, 192): selector.c (as observed,
    tests/apps/tk17.c). GlobalWire/Fix and friends are in global.c. */
 
-/* KbdRst (KERNEL.123): Schulman: does nothing in Standard and 386
-   Enhanced mode. CVWBreak (205), Bunny_351 (351): nothing either. */
-void KAPI KbdRst(void)
-{
-}
-
-void KAPI CVWBreak(void)
-{
-}
-
+/* KbdRst (KERNEL.123), CVWBreak (205), DoSignal (139): khook.asm.
+   Bunny_351 (351): Schulman: nothing. */
 void KAPI Bunny351(void)
 {
 }
@@ -224,12 +216,6 @@ u32 KAPI GetHeapSpaces(u16 h)
     total = 0xFFFF - ph;
     used = (u16)(sp >> 16) - (u16)sp;
     return ((u32)total << 16) | (u16)(total - used);
-}
-
-/* DoSignal (KERNEL.139): Schulman: KEYBOARD's Ctrl-Break, sent to the
-   focus window's task through its signal handler. TODO: nothing yet. */
-void KAPI DoSignal(void)
-{
 }
 
 /* GetCurPID (KERNEL.157): Schulman: returns 0 in Windows 3.x. */
@@ -327,13 +313,15 @@ u16 KAPI IsRomModule(u16 h)
 
 /* LogError (KERNEL.324), LogParamError (325): the debugging KERNEL
    reports these; the retail one passes them on to the notification hook
-   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek). */
-void KAPI LogError(u16 err, void FAR *info)
+   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek).
+   Observed (tests/apps/tk50.c, KRNL286): AX and DX come back as they
+   went in; khook.asm's LOGERROR and LOGPARAMERROR keep them around these */
+void KAPI LogError_(u16 err, void FAR *info)
 {
     th_logerror(err, info);
 }
 
-void KAPI LogParamError(u16 err, void FAR *proc, void FAR *param)
+void KAPI LogParamError_(u16 err, void FAR *proc, void FAR *param)
 {
     th_logparamerror(err, proc, param);
 }

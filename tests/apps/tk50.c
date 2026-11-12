@@ -370,6 +370,24 @@ static void t_simple(void)
     }
     if (K1("FlushCachedFileHandle(0)", 319, 1, 0))
         res("FlushCachedFileHandle(0)", "AX", r_ax);
+    /* KbdRst (123): KEYBOARD.DRV calls it from its INT 9 handler
+       (Schulman); WriteOutProfiles (315), LogError
+       (324), LogParamError (325): what each keeps and returns */
+    if (K0("KbdRst", 123, 1)) {
+        res("KbdRst", "AX", r_ax);
+        res("KbdRst", "DX", r_dx);
+    }
+    if (K0("WriteOutProfiles", 315, 1)) {
+        res("WriteOutProfiles", "DX", r_dx);
+    }
+    if (K3("LogError(0,0)", 324, 1, 0, 0, 0)) {
+        res("LogError(0,0)", "AX", r_ax);
+        res("LogError(0,0)", "DX", r_dx);
+    }
+    if (kc("LogParamError(0,0,0)", 325, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0)) {
+        res("LogParamError(0,0,0)", "AX", r_ax);
+        res("LogParamError(0,0,0)", "DX", r_dx);
+    }
     /* K329 = DebugFillBuffer(lp, n) */
     lstrcpy(buf, "abcdefghijklmnop");
     if (K3("K329(buf,8)", 329, 1, SEG(buf), OFF(buf), 8)) {
@@ -862,5 +880,14 @@ int __cdecl tmain(void)
     out("TK50 done, failures=");
     outhex((WORD)failures);
     out("\r\n");
+    /* last, after the summary: DoSignal (139), KEYBOARD's Ctrl-Break
+       (Schulman). Not called: CVWBreak (205), which the keyboard
+       interrupt handler jumps to (Schulman: an interrupt procedure), and
+       IsRomModule (323); each, called as a far procedure, ended the probe
+       on 3.1 (KRNL286) */
+    if (K0("DoSignal", 139, 0)) {
+        res("DoSignal", "AX", r_ax);
+        res("DoSignal", "DX", r_dx);
+    }
     return failures;
 }
