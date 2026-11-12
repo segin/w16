@@ -490,6 +490,12 @@ void activate_window(HWND h, BOOL mouse)
         return;
     }
     hqInput = w->hq;
+    {   /* the owner's last active popup (GetLastActivePopup) */
+        PWND o = w;
+        while (o->hwndOwner && valid_wnd(o->hwndOwner))
+            o = PW(o->hwndOwner);
+        o->hwndLastActive = h;
+    }
     set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (!old || !valid_wnd(old) || PW(old)->hq != w->hq)
         send_message(h, WM_ACTIVATEAPP, TRUE, 0);
