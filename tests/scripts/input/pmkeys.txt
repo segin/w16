@@ -1,0 +1,13 @@
+; Program Manager's arrow keys straight after it starts, no click on a
+; group first (tests/boottest.sh case pmkeys): Right twice selects the
+; third item of Main; then a click on the workspace and Right twice more
+key Right
+key Right
+sleep 1
+shot 01-keys
+click 1
+sleep 1
+key Right
+key Right
+sleep 1
+shot 02-click

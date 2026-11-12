@@ -155,7 +155,7 @@ static void layout(HWND h, PCB c)
         MoveWindow(c->edit, 0, 0, r.right - sysmet[SM_CXVSCROLL], eh, TRUE);
 }
 
-LRESULT WINAPI ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PCB c;
     if (!valid_wnd(h))

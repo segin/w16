@@ -23,7 +23,7 @@ HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
 void track_window(HWND h, UINT hit, BOOL keyboard);
-LRESULT WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
 
@@ -430,6 +430,35 @@ void switch_window(HWND cur, BOOL tobottom)
         ShowWindow(first, SW_RESTORE);
 }
 
+/* USER.274 GetNextQueueWindow(hwnd, nWhichWay): the top-level window a
+   task switch from hwnd's would go to. US11 on 3.1 (six top-level windows,
+   one hidden, one disabled, one owned): nWhichWay 1 goes up the Z order
+   (GW_HWNDPREV), 0 down, round the end; a hidden or disabled window is
+   passed over, and so is one whose last active popup is another window
+   (its owned popup stands for it: the owner of an active popup never came
+   back); 4 bytes of arguments. Microsoft's WINOLDAP calls it as it starts
+   a DOS program; as a stub that popped nothing it put WINOLDAP's stack
+   out and its C run-time stopped with R6000. UNVERIFIED: the case with no
+   other window (0 here) */
+HWND WINAPI U_GETNEXTQUEUEWINDOW(HWND h, int way)
+{
+    HWND t;
+    PWND w = valid_wnd(h);
+    if (!w)
+        return 0;
+    while (w->hwndParent && w->hwndParent != hwndDesktop)
+        w = PW(h = w->hwndParent);
+    for (t = h;;) {
+        t = GetWindow(t, way ? GW_HWNDPREV : GW_HWNDNEXT);
+        if (!t)
+            t = GetWindow(h, way ? GW_HWNDLAST : GW_HWNDFIRST);
+        if (!t || t == h)
+            return 0;
+        if ((PW(t)->style & (WS_VISIBLE | WS_DISABLED)) == WS_VISIBLE && GetLastActivePopup(t) == t)
+            return t;
+    }
+}
+
 /* ---- DefWindowProc ---- */
 extern WORD lastkey;            /* the last key pressed (input.c) */
 static LONG def_ctlcolor(HDC hdc, int type)
@@ -777,7 +806,7 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* ---- the desktop window (class #32769) ---- */
-LRESULT WINAPI DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_LBUTTONDBLCLK:

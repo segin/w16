@@ -21,6 +21,8 @@
 #                virtual X display, xvfb-run, never the user's desktop);
 #                with DROPIN_SHOTS="T1 T2 ..." in the environment, also
 #                after T1, T2, ... seconds, as PNG with -T1 etc. before .png
+# DROPIN_NOREDIR=1 in the environment: the command's output is not
+# redirected to C:\OUT.TXT (it goes to the screen).
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
@@ -130,6 +132,8 @@ if [ -n "$usex" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false"
     [ "$cpu" = 386x ] && cpu=386
 fi
+redir=" > C:\\OUT.TXT"
+[ -n "${DROPIN_NOREDIR:-}" ] && redir=
 common="[dosbox]
 $xdos
 memsize=16
@@ -146,7 +150,7 @@ pcspeaker=false
 mount c \"$work/c\"
 c:
 cd \\WINDOWS
-$cmd > C:\\OUT.TXT
+$cmd$redir
 echo WINEXIT >> C:\\OUT.TXT
 exit"
 if [ -z "$shot" ]; then
