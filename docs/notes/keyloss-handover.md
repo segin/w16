@@ -33,6 +33,14 @@ Suites (snapshot copies, tests/dos/notes/suite.sh REV OUT):
    still 2/15 with it disabled). Next: whether an interrupt (timer, the
    DPMI host's reflection) runs FPU code or FSAVE/FRSTOR between the
    instruction and FSTSW; tests/dos/notes/tk8x.sh N repeats TK8.
+   Measured: master 1 failure in 30 runs (plus 0 in 10), keyloss 4 in 31
+   (2 in 15 with the vector switch disabled): present on master, perhaps
+   more frequent on keyloss (not significant yet). Hypothesis to test
+   next: the probe's deliberately unmasked exceptions raise IRQ 13 (INT
+   75h) at a time that depends on the host's load, and the handler
+   (WIN87EM's or the default) touches the status word before or after the
+   probe's FSTSW. A run with RUNTESTS_DPMI=dosx and one with HDPMI would
+   tell whether the DPMI host's reflection matters.
 2. Boot test case input: 01-booted differs by 110 pixels (the pointer: 3.1
    ends at the top-left, w16 sometimes keeps it in the middle). 2 of 3
    runs fail on master too. Pointer motion during boot is lost now and
