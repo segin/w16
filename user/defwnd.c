@@ -23,7 +23,7 @@ HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
 void track_window(HWND h, UINT hit, BOOL keyboard);
-LRESULT WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
 
@@ -777,7 +777,7 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* ---- the desktop window (class #32769) ---- */
-LRESULT WINAPI DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_LBUTTONDBLCLK:

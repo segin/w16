@@ -270,17 +270,17 @@ LONG WINAPI SetClassLong(HWND h, int i, LONG v)
 
 /* ---- the system classes ---- */
 extern LONG WINAPI DefWindowProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI DesktopWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI MenuWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI IconTitleWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI ButtonWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI StaticWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI EditWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI ListBoxWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI ComboLBoxWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI ComboBoxWndProc(HWND, UINT, WPARAM, LPARAM);
-extern LONG WINAPI ScrollBarWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds DesktopWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds MenuWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds IconTitleWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds ButtonWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds StaticWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds EditWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds ListBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds ComboLBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds ComboBoxWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds ScrollBarWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI DefDlgProc(HWND, UINT, WPARAM, LPARAM);
 
 static void sysclass(LPCSTR name, UINT style, WNDPROC proc, int wndextra, HBRUSH br, LPCSTR cursor)

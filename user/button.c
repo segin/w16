@@ -327,7 +327,7 @@ static void clicked(HWND h)
     notify(h, BN_CLICKED);
 }
 
-LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     BYTE s;
     if (!valid_wnd(h))
@@ -464,7 +464,7 @@ LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* ---- STATIC: extra bytes 0-1 the font, 2-3 the icon (US2: 6 bytes) ---- */
-LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
     UINT type;

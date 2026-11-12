@@ -235,7 +235,7 @@ static void arrange(HWND client, BOOL tile, WPARAM how)
     CalcChildScroll(client, SB_BOTH);
 }
 
-LRESULT WINAPI MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_CREATE: {
@@ -673,7 +673,7 @@ void move_icon_title(HWND t, HWND h)
         title_place(t, PW(h));
 }
 
-LRESULT WINAPI IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
     switch (msg) {

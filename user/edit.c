@@ -508,7 +508,7 @@ static WORD pos_from_x(HWND h, PED e, int x, int y)
     return st + i;
 }
 
-LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PED e;
     if (!valid_wnd(h))
