@@ -875,7 +875,14 @@ wd_fire:
 ; ES = 0; GlobalSize ES = 0. (BX after GlobalSize, GlobalFlags,
 ; GlobalReAlloc and GlobalFree, CX after GlobalSize and DX after
 ; GlobalUnlock and GlobalReAlloc hold other values on 3.1, not copied.)
-; The C functions do the work.
+; The C functions do the work, called with KERNEL's DS. The caller's DS
+; comes back 0 when it was the block freed (Pietrek, GlobalFree: the DS
+; pushed on entry is zeroed when it is the selector or handle freed, so
+; that restoring it does not fault; observed, tests/apps/tk17.c "fs":
+; GlobalFree with DS = the block returns DS = 0) or is no longer a
+; present selector (GlobalReAlloc, GlobalDiscard). w16 restored it
+; before the call, and the C function's own epilogue reloaded the dead
+; selector.
 ;   GHEAPAPI exported-name, c-function, nargs, after
 %macro GHEAPAPI 4
 extern %2
@@ -883,16 +890,15 @@ global %1
 %1:
         push bp
         mov bp, sp
-        push ds                 ; the caller's CS:IP for heapcheck
+        push ds                 ; [bp-2] the caller's DS
         push ax
         mov ax, DGROUP
         mov ds, ax
-        mov ax, [bp + 2]
+        mov ax, [bp + 2]        ; the caller's CS:IP for heapcheck
         mov [_api_caller wrt DGROUP], ax
         mov ax, [bp + 4]
         mov [_api_caller + 2 wrt DGROUP], ax
         pop ax
-        pop ds
         push bx
 %assign i %3
 %rep %3
@@ -901,9 +907,30 @@ global %1
 %endrep
         call far %2
         %4
+        push ax
+        push bx
+        mov ax, [bp - 2]
+        or ax, ax
+        jz %%dsok
+%ifidn %4, AFTER_FREE
+        mov bx, [bp + 4 + 2 * %3]       ; GlobalFree's handle
+        or bx, 1
+        or ax, 1
+        cmp ax, bx
+        je %%dsz
+        mov ax, [bp - 2]
+%endif
+        lar bx, ax
+        jnz %%dsz
+        test bh, 80h                    ; present
+        jnz %%dsok
+%%dsz:  mov word [bp - 2], 0
+%%dsok: pop bx
+        pop ax
         push 0
         pop es
         pop bx
+        pop ds
         pop bp
         retf 2 * %3
 %endmacro

@@ -35,6 +35,7 @@ extern WORD __cdecl cur_cs(void);
 extern WORD __cdecl cur_ds(void);
 extern WORD __cdecl ret_ax(void FAR *fn, WORD arg);
 extern WORD __cdecl call_es(void FAR *fn, WORD arg);
+extern WORD __cdecl call_with_ds(void FAR *fn, WORD arg);
 
 /* not in win16.h (names from windows.lib) */
 UINT WINAPI AllocCStoDSAlias(UINT);
@@ -902,6 +903,14 @@ static void free_tiles(void)
     FARPROC fs = GetProcAddress(GetModuleHandle("KERNEL"), "FreeSelector");
     WORD s = AllocSelector(cur_ds()), t;
     HGLOBAL h;
+    /* Pietrek (GlobalFree): the caller's DS, if it is the block freed,
+       comes back 0 */
+    {
+        FARPROC gf = GetProcAddress(GetModuleHandle("KERNEL"), "GlobalFree");
+        HGLOBAL g = GlobalAlloc(GMEM_FIXED, 0x40);
+        WORD gs = g ? SELECTOROF(GlobalLock(g)) : 0;
+        obs("fs: DS after GlobalFree(DS)", gs ? call_with_ds((void FAR *)gf, gs) : 0xFFFF);
+    }
     obs("fs: ES after FreeSelector(ES)", s ? call_es((void FAR *)fs, s) : 0xFFFF);
     obs("fs: freed", s ? !sel_ok(s) : 0xFFFF);
     h = GlobalAlloc(GMEM_MOVEABLE, 0x18000L);

@@ -155,3 +155,18 @@ _call_es:
         pop es
         pop bp
         retf
+
+; u16 call_with_ds(void far *fn, u16 arg): calls fn(arg) (one word, Pascal)
+; with DS = arg; returns the DS it came back with
+global _call_with_ds
+_call_with_ds:
+        push bp
+        mov bp, sp
+        push ds
+        push word [bp + 10]
+        mov ds, [bp + 10]
+        call far [bp + 6]
+        mov ax, ds
+        pop ds
+        pop bp
+        retf

@@ -115,6 +115,7 @@
 { "GlobalAlloc block after GlobalDosFree: GlobalSize", 0x0000 },
 { "GlobalFree(GDA block) ret", 0x0000 },
 { "GDA block after GlobalFree: lar ok", 0x0000 },
+{ "fs: DS after GlobalFree(DS)", 0x0000 },
 { "fs: ES after FreeSelector(ES)", 0x0000 },
 { "fs: freed", 0x0001 },
 { "fs: FreeSelector(tile 1)", 0x0000 },
