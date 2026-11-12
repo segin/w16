@@ -1492,11 +1492,28 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
     if (!tot)
         return 0;
     need = tiles(((u32)tot - 1) << 4);
-    if (need > n)
-        return 0;                       /* TODO: a longer run of tiles */
     a = alloc_space(tot, WHERE_ANY, flags);
     if (!a)
         return 0;
+    if (need > n) {
+        /* more tiles than it had: a new run of selectors, the old one
+           freed, the new handle returned. Observed (tests/apps/tk17.c
+           "dg"; 3.1 Standard, 386 Enhanced, KRNL286): a discarded 100h
+           block brought back as 18000h gets another handle, the whole
+           size usable; w16 failed it (KERNEL audit, missing
+           functionality) */
+        u16 ns = dpmi_alloc_desc(need);
+        if (!ns) {
+            release(a);
+            return 0;
+        }
+        *seltab(s) = 0;
+        for (i = 0; i < n; i++)
+            dpmi_free_desc(s + i * sel_inc);
+        s = ns;
+        h = (h & 1) ? ns : ns & ~1u;
+        n = need;
+    }
     bytes = (u32)AR(a)->size << 4;
     for (i = need; i < n; i++)
         dpmi_free_desc(s + i * sel_inc);

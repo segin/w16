@@ -863,6 +863,35 @@ static void huge_ptrs(void)
     GlobalUnlock(h);
     GlobalFree(h);
 }
+
+/* A discarded block brought back bigger than 64K (more tiles than it
+   had) */
+static void disc_grow(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DISCARDABLE, 0x100), r;
+    if (!h) {
+        obs("dg: GlobalAlloc", 0);
+        return;
+    }
+    GlobalDiscard(h);
+    obs("dg: discarded", (GlobalFlags(h) & GMEM_DISCARDED) != 0);
+    r = GlobalReAlloc(h, 0x18000L, GMEM_MOVEABLE);
+    obs("dg: GlobalReAlloc(18000h) != 0", r != 0);
+    obs("dg: same handle", r == h);
+    obs("dg: GlobalSize hi", r ? HIWORD(GlobalSize(r)) : 0xFFFF);
+    obs("dg: not discarded", r ? !(GlobalFlags(r) & GMEM_DISCARDED) : 0xFFFF);
+    if (r) {
+        BYTE FAR *p = (BYTE FAR *)GlobalLock(r);
+        obs("dg: lock", p != NULL);
+        if (p) {
+            p[0x9000] = 0x5A;
+            obs("dg: byte at 9000h", p[0x9000]);
+            GlobalUnlock(r);
+        }
+        GlobalFree(r);
+    } else
+        GlobalFree(h);
+}
 #endif
 
 #ifdef TK17A
@@ -903,6 +932,7 @@ int __cdecl tmain(void)
        Windows 3.1 unable to finish these) */
     huge_blocks();
     huge_ptrs();
+    disc_grow();
     lpa_more();
     dos_last();
     free_tiles();
