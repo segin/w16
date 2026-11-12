@@ -615,8 +615,8 @@ _notify_call:
         pop bp
         retf
 
-INTCALL _dos21, 21h, far
-INTCALL _dpmi31_host, 31h, far    ; dosx.c: dpmi31 wraps it
+INTCALL _dos21, 21h, far, pm
+INTCALL _dpmi31_host, 31h, far, pm ; dosx.c: dpmi31 wraps it
 
 ; ---------------------------------------------------------------------------
 ; Constant exports. wlink cannot export absolute symbols, so these labels

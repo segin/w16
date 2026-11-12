@@ -34,6 +34,7 @@ extern WORD __cdecl get_desc(WORD sel, BYTE FAR *buf);
 extern WORD __cdecl cur_cs(void);
 extern WORD __cdecl cur_ds(void);
 extern WORD __cdecl ret_ax(void FAR *fn, WORD arg);
+extern WORD __cdecl call_es(void FAR *fn, WORD arg);
 
 /* not in win16.h (names from windows.lib) */
 UINT WINAPI AllocCStoDSAlias(UINT);
@@ -864,6 +865,30 @@ static void huge_ptrs(void)
 }
 #endif
 
+#ifdef TK17A
+/* FreeSelector with the selector in ES, and on the second selector of a
+   huge block (last: either may end the probe) */
+static void free_tiles(void)
+{
+    FARPROC fs = GetProcAddress(GetModuleHandle("KERNEL"), "FreeSelector");
+    WORD s = AllocSelector(cur_ds()), t;
+    HGLOBAL h;
+    obs("fs: ES after FreeSelector(ES)", s ? call_es((void FAR *)fs, s) : 0xFFFF);
+    obs("fs: freed", s ? !sel_ok(s) : 0xFFFF);
+    h = GlobalAlloc(GMEM_MOVEABLE, 0x18000L);
+    t = h ? (WORD)(GlobalHandle(h) >> 16) : 0;
+    if (!t) {
+        obs("fs: huge block", 0);
+        return;
+    }
+    obs("fs: FreeSelector(tile 1)", FreeSelector(t + inc_));
+    obs("fs: tile 1 still there", sel_ok(t + inc_));
+    obs("fs: GlobalSize hi after", HIWORD(GlobalSize(h)));
+    obs("fs: GlobalFree", (WORD)GlobalFree(h));
+    obs("fs: tile 1 after GlobalFree", sel_ok(t + inc_));
+}
+#endif
+
 int __cdecl tmain(void)
 {
 #ifdef TK17A
@@ -880,6 +905,7 @@ int __cdecl tmain(void)
     huge_ptrs();
     lpa_more();
     dos_last();
+    free_tiles();
 #else
     constants();
     alloc_selector();

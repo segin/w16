@@ -140,3 +140,18 @@ _ret_ax:
         call far [bp + 6]
         pop bp
         retf
+
+; u16 call_es(void far *fn, u16 arg): calls fn(arg) (one word, Pascal)
+; with ES = arg; returns the ES it came back with
+global _call_es
+_call_es:
+        push bp
+        mov bp, sp
+        push es
+        push word [bp + 10]
+        mov es, [bp + 10]
+        call far [bp + 6]
+        mov ax, es
+        pop es
+        pop bp
+        retf

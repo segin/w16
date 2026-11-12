@@ -235,6 +235,9 @@ u16 KAPI AllocSelector(u16 sel)                               /* KERNEL.175 */
    (GlobalSize gives 0 afterwards). Freeing a free selector also returns
    0, but corrupted Windows' free list (it handed the selector out twice);
    w16 leaves it to the DPMI host. */
+static void es_zero(void);
+#pragma aux es_zero = "push 0" "pop es" modify exact [es];
+
 u16 KAPI FreeSelector(u16 sel)                                /* KERNEL.176 */
 {
     u16 n = 1;
@@ -243,11 +246,16 @@ u16 KAPI FreeSelector(u16 sel)                                /* KERNEL.176 */
     sel |= 1;
     if ((u16)(GlobalHandle(sel) >> 16) == sel) {
         GlobalFree(sel);
-        return 0;
+    } else {
+        if (seg_rights(sel) & AR_PRESENT)
+            n = (u16)(seg_limit(sel) >> 16) + 1;
+        free_run(sel, n);
     }
-    if (seg_rights(sel) & AR_PRESENT)
-        n = (u16)(seg_limit(sel) >> 16) + 1;
-    free_run(sel, n);
+    /* observed (tests/apps/tk17.c): called with the selector in ES, 3.1
+       returns ES = 0; w16 gave it back the dead selector (KERNEL audit
+       #8). Its second selector of a huge block is freed too (3.1 the
+       same: the block keeps its size, GlobalFree still succeeds) */
+    es_zero();
     return 0;
 }
 
