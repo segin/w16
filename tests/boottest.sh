@@ -149,7 +149,10 @@
 # ">>> reference-run code" marks) and the text of the case (or function)
 # that makes the run. A result is stored only when it looks complete (a
 # boot that completed with a screen that is not blank; an input run that
-# ran its script to the end with every shot taken and none blank). In a
+# ran its script to the end with every shot taken and none blank) and
+# its case passed with it: a reference caught at a bad moment (a screen
+# taken mid-repaint on a loaded host) would otherwise fail every later
+# run from the cache; a failing case's references run again next time. In a
 # scratch drive kept with a run, files equal to the reference install's
 # are stored as links to it. Each entry has key.txt, what its key was
 # made from. BOOTTEST_REFRESH=1 in the environment: run every reference
@@ -311,6 +314,23 @@ refok() {
     fi
     return 0
 }
+# refkeep: at the end of a case, store the references it ran if it passed
+# (a reference that looks complete can still be wrong, e.g. a screen
+# taken mid-repaint on a loaded host: such a one would fail every run
+# from the cache), drop them if not
+refkeep() {
+    [ -f "$out/.pending-$_bt_n" ] || return 0
+    while read -r _rd _rt; do
+        if [ "${fails:-1}" = 0 ]; then
+            rm -rf "$_rd"; mv "$_rt" "$_rd"
+            echo "$(basename "$(dirname "$_rd")") $(basename "$_rd") stored" >> "$out/refcache.log"
+        else
+            rm -rf "$_rt"
+            echo "$(basename "$(dirname "$_rd")") $(basename "$_rd") not stored: the case failed" >> "$out/refcache.log"
+        fi
+    done < "$out/.pending-$_bt_n"
+    rm -f "$out/.pending-$_bt_n"
+}
 # refrun NAME CODE boot [dropin.sh options...]
 # refrun NAME CODE COMMAND [ARGS...]
 #   a reference run, from the cache when it has it. NAME's results are
@@ -344,7 +364,7 @@ refrun() {
             "$@" > "$out/$_rn.txt" 2>&1 || true
         fi
         if refok "$_rn"; then
-            _rt=$refcache/$_rn/.new-$_rk-$$
+            _rt=$refcache/$_rn/.new-$_rk-${_bt_n:-0}-$$
             rm -rf "$_rt"; mkdir -p "$_rt/files"
             for _rf in "$out/$_rn" "$out/$_rn".*; do [ -e "$_rf" ] && cp -a "$_rf" "$_rt/files/"; done
             # the scratch drive (inputrun.sh's work/c, dropin.sh -o's c):
@@ -357,8 +377,10 @@ refrun() {
                 done
             done
             cp "$_rkf" "$_rt/key.txt"
-            rm -rf "$_rd"; mv "$_rt" "$_rd"
-            echo "$_rn $_rk ran, stored" >> "$out/refcache.log"
+            # kept only if the case passes with it (refkeep): a reference
+            # caught in a bad moment must not stay in the cache
+            echo "$_rd $_rt" >> "$out/.pending-${_bt_n:-0}"
+            echo "$_rn $_rk ran" >> "$out/refcache.log"
         else
             echo "$_rn $_rk ran, NOT stored: incomplete (see $out/$_rn.txt)" >> "$out/refcache.log"
         fi
@@ -969,9 +991,10 @@ for c in $cases; do
     (
         # (cases use c, n and the like for their own purposes)
         _bt_c=$c _bt_n=$n _bt_t=$(date +%s) fails=0
-        trap 'echo "$_bt_c $(($(date +%s) - _bt_t))" > "$out/.case-$_bt_n.time"; touch "$out/.case-$_bt_n.done"' EXIT
+        trap '[ -f "$out/.case-$_bt_n.fails" ] || fails=1; refkeep; echo "$_bt_c $(($(date +%s) - _bt_t))" > "$out/.case-$_bt_n.time"; touch "$out/.case-$_bt_n.done"' EXIT
         runcase "$c" > "$out/.case-$_bt_n.out" 2>&1
         echo "$fails" > "$out/.case-$_bt_n.fails"
+        refkeep
     ) &
     pids="$pids $!"
 done
@@ -981,7 +1004,7 @@ wait
 echo "boottest: seconds per case:"
 awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "(all)", t }' "$out/times.txt"
 if [ -s "$out/refcache.log" ]; then
-    echo "boottest: references: $(grep -c 'from the cache' "$out/refcache.log") from the cache, $(grep -c ' ran, ' "$out/refcache.log") run ($out/refcache.log)"
+    echo "boottest: references: $(grep -c 'from the cache' "$out/refcache.log") from the cache, $(grep -c ' ran' "$out/refcache.log") run, $(grep -c ' stored$' "$out/refcache.log") stored ($out/refcache.log)"
 fi
 # retries: this run's, and cases that have needed them repeatedly
 if [ -s "$out/retries.txt" ]; then
