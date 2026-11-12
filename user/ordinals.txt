@@ -277,7 +277,7 @@
  271 GLOBALGETATOMNAME            -    8
  272 ISZOOMED                     -    2
  273 CONTROLPANELINFO             -    8
- 274 GETNEXTQUEUEWINDOW           -    ?
+ 274 GETNEXTQUEUEWINDOW           -    4
  275 REPAINTSCREEN                -    ?
  276 LOCKMYTASK                   -    ?
  277 GETDLGCTRLID                 -    2

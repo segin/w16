@@ -430,6 +430,33 @@ void switch_window(HWND cur, BOOL tobottom)
         ShowWindow(first, SW_RESTORE);
 }
 
+/* USER.274 GetNextQueueWindow(hwnd, next): the top-level window a task
+   switch from hwnd's goes to - the next (or, next = 0, the previous) one
+   in Z order, round the end, that is visible, enabled and not owned; 0
+   if none. Microsoft's WINOLDAP calls it while starting a DOS program; it
+   was a stub that popped no arguments, the caller's stack went wrong and
+   its C run-time stopped with R6000 (stack overflow). UNVERIFIED: the
+   rule for which window (Schulman: undocumented; Wine's 16-bit USER
+   gives this one) and the meaning of the flag's polarity */
+HWND WINAPI U_GETNEXTQUEUEWINDOW(HWND h, int next)
+{
+    HWND t;
+    PWND w = valid_wnd(h);
+    if (!w)
+        return 0;
+    while (w->hwndParent && w->hwndParent != hwndDesktop)
+        w = PW(h = w->hwndParent);
+    for (t = h;;) {
+        t = GetWindow(t, next ? GW_HWNDNEXT : GW_HWNDPREV);
+        if (!t)
+            t = GetWindow(h, next ? GW_HWNDFIRST : GW_HWNDLAST);
+        if (!t || t == h)
+            return 0;
+        if ((PW(t)->style & (WS_VISIBLE | WS_DISABLED)) == WS_VISIBLE && !PW(t)->hwndOwner)
+            return t;
+    }
+}
+
 /* ---- DefWindowProc ---- */
 extern WORD lastkey;            /* the last key pressed (input.c) */
 static LONG def_ctlcolor(HDC hdc, int type)
