@@ -875,6 +875,12 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         h.heap_size = 100;
     NE_HDR(m)->stack_size = h.stack_size;
     NE_HDR(m)->heap_size = h.heap_size;
+    /* Pietrek (LoadExeHeader): an expected Windows version of 0 is taken
+       as 2.01 (a missing-functionality item of the KERNEL audit).
+       UNVERIFIED by a probe: on 3.1 the probe stopped where it started
+       such a program (TK16A with 3Eh set to 0), no further output */
+    if (!NE_HDR(m)->expver)
+        NE_HDR(m)->expver = 0x0201;
 
     /* A library whose module is already loaded (under another file name)
        gives that module. A program does not: observed (tests/apps/tk16.c,
