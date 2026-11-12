@@ -117,8 +117,14 @@
 #define LMEM_MODIFY     0x0080
 #define LMEM_DISCARDABLE 0x0F00
 
-/* Segments hold at most 64K: offsets are 16-bit (format bound). */
-#define SEG_MAX         0x10000UL
+/* A local heap's segment grows to at most 64K less 16 bytes (Pietrek,
+   LocalNotifyDefault: "If this wraps around the 64K limit, then 64K minus
+   16 is used as the new size of the global block"). A full 64K would take
+   paras_for's 1002h paragraphs, two selector tiles: GlobalReAlloc would
+   move the block to a new selector run (grow_tiles), freeing the selector
+   the heap, its owner's DS and fixups like KEYBOARD's call into USER
+   still use. */
+#define SEG_MAX         0xFFF0UL
 
 typedef struct lheap {
     u16 seg;
@@ -397,16 +403,22 @@ static int grow(const lheap *hp, u16 need)
 {
     u16 h = (u16)GlobalHandle(hp->seg);
     u32 old = GlobalSize(h), size;
-    u16 last = I(hp, LI_LAST), nl, p;
+    u16 last = I(hp, LI_LAST), nl, p, room;
 
     if (!h || !old)
         return 0;
     size = ((old & ~31UL) + need + I(hp, LI_EXTRA) + GROW_SLOP + 31) & ~31UL;
-    /* UNVERIFIED: what Windows does when this passes 64K */
     if (size > SEG_MAX)
         size = SEG_MAX;
     nl = (u16)((size - 1 - SENTINEL_SIZE) & ~3UL);
-    if (size <= old || nl <= last || nl - last < need || !GlobalReAlloc(h, size, 0))
+    /* what the request will find: the new space and a free arena before
+       the old last sentinel, which it joins (tests/apps/tk3.c "full":
+       3.1 fills the heap up to the cap, KRNL286 to GlobalSize FFF0h) */
+    room = nl > last ? nl - last : 0;
+    p = a_prev(hp, last);
+    if (!(a_flags(hp, p) & LA_BUSY))
+        room += last - p;
+    if (size <= old || nl <= last || room < need || !GlobalReAlloc(h, size, 0))
         return 0;
     /* the heap ends at the segment's end, which is what GlobalSize says
        (KRNL286 gives 10h more than asked) */

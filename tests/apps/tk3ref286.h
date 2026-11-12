@@ -169,3 +169,5 @@
 { "ht: handle 32-table2", 0xDA4F, 1 },
 { "ht: hfree freed==last freed", 0x0000, 1 },
 { "LocalCompact(FFFF) discardable locked", 0x106A, 1 },
+{ "full: GlobalSize(DGROUP) low", 0xFFF0 },
+{ "full: GlobalSize(DGROUP) high", 0x0000 },

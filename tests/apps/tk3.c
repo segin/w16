@@ -590,6 +590,33 @@ static void probe_more(void)
     LocalFree((HLOCAL)h);
 }
 
+static WORD cur_ds(void);
+#pragma aux cur_ds = "mov ax, ds" value [ax];
+static WORD cur_ss(void);
+#pragma aux cur_ss = "mov ax, ss" value [ax];
+
+/* The task's own heap filled until LocalAlloc fails: the heap's segment
+   (DGROUP, also the stack) grows towards 64K and stays where it is, on
+   the same selector (Pietrek, LocalNotifyDefault: at most 64K less 16
+   bytes). w16 once grew it to a full 64K, two selector tiles, and moved
+   it to new selectors, leaving DS and SS on freed ones. */
+static void probe_full(void)
+{
+    HLOCAL h[80];
+    WORD n, i;
+    for (n = 0; n < 80; n++)
+        if ((h[n] = LocalAlloc(LMEM_FIXED, 0x400)) == 0)
+            break;
+    obs("full: LocalAlloc failed before 80", n < 80);
+    obs("full: DS the same", cur_ds() == ds());
+    obs("full: SS the same", cur_ss() == ds());
+    obs("full: GlobalHandle(DS)==hInstance", LOWORD(GlobalHandle(ds())) == hinst());
+    obs("full: GlobalSize(DGROUP) low", LOWORD(GlobalSize(hinst())));
+    obs("full: GlobalSize(DGROUP) high", HIWORD(GlobalSize(hinst())));
+    for (i = 0; i < n; i++)
+        LocalFree(h[i]);
+}
+
 int __cdecl tmain(void)
 {
     out("TK3 start\r\n");
@@ -604,6 +631,7 @@ int __cdecl tmain(void)
     probe_compact();
     probe_other();
     probe_more();
+    probe_full();
     out("TK3 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

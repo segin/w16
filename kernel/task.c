@@ -533,8 +533,8 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        DS = SS = DGROUP, SP = the end of the stack (static data, then the
        stack, then the local heap) */
     dsize = (m->dg_min ? m->dg_min : 0x10000UL) + h->stack_size;
-    if (dsize > 0xFFFEUL)
-        dsize = 0xFFFEUL;
+    if (dsize > 0xFFF0UL)               /* DGROUP's end (loader.c) */
+        dsize = 0xFFF0UL;
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
     {
         u16 FAR *s = MK_FP(dg_sel, sp - 24);

@@ -841,9 +841,14 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         if (flen > size)
             size = flen;
         if (i + 1 == h.auto_data) {
+            /* DGROUP stays one selector, below 64K (Pietrek: the local
+               heap keeps "the DGROUP below 64K"; local.c SEG_MAX). A full
+               64K would be two selector tiles, and a local heap grown in
+               it would move to new selectors. UNVERIFIED: 3.1's size for
+               data, heap and stack that add up to 64K or more */
             size += (u32)h.heap_size + h.stack_size;
-            if (size > 0x10000UL)
-                size = 0x10000UL;
+            if (size > 0xFFF0UL)
+                size = 0xFFF0UL;
         }
         /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
            segments are loaded moveable (even handles, hInstance = DS &
@@ -1093,6 +1098,8 @@ static u16 new_instance(module FAR *m, const loadparms FAR *lp)
     if (!m->dg_snap)
         return LE_NOMEM;
     size = gsize_of_sel(m->dg_snap);
+    if (size > 0xFFF0UL)                /* one selector, as above */
+        size = 0xFFF0UL;
     hnd = galloc(GMEM_MOVEABLE | GA_REQ_DGROUP, size & ~0x1FUL, m->ne_sel, &sel);
     if (!hnd)
         return LE_NOMEM;
