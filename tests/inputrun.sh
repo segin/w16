@@ -88,9 +88,10 @@ if [ -n "${INPUTRUN_CAPTURE:-}" ]; then
     printf '[dosbox]\ncaptures=%s\n' "$out/capture" >> "$work/dosbox.conf"
 fi
 # dropin.sh -p CPU prepared a DOSBox-X configuration ("quit warning" is
-# DOSBox-X's): run DOSBox-X then
+# DOSBox-X's): run DOSBox-X then, on X11 (under Xvfb its SDL picked no
+# video driver by itself: "Couldn't open X11 display")
 emu="dosbox -noconsole"
-grep -q '^quit warning' "$work/dosbox.conf" && emu="dosbox-x -nogui -fastlaunch"
+grep -q '^quit warning' "$work/dosbox.conf" && emu="env SDL_VIDEODRIVER=x11 SDL_VIDEO_DRIVER=x11 dosbox-x -nogui -fastlaunch"
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
