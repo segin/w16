@@ -75,7 +75,7 @@ dosx_to "$stage/W16SYS"
 cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TKID.TPL" "$stage/"
 # TK15 and TK16 (tasks) start their helpers from their own directory
 cp "$dos/TK15.EXE" "$dos/TK15A.EXE" "$stage/"
-cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$dos/TK16S.EXE" "$stage/"
+cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$dos/TK16S.EXE" "$dos/TK16I.EXE" "$stage/"
 for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     cp "$dos/$f" "$stage/WINDOWS/"
 done

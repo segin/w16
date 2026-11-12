@@ -96,6 +96,51 @@ static int f_read_big(u16 fh, u16 sel, u32 len)
     return len ? f_read(fh, MK_FP(sel, 0), (u16)len) : 1;
 }
 
+/* A segment's data from the file (at pos, flen bytes) into sel, which
+   holds cap bytes. An iterated segment (NESEG_ITERATED; Microsoft's NE
+   format: records of a repeat count, a byte count and that many bytes)
+   is expanded. Observed (tests/apps/tk16.c "iter", TK16I made by
+   tools/mkiterated.py): 3.1 runs a program whose data segment is so
+   stored, its data as expanded; w16 loaded the records as they were
+   (KERNEL audit #15). */
+static int f_read_seg(u16 fh, u32 pos, u16 sel, u32 flen, u32 cap, int iter)
+{
+    u16 tmp;
+    u32 in = 0, out = 0;
+    int ok = 1;
+    if (!f_seek(fh, pos))
+        return 0;
+    if (!iter)
+        return f_read_big(fh, sel, flen);
+    if (!galloc(GMEM_FIXED, flen, 0, &tmp))
+        return 0;
+    if (!f_read_big(fh, tmp, flen)) {
+        GlobalFree(tmp);
+        return 0;
+    }
+    while (ok && in + 4 <= flen) {
+        u16 cnt = *(u16 FAR *)MK_FP(tmp, (u16)in);
+        u16 len = *(u16 FAR *)MK_FP(tmp, (u16)in + 2), c, k;
+        in += 4;
+        if (in + len > flen) {
+            ok = 0;
+            break;
+        }
+        for (c = 0; c < cnt && ok; c++) {
+            if (out + len > cap) {
+                ok = 0;
+                break;
+            }
+            for (k = 0; k < len; k++)
+                *(u8 FAR *)MK_FP(sel, (u16)(out + k)) = *(u8 FAR *)MK_FP(tmp, (u16)(in + k));
+            out += len;
+        }
+        in += len;
+    }
+    GlobalFree(tmp);
+    return ok;
+}
+
 static void f_close(u16 fh)
 {
     regs16 r;
@@ -910,7 +955,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             if (size < 0x10000UL)
                 s->min_alloc = (u16)size;
         }
-        if (flen && (!f_seek(fh, (u32)s->sector << shift) || !f_read_big(fh, sel, flen))) {
+        if (flen && !f_read_seg(fh, (u32)s->sector << shift, sel, flen, size,
+                                (s->flags & NESEG_ITERATED) != 0)) {
             f_close(fh);
             return load_fail(m, path, "cannot read segment");
         }
@@ -1128,13 +1174,13 @@ static int redo_self_fixups(module FAR *m, u16 dg)
         return 1;
     flen = s->file_len ? s->file_len : 0x10000UL;
     data = (u32)s->sector << shift;
-    if (!galloc(GMEM_FIXED, flen, 0, &raw))
+    if (!galloc(GMEM_FIXED, gsize_of_sel(dg), 0, &raw))
         return 0;
     if (!f_open(m->path, &fh, &err)) {
         GlobalFree(raw);
         return 0;
     }
-    if (!f_seek(fh, data) || !f_read_big(fh, raw, flen) ||
+    if (!f_read_seg(fh, data, raw, flen, gsize_of_sel(dg), (s->flags & NESEG_ITERATED) != 0) ||
         !f_seek(fh, data + flen) || !f_read(fh, &n, 2))
         goto out;
     while (done < n) {
@@ -1149,7 +1195,7 @@ static int redo_self_fixups(module FAR *m, u16 dg)
                 (src != NERS_SEGMENT && src != NERS_FARPTR))
                 continue;
             for (;;) {                  /* as patch(), the selector only */
-                if ((u32)off + (src == NERS_FARPTR ? 4 : 2) > flen)
+                if ((u32)off + (src == NERS_FARPTR ? 4 : 2) > gsize_of_sel(dg))
                     break;
                 next = *(u16 FAR *)MK_FP(raw, off);
                 *(u16 FAR *)MK_FP(dg, off + (src == NERS_FARPTR ? 2 : 0)) = dg;

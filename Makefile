@@ -45,7 +45,7 @@ DXPROBES := DX1 DX2 DX4 DX5 DX8
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
-            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE
+            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -442,6 +442,10 @@ $(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
 	    $(if $(filter S,$*),option stack=1k option heapsize=32) \
 	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk16$*.map \
 	    file { $(B)/tests/tk15s.o $(B)/tests/tk16$*.o }
+
+# TK16I.EXE: TK16A with its data segment stored iterated
+$(DOS)/TK16I.EXE: $(DOS)/TK16A.EXE tools/mkiterated.py
+	python3 tools/mkiterated.py $< $@ ABABABABABABABAB
 
 # TK17.EXE: the selector probe, with descriptor helpers in tk17s.asm
 # (TK17A: its huge-block part, the same source with TK17A defined)

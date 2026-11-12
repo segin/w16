@@ -343,6 +343,27 @@ static void second(void)
     wait_gone(h1);
 }
 
+/* TK16I: TK16A with its data segment stored iterated (NE segment flag
+   0008h; tools/mkiterated.py) */
+static void iterated(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("iterated data");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16I.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("iter: TK16I", h > 32 ? 0x20 : h);
+    obs("iter: ran", sh.v[0][W_RAN]);
+    obs("iter: data as expanded", sh.v[0][W_ITER]);
+    obs("iter: far pointer its own", sh.v[0][W_SELF]);
+    if (h > 32)
+        wait_gone(h);
+}
+
 /* TK16S: linked with a 1K stack and a 20h-byte heap. Pietrek
    (LoadExeHeader): a program's stack is raised to 5K, a heap under 100
    bytes (not 0) to 100 */
@@ -383,6 +404,7 @@ int __cdecl tmain(void)
     handles();
     small();
     second();
+    iterated();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

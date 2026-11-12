@@ -39,5 +39,7 @@ enum {
     W_MT12,             /* its module table: stack size */
     W_SELF,             /* a static far pointer to its own data: its
                            selector is DS at entry */
+    W_ITER,             /* its "ABAB..." array as it should be (TK16I has
+                           it as an iterated record) */
     W_COUNT
 };

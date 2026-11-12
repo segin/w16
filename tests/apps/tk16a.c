@@ -42,6 +42,9 @@ static void args(const char FAR *p, char *mode)
     v = sh ? sh->v[slot] : NULL;
 }
 
+/* TK16I (tools/mkiterated.py) stores this as one iterated record */
+static char iter_pat[16] = "ABABABABABABABAB";
+
 /* a far pointer to the program's own data, made by a fixup in DGROUP */
 static WORD self_word;
 static WORD FAR *self_ptr = &self_word;
@@ -73,6 +76,9 @@ int __cdecl tmain(void)
     v[W_RAN] = 1;
     v[W_HPREV] = init_regs[4];
     v[W_SELF] = SELECTOROF(self_ptr) == entry_regs[8];
+    for (i = 0; i < 16 && iter_pat[i] == ((i & 1) ? 'B' : 'A'); i++)
+        ;
+    v[W_ITER] = i == 16;
     v[W_EBX] = entry_regs[1];
     v[W_ECX] = entry_regs[2];
     v[W_ICX] = init_regs[2];
