@@ -78,7 +78,8 @@ xdotool windowactivate --sync "\$wid" 2>/dev/null || xdotool windowfocus "\$wid"
 eval \$(xdotool getwindowgeometry --shell "\$wid")
 xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2))
 sleep $boot
-shot() { import -window "\$wid" "$out/\$1.png"; echo "shot \$1" >> "$out/input.log"; }
+# (import waits for ever when DOSBox has gone: at most 15 seconds)
+shot() { timeout 15 import -window "\$wid" "$out/\$1.png"; echo "shot \$1" >> "$out/input.log"; }
 tr -d '\r' < "$script" | while read -r cmd a b; do
     case "\$cmd" in
     ''|';'*) continue ;;
