@@ -437,9 +437,13 @@ void set_focus(HWND h)
     HWND old = hwndFocus;
     if (h == old)
         return;
+    /* GetFocus answers the new window already inside WM_KILLFOCUS (US12
+       on 3.1: A's WM_KILLFOCUS saw B, and 0 for SetFocus(NULL)) */
+    hwndFocus = h;
     if (old && valid_wnd(old))
         send_message(old, WM_KILLFOCUS, h, 0);
-    hwndFocus = h;
+    if (hwndFocus != h)     /* the old window moved it on (UNVERIFIED) */
+        return;
     if (h && valid_wnd(h))
         send_message(h, WM_SETFOCUS, old, 0);
 }

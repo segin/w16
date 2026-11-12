@@ -1174,6 +1174,13 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US12: GetFocus inside WM_KILLFOCUS and WM_SETFOCUS (tests/apps/us12.c)
+$(B)/tests/us12.o: tests/apps/us12ref.h tests/apps/tklog.h
+$(DOS)/US12.EXE: $(B)/tests/start.o $(B)/tests/us12.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us12.map file { $(B)/tests/start.o $(B)/tests/us12.o }
+dos: $(DOS)/US12.EXE
 # US11: argument sizes of USER's undocumented exports; GetNextQueueWindow
 $(B)/tests/us11.o: tests/apps/us11ref.h tests/apps/tklog.h
 $(DOS)/US11.EXE: $(B)/tests/start.o $(B)/tests/us11.o tests/apps/app.lnk
