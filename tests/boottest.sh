@@ -551,9 +551,9 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GO.BAT"
         scr=$root/tests/scripts/input/woados.txt
         fon=$root/build/fonts
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 100 "$scr" "$out/woados-ref" -r \
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-ref" -r \
             -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT" > "$out/woados-ref.txt" 2>&1 || true
-        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 100 "$scr" "$out/woados-w16" \
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-w16" \
             -x -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \

@@ -1,6 +1,7 @@
 ; MS-DOS Prompt by File > Run COMMAND.COM in Program Manager, a command,
 ; EXIT, back in Windows, then File > Exit Windows (tests/boottest.sh case
-; woados: WINOLDAP's switch through USER's DisableOEMLayer and
+; woados: WINOLDAP's switch (the swap file written and read back takes
+; seconds on a busy host: 15) through USER's DisableOEMLayer and
 ; EnableOEMLayer; text mode while the prompt runs and after Windows ends)
 click 1
 sleep 1
@@ -11,7 +12,7 @@ key r
 sleep 2
 type COMMAND.COM
 key Return
-sleep 8
+sleep 15
 shot 01-dos
 type ver
 key Return
@@ -19,12 +20,12 @@ sleep 2
 shot 02-ver
 type exit
 key Return
-sleep 8
+sleep 15
 shot 03-back
 key alt+f
 sleep 1
 key x
 sleep 2
 key Return
-sleep 8
+sleep 10
 shot 04-exit
