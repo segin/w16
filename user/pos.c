@@ -151,6 +151,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     if (flags & SWP_HIDEWINDOW) {
         w->style &= ~WS_VISIBLE;
+        /* CS_SAVEBITS: the image under it back now, before another
+           window is activated and comes up over its place (Windows
+           Write's File > Open box: the owner, brought up first, hid the
+           place from the image, and the box stayed on screen) */
+        if (wasvis)
+            restored = savebits_restore(h, &oldwin);
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
         /* the active window hidden, by ShowWindow or SetWindowPos: the
@@ -182,8 +188,6 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     if (wasvis && nowvis && !EqualRect(&oldwin, &w->rcWindow))
         savebits_forget(h);
-    if (wasvis && !nowvis)
-        restored = savebits_restore(h, &oldwin);
     if (changed && !(flags & SWP_NOREDRAW)) {
         if (nowvis && ((flags & SWP_NOZORDER) || !w->hwndParent ||
                        PW(w->hwndParent)->hwndChild == h)) {
