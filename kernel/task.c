@@ -935,9 +935,25 @@ u16 KAPI WaitEvent(u16 htask)                                 /* KERNEL.30 */
 
 /* Observed: one event more for the task (0: the caller); AX afterwards
    held the hTask. */
+static u16 lsl_tdb(u16 s);
+#pragma aux lsl_tdb = "lsl ax, ax" "jz l5" "xor ax, ax" "l5:" "cmp ax, 0FFh" "mov ax, 0" "jb l4" "inc ax" "l4:" parm [ax] value [ax];
+static int tdb_writable(u16 s);
+#pragma aux tdb_writable = "verw ax" "mov ax, 0" "jnz l6" "inc ax" "l6:" parm [ax] value [ax];
+
+/* A TDB is taken as it is when it looks like one (writable, "TD" at
+   FAh): PostEvent is called at interrupt time (USER's input), when the
+   task list may be in the middle of a requeue and a walk of it could
+   miss the task (KERNEL audit, low; Pietrek: PostEvent "simply increments
+   the value in the TDB_nEvents field"). Else the list is walked as before. */
 u16 KAPI PostEvent(u16 htask)                                 /* KERNEL.31 */
 {
-    u16 t = htask ? task_of(htask) : cur_task;
+    u16 t;
+    if (!htask)
+        t = cur_task;
+    else if (tdb_writable(htask) && lsl_tdb(htask) && TW(htask, TDB_SIG) == TDB_MAGIC)
+        t = htask;
+    else
+        t = task_of(htask);
     if (t)
         TW(t, TDB_EVENTS)++;
     return t;
