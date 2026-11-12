@@ -104,6 +104,7 @@ wswap_tail: db 2, ' ', 8, 0Dh   ; WSWAP's tail, as Windows 3.1 gives it
 s_windir:   db 'windir='
 windir:     times PATHMAX db 0  ; WIN.COM's directory, no trailing "\"
 prog_path:  times PATHMAX db 0  ; WIN386.EXE or WSWAP.EXE
+dswap_path: times PATHMAX db 0  ; DSWAP.EXE (standard mode's DOS programs)
 ; ExitWindowsExec's buffer (INT 2Fh AX=4B20h returns DX:CX = it). What
 ; KERNEL writes there is UNVERIFIED (WC9 could not make Windows 3.1 call
 ; it); w16 takes a program path, a blank, its arguments.
@@ -126,6 +127,12 @@ sw_x        equ block + SB_TASKS + (SB_NTASKS - 1) * SB_TASKLEN + TK_NAME
 
         align 2
 block:      times SB_SIZE db 0
+; INT 2Fh AX=4A05h SI=2's buffer: CX paragraphs (10h, from WSWAP and
+; DSWAP), zeros (WC3 on Windows 3.1: the 64 bytes at the DX:AX it returns
+; were 0 for both callers, DX 010Fh in two runs where WIN.COM was at
+; 0192h and 0194h: memory of its own, not its code)
+SW_BUFP     equ 10h
+sw_buf:     times SW_BUFP * 16 db 0
 
 ; ---- the INT 2Fh handler ----
 int2f:
@@ -162,10 +169,12 @@ sw_api:
         iret
 .s2:    cmp si, 2
         jne .s4
+        ; DX:AX -> a zeroed buffer. w16 returned a pointer into its own
+        ; code. UNVERIFIED: what the callers keep there
         dec byte [cs:block + SB_COUNT]
-        sub dx, 5                       ; a far pointer relative to DX,
-        mov ax, sw_stub + 50h           ; as Windows 3.1 returns (UNVERIFIED
-        mov si, sw_x                    ; what WSWAP does with it)
+        mov dx, cs
+        mov ax, sw_buf
+        mov si, sw_x
         iret
 .s4:    cmp si, 3
         jne .s4b
@@ -296,6 +305,23 @@ launch:
         je .noapp
         cmp byte [block + SB_17D], 1
         jne .noapp
+        ; 3.1's WIN.COM runs DSWAP.EXE (found in the system directory as
+        ; WSWAP is, at the start: dswap_path), with WSWAP's tail " \x08",
+        ; and DSWAP sets up the text screen (80x25), shows the MS-DOS
+        ; Prompt's banner ("Type EXIT and press ENTER to quit this MS-DOS
+        ; prompt ...") and runs the program itself (E10, an INT 21h/10h
+        ; recorder: WIN.COM's EXECs are wswap.exe, then dswap.exe " \x08",
+        ; which runs Z:\COMMAND.COM, then wswap.exe again;
+        ; docs/notes/keyloss-handover.md). w16 ran the program at 189h
+        ; itself: no banner, the text mode Windows left. Without DSWAP, as
+        ; before.
+        cmp byte [dswap_path], 0
+        je .direct
+        mov dx, dswap_path
+        mov bx, pblock
+        call exec
+        jmp .after                      ; the block as for a program
+.direct:
         mov ax, [env_seg]
         mov [exec_pb], ax
         mov word [exec_pb + 2], block + SB_TAIL
@@ -306,7 +332,7 @@ launch:
         mov bx, exec_pb
         call exec
         mov word [exec_pb + 2], exec_tail
-        ; the block as 3.1's WIN.COM leaves it for the next WSWAP (WC3: at
+.after: ; the block as 3.1's WIN.COM leaves it for the next WSWAP (WC3: at
         ; the end of the first run 16Fh 01, 17Ch 02, 17Eh 0Dh; at the start
         ; of the next 02, 01, 0Eh, and the program's task record free
         ; again: bytes 11h-13h 04 00 0E -> 00 80 0F (4F1h too went 0Dh ->
@@ -540,7 +566,12 @@ init:
         call logo_off
         mov si, m_notfound
         jmp fail
-.wswap: call fill_block
+.wswap: mov si, n_dswap               ; DSWAP for DOS programs (.std)
+        mov di, dswap_path
+        call find_file
+        jnc .dswap
+        mov byte [dswap_path], 0
+.dswap: call fill_block
         jmp .hook
 .enh:   mov si, n_win386
         mov di, prog_path
@@ -1802,6 +1833,7 @@ sb_k1:      db 02h, 70h, 00h, 30h, 00h, 00h, 0Fh, 0FFh, 0FFh
 n_win386:   db 'win386.exe', 0
 n_dosx:     db 'dosx.exe', 0
 n_wswap:    db 'wswap.exe', 0
+n_dswap:    db 'dswap.exe', 0
 n_system:   db 'system\', 0
 n_sysini:   db 'system.ini', 0
 n_krnl286:  db 'krnl286', 0

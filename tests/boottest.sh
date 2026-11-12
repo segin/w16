@@ -135,7 +135,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -363,6 +363,27 @@ for c in $cases; do
         done
         if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
+    winprompt)
+        # the MS-DOS Prompt with w16's WIN.COM against 3.1's (the rest
+        # Microsoft's): DSWAP's banner and text mode, back to Windows, exit
+        scr=$root/tests/scripts/input/winprompt.txt
+        printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GOP.BAT"
+        for v in ref w16; do
+            if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-$v" "$@" \
+                -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" > "$out/winprompt-$v.txt" 2>&1 || true
+        done
+        r=ok
+        for s in 01-dos 02-ver 03-back 04-exit; do
+            a=$out/winprompt-w16/$s.png b=$out/winprompt-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            n=$(magick compare -metric AE "$a" "$b" "$out/winprompt-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            # the text cursor's blink: up to 16 pixels
+            [ "${n:-0}" -le 16 ] || { r="$s: $n pixels differ ($out/winprompt-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   winprompt: the MS-DOS Prompt as with 3.1's WIN.COM"
+        else echo "FAIL winprompt: $r"; fails=$((fails + 1)); fi ;;
     exitwin)
         scr=$root/tests/scripts/input/exitwin.txt
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 70 "$scr" "$out/exitwin-ref" -r \

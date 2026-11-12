@@ -1,0 +1,30 @@
+; the MS-DOS Prompt in Standard mode (tests/boottest.sh case winprompt):
+; File > Run COMMAND.COM in Program Manager, its first screen (Windows
+; 3.1: DSWAP's banner "Type EXIT and press ENTER ..." in 80x25), a
+; command, EXIT, back in Windows, then File > Exit Windows. The swap file
+; written and read back takes seconds on a busy host: 15
+click 1
+sleep 1
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 01-dos
+type ver
+key Return
+sleep 2
+shot 02-ver
+type exit
+key Return
+sleep 15
+shot 03-back
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 10
+shot 04-exit

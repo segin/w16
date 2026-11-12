@@ -46,7 +46,17 @@ The key loss / "Illegal GRP4" itself: the USER agent owns it (a writer in
 USER/GDI; it fails on Microsoft's KERNEL too). KERNEL audit #1 (local heap
 growth to 64K moving DGROUP) is fixed but was not that trigger.
 
-## WIN.COM: the MS-DOS Prompt's banner (work in progress)
+## WIN.COM: the MS-DOS Prompt's banner (done; history below)
+
+Fixed after this note was first written: WIN.COM looks for dswap.exe at
+the start (find_file is in the start-up part, given back to DOS before
+Windows runs: calling it later was what hung) and runs it with WSWAP's
+tail when WSWAP ends for a DOS program, then updates the block as for a
+program it ran itself; SI=2 returns a zeroed buffer. Boot test case
+winprompt (3.1's WIN.COM against w16's, the MS-DOS Prompt, VER, EXIT,
+Exit Windows) matches; wincomswap, winoldapw and tests/wincom.sh pass.
+tests/dos/wc3.asm built with -DEACH (WC3E) appends its record after
+every call. The notes below are as found.
 
 With w16's WIN.COM the MS-DOS Prompt has no "Type EXIT and press ENTER
 ..." banner, and its text mode is the one Windows left (8x8, 50 lines).
