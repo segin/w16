@@ -191,6 +191,18 @@ waitcount() {
 tr -d '\r' < "$script" | while read -r cmd a b; do
     case "\$cmd" in
     ''|';'*) continue ;;
+    esac
+    # DOSBox may have made its window again (a busy host: the one found
+    # at the start was gone, every command and shot failed BadWindow)
+    if ! xdotool getwindowname "\$wid" > /dev/null 2>&1; then
+        n=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
+        if [ -n "\$n" ]; then
+            wid=\$n
+            echo "window \$wid (again)" >> "$out/input.log"
+            xdotool windowactivate --sync "\$wid" 2>/dev/null || xdotool windowfocus "\$wid" 2>/dev/null || true
+        fi
+    fi
+    case "\$cmd" in
     home) for i in 1 2 3 4 5 6 7 8; do xdotool mousemove_relative -- -100 -100; sleep 0.05; done ;;
     center) xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2)) ;;
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
