@@ -140,15 +140,6 @@ settle 20 2
 ; the same input as its boot is quicker or slower)
 home
 sleep 3
-; DOSBox takes the mouse on a click; the first one, a second after its
-; window appeared, was sometimes lost on a loaded host (then no motion
-; reached Windows at all, on Microsoft's side as on w16's): one more now,
-; with the X pointer over DOSBox's window (center: if DOSBox had the
-; mouse already, it keeps the X pointer there itself and Windows' pointer
-; stays home, top left on the desktop, where a click does nothing)
-center
-click 1
-sleep 0.5
 ; again: a slower boot may not have enabled its mouse yet the first time
 ; (build/boottest-145116: Microsoft's own reference stayed at 320,240
 ; while ours had gone home)
