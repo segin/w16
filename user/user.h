@@ -35,6 +35,7 @@ extern FARPROC __far __pascal K_SETTASKSIGNALPROC(HTASK, FARPROC);   /* 38 */
 extern HMODULE __far __pascal K_GETEXEPTR(HANDLE);                   /* 133 */
 extern WORD   __far __pascal K_DIRECTEDYIELD(HTASK);                 /* 150 */
 extern WORD   __far __pascal K_GETTASKDS(void);                      /* 155 */
+extern DWORD  __far __pascal K_GETHEAPSPACES(WORD);                  /* 138 */
 extern WORD   __far __pascal K_GETEXPWINVER(HMODULE);                /* 167 */
 extern void   __far __pascal K_DIAGOUTPUT(LPCSTR);                   /* 340 */
 extern WORD   __far __pascal K_OLDYIELD(void);                       /* 117 */
@@ -76,6 +77,11 @@ extern void  __far __pascal D_CHECKCURSOR(void);                     /* 104 */
 extern LONG __far __cdecl call_wndproc(WNDPROC f, WORD ax, HWND, UINT, WPARAM, LPARAM);
 extern void __far __cdecl keybd_event_entry(void);   /* KEYBOARD's event procedure */
 extern void __far __cdecl mouse_event_entry(void);   /* MOUSE's event procedure */
+WORD __far __cdecl lh_alloc(WORD sel, UINT flags, UINT size);    /* Local* in */
+WORD __far __cdecl lh_realloc(WORD sel, WORD h, UINT size, UINT flags); /* the heap */
+WORD __far __cdecl lh_free(WORD sel, WORD h);                     /* in segment */
+UINT __far __cdecl lh_size(WORD sel, WORD h);                     /* sel */
+WORD __far __cdecl seg_limit(WORD sel);
 WORD get_ds(void);
 #pragma aux get_ds = "mov ax, ds" value [ax];
 WORD get_ss(void);
@@ -261,6 +267,9 @@ LONG nc_hittest(PWND w, POINT pt);
 void nc_calcsize(PWND w, RECT *rc);
 
 /* ---- menus (menu.c) ---- */
+void menu_heaps_init(void);
+WORD menu_heap_sel(void);       /* the menu heap's selector */
+WORD menu_str_heap_sel(void);   /* the menu-string heap's */
 int  menu_bar_height(PWND w, int width);
 void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width);
 

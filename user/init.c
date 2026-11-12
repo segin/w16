@@ -206,6 +206,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     timer_init();
     input_init();
     register_system_classes();
+    menu_heaps_init();
     diag("INITDONE=Display Resources\r\n");
 
     diag("INIT=Fonts\r\n");
@@ -281,10 +282,41 @@ DWORD WINAPI GetDialogBaseUnits(void)
     return MAKELONG(cxSysChar, cySysChar);
 }
 
+/* a heap's percentage free, as GetFreeSystemResources counts it: the
+   free and total bytes GetHeapSpaces gives (the most the heap could span,
+   growth included), each in whole kilobytes, free * 100 / total */
+static UINT heap_percent(WORD h)
+{
+    DWORD s = h ? K_GETHEAPSPACES(h) : 0;
+    WORD total = HIWORD(s) >> 10;
+    return total ? (LOWORD(s) >> 10) * 100 / total : 0;     /* at most 6300 */
+}
+
+static UINT min_u(UINT a, UINT b)
+{
+    return a < b ? a : b;
+}
+
+/* GetFreeSystemResources (USER.284, 3.1 SDK): the percentage free of
+   USER's heaps (GFSR_USERRESOURCES, 2), of GDI's (GFSR_GDIRESOURCES, 1)
+   or the lower of the two (GFSR_SYSTEMRESOURCES, 0); USER's is the least
+   of its DGROUP's, the menu heap's and the menu-string heap's. Probe US13
+   on 3.1 fitted every value it saw, while menus, menu strings and
+   windows filled each heap in turn, to heap_percent's rule. */
 UINT WINAPI GetFreeSystemResources(UINT what)
 {
-    (void)what;
-    return 90;                  /* UNVERIFIED: a percentage; w16's heaps grow */
+    static HMODULE hgdi;
+    UINT user, gdi;
+    if (!hgdi)
+        hgdi = GetModuleHandle("GDI");
+    user = min_u(heap_percent((WORD)hInstUser),
+                 min_u(heap_percent(menu_heap_sel()), heap_percent(menu_str_heap_sel())));
+    gdi = heap_percent((WORD)hgdi);
+    if (what == GFSR_USERRESOURCES)
+        return user;
+    if (what == GFSR_GDIRESOURCES)
+        return gdi;
+    return what == GFSR_SYSTEMRESOURCES ? min_u(user, gdi) : 0;  /* US13: 0 for 3, FFFFh */
 }
 
 int WINAPI WEP(int n)

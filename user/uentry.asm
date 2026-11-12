@@ -14,6 +14,11 @@
 ;   the keyboard and mouse drivers (KEYBOARD.Enable, MOUSE.Enable); their
 ;   arguments come in registers (Windows 3.1 DDK, keyboard and mouse driver
 ;   interfaces), at interrupt time; every register is kept.
+; lh_alloc, lh_realloc, lh_free, lh_size: KERNEL's LocalAlloc, LocalReAlloc,
+;   LocalFree and LocalSize on the local heap in another segment (the menu
+;   heaps, menu.c): DS is that segment for the call (the Local* functions
+;   work on the caller's DS, 3.1 SDK) and USER's own again afterwards.
+;   Never at interrupt time.
         bits 16
         cpu 286
 
@@ -30,6 +35,7 @@ segment _NULL
 segment UENTRY_TEXT public align=16 class=CODE use16
 
 extern LOCALINIT                ; KERNEL.4
+extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE
 extern _user_init               ; int __cdecl user_init(WORD hinst) (C, far)
 extern KBD_EVENT                ; void far pascal kbd_event(ax, bx, si, di)
 extern MOUSE_EVENT_C            ; void far pascal mouse_event_c(ax, bx, cx, dx, si, di)
@@ -120,6 +126,73 @@ MOUSE_EVENT:
         pop ds
         popa
         popf
+        retf
+
+; WORD __far __cdecl lh_alloc(WORD sel, UINT flags, UINT size)
+global _lh_alloc
+_lh_alloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; flags
+        push word [bp+10]       ; size
+        call far LOCALALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_realloc(WORD sel, WORD h, UINT size, UINT flags)
+global _lh_realloc
+_lh_realloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; h
+        push word [bp+10]       ; size
+        push word [bp+12]       ; flags
+        call far LOCALREALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_free(WORD sel, WORD h)
+global _lh_free
+_lh_free:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALFREE
+        pop ds
+        pop bp
+        retf
+
+; UINT __far __cdecl lh_size(WORD sel, WORD h)
+global _lh_size
+_lh_size:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALSIZE
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl seg_limit(WORD sel): the segment's limit (LSL), 0 if
+; the selector is not one this privilege level may read
+global _seg_limit
+_seg_limit:
+        push bp
+        mov bp, sp
+        lsl ax, [bp+6]
+        jz .ok
+        xor ax, ax
+.ok:    pop bp
         retf
 
 ; the compiler's 32-bit helpers (no C run-time is linked), as in shell/start.asm
