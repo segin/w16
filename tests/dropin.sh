@@ -23,6 +23,7 @@
 #                after T1, T2, ... seconds, as PNG with -T1 etc. before .png
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
+# DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
@@ -136,7 +137,7 @@ memsize=16
 ${DROPIN_MACHINE:+machine=$DROPIN_MACHINE}
 [cpu]
 core=normal
-cputype=$cpu
+cputype=${DROPIN_CPUTYPE:-$cpu}
 cycles=${DROPIN_CYCLES:-max}
 [mixer]
 nosound=true
