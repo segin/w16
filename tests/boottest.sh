@@ -574,9 +574,9 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
-        "$root/tests/inputrun.sh" -b 25 -t 170 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r \
+        "$root/tests/inputrun.sh" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-ref" -r \
             > "$out/icons-ref.txt" 2>&1 || true
-        "$root/tests/inputrun.sh" -b 25 -t 170 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
+        "$root/tests/inputrun.sh" -b 25 -t 260 "$root/tests/scripts/input/icons.txt" "$out/icons-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/icons-w16.txt" 2>&1 || true
         r=ok
         for f in "$out/icons-ref"/[0-9]*.png; do

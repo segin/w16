@@ -3,54 +3,84 @@
 ; Clock, Character Map and Paintbrush started from File > Run and
 ; minimised with Alt+Space N, then Accessories opened with Ctrl+Tab (three times:
 ; StartUp, Games, Accessories) and
-; Enter
+; Enter.
+; Each step waits for its state, not a fixed time (on a loaded machine
+; fixed waits were too short and the keys went to the window active
+; before): the Run dialog up (Program Manager's caption, at 100,54, no
+; longer the active blue), the program's window active (the active blue
+; caption elsewhere than the Run dialog's) and done drawing (the screen
+; still: Program Manager ends its Run dialog only when the program waits
+; for messages; until then it is disabled, and minimising the program
+; would activate an icon instead, as on 3.1), Program Manager active
+; again after the program is minimised
 click 1
 sleep 1
 key alt+f
 key r
-sleep 2
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type notepad
+markcolor 0000aa
 key Return
-sleep 6
+waitmoved 0000aa 500 30
+settle 10
 key alt+space
 key n
-sleep 2
+waitpixel 100 54 0000aa 20
+sleep 1
 key alt+f
 key r
-sleep 2
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type calc
+markcolor 0000aa
 key Return
-sleep 6
+waitmoved 0000aa 500 30
+settle 10
 key alt+space
 key n
-sleep 2
+waitpixel 100 54 0000aa 20
+sleep 1
 key alt+f
 key r
-sleep 2
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type clock
+markcolor 0000aa
 key Return
-sleep 6
+waitmoved 0000aa 500 30
+settle 10
 key alt+space
 key n
-sleep 2
+waitpixel 100 54 0000aa 20
+sleep 1
 key alt+f
 key r
-sleep 2
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type charmap
+markcolor 0000aa
 key Return
-sleep 6
+waitmoved 0000aa 500 30
+settle 10
 key alt+space
 key n
-sleep 2
+waitpixel 100 54 0000aa 20
+sleep 1
 key alt+f
 key r
-sleep 2
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type pbrush
+markcolor 0000aa
 key Return
-sleep 8
+waitmoved 0000aa 500 30
+settle 10
 key alt+space
 key n
-sleep 3
+waitpixel 100 54 0000aa 20
+sleep 1
+sleep 2
 shot 01-icons
 key ctrl+Tab
 key ctrl+Tab

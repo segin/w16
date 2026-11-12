@@ -26,6 +26,18 @@
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     type TEXT         type text
 #     sleep S           wait S seconds (fractions allowed)
+#     waitpixel X Y RRGGBB MAX     wait until the pixel at X,Y has that
+#     waitnotpixel X Y RRGGBB MAX  colour (has not), at most MAX seconds
+#     markcolor RRGGBB  note where that colour's pixels are now
+#     waitmoved RRGGBB MIN MAX  wait until two shots in a row have MIN
+#                       pixels of it elsewhere (another window's active
+#                       caption), at most MAX seconds
+#     waitcount RRGGBB X0 Y0 X1 Y1 MIN MAX  wait until two shots in a row
+#                       have MIN pixels of that colour outside the rectangle
+#     settle MAX        wait until the screen holds still (two shots 0.7 s
+#                       apart equal), at most MAX seconds: a started program
+#                       has drawn its window (on a loaded machine "sleep"
+#                       can be too short and the keys go to another window)
 #     shot NAME         screenshot OUTDIR/NAME.png
 # INPUTRUN_NOLOCK=1 in the environment: autolock=false (no click needed
 # for the mouse). INPUTRUN_STAY=1: DOSBox stays at the DOS prompt after
@@ -92,7 +104,90 @@ xdotool windowactivate --sync "\$wid" 2>/dev/null || xdotool windowfocus "\$wid"
 eval \$(xdotool getwindowgeometry --shell "\$wid")
 xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2))
 sleep $boot
-shot() { import -window "\$wid" "$out/\$1.png"; echo "shot \$1" >> "$out/input.log"; }
+shot() { timeout 30 import -window "\$wid" "$out/\$1.png"; echo "shot \$1" >> "$out/input.log"; }
+# settle MAX: wait until the screen holds still (two screenshots 0.7 s
+# apart the same), at most MAX seconds
+settle() {
+    t0=\$(date +%s)
+    timeout 30 import -window "\$wid" "$out/.settle-a.png"
+    while :; do
+        sleep 0.7
+        timeout 30 import -window "\$wid" "$out/.settle-b.png"
+        n=\$(magick compare -metric AE "$out/.settle-a.png" "$out/.settle-b.png" null: 2>&1)
+        if [ "\${n%% *}" = 0 ]; then
+            echo "settled after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$1" ]; then
+            echo "not settled in \$1 s" >> "$out/input.log"; break
+        fi
+        mv "$out/.settle-b.png" "$out/.settle-a.png"
+    done
+    rm -f "$out/.settle-a.png" "$out/.settle-b.png"
+}
+# waitpixel X Y RRGGBB MAX / waitnotpixel X Y RRGGBB MAX: until the pixel
+# at X,Y of a screenshot is (is not) that colour, at most MAX seconds
+waitpix() {
+    want=\$1 x=\$2 y=\$3 c=\$4 max=\$5 t0=\$(date +%s)
+    while :; do
+        timeout 30 import -window "\$wid" "$out/.wait.png"
+        got=\$(python3 "$root/tests/scripts/shotpix.py" pixel "$out/.wait.png" "\$x" "\$y")
+        if { [ "\$want" = is ] && [ "\$got" = "\$c" ]; } || { [ "\$want" = not ] && [ "\$got" != "\$c" ]; }; then
+            echo "pixel \$x,\$y \$got after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$max" ]; then
+            echo "pixel \$x,\$y still \$got after \$max s" >> "$out/input.log"; break
+        fi
+        sleep 0.5
+    done
+    rm -f "$out/.wait.png"
+}
+# markcolor RRGGBB: the box of that colour's pixels now; waitmoved RRGGBB
+# MIN MAX: until two screenshots in a row have at least MIN pixels of it
+# in another box (an active caption elsewhere: the program started from a
+# dialog is active), at most MAX seconds
+markcolor() {
+    timeout 30 import -window "\$wid" "$out/.wait.png"
+    mark=\$(python3 "$root/tests/scripts/shotpix.py" bbox "$out/.wait.png" "\$1")
+    mark=\${mark#* }
+    echo "mark \$1 \$mark" >> "$out/input.log"
+    rm -f "$out/.wait.png"
+}
+waitmoved() {
+    c=\$1 min=\$2 max=\$3 t0=\$(date +%s) ok=0
+    while :; do
+        timeout 30 import -window "\$wid" "$out/.wait.png"
+        r=\$(python3 "$root/tests/scripts/shotpix.py" bbox "$out/.wait.png" "\$c")
+        n=\${r%% *} box=\${r#* }
+        if [ "\${n:-0}" -ge "\$min" ] && [ "\$box" != "\$mark" ]; then ok=\$((ok + 1)); else ok=0; fi
+        if [ \$ok -ge 2 ]; then
+            echo "moved: \$r after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$max" ]; then
+            echo "not moved: \$r after \$max s" >> "$out/input.log"; break
+        fi
+        sleep 0.5
+    done
+    rm -f "$out/.wait.png"
+}
+# waitcount RRGGBB X0 Y0 X1 Y1 MIN MAX: until two screenshots in a row have
+# at least MIN pixels of that colour outside the rectangle (a window's
+# active caption that is not Program Manager's), at most MAX seconds
+waitcount() {
+    c=\$1 x0=\$2 y0=\$3 x1=\$4 y1=\$5 min=\$6 max=\$7 t0=\$(date +%s) ok=0
+    while :; do
+        timeout 30 import -window "\$wid" "$out/.wait.png"
+        n=\$(python3 "$root/tests/scripts/shotpix.py" count "$out/.wait.png" "\$c" "\$x0" "\$y0" "\$x1" "\$y1")
+        if [ "\${n:-0}" -ge "\$min" ]; then ok=\$((ok + 1)); else ok=0; fi
+        if [ \$ok -ge 2 ]; then
+            echo "count \$n after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
+        fi
+        if [ \$((\$(date +%s) - t0)) -ge "\$max" ]; then
+            echo "count still \$n after \$max s" >> "$out/input.log"; break
+        fi
+        sleep 0.5
+    done
+    rm -f "$out/.wait.png"
+}
 tr -d '\r' < "$script" | while read -r cmd a b; do
     case "\$cmd" in
     ''|';'*) continue ;;
@@ -107,6 +202,12 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     type) xdotool type --window "\$wid" "\$a \$b" ;;
     sleep) sleep "\$a" ;;
     shot) shot "\$a" ;;
+    settle) settle "\$a" ;;
+    waitpixel) waitpix is \$a \$b ;;
+    waitnotpixel) waitpix not \$a \$b ;;
+    waitcount) waitcount \$a \$b ;;
+    markcolor) markcolor \$a ;;
+    waitmoved) waitmoved \$a \$b ;;
     *) echo "unknown command \$cmd" >> "$out/input.log" ;;
     esac
     echo "\$cmd \$a \$b" >> "$out/input.log"
