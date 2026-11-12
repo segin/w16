@@ -74,6 +74,14 @@
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
+#   write      Windows Write (Microsoft's WRITE.EXE, WIN.INI run=): a line
+#              typed, the Character menu, the ruler, a second line, File >
+#              Exit and No (tests/scripts/input/write.txt); w16's WIN.COM,
+#              DOSX, KRNL286, USER, SHELL, WINOLDAP and WIN87EM against
+#              all-Microsoft (Microsoft's GDI and fonts: w16's GDI has no
+#              TrueType, Write's text is Arial): identical screens, leaving
+#              out the caret (it blinks) and in the save box the Yes button
+#              (w16's MessageBox puts it 2 pixels right: UNVERIFIED rule)
 #   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
 #              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
 #              then every w16 part must not fault
@@ -120,7 +128,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -384,6 +392,38 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    write)
+        s=$root/tests/scripts/input/write.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/write-WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/write-WIN.INI" 'windows:run=WRITE.EXE'
+        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/write-ref" -r \
+            -f "$out/write-WIN.INI=WINDOWS/WIN.INI" > "$out/write-ref.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -b 25 -t 90 "$s" "$out/write-w16" -w -x \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
+            -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
+            -f "$out/write-WIN.INI=WINDOWS/WIN.INI" > "$out/write-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/write-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/write-w16/$s" ] || { r="no $s"; break; }
+            # the caret's places (it blinks), the save box's Yes button
+            case $s in
+            01-*) m="rectangle 27,46 28,61" ;;
+            02-*|03-*) m="rectangle 112,46 113,61" ;;
+            04-*) m="rectangle 112,82 113,97" ;;
+            05-*) m="rectangle 95,98 96,113" ;;
+            06-*) m="rectangle 213,280 276,311" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            magick "$f" -fill black -draw "$m" "$out/write-a.png"
+            magick "$out/write-w16/$s" -fill black -draw "$m" "$out/write-b.png"
+            n=$(magick compare -metric AE "$out/write-b.png" "$out/write-a.png" "$out/write-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/write-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   write: 0 pixels"
+        else echo "FAIL write: $r ($out)"; fails=$((fails + 1)); fi ;;
     winfile)
         # File Manager (Microsoft's WINFILE.EXE): its drive bar, Ctrl+letter
         # to drives that are there and not; w16 USER+GDI against Microsoft's,
