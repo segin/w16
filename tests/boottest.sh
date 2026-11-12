@@ -885,7 +885,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         refrun input-ref input "$root/tests/inputrun.sh" -b 1 -t 270 "$scr" "$out/input-ref" -r
-        "$root/tests/inputrun.sh" -b 1 -t 270 "$scr" "$out/input-w16" \
+        "$root/tests/inputrun.sh" -E "$out/input-ref" -b 1 -t 270 "$scr" "$out/input-w16" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
         r=ok
         for s in 01-booted 02-menu 03-closed; do
