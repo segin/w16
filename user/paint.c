@@ -122,6 +122,24 @@ void invalidate_screen(const RECT *rc)
     DeleteObject(r);
 }
 
+/* rgn (screen coordinates) in the window, its frame and children */
+void invalidate_window_screen_rgn(HWND h, HRGN rgn)
+{
+    PWND w = valid_wnd(h);
+    if (w)
+        add_update(w, rgn, TRUE, TRUE);
+}
+
+/* the same for rc less except (what a window moved or shown now covers) */
+void invalidate_screen_except(const RECT *rc, const RECT *except)
+{
+    HRGN r = CreateRectRgnIndirect(rc);
+    SetRectRgn(hrgnTmp1, except->left, except->top, except->right, except->bottom);
+    if (CombineRgn(r, r, hrgnTmp1, RGN_DIFF) != NULLREGION)
+        add_update(PW(hwndDesktop), r, TRUE, TRUE);
+    DeleteObject(r);
+}
+
 void redraw_screen(void)
 {
     invalidate_screen(&PW(hwndDesktop)->rcWindow);

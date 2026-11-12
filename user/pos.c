@@ -17,6 +17,8 @@ void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
 HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
+void invalidate_screen_except(const RECT *rc, const RECT *except);
+void invalidate_window_screen_rgn(HWND h, HRGN rgn);
 
 void calc_client(PWND w)
 {
@@ -61,6 +63,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     WINDOWPOS wp;
     RECT oldwin, oldcli;
     BOOL wasvis, nowvis, changed;
+    HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
     if (!w || h == hwndDesktop)
         return FALSE;
@@ -106,6 +109,16 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     /* Z order */
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
         if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
+            HWND s;
+            if (wasvis) {
+                above = CreateRectRgn(0, 0, 0, 0);
+                for (s = PW(w->hwndParent)->hwndChild; s && s != h; s = PW(s)->hwndNext)
+                    if (PW(s)->style & WS_VISIBLE) {
+                        HRGN t = CreateRectRgnIndirect(&PW(s)->rcWindow);
+                        CombineRgn(above, above, t, RGN_OR);
+                        DeleteObject(t);
+                    }
+            }
             unlink_window(w);
             link_window(w, after == (HWND)-1 ? HWND_TOP : (after == (HWND)-2 ? HWND_TOP : after));
             changed = TRUE;
@@ -161,11 +174,37 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             pointer_changed(&w->rcWindow);
     }
     if (changed && !(flags & SWP_NOREDRAW)) {
-        /* what was under the old place, and the window in its new one */
-        if (wasvis)
-            invalidate_screen(&oldwin);
-        if (nowvis)
-            invalidate_screen(&w->rcWindow);
+        if (nowvis && ((flags & SWP_NOZORDER) || !w->hwndParent ||
+                       PW(w->hwndParent)->hwndChild == h)) {
+            /* above its siblings: what it left uncovered, and the window
+               itself; not what it now covers. Observed on 3.1 (throwaway
+               probe, a child moved with MoveWindow(..., FALSE) and shown
+               over its parent, which has no WS_CLIPCHILDREN): the parent
+               got no WM_PAINT for it. Windows Write shows its ruler that
+               way and paints it at once (UpdateWindow); w16 also gave the
+               main window the ruler's place, and its paint then erased the
+               ruler */
+            if (wasvis)
+                invalidate_screen_except(&oldwin, &w->rcWindow);
+            if (wasvis && above && EqualRect(&oldwin, &w->rcWindow) &&
+                !(flags & SWP_FRAMECHANGED)) {
+                /* only brought up: what was covered (3.1, the same probe:
+                   a window activated again after a popup over it went
+                   was painted only where the popup had been) */
+                invalidate_window_screen_rgn(h, above);
+            } else
+                invalidate(h, 0, 0, TRUE, TRUE, TRUE);
+        } else {
+            /* what was under the old place, and the window in its new one */
+            if (wasvis)
+                invalidate_screen(&oldwin);
+            if (nowvis)
+                invalidate_screen(&w->rcWindow);
+        }
+    }
+    if (above) {
+        DeleteObject(above);
+        above = 0;
     }
     if ((flags & SWP_SHOWWINDOW) && (w->flags & WF_SENDSIZE)) {
         /* the WM_SIZE and WM_MOVE CreateWindow held back */
