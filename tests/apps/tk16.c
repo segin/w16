@@ -319,6 +319,30 @@ static void handles(void)
     wait_gone(h);
 }
 
+/* A second instance of TK16A: its static far pointer to its own data
+   points into its own DGROUP, not the first instance's */
+static void second(void)
+{
+    char cmd[100];
+    WORD h1, h2;
+
+    STEP("second instance");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 0);
+    h1 = K_WINEXEC(cmd, 1);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 1);
+    h2 = K_WINEXEC(cmd, 1);
+    obs("second: both > 32", h1 > 32 && h2 > 32);
+    obs("second: hPrevInstance==first", sh.v[1][W_HPREV] == h1);
+    obs("second: first's far pointer is its own", sh.v[0][W_SELF]);
+    obs("second: second's far pointer is its own", sh.v[1][W_SELF]);
+    wait_gone(h1);
+}
+
 /* TK16S: linked with a 1K stack and a 20h-byte heap. Pietrek
    (LoadExeHeader): a program's stack is raised to 5K, a heap under 100
    bytes (not 0) to 100 */
@@ -336,7 +360,7 @@ static void small(void)
     obs("small: TK16S > 32", h > 32);
     obs("small: entry BX (stack)", sh.v[0][W_EBX]);
     obs("small: entry CX (heap)", sh.v[0][W_ECX]);
-    obs("small: InitTask CX", sh.v[0][W_ICX]);
+    obs_env("small: InitTask CX", sh.v[0][W_ICX]);  /* layout */
     obs("small: module table 10h (heap)", sh.v[0][W_MT10]);
     obs("small: module table 12h (stack)", sh.v[0][W_MT12]);
     wait_gone(h);
@@ -358,6 +382,7 @@ int __cdecl tmain(void)
     renamed();
     handles();
     small();
+    second();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

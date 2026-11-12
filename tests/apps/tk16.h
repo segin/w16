@@ -37,5 +37,7 @@ enum {
     W_ICX,              /* CX after InitTask */
     W_MT10,             /* its module table: heap size */
     W_MT12,             /* its module table: stack size */
+    W_SELF,             /* a static far pointer to its own data: its
+                           selector is DS at entry */
     W_COUNT
 };

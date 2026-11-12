@@ -173,6 +173,8 @@ typedef struct module {
                                    file (the module table's includes the
                                    heap and the stack, as on 3.1) */
     u16 ending;                 /* loader.c: its WEP is running */
+    u16 dg_snap_of;             /* the DGROUP selector dg_snap was taken
+                                   from (its fixups name it) */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;

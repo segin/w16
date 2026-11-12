@@ -691,10 +691,10 @@ static int defer_add(u16 hmod)
     return 1;
 }
 
-/* Copy the DGROUP of a program just loaded, for its later instances
-   (UNVERIFIED: Windows reads the segment from the file again; a far
-   pointer to DGROUP in the data would point to the first instance's
-   here). */
+/* Copy the DGROUP of a program just loaded, for its later instances;
+   new_instance points its fixups to DGROUP itself at the new one
+   (redo_self_fixups). Pietrek (LMPrevInstance): a later instance gets a
+   DGROUP of its own, loaded as segments are. */
 static int snapshot(module FAR *m)
 {
     u16 ad = NE_HDR(m)->auto_data, sel;
@@ -710,6 +710,7 @@ static int snapshot(module FAR *m)
     if (n > 0x10000UL)
         n = 0x10000UL;
     m->dg_snap = sel;
+    m->dg_snap_of = m->seg[ad - 1].sel;
     if (n > 0x8000UL) {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->seg[ad - 1].sel, 0), 0x8000);
         kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->seg[ad - 1].sel, 0x8000), (u16)(n - 0x8000UL));
@@ -1105,6 +1106,67 @@ static u16 start_task(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     return dg_hnd;
 }
 
+/* In dg, a copy of program m's DGROUP as loaded: the fixups to DGROUP
+   itself (internal references to its segment, from the file's
+   relocation records; the chains are in the file's data, which the copy
+   no longer holds) get selector dg instead of the first instance's.
+   Observed (tests/apps/tk16.c "second"): a static far pointer to a
+   program's own data points to each instance's DGROUP on 3.1; w16 gave
+   the second instance the first one's (KERNEL audit #13). Returns 0 if
+   the file cannot be read. UNVERIFIED: references through the movable
+   entry table into DGROUP (exported data). */
+static int redo_self_fixups(module FAR *m, u16 dg)
+{
+    u16 ad = NE_HDR(m)->auto_data, fh, err, raw, n, done = 0, k;
+    u16 shift = NE_HDR(m)->align_shift ? NE_HDR(m)->align_shift : 9;
+    const ne_segment FAR *s = MOD_SEG(m, ad - 1);
+    u32 flen, data;
+    ne_reloc buf[32];
+    int ok = 0;
+
+    if (!(s->flags & NESEG_RELOCS) || !s->sector)
+        return 1;
+    flen = s->file_len ? s->file_len : 0x10000UL;
+    data = (u32)s->sector << shift;
+    if (!galloc(GMEM_FIXED, flen, 0, &raw))
+        return 0;
+    if (!f_open(m->path, &fh, &err)) {
+        GlobalFree(raw);
+        return 0;
+    }
+    if (!f_seek(fh, data) || !f_read_big(fh, raw, flen) ||
+        !f_seek(fh, data + flen) || !f_read(fh, &n, 2))
+        goto out;
+    while (done < n) {
+        u16 batch = n - done > 32 ? 32 : n - done;
+        if (!f_read(fh, buf, batch * sizeof(ne_reloc)))
+            goto out;
+        for (k = 0; k < batch; k++) {
+            const ne_reloc *rr = &buf[k];
+            u8 src = rr->src & NERS_MASK;
+            u16 off = rr->offset, next;
+            if ((rr->flags & NERF_TYPEMASK) != NERF_INTERNAL || (rr->t1 & 0xFF) != ad ||
+                (src != NERS_SEGMENT && src != NERS_FARPTR))
+                continue;
+            for (;;) {                  /* as patch(), the selector only */
+                if ((u32)off + (src == NERS_FARPTR ? 4 : 2) > flen)
+                    break;
+                next = *(u16 FAR *)MK_FP(raw, off);
+                *(u16 FAR *)MK_FP(dg, off + (src == NERS_FARPTR ? 2 : 0)) = dg;
+                if ((rr->flags & NERF_ADDITIVE) || next == NE_CHAIN_END)
+                    break;
+                off = next;
+            }
+        }
+        done += batch;
+    }
+    ok = 1;
+out:
+    f_close(fh);
+    GlobalFree(raw);
+    return ok;
+}
+
 /* Another instance of a loaded program: a new DGROUP (the module's as
    loaded), one more use of the module and of the DLLs it imports
    (import_uses; the DLLs are not initialised again); hPrevInstance is
@@ -1134,6 +1196,10 @@ static u16 new_instance(module FAR *m, const loadparms FAR *lp)
         kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->dg_snap, 0x8000), (u16)(size - 0x8000UL));
     } else {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->dg_snap, 0), (u16)size);
+    }
+    if (!redo_self_fixups(m, sel)) {
+        GlobalFree(hnd);
+        return LE_BADFORMAT;
     }
     hprev = task_prev_instance(m);
     uses(m, 1);

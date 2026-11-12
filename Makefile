@@ -96,9 +96,10 @@ $(B)/kernel/kapi.h: tools/kapiprag.py kernel/*.c kernel/*.h
 $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -fo=$@ $<
-# KERNEL's code outgrew one segment: the Windows boot and the exports for
-# Microsoft's modules go in a second code segment, BOOT_TEXT
-KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2
+# KERNEL's code outgrew one segment: the Windows boot, the exports for
+# Microsoft's modules and the profiles go in a second code segment,
+# BOOT_TEXT
+KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2 profile
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<

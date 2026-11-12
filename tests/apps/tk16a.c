@@ -42,6 +42,10 @@ static void args(const char FAR *p, char *mode)
     v = sh ? sh->v[slot] : NULL;
 }
 
+/* a far pointer to the program's own data, made by a fixup in DGROUP */
+static WORD self_word;
+static WORD FAR *self_ptr = &self_word;
+
 /* before InitTask: the PSP's tail (ES at entry) gives the slot */
 void __cdecl pre_init(void)
 {
@@ -68,6 +72,7 @@ int __cdecl tmain(void)
         return 1;
     v[W_RAN] = 1;
     v[W_HPREV] = init_regs[4];
+    v[W_SELF] = SELECTOROF(self_ptr) == entry_regs[8];
     v[W_EBX] = entry_regs[1];
     v[W_ECX] = entry_regs[2];
     v[W_ICX] = init_regs[2];
