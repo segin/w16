@@ -147,6 +147,54 @@ static void winexec(void)
 }
 
 /* LoadModule with an environment of our own */
+/* OpenFile's search of the PATH: a task started with an environment of
+   its own (PATH=C:\TK16P) looks for a file that is only in C:\TK16P */
+static void envpath(void)
+{
+    static char tail[64];
+    static WORD show[2] = { 2, 1 };
+    static struct {
+        WORD env;
+        char FAR *cmd;
+        WORD FAR *show;
+        DWORD reserved;
+    } p;
+    char path[140];
+    HGLOBAL g;
+    char FAR *e;
+    WORD h, n;
+    HFILE f;
+
+    STEP("environment PATH");
+    reset();
+    dos(0x3900, "C:\\TK16P", NULL);
+    f = _lcreat("C:\\TK16P\\TK16P.TXT", 0);
+    if (f != HFILE_ERROR)
+        _lclose(f);
+    g = GlobalAlloc(GMEM_FIXED, 32);
+    e = GlobalLock(g);
+    lstrcpy(e, "PATH=C:\\TK16P");
+    e[lstrlen(e) + 1] = 0;
+    n = args(tail + 1, 'P', 0);
+    tail[0] = (char)n;
+    tail[1 + n] = '\r';
+    p.env = (WORD)((DWORD)e >> 16);
+    p.cmd = tail;
+    p.show = show;
+    p.reserved = 0;
+    lstrcpy(path, dir);
+    lstrcat(path, "TK16A.EXE");
+    h = K_LOADMODULE(path, &p);
+    obs("envpath: LoadModule > 32", h > 32);
+    obs("envpath: ran", sh.v[0][W_RAN]);
+    obs("envpath: OpenFile found it in its PATH", sh.v[0][W_PFOUND]);
+    if (h > 32)
+        wait_gone(h);
+    GlobalFree(g);
+    dos(0x4100, "C:\\TK16P\\TK16P.TXT", NULL);
+    dos(0x3A00, "C:\\TK16P", NULL);
+}
+
 static void environment(void)
 {
     static char tail[64];
@@ -459,6 +507,7 @@ int __cdecl tmain(void)
     second();
     iterated();
     vectors();
+    envpath();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

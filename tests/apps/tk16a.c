@@ -134,6 +134,10 @@ int __cdecl tmain(void)
         v[W_T32] = *(WORD FAR *)MAKELP(t, 0x32);
         v[W_T32 + 1] = *(WORD FAR *)MAKELP(t, 0x34);
     }
+    if (mode == 'P') {
+        OFSTRUCT of;
+        v[W_PFOUND] = OpenFile("TK16P.TXT", &of, OF_EXIST) != HFILE_ERROR;
+    }
     if (mode == 'H') {
         v[W_HC0] = SetHandleCount(0);
         v[W_HC1] = SetHandleCount(30);

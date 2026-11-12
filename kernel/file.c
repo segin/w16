@@ -143,9 +143,13 @@ int file_has_path(const char FAR *name)
 
 /* The task's environment variable `name` (exact case), or NULL. w16's
    task shares KERNEL's PSP and environment. */
+/* A variable of the running task's environment (its PDB's 2Ch), KERNEL's
+   before a task runs. Observed (tests/apps/tk16.c "envpath"): OpenFile
+   searches the PATH of the environment a task was started with; w16
+   read KERNEL's (KERNEL audit, low). */
 const char FAR *file_env(const char *name)
 {
-    u16 env = *(u16 FAR *)MK_FP(psp_sel, 0x2C);
+    u16 env = *(u16 FAR *)MK_FP(cur_pdb ? cur_pdb : psp_sel, 0x2C);
     const char FAR *e;
     if (!env)
         return NULL;

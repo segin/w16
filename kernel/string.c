@@ -32,7 +32,10 @@ char FAR * KAPI_ES lstrcpy(char FAR *d, const char FAR *s)      /* KERNEL.88 */
         *d = 0;
         return d;
     }
-    if (IsBadStringPtr(s, 0xFFFF) || IsBadWritePtr(d, kstrlen(s) + 1))
+    /* lengths in 32 bits: a 64K string's length + 1 wrapped to 0, which
+       IsBadWritePtr passed (KERNEL audit, low) */
+    if (IsBadStringPtr(s, 0xFFFF) || (u32)kstrlen(s) + 1 > 0xFFFFUL ||
+        IsBadWritePtr(d, kstrlen(s) + 1))
         return NULL;
     while ((*d++ = *s++) != 0)
         ;
@@ -49,6 +52,7 @@ char FAR * KAPI_ES lstrcat(char FAR *d, const char FAR *s)      /* KERNEL.89 */
     if (!s)
         return d;
     if (IsBadStringPtr(s, 0xFFFF) ||
+        (u32)kstrlen(d) + kstrlen(s) + 1 > 0xFFFFUL ||
         IsBadWritePtr(d, kstrlen(d) + kstrlen(s) + 1))
         return NULL;
     while (*d)

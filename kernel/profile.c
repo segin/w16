@@ -129,6 +129,8 @@ static int resolve(const char FAR *file, char *path)
     if (file_has_path(file))
         return file_canon(file, path, &err);
     n = GetWindowsDirectory(tmp, 128);
+    if (n >= 128)                       /* did not fit: tmp not set */
+        return 0;
     if (n && tmp[n - 1] != '\\')
         tmp[n++] = '\\';
     while (*file && n < sizeof rs_tmp - 1)
