@@ -418,3 +418,44 @@ int WINAPI ExcludeUpdateRgn(HDC hdc, HWND h)
     (void)hdc, (void)h;
     return SIMPLEREGION;
 }
+
+/* ScrollDC: the bits of lprcScroll (the DC's clip box if NULL) moved by
+   dx, dy within the DC, only where they land inside lprcClip (the same
+   box if NULL); what the move uncovers there goes to hrgnUpdate and its
+   bounding box to lprcUpdate (SDK). Write imports it. UNVERIFIED: parts of
+   the source that are not visible (covered windows) are not added to the
+   update region; coordinates are taken as the DC's logical ones */
+BOOL WINAPI ScrollDC(HDC hdc, int dx, int dy, const RECT __far *scroll,
+                     const RECT __far *clip, HRGN update, RECT __far *rcupdate)
+{
+    RECT box, src, cl, dst;
+    HRGN a, b;
+    if (!hdc)
+        return FALSE;
+    GetClipBox(hdc, &box);
+    src = scroll ? *scroll : box;
+    cl = clip ? *clip : src;
+    IntersectRect(&src, &src, &cl);
+    dst = src;
+    OffsetRect(&dst, dx, dy);
+    IntersectRect(&dst, &dst, &cl);
+    if (!IsRectEmpty(&dst))
+        BitBlt(hdc, dst.left, dst.top, dst.right - dst.left, dst.bottom - dst.top,
+               hdc, dst.left - dx, dst.top - dy, SRCCOPY);
+    if (update || rcupdate) {
+        a = CreateRectRgnIndirect(&src);
+        b = CreateRectRgnIndirect(&dst);
+        if (a && b) {
+            CombineRgn(a, a, b, RGN_DIFF);
+            if (update)
+                CombineRgn(update, a, 0, RGN_COPY);
+            if (rcupdate)
+                GetRgnBox(a, rcupdate);
+        }
+        if (a)
+            DeleteObject(a);
+        if (b)
+            DeleteObject(b);
+    }
+    return TRUE;
+}
