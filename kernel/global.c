@@ -1340,6 +1340,21 @@ static const char *global_check(u16 *bad)
                 return "global: selector table entry is not this arena";
             if (!present(s) || lin_of(s) != lin_of(a) + 0x10)
                 return "global: block's selector does not start after its arena";
+            {   /* every tile: where set_tiles put it (the low word of
+                   its limit; a 286 host gives at most FFFFh) */
+                u32 bytes = (u32)AR(a)->size << 4, want;
+                u16 i, t, l, nt = tiles(bytes);
+                if ((AR(a)->flags & GA_DGROUP) && nt > 1)
+                    return "global: a DGROUP is more than one selector";
+                for (i = 0; i < nt; i++) {
+                    t = s + i * sel_inc;
+                    want = bytes - ((u32)i << 16) - 1;
+                    l = lsl(t);
+                    if (!present(t) || lin_of(t) != lin_of(a) + 0x10 + ((u32)i << 16) ||
+                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF)))
+                        return "global: a tile's base or limit is not the block's";
+                }
+            }
         }
         if (++items == 0)
             return "global: no end";
