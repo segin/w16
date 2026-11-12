@@ -26,6 +26,7 @@ segment CONST  public align=2  class=DATA use16
 segment CONST2 public align=2  class=DATA use16
 segment _BSS   public align=2  class=BSS  use16
 group DGROUP _DATA CONST CONST2 _BSS
+extern _api_caller                      ; global.c: the last heap API caller
 
 %include "intcall.inc"
 
@@ -324,6 +325,16 @@ global %1
 %1:
         push bp
         mov bp, sp
+        push ds                 ; the caller's CS:IP for heapcheck
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp + 2]
+        mov [_api_caller wrt DGROUP], ax
+        mov ax, [bp + 4]
+        mov [_api_caller + 2 wrt DGROUP], ax
+        pop ax
+        pop ds
         push ds
         push es
         push ds
@@ -815,6 +826,16 @@ global %1
 %1:
         push bp
         mov bp, sp
+        push ds                 ; the caller's CS:IP for heapcheck
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp + 2]
+        mov [_api_caller wrt DGROUP], ax
+        mov ax, [bp + 4]
+        mov [_api_caller + 2 wrt DGROUP], ax
+        pop ax
+        pop ds
         push bx
 %assign i %3
 %rep %3
