@@ -476,6 +476,23 @@ LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (type == SS_ICON) {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
             HICON ic = cs->lpszName ? LoadIcon(cs->hInstance, cs->lpszName) : 0;
+            /* an icon not the program's own is a system one (3.1: Program
+               Manager's Exit dialog names icon 32516 and shows
+               IDI_ASTERISK); "#n" is n */
+            if (!ic && cs->lpszName && !HIWORD((DWORD)cs->lpszName))
+                ic = LoadIcon(0, cs->lpszName);
+            else if (!ic && cs->lpszName) {
+                LPCSTR s = cs->lpszName;
+                if (s[0] == '#') {
+                    WORD n = 0;
+                    for (s++; *s >= '0' && *s <= '9'; s++)
+                        n = n * 10 + (*s - '0');
+                    ic = LoadIcon(cs->hInstance, MAKEINTRESOURCE(n));
+                    if (!ic)
+                        ic = LoadIcon(0, MAKEINTRESOURCE(n));
+                } else
+                    ic = LoadIcon(0, cs->lpszName);
+            }
             *(WORD __near *)(WND_EXTRA(w) + 2) = (WORD)ic;
             if (ic)
                 SetWindowPos(h, 0, 0, 0, sysmet[SM_CXICON], sysmet[SM_CYICON],

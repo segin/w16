@@ -628,8 +628,26 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                 if (!valid_wnd(target))
                     continue;
             }
-            if (e.msg != WM_MOUSEMOVE) {
-                /* activation on a click */
+            {
+                /* a disabled window (one a modal dialog keeps from input)
+                   gets no mouse messages: the cursor is set, a press
+                   beeps (3.1 SDK). Program Manager under its Exit dialog
+                   took the second release of a double-click and came back
+                   in front of the dialog */
+                extern BOOL sysmodal_blocks(HWND h);
+                PWND tw = valid_wnd(target);
+                PWND tt = tw ? valid_wnd(top_level(target)) : (PWND)0;
+                if ((tw && (tw->style & WS_DISABLED)) || (tt && (tt->style & WS_DISABLED)) ||
+                    (tw && sysmodal_blocks(top_level(target)))) {
+                    if (!menu_mode)
+                        send_message(target, WM_SETCURSOR, target, MAKELONG(HTERROR, e.msg));
+                    if (e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN)
+                        MessageBeep(0);
+                    continue;
+                }
+            }
+            if (e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN) {
+                /* activation on a press (not on a release) */
                 /* WM_MOUSEACTIVATE whenever the window clicked is not the
                    active one - a child of the active window included (3.1:
                    File Manager's file list passed it up to the directory

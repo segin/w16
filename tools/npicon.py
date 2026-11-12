@@ -27,19 +27,37 @@ def notepad():
     for y in range(11, 27, 3):
         i.rect(7, y, 23, y, CYAN)
     i.rect(9, 9, 9, 27, RED)
-    # a pencil lying across the page, point down to the left
-    for k in range(13):
-        x, y = 27 - k, 12 + k
-        i.set(x, y, YELLOW)
-        i.set(x + 1, y, OLIVE)
-        i.set(x - 1, y, BLACK)
-        i.set(x + 2, y, BLACK)
-    i.set(14, 25, WHITE)
-    i.set(13, 26, SILVER)
-    i.set(12, 27, BLACK)
-    i.set(28, 11, RED)
-    i.set(29, 11, BLACK)
-    i.set(28, 10, BLACK)
+    # a pencil lying across the page, point down to the left: drawn row by
+    # row along the diagonal x = 38 - y, so its outline and stripes run
+    # unbroken from the eraser to the point
+    def row(y, left, right, *colours):
+        """the pencil's row y: black edges at left-1 and right+1, colours
+        filling left..right"""
+        i.set(left - 1, y, BLACK)
+        i.set(right + 1, y, BLACK)
+        for k, c in enumerate(colours):
+            i.set(left + k, y, c)
+    for y in range(9, 30):
+        cx, t = 38 - y, y - 9
+        if t == 0:                                  # the eraser's end
+            for x in range(cx - 1, cx + 2):
+                i.set(x, y - 1, BLACK)
+            row(y, cx - 1, cx + 1, RED, RED, RED)
+        elif t == 1:
+            row(y, cx - 1, cx + 1, RED, RED, RED)
+        elif t == 2:                                # the metal band
+            row(y, cx - 1, cx + 1, SILVER, WHITE, GRAY)
+        elif t <= 14:                               # the painted body
+            row(y, cx - 1, cx + 1, OLIVE, YELLOW, YELLOW)
+        elif t == 15:                               # sharpened wood
+            row(y, cx - 1, cx + 1, SILVER, WHITE, WHITE)
+        elif t == 16:
+            row(y, cx - 1, cx, SILVER, WHITE)
+        elif t == 17:                               # the lead
+            row(y, cx - 1, cx - 1, GRAY)
+        elif t == 18:
+            i.set(cx - 1, y, BLACK)
+            break
     return i
 
 

@@ -2,7 +2,7 @@
 
 patch_tab       dw to_rm.seg, cb_c0.seg, 0
 
-msg_nomem       db 13, 10, '  Insufficient extended memory to run Windows in standard mode.'
+msg_nomem       db 13, 10, '  Insufficient extended memory to run w16 in standard mode.'
                 db 13, 10, 13, 10, '  Increase the amount of available extended memory.'
                 db 13, 10, '$'
 ; UNVERIFIED: Microsoft's texts for these three

@@ -1702,52 +1702,53 @@ n_nonwin:   db 'NonWindowsApp', 0
 n_swapdisk: db 'SwapDisk', 0
 
 ; ---- messages: as Windows 3.1's WIN.COM writes them (WC2, redirected
-; output), line ends and all ----
+; output), line ends and all, except that the product is called w16
+; (ARCHITECTURE.md 3, branding; tests/wincom.sh maps it back) ----
 m_dosver:   db 'Must have MS-DOS version 3.10 or greater', 0Ah, 0Dh, 0
 m_dosver_d: db 'Must have MS-DOS version 3.10 or greater', 0Ah, 0Dh, '$'
-m_cannot:   db 'Your computer cannot run Windows in either standard or 386', 0Ah, 0Dh
+m_cannot:   db 'Your computer cannot run w16 in either standard or 386', 0Ah, 0Dh
             db 'enhanced mode.', 0Ah, 0Dh, 0
 m_no386:    db 'Cannot run in 386 enhanced mode;', 0Ah, 0Dh
             db 'enter WIN to run in standard mode.', 0Ah, 0Dh, 0
 m_himem:    db 'Missing HIMEM.SYS;', 0Ah, 0Dh
-            db 'Make sure that the file is in your Windows directory and that its', 0Ah, 0Dh
+            db 'Make sure that the file is in your w16 directory and that its', 0Ah, 0Dh
             db 'location is correctly specified in your CONFIG.SYS file.', 0Ah, 0Dh, 0
 m_nodosx:   db 'Cannot find DOSX.EXE needed to run in standard mode;', 0Ah, 0Dh
-            db 'check to ensure the path is correct or reinstall Windows.', 0Ah, 0Dh, 0
+            db 'check to ensure the path is correct or reinstall w16.', 0Ah, 0Dh, 0
 m_nowin386: db 'Cannot find WIN386.EXE needed to run in 386 enhanced mode;', 0Ah, 0Dh
-            db 'check to ensure the path is correct or reinstall Windows.', 0Ah, 0Dh, 0
+            db 'check to ensure the path is correct or reinstall w16.', 0Ah, 0Dh, 0
 m_real:     db 0Dh, 0Ah
-            db 'This version of Windows does not run in real mode.', 0Dh, 0Ah
+            db 'This version of w16 does not run in real mode.', 0Dh, 0Ah
             db 0Dh, 0Ah
-            db 'To run Windows in standard mode, type win /s.', 0Dh, 0Ah
-            db 'To run Windows in 386 enhanced mode, type win /3.', 0Dh, 0Ah, 0
-m_run_std:  db 'You are already running Standard mode Windows.', 0Dh, 0Ah, 0
-m_run_enh:  db 'You are already running Enhanced mode Windows.', 0Dh, 0Ah
+            db 'To run w16 in standard mode, type win /s.', 0Dh, 0Ah
+            db 'To run w16 in 386 enhanced mode, type win /3.', 0Dh, 0Ah, 0
+m_run_std:  db 'You are already running Standard mode w16.', 0Dh, 0Ah, 0
+m_run_enh:  db 'You are already running Enhanced mode w16.', 0Dh, 0Ah
             db 0FEh, ' Press ALT+ENTER to switch this MS-DOS prompt between a window', 0Dh, 0Ah
             db '  and a full screen.', 0Dh, 0Ah, 0
-m_run:      db 'You are already running Windows.', 0Dh, 0Ah, 0
+m_run:      db 'You are already running w16.', 0Dh, 0Ah, 0
 m_run_tail: db 0FEh, ' Type Exit and press Enter to quit this MS-DOS prompt and', 0Dh, 0Ah
-            db '  return to Windows.', 0Dh, 0Ah
-            db 0FEh, ' Press ALT+TAB to switch to Windows or another application', 0Dh, 0Ah, 0
+            db '  return to w16.', 0Dh, 0Ah
+            db 0FEh, ' Press ALT+TAB to switch to w16 or another application', 0Dh, 0Ah, 0
 m_help:     db 0Dh, 0Ah
-            db 'Starts Windows.', 0Dh, 0Ah
+            db 'Starts w16.', 0Dh, 0Ah
             db 0Dh, 0Ah
             db 'WIN [/3] [/S] [/B] [/D:[F][S][V][X]]', 0Dh, 0Ah
             db 0Dh, 0Ah
-            db '/3    Starts Windows in 386 enhanced mode.', 0Dh, 0Ah
-            db '/S    Starts Windows in standard mode.', 0Dh, 0Ah
+            db '/3    Starts w16 in 386 enhanced mode.', 0Dh, 0Ah
+            db '/S    Starts w16 in standard mode.', 0Dh, 0Ah
             db '/B    Creates a file, BOOTLOG.TXT, that records system messages generated', 0Dh, 0Ah
             db '      during system startup (boot).', 0Dh, 0Ah
-            db '/D    Used for troubleshooting when Windows does not start correctly.', 0Dh, 0Ah
+            db '/D    Used for troubleshooting when w16 does not start correctly.', 0Dh, 0Ah
             db '  :F  Turns off 32-bit disk access.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: 32BitDiskAccess=FALSE.', 0Dh, 0Ah
-            db '  :S  Specifies that Windows should not use ROM address space between', 0Dh, 0Ah
+            db '  :S  Specifies that w16 should not use ROM address space between', 0Dh, 0Ah
             db '      F000:0000 and 1 MB for a break point.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: SystemROMBreakPoint=FALSE.', 0Dh, 0Ah
             db '  :V  Specifies that the ROM routine will handle interrupts from the hard', 0Dh, 0Ah
             db '      disk controller.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: VirtualHDIRQ=FALSE.', 0Dh, 0Ah
-            db '  :X  Excludes all of the adapter area from the range of memory that Windows', 0Dh, 0Ah
+            db '  :X  Excludes all of the adapter area from the range of memory that w16', 0Dh, 0Ah
             db '      scans to find unused space.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: EMMExclude=A000-FFFF.', 0Dh, 0Ah
             db 0Dh, 0Ah, 0

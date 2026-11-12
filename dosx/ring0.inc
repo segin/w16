@@ -611,9 +611,9 @@ r0_print:
 ; program has ended (pending_msg), as Microsoft's DOSX does: its output
 ; follows everything the client wrote.
 ; fatal_nomem: "Insufficient extended memory to run Windows in standard
-; mode." and exit 0FFh: what Microsoft's DOSX does for every INT 31h
-; function it does not have (DX5: 000Eh, 0401h, 0504h-050Bh, 0801h,
-; 0C00h, 0E00h, ...)
+; mode." (with "w16" for "Windows", ARCHITECTURE.md 3) and exit 0FFh:
+; what Microsoft's DOSX does for every INT 31h function it does not have
+; (DX5: 000Eh, 0401h, 0504h-050Bh, 0801h, 0C00h, 0E00h, ...)
 fatal_nomem:
         mov word [pending_msg], msg_nomem
         mov al, 0FFh

@@ -301,7 +301,8 @@ int WINAPI WinHelp(HWND h, LPCSTR file, UINT cmd, DWORD data)
 /* SetSysModalWindow/GetSysModalWindow (3.1 SDK): the window recorded.
    UNVERIFIED: 3.1 also keeps input and activation to it (Pietrek ch. 7:
    hQSysModal comes first when USER wakes a queue for input); w16 only
-   records it and activates it. */
+   records it and activates it; mouse input to other top-level windows
+   is dropped (a press beeps) while it lasts (input.c). */
 static HWND hwndSysModal;
 
 HWND WINAPI SetSysModalWindow(HWND h)
@@ -311,6 +312,21 @@ HWND WINAPI SetSysModalWindow(HWND h)
     if (hwndSysModal)
         SetActiveWindow(top_level(hwndSysModal));
     return old;
+}
+
+/* the system-modal window, if any, and whether input to top-level window
+   h is kept from it (h is not it and not owned by it) */
+BOOL sysmodal_blocks(HWND h)
+{
+    HWND o;
+    if (hwndSysModal && !valid_wnd(hwndSysModal))
+        hwndSysModal = 0;
+    if (!hwndSysModal || !h)
+        return FALSE;
+    for (o = h; o && valid_wnd(o); o = PW(o)->hwndOwner)
+        if (o == hwndSysModal)
+            return FALSE;
+    return TRUE;
 }
 
 HWND WINAPI GetSysModalWindow(void)

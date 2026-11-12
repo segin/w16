@@ -326,7 +326,7 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     SetWindowWord(h, DW_CX, ux);
     SetWindowWord(h, DW_CY, uy);
     SetWindowWord(h, DW_DEFID, IDOK);
-    SetWindowWord(h, DW_MODAL, modal);
+    SetWindowWord(h, DW_MODAL, modal | (modal && (style & DS_SYSMODAL) ? 4 : 0));
     /* the items */
     for (i = 0; i < n; i++) {
         int ix = ((const int __far *)p)[0], iy = ((const int __far *)p)[1];
@@ -370,8 +370,15 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
        class's procedure; DefDlgProc hands it on to the dialog procedure.
        It was called straight, NULL included: a GP fault in USER */
     if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
-        if (focus)
+        /* TRUE: the focus goes to the first tab stop even where the
+           procedure set it elsewhere meanwhile (3.1: Program Manager's
+           Exit dialog sets it to Cancel and answers TRUE, and OK has
+           it) */
+        if (focus) {
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
+            if (hwndFocus && IsChild(h, hwndFocus))
+                set_dlg_focus(h, focus);
+        }
     }
     if (!valid_wnd(h))
         return 0;
@@ -426,11 +433,17 @@ static int modal_loop(HWND h, HWND owner)
     MSG m;
     int code;
     BOOL ownerwas = FALSE;
+    /* DS_SYSMODAL: the system-modal window while it runs (3.1 SDK;
+       Program Manager's Exit dialog: a click on Program Manager does
+       nothing) */
+    BOOL sysmodal = (GetWindowWord(h, DW_MODAL) & 4) != 0;
+    HWND oldsm = sysmodal ? SetSysModalWindow(h) : 0;
     if (owner && valid_wnd(owner)) {
         ownerwas = !EnableWindow(owner, FALSE);
     }
-    /* bit 1: EndDialog enables the owner again (it was enabled before) */
-    SetWindowWord(h, DW_MODAL, ownerwas ? 3 : 1);
+    /* bit 1: EndDialog enables the owner again (it was enabled before);
+       bit 2: system modal */
+    SetWindowWord(h, DW_MODAL, (ownerwas ? 3 : 1) | (sysmodal ? 4 : 0));
     ShowWindow(h, SW_SHOWNORMAL);
     UpdateWindow(h);
     while (valid_wnd(h) && !GetWindowWord(h, DW_ENDED)) {
@@ -446,6 +459,8 @@ static int modal_loop(HWND h, HWND owner)
             send_message(owner ? owner : h, WM_ENTERIDLE, MSGF_DIALOGBOX, MAKELONG(h, 0));
     }
     code = valid_wnd(h) ? (int)GetWindowWord(h, DW_ENDCODE) : -1;
+    if (sysmodal)
+        SetSysModalWindow(oldsm);
     if (owner && valid_wnd(owner) && ownerwas)
         EnableWindow(owner, TRUE);
     if (valid_wnd(h)) {

@@ -325,7 +325,7 @@ int main(int argc, char **argv)
     (void)argc;
     if (!cpu_is_386()) {
         /* UNVERIFIED: Windows 3.1's WIN386 hung in DOSBox-X on an 80286 */
-        fail("Cannot run Windows in 386 enhanced mode on this processor.\r\n");
+        fail("Cannot run w16 in 386 enhanced mode on this processor.\r\n");
     }
     if (cpu_msw() & 1) {
         /* UNVERIFIED wording; GEMMIS/the 1605h V86 callback is handled below,
@@ -347,14 +347,14 @@ int main(int argc, char **argv)
         if (p) p[1] = 0; else inipath[0] = 0;
         strcat(inipath, "SYSTEM.INI");
         if (!load_ini(inipath))
-            fail("Cannot find the system initialization file needed to run Windows.\r\n\r\n"
+            fail("Cannot find the system initialization file needed to run w16.\r\n\r\n"
                  "You need to run the Setup program again.\r\n");
     }
     /* XMS */
     r.x.ax = 0x4300;
     int86(0x2F, &r, &r);
     if (r.h.al != 0x80)
-        fail("Cannot run Windows in 386 enhanced mode with the currently installed\r\n"
+        fail("Cannot run w16 in 386 enhanced mode with the currently installed\r\n"
              "extended memory driver.\r\n");
     r.x.ax = 0x4310;
     int86x(0x2F, &r, &r, &sr);
@@ -387,7 +387,7 @@ int main(int argc, char **argv)
              * Not supported yet (DOSBox-X's EMM does not run in V86 mode,
              * so it could not be tested). UNVERIFIED wording. */
             broadcast_1606();
-            fail("Cannot run Windows in 386 enhanced mode with the currently installed\r\n"
+            fail("Cannot run w16 in 386 enhanced mode with the currently installed\r\n"
                  "memory manager.\r\n");
         }
         /* ES:BX: the Win386_Startup_Info_Struc chain; not used yet (no
@@ -402,15 +402,15 @@ int main(int argc, char **argv)
     if (kb < 1024) {
         broadcast_1606();
         /* UNVERIFIED: Windows 3.1's own message for too little memory */
-        fail("Not enough extended memory to run Windows in 386 enhanced mode.\r\n");
+        fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n");
     }
     x.ax = 0x0900; x.dx = (unsigned)kb;
     xms_call(&x);
-    if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run Windows in 386 enhanced mode.\r\n"); }
+    if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
     xms_handle = x.dx;
     x.ax = 0x0C00; x.dx = xms_handle;
     xms_call(&x);
-    if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run Windows in 386 enhanced mode.\r\n"); }
+    if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
     phys = ((unsigned long)x.dx << 16) | x.bx;
     x.ax = 0x0300;                      /* global A20 on */
     xms_call(&x);

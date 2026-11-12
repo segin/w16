@@ -66,6 +66,15 @@ Notes:
 - The MIT licence on the MS-DOS repository has no explicit patent grant. Any relevant patents from the 1980s and early 1990s have expired.
 - MS-DOS 4.0 was co-developed with IBM, and IBM copyright notices appear in its sources. Microsoft published it under MIT, and the project relies on that in good faith.
 
+**Branding: user-facing "Windows" is "w16" (the user's decision, 2026-11-10).** Wherever w16's own programs and modules show the product's name to a user (resource strings, menus, dialog captions and texts, message boxes, console messages), it says "w16" where Windows 3.1 says "Windows": Program Manager's Help > w16 Tutorial and File > Exit w16..., the Exit w16 dialog ("This will end your w16 session."), Notepad's can't-quit message, WINOLDAP's messages, WIN.COM's console messages and `/?` help, DOSX's and WIN386's fatal messages, and the install tree's README. Everything else in that text stays as observed. Unchanged:
+- functional identifiers other software matches: INI sections and keys (`[windows]`, `[NonWindowsApp]`, `windir`), class and module names, file and directory names (`WINDOWS\`, `WINDOWS\SYSTEM`), DDE and help-file names and topics;
+- the term "non-Windows application" (a DOS program, as in `[NonWindowsApp]` and PIF files) in WINOLDAP's messages;
+- text that names Microsoft's product or another version: Program Manager's Windows 2.x build's About box ("Windows 2.x", the system it runs on), the README's "your own Windows 3.1 installation" and "Windows directory";
+- the linker's DOS stub text ("This is a Windows executable") and module descriptions (`.def` DESCRIPTION);
+- comments, documentation, citations, developer tools' output and test probes that log or reproduce the original.
+
+Tests that compare with Microsoft's output read "w16" as "Windows" (`tests/wincom.sh`) or mask the rebranded text, so everything else is still compared.
+
 ## 4. Historical Findings: Multitasking MS-DOS 4.00 and Windows
 
 Source: `microsoft/MS-DOS`, directory `v4.0-ozzie/`, containing scanned product specs and beta disk images.
@@ -287,6 +296,8 @@ The advance width of every character is in the `widths` lines of each source (fr
 ### 6.10 Scope: VGA First
 
 For now, w16 targets **VGA (640×480, 16 colours, 96 dpi) only**: `VGA.DRV`, the VGA grabber (`VGA.3GR`/`VGA.2GR`) and the VGA font sets. SuperVGA, 8514/A (120 dpi), EGA and CGA display drivers and their font sets are deferred. Nothing in the design should assume VGA in a way that would prevent adding them later; for example, metrics come from the display driver and are never hard-coded.
+
+**w16's VGA driver** lives in `drivers/vga/` (not implemented yet; w16 runs Microsoft's `VGA.DRV`). What exists is its graphics: the display driver carries the bitmaps, icons and cursors USER draws the interface with (`OBM_*` frame pieces, `OIC_*` message-box icons, `OCR_*` cursors). `drivers/vga/resources.md` lists every resource of the reference driver with its ID, size, format, cell layout and hot spot (format facts, `tools/vgainv.py`, headers only); `drivers/vga/art/` holds w16's own art for each, drawn as text and built by `make vgaart` (`tools/vgaart.py`) into `.BMP`/`.ICO`/`.CUR` files under `build/vga/`.
 
 ### 6.11 Design Note: Undocumented Layouts Are Part of the Contract
 
@@ -929,6 +940,43 @@ ZOI: the VMM's limits are the architecture's: 8192 LDT descriptors (64 KB), the 
 ### 12.5 The VxD API entries (INT 2Fh 1684h)
 
 `vxdapi.c` hands out protected-mode entries for exactly Windows 3.1's set (VPICD, VTD, Reboot, VDD, VMD, VKD, VCD, SHELL, PageFile, VTDAPI; ARCHITECTURE 12.2) as HLT breakpoints in the host's ring-3 segment. VX3 (`tests/apps/vx3.c`, run as the shell with `tests/refrun.sh VX3.EXE /3`) recorded function 0 of each under Windows 3.1: AX=030Ah for VPICD, VTD, VDD, VCD, SHELL (BX=1000h); VMD 0300h, VKD 0200h, PageFile 010Ah, VTDAPI 0001h; Reboot has none (carry set). w16 returns these. Every other function is traced with its registers and fails with carry set; during the boot to Program Manager only these come: VPICD 0 (version), VMD AX=0100h, VDD AX=000Ch, Reboot AX=0201h (ES:DI a KERNEL address: UNVERIFIED, presumably the Ctrl+Alt+Del handler). None of them blocks the boot; their meanings and results under Windows 3.1 are the next probe's work (they change state, so VX3 does not replay them blindly). No V86 API entries yet (Windows 3.1 has VPICD, VTD, VMD, DOSMGR).
+
+### 12.6 The VxDs w16 needs
+
+A complete replacement for WIN386.EXE provides the VMM and every VxD that the original bundles, under the same W3 module names and device IDs. SYSTEM.INI loads them by their W3 module names (`*vddvga`, `*wshell`); third-party `.386` files and programs reach them by device ID (VxD service calls, INT 2Fh AX=1684h) and through the services they export. The sources are `docs/win386-vxds.md` (the W3 and LE tables, read with readexe) and `docs/win386-services.md` (who calls which service).
+
+**Windows 3.1's WIN386.EXE: the VMM plus 28 built-in VxDs**
+
+| Group | VxDs (device ID) | Role |
+|---|---|---|
+| Core | VMM (0001h), VPICD (0003h), VTD (0005h), V86MMGR (0006h), DOSMGR (0015h), VDMAD (0004h) | VMs, interrupts, timer, V86 memory, DOS, DMA |
+| Devices | VDD (000Ah, W3 module VDDVGA), VKD (000Dh), VMD (000Ch), VCD (000Eh), VFD (001Bh), EBIOS (0012h), PARITY (0008h), Reboot (0009h), BIOSXLAT (0013h) | display, keyboard, mouse, COM ports, floppy, BIOS |
+| Disk and paging | BLOCKDEV (0010h), INT13 (0020h), WDCTRL (no ID), PageSwap (0007h), PageFile (0021h) | FastDisk, the swap file |
+| Shell and DOS sessions | SHELL (0017h, W3 module WSHELL), VMPOLL (0018h), VMCPD (0011h) | DOS windows, idle detection, the coprocessor |
+| Network and other | VNETBIOS (0014h), DOSNET (001Ah), COMBUFF, CDPSCSI, QEMMFix (no IDs) | NetBIOS, network redirector support, workarounds |
+
+**Loaded by default from a file:** VTDAPI.386 (0442h, the timer API for MMSYSTEM).
+
+**Windows for Workgroups 3.11 adds:**
+- **Built in:** VPD (000Fh, printer) and VWC (no ID).
+- **External `.386` files:**
+  - IFSMGR (0484h), VFAT (0486h), VCACHE (048Bh), IOS (0010h; it takes BLOCKDEV's ID): 32-bit file and disk access;
+  - VSHARE (0483h), VXDLDR (0027h), VPMTD (003Ah);
+  - VCOMM (002Bh), SERIAL and LPT.
+- **In a networked install** (not in our reference copy; a networked WfW 3.11 reference is in progress, not merged yet): the redirector, server, NDIS and protocol VxDs.
+
+**The boot set.** The VMM itself calls into VPICD, VTD, V86MMGR, PageSwap, VMCPD, VNETBIOS, DOSMGR and SHELL. The VxDs that do work during Sys_Critical_Init, Device_Init and Init_Complete add VDD, VKD, BLOCKDEV, VDMAD and PageFile. Of the VMM's 242 services, 199 are called by some module.
+
+**Two routes:**
+1. **Our VMM loads Microsoft's VxDs.** It must then provide all 199 called services with exactly the documented behaviour.
+2. **w16 also replaces the VxDs.** The service set narrows to what our own VxDs use, but every service number must still exist for third-party `.386` files.
+
+Each piece's route is recorded here as it is built.
+
+**Where w16 stands** (2026-11-11):
+- **Built:** a VMM with paging, a V86 monitor, the observed INT 2Fh 16xxh answers and a 32-bit DPMI host.
+- **API entries** for the ten VxDs Windows 3.1 exposes to programs (§12.5).
+- **Not yet:** real VxDs. The VxD loader comes next: init-order control messages and INT 20h dynamic linking (§12.4).
 
 ## 13. SHELL
 

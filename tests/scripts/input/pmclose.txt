@@ -1,0 +1,21 @@
+; Program Manager's system-menu box double-clicked (tests/boottest.sh
+; pmclose): the Exit dialog comes up in front, system modal; a click on
+; Program Manager's client area does nothing; Esc (Cancel) closes it
+click 1
+sleep 1
+home
+move 40 30
+sleep 1
+click 1
+click 1
+sleep 2
+shot 01-dialog
+home
+move 150 150
+sleep 1
+click 1
+sleep 1
+shot 02-clicked
+key Escape
+sleep 2
+shot 03-cancelled
