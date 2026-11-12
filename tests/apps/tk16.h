@@ -8,7 +8,7 @@
  *   H  report, with its handle counts (W_HC0, W_HC1), and exit
  */
 #define TK16_SLOTS  4
-#define TK16_SLOTW  48
+#define TK16_SLOTW  56
 
 typedef struct {
     WORD go;
@@ -32,5 +32,10 @@ enum {
     W_DONE = W_ENV + 8, /* set as it returns from its main */
     W_HC0,              /* mode H: SetHandleCount(0) */
     W_HC1,              /* mode H: then SetHandleCount(30) */
+    W_EBX,              /* BX at entry (stack size) */
+    W_ECX,              /* CX at entry (heap size) */
+    W_ICX,              /* CX after InitTask */
+    W_MT10,             /* its module table: heap size */
+    W_MT12,             /* its module table: stack size */
     W_COUNT
 };

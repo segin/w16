@@ -45,7 +45,7 @@ DXPROBES := DX1 DX2 DX4 DX5 DX8
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
-            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE
+            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -422,7 +422,8 @@ $(DOS)/MS1.COM: tests/dos/ms1.asm
 	$(NASM) -f bin -o $@ $<
 
 # TK16.EXE: task probe, part 2; its helpers TK16A (plain), TK16B (imports
-# TKBAD.DLL) and TK16C (a second data segment) are all tk16a.c
+# TKBAD.DLL), TK16C (a second data segment) and TK16S (a 1K stack and a
+# 20h-byte heap) are all tk16a.c
 $(B)/tests/tk16.o: tests/apps/tk16ref.h tests/apps/tk16ref286.h tests/apps/tklog.h tests/apps/tk15.h tests/apps/tk16.h
 $(DOS)/TK16.EXE: $(B)/tests/start.o $(B)/tests/tk16.o \
                 tests/apps/app.lnk tests/apps/tk16.lnk tests/apps/tk15k.lnk
@@ -437,6 +438,7 @@ $(DOS)/TK16%.EXE: $(B)/tests/tk15s.o $(B)/tests/tk16%.o \
                   tests/apps/app.lnk tests/apps/tk16.lnk tests/apps/tk15k.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk16.lnk $(if $(filter B,$*),import ID_GET TKBAD) \
+	    $(if $(filter S,$*),option stack=1k option heapsize=32) \
 	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk16$*.map \
 	    file { $(B)/tests/tk15s.o $(B)/tests/tk16$*.o }
 

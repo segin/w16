@@ -68,6 +68,14 @@ int __cdecl tmain(void)
         return 1;
     v[W_RAN] = 1;
     v[W_HPREV] = init_regs[4];
+    v[W_EBX] = entry_regs[1];
+    v[W_ECX] = entry_regs[2];
+    v[W_ICX] = init_regs[2];
+    {
+        WORD mt = (WORD)GetModuleHandle((LPCSTR)MAKELP(0, init_regs[5]));
+        v[W_MT10] = mt ? *(WORD FAR *)MAKELP(mt, 0x10) : 0xFFFF;
+        v[W_MT12] = mt ? *(WORD FAR *)MAKELP(mt, 0x12) : 0xFFFF;
+    }
     /* the tail as it was: InitTask put a NUL where the CR was */
     v[W_TAILLEN] = psp[0x80];
     for (i = 0; i < 24; i++)

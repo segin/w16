@@ -319,6 +319,29 @@ static void handles(void)
     wait_gone(h);
 }
 
+/* TK16S: linked with a 1K stack and a 20h-byte heap. Pietrek
+   (LoadExeHeader): a program's stack is raised to 5K, a heap under 100
+   bytes (not 0) to 100 */
+static void small(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("small stack and heap");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16S.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("small: TK16S > 32", h > 32);
+    obs("small: entry BX (stack)", sh.v[0][W_EBX]);
+    obs("small: entry CX (heap)", sh.v[0][W_ECX]);
+    obs("small: InitTask CX", sh.v[0][W_ICX]);
+    obs("small: module table 10h (heap)", sh.v[0][W_MT10]);
+    obs("small: module table 12h (stack)", sh.v[0][W_MT12]);
+    wait_gone(h);
+}
+
 int __cdecl tmain(void)
 {
     WORD n, i;
@@ -334,6 +357,7 @@ int __cdecl tmain(void)
     twodata();
     renamed();
     handles();
+    small();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

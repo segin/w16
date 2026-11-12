@@ -816,6 +816,16 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         return load_fail(m, path, "out of memory");
     }
     mod_set_name(m);
+    /* Pietrek (LoadExeHeader): a program's stack is made at least 5K, a
+       heap under 100 bytes (but not 0) 100. Observed (tests/apps/tk16.c,
+       TK16S linked with 400h and 20h): the module table, and BX and CX
+       at the program's entry, say 1400h and 64h (KERNEL audit #11) */
+    if (!(h.flags & NEF_LIBRARY) && h.stack_size < 0x1400)
+        h.stack_size = 0x1400;
+    if (h.heap_size && h.heap_size < 100)
+        h.heap_size = 100;
+    NE_HDR(m)->stack_size = h.stack_size;
+    NE_HDR(m)->heap_size = h.heap_size;
 
     /* A library whose module is already loaded (under another file name)
        gives that module. A program does not: observed (tests/apps/tk16.c,
