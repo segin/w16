@@ -601,7 +601,10 @@ static void sweep(void)
     for (m = module_first; m; ) {
         if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m) && !m->ending) {
             m->ending = 1;
-            if (NE_HDR(m)->flags & MDBF_WEP)
+            /* not for a DLL whose initialisation never ran (one a
+               program imports, the program's load or start having failed
+               first; KERNEL audit, low). UNVERIFIED on 3.1 */
+            if ((NE_HDR(m)->flags & MDBF_WEP) && m->lib_ran)
                 call_wep(m);
             if (MOD_USAGE(m)) {         /* loaded again by its WEP */
                 m->ending = 0;
@@ -1016,6 +1019,10 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     if (h.flags & NEF_LIBRARY) {
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
         module_signal(m->ne_sel, 0x40); /* Pietrek: before its init */
+        /* its initialisation runs now (or there is none); a deferred one
+           sets lib_ran when it runs (module_init_dll) */
+        if (!(h.cs && h.cs <= h.seg_count && defer_sel))
+            m->lib_ran = 1;
     }
     if ((h.flags & NEF_LIBRARY) && !(h.cs && h.cs <= h.seg_count && defer_sel))
         th_startdll(m, h.cs && h.cs <= h.seg_count ? m->seg[h.cs - 1].sel : 0,
@@ -1294,6 +1301,7 @@ int module_init_dll(u16 hmod)
     if (!m)
         return 1;
     h = NE_HDR(m);
+    m->lib_ran = 1;
     if (!h->cs || h->cs > m->seg_count)
         return 1;
     th_startdll(m, m->seg[h->cs - 1].sel, h->ip);     /* toolhelp.c: 64h */

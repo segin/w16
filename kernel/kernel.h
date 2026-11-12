@@ -175,6 +175,10 @@ typedef struct module {
     u16 ending;                 /* loader.c: its WEP is running */
     u16 dg_snap_of;             /* the DGROUP selector dg_snap was taken
                                    from (its fixups name it) */
+    u16 lib_ran;                /* loader.c: a DLL's initialisation ran
+                                   (or it has none): its WEP may run */
+    u16 rsrc_ready;             /* resource.c: its resource table's
+                                   handles are KERNEL's (rsrc_init) */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;
