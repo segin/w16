@@ -138,7 +138,9 @@
 # the run's command line (dropin.sh/inputrun.sh options, with this run's
 # paths taken out), the contents of every file named on it (input
 # scripts, PIFs, WIN.INIs, and the w16 files some reference runs use,
-# such as WC4.COM as WSWAP.EXE in wincomswap), DROPIN_* and INPUTRUN_*
+# such as WC4.COM as WSWAP.EXE in wincomswap, and build/dos's WIN.COM,
+# DOSX.EXE, KRNL286.EXE when dropin.sh -w, -x or no -r would take them;
+# mouseall's "reference" is mostly w16's and is not cached), DROPIN_* and INPUTRUN_*
 # in the environment, -t SECS, the reference install (each file's path,
 # size and time under .tools/ref/win31/cdrive), the emulator and tools
 # (path, size, time of dosbox, dosbox-x, Xvfb, magick, import, xdotool),
@@ -146,13 +148,35 @@
 # scripts/*.py, and the reference-run code of this file between the
 # ">>> reference-run code" marks) and the text of the case (or function)
 # that makes the run. A result is stored only when it looks complete (a
-# boot that completed with a screen that is not blank; an input run whose
-# screens are not blank). In the scratch drive kept with an input run,
-# files equal to the reference install's are stored as links to it. Each
-# entry has key.txt, what its key was made from. BOOTTEST_REFRESH=1 in the
-# environment: run every reference again and replace what is stored.
-# The w16 side of a case is never cached. DIR/refcache.log says which
-# references came from the cache.
+# boot that completed with a screen that is not blank; an input run that
+# ran its script to the end with every shot taken and none blank). In a
+# scratch drive kept with a run, files equal to the reference install's
+# are stored as links to it. Each entry has key.txt, what its key was
+# made from. BOOTTEST_REFRESH=1 in the environment: run every reference
+# again and replace what is stored. The w16 side of a case is never
+# cached. DIR/refcache.log says which references came from the cache.
+# Entries no longer used are not removed (rm -r build/refcache clears it).
+#
+# Waits. A boot's screen is taken when the screen is right, not after a
+# fixed time: the w16 side when it equals the reference's (dropin.sh -e),
+# a boot with nothing to compare with when Windows has settled (-s: Final
+# USER init in BOOTLOG.TXT, then 5 seconds unchanged); SECS stays the
+# limit, and a screen that never matches is taken then, as before. The
+# input cases' references keep their fixed boot wait (-b) and save the
+# screen the script starts from (boot.png); the w16 side starts its script
+# when its screen equals that one (inputrun.sh -e), or when settled (-s)
+# where the sides' boot screens differ by design. A session ends when its
+# script has run, not at its time limit. DROPIN_FIXED=1 and
+# INPUTRUN_FULL=1 give the old fixed timing (for debugging; they change
+# the references' keys).
+#
+# Job pool. BOOTTEST_JOBS cases (default 3) run at a time, each in a
+# subshell writing DIR/.case-N.out; the results are printed in case order.
+# Each DOSBox has an X display of its own (tests/xvfb.sh: Xvfb
+# -displayfd, so parallel runs never share one), and every case's files
+# have names of their own; references shared by cases (ref, woaref,
+# woaref2, dragoff-ref) are made once under a lock per cache key, and
+# retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -211,8 +235,12 @@ retrylog=$root/build/boottest-retries.log
 retried() {
     line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null) $1 $2 $3"
     echo "RETRY $1: $2 ($3)"
-    echo "$line" >> "$out/retries.txt"
-    echo "$line" >> "$retrylog"
+    # cases run in parallel: one writer at a time
+    (
+        flock 7
+        echo "$line" >> "$out/retries.txt"
+        echo "$line" >> "$retrylog"
+    ) 7>> "$retrylog.lock"
 }
 
 # booted NAME: the boot completed and Windows was still running when the
@@ -247,7 +275,7 @@ codeof() {
         on { print }' "$0"
 }
 # refkey NAME CODE ARGS...: the key of reference run NAME made by ARGS in
-# case (or function) CODE; what it was made from goes to $out/.key-NAME
+# case (or function) CODE; what it was made from goes to the file $_rkf
 refkey() {
     {
         echo "refcache 1 $1"
@@ -267,8 +295,8 @@ refkey() {
         case " $* " in *" -r "*) ;; *) printf 'KRNL286.EXE '; sha256sum < "$root/build/dos/KRNL286.EXE" ;; esac
         echo "code $k"
         codeof "$k"
-    } > "$out/.key-$rn"
-    sha256sum < "$out/.key-$rn" | cut -c1-16
+    } > "$_rkf"
+    sha256sum < "$_rkf" | cut -c1-16
 }
 # refok NAME: the reference run's result looks complete (worth keeping)
 refok() {
@@ -279,7 +307,7 @@ refok() {
         grep -q '^script done' "$out/$1/input.log" || return 1
         ! grep -q 'FAILED' "$out/$1/input.log" || return 1
         ls "$out/$1"/*.png > /dev/null 2>&1 || return 1
-        for f in "$out/$1"/*.png; do ! blank "$f" || return 1; done
+        for _rf in "$out/$1"/*.png; do ! blank "$_rf" || return 1; done
     fi
     return 0
 }
@@ -291,50 +319,53 @@ refok() {
 #   CODE: the case (or function) whose text is part of the key. Parallel
 #   cases wanting the same run wait for one another (a lock per key); a
 #   run is made once per boottest run even with BOOTTEST_REFRESH=1.
+#   Its variables begin with _r, so that the case's own are left alone.
 refrun() {
-    rn=$1 rc=$2; shift 2
-    rk=$(refkey "$rn" "$rc" "$@")
-    rd=$refcache/$rn/$rk
-    mkdir -p "$refcache/$rn"
-    exec 8> "$refcache/$rn/$rk.lock"
+    _rn=$1 _rc=$2; shift 2
+    _rkf=$(mktemp "$out/.key-$_rn.XXXXXX")
+    _rk=$(refkey "$_rn" "$_rc" "$@")
+    _rd=$refcache/$_rn/$_rk
+    mkdir -p "$refcache/$_rn"
+    exec 8> "$refcache/$_rn/$_rk.lock"
     flock 8
-    if [ "$(cat "$out/.ref-$rn" 2>/dev/null)" = "$rk" ]; then
+    if [ "$(cat "$out/.ref-$_rn" 2>/dev/null)" = "$_rk" ]; then
         :
-    elif [ -z "${BOOTTEST_REFRESH:-}" ] && [ -d "$rd/files" ]; then
-        rm -rf "$out/$rn"
-        cp -a "$rd/files/." "$out/"
-        echo "$rn $rk from the cache" >> "$out/refcache.log"
+    elif [ -z "${BOOTTEST_REFRESH:-}" ] && [ -d "$_rd/files" ]; then
+        rm -rf "$out/$_rn"
+        cp -a "$_rd/files/." "$out/"
+        echo "$_rn $_rk from the cache" >> "$out/refcache.log"
     else
-        rm -rf "$out/$rn" "$out/$rn".png "$out/$rn".txt
+        rm -rf "$out/$_rn" "$out/$_rn".png "$out/$_rn".txt
         if [ "$1" = boot ]; then
-            shift; oexp=${expect:-}; expect=
-            boot "$rn" "$@"
-            expect=$oexp
+            shift; _roexp=${expect:-}; expect=
+            boot "$_rn" "$@"
+            expect=$_roexp
         else
-            "$@" > "$out/$rn.txt" 2>&1 || true
+            "$@" > "$out/$_rn.txt" 2>&1 || true
         fi
-        if refok "$rn"; then
-            t=$refcache/$rn/.new-$rk-$$
-            rm -rf "$t"; mkdir -p "$t/files"
-            for f in "$out/$rn" "$out/$rn".*; do [ -e "$f" ] && cp -a "$f" "$t/files/"; done
+        if refok "$_rn"; then
+            _rt=$refcache/$_rn/.new-$_rk-$$
+            rm -rf "$_rt"; mkdir -p "$_rt/files"
+            for _rf in "$out/$_rn" "$out/$_rn".*; do [ -e "$_rf" ] && cp -a "$_rf" "$_rt/files/"; done
             # the scratch drive (inputrun.sh's work/c, dropin.sh -o's c):
             # files as in the reference install become links to it
-            for d in "$t/files/$rn/work/c" "$t/files/$rn/c"; do
-                [ -d "$d" ] || continue
-                (cd "$d" && find . -type f) | while IFS= read -r f; do
-                    f=${f#./}
-                    if cmp -s "$d/$f" "$reftree/$f"; then ln -sf "$reftree/$f" "$d/$f"; fi
+            for _rdd in "$_rt/files/$_rn/work/c" "$_rt/files/$_rn/c"; do
+                [ -d "$_rdd" ] || continue
+                (cd "$_rdd" && find . -type f) | while IFS= read -r _rf; do
+                    _rf=${_rf#./}
+                    if cmp -s "$_rdd/$_rf" "$reftree/$_rf"; then ln -sf "$reftree/$_rf" "$_rdd/$_rf"; fi
                 done
             done
-            cp "$out/.key-$rn" "$t/key.txt"
-            rm -rf "$rd"; mv "$t" "$rd"
-            echo "$rn $rk ran, stored" >> "$out/refcache.log"
+            cp "$_rkf" "$_rt/key.txt"
+            rm -rf "$_rd"; mv "$_rt" "$_rd"
+            echo "$_rn $_rk ran, stored" >> "$out/refcache.log"
         else
-            echo "$rn $rk ran, NOT stored: incomplete (see $out/$rn.txt)" >> "$out/refcache.log"
+            echo "$_rn $_rk ran, NOT stored: incomplete (see $out/$_rn.txt)" >> "$out/refcache.log"
         fi
     fi
-    echo "$rk" > "$out/.ref-$rn"
+    echo "$_rk" > "$out/.ref-$_rn"
     flock -u 8; exec 8>&-
+    rm -f "$_rkf"
 }
 
 # check CASE W16 REF: both must boot; the screens must be identical
@@ -355,7 +386,7 @@ check() {
     # a real difference shows against both reference boots.
     if [ "$n" != 0 ] && [ "$r" = woaref ]; then
         n1=$n
-        [ -f "$out/woaref2.png" ] || refrun woaref2 check boot -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+        refrun woaref2 check boot -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
         if booted woaref2; then
             n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
             n2=${n2%% *}
@@ -391,12 +422,17 @@ ref() { [ -n "$refdone" ] || { refrun ref ref boot -r; refdone=1; }; expect=$out
 woa=$root/build/dos/WINOLDAP.MOD
 woaref=
 woafiles() {
-    [ -f "$out/HI.PIF" ] && return
-    refwin=$root/.tools/ref/win31/cdrive/WINDOWS
-    python3 "$root/tools/mkpif.py" "$refwin/_DEFAULT.PIF" "$out/HI.PIF" \
-        'title=Echo Hi' 'program=COMMAND.COM' 'params=/C ECHO HI'
-    cp "$refwin/WIN.INI" "$out/WIN.INI"
-    python3 "$root/tests/scripts/iniset.py" "$out/WIN.INI" 'windows:run=C:\HI.PIF'
+    exec 7> "$out/.woafiles.lock"
+    flock 7
+    if [ ! -f "$out/.woafiles" ]; then
+        refwin=$root/.tools/ref/win31/cdrive/WINDOWS
+        python3 "$root/tools/mkpif.py" "$refwin/_DEFAULT.PIF" "$out/HI.PIF" \
+            'title=Echo Hi' 'program=COMMAND.COM' 'params=/C ECHO HI'
+        cp "$refwin/WIN.INI" "$out/WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/WIN.INI" 'windows:run=C:\HI.PIF'
+        touch "$out/.woafiles"
+    fi
+    flock -u 7; exec 7>&-
 }
 woaref() {
     [ -n "$woaref" ] && { expect=$out/woaref.png; return; }
@@ -405,8 +441,9 @@ woaref() {
     woaref=1 expect=$out/woaref.png
 }
 
-for c in $cases; do
-    ct=$(date +%s)
+# runcase CASE: one case; run in a subshell of its own (the job pool below)
+runcase() {
+    c=$1
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
@@ -654,9 +691,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
         refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -B -b 40 -t 170 "$scr" "$out/pmdrop-ref" -r
-        "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -b 40 -t 170 "$scr" "$out/pmdrop-pm" -r \
+        "$root/tests/inputrun.sh" -s -b 40 -t 170 "$scr" "$out/pmdrop-pm" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
-        "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
+        "$root/tests/inputrun.sh" -s -b 40 -t 170 "$scr" "$out/pmdrop-sh" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
             > "$out/pmdrop-sh.txt" 2>&1 || true
         # w16's USER and GDI under Microsoft's File Manager and Program
@@ -892,8 +929,54 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
-    echo "$c $(($(date +%s) - ct))" >> "$out/times.txt"
+}
+
+# The job pool: up to BOOTTEST_JOBS cases at a time (default 3), each in a
+# subshell with its output in $out/.case-N.out, printed in case order as
+# the cases finish. Every DOSBox runs on a display of its own
+# (tests/xvfb.sh); references two cases share wait for each other
+# (refrun's lock); retries are appended under a lock.
+for c in $cases; do
+    case $(codeof "$c" | head -1) in
+    "    "*")"*) ;;
+    *) echo "unknown case $c" >&2; exit 2 ;;
+    esac
 done
+jobs=${BOOTTEST_JOBS:-3}
+n=0 next=1 pids=
+# flush: print the output of the cases finished so far, in order
+flush() {
+    while [ -f "$out/.case-$next.done" ]; do
+        cat "$out/.case-$next.out"
+        if [ -f "$out/.case-$next.fails" ]; then
+            fails=$((fails + $(cat "$out/.case-$next.fails")))
+        else
+            echo "FAIL $(cut -d' ' -f1 "$out/.case-$next.time"): the case stopped before its end"
+            fails=$((fails + 1))
+        fi
+        cat "$out/.case-$next.time" >> "$out/times.txt"
+        next=$((next + 1))
+    done
+}
+running() {
+    r=0
+    for p in $pids; do kill -0 "$p" 2>/dev/null && r=$((r + 1)); done
+    echo $r
+}
+for c in $cases; do
+    n=$((n + 1))
+    while [ "$(running)" -ge "$jobs" ]; do flush; sleep 1; done
+    (
+        # (cases use c, n and the like for their own purposes)
+        _bt_c=$c _bt_n=$n _bt_t=$(date +%s) fails=0
+        trap 'echo "$_bt_c $(($(date +%s) - _bt_t))" > "$out/.case-$_bt_n.time"; touch "$out/.case-$_bt_n.done"' EXIT
+        runcase "$c" > "$out/.case-$_bt_n.out" 2>&1
+        echo "$fails" > "$out/.case-$_bt_n.fails"
+    ) &
+    pids="$pids $!"
+done
+while [ $next -le $n ]; do flush; [ $next -gt $n ] || sleep 1; done
+wait
 # each case's time, and the references taken from the cache
 echo "boottest: seconds per case:"
 awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "(all)", t }' "$out/times.txt"
