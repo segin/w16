@@ -301,7 +301,10 @@ void idle_cursor_check(HQUEUE hq)
     if (hcurCurrent == hcurSetByMsg || hwndCapture || menu_mode)
         return;
     w = WindowFromPoint(ptCursor);
-    if (w && valid_wnd(w) && PW(w)->hq == hq) {
+    /* or the desktop, which no task owns: Windows Write turned on its
+       ruler with the pointer on the desktop below its window; 3.1 showed
+       the arrow again after, w16 kept Write's I-beam */
+    if (w && valid_wnd(w) && (PW(w)->hq == hq || w == hwndDesktop)) {
         hcurSetByMsg = hcurCurrent;     /* once per change */
         pointer_changed(NULL);
     }

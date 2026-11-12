@@ -284,6 +284,7 @@ u16 winboot(void)
     {
         extern u16 sched_log, exit_msg;
         sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
+        heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
         exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
     }
     if (take_switch_b())

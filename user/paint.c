@@ -45,6 +45,7 @@ static void add_update(PWND w, HRGN rgn, BOOL erase, BOOL children)
     r = CreateRectRgnIndirect(&w->rcWindow);
     if (rgn)
         CombineRgn(r, r, rgn, RGN_AND);
+    savebits_invalidated((HWND)(WORD)w, r);     /* an image kept under a menu goes */
     {
         RECT box;
         if (GetRgnBox(r, &box) == NULLREGION)
@@ -119,6 +120,24 @@ void invalidate_screen(const RECT *rc)
 {
     HRGN r = CreateRectRgnIndirect(rc);
     add_update(PW(hwndDesktop), r, TRUE, TRUE);
+    DeleteObject(r);
+}
+
+/* rgn (screen coordinates) in the window, its frame and children */
+void invalidate_window_screen_rgn(HWND h, HRGN rgn)
+{
+    PWND w = valid_wnd(h);
+    if (w)
+        add_update(w, rgn, TRUE, TRUE);
+}
+
+/* the same for rc less except (what a window moved or shown now covers) */
+void invalidate_screen_except(const RECT *rc, const RECT *except)
+{
+    HRGN r = CreateRectRgnIndirect(rc);
+    SetRectRgn(hrgnTmp1, except->left, except->top, except->right, except->bottom);
+    if (CombineRgn(r, r, hrgnTmp1, RGN_DIFF) != NULLREGION)
+        add_update(PW(hwndDesktop), r, TRUE, TRUE);
     DeleteObject(r);
 }
 
@@ -417,4 +436,45 @@ int WINAPI ExcludeUpdateRgn(HDC hdc, HWND h)
 {
     (void)hdc, (void)h;
     return SIMPLEREGION;
+}
+
+/* ScrollDC: the bits of lprcScroll (the DC's clip box if NULL) moved by
+   dx, dy within the DC, only where they land inside lprcClip (the same
+   box if NULL); what the move uncovers there goes to hrgnUpdate and its
+   bounding box to lprcUpdate (SDK). Write imports it. UNVERIFIED: parts of
+   the source that are not visible (covered windows) are not added to the
+   update region; coordinates are taken as the DC's logical ones */
+BOOL WINAPI ScrollDC(HDC hdc, int dx, int dy, const RECT __far *scroll,
+                     const RECT __far *clip, HRGN update, RECT __far *rcupdate)
+{
+    RECT box, src, cl, dst;
+    HRGN a, b;
+    if (!hdc)
+        return FALSE;
+    GetClipBox(hdc, &box);
+    src = scroll ? *scroll : box;
+    cl = clip ? *clip : src;
+    IntersectRect(&src, &src, &cl);
+    dst = src;
+    OffsetRect(&dst, dx, dy);
+    IntersectRect(&dst, &dst, &cl);
+    if (!IsRectEmpty(&dst))
+        BitBlt(hdc, dst.left, dst.top, dst.right - dst.left, dst.bottom - dst.top,
+               hdc, dst.left - dx, dst.top - dy, SRCCOPY);
+    if (update || rcupdate) {
+        a = CreateRectRgnIndirect(&src);
+        b = CreateRectRgnIndirect(&dst);
+        if (a && b) {
+            CombineRgn(a, a, b, RGN_DIFF);
+            if (update)
+                CombineRgn(update, a, 0, RGN_COPY);
+            if (rcupdate)
+                GetRgnBox(a, rcupdate);
+        }
+        if (a)
+            DeleteObject(a);
+        if (b)
+            DeleteObject(b);
+    }
+    return TRUE;
 }

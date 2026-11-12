@@ -17,6 +17,11 @@ void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
 HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
+void invalidate_screen_except(const RECT *rc, const RECT *except);
+void invalidate_window_screen_rgn(HWND h, HRGN rgn);
+void savebits_show(HWND h);
+BOOL savebits_restore(HWND h, const RECT *oldwin);
+void savebits_forget(HWND h);
 
 void calc_client(PWND w)
 {
@@ -60,7 +65,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     PWND w = valid_wnd(h), parent;
     WINDOWPOS wp;
     RECT oldwin, oldcli;
-    BOOL wasvis, nowvis, changed;
+    BOOL wasvis, nowvis, changed, restored = FALSE;
+    HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
     if (!w || h == hwndDesktop)
         return FALSE;
@@ -106,6 +112,16 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     /* Z order */
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
         if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
+            HWND s;
+            if (wasvis) {
+                above = CreateRectRgn(0, 0, 0, 0);
+                for (s = PW(w->hwndParent)->hwndChild; s && s != h; s = PW(s)->hwndNext)
+                    if (PW(s)->style & WS_VISIBLE) {
+                        HRGN t = CreateRectRgnIndirect(&PW(s)->rcWindow);
+                        CombineRgn(above, above, t, RGN_OR);
+                        DeleteObject(t);
+                    }
+            }
             unlink_window(w);
             link_window(w, after == (HWND)-1 ? HWND_TOP : (after == (HWND)-2 ? HWND_TOP : after));
             changed = TRUE;
@@ -127,27 +143,24 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!(w = valid_wnd(h)))
             return FALSE;
     }
-    if (flags & SWP_SHOWWINDOW)
+    if (flags & SWP_SHOWWINDOW) {
+        /* CS_SAVEBITS: the screen under it kept (savebits.c) */
+        if (!(w->style & WS_CHILD) && (((PCLS)w->cls)->style & CS_SAVEBITS))
+            savebits_show(h);
         w->style |= WS_VISIBLE;
+    }
     if (flags & SWP_HIDEWINDOW) {
         w->style &= ~WS_VISIBLE;
+        /* CS_SAVEBITS: the image under it back now, before another
+           window is activated and comes up over its place (Windows
+           Write's File > Open box: the owner, brought up first, hid the
+           place from the image, and the box stayed on screen) */
+        if (wasvis)
+            restored = savebits_restore(h, &oldwin);
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
-        /* the active window hidden, by ShowWindow or SetWindowPos: the
-           next visible, enabled top-level window becomes active, or none.
-           Program Manager hides its Run dialog with SetWindowPos before
-           WinExec (US1-style trace on 3.1); the dialog stayed "active"
-           while hidden, so when it ended it gave the activation back to
-           Program Manager over the program just started */
-        if (h == hwndActive) {
-            HWND t = w->hwndOwner;
-            /* its owner first, if it can take it, else the next one */
-            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
-                t = next_to_activate(h);
-            activate_window(t, FALSE);
-            if (!(w = valid_wnd(h)))
-                return FALSE;
-        }
+        /* the active window hidden by SetWindowPos stays the active one
+           (ShowWindow(SW_HIDE) moves the activation, see there) */
     }
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
@@ -160,12 +173,41 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!EqualRect(&oldwin, &w->rcWindow))
             pointer_changed(&w->rcWindow);
     }
+    if (wasvis && nowvis && !EqualRect(&oldwin, &w->rcWindow))
+        savebits_forget(h);
     if (changed && !(flags & SWP_NOREDRAW)) {
-        /* what was under the old place, and the window in its new one */
-        if (wasvis)
-            invalidate_screen(&oldwin);
-        if (nowvis)
-            invalidate_screen(&w->rcWindow);
+        if (nowvis && ((flags & SWP_NOZORDER) || !w->hwndParent ||
+                       PW(w->hwndParent)->hwndChild == h)) {
+            /* above its siblings: what it left uncovered, and the window
+               itself; not what it now covers. Observed on 3.1 (throwaway
+               probe, a child moved with MoveWindow(..., FALSE) and shown
+               over its parent, which has no WS_CLIPCHILDREN): the parent
+               got no WM_PAINT for it. Windows Write shows its ruler that
+               way and paints it at once (UpdateWindow); w16 also gave the
+               main window the ruler's place, and its paint then erased the
+               ruler */
+            if (wasvis)
+                invalidate_screen_except(&oldwin, &w->rcWindow);
+            if (wasvis && above && EqualRect(&oldwin, &w->rcWindow) &&
+                !(flags & SWP_FRAMECHANGED)) {
+                /* only brought up: what was covered (3.1, the same probe:
+                   a window activated again after a popup over it went
+                   was painted only where the popup had been) */
+                invalidate_window_screen_rgn(h, above);
+            } else
+                invalidate(h, 0, 0, TRUE, TRUE, TRUE);
+        } else {
+            /* what was under the old place (unless the image under it was
+               put back), and the window in its new one */
+            if (wasvis && !restored)
+                invalidate_screen(&oldwin);
+            if (nowvis)
+                invalidate_screen(&w->rcWindow);
+        }
+    }
+    if (above) {
+        DeleteObject(above);
+        above = 0;
     }
     if ((flags & SWP_SHOWWINDOW) && (w->flags & WF_SENDSIZE)) {
         /* the WM_SIZE and WM_MOVE CreateWindow held back */
@@ -298,6 +340,29 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             return FALSE;
         send_message(h, WM_SHOWWINDOW, FALSE, 0);
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
+        /* the active window hidden by ShowWindow: its owner becomes
+           active if it can take it, else the next visible, enabled
+           top-level window, or none. SetWindowPos(SWP_HIDEWINDOW), with
+           or without SWP_NOACTIVATE, leaves the hidden window active on
+           3.1 (throwaway probe: an active popup hidden while its owner
+           was disabled, an icon of the same program shown: SetWindowPos
+           left the popup active, ShowWindow made the icon active; a new
+           window shown then was activated, and destroying the hidden
+           popup with nothing else shown gave the activation to its
+           enabled owner). Program Manager hides its Run dialog with
+           SetWindowPos before WinExec: w16 activated the next window
+           there, with the owner disabled an icon (Notepad's in the
+           boot-test icons), and keys typed before the program's window
+           came up (a loaded machine) went to that icon. UNVERIFIED:
+           3.1's next window (the probe's ShowWindow chose the icon over
+           another program's open window; next_to_activate prefers open
+           windows) */
+        if (h == hwndActive && (w = valid_wnd(h)) != 0) {
+            HWND t = w->hwndOwner;
+            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
+                t = next_to_activate(h);
+            activate_window(t, FALSE);
+        }
         return wasvis;
     case SW_SHOWMINIMIZED:
     case SW_MINIMIZE:

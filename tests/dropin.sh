@@ -18,7 +18,11 @@
 #     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable);
 #                -i WIN.INI:S:K=V edits WIN.INI instead
 #     -s PNG     also take a screenshot after SECS seconds (DOSBox on a
-#                virtual X display, xvfb-run, never the user's desktop)
+#                virtual X display, xvfb-run, never the user's desktop);
+#                with DROPIN_SHOTS="T1 T2 ..." in the environment, also
+#                after T1, T2, ... seconds, as PNG with -T1 etc. before .png
+# DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
+# fast as the host allows; "fixed N" runs N instructions per millisecond)
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
 #     -r         run the reference KERNEL instead (for comparison)
 #     -x         run w16's DOS extender (build/dos/DOSX.EXE) instead of
@@ -129,10 +133,11 @@ fi
 common="[dosbox]
 $xdos
 memsize=16
+${DROPIN_MACHINE:+machine=$DROPIN_MACHINE}
 [cpu]
 core=normal
 cputype=$cpu
-cycles=max
+cycles=${DROPIN_CYCLES:-max}
 [mixer]
 nosound=true
 [speaker]
@@ -153,6 +158,9 @@ else
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
 SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
+for t in ${DROPIN_SHOTS:-}; do
+    (sleep \$t; w=\$(xdotool search --name DOSBox 2>/dev/null | head -1); import -window "\${w:-root}" "$work/s-\$t.png") &
+done
 sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$work/s.png"
@@ -161,6 +169,9 @@ SH
     chmod +x "$work/shot.sh"
     xvfb-run -a -s '-screen 0 1024x768x24' "$work/shot.sh" || true
     cp "$work/s.png" "$shot"
+    for t in ${DROPIN_SHOTS:-}; do
+        cp "$work/s-$t.png" "${shot%.png}-$t.png" 2>/dev/null || true
+    done
 fi
 echo "== KERNEL output (C:\\OUT.TXT)"
 if [ -f "$work/c/OUT.TXT" ]; then tr -d '\r' < "$work/c/OUT.TXT"; else echo "(none: still running at the time limit?)"; fi

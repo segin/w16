@@ -597,6 +597,7 @@ u16 KAPI LAlloc(u16 ds, u16 flags, u16 n)                     /* KERNEL.5 */
     u16 need, a, h;
     int moveable = (flags & LMEM_MOVEABLE) != 0;
 
+    local_heap_check("LocalAlloc", ds);
     if (!heap_of(ds, &hp))
         return 0;
     need = arena_need(n, moveable);
@@ -658,6 +659,7 @@ u16 KAPI LReAlloc(u16 ds, u16 h, u16 n, u16 flags)            /* KERNEL.6 */
     lheap hp;
     u16 a, b, need, old;
 
+    local_heap_check("LocalReAlloc", ds);
     if (!heap_of(ds, &hp))
         return 0;
     if (h & 2) {
@@ -749,6 +751,7 @@ u16 KAPI LReAlloc(u16 ds, u16 h, u16 n, u16 flags)            /* KERNEL.6 */
 u16 KAPI LFree(u16 ds, u16 h)                                 /* KERNEL.7 */
 {
     lheap hp;
+    local_heap_check("LocalFree", ds);
     if (!heap_of(ds, &hp))
         return 0;
     if (h & 2) {
@@ -935,4 +938,48 @@ u32 KAPI LNotify(u16 ds, u32 proc)
     old = *p;
     *p = proc;
     return old;
+}
+
+/* ---- [w16] heapcheck=1: the local heap of segment seg checked whole
+   (global.c's heap_check calls it for every DGROUP). Returns 0 if
+   consistent, else a description, with *at the offending arena. ---- */
+const char *local_check(u16 seg, u16 *at)
+{
+    lheap hp;
+    u16 first, last, a, n, items = 0, lim, f, pf;
+    *at = 0;
+    if (!heap_of(seg, &hp))
+        return 0;                       /* no heap (yet): nothing to check */
+    lim = sel_limit(seg);
+    first = I(&hp, LI_FIRST);
+    last = I(&hp, LI_LAST);
+    if (first & 3 || last & 3 || last <= first || (u32)last + SENTINEL_SIZE > (u32)lim + 1)
+        return "local heap: bad first/last";
+    for (a = first; a != last; a = n) {
+        *at = a;
+        n = a_next(&hp, a);
+        if (n <= a || n > last || n & 3)
+            return "local heap: bad next";
+        if (a_prev(&hp, n) != a)
+            return "local heap: next's prev is not this arena";
+        if (a != first && a_flags(&hp, a) & LA_BUSY && a_flags(&hp, a) & LA_MOVEABLE) {
+            u16 h = W(seg, a + LA_HANDLE);
+            if ((h & 3) != 2 || (u32)h + 4 > (u32)lim + 1 || W(seg, h + HE_ADDR) != a + 6)
+                return "local heap: moveable arena and its handle disagree";
+        }
+        if (++items == 0)
+            return "local heap: no end";
+    }
+    /* the free list, in address order */
+    pf = first;
+    for (f = W(seg, first + LA_FREENEXT); f != last; f = W(seg, f + LA_FREENEXT)) {
+        *at = f;
+        if (f <= pf || f > last || f & 3 || !is_arena(&hp, f) || !a_free(&hp, f))
+            return "local heap: bad free list";
+        if (W(seg, f + LA_SIZE) != a_size(&hp, f) || W(seg, f + LA_FREEPREV) != pf)
+            return "local heap: free arena's size or link";
+        pf = f;
+    }
+    *at = 0;
+    return 0;
 }
