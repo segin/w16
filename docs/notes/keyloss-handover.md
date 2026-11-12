@@ -92,7 +92,9 @@ woados scenario with it):
   (black screen). Next: a WC3 variant that appends each call to WC.LOG at
   once (WC3 writes only at the end), to see which call of DSWAP's gets a
   different answer from w16's WIN.COM.
-- Also found: at Windows' start the display driver reads 30 rows from the
+- (Fixed since: WIN.COM puts back 0040:0084h after its logo, as 3.1's
+  does; winprompt checks the text mode after Windows.) Also found: at
+  Windows' start the display driver reads 30 rows from the
   BIOS under w16's WIN.COM (INT 10h 1130h DL=1Dh) and 25 under 3.1's
   (DL=18h): both show the logo in mode 12h; 3.1's leaves the BIOS's row
   count at 25. That is why the DOS screen after Windows comes back 8x8.

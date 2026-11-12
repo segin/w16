@@ -748,15 +748,23 @@ $(DOS)/WIN.COM: $(DOS)/WIN.CNF assets/boot/W16LOGOR.BMP
 dos: $(DOS)/WIN.COM
 
 # WC1-WC8.COM: the WIN.COM probes (tests/wincom.sh; ARCHITECTURE.md 9.5);
+# WC3E.COM: WC3 writing its record after every call; WCB.COM: the BIOS
+# data area to C:\BDA.LOG (boot test winprompt);
 # WC9.EXE: ExitWindowsExec as the shell
 WCPROBES := $(DOS)/WC1.COM $(DOS)/WC2.COM $(DOS)/WC3.COM $(DOS)/WC3B.COM \
             $(DOS)/WC4.COM $(DOS)/WC5.COM $(DOS)/WC6.COM $(DOS)/WC7.COM \
-            $(DOS)/WC8.COM $(DOS)/WC9.EXE
+            $(DOS)/WC8.COM $(DOS)/WC9.EXE $(DOS)/WCB.COM $(DOS)/WC3E.COM
 wcprobes: $(WCPROBES)
 dos: $(WCPROBES)
 $(DOS)/WC%.COM: tests/dos/wc%.asm tests/dos/wclib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/WCB.COM: tests/dos/wcb.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/WC3E.COM: tests/dos/wc3.asm tests/dos/wclib.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -DEACH -o $@ $<
 $(DOS)/WC3B.COM: tests/dos/wc3.asm tests/dos/wclib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -DDXAXOFF=0x160 -o $@ $<

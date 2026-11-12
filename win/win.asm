@@ -1542,8 +1542,23 @@ show_logo:
         jne .r
         mov [lg_h], ax
         mov [lg_bmp], si
+        ; the BIOS's row count (0040:0084h, rows - 1) is put back after the
+        ; mode set: Windows 3.1's WIN.COM leaves the one from before the
+        ; logo (observed, a stand-in for WSWAP dumping the BIOS data area:
+        ; 18h from 80x25, 31h from 50 lines; the rest as mode 12h sets it).
+        ; Windows' display driver reads it when it starts and restores that
+        ; text mode when it ends: with mode 12h's 1Dh it gave the 8x8 font
+        ; (50 lines) after Windows instead of 80x25
+        push es
+        mov ax, 40h
+        mov es, ax
+        mov al, [es:84h]
+        mov [bios_rows], al
         mov ax, 0012h                   ; VGA 640 x 480, 16 colours
         int 10h
+        mov al, [bios_rows]
+        mov [es:84h], al
+        pop es
         ; palette registers 0-15 -> DAC 0-15, then the bitmap's colours
         push cs
         pop es
@@ -1818,6 +1833,7 @@ ini_buf:    times INIBUF db 0
 ini_line:   times INILINE db 0
 file_end:   dw 0
 lg_bmp:     dw 0
+bios_rows:  db 0
 lg_w:       dw 0
 lg_h:       dw 0
 lg_x0:      dw 0

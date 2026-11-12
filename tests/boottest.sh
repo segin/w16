@@ -367,14 +367,27 @@ for c in $cases; do
         # the MS-DOS Prompt with w16's WIN.COM against 3.1's (the rest
         # Microsoft's): DSWAP's banner and text mode, back to Windows, exit
         scr=$root/tests/scripts/input/winprompt.txt
-        printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GOP.BAT"
+        # after WIN, WCB writes the BIOS data area: the text mode Windows
+        # left (3.1: mode 3, 80 columns, 25 rows, 16-line font; w16's
+        # WIN.COM once left 50 lines, the 8x8 font)
+        printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\nC:\\WCB\r\n' > "$out/GOP.BAT"
         for v in ref w16; do
             if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-$v" "$@" \
-                -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" > "$out/winprompt-$v.txt" 2>&1 || true
+                -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" -f "$root/build/dos/WCB.COM=WCB.COM" \
+                > "$out/winprompt-$v.txt" 2>&1 || true
         done
         r=ok
+        for v in ref w16; do
+            m=$(python3 -c "import sys; d = open(sys.argv[1], 'rb').read(); print('mode %02X cols %d rows %d font %d' % (d[0x49], d[0x4A], d[0x84] + 1, d[0x85]))" \
+                "$out/winprompt-$v/work/c/BDA.LOG" 2>/dev/null || echo none)
+            eval "bda_$v=\"\$m\""
+        done
+        if [ "$bda_w16" != "mode 03 cols 80 rows 25 font 16" ] || [ "$bda_w16" != "$bda_ref" ]; then
+            r="after Windows: $bda_w16 (3.1: $bda_ref)"
+        fi
         for s in 01-dos 02-ver 03-back 04-exit; do
+            [ "$r" = ok ] || break
             a=$out/winprompt-w16/$s.png b=$out/winprompt-ref/$s.png
             if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
             n=$(magick compare -metric AE "$a" "$b" "$out/winprompt-$s-diff.png" 2>&1 >/dev/null || true)
