@@ -1332,3 +1332,64 @@ install-tree: $(W16SYS)/MOUSE.DRV
 $(W16SYS)/MOUSE.DRV: $(DOS)/MOUSE.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+
+# ---- MD2: MOUSE.DRV's open questions observed (drivers/mouse/README.md;
+# findings and logs in tests/apps/md2logs/{a,b,c}/)
+# A: GetSetMouseData. MD2A.EXE (tests/apps/md2a.c, md2ax.c); MS3A.DRV, a
+# recording MOUSE in front of MOUSX, a renamed copy of the real driver
+# (tests/apps/ms3a.asm); MS4A.COM, an APM BIOS that records its callers
+# (tests/dos/ms4a.asm); tests/md2aprobe.sh
+$(B)/tests/md2a.o: tests/apps/md2ax.c tests/apps/md1ref.h tests/apps/tklog.h
+$(DOS)/MD2A.EXE: $(B)/tests/start.o $(B)/tests/md2a.o $(B)/tests/md2as.o $(B)/tests/md1s.o tests/apps/app.lnk tests/apps/md2a.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md2a.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/md2a.map file { $(B)/tests/start.o $(B)/tests/md2a.o $(B)/tests/md2as.o $(B)/tests/md1s.o }
+$(DOS)/MS3A.DRV: $(B)/tests/ms3a.o tests/apps/ms3a.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/ms3a.lnk name $@ option map=$(B)/tests/ms3a.map file { $(B)/tests/ms3a.o }
+	python3 tools/nemark.py $@ 3.10
+# B: PowerEventProc. MD2B.EXE (tests/apps/md2b.c); MS3B.COM, MS2 with INT
+# 15h AH=53h (tests/dos/ms3b.asm); MS4B.COM, an APM BIOS with scheduled
+# power events (tests/dos/ms4b.asm); MOUSEPT.DRV and MOUSEPF.DRV, test
+# builds of w16's driver (-DPWRTRACE, -DPWRFAIL); tests/md2bprobe.sh
+$(B)/tests/md2b.o: tests/apps/md1ref.h tests/apps/tklog.h
+$(DOS)/MD2B.EXE: $(B)/tests/start.o $(B)/tests/md2b.o $(B)/tests/md1s.o tests/apps/app.lnk tests/apps/md2b.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md2b.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/md2b.map file { $(B)/tests/start.o $(B)/tests/md2b.o $(B)/tests/md1s.o }
+$(B)/mouse/mousept.o: drivers/mouse/mouse.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DPWRTRACE -o $@ $<
+$(B)/mouse/mousepf.o: drivers/mouse/mouse.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DPWRTRACE -DPWRFAIL -o $@ $<
+$(DOS)/MOUSEPT.DRV: $(B)/mouse/mousept.o drivers/mouse/mouse.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mousept.map file { $< }
+	python3 tools/nemark.py $@ 3.10
+$(DOS)/MOUSEPF.DRV: $(B)/mouse/mousepf.o drivers/mouse/mouse.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mousepf.map file { $< }
+	python3 tools/nemark.py $@ 3.10
+# C: the packet after Enable. MD2C.EXE (tests/apps/md2c.c, md2cs.asm);
+# MS3C.COM, packets of MD2C's choosing (tests/dos/ms3c.asm);
+# tests/md2cprobe.sh, tests/md2cview.py
+$(B)/tests/md2c.o: tests/apps/md1ref.h tests/apps/tklog.h
+$(DOS)/MD2C.EXE: $(B)/tests/start.o $(B)/tests/md2c.o $(B)/tests/md2cs.o tests/apps/app.lnk tests/apps/md2c.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md2c.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/md2c.map file { $(B)/tests/start.o $(B)/tests/md2c.o $(B)/tests/md2cs.o }
+$(DOS)/MS3B.COM: tests/dos/ms3b.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/MS3C.COM: tests/dos/ms3c.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/MS4A.COM: tests/dos/ms4a.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/MS4B.COM: tests/dos/ms4b.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/MD2A.EXE $(DOS)/MS3A.DRV $(DOS)/MS4A.COM $(DOS)/MD2B.EXE $(DOS)/MS3B.COM \
+     $(DOS)/MS4B.COM $(DOS)/MOUSEPT.DRV $(DOS)/MOUSEPF.DRV $(DOS)/MD2C.EXE $(DOS)/MS3C.COM

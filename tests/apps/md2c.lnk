@@ -1,0 +1,3 @@
+# MD2C.EXE (tests/apps/md2c.c, md2cs.asm): packets after Enable
+@tests/apps/app.lnk
+import U_INITAPP USER.5
