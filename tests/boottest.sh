@@ -88,13 +88,17 @@
 #              in text mode, the same screens up to the cursor (40 pixels),
 #              Windows repainted as it was before, text mode at the end
 #   woadosbat  the same with TEMP set by a batch file around WIN
-#              (C:\WINDOWS\GO.BAT: SET TEMP=C:\WINDOWS\TEMP, WIN /S), as an
+#              (C:\WINDOWS\GO.BAT: SET TEMP=C:\WINDOWS\TEMP, WIN /S) and w16's
+#              WIN.COM as well, as an
 #              AUTOEXEC.BAT does. EXPECTED TO FAIL (reported as xfail, not
 #              counted): w16's stack does not come back from the prompt
 #              (EnableOEMLayer is never reached). Observed: the batch file
 #              alone (WIN /S, SwapDisk= in SYSTEM.INI) comes back; the
 #              harness's output redirect makes no difference (DROPIN_NOREDIR=1);
-#              Microsoft's stack comes back. UNVERIFIED why TEMP matters
+#              Microsoft's stack comes back. With w16's WIN.COM (master
+#              05e0494, its swap-path fixes) it comes back too and Windows is
+#              as before; what fails now is the prompt's first screen: no
+#              "Type EXIT ..." banner above DOSBox's (UNVERIFIED why)
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -588,15 +592,17 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     woados|woadosbat)
         scr=$root/tests/scripts/input/woados.txt
         fon=$root/build/fonts
+        wc=                             # woadosbat: w16's WIN.COM as well
         if [ $c = woados ]; then set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
         else
+            wc=-w
             printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GO.BAT"
             set -- -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT"
         fi
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-ref" -r \
             "$@" > "$out/$c-ref.txt" 2>&1 || true
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/$c-w16" \
-            -x "$@" \
+            -x $wc "$@" \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
