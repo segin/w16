@@ -542,16 +542,27 @@ static void destroy(module FAR *m);
 static void call_wep(module FAR *m);
 
 /* Free the DLLs nobody uses any more, importers first (the module list
-   has a module before the modules it imports). Not while loading. */
+   has a module before the modules it imports). Not while loading. A DLL
+   whose WEP is running is left to the sweep that called it: a WEP that
+   frees another library (FreeLibrary sweeps again) must not get its own
+   WEP called a second time (observed, tests/apps/tk5.c: TKID's WEP freeing
+   TKDLB runs once on 3.1; w16 recursed). UNVERIFIED: a WEP that loads its
+   own DLL again; it stays, as it is in use. */
 static void sweep(void)
 {
     module FAR *m;
     if (load_depth)
         return;
     for (m = module_first; m; ) {
-        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m)) {
+        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m) && !m->ending) {
+            m->ending = 1;
             if (NE_HDR(m)->flags & MDBF_WEP)
                 call_wep(m);
+            if (MOD_USAGE(m)) {         /* loaded again by its WEP */
+                m->ending = 0;
+                m = m->next;
+                continue;
+            }
             module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP */
             destroy(m);
             m = module_first;

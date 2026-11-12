@@ -172,6 +172,7 @@ typedef struct module {
     u16 dg_min;                 /* the DGROUP's minimum allocation in the
                                    file (the module table's includes the
                                    heap and the stack, as on 3.1) */
+    u16 ending;                 /* loader.c: its WEP is running */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;

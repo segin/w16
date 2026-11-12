@@ -38,6 +38,7 @@ typedef WORD (FAR PASCAL *infofn)(WORD);
 typedef WORD (FAR PASCAL *wordfn)(void);
 typedef DWORD (FAR PASCAL *dwordfn)(void);
 typedef void (FAR PASCAL *setwepfn)(WORD FAR *);
+typedef void (FAR PASCAL *hinstfn)(HINSTANCE);
 
 /* progress, so a run that hangs shows where */
 #define STEP(s) out("-- " s "\r\n")
@@ -791,8 +792,20 @@ static void probe_search(void)
             wep_flag = 0;
             if (setwep)
                 setwep((WORD FAR *)&wep_flag);
-            FreeLibrary(h);
-            obs("TKID WEP flag after last FreeLibrary", wep_flag);
+            /* its WEP frees TKDLB (loaded here once more): the WEP still
+               runs once (w16 called it again from the FreeLibrary's own
+               sweep, the DLL still listed with usage 0) */
+            {
+                HINSTANCE hb = LoadLibrary("TKDLB.DLL");
+                hinstfn setfree = (hinstfn)GetProcAddress(h, "ID_SETWEPFREE");
+                WORD ub = GetModuleUsage(hb);
+                if (setfree && (WORD)hb >= 32)
+                    setfree(hb);
+                FreeLibrary(h);
+                obs("TKID WEP flag after last FreeLibrary", wep_flag);
+                obs("TKDLB usage less after TKID's WEP freed it",
+                    (WORD)hb >= 32 ? ub - GetModuleUsage(hb) : 0xFFFF);
+            }
         } else {
             FreeLibrary(h);
         }
