@@ -73,7 +73,9 @@
 #              front and system modal, no menu left (pmclose.txt)
 #   woados     MS-DOS Prompt from Program Manager's File > Run COMMAND.COM,
 #              VER, EXIT, then Exit Windows (tests/scripts/input/woados.txt;
-#              TEMP set by C:\WINDOWS\GO.BAT): every w16 part but WIN.COM
+#              SYSTEM.INI [NonWindowsApp] SwapDisk=C:\WINDOWS\TEMP; with
+#              TEMP set by a batch file around WIN instead, w16's stack
+#              did not come back from the prompt, UNVERIFIED why): every w16 part but WIN.COM
 #              (UNVERIFIED why: with w16's WIN.COM, Windows ends when the
 #              prompt should start) against all of Microsoft's: the prompt
 #              in text mode, the same screens up to the cursor (40 pixels),
@@ -548,13 +550,12 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         if [ "$r" = ok ]; then echo "ok   pmclose: Exit dialog in front and modal, no menu left (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmclose: $r ($out)"; fails=$((fails + 1)); fi ;;
     woados)
-        printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\n' > "$out/GO.BAT"
         scr=$root/tests/scripts/input/woados.txt
         fon=$root/build/fonts
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-ref" -r \
-            -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT" > "$out/woados-ref.txt" 2>&1 || true
+            -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' > "$out/woados-ref.txt" 2>&1 || true
         INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-w16" \
-            -x -c GO -f "$out/GO.BAT=WINDOWS/GO.BAT" \
+            -x -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
             -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" \
