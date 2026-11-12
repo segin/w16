@@ -297,6 +297,28 @@ static void renamed(void)
     dos(0x4100, dst, NULL);
 }
 
+/* SetHandleCount is the task's own: a task started after this one
+   raised its count starts from 20 */
+static void handles(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("handle counts");
+    reset();
+    obs("hc: SetHandleCount(40)", SetHandleCount(40));
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'H', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("hc: TK16A > 32", h > 32);
+    obs("hc: TK16A finished", sh.v[0][W_DONE]);
+    obs("hc: TK16A SetHandleCount(0)", sh.v[0][W_HC0]);
+    obs("hc: TK16A SetHandleCount(30)", sh.v[0][W_HC1]);
+    obs("hc: ours SetHandleCount(0) after", SetHandleCount(0));
+    wait_gone(h);
+}
+
 int __cdecl tmain(void)
 {
     WORD n, i;
@@ -311,6 +333,7 @@ int __cdecl tmain(void)
     environment();
     twodata();
     renamed();
+    handles();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

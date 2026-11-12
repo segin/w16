@@ -104,6 +104,10 @@ int __cdecl tmain(void)
     if (mode == 'W')
         for (n = 0; n < 400 && !sh->go; n++)
             K_YIELD();
+    if (mode == 'H') {
+        v[W_HC0] = SetHandleCount(0);
+        v[W_HC1] = SetHandleCount(30);
+    }
     v[W_DONE] = 1;
     return 0;
 }

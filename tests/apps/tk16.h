@@ -5,6 +5,7 @@
  * "<mode> <slot> <TK16's DS> <offset of tk16sh> <TK16's hTask>". Modes:
  *   R  report and exit
  *   W  report, then Yield() until TK16 sets `go`, then exit
+ *   H  report, with its handle counts (W_HC0, W_HC1), and exit
  */
 #define TK16_SLOTS  4
 #define TK16_SLOTW  48
@@ -29,5 +30,7 @@ enum {
     W_ENVPATH_END = W_ENVPATH + 3,
     W_ENV,              /* 8 words: the start of the environment */
     W_DONE = W_ENV + 8, /* set as it returns from its main */
+    W_HC0,              /* mode H: SetHandleCount(0) */
+    W_HC1,              /* mode H: then SetHandleCount(30) */
     W_COUNT
 };

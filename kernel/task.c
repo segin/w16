@@ -85,6 +85,7 @@ typedef struct taskx {
     u16 dg_sel, dg_hnd;         /* its DGROUP */
     u16 stack_size, heap_size, sp;
     u16 hprev;
+    u16 handles;                /* SetHandleCount's count (0: 20) */
 } taskx;
 
 static taskx FAR *tx_first;
@@ -96,6 +97,20 @@ static taskx FAR *tx_of(u16 t)
         if (x->htask == t)
             return x;
     return NULL;
+}
+
+/* file.c (SetHandleCount): the current task's handle count, and setting
+   it (n: 0 reads it). Outside a task (booting) one count for KERNEL. */
+u16 task_handles(u16 n)
+{
+    static u16 boot_handles = 20;
+    taskx FAR *x = cur_task ? tx_of(cur_task) : NULL;
+    u16 FAR *p = x ? &x->handles : &boot_handles;
+    if (!*p)
+        *p = 20;
+    if (n)
+        *p = n;
+    return *p;
 }
 
 u16 get_winflags(void)
@@ -207,6 +222,22 @@ static u16 rm_int(u8 n, u16 ax, u16 bx, u16 dx, u16 si)
     r.ds = 0;
     dpmi31(&r);
     return (u16)rmc.eax;
+}
+
+/* INT n in real mode with AX and ES (DOS 49h: free the block at ES) */
+static void rm_int_es(u8 n, u16 ax, u16 es)
+{
+    regs16 r;
+    kmemset(&rmc, 0, sizeof rmc);
+    rmc.eax = ax;
+    rmc.es = es;
+    r.ax = 0x0300;
+    r.bx = n;
+    r.cx = 0;
+    r.di = FP_OFF((void FAR *)&rmc);
+    r.es = FP_SEG((void FAR *)&rmc);
+    r.ds = 0;
+    dpmi31(&r);
 }
 
 static u16 seg_of(u16 sel)
@@ -661,6 +692,14 @@ void __cdecl task_exit_c(u16 code)
         r.bx = i;
         r.ds = r.es = 0;
         dos21(&r);
+    }
+    /* a handle table SetHandleCount made (DOS 6700h: a DOS block, its
+       far pointer at PDB 34h) goes with the task; it stayed allocated
+       (KERNEL audit #10) */
+    {
+        u16 jseg = *(u16 FAR *)MK_FP(pdb, 0x36);
+        if (jseg && jseg != seg_of(pdb))
+            rm_int_es(0x21, 0x4900, jseg);
     }
     for (pp = &tx_first; *pp; pp = &(*pp)->next)
         if (*pp == x) {

@@ -624,19 +624,22 @@ u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136
     return r.ax == 0 ? DRIVE_REMOVABLE : DRIVE_FIXED;
 }
 
-static u16 handle_count = 20;
+/* observed: the count only grows, from 20 up to 255; it is the task's
+   own (tests/apps/tk16.c "hc": a task started after another raised its
+   count to 40 starts from 20). It is kept per task (task.c); DOS's 6700h
+   makes the handle table of the task's PDB at least that big. w16 had one count for all tasks (KERNEL audit #10) */
+u16 task_handles(u16 n);                /* task.c */
 
-/* observed: the count only grows, from 20 up to 255 */
 u16 KAPI_ES SetHandleCount(u16 n)                                  /* KERNEL.199 */
 {
     regs16 r;
     if (n > 255)
         n = 255;
-    if (n > handle_count) {
+    if (n > task_handles(0)) {
         rinit(&r, 0x6700);
         r.bx = n;
-        if (dos_call(&r))
-            handle_count = n;
+        if (dos_call(&r))       /* DOS may round the table up (DOSBox: even) */
+            task_handles(n);
     }
-    return handle_count;
+    return task_handles(0);
 }
