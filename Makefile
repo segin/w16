@@ -1175,6 +1175,13 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US13: menus in USER's menu heaps; GetFreeSystemResources (tests/apps/us13.c)
+$(B)/tests/us13.o: tests/apps/us13ref.h tests/apps/tklog.h
+$(DOS)/US13.EXE: $(B)/tests/start.o $(B)/tests/us13.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us13.map file { $(B)/tests/start.o $(B)/tests/us13.o }
+dos: $(DOS)/US13.EXE
 # US12: GetFocus inside WM_KILLFOCUS and WM_SETFOCUS (tests/apps/us12.c)
 $(B)/tests/us12.o: tests/apps/us12ref.h tests/apps/tklog.h
 $(DOS)/US12.EXE: $(B)/tests/start.o $(B)/tests/us12.o tests/apps/app.lnk
