@@ -1283,6 +1283,13 @@ $(DOS)/US18.EXE: $(B)/tests/start.o $(B)/tests/us18.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us18.map file { $(B)/tests/start.o $(B)/tests/us18.o }
 dos: $(DOS)/US18.EXE
+# US19: dragging a scroll bar's thumb with real input (tests/apps/us19.c)
+$(B)/tests/us19.o: tests/apps/us19ref.h tests/apps/tklog.h
+$(DOS)/US19.EXE: $(B)/tests/start.o $(B)/tests/us19.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us19.map file { $(B)/tests/start.o $(B)/tests/us19.o }
+dos: $(DOS)/US19.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
