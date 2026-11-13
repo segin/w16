@@ -83,7 +83,9 @@ static void init(frstate FAR *st, HWND dlg)
         enable(dlg, chx2, FALSE);
     if (!(fl & FR_SHOWHELP))
         hide(dlg, pshHelp);
-    update_buttons(st, dlg);
+    /* observed: the dialog tells itself, WM_COMMAND edt1 EN_CHANGE with
+       no window (the hook sees it before WM_INITDIALOG) */
+    SendMessage(dlg, WM_COMMAND, edt1, MAKELONG(0, EN_CHANGE));
 }
 
 /* tell the owner: action is FR_FINDNEXT, FR_REPLACE or FR_REPLACEALL */

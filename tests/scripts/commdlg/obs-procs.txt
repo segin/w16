@@ -1,4 +1,4 @@
-; which window procedures each dialog and its controls have (hook bit 10),
+; observation (run with -n): which window procedures each dialog and its controls have (hook bit 10)
 ; and the hook's messages; every dialog closed with Escape
 expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
 ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
