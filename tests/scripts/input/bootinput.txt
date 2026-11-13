@@ -134,6 +134,21 @@ sleep 0.3
 ; before MOUSE took input, in one run and not the other)
 waitpixel 100 54 0000aa 90
 settle 20 2
+; DOSBox (autolock) takes the mouse on a click only once a mouse driver
+; has asked for it (DOSBox 0.74-3: the BIOS's C207h and C200h set its
+; "requestlock"; HandleMouseButton captures on a click then and does not
+; pass that press on), and until it has the mouse it passes no motion on.
+; The click above comes a second in: on a quicker boot after MOUSE.DRV's
+; set-up (MS1: the PS/2 handler's first call is the release alone, 0008h),
+; on a slower one before it: DOSBox passed it on as a press and release
+; (MS1: 0009h, 0008h, in the gap after C200h) and never took the mouse, and
+; no motion reached Windows (w16's KERNEL boots MOUSE.DRV later: 12 in 12
+; runs). A right click now with the X pointer over DOSBox's window takes
+; the mouse if DOSBox has not; if it has, Windows gets a right click,
+; which does nothing in Program Manager
+center
+click 3
+sleep 0.5
 ; the pointer home before the first screen: where the moves made during
 ; the boot leave it depends on when MOUSE is enabled, which differs with
 ; the boot's speed (Windows 3.1 itself ends at 320,240 or 260,200 from
