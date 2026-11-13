@@ -62,20 +62,32 @@ key f
 matchnow 05-filemenu 20 1.5
 key Escape
 key Escape
-; to Program Manager and back
+; to Program Manager and back. The pointer stays in the screen's middle;
+; the window that comes up under it sets its shape (Program Manager's
+; and the Task List's the arrow, Notepad's text the I-beam) only some
+; time later: under load Windows 3.1's was still the I-beam over the Task
+; List 2 seconds after Ctrl+Esc. Each shot waits for the right shape
+; first: a pixel of the I-beam's top serif (318,231), black for the
+; I-beam, white for the arrow
 key alt+Tab
+waitpixel 318 231 ffffff 20
 matchnow 06-alttab 20 2
 key alt+Tab
+waitpixel 318 231 000000 20
 matchnow 07-back 20 2
 ; the Task List
 key ctrl+Escape
+waitpixel 318 231 ffffff 20
 matchnow 08-tasklist 20 2
 key Escape
+waitpixel 318 231 000000 20
 matchnow 09-closed 20 2
 ; Alt+Esc to Program Manager, Alt+Esc back
 key alt+Escape
+waitpixel 318 231 ffffff 20
 matchnow 10-altesc 20 2
 key alt+Escape
+waitpixel 318 231 000000 20
 matchnow 11-altesc-back 20 2
 ; closed without saving
 key alt+F4

@@ -251,7 +251,7 @@
 # The cases that took longest last time (build/boottest-times.txt, kept
 # by each run) start first; the output stays in case order. Cases made of
 # independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us,
-# winfile@cmp/all: see caseparts), scheduled like cases and summed up in
+# winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
 # the case's one line; a part can be run by name (tests/boottest.sh
 # allw16nolock@3).
 set -eu
@@ -1167,7 +1167,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # the run's timing)
         mdrv=$root/build/dos/MOUSE.DRV
         r=ok
-        for s in dragoff pmitems pmclose helpmenus; do
+        for s in ${part:-dragoff pmitems pmclose helpmenus}; do
             case $s in pmitems|pmclose) b=40 t=240 ;; *) b=25 t=200 ;; esac
             scr=$root/tests/scripts/input/$s.txt
             refrun mouse-$s-ref mouse "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/mouse-$s-ref" -r
@@ -1179,15 +1179,16 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
                 [ -f "$out/mouse-$s-w16/$g" ] || { r="$s: no $g"; break; }
                 m="rectangle 0,0 0,0"
                 [ $s = helpmenus ] && m="rectangle 14,42 20,61"
-                magick "$f" -fill black -draw "$m" "$out/mouse-a.png"
-                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-b.png"
-                n=$(magick compare -metric AE "$out/mouse-b.png" "$out/mouse-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "$m" "$out/mouse-$s-a.png"
+                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-$s-b.png"
+                n=$(magick compare -metric AE "$out/mouse-$s-b.png" "$out/mouse-$s-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
             done
             [ "$r" = ok ] || break
         done
-        if [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
         else echo "FAIL mouse: $r ($out)"; fails=$((fails + 1)); fi ;;
     mouseall)
         fon=$root/build/fonts
@@ -1237,7 +1238,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # icons: Clock's icon)
         kdrv=$root/build/dos/KEYBOARD.DRV
         r=ok
-        for s in kbtype tabs alttab helpmenus pmkeys icons menus; do
+        for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus}; do
             scr=$root/tests/scripts/input/$s.txt
             case $s in
             helpmenus) m="rectangle 14,42 20,61" ;;
@@ -1254,15 +1255,16 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             for f in "$out/kbd-$s-ref"/[0-9]*.png; do
                 g=$(basename "$f")
                 [ -f "$out/kbd-$s-w16/$g" ] || { r="$s: no $g"; break; }
-                magick "$f" -fill black -draw "$m" "$out/kbd-a.png"
-                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-b.png"
-                n=$(magick compare -metric AE "$out/kbd-b.png" "$out/kbd-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "$m" "$out/kbd-$s-a.png"
+                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-$s-b.png"
+                n=$(magick compare -metric AE "$out/kbd-$s-b.png" "$out/kbd-$s-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
             done
             [ "$r" = ok ] || break
         done
-        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
         else echo "FAIL kbd: $r ($out)"; fails=$((fails + 1)); fi ;;
     kbdall)
         # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
@@ -1378,7 +1380,7 @@ done
 # that are scheduled like cases (CASE@PART, run by name too): allw16nolock
 # (one part per run, its deliberate timings unchanged), pmdrop (w16
 # PROGMAN; PROGMAN and SHELL; USER and GDI), winfile (the comparison;
-# every w16 part). A part records its result (partdone) and prints only
+# every w16 part), kbd and mouse (one part per script). A part records its result (partdone) and prints only
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
 caseparts() {
@@ -1386,6 +1388,8 @@ caseparts() {
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
     pmdrop) echo "$1@pm $1@sh $1@us" ;;
     winfile) echo "$1@cmp $1@all" ;;
+    kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
+    mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     *) echo "$1" ;;
     esac
 }
@@ -1394,7 +1398,7 @@ partdone() { echo "$1" > "$out/.part-$c-$part"; }
 # partsummary CASE: the case's line from its parts' results
 partsummary() {
     pt=0 pbad=0 pfirst=
-    for pp in $(caseparts "$1"); do
+    for pp in $(grep "^$1@" "$out/.names"); do   # the parts this run has
         pt=$((pt + 1))
         pr=$(cat "$out/.part-$1-${pp#*@}" 2>/dev/null || echo "part ${pp#*@} stopped before its end")
         [ "$pr" = ok ] && continue
@@ -1407,6 +1411,12 @@ partsummary() {
     pmdrop)
         if [ $pbad = 0 ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $pfirst"; fi ;;
+    kbd)
+        if [ $pbad = 0 ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbd: $pfirst ($out)"; fi ;;
+    mouse)
+        if [ $pbad = 0 ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        else echo "FAIL mouse: $pfirst ($out)"; fi ;;
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;
