@@ -110,7 +110,15 @@ key BackSpace
 key Delete
 settle 60 2
 matchnow 02-edited 20 2
-; Alt menus: the Edit menu by Alt+E, then Search by Right
+; Alt menus: the Edit menu by Alt+E, then Search by Right. While a menu
+; is open, Windows 3.1's USER leaves Notepad's caret as it was when the
+; menu opened, shown or hidden, by the blink's phase then: one side's shot
+; had it, the other's not (30 pixels, kbd and sysdrv). So the caret goes
+; first to where every one of these menus covers it: the first line, 11
+; characters in (x 104; the Edit, Search and File menus all span 92-120)
+key ctrl+Home
+key Right Right Right Right Right Right Right Right Right Right Right
+settle 60 2
 key alt+e
 settle 60 2
 matchnow 03-editmenu 20 1.5
