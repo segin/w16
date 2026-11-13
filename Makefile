@@ -1208,6 +1208,16 @@ $(DOS)/US15.EXE: $(B)/tests/start.o $(B)/tests/us15.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us15.map file { $(B)/tests/start.o $(B)/tests/us15.o }
 dos: $(DOS)/US15.EXE
+# US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
+$(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
+$(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us16.map file { $(B)/tests/start.o $(B)/tests/us16.o }
+$(DOS)/US16A.EXE: $(DOS)/US16.EXE
+	cp $< $@
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/US16.EXE $(DOS)/US16A.EXE
 # US13: the caret's blink (tests/apps/us13.c)
 $(B)/tests/us13.o: tests/apps/us13ref.h tests/apps/tklog.h
 $(DOS)/US13.EXE: $(B)/tests/start.o $(B)/tests/us13.o tests/apps/app.lnk
