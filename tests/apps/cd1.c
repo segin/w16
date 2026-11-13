@@ -34,7 +34,10 @@
  * (hook returns 1), 4 hook returns TRUE from WM_INITDIALOG, 8 log every
  * message (not only the interesting ones), 10 half a second after
  * WM_INITDIALOG log which window procedures the dialog and its controls
- * have (by COMMDLG export name, or the control's class name).
+ * have (by COMMDLG export name, or the control's class name), 40 (Color
+ * dialog, CC_FULLOPEN) run the colour probe: type RGB values into the Red,
+ * Green and Blue boxes and log what Hue, Sat and Lum show, then HLS values
+ * into those and log Red, Green, Blue (colorprobe() below), then Cancel.
  * Only documented APIs are used.
  */
 #include <windows.h>
@@ -248,6 +251,8 @@ BOOL CALLBACK __export CdHook(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     }
     if (msg == WM_INITDIALOG && (hookbits & 0x10))
         PostMessage(owner, WM_USER + 1, (WPARAM)dlg, 0);
+    if (msg == WM_INITDIALOG && (hookbits & 0x40))
+        PostMessage(owner, WM_USER + 2, (WPARAM)dlg, 0);
     if (msg == WM_INITDIALOG && (hookbits & 4))
         return TRUE;
     if (msg == m_fileok && (hookbits & 2) && !refused) {
@@ -549,6 +554,88 @@ static void find_call(char *a, BOOL replace)
     frdlg = NULL;
 }
 
+/* ---- the colour probe (hook bit 40) ----
+ * The Color dialog's own conversion, black-box: values typed into its
+ * Red/Green/Blue boxes (IDs 2C2h-2C4h) and what its Hue/Sat/Lum boxes
+ * (2BFh-2C1h) show, and the other way round. The lines are collected in
+ * memory and written at the end (one file write per line is too slow). */
+static LPSTR probe_buf;
+static WORD probe_len;
+
+static void probe_out(LPCSTR s)
+{
+    int n = lstrlen(s);
+    if (!probe_buf)
+        probe_buf = (LPSTR)GlobalLock(GlobalAlloc(GMEM_FIXED, 60000));
+    if (probe_buf && probe_len + n >= 60000) {     /* full: out with it */
+        out(probe_buf);
+        probe_len = 0;
+        probe_buf[0] = 0;
+    }
+    if (probe_buf && probe_len + n < 60000) {
+        lstrcpy(probe_buf + probe_len, s);
+        probe_len += n;
+    }
+}
+
+static void put3(HWND dlg, int id0, int a, int b, int c)
+{
+    SetDlgItemInt(dlg, id0, a, FALSE);
+    SetDlgItemInt(dlg, id0 + 1, b, FALSE);
+    SetDlgItemInt(dlg, id0 + 2, c, FALSE);
+}
+
+static void probe_one(HWND dlg, BOOL rgb, int a, int b, int c)
+{
+    char t[64], x[3][8];
+    int i;
+    put3(dlg, rgb ? 0x2C2 : 0x2BF, a, b, c);
+    for (i = 0; i < 3; i++)
+        GetDlgItemText(dlg, (rgb ? 0x2BF : 0x2C2) + i, x[i], sizeof x[i]);
+    wsprintf(t, "%s %d %d %d -> %s %s %s\r\n", (LPSTR)(rgb ? "rgb" : "hls"), a, b, c,
+             (LPSTR)x[0], (LPSTR)x[1], (LPSTR)x[2]);
+    probe_out(t);
+}
+
+static void colorprobe(HWND dlg)
+{
+    static const int v[] = { 0, 1, 2, 3, 7, 15, 16, 31, 32, 63, 64, 85, 100, 127, 128,
+                             129, 170, 191, 192, 200, 223, 224, 239, 240, 250, 254, 255 };
+    int r, g, b, h, s, l, n = sizeof v / sizeof v[0];
+    WORD seed = 12345;                      /* 16-bit LCG: no long multiply */
+    probe_out("CD1 colorprobe\r\n");
+    for (r = 0; r < n; r++)                 /* a grid of values that matter */
+        for (g = 0; g < n; g += 2)
+            for (b = 0; b < n; b += 3)
+                probe_one(dlg, TRUE, v[r], v[g], v[b]);
+    for (r = 0; r < 300; r++) {             /* and pseudo-random colours */
+        int x, y;
+        seed = seed * 25173u + 13849u;
+        x = seed >> 8;
+        seed = seed * 25173u + 13849u;
+        y = seed >> 8;
+        seed = seed * 25173u + 13849u;
+        probe_one(dlg, TRUE, x, y, seed >> 8);
+    }
+    for (h = 0; h < 240; h += 7)
+        for (s = 0; s <= 240; s += 40)
+            for (l = 0; l <= 240; l += 24)
+                probe_one(dlg, FALSE, h, s, l);
+    for (r = 0; r < 200; r++) {
+        int x, y;
+        seed = seed * 25173u + 13849u;
+        x = (seed >> 4) % 240;
+        seed = seed * 25173u + 13849u;
+        y = (seed >> 4) % 241;
+        seed = seed * 25173u + 13849u;
+        probe_one(dlg, FALSE, x, y, (seed >> 4) % 241);
+    }
+    if (probe_buf && probe_len)
+        out(probe_buf);
+    probe_len = 0;
+    PostMessage(dlg, WM_COMMAND, IDCANCEL, 0);
+}
+
 /* which COMMDLG export, or which class's procedure, `proc` is */
 static void procname(FARPROC proc)
 {
@@ -596,6 +683,10 @@ static void procs(HWND dlg)
 
 LRESULT CALLBACK __export Cd1WndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
+    if (msg == WM_USER + 2) {
+        colorprobe((HWND)wp);
+        return 0;
+    }
     if (msg == WM_USER + 1) {
         DWORD end = GetTickCount() + 500;
         MSG m;
