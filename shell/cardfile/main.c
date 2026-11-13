@@ -366,9 +366,23 @@ void do_command(WORD id)
             break;
         /* the 3.0 type always asks first, pictures or not; No saves
            nothing (CF13) */
-        if (fmt == FMT_MGC &&
-            msg_box(IDS_SAVE30, NULL, MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
+        if (fmt == FMT_MGC) {
+            /* behind the box the original shows the card without its
+               picture, and the same picture as before after the save
+               (convert and picture scenarios) */
+            BOOL yes;
+            int kind = g_pic.kind;
+            if (!body_store())
+                break;
+            g_pic.kind = PIC_NONE;          /* kept, not drawn */
+            InvalidateRect(g_edit, NULL, TRUE);
+            yes = msg_box(IDS_SAVE30, NULL, MB_YESNO | MB_ICONEXCLAMATION) == IDYES;
+            g_pic.kind = kind;
+            if (yes)
+                file_save(path, fmt);
+            InvalidateRect(g_edit, NULL, TRUE);
             break;
+        }
         file_save(path, fmt);
         break;
     case IDM_MERGE:

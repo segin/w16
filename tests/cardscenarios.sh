@@ -14,6 +14,8 @@
 # baseline can be tightened. CF_BASELINE=update rewrites the baseline.
 # Input files a scenario needs are named on its "; needs:" line and come
 # from tests/scripts/cf/ (card files made by the original, see there).
+# CF_COMMDLG=w16 runs ours on w16's COMMDLG.DLL (its own baseline,
+# tests/scripts/cf-commdlg.baseline).
 #   usage: tests/cardscenarios.sh [scenario...]   (default: all)
 #   output: build/ref/cfscen/<date-time>/<scenario>/{orig,w16}
 set -eu
@@ -26,12 +28,20 @@ base=$root/tests/scripts/cf.baseline
 [ -f "$base" ] || : > "$base"
 newbase=$(mktemp); trap 'rm -f "$newbase"' EXIT
 status=0
+# CF_COMMDLG=w16: w16's run uses w16's COMMDLG.DLL (build/dos) as well, so
+# its Open, Save As, Find and Print Setup are ours against Microsoft's
+w16dlls=
+if [ "${CF_COMMDLG:-}" = w16 ]; then
+    w16dlls=$root/build/dos/COMMDLG.DLL=WINDOWS/SYSTEM/COMMDLG.DLL
+    base=$root/tests/scripts/cf-commdlg.baseline
+    [ -f "$base" ] || : > "$base"
+fi
 mkdir -p "$out"
 echo "output: $out"
 for n in $names; do
     needs=$(sed -n 's/^; needs: *//p' "$dir/$n.txt" | tr ' ' '\n' | sed "s|^|$dir/|" | tr '\n' ' ')
     CFRUN_GET=WINDOWS/WIN.INI "$root/tests/cfrun.sh" "$dir/$n.txt" "$out/$n/orig" $needs > /dev/null &
-    CFRUN_OURS=1 CFRUN_GET=WINDOWS/WIN.INI "$root/tests/cfrun.sh" "$dir/$n.txt" "$out/$n/w16" $needs > /dev/null
+    CFRUN_OURS=1 CFRUN_GET=WINDOWS/WIN.INI "$root/tests/cfrun.sh" "$dir/$n.txt" "$out/$n/w16" $needs $w16dlls > /dev/null
     wait
     result=ok
     for f in "$out/$n"/orig/*.CRD "$out/$n/orig/WIN.INI"; do
