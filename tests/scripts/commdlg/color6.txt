@@ -1,0 +1,42 @@
+; ChooseColor: typing into the edits (reached with Tab from the basic
+; colours: custom colours, OK, Cancel, then Hue Sat Lum Red Green Blue)
+cd1 color flags=13 rgb=4080C0 hook=1
+wait 7000
+key 09
+key 09
+key 09
+key 09
+wait 500
+focus
+type 300
+wait 1000
+key 09
+wait 1000
+dump
+type x
+wait 1000
+key 09
+wait 1000
+dump
+key 09
+key 09
+wait 500
+focus
+type 77
+wait 1000
+key 09
+wait 1000
+snap C:\E1.BMP
+dump
+key 09
+type
+wait 500
+key 08
+key 08
+key 08
+wait 1000
+key 09
+wait 1000
+dump
+key 0D
+wait 3000

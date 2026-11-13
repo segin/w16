@@ -1,0 +1,97 @@
+; Print: the nested Setup (and what follows it), page checks
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+; a: Setup button, landscape there, OK; then Cancel (Setup hook apart)
+cd1 print flags=3000 hook=21 copies=1
+cd1 wait 1000
+; b: Setup button, Cancel there; then OK
+cd1 print flags=3000 hook=21 copies=1
+cd1 wait 1000
+; c-h: pages and copies checked one at a time (OK, the message, Cancel)
+cd1 print flags=1002 hook=1 from=1 to=3 min=2 max=5 copies=1
+cd1 wait 1000
+cd1 print flags=1002 hook=1 from=6 to=3 min=2 max=5 copies=1
+cd1 wait 1000
+cd1 print flags=1002 hook=1 from=2 to=1 min=2 max=5 copies=1
+cd1 wait 1000
+cd1 print flags=1002 hook=1 from=2 to=9 min=2 max=5 copies=1
+cd1 wait 1000
+cd1 print flags=1002 hook=1 from=4 to=3 min=2 max=5 copies=1
+cd1 wait 1000
+cd1 print flags=1000 hook=1 from=4 to=3 min=2 max=5 copies=1
+wait 3000
+; a
+clickid 400
+wait 1500
+clickid 421
+wait 300
+clickid 1
+wait 1500
+focus
+snap C:\A1.BMP
+clickid 2
+wait 2500
+; b
+clickid 400
+wait 1500
+clickid 2
+wait 1500
+focus
+snap C:\B1.BMP
+clickid 1
+wait 2500
+; c
+clickid 1
+wait 1000
+snap C:\C1.BMP
+dump
+key 0D
+wait 800
+focus
+snap C:\C2.BMP
+clickid 2
+wait 2500
+; d
+clickid 1
+wait 1000
+dump
+key 0D
+wait 800
+focus
+clickid 2
+wait 2500
+; e
+clickid 1
+wait 1000
+dump
+key 0D
+wait 800
+focus
+clickid 2
+wait 2500
+; f
+clickid 1
+wait 1000
+dump
+key 0D
+wait 800
+focus
+clickid 2
+wait 2500
+; g: From > To
+clickid 1
+wait 1000
+snap C:\G1.BMP
+dump
+key 0D
+wait 800
+focus
+clickid 2
+wait 2500
+; h: All with From > To: OK
+clickid 1
+wait 2000

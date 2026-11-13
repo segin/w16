@@ -286,6 +286,10 @@ void nc_paint(HWND h, HRGN rgn, BOOL active);
 LONG nc_hittest(PWND w, POINT pt);
 void nc_calcsize(PWND w, RECT *rc);
 
+/* ---- the desktop's version stamp (deskver.c; [w16] DesktopVersion) ---- */
+void deskver_init(void);
+void deskver_paint(HDC hdc, const RECT *rc);
+
 /* ---- menus (menu.c) ---- */
 void menu_heaps_init(void);
 void sbmenu_init(void);

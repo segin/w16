@@ -8,9 +8,11 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
-#   odstring   TK56 as the shell calls OutputDebugString: the screen against
-#              3.1's (which shows the text: handle 3 is DOSBox's console)
-#                                                   must be 0
+#   odstring   TK56 as the shell calls OutputDebugString: with dropin.sh's
+#              stock DebugToAux=1 the screen against 3.1's (which shows the
+#              text: handle 3 is DOSBox's console), must be 0; with w16's
+#              default DebugToAux=0 against TK56's screen without the calls
+#              (the text never on the screen), must be 0
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
@@ -150,6 +152,9 @@
 #              port) against the same with Microsoft's COMM.DRV: CM1's log
 #              and the far end's records identical (not cached: the
 #              far end is part of the run)
+#   commdlg    w16's COMMDLG.DLL over Microsoft's in the reference install:
+#              open1, find1, color1, font1, print1 of tests/commdlgscen.sh
+#              (the probe's log identical, screens within the baseline)
 #   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
 #              DOSX, USER and GDI under real key input: typing in Notepad
 #              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
@@ -185,6 +190,18 @@
 #              compared in helpmenus, pmclose ...), so its run's screen,
 #              the menu left open (sbmenu-on.png), is kept to look at but
 #              not compared
+#   deskver    w16's desktop version stamp (a w16 extension,
+#              user/deskver.c; every other case runs with it off, as
+#              tests/dropin.sh's default [w16] DesktopVersion=0): with 0,
+#              w16's USER and GDI on w16's KRNL286 against all-Microsoft,
+#              must be 0 pixels; with every w16 part (fonts and PROGMAN
+#              too), Program Manager dragged over the stamp and back
+#              (tests/scripts/input/deskver.txt) with 0 and with 1: each
+#              screen with 1 must be the one with 0 plus the stamp as
+#              tools/deskstamp.py draws it from w16's System font (exact
+#              where the corner is uncovered; only the stamp's pixels
+#              where the window covers part of it; only inside its box
+#              under the drag frame) (tests/scripts/deskver.py)
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
 # "INITDONE=Final USER" fails whatever the pixels say.
@@ -272,7 +289,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -560,12 +577,24 @@ runcase() {
         # TK56 as the shell calls OutputDebugString and waits. Windows
         # 3.1's retail KERNEL writes the text to DOS handle 3 (AUX), which
         # in DOSBox is the console: it is painted over the screen, with
-        # WIN's output redirected to a file as here. w16 wrote it to
-        # handle 1 (into the file here; over the screen in a session
-        # without the redirect): the screens differed
+        # WIN's output redirected to a file as here. Stock setting
+        # (dropin.sh's DebugToAux=1): against 3.1's screen. w16's default
+        # (DebugToAux=0: AUX only when it is not the console): the screen
+        # must be the one TK56 leaves without the calls (tail "q")
         set -- -f "$root/build/dos/TK56.EXE=TK56.EXE" -i 'boot:shell=C:\TK56.EXE'
         refrun odsref odstring boot -r "$@"; expect=$out/odsref.png
-        boot odstring "$@"; check odstring odstring odsref ;;
+        boot odstring "$@"; check odstring odstring odsref
+        expect=
+        boot odsquiet -c 'WIN /S /B q' "$@"
+        boot odsdefault -i w16:DebugToAux=0 "$@"
+        if booted odsquiet && booted odsdefault; then
+            n=$(magick compare -metric AE "$out/odsdefault.png" "$out/odsquiet.png" "$out/odsdefault-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            if [ "$n" = 0 ]; then echo "ok   odstring default: the text kept off the screen (0 pixels against no calls)"
+            else echo "FAIL odstring default: $n pixels differ from the screen without the calls ($out/odsdefault-diff.png)"; fails=$((fails + 1)); fi
+        else
+            echo "FAIL odstring default: a boot did not complete ($out/odsdefault.txt, $out/odsquiet.txt)"; fails=$((fails + 1))
+        fi ;;
     lastexit)
         # the shell (TK55) ends at once with exit code 5: Windows ends
         # through USER's ExitWindows (KERNEL, last task); a batch file
@@ -1182,6 +1211,50 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
         else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
+    deskver)
+        # the desktop's version stamp (a w16 extension, user/deskver.c):
+        # off, w16's USER and GDI give 3.1's screen; on, every w16 part,
+        # the drag script run with it off and on (the on run waits for
+        # the off run's screens, the stamp's box left out), each screen as
+        # tools/deskstamp.py says (tests/scripts/deskver.py)
+        ref
+        boot deskver-stock -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -i w16:DesktopVersion=0
+        r=ok
+        if ! booted deskver-stock; then
+            r="DesktopVersion=0: the boot did not complete ($out/deskver-stock.txt)"
+        else
+            n=$(magick compare -metric AE "$out/deskver-stock.png" "$out/ref.png" "$out/deskver-stock-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="DesktopVersion=0: the screen differs from 3.1's by $n pixels ($out/deskver-stock-diff.png)"
+        fi
+        if [ "$r" = ok ]; then
+            fon=$root/build/fonts
+            dvrun() {   # SETTING DIR [inputrun.sh options]
+                _v=$1 _d=$2; shift 2
+                "$root/tests/inputrun.sh" "$@" -s -b 30 -t 150 "$root/tests/scripts/input/deskver.txt" "$_d" \
+                    -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                    -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD" -f "$root/build/dos/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" \
+                    -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                    -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                    -i "w16:DesktopVersion=$_v" > "$_d.txt" 2>&1 || true
+            }
+            dvtext=$(python3 "$root/tools/deskstamp.py" --text Standard)
+            dvbox=$(python3 "$root/tools/deskstamp.py" "$fon/VGASYS.FON" "$dvtext" --box 640 480)
+            dvrun 0 "$out/deskver-off"
+            # shellcheck disable=SC2086
+            set -- $dvbox
+            dvrun 1 "$out/deskver-on" -E "$out/deskver-off" \
+                -M "rectangle $1,$2 $(($1 + $3 - 1)),$(($2 + $4 - 1))"
+            if ! python3 "$root/tests/scripts/deskver.py" "$fon/VGASYS.FON" "$dvtext" \
+                "$out/deskver-off" "$out/deskver-on" boot,04-back 02-down,03-back-moving 01-down-moving \
+                > "$out/deskver-check.txt" 2>&1; then
+                r="DesktopVersion=1: $(grep -c '^FAIL' "$out/deskver-check.txt") screen(s) wrong ($out/deskver-check.txt)"
+            fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   deskver: \"$dvtext\" as drawn by tools/deskstamp.py (5 screens); DesktopVersion=0 as 3.1"
+        else echo "FAIL deskver: $r"; fails=$((fails + 1)); fi ;;
     mouse)
         # each script with Microsoft's MOUSE.DRV and with w16's; nothing
         # else differs: no part of any screen is left out but Notepad's
@@ -1243,6 +1316,18 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
         else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
+    commdlg)
+        # w16's COMMDLG.DLL against Microsoft's on the reference 3.1
+        # (tests/commdlgscen.sh, ARCHITECTURE.md 17): one scenario of each
+        # dialog; the probe's log identical, the screens within
+        # tests/scripts/commdlg.baseline (our own pictures)
+        if CD_OUT="$out/commdlg" "$root/tests/commdlgscen.sh" open1 find1 color1 font1 print1 \
+                > "$out/commdlg.txt" 2>&1; then
+            echo "ok   commdlg: Open, Find, Color, Font, Print as the original's"
+        else
+            echo "FAIL commdlg: $(grep -m1 -E '^  ' "$out/commdlg.txt" || echo 'see commdlg.txt') ($out/commdlg.txt)"
+            fails=$((fails + 1))
+        fi ;;
     comm)
         # (both runs each time: commhost's records are part of the result)
         if "$root/tests/commprobe.sh" -p 4 -o "$out/comm" > "$out/comm.txt" 2>&1; then

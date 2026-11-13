@@ -1,0 +1,45 @@
+; ChooseColor: Define Custom Colors (Tab Tab Tab Space), then typing
+; into Hue (too big, then valid), Add to Custom Colors, OK
+cd1 color flags=11 rgb=4080C0 hook=1
+wait 7000
+key 09
+key 09
+key 09
+wait 500
+focus
+key 20
+wait 4000
+focus
+snap C:\D1.BMP
+dump
+type 300
+wait 1500
+dump
+key 09
+wait 500
+key 09
+wait 500
+key 09
+wait 500
+focus
+type 77
+wait 1500
+snap C:\D2.BMP
+dump
+key 09
+key 09
+key 09
+key 09
+wait 500
+focus
+key 20
+wait 1500
+snap C:\D3.BMP
+key 20
+wait 1500
+snap C:\D4.BMP
+key 09
+wait 500
+focus
+key 0D
+wait 4000

@@ -1,0 +1,47 @@
+; which window procedures each dialog and its controls have (hook bit 10),
+; and the hook's messages; every dialog closed with Escape
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+cd1 open flags=20 hook=11 filter=All|*.*
+cd1 save flags=20 hook=11 filter=All|*.*
+cd1 open flags=220 hook=11 filter=All|*.*
+cd1 color flags=10 hook=11
+cd1 color flags=12 hook=11
+cd1 font flags=101 hook=11
+cd1 find flags=100 hook=11
+cd1 replace flags=100 hook=11
+cd1 print flags=3000 hook=11
+cd1 print flags=3040 hook=11
+wait 2500
+snap C:\P1.BMP
+key 1B
+wait 2000
+snap C:\P2.BMP
+key 1B
+wait 2000
+snap C:\P3.BMP
+key 1B
+wait 2000
+snap C:\P4.BMP
+key 1B
+wait 2000
+snap C:\P5.BMP
+key 1B
+wait 2500
+snap C:\P6.BMP
+key 1B
+wait 2000
+snap C:\P7.BMP
+key 1B
+wait 2000
+snap C:\P8.BMP
+key 1B
+wait 2500
+snap C:\P9.BMP
+key 1B
+wait 2500
+snap C:\P10.BMP
+key 1B
+wait 1500

@@ -5,7 +5,7 @@
  * file (DROPIN_CONF='[serial]' 'serial1=file file:...'): the screen, WIN's
  * redirected output (C:\OUT.TXT) and COM1 tell. It then waits for ever,
  * so the screen can be compared (boot-test case odstring); with the
- * command tail "x" it ends after 3 seconds.
+ * command tail "x" it ends after 3 seconds, with "q" it calls nothing.
  */
 #include <windows.h>
 
@@ -24,9 +24,16 @@ int __cdecl tmain(void)
     WaitEvent(0);
     InitApp((HINSTANCE)init_regs[5]);
     out("TK56 start\r\n");
-    OutputDebugString(s1);
-    OutputDebugString(s2);
-    OutputDebugString("\r\n");
+    {
+        /* command tail "q": no OutputDebugString (the screen to compare
+           w16's default with: boot-test odstring) */
+        char FAR *t = (char FAR *)MAKELP(init_regs[6], init_regs[1]);
+        if (t[0] != 'q') {
+            OutputDebugString(s1);
+            OutputDebugString(s2);
+            OutputDebugString("\r\n");
+        }
+    }
     out("TK56 called\r\n");
     {
         /* with "x" as the command tail: end after 3 seconds (Windows then

@@ -1,0 +1,29 @@
+; where the file list scrolls when OK finds no such file
+cd1 open filter=All|*.* flags=1000
+cd1 open filter=All|*.* flags=1000
+cd1 open filter=All|*.* flags=1000
+wait 3000
+type zzz.txt
+key 0D
+wait 1000
+snap C:\T1.BMP
+key 0D
+wait 500
+key 1B
+wait 1000
+type setupx.txt
+key 0D
+wait 1000
+snap C:\T2.BMP
+key 0D
+wait 500
+key 1B
+wait 1000
+type sol.exe
+key 0D
+wait 1000
+snap C:\T3.BMP
+key 0D
+wait 500
+key 1B
+wait 1000
