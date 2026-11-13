@@ -7,6 +7,10 @@
 ; Every shot is taken in the caret's phase (matchnow NAME MAX S,
 ; tests/inputrun.sh): Notepad's caret may show on any of them (w16's USER
 ; keeps it blinking while a menu is open)
+; DOSBox takes the mouse (for the pointer moves below; the pointer is on
+; Program Manager's Main group, away from its items)
+click 1
+sleep 1
 key alt+f
 key r
 ; the Run dialog up (Program Manager's caption no longer active), then
@@ -62,20 +66,52 @@ key f
 matchnow 05-filemenu 20 1.5
 key Escape
 key Escape
-; to Program Manager and back
+; to Program Manager and back. The pointer stays in the screen's middle;
+; the window that comes up under it sets its shape (Program Manager's
+; and the Task List's the arrow, Notepad's text the I-beam) only when a
+; mouse message comes: without one, Windows 3.1's and w16's pointer stayed
+; the I-beam over the Task List for 20 s in some runs and changed in
+; others. After each switch, once the new window is active (the active
+; caption elsewhere: waitmoved), the pointer is moved 4 pixels and back
+; (the mouse taken by DOSBox with the click at the start): the mouse
+; messages set the shape on both sides
+markcolor 0000aa
 key alt+Tab
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 06-alttab 20 2
+markcolor 0000aa
 key alt+Tab
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 07-back 20 2
 ; the Task List
+markcolor 0000aa
 key ctrl+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 08-tasklist 20 2
+markcolor 0000aa
 key Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 09-closed 20 2
 ; Alt+Esc to Program Manager, Alt+Esc back
+markcolor 0000aa
 key alt+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 10-altesc 20 2
+markcolor 0000aa
 key alt+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
 matchnow 11-altesc-back 20 2
 ; closed without saving
 key alt+F4

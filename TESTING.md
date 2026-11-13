@@ -60,14 +60,20 @@ display, so they never open windows on your desktop.
 
 | Command | What it does | Time |
 |---|---|---|
-| `make test` | `tools/castcheck.py`, then the probe programs under w16's KERNEL with HDPMI16 (`tests/run-tests.sh`); with a reference install also the WIN.COM scenarios (`tests/wincom.sh`) and the font checks (`tests/fonts.sh -q`) | a few minutes |
-| `make boot-test` | boots real Windows 3.1 on w16's parts and compares every screen with the same boot on Microsoft's, pixel for pixel (`tests/boottest.sh`) | ~15 min at 3 jobs on a desktop; ~5 min at 12 jobs on a 20-core, 40-thread server |
+| `make test` | `tools/castcheck.py`, then the probe programs under w16's KERNEL, on HDPMI16 and on w16's own DOS extender (`tests/run-tests.sh`); with a reference install also the WIN.COM scenarios (`tests/wincom.sh`) and the font checks (`tests/fonts.sh -q`); all of it in parallel | ~12 s on a 20-core, 40-thread server; ~1 min at 8 threads; ~2 min one at a time |
+| `make boot-test` | boots real Windows 3.1 on w16's parts and compares every screen with the same boot on Microsoft's, pixel for pixel (`tests/boottest.sh`) | ~15 min at 3 jobs on a desktop; ~3.5 min at 12 or more jobs on a 20-core, 40-thread server, with `make test` beside it (`tools/remote-test.sh`) |
 | `tests/boottest.sh CASE ...` | only those boot-test cases (names and descriptions at the top of `tests/boottest.sh`) | |
-| `RUNTESTS_DPMI=dosx tests/run-tests.sh` | the probe programs on w16's own DOS extender instead of HDPMI16 | |
+| `RUNTESTS_DPMI=dosx tests/run-tests.sh` | the probe programs on w16's own DOS extender only (`hdpmi` only HDPMI16; `make test` uses `"hdpmi dosx"`) | |
+
+`make test` settings: `RUNTESTS_JOBS=N` probes at once (default: the
+machine's threads, at most 16), `WINCOM_JOBS=N` WIN.COM scenarios at once
+(default: half the threads, at most 12); `1` runs one at a time. Every probe
+runs in a scratch copy of its directory, so runs never share files.
 
 Boot-test settings:
 
-- `BOOTTEST_JOBS=N`: cases run at once (default 3). On a busy machine use fewer; timing-sensitive cases can fail under heavy load.
+- `BOOTTEST_JOBS=N`: cases run at once (default 3). On a busy machine use fewer; timing-sensitive cases can fail under heavy load. Cases made of independent sessions run as parts that are scheduled separately (`allw16nolock@1` ... `@6`, `pmdrop@pm`, `winfile@cmp`, `kbd@kbtype`, ...; a part can be run by name) and are reported as one line; the longest cases of the last run start first.
+- `INPUTRUN_KEYDELAY=MS`: time between keys typed into DOSBox (default 50; with xdotool's 12 a loaded DOSBox lost keys).
 - `BOOTTEST_REFRESH=1`: rerun the Windows 3.1 reference boots instead of using the cache in `build/refcache/` (the cache is keyed on everything a reference depends on, so you rarely need this).
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
@@ -131,8 +137,10 @@ tools/remote-test.sh -b -e DROPIN_INI=w16:ExtendedUserHeap=1 user write   # with
 - Each checkout or worktree gets its own directory there,
   `$W16_REMOTE_DIR/NAME` (default `/mnt/build/w16-runs/NAME`); the reference
   cache is shared between them.
-- `-j N` sets the boot test's jobs (default 12); at most `W16_REMOTE_SLOTS`
-  runs (default 3) use the host at once.
+- `-j N` sets the boot test's jobs (default: a third of the host's threads,
+  3 to 16; 13 on installation-05); at most `W16_REMOTE_SLOTS` runs (default 3)
+  use the host at once. With both suites asked for, `make test` runs beside
+  the boot test (at 8 probes at once) instead of before it.
 - The summaries and the failing cases' diffs come back to
   `build/remote-NAME/`; the host keeps its last 3 result directories.
 

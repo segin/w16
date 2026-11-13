@@ -233,8 +233,25 @@ else
     case $(printf '%s' "$cmd" | tr a-z A-Z) in *' /B'*) bootlog=$work/c/WINDOWS/BOOTLOG.TXT ;; esac
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 &
-dpid=\$! pids=
+# The emulator, with others running on the machine, now and then ends at
+# once with "Can't init SDL Couldn't open X11 display" or "... No
+# available video device" on a display that is there (DOSBox-X: 1 in 8
+# started together on one Xvfb, also when started one at a time; DOSBox:
+# once in about a thousand; UNVERIFIED why). The emulator
+# has not started then: it is started again, at most twice, and each
+# restart is reported ("emulator restarted"; boottest.sh logs it as a
+# retry). Nothing of the guest has run at that point.
+k=0
+while :; do
+    SDL_AUDIODRIVER=dummy timeout -k 10 $((secs + 5)) $emu -conf "$work/dosbox.conf" > "$work/emu.log" 2>&1 &
+    dpid=\$!
+    i=0
+    while [ \$i -lt 600 ] && kill -0 \$dpid 2>/dev/null && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
+    kill -0 \$dpid 2>/dev/null || ! grep -q "Can't init SDL" "$work/emu.log" || [ \$k -ge 2 ] || {
+        k=\$((k + 1)); echo "emulator restarted (\$k): \$(grep -m1 "Can't init SDL" "$work/emu.log")" >> "$work/emu.restarts"; continue; }
+    break
+done
+pids=
 for t in ${DROPIN_SHOTS:-}; do
     (sleep \$t; w=\$(xdotool search --name DOSBox 2>/dev/null | head -1); import -window "\${w:-root}" "$work/s-\$t.png") &
     pids="\$pids \$!"
@@ -279,6 +296,12 @@ SH
     chmod +x "$work/shot.sh"
     "$root/tests/xvfb.sh" "$work/shot.sh" || true
     cp "$work/s.png" "$shot"
+    # a one-colour screen (no window, or a failed capture): what the
+    # emulator said, for the report
+    [ ! -f "$work/emu.restarts" ] || { echo "== emulator restarted"; cat "$work/emu.restarts"; }
+    if [ "$(magick identify -format %k "$work/s.png" 2>/dev/null)" = 1 ]; then
+        echo "== emulator output (the screenshot is one colour)"; tail -n 20 "$work/emu.log" 2>/dev/null
+    fi
     for t in ${DROPIN_SHOTS:-}; do
         cp "$work/s-$t.png" "${shot%.png}-$t.png" 2>/dev/null || true
     done
