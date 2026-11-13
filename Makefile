@@ -1664,3 +1664,9 @@ $(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
 
 # COMMDLG.DLL and its probe (shell/commdlg/commdlg.mk)
 include shell/commdlg/commdlg.mk
+# MS5.COM: counts the idle calls (INT 28h, INT 2Fh 1689h) and INT 74h that
+# reach real mode (tests/dos/ms5.asm; TK49 reads it)
+$(DOS)/MS5.COM: tests/dos/ms5.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/MS5.COM

@@ -376,11 +376,17 @@ static void sti(void);
    WaitEvent with them disabled (observed: with them left so, USER's
    timer procedure, called from IRQ 0 through SYSTEM.DRV, ran 12 times in
    15 seconds instead of every 100 ms, and no WM_TIMER arrived). */
+/* Nothing to run: DOS's idle call. Windows 3.1's KRNL286 makes it in
+   real mode as often as w16's does (MS5, tests/dos/ms5.asm: about
+   455,000 INT 28h in 30 idle seconds each) and never INT 2Fh AX=1689h
+   (the kernel idle call to the 386 Enhanced mode VMM), which w16 made
+   on every pass as well; with it, DOSBox's mouse stopped for good after
+   the first motion in up to half the boots with motion from the start
+   (boot-test input, bootnolock.txt; drivers/mouse/README.md). */
 static void idle(void)
 {
     sti();
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
-    rm_int(0x2F, 0x1689, 1, 0, 0);      /* Windows kernel idle */
 }
 
 /* [w16] schedlog=1 (winboot.c): every switch is printed, with what
