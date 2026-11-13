@@ -76,8 +76,11 @@ static BOOL mgc_pic_read(HFILE f, WORD size, PICTURE *p)
     p->kind = PIC_BITMAP;
     p->cx = hdr[0];
     p->cy = hdr[1];
-    p->x = hdr[2];
-    p->y = hdr[3];
+    /* a 3.0 file places pictures in eighths of a character cell: a picture
+       15 pixels down (cy 15) was written as 8 (picture scenario).
+       UNVERIFIED: reading back (convert scenario, PIC30Y.CRD) */
+    p->x = MulDiv(hdr[2], g_cx, 8);
+    p->y = MulDiv(hdr[3], g_cy, 8);
     p->bmp = CreateBitmap(p->cx, p->cy, 1, 1, bits);
     GlobalUnlock(h);
     GlobalFree(h);
@@ -265,8 +268,8 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
             hdr[0] = (WORD)size;
             hdr[1] = w;
             hdr[2] = h;
-            hdr[3] = p->x;
-            hdr[4] = p->y;
+            hdr[3] = MulDiv(p->x, 8, g_cx);  /* eighths of a cell (above) */
+            hdr[4] = MulDiv(p->y, 8, g_cy);
             ok = size <= 0xFFFFu && f_write(f, hdr, sizeof hdr) && write_block(f, bits, size);
             GlobalUnlock(bits);
             GlobalFree(bits);

@@ -98,6 +98,17 @@ BOOL dlg_add(void)
     return TRUE;
 }
 
+/* "Cannot find "zzz"." (string 34, the text in quotes: stack scenario,
+   Go To; UNVERIFIED for Find) */
+static void not_found(LPCSTR what)
+{
+    char q[INDEX_BYTES + 260];
+    s_cpy(q, "\"", sizeof q);
+    s_cat(q, what, sizeof q);
+    s_cat(q, "\"", sizeof q);
+    msg_box(IDS_NOTFOUND, q, MB_OK | MB_ICONEXCLAMATION);
+}
+
 /* does the index line contain s (ignoring case)? */
 static BOOL contains(LPCSTR line, LPCSTR s)
 {
@@ -129,7 +140,7 @@ void dlg_goto(void)
             return;
         }
     }
-    msg_box(IDS_NOTFOUND, goto_text, MB_OK | MB_ICONEXCLAMATION);
+    not_found(goto_text);
 }
 
 /* ---- Find ---- */
@@ -228,7 +239,7 @@ void find_next(void)
         LocalUnlock(h);
         LocalFree(h);
     }
-    msg_box(IDS_NOTFOUND, find_text, MB_OK | MB_ICONEXCLAMATION);
+    not_found(find_text);
 }
 
 static FINDREPLACE fr;

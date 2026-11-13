@@ -285,9 +285,12 @@ static void card_duplicate(void)
         c->pos = copy.pos;
         c->fmt = copy.fmt;
     }
-    /* UNVERIFIED: whether an object on the card is cloned at once */
-    g_cur = at;
-    body_load(at);
+    /* The copy goes behind the card (stack scenario: the card stays in
+       front, its copy next); it is put after the cards with the same
+       index line, so the front card keeps its place. UNVERIFIED: whether
+       an object on the card is cloned at once. */
+    if (at <= g_cur)
+        g_cur++;
     g_dirty = TRUE;
     card_changed();
 }
