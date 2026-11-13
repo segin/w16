@@ -68,6 +68,92 @@ void kputs(const char FAR *s)
     kernel_psp(0);
 }
 
+/* ---- w16's own diagnostics (kdbg) ----
+   Windows 3.1 writes nothing of its own to standard output while it
+   runs (its OutputDebugString goes to handle 3, AUX: task.c). w16's
+   diagnostics (unimplemented calls, WinOldApCall notes, [w16] schedlog
+   and the like) went to handle 1, which a user's session has on the
+   console: painted over Windows' screen (KERNEL audit, finding 9). They
+   go to the file [w16] debuglog= names, appended, when it is set; else
+   to KERNEL's standard output only while no Windows screen is up (make
+   test, the boot before USER); else nowhere. Reports that end Windows
+   (faults, the watchdog, "Error loading") switch to text mode and still
+   use kputs. */
+static char dbg_path[80];
+u16 win_screen;                 /* USER loaded, Windows' screen up */
+
+void kdbg_init(const char FAR *path)
+{
+    u16 i;
+    for (i = 0; path[i] && i < sizeof dbg_path - 1; i++)
+        dbg_path[i] = path[i];
+    dbg_path[i] = 0;
+}
+
+/* to the [w16] debuglog file only (nothing without it) */
+void kdbg_file(const char FAR *s)
+{
+    regs16 r;
+    u16 h;
+    if (!dbg_path[0])
+        return;
+    kernel_psp(1);
+    r.ax = 0x3D01;                      /* open for writing */
+    r.dx = FP_OFF((char FAR *)dbg_path);
+    r.ds = FP_SEG((char FAR *)dbg_path);
+    r.es = 0;
+    if (dos21(&r)) {
+        r.ax = 0x3C00;                  /* or create it */
+        r.cx = 0;
+        r.dx = FP_OFF((char FAR *)dbg_path);
+        r.ds = FP_SEG((char FAR *)dbg_path);
+        r.es = 0;
+        if (dos21(&r)) {
+            kernel_psp(0);
+            return;
+        }
+    }
+    h = r.ax;
+    r.ax = 0x4202;                      /* to the end */
+    r.bx = h;
+    r.cx = r.dx = 0;
+    r.ds = r.es = 0;
+    dos21(&r);
+    r.ax = 0x4000;
+    r.bx = h;
+    r.cx = kstrlen(s);
+    r.dx = FP_OFF(s);
+    r.ds = FP_SEG(s);
+    r.es = 0;
+    dos21(&r);
+    r.ax = 0x3E00;
+    r.bx = h;
+    r.ds = r.es = 0;
+    dos21(&r);
+    kernel_psp(0);
+}
+
+void kdbg(const char FAR *s)
+{
+    if (dbg_path[0])
+        kdbg_file(s);
+    else if (!win_screen)
+        kputs(s);
+}
+
+void kdbghex(u16 v)
+{
+    char b[5];
+    int i;
+    for (i = 3; i >= 0; i--) {
+        u16 d = v & 15;
+        b[i] = (char)(d < 10 ? '0' + d : 'A' + d - 10);
+        v >>= 4;
+    }
+    b[4] = 0;
+    kdbg(b);
+}
+
 void kputhex(u16 v)
 {
     char b[5];
