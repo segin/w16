@@ -1474,3 +1474,50 @@ $(DOS)/MS4B.COM: tests/dos/ms4b.asm
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/MD2A.EXE $(DOS)/MS3A.DRV $(DOS)/MS4A.COM $(DOS)/MD2B.EXE $(DOS)/MS3B.COM \
      $(DOS)/MS4B.COM $(DOS)/MOUSEPT.DRV $(DOS)/MOUSEPF.DRV $(DOS)/MD2C.EXE $(DOS)/MS3C.COM
+
+# ---- KEYBOARD.DRV: w16's keyboard driver (drivers/keyboard; README.md there)
+# KB1.EXE: every export called over all its inputs (tests/apps/kb1.c; run by
+# tests/kbprobe.sh with Windows 3.1's KEYBOARD.DRV and with w16's)
+$(B)/tests/kb1.o: tests/apps/kb1ref.h tests/apps/tklog.h
+$(DOS)/KB1.EXE: $(B)/tests/start.o $(B)/tests/kb1.o $(B)/tests/md1s.o $(B)/tests/kb1s.o tests/apps/app.lnk tests/apps/kb1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kb1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/kb1.map file { $(B)/tests/start.o $(B)/tests/kb1.o $(B)/tests/md1s.o $(B)/tests/kb1s.o }
+dos: $(DOS)/KB1.EXE
+# KBREC.DRV: a recording KEYBOARD in front of KBTARGET, a renamed copy of the
+# driver under test (tests/apps/kbrec.asm; tests/kbprobe.sh)
+$(DOS)/KBREC.DRV: $(B)/tests/kbrec.o tests/apps/kbrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kbrec.lnk name $@ option map=$(B)/tests/kbrec.map file { $(B)/tests/kbrec.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KBREC.DRV
+# KB2.EXE: keyboard messages and KBREC's and KB4's records under real
+# input (tests/apps/kb2.c); KB4.COM: a real-mode TSR recording INT 9, INT
+# 16h, INT 15h AH=4Fh (tests/dos/kb4.asm)
+$(B)/tests/kb2.o: tests/apps/kb1ref.h tests/apps/tklog.h
+$(DOS)/KB2.EXE: $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o tests/apps/app.lnk tests/apps/kb2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kb2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/kb2.map file { $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o }
+$(DOS)/KB4.COM: tests/dos/kb4.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/KB2.EXE $(DOS)/KB4.COM
+# the driver: NASM, with the ANSI/OEM tables made by tools/kbtables.py
+$(B)/keyboard/kbtables.inc: tools/kbtables.py
+	@mkdir -p $(@D)
+	python3 tools/kbtables.py $@
+$(B)/keyboard/keyboard.o: drivers/keyboard/keyboard.asm $(B)/keyboard/kbtables.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -I$(B)/keyboard/ -o $@ $<
+$(DOS)/KEYBOARD.DRV: $(B)/keyboard/keyboard.o drivers/keyboard/keyboard.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/keyboard/keyboard.lnk name $@ option map=$(B)/keyboard/keyboard.map \
+	    file { $(B)/keyboard/keyboard.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KEYBOARD.DRV
+# the install tree gets it too (build/w16/SYSTEM)
+install-tree: $(W16SYS)/KEYBOARD.DRV
+$(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
+	@mkdir -p $(@D)
+	cp $< $@

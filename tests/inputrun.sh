@@ -47,6 +47,8 @@
 #     click [N]         press and release button N (1 left, 3 right)
 #     down N / up N     press or release button N
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
+#     keydown KEYS / keyup KEYS  press or release keys only (a key held
+#                       while others are typed, e.g. Alt for Alt+keypad)
 #     type TEXT         type text
 #     sleep S           wait S seconds (fractions allowed)
 #     waitpixel X Y RRGGBB MAX     wait until the pixel at X,Y has that
@@ -404,6 +406,8 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;
     key) xdotool key --window "\$wid" \$a \$b ;;
+    keydown) xdotool keydown --window "\$wid" \$a \$b ;;
+    keyup) xdotool keyup --window "\$wid" \$a \$b ;;
     type) xdotool type --window "\$wid" "\$a \$b" ;;
     sleep) sleep "\$a" ;;
     waitexit) waitexit "\$a" ;;

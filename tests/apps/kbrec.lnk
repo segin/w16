@@ -1,0 +1,58 @@
+# wlink directives for KBREC.DRV (tests/apps/kbrec.asm): a recording
+# KEYBOARD driver in front of KBTARGET (a renamed copy of the driver under
+# test). Output name and object come from the Makefile.
+format windows dll
+option quiet
+option modname=KEYBOARD
+option description 'KBREC recording keyboard driver (w16 probe)'
+option start=libentry
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRE.1=T_1
+export ENABLE.2=T_2
+export DISABLE.3=T_3
+export TOASCII.4=T_4
+export ANSITOOEM.5=T_5
+export OEMTOANSI.6=T_6
+export SETSPEED.7=T_7
+export WEP.8 resident
+export SCREENSWITCHENABLE.100=T_100
+export GETTABLESEG.126=T_126
+export NEWTABLE.127=T_127
+export OEMKEYSCAN.128=T_128
+export VKKEYSCAN.129=T_129
+export GETKEYBOARDTYPE.130=T_130
+export MAPVIRTUALKEY.131=T_131
+export GETKBCODEPAGE.132=T_132
+export GETKEYNAMETEXT.133=T_133
+export ANSITOOEMBUFF.134=T_134
+export OEMTOANSIBUFF.135=T_135
+export ENABLEKBSYSREQ.136=T_136
+export GETBIOSKEYPROC.137=T_137
+export KBRLOG.200
+import X_1 KBTARGET.1
+import X_2 KBTARGET.2
+import X_3 KBTARGET.3
+import X_4 KBTARGET.4
+import X_5 KBTARGET.5
+import X_6 KBTARGET.6
+import X_7 KBTARGET.7
+import X_100 KBTARGET.100
+import X_126 KBTARGET.126
+import X_127 KBTARGET.127
+import X_128 KBTARGET.128
+import X_129 KBTARGET.129
+import X_130 KBTARGET.130
+import X_131 KBTARGET.131
+import X_132 KBTARGET.132
+import X_133 KBTARGET.133
+import X_134 KBTARGET.134
+import X_135 KBTARGET.135
+import X_136 KBTARGET.136
+import X_137 KBTARGET.137
+import __0040H KERNEL.193
+import __0000H KERNEL.183
+import ALLOCSELECTOR KERNEL.175
+import SETSELECTORBASE KERNEL.187
+import SETSELECTORLIMIT KERNEL.189
