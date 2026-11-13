@@ -661,9 +661,10 @@ static void probe_full(void)
         LocalFree(h[i]);
     /* everything freed again: LocalShrink (Pietrek: compacts the heap to
        fit its non-discardable blocks into the size asked for) */
-    /* recorded, not checked: w16 does not shrink yet (3.1, Standard:
-       3FEh, LocalHeapSize 3F4h, DGROUP 6A20h, back near the module's 1K
-       heap) */
+    /* recorded, not checked: DGROUP's size depends on the stack and
+       data before the heap (3.1, Standard: 3FEh, LocalHeapSize 3F4h,
+       DGROUP 6A20h, back near the module's 1K heap; w16 under make test:
+       3FEh, 3F4h, 6970h). LocalShrink itself: tests/apps/tk54.c */
     obs_env("shrink: LocalShrink(0, 0)", LocalShrink(0, 0));
     obs_env("shrink: LocalHeapSize after", LocalHeapSize());
     obs_env("shrink: GlobalSize(DGROUP) after", LOWORD(GlobalSize(hinst())));

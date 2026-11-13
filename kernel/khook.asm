@@ -329,6 +329,44 @@ LOCALNOTIFY:
         pop bp
         retf 4
 
+; KERNEL's own LocalNotify procedure, as heaps get it (Pietrek:
+; LocalNotifyDefault): BOOL FAR PASCAL (wMsg, hMem, wArg) called with DS =
+; the heap's segment; local.c's LNDEFAULT does the work with that DS
+extern LNDEFAULT
+global NOTIFY_DEFAULT_ENTRY
+NOTIFY_DEFAULT_ENTRY:
+        push bp
+        mov bp, sp
+        push ds
+        push ds
+        push word [bp + 10]
+        push word [bp + 8]
+        push word [bp + 6]
+        call far LNDEFAULT
+        pop ds
+        pop bp
+        retf 6
+
+; u16 __cdecl lnotify_call(u16 ds, u32 proc, u16 msg, u16 h, u16 arg): call
+; a heap's LocalNotify procedure, Pascal, with DS = the heap's segment
+global _lnotify_call
+_lnotify_call:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        push di
+        push word [bp + 12]
+        push word [bp + 14]
+        push word [bp + 16]
+        mov ds, [bp + 6]
+        call far [ss:bp + 8]
+        pop di
+        pop si
+        pop ds
+        pop bp
+        retf
+
 ; DebugDefineSegment (KERNEL.314): Schulman: tells a system debugger
 ; (INT 41h) about a segment; six words. UNVERIFIED: the call TK50 tried
 ; ended the probe on 3.1; w16 has no system debugger to tell.

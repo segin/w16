@@ -1167,6 +1167,7 @@ u16 KAPI SetSigHandler(u32 proc, u32 FAR *old, u16 FAR *oldtype, u16 type, u16 o
    of the exit call), hInstance = the task's, hQueue = its queue.
    UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
 extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
+void KAPI ExitKernel(void);              /* kmisc.c */
 
 void __cdecl task_signal_exit(u16 ax)
 {
@@ -1176,6 +1177,23 @@ void __cdecl task_signal_exit(u16 ax)
     if (!t || (boot_tdb && t == boot_tdb))
         return;
     th_task_exit(ax);                   /* toolhelp.c: 62h, BL = AL */
+    /* the last task: Windows ends through USER's ExitWindows, called
+       here, before the task's signal procedure, on its stack (Pietrek,
+       ch. 3, ExitCall: "if (Num_Tasks == 0) ... PExitProc()", ExitKernel
+       should it return). Observed (tests/apps/tk55.c, a shell that ends
+       at once with exit code 5, Microsoft's USER): on 3.1 WIN's
+       ERRORLEVEL is 0 and the screen is back in mode 3 (the display's
+       Disable through ExitWindows); w16 ended with 5 in mode 12h */
+    if (num_tasks == 1) {
+        module FAR *u = module_find("USER");
+        u16 sel, off;
+        int is_const;
+        if (u && module_entry(u, 7, &sel, &off, &is_const) && !is_const) {
+            typedef u16 (__far __pascal *ewproc)(u32 rc, u16 reserved);
+            ((ewproc)(((u32)sel << 16) | off))(0, 0);
+            ExitKernel();
+        }
+    }
     p = *(u32 FAR *)MK_FP(t, 0x2A);
     if (!p)
         return;

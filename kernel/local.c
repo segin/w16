@@ -331,6 +331,50 @@ static u16 largest_free(const lheap *hp)
 static u16 h_lock(const lheap *hp, u16 h) { return B(hp->seg, h + HE_LOCK); }
 static u16 h_flags(const lheap *hp, u16 h) { return B(hp->seg, h + HE_FLAGS); }
 
+/* ---- the heap's LocalNotify procedure (tests/apps/tk54.c, Windows 3.1
+   under KRNL286 and KRNL386 alike): KERNEL calls it, Pascal (wMsg, hMem,
+   wArg), with DS = the heap's segment:
+     LN_OUTOFMEM (0) when a request does not fit after compacting and
+       discarding, wArg = the arena bytes it needs (1000 fixed: 3ECh);
+       TRUE: KERNEL tries again (and asks again if it still does not fit),
+       FALSE: the request fails. KERNEL's own procedure grows the heap's
+       segment: with a procedure of the program's that answers FALSE the
+       heap does not grow at all.
+     LN_MOVE (1) when compaction has moved a moveable block: hMem its
+       handle, wArg its old address.
+     LN_DISCARD (2) before a discardable block is discarded: hMem its
+       handle, wArg its flags byte (0Fh for LMEM_DISCARDABLE); FALSE keeps
+       it (LocalCompact(FFFFh) then discards nothing).
+   UNVERIFIED: hMem for LN_OUTOFMEM (w16: 0), and whether the answer to
+   LN_MOVE matters (w16: ignored) ---- */
+#define LN_OUTOFMEM     0
+#define LN_MOVE         1
+#define LN_DISCARD      2
+
+extern void __far __pascal notify_default_entry(void);   /* khook.asm */
+extern u16 __cdecl lnotify_call(u16 ds, u32 proc, u16 msg, u16 h, u16 arg);
+
+static u16 notify(const lheap *hp, u16 msg, u16 h, u16 arg)
+{
+    u32 proc = *(u32 FAR *)MK_FP(hp->seg, hp->info + LI_NOTIFY);
+    if (!proc)
+        return msg != LN_OUTOFMEM;      /* UNVERIFIED: no procedure */
+    return lnotify_call(hp->seg, proc, msg, h, arg);
+}
+
+static int grow(const lheap *hp, u16 need);
+
+/* KERNEL's procedure (khook.asm notify_default_entry, with the heap's
+   DS): grows the heap for LN_OUTOFMEM, lets every block be discarded */
+u16 KAPI LNDEFAULT(u16 ds, u16 msg, u16 h, u16 arg)
+{
+    lheap hp;
+    (void)h;
+    if (msg == LN_OUTOFMEM)
+        return heap_of(ds, &hp) && grow(&hp, arg);
+    return msg == LN_DISCARD;
+}
+
 /* Move unlocked moveable blocks up into free space directly above them
    (observed: LocalCompact moves a block into the hole above it).
    UNVERIFIED: the order in which Windows visits blocks. */
@@ -362,6 +406,7 @@ static void compact(const lheap *hp)
             set_prev(hp, a, p, LA_BUSY);
             W(hp->seg, a + LA_NEXT) = a + fs;
             release(hp, a);
+            notify(hp, LN_MOVE, h, a + 6);
             moved = 1;
             a = a + fs;
         }
@@ -377,25 +422,34 @@ static void discard_block(const lheap *hp, u16 h)
     B(hp->seg, h + HE_FLAGS) |= HF_DISCARDED;
 }
 
-/* discard every unlocked discardable block; returns whether any was.
+/* discard the unlocked discardable blocks the notify procedure lets go
+   (LN_DISCARD, asked once for each); returns whether any was.
    UNVERIFIED: whether Windows stops once the request would fit. */
+#define NDISC 32
 static int discard_all(const lheap *hp)
 {
-    u16 first = I(hp, LI_FIRST), a, h;
-    int any = 0, again;
-    do {
-        again = 0;
-        for (a = a_prev(hp, I(hp, LI_LAST)); a != first; a = a_prev(hp, a)) {
-            if (a_flags(hp, a) != (LA_BUSY | LA_MOVEABLE))
-                continue;
-            h = W(hp->seg, a + LA_HANDLE);
-            if ((h_flags(hp, h) & HF_DISCARDABLE) && !h_lock(hp, h)) {
-                discard_block(hp, h);   /* arenas merge: start over */
-                any = again = 1;
-                break;
-            }
+    u16 first = I(hp, LI_FIRST), a, h, cand[NDISC], n = 0, i;
+    int any = 0;
+    /* the candidates first (discarding merges arenas), at most NDISC */
+    for (a = a_prev(hp, I(hp, LI_LAST)); a != first && n < NDISC; a = a_prev(hp, a)) {
+        if (a_flags(hp, a) != (LA_BUSY | LA_MOVEABLE))
+            continue;
+        h = W(hp->seg, a + LA_HANDLE);
+        if ((h_flags(hp, h) & HF_DISCARDABLE) && !h_lock(hp, h))
+            cand[n++] = h;
+    }
+    for (i = 0; i < n; i++) {
+        h = cand[i];
+        if (!W(hp->seg, h + HE_ADDR) || h_lock(hp, h))
+            continue;
+        if (!notify(hp, LN_DISCARD, h, h_flags(hp, h)))
+            continue;
+        if (W(hp->seg, h + HE_ADDR) && !h_lock(hp, h)) {   /* (the procedure
+                                                            may have locked it) */
+            discard_block(hp, h);
+            any = 1;
         }
-    } while (again);
+    }
     return any;
 }
 
@@ -448,17 +502,21 @@ static int grow(const lheap *hp, u16 need)
    (verified) was observed only where nothing could be compacted. */
 static u16 arena_alloc(const lheap *hp, u16 need, int moveable, u16 flags)
 {
-    u16 f = fit(hp, need, moveable);
-    if (!f && !(flags & LMEM_NOCOMPACT)) {
-        compact(hp);
+    u16 f;
+    for (;;) {
         f = fit(hp, need, moveable);
+        if (!f && !(flags & LMEM_NOCOMPACT)) {
+            compact(hp);
+            f = fit(hp, need, moveable);
+        }
+        if (!f && !(flags & LMEM_NODISCARD) && discard_all(hp)) {
+            compact(hp);
+            f = fit(hp, need, moveable);
+        }
+        /* the notify procedure; KERNEL's grows the heap (TK54) */
+        if (f || !notify(hp, LN_OUTOFMEM, 0, need))
+            break;
     }
-    if (!f && !(flags & LMEM_NODISCARD) && discard_all(hp)) {
-        compact(hp);
-        f = fit(hp, need, moveable);
-    }
-    if (!f && grow(hp, need))
-        f = fit(hp, need, moveable);
     return f ? take(hp, f, need, moveable) : 0;
 }
 
@@ -515,16 +573,6 @@ static void free_handle(const lheap *hp, u16 h)
 
 /* ---- LocalInit ---- */
 
-/* Default LocalNotify procedure, stored in new heaps' information block.
-   UNVERIFIED: what the Windows one does; w16 never calls it yet. */
-static u16 __far __pascal notify_default(u16 msg, u16 h, u16 arg)
-{
-    (void)msg;
-    (void)h;
-    (void)arg;
-    return 0;
-}
-
 /* Observed: start is rounded up to 4; the last sentinel goes at
    (end - 0Ah) & ~3; with start 0 the heap is the last `end` bytes of the
    segment. The first sentinel (0Ch bytes), the information arena (30h)
@@ -569,7 +617,7 @@ static u16 local_init(u16 seg, u16 start, u16 end)
     I(&hp, LI_FIRST) = first;
     I(&hp, LI_LAST) = last;
     I(&hp, LI_HDELTA) = LH_HDELTA;
-    *(u32 FAR *)MK_FP(seg, hp.info + LI_NOTIFY) = (u32)notify_default;
+    *(u32 FAR *)MK_FP(seg, hp.info + LI_NOTIFY) = (u32)(void __far *)notify_default_entry;
     I(&hp, LI_EXTRA) = LH_EXTRA;
     I(&hp, LI_MINSIZE) = last - first + SENTINEL_SIZE;
     I(&hp, LI_MAGIC) = LH_MAGIC;
@@ -916,15 +964,58 @@ u16 KAPI LHeapSize(u16 ds)
     return (u16)(local_spaces(ds) >> 16);
 }
 
-/* LocalShrink (KERNEL.121): the SDK: shrinks the heap in hseg (0: the
-   caller's DS) towards cb bytes and returns its new size. w16 does not
-   shrink yet: it returns the size the heap has. */
+/* LocalShrink (KERNEL.121): the heap in hseg (0: the caller's DS)
+   compacted and its segment made smaller. Observed (tests/apps/tk54.c,
+   3.1 under KRNL286 and KRNL386 alike; a heap made by LocalInit(sel, 16,
+   511) in a 512-byte block, grown to FF0h, everything freed): the new end
+   is first + max(cb, the heap's minimum size, info 20h) + 2, the last
+   sentinel at (end - 0Ah) & ~3 as LocalInit puts it, the segment
+   reallocated to end bytes (back to 210h under KRNL286 for cb 0; 430h for
+   cb 400h), and the result is last - first + 0Ah (1EEh, 402h). A block
+   still in use keeps its place: the heap does not end below it.
+   UNVERIFIED: hseg as a handle (w16: or 1, the selector), discarding. */
 u16 KAPI LShrink(u16 ds, u16 hseg, u16 cb)
 {
-    (void)cb;
+    lheap hp;
+    u16 first, last, top, p, q, nl, h;
+    u32 end;
     if (hseg)
-        ds = hseg | 1;      /* a handle or selector: UNVERIFIED */
-    return (u16)(local_spaces(ds) >> 16);
+        ds = hseg | 1;
+    if (!heap_of(ds, &hp))
+        return 0;
+    compact(&hp);
+    first = I(&hp, LI_FIRST);
+    last = I(&hp, LI_LAST);
+    p = a_prev(&hp, last);
+    top = a_free(&hp, p) ? p : last;    /* the end of the blocks in use */
+    end = (u32)first + (cb > I(&hp, LI_MINSIZE) ? cb : I(&hp, LI_MINSIZE)) + 2;
+    nl = end - SENTINEL_SIZE > 0xFFFFUL ? last : (u16)((end - SENTINEL_SIZE) & ~3UL);
+    if (nl < top)
+        nl = top;
+    if (nl > top && nl - top < MIN_ARENA)
+        nl = top;                       /* no free arena that small */
+    if (nl >= last)
+        return last - first + SENTINEL_SIZE;
+    /* the free arena below the last sentinel shrinks or becomes it */
+    q = W(hp.seg, last + LA_FREEPREV);  /* the free arena before the sentinel */
+    if (nl == p) {
+        q = W(hp.seg, p + LA_FREEPREV);
+        I(&hp, LI_ITEMS)--;
+    } else {
+        W(hp.seg, p + LA_NEXT) = nl;
+        W(hp.seg, p + LA_SIZE) = nl - p;
+    }
+    set_prev(&hp, nl, nl == p ? a_prev(&hp, p) : p, LA_BUSY);
+    W(hp.seg, nl + LA_NEXT) = nl;
+    W(hp.seg, nl + LA_SIZE) = SENTINEL_SIZE;
+    W(hp.seg, nl + LA_FREEPREV) = q;
+    W(hp.seg, nl + LA_FREENEXT) = nl;
+    W(hp.seg, q + LA_FREENEXT) = nl;
+    I(&hp, LI_LAST) = nl;
+    h = (u16)GlobalHandle(hp.seg);
+    if (h)
+        GlobalReAlloc(h, (u32)nl + SENTINEL_SIZE, 0);
+    return nl - first + SENTINEL_SIZE;
 }
 
 /* LocalHandleDelta (KERNEL.310, SDK): the number of handles a new handle
@@ -945,10 +1036,8 @@ u16 KAPI LHDelta(u16 ds, u16 n)
    procedure, in the information block; returns the previous one.
    Observed on 3.1 (tests/apps/tk50.c): KRNL286 keeps it at 18h of its
    information block (w16 keeps it there too), the
-   default is a procedure in KERNEL. KERNEL then calls it with (wMsg,
-   hMem, wArg): LN_OUTOFMEM (0, wArg = the bytes it needs) before growing
-   the heap, LN_DISCARD (2) before discarding a block. UNVERIFIED: w16
-   does not call it yet. */
+   default is a procedure in KERNEL (here notify_default_entry, which
+   grows the heap). How KERNEL calls it: the notify section above (TK54). */
 u32 KAPI LNotify(u16 ds, u32 proc)
 {
     lheap hp;
