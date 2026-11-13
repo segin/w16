@@ -53,6 +53,14 @@ Other targets:
 Builds are reproducible apart from build timestamps embedded in some
 executables.
 
+**Version.** w16's version is the one line of the file `VERSION` (its only
+source). The Makefile writes it to `build/w16ver.h` with the build: the
+source tree's commit, `git rev-parse --short=7 HEAD`, or `W16_BUILD` from
+the environment (e.g. `make W16_BUILD=mybuild`), or `unknown` outside a git
+checkout. The file is rewritten only when either changes. USER shows both
+on the desktop (ARCHITECTURE.md §6.8, `[w16] DesktopVersion`). Module
+version resources and `GetVersion` keep Windows 3.1's 3.10.
+
 ## 3. Using the install tree
 
 `build/w16/` contains only w16's own files. w16 does not yet replace every
