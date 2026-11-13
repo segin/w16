@@ -166,7 +166,22 @@
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
 #              w16's USER and GDI on w16's KRNL286 against all-Microsoft
-#              under the same input; the screens after must be identical
+#              under the same input; the screens after must be identical.
+#              w16's run has [w16] ScrollBarMenu=0: the script right-clicks
+#              wherever the boot left the pointer, which could be a scroll
+#              bar, and the comparison is with 3.1
+#   sbmenu     w16's scroll-bar menu (a w16 extension, user/scroll.c), probe
+#              US17 as the shell, w16's USER on Microsoft's KRNL286: with
+#              [w16] ScrollBarMenu=0, US17's log (every right click's
+#              messages: none) and its last screen against Windows 3.1's
+#              run of US17, identical; with the menu on, US17 must pass
+#              (each item of each bar's menu: its items, its place, the
+#              WM_VSCROLL/WM_HSCROLL it sends, no menu messages to the
+#              window). No 3.1 reference can exist for the menu itself;
+#              its drawing is the popup code every other menu uses (pixel
+#              compared in helpmenus, pmclose ...), so its run's screen,
+#              the menu left open (sbmenu-on.png), is kept to look at but
+#              not compared
 # The reference for each is Microsoft's KRNL286 (dropin.sh -r), DOSX,
 # WIN.COM and USER. A boot whose BOOTLOG.TXT does not reach
 # "INITDONE=Final USER" fails whatever the pixels say.
@@ -250,7 +265,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
+cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1073,8 +1088,11 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     input)
         scr=$root/tests/scripts/input/bootinput.txt
         refrun input-ref input "$root/tests/inputrun.sh" -b 1 -t 270 "$scr" "$out/input-ref" -r
+        # (ScrollBarMenu=0: its right click lands wherever the boot left
+        # the pointer; 3.1 has no scroll-bar menu)
         "$root/tests/inputrun.sh" -E "$out/input-ref" -b 1 -t 270 "$scr" "$out/input-w16" \
-            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/input-w16.txt" 2>&1 || true
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -i w16:ScrollBarMenu=0 > "$out/input-w16.txt" 2>&1 || true
         r=ok
         for s in 01-booted 02-menu 03-closed; do
             if [ ! -f "$out/input-w16/$s.png" ] || [ ! -f "$out/input-ref/$s.png" ]; then
@@ -1086,6 +1104,45 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   input: 0 pixels"
         else echo "FAIL input: $r"; fails=$((fails + 1)); fi ;;
+    sbmenu)
+        # US17 as the shell (tests/apps/us17.c); its log is TK.LOG in
+        # C:\WINDOWS (the shell's directory) or C:\
+        sbm() {   # LABEL dropin.sh options...: one run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 150 -s "$out/$_l.png" -o "$out/$_l" \
+                -f "$root/build/dos/US17.EXE=US17.EXE" -i 'boot:shell=C:\US17.EXE' "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        refrun sbmenu-ref sbmenu sh -c '"$1" -t 150 -s "$2/sbmenu-ref.png" -o "$2/sbmenu-ref" -r \
+            -f "$3=US17.EXE" -i "boot:shell=C:\US17.EXE" -i w16:ScrollBarMenu=0' sh \
+            "$root/tests/dropin.sh" "$out" "$root/build/dos/US17.EXE"
+        for _d in "$out/sbmenu-ref/c/WINDOWS" "$out/sbmenu-ref/c"; do
+            [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/sbmenu-ref.log"; break; }
+        done
+        sbm sbmenu-stock -r -f "$user=WINDOWS/SYSTEM/USER.EXE" -i w16:ScrollBarMenu=0 -e "$out/sbmenu-ref.png"
+        sbm sbmenu-on -r -f "$user=WINDOWS/SYSTEM/USER.EXE" -i w16:ScrollBarMenu=1
+        r=ok
+        for k in ref stock on; do
+            f=$out/sbmenu-$k.log
+            if [ ! -f "$f" ] || ! grep -q '^US17 end' "$f"; then r="$k: US17 did not finish ($f)"; break; fi
+            if grep -q '^FAIL' "$f"; then r="$k: $(grep -c '^FAIL' "$f") check(s) failed ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/sbmenu-ref.log" > "$out/sbmenu-ref.obs"
+            grep '^OBS [^~]' "$out/sbmenu-stock.log" > "$out/sbmenu-stock.obs"
+            if ! cmp -s "$out/sbmenu-ref.obs" "$out/sbmenu-stock.obs"; then
+                r="ScrollBarMenu=0: the messages differ from 3.1's ($out/sbmenu-ref.obs, sbmenu-stock.obs)"
+            else
+                n=$(magick compare -metric AE "$out/sbmenu-stock.png" "$out/sbmenu-ref.png" "$out/sbmenu-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || r="ScrollBarMenu=0: the screen differs from 3.1's by $n pixels ($out/sbmenu-diff.png)"
+            fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
+        else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
     mouse)
         # each script with Microsoft's MOUSE.DRV and with w16's; nothing
         # else differs: no part of any screen is left out but Notepad's

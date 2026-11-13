@@ -1222,6 +1222,13 @@ $(DOS)/US15.EXE: $(B)/tests/start.o $(B)/tests/us15.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us15.map file { $(B)/tests/start.o $(B)/tests/us15.o }
 dos: $(DOS)/US15.EXE
+# US17: the scroll-bar menu, w16's extension (tests/apps/us17.c)
+$(B)/tests/us17.o: tests/apps/us17ref.h tests/apps/tklog.h
+$(DOS)/US17.EXE: $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us17.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us17.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us17.map file { $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o }
+dos: $(DOS)/US17.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
