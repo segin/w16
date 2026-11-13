@@ -286,6 +286,10 @@ u16 winboot(void)
         sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
         heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
         exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
+        {
+            extern u16 debug_to_aux;
+            debug_to_aux = GetPrivateProfileInt("w16", "DebugToAux", 0, sysini) != 0;
+        }
     }
     {
         /* [w16] debuglog=FILE: w16's own diagnostics (util.c kdbg) */

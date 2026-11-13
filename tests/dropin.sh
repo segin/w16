@@ -85,9 +85,14 @@ w16:exitmsg=1
 w16:debuglog=C:\W16DBG.LOG'
 # [w16] DesktopVersion=0: w16 USER's desktop version stamp (user/deskver.c)
 # off, as stock Windows 3.1, so screens compare with 3.1's; a later
-# DROPIN_INI or -i w16:DesktopVersion=1 replaces it (boot-test case deskver)
+# DROPIN_INI or -i w16:DesktopVersion=1 replaces it (boot-test case deskver).
+# [w16] DebugToAux=1: OutputDebugString to handle 3 (AUX) always, as stock
+# 3.1 (in DOSBox AUX is the console: the text shows on the screen); w16's
+# default writes it there only when AUX is not the console (boot-test
+# case odstring)
 inis="$inis
-w16:DesktopVersion=0"
+w16:DesktopVersion=0
+w16:DebugToAux=1"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
 while getopts k:c:t:f:i:s:e:W:no:rxX:wp: opt; do

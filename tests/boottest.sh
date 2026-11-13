@@ -8,9 +8,11 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
-#   odstring   TK56 as the shell calls OutputDebugString: the screen against
-#              3.1's (which shows the text: handle 3 is DOSBox's console)
-#                                                   must be 0
+#   odstring   TK56 as the shell calls OutputDebugString: with dropin.sh's
+#              stock DebugToAux=1 the screen against 3.1's (which shows the
+#              text: handle 3 is DOSBox's console), must be 0; with w16's
+#              default DebugToAux=0 against TK56's screen without the calls
+#              (the text never on the screen), must be 0
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
@@ -566,12 +568,24 @@ runcase() {
         # TK56 as the shell calls OutputDebugString and waits. Windows
         # 3.1's retail KERNEL writes the text to DOS handle 3 (AUX), which
         # in DOSBox is the console: it is painted over the screen, with
-        # WIN's output redirected to a file as here. w16 wrote it to
-        # handle 1 (into the file here; over the screen in a session
-        # without the redirect): the screens differed
+        # WIN's output redirected to a file as here. Stock setting
+        # (dropin.sh's DebugToAux=1): against 3.1's screen. w16's default
+        # (DebugToAux=0: AUX only when it is not the console): the screen
+        # must be the one TK56 leaves without the calls (tail "q")
         set -- -f "$root/build/dos/TK56.EXE=TK56.EXE" -i 'boot:shell=C:\TK56.EXE'
         refrun odsref odstring boot -r "$@"; expect=$out/odsref.png
-        boot odstring "$@"; check odstring odstring odsref ;;
+        boot odstring "$@"; check odstring odstring odsref
+        expect=
+        boot odsquiet -c 'WIN /S /B q' "$@"
+        boot odsdefault -i w16:DebugToAux=0 "$@"
+        if booted odsquiet && booted odsdefault; then
+            n=$(magick compare -metric AE "$out/odsdefault.png" "$out/odsquiet.png" "$out/odsdefault-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            if [ "$n" = 0 ]; then echo "ok   odstring default: the text kept off the screen (0 pixels against no calls)"
+            else echo "FAIL odstring default: $n pixels differ from the screen without the calls ($out/odsdefault-diff.png)"; fails=$((fails + 1)); fi
+        else
+            echo "FAIL odstring default: a boot did not complete ($out/odsdefault.txt, $out/odsquiet.txt)"; fails=$((fails + 1))
+        fi ;;
     lastexit)
         # the shell (TK55) ends at once with exit code 5: Windows ends
         # through USER's ExitWindows (KERNEL, last task); a batch file
