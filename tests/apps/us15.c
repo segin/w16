@@ -575,7 +575,9 @@ static void costs(HWND top)
     a = reg("ABCH", 0, 0, 0, NULL);
     obs_env("class atom", a);
     obs("class atom found by GlobalFindAtom", GlobalFindAtom("ABCH") == a);
-    obs("class atom >= C000h", a >= 0xC000u);
+    /* (3.1 returned 1 from RegisterClass here, not the atom GetClassInfo
+       gives; w16 returns the atom) */
+    obs_env("class atom >= C000h", a >= 0xC000u);
     UnregisterClass("ABCH", hi);
 
     /* properties */
@@ -764,7 +766,9 @@ static void fill_props(HWND top, BOOL str)
         /* the last one set can be read back */
         if (str)
             numname("P", n - 1);
-        obs(str ? "string props: the last one reads back" : "atom props: the last one reads back",
+        /* (3.1 accepts string names after its atom heap is full but
+           loses them: an OBS ~ for those) */
+        (str ? obs_env : obs)(str ? "string props: the last one reads back" : "atom props: the last one reads back",
             GetProp(w, str ? (LPCSTR)cname : MAKEINTATOM(n)) == (HANDLE)(n - 1));
     }
     if (str) {
