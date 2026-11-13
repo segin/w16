@@ -9,7 +9,7 @@ is (`SYSTEM.INI` `[boot] comm.drv=comm.drv`, as Setup leaves it).
 `comm.asm` (NASM) and `comm.lnk` (wlink); `make` builds
 `build/dos/COMM.DRV` (one fixed code segment, one fixed data segment,
 expected Windows version 3.10) and copies it into the install tree.
-8250, 16450 and 16550(A) UARTs on COM1-COM4, LPT1-LPT3 through the BIOS.
+8250, 16450 and 16550(A) UARTs on COM1-COM4, LPT1-LPT3 through their ports.
 Standard mode; 386 Enhanced mode is not verified (below).
 
 Applications never call the driver: USER's OpenComm, ReadComm, WriteComm,
@@ -45,7 +45,7 @@ called through a thunk that compares SP before and after).
 | 13 | `csetbrk(cid)` | 2 | break on |
 | 14 | `cclrbrk(cid)` | 2 | break off |
 | 15 | `getdcb(cid)` | 2 | the port's DCB's address |
-| 16 | `WEP(int)` | 2 | returns 1 (resident name) |
+| 16 | `WEP(int)` | 2 | returns 1 (resident name; not called by CM1: the DDK's signature) |
 | 17 | `SuspendOpenCommPorts()` | 0 | nothing (below) |
 | 18 | `ReactivateOpenCommPorts()` | 0 | every open port set up again |
 | 19 | `CommWriteString(cid, LPSTR, n)` | 8 | bytes queued; their count |
@@ -270,9 +270,13 @@ with Windows 3.1's COMM.DRV and once with w16's, and compares the logs.
 
 ## Verified
 
-- `tests/commprobe.sh`: CM1's log (OBS lines but the "~" ones: timing,
-  addresses) and commhost's records for COM1 and COM2 identical with w16's
-  driver and Windows 3.1's.
+- `tests/commprobe.sh` (all parts, DOSBox 0.74 on the build host): CM1's
+  log (670 OBS lines, all but the "~" ones: timing, addresses, values
+  Windows 3.1's driver leaves to chance) and commhost's records for COM1
+  (173 lines: every byte and line change that came down the cable) and
+  COM2 identical with w16's driver and Windows 3.1's.
+- `tests/commprobe.sh -x -p 9` (DOSBox-X, LPT1 a printer writing to a
+  file): CM1's parts A and D and the printer's output identical.
 - `make boot-test` case `comm`: CM1's part C (the exchange through USER)
   with w16's COMM.DRV against Windows 3.1's.
 - The install tree (`build/w16/SYSTEM/COMM.DRV`).
