@@ -1062,6 +1062,14 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
+# GD4.EXE: GDI's heaps, object costs and limits (tests/apps/gd4.c; tests/gdiheap.sh)
+gdprobes: $(DOS)/GD4.EXE
+dos: $(DOS)/GD4.EXE
+$(B)/tests/gd4.o: tests/apps/gd4ref.h tests/apps/tklog.h
+$(DOS)/GD4.EXE: $(B)/tests/start.o $(B)/tests/gd4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd4.map file { $(B)/tests/start.o $(B)/tests/gd4.o }
 # ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
 # WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
 WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
