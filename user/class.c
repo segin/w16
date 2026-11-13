@@ -1,31 +1,23 @@
 /*
  * class.c - window classes.
  *
- * A class lives in USER's local heap (CLS, then cbClsExtra bytes). Its name
- * is an atom of USER's local atom table, so GetClassInfo's return value is
- * that atom (Windows 3.1 returns C302h-style values for the system classes
- * and 8000h-8004h for the integer-atom classes #32768-#32772: probe US2).
- * Application classes are found by name and hInstance (module), system
- * classes (hInstance 0 here) by name alone (3.1 SDK, RegisterClass).
+ * A class is a CLS in USER's local heap (DGROUP), then cbClsExtra bytes,
+ * with the layout of Schulman's CLASS (Undocumented Windows, ch. 6), which
+ * probe US15 read on 3.1: hcNext, the 'NK' signature, the name's atom (in
+ * USER's DGROUP atom table: GlobalFindAtom does not find it), hDCE, the
+ * window count, then the WNDCLASS with hInstance the module and both
+ * string pointers 0 (3.1's block: 24h + the extra bytes, and one atom).
+ * w16 keeps a string menu name as a copy in its string heap (uheap.c),
+ * lpszMenuName pointing to it. Classes are found by name (atoms compare
+ * without regard to case) and module; system classes (USER's module)
+ * by name alone (3.1 SDK, RegisterClass). GetClassInfo returns the
+ * class's atom (Windows 3.1 returns C302h-style values for the system
+ * classes and 8000h-8004h for the integer-atom classes #32768-#32772:
+ * probe US2).
  */
 #include "user.h"
 
 static WORD classes;            /* near list */
-
-static ATOM class_atom(LPCSTR name, BOOL add)
-{
-    if (ISATOM(name))
-        return LOWORD((DWORD)name);
-    if (name[0] == '#') {               /* "#32770" means atom 32770 */
-        WORD v = 0;
-        LPCSTR p = name + 1;
-        while (*p >= '0' && *p <= '9')
-            v = v * 10 + (*p++ - '0');
-        if (!*p && v)
-            return v;
-    }
-    return add ? AddAtom(name) : FindAtom(name);
-}
 
 static HMODULE module_of(HINSTANCE hinst)
 {
@@ -48,64 +40,81 @@ static WORD int_name(LPCSTR name)
     return 0;
 }
 
-static BOOL same_name(PCLS c, LPCSTR name)
+/* the atom a name is known by: 0 if no class could have it */
+static ATOM name_atom(LPCSTR name)
 {
     WORD v = int_name(name);
-    if (v)
-        return c->atom == v && (!c->name || v >= 0xC000u);
-    return c->name && !lstr_cmpi((LPCSTR)MAKELP(get_ds(), c->name), name);
+    return v ? v : FindAtom(name);
 }
+
+#define IS_SYSTEM(c)   ((c)->hModule == hModUser)
 
 /* classes are found by name, compared without regard to case, as atoms
    are; an application's own (its module's) before the system's */
 PCLS find_class(LPCSTR name, HINSTANCE hinst)
 {
     HMODULE m = module_of(hinst);
+    ATOM a = name_atom(name);
     PCLS c, sys = 0;
+    if (!a)
+        return 0;
     for (c = (PCLS)classes; c; c = (PCLS)c->next) {
-        if (!same_name(c, name))
+        if (c->atom != a)
             continue;
-        if (c->hModule == m && m)
+        if (c->hModule == m && m && !IS_SYSTEM(c))
             return c;
         if (c->style & CS_GLOBALCLASS)
             sys = c;
-        if (!c->hInstance)
+        if (IS_SYSTEM(c))
             sys = sys ? sys : c;
     }
     return sys;
 }
 
+LPCSTR class_menu_name(PCLS c)
+{
+    LPCSTR n = c->lpszMenuName;
+    if (!ISATOM(n))
+        n = (LPCSTR)UH_PTR(&uhStr, LOWORD((DWORD)n));  /* the heap's selector now */
+    return n;
+}
+
 static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
 {
     PCLS c;
-    HMODULE m = system ? 0 : module_of(wc->hInstance);
-    ATOM a;
-    for (c = (PCLS)classes; c; c = (PCLS)c->next)
-        if (same_name(c, wc->lpszClassName) && c->hModule == m && (!system || !c->hInstance))
-            return 0;                   /* already registered by this module */
-    a = class_atom(wc->lpszClassName, TRUE);
+    HMODULE m = system ? hModUser : module_of(wc->hInstance);
+    ATOM a = name_atom(wc->lpszClassName);
+    WORD menu = 0;
+    if (a)
+        for (c = (PCLS)classes; c; c = (PCLS)c->next)
+            if (c->atom == a && c->hModule == m)
+                return 0;               /* already registered by this module */
+    a = int_name(wc->lpszClassName);
+    if (!a)
+        a = AddAtom(wc->lpszClassName);
     if (!a)
         return 0;
-    c = (PCLS)LocalAlloc(LPTR, sizeof(CLS) + (wc->cbClsExtra > 0 ? wc->cbClsExtra : 0));
-    if (!c)
+    if (wc->lpszMenuName && !ISATOM(wc->lpszMenuName))
+        menu = uh_strdup(wc->lpszMenuName);
+    c = menu || !wc->lpszMenuName || ISATOM(wc->lpszMenuName) ?
+        (PCLS)LocalAlloc(LPTR, sizeof(CLS) + (wc->cbClsExtra > 0 ? wc->cbClsExtra : 0)) : (PCLS)0;
+    if (!c) {
+        uh_free(&uhStr, menu);
+        if (a >= 0xC000u)
+            DeleteAtom(a);
         return 0;
+    }
+    c->sig = CLS_SIG;
     c->atom = a;
-    if (!int_name(wc->lpszClassName))
-        c->name = local_strdup(wc->lpszClassName);
     c->style = wc->style;
     c->lpfnWndProc = wc->lpfnWndProc;
     c->cbClsExtra = wc->cbClsExtra > 0 ? wc->cbClsExtra : 0;
     c->cbWndExtra = wc->cbWndExtra > 0 ? wc->cbWndExtra : 0;
-    c->hInstance = system ? 0 : wc->hInstance;
     c->hModule = m;
     c->hIcon = wc->hIcon;
     c->hCursor = wc->hCursor;
     c->hbrBackground = wc->hbrBackground;
-    c->lpszMenuName = wc->lpszMenuName;
-    if (wc->lpszMenuName && !ISATOM(wc->lpszMenuName)) {
-        c->menuname = local_strdup(wc->lpszMenuName);
-        c->lpszMenuName = (LPCSTR)MAKELP(get_ds(), c->menuname);
-    }
+    c->lpszMenuName = menu ? (LPCSTR)UH_PTR(&uhStr, menu) : wc->lpszMenuName;
     c->next = classes;
     classes = (WORD)c;
     return c;
@@ -122,17 +131,15 @@ BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
 {
     PCLS c = find_class(name, hinst);
     WORD *link;
-    if (!c || !c->hInstance || c->cwnd)
+    if (!c || IS_SYSTEM(c) || c->cwnd)
         return FALSE;
     for (link = &classes; *link; link = &((PCLS)*link)->next)
         if (*link == (WORD)c) {
             *link = c->next;
             break;
         }
-    if (c->menuname)
-        LocalFree((HLOCAL)c->menuname);
-    if (c->name)
-        LocalFree((HLOCAL)c->name);
+    if (!ISATOM(c->lpszMenuName))
+        uh_free(&uhStr, LOWORD((DWORD)c->lpszMenuName));
     if (c->atom >= 0xC000u)
         DeleteAtom(c->atom);
     LocalFree((HLOCAL)c);
@@ -148,11 +155,12 @@ BOOL WINAPI GetClassInfo(HINSTANCE hinst, LPCSTR name, WNDCLASS __far *wc)
     wc->lpfnWndProc = c->lpfnWndProc;
     wc->cbClsExtra = c->cbClsExtra;
     wc->cbWndExtra = c->cbWndExtra;
-    wc->hInstance = c->hInstance;
+    /* 3.1: the hInstance asked with (US15); 0 for a system class */
+    wc->hInstance = IS_SYSTEM(c) ? 0 : hinst ? hinst : (HINSTANCE)c->hModule;
     wc->hIcon = c->hIcon;
     wc->hCursor = c->hCursor;
     wc->hbrBackground = c->hbrBackground;
-    wc->lpszMenuName = c->lpszMenuName;
+    wc->lpszMenuName = class_menu_name(c);
     wc->lpszClassName = name;
     return c->atom;
 }
@@ -242,7 +250,7 @@ LONG WINAPI GetClassLong(HWND h, int i)
     if (i == GCL_WNDPROC)
         return (LONG)c->lpfnWndProc;
     if (i == GCL_MENUNAME)
-        return (LONG)c->lpszMenuName;
+        return (LONG)class_menu_name(c);
     p = class_field(c, i, 4);
     return p ? *p : 0;
 }

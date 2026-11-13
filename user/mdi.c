@@ -636,7 +636,7 @@ static void title_place(HWND t, PWND w)
     char text[80];
     HFONT old;
     PWND p = PW(w->hwndParent);
-    GetWindowText((HWND)(WORD)w, text, sizeof text);
+    GetWindowText(HW(w), text, sizeof text);
     old = SelectObject(hdc, icon_font());
     SetRect(&r, 0, 0, sysmet[SM_CXICONSPACING] - 2, 0);
     DrawText(hdc, text, -1, &r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
@@ -652,7 +652,7 @@ static void title_place(HWND t, PWND w)
             x -= p->rcClient.left;
             y -= p->rcClient.top;
         }
-        set_window_pos(t, (HWND)(WORD)w, x, y, cx, r.bottom - r.top, SWP_NOACTIVATE);
+        set_window_pos(t, HW(w), x, y, cx, r.bottom - r.top, SWP_NOACTIVATE);
     }
 }
 

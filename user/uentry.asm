@@ -19,6 +19,10 @@
 ;   heaps, menu.c): DS is that segment for the call (the Local* functions
 ;   work on the caller's DS, 3.1 SDK) and USER's own again afterwards.
 ;   Never at interrupt time.
+; at_init, at_add, at_find, at_delete, at_name: KERNEL's InitAtomTable,
+;   AddAtom, FindAtom, DeleteAtom and GetAtomName on the atom table of the
+;   local heap in another segment (the global atom table's heap, uheap.c),
+;   the same way. Never at interrupt time.
         bits 16
         cpu 286
 
@@ -36,6 +40,7 @@ segment UENTRY_TEXT public align=16 class=CODE use16
 
 extern LOCALINIT                ; KERNEL.4
 extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE
+extern INITATOMTABLE, ADDATOM, FINDATOM, DELETEATOM, GETATOMNAME
 extern _user_init               ; int __cdecl user_init(WORD hinst) (C, far)
 extern KBD_EVENT                ; void far pascal kbd_event(ax, bx, si, di)
 extern MOUSE_EVENT_C            ; void far pascal mouse_event_c(ax, bx, cx, dx, si, di)
@@ -179,6 +184,75 @@ _lh_size:
         mov ds, [bp+6]
         push word [bp+8]
         call far LOCALSIZE
+        pop ds
+        pop bp
+        retf
+
+; BOOL __far __cdecl at_init(WORD sel, int n)
+global _at_init
+_at_init:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far INITATOMTABLE
+        pop ds
+        pop bp
+        retf
+
+; ATOM __far __cdecl at_add(WORD sel, LPCSTR s) (and at_find)
+global _at_add
+_at_add:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+10]       ; s (segment)
+        push word [bp+8]        ; s (offset)
+        call far ADDATOM
+        pop ds
+        pop bp
+        retf
+
+global _at_find
+_at_find:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+10]
+        push word [bp+8]
+        call far FINDATOM
+        pop ds
+        pop bp
+        retf
+
+; ATOM __far __cdecl at_delete(WORD sel, ATOM a)
+global _at_delete
+_at_delete:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far DELETEATOM
+        pop ds
+        pop bp
+        retf
+
+; UINT __far __cdecl at_name(WORD sel, ATOM a, LPSTR buf, int n)
+global _at_name
+_at_name:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; atom
+        push word [bp+12]       ; buf (segment)
+        push word [bp+10]       ; buf (offset)
+        push word [bp+14]       ; n
+        call far GETATOMNAME
         pop ds
         pop bp
         retf

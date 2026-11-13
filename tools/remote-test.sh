@@ -13,6 +13,8 @@
 #     -j JOBS   BOOTTEST_JOBS there (default 12)
 #     -t        make test only          -b   boot test only
 #     -k N      keep the last N boot-test result directories there (default 3)
+#     -e VAR=VALUE  set an environment variable for the tests there
+#               (repeatable), e.g. -e DROPIN_INI=w16:ExtendedUserHeap=1
 #   CASE ...    boot-test cases (default: all)
 #
 # The reference installs (.tools) are not copied per run: each run directory
@@ -30,11 +32,13 @@ base=${W16_REMOTE_DIR:-/mnt/build/w16-runs}
 tools=${W16_REMOTE_TOOLS:-/mnt/build/w16/.tools}
 slots=${W16_REMOTE_SLOTS:-3}
 root=$(git rev-parse --show-toplevel)
-name=$(basename "$root") jobs=12 keep=3 dotest=1 doboot=1
-while getopts H:d:n:j:tbk: opt; do
+name=$(basename "$root") jobs=12 keep=3 dotest=1 doboot=1 envs=
+while getopts H:d:n:j:tbk:e: opt; do
     case $opt in
     H) host=$OPTARG ;; d) base=$OPTARG ;; n) name=$OPTARG ;;
     j) jobs=$OPTARG ;; t) doboot=0 ;; b) dotest=0 ;; k) keep=$OPTARG ;;
+    e) case $OPTARG in *=*) ;; *) echo "-e needs VAR=VALUE" >&2; exit 2 ;; esac
+       envs="$envs,$(printf '%s' "$OPTARG" | base64 -w0)" ;;
     *) sed -n '2,28p' "$0"; exit 2 ;;
     esac
 done
@@ -52,10 +56,12 @@ rsync -a --delete --exclude=/build/ --exclude=/.claude/ --exclude=/.tools \
 rc=0
 # shellcheck disable=SC2087
 if ssh -o BatchMode=yes "$host" sh -s -- "$dir" "$tools" "$slots" "$jobs" \
-    "$keep" "$dotest" "$doboot" $cases <<'EOF'
+    "$keep" "$dotest" "$doboot" "x$envs" $cases <<'EOF'
 set -u
-dir=$1 tools=$2 slots=$3 jobs=$4 keep=$5 dotest=$6 doboot=$7
-shift 7
+dir=$1 tools=$2 slots=$3 jobs=$4 keep=$5 dotest=$6 doboot=$7 envs=${8#x}
+shift 8
+# -e VAR=VALUE settings, base64-encoded so values survive ssh's quoting
+IFS=,; for e in $envs; do [ -n "$e" ] && export "$(printf '%s' "$e" | base64 -d)"; done; unset IFS
 cases="$*"
 cd "$dir" || exit 2
 [ -e .tools ] || ln -s "$tools" .tools

@@ -161,13 +161,21 @@ static void make_gray(void)
 
 static void load_fonts(void)
 {
-    /* every value of WIN.INI [fonts], in file order */
-    static char keys[2048], val[80];
-    char *k;
-    GetProfileString("fonts", NULL, "", keys, sizeof keys);
+    /* every value of WIN.INI [fonts], in file order; the key list in a
+       block of its own while it is read (2K of DGROUP for good was most
+       of what made w16's USER's static data larger than 3.1's: US15) */
+    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, 2048 + 80);
+    char __far *keys, __far *val, __far *k;
+    if (!g)
+        return;
+    keys = (char __far *)GlobalLock(g);
+    val = keys + 2048;
+    GetProfileString("fonts", NULL, "", keys, 2048);
     for (k = keys; *k; k += lstr_len(k) + 1)
-        if (GetProfileString("fonts", k, "", val, sizeof val))
+        if (GetProfileString("fonts", k, "", val, 80))
             AddFontResource(val);
+    GlobalUnlock(g);
+    GlobalFree(g);
 }
 
 static BYTE kbinfo[16];
@@ -181,6 +189,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     hModUser = K_GETEXEPTR(hinst);
     ulog("USER init\r\n");
     InitAtomTable(37);                  /* UNVERIFIED size; atoms grow anyway */
+    uheaps_init();                      /* the global atom table's heap & co. */
 
     diag("INIT=Keyboard\r\n");
     KB_INQUIRE(kbinfo);
@@ -237,7 +246,7 @@ void WINAPI FinalUserInit(void)
         /* SYSTEM.INI [boot] drivers=: loaded as libraries; UNVERIFIED that
            this is all 3.1 does (it sends them DRV_LOAD; US1 saw MMSYSTEM's
            DriverProc call DefDriverProc for message 1) */
-        static char list[128];
+        char list[128];
         char *p, *q;
         GetPrivateProfileString("boot", "drivers", "", list, sizeof list, "SYSTEM.INI");
         for (p = list; *p;) {

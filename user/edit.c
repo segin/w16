@@ -2,7 +2,11 @@
  * edit.c - the EDIT class: single-line and (simple) multi-line edit
  * controls.
  *
- * The text is a block in USER's local heap. UNVERIFIED and not yet done
+ * The state (ED) and the text are blocks of USER's object heap (uheap.c),
+ * not of DGROUP (3.1's edit control costs DGROUP only its WND: US15), the
+ * window's first extra word the state's handle, reached through E() on
+ * every use (nothing in the heap is held across a call that allocates in
+ * it or sends a message). UNVERIFIED and not yet done
  * the way Windows 3.1 does it: 3.1 keeps the text in the local heap of the
  * hInstance given to CreateWindow (EM_GETHANDLE gives that local handle;
  * Notepad relies on it); undo; word wrap of multi-line controls.
@@ -31,7 +35,8 @@ typedef struct ED {
     char   password;
     HWND   parent;
 } ED;
-typedef ED __near *PED;
+typedef WORD PED;               /* the state block's handle (object heap) */
+#define E(e)    ((ED __far *)UH_PTR(&uhObj, (e)))
 
 static PED ed_of(HWND h)
 {
@@ -43,27 +48,27 @@ static DWORD estyle(HWND h)
     return GetWindowLong(h, GWL_STYLE);
 }
 
-static char __near *text(PED e)
+static char __far *text(PED e)
 {
-    return (char __near *)e->text;
+    return (char __far *)UH_PTR(&uhObj, E(e)->text);
 }
 
 static void notify(HWND h, PED e, WORD code)
 {
-    send_message(e->parent, WM_COMMAND, GetWindowWord(h, GWW_ID), MAKELONG(h, code));
+    send_message(E(e)->parent, WM_COMMAND, GetWindowWord(h, GWW_ID), MAKELONG(h, code));
 }
 
 static BOOL grow(PED e, WORD need)
 {
-    if (need + 1 <= e->size)
+    if (need + 1 <= E(e)->size)
         return TRUE;
     {
         WORD n = need + 32;
-        WORD b = (WORD)LocalReAlloc((HLOCAL)e->text, n, LMEM_MOVEABLE);
+        WORD b = uh_realloc(&uhObj, E(e)->text, n);
         if (!b)
             return FALSE;
-        e->text = b;
-        e->size = n;
+        E(e)->text = b;
+        E(e)->size = n;
     }
     return TRUE;
 }
@@ -76,17 +81,17 @@ static void set_text(PED e, LPCSTR s)
     if (n)
         fmemcpy((char __far *)text(e), s, n);
     text(e)[n] = 0;
-    e->len = n;
-    e->sel0 = e->sel1 = 0;
-    e->first = 0;
-    e->topline = 0;
+    E(e)->len = n;
+    E(e)->sel0 = E(e)->sel1 = 0;
+    E(e)->first = 0;
+    E(e)->topline = 0;
 }
 
 /* lines of a multi-line control: start offsets */
 static WORD line_start(PED e, int line)
 {
     WORD i = 0;
-    while (line > 0 && i < e->len) {
+    while (line > 0 && i < E(e)->len) {
         if (text(e)[i] == '\r' && text(e)[i + 1] == '\n') {
             i += 2;
             line--;
@@ -102,7 +107,7 @@ static WORD line_start(PED e, int line)
 static WORD line_len(PED e, WORD start)
 {
     WORD i = start;
-    while (i < e->len && text(e)[i] != '\r' && text(e)[i] != '\n')
+    while (i < E(e)->len && text(e)[i] != '\r' && text(e)[i] != '\n')
         i++;
     return i - start;
 }
@@ -111,7 +116,7 @@ static int line_of(PED e, WORD pos)
 {
     WORD i;
     int n = 0;
-    for (i = 0; i < pos && i < e->len; i++)
+    for (i = 0; i < pos && i < E(e)->len; i++)
         if (text(e)[i] == '\n')
             n++;
     return n;
@@ -121,14 +126,14 @@ static int line_of(PED e, WORD pos)
 
 static int line_count(PED e)
 {
-    return line_of(e, e->len) + 1;
+    return line_of(e, E(e)->len) + 1;
 }
 
 static int line_height(HWND h, PED e)
 {
     HDC hdc = GetDC(h);
     TEXTMETRIC tm;
-    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     GetTextMetrics(hdc, &tm);
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
@@ -158,12 +163,12 @@ static int inset(HWND h, PED e)
 static int tab_stops(PED e, int *buf, int max)
 {
     int bx = LOWORD(GetDialogBaseUnits()), i, n = 0;
-    if (!e->ntabs || !e->tabs) {
+    if (!E(e)->ntabs || !E(e)->tabs) {
         buf[0] = 32 * bx / 4;
         return 1;
     }
-    for (i = 0; i < (int)e->ntabs && i < max; i++, n++)
-        buf[i] = ((int __near *)e->tabs)[i] * bx / 4;
+    for (i = 0; i < (int)E(e)->ntabs && i < max; i++, n++)
+        buf[i] = ((int __far *)UH_PTR(&uhObj, E(e)->tabs))[i] * bx / 4;
     return n;
 }
 
@@ -180,12 +185,12 @@ static int tabbed_x(HDC hdc, PED e, WORD pos)
     int *sp = stops;
     if (pos <= ls)
         return 0;
-    if (e->ntabs > 16) {
-        sp = (int __near *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+    if (E(e)->ntabs > 16) {
+        sp = (int __near *)LocalAlloc(LPTR, E(e)->ntabs * sizeof(int));
         if (!sp)
             sp = stops;
     }
-    n = tab_stops(e, sp, sp == stops ? 16 : e->ntabs);
+    n = tab_stops(e, sp, sp == stops ? 16 : E(e)->ntabs);
     n = LOWORD(GetTabbedTextExtent(hdc, text(e) + ls, pos - ls, n, sp));
     if (sp != stops)
         LocalFree((HLOCAL)sp);
@@ -196,15 +201,15 @@ static int tabbed_x(HDC hdc, PED e, WORD pos)
    multi-line control */
 static void out_text(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, int origin)
 {
-    if ((estyle(h) & ES_MULTILINE) && !e->password) {
+    if ((estyle(h) & ES_MULTILINE) && !E(e)->password) {
         int stops[16], k;
         int *sp = stops;
-        if (e->ntabs > 16) {
-            sp = (int __near *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+        if (E(e)->ntabs > 16) {
+            sp = (int __near *)LocalAlloc(LPTR, E(e)->ntabs * sizeof(int));
             if (!sp)
                 sp = stops;
         }
-        k = tab_stops(e, sp, sp == stops ? 16 : e->ntabs);
+        k = tab_stops(e, sp, sp == stops ? 16 : E(e)->ntabs);
         TabbedTextOut(hdc, x, y, text(e) + start, n, k, sp, origin);
         if (sp != stops)
             LocalFree((HLOCAL)sp);
@@ -216,13 +221,13 @@ static int text_x(HDC hdc, PED e, WORD start, WORD n)
 {
     if (!n)
         return 0;
-    if (e->multi && !e->password)
+    if (E(e)->multi && !E(e)->password)
         return tabbed_x(hdc, e, start + n) - tabbed_x(hdc, e, start);
-    if (e->password) {
+    if (E(e)->password) {
         char buf[64];
         WORD i;
         for (i = 0; i < n && i < sizeof buf; i++)
-            buf[i] = e->password;
+            buf[i] = E(e)->password;
         return LOWORD(GetTextExtent(hdc, buf, n < sizeof buf ? n : sizeof buf));
     }
     return LOWORD(GetTextExtent(hdc, text(e) + start, n));
@@ -235,11 +240,11 @@ static void draw_run(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, B
     SetBkMode(hdc, OPAQUE);
     SetBkColor(hdc, syscolor[sel ? COLOR_HIGHLIGHT : COLOR_WINDOW]);
     SetTextColor(hdc, syscolor[sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
-    if (e->password) {
+    if (E(e)->password) {
         char buf[64];
         WORD i;
         for (i = 0; i < n && i < sizeof buf; i++)
-            buf[i] = e->password;
+            buf[i] = E(e)->password;
         TextOut(hdc, x, y, buf, n < sizeof buf ? n : sizeof buf);
     } else
         out_text(hdc, h, e, x, y, start, n, origin);
@@ -248,11 +253,11 @@ static void draw_run(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, B
 static void paint(HWND h, PED e, HDC hdc)
 {
     RECT r;
-    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
-    HBRUSH b = (HBRUSH)(WORD)send_message(e->parent, WM_CTLCOLOR, (WPARAM)hdc,
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
+    HBRUSH b = (HBRUSH)(WORD)send_message(E(e)->parent, WM_CTLCOLOR, (WPARAM)hdc,
                                           MAKELONG(h, CTLCOLOR_EDIT));
-    WORD s0 = e->sel0 < e->sel1 ? e->sel0 : e->sel1, s1 = e->sel0 < e->sel1 ? e->sel1 : e->sel0;
-    BOOL showsel = e->focus || (estyle(h) & ES_NOHIDESEL);
+    WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
+    BOOL showsel = E(e)->focus || (estyle(h) & ES_NOHIDESEL);
     int lh = line_height(h, e);
     GetClientRect(h, &r);
     FillRect(hdc, &r, b ? b : sysbrush[COLOR_WINDOW]);
@@ -260,11 +265,11 @@ static void paint(HWND h, PED e, HDC hdc)
     SetTextColor(hdc, syscolor[COLOR_WINDOWTEXT]);
     {
         int line, nlines = (estyle(h) & ES_MULTILINE) ? line_count(e) : 1;
-        for (line = (estyle(h) & ES_MULTILINE) ? e->topline : 0; line < nlines; line++) {
-            WORD st = (estyle(h) & ES_MULTILINE) ? line_start(e, line) : e->first;
-            WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : e->len - e->first;
-            int y = (estyle(h) & ES_MULTILINE) ? (line - e->topline) * lh : inset(h, e);
-            int x = inset(h, e) - ((estyle(h) & ES_MULTILINE) ? e->xoff : 0);
+        for (line = (estyle(h) & ES_MULTILINE) ? E(e)->topline : 0; line < nlines; line++) {
+            WORD st = (estyle(h) & ES_MULTILINE) ? line_start(e, line) : E(e)->first;
+            WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : E(e)->len - E(e)->first;
+            int y = (estyle(h) & ES_MULTILINE) ? (line - E(e)->topline) * lh : inset(h, e);
+            int x = inset(h, e) - ((estyle(h) & ES_MULTILINE) ? E(e)->xoff : 0);
             WORD a = st, z = st + n;
             if (y > r.bottom)
                 break;
@@ -283,11 +288,11 @@ static void paint(HWND h, PED e, HDC hdc)
                     FillRect(hdc, &b, sysbrush[COLOR_HIGHLIGHT]);
                     SetBkMode(hdc, TRANSPARENT);
                     SetTextColor(hdc, syscolor[COLOR_HIGHLIGHTTEXT]);
-                    if (e->password) {
+                    if (E(e)->password) {
                         char buf[64];
                         WORD i;
                         for (i = 0; i < q - p && i < sizeof buf; i++)
-                            buf[i] = e->password;
+                            buf[i] = E(e)->password;
                         TextOut(hdc, xp, y, buf, i);
                     } else
                         out_text(hdc, h, e, xp, y, p, q - p, x);
@@ -295,7 +300,7 @@ static void paint(HWND h, PED e, HDC hdc)
             } else {
                 if (!IsWindowEnabled(h)) {
                     SetBkMode(hdc, TRANSPARENT);
-                    if (e->password)
+                    if (E(e)->password)
                         draw_run(hdc, h, e, x, y, a, z - a, FALSE, x);
                     else
                         out_text(hdc, h, e, x, y, a, z - a, x);
@@ -313,20 +318,20 @@ static void place_caret(HWND h, PED e)
     HFONT old;
     int x, y = inset(h, e), lh;
     WORD st;
-    if (!e->focus)
+    if (!E(e)->focus)
         return;
     hdc = GetDC(h);
-    old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     lh = line_height(h, e);
     if (estyle(h) & ES_MULTILINE) {
-        int line = line_of(e, e->sel1);
+        int line = line_of(e, E(e)->sel1);
         st = line_start(e, line);
-        y = (line - e->topline) * lh;
+        y = (line - E(e)->topline) * lh;
     } else
-        st = e->first;
-    x = inset(h, e) + (e->sel1 > st ? text_x(hdc, e, st, e->sel1 - st) : 0);
+        st = E(e)->first;
+    x = inset(h, e) + (E(e)->sel1 > st ? text_x(hdc, e, st, E(e)->sel1 - st) : 0);
     if (estyle(h) & ES_MULTILINE)
-        x -= e->xoff;
+        x -= E(e)->xoff;
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
     SetCaretPos(x, y);
@@ -338,20 +343,20 @@ static void scroll_to_caret(HWND h, PED e)
     RECT r;
     GetClientRect(h, &r);
     if (estyle(h) & ES_MULTILINE) {
-        int line = line_of(e, e->sel1), lh = line_height(h, e), rows = r.bottom / (lh ? lh : 1);
-        if (line < e->topline)
-            e->topline = line;
-        else if (rows > 0 && line >= e->topline + rows)
-            e->topline = line - rows + 1;
+        int line = line_of(e, E(e)->sel1), lh = line_height(h, e), rows = r.bottom / (lh ? lh : 1);
+        if (line < E(e)->topline)
+            E(e)->topline = line;
+        else if (rows > 0 && line >= E(e)->topline + rows)
+            E(e)->topline = line - rows + 1;
         return;
     }
-    if (e->sel1 < e->first)
-        e->first = e->sel1;
+    if (E(e)->sel1 < E(e)->first)
+        E(e)->first = E(e)->sel1;
     else {
         HDC hdc = GetDC(h);
-        HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
-        while (e->first < e->sel1 && text_x(hdc, e, e->first, e->sel1 - e->first) > r.right - 2)
-            e->first++;
+        HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
+        while (E(e)->first < E(e)->sel1 && text_x(hdc, e, E(e)->first, E(e)->sel1 - E(e)->first) > r.right - 2)
+            E(e)->first++;
         SelectObject(hdc, old);
         ReleaseDC(h, hdc);
     }
@@ -372,7 +377,7 @@ static int char_w(HWND h, PED e)
 {
     HDC hdc = GetDC(h);
     TEXTMETRIC tm;
-    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     GetTextMetrics(hdc, &tm);
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
@@ -382,7 +387,7 @@ static int char_w(HWND h, PED e)
 static int widest(HWND h, PED e)
 {
     HDC hdc = GetDC(h);
-    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     int line, n = line_count(e), w = 0;
     for (line = 0; line < n; line++) {
         WORD st = line_start(e, line);
@@ -404,12 +409,12 @@ static void set_scrollbars(HWND h, PED e)
     n = line_count(e);
     if (s & WS_VSCROLL) {
         SetScrollRange(h, SB_VERT, 0, 100, FALSE);
-        SetScrollPos(h, SB_VERT, n > 1 ? (int)((long)e->topline * 100 / (n - 1)) : 0, TRUE);
+        SetScrollPos(h, SB_VERT, n > 1 ? (int)((long)E(e)->topline * 100 / (n - 1)) : 0, TRUE);
     }
     if (s & WS_HSCROLL) {
         int w = widest(h, e);
         SetScrollRange(h, SB_HORZ, 0, 100, FALSE);
-        SetScrollPos(h, SB_HORZ, w > 0 ? (int)((long)e->xoff * 100 / w) : 0, TRUE);
+        SetScrollPos(h, SB_HORZ, w > 0 ? (int)((long)E(e)->xoff * 100 / w) : 0, TRUE);
     }
 }
 
@@ -424,9 +429,9 @@ static void scroll_to(HWND h, PED e, int top, int xoff, BOOL nv, BOOL nh, BOOL f
         top = 0;
     if (xoff < 0)
         xoff = 0;
-    if (top != e->topline || xoff != e->xoff) {
-        e->topline = top;
-        e->xoff = xoff;
+    if (top != E(e)->topline || xoff != E(e)->xoff) {
+        E(e)->topline = top;
+        E(e)->xoff = xoff;
         HideCaret(h);
         InvalidateRect(h, NULL, TRUE);
         place_caret(h, e);
@@ -466,20 +471,20 @@ static void refresh(HWND h, PED e)
 
 static void replace_sel(HWND h, PED e, LPCSTR s)
 {
-    WORD s0 = e->sel0 < e->sel1 ? e->sel0 : e->sel1, s1 = e->sel0 < e->sel1 ? e->sel1 : e->sel0;
+    WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
     WORD n = s ? lstr_len(s) : 0;
-    if (e->limit && e->len - (s1 - s0) + n > e->limit) {
+    if (E(e)->limit && E(e)->len - (s1 - s0) + n > E(e)->limit) {
         notify(h, e, EN_MAXTEXT);
         return;
     }
-    if (!grow(e, e->len - (s1 - s0) + n))
+    if (!grow(e, E(e)->len - (s1 - s0) + n))
         return;
-    fmemcpy((char __far *)(text(e) + s0 + n), (char __far *)(text(e) + s1), e->len - s1 + 1);
+    fmemcpy((char __far *)(text(e) + s0 + n), (char __far *)(text(e) + s1), E(e)->len - s1 + 1);
     if (n)
         fmemcpy((char __far *)(text(e) + s0), s, n);
-    e->len = e->len - (s1 - s0) + n;
-    e->sel0 = e->sel1 = s0 + n;
-    e->modified = 1;
+    E(e)->len = E(e)->len - (s1 - s0) + n;
+    E(e)->sel0 = E(e)->sel1 = s0 + n;
+    E(e)->modified = 1;
     refresh(h, e);
     notify(h, e, EN_CHANGE);
 }
@@ -487,20 +492,20 @@ static void replace_sel(HWND h, PED e, LPCSTR s)
 static WORD pos_from_x(HWND h, PED e, int x, int y)
 {
     HDC hdc = GetDC(h);
-    HFONT old = SelectObject(hdc, e->font ? e->font : GetStockObject(SYSTEM_FONT));
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     WORD st, n, i;
     if (estyle(h) & ES_MULTILINE) {
-        int line = e->topline + y / line_height(h, e);
+        int line = E(e)->topline + y / line_height(h, e);
         if (line >= line_count(e))
             line = line_count(e) - 1;
         st = line_start(e, line);
         n = line_len(e, st);
     } else {
-        st = e->first;
-        n = e->len - st;
+        st = E(e)->first;
+        n = E(e)->len - st;
     }
     for (i = 0; i < n; i++)
-        if (inset(h, e) - ((estyle(h) & ES_MULTILINE) ? e->xoff : 0) +
+        if (inset(h, e) - ((estyle(h) & ES_MULTILINE) ? E(e)->xoff : 0) +
             text_x(hdc, e, st, i + 1) - (text_x(hdc, e, st + i, 1) / 2) > x)
             break;
     SelectObject(hdc, old);
@@ -515,16 +520,21 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     e = ed_of(h);
     if (msg == WM_NCCREATE) {
-        e = (PED)LocalAlloc(LPTR, sizeof(ED));
+        WORD t;
+        e = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(ED));
         if (!e)
             return 0;
-        /* fixed: e->text is used as the pointer (a moveable handle is not one) */
-        e->text = (WORD)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, 32);
-        e->size = 32;
-        e->multi = (estyle(h) & ES_MULTILINE) != 0;
-        e->parent = GetParent(h);
+        t = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, 32);
+        if (!t) {
+            uh_free(&uhObj, e);
+            return 0;
+        }
+        E(e)->text = t;
+        E(e)->size = 32;
+        E(e)->multi = (estyle(h) & ES_MULTILINE) != 0;
+        E(e)->parent = GetParent(h);
         if (estyle(h) & ES_PASSWORD)
-            e->password = '*';
+            E(e)->password = '*';
         SetWindowWord(h, 0, (WORD)e);
         {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
@@ -537,10 +547,9 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return DefWindowProc(h, msg, wp, lp);
     switch (msg) {
     case WM_NCDESTROY:
-        if (e->tabs)
-            LocalFree((HLOCAL)e->tabs);
-        LocalFree((HLOCAL)e->text);
-        LocalFree((HLOCAL)e);
+        uh_free(&uhObj, E(e)->tabs);
+        uh_free(&uhObj, E(e)->text);
+        uh_free(&uhObj, e);
         SetWindowWord(h, 0, 0);
         return 0;
     case WM_PAINT: {
@@ -553,38 +562,38 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_SETFONT:
-        e->font = (HFONT)wp;
+        E(e)->font = (HFONT)wp;
         if (LOWORD(lp))
             InvalidateRect(h, NULL, TRUE);
         return 0;
     case WM_GETFONT:
-        return (LONG)(WORD)e->font;
+        return (LONG)(WORD)E(e)->font;
     case WM_SETTEXT:
         set_text(e, (LPCSTR)lp);
-        e->modified = 0;
+        E(e)->modified = 0;
         refresh(h, e);
         notify(h, e, EN_CHANGE);
         return 1;
     case WM_GETTEXT:
         if ((int)wp <= 0)
             return 0;
-        lstr_cpyn((LPSTR)lp, (LPCSTR)MAKELP(get_ds(), e->text), wp);
+        lstr_cpyn((LPSTR)lp, (LPCSTR)text(e), wp);
         return lstr_len((LPCSTR)lp);
     case WM_GETTEXTLENGTH:
-        return e->len;
+        return E(e)->len;
     case WM_SETFOCUS:
-        e->focus = 1;
+        E(e)->focus = 1;
         /* two pixels wide in Notepad's multi-line control, one in the
            Run dialog's single-line one (3.1; UNVERIFIED which of style
            and font decides) */
-        CreateCaret(h, 0, e->multi ? 2 : 1, line_height(h, e));
+        CreateCaret(h, 0, E(e)->multi ? 2 : 1, line_height(h, e));
         place_caret(h, e);
         ShowCaret(h);
         InvalidateRect(h, NULL, TRUE);
         notify(h, e, EN_SETFOCUS);
         return 0;
     case WM_KILLFOCUS:
-        e->focus = 0;
+        E(e)->focus = 0;
         DestroyCaret();
         InvalidateRect(h, NULL, TRUE);
         notify(h, e, EN_KILLFOCUS);
@@ -595,15 +604,18 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
         SetFocus(h);
-        e->sel0 = e->sel1 = pos_from_x(h, e, (int)LOWORD(lp), (int)HIWORD(lp));
+        {
+            WORD pos = pos_from_x(h, e, (int)LOWORD(lp), (int)HIWORD(lp));
+            E(e)->sel0 = E(e)->sel1 = pos;
+        }
         SetCapture(h);
         refresh(h, e);
         return 0;
     case WM_MOUSEMOVE:
         if (GetCapture() == h) {
             WORD p = pos_from_x(h, e, (int)LOWORD(lp), (int)HIWORD(lp));
-            if (p != e->sel1) {
-                e->sel1 = p;
+            if (p != E(e)->sel1) {
+                E(e)->sel1 = p;
                 refresh(h, e);
             }
         }
@@ -616,8 +628,8 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (estyle(h) & ES_READONLY)
             return 0;
         if (wp == 8) {
-            if (e->sel0 == e->sel1 && e->sel1 > 0)
-                e->sel0 = e->sel1 - 1;
+            if (E(e)->sel0 == E(e)->sel1 && E(e)->sel1 > 0)
+                E(e)->sel0 = E(e)->sel1 - 1;
             replace_sel(h, e, "");
         } else if (wp == '\r') {
             if (estyle(h) & ES_MULTILINE)
@@ -635,22 +647,22 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_KEYDOWN: {
         BOOL shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-        WORD p = e->sel1;
+        WORD p = E(e)->sel1;
         switch (wp) {
         case VK_LEFT: if (p) p--; break;
-        case VK_RIGHT: if (p < e->len) p++; break;
+        case VK_RIGHT: if (p < E(e)->len) p++; break;
         case VK_HOME:
             p = (estyle(h) & ES_MULTILINE) ? line_start(e, line_of(e, p)) : 0;
             break;
         case VK_END:
             p = (estyle(h) & ES_MULTILINE) ? line_start(e, line_of(e, p)) +
-                line_len(e, line_start(e, line_of(e, p))) : e->len;
+                line_len(e, line_start(e, line_of(e, p))) : E(e)->len;
             break;
         case VK_DELETE:
             if (estyle(h) & ES_READONLY)
                 return 0;
-            if (e->sel0 == e->sel1 && e->sel1 < e->len)
-                e->sel1++;
+            if (E(e)->sel0 == E(e)->sel1 && E(e)->sel1 < E(e)->len)
+                E(e)->sel1++;
             replace_sel(h, e, "");
             return 0;
         case VK_UP:
@@ -668,22 +680,22 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         default:
             return 0;
         }
-        e->sel1 = p;
+        E(e)->sel1 = p;
         if (!shift)
-            e->sel0 = p;
+            E(e)->sel0 = p;
         refresh(h, e);
         return 0;
     }
     /* ---- EM_ messages ---- */
     case EM_GETSEL:
-        return MAKELONG(e->sel0 < e->sel1 ? e->sel0 : e->sel1, e->sel0 < e->sel1 ? e->sel1 : e->sel0);
+        return MAKELONG(E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0);
     case EM_SETSEL: {
         int a = (int)LOWORD(lp), b = (int)HIWORD(lp);
         if (a == -1) {
-            e->sel0 = e->sel1;
+            E(e)->sel0 = E(e)->sel1;
         } else {
-            e->sel0 = (WORD)(a < 0 ? 0 : a > (int)e->len ? e->len : a);
-            e->sel1 = (WORD)(b < 0 || b > (int)e->len ? e->len : b);
+            E(e)->sel0 = (WORD)(a < 0 ? 0 : a > (int)E(e)->len ? E(e)->len : a);
+            E(e)->sel1 = (WORD)(b < 0 || b > (int)E(e)->len ? E(e)->len : b);
         }
         refresh(h, e);
         return 1;
@@ -692,22 +704,22 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         replace_sel(h, e, (LPCSTR)lp);
         return 0;
     case EM_LIMITTEXT:
-        e->limit = wp;
+        E(e)->limit = wp;
         return 0;
     case EM_GETLINECOUNT:
         return line_count(e);
     case EM_LINEINDEX: {
-        int line = (int)wp == -1 ? line_of(e, e->sel1) : (int)wp;
+        int line = (int)wp == -1 ? line_of(e, E(e)->sel1) : (int)wp;
         if (line >= line_count(e))
             return -1;
         return line_start(e, line);
     }
     case EM_LINELENGTH: {
-        WORD at = (int)wp == -1 ? e->sel1 : wp;
+        WORD at = (int)wp == -1 ? E(e)->sel1 : wp;
         return line_len(e, line_start(e, line_of(e, at)));
     }
     case EM_LINEFROMCHAR:
-        return line_of(e, (int)wp == -1 ? e->sel1 : wp);
+        return line_of(e, (int)wp == -1 ? E(e)->sel1 : wp);
     case EM_GETLINE: {
         WORD st, n, max = *(WORD __far *)lp;
         if ((int)wp >= line_count(e))
@@ -720,9 +732,9 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return n;
     }
     case EM_GETMODIFY:
-        return e->modified;
+        return E(e)->modified;
     case EM_SETMODIFY:
-        e->modified = wp != 0;
+        E(e)->modified = wp != 0;
         return 0;
     case EM_SETREADONLY: {
         PWND w = valid_wnd(h);
@@ -733,27 +745,27 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 1;
     }
     case EM_SETPASSWORDCHAR:
-        e->password = (char)wp;
+        E(e)->password = (char)wp;
         InvalidateRect(h, NULL, TRUE);
         return 0;
     case EM_GETPASSWORDCHAR:
-        return (BYTE)e->password;
+        return (BYTE)E(e)->password;
     case EM_CANUNDO:
     case EM_UNDO:
     case EM_EMPTYUNDOBUFFER:
         return 0;
     case EM_GETFIRSTVISIBLELINE:
-        return (estyle(h) & ES_MULTILINE) ? e->topline : e->first;
+        return (estyle(h) & ES_MULTILINE) ? E(e)->topline : E(e)->first;
     case EM_LINESCROLL:
         if (estyle(h) & ES_MULTILINE)
-            scroll_to(h, e, e->topline + (int)LOWORD(lp), e->xoff + (int)HIWORD(lp) * char_w(h, e),
+            scroll_to(h, e, E(e)->topline + (int)LOWORD(lp), E(e)->xoff + (int)HIWORD(lp) * char_w(h, e),
                       TRUE, TRUE, FALSE);
         return 1;
     case WM_VSCROLL:
     case WM_HSCROLL: {
         BOOL v = msg == WM_VSCROLL;
-        int n = line_count(e), page = visible_lines(h, e) - 1, cw = char_w(h, e), top = e->topline,
-            x = e->xoff, pos = (int)LOWORD(lp);
+        int n = line_count(e), page = visible_lines(h, e) - 1, cw = char_w(h, e), top = E(e)->topline,
+            x = E(e)->xoff, pos = (int)LOWORD(lp);
         if (!(estyle(h) & ES_MULTILINE))
             return 0;
         if (page < 1)
@@ -784,24 +796,25 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_SETTABSTOPS:
         /* wParam stops at lParam (dialog units); 0: the default, 1: a
            stop every that many (3.1 SDK) */
-        if (e->tabs)
-            LocalFree((HLOCAL)e->tabs);
-        e->tabs = 0;
-        e->ntabs = 0;
+        uh_free(&uhObj, E(e)->tabs);
+        E(e)->tabs = 0;
+        E(e)->ntabs = 0;
         if (!(estyle(h) & ES_MULTILINE))
             return FALSE;
         if (wp && lp) {
             WORD i, n = wp;
-            int __near *t;
+            int __far *t;
+            WORD b;
             /* one value: a stop every that many units (TabbedTextOut
                repeats a single stop) */
-            e->tabs = (WORD)LocalAlloc(LPTR, n * sizeof(int));
-            if (!e->tabs)
+            b = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, n * sizeof(int));
+            if (!b)
                 return FALSE;
-            t = (int __near *)e->tabs;
+            E(e)->tabs = b;
+            t = (int __far *)UH_PTR(&uhObj, b);
             for (i = 0; i < n; i++)
                 t[i] = ((int __far *)lp)[i];
-            e->ntabs = n;
+            E(e)->ntabs = n;
         }
         InvalidateRect(h, NULL, TRUE);
         return TRUE;

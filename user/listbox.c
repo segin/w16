@@ -3,7 +3,9 @@
  *
  * The state is a block in USER's local heap, its handle in the window's
  * first extra word (Windows 3.1's class has 2 extra bytes: US2); the items
- * are another block of LBITEMs, strings in their own local blocks.
+ * are another block of LBITEMs, strings blocks of their own, both in the
+ * object heap (uheap.c: 3.1's list box strings cost DGROUP nothing, US15),
+ * reached through item() and STR() each time.
  * Items are drawn in the window's font one line apart, the text 2 pixels
  * from the left (UNVERIFIED: US4 to compare), selected items in the
  * Highlight colours, the caret item with a dotted focus rectangle.
@@ -17,7 +19,8 @@ typedef struct LBITEM {
     DWORD data;
     WORD  sel;
 } LBITEM;
-typedef LBITEM __near *PLBITEM;
+typedef LBITEM __far *PLBITEM;
+#define STR(t)  ((LPCSTR)UH_PTR(&uhObj, (t)))
 
 typedef struct LB {
     WORD   items;               /* local block of LBITEMs */
@@ -42,7 +45,7 @@ static PLB lb_of(HWND h)
 
 static PLBITEM item(PLB lb, int i)
 {
-    return (PLBITEM)(lb->items + i * sizeof(LBITEM));
+    return (PLBITEM)UH_PTR(&uhObj, lb->items + i * sizeof(LBITEM));
 }
 
 static DWORD lbstyle(HWND h)
@@ -213,7 +216,7 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, syscolor[it->sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
     if (it->text) {
-        LPCSTR s = (LPCSTR)MAKELP(get_ds(), it->text);
+        LPCSTR s = STR(it->text);
         if (lbstyle(h) & LBS_USETABSTOPS)
             TabbedTextOut(hdc, r.left + 2, r.top, s, lstr_len(s), 0, NULL, r.left + 2);
         else
@@ -248,15 +251,16 @@ static void redraw(HWND h)
 static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
 {
     PLBITEM it;
+    WORD text;
     if (lb->count >= lb->alloc) {
         int n = lb->alloc ? lb->alloc * 2 : 16;
-        WORD blk = lb->items ? (WORD)LocalReAlloc((HLOCAL)lb->items, n * sizeof(LBITEM), LMEM_MOVEABLE)
-                             : (WORD)LocalAlloc(LMEM_FIXED, n * sizeof(LBITEM));
+        WORD blk = uh_realloc(&uhObj, lb->items, n * sizeof(LBITEM));
         if (!blk)
             return LB_ERRSPACE;
         lb->items = blk;
         lb->alloc = n;
     }
+    text = hasstrings(h) ? uh_strdup_in(&uhObj, s) : 0;    /* before item(): it allocates */
     if (at < 0 || at > lb->count)
         at = lb->count;
     if (at < lb->count)
@@ -266,7 +270,7 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
     it = item(lb, at);
     it->sel = 0;
     it->data = data;
-    it->text = hasstrings(h) ? local_strdup(s) : 0;
+    it->text = text;
     if (!hasstrings(h))
         it->data = (DWORD)s;
     if (lb->cur >= at && lb->cur >= 0 && lb->count > 1)
@@ -294,15 +298,14 @@ static int sorted_pos(HWND h, PLB lb, LPCSTR s)
         return lb->count;
     }
     for (i = 0; i < lb->count; i++)
-        if (lstrcmpi(s, (LPCSTR)MAKELP(get_ds(), item(lb, i)->text)) < 0)
+        if (lstrcmpi(s, STR(item(lb, i)->text)) < 0)
             return i;
     return lb->count;
 }
 
 static void del_item(PLB lb, int i)
 {
-    if (item(lb, i)->text)
-        LocalFree((HLOCAL)item(lb, i)->text);
+    uh_free(&uhObj, item(lb, i)->text);
     if (i + 1 < lb->count)
         fmemcpy((void __far *)item(lb, i), (void __far *)item(lb, i + 1),
                 (lb->count - i - 1) * sizeof(LBITEM));
@@ -388,7 +391,7 @@ static int find(HWND h, PLB lb, int start, LPCSTR s, BOOL exact)
         char buf[256];
         if (!item(lb, k)->text)
             continue;
-        t = (LPCSTR)MAKELP(get_ds(), item(lb, k)->text);
+        t = STR(item(lb, k)->text);
         if (exact) {
             if (!lstrcmpi(t, s))
                 return k;
@@ -479,8 +482,7 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DESTROY:
         while (lb->count)
             del_item(lb, lb->count - 1);
-        if (lb->items)
-            LocalFree((HLOCAL)lb->items);
+        uh_free(&uhObj, lb->items);
         LocalFree((HLOCAL)lb);
         SetWindowWord(h, 0, 0);
         return 0;
@@ -785,12 +787,12 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             *(DWORD __far *)lp = item(lb, wp)->data;
             return 4;
         }
-        lstr_cpyn((LPSTR)lp, (LPCSTR)MAKELP(get_ds(), item(lb, wp)->text), 0x7FFF);
+        lstr_cpyn((LPSTR)lp, STR(item(lb, wp)->text), 0x7FFF);
         return lstr_len((LPCSTR)lp);
     case LB_GETTEXTLEN:
         if ((int)wp < 0 || (int)wp >= lb->count)
             return LB_ERR;
-        return item(lb, wp)->text ? lstr_len((LPCSTR)MAKELP(get_ds(), item(lb, wp)->text)) : 4;
+        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 4;
     case LB_SETCURSEL:
         if ((int)wp >= lb->count)
             return LB_ERR;
