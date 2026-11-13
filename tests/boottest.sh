@@ -269,7 +269,10 @@ blank() {
 # (an intermittent real bug looks exactly like a flaky test), not noise.
 retrylog=$root/build/boottest-retries.log
 retried() {
-    line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null) $1 $2 $3"
+    # (git's failure, outside a repository as on the remote build host,
+    # made the assignment fail and set -e end the case: "the case stopped
+    # before its end" in place of every retried case's result)
+    line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null || true) $1 $2 $3"
     echo "RETRY $1: $2 ($3)"
     # cases run in parallel: one writer at a time
     (
@@ -445,7 +448,7 @@ check() {
         if booted woaref2; then
             n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
             n2=${n2%% *}
-            [ "$n2" = 0 ] && { n=0; retried "$c" woaref-second-boot "first reference differed by $n1 pixels"; }
+            if [ "$n2" = 0 ]; then n=0; retried "$c" woaref-second-boot "first reference differed by $n1 pixels"; fi
         fi
         # the same stray caption repaint shows up in the case's own boot
         # too (it is Microsoft's USER redrawing after the DOS program
@@ -459,9 +462,11 @@ check() {
             for rr in woaref woaref2; do
                 [ -f "$out/$rr.png" ] || continue
                 m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
-                [ "${m%% *}" = 0 ] && n=0
+                if [ "${m%% *}" = 0 ]; then n=0; fi
             done
-            [ "$n" = 0 ] && retried "$c" case-second-boot "first boot differed by $n1 pixels"
+            # (if, not &&: a false test ending a loop body made dash's
+            # set -e end the case: "the case stopped before its end")
+            if [ "$n" = 0 ]; then retried "$c" case-second-boot "first boot differed by $n1 pixels"; fi
         fi
     fi
     case $n in
@@ -558,13 +563,21 @@ runcase() {
         else
             echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
         fi ;;
-    winoldap)  woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+    # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
+    # its default svga_s3, after the DOS program's text mode and back, the
+    # displayed image now and then kept stale bytes 1000h-104Fh of the
+    # planes (Program Manager's frame top in the desktop colour, 349-371
+    # pixels) that were not in video memory (GDI's GetPixel read the right
+    # frame), with Microsoft's WINOLDAP as with w16's (commit 7480e1c).
+    # Remote runs of these three cases: svga_s3 8 of 10 with a failure,
+    # vgaonly 0 of 15. Windows' display driver is VGA.DRV either way.
+    winoldap)  export DROPIN_MACHINE=vgaonly; woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldap winoldap woaref ;;
-    winoldapk) woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+    winoldapk) export DROPIN_MACHINE=vgaonly; woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldapk winoldapk woaref ;;
-    winoldapw) woaref; boot winoldapw -r -w -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+    winoldapw) export DROPIN_MACHINE=vgaonly; woaref; boot winoldapw -r -w -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
                check winoldapw winoldapw woaref ;;
     wincomswap)
         # WC4 in WSWAP's place records the block; each scenario a batch file
