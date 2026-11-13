@@ -10,7 +10,9 @@
 ; the caller's on a side stack). Then every register is restored and a
 ; RETF jumps to the real function with the caller's stack and registers.
 ; gdl_retcatch records DX:AX (gdl_exit, which returns the caller's return
-; address) and returns there with the real function's registers.
+; address) and returns there with the real function's registers. It also
+; passes gdl_exit the stack pointer the real function returned with, so
+; the bytes it popped can be recorded (VGREC, gdlog.c's GD_POPS).
 
         bits 16
         cpu 286
@@ -19,7 +21,7 @@
 %include "gdlog.inc"
 
 extern _gdl_enter               ; u16 __cdecl far gdl_enter(u16 idx, u16 far *frame)
-extern _gdl_exit                ; u32 __cdecl far gdl_exit(u32 result)
+extern _gdl_exit                ; u32 __cdecl far gdl_exit(u32 result, u16 sp)
 extern _gdl_init                ; void __cdecl far gdl_init(void)
 
 segment _NULL
@@ -66,10 +68,12 @@ gdl_retcatch:
         pusha
         mov bx, DGROUP
         mov ds, bx
+        lea bx, [bp + 6]                ; SP as the real function left it
+        push bx
         push dx
         push ax
         call far _gdl_exit
-        add sp, 4
+        add sp, 6
         mov [bp + 2], ax
         mov [bp + 4], dx
         popa

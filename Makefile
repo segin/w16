@@ -1043,6 +1043,39 @@ $(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/
 	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/gdi/gd1.map \
 	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
+# VGREC.DRV: GD1 that records values only (no dump of what lies behind a
+# pointer the driver owns: PDEVICE, physical objects) and the bytes each
+# call popped, also of the undocumented entries (drivers/vga/README.md;
+# tests/vgaprobe.sh puts it in front of the display driver under test)
+vgaprobes: $(DOS)/VGREC.DRV
+$(B)/gdi/vgreclog.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY -dGD_VALUES -dGD_POPS -dGDL_TAG='"D"' -fo=$@ $<
+$(DOS)/VGREC.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/vgreclog.o $(B)/gdi/gd1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/vgrec.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/vgreclog.o }
+# VG1.EXE: the display driver's values as programs see them (tests/apps/vg1.c;
+# tests/vgaprobe.sh -p, Windows 3.1's VGA.DRV against w16's)
+$(B)/tests/vg1.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG1.EXE: $(B)/tests/start.o $(B)/tests/vg1.o $(B)/tests/md1s.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg1.map file { $(B)/tests/start.o $(B)/tests/vg1.o $(B)/tests/md1s.o }
+vgaprobes: $(DOS)/VG1.EXE
+# VG3.EXE: GetNearestColor for all 2^24 colours (tests/apps/vg3.c)
+$(DOS)/VG3.EXE: $(B)/tests/start.o $(B)/tests/vg3.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg3.map file { $(B)/tests/start.o $(B)/tests/vg3.o }
+vgaprobes: $(DOS)/VG3.EXE
+# VG4.EXE: solid-brush patterns for all colours of a range of reds (tests/apps/vg4.c)
+$(DOS)/VG4.EXE: $(B)/tests/start.o $(B)/tests/vg4.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg4.map file { $(B)/tests/start.o $(B)/tests/vg4.o }
+vgaprobes: $(DOS)/VG4.EXE
 # GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
 # GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
 # X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
