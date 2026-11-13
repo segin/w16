@@ -18,6 +18,8 @@ w16 repository's LICENSE):
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
                           serial, bus or InPort mouse, use your own
                           Windows 3.1 MOUSE.DRV instead)
+  SYSTEM\COMM.DRV         the serial (COM1-COM4) and parallel
+                          (LPT1-LPT3) port driver
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -37,7 +39,7 @@ overwriting the files above:
   SYSTEM:                 USER.EXE, GDI.EXE, MMSYSTEM.DLL,
                           the drivers named in SYSTEM.INI's [boot]
                           section (SYSTEM.DRV, KEYBOARD.DRV, VGA.DRV,
-                          MMSOUND.DRV, COMM.DRV, ...), the other
+                          MMSOUND.DRV, ...), the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS
                           programs WINOLDAP.MOD, DSWAP.EXE and the

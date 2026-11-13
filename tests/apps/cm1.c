@@ -688,11 +688,25 @@ static void part_c(void)
     readall("break");
     stat("break read");
     evts("break read");
-    /* a new event mask: what happens to the events in the word */
+    /* a new event mask: what becomes of the events in the word, which
+       events are recorded */
     host("#X41;");
     pump(500);
     SetCommEventMask(cid, EV_RXFLAG | EV_TXEMPTY);
+    obs("new mask peek", GetCommEventMask(cid, 0));
     evts("new mask");
+    host("#X41;");
+    pump(500);
+    evts("new mask data");
+    SetCommEventMask(cid, 0x3FFF);
+    host("#X41;");
+    pump(500);
+    obs("full mask peek", GetCommEventMask(cid, 0));
+    SetCommEventMask(cid, EV_RXFLAG);
+    obs("rxflag mask peek", GetCommEventMask(cid, 0));
+    SetCommEventMask(cid, EV_RXCHAR);
+    obs("rxchar mask peek", GetCommEventMask(cid, 0));
+    evts("rxchar mask");
     SetCommEventMask(cid, 0x3FFF);
     readall("new mask");
     d.fChEvt = 1;
@@ -822,10 +836,14 @@ static void part_c(void)
     /* 6: SetCommBreak */
     say("C6 break");
     obs("SetCommBreak", SetCommBreak(cid));
-    WriteComm(cid, "abc", 3);
     pump(400);
-    stat("in break");
+    if (port)
+        uart("in break", port);
     obs("ClearCommBreak", ClearCommBreak(cid));
+    /* (bytes written during the break: on Windows 3.1 they stayed queued
+       until the next write after ClearCommBreak, and in some runs the
+       second of three was lost: not compared) */
+    WriteComm(cid, "abc", 3);
     waitout(2000);
     pump(300);
     stat("break cleared");
@@ -1017,17 +1035,25 @@ static void part_c(void)
     obs("ReadCommString rest", r);
     r = (int)LOWORD(dc(20, 4, cid, SELECTOROF((LPVOID)buf), OFFSETOF((LPVOID)buf), 20));
     obs("ReadCommString none", r);
+    /* the output held (SETXOFF), so that the counts do not depend on how
+       much went meanwhile */
+    waitout(3000);
+    pump(200);
+    EscapeCommFunction(cid, SETXOFF);
     pattern(buf, 40, 17);
     r = (int)LOWORD(dc(19, 4, cid, SELECTOROF((LPVOID)buf), OFFSETOF((LPVOID)buf), 40));
     obs("CommWriteString 40", r);
     pattern(buf, 1500, 19);
     r = (int)LOWORD(dc(19, 4, cid, SELECTOROF((LPVOID)buf), OFFSETOF((LPVOID)buf), 1500));
-    /* (how much the queue took depends on how much went meanwhile) */
-    obs_env("CommWriteString 1500", r);
+    obs("CommWriteString 1500", r);
     stat("after 1500");
     r = WriteComm(cid, buf, 1500);
     obs("WriteComm 1500", r);
     stat("WriteComm 1500");
+    r = (int)LOWORD(dc(5, 2, cid, 'p'));
+    obs("sndcom full", r);
+    stat("sndcom full");
+    EscapeCommFunction(cid, SETXON);
     waitout(5000);
     pump(300);
     r = (int)LOWORD(dc(5, 2, cid, 'q'));

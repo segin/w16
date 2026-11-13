@@ -28,8 +28,9 @@ reception goes on meanwhile.
   #Q;         end: close the connection and exit
 The log (-l FILE) has one line per run of data bytes (D <hex>, in the
 order received; a run ends at a line change, a command or a mark),
-"L rts dtr brk" for each change of the guest's lines, and "#..." for
-each command as received.
+"L rts dtr brk" for each change of the guest's lines (those the emulator
+reports in the first second after connecting are taken as the start,
+not logged), and "#..." for each command as received.
 
 -T FILE: also every chunk received ("<") and sent (">", the link's own
 encoding) with the seconds since the start, for reading timing.
@@ -70,6 +71,7 @@ def main():
         print('commhost: nobody connected', file=sys.stderr)
         return 1
     conn.settimeout(None)
+    t_conn = time.time()
     lock = threading.Lock()
     state = {'out': 3}
     run = []                    # data bytes not yet logged
@@ -153,7 +155,13 @@ def main():
                 esc = False
                 if b != 0xFF:
                     st = (b & 1, (b >> 1) & 1, (b >> 2) & 1)
-                    if st != lines:
+                    # the states the emulator sends in its first second
+                    # (its own start, before the guest does anything)
+                    # are only the starting point: they varied between
+                    # runs of the same emulator
+                    if time.time() - t_conn < 1.0:
+                        lines = st
+                    elif st != lines:
                         lines = st
                         note('L rts=%d dtr=%d brk=%d' % st)
                     continue

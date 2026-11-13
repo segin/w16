@@ -227,7 +227,7 @@ struc P
 .outtrig        resw 1
 .lastrx         resd 1              ; GetSystemMsecCount at the last byte
 .savefifo       resb 1              ; before the open: the FIFO (IIR C0h)
-.savemcr        resb 1              ; and the modem control
+.pad2           resb 1
 .size:
 endstruc
 
@@ -342,16 +342,13 @@ INICOM:
         mov [si + P.txout], ax
         cmp byte [si + P.isopen], 0
         jne .again
-        ; the UART as it was, for trmcom (CM1: the modem control and FIFO
-        ; after a close are those before the open)
+        ; the FIFO as it was, for trmcom (CM1: the FIFO after a close is
+        ; as it was before the open)
         mov dx, [si + P.base]
         add dx, U_IIR
         in al, dx
         and al, 0C0h
         mov [si + P.savefifo], al
-        add dx, U_MCR - U_IIR
-        in al, dx
-        mov [si + P.savemcr], al
         mov byte [si + P.isopen], 1
         call hook
 .again: mov byte [si + P.fresh], 1
@@ -584,7 +581,11 @@ copydcb:
         pop si
         pop es
         pop ds
-        ret
+        ; no parity: fParity is cleared in the copy (CM1)
+        cmp byte [si + P.dcb + D_PARITY], 0
+        jne .r
+        and word [si + P.dcb + D_FLAGS], ~F_PARITY
+.r:     ret
 
 ; program: SI = an open COM port: the UART set up from the DCB (line
 ; control, divisor, FIFO, modem control, interrupts).
@@ -1424,6 +1425,11 @@ getrx:
         xor bx, bx
 .w:     mov [si + P.rxout], bx
         dec word [si + P.rxcnt]
+        ; a byte read takes EV_RXCHAR out of the event word, a byte
+        ; queued EV_TXEMPTY (CM1: with the event mask changed to EV_RXFLAG
+        ; after a read and before a write, the word had EV_RXFLAG alone;
+        ; UNVERIFIED which of the reads and writes did it)
+        and word [si + P.evt], ~EV_RXCHAR
         push ax
         call rxtaken
         pop ax
@@ -1584,6 +1590,7 @@ putq:
         xor ax, ax
 .w:     mov [si + P.txin], ax
         inc word [si + P.txcnt]
+        and word [si + P.evt], ~EV_TXEMPTY  ; (CM1: see getrx)
         mov ax, [si + P.txcnt]
         cmp ax, [si + P.outtrig]
         jb .k
@@ -1778,8 +1785,8 @@ TRMCOM:
         call drain
         push ax
         ; closed as Windows 3.1's driver leaves it (CM1, commhost's
-        ; record): no interrupts; the modem control 0, then as it was
-        ; before the open without OUT2; the FIFO as it was before the open
+        ; record): no interrupts; the modem control 0, then DTR and RTS
+        ; as they were (OUT2 off); the FIFO as it was before the open
         cli
         mov dx, [si + P.base]
         add dx, U_IER
@@ -1787,14 +1794,16 @@ TRMCOM:
         out dx, al
         add dx, U_MCR - U_IER
         out dx, al
-        mov al, [si + P.savemcr]
+        mov al, [si + P.mcr]
         and al, MCR_DTR | MCR_RTS
         out dx, al
         add dx, U_FCR - U_MCR
         xor al, al
+        mov byte [si + P.fifo], 0
         cmp byte [si + P.savefifo], 0C0h
         jne .fcr
         mov al, 1                       ; (trigger level: UNVERIFIED)
+        mov byte [si + P.fifo], 1
 .fcr:   out dx, al
         mov byte [si + P.txon], 0
         mov byte [si + P.isopen], 0
@@ -1808,8 +1817,9 @@ TRMCOM:
 
 ; drain: SI = an open COM port: wait for the transmit queue to empty and
 ; the transmitter to finish. AX = 0, or -2 when the queue did not move
-; for TX_TIMEOUT ms.
-TX_TIMEOUT      equ 10000
+; for TX_TIMEOUT ms (CM1: output held by XOFF, CloseComm returned after
+; 30 s; its result was 0 there, through USER).
+TX_TIMEOUT      equ 30000                ; (CM1: 30 s on Windows 3.1)
 drain:
         call getms
         mov bx, ax
@@ -1897,10 +1907,10 @@ CEXTFCN:
         je .baseirq
         cmp bx, GETBASEIRQ + 1          ; (11 answers as 10: CM1)
         je .baseirq
-        cmp byte [si + P.isopen], 0     ; (Windows 3.1's driver answers
-        je .ok                          ; 0 for a closed port: CM1)
+        cmp byte [si + P.isopen], 0
+        je .closed
         cli
-        cmp bx, SETXOFF
+.disp:  cmp bx, SETXOFF
         je .xoff
         cmp bx, SETXON
         je .xon
@@ -1918,8 +1928,22 @@ CEXTFCN:
 .xoff:  or byte [si + P.stat], CS_XOFFHOLD
         jmp .done
 .xon:   and byte [si + P.stat], ~CS_XOFFHOLD
+        cmp byte [si + P.isopen], 0
+        je .done
         call kicktx
         jmp .done
+        ; a closed port that was open before: the escapes still act on
+        ; its UART (CM1: commhost saw Windows 3.1's driver change the
+        ; lines of a closed COM2; it leaves AX as it was, this one says 0)
+.closed:
+        cmp word [si + P.base], 0
+        je .ok
+        cli
+        mov dx, [si + P.base]
+        add dx, U_MCR
+        in al, dx
+        mov [si + P.mcr], al
+        jmp .disp
 .rts:   mov al, MCR_RTS
         jmp .set
 .dtr:   mov al, MCR_DTR
@@ -2020,11 +2044,8 @@ CEVT:
         jc .ret
         cmp word [bp + 8], 80h          ; a parallel port: none (CM1)
         jae .ret
-        mov ax, [bp + 6]
-        cli
-        mov [si + P.evtmask], ax
-        and [si + P.evt], ax            ; (events outside the new mask go:
-        sti                             ; CM1)
+        mov ax, [bp + 6]                ; (the word keeps what it has, also
+        mov [si + P.evtmask], ax        ; events now outside the mask: CM1)
         lea ax, [si + P.evt]
         mov dx, ds
 .ret:   LEAVE 4
