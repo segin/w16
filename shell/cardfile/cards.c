@@ -198,10 +198,8 @@ void pic_free(PICTURE *p)
 {
     if (p->kind == PIC_BITMAP && p->bmp)
         DeleteObject(p->bmp);
-#ifndef W16_WIN2
     if (p->kind == PIC_OBJECT)
         ole_free(p);
-#endif
     mem_set(p, 0, sizeof *p);
 }
 

@@ -143,9 +143,13 @@ int file_has_path(const char FAR *name)
 
 /* The task's environment variable `name` (exact case), or NULL. w16's
    task shares KERNEL's PSP and environment. */
+/* A variable of the running task's environment (its PDB's 2Ch), KERNEL's
+   before a task runs. Observed (tests/apps/tk16.c "envpath"): OpenFile
+   searches the PATH of the environment a task was started with; w16
+   read KERNEL's (KERNEL audit, low). */
 const char FAR *file_env(const char *name)
 {
-    u16 env = *(u16 FAR *)MK_FP(psp_sel, 0x2C);
+    u16 env = *(u16 FAR *)MK_FP(cur_pdb ? cur_pdb : psp_sel, 0x2C);
     const char FAR *e;
     if (!env)
         return NULL;
@@ -270,15 +274,21 @@ int file_canon(const char FAR *name, char *out, u16 *err)
     return 1;
 }
 
+/* in KERNEL's data, not on the caller's stack: these paths made
+   OpenFile, the profiles and AddAtom take 600-900 bytes of it (KERNEL
+   audit #16); KERNEL does not yield in them, and none calls itself */
+static char jc_tmp[OFS_PATHMAX + 16], so_dir[OFS_PATHMAX];
+static char of_path[OFS_PATHMAX], of_given[OFS_PATHMAX], of_found[OFS_PATHMAX];
+
 static u16 join_canon(const char FAR *dir, const char FAR *name, char *out, u16 *err)
 {
-    char tmp[OFS_PATHMAX + 16];
+    char *tmp = jc_tmp;
     u16 n = 0;
-    while (*dir && n < sizeof tmp - 2)
+    while (*dir && n < sizeof jc_tmp - 2)
         tmp[n++] = *dir++;
     if (n && tmp[n - 1] != '\\')
         tmp[n++] = '\\';
-    while (*name && n < sizeof tmp - 1)
+    while (*name && n < sizeof jc_tmp - 1)
         tmp[n++] = *name++;
     tmp[n] = 0;
     return file_canon(tmp, out, err);
@@ -318,7 +328,7 @@ static void str_to(char FAR *d, const char *s)
    directory of the running task's program, the PATH directories. */
 static u16 search_open(const char FAR *name, u16 mode, char *found)
 {
-    char dir[OFS_PATHMAX];
+    char *dir = so_dir;
     const char FAR *p;
     module FAR *t;
     u16 fh, err, i, k;
@@ -326,13 +336,13 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
     for (k = 0; k < 4; k++) {
         switch (k) {
         case 0: dir[0] = '.'; dir[1] = 0; break;
-        case 1: GetWindowsDirectory(dir, sizeof dir); break;
-        case 2: GetSystemDirectory(dir, sizeof dir); break;
+        case 1: GetWindowsDirectory(dir, sizeof so_dir); break;
+        case 2: GetSystemDirectory(dir, sizeof so_dir); break;
         case 3:
             t = task_module();
             if (!t)
                 continue;
-            for (i = 0; t->path[i] && i < sizeof dir - 1; i++)
+            for (i = 0; t->path[i] && i < sizeof so_dir - 1; i++)
                 dir[i] = t->path[i];
             while (i && dir[i - 1] != '\\')
                 i--;
@@ -347,7 +357,7 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
         u16 n = 0;
         while (p[n] && p[n] != ';')
             n++;
-        if (n && n < sizeof dir) {
+        if (n && n < sizeof so_dir) {
             for (i = 0; i < n; i++)
                 dir[i] = p[i];
             dir[n] = 0;
@@ -364,7 +374,7 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
 
 u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.74 */
 {
-    char path[OFS_PATHMAX], given[OFS_PATHMAX];
+    char *path = of_path, *given = of_given;
     u16 fh, err, date, time, i;
     u16 mode = flags & 0xFF;
 
@@ -392,10 +402,10 @@ u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.
     } else if (file_has_path(name)) {
         fh = dos_open(path, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, &err);
     } else {
-        char found[OFS_PATHMAX];
+        char *found = of_found;
         fh = search_open(name, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, found);
         if (fh != HFILE_ERROR)
-            kmemcpy(path, found, sizeof path);
+            kmemcpy(path, found, sizeof of_path);
         else
             err = DOSE_NOFILE;
     }
@@ -456,14 +466,24 @@ u16 KAPI _lclose(u16 fh)                                        /* KERNEL.81 */
     return dos_close(fh) ? 0 : HFILE_ERROR;
 }
 
+/* _lread and _lwrite stay in the buffer's segment (dos_rw goes on in the
+   next selector, as _hread does; for these that is some other block:
+   KERNEL audit, low). UNVERIFIED: what 3.1 does with a buffer that ends
+   past 64K. */
+static u32 seg_count(void FAR *buf, u16 n)
+{
+    u32 room = 0x10000UL - FP_OFF(buf);
+    return n > room ? room : n;
+}
+
 u16 KAPI _lread(u16 fh, void FAR *buf, u16 n)                   /* KERNEL.82 */
 {
-    return (u16)dos_rw(0x3F, fh, FP_SEG(buf), FP_OFF(buf), n);
+    return (u16)dos_rw(0x3F, fh, FP_SEG(buf), FP_OFF(buf), seg_count(buf, n));
 }
 
 u16 KAPI _lwrite(u16 fh, const void FAR *buf, u16 n)            /* KERNEL.86 */
 {
-    return (u16)dos_rw(0x40, fh, FP_SEG(buf), FP_OFF(buf), n);
+    return (u16)dos_rw(0x40, fh, FP_SEG(buf), FP_OFF(buf), seg_count((void FAR *)buf, n));
 }
 
 u32 KAPI _llseek(u16 fh, u32 off, u16 how)                      /* KERNEL.84 */
@@ -624,19 +644,22 @@ u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136
     return r.ax == 0 ? DRIVE_REMOVABLE : DRIVE_FIXED;
 }
 
-static u16 handle_count = 20;
+/* observed: the count only grows, from 20 up to 255; it is the task's
+   own (tests/apps/tk16.c "hc": a task started after another raised its
+   count to 40 starts from 20). It is kept per task (task.c); DOS's 6700h
+   makes the handle table of the task's PDB at least that big. w16 had one count for all tasks (KERNEL audit #10) */
+u16 task_handles(u16 n);                /* task.c */
 
-/* observed: the count only grows, from 20 up to 255 */
 u16 KAPI_ES SetHandleCount(u16 n)                                  /* KERNEL.199 */
 {
     regs16 r;
     if (n > 255)
         n = 255;
-    if (n > handle_count) {
+    if (n > task_handles(0)) {
         rinit(&r, 0x6700);
         r.bx = n;
-        if (dos_call(&r))
-            handle_count = n;
+        if (dos_call(&r))       /* DOS may round the table up (DOSBox: even) */
+            task_handles(n);
     }
-    return handle_count;
+    return task_handles(0);
 }

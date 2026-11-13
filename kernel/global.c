@@ -750,7 +750,11 @@ static int set_tiles(u16 s, u16 n, u32 lin, u32 size, int code)
     for (i = 0; i < n; i++) {
         u32 off = (u32)i << 16;
         u32 lim = size > off ? size - off - 1 : 0;
-        if (!dpmi_set_desc(s + i * sel_inc, lin + off, lim, code))
+        /* a 286 host takes no limit past FFFFh and left the descriptor
+           as it was: FFFFh then, all a 286 tile holds (KERNEL audit,
+           low) */
+        if (!dpmi_set_desc(s + i * sel_inc, lin + off, lim, code) &&
+            (lim <= 0xFFFFUL || !dpmi_set_desc(s + i * sel_inc, lin + off, 0xFFFF, code)))
             return 0;
     }
     return 1;
@@ -1301,6 +1305,157 @@ u32 gsize_of_sel(u16 sel)
     return p ? gsize_of_sel(p->src) : 0;
 }
 
+
+/* ---- [w16] heapcheck=1 (winboot.c): the global heap and every local
+   heap in it checked whole at each Global/Local allocation call and task
+   switch; the first inconsistency is reported (where it was found, the
+   arena, its neighbours) and Windows stopped, so that the code that wrote
+   past its block is caught close to the act (a debugging aid) ---- */
+u16 heap_check_on;
+u32 api_caller;            /* kentry.asm: the last heap API caller */
+static u16 heap_check_busy;
+
+const char *local_check(u16 seg, u16 *at);      /* local.c */
+
+static const char *global_check(u16 *bad)
+{
+    u16 a, n, items = 0, f, pf;
+    *bad = 0;
+    if (!bm)
+        return 0;
+    for (a = hp->first; ; a = n) {
+        *bad = a;
+        if (!present(a) || lsl(a) < 0x0F)
+            return "global: arena selector not usable";
+        n = AR(a)->next;
+        if (a == hp->last)
+            break;
+        if (!n || !present(n))
+            return "global: bad next arena";
+        if (AR(n)->prev != a)
+            return "global: next arena's prev is not this one";
+        if (AR(a)->owner != OWN_NOTTHERE && AR(n)->owner != OWN_NOTTHERE &&
+            lin_of(a) + ((u32)TOTAL(a) << 4) != lin_of(n))
+            return "global: arena size does not reach the next arena";
+        if (!is_free(a) && AR(a)->owner != OWN_SENTINEL && AR(a)->owner != OWN_NOTTHERE &&
+            AR(a)->handle) {
+            u16 s = AR(a)->handle | 1;
+            if (*seltab(s) != a)
+                return "global: selector table entry is not this arena";
+            if (!present(s) || lin_of(s) != lin_of(a) + 0x10)
+                return "global: block's selector does not start after its arena";
+            {   /* every tile: where set_tiles put it (the low word of
+                   its limit; a 286 host gives at most FFFFh) */
+                u32 bytes = (u32)AR(a)->size << 4, want;
+                u16 i, t, l, nt = tiles(bytes);
+                if ((AR(a)->flags & GA_DGROUP) && nt > 1)
+                    return "global: a DGROUP is more than one selector";
+                for (i = 0; i < nt; i++) {
+                    t = s + i * sel_inc;
+                    want = bytes - ((u32)i << 16) - 1;
+                    l = lsl(t);
+                    if (!present(t) || lin_of(t) != lin_of(a) + 0x10 + ((u32)i << 16) ||
+                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF)))
+                        return "global: a tile's base or limit is not the block's";
+                }
+            }
+        }
+        if (++items == 0)
+            return "global: no end";
+    }
+    /* free blocks, in address order */
+    pf = hp->first;
+    for (f = AR(hp->first)->lnext; f != hp->last; f = AR(f)->lnext) {
+        *bad = f;
+        if (!f || !present(f) || !is_free(f) || AR(f)->lprev != pf || lin_of(f) <= lin_of(pf))
+            return "global: bad free list";
+        pf = f;
+    }
+    *bad = 0;
+    return 0;
+}
+
+static void hc_arena(const char *what, u16 a)
+{
+    u16 i;
+    kputs(what);
+    kputhex(a);
+    if (a && present(a)) {
+        kputs(":");
+        for (i = 0; i < 16; i += 2) {
+            kputs(" ");
+            kputhex(*(u16 FAR *)MK_FP(a, i));
+        }
+    }
+    kputs("\r\n");
+}
+
+/* where: the API or event, caller: its return address (0:0 if not known) */
+void heap_check(const char *where, u32 caller)
+{
+    u16 bad;
+    const char *why;
+    if (!heap_check_on || heap_check_busy)
+        return;
+    heap_check_busy = 1;
+    why = global_check(&bad);
+    heap_check_busy = 0;
+    if (why)
+        heap_fail(why, where, caller, bad, 0, 0);
+}
+
+/* the local heap in segment ds (at each Local* call on it) */
+void local_heap_check(const char *where, u16 ds)
+{
+    u16 lbad;
+    const char *why;
+    if (!heap_check_on || heap_check_busy)
+        return;
+    why = local_check(ds, &lbad);
+    if (why)
+        heap_fail(why, where, api_caller, 0, ds, lbad);
+}
+
+void heap_fail(const char *why, const char *where, u32 caller, u16 bad, u16 lseg, u16 lbad)
+{
+    heap_check_on = 0;
+    kputs("w16 heapcheck: ");
+    kputs(why);
+    kputs(" at ");
+    kputs(where);
+    kputs(" from ");
+    kputhex((u16)(caller >> 16));
+    kputs(":");
+    kputhex((u16)caller);
+    kputs("\r\n");
+    if (bad) {
+        hc_arena("  arena ", bad);
+        if (present(bad)) {
+            hc_arena("  prev  ", AR(bad)->prev);
+            hc_arena("  next  ", AR(bad)->next);
+        }
+    }
+    if (lseg) {
+        u16 i, o = lbad > 0x10 ? lbad - 0x10 : 0;
+        kputs("  local heap in ");
+        kputhex(lseg);
+        kputs(", arena ");
+        kputhex(lbad);
+        kputs(":");
+        for (i = 0; i < 0x30 && (u32)o + i + 1 <= (u32)lsl(lseg); i += 2) {
+            if (!(i & 0x0F)) {
+                kputs("\r\n    ");
+                kputhex(o + i);
+                kputs(":");
+            }
+            kputs(" ");
+            kputhex(*(u16 FAR *)MK_FP(lseg, o + i));
+        }
+        kputs("\r\n");
+    }
+    kexit_to_dos(0xFE);
+}
+
 /* ---- API ---- */
 
 /* Observed (tests/apps/tk15.c): a block a task allocates is freed when
@@ -1310,6 +1465,7 @@ u32 gsize_of_sel(u16 sel)
 u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
 {
     u16 owner = task_pdb();
+    heap_check("GlobalAlloc", 0);
     if (flags & GMEM_SHARE) {
         module FAR *m = task_module();
         owner = m ? m->ne_sel : 0;
@@ -1336,11 +1492,28 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
     if (!tot)
         return 0;
     need = tiles(((u32)tot - 1) << 4);
-    if (need > n)
-        return 0;                       /* TODO: a longer run of tiles */
     a = alloc_space(tot, WHERE_ANY, flags);
     if (!a)
         return 0;
+    if (need > n) {
+        /* more tiles than it had: a new run of selectors, the old one
+           freed, the new handle returned. Observed (tests/apps/tk17.c
+           "dg"; 3.1 Standard, 386 Enhanced, KRNL286): a discarded 100h
+           block brought back as 18000h gets another handle, the whole
+           size usable; w16 failed it (KERNEL audit, missing
+           functionality) */
+        u16 ns = dpmi_alloc_desc(need);
+        if (!ns) {
+            release(a);
+            return 0;
+        }
+        *seltab(s) = 0;
+        for (i = 0; i < n; i++)
+            dpmi_free_desc(s + i * sel_inc);
+        s = ns;
+        h = (h & 1) ? ns : ns & ~1u;
+        n = need;
+    }
     bytes = (u32)AR(a)->size << 4;
     for (i = need; i < n; i++)
         dpmi_free_desc(s + i * sel_inc);
@@ -1352,7 +1525,10 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
         gf |= GA_DGROUP;
     if (db & DB_DISCCODE)
         gf |= GA_DISCCODE;
-    set_arena(a, 0, owner, AR(a)->size, (u8)gf, h);
+    /* a discarded block was moveable: its handle stays even, also when
+       the call named it by its selector (the arena got h | 1, which
+       made the block fixed; KERNEL audit, low) */
+    set_arena(a, 0, owner, AR(a)->size, (u8)gf, h & ~1u);
     AR(a)->lprev = AR(a)->lnext = 0;
     if (db & DB_DISC)
         lru_add(a, 1);
@@ -1368,6 +1544,7 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
 static u16 grow_tiles(u16 a, u16 h, u16 tot, u16 flags)
 {
     u16 os = h | 1, on = tiles((u32)AR(a)->size << 4), ns, nn, f, i;
+    u8 hold;
     u32 old = (u32)AR(a)->size << 4, bytes;
     int code = is_code(os);
 
@@ -1379,9 +1556,11 @@ static u16 grow_tiles(u16 a, u16 h, u16 tot, u16 flags)
     ns = dpmi_alloc_desc(nn);
     if (!ns)
         return 0;
-    AR(a)->count++;                     /* hold it while making room */
+    hold = AR(a)->count;                /* hold it while making room (not */
+    if (hold != 0xFF)                   /* past FFh: it wrapped to 0, and */
+        AR(a)->count++;                 /* the block could move; audit) */
     f = alloc_space(tot, lin_of(a) >= ONE_MB ? WHERE_ANY : WHERE_DOS, flags);
-    AR(a)->count--;
+    AR(a)->count = hold;
     if (!f) {
         for (i = 0; i < nn; i++)
             dpmi_free_desc(ns + i * sel_inc);
@@ -1435,6 +1614,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     u16 a, tot, cur, s, n;
     u32 old, bytes;
 
+    heap_check("GlobalReAlloc", api_caller);
     switch (find(h, &a)) {
     case FB_DISC:
         return realloc_discarded(h, size, flags);
@@ -1493,11 +1673,14 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
             dpmi_free_desc(part);
         } else if (!(h & 1) || (flags & GMEM_MOVEABLE)) {
             u16 f;
+            u8 hold;
             if (AR(a)->count && !(h & 1))
                 return 0;               /* fixed with GlobalFix */
-            AR(a)->count++;             /* hold it while making room */
+            hold = AR(a)->count;        /* hold it while making room */
+            if (hold != 0xFF)           /* (not past FFh, as above) */
+                AR(a)->count++;
             f = alloc_space(tot, lin_of(a) >= ONE_MB ? WHERE_ANY : WHERE_DOS, flags);
-            AR(a)->count--;
+            AR(a)->count = hold;
             if (!f)
                 return 0;
             transplant(a, f);
@@ -1520,6 +1703,7 @@ u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
 {
     u16 a, i;
     alias FAR *p;
+    heap_check("GlobalFree", api_caller);
     switch (find(h, &a)) {
     case FB_BLOCK:
         if (AR(a)->owner == OWN_BURGER)
@@ -1540,6 +1724,7 @@ void FAR * KAPI GlobalLock(u16 h)                             /* KERNEL.18 */
 {
     u16 a;
     alias FAR *p;
+    heap_check("GlobalLock", api_caller);
     if (find(h, &a) != FB_BLOCK) {
         p = alias_find(h, NULL);
         return p ? MK_FP(p->sel, 0) : NULL;

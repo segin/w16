@@ -9,7 +9,8 @@
 ; coming back. The first
 ; MAXPER calls of each AX value are recorded (1680h idle calls would flood
 ; it), all are counted. Afterwards it appends the record to C:\WC.LOG and
-; exits with the program's exit code. WIN.COM's block for the switcher
+; exits with the program's exit code. Built with EACH (WC3E.COM, by hand:
+; nasm -f bin -DEACH) it appends the record so far after every call. WIN.COM's block for the switcher
 ; (INT 2Fh AX=4A05h SI=5) is dumped as first returned and at the end. Calls made while a recorded call is
 ; still in progress (nested) are passed on unrecorded.
 ; Black-box probe for w16's WIN.COM (ARCHITECTURE.md 9.5).
@@ -153,6 +154,31 @@ int2f:
         push ax                         ; flags to return with
         call record
         call blkfirst
+%ifdef EACH
+        ; WC3E: the record so far appended after every call (for a program
+        ; that never ends)
+        push ds
+        push es
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push cs
+        pop ds
+        push cs
+        pop es
+        call dump
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop es
+        pop ds
+%endif
         mov ax, [cs:out_ax]
         mov bx, [cs:out_bx]
         mov si, [cs:out_si]

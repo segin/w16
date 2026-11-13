@@ -11,6 +11,12 @@ segment type code fixed preload
 # moveable, as Windows 3.1's USER has it: the local heap grows (US4: the
 # fourth dialog's controls failed in a fixed 7K one)
 segment type data moveable preload
+# but the far data (class FAR_DATA: what the keyboard and mouse event
+# procedures and the timer tick touch at interrupt time, and other far
+# tables wlink packs with it) is fixed: a moveable segment can be in the
+# middle of being moved when an interrupt comes (ARCHITECTURE.md 10.3;
+# tools/irqcheck.py, run by make test, checks the built file)
+segment class 'FAR_DATA' fixed preload
 library windows.lib
 # KERNEL
 import K_FATALEXIT KERNEL.1
@@ -22,6 +28,7 @@ import K_GETTASKQUEUE KERNEL.35
 import K_SETTASKSIGNALPROC KERNEL.38
 import K_OLDYIELD KERNEL.117
 import K_GETEXEPTR KERNEL.133
+import K_GETHEAPSPACES KERNEL.138
 import K_DIRECTEDYIELD KERNEL.150
 import K_GETTASKDS KERNEL.155
 import K_GETEXPWINVER KERNEL.167
@@ -32,14 +39,19 @@ import G_SETDCORG GDI.117
 import G_INQUIREVISRGN GDI.131
 import G_GETDCSTATE GDI.179
 import G_SETDCSTATE GDI.180
+import G_DEATH GDI.121
+import G_RESURRECTION GDI.122
 import G_FINALGDIINIT GDI.405
 import G_GDITASKTERMINATION GDI.460
 import G_ISGDIOBJECT GDI.462
 import G_MAKEOBJECTPRIVATE GDI.463
+import G_GDISELECTPALETTE GDI.361
+import G_GDIREALIZEPALETTE GDI.362
 # SYSTEM
 import S_CREATESYSTEMTIMER SYSTEM.2
 import S_KILLSYSTEMTIMER SYSTEM.3
 import S_ENABLESYSTEMTIMERS SYSTEM.4
+import S_DISABLESYSTEMTIMERS SYSTEM.5
 import S_GETSYSTEMMSECCOUNT SYSTEM.6
 # KEYBOARD, MOUSE, DISPLAY
 import KB_INQUIRE KEYBOARD.1

@@ -15,23 +15,25 @@
 
 typedef struct SBINFO {
     int min, max, pos;
-    WORD hidden;
+    WORD disabled;              /* shown with nothing to scroll (no thumb,
+                                   greyed arrows): sb_show_disabled */
 } SBINFO;
 
 typedef struct SBS {            /* a window's two bars (WND.scroll) */
     SBINFO v, h;
 } SBS;
 
-static HBITMAP bmArrow[8];      /* up, down, right, left, and pressed */
+static HBITMAP bmArrow[12];     /* up, down, right, left; pressed; greyed */
 
 static void load_arrows(void)
 {
-    static const WORD ids[8] = { OBM_UPARROW, OBM_DNARROW, OBM_RGARROW, OBM_LFARROW,
-                                 OBM_UPARROWD, OBM_DNARROWD, OBM_RGARROWD, OBM_LFARROWD };
+    static const WORD ids[12] = { OBM_UPARROW, OBM_DNARROW, OBM_RGARROW, OBM_LFARROW,
+                                  OBM_UPARROWD, OBM_DNARROWD, OBM_RGARROWD, OBM_LFARROWD,
+                                  32737, 32736, 32735, 32734 };   /* OBM_UPARROWI ... */
     int i;
     if (bmArrow[0])
         return;
-    for (i = 0; i < 8; i++)
+    for (i = 0; i < 12; i++)
         bmArrow[i] = LoadBitmap(0, MAKEINTRESOURCE(ids[i]));
 }
 
@@ -83,7 +85,9 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     int thick = vert ? rc->right - rc->left : rc->bottom - rc->top;
     int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
     int t, ath = thick;         /* the arrows' thickness */
+    int g = s->disabled && bmArrow[8] ? 8 : 0;      /* greyed arrows */
     load_arrows();
+    g = s->disabled && bmArrow[8] ? 8 : 0;
     if (len < 2 * arrow)
         arrow = len / 2;
     /* a bar thicker than the arrows: they keep their size at the near
@@ -99,9 +103,11 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
         fillc(hdc, rc->right - arrow, rc->top + ath, arrow, thick - ath, COLOR_WINDOWFRAME);
     }
     if (vert) {
-        blt(hdc, rc->left, rc->top, ath, arrow, bmArrow[0]);
-        blt(hdc, rc->left, rc->bottom - arrow, ath, arrow, bmArrow[1]);
-        fillc(hdc, rc->left, rc->top + arrow, thick, len - 2 * arrow, COLOR_SCROLLBAR);
+        blt(hdc, rc->left, rc->top, ath, arrow, bmArrow[g + 0]);
+        blt(hdc, rc->left, rc->bottom - arrow, ath, arrow, bmArrow[g + 1]);
+        /* disabled: a white shaft (3.1, File Manager's tree; UNVERIFIED
+           that it is the window colour) */
+        fillc(hdc, rc->left, rc->top + arrow, thick, len - 2 * arrow, g ? COLOR_WINDOW : COLOR_SCROLLBAR);
         fillc(hdc, rc->left, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
         fillc(hdc, rc->right - 1, rc->top + arrow, 1, len - 2 * arrow, COLOR_WINDOWFRAME);
         if (s->max > s->min && len > 3 * arrow - 2) {
@@ -109,9 +115,9 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
             draw_thumb(hdc, rc->left, rc->top + t, thick, arrow);
         }
     } else {
-        blt(hdc, rc->left, rc->top, arrow, ath, bmArrow[3]);
-        blt(hdc, rc->right - arrow, rc->top, arrow, ath, bmArrow[2]);
-        fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, thick, COLOR_SCROLLBAR);
+        blt(hdc, rc->left, rc->top, arrow, ath, bmArrow[g + 3]);
+        blt(hdc, rc->right - arrow, rc->top, arrow, ath, bmArrow[g + 2]);
+        fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, thick, g ? COLOR_WINDOW : COLOR_SCROLLBAR);
         fillc(hdc, rc->left + arrow, rc->top, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
         fillc(hdc, rc->left + arrow, rc->bottom - 1, len - 2 * arrow, 1, COLOR_WINDOWFRAME);
         if (s->max > s->min && len > 3 * arrow - 2) {
@@ -121,17 +127,29 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     }
 }
 
-/* ---- a window's bars ---- */
-static SBS __near *sbs_of(PWND w, BOOL create)
+/* ---- a window's bars ----
+   WND+34 is the handle of their state, a block of the object heap
+   (uheap.c; 3.1's is a 10h-byte DGROUP block made with a window that has
+   scroll bars: US15); a pointer to it is not kept across a message */
+static SBS __far *sbs_of(PWND w, BOOL create)
 {
     if (!w->scroll && create) {
-        SBS __near *s = (SBS __near *)LocalAlloc(LPTR, sizeof(SBS));
-        if (!s)
+        WORD h = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(SBS));
+        SBS __far *s;
+        if (!h)
             return 0;
+        s = (SBS __far *)UH_PTR(&uhObj, h);
         s->v.max = s->h.max = 100;
-        w->scroll = (WORD)s;
+        w->scroll = h;
     }
-    return (SBS __near *)w->scroll;
+    return w->scroll ? (SBS __far *)UH_PTR(&uhObj, w->scroll) : (SBS __far *)0;
+}
+
+/* DestroyWindow */
+void free_scroll(PWND w)
+{
+    uh_free(&uhObj, w->scroll);
+    w->scroll = 0;
 }
 
 void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
@@ -150,7 +168,7 @@ void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
 /* called by nc_paint with the window DC */
 void nc_draw_scrollbars(HDC hdc, PWND w)
 {
-    SBS __near *s = sbs_of(w, TRUE);
+    SBS __far *s = sbs_of(w, TRUE);
     RECT v, h;
     window_scrollbar_rects(w, &v, &h);
     if ((w->style & WS_VSCROLL) && s)
@@ -170,12 +188,12 @@ static SBINFO *info(HWND hwnd, int bar, PWND *pw)
     if (!w)
         return 0;
     if (bar == SB_CTL)
-        return (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+        return (SBINFO *)WND_EXTRA(w);
     {
-        SBS __near *s = sbs_of(w, TRUE);
+        SBS __far *s = sbs_of(w, TRUE);
         if (!s)
             return 0;
-        return bar == SB_VERT ? (SBINFO *)MAKELP(get_ds(), &s->v) : (SBINFO *)MAKELP(get_ds(), &s->h);
+        return bar == SB_VERT ? &s->v : &s->h;
     }
 }
 
@@ -219,8 +237,11 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
 {
     PWND w;
     SBINFO *s = info(hwnd, bar, &w);
+    WORD was;
     if (!s)
         return;
+    was = s->disabled;
+    s->disabled = 0;
     s->min = min;
     s->max = max;
     if (s->pos < min)
@@ -241,7 +262,31 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
             return;
         }
     }
-    if (redraw)
+    /* a bar that was shown disabled is drawn again either way (File
+       Manager's file list, refilled, kept its greyed bar) */
+    if (redraw || was)
+        redraw_bar(hwnd, bar);
+}
+
+/* a window's bar shown with nothing to scroll: no thumb, the arrows
+   greyed (3.1: File Manager's tree, LBS_DISABLENOSCROLL, four items in
+   room for more, shows its vertical bar so) */
+void sb_show_disabled(HWND hwnd, int bar)
+{
+    PWND w;
+    SBINFO *s = info(hwnd, bar, &w);
+    DWORD f = bar == SB_VERT ? WS_VSCROLL : WS_HSCROLL;
+    if (!s || bar == SB_CTL)
+        return;
+    s->min = s->max = s->pos = 0;
+    if (s->disabled && (w->style & f))
+        return;
+    s->disabled = 1;
+    if (!(w->style & f)) {
+        w->style |= f;
+        set_window_pos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    } else
         redraw_bar(hwnd, bar);
 }
 
@@ -303,6 +348,9 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     if (part != SB_THUMBTRACK)
         send_message(notify, msg, part, lp);
     for (;;) {
+        /* again after each message sent: the state is in the object heap */
+        if ((s = info(hwnd, bar, &w)) == 0)
+            break;
         if (!PeekMessage(&m, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
             if (part != SB_THUMBTRACK && (long)(GetTickCount() - next) >= 0) {
                 send_message(notify, msg, part, lp);
@@ -346,15 +394,112 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     send_message(notify, msg, SB_ENDSCROLL, lp);
 }
 
+/* ---- the scroll-bar menu: a w16 extension ----
+   Windows 2000 and later give every scroll bar a shortcut menu on a right
+   click (Raymond Chen, The Old New Thing, 2026-09-22: "Windows 2000 added
+   a right-click menu to the scroll bar"; Scroll Here, Top, Bottom, Page
+   Up, Page Down, Scroll Up, Scroll Down; the separators as in the menu
+   Nick Gammon's forum transcribes, gammon.com.au/forum thread 8417; the
+   horizontal wording, Left Edge, Right Edge, Page Left, Page Right,
+   Scroll Left, Scroll Right, as a Trapeze Group application's help page
+   lists both bars' right-click menus); the order, wording and separators confirmed by a
+   screenshot of the vertical menu from PsyMP3 (the user's own
+   ISC-licensed program; supplied 2026-11-13). None of
+   those sources shows a mnemonic, so the items have none. Windows 3.1 has no such menu: [w16] ScrollBarMenu=0 in
+   SYSTEM.INI (read at start-up; default 1) turns it off, and then nothing
+   here runs and USER behaves as 3.1's (ARCHITECTURE.md 10.3).
+
+   Shown on the right button's release (later Windows shows it from
+   WM_CONTEXTMENU, which DefWindowProc makes from WM_RBUTTONUP and
+   WM_NCRBUTTONUP: Win32 SDK, WM_CONTEXTMENU), at the pointer, by USER's
+   own menu loop (menu_track_quiet: the window gets none of the menu's
+   messages, only the WM_VSCROLL/WM_HSCROLL it already understands). Not
+   for a disabled window or a bar with nothing to scroll (shown disabled,
+   or an empty range): what later Windows does there is not documented,
+   so the conservative choice. The commands send what a mouse or the
+   scroll-bar control's keys send for the same thing, then SB_ENDSCROLL;
+   Scroll Here sends SB_THUMBTRACK and SB_THUMBPOSITION with the position
+   whose thumb is centred on the click, as a drag of the thumb there
+   would (the exact sequence later Windows sends is not documented:
+   UNVERIFIED; both, so that programs that act on either one move) */
+WORD sb_menu_on = 1;            /* [w16] ScrollBarMenu */
+
+void sbmenu_init(void)
+{
+    sb_menu_on = GetPrivateProfileInt("w16", "ScrollBarMenu", 1, "SYSTEM.INI") != 0;
+}
+
+UINT menu_track_quiet(HMENU hm, int x, int y, HWND h);
+
+#define SBM_HERE 0x100          /* the items' ids: 100h + SB_ code */
+
+/* hwnd's bar (SB_VERT, SB_HORZ, SB_CTL) in rc (screen) right-clicked at pt
+   (screen): the menu, and the command chosen sent to notify (the window
+   for its own bars, the parent for a control) */
+void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
+{
+    static const char *const vtext[] = { "Scroll Here", "Top", "Bottom", "Page Up", "Page Down",
+                                         "Scroll Up", "Scroll Down" };
+    static const char *const htext[] = { "Scroll Here", "Left Edge", "Right Edge", "Page Left",
+                                         "Page Right", "Scroll Left", "Scroll Right" };
+    static const BYTE codes[] = { SB_THUMBPOSITION, SB_TOP, SB_BOTTOM, SB_PAGEUP, SB_PAGEDOWN,
+                                  SB_LINEUP, SB_LINEDOWN };
+    PWND w;
+    SBINFO *s;
+    BOOL vert;
+    int min, max, len, arrow, at, travel, here, i;
+    long v;
+    HMENU hm;
+    UINT cmd, msg;
+    WORD ctl;
+    if (!sb_menu_on || !IsWindowEnabled(hwnd))
+        return;
+    if ((s = info(hwnd, bar, &w)) == 0 || s->disabled || s->max <= s->min)
+        return;
+    min = s->min, max = s->max;
+    vert = bar == SB_VERT || (bar == SB_CTL && (w->style & SBS_VERT));
+    if (bar == SB_CTL && (w->style & SBS_SIZEBOX))
+        return;
+    /* the position whose thumb is centred on the click */
+    len = vert ? rc->bottom - rc->top : rc->right - rc->left;
+    arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
+    if (len < 2 * arrow)
+        arrow = len / 2;
+    at = (vert ? pt.y - rc->top : pt.x - rc->left) - (arrow - 1) - arrow / 2;
+    travel = len - 3 * arrow + 2;
+    v = travel > 0 && at > 0 ? min + ((long)at * (max - min) * 2 + travel) / (2L * travel) : min;
+    here = v > max ? max : (int)v;
+    if ((hm = CreatePopupMenu()) == 0)
+        return;
+    for (i = 0; i < 7; i++) {
+        if (i == 1 || i == 3 || i == 5)
+            AppendMenu(hm, MF_SEPARATOR, 0, NULL);
+        AppendMenu(hm, MF_STRING, SBM_HERE + codes[i], vert ? vtext[i] : htext[i]);
+    }
+    cmd = menu_track_quiet(hm, pt.x, pt.y, hwnd);
+    DestroyMenu(hm);
+    if (!cmd || !IsWindow(notify) || !IsWindow(hwnd))
+        return;
+    msg = vert ? WM_VSCROLL : WM_HSCROLL;
+    ctl = bar == SB_CTL ? (WORD)hwnd : 0;
+    cmd -= SBM_HERE;
+    if (cmd == SB_THUMBPOSITION) {
+        send_message(notify, msg, SB_THUMBTRACK, MAKELONG(here, ctl));
+        send_message(notify, msg, SB_THUMBPOSITION, MAKELONG(here, ctl));
+    } else
+        send_message(notify, msg, cmd, MAKELONG(0, ctl));
+    send_message(notify, msg, SB_ENDSCROLL, MAKELONG(0, ctl));
+}
+
 /* ---- the SCROLLBAR class: its SBINFO in the window extra bytes
    (Windows 3.1's class has 10: US2) ---- */
-LRESULT WINAPI ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
     SBINFO *s;
     if (!w)
         return 0;
-    s = (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+    s = (SBINFO *)WND_EXTRA(w);
     switch (msg) {
     case WM_CREATE:
         s->min = s->max = s->pos = 0;
@@ -383,6 +528,20 @@ LRESULT WINAPI ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         track_scrollbar(h, GetParent(h), SB_CTL, &r, pt);
         return 0;
     }
+    case WM_RBUTTONUP:
+        if (sb_menu_on) {               /* (w16's extension, above) */
+            RECT r;
+            POINT pt;
+            GetClientRect(h, &r);       /* where the bar is drawn */
+            ClientToScreen(h, (POINT *)&r.left);
+            ClientToScreen(h, (POINT *)&r.right);
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            ClientToScreen(h, &pt);
+            scrollbar_menu(h, GetParent(h), SB_CTL, &r, pt);
+            return 0;
+        }
+        break;
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS;
     case WM_KEYDOWN: {

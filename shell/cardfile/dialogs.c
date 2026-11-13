@@ -231,7 +231,6 @@ void find_next(void)
     msg_box(IDS_NOTFOUND, find_text, MB_OK | MB_ICONEXCLAMATION);
 }
 
-#ifndef W16_WIN2
 static FINDREPLACE fr;
 
 void dlg_find(void)
@@ -269,58 +268,6 @@ BOOL find_message(UINT msg, LPARAM lp)
         find_next();
     return 0;
 }
-#else
-BOOL CALLBACK __export Find2DlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
-{
-    (void)lp;
-    switch (msg) {
-    case WM_INITDIALOG:
-        SetDlgItemText(d, IDC_FINDTEXT, find_text);
-        CheckDlgButton(d, IDC_MATCHCASE, find_case);
-        CheckRadioButton(d, IDC_FINDUP, IDC_FINDDOWN, find_up ? IDC_FINDUP : IDC_FINDDOWN);
-        return TRUE;
-    case WM_COMMAND:
-        switch (wp) {
-        case IDOK:
-            GetDlgItemText(d, IDC_FINDTEXT, find_text, sizeof find_text);
-            find_case = IsDlgButtonChecked(d, IDC_MATCHCASE);
-            find_up = IsDlgButtonChecked(d, IDC_FINDUP);
-            find_next();
-            return TRUE;
-        case IDCANCEL:
-            DestroyWindow(d);
-            g_finddlg = NULL;
-            return TRUE;
-        case IDC_MATCHCASE:
-            CheckDlgButton(d, wp, !IsDlgButtonChecked(d, wp));
-            return TRUE;
-        case IDC_FINDUP:
-        case IDC_FINDDOWN:
-            CheckRadioButton(d, IDC_FINDUP, IDC_FINDDOWN, wp);
-            return TRUE;
-        }
-        break;
-    }
-    return FALSE;
-}
-
-void dlg_find(void)
-{
-    if (g_finddlg) {
-        SetFocus(g_finddlg);
-        return;
-    }
-    g_finddlg = CreateDialog(g_hinst, MAKEINTRESOURCE(IDD_FIND2), g_frame,
-                             (DLGPROC)MakeProcInstance((FARPROC)Find2DlgProc, g_hinst));
-}
-
-BOOL find_message(UINT msg, LPARAM lp)
-{
-    (void)msg;
-    (void)lp;
-    return 0;
-}
-#endif
 
 /* ---- Autodial ----
    The settings live in WIN.INI [windows] (CF10). UNVERIFIED: that the
@@ -561,14 +508,7 @@ void dlg_autodial(void)
 
 void about_box(void)
 {
-#ifndef W16_WIN2
     char t[40];
     LoadString(g_hinst, IDS_APPNAME, t, sizeof t);
     ShellAbout(g_frame, t, "", LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_CARDFILE)));
-#else
-    FARPROC p = MakeProcInstance((FARPROC)DlgProc, g_hinst);
-    dlg_kind = IDD_ABOUT2;
-    DialogBox(g_hinst, MAKEINTRESOURCE(IDD_ABOUT2), g_frame, (DLGPROC)p);
-    FreeProcInstance(p);
-#endif
 }

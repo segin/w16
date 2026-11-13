@@ -5,22 +5,18 @@
  * and files (.CRD, docs/crd-format.md). Every visible detail comes from
  * black-box observation of the original (tests/cfrun.sh, the CF probes
  * in tests/scripts/cfprobe/, ARCHITECTURE.md 15) and its resources read
- * as data (tools/nerc.py). Built medium model without a C runtime, in two
- * builds from this source: Windows 3.x and, with W16_WIN2, Windows 2.x
- * (no COMMDLG, OLE, WinHelp: compat2.c).
+ * as data (tools/nerc.py). Built medium model without a C runtime, for
+ * Windows 3.1 only (no 2.x build: those are for Program Manager alone).
  */
 #ifndef CARDFILE_H
 #define CARDFILE_H
 
 #include <windows.h>
-#ifndef W16_WIN2
 #include <shellapi.h>
 #include <commdlg.h>
 #include <ole.h>
 /* SHELL.22, documented in the 3.1 SDK; not in every shellapi.h */
 int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
-#endif
-#include "compat2.h"
 
 /* ---- resources: the original's IDs where they are visible (menu
    commands, control IDs, string numbers), our own otherwise ---- */
@@ -86,10 +82,7 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDD_INVALIDLINK     115
 #define IDD_PASTESPECIAL    116
 #define IDD_INSERTOBJECT    117
-#define IDD_FIND2           118         /* the 2.x build's Find */
-#define IDD_OPEN2           120         /* the 2.x build's file dialogs */
-#define IDD_SAVE2           121
-#define IDD_ABOUT2          122
+#define IDD_FIND2           118         /* FindText's template */
 
 #define IDC_EDIT            301         /* Index, Add, Go To */
 #define IDC_PRINTFILE       110
@@ -132,7 +125,7 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDC_FNAME           11
 #define IDC_FLIST           12
 #define IDC_FPATH           10
-/* 2.x Find */
+/* Find (COMMDLG's control IDs) */
 #define IDC_FINDTEXT        1152
 #define IDC_MATCHCASE       1041
 #define IDC_FINDUP          1056
@@ -234,7 +227,6 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_VERBFMT1        784
 #define IDS_VERBFMT2        785
 #define IDS_EDITVERB        786
-#define IDS_NOHELP          900         /* the 2.x build's own */
 
 /* ---- the card file in memory ----
    Each card has a header in one growable array (cards.c): its index line
@@ -270,7 +262,7 @@ typedef CARDHDR FAR *LPCARD;
 
 /* the current card's picture */
 #define PIC_NONE            0
-#define PIC_BITMAP          1           /* a bitmap (3.0 files; the 2.x build) */
+#define PIC_BITMAP          1           /* a bitmap from a 3.0 file */
 #define PIC_OBJECT          2           /* an OLE object */
 
 typedef struct {
@@ -278,9 +270,7 @@ typedef struct {
     int x, y;                           /* top left on the card body, pixels */
     int cx, cy;                         /* size, pixels */
     HBITMAP bmp;                        /* PIC_BITMAP */
-#ifndef W16_WIN2
     LPOLEOBJECT obj;                    /* PIC_OBJECT */
-#endif
     DWORD id;                           /* the object's number */
     WORD otype;                         /* 0 embedded, 1 linked, 2 static */
     int ccx, ccy;                       /* the character size it was made at */
@@ -441,12 +431,7 @@ void dbg(const char FAR *s);           /* a line to C:\CFDBG.TXT */
 #define DBG(s) ((void)0)
 #endif
 
-#ifdef W16_WIN2
-#define CF_RADIO            BS_RADIOBUTTON
-#define CF_CHECK            BS_CHECKBOX
-#else
 #define CF_RADIO            BS_AUTORADIOBUTTON
 #define CF_CHECK            BS_AUTOCHECKBOX
-#endif
 
 #endif

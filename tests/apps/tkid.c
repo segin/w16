@@ -40,10 +40,18 @@ WORD FAR PASCAL __loadds ID_GET(void)                           /* 1 */
     return (BYTE)id_mark[5];
 }
 
-/* WEP writes 100h | its argument to *p */
+/* WEP adds 100h to *p and ors in its argument: 100h after one call */
 void FAR PASCAL __loadds ID_SETWEP(WORD FAR *p)                 /* 2 */
 {
     wep_ptr = p;
+}
+
+static HINSTANCE wep_free;
+
+/* WEP frees this library (once): a FreeLibrary while the DLL ends */
+void FAR PASCAL __loadds ID_SETWEPFREE(HINSTANCE h)             /* 5 */
+{
+    wep_free = h;
 }
 
 WORD FAR PASCAL __loadds ID_INFO(WORD i)                        /* 3 */
@@ -57,6 +65,11 @@ int FAR PASCAL __loadds WEP(int param)
     touch_file("C:\\TKWEP.TMP");        /* TKBAD: was WEP called at all? */
 #endif
     if (wep_ptr)
-        *wep_ptr = 0x100 | (WORD)param;
+        *wep_ptr = (*wep_ptr + 0x100) | (WORD)param;
+    if (wep_free) {
+        HINSTANCE h = wep_free;
+        wep_free = 0;
+        FreeLibrary(h);
+    }
     return 1;
 }

@@ -118,9 +118,6 @@ BOOL body_read(HFILE f, int fmt, DWORD pos, HGLOBAL FAR *text, WORD FAR *cb, PIC
         if (w && !mgc_pic_read(f, w, p))
             return FALSE;
     } else if (w) {
-#ifdef W16_WIN2
-        return FALSE;                   /* no OLE on Windows 2.x */
-#else
         WORD tail[8];
         DWORD at;
         if (!f_read(f, &p->id, 4))
@@ -139,7 +136,6 @@ BOOL body_read(HFILE f, int fmt, DWORD pos, HGLOBAL FAR *text, WORD FAR *cb, PIC
         p->cx = MulDiv(tail[4], g_cx, p->ccx ? p->ccx : g_cx) - p->x;
         p->cy = MulDiv(tail[5], g_cy, p->ccy ? p->ccy : g_cy) - p->y;
         p->otype = tail[6];
-#endif
     }
     return text_read(f, text, cb);
 }
@@ -157,7 +153,6 @@ static HBITMAP pic_mono(PICTURE *p, int *w, int *h, BOOL *own)
         *h = p->cy;
         return p->bmp;
     }
-#ifndef W16_WIN2
     if (p->kind == PIC_OBJECT && p->obj) {
         HDC scr = GetDC(NULL), mem = CreateCompatibleDC(scr);
         HBITMAP bm = CreateBitmap(p->cx + 1, p->cy + 1, 1, 1, NULL), old;
@@ -184,7 +179,6 @@ static HBITMAP pic_mono(PICTURE *p, int *w, int *h, BOOL *own)
         *own = TRUE;
         return bm;
     }
-#endif
     return NULL;
 }
 
@@ -210,7 +204,6 @@ static BOOL write_block(HFILE f, HGLOBAL h, DWORD size)
     return ok;
 }
 
-#ifndef W16_WIN2
 /* A 3.0 picture in a 3.1 file: the static BITMAP object the original
    makes of it (CF8): HIMETRIC size 0 x 0, the monochrome bitmap as
    presentation (a 14-byte BITMAP, then the bits), the rectangle x, y,
@@ -250,7 +243,6 @@ static BOOL write_static_bitmap(HFILE f, PICTURE *p)
     GlobalFree(h);
     return ok;
 }
-#endif
 
 /* Write a body at the file's position; returns its offset or -1. */
 DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
@@ -284,7 +276,6 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
             return (DWORD)-1;
         }
     } else {
-#ifndef W16_WIN2
         if (p->kind == PIC_OBJECT && p->obj) {
             WORD tail[7];
             if (!wr_word(f, 1) || !f_write(f, &p->id, 4) || !ole_save(f, p))
@@ -307,7 +298,6 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
             if (!wr_word(f, 1) || !f_write(f, &id, 4) || !write_static_bitmap(f, p))
                 return (DWORD)-1;
         } else
-#endif
         if (!wr_word(f, 0))
             return (DWORD)-1;
     }
@@ -328,14 +318,10 @@ static DWORD body_len(HFILE f, int fmt, DWORD pos)
         if (w)
             at += 8 + (DWORD)w;
     } else if (w) {
-#ifdef W16_WIN2
-        return 0;
-#else
         at = ole_skip(f, at + 4);
         if (!at)
             return 0;
         at += 14;
-#endif
     }
     if (_llseek(f, at, 0) != (LONG)at || !rd_word(f, &n))
         return 0;
@@ -393,10 +379,6 @@ BOOL crd_open(LPCSTR path, BOOL merge)
         fmt = FMT_RRG;
     else
         goto bad;
-#ifdef W16_WIN2
-    if (fmt == FMT_RRG)
-        goto bad;                       /* objects need OLE: not on 2.x */
-#endif
     if (fmt == FMT_RRG && !f_read(f, &next, 4))
         goto bad;
     if (!rd_word(f, &n))

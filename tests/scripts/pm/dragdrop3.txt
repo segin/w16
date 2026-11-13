@@ -1,0 +1,38 @@
+; Files dropped from File Manager with Save Settings on Exit off: the group
+; file as written after the drop (new items in the last slots) is what
+; remains.
+;pre MD C:\PMDROP
+;pre COPY C:\WINDOWS\CALC.EXE C:\PMDROP\CALC.EXE
+;pre COPY C:\WINDOWS\NOTEPAD.EXE C:\PMDROP\NOTEPAD.EXE
+;pre COPY C:\WINDOWS\WRITE.EXE C:\PMDROP\WRITE.EXE
+;pre ECHO hello> C:\PMDROP\README.TXT
+;pre ECHO data> C:\PMDROP\DATA.XYZ
+run WINFILE.EXE
+wait 3000
+move 0 0 640 250
+wait 500
+mclick 60 113
+wait 1500
+run PROGMAN.EXE
+wait 3000
+move 0 250 640 230
+wait 500
+menu o
+char s
+wait 1000
+; Calc and Notepad (Ctrl+click) into Main's client area
+mclick 300 113
+kdown 11
+mclick 300 145
+kup 11
+wait 500
+mdown 300 145
+mmove 300 170
+mmove 390 445
+mup 390 445
+wait 2000
+snap C:\DC1.BMP
+close
+wait 1500
+close
+wait 1500

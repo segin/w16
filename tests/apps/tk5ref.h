@@ -194,6 +194,7 @@
 { "TKID LoadLibrary==DS&~1", 0x0001 },
 { "TKID usage after 2 frees", 0x0001 },
 { "TKID WEP flag after last FreeLibrary", 0x0100 },
+{ "TKDLB usage less after TKID's WEP freed it", 0x0001 },
 { "TKID unloaded after FreeLibrary(0001)", 0x0001 },
 { "TKID unloaded after FreeLibrary(0002)", 0x0001 },
 { "TKID unloaded after FreeLibrary(0003)", 0x0001 },

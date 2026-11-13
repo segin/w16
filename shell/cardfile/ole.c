@@ -20,7 +20,6 @@
  */
 #include "cardfile.h"
 
-#ifndef W16_WIN2
 
 static LHCLIENTDOC doc;
 static char s_stdfile[] = "StdFileEditing";
@@ -656,4 +655,3 @@ void ole_command(WORD id)
     }
 }
 
-#endif

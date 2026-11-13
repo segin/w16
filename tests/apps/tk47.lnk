@@ -1,0 +1,3 @@
+# TK47.EXE (tests/apps/tk47.c, tk47s.asm): INT 15h C207h with a code selector below 1 MB
+@tests/apps/app.lnk
+import U_INITAPP USER.5

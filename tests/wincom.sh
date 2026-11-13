@@ -12,6 +12,10 @@
 #   - the switcher block WSWAP reads (WC4.COM as WSWAP.EXE).
 # Values that depend on where things are in memory (segments, offsets of
 # WIN.COM's handler and data, free memory) are left out of the comparison.
+# w16's messages call the product "w16" where Microsoft's say "Windows"
+# (ARCHITECTURE.md 3, branding): "w16" is read as "Windows" in the screen
+# rows and in what WIN.COM wrote (Microsoft's never has "w16"), so every
+# other byte is still compared.
 #
 #   usage: tests/wincom.sh [-k] [-v] [SCENARIO...]
 #     -k  keep the scratch directories (printed)
@@ -107,7 +111,8 @@ run_one() {   # run_one DIR WINCOM OPTIONS COMMANDS
         dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >/dev/null 2>&1 || true
     # the record, without what depends on memory layout
     {
-        [ -f "$d/c/WC.LOG" ] && tr -d '\r' < "$d/c/WC.LOG" | sed \
+        [ -f "$d/c/WC.LOG" ] && tr -d '\r' < "$d/c/WC.LOG" | LC_ALL=C sed \
+            -e '/^|/s/w16/Windows/g' \
             -e 's/^psp=.*parentprog=[^ ]* \(top=[0-9A-F]*\).*/\1/' \
             -e 's/^\(envseg\)=.*/\1/' \
             -e 's/^parenttail=80 .*/parenttail=(WIN386 reuses its PSP)/' \
@@ -131,7 +136,7 @@ run_one() {   # run_one DIR WINCOM OPTIONS COMMANDS
         for o in "$d"/c/O*.TXT; do
             [ -f "$o" ] || continue
             echo "== $(basename "$o")"
-            od -An -c "$o"
+            LC_ALL=C sed 's/w16/Windows/g' "$o" | od -An -c
         done
     } > "$d/result.txt"
 }

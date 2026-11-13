@@ -1,0 +1,26 @@
+; minimized (both faces), no title, maximized
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 09:05:30.50 1500
+syscmd F020
+freeze 09:05:30.50 1500
+snap C:\I1.BMP
+dump
+syscmd F120
+cmd 1
+freeze 09:05:30.50 1500
+syscmd F020
+freeze 09:05:30.50 1500
+snap C:\I2.BMP
+dump
+syscmd F120
+cmd 6
+freeze 09:05:30.50 1500
+snap C:\I3.BMP
+dump
+syscmd F030
+freeze 09:05:30.50 1500
+snap C:\I4.BMP
+dump
+close
+wait 1000

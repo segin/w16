@@ -281,6 +281,12 @@ u16 winboot(void)
                             sysini);
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
+    {
+        extern u16 sched_log, exit_msg;
+        sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
+        heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
+        exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
+    }
     if (take_switch_b())
         diag_init();
     booting = 1;
@@ -322,8 +328,13 @@ u16 winboot(void)
     if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
         print_modmap();
     final_user_init();
-    /* the watchdog keeps running: a debugging aid, it reports where the
-       system is after SECONDS without a boot log line */
+    /* the boot is over: the watchdog ([w16] watchdog=SECONDS) watches the
+       boot only. It kept running and, SECONDS after the last boot log line,
+       reported "no boot progress" and ended a Windows that was only idle:
+       tests/dropin.sh -p 286 with a fixed-time screenshot (DROPIN_FIXED=1,
+       -t 150) showed a black screen, which looked like a boot failure on
+       the 80286 */
+    wd_stop();
     task_boot_tdb_end();
     {
         u16 rc = task_boot();           /* back when the last task ends */

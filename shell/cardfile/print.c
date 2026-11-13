@@ -106,7 +106,6 @@ void dlg_pagesetup(void)
 
 /* ---- the printer ---- */
 
-#ifndef W16_WIN2
 static HGLOBAL dev_mode, dev_names;
 
 void print_setup(void)
@@ -139,29 +138,6 @@ static HDC printer_dc(void)
     dev_names = pd.hDevNames;
     return pd.hDC;
 }
-#else
-void print_setup(void)
-{
-}
-
-/* WIN.INI [windows] device=name,driver,port */
-static HDC printer_dc(void)
-{
-    char dev[80], *drv, *port;
-    GetProfileString("windows", "device", "", dev, sizeof dev);
-    for (drv = dev; *drv && *drv != ','; drv++)
-        ;
-    if (!*drv)
-        return NULL;
-    *drv++ = 0;
-    for (port = drv; *port && *port != ','; port++)
-        ;
-    if (!*port)
-        return NULL;
-    *port++ = 0;
-    return CreateDC(drv, dev, port, NULL);
-}
-#endif
 
 static BOOL user_abort;
 static HWND abort_dlg;
@@ -286,7 +262,6 @@ static int print_one(HDC dc, WORD i, int x, int y, int cx, int cy)
         SelectObject(mem, old);
         DeleteDC(mem);
     }
-#ifndef W16_WIN2
     else if (pic.kind == PIC_OBJECT) {
         RECT r;
         SetRect(&r, x + 1 + MulDiv(pic.x, cx, g_cx), y + cy + 4 + MulDiv(pic.y, cy, g_cy), 0, 0);
@@ -294,7 +269,6 @@ static int print_one(HDC dc, WORD i, int x, int y, int cx, int cy)
         r.bottom = r.top + MulDiv(pic.cy, cy, g_cy);
         ole_draw(&pic, dc, &r);
     }
-#endif
     pic_free(&pic);
     return h;
 }

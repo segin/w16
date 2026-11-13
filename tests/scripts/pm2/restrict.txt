@@ -1,0 +1,19 @@
+;restrict NoRun=1
+;restrict NoSaveSettings=1
+;restrict EditLevel=1
+run C:\PROGMAN.EXE
+wait 4000
+snap C:\START.DDB
+; File > New: straight to Program Item Properties (EditLevel=1)
+cmd 100
+wait 1000
+snap C:\NEW.DDB
+key 1B
+wait 500
+; File > Run: nothing (NoRun)
+cmd 106
+wait 1000
+snap C:\RUN.DDB
+; File > Exit: PROGMAN.INI keeps Window= and Order= (NoSaveSettings)
+cmd 107
+wait 1500

@@ -1,6 +1,5 @@
 /*
- * filedlg.c - w16 Cardfile: Open, Save As and Merge (COMMDLG; the 2.x
- * build has its own in compat2.c).
+ * filedlg.c - w16 Cardfile: Open, Save As and Merge (COMMDLG).
  *
  * Observed (CF2, CF8, CF9): the File Name box starts as "*.crd" in the
  * current directory; Save As offers "Card File (*.CRD)" and "3.0 Card
@@ -9,7 +8,6 @@
  */
 #include "cardfile.h"
 
-#ifndef W16_WIN2
 static OPENFILENAME ofn;                /* kept: the filter choice stays */
 static char filter[3][160];
 static char title[40];
@@ -92,4 +90,3 @@ BOOL file_dialog(int which, LPSTR path, int *fmt)
         s_cpy(path, file, 144);
     return ok;
 }
-#endif

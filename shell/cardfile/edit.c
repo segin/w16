@@ -4,8 +4,8 @@
  *
  * In Text mode the commands go to the card's Edit control. In Picture
  * mode (Edit > Picture) they work on the card's picture: on Windows 3.1
- * an OLE object (a pasted bitmap becomes a static object, CF6); in the
- * 2.x build a bitmap, as Cardfile 2.x and 3.0 kept them.
+ * an OLE object (a pasted bitmap becomes a static object, CF6), or a
+ * bitmap read from a 3.0 file.
  */
 #include "cardfile.h"
 
@@ -59,50 +59,11 @@ static void pic_copy(void)
         DeleteDC(a);
         DeleteDC(b);
     }
-#ifndef W16_WIN2
     else if (g_pic.kind == PIC_OBJECT) {
         ole_copy(&g_pic);
     }
-#endif
 }
 
-#ifdef W16_WIN2
-/* the 2.x build keeps pictures as monochrome bitmaps, as 2.x did */
-static BOOL pic_paste_bitmap(void)
-{
-    HBITMAP src, mono;
-    BITMAP bm;
-    HDC dc, a, b;
-    if (!IsClipboardFormatAvailable(CF_BITMAP) || !OpenClipboard(g_frame)) {
-        msg_box(IDS_NOPICCLIP, NULL, MB_OK | MB_ICONEXCLAMATION);
-        return FALSE;
-    }
-    src = GetClipboardData(CF_BITMAP);
-    GetObject(src, sizeof bm, (LPSTR)&bm);
-    mono = CreateBitmap(bm.bmWidth, bm.bmHeight, 1, 1, NULL);
-    dc = GetDC(NULL);
-    a = CreateCompatibleDC(dc);
-    b = CreateCompatibleDC(dc);
-    ReleaseDC(NULL, dc);
-    if (mono) {
-        HBITMAP oa = SelectObject(a, src), ob = SelectObject(b, mono);
-        BitBlt(b, 0, 0, bm.bmWidth, bm.bmHeight, a, 0, 0, SRCCOPY);
-        SelectObject(a, oa);
-        SelectObject(b, ob);
-    }
-    DeleteDC(a);
-    DeleteDC(b);
-    CloseClipboard();
-    if (!mono)
-        return FALSE;
-    pic_free(&g_pic);
-    g_pic.kind = PIC_BITMAP;
-    g_pic.bmp = mono;
-    g_pic.cx = bm.bmWidth;
-    g_pic.cy = bm.bmHeight;
-    return TRUE;
-}
-#endif
 
 void edit_cut(void)
 {
@@ -152,13 +113,8 @@ void edit_paste(void)
         }
         return;
     }
-#ifdef W16_WIN2
-    if (pic_paste_bitmap())
-        pic_changed();
-#else
     if (ole_paste(FALSE))
         pic_changed();
-#endif
 }
 
 /* ---- moving the picture ---- */
@@ -207,10 +163,8 @@ BOOL pic_mouse(UINT msg, int x, int y)
         }
         break;
     case WM_LBUTTONDBLCLK:
-#ifndef W16_WIN2
         if (g_pic.kind == PIC_OBJECT)
             ole_activate(&g_pic, 0);
-#endif
         break;
     }
     return TRUE;

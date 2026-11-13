@@ -86,6 +86,7 @@ struct vm {
     u16 refsp;              /* the reflection stack pointer (info->refstk_seg) */
     u16 psp_seg;
     u32 dsel;               /* the client's first DS selector */
+    u32 last_cs, last_ip, last_ds;  /* where the client last left protected mode */
     u32 pmvec_sel[256];     /* protected-mode interrupt vectors (0205h) */
     u32 pmvec_off[256];
     u32 excvec_sel[32];     /* exception handlers (0203h) */
@@ -141,7 +142,8 @@ extern u8 *ldt;
 extern u32 ldt_limit;
 
 void exec_v86(struct cregs *v);            /* run client code until REFRET/IRQRET */
-void exec_return(struct cregs *r);         /* that breakpoint: back to exec_v86's caller */
+void exec_return(struct cregs *r);
+int exec_depth(void);         /* that breakpoint: back to exec_v86's caller */
 void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
 void v86_farcall(struct cregs *v, int iret);
 u32 xbuf_lin(void);                        /* the transfer buffer */
@@ -150,6 +152,10 @@ u32 xbuf_size(void);
 /* dosx.c: INT 21h from protected mode */
 void dos_pm(struct cregs *r);
 void video_pm(struct cregs *r);
+
+/* vxdapi.c */
+void vxdapi_get(struct cregs *r, u32 *sel, u32 *off);
+void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs);
 int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);

@@ -9,8 +9,10 @@
 # seconds each takes a screenshot; the two are compared pixel for pixel.
 # Microsoft's KRNL386, USER, GDI and drivers run in both.
 #
-#   usage: tests/win386.sh [-t SECS] [-o DIR] [-n] [-i S:K=V]...
-#     -t SECS   time before the screenshot (default 45)
+#   usage: tests/win386.sh [-t SECS] [-m MAXSECS] [-o DIR] [-n] [-i S:K=V]...
+#     -t SECS   time between the end of KERNEL's boot log (INITDONE=TSRQuery)
+#               and the screenshot (default 10)
+#     -m MAXSECS  the most to wait for that end (default 300: busy hosts)
 #     -o DIR    where the screenshots, boot logs and the VMM's trace go
 #               (default build/win386-<timestamp>)
 #     -n        only w16's run (no reference run, no comparison)
@@ -23,10 +25,11 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 [ -d "$ref" ] || ref=$(cd "$root/../../.." && pwd)/.tools/ref/win31/cdrive
-secs=45 out= norefrun= inis=
-while getopts t:o:ni: opt; do
+secs=10 maxsecs=300 out= norefrun= inis=
+while getopts t:m:o:ni: opt; do
     case $opt in
     t) secs=$OPTARG ;;
+    m) maxsecs=$OPTARG ;;
     o) out=$OPTARG ;;
     n) norefrun=1 ;;
     i) inis="$inis $OPTARG" ;;
@@ -73,19 +76,51 @@ exit
 CONF
     cat > "$d/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >"$d/dosbox.log" 2>&1 &
+# SDL often fails to open a fresh Xvfb display on a busy host ("Couldn't
+# open X11 display" although the server answers): try again, here
+t=0
+while :; do
+    SDL_AUDIODRIVER=dummy timeout $((maxsecs + 10)) dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >"$d/dosbox.log" 2>&1 &
+    pid=\$!
+    sleep 3
+    kill -0 \$pid 2>/dev/null && break
+    grep -q 'open X11 display' "$d/dosbox.log" || exit 7
+    t=\$((t + 1))
+    [ \$t -lt 20 ] || exit 7
+done
+# the screen: SECS seconds after KERNEL's boot log reaches its end (or
+# Windows ended), at most MAXSECS after the start (a busy host is slow)
+s=3
+while [ \$s -lt $maxsecs ]; do
+    grep -q 'INITDONE=TSRQuery' "$d/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null && break
+    kill -0 \$pid 2>/dev/null || break
+    sleep 1
+    s=\$((s + 1))
+done
 sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 import -window "\${wid:-root}" "$d/s.png"
 wait
 SH
     chmod +x "$d/shot.sh"
-    # a display number of our own (other tests may run Xvfb at the same time)
-    xvfb-run -a -n $((300 + $$ % 4000)) -s '-screen 0 1024x768x24' "$d/shot.sh" >/dev/null 2>&1 || true
+    # a display number of our own (other tests may run Xvfb at the same
+    # time and xvfb-run -a can collide): a free one, and up to 5 tries
+    try=0
+    while [ $try -lt 5 ]; do
+        n=$((300 + ($$ * 7 + try * 131) % 4000))
+        while [ -e /tmp/.X$n-lock ] || [ -e /tmp/.X11-unix/X$n ]; do n=$((n + 1)); done
+        xvfb-run -n $n -s '-screen 0 1024x768x24' "$d/shot.sh" >>"$d/xvfb.log" 2>&1 || echo "try $try display $n: $?" >>"$d/xvfb.log"
+        # DOSBox-X ran unless it found no X display
+        [ -s "$d/dosbox.log" ] && ! grep -q "open X11 display" "$d/dosbox.log" && break
+        cat "$d/dosbox.log" >> "$d/xvfb.log" 2>/dev/null; rm -f "$d/s.png" "$d/dosbox.log"
+        try=$((try + 1))
+        sleep 1
+    done
     [ -f "$d/s.png" ] && cp "$d/s.png" "$out/$1.png"
     [ -f "$d/c/WINDOWS/BOOTLOG.TXT" ] && tr -d '\r' < "$d/c/WINDOWS/BOOTLOG.TXT" > "$out/$1-bootlog.txt"
     [ -f "$d/c/OUT.TXT" ] && tr -d '\r' < "$d/c/OUT.TXT" > "$out/$1-out.txt"
     [ -f "$d/com1.txt" ] && cp "$d/com1.txt" "$out/$1-com1.txt"
+    [ -f "$d/xvfb.log" ] && cp "$d/xvfb.log" "$out/$1-xvfb.log"
     [ -n "${WIN386_KEEP:-}" ] && echo "kept $d" || rm -rf "$d"
 }
 
@@ -104,7 +139,7 @@ status=1
 if [ -z "$norefrun" ] && [ -f "$out/w16.png" ] && [ -f "$out/ms.png" ]; then
     diffpx=$(compare -metric AE "$out/w16.png" "$out/ms.png" "$out/diff.png" 2>&1 || true)
     echo "== screenshots: $out/w16.png $out/ms.png; differing pixels: $diffpx"
-    [ "$diffpx" = 0 ] && status=0
+    [ "${diffpx%% *}" = 0 ] && status=0      # compare prints "0 (0)"
 else
     echo "== screenshot: $out/w16.png"
 fi

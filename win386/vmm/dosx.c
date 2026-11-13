@@ -232,6 +232,16 @@ void dos_pm(struct cregs *r)
         call21(&v, 0, 0, 0, 0, 0, 0);
         return;
     }
+    case 0x26: case 0x55: {             /* create a PSP at DX: a selector */
+        int seg = sel_to_seg(DX(r));
+        if (seg < 0) break;
+        v = *r;
+        SETW(v.edx, seg);
+        call21(&v, 0, 0, 0, 0, 0, 0);
+        r->eax = v.eax;
+        r->eflags = v.eflags;
+        return;
+    }
     case 0x51: case 0x62: {             /* get PSP: a selector back */
         u32 sel;
         call21(r, 0, 0, 0, 0, 0, 0);

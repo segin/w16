@@ -625,7 +625,13 @@ cleanup:
         cmp byte [client_active], 0
         je .nc
         call client_rm_reset
-.nc:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
+.nc:    ; (the video mode is left as the client left it: Microsoft's DOSX
+        ; makes no INT 10h call after Windows' display driver set mode 3
+        ; (E10, docs/notes/keyloss-handover.md); it is WIN.COM that sets
+        ; text mode after WSWAP. w16's DOSX used to set back the mode it
+        ; found at its start: 12h, the logo's, and Windows ended in VGA
+        ; graphics with the BIOS's text on it)
+        ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
         cmp byte [did1605], 0
         je .nc2
         mov dx, 1

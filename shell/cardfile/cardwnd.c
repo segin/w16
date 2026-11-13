@@ -105,24 +105,18 @@ void pic_draw(HDC dc, int x, int y)
         HBITMAP old = SelectObject(mem, g_pic.bmp);
         SetTextColor(dc, RGB(0, 0, 0));
         SetBkColor(dc, RGB(255, 255, 255));
-#ifdef W16_WIN2
-        BitBlt(dc, x + g_pic.x, y + g_pic.y, g_pic.cx, g_pic.cy, mem, 0, 0, SRCCOPY);
-#else
         /* on 3.1 the picture is a static object whose rectangle is a
            pixel smaller than the bitmap (CF8): drawn stretched into it */
         StretchBlt(dc, x + g_pic.x, y + g_pic.y, g_pic.cx - 1, g_pic.cy - 1, mem, 0, 0,
                    g_pic.cx, g_pic.cy, SRCCOPY);
-#endif
         SelectObject(mem, old);
         DeleteDC(mem);
     }
-#ifndef W16_WIN2
     else if (g_pic.kind == PIC_OBJECT) {
         RECT r;
         SetRect(&r, x + g_pic.x, y + g_pic.y, x + g_pic.x + g_pic.cx, y + g_pic.y + g_pic.cy);
         ole_draw(&g_pic, dc, &r);
     }
-#endif
 }
 
 /* ---- turning the cards ---- */

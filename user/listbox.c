@@ -3,7 +3,9 @@
  *
  * The state is a block in USER's local heap, its handle in the window's
  * first extra word (Windows 3.1's class has 2 extra bytes: US2); the items
- * are another block of LBITEMs, strings in their own local blocks.
+ * are another block of LBITEMs, strings blocks of their own, both in the
+ * object heap (uheap.c: 3.1's list box strings cost DGROUP nothing, US15),
+ * reached through item() and STR() each time.
  * Items are drawn in the window's font one line apart, the text 2 pixels
  * from the left (UNVERIFIED: US4 to compare), selected items in the
  * Highlight colours, the caret item with a dotted focus rectangle.
@@ -17,7 +19,8 @@ typedef struct LBITEM {
     DWORD data;
     WORD  sel;
 } LBITEM;
-typedef LBITEM __near *PLBITEM;
+typedef LBITEM __far *PLBITEM;
+#define STR(t)  ((LPCSTR)UH_PTR(&uhObj, (t)))
 
 typedef struct LB {
     WORD   items;               /* local block of LBITEMs */
@@ -29,6 +32,9 @@ typedef struct LB {
     WORD   anchor;
     HWND   owner;               /* parent, or the combo box */
     WORD   nredraw;
+    int    colw;                /* LBS_MULTICOLUMN: a column's width */
+    DWORD  bars;                /* WS_VSCROLL/WS_HSCROLL it was made with */
+    int    hext;                /* LB_SETHORIZONTALEXTENT */
 } LB;
 typedef LB __near *PLB;
 
@@ -39,7 +45,7 @@ static PLB lb_of(HWND h)
 
 static PLBITEM item(PLB lb, int i)
 {
-    return (PLBITEM)(lb->items + i * sizeof(LBITEM));
+    return (PLBITEM)UH_PTR(&uhObj, lb->items + i * sizeof(LBITEM));
 }
 
 static DWORD lbstyle(HWND h)
@@ -65,6 +71,56 @@ static int visible_rows(HWND h, PLB lb)
     return lb->itemh ? (r.bottom - r.top) / lb->itemh : 1;
 }
 
+/* LBS_MULTICOLUMN (File Manager's file list): items run down a column,
+   then on in the next one to the right, each column colw wide
+   (LB_SETCOLUMNWIDTH); lb->top is the first item of the leftmost column
+   shown, and a horizontal scroll bar moves by columns (3.1 SDK).
+   UNVERIFIED: the default column width (here 15 average characters) */
+static BOOL multicol(HWND h)
+{
+    return (lbstyle(h) & LBS_MULTICOLUMN) != 0;
+}
+
+static int col_width(PLB lb)
+{
+    return lb->colw > 0 ? lb->colw : 15 * cxSysChar;
+}
+
+static int visible_cols(HWND h, PLB lb)
+{
+    RECT r;
+    int n;
+    GetClientRect(h, &r);
+    n = (r.right - r.left) / col_width(lb);
+    return n > 0 ? n : 1;
+}
+
+/* the item's rectangle in the client area (it may lie outside it) */
+static void item_rect(HWND h, PLB lb, int i, RECT *r)
+{
+    RECT c;
+    GetClientRect(h, &c);
+    if (multicol(h)) {
+        int rows = visible_rows(h, lb), k = i - lb->top;
+        int col, row;
+        if (rows < 1)
+            rows = 1;
+        col = k >= 0 ? k / rows : -((-k + rows - 1) / rows);
+        row = k - col * rows;
+        r->left = col * col_width(lb);
+        r->right = r->left + col_width(lb);
+        r->top = row * lb->itemh;
+        r->bottom = r->top + lb->itemh;
+        return;
+    }
+    r->left = 0;
+    r->right = c.right;
+    r->top = (i - lb->top) * lb->itemh;
+    r->bottom = r->top + lb->itemh;
+}
+
+void sb_show_disabled(HWND hwnd, int bar);
+
 static void notify(HWND h, PLB lb, WORD code)
 {
     if ((lbstyle(h) & LBS_NOTIFY) || GetParent(h) != lb->owner)
@@ -73,12 +129,49 @@ static void notify(HWND h, PLB lb, WORD code)
 
 static void update_scroll(HWND h, PLB lb)
 {
-    if (!(lbstyle(h) & WS_VSCROLL))
+    if (multicol(h)) {
+        int rows = visible_rows(h, lb), cols, max;
+        if (!(lb->bars & WS_HSCROLL))
+            return;
+        if (rows < 1)
+            rows = 1;
+        cols = (lb->count + rows - 1) / rows;
+        max = cols - visible_cols(h, lb);
+        if (max < 0)
+            max = 0;
+        if (!max && (lbstyle(h) & LBS_DISABLENOSCROLL)) {
+            sb_show_disabled(h, SB_HORZ);
+            return;
+        }
+        SetScrollRange(h, SB_HORZ, 0, max, FALSE);
+        SetScrollPos(h, SB_HORZ, lb->top / rows, TRUE);
+        return;
+    }
+    /* a single-column box's horizontal bar: LB_SETHORIZONTALEXTENT's
+       width less the box's (UNVERIFIED: no horizontal scrolling yet) */
+    if (lb->bars & WS_HSCROLL) {
+        RECT c;
+        int max;
+        GetClientRect(h, &c);
+        max = lb->hext - c.right;
+        if (max <= 0 && (lbstyle(h) & LBS_DISABLENOSCROLL))
+            sb_show_disabled(h, SB_HORZ);
+        else
+            SetScrollRange(h, SB_HORZ, 0, max > 0 ? max : 0, TRUE);
+    }
+    /* the bars it was made with come and go as needed (an empty range
+       hides one, and takes its style away: File Manager's file list, empty
+       when made, then never showed its horizontal bar) */
+    if (!(lb->bars & WS_VSCROLL))
         return;
     {
         int rows = visible_rows(h, lb), max = lb->count - rows;
         if (max < 0)
             max = 0;
+        if (!max && (lbstyle(h) & LBS_DISABLENOSCROLL)) {
+            sb_show_disabled(h, SB_VERT);
+            return;
+        }
         SetScrollRange(h, SB_VERT, 0, max, FALSE);
         SetScrollPos(h, SB_VERT, lb->top, TRUE);
     }
@@ -86,14 +179,12 @@ static void update_scroll(HWND h, PLB lb)
 
 static void draw_item(HWND h, PLB lb, HDC hdc, int i)
 {
-    RECT r;
+    RECT r, c;
     PLBITEM it;
-    int y = (i - lb->top) * lb->itemh;
-    GetClientRect(h, &r);
-    if (y < 0 || y >= r.bottom)
+    GetClientRect(h, &c);
+    item_rect(h, lb, i, &r);
+    if (r.top < 0 || r.top >= c.bottom || r.left >= c.right || r.right <= 0)
         return;
-    r.top = y;
-    r.bottom = y + lb->itemh;
     if (i >= lb->count) {
         return;
     }
@@ -103,20 +194,29 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         di.CtlType = ODT_LISTBOX;
         di.CtlID = GetWindowWord(h, GWW_ID);
         di.itemID = i;
+        /* the item drawn whole without ODS_FOCUS, then the focus item
+           again with ODA_FOCUS and ODS_FOCUS (3.1: File Manager's tree
+           draws its focus rectangle only then, and its file list draws
+           it once - both match only so) */
         di.itemAction = ODA_DRAWENTIRE;
-        di.itemState = (it->sel ? ODS_SELECTED : 0) | (lb->focus && i == lb->caret ? ODS_FOCUS : 0);
+        di.itemState = it->sel ? ODS_SELECTED : 0;
         di.hwndItem = h;
         di.hDC = hdc;
         di.rcItem = r;
         di.itemData = it->data;
         send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
+        if (lb->focus && i == lb->caret && valid_wnd(h)) {
+            di.itemState |= ODS_FOCUS;
+            di.itemAction = ODA_FOCUS;
+            send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
+        }
         return;
     }
     FillRect(hdc, &r, sysbrush[it->sel ? COLOR_HIGHLIGHT : COLOR_WINDOW]);
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, syscolor[it->sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
     if (it->text) {
-        LPCSTR s = (LPCSTR)MAKELP(get_ds(), it->text);
+        LPCSTR s = STR(it->text);
         if (lbstyle(h) & LBS_USETABSTOPS)
             TabbedTextOut(hdc, r.left + 2, r.top, s, lstr_len(s), 0, NULL, r.left + 2);
         else
@@ -135,6 +235,8 @@ static void paint(HWND h, PLB lb, HDC hdc)
     send_message(lb->owner, WM_CTLCOLOR, (WPARAM)hdc, MAKELONG(h, CTLCOLOR_LISTBOX));
     FillRect(hdc, &r, sysbrush[COLOR_WINDOW]);
     rows = visible_rows(h, lb) + 1;
+    if (multicol(h))
+        rows = (rows - 1 > 0 ? rows - 1 : 1) * (visible_cols(h, lb) + 1);
     for (i = lb->top; i < lb->count && i < lb->top + rows; i++)
         draw_item(h, lb, hdc, i);
     if (old)
@@ -149,15 +251,16 @@ static void redraw(HWND h)
 static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
 {
     PLBITEM it;
+    WORD text;
     if (lb->count >= lb->alloc) {
         int n = lb->alloc ? lb->alloc * 2 : 16;
-        WORD blk = lb->items ? (WORD)LocalReAlloc((HLOCAL)lb->items, n * sizeof(LBITEM), LMEM_MOVEABLE)
-                             : (WORD)LocalAlloc(LMEM_FIXED, n * sizeof(LBITEM));
+        WORD blk = uh_realloc(&uhObj, lb->items, n * sizeof(LBITEM));
         if (!blk)
             return LB_ERRSPACE;
         lb->items = blk;
         lb->alloc = n;
     }
+    text = hasstrings(h) ? uh_strdup_in(&uhObj, s) : 0;    /* before item(): it allocates */
     if (at < 0 || at > lb->count)
         at = lb->count;
     if (at < lb->count)
@@ -167,7 +270,7 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
     it = item(lb, at);
     it->sel = 0;
     it->data = data;
-    it->text = hasstrings(h) ? local_strdup(s) : 0;
+    it->text = text;
     if (!hasstrings(h))
         it->data = (DWORD)s;
     if (lb->cur >= at && lb->cur >= 0 && lb->count > 1)
@@ -195,15 +298,14 @@ static int sorted_pos(HWND h, PLB lb, LPCSTR s)
         return lb->count;
     }
     for (i = 0; i < lb->count; i++)
-        if (lstrcmpi(s, (LPCSTR)MAKELP(get_ds(), item(lb, i)->text)) < 0)
+        if (lstrcmpi(s, STR(item(lb, i)->text)) < 0)
             return i;
     return lb->count;
 }
 
 static void del_item(PLB lb, int i)
 {
-    if (item(lb, i)->text)
-        LocalFree((HLOCAL)item(lb, i)->text);
+    uh_free(&uhObj, item(lb, i)->text);
     if (i + 1 < lb->count)
         fmemcpy((void __far *)item(lb, i), (void __far *)item(lb, i + 1),
                 (lb->count - i - 1) * sizeof(LBITEM));
@@ -217,6 +319,22 @@ static void del_item(PLB lb, int i)
 static void make_visible(HWND h, PLB lb, int i)
 {
     int rows = visible_rows(h, lb);
+    /* not while it has no height yet (File Manager's file list, filled
+       while 0 high: its top went to the selected item, and ".." at the
+       head of the list was never shown) */
+    if (rows < 1)
+        return;
+    if (multicol(h)) {
+        int cols = visible_cols(h, lb);
+        if (i < lb->top)
+            lb->top = i / rows * rows;
+        else if (i >= lb->top + rows * cols)
+            lb->top = (i / rows - cols + 1) * rows;
+        if (lb->top < 0)
+            lb->top = 0;
+        update_scroll(h, lb);
+        return;
+    }
     if (i < lb->top)
         lb->top = i;
     else if (i >= lb->top + rows)
@@ -239,16 +357,41 @@ static void set_cur(HWND h, PLB lb, int i)
     redraw(h);
 }
 
-static int find(PLB lb, int start, LPCSTR s, BOOL exact)
+static int find(HWND h, PLB lb, int start, LPCSTR s, BOOL exact)
 {
-    int i, n = lb->count, len = lstr_len(s);
+    int i, n = lb->count, len;
+    /* owner-drawn without LBS_HASSTRINGS: lParam is item data, equal to
+       an item's (or, sorted, WM_COMPAREITEM says 0) - 3.1 SDK. w16 found
+       nothing, so File Manager's tree (LB_SELECTSTRING by its item data)
+       had no selection, and it showed "\*.*", the root, unanswering */
+    if (!hasstrings(h)) {
+        for (i = 1; i <= n; i++) {
+            int k = (start + i) % n;
+            if (lbstyle(h) & LBS_SORT) {
+                COMPAREITEMSTRUCT ci;
+                ci.CtlType = ODT_LISTBOX;
+                ci.CtlID = GetWindowWord(h, GWW_ID);
+                ci.hwndItem = h;
+                ci.itemID1 = (UINT)-1;
+                ci.itemData1 = (DWORD)s;
+                ci.itemID2 = k;
+                ci.itemData2 = item(lb, k)->data;
+                if (!(int)send_message(lb->owner, WM_COMPAREITEM, ci.CtlID,
+                                       (LPARAM)(COMPAREITEMSTRUCT __far *)&ci))
+                    return k;
+            } else if (item(lb, k)->data == (DWORD)s)
+                return k;
+        }
+        return LB_ERR;
+    }
+    len = lstr_len(s);
     for (i = 1; i <= n; i++) {
         int k = (start + i) % n;
         LPCSTR t;
         char buf[256];
         if (!item(lb, k)->text)
             continue;
-        t = (LPCSTR)MAKELP(get_ds(), item(lb, k)->text);
+        t = STR(item(lb, k)->text);
         if (exact) {
             if (!lstrcmpi(t, s))
                 return k;
@@ -261,10 +404,18 @@ static int find(PLB lb, int start, LPCSTR s, BOOL exact)
     return LB_ERR;
 }
 
-static int hit(HWND h, PLB lb, int y)
+static int hit(HWND h, PLB lb, int x, int y)
 {
-    int i = lb->top + y / (lb->itemh ? lb->itemh : 1);
-    (void)h;
+    int i;
+    if (multicol(h)) {
+        int rows = visible_rows(h, lb), row = y / (lb->itemh ? lb->itemh : 1);
+        if (rows < 1)
+            rows = 1;
+        if (row >= rows || x < 0 || y < 0)
+            return -1;
+        i = lb->top + x / col_width(lb) * rows + row;
+    } else
+        i = lb->top + y / (lb->itemh ? lb->itemh : 1);
     return i < lb->count ? i : -1;
 }
 
@@ -287,7 +438,7 @@ static void integral(HWND h, PLB lb)
                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PLB lb;
     if (!valid_wnd(h))
@@ -308,6 +459,7 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         SetWindowWord(h, 0, (WORD)lb);
         lb->cur = -1;
         lb->itemh = cySysChar;
+        lb->bars = lbstyle(h) & (WS_VSCROLL | WS_HSCROLL);
         lb->owner = GetParent(h);
         if (lbstyle(h) & LBS_OWNERDRAWFIXED) {
             MEASUREITEMSTRUCT mi;
@@ -330,8 +482,7 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DESTROY:
         while (lb->count)
             del_item(lb, lb->count - 1);
-        if (lb->items)
-            LocalFree((HLOCAL)lb->items);
+        uh_free(&uhObj, lb->items);
         LocalFree((HLOCAL)lb);
         SetWindowWord(h, 0, 0);
         return 0;
@@ -371,6 +522,10 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         notify(h, lb, LBN_KILLFOCUS);
         return 0;
     case WM_SIZE:
+        /* columns start on a whole column again (a top worked out while
+           the box was one row high is any item) */
+        if (multicol(h) && visible_rows(h, lb) > 0)
+            lb->top = lb->top / visible_rows(h, lb) * visible_rows(h, lb);
         integral(h, lb);
         update_scroll(h, lb);
         return 0;
@@ -378,27 +533,118 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return DLGC_WANTARROWS | DLGC_WANTCHARS;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
-        int i = hit(h, lb, (int)HIWORD(lp));
+        int i = hit(h, lb, (int)LOWORD(lp), (int)HIWORD(lp));
         if (GetFocus() != h && GetParent(h) == lb->owner)
             SetFocus(h);
+        /* WM_LBTRACKPOINT (131h, Schulman ch. 7): the item and the point
+           to the owner first; a non-zero answer means it does the rest
+           (3.1: File Manager reads Shift and Ctrl here, selects, and
+           starts its drag itself, with the capture on its directory
+           window). UNVERIFIED: sent, not posted, and the answer's use
+           (Wine's list box does so) */
+        if (msg == WM_LBUTTONDOWN && GetParent(h) == lb->owner &&
+            send_message(lb->owner, 0x0131, (WPARAM)i, lp))
+            return 0;
+        if (!valid_wnd(h))
+            return 0;
+        /* the box takes the mouse while the button is down, before it
+           tells its owner of the change, the selection following the
+           pointer (3.1: File Manager's LBN_SELCHANGE starts its drag
+           only while its file list has the capture) */
+        if (msg == WM_LBUTTONDOWN && GetParent(h) == lb->owner && valid_wnd(h))
+            SetCapture(h);
         if (i < 0)
             return 0;
-        if (multi(h)) {
+        if ((lbstyle(h) & LBS_EXTENDEDSEL) && !(GetKeyState(VK_CONTROL) & 0x8000)) {
+            /* extended selection (3.1 SDK): a click selects that item
+               alone, Shift+click the range from the anchor */
+            int k, a = (GetKeyState(VK_SHIFT) & 0x8000) ? lb->anchor : i;
+            for (k = 0; k < lb->count; k++)
+                item(lb, k)->sel = (k >= a && k <= i) || (k <= a && k >= i);
+            if (!(GetKeyState(VK_SHIFT) & 0x8000))
+                lb->anchor = i;
+            lb->caret = i;
+            lb->cur = i;
+            make_visible(h, lb, i);
+            redraw(h);
+        } else if (multi(h)) {
             item(lb, i)->sel ^= 1;
             lb->caret = i;
+            lb->anchor = i;
             redraw(h);
         } else
             set_cur(h, lb, i);
         notify(h, lb, LBN_SELCHANGE);
         if (msg == WM_LBUTTONDBLCLK)
             notify(h, lb, LBN_DBLCLK);
+        /* extended style 2 (Schulman: WES_NOTIFYDRAG; Wine calls it
+           WS_EX_DRAGDETECT): a press that turns into a drag sends the
+           owner WM_BEGINDRAG (22Ch), 0 and 0 (File Manager does not use it).
+           UNVERIFIED: the parameters */
+        if (msg == WM_LBUTTONDOWN && (GetWindowLong(h, GWL_EXSTYLE) & 2) && valid_wnd(h)) {
+            extern BOOL WINAPI U_DRAGDETECT(HWND h, POINT __far *lp);
+            POINT pt;
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            ClientToScreen(h, &pt);
+            if (U_DRAGDETECT(h, &pt) && valid_wnd(h))
+                send_message(lb->owner, 0x022C, 0, 0);
+        }
         return 0;
     }
+    case WM_MOUSEMOVE:
+        if (GetCapture() == h && (wp & MK_LBUTTON)) {
+            RECT c;
+            POINT p;
+            int i;
+            GetClientRect(h, &c);
+            p.x = (int)LOWORD(lp);
+            p.y = (int)HIWORD(lp);
+            if (!PtInRect(&c, p))
+                return 0;       /* UNVERIFIED: 3.1 scrolls here */
+            i = hit(h, lb, p.x, p.y);
+            if (i < 0 || i == lb->caret)
+                return 0;
+            if (lbstyle(h) & LBS_EXTENDEDSEL) {
+                int k, a = lb->anchor;
+                for (k = 0; k < lb->count; k++)
+                    item(lb, k)->sel = (k >= a && k <= i) || (k <= a && k >= i);
+                lb->caret = lb->cur = i;
+                redraw(h);
+            } else if (multi(h))
+                return 0;
+            else
+                set_cur(h, lb, i);
+            notify(h, lb, LBN_SELCHANGE);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (GetCapture() == h)
+            ReleaseCapture();
+        return 0;
     case WM_KEYDOWN: {
         int i = lb->caret, rows = visible_rows(h, lb);
+        /* LBS_WANTKEYBOARDINPUT: the owner first (WM_VKEYTOITEM: -2
+           done, -1 the list box's own handling, else the item to go to) */
+        if (lbstyle(h) & LBS_WANTKEYBOARDINPUT) {
+            int r = (int)send_message(lb->owner, WM_VKEYTOITEM, wp, MAKELONG(h, lb->caret));
+            if (!valid_wnd(h) || r == -2)
+                return 0;
+            if (r >= 0) {
+                if (r < lb->count) {
+                    set_cur(h, lb, r);
+                    notify(h, lb, LBN_SELCHANGE);
+                }
+                return 0;
+            }
+        }
+        if (rows < 1)
+            rows = 1;
         switch (wp) {
         case VK_UP: i--; break;
         case VK_DOWN: i++; break;
+        case VK_LEFT: if (multicol(h)) i -= rows; else i--; break;
+        case VK_RIGHT: if (multicol(h)) i += rows; else i++; break;
         case VK_PRIOR: i -= rows - 1; break;
         case VK_NEXT: i += rows - 1; break;
         case VK_HOME: i = 0; break;
@@ -431,15 +677,54 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CHAR: {
         char s[2];
         int i;
+        /* owner-drawn without strings and LBS_WANTKEYBOARDINPUT: the
+           owner says (WM_CHARTOITEM; File Manager's Ctrl+letter drives) */
+        if ((lbstyle(h) & LBS_WANTKEYBOARDINPUT) && !hasstrings(h)) {
+            int r = (int)send_message(lb->owner, WM_CHARTOITEM, wp, MAKELONG(h, lb->caret));
+            if (valid_wnd(h) && r >= 0 && r < lb->count) {
+                set_cur(h, lb, r);
+                notify(h, lb, LBN_SELCHANGE);
+            }
+            return 0;
+        }
         s[0] = (char)wp;
         s[1] = 0;
-        i = find(lb, lb->caret, s, FALSE);
+        i = find(h, lb, lb->caret, s, FALSE);
         if (i >= 0) {
             set_cur(h, lb, i);
             notify(h, lb, LBN_SELCHANGE);
         }
         return 0;
     }
+    case WM_HSCROLL:
+        if (multicol(h)) {
+            int rows = visible_rows(h, lb), c, cols, t;
+            if (rows < 1)
+                rows = 1;
+            c = lb->top / rows;
+            cols = visible_cols(h, lb);
+            switch (wp) {
+            case SB_LINEUP: c--; break;
+            case SB_LINEDOWN: c++; break;
+            case SB_PAGEUP: c -= cols; break;
+            case SB_PAGEDOWN: c += cols; break;
+            case SB_THUMBTRACK:
+            case SB_THUMBPOSITION: c = (int)LOWORD(lp); break;
+            case SB_TOP: c = 0; break;
+            case SB_BOTTOM: c = lb->count; break;
+            }
+            t = (lb->count + rows - 1) / rows - cols;
+            if (c > t)
+                c = t;
+            if (c < 0)
+                c = 0;
+            if (c * rows != lb->top) {
+                lb->top = c * rows;
+                update_scroll(h, lb);
+                redraw(h);
+            }
+        }
+        return 0;
     case WM_VSCROLL: {
         int rows = visible_rows(h, lb), t = lb->top;
         switch (wp) {
@@ -502,12 +787,12 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             *(DWORD __far *)lp = item(lb, wp)->data;
             return 4;
         }
-        lstr_cpyn((LPSTR)lp, (LPCSTR)MAKELP(get_ds(), item(lb, wp)->text), 0x7FFF);
+        lstr_cpyn((LPSTR)lp, STR(item(lb, wp)->text), 0x7FFF);
         return lstr_len((LPCSTR)lp);
     case LB_GETTEXTLEN:
         if ((int)wp < 0 || (int)wp >= lb->count)
             return LB_ERR;
-        return item(lb, wp)->text ? lstr_len((LPCSTR)MAKELP(get_ds(), item(lb, wp)->text)) : 4;
+        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 4;
     case LB_SETCURSEL:
         if ((int)wp >= lb->count)
             return LB_ERR;
@@ -520,9 +805,14 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if ((int)LOWORD(lp) == -1) {
             for (i = 0; i < lb->count; i++)
                 item(lb, i)->sel = wp != 0;
-        } else if ((int)LOWORD(lp) < lb->count)
+        } else if ((int)LOWORD(lp) < lb->count) {
             item(lb, LOWORD(lp))->sel = wp != 0;
-        else
+            /* selecting an item moves the caret (the focus rectangle)
+               to it (3.1: File Manager selects the file it was pressed
+               on with LB_SETSEL alone, and the rectangle is round it) */
+            if (wp)
+                lb->caret = (int)LOWORD(lp);
+        } else
             return LB_ERR;
         redraw(h);
         return 0;
@@ -543,17 +833,20 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return n;
     }
     case LB_FINDSTRING:
-        return find(lb, (int)wp, (LPCSTR)lp, FALSE);
+        return find(h, lb, (int)wp, (LPCSTR)lp, FALSE);
     case LB_FINDSTRINGEXACT:
-        return find(lb, (int)wp, (LPCSTR)lp, TRUE);
+        return find(h, lb, (int)wp, (LPCSTR)lp, TRUE);
     case LB_SELECTSTRING: {
-        int i = find(lb, (int)wp, (LPCSTR)lp, FALSE);
+        int i = find(h, lb, (int)wp, (LPCSTR)lp, FALSE);
         if (i >= 0)
             set_cur(h, lb, i);
         return i;
     }
     case LB_SETTOPINDEX:
         lb->top = (int)wp;
+        /* multi-column: the column holding it (UNVERIFIED) */
+        if (multicol(h) && visible_rows(h, lb) > 0)
+            lb->top = lb->top / visible_rows(h, lb) * visible_rows(h, lb);
         update_scroll(h, lb);
         redraw(h);
         return 0;
@@ -569,8 +862,8 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case LB_GETITEMRECT: {
         RECT __far *r = (RECT __far *)lp;
         RECT c;
-        GetClientRect(h, &c);
-        SetRect(r, 0, ((int)wp - lb->top) * lb->itemh, c.right, ((int)wp - lb->top + 1) * lb->itemh);
+        item_rect(h, lb, (int)wp, &c);
+        *r = c;
         return 0;
     }
     case LB_SETITEMHEIGHT:
@@ -586,20 +879,30 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case LB_GETCARETINDEX:
         return lb->caret;
-    case LB_SETHORIZONTALEXTENT:
-    case LB_SETTABSTOPS:
     case LB_SETCOLUMNWIDTH:
-        return 1;
-    case LB_DIR:
-        return LB_ERR;          /* UNVERIFIED: not yet */
-    case LB_GETHORIZONTALEXTENT:
+        /* File Manager's: 0 returned on 3.1 (US-trace) */
+        lb->colw = (int)wp;
+        update_scroll(h, lb);
+        redraw(h);
         return 0;
+    case LB_SETHORIZONTALEXTENT:
+        lb->hext = (int)wp;
+        update_scroll(h, lb);
+        return 0;
+    case LB_SETTABSTOPS:
+        return 1;
+    case LB_DIR: {
+        extern LRESULT lb_dir(HWND lb, UINT attr, LPCSTR spec);   /* dirlist.c */
+        return lb_dir(h, (UINT)wp, (LPCSTR)lp);
+    }
+    case LB_GETHORIZONTALEXTENT:
+        return lb->hext;
     }
     return DefWindowProc(h, msg, wp, lp);
 }
 
 /* the combo box's drop-down list (class ComboLBox) */
-LRESULT WINAPI ComboLBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ComboLBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_MOUSEACTIVATE)
         return MA_NOACTIVATE;

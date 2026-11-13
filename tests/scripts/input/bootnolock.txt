@@ -1,0 +1,62 @@
+; for DOSBox with autolock=false (INPUTRUN_NOLOCK=1: motion arrives
+; without a click capturing the mouse): heavy mouse motion, clicks and
+; Shift from mid-boot on (tests/inputrun.sh -b 10 to 20), then the Help menu by
+; keyboard, then the X pointer over the window's middle and moved up and
+; left (tests/boottest.sh case allw16nolock: the menu must open and the
+; pointer move between the last two screens)
+; Shots wait for the screen to have held still as long as the old
+; sleep before them (settle 20 S), not a fixed time
+click 1
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+jiggle 150
+click 1
+key shift
+; Windows up: Program Manager's caption active and the screen still (a
+; fixed 10 s was too short on a loaded host and the keys were lost)
+waitpixel 100 54 0000aa 90
+settle 20 2
+key alt+h
+settle 20 1.5
+shot 01-help
+key Escape
+key Escape
+center
+settle 20 1
+shot 02-before
+move -60 -40
+sleep 0.3
+move -60 -40
+settle 20 1
+shot 03-after

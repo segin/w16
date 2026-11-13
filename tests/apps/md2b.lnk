@@ -1,0 +1,3 @@
+# MD2B.EXE (tests/apps/md2b.c, md1s.asm): PowerEventProc observed
+@tests/apps/app.lnk
+import U_INITAPP USER.5

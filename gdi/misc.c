@@ -9,6 +9,9 @@ HINSTANCE gdi_inst;
 int __cdecl __far gdi_init(WORD hinst)
 {
     gdi_inst = hinst;
+    /* [w16] ExtendedGdiHeap (gdi.h): read once, before the first object */
+    gdi_extended = GetPrivateProfileInt("w16", "ExtendedGdiHeap", 0, "SYSTEM.INI") != 0;
+    xheap_init();
     font_init();
     stock_init();
     return 1;
@@ -25,16 +28,40 @@ static const PALETTEENTRY defpal[20] = {
     {0, 0, 255, 0}, {255, 0, 255, 0}, {0, 255, 255, 0}, {255, 255, 255, 0}
 };
 
+/* the entries are in GDI's heaps (GD4: 3.1's palette took 1Ah bytes of
+   DGROUP with 16 entries and with 256) */
 static HPALETTE pal_new(WORD n, const PALETTEENTRY __far *pe)
 {
-    HANDLE h = obj_alloc(PAL_MAGIC, sizeof(PALOBJ) + (n ? n - 1 : 0) * sizeof(PALETTEENTRY));
-    PALOBJ NEAR *p;
-    if (!h)
+    XP x = xalloc(n * sizeof(PALETTEENTRY));
+    HANDLE h;
+    LPPALOBJ p;
+    if (!x)
         return 0;
-    p = DEREF(h);
+    h = obj_alloc(PAL_MAGIC, sizeof(PALOBJ));
+    if (!h) {
+        xfree(x);
+        return 0;
+    }
+    p = obj_get(h, PAL_MAGIC);
+    p->palVersion = 0x300;
     p->nEntries = n;
-    mem_copy(p->pe, pe, n * sizeof(PALETTEENTRY));
+    p->xEntries = x;
+    mem_copy(xptr(x), pe, n * sizeof(PALETTEENTRY));
     return h;
+}
+
+void pal_free(HPALETTE h)
+{
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
+    if (!p)
+        return;
+    xfree(p->xEntries);
+    obj_free(h);
+}
+
+static PALETTEENTRY __far *pal_entries(LPPALOBJ p)
+{
+    return xptr(p->xEntries);
 }
 
 HPALETTE pal_default(void)
@@ -51,31 +78,31 @@ HPALETTE GDIAPI CreatePalette(const LOGPALETTE __far *lp)          /* GDI.360 */
 
 WORD GDIAPI GetPaletteEntries(HPALETTE h, WORD start, WORD n, PALETTEENTRY __far *pe) /* GDI.363 */
 {
-    PALOBJ NEAR *p = obj_get(h, PAL_MAGIC);
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
     WORD i;
     if (!p)
         return 0;
     if (!pe)
         return p->nEntries;
     for (i = 0; i < n && start + i < p->nEntries; i++)
-        pe[i] = p->pe[start + i];
+        pe[i] = pal_entries(p)[start + i];
     return i;
 }
 
 WORD GDIAPI SetPaletteEntries(HPALETTE h, WORD start, WORD n, const PALETTEENTRY __far *pe) /* GDI.364 */
 {
-    PALOBJ NEAR *p = obj_get(h, PAL_MAGIC);
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
     WORD i;
     if (!p)
         return 0;
     for (i = 0; i < n && start + i < p->nEntries; i++)
-        p->pe[start + i] = pe[i];
+        pal_entries(p)[start + i] = pe[i];
     return i;
 }
 
 HPALETTE GDIAPI GDISelectPalette(HDC hdc, HPALETTE h, BOOL bk)     /* GDI.361 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     HPALETTE old;
     (void)bk;
     if (!dc || !obj_get(h, PAL_MAGIC))
@@ -127,14 +154,16 @@ WORD GDIAPI GetSystemPaletteEntries(HDC hdc, WORD start, WORD n, PALETTEENTRY __
 
 WORD GDIAPI GetNearestPaletteIndex(HPALETTE h, COLORREF c)         /* GDI.370 */
 {
-    PALOBJ NEAR *p = obj_get(h, PAL_MAGIC);
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
+    PALETTEENTRY __far *e;
     WORD i, best = 0;
     long bd = 0x7FFFFFFFL;
     if (!p)
         return 0;
+    e = pal_entries(p);
     for (i = 0; i < p->nEntries; i++) {
-        long dr = (long)p->pe[i].peRed - (BYTE)c, dg = (long)p->pe[i].peGreen - (BYTE)(c >> 8);
-        long db = (long)p->pe[i].peBlue - (BYTE)(c >> 16), d = dr * dr + dg * dg + db * db;
+        long dr = (long)e[i].peRed - (BYTE)c, dg = (long)e[i].peGreen - (BYTE)(c >> 8);
+        long db = (long)e[i].peBlue - (BYTE)(c >> 16), d = dr * dr + dg * dg + db * db;
         if (d < bd) {
             bd = d;
             best = i;
@@ -159,7 +188,7 @@ int GDIAPI MulDiv(int a, int b, int c)                             /* GDI.128 */
 
 int GDIAPI Escape(HDC hdc, int fn, int n, LPCSTR in, void __far *out) /* GDI.38 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     (void)n;
     if (!dc || !dc->dev->fn[DRV_CONTROL])
         return 0;

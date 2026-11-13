@@ -33,6 +33,8 @@
  */
 #include "kernel.h"
 
+void sig_default_set(u16 t);
+
 /* InitTask's stack limit lies this far above the lowest address of the
    stack (observed on Windows 3.1: SP - limit = stack size - 96h). */
 #define STACK_SLOP      0x0096
@@ -83,6 +85,7 @@ typedef struct taskx {
     u16 dg_sel, dg_hnd;         /* its DGROUP */
     u16 stack_size, heap_size, sp;
     u16 hprev;
+    u16 handles;                /* SetHandleCount's count (0: 20) */
 } taskx;
 
 static taskx FAR *tx_first;
@@ -94,6 +97,20 @@ static taskx FAR *tx_of(u16 t)
         if (x->htask == t)
             return x;
     return NULL;
+}
+
+/* file.c (SetHandleCount): the current task's handle count, and setting
+   it (n: 0 reads it). Outside a task (booting) one count for KERNEL. */
+u16 task_handles(u16 n)
+{
+    static u16 boot_handles = 20;
+    taskx FAR *x = cur_task ? tx_of(cur_task) : NULL;
+    u16 FAR *p = x ? &x->handles : &boot_handles;
+    if (!*p)
+        *p = 20;
+    if (n)
+        *p = n;
+    return *p;
 }
 
 u16 get_winflags(void)
@@ -205,6 +222,22 @@ static u16 rm_int(u8 n, u16 ax, u16 bx, u16 dx, u16 si)
     r.ds = 0;
     dpmi31(&r);
     return (u16)rmc.eax;
+}
+
+/* INT n in real mode with AX and ES (DOS 49h: free the block at ES) */
+static void rm_int_es(u8 n, u16 ax, u16 es)
+{
+    regs16 r;
+    kmemset(&rmc, 0, sizeof rmc);
+    rmc.eax = ax;
+    rmc.es = es;
+    r.ax = 0x0300;
+    r.bx = n;
+    r.cx = 0;
+    r.di = FP_OFF((void FAR *)&rmc);
+    r.es = FP_SEG((void FAR *)&rmc);
+    r.ds = 0;
+    dpmi31(&r);
 }
 
 static u16 seg_of(u16 sel)
@@ -350,10 +383,99 @@ static void idle(void)
     rm_int(0x2F, 0x1689, 1, 0, 0);      /* Windows kernel idle */
 }
 
+/* [w16] schedlog=1 (winboot.c): every switch is printed, with what
+   asked for it (a debugging aid) */
+u16 sched_log;
+static const char *sched_why = "";
+
+static void log_name(u16 t)
+{
+    char n[9];
+    u16 i;
+    if (!t) {
+        kputs("-");
+        return;
+    }
+    for (i = 0; i < 8 && TB(t, TDB_NAME + i); i++)
+        n[i] = TB(t, TDB_NAME + i);
+    n[i] = 0;
+    kputs(n);
+}
+
+/* A task's vectors for INT 0, 2, 4, 6, 7, 3Eh and 75h (Pietrek: TDB
+   32h-4Dh). Observed (tests/apps/tk16.c "vec", 3.1): a task's INT 21h
+   25h for INT 0 shows in its TDB at once; a task started afterwards has
+   the vector as it was at the start, and its TDB says so; the first
+   task keeps its own. w16 had one vector for all tasks (KERNEL audit
+   #14). The TDB holds the task's vectors (kentry.asm writes the running
+   task's at 25h, and int_vec_cur, the vectors installed); a switch
+   installs the new task's that differ (DPMI 0205h). */
+static const u8 int_vec_no[7] = { 0x00, 0x02, 0x04, 0x06, 0x07, 0x3E, 0x75 };
+static u32 int_vec_default[7];
+u32 int_vec_cur[7];                     /* kentry.asm writes it too */
+static u16 int_vec_have;
+
+static void int_vec_init(void)
+{
+    regs16 r;
+    u16 i;
+    if (int_vec_have)
+        return;
+    for (i = 0; i < 7; i++) {
+        r.ax = 0x0204;
+        r.bx = int_vec_no[i];
+        r.ds = r.es = 0;
+        dpmi31(&r);
+        int_vec_default[i] = int_vec_cur[i] = ((u32)r.cx << 16) | r.dx;
+    }
+    int_vec_have = 1;
+}
+
+static void int_vec_tdb(u16 t)
+{
+    u16 i;
+    int_vec_init();
+    for (i = 0; i < 7; i++)
+        *(u32 FAR *)MK_FP(t, 0x32 + 4 * i) = int_vec_default[i];
+}
+
+static void int_vec_switch(u16 t)
+{
+    regs16 r;
+    u16 i;
+    u32 v;
+    if (!int_vec_have)
+        return;
+    for (i = 0; i < 7; i++) {
+        v = *(u32 FAR *)MK_FP(t, 0x32 + 4 * i);
+        if (v == int_vec_cur[i] || !v)
+            continue;
+        r.ax = 0x0205;
+        r.bx = int_vec_no[i];
+        r.cx = (u16)(v >> 16);
+        r.dx = (u16)v;
+        r.ds = r.es = 0;
+        dpmi31(&r);
+        int_vec_cur[i] = v;
+    }
+}
+
 static void switch_to(u16 t)
 {
     u16 from = cur_task;
     static u16 have87 = 0xFFFF;
+
+    heap_check("task switch", 0);
+
+    if (sched_log) {
+        kputs("w16 sw ");
+        log_name(from);
+        kputs(" -> ");
+        log_name(t);
+        kputs(" (");
+        kputs(sched_why);
+        kputs(")\r\n");
+    }
 
     if (have87 == 0xFFFF)
         have87 = (get_winflags() & WF_80x87) != 0;
@@ -368,6 +490,7 @@ static void switch_to(u16 t)
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
     set_dta(t);
+    int_vec_switch(t);
     restore_dir(t, from);
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
@@ -487,10 +610,12 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     save_dir(t);
     TW(t, TDB_LIBINIT) = libinit;
     TW(t, TDB_ALIAS) = alias;
+    sig_default_set(t);
     procinst_init_tdb(t);
     for (i = 0; i < 8 && m->name[i]; i++)
         TB(t, TDB_NAME + i) = (u8)m->name[i];
     TW(t, TDB_SIG) = TDB_MAGIC;
+    int_vec_tdb(t);
 
     /* the start-up frame on the task's stack (kentry.asm, task_switch and
        task_tramp): its entry point, then the registers a task starts
@@ -499,8 +624,8 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        DS = SS = DGROUP, SP = the end of the stack (static data, then the
        stack, then the local heap) */
     dsize = (m->dg_min ? m->dg_min : 0x10000UL) + h->stack_size;
-    if (dsize > 0xFFFEUL)
-        dsize = 0xFFFEUL;
+    if (dsize > 0xFFF0UL)               /* DGROUP's end (loader.c) */
+        dsize = 0xFFF0UL;
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
     {
         u16 FAR *s = MK_FP(dg_sel, sp - 24);
@@ -563,12 +688,14 @@ void task_set_env(u16 t, u16 env)
 }
 
 /* Start the new task t from a running task: it runs until it yields
-   (observed: LoadModule returned after the new task's first Yield). */
+   (observed: LoadModule returned after the new task's first Yield).
+   Through Yield, as 3.1's CloseApplEnv (Pietrek ch. 3). */
 void task_start(u16 t)
 {
     (void)t;
+    sched_why = "start";
     if (cur_task)
-        OldYield();
+        Yield();
 }
 
 /* Run the tasks (from KERNEL's own stack, after the first task is made);
@@ -586,6 +713,7 @@ u16 task_boot(void)
     cur_pdb = TW(t, TDB_PDB);
     set_psp(cur_pdb);
     set_dta(t);
+    int_vec_switch(t);
     restore_dir(t, 0);
     in_sched = 0;
     task_switch((u16 FAR *)boot_sssp, TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));
@@ -626,15 +754,30 @@ void __cdecl task_exit_c(u16 code)
         r.ds = r.es = 0;
         dos21(&r);
     }
+    /* a handle table SetHandleCount made (DOS 6700h: a DOS block, its
+       far pointer at PDB 34h) goes with the task; it stayed allocated
+       (KERNEL audit #10) */
+    {
+        u16 jseg = *(u16 FAR *)MK_FP(pdb, 0x36);
+        if (jseg && jseg != seg_of(pdb))
+            rm_int_es(0x21, 0x4900, jseg);
+    }
     for (pp = &tx_first; *pp; pp = &(*pp)->next)
         if (*pp == x) {
             *pp = x->next;
             break;
         }
-    in_sched = 0;
-    cur_task = 0;
+    /* the module and the DLLs it leaves go (their WEPs and the 80h
+       signal) with the ending task still the current one, as on 3.1
+       (Pietrek: ExitCall frees the module before the task's PDB and TDB);
+       it was 0 there (KERNEL audit, low; UNVERIFIED: what GetCurrentTask
+       gives in such a WEP on 3.1). No task switch meanwhile: the
+       ending task is off the list and would not come back */
+    in_sched = 1;
     if (m)
         module_end_instance(m, x->dg_hnd, x->dg_sel);
+    in_sched = 0;
+    cur_task = 0;
     set_psp(psp_sel);
     cur_pdb = 0;
     dpmi_free_desc(pdb);
@@ -722,9 +865,26 @@ void __cdecl inittask_c(regs16 FAR *r)
 
 /* ---- API ---- */
 
+void kernel_psp(int on)
+{
+    if (cur_pdb && cur_pdb != psp_sel)
+        set_psp(on ? psp_sel : cur_pdb);
+}
+
+static u16 ss_now(void);
+#pragma aux ss_now = "mov ax, ss" value [ax];
+
+/* FatalExitHook's procedure (toolhelp.c) hears of it first (Schulman:
+   "BOOL FAR PASCAL FatalExitHookCallback(WORD exitCode)", called
+   whenever an application calls FatalExit); it was never called
+   (KERNEL audit, low). UNVERIFIED: what its result changes; the task
+   ends either way. */
 void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 {
     regs16 r;
+    u32 hook = fatal_exit_hook();
+    if (hook)
+        mod_call((u16)(hook >> 16), (u16)hook, ss_now(), 0, 0, 1, code);
     kputs("w16: FatalExit ");
     kputhex(code);
     kputs("\r\n");
@@ -744,11 +904,37 @@ u32 KAPI_ES GetVersion(void)                                     /* KERNEL.3 */
     return ((u32)(((r.ax & 0xFF) << 8) | (r.ax >> 8)) << 16) | 0x0A03;
 }
 
-/* Without a message queue (no USER yet) Yield is OldYield (Pietrek). */
+/* Yield (Pietrek ch. 6, Yield and UserYield): with a message queue it
+   is USER's UserYield (USER.332), which answers the inter-task
+   SendMessages waiting for the task before and after OldYield; without
+   one (no USER yet) it is OldYield. LoadModule starts a new task with
+   Yield (Pietrek ch. 3, CloseApplEnv): so the starting task answers the
+   new one's SendMessages (activation) while it waits, as on 3.1 (the
+   USER agent's trace: Notepad started from Program Manager's File > Run
+   reaches GetMessage before Program Manager's EndDialog runs); with a
+   plain OldYield Program Manager went on and activated itself again. */
+typedef void (__far __pascal *voidproc)(void);
+
 void KAPI Yield(void)                                         /* KERNEL.29 */
 {
-    if (cur_task)
-        TW(cur_task, TDB_YIELDTO) = 0;
+    static u32 user_yield;
+    if (!cur_task)
+        return;
+    TW(cur_task, TDB_YIELDTO) = 0;
+    sched_why = "Yield";
+    if (TW(cur_task, TDB_QUEUE)) {
+        if (!user_yield) {
+            module FAR *u = module_find("USER");
+            u16 sel, off;
+            int is_const;
+            if (u && module_entry(u, 332, &sel, &off, &is_const) && !is_const)
+                user_yield = ((u32)sel << 16) | off;
+        }
+        if (user_yield) {
+            ((voidproc)user_yield)();
+            return;
+        }
+    }
     OldYield();
 }
 
@@ -766,15 +952,32 @@ u16 KAPI WaitEvent(u16 htask)                                 /* KERNEL.30 */
         }
         if (t != cur_task || t == boot_tdb)
             return 0;           /* UNVERIFIED: another task's, the boot's */
+        sched_why = "WaitEvent";
         reschedule();
     }
 }
 
 /* Observed: one event more for the task (0: the caller); AX afterwards
    held the hTask. */
+static u16 lsl_tdb(u16 s);
+#pragma aux lsl_tdb = "lsl ax, ax" "jz l5" "xor ax, ax" "l5:" "cmp ax, 0FFh" "mov ax, 0" "jb l4" "inc ax" "l4:" parm [ax] value [ax];
+static int tdb_writable(u16 s);
+#pragma aux tdb_writable = "verw ax" "mov ax, 0" "jnz l6" "inc ax" "l6:" parm [ax] value [ax];
+
+/* A TDB is taken as it is when it looks like one (writable, "TD" at
+   FAh): PostEvent is called at interrupt time (USER's input), when the
+   task list may be in the middle of a requeue and a walk of it could
+   miss the task (KERNEL audit, low; Pietrek: PostEvent "simply increments
+   the value in the TDB_nEvents field"). Else the list is walked as before. */
 u16 KAPI PostEvent(u16 htask)                                 /* KERNEL.31 */
 {
-    u16 t = htask ? task_of(htask) : cur_task;
+    u16 t;
+    if (!htask)
+        t = cur_task;
+    else if (tdb_writable(htask) && lsl_tdb(htask) && TW(htask, TDB_SIG) == TDB_MAGIC)
+        t = htask;
+    else
+        t = task_of(htask);
     if (t)
         TW(t, TDB_EVENTS)++;
     return t;
@@ -828,6 +1031,7 @@ void KAPI OldYield(void)                                      /* KERNEL.117 */
     TW(t, TDB_EVENTS)++;
     reschedule();
     TW(t, TDB_EVENTS)--;
+    sched_why = "OldYield";
 }
 
 /* GetDOSEnvironment: the environment (every task shares KERNEL's). */
@@ -850,6 +1054,7 @@ void KAPI DirectedYield(u16 htask)                            /* KERNEL.150 */
 {
     if (cur_task)
         TW(cur_task, TDB_YIELDTO) = task_of(htask);
+    sched_why = "DirectedYield";
     OldYield();
 }
 
@@ -914,6 +1119,42 @@ void task_boot_tdb_end(void)
     GlobalFree(t);
 }
 
+/* ---- SetSigHandler (KERNEL.140; Schulman, Undocumented Windows ch. 5,
+   DoSignal: the handler is at TDB 26h, the default one a RETF in KERNEL).
+   TK38 (3.1): SetSigHandler(proc, lpOldProc, lpOldType, type, 1) returns
+   0, stores the old handler and type, and puts the type at TDB 24h and
+   the handler at 26h; a task starts with type 0 and KERNEL's default
+   handler; a NULL handler puts the default one back. UNVERIFIED: the
+   fifth argument (1 in every call seen), and what the default handler
+   pops (w16: nothing, a plain RETF as Schulman says). ---- */
+#define TDB_SIGTYPE     0x24
+#define TDB_SIGPROC     0x26
+extern void __far sig_default(void);
+#pragma aux sig_default "*"
+
+void sig_default_set(u16 t)
+{
+    TW(t, TDB_SIGTYPE) = 0;
+    *(u32 FAR *)MK_FP(t, TDB_SIGPROC) = (u32)(void __far *)sig_default;
+}
+
+u16 KAPI SetSigHandler(u32 proc, u32 FAR *old, u16 FAR *oldtype, u16 type, u16 one)
+{
+    u16 t = cur_task;
+    (void)one;
+    if (!t)
+        return 0;
+    if (old)
+        *old = *(u32 FAR *)MK_FP(t, TDB_SIGPROC);
+    if (oldtype)
+        *oldtype = TW(t, TDB_SIGTYPE);
+    if (!proc)
+        proc = (u32)(void __far *)sig_default;
+    *(u32 FAR *)MK_FP(t, TDB_SIGPROC) = proc;
+    TW(t, TDB_SIGTYPE) = type;
+    return 0;
+}
+
 /* ---- signals to USER ----
    Pietrek (ch. 3, ExitCall; Schulman, SetTaskSignalProc): when a task
    ends, KERNEL first calls the task's signal procedure (TDB 2Ah, which
@@ -926,6 +1167,7 @@ void task_boot_tdb_end(void)
    of the exit call), hInstance = the task's, hQueue = its queue.
    UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
 extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
+void KAPI ExitKernel(void);              /* kmisc.c */
 
 void __cdecl task_signal_exit(u16 ax)
 {
@@ -935,6 +1177,23 @@ void __cdecl task_signal_exit(u16 ax)
     if (!t || (boot_tdb && t == boot_tdb))
         return;
     th_task_exit(ax);                   /* toolhelp.c: 62h, BL = AL */
+    /* the last task: Windows ends through USER's ExitWindows, called
+       here, before the task's signal procedure, on its stack (Pietrek,
+       ch. 3, ExitCall: "if (Num_Tasks == 0) ... PExitProc()", ExitKernel
+       should it return). Observed (tests/apps/tk55.c, a shell that ends
+       at once with exit code 5, Microsoft's USER): on 3.1 WIN's
+       ERRORLEVEL is 0 and the screen is back in mode 3 (the display's
+       Disable through ExitWindows); w16 ended with 5 in mode 12h */
+    if (num_tasks == 1) {
+        module FAR *u = module_find("USER");
+        u16 sel, off;
+        int is_const;
+        if (u && module_entry(u, 7, &sel, &off, &is_const) && !is_const) {
+            typedef u16 (__far __pascal *ewproc)(u32 rc, u16 reserved);
+            ((ewproc)(((u32)sel << 16) | off))(0, 0);
+            ExitKernel();
+        }
+    }
     p = *(u32 FAR *)MK_FP(t, 0x2A);
     if (!p)
         return;

@@ -1,0 +1,54 @@
+; MD2 phase 2 (tests/md2bprobe.sh): moves of distinct sizes 1..24 pixels to the
+; right, one PS/2 packet each, so each event can be matched to its packet
+click 1
+sleep 2
+move 1 0
+sleep 0.8
+move 2 0
+sleep 0.8
+move 3 0
+sleep 0.8
+move 4 0
+sleep 0.8
+move 5 0
+sleep 0.8
+move 6 0
+sleep 0.8
+move 7 0
+sleep 0.8
+move 8 0
+sleep 0.8
+move 9 0
+sleep 0.8
+move 10 0
+sleep 0.8
+move 11 0
+sleep 0.8
+move 12 0
+sleep 0.8
+move 13 0
+sleep 0.8
+move 14 0
+sleep 0.8
+move 15 0
+sleep 0.8
+move 16 0
+sleep 0.8
+move 17 0
+sleep 0.8
+move 18 0
+sleep 0.8
+move 19 0
+sleep 0.8
+move 20 0
+sleep 0.8
+move 21 0
+sleep 0.8
+move 22 0
+sleep 0.8
+move 23 0
+sleep 0.8
+move 24 0
+sleep 0.8
+sleep 2
+shot end

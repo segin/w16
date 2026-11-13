@@ -311,11 +311,7 @@ void enable_menus(void)
     DWORD s = SendMessage(g_edit, EM_GETSEL, 0, 0);
     sel = HIWORD(s) != LOWORD(s);
     if (g_picmode)
-#ifdef W16_WIN2
-        paste = IsClipboardFormatAvailable(CF_BITMAP);
-#else
         paste = ole_can_paste() || IsClipboardFormatAvailable(CF_BITMAP);
-#endif
     else
         paste = IsClipboardFormatAvailable(CF_TEXT);
     enable(m, IDM_UNDO, card && !g_picmode && SendMessage(g_edit, EM_CANUNDO, 0, 0));
@@ -332,9 +328,7 @@ void enable_menus(void)
     CheckMenuItem(m, IDM_PICTURE, MF_BYCOMMAND | (g_picmode ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem(m, IDM_CARDVIEW, MF_BYCOMMAND | (g_listview ? MF_UNCHECKED : MF_CHECKED));
     CheckMenuItem(m, IDM_LISTVIEW, MF_BYCOMMAND | (g_listview ? MF_CHECKED : MF_UNCHECKED));
-#ifndef W16_WIN2
     ole_menu(GetSubMenu(m, MENU_EDIT));
-#endif
 }
 
 /* ---- commands ---- */
@@ -367,13 +361,11 @@ void do_command(WORD id)
         fmt = g_fmt;
         if (!file_dialog(FD_SAVEAS, path, &fmt))
             break;
-#ifndef W16_WIN2
         /* the 3.0 type always asks first, pictures or not; No saves
            nothing (CF13) */
         if (fmt == FMT_MGC &&
             msg_box(IDS_SAVE30, NULL, MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
             break;
-#endif
         file_save(path, fmt);
         break;
     case IDM_MERGE:
@@ -465,9 +457,7 @@ void do_command(WORD id)
         about_box();
         break;
     default:
-#ifndef W16_WIN2
         ole_command(id);
-#endif
         break;
     }
 }
@@ -529,7 +519,6 @@ LRESULT CALLBACK __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         else if (wp == SB_LINEDOWN || wp == SB_PAGEDOWN)
             go_next(1);
         return 0;
-#ifndef W16_WIN2
     case WM_DROPFILES:
         {
             char path[144];
@@ -539,7 +528,6 @@ LRESULT CALLBACK __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
                 file_open(path);
         }
         return 0;
-#endif
     case WM_CLOSE:
         if (!query_save())
             return 0;
@@ -576,9 +564,7 @@ static BOOL init(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
         wc.hIcon = LoadIcon(hinst, MAKEINTRESOURCE(IDI_CARDFILE));
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-#ifndef W16_WIN2
         wc.lpszMenuName = MAKEINTRESOURCE(IDM_MAIN);
-#endif
         wc.lpszClassName = cls_frame;
         if (!RegisterClass(&wc) || !cardwnd_register(hinst))
             return FALSE;
@@ -603,9 +589,6 @@ static BOOL init(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
                              4, 0, 430, 323, NULL, NULL, hinst, NULL);
     if (!g_frame)
         return FALSE;
-#ifdef W16_WIN2
-    SetMenu(g_frame, cf_load_menu(hinst, MAKEINTRESOURCE(IDM_MAIN)));
-#endif
     g_list = CreateWindow("ListBox", "", WS_CHILD | LBS_NOTIFY, 0, 0, 0, 0,
                           g_frame, (HMENU)ID_LIST, hinst, NULL);
     g_card = CreateWindow("Card", "", WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, 0, 0,
@@ -625,10 +608,8 @@ static BOOL init(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
     SendMessage(g_edit, WM_SETFONT, (WPARAM)g_font, 0);
     g_oldedit = (FARPROC)GetWindowLong(g_edit, GWL_WNDPROC);
     SetWindowLong(g_edit, GWL_WNDPROC, (LONG)MakeProcInstance((FARPROC)EditWndProc, hinst));
-#ifndef W16_WIN2
     if (!ole_init())
         return FALSE;
-#endif
     help_init();
     page_defaults();
     layout();
@@ -661,9 +642,7 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
         TranslateMessage(&m);
         DispatchMessage(&m);
     }
-#ifndef W16_WIN2
     ole_done();
-#endif
     help_done();
     return m.wParam;
 }

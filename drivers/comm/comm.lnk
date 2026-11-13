@@ -1,0 +1,42 @@
+# wlink directives for w16's COMM.DRV (drivers/comm/). Object file and
+# output name come from the Makefile. Module name and ordinals as Windows
+# 3.1's COMM.DRV has them (its NE export table, docs/exports/COMM.txt;
+# tools/neinfo.py). Code and data are fixed: the UARTs interrupt at any
+# time, and getdcb and cevt hand out pointers into the data segment.
+format windows dll
+option modname=COMM
+option description 'w16 communications driver'
+option start=libentry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INICOM.1
+export SETCOM.2
+export SETQUE.3
+export RECCOM.4
+export SNDCOM.5
+export CTX.6
+export TRMCOM.7
+export STACOM.8
+export CEXTFCN.9
+export CFLUSH.10
+export CEVT.11
+export CEVTGET.12
+export CSETBRK.13
+export CCLRBRK.14
+export GETDCB.15
+export WEP.16 resident
+export SUSPENDOPENCOMMPORTS.17
+export REACTIVATEOPENCOMMPORTS.18
+export COMMWRITESTRING.19
+export READCOMMSTRING.20
+export ENABLENOTIFICATION.100
+export COMMORD101.101
+import GETMODULEHANDLE KERNEL.47
+import GETPROCADDRESS KERNEL.50
+import GETPRIVATEPROFILEINT KERNEL.127
+import GETPRIVATEPROFILESTRING KERNEL.128
+import __0040H KERNEL.193
+import CREATESYSTEMTIMER SYSTEM.2
+import GETSYSTEMMSECCOUNT SYSTEM.6

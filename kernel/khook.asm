@@ -94,6 +94,74 @@ _DEBUGOUTPUT:
         retf
 A20PROC:                        ; KERNEL.165
         retf 2
+
+; KbdRst (KERNEL.123): Schulman: KEYBOARD.DRV's INT 9 handler calls it;
+; in 3.x it does nothing. DoSignal (KERNEL.139): Schulman: KEYBOARD's
+; Ctrl-Break, for the focus task's signal procedure (w16: nothing yet).
+; Observed (tests/apps/tk50.c, KRNL286): both keep every register, AX
+; and DX included. (They were C functions returning with AX = KERNEL's
+; data selector, inside the keyboard interrupt.)
+global KBDRST, DOSIGNAL
+KBDRST:
+DOSIGNAL:
+        retf
+
+; NetBIOSCall (KERNEL.103): INT 5Ch with the caller's ES:BX (an NCB).
+; Observed (tests/apps/tk50.c, KRNL286 in DOSBox, which has no NetBIOS):
+; every register kept, the NCB untouched. w16 does no more. UNVERIFIED:
+; with a NetBIOS present (DPMI hosts translate INT 5Ch NCBs; Schulman).
+global NETBIOSCALL
+NETBIOSCALL:
+        retf
+
+; EMSCopy (KERNEL.160): Schulman: a holdover from 2.x EMS support that
+; does nothing in 3.x, 14 bytes of arguments. UNVERIFIED: with seven
+; zero words it ended the probe on 3.1 (tests/apps/tk50.c).
+global EMSCOPY
+EMSCOPY:
+        retf 14
+
+; CVWBreak (KERNEL.205): the keyboard interrupt handler jumps to it on
+; Ctrl+Alt+SysReq once EnableKBSysReq asks for it (Schulman: "void FAR
+; _interrupt"); it returns as an interrupt procedure. Called as a far
+; procedure on 3.1 it ended the probe (tests/apps/tk50.c). UNVERIFIED
+; beyond that: w16 has no debugger to break into, so it only returns.
+global CVWBREAK
+CVWBREAK:
+        iret
+
+; LogError (KERNEL.324), LogParamError (325): kmisc.c, with AX and DX
+; kept as on 3.1 (observed, tests/apps/tk50.c)
+extern LOGERROR_, LOGPARAMERROR_
+global LOGERROR, LOGPARAMERROR
+LOGERROR:
+        push ax
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 14]             ; err
+        push word [bp + 12]             ; info
+        push word [bp + 10]
+        call far LOGERROR_
+        pop bp
+        pop dx
+        pop ax
+        retf 6
+LOGPARAMERROR:
+        push ax
+        push dx
+        push bp
+        mov bp, sp
+        push word [bp + 18]             ; err
+        push word [bp + 16]             ; proc
+        push word [bp + 14]
+        push word [bp + 12]             ; param
+        push word [bp + 10]
+        call far LOGPARAMERROR_
+        pop bp
+        pop dx
+        pop ax
+        retf 10
 ; K329 (KERNEL.329), Schulman's DebugFillBuffer(lpBuf, n): the retail
 ; KERNEL leaves the buffer as it is (observed).
 K329:
@@ -260,6 +328,44 @@ LOCALNOTIFY:
         pop ds
         pop bp
         retf 4
+
+; KERNEL's own LocalNotify procedure, as heaps get it (Pietrek:
+; LocalNotifyDefault): BOOL FAR PASCAL (wMsg, hMem, wArg) called with DS =
+; the heap's segment; local.c's LNDEFAULT does the work with that DS
+extern LNDEFAULT
+global NOTIFY_DEFAULT_ENTRY
+NOTIFY_DEFAULT_ENTRY:
+        push bp
+        mov bp, sp
+        push ds
+        push ds
+        push word [bp + 10]
+        push word [bp + 8]
+        push word [bp + 6]
+        call far LNDEFAULT
+        pop ds
+        pop bp
+        retf 6
+
+; u16 __cdecl lnotify_call(u16 ds, u32 proc, u16 msg, u16 h, u16 arg): call
+; a heap's LocalNotify procedure, Pascal, with DS = the heap's segment
+global _lnotify_call
+_lnotify_call:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        push di
+        push word [bp + 12]
+        push word [bp + 14]
+        push word [bp + 16]
+        mov ds, [bp + 6]
+        call far [ss:bp + 8]
+        pop di
+        pop si
+        pop ds
+        pop bp
+        retf
 
 ; DebugDefineSegment (KERNEL.314): Schulman: tells a system debugger
 ; (INT 41h) about a segment; six words. UNVERIFIED: the call TK50 tried

@@ -100,7 +100,7 @@ void dev_close(NPDEVICE d)
 }
 
 /* a logical colour to the DC's physical one (ColorInfo) */
-DWORD dev_colorinfo(NPDC dc, COLORREF c)
+DWORD dev_colorinfo(LPDC dc, COLORREF c)
 {
     DWORD pc = 0;
     ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);

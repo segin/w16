@@ -1,0 +1,29 @@
+; Help > About Program Manager (ShellAbout's dialog) opened and closed
+; with Enter, Esc and the OK button; afterwards the menus must respond
+; (tests/inputrun.sh; boot-test case about)
+click 1
+sleep 1
+key alt+h
+key a
+sleep 3
+shot 01-about
+key Return
+sleep 2
+shot 02-closed-enter
+key alt+f
+sleep 1.5
+shot 03-menu
+key Escape
+key Escape
+sleep 1
+key alt+h
+key a
+sleep 3
+key Escape
+sleep 2
+key alt+h
+sleep 1.5
+shot 04-after-esc
+key Escape
+key Escape
+sleep 1

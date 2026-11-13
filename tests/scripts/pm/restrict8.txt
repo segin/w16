@@ -1,0 +1,31 @@
+; [Restrictions] values: on is any non-zero number (-1, 2, " 1"), "yes" is
+; off; EditLevel=9 acts as 4.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoRun=-1>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoClose=yes>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoSaveSettings= 1>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoFileMenu=0>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO EditLevel=9>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\Y1.BMP
+key 1B
+key 1B
+wait 300
+menu o
+wait 500
+snap C:\Y2.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char p
+wait 1000
+snap C:\Y3.BMP
+key 1B
+wait 500
+menu f
+char x
+wait 1500

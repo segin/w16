@@ -370,6 +370,27 @@ static void t_simple(void)
     }
     if (K1("FlushCachedFileHandle(0)", 319, 1, 0))
         res("FlushCachedFileHandle(0)", "AX", r_ax);
+    /* KbdRst (123): KEYBOARD.DRV calls it from its INT 9 handler
+       (Schulman); WriteOutProfiles (315), LogError
+       (324), LogParamError (325): what each keeps and returns */
+    if (K0("KbdRst", 123, 1)) {
+        res("KbdRst", "AX", r_ax);
+        res("KbdRst", "DX", r_dx);
+    }
+    if (K0("WriteOutProfiles", 315, 1)) {
+        res("WriteOutProfiles", "DX", r_dx);
+    }
+    if (K3("LogError(0,0)", 324, 1, 0, 0, 0)) {
+        res("LogError(0,0)", "AX", r_ax);
+        res("LogError(0,0)", "DX", r_dx);
+    }
+    /* EMSCopy (160), Schulman: does nothing in 3.x, 14 bytes of
+       arguments. Not called: with seven zero words it ended the probe on
+       3.1 (KRNL286) */
+    if (kc("LogParamError(0,0,0)", 325, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0)) {
+        res("LogParamError(0,0,0)", "AX", r_ax);
+        res("LogParamError(0,0,0)", "DX", r_dx);
+    }
     /* K329 = DebugFillBuffer(lp, n) */
     lstrcpy(buf, "abcdefghijklmnop");
     if (K3("K329(buf,8)", 329, 1, SEG(buf), OFF(buf), 8)) {
@@ -596,6 +617,28 @@ static void t_dosproc(void)
     dos_count = 0;
     w_call(kproc(101), 0, 0, 0, 0, 0, 0, 0, 0, 0);     /* NoHookDOSCall */
     res("NoHookDOSCall through the DOS proc", "", dos_count);
+    /* NetBIOSCall (103): INT 5Ch with the caller's ES:BX (an NCB);
+       command 7Fh, which no NetBIOS knows (none in DOSBox) */
+    {
+        static BYTE ncb[64];
+        WORD i;
+        for (i = 0; i < sizeof ncb; i++)
+            ncb[i] = 0;
+        ncb[0] = 0x7F;
+        w_es = SEG(ncb);
+        w_bx = OFF(ncb);
+        w_ax = 0x1234;
+        if (kproc(103)) {
+            w_call(kproc(103), 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            res("NetBIOSCall(7Fh) left", "", w_popped);
+            res("NetBIOSCall(7Fh) kept", "", mask());
+            res("NetBIOSCall(7Fh) AX", "", w_regs[0]);
+            res("NetBIOSCall(7Fh) NCB retcode", "", ncb[1]);
+            res("NetBIOSCall(7Fh) NCB cmd", "", ncb[0]);
+        } else
+            res("NetBIOSCall missing", "", 1);
+        w_es = w_bx = 0;
+    }
     w_ax = 0;
     K2("GetSetKernelDOSProc(old)", 311, 0, HIWORD(old), LOWORD(old));
     res("GetSetKernelDOSProc(old) returns ours", "",
@@ -862,5 +905,14 @@ int __cdecl tmain(void)
     out("TK50 done, failures=");
     outhex((WORD)failures);
     out("\r\n");
+    /* last, after the summary: DoSignal (139), KEYBOARD's Ctrl-Break
+       (Schulman). Not called: CVWBreak (205), which the keyboard
+       interrupt handler jumps to (Schulman: an interrupt procedure), and
+       IsRomModule (323); each, called as a far procedure, ended the probe
+       on 3.1 (KRNL286) */
+    if (K0("DoSignal", 139, 0)) {
+        res("DoSignal", "AX", r_ax);
+        res("DoSignal", "DX", r_dx);
+    }
     return failures;
 }

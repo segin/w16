@@ -5,18 +5,12 @@
  * templates' "Helv" 8 font) and message texts match Windows 3.1's
  * Cardfile, read as data from its NE resources (tools/nerc.py) and
  * checked against screenshots of it. The icon is our own artwork
- * (tools/mkcardicon.py). The 2.x build leaves out what Windows 2.x
- * cannot read (dialog fonts) and has its own Open, Save As, Find and
- * About boxes in place of COMMDLG's and SHELL's.
+ * (tools/mkcardicon.py).
  */
 #include <windows.h>
 #include "cardfile.h"
 
-#ifdef W16_WIN2
-#define CF_FONT
-#else
 #define CF_FONT FONT 8, "Helv"
-#endif
 
 IDI_CARDFILE ICON "cardfile.ico"
 
@@ -288,7 +282,6 @@ BEGIN
     PUSHBUTTON      "Cancel", IDCANCEL, 115, 22, 40, 16, WS_GROUP
 END
 
-#ifndef W16_WIN2
 IDD_LINKS DIALOG 12, 34, 291, 97
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Link"
@@ -344,11 +337,9 @@ BEGIN
     CONTROL         "&Object Type:", -1, "Static", SS_LEFT, 7, 3, 50, 9
     CONTROL         "", IDC_TYPELIST, "ListBox", LBS_NOTIFY | LBS_SORT | WS_VSCROLL | WS_BORDER | WS_TABSTOP, 6, 14, 125, 40
 END
-#endif
 
 /* Find: COMMDLG's FindText with this template (the original's, with
-   "Match Whole Word Only" placed outside the box); the 2.x build runs
-   it as its own modeless dialog */
+   "Match Whole Word Only" placed outside the box) */
 IDD_FIND2 DIALOG 30, 73, 236, 62
 STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 CAPTION "Find"
@@ -366,46 +357,4 @@ BEGIN
     PUSHBUTTON      "&Help", 1038, 182, 45, 50, 14, WS_GROUP
 END
 
-#ifdef W16_WIN2
-/* the 2.x build's file dialogs and About box: our own */
-IDD_OPEN2 DIALOG 10, 10, 148, 116
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Open"
-BEGIN
-    LTEXT           "File &Name:", -1, 5, 4, 76, 10
-    EDITTEXT        IDC_FNAME, 5, 17, 100, 12, ES_AUTOHSCROLL
-    LTEXT           "&Files in", -1, 5, 39, 38, 10
-    LISTBOX         IDC_FLIST, 5, 53, 70, 57, LBS_SORT | LBS_NOTIFY | WS_VSCROLL | WS_BORDER | WS_TABSTOP
-    DEFPUSHBUTTON   "OK", IDOK, 88, 62, 50, 16
-    PUSHBUTTON      "Cancel", IDCANCEL, 88, 87, 50, 16
-    LTEXT           "", IDC_FPATH, 44, 39, 98, 12, SS_NOPREFIX
-END
 
-IDD_SAVE2 DIALOG 20, 20, 180, 53
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Save As"
-BEGIN
-    LTEXT           "File &Name:", -1, 6, 5, 85, 12
-    EDITTEXT        IDC_FNAME, 6, 19, 104, 12, ES_AUTOHSCROLL
-    DEFPUSHBUTTON   "OK", IDOK, 123, 19, 43, 14
-    PUSHBUTTON      "Cancel", IDCANCEL, 123, 36, 43, 14
-    LTEXT           "", IDC_FPATH, 6, 36, 110, 12, SS_NOPREFIX
-END
-
-IDD_ABOUT2 DIALOG 13, 15, 160, 64
-STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "About Cardfile"
-BEGIN
-    ICON            IDI_CARDFILE, -1, 8, 8, 16, 16
-    CTEXT           "Cardfile", -1, 30, 8, 122, 8
-    CTEXT           "w16 (Windows 2.x build)", -1, 30, 20, 122, 8
-    DEFPUSHBUTTON   "OK", IDOK, 64, 42, 32, 14
-END
-#endif
-
-#ifdef W16_WIN2
-STRINGTABLE
-BEGIN
-    IDS_NOHELP,         "Help is not available on this version of Windows."
-END
-#endif

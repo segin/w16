@@ -11,7 +11,6 @@
  *   Help > How to Use Help: HELP_HELPONHELP;
  *   F1 on a menu item: nothing;
  *   the Find box's Help button: what COMMDLG asks for.
- * Windows 2.x has no WinHelp (compat2.c).
  */
 #include "cardfile.h"
 
