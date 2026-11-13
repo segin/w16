@@ -25,7 +25,7 @@ export table, `docs/exports/MOUSE.txt`). Only USER imports any of them
 | 2 | `Enable(lpEventProc)` | configures the device, takes IRQ 12, reports to the event procedure | DDK, Pietrek ch. 1 |
 | 3 | `Disable()` | disables the device, gives IRQ 12 back | DDK |
 | 4 | `MouseGetIntVect()` | 74h (-1 without a mouse) | DDK; MD1: 74h |
-| 5 | `GetSetMouseData(LPVOID, DWORD)` | Microsoft Mouse 8.20's private settings call: bits 15-31 get 3.1's error (AX 0900h, DX = HIWORD(dwFlags)); otherwise the buffer is left alone, AX 0, DX 2 after a get and 0 after a set; `RETF 8` | MD1, MD2A (Notes) |
+| 5 | `GetSetMouseData(LPVOID, DWORD)` | Microsoft Mouse 8.20's private settings call: every field (type, last motion, version 0820h, sensitivity, acceleration profiles, profile names, MOUSE.INI name), applied inside the driver; `RETF 8` | MD1, MD2A (Notes) |
 | 6 | `CplApplet(hwnd, code, l1, l2)` | FALSE: Control Panel shows its own Mouse dialog | DDK; MD1 |
 | 7 | `PowerEventProc(WORD wEvent, DWORD)` | POWER.DRV's call, WM_POWER codes: on 2 and 3 while enabled the device is set up again; returns 0; `RETF 6` | MD1, MD2B (Notes) |
 | 8 | `WEP(bSystemExit)` | turns the mouse off if on; returns 1 (exported by name, resident) | DDK |
@@ -55,7 +55,9 @@ WIN.INI) is USER's, not the driver's: Windows 3.1's driver gives the raw
 mickeys (MD1: a 40-pixel move came as 40, a 300-pixel sweep unscaled),
 and w16's USER needed acceleration of its own to put the pointer where
 3.1's USER does on Windows 3.1's driver (commit d61c8a9). This driver
-does none.
+does none of that. Its own scaling, the sensitivity and acceleration
+profiles that only Microsoft Mouse 8.20's programs set through
+GetSetMouseData (Notes), is 1:1 until they change it, as 3.1's is.
 
 ## Hardware path, and why
 
@@ -170,8 +172,12 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
 ## Not verified / not done
 
 - 386 Enhanced mode (above).
-- GetSetMouseData beyond its error for bits 15-31 and PowerEventProc
-  beyond the set-up on a resume (Notes).
+- GetSetMouseData: the meaning of bits 2, 6 and 9 and of the fields
+  behind 5 and 7; the sensitivity curve between the observed points; how
+  3.1 picks a profile's factor (w16: the larger of |X| and |Y|) and in
+  which order profile and sensitivity apply; limits on set values beyond
+  the observed errors; reading or writing MOUSE.INI (w16 does neither).
+  PowerEventProc beyond the set-up on a resume (Notes).
 - Packets with motion and a button change together (above); why 3.1
   holds a packet back after a set-up; whether a button change in an
   earlier packet of a multi-packet IRQ survives (only motion was tested).
@@ -211,10 +217,20 @@ mode, Microsoft's KRNL286, DOSX and USER (findings and logs in
   fails the whole call; settings take effect inside the driver at once
   (sensitivity and profiles scale what the event procedure gets). DX is
   2 after gets, 0 after sets; whether the result is a DWORD is not known.
-  w16 implements the shape and the bits-15-31 error and leaves the buffer
-  alone otherwise: Mouse 8.20's Control Panel stops with its "requires
-  MOUSE.DRV version 8.20" message. Full support would need w16's own
-  tables and settings (never Microsoft's).
+  **w16 implements all the fields** (`mouse.asm`, GetSetMouseData): the
+  values a get returns on PS/2 are the observed ones (type 4, byte 0, the
+  version 0820h, 2 and 1, sensitivity 10 and 10, 0, profile 3), the
+  checks and error codes are the observed ones, and the settings act
+  inside the driver at interrupt time. What is w16's own: the four
+  acceleration profiles' tables (chosen so that a 40-mickey step comes out
+  2.5 times as large with Slow and 5 times with Fast, as with 3.1's), and
+  the sensitivity curve, (s - 2) / 8 up to 10 and (s - 6) / 4 above, a
+  step never below one mickey, fitted to 3.1's results at 1, 5, 15, 19
+  and 20. The profile names are the ones Mouse 8.20's programs show; the
+  MOUSE.INI name is the Windows directory's. Checked with MD2A against
+  3.1's logs: the flag scan (everything written and returned, apart from
+  scratch registers and table contents, which 3.1's log leaves out) and
+  the sensitivity and profile runs give the same results.
 - **PowerEventProc** (MD2B, `tests/md2bprobe.sh`; POWER.DRV from the
   install disks, MS4B.COM an APM BIOS of ours): `WORD
   PowerEventProc(WORD wEvent, DWORD dwParam)`, `RETF 6`, wEvent the first
