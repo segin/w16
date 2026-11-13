@@ -62,6 +62,10 @@
 #                       caption), at most MAX seconds
 #     waitcount RRGGBB X0 Y0 X1 Y1 MIN MAX  wait until two shots in a row
 #                       have MIN pixels of that colour outside the rectangle
+#     settlecaret MAX STILL  settle MAX STILL, but a text caret's blink
+#                       (up to 30 pixels: 2 x 15) does not count as a change:
+#                       a program with a blinking caret has caught up with
+#                       the keys once nothing else moved for STILL seconds
 #     settle MAX [STILL]  wait until the screen holds still (two shots 0.7 s
 #                       apart equal; with STILL, unchanged in every shot,
 #                       taken about every half second, for STILL seconds),
@@ -304,13 +308,15 @@ match() {
 }
 settlefor() {
     need=\$(awk "BEGIN { print int(\$2 * 1000) }")
+    tol=\${3:-0}
     timeout 30 import -window "\$wid" "$out/.settle-a.png"
     since=\$(ms)
     while :; do
         sleep 0.5
         timeout 30 import -window "\$wid" "$out/.settle-b.png"
         n=\$(magick compare -metric AE "$out/.settle-a.png" "$out/.settle-b.png" null: 2>&1)
-        if [ "\${n%% *}" = 0 ] && ! blank "$out/.settle-b.png"; then
+        n=\${n%%[. ]*}
+        if [ "\${n:-1}" -le "\$tol" ] && ! blank "$out/.settle-b.png"; then
             if [ \$((\$(ms) - since)) -ge "\$need" ]; then
                 echo "settled (\$2 s still) after \$((\$(date +%s) - t0)) s" >> "$out/input.log"; break
             fi
@@ -434,6 +440,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;
     settle) settle \$a \$b ;;
+    settlecaret) t0=\$(date +%s); settlefor \$a \$b 30 ;;
     match) match \$a \$b ;;
     matchnow) matchnow \$a \$b ;;
     waitpixel) waitpix is \$a \$b ;;

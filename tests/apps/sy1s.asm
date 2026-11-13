@@ -100,13 +100,16 @@ cbcommon:
         mov es, [D_0040]
         mov ax, [es:6Ch]
         mov [bx + 14], ax
-        mov al, 0Bh                     ; OCW3: read the ISR
-        out 20h, al
+        pushf                           ; (interrupts off: an interrupt
+        cli                             ; between the two OCW3 writes would
+        mov al, 0Bh                     ; find the PIC reading its ISR)
+        out 20h, al                     ; OCW3: read the ISR
         in al, 20h
         mov ah, al
         mov al, 0Ah                     ; back to the IRR
         out 20h, al
         in al, 21h
+        popf
         xchg al, ah
         mov [bx + 16], ax
         mov ax, [D_DEPTH]

@@ -131,6 +131,8 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
    WND+34 is the handle of their state, a block of the object heap
    (uheap.c; 3.1's is a 10h-byte DGROUP block made with a window that has
    scroll bars: US15); a pointer to it is not kept across a message */
+static void ghost_repaint(HDC hdc, HWND hwnd, int bar, const RECT *rc, BOOL vert);
+
 static SBS __far *sbs_of(PWND w, BOOL create)
 {
     if (!w->scroll && create) {
@@ -171,10 +173,14 @@ void nc_draw_scrollbars(HDC hdc, PWND w)
     SBS __far *s = sbs_of(w, TRUE);
     RECT v, h;
     window_scrollbar_rects(w, &v, &h);
-    if ((w->style & WS_VSCROLL) && s)
+    if ((w->style & WS_VSCROLL) && s) {
         draw_scrollbar(hdc, &v, TRUE, &s->v);
-    if ((w->style & WS_HSCROLL) && s)
+        ghost_repaint(hdc, HW(w), SB_VERT, &v, TRUE);
+    }
+    if ((w->style & WS_HSCROLL) && s) {
         draw_scrollbar(hdc, &h, FALSE, &s->h);
+        ghost_repaint(hdc, HW(w), SB_HORZ, &h, FALSE);
+    }
     if ((w->style & WS_VSCROLL) && (w->style & WS_HSCROLL)) {
         /* the corner between them */
         fillc(hdc, v.left + 1, h.top + 1, v.right - v.left - 2, h.bottom - h.top - 2, COLOR_BTNFACE);
@@ -292,8 +298,17 @@ void sb_show_disabled(HWND hwnd, int bar)
 
 void WINAPI GetScrollRange(HWND hwnd, int bar, int __far *min, int __far *max)
 {
-    PWND w;
-    SBINFO *s = info(hwnd, bar, &w);
+    PWND w = valid_wnd(hwnd);
+    SBINFO *s;
+    /* a window that has never had that bar: 0, 0 (3.1: Terminal's main
+       window and its dialogs; w16 made the bar's state, 0-100, to read
+       it) */
+    if (w && bar != SB_CTL && !sbs_of(w, FALSE) &&
+        !(w->style & (bar == SB_VERT ? WS_VSCROLL : WS_HSCROLL))) {
+        *min = *max = 0;
+        return;
+    }
+    s = info(hwnd, bar, &w);
     *min = s ? s->min : 0;
     *max = s ? s->max : 0;
 }
@@ -317,7 +332,37 @@ void WINAPI ShowScrollBar(HWND hwnd, int bar, BOOL show)
                    SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
-/* ---- tracking: the mouse on a bar of window or control hwnd ---- */
+/* ---- tracking: the mouse on a bar of window or control hwnd ----
+
+   Dragging the thumb, as on Windows 3.1 (probe US19 with real mouse input,
+   tests/boottest.sh sbdrag; screenshots taken mid-drag):
+   - the thumb's place is shown by its outline (a rectangle of the thumb's
+     size, one pixel wide, corners included) inverted through the 50% gray
+     pattern aligned to the screen (pixels where x + y is odd on VGA, so a
+     black line goes white at every other pixel and the Scrollbar gray goes
+     dark gray), drawn over whatever is there: over the real thumb when the
+     press is made, then following the pointer pixel for pixel, its offset
+     from the pointer kept, stopped at the ends of the thumb's travel. The
+     real thumb stays where it is unless the program moves it (SetScrollPos
+     on SB_THUMBTRACK, as Notepad's edit control does): the outline is then
+     drawn on the moved thumb. Released, the outline goes and the thumb is
+     wherever the program put it;
+   - the press itself sends SB_THUMBTRACK with the bar's position; each
+     move that changes the position sends SB_THUMBTRACK with it (none when
+     it does not change); the position is the thumb's offset in its travel
+     scaled to the range, rounded to the nearest (a bar of travel 150 for
+     0-100: 1 pixel gave 1, 3 gave 2, 4 gave 3);
+   - with the pointer out of the bar's rectangle widened by 4 pixels left
+     and right and 1 up and down (measured on a window's vertical bar and a
+     horizontal control, 17 pixels thick: the pointer moved a pixel at a
+     time), the outline goes back to the thumb's starting place and
+     SB_THUMBTRACK sends the position of that place (which can differ by
+     one from the bar's: a control 120 high at 50 sent 51); back in, it
+     follows again;
+   - the release sends SB_THUMBPOSITION with the last position sent (the
+     starting place's if released outside), then SB_ENDSCROLL;
+   - meanwhile the task's windows repaint (an area only invalidated on
+     SB_THUMBTRACK was drawn mid-drag). */
 static int hit_part(int at, int len, int arrow, SBINFO *s)
 {
     int t = thumb_pos(len, arrow, s);
@@ -325,9 +370,72 @@ static int hit_part(int at, int len, int arrow, SBINFO *s)
         return SB_LINEUP;
     if (at >= len - arrow)
         return SB_LINEDOWN;
-    if (s->max > s->min && at >= t && at < t + arrow)
+    if (s->max > s->min && len > 3 * arrow - 2 && at >= t && at < t + arrow)
         return SB_THUMBTRACK;
     return at < t ? SB_PAGEUP : SB_PAGEDOWN;
+}
+
+extern HBRUSH hbrGray;
+
+/* the thumb being dragged: whose bar, and the outline's offset along the
+   bar (as thumb_pos's), -1 when none is shown */
+static HWND sbt_hwnd;
+static int sbt_bar, sbt_off = -1;
+
+/* the outline at offset off of the bar in rc of hdc (inverting: drawn
+   again it goes) */
+static void ghost(HDC hdc, const RECT *rc, BOOL vert, int off)
+{
+    int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
+    int x, y, cx, cy;
+    HBRUSH old;
+    if (vert)
+        x = rc->left, y = rc->top + off, cx = rc->right - rc->left, cy = arrow;
+    else
+        x = rc->left + off, y = rc->top, cx = arrow, cy = rc->bottom - rc->top;
+    /* the pattern aligned with the screen whatever the DC's origin (as
+       GrayString's, rect.c) */
+    {
+        DWORD org = GetDCOrg(hdc);
+        UnrealizeObject(hbrGray);
+        SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+    }
+    old = SelectObject(hdc, hbrGray);
+    PatBlt(hdc, x, y, cx, 1, PATINVERT);
+    PatBlt(hdc, x, y + cy - 1, cx, 1, PATINVERT);
+    PatBlt(hdc, x, y + 1, 1, cy - 2, PATINVERT);
+    PatBlt(hdc, x + cx - 1, y + 1, 1, cy - 2, PATINVERT);
+    SelectObject(hdc, old);
+    SetBrushOrg(hdc, 0, 0);
+}
+
+/* after a bar of hwnd was drawn in rc of hdc: the outline again on it if
+   it is the one being dragged (SetScrollPos from SB_THUMBTRACK paints the
+   bar under the outline; the paint and the outline clipped alike) */
+static void ghost_repaint(HDC hdc, HWND hwnd, int bar, const RECT *rc, BOOL vert)
+{
+    if (sbt_off >= 0 && hwnd == sbt_hwnd && bar == sbt_bar)
+        ghost(hdc, rc, vert, sbt_off);
+}
+
+/* the outline moved to off (-1: taken away); rc the bar in screen
+   coordinates */
+static void ghost_move(HWND hwnd, const RECT *rc, BOOL vert, int off)
+{
+    PWND w = valid_wnd(hwnd);
+    HDC hdc;
+    RECT r = *rc;
+    if (off == sbt_off || !w)
+        return;
+    if ((hdc = GetWindowDC(hwnd)) == 0)
+        return;
+    OffsetRect(&r, -w->rcWindow.left, -w->rcWindow.top);
+    if (sbt_off >= 0)
+        ghost(hdc, &r, vert, sbt_off);
+    sbt_off = off;
+    if (off >= 0)
+        ghost(hdc, &r, vert, off);
+    ReleaseDC(hwnd, hdc);
 }
 
 void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
@@ -339,14 +447,30 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
     int at = vert ? pt.y - rc->top : pt.x - rc->left;
     int part = hit_part(at, len, arrow, s);
+    int travel = len - 3 * arrow + 2;
     UINT msg = vert ? WM_VSCROLL : WM_HSCROLL;
     LPARAM lp = bar == SB_CTL ? MAKELONG(0, hwnd) : 0;
     MSG m;
     DWORD next = GetTickCount() + 400;
-    int grab = at - thumb_pos(len, arrow, s);
+    int off0 = thumb_pos(len, arrow, s), pos0 = s->pos, last = s->pos, min = s->min, max = s->max;
+    RECT near_;
     SetCapture(hwnd);
     if (part != SB_THUMBTRACK)
         send_message(notify, msg, part, lp);
+    else {
+        /* the pointer's room: the bar widened 4 pixels left and right,
+           1 up and down (3.1, VGA; UNVERIFIED on other displays) */
+        near_ = *rc;
+        near_.left -= 4;
+        near_.right += 4;
+        near_.top -= 1;
+        near_.bottom += 1;
+        sbt_hwnd = hwnd;
+        sbt_bar = bar;
+        sbt_off = -1;
+        ghost_move(hwnd, rc, vert, off0);
+        send_message(notify, msg, SB_THUMBTRACK, MAKELONG(pos0, HIWORD(lp)));
+    }
     for (;;) {
         /* again after each message sent: the state is in the object heap */
         if ((s = info(hwnd, bar, &w)) == 0)
@@ -356,39 +480,53 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
                 send_message(notify, msg, part, lp);
                 next = GetTickCount() + 50;
             }
+            /* the task's windows repaint meanwhile (3.1: US19's window,
+               which only invalidates on SB_THUMBTRACK, showed each tracked
+               position mid-drag; Notepad's text followed the thumb) */
+            if (PeekMessage(&m, 0, WM_PAINT, WM_PAINT, PM_REMOVE)) {
+                DispatchMessage(&m);
+                continue;
+            }
             WaitMessage();
             continue;
         }
         if (m.message == WM_MOUSEMOVE && part == SB_THUMBTRACK) {
-            POINT p = m.pt;
-            int a = (vert ? p.y - rc->top : p.x - rc->left) - grab - (arrow - 1);
-            int travel = len - 3 * arrow + 2;
-            long v = travel > 0 ? s->min + (long)a * (s->max - s->min) / travel : s->min;
-            if (bar != SB_CTL) {
-                POINT o;
-                o.x = o.y = 0;
-                (void)o;
+            int off = off0, pos = pos0;
+            if (travel > 0) {
+                if (PtInRect(&near_, m.pt)) {
+                    off = off0 + (vert ? m.pt.y - pt.y : m.pt.x - pt.x);
+                    if (off < arrow - 1)
+                        off = arrow - 1;
+                    if (off > arrow - 1 + travel)
+                        off = arrow - 1 + travel;
+                }
+                /* rounded to the nearest; out of the room too the position
+                   is the starting place's, which need not be the one the
+                   press sent (3.1: a control of travel 71 at 50 sent 51) */
+                pos = min + (int)(((long)(off - (arrow - 1)) * (max - min) * 2 + travel) /
+                                  (2L * travel));
             }
-            if (v < s->min)
-                v = s->min;
-            if (v > s->max)
-                v = s->max;
-            send_message(notify, msg, SB_THUMBTRACK, MAKELONG((int)v, HIWORD(lp)));
+            ghost_move(hwnd, rc, vert, off);
+            if (pos != last) {
+                last = pos;
+                send_message(notify, msg, SB_THUMBTRACK, MAKELONG(pos, HIWORD(lp)));
+            }
         }
         if (m.message == WM_LBUTTONUP) {
             if (part == SB_THUMBTRACK) {
-                POINT p = m.pt;
-                int a = (vert ? p.y - rc->top : p.x - rc->left) - grab - (arrow - 1);
-                int travel = len - 3 * arrow + 2;
-                long v = travel > 0 ? s->min + (long)a * (s->max - s->min) / travel : s->min;
-                if (v < s->min)
-                    v = s->min;
-                if (v > s->max)
-                    v = s->max;
-                send_message(notify, msg, SB_THUMBPOSITION, MAKELONG((int)v, HIWORD(lp)));
+                ghost_move(hwnd, rc, vert, -1);
+                sbt_hwnd = 0;
+                send_message(notify, msg, SB_THUMBPOSITION, MAKELONG(last, HIWORD(lp)));
             }
             break;
         }
+    }
+    if (part == SB_THUMBTRACK) {
+        /* (the window went during the drag) */
+        if (sbt_off >= 0 && IsWindow(hwnd))
+            ghost_move(hwnd, rc, vert, -1);
+        sbt_hwnd = 0;
+        sbt_off = -1;
     }
     ReleaseCapture();
     send_message(notify, msg, SB_ENDSCROLL, lp);
@@ -544,8 +682,10 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         GetClientRect(h, &r);
         if (w->style & SBS_SIZEBOX)
             FillRect(hdc, &r, sysbrush[COLOR_BTNFACE]);
-        else
+        else {
             draw_scrollbar(hdc, &r, (w->style & SBS_VERT) != 0, s);
+            ghost_repaint(hdc, h, SB_CTL, &r, (w->style & SBS_VERT) != 0);
+        }
         EndPaint(h, &ps);
         return 0;
     }

@@ -355,9 +355,52 @@ setup:
         mov ax, 0C202h                  ; sample rate
         mov bh, RATE_40
         int 15h
+        call unstick
         mov ax, 0C200h                  ; enable
         mov bh, 1
         int 15h
+        ret
+
+; unstick (task time, before the device is enabled): nothing of an
+; earlier IRQ 12 is left to block the next. Bytes waiting in the 8042's
+; auxiliary output are read and dropped; an IRQ 12 still marked in
+; service at the slave PIC (no handler can be running now: this is task
+; time) gets a specific end of interrupt, and then the cascade (IRQ 2) at
+; the master too if nothing else is in service at the slave. Such a left
+; over IRQ 12 stops every later one while the keyboard (IRQ 1) goes on.
+unstick:
+        pushf
+        cli
+        mov cx, 16
+.drain: in al, 64h
+        and al, K_OBF | K_AUX
+        cmp al, K_OBF | K_AUX
+        jne .pic
+        in al, 60h
+        loop .drain
+.pic:   mov al, 0Bh                     ; OCW3: read the in-service register
+        out 0A0h, al
+        in al, 0A0h
+        test al, 10h                    ; IRQ 12 (slave input 4)
+        jz .done
+        mov al, 64h                     ; specific EOI, slave input 4
+        out 0A0h, al
+        mov al, 0Bh
+        out 0A0h, al
+        in al, 0A0h
+        test al, al
+        jnz .done
+        mov al, 0Bh
+        out 20h, al
+        in al, 20h
+        test al, 04h                    ; the cascade, master input 2
+        jz .done
+        mov al, 62h                     ; specific EOI, master input 2
+        out 20h, al
+.done:  mov al, 0Ah                     ; OCW3: back to the request register
+        out 0A0h, al
+        out 20h, al
+        popf
         ret
 
 ; off: disable reporting, give IRQ 12 back. DS = DGROUP. C200h BH 0 and

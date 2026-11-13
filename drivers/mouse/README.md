@@ -109,6 +109,29 @@ INT 74h with INT 21h AH=25h, which does the same (with DPMI 0205h,
 Microsoft's DOSX left the IVT alone), and it does so before enabling the
 device, so no packet can come before its handler is there (the gap that
 made w16's DOSX drop such packets, ARCHITECTURE.md 9.6, does not arise).
+Just before it enables the device (Enable, a resume) it also clears
+what an earlier IRQ 12 may have left: bytes waiting in the 8042's
+auxiliary output are read and dropped, and an IRQ 12 still marked in
+service at the slave PIC gets a specific end of interrupt (then the
+cascade, IRQ 2, at the master if nothing else is in service at the
+slave). That is task time, where no IRQ 12 handler can be running, so
+such a bit can only be a leftover; left, it stops every later IRQ 12
+while the keyboard (IRQ 1) goes on: the stuck pointer below.
+
+**The stuck pointer** (boot-test `input`, `tests/scripts/input/
+bootnolock.txt`: after mouse motion during the boot the pointer never
+moved again; keys still worked). Reproduced on installation-05
+(`build/m6/rep.sh`, motion from the boot's first second): Microsoft's
+USER, GDI, DOSX and MOUSE.DRV on w16's KRNL286 9 boots in 20, on Windows
+3.1's KRNL286 none in 40. MS5 (`tests/dos/ms5.asm`) counted what the
+idle loops send to real mode in 30 idle seconds: both KERNELs about
+455,000 INT 28h, but w16's also an INT 2Fh AX=1689h (the 386 Enhanced
+mode kernel idle call) on every pass, which 3.1's KRNL286 never makes.
+Without it (kernel/task.c, idle) the same test gave 0 in 40. DOSBox
+0.74 does nothing with 1689h (its source); the call doubled the idle
+loop's switches to real mode and back through the DOS extender, and so
+the chance that IRQ 12 comes during one. UNVERIFIED: which step of
+Microsoft's DOSX then loses the interrupt's end.
 
 Emulators: DOSBox 0.74's keyboard controller has no auxiliary port (its
 source, read for facts: no A8h/D4h commands, status bit 5 never set);

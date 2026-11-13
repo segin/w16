@@ -67,8 +67,13 @@ Details observed and reproduced:
   is ignored. VK 0 sets the lights. Otherwise the character for the
   shift state: one byte written, 1; none: a 0 word written, 0, and the
   lights set from the key-state array's lock toggles (the BIOS flags'
-  bits 4-6, then INT 16h AH=01h, which has the BIOS set the keyboard's
-  lights: twice for Num Lock). Shift states: Alt alone changes nothing,
+  Caps and Scroll Lock bits, then INT 16h AH=01h, which has the BIOS set
+  the keyboard's lights: twice for Num Lock). Num Lock's bit is left to
+  the interrupt handler, which needs it for the keypad at once (only VK 0
+  sets it): set from the array of a key USER translated late, it put an
+  old Num Lock state back under load (36 parallel runs: the keypad's 2
+  came as VK_DOWN in some, VK_NUMPAD2 in others). UNVERIFIED whether 3.1's
+  ToAscii writes the Num Lock bit (KB1 and KB2 cannot tell). Shift states: Alt alone changes nothing,
   Ctrl+Alt gives nothing (the US layout has no AltGr characters), Caps
   Lock affects the letters only, Shift+Caps Lock gives lower case; Ctrl
   gives 01h-1Ah for the letters, 7Fh for Backspace, 0Ah for Enter, 1Bh,

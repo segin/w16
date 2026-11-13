@@ -42,6 +42,7 @@
 ; (SYRDUMP) writes the header and records to C:\SYREC.BIN. SYREC also
 ; writes that file after each DisableSystemTimers call (Windows' exit,
 ; and each switch to a DOS program), so the end of a run is recorded.
+; Ordinal 202 (SYRPAD): DX:AX = the canary (below).
         bits 16
         cpu 286
 
@@ -49,16 +50,26 @@ REC     equ 64
 MAXREC  equ 560
 NKIND   equ 64                          ; counts: 0..31 ordinals, 32+ slots
 NSLOT   equ 16
-PAD     equ 4096                        ; bytes before the header (below)
+PAD     equ 256                         ; the canary (below)
 
 segment _TEXT  public align=16 class=CODE use16
 segment _DATA  public align=16 class=DATA use16
 group DGROUP _DATA
+segment RECS   align=16 class=FAR_DATA use16
 
 extern __0040H                          ; KERNEL.193
 
+; The records are in a segment of their own, RECS; the automatic data
+; segment holds only a canary that must stay zero (SYRPAD; the dump's
+; first PAD bytes, listed by tools/syrec.py). Stray writes once landed in
+; SYREC's data, with either driver behind it: tback's record pointer was
+; kept below SP (see tcommon), and the procedure's AX (often its DS) and
+; flags were written at a random offset. Fixed; the canary stays to show
+; it should anything write here again.
 segment _DATA
-pad:    times PAD db 0                  ; (see below: what lands here)
+pad:    times PAD db 0
+
+segment RECS
 hdr:
 count   dw 0                            ; +0 records kept
 max     dw MAXREC                       ; +2
@@ -140,6 +151,12 @@ SYRLOG:
         mov dx, seg hdr
         retf
 
+global SYRPAD
+SYRPAD:
+        mov ax, pad
+        mov dx, seg pad
+        retf
+
 global SYRDUMP
 SYRDUMP:
         push ds
@@ -149,7 +166,8 @@ SYRDUMP:
         pop ds
         retf
 
-; dumpfile: DS = DGROUP. C:\SYREC.BIN = the header and the records kept.
+; dumpfile: DS = RECS. C:\SYREC.BIN = the pad (DGROUP), then the
+; header and the records kept.
 dumpfile:
         pusha
         mov ah, 3Ch
@@ -158,11 +176,19 @@ dumpfile:
         int 21h
         jc .r
         mov bx, ax
-        mov ax, REC
-        mul word [count wrt DGROUP]
-        add ax, recs - pad
-        mov cx, ax
+        push ds
+        mov ax, DGROUP
+        mov ds, ax
         mov dx, pad
+        mov cx, PAD
+        mov ah, 40h
+        int 21h
+        pop ds
+        mov ax, REC
+        mul word [count]
+        add ax, recs - hdr
+        mov cx, ax
+        mov dx, hdr
         mov ah, 40h
         int 21h
         mov ah, 3Eh
@@ -170,7 +196,7 @@ dumpfile:
 .r:     popa
         ret
 
-; newrec: DS = DGROUP, AX = kind. DI = a new record (kind and sequence
+; newrec: DS = RECS, AX = kind. DI = a new record (kind and sequence
 ; filled in) or 0 when not kept; the kind's count goes up either way.
 ; Interrupts off while it is taken.
 newrec:
@@ -178,7 +204,7 @@ newrec:
         cli
         push bx
         push ax
-        inc word [total wrt DGROUP]
+        inc word [total]
         mov bx, ax
         cmp bx, 100h
         jb .o
@@ -187,15 +213,15 @@ newrec:
         jb .k
         mov bx, 0
 .k:     shl bx, 1
-        inc word [counts + bx wrt DGROUP]
-        mov ax, [kept + bx wrt DGROUP]
+        inc word [counts + bx]
+        mov ax, [kept + bx]
         cmp ax, [cs:limit + bx]
         jae .no
-        mov di, [count wrt DGROUP]
+        mov di, [count]
         cmp di, MAXREC
         jae .no
-        inc word [kept + bx wrt DGROUP]
-        inc word [count wrt DGROUP]
+        inc word [kept + bx]
+        inc word [count]
         push dx
         mov ax, REC
         mul di
@@ -205,7 +231,7 @@ newrec:
         pop ax
         mov [di], ax
         push ax
-        mov ax, [total wrt DGROUP]
+        mov ax, [total]
         mov [di + 2], ax
         pop ax
         pop bx
@@ -315,9 +341,9 @@ thcommon:
         cmp bx, -1
         je .noct
         mov ax, [bp + 8]
-        mov [slots + bx + 4 wrt DGROUP], ax
+        mov [slots + bx + 4], ax
         mov ax, [bp + 10]
-        mov [slots + bx + 6 wrt DGROUP], ax
+        mov [slots + bx + 6], ax
         shr bx, 1                       ; slot * 4: 4 bytes a trampoline
         lea ax, [bx + tramps]
         mov [bp - 8], ax
@@ -392,10 +418,10 @@ back:
         cmp bx, -1
         je .post
         mov ax, [ss:si + 18]
-        mov [slots + bx + 2 wrt DGROUP], ax
+        mov [slots + bx + 2], ax
         or ax, ax
         jnz .post
-        mov word [slots + bx wrt DGROUP], 0
+        mov word [slots + bx], 0
         jmp .post
 .nokt:  cmp word [bp + 2], 3
         jne .nods
@@ -403,11 +429,11 @@ back:
         jne .post
         mov ax, [bp + 8]                ; the handle killed
         xor bx, bx
-.fk:    cmp word [slots + bx wrt DGROUP], 0
+.fk:    cmp word [slots + bx], 0
         je .fn
-        cmp [slots + bx + 2 wrt DGROUP], ax
+        cmp [slots + bx + 2], ax
         jne .fn
-        mov word [slots + bx wrt DGROUP], 0
+        mov word [slots + bx], 0
         jmp .post
 .fn:    add bx, 8
         cmp bx, NSLOT * 8
@@ -437,12 +463,12 @@ back:
         pop bp
         retf
 
-; takeslot: DS = DGROUP; BX = a free slot * 8, marked used, or -1
+; takeslot: DS = RECS; BX = a free slot * 8, marked used, or -1
 takeslot:
         pushf
         cli
         xor bx, bx
-.l:     cmp word [slots + bx wrt DGROUP], 0
+.l:     cmp word [slots + bx], 0
         je .t
         add bx, 8
         cmp bx, NSLOT * 8
@@ -450,8 +476,8 @@ takeslot:
         mov bx, -1
         popf
         ret
-.t:     mov word [slots + bx wrt DGROUP], 1
-        mov word [slots + bx + 2 wrt DGROUP], 0FFFFh
+.t:     mov word [slots + bx], 1
+        mov word [slots + bx + 2], 0FFFFh
         popf
         ret
 
@@ -467,57 +493,65 @@ tcommon_near:
         jmp tcommon
 
 ; A timer procedure call: [bp+2] slot, [bp+4] return IP, [bp+6] return CS
+; (The record's address stays in [bp-6], which is above SP while the
+; procedure runs: a first version kept it in the PUSHA frame below SP,
+; where the procedure's own stack use and nested interrupts overwrote it,
+; and tback then wrote the procedure's AX and flags at a random offset of
+; the records: tests/sysprobe.sh's rec failed now and then, on either
+; driver, and a boot could crash.)
 tcommon:
         push bp
         mov bp, sp
-        sub sp, 4                       ; [bp-4] target offset, [bp-2] seg
+        sub sp, 6                       ; [bp-4] target offset, [bp-2] seg,
+                                        ; [bp-6] the record or 0
         pushf
         pusha
         push ds
         push es
-        ; [bp-6] flags, [bp-8] AX, -10 CX, -12 DX, -14 BX, -16 SP, -18 BP,
-        ; -20 SI, -22 DI, -24 DS, -26 ES
+        ; [bp-8] flags, [bp-10] AX, -12 CX, -14 DX, -16 BX, -18 SP, -20 BP,
+        ; -22 SI, -24 DI, -26 DS, -28 ES
         cld
         mov ax, seg hdr
         mov ds, ax
         mov bx, [bp + 2]
         shl bx, 3
-        mov ax, [slots + bx + 4 wrt DGROUP]
+        mov ax, [slots + bx + 4]
         mov [bp - 4], ax
-        mov ax, [slots + bx + 6 wrt DGROUP]
+        mov ax, [slots + bx + 6]
         mov [bp - 2], ax
-        inc word [depth wrt DGROUP]
-        mov ax, [depth wrt DGROUP]
-        cmp ax, [maxdep wrt DGROUP]
+        inc word [depth]
+        mov ax, [depth]
+        cmp ax, [maxdep]
         jbe .d
-        mov [maxdep wrt DGROUP], ax
+        mov [maxdep], ax
 .d:     mov ax, [bp + 2]
         add ax, 100h
         call newrec
+        mov [bp - 6], di
         or di, di
         jz .full
         push ds
         pop es
         add di, 4
-        mov ax, [bp - 8]
-        stosw                           ; +4 AX
-        mov ax, [bp - 14]
-        stosw                           ; BX
         mov ax, [bp - 10]
-        stosw                           ; CX
+        stosw                           ; +4 AX
+        mov ax, [bp - 16]
+        stosw                           ; BX
         mov ax, [bp - 12]
+        stosw                           ; CX
+        mov ax, [bp - 14]
         stosw                           ; DX
-        mov ax, [bp - 20]
-        stosw                           ; SI
         mov ax, [bp - 22]
+        stosw                           ; SI
+        mov ax, [bp - 24]
         stosw                           ; DI
         mov ax, [bp]
         stosw                           ; +16 BP
-        mov ax, [bp - 6]
+        mov ax, [bp - 8]
         stosw                           ; +18 flags
-        mov ax, [bp - 24]
-        stosw                           ; +20 DS
         mov ax, [bp - 26]
+        stosw                           ; +20 DS
+        mov ax, [bp - 28]
         stosw                           ; +22 ES
         mov ax, ss
         stosw                           ; +24 SS
@@ -536,20 +570,21 @@ tcommon:
         stosw                           ; +32 tick low
         mov ax, dx
         stosw                           ; +34 tick high
-        mov al, 0Bh                     ; OCW3: read the ISR
-        out 20h, al
+        pushf                           ; (interrupts off: an interrupt
+        cli                             ; between the two OCW3 writes would
+        mov al, 0Bh                     ; find the PIC reading its ISR)
+        out 20h, al                     ; OCW3: read the ISR
         in al, 20h
         mov ah, al
         mov al, 0Ah                     ; back to the IRR
         out 20h, al
         in al, 21h
+        popf
         xchg al, ah
         stosw                           ; +36 ISR, IMR
-        mov ax, [depth wrt DGROUP]
+        mov ax, [depth]
         stosw                           ; +38 depth
-        sub di, 40
-.full:  mov [bp - 16], di               ; the record (SP slot: not restored)
-        pop es
+.full:  pop es
         pop ds
         popa
         popf
@@ -559,29 +594,30 @@ tcommon:
         push word [bp - 4]
         mov bp, [bp]
         retf
-tback:  ; SP = frame - 4; [frame - 16] the record
+tback:  ; SP = frame - 6: [frame - 6] the record
         push bp
         mov bp, sp
-        add bp, 2 + 4                   ; the frame
+        add bp, 8                       ; the frame
         pushf
         push ds
         push di
         push ax
+        ; [bp-10] flags after the procedure
         mov di, seg hdr
         mov ds, di
-        dec word [depth wrt DGROUP]
-        mov di, [bp - 16]
+        dec word [depth]
+        mov di, [bp - 6]
         or di, di
         jz .n
         mov [di + 40], ax
-        mov ax, [bp - 8 - 2]            ; flags after the procedure
+        mov ax, [bp - 10]
         mov [di + 42], ax
 .n:     pop ax
         pop di
         pop ds
         popf
         pop bp                          ; the procedure's BP
-        add sp, 4
+        add sp, 6
         pop bp                          ; ours: the caller's BP
         add sp, 2                       ; the slot
         retf

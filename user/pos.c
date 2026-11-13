@@ -12,7 +12,7 @@
 #include "user.h"
 
 void refresh_dcs(void);
-void byte_align(PWND w);
+void byte_align(PWND w, BOOL made);
 void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
 HWND next_to_activate(HWND h);
@@ -134,7 +134,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         calc_client(w);
         if (!(w = valid_wnd(h)))
             return FALSE;
-        byte_align(w);
+        byte_align(w, FALSE);
         if (w->rcClient.left != oldcli.left || w->rcClient.top != oldcli.top)
             move_children(w, w->rcClient.left - oldcli.left, w->rcClient.top - oldcli.top);
         if (w->hrgnUpdate)

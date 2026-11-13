@@ -717,7 +717,11 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                         continue;
                 }
             }
-            if (valid_wnd(target) && !menu_mode) {
+            /* not while the mouse is captured (3.1 SDK, WM_SETCURSOR; 3.1:
+               the arrow stayed while Notepad's scroll-bar thumb was
+               dragged, where the capturing frame's class cursor, an
+               I-beam, came up on w16) */
+            if (valid_wnd(target) && !menu_mode && !hwndCapture) {
                 send_message(target, WM_SETCURSOR, target, MAKELONG(hit, e.msg));
                 hcurSetByMsg = hcurCurrent;
             }
