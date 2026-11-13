@@ -1006,9 +1006,9 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	python3 tools/nemark.py $@ 3.10
 
 test: dos fonts
-	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
+	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
-	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV
+	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV
 	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1043,6 +1043,71 @@ $(DOS)/GD1.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o $(B)/gdi/
 	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/gdi/gd1.map \
 	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/gd1log.o }
+# VGREC.DRV: GD1 that records values only (no dump of what lies behind a
+# pointer the driver owns: PDEVICE, physical objects) and the bytes each
+# call popped, also of the undocumented entries (drivers/vga/README.md;
+# tests/vgaprobe.sh puts it in front of the display driver under test)
+vgaprobes: $(DOS)/VGREC.DRV
+$(B)/gdi/vgreclog.o: tests/gdi/gdlog.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -dGD_DISPLAY -dGD_VALUES -dGD_POPS -dGDL_TAG='"D"' -fo=$@ $<
+$(DOS)/VGREC.DRV: $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/vgreclog.o $(B)/gdi/gd1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/gd1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/vgrec.map \
+	    file { $(B)/gdi/gdlog.o $(B)/gdi/gd1stubs.o $(B)/gdi/vgreclog.o }
+# VG1.EXE: the display driver's values as programs see them (tests/apps/vg1.c;
+# tests/vgaprobe.sh -p, Windows 3.1's VGA.DRV against w16's)
+$(B)/tests/vg1.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG1.EXE: $(B)/tests/start.o $(B)/tests/vg1.o $(B)/tests/md1s.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg1.map file { $(B)/tests/start.o $(B)/tests/vg1.o $(B)/tests/md1s.o }
+vgaprobes: $(DOS)/VG1.EXE
+# VG3.EXE: GetNearestColor for all 2^24 colours (tests/apps/vg3.c)
+$(DOS)/VG3.EXE: $(B)/tests/start.o $(B)/tests/vg3.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg3.map file { $(B)/tests/start.o $(B)/tests/vg3.o }
+vgaprobes: $(DOS)/VG3.EXE
+# VG4.EXE: solid-brush patterns for all colours of a range of reds (tests/apps/vg4.c)
+$(DOS)/VG4.EXE: $(B)/tests/start.o $(B)/tests/vg4.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg4.map file { $(B)/tests/start.o $(B)/tests/vg4.o }
+vgaprobes: $(DOS)/VG4.EXE
+# VG5.EXE: lines of every pen style (tests/apps/vg5.c)
+$(B)/tests/vg5.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG5.EXE: $(B)/tests/start.o $(B)/tests/vg5.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg5.map file { $(B)/tests/start.o $(B)/tests/vg5.o }
+vgaprobes: $(DOS)/VG5.EXE
+# VG6.EXE: text with every attribute (tests/apps/vg6.c)
+$(B)/tests/vg6.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG6.EXE: $(B)/tests/start.o $(B)/tests/vg6.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg6.map file { $(B)/tests/start.o $(B)/tests/vg6.o }
+vgaprobes: $(DOS)/VG6.EXE
+# VG7.EXE: raster operations, conversions, DIBs, hatches (tests/apps/vg7.c)
+$(B)/tests/vg7.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG7.EXE: $(B)/tests/start.o $(B)/tests/vg7.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg7.map file { $(B)/tests/start.o $(B)/tests/vg7.o }
+vgaprobes: $(DOS)/VG7.EXE
+# VG8.EXE: EnumObj, escapes, flood fills (tests/apps/vg8.c)
+$(B)/tests/vg8.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG8.EXE: $(B)/tests/start.o $(B)/tests/vg8.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg8.map file { $(B)/tests/start.o $(B)/tests/vg8.o }
+vgaprobes: $(DOS)/VG8.EXE
+dos: $(DOS)/VG8.EXE
+dos: $(DOS)/VG7.EXE
+# the VGA probes are built with the rest (the boot test runs them)
+dos: $(DOS)/VGREC.DRV $(DOS)/VG1.EXE $(DOS)/VG3.EXE $(DOS)/VG4.EXE $(DOS)/VG5.EXE $(DOS)/VG6.EXE
 # GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
 # GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
 # X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
@@ -1698,3 +1763,35 @@ $(DOS)/MS5.COM: tests/dos/ms5.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/MS5.COM
+
+# ---- VGA.DRV: w16's VGA display driver (drivers/vga; README.md there):
+# C (large model, SS != DS, exports __loadds) and entry.asm, every segment
+# fixed; resources from tools/vgares.py (w16's art from make vgaart, the
+# configuration and stock-font data). build/vga/link.lnk names the objects
+# so tests/vgaprobe.sh -m can relink them with other resources.
+VCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -Idrivers/vga
+VOBJS   := $(B)/vga/entry.o $(B)/vga/vga.o $(B)/vga/surf.o $(B)/vga/rop.o $(B)/vga/color.o \
+           $(B)/vga/blt.o $(B)/vga/output.o $(B)/vga/text.o $(B)/vga/dib.o $(B)/vga/cursor.o \
+           $(B)/gdi/i4.o
+$(B)/vga/entry.o: drivers/vga/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/vga/%.o: drivers/vga/%.c drivers/vga/vga.h
+	@mkdir -p $(@D)
+	$(WCC) $(VCFLAGS) -fo=$@ $<
+$(B)/vga/vga.res: $(B)/vga/.stamp tools/vgares.py tools/fontc.py
+	python3 -B tools/vgares.py $(B)/vga $@
+$(B)/vga/link.lnk: drivers/vga/vga.lnk Makefile
+	@mkdir -p $(@D)
+	{ echo '@drivers/vga/vga.lnk'; echo 'file { $(VOBJS) }'; } > $@
+$(DOS)/VGA.DRV: $(VOBJS) $(B)/vga/link.lnk $(B)/vga/vga.res tools/nenoname.py tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/vga/link.lnk name $@ option map=$(B)/vga/vga.map \
+	    option resource=$(B)/vga/vga.res
+	python3 tools/nenoname.py $@ 501-502
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/VGA.DRV
+install-tree: $(W16SYS)/VGA.DRV
+$(W16SYS)/VGA.DRV: $(DOS)/VGA.DRV
+	@mkdir -p $(@D)
+	cp $< $@

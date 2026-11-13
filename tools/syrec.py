@@ -13,6 +13,8 @@ calls with their registers and context.
 import struct
 import sys
 
+PAD = 256                       # syrec.asm's PAD
+
 NAMES = {1: 'InquireSystem', 2: 'CreateSystemTimer', 3: 'KillSystemTimer',
          4: 'EnableSystemTimers', 5: 'DisableSystemTimers', 6: 'GetSystemMsecCount',
          7: 'Get80x87SaveSize', 8: 'Save80x87State', 9: 'Restore80x87State',
@@ -22,10 +24,10 @@ ARGS = {1: 2, 2: 3, 3: 1, 8: 2, 9: 2, 10: 1, 20: 1}   # words (measured, SY1)
 
 def main():
     pad = open(sys.argv[1], 'rb').read()
-    # the file starts with SYREC's 4096-byte pad (anything written there is
+    # the file starts with SYREC's PAD-byte pad (anything written there is
     # not SYREC's: listed), then the header
-    stray = [(i, w) for i, w in enumerate(struct.unpack_from('<2048H', pad, 0)) if w]
-    d = pad[4096:]
+    stray = [(i, w) for i, w in enumerate(struct.unpack_from('<%dH' % (PAD // 2), pad, 0)) if w]
+    d = pad[PAD:]
     csmap = {}
     if len(sys.argv) > 2:
         for line in open(sys.argv[2], encoding='latin-1'):
