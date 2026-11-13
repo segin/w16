@@ -164,12 +164,12 @@ Without a coprocessor both do nothing.
   call through a whole boot and Windows' exit, with its caller, arguments,
   results and the bytes taken off, and each timer procedure call (decoded
   by `tools/syrec.py`). Only values are recorded, never memory behind a
-  pointer. With either driver behind it, some of its own data words get
-  written at boot by something else (pairs that look like AX = 1 and the
-  driver's DS pushed: an interrupt frame on a stack in SYREC's segment;
-  not seen with either driver loaded directly as SYSTEM, where a 4 KB pad
-  at the start of w16's data stayed zero), so SYREC keeps a 4 KB pad in
-  front of its records. Not understood.
+  pointer. (Its first version kept, in its timer-procedure trampoline,
+  the record's address below the stack pointer while the procedure ran;
+  the procedure's AX and flags were then written at random offsets of
+  SYREC's records, with either driver behind it, and the call lists
+  differed now and then. Fixed; the records are in a segment of their
+  own, and a canary in SYREC's automatic data segment must stay zero.)
 - `sysprobe.sh fd`: part B again with DOSBox floppy images in A: and B:,
   then A: only (`tests/scripts/mkfloppy.py`).
 

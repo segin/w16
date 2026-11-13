@@ -918,9 +918,9 @@ int __cdecl tmain(void)
     BW(D_MSEC + 2) = SELECTOROF(p[6]);
     obs_env("block", blk);
     {
-        /* SYREC in front: its pad (256 bytes before its header); a test
-           build answering ordinal 99 with a pad of its own: that */
-        FARPROC plog = GetProcAddress(hs, MAKEINTRESOURCE(200));
+        /* SYREC in front: the canary in its automatic data segment (SYRPAD,
+           syrec.asm); a test build answering ordinal 99 with a pad: that */
+        FARPROC plog = GetProcAddress(hs, MAKEINTRESOURCE(202));
         FARPROC ppad = GetProcAddress(hs, MAKEINTRESOURCE(99));
         if (ppad) {
             WORD FAR *pad = (WORD FAR *)((DWORD (FAR PASCAL *)(void))ppad)();
@@ -934,9 +934,9 @@ int __cdecl tmain(void)
             flush();
         }
         if (plog) {
-            WORD FAR *pad = (WORD FAR *)((DWORD (FAR PASCAL *)(void))plog)() - 2048;
+            WORD FAR *pad = (WORD FAR *)((DWORD (FAR PASCAL *)(void))plog)();
             put("SYREC pad at start:");
-            for (i = 0; i < 2048; i++)
+            for (i = 0; i < 128; i++)
                 if (pad[i]) {
                     wsprintf(line, " +%02X=%04X", 2 * i, pad[i]);
                     put(line);
