@@ -1,0 +1,26 @@
+; drag Program Manager by its caption and size it by its lower right
+; corner; shots while the frame shows (tests/inputrun.sh)
+click 1
+sleep 1
+home
+move 150 31
+sleep 0.5
+down 1
+sleep 0.5
+move 20 20
+sleep 1
+shot 01-moving
+up 1
+sleep 2
+shot 02-moved
+home
+move 299 197
+sleep 0.5
+down 1
+sleep 0.5
+move 20 10
+sleep 1
+shot 03-sizing
+up 1
+sleep 2
+shot 04-sized

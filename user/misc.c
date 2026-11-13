@@ -16,7 +16,7 @@ void free_window_dcs(HWND h);
 
 /* ---- stubs (user/stubs.asm, tools/mkuserexp.py): record which
    unimplemented ordinals are called ---- */
-static BYTE unimpl_seen[64];            /* bit per ordinal 0-511 */
+static BYTE __far unimpl_seen[64];            /* bit per ordinal 0-511 */
 static WORD unimpl_count;
 
 void __far __pascal __loadds UNIMPL(WORD ord)
@@ -73,10 +73,22 @@ void WINAPI MessageBeep(UINT type)
     (void)type;
 }
 
-/* ---- the caret (minimal: one caret, drawn by inverting) ---- */
+/* ---- the caret: one, drawn by inverting, blinking ----
+   US13 on Windows 3.1: the caret blinks only while its task reads
+   messages (a second without them, it stayed as it was) and no message
+   reaches the window procedure: a system timer of USER's (SetSystemTimer,
+   WM_SYSTIMER whose lParam is USER's own procedure, run by
+   DispatchMessage; 3.0 exported it as CaretBlinkProc, USER.311). The
+   period is GetCaretBlinkTime rounded up to the 55 ms tick (530: 550 ms;
+   200: 220 ms). The phase goes on while the caret is hidden: ShowCaret
+   draws nothing until the next "on" (3.1: 194 ms after ShowCaret, on the
+   old schedule); SetCaretPos keeps the phase; CreateCaret starts on, and
+   ShowCaret then draws at once. WIN.INI [windows] CursorBlinkRate, 530
+   by default (3.1 SDK). Nothing of this runs at interrupt time. */
+#define CARET_TIMER 0xFFFE      /* UNVERIFIED: 3.1's id for it */
 static HWND hwndCaret;
-static int caret_x, caret_y, caret_cx, caret_cy, caret_hide, caret_on;
-static UINT caret_blink = 530;
+static int caret_x, caret_y, caret_cx, caret_cy, caret_hide, caret_on, caret_phase;
+static UINT caret_blink;
 
 static void caret_draw(void)
 {
@@ -89,6 +101,75 @@ static void caret_draw(void)
     caret_on ^= 1;
 }
 
+/* shown when in the "on" phase and not hidden */
+static void caret_update(void)
+{
+    int want = caret_phase && !caret_hide;
+    if (want != caret_on)
+        caret_draw();
+}
+
+static UINT blink_time(void)
+{
+    if (!caret_blink)
+        caret_blink = GetProfileInt("windows", "CursorBlinkRate", 530);
+    return caret_blink;
+}
+
+void __far __pascal __loadds caret_blink_proc(HWND h, UINT msg, UINT id, DWORD t)
+{
+    (void)msg, (void)id, (void)t;
+    if (h && h == hwndCaret) {
+        caret_phase ^= 1;
+        caret_update();
+    }
+}
+
+static void caret_timer(BOOL on)
+{
+    UINT WINAPI U_BEAR11(HWND, UINT, UINT, TIMERPROC);
+    BOOL WINAPI U_KILLSYSTEMTIMER(HWND, UINT);
+    if (!hwndCaret)
+        return;
+    if (on)
+        U_BEAR11(hwndCaret, CARET_TIMER, blink_time(), (TIMERPROC)caret_blink_proc);
+    else
+        U_KILLSYSTEMTIMER(hwndCaret, CARET_TIMER);
+}
+
+/* for savebits.c: where the caret shows on screen (FALSE: it does not) */
+BOOL caret_screen_rect(RECT *r)
+{
+    PWND w;
+    if (!hwndCaret || !caret_on || !(w = valid_wnd(hwndCaret)))
+        return FALSE;
+    SetRect(r, caret_x, caret_y, caret_x + caret_cx, caret_y + caret_cy);
+    OffsetRect(r, w->rcClient.left, w->rcClient.top);
+    return TRUE;
+}
+
+void caret_toggle(void)
+{
+    caret_draw();
+}
+
+/* the caret inverted again within screen rectangle rc, its state kept */
+void caret_invert_in(const RECT *rc)
+{
+    PWND w;
+    HDC hdc;
+    int sv;
+    if (!hwndCaret || !(w = valid_wnd(hwndCaret)))
+        return;
+    hdc = get_dc(hwndCaret, FALSE, 0, 0);
+    sv = SaveDC(hdc);
+    IntersectClipRect(hdc, rc->left - w->rcClient.left, rc->top - w->rcClient.top,
+                      rc->right - w->rcClient.left, rc->bottom - w->rcClient.top);
+    PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+    RestoreDC(hdc, sv);
+    release_dc(hwndCaret, hdc);
+}
+
 void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
 {
     DestroyCaret();
@@ -97,6 +178,8 @@ void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
     caret_cy = cy ? cy : sysmet[SM_CYBORDER];
     caret_hide = 1;
     caret_on = 0;
+    caret_phase = 1;
+    caret_timer(TRUE);
     (void)bm;
 }
 
@@ -104,6 +187,7 @@ void WINAPI DestroyCaret(void)
 {
     if (hwndCaret && caret_on)
         caret_draw();
+    caret_timer(FALSE);
     hwndCaret = 0;
 }
 
@@ -111,16 +195,16 @@ void WINAPI HideCaret(HWND h)
 {
     if (!hwndCaret || (h && h != hwndCaret))
         return;
-    if (!caret_hide++ && caret_on)
-        caret_draw();
+    caret_hide++;
+    caret_update();
 }
 
 void WINAPI ShowCaret(HWND h)
 {
     if (!hwndCaret || (h && h != hwndCaret) || !caret_hide)
         return;
-    if (!--caret_hide && !caret_on)
-        caret_draw();
+    caret_hide--;
+    caret_update();
 }
 
 void WINAPI SetCaretPos(int x, int y)
@@ -140,14 +224,17 @@ void WINAPI GetCaretPos(POINT __far *p)
     p->y = caret_y;
 }
 
+/* the new rate from now on (UNVERIFIED: 3.1 restarted the count, the
+   first change 313 ms after the call, then every 220 ms) */
 void WINAPI SetCaretBlinkTime(UINT t)
 {
-    caret_blink = t;
+    caret_blink = t ? t : 1;
+    caret_timer(TRUE);
 }
 
 UINT WINAPI GetCaretBlinkTime(void)
 {
-    return caret_blink;
+    return blink_time();
 }
 
 /* ---- odds and ends ---- */
@@ -166,6 +253,14 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
     diag("INITDONE=TSRQuery\r\n");
     for (h = PW(hwndDesktop)->hwndChild; h; h = PW(h)->hwndNext)
         send_message(h, WM_ENDSESSION, TRUE, 0);
+    /* then, as 3.1's USER does (US1 trace of ExitWindows, Microsoft's
+       USER between forwarders; Pietrek ch. 1): the cursor off
+       (DISPLAY.SetCursor(NULL)), MOUSE.Disable, KEYBOARD.Disable,
+       SYSTEM.DisableSystemTimers, and GDI's Death on the screen's DC,
+       which puts the display back in text mode. w16's USER skipped these
+       and the graphics screen stayed up at the DOS prompt */
+    input_disable();
+    G_DEATH(hdcScreen);
     /* KERNEL ends Windows (ExitKernel, KERNEL.2) with the code */
     {
         extern void __far __pascal K_EXITKERNEL(WORD);
@@ -225,9 +320,430 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
     return FALSE;
 }
 
+/* WinHelp (probe US7 with tests/apps/thelp.c as WINHELP.EXE on 3.1, and
+   the requests of Program Manager and Notepad): the help window is the
+   window of class MS_WINHELP; when there is none, WINHELP.EXE is started
+   with "-x" - except for HELP_QUIT, which then sends nothing. Each request
+   is the registered message "WM_WINHELP" sent to it, wParam the caller's
+   window, lParam's low word a shared global block:
+     WORD cbData, WORD command, DWORD topic (HELP_CONTEXT's number, else
+     0), DWORD reserved (0), WORD offset of the help file's name (16),
+     WORD offset of the data (0 if none), the file name, the data
+   (a key: the string; HELP_MULTIKEY, HELP_SETWINPOS: the structure, its
+   first word its size). UNVERIFIED: the return values (TRUE here), the
+   topic word for key commands (3.1 left garbage there). Notepad shows
+   "Not enough memory" when HELP_QUIT on exit returns FALSE. */
 int WINAPI WinHelp(HWND h, LPCSTR file, UINT cmd, DWORD data)
 {
-    (void)h, (void)file, (void)cmd, (void)data;
-    return 0;                   /* UNVERIFIED: WINHELP.EXE is not started yet */
+    UINT msg = RegisterWindowMessage("WM_WINHELP");
+    HWND hw = FindWindow("MS_WINHELP", NULL);
+    WORD nf, nd = 0, cb;
+    HGLOBAL g;
+    BYTE __far *p;
+    if (!hw) {
+        if (cmd == HELP_QUIT)
+            return TRUE;
+        WinExec("winhelp.exe -x", SW_SHOW);
+        hw = FindWindow("MS_WINHELP", NULL);
+        if (!hw)
+            return FALSE;
+    }
+    nf = file ? lstr_len(file) + 1 : 0;
+    switch (cmd) {
+    case HELP_KEY:
+    case HELP_PARTIALKEY:
+    case HELP_COMMAND:
+        nd = data ? lstr_len((LPCSTR)data) + 1 : 0;
+        break;
+    case HELP_MULTIKEY:
+    case HELP_SETWINPOS:
+        nd = data ? *(const WORD __far *)data : 0;
+        break;
+    }
+    cb = 16 + nf + nd;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, cb);
+    if (!g)
+        return FALSE;
+    p = (BYTE __far *)GlobalLock(g);
+    *(WORD __far *)(p + 0) = cb;
+    *(WORD __far *)(p + 2) = cmd;
+    if (cmd == HELP_CONTEXT || cmd == HELP_SETCONTENTS || cmd == HELP_CONTEXTPOPUP)
+        *(DWORD __far *)(p + 4) = data;
+    *(WORD __far *)(p + 12) = nf ? 16 : 0;
+    *(WORD __far *)(p + 14) = nd ? 16 + nf : 0;
+    if (nf)
+        fmemcpy(p + 16, file, nf);
+    if (nd)
+        fmemcpy(p + 16 + nf, (const void __far *)data, nd);
+    GlobalUnlock(g);
+    SendMessage(hw, msg, (WPARAM)h, MAKELONG(g, 0));
+    GlobalFree(g);
+    return TRUE;
 }
 
+
+/* SetSysModalWindow/GetSysModalWindow (3.1 SDK): the window recorded.
+   UNVERIFIED: 3.1 also keeps input and activation to it (Pietrek ch. 7:
+   hQSysModal comes first when USER wakes a queue for input); w16 only
+   records it and activates it; mouse input to other top-level windows
+   is dropped (a press beeps) while it lasts (input.c). */
+static HWND hwndSysModal;
+
+HWND WINAPI SetSysModalWindow(HWND h)
+{
+    HWND old = hwndSysModal;
+    hwndSysModal = valid_wnd(h) ? h : 0;
+    if (hwndSysModal)
+        SetActiveWindow(top_level(hwndSysModal));
+    return old;
+}
+
+/* the system-modal window, if any, and whether input to top-level window
+   h is kept from it (h is not it and not owned by it) */
+BOOL sysmodal_blocks(HWND h)
+{
+    HWND o;
+    if (hwndSysModal && !valid_wnd(hwndSysModal))
+        hwndSysModal = 0;
+    if (!hwndSysModal || !h)
+        return FALSE;
+    for (o = h; o && valid_wnd(o); o = PW(o)->hwndOwner)
+        if (o == hwndSysModal)
+            return FALSE;
+    return TRUE;
+}
+
+HWND WINAPI GetSysModalWindow(void)
+{
+    if (hwndSysModal && !valid_wnd(hwndSysModal))
+        hwndSysModal = 0;
+    return hwndSysModal;
+}
+
+/* ---- the network functions (USER.499-532) without a network driver:
+   WNetGetCaps 0 for every index, every other one WN_NOT_SUPPORTED (1)
+   with its buffers untouched (US8 on Windows 3.1: caps 0-12 and FFFFh,
+   WNetGetConnection of A:, C:, D:, Z:, WNetGetUser, WNetGetError,
+   WNetGetDirectoryType, Add/Cancel/RestoreConnection, WNetGetErrorText).
+   UNVERIFIED for the print-queue and dialog ones. They were stubs
+   returning 0, WN_SUCCESS: File Manager took every drive A-Z for a
+   connected network drive. WNetEnable/WNetDisable (521, 522): no
+   arguments, 1 (US11). WNetGetUser(szUser, lpSize) pops 8 bytes (3.1 DDK;
+   Wine's 12 left US8's stack four bytes off on w16, not on 3.1). ---- */
+#ifndef WN_NOT_SUPPORTED
+#define WN_NOT_SUPPORTED 1
+#endif
+
+WORD WINAPI U_WNETERRORTEXT(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETOPENJOB(DWORD d0, DWORD d1, DWORD d2, WORD w)
+{
+    (void)d0; (void)d1; (void)d2; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCLOSEJOB(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETABORTJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETHOLDJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETRELEASEJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCANCELJOB(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETSETJOBCOPIES(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETWATCHQUEUE(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETUNWATCHQUEUE(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETLOCKQUEUEDATA(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETUNLOCKQUEUEDATA(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETCONNECTION(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETCAPS(WORD w)
+{
+    (void)w;
+    return 0;
+}
+
+WORD WINAPI U_WNETDEVICEMODE(WORD w)
+{
+    (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETBROWSEDIALOG(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETUSER(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETADDCONNECTION(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCANCELCONNECTION(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETERROR(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETERRORTEXT(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETRESTORECONNECTION(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETWRITEJOB(DWORD d0, DWORD d1, WORD w)
+{
+    (void)d0; (void)d1; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCONNECTDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETDISCONNECTDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETCONNECTIONDIALOG(DWORD d0)
+{
+    (void)d0;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETVIEWQUEUEDIALOG(DWORD d0, WORD w)
+{
+    (void)d0; (void)w;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETPROPERTYDIALOG(DWORD d0, DWORD d1, DWORD d2)
+{
+    (void)d0; (void)d1; (void)d2;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETDIRECTORYTYPE(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETDIRECTORYNOTIFY(DWORD d0, DWORD d1)
+{
+    (void)d0; (void)d1;
+    return WN_NOT_SUPPORTED;
+}
+
+WORD WINAPI U_WNETGETPROPERTYTEXT(DWORD d0, DWORD d1, DWORD d2, DWORD d3)
+{
+    (void)d0; (void)d1; (void)d2; (void)d3;
+    return WN_NOT_SUPPORTED;
+}
+
+/* FlashWindow: the caption (or a minimised window's title) drawn the other
+   way, active or inactive, without changing which window is active; FALSE
+   puts back how it is. Returns whether it was drawn active before (SDK).
+   Write imports it. UNVERIFIED: 3.1 may send WM_NCACTIVATE instead of
+   drawing directly */
+void redraw_icon_title(HWND h);
+BOOL WINAPI FlashWindow(HWND h, BOOL invert)
+{
+    PWND w = valid_wnd(h);
+    BOOL was, now;
+    if (!w)
+        return FALSE;
+    was = (w->flags & WF_ACTIVEFRAME) != 0;
+    now = invert ? !was : (h == hwndActive);
+    if (now)
+        w->flags |= WF_ACTIVEFRAME;
+    else
+        w->flags &= ~WF_ACTIVEFRAME;
+    if (now != was && is_visible(w)) {
+        if (w->style & WS_MINIMIZE)
+            redraw_icon_title(h);
+        else
+            nc_paint(h, 0, now);
+    }
+    return was;
+}
+
+/* ---- global atoms (USER.268-271) and the palette front ends (282, 283):
+   OLECLI, OLESVR, DDEML and SHELL import them from USER. On 3.1 the
+   global atom table is a local atom table kept in a heap of USER's own
+   (USER's GlobalAddAtom sets DS to it and calls KERNEL's AddAtom:
+   Schulman, Undocumented Windows ch. 5; Pietrek, Windows Internals ch. 1,
+   GlobalInitAtom); US15 found it there (a 100h-byte heap at start, which
+   GlobalAddAtom grows) and RegisterWindowMessage's and
+   RegisterClipboardFormat's atoms not in it (GlobalFindAtom does not find
+   them: they are in USER's DGROUP atom table). w16 does the same
+   (uheap.c) ---- */
+ATOM WINAPI GlobalAddAtom(LPCSTR s)
+{
+    return ga_add(s);
+}
+
+ATOM WINAPI GlobalDeleteAtom(ATOM a)
+{
+    return ga_delete(a);
+}
+
+ATOM WINAPI GlobalFindAtom(LPCSTR s)
+{
+    return ga_find(s);
+}
+
+UINT WINAPI GlobalGetAtomName(ATOM a, LPSTR buf, int n)
+{
+    return ga_name(a, buf, n);
+}
+
+/* UNVERIFIED: 3.1's USER may also track the foreground palette and send
+   WM_PALETTECHANGED; on VGA (no RC_PALETTE) nothing is ever mapped */
+HPALETTE WINAPI SelectPalette(HDC hdc, HPALETTE h, BOOL bk)
+{
+    return G_GDISELECTPALETTE(hdc, h, bk);
+}
+
+UINT WINAPI RealizePalette(HDC hdc)
+{
+    return LOWORD(G_GDIREALIZEPALETTE(hdc));
+}
+
+WORD WINAPI U_WNETENABLE(void)                                  /* 521 */
+{
+    return 1;
+}
+
+WORD WINAPI U_WNETDISABLE(void)                                 /* 522 */
+{
+    return 1;
+}
+
+/* ---- undocumented exports whose argument sizes were not known (they
+   were stubs that popped nothing). US11 on Windows 3.1 measured what each
+   pops (Schulman, Undocumented Windows ch. 6, for the parameter lists);
+   those not here are correctly sized stubs returning 3.1's 0: IsTwoByte-
+   CharPrefix (BEAR51, 2 bytes), QuerySendMessage (10), LockInput (6),
+   LockMyTask (2), WinOldAppHackOMatic (4), GetUserLocalObjType (2),
+   hardware_event (register arguments, pops none), OldExitWindows (none:
+   Schulman; not called, it ends Windows). ---- */
+
+/* USER.275: no arguments; 1 (US11). UNVERIFIED that it is more than the
+   whole screen painted again */
+BOOL WINAPI U_REPAINTSCREEN(void)
+{
+    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    return TRUE;
+}
+
+/* USER.323 GetMessage2(lpMsg, hwnd, min, max, wRemove, bWait): the back
+   end of GetMessage and PeekMessage (Schulman); 14 bytes (US11: with
+   bWait FALSE and a message waiting, 1) */
+BOOL WINAPI U_GETMESSAGE2(MSG __far *m, HWND h, UINT lo, UINT hi, UINT remove, BOOL wait)
+{
+    if (!wait)
+        return PeekMessage(m, h, lo, hi, remove);
+    return GetMessage(m, h, lo, hi);
+}
+
+/* USER.343 GetFilePortName(LPOFSTRUCT): GDI's "Print to File" dialog
+   (Schulman); 4 bytes. w16 has no dialog yet: SP_USERABORT (-3), as if
+   cancelled. UNVERIFIED beyond the size */
+int WINAPI U_GETFILEPORTNAME(OFSTRUCT __far *of)
+{
+    (void)of;
+    return -3;
+}
+
+/* USER.372 GetInternalIconHeader(src, dst): 8 bytes; copies the 12 bytes
+   at src (an icon's CURSORICONINFO header: hot spot, size, width bytes,
+   planes, bits a pixel) to dst (US11: a pattern at src, 12 bytes of it at
+   dst, nothing more). Program Manager imports it. UNVERIFIED: the value
+   it returns (3.1's DX was src's selector) */
+DWORD WINAPI U_GETINTERNALICONHEADER(const BYTE __far *src, BYTE __far *dst)
+{
+    int i;
+    for (i = 0; i < 12; i++)
+        dst[i] = src[i];
+    return (DWORD)(const void __far *)src;
+}

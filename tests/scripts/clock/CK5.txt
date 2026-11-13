@@ -1,0 +1,17 @@
+; [intl] 24-hour clock, separators, date order
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 15:04:05.50 1500
+snap C:\L1.BMP
+cmd 7
+freeze 15:04:05.50 1500
+snap C:\L2.BMP
+cmd 1
+freeze 15:04:05.50 1500
+snap C:\L3.BMP
+syscmd F020
+freeze 15:04:05.50 1500
+snap C:\L4.BMP
+dump
+close
+wait 1000

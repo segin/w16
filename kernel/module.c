@@ -415,7 +415,9 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
             ord = ord * 10 + (u16)(*p - '0');
         }
     } else {
-        u8 pname[256];          /* length-prefixed: at most 255 characters */
+        static u8 pname[256];   /* length-prefixed: at most 255 characters;
+                                   not on the caller's stack (KERNEL
+                                   audit #16) */
         u16 i;
         for (i = 0; name[i]; i++)
             if (i == 255)

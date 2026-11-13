@@ -26,6 +26,7 @@ segment CONST  public align=2  class=DATA use16
 segment CONST2 public align=2  class=DATA use16
 segment _BSS   public align=2  class=BSS  use16
 group DGROUP _DATA CONST CONST2 _BSS
+extern _api_caller                      ; global.c: the last heap API caller
 
 %include "intcall.inc"
 
@@ -35,6 +36,7 @@ extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
 extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
+extern _int_vec_cur             ; task.c: the vectors installed (TDB 32h)
 extern _dos_exit_note           ; fault.c
 extern _task_signal_exit        ; task.c
 
@@ -79,6 +81,7 @@ int3d_handler:
 
 ; AH=51h and 62h from a task return its PDB (observed on Windows 3.1,
 ; tests/apps/tk15.c: the selector GetCurrentPDB gives).
+vec_ints        db 00h, 02h, 04h, 06h, 07h, 3Eh, 75h   ; TDB 32h-4Dh
 global int21_handler
 int21_handler:
         ; record the call (AX, BX, DX, caller CS:IP) in a ring of 16 for
@@ -133,6 +136,40 @@ int21_handler:
         pop ds
         jmp .chain
 .not1a:
+        cmp ah, 25h
+        jne .not25
+        ; set vector: for INT 0, 2, 4, 6, 7, 3Eh, 75h the running task's
+        ; (TDB 32h-4Dh) and int_vec_cur too (task.c), then DOS as before
+        push bx
+        push cx
+        push si
+        push di
+        xor si, si
+.v25l:  cmp al, [cs:vec_ints + si]
+        je .v25f
+        inc si
+        cmp si, 7
+        jb .v25l
+        jmp .v25x
+.v25f:  mov cx, ds                      ; the caller's DS: the vector's CS
+        mov di, DGROUP
+        mov ds, di
+        shl si, 2
+        mov [_int_vec_cur + si wrt DGROUP], dx
+        mov [_int_vec_cur + si + 2 wrt DGROUP], cx
+        mov di, [_cur_task wrt DGROUP]
+        or di, di
+        jz .v25r
+        mov ds, di
+        mov [si + 32h], dx
+        mov [si + 34h], cx
+.v25r:  mov ds, cx
+.v25x:  pop di
+        pop si
+        pop cx
+        pop bx
+        jmp .chain
+.not25:
         cmp ah, 51h
         je .pdb
         cmp ah, 62h
@@ -237,7 +274,9 @@ _task_switch:
 ; popped; the far address of its entry point is next on the stack, at its
 ; initial SP. AX = 0 at a task's entry (observed on Windows 3.1).
 global task_tramp
+extern task_start_hook          ; khook.asm: the task-start notification
 task_tramp:
+        call far task_start_hook
         xor ax, ax
         retf
 
@@ -316,13 +355,24 @@ INITTASK:
 ; the caller's DS as an extra first argument, followed by copies of the
 ; caller's NARGS word arguments, and restore DS on return.
 ;   LOCALAPI exported-name, c-function, nargs
-%macro LOCALAPI 3
+%macro LOCALAPI 3-4 L_NONE
 extern %2
 global %1
 %1:
         push bp
         mov bp, sp
+        push ds                 ; the caller's CS:IP for heapcheck
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp + 2]
+        mov [_api_caller wrt DGROUP], ax
+        mov ax, [bp + 4]
+        mov [_api_caller + 2 wrt DGROUP], ax
+        pop ax
+        pop ds
         push ds
+        push es
         push ds
 %assign i %3
 %rep %3
@@ -330,20 +380,34 @@ global %1
 %assign i i - 1
 %endrep
         call far %2
+        %4
+        pop es
         pop ds
         pop bp
         retf 2 * %3
 %endmacro
+; What the local-heap functions leave in CX (TK43, 3.1: LocalAlloc,
+; LocalReAlloc, LocalLock, LocalUnlock, LocalSize and LocalFlags the
+; result, = AX; LocalFree 1; ES kept by all; GDI relies on CX: it did
+; not start when LocalAlloc kept CX)
+%macro L_NONE 0
+%endmacro
+%macro L_CXAX 0
+        mov cx, ax
+%endmacro
+%macro L_CX1 0
+        mov cx, 1
+%endmacro
 
 LOCALAPI LOCALINIT,    LINIT,    3      ; KERNEL.4
-LOCALAPI LOCALALLOC,   LALLOC,   2      ; KERNEL.5
-LOCALAPI LOCALREALLOC, LREALLOC, 3      ; KERNEL.6
-LOCALAPI LOCALFREE,    LFREE,    1      ; KERNEL.7
-LOCALAPI LOCALLOCK,    LLOCK,    1      ; KERNEL.8
-LOCALAPI LOCALUNLOCK,  LUNLOCK,  1      ; KERNEL.9
-LOCALAPI LOCALSIZE,    LSIZE,    1      ; KERNEL.10
+LOCALAPI LOCALALLOC,   LALLOC,   2, L_CXAX      ; KERNEL.5
+LOCALAPI LOCALREALLOC, LREALLOC, 3, L_CXAX      ; KERNEL.6
+LOCALAPI LOCALFREE,    LFREE,    1, L_CX1      ; KERNEL.7
+LOCALAPI LOCALLOCK,    LLOCK,    1, L_CXAX      ; KERNEL.8
+LOCALAPI LOCALUNLOCK,  LUNLOCK,  1, L_CXAX      ; KERNEL.9
+LOCALAPI LOCALSIZE,    LSIZE,    1, L_CXAX      ; KERNEL.10
 LOCALAPI LOCALHANDLE,  LHANDLE,  1      ; KERNEL.11
-LOCALAPI LOCALFLAGS,   LFLAGS,   1      ; KERNEL.12
+LOCALAPI LOCALFLAGS,   LFLAGS,   1, L_CXAX      ; KERNEL.12
 LOCALAPI LOCALCOMPACT, LCOMPACT, 1      ; KERNEL.13
 ; Other APIs that need the caller's DS (procinst.c)
 LOCALAPI MAKEPROCINSTANCE, MPI, 3       ; KERNEL.51
@@ -470,8 +534,13 @@ GETTASKQUEUEES:
 ; not: under DOSX, KERNEL's first version, which called INT 31h on the
 ; moving stack, returned through zeros - observed with TK19 as the shell
 ; in tests/dropin.sh.) The caller frees the old memory afterwards.
+; Interrupts stay off from before the copy until the new base is set: an
+; interrupt handler (the mouse's or keyboard's, USER's event code) may
+; write into the segment being moved, which would be lost in the old
+; copy, and must not run on this stack. UNVERIFIED: how 3.1's KRNL286
+; does it. The stack only holds the INT 31h call's frame then; 1 KB.
 segment _BSS
-move_stack      resb 256
+move_stack      resb 1024
 move_stack_top:
 segment _TEXT
 global _seg_move
@@ -488,13 +557,13 @@ _seg_move:
         mov ax, [bp + 10]               ; nwords
         mov ds, [bp + 6]
         mov es, [bp + 8]
+        pushf                           ; the caller's interrupt flag
         ; onto KERNEL's stack (SS:SP kept in DI:SI)
         mov si, sp
         mov di, ss
         cli
         mov ss, [cs:dgroup_word]
         mov sp, move_stack_top wrt DGROUP
-        sti
         push si
         push di
         push cx
@@ -508,10 +577,9 @@ _seg_move:
         int 31h
         pop di
         pop si
-        cli
         mov ss, di                      ; sel, now at its new base, or SS
         mov sp, si
-        sti
+        popf
         pop es
         pop ds
         pop di
@@ -583,8 +651,8 @@ _notify_call:
         pop bp
         retf
 
-INTCALL _dos21, 21h, far
-INTCALL _dpmi31_host, 31h, far    ; dosx.c: dpmi31 wraps it
+INTCALL _dos21, 21h, far, pm
+INTCALL _dpmi31_host, 31h, far, pm ; dosx.c: dpmi31 wraps it
 
 ; ---------------------------------------------------------------------------
 ; Constant exports. wlink cannot export absolute symbols, so these labels
@@ -615,12 +683,15 @@ __C000H:        db 0
 ; fault_exit on KERNEL's exit stack and returns to the host, which
 ; resumes there; fault_exit calls fault_report (does not return).
 extern _fault_report            ; void __cdecl __far fault_report(void)
+extern _gp_handler              ; u16 __cdecl __far gp_handler(void)
 global _fault_regs
 segment _BSS
 global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
 _fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+in_fault        resb 1          ; set while a fault is being handled
+gp_ip           resw 1
 segment _TEXT
 
 %macro FAULTENTRY 1
@@ -669,8 +740,21 @@ fault_common:
         mov [_fault_regs + 30 wrt DGROUP], es
         mov word [bp + 10], fault_exit
         mov word [bp + 12], cs
-        mov word [bp + 16], exit_stack_top wrt DGROUP
+        ; on the exit stack: a fault while on it (task_exit_c, the WEPs it
+        ; calls) goes on below the faulting SP, not over the frames in use
+        ; there (KERNEL audit #12); else from the top
+        mov ax, exit_stack_top wrt DGROUP
+        cmp word [bp + 18], DGROUP
+        jne .top
+        mov bx, [bp + 16]
+        cmp bx, exit_stack_top wrt DGROUP
+        ja .top
+        cmp bx, (exit_stack + 1024) wrt DGROUP
+        jb .top                         ; (no room left: from the top)
+        lea ax, [bx - 512]
+.top:   mov [bp + 16], ax
         mov word [bp + 18], DGROUP
+        mov bx, [_fault_regs + 16 wrt DGROUP]
         pop bp
         add sp, 2
         retf
@@ -678,8 +762,44 @@ fault_exit:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        ; a fault while one is being handled (fault_regs holds the second
+        ; one now): no recovery, reported as it is
+        cmp byte [in_fault wrt DGROUP], 0
+        jne .report
+        mov byte [in_fault wrt DGROUP], 1
+        call far _gp_handler            ; a "__GP" table entry for CS:IP?
+        test ax, ax
+        jnz .gp
+.report:
         call far _fault_report
 .hang:  jmp .hang
+; resume at the faulting CS:AX, the registers as they were (DS and ES
+; made 0 by gp_handler when not valid), on the faulting stack with the
+; error code and the faulting IP pushed (TK40, 3.1: [SP] = IP, [SP+2] =
+; the error code, flags 3202h: the arithmetic flags clear)
+.gp:    mov [gp_ip wrt DGROUP], ax
+        mov ss, [_fault_regs + 12 wrt DGROUP]
+        mov sp, [_fault_regs + 10 wrt DGROUP]
+        push word [_fault_regs + 2 wrt DGROUP]          ; error code
+        push word [_fault_regs + 4 wrt DGROUP]          ; faulting IP
+        mov ax, [_fault_regs + 8 wrt DGROUP]            ; flags: IF, DF, IOPL
+        and ax, 7600h                                   ; and NT kept, the
+        or al, 2                                        ; others clear (3.1)
+        push ax
+        push word [_fault_regs + 6 wrt DGROUP]          ; cs
+        push word [gp_ip wrt DGROUP]                    ; ip
+        push word [_fault_regs + 28 wrt DGROUP]         ; ds
+        mov es, [_fault_regs + 30 wrt DGROUP]
+        mov ax, [_fault_regs + 14 wrt DGROUP]
+        mov bx, [_fault_regs + 16 wrt DGROUP]
+        mov cx, [_fault_regs + 18 wrt DGROUP]
+        mov dx, [_fault_regs + 20 wrt DGROUP]
+        mov si, [_fault_regs + 22 wrt DGROUP]
+        mov di, [_fault_regs + 24 wrt DGROUP]
+        mov bp, [_fault_regs + 26 wrt DGROUP]
+        mov byte [in_fault wrt DGROUP], 0
+        pop ds
+        iret
 
 ; ---------------------------------------------------------------------------
 ; Boot watchdog (fault.c): samples the interrupted CS:IP into a ring of 64
@@ -744,6 +864,108 @@ wd_fire:
         sti
         call far _wd_report
 .hang:  jmp .hang
+
+; ---------------------------------------------------------------------------
+; Global-heap exports with the registers 3.1 leaves (TK43, KRNL286, a
+; moveable, a fixed and a discardable block): GlobalLock keeps BX and
+; returns the selector in CX as well as in DX (GDI relies on CX: it did
+; not start when CX was kept), ES = 0; GlobalUnlock keeps BX, CX = 0,
+; ES = 0; GlobalFlags CX = the flags (= AX), DX = the selector, ES = 0;
+; GlobalFree CX = DX = 0, ES = 0; GlobalReAlloc CX = the handle (= AX),
+; ES = 0; GlobalSize ES = 0. (BX after GlobalSize, GlobalFlags,
+; GlobalReAlloc and GlobalFree, CX after GlobalSize and DX after
+; GlobalUnlock and GlobalReAlloc hold other values on 3.1, not copied.)
+; The C functions do the work, called with KERNEL's DS. The caller's DS
+; comes back 0 when it was the block freed (Pietrek, GlobalFree: the DS
+; pushed on entry is zeroed when it is the selector or handle freed, so
+; that restoring it does not fault; observed, tests/apps/tk17.c "fs":
+; GlobalFree with DS = the block returns DS = 0) or is no longer a
+; present selector (GlobalReAlloc, GlobalDiscard). w16 restored it
+; before the call, and the C function's own epilogue reloaded the dead
+; selector.
+;   GHEAPAPI exported-name, c-function, nargs, after
+%macro GHEAPAPI 4
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        push ds                 ; [bp-2] the caller's DS
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp + 2]        ; the caller's CS:IP for heapcheck
+        mov [_api_caller wrt DGROUP], ax
+        mov ax, [bp + 4]
+        mov [_api_caller + 2 wrt DGROUP], ax
+        pop ax
+        push bx
+%assign i %3
+%rep %3
+        push word [bp + 4 + 2 * i]
+%assign i i - 1
+%endrep
+        call far %2
+        %4
+        push ax
+        push bx
+        mov ax, [bp - 2]
+        or ax, ax
+        jz %%dsok
+%ifidn %4, AFTER_FREE
+        mov bx, [bp + 4 + 2 * %3]       ; GlobalFree's handle
+        or bx, 1
+        or ax, 1
+        cmp ax, bx
+        je %%dsz
+        mov ax, [bp - 2]
+%endif
+        lar bx, ax
+        jnz %%dsz
+        test bh, 80h                    ; present
+        jnz %%dsok
+%%dsz:  mov word [bp - 2], 0
+%%dsok: pop bx
+        pop ax
+        push 0
+        pop es
+        pop bx
+        pop ds
+        pop bp
+        retf 2 * %3
+%endmacro
+%macro AFTER_LOCK 0
+        mov cx, dx
+%endmacro
+%macro AFTER_UNLOCK 0
+        xor cx, cx
+%endmacro
+%macro AFTER_FLAGS 0
+        mov cx, ax
+        mov dx, [bp + 6]
+        or dx, 1
+%endmacro
+%macro AFTER_FREE 0
+        xor cx, cx
+        xor dx, dx
+%endmacro
+%macro AFTER_NONE 0
+%endmacro
+%macro AFTER_REALLOC 0
+        mov cx, ax
+%endmacro
+GHEAPAPI GLOBALLOCKX,    GLOBALLOCK,    1, AFTER_LOCK
+GHEAPAPI GLOBALUNLOCKX,  GLOBALUNLOCK,  1, AFTER_UNLOCK
+GHEAPAPI GLOBALFLAGSX,   GLOBALFLAGS,   1, AFTER_FLAGS
+GHEAPAPI GLOBALFREEX,    GLOBALFREE,    1, AFTER_FREE
+GHEAPAPI GLOBALSIZEX,    GLOBALSIZE,    1, AFTER_NONE
+GHEAPAPI GLOBALREALLOCX, GLOBALREALLOC, 4, AFTER_REALLOC
+
+; ---------------------------------------------------------------------------
+; The default signal handler (task.c, SetSigHandler): a RETF
+global sig_default
+sig_default:
+        retf
 
 ; ---------------------------------------------------------------------------
 ; K327 (HandleParamError, Schulman): register-based; USER's and GDI's

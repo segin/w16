@@ -1,14 +1,15 @@
 ; intcall.inc - generic "issue INT n with a regs16 block" helper.
 ;
-;   INTCALL name, intno, far|near
+;   INTCALL name, intno, far|near [, pm]
 ;
 ; Defines a cdecl function  int name(regs16 *r)  that loads AX..ES from *r,
 ; executes INT intno, stores all registers and FLAGS back into *r and
 ; returns the carry flag (0 or 1). `far` builds a large-model version
-; (far return, far pointer argument), `near` a small-model one.
+; (far return, far pointer argument), `near` a small-model one. `pm`
+; (protected mode only): a caller's ES the call made invalid comes back 0.
 ; regs16 layout: ax 0, bx 2, cx 4, dx 6, si 8, di 10, ds 12, es 14, flags 16.
 
-%macro INTCALL 3
+%macro INTCALL 3-4
 global %1
 %1:
         push bp
@@ -53,6 +54,18 @@ global %1
         pop ax
         mov [bx+16], ax
         and ax, 1
+        ; the caller's ES may hold a selector the call freed (DPMI 0001h:
+        ; the host zeroes segment registers holding it); it comes back 0
+        ; then, as from 3.1's FreeSelector (tests/apps/tk17.c), not
+        ; reloaded (a fault, or a dead selector)
+%ifidni %4, pm
+        mov dx, ax
+        mov ax, [bp-8]
+        lar ax, ax
+        jz %%esok
+        mov word [bp-8], 0
+%%esok: mov ax, dx
+%endif
         lea sp, [bp-8]
         pop es
         pop ds

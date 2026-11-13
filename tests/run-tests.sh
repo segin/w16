@@ -55,10 +55,12 @@ run TK3 0
 run TK4 0
 run TK12 0
 run TK13 0
+run TK54 0
 run TK17 0
 run TK17A 0
 run TK19 0
-run TK2 255 "w16: call to unimplemented KERNEL.204"
+run TK50 0
+run TK2 255 "w16: call to unimplemented KERNEL.27"
 
 # TK5 (DLL loading) and TK11 (module tables), laid out like the reference
 # runs (tests/tk5ref.sh): the DLLs in the Windows directory C:\WINDOWS,
@@ -74,7 +76,7 @@ dosx_to "$stage/W16SYS"
 cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TKID.TPL" "$stage/"
 # TK15 and TK16 (tasks) start their helpers from their own directory
 cp "$dos/TK15.EXE" "$dos/TK15A.EXE" "$stage/"
-cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$stage/"
+cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$dos/TK16S.EXE" "$dos/TK16I.EXE" "$stage/"
 for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
     cp "$dos/$f" "$stage/WINDOWS/"
 done

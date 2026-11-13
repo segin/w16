@@ -19,50 +19,139 @@
 HBRUSH sys_brush(HBRUSH b);
 int cxSysCharMenu(void);
 
-typedef struct MITEM {
+/* ---- the menu heaps ----
+   Windows 3.1 keeps menus out of USER's DGROUP: at start-up USER
+   allocates two moveable global blocks of 418h bytes (GMEM_DDESHARE |
+   GMEM_MOVEABLE | GMEM_ZEROINIT) and makes each a local heap with
+   LocalInit(h, 12h, 417h); menu structures and their item arrays go in
+   the first, the items' strings in the second (Pietrek, Windows
+   Internals, ch. 1, LoadWindows; Schulman, Undocumented Windows, ch. 6,
+   "USER Heaps"). Probe US14 confirmed it on 3.1: both are local heaps in
+   USER-owned 420h-byte blocks, a CreateMenu block (fixed, 14h bytes) and
+   the item arrays are in one, item texts (their length + 1) in the other,
+   and nothing of a menu lands in DGROUP; each grows to 64K (2712 empty
+   menus; 2503 items in one menu; 510 items of 120 characters).
+   An HMENU is the near handle of a fixed block in the menu heap. The
+   heaps are reached through far pointers made from their selector
+   (MK_FP), the Local* calls through uentry.asm's lh_* (DS switched to the
+   heap's selector and back). A heap's selector is refreshed after each
+   allocation in it (a moveable segment that grows could get a new one),
+   so no far pointer into a heap is kept across a call that allocates. */
+HGLOBAL hMenuHeap, hMenuStrHeap;
+static WORD msel, ssel;         /* their selectors */
+
+static WORD heap_sel(HGLOBAL h)
+{
+    return h ? HIWORD(GlobalHandle((UINT)h)) : 0;
+}
+
+static HGLOBAL make_heap(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE | GMEM_ZEROINIT, 0x418);
+    if (h && !LocalInit(heap_sel(h), 0x12, 0x417)) {
+        GlobalFree(h);
+        h = 0;
+    }
+    return h;
+}
+
+/* user_init: the two heaps (3.1: after the global atom table) */
+void menu_heaps_init(void)
+{
+    hMenuHeap = make_heap();
+    hMenuStrHeap = make_heap();
+    msel = heap_sel(hMenuHeap);
+    ssel = heap_sel(hMenuStrHeap);
+}
+
+/* GetFreeSystemResources: the selectors of the menu heaps */
+WORD menu_heap_sel(void)
+{
+    return msel;
+}
+
+WORD menu_str_heap_sel(void)
+{
+    return ssel;
+}
+
+static WORD m_alloc(UINT flags, UINT n)
+{
+    WORD r = msel ? lh_alloc(msel, flags, n) : 0;
+    msel = heap_sel(hMenuHeap);
+    return r;
+}
+
+static WORD m_realloc(WORD h, UINT n, UINT flags)
+{
+    WORD r = lh_realloc(msel, h, n, flags);
+    msel = heap_sel(hMenuHeap);
+    return r;
+}
+
+/* a copy of s in the string heap, 0 if it does not fit */
+static WORD str_dup(LPCSTR s)
+{
+    WORD n = lstr_len(s) + 1, r = ssel ? lh_alloc(ssel, LMEM_FIXED, n) : 0;
+    ssel = heap_sel(hMenuStrHeap);
+    if (r)
+        fmemcpy(MK_FP(ssel, r), s, n);
+    return r;
+}
+
+#define STEXT(t)    ((LPCSTR)MK_FP(ssel, (t)))
+
+typedef struct MITEM {          /* 1Ah bytes, as 3.1's ITEM (Schulman ch. 6) */
     UINT   flags;               /* MF_* */
     UINT   id;                  /* or the popup's HMENU */
-    WORD   text;                /* local string, or an HBITMAP with MF_BITMAP */
+    WORD   text;                /* string-heap handle, or an HBITMAP with MF_BITMAP */
     RECT   rc;                  /* where it was last laid out (menu coordinates) */
     WORD   hbmCheck, hbmUncheck;
+    WORD   unused[4];           /* (to 3.1's size: as many items fit in 64K) */
 } MITEM;
-typedef MITEM __near *PMITEM;
+typedef MITEM __far *LPMITEM;
 
-typedef struct MENU {
+typedef struct MENU {           /* 14h bytes, as 3.1's (Schulman ch. 6; US14) */
     WORD   magic;               /* 'MU' */
-    WORD   items;               /* local block of MITEMs */
+    WORD   items;               /* menu-heap block of MITEMs */
     WORD   count;
     WORD   flags;               /* MENU_POPUP, MENU_SYSMENU */
     HWND   hwnd;                /* the window it is the bar or popup of */
     int    cx, cy;              /* laid-out size */
     int    tabx;                /* a popup's accelerator column */
+    WORD   unused[2];
 } MENU;
-typedef MENU __near *PMENU;
+typedef MENU __far *LPMENU;
 #define MENU_MAGIC   0x554D
 #define MENU_POPUP   1
 #define MENU_SYSMENU 2
 
-static PMENU valid_menu(HMENU h)
+static LPMENU valid_menu(HMENU h)
 {
-    PMENU m = (PMENU)(WORD)h;
-    if (!h || ((WORD)h & 1) || LocalSize((HLOCAL)h) < sizeof(MENU) || m->magic != MENU_MAGIC)
+    LPMENU m;
+    WORD o = (WORD)h;
+    if (!o || (o & 1) || !msel || (DWORD)o + sizeof(MENU) - 1 > seg_limit(msel) ||
+        lh_size(msel, o) < sizeof(MENU))
         return 0;
-    return m;
+    m = (LPMENU)MK_FP(msel, o);
+    return m->magic == MENU_MAGIC ? m : 0;
 }
 
-static PMITEM item_at(PMENU m, UINT i)
+static LPMITEM item_at(LPMENU m, UINT i)
 {
-    return (PMITEM)(m->items + i * sizeof(MITEM));
+    return (LPMITEM)MK_FP(msel, m->items + i * sizeof(MITEM));
 }
 
 static HMENU new_menu(WORD flags)
 {
-    PMENU m = (PMENU)LocalAlloc(LPTR, sizeof(MENU));
-    if (!m)
+    WORD h = m_alloc(LPTR, sizeof(MENU));
+    LPMENU m;
+    if (!h)
         return 0;
+    m = (LPMENU)MK_FP(msel, h);
     m->magic = MENU_MAGIC;
     m->flags = flags;
-    return (HMENU)(WORD)m;
+    return (HMENU)h;
 }
 
 HMENU WINAPI CreateMenu(void)
@@ -75,28 +164,29 @@ HMENU WINAPI CreatePopupMenu(void)
     return new_menu(MENU_POPUP);
 }
 
-static void free_item(PMITEM it)
+static void free_item(LPMITEM it)
 {
     if (!(it->flags & (MF_BITMAP | MF_OWNERDRAW)) && it->text)
-        LocalFree((HLOCAL)it->text);
+        lh_free(ssel, it->text);
+    it->text = 0;
 }
 
 BOOL WINAPI DestroyMenu(HMENU h)
 {
-    PMENU m = valid_menu(h);
+    LPMENU m = valid_menu(h);
     UINT i;
     if (!m)
         return FALSE;
+    m->magic = 0;               /* (a menu that holds itself ends here) */
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
+        LPMITEM it = item_at(m, i);
         if (it->flags & MF_POPUP)
-            DestroyMenu((HMENU)it->id);
+            DestroyMenu((HMENU)it->id);         /* frees only: m stays good */
         free_item(it);
     }
     if (m->items)
-        LocalFree((HLOCAL)m->items);
-    m->magic = 0;
-    LocalFree((HLOCAL)m);
+        lh_free(msel, m->items);
+    lh_free(msel, (WORD)h);
     return TRUE;
 }
 
@@ -105,57 +195,70 @@ BOOL WINAPI IsMenu(HMENU h)
     return valid_menu(h) != 0;
 }
 
-/* position of an item by command (searching popups too) or position */
-static PMITEM find_item(PMENU m, UINT what, UINT flags, PMENU *owner)
+/* the index of an item by position, or by command searching popups too;
+   the menu that holds it in *owner. -1: none */
+static int find_item(HMENU h, UINT what, UINT flags, HMENU *owner)
 {
+    LPMENU m = valid_menu(h);
     UINT i;
+    if (!m)
+        return -1;
     if (flags & MF_BYPOSITION) {
         if (what >= m->count)
-            return 0;
-        if (owner)
-            *owner = m;
-        return item_at(m, what);
+            return -1;
+        *owner = h;
+        return what;
     }
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
-        if (it->flags & MF_POPUP) {
-            PMENU sub = valid_menu((HMENU)it->id);
-            PMITEM r;
-            if ((UINT)it->id == what) {
-                if (owner)
-                    *owner = m;
-                return it;
-            }
-            if (sub && (r = find_item(sub, what, flags, owner)) != 0)
+        LPMITEM it = item_at(m, i);
+        if ((it->flags & MF_POPUP) && (UINT)it->id != what) {
+            int r = find_item((HMENU)it->id, what, flags, owner);
+            if (r >= 0)
                 return r;
-        } else if (it->id == what && !(it->flags & MF_SEPARATOR && 0)) {
-            if (owner)
-                *owner = m;
-            return it;
+        } else if (it->id == what) {
+            *owner = h;
+            return i;
         }
     }
-    return 0;
+    return -1;
 }
 
-static void set_item(PMITEM it, UINT flags, UINT id, LPCSTR data)
+/* the item itself (for a look or a change of its flags: nothing may be
+   allocated while it is held) */
+static LPMITEM find_it(HMENU h, UINT what, UINT flags)
 {
-    free_item(it);
+    HMENU owner = 0;
+    int i = find_item(h, what, flags, &owner);
+    return i < 0 ? (LPMITEM)0 : item_at(valid_menu(owner), i);
+}
+
+/* an item's text field for flags and data: a string copied into the
+   string heap (FALSE if it does not fit), a bitmap or owner-draw value */
+static BOOL item_text(UINT flags, LPCSTR data, WORD *text)
+{
+    *text = 0;
+    if (flags & (MF_BITMAP | MF_OWNERDRAW))
+        *text = LOWORD((DWORD)data);
+    else if (!(flags & MF_SEPARATOR) && data)
+        return (*text = str_dup(data)) != 0;
+    return TRUE;
+}
+
+static void store_item(LPMITEM it, UINT flags, UINT id, LPCSTR data, WORD text)
+{
     it->flags = flags & ~(MF_BYPOSITION | MF_CHANGE | MF_APPEND | MF_DELETE | MF_REMOVE | MF_INSERT);
     it->id = id;
-    it->text = 0;
-    if (flags & (MF_BITMAP | MF_OWNERDRAW))
-        it->text = LOWORD((DWORD)data);
-    else if (!(flags & MF_SEPARATOR) && data)
-        it->text = local_strdup(data);
+    it->text = text;
     if ((flags & MF_SEPARATOR) || (!data && !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_POPUP))))
         it->flags |= MF_SEPARATOR;
 }
 
 static BOOL insert_item(HMENU h, UINT pos, UINT flags, UINT id, LPCSTR data)
 {
-    PMENU m = valid_menu(h), owner = (PMENU)0;
+    LPMENU m = valid_menu(h);
+    HMENU owner = h;
     UINT at;
-    WORD blk;
+    WORD blk, text;
     if (!m)
         return FALSE;
     if (pos == (UINT)-1)
@@ -163,29 +266,32 @@ static BOOL insert_item(HMENU h, UINT pos, UINT flags, UINT id, LPCSTR data)
     else if (flags & MF_BYPOSITION)
         at = pos > m->count ? m->count : pos;
     else {
-        PMITEM it = find_item(m, pos, 0, &owner);
-        if (!it)
+        int i = find_item(h, pos, 0, &owner);
+        if (i < 0) {
+            owner = h;
             at = m->count;
-        else {
-            m = owner;
-            at = ((WORD)it - m->items) / sizeof(MITEM);
-        }
+        } else
+            at = i;
     }
-    blk = m->items ? (WORD)LocalReAlloc((HLOCAL)m->items, (m->count + 1) * sizeof(MITEM),
-                                        LMEM_MOVEABLE | LMEM_ZEROINIT)
-                   : (WORD)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(MITEM));
-    if (!blk)
+    if (!item_text(flags, data, &text))
         return FALSE;
+    m = valid_menu(owner);
+    blk = m->items ? m_realloc(m->items, (m->count + 1) * sizeof(MITEM), LMEM_MOVEABLE | LMEM_ZEROINIT)
+                   : m_alloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(MITEM));
+    m = valid_menu(owner);              /* the heap's selector may be new */
+    if (!blk) {
+        if (text && !(flags & (MF_BITMAP | MF_OWNERDRAW)))
+            lh_free(ssel, text);
+        return FALSE;
+    }
     m->items = blk;
     if (at < m->count)
-        fmemcpy((void __far *)item_at(m, at + 1), (void __far *)item_at(m, at),
-                (m->count - at) * sizeof(MITEM));
+        fmemcpy(item_at(m, at + 1), item_at(m, at), (m->count - at) * sizeof(MITEM));
     m->count++;
     {
-        PMITEM it = item_at(m, at);
-        it->text = 0;
-        it->flags = 0;
-        set_item(it, flags, id, data);
+        LPMITEM it = item_at(m, at);
+        fmemset(it, 0, sizeof(MITEM));
+        store_item(it, flags, id, data, text);
     }
     return TRUE;
 }
@@ -202,22 +308,19 @@ BOOL WINAPI InsertMenu(HMENU h, UINT pos, UINT flags, UINT id, LPCSTR data)
 
 static BOOL remove_item(HMENU h, UINT what, UINT flags, BOOL destroy)
 {
-    PMENU m = valid_menu(h), owner = (PMENU)0;
-    PMITEM it;
-    UINT at;
-    if (!m)
+    HMENU owner = 0;
+    int i = find_item(h, what, flags, &owner);
+    LPMENU m;
+    LPMITEM it;
+    if (i < 0)
         return FALSE;
-    it = find_item(m, what, flags, &owner);
-    if (!it)
-        return FALSE;
-    m = owner;
-    at = ((WORD)it - m->items) / sizeof(MITEM);
+    m = valid_menu(owner);
+    it = item_at(m, i);
     if (destroy && (it->flags & MF_POPUP))
         DestroyMenu((HMENU)it->id);
     free_item(it);
-    if (at + 1 < m->count)
-        fmemcpy((void __far *)item_at(m, at), (void __far *)item_at(m, at + 1),
-                (m->count - at - 1) * sizeof(MITEM));
+    if ((UINT)i + 1 < m->count)
+        fmemcpy(item_at(m, i), item_at(m, i + 1), (m->count - i - 1) * sizeof(MITEM));
     m->count--;
     return TRUE;
 }
@@ -234,11 +337,13 @@ BOOL WINAPI DeleteMenu(HMENU h, UINT what, UINT flags)
 
 BOOL WINAPI ModifyMenu(HMENU h, UINT what, UINT flags, UINT id, LPCSTR data)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
-    if (!it)
+    LPMITEM it;
+    WORD text;
+    if (!find_it(h, what, flags) || !item_text(flags, data, &text))
         return FALSE;
-    set_item(it, flags, id, data);
+    it = find_it(h, what, flags);       /* again: the string may have moved things */
+    free_item(it);
+    store_item(it, flags, id, data, text);
     return TRUE;
 }
 
@@ -257,14 +362,14 @@ BOOL WINAPI ChangeMenu(HMENU h, UINT what, LPCSTR data, UINT id, UINT flags)
 
 int WINAPI GetMenuItemCount(HMENU h)
 {
-    PMENU m = valid_menu(h);
+    LPMENU m = valid_menu(h);
     return m ? m->count : -1;
 }
 
 UINT WINAPI GetMenuItemID(HMENU h, int pos)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it;
+    LPMENU m = valid_menu(h);
+    LPMITEM it;
     if (!m || pos < 0 || (UINT)pos >= m->count)
         return (UINT)-1;
     it = item_at(m, pos);
@@ -273,8 +378,8 @@ UINT WINAPI GetMenuItemID(HMENU h, int pos)
 
 HMENU WINAPI GetSubMenu(HMENU h, int pos)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it;
+    LPMENU m = valid_menu(h);
+    LPMITEM it;
     if (!m || pos < 0 || (UINT)pos >= m->count)
         return 0;
     it = item_at(m, pos);
@@ -283,12 +388,11 @@ HMENU WINAPI GetSubMenu(HMENU h, int pos)
 
 UINT WINAPI GetMenuState(HMENU h, UINT what, UINT flags)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     if (!it)
         return (UINT)-1;
     if (it->flags & MF_POPUP) {
-        PMENU sub = valid_menu((HMENU)it->id);
+        LPMENU sub = valid_menu((HMENU)it->id);
         return ((sub ? sub->count : 0) << 8) | (it->flags & 0xFF);
     }
     return it->flags;
@@ -296,22 +400,20 @@ UINT WINAPI GetMenuState(HMENU h, UINT what, UINT flags)
 
 int WINAPI GetMenuString(HMENU h, UINT what, LPSTR buf, int n, UINT flags)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     if (!it || n <= 0)
         return 0;
     if ((it->flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR)) || !it->text) {
         buf[0] = 0;
         return 0;
     }
-    lstr_cpyn(buf, (LPCSTR)MAKELP(get_ds(), it->text), n);
+    lstr_cpyn(buf, STEXT(it->text), n);
     return lstr_len(buf);
 }
 
 BOOL WINAPI CheckMenuItem(HMENU h, UINT what, UINT flags)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     UINT old;
     if (!it)
         return (BOOL)-1;
@@ -322,8 +424,7 @@ BOOL WINAPI CheckMenuItem(HMENU h, UINT what, UINT flags)
 
 BOOL WINAPI EnableMenuItem(HMENU h, UINT what, UINT flags)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     UINT old;
     if (!it)
         return (BOOL)-1;
@@ -334,8 +435,7 @@ BOOL WINAPI EnableMenuItem(HMENU h, UINT what, UINT flags)
 
 BOOL WINAPI HiliteMenuItem(HWND hw, HMENU h, UINT what, UINT flags)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     if (!it)
         return FALSE;
     it->flags = (it->flags & ~MF_HILITE) | (flags & MF_HILITE);
@@ -345,8 +445,7 @@ BOOL WINAPI HiliteMenuItem(HWND hw, HMENU h, UINT what, UINT flags)
 
 BOOL WINAPI SetMenuItemBitmaps(HMENU h, UINT what, UINT flags, HBITMAP un, HBITMAP ck)
 {
-    PMENU m = valid_menu(h);
-    PMITEM it = m ? find_item(m, what, flags, 0) : (PMITEM)0;
+    LPMITEM it = find_it(h, what, flags);
     if (!it)
         return FALSE;
     it->hbmUncheck = (WORD)un;
@@ -368,11 +467,12 @@ HMENU WINAPI GetMenu(HWND h)
 BOOL WINAPI SetMenu(HWND h, HMENU menu)
 {
     PWND w = valid_wnd(h);
+    LPMENU m;
     if (!w || (w->style & WS_CHILD))
         return FALSE;
     w->hMenu = (WORD)menu;
-    if (valid_menu(menu))
-        valid_menu(menu)->hwnd = h;
+    if ((m = valid_menu(menu)) != 0)
+        m->hwnd = h;
     set_window_pos(h, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                    SWP_NOACTIVATE | SWP_FRAMECHANGED);
     return TRUE;
@@ -496,15 +596,15 @@ static void sysmenu_states(PWND w, HMENU m)
 }
 
 /* ---- the menu bar ---- */
-static void text_of(PMITEM it, char *buf, int n)
+static void text_of(LPMITEM it, char *buf, int n)
 {
     if ((it->flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR)) || !it->text)
         buf[0] = 0;
     else
-        lstr_cpyn(buf, (LPCSTR)MAKELP(get_ds(), it->text), n);
+        lstr_cpyn(buf, STEXT(it->text), n);
 }
 
-static int item_text_width(HDC hdc, PMITEM it)
+static int item_text_width(HDC hdc, LPMITEM it)
 {
     char buf[128], out[128];
     int i, k = 0;
@@ -524,27 +624,35 @@ static int item_text_width(HDC hdc, PMITEM it)
 /* align: the window's class has CS_BYTEALIGNCLIENT (probe US5: then the
    items start on 8-pixel boundaries, rounded to the nearest; Program
    Manager's frame class has it) */
-static int layout_bar(PMENU m, int width, BOOL align)
+static int layout_bar(LPMENU m, int width, BOOL align)
 {
     HDC hdc = hdcScreen;
     HFONT old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     int x = 0, y = 0, h = sysmet[SM_CYMENU];
     UINT i;
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
+        LPMITEM it = item_at(m, i);
         /* the text's width plus a system-font cell (8 pixels) on each side
            (US5: File, Options, Window, Help with texts of 24, 50, 52, 30
            pixels start 0, 40, 106, 174 pixels into the bar) */
         int cc = cxSysCharMenu();
         int w = item_text_width(hdc, it) + 2 * cc;
         if (x + w > width && x > 0) {
+            /* a further row one pixel more down (3.1: File Manager made
+               narrow, its bar on two rows, the second's text 19 pixels
+               below the first's, the bar 37 high) */
             x = 0;
-            y += h;
+            y += h + sysmet[SM_CYBORDER];
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
-        if (align)
+        if (align) {
+            /* the item reaches to where the next one starts (Program
+               Manager's Help item highlighted on 3.1: 2 pixels wider than
+               its text plus margins) */
             x = (x + 4) / 8 * 8;
+            it->rc.right = x;
+        }
     }
     SelectObject(hdc, old);
     m->cx = width;
@@ -554,7 +662,7 @@ static int layout_bar(PMENU m, int width, BOOL align)
 
 int menu_bar_height(PWND w, int width)
 {
-    PMENU m = valid_menu((HMENU)w->hMenu);
+    LPMENU m = valid_menu((HMENU)w->hMenu);
     if (!m)
         return 0;
     return layout_bar(m, width, (((PCLS)w->cls)->style & CS_BYTEALIGNCLIENT) != 0) +
@@ -563,7 +671,7 @@ int menu_bar_height(PWND w, int width)
 
 /* draw a menu item's text with its mnemonic underlined, tabbed text
    right-aligned at right */
-static void draw_item_text(HDC hdc, PMITEM it, int x, int y, int right)
+static void draw_item_text(HDC hdc, LPMITEM it, int x, int y, int right)
 {
     char buf[128];
     char *tab;
@@ -584,7 +692,7 @@ static void draw_item_text(HDC hdc, PMITEM it, int x, int y, int right)
     }
 }
 
-static void draw_bar_item(HDC hdc, PMITEM it, int ox, int oy)
+static void draw_bar_item(HDC hdc, LPMITEM it, int ox, int oy)
 {
     BOOL hil = (it->flags & MF_HILITE) != 0;
     RECT r = it->rc;
@@ -598,14 +706,14 @@ static void draw_bar_item(HDC hdc, PMITEM it, int ox, int oy)
 
 void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width)
 {
-    PMENU m = valid_menu((HMENU)w->hMenu);
+    LPMENU m = valid_menu((HMENU)w->hMenu);
     HFONT old;
     UINT i;
     RECT r;
     if (!m)
         return;
     layout_bar(m, width, (((PCLS)w->cls)->style & CS_BYTEALIGNCLIENT) != 0);
-    m->hwnd = (HWND)(WORD)w;
+    m->hwnd = HW(w);
     old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     SetRect(&r, x, y, x + width, y + m->cy);
     FillRect(hdc, &r, sysbrush[COLOR_MENU]);
@@ -646,14 +754,14 @@ typedef struct POPUP {
     HWND   owner;
 } POPUP;
 
-static void layout_popup(PMENU m)
+static void layout_popup(LPMENU m)
 {
     HDC hdc = hdcScreen;
     HFONT old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     int y = 0, wmax = 0, tabmax = 0;
     UINT i;
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
+        LPMITEM it = item_at(m, i);
         char buf[128], *tab;
         int h = (it->flags & MF_SEPARATOR) ? cySysChar / 2 - 1 : sysmet[SM_CYMENU];
         text_of(it, buf, sizeof buf);
@@ -676,7 +784,7 @@ static void layout_popup(PMENU m)
     m->cy = y + 2;
     m->tabx = POP_LEFT + wmax + POP_GAP;
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
+        LPMITEM it = item_at(m, i);
         it->rc.left = 1;
         it->rc.right = m->cx - 1;
         OffsetRect(&it->rc, 0, 1);
@@ -686,7 +794,7 @@ static void layout_popup(PMENU m)
 
 static HBITMAP bmCheck;
 
-static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
+static void draw_popup_item(HDC hdc, LPMENU m, LPMITEM it, BOOL hil)
 {
     RECT r = it->rc;
     BOOL grayhil = hil && (it->flags & MF_GRAYED);
@@ -730,7 +838,14 @@ static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
         SetTextColor(mem, RGB(0, 0, 0));
         draw_item_text(mem, it, POP_LEFT, 0, m->tabx);
         UnrealizeObject(hbrGray);
-        SetBrushOrg(mem, (LOWORD(org) + HIWORD(org) + r.left + r.top) & 1, 0);
+        /* the checkerboard starts at the item's corner, not the screen's:
+           Windows Write's grayed Undo under the highlight, its item at
+           49,42 on screen, had the other phase than w16 gave it from the
+           screen; the system menu's Restore (US4) sat at an even place.
+           UNVERIFIED: its shortcut (Ctrl+Z) was one pixel further right
+           on 3.1 than in the item's other states */
+        (void)org;
+        SetBrushOrg(mem, 0, 0);
         obr = SelectObject(mem, hbrGray);
         PatBlt(mem, 0, 0, cx, cy, 0x00FA0089L);     /* DPo */
         SelectObject(mem, obr);
@@ -751,13 +866,13 @@ static void draw_popup_item(HDC hdc, PMENU m, PMITEM it, BOOL hil)
     draw_item_text(hdc, it, r.left + POP_LEFT, r.top, r.left + m->tabx);
 }
 
-LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HMENU hm = (HMENU)GetWindowWord(h, 0);
-        PMENU m = valid_menu(hm);
+        LPMENU m = valid_menu(hm);
         HDC hdc = BeginPaint(h, &ps);
         if (m) {
             HFONT old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
@@ -775,7 +890,7 @@ LRESULT WINAPI MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             }
             FrameRect(hdc, &r, sysbrush[COLOR_WINDOWFRAME]);
             for (i = 0; i < m->count; i++) {
-                PMITEM it = item_at(m, i);
+                LPMITEM it = item_at(m, i);
                 draw_popup_item(hdc, m, it, (it->flags & MF_HILITE) != 0);
             }
             SelectObject(hdc, old);
@@ -837,7 +952,7 @@ static void close_popup(MLOOP *l)
         l->hwndPopup = 0;
     }
     if (l->popup) {
-        PMENU m = valid_menu(l->popup);
+        LPMENU m = valid_menu(l->popup);
         UINT i;
         if (m)
             for (i = 0; i < m->count; i++)
@@ -849,7 +964,7 @@ static void close_popup(MLOOP *l)
 
 static void select_popup_item(MLOOP *l, int sel)
 {
-    PMENU m = valid_menu(l->popup);
+    LPMENU m = valid_menu(l->popup);
     HDC hdc;
     HFONT old;
     if (!m || sel == l->sel)
@@ -862,7 +977,7 @@ static void select_popup_item(MLOOP *l, int sel)
     }
     l->sel = sel;
     if (sel >= 0 && (UINT)sel < m->count) {
-        PMITEM it = item_at(m, sel);
+        LPMITEM it = item_at(m, sel);
         it->flags |= MF_HILITE;
         draw_popup_item(hdc, m, it, TRUE);
         send_message(l->owner, WM_MENUSELECT, (it->flags & MF_POPUP) ? (UINT)it->id : it->id,
@@ -874,10 +989,12 @@ static void select_popup_item(MLOOP *l, int sel)
 
 static void open_popup(MLOOP *l, HMENU popup, int x, int y)
 {
-    PMENU m = valid_menu(popup);
-    if (!m)
+    LPMENU m;
+    if (!valid_menu(popup))
         return;
     send_message(l->owner, WM_INITMENUPOPUP, (WPARAM)popup, MAKELONG(l->barsel, l->sysmenu));
+    if ((m = valid_menu(popup)) == 0)  /* (again: the owner may have changed it) */
+        return;
     layout_popup(m);
     if (x + m->cx > sysmet[SM_CXSCREEN])
         x = sysmet[SM_CXSCREEN] - m->cx;
@@ -898,14 +1015,14 @@ static void open_popup(MLOOP *l, HMENU popup, int x, int y)
 static void bar_rect(MLOOP *l, int i, RECT *r)
 {
     PWND w = PW(l->owner);
-    PMENU m = valid_menu(l->bar);
+    LPMENU m = valid_menu(l->bar);
     *r = item_at(m, i)->rc;
     OffsetRect(r, w->rcClient.left, w->rcClient.top - m->cy - sysmet[SM_CYBORDER]);
 }
 
 static void select_bar(MLOOP *l, int i, BOOL open)
 {
-    PMENU m = valid_menu(l->bar);
+    LPMENU m = valid_menu(l->bar);
     HDC hdc;
     PWND w = PW(l->owner);
     close_popup(l);
@@ -934,7 +1051,7 @@ static void select_bar(MLOOP *l, int i, BOOL open)
         }
         l->barsel = i;
         if (i >= 0) {
-            PMITEM it = item_at(m, i);
+            LPMITEM it = item_at(m, i);
             it->flags |= MF_HILITE;
             draw_bar_item(hdc, it, ox, oy);
             send_message(l->owner, WM_MENUSELECT, (it->flags & MF_POPUP) ? (UINT)it->id : it->id,
@@ -943,19 +1060,20 @@ static void select_bar(MLOOP *l, int i, BOOL open)
         SelectObject(hdc, old);
     }
     release_dc(l->owner, hdc);
-    if (open && i >= 0 && (item_at(m, i)->flags & MF_POPUP)) {
+    m = valid_menu(l->bar);             /* after WM_MENUSELECT */
+    if (open && m && i >= 0 && (UINT)i < m->count && (item_at(m, i)->flags & MF_POPUP)) {
         RECT r;
         bar_rect(l, i, &r);
         open_popup(l, (HMENU)item_at(m, i)->id, r.left, r.bottom);   /* on the bar's line */
     }
 }
 
-static int mnemonic(PMENU m, char c)
+static int mnemonic(LPMENU m, char c)
 {
     UINT i;
     c = (char)(DWORD)AnsiUpper((LPSTR)MAKELP(0, (BYTE)c));
     for (i = 0; i < m->count; i++) {
-        PMITEM it = item_at(m, i);
+        LPMITEM it = item_at(m, i);
         char buf[128], *p;
         text_of(it, buf, sizeof buf);
         for (p = buf; *p; p++)
@@ -968,9 +1086,13 @@ static int mnemonic(PMENU m, char c)
     return -1;
 }
 
-static void choose(MLOOP *l, PMENU m, int i)
+static void choose(MLOOP *l, HMENU h, int i)
 {
-    PMITEM it = item_at(m, i);
+    LPMENU m = valid_menu(h);
+    LPMITEM it;
+    if (!m || i < 0 || (UINT)i >= m->count)
+        return;
+    it = item_at(m, i);
     if (it->flags & (MF_GRAYED | MF_DISABLED | MF_SEPARATOR))
         return;
     if (it->flags & MF_POPUP)
@@ -980,7 +1102,7 @@ static void choose(MLOOP *l, PMENU m, int i)
     l->done = TRUE;
 }
 
-static int next_item(PMENU m, int i, int dir)
+static int next_item(LPMENU m, int i, int dir)
 {
     int n = m->count, k;
     for (k = 0; k < n; k++) {
@@ -993,7 +1115,7 @@ static int next_item(PMENU m, int i, int dir)
 
 static void menu_key(MLOOP *l, UINT vk)
 {
-    PMENU bar = valid_menu(l->bar), pop = valid_menu(l->popup);
+    LPMENU bar = valid_menu(l->bar), pop = valid_menu(l->popup);
     switch (vk) {
     case VK_ESCAPE:
         if (l->popup && !l->sysmenu && bar) {
@@ -1017,7 +1139,7 @@ static void menu_key(MLOOP *l, UINT vk)
         break;
     case VK_RETURN:
         if (pop && l->sel >= 0)
-            choose(l, pop, l->sel);
+            choose(l, l->popup, l->sel);
         else if (bar && l->barsel >= 0 && !l->sysmenu)
             select_bar(l, l->barsel, TRUE);
         break;
@@ -1026,7 +1148,7 @@ static void menu_key(MLOOP *l, UINT vk)
 
 static void menu_char(MLOOP *l, char c)
 {
-    PMENU m = valid_menu(l->popup ? l->popup : l->bar);
+    LPMENU m = valid_menu(l->popup ? l->popup : l->bar);
     int i;
     if (!m)
         return;
@@ -1037,16 +1159,26 @@ static void menu_char(MLOOP *l, char c)
     }
     if (l->popup) {
         select_popup_item(l, i);
-        choose(l, m, i);
+        choose(l, l->popup, i);
     } else
         select_bar(l, i, TRUE);
 }
 
 /* the loop: messages for the menu are read here; others are passed on */
+extern int menu_mode;
+
 static void run_menu(MLOOP *l)
 {
     MSG msg;
     HWND oldcap = GetCapture();
+    /* the arrow while a menu is up, whatever the window under it chose
+       (3.1: the arrow over Notepad's Help menu, opened from the keyboard
+       with the pointer over the edit control; the menu class has no
+       cursor, US2) */
+    menu_mode++;
+    SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
+    /* the caret goes on blinking (3.1: Notepad's caret seen both on and
+       off while its Help menu is up) */
     while (!l->done) {
         if (!GetMessage(&msg, 0, 0, 0)) {
             PostQuitMessage(msg.wParam);
@@ -1055,6 +1187,9 @@ static void run_menu(MLOOP *l)
         switch (msg.message) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            /* the characters for mnemonics come from here: without this a
+               menu opened from the keyboard ignored its item letters */
+            TranslateMessage(&msg);
             menu_key(l, msg.wParam);
             continue;
         case WM_CHAR:
@@ -1064,12 +1199,29 @@ static void run_menu(MLOOP *l)
         case WM_KEYUP:
         case WM_SYSKEYUP:
             continue;
+        case WM_LBUTTONDBLCLK:
+        case WM_NCLBUTTONDBLCLK:
+            /* a double click on the system box while its menu is up: the
+               menu ends, then SC_CLOSE (3.1: nothing of the menu stays).
+               It went to DefWindowProc inside the loop, so the window
+               closed - Program Manager's Exit dialog - under a menu that
+               stayed up and live */
+            if (l->sysmenu && valid_wnd(l->owner) &&
+                (int)send_message(l->owner, WM_NCHITTEST, 0, MAKELONG(msg.pt.x, msg.pt.y)) == HTSYSMENU) {
+                l->result = SC_CLOSE;
+                l->resultsys = TRUE;
+                l->done = TRUE;
+                continue;
+            }
+            /* elsewhere: a press like any other */
+            msg.message = msg.message == WM_LBUTTONDBLCLK ? WM_LBUTTONDOWN : WM_NCLBUTTONDOWN;
+            /* fall through */
         case WM_LBUTTONDOWN:
         case WM_NCLBUTTONDOWN:
         case WM_LBUTTONUP:
         case WM_NCLBUTTONUP: {
             POINT pt = msg.pt;
-            PMENU pop = valid_menu(l->popup), bar = valid_menu(l->bar);
+            LPMENU pop = valid_menu(l->popup), bar = valid_menu(l->bar);
             if (pop && l->hwndPopup && PtInRect(&PW(l->hwndPopup)->rcWindow, pt)) {
                 UINT i;
                 pt.x -= PW(l->hwndPopup)->rcWindow.left;
@@ -1078,23 +1230,28 @@ static void run_menu(MLOOP *l)
                     if (PtInRect(&item_at(pop, i)->rc, pt)) {
                         select_popup_item(l, i);
                         if (msg.message == WM_LBUTTONUP || msg.message == WM_NCLBUTTONUP)
-                            choose(l, pop, i);
+                            choose(l, l->popup, i);
                         break;
                     }
                 continue;
             }
             if (bar && !l->sysmenu) {
-                UINT i;
-                for (i = 0; i < bar->count; i++) {
+                UINT i, n = bar->count;
+                for (i = 0; i < n; i++) {
                     RECT r;
                     bar_rect(l, i, &r);
                     if (PtInRect(&r, pt)) {
                         if (msg.message == WM_LBUTTONDOWN || msg.message == WM_NCLBUTTONDOWN)
                             select_bar(l, i, TRUE);
+                        else if (l->popup && l->sel < 0)
+                            /* released on the bar item: the popup's first
+                               item selected, as from the keyboard (3.1,
+                               Program Manager's Help clicked) */
+                            select_popup_item(l, 0);
                         break;
                     }
                 }
-                if (i < bar->count)
+                if (i < n)
                     continue;
             }
             if (msg.message == WM_LBUTTONDOWN || msg.message == WM_NCLBUTTONDOWN)
@@ -1117,6 +1274,7 @@ static void run_menu(MLOOP *l)
         send_message(l->owner, WM_MENUSELECT, 0, MAKELONG(0xFFFF, 0));
     if (oldcap)
         SetCapture(oldcap);
+    menu_mode--;
     if (l->result && valid_wnd(l->owner))
         PostMessage(l->owner, l->resultsys ? WM_SYSCOMMAND : WM_COMMAND, l->result, 0);
 }
@@ -1127,7 +1285,7 @@ void menu_track_bar(HWND h, char key)
 {
     MLOOP l;
     PWND w = valid_wnd(h);
-    PMENU bar;
+    LPMENU bar;
     if (!w)
         return;
     fmemset(&l, 0, sizeof l);
@@ -1136,7 +1294,10 @@ void menu_track_bar(HWND h, char key)
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
     bar = valid_menu(l.bar);
-    if (key == ' ' || (!bar && (w->style & WS_SYSMENU))) {
+    /* Alt+Space, or Alt (F10) alone in a window without a menu bar: the
+       system menu. Alt+letter without a menu bar used to open it as well,
+       so Alt+H in a dialog or in Clock put up the system menu */
+    if (key == ' ' || (!bar && !key && (w->style & WS_SYSMENU))) {
         l.bar = GetSystemMenu(h, FALSE);
         l.sysmenu = TRUE;
         sysmenu_states(w, l.bar);
@@ -1146,7 +1307,7 @@ void menu_track_bar(HWND h, char key)
     } else if (bar) {
         send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
         if (key) {
-            int i = mnemonic(bar, key);
+            int i = (bar = valid_menu(l.bar)) != 0 ? mnemonic(bar, key) : -1;
             if (i < 0) {
                 MessageBeep(0);
                 return;
@@ -1156,15 +1317,18 @@ void menu_track_bar(HWND h, char key)
                 select_popup_item(&l, 0);
         } else
             select_bar(&l, 0, FALSE);
-    } else
+    } else {
+        if (key)
+            MessageBeep(0);
         return;
+    }
     run_menu(&l);
 }
 
 BOOL WINAPI TrackPopupMenu(HMENU hm, UINT flags, int x, int y, int r, HWND h, const RECT __far *rc)
 {
     MLOOP l;
-    PMENU m = valid_menu(hm);
+    LPMENU m = valid_menu(hm);
     (void)r, (void)rc;
     if (!m || !valid_wnd(h))
         return FALSE;
@@ -1186,7 +1350,7 @@ void menu_track_point(HWND h, POINT pt)
 {
     MLOOP l;
     PWND w = valid_wnd(h);
-    PMENU bar;
+    LPMENU bar;
     UINT i;
     if (!w || !(bar = valid_menu((HMENU)w->hMenu)))
         return;
@@ -1196,7 +1360,7 @@ void menu_track_point(HWND h, POINT pt)
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
     send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
-    for (i = 0; i < bar->count; i++) {
+    for (i = 0; (bar = valid_menu(l.bar)) != 0 && i < bar->count; i++) {
         RECT r;
         bar_rect(&l, i, &r);
         if (PtInRect(&r, pt)) {

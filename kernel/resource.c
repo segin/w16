@@ -282,6 +282,7 @@ void rsrc_init(module FAR *m)
         if (TYPE(m, t)->type_id == (0x8000 | 3) && dibicon)
             TYPE(m, t)->reserved = dibicon;
     }
+    m->rsrc_ready = 1;
     for (t = type_first(m); t; t = type_next(m, t))
         for (k = 0; k < TYPE(m, t)->count; k++) {
             u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
@@ -301,6 +302,10 @@ void rsrc_init(module FAR *m)
 void rsrc_free(module FAR *m)
 {
     u16 t, k;
+    /* a load that failed before rsrc_init left the file's words in the
+       handle fields: not handles (KERNEL audit, low) */
+    if (!m->rsrc_ready)
+        return;
     for (t = type_first(m); t; t = type_next(m, t))
         for (k = 0; k < TYPE(m, t)->count; k++) {
             u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);

@@ -1,0 +1,220 @@
+; MD2 mode 8 (tests/apps/md2ax.c): a click to capture the mouse, then motion
+; by 1, 2, ... 9 mickeys to the right in turn, 0.7 s apart, over and over
+click 1
+sleep 1
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5
+move 1 0
+sleep 0.5
+move 2 0
+sleep 0.5
+move 3 0
+sleep 0.5
+move 4 0
+sleep 0.5
+move 5 0
+sleep 0.5
+move 6 0
+sleep 0.5
+move 7 0
+sleep 0.5
+move 8 0
+sleep 0.5
+move 9 0
+sleep 0.5

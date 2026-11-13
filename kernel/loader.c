@@ -96,6 +96,51 @@ static int f_read_big(u16 fh, u16 sel, u32 len)
     return len ? f_read(fh, MK_FP(sel, 0), (u16)len) : 1;
 }
 
+/* A segment's data from the file (at pos, flen bytes) into sel, which
+   holds cap bytes. An iterated segment (NESEG_ITERATED; Microsoft's NE
+   format: records of a repeat count, a byte count and that many bytes)
+   is expanded. Observed (tests/apps/tk16.c "iter", TK16I made by
+   tools/mkiterated.py): 3.1 runs a program whose data segment is so
+   stored, its data as expanded; w16 loaded the records as they were
+   (KERNEL audit #15). */
+static int f_read_seg(u16 fh, u32 pos, u16 sel, u32 flen, u32 cap, int iter)
+{
+    u16 tmp;
+    u32 in = 0, out = 0;
+    int ok = 1;
+    if (!f_seek(fh, pos))
+        return 0;
+    if (!iter)
+        return f_read_big(fh, sel, flen);
+    if (!galloc(GMEM_FIXED, flen, 0, &tmp))
+        return 0;
+    if (!f_read_big(fh, tmp, flen)) {
+        GlobalFree(tmp);
+        return 0;
+    }
+    while (ok && in + 4 <= flen) {
+        u16 cnt = *(u16 FAR *)MK_FP(tmp, (u16)in);
+        u16 len = *(u16 FAR *)MK_FP(tmp, (u16)in + 2), c, k;
+        in += 4;
+        if (in + len > flen) {
+            ok = 0;
+            break;
+        }
+        for (c = 0; c < cnt && ok; c++) {
+            if (out + len > cap) {
+                ok = 0;
+                break;
+            }
+            for (k = 0; k < len; k++)
+                *(u8 FAR *)MK_FP(sel, (u16)(out + k)) = *(u8 FAR *)MK_FP(tmp, (u16)(in + k));
+            out += len;
+        }
+        in += len;
+    }
+    GlobalFree(tmp);
+    return ok;
+}
+
 static void f_close(u16 fh)
 {
     regs16 r;
@@ -542,16 +587,30 @@ static void destroy(module FAR *m);
 static void call_wep(module FAR *m);
 
 /* Free the DLLs nobody uses any more, importers first (the module list
-   has a module before the modules it imports). Not while loading. */
+   has a module before the modules it imports). Not while loading. A DLL
+   whose WEP is running is left to the sweep that called it: a WEP that
+   frees another library (FreeLibrary sweeps again) must not get its own
+   WEP called a second time (observed, tests/apps/tk5.c: TKID's WEP freeing
+   TKDLB runs once on 3.1; w16 recursed). UNVERIFIED: a WEP that loads its
+   own DLL again; it stays, as it is in use. */
 static void sweep(void)
 {
     module FAR *m;
     if (load_depth)
         return;
     for (m = module_first; m; ) {
-        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m)) {
-            if (NE_HDR(m)->flags & MDBF_WEP)
+        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m) && !m->ending) {
+            m->ending = 1;
+            /* not for a DLL whose initialisation never ran (one a
+               program imports, the program's load or start having failed
+               first; KERNEL audit, low). UNVERIFIED on 3.1 */
+            if ((NE_HDR(m)->flags & MDBF_WEP) && m->lib_ran)
                 call_wep(m);
+            if (MOD_USAGE(m)) {         /* loaded again by its WEP */
+                m->ending = 0;
+                m = m->next;
+                continue;
+            }
             module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP */
             destroy(m);
             m = module_first;
@@ -565,6 +624,7 @@ static void sweep(void)
 static void destroy(module FAR *m)
 {
     u16 i;
+    th_delmodule(m);                    /* toolhelp.c: 65h, 52h each */
     mod_unlink(m);
     for (i = 0; i < m->seg_count; i++)
         if (m->seg[i].hnd)
@@ -679,10 +739,10 @@ static int defer_add(u16 hmod)
     return 1;
 }
 
-/* Copy the DGROUP of a program just loaded, for its later instances
-   (UNVERIFIED: Windows reads the segment from the file again; a far
-   pointer to DGROUP in the data would point to the first instance's
-   here). */
+/* Copy the DGROUP of a program just loaded, for its later instances;
+   new_instance points its fixups to DGROUP itself at the new one
+   (redo_self_fixups). Pietrek (LMPrevInstance): a later instance gets a
+   DGROUP of its own, loaded as segments are. */
 static int snapshot(module FAR *m)
 {
     u16 ad = NE_HDR(m)->auto_data, sel;
@@ -698,6 +758,7 @@ static int snapshot(module FAR *m)
     if (n > 0x10000UL)
         n = 0x10000UL;
     m->dg_snap = sel;
+    m->dg_snap_of = m->seg[ad - 1].sel;
     if (n > 0x8000UL) {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->seg[ad - 1].sel, 0), 0x8000);
         kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->seg[ad - 1].sel, 0x8000), (u16)(n - 0x8000UL));
@@ -804,13 +865,32 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         return load_fail(m, path, "out of memory");
     }
     mod_set_name(m);
+    /* Pietrek (LoadExeHeader): a program's stack is made at least 5K, a
+       heap under 100 bytes (but not 0) 100. Observed (tests/apps/tk16.c,
+       TK16S linked with 400h and 20h): the module table, and BX and CX
+       at the program's entry, say 1400h and 64h (KERNEL audit #11) */
+    if (!(h.flags & NEF_LIBRARY) && h.stack_size < 0x1400)
+        h.stack_size = 0x1400;
+    if (h.heap_size && h.heap_size < 100)
+        h.heap_size = 100;
+    NE_HDR(m)->stack_size = h.stack_size;
+    NE_HDR(m)->heap_size = h.heap_size;
+    /* Pietrek (LoadExeHeader): an expected Windows version of 0 is taken
+       as 2.01 (a missing-functionality item of the KERNEL audit).
+       UNVERIFIED by a probe: on 3.1 the probe stopped where it started
+       such a program (TK16A with 3Eh set to 0), no further output */
+    if (!NE_HDR(m)->expver)
+        NE_HDR(m)->expver = 0x0201;
 
-    /* One copy per module: a file whose module is already loaded (under
-       another file name) gives that module.
-       UNVERIFIED: Windows 3.1 compared the file's base name with the
-       loaded module names before opening anything (observed); what it
-       does when the module inside is called differently is not. */
-    for (dup = module_first; dup; dup = dup->next)
+    /* A library whose module is already loaded (under another file name)
+       gives that module. A program does not: observed (tests/apps/tk16.c,
+       "renamed"), a copy of a running program under another file name is
+       a module of its own on 3.1 (hPrevInstance 0, the first one's usage
+       still 1), with its own DGROUP; w16 started it on the running
+       instance's DGROUP. Windows 3.1 compares the file's base name with
+       the loaded module names before opening anything (observed).
+       UNVERIFIED: the library case. */
+    for (dup = module_first; dup && (m->flags & NEF_LIBRARY); dup = dup->next)
         if (kstricmp(dup->name, m->name) == 0) {
             f_close(fh);
             destroy(m);
@@ -840,9 +920,14 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         if (flen > size)
             size = flen;
         if (i + 1 == h.auto_data) {
+            /* DGROUP stays one selector, below 64K (Pietrek: the local
+               heap keeps "the DGROUP below 64K"; local.c SEG_MAX). A full
+               64K would be two selector tiles, and a local heap grown in
+               it would move to new selectors. UNVERIFIED: 3.1's size for
+               data, heap and stack that add up to 64K or more */
             size += (u32)h.heap_size + h.stack_size;
-            if (size > 0x10000UL)
-                size = 0x10000UL;
+            if (size > 0xFFF0UL)
+                size = 0xFFF0UL;
         }
         /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
            segments are loaded moveable (even handles, hInstance = DS &
@@ -879,7 +964,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             if (size < 0x10000UL)
                 s->min_alloc = (u16)size;
         }
-        if (flen && (!f_seek(fh, (u32)s->sector << shift) || !f_read_big(fh, sel, flen))) {
+        if (flen && !f_read_seg(fh, (u32)s->sector << shift, sel, flen, size,
+                                (s->flags & NESEG_ITERATED) != 0)) {
             f_close(fh);
             return load_fail(m, path, "cannot read segment");
         }
@@ -926,6 +1012,7 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     for (i = 0; i < h.seg_count; i++)
         if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
             gset_code(m->seg[i].sel);
+    th_loadsegs(m);                     /* toolhelp.c: 50h each */
     rsrc_init(m);
 
     /* A DLL's initialisation, on the caller's stack. Observed on Windows
@@ -938,7 +1025,14 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     if (h.flags & NEF_LIBRARY) {
         NE_HDR(m)->flags |= MDBF_WEP;   /* observed on DLLs (table 0Ch) */
         module_signal(m->ne_sel, 0x40); /* Pietrek: before its init */
+        /* its initialisation runs now (or there is none); a deferred one
+           sets lib_ran when it runs (module_init_dll) */
+        if (!(h.cs && h.cs <= h.seg_count && defer_sel))
+            m->lib_ran = 1;
     }
+    if ((h.flags & NEF_LIBRARY) && !(h.cs && h.cs <= h.seg_count && defer_sel))
+        th_startdll(m, h.cs && h.cs <= h.seg_count ? m->seg[h.cs - 1].sel : 0,
+                    h.cs && h.cs <= h.seg_count ? h.ip : 0);   /* 64h */
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
         if (!defer_add(m->ne_sel)) {
             *err = LE_NOMEM;
@@ -1071,6 +1165,67 @@ static u16 start_task(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     return dg_hnd;
 }
 
+/* In dg, a copy of program m's DGROUP as loaded: the fixups to DGROUP
+   itself (internal references to its segment, from the file's
+   relocation records; the chains are in the file's data, which the copy
+   no longer holds) get selector dg instead of the first instance's.
+   Observed (tests/apps/tk16.c "second"): a static far pointer to a
+   program's own data points to each instance's DGROUP on 3.1; w16 gave
+   the second instance the first one's (KERNEL audit #13). Returns 0 if
+   the file cannot be read. UNVERIFIED: references through the movable
+   entry table into DGROUP (exported data). */
+static int redo_self_fixups(module FAR *m, u16 dg)
+{
+    u16 ad = NE_HDR(m)->auto_data, fh, err, raw, n, done = 0, k;
+    u16 shift = NE_HDR(m)->align_shift ? NE_HDR(m)->align_shift : 9;
+    const ne_segment FAR *s = MOD_SEG(m, ad - 1);
+    u32 flen, data;
+    ne_reloc buf[32];
+    int ok = 0;
+
+    if (!(s->flags & NESEG_RELOCS) || !s->sector)
+        return 1;
+    flen = s->file_len ? s->file_len : 0x10000UL;
+    data = (u32)s->sector << shift;
+    if (!galloc(GMEM_FIXED, gsize_of_sel(dg), 0, &raw))
+        return 0;
+    if (!f_open(m->path, &fh, &err)) {
+        GlobalFree(raw);
+        return 0;
+    }
+    if (!f_read_seg(fh, data, raw, flen, gsize_of_sel(dg), (s->flags & NESEG_ITERATED) != 0) ||
+        !f_seek(fh, data + flen) || !f_read(fh, &n, 2))
+        goto out;
+    while (done < n) {
+        u16 batch = n - done > 32 ? 32 : n - done;
+        if (!f_read(fh, buf, batch * sizeof(ne_reloc)))
+            goto out;
+        for (k = 0; k < batch; k++) {
+            const ne_reloc *rr = &buf[k];
+            u8 src = rr->src & NERS_MASK;
+            u16 off = rr->offset, next;
+            if ((rr->flags & NERF_TYPEMASK) != NERF_INTERNAL || (rr->t1 & 0xFF) != ad ||
+                (src != NERS_SEGMENT && src != NERS_FARPTR))
+                continue;
+            for (;;) {                  /* as patch(), the selector only */
+                if ((u32)off + (src == NERS_FARPTR ? 4 : 2) > gsize_of_sel(dg))
+                    break;
+                next = *(u16 FAR *)MK_FP(raw, off);
+                *(u16 FAR *)MK_FP(dg, off + (src == NERS_FARPTR ? 2 : 0)) = dg;
+                if ((rr->flags & NERF_ADDITIVE) || next == NE_CHAIN_END)
+                    break;
+                off = next;
+            }
+        }
+        done += batch;
+    }
+    ok = 1;
+out:
+    f_close(fh);
+    GlobalFree(raw);
+    return ok;
+}
+
 /* Another instance of a loaded program: a new DGROUP (the module's as
    loaded), one more use of the module and of the DLLs it imports
    (import_uses; the DLLs are not initialised again); hPrevInstance is
@@ -1088,6 +1243,8 @@ static u16 new_instance(module FAR *m, const loadparms FAR *lp)
     if (!m->dg_snap)
         return LE_NOMEM;
     size = gsize_of_sel(m->dg_snap);
+    if (size > 0xFFF0UL)                /* one selector, as above */
+        size = 0xFFF0UL;
     hnd = galloc(GMEM_MOVEABLE | GA_REQ_DGROUP, size & ~0x1FUL, m->ne_sel, &sel);
     if (!hnd)
         return LE_NOMEM;
@@ -1098,6 +1255,10 @@ static u16 new_instance(module FAR *m, const loadparms FAR *lp)
         kmemcpy(MK_FP(sel, 0x8000), MK_FP(m->dg_snap, 0x8000), (u16)(size - 0x8000UL));
     } else {
         kmemcpy(MK_FP(sel, 0), MK_FP(m->dg_snap, 0), (u16)size);
+    }
+    if (!redo_self_fixups(m, sel)) {
+        GlobalFree(hnd);
+        return LE_BADFORMAT;
     }
     hprev = task_prev_instance(m);
     uses(m, 1);
@@ -1146,8 +1307,10 @@ int module_init_dll(u16 hmod)
     if (!m)
         return 1;
     h = NE_HDR(m);
+    m->lib_ran = 1;
     if (!h->cs || h->cs > m->seg_count)
         return 1;
+    th_startdll(m, m->seg[h->cs - 1].sel, h->ip);     /* toolhelp.c: 64h */
     return mod_call(m->seg[h->cs - 1].sel, h->ip, entry_ds(m), h->heap_size,
                     module_instance(m), 0, 0) != 0;
 }

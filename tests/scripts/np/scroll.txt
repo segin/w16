@@ -1,0 +1,29 @@
+; NP9: the frame's scroll bars while typing and moving (they follow the
+; edit control's EN_HSCROLL/EN_VSCROLL, not every change)
+; gen 30000 64 BIG.TXT
+; log
+run NOTEPAD.EXE
+wait 3000
+type 1 a long line that goes on and on and on past the right edge of the window to make the edit control scroll sideways for a while
+wait 1000
+info
+snap C:\TYPED.BMP
+key 24
+info
+key 23
+info
+snap C:\END.BMP
+close
+wait 800
+char n
+wait 800
+run NOTEPAD.EXE C:\BIG.TXT
+wait 3000
+key 22
+key 22
+info
+key 28
+key 28
+key 21
+info
+snap C:\PGDN.BMP

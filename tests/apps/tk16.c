@@ -147,6 +147,54 @@ static void winexec(void)
 }
 
 /* LoadModule with an environment of our own */
+/* OpenFile's search of the PATH: a task started with an environment of
+   its own (PATH=C:\TK16P) looks for a file that is only in C:\TK16P */
+static void envpath(void)
+{
+    static char tail[64];
+    static WORD show[2] = { 2, 1 };
+    static struct {
+        WORD env;
+        char FAR *cmd;
+        WORD FAR *show;
+        DWORD reserved;
+    } p;
+    char path[140];
+    HGLOBAL g;
+    char FAR *e;
+    WORD h, n;
+    HFILE f;
+
+    STEP("environment PATH");
+    reset();
+    dos(0x3900, "C:\\TK16P", NULL);
+    f = _lcreat("C:\\TK16P\\TK16P.TXT", 0);
+    if (f != HFILE_ERROR)
+        _lclose(f);
+    g = GlobalAlloc(GMEM_FIXED, 32);
+    e = GlobalLock(g);
+    lstrcpy(e, "PATH=C:\\TK16P");
+    e[lstrlen(e) + 1] = 0;
+    n = args(tail + 1, 'P', 0);
+    tail[0] = (char)n;
+    tail[1 + n] = '\r';
+    p.env = (WORD)((DWORD)e >> 16);
+    p.cmd = tail;
+    p.show = show;
+    p.reserved = 0;
+    lstrcpy(path, dir);
+    lstrcat(path, "TK16A.EXE");
+    h = K_LOADMODULE(path, &p);
+    obs("envpath: LoadModule > 32", h > 32);
+    obs("envpath: ran", sh.v[0][W_RAN]);
+    obs("envpath: OpenFile found it in its PATH", sh.v[0][W_PFOUND]);
+    if (h > 32)
+        wait_gone(h);
+    GlobalFree(g);
+    dos(0x4100, "C:\\TK16P\\TK16P.TXT", NULL);
+    dos(0x3A00, "C:\\TK16P", NULL);
+}
+
 static void environment(void)
 {
     static char tail[64];
@@ -245,6 +293,201 @@ static void twodata(void)
     obs("TK16C gone", GetModuleHandle("TK16C") == 0);
 }
 
+/* A copy of TK16A.EXE under another file name, started while TK16A
+   runs: the module is the same (its name is in the file), so it is a
+   second instance of it, on a DGROUP of its own (w16 started it on the
+   running instance's DGROUP) */
+static void renamed(void)
+{
+    char src[100], dst[100], cmd[120];
+    static char buf[1024];
+    HFILE fi, fo;
+    WORD h1, h2, n;
+
+    STEP("renamed copy");
+    reset();
+    lstrcpy(src, dir);
+    str(src + lstrlen(src), "TK16A.EXE");
+    lstrcpy(dst, dir);
+    str(dst + lstrlen(dst), "TK16R.EXE");
+    fi = _lopen(src, OF_READ);
+    fo = _lcreat(dst, 0);
+    if (fi != HFILE_ERROR && fo != HFILE_ERROR)
+        while ((n = _lread(fi, buf, sizeof buf)) != 0 && n != (WORD)HFILE_ERROR)
+            _lwrite(fo, buf, n);
+    if (fi != HFILE_ERROR)
+        _lclose(fi);
+    if (fo != HFILE_ERROR)
+        _lclose(fo);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 0);
+    h1 = K_WINEXEC(cmd, 1);
+    obs("renamed: TK16A > 32", h1 > 32);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16R.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 1);
+    h2 = K_WINEXEC(cmd, 1);
+    obs("renamed: TK16R", h2 > 32 ? 0x20 : h2);
+    obs("renamed: TK16R ran", sh.v[1][W_RAN]);
+    obs("renamed: TK16R hPrevInstance==TK16A's", sh.v[1][W_HPREV] == h1);
+    obs("renamed: TK16R hPrevInstance==0", sh.v[1][W_HPREV] == 0);
+    obs("renamed: TK16R hInstance!=TK16A's", h2 != h1);
+    obs("renamed: GetModuleHandle(TK16R)", GetModuleHandle("TK16R") != 0);
+    obs("renamed: GetModuleUsage(TK16A)", GetModuleUsage(GetModuleHandle("TK16A")));
+    obs("renamed: same module", GetModuleHandle((LPCSTR)MAKELP(0, h1)) ==
+                                GetModuleHandle((LPCSTR)MAKELP(0, h2)));
+    obs("renamed: GetNumTasks", K_GETNUMTASKS());
+    wait_gone(h1);
+    obs("renamed: TK16R finished", sh.v[1][W_DONE]);
+    obs("renamed: TK16A finished", sh.v[0][W_DONE]);
+    obs("renamed: TK16A gone", GetModuleHandle("TK16A") == 0);
+    dos(0x4100, dst, NULL);
+}
+
+/* SetHandleCount is the task's own: a task started after this one
+   raised its count starts from 20 */
+static void handles(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("handle counts");
+    reset();
+    obs("hc: SetHandleCount(40)", SetHandleCount(40));
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'H', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("hc: TK16A > 32", h > 32);
+    obs("hc: TK16A finished", sh.v[0][W_DONE]);
+    obs("hc: TK16A SetHandleCount(0)", sh.v[0][W_HC0]);
+    obs("hc: TK16A SetHandleCount(30)", sh.v[0][W_HC1]);
+    obs("hc: ours SetHandleCount(0) after", SetHandleCount(0));
+    wait_gone(h);
+}
+
+/* A second instance of TK16A: its static far pointer to its own data
+   points into its own DGROUP, not the first instance's */
+static void second(void)
+{
+    char cmd[100];
+    WORD h1, h2;
+
+    STEP("second instance");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'W', 0);
+    h1 = K_WINEXEC(cmd, 1);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 1);
+    h2 = K_WINEXEC(cmd, 1);
+    obs("second: both > 32", h1 > 32 && h2 > 32);
+    obs("second: hPrevInstance==first", sh.v[1][W_HPREV] == h1);
+    obs("second: first's far pointer is its own", sh.v[0][W_SELF]);
+    obs("second: second's far pointer is its own", sh.v[1][W_SELF]);
+    wait_gone(h1);
+}
+
+static DWORD getvec(BYTE n)
+{
+    WORD r[8], i;
+    for (i = 0; i < 8; i++)
+        r[i] = 0;
+    r[0] = 0x3500 | n;
+    dos_int21((WORD FAR *)r);
+    return MAKELONG(r[1], r[7]);
+}
+
+static void setvec(BYTE n, DWORD v)
+{
+    WORD r[8], i;
+    for (i = 0; i < 8; i++)
+        r[i] = 0;
+    r[0] = 0x2500 | n;
+    r[3] = LOWORD(v);
+    r[6] = HIWORD(v);
+    dos_int21((WORD FAR *)r);
+}
+
+/* Pietrek (TDB): 32h-4Dh hold a task's vectors for INT 0, 2, 4, 6, 7,
+   3Eh and 75h. INT 0 set by this task with INT 21h 25h: what this task's
+   TDB says, and what a task started afterwards gets */
+static void vectors(void)
+{
+    char cmd[100];
+    WORD h, t = (WORD)GetCurrentTask();
+    DWORD v0 = getvec(0), mine = (DWORD)(void FAR *)renamed;
+
+    STEP("interrupt vectors");
+    reset();
+    obs("vec: TDB 32h==INT 0 at start", *(DWORD FAR *)MAKELP(t, 0x32) == v0);
+    setvec(0, mine);
+    obs("vec: INT 0 set", getvec(0) == mine);
+    obs("vec: TDB 32h==the new one", *(DWORD FAR *)MAKELP(t, 0x32) == mine);
+    obs("vec: TDB 32h==the old one", *(DWORD FAR *)MAKELP(t, 0x32) == v0);
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16A.EXE ");
+    args(cmd + lstrlen(cmd), 'V', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("vec: TK16A > 32", h > 32);
+    obs("vec: TK16A's INT 0==ours", MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]) == mine);
+    obs("vec: TK16A's INT 0==the old one", MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]) == v0);
+    obs("vec: TK16A's TDB 32h==its INT 0",
+        MAKELONG(sh.v[0][W_T32], sh.v[0][W_T32 + 1]) == MAKELONG(sh.v[0][W_V0], sh.v[0][W_V0 + 1]));
+    obs("vec: ours after", getvec(0) == mine);
+    setvec(0, v0);
+    obs("vec: put back", getvec(0) == v0);
+    if (h > 32)
+        wait_gone(h);
+}
+
+/* TK16I: TK16A with its data segment stored iterated (NE segment flag
+   0008h; tools/mkiterated.py) */
+static void iterated(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("iterated data");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16I.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("iter: TK16I", h > 32 ? 0x20 : h);
+    obs("iter: ran", sh.v[0][W_RAN]);
+    obs("iter: data as expanded", sh.v[0][W_ITER]);
+    obs("iter: far pointer its own", sh.v[0][W_SELF]);
+    if (h > 32)
+        wait_gone(h);
+}
+
+/* TK16S: linked with a 1K stack and a 20h-byte heap. Pietrek
+   (LoadExeHeader): a program's stack is raised to 5K, a heap under 100
+   bytes (not 0) to 100 */
+static void small(void)
+{
+    char cmd[100];
+    WORD h;
+
+    STEP("small stack and heap");
+    reset();
+    lstrcpy(cmd, dir);
+    str(cmd + lstrlen(cmd), "TK16S.EXE ");
+    args(cmd + lstrlen(cmd), 'R', 0);
+    h = K_WINEXEC(cmd, 1);
+    obs("small: TK16S > 32", h > 32);
+    obs("small: entry BX (stack)", sh.v[0][W_EBX]);
+    obs("small: entry CX (heap)", sh.v[0][W_ECX]);
+    obs_env("small: InitTask CX", sh.v[0][W_ICX]);  /* layout */
+    obs("small: module table 10h (heap)", sh.v[0][W_MT10]);
+    obs("small: module table 12h (stack)", sh.v[0][W_MT12]);
+    wait_gone(h);
+}
+
 int __cdecl tmain(void)
 {
     WORD n, i;
@@ -258,6 +501,13 @@ int __cdecl tmain(void)
     winexec();
     environment();
     twodata();
+    renamed();
+    handles();
+    small();
+    second();
+    iterated();
+    vectors();
+    envpath();
     baddll();
     obs("GetNumTasks at the end", K_GETNUMTASKS());
     out("TK16 done, failures=");

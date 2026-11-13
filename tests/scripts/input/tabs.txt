@@ -1,0 +1,37 @@
+; tabs in a multi-line edit control: Notepad, a line with tabs
+; (tests/inputrun.sh; boot-test case tabs)
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a blinking caret (matchnow NAME 20 S): the reference's run
+; keeps its fixed delay after the last key (the caret's phase); a w16 run
+; waits until its screen equals the reference's shot, caret phase and all
+key alt+f
+key r
+; the Run dialog up (Program Manager's caption no longer active), then
+; the program's window active and drawn (as in icons.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type notepad
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+type ab
+key Tab
+type cd
+key Tab
+key Tab
+type e
+key Return
+key Tab
+type f
+matchnow 01-tabs 20 2
+key alt+F4
+sleep 2
+key n
+match 02-closed 20 2
+shot 02-closed

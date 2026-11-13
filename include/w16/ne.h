@@ -96,6 +96,7 @@ typedef struct ne_segment {
 
 #define NESEG_DATA      0x0001          /* data segment (else code) */
 #define NESEG_ALLOCED   0x0002          /* loader: memory allocated */
+#define NESEG_ITERATED  0x0008          /* the file holds iterated records */
 #define NESEG_LOADED    0x0004          /* loader: segment loaded */
 #define NESEG_MOVABLE   0x0010
 #define NESEG_PURE      0x0020          /* shareable / pure */

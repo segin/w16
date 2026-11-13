@@ -1,0 +1,32 @@
+; Seconds and Date off and on, digital and analog
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+cmd 7
+freeze 10:09:30.50 1500
+snap C:\S1.BMP
+cmd 8
+freeze 10:09:30.50 1500
+snap C:\S2.BMP
+cmd 7
+freeze 10:09:30.50 1500
+snap C:\S3.BMP
+cmd 1
+freeze 10:09:30.50 1500
+snap C:\S4.BMP
+cmd 7
+freeze 10:09:30.50 1500
+snap C:\S5.BMP
+cmd 8
+freeze 10:09:30.50 1500
+snap C:\S6.BMP
+menu s
+freeze 10:09:30.50 800
+snap C:\MSET.BMP
+key 1B
+key 1B
+cmd 8
+freeze 10:09:30.50 1500
+snap C:\S7.BMP
+close
+wait 1000

@@ -50,6 +50,7 @@ emm386|vx1 ems=emm386|C:\VX2 eeee;WIN /3 > C:\O1.TXT;C:\WC2 !emm386
 emsboard|vx1 ems=true|C:\VX2 eeee;WIN /3 > C:\O1.TXT;C:\WC2 !emsboard
 noini|vx1 rm=WINDOWS/SYSTEM.INI|WIN /3 > C:\O1.TXT;C:\WC2 !noini
 help|vx1|SYSTEM\WIN386 /? > C:\O1.TXT;C:\WC2 !help
+irq|vx4|WIN /3;C:\WC2 !irq
 krnl|-|WIN /3 /B > C:\O1.TXT;C:\WC2 !krnl
 '
 
@@ -65,6 +66,7 @@ run_one() {   # run_one DIR OPTIONS COMMANDS
         spy) mv "$d/c/WINDOWS/SYSTEM/WIN386.EXE" "$d/c/WINDOWS/SYSTEM/WIN386.EX_"
              cp "$dos/WC3.COM" "$d/c/WINDOWS/SYSTEM/WIN386.EXE" ;;
         vx1) cp "$dos/VX1.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
+        vx4) cp "$dos/VX4.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
         mem=*) mem=${o#mem=} ;;
         cpu=*) cpu=${o#cpu=} ;;
         nohimem) xms=false ;;
@@ -79,8 +81,8 @@ run_one() {   # run_one DIR OPTIONS COMMANDS
         printf '[dos]\nxms=%s\nems=%s\n' "$xms" "$ems"
         printf '[mixer]\nnosound=true\n[speaker]\npcspeaker=false\n'
         printf '[log]\nlogfile=%s/trace.log\n' "$d"
-        printf '[serial]\nserial1=file file:%s/com1.txt\n' "$d"     # w16's VMM traces here
         for c in ${VXOBS_LOG:-}; do printf '%s=true\n' "$c"; done   # e.g. "files exec"
+        printf '[serial]\nserial1=file file:%s/com1.txt\n' "$d"     # w16's VMM traces here
         printf '[autoexec]\nmount c "%s/c"\nc:\ncd \\WINDOWS\nCLS\n' "$d"
         printf '%s\n' "$cmds" | tr ';' '\n'
         printf 'exit\n'
@@ -100,7 +102,7 @@ done
 wait
 for n in $names; do
     echo "======== $n"
-    for f in WC.LOG VX1.LOG; do
+    for f in WC.LOG VX1.LOG VX4.LOG; do
         [ -f "$work/$n/c/$f" ] && { echo "---- $f"; tr -d '\r' < "$work/$n/c/$f"; }
     done
     for o in "$work/$n"/c/O*.TXT; do
@@ -110,7 +112,7 @@ for n in $names; do
     done
     if [ -n "$outdir" ]; then
         mkdir -p "$outdir/$n"
-        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log "$work/$n"/com1.txt; do
+        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/VX4.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log "$work/$n"/com1.txt; do
             [ -f "$f" ] && cp "$f" "$outdir/$n/"
         done
     fi

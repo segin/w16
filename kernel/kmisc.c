@@ -168,16 +168,8 @@ u16 KAPI_ES SetErrorMode(u16 mode)
 /* GlobalPageLock / GlobalPageUnlock (191, 192): selector.c (as observed,
    tests/apps/tk17.c). GlobalWire/Fix and friends are in global.c. */
 
-/* KbdRst (KERNEL.123): Schulman: does nothing in Standard and 386
-   Enhanced mode. CVWBreak (205), Bunny_351 (351): nothing either. */
-void KAPI KbdRst(void)
-{
-}
-
-void KAPI CVWBreak(void)
-{
-}
-
+/* KbdRst (KERNEL.123), CVWBreak (205), DoSignal (139): khook.asm.
+   Bunny_351 (351): Schulman: nothing. */
 void KAPI Bunny351(void)
 {
 }
@@ -197,24 +189,33 @@ u32 KAPI FileCdr(u32 proc)
 }
 
 /* GetHeapSpaces (KERNEL.138): Schulman: for an hModule or hInstance, the
-   local heap's total (HIWORD) and free (LOWORD) bytes. */
+   local heap's total (HIWORD) and free (LOWORD) bytes. Observed on 3.1
+   (tests/apps/tk51.c, USER's heaps under KRNL286): "total" is the most
+   the heap could span, FFFFh less the offset of its information block
+   (word 6 of the segment: USER's DGROUP, pHeap AE4h: F51Bh; a heap in a
+   430h-byte block, pHeap 24h: FFDBh), and "free" is that less the bytes
+   in use. USER's GetFreeSystemResources computes its percentages from
+   these and divided by zero (overflow) with w16's first version, which
+   gave the heap's present span. */
 u32 KAPI GetHeapSpaces(u16 h)
 {
     module FAR *m = module_of(h);
-    u16 ad;
+    u16 ad, ph, total, used;
+    u32 sp;
     if (m && (h | 1) == (m->ne_sel | 1)) {
         ad = NE_HDR(m)->auto_data;
         if (!ad || ad > m->seg_count)
             return 0;
         h = m->seg[ad - 1].sel;
     }
-    return local_spaces(h | 1);
-}
-
-/* DoSignal (KERNEL.139): Schulman: KEYBOARD's Ctrl-Break, sent to the
-   focus window's task through its signal handler. TODO: nothing yet. */
-void KAPI DoSignal(void)
-{
+    h |= 1;
+    sp = local_spaces(h);
+    if (!sp)
+        return 0;
+    ph = *(u16 FAR *)MK_FP(h, 6);
+    total = 0xFFFF - ph;
+    used = (u16)(sp >> 16) - (u16)sp;
+    return ((u32)total << 16) | (u16)(total - used);
 }
 
 /* GetCurPID (KERNEL.157): Schulman: returns 0 in Windows 3.x. */
@@ -311,18 +312,18 @@ u16 KAPI IsRomModule(u16 h)
 }
 
 /* LogError (KERNEL.324), LogParamError (325): the debugging KERNEL
-   reports these; the retail one does nothing (Pietrek). */
-void KAPI LogError(u16 err, void FAR *info)
+   reports these; the retail one passes them on to the notification hook
+   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek).
+   Observed (tests/apps/tk50.c, KRNL286): AX and DX come back as they
+   went in; khook.asm's LOGERROR and LOGPARAMERROR keep them around these */
+void KAPI LogError_(u16 err, void FAR *info)
 {
-    (void)err;
-    (void)info;
+    th_logerror(err, info);
 }
 
-void KAPI LogParamError(u16 err, void FAR *proc, void FAR *param)
+void KAPI LogParamError_(u16 err, void FAR *proc, void FAR *param)
 {
-    (void)err;
-    (void)proc;
-    (void)param;
+    th_logparamerror(err, proc, param);
 }
 
 /* ---- pointer validation (KERNEL.334-337, 346, 347; SDK) ---- */
@@ -336,11 +337,6 @@ static u16 lar(u16 sel);
     "ok:" \
     parm [dx] value [ax] modify exact [ax];
 
-static u16 lsl(u16 sel);
-#pragma aux lsl = \
-    "xor ax, ax" \
-    "lsl ax, dx" \
-    parm [dx] value [ax] modify exact [ax];
 
 /* access rights byte (LAR's bits 8-15), 0 if not accessible */
 static u8 rights(u16 sel)
@@ -362,7 +358,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     }
     if (n == 0)
         return 1;
-    return off + n - 1 <= lsl(sel);     /* UNVERIFIED: expand-down */
+    return off + n - 1 <= sel_lim16(sel);     /* UNVERIFIED: expand-down */
 }
 
 u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
@@ -378,7 +374,7 @@ u16 KAPI IsBadWritePtr(void FAR *p, u16 n)
 u16 KAPI IsBadCodePtr(void FAR *p)
 {
     u8 ar = rights(FP_SEG(p));
-    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= lsl(FP_SEG(p)));
+    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= sel_lim16(FP_SEG(p)));
 }
 
 u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
@@ -386,7 +382,7 @@ u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
     u16 sel = FP_SEG(p), off = FP_OFF(p), lim, i;
     if (!range_ok(sel, off, 1, 0))
         return 1;
-    lim = lsl(sel);
+    lim = sel_lim16(sel);
     for (i = 0; i < max; i++) {
         if ((u32)off + i > lim)
             return 1;

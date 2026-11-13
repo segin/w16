@@ -1,0 +1,31 @@
+; no title: double-click, hit test, double-click on the caption area
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+post 0203 0 40:40
+freeze 10:09:30.50 1500
+snap C:\N1.BMP
+dump
+send 0084 0 64:64
+send 0084 0 0:0
+send 0084 0 2:2
+send 0084 0 E0:70
+post 00A3 2 40:40
+freeze 10:09:30.50 1500
+snap C:\N2.BMP
+dump
+send 0084 0 64:64
+post 0203 0 40:40
+freeze 10:09:30.50 1500
+dump
+post 0203 0 40:40
+freeze 10:09:30.50 1500
+dump
+post 00A3 2 40:40
+freeze 10:09:30.50 1500
+dump
+post 00A3 2 40:40
+freeze 10:09:30.50 1500
+dump
+close
+wait 1000

@@ -1,0 +1,16 @@
+;restrict EditLevel=4
+;restrict NoClose=1
+run C:\PROGMAN.EXE
+wait 4000
+; File > Properties: everything disabled but Cancel and Help (EditLevel=4)
+cmd 105
+wait 1000
+snap C:\PROPS.DDB
+key 1B
+wait 500
+; File > Exit and Close: nothing (NoClose); Windows still ends at the end
+cmd 107
+wait 1000
+close
+wait 1000
+snap C:\NOCLOSE.DDB

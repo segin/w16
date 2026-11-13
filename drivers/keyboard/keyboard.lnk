@@ -1,0 +1,41 @@
+# wlink directives for w16's KEYBOARD.DRV (drivers/keyboard/). Object file
+# and output name come from the Makefile. Module name and ordinals as
+# Windows 3.1's KEYBOARD.DRV has them (its NE export table,
+# docs/exports/KEYBOARD.txt). Everything is fixed: INT 9 can come at any
+# time. KBTAB, the table segment, holds GetTableSeg and nothing else
+# exported (KB1: on Windows 3.1, GetTableSeg's own segment, alone).
+format windows dll
+option modname=KEYBOARD
+option description 'w16 keyboard driver (US)'
+option start=libentry
+option quiet
+option map
+option packcode=0
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRE.1
+export ENABLE.2
+export DISABLE.3
+export TOASCII.4
+export ANSITOOEM.5
+export OEMTOANSI.6
+export SETSPEED.7
+export WEP.8 resident
+export SCREENSWITCHENABLE.100
+export GETTABLESEG.126
+export NEWTABLE.127
+export OEMKEYSCAN.128
+export VKKEYSCAN.129
+export GETKEYBOARDTYPE.130
+export MAPVIRTUALKEY.131
+export GETKBCODEPAGE.132
+export GETKEYNAMETEXT.133
+export ANSITOOEMBUFF.134
+export OEMTOANSIBUFF.135
+export ENABLEKBSYSREQ.136
+export GETBIOSKEYPROC.137
+import GETPRIVATEPROFILEINT KERNEL.127
+import __0040H KERNEL.193
+import __AHINCR KERNEL.114
+import DOSIGNAL KERNEL.139
+import CVWBREAK KERNEL.205

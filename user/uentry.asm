@@ -4,13 +4,25 @@
 ; libentry: KERNEL calls a DLL's entry point with DI = hInstance, CX = the
 ;   local heap size, DS = its data segment, ES:SI = the command line (TK5,
 ;   ARCHITECTURE.md 9.2); USER makes its local heap and runs user_init.
-; call_wndproc: calls a window procedure with AX = the window's hInstance,
-;   as Windows does, so an exported procedure without a MakeProcInstance
-;   thunk finds its data segment (Pietrek, Windows Internals, ch. 4/7).
+; call_wndproc: calls a window procedure with AX = the window's hInstance
+;   and DS = ES = SS, as Windows does (Pietrek, Windows Internals, ch. 7:
+;   DispatchMessage and SendMessage), so an exported procedure without a
+;   MakeProcInstance thunk, or one with no prologue at all (w16's
+;   WINOLDAP, compiled -zWs), finds its data segment. USER's own class
+;   procedures are __loadds.
 ; keybd_event_entry / mouse_event_entry: the event procedures USER gives
 ;   the keyboard and mouse drivers (KEYBOARD.Enable, MOUSE.Enable); their
 ;   arguments come in registers (Windows 3.1 DDK, keyboard and mouse driver
 ;   interfaces), at interrupt time; every register is kept.
+; lh_alloc, lh_realloc, lh_free, lh_size: KERNEL's LocalAlloc, LocalReAlloc,
+;   LocalFree and LocalSize on the local heap in another segment (the menu
+;   heaps, menu.c): DS is that segment for the call (the Local* functions
+;   work on the caller's DS, 3.1 SDK) and USER's own again afterwards.
+;   Never at interrupt time.
+; at_init, at_add, at_find, at_delete, at_name: KERNEL's InitAtomTable,
+;   AddAtom, FindAtom, DeleteAtom and GetAtomName on the atom table of the
+;   local heap in another segment (the global atom table's heap, uheap.c),
+;   the same way. Never at interrupt time.
         bits 16
         cpu 286
 
@@ -27,6 +39,8 @@ segment _NULL
 segment UENTRY_TEXT public align=16 class=CODE use16
 
 extern LOCALINIT                ; KERNEL.4
+extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE
+extern INITATOMTABLE, ADDATOM, FINDATOM, DELETEATOM, GETATOMNAME
 extern _user_init               ; int __cdecl user_init(WORD hinst) (C, far)
 extern KBD_EVENT                ; void far pascal kbd_event(ax, bx, si, di)
 extern MOUSE_EVENT_C            ; void far pascal mouse_event_c(ax, bx, cx, dx, si, di)
@@ -68,6 +82,12 @@ _call_wndproc:
         push word [bp+20]       ; lParam high
         push word [bp+18]       ; lParam low
         mov ax, [bp+10]
+        or ax, ax
+        jnz .ax
+        mov ax, ss              ; (a timer procedure: AX = SS)
+.ax:    mov dx, ss              ; DS = ES = SS: the calling task's data
+        mov ds, dx              ; segment, for a procedure that is not
+        mov es, dx              ; exported properly (Pietrek ch. 7)
         call far [bp+6]
         pop ds
         pop di
@@ -111,6 +131,142 @@ MOUSE_EVENT:
         pop ds
         popa
         popf
+        retf
+
+; WORD __far __cdecl lh_alloc(WORD sel, UINT flags, UINT size)
+global _lh_alloc
+_lh_alloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; flags
+        push word [bp+10]       ; size
+        call far LOCALALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_realloc(WORD sel, WORD h, UINT size, UINT flags)
+global _lh_realloc
+_lh_realloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; h
+        push word [bp+10]       ; size
+        push word [bp+12]       ; flags
+        call far LOCALREALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_free(WORD sel, WORD h)
+global _lh_free
+_lh_free:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALFREE
+        pop ds
+        pop bp
+        retf
+
+; UINT __far __cdecl lh_size(WORD sel, WORD h)
+global _lh_size
+_lh_size:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALSIZE
+        pop ds
+        pop bp
+        retf
+
+; BOOL __far __cdecl at_init(WORD sel, int n)
+global _at_init
+_at_init:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far INITATOMTABLE
+        pop ds
+        pop bp
+        retf
+
+; ATOM __far __cdecl at_add(WORD sel, LPCSTR s) (and at_find)
+global _at_add
+_at_add:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+10]       ; s (segment)
+        push word [bp+8]        ; s (offset)
+        call far ADDATOM
+        pop ds
+        pop bp
+        retf
+
+global _at_find
+_at_find:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+10]
+        push word [bp+8]
+        call far FINDATOM
+        pop ds
+        pop bp
+        retf
+
+; ATOM __far __cdecl at_delete(WORD sel, ATOM a)
+global _at_delete
+_at_delete:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far DELETEATOM
+        pop ds
+        pop bp
+        retf
+
+; UINT __far __cdecl at_name(WORD sel, ATOM a, LPSTR buf, int n)
+global _at_name
+_at_name:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; atom
+        push word [bp+12]       ; buf (segment)
+        push word [bp+10]       ; buf (offset)
+        push word [bp+14]       ; n
+        call far GETATOMNAME
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl seg_limit(WORD sel): the segment's limit (LSL), 0 if
+; the selector is not one this privilege level may read
+global _seg_limit
+_seg_limit:
+        push bp
+        mov bp, sp
+        lsl ax, [bp+6]
+        jz .ok
+        xor ax, ax
+.ok:    pop bp
         retf
 
 ; the compiler's 32-bit helpers (no C run-time is linked), as in shell/start.asm

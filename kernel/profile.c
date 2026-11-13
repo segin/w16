@@ -117,16 +117,23 @@ static void normalise(pcache *pc)
 
 /* The full path of profile `file`: the Windows directory if it has no
    path. 0 if the name is not valid. */
+/* in KERNEL's data, not on the caller's stack: these paths made
+   OpenFile, the profiles and AddAtom take 600-900 bytes of it (KERNEL
+   audit #16); KERNEL does not yield in them, and none calls itself */
+static char rs_tmp[160], cf_win[128], api_path[128];
+
 static int resolve(const char FAR *file, char *path)
 {
-    char tmp[160];
+    char *tmp = rs_tmp;
     u16 n, err;
     if (file_has_path(file))
         return file_canon(file, path, &err);
     n = GetWindowsDirectory(tmp, 128);
+    if (n >= 128)                       /* did not fit: tmp not set */
+        return 0;
     if (n && tmp[n - 1] != '\\')
         tmp[n++] = '\\';
-    while (*file && n < sizeof tmp - 1)
+    while (*file && n < sizeof rs_tmp - 1)
         tmp[n++] = *file++;
     tmp[n] = 0;
     return file_canon(tmp, path, &err);
@@ -144,18 +151,23 @@ static int same_path(const char *a, const char *b)
 /* the cache for a private profile: WIN.INI has its own */
 static pcache *cache_for(const char *path)
 {
-    char w[128];
+    char *w = cf_win;
     if (resolve("WIN.INI", w) && same_path(w, path))
         return &win_ini;
     return &priv_ini;
 }
 
-/* Make pc hold `path`. Returns 1 if the file exists; else the cache is
-   empty (and pc->path set, for a write that creates the file). */
+/* Make pc hold `path`. Returns 1 if the file exists; 0 if not (the cache
+   empty and pc->path set, for a write that creates the file); -1 if it
+   exists but could not be read (no memory, a read error): the cache is
+   empty and its path cleared, so that no write goes to a file whose
+   copy is not there (a write after such a failure used to flush an
+   empty copy to the previous file's path, WIN.INI's for one; KERNEL
+   audit #9). */
 static int load(pcache *pc, const char *path)
 {
     u16 fh, err, sel;
-    u32 size;
+    u32 size, got;
 
     fh = dos_open(path, 0, &err);
     if (fh == HFILE_ERROR) {
@@ -176,12 +188,17 @@ static int load(pcache *pc, const char *path)
         pc->hnd = galloc(GMEM_FIXED_, size, 0, &sel);
         if (!pc->hnd) {
             dos_close(fh);
-            return 0;
+            pc->path[0] = 0;
+            return -1;
         }
         pc->sel = sel;
-        size = dos_rw(0x3F, fh, sel, 0, size);
-        if (size == 0xFFFFFFFFUL)
-            size = 0;
+        got = dos_rw(0x3F, fh, sel, 0, size);
+        if (got != size) {
+            dos_close(fh);
+            drop(pc);
+            pc->path[0] = 0;
+            return -1;
+        }
     }
     dos_close(fh);
     pc->len = size;
@@ -357,7 +374,7 @@ static int read_string(const char FAR *sec, const char FAR *key, const char FAR 
     line hdr, ln;
     u32 eq;
 
-    if (sec && load(pc, path) && find_section(pc, trimmed(sec, 1), &hdr)) {
+    if (sec && load(pc, path) > 0 && find_section(pc, trimmed(sec, 1), &hdr)) {
         if (!key)
             return put_keys(pc, &hdr, buf, cap);
         if (find_key(pc, &hdr, trimmed(key, 1), &ln, &eq))
@@ -409,7 +426,7 @@ static u16 read_int(const char FAR *sec, const char FAR *key, u16 def,
 {
     line hdr, ln;
     u32 eq;
-    if (sec && key && load(pc, path) && find_section(pc, trimmed(sec, 1), &hdr) &&
+    if (sec && key && load(pc, path) > 0 && find_section(pc, trimmed(sec, 1), &hdr) &&
         find_key(pc, &hdr, trimmed(key, 1), &ln, &eq))
         return parse_int(pc, eq + 1, value_end(pc, eq, &ln));
     return def;
@@ -482,7 +499,8 @@ static int splice(pcache *pc, u32 a, u32 b, const piece *pcs, u16 np)
     return 1;
 }
 
-/* write the whole copy back; 0 if the file cannot be made */
+/* write the whole copy back; 0 if the file cannot be made or not all of
+   it was written (a full disk: the copy is dropped, to be read again) */
 static int flush_out(pcache *pc)
 {
     u16 err, fh = dos_create(pc->path, 0, &err);
@@ -490,8 +508,11 @@ static int flush_out(pcache *pc)
         drop(pc);
         return 0;
     }
-    if (pc->len)
-        dos_rw(0x40, fh, pc->sel, 0, pc->len);
+    if (pc->len && dos_rw(0x40, fh, pc->sel, 0, pc->len) != pc->len) {
+        dos_close(fh);
+        drop(pc);
+        return 0;
+    }
     dos_close(fh);
     pc->valid = 1;
     return 1;
@@ -524,7 +545,8 @@ static int write_string(const char FAR *sec, const char FAR *key, const char FAR
 
     if (!sec)
         return 0;               /* UNVERIFIED: 3.1 wrote a garbage section */
-    load(pc, path);
+    if (load(pc, path) < 0)
+        return 0;
     /* observed: a written section or key loses trailing blanks only */
     s = trimmed(sec, 0);
     if (find_section(pc, s, &hdr)) {
@@ -602,7 +624,7 @@ static int win_ini_path(char *path)
 
 u16 KAPI GetProfileInt(const char FAR *sec, const char FAR *key, u16 def)  /* KERNEL.57 */
 {
-    char path[128];
+    char *path = api_path;
     if (!win_ini_path(path))
         return def;
     return read_int(sec, key, def, path, &win_ini);
@@ -611,7 +633,7 @@ u16 KAPI GetProfileInt(const char FAR *sec, const char FAR *key, u16 def)  /* KE
 int KAPI GetProfileString(const char FAR *sec, const char FAR *key,
                           const char FAR *def, char FAR *buf, int n)  /* KERNEL.58 */
 {
-    char path[128];
+    char *path = api_path;
     if (!win_ini_path(path))
         return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
     return read_string(sec, key, def, buf, n, path, &win_ini);
@@ -620,7 +642,7 @@ int KAPI GetProfileString(const char FAR *sec, const char FAR *key,
 u16 KAPI WriteProfileString(const char FAR *sec, const char FAR *key,
                             const char FAR *val)                /* KERNEL.59 */
 {
-    char path[128];
+    char *path = api_path;
     if (!sec && !key && !val) {         /* observed: returns 0 */
         drop(&win_ini);
         return 0;
@@ -633,7 +655,7 @@ u16 KAPI WriteProfileString(const char FAR *sec, const char FAR *key,
 u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
                               const char FAR *file)             /* KERNEL.127 */
 {
-    char path[128];
+    char *path = api_path;
     if (!file || !resolve(file, path))
         return def;
     return read_int(sec, key, def, path, cache_for(path));
@@ -643,7 +665,7 @@ int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
                                  const char FAR *def, char FAR *buf, int n,
                                  const char FAR *file)          /* KERNEL.128 */
 {
-    char path[128];
+    char *path = api_path;
     if (!file || !resolve(file, path))
         return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
     return read_string(sec, key, def, buf, n, path, cache_for(path));
@@ -653,7 +675,7 @@ u16 KAPI WritePrivateProfileString(const char FAR *sec, const char FAR *key,
                                    const char FAR *val,
                                    const char FAR *file)        /* KERNEL.129 */
 {
-    char path[128];
+    char *path = api_path;
     if (!sec && !key && !val) {         /* observed: returns 0 */
         drop(&priv_ini);
         return 0;

@@ -1,0 +1,24 @@
+; real input after the boot: a click to give DOSBox the mouse, the File
+; menu clicked, the Help menu by keyboard, the pointer moved
+; (tests/boottest.sh case allw16input: the screens must change)
+; Shots wait for the screen to have held still as long as the old
+; sleep before them (settle 20 S), not a fixed time
+click 1
+sleep 1
+home
+move 20 20
+click 1
+settle 20 1.5
+shot 01-menu
+key Escape
+key Escape
+sleep 1
+key alt+h
+settle 20 1.5
+shot 02-help
+key Escape
+key Escape
+home
+move 150 100
+settle 20 1
+shot 03-moved

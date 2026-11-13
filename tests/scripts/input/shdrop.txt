@@ -1,0 +1,42 @@
+; File Manager drag and drop onto Program Manager under real input
+; (tests/inputrun.sh, tests/shellinput.sh): start File Manager from
+; Program Manager, make it narrower with the keyboard (Size from its
+; system menu), then drag a file of its directory pane into Program
+; Manager's group window with the mouse
+key alt+f
+key r
+sleep 4
+type winfile
+key Return
+sleep 10
+shot 01-winfile
+key alt+space
+sleep 1
+key s
+sleep 1
+key Right
+key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
+key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
+key Return
+sleep 2
+shot 02-narrow
+click 1
+sleep 1
+home
+move 135 106
+sleep 1
+shot 03-pointer
+down 1
+sleep 0.5
+move 5 2
+sleep 0.5
+move 10 2
+sleep 0.5
+move 15 3
+sleep 0.5
+move 15 3
+sleep 1
+shot 04-dragging
+up 1
+sleep 3
+shot 05-dropped

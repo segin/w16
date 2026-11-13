@@ -1,0 +1,28 @@
+; Set Font...: Courier New
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+cmd 3
+freeze 10:09:30.50 1500
+snap C:\F1.BMP
+dump
+type Courier New
+freeze 10:09:30.50 1500
+snap C:\F2.BMP
+key 0D
+wait 1000
+freeze 10:09:30.50 1500
+snap C:\F3.BMP
+cmd 3
+wait 1500
+key 1B
+wait 500
+cmd 1
+freeze 10:09:30.50 1500
+menu s
+freeze 10:09:30.50 800
+snap C:\MSET.BMP
+key 1B
+key 1B
+close
+wait 1000

@@ -161,13 +161,21 @@ static void make_gray(void)
 
 static void load_fonts(void)
 {
-    /* every value of WIN.INI [fonts], in file order */
-    static char keys[2048], val[80];
-    char *k;
-    GetProfileString("fonts", NULL, "", keys, sizeof keys);
+    /* every value of WIN.INI [fonts], in file order; the key list in a
+       block of its own while it is read (2K of DGROUP for good was most
+       of what made w16's USER's static data larger than 3.1's: US15) */
+    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, 2048 + 80);
+    char __far *keys, __far *val, __far *k;
+    if (!g)
+        return;
+    keys = (char __far *)GlobalLock(g);
+    val = keys + 2048;
+    GetProfileString("fonts", NULL, "", keys, 2048);
     for (k = keys; *k; k += lstr_len(k) + 1)
-        if (GetProfileString("fonts", k, "", val, sizeof val))
+        if (GetProfileString("fonts", k, "", val, 80))
             AddFontResource(val);
+    GlobalUnlock(g);
+    GlobalFree(g);
 }
 
 static BYTE kbinfo[16];
@@ -181,6 +189,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     hModUser = K_GETEXEPTR(hinst);
     ulog("USER init\r\n");
     InitAtomTable(37);                  /* UNVERIFIED size; atoms grow anyway */
+    uheaps_init();                      /* the global atom table's heap & co. */
 
     diag("INIT=Keyboard\r\n");
     KB_INQUIRE(kbinfo);
@@ -206,6 +215,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     timer_init();
     input_init();
     register_system_classes();
+    menu_heaps_init();
     diag("INITDONE=Display Resources\r\n");
 
     diag("INIT=Fonts\r\n");
@@ -236,7 +246,7 @@ void WINAPI FinalUserInit(void)
         /* SYSTEM.INI [boot] drivers=: loaded as libraries; UNVERIFIED that
            this is all 3.1 does (it sends them DRV_LOAD; US1 saw MMSYSTEM's
            DriverProc call DefDriverProc for message 1) */
-        static char list[128];
+        char list[128];
         char *p, *q;
         GetPrivateProfileString("boot", "drivers", "", list, sizeof list, "SYSTEM.INI");
         for (p = list; *p;) {
@@ -281,10 +291,41 @@ DWORD WINAPI GetDialogBaseUnits(void)
     return MAKELONG(cxSysChar, cySysChar);
 }
 
+/* a heap's percentage free, as GetFreeSystemResources counts it: the
+   free and total bytes GetHeapSpaces gives (the most the heap could span,
+   growth included), each in whole kilobytes, free * 100 / total */
+static UINT heap_percent(WORD h)
+{
+    DWORD s = h ? K_GETHEAPSPACES(h) : 0;
+    WORD total = HIWORD(s) >> 10;
+    return total ? (LOWORD(s) >> 10) * 100 / total : 0;     /* at most 6300 */
+}
+
+static UINT min_u(UINT a, UINT b)
+{
+    return a < b ? a : b;
+}
+
+/* GetFreeSystemResources (USER.284, 3.1 SDK): the percentage free of
+   USER's heaps (GFSR_USERRESOURCES, 2), of GDI's (GFSR_GDIRESOURCES, 1)
+   or the lower of the two (GFSR_SYSTEMRESOURCES, 0); USER's is the least
+   of its DGROUP's, the menu heap's and the menu-string heap's. Probe US14
+   on 3.1 fitted every value it saw, while menus, menu strings and
+   windows filled each heap in turn, to heap_percent's rule. */
 UINT WINAPI GetFreeSystemResources(UINT what)
 {
-    (void)what;
-    return 90;                  /* UNVERIFIED: a percentage; w16's heaps grow */
+    static HMODULE hgdi;
+    UINT user, gdi;
+    if (!hgdi)
+        hgdi = GetModuleHandle("GDI");
+    user = min_u(heap_percent((WORD)hInstUser),
+                 min_u(heap_percent(menu_heap_sel()), heap_percent(menu_str_heap_sel())));
+    gdi = heap_percent((WORD)hgdi);
+    if (what == GFSR_USERRESOURCES)
+        return user;
+    if (what == GFSR_GDIRESOURCES)
+        return gdi;
+    return what == GFSR_SYSTEMRESOURCES ? min_u(user, gdi) : 0;  /* US14: 0 for 3, FFFFh */
 }
 
 int WINAPI WEP(int n)

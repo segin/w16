@@ -496,9 +496,13 @@ static LPSTR serialize(group FAR *g, WORD *size)
         wr16(p, at + 4, 10);
         p[at + 6] = 'P'; p[at + 7] = 'M'; p[at + 8] = 'C'; p[at + 9] = 'C';
         at += 10;
-        for (i = 0; i < g->nz; i++) {   /* in slot order */
-            item FAR *u = g->z[i];
+        /* in data order (observed: items dropped together, which go on
+           top of the z-order in reverse, have their tags in the order of
+           their data) */
+        for (t = g->dfirst; t; t = t->dnext) {
+            item FAR *u = t;
             WORD k;
+            i = zindex(g, u);
             copy(p + at, u->tags, u->cbtags);
             for (k = 0; k < u->cbtags; k += rd16(p, at + k + 4)) {
                 wr16(p, at + k + 2, i);
@@ -669,6 +673,7 @@ HWND group_load(const char FAR *grpfile, int ininum)
        to the bottom), so loading in Order= sequence rebuilds the saved
        z-order */
     SetWindowPos(g->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    group_rescroll(g->hwnd);
     return g->hwnd;
 }
 
@@ -846,6 +851,10 @@ static void title_rect(HDC dc, item FAR *t, RECT *r)
         SelectObject(dc, old);
 }
 
+#ifndef W16_WIN2
+static BOOL dragging_item(HWND hwnd, item FAR *t);
+#endif
+
 static void paint(HWND hwnd, group FAR *g)
 {
     PAINTSTRUCT ps;
@@ -861,6 +870,10 @@ static void paint(HWND hwnd, group FAR *g)
         item FAR *t = g->z[i];
         RECT r;
         BOOL hi = active && t == g->sel;
+#ifndef W16_WIN2
+        if (dragging_item(hwnd, t))
+            continue;
+#endif
         DrawIcon(dc, t->x + ICON_DX, t->y + ICON_DY, t->hicon);
         title_rect(dc, t, &r);
         SetBkMode(dc, hi ? OPAQUE : TRANSPARENT);
@@ -998,33 +1011,166 @@ static int grid_cols(HWND hwnd)
     return cols < 1 ? 1 : cols;
 }
 
-/* Arrange Icons: the observed grid, as many columns as fit. */
+/* Scroll bars: a group whose items reach outside its client area gets a
+   bar for that direction, its range from the items' extent less the
+   client area, at position 0 (Windows 3.1: Accessories, 416 x 202, its
+   third row cut off, shows a vertical bar with the thumb at the top and
+   no horizontal one; w16 showed none). Scrolling moves the items, as
+   USER's ScrollChildren moves MDI children; the range is worked out
+   again when it ends. UNVERIFIED: the range's exact ends, the step of
+   the arrows (8 pixels here) and of a page (the client area). */
+static BOOL in_rescroll;
+
+void group_rescroll(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    RECT c, u, r;
+    HDC dc;
+    WORD i;
+    int bar;
+    if (!g || IsIconic(hwnd) || in_rescroll)
+        return;
+    in_rescroll = TRUE;
+    GetClientRect(hwnd, &c);
+    u = c;
+    dc = GetDC(hwnd);
+    for (i = 0; i < g->nz; i++) {
+        item FAR *t = g->z[i];
+        title_rect(dc, t, &r);
+        UnionRect(&u, &u, &r);
+        SetRect(&r, t->x + ICON_DX, t->y + ICON_DY, t->x + ICON_DX + 32, t->y + ICON_DY + 32);
+        UnionRect(&u, &u, &r);
+    }
+    ReleaseDC(hwnd, dc);
+    for (bar = SB_HORZ; bar <= SB_VERT; bar++) {
+        int lo = bar == SB_HORZ ? u.left : u.top;
+        int hi = bar == SB_HORZ ? u.right - c.right : u.bottom - c.bottom;
+        if (lo < 0 || hi > 0) {
+            SetScrollRange(hwnd, bar, lo, hi, FALSE);
+            SetScrollPos(hwnd, bar, 0, TRUE);
+        } else
+            SetScrollRange(hwnd, bar, 0, 0, TRUE);      /* hides it */
+    }
+    in_rescroll = FALSE;
+    /* a bar shown or hidden changed the client area: once more */
+    GetClientRect(hwnd, &r);
+    if (r.right != c.right || r.bottom != c.bottom)
+        group_rescroll(hwnd);
+}
+
+static void group_scroll(HWND hwnd, int bar, WPARAM code, int thumb)
+{
+    group FAR *g = grp_of(hwnd);
+    int lo, hi, pos, np, d;
+    RECT c;
+    WORD i;
+    if (!g)
+        return;
+    GetScrollRange(hwnd, bar, &lo, &hi);
+    pos = GetScrollPos(hwnd, bar);
+    GetClientRect(hwnd, &c);
+    switch (code) {
+    case SB_LINEUP:        np = pos - 8; break;
+    case SB_LINEDOWN:      np = pos + 8; break;
+    case SB_PAGEUP:        np = pos - (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_PAGEDOWN:      np = pos + (bar == SB_VERT ? c.bottom : c.right); break;
+    case SB_TOP:           np = lo; break;
+    case SB_BOTTOM:        np = hi; break;
+    case SB_THUMBPOSITION: np = thumb; break;
+    case SB_ENDSCROLL:     group_rescroll(hwnd); return;
+    default:               return;
+    }
+    if (np < lo)
+        np = lo;
+    if (np > hi)
+        np = hi;
+    d = np - pos;
+    if (!d)
+        return;
+    for (i = 0; i < g->nz; i++) {
+        if (bar == SB_HORZ)
+            g->z[i]->x -= d;
+        else
+            g->z[i]->y -= d;
+    }
+    SetScrollPos(hwnd, bar, np, TRUE);
+    ScrollWindow(hwnd, bar == SB_HORZ ? -d : 0, bar == SB_VERT ? -d : 0, NULL, NULL);
+    UpdateWindow(hwnd);
+}
+
+/* Arrange Icons: the observed grid, as many columns as fit. The items
+   keep their reading order: observed with Auto Arrange on, an item
+   dropped at (14,7) came before one at (21,0), and one dropped at
+   (364,112) after every item of the row at 72. Taken here as rows of
+   the grid's height (y / CY_SPACING), then x; items that tie keep their
+   data order. UNVERIFIED beyond those cases. */
+static int band(int y)
+{
+    return y >= 0 ? y / CY_SPACING : -((CY_SPACING - 1 - y) / CY_SPACING);
+}
+
+static BOOL before(item FAR *a, item FAR *b)
+{
+    int ra = band(a->y), rb = band(b->y);
+    return ra < rb || (ra == rb && a->x < b->x);
+}
+
 void group_arrange(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     item FAR *t;
-    int cols, i = 0;
+    item FAR * FAR *v;
+    WORD n = 0, i, j;
+    int cols;
     if (!g)
         return;
     cols = grid_cols(hwnd);
-    for (t = g->dfirst; t; t = t->dnext, i++) {
-        t->x = X_FIRST + (i % cols) * CX_SPACING;
-        t->y = (i / cols) * CY_SPACING;
+    for (t = g->dfirst; t; t = t->dnext)
+        n++;
+    v = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
+    if (!v)
+        return;
+    for (i = 0, t = g->dfirst; t; t = t->dnext) {   /* stable insertion sort */
+        for (j = i; j > 0 && before(t, v[j - 1]); j--)
+            v[j] = v[j - 1];
+        v[j] = t;
+        i++;
     }
+    for (i = 0; i < n; i++) {
+        v[i]->x = X_FIRST + (i % cols) * CX_SPACING;
+        v[i]->y = (i / cols) * CY_SPACING;
+    }
+    mem_free((LPSTR)v);
     InvalidateRect(hwnd, NULL, TRUE);
+    group_rescroll(hwnd);
 }
 
-/* The first grid cell, in reading order, that no item occupies
-   (observed: the first item of an empty group goes to (21, 0)). */
+/* The first free grid cell in reading order. Observed (items dropped
+   from File Manager): a cell is taken when any item's own cell-sized
+   rectangle (CX_SPACING x CY_SPACING from its position) overlaps it, so
+   an item off the grid blocks the cells it straddles; and the grid
+   starts at the smallest x and y of the items (an item at x=14 put the
+   next one at x=314 rather than 321). An empty group starts at
+   (X_FIRST, 0) (observed). UNVERIFIED: whether File > New places items
+   the same way (it does for groups on the grid, where both agree). */
 static void free_cell(HWND hwnd, group FAR *g, int FAR *x, int FAR *y)
 {
-    int cols = grid_cols(hwnd), cell;
+    int cols = grid_cols(hwnd), cell, x0 = X_FIRST, y0 = 0;
+    WORD i;
+    for (i = 0; i < g->nz; i++) {
+        if (!i || g->z[i]->x < x0)
+            x0 = g->z[i]->x;
+        if (!i || g->z[i]->y < y0)
+            y0 = g->z[i]->y;
+    }
     for (cell = 0;; cell++) {
-        int cx = X_FIRST + (cell % cols) * CX_SPACING, cy = (cell / cols) * CY_SPACING;
-        WORD i;
-        for (i = 0; i < g->nz; i++)
-            if (g->z[i]->x == cx && g->z[i]->y == cy)
+        int cx = x0 + (cell % cols) * CX_SPACING, cy = y0 + (cell / cols) * CY_SPACING;
+        for (i = 0; i < g->nz; i++) {
+            item FAR *t = g->z[i];
+            if (t->x < cx + CX_SPACING && cx < t->x + CX_SPACING &&
+                t->y < cy + CY_SPACING && cy < t->y + CY_SPACING)
                 break;
+        }
         if (i == g->nz) {
             *x = cx;
             *y = cy;
@@ -1432,6 +1578,7 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
     if (g_autoarrange)
         group_arrange(hwnd);
     invalidate_item(hwnd, t);
+    group_rescroll(hwnd);
     return TRUE;
 }
 
@@ -1525,12 +1672,13 @@ static void remove_item(HWND hwnd, group FAR *g, item FAR *t)
     if (g->sel == t)
         g->sel = g->nz ? g->z[0] : NULL;
     invalidate_item(hwnd, g->sel);
+    group_rescroll(hwnd);
 }
 
 /* File > Move and File > Copy (observed): the item arrives in `to` on top
    of the z-order, in the first free grid cell, its data at the end, and
    is selected there; Move then removes it from `from`. */
-BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
+static BOOL transfer(HWND from, HWND to, BOOL copy_only, const POINT *at)
 {
     group FAR *src = grp_of(from), FAR *dst = grp_of(to);
     item FAR *t, FAR *u;
@@ -1541,7 +1689,11 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     u = clone_item(t);
     if (!u)
         return FALSE;
-    free_cell(to, dst, &u->x, &u->y);
+    if (at) {
+        u->x = at->x;
+        u->y = at->y;
+    } else
+        free_cell(to, dst, &u->x, &u->y);
     for (k = dst->nz; k > 0; k--)
         dst->z[k] = dst->z[k - 1];
     dst->z[0] = u;
@@ -1557,12 +1709,107 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
     if (g_autoarrange)
         group_arrange(to);
     invalidate_item(to, u);
+    group_rescroll(to);
     if (copy_only)
         return TRUE;
     remove_item(from, src, t);
     free_item(t);
     return write_group(src);
 }
+
+BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
+{
+    return transfer(from, to, copy_only, NULL);
+}
+
+#ifndef W16_WIN2
+/* ---- dragging items (3.x) ----
+   As Windows 3.1's Program Manager does it (observed through USER's
+   exports, real mouse input): a press on an item notes a square around
+   the point, 2 pixels each way (half SM_CXDOUBLECLK/SM_CYDOUBLECLK); a
+   move with the button down out of it starts USER's DragObject(MDI
+   client, the group, 1, ...) with the item's icon as the cursor; Ctrl
+   held copies. The groups answer WM_QUERYDROPOBJECT for such a drag and
+   take WM_DROPOBJECT: the item moves (or is copied) with its icon
+   centred on the drop point, in the same group or another; while it is
+   dragged it is not drawn in its place. DragObject's result is 1.
+   UNVERIFIED: the copy rule's key test and the exact place in another
+   group; Program Manager's own block arguments (its item and group) are
+   kept here instead. */
+extern DWORD FAR PASCAL DragObject(HWND, HWND, WORD, WORD, WORD, HCURSOR);
+
+static RECT drag_rc;            /* the square of the last press */
+static POINT drag_from;         /* the press, in the group's client area */
+static HWND drag_src;           /* the group a drag of ours comes from */
+static BOOL drag_copy;
+
+/* the item a drag of ours takes: not drawn in its group meanwhile (3.1) */
+static BOOL dragging_item(HWND hwnd, item FAR *t)
+{
+    group FAR *g = grp_of(hwnd);
+    return drag_src == hwnd && g && t == g->sel;
+}
+
+static void drag_press(HWND hwnd, int x, int y)
+{
+    drag_from.x = x;
+    drag_from.y = y;
+    SetRect(&drag_rc, x, y, x, y);
+    InflateRect(&drag_rc, GetSystemMetrics(SM_CXDOUBLECLK) / 2, GetSystemMetrics(SM_CYDOUBLECLK) / 2);
+    (void)hwnd;
+}
+
+static void drag_move(HWND hwnd, group FAR *g, int x, int y)
+{
+    POINT p;
+    p.x = x;
+    p.y = y;
+    if (IsRectEmpty(&drag_rc) || PtInRect(&drag_rc, p) || !g->sel)
+        return;
+    SetRectEmpty(&drag_rc);
+    drag_copy = GetKeyState(VK_CONTROL) < 0;
+    drag_src = hwnd;
+    invalidate_item(hwnd, g->sel);
+    UpdateWindow(hwnd);
+    DragObject(g_client, hwnd, 1, 0, 0, g->sel->hicon);
+    drag_src = NULL;
+    if (g->sel)
+        invalidate_item(hwnd, g->sel);
+}
+
+/* WM_DROPOBJECT of one of our drags on group hwnd: lp the DRAGINFO
+   (USER's block: x, y in our client area at words 5 and 6) */
+static LRESULT drag_drop(HWND hwnd, group FAR *g, LPARAM lp)
+{
+    const int FAR *info = (const int FAR *)lp;
+    POINT at;
+    group FAR *src = grp_of(drag_src);
+    item FAR *t;
+    if (!src || !src->sel)
+        return 0;
+    t = src->sel;
+    /* the icon centred on the drop point (3.1: Read Me dropped at
+       294,138 has its icon's square at 276,120, 36 pixels wide) */
+    at.x = info[5] - GetSystemMetrics(SM_CXICON) / 2 - ICON_DX;
+    at.y = info[6] - GetSystemMetrics(SM_CYICON) / 2 - ICON_DY;
+    if (hwnd == drag_src) {
+        if (drag_copy)
+            transfer(drag_src, hwnd, TRUE, &at);
+        else {
+            invalidate_item(hwnd, t);
+            t->x = at.x;
+            t->y = at.y;
+            write_group(g);
+            if (g_autoarrange)
+                group_arrange(hwnd);
+            invalidate_item(hwnd, t);
+            group_rescroll(hwnd);
+        }
+    } else
+        transfer(drag_src, hwnd, drag_copy, &at);
+    return 1;
+}
+#endif
 
 /* Start every item of the group, as Windows does with StartUp. Each
    item runs as its Properties say (working directory, Run Minimized).
@@ -1758,6 +2005,221 @@ BOOL group_delete_selected(HWND hwnd)
     return write_group(g);
 }
 
+#ifndef W16_WIN2
+/* ---- files dropped from File Manager (WM_DROPFILES) ----
+ * Observed on Windows 3.1 (tests/scripts/pm/dragdrop*.txt; files dragged
+ * from WINFILE.EXE with journalled mouse input):
+ * - Group windows accept files (WS_EX_ACCEPTFILES), over their client
+ *   and non-client areas and when minimized; the frame and the MDI
+ *   client do not (File Manager shows its no-drop cursor there).
+ * - Each file becomes an item: description = the file name without its
+ *   extension, first letter capital, the rest small ("Notepad",
+ *   "Readme"); command line = the full path as dropped, with the
+ *   file's directory as working directory (stored as Program Item
+ *   Properties stores it: C:\PMDROP\NOTEPAD.EXE plus tag 8101h
+ *   "C:\PMDROP\").
+ * - Icon: SHELL's ExtractAssociatedIcon. A program's own first icon
+ *   (path, 0); a document's associated program as WIN.INI names it
+ *   ("notepad.exe", 0); for a file without an icon of its own (a DOS
+ *   program, .COM, .BAT, .PIF) SHELL answers with Program Manager's own
+ *   file and an index (1, or 6 for a .PIF): the item keeps the dropped
+ *   file as icon path with that index, and the bits of our icon there.
+ * - A document with no association: a box "Invalid Path", "There is no
+ *   association for <path>." (OK, Cancel - the default -; exclamation
+ *   icon). Cancel leaves it out; OK adds it with no icon file ("") and
+ *   Program Manager's icon 6 (an empty window).
+ * - One file dropped on the client area goes where it was dropped: its
+ *   icon centred on the point (item position = point - 18, 18). That
+ *   includes a minimized group, whose client area is its icon (dropped at
+ *   the icon's (22,16): item at (4,-2)). Several files, or a drop on the
+ *   caption, go to the next free grid cells (free_cell), in the order
+ *   File Manager lists them.
+ * - Each new item goes on top of the z-order (the last one selected) and
+ *   its data at the end of the file. The file is written after the drop
+ *   with the new items in the last slots, in drop order; with Save
+ *   Settings on Exit it is written again on exit, in the z-order (new
+ *   items first). UNVERIFIED: when exactly the first write happens (a
+ *   copy taken two seconds after a drop, File Manager still active, was
+ *   unchanged; once Program Manager had been activated it was written).
+ * - With Auto Arrange the group is arranged afterwards.
+ * - Neither EditLevel nor NoFileMenu stops a drop (observed).
+ * - The original stops at 50 items per group (a drop of 50 files on Main
+ *   left 50 items; its message was not seen: the test harness stalls on
+ *   it). w16 has no such limit (Zero-One-Infinity).
+ * - Program Manager is not activated by a drop. */
+
+typedef HICON (FAR PASCAL *EXTRACTASSOC)(HINSTANCE, LPSTR, UINT FAR *);
+
+/* The icon for a dropped file as ExtractAssociatedIcon answers (see
+   above). Fills t->iconpath, iicon and the bits; FALSE if SHELL has no
+   answer (the caller then falls back to choose_icon). */
+static BOOL dropped_icon(item FAR *t, const char FAR *file)
+{
+    static EXTRACTASSOC fn;
+    char own[144];                      /* DOS paths: OFSTRUCT's own bound */
+    LPSTR buf;
+    UINT index = 0;
+    HICON h;
+    BOOL ok;
+    int n = s_len(file);
+    if (!fn) {
+        HMODULE shell = GetModuleHandle("SHELL");
+        if (shell)
+            fn = (EXTRACTASSOC)GetProcAddress(shell, "ExtractAssociatedIcon");
+        if (!fn)
+            return FALSE;
+    }
+    /* SHELL may write a path of its own (an associated program's) */
+    buf = mem_alloc(n + 260);
+    if (!buf)
+        return FALSE;
+    s_cpy(buf, file, n + 1);
+    h = fn(g_hinst, buf, &index);
+    if (!h) {
+        mem_free(buf);
+        return FALSE;
+    }
+    ok = icon_bits(t, h);
+    DestroyIcon(h);
+    if (GetModuleFileName(g_hinst, own, sizeof own) && !s_icmp(buf, own))
+        s_cpy(buf, file, n + 1);        /* our own icon: the file's path */
+    t->iconpath = s_dup(buf);
+    t->iicon = index;
+    mem_free(buf);
+    if (!ok || !t->iconpath) {
+        mem_free(t->icon);
+        mem_free(t->iconpath);
+        t->icon = t->iconpath = NULL;
+        t->cbhdr = t->cband = t->cbxor = 0;
+        return FALSE;
+    }
+    make_icon(t);
+    return TRUE;
+}
+
+/* Add one dropped file to group g; at_point: put it at (x, y). */
+static BOOL drop_file(HWND hwnd, group FAR *g, LPSTR file, BOOL at_point, int x, int y)
+{
+    item FAR *t;
+    LPSTR desc, dir;
+    int n = s_len(file), d = dir_part(file, n), e, k;
+    char found[144];                    /* FindExecutable's: DOS paths */
+
+    BOOL noassoc = FALSE;
+
+    /* a document needs an association (observed message) */
+    if (!is_program(file) && (UINT)FindExecutable(file, NULL, found) <= 32) {
+        if (ask(g_frame, IDS_INVALIDPATH, IDS_NOASSOC, file,
+                MB_OKCANCEL | MB_ICONEXCLAMATION | MB_DEFBUTTON2) != IDOK)
+            return FALSE;
+        noassoc = TRUE;
+    }
+    if (!grow_slots(g))
+        return FALSE;
+    /* the description: the name without extension, "Capitalised" */
+    for (e = n; e > d && file[e - 1] != '.'; e--)
+        ;
+    if (e == d)
+        e = n + 1;
+    desc = mem_alloc(e - d);
+    dir = mem_alloc(d + 1);
+    t = (item FAR *)mem_alloc(sizeof(item));
+    if (!desc || !dir || !t) {
+        mem_free(desc);
+        mem_free(dir);
+        mem_free((LPSTR)t);
+        return FALSE;
+    }
+    s_cpy(desc, file + d, e - d);
+    AnsiLower(desc);
+    AnsiUpperBuff(desc, 1);
+    /* the working directory: without its last backslash, except a root */
+    s_cpy(dir, file, d + 1);
+    if (d > 1 && dir[d - 1] == '\\' && !(d == 3 && dir[1] == ':'))
+        dir[d - 1] = 0;
+    if (!set_fields(t, desc, file, dir, 0, FALSE)) {
+        mem_free(desc);
+        mem_free(dir);
+        free_item(t);
+        return FALSE;
+    }
+    mem_free(desc);
+    mem_free(dir);
+    if (noassoc) {                      /* observed: "" and our icon 6 */
+        t->iconpath = s_dup("");
+        t->iicon = 6;
+        fetch_bits(t, "PROGMAN.EXE", 6);
+        make_icon(t);
+    } else if (!dropped_icon(t, file)) {
+        choose_icon(t, file);
+    }
+    if (at_point) {
+        t->x = x;
+        t->y = y;
+    } else {
+        free_cell(hwnd, g, &t->x, &t->y);
+    }
+    for (k = g->nz; k > 0; k--)         /* on top of the z-order */
+        g->z[k] = g->z[k - 1];
+    g->z[0] = t;
+    g->nz++;
+    data_append(g, t);
+    invalidate_item(hwnd, g->sel);
+    g->sel = t;
+    invalidate_item(hwnd, t);
+    g->dirty = TRUE;
+    return TRUE;
+}
+
+/* Write g with the k newest items (z[0..k-1], newest first) in the last
+   slots, oldest first, as the original does after a drop. */
+static void write_dropped(group FAR *g, WORD k)
+{
+    item FAR * FAR *keep = (item FAR * FAR *)mem_alloc((DWORD)g->nz * sizeof(item FAR *));
+    WORD i;
+    if (!keep)
+        return;
+    for (i = 0; i < g->nz; i++)
+        keep[i] = g->z[i];
+    for (i = 0; i + k < g->nz; i++)
+        g->z[i] = keep[k + i];
+    for (i = 0; i < k; i++)
+        g->z[g->nz - k + i] = keep[k - 1 - i];
+    write_group(g);
+    for (i = 0; i < g->nz; i++)
+        g->z[i] = keep[i];
+    mem_free((LPSTR)keep);
+}
+
+static void drop_files(HWND hwnd, HDROP h)
+{
+    group FAR *g = grp_of(hwnd);
+    UINT n = DragQueryFile(h, (UINT)-1, NULL, 0), i;
+    WORD before = g ? g->nz : 0;
+    POINT pt;
+    BOOL in_client = DragQueryPoint(h, &pt);
+    for (i = 0; g && i < n; i++) {
+        UINT len = DragQueryFile(h, i, NULL, 0);
+        LPSTR file = mem_alloc(len + 1);
+        if (!file)
+            break;
+        DragQueryFile(h, i, file, len + 1);
+        /* the icon centred on the point: ICON_DX plus half an icon */
+        drop_file(hwnd, g, file, n == 1 && in_client,
+                  pt.x - ICON_DX - GetSystemMetrics(SM_CXICON) / 2,
+                  pt.y - ICON_DY - GetSystemMetrics(SM_CYICON) / 2);
+        mem_free(file);
+    }
+    DragFinish(h);
+    if (g && g_autoarrange)
+        group_arrange(hwnd);
+    if (g && g->nz > before)
+        write_dropped(g, g->nz - before);
+    if (g)
+        group_rescroll(hwnd);
+}
+#endif
+
 /* ---- the window ---- */
 
 #ifdef PM_DEBUGLOG
@@ -1790,12 +2252,39 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_SIZE:
         if (g && g_autoarrange && wp != SIZE_MINIMIZED)
             group_arrange(hwnd);
+        else if (g && wp != SIZE_MINIMIZED)
+            group_rescroll(hwnd);
         break;
+    case WM_HSCROLL:
+    case WM_VSCROLL:
+        group_scroll(hwnd, msg == WM_HSCROLL ? SB_HORZ : SB_VERT, wp, (short)LOWORD(lp));
+        return 0;
     case WM_LBUTTONDOWN:
         SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)hwnd, 0);
-        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL)
+        if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL) {
             select_item(hwnd, g, t);
+#ifndef W16_WIN2
+            drag_press(hwnd, (short)LOWORD(lp), (short)HIWORD(lp));
+#endif
+        }
         return 0;
+#ifndef W16_WIN2
+    case WM_MOUSEMOVE:
+        if (g && (wp & MK_LBUTTON))
+            drag_move(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp));
+        return 0;
+    case WM_LBUTTONUP:
+        SetRectEmpty(&drag_rc);
+        return 0;
+    case 0x022B:                        /* WM_QUERYDROPOBJECT */
+        if (drag_src && g)
+            return 1;
+        break;
+    case 0x022A:                        /* WM_DROPOBJECT */
+        if (drag_src && g)
+            return drag_drop(hwnd, g, lp);
+        break;
+#endif
     case WM_LBUTTONDBLCLK:
         if (g && (t = hit(hwnd, g, (short)LOWORD(lp), (short)HIWORD(lp))) != NULL) {
             select_item(hwnd, g, t);
@@ -1863,9 +2352,11 @@ LRESULT CALLBACK __export GroupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_CLOSE:
         ShowWindow(hwnd, SW_MINIMIZE);
         return 0;
+#ifndef W16_WIN2
     case WM_DROPFILES:
-        DragFinish((HDROP)wp);          /* TODO: add items for the files */
+        drop_files(hwnd, (HDROP)wp);
         return 0;
+#endif
     case WM_DESTROY:
         if (g) {
             unlink_group(g);

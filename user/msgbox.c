@@ -35,34 +35,18 @@ static BOOL CALLBACK __loadds mb_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return msg == WM_INITDIALOG;
 }
 
-int WINAPI MessageBox(HWND owner, LPCSTR text, LPCSTR caption, UINT type)
+/* the box: text, an optional icon, n buttons labelled names[i] with
+   control ids ids[i], def the default one; returns the id chosen */
+static int box(HWND owner, LPCSTR text, LPCSTR caption, LPCSTR iconid, const char *const *names,
+               const BYTE *ids, UINT n, UINT def, BOOL sysmodal)
 {
-    static const char *const names[] = { "OK", "Cancel", "&Abort", "&Retry", "&Ignore", "&Yes", "&No" };
-    static const BYTE sets[6][4] = {
-        { IDOK, 0 }, { IDOK, IDCANCEL, 0 }, { IDABORT, IDRETRY, IDIGNORE, 0 },
-        { IDYES, IDNO, IDCANCEL, 0 }, { IDYES, IDNO, 0 }, { IDRETRY, IDCANCEL, 0 }
-    };
-    UINT set = type & MB_TYPEMASK, i, n = 0, def;
-    LPCSTR iconid = 0;
+    UINT i;
     HICON icon = 0;
     HWND dlg, c;
     RECT tr;
     int tx, cw, ch, top, by, bx, iy = 16, ty = 16, textw, texth;
     HDC hdc;
     DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
-    if (set > 5)
-        set = 0;
-    while (n < 4 && sets[set][n])
-        n++;
-    def = (type & MB_DEFMASK) >> 8;
-    if (def >= n)
-        def = 0;
-    switch (type & MB_ICONMASK) {
-    case MB_ICONHAND: iconid = IDI_HAND; break;
-    case MB_ICONQUESTION: iconid = IDI_QUESTION; break;
-    case MB_ICONEXCLAMATION: iconid = IDI_EXCLAMATION; break;
-    case MB_ICONASTERISK: iconid = IDI_ASTERISK; break;
-    }
     if (iconid)
         icon = LoadIcon(0, iconid);
     if (!text)
@@ -115,22 +99,95 @@ int WINAPI MessageBox(HWND owner, LPCSTR text, LPCSTR caption, UINT type)
                   textw + 1, texth, dlg, (HMENU)-1, hInstUser, NULL);
     bx = (cw / 2 - (n * 29 + (n - 1) * 8) + 1) / 2 * 2;
     for (i = 0; i < n; i++) {
-        UINT id = sets[set][i];
-        c = create_window(0, "Button", names[id - 1],
+        UINT id = ids[i];
+        c = create_window(0, "Button", names[i],
                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | (i == def ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON) |
                           (i == 0 ? WS_GROUP : 0),
                           bx + i * 74, by, 58, 28, dlg, (HMENU)id, hInstUser, NULL);
         if (i == def && c)
             SetWindowWord(dlg, 18, id);                     /* the default id */
     }
-    if (type & MB_SYSTEMMODAL)
+    if (sysmodal)
         owner = 0;
     {
-        HWND f = GetDlgItem(dlg, sets[set][def]);
+        HWND f = GetDlgItem(dlg, ids[def]);
         int r;
         extern int dialog_run(HWND dlg, HWND owner, HWND focus);
         mb_result = 0;
         r = dialog_run(dlg, owner, f);
-        return r > 0 ? r : (mb_result ? mb_result : sets[set][0]);
+        return r > 0 ? r : (mb_result ? mb_result : ids[0]);
     }
+}
+
+int WINAPI MessageBox(HWND owner, LPCSTR text, LPCSTR caption, UINT type)
+{
+    static const char *const allnames[] = { "OK", "Cancel", "&Abort", "&Retry", "&Ignore", "&Yes", "&No" };
+    static const BYTE sets[6][4] = {
+        { IDOK, 0 }, { IDOK, IDCANCEL, 0 }, { IDABORT, IDRETRY, IDIGNORE, 0 },
+        { IDYES, IDNO, IDCANCEL, 0 }, { IDYES, IDNO, 0 }, { IDRETRY, IDCANCEL, 0 }
+    };
+    const char *names[4];
+    UINT set = type & MB_TYPEMASK, n = 0, def;
+    LPCSTR iconid = 0;
+    if (set > 5)
+        set = 0;
+    while (n < 4 && sets[set][n]) {
+        names[n] = allnames[sets[set][n] - 1];
+        n++;
+    }
+    def = (type & MB_DEFMASK) >> 8;
+    if (def >= n)
+        def = 0;
+    switch (type & MB_ICONMASK) {
+    case MB_ICONHAND: iconid = IDI_HAND; break;
+    case MB_ICONQUESTION: iconid = IDI_QUESTION; break;
+    case MB_ICONEXCLAMATION: iconid = IDI_EXCLAMATION; break;
+    case MB_ICONASTERISK: iconid = IDI_ASTERISK; break;
+    }
+    return box(owner, text, caption, iconid, names, sets[set], n, def,
+               (type & MB_SYSTEMMODAL) != 0);
+}
+
+/* USER.320, SysErrorBox(text, caption, left, middle, right): up to three
+   buttons, each an SEB_ code (1 OK, 2 Cancel, 3 Yes, 4 No, 5 Retry,
+   6 Abort, 7 Ignore, 8 Close; 8000h: the default) or 0 for none; returns
+   1, 2 or 3, the position chosen (Schulman ch. 6). KERNEL's FatalAppExit
+   and the fault report use it ("Application Error", one Close button:
+   ARCHITECTURE.md 9). UNVERIFIED: the box's look (here MessageBox's
+   layout, no icon, system modal); Schulman says 3.1 runs its own event
+   loop for it. The text goes to USER.LOG too. */
+int WINAPI U_SYSERRORBOX(LPCSTR text, LPCSTR caption, WORD b1, WORD b2, WORD b3)
+{
+    static const char *const seb[] = { "", "OK", "Cancel", "&Yes", "&No", "&Retry", "&Abort",
+                                       "&Ignore", "&Close" };
+    const char *names[3];
+    BYTE ids[3];
+    WORD b[3];
+    UINT n = 0, def = 0, i;
+    int r;
+    b[0] = b1, b[1] = b2, b[2] = b3;
+    ulog("SysErrorBox: ");
+    if (caption)
+        ulog(caption);
+    ulog(": ");
+    if (text)
+        ulog(text);
+    ulog("\r\n");
+    for (i = 0; i < 3; i++) {
+        WORD k = b[i] & 0x7FFF;
+        if (!k || k > 8)
+            continue;
+        if (b[i] & 0x8000)
+            def = n;
+        names[n] = seb[k];
+        ids[n] = (BYTE)(i + 1);
+        n++;
+    }
+    if (!n) {
+        names[0] = seb[1];
+        ids[0] = 1;
+        n = 1;
+    }
+    r = box(0, text, caption, 0, names, ids, n, def, TRUE);
+    return r >= 1 && r <= 3 ? r : ids[0];
 }

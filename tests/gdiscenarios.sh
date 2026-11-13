@@ -17,7 +17,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 out=$root/build/ref/gdiscen
 if [ "${1:-}" = -o ]; then out=$2; shift 2; fi
 scripts=${*:-$(ls "$root"/tests/scripts/gdi/*.txt "$root"/tests/scripts/pm/*.txt)}
-gdi=$root/build/dos/GDI.EXE
+gdi=${GDISCEN_GDI:-$root/build/dos/GDI.EXE}   # GDISCEN_GDI: another w16 GDI.EXE
 mkdir -p "$out"
 total=0 differ=0 status=0
 for s in $scripts; do

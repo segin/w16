@@ -1,0 +1,18 @@
+# combo-box drop-down arrow (0 bits drawn in the text colour)
+name OBM_COMBO
+type bitmap
+id 32738
+size 7x9
+bpp 1
+header info
+
+pixels
+--###--
+--###--
+--###--
+#######
+-#####-
+--###--
+---#---
+-------
+#######
