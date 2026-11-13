@@ -2,14 +2,33 @@
  * edit.c - the EDIT class: single-line and (simple) multi-line edit
  * controls.
  *
- * The state (ED) and the text are blocks of USER's object heap (uheap.c),
- * not of DGROUP (3.1's edit control costs DGROUP only its WND: US15), the
+ * The state (ED) is a block of USER's object heap (uheap.c), not of
+ * DGROUP (3.1's edit control costs DGROUP only its WND: US15), the
  * window's first extra word the state's handle, reached through E() on
  * every use (nothing in the heap is held across a call that allocates in
- * it or sends a message). UNVERIFIED and not yet done
- * the way Windows 3.1 does it: 3.1 keeps the text in the local heap of the
- * hInstance given to CreateWindow (EM_GETHANDLE gives that local handle;
- * Notepad relies on it); undo; word wrap of multi-line controls.
+ * it or sends a message).
+ *
+ * The text, as on 3.1 (probe US20), is a moveable local block, never
+ * locked, in the local heap of the data segment the window's hInstance
+ * names - the application's own DS for a control it creates, so that
+ * EM_GETHANDLE gives it a handle it can LocalLock, LocalReAlloc and give
+ * back with EM_SETHANDLE (Notepad reads and writes files so). A dialog
+ * without DS_LOCALEDIT gives its edit controls a 2000-byte segment of
+ * their own instead (dlg.c); a control whose hInstance has no local heap
+ * gets a private one. The block is len + 33 bytes when made or grown
+ * (3.1: 34 empty, 30038 for 30005 characters; never shrunk by WM_SETTEXT;
+ * EM_SETHANDLE sizes the new block so, 20 bytes holding 8 characters
+ * became 42); EM_SETHANDLE leaves the old block to the application and
+ * clears the modified flag; DestroyWindow frees the block. Its characters
+ * are read where they are each time, the length is the control's (3.1:
+ * text changed behind the control's back is seen up to the old length).
+ * A pointer into it is made by lh_deref (LocalLock, LocalUnlock) and is
+ * good until the next allocation in that heap. Single-line controls keep
+ * their text the same way, but EM_GETHANDLE gives them 0 (3.1).
+ * Not done: undo; word wrap of multi-line controls; 3.1 apparently keeps
+ * line starts in the same heap (Notepad's limit depends on the number of
+ * lines: ARCHITECTURE.md 15.1), w16 does not, so the largest file Notepad
+ * opens differs (UNVERIFIED by how much).
  * Drawing (measured on US4's dialogs; UNVERIFIED in detail): the text
  * starts 1 pixel inside the border, the selection in the Highlight colours.
  *
@@ -18,8 +37,10 @@
 #include "user.h"
 
 typedef struct ED {
-    WORD   text;                /* local block, NUL-terminated */
-    WORD   size;                /* bytes allocated */
+    WORD   text;                /* moveable local block of hseg, NUL-terminated */
+    HANDLE hseg;                /* the segment its heap is in (a global handle) */
+    WORD   sel;                 /* its selector, taken again after each allocation */
+    HANDLE own;                 /* a private segment, freed with the control */
     WORD   len;
     WORD   sel0, sel1;          /* selection; sel1 is the caret */
     WORD   first;               /* first visible character (single line) */
@@ -48,9 +69,41 @@ static DWORD estyle(HWND h)
     return GetWindowLong(h, GWL_STYLE);
 }
 
+static WORD seg_sel(HANDLE h)
+{
+    return h ? HIWORD(GlobalHandle((UINT)h)) : 0;
+}
+
+/* the text now: good until the next allocation in its heap */
 static char __far *text(PED e)
 {
-    return (char __far *)UH_PTR(&uhObj, E(e)->text);
+    WORD sel = E(e)->sel;
+    return (char __far *)MK_FP(sel, lh_deref(sel, E(e)->text));
+}
+
+/* a 2000-byte segment made a local heap, for edit controls' text (3.1: a
+   dialog's without DS_LOCALEDIT, GlobalSize 7D0h); 0 if none */
+HANDLE edit_segment(void)
+{
+    HANDLE g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 2000);
+    if (g && !LocalInit(seg_sel(g), 0x12, 1999)) {
+        GlobalFree(g);
+        g = 0;
+    }
+    return g;
+}
+
+/* does segment h have a local heap? (an instance's data segment has its
+   heap's offset at 6, Pietrek ch. 2; a module database starts "NE") */
+static BOOL has_heap(HANDLE h)
+{
+    WORD sel = seg_sel(h);
+    DWORD n = sel ? GlobalSize(h) : 0;
+    if (n < 0x10)
+        return FALSE;
+    if (*(WORD __far *)MK_FP(sel, 0) == 0x454E)
+        return FALSE;
+    return *(WORD __far *)MK_FP(sel, 6) != 0 && *(WORD __far *)MK_FP(sel, 6) < n;
 }
 
 static void notify(HWND h, PED e, WORD code)
@@ -58,25 +111,65 @@ static void notify(HWND h, PED e, WORD code)
     send_message(E(e)->parent, WM_COMMAND, GetWindowWord(h, GWW_ID), MAKELONG(h, code));
 }
 
-static BOOL grow(PED e, WORD need)
+/* the text's block made n bytes. KERNEL's LocalReAlloc grows a block in
+   place only into a free block after it, and otherwise needs room for a
+   copy, which a 31.5K text in a 53K segment never has (US20 part H: no
+   flags grow a 31501-byte block at the heap's end by 32, on 3.1 either);
+   yet 3.1's edit control grows it there when text is added (US20 part G;
+   US21: Notepad's segment grew by 3744 bytes, the text in place, free
+   space after it), though not when another block follows it (part F).
+   So with force, when the plain LocalReAlloc fails, a block too big for
+   the free space there is is allocated, which makes KERNEL grow the heap
+   at its end, freed, and the LocalReAlloc tried again in place (flags 0:
+   joined with a free block after it, which there is only if the text was
+   the last block). UNVERIFIED how 3.1 does it (its segment grew by
+   less) */
+static BOOL resize(PED e, WORD n, BOOL force)
 {
-    if (need + 1 <= E(e)->size)
-        return TRUE;
-    {
-        WORD n = need + 32;
-        WORD b = uh_realloc(&uhObj, E(e)->text, n);
-        if (!b)
-            return FALSE;
-        E(e)->text = b;
-        E(e)->size = n;
+    WORD b, cur, t;
+    int tries;
+    for (tries = 0;; tries++) {
+        /* the retry in place only: with the text not the heap's last
+           block 3.1 does not grow it (US20 part F) */
+        b = lh_realloc(E(e)->sel, E(e)->text, n, tries ? 0 : LMEM_MOVEABLE);
+        E(e)->sel = seg_sel(E(e)->hseg);
+        if (b || tries || !force)
+            break;
+        cur = lh_size(E(e)->sel, E(e)->text);
+        if (n <= cur)
+            break;
+        t = lh_alloc(E(e)->sel, LMEM_FIXED, n - cur > 4096 - 64 ? n - cur + 64 : 4096);
+        E(e)->sel = seg_sel(E(e)->hseg);
+        if (!t)
+            break;
+        lh_free(E(e)->sel, t);
     }
+    if (!b)
+        return FALSE;
+    E(e)->text = b;
     return TRUE;
+}
+
+/* room for need characters and the NUL: need + 33 bytes, or, when typing
+   (step), 32 more than the block has if that is enough (3.1: 31502,
+   31534, 31566 while 40 characters were typed; WM_SETTEXT of 30005
+   characters: 30038) */
+static BOOL grow(PED e, WORD need, BOOL step)
+{
+    WORD cur = lh_size(E(e)->sel, E(e)->text);
+    if (need + 1 <= cur)
+        return TRUE;
+    if (need > 0xFFFF - 33)
+        return FALSE;
+    if (step && cur <= 0xFFFF - 32 && need + 1 <= cur + 32)
+        return resize(e, cur + 32, TRUE);
+    return resize(e, need + 33, TRUE);
 }
 
 static void set_text(PED e, LPCSTR s)
 {
     WORD n = s ? lstr_len(s) : 0;
-    if (!grow(e, n))
+    if (!grow(e, n, FALSE))
         return;
     if (n)
         fmemcpy((char __far *)text(e), s, n);
@@ -87,15 +180,17 @@ static void set_text(PED e, LPCSTR s)
     E(e)->topline = 0;
 }
 
-/* lines of a multi-line control: start offsets */
+/* lines of a multi-line control: start offsets (the text's pointer taken
+   once: nothing here allocates) */
 static WORD line_start(PED e, int line)
 {
-    WORD i = 0;
-    while (line > 0 && i < E(e)->len) {
-        if (text(e)[i] == '\r' && text(e)[i + 1] == '\n') {
+    const char __far *t = text(e);
+    WORD i = 0, len = E(e)->len;
+    while (line > 0 && i < len) {
+        if (t[i] == '\r' && t[i + 1] == '\n') {
             i += 2;
             line--;
-        } else if (text(e)[i] == '\n') {
+        } else if (t[i] == '\n') {
             i++;
             line--;
         } else
@@ -106,18 +201,20 @@ static WORD line_start(PED e, int line)
 
 static WORD line_len(PED e, WORD start)
 {
-    WORD i = start;
-    while (i < E(e)->len && text(e)[i] != '\r' && text(e)[i] != '\n')
+    const char __far *t = text(e);
+    WORD i = start, len = E(e)->len;
+    while (i < len && t[i] != '\r' && t[i] != '\n')
         i++;
     return i - start;
 }
 
 static int line_of(PED e, WORD pos)
 {
-    WORD i;
+    const char __far *t = text(e);
+    WORD i, len = E(e)->len;
     int n = 0;
-    for (i = 0; i < pos && i < E(e)->len; i++)
-        if (text(e)[i] == '\n')
+    for (i = 0; i < pos && i < len; i++)
+        if (t[i] == '\n')
             n++;
     return n;
 }
@@ -172,9 +269,16 @@ static int tab_stops(PED e, int *buf, int max)
     return n;
 }
 
+/* the start of pos's line: back to the last line feed (the same as
+   line_start(line_of(pos)), without scanning from the text's start) */
 static int line_start_of(PED e, WORD pos)
 {
-    return line_start(e, line_of(e, pos));
+    const char __far *t = text(e);
+    if (pos > E(e)->len)
+        pos = E(e)->len;
+    while (pos > 0 && t[pos - 1] != '\n')
+        pos--;
+    return pos;
 }
 
 /* the width from the start of pos's line to pos, tabs expanded */
@@ -265,12 +369,20 @@ static void paint(HWND h, PED e, HDC hdc)
     SetTextColor(hdc, syscolor[COLOR_WINDOWTEXT]);
     {
         int line, nlines = (estyle(h) & ES_MULTILINE) ? line_count(e) : 1;
+        WORD next = 0;              /* the next line's start (multi-line) */
         for (line = (estyle(h) & ES_MULTILINE) ? E(e)->topline : 0; line < nlines; line++) {
-            WORD st = (estyle(h) & ES_MULTILINE) ? line_start(e, line) : E(e)->first;
+            WORD st = !(estyle(h) & ES_MULTILINE) ? E(e)->first :
+                      line == E(e)->topline ? line_start(e, line) : next;
             WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : E(e)->len - E(e)->first;
             int y = (estyle(h) & ES_MULTILINE) ? (line - E(e)->topline) * lh : inset(h, e);
             int x = inset(h, e) - ((estyle(h) & ES_MULTILINE) ? E(e)->xoff : 0);
             WORD a = st, z = st + n;
+            if (estyle(h) & ES_MULTILINE) {
+                const char __far *t = text(e);
+                next = st + n;
+                if (next < E(e)->len)
+                    next += t[next] == '\r' && next + 1 < E(e)->len && t[next + 1] == '\n' ? 2 : 1;
+            }
             if (y > r.bottom)
                 break;
             /* a multi-line control shows whole lines only (3.1: Notepad,
@@ -392,12 +504,21 @@ static int widest(HWND h, PED e)
 {
     HDC hdc = GetDC(h);
     HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
-    int line, n = line_count(e), w = 0;
-    for (line = 0; line < n; line++) {
-        WORD st = line_start(e, line);
-        int x = text_x(hdc, e, st, line_len(e, st));
+    int w = 0;
+    WORD st = 0;
+    /* line by line from the start (not line_start for each: a 500-line
+       text took seconds a keystroke) */
+    for (;;) {
+        WORD n = line_len(e, st);
+        int x = text_x(hdc, e, st, n);
+        const char __far *t;
         if (x > w)
             w = x;
+        st += n;
+        if (st >= E(e)->len)
+            break;
+        t = text(e);
+        st += t[st] == '\r' && st + 1 < E(e)->len && t[st + 1] == '\n' ? 2 : 1;
     }
     SelectObject(hdc, old);
     ReleaseDC(h, hdc);
@@ -465,23 +586,36 @@ static void refresh(HWND h, PED e)
        control (selecting its text) while the dialog itself is still to be
        painted, and the dialog, without WS_CLIPCHILDREN, would paint over
        it (US4's Run dialog) */
+    int top = E(e)->topline, xoff = E(e)->xoff;
     scroll_to_caret(h, e);
     HideCaret(h);
     InvalidateRect(h, NULL, TRUE);
     place_caret(h, e);
     ShowCaret(h);
     set_scrollbars(h, e);
+    /* a scroll made by keys or typing is reported too (3.1: Notepad's
+       bars follow Ctrl+End and typing, taken on EN_VSCROLL/EN_HSCROLL:
+       ARCHITECTURE.md 15.1) */
+    if (E(e)->multi && E(e)->topline != top)
+        notify(h, e, EN_VSCROLL);
+    if (E(e)->multi && E(e)->xoff != xoff)
+        notify(h, e, EN_HSCROLL);
 }
 
 static void replace_sel(HWND h, PED e, LPCSTR s)
 {
     WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
     WORD n = s ? lstr_len(s) : 0;
+    /* past the limit what fits goes in (3.1: 5 characters replacing
+       nothing at 29998 left 30000) */
     if (E(e)->limit && E(e)->len - (s1 - s0) + n > E(e)->limit) {
+        WORD keep = E(e)->len - (s1 - s0);
+        n = keep < E(e)->limit ? E(e)->limit - keep : 0;
         notify(h, e, EN_MAXTEXT);
-        return;
+        if (!n && s0 == s1)
+            return;
     }
-    if (!grow(e, E(e)->len - (s1 - s0) + n))
+    if (!grow(e, E(e)->len - (s1 - s0) + n, TRUE))
         return;
     fmemcpy((char __far *)(text(e) + s0 + n), (char __far *)(text(e) + s1), E(e)->len - s1 + 1);
     if (n)
@@ -525,16 +659,29 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     e = ed_of(h);
     if (msg == WM_NCCREATE) {
         WORD t;
-        e = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(ED));
-        if (!e)
+        HANDLE seg = (HANDLE)GetWindowWord(h, GWW_HINSTANCE), own = 0;
+        if (!has_heap(seg))
+            seg = own = edit_segment();
+        if (!seg)
             return 0;
-        t = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, 32);
+        e = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(ED));
+        if (!e) {
+            if (own)
+                GlobalFree(own);
+            return 0;
+        }
+        t = lh_alloc(seg_sel(seg), LMEM_MOVEABLE | LMEM_ZEROINIT, 33);
         if (!t) {
             uh_free(&uhObj, e);
+            if (own)
+                GlobalFree(own);
             return 0;
         }
         E(e)->text = t;
-        E(e)->size = 32;
+        E(e)->hseg = seg;
+        E(e)->sel = seg_sel(seg);
+        E(e)->own = own;
+        E(e)->limit = 30000;        /* (3.1 SDK; US20) */
         E(e)->multi = (estyle(h) & ES_MULTILINE) != 0;
         E(e)->parent = GetParent(h);
         if (estyle(h) & ES_PASSWORD)
@@ -552,7 +699,9 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_NCDESTROY:
         uh_free(&uhObj, E(e)->tabs);
-        uh_free(&uhObj, E(e)->text);
+        lh_free(E(e)->sel, E(e)->text);
+        if (E(e)->own)
+            GlobalFree(E(e)->own);
         uh_free(&uhObj, e);
         SetWindowWord(h, 0, 0);
         return 0;
@@ -581,8 +730,13 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_GETTEXT:
         if ((int)wp <= 0)
             return 0;
-        lstr_cpyn((LPSTR)lp, (LPCSTR)text(e), wp);
-        return lstr_len((LPCSTR)lp);
+    {
+        /* the control's length of what is in the block (US20) */
+        WORD n = E(e)->len < wp - 1 ? E(e)->len : wp - 1;
+        fmemcpy((LPSTR)lp, text(e), n);
+        ((LPSTR)lp)[n] = 0;
+        return n;
+    }
     case WM_GETTEXTLENGTH:
         return E(e)->len;
     case WM_SETFOCUS:
@@ -685,6 +839,32 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 break;
             }
             return 0;
+        case VK_PRIOR:
+        case VK_NEXT:
+            /* a page (the lines shown less one) up or down, the caret
+               and the view together (3.1: Notepad, two Page Downs from
+               the top showed line 43 at the top with the caret on it.
+               UNVERIFIED near the ends) */
+            if (estyle(h) & ES_MULTILINE) {
+                int n = line_count(e), page = visible_lines(h, e) - 1, d, line, top;
+                WORD col = p - line_start(e, line_of(e, p)), st, ln;
+                if (page < 1)
+                    page = 1;
+                d = wp == VK_PRIOR ? -page : page;
+                line = line_of(e, p) + d;
+                line = line < 0 ? 0 : line > n - 1 ? n - 1 : line;
+                top = E(e)->topline + d;
+                top = top < 0 ? 0 : top > n - 1 ? n - 1 : top;
+                st = line_start(e, line);
+                ln = line_len(e, st);
+                p = st + (col < ln ? col : ln);
+                E(e)->sel1 = p;
+                if (!shift)
+                    E(e)->sel0 = p;
+                scroll_to(h, e, top, E(e)->xoff, TRUE, FALSE, FALSE);
+                refresh(h, e);
+            }
+            return 0;
         default:
             return 0;
         }
@@ -712,7 +892,28 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         replace_sel(h, e, (LPCSTR)lp);
         return 0;
     case EM_LIMITTEXT:
-        E(e)->limit = wp;
+        E(e)->limit = wp;           /* 0: none */
+        return 0;
+    case WM_USER + 13:              /* EM_GETHANDLE: multi-line only (US20) */
+        return E(e)->multi ? E(e)->text : 0;
+    case WM_USER + 12:              /* EM_SETHANDLE */
+        if (E(e)->multi && wp) {
+            WORD n;
+            E(e)->text = wp;
+            n = lstr_len(text(e));
+            /* the block sized to the text, if KERNEL can (3.1: 20
+               bytes holding 8 characters became 42, 3000 holding 2900
+               2934; a 31502-byte one at the end of a full heap stayed) */
+            if (n <= 0xFFFF - 33)
+                resize(e, n + 33, FALSE);
+            E(e)->len = n;
+            E(e)->sel0 = E(e)->sel1 = 0;
+            E(e)->first = 0;
+            E(e)->topline = 0;
+            E(e)->xoff = 0;
+            E(e)->modified = 0;
+            refresh(h, e);
+        }
         return 0;
     case EM_GETLINECOUNT:
         return line_count(e);

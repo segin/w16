@@ -29,6 +29,20 @@
 #define DW_CX       22          /* base units */
 #define DW_CY       24
 #define DW_MODAL    26
+#define DW_EDITSEG  28          /* the edit controls' segment (no DS_LOCALEDIT) */
+
+HANDLE edit_segment(void);
+
+/* the dialog going (win.c, after its children): its edit controls'
+   segment with it (3.1: GlobalSize 0 after DestroyWindow, US20) */
+void dlg_free_editseg(HWND h)
+{
+    HANDLE g = (HANDLE)GetWindowWord(h, DW_EDITSEG);
+    if (g) {
+        SetWindowWord(h, DW_EDITSEG, 0);
+        GlobalFree(g);
+    }
+}
 
 HBRUSH sys_brush(HBRUSH b);
 
@@ -357,8 +371,20 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             q = skip_sz(q, &text);
         {
             BYTE extra = *q++;
+            HINSTANCE ihinst = hinst;
+            /* edit controls keep their text in a segment of the dialog's
+               own, one for all of them, unless DS_LOCALEDIT (3.1 SDK;
+               US20: both edits' hInstance a 2000-byte segment, the
+               dialog's the application's) */
+            if (!(style & DS_LOCALEDIT) && !lstr_cmpi(icls, "Edit")) {
+                HANDLE g = (HANDLE)GetWindowWord(h, DW_EDITSEG);
+                if (!g && (g = edit_segment()) != 0)
+                    SetWindowWord(h, DW_EDITSEG, (WORD)g);
+                if (g)
+                    ihinst = (HINSTANCE)g;
+            }
             c = create_window(WS_EX_NOPARENTNOTIFY, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
-                              du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, hinst,
+                              du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, ihinst,
                               extra ? (void __far *)q : NULL);
             q += extra;
         }

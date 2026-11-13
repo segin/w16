@@ -39,7 +39,7 @@ segment _NULL
 segment UENTRY_TEXT public align=16 class=CODE use16
 
 extern LOCALINIT                ; KERNEL.4
-extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE
+extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE, LOCALLOCK, LOCALUNLOCK
 extern INITATOMTABLE, ADDATOM, FINDATOM, DELETEATOM, GETATOMNAME
 extern _user_init               ; int __cdecl user_init(WORD hinst) (C, far)
 extern KBD_EVENT                ; void far pascal kbd_event(ax, bx, si, di)
@@ -184,6 +184,25 @@ _lh_size:
         mov ds, [bp+6]
         push word [bp+8]
         call far LOCALSIZE
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_deref(WORD sel, WORD h): the offset of local block
+; h in segment sel now (locked and unlocked again: valid until the heap
+; changes)
+global _lh_deref
+_lh_deref:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALLOCK
+        push ax
+        push word [bp+8]
+        call far LOCALUNLOCK
+        pop ax
         pop ds
         pop bp
         retf
