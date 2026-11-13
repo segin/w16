@@ -273,6 +273,10 @@ static void paint(HWND h, PED e, HDC hdc)
             WORD a = st, z = st + n;
             if (y > r.bottom)
                 break;
+            /* a multi-line control shows whole lines only (3.1: Notepad,
+               45 lines, the room for a 23rd line's top left blank) */
+            if ((estyle(h) & ES_MULTILINE) && line > E(e)->topline && y + lh > r.bottom)
+                break;
             /* before, inside, after the selection */
             if (showsel && s1 > s0 && s0 < z && s1 > a) {
                 WORD p = s0 > a ? s0 : a, q = s1 < z ? s1 : z;
@@ -651,12 +655,16 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         switch (wp) {
         case VK_LEFT: if (p) p--; break;
         case VK_RIGHT: if (p < E(e)->len) p++; break;
+        /* with Ctrl, the start and the end of the text (3.1: Notepad,
+           Ctrl+Home after typing 45 lines went to the first) */
         case VK_HOME:
-            p = (estyle(h) & ES_MULTILINE) ? line_start(e, line_of(e, p)) : 0;
+            p = (estyle(h) & ES_MULTILINE) && !(GetKeyState(VK_CONTROL) & 0x8000) ?
+                line_start(e, line_of(e, p)) : 0;
             break;
         case VK_END:
-            p = (estyle(h) & ES_MULTILINE) ? line_start(e, line_of(e, p)) +
-                line_len(e, line_start(e, line_of(e, p))) : E(e)->len;
+            p = (estyle(h) & ES_MULTILINE) && !(GetKeyState(VK_CONTROL) & 0x8000) ?
+                line_start(e, line_of(e, p)) + line_len(e, line_start(e, line_of(e, p))) :
+                E(e)->len;
             break;
         case VK_DELETE:
             if (estyle(h) & ES_READONLY)
@@ -768,6 +776,15 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             x = E(e)->xoff, pos = (int)LOWORD(lp);
         if (!(estyle(h) & ES_MULTILINE))
             return 0;
+        /* the scroll code EM_GETTHUMB (WM_USER+14, Schulman ch. 7): the
+           position for its parent's bar, which Notepad takes after a
+           scroll; the first line * 100 / (lines - 1) rounded (3.1:
+           Notepad, 45 lines, first line 32: its thumb at 73) */
+        if (wp == WM_USER + 14) {
+            if (v)
+                return n > 1 ? (LRESULT)(((long)top * 200 + (n - 1)) / (2L * (n - 1))) : 0;
+            return widest(h, e) > 0 ? (LRESULT)(((long)x * 200 + widest(h, e)) / (2L * widest(h, e))) : 0;
+        }
         if (page < 1)
             page = 1;
         switch (wp) {
@@ -779,8 +796,10 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         case SB_BOTTOM: if (v) top = n - 1; else x = widest(h, e); break;
         case SB_THUMBTRACK:
         case SB_THUMBPOSITION:
+            /* rounded to the nearest line (3.1: Notepad's 45 lines
+               dragged, every screen a line further than truncating gave) */
             if (v)
-                top = (int)((long)pos * (n - 1) / 100);
+                top = (int)(((long)pos * (n - 1) + 50) / 100);
             else
                 x = (int)((long)pos * widest(h, e) / 100);
             break;
