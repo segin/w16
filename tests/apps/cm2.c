@@ -541,6 +541,27 @@ int __cdecl tmain(void)
     obs_env("ds", SELECTOROF((LPVOID)&dcb));
     obs_env("hwnd", (WORD)hwnd);
     obs_env("stk", OFFSETOF((LPVOID)&wc));
+    /* SYSTEM.DRV's GetSystemMsecCount, which COMM.DRV times its close
+       with: does it ever go back or jump? ("~": timing) */
+    {
+        FARPROC f = GetProcAddress(GetModuleHandle("SYSTEM"), MAKEINTRESOURCE(6));
+        DWORD prev = 0, v, t0 = GetTickCount();
+        WORD back = 0, jumps = 0, n = 0;
+        int k;
+        for (k = 0; k < 16; k++)
+            args[k] = 0;
+        while (f && GetTickCount() - t0 < 100000L && prev < 0x10800L) {
+            v = md_call(f, args, res);
+            if (n && (long)(v - prev) < 0)
+                back++;
+            if (n && v - prev > 1000 && (long)(v - prev) > 0)
+                jumps++;
+            prev = v;
+            n++;
+        }
+        wsprintf(line, "OBS ~msec calls %u back %u jumps %u last %08lX\r\n", n, back, jumps, prev);
+        out(line);
+    }
     part_p();
     part_n();
     part_w();

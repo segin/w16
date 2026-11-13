@@ -12,12 +12,14 @@
 # "OBS ~" lines, COMMREC's log with its pointers and window handles
 # reduced to what is not layout (tests/scripts/commrec.py), and
 # commhost's records.
-#   usage: tests/commusr.sh [-o DIR] [-e EXE] [-n] [-d DRV] [-a] [-r NAME] [-p N]
+#   usage: tests/commusr.sh [-o DIR] [-e EXE] [-n] [-d DRV] [-W DRV] [-a] [-r NAME] [-p N]
 #     -o DIR   keep everything in DIR (default build/commusr-HHMMSS)
 #     -e EXE   the probe (default build/dos/CM2.EXE)
 #     -n       no COMMREC: the driver as COMM.DRV itself
 #     -d DRV   the driver (default Windows 3.1's SYSTEM\COMM.DRV;
 #              build/dos/COMM.DRV is w16's)
+#     -W DRV   the w16 run's driver (default the same as the ms run's;
+#              build/dos/COMM.DRV for w16's)
 #     -a       the w16 run on every w16 part (WIN.COM, DOSX, KRNL286, USER,
 #              GDI) instead of w16's USER on Microsoft's
 #     -r NAME  only that run (ms or w16); nothing compared
@@ -27,13 +29,14 @@ set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 out= exe=$root/build/dos/CM2.EXE rec=1 drv=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/COMM.DRV
-all= only= parts=15
-while getopts o:e:nd:ar:p: opt; do
+all= only= parts=15 wdrv=
+while getopts o:e:nd:W:ar:p: opt; do
     case $opt in
     o) out=$OPTARG ;;
     e) exe=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
     n) rec= ;;
     d) drv=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
+    W) wdrv=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
     a) all=1 ;;
     r) only=$OPTARG ;;
     p) parts=$OPTARG ;;
@@ -45,20 +48,25 @@ done
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 name=$(basename "$exe" | tr a-z A-Z)
+[ -n "$wdrv" ] || wdrv=$drv
 # the driver: as COMM.DRV, or renamed MCOM behind COMMREC
-if [ -n "$rec" ]; then
-    cp "$drv" "$out/MCOM.DLL"
-    chmod u+w "$out/MCOM.DLL"
-    python3 "$root/tools/nerename.py" "$out/MCOM.DLL" --module MCOM
-    drvfiles="-f $out/MCOM.DLL=WINDOWS/SYSTEM/MCOM.DLL -f $root/build/dos/COMMREC.DRV=WINDOWS/SYSTEM/COMM.DRV"
-else
-    drvfiles="-f $drv=WINDOWS/SYSTEM/COMM.DRV"
-fi
+# drivers RUN FILE: the options that install FILE for run RUN
+drivers() {
+    if [ -n "$rec" ]; then
+        cp "$2" "$out/$1-MCOM.DLL"
+        chmod u+w "$out/$1-MCOM.DLL"
+        python3 "$root/tools/nerename.py" "$out/$1-MCOM.DLL" --module MCOM
+        echo "-f $out/$1-MCOM.DLL=WINDOWS/SYSTEM/MCOM.DLL -f $root/build/dos/COMMREC.DRV=WINDOWS/SYSTEM/COMM.DRV"
+    else
+        echo "-f $2=WINDOWS/SYSTEM/COMM.DRV"
+    fi
+}
 freeport() {
     python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'
 }
 run() {
     run=$1; shift
+    drvfiles=$(drivers "$run" "$2"); shift 2
     port=$(freeport)
     python3 "$root/tests/commhost.py" -t 700 -l "$out/$run.host" "$port" > "$out/$run.hostout" 2>&1 &
     hpid=$!
@@ -83,15 +91,15 @@ serial2=nullmodem server:127.0.0.1 port:$port2"
     fi
 }
 case $only in
-''|ms) run ms -r ;;
+''|ms) run ms -d "$drv" -r ;;
 esac
 case $only in
 ''|w16)
     if [ -n "$all" ]; then
-        run w16 -w -x -f "$root/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE" \
+        run w16 -d "$wdrv" -w -x -f "$root/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE" \
             -f "$root/build/dos/GDI.EXE=WINDOWS/SYSTEM/GDI.EXE"
     else
-        run w16 -r -f "$root/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"
+        run w16 -d "$wdrv" -r -f "$root/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"
     fi ;;
 esac
 [ -z "$only" ] || { echo "commusr: $only run in $out"; exit 0; }
@@ -102,6 +110,12 @@ done
 kinds="cmp host host2"
 [ -n "$rec" ] && kinds="$kinds reccmp"
 for k in $kinds; do
+    if [ $k = host ]; then
+        # Windows 3.1's driver sometimes loses a write's second byte (as
+        # tests/commprobe.sh): commhost's "#W150;" as "#150;"
+        for r in ms w16; do sed 's/^#\([0-9]\)/#W\1/' "$out/$r.host" > "$out/$r.hostn"; done
+        k=hostn
+    fi
     if cmp -s "$out/ms.$k" "$out/w16.$k"; then
         echo "ok   $k: w16's USER the same as Windows 3.1's"
     else

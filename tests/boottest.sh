@@ -162,6 +162,16 @@
 #   commdlg    w16's COMMDLG.DLL over Microsoft's in the reference install:
 #              open1, find1, color1, font1, print1 of tests/commdlgscen.sh
 #              (the probe's log identical, screens within the baseline)
+#   commuser   w16's USER's comm functions (user/comm.c) against Windows
+#              3.1's: probe CM2 with COMMREC recording USER's calls to the
+#              driver (tests/commusr.sh): the logs and the far end's
+#              records identical
+#   commall    the comm case on every w16 part (WIN.COM, DOSX, KRNL286,
+#              USER, GDI, COMM.DRV) against all of Microsoft's: CM1's
+#              exchange through USER and the far end's records identical
+#   termclose  Terminal closed while it sends a file over COM1 (Alt+F4,
+#              Yes to stop: tests/scripts/input/termclose.txt) on every
+#              w16 part: Terminal gone, the screen as all-Microsoft's
 #   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
 #              DOSX, USER and GDI under real key input: typing in Notepad
 #              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
@@ -292,7 +302,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1369,6 +1379,63 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             echo "FAIL comm: $(grep -m1 -E '^FAIL' "$out/comm.txt" || echo 'see comm.txt') ($out/comm.txt)"
             fails=$((fails + 1))
         fi ;;
+    commuser)
+        # w16's USER's comm functions against Windows 3.1's
+        # (tests/commusr.sh): probe CM2 on each, COMMREC recording every
+        # call USER makes to Windows 3.1's COMM.DRV, commhost at the far
+        # end; the probe's log, COMMREC's and commhost's identical
+        if "$root/tests/commusr.sh" -o "$out/commuser" > "$out/commuser.txt" 2>&1; then
+            echo "ok   commuser: CM2's log, USER's driver calls and the far end the same on w16's USER"
+        else
+            echo "FAIL commuser: $(grep -m1 -E '^FAIL' "$out/commuser.txt" || echo 'see commuser.txt') ($out/commuser.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    commall)
+        # the comm case on every w16 part: CM1's exchange through USER
+        # (part C) on w16's WIN.COM, DOSX, KRNL286, USER, GDI and COMM.DRV
+        # against all of Microsoft's (tests/commusr.sh -a)
+        if "$root/tests/commusr.sh" -e "$root/build/dos/CM1.EXE" -n -a -p 4 \
+            -W "$root/build/dos/COMM.DRV" -o "$out/commall" > "$out/commall.txt" 2>&1; then
+            echo "ok   commall: CM1's exchange and the far end's records the same on every w16 part"
+        else
+            echo "FAIL commall: $(grep -m1 -E '^FAIL' "$out/commall.txt" || echo 'see commall.txt') ($out/commall.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    termclose)
+        # Terminal closed while sending a file (tests/scripts/input/
+        # termclose.txt), tests/commhost.py at the far end of COM1: on
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, COMM.DRV)
+        # Terminal must be gone and the screen as all-Microsoft's (not
+        # cached: the far end is part of the run)
+        scr=$root/tests/scripts/input/termclose.txt
+        python3 -c 'for i in range(400): print("line %04d of the text Terminal sends: the quick brown fox jumps over the lazy dog" % i)' > "$out/termclose-SEND.TXT"
+        for k in ref w16; do
+            port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+            python3 "$root/tests/commhost.py" -t 400 -l "$out/termclose-$k.host" "$port" > "$out/termclose-$k.hostout" 2>&1 &
+            hpid=$!
+            sleep 0.5
+            if [ $k = ref ]; then set -- -s -b 40 -t 240 "$scr" "$out/termclose-ref" -r
+            else set -- -e "$out/termclose-ref/boot.png" -E "$out/termclose-ref" -b 40 -t 240 "$scr" "$out/termclose-w16" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/COMM.DRV=WINDOWS/SYSTEM/COMM.DRV"; fi
+            DROPIN_CONF="[serial]
+serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i 'WIN.INI:windows:run=TERMINAL.EXE' \
+                -f "$out/termclose-SEND.TXT=WINDOWS/SEND.TXT" > "$out/termclose-$k.txt" 2>&1 || true
+            kill "$hpid" 2>/dev/null || true
+            wait "$hpid" 2>/dev/null || true
+        done
+        r=ok
+        f=03-closed.png
+        if [ ! -f "$out/termclose-ref/$f" ] || [ ! -f "$out/termclose-w16/$f" ]; then r="no $f"
+        elif ! grep -q 'L rts=0 dtr=0' "$out/termclose-ref.host"; then r="the reference did not close the port"
+        elif ! grep -q '^D ' "$out/termclose-w16.host"; then r="w16: nothing was sent"
+        else
+            n=$(magick compare -metric AE "$out/termclose-w16/$f" "$out/termclose-ref/$f" "$out/termclose-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$f: $n pixels differ (Terminal still there?)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   termclose: Terminal closed mid-transfer on every w16 part, the screen as 3.1's"
+        else echo "FAIL termclose: $r ($out)"; fails=$((fails + 1)); fi ;;
     kbd)
         # w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
         # DOSX, USER and GDI under real key input: typing in Notepad
