@@ -13,10 +13,16 @@ HWND hwndDesktop;
 /* CS_BYTEALIGNCLIENT: the client area's left edge goes to the nearest
    multiple of 8 on screen (probe US5: asked for x 10 and 333, Windows 3.1
    put such windows at 12 and 332, their client areas at 16 and 336) */
-void byte_align(PWND w)
+void byte_align(PWND w, BOOL made)
 {
     int dx;
     WORD cs = ((PCLS)w->cls)->style;
+    /* CS_BYTEALIGNWINDOW only when the window is made, not when it is
+       moved (US18 on 3.1: a dialog-class window made at x 221 went to 224,
+       moved to 213 and to 230 it stayed there; Terminal centres its
+       dialogs at 220) */
+    if (!made)
+        cs &= ~CS_BYTEALIGNWINDOW;
     /* not an icon (3.1: Notepad's, CS_BYTEALIGNCLIENT, minimised at 21
        like the rest; w16 had it at 24) */
     if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & (WS_CHILD | WS_MINIMIZE)))
@@ -327,12 +333,18 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             if (cy != CW_USEDEFAULT && cy)
                 sw = cy;                /* y of CW_USEDEFAULT: the show command */
             if (cx == CW_USEDEFAULT) {
-                /* the screen's width less two frames, down to the row of
-                   icons (Notepad started first on 3.1: 632x408 at 0,0 on
-                   640x480, then moved to x 4 by CS_BYTEALIGNCLIENT;
-                   UNVERIFIED for later, cascaded ones) */
-                cx = sysmet[SM_CXSCREEN] - x - 2 * sysmet[SM_CXFRAME];
+                /* the screen's width less a frame, down to the row of
+                   icons, and with CS_BYTEALIGNCLIENT a client area a
+                   whole number of 8 pixels wide (started first on 3.1 on
+                   640x480: Terminal 636x408 at 0,0; Notepad, whose class
+                   has CS_BYTEALIGNCLIENT, 632x408, then moved to x 4.
+                   UNVERIFIED for later, cascaded ones, and whether the
+                   client width is aligned in other cases too) */
+                int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] : sysmet[SM_CXBORDER];
+                cx = sysmet[SM_CXSCREEN] - x - sysmet[SM_CXFRAME];
                 cy = sysmet[SM_CYSCREEN] - y - sysmet[SM_CYICONSPACING];
+                if (c->style & CS_BYTEALIGNCLIENT)
+                    cx -= (cx - 2 * fx) % 8;
             }
         } else if (cx == CW_USEDEFAULT) {
             cx = sysmet[SM_CXSCREEN] * 3 / 4;
@@ -393,7 +405,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     calc_client(w);
-    byte_align(w);
+    byte_align(w, TRUE);
     r = send_message(h, WM_CREATE, 0, (LPARAM)(CREATESTRUCT __far *)&cs);
     if (!valid_wnd(h))
         return 0;

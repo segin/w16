@@ -1138,6 +1138,18 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         }
         us18 mdimax-us18ref -r
         us18 mdimax-us18 -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
+        # and marked for 3.10 (US18A: what differs for such programs)
+        us18a() {
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 150 -s "$out/$_l.png" -o "$out/$_l" \
+                -f "$root/build/dos/US18A.EXE=US18.EXE" -i 'boot:shell=C:\US18.EXE' "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        us18a mdimax-us18aref -r
+        us18a mdimax-us18a -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
         scr=$root/tests/scripts/input/mdimax.txt
         refrun mdimax-ref mdimax "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/mdimax-ref" -r
         "$root/tests/inputrun.sh" -e "$out/mdimax-ref/boot.png" -E "$out/mdimax-ref" -b 40 -t 240 "$scr" "$out/mdimax-us" -r \
@@ -1146,16 +1158,17 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/mdimax-pm.txt" 2>&1 || true
         r=ok
-        for k in us18ref us18; do
+        for k in us18ref us18 us18aref us18a; do
             f=$out/mdimax-$k.log
             if [ ! -f "$f" ] || ! grep -q '^US18 end' "$f"; then r="$k: US18 did not finish ($f)"; break; fi
         done
-        if [ "$r" = ok ]; then
-            grep '^OBS [^~]' "$out/mdimax-us18ref.log" > "$out/mdimax-us18ref.obs"
-            grep '^OBS [^~]' "$out/mdimax-us18.log" > "$out/mdimax-us18.obs"
-            cmp -s "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" ||
-                r="US18: $(diff "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/mdimax-us18ref.obs, mdimax-us18.obs)"
-        fi
+        for k in us18 us18a; do
+            [ "$r" = ok ] || break
+            grep '^OBS [^~]' "$out/mdimax-${k}ref.log" > "$out/mdimax-${k}ref.obs"
+            grep '^OBS [^~]' "$out/mdimax-$k.log" > "$out/mdimax-$k.obs"
+            cmp -s "$out/mdimax-${k}ref.obs" "$out/mdimax-$k.obs" ||
+                r="$k: $(diff "$out/mdimax-${k}ref.obs" "$out/mdimax-$k.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/mdimax-${k}ref.obs, mdimax-$k.obs)"
+        done
         for k in us pm; do
             [ "$r" = ok ] || break
             ls "$out/mdimax-ref"/[0-9]*.png > /dev/null 2>&1 || { r="no reference screens"; break; }

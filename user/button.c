@@ -334,9 +334,18 @@ LRESULT WINAPI __loadds ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     s = state(h);
     switch (msg) {
-    case WM_CREATE:
+    case WM_CREATE: {
+        /* BS_USERBUTTON in a program marked for 3.10 is a push button
+           (US18 on 3.1: made by such a program, by CreateWindow or a
+           dialog template, it reads back 0; by one marked 3.00 it stays
+           8. Terminal's status bar, Stop and Pause, are such buttons) */
+        PWND w = valid_wnd(h);
+        if (w && (w->style & 0x0F) == BS_USERBUTTON &&
+            K_GETEXPWINVER(K_GETEXEPTR(w->hInstance)) >= 0x030A)
+            w->style &= ~0x0FL;
         set_state(h, 0);
         return 0;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(h, &ps);

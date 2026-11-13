@@ -35,6 +35,9 @@ typedef struct LB {
     int    colw;                /* LBS_MULTICOLUMN: a column's width */
     DWORD  bars;                /* WS_VSCROLL/WS_HSCROLL it was made with */
     int    hext;                /* LB_SETHORIZONTALEXTENT */
+    int    reqh;                /* the client height asked for (integral) */
+    int    winh;                /* the window's height then */
+    BYTE   sizing;              /* integral() resizing it */
 } LB;
 typedef LB __near *PLB;
 
@@ -422,20 +425,33 @@ static int hit(HWND h, PLB lb, int x, int y)
 /* without LBS_NOINTEGRALHEIGHT the box shrinks to whole items (US4: a
    simple combo box's list 50 pixels high, three items and its border,
    where 57 were asked for) */
+/* The height is worked out from the one asked for, again when the font
+   changes: a dialog's list box is made with the system font's items and
+   gets the dialog's font after (3.1: Terminal's Default Serial Port, 65
+   pixels asked, 5 items of MS Sans Serif's 13; w16 shrank it to 4 of the
+   system font's 16 first and then to 4 of 13, with a scroll bar) */
 static void integral(HWND h, PLB lb)
 {
     RECT r;
     PWND w = valid_wnd(h);
-    int extra;
+    int want;
     if (!w || (lbstyle(h) & LBS_NOINTEGRALHEIGHT) || lb->itemh <= 0 ||
         (lbstyle(h) & LBS_OWNERDRAWVARIABLE))
         return;
     GetClientRect(h, &r);
-    extra = r.bottom % lb->itemh;
-    if (extra && r.bottom > lb->itemh)
+    want = lb->reqh;
+    if (want > lb->itemh)
+        want -= want % lb->itemh;
+    if (want != r.bottom) {
+        lb->sizing = 1;
         set_window_pos(h, 0, 0, 0, w->rcWindow.right - w->rcWindow.left,
-                       w->rcWindow.bottom - w->rcWindow.top - extra,
+                       w->rcWindow.bottom - w->rcWindow.top + want - r.bottom,
                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        if (valid_wnd(h)) {
+            lb->sizing = 0;
+            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
+        }
+    }
 }
 
 LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -461,6 +477,12 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         lb->itemh = cySysChar;
         lb->bars = lbstyle(h) & (WS_VSCROLL | WS_HSCROLL);
         lb->owner = GetParent(h);
+        {
+            RECT c;
+            GetClientRect(h, &c);
+            lb->reqh = c.bottom;
+            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
+        }
         if (lbstyle(h) & LBS_OWNERDRAWFIXED) {
             MEASUREITEMSTRUCT mi;
             mi.CtlType = ODT_LISTBOX;
@@ -503,8 +525,11 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         SelectObject(hdc, old);
         ReleaseDC(h, hdc);
         lb->font = (HFONT)wp;
-        if (!(lbstyle(h) & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE)))
+        if (!(lbstyle(h) & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE))) {
             lb->itemh = tm.tmHeight;
+            integral(h, lb);
+            update_scroll(h, lb);
+        }
         if (LOWORD(lp))
             redraw(h);
         return 0;
@@ -526,7 +551,15 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
            the box was one row high is any item) */
         if (multicol(h) && visible_rows(h, lb) > 0)
             lb->top = lb->top / visible_rows(h, lb) * visible_rows(h, lb);
-        integral(h, lb);
+        if (!lb->sizing && PW(h)->rcWindow.bottom - PW(h)->rcWindow.top != lb->winh) {
+            /* sized by its owner (not a scroll bar come or gone): that is
+               the height asked for now */
+            RECT c;
+            GetClientRect(h, &c);
+            lb->reqh = c.bottom;
+            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
+            integral(h, lb);
+        }
         update_scroll(h, lb);
         return 0;
     case WM_GETDLGCODE:
@@ -641,8 +674,11 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (rows < 1)
             rows = 1;
         switch (wp) {
-        case VK_UP: i--; break;
-        case VK_DOWN: i++; break;
+        /* nothing selected yet: Down or Up selects the caret's item, the
+           first (3.1: COMMDLG's file list, Down twice from no selection
+           went to the second file; w16 went to the third) */
+        case VK_UP: if (multi(h) || lb->cur >= 0) i--; else if (i < 0) i = 0; break;
+        case VK_DOWN: if (multi(h) || lb->cur >= 0) i++; else if (i < 0) i = 0; break;
         case VK_LEFT: if (multicol(h)) i -= rows; else i--; break;
         case VK_RIGHT: if (multicol(h)) i += rows; else i++; break;
         case VK_PRIOR: i -= rows - 1; break;
