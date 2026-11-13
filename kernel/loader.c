@@ -717,11 +717,11 @@ static u16 entry_ds(module FAR *m)
 
 static module FAR *load_fail(module FAR *m, const char FAR *path, const char *why)
 {
-    kputs("w16: cannot load ");
-    kputs(path);
-    kputs(": ");
-    kputs(why);
-    kputs("\r\n");
+    kdbg("w16: cannot load ");
+    kdbg(path);
+    kdbg(": ");
+    kdbg(why);
+    kdbg("\r\n");
     if (m)
         destroy(m);
     return NULL;

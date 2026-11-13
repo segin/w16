@@ -39,6 +39,7 @@ void text_mode(void)
         u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
     } rmc;
     regs16 r;
+    win_screen = 0;                     /* (reports go to the screen now) */
     if (!winboot_active || !module_find("DISPLAY"))
         return;
     kmemset(&rmc, 0, sizeof rmc);
@@ -153,6 +154,11 @@ u16 __cdecl __far gp_handler(void)
 }
 
 /* " MODULE:n" for the module segment sel belongs to */
+/* where() writes to the screen in a report, to kdbg in a note */
+static int where_dbg;
+static void wputs(const char FAR *s) { if (where_dbg) kdbg(s); else kputs(s); }
+static void wputhex(u16 v) { if (where_dbg) kdbghex(v); else kputhex(v); }
+
 void where(u16 sel)
 {
     module FAR *m;
@@ -160,36 +166,36 @@ void where(u16 sel)
     for (m = module_first; m; m = m->next)
         for (i = 0; i < m->seg_count; i++)
             if (m->seg[i].sel && (m->seg[i].sel | 7) == (sel | 7)) {
-                kputs(" (");
-                kputs(m->name);
-                kputs(":");
+                wputs(" (");
+                wputs(m->name);
+                wputs(":");
                 kputdec(i + 1);
-                kputs(" base ");
+                wputs(" base ");
                 {
                     u32 b = dpmi_get_base(sel);
-                    kputhex((u16)(b >> 16));
-                    kputhex((u16)b);
+                    wputhex((u16)(b >> 16));
+                    wputhex((u16)b);
                 }
-                kputs(" limit ");
-                kputhex(lsl(sel));
-                kputs(")");
+                wputs(" limit ");
+                wputhex(lsl(sel));
+                wputs(")");
                 return;
             }
     for (m = module_first; m; m = m->next)
         if ((m->ne_sel | 7) == (sel | 7)) {
-            kputs(" (module table of ");
-            kputs(m->name);
-            kputs(")");
+            wputs(" (module table of ");
+            wputs(m->name);
+            wputs(")");
             return;
         }
     if (sel) {
         u32 b = dpmi_get_base(sel);
-        kputs(" (base ");
-        kputhex((u16)(b >> 16));
-        kputhex((u16)b);
-        kputs(" limit ");
-        kputhex(lsl(sel));
-        kputs(")");
+        wputs(" (base ");
+        wputhex((u16)(b >> 16));
+        wputhex((u16)b);
+        wputs(" limit ");
+        wputhex(lsl(sel));
+        wputs(")");
     }
 }
 
@@ -341,14 +347,16 @@ void __cdecl k327_note(u16 err, u16 ip, u16 cs)
     static u16 count;
     if (++count > 8)
         return;
-    kputs("w16: parameter error ");
-    kputhex(err);
-    kputs(" at ");
-    kputhex(cs);
-    kputs(":");
-    kputhex(ip);
+    kdbg("w16: parameter error ");
+    kdbghex(err);
+    kdbg(" at ");
+    kdbghex(cs);
+    kdbg(":");
+    kdbghex(ip);
+    where_dbg = 1;
     where(cs);
-    kputs("\r\n");
+    where_dbg = 0;
+    kdbg("\r\n");
 }
 
 /* INT 21h AH=4Ch with no current task (kentry.asm): the KERNEL process

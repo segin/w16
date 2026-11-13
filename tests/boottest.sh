@@ -8,6 +8,9 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
+#   odstring   TK56 as the shell calls OutputDebugString: the screen against
+#              3.1's (which shows the text: handle 3 is DOSBox's console)
+#                                                   must be 0
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
@@ -265,7 +268,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -544,6 +547,16 @@ runcase() {
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
+    odstring)
+        # TK56 as the shell calls OutputDebugString and waits. Windows
+        # 3.1's retail KERNEL writes the text to DOS handle 3 (AUX), which
+        # in DOSBox is the console: it is painted over the screen, with
+        # WIN's output redirected to a file as here. w16 wrote it to
+        # handle 1 (into the file here; over the screen in a session
+        # without the redirect): the screens differed
+        set -- -f "$root/build/dos/TK56.EXE=TK56.EXE" -i 'boot:shell=C:\TK56.EXE'
+        refrun odsref odstring boot -r "$@"; expect=$out/odsref.png
+        boot odstring "$@"; check odstring odstring odsref ;;
     lastexit)
         # the shell (TK55) ends at once with exit code 5: Windows ends
         # through USER's ExitWindows (KERNEL, last task); a batch file

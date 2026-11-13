@@ -86,6 +86,11 @@ int  kstricmp(const char FAR *a, const char FAR *b);
 int  kstrnicmp_p(const char FAR *a, const u8 FAR *pstr);  /* vs length-prefixed */
 void kputs(const char FAR *s);
 void kputhex(u16 v);
+void kdbg(const char FAR *s);           /* util.c: w16's diagnostics */
+void kdbg_file(const char FAR *s);
+void kdbghex(u16 v);
+void kdbg_init(const char FAR *path);
+extern u16 win_screen;
 void kputdec(u16 v);
 void kexit_to_dos(u8 code);
 
