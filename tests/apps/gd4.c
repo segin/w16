@@ -503,6 +503,9 @@ static void fill_complex(void)
     DeleteObject(r);
 }
 
+#ifndef GD4_STAIRS_MS
+#define GD4_STAIRS_MS 60000L
+#endif
 /* one rectangle per band, added one at a time (at most a minute) */
 static void fill_stairs(void)
 {
@@ -519,7 +522,7 @@ static void fill_stairs(void)
             out(": GFSR(1)=");
             outhex(gfsr(1));
             out("\r\n");
-            if (GetTickCount() - t0 > 60000L) {
+            if (GetTickCount() - t0 > GD4_STAIRS_MS) {
                 out("OBS ~region bands: stopped at a minute\r\n");
                 n++;
                 break;
@@ -654,6 +657,7 @@ int __cdecl tmain(void)
 
     g = GlobalAlloc(GMEM_MOVEABLE, NMAX * sizeof(WORD));
     hs = (WORD FAR *)GlobalLock(g);
+#ifndef GD4_STAIRS_ONLY
     fill(K_PEN);
     fill(K_SBRUSH);
     fill(K_FONT);
@@ -664,6 +668,7 @@ int __cdecl tmain(void)
     fill(K_BMP);
     fill_savedc();
     fill_complex();
+#endif
     fill_stairs();
     ReleaseDC(NULL, hdcScreen);
     fill_getdc();
