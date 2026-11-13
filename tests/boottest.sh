@@ -565,9 +565,14 @@ runcase() {
         set -- -c GO55 -f "$out/GO55.BAT=WINDOWS/GO55.BAT" -f "$root/build/dos/VIDMODE.COM=VIDMODE.COM" \
             -f "$root/build/dos/TK55.EXE=TK55.EXE" -i 'boot:shell=C:\TK55.EXE'
         r=ok
+        # both at once; each ends when the batch file's record is written
+        # (-W EL.TXT), at 60 s at the latest as before
         for k in ref w16; do
             o=; [ $k = ref ] && o=-r
-            "$root/tests/dropin.sh" -t 60 -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 || true
+            "$root/tests/dropin.sh" -t 60 -W EL.TXT -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref w16; do
             el=$(tr -d '\r' < "$out/lastexit-$k/c/EL.TXT" 2>/dev/null | tr '\n' ' ')
             [ "$el" = "rc 0 mode 3 " ] || r="$k: $el (rc 0 mode 3 expected)"
         done
@@ -714,12 +719,12 @@ runcase() {
         # left (3.1: mode 3, 80 columns, 25 rows, 16-line font; w16's
         # WIN.COM once left 50 lines, the 8x8 font)
         printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\nC:\\WCB\r\n' > "$out/GOP.BAT"
-        for v in ref w16; do
-            if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
-            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-$v" "$@" \
-                -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" -f "$root/build/dos/WCB.COM=WCB.COM" \
-                > "$out/winprompt-$v.txt" 2>&1 || true
-        done
+        # w16's side beside the reference's (cached; their timing as before)
+        set -- -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" -f "$root/build/dos/WCB.COM=WCB.COM"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-w16" -r -w "$@" \
+            > "$out/winprompt-w16.txt" 2>&1 &
+        refrun winprompt-ref winprompt env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-ref" -r "$@"
+        wait
         r=ok
         for v in ref w16; do
             m=$(python3 -c "import sys; d = open(sys.argv[1], 'rb').read(); print('mode %02X cols %d rows %d font %d' % (d[0x49], d[0x4A], d[0x84] + 1, d[0x85]))" \
