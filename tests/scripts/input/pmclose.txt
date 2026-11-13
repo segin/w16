@@ -1,6 +1,14 @@
 ; Program Manager's system-menu box double-clicked (tests/boottest.sh
 ; pmclose): the Exit dialog comes up in front, system modal; a click on
 ; Program Manager's client area does nothing; Esc (Cancel) closes it
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a caret keep their fixed delay after the last key (the
+; caret's blink phase)
 click 1
 sleep 1
 home
@@ -8,14 +16,14 @@ move 40 30
 sleep 1
 click 1
 click 1
-sleep 2
+match 01-dialog 20 2
 shot 01-dialog
 home
 move 150 150
 sleep 1
 click 1
-sleep 1
+match 02-clicked 20 1
 shot 02-clicked
 key Escape
-sleep 2
+match 03-cancelled 20 2
 shot 03-cancelled

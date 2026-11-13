@@ -2,12 +2,25 @@
 ; File Manager's directory pane (APPS.HLP) dragged into the Main group with
 ; the mouse, as shdrop.txt does; then File Manager closed and Windows ended
 ; from Program Manager (File > Exit Windows, OK), so MAIN.GRP is saved
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a caret keep their fixed delay after the last key (the
+; caret's blink phase)
 key alt+f
 key r
-sleep 4
+; the Run dialog up (Program Manager's caption no longer active), then
+; the program's window active and drawn (as in icons.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
 type winfile
+markcolor 0000aa
 key Return
-sleep 10
+waitmoved 0000aa 500 30
+match 01-winfile 20 2
 shot 01-winfile
 key alt+space
 sleep 1
@@ -17,13 +30,13 @@ key Right
 key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
 key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
 key Return
-sleep 2
+match 02-narrow 20 2
 shot 02-narrow
 click 1
 sleep 1
 home
 move 135 106
-sleep 1
+match 03-pointer 20 1
 shot 03-pointer
 down 1
 sleep 0.5
@@ -34,10 +47,10 @@ sleep 0.5
 move 15 3
 sleep 0.5
 move 15 3
-sleep 1
+match 04-dragging 20 1
 shot 04-dragging
 up 1
-sleep 3
+match 05-dropped 20 3
 shot 05-dropped
 key alt+f
 key x
@@ -46,4 +59,4 @@ key alt+f
 key x
 sleep 2
 key Return
-sleep 8
+waitexit 60

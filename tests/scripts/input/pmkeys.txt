@@ -1,13 +1,14 @@
 ; Program Manager's arrow keys straight after it starts, no click on a
 ; group first (tests/boottest.sh case pmkeys): Right twice selects the
-; third item of Main; then a click on the workspace and Right twice more
+; third item of Main; then a click on the workspace and Right twice more.
+; The shots wait for their state (match: tests/inputrun.sh)
 key Right
 key Right
-sleep 1
+match 01-keys 20 1
 shot 01-keys
 click 1
 sleep 1
 key Right
 key Right
-sleep 1
+match 02-click 20 1
 shot 02-click
