@@ -282,8 +282,9 @@ u16 winboot(void)
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
     {
-        extern u16 sched_log, exit_msg;
+        extern u16 sched_log, exit_msg, idle_1689;
         sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
+        idle_1689 = GetPrivateProfileInt("w16", "idle1689", 0, sysini);
         heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
         exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
         {

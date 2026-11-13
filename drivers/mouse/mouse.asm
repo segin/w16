@@ -290,6 +290,10 @@ ENABLE:
 ; ours before the device is enabled: no packet can come before the
 ; handler is there.
 on:
+%ifdef LATEHOOK                         ; a test build (MOUSELH.DRV,
+        mov word [enabled wrt DGROUP], 1 ; tests/mousestress.sh -M lh): the
+        call setup                      ; device enabled before INT 74h is
+%endif                                  ; taken, as Windows 3.1's driver does
         push es
         mov ax, 3500h + IRQ12_VEC       ; DOS get/set vector: the DOS
         int 21h                         ; extender then also routes IRQ 12
@@ -304,8 +308,10 @@ on:
         int 21h
         pop ds
         mov word [hooked wrt DGROUP], 1
+%ifndef LATEHOOK
         mov word [enabled wrt DGROUP], 1
         call setup
+%endif
         ; IRQ 12 and the cascade unmasked at the interrupt controllers
         cli
         in al, 0A1h
