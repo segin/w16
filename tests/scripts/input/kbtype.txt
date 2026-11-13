@@ -27,16 +27,66 @@ markcolor 0000aa
 key Return
 waitmoved 0000aa 500 30
 settle 10
-type The quick brown fox jumps over the lazy dog.
+; The text goes in a few keys at a time, each piece once the screen has
+; held still (Notepad caught up): on a loaded host the emulator can fall
+; seconds behind and then take a burst of keys at once, more than USER's
+; system queue holds (120 events, Pietrek; w16's USER as 3.1's): the rest
+; is dropped (36 parallel runs: every event reached USER through the
+; driver, but in one run Notepad never got Shift, /, Space). (A piece
+; cannot begin or end with a space: the script reader drops them.)
+type The
+key space
+type quick
+key space
+settle 30
+type brown
+key space
+type fox
+key space
+settle 30
+type jumps
+key space
+type over
+key space
+settle 30
+type the
+key space
+type lazy
+key space
+type dog.
 key Return
-type THE QUICK BROWN FOX 0123456789
+settle 30
+type THE
+key space
+type QUICK
+key space
+settle 30
+type BROWN
+key space
+type FOX
+key space
+settle 30
+type 0123456789
 key Return
-type `~!@#$%^&*()-_=+[{]}\|;:'",<.>/?
+settle 30
+type `~!@#$%^
+settle 30
+type &*()-_=+
+settle 30
+type [{]}\|;:
+settle 30
+type '",<.>/?
 key Return
+settle 30
 key Caps_Lock
-type caps On, 42
+type caps
+key space
+type On,
+key space
+type 42
 key Caps_Lock
 key Return
+settle 30
 key KP_1
 key KP_2
 key KP_Add
