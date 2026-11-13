@@ -133,7 +133,8 @@ static void read_menu(HWND mw)
             lstrcpy(t, "-");
         else
             GetMenuString(m, i, t, sizeof t, MF_BYPOSITION);
-        if (st & (MF_GRAYED | MF_DISABLED | MF_CHECKED))
+        /* (a separator is MF_DISABLED as well, as on 3.1: US18) */
+        if ((st & (MF_GRAYED | MF_DISABLED | MF_CHECKED)) && !(st & MF_SEPARATOR))
             append(t, sizeof t, "(state)");
         if (i)
             append(got, sizeof got, "|");
