@@ -1,0 +1,39 @@
+; ChooseFont by mouse and keyboard: a face, style, size and effects
+; chosen; a face typed; a size that is not a number
+cd1 font flags=101 hook=1
+cd1 font flags=1 hook=1
+cd1 font flags=1
+wait 3000
+; 1: Courier, Bold, 12, Underline, then OK
+click 100 168
+wait 800
+snap C:\A1.BMP
+click 250 181
+wait 600
+click 360 194
+wait 600
+click 45 269
+wait 600
+snap C:\A2.BMP
+dump
+key 0D
+wait 1500
+; 2: a face typed
+type MS Serif
+wait 600
+snap C:\B1.BMP
+key 0D
+wait 1500
+; 3: a size that is not a number
+click 380 139
+wait 400
+type x
+wait 400
+key 0D
+wait 1000
+snap C:\C1.BMP
+dump
+key 0D
+wait 800
+key 1B
+wait 1500

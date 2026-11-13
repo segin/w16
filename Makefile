@@ -1575,3 +1575,6 @@ install-tree: $(W16SYS)/KEYBOARD.DRV
 $(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+
+# COMMDLG.DLL and its probe (shell/commdlg/commdlg.mk)
+include shell/commdlg/commdlg.mk

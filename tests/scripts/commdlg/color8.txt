@@ -1,0 +1,73 @@
+; ChooseColor: Add to Custom Colors (Tab x11 from no focus), twice,
+; then the custom colours box; a: Cancel, b: OK (what comes back)
+cd1 color flags=13 rgb=0080FF hook=1 cust=FF0000,00FF00
+cd1 color flags=13 rgb=0080FF hook=1 cust=FF0000,00FF00
+wait 7000
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+wait 500
+focus
+key 20
+wait 1500
+snap C:\A1.BMP
+key 20
+wait 1500
+snap C:\A2.BMP
+key 09
+key 09
+wait 500
+focus
+key 27
+wait 500
+key 20
+wait 1500
+snap C:\A3.BMP
+key 09
+key 09
+wait 300
+focus
+key 1B
+wait 7000
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+key 09
+wait 500
+focus
+key 20
+wait 1500
+snap C:\B1.BMP
+key 20
+wait 1500
+snap C:\B2.BMP
+key 09
+key 09
+wait 500
+focus
+key 27
+wait 500
+key 20
+wait 1500
+snap C:\B3.BMP
+key 09
+key 09
+wait 300
+focus
+key 0D
+wait 3000

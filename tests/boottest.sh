@@ -150,6 +150,9 @@
 #              port) against the same with Microsoft's COMM.DRV: CM1's log
 #              and the far end's records identical (not cached: the
 #              far end is part of the run)
+#   commdlg    w16's COMMDLG.DLL over Microsoft's in the reference install:
+#              open1, find1, color1, font1, print1 of tests/commdlgscen.sh
+#              (the probe's log identical, screens within the baseline)
 #   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
 #              DOSX, USER and GDI under real key input: typing in Notepad
 #              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
@@ -280,7 +283,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1272,6 +1275,18 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
         else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
+    commdlg)
+        # w16's COMMDLG.DLL against Microsoft's on the reference 3.1
+        # (tests/commdlgscen.sh, ARCHITECTURE.md 17): one scenario of each
+        # dialog; the probe's log identical, the screens within
+        # tests/scripts/commdlg.baseline (our own pictures)
+        if CD_OUT="$out/commdlg" "$root/tests/commdlgscen.sh" open1 find1 color1 font1 print1 \
+                > "$out/commdlg.txt" 2>&1; then
+            echo "ok   commdlg: Open, Find, Color, Font, Print as the original's"
+        else
+            echo "FAIL commdlg: $(grep -m1 -E '^  ' "$out/commdlg.txt" || echo 'see commdlg.txt') ($out/commdlg.txt)"
+            fails=$((fails + 1))
+        fi ;;
     comm)
         # (both runs each time: commhost's records are part of the result)
         if "$root/tests/commprobe.sh" -p 4 -o "$out/comm" > "$out/comm.txt" 2>&1; then

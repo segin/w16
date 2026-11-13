@@ -1,0 +1,78 @@
+; Print Setup's choices: orientation, paper size and source, the
+; specific printer; Print's quality, range and boxes, copies
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+; a: Setup: landscape, Legal, manual feed, specific printer, OK
+cd1 print flags=2040 hook=1
+cd1 wait 1000
+; b: Print: selection, print to file, collate, 150 dpi, copies 2, OK
+cd1 print flags=1100 hook=1 copies=1 from=1 to=1 min=1 max=1 keep=1
+cd1 wait 1000
+; c: Print: NOSELECTION, NOPAGENUMS, DISABLEPRINTTOFILE, OK
+cd1 print flags=8000C copies=1
+cd1 wait 1000
+; d: Print: HIDEPRINTTOFILE, USEDEVMODECOPIES, copies 3 typed, OK
+cd1 print flags=140000 copies=4 keep=1
+wait 3000
+; a
+clickid 421
+wait 500
+snap C:\A1.BMP
+clickid 471
+wait 500
+clickid 471
+wait 500
+key 28
+key 28
+key 28
+wait 500
+clickid 472
+wait 500
+clickid 472
+wait 500
+key 28
+key 28
+wait 500
+clickid 423
+wait 500
+snap C:\A2.BMP
+dump
+clickid 1
+wait 2500
+; b
+clickid 421
+clickid 410
+clickid 411
+clickid 470
+wait 500
+clickid 470
+wait 500
+key 28
+wait 300
+clickid 482
+key 23
+key 08
+type 2
+wait 300
+snap C:\B1.BMP
+dump
+clickid 1
+wait 2500
+; c
+snap C:\C1.BMP
+dump
+clickid 1
+wait 2500
+; d
+snap C:\D1.BMP
+dump
+clickid 482
+key 23
+key 08
+type 3
+clickid 1
+wait 1500
