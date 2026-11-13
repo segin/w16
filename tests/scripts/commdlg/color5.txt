@@ -1,0 +1,44 @@
+; ChooseColor: Define Custom Colors, Add to Custom Colors, the edits,
+; Solid, Help
+; a: Define Custom Colors, then Add twice, Cancel (are the customs kept?)
+cd1 color flags=19 rgb=FF8000 hook=1
+; b: Add, OK; typed values out of range and not numbers; Solid
+cd1 color flags=1B rgb=4080C0 hook=1
+wait 6000
+alt d
+wait 3000
+snap C:\A1.BMP
+dump
+alt a
+wait 1000
+alt a
+wait 1000
+snap C:\A2.BMP
+key 1B
+wait 6000
+; b
+alt a
+wait 1000
+alt r
+type 300
+key 09
+wait 1500
+snap C:\B1.BMP
+dump
+alt g
+type x
+key 09
+wait 1500
+snap C:\B2.BMP
+dump
+alt h
+type 250
+key 09
+wait 1500
+dump
+alt o
+wait 1500
+snap C:\B3.BMP
+dump
+key 0D
+wait 3000
