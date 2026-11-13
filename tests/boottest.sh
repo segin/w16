@@ -141,8 +141,8 @@
 #              DOSX, USER and GDI under real key input: typing in Notepad
 #              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
 #              the keypad, arrows, Alt menus, Ctrl+C/V, Alt+Tab, Ctrl+Esc,
-#              Alt+Esc) and the tabs, alttab, helpmenus, pmkeys and icons
-#              scripts, every screen against the same script with
+#              Alt+Esc) and the tabs, alttab, helpmenus, pmkeys, icons and
+#              menus scripts, every screen against the same script with
 #              Microsoft's KEYBOARD.DRV                must be 0
 #   kbdall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
 #              fonts) with w16's KEYBOARD.DRV against the same with
@@ -471,9 +471,11 @@ check() {
             for rr in woaref woaref2; do
                 [ -f "$out/$rr.png" ] || continue
                 m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
-                [ "${m%% *}" = 0 ] && n=0
+                if [ "${m%% *}" = 0 ]; then n=0; fi
             done
-            [ "$n" = 0 ] && retried "$c" case-second-boot "first boot differed by $n1 pixels"
+            # (an if, not &&: a false test as check's last command made
+            # check fail and set -e end the case without a FAIL line)
+            if [ "$n" = 0 ]; then retried "$c" case-second-boot "first boot differed by $n1 pixels"; fi
         fi
     fi
     case $n in
@@ -1102,13 +1104,13 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
     kbd)
         # w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
         # DOSX, USER and GDI under real key input: typing in Notepad
-        # (kbtype) and the key scripts of tabs, alttab, helpmenus, pmkeys
-        # and icons, every screen against the same script with Microsoft's
+        # (kbtype) and the key scripts of tabs, alttab, helpmenus, pmkeys,
+        # icons and allw16input (menus), every screen against the same script with Microsoft's
         # KEYBOARD.DRV (helpmenus: Notepad's caret left out as there;
         # icons: Clock's icon)
         kdrv=$root/build/dos/KEYBOARD.DRV
         r=ok
-        for s in kbtype tabs alttab helpmenus pmkeys icons; do
+        for s in kbtype tabs alttab helpmenus pmkeys icons menus; do
             scr=$root/tests/scripts/input/$s.txt
             case $s in
             helpmenus) m="rectangle 14,42 20,61" ;;
@@ -1133,20 +1135,17 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             done
             [ "$r" = ok ] || break
         done
-        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons with w16's KEYBOARD.DRV)"
+        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
         else echo "FAIL kbd: $r ($out)"; fails=$((fails + 1)); fi ;;
     kbdall)
         # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
         # fonts) with w16's KEYBOARD.DRV against the same with Microsoft's
         # KEYBOARD.DRV, the kbtype script (both sides are w16's but for
-        # KEYBOARD.DRV: not cached). w16's USER keeps Notepad's caret
-        # blinking while a menu is open (as in helpmenus): its place is
-        # left out of the menu shots
+        # KEYBOARD.DRV: not cached)
         fon=$root/build/fonts
         scr=$root/tests/scripts/input/kbtype.txt
-        cm="rectangle 76,86 86,108"
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -M "$cm" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
                 -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
             "$root/tests/inputrun.sh" "$@" \
@@ -1162,10 +1161,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             [ "$r" = ok ] || break
             g=$(basename "$f")
             [ -f "$out/kbdall-w16/$g" ] || { r="no $g"; break; }
-            case $g in 0[345]-*) m=$cm ;; *) m="rectangle 0,0 0,0" ;; esac
-            magick "$f" -fill black -draw "$m" "$out/kbdall-a.png"
-            magick "$out/kbdall-w16/$g" -fill black -draw "$m" "$out/kbdall-b.png"
-            n=$(magick compare -metric AE "$out/kbdall-b.png" "$out/kbdall-a.png" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=$(magick compare -metric AE "$out/kbdall-w16/$g" "$f" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || r="$g: $n pixels differ ($out/kbdall-${g%.png}-diff.png)"
         done

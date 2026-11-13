@@ -4,9 +4,9 @@
 ; Ctrl accelerators (copy, paste), Alt+Tab, Ctrl+Esc (the Task List),
 ; Alt+Esc, Alt+F4. DOSBox keeps Ctrl+F1..F12, Alt+Enter and Alt+Pause for
 ; itself: none of them here.
-; Shots without a blinking caret wait for their state (match NAME MAX S);
-; shots with one (matchnow NAME MAX S) are taken in the caret's phase
-; (tests/inputrun.sh)
+; Every shot is taken in the caret's phase (matchnow NAME MAX S,
+; tests/inputrun.sh): Notepad's caret may show on any of them (w16's USER
+; keeps it blinking while a menu is open)
 key alt+f
 key r
 ; the Run dialog up (Program Manager's caption no longer active), then
@@ -51,42 +51,34 @@ key Delete
 matchnow 02-edited 20 2
 ; Alt menus: the Edit menu by Alt+E, then Search by Right
 key alt+e
-match 03-editmenu 20 1.5
-shot 03-editmenu
+matchnow 03-editmenu 20 1.5
 key Right
-match 04-searchmenu 20 1.5
-shot 04-searchmenu
+matchnow 04-searchmenu 20 1.5
 key Escape
 key Escape
 ; Alt alone, then a letter: the File menu
 key alt
 key f
-match 05-filemenu 20 1.5
-shot 05-filemenu
+matchnow 05-filemenu 20 1.5
 key Escape
 key Escape
 ; to Program Manager and back
 key alt+Tab
-match 06-alttab 20 2
-shot 06-alttab
+matchnow 06-alttab 20 2
 key alt+Tab
 matchnow 07-back 20 2
 ; the Task List
 key ctrl+Escape
-match 08-tasklist 20 2
-shot 08-tasklist
+matchnow 08-tasklist 20 2
 key Escape
 matchnow 09-closed 20 2
 ; Alt+Esc to Program Manager, Alt+Esc back
 key alt+Escape
-match 10-altesc 20 2
-shot 10-altesc
+matchnow 10-altesc 20 2
 key alt+Escape
 matchnow 11-altesc-back 20 2
 ; closed without saving
 key alt+F4
-match 12-save 20 2
-shot 12-save
+matchnow 12-save 20 2
 key n
-match 13-closed 20 2
-shot 13-closed
+matchnow 13-closed 20 2
