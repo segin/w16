@@ -10,7 +10,8 @@
 #               /mnt/build/w16-runs); each checkout gets DIR/NAME
 #     -n NAME   the run directory's name (default: this checkout's directory
 #               name, e.g. agent-a1b2c3 for a worktree, w16 for the main one)
-#     -j JOBS   BOOTTEST_JOBS there (default 12)
+#     -j JOBS   BOOTTEST_JOBS there (default: from the host's threads, see
+#               below)
 #     -t        make test only          -b   boot test only
 #     -k N      keep the last N boot-test result directories there (default 3)
 #     -e VAR=VALUE  set an environment variable for the tests there
@@ -26,13 +27,19 @@
 # (default 3) use the host at once; others wait for a slot.
 # Results come back to build/remote-NAME/ here: make-test.log, boot.log and
 # the boot test's *-diff.png files of failing cases.
+# With both requested, make test runs beside the boot test (it takes a
+# small share of the host: RUNTESTS_JOBS 8, WINCOM_JOBS 4). The boot
+# test's default jobs: a third of the host's threads (nproc), at least 3
+# and at most 16 (measured on installation-05, 20 cores / 40 threads, in
+# ARCHITECTURE.md 9.2: past that the wall time no longer drops and the
+# timing-sensitive cases start to fail).
 set -eu
 host=${W16_REMOTE_HOST:-installation-05}
 base=${W16_REMOTE_DIR:-/mnt/build/w16-runs}
 tools=${W16_REMOTE_TOOLS:-/mnt/build/w16/.tools}
 slots=${W16_REMOTE_SLOTS:-3}
 root=$(git rev-parse --show-toplevel)
-name=$(basename "$root") jobs=12 keep=3 dotest=1 doboot=1 envs=
+name=$(basename "$root") jobs=auto keep=3 dotest=1 doboot=1 envs=
 while getopts H:d:n:j:tbk:e: opt; do
     case $opt in
     H) host=$OPTARG ;; d) base=$OPTARG ;; n) name=$OPTARG ;;
@@ -78,19 +85,34 @@ while :; do
 done
 rc=0
 make -j"$(nproc)" all win386 > build/remote-make.log 2>&1 || { tail -n 20 build/remote-make.log; exit 3; }
+if [ "$jobs" = auto ]; then
+    jobs=$(( $(nproc) / 3 )); [ $jobs -lt 3 ] && jobs=3; [ $jobs -gt 16 ] && jobs=16
+fi
+# make test, beside the boot test when both are asked for
 if [ "$dotest" = 1 ]; then
-    make test > build/make-test.log 2>&1 || rc=1
-    echo "make test: $( [ $rc = 0 ] && echo pass || echo FAIL)"
-    grep -a '^FAIL' build/make-test.log | tr -d '\r' | head -20
+    if [ "$doboot" = 1 ]; then
+        RUNTESTS_JOBS=8 WINCOM_JOBS=4 make test > build/make-test.log 2>&1 &
+        tpid=$!
+    else
+        make test > build/make-test.log 2>&1; trc=$?
+    fi
 fi
 if [ "$doboot" = 1 ]; then
     cp tests/boottest.sh build/boottest-snapshot.sh
+    echo "boot test: BOOTTEST_JOBS=$jobs"
     # shellcheck disable=SC2086
     BOOTTEST_JOBS=$jobs sh build/boottest-snapshot.sh $cases > build/boot.log 2>&1 || rc=1
     grep -E '^(ok|FAIL|xfail)' build/boot.log | grep -v '^ok' || true
     echo "boot test: $(grep -c '^ok' build/boot.log) ok; $(tail -n 1 build/boot.log)"
     # keep only the last $keep result directories
     ls -1dt build/boottest-[0-9]* 2>/dev/null | tail -n +$((keep + 1)) | while read -r d; do rm -rf -- "$d"; done
+fi
+if [ "$dotest" = 1 ]; then
+    if [ -n "${tpid:-}" ]; then wait "$tpid"; trc=$?; fi
+    if [ "$trc" = 0 ]; then t=pass; else t=FAIL; fi
+    echo "make test: $t"
+    [ $t = pass ] || rc=1
+    grep -a '^FAIL\|FAILED' build/make-test.log | tr -d '\r' | head -20
 fi
 exit $rc
 EOF
