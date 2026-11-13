@@ -1190,6 +1190,13 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US14: menus in USER's menu heaps; GetFreeSystemResources (tests/apps/us14.c)
+$(B)/tests/us14.o: tests/apps/us14ref.h tests/apps/tklog.h
+$(DOS)/US14.EXE: $(B)/tests/start.o $(B)/tests/us14.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us14.map file { $(B)/tests/start.o $(B)/tests/us14.o }
+dos: $(DOS)/US14.EXE
 # US13: the caret's blink (tests/apps/us13.c)
 $(B)/tests/us13.o: tests/apps/us13ref.h tests/apps/tklog.h
 $(DOS)/US13.EXE: $(B)/tests/start.o $(B)/tests/us13.o tests/apps/app.lnk
