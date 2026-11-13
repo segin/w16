@@ -1034,7 +1034,7 @@ $(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/
 # ---- GDI.EXE: w16's GDI (gdi/; ARCHITECTURE.md 11) ----
 # large model, SS != DS, byte-packed structures (the DDK's), 286
 GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
-GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/object.o \
+GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o
 gdi: $(DOS)/GDI.EXE

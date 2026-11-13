@@ -23,18 +23,20 @@
 #define ETO_OPAQUE 2
 #define ETO_CLIPPED 4
 
-static DWORD drv_extent(NPDC dc, LPCSTR s, int n)
+static DWORD drv_extent(LPDC dc, LPCSTR s, int n)
 {
-    if (!dc->pfont)
+    LPFONT f = dc_font(dc);
+    TEXTXFORM tx;
+    if (!f)
         return 0;
+    font_xform(dc, f, &tx);
     return ((DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT])(dc->lpPDevice, 0, 0, 0, s, -n,
-                                                        dc->pfont->fi, &dc->dm, &dc->xform,
-                                                        0, 0, 0);
+                                                        f->fi, &dc->dm, &tx, 0, 0, 0);
 }
 
 DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD e;
     int w, h;
     if (!dc || n <= 0)
@@ -63,21 +65,23 @@ BOOL GDIAPI GetTextExtentPoint(HDC hdc, LPCSTR s, int n, POINT __far *sz) /* GDI
 BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
                        LPCSTR s, int n, const short __far *dx)    /* GDI.351 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     LPFONTINFO fi;
     DRVEXTTEXTOUT fn;
     int p[4];
     RECT orc, clip;
-    NPRGN rao;
+    LPRGN rao;
     WORD k, nrects;
-    short NEAR *ddx = 0;
-    HLOCAL hdx = 0;
+    short __far *ddx = 0;
+    XP xdx = 0;
+    TEXTXFORM tx;
     if (!dc)
         return FALSE;
     if (!font_realize(dc))
         return FALSE;
     dc = dc_get(hdc);
-    fi = dc->pfont->fi;
+    fi = dc_font(dc)->fi;
+    font_xform(dc, dc_font(dc), &tx);
     fn = (DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT];
     if (n < 0)
         n = 0;
@@ -117,9 +121,9 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
         opt &= ~(ETO_OPAQUE | ETO_CLIPPED);
     if (dx && n) {
         int i;
-        hdx = LocalAlloc(LMEM_FIXED, n * 2);
-        if (hdx) {
-            ddx = (short NEAR *)hdx;
+        xdx = xalloc(n * 2);
+        if (xdx) {
+            ddx = xptr(xdx);
             for (i = 0; i < n; i++)
                 ddx[i] = dc_scale_x(dc, dx[i]);
         }
@@ -130,8 +134,8 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     for (k = 0; k < nrects; k++) {
         rao = rgn_ptr(dc->hRao);
         clip = nrects == 1 ? rao->box : rao->r[k];
-        fn(dc->lpPDevice, x, y, &clip, s, n, fi, &dc->dm, &dc->xform,
-           ddx ? (short __far *)ddx : (short __far *)0, opt ? &orc : 0, opt);
+        fn(dc->lpPDevice, x, y, &clip, s, n, fi, &dc->dm, &tx,
+           ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
     }
     if (n) {
         DWORD e = drv_extent(dc, s, n);
@@ -141,8 +145,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     }
     if (opt & ETO_OPAQUE)
         dc_update_bounds(dc, orc.left, orc.top, orc.right, orc.bottom);
-    if (hdx)
-        LocalFree(hdx);
+    xfree(xdx);
     return TRUE;
 }
 
@@ -155,13 +158,15 @@ BOOL GDIAPI TextOut(HDC hdc, int x, int y, LPCSTR s, int n)        /* GDI.33 */
 
 BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     LPFONTINFO fi;
-    FONTOBJ NEAR *fo;
+    LPFONTOBJ fo;
+    TEXTXFORM tx;
     if (!dc || !font_realize(dc))
         return FALSE;
     dc = dc_get(hdc);
-    fi = dc->pfont->fi;
+    fi = dc_font(dc)->fi;
+    font_xform(dc, dc_font(dc), &tx);
     fo = obj_get(dc->hFont, FONT_MAGIC);
     tm->tmHeight = fi->dfPixHeight;
     tm->tmAscent = fi->dfAscent;
@@ -180,11 +185,11 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
     tm->tmBreakChar = fi->dfBreakChar + fi->dfFirstChar;
     tm->tmPitchAndFamily = fi->dfPitchAndFamily;
     tm->tmCharSet = fi->dfCharSet;
-    tm->tmOverhang = dc->xform.txfOverhang;
-    if (dc->xform.txfOverhang) {          /* emboldened: UNVERIFIED metrics */
-        tm->tmWeight = dc->xform.txfWeight;
-        tm->tmAveCharWidth += dc->xform.txfOverhang;
-        tm->tmMaxCharWidth += dc->xform.txfOverhang;
+    tm->tmOverhang = tx.txfOverhang;
+    if (tx.txfOverhang) {          /* emboldened: UNVERIFIED metrics */
+        tm->tmWeight = tx.txfWeight;
+        tm->tmAveCharWidth += tx.txfOverhang;
+        tm->tmMaxCharWidth += tx.txfOverhang;
     }
     tm->tmDigitizedAspectX = fi->dfHorizRes;
     tm->tmDigitizedAspectY = fi->dfVertRes;
@@ -197,33 +202,35 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
 
 int GDIAPI GetTextFace(HDC hdc, int n, LPSTR buf)                  /* GDI.92 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int i;
     if (!dc || !font_realize(dc) || n <= 0)
         return 0;
     dc = dc_get(hdc);
-    for (i = 0; i < n - 1 && dc->pfont->face[i]; i++)
-        buf[i] = dc->pfont->face[i];
+    for (i = 0; i < n - 1 && dc_font(dc)->face[i]; i++)
+        buf[i] = dc_font(dc)->face[i];
     buf[i] = 0;
     return i;
 }
 
 BOOL GDIAPI GetCharWidth(HDC hdc, WORD first, WORD last, short __far *buf) /* GDI.350 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DRVGETCHARWIDTH fn;
+    TEXTXFORM tx;
     if (!dc || !font_realize(dc) || last < first)
         return FALSE;
     dc = dc_get(hdc);
+    font_xform(dc, dc_font(dc), &tx);
     fn = (DRVGETCHARWIDTH)dc->dev->fn[DRV_GETCHARWIDTH];
     if (fn)
-        return fn(dc->lpPDevice, buf, first, last, dc->pfont->fi, &dc->dm, &dc->xform) != 0;
+        return fn(dc->lpPDevice, buf, first, last, dc_font(dc)->fi, &dc->dm, &tx) != 0;
     return FALSE;
 }
 
 DWORD GDIAPI SetMapperFlags(HDC hdc, DWORD f)                      /* GDI.349 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;

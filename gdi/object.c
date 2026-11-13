@@ -15,45 +15,67 @@
 HANDLE stock[20];
 DWORD obj_seq;
 HBITMAP stock_bitmap;
-NPDC dc_list[1];
 
+/* the limit of segment sel (LSL), 0 if it is not valid */
+WORD seg_limit(WORD sel);
+#pragma aux seg_limit = "xor ax, ax" "lsl ax, dx" parm [dx] value [ax];
+WORD get_ds(void);
+#pragma aux get_ds = "mov ax, ds" value [ax];
+
+/* An object's block in DGROUP is moveable and locked (objects never
+   move; GD2: handles 4 apart, as the local handle table's entries are) */
 HANDLE obj_alloc(WORD magic, WORD size)
 {
-    HANDLE h = LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, size);
-    OBJHDR NEAR *o;
+    HANDLE h;
+    LPOBJHDR o;
+    h = LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, size);
     if (!h)
         return 0;
-    LocalLock(h);                       /* objects never move */
-    o = POBJ(h);
+    LocalLock(h);
+    o = (OBJHDR NEAR *)DEREF(h);
     o->wMagic = magic;
     o->dwCount = ++obj_seq;
     return h;
 }
 
-/* the object of a handle if it has that signature (0: any) */
-void NEAR *obj_get(HANDLE h, WORD magic)
+/* the signature (with its flags) of a valid object handle, 0 if none */
+WORD obj_magic(HANDLE h)
 {
     OBJHDR NEAR *o;
-    WORD sz;
-    if (!h || (h & 3) != 2)
+    WORD m;
+    if (!h || (h & 3) != 2 || h > seg_limit(get_ds()) - 1)
         return 0;
-    sz = LocalSize(h);
-    if (sz < sizeof(OBJHDR))
+    if (LocalSize(h) < sizeof(OBJHDR))
         return 0;
-    o = POBJ(h);
+    o = DEREF(h);
     if (!o)
         return 0;
-    if ((o->wMagic & MAGIC_MASK) < PEN_MAGIC || (o->wMagic & MAGIC_MASK) > METAFILEDC_MAGIC)
+    m = o->wMagic;
+    if ((m & MAGIC_MASK) < PEN_MAGIC || (m & MAGIC_MASK) > METAFILEDC_MAGIC)
         return 0;
-    if (magic && (o->wMagic & MAGIC_MASK) != magic)
+    return m;
+}
+
+/* the whole object of a handle if it has that signature (0: any) */
+void __far *obj_get(HANDLE h, WORD magic)
+{
+    WORD m = obj_magic(h);
+    if (!m || (magic && (m & MAGIC_MASK) != magic))
         return 0;
-    return o;
+    return (OBJHDR NEAR *)DEREF(h);
+}
+
+void obj_set_magic(HANDLE h, WORD m)
+{
+    LPOBJHDR o = obj_get(h, 0);
+    if (o)
+        o->wMagic = m;
 }
 
 int obj_type(HANDLE h)
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
-    return o ? (o->wMagic & MAGIC_MASK) - MAGIC_BASE : 0;
+    WORD m = obj_magic(h);
+    return m ? (m & MAGIC_MASK) - MAGIC_BASE : 0;
 }
 
 void obj_free(HANDLE h)
@@ -76,10 +98,10 @@ static int is_stock(HANDLE h)
 HPEN GDIAPI CreatePenIndirect(const LOGPEN __far *lp)              /* GDI.62 */
 {
     HANDLE h = obj_alloc(PEN_MAGIC, sizeof(PENOBJ));
-    PENOBJ NEAR *p;
+    LPPENOBJ p;
     if (!h)
         return 0;
-    p = DEREF(h);
+    p = obj_get(h, PEN_MAGIC);
     p->lp = *lp;
     if (p->lp.lopnStyle > 6)            /* PS_INSIDEFRAME is the last */
         p->lp.lopnStyle = 0;
@@ -96,32 +118,32 @@ HPEN GDIAPI CreatePen(int style, int width, COLORREF color)        /* GDI.61 */
     return CreatePenIndirect(&lp);
 }
 
+/* BS_PATTERN: GetObject gives back the program's bitmap (GD4 on 3.1), and
+   the brush keeps its own copy of the 8 x 8 pattern (the program may
+   delete the bitmap), a global block made as a bitmap's is, PBITMAP and
+   bits, in what Schulman's BRUSHOBJ calls crHatchBk (GD4: 3.1's pattern
+   brush took no more of DGROUP than a solid one) */
 HBRUSH GDIAPI CreateBrushIndirect(const LOGBRUSH __far *lb)        /* GDI.50 */
 {
-    HANDLE h = obj_alloc(BRUSH_MAGIC, sizeof(BRUSHOBJ));
-    BRUSHOBJ NEAR *b;
-    if (!h)
-        return 0;
-    b = DEREF(h);
-    b->lb = *lb;
-    b->crHatchBk = RGB(255, 255, 255);
-    if (lb->lbStyle == 3) {             /* BS_PATTERN: keep a copy */
-        LPPBITMAP src = bm_pbitmap(lb->lbHatch);
-        if (!src) {
-            obj_free(h);
+    HANDLE h;
+    HGLOBAL pat = 0;
+    LPBRUSHOBJ b;
+    if (lb->lbStyle == 3) {
+        pat = bm_pattern_copy(lb->lbHatch);
+        if (!pat)
             return 0;
-        }
-        b->hbmPattern = bm_create(8, 8, src->bmPlanes, src->bmBitsPixel, 0, 0);
-        if (b->hbmPattern) {
-            LPPBITMAP d = bm_pbitmap(b->hbmPattern);
-            int y, w = min(src->bmWidthBytes, d->bmWidthBytes), p;
-            for (p = 0; p < src->bmPlanes; p++)
-                for (y = 0; y < 8 && y < src->bmHeight; y++)
-                    mem_copy((char __far *)d->bmBits + p * d->bmWidthPlanes + y * d->bmWidthBytes,
-                             (char __far *)src->bmBits + p * src->bmWidthPlanes + y * src->bmWidthBytes, w);
-            b->lb.lbHatch = b->hbmPattern;
-        }
     }
+    h = obj_alloc(BRUSH_MAGIC, sizeof(BRUSHOBJ));
+    if (!h) {
+        if (pat) {
+            GlobalUnlock(pat);
+            GlobalFree(pat);
+        }
+        return 0;
+    }
+    b = obj_get(h, BRUSH_MAGIC);
+    b->lb = *lb;
+    b->hPatBits = pat;
     return h;
 }
 
@@ -154,14 +176,17 @@ HBRUSH GDIAPI CreatePatternBrush(HBITMAP hbm)                      /* GDI.60 */
 
 HFONT GDIAPI CreateFontIndirect(const LOGFONT __far *lf)           /* GDI.57 */
 {
-    HANDLE h = obj_alloc(FONT_MAGIC, sizeof(FONTOBJ));
-    FONTOBJ NEAR *f;
-    int i;
+    HANDLE h;
+    LPFONTOBJ f;
+    int i, n = 0;
+    while (n < LF_FACESIZE - 1 && lf->lfFaceName[n])
+        n++;
+    h = obj_alloc(FONT_MAGIC, sizeof(OBJHDR) + LF_FIXEDPART + max(n + 1, FONT_MINFACE));
     if (!h)
         return 0;
-    f = DEREF(h);
-    mem_copy(&f->lf, lf, sizeof(LOGFONT) - LF_FACESIZE);
-    for (i = 0; i < LF_FACESIZE - 1 && lf->lfFaceName[i]; i++)
+    f = obj_get(h, FONT_MAGIC);
+    mem_copy(&f->lf, lf, LF_FIXEDPART);
+    for (i = 0; i < n; i++)
         f->lf.lfFaceName[i] = lf->lfFaceName[i];
     return h;
 }
@@ -281,27 +306,36 @@ HGDIOBJ GDIAPI GetStockObject(int i)                               /* GDI.87 */
 
 int GDIAPI GetObject(HGDIOBJ h, int n, void __far *buf)            /* GDI.82 */
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
+    LPOBJHDR o = obj_get(h, 0);
     int size;
-    void NEAR *src;
+    void __far *src;
     BITMAP bm;
+    LOGFONT lf;
     if (!o || n < 0)
         return 0;
     switch (o->wMagic & MAGIC_MASK) {
     case PEN_MAGIC:
-        src = &((PENOBJ NEAR *)o)->lp;
+        src = &((LPPENOBJ)o)->lp;
         size = sizeof(LOGPEN);
         break;
     case BRUSH_MAGIC:
-        src = &((BRUSHOBJ NEAR *)o)->lb;
+        src = &((LPBRUSHOBJ)o)->lb;
         size = sizeof(LOGBRUSH);
         break;
-    case FONT_MAGIC:
-        src = &((FONTOBJ NEAR *)o)->lf;
+    case FONT_MAGIC: {
+        /* the block ends after the face name: the rest is zeros */
+        LPFONTOBJ f = (LPFONTOBJ)o;
+        int i;
+        mem_set(&lf, 0, sizeof lf);
+        mem_copy(&lf, &f->lf, LF_FIXEDPART);
+        for (i = 0; i < LF_FACESIZE - 1 && f->lf.lfFaceName[i]; i++)
+            lf.lfFaceName[i] = f->lf.lfFaceName[i];
+        src = &lf;
         size = sizeof(LOGFONT);
         break;
+    }
     case PAL_MAGIC:
-        src = &((PALOBJ NEAR *)o)->nEntries;
+        src = &((LPPALOBJ)o)->nEntries;
         size = 2;
         break;
     case BITMAP_MAGIC: {
@@ -313,13 +347,9 @@ int GDIAPI GetObject(HGDIOBJ h, int n, void __far *buf)            /* GDI.82 */
         bm.bmPlanes = pb->bmPlanes;
         bm.bmBitsPixel = pb->bmBitsPixel;
         bm.bmBits = 0;
-        src = 0;
+        src = &bm;
         size = sizeof(BITMAP);
-        if (n > size)
-            n = size;
-        if (buf)
-            mem_copy(buf, &bm, n);
-        return n;
+        break;
     }
     default:
         return 0;
@@ -339,25 +369,22 @@ int GDIAPI IsGDIObject(HANDLE h)                                    /* GDI.462 *
 
 BOOL GDIAPI MakeObjectPrivate(HANDLE h, BOOL priv)                  /* GDI.463 */
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
-    BOOL old;
-    if (!o)
+    WORD m = obj_magic(h);
+    if (!m)
         return 0;
-    old = (o->wMagic & OBJ_PRIVATE) != 0;
-    if (priv)
-        o->wMagic |= OBJ_PRIVATE;
-    else
-        o->wMagic &= ~OBJ_PRIVATE;
-    return old;
+    obj_set_magic(h, priv ? m | OBJ_PRIVATE : m & ~OBJ_PRIVATE);
+    return (m & OBJ_PRIVATE) != 0;
 }
 
+/* the brush's realizations are made again (with the DC's brush origin
+   when next used) */
 BOOL GDIAPI UnrealizeObject(HGDIOBJ h)                              /* GDI.150 */
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
-    if (!o)
+    WORD m = obj_magic(h);
+    if (!m)
         return FALSE;
-    if ((o->wMagic & MAGIC_MASK) == BRUSH_MAGIC)
-        ((BRUSHOBJ NEAR *)o)->gen++;
+    if ((m & MAGIC_MASK) == BRUSH_MAGIC)
+        dc_brush_changed(h);
     return TRUE;
 }
 
@@ -368,37 +395,42 @@ HANDLE GDIAPI SetObjectOwner(HANDLE h, HANDLE owner)                /* GDI.461 *
     return h;
 }
 
-int dc_uses(HANDLE h);                  /* dc.c */
-void bm_free(HBITMAP h);                /* bitmap.c */
-void rgn_free(HRGN h);                  /* rgn.c */
-
 BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
-    if (!o)
+    WORD m = obj_magic(h);
+    if (!m)
         return FALSE;
     if (is_stock(h))
         return TRUE;
-    switch (o->wMagic & MAGIC_MASK) {
+    switch (m & MAGIC_MASK) {
     case DC_MAGIC:
     case DISDC_MAGIC:
     case METADC_MAGIC:
         return FALSE;
     case BITMAP_MAGIC:
-        if (((BITMAPOBJ NEAR *)o)->hdcSel)
+        if (((LPBITMAPOBJ)obj_get(h, BITMAP_MAGIC))->hdcSel)
             return FALSE;
         bm_free(h);
         return TRUE;
     case RGN_MAGIC:
-        obj_free(h);
+        rgn_free(h);
         return TRUE;
-    case BRUSH_MAGIC:
+    case PAL_MAGIC:
+        pal_free(h);
+        return TRUE;
+    case BRUSH_MAGIC: {
+        HGLOBAL pat;
         if (dc_uses(h))
             return FALSE;
-        if (((BRUSHOBJ NEAR *)o)->hbmPattern)
-            bm_free(((BRUSHOBJ NEAR *)o)->hbmPattern);
+        dc_brush_changed(h);
+        pat = ((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->hPatBits;
+        if (pat) {
+            GlobalUnlock(pat);
+            GlobalFree(pat);
+        }
         obj_free(h);
         return TRUE;
+    }
     default:
         if (dc_uses(h))
             return FALSE;

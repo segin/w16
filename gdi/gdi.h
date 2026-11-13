@@ -268,16 +268,50 @@ typedef struct DEVICE {
 } DEVICE;
 typedef DEVICE NEAR *NPDEVICE;
 
-/* ---- GDI objects in the local heap ---- */
+/* ---- GDI's own heaps (heap.c; ARCHITECTURE.md 11.7) ----
+
+   Data programs never reach through a handle (region rectangles,
+   realized pens and brushes, the font table, saved DC states, palette
+   entries, temporary buffers) is kept
+   in local heaps of GDI's own, each in a moveable global segment (GMEM_SHARE,
+   owned by GDI) that grows to at most FFF0h bytes, as many segments as are
+   needed. A block there is an XP: the heap's number (1..) in the high word
+   and the block's offset (LMEM_FIXED: the handle is the address) in the
+   low word. xptr() makes the far pointer from the heap's selector, which
+   is taken again (GlobalHandle) after every allocation in that heap. A
+   fixed block never moves within its heap and a heap's segment keeps its
+   selector while it stays under 64K, but a far pointer is still not kept
+   across a call that can allocate in GDI's heaps or call out (driver
+   calls that may call GDI, DC hooks, enumeration callbacks): it is made
+   again from its handle afterwards. Nothing here is used at interrupt
+   time. */
+typedef DWORD XP;
+void xheap_init(void);
+XP xalloc(WORD size);                   /* zeroed; 0: no room */
+XP xrealloc(XP p, WORD size);           /* the block, perhaps elsewhere; 0: no room (p kept) */
+void xfree(XP p);
+WORD xsize(XP p);
+void __far *xptr(XP p);
+DWORD xheap_stats(void);                /* heaps (high word), KB in use (low) */
+/* entry.asm: KERNEL's Local* on the heap in segment sel (DS switched) */
+WORD __far __cdecl lh_alloc(WORD sel, WORD flags, WORD size);
+WORD __far __cdecl lh_realloc(WORD sel, WORD h, WORD size, WORD flags);
+WORD __far __cdecl lh_free(WORD sel, WORD h);
+WORD __far __cdecl lh_size(WORD sel, WORD h);
+
+/* ---- GDI objects ---- */
+
+#pragma pack(push, 1)
 
 /* object header (Schulman ch. 8; 3.1 retail): hNext, signature, a
-   sequence count, a metafile list */
+   sequence count, a metafile list; 0Ah bytes */
 typedef struct {
     HANDLE hNext;
     WORD wMagic;
     DWORD dwCount;
     WORD wMetaList;
 } OBJHDR;
+typedef OBJHDR __far *LPOBJHDR;
 
 /* signatures, 3.1 (Schulman ch. 8): 'GO' + type - 1; flag 2000h = private
    (MakeObjectPrivate), 8000h = selected (UNVERIFIED) */
@@ -295,7 +329,6 @@ typedef struct {
 #define METAFILEDC_MAGIC 0x4F51
 #define MAGIC_MASK 0x5FFF
 #define OBJ_PRIVATE 0x2000
-#define OBJ_STOCK_FLAG 0x0001      /* in our own flags word */
 
 typedef struct { WORD lopnStyle; POINT lopnWidth; COLORREF lopnColor; } LOGPEN;
 typedef struct { WORD lbStyle; COLORREF lbColor; short lbHatch; } LOGBRUSH;
@@ -306,6 +339,7 @@ typedef struct {
     BYTE lfClipPrecision, lfQuality, lfPitchAndFamily;
     char lfFaceName[LF_FACESIZE];
 } LOGFONT;
+#define LF_FIXEDPART 18                 /* LOGFONT before the face name */
 typedef struct {
     short bmType, bmWidth, bmHeight, bmWidthBytes;
     BYTE bmPlanes, bmBitsPixel;
@@ -320,156 +354,194 @@ typedef struct {
     short tmOverhang, tmDigitizedAspectX, tmDigitizedAspectY;
 } TEXTMETRIC;
 
-typedef struct {
+/* The objects as Schulman ch. 8 gives 3.1's: the header, then the
+   documented logical structure. 3.1's blocks as TOOLHELP showed them
+   (GD4): pen 1Ah, brush 1Ah, font 2Ah (3Eh with a 31-character face),
+   palette 1Ah (its entries elsewhere), bitmap 2Ah, rectangle region 2Ah,
+   DC CEh. */
+typedef struct {                        /* 14h */
     OBJHDR hdr;
     LOGPEN lp;
-    WORD gen;
 } PENOBJ;
+typedef PENOBJ __far *LPPENOBJ;
 
-typedef struct {
+typedef struct {                        /* 16h */
     OBJHDR hdr;
-    LOGBRUSH lb;
-    COLORREF crHatchBk;
-    HBITMAP hbmPattern;                 /* pattern brush: our own copy */
-    WORD gen;                           /* bumped by UnrealizeObject */
+    LOGBRUSH lb;                        /* BS_PATTERN: lbHatch = the program's bitmap (GD4) */
+    HGLOBAL hPatBits;                   /* Schulman's crHatchBk: w16 keeps a BS_PATTERN */
+    WORD unused;                        /* brush's copy of the bits here (PBITMAP + bits) */
 } BRUSHOBJ;
+typedef BRUSHOBJ __far *LPBRUSHOBJ;
 
-struct FONTENT;
+/* the header, then the LOGFONT up to its face name's end, at least 0Eh
+   bytes of it (GD4: 3.1's block was 2Ah for no face and for "MS Sans
+   Serif", 3Eh for 31 characters); GetObject gives the whole LOGFONT */
 typedef struct {
     OBJHDR hdr;
     LOGFONT lf;
 } FONTOBJ;
+typedef FONTOBJ __far *LPFONTOBJ;
+#define FONT_MINFACE 14
 
-typedef struct {
+typedef struct {                        /* 1Ah */
     OBJHDR hdr;
-    HGLOBAL hBits;                      /* PBITMAP header (+ bits) */
+    HGLOBAL hBits;                      /* 0Ah hmemBitmap: PBITMAP header (+ bits) */
+    WORD bSelected;                     /* 0Ch */
+    HDC hdcSel;                         /* 0Eh the DC it is selected into */
     HGLOBAL hHuge;                      /* the bits, when over 64K */
     WORD sel;                           /* hBits' selector */
-    HDC hdcSel;                         /* DC it is selected into */
     WORD flags;
-    short width, height;
-    BYTE planes, bpp;
     WORD sizeX, sizeY;                  /* SetBitmapDimension */
 } BITMAPOBJ;
+typedef BITMAPOBJ __far *LPBITMAPOBJ;
 #define BMF_STOCK 1
 #define BMF_DISCARDABLE 2
 
-typedef struct {
+typedef struct {                        /* 12h */
     OBJHDR hdr;
-    WORD nEntries;
-    PALETTEENTRY pe[1];
+    WORD palVersion;                    /* 0Ah: LOGPALETTE's (Schulman ch. 8), 300h */
+    WORD nEntries;                      /* 0Ch palNumEntries */
+    XP xEntries;                        /* palPalEntry: in GDI's heaps, not here */
 } PALOBJ;
+typedef PALOBJ __far *LPPALOBJ;
 
 /* regions: y-x banded rectangles (no overlap; within a band the same top
-   and bottom, sorted by left; bands sorted by top) */
-typedef struct {
+   and bottom, sorted by left; bands sorted by top). The object is the
+   header and the XP of the rectangles, which are in GDI's heaps. */
+typedef struct {                        /* 0Eh */
     OBJHDR hdr;
+    XP xData;
+} RGNOBJ;
+typedef RGNOBJ __far *LPRGNOBJ;
+typedef struct {
     WORD n;                             /* rectangles */
     WORD cap;
     RECT box;
     RECT r[1];
-} RGNOBJ;
-typedef RGNOBJ NEAR *NPRGN;
+} RGNDATA;
+typedef RGNDATA __far *LPRGN;
+#define RGNDATA_SIZE(n) (sizeof(RGNDATA) + ((n) ? (n) - 1 : 0) * sizeof(RECT))
 
-/* a realized pen or brush, kept with the DC */
-typedef struct {
-    WORD size;
-    BYTE data[1];
-} PHYS;
-
-/* the device context */
+/* the device context: CEh bytes, every field Schulman ch. 8 names for 3.1
+   retail at its offset; w16 keeps its own state in the fields whose use
+   there is not known (marked "w16") */
 typedef struct DC {
-    OBJHDR hdr;
-    WORD flags;
-    NPDEVICE dev;                       /* driver */
-    LPVOID lpPDevice;                   /* PDEVICE, or the selected PBITMAP */
-    HBITMAP hBitmap;                    /* memory DC: the selected bitmap */
-    HPEN hPen;
-    HBRUSH hBrush;
-    HFONT hFont;
-    HPALETTE hPal;
-    HRGN hClipRgn;                      /* app's clip region (device coords) */
-    HRGN hVisRgn;                       /* USER's visible region (screen) */
-    HRGN hRao;                          /* vis & clip, screen coords */
-    WORD raoValid;
-    WORD saveLevel;
-    DRAWMODE dm;
-    /* realized objects */
-    HPEN hPPenOf; WORD ppenGen; HLOCAL hPPen;
-    HBRUSH hPBrushOf; WORD pbrushGen; POINT pbrushOrg; HLOCAL hPBrush;
-    LPVOID lpPDevOfBrush;
-    struct FONTENT NEAR *pfont;         /* realized font */
-    TEXTXFORM xform;
-    HFONT hFontOf;
-    LPVOID lpPDevOfFont;
-    POINT cur;                          /* current position (logical) */
-    POINT wndOrg, wndExt, vpOrg, vpExt;
-    WORD mapMode;
-    WORD relAbs, polyFill, stretchMode, textAlign;
-    POINT brushOrg;
-    POINT dcOrg;                        /* SetDCOrg (screen) */
-    FARPROC hook;
-    DWORD hookData;
-    WORD hookFlags;
-    RECT bounds;
-    WORD boundsFlags;
-    short breakCount, breakExtra;
-    short charExtra;
-    WORD mapperFlags;
-    HTASK owner;
-    WORD isMemDC;
-    WORD isIC;
-} DC;
-typedef DC NEAR *NPDC;
+    OBJHDR hdr;                         /* 00 hNext: the SaveDC stack's top is xSaved */
+    WORD flags;                         /* 0A byFlags, byFlags2 (w16: DCF_*) */
+    HANDLE hMetaFile;                   /* 0C */
+    HRGN hClipRgn;                      /* 0E hrgnClip (device coordinates) */
+    HDC hLink;                          /* 10 hPDevice (w16: next DC in GDI's list) */
+    HPEN hPen;                          /* 12 hLPen */
+    HBRUSH hBrush;                      /* 14 hLBrush */
+    HFONT hFont;                        /* 16 hLFont */
+    HBITMAP hBitmap;                    /* 18 */
+    HPALETTE hPal;                      /* 1A dchPal */
+    struct DEVICE NEAR *dev;            /* 1C hLDevice (the driver's entry points) */
+    HRGN hRao;                          /* 1E hRaoClip: vis & clip, screen coordinates */
+    WORD raoValid;                      /* 20 hPDeviceBlock (w16) */
+    HPEN hPPenOf;                       /* 22 hPPen (w16: the pen xPPen is of) */
+    HBRUSH hPBrushOf;                   /* 24 hPBrush (w16) */
+    HFONT hFontOf;                      /* 26 hPFontTrans (w16) */
+    WORD hookFlags;                     /* 28 hPFont (w16) */
+    LPVOID lpPDevice;                   /* 2A PDEVICE, or the selected PBITMAP */
+    XP xPPen;                           /* 2E pLDevice, pRaoClip (w16: realized pen) */
+    XP xPBrush;                         /* 32 pPDeviceBlock, pPPen (w16) */
+    XP xFont;                           /* 36 pPBrush, pPFontTrans (w16: FONTENT) */
+    LPVOID lpPDevOfBrush;               /* 3A lpPFont (w16) */
+    WORD boundsFlags;                   /* 3E nPFTIndex (w16) */
+    LPVOID lpPDevOfFont;                /* 40 Transform (w16) */
+    DRAWMODE dm;                        /* 44 */
+    POINT cur;                          /* 64 LCursPos */
+    POINT wndOrg, wndExt, vpOrg, vpExt; /* 68 6C 70 74 */
+    XP xSaved;                          /* 78 UserVptOrg (w16: SaveDC stack, GDI's heaps) */
+    WORD mapMode;                       /* 7C */
+    short charExtra;                    /* 7E wXFormFlags (w16: logical extra) */
+    WORD relAbs, polyFill, stretchMode; /* 80 82 84 */
+    BYTE planes, bitsPixel;             /* 86 */
+    WORD w88, w8A;                      /* 88 wPenWidth, wPenHeight */
+    WORD textAlign;                     /* 8C */
+    DWORD mapperFlags;                  /* 8E */
+    POINT brushOrg;                     /* 92 */
+    HTASK owner;                        /* 96 wFontAspectX (w16) */
+    WORD w98, w9A;                      /* 98 wFontAspectY, hFontWeights */
+    WORD saveLevel;                     /* 9C wDCSaveLevel */
+    WORD w9E;                           /* 9E wcDCLocks */
+    HRGN hVisRgn;                       /* A0 screen coordinates (USER's) */
+    POINT dcOrg;                        /* A2 SetDCOrg (screen) */
+    BYTE wA6[14];                       /* A6 lpfnPrint, atoms, PostScale */
+    RECT bounds;                        /* B4 rectBounds */
+    RECT rectLVB;                       /* BC */
+    FARPROC hook;                       /* C4 lpfnNotify */
+    DWORD hookData;                     /* C8 lpHookData */
+    WORD wDCGlobFlags;                  /* CC */
+} DC;                                   /* CE */
+typedef DC __far *LPDC;
 #define DCF_DISPLAY 0x0001
 #define DCF_MEMORY 0x0002
 #define DCF_IC 0x0004
-#define DCF_SAVED 0x0008
 #define DCF_STATE 0x0010                /* GetDCState copy */
+typedef char dc_size_check[sizeof(DC) == 0xCE ? 1 : -1];   /* Schulman: CEh */
 
-/* deref a moveable local handle: the handle table entry's first word is
-   the block's address (KERNEL local heap; Pietrek ch. 2) */
+/* a saved state (SaveDC), in GDI's heaps */
+typedef struct {
+    DC dc;                              /* xSaved: the next one down */
+    XP xClip;                           /* the clip region's rectangles (RGNDATA), 0: none */
+} SAVEDDC;
+
+/* a realized pen or brush is the driver's block as it asked for it */
+
+#pragma pack(pop)
+
+/* deref a moveable local handle in DGROUP: the handle table entry's first
+   word is the block's address (KERNEL local heap; Pietrek ch. 2) */
 #define DEREF(h) ((void NEAR *)*(WORD NEAR *)(h))
-#define POBJ(h) ((OBJHDR NEAR *)DEREF(h))
 
 /* object.c */
 HANDLE obj_alloc(WORD magic, WORD size);
-void NEAR *obj_get(HANDLE h, WORD magic);
+void __far *obj_get(HANDLE h, WORD magic);  /* the whole object, or 0 */
+WORD obj_magic(HANDLE h);               /* the signature with its flags, 0: none */
+void obj_set_magic(HANDLE h, WORD m);
 int obj_type(HANDLE h);
 void obj_free(HANDLE h);
 extern HANDLE stock[20];
 extern DWORD obj_seq;
 #define STOCK_COUNT 18
-NPDC dc_get(HDC h);
+LPDC dc_get(HDC h);
 
 /* dc.c */
-void dc_rao_invalidate(NPDC dc);
-NPRGN dc_rao(NPDC dc);
-void dc_lp_to_dp(NPDC dc, int __far *pts, int n);
-void dc_dp_to_lp(NPDC dc, int __far *pts, int n);
-int dc_scale_x(NPDC dc, int x);
-int dc_scale_y(NPDC dc, int y);
-void dc_set_device_colors(NPDC dc);
-LPVOID dc_pbrush(NPDC dc);
-LPVOID dc_ppen(NPDC dc);
-void dc_update_bounds(NPDC dc, int l, int t, int r, int b);
+void dc_rao_invalidate(LPDC dc);
+LPRGN dc_rao(LPDC dc);
+void dc_lp_to_dp(LPDC dc, int __far *pts, int n);
+void dc_dp_to_lp(LPDC dc, int __far *pts, int n);
+int dc_scale_x(LPDC dc, int x);
+int dc_scale_y(LPDC dc, int y);
+void dc_set_device_colors(LPDC dc);
+LPVOID dc_pbrush(LPDC dc);
+LPVOID dc_ppen(LPDC dc);
+void dc_update_bounds(LPDC dc, int l, int t, int r, int b);
+void dc_brush_changed(HBRUSH h);
+HDC dc_first(void);
 
 /* driver.c */
+
 NPDEVICE dev_open(LPCSTR name);
 void dev_close(NPDEVICE d);
 extern NPDEVICE display;
-DWORD dev_colorinfo(NPDC dc, COLORREF c);
+DWORD dev_colorinfo(LPDC dc, COLORREF c);
 #define DRVFN(d, n) ((d)->fn[n])
 
 /* rgn.c */
 HRGN rgn_new(int l, int t, int r, int b);
 void rgn_set_rect(HRGN h, int l, int t, int r, int b);
 int rgn_combine(HRGN dst, HRGN a, HRGN b, int mode);
-int rgn_complexity(NPRGN r);
+int rgn_op_rect(HRGN h, int l, int t, int r, int b, int mode);
+int rgn_complexity(LPRGN r);
 int rgn_copy(HRGN dst, HRGN src);
 void rgn_offset(HRGN h, int dx, int dy);
-NPRGN rgn_ptr(HRGN h);
-int rgn_clip_rect(NPRGN r, NPRECT rc);       /* rects of r intersecting rc */
+LPRGN rgn_ptr(HRGN h);
+XP rgn_dup_data(HRGN h);                /* a copy of the rectangles, 0 for none */
+int rgn_set_data(HRGN h, XP x);         /* take the rectangles (x is then the region's) */
+void rgn_free(HRGN h);
 #define NULLREGION 1
 #define SIMPLEREGION 2
 #define COMPLEXREGION 3
@@ -483,17 +555,19 @@ int rgn_clip_rect(NPRGN r, NPRECT rc);       /* rects of r intersecting rc */
 /* bitmap.c */
 HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WORD flags);
 LPPBITMAP bm_pbitmap(HBITMAP h);
+HGLOBAL bm_pattern_copy(HBITMAP h);
 BYTE __far *bm_scan(LPPBITMAP pb, int y);
 void bm_free(HBITMAP h);
-NPDC dc_out(HDC hdc);
+LPDC dc_out(HDC hdc);
 int dc_uses(HANDLE h);
 HPALETTE pal_default(void);
+void pal_free(HPALETTE h);
 void stock_init(void);
 extern HBITMAP stock_bitmap;
 
-/* font.c */
+/* font.c: the font table, in GDI's heaps */
 typedef struct FONTENT {
-    struct FONTENT NEAR *next;
+    XP next;
     HINSTANCE hMod;                     /* the .FON module */
     WORD resId;
     HGLOBAL hRes;
@@ -507,10 +581,12 @@ typedef struct FONTENT {
     short points;
     short type, il;
 } FONTENT;
-typedef FONTENT NEAR *NPFONT;
+typedef FONTENT __far *LPFONT;
 void font_init(void);
-NPFONT font_realize(NPDC dc);
-extern NPFONT fonts;
+LPFONT font_realize(LPDC dc);
+LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
+void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
+extern XP fonts;
 
 /* API functions used inside GDI too */
 BOOL GDIAPI PtInRegion(HRGN, int, int);
