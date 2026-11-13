@@ -7,7 +7,9 @@
 # with the interrupt controllers' registers. For the build host: runs are
 # long and several go at once (ARCHITECTURE.md 9.2).
 #   usage: tests/mousestress.sh [options]
-#     -D ms|w16   the DOS extender (default ms: Microsoft's DOSX)
+#     -D ms|w16|nd  the DOS extender (default ms: Microsoft's DOSX; nd:
+#                 w16's built without dropping a PS/2 packet that comes
+#                 before the client takes INT 74h, DOSXND.EXE)
 #     -M ms|w16|lh  MOUSE.DRV (default ms; lh: MOUSELH.DRV, w16's driver
 #                 enabling the device before it takes INT 74h, as 3.1's)
 #     -U ms|w16   USER and GDI (default ms)
@@ -43,6 +45,7 @@ mkdir -p "$out"
 set -- -f "$root/build/dos/MD3.EXE=MD3.EXE" -i 'boot:shell=C:\MD3.EXE' \
     -i "w16:md3secs=$secs" -i "w16:idle1689=$accel" -i "w16:md3reenable=$reen"
 [ "$dosx" = w16 ] && set -- "$@" -x
+[ "$dosx" = nd ] && set -- "$@" -X "$root/build/dos/DOSXND.EXE"
 [ "$kern" = ms ] && set -- "$@" -r
 if [ -n "$ms2" ]; then
     printf 'C:\\MS2.COM R\r\nWIN /S /B\r\n' > "$out/RUNL.BAT"

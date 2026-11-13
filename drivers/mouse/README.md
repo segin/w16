@@ -166,12 +166,21 @@ before such a stall were the start of a set-up: C205h, then C201h (the
 reset), which returned normally; after it no BIOS call, no INT 74h and
 no call of the C207h handler reached real mode again although MD3 went on
 calling Disable and Enable: Microsoft's driver stopped in the middle of
-its set-up for good. Which
-instruction inside Microsoft's driver and DOS extender loses the end of
-the interrupt is not observable from outside. w16's DOSX sends no end of
-interrupt of its own (the client's handler or the BIOS does); it drops a
-packet the BIOS delivers before the client has taken INT 74h (9.6), and
-the BIOS still ends that interrupt.
+its set-up for good. What w16's DOSX does differently is the drop: it does not call the
+C207h handler for a packet the BIOS delivers while the client has not
+taken INT 74h in protected mode (ARCHITECTURE.md 9.6; the BIOS still
+ends that interrupt). Built without it (DOSXND.EXE, `-D nd`), w16's
+DOSX with Microsoft's driver stalled in 3 of 4 runs the same way (slave
+ISR 10h); with it, 0 of 4 in the same batch. So the end of IRQ 12 is
+lost when the BIOS hands Microsoft's MOUSE.DRV a packet through its
+C207h handler while the driver does not hold INT 74h: between its
+Disable giving the vector back and its next Enable taking it again,
+and between enabling the device (C200h) and hooking, which is the order
+it uses. Called then, Microsoft's driver never ends that IRQ 12 at the
+slave PIC and makes no BIOS call again. Microsoft's DOSX passes such
+packets on (TK47); which instruction inside the driver then goes wrong
+is not observable from outside. w16's DOSX sends no end of interrupt of
+its own (the client's handler or the BIOS does).
 
 Emulators: DOSBox 0.74's keyboard controller has no auxiliary port (its
 source, read for facts: no A8h/D4h commands, status bit 5 never set);

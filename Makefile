@@ -717,6 +717,13 @@ $(DOS)/DOSXT.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
 	@mkdir -p $(@D)
 	$(NASM) -f bin -dTRACE -I . -o $@ $<
 
+# DOSXND.EXE: without the drop of a PS/2 packet before the client takes
+# INT 74h (a test build: tests/mousestress.sh -D nd)
+$(DOS)/DOSXND.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -dNOPS2DROP -I . -o $@ $<
+dos: $(DOS)/DOSXND.EXE
+
 # DX6.EXE: a Windows program dumping the GDT/IDT (run as the shell)
 $(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
 	@mkdir -p $(@D)
