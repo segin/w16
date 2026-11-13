@@ -16,7 +16,8 @@
 # screenshot, which may differ from the original by
 # no more pixels than tests/scripts/commdlg.baseline records
 # ("scenario/SHOT count"; our own drive and folder pictures).
-#   usage: tests/commdlgscen.sh [-n] [scenario...]       (default: all)
+#   usage: tests/commdlgscen.sh [-n] [scenario...]       (default: all but obs-*,
+#   observation scripts not meant to compare: run them by name with -n)
 #   -n: the original only (observation; nothing is compared)
 #   CD_OUT=dir: where the runs go (default build/ref/commdlg-<timestamp>)
 #   CD_BASELINE=update: rewrite the baseline from this run
@@ -28,7 +29,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 origonly=
 if [ "${1:-}" = -n ]; then origonly=1; shift; fi
 out=${CD_OUT:-$root/build/ref/commdlg-$(date +%Y%m%d-%H%M%S)}
-names=${*:-$(cd "$root/tests/scripts/commdlg" && ls *.txt | sed 's/\.txt$//')}
+names=${*:-$(cd "$root/tests/scripts/commdlg" && ls *.txt | grep -v '^obs-' | sed 's/\.txt$//')}
 base=$root/tests/scripts/commdlg.baseline
 [ -f "$base" ] || : > "$base"
 ref=$root/.tools/ref/win31/cdrive

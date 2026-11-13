@@ -41,6 +41,7 @@ typedef struct {
     LPSTR startdir;                     /* for OFN_NOCHANGEDIR */
     char caption[80];                   /* the window's caption */
     BOOL ended;                         /* EndDialog called */
+    BOOL own_template;                  /* ours, not the application's */
 } fstate;
 
 /* Flags bits the original sets in the caller's structure while a combo
@@ -418,6 +419,8 @@ static void init_dialog(fstate FAR *st)
            original moves it one pixel left and widens it by two, to the
            list's edges) */
         HWND e = GetDlgItem(dlg, edt1), l = GetDlgItem(dlg, lst1);
+        if (!st->own_template)          /* observed: Paintbrush's stays */
+            e = NULL;
         if (e && l) {
             RECT re, rl;
             int w, h;
@@ -1069,6 +1072,7 @@ static BOOL file_dialog(LPOPENFILENAME o, BOOL save)
     t.app = o->hInstance;
     t.use_handle = (o->Flags & OFN_ENABLETEMPLATEHANDLE) != 0;
     t.use_name = !t.use_handle && (o->Flags & OFN_ENABLETEMPLATE);
+    st->own_template = !t.use_handle && !t.use_name;
     t.name = o->lpTemplateName;
     t.ours = MAKEINTRESOURCE(st->multi ? DLG_MULTIOPEN : DLG_OPEN);
     pics_load();
