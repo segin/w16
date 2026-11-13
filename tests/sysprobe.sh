@@ -6,7 +6,7 @@
 #   sy1  SY1.EXE (tests/apps/sy1.c) as the shell calls every export:
 #        the bytes each takes off the stack and the registers it leaves,
 #        InquireSystem over its inputs, the coprocessor's save area,
-#        timers (how many, handles, the ticks between calls for 32 rates,
+#        timers (how many, handles, the ticks between calls for 30 rates,
 #        the context of a call, reentrancy, a timer killing itself), the
 #        msec count against the BIOS tick count, INT 8 interrupts per tick,
 #        Disable/EnableSystemTimers, WEP. Their logs, without the "~"
