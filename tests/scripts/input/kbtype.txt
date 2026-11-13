@@ -1,0 +1,92 @@
+; Typing in Notepad through the keyboard driver (tests/inputrun.sh;
+; boot-test cases kbd and kbdall): letters, Shift, digits, punctuation,
+; Caps Lock, the keypad with Num Lock, arrows and selection, Alt menus,
+; Ctrl accelerators (copy, paste), Alt+Tab, Ctrl+Esc (the Task List),
+; Alt+Esc, Alt+F4. DOSBox keeps Ctrl+F1..F12, Alt+Enter and Alt+Pause for
+; itself: none of them here.
+; Shots without a blinking caret wait for their state (match NAME MAX S);
+; shots with one (matchnow NAME MAX S) are taken in the caret's phase
+; (tests/inputrun.sh)
+key alt+f
+key r
+; the Run dialog up (Program Manager's caption no longer active), then
+; Notepad's window active and drawn (as in tabs.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type notepad
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+type The quick brown fox jumps over the lazy dog.
+key Return
+type THE QUICK BROWN FOX 0123456789
+key Return
+type `~!@#$%^&*()-_=+[{]}\|;:'",<.>/?
+key Return
+key Caps_Lock
+type caps On, 42
+key Caps_Lock
+key Return
+key KP_1
+key KP_2
+key KP_Add
+key KP_Multiply
+key KP_Divide
+key KP_Subtract
+key KP_Decimal
+key KP_Enter
+matchnow 01-typed 20 2
+key Up
+key Up
+key Home
+key shift+End
+key ctrl+c
+key ctrl+End
+key ctrl+v
+key Left
+key Left
+key BackSpace
+key Delete
+matchnow 02-edited 20 2
+; Alt menus: the Edit menu by Alt+E, then Search by Right
+key alt+e
+match 03-editmenu 20 1.5
+shot 03-editmenu
+key Right
+match 04-searchmenu 20 1.5
+shot 04-searchmenu
+key Escape
+key Escape
+; Alt alone, then a letter: the File menu
+key alt
+key f
+match 05-filemenu 20 1.5
+shot 05-filemenu
+key Escape
+key Escape
+; to Program Manager and back
+key alt+Tab
+match 06-alttab 20 2
+shot 06-alttab
+key alt+Tab
+matchnow 07-back 20 2
+; the Task List
+key ctrl+Escape
+match 08-tasklist 20 2
+shot 08-tasklist
+key Escape
+matchnow 09-closed 20 2
+; Alt+Esc to Program Manager, Alt+Esc back
+key alt+Escape
+match 10-altesc 20 2
+shot 10-altesc
+key alt+Escape
+matchnow 11-altesc-back 20 2
+; closed without saving
+key alt+F4
+match 12-save 20 2
+shot 12-save
+key n
+match 13-closed 20 2
+shot 13-closed

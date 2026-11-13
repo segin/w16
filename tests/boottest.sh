@@ -134,6 +134,21 @@
 #   mouseall   every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
 #              fonts) with w16's MOUSE.DRV against the same with
 #              Microsoft's MOUSE.DRV, the dragoff script: must be 0
+#   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
+#              DOSX, USER and GDI under real key input: typing in Notepad
+#              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
+#              the keypad, arrows, Alt menus, Ctrl+C/V, Alt+Tab, Ctrl+Esc,
+#              Alt+Esc) and the tabs, alttab, helpmenus, pmkeys and icons
+#              scripts, every screen against the same script with
+#              Microsoft's KEYBOARD.DRV                must be 0
+#   kbdall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+#              fonts) with w16's KEYBOARD.DRV against the same with
+#              Microsoft's, the kbtype script: must be 0
+#   kbdwrite   Windows Write's script (write) with w16's KEYBOARD.DRV on
+#              Microsoft's stack: must be 0 but for the caret
+#   kbdwoados  the woados script with w16's KEYBOARD.DRV on Microsoft's
+#              stack (Disable and Enable around the DOS program): the
+#              screens as all-Microsoft's up to the cursor
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -222,7 +237,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1073,6 +1088,143 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
         else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
+    kbd)
+        # w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
+        # DOSX, USER and GDI under real key input: typing in Notepad
+        # (kbtype) and the key scripts of tabs, alttab, helpmenus, pmkeys
+        # and icons, every screen against the same script with Microsoft's
+        # KEYBOARD.DRV (helpmenus: Notepad's caret left out as there;
+        # icons: Clock's icon)
+        kdrv=$root/build/dos/KEYBOARD.DRV
+        r=ok
+        for s in kbtype tabs alttab helpmenus pmkeys icons; do
+            scr=$root/tests/scripts/input/$s.txt
+            case $s in
+            helpmenus) m="rectangle 14,42 20,61" ;;
+            icons) m="rectangle 160,400 220,445" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            b=25 t=220
+            [ $s = pmkeys ] && b=40
+            [ $s = icons ] && t=380
+            refrun kbd-$s-ref kbd "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/kbd-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/kbd-$s-ref/boot.png" -E "$out/kbd-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/kbd-$s-w16" -r \
+                -f "$kdrv=WINDOWS/SYSTEM/KEYBOARD.DRV" > "$out/kbd-$s-w16.txt" 2>&1 || true
+            ls "$out/kbd-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/kbd-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/kbd-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                magick "$f" -fill black -draw "$m" "$out/kbd-a.png"
+                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-b.png"
+                n=$(magick compare -metric AE "$out/kbd-b.png" "$out/kbd-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbd: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdall)
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+        # fonts) with w16's KEYBOARD.DRV against the same with Microsoft's
+        # KEYBOARD.DRV, the kbtype script (both sides are w16's but for
+        # KEYBOARD.DRV: not cached). w16's USER keeps Notepad's caret
+        # blinking while a menu is open (as in helpmenus): its place is
+        # left out of the menu shots
+        fon=$root/build/fonts
+        scr=$root/tests/scripts/input/kbtype.txt
+        cm="rectangle 76,86 86,108"
+        for k in ref w16; do
+            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -M "$cm" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
+                -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
+            else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
+            "$root/tests/inputrun.sh" "$@" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/kbdall-$k.txt" 2>&1 || true
+        done
+        r=ok
+        ls "$out/kbdall-ref"/[0-9]*.png > /dev/null 2>&1 || r="no screens"
+        for f in "$out/kbdall-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            g=$(basename "$f")
+            [ -f "$out/kbdall-w16/$g" ] || { r="no $g"; break; }
+            case $g in 0[345]-*) m=$cm ;; *) m="rectangle 0,0 0,0" ;; esac
+            magick "$f" -fill black -draw "$m" "$out/kbdall-a.png"
+            magick "$out/kbdall-w16/$g" -fill black -draw "$m" "$out/kbdall-b.png"
+            n=$(magick compare -metric AE "$out/kbdall-b.png" "$out/kbdall-a.png" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$g: $n pixels differ ($out/kbdall-${g%.png}-diff.png)"
+        done
+        # and the typing did something: the typed screen is not the boot's
+        if [ "$r" = ok ]; then
+            n=$(magick compare -metric AE "$out/kbdall-w16/01-typed.png" "$out/kbdall-w16/boot.png" null: 2>&1 || true)
+            [ "${n%% *}" != 0 ] || r="the typing did nothing"
+        fi
+        if [ "$r" = ok ]; then echo "ok   kbdall: 0 pixels (every w16 part, w16's KEYBOARD.DRV against Microsoft's)"
+        else echo "FAIL kbdall: $r"; fails=$((fails + 1)); fi ;;
+    kbdwrite)
+        # Windows Write (the write case's script) with w16's KEYBOARD.DRV
+        # on Microsoft's KRNL286, DOSX, USER, GDI against all-Microsoft:
+        # identical screens but for the caret's places (it blinks)
+        s=$root/tests/scripts/input/write.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/kbdwrite-WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/kbdwrite-WIN.INI" 'windows:run=WRITE.EXE'
+        refrun kbdwrite-ref kbdwrite "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/kbdwrite-ref" -r \
+            -f "$out/kbdwrite-WIN.INI=WINDOWS/WIN.INI"
+        "$root/tests/inputrun.sh" -e "$out/kbdwrite-ref/boot.png" -m "rectangle 27,46 28,61" -E "$out/kbdwrite-ref" \
+            -M "rectangle 27,46 28,61 rectangle 112,46 113,61 rectangle 112,82 113,97 rectangle 95,98 96,113" -b 25 -t 210 "$s" "$out/kbdwrite-w16" -r \
+            -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV" \
+            -f "$out/kbdwrite-WIN.INI=WINDOWS/WIN.INI" > "$out/kbdwrite-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/kbdwrite-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/kbdwrite-w16/$s" ] || { r="no $s"; break; }
+            case $s in
+            01-*) m="rectangle 27,46 28,61" ;;
+            02-*|03-*) m="rectangle 112,46 113,61" ;;
+            04-*) m="rectangle 112,82 113,97" ;;
+            05-*) m="rectangle 95,98 96,113" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            magick "$f" -fill black -draw "$m" "$out/kbdwrite-a.png"
+            magick "$out/kbdwrite-w16/$s" -fill black -draw "$m" "$out/kbdwrite-b.png"
+            n=$(magick compare -metric AE "$out/kbdwrite-b.png" "$out/kbdwrite-a.png" "$out/kbdwrite-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/kbdwrite-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   kbdwrite: 0 pixels (Write with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbdwrite: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdwoados)
+        # the MS-DOS Prompt (the woados case's script: KEYBOARD.Disable and
+        # Enable around the DOS program, the BIOS's keyboard in between)
+        # with w16's KEYBOARD.DRV on Microsoft's KRNL286, DOSX, USER, GDI,
+        # WINOLDAP against all-Microsoft: the same screens up to the
+        # cursor (40 pixels), Windows repainted as it was before
+        scr=$root/tests/scripts/input/woados.txt
+        set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        refrun kbdwoados-ref kbdwoados env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/kbdwoados-ref" -r "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/kbdwoados-w16" -r "$@" \
+            -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV" > "$out/kbdwoados-w16.txt" 2>&1 || true
+        a=$out/kbdwoados-w16 b=$out/kbdwoados-ref r=ok
+        for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
+            f=${s%%:*} want=${s#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            if [ $f = 03-back ]; then
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/kbdwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            else
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/kbdwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            fi
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   kbdwoados: the MS-DOS Prompt and back with w16's KEYBOARD.DRV"
+        else echo "FAIL kbdwoados: $r ($out/kbdwoados-w16)"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }
