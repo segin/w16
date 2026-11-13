@@ -1,0 +1,26 @@
+; CF8: the Save As type after opening 3.0 files; a 3.0 picture saved as 3.1
+; (needs C:\CF2A.CRD from CF2 and C:\CF6B.CRD from CF6)
+run CARDFILE.EXE C:\CF2A.CRD
+wait 3000
+snap C:\OPENED.BMP
+menu f
+char a
+wait 1500
+dump
+key 1B
+wait 500
+menu f
+char o
+wait 1500
+type C:\CF6B.CRD
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+dump
+cbsel 470 0
+type C:\CF8A.CRD
+key 0D
+wait 2000
+dump

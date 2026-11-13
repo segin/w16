@@ -9,6 +9,8 @@ w16 repository's LICENSE):
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
   CLOCK.EXE               Clock
+  CARDFILE.EXE            Cardfile (needs COMMDLG.DLL and OLECLI.DLL in
+                          SYSTEM; its help is CARDFILE.HLP)
   SYSTEM\KRNL286.EXE      KERNEL
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation

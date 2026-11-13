@@ -1,0 +1,46 @@
+; CF13: the messages of a 3.0-format Save As, without and with a picture
+run CARDFILE.EXE
+wait 3000
+type plain text
+menu f
+char a
+wait 1500
+cbsel 470 1
+type C:\T1.CRD
+key 0D
+wait 1500
+snap C:\M1.BMP
+dump
+key 0D
+wait 1000
+snap C:\M2.BMP
+clippic 20 20
+menu e
+char e
+ckey c 56
+wait 1000
+menu f
+char a
+wait 1500
+dump
+type C:\T2.CRD
+key 0D
+wait 1500
+snap C:\M3.BMP
+dump
+alt n
+wait 1500
+snap C:\M4.BMP
+dump
+menu f
+char a
+wait 1500
+type C:\T3.CRD
+key 0D
+wait 1500
+alt y
+wait 1500
+snap C:\M5.BMP
+dump
+key 0D
+wait 1000

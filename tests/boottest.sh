@@ -107,6 +107,13 @@
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
+#   mdimax     a maximised MDI child's controls in the frame's menu bar:
+#              probe US18 as the shell on 3.1 and on w16's USER (its OBS
+#              lines identical), then Program Manager's Main group
+#              maximised, its system menu from the bar (Alt+-), File and
+#              Left, the restore button clicked, Accessories maximised,
+#              the Window menu, Ctrl+F4 (tests/scripts/input/mdimax.txt):
+#              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -118,6 +125,11 @@
 #              TrueType, Write's text is Arial): identical screens, leaving
 #              out the caret (it blinks) and in the save box the Yes button
 #              (w16's MessageBox puts it 2 pixels right: UNVERIFIED rule)
+#   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
+#              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
+#              List view, Find, Autodial, the Edit menu, Exit without
+#              saving): w16's CARDFILE.EXE against Microsoft's, both on
+#              all-Microsoft Windows 3.1: every screen identical
 #   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
 #              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
 #              then every w16 part must not fault
@@ -155,6 +167,16 @@
 #   commdlg    w16's COMMDLG.DLL over Microsoft's in the reference install:
 #              open1, find1, color1, font1, print1 of tests/commdlgscen.sh
 #              (the probe's log identical, screens within the baseline)
+#   commuser   w16's USER's comm functions (user/comm.c) against Windows
+#              3.1's: probe CM2 with COMMREC recording USER's calls to the
+#              driver (tests/commusr.sh): the logs and the far end's
+#              records identical
+#   commall    the comm case on every w16 part (WIN.COM, DOSX, KRNL286,
+#              USER, GDI, COMM.DRV) against all of Microsoft's: CM1's
+#              exchange through USER and the far end's records identical
+#   termclose  Terminal closed while it sends a file over COM1 (Alt+F4,
+#              Yes to stop: tests/scripts/input/termclose.txt) on every
+#              w16 part: Terminal gone, the screen as all-Microsoft's
 #   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
 #              DOSX, USER and GDI under real key input: typing in Notepad
 #              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
@@ -283,7 +305,11 @@
 # woaref2, dragoff-ref) are made once under a lock per cache key, and
 # retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
 # The cases that took longest last time (build/boottest-times.txt, kept
-# by each run) start first; the output stays in case order.
+# by each run) start first; the output stays in case order. Cases made of
+# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us,
+# winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
+# the case's one line; a part can be run by name (tests/boottest.sh
+# allw16nolock@3).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -299,7 +325,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -317,6 +343,10 @@ boot() {
     while :; do
         "$root/tests/dropin.sh" -t "$secs" -i w16:watchdog=0 -s "$out/$name.png" "$@" \
             > "$out/$name.txt" 2>&1 || true
+        # DOSBox-X ending at once at its start (dropin.sh restarts it)
+        if grep -q '^== emulator restarted' "$out/$name.txt"; then
+            retried "$name" emulator-start "$(grep -c '^emulator restarted' "$out/$name.txt") restart(s): Couldn't open X11 display"
+        fi
         # A screenshot of one colour means the hidden X display or the
         # window capture failed (seen under heavy load), not that Windows
         # drew nothing: Windows' screen is never a single colour here.
@@ -574,7 +604,8 @@ woaref() {
 
 # runcase CASE: one case; run in a subshell of its own (the job pool below)
 runcase() {
-    c=$1
+    c=${1%@*} part=
+    case $1 in *@*) part=${1#*@} ;; esac
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
@@ -616,9 +647,14 @@ runcase() {
         set -- -c GO55 -f "$out/GO55.BAT=WINDOWS/GO55.BAT" -f "$root/build/dos/VIDMODE.COM=VIDMODE.COM" \
             -f "$root/build/dos/TK55.EXE=TK55.EXE" -i 'boot:shell=C:\TK55.EXE'
         r=ok
+        # both at once; each ends when the batch file's record is written
+        # (-W EL.TXT), at 60 s at the latest as before
         for k in ref w16; do
             o=; [ $k = ref ] && o=-r
-            "$root/tests/dropin.sh" -t 60 -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 || true
+            "$root/tests/dropin.sh" -t 60 -W EL.TXT -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref w16; do
             el=$(tr -d '\r' < "$out/lastexit-$k/c/EL.TXT" 2>/dev/null | tr '\n' ' ')
             [ "$el" = "rc 0 mode 3 " ] || r="$k: $el (rc 0 mode 3 expected)"
         done
@@ -734,6 +770,7 @@ runcase() {
     allw16nolock)
         fon=$root/build/fonts
         k=1 bad=0 runs=${NOLOCK_RUNS:-6}
+        [ -z "$part" ] || k=$part runs=$part
         while [ $k -le $runs ]; do
             b=${NOLOCK_BOOT:-$((10 + (k - 1) % 6 * 2))}
             INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b "$b" -t 240 \
@@ -753,7 +790,8 @@ runcase() {
                 echo "     $c run $k (motion from second $b): help menu $h pixels, pointer moved $p pixels ($d)"; bad=$((bad + 1)); fi
             k=$((k + 1))
         done
-        if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
+        if [ -n "$part" ]; then partdone "$([ $bad = 0 ] && echo ok || echo "run $part failed")"
+        elif [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
     winprompt)
         # the MS-DOS Prompt with w16's WIN.COM against 3.1's (the rest
@@ -763,12 +801,12 @@ runcase() {
         # left (3.1: mode 3, 80 columns, 25 rows, 16-line font; w16's
         # WIN.COM once left 50 lines, the 8x8 font)
         printf 'SET TEMP=C:\\WINDOWS\\TEMP\r\nWIN /S\r\nC:\\WCB\r\n' > "$out/GOP.BAT"
-        for v in ref w16; do
-            if [ $v = w16 ]; then set -- -r -w; else set -- -r; fi
-            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-$v" "$@" \
-                -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" -f "$root/build/dos/WCB.COM=WCB.COM" \
-                > "$out/winprompt-$v.txt" 2>&1 || true
-        done
+        # w16's side beside the reference's (cached; their timing as before)
+        set -- -c GOP -f "$out/GOP.BAT=WINDOWS/GOP.BAT" -f "$root/build/dos/WCB.COM=WCB.COM"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-w16" -r -w "$@" \
+            > "$out/winprompt-w16.txt" 2>&1 &
+        refrun winprompt-ref winprompt env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 140 "$scr" "$out/winprompt-ref" -r "$@"
+        wait
         r=ok
         for v in ref w16; do
             m=$(python3 -c "import sys; d = open(sys.argv[1], 'rb').read(); print('mode %02X cols %d rows %d font %d' % (d[0x49], d[0x4A], d[0x84] + 1, d[0x85]))" \
@@ -887,6 +925,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # 3.1's width rule for long captions). Then every w16 part: no
         # fault (it ended in KERNEL's lstrcat, back to DOS).
         s=$root/tests/scripts/input/winfile.txt
+        r=ok
+        if [ "${part:-cmp}" = cmp ]; then
         refrun winfile-ref winfile "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/winfile-ref" -r
         "$root/tests/inputrun.sh" -e "$out/winfile-ref/boot.png" -E "$out/winfile-ref" -M "rectangle 0,85 240,140 rectangle 0,455 639,479" -b 25 -t 210 "$s" "$out/winfile-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/winfile-w16.txt" 2>&1 || true
@@ -903,7 +943,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             [ "$n" = 0 ] || { r="$s2: $n pixels differ"; break; }
         done
         ls "$out/winfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
-        if [ "$r" = ok ]; then
+        fi
+        # every w16 part (the part "all"; after the comparison when whole)
+        if [ "$r" = ok ] && [ "${part:-all}" = all ]; then
             fon=$root/build/fonts
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 220 "$s" "$out/winfile-all" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
@@ -914,42 +956,68 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             if grep -aq "exception" "$out/winfile-all/work/c/OUT.TXT" 2>/dev/null; then r="every w16 part: a fault ($out/winfile-all/work/c/OUT.TXT)"
             elif [ ! -f "$out/winfile-all/07-back-c.png" ]; then r="every w16 part: screens missing"; fi
         fi
-        if [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
         refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -s -b 40 -t 290 "$scr" "$out/pmdrop-ref" -r
+        pk=${part:-pm sh us}     # the sessions this run makes
+        case " $pk " in *" pm "*)
         "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-pm" -r \
-            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true ;; esac
+        case " $pk " in *" sh "*)
         "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-sh" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
-            > "$out/pmdrop-sh.txt" 2>&1 || true
+            > "$out/pmdrop-sh.txt" 2>&1 || true ;; esac
         # w16's USER and GDI under Microsoft's File Manager and Program
         # Manager (DragObject, DumpIcon): the file's focus rectangle left
         # out, its dots in the other phase (GDI's pattern origin)
+        case " $pk " in *" us "*)
         "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -E "$out/pmdrop-ref" -M "rectangle 258,200 280,224" -b 40 -t 290 "$scr" "$out/pmdrop-us" -r \
-            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true ;; esac
         r=ok
         grp=work/c/WINDOWS/MAIN.GRP
         if ! grep -aq "C:.WINDOWS.APPS.HLP" "$out/pmdrop-ref/$grp" 2>/dev/null; then
             r="the reference did not add the item ($out/pmdrop-ref)"
         fi
-        for k in pm sh us; do
+        for k in $pk; do
             [ "$r" = ok ] || break
             cmp -s "$out/pmdrop-ref/$grp" "$out/pmdrop-$k/$grp" || { r="$k: MAIN.GRP differs"; break; }
             for s in 04-dragging 05-dropped; do
                 [ -f "$out/pmdrop-$k/$s.png" ] || { r="$k: no $s"; break; }
                 m="rectangle 0,0 0,0"
                 [ $k = us ] && m="rectangle 258,200 280,224"
-                magick "$out/pmdrop-$k/$s.png" -fill black -draw "$m" "$out/pmdrop-a.png"
-                magick "$out/pmdrop-ref/$s.png" -fill black -draw "$m" "$out/pmdrop-b.png"
-                n=$(magick compare -metric AE "$out/pmdrop-a.png" "$out/pmdrop-b.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                magick "$out/pmdrop-$k/$s.png" -fill black -draw "$m" "$out/pmdrop-$k-a.png"
+                magick "$out/pmdrop-ref/$s.png" -fill black -draw "$m" "$out/pmdrop-$k-b.png"
+                n=$(magick compare -metric AE "$out/pmdrop-$k-a.png" "$out/pmdrop-$k-b.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
             done
         done
-        if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
+    cardfile)
+        s=$root/tests/scripts/input/cardfile.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cardfile-WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/cardfile-WIN.INI" 'windows:run=CARDFILE.EXE'
+        refrun cardfile-ref cardfile "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/cardfile-ref" -r \
+            -f "$out/cardfile-WIN.INI=WINDOWS/WIN.INI"
+        "$root/tests/inputrun.sh" -e "$out/cardfile-ref/boot.png" -E "$out/cardfile-ref" -b 25 -t 210 \
+            "$s" "$out/cardfile-w16" -r -f "$out/cardfile-WIN.INI=WINDOWS/WIN.INI" \
+            -f "$root/build/dos/CARDFILE.EXE=WINDOWS/CARDFILE.EXE" > "$out/cardfile-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/cardfile-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/cardfile-w16/$s" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/cardfile-w16/$s" "$f" "$out/cardfile-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/cardfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   cardfile: 0 pixels"
+        else echo "FAIL cardfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmclose)
         # Program Manager's system box double-clicked: its Exit dialog in
         # front, active and system modal (a click on Program Manager does
@@ -1052,6 +1120,59 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmkeys: arrow keys move Program Manager's selection from the start (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmkeys: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mdimax)
+        # a maximised MDI child's controls in the frame's menu bar (user/mdi.c):
+        # probe US18 (tests/apps/us18.c) as the shell on Windows 3.1 and on
+        # w16's USER, the OBS lines of the two logs identical; then real
+        # input in Program Manager (tests/scripts/input/mdimax.txt) on w16's
+        # USER and GDI, with Microsoft's PROGMAN pixel for pixel and with
+        # w16's (its group icons left out), against all-Microsoft
+        us18() {   # LABEL dropin.sh options...: US18's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 150 -s "$out/$_l.png" -o "$out/$_l" \
+                -f "$root/build/dos/US18.EXE=US18.EXE" -i 'boot:shell=C:\US18.EXE' "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        us18 mdimax-us18ref -r
+        us18 mdimax-us18 -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
+        scr=$root/tests/scripts/input/mdimax.txt
+        refrun mdimax-ref mdimax "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/mdimax-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/mdimax-ref/boot.png" -E "$out/mdimax-ref" -b 40 -t 240 "$scr" "$out/mdimax-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/mdimax-us.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -s -E "$out/mdimax-ref" -M "rectangle 60,310 300,342" -b 40 -t 240 "$scr" "$out/mdimax-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/mdimax-pm.txt" 2>&1 || true
+        r=ok
+        for k in us18ref us18; do
+            f=$out/mdimax-$k.log
+            if [ ! -f "$f" ] || ! grep -q '^US18 end' "$f"; then r="$k: US18 did not finish ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/mdimax-us18ref.log" > "$out/mdimax-us18ref.obs"
+            grep '^OBS [^~]' "$out/mdimax-us18.log" > "$out/mdimax-us18.obs"
+            cmp -s "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" ||
+                r="US18: $(diff "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/mdimax-us18ref.obs, mdimax-us18.obs)"
+        fi
+        for k in us pm; do
+            [ "$r" = ok ] || break
+            ls "$out/mdimax-ref"/[0-9]*.png > /dev/null 2>&1 || { r="no reference screens"; break; }
+            for f in "$out/mdimax-ref"/[0-9]*.png; do
+                s=$(basename "$f")
+                [ -f "$out/mdimax-$k/$s" ] || { r="$k: no $s"; break; }
+                m="rectangle 0,0 0,0"
+                [ $k = pm ] && m="rectangle 60,310 300,342"
+                magick "$f" -fill black -draw "$m" "$out/mdimax-a.png"
+                magick "$out/mdimax-$k/$s" -fill black -draw "$m" "$out/mdimax-b.png"
+                n=$(magick compare -metric AE "$out/mdimax-b.png" "$out/mdimax-a.png" "$out/mdimax-$k-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+        done
+        if [ "$r" = ok ]; then echo "ok   mdimax: US18 as 3.1; maximised groups' controls in the bar, 0 pixels (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL mdimax: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmitems)
         # an item dragged within Program Manager's Main group, then the
         # minimised Accessories group restored (in front, active):
@@ -1250,7 +1371,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # the run's timing)
         mdrv=$root/build/dos/MOUSE.DRV
         r=ok
-        for s in dragoff pmitems pmclose helpmenus; do
+        for s in ${part:-dragoff pmitems pmclose helpmenus}; do
             case $s in pmitems|pmclose) b=40 t=240 ;; *) b=25 t=200 ;; esac
             scr=$root/tests/scripts/input/$s.txt
             refrun mouse-$s-ref mouse "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/mouse-$s-ref" -r
@@ -1262,15 +1383,16 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
                 [ -f "$out/mouse-$s-w16/$g" ] || { r="$s: no $g"; break; }
                 m="rectangle 0,0 0,0"
                 [ $s = helpmenus ] && m="rectangle 14,42 20,61"
-                magick "$f" -fill black -draw "$m" "$out/mouse-a.png"
-                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-b.png"
-                n=$(magick compare -metric AE "$out/mouse-b.png" "$out/mouse-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "$m" "$out/mouse-$s-a.png"
+                magick "$out/mouse-$s-w16/$g" -fill black -draw "$m" "$out/mouse-$s-b.png"
+                n=$(magick compare -metric AE "$out/mouse-$s-b.png" "$out/mouse-$s-a.png" "$out/mouse-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
             done
             [ "$r" = ok ] || break
         done
-        if [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
         else echo "FAIL mouse: $r ($out)"; fails=$((fails + 1)); fi ;;
     mouseall)
         fon=$root/build/fonts
@@ -1323,6 +1445,63 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             echo "FAIL comm: $(grep -m1 -E '^FAIL' "$out/comm.txt" || echo 'see comm.txt') ($out/comm.txt)"
             fails=$((fails + 1))
         fi ;;
+    commuser)
+        # w16's USER's comm functions against Windows 3.1's
+        # (tests/commusr.sh): probe CM2 on each, COMMREC recording every
+        # call USER makes to Windows 3.1's COMM.DRV, commhost at the far
+        # end; the probe's log, COMMREC's and commhost's identical
+        if "$root/tests/commusr.sh" -o "$out/commuser" > "$out/commuser.txt" 2>&1; then
+            echo "ok   commuser: CM2's log, USER's driver calls and the far end the same on w16's USER"
+        else
+            echo "FAIL commuser: $(grep -m1 -E '^FAIL' "$out/commuser.txt" || echo 'see commuser.txt') ($out/commuser.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    commall)
+        # the comm case on every w16 part: CM1's exchange through USER
+        # (part C) on w16's WIN.COM, DOSX, KRNL286, USER, GDI and COMM.DRV
+        # against all of Microsoft's (tests/commusr.sh -a)
+        if "$root/tests/commusr.sh" -e "$root/build/dos/CM1.EXE" -n -a -p 4 \
+            -W "$root/build/dos/COMM.DRV" -o "$out/commall" > "$out/commall.txt" 2>&1; then
+            echo "ok   commall: CM1's exchange and the far end's records the same on every w16 part"
+        else
+            echo "FAIL commall: $(grep -m1 -E '^FAIL' "$out/commall.txt" || echo 'see commall.txt') ($out/commall.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    termclose)
+        # Terminal closed while sending a file (tests/scripts/input/
+        # termclose.txt), tests/commhost.py at the far end of COM1: on
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, COMM.DRV)
+        # Terminal must be gone and the screen as all-Microsoft's (not
+        # cached: the far end is part of the run)
+        scr=$root/tests/scripts/input/termclose.txt
+        python3 -c 'for i in range(400): print("line %04d of the text Terminal sends: the quick brown fox jumps over the lazy dog" % i)' > "$out/termclose-SEND.TXT"
+        for k in ref w16; do
+            port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+            python3 "$root/tests/commhost.py" -t 400 -l "$out/termclose-$k.host" "$port" > "$out/termclose-$k.hostout" 2>&1 &
+            hpid=$!
+            sleep 0.5
+            if [ $k = ref ]; then set -- -s -b 40 -t 240 "$scr" "$out/termclose-ref" -r
+            else set -- -e "$out/termclose-ref/boot.png" -E "$out/termclose-ref" -b 40 -t 240 "$scr" "$out/termclose-w16" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/COMM.DRV=WINDOWS/SYSTEM/COMM.DRV"; fi
+            DROPIN_CONF="[serial]
+serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i 'WIN.INI:windows:run=TERMINAL.EXE' \
+                -f "$out/termclose-SEND.TXT=WINDOWS/SEND.TXT" > "$out/termclose-$k.txt" 2>&1 || true
+            kill "$hpid" 2>/dev/null || true
+            wait "$hpid" 2>/dev/null || true
+        done
+        r=ok
+        f=03-closed.png
+        if [ ! -f "$out/termclose-ref/$f" ] || [ ! -f "$out/termclose-w16/$f" ]; then r="no $f"
+        elif ! grep -q 'L rts=0 dtr=0' "$out/termclose-ref.host"; then r="the reference did not close the port"
+        elif ! grep -q '^D ' "$out/termclose-w16.host"; then r="w16: nothing was sent"
+        else
+            n=$(magick compare -metric AE "$out/termclose-w16/$f" "$out/termclose-ref/$f" "$out/termclose-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$f: $n pixels differ (Terminal still there?)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   termclose: Terminal closed mid-transfer on every w16 part, the screen as 3.1's"
+        else echo "FAIL termclose: $r ($out)"; fails=$((fails + 1)); fi ;;
     kbd)
         # w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
         # DOSX, USER and GDI under real key input: typing in Notepad
@@ -1332,7 +1511,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # icons: Clock's icon)
         kdrv=$root/build/dos/KEYBOARD.DRV
         r=ok
-        for s in kbtype tabs alttab helpmenus pmkeys icons menus; do
+        for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus}; do
             scr=$root/tests/scripts/input/$s.txt
             case $s in
             helpmenus) m="rectangle 14,42 20,61" ;;
@@ -1349,15 +1528,16 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             for f in "$out/kbd-$s-ref"/[0-9]*.png; do
                 g=$(basename "$f")
                 [ -f "$out/kbd-$s-w16/$g" ] || { r="$s: no $g"; break; }
-                magick "$f" -fill black -draw "$m" "$out/kbd-a.png"
-                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-b.png"
-                n=$(magick compare -metric AE "$out/kbd-b.png" "$out/kbd-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "$m" "$out/kbd-$s-a.png"
+                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-$s-b.png"
+                n=$(magick compare -metric AE "$out/kbd-$s-b.png" "$out/kbd-$s-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
             done
             [ "$r" = ok ] || break
         done
-        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
         else echo "FAIL kbd: $r ($out)"; fails=$((fails + 1)); fi ;;
     kbdall)
         # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
@@ -1588,11 +1768,63 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
 # (tests/xvfb.sh); references two cases share wait for each other
 # (refrun's lock); retries are appended under a lock.
 for c in $cases; do
-    case $(codeof "$c" | head -1) in
+    case $(codeof "${c%@*}" | head -1) in
     "    "*")"*) ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done
+# Parts. A case made of several independent sessions is split into parts
+# that are scheduled like cases (CASE@PART, run by name too): allw16nolock
+# (one part per run, its deliberate timings unchanged), pmdrop (w16
+# PROGMAN; PROGMAN and SHELL; USER and GDI), winfile (the comparison;
+# every w16 part), kbd and mouse (one part per script). A part records its result (partdone) and prints only
+# its own details; when the last part of a case is printed, the case's
+# own ok or FAIL line follows (partsummary) and counts once.
+caseparts() {
+    case $1 in
+    allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
+    pmdrop) echo "$1@pm $1@sh $1@us" ;;
+    winfile) echo "$1@cmp $1@all" ;;
+    kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
+    mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
+    *) echo "$1" ;;
+    esac
+}
+# partdone RESULT: this part's result, "ok" or what failed
+partdone() { echo "$1" > "$out/.part-$c-$part"; }
+# partsummary CASE: the case's line from its parts' results
+partsummary() {
+    pt=0 pbad=0 pfirst=
+    for pp in $(grep "^$1@" "$out/.names"); do   # the parts this run has
+        pt=$((pt + 1))
+        pr=$(cat "$out/.part-$1-${pp#*@}" 2>/dev/null || echo "part ${pp#*@} stopped before its end")
+        [ "$pr" = ok ] && continue
+        pbad=$((pbad + 1)); [ -n "$pfirst" ] || pfirst=$pr
+    done
+    case $1 in
+    allw16nolock)
+        if [ $pbad = 0 ]; then echo "ok   $1: $pt of $pt runs: menus and pointer respond"
+        else echo "FAIL $1: $pbad of $pt runs failed"; fi ;;
+    pmdrop)
+        if [ $pbad = 0 ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
+        else echo "FAIL pmdrop: $pfirst"; fi ;;
+    kbd)
+        if [ $pbad = 0 ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbd: $pfirst ($out)"; fi ;;
+    mouse)
+        if [ $pbad = 0 ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
+        else echo "FAIL mouse: $pfirst ($out)"; fi ;;
+    winfile)
+        if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
+        else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    esac
+    [ $pbad = 0 ]
+}
+expanded=
+for c in $cases; do
+    case $c in *@*) expanded="$expanded $c" ;; *) expanded="$expanded $(caseparts "$c")" ;; esac
+done
+cases=$expanded
 jobs=${BOOTTEST_JOBS:-3}
 n=0 next=1 pids=
 # flush: print the output of the cases finished so far, in order
@@ -1606,6 +1838,12 @@ flush() {
             fails=$((fails + 1))
         fi
         cat "$out/.case-$next.time" >> "$out/times.txt"
+        # the last part of a case: the case's line
+        pc=$(sed -n "${next}p" "$out/.names")
+        case $pc in *@*)
+            if [ "$(sed -n "$((next + 1))p" "$out/.names" | sed 's/@.*//')" != "${pc%@*}" ] &&
+               ! partsummary "${pc%@*}"; then fails=$((fails + 1)); fi ;;
+        esac
         next=$((next + 1))
     done
 }
@@ -1626,6 +1864,7 @@ order=$(i=0; for c in $cases; do
     echo "${t:-99999} $i $c"
 done | sort -k1,1nr -k2,2n | cut -d' ' -f2-)
 total=$(echo "$cases" | wc -w)
+for c in $cases; do echo "$c"; done > "$out/.names"
 echo "$order" | while read -r n c; do echo "$n $c"; done > "$out/.order"
 while read -r n c; do
     while [ "$(running)" -ge "$jobs" ]; do flush; sleep 1; done
@@ -1653,6 +1892,12 @@ awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "
 if [ -s "$out/refcache.log" ]; then
     echo "boottest: references: $(grep -c 'from the cache' "$out/refcache.log") from the cache, $(grep -c ' ran' "$out/refcache.log") run, $(grep -c ' stored$' "$out/refcache.log") stored ($out/refcache.log)"
 fi
+# input sessions whose DOSBox-X was restarted at its start (inputrun.sh)
+for f in "$out"/*/input.log; do
+    [ -f "$f" ] && grep -q '^emulator restarted' "$f" || continue
+    d=$(basename "$(dirname "$f")")
+    retried "$d" emulator-start "$(grep -c '^emulator restarted' "$f") restart(s): Couldn't open X11 display"
+done
 # retries: this run's, and cases that have needed them repeatedly
 if [ -s "$out/retries.txt" ]; then
     echo "boottest: $(wc -l < "$out/retries.txt") retr$( [ "$(wc -l < "$out/retries.txt")" = 1 ] && echo y || echo ies) this run (see $out/retries.txt)"

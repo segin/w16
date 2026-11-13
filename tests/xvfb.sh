@@ -20,6 +20,9 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 d=$(mktemp -d "${TMPDIR:-/tmp}/w16xvfb.XXXXXX")
 Xvfb -displayfd 3 -screen 0 1024x768x24 -nolisten tcp 3> "$d/display" 2> "$d/err" &
 xpid=$!
+# killed itself (a boot test stopped by hand), it ends its server too
+cpid=
+trap 'kill $cpid "$xpid" 2>/dev/null; rm -rf "$d"; exit 143' INT TERM HUP
 # the display number is written when the server accepts connections
 i=0
 while :; do
@@ -34,7 +37,10 @@ while :; do
     sleep 0.05; i=$((i + 1))
 done
 rc=0
-DISPLAY=:$n "$@" || rc=$?
+# (in the background: a trap then runs at once, not after the command)
+DISPLAY=:$n "$@" &
+cpid=$!
+wait "$cpid" || rc=$?
 # the server's own messages, if it had any (seen once: DOSBox found "no
 # available video device" on a display this script had started)
 if ! kill -0 "$xpid" 2>/dev/null; then

@@ -17,6 +17,8 @@
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
  *     focus                  log the window with the focus
+ *     blinktime <ms>         SetCaretBlinkTime (65535: carets keep their
+ *                            phase, for repeatable screenshots)
  *     clickid <hex id>       click (posted) the middle of a control of the
  *                            active dialog
  *     move <x> <y> <cx> <cy> MoveWindow the active top-level window
@@ -65,6 +67,18 @@
  *     dumpmenu               log the active window's menu bar and system
  *                            menu: each item's ID, state flags and text
  *     mark <n>               label the next observations of THELP.EXE
+ *     ckey <mods> <vk-hex>   a key press with modifiers held: mods is any
+ *                            of c (Ctrl), s (Shift), a (Alt) (the
+ *                            keyboard state is set around the message)
+ *     clippic <w> <h>        put a w x h test picture (CF_BITMAP, the
+ *                            display's format, drawn the same each time)
+ *                            on the clipboard
+ *     cliptext <text>        put <text> on the clipboard (CF_TEXT)
+ *     cbsel <id-hex> <n>     select entry n of combo box <id> in the
+ *                            focus's dialog and tell the dialog
+ *                            (CBN_SELCHANGE), as choosing it does
+ *     blink <ms>             SetCaretBlinkTime (a long time keeps carets
+ *                            from blinking between screenshots)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too. A script named on the command line (SNAP.EXE FILE.TXT) runs
@@ -1061,6 +1075,112 @@ static void text_of_focus(void)
 
 /* One command: the dispatcher shared by script mode and the interactive
    window. The line is split in place. */
+/* ---- Cardfile's scenarios: keys with modifiers held, test data on the
+   clipboard, a combo box choice ---- */
+
+static void ckey(char *arg)
+{
+    static BYTE ks[256], save[256];
+    char *m = arg;
+    WORD vk;
+    int i;
+    while (*arg && *arg != ' ')
+        arg++;
+    vk = next_num(&arg, 16);
+    GetKeyboardState(save);
+    for (i = 0; i < 256; i++)
+        ks[i] = save[i];
+    for (; *m && *m != ' '; m++) {
+        if (*m == 'c')
+            ks[VK_CONTROL] |= 0x80;
+        else if (*m == 's')
+            ks[VK_SHIFT] |= 0x80;
+        else if (*m == 'a')
+            ks[VK_MENU] |= 0x80;
+    }
+    SetKeyboardState(ks);
+    PostMessage(target(), ks[VK_MENU] & 0x80 ? WM_SYSKEYDOWN : WM_KEYDOWN, vk,
+                ks[VK_MENU] & 0x80 ? 0x20000001L : 1L);
+    pump(200);
+    PostMessage(target(), ks[VK_MENU] & 0x80 ? WM_SYSKEYUP : WM_KEYUP, vk,
+                ks[VK_MENU] & 0x80 ? 0xE0000001L : 0xC0000001L);
+    pump(100);
+    SetKeyboardState(save);
+    pump(100);
+}
+
+/* a deterministic picture: white, a black frame, a gray ellipse, a
+   diagonal, so that pasted pictures can be told apart and compared */
+static void clippic(char *arg)
+{
+    int w = next_num(&arg, 10), h = next_num(&arg, 10);
+    HDC scr = GetDC(NULL), mem = CreateCompatibleDC(scr);
+    HBITMAP bm = CreateCompatibleBitmap(scr, w, h), old;
+    ReleaseDC(NULL, scr);
+    if (!mem || !bm) {
+        out(" -> no bitmap");
+        return;
+    }
+    old = SelectObject(mem, bm);
+    PatBlt(mem, 0, 0, w, h, WHITENESS);
+    SelectObject(mem, GetStockObject(GRAY_BRUSH));
+    Ellipse(mem, w / 4, h / 4, w - 2, h - 2);
+    SelectObject(mem, GetStockObject(NULL_BRUSH));
+    Rectangle(mem, 0, 0, w, h);
+    MoveTo(mem, 0, 0);
+    LineTo(mem, w, h);
+    SelectObject(mem, GetStockObject(WHITE_BRUSH));
+    SelectObject(mem, old);
+    DeleteDC(mem);
+    if (!OpenClipboard(NULL)) {
+        out(" -> clipboard busy");
+        DeleteObject(bm);
+        return;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_BITMAP, bm);
+    CloseClipboard();
+}
+
+static void cliptext(const char *text)
+{
+    WORD n = 0;
+    HGLOBAL h;
+    char FAR *p;
+    while (text[n])
+        n++;
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
+    if (!h || !OpenClipboard(NULL)) {
+        out(" -> failed");
+        return;
+    }
+    p = GlobalLock(h);
+    for (; n != (WORD)-1; n--)
+        p[n] = text[n];
+    GlobalUnlock(h);
+    EmptyClipboard();
+    SetClipboardData(CF_TEXT, h);
+    CloseClipboard();
+}
+
+
+static void cbsel(char *arg)
+{
+    WORD id = next_num(&arg, 16), n = next_num(&arg, 10);
+    HWND dlg = target(), cb;
+    while (dlg && (GetWindowLong(dlg, GWL_STYLE) & WS_CHILD))
+        dlg = GetParent(dlg);
+    cb = dlg ? GetDlgItem(dlg, id) : NULL;
+    if (!cb) {
+        out(" -> no such control");
+        return;
+    }
+    SendMessage(cb, CB_SETCURSEL, n, 0);
+    SendMessage(dlg, WM_COMMAND, id, MAKELPARAM(cb, CBN_SELCHANGE));
+    pump(200);
+}
+
+
 static void run_line(char *l)
 {
     char *arg = l;
@@ -1333,6 +1453,19 @@ static void run_line(char *l)
         info();
     } else if (same(l, "text")) {
         text_of_focus();
+    } else if (same(l, "ckey")) {
+        ckey(arg);
+    } else if (same(l, "clippic")) {
+        clippic(arg);
+    } else if (same(l, "cliptext")) {
+        cliptext(arg);
+    } else if (same(l, "cbsel")) {
+        cbsel(arg);
+    } else if (same(l, "blinktime") || same(l, "blink")) {
+        /* blinktime <ms>: SetCaretBlinkTime for the session, e.g. 65535 so
+           a caret keeps the phase it starts in (screenshots that do not
+           depend on the moment they are taken) */
+        SetCaretBlinkTime(parse_num(arg, 10));
     } else if (same(l, "focus")) {
         /* which window has the focus: class, ID, text */
         HWND f = GetFocus();

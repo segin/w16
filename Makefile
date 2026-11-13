@@ -928,6 +928,29 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CARDFILE.EXE (shell/cardfile; ARCHITECTURE.md 15), Windows 3.1
+# only ----
+CF_NAMES := main cards cardwnd crd dialogs filedlg edit print ole help util
+SHELL_CF := $(B)/shell/start.o $(CF_NAMES:%=$(B)/shell/cardfile/%.o)
+CF_HDRS  := shell/cardfile/cardfile.h
+shell: $(DOS)/CARDFILE.EXE
+$(B)/shell/cardfile/%.o: shell/cardfile/%.c $(CF_HDRS)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/res/cardfile.ico: tools/mkcardicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcardicon.py $@
+$(B)/shell/cardfile/cardfile.res: shell/cardfile/cardfile.rc $(CF_HDRS) $(B)/shell/res/cardfile.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/cardfile -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CARDFILE.EXE: $(SHELL_CF) $(B)/shell/cardfile/cardfile.res shell/cardfile/cardfile.lnk \
+                     tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cardfile/cardfile.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/cardfile/cardfile.map \
+	    option resource=$(B)/shell/cardfile/cardfile.res file { $(SHELL_CF) }
+	python3 tools/nemark.py $@ 3.10
+
 # ---- shell: CALC.EXE (shell/calc; ARCHITECTURE.md 15.3): x87 code with
 # emulator fixups (-fpi, WIN87EM) ----
 CALC_SRC := main draw engine fmt paste fpu stat clip help
@@ -985,7 +1008,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 test: dos fonts
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
-	tests/run-tests.sh
+	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
 # reference (tests/boottest.sh); run after every merge: make test does not
@@ -1135,6 +1158,11 @@ install-tree: $(W16)/CALC.EXE
 $(W16)/CALC.EXE: $(DOS)/CALC.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+# Cardfile (ARCHITECTURE.md 15), in the Windows directory as on 3.1
+install-tree: $(W16)/CARDFILE.EXE
+$(W16)/CARDFILE.EXE: $(DOS)/CARDFILE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
@@ -1245,6 +1273,13 @@ $(DOS)/US17.EXE: $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o tests/
 	$(WLINK) @tests/apps/us17.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us17.map file { $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o }
 dos: $(DOS)/US17.EXE
+# US18: a maximised MDI child's controls in the frame's menu bar (tests/apps/us18.c)
+$(B)/tests/us18.o: tests/apps/us18ref.h tests/apps/tklog.h
+$(DOS)/US18.EXE: $(B)/tests/start.o $(B)/tests/us18.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us18.map file { $(B)/tests/start.o $(B)/tests/us18.o }
+dos: $(DOS)/US18.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
@@ -1557,6 +1592,21 @@ $(DOS)/SYREC.DRV: $(B)/tests/syrec.o tests/apps/syrec.lnk
 	$(WLINK) @tests/apps/syrec.lnk name $@ option map=$(B)/tests/syrec.map file { $(B)/tests/syrec.o }
 	python3 tools/nemark.py $@ 3.10
 dos: $(DOS)/SY1.EXE $(DOS)/SYREC.DRV
+# COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
+# renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
+$(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \
+                    tests/apps/dll.lnk tests/apps/commrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/commrec.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/commrec.map file { $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o }
+dos: $(DOS)/COMMREC.DRV
+# CM2.EXE: USER's comm functions observed (tests/apps/cm2.c; tests/commusr.sh)
+$(B)/tests/cm2.o: tests/apps/cm2ref.h tests/apps/tklog.h
+$(DOS)/CM2.EXE: $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cm2.map file { $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o }
+dos: $(DOS)/CM2.EXE
 # ---- KEYBOARD.DRV: w16's keyboard driver (drivers/keyboard; README.md there)
 # KB1.EXE: every export called over all its inputs (tests/apps/kb1.c; run by
 # tests/kbprobe.sh with Windows 3.1's KEYBOARD.DRV and with w16's)

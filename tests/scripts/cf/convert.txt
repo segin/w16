@@ -1,0 +1,70 @@
+; convert: open card files made by the original Cardfile 3.1 (a 3.0 file
+; of text cards, a 3.0 file with a picture, a 3.1 file with a pasted
+; picture) and save them again: with no change, with Save As, and as 3.0;
+; a 3.0 file whose picture is placed down and right (PIC30Y: saved by the
+; original from the picture scenario) saved as 3.1
+; needs: THREE.CRD PIC30.CRD PIC31.CRD PIC30Y.CRD
+blink 60000
+run CARDFILE.EXE C:\THREE.CRD
+wait 3000
+snap C:\C01.BMP
+menu f
+char s
+wait 1500
+menu f
+char a
+wait 1500
+type C:\THREE2.CRD
+key 0D
+wait 1500
+menu f
+char o
+wait 1500
+type C:\PIC30.CRD
+key 0D
+wait 1500
+snap C:\C02.BMP
+menu f
+char a
+wait 1500
+type C:\PIC30B.CRD
+key 0D
+wait 1500
+menu f
+char o
+wait 1500
+type C:\PIC31.CRD
+key 0D
+wait 1500
+snap C:\C03.BMP
+menu f
+char a
+wait 1500
+type C:\PIC31B.CRD
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+cbsel 470 1
+type C:\PIC31C.CRD
+key 0D
+wait 1500
+snap C:\C04.BMP
+alt y
+wait 1500
+snap C:\C05.BMP
+menu f
+char o
+wait 1500
+type C:\PIC30Y.CRD
+key 0D
+wait 1500
+snap C:\C06.BMP
+menu f
+char a
+wait 1500
+cbsel 470 0
+type C:\PIC30Z.CRD
+key 0D
+wait 1500

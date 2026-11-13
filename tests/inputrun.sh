@@ -49,7 +49,10 @@
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     keydown KEYS / keyup KEYS  press or release keys only (a key held
 #                       while others are typed, e.g. Alt for Alt+keypad)
-#     type TEXT         type text
+#     type TEXT         type text (key and type: INPUTRUN_KEYDELAY ms between
+#                       keys, default 50; xdotool's 12 lost keys under load,
+#                       on Microsoft's side as on w16's: DOSBox took them in
+#                       bursts, apparently more than its keyboard buffer holds)
 #     sleep S           wait S seconds (fractions allowed)
 #     waitpixel X Y RRGGBB MAX     wait until the pixel at X,Y has that
 #     waitnotpixel X Y RRGGBB MAX  colour (has not), at most MAX seconds
@@ -151,13 +154,31 @@ grep -q '^quit warning' "$work/dosbox.conf" && emu="env SDL_VIDEODRIVER=x11 SDL_
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
-SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
-dpid=\$!
+# The emulator, with others running on the machine, now and then ends at
+# once with "Can't init SDL Couldn't open X11 display" or "... No
+# available video device" on a display that is there (DOSBox-X: 1 in 8
+# started together on one Xvfb, also when started one at a time; DOSBox:
+# once in about a thousand; UNVERIFIED why). The emulator
+# has not started then: it is started again, at most twice, and each
+# restart is reported ("emulator restarted"; boottest.sh logs it as a
+# retry). Nothing of the guest has run at that point.
+k=0
+while :; do
+    SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
+    dpid=\$! t0=\$(date +%s%N)
+    i=0
+    while [ \$i -lt 600 ] && kill -0 \$dpid 2>/dev/null && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
+    kill -0 \$dpid 2>/dev/null || ! grep -q "Can't init SDL" "$out/dosbox.log" || [ \$k -ge 2 ] || {
+        k=\$((k + 1)); echo "emulator restarted (\$k): \$(grep -m1 "Can't init SDL" "$out/dosbox.log")" >> "$out/input.log"; continue; }
+    break
+done
 if [ -n "${INPUTRUN_EARLY:-}$expect$settle" ]; then
     # as soon as the window is there (-b then counts from that)
     i=0; while [ \$i -lt 600 ] && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
 else
-    sleep 3
+    # 3 s after DOSBox started (-b counts from then)
+    r=\$(( 3000 - (\$(date +%s%N) - t0) / 1000000 ))
+    [ \$r -le 0 ] || sleep \$(awk "BEGIN { print \$r / 1000 }")
 fi
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 echo "window \$wid" >> "$out/input.log"
@@ -405,10 +426,10 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     click) xdotool click "\${a:-1}" ;;
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;
-    key) xdotool key --window "\$wid" \$a \$b ;;
+    key) xdotool key --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" \$a \$b ;;
     keydown) xdotool keydown --window "\$wid" \$a \$b ;;
     keyup) xdotool keyup --window "\$wid" \$a \$b ;;
-    type) xdotool type --window "\$wid" "\$a \$b" ;;
+    type) xdotool type --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" "\$a \$b" ;;
     sleep) sleep "\$a" ;;
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;
