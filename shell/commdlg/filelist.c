@@ -157,7 +157,8 @@ void measure_item(HWND dlg, MEASUREITEMSTRUCT FAR *m)
 /* An item: its whole rectangle in the window or highlight colour, the
    picture `cell` at pic_x (-1: none), the text in lower case at text_x,
    centred; the focus rectangle around it all (observed). */
-static void draw_item(const DRAWITEMSTRUCT FAR *d, int pic_x, int cell, int text_x, BOOL hi)
+static void draw_item(const DRAWITEMSTRUCT FAR *d, int pic_x, int cell, int text_x, BOOL hi,
+                      BOOL gray)
 {
     char t[DOS_PATH + 4];
     TEXTMETRIC tm;
@@ -177,21 +178,23 @@ static void draw_item(const DRAWITEMSTRUCT FAR *d, int pic_x, int cell, int text
                  cell, hi);
     GetTextMetrics(d->hDC, &tm);
     SetBkMode(d->hDC, TRANSPARENT);
-    SetTextColor(d->hDC, GetSysColor(hi ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
+    SetTextColor(d->hDC, GetSysColor(hi ? COLOR_HIGHLIGHTTEXT
+                                        : gray ? COLOR_GRAYTEXT : COLOR_WINDOWTEXT));
     TextOut(d->hDC, text_x, d->rcItem.top + (d->rcItem.bottom - d->rcItem.top - tm.tmHeight) / 2,
             t, n);
     if (d->itemState & ODS_FOCUS)
         DrawFocusRect(d->hDC, &d->rcItem);
 }
 
-void draw_file_item(const DRAWITEMSTRUCT FAR *d)
+/* Save As shows its file list in gray (observed) */
+void draw_file_item(const DRAWITEMSTRUCT FAR *d, BOOL save)
 {
     if (d->itemID == (UINT)-1) {
         if (d->itemState & ODS_FOCUS)
             DrawFocusRect(d->hDC, &d->rcItem);
         return;
     }
-    draw_item(d, -1, 0, d->rcItem.left + 4, (d->itemState & ODS_SELECTED) != 0);
+    draw_item(d, -1, 0, d->rcItem.left + 4, (d->itemState & ODS_SELECTED) != 0, save);
 }
 
 /* the folder list shows its selection only while it has the focus */
@@ -204,7 +207,7 @@ void draw_dir_item(const DRAWITEMSTRUCT FAR *d)
     data = SendMessage(d->hwndItem, LB_GETITEMDATA, d->itemID, 0);
     x = d->rcItem.left + 4 + 4 * LOWORD(data);
     draw_item(d, x, HIWORD(data), x + PIC_W + 4,
-              (d->itemState & (ODS_SELECTED | ODS_FOCUS)) == (ODS_SELECTED | ODS_FOCUS));
+              (d->itemState & (ODS_SELECTED | ODS_FOCUS)) == (ODS_SELECTED | ODS_FOCUS), FALSE);
 }
 
 void draw_drive_item(const DRAWITEMSTRUCT FAR *d)
@@ -215,5 +218,5 @@ void draw_drive_item(const DRAWITEMSTRUCT FAR *d)
         return;
     data = SendMessage(d->hwndItem, CB_GETITEMDATA, d->itemID, 0);
     x = d->rcItem.left + 4;
-    draw_item(d, x, HIWORD(data), x + PIC_W + 4, (d->itemState & ODS_SELECTED) != 0);
+    draw_item(d, x, HIWORD(data), x + PIC_W + 4, (d->itemState & ODS_SELECTED) != 0, FALSE);
 }

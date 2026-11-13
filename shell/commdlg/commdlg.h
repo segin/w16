@@ -130,7 +130,7 @@ int     drive_kind(int d);              /* PIC_FLOPPY.. or -1: none */
 #define PIC_RAM         7
 void    draw_dir_item(const DRAWITEMSTRUCT FAR *d);
 void    draw_drive_item(const DRAWITEMSTRUCT FAR *d);
-void    draw_file_item(const DRAWITEMSTRUCT FAR *d);
+void    draw_file_item(const DRAWITEMSTRUCT FAR *d, BOOL save);
 void    measure_item(HWND dlg, MEASUREITEMSTRUCT FAR *m);
 
 /* ---- the dialogs' procedures (exported) ---- */

@@ -419,7 +419,9 @@ static void init_dialog(fstate FAR *st)
             MoveWindow(e, rl.left, re.top, w, h, FALSE);
         }
     }
-    SendDlgItemMessage(dlg, edt1, EM_LIMITTEXT, DOS_PATH - 1, 0);
+    /* a path, as DOS bounds it; several names: what lpstrFile holds */
+    SendDlgItemMessage(dlg, edt1, EM_LIMITTEXT,
+                       st->multi && o->nMaxFile > DOS_PATH ? (WPARAM)(o->nMaxFile - 1) : DOS_PATH - 1, 0);
     /* observed: F4 does not drop the lists down, Down does */
     SendDlgItemMessage(dlg, cmb1, CB_SETEXTENDEDUI, TRUE, 0);
     SendDlgItemMessage(dlg, cmb2, CB_SETEXTENDEDUI, TRUE, 0);
@@ -457,6 +459,102 @@ static void init_dialog(fstate FAR *st)
     SendMessage(dlg, WM_COMMAND, cmb2, MAKELONG(GetDlgItem(dlg, cmb2), CBN_INIT));
     subclass(GetDlgItem(dlg, lst2), (FARPROC)dwLBSubclass);
     subclass(GetDlgItem(dlg, IDOK), (FARPROC)dwOKSubclass);
+}
+
+/* ---- several files (OFN_ALLOWMULTISELECT) ----
+ * Observed: the name box lists the selected names in lower case, one
+ * space apart; OK returns "<FOLDER> name name ..." (the folder in capitals
+ * as the current directory is, the names as in the box), nFileOffset at
+ * the first name, nFileExtension 0, an empty lpstrFileTitle. */
+
+static void multi_names(fstate FAR *st)
+{
+    HWND lb = GetDlgItem(st->dlg, lst1);
+    int n = (int)SendMessage(lb, LB_GETSELCOUNT, 0, 0), i, k;
+    int FAR *sel;
+    LPSTR text;
+    char t[DOS_PATH];
+    if (n <= 0)
+        return;
+    sel = mem_alloc((DWORD)n << 1);                  /* ints */
+    text = mem_alloc(((DWORD)n << 3) + ((DWORD)n << 2) + n + 1);  /* 12 + space each */
+    if (sel && text) {
+        n = (int)SendMessage(lb, LB_GETSELITEMS, n, (LPARAM)sel);
+        for (i = k = 0; i < n; i++) {
+            SendMessage(lb, LB_GETTEXT, sel[i], (LPARAM)(LPSTR)t);
+            s_lower(t);
+            if (i)
+                text[k++] = ' ';
+            s_cpy(text + k, t, 13);
+            k += s_len(t);
+        }
+        SetDlgItemText(st->dlg, edt1, text);
+    }
+    mem_free(sel);
+    mem_free(text);
+}
+
+/* OK with several names in the box: TRUE ends the dialog */
+static BOOL take_multi(fstate FAR *st, LPCSTR names)
+{
+    LPOPENFILENAME o = st->ofn;
+    LPSTR dir = cur_dir(), r;
+    DWORD need;
+    if (!dir)
+        return FALSE;
+    need = (DWORD)s_len(dir) + 1 + s_len(names) + 1;
+    r = mem_alloc(need);
+    if (r) {
+        s_cpy(r, dir, (int)need);
+        s_cat(r, " ", (int)need);
+        s_cat(r, names, (int)need);
+        o->nFileOffset = s_len(dir) + 1;
+        o->nFileExtension = 0;
+        if (need > o->nMaxFile) {
+            if (o->lpstrFile && o->nMaxFile >= 2) {
+                o->lpstrFile[0] = (char)LOBYTE(need - 1);
+                o->lpstrFile[1] = (char)HIBYTE(need - 1);
+            }
+            cd_seterr(FNERR_BUFFERTOOSMALL);
+        } else {
+            s_cpy(o->lpstrFile, r, (int)o->nMaxFile);
+            if (o->lpstrFileTitle && o->nMaxFileTitle)
+                o->lpstrFileTitle[0] = 0;
+            {
+                int i = (int)SendDlgItemMessage(st->dlg, cmb1, CB_GETCURSEL, 0, 0);
+                o->nFilterIndex = st->has_custom ? i : i + 1;
+            }
+            if (IsWindowVisible(GetDlgItem(st->dlg, chx1))) {
+                if (IsDlgButtonChecked(st->dlg, chx1))
+                    o->Flags |= OFN_READONLY;
+                else
+                    o->Flags &= ~OFN_READONLY;
+            }
+        }
+        mem_free(r);
+    }
+    mem_free(dir);
+    if (cd_geterr())
+        return TRUE;
+    if (st->hook && call_hook(st->hook, st->dlg, msg_fileok, 0, (LPARAM)o))
+        return FALSE;
+    return TRUE;
+}
+
+/* a typed pattern goes into the caller's custom filter, after its
+   description (observed: an empty buffer becomes "\0*.ini") */
+static void keep_pattern(fstate FAR *st, LPCSTR pat)
+{
+    LPOPENFILENAME o = st->ofn;
+    int d, room;
+    if (!o->lpstrCustomFilter || o->nMaxCustFilter < 2)
+        return;
+    d = s_len(o->lpstrCustomFilter) + 1;
+    room = (int)o->nMaxCustFilter - d;
+    if (room < 2)
+        return;
+    s_cpy(o->lpstrCustomFilter + d, pat, room - 1);
+    o->lpstrCustomFilter[d + s_len(o->lpstrCustomFilter + d) + 1] = 0;
 }
 
 /* ---- OK ---- */
@@ -551,6 +649,24 @@ static BOOL take_name(fstate FAR *st)
     int a;
     DWORD fl = o->Flags;
 
+    if (st->multi) {                    /* several names: as many as typed */
+        int len = GetWindowTextLength(GetDlgItem(dlg, edt1));
+        LPSTR all = mem_alloc(len + 1), q;
+        BOOL several = FALSE, done = FALSE;
+        if (all) {
+            GetDlgItemText(dlg, edt1, all, len + 1);
+            for (q = all; *q == ' '; q++)
+                ;
+            for (p = q + s_len(q); p > q && p[-1] == ' '; )
+                *--p = 0;
+            several = s_chr(q, ' ') != NULL;
+            if (several)
+                done = take_multi(st, q);
+            mem_free(all);
+        }
+        if (several)
+            return done;
+    }
     GetDlgItemText(dlg, edt1, typed, sizeof typed);
     for (p = typed; *p == ' '; p++)
         ;
@@ -595,6 +711,7 @@ static BOOL take_name(fstate FAR *st)
             *name = c;
         }
         SetDlgItemText(dlg, edt1, name);
+        keep_pattern(st, name);
         refresh(st, name);
         drives_refresh(st);
         SendDlgItemMessage(dlg, edt1, EM_SETSEL, 0, MAKELPARAM(0, -1));
@@ -614,13 +731,14 @@ static BOOL take_name(fstate FAR *st)
         return FALSE;
     }
 
-    /* a file: the file list scrolls to the first name starting with its
-       first letter (observed: "setupx.txt" puts scrnsave.scr on top,
-       "zzz.txt" zigzag.bmp; nothing is selected) */
+    /* a file: the file list scrolls to the first name starting with the
+       typed text's first character (observed: "setupx.txt" puts
+       scrnsave.scr on top, "zzz.txt" zigzag.bmp, "c:\nodir\x.txt"
+       calc.exe; nothing is selected) */
     {
         char first[2];
         int at;
-        first[0] = name[0];
+        first[0] = typed[0];
         first[1] = 0;
         at = (int)SendDlgItemMessage(dlg, lst1, LB_FINDSTRING, (WPARAM)-1, (LPARAM)(LPSTR)first);
         if (at >= 0)
@@ -755,7 +873,7 @@ static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
         else if (d->CtlID == cmb2)
             draw_drive_item(d);
         else
-            draw_file_item(d);
+            draw_file_item(d, st->save);
         return TRUE;
     }
     case WM_DESTROY:
@@ -774,7 +892,9 @@ static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
             send_help(dlg, st->ofn->hwndOwner, (LPARAM)st->ofn);
             return TRUE;
         case lst1:
-            if (HIWORD(lp) == LBN_SELCHANGE) {
+            if (HIWORD(lp) == LBN_SELCHANGE && st->multi) {
+                multi_names(st);
+            } else if (HIWORD(lp) == LBN_SELCHANGE) {
                 char t[DOS_PATH];
                 i = (int)SendDlgItemMessage(dlg, lst1, LB_GETCURSEL, 0, 0);
                 if (i >= 0) {
