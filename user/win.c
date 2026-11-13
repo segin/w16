@@ -510,6 +510,10 @@ static void destroy_tree(HWND h)
     }
     if ((w = valid_wnd(h)) == 0)
         return;
+    if (w->flags & WF_DLG) {
+        void dlg_free_editseg(HWND h);
+        dlg_free_editseg(h);
+    }
     free_place(h);
     send_message(h, WM_NCDESTROY, 0, 0);
     if ((w = valid_wnd(h)) == 0)

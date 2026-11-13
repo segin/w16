@@ -775,7 +775,19 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (LOWORD(lp) == HTERROR && (HIWORD(lp) == WM_LBUTTONDOWN))
             MessageBeep(0);
-        SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
+        {
+            /* the sizing borders' arrows (3.1 SDK, DefWindowProc; 3.1:
+               US22, the left border's left-right arrow, the bottom right
+               corner's diagonal one) */
+            LPCSTR c = IDC_ARROW;
+            switch (LOWORD(lp)) {
+            case HTLEFT: case HTRIGHT: c = IDC_SIZEWE; break;
+            case HTTOP: case HTBOTTOM: c = IDC_SIZENS; break;
+            case HTTOPLEFT: case HTBOTTOMRIGHT: c = IDC_SIZENWSE; break;
+            case HTTOPRIGHT: case HTBOTTOMLEFT: c = IDC_SIZENESW; break;
+            }
+            SetCursor(load_icon_cursor(0, c, TRUE));
+        }
         return 0;
     case WM_MOUSEACTIVATE:
         if ((w->style & WS_CHILD) && w->hwndParent) {

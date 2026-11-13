@@ -423,11 +423,20 @@ HWND WINAPI SetCapture(HWND h)
 
 void WINAPI ReleaseCapture(void)
 {
+    BOOL was = hwndCapture != 0;
     hwndCapture = 0;
     if (hwndActive && valid_wnd(hwndActive))
         hqInput = PW(hwndActive)->hq;
     else
         hqInput = 0;
+    /* a mouse move where the pointer is, so that the window under it
+       sets the cursor at once (3.1, US22: after ReleaseCapture, with the
+       pointer still, the window got WM_SETCURSOR and WM_NCMOUSEMOVE or
+       WM_MOUSEMOVE at that point - over a sizing border the sizing arrow
+       came up without a move; the message came after ReleaseCapture had
+       returned) */
+    if (was)
+        pointer_changed(NULL);
 }
 
 HWND WINAPI GetCapture(void)

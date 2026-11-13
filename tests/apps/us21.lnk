@@ -1,0 +1,3 @@
+# US21.EXE (tests/apps/us21.c): Notepad's heap through TOOLHELP
+@tests/apps/app.lnk
+library toolhelp.lib

@@ -254,6 +254,17 @@
 #              all-Microsoft: every screen, mid-drag too, identical
 #              (Notepad's caret left out), and US19's WM_VSCROLL/WM_HSCROLL
 #              log identical (parts sbdrag@us, sbdrag@np)
+#   edithandle an edit control's text in the local heap its hInstance names,
+#              EM_GETHANDLE, EM_SETHANDLE (user/edit.c): probe US20 as the
+#              shell, its OBS lines on w16's USER as on 3.1's; Microsoft's
+#              Notepad on w16's USER and GDI opening a 31500-byte file,
+#              paging, typing and saving: every screen and the saved
+#              bytes as all-Microsoft's (parts edithandle@us, @np)
+#   capcursor  the cursor after a capture ends: probe US22 as the shell,
+#              the mouse captured, moved and released still over a sizing
+#              border, a corner and the client area; w16's USER and GDI
+#              against all-Microsoft: every screen and US22's log of mouse
+#              messages and WM_SETCURSOR identical
 #   deskver    w16's desktop version stamp (a w16 extension,
 #              user/deskver.c; every other case runs with it off, as
 #              tests/dropin.sh's default [w16] DesktopVersion=0): with 0,
@@ -334,7 +345,7 @@
 # retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
 # The cases that took longest last time (build/boottest-times.txt, kept
 # by each run) start first; the output stays in case order. Cases made of
-# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us, sbdrag@us/np,
+# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us, sbdrag@us/np, edithandle@us/np,
 # winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
 # the case's one line; a part can be run by name (tests/boottest.sh
 # allw16nolock@3).
@@ -353,7 +364,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1361,6 +1372,99 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
         else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
+    capcursor)
+        # the cursor after a capture ends (user/input.c ReleaseCapture,
+        # user/defwnd.c WM_SETCURSOR): probe US22 as the shell, the mouse
+        # captured, moved and released still over a sizing border, a
+        # corner and the client area (tests/scripts/input/capcursor.txt);
+        # w16's USER and GDI against all-Microsoft: every screen
+        # identical (the cursor's shape after the release), and US22's
+        # log of mouse messages and WM_SETCURSOR from the first press on
+        scr=$root/tests/scripts/input/capcursor.txt
+        refrun capcursor-ref capcursor "$root/tests/inputrun.sh" -s -b 40 -t 200 "$scr" "$out/capcursor-ref" -r \
+            -f "$root/build/dos/US22.EXE=US22.EXE" -i 'boot:shell=C:\US22.EXE'
+        "$root/tests/inputrun.sh" -e "$out/capcursor-ref/boot.png" -E "$out/capcursor-ref" -b 40 -t 200 "$scr" "$out/capcursor-w16" -r \
+            -f "$root/build/dos/US22.EXE=US22.EXE" -i 'boot:shell=C:\US22.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/capcursor-w16.txt" 2>&1 || true
+        for k in ref w16; do
+            f=$out/capcursor-$k/work/c/WINDOWS/TK.LOG
+            if [ -f "$f" ]; then tr -d '\r' < "$f" | sed -n '/^LBUTTONDOWN/,$p' > "$out/capcursor-$k.log"
+            else : > "$out/capcursor-$k.log"; fi
+        done
+        r=ok
+        if [ "$(grep -c '^ReleaseCapture }' "$out/capcursor-ref.log")" != 3 ]; then
+            r="the reference's log has not three releases ($out/capcursor-ref.log)"
+        elif ! cmp -s "$out/capcursor-ref.log" "$out/capcursor-w16.log"; then
+            r="US22's messages differ from 3.1's ($out/capcursor-ref.log, capcursor-w16.log)"
+        fi
+        for g in "$out/capcursor-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$g" .png)
+            [ -f "$out/capcursor-w16/$s.png" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/capcursor-w16/$s.png" "$g" "$out/capcursor-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$s: $n pixels differ ($out/capcursor-$s-diff.png)"
+        done
+        if [ "$r" = ok ]; then echo "ok   capcursor: 0 pixels after each release, US22's messages as 3.1's"
+        else echo "FAIL capcursor: $r"; fails=$((fails + 1)); fi ;;
+    edithandle)
+        # an edit control's text in its hInstance's local heap,
+        # EM_GETHANDLE and EM_SETHANDLE (user/edit.c): part us, probe US20
+        # (tests/apps/us20.c) as the shell on Windows 3.1 and on w16's
+        # USER, the OBS lines of the two logs identical; part np,
+        # Microsoft's Notepad on w16's USER and GDI opening a 31500-byte
+        # file, paging, typing at both ends and saving
+        # (tests/scripts/input/npfile.txt) against all-Microsoft: every
+        # screen and the saved file's bytes identical
+        pk=${part:-us np}
+        r=ok
+        case " $pk " in *" us "*)
+        for k in ref w16; do
+            if [ $k = ref ]; then set -- -r; else set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE"; fi
+            "$root/tests/dropin.sh" -t 150 -s "$out/edithandle-$k.png" -o "$out/edithandle-$k" \
+                -f "$root/build/dos/US20.EXE=US20.EXE" -i 'boot:shell=C:\US20.EXE' "$@" \
+                > "$out/edithandle-$k.txt" 2>&1 || true
+            : > "$out/edithandle-$k.log"
+            for _d in "$out/edithandle-$k/c/WINDOWS" "$out/edithandle-$k/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/edithandle-$k.log"; break; }
+            done
+        done
+        for k in ref w16; do
+            f=$out/edithandle-$k.log
+            if ! grep -q '^US20 end' "$f"; then r="us: $k: US20 did not finish ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/edithandle-ref.log" > "$out/edithandle-ref.obs"
+            grep '^OBS [^~]' "$out/edithandle-w16.log" > "$out/edithandle-w16.obs"
+            cmp -s "$out/edithandle-ref.obs" "$out/edithandle-w16.obs" ||
+                r="us: US20's observations differ from 3.1's ($out/edithandle-ref.obs, edithandle-w16.obs)"
+        fi ;; esac
+        case " $pk " in *" np "*)
+        scr=$root/tests/scripts/input/npfile.txt
+        python3 -c 'import sys
+open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown fox jumps over the lazy dog, twice.\n" % i for i in range(1, 501)))' "$out/NPFILE.TXT"
+        refrun npfile-ref edithandle "$root/tests/inputrun.sh" -s -b 40 -t 200 "$scr" "$out/npfile-ref" -r \
+            -f "$out/NPFILE.TXT=NPFILE.TXT" -i 'WIN.INI:windows:run=C:\NPFILE.TXT'
+        "$root/tests/inputrun.sh" -e "$out/npfile-ref/boot.png" -E "$out/npfile-ref" -b 40 -t 200 "$scr" "$out/npfile-w16" -r \
+            -f "$out/NPFILE.TXT=NPFILE.TXT" -i 'WIN.INI:windows:run=C:\NPFILE.TXT' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/npfile-w16.txt" 2>&1 || true
+        f=work/c/NPFILE.TXT
+        if [ "$r" = ok ] && ! grep -q 'Added at the end' "$out/npfile-ref/$f" 2>/dev/null; then
+            r="np: the reference did not save the edited file ($out/npfile-ref)"
+        elif [ "$r" = ok ] && ! cmp -s "$out/npfile-ref/$f" "$out/npfile-w16/$f"; then
+            r="np: the saved file differs ($out/npfile-ref/$f, npfile-w16/$f)"
+        fi
+        for g in "$out/npfile-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$g" .png)
+            [ -f "$out/npfile-w16/$s.png" ] || { r="np: no $s"; break; }
+            n=$(magick compare -metric AE "$out/npfile-w16/$s.png" "$g" "$out/npfile-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="np: $s: $n pixels differ ($out/npfile-$s-diff.png)"
+        done ;; esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   edithandle: US20 as 3.1; Notepad opens, edits and saves a 31500-byte file as on 3.1 (0 pixels, same bytes)"
+        else echo "FAIL edithandle: $r"; fails=$((fails + 1)); fi ;;
     sbdrag)
         # a scroll bar's thumb dragged with real input (user/scroll.c,
         # track_scrollbar): part us, probe US19 as the shell, its four bars
@@ -2023,6 +2127,7 @@ caseparts() {
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
     pmdrop) echo "$1@pm $1@sh $1@us" ;;
     sbdrag) echo "$1@us $1@np" ;;
+    edithandle) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -2048,6 +2153,9 @@ partsummary() {
     pmdrop)
         if [ $pbad = 0 ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $pfirst"; fi ;;
+    edithandle)
+        if [ $pbad = 0 ]; then echo "ok   edithandle: US20 as 3.1; Notepad opens, edits and saves a 31500-byte file as on 3.1 (0 pixels, same bytes)"
+        else echo "FAIL edithandle: $pfirst"; fi ;;
     sbdrag)
         if [ $pbad = 0 ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Notepad), US19's messages as 3.1's"
         else echo "FAIL sbdrag: $pfirst"; fi ;;

@@ -81,6 +81,7 @@ WORD __far __cdecl lh_alloc(WORD sel, UINT flags, UINT size);    /* Local* in */
 WORD __far __cdecl lh_realloc(WORD sel, WORD h, UINT size, UINT flags); /* the heap */
 WORD __far __cdecl lh_free(WORD sel, WORD h);                     /* in segment */
 UINT __far __cdecl lh_size(WORD sel, WORD h);                     /* sel */
+WORD __far __cdecl lh_deref(WORD sel, WORD h);    /* block h's offset now */
 WORD __far __cdecl seg_limit(WORD sel);
 BOOL __far __cdecl at_init(WORD sel, int n);                      /* atom calls */
 ATOM __far __cdecl at_add(WORD sel, LPCSTR s);                    /* on the */

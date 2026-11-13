@@ -1360,6 +1360,27 @@ $(DOS)/US18A.EXE: $(DOS)/US18.EXE
 	cp $< $@
 	python3 tools/nemark.py $@ 3.10
 dos: $(DOS)/US18A.EXE
+# US20: an edit control's text, EM_GETHANDLE and EM_SETHANDLE (tests/apps/us20.c)
+$(B)/tests/us20.o: tests/apps/us20ref.h tests/apps/tklog.h
+$(DOS)/US20.EXE: $(B)/tests/start.o $(B)/tests/us20.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us20.map file { $(B)/tests/start.o $(B)/tests/us20.o }
+dos: $(DOS)/US20.EXE
+# US21: Microsoft's Notepad's data segment around its edit control's text (tests/apps/us21.c)
+$(B)/tests/us21.o: tests/apps/us20ref.h tests/apps/tklog.h
+$(DOS)/US21.EXE: $(B)/tests/start.o $(B)/tests/us21.o tests/apps/app.lnk tests/apps/us21.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us21.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us21.map file { $(B)/tests/start.o $(B)/tests/us21.o }
+dos: $(DOS)/US21.EXE
+# US22: what follows ReleaseCapture (tests/apps/us22.c)
+$(B)/tests/us22.o: tests/apps/us20ref.h tests/apps/tklog.h
+$(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us22.map file { $(B)/tests/start.o $(B)/tests/us22.o }
+dos: $(DOS)/US22.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
