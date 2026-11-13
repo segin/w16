@@ -130,3 +130,37 @@ woados scenario with it):
 Order agreed with the coordinator: the 75a4c00 suite and alttab, the
 DSWAP banner, the three intermittent bugs, then LocalNotify/LocalShrink
 and ExitWindows on the last task.
+
+## Session 2 (master 0075892, 0248006, 8690c87 merged)
+
+Scratch: /tmp/kl (scripts e10.sh, e10p.sh, full.sh, wcw.sh, inp.sh,
+inpms.sh), /tmp/klrep (repeated boot-test cases), worktrees
+.claude/worktrees/kl-master (master build for comparisons) and kl-exp
+(instrumented builds: USER logs mouse/key event counts with
+[w16] userlog=1; never commit from it).
+
+Task 1 (regressions?): write 3/3 ok on keyloss and on master, mouseall
+3/3 ok on both; alttab: keyloss 1 fail in 4 (Notepad's caret did not
+blink: fixed on master by 8690c87, merged since), master 1 fail in 4
+(repaint not finished at the shot: fixed by the harness's match waits).
+No keyloss regression found.
+
+Task 2 (exit in 640x480): DONE, 8434256 + 8d4cb37 + edb1d06 (WIN.COM
+sets mode/cursor after WSWAP for a DOS program and after a normal end or
+restart, not after an error: tests/wincom.sh; DOSX leaves the mode; DSWAP
+keeps 16Fh/17Ch). woadosbat passes, no longer xfail.
+
+woados (Microsoft's WIN.COM, every other w16 part) intermittent since
+master 8690c87 (the caret blink): not the display. FIXED, 32e6fab: a
+stale QS_TIMER (a ready timer killed or reset left the bit on) kept
+Program Manager going round GetMessage without waiting or yielding, so
+WINOLDAP's switch timer waited. Found with KERNEL dumps of the task list
+and event counts at WaitEvent/OldYield and a USER log of that loop (kl-exp,
+reverted). Side finding, not changed: USER's set_wakebit posts an event
+for every bit set, waiting or not (Program Manager had 60 piled up);
+Pietrek's SetWakeBit2 posts only for a bit in the wake mask and clears
+the mask. A candidate fidelity change; needs a full boot test.
+
+Task 3 (input case): DONE, e38cbfa: a harness race, not w16 (see the
+commit: DOSBox's autolock capture click came before MOUSE.DRV's set-up on
+w16's boot; MS1 showed the click passed on as press+release).
