@@ -277,17 +277,7 @@ launch:
 .ran:   mov ah, 4Dh
         int 21h                         ; AL = the program's exit code
         cmp byte [mode], 2
-        jne .enh
-        ; standard mode: whenever WSWAP returns (a DOS program to run or
-        ; Windows' end) the video mode and the cursor shape found at the
-        ; start are set (E10 on Windows 3.1's WIN.COM: INT 10h AX=0003h
-        ; then AH=01h CX=0607h, before DSWAP and at the end; after mode 1
-        ; and cursor 0205h set before WIN, AX=0001h and CX=0205h). w16's
-        ; set nothing, and Windows ended in VGA graphics (mode 12h, set
-        ; back by w16's DOSX then) with the BIOS's text on it
-        call vid_restore
-        jmp .std
-.enh:
+        je .std
         ; enhanced: restore the video mode found at the start, but only
         ; when Windows ended normally or restarts (after an error Windows
         ; 3.1's WIN.COM leaves the screen as it is; WC1 exit codes)
@@ -317,6 +307,17 @@ launch:
         je .noapp
         cmp byte [block + SB_17D], 1
         jne .noapp
+        ; standard mode: when WSWAP returns for a DOS program, and when
+        ; Windows ended normally or restarts, the video mode and the
+        ; cursor shape found at the start are set (E10 on Windows 3.1's
+        ; WIN.COM: INT 10h AX=0003h then AX=0100h CX=0607h, before DSWAP
+        ; and at the end; with mode 1 and cursor 0205h set before WIN,
+        ; 0001h and 0205h). After an error (WIN.COM's exit code FFh or 7,
+        ; tests/wincom.sh) 3.1's leaves the screen as it is, as in
+        ; enhanced mode. w16's set nothing in standard mode, and Windows
+        ; ended in VGA graphics (mode 12h, set back by w16's DOSX then)
+        ; with the BIOS's text on it
+        call vid_restore
         ; 3.1's WIN.COM runs DSWAP.EXE (found in the system directory as
         ; WSWAP is, at the start: dswap_path), with WSWAP's tail " \x08",
         ; and DSWAP sets up the text screen (80x25), shows the MS-DOS
@@ -378,10 +379,17 @@ launch:
         ; the way it should, Windows 3.1's WIN.COM exits with FFh
         mov al, [block + SB_RC]
         cmp byte [block + SB_DONE], 0
-        jne .code
+        jne .sck
         cmp byte [block + SB_COUNT], 0
-        jne .code
+        jne .sck
         mov al, 0FFh
+.sck:   test al, al                     ; (the screen: see .std)
+        jz .svid
+        cmp al, 42h
+        je .svid
+        cmp al, 44h
+        jne .code
+.svid:  call vid_restore
 .code:  cmp al, 42h                     ; EW_RESTARTWINDOWS
         je .again
         cmp al, 44h                     ; ExitWindowsExec
