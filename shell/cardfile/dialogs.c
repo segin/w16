@@ -219,25 +219,28 @@ void find_next(void)
     }
     LocalUnlock(h);
     LocalFree(h);
-    /* the other cards, in order, back to this one */
-    for (k = 1; k <= g_ncards; k++) {
+    /* the other cards, in order, read from their files: the front card
+       changes only when the text is found (CF15) */
+    if (!body_store())
+        return;
+    for (k = 1; k < g_ncards; k++) {
         WORD i = find_up ? (WORD)(((DWORD)g_cur + g_ncards - k) % g_ncards)
                          : (WORD)(((DWORD)g_cur + k) % g_ncards);
-        go_card(i);
-        n = GetWindowTextLength(g_edit);
-        h = LocalAlloc(LMEM_MOVEABLE, n + 1);
-        if (!h)
-            return;
-        t = LocalLock(h);
-        GetWindowText(g_edit, t, n + 1);
-        if (find_up ? search_text_up(t, n, &at) : search_text(t, 0, &at)) {
+        HGLOBAL g;
+        WORD cb;
+        BOOL hit;
+        LPSTR gt;
+        if (!body_text(card_hdr(i), &g, &cb) || !g)
+            continue;
+        gt = GlobalLock(g);
+        hit = find_up ? search_text_up(gt, cb, &at) : search_text(gt, 0, &at);
+        GlobalUnlock(g);
+        GlobalFree(g);
+        if (hit) {
+            go_card(i);
             SendMessage(g_edit, EM_SETSEL, 0, MAKELPARAM(at, at + s_len(find_text)));
-            LocalUnlock(h);
-            LocalFree(h);
             return;
         }
-        LocalUnlock(h);
-        LocalFree(h);
     }
     not_found(find_text);
 }

@@ -42,3 +42,4 @@ wait 1500
 type C:\OBJ.CRD
 key 0D
 wait 2000
+snap C:\SAVED.BMP

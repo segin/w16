@@ -293,11 +293,8 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *p)
             if (!f_write(f, tail, sizeof tail))
                 return (DWORD)-1;
         } else if (p->kind == PIC_BITMAP && p->bmp) {
-            /* a 3.0 file's picture saved as 3.1 got number 2 and left
-               the counter at 3, opened afresh or not (CF8, CF12).
-               UNVERIFIED: with more than one picture. */
-            DWORD id = g_lastobj + 2;
-            g_lastobj += 3;
+            /* the next number (crd_open sets where they start) */
+            DWORD id = g_lastobj++;
             if (!wr_word(f, 1) || !f_write(f, &id, 4) || !write_static_bitmap(f, p))
                 return (DWORD)-1;
         } else
@@ -329,6 +326,24 @@ static DWORD body_len(HFILE f, int fmt, DWORD pos)
     if (_llseek(f, at, 0) != (LONG)at || !rd_word(f, &n))
         return 0;
     return at + 2 + n - pos;
+}
+
+/* A card's text alone (a global block with a NUL; NULL for a blank
+   card), its picture skipped: what Find searches. */
+BOOL body_text(LPCARD c, HGLOBAL FAR *text, WORD FAR *cb)
+{
+    HFILE f;
+    DWORD at;
+    *text = NULL;
+    *cb = 0;
+    if (c->where == WHERE_BLANK)
+        return TRUE;
+    f = body_file(c);
+    if (f == HFILE_ERROR || !body_len(f, c->fmt, c->pos))
+        return FALSE;
+    /* body_len leaves the file after the text's length word */
+    at = _llseek(f, 0, 1) - 2;
+    return _llseek(f, at, 0) == (LONG)at && text_read(f, text, cb);
 }
 
 /* Copy a body from one file to another (the same format), or convert it
@@ -434,6 +449,22 @@ BOOL crd_open(LPCSTR path, BOOL merge)
         _lclose(f);
     } else {
         src = f;
+        /* A 3.0 file's pictures get object numbers from P + 1 on, P the
+           number of pictures in it, in card order, when saved as 3.1:
+           one picture became object 2 (counter 3), two 3 and 4 (counter
+           5) (CF8, CF12, convert scenario). UNVERIFIED: why P + 1, and a
+           file whose front card has no picture. */
+        if (fmt == FMT_MGC) {
+            DWORD pics = 0;
+            WORD k;
+            for (k = 0; k < g_ncards; k++) {
+                LPCARD c = card_hdr(k);
+                WORD w;
+                if (_llseek(f, c->pos, 0) == (LONG)c->pos && rd_word(f, &w) && w)
+                    pics++;
+            }
+            g_lastobj = pics ? pics + 1 : 0;
+        }
     }
     return TRUE;
 bad:

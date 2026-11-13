@@ -614,6 +614,7 @@ static BOOL init(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
     if (!ole_init())
         return FALSE;
     help_init();
+    g_findmsg = RegisterWindowMessage("commdlg_FindReplace");   /* FINDMSGSTRING */
     page_defaults();
     layout();
     card_place_edit();
@@ -640,6 +641,9 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE prev, LPSTR cmd, int show)
     while (GetMessage(&m, NULL, 0, 0)) {
         if (g_finddlg && IsDialogMessage(g_finddlg, &m))
             continue;
+        /* the menu states decide which accelerators work (Find Next F3) */
+        if (m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN)
+            enable_menus();
         if (TranslateAccelerator(g_frame, accel, &m))
             continue;
         TranslateMessage(&m);

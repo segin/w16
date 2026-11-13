@@ -25,6 +25,8 @@ static LHCLIENTDOC doc;
 static char s_stdfile[] = "StdFileEditing";
 static char s_static[] = "Static";
 
+static void bounds_to_size(PICTURE *p, RECT *r);
+
 /* ---- the client: one for all objects ---- */
 
 static OLECLIENTVTBL client_vtbl;
@@ -39,17 +41,8 @@ int CALLBACK __export ClientCallBack(LPOLECLIENT c, OLE_NOTIFICATION n, LPOLEOBJ
     case OLE_CLOSED:
         if (g_pic.kind == PIC_OBJECT && g_pic.obj == o) {
             RECT r;
-            if (n != OLE_CLOSED && OleQueryBounds(o, &r) == OLE_OK) {
-                HDC dc = GetDC(NULL);
-                int w = r.right - r.left, h = r.bottom - r.top;
-                if (w < 0)
-                    w = -w;
-                if (h < 0)
-                    h = -h;
-                g_pic.cx = MulDiv(w, GetDeviceCaps(dc, LOGPIXELSX), 2540);
-                g_pic.cy = MulDiv(h, GetDeviceCaps(dc, LOGPIXELSY), 2540);
-                ReleaseDC(NULL, dc);
-            }
+            if (n != OLE_CLOSED && OleQueryBounds(o, &r) == OLE_OK)
+                bounds_to_size(&g_pic, &r);
             g_carddirty = TRUE;
             InvalidateRect(g_edit, NULL, TRUE);
         }
@@ -81,34 +74,66 @@ static OLESTATUS wait_for(LPOLEOBJECT o, OLESTATUS st)
 
 typedef struct {
     OLESTREAM s;
-    HFILE f;                            /* or HFILE_ERROR for memory */
-    char FAR *mem;
-    DWORD at, len;
+    HFILE f;
 } STREAM;
 
 static OLESTREAMVTBL stream_vtbl;
 
+/* OLECLI passes blocks larger than 64K (an embedded Paintbrush picture's
+   native data is 141K): they are huge, and are read and written a piece
+   at a time, moving to the next segment by __AHINCR (KERNEL.114) */
+static WORD ahincr(void)
+{
+    static WORD inc;
+    if (!inc)
+        inc = LOWORD((DWORD)GetProcAddress(GetModuleHandle("KERNEL"), "__AHINCR"));
+    return inc;
+}
+
+static char __far *huge_add(char __far *p, WORD n)
+{
+    DWORD off = (DWORD)OFFSETOF(p) + n;
+    WORD sel = SELECTOROF(p) + (WORD)(off >> 16) * ahincr();
+    return (char __far *)MAKELP(sel, (WORD)off);
+}
+
+/* the most to do at once from p: to the segment's end, at most 32K */
+static WORD piece(char __far *p, DWORD left)
+{
+    DWORD room = 0x10000UL - OFFSETOF(p);
+    if (room > 0x8000UL)
+        room = 0x8000UL;
+    return (WORD)(left < room ? left : room);
+}
+
 DWORD CALLBACK __export StreamGet(LPOLESTREAM s, void FAR *buf, DWORD n)
 {
     STREAM FAR *st = (STREAM FAR *)s;
-    if (st->f != HFILE_ERROR) {
-        if (n > 0xFFFFu)
+    char __far *p = buf;
+    DWORD left = n;
+    while (left) {
+        WORD k = piece(p, left);
+        if (_lread(st->f, p, k) != k)
             return 0;
-        return _lread(st->f, buf, (WORD)n) == (WORD)n ? n : 0;
+        p = huge_add(p, k);
+        left -= k;
     }
-    if (st->at + n > st->len)
-        return 0;
-    mem_cpy(buf, st->mem + (WORD)st->at, (WORD)n);
-    st->at += n;
     return n;
 }
 
 DWORD CALLBACK __export StreamPut(LPOLESTREAM s, OLE_CONST void FAR *buf, DWORD n)
 {
     STREAM FAR *st = (STREAM FAR *)s;
-    if (n > 0xFFFFu)
-        return 0;
-    return _lwrite(st->f, buf, (WORD)n) == (WORD)n ? n : 0;
+    char __far *p = (char __far *)buf;
+    DWORD left = n;
+    while (left) {
+        WORD k = piece(p, left);
+        if (_lwrite(st->f, p, k) != k)
+            return 0;
+        p = huge_add(p, k);
+        left -= k;
+    }
+    return n;
 }
 
 /* ---- set-up ---- */
@@ -165,20 +190,47 @@ static void obj_type(PICTURE *p)
 }
 
 /* size of the object in pixels (OleQueryBounds gives HIMETRIC) */
+/* size of the object in pixels (OleQueryBounds gives HIMETRIC), made to
+   fit the card body: an embedded Paintbrush picture of 16931 x 11693
+   HIMETRIC (640 x 442 pixels) got the rectangle 0,0,237,164 (CF14): at
+   most 40 characters wide and 11 lines less a pixel high, the shape
+   kept. UNVERIFIED: the rule for wide pictures and the rounding. */
+static void bounds_to_size(PICTURE *p, RECT *r)
+{
+    HDC dc = GetDC(NULL);
+    int w = r->right - r->left, h = r->bottom - r->top, mw = 40 * g_cx, mh = 11 * g_cy - 1;
+    if (w < 0)
+        w = -w;
+    if (h < 0)
+        h = -h;
+    w = MulDiv(w, GetDeviceCaps(dc, LOGPIXELSX), 2540);
+    h = MulDiv(h, GetDeviceCaps(dc, LOGPIXELSY), 2540);
+    ReleaseDC(NULL, dc);
+    if (h > mh && MulDiv(w, mh, h) <= mw) {
+        w = MulDiv(w, mh, h);
+        h = mh;
+    } else if (w > mw) {
+        h = MulDiv(h, mw, w);
+        w = mw;
+    }
+    p->cx = w;
+    p->cy = h;
+}
+
 static void obj_size(PICTURE *p)
 {
     RECT r;
-    if (OleQueryBounds(p->obj, &r) == OLE_OK) {
-        HDC dc = GetDC(NULL);
-        int w = r.right - r.left, h = r.bottom - r.top;
-        if (w < 0)
-            w = -w;
-        if (h < 0)
-            h = -h;
-        p->cx = MulDiv(w, GetDeviceCaps(dc, LOGPIXELSX), 2540);
-        p->cy = MulDiv(h, GetDeviceCaps(dc, LOGPIXELSY), 2540);
-        ReleaseDC(NULL, dc);
-    }
+    if (OleQueryBounds(p->obj, &r) == OLE_OK)
+        bounds_to_size(p, &r);
+}
+
+/* the names the server shows: "Paintbrush - Paintbrush Picture in
+   (Untitled)" (object scenario): Cardfile and the file's name */
+static void host_names(LPOLEOBJECT o)
+{
+    char app[40];
+    LoadString(g_hinst, IDS_APPNAME, app, sizeof app);
+    wait_for(o, OleSetHostNames(o, app, g_path[0] ? base_name(g_path) : load_str(IDS_UNTITLED)));
 }
 
 /* ---- loading and saving ---- */
@@ -345,7 +397,8 @@ void ole_activate(PICTURE *p, int verb)
         return;
     }
     GetClientRect(g_edit, &r);
-    st = wait_for(p->obj, OleActivate(p->obj, verb, TRUE, TRUE, g_frame, &r));
+    st = wait_for(p->obj, OleActivate(p->obj, verb, TRUE, TRUE, g_frame, NULL));
+    (void)r;
     if (st != OLE_OK)
         msg_box(IDS_NOSERVER, NULL, MB_OK | MB_ICONEXCLAMATION);
 }
@@ -486,8 +539,9 @@ void ole_insert(void)
     new_object(o, id);
     g_carddirty = TRUE;
     InvalidateRect(g_edit, NULL, TRUE);
-    /* the server opens on the new object for editing */
-    ole_activate(&g_pic, 0);
+    /* the server opens on the new object by itself once it has the host
+       names (OleActivate would show it maximized: object scenario) */
+    host_names(o);
 }
 
 /* ---- Links ---- */

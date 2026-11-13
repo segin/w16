@@ -331,6 +331,7 @@ DWORD body_write(HFILE f, int fmt, LPCSTR text, WORD cb, PICTURE *pic);
 BOOL body_copy(HFILE from, int ffmt, DWORD pos, HFILE to, int tfmt, DWORD FAR *newpos);
 extern char g_srcpath[];
 BOOL merge_body(HFILE f, LPCARD c);
+BOOL body_text(LPCARD c, HGLOBAL FAR *text, WORD FAR *cb);
 
 /* cardwnd.c */
 BOOL cardwnd_register(HINSTANCE);
