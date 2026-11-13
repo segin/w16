@@ -16,6 +16,7 @@
 #include <windows.h>
 
 #define TK_REF "tk13ref.h"
+#define TK_REF286 "tk13ref286.h"
 #include "tklog.h"
 
 extern DWORD __cdecl call_ds(WORD ds, void FAR *fn, WORD nargs, WORD a1, WORD a2, WORD a3);

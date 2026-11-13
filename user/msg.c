@@ -63,18 +63,27 @@ void destroy_queue(HQUEUE hq)
     GlobalFree(LOWORD(GlobalHandle(hq)));
 }
 
+/* SetWakeBit2 (Pietrek, Windows Internals ch. 7): the bits are set, and
+   the task gets an event only when it waits for one of them (its wake
+   mask), the mask then cleared: one event per wait. w16 posted an event
+   for every bit set, waiting or not: a task that read its messages
+   without waiting piled them up (Program Manager had 60 with its caret
+   blinking), and its WaitEvent then returned at once that many times */
 void set_wakebit(HQUEUE hq, WORD bits)
 {
     QUEUE __far *q;
-    WORD f;
+    WORD f, post;
     if (!hq)
         return;
     q = q_of(hq);
     f = irq_off();
     q->wakebits |= bits;
     q->changebits |= bits;
+    post = (bits & q->wakemask) != 0;
+    if (post)
+        q->wakemask = 0;
     irq_restore(f);
-    if (q->task)
+    if (post && q->task)
         K_POSTEVENT(q->task);
 }
 
@@ -493,13 +502,15 @@ void WINAPI WaitMessage(void)
     if (!hq)
         return;
     for (;;) {
+        /* the wake mask first, then the look: a bit set in between still
+           posts the event WaitEvent takes (set_wakebit) */
+        q_of(hq)->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
         receive_sent(hq);
         q = q_of(hq);
         if (q->count || q->quit || q->npaint || q->ntimer || input_pending)
             return;
         if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE | PM_NOYIELD))
             return;
-        q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
         if (journal_active()) {         /* playback input comes by polling */
             K_OLDYIELD();
             continue;

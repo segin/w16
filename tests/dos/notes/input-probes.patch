@@ -1,0 +1,59 @@
+diff --git a/tests/apps/tk49.c b/tests/apps/tk49.c
+index 52f96eb..eb14869 100644
+--- a/tests/apps/tk49.c
++++ b/tests/apps/tk49.c
+@@ -42,6 +42,24 @@ int __cdecl tmain(void)
+                  r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]);
+         out(line);
+     }
++    {
++        BYTE imr = 0, isr = 0, irr = 0;
++        _asm {
++            in al, 0A1h
++            mov imr, al
++            mov al, 0Bh
++            out 0A0h, al
++            in al, 0A0h
++            mov isr, al
++            mov al, 0Ah
++            out 0A0h, al
++            in al, 0A0h
++            mov irr, al
++        }
++        wsprintf(line, "NOW ivt74=%04X:%04X imr=%02X isr=%02X irr=%02X\r\n",
++                 ivt[0x74 * 2 + 1], ivt[0x74 * 2], imr, isr, irr);
++        out(line);
++    }
+     out("TK49 done\r\n");
+     return 0;
+ }
+diff --git a/tests/dos/ms1.asm b/tests/dos/ms1.asm
+index 2d0480a..8844acf 100644
+--- a/tests/dos/ms1.asm
++++ b/tests/dos/ms1.asm
+@@ -57,7 +57,11 @@ rec:    push di
+         stosw
+         mov ax, si
+         stosw
+-        mov ax, [cs:in15]
++        push ds                 ; (kl-exp: BIOS ticks in place of the depth)
++        xor ax, ax
++        mov ds, ax
++        mov ax, [46Ch]
++        pop ds
+         stosw
+         push ds
+         xor ax, ax
+diff --git a/tests/inputrun.sh b/tests/inputrun.sh
+index b22ca1c..5569408 100755
+--- a/tests/inputrun.sh
++++ b/tests/inputrun.sh
+@@ -418,7 +418,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
+     waitmoved) waitmoved \$a \$b ;;
+     *) echo "unknown command \$cmd" >> "$out/input.log" ;;
+     esac
+-    echo "\$cmd \$a \$b" >> "$out/input.log"
++    echo "\$(date +%H:%M:%S.%N) \$cmd \$a \$b" >> "$out/input.log"
+     sleep 0.2
+ done
+ echo "script done" >> "$out/input.log"

@@ -60,26 +60,32 @@
  */
 #include "kernel.h"
 
-/* ---- heap information block (offsets from pHeap) ---- */
+/* ---- heap information block (offsets from pHeap) ----
+   KRNL286's layout (tests/apps/tk53.c, Windows 3.1 under KRNL286: the
+   block after LocalInit, and which word Microsoft's TOOLHELP checks:
+   GlobalEntry's wHeapPresent goes to 0 when the word at 22h, "LH", is
+   zeroed and for no other one). w16 had KRNL386's (first and last
+   sentinels and the discard total as dwords, the signature at 28h), and
+   TOOLHELP found no local heap anywhere (US14's heap walk). */
 #define LI_CHECK        0x00
 #define LI_FREEZE       0x02
 #define LI_ITEMS        0x04    /* number of arenas */
 #define LI_FIRST        0x06    /* first sentinel */
-#define LI_LAST         0x0A    /* last sentinel */
-#define LI_NCOMPACT     0x0E    /* byte */
-#define LI_DISLEVEL     0x0F    /* byte */
-#define LI_DISTOTAL     0x10    /* dword */
-#define LI_HTABLE       0x14    /* newest handle table */
-#define LI_HFREE        0x16    /* first free handle */
-#define LI_HDELTA       0x18    /* entries per new handle table */
-#define LI_EXPAND       0x1A
-#define LI_PSTATS       0x1C
-#define LI_NOTIFY       0x1E    /* far pointer, LocalNotify procedure */
-#define LI_LOCK         0x22
-#define LI_EXTRA        0x24    /* extra bytes when growing */
-#define LI_MINSIZE      0x26    /* last - first + 0Ah */
-#define LI_MAGIC        0x28
-#define LI_SIZE         0x2A
+#define LI_LAST         0x08    /* last sentinel */
+#define LI_NCOMPACT     0x0A    /* byte */
+#define LI_DISLEVEL     0x0B    /* byte */
+#define LI_DISTOTAL     0x0C
+#define LI_HTABLE       0x0E    /* newest handle table */
+#define LI_HFREE        0x10    /* first free handle */
+#define LI_HDELTA       0x12    /* entries per new handle table */
+#define LI_EXPAND       0x14    /* (3.1: a near procedure in KERNEL) */
+#define LI_PSTATS       0x16
+#define LI_NOTIFY       0x18    /* far pointer, LocalNotify procedure */
+#define LI_LOCK         0x1C
+#define LI_EXTRA        0x1E    /* extra bytes when growing */
+#define LI_MINSIZE      0x20    /* last - first + 0Ah */
+#define LI_MAGIC        0x22
+#define LI_SIZE         0x24
 
 #define LH_MAGIC        0x484C  /* "LH" */
 #define LH_HDELTA       0x0020
@@ -938,7 +944,7 @@ u16 KAPI LHDelta(u16 ds, u16 n)
 /* LocalNotify (KERNEL.14, Windows 2.x SDK): the heap's notification
    procedure, in the information block; returns the previous one.
    Observed on 3.1 (tests/apps/tk50.c): KRNL286 keeps it at 18h of its
-   information block (w16's block has KRNL386's layout: 1Eh), the
+   information block (w16 keeps it there too), the
    default is a procedure in KERNEL. KERNEL then calls it with (wMsg,
    hMem, wArg): LN_OUTOFMEM (0, wArg = the bytes it needs) before growing
    the heap, LN_DISCARD (2) before discarding a block. UNVERIFIED: w16
