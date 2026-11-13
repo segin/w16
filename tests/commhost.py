@@ -153,7 +153,12 @@ def main():
         for b in d:
             if esc:
                 esc = False
-                if b != 0xFF:
+                # In its first second the emulator sends its own line
+                # states; the first state byte it sends is whatever its
+                # variable held (seen: 00, 0Eh, 6Eh, FFh): FFh there is a
+                # state too, not a data byte FFh (it was recorded as
+                # "D FF" at the start of a run now and then)
+                if b != 0xFF or time.time() - t_conn < 1.0:
                     st = (b & 1, (b >> 1) & 1, (b >> 2) & 1)
                     # the states the emulator sends in its first second
                     # (its own start, before the guest does anything)

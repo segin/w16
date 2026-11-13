@@ -68,10 +68,10 @@ run() {
     run=$1; shift
     drvfiles=$(drivers "$run" "$2"); shift 2
     port=$(freeport)
-    python3 "$root/tests/commhost.py" -t 700 -l "$out/$run.host" "$port" > "$out/$run.hostout" 2>&1 &
+    python3 "$root/tests/commhost.py" -t 700 -l "$out/$run.host" -T "$out/$run.hosttime" "$port" > "$out/$run.hostout" 2>&1 &
     hpid=$!
     port2=$(freeport)
-    python3 "$root/tests/commhost.py" -t 700 -l "$out/$run.host2" "$port2" > "$out/$run.hostout2" 2>&1 &
+    python3 "$root/tests/commhost.py" -t 700 -l "$out/$run.host2" -T "$out/$run.hosttime2" "$port2" > "$out/$run.hostout2" 2>&1 &
     hpid2=$!
     sleep 0.5
     conf="[serial]
