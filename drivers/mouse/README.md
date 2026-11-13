@@ -152,6 +152,11 @@ the 1689h accelerator). With `-r 200` (5 minutes, 4 runs each):
 | w16's | Microsoft's | w16's | 0 of 4 |
 | w16's | w16's (and MOUSELH) | w16's | 0 of 4 |
 
+One-hour runs (4 each, `-a -r 200`: the 1689h accelerator and an
+Enable every 200 ms, 16,386 Enables and about 1.3 million DOS I/O bursts
+per run): w16's DOSX with Microsoft's driver, Microsoft's DOSX with
+w16's driver, w16's DOSX with w16's driver: 0 stalls in all 12.
+
 Every stall leaves IRQ 12 in service at the slave PIC (ISR 10h) and
 nothing at the master: the IRQ was acknowledged at the master but never
 ended at the slave, and the slave then holds back every later IRQ 12
