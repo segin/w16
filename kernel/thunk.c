@@ -149,17 +149,17 @@ found:
 void __cdecl unimpl_report(u16 index)
 {
     tblock FAR *b = index < count ? block_of(index, 0) : NULL;
-    kputs("w16: call to unimplemented ");
+    kdbg("w16: call to unimplemented ");
     if (b) {
         thunkinfo FAR *t = &b->info[index % TB_COUNT];
-        kputs(t->mod);
-        kputs(".");
+        kdbg(t->mod);
+        kdbg(".");
         if (t->name[0])
-            kputs(t->name);
+            kdbg(t->name);
         else
             kputdec(t->ordinal);
     }
-    kputs("\r\n");
+    kdbg("\r\n");
 }
 
 void where(u16 sel);             /* fault.c */
