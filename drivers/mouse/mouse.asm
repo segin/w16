@@ -37,6 +37,7 @@ segment _DATA  public align=16 class=DATA use16
 group DGROUP _DATA
 
 extern GETVERSION                       ; KERNEL.3
+extern GETWINDOWSDIRECTORY              ; KERNEL.134
 extern __0040H                          ; KERNEL.193: selector of 0040:0000
 
 ; Status flags for the event procedure (DDK, Mouse_Event)
@@ -96,6 +97,61 @@ nirq            db 0                    ; IRQs that brought one since the
                                         ; last set-up (counts up to 2)
 busy            db 0                    ; the event procedure is running
 
+; GetSetMouseData's settings (the fields of its buffer, MD2A: tests/apps/
+; md2logs/a/notes.md). The values a get returns on a PS/2 setup are what
+; Windows 3.1's driver returned there; the acceleration profiles and the
+; sensitivity curve are w16's own (below).
+gs_type         db 4                    ; +0, bit 1: mouse type (PS/2)
+gs_irq          db 0                    ; +1, bit 2
+raw_x           dw 0                    ; +2, +4, bit 3: the last packet's
+raw_y           dw 0                    ; motion before scaling (Y down)
+GS_VERSION      equ 0820h               ; +6, bit 4: the version Microsoft
+                                        ; Mouse 8.20's programs ask for
+gs_10           db 2                    ; +10, +11, bit 6: only 2, 1 are
+gs_11           db 1                    ; accepted (meaning unknown)
+sens_x          db 10                   ; +13, +14, bit 8: sensitivity,
+sens_y          db 10                   ; 10 = 1:1
+gs_15           db 0                    ; +15, bit 9: 0 or 1 (no effect seen)
+active          db 3                    ; +24, bit 12: the active profile
+; bit 10, through the far pointer at +16: the profiles, 260 bytes: a count
+; per profile, then 32 thresholds per profile (the larger of |X| and |Y|
+; of a packet, in mickeys), then 32 factors per profile in 1/16: the last
+; entry whose threshold the packet reaches gives its factor. w16's own
+; defaults, chosen so that a 40-mickey step comes out 2.5 times as large
+; with Slow and 5 times with Fast, as with Windows 3.1's driver (MD2A
+; beh12); the steps in between are w16's choice. Unaccelerated has none.
+P_COUNT         equ 4
+P_ENTRIES       equ 32
+prof_count      db 4, 4, 5, 0
+prof_thr        db 0, 8, 16, 24
+                times P_ENTRIES - 4 db 0
+                db 0, 6, 12, 20
+                times P_ENTRIES - 4 db 0
+                db 0, 4, 8, 14, 20
+                times P_ENTRIES - 5 db 0
+                times P_ENTRIES db 0
+prof_fac        db 16, 24, 32, 40
+                times P_ENTRIES - 4 db 0
+                db 16, 28, 44, 56
+                times P_ENTRIES - 4 db 0
+                db 16, 32, 48, 64, 80
+                times P_ENTRIES - 5 db 0
+                times P_ENTRIES db 0
+PROF_SIZE       equ P_COUNT + 2 * P_COUNT * P_ENTRIES
+; bit 11, through the far pointer at +20: the profiles' names, 16
+; characters each, padded with spaces (as Mouse 8.20's programs show them)
+prof_names      db "Slow            "
+                db "Moderate        "
+                db "Fast            "
+                db "Unaccelerated   "
+NAMES_SIZE      equ 4 * 16
+; bit 14, through the (unaligned) far pointer at +25: the settings file,
+; a length byte (counting the 0) and the name: the Windows directory's
+; MOUSE.INI (LibEntry)
+INI_MAX         equ 128
+ini_path        times INI_MAX + 1 db 0
+ini_name        db "\MOUSE.INI", 0
+
 segment _TEXT
 
 ; ---- LibEntry: DS = DGROUP, DI = hInstance. Looks for the device. ----
@@ -105,6 +161,27 @@ libentry:
         push di
         call detect
         mov [have_mouse wrt DGROUP], ax
+        ; GetSetMouseData's settings file: <Windows directory>\MOUSE.INI
+        push ds
+        push ini_path + 1 wrt DGROUP
+        push INI_MAX - 12
+        call far GETWINDOWSDIRECTORY    ; AX = length
+        mov di, ax
+        push ds
+        pop es
+        cmp byte [ini_path + di wrt DGROUP], '\'    ; (a root: "C:\")
+        jne .name
+        dec di
+.name:  add di, ini_path + 1
+        mov si, ini_name
+        cld
+.copy:  lodsb
+        stosb
+        test al, al
+        jnz .copy
+        sub di, ini_path + 1            ; the length, the 0 counted
+        mov ax, di
+        mov [ini_path wrt DGROUP], al
         mov ax, 1                       ; loaded, mouse or not (Inquire says)
         pop di
         pop si
@@ -373,13 +450,17 @@ MOUSEGETINTVECT:
 ; ---- 5: DWORD FAR PASCAL GetSetMouseData(LPVOID lpData, DWORD dwFlags)
 ; Microsoft Mouse 8.20's private settings interface between its own
 ; programs (POINT.EXE, POINTLIB.DLL, POINTER.EXE) and its driver; Windows
-; 3.1 was not seen calling it (MD2A: tests/apps/md2logs/a/notes.md). Bit 0
-; of dwFlags: set (else get); bits 1-14 name fields of the buffer; AX = 0
-; or error * 256 + bit. w16 keeps none of Mouse 8.20's settings: bits
-; 15-31 get 3.1's answer (AX = 0900h, DX = HIWORD(dwFlags), the buffer
-; untouched); for the rest the buffer is left as it is and AX = 0, DX = 0
-; after a set, 2 after a get, as 3.1's. (Mouse 8.20's Control Panel then
-; stops with its "requires MOUSE.DRV version 8.20" message.)
+; 3.1 was not seen calling it. What it does, as Windows 3.1's driver was
+; observed to do it (MD2A: tests/apps/md2logs/a/notes.md):
+; - dwFlags bit 0: set the fields named by bits 1-14 from *lpData; without
+;   it, get them into *lpData. Bit 13 means bits 10 and 11.
+; - bits 15-31: AX = 0900h, DX = HIWORD(dwFlags), nothing done;
+; - otherwise AX = 0, or error * 256 + bit for the first bad bit: 02 the
+;   field is not there (bits 5 and 7), 03-05 a bad value in a set; one bad
+;   bit and nothing is done. DX = 2 after a get, 0 after a set (whether
+;   the result is meant as a DWORD is not known).
+; - the fields: the data block above. A set of bits 1-4 (type, IRQ, last
+;   motion, version) is accepted and changes nothing (UNVERIFIED).
 global GETSETMOUSEDATA
 GETSETMOUSEDATA:
 %ifdef PWRTRACE
@@ -387,19 +468,245 @@ GETSETMOUSEDATA:
 %endif
         push bp
         mov bp, sp
+        push ds
+        push si
+        push di
+        push es
+        mov ax, DGROUP
+        mov ds, ax
         mov dx, [bp + 8]                ; dwFlags, high word
         mov ax, 0900h
         test dx, dx
         jnz .ret
-        test byte [bp + 7], 80h         ; bit 15
+        mov cx, [bp + 6]                ; dwFlags, low word
+        test ch, 80h                    ; bit 15
         jnz .ret
-        xor ax, ax
-        mov dx, 2
-        test byte [bp + 6], 1           ; a set
-        jz .ret
-        xor dx, dx
-.ret:   pop bp
+        test ch, 20h                    ; bit 13: bits 10 and 11
+        jz .b13
+        or ch, 0Ch
+.b13:   mov dx, 2                       ; a get
+        test cl, 1
+        jz .dx
+        xor dx, dx                      ; a set
+.dx:    mov ax, 0205h                   ; bits 5 and 7: no such field here
+        test cl, 20h
+        jnz .ret
+        mov ax, 0207h
+        test cl, 80h
+        jnz .ret
+        les di, [bp + 10]               ; lpData
+        test cl, 1
+        jnz .set
+        call gs_get
+        jmp .ok
+.set:   call gs_check                   ; AX = 0 or the error
+        test ax, ax
+        jnz .ret
+        call gs_set
+.ok:    xor ax, ax
+.ret:   xor cx, cx                      ; as 3.1's leaves it (SI, DI kept)
+        pop es
+        pop di
+        pop si
+        pop ds
+        pop bp
         retf 8
+
+; gs_get: the fields CX names into ES:DI. DS = DGROUP.
+gs_get:
+        test cl, 2                      ; bit 1
+        jz .b2
+        mov al, [gs_type wrt DGROUP]
+        mov [es:di], al
+.b2:    test cl, 4
+        jz .b3
+        mov al, [gs_irq wrt DGROUP]
+        mov [es:di + 1], al
+.b3:    test cl, 8
+        jz .b4
+        cli
+        mov ax, [raw_x wrt DGROUP]
+        mov bx, [raw_y wrt DGROUP]
+        sti
+        mov [es:di + 2], ax
+        mov [es:di + 4], bx
+.b4:    test cl, 10h
+        jz .b6
+        mov word [es:di + 6], GS_VERSION
+.b6:    test cl, 40h
+        jz .b8
+        mov al, [gs_10 wrt DGROUP]
+        mov [es:di + 10], al
+        mov al, [gs_11 wrt DGROUP]
+        mov [es:di + 11], al
+.b8:    test ch, 1
+        jz .b9
+        mov al, [sens_x wrt DGROUP]
+        mov [es:di + 13], al
+        mov al, [sens_y wrt DGROUP]
+        mov [es:di + 14], al
+.b9:    test ch, 2
+        jz .b10
+        mov al, [gs_15 wrt DGROUP]
+        mov [es:di + 15], al
+.b10:   test ch, 4
+        jz .b11
+        push cx
+        push di
+        push es
+        les di, [es:di + 16]
+        mov si, prof_count
+        mov cx, PROF_SIZE
+        cld
+        rep movsb
+        pop es
+        pop di
+        pop cx
+.b11:   test ch, 8
+        jz .b12
+        push cx
+        push di
+        push es
+        les di, [es:di + 20]
+        mov si, prof_names
+        mov cx, NAMES_SIZE
+        cld
+        rep movsb
+        pop es
+        pop di
+        pop cx
+.b12:   test ch, 10h
+        jz .b14
+        mov al, [active wrt DGROUP]
+        mov [es:di + 24], al
+.b14:   test ch, 40h
+        jz .ret
+        push cx
+        push di
+        push es
+        les di, [es:di + 25]
+        mov si, ini_path
+        mov cl, [si]
+        xor ch, ch
+        inc cx                          ; the length byte as well
+        cld
+        rep movsb
+        pop es
+        pop di
+        pop cx
+.ret:   ret
+
+; gs_check: AX = 0, or the error for the first bad value of a set (CX the
+; flags, ES:DI the buffer). Observed: +11 = 0 gives 0406h, other values
+; than 2, 1 at +10, +11 0506h; +15 above 1 (5Ah) 0309h. UNVERIFIED: the
+; active profile above 3 (030Ch here), limits on sensitivity (none here).
+gs_check:
+        xor ax, ax
+        test cl, 40h                    ; bit 6
+        jz .b9
+        mov ax, 0406h
+        cmp byte [es:di + 11], 0
+        je .ret
+        mov ax, 0506h
+        cmp byte [es:di + 11], 1
+        jne .ret
+        cmp byte [es:di + 10], 2
+        jne .ret
+        xor ax, ax
+.b9:    test ch, 2
+        jz .b12
+        mov ax, 0309h
+        cmp byte [es:di + 15], 1
+        ja .ret
+        xor ax, ax
+.b12:   test ch, 10h
+        jz .ret
+        mov ax, 030Ch
+        cmp byte [es:di + 24], P_COUNT - 1
+        ja .ret
+        xor ax, ax
+.ret:   ret
+
+; gs_set: the fields CX names from ES:DI (checked). DS = DGROUP. What the
+; interrupt-time code uses changes with interrupts disabled.
+gs_set:
+        test ch, 1                      ; bit 8: sensitivity
+        jz .b9
+        mov al, [es:di + 13]
+        mov ah, [es:di + 14]
+        cli
+        mov [sens_x wrt DGROUP], al
+        mov [sens_y wrt DGROUP], ah
+        sti
+.b9:    test ch, 2
+        jz .b10
+        mov al, [es:di + 15]
+        mov [gs_15 wrt DGROUP], al
+.b10:   test ch, 4                      ; the profiles
+        jz .b11
+        push cx
+        push di
+        push ds
+        push es
+        lds si, [es:di + 16]
+        mov ax, DGROUP
+        mov es, ax
+        mov di, prof_count
+        mov cx, PROF_SIZE
+        cld
+        cli
+        rep movsb
+        sti
+        pop es
+        pop ds
+        pop di
+        pop cx
+.b11:   test ch, 8                      ; their names
+        jz .b12
+        push cx
+        push di
+        push ds
+        push es
+        lds si, [es:di + 20]
+        mov ax, DGROUP
+        mov es, ax
+        mov di, prof_names
+        mov cx, NAMES_SIZE
+        cld
+        rep movsb
+        pop es
+        pop ds
+        pop di
+        pop cx
+.b12:   test ch, 10h                    ; the active profile
+        jz .b14
+        mov al, [es:di + 24]
+        mov [active wrt DGROUP], al
+.b14:   test ch, 40h                    ; the settings file's name
+        jz .ret
+        push cx
+        push di
+        push ds
+        push es
+        lds si, [es:di + 25]
+        mov ax, DGROUP
+        mov es, ax
+        mov cl, [si]                    ; its length byte
+        xor ch, ch
+        cmp cx, INI_MAX
+        jbe .len
+        mov cx, INI_MAX
+.len:   mov di, ini_path
+        mov [es:di], cl
+        inc si
+        inc di
+        cld
+        rep movsb
+        pop es
+        pop ds
+        pop di
+        pop cx
+.ret:   ret
 
 ; ---- 7: WORD FAR PASCAL PowerEventProc(WORD wEvent, DWORD dwParam)
 ; POWER.DRV's call after it sends WM_POWER (MD2B: tests/apps/md2logs/b/
@@ -609,11 +916,18 @@ endirq:
         jz .yok
         mov ch, 0FFh
 .yok:   neg cx                          ; the device counts up, the screen down
+        mov [raw_x wrt DGROUP], bx
+        mov [raw_y wrt DGROUP], cx
         xor ax, ax
         mov si, bx
         or si, cx
         jz .btn
-        mov al, SF_MOVEMENT
+        mov al, SF_MOVEMENT             ; (from the motion before scaling:
+        push ax                         ; UNVERIFIED for a step scaled to
+        push dx                         ; 0, 0)
+        call scale
+        pop dx
+        pop ax
 .btn:   mov dh, [buttons wrt DGROUP]    ; the last reported buttons
         and dl, P_LEFT | P_RIGHT
         mov [buttons wrt DGROUP], dl
@@ -650,4 +964,107 @@ endirq:
         pop ds
         cli
         mov byte [busy wrt DGROUP], 0
+.ret:   ret
+
+; scale: BX, CX (a packet's X and Y, the screen's signs) scaled as
+; GetSetMouseData's settings say, inside the driver as Windows 3.1's does
+; it (MD2A beh11, beh12): first the active profile's acceleration (the
+; larger of |X| and |Y| picks the factor, both axes get it; UNVERIFIED
+; which of |X|, |Y| or their sum 3.1 uses, and the order of the two
+; steps), then each axis's sensitivity. Uses AX, DX, SI, DI.
+scale:
+        mov al, [active wrt DGROUP]
+        xor ah, ah
+        mov si, ax
+        cmp byte [prof_count + si wrt DGROUP], 0
+        je .sens                        ; no acceleration (Unaccelerated)
+        mov ax, bx                      ; the packet's speed: max |X|, |Y|
+        cwd
+        xor ax, dx
+        sub ax, dx
+        mov di, ax
+        mov ax, cx
+        cwd
+        xor ax, dx
+        sub ax, dx
+        cmp ax, di
+        jbe .max
+        mov di, ax
+.max:   push cx
+        mov cl, [prof_count + si wrt DGROUP]
+        xor ch, ch
+        cmp cx, P_ENTRIES
+        jbe .cnt
+        mov cx, P_ENTRIES
+.cnt:   shl si, 5                       ; the profile's entries
+        mov dh, 16                      ; 1:1 below every threshold
+.lp:    mov al, [prof_thr + si wrt DGROUP]
+        xor ah, ah
+        cmp di, ax
+        jb .nx
+        mov dh, [prof_fac + si wrt DGROUP]
+.nx:    inc si
+        loop .lp
+        pop cx
+        mov al, dh
+        xor ah, ah
+        mov di, ax                      ; X, Y * factor / 16
+        mov si, 16
+        mov ax, bx
+        imul di
+        idiv si
+        mov bx, ax
+        mov ax, cx
+        imul di
+        idiv si
+        mov cx, ax
+.sens:  mov al, [sens_x wrt DGROUP]
+        mov si, bx
+        call sens
+        mov bx, si
+        mov al, [sens_y wrt DGROUP]
+        mov si, cx
+        call sens
+        mov cx, si
+        ret
+
+; sens: SI scaled by sensitivity AL. 10 is 1:1 and 0 stops motion; in
+; between and above, w16's own curve fitted to what Windows 3.1's driver
+; did with 40 mickeys (MD2A beh11, beh12: 1 gave 1, 5 gave 15, 15 gave
+; 90, 19 gave 130, 20 gave 140, and 20 made 20 into 70): (s - 2) / 8 up
+; to 10, (s - 6) / 4 above; a step never shrinks below one mickey
+; (UNVERIFIED between the observed points). Uses AX, DI.
+sens:
+        cmp al, 10
+        je .ret
+        test si, si
+        jz .ret
+        test al, al
+        jnz .nz
+        xor si, si
+        ret
+.nz:    xor ah, ah
+        cmp al, 10
+        ja .hi
+        sub ax, 2
+        mov di, 8
+        jmp .mul
+.hi:    sub ax, 6
+        mov di, 4
+.mul:   push dx
+        push si
+        imul si
+        idiv di
+        pop dx                          ; the step before
+        test dx, dx
+        js .neg
+        cmp ax, 1
+        jge .done
+        mov ax, 1
+        jmp .done
+.neg:   cmp ax, -1
+        jle .done
+        mov ax, -1
+.done:  mov si, ax
+        pop dx
 .ret:   ret
