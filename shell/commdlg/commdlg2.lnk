@@ -1,6 +1,0 @@
-# wlink directives for the Windows 2.x build of COMMDLG.DLL: the 3.x
-# build's, with every segment fixed (real-mode Windows moves moveable
-# segments; our callbacks and DS loads take addresses directly).
-@shell/commdlg/commdlg.lnk
-segment class 'CODE' fixed preload
-segment class 'DATA' fixed preload

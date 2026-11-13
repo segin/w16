@@ -6,21 +6,14 @@
  * applications that bring their own templates rely on the IDs, and the
  * dialogs must look the same). The pictures are w16's own
  * (tools/mkcdart.py).
- *
- * The Windows 2.x build has no combo boxes and no owner-drawn list boxes
- * in USER: its dialogs use our classes CdCombo and CdList instead
- * (cd2ctl.c).
  */
 #include <windows.h>
 #include "cdlgs.h"
 
-#ifdef W16_WIN2
-#define CD_COMBO        "CdCombo"
-#define CD_LIST         "CdList"
-#else
 #define CD_COMBO        "ComboBox"
 #define CD_LIST         "ListBox"
-#endif
+#define DLG_STYLE       0x80C800C0L
+#define DLG_FONTSTMT    FONT 8, "Helv"
 
 BMP_DRIVES      BITMAP  "drives.bmp"
 BMP_FONTTYPE    BITMAP  "fonttype.bmp"
@@ -30,9 +23,9 @@ ICO_PORTRAIT    ICON    "portrait.ico"
 ICO_LANDSCAPE   ICON    "landscape.ico"
 
 DLG_OPEN DIALOG 36, 24, 264, 134
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Open"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "File &Name:", 0x0442, "Static", 0x50020000L, 6, 6, 76, 9
     CONTROL "", 0x0480, "Edit", 0x50810480L, 6, 16, 90, 12
@@ -51,9 +44,9 @@ BEGIN
 END
 
 DLG_MULTIOPEN DIALOG 36, 24, 264, 134
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Open"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "File &Name:", 0x0442, "Static", 0x50020000L, 6, 6, 76, 10
     CONTROL "", 0x0480, "Edit", 0x50810480L, 6, 16, 90, 12
@@ -72,9 +65,9 @@ BEGIN
 END
 
 DLG_PRINT DIALOG 36, 52, 225, 130
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Print"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "Printer:", 0x0445, "Static", 0x50020000L, 4, 4, 40, 8
     CONTROL "System Default", 0x0440, "Static", 0x50020000L, 44, 4, 120, 18
@@ -99,9 +92,9 @@ BEGIN
 END
 
 DLG_PRNSETUP DIALOG 30, 23, 287, 122
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Print Setup"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "Printer", 0x0432, "Button", 0x50000007L, 4, 6, 224, 66
     CONTROL "(No Default Printer)", 0x0440, "Static", 0x50020000L, 18, 30, 208, 9
@@ -124,9 +117,9 @@ BEGIN
 END
 
 DLG_FIND DIALOG 30, 73, 236, 62
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Find"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 8, 42, 8
     CONTROL "", 0x0480, "Edit", 0x50830080L, 47, 7, 128, 12
@@ -141,9 +134,9 @@ BEGIN
 END
 
 DLG_REPLACE DIALOG 36, 44, 230, 94
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Replace"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 9, 48, 8
     CONTROL "", 0x0480, "Edit", 0x50830080L, 54, 7, 114, 12
@@ -159,9 +152,9 @@ BEGIN
 END
 
 CHOOSECOLOR DIALOG 2, 0, 298, 184
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Color"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "&Basic Colors:", -1, "Static", 0x50020000L, 4, 4, 140, 9
     CONTROL "", 0x02D0, "Static", 0x5003000BL, 4, 14, 140, 86
@@ -193,9 +186,9 @@ BEGIN
 END
 
 DLG_FONT DIALOG 13, 54, 264, 147
-STYLE 0x80C800C0L
+STYLE DLG_STYLE
 CAPTION "Font"
-FONT 8, "Helv"
+DLG_FONTSTMT
 BEGIN
     CONTROL "&Font:", 0x0440, "Static", 0x50020000L, 6, 3, 40, 9
     CONTROL "", 0x0470, CD_COMBO, 0x50210B51L, 6, 13, 94, 54

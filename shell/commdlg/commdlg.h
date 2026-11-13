@@ -5,11 +5,8 @@
  * the Windows 3.1 SDK's documentation and black-box observation of the
  * original (tests/apps/cd1.c, tests/commdlgscen.sh; ARCHITECTURE.md 17).
  * Large model, SS != DS (the code runs on its callers' stacks); every
- * entry point and callback loads DS itself (__loadds).
- *
- * W16_WIN2 builds the Windows 2.x version: 8086 code, no *Param dialog
- * calls, no combo boxes or owner-drawn list boxes in USER (cd2ctl.c has
- * our own), no WinHelp.
+ * entry point and callback loads DS itself (__loadds). Windows 3.x only:
+ * w16 builds no Windows 2.x COMMDLG (2.x builds are Program Manager's).
  */
 #ifndef W16_COMMDLG_H
 #define W16_COMMDLG_H
@@ -160,8 +157,5 @@ LRESULT call_old(HWND w, UINT msg, WPARAM wp, LPARAM lp);
 void    cd_init_color(void);
 void    cd_init_font(void);
 
-#ifdef W16_WIN2
-BOOL    ctl2_register(void);            /* cd2ctl.c */
-#endif
 
 #endif

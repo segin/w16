@@ -2,8 +2,8 @@
 ;
 ; KERNEL calls a DLL's entry point once, when it loads it, with DS = the
 ; library's data segment, DI = its instance handle and CX = the local heap
-; size from the NE header (the Windows SDK's convention, on Windows 2.x
-; and 3.x alike). We set up the local heap and call cd_libmain(hinst);
+; size from the NE header (the Windows SDK's convention, on Windows 3.x).
+; We set up the local heap and call cd_libmain(hinst);
 ; its result (nonzero: loaded) goes back in AX.
 
         bits 16

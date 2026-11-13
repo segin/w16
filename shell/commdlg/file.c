@@ -25,9 +25,6 @@
  */
 #include "commdlg.h"
 
-#ifdef W16_WIN2
-extern LPARAM cd_pending_param;
-#endif
 
 /* WM_COMMAND notification the dialog sends itself while it sets up a
    combo box (observed: 8000h) */
@@ -296,7 +293,8 @@ static void fill_drives(fstate FAR *st)
                 s_cpy(text + 3, remote, sizeof text - 3);
                 s_lower(text + 3);
             }
-        } else if (kind != PIC_FLOPPY) {
+        } else
+        if (kind != PIC_FLOPPY && kind != PIC_NET) {
             char label[13];
             volume_label(d, label);
             if (label[0]) {
@@ -616,7 +614,18 @@ static BOOL take_name(fstate FAR *st)
         return FALSE;
     }
 
-    /* a file */
+    /* a file: the file list scrolls to the first name starting with its
+       first letter (observed: "setupx.txt" puts scrnsave.scr on top,
+       "zzz.txt" zigzag.bmp; nothing is selected) */
+    {
+        char first[2];
+        int at;
+        first[0] = name[0];
+        first[1] = 0;
+        at = (int)SendDlgItemMessage(dlg, lst1, LB_FINDSTRING, (WPARAM)-1, (LPARAM)(LPSTR)first);
+        if (at >= 0)
+            SendDlgItemMessage(dlg, lst1, LB_SETTOPINDEX, at, 0);
+    }
     if (!valid_name(name)) {
         cd_msgbox(dlg, st->caption, IDS_INVALIDNAME, typed, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
@@ -717,9 +726,6 @@ static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
     int i;
 
     if (msg == WM_INITDIALOG) {
-#ifdef W16_WIN2
-        lp = cd_pending_param;
-#endif
         st = (fstate FAR *)lp;
         st->save = save;
         st->dlg = dlg;

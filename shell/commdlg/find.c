@@ -16,9 +16,6 @@
  */
 #include "commdlg.h"
 
-#ifdef W16_WIN2
-extern LPARAM cd_pending_param;
-#endif
 
 typedef struct {
     LPFINDREPLACE fr;
@@ -121,9 +118,6 @@ static BOOL find_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     frstate FAR *st;
     if (msg == WM_INITDIALOG) {
-#ifdef W16_WIN2
-        lp = cd_pending_param;
-#endif
         st = (frstate FAR *)lp;
         state_set(dlg, st);
         init(st, dlg);

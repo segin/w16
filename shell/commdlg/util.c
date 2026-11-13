@@ -37,10 +37,6 @@ int __cdecl __far cd_libmain(HINSTANCE inst)
     msg_setrgb = RegisterWindowMessage(S_SETRGB);
     msg_findmsg = RegisterWindowMessage(S_FINDMSG);
     msg_help = RegisterWindowMessage(S_HELP);
-#ifdef W16_WIN2
-    if (!ctl2_register())
-        return 0;
-#endif
     return 1;
 }
 
@@ -271,11 +267,6 @@ int cd_msgbox_c(HWND owner, LPCSTR caption, UINT ids, char drive, UINT style)
 
 /* ---- templates ---- */
 
-#ifdef W16_WIN2
-/* Windows 2.x has no *Param dialog calls: the parameter waits here for
-   the dialog's WM_INITDIALOG (cd_initparam) */
-LPARAM cd_pending_param;
-#endif
 
 static HGLOBAL get_template(const cd_template FAR *t, BOOL FAR *own_res)
 {
@@ -324,17 +315,11 @@ int cd_modal(const cd_template FAR *t, HWND owner, FARPROC proc, LPARAM lp)
             FreeResource(h);
         return -1;
     }
-#ifdef W16_WIN2
-    GlobalUnlock(h);
-    cd_pending_param = lp;
-    r = DialogBoxIndirect(cd_inst, h, owner, proc);
-#else
     r = DialogBoxIndirectParam(cd_inst, (HGLOBAL)h, owner, (DLGPROC)proc, lp);
     if (res)
         UnlockResource(h);
     else
         GlobalUnlock(h);
-#endif
     if (res)
         FreeResource(h);
     if (r == -1)
@@ -357,12 +342,7 @@ HWND cd_modeless(const cd_template FAR *t, HWND owner, FARPROC proc, LPARAM lp)
             FreeResource(h);
         return NULL;
     }
-#ifdef W16_WIN2
-    cd_pending_param = lp;
-    w = CreateDialogIndirect(cd_inst, p, owner, proc);
-#else
     w = CreateDialogIndirectParam(cd_inst, p, owner, (DLGPROC)proc, lp);
-#endif
     if (res) {
         UnlockResource(h);
         FreeResource(h);
@@ -610,7 +590,7 @@ int dos_open_test(LPCSTR path, int mode)
    drive that exists, 0Fh: invalid drive) */
 BOOL dos_drive_exists(int d)
 {
-    return GetDriveType(d) != 0;
+    return drive_kind(d) >= 0;
 }
 
 LPSTR cur_dir(void)
