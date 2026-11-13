@@ -68,6 +68,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     BOOL wasvis, nowvis, changed, restored = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
+    UINT asked = flags;
     if (!w || h == hwndDesktop)
         return FALSE;
     parent = PW(w->hwndParent);
@@ -229,9 +230,13 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
        DefMDIChildProc turns into the MDI child's activation (3.1, File
        Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
-       WM_CHILDACTIVATE as it is shown). UNVERIFIED: on moves and sizes
-       without SWP_NOACTIVATE too, as the SDK says */
-    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
+       WM_CHILDACTIVATE as it is shown); also when ShowWindow maximises or
+       restores one already shown (US18: WM_MDIMAXIMIZE or ShowWindow
+       SW_SHOWMAXIMIZED on a child that is not the active one activates it
+       before its WM_SIZE). UNVERIFIED: on moves and sizes without
+       SWP_NOACTIVATE too, as the SDK says */
+    if (((flags & SWP_SHOWWINDOW) || (asked & (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) ==
+         (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
         send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
@@ -241,17 +246,20 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     wp.y = w->rcWindow.top - py;
     wp.cx = w->rcWindow.right - w->rcWindow.left;
     wp.cy = w->rcWindow.bottom - w->rcWindow.top;
-    wp.flags = flags;
+    wp.flags = flags & ~(SWP_NOMOVE | SWP_NOSIZE);     /* what did change, below */
     if (!EqualRect(&oldwin, &w->rcWindow) || (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
         !(flags & SWP_NOZORDER)) {
-        if (EqualRect(&oldwin, &w->rcWindow))
-            wp.flags |= SWP_NOMOVE | SWP_NOSIZE;
-        else {
-            if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top)
-                wp.flags |= SWP_NOMOVE;
-            if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy)
-                wp.flags |= SWP_NOSIZE;
-        }
+        /* moved or sized: the window or its client area (US18: on 3.1 a
+           scroll bar a window's WM_SIZE takes away gives it a second
+           WM_SIZE with the larger client area; w16 sent none, and Program
+           Manager's group maximised from its icon kept its scroll bars) */
+        if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
+            oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
+            wp.flags |= SWP_NOMOVE;
+        if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy &&
+            oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
+            oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
+            wp.flags |= SWP_NOSIZE;
         send_message(h, WM_WINDOWPOSCHANGED, 0, (LPARAM)(WINDOWPOS __far *)&wp);
     }
     return TRUE;
@@ -325,10 +333,27 @@ static PLACE *place_of(HWND h, BOOL create)
     }
 }
 
+static BOOL restore_noact;      /* restore_noactivate under way */
+
+/* a maximised or minimised window restored without being activated (an
+   MDI child giving its maximised state to the one activated: mdi.c) */
+void restore_noactivate(HWND h)
+{
+    restore_noact = TRUE;
+    ShowWindow(h, SW_RESTORE);
+    restore_noact = FALSE;
+}
+
+static BOOL same_size(const RECT *a, const RECT *b)
+{
+    return a->right - a->left == b->right - b->left && a->bottom - a->top == b->bottom - b->top;
+}
+
 BOOL WINAPI ShowWindow(HWND h, int cmd)
 {
     PWND w = valid_wnd(h);
     BOOL wasvis;
+    RECT sized;
     UINT f = SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
     PLACE *pl;
     if (!w)
@@ -384,16 +409,19 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 icon_place(w, &pt);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
                            (cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
             if ((w = valid_wnd(h)) != 0) {
                 /* with the icon's client size, as from WM_WINDOWPOSCHANGED
                    (it was 0 x 0: w16's Clock sized its icon's digits to
-                   it, and they came out huge and cut off) */
-                send_message(h, WM_SIZE, SIZE_MINIMIZED,
-                             MAKELONG(w->rcClient.right - w->rcClient.left,
-                                      w->rcClient.bottom - w->rcClient.top));
+                   it, and they came out huge and cut off); it comes from
+                   there, once (US18), but for a size that stays the same */
+                if (same_size(&sized, &w->rcWindow))
+                    send_message(h, WM_SIZE, SIZE_MINIMIZED,
+                                 MAKELONG(w->rcClient.right - w->rcClient.left,
+                                          w->rcClient.bottom - w->rcClient.top));
                 if (pl && !pl->title && (w = valid_wnd(h)) != 0)
                     pl->title = make_icon_title(h);
             }
@@ -441,6 +469,17 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (w->style & WS_CHILD)
                     OffsetRect(&pl->normal, -PW(w->hwndParent)->rcClient.left,
                                -PW(w->hwndParent)->rcClient.top);
+            } else if (pl) {
+                /* maximised from its icon: the icon's place kept, its
+                   title gone, as when restored (the title stayed behind
+                   a maximised MDI child made from an icon) */
+                pl->icon.x = w->rcWindow.left;
+                pl->icon.y = w->rcWindow.top;
+                if (w->style & WS_CHILD) {
+                    pl->icon.x -= PW(w->hwndParent)->rcClient.left;
+                    pl->icon.y -= PW(w->hwndParent)->rcClient.top;
+                }
+                pl->hasicon = 1;
             }
             if (w->style & WS_CHILD) {
                 PWND p = PW(w->hwndParent);
@@ -458,14 +497,33 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
             if (!(w = valid_wnd(h)))
                 return wasvis;
+            /* an icon opened: WM_QUERYOPEN first, FALSE keeps it an icon
+               (3.1 SDK; US18: 3.1 sends it after WM_GETMINMAXINFO when an
+               MDI child is maximised from its icon. Program Manager's
+               groups answer it, and without it a group maximised from its
+               icon kept scroll bars it had no need of) */
+            if (w->style & WS_MINIMIZE) {
+                if (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h)))
+                    return wasvis;
+                if (pl && pl->title) {
+                    destroy_window(pl->title);
+                    pl->title = 0;
+                }
+                if (!(w = valid_wnd(h)))
+                    return wasvis;
+            }
             w->style &= ~WS_MINIMIZE;
             w->style |= WS_MAXIMIZE;
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
                            mm.ptMaxSize.x, mm.ptMaxSize.y,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            if ((w = valid_wnd(h)) != 0)
+            /* WM_SIZE comes from DefWindowProc's WM_WINDOWPOSCHANGED, once
+               (US18: one WM_SIZE per maximise or restore on 3.1; w16 sent
+               a second here); here only when the size stayed the same */
+            if ((w = valid_wnd(h)) != 0 && same_size(&sized, &w->rcWindow))
                 send_message(h, WM_SIZE, SIZE_MAXIMIZED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
@@ -478,6 +536,10 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     case SW_RESTORE:
         if (w->style & (WS_MINIMIZE | WS_MAXIMIZE)) {
             RECT r;
+            /* an icon opened: WM_QUERYOPEN first (3.1 SDK) */
+            if ((w->style & WS_MINIMIZE) &&
+                (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h))))
+                return wasvis;
             pl = place_of(h, FALSE);
             if (w->style & WS_MINIMIZE) {
                 if (!pl)
@@ -500,9 +562,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             w->style &= ~(WS_MINIMIZE | WS_MAXIMIZE);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, r.left, r.top, r.right - r.left, r.bottom - r.top,
-                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            if ((w = valid_wnd(h)) != 0)
+                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
+                           (restore_noact ? SWP_NOACTIVATE : 0));
+            if ((w = valid_wnd(h)) != 0 && same_size(&sized, &w->rcWindow))
                 send_message(h, WM_SIZE, SIZE_RESTORED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
@@ -511,7 +575,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                from its icon comes up in front, active). A child gets
                WM_CHILDACTIVATE, which an MDI child turns into its
                activation; w16 left it where it was in the Z order */
-            if ((w = valid_wnd(h)) != 0) {
+            if ((w = valid_wnd(h)) != 0 && !restore_noact) {
                 if (!(w->style & WS_CHILD))
                     activate_window(h, FALSE);
                 else {
