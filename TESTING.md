@@ -121,6 +121,7 @@ control, which helps when your own is busy or small:
 W16_REMOTE_HOST=myhost tools/remote-test.sh            # build + make test + full boot test
 W16_REMOTE_HOST=myhost tools/remote-test.sh -b write   # one boot-test case
 tools/remote-test.sh -t                                 # make test only
+tools/remote-test.sh -b -e DROPIN_INI=w16:ExtendedUserHeap=1 user write   # with a setting
 ```
 
 - The host needs the packages from section 1, passwordless `ssh`, and its own
