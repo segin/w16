@@ -35,6 +35,12 @@ while :; do
 done
 rc=0
 DISPLAY=:$n "$@" || rc=$?
+# the server's own messages, if it had any (seen once: DOSBox found "no
+# available video device" on a display this script had started)
+if ! kill -0 "$xpid" 2>/dev/null; then
+    echo "xvfb.sh: Xvfb :$n ended before the command did" >&2
+    sed 's/^/xvfb.sh: Xvfb: /' "$d/err" >&2
+fi
 kill "$xpid" 2>/dev/null || true
 wait "$xpid" 2>/dev/null || true
 rm -rf "$d"
