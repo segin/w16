@@ -1023,6 +1023,63 @@ static void part_c(void)
     dc(100, 4, cid, 0, 0, 0);
     readall("direct");
 
+    /* 10b: the event word and CN_EVENT step by step (peeks: mask 0
+       clears nothing) */
+    say("C10b events");
+    SetCommEventMask(cid, 0x3FFF);
+    obs("EnableCommNotification -1 b", EnableCommNotification(cid, hwnd, -1, -1));
+    pump(300);
+    evts("C10b start");
+    nmsg = 0;
+    host("#X41;");
+    pump(500);
+    obs("C10b rx peek", GetCommEventMask(cid, 0));
+    notes("C10b rx");
+    readall("C10b");
+    obs("C10b read peek", GetCommEventMask(cid, 0));
+    WriteComm(cid, "x", 1);
+    obs("C10b write peek", GetCommEventMask(cid, 0));
+    pump(500);
+    obs("C10b written peek", GetCommEventMask(cid, 0));
+    notes("C10b written");
+    host("#X42;");
+    pump(500);
+    obs("C10b rx2 peek", GetCommEventMask(cid, 0));
+    notes("C10b rx2");
+    obs("C10b clear rxchar", GetCommEventMask(cid, EV_RXCHAR));
+    host("#X43;");
+    pump(500);
+    obs("C10b rx3 peek", GetCommEventMask(cid, 0));
+    notes("C10b rx3");
+    evts("C10b clear");
+    WriteComm(cid, "y", 1);
+    pump(500);
+    obs("C10b write2 peek", GetCommEventMask(cid, 0));
+    notes("C10b write2");
+    host("#C2;");
+    pump(500);
+    obs("C10b cts peek", GetCommEventMask(cid, 0));
+    notes("C10b cts");
+    host("#C3;");
+    pump(500);
+    obs("C10b cts2 peek", GetCommEventMask(cid, 0));
+    notes("C10b cts2");
+    SetCommEventMask(cid, EV_CTS);
+    evts("C10b ctsmask");
+    host("#X44;");
+    pump(500);
+    obs("C10b masked rx peek", GetCommEventMask(cid, 0));
+    notes("C10b masked rx");
+    host("#C2;");
+    pump(500);
+    obs("C10b masked cts peek", GetCommEventMask(cid, 0));
+    notes("C10b masked cts");
+    host("#C3;");
+    pump(500);
+    EnableCommNotification(cid, 0, -1, -1);
+    SetCommEventMask(cid, 0x3FFF);
+    readall("C10b end");
+
     /* 11: the direct string calls */
     say("C11 strings");
     host("#M11;#P30,0;");

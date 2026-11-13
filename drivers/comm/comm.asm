@@ -212,6 +212,7 @@ struc P
 .notify         resb 1              ; NS_ notification state
 .evnew          resb 1              ; an event newly in the event word
 .fresh          resb 1              ; program: a fresh start (open)
+.evseen         resw 1              ; events already notified (CN_EVENT)
 .rxq            resd 1
 .rxsize         resw 1
 .rxcnt          resw 1
@@ -326,6 +327,7 @@ INICOM:
         xor ax, ax
         mov [si + P.err], ax
         mov [si + P.evt], ax
+        mov [si + P.evseen], ax
         mov [si + P.evtmask], ax
         mov [si + P.stat], al
         mov [si + P.txon], al
@@ -359,6 +361,7 @@ INICOM:
         xor ax, ax
         mov [si + P.err], ax
         mov [si + P.evt], ax
+        mov [si + P.evseen], ax
         mov [si + P.evtmask], ax
         mov [si + P.stat], al
         mov byte [si + P.isopen], 1
@@ -1313,18 +1316,33 @@ post:
         call far [postmsg]
         ret
 
-; event: CX = events -> those in the event mask into the event word;
-; a bit newly there is noted for CN_EVENT (CM1: the word holds only
-; events in the mask)
+; event: CX = events -> those in the event mask into the event word
+; (CM1: the word holds only events in the mask; a new mask leaves it as
+; it is). An event not seen since cevtGet last cleared it is noted for
+; CN_EVENT (CM1, part C10b: EV_TXEMPTY again after a write did not post,
+; again after GetCommEventMask cleared it did), but while CN_RECEIVE
+; notification is on EV_RXCHAR does not count, nor EV_TXEMPTY while
+; CN_TRANSMIT is (C10: with triggers 50 and 20 they did not post, with
+; -1 and -1 they did).
 event:
         push ax
         push bx
         mov ax, [si + P.evtmask]
         and ax, cx
         jz .r
-        mov bx, [si + P.evt]
+        mov bx, [si + P.evseen]
         not bx
         and bx, ax
+        or [si + P.evseen], ax
+        cmp word [si + P.hwnd], 0
+        je .n
+        cmp word [si + P.intrig], -1
+        je .t
+        and bx, ~EV_RXCHAR
+.t:     cmp word [si + P.outtrig], -1
+        je .n
+        and bx, ~EV_TXEMPTY
+.n:     test bx, bx
         jz .o
         mov byte [si + P.evnew], 1
 .o:     or [si + P.evt], ax
@@ -1425,11 +1443,15 @@ getrx:
         xor bx, bx
 .w:     mov [si + P.rxout], bx
         dec word [si + P.rxcnt]
-        ; a byte read takes EV_RXCHAR out of the event word, a byte
-        ; queued EV_TXEMPTY (CM1: with the event mask changed to EV_RXFLAG
-        ; after a read and before a write, the word had EV_RXFLAG alone;
-        ; UNVERIFIED which of the reads and writes did it)
+        ; a byte read while CN_RECEIVE notification is on takes EV_RXCHAR
+        ; out of the event word (CM1, C10 against C10b: with it on the
+        ; word was without it after the queue was read, with it off not)
+        cmp word [si + P.hwnd], 0
+        je .k
+        cmp word [si + P.intrig], -1
+        je .k
         and word [si + P.evt], ~EV_RXCHAR
+.k:
         push ax
         call rxtaken
         pop ax
@@ -1590,7 +1612,10 @@ putq:
         xor ax, ax
 .w:     mov [si + P.txin], ax
         inc word [si + P.txcnt]
-        and word [si + P.evt], ~EV_TXEMPTY  ; (CM1: see getrx)
+        ; a byte queued takes EV_TXEMPTY out of the event word (CM1, C10:
+        ; with the mask then EV_RXFLAG alone, a write left the word
+        ; without it)
+        and word [si + P.evt], ~EV_TXEMPTY
         mov ax, [si + P.txcnt]
         cmp ax, [si + P.outtrig]
         jb .k
@@ -2063,6 +2088,7 @@ CEVTGET:
         cli
         mov ax, [si + P.evt]
         and [si + P.evt], cx
+        and [si + P.evseen], cx
         sti
 .ret:   LEAVE 4
 
@@ -2146,6 +2172,8 @@ ENABLENOTIFICATION:
         mov [si + P.outtrig], ax
         mov byte [si + P.notify], 0
         mov byte [si + P.evnew], 0
+        mov ax, [si + P.evt]
+        mov [si + P.evseen], ax
         sti
         mov ax, 1
 .ret:   LEAVE 8

@@ -74,7 +74,9 @@ ReadCommString and EnableNotification 0.
 - **Validation**, in this order (CM1, fields wrong two at a time): baud
   rate (IE_BAUDRATE -12), parity 0-4 (IE_DEFAULT -5), byte size 5-8
   (IE_BYTESIZE -11), stop bits 0-2, 1 (1.5) only with 5-bit bytes
-  (IE_DEFAULT). setcom checks the same and changes nothing on an error.
+  (IE_DEFAULT). setcom checks the same and changes nothing on an error;
+  on a closed port that was open before it sets the UART up all the same,
+  interrupts included, as Windows 3.1's driver does.
   inicom on a port already open succeeds (USER's OpenComm is what returns
   IE_OPEN); CM1 does not do it, because with Windows 3.1's driver SETXON
   and trmcom did not return afterwards.
@@ -97,19 +99,25 @@ ReadCommString and EnableNotification 0.
 - **Modem control**: DTR and RTS on unless fDtrDisable/fRtsDisable; OUT2
   on. Interrupts: receive, line status, modem status (IER 0Dh); transmit
   while there is something to send.
-- **The DCB** is kept exactly as given (dummy bits too); getdcb returns
-  its address in the driver's data segment, also for a port not open.
+- **The DCB** is kept as given (dummy bits too), except that fParity is
+  cleared when Parity is 0; getdcb returns its address in the driver's
+  data segment, also for a port not open.
 - **Closing** (trmcom) waits for the queue to go and the transmitter to
-  empty (at 2 baud that takes Windows 3.1's driver 5.5 s too), then: IER
-  0, the FIFO off, OUT2 off, DTR and RTS left as they were. A queue that
-  does not move for 10 s gives -2 (UNVERIFIED: the time).
+  empty (at 2 baud that takes Windows 3.1's driver 5.5 s too); output held
+  by XOFF made Windows 3.1's CloseComm take 30 s, so a queue that does not
+  move for 30 s ends the wait (-2). Then: IER 0; MCR 0 and then DTR and
+  RTS as they were, OUT2 off (commhost sees the lines drop and come back,
+  as with Windows 3.1's driver); the FIFO as it was before the open.
 
 ### Data, flow control, errors
 
 - **Transmit**: one byte per transmit interrupt, FIFO or not (CM1: right
-  after a 300-byte write Windows 3.1's driver had 298 left). XON/XOFF go
-  first; ctx's byte next, then the queue; ctx's byte waits for an XOFF
-  hold like the queue (status 48h until released; a second ctx 4000h).
+  after a 300-byte write Windows 3.1's driver had 298 left), and only
+  into an empty holding register. XON/XOFF go first; ctx's byte next,
+  then the queue; ctx's byte waits for an XOFF hold like the queue
+  (status 48h until released; a second ctx 4000h). setcom leaves an
+  enabled FIFO alone (w16's first version reset it there and lost a byte
+  of the data in it).
 - **XON/XOFF out** (fOutX): XOFF received holds the output (status 08h),
   XON releases it; neither is stored. SETXOFF/SETXON (escapes 1, 2) do
   the same. **CTS/DSR out** (fOutxCtsFlow, fOutxDsrFlow): the output
@@ -141,7 +149,11 @@ ReadCommString and EnableNotification 0.
 
 ### Events and notification
 
-- The event word holds only events in the mask (cevt). EV_RXCHAR for
+- The event word holds only events in the mask; a new mask (cevt) leaves
+  what is in the word. A byte queued takes EV_TXEMPTY out of it, a byte
+  read takes EV_RXCHAR out while CN_RECEIVE notification is on (CM1,
+  C10 against C10b: the word after a mask change, a write and a read).
+  EV_RXCHAR for
   every byte stored; EV_RXFLAG for EvtChar (fChEvt or not); EV_TXEMPTY
   when the queue's last byte goes; EV_CTS, EV_DSR, EV_RLSD on a change,
   EV_RING with the ring line on, EV_RingTe on its trailing edge; EV_CTSS,
@@ -151,8 +163,11 @@ ReadCommString and EnableNotification 0.
 - **WM_COMMNOTIFY** (EnableNotification; wParam the id, lParam the
   code, one message per code; checked from a SYSTEM.DRV timer every 100
   ms, `CreateSystemTimer` as Windows 3.1's driver imports it):
-  CN_EVENT when an event newly enters the event word (nothing for the
-  events already there when notification was enabled); CN_TRANSMIT when
+  CN_EVENT when an event comes that was not seen since cevtGet last
+  cleared it (nothing for the events already in the word when
+  notification was enabled; EV_TXEMPTY again after a write does not
+  count), EV_RXCHAR not counting while CN_RECEIVE is on and EV_TXEMPTY
+  not while CN_TRANSMIT is; CN_TRANSMIT when
   the transmit queue, having reached the out trigger, falls below it
   (nothing on enabling with an empty queue); CN_RECEIVE when the receive
   queue reaches the in trigger (again only after it was below it), or
@@ -173,16 +188,25 @@ for every code except RESETDEV (INT 17h AH=1; AX the error bits).
 
 ### Parallel ports
 
-Output byte by byte through the BIOS (INT 17h AH=0); its status gives
-CE_PTO (time-out), CE_IOE (I/O error), CE_OOP (paper out), CE_DNS (not
-selected), EV_PERR and an error result (sndcom 8000h, ctx 4000h,
-CommWriteString the count printed). Nothing is queued. CM1 in DOSBox
-0.74 (an LPT1 address in the BIOS data area, no printer): Windows 3.1's
-driver gave CE_IOE | CE_DNS (0C00h) for a write, 4000h for
-TransmitCommChar, ReadComm 0, SetCommBreak and FlushComm the error word,
-as this one does. UNVERIFIED: whether Windows 3.1's driver uses the BIOS
-or the ports, and its behaviour with a working printer (DOSBox-X's
-`parallel1=file`, `tests/commprobe.sh -x`, below).
+Byte by byte through the port itself, nothing queued: the status port
+(base + 1) first, waiting while the printer is busy; error (bit 3 low)
+CE_IOE, not selected (bit 4 low) CE_DNS, paper out (bit 5) CE_OOP, still
+busy after 1 s (UNVERIFIED: the time) CE_PTO, each with EV_PERR and an
+error result (sndcom 8000h, ctx 4000h, CommWriteString the count
+printed); else the byte to the data port and a strobe pulse on the
+control port. RESETDEV pulses INIT and answers the status's error bits
+(also put in the error word). Windows 3.1's driver reads the port too: in
+DOSBox 0.74, whose LPT1 status port reads 87h and whose BIOS reports a
+time-out, it gave CE_IOE | CE_DNS (0C00h), which the BIOS does not give.
+Observed (CM1 part D): in DOSBox 0.74 a write CE_IOE | CE_DNS, WriteComm
+0, TransmitCommChar 4000h, RESETDEV 0C00h, SetCommBreak and FlushComm
+the error word, ReadComm 0, SetCommEventMask a null pointer, every
+escape but RESETDEV 0:0 (GETMAXLPT and GETMAXCOM too), LPT2 IE_HARDWARE,
+LPT4 IE_BADID; in DOSBox-X with `parallel1=file` (`tests/commprobe.sh
+-x -p 9`) the text arrives in the printer's file byte for byte, the same
+with both drivers. getdcb's pointer for a parallel port points at no DCB
+on Windows 3.1 (only its Id is compared). The parallel port's event word
+on Windows 3.1 (0087h after the errors) is not understood: not compared.
 
 ### Leaving Windows for a DOS program
 
@@ -233,10 +257,16 @@ with Windows 3.1's COMM.DRV and once with w16's, and compares the logs.
   closed port, ordinal 101.
 - Things Windows 3.1's driver did that CM1 avoids (and this driver does
   not copy): trmcom on a port not open did not return; after inicom on an
-  open port, SETXON and trmcom did not return; without cevt's event word
-  first, SETXON did not return (UNVERIFIED which of these was the
-  cause); inicom and setcom take 220 ms each (4 timer ticks: purpose
-  unknown; this driver does not wait).
+  open port, SETXON and trmcom did not return; escapes on a closed port
+  leave AX as it was (logged, not compared); bytes written during a
+  break stayed queued until the next write after cclrbrk, and in some
+  runs the second of three was lost (this driver sends them in order;
+  CM1 writes after the break); inicom and setcom take 220 ms each (4
+  timer ticks: purpose unknown; this driver does not wait).
+- Timing-dependent values are logged as "~" or avoided: the bytes the
+  queue takes while it is draining (CM1 holds the output with SETXOFF
+  for those counts), the emulator's line states in its first second
+  (commhost takes them as the start).
 
 ## Verified
 

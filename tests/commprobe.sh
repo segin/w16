@@ -14,7 +14,7 @@
 #   usage: tests/commprobe.sh [-o DIR] [-x] [-r NAME] [-d FILE] [-p N]
 #     -o DIR   keep everything in DIR (default build/commprobe-HHMMSS)
 #     -x       DOSBox-X (tests/dropin.sh -p 386) instead of DOSBox, with
-#              LPT1 written to DIR/NAME.lpt
+#              LPT1 a printer that writes to DIR/NAME.lpt (compared too)
 #     -r NAME  only that run (ms or w16); nothing compared
 #     -d FILE  the driver of the w16 run (default build/dos/COMM.DRV)
 #     -p N     only CM1's parts in the bit mask N (1 A, 2 B, 4 C, 8 D;
@@ -80,7 +80,12 @@ esac
 [ -z "$only" ] || { echo "commprobe: $only run in $out"; exit 0; }
 fails=0
 grep -q '^CM1 done' "$out/ms.log" || { echo "FAIL: the run with Windows 3.1's COMM.DRV did not finish ($out/ms.log)"; fails=1; }
-for k in log host host2; do
+kinds="log host host2"
+if [ -n "$usex" ]; then
+    kinds="$kinds lpt"
+    touch "$out/ms.lpt" "$out/w16.lpt"
+fi
+for k in $kinds; do
     a=$out/ms.$k b=$out/w16.$k
     [ $k = log ] && a=$out/ms.cmp b=$out/w16.cmp
     if cmp -s "$a" "$b"; then
