@@ -1273,6 +1273,13 @@ $(DOS)/US17.EXE: $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o tests/
 	$(WLINK) @tests/apps/us17.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us17.map file { $(B)/tests/start.o $(B)/tests/us17.o $(B)/tests/mevent.o }
 dos: $(DOS)/US17.EXE
+# US18: a maximised MDI child's controls in the frame's menu bar (tests/apps/us18.c)
+$(B)/tests/us18.o: tests/apps/us18ref.h tests/apps/tklog.h
+$(DOS)/US18.EXE: $(B)/tests/start.o $(B)/tests/us18.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us18.map file { $(B)/tests/start.o $(B)/tests/us18.o }
+dos: $(DOS)/US18.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
@@ -1557,6 +1564,21 @@ $(DOS)/CM1.EXE: $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o tests/apps
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/cm1.map file { $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o }
 dos: $(DOS)/CM1.EXE
+# COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
+# renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
+$(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \
+                    tests/apps/dll.lnk tests/apps/commrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/commrec.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/commrec.map file { $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o }
+dos: $(DOS)/COMMREC.DRV
+# CM2.EXE: USER's comm functions observed (tests/apps/cm2.c; tests/commusr.sh)
+$(B)/tests/cm2.o: tests/apps/cm2ref.h tests/apps/tklog.h
+$(DOS)/CM2.EXE: $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cm2.map file { $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o }
+dos: $(DOS)/CM2.EXE
 # ---- KEYBOARD.DRV: w16's keyboard driver (drivers/keyboard; README.md there)
 # KB1.EXE: every export called over all its inputs (tests/apps/kb1.c; run by
 # tests/kbprobe.sh with Windows 3.1's KEYBOARD.DRV and with w16's)

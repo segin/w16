@@ -1572,8 +1572,9 @@ linewait:
         call getms
         pop cx
         mov bp, sp
-        push ax                         ; the start: [bp - 2], [bp - 4]
+        push ax                         ; the last reading: [bp - 2], [bp - 4]
         push dx
+        push word 0                     ; ms waited: [bp - 6] (as drain counts)
 .wait:  test [si + P.msr], bl
         jnz .on
         cmp word [di], -1
@@ -1581,9 +1582,19 @@ linewait:
         push cx
         call getms
         pop cx
+        push ax
+        push dx
         sub ax, [bp - 2]
         sbb dx, [bp - 4]
-        jnz .late
+        pop word [bp - 4]
+        pop word [bp - 2]
+        jnz .w
+        cmp ax, 5000
+        ja .w
+        add [bp - 6], ax
+        jnc .w
+        mov word [bp - 6], 0FFFFh
+.w:     mov ax, [bp - 6]
         cmp ax, [di]
         jb .wait
 .late:  mov sp, bp
@@ -1846,8 +1857,11 @@ TRMCOM:
 ; 30 s; its result was 0 there, through USER).
 TX_TIMEOUT      equ 30000                ; (CM1: 30 s on Windows 3.1)
 drain:
+        push bp
+        mov bp, sp
+        push word 0                     ; [bp - 2]: ms the queue has not moved
         call getms
-        mov bx, ax
+        mov bx, ax                      ; CX:BX the last reading
         mov cx, dx
         mov di, [si + P.txcnt]
 .wait:  mov ax, [si + P.txcnt]
@@ -1856,32 +1870,43 @@ drain:
         cmp ax, di
         je .same
         mov di, ax
-        push cx
-        push bx
-        call getms
-        pop bx
-        pop cx
-        mov bx, ax
-        mov cx, dx
-        jmp .wait
+        mov word [bp - 2], 0            ; it moved
 .same:  push cx
         push bx
         call getms
         pop bx
         pop cx
+        ; the time is the sum of the steps between readings, a step back
+        ; or of more than 5 s not counted: once in a few runs of CM1 on a
+        ; busy host the close timed out after 2 s, not 30 (a reading of
+        ; GetSystemMsecCount out of step, maybe taken while the driver's
+        ; own system-timer procedure, which reads it at interrupt time,
+        ; was in it: UNVERIFIED); the loop reads it far more often than
+        ; every 5 s
+        push ax
+        push dx
         sub ax, bx
         sbb dx, cx
-        jnz .tout
-        cmp ax, TX_TIMEOUT
+        jnz .next
+        cmp ax, 5000
+        ja .next
+        add [bp - 2], ax
+        jnc .next
+        mov word [bp - 2], 0FFFFh
+.next:  pop cx                          ; the reading becomes the last
+        pop bx
+        cmp word [bp - 2], TX_TIMEOUT
         jb .wait
-.tout:  mov ax, -2
-        ret
+        mov ax, -2
+        jmp .end
 .shift: mov dx, [si + P.base]
         add dx, U_LSR
 .t:     in al, dx
         test al, LSR_TEMT
         jz .t
         xor ax, ax
+.end:   mov sp, bp
+        pop bp
         ret
 
 ; ---- 8: int stacom(cid, COMSTAT FAR *): the error word (cleared) ----
@@ -2218,7 +2243,9 @@ WEP:
         retf 2
 
 ; ---- 101: no name in Windows 3.1's driver ----
+; It takes nothing off the stack and leaves AX as it was (CM1: what it
+; "returned" was whatever the caller had in AX, the low word of a
+; GetTickCount there, different in every run)
 global COMMORD101
 COMMORD101:
-        xor ax, ax
         retf

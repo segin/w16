@@ -1,0 +1,59 @@
+; A maximised MDI child's controls in the frame's menu bar (tests/boottest.sh
+; case mdimax): Program Manager's Main group maximised from its system menu
+; (Alt+- X), its system menu opened from the bar with Alt+-, the File menu
+; and Left onto the group's system menu and on to Program Manager's own,
+; the group restored with a click on the bar's restore button, Accessories
+; chosen from the Window menu and maximised, the Window menu (its list of
+; groups), and Ctrl+F4. The shots wait for their state (match:
+; tests/inputrun.sh). The first click lets DOSBox take the mouse (as
+; helpmenus.txt)
+click 1
+sleep 1
+key alt+minus
+sleep 1
+key x
+match 01-max 20 1
+shot 01-max
+key alt+minus
+match 02-sysmenu 20 1
+shot 02-sysmenu
+key Escape
+key Escape
+sleep 1
+key alt+f
+sleep 1
+key Left
+match 03-left 20 1
+shot 03-left
+key Left
+match 04-framesys 20 1
+shot 04-framesys
+key Escape
+key Escape
+sleep 1
+; the restore button at the bar's right end (566,80 on the screen: the
+; pointer moves twice the distance it is given, in moves under 256)
+home
+move 140 20
+move 143 20
+click 1
+match 05-restored 20 1
+shot 05-restored
+key alt+w
+sleep 1
+key 1
+sleep 1
+key alt+minus
+sleep 1
+key x
+match 06-max2 20 1
+shot 06-max2
+key alt+w
+match 07-winmenu 20 1
+shot 07-winmenu
+key Escape
+key Escape
+sleep 1
+key ctrl+F4
+match 08-ctrlf4 20 1
+shot 08-ctrlf4

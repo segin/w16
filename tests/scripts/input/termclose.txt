@@ -1,0 +1,36 @@
+; Terminal closed in the middle of sending a file (tests/boottest.sh case
+; termclose): Terminal (WIN.INI run=) asks for its port (COM1, a nullmodem
+; port with tests/commhost.py at the far end), Transfers > Send Text File,
+; SEND.TXT chosen in the list (Tab, Down, Down, Enter), the transfer under
+; way, Alt+F4, Yes to stop it, N (a "save changes" box would take it; 3.1
+; asks nothing for an untitled, unchanged session and the key goes to
+; Program Manager): Terminal must be gone. Only the last screens are
+; compared (the earlier ones show list box and status-bar differences of
+; w16's USER not part of this case)
+click 1
+sleep 1
+settle 10 1
+key Down
+key Return
+sleep 2
+key alt+t
+sleep 1
+key s
+sleep 2
+key Tab
+sleep 0.5
+key Down
+sleep 0.5
+key Down
+sleep 0.5
+key Return
+sleep 3
+shot 01-sending
+key alt+F4
+sleep 2
+shot 02-stop
+key y
+sleep 2
+key n
+match 03-closed 20 2
+shot 03-closed

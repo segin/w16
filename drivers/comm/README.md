@@ -16,9 +16,10 @@ Applications never call the driver: USER's OpenComm, ReadComm, WriteComm,
 ... do (DDK "About the Communications Driver"). Windows 3.1's USER imports
 ordinals 1-15 and looks for 19, 20 and 100 at run time; WINOLDAP imports
 17 and 18; nothing imports 16 and 101 (`tools/neimports.py --importers
-COMM`). w16's own USER does not implement the comm functions yet (its
-stubs return 0): everything here was measured and is tested with
-Microsoft's USER.
+COMM`). Everything here was measured and is tested with Microsoft's
+USER; w16's USER (`user/comm.c`) uses the driver the same way, call for
+call (probe CM2 and the COMMREC recorder, `tests/commusr.sh`; boot-test
+cases `commuser`, `commall`, `termclose`).
 
 ## Interface
 
@@ -51,7 +52,7 @@ called through a thunk that compares SP before and after).
 | 19 | `CommWriteString(cid, LPSTR, n)` | 8 | bytes queued; their count |
 | 20 | `ReadCommString(cid, LPSTR, n)` | 8 | bytes read; their count |
 | 100 | `EnableNotification(cid, hwnd, in, out)` | 8 | WM_COMMNOTIFY; TRUE |
-| 101 | (no name, not flagged exported) | 0 | returns 0 |
+| 101 | (no name, not flagged exported) | 0 | nothing: AX as it was |
 
 A port id is 0-3 (COM1-COM4) or 80h-82h (LPT1-LPT3): Windows 3.1's driver
 takes no others (inicom IE_BADID; GETMAXCOM 3, GETMAXLPT 82h), so neither
@@ -269,6 +270,28 @@ with Windows 3.1's COMM.DRV and once with w16's, and compares the logs.
   queue takes while it is draining (CM1 holds the output with SETXOFF
   for those counts), the emulator's line states in its first second
   (commhost takes them as the start).
+
+### Timing in CM1's comparison
+
+- How much of a write is still queued a moment after it depends on how
+  fast the emulated machine runs against the line: CM1 logs that count
+  as "~" (Windows 3.1's driver left 298 or 297 of 300; so does w16's).
+- Windows 3.1's driver sometimes loses the second byte of a write that
+  starts the transmitter again: its first byte goes alone, then a pause,
+  then the rest without the second (commhost's "#W150;" arrives as
+  "#150;"), in most runs on a busy host, after the break test and once
+  after XON. w16's driver loses nothing. `tests/commprobe.sh` and
+  `tests/commusr.sh` compare commhost's record with that byte put back.
+- The close's 30-second time-out (trmcom, and the CtsTimeout/DsrTimeout
+  waits) is the sum of the steps between readings of GetSystemMsecCount,
+  a step back or of more than 5 seconds not counted: once in a few runs
+  on a busy host the close ended after 2 seconds with -2, a reading out
+  of step (UNVERIFIED cause: CM2 saw SYSTEM.DRV's count go neither back
+  nor jump in 3 runs of 20 s and one across 65536 ms, without the
+  driver's system-timer procedure reading it at the same time).
+- Seen once: commhost on COM2, which part C does not use, recorded a
+  lone byte FFh from Windows 3.1's driver's run (not understood; COM2's
+  far end now keeps a timed record too, `NAME.hosttime2`).
 
 ## Verified
 
