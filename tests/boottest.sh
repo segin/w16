@@ -192,6 +192,20 @@
 #   kbdwoados  the woados script with w16's KEYBOARD.DRV on Microsoft's
 #              stack (Disable and Enable around the DOS program): the
 #              screens as all-Microsoft's up to the cursor
+#   sysdrv     w16's SYSTEM.DRV (drivers/system) on Microsoft's stack under
+#              real input: kbtype, tabs, alttab, helpmenus, dragoff,
+#              pmkeys, every screen against Microsoft's SYSTEM.DRV: 0
+#   sysdrvall  every w16 part with w16's SYSTEM.DRV against the same with
+#              Microsoft's, kbtype and tabs        must be 0
+#   sysdrvwoados  the woados script with w16's SYSTEM.DRV (system timers
+#              off and on around the DOS program), as kbdwoados
+#   sysboot    plain boots with w16's SYSTEM.DRV: on Microsoft's stack, on
+#              w16's WIN.COM, DOSX, KRNL286, and on an emulated 80286,
+#              each against the all-Microsoft boot  must be 0
+#   sysclock   Clock's scenarios (tests/clockscenarios.sh) with w16's
+#              SYSTEM.DRV under both Clocks: within their baseline
+#   sysprobe   tests/sysprobe.sh: SY1's and SYREC's logs, w16's
+#              SYSTEM.DRV against Microsoft's      identical
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -311,7 +325,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1620,6 +1634,130 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         done
         if [ "$r" = ok ]; then echo "ok   kbdwoados: the MS-DOS Prompt and back with w16's KEYBOARD.DRV"
         else echo "FAIL kbdwoados: $r ($out/kbdwoados-w16)"; fails=$((fails + 1)); fi ;;
+    sysdrv)
+        # w16's SYSTEM.DRV (drivers/system) on Microsoft's KRNL286, DOSX,
+        # USER and GDI under real input: the timer-driven scripts (kbtype:
+        # typematic repeats and the caret; tabs, alttab: the caret's blink
+        # in dialogs; helpmenus; dragoff: the mouse; pmkeys), every screen
+        # against the same script with Microsoft's SYSTEM.DRV (helpmenus:
+        # Notepad's caret left out, as in the mouse and kbd cases)
+        sdrv=$root/build/dos/SYSTEM.DRV
+        r=ok
+        for s in kbtype tabs alttab helpmenus dragoff pmkeys; do
+            scr=$root/tests/scripts/input/$s.txt
+            case $s in
+            helpmenus) m="rectangle 14,42 20,61" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            b=25 t=220
+            [ $s = pmkeys ] && b=40
+            refrun sysdrv-$s-ref sysdrv "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/sysdrv-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/sysdrv-$s-ref/boot.png" -E "$out/sysdrv-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/sysdrv-$s-w16" -r \
+                -f "$sdrv=WINDOWS/SYSTEM/SYSTEM.DRV" > "$out/sysdrv-$s-w16.txt" 2>&1 || true
+            ls "$out/sysdrv-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/sysdrv-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/sysdrv-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                magick "$f" -fill black -draw "$m" "$out/sysdrv-a.png"
+                magick "$out/sysdrv-$s-w16/$g" -fill black -draw "$m" "$out/sysdrv-b.png"
+                n=$(magick compare -metric AE "$out/sysdrv-b.png" "$out/sysdrv-a.png" "$out/sysdrv-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   sysdrv: 0 pixels (kbtype, tabs, alttab, helpmenus, dragoff, pmkeys with w16's SYSTEM.DRV)"
+        else echo "FAIL sysdrv: $r ($out)"; fails=$((fails + 1)); fi ;;
+    sysdrvall)
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+        # fonts) with w16's SYSTEM.DRV against the same with Microsoft's
+        # SYSTEM.DRV, the kbtype and tabs scripts (both sides are w16's
+        # but for SYSTEM.DRV: not cached)
+        fon=$root/build/fonts
+        r=ok
+        for s in kbtype tabs; do
+            scr=$root/tests/scripts/input/$s.txt
+            for k in ref w16; do
+                if [ $k = w16 ]; then set -- -e "$out/sysdrvall-$s-ref/boot.png" -E "$out/sysdrvall-$s-ref" -b 30 -t 240 "$scr" "$out/sysdrvall-$s-$k" \
+                    -f "$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV"
+                else set -- -s -b 30 -t 240 "$scr" "$out/sysdrvall-$s-$k"; fi
+                "$root/tests/inputrun.sh" "$@" \
+                    -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                    -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                    -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                    -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                    > "$out/sysdrvall-$s-$k.txt" 2>&1 || true
+            done
+            ls "$out/sysdrvall-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/sysdrvall-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/sysdrvall-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                n=$(magick compare -metric AE "$out/sysdrvall-$s-w16/$g" "$f" "$out/sysdrvall-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   sysdrvall: 0 pixels (every w16 part, w16's SYSTEM.DRV against Microsoft's)"
+        else echo "FAIL sysdrvall: $r ($out)"; fails=$((fails + 1)); fi ;;
+    sysdrvwoados)
+        # the MS-DOS Prompt (woados: WINOLDAP's DisableOEMLayer takes the
+        # system timers off, EnableOEMLayer puts them back) with w16's
+        # SYSTEM.DRV on Microsoft's stack against all-Microsoft, as kbdwoados
+        scr=$root/tests/scripts/input/woados.txt
+        set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        refrun sysdrvwoados-ref sysdrvwoados env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/sysdrvwoados-ref" -r "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/sysdrvwoados-w16" -r "$@" \
+            -f "$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV" > "$out/sysdrvwoados-w16.txt" 2>&1 || true
+        a=$out/sysdrvwoados-w16 b=$out/sysdrvwoados-ref r=ok
+        for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
+            f=${s%%:*} want=${s#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            if [ $f = 03-back ]; then
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/sysdrvwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            else
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/sysdrvwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            fi
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   sysdrvwoados: the MS-DOS Prompt and back with w16's SYSTEM.DRV"
+        else echo "FAIL sysdrvwoados: $r ($out/sysdrvwoados-w16)"; fails=$((fails + 1)); fi ;;
+    sysboot) # w16's SYSTEM.DRV in plain boots: on Microsoft's stack, on
+            # w16's WIN.COM, DOSX and KRNL286, and on an emulated 80286
+            # (DOSBox-X: KRNL286, no coprocessor path), each against the
+            # all-Microsoft boot there        must be 0
+            ref
+            boot sysms -r -f "$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV"; check sysms sysms ref
+            boot sysallw16 -w -x -f "$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV"; check sysallw16 sysallw16 ref
+            _s=$secs; secs=180
+            refrun ref286 k286 boot -r -p 286; expect=$out/ref286.png
+            boot sys286 -r -p 286 -f "$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV"; check sys286 sys286 ref286
+            expect= secs=$_s ;;
+    sysclock)
+        # Clock's scenarios (tests/clockscenarios.sh: its second hand, the
+        # minute and day changing, SetTimer through USER on SYSTEM.DRV's
+        # timer) with w16's SYSTEM.DRV under both Clocks: within the
+        # scenarios' baseline, as with Microsoft's driver
+        if CK_FILES="$root/build/dos/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV" CK_JOBS=2 \
+                "$root/tests/clockscenarios.sh" -o "$out/sysclock" > "$out/sysclock.txt" 2>&1; then
+            echo "ok   sysclock: Clock's scenarios with w16's SYSTEM.DRV"
+        else
+            echo "FAIL sysclock: $(grep -m1 -E '^  ' "$out/sysclock.txt" || echo 'see sysclock.txt') ($out/sysclock.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    sysprobe)
+        # tests/sysprobe.sh: SY1 (every export, timers, the msec count,
+        # Disable/Enable) and SYREC's boot record, w16's SYSTEM.DRV against
+        # Microsoft's (not cached: both runs each time)
+        if "$root/tests/sysprobe.sh" -o "$out/sysprobe" > "$out/sysprobe.txt" 2>&1; then
+            echo "ok   sysprobe: SY1's logs and the boot's calls the same with w16's SYSTEM.DRV"
+        else
+            echo "FAIL sysprobe: $(grep -m1 -E '^FAIL' "$out/sysprobe.txt" || echo 'see sysprobe.txt') ($out/sysprobe.txt)"
+            fails=$((fails + 1))
+        fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }
