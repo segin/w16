@@ -8,6 +8,9 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
+#   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
+#              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
+#              there                                must be 0
 #   wincom     w16's WIN.COM + KRNL286             must be 0
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
@@ -237,7 +240,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados}
+cases=${*:-kernel dosx k286 wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -511,6 +514,14 @@ runcase() {
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
+    k286)   # an emulated 80286 (DOSBox-X cputype=286): w16's KRNL286 on
+            # Microsoft's DOSX and on w16's, against Microsoft's KRNL286
+            # there (mode switches back to real mode by processor reset)
+            _s=$secs; secs=180
+            refrun ref286 k286 boot -r -p 286; expect=$out/ref286.png
+            boot k286 -p 286; check k286 k286 ref286
+            boot k286x -x -p 286; check k286x k286x ref286
+            expect= secs=$_s ;;
     wincom) ref; boot wincom -w; check wincom wincom ref ;;
     allw16) ref; boot allw16 -w -x; check allw16 allw16 ref ;;
     user)   ref; boot user -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
