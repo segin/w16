@@ -158,10 +158,12 @@ WORD EXPORT DeviceBitmapBits(LPVOID lpBitmap, WORD get, WORD start, WORD scans, 
     {
         RGBQUAD __far *t = (RGBQUAD __far *)((BYTE __far *)bi + (WORD)bi->biSize);
         int nt = bi->biBitCount == 24 ? 0 : 1 << bi->biBitCount;
+        /* a monochrome bitmap: black first, white last, the rest 0
+           (VG7: 3.1's driver for 4- and 8-bit DIBs) */
         for (i = 0; i < nt; i++) {
             COLORREF c = 0;
-            if (bi->biBitCount == 1)
-                c = i ? RGB(255, 255, 255) : 0;
+            if (bi->biBitCount == 1 || S.planes == 1)
+                c = i == nt - 1 ? RGB(255, 255, 255) : 0;
             else if (i < 16)
                 c = index_rgb(dib_to_index[i]);
             t[i].rgbRed = GetRValue(c);
@@ -180,8 +182,14 @@ WORD EXPORT DeviceBitmapBits(LPVOID lpBitmap, WORD get, WORD start, WORD scans, 
             get_indices(&S, y, k, n);
             for (i = 0; i < n; i++) {
                 int px = k + i, v = ibuf[i];
-                if (S.planes == 1)
+                if (S.planes == 1) {
+                    /* white is the table's last entry */
                     v = v ? 15 : 0;
+                    if (bi->biBitCount == 8) {
+                        row[px] = (BYTE)(v ? 0xFF : 0);
+                        continue;
+                    }
+                }
                 switch (bi->biBitCount) {
                 case 1:
                     if (rgb_mono(index_rgb(v)))

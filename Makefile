@@ -1090,6 +1090,14 @@ $(DOS)/VG6.EXE: $(B)/tests/start.o $(B)/tests/vg6.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vg6.map file { $(B)/tests/start.o $(B)/tests/vg6.o }
 vgaprobes: $(DOS)/VG6.EXE
+# VG7.EXE: raster operations, conversions, DIBs, hatches (tests/apps/vg7.c)
+$(B)/tests/vg7.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG7.EXE: $(B)/tests/start.o $(B)/tests/vg7.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg7.map file { $(B)/tests/start.o $(B)/tests/vg7.o }
+vgaprobes: $(DOS)/VG7.EXE
+dos: $(DOS)/VG7.EXE
 # the VGA probes are built with the rest (the boot test runs them)
 dos: $(DOS)/VGREC.DRV $(DOS)/VG1.EXE $(DOS)/VG3.EXE $(DOS)/VG4.EXE $(DOS)/VG5.EXE $(DOS)/VG6.EXE
 # GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
