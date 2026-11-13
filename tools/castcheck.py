@@ -12,13 +12,16 @@ MDI's window list); the symptom moved with the layout of USER's heap.
 Flagged: a cast to a pointer type that is not __near/NEAR (an explicit
 "*", or a far pointer typedef such as LPSTR/LPVOID) applied directly to
 LocalAlloc, LocalReAlloc, LocalHandle, USER's lh_alloc/lh_realloc (the
-same in another segment's heap: user/uentry.asm, the menu heaps), USER's
-uh_alloc/uh_realloc/uh_strdup/uh_strdup_in (user/uheap.c, its other heaps), or to an
-expression cast to HLOCAL/HANDLE first. A handle in a heap other than
-DGROUP becomes a pointer with that heap's selector, MK_FP(sel, h)
-(USER's own heaps: UH_PTR(heap, h)). (LocalLock returns a near pointer: widening that is
-right; a handle of one of USER's other heaps is no near pointer either.) A
-line can be exempted with a comment containing "castcheck: ok".
+same in another segment's heap: user/uentry.asm, the menu heaps; gdi/entry.asm,
+GDI's own heaps), USER's uh_alloc/uh_realloc/uh_strdup/uh_strdup_in
+(user/uheap.c, its other heaps), GDI's xalloc/xrealloc (an XP, heap number
+and offset: gdi/heap.c; xptr() makes its pointer), or to an expression cast
+to HLOCAL/HANDLE/XP first. A handle in a heap other than DGROUP becomes a
+pointer with that heap's selector, MK_FP(sel, h) (USER's own heaps:
+UH_PTR(heap, h); GDI's: xptr(x)). (LocalLock returns a near pointer:
+widening that is right; a handle of one of USER's other heaps is no near
+pointer either.) A line can be exempted with a comment containing
+"castcheck: ok".
 
 usage: castcheck.py FILE...    exit status 1 when anything is flagged
 """
@@ -27,7 +30,7 @@ import sys
 
 FAR_TYPEDEFS = r'(?:LP[A-Z]+|FARPROC|PWORD)'
 CAST = r'\(\s*((?:const\s+)?[A-Za-z_][\w\s]*?(?:\*\s*)+|' + FAR_TYPEDEFS + r')\s*\)'
-SRC = r'\s*\(?\s*(?:Local(?:Re)?Alloc|LocalHandle|lh_(?:re)?alloc|uh_(?:re)?alloc|uh_strdup(?:_in)?|\(\s*(?:HLOCAL|HANDLE|UINT|WORD)\s*\))'
+SRC = r'\s*\(?\s*(?:Local(?:Re)?Alloc|LocalHandle|lh_(?:re)?alloc|uh_(?:re)?alloc|uh_strdup(?:_in)?|x(?:re)?alloc\b|\(\s*(?:HLOCAL|HANDLE|UINT|WORD|XP)\s*\))'
 PAT = re.compile(CAST + SRC)
 
 def check(path):
