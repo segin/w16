@@ -20,6 +20,15 @@ touch must be far data in a fixed segment (ARCHITECTURE.md 10.3):
 
 usage: irqcheck.py USER.EXE MAPFILE OBJ...   exit status 1 when anything is
 flagged
+
+The drivers in assembly (drivers/: SYSTEM.DRV's INT 8 handler and the
+timer procedures it calls, KEYBOARD's INT 9, MOUSE's IRQ 12, COMM's
+UARTs) load their own data selector at interrupt time and keep
+everything they touch there in their own segments, so for them the rule
+is that every segment of the file is fixed (neither moveable nor
+discardable) in its NE segment table:
+
+usage: irqcheck.py --fixed DRIVER...
 """
 import re
 import struct
@@ -135,7 +144,23 @@ def check_code(objs):
     return bad, sorted(seen)
 
 
+def check_fixed(files):
+    """every segment of each file fixed and not discardable"""
+    bad = 0
+    for f in files:
+        for i, (_, _, flags, _) in enumerate(ne_segments(f)):
+            if flags & 0x1010:
+                print('irqcheck: %s: segment %d is %s (flags %04Xh)' %
+                      (f, i + 1, 'moveable' if flags & 0x10 else 'discardable', flags))
+                bad += 1
+    if not bad:
+        print('irqcheck: every segment fixed in %s' % ', '.join(os.path.basename(f) for f in files))
+    return 1 if bad else 0
+
+
 def main(args):
+    if args and args[0] == '--fixed':
+        return check_fixed(args[1:])
     exe, mapfile, objs = args[0], args[1], args[2:]
     bad = check_segments(exe, mapfile)
     b, seen = check_code(objs)
