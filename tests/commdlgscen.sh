@@ -45,7 +45,10 @@ for n in $names; do
         work=$(mktemp -d)
         cp -r "$ref" "$work/c"
         files="$d/SNAP.TXT $d/CD1.TXT ${CD_PROBE:-$root/build/dos/CD1.EXE}"
-        grep -q '^nocd1' "$src" || echo 'run C:\CD1.EXE' | sed 's/$/\r/' > "$d/SNAP.TXT"
+        # carets keep the phase they start in (both runs alike: a screenshot
+        # must not depend on when it is taken within a blink)
+        echo 'blinktime 65535' | sed 's/$/\r/' > "$d/SNAP.TXT"
+        grep -q '^nocd1' "$src" || echo 'run C:\CD1.EXE' | sed 's/$/\r/' >> "$d/SNAP.TXT"
         grep -v '^cd1 \|^file \|^ini \|^expand \|^ignore \|^nocd1\|^nohwnd' "$src" | sed 's/$/\r/' >> "$d/SNAP.TXT"
         grep '^cd1 ' "$src" | sed 's/^cd1 //; s/$/\r/' > "$d/CD1.TXT"
         grep '^file ' "$src" | sed 's/^file //' | while read -r f; do
