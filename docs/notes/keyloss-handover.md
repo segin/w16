@@ -161,6 +161,36 @@ for every bit set, waiting or not (Program Manager had 60 piled up);
 Pietrek's SetWakeBit2 posts only for a bit in the wake mask and clears
 the mask. A candidate fidelity change; needs a full boot test.
 
-Task 3 (input case): DONE, e38cbfa: a harness race, not w16 (see the
-commit: DOSBox's autolock capture click came before MOUSE.DRV's set-up on
-w16's boot; MS1 showed the click passed on as press+release).
+Task 3 (input case): e38cbfa (the right click after the boot) made it
+pass 3 of 3 alone, but it failed again in the full parallel boot test
+(/tmp/kl/bt-full1: pointer still in the middle, the right click was in
+input.log). So the capture race is not the whole story, or the right
+click itself did not capture under load. NOT DONE. Facts so far: the
+event procedure is never called (instrumented USER); MS1: after C200h no
+INT 74h at all, slave PIC IMR EC, ISR/IRR 0, IVT 74h = DOSX's (TK49 NOW
+line, tests/apps/tk49.c change in kl-exp only); DOSBox 0.74-3 passes
+motion only when it holds the mouse (autolock) - see e38cbfa's message
+for the source facts. Next: log DOSBox-side capture (e.g. check whether
+SDL grabbed: xdotool getmouselocation before/after the click) and run
+the w16 side with INPUTRUN_NOLOCK=1 to separate DOSBox capture from w16.
+
+Task 4 (FPU flake), not started beyond reading: the coordinator saw on
+master b1e409d TK6 (87 run) lose exception bits from the status word
+(87.div0.sw 0004, 87.inv.sw 0001, 87.inv.masked.sw 0841,
+87.div0.masked.sw 0844 on 3.1). w16's WIN87EM IRQ 13 handler
+(win87em/win87em.asm irq13_handler) does FNCLEX whatever it finds, even
+with no unmasked exception pending: an IRQ 13 that DOSBox-X delivers
+late (after the probe's next FP instruction) would clear the bits the
+probe's FSTSW then reads. Next: count IRQ 13 handler calls per probe step
+(TK6/TK8 already record "h" = handler calls) in a failing run, and probe
+what Microsoft's WIN87EM does with an IRQ 13 when no unmasked exception
+is pending (black box).
+
+From the coordinator (master a5deb40, merged 047f871; local.c conflict
+resolved to keyloss's grow(), which already caps at SEG_MAX = FFF0h):
+- ToolHelp's GlobalEntry on w16's KERNEL: no block shows a local heap
+  (wHeapPresent / the local-heap flag never set): US14's heap checks
+  fail there. To do.
+- boot-test icons fails under load on master too (2 of 3, at Alt+F, R
+  right after Notepad is minimised): an existing USER activation race,
+  noted only.
