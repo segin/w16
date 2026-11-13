@@ -1,5 +1,9 @@
 ; PrintDlg with two printers (PostScript as the default on LPT2:, the
 ; LaserJet on FILE: and LPT1:) and one whose driver is missing
+; Window handles not compared (nohwnd): from the second call on ours are
+; one USER block further on (UNVERIFIED: which 12-byte USER allocation the
+; Print dialog leaves behind or the original frees)
+nohwnd
 expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
 expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
 expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL

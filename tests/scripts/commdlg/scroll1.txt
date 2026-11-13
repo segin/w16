@@ -1,4 +1,4 @@
-; observation: where the file list scrolls when OK finds no such file
+; where the file list scrolls when OK finds no such file
 cd1 open filter=All|*.* flags=1000
 cd1 open filter=All|*.* flags=1000
 cd1 open filter=All|*.* flags=1000

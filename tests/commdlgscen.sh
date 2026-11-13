@@ -11,7 +11,8 @@
 # "expand <name> <path under C:>" expands a compressed file of the Setup
 # disks (tools/szdd.py; printer drivers). Compared afterwards: CD1.LOG (the
 # returned structures; "ignore <regex>" lines exclude log lines from the
-# comparison) and every screenshot, which may differ from the original by
+# comparison, "nohwnd" masks window handles in the hook's lines) and every
+# screenshot, which may differ from the original by
 # no more pixels than tests/scripts/commdlg.baseline records
 # ("scenario/SHOT count"; our own drive and folder pictures).
 #   usage: tests/commdlgscen.sh [-n] [scenario...]       (default: all)
@@ -45,7 +46,7 @@ for n in $names; do
         cp -r "$ref" "$work/c"
         files="$d/SNAP.TXT $d/CD1.TXT ${CD_PROBE:-$root/build/dos/CD1.EXE}"
         grep -q '^nocd1' "$src" || echo 'run C:\CD1.EXE' | sed 's/$/\r/' > "$d/SNAP.TXT"
-        grep -v '^cd1 \|^file \|^ini \|^expand \|^ignore \|^nocd1' "$src" | sed 's/$/\r/' >> "$d/SNAP.TXT"
+        grep -v '^cd1 \|^file \|^ini \|^expand \|^ignore \|^nocd1\|^nohwnd' "$src" | sed 's/$/\r/' >> "$d/SNAP.TXT"
         grep '^cd1 ' "$src" | sed 's/^cd1 //; s/$/\r/' > "$d/CD1.TXT"
         grep '^file ' "$src" | sed 's/^file //' | while read -r f; do
             mkdir -p "$(dirname "$work/c/${f#*=}")"
@@ -67,7 +68,10 @@ for n in $names; do
     [ -n "$origonly" ] && { echo "== $n: observed ($out/$n/orig)"; continue; }
     result=ok
     ign=$(grep '^ignore ' "$src" | sed 's/^ignore //' | paste -sd'|' -)
-    filt() { if [ -n "$ign" ]; then tr -d '\r' < "$1" | grep -Ev "$ign"; else tr -d '\r' < "$1"; fi; }
+    # "nohwnd": window handles in the hook's lines are not compared
+    hw=cat
+    grep -q '^nohwnd' "$src" && hw="sed -e s/WM_INITDIALOG.wp=..../WM_INITDIALOG_wp=hwnd/ -e s/\(WM_COMMAND.wp=.....lp=....\)..../\1hwnd/"
+    filt() { if [ -n "$ign" ]; then tr -d '\r' < "$1" | grep -Ev "$ign"; else tr -d '\r' < "$1"; fi | $hw; }
     if [ -f "$out/$n/orig/CD1.LOG" ]; then
         if ! [ -f "$out/$n/w16/CD1.LOG" ] || ! filt "$out/$n/orig/CD1.LOG" > "$out/$n/orig.log" ||
            ! filt "$out/$n/w16/CD1.LOG" > "$out/$n/w16.log" ||

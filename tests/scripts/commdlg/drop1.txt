@@ -1,5 +1,4 @@
-; observation: the internal Flags bits 10000000h / 20000000h (the combo
-; boxes dropped down?) and the notifications around a drop-down, by mouse
+; the combo boxes dropped down: notifications and the Flags bits 10000000h / 20000000h
 ; a: types dropped (click), click its current item, Cancel
 cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
 ; b: drives dropped, Escape, Cancel

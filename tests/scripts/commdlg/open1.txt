@@ -11,3 +11,14 @@ dump
 type win.ini
 key 0D
 wait 1000
+cd1 open filter=All|*.* file=C:\WINDOWS\SYSTEM\README.TXT ftitle=40
+cd1 open filter=All|*.* file=*.INI
+wait 1500
+snap C:\O3.BMP
+dump
+key 1B
+wait 1500
+snap C:\O4.BMP
+dump
+key 1B
+wait 1000

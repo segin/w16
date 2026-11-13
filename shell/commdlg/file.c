@@ -152,6 +152,18 @@ static LPCSTR cur_pattern(fstate FAR *st)
     return st->pats[i];
 }
 
+/* the name box shows the current pattern in lower case (observed:
+   Paintbrush's "*.BMP;*.DIB" appears as "*.bmp;*.dib") */
+static void pattern_text(fstate FAR *st)
+{
+    LPSTR p = s_dup(cur_pattern(st));
+    if (!p)
+        return;
+    s_lower(p);
+    SetDlgItemText(st->dlg, edt1, p);
+    mem_free(p);
+}
+
 /* the files of the current folder matching "a;b;c" */
 static void fill_files(fstate FAR *st, LPCSTR patterns)
 {
@@ -430,29 +442,17 @@ static void init_dialog(fstate FAR *st)
     SendMessage(dlg, WM_COMMAND, cmb1, MAKELONG(GetDlgItem(dlg, cmb1), CBN_INIT));
     pat = cur_pattern(st);
     if (o->lpstrFile && o->lpstrFile[0]) {
-        /* a path given: go there, keep the name */
-        LPSTR f = s_dup(o->lpstrFile), n;
-        if (f) {
-            n = name_part(f);
-            if (n != f) {
-                char c = *n;
-                *n = 0;
-                if (f[1] == ':')
-                    dos_setdrive((f[0] | 0x20) - 'a');
-                if (n > f + 1 && !(n == f + 2 && f[1] == ':')) {
-                    if (n[-1] == '\\' && n - 1 > f && n[-2] != ':')
-                        n[-1] = 0;
-                    dos_chdir(f);
-                }
-                *n = c;
-            }
-            SetDlgItemText(dlg, edt1, n);
-            if (is_wild(n))
-                pat = NULL, fill_files(st, n);
-            mem_free(f);
-        }
+        /* the text as given, in lower case, in the name box: a path is
+           not gone to (observed: "C:\WINDOWS\SYSTEM\README.TXT" shows
+           whole, the folder stays). The caller's buffer itself comes back
+           in lower case, even after Cancel. A pattern without a folder
+           lists those files (UNVERIFIED: a pattern with one). */
+        AnsiLower(o->lpstrFile);
+        SetDlgItemText(dlg, edt1, o->lpstrFile);
+        if (is_wild(o->lpstrFile) && name_part(o->lpstrFile) == o->lpstrFile)
+            fill_files(st, o->lpstrFile);
     } else {
-        SetDlgItemText(dlg, edt1, pat);
+        pattern_text(st);
     }
     fill_dirs(st);
     fill_drives(st);
@@ -681,7 +681,7 @@ static BOOL take_name(fstate FAR *st)
     if (typed[1] == ':' && !typed[2]) {
         if (change_drive(st, (typed[0] | 0x20) - 'a')) {
             refresh(st, NULL);
-            SetDlgItemText(dlg, edt1, cur_pattern(st));
+            pattern_text(st);
             drives_refresh(st);
         }
         SendDlgItemMessage(dlg, edt1, EM_SETSEL, 0, MAKELPARAM(0, -1));
@@ -725,7 +725,7 @@ static BOOL take_name(fstate FAR *st)
             change_drive(st, (typed[0] | 0x20) - 'a');
         dos_chdir(typed);
         refresh(st, NULL);
-        SetDlgItemText(dlg, edt1, cur_pattern(st));
+        pattern_text(st);
         drives_refresh(st);
         SendDlgItemMessage(dlg, edt1, EM_SETSEL, 0, MAKELPARAM(0, -1));
         return FALSE;
@@ -933,7 +933,7 @@ static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
             case CBN_INIT:                  /* the type chosen: list it */
                 i = (int)SendDlgItemMessage(dlg, cmb1, CB_GETCURSEL, 0, 0);
                 st->ofn->nFilterIndex = st->has_custom ? i : i + 1;
-                SetDlgItemText(dlg, edt1, cur_pattern(st));
+                pattern_text(st);
                 fill_files(st, cur_pattern(st));
                 notify_sel(st, cmb1, i, CD_LBSELCHANGE);
                 break;
