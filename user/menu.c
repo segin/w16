@@ -924,6 +924,11 @@ typedef struct MLOOP {
     UINT   result;              /* command chosen, 0 none */
     BOOL   resultsys;
     BOOL   done;
+    BOOL   quiet;               /* USER's own menu (the scroll-bar menu):
+                                   nothing is sent or posted to the owner,
+                                   the command is returned (menu_track_quiet) */
+    BOOL   rbutton;             /* TPM_RIGHTBUTTON: the right button
+                                   chooses and closes as the left one does */
 } MLOOP;
 
 void sysbox_rect(PWND w, RECT *r);
@@ -980,8 +985,9 @@ static void select_popup_item(MLOOP *l, int sel)
         LPMITEM it = item_at(m, sel);
         it->flags |= MF_HILITE;
         draw_popup_item(hdc, m, it, TRUE);
-        send_message(l->owner, WM_MENUSELECT, (it->flags & MF_POPUP) ? (UINT)it->id : it->id,
-                     MAKELONG(it->flags, l->popup));
+        if (!l->quiet)
+            send_message(l->owner, WM_MENUSELECT, (it->flags & MF_POPUP) ? (UINT)it->id : it->id,
+                         MAKELONG(it->flags, l->popup));
     }
     SelectObject(hdc, old);
     ReleaseDC(l->hwndPopup, hdc);
@@ -992,7 +998,8 @@ static void open_popup(MLOOP *l, HMENU popup, int x, int y)
     LPMENU m;
     if (!valid_menu(popup))
         return;
-    send_message(l->owner, WM_INITMENUPOPUP, (WPARAM)popup, MAKELONG(l->barsel, l->sysmenu));
+    if (!l->quiet)
+        send_message(l->owner, WM_INITMENUPOPUP, (WPARAM)popup, MAKELONG(l->barsel, l->sysmenu));
     if ((m = valid_menu(popup)) == 0)  /* (again: the owner may have changed it) */
         return;
     layout_popup(m);
@@ -1184,6 +1191,17 @@ static void run_menu(MLOOP *l)
             PostQuitMessage(msg.wParam);
             break;
         }
+        /* TPM_RIGHTBUTTON (3.1 SDK: the menu tracks the right button):
+           right presses and releases act as left ones */
+        if (l->rbutton)
+            switch (msg.message) {
+            case WM_RBUTTONDOWN: msg.message = WM_LBUTTONDOWN; break;
+            case WM_RBUTTONUP: msg.message = WM_LBUTTONUP; break;
+            case WM_RBUTTONDBLCLK: msg.message = WM_LBUTTONDOWN; break;
+            case WM_NCRBUTTONDOWN: msg.message = WM_NCLBUTTONDOWN; break;
+            case WM_NCRBUTTONUP: msg.message = WM_NCLBUTTONUP; break;
+            case WM_NCRBUTTONDBLCLK: msg.message = WM_NCLBUTTONDOWN; break;
+            }
         switch (msg.message) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -1270,12 +1288,12 @@ static void run_menu(MLOOP *l)
     close_popup(l);
     if (!l->sysmenu && valid_menu(l->bar) && valid_wnd(l->owner))
         select_bar(l, -1, FALSE);
-    if (valid_wnd(l->owner))
+    if (!l->quiet && valid_wnd(l->owner))
         send_message(l->owner, WM_MENUSELECT, 0, MAKELONG(0xFFFF, 0));
     if (oldcap)
         SetCapture(oldcap);
     menu_mode--;
-    if (l->result && valid_wnd(l->owner))
+    if (l->result && !l->quiet && valid_wnd(l->owner))
         PostMessage(l->owner, l->resultsys ? WM_SYSCOMMAND : WM_COMMAND, l->result, 0);
 }
 
@@ -1335,6 +1353,7 @@ BOOL WINAPI TrackPopupMenu(HMENU hm, UINT flags, int x, int y, int r, HWND h, co
     fmemset(&l, 0, sizeof l);
     l.owner = h;
     l.barsel = -1;
+    l.rbutton = (flags & TPM_RIGHTBUTTON) != 0;
     layout_popup(m);
     if (flags & TPM_CENTERALIGN)
         x -= m->cx / 2;
@@ -1343,6 +1362,29 @@ BOOL WINAPI TrackPopupMenu(HMENU hm, UINT flags, int x, int y, int r, HWND h, co
     open_popup(&l, hm, x, y);
     run_menu(&l);
     return TRUE;
+}
+
+/* USER's own popup at x, y (screen; its top left corner there, as
+   TrackPopupMenu with TPM_LEFTALIGN | TPM_RIGHTBUTTON): the same loop,
+   keyboard and mouse as every other menu, but the owner h gets none of the
+   menu's messages (WM_INITMENUPOPUP, WM_MENUSELECT, WM_COMMAND), which an
+   application could take for its own; the command chosen is returned, 0
+   for none (the scroll-bar menu, scroll.c) */
+UINT menu_track_quiet(HMENU hm, int x, int y, HWND h)
+{
+    MLOOP l;
+    if (!valid_menu(hm) || !valid_wnd(h))
+        return 0;
+    fmemset(&l, 0, sizeof l);
+    l.owner = h;
+    l.barsel = -1;
+    l.quiet = TRUE;
+    l.rbutton = TRUE;
+    open_popup(&l, hm, x, y);
+    if (!l.hwndPopup)
+        return 0;
+    run_menu(&l);
+    return l.result;
 }
 
 /* a click on the menu bar at pt (screen) */
