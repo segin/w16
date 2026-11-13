@@ -17,13 +17,13 @@
 #              LPT1 written to DIR/NAME.lpt
 #     -r NAME  only that run (ms or w16); nothing compared
 #     -d FILE  the driver of the w16 run (default build/dos/COMM.DRV)
-#     -p N     only CM1's parts in the bit mask N (1 A, 2 B, 4 C, 8 D, 16 E;
+#     -p N     only CM1's parts in the bit mask N (1 A, 2 B, 4 C, 8 D;
 #              SYSTEM.INI [w16] cm1parts; default all)
 # Exit status 0 when the runs agree.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= usex= only= drv=$root/build/dos/COMM.DRV parts=31
+out= usex= only= drv=$root/build/dos/COMM.DRV parts=15
 while getopts o:xr:d:p: opt; do
     case $opt in
     o) out=$OPTARG ;;

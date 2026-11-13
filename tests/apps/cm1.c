@@ -347,6 +347,8 @@ static void part_a(void)
     pops("CommWriteString(9)", dc(19, 4, 9, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb), 3));
     pops("ReadCommString(9)", dc(20, 4, 9, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb), 3));
     pops("EnableNotification(9)", dc(100, 4, 9, 0, 0, 0));
+    /* ordinal 101, no name: what it takes off the stack */
+    pops("ordinal 101", dc(101, 0));
     pops("SuspendOpenCommPorts", dc(17, 0) & 0);
     pops("ReactivateOpenCommPorts", dc(18, 0) & 0);
     /* LPT ids */
@@ -475,6 +477,13 @@ static void part_b(void)
     d.fDummy = 3;
     d.fDummy2 = 1;
     try_dcb("all flags", &d);
+    base(&d, 1);
+    d.fParity = 1;
+    d.Parity = 2;
+    try_dcb("fParity even", &d);
+    base(&d, 1);
+    d.fParity = 1;
+    try_dcb("fParity none", &d);
     for (i = 0; i < sizeof ids; i++) {
         base(&d, ids[i]);
         wsprintf(n, "id %02X", ids[i]);
@@ -585,6 +594,12 @@ static void part_b(void)
     obs("trmcom", LOWORD(dc(7, 1, 1)));
     if (port)
         uart("COM2 closed", port);
+    /* setcom on the port now closed (trmcom on a port that is not open
+       did not return with Windows 3.1's driver: not called) */
+    base(&d, 1);
+    obs("closed setcom", LOWORD(dc(2, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
+    if (port)
+        uart("closed setcom", port);
 }
 
 /* ---- C: COM1 through USER, commhost at the other end ---- */
@@ -673,6 +688,13 @@ static void part_c(void)
     readall("break");
     stat("break read");
     evts("break read");
+    /* a new event mask: what happens to the events in the word */
+    host("#X41;");
+    pump(500);
+    SetCommEventMask(cid, EV_RXFLAG | EV_TXEMPTY);
+    evts("new mask");
+    SetCommEventMask(cid, 0x3FFF);
+    readall("new mask");
     d.fChEvt = 1;
     setstate(&d);
     host("#X4541;");
@@ -1000,7 +1022,8 @@ static void part_c(void)
     obs("CommWriteString 40", r);
     pattern(buf, 1500, 19);
     r = (int)LOWORD(dc(19, 4, cid, SELECTOROF((LPVOID)buf), OFFSETOF((LPVOID)buf), 1500));
-    obs("CommWriteString 1500", r);
+    /* (how much the queue took depends on how much went meanwhile) */
+    obs_env("CommWriteString 1500", r);
     stat("after 1500");
     r = WriteComm(cid, buf, 1500);
     obs("WriteComm 1500", r);
@@ -1125,30 +1148,6 @@ static void part_d(void)
         CloseComm(cid);
 }
 
-/* ---- E: fParity (last: with Windows 3.1's driver a run hung here) ---- */
-static void part_e(void)
-{
-    DCB d;
-    say("E: fParity");
-    base(&d, 1);
-    d.fParity = 1;
-    d.Parity = 2;
-    try_dcb("fParity even", &d);
-    base(&d, 1);
-    d.fParity = 1;
-    try_dcb("fParity none", &d);
-    /* setcom on a port that is not open (with Windows 3.1's driver the
-       trmcom after it did not return) */
-    base(&d, 1);
-    obs("closed setcom", LOWORD(dc(2, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
-    if (combase[1])
-        uart("closed setcom", combase[1]);
-    /* (trmcom on a port that is not open did not return with Windows
-       3.1's driver: not called) */
-    /* ordinal 101, no name: what it takes off the stack */
-    pops("ordinal 101", dc(101, 0));
-}
-
 int __cdecl tmain(void)
 {
     HINSTANCE hi = (HINSTANCE)init_regs[5];
@@ -1168,9 +1167,9 @@ int __cdecl tmain(void)
     wc.lpszClassName = "CM1";
     RegisterClass(&wc);
     hwnd = CreateWindow("CM1", "CM1", WS_OVERLAPPED, 0, 0, 100, 100, NULL, NULL, hi, NULL);
-    /* [w16] cm1parts in SYSTEM.INI: which parts (bit 0 A ... bit 4 E;
+    /* [w16] cm1parts in SYSTEM.INI: which parts (bit 0 A ... bit 3 D;
        A always, it finds the entry points) */
-    parts = GetPrivateProfileInt("w16", "cm1parts", 31, "SYSTEM.INI");
+    parts = GetPrivateProfileInt("w16", "cm1parts", 15, "SYSTEM.INI");
     part_a();
     if (parts & 2)
         part_b();
@@ -1178,8 +1177,6 @@ int __cdecl tmain(void)
         part_c();
     if (parts & 8)
         part_d();
-    if (parts & 16)
-        part_e();
     out("CM1 done\r\n");
     return 0;
 }

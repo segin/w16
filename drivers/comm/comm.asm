@@ -211,6 +211,7 @@ struc P
 .brk            resb 1              ; break set
 .notify         resb 1              ; NS_ notification state
 .evnew          resb 1              ; an event newly in the event word
+.fresh          resb 1              ; program: a fresh start (open)
 .rxq            resd 1
 .rxsize         resw 1
 .rxcnt          resw 1
@@ -225,8 +226,8 @@ struc P
 .intrig         resw 1
 .outtrig        resw 1
 .lastrx         resd 1              ; GetSystemMsecCount at the last byte
-.saveier        resb 1              ; Suspend's record
-.savemcr        resb 1
+.savefifo       resb 1              ; before the open: the FIFO (IIR C0h)
+.savemcr        resb 1              ; and the modem control
 .size:
 endstruc
 
@@ -341,9 +342,20 @@ INICOM:
         mov [si + P.txout], ax
         cmp byte [si + P.isopen], 0
         jne .again
+        ; the UART as it was, for trmcom (CM1: the modem control and FIFO
+        ; after a close are those before the open)
+        mov dx, [si + P.base]
+        add dx, U_IIR
+        in al, dx
+        and al, 0C0h
+        mov [si + P.savefifo], al
+        add dx, U_MCR - U_IIR
+        in al, dx
+        mov [si + P.savemcr], al
         mov byte [si + P.isopen], 1
         call hook
-.again: call program
+.again: mov byte [si + P.fresh], 1
+        call program
         xor ax, ax
         jmp .ret
 .lpt:   call copydcb
@@ -618,7 +630,6 @@ program:
         ; has one
         pop cx
         sti
-        mov byte [si + P.fifo], 0
         cmp cx, 4800
         jb .nofifo
         mov ax, si
@@ -638,23 +649,34 @@ program:
         call far GETPRIVATEPROFILEINT
         test ax, ax
         jz .nofifo
-        mov dx, [si + P.base]
+        ; on (and emptied) at an open, or when it was off; left alone
+        ; when it is on already: setcom must not lose what the FIFOs
+        ; hold (it did, in w16's first version: a byte of a command to
+        ; commhost)
+        cmp byte [si + P.fresh], 0
+        jne .on
+        cmp byte [si + P.fifo], 0
+        jne .mcr
+.on:    mov dx, [si + P.base]
         add dx, U_FCR
         mov al, 0C7h                    ; on, both cleared, 14 bytes
-        out dx, al
+        out dx, al                      ; (the trigger: UNVERIFIED)
         in al, dx
         and al, 0C0h
         cmp al, 0C0h
-        jne .nofifo
         mov byte [si + P.fifo], 1
-        jmp .mcr
+        je .mcr
 .nofifo:
+        mov byte [si + P.fifo], 0
         mov dx, [si + P.base]
         add dx, U_FCR
         xor al, al
         out dx, al
 .mcr:   call setmcr
         cli
+        cmp byte [si + P.fresh], 0
+        je .ier
+        mov byte [si + P.fresh], 0
         mov dx, [si + P.base]
         add dx, U_MSR
         in al, dx
@@ -663,7 +685,7 @@ program:
         in al, dx
         sub dx, U_LSR
         in al, dx                       ; nothing old waiting
-        call setier
+.ier:   call setier
         sti
         ret
 
@@ -1141,6 +1163,19 @@ kicktx:
 transmit:
         cmp byte [si + P.brk], 0
         jne .off
+        ; only into an empty holding register (a rewrite of IER can
+        ; bring a transmit interrupt with it; a byte written over another
+        ; is lost)
+        mov dx, [si + P.base]
+        add dx, U_LSR
+        in al, dx
+        test al, LSR_OE | LSR_PE | LSR_FE | LSR_BI
+        jz .lsr
+        push ax
+        call linestat
+        pop ax
+.lsr:   test al, LSR_THRE
+        jz .ret
         ; one byte an interrupt, FIFO or not (CM1: Windows 3.1's driver
         ; has 2 of 300 bytes out right after the write, as one a time
         ; gives); XON and XOFF first and whatever holds the output;
@@ -1174,7 +1209,7 @@ transmit:
         call event
 .out:   mov dx, [si + P.base]
         out dx, al
-        ret
+.ret:   ret
 .empty:
 .off:   mov byte [si + P.txon], 0
         jmp setier
@@ -1623,50 +1658,77 @@ COMMWRITESTRING:
 .done:  mov ax, dx
 .ret:   LEAVE 8
 
-; lptout: SI = an LPT port, AL = a byte: the BIOS prints it (INT 17h
-; AH=0). AX = 0, or 8000h with the error bits set for a time-out or a
-; printer error (and EV_PERR).
+; lptout: SI = an LPT port, AL = a byte, printed through the port
+; itself (Windows 3.1's driver reads the status port: CM1 in DOSBox 0.74,
+; whose LPT1 status port reads 87h, gave CE_IOE | CE_DNS, which the BIOS
+; does not report). AX = 0, or 8000h with the error bits set (and
+; EV_PERR) and nothing printed.
 lptout:
-        mov ah, 0
-        call lptbios
-        xor ax, ax
-        jcxz .ret
+        push dx
+        push bx
+        mov bl, al
+        call lptstat
+        jcxz .print
         or [si + P.err], cx
         mov cx, EV_PERR
         call event
         mov ax, 8000h
-.ret:   ret
+        jmp .ret
+.print: mov dx, [si + P.base]
+        mov al, bl
+        out dx, al                      ; the data
+        add dx, 2
+        in al, dx
+        and al, ~1Fh
+        or al, 0Ch                      ; not initialising, selected
+        mov ah, al
+        or al, 1                        ; strobe
+        out dx, al
+        mov al, ah
+        out dx, al
+        xor ax, ax
+.ret:   pop bx
+        pop dx
+        ret
 
-; lptbios: SI = an LPT port, AH = INT 17h function, AL its byte -> CX =
-; the CE_ bits of the printer's status: time-out CE_PTO, I/O error
-; CE_IOE, paper out CE_OOP, not selected CE_DNS
-lptbios:
-        push dx
+; lptstat: SI = an LPT port -> CX = the CE_ bits of its status port,
+; waiting while it is busy: CE_IOE (error, bit 3 low), CE_DNS (not
+; selected, bit 4 low), CE_OOP (paper out, bit 5), CE_PTO (still busy,
+; bit 7 low, after LPT_TIMEOUT ms; UNVERIFIED: the time)
+LPT_TIMEOUT     equ 1000
+lptstat:
+        push ax
         push bx
+        push dx
+        call getms
         mov bx, ax
-        mov ax, si
-        sub ax, ports + NCOM * P.size
-        xor dx, dx
-        mov cx, P.size
-        div cx
-        mov dx, ax                      ; the printer: 0-2
-        mov ax, bx
-        int 17h
+.wait:  mov dx, [si + P.base]
+        inc dx
+        in al, dx
         xor cx, cx
-        test ah, 01h
-        jz .1
-        or cx, CE_PTO
-.1:     test ah, 08h
-        jz .2
+        test al, 08h
+        jnz .1
         or cx, CE_IOE
-.2:     test ah, 20h
+.1:     test al, 10h
+        jnz .2
+        or cx, CE_DNS
+.2:     test al, 20h
         jz .3
         or cx, CE_OOP
-.3:     test ah, 10h
-        jnz .4
-        or cx, CE_DNS
-.4:     pop bx
-        pop dx
+.3:     jcxz .busy
+        jmp .ret
+.busy:  test al, 80h
+        jnz .ret
+        push cx
+        call getms
+        pop cx
+        sub ax, bx
+        cmp ax, LPT_TIMEOUT
+        jb .wait
+        or cx, CE_PTO
+.ret:   pop dx
+        pop bx
+        pop ax
         ret
 
 ; ---- 6: int ctx(cid, ch) ----
@@ -1715,19 +1777,25 @@ TRMCOM:
         jae .lpt
         call drain
         push ax
-        ; closed as Windows 3.1's driver leaves it (CM1): no interrupts,
-        ; OUT2 off (DTR and RTS as they were), the FIFO off
+        ; closed as Windows 3.1's driver leaves it (CM1, commhost's
+        ; record): no interrupts; the modem control 0, then as it was
+        ; before the open without OUT2; the FIFO as it was before the open
         cli
         mov dx, [si + P.base]
         add dx, U_IER
         xor al, al
         out dx, al
-        add dx, U_FCR - U_IER
+        add dx, U_MCR - U_IER
         out dx, al
-        add dx, U_MCR - U_FCR
-        mov al, [si + P.mcr]
+        mov al, [si + P.savemcr]
         and al, MCR_DTR | MCR_RTS
         out dx, al
+        add dx, U_FCR - U_MCR
+        xor al, al
+        cmp byte [si + P.savefifo], 0C0h
+        jne .fcr
+        mov al, 1                       ; (trigger level: UNVERIFIED)
+.fcr:   out dx, al
         mov byte [si + P.txon], 0
         mov byte [si + P.isopen], 0
         sti
@@ -1869,14 +1937,23 @@ CEXTFCN:
 .ok:    xor ax, ax
         xor dx, dx
         jmp .ret
-        ; a parallel port: RESETDEV initialises the printer (INT 17h
-        ; AH=1); AX the error bits of its status. Every other code gives 0
-        ; for a parallel port (CM1: GETMAXLPT and GETMAXCOM too).
+        ; a parallel port: RESETDEV initialises the printer (the INIT
+        ; line); AX the error bits of its status. Every other code gives
+        ; 0 for a parallel port (CM1: GETMAXLPT and GETMAXCOM too).
 .lptf:  cmp bx, RESETDEV
         jne .ok
-        mov ah, 1
-        call lptbios
-        mov ax, cx
+        mov dx, [si + P.base]           ; the INIT line low a moment
+        add dx, 2
+        mov al, 08h
+        out dx, al
+        mov cx, 100
+.dly:   in al, dx
+        loop .dly
+        mov al, 0Ch
+        out dx, al
+        call lptstat
+        or [si + P.err], cx             ; (CM1: 0C00h, in the error word
+        mov ax, cx                      ; too)
         xor dx, dx
         jmp .ret
 .lpt:   cmp byte [si + P.isopen], 0
@@ -1941,8 +2018,13 @@ CEVT:
         mov ax, 0
         mov dx, 0
         jc .ret
+        cmp word [bp + 8], 80h          ; a parallel port: none (CM1)
+        jae .ret
         mov ax, [bp + 6]
+        cli
         mov [si + P.evtmask], ax
+        and [si + P.evt], ax            ; (events outside the new mask go:
+        sti                             ; CM1)
         lea ax, [si + P.evt]
         mov dx, ds
 .ret:   LEAVE 4
@@ -2070,6 +2152,7 @@ REACTIVATEOPENCOMMPORTS:
         cli
         call holds
         sti
+        mov byte [si + P.fresh], 1
         call program
         cli
         call kicktx
