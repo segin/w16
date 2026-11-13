@@ -17,6 +17,8 @@
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
  *     focus                  log the window with the focus
+ *     blinktime <ms>         SetCaretBlinkTime (65535: carets keep their
+ *                            phase, for repeatable screenshots)
  *     clickid <hex id>       click (posted) the middle of a control of the
  *                            active dialog
  *     move <x> <y> <cx> <cy> MoveWindow the active top-level window
@@ -1333,6 +1335,11 @@ static void run_line(char *l)
         info();
     } else if (same(l, "text")) {
         text_of_focus();
+    } else if (same(l, "blinktime")) {
+        /* blinktime <ms>: SetCaretBlinkTime for the session, e.g. 65535 so
+           a caret keeps the phase it starts in (screenshots that do not
+           depend on the moment they are taken) */
+        SetCaretBlinkTime(parse_num(arg, 10));
     } else if (same(l, "focus")) {
         /* which window has the focus: class, ID, text */
         HWND f = GetFocus();
