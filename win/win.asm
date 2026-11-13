@@ -90,6 +90,7 @@ f_int23orig: dd 0           ; INT 23h at start (LOSE.COM saved it too)
 mode:       db 0            ; 2 standard, 3 386 enhanced
 cpu_type:   db 0            ; 0 8086, 2 80286, 3 80386 or later
 vid_mode:   db 3            ; video mode at start
+vid_cursor: dw 0607h        ; cursor shape at start (0040:0060h)
 exit_code:  db 0
 save_ss:    dw 0
 save_sp:    dw 0
@@ -175,7 +176,8 @@ sw_api:
         mov dx, cs
         mov ax, sw_buf
         mov si, sw_x
-        iret
+        mov di, block                   ; DI -> the block (3.1: 06C8h, for
+        iret                            ; DSWAP's call and WSWAP's)
 .s4:    cmp si, 3
         jne .s4b
         ; WSWAP about to run a DOS program: Windows 3.1's WIN.COM (WC3)
@@ -201,7 +203,7 @@ sw_api:
         ; 4F2h alone: w16 used to clear it here, and WSWAP, back from the
         ; DOS program, ended Windows (it could not find Windows' swap
         ; file); 3.1's block keeps it then. It is cleared before WSWAP is
-        ; started again for a restart (.again2 below)
+        ; started again for a restart (.again below)
         mov ax, [cs:block + SB_COUNT]
         mov di, block                   ; DI -> the block (3.1: 06C8h, as
         mov si, 8                       ; SI=5's AX; w16 left DI alone)
@@ -275,7 +277,17 @@ launch:
 .ran:   mov ah, 4Dh
         int 21h                         ; AL = the program's exit code
         cmp byte [mode], 2
-        je .std
+        jne .enh
+        ; standard mode: whenever WSWAP returns (a DOS program to run or
+        ; Windows' end) the video mode and the cursor shape found at the
+        ; start are set (E10 on Windows 3.1's WIN.COM: INT 10h AX=0003h
+        ; then AH=01h CX=0607h, before DSWAP and at the end; after mode 1
+        ; and cursor 0205h set before WIN, AX=0001h and CX=0205h). w16's
+        ; set nothing, and Windows ended in VGA graphics (mode 12h, set
+        ; back by w16's DOSX then) with the BIOS's text on it
+        call vid_restore
+        jmp .std
+.enh:
         ; enhanced: restore the video mode found at the start, but only
         ; when Windows ended normally or restarts (after an error Windows
         ; 3.1's WIN.COM leaves the screen as it is; WC1 exit codes)
@@ -320,7 +332,7 @@ launch:
         mov dx, dswap_path
         mov bx, pblock
         call exec
-        jmp .after                      ; the block as for a program
+        jmp .after                      ; the program's task record
 .direct:
         mov ax, [env_seg]
         mov [exec_pb], ax
@@ -350,6 +362,15 @@ launch:
         mov byte [bx + TK_FLAG], 80h
         inc byte [bx + 13h]
 .nrec:  mov byte [block + SB_17E], SB_NTASKS - 1
+        ; 16Fh and 17Ch: DSWAP's own doing (its SI=2 counts 17Ch down)
+        ; when it ran. With these done here as well, WSWAP's second run
+        ; found 16Fh 03 and 17Ch 00 where 3.1's finds 02 and 01 (WC3 in
+        ; front of WSWAP), Windows' end left 17Dh 1, and w16's WIN.COM
+        ; took it for another DOS program: WSWAP and DSWAP in turn, each
+        ; returning at once, until 17Ch ran out. UNVERIFIED: 3.1 ends
+        ; with 17Ch FFh 17Dh 00h, w16 with 00h 01h (both end Windows)
+        cmp byte [dswap_path], 0
+        jne .run
         inc byte [block + 16Fh]
         dec byte [block + SB_COUNT]
         jmp .run
@@ -366,14 +387,7 @@ launch:
         cmp al, 44h                     ; ExitWindowsExec
         jne .exit
         call exec_program
-.again: cmp byte [mode], 2               ; standard mode: the video mode
-        jne .again2                     ; is set again before WSWAP runs
-        push ax                         ; again (enhanced: done above)
-        mov al, [vid_mode]
-        xor ah, ah
-        int 10h
-        pop ax
-.again2:
+.again:                                 ; (the video mode: set above)
         ; WSWAP keeps the number of its swap file (~WOA<n>.TMP) at block
         ; 4F2h; on 3.1 a WSWAP started again for a restart finds 0 there
         ; and begins afresh rather than resuming the old file (WC3 block
@@ -393,6 +407,20 @@ launch:
         pop ax
         mov ah, 4Ch
         int 21h
+
+; the video mode and cursor shape found at the start; keeps AX
+vid_restore:
+        push ax
+        push cx
+        mov al, [vid_mode]
+        xor ah, ah
+        int 10h
+        mov cx, [vid_cursor]
+        mov ax, 0100h
+        int 10h
+        pop cx
+        pop ax
+        ret
 
 ; EXEC DS:DX with the parameter block at ES:BX (CS); keeps SS:SP
 exec:
@@ -525,6 +553,12 @@ init:
         mov ah, 0Fh
         int 10h
         mov [vid_mode], al
+        push es
+        mov ax, 40h
+        mov es, ax
+        mov ax, [es:60h]                ; the BIOS's cursor shape
+        mov [vid_cursor], ax
+        pop es
         call check_win_version          ; exits if Windows is running
         call parse_flags
         call check_cpu
