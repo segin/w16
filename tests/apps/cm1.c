@@ -7,7 +7,7 @@
  * COM1 is a DOSBox "nullmodem" port whose other end is tests/commhost.py
  * (it records what arrives and carries out "#...;" commands CM1 sends:
  * send bytes, set the lines CM1 sees as CTS and DSR, a break, a wait).
- * COM2 is DOSBox's "dummy" port (a UART with nothing on it), COM3 and
+ * COM2 is a nullmodem port too, its commhost only recording; COM3 and
  * COM4 are missing. LPT1 is whatever the emulator gives.
  *
  * Logged (only what the driver returns and what the UART's registers
@@ -65,13 +65,22 @@ static DWORD dc(int o, int n, ...)
     for (i = 16 - n; i < 16; i++)
         args[i] = va_arg(ap, WORD);
     va_end(ap);
-    return md_call(drv[o], args, res);
+    {
+        DWORD t = GetTickCount(), r = md_call(drv[o], args, res);
+        t = GetTickCount() - t;
+        if (t >= 200) {     /* slow calls are noted (timing: "~") */
+            wsprintf(line, "OBS ~slow ordinal %d: %u ms\r\n", o, (WORD)t);
+            out(line);
+        }
+        return r;
+    }
 }
 
 static void say(const char *s)
 {
     out(s);
-    out("\r\n");
+    wsprintf(line, "\r\nOBS ~t=%lu\r\n", GetTickCount());
+    out(line);
 }
 
 static void obs2(const char *name, DWORD r)
@@ -193,11 +202,16 @@ static void evts(const char *name)
     out(line);
 }
 
+/* commands for commhost; each string starts with a wait, so that all of
+   it has arrived before commhost does anything that holds CM1's output
+   (an XOFF, CTS or DSR dropped in the middle of a command string held
+   the rest of it) */
 static void host(const char *cmd)
 {
     WORD n = 0;
     while (cmd[n])
         n++;
+    WriteComm(cid, "#W150;", 6);
     WriteComm(cid, cmd, n);
 }
 
@@ -235,10 +249,12 @@ static BYTE buf[2048];
 /* read everything there is: count and a checksum */
 static void readall(const char *name)
 {
-    int n, total = 0;
+    int n, total = 0, calls = 0;
     WORD sum = 0, i;
     BYTE first = 0, last = 0;
-    while ((n = ReadComm(cid, buf, 256)) > 0) {
+    /* (at most 40 calls: after an EOF character, ReadComm on Windows 3.1
+       went on returning data, see "calls") */
+    while (calls++ < 40 && (n = ReadComm(cid, buf, 256)) > 0) {
         if (!total)
             first = buf[0];
         for (i = 0; i < n; i++)
@@ -246,8 +262,8 @@ static void readall(const char *name)
         last = buf[n - 1];
         total += n;
     }
-    wsprintf(line, "OBS %s read=%d (last %d) sum %04X first %02X last %02X\r\n", (LPSTR)name,
-             total, n, sum, first, last);
+    wsprintf(line, "OBS %s read=%d (last %d) sum %04X first %02X last %02X calls %d\r\n",
+             (LPSTR)name, total, n, sum, first, last, calls);
     out(line);
 }
 
@@ -395,7 +411,6 @@ static void part_b(void)
     for (i = 0; i <= 6; i++) {
         base(&d, 1);
         d.Parity = (BYTE)i;
-        d.fParity = 1;
         wsprintf(n, "parity %u", i);
         try_dcb(n, &d);
     }
@@ -416,6 +431,26 @@ static void part_b(void)
     d.Parity = 7;
     d.ByteSize = 9;
     try_dcb("parity 7 bytesize 9", &d);
+    base(&d, 1);
+    d.Parity = 7;
+    d.BaudRate = 1;
+    try_dcb("parity 7 baud 1", &d);
+    base(&d, 1);
+    d.StopBits = 3;
+    d.ByteSize = 9;
+    try_dcb("stopbits 3 bytesize 9", &d);
+    base(&d, 1);
+    d.StopBits = 3;
+    d.BaudRate = 1;
+    try_dcb("stopbits 3 baud 1", &d);
+    base(&d, 1);
+    d.ByteSize = 4;
+    d.StopBits = 1;
+    try_dcb("stopbits 1 bytesize 4", &d);
+    base(&d, 1);
+    d.ByteSize = 6;
+    d.StopBits = 1;
+    try_dcb("stopbits 1 bytesize 6", &d);
     base(&d, 1);
     d.fRtsDisable = 1;
     d.fDtrDisable = 1;
@@ -453,25 +488,33 @@ static void part_b(void)
 
     /* closed and open */
     base(&d, 1);
-    obs("closed setcom", LOWORD(dc(2, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
-    obs("closed trmcom", LOWORD(dc(7, 1, 1)));
+    /* trmcom of a closed port: not called (with Windows 3.1's driver it
+       did not return) */
     obs2("closed getdcb", dc(15, 1, 1) & 0xFFFF0000UL ? 1 : 0);
     obs("closed reccom", LOWORD(dc(4, 1, 1)));
-    obs("closed sndcom", LOWORD(dc(5, 2, 1, 'x')));
-    obs("closed ctx", LOWORD(dc(6, 2, 1, 'x')));
-    obs("closed csetbrk", LOWORD(dc(13, 1, 1)));
-    obs("closed cflush", LOWORD(dc(10, 2, 1, 0)));
     obs("closed cevtGet", LOWORD(dc(12, 2, 1, 0xFFFF)));
     obs2("closed cevt", dc(11, 2, 1, 1) & 0xFFFF0000UL ? 1 : 0);
-    obs("closed stacom", LOWORD(dc(8, 3, 1, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb))));
     for (i = 0; i <= 12; i++) {
         wsprintf(n, "closed cextfcn %u", i);
         obs2(n, dc(9, 2, 1, i));
     }
     obs("closed EnableNotification", LOWORD(dc(100, 4, 1, 0, 0, 0)));
 
+    for (i = 0; i < 6; i++) {
+        static const WORD c[] = {0, 1, 2, 3, 0x80, 0x81};
+        wsprintf(n, "GETBASEIRQ %X", c[i]);
+        obs2(n, dc(9, 2, c[i], 10));
+    }
+    /* COM3: no UART */
+    base(&d, 2);
+    obs("COM3 inicom", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
+    dc(7, 1, 2);
+    base(&d, 1);
     obs("open", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
     obs("open again", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
+    /* the event word first, as USER's OpenComm (without it SETXON did not
+       return with Windows 3.1's driver) */
+    obs("open cevt", dc(11, 2, 1, 0) != 0);
     /* setcom on the open port, one change at a time */
     for (i = 0; i < 8; i++) {
         base(&d2, 1);
@@ -499,9 +542,29 @@ static void part_b(void)
     obs("noqueue stacom", LOWORD(r));
     bdump("noqueue comstat", qb, 5);
     obs("noqueue reccom", LOWORD(dc(4, 1, 1)));
-    obs("noqueue sndcom", LOWORD(dc(5, 2, 1, 'x')));
+    /* (sndcom without queues: not called; on Windows 3.1 it returned
+       CE_TXFULL, and SETXON and trmcom did not return afterwards) */
+    /* queues (with none, SETXON did not return with Windows 3.1's
+       driver) */
+    {
+        WORD qsel = (WORD)GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 512);
+        WORD q[6];
+        q[0] = 0;
+        q[1] = qsel;
+        q[2] = 256;
+        q[3] = 256;
+        q[4] = qsel;
+        q[5] = 256;
+        obs("setque", LOWORD(dc(3, 3, 1, SELECTOROF((LPVOID)q), OFFSETOF((LPVOID)q))));
+    }
+    r = dc(8, 3, 1, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb));
+    obs("queue stacom", LOWORD(r));
+    bdump("queue comstat", qb, 5);
     for (i = 0; i <= 12; i++) {
-        if (i == 7)
+        /* RESETDEV; SETXOFF and SETXON did not return with Windows 3.1's
+           driver here (on COM2 opened directly; through USER on COM1 they
+           did, part C) */
+        if (i == 7 || i == 1 || i == 2)
             continue;
         wsprintf(n, "open cextfcn %u", i);
         obs2(n, dc(9, 2, 1, i));
@@ -519,18 +582,13 @@ static void part_b(void)
     g = dc(11, 2, 1, 0);
     obs("cevt same pointer", r == g);
     obs("cevtGet", LOWORD(dc(12, 2, 1, 0xFFFF)));
+    /* RTS and DTR on again (with them off, trmcom did not return with
+       Windows 3.1's driver) */
+    dc(9, 2, 1, SETRTS);
+    dc(9, 2, 1, SETDTR);
     obs("trmcom", LOWORD(dc(7, 1, 1)));
     if (port)
         uart("COM2 closed", port);
-    for (i = 0; i < 6; i++) {
-        static const WORD c[] = {0, 1, 2, 3, 0x80, 0x81};
-        wsprintf(n, "GETBASEIRQ %X", c[i]);
-        obs2(n, dc(9, 2, c[i], 10));
-    }
-    /* COM3: no UART */
-    base(&d, 2);
-    obs("COM3 inicom", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
-    dc(7, 1, 2);
 }
 
 /* ---- C: COM1 through USER, commhost at the other end ---- */
@@ -761,17 +819,39 @@ static void part_c(void)
     d.XonLim = 100;
     d.XoffLim = 200;
     setstate(&d);
-    host("#M7;#P900,0;");
+    /* where XOFF goes: queue 1024, XoffLim 200 */
+    host("#M7;#P822,0;");
+    waitin(822, 4000);
+    pump(300);
+    stat("C7 822");
+    for (i = 823; i <= 826; i++) {
+        host("#P1,0;");
+        pump(400);
+        wsprintf(n, "C7 %u", i);
+        stat(n);
+    }
+    host("#P74,0;");
     waitin(900, 4000);
     pump(500);
     stat("C7 full");
-    for (i = 0; i < 9; i++) {
+    for (i = 0; i < 7; i++) {
         r = ReadComm(cid, buf, 100);
         wsprintf(n, "C7 read %u", i);
         obs(n, r);
         pump(200);
         stat(n);
     }
+    /* where XON goes: XonLim 100 */
+    ReadComm(cid, buf, 98);
+    pump(300);
+    stat("C7 102");
+    for (i = 0; i < 4; i++) {
+        r = ReadComm(cid, buf, 1);
+        wsprintf(n, "C7 read one %u", i);
+        pump(300);
+        stat(n);
+    }
+    readall("C7 rest");
     host("#M7b;");
     d.fInX = 0;
     d.fRtsflow = 1;
@@ -824,14 +904,43 @@ static void part_c(void)
     host("#X41421A4344;");
     pump(500);
     stat("eof");
-    readall("eof");
+    /* the driver directly (ReadComm did not return here on Windows 3.1) */
+    for (i = 0; i < 4; i++) {
+        wsprintf(n, "eof reccom %u", i);
+        obs(n, LOWORD(dc(4, 1, cid)));
+    }
+    r = (int)LOWORD(dc(20, 4, cid, SELECTOROF((LPVOID)buf), OFFSETOF((LPVOID)buf), 20));
+    obs("eof ReadCommString", r);
     stat("eof read");
     d.fBinary = 1;
     setstate(&d);
+    stat("binary set");
     host("#X4546;");
     pump(500);
     stat("binary again");
+    for (i = 0; i < 4; i++) {
+        wsprintf(n, "binary reccom %u", i);
+        obs(n, LOWORD(dc(4, 1, cid)));
+    }
     readall("binary again");
+    obs("FlushComm rx eof", FlushComm(cid, 1));
+    stat("eof flushed");
+    host("#X4748;");
+    pump(500);
+    stat("eof flushed rx");
+    readall("eof flushed");
+    /* (after the EOF character nothing more is taken until the port is
+       opened again, on Windows 3.1) */
+    obs("eof CloseComm", CloseComm(cid));
+    cid = OpenComm("COM1", 1024, 1024);
+    obs("eof reopen", cid);
+    base(&d, (BYTE)cid);
+    setstate(&d);
+    SetCommEventMask(cid, 0x3FFF);
+    stat("eof reopened");
+    host("#X4950;");
+    pump(500);
+    readall("eof reopened");
 
     /* 10: WM_COMMNOTIFY */
     say("C10 notify");
@@ -913,6 +1022,13 @@ static void part_c(void)
     obs("reccom", r);
     r = (int)LOWORD(dc(4, 1, cid));
     obs("reccom none", r);
+    stat("reccom");
+    host("#X7B;");
+    pump(500);
+    r = (int)LOWORD(dc(4, 1, cid));
+    obs("reccom clean", r);
+    r = (int)LOWORD(dc(4, 1, cid));
+    obs("reccom clean none", r);
 
     /* 12: suspended across a DOS program */
     say("C12 suspend");
@@ -1009,10 +1125,35 @@ static void part_d(void)
         CloseComm(cid);
 }
 
+/* ---- E: fParity (last: with Windows 3.1's driver a run hung here) ---- */
+static void part_e(void)
+{
+    DCB d;
+    say("E: fParity");
+    base(&d, 1);
+    d.fParity = 1;
+    d.Parity = 2;
+    try_dcb("fParity even", &d);
+    base(&d, 1);
+    d.fParity = 1;
+    try_dcb("fParity none", &d);
+    /* setcom on a port that is not open (with Windows 3.1's driver the
+       trmcom after it did not return) */
+    base(&d, 1);
+    obs("closed setcom", LOWORD(dc(2, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
+    if (combase[1])
+        uart("closed setcom", combase[1]);
+    /* (trmcom on a port that is not open did not return with Windows
+       3.1's driver: not called) */
+    /* ordinal 101, no name: what it takes off the stack */
+    pops("ordinal 101", dc(101, 0));
+}
+
 int __cdecl tmain(void)
 {
     HINSTANCE hi = (HINSTANCE)init_regs[5];
     WNDCLASS wc;
+    WORD parts;
     WaitEvent(0);
     InitApp(hi);
     out("CM1 start\r\n");
@@ -1027,10 +1168,18 @@ int __cdecl tmain(void)
     wc.lpszClassName = "CM1";
     RegisterClass(&wc);
     hwnd = CreateWindow("CM1", "CM1", WS_OVERLAPPED, 0, 0, 100, 100, NULL, NULL, hi, NULL);
+    /* [w16] cm1parts in SYSTEM.INI: which parts (bit 0 A ... bit 4 E;
+       A always, it finds the entry points) */
+    parts = GetPrivateProfileInt("w16", "cm1parts", 31, "SYSTEM.INI");
     part_a();
-    part_b();
-    part_c();
-    part_d();
+    if (parts & 2)
+        part_b();
+    if (parts & 4)
+        part_c();
+    if (parts & 8)
+        part_d();
+    if (parts & 16)
+        part_e();
     out("CM1 done\r\n");
     return 0;
 }

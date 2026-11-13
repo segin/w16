@@ -9,23 +9,27 @@
 #   w16    w16's (build/dos/COMM.DRV)
 # Each gives CM1's TK.LOG (NAME.log; NAME.cmp without the "OBS ~" lines)
 # and commhost's record of what came down the cable and when the lines
-# changed (NAME.host). Both must be the same for the two drivers.
-#   usage: tests/commprobe.sh [-o DIR] [-x] [-k] [-r NAME]
+# changed (NAME.host; NAME.host2 for COM2, also a nullmodem port with a
+# commhost that only records). All must be the same for the two drivers.
+#   usage: tests/commprobe.sh [-o DIR] [-x] [-r NAME] [-d FILE] [-p N]
 #     -o DIR   keep everything in DIR (default build/commprobe-HHMMSS)
 #     -x       DOSBox-X (tests/dropin.sh -p 386) instead of DOSBox, with
 #              LPT1 written to DIR/NAME.lpt
 #     -r NAME  only that run (ms or w16); nothing compared
 #     -d FILE  the driver of the w16 run (default build/dos/COMM.DRV)
+#     -p N     only CM1's parts in the bit mask N (1 A, 2 B, 4 C, 8 D, 16 E;
+#              SYSTEM.INI [w16] cm1parts; default all)
 # Exit status 0 when the runs agree.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= usex= only= drv=$root/build/dos/COMM.DRV
-while getopts o:xr:d: opt; do
+out= usex= only= drv=$root/build/dos/COMM.DRV parts=31
+while getopts o:xr:d:p: opt; do
     case $opt in
     o) out=$OPTARG ;;
     x) usex=1 ;;
     r) only=$OPTARG ;;
+    p) parts=$OPTARG ;;
     d) drv=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
@@ -42,13 +46,17 @@ freeport() {
 run() {
     name=$1; shift
     port=$(freeport)
-    python3 "$root/tests/commhost.py" -t 400 -l "$out/$name.host" "$port" \
+    python3 "$root/tests/commhost.py" -t 700 -l "$out/$name.host" -T "$out/$name.hosttime" "$port" \
         > "$out/$name.hostout" 2>&1 &
     hpid=$!
+    port2=$(freeport)
+    python3 "$root/tests/commhost.py" -t 700 -l "$out/$name.host2" "$port2" \
+        > "$out/$name.hostout2" 2>&1 &
+    hpid2=$!
     sleep 0.5
     conf="[serial]
 serial1=nullmodem server:127.0.0.1 port:$port
-serial2=dummy"
+serial2=nullmodem server:127.0.0.1 port:$port2"
     x=
     if [ -n "$usex" ]; then
         x="-p 386"
@@ -56,10 +64,10 @@ serial2=dummy"
 [parallel]
 parallel1=file append:$out/$name.lpt"
     fi
-    DROPIN_CONF=$conf "$root/tests/dropin.sh" -r $x -t 360 -o "$out/$name" -c 'WIN /S' \
-        -f "$cm1=CM1.EXE" -i 'boot:shell=C:\CM1.EXE' "$@" > "$out/$name.txt" 2>&1 || true
-    kill "$hpid" 2>/dev/null || true
-    wait "$hpid" 2>/dev/null || true
+    DROPIN_CONF=$conf "$root/tests/dropin.sh" -r $x -t 600 -o "$out/$name" -c 'WIN /S' \
+        -f "$cm1=CM1.EXE" -i 'boot:shell=C:\CM1.EXE' -i "w16:cm1parts=$parts" "$@" > "$out/$name.txt" 2>&1 || true
+    kill "$hpid" "$hpid2" 2>/dev/null || true
+    wait "$hpid" "$hpid2" 2>/dev/null || true
     tr -d '\r' < "$out/$name/c/WINDOWS/TK.LOG" > "$out/$name.log" 2>/dev/null || : > "$out/$name.log"
     grep -v '^OBS ~' "$out/$name.log" > "$out/$name.cmp" || true
 }
@@ -72,7 +80,7 @@ esac
 [ -z "$only" ] || { echo "commprobe: $only run in $out"; exit 0; }
 fails=0
 grep -q '^CM1 done' "$out/ms.log" || { echo "FAIL: the run with Windows 3.1's COMM.DRV did not finish ($out/ms.log)"; fails=1; }
-for k in log host; do
+for k in log host host2; do
     a=$out/ms.$k b=$out/w16.$k
     [ $k = log ] && a=$out/ms.cmp b=$out/w16.cmp
     if cmp -s "$a" "$b"; then

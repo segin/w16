@@ -1445,3 +1445,29 @@ $(DOS)/MS4B.COM: tests/dos/ms4b.asm
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/MD2A.EXE $(DOS)/MS3A.DRV $(DOS)/MS4A.COM $(DOS)/MD2B.EXE $(DOS)/MS3B.COM \
      $(DOS)/MS4B.COM $(DOS)/MOUSEPT.DRV $(DOS)/MOUSEPF.DRV $(DOS)/MD2C.EXE $(DOS)/MS3C.COM
+
+# ---- COMM.DRV: w16's serial and parallel communications driver
+# (drivers/comm; README.md there)
+$(B)/comm/comm.o: drivers/comm/comm.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/COMM.DRV: $(B)/comm/comm.o drivers/comm/comm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/comm/comm.lnk name $@ option map=$(B)/comm/comm.map \
+	    file { $(B)/comm/comm.o }
+	python3 tools/nenoname.py $@ 101
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/COMM.DRV
+install-tree: $(W16SYS)/COMM.DRV
+$(W16SYS)/COMM.DRV: $(DOS)/COMM.DRV
+	@mkdir -p $(@D)
+	cp $< $@
+# CM1.EXE: the communications driver observed (tests/apps/cm1.c, md1s.asm's
+# call thunk; run by tests/commprobe.sh with Windows 3.1's COMM.DRV and
+# with w16's, tests/commhost.py at the far end of COM1)
+$(B)/tests/cm1.o: tests/apps/cm1ref.h tests/apps/tklog.h
+$(DOS)/CM1.EXE: $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cm1.map file { $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o }
+dos: $(DOS)/CM1.EXE

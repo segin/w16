@@ -31,7 +31,10 @@ order received; a run ends at a line change, a command or a mark),
 "L rts dtr brk" for each change of the guest's lines, and "#..." for
 each command as received.
 
-usage: commhost.py [-l LOG] [-t SECS] PORT
+-T FILE: also every chunk received ("<") and sent (">", the link's own
+encoding) with the seconds since the start, for reading timing.
+
+usage: commhost.py [-l LOG] [-T FILE] [-t SECS] PORT
 """
 import argparse
 import socket
@@ -46,8 +49,16 @@ def main():
     ap.add_argument('port', type=int)
     ap.add_argument('-l', '--log')
     ap.add_argument('-t', '--timeout', type=float, default=600)
+    ap.add_argument('-T', '--timed')
     a = ap.parse_args()
     log = open(a.log, 'w') if a.log else sys.stdout
+    tlf = open(a.timed, 'w') if a.timed else None
+    t0 = time.time()
+
+    def tlog(s):
+        if tlf:
+            tlf.write('%8.3f %s\n' % (time.time() - t0, s))
+            tlf.flush()
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(('127.0.0.1', a.port))
@@ -77,6 +88,7 @@ def main():
     def send(b):
         with lock:
             conn.sendall(b)
+            tlog('> ' + b.hex())
 
     def sendctl(n):
         send(bytes([0xFF, n & 0xFF]))
@@ -135,6 +147,7 @@ def main():
             break
         if not d:
             break
+        tlog('< ' + d.hex())
         for b in d:
             if esc:
                 esc = False
