@@ -16,7 +16,7 @@ void free_window_dcs(HWND h);
 
 /* ---- stubs (user/stubs.asm, tools/mkuserexp.py): record which
    unimplemented ordinals are called ---- */
-static BYTE unimpl_seen[64];            /* bit per ordinal 0-511 */
+static BYTE __far unimpl_seen[64];            /* bit per ordinal 0-511 */
 static WORD unimpl_count;
 
 void __far __pascal __loadds UNIMPL(WORD ord)

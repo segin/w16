@@ -1156,7 +1156,9 @@ USER_C   := $(wildcard user/*.c)
 # uentry.o first: its _NULL (class BEGDATA) must start DGROUP, the 16 bytes
 # of instance data KERNEL keeps there (the atom table pointer at 8, ...)
 USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o)
-UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+# -zc: string literals and const data in the code segments, not DGROUP,
+# whose room is windows' and classes' (ARCHITECTURE.md 10.3, US15)
+UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -zc -ox -wx -we \
             -i=$(WATCOM)/h -i=$(WATCOM)/h/win
 $(B)/user/u_%.o: user/%.c user/user.h
 	@mkdir -p $(@D)

@@ -58,7 +58,7 @@ static HCURSOR hcurNoDrop;
    (w16's own drawing) */
 static HCURSOR no_drop(void)
 {
-    static BYTE andb[128], xorb[128];
+    static BYTE __far andb[128], __far xorb[128];
     int x, y;
     if (hcurNoDrop)
         return hcurNoDrop;
