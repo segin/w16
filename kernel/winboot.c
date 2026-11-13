@@ -179,21 +179,21 @@ static void print_modmap(void)
     module FAR *m;
     u16 i;
     for (m = module_first; m; m = m->next) {
-        kputs("w16: ");
-        kputs(m->name);
-        kputs(" rec=");
-        kputhex(m->self);
-        kputs(" hmod=");
-        kputhex(m->ne_sel);
+        kdbg("w16: ");
+        kdbg(m->name);
+        kdbg(" rec=");
+        kdbghex(m->self);
+        kdbg(" hmod=");
+        kdbghex(m->ne_sel);
         for (i = 0; i < m->seg_count; i++) {
-            kputs(" ");
-            kputdec(i + 1);
-            kputs("=");
-            kputhex(m->seg[i].sel);
+            kdbg(" ");
+            kdbghex(i + 1);
+            kdbg("=");
+            kdbghex(m->seg[i].sel);
         }
-        kputs(" ");
-        kputs(m->path);
-        kputs("\r\n");
+        kdbg(" ");
+        kdbg(m->path);
+        kdbg("\r\n");
     }
 }
 
@@ -286,6 +286,16 @@ u16 winboot(void)
         sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
         heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
         exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
+        {
+            extern u16 debug_to_aux;
+            debug_to_aux = GetPrivateProfileInt("w16", "DebugToAux", 0, sysini) != 0;
+        }
+    }
+    {
+        /* [w16] debuglog=FILE: w16's own diagnostics (util.c kdbg) */
+        static char dbg[80];
+        GetPrivateProfileString("w16", "debuglog", "", dbg, sizeof dbg, sysini);
+        kdbg_init(dbg);
     }
     if (take_switch_b())
         diag_init();
@@ -299,6 +309,8 @@ u16 winboot(void)
     boot_load("fonts.fon", "FONTS.FON");
     boot_load("oemfonts.fon", "OEMFONTS.FON");
     boot_load(NULL, "GDI.EXE");
+    win_screen = 1;                     /* USER's initialisation enables
+                                           the display: graphics from here */
     boot_load(NULL, "USER.EXE");
 
     /* the shell: its command tail is the rest of KERNEL's, without the

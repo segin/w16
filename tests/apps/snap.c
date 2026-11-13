@@ -16,6 +16,9 @@
  *     type <text>            post a WM_CHAR for each character of <text>
  *     snap <file.bmp>        save the whole screen as a 4-bit .BMP
  *     dump                   log every window: class, text, style, rect
+ *     focus                  log the window with the focus
+ *     clickid <hex id>       click (posted) the middle of a control of the
+ *                            active dialog
  *     move <x> <y> <cx> <cy> MoveWindow the active top-level window
  *     mdown <x> <y>          real (journalled) mouse input at screen
  *     mmove <x> <y>          position x,y: left button down, a move, the
@@ -1458,6 +1461,37 @@ static void run_line(char *l)
         cbsel(arg);
     } else if (same(l, "blink")) {
         SetCaretBlinkTime(parse_num(arg, 10));
+    } else if (same(l, "focus")) {
+        /* which window has the focus: class, ID, text */
+        HWND f = GetFocus();
+        char cls[32], text[64];
+        cls[0] = text[0] = 0;
+        if (f) {
+            GetClassName(f, cls, sizeof cls);
+            SendMessage(f, WM_GETTEXT, sizeof text, (LPARAM)(LPSTR)text);
+        }
+        out(" -> ");
+        out(cls);
+        out(" id=");
+        outhex(f ? GetWindowWord(f, GWW_ID) : 0, 4);
+        out(" \"");
+        out(text);
+        out("\"");
+    } else if (same(l, "clickid")) {
+        /* clickid <hex id>: a left click (posted) in the middle of that
+           control of the active dialog (group boxes do not get in the way) */
+        HWND top = top_window(), w = top ? GetDlgItem(top, parse_num(arg, 16)) : NULL;
+        if (w) {
+            RECT r;
+            LPARAM lp;
+            GetClientRect(w, &r);
+            lp = MAKELPARAM(r.right / 2, r.bottom / 2);
+            PostMessage(w, WM_LBUTTONDOWN, MK_LBUTTON, lp);
+            PostMessage(w, WM_LBUTTONUP, 0, lp);
+        } else {
+            out(" -> no such control");
+        }
+        pump(300);
     } else if (same(l, "dump")) {
         out("\r\n");
         dump_tree(GetWindow(GetDesktopWindow(), GW_CHILD), 0);

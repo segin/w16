@@ -1,0 +1,34 @@
+; PrintDlg with one printer (HP LaserJet Series II on LPT1:): the Print and
+; Print Setup dialogs, what comes back
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+; a: return the default, no dialog
+cd1 print flags=400
+; b: return the default with a DC
+cd1 print flags=500
+; c: the Print dialog, all pages, OK
+cd1 print flags=3100 hook=11 from=1 to=5 min=1 max=10 copies=1
+; d: the Print Setup dialog, OK
+cd1 print flags=3040 hook=11
+; e: Print with pages, collate, print to file shown, help, OK
+cd1 print flags=0832 from=2 to=3 min=1 max=9 copies=2 keep=1
+wait 3000
+; c
+snap C:\C1.BMP
+dump
+key 0D
+wait 2000
+; d
+snap C:\D1.BMP
+dump
+key 0D
+wait 2000
+; e
+snap C:\E1.BMP
+dump
+key 0D
+wait 2000

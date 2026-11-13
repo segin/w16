@@ -1,0 +1,137 @@
+; GetOpenFileName / GetSaveFileName behaviour: typed names, messages,
+; returned fields
+cd1 mkfile C:\WINDOWS\RO.TXT
+cd1 attr C:\WINDOWS\RO.TXT 1
+; 1: a name that does not exist, no flags: returned as typed, made full
+cd1 open filter=All|*.* ftitle=20
+; 2: FILEMUSTEXIST: the message
+cd1 open filter=All|*.* flags=1000
+; 3: PATHMUSTEXIST, a path that does not exist
+cd1 save filter=All|*.* flags=800
+; 4: OVERWRITEPROMPT on an existing file: the question, Yes
+cd1 save filter=All|*.* flags=2
+; 5: CREATEPROMPT: the question, No, then Cancel
+cd1 open filter=All|*.* flags=2000
+; 6: a reserved device name, then an invalid one
+cd1 save filter=All|*.* flags=0
+; 7: default extension
+cd1 save filter=All|*.* defext=txt ftitle=40
+; 8: the buffer is too small
+cd1 open filter=All|*.* max=8
+; 9: a directory typed: goes there; a pattern typed: lists it; then a file
+cd1 open filter=All|*.* ftitle=40
+cd1 pwd
+; 10: NOCHANGEDIR
+cd1 open filter=All|*.* flags=8 dir=C:\WINDOWS\SYSTEM
+cd1 pwd
+; 11: a read-only file, NOREADONLYRETURN on save
+cd1 save filter=All|*.* flags=8000
+; 12: read only box checked
+cd1 open filter=All|*.*
+; 13: the initial directory and file with a path
+cd1 open filter=All|*.* file=C:\WINDOWS\SYSTEM\*.drv
+cd1 cd C:\
+cd1 pwd
+wait 2500
+; 1
+type nofile.txt
+key 0D
+wait 1000
+; 2
+type nofile.txt
+key 0D
+wait 1000
+snap C:\F2A.BMP
+dump
+key 0D
+wait 500
+key 1B
+wait 1000
+; 3
+type c:\nodir\x.txt
+key 0D
+wait 1000
+snap C:\F3A.BMP
+dump
+key 0D
+wait 500
+key 1B
+wait 1000
+; 4
+type win.ini
+key 0D
+wait 1000
+snap C:\F4A.BMP
+dump
+alt y
+wait 1000
+; 5
+type newfile.txt
+key 0D
+wait 1000
+snap C:\F5A.BMP
+dump
+alt n
+wait 500
+key 1B
+wait 1000
+; 6
+type con
+key 0D
+wait 1000
+snap C:\F6A.BMP
+dump
+key 0D
+wait 500
+type a+b<c.txt
+key 0D
+wait 1000
+snap C:\F6B.BMP
+dump
+key 0D
+wait 500
+key 1B
+wait 1000
+; 7
+type readme
+key 0D
+wait 1000
+; 8
+type system.ini
+key 0D
+wait 1000
+; 9
+type system
+key 0D
+wait 1000
+dump
+type *.drv
+key 0D
+wait 1000
+dump
+type vga.drv
+key 0D
+wait 1000
+; 10
+type mouse.drv
+key 0D
+wait 1000
+; 11
+type ro.txt
+key 0D
+wait 1000
+snap C:\F11A.BMP
+dump
+key 0D
+wait 500
+key 1B
+wait 1000
+; 12
+alt r
+type win.ini
+key 0D
+wait 1000
+; 13
+dump
+key 1B
+wait 1000

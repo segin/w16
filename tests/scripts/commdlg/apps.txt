@@ -1,0 +1,45 @@
+; other programs' common dialogs: Program Manager's Browse, Write's
+; Font, Paintbrush's Open, Cardfile's Open
+nocd1
+run PROGMAN.EXE
+wait 3000
+menu f
+char r
+wait 800
+alt b
+wait 2000
+snap C:\P1.BMP
+key 1B
+wait 600
+key 1B
+wait 600
+run WRITE.EXE
+wait 3000
+menu c
+char f
+wait 2500
+snap C:\W1.BMP
+key 1B
+wait 600
+close
+wait 1500
+run PBRUSH.EXE
+wait 3000
+menu f
+char o
+wait 2500
+snap C:\B1.BMP
+key 1B
+wait 600
+close
+wait 1500
+run CARDFILE.EXE
+wait 3000
+menu f
+char o
+wait 2500
+snap C:\C1.BMP
+key 1B
+wait 600
+close
+wait 1500

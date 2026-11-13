@@ -1,0 +1,21 @@
+; ChooseFont with a printer DC (PostScript): printer fonts, both, WYSIWYG
+expand PSCRIPT.DR_ WINDOWS/SYSTEM/PSCRIPT.DRV
+ini WINDOWS/WIN.INI windows:device=Apple LaserWriter Plus,PSCRIPT,LPT1:
+ini WINDOWS/WIN.INI devices:Apple LaserWriter Plus=PSCRIPT,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:Apple LaserWriter Plus=PSCRIPT,LPT1:,15,45
+cd1 font flags=102 dc=1
+cd1 font flags=143 dc=1 face=Courier height=-13
+cd1 font flags=8143 dc=1 face=Times~New~Roman height=-16
+wait 4000
+snap C:\R1.BMP
+dump
+key 0D
+wait 2000
+snap C:\R2.BMP
+dump
+key 0D
+wait 2000
+snap C:\R3.BMP
+dump
+key 0D
+wait 2000

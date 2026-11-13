@@ -1206,8 +1206,14 @@ static void run_menu(MLOOP *l)
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
             /* the characters for mnemonics come from here: without this a
-               menu opened from the keyboard ignored its item letters */
-            TranslateMessage(&msg);
+               menu opened from the keyboard ignored its item letters. Not
+               for Return and Esc, the menu's own keys: their WM_CHAR was
+               left in the queue and reached the window after the menu (3.1:
+               Notepad's Edit > Time/Date chosen by Enter puts the time
+               after the text; w16 put a line break first; Write took the
+               '\r' as typing and scrolled back to its caret) */
+            if (msg.wParam != VK_RETURN && msg.wParam != VK_ESCAPE)
+                TranslateMessage(&msg);
             menu_key(l, msg.wParam);
             continue;
         case WM_CHAR:

@@ -1,0 +1,39 @@
+# wlink directives for w16's COMMDLG.DLL (shell/commdlg; objects, output
+# and resources come from shell/commdlg/commdlg.mk). The exports are the
+# original's ordinals and names (its NE entry table, docs/exportdb); the
+# original also has unnamed, unexported entries 32-53 (entry flags 00: the
+# linker's entry points into its moveable code segments, not API), which
+# w16 does not reproduce.
+format windows dll
+option modname=COMMDLG
+option description 'w16 Common Dialogs'
+option start=libentry
+option heapsize=4k
+option quiet
+library windows.lib
+export GETOPENFILENAME.1
+export GETSAVEFILENAME.2
+export CHOOSECOLOR.5
+export FILEOPENDLGPROC.6
+export FILESAVEDLGPROC.7
+export COLORDLGPROC.8
+export LOADALTERBITMAP.9
+export FINDTEXT.11
+export REPLACETEXT.12
+export FINDTEXTDLGPROC.13
+export REPLACETEXTDLGPROC.14
+export CHOOSEFONT.15
+export FORMATCHARDLGPROC.16
+export FONTSTYLEENUMPROC.18
+export FONTFAMILYENUMPROC.19
+export PRINTDLG.20
+export PRINTDLGPROC.21
+export PRINTSETUPDLGPROC.22
+export EDITINTEGERONLY.23
+export WANTARROWS.25
+export COMMDLGEXTENDEDERROR.26
+export GETFILETITLE.27
+export WEP.28 resident
+export DWLBSUBCLASS.29
+export DWUPARROWHACK.30
+export DWOKSUBCLASS.31

@@ -35,6 +35,8 @@ static u16 filecdr_task;
    end of ExitWindows (Pietrek). UNVERIFIED: the exit code. */
 void KAPI ExitKernel(void)
 {
+    win_screen = 0;                     /* USER's ExitWindows disabled the
+                                           display: text mode */
     trace_print();                      /* [w16] trace, if any */
     kexit_to_dos(0);
 }
@@ -234,9 +236,9 @@ u32 KAPI GetCurPID(u32 dw)
    logged, 0 returned). */
 u32 KAPI WinOldApCall(u16 fn)
 {
-    kputs("w16: WinOldApCall ");
-    kputhex(fn);
-    kputs("\r\n");
+    kdbg("w16: WinOldApCall ");
+    kdbghex(fn);
+    kdbg("\r\n");
     if (fn == 0)
         return 0;
     return ((u32)psp_sel << 16) | fn;
@@ -252,20 +254,20 @@ static u32 woa_hook;
 
 u16 KAPI RegisterWinOldApHook(u16 a, u16 b, u16 c)
 {
-    kputs("w16: RegisterWinOldApHook ");
-    kputhex(a);
-    kputs(" ");
-    kputhex(b);
-    kputs(" ");
-    kputhex(c);
-    kputs("\r\n");
+    kdbg("w16: RegisterWinOldApHook ");
+    kdbghex(a);
+    kdbg(" ");
+    kdbghex(b);
+    kdbg(" ");
+    kdbghex(c);
+    kdbg("\r\n");
     woa_hook = ((u32)b << 16) | c;
     return 1;
 }
 
 u32 KAPI GetWinOldApHooks(void)
 {
-    kputs("w16: GetWinOldApHooks\r\n");
+    kdbg("w16: GetWinOldApHooks\r\n");
     return woa_hook;
 }
 

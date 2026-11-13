@@ -393,13 +393,13 @@ static void log_name(u16 t)
     char n[9];
     u16 i;
     if (!t) {
-        kputs("-");
+        kdbg("-");
         return;
     }
     for (i = 0; i < 8 && TB(t, TDB_NAME + i); i++)
         n[i] = TB(t, TDB_NAME + i);
     n[i] = 0;
-    kputs(n);
+    kdbg(n);
 }
 
 /* A task's vectors for INT 0, 2, 4, 6, 7, 3Eh and 75h (Pietrek: TDB
@@ -468,13 +468,13 @@ static void switch_to(u16 t)
     heap_check("task switch", 0);
 
     if (sched_log) {
-        kputs("w16 sw ");
+        kdbg("w16 sw ");
         log_name(from);
-        kputs(" -> ");
+        kdbg(" -> ");
         log_name(t);
-        kputs(" (");
-        kputs(sched_why);
-        kputs(")\r\n");
+        kdbg(" (");
+        kdbg(sched_why);
+        kdbg(")\r\n");
     }
 
     if (have87 == 0xFFFF)
@@ -885,9 +885,9 @@ void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
     u32 hook = fatal_exit_hook();
     if (hook)
         mod_call((u16)(hook >> 16), (u16)hook, ss_now(), 0, 0, 1, code);
-    kputs("w16: FatalExit ");
-    kputhex(code);
-    kputs("\r\n");
+    kdbg("w16: FatalExit ");
+    kdbghex(code);
+    kdbg("\r\n");
     r.ax = 0x4CFF;              /* ends the task through our INT 21h hook */
     r.ds = r.es = 0;
     dos21(&r);
@@ -1013,11 +1013,48 @@ u32 KAPI_ES GetCurrentPDB(void)                                  /* KERNEL.37 */
     return ((u32)psp_sel << 16) | (cur_task ? cur_pdb : psp_sel);
 }
 
+/* [w16] DebugToAux (winboot.c): 1 = OutputDebugString always to handle 3 */
+u16 debug_to_aux;
+
+/* handle 3 is a device other than the console (IOCTL 4400h: DX bit 7 a
+   character device, bits 0 and 1 the console's input and output) */
+static int aux_not_console(void)
+{
+    regs16 r;
+    r.ax = 0x4400;
+    r.bx = 3;
+    r.ds = r.es = 0;
+    if (dos21(&r))
+        return 0;
+    return (r.dx & 0x80) && !(r.dx & 0x03);
+}
+
 void KAPI OutputDebugString(const char FAR *s)                /* KERNEL.115 */
 {
     if (s) {
+        regs16 r;
         th_outstr(s);                   /* toolhelp.c: 12h */
-        kputs(s);
+        /* then, with no debugger, Windows 3.1's retail KRNL286 writes the
+           text to DOS handle 3, the standard auxiliary device (TK56 with
+           E10 loaded before WIN: INT 21h AH=40h, BX=0003h, CX = the
+           length, from KERNEL). Under DOSBox that is the console: 3.1
+           paints the text over its own screen (COMMDLG's "Return from
+           GetDriveType ..." in Recorder's File > Merge). w16's default
+           (an enhancement, ARCHITECTURE.md 6.8): handle 3 only when it is
+           not the console (IOCTL 4400h: a character device without the
+           console bits, e.g. COM1 on a real machine); [w16] DebugToAux=1
+           writes it there always, as 3.1. UNVERIFIED: whose PSP 3.1 uses
+           (w16: the current one) */
+        if (debug_to_aux || aux_not_console()) {
+            r.ax = 0x4000;
+            r.bx = 3;
+            r.cx = kstrlen(s);
+            r.dx = FP_OFF(s);
+            r.ds = FP_SEG(s);
+            r.es = 0;
+            dos21(&r);
+        }
+        kdbg_file(s);                   /* and [w16] debuglog (util.c) */
     }
 }
 

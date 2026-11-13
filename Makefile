@@ -42,7 +42,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE
@@ -1207,6 +1207,22 @@ UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -zc -ox -wx -we \
 $(B)/user/u_%.o: user/%.c user/user.h
 	@mkdir -p $(@D)
 	$(WCC) $(UUCFLAGS) -fo=$@ $<
+# build/w16ver.h: w16's version (the file VERSION, its one source) and the
+# build: the source tree's commit, `git rev-parse --short=7 HEAD`, or
+# W16_BUILD from the environment (tools/remote-test.sh passes it: a
+# worktree's copy on the build host is no git checkout), else "unknown".
+# Rewritten only when it changes, so a build of the same commit is the
+# same. USER's desktop stamp shows both (user/deskver.c).
+W16_VERSION := $(shell cat VERSION)
+W16_BUILD   ?= $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+$(B)/w16ver.h: VERSION FORCE
+	@mkdir -p $(@D)
+	@printf '#define W16_VERSION "%s"\n#define W16_BUILD "%s"\n' '$(W16_VERSION)' '$(W16_BUILD)' > $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv $@.tmp $@; fi
+.PHONY: FORCE
+FORCE:
+$(B)/user/u_deskver.o: $(B)/w16ver.h
+$(B)/user/u_deskver.o: UUCFLAGS += -i=$(B)
 $(B)/user/uentry.o: user/uentry.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
@@ -1587,3 +1603,6 @@ install-tree: $(W16SYS)/KEYBOARD.DRV
 $(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+
+# COMMDLG.DLL and its probe (shell/commdlg/commdlg.mk)
+include shell/commdlg/commdlg.mk

@@ -17,6 +17,8 @@ w16 repository's LICENSE):
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
                           About boxes)
+  SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
+                          Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
                           serial, bus or InPort mouse, use your own
                           Windows 3.1 MOUSE.DRV instead)
@@ -54,9 +56,9 @@ overwriting the files above:
 Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
 it is there and w16's KRNL286.EXE only when it is not.
 
-Notepad also needs COMMDLG.DLL (SYSTEM) for its Open, Save As, Find and
-Print Setup dialogs, and uses your NOTEPAD.HLP (Windows directory) for
-Help; w16 ships no help text.
+Notepad uses your NOTEPAD.HLP (Windows directory) for Help; w16 ships no
+help text. Printing needs your printer's driver (installed with Control
+Panel, as on Windows 3.1).
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
