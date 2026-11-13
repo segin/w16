@@ -596,9 +596,16 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
         send_message(h, WM_SHOWWINDOW, TRUE, 0);
         if (!(w = valid_wnd(h)))
             return FALSE;
+        /* a child keeps its place in the Z order (US18: three hidden
+           children shown with SW_SHOW or SW_SHOWNORMAL stay in the order
+           they were made on 3.1; w16 brought each to the top, and
+           COMMDLG's dialogs, which show their controls one by one, came
+           out with their tab order backwards: Terminal's Send Text File,
+           Tab from the file name went to Strip LF) */
         set_window_pos(h, (cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? 0 : HWND_TOP,
                        0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
-                       ((cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? SWP_NOACTIVATE | SWP_NOZORDER : 0));
+                       ((cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? SWP_NOACTIVATE | SWP_NOZORDER : 0) |
+                       ((w->style & WS_CHILD) ? SWP_NOZORDER : 0));
         return FALSE;
     }
 }

@@ -307,6 +307,28 @@ int __cdecl tmain(void)
         lstrcpy(tag, "plain");
         dump_items("top", GetSystemMenu(t, FALSE));
         dump_items("child", GetSystemMenu(c, FALSE));
+        /* hidden children shown: where they go in the Z order */
+        {
+            static const int cmds[] = { SW_SHOW, SW_SHOWNORMAL, SW_SHOWNA, SW_SHOWNOACTIVATE };
+            int k, j;
+            for (k = 0; k < 4; k++) {
+                HWND a[3], w;
+                WORD order = 0;
+                for (j = 0; j < 3; j++)
+                    a[j] = CreateWindow("US18F", "Z", WS_CHILD, j * 10, 0, 10, 10, t, (HMENU)(j + 1), hi, NULL);
+                for (j = 0; j < 3; j++)
+                    ShowWindow(a[j], cmds[k]);
+                for (w = GetWindow(t, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+                    order = order * 16 + GetWindowWord(w, GWW_ID);
+                {
+                    char nm[24];
+                    wsprintf(nm, "zorder.show%d", cmds[k]);
+                    o(nm, order);
+                }
+                for (j = 0; j < 3; j++)
+                    DestroyWindow(a[j]);
+            }
+        }
         DestroyWindow(t);
     }
 
