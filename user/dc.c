@@ -99,7 +99,7 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
                    parent->rcClient.right, parent->rcClient.bottom);
         CombineRgn(r, r, hrgnTmp1, RGN_AND);
         if (clipsib) {
-            for (s = parent->hwndChild; s && s != (HWND)(WORD)p; s = PW(s)->hwndNext) {
+            for (s = parent->hwndChild; s && s != HW(p); s = PW(s)->hwndNext) {
                 PWND sw = PW(s);
                 if (!(sw->style & WS_VISIBLE))
                     continue;

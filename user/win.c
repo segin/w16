@@ -41,16 +41,125 @@ void free_props(PWND w);
 void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
 
+/* ---- where a window's WND is ----
+   Normally (the layout 3.1's tools know, Schulman ch. 6) the WND and its
+   extra bytes are one fixed block of USER's DGROUP and the HWND is its
+   offset: PW(h) is DGROUP:h.
+   [w16] ExtendedUserHeap=1 (SYSTEM.INI, read at start-up; off by default)
+   moves them out: the HWND is still the offset of a fixed DGROUP block,
+   but a 4-byte stub {heap number with STUB_SIG, offset}, and the WND
+   follows a word holding the HWND in a block of one of up to NWNDHEAPS
+   window heaps (local heaps in 64K global blocks of their own, made whole
+   so their selectors never change). A window then costs DGROUP the stub
+   alone, as Windows 95 did, and thousands fit; but a program that reads
+   USER's data directly (Spy-type tools, desktop replacements, debuggers,
+   some hook DLLs; TOOLHELP's heap walk shows stubs where WNDs were) does
+   not find the WND at DGROUP:HWND. Everything else reaches windows through
+   PW/HW/valid_wnd, the one code path both layouts share. */
+#define NWNDHEAPS 16
+#define STUB_SIG  0x5700        /* 'W' in the high byte, the heap's number low */
+typedef struct STUB {
+    WORD sig;
+    WORD off;                   /* the window heap's block: the HWND, then the WND */
+} STUB;
+static UHEAP uhWnd[NWNDHEAPS];
+static int nwndheaps;
+static WND dummy_wnd;           /* PW of a handle that is no window (ext mode) */
+
+static BOOL add_wnd_heap(void)
+{
+    HGLOBAL g;
+    WORD sel;
+    if (nwndheaps >= NWNDHEAPS)
+        return FALSE;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0xFFF0);
+    if (!g)
+        return FALSE;
+    sel = HIWORD(GlobalHandle((UINT)g));
+    if (!LocalInit(sel, 0x12, 0xFFEF)) {
+        GlobalFree(g);
+        return FALSE;
+    }
+    uhWnd[nwndheaps].h = g;
+    uhWnd[nwndheaps].sel = sel;
+    nwndheaps++;
+    return TRUE;
+}
+
+PWND wnd_of(WORD h)
+{
+    STUB __near *st;
+    if (!h)
+        return 0;
+    if (!ext_user_heap)
+        return (PWND)MK_FP(get_ds(), h);
+    st = (STUB __near *)h;
+    if ((st->sig & 0xFF00) != STUB_SIG || (st->sig & 0xFF) >= nwndheaps)
+        return (PWND)(WND __near *)&dummy_wnd;
+    return (PWND)MK_FP(uhWnd[st->sig & 0xFF].sel, st->off + 2);
+}
+
+HWND hwnd_of(PWND w)
+{
+    if (!w)
+        return 0;
+    return ext_user_heap ? (HWND)((WORD __far *)w)[-1] : (HWND)FP_OFF(w);
+}
+
+/* a new window's block of size bytes, zeroed: its handle, 0 if no room */
+static HWND alloc_wnd(WORD size)
+{
+    STUB __near *st;
+    WORD i, off = 0;
+    if (!ext_user_heap)
+        return (HWND)LocalAlloc(LPTR, size);
+    st = (STUB __near *)LocalAlloc(LPTR, sizeof(STUB));
+    if (!st)
+        return 0;
+    for (i = 0; !off; i++) {
+        if (i == nwndheaps && !add_wnd_heap())
+            break;
+        off = uh_alloc(&uhWnd[i], LMEM_FIXED | LMEM_ZEROINIT, size + 2);
+    }
+    if (!off) {
+        LocalFree((HLOCAL)st);
+        return 0;
+    }
+    i--;
+    *(WORD __far *)MK_FP(uhWnd[i].sel, off) = (WORD)st;
+    st->sig = STUB_SIG | i;
+    st->off = off;
+    return (HWND)(WORD)st;
+}
+
+static void free_wnd(HWND h)
+{
+    STUB __near *st = (STUB __near *)(WORD)h;
+    if (ext_user_heap)
+        uh_free(&uhWnd[st->sig & 0xFF], st->off);
+    LocalFree((HLOCAL)h);
+}
+
 PWND valid_wnd(HWND h)
 {
-    PWND w = PW(h);
+    PWND w;
     WORD sz;
     if (!h || ((WORD)h & 1))
         return 0;
     /* a live window is a local block of ours that points to a class */
     sz = LocalSize((HLOCAL)h);
-    if (sz < sizeof(WND) || LocalHandle((UINT)h) != (HLOCAL)h)
+    if (sz < (ext_user_heap ? sizeof(STUB) : sizeof(WND)) || LocalHandle((UINT)h) != (HLOCAL)h)
         return 0;
+    if (ext_user_heap) {
+        STUB __near *st = (STUB __near *)(WORD)h;
+        UHEAP *hp;
+        if ((st->sig & 0xFF00) != STUB_SIG || (st->sig & 0xFF) >= nwndheaps || (st->off & 1))
+            return 0;
+        hp = &uhWnd[st->sig & 0xFF];
+        if (uh_size(hp, st->off) < sizeof(WND) + 2 || *(WORD __far *)MK_FP(hp->sel, st->off) != (WORD)h)
+            return 0;
+    }
+    w = PW(h);
     if (!w->cls || (w->flags & 0x8000))
         return 0;
     return w;
@@ -61,7 +170,7 @@ HWND top_level(HWND h)
     PWND w = valid_wnd(h);
     while (w && (w->style & WS_CHILD) && w->hwndParent)
         w = PW(w->hwndParent);
-    return (HWND)(WORD)w;
+    return HW(w);
 }
 
 void unlink_window(PWND w)
@@ -71,7 +180,7 @@ void unlink_window(PWND w)
     if (!p)
         return;
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)
-        if (*link == (HWND)(WORD)w) {
+        if (*link == HW(w)) {
             *link = w->hwndNext;
             break;
         }
@@ -87,7 +196,7 @@ void link_window(PWND w, HWND after)
         return;
     if (after == HWND_TOP) {
         w->hwndNext = p->hwndChild;
-        p->hwndChild = (HWND)(WORD)w;
+        p->hwndChild = HW(w);
         return;
     }
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)
@@ -96,7 +205,7 @@ void link_window(PWND w, HWND after)
             break;
         }
     w->hwndNext = *link;
-    *link = (HWND)(WORD)w;
+    *link = HW(w);
 }
 
 BOOL is_visible(PWND w)
@@ -166,10 +275,10 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     pw = parent ? valid_wnd(parent) : (PWND)0;
     if ((style & WS_CHILD) && !pw)
         return 0;
-    w = (PWND)LocalAlloc(LPTR, sizeof(WND) + c->cbWndExtra);
-    if (!w)
+    h = alloc_wnd(sizeof(WND) + c->cbWndExtra);
+    if (!h)
         return 0;
-    h = (HWND)(WORD)w;
+    w = PW(h);
     w->cls = (WORD)c;
     c->cwnd++;
     w->hInstance = hinst;
@@ -330,7 +439,7 @@ HWND WINAPI CreateWindowEx(DWORD ex, LPCSTR cls, LPCSTR title, DWORD style, int 
 
 static void free_window(PWND w)
 {
-    HWND h = (HWND)(WORD)w;
+    HWND h = HW(w);
     kill_window_timers(h);
     if (w->hrgnUpdate) {
         if ((WORD)w->hrgnUpdate > 1)
@@ -352,7 +461,7 @@ static void free_window(PWND w)
     ((PCLS)w->cls)->cwnd--;
     w->cls = 0;
     w->flags |= 0x8000;
-    LocalFree((HLOCAL)w);
+    free_wnd(h);
 }
 
 static void destroy_tree(HWND h)
@@ -524,7 +633,7 @@ HWND WINAPI GetWindow(HWND h, UINT cmd)
     case GW_HWNDLAST:
         if (!w->hwndParent)
             return 0;
-        for (r = (HWND)(WORD)w; PW(r)->hwndNext; r = PW(r)->hwndNext)
+        for (r = HW(w); PW(r)->hwndNext; r = PW(r)->hwndNext)
             ;
         return r;
     case GW_HWNDNEXT:

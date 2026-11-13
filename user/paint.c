@@ -45,7 +45,7 @@ static void add_update(PWND w, HRGN rgn, BOOL erase, BOOL children)
     r = CreateRectRgnIndirect(&w->rcWindow);
     if (rgn)
         CombineRgn(r, r, rgn, RGN_AND);
-    savebits_invalidated((HWND)(WORD)w, r);     /* an image kept under a menu goes */
+    savebits_invalidated(HW(w), r);     /* an image kept under a menu goes */
     {
         RECT box;
         if (GetRgnBox(r, &box) == NULLREGION)

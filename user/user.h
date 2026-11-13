@@ -120,8 +120,13 @@ typedef struct WND {            /* layout: Pietrek, Windows Internals, table 4-2
     WORD   hSysMenu;            /* 3A */
     /* window extra bytes follow (cbWndExtra) */
 } WND;
-typedef WND __near *PWND;
-#define WND_EXTRA(w)   ((BYTE __near *)((w) + 1))
+/* A PWND is a far pointer: to the WND in DGROUP (the HWND its offset),
+   or, with [w16] ExtendedUserHeap=1, to the window's data in a window heap
+   of its own, the HWND then the offset of a small stub block in DGROUP
+   that says where (win.c). PW() and HW() go between the two; nothing
+   else may assume which. */
+typedef WND __far *PWND;
+#define WND_EXTRA(w)   ((BYTE __far *)((w) + 1))
 
 /* WND.flags (w16's own) */
 #define WF_UPDATENC     0x0001  /* the frame needs WM_NCPAINT */
@@ -137,7 +142,10 @@ typedef WND __near *PWND;
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
 #define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
 
-#define PW(h)   ((PWND)(WORD)(h))
+PWND wnd_of(WORD h);              /* the WND of a handle believed live */
+HWND hwnd_of(PWND w);              /* the handle of a WND */
+#define PW(h)   wnd_of((WORD)(h))
+#define HW(w)   hwnd_of(w)
 PWND valid_wnd(HWND h);         /* NULL if h is not a live window */
 extern HWND hwndDesktop;
 

@@ -188,7 +188,7 @@ static SBINFO *info(HWND hwnd, int bar, PWND *pw)
     if (!w)
         return 0;
     if (bar == SB_CTL)
-        return (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+        return (SBINFO *)WND_EXTRA(w);
     {
         SBS __far *s = sbs_of(w, TRUE);
         if (!s)
@@ -402,7 +402,7 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     SBINFO *s;
     if (!w)
         return 0;
-    s = (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+    s = (SBINFO *)WND_EXTRA(w);
     switch (msg) {
     case WM_CREATE:
         s->min = s->max = s->pos = 0;

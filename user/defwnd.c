@@ -210,7 +210,7 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
     if (w->style & WS_SYSMENU) {
         int s = sysmet[SM_CXSIZE];
         blt_bitmap(hdc, bmClose, t.left, t.top, (w->style & WS_CHILD) ? s : 0, s, t.bottom - t.top);
-        if ((HWND)(WORD)w == hwndSysMenuOpen) {
+        if (HW(w) == hwndSysMenuOpen) {
             RECT b;
             SetRect(&b, t.left, t.top, t.left + s, t.bottom);
             InvertRect(hdc, &b);
