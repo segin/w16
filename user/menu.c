@@ -180,7 +180,10 @@ BOOL WINAPI DestroyMenu(HMENU h)
     m->magic = 0;               /* (a menu that holds itself ends here) */
     for (i = 0; i < m->count; i++) {
         LPMITEM it = item_at(m, i);
-        if (it->flags & MF_POPUP)
+        /* (not a window's system menu: an MDI child's is in its frame's
+           bar while the child is maximised, and the child frees it) */
+        if ((it->flags & MF_POPUP) && valid_menu((HMENU)it->id) &&
+            !(valid_menu((HMENU)it->id)->flags & MENU_SYSMENU))
             DestroyMenu((HMENU)it->id);         /* frees only: m stays good */
         free_item(it);
     }
@@ -197,10 +200,42 @@ BOOL WINAPI IsMenu(HMENU h)
 
 /* the index of an item by position, or by command searching popups too;
    the menu that holds it in *owner. -1: none */
-static int find_item(HMENU h, UINT what, UINT flags, HMENU *owner)
+/* by command: a command item anywhere in the tree first, then a popup
+   whose handle is the value. w16's HMENUs are small menu-heap offsets
+   (as 3.1's), and one can equal a command: Program Manager, not the
+   shell, renames File > Exit Windows... (id 6Ch) to E&xit with
+   ModifyMenu by command, and w16's search found the File popup itself,
+   handle 6Ch, first - the bar read "Exit" */
+static int find_cmd(HMENU h, UINT what, BOOL popups, HMENU *owner)
 {
     LPMENU m = valid_menu(h);
     UINT i;
+    if (!m)
+        return -1;
+    for (i = 0; i < m->count; i++) {
+        LPMITEM it = item_at(m, i);
+        if (it->flags & MF_POPUP) {
+            int r;
+            if (popups && (UINT)it->id == what) {
+                *owner = h;
+                return i;
+            }
+            r = find_cmd((HMENU)it->id, what, popups, owner);
+            if (r >= 0)
+                return r;
+            m = valid_menu(h);
+        } else if (it->id == what && !popups) {
+            *owner = h;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int find_item(HMENU h, UINT what, UINT flags, HMENU *owner)
+{
+    LPMENU m = valid_menu(h);
+    int r;
     if (!m)
         return -1;
     if (flags & MF_BYPOSITION) {
@@ -209,18 +244,8 @@ static int find_item(HMENU h, UINT what, UINT flags, HMENU *owner)
         *owner = h;
         return what;
     }
-    for (i = 0; i < m->count; i++) {
-        LPMITEM it = item_at(m, i);
-        if ((it->flags & MF_POPUP) && (UINT)it->id != what) {
-            int r = find_item((HMENU)it->id, what, flags, owner);
-            if (r >= 0)
-                return r;
-        } else if (it->id == what) {
-            *owner = h;
-            return i;
-        }
-    }
-    return -1;
+    r = find_cmd(h, what, FALSE, owner);
+    return r >= 0 ? r : find_cmd(h, what, TRUE, owner);
 }
 
 /* the item itself (for a look or a change of its flags: nothing may be
@@ -249,8 +274,10 @@ static void store_item(LPMITEM it, UINT flags, UINT id, LPCSTR data, WORD text)
     it->flags = flags & ~(MF_BYPOSITION | MF_CHANGE | MF_APPEND | MF_DELETE | MF_REMOVE | MF_INSERT);
     it->id = id;
     it->text = text;
+    /* a separator is also disabled (probe US18: 3.1's GetMenuState gives
+       0802h for one made by AppendMenu, InsertMenu or a template) */
     if ((flags & MF_SEPARATOR) || (!data && !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_POPUP))))
-        it->flags |= MF_SEPARATOR;
+        it->flags |= MF_SEPARATOR | MF_DISABLED;
 }
 
 static BOOL insert_item(HMENU h, UINT pos, UINT flags, UINT id, LPCSTR data)
@@ -547,7 +574,11 @@ HMENU WINAPI LoadMenu(HINSTANCE hinst, LPCSTR name)
 static HMENU make_sysmenu(PWND w)
 {
     HMENU m = new_menu(MENU_POPUP | MENU_SYSMENU);
-    BOOL child = (w->style & WS_CHILD) != 0;
+    /* an MDI child's: a child of an MDICLIENT (US18: another child window
+       gets the top-level one, Close Alt+F4 and Switch To...) */
+    extern LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+    BOOL child = (w->style & WS_CHILD) && valid_wnd(w->hwndParent) &&
+                 ((PCLS)PW(w->hwndParent)->cls)->lpfnWndProc == (WNDPROC)MDIClientWndProc;
     AppendMenu(m, MF_STRING, SC_RESTORE, "&Restore");
     AppendMenu(m, MF_STRING, SC_MOVE, "&Move");
     AppendMenu(m, MF_STRING, SC_SIZE, "&Size");
@@ -595,6 +626,13 @@ static void sysmenu_states(PWND w, HMENU m)
     EnableMenuItem(m, SC_MAXIMIZE, (!(s & WS_MAXIMIZEBOX) || (s & WS_MAXIMIZE)) ? MF_GRAYED : MF_ENABLED);
 }
 
+void sysmenu_states_of(HWND h, HMENU m)
+{
+    PWND w = valid_wnd(h);
+    if (w)
+        sysmenu_states(w, m);
+}
+
 /* ---- the menu bar ---- */
 static void text_of(LPMITEM it, char *buf, int n)
 {
@@ -624,12 +662,25 @@ static int item_text_width(HDC hdc, LPMITEM it)
 /* align: the window's class has CS_BYTEALIGNCLIENT (probe US5: then the
    items start on 8-pixel boundaries, rounded to the nearest; Program
    Manager's frame class has it) */
+HBITMAP frame_bitmap(int which);
+
+/* OBM_CLOSE in a bar is a maximised MDI child's system-menu box: the
+   bitmap's right half and a black line, as in the child's caption (US18:
+   19 x 18 in Program Manager's bar on 3.1) */
+static int bitmap_width(HBITMAP b)
+{
+    BITMAP bm;
+    if (b && b == frame_bitmap(0))
+        return sysmet[SM_CXSIZE] + 1;
+    return b && GetObject(b, sizeof bm, (LPSTR)&bm) ? bm.bmWidth : 0;
+}
+
 static int layout_bar(LPMENU m, int width, BOOL align)
 {
     HDC hdc = hdcScreen;
     HFONT old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     int x = 0, y = 0, h = sysmet[SM_CYMENU];
-    UINT i;
+    UINT i, help = m->count;
     for (i = 0; i < m->count; i++) {
         LPMITEM it = item_at(m, i);
         /* the text's width plus a system-font cell (8 pixels) on each side
@@ -637,6 +688,20 @@ static int layout_bar(LPMENU m, int width, BOOL align)
            pixels start 0, 40, 106, 174 pixels into the bar) */
         int cc = cxSysCharMenu();
         int w = item_text_width(hdc, it) + 2 * cc;
+        if (it->flags & MF_BITMAP)
+            /* a bitmap: its own width, no margins (US18: a maximised MDI
+               child's system-menu bitmap, 19 wide, then File at 19;
+               UNVERIFIED for a bitmap taller than the bar) */
+            w = bitmap_width((HBITMAP)it->text);
+        else if (align)
+            /* CS_BYTEALIGNCLIENT: the width to the nearest 8 pixels
+               (Program Manager on 3.1, its items highlighted: File 40,
+               Options 64, Window 72, Help 48 for texts of 24, 50, 52, 30;
+               the same widths after a maximised group's 19-pixel bitmap,
+               File then at 19: the widths are rounded, not the places) */
+            w = (w + 4) / 8 * 8;
+        if ((it->flags & MF_HELP) && help == m->count)
+            help = i;
         if (x + w > width && x > 0) {
             /* a further row one pixel more down (3.1: File Manager made
                narrow, its bar on two rows, the second's text 19 pixels
@@ -646,13 +711,17 @@ static int layout_bar(LPMENU m, int width, BOOL align)
         }
         SetRect(&it->rc, x, y, x + w, y + h);
         x += w;
-        if (align) {
-            /* the item reaches to where the next one starts (Program
-               Manager's Help item highlighted on 3.1: 2 pixels wider than
-               its text plus margins) */
-            x = (x + 4) / 8 * 8;
-            it->rc.right = x;
-        }
+    }
+    /* MF_HELP: that item and the ones after it at the right end of their
+       row (US18: a maximised MDI child's restore button, the bar's last
+       19 pixels) */
+    if (help < m->count) {
+        LPMITEM last = item_at(m, m->count - 1);
+        int shift = width - last->rc.right;
+        if (shift > 0)
+            for (i = help; i < m->count; i++)
+                if (item_at(m, i)->rc.top == last->rc.top)
+                    OffsetRect(&item_at(m, i)->rc, shift, 0);
     }
     SelectObject(hdc, old);
     m->cx = width;
@@ -697,6 +766,35 @@ static void draw_bar_item(HDC hdc, LPMITEM it, int ox, int oy)
     BOOL hil = (it->flags & MF_HILITE) != 0;
     RECT r = it->rc;
     OffsetRect(&r, ox, oy);
+    if (it->flags & MF_BITMAP) {
+        /* a bitmap, inverted when selected; the restore button of a
+           maximised MDI child is drawn pushed instead (OBM_RESTORED)
+           (US18: Windows 3.1's Program Manager, its bar's items chosen
+           in turn from the keyboard) */
+        HBITMAP b = (HBITMAP)it->text, old;
+        BITMAP bm;
+        FillRect(hdc, &r, sysbrush[COLOR_MENU]);
+        if (hil && b == frame_bitmap(1))
+            b = frame_bitmap(2);
+        if (b && GetObject(b, sizeof bm, (LPSTR)&bm)) {
+            int cx = bm.bmWidth, sx = 0;
+            if (b == frame_bitmap(0)) {
+                cx = sysmet[SM_CXSIZE];
+                sx = cx;
+            }
+            old = SelectObject(hdcMem, b);
+            BitBlt(hdc, r.left, r.top, cx, bm.bmHeight, hdcMem, sx, 0, SRCCOPY);
+            SelectObject(hdcMem, old);
+            if (b == frame_bitmap(0)) {
+                HBRUSH ob = SelectObject(hdc, sysbrush[COLOR_WINDOWFRAME]);
+                PatBlt(hdc, r.left + cx, r.top, 1, r.bottom - r.top, PATCOPY);
+                SelectObject(hdc, ob);
+            }
+        }
+        if (hil && (HBITMAP)it->text != frame_bitmap(1))
+            InvertRect(hdc, &r);
+        return;
+    }
     FillRect(hdc, &r, sysbrush[hil ? COLOR_HIGHLIGHT : COLOR_MENU]);
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, syscolor[(it->flags & MF_GRAYED) ? COLOR_GRAYTEXT :
@@ -929,6 +1027,9 @@ typedef struct MLOOP {
                                    the command is returned (menu_track_quiet) */
     BOOL   rbutton;             /* TPM_RIGHTBUTTON: the right button
                                    chooses and closes as the left one does */
+    HMENU  menubar;             /* the window's menu bar, for the arrow
+                                   keys between it and the system menu */
+    BOOL   sysinv;              /* the system-menu box is inverted */
 } MLOOP;
 
 void sysbox_rect(PWND w, RECT *r);
@@ -948,10 +1049,19 @@ static void invert_sysbox(MLOOP *l)
     release_dc(l->owner, hdc);
 }
 
+/* the system-menu box inverted while the system menu is the selected
+   part of the bar, with its popup open or not (3.1: Program Manager's
+   bar, Right from its last item: the box inverted, no popup) */
+static void set_sysinv(MLOOP *l, BOOL on)
+{
+    if (on != l->sysinv) {
+        invert_sysbox(l);
+        l->sysinv = on;
+    }
+}
+
 static void close_popup(MLOOP *l)
 {
-    if (l->sysmenu && l->hwndPopup)
-        invert_sysbox(l);
     if (l->hwndPopup) {
         DestroyWindow(l->hwndPopup);
         l->hwndPopup = 0;
@@ -1041,7 +1151,7 @@ static void select_bar(MLOOP *l, int i, BOOL open)
             open_popup(l, l->bar, r.left + sysmet[SM_CXFRAME],
                        r.top + sysmet[SM_CYFRAME] - 2 + sysmet[SM_CYCAPTION]);
             if (l->hwndPopup)
-                invert_sysbox(l);
+                set_sysinv(l, TRUE);
         }
         return;
     }
@@ -1120,6 +1230,32 @@ static int next_item(LPMENU m, int i, int dir)
     return -1;
 }
 
+/* the window's system menu can be reached from its bar with the arrow
+   keys */
+static BOOL sys_reachable(MLOOP *l)
+{
+    PWND w = valid_wnd(l->owner);
+    return !l->quiet && w && !(w->style & WS_CHILD) && (w->style & WS_SYSMENU) &&
+           valid_menu(l->menubar) && l->bar == l->menubar;
+}
+
+void sysmenu_states_of(HWND h, HMENU m);
+
+/* the bar's selection moves to the system menu, its popup opened if one
+   was open */
+static void to_sysmenu(MLOOP *l, BOOL open)
+{
+    select_bar(l, -1, FALSE);
+    l->bar = GetSystemMenu(l->owner, FALSE);
+    l->sysmenu = TRUE;
+    sysmenu_states_of(l->owner, l->bar);
+    if (open) {
+        select_bar(l, 0, TRUE);
+        select_popup_item(l, 0);
+    } else
+        set_sysinv(l, TRUE);
+}
+
 static void menu_key(MLOOP *l, UINT vk)
 {
     LPMENU bar = valid_menu(l->bar), pop = valid_menu(l->popup);
@@ -1132,23 +1268,63 @@ static void menu_key(MLOOP *l, UINT vk)
         break;
     case VK_LEFT:
     case VK_RIGHT:
-        if (bar && !l->sysmenu)
-            select_bar(l, next_item(bar, l->barsel < 0 ? 0 : l->barsel, vk == VK_LEFT ? -1 : 1),
-                       l->popup != 0);
+        if (bar && !l->sysmenu) {
+            BOOL open = l->popup != 0;
+            int i = next_item(bar, l->barsel < 0 ? 0 : l->barsel, vk == VK_LEFT ? -1 : 1);
+            /* past either end of the bar: the system menu (3.1: Program
+               Manager's bar, Right from its last item inverts the
+               system-menu box) */
+            if (l->barsel >= 0 && sys_reachable(l) &&
+                (vk == VK_LEFT ? i >= l->barsel : i <= l->barsel)) {
+                to_sysmenu(l, open);
+                break;
+            }
+            select_bar(l, i, open);
+            /* the next popup opens with its first item selected (3.1:
+               Program Manager's File menu, Right: Options' Auto Arrange
+               selected; US18's screens) */
+            if (open && l->popup)
+                select_popup_item(l, 0);
+        } else if (l->sysmenu && valid_menu(l->menubar) && valid_menu(l->menubar)->count) {
+            /* from the system menu into the bar: its first or last item */
+            BOOL open = l->popup != 0;
+            LPMENU mb = valid_menu(l->menubar);
+            int i = vk == VK_RIGHT ? next_item(mb, -1, 1) : next_item(mb, 0, -1);
+            close_popup(l);
+            set_sysinv(l, FALSE);
+            l->sysmenu = FALSE;
+            l->bar = l->menubar;
+            l->barsel = -1;
+            if (i >= 0) {
+                select_bar(l, i, open);
+                if (open && l->popup)
+                    select_popup_item(l, 0);
+            }
+        }
         break;
     case VK_DOWN:
     case VK_UP:
-        if (!pop && bar && l->barsel >= 0 && !l->sysmenu)
+        if (!pop && l->sysmenu && l->sysinv) {
+            select_bar(l, 0, TRUE);             /* the system menu, selected, opened */
+            select_popup_item(l, 0);
+        } else if (!pop && bar && l->barsel >= 0 && !l->sysmenu)
             select_bar(l, l->barsel, TRUE);
         else if (pop)
             select_popup_item(l, next_item(pop, l->sel < 0 ? (vk == VK_DOWN ? -1 : 0) : l->sel,
                                            vk == VK_UP ? -1 : 1));
         break;
     case VK_RETURN:
-        if (pop && l->sel >= 0)
+        if (!pop && l->sysmenu && l->sysinv) {
+            select_bar(l, 0, TRUE);
+            select_popup_item(l, 0);
+        } else if (pop && l->sel >= 0)
             choose(l, l->popup, l->sel);
-        else if (bar && l->barsel >= 0 && !l->sysmenu)
-            select_bar(l, l->barsel, TRUE);
+        else if (bar && l->barsel >= 0 && (UINT)l->barsel < bar->count && !l->sysmenu) {
+            if (item_at(bar, l->barsel)->flags & MF_POPUP)
+                select_bar(l, l->barsel, TRUE);
+            else
+                choose(l, l->bar, l->barsel);   /* a command on the bar itself */
+        }
         break;
     }
 }
@@ -1167,6 +1343,13 @@ static void menu_char(MLOOP *l, char c)
     if (l->popup) {
         select_popup_item(l, i);
         choose(l, l->popup, i);
+        /* a grayed item's letter closes the menu, nothing chosen (3.1:
+           a maximised group's system menu opened from Program Manager's
+           bar with Alt+-, X for the grayed Maximize: the menu went) */
+        if ((m = valid_menu(l->popup)) != 0 && (UINT)i < m->count &&
+            (item_at(m, i)->flags & (MF_GRAYED | MF_DISABLED)) &&
+            !(item_at(m, i)->flags & MF_POPUP))
+            l->done = TRUE;
     } else
         select_bar(l, i, TRUE);
 }
@@ -1267,6 +1450,8 @@ static void run_menu(MLOOP *l)
                     if (PtInRect(&r, pt)) {
                         if (msg.message == WM_LBUTTONDOWN || msg.message == WM_NCLBUTTONDOWN)
                             select_bar(l, i, TRUE);
+                        else if (l->barsel == (int)i && !(item_at(bar, i)->flags & MF_POPUP))
+                            choose(l, l->bar, i);       /* released on a command */
                         else if (l->popup && l->sel < 0)
                             /* released on the bar item: the popup's first
                                item selected, as from the keyboard (3.1,
@@ -1292,6 +1477,7 @@ static void run_menu(MLOOP *l)
             break;
     }
     close_popup(l);
+    set_sysinv(l, FALSE);
     if (!l->sysmenu && valid_menu(l->bar) && valid_wnd(l->owner))
         select_bar(l, -1, FALSE);
     if (!l->quiet && valid_wnd(l->owner))
@@ -1317,6 +1503,8 @@ void menu_track_bar(HWND h, char key)
     l.barsel = -1;
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
+    if (!(w->style & WS_CHILD))
+        l.menubar = l.bar;
     bar = valid_menu(l.bar);
     /* Alt+Space, or Alt (F10) alone in a window without a menu bar: the
        system menu. Alt+letter without a menu bar used to open it as well,
@@ -1346,6 +1534,33 @@ void menu_track_bar(HWND h, char key)
             MessageBeep(0);
         return;
     }
+    run_menu(&l);
+}
+
+/* the bar of window h opened from the keyboard at item i, its popup's
+   first item selected (Alt+- with a maximised MDI child: its system menu,
+   the bar's first item: mdi.c) */
+void menu_track_bar_at(HWND h, int i)
+{
+    MLOOP l;
+    PWND w = valid_wnd(h);
+    LPMENU bar;
+    if (!w)
+        return;
+    fmemset(&l, 0, sizeof l);
+    l.owner = h;
+    l.barsel = -1;
+    l.sel = -1;
+    l.bar = (HMENU)w->hMenu;
+    if (!valid_menu(l.bar))
+        return;
+    l.menubar = l.bar;
+    send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
+    if ((bar = valid_menu(l.bar)) == 0 || i < 0 || (UINT)i >= bar->count)
+        return;
+    select_bar(&l, i, TRUE);
+    if (l.popup)
+        select_popup_item(&l, 0);
     run_menu(&l);
 }
 
@@ -1407,6 +1622,7 @@ void menu_track_point(HWND h, POINT pt)
     l.barsel = -1;
     l.sel = -1;
     l.bar = (HMENU)w->hMenu;
+    l.menubar = l.bar;
     send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
     for (i = 0; (bar = valid_menu(l.bar)) != 0 && i < bar->count; i++) {
         RECT r;
@@ -1432,6 +1648,8 @@ void menu_track_sys(HWND h)
     l.sel = -1;
     l.bar = GetSystemMenu(h, FALSE);
     l.sysmenu = TRUE;
+    if (!(PW(h)->style & WS_CHILD))
+        l.menubar = (HMENU)PW(h)->hMenu;
     sysmenu_states(PW(h), l.bar);
     send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
     select_bar(&l, 0, TRUE);

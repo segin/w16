@@ -18,9 +18,13 @@ HBRUSH sys_brush(HBRUSH b);
 #define MDI_WINMENU   2
 #define MDI_FIRSTID   4
 #define MDI_COUNT     6
-#define MDI_MAXED     8
-#define MDI_FRAMETEXT 10        /* local copy of the frame's own title */
+#define MDI_MAXED     8         /* the maximised child whose controls are in the frame's bar */
+#define MDI_FRAMETEXT 10        /* the frame's own title: a block of the string heap, 0 none */
 #define MDI_SCROLL    12        /* the WS_VSCROLL/WS_HSCROLL it was made with */
+#define MDI_FROMICON  14        /* the maximised child was an icon before */
+
+HBITMAP frame_bitmap(int which);
+void menu_track_bar_at(HWND h, int i);
 
 static HWND client_of(HWND child)
 {
@@ -33,7 +37,267 @@ static HWND active_child(HWND client)
     return (HWND)GetWindowWord(client, MDI_ACTIVE);
 }
 
+static HWND maxed_child(HWND client)
+{
+    HWND m = (HWND)GetWindowWord(client, MDI_MAXED);
+    return m && valid_wnd(m) ? m : 0;
+}
+
+/* ---- a maximised child (probe US18, tests/apps/us18.c, on Windows 3.1) ----
+   While an MDI child is maximised its controls are in the frame's menu
+   bar: first a popup holding the child's own system menu, drawn as the
+   child's system-menu box (MF_POPUP | MF_BITMAP: GetMenuState 0914h with
+   the nine items), last its restore button, a command SC_RESTORE (F120h)
+   at the bar's right end (MF_HELP | MF_BITMAP, 4004h); the frame's caption
+   is "Frame - [Child]"; the child's style loses WS_SYSMENU; its system
+   menu grays Move, Size and Maximize (Restore and Minimize enabled), and
+   once restored grays Restore only. It all happens in DefMDIChildProc's
+   WM_SIZE: a child that keeps WM_SIZE from it is maximised with no change
+   to the bar, the caption or its style, and WM_MDIGETACTIVE then says it
+   is not maximised. Choosing either control sends the frame WM_COMMAND
+   with the SC_ code, which DefFrameProc passes to the active child as
+   WM_SYSCOMMAND. */
+
+/* the frame's own title (DefFrameProc's WM_SETTEXT keeps it), and the
+   maximised child's in brackets after it (US18: "US18 - [Three]"; a new
+   frame title while maximised gives "Frame2 - [Renamed]"). The frame is
+   not sent WM_SETTEXT for it. */
+static void frame_text(HWND client)
+{
+    HWND frame = GetParent(client), m = maxed_child(client);
+    WORD t = GetWindowWord(client, MDI_FRAMETEXT);
+    char buf[200];
+    int n;
+    if (!frame)
+        return;
+    if (!t) {
+        GetWindowText(frame, buf, 120);
+        t = uh_strdup(buf);
+        SetWindowWord(client, MDI_FRAMETEXT, t);
+    }
+    if (t)
+        lstr_cpyn(buf, (LPCSTR)UH_PTR(&uhStr, t), 120);
+    else
+        buf[0] = 0;
+    if (m) {
+        n = lstr_len(buf);
+        lstr_cpyn(buf + n, " - [", 5);
+        n += 4;
+        GetWindowText(m, buf + n, sizeof buf - n - 2);
+        n = lstr_len(buf);
+        buf[n] = ']';
+        buf[n + 1] = 0;
+    }
+    DefWindowProc(frame, WM_SETTEXT, 0, (LPARAM)(LPSTR)buf);
+}
+
+/* the system menu's states: maximised (Move, Size, Maximize grayed) or
+   restored (Restore grayed) (US18) */
+static void child_sys_states(HWND child, BOOL maxed)
+{
+    HMENU s = GetSystemMenu(child, FALSE);
+    EnableMenuItem(s, SC_RESTORE, maxed ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(s, SC_MOVE, maxed ? MF_GRAYED : MF_ENABLED);
+    EnableMenuItem(s, SC_SIZE, maxed ? MF_GRAYED : MF_ENABLED);
+    EnableMenuItem(s, SC_MINIMIZE, MF_ENABLED);
+    EnableMenuItem(s, SC_MAXIMIZE, maxed ? MF_GRAYED : MF_ENABLED);
+}
+
+/* the child's controls into the frame's bar, or out of it. The system
+   box's bitmap is OBM_CLOSE, which menu.c draws as a child's box (its
+   right half and a black line, 19 x 18) */
+static void bar_add(HWND client, HWND child)
+{
+    HMENU bar = GetMenu(GetParent(client)), s = GetSystemMenu(child, FALSE);
+    if (!bar || !s)
+        return;
+    InsertMenu(bar, 0, MF_BYPOSITION | MF_POPUP | MF_BITMAP, (UINT)s,
+               (LPCSTR)MAKELONG(frame_bitmap(0), 0));
+    AppendMenu(bar, MF_HELP | MF_BITMAP, SC_RESTORE, (LPCSTR)MAKELONG(frame_bitmap(1), 0));
+}
+
+static void bar_remove_from(HMENU bar, HWND child)
+{
+    PWND w = valid_wnd(child);
+    int n;
+    if (!bar || !IsMenu(bar))
+        return;
+    if (w && w->hSysMenu && GetSubMenu(bar, 0) == (HMENU)w->hSysMenu)
+        RemoveMenu(bar, 0, MF_BYPOSITION);
+    n = GetMenuItemCount(bar);
+    if (n > 0 && GetMenuItemID(bar, n - 1) == SC_RESTORE &&
+        (GetMenuState(bar, n - 1, MF_BYPOSITION) & MF_BITMAP))
+        RemoveMenu(bar, n - 1, MF_BYPOSITION);
+}
+
+static void bar_remove(HWND client, HWND child)
+{
+    bar_remove_from(GetMenu(GetParent(client)), child);
+}
+
+/* child stops being the maximised one: its controls leave the bar */
+static void unmax(HWND client, HWND child, BOOL restored)
+{
+    PWND w;
+    SetWindowWord(client, MDI_MAXED, 0);
+    if ((w = valid_wnd(child)) != 0)
+        w->style |= WS_SYSMENU;
+    if (restored)
+        child_sys_states(child, FALSE);
+    bar_remove(client, child);
+}
+
+/* DefMDIChildProc's WM_SIZE */
+static void child_size(HWND client, HWND h, WPARAM how)
+{
+    HWND m = maxed_child(client);
+    HWND frame = GetParent(client);
+    if (how == SIZE_MAXIMIZED) {
+        PWND w;
+        if (m == h)
+            return;
+        if (m)
+            unmax(client, m, TRUE);
+        SetWindowWord(client, MDI_MAXED, (WORD)h);
+        if ((w = valid_wnd(h)) != 0)
+            w->style &= ~WS_SYSMENU;
+        child_sys_states(h, TRUE);
+        bar_add(client, h);
+    } else if (m == h) {
+        /* its states stay (US18: only a child that gives the maximised
+           state to another gets Restore grayed again) */
+        unmax(client, h, FALSE);
+        SetWindowWord(client, MDI_FROMICON, 0);
+    } else if (how == SIZE_MINIMIZED) {
+        /* minimised (not from maximised): Size and Minimize grayed (US18) */
+        HMENU s = GetSystemMenu(h, FALSE);
+        EnableMenuItem(s, SC_RESTORE, MF_ENABLED);
+        EnableMenuItem(s, SC_MOVE, MF_ENABLED);
+        EnableMenuItem(s, SC_SIZE, MF_GRAYED);
+        EnableMenuItem(s, SC_MINIMIZE, MF_GRAYED);
+        EnableMenuItem(s, SC_MAXIMIZE, MF_ENABLED);
+        return;
+    } else
+        return;
+    frame_text(client);
+    DrawMenuBar(frame);
+}
+
+static HWND next_child(HWND client, HWND h);
+static void child_activate(HWND client, HWND child);
+
+/* DefMDIChildProc's WM_SIZE: the active child minimised gives the
+   activation to the next one that is not (US18: 3.1's maximised child
+   minimised, WM_SIZE minimised, then it got WM_MDIACTIVATE(0) and the
+   restored child WM_MDIACTIVATE(1), not maximised) */
+static void child_sized(HWND client, HWND h, WPARAM how)
+{
+    child_size(client, h, how);
+    if (how == SIZE_MINIMIZED && active_child(client) == h) {
+        HWND n = next_child(client, h);
+        if (n && !IsIconic(n))
+            child_activate(client, n);
+    }
+}
+
+/* the maximised child of an MDI client, 0 none (Alt+-: defwnd.c) */
+HWND mdi_maxed_child(HWND client)
+{
+    return valid_wnd(client) ? maxed_child(client) : 0;
+}
+
+/* Alt+- in MDI child c whose controls are in the frame's bar: its system
+   menu opens there (3.1: Program Manager's maximised group, the popup
+   under the bitmap, the bitmap inverted, Restore selected). FALSE: not
+   maximised */
+BOOL mdi_sysmenu_key(HWND c)
+{
+    HWND client = client_of(c);
+    if (!client || maxed_child(client) != c)
+        return FALSE;
+    menu_track_bar_at(GetParent(client), 0);
+    return TRUE;
+}
+
+/* ---- the window menu's list of children (US18) ----
+   After the window menu's own items, a separator and one item per child
+   in id order, "&1 One", "&2 Two" ..., id the child's (the first child id
+   upwards), the active one checked; none at all, separator included,
+   with no children. Children's ids stay consecutive: when one goes, those
+   after it move down one (3.1: "One", id 500, closed, "Two" became
+   "&1 Two", id 500). UNVERIFIED: beyond nine children (3.1 SDK: a "More
+   Windows..." item and a dialog) - here the first nine are listed. */
+#define MDI_LISTMAX 9
+
+static void winmenu_clear(HWND client, HMENU wm)
+{
+    UINT first = GetWindowWord(client, MDI_FIRSTID);
+    int i, at = -1;
+    if (!wm || !IsMenu(wm))
+        return;
+    for (i = GetMenuItemCount(wm) - 1; i >= 0; i--) {
+        UINT id = GetMenuItemID(wm, i);
+        if (id >= first && id < first + MDI_LISTMAX + 1 &&
+            !(GetMenuState(wm, i, MF_BYPOSITION) & (MF_POPUP | MF_SEPARATOR))) {
+            RemoveMenu(wm, i, MF_BYPOSITION);
+            at = i;
+        }
+    }
+    if (at > 0 && (GetMenuState(wm, at - 1, MF_BYPOSITION) & MF_SEPARATOR))
+        RemoveMenu(wm, at - 1, MF_BYPOSITION);
+}
+
+static BOOL is_mdi_child(HWND s)
+{
+    return !GetWindow(s, GW_OWNER) && GetClassWord(s, -32) != 32772;
+}
+
+static void winmenu_update(HWND client, HWND skip)
+{
+    HMENU wm = (HMENU)GetWindowWord(client, MDI_WINMENU);
+    UINT first = GetWindowWord(client, MDI_FIRSTID), k;
+    HWND s, act = active_child(client);
+    BOOL sep = FALSE;
+    if (!wm || !IsMenu(wm))
+        return;
+    winmenu_clear(client, wm);
+    for (k = 0; k < MDI_LISTMAX; k++)
+        for (s = GetWindow(client, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
+            if (s != skip && is_mdi_child(s) && GetWindowWord(s, GWW_ID) == first + k) {
+                char t[90];
+                int n;
+                if (!sep)
+                    AppendMenu(wm, MF_SEPARATOR, 0, NULL);
+                sep = TRUE;
+                t[0] = '&';
+                t[1] = (char)('1' + k);
+                t[2] = ' ';
+                GetWindowText(s, t + 3, sizeof t - 3);
+                n = lstr_len(t);
+                (void)n;
+                AppendMenu(wm, MF_STRING | (s == act ? MF_CHECKED : 0), first + k, t);
+                break;
+            }
+}
+
 static BOOL mdi_creating;       /* WM_MDICREATE under way */
+
+/* the child to activate after h: the first visible one under it that
+   is not minimised, else a minimised one (US18: Windows 3.1, with the
+   maximised child closed, activated the restored one, not the icon in
+   front of it; the same after the active child is minimised) */
+static HWND next_child(HWND client, HWND h)
+{
+    HWND s, icon = 0;
+    for (s = GetWindow(client, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
+        if (s != h && is_mdi_child(s) && IsWindowVisible(s)) {
+            if (!IsIconic(s))
+                return s;
+            if (!icon)
+                icon = s;
+        }
+    return icon;
+}
 
 static void child_activate(HWND client, HWND child)
 {
@@ -44,6 +308,24 @@ static void child_activate(HWND client, HWND child)
     if (old && valid_wnd(old)) {
         send_message(old, WM_NCACTIVATE, FALSE, 0);
         send_message(old, WM_MDIACTIVATE, FALSE, MAKELONG(child, old));
+    }
+    /* the maximised child deactivated: the new one is maximised, then the
+       old one restored (US18, 3.1's order: old WM_MDIACTIVATE(0), new
+       WM_SIZE maximised, old WM_SIZE restored, new WM_MDIACTIVATE(1)) */
+    /* A child maximised so from its icon goes back to its icon when it
+       gives the state away (US18: WM_SIZE minimised, 36 x 36, in place
+       of restored) */
+    if (old && child && old == maxed_child(client) && valid_wnd(child)) {
+        void restore_noactivate(HWND h);
+        BOOL wasicon = IsIconic(child), oldicon = (HWND)GetWindowWord(client, MDI_FROMICON) == old;
+        ShowWindow(child, SW_SHOWMAXIMIZED);
+        SetWindowWord(client, MDI_FROMICON, wasicon ? (WORD)child : 0);
+        if (valid_wnd(old)) {
+            if (oldicon)
+                ShowWindow(old, SW_SHOWMINNOACTIVE);
+            else
+                restore_noactivate(old);
+        }
     }
     if (child && valid_wnd(child)) {
         set_window_pos(child, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -58,6 +340,8 @@ static void child_activate(HWND client, HWND child)
         if (top_level(client) == hwndActive && !mdi_creating)
             set_focus(child);
     }
+    if (!mdi_creating)
+        winmenu_update(client, 0);          /* the check mark */
 }
 
 static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
@@ -90,6 +374,13 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
         }
     }
     style &= ~(WS_VISIBLE | WS_MAXIMIZE | WS_MINIMIZE);
+    /* a maximised child is restored first, and the new one is not
+       maximised (US18: 3.1's maximised child got WM_SIZE restored before
+       the new child's first WM_SIZE) */
+    if (maxed_child(client)) {
+        void restore_noactivate(HWND h);
+        restore_noactivate(maxed_child(client));
+    }
     mdi_creating = TRUE;
     h = create_window(0, mc->szClass, mc->szTitle, style, x, y, cx, cy, client, (HMENU)id,
                       mc->hOwner, (void __far *)mc);
@@ -98,6 +389,10 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
         return 0;
     }
     SetWindowWord(client, MDI_COUNT, n + 1);
+    /* a new child's system menu has Minimize grayed until it is first
+       maximised (US18: 3.1's GetMenuState on a new child's system menu,
+       also for one that never passes WM_SIZE on; UNVERIFIED why) */
+    EnableMenuItem(GetSystemMenu(h, FALSE), SC_MINIMIZE, MF_GRAYED);
     if (mc->style & WS_MINIMIZE)
         ShowWindow(h, SW_SHOWMINNOACTIVE);
     else if (mc->style & WS_MAXIMIZE)
@@ -106,6 +401,7 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
         ShowWindow(h, SW_SHOW);         /* WM_CHILDACTIVATE activates it */
     child_activate(client, h);
     mdi_creating = FALSE;
+    winmenu_update(client, 0);
     /* made, the active child gets the focus when the frame is active and
        the focus is on the frame or the client (3.1: Program Manager's
        groups, made after its frame took the focus, answer the arrow keys
@@ -116,22 +412,43 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
     return h;
 }
 
+/* WM_MDIDESTROY. The active child is deactivated and the next one
+   activated first - maximised in its place if it was (US18: old
+   WM_MDIACTIVATE(0), next WM_SIZE maximised, old WM_SIZE restored, next
+   WM_MDIACTIVATE(1)); the last child is only deactivated, and its
+   controls leave the bar */
 static void mdi_destroy(HWND client, HWND child)
 {
+    UINT id;
+    HWND s;
+    if (!valid_wnd(child))
+        return;
     if (active_child(client) == child) {
-        HWND next = 0, s;
-        for (s = GetWindow(client, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
-            if (s != child && GetWindow(s, GW_OWNER) == 0 && IsWindowVisible(s) &&
-                GetClassWord(s, -32) != 32772) {
-                next = s;
-                break;
-            }
-        SetWindowWord(client, MDI_ACTIVE, 0);
+        HWND next = next_child(client, child);
         if (next)
             child_activate(client, next);
+        else {
+            SetWindowWord(client, MDI_ACTIVE, 0);
+            send_message(child, WM_NCACTIVATE, FALSE, 0);
+            send_message(child, WM_MDIACTIVATE, FALSE, MAKELONG(0, child));
+        }
     }
+    if (maxed_child(client) == child) {
+        unmax(client, child, FALSE);
+        frame_text(client);
+        DrawMenuBar(GetParent(client));
+    }
+    if (!valid_wnd(child))
+        return;
+    id = GetWindowWord(child, GWW_ID);
     DestroyWindow(child);
     SetWindowWord(client, MDI_COUNT, GetWindowWord(client, MDI_COUNT) - 1);
+    /* the ids after it move down one */
+    for (s = GetWindow(client, GW_CHILD); s; s = GetWindow(s, GW_HWNDNEXT))
+        if (is_mdi_child(s) && GetWindowWord(s, GWW_ID) > id &&
+            GetWindowWord(s, GWW_ID) < GetWindowWord(client, MDI_FIRSTID) + 0x1000)
+            SetWindowWord(s, GWW_ID, GetWindowWord(s, GWW_ID) - 1);
+    winmenu_update(client, 0);
 }
 
 void WINAPI U_SCROLLCHILDREN(HWND h, UINT msg, WPARAM wp, LPARAM lp);
@@ -275,7 +592,7 @@ LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_MDIGETACTIVE: {
         HWND a = active_child(h);
-        return MAKELONG(a, a && IsZoomed(a));
+        return MAKELONG(a, a && a == maxed_child(h));
     }
     case WM_MDIMAXIMIZE:
         ShowWindow((HWND)wp, SW_SHOWMAXIMIZED);
@@ -311,17 +628,27 @@ LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_MDISETMENU: {
-        HWND frame = GetParent(h);
+        /* wParam TRUE: the window menu's list made again, lParam not
+           used; else lParam's frame menu (0: the same) and window menu
+           (0: the same). The list leaves the old window menu, a maximised
+           child's controls the old bar, and both go into the new ones
+           (US18). The old frame menu is returned */
+        HWND frame = GetParent(h), m = maxed_child(h);
         HMENU old = GetMenu(frame);
-        if (!wp && lp)
-            SetWindowWord(h, MDI_WINMENU, HIWORD(lp));
-        else {
-            if (LOWORD(lp))
-                SetWindowWord(h, MDI_WINMENU, LOWORD(lp));
-            if (LOWORD(wp) == 0 && HIWORD(lp) == 0)
-                ;
-            SetMenu(frame, (HMENU)LOWORD(lp));
+        if (!wp) {
+            if (LOWORD(lp) && m)
+                bar_remove_from(old, m);
+            if (HIWORD(lp)) {
+                winmenu_clear(h, (HMENU)GetWindowWord(h, MDI_WINMENU));
+                SetWindowWord(h, MDI_WINMENU, HIWORD(lp));
+            }
+            if (LOWORD(lp)) {
+                SetMenu(frame, (HMENU)LOWORD(lp));
+                if (m)
+                    bar_add(h, m);
+            }
         }
+        winmenu_update(h, 0);
         return (LONG)(WORD)old;
     }
     case WM_MDICASCADE:
@@ -344,7 +671,7 @@ LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_SIZE: {
-        HWND a = active_child(h);
+        HWND a = maxed_child(h);
         if (a && IsZoomed(a)) {
             RECT r;
             GetClientRect(h, &r);
@@ -390,6 +717,19 @@ LRESULT WINAPI DefFrameProc(HWND h, HWND client, UINT msg, WPARAM wp, LPARAM lp)
         case WM_SETFOCUS:
             set_focus(client);
             return 0;
+        case WM_SETTEXT: {
+            /* the frame's own title kept; with a maximised child its
+               title follows in brackets (US18) */
+            WORD t = GetWindowWord(client, MDI_FRAMETEXT);
+            if (t)
+                uh_free(&uhStr, t);
+            SetWindowWord(client, MDI_FRAMETEXT, uh_strdup(lp ? (LPCSTR)lp : ""));
+            if (maxed_child(client)) {
+                frame_text(client);
+                return 1;
+            }
+            break;
+        }
         case WM_SIZE: {
             RECT r;
             GetClientRect(h, &r);
@@ -413,6 +753,27 @@ LRESULT WINAPI DefMDIChildProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     HWND client = client_of(h);
     switch (msg) {
+    case WM_SIZE:
+        if (client)
+            child_sized(client, h, wp);
+        break;
+    case WM_SETTEXT: {
+        LRESULT r = DefWindowProc(h, msg, wp, lp);
+        if (client) {
+            if (maxed_child(client) == h)
+                frame_text(client);
+            winmenu_update(client, 0);
+        }
+        return r;
+    }
+    case WM_DESTROY:
+        /* destroyed while maximised, not by WM_MDIDESTROY */
+        if (client && maxed_child(client) == h) {
+            unmax(client, h, FALSE);
+            frame_text(client);
+            DrawMenuBar(GetParent(client));
+        }
+        break;
     case WM_WINDOWPOSCHANGED:
         /* moved or sized: the client's scroll bars follow */
         if (client && !IsZoomed(h))

@@ -50,7 +50,7 @@ run() {
         > "$out/$name.hostout" 2>&1 &
     hpid=$!
     port2=$(freeport)
-    python3 "$root/tests/commhost.py" -t 700 -l "$out/$name.host2" "$port2" \
+    python3 "$root/tests/commhost.py" -t 700 -l "$out/$name.host2" -T "$out/$name.hosttime2" "$port2" \
         > "$out/$name.hostout2" 2>&1 &
     hpid2=$!
     sleep 0.5
@@ -88,6 +88,16 @@ fi
 for k in $kinds; do
     a=$out/ms.$k b=$out/w16.$k
     [ $k = log ] && a=$out/ms.cmp b=$out/w16.cmp
+    if [ $k = host ]; then
+        # Windows 3.1's driver sometimes loses the second byte of a write
+        # that starts the transmitter again (its first byte goes alone,
+        # the next one does not arrive): commhost's "#W150;" then comes
+        # as "#150;", in most runs on a busy host. w16's driver loses
+        # nothing; the record is compared with that byte put back
+        sed 's/^#\([0-9]\)/#W\1/' "$a" > "$a.norm"
+        sed 's/^#\([0-9]\)/#W\1/' "$b" > "$b.norm"
+        a=$a.norm b=$b.norm
+    fi
     if cmp -s "$a" "$b"; then
         echo "ok   $k: w16's COMM.DRV the same as Windows 3.1's"
     else
