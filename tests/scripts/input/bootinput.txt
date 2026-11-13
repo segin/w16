@@ -129,7 +129,11 @@ sleep 0.3
 move -30 -20
 key shift
 sleep 0.3
-sleep 10
+; Windows up: Program Manager's caption active and the screen still (a
+; fixed 10 s was too short on a loaded host: the pointer was sent home
+; before MOUSE took input, in one run and not the other)
+waitpixel 100 54 0000aa 90
+settle 20 2
 ; the pointer home before the first screen: where the moves made during
 ; the boot leave it depends on when MOUSE is enabled, which differs with
 ; the boot's speed (Windows 3.1 itself ends at 320,240 or 260,200 from
@@ -140,15 +144,15 @@ sleep 3
 ; (build/boottest-145116: Microsoft's own reference stayed at 320,240
 ; while ours had gone home)
 home
-sleep 1
+match 01-booted 20 1
 shot 01-booted
 home
 move 150 200
 sleep 1
 key alt+f
-sleep 2
+match 02-menu 20 2
 shot 02-menu
 key Escape
 key Escape
-sleep 1
+match 03-closed 20 1
 shot 03-closed

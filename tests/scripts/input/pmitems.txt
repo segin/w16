@@ -3,11 +3,19 @@
 ; the group; then the minimised Accessories group restored (Ctrl+Tab to
 ; its icon, Enter), which must come up in front and active; then Windows
 ; ended (File > Exit Windows, OK) so MAIN.GRP is saved
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a caret keep their fixed delay after the last key (the
+; caret's blink phase)
 click 1
 sleep 1
 home
 move 132 101
-sleep 1
+match 01-pointer 20 1
 shot 01-pointer
 down 1
 sleep 0.5
@@ -18,20 +26,20 @@ sleep 0.5
 move 20 10
 sleep 0.5
 move 20 10
-sleep 1
+match 02-dragging 20 1
 shot 02-dragging
 up 1
-sleep 2
+match 03-moved 20 2
 shot 03-moved
 key ctrl+Tab
 key ctrl+Tab
 key ctrl+Tab
 sleep 1
 key Return
-sleep 3
+match 04-restored 20 3
 shot 04-restored
 key alt+f
 key x
 sleep 2
 key Return
-sleep 8
+waitexit 60
