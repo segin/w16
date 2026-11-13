@@ -1,0 +1,35 @@
+; find: Find from the front card, a match on another card, Esc, Find Next
+; (F3), the not-found message
+blink 60000
+run CARDFILE.EXE
+wait 3000
+type first card apple
+key 76
+wait 300
+type B
+key 0D
+wait 300
+type second has apple too
+key 21
+wait 300
+menu s
+char f
+wait 1000
+type apple
+key 0D
+wait 1000
+snap C:\F1.BMP
+key 1B
+wait 300
+key 72
+wait 1000
+snap C:\F2.BMP
+menu s
+char f
+wait 1000
+type zzz
+key 0D
+wait 1000
+snap C:\F3.BMP
+key 0D
+wait 300

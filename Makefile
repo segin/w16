@@ -928,6 +928,29 @@ $(WIN2)/PROGMAN.EXE: $(SHELL_PM2) $(B)/shell2/progman/progman.res shell/progman/
 	    option resource=$(B)/shell2/progman/progman.res file { $(SHELL_PM2) }
 	python3 tools/nemark.py $@ 2.0
 
+# ---- shell: CARDFILE.EXE (shell/cardfile; ARCHITECTURE.md 15), Windows 3.1
+# only ----
+CF_NAMES := main cards cardwnd crd dialogs filedlg edit print ole help util
+SHELL_CF := $(B)/shell/start.o $(CF_NAMES:%=$(B)/shell/cardfile/%.o)
+CF_HDRS  := shell/cardfile/cardfile.h
+shell: $(DOS)/CARDFILE.EXE
+$(B)/shell/cardfile/%.o: shell/cardfile/%.c $(CF_HDRS)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/res/cardfile.ico: tools/mkcardicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkcardicon.py $@
+$(B)/shell/cardfile/cardfile.res: shell/cardfile/cardfile.rc $(CF_HDRS) $(B)/shell/res/cardfile.ico
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/cardfile -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/CARDFILE.EXE: $(SHELL_CF) $(B)/shell/cardfile/cardfile.res shell/cardfile/cardfile.lnk \
+                     tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cardfile/cardfile.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/cardfile/cardfile.map \
+	    option resource=$(B)/shell/cardfile/cardfile.res file { $(SHELL_CF) }
+	python3 tools/nemark.py $@ 3.10
+
 # ---- shell: CALC.EXE (shell/calc; ARCHITECTURE.md 15.3): x87 code with
 # emulator fixups (-fpi, WIN87EM) ----
 CALC_SRC := main draw engine fmt paste fpu stat clip help
@@ -1133,6 +1156,11 @@ install-tree: $(W16TREE)
 # Calculator (ARCHITECTURE.md 15.3)
 install-tree: $(W16)/CALC.EXE
 $(W16)/CALC.EXE: $(DOS)/CALC.EXE
+	@mkdir -p $(@D)
+	cp $< $@
+# Cardfile (ARCHITECTURE.md 15), in the Windows directory as on 3.1
+install-tree: $(W16)/CARDFILE.EXE
+$(W16)/CARDFILE.EXE: $(DOS)/CARDFILE.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 all: install-tree

@@ -1,0 +1,58 @@
+; CF6: pictures: a pasted bitmap, saved as 3.1 and as 3.0 files
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Pic
+key 0D
+wait 300
+type text under
+clippic 40 30
+menu e
+char e
+wait 300
+ckey c 56
+wait 1000
+snap C:\PASTED.BMP
+menu e
+wait 300
+snap C:\EDITMENU.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char a
+wait 1500
+type C:\CF6A.CRD
+key 0D
+wait 1500
+dump
+menu f
+char a
+wait 1500
+cbsel 470 1
+wait 300
+snap C:\SAVEAS30.BMP
+type C:\CF6B.CRD
+key 0D
+wait 1500
+snap C:\WARN30.BMP
+dump
+key 0D
+wait 1500
+snap C:\AFTER30.BMP
+dump
+menu f
+char o
+wait 1500
+type C:\CF6B.CRD
+key 0D
+wait 1500
+snap C:\OPEN30.BMP
+menu f
+char a
+wait 1500
+type C:\CF6C.CRD
+key 0D
+wait 1500
+dump

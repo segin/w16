@@ -1,0 +1,43 @@
+; basic: the first window, typing, Index (F6), Add (F7), List view and
+; back, PgUp; saved as BASIC.CRD
+blink 60000
+run CARDFILE.EXE
+wait 3000
+snap C:\S01.BMP
+type Hello World
+wait 300
+snap C:\S02.BMP
+key 75
+wait 500
+snap C:\S03.BMP
+type Smith, John
+key 0D
+wait 500
+snap C:\S04.BMP
+key 76
+wait 500
+snap C:\S05.BMP
+type Adams
+key 0D
+wait 500
+type Second card body
+key 0D
+type 555-1234
+snap C:\S06.BMP
+menu v
+char l
+wait 500
+snap C:\S07.BMP
+menu v
+char c
+wait 500
+key 21
+wait 300
+snap C:\S08.BMP
+menu f
+char a
+wait 1500
+type C:\BASIC.CRD
+key 0D
+wait 1500
+snap C:\S09.BMP

@@ -1,0 +1,53 @@
+; CF2: card files written by Cardfile 3.1: empty, text cards, 3.0 format
+run CARDFILE.EXE
+wait 3000
+menu f
+char a
+wait 1000
+snap C:\SAVEAS.BMP
+dump
+type C:\CF2A.CRD
+key 0D
+wait 1000
+key 75
+wait 300
+type Zebra
+key 0D
+wait 300
+type Line one
+key 0D
+type Line two
+key 76
+wait 300
+type apple
+key 0D
+wait 300
+type Body of apple
+key 76
+wait 300
+type Mango
+key 0D
+wait 300
+menu f
+char s
+wait 1000
+dump
+menu f
+char a
+wait 1000
+type C:\CF2B.CRD
+key 0D
+wait 1000
+menu f
+char a
+wait 1000
+alt t
+key 28
+wait 300
+snap C:\SAVEAS3.BMP
+dump
+type C:\CF2C.CRD
+key 0D
+wait 1000
+snap C:\AFTER3.BMP
+dump

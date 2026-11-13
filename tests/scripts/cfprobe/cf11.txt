@@ -1,0 +1,9 @@
+; CF11: class styles; one card in List view (the window height)
+run CARDFILE.EXE
+wait 3000
+dump
+menu v
+char l
+wait 500
+dump
+snap C:\LIST.BMP

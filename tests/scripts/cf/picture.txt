@@ -1,0 +1,66 @@
+; picture: Picture mode, a pasted bitmap (a static object on 3.1), moved
+; with the keys and the mouse, Copy, Cut and Paste, the Edit menu with a
+; picture; saved as 3.1 and 3.0 files
+blink 60000
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Pic
+key 0D
+wait 300
+type text under the picture
+clippic 40 30
+menu e
+char e
+wait 300
+ckey c 56
+wait 1000
+snap C:\P01.BMP
+menu e
+wait 500
+snap C:\P02.BMP
+key 1B
+key 1B
+wait 300
+key 27
+key 27
+key 28
+wait 300
+snap C:\P03.BMP
+drag 30 160 90 200
+wait 500
+snap C:\P04.BMP
+menu f
+char a
+wait 1500
+type C:\PIC.CRD
+key 0D
+wait 1500
+key 76
+wait 300
+type Second
+key 0D
+wait 300
+menu e
+char e
+ckey c 56
+wait 1000
+snap C:\P05.BMP
+menu f
+char a
+wait 1500
+type C:\PIC2.CRD
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+cbsel 470 1
+type C:\PIC3.CRD
+key 0D
+wait 1500
+snap C:\P06.BMP
+alt y
+wait 1500
+snap C:\P07.BMP

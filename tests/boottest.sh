@@ -118,6 +118,11 @@
 #              TrueType, Write's text is Arial): identical screens, leaving
 #              out the caret (it blinks) and in the save box the Yes button
 #              (w16's MessageBox puts it 2 pixels right: UNVERIFIED rule)
+#   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
+#              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
+#              List view, Find, Autodial, the Edit menu, Exit without
+#              saving): w16's CARDFILE.EXE against Microsoft's, both on
+#              all-Microsoft Windows 3.1: every screen identical
 #   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
 #              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
 #              then every w16 part must not fault
@@ -289,7 +294,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -962,6 +967,26 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
+    cardfile)
+        s=$root/tests/scripts/input/cardfile.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cardfile-WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/cardfile-WIN.INI" 'windows:run=CARDFILE.EXE'
+        refrun cardfile-ref cardfile "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/cardfile-ref" -r \
+            -f "$out/cardfile-WIN.INI=WINDOWS/WIN.INI"
+        "$root/tests/inputrun.sh" -e "$out/cardfile-ref/boot.png" -E "$out/cardfile-ref" -b 25 -t 210 \
+            "$s" "$out/cardfile-w16" -r -f "$out/cardfile-WIN.INI=WINDOWS/WIN.INI" \
+            -f "$root/build/dos/CARDFILE.EXE=WINDOWS/CARDFILE.EXE" > "$out/cardfile-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/cardfile-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/cardfile-w16/$s" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/cardfile-w16/$s" "$f" "$out/cardfile-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/cardfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   cardfile: 0 pixels"
+        else echo "FAIL cardfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmclose)
         # Program Manager's system box double-clicked: its Exit dialog in
         # front, active and system modal (a click on Program Manager does

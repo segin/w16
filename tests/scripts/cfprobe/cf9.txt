@@ -1,0 +1,82 @@
+; CF9: the dialogs, as screenshots and window dumps
+run CARDFILE.EXE
+wait 3000
+menu f
+char o
+wait 1500
+snap C:\D_OPEN.BMP
+dump
+key 1B
+wait 500
+menu f
+char m
+wait 1500
+snap C:\D_MERGE.BMP
+dump
+key 1B
+wait 500
+key 75
+wait 500
+snap C:\D_INDEX.BMP
+key 1B
+wait 300
+key 76
+wait 500
+snap C:\D_ADD.BMP
+key 1B
+wait 300
+key 73
+wait 500
+snap C:\D_GOTO.BMP
+key 1B
+wait 300
+menu s
+char f
+wait 1000
+snap C:\D_FIND.BMP
+dump
+key 1B
+wait 300
+type Call 555-1234 now
+key 74
+wait 1000
+snap C:\D_DIAL.BMP
+dump
+alt s
+wait 500
+snap C:\D_DIAL2.BMP
+key 1B
+wait 300
+menu f
+char t
+wait 1000
+snap C:\D_PAGE.BMP
+dump
+key 1B
+wait 300
+menu f
+char r
+wait 1500
+snap C:\D_PRSET.BMP
+key 1B
+wait 300
+menu c
+char d
+wait 1000
+snap C:\D_DEL.BMP
+dump
+key 1B
+wait 300
+menu h
+char a
+wait 1500
+snap C:\D_ABOUT.BMP
+key 1B
+wait 300
+menu f
+char n
+wait 1000
+snap C:\D_SAVE.BMP
+dump
+key 1B
+wait 300
