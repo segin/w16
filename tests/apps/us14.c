@@ -109,21 +109,29 @@ static void scan(void)
     }
 }
 
-/* the heap holding a live block with this handle: its index, -1 none */
+static int delta(int i);
+
+/* the heap holding a live block with this handle: its index, -1 none.
+   Heaps that grew since the last scan are looked in first: heaps made
+   alike have blocks at the same offsets (w16's USER has more heaps than
+   3.1's, several made the same way as the menu heaps) */
 static int find_block(WORD handle, LOCALENTRY *out_le)
 {
     LOCALENTRY le;
     BOOL more;
-    int i;
-    for (i = 0; i < nheaps; i++) {
-        le.dwSize = sizeof le;
-        for (more = lfirst(&le, (WORD)heaps[i].h); more; more = lnext(&le))
-            if (!(le.wFlags & LF_FREE) && (WORD)le.hHandle == handle) {
-                if (out_le)
-                    *out_le = le;
-                return i;
-            }
-    }
+    int i, pass;
+    for (pass = 0; pass < 2; pass++)
+        for (i = 0; i < nheaps; i++) {
+            if (!pass && delta(i) <= 0)
+                continue;
+            le.dwSize = sizeof le;
+            for (more = lfirst(&le, (WORD)heaps[i].h); more; more = lnext(&le))
+                if (!(le.wFlags & LF_FREE) && (WORD)le.hHandle == handle) {
+                    if (out_le)
+                        *out_le = le;
+                    return i;
+                }
+        }
     return -1;
 }
 

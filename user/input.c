@@ -29,7 +29,7 @@ static SYSEV __far sysq[NSYSQ];
 static volatile WORD __far sq_head, __far sq_count;
 WORD __far input_pending;
 BYTE __far keystate[256];       /* the driver's async state (KEYBOARD.Enable) */
-static BYTE qkeystate[256];     /* GetKeyState's: as of the last message */
+static BYTE __far qkeystate[256];     /* GetKeyState's: as of the last message */
 POINT __far ptCursor;
 WORD lastkey;
 void switch_window(HWND cur, BOOL tobottom);                   /* the last key pressed: Alt alone opens the menu */

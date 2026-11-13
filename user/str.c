@@ -170,8 +170,9 @@ LPSTR WINAPI AnsiPrev(LPCSTR start, LPCSTR s)
    01h-1Fh, then 20h-2Fh, 3Ah-40h, 5Bh-60h, 7Bh-BFh in code order, D7h,
    DFh, the accented letters C0h/E0h ... (each upper case before its lower
    case for lstrcmp), F7h after F6h, then digits 0-9, then A a B b ... Z z. */
-static BYTE weight[256];
-static BYTE tiebreak[256];
+/* (far: out of DGROUP, whose room is windows' and classes') */
+static BYTE __far weight[256];
+static BYTE __far tiebreak[256];
 
 static void make_weights(void)
 {

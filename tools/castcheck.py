@@ -12,10 +12,13 @@ MDI's window list); the symptom moved with the layout of USER's heap.
 Flagged: a cast to a pointer type that is not __near/NEAR (an explicit
 "*", or a far pointer typedef such as LPSTR/LPVOID) applied directly to
 LocalAlloc, LocalReAlloc, LocalHandle, USER's lh_alloc/lh_realloc (the
-same in another segment's heap: user/uentry.asm, the menu heaps), or to an
+same in another segment's heap: user/uentry.asm, the menu heaps), USER's
+uh_alloc/uh_realloc/uh_strdup/uh_strdup_in (user/uheap.c, its other heaps), or to an
 expression cast to HLOCAL/HANDLE first. A handle in a heap other than
-DGROUP becomes a pointer with that heap's selector, MK_FP(sel, h). (LocalLock returns a near pointer: widening that is
-right.) A line can be exempted with a comment containing "castcheck: ok".
+DGROUP becomes a pointer with that heap's selector, MK_FP(sel, h)
+(USER's own heaps: UH_PTR(heap, h)). (LocalLock returns a near pointer: widening that is
+right; a handle of one of USER's other heaps is no near pointer either.) A
+line can be exempted with a comment containing "castcheck: ok".
 
 usage: castcheck.py FILE...    exit status 1 when anything is flagged
 """
@@ -24,7 +27,7 @@ import sys
 
 FAR_TYPEDEFS = r'(?:LP[A-Z]+|FARPROC|PWORD)'
 CAST = r'\(\s*((?:const\s+)?[A-Za-z_][\w\s]*?(?:\*\s*)+|' + FAR_TYPEDEFS + r')\s*\)'
-SRC = r'\s*\(?\s*(?:Local(?:Re)?Alloc|LocalHandle|lh_(?:re)?alloc|\(\s*(?:HLOCAL|HANDLE|UINT|WORD)\s*\))'
+SRC = r'\s*\(?\s*(?:Local(?:Re)?Alloc|LocalHandle|lh_(?:re)?alloc|uh_(?:re)?alloc|uh_strdup(?:_in)?|\(\s*(?:HLOCAL|HANDLE|UINT|WORD)\s*\))'
 PAT = re.compile(CAST + SRC)
 
 def check(path):
@@ -34,9 +37,11 @@ def check(path):
             continue
         for m in PAT.finditer(line):
             t = m.group(1)
-            if re.search(r'\b(__near|NEAR|_near|near)\b', t):
+            other = re.search(r'\buh_', m.group(0)) is not None
+            if re.search(r'\b(__near|NEAR|_near|near)\b', t) and not other:
                 continue
-            print('%s:%d: %s cast to a far pointer: %s' % (path, n, m.group(0).strip(), line.strip()))
+            print('%s:%d: %s cast to a %s pointer: %s' % (path, n, m.group(0).strip(),
+                  'near' if other and 'near' in t.lower() else 'far', line.strip()))
             bad += 1
     return bad
 

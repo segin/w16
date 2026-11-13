@@ -713,7 +713,7 @@ void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width)
     if (!m)
         return;
     layout_bar(m, width, (((PCLS)w->cls)->style & CS_BYTEALIGNCLIENT) != 0);
-    m->hwnd = (HWND)(WORD)w;
+    m->hwnd = HW(w);
     old = SelectObject(hdc, GetStockObject(SYSTEM_FONT));
     SetRect(&r, x, y, x + width, y + m->cy);
     FillRect(hdc, &r, sysbrush[COLOR_MENU]);

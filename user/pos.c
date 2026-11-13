@@ -36,8 +36,8 @@ void calc_client(PWND w)
     }
     OffsetRect(&r, -px, -py);
     p.rgrc[0] = r;
-    send_message((HWND)(WORD)w, WM_NCCALCSIZE, FALSE, (LPARAM)(NCCALCSIZE_PARAMS __far *)&p);
-    if (!valid_wnd((HWND)(WORD)w))
+    send_message(HW(w), WM_NCCALCSIZE, FALSE, (LPARAM)(NCCALCSIZE_PARAMS __far *)&p);
+    if (!valid_wnd(HW(w)))
         return;
     w->rcClient = p.rgrc[0];
     OffsetRect(&w->rcClient, px, py);
@@ -288,7 +288,7 @@ static void icon_place(PWND w, POINT *pt)
     HWND s;
     pr = (w->style & WS_CHILD) ? parent->rcClient : PW(hwndDesktop)->rcWindow;
     for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
-        if (s != (HWND)(WORD)w && (PW(s)->style & WS_MINIMIZE))
+        if (s != HW(w) && (PW(s)->style & WS_MINIMIZE))
             n++;
     pt->x = (n % ((pr.right - pr.left) / cx)) * cx + (cx - sysmet[SM_CXICON]) / 2;
     pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx));

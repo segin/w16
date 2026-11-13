@@ -66,6 +66,9 @@
 # w16:watchdog=0 turns that off). It also gets [w16] exitmsg=1: KERNEL prints
 # "w16: back to DOS, code N" when Windows ends (tests look for it).
 #
+# DROPIN_INI in the environment: more S:K=V settings, one per line, as -i
+# (e.g. DROPIN_INI=w16:ExtendedUserHeap=1 for a whole boot-test run; they
+# reach Microsoft's reference boots too, which ignore [w16]).
 # Prints KERNEL's messages (C:\OUT.TXT: WIN's standard output), the boot
 # log, and a summary: which modules loaded, whether USER's initialisation
 # returned, whether the shell started.
@@ -76,6 +79,8 @@ ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
 cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
 w16:exitmsg=1'
+[ -z "${DROPIN_INI:-}" ] || inis="$inis
+$DROPIN_INI"
 while getopts k:c:t:f:i:s:e:W:no:rxX:wp: opt; do
     case $opt in
     k) kernel=$OPTARG ;;
