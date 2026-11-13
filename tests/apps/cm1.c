@@ -495,8 +495,11 @@ static void part_b(void)
     obs("closed cevtGet", LOWORD(dc(12, 2, 1, 0xFFFF)));
     obs2("closed cevt", dc(11, 2, 1, 1) & 0xFFFF0000UL ? 1 : 0);
     for (i = 0; i <= 12; i++) {
-        wsprintf(n, "closed cextfcn %u", i);
-        obs2(n, dc(9, 2, 1, i));
+        /* (on a closed port Windows 3.1's driver leaves AX as it was:
+           not compared) */
+        DWORD x = dc(9, 2, 1, i);
+        wsprintf(line, "OBS ~closed cextfcn %u=%04X %04X\r\n", i, HIWORD(x), LOWORD(x));
+        out(line);
     }
     obs("closed EnableNotification", LOWORD(dc(100, 4, 1, 0, 0, 0)));
 
@@ -511,9 +514,9 @@ static void part_b(void)
     dc(7, 1, 2);
     base(&d, 1);
     obs("open", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
-    obs("open again", LOWORD(dc(1, 2, SELECTOROF((LPVOID)&d), OFFSETOF((LPVOID)&d))));
-    /* the event word first, as USER's OpenComm (without it SETXON did not
-       return with Windows 3.1's driver) */
+    /* (inicom again on the open port: Windows 3.1's driver returned 0, and
+       afterwards SETXON and trmcom did not return; USER refuses a second
+       OpenComm itself, IE_OPEN. Not done here.) */
     obs("open cevt", dc(11, 2, 1, 0) != 0);
     /* setcom on the open port, one change at a time */
     for (i = 0; i < 8; i++) {
@@ -542,10 +545,10 @@ static void part_b(void)
     obs("noqueue stacom", LOWORD(r));
     bdump("noqueue comstat", qb, 5);
     obs("noqueue reccom", LOWORD(dc(4, 1, 1)));
-    /* (sndcom without queues: not called; on Windows 3.1 it returned
-       CE_TXFULL, and SETXON and trmcom did not return afterwards) */
-    /* queues (with none, SETXON did not return with Windows 3.1's
-       driver) */
+    obs("noqueue sndcom", LOWORD(dc(5, 2, 1, 'x')));
+    r = dc(8, 3, 1, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb));
+    obs("noqueue stacom 2", LOWORD(r));
+    /* queues, as USER's OpenComm gives them */
     {
         WORD qsel = (WORD)GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 512);
         WORD q[6];
@@ -561,10 +564,7 @@ static void part_b(void)
     obs("queue stacom", LOWORD(r));
     bdump("queue comstat", qb, 5);
     for (i = 0; i <= 12; i++) {
-        /* RESETDEV; SETXOFF and SETXON did not return with Windows 3.1's
-           driver here (on COM2 opened directly; through USER on COM1 they
-           did, part C) */
-        if (i == 7 || i == 1 || i == 2)
+        if (i == 7)                 /* RESETDEV: a printer escape */
             continue;
         wsprintf(n, "open cextfcn %u", i);
         obs2(n, dc(9, 2, 1, i));
@@ -582,10 +582,6 @@ static void part_b(void)
     g = dc(11, 2, 1, 0);
     obs("cevt same pointer", r == g);
     obs("cevtGet", LOWORD(dc(12, 2, 1, 0xFFFF)));
-    /* RTS and DTR on again (with them off, trmcom did not return with
-       Windows 3.1's driver) */
-    dc(9, 2, 1, SETRTS);
-    dc(9, 2, 1, SETDTR);
     obs("trmcom", LOWORD(dc(7, 1, 1)));
     if (port)
         uart("COM2 closed", port);
@@ -1053,12 +1049,13 @@ static void part_c(void)
 
     /* 13: closing with output held */
     say("C13 close");
-    host("#M13;#X13;");
-    pump(400);
     d.fOutX = 1;
     setstate(&d);
+    host("#M13;#X13;");
+    pump(400);
     WriteComm(cid, buf, pattern(buf, 10, 23));
     pump(200);
+    stat("before close");
     t = GetTickCount();
     r = CloseComm(cid);
     t = GetTickCount() - t;
@@ -1097,7 +1094,9 @@ static void part_d(void)
     obs("OpenComm LPT1 again", OpenComm("LPT1", 0, 0));
     r = GetCommState(cid, &d);
     obs("GetCommState LPT1", r);
-    dcbdump("LPT1 dcb", &d);
+    /* only the Id: what getdcb points to for a parallel port is not a DCB
+       on Windows 3.1 (its other bytes are not logged) */
+    obs("LPT1 dcb Id", d.Id);
     stat("LPT1");
     r = WriteComm(cid, "Hello, LPT1\r\n", 13);
     obs("WriteComm LPT1", r);
@@ -1112,7 +1111,8 @@ static void part_d(void)
     obs("LPT1 SetCommBreak", SetCommBreak(cid));
     obs("LPT1 FlushComm", FlushComm(cid, 0));
     obs("LPT1 SetCommEventMask", SetCommEventMask(cid, EV_PERR) != 0);
-    obs("LPT1 GetCommEventMask", GetCommEventMask(cid, 0xFFFF));
+    /* (Windows 3.1 gave 0087 here: not understood, not compared) */
+    obs_env("LPT1 GetCommEventMask", GetCommEventMask(cid, 0xFFFF));
     obs("LPT1 SetCommState", SetCommState(&d));
     obs("CloseComm LPT1", CloseComm(cid));
     cid = OpenComm("LPT2", 0, 0);

@@ -134,6 +134,13 @@
 #   mouseall   every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
 #              fonts) with w16's MOUSE.DRV against the same with
 #              Microsoft's MOUSE.DRV, the dragoff script: must be 0
+#   comm       w16's COMM.DRV (drivers/comm) on Microsoft's KRNL286, DOSX and
+#              USER: CM1's exchange through USER on COM1 (tests/commprobe.sh
+#              -p 4: data both ways, events, flow control, notifications
+#              with tests/commhost.py at the far end of DOSBox's nullmodem
+#              port) against the same with Microsoft's COMM.DRV: CM1's log
+#              and the far end's records identical (not cached: the
+#              far end is part of the run)
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -222,7 +229,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys}
+cases=${*:-kernel dosx wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys comm}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1073,6 +1080,14 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   mouseall: 0 pixels (every w16 part, w16's MOUSE.DRV against Microsoft's)"
         else echo "FAIL mouseall: $r"; fails=$((fails + 1)); fi ;;
+    comm)
+        # (both runs each time: commhost's records are part of the result)
+        if "$root/tests/commprobe.sh" -p 4 -o "$out/comm" > "$out/comm.txt" 2>&1; then
+            echo "ok   comm: CM1's exchange and the far end's records the same with w16's COMM.DRV"
+        else
+            echo "FAIL comm: $(grep -m1 -E '^FAIL' "$out/comm.txt" || echo 'see comm.txt') ($out/comm.txt)"
+            fails=$((fails + 1))
+        fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }

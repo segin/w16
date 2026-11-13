@@ -470,31 +470,29 @@ inihex:
         ret
 
 ; validate: ES:DI = a DCB for a COM port. CF and AX = the error when it
-; is not acceptable. The order (CM1): the baud rate (IE_BAUDRATE), then
-; parity and stop bits (IE_DEFAULT), then the byte size (IE_BYTESIZE).
+; is not acceptable. The order (CM1, two fields wrong at a time): the
+; baud rate (IE_BAUDRATE), the parity (IE_DEFAULT), the byte size (5-8,
+; IE_BYTESIZE), the stop bits (IE_DEFAULT; 1.5 only with 5-bit bytes).
 validate:
         mov ax, [es:di + D_BAUD]
         call divisor
         mov ax, IE_BAUDRATE
         jc .bad
-        mov al, [es:di + D_PARITY]
-        cmp al, 4
+        cmp byte [es:di + D_PARITY], 4
         ja .def
-        mov al, [es:di + D_STOPBITS]
-        cmp al, 2
-        ja .def
-        jb .sb
-        jmp .size
-.sb:    cmp al, 1                       ; 1.5 stop bits: 5-bit bytes only
-        jne .size
-        cmp byte [es:di + D_BYTESIZE], 5
-        jne .def
-.size:  mov al, [es:di + D_BYTESIZE]
+        mov al, [es:di + D_BYTESIZE]
         cmp al, 5
         jb .bsz
         cmp al, 8
         ja .bsz
-        clc
+        mov al, [es:di + D_STOPBITS]
+        cmp al, 2
+        ja .def
+        cmp al, 1                       ; 1.5 stop bits: 5-bit bytes only
+        jne .ok
+        cmp byte [es:di + D_BYTESIZE], 5
+        jne .def
+.ok:    clc
         ret
 .def:   mov ax, IE_DEFAULT
         stc
@@ -1328,7 +1326,9 @@ SETCOM:
         call validate
         jc .ret
         call copydcb
-        cmp byte [si + P.isopen], 0
+        ; a closed port that was open before is set up all the same, its
+        ; interrupts on (CM1: so did Windows 3.1's driver)
+        cmp word [si + P.base], 0
         je .ok
         cli
         call holds
@@ -1625,41 +1625,48 @@ COMMWRITESTRING:
 
 ; lptout: SI = an LPT port, AL = a byte: the BIOS prints it (INT 17h
 ; AH=0). AX = 0, or 8000h with the error bits set for a time-out or a
-; printer error.
+; printer error (and EV_PERR).
 lptout:
-        push dx
         mov ah, 0
-        mov dx, si
-        sub dx, ports + NCOM * P.size
-        push ax
-        mov ax, dx
-        xor dx, dx
-        push bx
-        mov bx, P.size
-        div bx
-        pop bx
-        mov dx, ax
-        pop ax
-        int 17h
-        xor cx, cx
-        test ah, 01h                    ; time-out
-        jz .1
-        or cx, CE_PTO
-.1:     test ah, 08h                    ; I/O error
-        jz .2
-        or cx, CE_IOE
-.2:     test ah, 20h                    ; out of paper
-        jz .3
-        or cx, CE_OOP
-.3:     test ah, 10h                    ; selected?
-        jnz .4
-        or cx, CE_DNS
-.4:     xor ax, ax
+        call lptbios
+        xor ax, ax
         jcxz .ret
         or [si + P.err], cx
-        or word [si + P.evt], EV_PERR
+        mov cx, EV_PERR
+        call event
         mov ax, 8000h
-.ret:   pop dx
+.ret:   ret
+
+; lptbios: SI = an LPT port, AH = INT 17h function, AL its byte -> CX =
+; the CE_ bits of the printer's status: time-out CE_PTO, I/O error
+; CE_IOE, paper out CE_OOP, not selected CE_DNS
+lptbios:
+        push dx
+        push bx
+        mov bx, ax
+        mov ax, si
+        sub ax, ports + NCOM * P.size
+        xor dx, dx
+        mov cx, P.size
+        div cx
+        mov dx, ax                      ; the printer: 0-2
+        mov ax, bx
+        int 17h
+        xor cx, cx
+        test ah, 01h
+        jz .1
+        or cx, CE_PTO
+.1:     test ah, 08h
+        jz .2
+        or cx, CE_IOE
+.2:     test ah, 20h
+        jz .3
+        or cx, CE_OOP
+.3:     test ah, 10h
+        jnz .4
+        or cx, CE_DNS
+.4:     pop bx
+        pop dx
         ret
 
 ; ---- 6: int ctx(cid, ch) ----
@@ -1812,6 +1819,8 @@ CEXTFCN:
         mov bx, [bp + 6]
         xor ax, ax
         xor dx, dx
+        cmp word [bp + 8], 80h
+        jae .lpt
         cmp bx, GETMAXLPT
         je .maxlpt
         cmp bx, GETMAXCOM
@@ -1822,8 +1831,6 @@ CEXTFCN:
         je .baseirq
         cmp byte [si + P.isopen], 0     ; (Windows 3.1's driver answers
         je .ok                          ; 0 for a closed port: CM1)
-        cmp word [bp + 8], 80h
-        jae .lptf
         cli
         cmp bx, SETXOFF
         je .xoff
@@ -1862,9 +1869,19 @@ CEXTFCN:
 .ok:    xor ax, ax
         xor dx, dx
         jmp .ret
+        ; a parallel port: RESETDEV initialises the printer (INT 17h
+        ; AH=1); AX the error bits of its status. Every other code gives 0
+        ; for a parallel port (CM1: GETMAXLPT and GETMAXCOM too).
 .lptf:  cmp bx, RESETDEV
         jne .ok
-        jmp .ok
+        mov ah, 1
+        call lptbios
+        mov ax, cx
+        xor dx, dx
+        jmp .ret
+.lpt:   cmp byte [si + P.isopen], 0
+        jne .lptf
+        jmp .ret
 .maxlpt:
         mov ax, 80h + NLPT - 1
         jmp .ret
@@ -1912,8 +1929,8 @@ CFLUSH:
         mov [si + P.rxout], ax
         call rxtaken
 .ok:    sti
-        xor ax, ax
-.ret:   LEAVE 4
+        mov ax, [si + P.err]            ; the error word, as it is (CM1,
+.ret:   LEAVE 4                         ; the DDK)
 
 ; ---- 11: WORD FAR *cevt(cid, mask) ----
 global CEVT
@@ -1967,7 +1984,7 @@ brk:
         mov ax, 8000h
         jc .ret
         cmp byte [si + P.isopen], 0
-        je .ret
+        je .ok
         cmp word [bp + 6], 80h
         jae .ok
         mov [si + P.brk], cl
@@ -1982,7 +1999,7 @@ brk:
         add dx, U_LCR
         out dx, al
         sti
-.ok:    xor ax, ax
+.ok:    mov ax, [si + P.err]            ; the error word, as it is (CM1)
 .ret:   ret
 
 ; ---- 15: DCB FAR *getdcb(cid) ----
@@ -2004,10 +2021,8 @@ ENABLENOTIFICATION:
         ENTER
         mov ax, [bp + 12]
         call port
-        mov ax, 0
+        mov ax, 0                       ; (open or not: CM1)
         jc .ret
-        cmp byte [si + P.isopen], 0
-        je .ret
         cmp word [postmsg + 2], 0
         jne .have
         push ds
