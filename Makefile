@@ -976,6 +976,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	python3 tools/nemark.py $@ 3.10
 
 test: dos fonts
+	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
 	tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
