@@ -69,11 +69,11 @@ own Windows 3.1 installation: `build/w16/README.TXT` lists exactly which
 files, and where they go. Copy them in without overwriting w16's, then run
 `WIN /S` (Standard mode) from that directory in DOS or DOSBox.
 
-w16's `USER.EXE` and `GDI.EXE` are built into `build/dos/` but are not yet
-in the install tree; you can copy them over your own Windows 3.1's
-`SYSTEM\USER.EXE` and `SYSTEM\GDI.EXE` to try them.
-[TESTING.md](TESTING.md) §4 shows how to assemble a complete all-w16 drive
-for DOSBox with `tests/dropin.sh`.
+The tree holds every w16 module that replaces part of Windows 3.1: WIN.COM,
+DOSX, KERNEL, USER, GDI, SHELL, COMMDLG, WINOLDAP, WIN87EM, the mouse,
+keyboard and comm drivers, the fonts and the applets. `WIN386.EXE` (386
+Enhanced mode) is not in it yet. [TESTING.md](TESTING.md) §4 shows how to
+assemble a complete all-w16 drive for DOSBox with `tests/dropin.sh`.
 
 ## 4. Layout of the source
 

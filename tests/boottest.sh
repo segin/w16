@@ -718,7 +718,7 @@ runcase() {
     tree)
         ref
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
-            echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN and fonts)"
+            echo "ok   tree: boots ($(sed -n "s/.*Windows 3.1.s own files: \([0-9]*\).*/\1/p" "$out/tree.txt" | tail -1) pixels off stock 3.1, expected: w16 PROGMAN, fonts and USER/GDI drawing differences)"
         else
             echo "FAIL tree: see $out/tree.txt"; fails=$((fails + 1))
         fi ;;

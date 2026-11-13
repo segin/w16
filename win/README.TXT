@@ -9,9 +9,13 @@ w16 repository's LICENSE):
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
   CLOCK.EXE               Clock
+  CALC.EXE                Calculator
   CARDFILE.EXE            Cardfile (needs COMMDLG.DLL and OLECLI.DLL in
                           SYSTEM; its help is CARDFILE.HLP)
   SYSTEM\KRNL286.EXE      KERNEL
+  SYSTEM\USER.EXE         USER (windows, menus, dialogs, messages)
+  SYSTEM\GDI.EXE          GDI (graphics)
+  SYSTEM\WINOLDAP.MOD     runs DOS programs under w16
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
@@ -44,14 +48,14 @@ overwriting the files above:
 
   Windows directory:      SYSTEM.INI, WIN.INI, PROGMAN.INI, the *.GRP
                           group files, and any applications you want
-  SYSTEM:                 USER.EXE, GDI.EXE, MMSYSTEM.DLL,
+  SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
                           the drivers named in SYSTEM.INI's [boot]
                           section (SYSTEM.DRV, VGA.DRV,
                           MMSOUND.DRV, ...), the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS
-                          programs WINOLDAP.MOD, DSWAP.EXE and the
-                          VGACOLOR.2GR grabber
+                          programs DSWAP.EXE and the VGACOLOR.2GR
+                          grabber
 
 Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
 it is there and w16's KRNL286.EXE only when it is not.
