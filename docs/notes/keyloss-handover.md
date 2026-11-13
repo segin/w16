@@ -194,3 +194,42 @@ resolved to keyloss's grow(), which already caps at SEG_MAX = FFF0h):
 - boot-test icons fails under load on master too (2 of 3, at Alt+F, R
   right after Notepad is minimised): an existing USER activation race,
   noted only.
+
+## Session 3 (branch keyloss2 from master 47251d5)
+
+- input: measured with MS1 (BIOS ticks in place of the depth word, kl-exp
+  only) and timestamps in input.log: the time from MOUSE.DRV's detection
+  (C205h/C201h, DOSBox drops its capture request) to USER's MOUSE.Enable
+  (C207h/C200h) is 2.0-2.6 s on w16 and 0.9-1.1 s on 3.1 (6 runs each,
+  same load; 7 s for both under 6-fold load). A click in that window is
+  passed on and DOSBox never takes the mouse; before it (DOSBox's
+  initial request) and after it the click captures. With e38cbfa's right
+  click after the boot: 22 of 22 w16 runs ok (1, 3, 4, 6 at a time); the
+  one failure (full boot test /tmp/kl/bt-full1) is not reproduced.
+- FPU: 2f329ff. Not WIN87EM: Windows 3.1 itself gives C3/C0 in those
+  status words (undefined condition codes). TK6 30/30, TK8 30/30 since.
+- ToolHelp: DONE, TK53 e07d28c + bf61200 (KRNL286's information block;
+  TK3 checks per layout, tk3ref286.h regenerated, tk13ref286.h new).
+- Wake bits: DONE, 7e6ce4f (SetWakeBit2). Remote full run: make test
+  pass, boot test 41 ok + winoldapw (known artefact); a later subset run
+  had winoldap/winoldapk 371 px once (not looked at; was ok in the full
+  run with the same code).
+- 286 boot: 8bc4a05. Not a boot failure: the watchdog (dropin's
+  watchdog=15) kept running after the boot and ended an idle Windows
+  before a fixed-time shot. KERNEL stops it after Final USER init now;
+  boot-test k286 (both DOSXes on cputype=286): 0 pixels. The bisect
+  (fed5337) was noise from single runs on a loaded host. Under heavy
+  local load the 286 boot is very slow (no BOOTLOG in 150 s once); the
+  remote host does it in ~21 s.
+- Probe instrumentation used for input (TK49's NOW line with the slave
+  PIC registers and IVT 74h, MS1 with BIOS ticks, inputrun timestamps):
+  tests/dos/notes/input-probes.patch (not applied).
+- Next: (5) LocalNotify/LocalShrink, (6) ExitWindows when the last task
+  ends. Full suites: tools/remote-test.sh (installation-05).
+- Final remote run on 531c5fe: make test pass, boot test 44/44 ok.
+- Added to the list (coordinator): winoldap/winoldapk/winoldapw failing
+  now and then by ~352.7 or 371.0 px (DOSBox's displayed image only;
+  GDI GetPixel reads the right frame; see commit 7480e1c's notes): make
+  the cases reliable without loosening thresholds (finish the
+  vgaonly/cycles sweep, or compare a GDI-side dump, or force a full
+  redraw before the shot). After (5) and (6).

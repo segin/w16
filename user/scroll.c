@@ -127,17 +127,29 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     }
 }
 
-/* ---- a window's bars ---- */
-static SBS __near *sbs_of(PWND w, BOOL create)
+/* ---- a window's bars ----
+   WND+34 is the handle of their state, a block of the object heap
+   (uheap.c; 3.1's is a 10h-byte DGROUP block made with a window that has
+   scroll bars: US15); a pointer to it is not kept across a message */
+static SBS __far *sbs_of(PWND w, BOOL create)
 {
     if (!w->scroll && create) {
-        SBS __near *s = (SBS __near *)LocalAlloc(LPTR, sizeof(SBS));
-        if (!s)
+        WORD h = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(SBS));
+        SBS __far *s;
+        if (!h)
             return 0;
+        s = (SBS __far *)UH_PTR(&uhObj, h);
         s->v.max = s->h.max = 100;
-        w->scroll = (WORD)s;
+        w->scroll = h;
     }
-    return (SBS __near *)w->scroll;
+    return w->scroll ? (SBS __far *)UH_PTR(&uhObj, w->scroll) : (SBS __far *)0;
+}
+
+/* DestroyWindow */
+void free_scroll(PWND w)
+{
+    uh_free(&uhObj, w->scroll);
+    w->scroll = 0;
 }
 
 void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
@@ -156,7 +168,7 @@ void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
 /* called by nc_paint with the window DC */
 void nc_draw_scrollbars(HDC hdc, PWND w)
 {
-    SBS __near *s = sbs_of(w, TRUE);
+    SBS __far *s = sbs_of(w, TRUE);
     RECT v, h;
     window_scrollbar_rects(w, &v, &h);
     if ((w->style & WS_VSCROLL) && s)
@@ -176,12 +188,12 @@ static SBINFO *info(HWND hwnd, int bar, PWND *pw)
     if (!w)
         return 0;
     if (bar == SB_CTL)
-        return (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+        return (SBINFO *)WND_EXTRA(w);
     {
-        SBS __near *s = sbs_of(w, TRUE);
+        SBS __far *s = sbs_of(w, TRUE);
         if (!s)
             return 0;
-        return bar == SB_VERT ? (SBINFO *)MAKELP(get_ds(), &s->v) : (SBINFO *)MAKELP(get_ds(), &s->h);
+        return bar == SB_VERT ? &s->v : &s->h;
     }
 }
 
@@ -336,6 +348,9 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     if (part != SB_THUMBTRACK)
         send_message(notify, msg, part, lp);
     for (;;) {
+        /* again after each message sent: the state is in the object heap */
+        if ((s = info(hwnd, bar, &w)) == 0)
+            break;
         if (!PeekMessage(&m, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
             if (part != SB_THUMBTRACK && (long)(GetTickCount() - next) >= 0) {
                 send_message(notify, msg, part, lp);
@@ -387,7 +402,7 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     SBINFO *s;
     if (!w)
         return 0;
-    s = (SBINFO *)MAKELP(get_ds(), WND_EXTRA(w));
+    s = (SBINFO *)WND_EXTRA(w);
     switch (msg) {
     case WM_CREATE:
         s->min = s->max = s->pos = 0;
