@@ -18,8 +18,10 @@ programs can see through the driver (GDIINFO, system metrics and colours
 from its configuration resource, the stock fonts, GetNearestColor, the
 dithering of solid brushes on colour and monochrome bitmaps, the bitmap
 formats, Inquire, the VGA palette) is the same as with Microsoft's (VG1,
-VG3), and so are lines of every style (VG5) and text with every
-attribute (VG6). See "Stages" below.
+VG3), and so are lines of every style (VG5), text with every attribute
+(VG6), all 256 raster operations, monochrome/colour conversions, DIBs
+and hatches (VG7), EnumObj, the escapes and flood fills (VG8). See
+"Stages" below.
 
 ## Layout
 
@@ -177,7 +179,12 @@ the height in DX.
   build host. VG3 (all 2^24 colours, on the screen and on a monochrome
   bitmap) gives identical files with both drivers.
 - VG5 (`tests/apps/vg5.c`): lines of every style; VG6
-  (`tests/apps/vg6.c`): text. Their logs are compared whole.
+  (`tests/apps/vg6.c`): text; VG7 (`tests/apps/vg7.c`): every ROP3 on
+  colour and monochrome bitmaps with a source and a pattern brush,
+  monochrome/colour BitBlts with several colour pairs, 1/4/8/24-bit DIBs
+  both ways, hatches; VG8 (`tests/apps/vg8.c`): EnumObjects, the escapes
+  QUERYESCSUPPORT reports, GETCOLORTABLE, EnumFonts, flood fills. Their
+  logs are compared whole: identical (VG5 but for the turns noted).
 - Boot-test cases (`tests/boottest.sh`): `vga` (twelve input scripts with
   w16's driver and Microsoft's resources against Microsoft's driver, every
   screen 0 pixels), `vgaboot` (plain boots: 0 pixels; with w16's own
@@ -204,11 +211,12 @@ the height in DX.
 
 ## Not verified yet (UNVERIFIED)
 
-- Styled polylines turning from slanted y segments to x ones (above),
-  hatch patterns, ScanLR's start pixel, colour -> monochrome BitBlt's
-  background rule, EnumObj's order, the escapes Control supports, DIBs in
-  RLE or over 64K, the dithering of all 2^24 colours (VG4: written, run on
-  the build host next).
+- Styled polylines turning from slanted y segments to x ones (above).
+- The MOUSETRAILS escape itself (QUERYESCSUPPORT answers -7 as 3.1's).
+- DIBs in RLE (DeviceBitmapBits and SetDIBitsToDevice refuse them) or over
+  64K; SetDIBitsToDevice beyond WinMine's use.
+- The dithering of all 2^24 colours (VG4, tests/vgacolor.sh: written, to
+  run on the build host; VG1's 4913 colours and 2553 more are identical).
 - That nothing but the driver reads OEMBIN 2 and STRINGS 1000/1010 (w16's
   hold a note).
 - 386 Enhanced mode (INT 2Fh 4000h-4007h, the grabber).
