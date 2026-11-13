@@ -1,0 +1,36 @@
+# wlink directives for SYREC.DRV (tests/apps/syrec.asm): a recording
+# SYSTEM driver in front of SYSTGT (a renamed copy of the driver under
+# test). Output name and object come from the Makefile.
+format windows dll
+option quiet
+option modname=SYSTEM
+option description 'SYREC recording system driver (w16 probe)'
+option start=libentry
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRESYSTEM.1=T_1
+export CREATESYSTEMTIMER.2=T_2
+export KILLSYSTEMTIMER.3=T_3
+export ENABLESYSTEMTIMERS.4=T_4
+export DISABLESYSTEMTIMERS.5=T_5
+export GETSYSTEMMSECCOUNT.6=T_6
+export GET80X87SAVESIZE.7=T_7
+export SAVE80X87STATE.8=T_8
+export RESTORE80X87STATE.9=T_9
+export WEP.10=T_10 resident
+export A20_PROC.20=T_20
+export SYRLOG.200
+export SYRDUMP.201
+import X_1 SYSTGT.1
+import X_2 SYSTGT.2
+import X_3 SYSTGT.3
+import X_4 SYSTGT.4
+import X_5 SYSTGT.5
+import X_6 SYSTGT.6
+import X_7 SYSTGT.7
+import X_8 SYSTGT.8
+import X_9 SYSTGT.9
+import X_10 SYSTGT.10
+import X_20 SYSTGT.20
+import __0040H KERNEL.193
