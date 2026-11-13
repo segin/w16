@@ -91,6 +91,22 @@ DWORD WINAPI GetTimerResolution(void)
     return 1000;                /* US2: 03E8h */
 }
 
+/* a ready timer of queue hq made not ready (interrupts off): one fewer
+   to deliver, and QS_TIMER off with the last. Killing or resetting a
+   ready timer took the count down and left QS_TIMER on: GetMessage, with
+   the bit on and nothing to give, neither waited nor yielded and went
+   round again until some other message came. Program
+   Manager's blinking caret did it when File > Run's dialog went away
+   with the caret timer ready: WINOLDAP, started from that dialog, got no
+   turn for its switch timer until later keys came (boot-test woados,
+   intermittent since master 8690c87) */
+static void unready(HQUEUE hq)
+{
+    QUEUE __far *q = q_of(hq);
+    if (q->ntimer && !--q->ntimer)
+        q->wakebits &= ~QS_TIMER;
+}
+
 /* a free slot, a chunk added if none (NULL: no memory) */
 static PTIMER free_slot(void)
 {
@@ -166,8 +182,7 @@ found:
     f = irq_off();
     if (t->ready) {
         t->ready = 0;
-        if (q_of(t->hq)->ntimer)
-            q_of(t->hq)->ntimer--;
+        unready(t->hq);
     }
     t->rate = rate < TICK ? TICK : rate;
     t->left = t->rate;
@@ -189,8 +204,8 @@ UINT WINAPI U_BEAR11(HWND h, UINT id, UINT rate, TIMERPROC proc)   /* SetSystemT
 static void free_timer(PTIMER t)
 {
     WORD f = irq_off();
-    if (t->used && t->ready && q_of(t->hq)->ntimer)
-        q_of(t->hq)->ntimer--;
+    if (t->used && t->ready)
+        unready(t->hq);
     t->used = 0;
     irq_restore(f);
 }
@@ -245,8 +260,10 @@ BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL re
     PTIMER t, best = 0;
     int i;
     UINT msg;
-    if (!q->ntimer)
+    if (!q->ntimer) {
+        q->wakebits &= ~QS_TIMER;
         return FALSE;
+    }
     /* the newest ready timer first (the order of the list it was) */
     FOR_TIMERS(c, i, t) {
         if (!t->used || t->hq != hq || !t->ready)
