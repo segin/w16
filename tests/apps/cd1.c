@@ -265,6 +265,15 @@ static FARPROC hookproc(void)
     return p;
 }
 
+/* PrintDlg with hook bit 20: the Print Setup hook is this one ("shook") */
+BOOL CALLBACK __export CdSetupHook(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)dlg;
+    if (interesting(msg))
+        outf("  shook %04X %s wp=%04X lp=%08lX\r\n", msg, msgname(msg), wp, lp);
+    return FALSE;
+}
+
 /* ---- calls ---- */
 
 static void file_call(char *a, BOOL save)
@@ -418,6 +427,17 @@ static void font_call(char *a)
          lf.lfHeight, lf.lfWidth, lf.lfEscapement, lf.lfOrientation, lf.lfWeight,
          lf.lfItalic, lf.lfUnderline, lf.lfStrikeOut, lf.lfCharSet, lf.lfOutPrecision,
          lf.lfClipPrecision, lf.lfQuality, lf.lfPitchAndFamily, (LPSTR)lf.lfFaceName);
+    if (decv(a, "tm", 0) && r) {        /* tm=1: the chosen font's metrics */
+        HDC sdc = GetDC(NULL);
+        HFONT hf = CreateFontIndirect(&lf), of = SelectObject(sdc, hf);
+        TEXTMETRIC tm;
+        GetTextMetrics(sdc, &tm);
+        outf("  tm h=%d asc=%d desc=%d il=%d el=%d\r\n", tm.tmHeight, tm.tmAscent,
+             tm.tmDescent, tm.tmInternalLeading, tm.tmExternalLeading);
+        SelectObject(sdc, of);
+        DeleteObject(hf);
+        ReleaseDC(NULL, sdc);
+    }
     if (c.hDC)
         DeleteDC(c.hDC);
 }
@@ -450,6 +470,8 @@ static void print_call(char *a)
     if (hookbits) {
         p.lpfnPrintHook = (LPPRINTHOOKPROC)hookproc();
         p.lpfnSetupHook = (LPSETUPHOOKPROC)hookproc();
+        if (hookbits & 0x20)
+            p.lpfnSetupHook = (LPSETUPHOOKPROC)MakeProcInstance((FARPROC)CdSetupHook, inst);
     }
     cur_struct = &p;
     r = PrintDlg(&p);
@@ -466,12 +488,18 @@ static void print_call(char *a)
     }
     if (p.hDevMode) {
         DEVMODE FAR *m = (DEVMODE FAR *)GlobalLock(p.hDevMode);
-        outf("  devmode size=%lu name=\"%s\" spec=%04X drvver=%04X size=%u extra=%u fields=%08lX orient=%d paper=%d len=%d wid=%d scale=%d copies=%d src=%d qual=%d color=%d duplex=%d\r\n",
+        /* fields the driver does not claim (dmFields) hold whatever
+           happened to be in its memory: shown as "-" */
+#define F(bit, v) ((m->dmFields & (bit)) ? (int)(v) : (int)0x8000)
+        outf("  devmode size=%lu name=\"%s\" spec=%04X drvver=%04X size=%u extra=%u fields=%08lX orient=%d paper=%d len=%d wid=%d scale=%d copies=%d src=%d qual=%d color=%d duplex=%d yres=%d tt=%d\r\n",
              GlobalSize(p.hDevMode), (LPSTR)m->dmDeviceName, m->dmSpecVersion,
              m->dmDriverVersion, m->dmSize, m->dmDriverExtra, m->dmFields,
-             m->dmOrientation, m->dmPaperSize, m->dmPaperLength, m->dmPaperWidth,
-             m->dmScale, m->dmCopies, m->dmDefaultSource, m->dmPrintQuality,
-             m->dmColor, m->dmDuplex);
+             F(0x1, m->dmOrientation), F(0x2, m->dmPaperSize), F(0x4, m->dmPaperLength),
+             F(0x8, m->dmPaperWidth), F(0x10, m->dmScale), F(0x100, m->dmCopies),
+             F(0x200, m->dmDefaultSource), F(0x400, m->dmPrintQuality),
+             F(0x800, m->dmColor), F(0x1000, m->dmDuplex), F(0x2000, m->dmYResolution),
+             F(0x4000, m->dmTTOption));
+#undef F
         GlobalUnlock(p.hDevMode);
     }
     if (p.hDC)

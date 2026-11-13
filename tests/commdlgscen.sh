@@ -18,7 +18,8 @@
 #   -n: the original only (observation; nothing is compared)
 #   CD_OUT=dir: where the runs go (default build/ref/commdlg-<timestamp>)
 #   CD_BASELINE=update: rewrite the baseline from this run
-#   CD_DLL, CD_PROBE: our COMMDLG.DLL and CD1.EXE (default build/dos/...)
+#   CD_DLL, CD_PROBE, CD_SNAP: our COMMDLG.DLL, CD1.EXE, SNAP.EXE (default
+#   build/dos/...)
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -60,7 +61,7 @@ for n in $names; do
             cp "${CD_DLL:-$root/build/dos/COMMDLG.DLL}" "$work/c/WINDOWS/SYSTEM/COMMDLG.DLL"
         fi
         REFRUN_FILES="$files" REFRUN_OUT=$d REFRUN_GET="CD1.LOG" \
-            "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S "$work/c" > "$d/log.txt" || true
+            "$root/tests/refrun.sh" "${CD_SNAP:-$root/build/dos/SNAP.EXE}" /S "$work/c" > "$d/log.txt" || true
         rm -rf "$work"
     done
     [ -n "$origonly" ] && { echo "== $n: observed ($out/$n/orig)"; continue; }

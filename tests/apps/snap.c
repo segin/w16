@@ -19,6 +19,8 @@
  *     focus                  log the window with the focus
  *     click <x> <y>          post a left click at a screen point (also
  *                            dblclick), to the window there
+ *     clickid <hex id>       click the middle of a control of the active
+ *                            dialog
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
  * When the script ends SNAP exits, and because it is the shell, Windows
  * exits too.
@@ -469,6 +471,21 @@ static void run_line(char *l)
         out(" \"");
         out(text);
         out("\"");
+    } else if (same(l, "clickid")) {
+        /* clickid <hex id>: a left click in the middle of that control
+           of the active dialog (group boxes do not get in the way) */
+        HWND top = top_window(), w = top ? GetDlgItem(top, parse_num(arg, 16)) : NULL;
+        if (w) {
+            RECT r;
+            LPARAM lp;
+            GetClientRect(w, &r);
+            lp = MAKELPARAM(r.right / 2, r.bottom / 2);
+            PostMessage(w, WM_LBUTTONDOWN, MK_LBUTTON, lp);
+            PostMessage(w, WM_LBUTTONUP, 0, lp);
+        } else {
+            out(" -> no such control");
+        }
+        pump(300);
     } else if (same(l, "click") || same(l, "dblclick")) {
         /* click <x> <y>: a left click at screen point x,y, posted to the
            window there (client coordinates) */
