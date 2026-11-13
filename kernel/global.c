@@ -1418,6 +1418,7 @@ void local_heap_check(const char *where, u16 ds)
 
 void heap_fail(const char *why, const char *where, u32 caller, u16 bad, u16 lseg, u16 lbad)
 {
+    text_mode();                        /* a report that ends Windows (fault.c) */
     heap_check_on = 0;
     kputs("w16 heapcheck: ");
     kputs(why);
