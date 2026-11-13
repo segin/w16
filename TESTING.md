@@ -60,7 +60,7 @@ display, so they never open windows on your desktop.
 
 | Command | What it does | Time |
 |---|---|---|
-| `make test` | `tools/castcheck.py`, then the probe programs under w16's KERNEL, on HDPMI16 and on w16's own DOS extender (`tests/run-tests.sh`); with a reference install also the WIN.COM scenarios (`tests/wincom.sh`) and the font checks (`tests/fonts.sh -q`); all of it in parallel | ~12 s on a 20-core, 40-thread server; ~1 min at 8 threads; ~2 min one at a time |
+| `make test` | the default group files against their definitions and w16's icons (`grpcheck`; with a reference install also `tests/grpref.py`, `tools/mkgrp.py` against Setup's group files), `tools/castcheck.py`, then the probe programs under w16's KERNEL, on HDPMI16 and on w16's own DOS extender (`tests/run-tests.sh`); with a reference install also the WIN.COM scenarios (`tests/wincom.sh`) and the font checks (`tests/fonts.sh -q`); all of it in parallel | ~12 s on a 20-core, 40-thread server; ~1 min at 8 threads; ~2 min one at a time |
 | `make boot-test` | boots real Windows 3.1 on w16's parts and compares every screen with the same boot on Microsoft's, pixel for pixel (`tests/boottest.sh`) | ~15 min at 3 jobs on a desktop; ~3.5 min at 12 or more jobs on a 20-core, 40-thread server, with `make test` beside it (`tools/remote-test.sh`) |
 | `tests/boottest.sh CASE ...` | only those boot-test cases (names and descriptions at the top of `tests/boottest.sh`) | |
 | `RUNTESTS_DPMI=dosx tests/run-tests.sh` | the probe programs on w16's own DOS extender only (`hdpmi` only HDPMI16; `make test` uses `"hdpmi dosx"`) | |

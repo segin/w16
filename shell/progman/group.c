@@ -264,10 +264,15 @@ static BOOL grow_slots(group FAR *g)
     return TRUE;
 }
 
-/* Move the item at z-index i to the top (observed on selection). */
+/* Move the item at z-index i to the top (observed on selection). The
+   new order is saved on exit (observed, tests/boottest.sh w16groups:
+   Windows 3.1's Program Manager wrote MAIN.GRP with the selected Read Me
+   item first in rgiItems, the group otherwise unchanged). */
 static void raise_item(group FAR *g, int i)
 {
     item FAR *t = g->z[i];
+    if (i > 0)
+        g->dirty = TRUE;
     for (; i > 0; i--)
         g->z[i] = g->z[i - 1];
     g->z[0] = t;
@@ -277,6 +282,8 @@ static void raise_item(group FAR *g, int i)
 static void lower_item(group FAR *g, int i)
 {
     item FAR *t = g->z[i];
+    if (i + 1 < (int)g->nz)
+        g->dirty = TRUE;
     for (; i + 1 < (int)g->nz; i++)
         g->z[i] = g->z[i + 1];
     g->z[g->nz - 1] = t;

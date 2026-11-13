@@ -1,0 +1,15 @@
+# w16's default Accessories group (tools/mkgrp.py -> ACCESSOR.GRP).
+# Layout as Windows 3.1 Setup's Accessories: minimized (show 2), its
+# normal window one cascade step (22 pixels) below and right of Main's,
+# its icon at 21,218. The items are w16's own applets, in the order
+# Setup lists them (Notepad, Cardfile, Calculator, Clock), each with the
+# icon of w16's build of that program.
+file ACCESSOR.GRP
+name Accessories
+show 2
+rect 22 22 438 224
+min  21 218
+item Notepad | NOTEPAD.EXE | NOTEPAD.EXE
+item Cardfile | CARDFILE.EXE | CARDFILE.EXE
+item Calculator | CALC.EXE | CALC.EXE
+item Clock | CLOCK.EXE | CLOCK.EXE
