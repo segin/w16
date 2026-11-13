@@ -169,15 +169,6 @@ libentry:
         push si
         push di
         call newtable_
-        ; the BIOS's "enhanced keyboard" flag (40:96h bit 4) cleared, as
-        ; with Windows 3.1's driver (KB1, KB2: 40:96h is 0 from the start
-        ; of Windows; DOSBox's BIOS sets bit 4). UNVERIFIED: whether the
-        ; rest of the byte is cleared as well (DOSBox has no other bit set)
-        push es
-        mov ax, __0040H
-        mov es, ax
-        and byte [es:KB_FLAG3], ~F3_101
-        pop es
         mov ax, 1
         pop di
         pop si
@@ -289,6 +280,15 @@ ENABLE:
         jz .l
         inc al
 .l:     mov [es:di + VK_SCROLL], al
+        ; the BIOS's "enhanced keyboard" flag (40:96h bit 4) cleared, as
+        ; Windows 3.1's Enable does (KB2: set by DOSBox's BIOS, still set
+        ; at SetSpeed, clear from Enable on; KB1: Enable leaves bit 1).
+        ; UNVERIFIED: the other bits (DOSBox sets no other)
+        push es
+        mov ax, __0040H
+        mov es, ax
+        and byte [es:KB_FLAG3], ~F3_101
+        pop es
         cli
         mov byte [prefix wrt DGROUP], 0
         mov byte [e1_state wrt DGROUP], 0
@@ -470,8 +470,7 @@ GETBIOSKEYPROC:
 
 ; ---- 7: int SetSpeed(rate): -1 asks (0: it can); otherwise the rate
 ; (bits 0-4) and delay (bits 5-6) go to the keyboard (command F3h) and
-; come back as given. Windows 3.1's driver asks INT 16h AX=6F00h first
-; (KB2), so does this one. ----
+; come back as given. ----
 global SETSPEED
 SETSPEED:
         push bp
@@ -481,14 +480,18 @@ SETSPEED:
         jne .set
         xor ax, ax
         jmp .r
-.set:   mov ax, 6F00h
-        int 16h
-        pushf
+.set:   pushf
         cli
         mov al, 0F3h
         call kbd_send
+        ; Windows' speed counts up (31 the fastest), the keyboard's rate
+        ; down (0 the fastest: IBM PC/AT); the delay as it is (KB2's
+        ; repeat counts against Windows 3.1's driver's)
         mov al, [bp + 6]
-        and al, 7Fh
+        mov ah, al
+        and ax, 1F60h
+        xor ah, 1Fh
+        or al, ah
         call kbd_send
         popf
         mov ax, [bp + 6]
