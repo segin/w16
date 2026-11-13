@@ -512,7 +512,7 @@ LONG WINAPI DispatchMessage(const MSG __far *m)
 {
     PWND w;
     LONG r;
-    if (m->message == WM_TIMER && m->lParam)
+    if ((m->message == WM_TIMER || m->message == WM_SYSTIMER) && m->lParam)
         return call_wndproc((WNDPROC)m->lParam, 0, m->hwnd, m->message, m->wParam,
                             GetTickCount());
     w = valid_wnd(m->hwnd);

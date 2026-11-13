@@ -73,10 +73,22 @@ void WINAPI MessageBeep(UINT type)
     (void)type;
 }
 
-/* ---- the caret (minimal: one caret, drawn by inverting) ---- */
+/* ---- the caret: one, drawn by inverting, blinking ----
+   US13 on Windows 3.1: the caret blinks only while its task reads
+   messages (a second without them, it stayed as it was) and no message
+   reaches the window procedure: a system timer of USER's (SetSystemTimer,
+   WM_SYSTIMER whose lParam is USER's own procedure, run by
+   DispatchMessage; 3.0 exported it as CaretBlinkProc, USER.311). The
+   period is GetCaretBlinkTime rounded up to the 55 ms tick (530: 550 ms;
+   200: 220 ms). The phase goes on while the caret is hidden: ShowCaret
+   draws nothing until the next "on" (3.1: 194 ms after ShowCaret, on the
+   old schedule); SetCaretPos keeps the phase; CreateCaret starts on, and
+   ShowCaret then draws at once. WIN.INI [windows] CursorBlinkRate, 530
+   by default (3.1 SDK). Nothing of this runs at interrupt time. */
+#define CARET_TIMER 0xFFFE      /* UNVERIFIED: 3.1's id for it */
 static HWND hwndCaret;
-static int caret_x, caret_y, caret_cx, caret_cy, caret_hide, caret_on;
-static UINT caret_blink = 530;
+static int caret_x, caret_y, caret_cx, caret_cy, caret_hide, caret_on, caret_phase;
+static UINT caret_blink;
 
 static void caret_draw(void)
 {
@@ -87,6 +99,42 @@ static void caret_draw(void)
     PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
     release_dc(hwndCaret, hdc);
     caret_on ^= 1;
+}
+
+/* shown when in the "on" phase and not hidden */
+static void caret_update(void)
+{
+    int want = caret_phase && !caret_hide;
+    if (want != caret_on)
+        caret_draw();
+}
+
+static UINT blink_time(void)
+{
+    if (!caret_blink)
+        caret_blink = GetProfileInt("windows", "CursorBlinkRate", 530);
+    return caret_blink;
+}
+
+void __far __pascal __loadds caret_blink_proc(HWND h, UINT msg, UINT id, DWORD t)
+{
+    (void)msg, (void)id, (void)t;
+    if (h && h == hwndCaret) {
+        caret_phase ^= 1;
+        caret_update();
+    }
+}
+
+static void caret_timer(BOOL on)
+{
+    UINT WINAPI U_BEAR11(HWND, UINT, UINT, TIMERPROC);
+    BOOL WINAPI U_KILLSYSTEMTIMER(HWND, UINT);
+    if (!hwndCaret)
+        return;
+    if (on)
+        U_BEAR11(hwndCaret, CARET_TIMER, blink_time(), (TIMERPROC)caret_blink_proc);
+    else
+        U_KILLSYSTEMTIMER(hwndCaret, CARET_TIMER);
 }
 
 /* for savebits.c: where the caret shows on screen (FALSE: it does not) */
@@ -130,6 +178,8 @@ void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
     caret_cy = cy ? cy : sysmet[SM_CYBORDER];
     caret_hide = 1;
     caret_on = 0;
+    caret_phase = 1;
+    caret_timer(TRUE);
     (void)bm;
 }
 
@@ -137,6 +187,7 @@ void WINAPI DestroyCaret(void)
 {
     if (hwndCaret && caret_on)
         caret_draw();
+    caret_timer(FALSE);
     hwndCaret = 0;
 }
 
@@ -144,16 +195,16 @@ void WINAPI HideCaret(HWND h)
 {
     if (!hwndCaret || (h && h != hwndCaret))
         return;
-    if (!caret_hide++ && caret_on)
-        caret_draw();
+    caret_hide++;
+    caret_update();
 }
 
 void WINAPI ShowCaret(HWND h)
 {
     if (!hwndCaret || (h && h != hwndCaret) || !caret_hide)
         return;
-    if (!--caret_hide && !caret_on)
-        caret_draw();
+    caret_hide--;
+    caret_update();
 }
 
 void WINAPI SetCaretPos(int x, int y)
@@ -173,14 +224,17 @@ void WINAPI GetCaretPos(POINT __far *p)
     p->y = caret_y;
 }
 
+/* the new rate from now on (UNVERIFIED: 3.1 restarted the count, the
+   first change 313 ms after the call, then every 220 ms) */
 void WINAPI SetCaretBlinkTime(UINT t)
 {
-    caret_blink = t;
+    caret_blink = t ? t : 1;
+    caret_timer(TRUE);
 }
 
 UINT WINAPI GetCaretBlinkTime(void)
 {
-    return caret_blink;
+    return blink_time();
 }
 
 /* ---- odds and ends ---- */
