@@ -249,7 +249,11 @@
 # woaref2, dragoff-ref) are made once under a lock per cache key, and
 # retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
 # The cases that took longest last time (build/boottest-times.txt, kept
-# by each run) start first; the output stays in case order.
+# by each run) start first; the output stays in case order. Cases made of
+# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us,
+# winfile@cmp/all: see caseparts), scheduled like cases and summed up in
+# the case's one line; a part can be run by name (tests/boottest.sh
+# allw16nolock@3).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -540,7 +544,8 @@ woaref() {
 
 # runcase CASE: one case; run in a subshell of its own (the job pool below)
 runcase() {
-    c=$1
+    c=${1%@*} part=
+    case $1 in *@*) part=${1#*@} ;; esac
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
@@ -678,6 +683,7 @@ runcase() {
     allw16nolock)
         fon=$root/build/fonts
         k=1 bad=0 runs=${NOLOCK_RUNS:-6}
+        [ -z "$part" ] || k=$part runs=$part
         while [ $k -le $runs ]; do
             b=${NOLOCK_BOOT:-$((10 + (k - 1) % 6 * 2))}
             INPUTRUN_NOLOCK=1 "$root/tests/inputrun.sh" -b "$b" -t 240 \
@@ -697,7 +703,8 @@ runcase() {
                 echo "     $c run $k (motion from second $b): help menu $h pixels, pointer moved $p pixels ($d)"; bad=$((bad + 1)); fi
             k=$((k + 1))
         done
-        if [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
+        if [ -n "$part" ]; then partdone "$([ $bad = 0 ] && echo ok || echo "run $part failed")"
+        elif [ $bad = 0 ]; then echo "ok   $c: $runs of $runs runs: menus and pointer respond"
         else echo "FAIL $c: $bad of $runs runs failed"; fails=$((fails + 1)); fi ;;
     winprompt)
         # the MS-DOS Prompt with w16's WIN.COM against 3.1's (the rest
@@ -831,6 +838,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # 3.1's width rule for long captions). Then every w16 part: no
         # fault (it ended in KERNEL's lstrcat, back to DOS).
         s=$root/tests/scripts/input/winfile.txt
+        r=ok
+        if [ "${part:-cmp}" = cmp ]; then
         refrun winfile-ref winfile "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/winfile-ref" -r
         "$root/tests/inputrun.sh" -e "$out/winfile-ref/boot.png" -E "$out/winfile-ref" -M "rectangle 0,85 240,140 rectangle 0,455 639,479" -b 25 -t 210 "$s" "$out/winfile-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/winfile-w16.txt" 2>&1 || true
@@ -847,7 +856,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             [ "$n" = 0 ] || { r="$s2: $n pixels differ"; break; }
         done
         ls "$out/winfile-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
-        if [ "$r" = ok ]; then
+        fi
+        # every w16 part (the part "all"; after the comparison when whole)
+        if [ "$r" = ok ] && [ "${part:-all}" = all ]; then
             fon=$root/build/fonts
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 30 -t 220 "$s" "$out/winfile-all" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
@@ -858,41 +869,47 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             if grep -aq "exception" "$out/winfile-all/work/c/OUT.TXT" 2>/dev/null; then r="every w16 part: a fault ($out/winfile-all/work/c/OUT.TXT)"
             elif [ ! -f "$out/winfile-all/07-back-c.png" ]; then r="every w16 part: screens missing"; fi
         fi
-        if [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
         refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -s -b 40 -t 290 "$scr" "$out/pmdrop-ref" -r
+        pk=${part:-pm sh us}     # the sessions this run makes
+        case " $pk " in *" pm "*)
         "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-pm" -r \
-            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmdrop-pm.txt" 2>&1 || true ;; esac
+        case " $pk " in *" sh "*)
         "$root/tests/inputrun.sh" -s -E "$out/pmdrop-ref" -M "rectangle 60,310 300,342 rectangle 0,455 639,479" -b 40 -t 290 "$scr" "$out/pmdrop-sh" -r \
             -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" \
-            > "$out/pmdrop-sh.txt" 2>&1 || true
+            > "$out/pmdrop-sh.txt" 2>&1 || true ;; esac
         # w16's USER and GDI under Microsoft's File Manager and Program
         # Manager (DragObject, DumpIcon): the file's focus rectangle left
         # out, its dots in the other phase (GDI's pattern origin)
+        case " $pk " in *" us "*)
         "$root/tests/inputrun.sh" -e "$out/pmdrop-ref/boot.png" -E "$out/pmdrop-ref" -M "rectangle 258,200 280,224" -b 40 -t 290 "$scr" "$out/pmdrop-us" -r \
-            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmdrop-us.txt" 2>&1 || true ;; esac
         r=ok
         grp=work/c/WINDOWS/MAIN.GRP
         if ! grep -aq "C:.WINDOWS.APPS.HLP" "$out/pmdrop-ref/$grp" 2>/dev/null; then
             r="the reference did not add the item ($out/pmdrop-ref)"
         fi
-        for k in pm sh us; do
+        for k in $pk; do
             [ "$r" = ok ] || break
             cmp -s "$out/pmdrop-ref/$grp" "$out/pmdrop-$k/$grp" || { r="$k: MAIN.GRP differs"; break; }
             for s in 04-dragging 05-dropped; do
                 [ -f "$out/pmdrop-$k/$s.png" ] || { r="$k: no $s"; break; }
                 m="rectangle 0,0 0,0"
                 [ $k = us ] && m="rectangle 258,200 280,224"
-                magick "$out/pmdrop-$k/$s.png" -fill black -draw "$m" "$out/pmdrop-a.png"
-                magick "$out/pmdrop-ref/$s.png" -fill black -draw "$m" "$out/pmdrop-b.png"
-                n=$(magick compare -metric AE "$out/pmdrop-a.png" "$out/pmdrop-b.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
+                magick "$out/pmdrop-$k/$s.png" -fill black -draw "$m" "$out/pmdrop-$k-a.png"
+                magick "$out/pmdrop-ref/$s.png" -fill black -draw "$m" "$out/pmdrop-$k-b.png"
+                n=$(magick compare -metric AE "$out/pmdrop-$k-a.png" "$out/pmdrop-$k-b.png" "$out/pmdrop-$k-$s-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
             done
         done
-        if [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
     pmclose)
         # Program Manager's system box double-clicked: its Exit dialog in
@@ -1352,11 +1369,55 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
 # (tests/xvfb.sh); references two cases share wait for each other
 # (refrun's lock); retries are appended under a lock.
 for c in $cases; do
-    case $(codeof "$c" | head -1) in
+    case $(codeof "${c%@*}" | head -1) in
     "    "*")"*) ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 done
+# Parts. A case made of several independent sessions is split into parts
+# that are scheduled like cases (CASE@PART, run by name too): allw16nolock
+# (one part per run, its deliberate timings unchanged), pmdrop (w16
+# PROGMAN; PROGMAN and SHELL; USER and GDI), winfile (the comparison;
+# every w16 part). A part records its result (partdone) and prints only
+# its own details; when the last part of a case is printed, the case's
+# own ok or FAIL line follows (partsummary) and counts once.
+caseparts() {
+    case $1 in
+    allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
+    pmdrop) echo "$1@pm $1@sh $1@us" ;;
+    winfile) echo "$1@cmp $1@all" ;;
+    *) echo "$1" ;;
+    esac
+}
+# partdone RESULT: this part's result, "ok" or what failed
+partdone() { echo "$1" > "$out/.part-$c-$part"; }
+# partsummary CASE: the case's line from its parts' results
+partsummary() {
+    pt=0 pbad=0 pfirst=
+    for pp in $(caseparts "$1"); do
+        pt=$((pt + 1))
+        pr=$(cat "$out/.part-$1-${pp#*@}" 2>/dev/null || echo "part ${pp#*@} stopped before its end")
+        [ "$pr" = ok ] && continue
+        pbad=$((pbad + 1)); [ -n "$pfirst" ] || pfirst=$pr
+    done
+    case $1 in
+    allw16nolock)
+        if [ $pbad = 0 ]; then echo "ok   $1: $pt of $pt runs: menus and pointer respond"
+        else echo "FAIL $1: $pbad of $pt runs failed"; fi ;;
+    pmdrop)
+        if [ $pbad = 0 ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
+        else echo "FAIL pmdrop: $pfirst"; fi ;;
+    winfile)
+        if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
+        else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    esac
+    [ $pbad = 0 ]
+}
+expanded=
+for c in $cases; do
+    case $c in *@*) expanded="$expanded $c" ;; *) expanded="$expanded $(caseparts "$c")" ;; esac
+done
+cases=$expanded
 jobs=${BOOTTEST_JOBS:-3}
 n=0 next=1 pids=
 # flush: print the output of the cases finished so far, in order
@@ -1370,6 +1431,12 @@ flush() {
             fails=$((fails + 1))
         fi
         cat "$out/.case-$next.time" >> "$out/times.txt"
+        # the last part of a case: the case's line
+        pc=$(sed -n "${next}p" "$out/.names")
+        case $pc in *@*)
+            if [ "$(sed -n "$((next + 1))p" "$out/.names" | sed 's/@.*//')" != "${pc%@*}" ] &&
+               ! partsummary "${pc%@*}"; then fails=$((fails + 1)); fi ;;
+        esac
         next=$((next + 1))
     done
 }
@@ -1390,6 +1457,7 @@ order=$(i=0; for c in $cases; do
     echo "${t:-99999} $i $c"
 done | sort -k1,1nr -k2,2n | cut -d' ' -f2-)
 total=$(echo "$cases" | wc -w)
+for c in $cases; do echo "$c"; done > "$out/.names"
 echo "$order" | while read -r n c; do echo "$n $c"; done > "$out/.order"
 while read -r n c; do
     while [ "$(running)" -ge "$jobs" ]; do flush; sleep 1; done
