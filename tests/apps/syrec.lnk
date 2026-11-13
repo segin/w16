@@ -22,6 +22,7 @@ export WEP.10=T_10 resident
 export A20_PROC.20=T_20
 export SYRLOG.200
 export SYRDUMP.201
+export SYRPAD.202
 import X_1 SYSTGT.1
 import X_2 SYSTGT.2
 import X_3 SYSTGT.3
