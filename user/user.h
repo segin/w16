@@ -288,6 +288,7 @@ void nc_calcsize(PWND w, RECT *rc);
 
 /* ---- menus (menu.c) ---- */
 void menu_heaps_init(void);
+void sbmenu_init(void);
 WORD menu_heap_sel(void);       /* the menu heap's selector */
 WORD menu_str_heap_sel(void);   /* the menu-string heap's */
 int  menu_bar_height(PWND w, int width);

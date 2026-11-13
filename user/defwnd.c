@@ -310,6 +310,8 @@ static void draw_frame(HDC hdc, PWND w, BOOL active)
 void nc_draw_scrollbars(HDC hdc, PWND w);
 void window_scrollbar_rects(PWND w, RECT *v, RECT *h);
 void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt);
+void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt);
+extern WORD sb_menu_on;
 
 void nc_paint(HWND h, HRGN rgn, BOOL active)
 {
@@ -627,6 +629,20 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         case HTMAXBUTTON:
             send_message(h, WM_SYSCOMMAND, (w->style & WS_MAXIMIZE) ? SC_RESTORE : SC_MAXIMIZE, lp);
             break;
+        }
+        return 0;
+    case WM_NCRBUTTONUP:
+        /* w16's scroll-bar menu (scroll.c); with [w16] ScrollBarMenu=0
+           nothing, as on 3.1 */
+        if (sb_menu_on && (wp == HTVSCROLL || wp == HTHSCROLL)) {
+            RECT v, hz;
+            POINT pt;
+            window_scrollbar_rects(w, &v, &hz);
+            OffsetRect(&v, w->rcWindow.left, w->rcWindow.top);
+            OffsetRect(&hz, w->rcWindow.left, w->rcWindow.top);
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            scrollbar_menu(h, h, wp == HTVSCROLL ? SB_VERT : SB_HORZ, wp == HTVSCROLL ? &v : &hz, pt);
         }
         return 0;
     case WM_NCLBUTTONDBLCLK:
