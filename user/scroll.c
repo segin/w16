@@ -298,8 +298,17 @@ void sb_show_disabled(HWND hwnd, int bar)
 
 void WINAPI GetScrollRange(HWND hwnd, int bar, int __far *min, int __far *max)
 {
-    PWND w;
-    SBINFO *s = info(hwnd, bar, &w);
+    PWND w = valid_wnd(hwnd);
+    SBINFO *s;
+    /* a window that has never had that bar: 0, 0 (3.1: Terminal's main
+       window and its dialogs; w16 made the bar's state, 0-100, to read
+       it) */
+    if (w && bar != SB_CTL && !sbs_of(w, FALSE) &&
+        !(w->style & (bar == SB_VERT ? WS_VSCROLL : WS_HSCROLL))) {
+        *min = *max = 0;
+        return;
+    }
+    s = info(hwnd, bar, &w);
     *min = s ? s->min : 0;
     *max = s ? s->max : 0;
 }

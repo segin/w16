@@ -307,6 +307,70 @@ int __cdecl tmain(void)
         lstrcpy(tag, "plain");
         dump_items("top", GetSystemMenu(t, FALSE));
         dump_items("child", GetSystemMenu(c, FALSE));
+        /* controls' styles as made and as read back (Terminal's status
+           bar: BS_USERBUTTON buttons; its edits and combo boxes with
+           WS_BORDER) */
+        {
+            static const struct { const char *cls; DWORD st; } k[] = {
+                { "Button", BS_USERBUTTON }, { "Button", 0x0A }, { "Button", BS_OWNERDRAW },
+                { "Button", BS_PUSHBUTTON },
+                /* (not compared yet: 3.1's Edit and ComboBox take
+                   WS_BORDER out of their style, and a CBS_DROPDOWN gets
+                   CBS_HASSTRINGS; w16's keep the border as a frame) */
+                { "ListBox", WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_SORT },
+                { "Static", SS_LEFT | WS_BORDER }
+            };
+            int j;
+            for (j = 0; j < (int)(sizeof k / sizeof k[0]); j++) {
+                HWND w = CreateWindow(k[j].cls, "", WS_CHILD | WS_VISIBLE | k[j].st, 0, 0, 60, 60, t,
+                                      (HMENU)(100 + j), hi, NULL);
+                char nm[24];
+                wsprintf(nm, "ctlstyle%d.hi", j);
+                o(nm, HIWORD(GetWindowLong(w, GWL_STYLE)));
+                wsprintf(nm, "ctlstyle%d.lo", j);
+                o(nm, LOWORD(GetWindowLong(w, GWL_STYLE)));
+                DestroyWindow(w);
+            }
+        }
+        /* a BS_USERBUTTON button made by a dialog template, as
+           Terminal's status bar has them: its style read back */
+        {
+            static BYTE dt[] = {
+                0x40, 0x00, 0x80, 0x40,         /* WS_CHILD|WS_BORDER|DS_SETFONT */
+                1,                              /* one item */
+                0, 0, 0, 0, 100, 0, 20, 0,      /* x y cx cy */
+                0, 0, 0,                        /* no menu, class, caption */
+                8, 0, 'H', 'e', 'l', 'v', 0,    /* 8 point Helv */
+                0, 0, 0, 0, 40, 0, 12, 0,       /* item at 0,0 40x12 */
+                10, 0,                          /* id 10 */
+                0x08, 0x00, 0x00, 0x50,         /* WS_CHILD|WS_VISIBLE|BS_USERBUTTON */
+                0x80, 0,                        /* Button, empty text */
+                0                               /* no extra bytes */
+            };
+            HWND d = CreateDialogIndirect(hi, dt, t, NULL);
+            HWND b = d ? GetDlgItem(d, 10) : 0;
+            o("dlguserbutton.made", d != 0);
+            o("dlguserbutton.lo", b ? LOWORD(GetWindowLong(b, GWL_STYLE)) : 0xFFFF);
+            o("dlguserbutton.dlgstyle", d ? LOWORD(GetWindowLong(d, GWL_STYLE)) : 0xFFFF);
+            if (d)
+                DestroyWindow(d);
+        }
+        /* CS_BYTEALIGNWINDOW (the dialog class): made at x 221, then
+           moved to 213 and to 230 */
+        {
+            HWND d = CreateWindow(MAKEINTRESOURCE(32770), "D", WS_POPUP | WS_CAPTION, 221, 50, 100, 60,
+                                  t, 0, hi, NULL);
+            RECT r;
+            GetWindowRect(d, &r);
+            o("bytealign.made", r.left);
+            MoveWindow(d, 213, 50, 100, 60, FALSE);
+            GetWindowRect(d, &r);
+            o("bytealign.moved", r.left);
+            SetWindowPos(d, 0, 230, 50, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            GetWindowRect(d, &r);
+            o("bytealign.swp", r.left);
+            DestroyWindow(d);
+        }
         /* hidden children shown: where they go in the Z order */
         {
             static const int cmds[] = { SW_SHOW, SW_SHOWNORMAL, SW_SHOWNA, SW_SHOWNOACTIVATE };

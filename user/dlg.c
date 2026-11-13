@@ -259,8 +259,14 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         {
             LOGFONT lf;
             fmemset(&lf, 0, sizeof lf);
-            lf.lfHeight = -(pts * GetDeviceCaps(hdcScreen, LOGPIXELSY) / 72);
+            /* the height rounded, and "Helv" made "MS Sans Serif" (3.1:
+               Terminal's dialogs, 8-point Helv in their templates, have a
+               font whose LOGFONT reads MS Sans Serif, height -11; w16
+               kept Helv and truncated 10.67 to -10) */
+            lf.lfHeight = -((pts * GetDeviceCaps(hdcScreen, LOGPIXELSY) + 36) / 72);
             lf.lfWeight = FW_BOLD;      /* UNVERIFIED: 3.1 dialog fonts are bold */
+            if (!lstr_cmpi(face, "Helv"))
+                face = "MS Sans Serif";
             lstr_cpyn(lf.lfFaceName, face, LF_FACESIZE);
             font = CreateFontIndirect(&lf);
         }
@@ -312,9 +318,12 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         OffsetRect(&r, -r.left, 0);
     if (menu)
         hmenu = LoadMenu(hinst, menu);
+    /* the style keeps DS_SETFONT and DS_MODALFRAME, and the controls get
+       WS_EX_NOPARENTNOTIFY (3.1: Terminal's and COMMDLG's dialogs read
+       back 14C800C0h and 40800040h, their controls exstyle 4) */
     h = create_window((style & DS_MODALFRAME) ? WS_EX_DLGMODALFRAME : 0,
                       cls ? cls : MAKEINTRESOURCE(32770), caption,
-                      style & ~(WS_VISIBLE | DS_SETFONT | DS_MODALFRAME | DS_ABSALIGN |
+                      style & ~(WS_VISIBLE | DS_ABSALIGN |
                                 DS_SYSMODAL | DS_LOCALEDIT | DS_NOIDLEMSG),
                       r.left, r.top, r.right - r.left, r.bottom - r.top, owner, hmenu,
                       hinst, NULL);
@@ -348,7 +357,7 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             q = skip_sz(q, &text);
         {
             BYTE extra = *q++;
-            c = create_window(0, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
+            c = create_window(WS_EX_NOPARENTNOTIFY, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
                               du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, hinst,
                               extra ? (void __far *)q : NULL);
             q += extra;
