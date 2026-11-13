@@ -1282,6 +1282,11 @@ $(DOS)/US18.EXE: $(B)/tests/start.o $(B)/tests/us18.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us18.map file { $(B)/tests/start.o $(B)/tests/us18.o }
 dos: $(DOS)/US18.EXE
+# US18A.EXE: US18 marked for Windows 3.10 (BS_USERBUTTON becomes a push button there)
+$(DOS)/US18A.EXE: $(DOS)/US18.EXE
+	cp $< $@
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/US18A.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
