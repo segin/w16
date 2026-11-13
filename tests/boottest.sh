@@ -240,6 +240,11 @@
 #              Notepad on w16's USER and GDI opening a 31500-byte file,
 #              paging, typing and saving: every screen and the saved
 #              bytes as all-Microsoft's (parts edithandle@us, @np)
+#   capcursor  the cursor after a capture ends: probe US22 as the shell,
+#              the mouse captured, moved and released still over a sizing
+#              border, a corner and the client area; w16's USER and GDI
+#              against all-Microsoft: every screen and US22's log of mouse
+#              messages and WM_SETCURSOR identical
 #   deskver    w16's desktop version stamp (a w16 extension,
 #              user/deskver.c; every other case runs with it off, as
 #              tests/dropin.sh's default [w16] DesktopVersion=0): with 0,
@@ -339,7 +344,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1347,6 +1352,41 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
         else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
+    capcursor)
+        # the cursor after a capture ends (user/input.c ReleaseCapture,
+        # user/defwnd.c WM_SETCURSOR): probe US22 as the shell, the mouse
+        # captured, moved and released still over a sizing border, a
+        # corner and the client area (tests/scripts/input/capcursor.txt);
+        # w16's USER and GDI against all-Microsoft: every screen
+        # identical (the cursor's shape after the release), and US22's
+        # log of mouse messages and WM_SETCURSOR from the first press on
+        scr=$root/tests/scripts/input/capcursor.txt
+        refrun capcursor-ref capcursor "$root/tests/inputrun.sh" -s -b 40 -t 200 "$scr" "$out/capcursor-ref" -r \
+            -f "$root/build/dos/US22.EXE=US22.EXE" -i 'boot:shell=C:\US22.EXE'
+        "$root/tests/inputrun.sh" -e "$out/capcursor-ref/boot.png" -E "$out/capcursor-ref" -b 40 -t 200 "$scr" "$out/capcursor-w16" -r \
+            -f "$root/build/dos/US22.EXE=US22.EXE" -i 'boot:shell=C:\US22.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/capcursor-w16.txt" 2>&1 || true
+        for k in ref w16; do
+            f=$out/capcursor-$k/work/c/WINDOWS/TK.LOG
+            if [ -f "$f" ]; then tr -d '\r' < "$f" | sed -n '/^LBUTTONDOWN/,$p' > "$out/capcursor-$k.log"
+            else : > "$out/capcursor-$k.log"; fi
+        done
+        r=ok
+        if [ "$(grep -c '^ReleaseCapture }' "$out/capcursor-ref.log")" != 3 ]; then
+            r="the reference's log has not three releases ($out/capcursor-ref.log)"
+        elif ! cmp -s "$out/capcursor-ref.log" "$out/capcursor-w16.log"; then
+            r="US22's messages differ from 3.1's ($out/capcursor-ref.log, capcursor-w16.log)"
+        fi
+        for g in "$out/capcursor-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$g" .png)
+            [ -f "$out/capcursor-w16/$s.png" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/capcursor-w16/$s.png" "$g" "$out/capcursor-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$s: $n pixels differ ($out/capcursor-$s-diff.png)"
+        done
+        if [ "$r" = ok ]; then echo "ok   capcursor: 0 pixels after each release, US22's messages as 3.1's"
+        else echo "FAIL capcursor: $r"; fails=$((fails + 1)); fi ;;
     edithandle)
         # an edit control's text in its hInstance's local heap,
         # EM_GETHANDLE and EM_SETHANDLE (user/edit.c): part us, probe US20
