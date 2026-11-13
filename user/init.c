@@ -216,6 +216,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     input_init();
     register_system_classes();
     menu_heaps_init();
+    sbmenu_init();                      /* [w16] ScrollBarMenu (scroll.c) */
     diag("INITDONE=Display Resources\r\n");
 
     diag("INIT=Fonts\r\n");

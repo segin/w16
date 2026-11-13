@@ -394,6 +394,103 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     send_message(notify, msg, SB_ENDSCROLL, lp);
 }
 
+/* ---- the scroll-bar menu: a w16 extension ----
+   Windows 2000 and later give every scroll bar a shortcut menu on a right
+   click (Raymond Chen, The Old New Thing, 2026-09-22: "Windows 2000 added
+   a right-click menu to the scroll bar"; Scroll Here, Top, Bottom, Page
+   Up, Page Down, Scroll Up, Scroll Down; the separators as in the menu
+   Nick Gammon's forum transcribes, gammon.com.au/forum thread 8417; the
+   horizontal wording, Left Edge, Right Edge, Page Left, Page Right,
+   Scroll Left, Scroll Right, as a Trapeze Group application's help page
+   lists both bars' right-click menus); the order, wording and separators confirmed by a
+   screenshot of the vertical menu from PsyMP3 (the user's own
+   ISC-licensed program; supplied 2026-11-13). None of
+   those sources shows a mnemonic, so the items have none. Windows 3.1 has no such menu: [w16] ScrollBarMenu=0 in
+   SYSTEM.INI (read at start-up; default 1) turns it off, and then nothing
+   here runs and USER behaves as 3.1's (ARCHITECTURE.md 10.3).
+
+   Shown on the right button's release (later Windows shows it from
+   WM_CONTEXTMENU, which DefWindowProc makes from WM_RBUTTONUP and
+   WM_NCRBUTTONUP: Win32 SDK, WM_CONTEXTMENU), at the pointer, by USER's
+   own menu loop (menu_track_quiet: the window gets none of the menu's
+   messages, only the WM_VSCROLL/WM_HSCROLL it already understands). Not
+   for a disabled window or a bar with nothing to scroll (shown disabled,
+   or an empty range): what later Windows does there is not documented,
+   so the conservative choice. The commands send what a mouse or the
+   scroll-bar control's keys send for the same thing, then SB_ENDSCROLL;
+   Scroll Here sends SB_THUMBTRACK and SB_THUMBPOSITION with the position
+   whose thumb is centred on the click, as a drag of the thumb there
+   would (the exact sequence later Windows sends is not documented:
+   UNVERIFIED; both, so that programs that act on either one move) */
+WORD sb_menu_on = 1;            /* [w16] ScrollBarMenu */
+
+void sbmenu_init(void)
+{
+    sb_menu_on = GetPrivateProfileInt("w16", "ScrollBarMenu", 1, "SYSTEM.INI") != 0;
+}
+
+UINT menu_track_quiet(HMENU hm, int x, int y, HWND h);
+
+#define SBM_HERE 0x100          /* the items' ids: 100h + SB_ code */
+
+/* hwnd's bar (SB_VERT, SB_HORZ, SB_CTL) in rc (screen) right-clicked at pt
+   (screen): the menu, and the command chosen sent to notify (the window
+   for its own bars, the parent for a control) */
+void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
+{
+    static const char *const vtext[] = { "Scroll Here", "Top", "Bottom", "Page Up", "Page Down",
+                                         "Scroll Up", "Scroll Down" };
+    static const char *const htext[] = { "Scroll Here", "Left Edge", "Right Edge", "Page Left",
+                                         "Page Right", "Scroll Left", "Scroll Right" };
+    static const BYTE codes[] = { SB_THUMBPOSITION, SB_TOP, SB_BOTTOM, SB_PAGEUP, SB_PAGEDOWN,
+                                  SB_LINEUP, SB_LINEDOWN };
+    PWND w;
+    SBINFO *s;
+    BOOL vert;
+    int min, max, len, arrow, at, travel, here, i;
+    long v;
+    HMENU hm;
+    UINT cmd, msg;
+    WORD ctl;
+    if (!sb_menu_on || !IsWindowEnabled(hwnd))
+        return;
+    if ((s = info(hwnd, bar, &w)) == 0 || s->disabled || s->max <= s->min)
+        return;
+    min = s->min, max = s->max;
+    vert = bar == SB_VERT || (bar == SB_CTL && (w->style & SBS_VERT));
+    if (bar == SB_CTL && (w->style & SBS_SIZEBOX))
+        return;
+    /* the position whose thumb is centred on the click */
+    len = vert ? rc->bottom - rc->top : rc->right - rc->left;
+    arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
+    if (len < 2 * arrow)
+        arrow = len / 2;
+    at = (vert ? pt.y - rc->top : pt.x - rc->left) - (arrow - 1) - arrow / 2;
+    travel = len - 3 * arrow + 2;
+    v = travel > 0 && at > 0 ? min + ((long)at * (max - min) * 2 + travel) / (2L * travel) : min;
+    here = v > max ? max : (int)v;
+    if ((hm = CreatePopupMenu()) == 0)
+        return;
+    for (i = 0; i < 7; i++) {
+        if (i == 1 || i == 3 || i == 5)
+            AppendMenu(hm, MF_SEPARATOR, 0, NULL);
+        AppendMenu(hm, MF_STRING, SBM_HERE + codes[i], vert ? vtext[i] : htext[i]);
+    }
+    cmd = menu_track_quiet(hm, pt.x, pt.y, hwnd);
+    DestroyMenu(hm);
+    if (!cmd || !IsWindow(notify) || !IsWindow(hwnd))
+        return;
+    msg = vert ? WM_VSCROLL : WM_HSCROLL;
+    ctl = bar == SB_CTL ? (WORD)hwnd : 0;
+    cmd -= SBM_HERE;
+    if (cmd == SB_THUMBPOSITION) {
+        send_message(notify, msg, SB_THUMBTRACK, MAKELONG(here, ctl));
+        send_message(notify, msg, SB_THUMBPOSITION, MAKELONG(here, ctl));
+    } else
+        send_message(notify, msg, cmd, MAKELONG(0, ctl));
+    send_message(notify, msg, SB_ENDSCROLL, MAKELONG(0, ctl));
+}
+
 /* ---- the SCROLLBAR class: its SBINFO in the window extra bytes
    (Windows 3.1's class has 10: US2) ---- */
 LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -431,6 +528,20 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         track_scrollbar(h, GetParent(h), SB_CTL, &r, pt);
         return 0;
     }
+    case WM_RBUTTONUP:
+        if (sb_menu_on) {               /* (w16's extension, above) */
+            RECT r;
+            POINT pt;
+            GetClientRect(h, &r);       /* where the bar is drawn */
+            ClientToScreen(h, (POINT *)&r.left);
+            ClientToScreen(h, (POINT *)&r.right);
+            pt.x = (int)LOWORD(lp);
+            pt.y = (int)HIWORD(lp);
+            ClientToScreen(h, &pt);
+            scrollbar_menu(h, GetParent(h), SB_CTL, &r, pt);
+            return 0;
+        }
+        break;
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS;
     case WM_KEYDOWN: {
