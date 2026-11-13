@@ -18,28 +18,35 @@
 ; Only values are recorded: registers and stack words. Nothing behind a
 ; pointer argument is ever read (that could copy Microsoft code or data).
 ;
-; A record (REC = 48 bytes):
+; A record (REC = 52 bytes):
 ;   +0 kind: the ordinal for a call, E0h for an event-procedure call
 ;   +2 sequence number (calls and events share it)
 ;   +4 AX BX CX DX SI DI (+4..+15), +16 flags, +18 DS, +20 ES, +22 SS
 ;   calls:  +24..+39 the 8 stack words above the return address (w0 at
 ;           +24 is the last-pushed argument), +40 AX out, +42 DX out,
-;           +44 flags out, +46 bytes taken off
+;           +44 flags out, +46 bytes taken off, +48 KB4.COM's record
+;           count before the call, +50 after it (tests/dos/kb4.asm: the
+;           real-mode INT 16h calls the call made)
 ;   events: +24 BIOS 40:17h/18h, +26 40:96h/97h, +28 nesting depth,
-;           +30 BIOS tick count (low word), +32 caller IP, +34 caller CS
+;           +30 BIOS tick count (low word), +32 caller IP, +34 caller CS,
+;           +36 KB4.COM's record count
 ; Ordinal 200 (KBRLOG) returns DX:AX = the log header: count, max, REC,
 ; total, then the records at header + 16.
         bits 16
         cpu 286
 
-REC     equ 48
-MAXREC  equ 1300
+REC     equ 52
+MAXREC  equ 1200
 
 segment _TEXT  public align=16 class=CODE use16
 segment _DATA  public align=16 class=DATA use16
 group DGROUP _DATA
 
 extern __0040H                          ; KERNEL.193
+extern __0000H                          ; KERNEL.183
+extern ALLOCSELECTOR                    ; KERNEL.175
+extern SETSELECTORBASE                  ; KERNEL.187
+extern SETSELECTORLIMIT                 ; KERNEL.189
 
 segment _DATA
 hdr:
@@ -49,14 +56,72 @@ recsz   dw REC
 total   dw 0
 userproc dd 0                           ; the event procedure Enable got
 depth   dw 0
-        dw 0
+kb4sel  dw 0
 recs:   times MAXREC * REC db 0
+kb4off  dw 0
 
 segment _TEXT
+; LibEntry: KB4.COM's log (tests/dos/kb4.asm), when it is loaded: a
+; selector for the real-mode segment INT 65h points into, so that each
+; record can say how many real-mode records KB4 had then (which calls
+; made INT 16h calls)
 global libentry
 libentry:
+        push ds
+        push es
+        push bx
+        mov ax, __0000H
+        mov es, ax
+        mov bx, [es:65h * 4]
+        mov cx, [es:65h * 4 + 2]
+        jcxz .none
+        push bx
+        push cx
+        push ds                         ; AllocSelector(DS): a data one
+        call far ALLOCSELECTOR
+        pop cx
+        pop bx
+        or ax, ax
+        jz .none
+        mov [kb4sel wrt DGROUP], ax
+        mov [kb4off wrt DGROUP], bx
+        push ax                         ; SetSelectorBase(sel, seg * 16)
+        mov ax, cx
+        shr ax, 12
+        push ax
+        mov ax, cx
+        shl ax, 4
+        push ax
+        call far SETSELECTORBASE
+        push word [kb4sel wrt DGROUP]   ; SetSelectorLimit(sel, 0FFFFh)
+        push word 0
+        push word 0FFFFh
+        call far SETSELECTORLIMIT
+        ; KB4's header has 'K4' at +4
+        mov es, [kb4sel wrt DGROUP]
+        mov bx, [kb4off wrt DGROUP]
+        cmp word [es:bx + 4], 344Bh
+        je .none
+        mov word [kb4sel wrt DGROUP], 0
+.none:  pop bx
+        pop es
+        pop ds
         mov ax, 1
         retf
+
+; kb4count: AX = KB4's record count (0 without KB4). DS = DGROUP.
+kb4count:
+        xor ax, ax
+        cmp word [kb4sel wrt DGROUP], 0
+        je .r
+        push es
+        push bx
+        mov es, [kb4sel wrt DGROUP]
+        mov bx, [kb4off wrt DGROUP]
+        mov ax, [es:bx]
+        pop bx
+        pop es
+.r:     ret
 
 %macro thunk 1
 global T_%1
@@ -91,45 +156,45 @@ extern X_129, X_130, X_131, X_132, X_133, X_134, X_135, X_136, X_137
 ; ordinal -> target
 targets:
         dw 1
-        dd X_1
+        dw X_1, seg X_1
         dw 2
-        dd X_2
+        dw X_2, seg X_2
         dw 3
-        dd X_3
+        dw X_3, seg X_3
         dw 4
-        dd X_4
+        dw X_4, seg X_4
         dw 5
-        dd X_5
+        dw X_5, seg X_5
         dw 6
-        dd X_6
+        dw X_6, seg X_6
         dw 7
-        dd X_7
+        dw X_7, seg X_7
         dw 100
-        dd X_100
+        dw X_100, seg X_100
         dw 126
-        dd X_126
+        dw X_126, seg X_126
         dw 127
-        dd X_127
+        dw X_127, seg X_127
         dw 128
-        dd X_128
+        dw X_128, seg X_128
         dw 129
-        dd X_129
+        dw X_129, seg X_129
         dw 130
-        dd X_130
+        dw X_130, seg X_130
         dw 131
-        dd X_131
+        dw X_131, seg X_131
         dw 132
-        dd X_132
+        dw X_132, seg X_132
         dw 133
-        dd X_133
+        dw X_133, seg X_133
         dw 134
-        dd X_134
+        dw X_134, seg X_134
         dw 135
-        dd X_135
+        dw X_135, seg X_135
         dw 136
-        dd X_136
+        dw X_136, seg X_136
         dw 137
-        dd X_137
+        dw X_137, seg X_137
         dw 0
 
 global WEP
@@ -230,6 +295,8 @@ thcommon:
         stosw                           ; +24..+39
         add si, 2
         loop .args
+        call kb4count
+        mov [di + 48 - 40], ax          ; +48 KB4 records before
 .norec: ; Enable: the event procedure becomes ours
         cmp word [bp + 2], 2
         jne .noen
@@ -284,6 +351,8 @@ back:
         mov ax, [ss:si + 20]
         mov [di + 44], ax
         mov [di + 46], cx
+        call kb4count
+        mov [di + 50], ax               ; +50 KB4 records after
 .norec2:
         ; return address to [bp+4+n]; the caller's BP to [bp+2+n]; the
         ; new SP to [bp-4]
@@ -377,6 +446,8 @@ event:
         stosw                           ; +32 caller IP
         mov ax, [bp + 12]
         stosw                           ; +34 caller CS
+        call kb4count
+        stosw                           ; +36 KB4 records
 .full:  pop es
         pop ds
         popa

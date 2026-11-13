@@ -8,7 +8,7 @@
  *
  * KB2 opens a window with the focus and logs every keyboard message it
  * gets (TranslateMessage on, so USER calls the driver's ToAscii) while
- * the input script types, until Ctrl+Shift+F12 (or [w16] kb2secs seconds,
+ * the input script types, until Shift+F12 (or [w16] kb2secs seconds,
  * default 300); then
  * it writes out KBREC's records (every call USER and the display driver
  * made to the driver, every call the driver made to USER's event
@@ -17,11 +17,17 @@
  *
  * Output lines (TK.LOG):
  *   M msg wParam lParam                  a message (WM_KEYDOWN etc.)
- *   E AX BX SI DI IF= 17= 96= depth=     an event-procedure call
- *   ~E CX DX DS ES SS caller             its other registers
+ *   E AX BX IF= 17= 96= depth=           an event-procedure call
+ *   ~E SI DI CX DX DS ES SS caller       its other registers (Windows 3.1's
+ *                                        driver leaves SI, DI, CX, DX as
+ *                                        they happen to be)
  *   C name args -> AX [DX] popped=       a call to the driver
  *   ~C ...                               the raw record
  *   R kind w1 w2 w3 w4 w5                a real-mode record (KB4)
+ *   S xx xx ...                          the bytes the keyboard controller
+ *                                        gave (port 60h), as an INT 9
+ *                                        handler of KB2's in front of the
+ *                                        driver's read them (kb2s.asm)
  */
 #include <windows.h>
 
@@ -29,6 +35,40 @@
 #include "tklog.h"
 
 extern int FAR PASCAL U_INITAPP(WORD hinst);
+extern BYTE __far __cdecl sc_code[];
+extern WORD __far __cdecl sc_len;
+extern void __cdecl __far get_vec9(WORD FAR *v);
+extern void __cdecl __far set_vec9(WORD sel, WORD off);
+
+/* the scan-code logger (kb2s.asm): a fixed block, its code alias */
+#define SC_MAX 4000
+static WORD scsel, sccs, old9[2];
+
+static void sc_install(void)
+{
+    WORD FAR *w;
+    WORD i;
+    scsel = (WORD)GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 256 + SC_MAX);
+    if (!scsel)
+        return;
+    w = (WORD FAR *)MAKELP(scsel, 0);
+    for (i = 0; i < sc_len; i++)
+        ((BYTE FAR *)w)[16 + i] = sc_code[i];
+    get_vec9(old9);
+    w[0] = scsel;
+    w[2] = SC_MAX;
+    w[3] = old9[1];
+    w[4] = old9[0];
+    sccs = AllocDStoCSAlias(scsel);
+    if (sccs)
+        set_vec9(sccs, 16);
+}
+
+static void sc_remove(void)
+{
+    if (sccs)
+        set_vec9(old9[0], old9[1]);
+}
 
 static char lb[4096];
 static WORD lbn;
@@ -67,8 +107,8 @@ LRESULT FAR PASCAL __export __loadds kb2proc(HWND hwnd, UINT msg, WPARAM wp, LPA
             m[3] = HIWORD(lp);
             nmsg++;
         }
-        /* the end: Ctrl+Shift+F12 */
-        if (msg == WM_KEYDOWN && wp == VK_F12 && GetKeyState(VK_CONTROL) < 0 && GetKeyState(VK_SHIFT) < 0)
+        /* the end: Shift+F12 (DOSBox keeps Ctrl+F12) */
+        if (msg == WM_KEYDOWN && wp == VK_F12 && GetKeyState(VK_CONTROL) >= 0 && GetKeyState(VK_SHIFT) < 0)
             done = 1;
         return 0;                       /* no menus, no task switching */
     case WM_TIMER:
@@ -127,11 +167,11 @@ static void dump_kbrec(void)
     for (i = 0; i < n; i++) {
         r = (WORD FAR *)((BYTE FAR *)h + 16 + i * sz);
         if (r[0] == 0xE0) {
-            wsprintf(line, "E %04X %04X %04X %04X IF=%u 17=%04X 96=%04X depth=%u\r\n",
-                     r[2], r[3], r[6], r[7], (r[8] >> 9) & 1, r[12], r[13], r[14]);
+            wsprintf(line, "E %04X %04X IF=%u 17=%04X 96=%04X depth=%u\r\n",
+                     r[2], r[3], (r[8] >> 9) & 1, r[12], r[13], r[14]);
             put(line);
-            wsprintf(line, "~E CX=%04X DX=%04X DS=%04X ES=%04X SS=%04X flags=%04X from %04X:%04X tick=%04X #%u\r\n",
-                     r[4], r[5], r[9], r[10], r[11], r[8], r[17], r[16], r[15], r[1]);
+            wsprintf(line, "~E SI=%04X DI=%04X CX=%04X DX=%04X DS=%04X ES=%04X SS=%04X flags=%04X from %04X:%04X tick=%04X #%u r=%u\r\n",
+                     r[6], r[7], r[4], r[5], r[9], r[10], r[11], r[8], r[17], r[16], r[15], r[1], r[18]);
             put(line);
         } else {
             WORD o = r[0];
@@ -162,6 +202,10 @@ static void dump_kbrec(void)
                 break;
             }
             put(line);
+            if (r[25] != r[24]) {
+                wsprintf(line, "C   real-mode records %u\r\n", r[25] - r[24]);
+                put(line);
+            }
             wsprintf(line, "~C %u #%u AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X F=%04X DS=%04X ES=%04X"
                      " w=%04X %04X %04X %04X %04X %04X %04X %04X -> %04X %04X F=%04X\r\n",
                      o, r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10],
@@ -228,6 +272,7 @@ int __cdecl tmain(void)
     RegisterClass(&wc);
     hwnd = CreateWindow("KB2", "KB2", WS_POPUP | WS_CAPTION | WS_VISIBLE, 40, 40, 400, 300, 0, 0, hi, 0);
     SetFocus(hwnd);
+    sc_install();
     secs = GetPrivateProfileInt("w16", "kb2secs", 300, "SYSTEM.INI");
     SetTimer(hwnd, 1, 1000, NULL);
     out("listening\r\n");
@@ -236,6 +281,7 @@ int __cdecl tmain(void)
         DispatchMessage(&m);
     }
     KillTimer(hwnd, 1);
+    sc_remove();
     wsprintf(line, "messages=%u\r\n", nmsg);
     put(line);
     for (i = 0; i < nmsg; i++) {
@@ -254,6 +300,17 @@ int __cdecl tmain(void)
                 wsprintf(line, " %02X=%02X", i, ks[i]);
                 put(line);
             }
+        put("\r\n");
+    }
+    if (sccs) {
+        WORD FAR *w = (WORD FAR *)MAKELP(scsel, 0);
+        BYTE FAR *b = (BYTE FAR *)w + 256;
+        wsprintf(line, "scan codes=%u", w[1]);
+        put(line);
+        for (i = 0; i < w[1]; i++) {
+            wsprintf(line, "%s%02X", (LPSTR)(i % 32 ? " " : "\r\nS "), b[i]);
+            put(line);
+        }
         put("\r\n");
     }
     dump_kbrec();

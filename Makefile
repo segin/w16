@@ -1466,11 +1466,29 @@ dos: $(DOS)/KBREC.DRV
 # input (tests/apps/kb2.c); KB4.COM: a real-mode TSR recording INT 9, INT
 # 16h, INT 15h AH=4Fh (tests/dos/kb4.asm)
 $(B)/tests/kb2.o: tests/apps/kb1ref.h tests/apps/tklog.h
-$(DOS)/KB2.EXE: $(B)/tests/start.o $(B)/tests/kb2.o tests/apps/app.lnk tests/apps/kb2.lnk
+$(DOS)/KB2.EXE: $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o tests/apps/app.lnk tests/apps/kb2.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/kb2.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/kb2.map file { $(B)/tests/start.o $(B)/tests/kb2.o }
+	    option map=$(B)/tests/kb2.map file { $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o }
 $(DOS)/KB4.COM: tests/dos/kb4.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/KB2.EXE $(DOS)/KB4.COM
+# the driver: NASM, with the ANSI/OEM tables made by tools/kbtables.py
+$(B)/keyboard/kbtables.inc: tools/kbtables.py
+	@mkdir -p $(@D)
+	python3 tools/kbtables.py $@
+$(B)/keyboard/keyboard.o: drivers/keyboard/keyboard.asm $(B)/keyboard/kbtables.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -I$(B)/keyboard/ -o $@ $<
+$(DOS)/KEYBOARD.DRV: $(B)/keyboard/keyboard.o drivers/keyboard/keyboard.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/keyboard/keyboard.lnk name $@ option map=$(B)/keyboard/keyboard.map \
+	    file { $(B)/keyboard/keyboard.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KEYBOARD.DRV
+# the install tree gets it too (build/w16/SYSTEM)
+install-tree: $(W16SYS)/KEYBOARD.DRV
+$(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
+	@mkdir -p $(@D)
+	cp $< $@

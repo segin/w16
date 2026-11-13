@@ -458,14 +458,16 @@ int __cdecl tmain(void)
             put("\r\n");
         }
     {
-        static const WORD big[] = { 0x100, 0x11E, 0x141, 0x1C8, 0xE01E, 0xFFFF };
-        for (k = 0; k < 3; k++) {
-            wsprintf(line, "MVK %u big:", k);
+        static const WORD big[] = { 0x100, 0x11E, 0x141, 0x1C8, 0xE01E, 0xFFFF, 0x120, 0x130,
+                                    0x1BA, 0x10D, 0x16A, 0x8041 };
+        static const WORD types[] = { 0, 1, 2, 5, 0xFF, 0x100, 0x102, 0xFFFF };
+        for (k = 0; k < 8; k++) {
+            wsprintf(line, "MVK %X big:", types[k]);
             put(line);
-            for (i = 0; i < 6; i++) {
+            for (i = 0; i < 12; i++) {
                 clear();
                 args[14] = big[i];
-                args[15] = k;
+                args[15] = types[k];
                 r = call(131);
                 wsprintf(line, " %X", LOWORD(r));
                 put(line);
@@ -908,11 +910,19 @@ int __cdecl tmain(void)
             case 136: args[15] = 0; break;
             }
             kb_callx(p[o2], args, rr);
-            wsprintf(line, "OBS regs %u: popped=%u AX=%04X DX=%04X keeps SI=%u DI=%u DS=%u BP=%u ES=%u"
-                     " ~BX=%04X CX=%04X\r\n",
-                     o2, rr[0], rr[2], rr[5], rr[6] == 0x5555, rr[7] == 0x6666,
-                     rr[8] == SELECTOROF((void FAR *)rr), rr[10] == OFFSETOF((void FAR *)rr),
-                     rr[9] == SELECTOROF((void FAR *)rr), rr[3], rr[4]);
+            /* AX is the result except for the void ones (100, 127, 134,
+               135); DX only for the DWORD ones (128, 137); BX, CX, ES
+               are the callee's to use (layout, "~") */
+            {
+                int vax = o2 == 100 || o2 == 127 || o2 == 134 || o2 == 135;
+                int vdx = o2 == 128 || o2 == 137;
+                wsprintf(line, "OBS regs %u: popped=%u %sAX=%04X %sDX=%04X keeps SI=%u DI=%u DS=%u BP=%u"
+                         " ~ES=%u ~BX=%04X ~CX=%04X\r\n",
+                         o2, rr[0], (LPSTR)(vax ? "~" : ""), rr[2], (LPSTR)(vdx ? "" : "~"), rr[5],
+                         rr[6] == 0x5555, rr[7] == 0x6666,
+                         rr[8] == SELECTOROF((void FAR *)rr), rr[10] == OFFSETOF((void FAR *)rr),
+                         rr[9] == SELECTOROF((void FAR *)rr), rr[3], rr[4]);
+            }
             put(line);
         }
     }
@@ -993,6 +1003,47 @@ int __cdecl tmain(void)
                 put(line);
             }
         put("\r\n");
+        /* Enable with BIOS keyboard flags set: what it puts in the array,
+           then the flags back as they were */
+        {
+            BYTE FAR *bda = (BYTE FAR *)MAKELP(get_0040h(), 0);
+            static const BYTE f17[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x7F };
+            static const BYTE f18[] = { 0x01, 0x02, 0x04, 0x08 };
+            BYTE o17 = bda[0x17], o18 = bda[0x18], o96 = bda[0x96];
+            for (k = 0; k < sizeof f17 + sizeof f18 + 1; k++) {
+                clear();
+                kb_callx(p[3], args, rr);
+                if (k < sizeof f17) {
+                    bda[0x17] = f17[k];
+                    wsprintf(line, "OBS Enable with 40:17=%02X wrote:", f17[k]);
+                } else if (k < sizeof f17 + sizeof f18) {
+                    bda[0x18] = f18[k - sizeof f17];
+                    wsprintf(line, "OBS Enable with 40:18=%02X wrote:", f18[k - sizeof f17]);
+                } else {
+                    bda[0x96] = 0x02;          /* the E0 prefix seen */
+                    wsprintf(line, "OBS Enable with 40:96=02 wrote:");
+                }
+                put(line);
+                fill(ks, 256, 0xCC);
+                clear();
+                args[12] = SELECTOROF((FARPROC)kb_event);
+                args[13] = OFFSETOF((FARPROC)kb_event);
+                args[14] = SELECTOROF((void FAR *)ks);
+                args[15] = OFFSETOF((void FAR *)ks);
+                kb_callx(p[2], args, rr);
+                for (i = 0; i < 256; i++)
+                    if (ks[i] != 0xCC) {
+                        wsprintf(line, " %02X=%02X", i, ks[i]);
+                        put(line);
+                    }
+                wsprintf(line, "; then 40:17=%02X 18=%02X 96=%02X\r\n", bda[0x17], bda[0x18], bda[0x96]);
+                put(line);
+                bda[0x17] = o17;
+                bda[0x18] = o18;
+                bda[0x96] = o96;
+            }
+            flush();
+        }
     }
     flush();
 
@@ -1002,7 +1053,7 @@ int __cdecl tmain(void)
         clear();
         args[15] = 0;
         kb_callx(p[8], args, rr);
-        wsprintf(line, "OBS WEP(0)=%04X popped=%u\r\n", rr[2], rr[0]);
+        wsprintf(line, "OBS WEP(0) ~AX=%04X popped=%u\r\n", rr[2], rr[0]);
         put(line);
     }
     for (i = 1; i < 138; i++)

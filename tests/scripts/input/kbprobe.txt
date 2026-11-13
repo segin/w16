@@ -33,7 +33,6 @@ key F10
 key F11
 key F12
 key shift+F1
-key ctrl+F4
 key Left
 key Right
 key Up
@@ -76,7 +75,6 @@ key Shift_L
 key Control_L
 key Alt_L
 key ctrl+Right
-key alt+Return
 ; Alt+keypad: 65 (A), 0233 (e acute), 130 (OEM e acute)
 key Num_Lock
 keydown Alt_L
@@ -111,6 +109,7 @@ key Pause
 key ctrl+Pause
 key Escape
 sleep 3
-; the end (KB2 writes its log, Windows ends)
-key ctrl+shift+F12
+; the end: Shift+F12 (KB2 writes its log, Windows ends). DOSBox keeps
+; Ctrl+F1..F12, Alt+Enter and Alt+Pause for itself: none of them here
+key shift+F12
 waitexit 120
