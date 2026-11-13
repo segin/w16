@@ -1,0 +1,10 @@
+# w16's default StartUp group (tools/mkgrp.py -> STARTUP.GRP): empty, as
+# Windows 3.1 Setup makes it; Program Manager starts what is put in it
+# when the session starts. Minimized, the next cascade step after
+# Accessories (3.1 has Games in between, which w16 does not ship), its
+# icon next to Accessories' on the bottom row.
+file STARTUP.GRP
+name StartUp
+show 2
+rect 44 44 460 246
+min  96 218

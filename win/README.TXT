@@ -41,6 +41,17 @@ w16 repository's LICENSE):
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
   SYSTEM\SSERIFE.FON      MS Sans Serif font
+  SYSTEM.INI, WIN.INI     w16's default settings (only w16's drivers,
+                          fonts and programs)
+  PROGMAN.INI             Program Manager's settings and its groups:
+  MAIN.GRP                  Main (MS-DOS Prompt, Read Me)
+  ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
+                            Clock)
+  STARTUP.GRP               StartUp (empty)
+
+This directory is meant to be C:\W16: PROGMAN.INI names the group files
+as C:\W16\MAIN.GRP and so on. Installed elsewhere, change the [Groups]
+lines of PROGMAN.INI to match.
 
 REG.DAT (the registration database) may be copied too; without one,
 w16's SHELL.DLL makes an empty one and fills it from WIN.INI's
@@ -51,11 +62,12 @@ copy these from your own Windows 3.1 installation into the same places
 (Windows directory or its SYSTEM subdirectory, as there), without
 overwriting the files above:
 
-  Windows directory:      SYSTEM.INI, WIN.INI, PROGMAN.INI, the *.GRP
-                          group files, and any applications you want
+  Windows directory:      any applications you want (w16's INI and
+                          group files above are all it needs)
   SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
                           the drivers named in SYSTEM.INI's [boot]
-                          section (VGA.DRV, MMSOUND.DRV, ...),
+                          section that w16 lacks (MMSOUND.DRV: set
+                          sound.drv=mmsound.drv in [boot]),
                           the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS

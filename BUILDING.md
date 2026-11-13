@@ -46,6 +46,7 @@ Other targets:
 | `make dos` | only `build/dos/` |
 | `make shell` | only the applets (Program Manager, Notepad, Clock, Calculator, …) |
 | `make install-tree` | only `build/w16/` |
+| `make groups` | Program Manager's default group files again (`assets/progman/*.GRP`, by `tools/mkgrp.py` from the `*.txt` definitions and the icons of w16's programs); `make test` checks that the committed ones are up to date |
 | `make vgaart` | the VGA display driver's graphics (`drivers/vga/art`) into `build/vga/` |
 | `make clean` | removes `build/` entirely |
 | `make test`, `make boot-test` | the test suites ([TESTING.md](TESTING.md)) |
@@ -71,7 +72,12 @@ files, and where they go. Copy them in without overwriting w16's, then run
 
 The tree holds every w16 module that replaces part of Windows 3.1: WIN.COM,
 DOSX, KERNEL, USER, GDI, SHELL, COMMDLG, WINOLDAP, WIN87EM, the mouse,
-keyboard and comm drivers, the fonts and the applets. `WIN386.EXE` (386
+keyboard and comm drivers, the fonts and the applets. It also holds w16's
+default `SYSTEM.INI`, `WIN.INI` and `PROGMAN.INI` with three program
+groups (Main, Accessories, StartUp: `assets/`). The tree is meant to be
+installed as `C:\W16`; `PROGMAN.INI` names its groups there
+(`C:\W16\MAIN.GRP`, ...), so a tree put elsewhere needs its `[Groups]`
+lines changed. `WIN386.EXE` (386
 Enhanced mode) is not in it yet. [TESTING.md](TESTING.md) §4 shows how to
 assemble a complete all-w16 drive for DOSBox with `tests/dropin.sh`.
 

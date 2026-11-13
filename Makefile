@@ -1005,7 +1005,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
 	python3 tools/nemark.py $@ 3.10
 
-test: dos fonts
+test: dos fonts grpcheck
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV
@@ -1242,6 +1242,29 @@ install-tree: $(W16)/SYSTEM.INI $(W16)/WIN.INI
 $(W16)/SYSTEM.INI $(W16)/WIN.INI: $(W16)/%: assets/%
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
+# Program Manager's default groups (assets/progman: PROGMAN.INI and the
+# .GRP files, which tools/mkgrp.py makes from the *.txt definitions and the
+# icons of w16's own programs; `make groups` makes them again, and make
+# test checks that they are up to date)
+GRPS := MAIN ACCESSOR STARTUP
+install-tree: $(W16)/PROGMAN.INI $(GRPS:%=$(W16)/%.GRP)
+$(W16)/PROGMAN.INI: assets/progman/PROGMAN.INI
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
+$(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
+	@mkdir -p $(@D)
+	cp $< $@
+GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE
+groups: $(GRP_ICONS)
+	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
+grpcheck: $(GRP_ICONS)
+	@mkdir -p $(B)/grpcheck
+	@for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt $(B)/grpcheck/$$g.GRP || exit 1; \
+	    cmp -s $(B)/grpcheck/$$g.GRP assets/progman/$$g.GRP || \
+	    { echo "assets/progman/$$g.GRP is out of date (definition or icons changed): make groups"; exit 1; }; done
+	@echo "grpcheck: assets/progman/*.GRP match their definitions and w16's icons"
+	python3 tests/grpref.py
+.PHONY: groups grpcheck
 $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
 $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
