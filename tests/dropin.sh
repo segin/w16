@@ -46,6 +46,8 @@
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
 # DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
+# DROPIN_CONF: more dosbox.conf lines (sections and settings), e.g. a
+# [serial] section (tests/commprobe.sh)
 # The report ends with "== shot: after N s (how)" for -s: settled,
 # matched (-e), limit (SECS reached), exited (DOSBox ended first), fixed.
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
@@ -180,6 +182,13 @@ $cmd$redir
 echo WINEXIT >> C:\\OUT.TXT
 exit"
 printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"
+# DROPIN_CONF in the environment: more dosbox.conf lines, put before the
+# rest (e.g. "[serial]" and "serial1=nullmodem server:127.0.0.1
+# port:N": tests/commprobe.sh's serial link)
+if [ -n "${DROPIN_CONF:-}" ]; then
+    { printf '%s\n' "$DROPIN_CONF"; cat "$work/dosbox.conf"; } > "$work/dosbox.conf.new"
+    mv "$work/dosbox.conf.new" "$work/dosbox.conf"
+fi
 [ -z "$prep" ] || exit 0
 if [ -z "$shot" ] && [ -n "$endfile" ]; then
     SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
