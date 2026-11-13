@@ -290,6 +290,10 @@ boot() {
     while :; do
         "$root/tests/dropin.sh" -t "$secs" -i w16:watchdog=0 -s "$out/$name.png" "$@" \
             > "$out/$name.txt" 2>&1 || true
+        # DOSBox-X ending at once at its start (dropin.sh restarts it)
+        if grep -q '^== emulator restarted' "$out/$name.txt"; then
+            retried "$name" emulator-start "$(grep -c '^emulator restarted' "$out/$name.txt") restart(s): Couldn't open X11 display"
+        fi
         # A screenshot of one colour means the hidden X display or the
         # window capture failed (seen under heavy load), not that Windows
         # drew nothing: Windows' screen is never a single colour here.
@@ -1513,6 +1517,12 @@ awk '{ printf "  %-16s %5d\n", $1, $2; t += $2 } END { printf "  %-16s %5d\n", "
 if [ -s "$out/refcache.log" ]; then
     echo "boottest: references: $(grep -c 'from the cache' "$out/refcache.log") from the cache, $(grep -c ' ran' "$out/refcache.log") run, $(grep -c ' stored$' "$out/refcache.log") stored ($out/refcache.log)"
 fi
+# input sessions whose DOSBox-X was restarted at its start (inputrun.sh)
+for f in "$out"/*/input.log; do
+    [ -f "$f" ] && grep -q '^emulator restarted' "$f" || continue
+    d=$(basename "$(dirname "$f")")
+    retried "$d" emulator-start "$(grep -c '^emulator restarted' "$f") restart(s): Couldn't open X11 display"
+done
 # retries: this run's, and cases that have needed them repeatedly
 if [ -s "$out/retries.txt" ]; then
     echo "boottest: $(wc -l < "$out/retries.txt") retr$( [ "$(wc -l < "$out/retries.txt")" = 1 ] && echo y || echo ies) this run (see $out/retries.txt)"

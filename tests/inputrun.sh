@@ -154,13 +154,31 @@ grep -q '^quit warning' "$work/dosbox.conf" && emu="env SDL_VIDEODRIVER=x11 SDL_
 cat > "$work/run.sh" <<SH
 #!/bin/sh
 cd "$work"
-SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
-dpid=\$!
+# The emulator, with others running on the machine, now and then ends at
+# once with "Can't init SDL Couldn't open X11 display" or "... No
+# available video device" on a display that is there (DOSBox-X: 1 in 8
+# started together on one Xvfb, also when started one at a time; DOSBox:
+# once in about a thousand; UNVERIFIED why). The emulator
+# has not started then: it is started again, at most twice, and each
+# restart is reported ("emulator restarted"; boottest.sh logs it as a
+# retry). Nothing of the guest has run at that point.
+k=0
+while :; do
+    SDL_AUDIODRIVER=dummy timeout -k 10 $total $emu -conf "$work/dosbox.conf" > "$out/dosbox.log" 2>&1 &
+    dpid=\$! t0=\$(date +%s%N)
+    i=0
+    while [ \$i -lt 600 ] && kill -0 \$dpid 2>/dev/null && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
+    kill -0 \$dpid 2>/dev/null || ! grep -q "Can't init SDL" "$out/dosbox.log" || [ \$k -ge 2 ] || {
+        k=\$((k + 1)); echo "emulator restarted (\$k): \$(grep -m1 "Can't init SDL" "$out/dosbox.log")" >> "$out/input.log"; continue; }
+    break
+done
 if [ -n "${INPUTRUN_EARLY:-}$expect$settle" ]; then
     # as soon as the window is there (-b then counts from that)
     i=0; while [ \$i -lt 600 ] && ! xdotool search --name DOSBox > /dev/null 2>&1; do sleep 0.05; i=\$((i + 1)); done
 else
-    sleep 3
+    # 3 s after DOSBox started (-b counts from then)
+    r=\$(( 3000 - (\$(date +%s%N) - t0) / 1000000 ))
+    [ \$r -le 0 ] || sleep \$(awk "BEGIN { print \$r / 1000 }")
 fi
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
 echo "window \$wid" >> "$out/input.log"
