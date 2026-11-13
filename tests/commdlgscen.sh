@@ -11,11 +11,13 @@
 # "expand <name> <path under C:>" expands a compressed file of the Setup
 # disks (tools/szdd.py; printer drivers). Compared afterwards: CD1.LOG (the
 # returned structures; "ignore <regex>" lines exclude log lines from the
-# comparison, "nohwnd" masks window handles in the hook's lines) and every
+# comparison, "nohwnd" masks window handles in the hook's lines; "timeout
+# <s>" gives both runs more than the default 120 s) and every
 # screenshot, which may differ from the original by
 # no more pixels than tests/scripts/commdlg.baseline records
 # ("scenario/SHOT count"; our own drive and folder pictures).
-#   usage: tests/commdlgscen.sh [-n] [scenario...]       (default: all)
+#   usage: tests/commdlgscen.sh [-n] [scenario...]       (default: all but obs-*,
+#   observation scripts not meant to compare: run them by name with -n)
 #   -n: the original only (observation; nothing is compared)
 #   CD_OUT=dir: where the runs go (default build/ref/commdlg-<timestamp>)
 #   CD_BASELINE=update: rewrite the baseline from this run
@@ -27,7 +29,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 origonly=
 if [ "${1:-}" = -n ]; then origonly=1; shift; fi
 out=${CD_OUT:-$root/build/ref/commdlg-$(date +%Y%m%d-%H%M%S)}
-names=${*:-$(cd "$root/tests/scripts/commdlg" && ls *.txt | sed 's/\.txt$//')}
+names=${*:-$(cd "$root/tests/scripts/commdlg" && ls *.txt | grep -v '^obs-' | sed 's/\.txt$//')}
 base=$root/tests/scripts/commdlg.baseline
 [ -f "$base" ] || : > "$base"
 ref=$root/.tools/ref/win31/cdrive
@@ -49,7 +51,7 @@ for n in $names; do
         # must not depend on when it is taken within a blink)
         echo 'blinktime 65535' | sed 's/$/\r/' > "$d/SNAP.TXT"
         grep -q '^nocd1' "$src" || echo 'run C:\CD1.EXE' | sed 's/$/\r/' >> "$d/SNAP.TXT"
-        grep -v '^cd1 \|^file \|^ini \|^expand \|^ignore \|^nocd1\|^nohwnd' "$src" | sed 's/$/\r/' >> "$d/SNAP.TXT"
+        grep -v '^cd1 \|^file \|^ini \|^expand \|^ignore \|^nocd1\|^nohwnd\|^timeout ' "$src" | sed 's/$/\r/' >> "$d/SNAP.TXT"
         grep '^cd1 ' "$src" | sed 's/^cd1 //; s/$/\r/' > "$d/CD1.TXT"
         grep '^file ' "$src" | sed 's/^file //' | while read -r f; do
             mkdir -p "$(dirname "$work/c/${f#*=}")"
@@ -64,7 +66,9 @@ for n in $names; do
         if [ $who = w16 ]; then
             cp "${CD_DLL:-$root/build/dos/COMMDLG.DLL}" "$work/c/WINDOWS/SYSTEM/COMMDLG.DLL"
         fi
-        REFRUN_FILES="$files" REFRUN_OUT=$d REFRUN_GET="CD1.LOG" \
+        # "timeout <s>": a long scenario's time for both runs (default 120)
+        tmo=$(sed -n 's/^timeout \([0-9]*\).*/\1/p' "$src")
+        REFRUN_TIMEOUT=${tmo:-${REFRUN_TIMEOUT:-120}} REFRUN_FILES="$files" REFRUN_OUT=$d REFRUN_GET="CD1.LOG" \
             "$root/tests/refrun.sh" "${CD_SNAP:-$root/build/dos/SNAP.EXE}" /S "$work/c" > "$d/log.txt" || true
         rm -rf "$work"
     done
