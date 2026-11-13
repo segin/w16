@@ -250,12 +250,19 @@ BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
     if (dc->hook)
         ((WORD (__far __pascal *)(HDC, WORD, DWORD, DWORD))dc->hook)(hdc, DCHC_DELETEDC, dc->hookData, 0);
     dc = dc_get(hdc);
-    while (dc->saved) {
-        NPDC s = dc->saved;
-        dc->saved = s->saved;
-        if (s->hClipRgn)
+    while (dc->hdr.hNext) {             /* the SaveDC stack */
+        HANDLE hs = dc->hdr.hNext;
+        NPDC s = dc_get(hs);
+        dc->hdr.hNext = s ? s->hdr.hNext : 0;
+        if (s && s->hClipRgn)
             obj_free(s->hClipRgn);
-        LocalFree((HLOCAL)s);
+        if (s)
+            obj_free(hs);
+    }
+    while (dc->hVisRgn && POBJ(dc->hVisRgn)->hNext) {   /* SaveVisRgn's */
+        HRGN top = POBJ(dc->hVisRgn)->hNext;
+        POBJ(dc->hVisRgn)->hNext = POBJ(top)->hNext;
+        obj_free(top);
     }
     phys_free(dc, &dc->hPPen, OBJ_PEN);
     phys_free(dc, &dc->hPBrush, OBJ_BRUSH);

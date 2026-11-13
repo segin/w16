@@ -392,7 +392,6 @@ typedef struct DC {
     HRGN hVisRgn;                       /* USER's visible region (screen) */
     HRGN hRao;                          /* vis & clip, screen coords */
     WORD raoValid;
-    struct DC NEAR *saved;              /* SaveDC stack (copies) */
     WORD saveLevel;
     DRAWMODE dm;
     /* realized objects */
