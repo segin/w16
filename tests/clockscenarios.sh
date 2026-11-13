@@ -17,6 +17,8 @@
 #   usage: tests/clockscenarios.sh [-o DIR] [CKn...]   (default: all)
 #   DIR defaults to build/ref/clock/<date-time>; CK_JOBS runs in
 #   parallel (default 4). CK_BASELINE=update rewrites the baseline.
+#   CK_FILES="SRC=DST ...": more files for both sides (e.g. w16's
+#   SYSTEM.DRV as WINDOWS/SYSTEM/SYSTEM.DRV: boot-test case sysclock).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -49,6 +51,7 @@ run() {     # NAME WHO
         done < "$sc/$n.win"
     fi
     files="$files $d/WIN.INI.in=WINDOWS/WIN.INI"
+    files="$files ${CK_FILES:-}"
     if [ -f "$sc/$n.ini" ]; then
         sed 's/$/\r/' "$sc/$n.ini" > "$d/CLOCK.INI.in"
         files="$files $d/CLOCK.INI.in=WINDOWS/CLOCK.INI"
@@ -64,6 +67,7 @@ run16() {   # WHO: no timer left (SNAP takes them all, then starts Clock)
     exe=CLOCK.EXE ours=
     if [ "$1" = w16 ]; then exe='C:\CLOCK.EXE' ours="-f $root/build/dos/CLOCK.EXE=CLOCK.EXE"; fi
     printf '%s\r\n' 'timers' "run $exe" 'wait 3000' > "$d/SNAP.TXT"
+    for f in ${CK_FILES:-}; do ours="$ours -f $f"; done
     "$root/tests/gdiboot.sh" -r -s -t 45 -d "$d" -f "$root/build/dos/SNAP.EXE=SNAP.EXE" \
         -f "$d/SNAP.TXT=SNAP.TXT" $ours \
         -i 'boot:shell=C:\SNAP.EXE' > "$d/log.txt" 2>&1 || true

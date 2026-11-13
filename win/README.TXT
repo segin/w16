@@ -32,6 +32,11 @@ w16 repository's LICENSE):
                           437; for another layout or code page use
                           your own Windows 3.1 KEYBOARD.DRV and its
                           KBD*.DLL instead)
+  SYSTEM\SYSTEM.DRV       the system driver: timers, the millisecond
+                          count, coprocessor state, drive types
+                          (for a standard PC/AT; on a machine that
+                          needs another system driver, such as
+                          HPSYSTEM.DRV, use that instead)
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -50,8 +55,8 @@ overwriting the files above:
                           group files, and any applications you want
   SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
                           the drivers named in SYSTEM.INI's [boot]
-                          section (SYSTEM.DRV, VGA.DRV,
-                          MMSOUND.DRV, ...), the other
+                          section (VGA.DRV, MMSOUND.DRV, ...),
+                          the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS
                           programs DSWAP.EXE and the VGACOLOR.2GR

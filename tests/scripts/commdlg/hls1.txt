@@ -2,5 +2,6 @@
 ; probe (hook bit 40) types a grid of RGB values and of HLS values into the
 ; dialog and logs what the other three boxes show (ARCHITECTURE.md 17;
 ; the table: tests/scripts/commdlg/hls1.table)
+timeout 400
 cd1 color flags=13 hook=40
 wait 120000
