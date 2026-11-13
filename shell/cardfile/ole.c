@@ -613,11 +613,17 @@ void ole_menu(HMENU edit)
     BOOL obj = !g_listview && g_pic.kind == PIC_OBJECT;
     EnableMenuItem(edit, IDM_PASTELINK, MF_BYCOMMAND |
                    (!g_listview && g_picmode && ole_can_link() ? MF_ENABLED : MF_GRAYED));
-    EnableMenuItem(edit, IDM_PASTESPECIAL, MF_BYCOMMAND | (!g_listview ? MF_ENABLED : MF_GRAYED));
+    /* grayed with an empty clipboard (dialogs scenario); UNVERIFIED: in
+       Text mode with a picture on the clipboard */
+    EnableMenuItem(edit, IDM_PASTESPECIAL, MF_BYCOMMAND |
+                   (!g_listview && (ole_can_paste() || IsClipboardFormatAvailable(CF_BITMAP) ||
+                                    IsClipboardFormatAvailable(CF_METAFILEPICT))
+                        ? MF_ENABLED : MF_GRAYED));
     EnableMenuItem(edit, IDM_LINKS, MF_BYCOMMAND |
                    (obj && g_pic.otype == 1 ? MF_ENABLED : MF_GRAYED));
     EnableMenuItem(edit, IDM_OBJECT, MF_BYCOMMAND | (obj && g_pic.otype != 2 ? MF_ENABLED : MF_GRAYED));
-    EnableMenuItem(edit, IDM_INSERTOBJECT, MF_BYCOMMAND | (!g_listview ? MF_ENABLED : MF_GRAYED));
+    /* Picture mode only (grayed in Text mode, enabled in Picture mode) */
+    EnableMenuItem(edit, IDM_INSERTOBJECT, MF_BYCOMMAND | (!g_listview && g_picmode ? MF_ENABLED : MF_GRAYED));
     (void)obj_class;
 }
 

@@ -1,0 +1,45 @@
+; CF14: Insert Object (Picture mode): the dialog, an embedded Paintbrush
+; picture, the Edit menu with it, the file
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Obj
+key 0D
+wait 300
+menu e
+char e
+wait 300
+menu e
+char n
+wait 1500
+snap C:\INSOBJ.BMP
+dump
+key 0D
+wait 8000
+snap C:\SERVER.BMP
+dump
+menu f
+wait 800
+snap C:\PBFILE.BMP
+char x
+wait 3000
+snap C:\UPDATE.BMP
+dump
+alt y
+wait 4000
+snap C:\EMBED.BMP
+menu e
+wait 500
+snap C:\EDITMENU.BMP
+dump
+key 1B
+key 1B
+wait 300
+menu f
+char a
+wait 1500
+type C:\CF14A.CRD
+key 0D
+wait 2000
+dump

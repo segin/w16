@@ -171,7 +171,10 @@ static HBITMAP pic_mono(PICTURE *p, int *w, int *h, BOOL *own)
             return NULL;
         }
         old = SelectObject(mem, bm);
-        PatBlt(mem, 0, 0, p->cx + 1, p->cy + 1, BLACKNESS);
+        /* the original's extra column read mostly white, its last row
+           black (it is uninitialised memory there) */
+        PatBlt(mem, 0, 0, p->cx + 1, p->cy + 1, WHITENESS);
+        PatBlt(mem, 0, p->cy, p->cx + 1, 1, BLACKNESS);
         SetRect(&r, 0, 0, p->cx, p->cy);
         ole_draw(p, mem, &r);
         SelectObject(mem, old);
@@ -503,6 +506,13 @@ static BOOL write_cards(HFILE f, int fmt)
             if (from == HFILE_ERROR || !body_copy(from, c->fmt, c->pos, f, fmt, &c->newpos))
                 return FALSE;
         }
+    }
+    /* the object counter as it is after the bodies (conversions number
+       their objects) */
+    if (fmt == FMT_RRG) {
+        _llseek(f, 3, 0);
+        if (!f_write(f, &g_lastobj, 4))
+            return FALSE;
     }
     _llseek(f, fmt == FMT_MGC ? 5 : 9, 0);
     for (i = 0; i < g_ncards; i++) {

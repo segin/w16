@@ -301,12 +301,29 @@ static void enable(HMENU m, UINT id, BOOL on)
 
 void enable_menus(void)
 {
+    /* Observed (dialogs scenario, CF6): on an empty card in Text mode
+       with nothing on the clipboard, Cut, Copy, Paste and Find Next are
+       grayed and so is Print (Print All is not); in Picture mode with a
+       picture, Cut, Copy and Paste are enabled. UNVERIFIED: that Print
+       follows an empty card. */
     HMENU m = GetMenu(g_frame);
-    BOOL card = !g_listview;
+    BOOL card = !g_listview, sel, pic = g_pic.kind != PIC_NONE, paste;
+    DWORD s = SendMessage(g_edit, EM_GETSEL, 0, 0);
+    sel = HIWORD(s) != LOWORD(s);
+    if (g_picmode)
+#ifdef W16_WIN2
+        paste = IsClipboardFormatAvailable(CF_BITMAP);
+#else
+        paste = ole_can_paste() || IsClipboardFormatAvailable(CF_BITMAP);
+#endif
+    else
+        paste = IsClipboardFormatAvailable(CF_TEXT);
     enable(m, IDM_UNDO, card && !g_picmode && SendMessage(g_edit, EM_CANUNDO, 0, 0));
-    enable(m, IDM_CUT, card);
-    enable(m, IDM_COPY, card);
-    enable(m, IDM_PASTE, card);
+    enable(m, IDM_CUT, card && (g_picmode ? pic : sel));
+    enable(m, IDM_COPY, card && (g_picmode ? pic : sel));
+    enable(m, IDM_PASTE, card && paste);
+    enable(m, IDM_PRINT, GetWindowTextLength(g_edit) || pic || card_hdr(g_cur)->index[0]);
+    enable(m, IDM_FINDNEXT, find_has_text());
     enable(m, IDM_INDEX, TRUE);
     enable(m, IDM_RESTORE, card);
     enable(m, IDM_TEXT, card);

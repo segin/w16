@@ -369,6 +369,7 @@ BOOL file_dialog(int which, LPSTR path, int *fmt);   /* FD_OPEN, ... */
 #define FD_MERGE            2
 void about_box(void);
 BOOL find_message(UINT msg, LPARAM lp);
+BOOL find_has_text(void);
 extern UINT g_findmsg;
 extern HWND g_finddlg;
 
@@ -433,6 +434,12 @@ BOOL f_read(HFILE f, void FAR *buf, WORD n);
 BOOL f_write(HFILE f, const void FAR *buf, WORD n);
 BOOL f_copy(HFILE from, HFILE to, DWORD n);
 void fmt_msg(LPSTR out, int size, LPCSTR fmt, LPCSTR arg);
+#ifdef CF_DEBUG
+void dbg(const char FAR *s);           /* a line to C:\CFDBG.TXT */
+#define DBG(s) dbg(s)
+#else
+#define DBG(s) ((void)0)
+#endif
 
 #ifdef W16_WIN2
 #define CF_RADIO            BS_RADIOBUTTON

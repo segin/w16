@@ -272,8 +272,11 @@ LRESULT CALLBACK __export EditWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT:
         r = CallWindowProc(g_oldedit, w, msg, wp, lp);
         if (g_pic.kind != PIC_NONE) {
+            /* the caret goes over the picture, as in the original */
             HDC dc = GetDC(w);
+            HideCaret(w);
             pic_draw(dc, 0, 0);
+            ShowCaret(w);
             ReleaseDC(w, dc);
         }
         return r;

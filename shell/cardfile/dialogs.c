@@ -134,6 +134,11 @@ void dlg_goto(void)
 
 /* ---- Find ---- */
 
+BOOL find_has_text(void)
+{
+    return find_text[0] != 0;
+}
+
 /* Search card texts from the caret on, then the following cards. */
 static BOOL search_text(LPCSTR text, WORD start, WORD *at)
 {
@@ -451,8 +456,10 @@ BOOL CALLBACK __export DialDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
     case WM_COMMAND:
         switch (wp) {
         case IDC_SETUP:
+            /* the focus goes to the checked dial type (dialogs scenario) */
             dial_expanded = TRUE;
             dial_size(d, TRUE);
+            SetFocus(GetDlgItem(d, IsDlgButtonChecked(d, IDC_PULSE) ? IDC_PULSE : IDC_TONE));
             return TRUE;
         case IDC_TONE:
         case IDC_PULSE:

@@ -120,3 +120,20 @@ void fmt_msg(LPSTR out, int size, LPCSTR fmt, LPCSTR arg)
     }
     out[j] = 0;
 }
+
+#ifdef CF_DEBUG
+/* a trace line appended to C:\CFDBG.TXT (debugging builds only) */
+void dbg(const char FAR *s)
+{
+    OFSTRUCT of;
+    HFILE f = OpenFile("C:\\CFDBG.TXT", &of, OF_WRITE);
+    if (f == HFILE_ERROR)
+        f = OpenFile("C:\\CFDBG.TXT", &of, OF_CREATE | OF_WRITE);
+    if (f == HFILE_ERROR)
+        return;
+    _llseek(f, 0, 2);
+    _lwrite(f, s, s_len(s));
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
+}
+#endif
