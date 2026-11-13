@@ -41,6 +41,7 @@ int menu_mode;                  /* menu loops running: the arrow stays */
 static int cursor_level;        /* ShowCursor's count */
 static RECT __far rcClip;
 static int __far mthresh1 = 2, __far mthresh2, __far mspeed = 1;   /* acceleration */
+static int __far cxScreen, __far cyScreen;  /* sysmet's, for interrupt time */
 
 static DWORD lastclick_time;
 static POINT lastclick_pt;
@@ -110,8 +111,8 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
     (void)dx, (void)si, (void)di;
     if (ax & 1) {
         if (ax & 0x8000) {
-            x = (int)(((DWORD)bx * sysmet[SM_CXSCREEN]) >> 16);
-            y = (int)(((DWORD)cx * sysmet[SM_CYSCREEN]) >> 16);
+            x = (int)(((DWORD)bx * cxScreen) >> 16);
+            y = (int)(((DWORD)cx * cyScreen) >> 16);
         } else {
             /* acceleration (WIN.INI MouseThreshold1/2, MouseSpeed: 2, 0
                and 1 on 3.1 as SPI_GETMOUSE reports them, US2): past the
@@ -213,6 +214,8 @@ void journal_poll(void)
 
 void input_init(void)
 {
+    cxScreen = sysmet[SM_CXSCREEN];
+    cyScreen = sysmet[SM_CYSCREEN];
     SetRect(&rcClip, 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN]);
     ptCursor.x = sysmet[SM_CXSCREEN] / 2;
     ptCursor.y = sysmet[SM_CYSCREEN] / 2;

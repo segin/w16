@@ -978,6 +978,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 
 test: dos fonts
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
+	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the

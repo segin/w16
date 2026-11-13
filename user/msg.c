@@ -32,7 +32,10 @@ HQUEUE create_queue(HTASK task, WORD size)
     QUEUE __far *q;
     if (!size)
         size = 8;
-    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE,
+    /* fixed: the event procedures and the timer tick set its wake bits
+       at interrupt time, and a moveable block can be in the middle of
+       moving then (GlobalLock does not stop that in protected mode) */
+    g = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT | GMEM_SHARE,
                     sizeof(QUEUE) + (size - 1) * sizeof(QMSG));
     if (!g)
         return 0;

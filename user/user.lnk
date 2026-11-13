@@ -11,6 +11,12 @@ segment type code fixed preload
 # moveable, as Windows 3.1's USER has it: the local heap grows (US4: the
 # fourth dialog's controls failed in a fixed 7K one)
 segment type data moveable preload
+# but the far data (class FAR_DATA: what the keyboard and mouse event
+# procedures and the timer tick touch at interrupt time, and other far
+# tables wlink packs with it) is fixed: a moveable segment can be in the
+# middle of being moved when an interrupt comes (ARCHITECTURE.md 10.3;
+# tools/irqcheck.py, run by make test, checks the built file)
+segment class 'FAR_DATA' fixed preload
 library windows.lib
 # KERNEL
 import K_FATALEXIT KERNEL.1
