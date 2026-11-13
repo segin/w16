@@ -426,17 +426,14 @@ BOOL CALLBACK __export InsertDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 if (RegOpenKey(HKEY_CLASSES_ROOT, sub, &h) != ERROR_SUCCESS)
                     continue;
                 RegCloseKey(h);
-                if (RegQueryValue(HKEY_CLASSES_ROOT, key, name, &n) == ERROR_SUCCESS && name[0]) {
-                    int at = (int)SendDlgItemMessage(d, IDC_TYPELIST, LB_ADDSTRING, 0,
-                                                     (LPARAM)(LPSTR)name);
-                    /* remember the class behind each name */
-                    SendDlgItemMessage(d, IDC_TYPELIST, LB_SETITEMDATA, at,
-                                       (LPARAM)(LPSTR)AnsiNext(name) - (LPARAM)(LPSTR)name);
-                }
+                if (RegQueryValue(HKEY_CLASSES_ROOT, key, name, &n) == ERROR_SUCCESS && name[0])
+                    SendDlgItemMessage(d, IDC_TYPELIST, LB_ADDSTRING, 0, (LPARAM)(LPSTR)name);
             }
             SendDlgItemMessage(d, IDC_TYPELIST, LB_SETCURSEL, 0, 0);
         }
-        return TRUE;
+        /* the focus on the list (object scenario) */
+        SetFocus(GetDlgItem(d, IDC_TYPELIST));
+        return FALSE;
     case WM_COMMAND:
         if (wp == IDOK || (wp == IDC_TYPELIST && HIWORD(lp) == LBN_DBLCLK)) {
             char name[80], key[64];
@@ -489,6 +486,8 @@ void ole_insert(void)
     new_object(o, id);
     g_carddirty = TRUE;
     InvalidateRect(g_edit, NULL, TRUE);
+    /* the server opens on the new object for editing */
+    ole_activate(&g_pic, 0);
 }
 
 /* ---- Links ---- */
