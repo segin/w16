@@ -129,7 +129,9 @@ ReadCommString and EnableNotification 0.
   No hold shows in the status.
 - **Input flow** (fInX, fRtsflow, fDtrflow): when the receive queue
   holds size - XoffLim bytes, XOFF goes out (status 10h) and/or RTS and
-  DTR drop; when it is down to XonLim, XON and the lines again.
+  DTR drop; when it is down to XonLim, XON and the lines again (CM1, byte
+  by byte: a 1024-byte queue with XoffLim 200 sent XOFF at the 824th
+  byte, XonLim 100 sent XON when a read left 100).
 - **Receive**: fNull drops NULs; fPeChar replaces bytes with parity
   errors by PeChar; XON/XOFF with fOutX are not stored; a full queue
   drops the byte with CE_RXOVER (the first `size` bytes stay). Outside
