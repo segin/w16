@@ -137,7 +137,7 @@ $(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
 $(B)/tests/tk11.o: tests/apps/tk11ref.h tests/apps/tklog.h
-$(B)/tests/tk13.o: tests/apps/tk13ref.h tests/apps/tklog.h
+$(B)/tests/tk13.o: tests/apps/tk13ref.h tests/apps/tk13ref286.h tests/apps/tklog.h
 $(B)/tests/tk14.o: tests/apps/tk14ref.h tests/apps/tklog.h
 
 # TK11.EXE: the in-memory module table probe (uses TK5's DLLs)
