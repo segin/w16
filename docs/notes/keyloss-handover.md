@@ -233,3 +233,15 @@ resolved to keyloss's grow(), which already caps at SEG_MAX = FFF0h):
   the cases reliable without loosening thresholds (finish the
   vgaonly/cycles sweep, or compare a GDI-side dump, or force a full
   redraw before the shot). After (5) and (6).
+
+## Session 4 (branch keyloss3 from master bcdf387)
+
+- (5) LocalNotify/LocalShrink: DONE a1cf7e6 (TK54 in make test).
+- (6) ExitWindows when the last task ends: DONE c466366 (TK55, boot-test
+  lastexit).
+- WINOLDAP pixels: the stale bytes are a DOSBox svga_s3 display artefact;
+  the WINOLDAP cases now run on machine=vgaonly (svga_s3: 8 of 10 remote
+  runs of the three cases with a failure; vgaonly 0 of 15). Also found:
+  boottest.sh's retried() killed the case under set -e on the remote host
+  (git rev-parse fails outside a repository, the assignment failed), so
+  every retried case there reported "the case stopped before its end".

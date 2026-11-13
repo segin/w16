@@ -575,8 +575,8 @@ static void costs(HWND top)
     a = reg("ABCH", 0, 0, 0, NULL);
     obs_env("class atom", a);
     obs("class atom found by GlobalFindAtom", GlobalFindAtom("ABCH") == a);
-    /* (3.1 returned 1 from RegisterClass here, not the atom GetClassInfo
-       gives; w16 returns the atom) */
+    /* (3.1's RegisterClass returns 1, not the atom, to a program marked
+       for 3.00 as this one is: US16) */
     obs_env("class atom >= C000h", a >= 0xC000u);
     UnregisterClass("ABCH", hi);
 

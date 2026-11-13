@@ -38,11 +38,11 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE
@@ -134,6 +134,7 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tk3ref286.h tests/apps/tklog.h
 $(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tklog.h
+$(B)/tests/tk54.o: tests/apps/tk54ref.h tests/apps/tk54ref286.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
 $(B)/tests/tk11.o: tests/apps/tk11ref.h tests/apps/tklog.h
@@ -418,6 +419,11 @@ $(DOS)/TK49.EXE: $(B)/tests/start.o $(B)/tests/tk49.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk49.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk49.map file { $(B)/tests/start.o $(B)/tests/tk49.o }
+# VIDMODE.COM: exit code = the BIOS video mode (boot-test lastexit)
+$(DOS)/VIDMODE.COM: tests/dos/vidmode.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/VIDMODE.COM
 # MS1.COM: a real-mode TSR recording the PS/2 pointing-device calls (TK49 reads it)
 $(DOS)/MS1.COM: tests/dos/ms1.asm
 	@mkdir -p $(@D)
@@ -978,6 +984,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 
 test: dos fonts
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
+	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1035,7 +1042,7 @@ $(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/
 # ---- GDI.EXE: w16's GDI (gdi/; ARCHITECTURE.md 11) ----
 # large model, SS != DS, byte-packed structures (the DDK's), 286
 GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
-GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/object.o \
+GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o
 gdi: $(DOS)/GDI.EXE
@@ -1063,6 +1070,14 @@ $(DOS)/GD3.EXE: $(B)/tests/start.o $(B)/tests/gd3.o tests/apps/app.lnk tests/app
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/gd3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd3.map file { $(B)/tests/start.o $(B)/tests/gd3.o }
+# GD4.EXE: GDI's heaps, object costs and limits (tests/apps/gd4.c; tests/gdiheap.sh)
+gdprobes: $(DOS)/GD4.EXE
+dos: $(DOS)/GD4.EXE
+$(B)/tests/gd4.o: tests/apps/gd4ref.h tests/apps/tklog.h
+$(DOS)/GD4.EXE: $(B)/tests/start.o $(B)/tests/gd4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd4.map file { $(B)/tests/start.o $(B)/tests/gd4.o }
 # ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
 # WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
 WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
@@ -1207,6 +1222,16 @@ $(DOS)/US15.EXE: $(B)/tests/start.o $(B)/tests/us15.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us15.map file { $(B)/tests/start.o $(B)/tests/us15.o }
 dos: $(DOS)/US15.EXE
+# US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
+$(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
+$(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us16.map file { $(B)/tests/start.o $(B)/tests/us16.o }
+$(DOS)/US16A.EXE: $(DOS)/US16.EXE
+	cp $< $@
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/US16.EXE $(DOS)/US16A.EXE
 # US13: the caret's blink (tests/apps/us13.c)
 $(B)/tests/us13.o: tests/apps/us13ref.h tests/apps/tklog.h
 $(DOS)/US13.EXE: $(B)/tests/start.o $(B)/tests/us13.o tests/apps/app.lnk
@@ -1481,3 +1506,49 @@ $(DOS)/CM1.EXE: $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o tests/apps
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/cm1.map file { $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o }
 dos: $(DOS)/CM1.EXE
+# ---- KEYBOARD.DRV: w16's keyboard driver (drivers/keyboard; README.md there)
+# KB1.EXE: every export called over all its inputs (tests/apps/kb1.c; run by
+# tests/kbprobe.sh with Windows 3.1's KEYBOARD.DRV and with w16's)
+$(B)/tests/kb1.o: tests/apps/kb1ref.h tests/apps/tklog.h
+$(DOS)/KB1.EXE: $(B)/tests/start.o $(B)/tests/kb1.o $(B)/tests/md1s.o $(B)/tests/kb1s.o tests/apps/app.lnk tests/apps/kb1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kb1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/kb1.map file { $(B)/tests/start.o $(B)/tests/kb1.o $(B)/tests/md1s.o $(B)/tests/kb1s.o }
+dos: $(DOS)/KB1.EXE
+# KBREC.DRV: a recording KEYBOARD in front of KBTARGET, a renamed copy of the
+# driver under test (tests/apps/kbrec.asm; tests/kbprobe.sh)
+$(DOS)/KBREC.DRV: $(B)/tests/kbrec.o tests/apps/kbrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kbrec.lnk name $@ option map=$(B)/tests/kbrec.map file { $(B)/tests/kbrec.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KBREC.DRV
+# KB2.EXE: keyboard messages and KBREC's and KB4's records under real
+# input (tests/apps/kb2.c); KB4.COM: a real-mode TSR recording INT 9, INT
+# 16h, INT 15h AH=4Fh (tests/dos/kb4.asm)
+$(B)/tests/kb2.o: tests/apps/kb1ref.h tests/apps/tklog.h
+$(DOS)/KB2.EXE: $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o tests/apps/app.lnk tests/apps/kb2.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/kb2.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/kb2.map file { $(B)/tests/start.o $(B)/tests/kb2.o $(B)/tests/kb2s.o }
+$(DOS)/KB4.COM: tests/dos/kb4.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/KB2.EXE $(DOS)/KB4.COM
+# the driver: NASM, with the ANSI/OEM tables made by tools/kbtables.py
+$(B)/keyboard/kbtables.inc: tools/kbtables.py
+	@mkdir -p $(@D)
+	python3 tools/kbtables.py $@
+$(B)/keyboard/keyboard.o: drivers/keyboard/keyboard.asm $(B)/keyboard/kbtables.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -I$(B)/keyboard/ -o $@ $<
+$(DOS)/KEYBOARD.DRV: $(B)/keyboard/keyboard.o drivers/keyboard/keyboard.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/keyboard/keyboard.lnk name $@ option map=$(B)/keyboard/keyboard.map \
+	    file { $(B)/keyboard/keyboard.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KEYBOARD.DRV
+# the install tree gets it too (build/w16/SYSTEM)
+install-tree: $(W16SYS)/KEYBOARD.DRV
+$(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
+	@mkdir -p $(@D)
+	cp $< $@

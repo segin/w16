@@ -55,6 +55,7 @@ run TK3 0
 run TK4 0
 run TK12 0
 run TK13 0
+run TK54 0
 run TK17 0
 run TK17A 0
 run TK19 0

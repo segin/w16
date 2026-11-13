@@ -8,6 +8,9 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
+#   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
+#              mode 3 afterwards, as 3.1's KERNEL ends Windows through
+#              USER's ExitWindows when the last task ends (ref and w16)
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
@@ -144,6 +147,21 @@
 #              port) against the same with Microsoft's COMM.DRV: CM1's log
 #              and the far end's records identical (not cached: the
 #              far end is part of the run)
+#   kbd        w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
+#              DOSX, USER and GDI under real key input: typing in Notepad
+#              (kbtype.txt: letters, Shift, digits, punctuation, Caps Lock,
+#              the keypad, arrows, Alt menus, Ctrl+C/V, Alt+Tab, Ctrl+Esc,
+#              Alt+Esc) and the tabs, alttab, helpmenus, pmkeys, icons and
+#              menus scripts, every screen against the same script with
+#              Microsoft's KEYBOARD.DRV                must be 0
+#   kbdall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+#              fonts) with w16's KEYBOARD.DRV against the same with
+#              Microsoft's, the kbtype script: must be 0
+#   kbdwrite   Windows Write's script (write) with w16's KEYBOARD.DRV on
+#              Microsoft's stack: must be 0 but for the caret
+#   kbdwoados  the woados script with w16's KEYBOARD.DRV on Microsoft's
+#              stack (Disable and Enable around the DOS program): the
+#              screens as all-Microsoft's up to the cursor
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -232,7 +250,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys comm}
+cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -273,7 +291,10 @@ blank() {
 # (an intermittent real bug looks exactly like a flaky test), not noise.
 retrylog=$root/build/boottest-retries.log
 retried() {
-    line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null) $1 $2 $3"
+    # (git's failure, outside a repository as on the remote build host,
+    # made the assignment fail and set -e end the case: "the case stopped
+    # before its end" in place of every retried case's result)
+    line="$(date '+%Y-%m-%d %H:%M') $(git -C "$root" rev-parse --short HEAD 2>/dev/null || true) $1 $2 $3"
     echo "RETRY $1: $2 ($3)"
     # cases run in parallel: one writer at a time
     (
@@ -449,7 +470,7 @@ check() {
         if booted woaref2; then
             n2=$(magick compare -metric AE "$out/$w.png" "$out/woaref2.png" "$out/$c-diff2.png" 2>&1 >/dev/null || true)
             n2=${n2%% *}
-            [ "$n2" = 0 ] && { n=0; retried "$c" woaref-second-boot "first reference differed by $n1 pixels"; }
+            if [ "$n2" = 0 ]; then n=0; retried "$c" woaref-second-boot "first reference differed by $n1 pixels"; fi
         fi
         # the same stray caption repaint shows up in the case's own boot
         # too (it is Microsoft's USER redrawing after the DOS program
@@ -463,9 +484,11 @@ check() {
             for rr in woaref woaref2; do
                 [ -f "$out/$rr.png" ] || continue
                 m=$(magick compare -metric AE "$out/$w.png" "$out/$rr.png" null: 2>&1 || true)
-                [ "${m%% *}" = 0 ] && n=0
+                if [ "${m%% *}" = 0 ]; then n=0; fi
             done
-            [ "$n" = 0 ] && retried "$c" case-second-boot "first boot differed by $n1 pixels"
+            # (an if, not &&: a false test as check's last command made
+            # check fail and set -e end the case without a FAIL line)
+            if [ "$n" = 0 ]; then retried "$c" case-second-boot "first boot differed by $n1 pixels"; fi
         fi
     fi
     case $n in
@@ -506,6 +529,30 @@ runcase() {
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
+    lastexit)
+        # the shell (TK55) ends at once with exit code 5: Windows ends
+        # through USER's ExitWindows (KERNEL, last task); a batch file
+        # around WIN records WIN's ERRORLEVEL and the video mode after it
+        {
+            printf 'WIN /S /B > C:\\OUT.TXT\r\n'
+            for n in 9 8 7 6 5 4 3 2 1 0; do printf 'IF ERRORLEVEL %s GOTO E%s\r\n' $n $n; done
+            for n in 9 8 7 6 5 4 3 2 1 0; do printf ':E%s\r\nECHO rc %s> C:\\EL.TXT\r\nGOTO V\r\n' $n $n; done
+            printf ':V\r\nC:\\VIDMODE\r\n'
+            for n in 18 16 7 3 2 1 0; do printf 'IF ERRORLEVEL %s GOTO M%s\r\n' $n $n; done
+            for n in 18 16 7 3 2 1 0; do printf ':M%s\r\nECHO mode %s>> C:\\EL.TXT\r\nGOTO Z\r\n' $n $n; done
+            printf ':Z\r\n'
+        } > "$out/GO55.BAT"
+        set -- -c GO55 -f "$out/GO55.BAT=WINDOWS/GO55.BAT" -f "$root/build/dos/VIDMODE.COM=VIDMODE.COM" \
+            -f "$root/build/dos/TK55.EXE=TK55.EXE" -i 'boot:shell=C:\TK55.EXE'
+        r=ok
+        for k in ref w16; do
+            o=; [ $k = ref ] && o=-r
+            "$root/tests/dropin.sh" -t 60 -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 || true
+            el=$(tr -d '\r' < "$out/lastexit-$k/c/EL.TXT" 2>/dev/null | tr '\n' ' ')
+            [ "$el" = "rc 0 mode 3 " ] || r="$k: $el (rc 0 mode 3 expected)"
+        done
+        if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
+        else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
     k286)   # an emulated 80286 (DOSBox-X cputype=286): w16's KRNL286 on
             # Microsoft's DOSX and on w16's, against Microsoft's KRNL286
             # there (mode switches back to real mode by processor reset)
@@ -538,13 +585,21 @@ runcase() {
         else
             echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
         fi ;;
-    winoldap)  woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+    # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
+    # its default svga_s3, after the DOS program's text mode and back, the
+    # displayed image now and then kept stale bytes 1000h-104Fh of the
+    # planes (Program Manager's frame top in the desktop colour, 349-371
+    # pixels) that were not in video memory (GDI's GetPixel read the right
+    # frame), with Microsoft's WINOLDAP as with w16's (commit 7480e1c).
+    # Remote runs of these three cases: svga_s3 8 of 10 with a failure,
+    # vgaonly 0 of 15. Windows' display driver is VGA.DRV either way.
+    winoldap)  export DROPIN_MACHINE=vgaonly; woaref; boot winoldap -r -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldap winoldap woaref ;;
-    winoldapk) woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
+    winoldapk) export DROPIN_MACHINE=vgaonly; woaref; boot winoldapk -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI" \
                    -f "$woa=WINDOWS/SYSTEM/WINOLDAP.MOD"
                check winoldapk winoldapk woaref ;;
-    winoldapw) woaref; boot winoldapw -r -w -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
+    winoldapw) export DROPIN_MACHINE=vgaonly; woaref; boot winoldapw -r -w -f "$out/HI.PIF=HI.PIF" -f "$out/WIN.INI=WINDOWS/WIN.INI"
                check winoldapw winoldapw woaref ;;
     wincomswap)
         # WC4 in WSWAP's place records the block; each scenario a batch file
@@ -1099,6 +1154,137 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             echo "FAIL comm: $(grep -m1 -E '^FAIL' "$out/comm.txt" || echo 'see comm.txt') ($out/comm.txt)"
             fails=$((fails + 1))
         fi ;;
+    kbd)
+        # w16's KEYBOARD.DRV (drivers/keyboard) on Microsoft's KRNL286,
+        # DOSX, USER and GDI under real key input: typing in Notepad
+        # (kbtype) and the key scripts of tabs, alttab, helpmenus, pmkeys,
+        # icons and allw16input (menus), every screen against the same script with Microsoft's
+        # KEYBOARD.DRV (helpmenus: Notepad's caret left out as there;
+        # icons: Clock's icon)
+        kdrv=$root/build/dos/KEYBOARD.DRV
+        r=ok
+        for s in kbtype tabs alttab helpmenus pmkeys icons menus; do
+            scr=$root/tests/scripts/input/$s.txt
+            case $s in
+            helpmenus) m="rectangle 14,42 20,61" ;;
+            icons) m="rectangle 160,400 220,445" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            b=25 t=220
+            [ $s = pmkeys ] && b=40
+            [ $s = icons ] && t=380
+            refrun kbd-$s-ref kbd "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/kbd-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/kbd-$s-ref/boot.png" -E "$out/kbd-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/kbd-$s-w16" -r \
+                -f "$kdrv=WINDOWS/SYSTEM/KEYBOARD.DRV" > "$out/kbd-$s-w16.txt" 2>&1 || true
+            ls "$out/kbd-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/kbd-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/kbd-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                magick "$f" -fill black -draw "$m" "$out/kbd-a.png"
+                magick "$out/kbd-$s-w16/$g" -fill black -draw "$m" "$out/kbd-b.png"
+                n=$(magick compare -metric AE "$out/kbd-b.png" "$out/kbd-a.png" "$out/kbd-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbd: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdall)
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+        # fonts) with w16's KEYBOARD.DRV against the same with Microsoft's
+        # KEYBOARD.DRV, the kbtype script (both sides are w16's but for
+        # KEYBOARD.DRV: not cached)
+        fon=$root/build/fonts
+        scr=$root/tests/scripts/input/kbtype.txt
+        for k in ref w16; do
+            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
+                -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
+            else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
+            "$root/tests/inputrun.sh" "$@" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/kbdall-$k.txt" 2>&1 || true
+        done
+        r=ok
+        ls "$out/kbdall-ref"/[0-9]*.png > /dev/null 2>&1 || r="no screens"
+        for f in "$out/kbdall-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            g=$(basename "$f")
+            [ -f "$out/kbdall-w16/$g" ] || { r="no $g"; break; }
+            n=$(magick compare -metric AE "$out/kbdall-w16/$g" "$f" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$g: $n pixels differ ($out/kbdall-${g%.png}-diff.png)"
+        done
+        # and the typing did something: the typed screen is not the boot's
+        if [ "$r" = ok ]; then
+            n=$(magick compare -metric AE "$out/kbdall-w16/01-typed.png" "$out/kbdall-w16/boot.png" null: 2>&1 || true)
+            [ "${n%% *}" != 0 ] || r="the typing did nothing"
+        fi
+        if [ "$r" = ok ]; then echo "ok   kbdall: 0 pixels (every w16 part, w16's KEYBOARD.DRV against Microsoft's)"
+        else echo "FAIL kbdall: $r"; fails=$((fails + 1)); fi ;;
+    kbdwrite)
+        # Windows Write (the write case's script) with w16's KEYBOARD.DRV
+        # on Microsoft's KRNL286, DOSX, USER, GDI against all-Microsoft:
+        # identical screens but for the caret's places (it blinks)
+        s=$root/tests/scripts/input/write.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/kbdwrite-WIN.INI"
+        python3 "$root/tests/scripts/iniset.py" "$out/kbdwrite-WIN.INI" 'windows:run=WRITE.EXE'
+        refrun kbdwrite-ref kbdwrite "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/kbdwrite-ref" -r \
+            -f "$out/kbdwrite-WIN.INI=WINDOWS/WIN.INI"
+        "$root/tests/inputrun.sh" -e "$out/kbdwrite-ref/boot.png" -m "rectangle 27,46 28,61" -E "$out/kbdwrite-ref" \
+            -M "rectangle 27,46 28,61 rectangle 112,46 113,61 rectangle 112,82 113,97 rectangle 95,98 96,113" -b 25 -t 210 "$s" "$out/kbdwrite-w16" -r \
+            -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV" \
+            -f "$out/kbdwrite-WIN.INI=WINDOWS/WIN.INI" > "$out/kbdwrite-w16.txt" 2>&1 || true
+        r=ok
+        for f in "$out/kbdwrite-ref"/[0-9]*.png; do
+            s=$(basename "$f")
+            [ -f "$out/kbdwrite-w16/$s" ] || { r="no $s"; break; }
+            case $s in
+            01-*) m="rectangle 27,46 28,61" ;;
+            02-*|03-*) m="rectangle 112,46 113,61" ;;
+            04-*) m="rectangle 112,82 113,97" ;;
+            05-*) m="rectangle 95,98 96,113" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            magick "$f" -fill black -draw "$m" "$out/kbdwrite-a.png"
+            magick "$out/kbdwrite-w16/$s" -fill black -draw "$m" "$out/kbdwrite-b.png"
+            n=$(magick compare -metric AE "$out/kbdwrite-b.png" "$out/kbdwrite-a.png" "$out/kbdwrite-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+        done
+        ls "$out/kbdwrite-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+        if [ "$r" = ok ]; then echo "ok   kbdwrite: 0 pixels (Write with w16's KEYBOARD.DRV)"
+        else echo "FAIL kbdwrite: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdwoados)
+        # the MS-DOS Prompt (the woados case's script: KEYBOARD.Disable and
+        # Enable around the DOS program, the BIOS's keyboard in between)
+        # with w16's KEYBOARD.DRV on Microsoft's KRNL286, DOSX, USER, GDI,
+        # WINOLDAP against all-Microsoft: the same screens up to the
+        # cursor (40 pixels), Windows repainted as it was before
+        scr=$root/tests/scripts/input/woados.txt
+        set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        refrun kbdwoados-ref kbdwoados env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/kbdwoados-ref" -r "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/kbdwoados-w16" -r "$@" \
+            -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV" > "$out/kbdwoados-w16.txt" 2>&1 || true
+        a=$out/kbdwoados-w16 b=$out/kbdwoados-ref r=ok
+        for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
+            f=${s%%:*} want=${s#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            if [ $f = 03-back ]; then
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/kbdwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            else
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/kbdwoados-$f-diff.png" 2>&1 >/dev/null || true)
+            fi
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   kbdwoados: the MS-DOS Prompt and back with w16's KEYBOARD.DRV"
+        else echo "FAIL kbdwoados: $r ($out/kbdwoados-w16)"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }

@@ -20,6 +20,10 @@ w16 repository's LICENSE):
                           Windows 3.1 MOUSE.DRV instead)
   SYSTEM\COMM.DRV         the serial (COM1-COM4) and parallel
                           (LPT1-LPT3) port driver
+  SYSTEM\KEYBOARD.DRV     the keyboard driver (US layout, code page
+                          437; for another layout or code page use
+                          your own Windows 3.1 KEYBOARD.DRV and its
+                          KBD*.DLL instead)
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -38,7 +42,7 @@ overwriting the files above:
                           group files, and any applications you want
   SYSTEM:                 USER.EXE, GDI.EXE, MMSYSTEM.DLL,
                           the drivers named in SYSTEM.INI's [boot]
-                          section (SYSTEM.DRV, KEYBOARD.DRV, VGA.DRV,
+                          section (SYSTEM.DRV, VGA.DRV,
                           MMSOUND.DRV, ...), the other
                           fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
                           WIN.COM starts in Standard mode), and for DOS

@@ -120,11 +120,20 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
     return c;
 }
 
+/* The class's atom for a program that expects Windows 3.10 or later, 1
+   for an older one (3.0's RegisterClass returned a BOOL): probe US16 on
+   3.1, Standard and 386 Enhanced, KRNL386 and KRNL286, for string,
+   "#nnnnn" and integer-atom names, CS_GLOBALCLASS and a local "Button"
+   class; Pietrek (Windows Internals, ch. 4): "either 0, 1, or the atom
+   handle of the class name". The version is the registering module's
+   (wc->hInstance's). */
 ATOM WINAPI RegisterClass(const WNDCLASS __far *wc)
 {
     PCLS c;
     c = register_class(wc, FALSE);
-    return c ? c->atom : 0;
+    if (!c)
+        return 0;
+    return K_GETEXPWINVER(K_GETEXEPTR(wc->hInstance)) >= 0x030A ? c->atom : 1;
 }
 
 BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)

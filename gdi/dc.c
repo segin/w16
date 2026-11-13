@@ -21,97 +21,98 @@
 #define DCHF_VALIDATEVISRGN 2
 
 
-NPDC dc_get(HDC h)
+LPDC dc_get(HDC h)
 {
-    OBJHDR NEAR *o = obj_get(h, 0);
-    if (!o)
-        return 0;
-    switch (o->wMagic & MAGIC_MASK) {
-    case DC_MAGIC:
-    case DISDC_MAGIC:
-        return (NPDC)o;
-    }
-    return 0;
+    WORD m = obj_magic(h) & MAGIC_MASK;
+    return m == DC_MAGIC || m == DISDC_MAGIC ? (LPDC)obj_get(h, 0) : (LPDC)0;
 }
 
-/* ---- the DC list (for DeleteObject's "still selected" check) ---- */
+/* ---- the DC list (DeleteObject's "still selected" check,
+   UnrealizeObject), linked through the DCs' hLink ---- */
 
-typedef struct DCLINK { struct DCLINK NEAR *next; HDC h; } DCLINK;
-static DCLINK NEAR *dcs;
+static HDC dcs;
+
+HDC dc_first(void)
+{
+    return dcs;
+}
 
 static void dc_link(HDC h)
 {
-    DCLINK NEAR *l = (DCLINK NEAR *)LocalAlloc(LMEM_FIXED, sizeof(DCLINK));
-    if (l) {
-        l->h = h;
-        l->next = dcs;
-        dcs = l;
-    }
+    LPDC dc = dc_get(h);
+    dc->hLink = dcs;
+    dcs = h;
 }
 
 static void dc_unlink(HDC h)
 {
-    DCLINK NEAR **pp;
-    for (pp = &dcs; *pp; pp = &(*pp)->next)
-        if ((*pp)->h == h) {
-            DCLINK NEAR *l = *pp;
-            *pp = l->next;
-            LocalFree((HLOCAL)l);
+    HDC cur = dcs;
+    LPDC prev = 0, dc;
+    while (cur && (dc = dc_get(cur)) != 0) {
+        if (cur == h) {
+            if (prev)
+                prev->hLink = dc->hLink;
+            else
+                dcs = dc->hLink;
             return;
         }
+        prev = dc;
+        cur = dc->hLink;
+    }
 }
 
 int dc_uses(HANDLE h)
 {
-    DCLINK NEAR *l;
-    for (l = dcs; l; l = l->next) {
-        NPDC dc = dc_get(l->h);
-        if (dc && (dc->hPen == h || dc->hBrush == h || dc->hFont == h))
+    HDC l;
+    LPDC dc;
+    for (l = dcs; l && (dc = dc_get(l)) != 0; l = dc->hLink)
+        if (dc->hPen == h || dc->hBrush == h || dc->hFont == h)
             return 1;
-    }
     return 0;
 }
 
-/* ---- realized objects ---- */
+/* ---- realized objects: the driver's blocks, in GDI's heaps ---- */
 
-static void phys_free(NPDC dc, HLOCAL NEAR *ph, int style)
+static void phys_free(LPDC dc, XP __far *ph, int style)
 {
     if (*ph) {
-        BYTE NEAR *p = DEREF(*ph);
+        BYTE __far *p = xptr(*ph);
         ((DRVREALIZE)dc->dev->fn[DRV_REALIZEOBJECT])(dc->lpPDevice, -style, p, p, 0);
-        obj_free(*ph);
+        xfree(*ph);
         *ph = 0;
     }
 }
 
-static HLOCAL phys_realize(NPDC dc, int style, void __far *in, LPVOID xf)
+static XP phys_realize(LPDC dc, int style, void __far *in, LPVOID xf)
 {
     DRVREALIZE rz = (DRVREALIZE)dc->dev->fn[DRV_REALIZEOBJECT];
     WORD size = LOWORD(rz(dc->lpPDevice, style, in, 0, xf));
-    HLOCAL h;
+    XP x;
     if (!size || size == 0xFFFF)
         return 0;
-    h = LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, size);
-    if (!h)
+    x = xalloc(size);
+    if (!x)
         return 0;
-    LocalLock(h);
-    rz(dc->lpPDevice, style, in, DEREF(h), xf);
-    return h;
+    rz(dc->lpPDevice, style, in, xptr(x), xf);
+    return x;
 }
 
-LPVOID dc_ppen(NPDC dc)
+/* (the DC is in DGROUP, or with ExtendedGdiHeap in GDI's heaps, where a
+   block does not move: its pointer stays good over these allocations) */
+LPVOID dc_ppen(LPDC dc)
 {
-    PENOBJ NEAR *p = obj_get(dc->hPen, PEN_MAGIC);
+    LPPENOBJ p = obj_get(dc->hPen, PEN_MAGIC);
     if (!p)
         return 0;
-    if (dc->hPPenOf != dc->hPen || dc->ppenGen != p->gen || !dc->hPPen) {
+    if (dc->hPPenOf != dc->hPen || !dc->xPPen) {
         LOGPEN lp = p->lp;
-        phys_free(dc, &dc->hPPen, OBJ_PEN);
-        dc->hPPen = phys_realize(dc, OBJ_PEN, &lp, &lp);
+        XP x;
+        phys_free(dc, &dc->xPPen, OBJ_PEN);
+        x = phys_realize(dc, OBJ_PEN, &lp, &lp);
+        dc->xPPen = x;
         dc->hPPenOf = dc->hPen;
-        dc->ppenGen = p->gen;
     }
-    return dc->hPPen ? (LPVOID)(BYTE NEAR *)DEREF(dc->hPPen) : 0;
+    return dc->xPPen ? xptr(dc->xPPen) : 0;
 }
 
 /* LBRUSH as 3.1 passes it (GD1): lbColor the logical colour (for
@@ -121,35 +122,44 @@ LPVOID dc_ppen(NPDC dc)
 typedef struct { short lbStyle; DWORD lbColor; short lbHatch; DWORD lbBkColor; } LBRUSH;
 #pragma pack(pop)
 
-LPVOID dc_pbrush(NPDC dc)
+LPVOID dc_pbrush(LPDC dc)
 {
-    BRUSHOBJ NEAR *b = obj_get(dc->hBrush, BRUSH_MAGIC);
+    LPBRUSHOBJ b = obj_get(dc->hBrush, BRUSH_MAGIC);
     if (!b)
         return 0;
-    if (dc->hPBrushOf != dc->hBrush || dc->pbrushGen != b->gen || !dc->hPBrush ||
-        dc->lpPDevOfBrush != dc->lpPDevice) {
+    if (dc->hPBrushOf != dc->hBrush || !dc->xPBrush || dc->lpPDevOfBrush != dc->lpPDevice) {
         LBRUSH lb;
+        XP x;
         lb.lbStyle = b->lb.lbStyle;
         lb.lbColor = b->lb.lbColor;
         lb.lbHatch = b->lb.lbHatch;
         lb.lbBkColor = dc->dm.bkColor;
         if (lb.lbStyle == 3) {
-            BITMAPOBJ NEAR *bm = obj_get(b->lb.lbHatch, BITMAP_MAGIC);
-            lb.lbColor = (DWORD)bm_pbitmap(b->lb.lbHatch);
-            lb.lbHatch = bm ? bm->hBits : 0;
+            lb.lbColor = (DWORD)(LPVOID)GlobalLock(b->hPatBits);
+            GlobalUnlock(b->hPatBits);
+            lb.lbHatch = b->hPatBits;
         } else if (lb.lbStyle != 2)
             lb.lbHatch = 0;
-        phys_free(dc, &dc->hPBrush, OBJ_BRUSH);
-        dc->hPBrush = phys_realize(dc, OBJ_BRUSH, &lb,
-                                   MAKELP(dc->brushOrg.y, dc->brushOrg.x));
+        phys_free(dc, &dc->xPBrush, OBJ_BRUSH);
+        x = phys_realize(dc, OBJ_BRUSH, &lb, MAKELP(dc->brushOrg.y, dc->brushOrg.x));
+        dc->xPBrush = x;
         dc->hPBrushOf = dc->hBrush;
-        dc->pbrushGen = b->gen;
         dc->lpPDevOfBrush = dc->lpPDevice;
     }
-    return dc->hPBrush ? (LPVOID)(BYTE NEAR *)DEREF(dc->hPBrush) : 0;
+    return dc->xPBrush ? xptr(dc->xPBrush) : 0;
 }
 
-void dc_set_device_colors(NPDC dc)
+/* UnrealizeObject or DeleteObject of a brush: DCs realize it again */
+void dc_brush_changed(HBRUSH h)
+{
+    HDC l;
+    LPDC dc;
+    for (l = dcs; l && (dc = dc_get(l)) != 0; l = dc->hLink)
+        if (dc->hPBrushOf == h)
+            dc->hPBrushOf = 0;
+}
+
+void dc_set_device_colors(LPDC dc)
 {
     dc->dm.bkColor = dev_colorinfo(dc, dc->dm.LbkColor);
     dc->dm.TextColor = dev_colorinfo(dc, dc->dm.LTextColor);
@@ -157,7 +167,7 @@ void dc_set_device_colors(NPDC dc)
 
 /* ---- creation ---- */
 
-static void dc_defaults(NPDC dc)
+static void dc_defaults(LPDC dc)
 {
     dc->hPen = stock[7];
     dc->hBrush = stock[0];
@@ -177,22 +187,32 @@ static void dc_defaults(NPDC dc)
 
 static HDC dc_new(NPDEVICE dev, LPVOID lpPDevice, WORD flags)
 {
-    HDC h = obj_alloc(DC_MAGIC, sizeof(DC));
-    NPDC dc;
-    if (!h)
+    HRGN vis = rgn_new(0, 0, dev->info.dpHorzRes, dev->info.dpVertRes);
+    HRGN rao = vis ? rgn_new(0, 0, 0, 0) : 0;
+    HDC h = rao ? obj_alloc(DC_MAGIC, sizeof(DC)) : 0;
+    LPDC dc;
+    if (!h) {
+        if (vis)
+            rgn_free(vis);
+        if (rao)
+            rgn_free(rao);
         return 0;
-    dc = DEREF(h);
+    }
+    dc = dc_get(h);
     dc->flags = flags;
     dc->dev = dev;
     dc->lpPDevice = lpPDevice;
     dc->owner = GetCurrentTask();
+    dc->planes = (BYTE)dev->info.dpPlanes;
+    dc->bitsPixel = (BYTE)dev->info.dpBitsPixel;
     dc_defaults(dc);
-    dc->hVisRgn = rgn_new(0, 0, dev->info.dpHorzRes, dev->info.dpVertRes);
-    dc->hRao = rgn_new(0, 0, 0, 0);
-    dc = DEREF(h);
+    dc->hVisRgn = vis;
+    dc->hRao = rao;
     dc_set_device_colors(dc);
     dc_pbrush(dc);
+    dc = dc_get(h);
     dc_ppen(dc);
+    dc = dc_get(h);
     font_realize(dc);
     dc_link(h);
     return h;
@@ -215,7 +235,7 @@ HDC GDIAPI CreateDC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __fa
 HDC GDIAPI CreateIC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __far *init) /* GDI.153 */
 {
     HDC h = CreateDC(driver, device, output, init);
-    NPDC dc = dc_get(h);
+    LPDC dc = dc_get(h);
     if (dc)
         dc->flags |= DCF_IC;
     return h;
@@ -223,10 +243,10 @@ HDC GDIAPI CreateIC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __fa
 
 HDC GDIAPI CreateCompatibleDC(HDC hdc)                             /* GDI.52 */
 {
-    NPDC src = hdc ? dc_get(hdc) : (NPDC)0;
+    LPDC src = hdc ? dc_get(hdc) : (LPDC)0;
     NPDEVICE d = src ? src->dev : display;
     HDC h;
-    NPDC dc;
+    LPDC dc;
     if (!d)
         d = dev_open("DISPLAY");
     if (!d)
@@ -234,40 +254,50 @@ HDC GDIAPI CreateCompatibleDC(HDC hdc)                             /* GDI.52 */
     d->refs++;
     h = dc_new(d, bm_pbitmap(stock_bitmap), DCF_MEMORY);
     dc = dc_get(h);
-    if (dc) {
+    if (dc)
         dc->hBitmap = stock_bitmap;
-        dc->isMemDC = 1;
-    }
+    else
+        dev_close(d);
     return h;
 }
 
+static void saved_free(XP x);
+
 BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
 {
-    NPDC dc = dc_get(hdc);
-    BITMAPOBJ NEAR *bm;
+    LPDC dc = dc_get(hdc);
+    LPBITMAPOBJ bm;
+    HRGN vis;
     if (!dc)
         return FALSE;
     if (dc->hook)
         ((WORD (__far __pascal *)(HDC, WORD, DWORD, DWORD))dc->hook)(hdc, DCHC_DELETEDC, dc->hookData, 0);
     dc = dc_get(hdc);
-    while (dc->saved) {
-        NPDC s = dc->saved;
-        dc->saved = s->saved;
-        if (s->hClipRgn)
-            obj_free(s->hClipRgn);
-        LocalFree((HLOCAL)s);
+    while (dc->xSaved) {                /* the SaveDC stack */
+        XP x = dc->xSaved;
+        dc->xSaved = ((SAVEDDC __far *)xptr(x))->dc.xSaved;
+        saved_free(x);
     }
-    phys_free(dc, &dc->hPPen, OBJ_PEN);
-    phys_free(dc, &dc->hPBrush, OBJ_BRUSH);
+    vis = dc->hVisRgn;
+    while (vis && ((LPOBJHDR)obj_get(vis, RGN_MAGIC))->hNext) {    /* SaveVisRgn's */
+        LPOBJHDR v = obj_get(vis, RGN_MAGIC);
+        HRGN top = v->hNext;
+        v->hNext = ((LPOBJHDR)obj_get(top, RGN_MAGIC))->hNext;
+        rgn_free(top);
+    }
+    phys_free(dc, &dc->xPPen, OBJ_PEN);
+    phys_free(dc, &dc->xPBrush, OBJ_BRUSH);
     bm = obj_get(dc->hBitmap, BITMAP_MAGIC);
-    if (bm && bm->hdcSel == hdc)
+    if (bm && bm->hdcSel == hdc) {
         bm->hdcSel = 0;
+        bm->bSelected = 0;
+    }
     if (dc->hClipRgn)
-        obj_free(dc->hClipRgn);
+        rgn_free(dc->hClipRgn);
     if (dc->hVisRgn)
-        obj_free(dc->hVisRgn);
+        rgn_free(dc->hVisRgn);
     if (dc->hRao)
-        obj_free(dc->hRao);
+        rgn_free(dc->hRao);
     dev_close(dc->dev);
     dc_unlink(hdc);
     obj_free(hdc);
@@ -276,15 +306,15 @@ BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
 
 /* ---- the composite clip region (vis & clip): "Rao" (Schulman) ---- */
 
-void dc_rao_invalidate(NPDC dc)
+void dc_rao_invalidate(LPDC dc)
 {
     dc->raoValid = 0;
 }
 
 /* call USER's DC hook when the visible region was invalidated */
-static NPDC dc_validate(HDC hdc)
+static LPDC dc_validate(HDC hdc)
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (dc && dc->hook && (dc->hookFlags & DCHF_INVALIDATEVISRGN)) {
         dc->hookFlags &= ~DCHF_INVALIDATEVISRGN;
         ((WORD (__far __pascal *)(HDC, WORD, DWORD, DWORD))dc->hook)(hdc, DCHC_INVALIDVISRGN,
@@ -294,7 +324,7 @@ static NPDC dc_validate(HDC hdc)
     return dc;
 }
 
-NPRGN dc_rao(NPDC dc)
+LPRGN dc_rao(LPDC dc)
 {
     if (!dc->raoValid) {
         HRGN vis = dc->hVisRgn;
@@ -309,7 +339,6 @@ NPRGN dc_rao(NPDC dc)
            x = 639 would wrap into the next scan line */
         {
             int w, h;
-            HRGN surf;
             if (dc->flags & DCF_MEMORY) {
                 LPPBITMAP pb = dc->lpPDevice;
                 w = pb->bmWidth;
@@ -318,11 +347,7 @@ NPRGN dc_rao(NPDC dc)
                 w = dc->dev->info.dpHorzRes;
                 h = dc->dev->info.dpVertRes;
             }
-            surf = rgn_new(0, 0, w, h);
-            if (surf) {
-                rgn_combine(dc->hRao, dc->hRao, surf, RGN_AND);
-                obj_free(surf);
-            }
+            rgn_op_rect(dc->hRao, 0, 0, w, h, RGN_AND);
         }
         dc->raoValid = 1;
     }
@@ -330,18 +355,18 @@ NPRGN dc_rao(NPDC dc)
 }
 
 /* the DC ready for output (hook called, composite region current) */
-NPDC dc_out(HDC hdc)
+LPDC dc_out(HDC hdc)
 {
-    NPDC dc = dc_validate(hdc);
+    LPDC dc = dc_validate(hdc);
     if (dc)
         dc_rao(dc);
     return dc;
 }
 
 /* accumulate output bounds (screen coordinates; GetBoundsRect) */
-void dc_update_bounds(NPDC dc, int l, int t, int r, int b)
+void dc_update_bounds(LPDC dc, int l, int t, int r, int b)
 {
-    NPRGN rao = rgn_ptr(dc->hRao);
+    LPRGN rao = rgn_ptr(dc->hRao);
     if (rao) {
         if (l < rao->box.left) l = rao->box.left;
         if (t < rao->box.top) t = rao->box.top;
@@ -365,21 +390,21 @@ void dc_update_bounds(NPDC dc, int l, int t, int r, int b)
 
 /* ---- coordinates ---- */
 
-static int xform_x(NPDC dc, int x)
+static int xform_x(LPDC dc, int x)
 {
     if (dc->mapMode == 1)
         return x - dc->wndOrg.x + dc->vpOrg.x;
     return mul_div(x - dc->wndOrg.x, dc->vpExt.x, dc->wndExt.x) + dc->vpOrg.x;
 }
 
-static int xform_y(NPDC dc, int y)
+static int xform_y(LPDC dc, int y)
 {
     if (dc->mapMode == 1)
         return y - dc->wndOrg.y + dc->vpOrg.y;
     return mul_div(y - dc->wndOrg.y, dc->vpExt.y, dc->wndExt.y) + dc->vpOrg.y;
 }
 
-void dc_lp_to_dp(NPDC dc, int __far *p, int n)
+void dc_lp_to_dp(LPDC dc, int __far *p, int n)
 {
     while (n-- > 0) {
         p[0] = xform_x(dc, p[0]);
@@ -388,7 +413,7 @@ void dc_lp_to_dp(NPDC dc, int __far *p, int n)
     }
 }
 
-void dc_dp_to_lp(NPDC dc, int __far *p, int n)
+void dc_dp_to_lp(LPDC dc, int __far *p, int n)
 {
     while (n-- > 0) {
         if (dc->mapMode == 1) {
@@ -403,19 +428,19 @@ void dc_dp_to_lp(NPDC dc, int __far *p, int n)
 }
 
 /* a logical width/height to device units (no origin) */
-int dc_scale_x(NPDC dc, int x)
+int dc_scale_x(LPDC dc, int x)
 {
     return dc->mapMode == 1 ? x : mul_div(x, dc->vpExt.x, dc->wndExt.x);
 }
 
-int dc_scale_y(NPDC dc, int y)
+int dc_scale_y(LPDC dc, int y)
 {
     return dc->mapMode == 1 ? y : mul_div(y, dc->vpExt.y, dc->wndExt.y);
 }
 
 BOOL GDIAPI LPtoDP(HDC hdc, POINT __far *p, int n)                 /* GDI.99 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
     dc_lp_to_dp(dc, (int __far *)p, n);
@@ -424,7 +449,7 @@ BOOL GDIAPI LPtoDP(HDC hdc, POINT __far *p, int n)                 /* GDI.99 */
 
 BOOL GDIAPI DPtoLP(HDC hdc, POINT __far *p, int n)                 /* GDI.67 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
     dc_dp_to_lp(dc, (int __far *)p, n);
@@ -436,7 +461,7 @@ BOOL GDIAPI DPtoLP(HDC hdc, POINT __far *p, int n)                 /* GDI.67 */
 #define ATTR(name, ord, field, type)                                     \
     type GDIAPI Get##name(HDC hdc)                                       \
     {                                                                    \
-        NPDC dc = dc_get(hdc);                                           \
+        LPDC dc = dc_get(hdc);                                           \
         return dc ? (type)dc->field : 0;                                 \
     }
 
@@ -453,7 +478,7 @@ ATTR(TextColor, 90, dm.LTextColor, COLORREF)
 
 int GDIAPI SetBkMode(HDC hdc, int m)                               /* GDI.2 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc || m < 1 || m > 2)
         return 0;
@@ -464,7 +489,7 @@ int GDIAPI SetBkMode(HDC hdc, int m)                               /* GDI.2 */
 
 int GDIAPI SetROP2(HDC hdc, int r)                                 /* GDI.4 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc || r < 1 || r > 16)
         return 0;
@@ -475,7 +500,7 @@ int GDIAPI SetROP2(HDC hdc, int r)                                 /* GDI.4 */
 
 int GDIAPI SetRelAbs(HDC hdc, int m)                               /* GDI.5 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc)
         return 0;
@@ -486,7 +511,7 @@ int GDIAPI SetRelAbs(HDC hdc, int m)                               /* GDI.5 */
 
 int GDIAPI SetPolyFillMode(HDC hdc, int m)                         /* GDI.6 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc || m < 1 || m > 2)
         return 0;
@@ -497,7 +522,7 @@ int GDIAPI SetPolyFillMode(HDC hdc, int m)                         /* GDI.6 */
 
 int GDIAPI SetStretchBltMode(HDC hdc, int m)                       /* GDI.7 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc || m < 1 || m > 3)
         return 0;
@@ -508,7 +533,7 @@ int GDIAPI SetStretchBltMode(HDC hdc, int m)                       /* GDI.7 */
 
 int GDIAPI SetTextCharacterExtra(HDC hdc, int x)                   /* GDI.8 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc)
         return 0x8000;
@@ -520,7 +545,7 @@ int GDIAPI SetTextCharacterExtra(HDC hdc, int x)                   /* GDI.8 */
 
 WORD GDIAPI SetTextAlign(HDC hdc, WORD a)                          /* GDI.346 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     WORD old;
     if (!dc)
         return 0;
@@ -531,7 +556,7 @@ WORD GDIAPI SetTextAlign(HDC hdc, WORD a)                          /* GDI.346 */
 
 int GDIAPI SetTextJustification(HDC hdc, int extra, int count)     /* GDI.10 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return 0;
     extra = dc_scale_x(dc, extra);
@@ -550,7 +575,7 @@ int GDIAPI SetTextJustification(HDC hdc, int extra, int count)     /* GDI.10 */
 
 COLORREF GDIAPI SetBkColor(HDC hdc, COLORREF c)                    /* GDI.1 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     COLORREF old;
     if (!dc)
         return 0x80000000L;
@@ -562,7 +587,7 @@ COLORREF GDIAPI SetBkColor(HDC hdc, COLORREF c)                    /* GDI.1 */
 
 COLORREF GDIAPI SetTextColor(HDC hdc, COLORREF c)                  /* GDI.9 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     COLORREF old;
     if (!dc)
         return 0x80000000L;
@@ -574,7 +599,7 @@ COLORREF GDIAPI SetTextColor(HDC hdc, COLORREF c)                  /* GDI.9 */
 
 COLORREF GDIAPI GetNearestColor(HDC hdc, COLORREF c)               /* GDI.154 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD pc;
     if (!dc)
         return 0x80000000L;
@@ -583,7 +608,7 @@ COLORREF GDIAPI GetNearestColor(HDC hdc, COLORREF c)               /* GDI.154 */
 
 int GDIAPI GetDeviceCaps(HDC hdc, int i)                           /* GDI.80 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc || i < 0 || i > 0x6C || (i & 1))
         return 0;
     return *(short NEAR *)((BYTE NEAR *)&dc->dev->info + i);
@@ -593,7 +618,7 @@ int GDIAPI GetDeviceCaps(HDC hdc, int i)                           /* GDI.80 */
 
 DWORD GDIAPI SetBrushOrg(HDC hdc, int x, int y)                    /* GDI.148 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -605,7 +630,7 @@ DWORD GDIAPI SetBrushOrg(HDC hdc, int x, int y)                    /* GDI.148 */
 
 DWORD GDIAPI GetBrushOrg(HDC hdc)                                  /* GDI.149 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? MAKELONG(dc->brushOrg.x, dc->brushOrg.y) : 0;
 }
 
@@ -613,7 +638,7 @@ DWORD GDIAPI GetBrushOrg(HDC hdc)                                  /* GDI.149 */
    returned 0 every time */
 DWORD GDIAPI SetDCOrg(HDC hdc, int x, int y)                       /* GDI.117 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return 0;
     dc->dcOrg.x = x;
@@ -624,13 +649,13 @@ DWORD GDIAPI SetDCOrg(HDC hdc, int x, int y)                       /* GDI.117 */
 
 DWORD GDIAPI GetDCOrg(HDC hdc)                                     /* GDI.79 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? MAKELONG(dc->dcOrg.x, dc->dcOrg.y) : 0;
 }
 
 /* ---- mapping ---- */
 
-static void map_extents(NPDC dc)
+static void map_extents(LPDC dc)
 {
     GDIINFO NEAR *gi = &dc->dev->info;
     switch (dc->mapMode) {
@@ -655,7 +680,7 @@ static void map_extents(NPDC dc)
 
 int GDIAPI SetMapMode(HDC hdc, int m)                              /* GDI.3 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int old;
     if (!dc || m < 1 || m > 8)
         return 0;
@@ -665,7 +690,7 @@ int GDIAPI SetMapMode(HDC hdc, int m)                              /* GDI.3 */
     return old;
 }
 
-static void iso_fix(NPDC dc)
+static void iso_fix(LPDC dc)
 {
     /* MM_ISOTROPIC: shrink the viewport extent so both axes scale alike
        UNVERIFIED: 3.1's exact rounding */
@@ -683,7 +708,7 @@ static void iso_fix(NPDC dc)
 #define ORGEXT(fn, ord, field, fix)                                      \
     DWORD GDIAPI fn(HDC hdc, int x, int y)                               \
     {                                                                    \
-        NPDC dc = dc_get(hdc);                                           \
+        LPDC dc = dc_get(hdc);                                           \
         DWORD old;                                                       \
         if (!dc)                                                         \
             return 0;                                                    \
@@ -707,7 +732,7 @@ ORGEXT(SetViewportExt, 14, vpExt, 1)
 #define GETPT(fn, ord, field)                                            \
     DWORD GDIAPI fn(HDC hdc)                                             \
     {                                                                    \
-        NPDC dc = dc_get(hdc);                                           \
+        LPDC dc = dc_get(hdc);                                           \
         return dc ? MAKELONG(dc->field.x, dc->field.y) : 0;              \
     }
 
@@ -719,7 +744,7 @@ GETPT(GetCurrentPosition, 78, cur)
 
 DWORD GDIAPI OffsetWindowOrg(HDC hdc, int dx, int dy)              /* GDI.15 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -731,7 +756,7 @@ DWORD GDIAPI OffsetWindowOrg(HDC hdc, int dx, int dy)              /* GDI.15 */
 
 DWORD GDIAPI OffsetViewportOrg(HDC hdc, int dx, int dy)            /* GDI.17 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -743,7 +768,7 @@ DWORD GDIAPI OffsetViewportOrg(HDC hdc, int dx, int dy)            /* GDI.17 */
 
 DWORD GDIAPI ScaleWindowExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.16 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -758,7 +783,7 @@ DWORD GDIAPI ScaleWindowExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.16 *
 
 DWORD GDIAPI ScaleViewportExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.18 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -773,7 +798,7 @@ DWORD GDIAPI ScaleViewportExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.18
 
 DWORD GDIAPI MoveTo(HDC hdc, int x, int y)                         /* GDI.20 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     DWORD old;
     if (!dc)
         return 0;
@@ -787,12 +812,12 @@ DWORD GDIAPI MoveTo(HDC hdc, int x, int y)                         /* GDI.20 */
 
 HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
 {
-    NPDC dc = dc_get(hdc);
-    OBJHDR NEAR *o = obj_get(h, 0);
+    LPDC dc = dc_get(hdc);
+    WORD m = obj_magic(h);
     HANDLE old;
-    if (!dc || !o)
+    if (!dc || !m)
         return 0;
-    switch (o->wMagic & MAGIC_MASK) {
+    switch (m & MAGIC_MASK) {
     case PEN_MAGIC:
         old = dc->hPen;
         dc->hPen = h;
@@ -813,7 +838,7 @@ HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
         return SelectClipRgn(hdc, h);
     }
     case BITMAP_MAGIC: {
-        BITMAPOBJ NEAR *bm = (BITMAPOBJ NEAR *)o, NEAR *ob;
+        LPBITMAPOBJ bm = obj_get(h, BITMAP_MAGIC), ob;
         LPPBITMAP pb;
         if (!(dc->flags & DCF_MEMORY))
             return 0;
@@ -824,10 +849,14 @@ HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
             return 0;
         old = dc->hBitmap;
         ob = obj_get(old, BITMAP_MAGIC);
-        if (ob && ob->hdcSel == hdc)
+        if (ob && ob->hdcSel == hdc) {
             ob->hdcSel = 0;
-        if (h != stock_bitmap)
+            ob->bSelected = 0;
+        }
+        if (h != stock_bitmap) {
             bm->hdcSel = hdc;
+            bm->bSelected = 1;
+        }
         dc->hBitmap = h;
         dc->lpPDevice = pb;
         rgn_set_rect(dc->hVisRgn, 0, 0, pb->bmWidth, pb->bmHeight);
@@ -841,7 +870,7 @@ HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
 
 HFONT GDIAPI GetCurLogFont(HDC hdc)                                /* GDI.411 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? dc->hFont : 0;
 }
 
@@ -849,12 +878,12 @@ HFONT GDIAPI GetCurLogFont(HDC hdc)                                /* GDI.411 */
 
 int GDIAPI SelectClipRgn(HDC hdc, HRGN h)                          /* GDI.44 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return ERROR;
     if (!h) {
         if (dc->hClipRgn) {
-            obj_free(dc->hClipRgn);
+            rgn_free(dc->hClipRgn);
             dc->hClipRgn = 0;
         }
     } else {
@@ -868,45 +897,42 @@ int GDIAPI SelectClipRgn(HDC hdc, HRGN h)                          /* GDI.44 */
     return rgn_complexity(dc_rao(dc));
 }
 
-static int clip_rect_op(NPDC dc, int l, int t, int r, int b, int mode)
+static int clip_rect_op(LPDC dc, int l, int t, int r, int b, int mode)
 {
     int p[4];
-    HRGN tmp;
     p[0] = l; p[1] = t; p[2] = r; p[3] = b;
     dc_lp_to_dp(dc, p, 2);
-    if (p[0] > p[2]) { int x = p[0]; p[0] = p[2]; p[2] = x; }
-    if (p[1] > p[3]) { int x = p[1]; p[1] = p[3]; p[3] = x; }
-    tmp = rgn_new(p[0], p[1], p[2], p[3]);
-    if (!tmp)
-        return ERROR;
     if (!dc->hClipRgn) {
-        NPRGN vis = rgn_ptr(dc->hVisRgn);
+        LPRGN vis;
         /* no clip region yet: start from the whole device surface */
-        dc->hClipRgn = rgn_new(0, 0, dc->dev->info.dpHorzRes, dc->dev->info.dpVertRes);
+        HRGN c = rgn_new(0, 0, dc->dev->info.dpHorzRes, dc->dev->info.dpVertRes);
+        if (!c)
+            return ERROR;
+        dc->hClipRgn = c;
+        vis = rgn_ptr(dc->hVisRgn);
         if (dc->flags & DCF_MEMORY && vis)
-            rgn_set_rect(dc->hClipRgn, vis->box.left, vis->box.top, vis->box.right, vis->box.bottom);
+            rgn_set_rect(c, vis->box.left, vis->box.top, vis->box.right, vis->box.bottom);
     }
-    rgn_combine(dc->hClipRgn, dc->hClipRgn, tmp, mode);
-    obj_free(tmp);
+    rgn_op_rect(dc->hClipRgn, p[0], p[1], p[2], p[3], mode);
     dc_rao_invalidate(dc);
     return rgn_complexity(dc_rao(dc));
 }
 
 int GDIAPI IntersectClipRect(HDC hdc, int l, int t, int r, int b)  /* GDI.22 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_AND) : ERROR;
 }
 
 int GDIAPI ExcludeClipRect(HDC hdc, int l, int t, int r, int b)    /* GDI.21 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_DIFF) : ERROR;
 }
 
 int GDIAPI OffsetClipRgn(HDC hdc, int dx, int dy)                  /* GDI.32 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return ERROR;
     if (dc->hClipRgn) {
@@ -919,8 +945,8 @@ int GDIAPI OffsetClipRgn(HDC hdc, int dx, int dy)                  /* GDI.32 */
 /* the box of the composite clip region, in logical coordinates */
 int GDIAPI GetClipBox(HDC hdc, RECT __far *rc)                     /* GDI.77 */
 {
-    NPDC dc = dc_out(hdc);
-    NPRGN r;
+    LPDC dc = dc_out(hdc);
+    LPRGN r;
     int p[4];
     if (!dc)
         return ERROR;
@@ -941,13 +967,13 @@ int GDIAPI GetClipBox(HDC hdc, RECT __far *rc)                     /* GDI.77 */
 
 HRGN GDIAPI GetClipRgn(HDC hdc)                                    /* GDI.173 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? dc->hClipRgn : 0;
 }
 
 BOOL GDIAPI PtVisible(HDC hdc, int x, int y)                       /* GDI.103 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     int p[2];
     if (!dc)
         return FALSE;
@@ -959,7 +985,7 @@ BOOL GDIAPI PtVisible(HDC hdc, int x, int y)                       /* GDI.103 */
 
 BOOL GDIAPI RectVisible(HDC hdc, const RECT __far *rc)             /* GDI.465 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     int p[4];
     RECT r;
     if (!dc)
@@ -982,7 +1008,7 @@ BOOL GDIAPI RectVisibleOld(HDC hdc, const RECT __far *rc)          /* GDI.104 */
 
 int GDIAPI SelectVisRgn(HDC hdc, HRGN h)                           /* GDI.105 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     int r;
     if (!dc || !rgn_ptr(h))
         return ERROR;
@@ -993,7 +1019,7 @@ int GDIAPI SelectVisRgn(HDC hdc, HRGN h)                           /* GDI.105 */
 
 HRGN GDIAPI InquireVisRgn(HDC hdc)                                 /* GDI.131 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     return dc ? dc->hVisRgn : 0;
 }
 
@@ -1002,15 +1028,13 @@ HRGN GDIAPI InquireVisRgn(HDC hdc)                                 /* GDI.131 */
    logical ones */
 static int vis_rect_op(HDC hdc, int l, int t, int r, int b, int mode)
 {
-    NPDC dc = dc_get(hdc);
-    HRGN tmp;
+    LPDC dc = dc_get(hdc);
     int res;
     if (!dc)
         return ERROR;
-    tmp = rgn_new(l + dc->dcOrg.x, t + dc->dcOrg.y, r + dc->dcOrg.x, b + dc->dcOrg.y);
+    res = rgn_op_rect(dc->hVisRgn, l + dc->dcOrg.x, t + dc->dcOrg.y, r + dc->dcOrg.x,
+                      b + dc->dcOrg.y, mode);
     dc = dc_get(hdc);
-    res = rgn_combine(dc->hVisRgn, dc->hVisRgn, tmp, mode);
-    obj_free(tmp);
     dc_rao_invalidate(dc);
     return res;
 }
@@ -1027,7 +1051,7 @@ int GDIAPI ExcludeVisRect(HDC hdc, int l, int t, int r, int b)     /* GDI.73 */
 
 int GDIAPI OffsetVisRgn(HDC hdc, int dx, int dy)                   /* GDI.102 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return ERROR;
     rgn_offset(dc->hVisRgn, dx, dy);
@@ -1039,7 +1063,7 @@ int GDIAPI OffsetVisRgn(HDC hdc, int dx, int dy)                   /* GDI.102 */
    region object's hNext field, as the header has one) */
 HRGN GDIAPI SaveVisRgn(HDC hdc)                                    /* GDI.129 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     HRGN copy;
     if (!dc)
         return 0;
@@ -1048,24 +1072,24 @@ HRGN GDIAPI SaveVisRgn(HDC hdc)                                    /* GDI.129 */
         return 0;
     dc = dc_get(hdc);
     rgn_copy(copy, dc->hVisRgn);
-    POBJ(copy)->hNext = POBJ(dc->hVisRgn)->hNext;
-    POBJ(dc->hVisRgn)->hNext = copy;
+    ((LPOBJHDR)obj_get(copy, 0))->hNext = ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext;
+    ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext = copy;
     return copy;
 }
 
 int GDIAPI RestoreVisRgn(HDC hdc)                                  /* GDI.130 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     HRGN top;
     int r;
     if (!dc)
         return ERROR;
-    top = POBJ(dc->hVisRgn)->hNext;
+    top = ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext;
     if (!top)
         return ERROR;
-    POBJ(dc->hVisRgn)->hNext = POBJ(top)->hNext;
+    ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext = ((LPOBJHDR)obj_get(top, 0))->hNext;
     r = rgn_copy(dc->hVisRgn, top);
-    obj_free(top);
+    rgn_free(top);
     dc_rao_invalidate(dc_get(hdc));
     return r;
 }
@@ -1074,7 +1098,7 @@ int GDIAPI RestoreVisRgn(HDC hdc)                                  /* GDI.130 */
 
 BOOL GDIAPI SetDCHook(HDC hdc, FARPROC proc, DWORD data)           /* GDI.190 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
     dc->hook = proc;
@@ -1084,7 +1108,7 @@ BOOL GDIAPI SetDCHook(HDC hdc, FARPROC proc, DWORD data)           /* GDI.190 */
 
 DWORD GDIAPI GetDCHook(HDC hdc, FARPROC __far *proc)               /* GDI.191 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return 0;
     *proc = dc->hook;
@@ -1093,7 +1117,7 @@ DWORD GDIAPI GetDCHook(HDC hdc, FARPROC __far *proc)               /* GDI.191 */
 
 WORD GDIAPI SetHookFlags(HDC hdc, WORD flags)                      /* GDI.192 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     WORD old;
     if (!dc)
         return 0;
@@ -1113,7 +1137,7 @@ WORD GDIAPI SetHookFlags(HDC hdc, WORD flags)                      /* GDI.192 */
 
 WORD GDIAPI GetBoundsRect(HDC hdc, RECT __far *rc, WORD flags)     /* GDI.194 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     WORD r;
     if (!dc)
         return 0;
@@ -1136,7 +1160,7 @@ WORD GDIAPI GetBoundsRect(HDC hdc, RECT __far *rc, WORD flags)     /* GDI.194 */
 
 WORD GDIAPI SetBoundsRect(HDC hdc, const RECT __far *rc, WORD flags) /* GDI.193 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     WORD r;
     if (!dc)
         return 0;
@@ -1155,11 +1179,11 @@ WORD GDIAPI SetBoundsRect(HDC hdc, const RECT __far *rc, WORD flags) /* GDI.193 
 
 /* ---- saving state ---- */
 
-/* copy the state of src into dst: everything but the device, the
-   visible region, the DC origin, the hook and the save stack */
-static void state_copy(NPDC dst, NPDC src, int bitmap)
+/* copy the state of src into dst: everything but the device, the clip,
+   visible and composite regions, the DC origin, the hook, the realized
+   objects and the save stack */
+static void state_copy(LPDC dst, LPDC src, int bitmap)
 {
-    HRGN clip;
     dst->hPen = src->hPen;
     dst->hBrush = src->hBrush;
     dst->hFont = src->hFont;
@@ -1187,83 +1211,135 @@ static void state_copy(NPDC dst, NPDC src, int bitmap)
     dst->brushOrg = src->brushOrg;
     dst->charExtra = src->charExtra;
     dst->mapperFlags = src->mapperFlags;
-    clip = dst->hClipRgn;
-    if (src->hClipRgn) {
-        if (!clip)
-            clip = rgn_new(0, 0, 0, 0);
-        if (clip)
-            rgn_copy(clip, src->hClipRgn);
-    } else if (clip) {
-        obj_free(clip);
-        clip = 0;
-    }
-    dst->hClipRgn = clip;
     dst->raoValid = 0;
     if (bitmap)
         dst->hBitmap = src->hBitmap;
 }
 
-/* a state copy: a DC object (Schulman: the same signature as a DC) with
-   no device of its own */
-static HANDLE state_new(NPDC src)
+/* the DC's clip region becomes the rectangles x (taken; 0: no clip
+   region) */
+static void clip_take(HDC hdc, XP x)
+{
+    LPDC dc = dc_get(hdc);
+    if (!x) {
+        if (dc->hClipRgn) {
+            rgn_free(dc->hClipRgn);
+            dc->hClipRgn = 0;
+        }
+    } else {
+        if (!dc->hClipRgn) {
+            HRGN c = rgn_new(0, 0, 0, 0);
+            dc = dc_get(hdc);
+            dc->hClipRgn = c;
+        }
+        if (dc->hClipRgn)
+            rgn_set_data(dc->hClipRgn, x);
+        else
+            xfree(x);
+    }
+    dc_rao_invalidate(dc_get(hdc));
+}
+
+/* GetDCState's copy: a DC object (Schulman: the same signature as a DC)
+   with no device of its own, its clip region a region object */
+static HANDLE state_new(HDC hdc)
 {
     HANDLE h = obj_alloc(DC_MAGIC, sizeof(DC));
-    NPDC s;
+    LPDC s, src;
+    HRGN clip = 0;
     if (!h)
         return 0;
-    s = DEREF(h);
+    src = dc_get(hdc);
+    if (src->hClipRgn) {
+        clip = rgn_new(0, 0, 0, 0);
+        if (!clip) {
+            obj_free(h);
+            return 0;
+        }
+        rgn_copy(clip, dc_get(hdc)->hClipRgn);
+    }
+    s = dc_get(h);
+    src = dc_get(hdc);
     s->flags = DCF_STATE;
     s->dev = src->dev;
     s->lpPDevice = src->lpPDevice;
     state_copy(s, src, 1);
+    s->hClipRgn = clip;
     return h;
 }
 
 /* after a state change: colours and realized objects for the new state */
 static void state_refresh(HDC hdc)
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     dc_set_device_colors(dc);
     dc_ppen(dc);
+    dc = dc_get(hdc);
     dc_pbrush(dc);
+    dc = dc_get(hdc);
     font_realize(dc);
 }
 
 HANDLE GDIAPI GetDCState(HDC hdc)                                  /* GDI.179 */
 {
-    NPDC dc = dc_get(hdc);
-    return dc ? state_new(dc) : 0;
+    return dc_get(hdc) ? state_new(hdc) : 0;
 }
 
 void GDIAPI SetDCState(HDC hdc, HANDLE hs)                         /* GDI.180 */
 {
-    NPDC dc = dc_get(hdc), s = dc_get(hs);
+    LPDC dc = dc_get(hdc), s = dc_get(hs);
+    XP clip = 0;
     if (!dc || !s)
         return;
+    if (s->hClipRgn)
+        clip = rgn_dup_data(s->hClipRgn);
+    dc = dc_get(hdc);
+    s = dc_get(hs);
     state_copy(dc, s, 0);
+    clip_take(hdc, clip);
     state_refresh(hdc);
+}
+
+/* SaveDC's states are SAVEDDCs in GDI's heaps, the DC's xSaved the top
+   (3.1 kept DC copies in DGROUP linked through hNext, Schulman ch. 8;
+   GD4: D0h bytes each, 253 deep) */
+static void saved_free(XP x)
+{
+    SAVEDDC __far *sv = xptr(x);
+    if (sv->xClip)
+        xfree(sv->xClip);
+    xfree(x);
 }
 
 int GDIAPI SaveDC(HDC hdc)                                         /* GDI.30 */
 {
-    NPDC dc = dc_get(hdc);
-    HANDLE hs;
-    NPDC s;
+    LPDC dc = dc_get(hdc);
+    SAVEDDC __far *sv;
+    XP x, clip = 0;
     if (!dc)
         return 0;
-    hs = state_new(dc);
-    if (!hs)
+    if (dc->hClipRgn) {
+        clip = rgn_dup_data(dc->hClipRgn);
+        if (!clip)
+            return 0;
+    }
+    x = xalloc(sizeof(SAVEDDC));
+    if (!x) {
+        xfree(clip);
         return 0;
+    }
     dc = dc_get(hdc);
-    s = DEREF(hs);
-    s->hdr.hNext = dc->hdr.hNext;
-    dc->hdr.hNext = hs;
+    sv = xptr(x);
+    state_copy(&sv->dc, dc, 1);
+    sv->xClip = clip;
+    sv->dc.xSaved = dc->xSaved;
+    dc->xSaved = x;
     return ++dc->saveLevel;
 }
 
 BOOL GDIAPI RestoreDC(HDC hdc, int level)                          /* GDI.39 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
     if (level < 0)
@@ -1271,22 +1347,25 @@ BOOL GDIAPI RestoreDC(HDC hdc, int level)                          /* GDI.39 */
     if (level <= 0 || level > (int)dc->saveLevel)
         return FALSE;
     while ((int)dc->saveLevel >= level) {
-        HANDLE hs = dc->hdr.hNext;
-        NPDC s = dc_get(hs);
-        if (!s)
+        XP x = dc->xSaved;
+        SAVEDDC __far *sv;
+        if (!x)
             return FALSE;
-        dc->hdr.hNext = s->hdr.hNext;
+        sv = xptr(x);
+        dc->xSaved = sv->dc.xSaved;
         dc->saveLevel--;
         if ((int)dc->saveLevel == level - 1) {
-            if (dc->flags & DCF_MEMORY && s->hBitmap != dc->hBitmap)
-                SelectObject(hdc, s->hBitmap);
+            XP clip;
+            if (dc->flags & DCF_MEMORY && sv->dc.hBitmap != dc->hBitmap)
+                SelectObject(hdc, sv->dc.hBitmap);
             dc = dc_get(hdc);
-            s = dc_get(hs);
-            state_copy(dc, s, 0);
+            sv = xptr(x);
+            state_copy(dc, &sv->dc, 0);
+            clip = sv->xClip;
+            sv->xClip = 0;
+            clip_take(hdc, clip);
         }
-        if (s->hClipRgn)
-            obj_free(s->hClipRgn);
-        obj_free(hs);
+        saved_free(x);
         dc = dc_get(hdc);
     }
     state_refresh(hdc);
@@ -1298,14 +1377,14 @@ BOOL GDIAPI RestoreDC(HDC hdc, int level)                          /* GDI.39 */
 
 void GDIAPI Death(HDC hdc)                                         /* GDI.121 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     if (dc && dc->dev->fn[DRV_DISABLE])
         ((DRVDISABLE)dc->dev->fn[DRV_DISABLE])(dc->dev->lpPDevice);
 }
 
 void GDIAPI Resurrection(HDC hdc, WORD a, WORD b, WORD c, WORD d, WORD e, WORD f) /* GDI.122 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     (void)a; (void)b; (void)c; (void)d; (void)e; (void)f;
     if (dc)
         ((DRVENABLE)dc->dev->fn[DRV_ENABLE])(dc->dev->lpPDevice, 0, 0, 0, 0);
