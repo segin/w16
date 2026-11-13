@@ -62,6 +62,23 @@ import KB_SETSPEED KEYBOARD.7
 import MS_INQUIRE MOUSE.1
 import MS_ENABLE MOUSE.2
 import MS_DISABLE MOUSE.3
+# COMM (as Windows 3.1's USER imports it: 1-15; 19, 20 and 100 are found
+# at run time, user/comm.c)
+import C_INICOM COMM.1
+import C_SETCOM COMM.2
+import C_SETQUE COMM.3
+import C_RECCOM COMM.4
+import C_SNDCOM COMM.5
+import C_CTX COMM.6
+import C_TRMCOM COMM.7
+import C_STACOM COMM.8
+import C_CEXTFCN COMM.9
+import C_CFLUSH COMM.10
+import C_CEVT COMM.11
+import C_CEVTGET COMM.12
+import C_CSETBRK COMM.13
+import C_CCLRBRK COMM.14
+import C_GETDCB COMM.15
 import D_INQUIRE DISPLAY.101
 import D_SETCURSOR DISPLAY.102
 import D_MOVECURSOR DISPLAY.103
