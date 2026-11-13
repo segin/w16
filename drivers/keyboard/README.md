@@ -189,7 +189,7 @@ windows.h, the US key caps, and corrected by KB1's comparison.
   keyboard messages the program gets: identical but for typematic
   repeat counts (timing).
 - Boot-test cases `kbd` (typing in Notepad: `tests/scripts/input/kbtype.txt`,
-  and the scripts of tabs, alttab, helpmenus, pmkeys, icons; w16's
+  and the scripts of tabs, alttab, helpmenus, pmkeys, icons, menus; w16's
   driver on Microsoft's stack against all-Microsoft), `kbdall` (every w16
   part with w16's driver against every w16 part with Microsoft's),
   `kbdwrite` (Windows Write), `kbdwoados` (the MS-DOS Prompt): every
