@@ -141,6 +141,8 @@ typedef WND __far *PWND;
 #define WF_HASPOS       0x0200  /* SetWindowPlacement: restored rect known */
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
 #define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
+#define WF_TEXTHEAP     0x000F0000L     /* which string heap holds the text */
+#define TEXTHEAP(w)     ((WORD)((w)->flags >> 16) & 15)
 
 PWND wnd_of(WORD h);              /* the WND of a handle believed live */
 HWND hwnd_of(PWND w);              /* the handle of a WND */
@@ -297,7 +299,11 @@ typedef struct UHEAP {
     WORD    sel;                /* taken again after each allocation */
 } UHEAP;
 extern UHEAP uhAtoms;           /* the global atom table (3.1's own heap) */
-extern UHEAP uhStr;             /* window text, class menu names */
+#define NSTRHEAPS 16
+extern UHEAP uhStrs[NSTRHEAPS]; /* string heaps: window text (a window's in
+                                   uhStrs[TEXTHEAP(w)]); class menu names
+                                   in the first */
+#define uhStr (uhStrs[0])
 extern UHEAP uhObj;             /* properties, hooks, DCs, scroll bars... */
 extern WORD ext_user_heap;      /* [w16] ExtendedUserHeap=1 (win.c) */
 void uheaps_init(void);
@@ -306,6 +312,7 @@ WORD uh_realloc(UHEAP *hp, WORD h, UINT n);     /* may move it; 0: failed */
 void uh_free(UHEAP *hp, WORD h);
 UINT uh_size(UHEAP *hp, WORD h);
 WORD uh_strdup(LPCSTR s);                       /* in uhStr */
+WORD uh_text(LPCSTR s, WORD *heap);             /* in a string heap: which */
 WORD uh_strdup_in(UHEAP *hp, LPCSTR s);
 ATOM ga_add(LPCSTR s);                          /* the global atom table */
 ATOM ga_find(LPCSTR s);

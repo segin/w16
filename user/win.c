@@ -216,14 +216,21 @@ BOOL is_visible(PWND w)
     return TRUE;
 }
 
-/* window text: a block of the string heap (uheap.c; 3.1 keeps it out of
+/* window text: a block of a string heap (uheap.c; 3.1 keeps it out of
    DGROUP too: US15), WND+32 its handle, 0 for none (an empty text frees
-   it, as 3.1's does) */
-static void set_text(PWND w, LPCSTR s)
+   it, as 3.1's does), the heap's number in the flags. FALSE: no room for
+   it (3.1's CreateWindow fails then: US15) */
+#define TEXTPTR(w)  ((LPCSTR)UH_PTR(&uhStrs[TEXTHEAP(w)], (w)->text))
+static BOOL set_text(PWND w, LPCSTR s)
 {
+    WORD heap, t = 0;
+    if (s && *s && !(t = uh_text(s, &heap)))
+        return FALSE;
     if (w->text)
-        uh_free(&uhStr, w->text);
-    w->text = (s && *s) ? uh_strdup(s) : 0;
+        uh_free(&uhStrs[TEXTHEAP(w)], w->text);
+    w->text = t;
+    w->flags = (w->flags & ~WF_TEXTHEAP) | (t ? (DWORD)heap << 16 : 0);
+    return TRUE;
 }
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
@@ -304,8 +311,11 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         style &= ~WS_VISIBLE;
     }
     w->style = style;
-    if (title && !ISATOM(title))
-        set_text(w, title);
+    if (title && !ISATOM(title) && !set_text(w, title)) {
+        c->cwnd--;
+        free_wnd(h);
+        return 0;
+    }
 
     /* default position and size */
     if (!(style & (WS_CHILD | WS_POPUP))) {
@@ -451,7 +461,7 @@ static void free_window(PWND w)
         dec_paint(w->hq);
     }
     if (w->text)
-        uh_free(&uhStr, w->text);
+        uh_free(&uhStrs[TEXTHEAP(w)], w->text);
     if (!(w->style & WS_CHILD) && w->hMenu)
         DestroyMenu((HMENU)w->hMenu);
     if (w->hSysMenu)
@@ -741,18 +751,18 @@ LONG def_gettext(PWND w, int n, LPSTR buf)
         buf[0] = 0;
         return 0;
     }
-    lstr_cpyn(buf, (LPCSTR)UH_PTR(&uhStr, w->text), n);
+    lstr_cpyn(buf, TEXTPTR(w), n);
     return lstr_len(buf);
 }
 
 LONG def_gettextlength(PWND w)
 {
-    return w->text ? lstr_len((LPCSTR)UH_PTR(&uhStr, w->text)) : 0;
+    return w->text ? lstr_len(TEXTPTR(w)) : 0;
 }
 
-void def_settext(PWND w, LPCSTR s)
+BOOL def_settext(PWND w, LPCSTR s)
 {
-    set_text(w, s);
+    return set_text(w, s);
 }
 
 /* ---- window words and longs ---- */

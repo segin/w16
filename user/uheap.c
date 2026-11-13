@@ -12,7 +12,8 @@
  * made a local heap with LocalInit (as menu.c's):
  *   - the global atom heap (GlobalAddAtom & co., properties' names), as
  *     3.1's; its atom table is made with InitAtomTable in it;
- *   - the string heap: window text, class menu names;
+ *   - the string heaps: window text (more made as they fill), class menu
+ *     names (in the first);
  *   - the object heap: what applications never reach directly - property
  *     lists, hooks, the DC cache, scroll-bar state, window placements, the
  *     list box items and strings.
@@ -29,7 +30,8 @@
  */
 #include "user.h"
 
-UHEAP uhAtoms, uhStr, uhObj;
+UHEAP uhAtoms, uhStrs[NSTRHEAPS], uhObj;
+static int nstrheaps;
 WORD ext_user_heap;             /* [w16] ExtendedUserHeap (win.c) */
 
 static WORD sel_of(HGLOBAL h)
@@ -58,7 +60,8 @@ void uheaps_init(void)
     if (make(&uhAtoms, 0x100))
         at_init(uhAtoms.sel, 37);
     uhAtoms.sel = sel_of(uhAtoms.h);
-    make(&uhStr, 0x418);
+    if (make(&uhStr, 0x418))
+        nstrheaps = 1;
     make(&uhObj, 0x418);
     ext_user_heap = GetPrivateProfileInt("w16", "ExtendedUserHeap", 0, "SYSTEM.INI") != 0;
 }
@@ -105,6 +108,25 @@ WORD uh_strdup_in(UHEAP *hp, LPCSTR s)
     r = uh_alloc(hp, LMEM_FIXED, n);
     if (r)
         fmemcpy(UH_PTR(hp, r), s, n);
+    return r;
+}
+
+/* a copy of s for a window's text: in the first string heap with room,
+   a new one made when none has (up to NSTRHEAPS: window text has room
+   beyond one 64K heap, where 3.1's CreateWindow fails once its text heap
+   is full: US15); *heap says which. 0 if no room anywhere. */
+WORD uh_text(LPCSTR s, WORD *heap)
+{
+    WORD i, r = 0;
+    for (i = 0; i < NSTRHEAPS && !r; i++) {
+        if (i == nstrheaps) {
+            if (!make(&uhStrs[i], 0x418))
+                break;
+            nstrheaps++;
+        }
+        r = uh_strdup_in(&uhStrs[i], s);
+    }
+    *heap = r ? i - 1 : 0;
     return r;
 }
 

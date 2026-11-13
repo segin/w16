@@ -16,7 +16,7 @@
  */
 #include "user.h"
 
-void def_settext(PWND w, LPCSTR s);
+BOOL def_settext(PWND w, LPCSTR s);
 LONG def_gettext(PWND w, int n, LPSTR buf);
 LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
@@ -534,8 +534,9 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NCCREATE:
         if (lp) {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
-            if (cs->lpszName && !ISATOM(cs->lpszName))
-                def_settext(w, cs->lpszName);
+            /* no room for the text: CreateWindow fails (3.1: US15) */
+            if (cs->lpszName && !ISATOM(cs->lpszName) && !def_settext(w, cs->lpszName))
+                return 0;
         }
         return 1;
     case WM_NCCALCSIZE: {
@@ -680,7 +681,8 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 1;
     }
     case WM_SETTEXT:
-        def_settext(w, (LPCSTR)lp);
+        if (!def_settext(w, (LPCSTR)lp))
+            return 0;
         if (has_caption(w) && is_visible(w))
             nc_paint(h, 0, (w->flags & WF_ACTIVEFRAME) != 0);
         if (w->style & WS_MINIMIZE) {
