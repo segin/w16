@@ -130,8 +130,48 @@ mode kernel idle call) on every pass, which 3.1's KRNL286 never makes.
 Without it (kernel/task.c, idle) the same test gave 0 in 40. DOSBox
 0.74 does nothing with 1689h (its source); the call doubled the idle
 loop's switches to real mode and back through the DOS extender, and so
-the chance that IRQ 12 comes during one. UNVERIFIED: which step of
-Microsoft's DOSX then loses the interrupt's end.
+the chance that IRQ 12 comes during one.
+
+**Where the interrupt is lost: Microsoft's DOSX with Microsoft's
+MOUSE.DRV** (`tests/mousestress.sh`, MD3 `tests/apps/md3.c`, on
+installation-05). MD3 runs as the shell for long runs: DOS file I/O and
+idle phases keep Windows going to real mode, the pointer is moved
+without a pause, and with `-r` MD3 calls the driver's Disable and Enable
+every 200 ms (each Enable is a chance for a packet while the driver sets
+itself up, as at boot); it logs every stall (no motion for 5 s) with the
+PIC and 8042 registers. In steady motion with I/O alone nothing stalled
+(16 runs of 10 minutes, either DOS extender, Microsoft's driver, with
+the 1689h accelerator). With `-r 200` (5 minutes, 4 runs each):
+
+| DOS extender | MOUSE.DRV | KRNL286 | runs stalled |
+|---|---|---|---|
+| Microsoft's | Microsoft's | Windows 3.1's | 4 of 4 |
+| Microsoft's | Microsoft's | w16's | 3 of 4 |
+| Microsoft's | w16's | w16's | 0 of 4 |
+| Microsoft's | w16's, enabling before it takes INT 74h (MOUSELH) | w16's | 0 of 4 |
+| w16's | Microsoft's | w16's | 0 of 4 |
+| w16's | w16's (and MOUSELH) | w16's | 0 of 4 |
+
+Every stall leaves IRQ 12 in service at the slave PIC (ISR 10h) and
+nothing at the master: the IRQ was acknowledged at the master but never
+ended at the slave, and the slave then holds back every later IRQ 12
+while the keyboard (IRQ 1) goes on. It happens with Windows 3.1's own
+KERNEL, USER, DOSX and MOUSE.DRV, so it is Windows 3.1's own behaviour
+under motion during the driver's set-up, which w16's KERNEL had only
+made likelier at boot; neither w16's DOS extender nor w16's driver gives
+it, and w16's driver does not even with Microsoft's ordering on
+Microsoft's DOSX. With MS2 loaded (`-L`, 8 runs of 5 minutes, Windows
+3.1's own stack: 7 stalled with IRQ 12 in service), the last records
+before such a stall were the start of a set-up: C205h, then C201h (the
+reset), which returned normally; after it no BIOS call, no INT 74h and
+no call of the C207h handler reached real mode again although MD3 went on
+calling Disable and Enable: Microsoft's driver stopped in the middle of
+its set-up for good. Which
+instruction inside Microsoft's driver and DOS extender loses the end of
+the interrupt is not observable from outside. w16's DOSX sends no end of
+interrupt of its own (the client's handler or the BIOS does); it drops a
+packet the BIOS delivers before the client has taken INT 74h (9.6), and
+the BIOS still ends that interrupt.
 
 Emulators: DOSBox 0.74's keyboard controller has no auxiliary port (its
 source, read for facts: no A8h/D4h commands, status bit 5 never set);
