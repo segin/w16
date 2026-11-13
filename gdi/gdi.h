@@ -272,7 +272,7 @@ typedef DEVICE NEAR *NPDEVICE;
 
    Data programs never reach through a handle (region rectangles,
    realized pens and brushes, the font table, saved DC states, palette
-   entries, temporary buffers) is kept
+   entries, temporary buffers; with ExtendedGdiHeap, object bodies) is kept
    in local heaps of GDI's own, each in a moveable global segment (GMEM_SHARE,
    owned by GDI) that grows to at most FFF0h bytes, as many segments as are
    needed. A block there is an XP: the heap's number (1..) in the high word
@@ -299,6 +299,20 @@ WORD __far __cdecl lh_realloc(WORD sel, WORD h, WORD size, WORD flags);
 WORD __far __cdecl lh_free(WORD sel, WORD h);
 WORD __far __cdecl lh_size(WORD sel, WORD h);
 
+/* [w16] ExtendedGdiHeap=1 in SYSTEM.INI (read at GDI's start-up; default
+   0): each object's block in GDI's DGROUP is only a 4-byte stub, fixed
+   (the handle is its address): an index into GDI's object table, then the
+   signature at offset 2, where TOOLHELP and IsGDIObject read it. The
+   object itself (header and body) is in GDI's own heaps, its header's
+   wMetaList naming the stub (a handle is valid when its block, its
+   table entry and the body agree). Handles stay
+   offsets of blocks in GDI's DGROUP, but are no longer moveable-block
+   handles (3.1's are, 4 apart), and programs that read GDI's objects
+   through their handles directly (a DC's fields, a pen's LOGPEN after the
+   header, the header's hNext or sequence count) see the stub and can
+   break. Off: the objects are complete in DGROUP, as 3.1's. */
+extern WORD gdi_extended;
+
 /* ---- GDI objects ---- */
 
 #pragma pack(push, 1)
@@ -312,6 +326,14 @@ typedef struct {
     WORD wMetaList;
 } OBJHDR;
 typedef OBJHDR __far *LPOBJHDR;
+
+/* ExtendedGdiHeap's block in DGROUP, fixed (the handle is its address):
+   the object's entry in GDI's object table (object.c), whose XP is the
+   body (the whole object, header included), then the signature */
+typedef struct {
+    WORD idx;
+    WORD wMagic;
+} OBJSTUB;
 
 /* signatures, 3.1 (Schulman ch. 8): 'GO' + type - 1; flag 2000h = private
    (MakeObjectPrivate), 8000h = selected (UNVERIFIED) */

@@ -97,8 +97,8 @@ static XP phys_realize(LPDC dc, int style, void __far *in, LPVOID xf)
     return x;
 }
 
-/* (the DC is a locked block: its pointer stays good over these
-   allocations) */
+/* (the DC is in DGROUP, or with ExtendedGdiHeap in GDI's heaps, where a
+   block does not move: its pointer stays good over these allocations) */
 LPVOID dc_ppen(LPDC dc)
 {
     LPPENOBJ p = obj_get(dc->hPen, PEN_MAGIC);

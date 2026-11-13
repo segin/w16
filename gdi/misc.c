@@ -9,6 +9,8 @@ HINSTANCE gdi_inst;
 int __cdecl __far gdi_init(WORD hinst)
 {
     gdi_inst = hinst;
+    /* [w16] ExtendedGdiHeap (gdi.h): read once, before the first object */
+    gdi_extended = GetPrivateProfileInt("w16", "ExtendedGdiHeap", 0, "SYSTEM.INI") != 0;
     xheap_init();
     font_init();
     stock_init();

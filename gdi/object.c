@@ -15,6 +15,7 @@
 HANDLE stock[20];
 DWORD obj_seq;
 HBITMAP stock_bitmap;
+WORD gdi_extended;
 
 /* the limit of segment sel (LSL), 0 if it is not valid */
 WORD seg_limit(WORD sel);
@@ -22,17 +23,110 @@ WORD seg_limit(WORD sel);
 WORD get_ds(void);
 #pragma aux get_ds = "mov ax, ds" value [ax];
 
+/* ---- ExtendedGdiHeap: the object table ----
+   A stub is a fixed 4-byte block in DGROUP (its address is the handle):
+   the number of the object's entry in this table, then the signature
+   where TOOLHELP and IsGDIObject find it (offset 2, Schulman ch. 8). The
+   table's entries (the bodies' XPs) are in pages in GDI's heaps; a free
+   entry has a zero high word and the next free entry + 1 in its low. */
+#define BT_PAGE 2048
+#define BT_PAGES 32
+static XP btdir[BT_PAGES];
+static WORD bt_n, bt_free;
+
+static XP __far *bt_slot(WORD i)
+{
+    XP d = i / BT_PAGE < BT_PAGES ? btdir[i / BT_PAGE] : 0;
+    return d ? (XP __far *)xptr(d) + i % BT_PAGE : (XP __far *)0;
+}
+
+static int bt_new(XP body, WORD *idx)
+{
+    WORD i;
+    XP __far *s;
+    if (bt_free) {
+        i = bt_free - 1;
+        bt_free = LOWORD(*bt_slot(i));
+    } else {
+        i = bt_n;
+        if (i / BT_PAGE >= BT_PAGES)
+            return 0;
+        if (!btdir[i / BT_PAGE]) {
+            btdir[i / BT_PAGE] = xalloc(BT_PAGE * sizeof(XP));
+            if (!btdir[i / BT_PAGE])
+                return 0;
+        }
+        bt_n++;
+    }
+    s = bt_slot(i);
+    *s = body;
+    *idx = i;
+    return 1;
+}
+
+static void bt_del(WORD i)
+{
+    *bt_slot(i) = bt_free;
+    bt_free = i + 1;
+}
+
+/* the object's stub (ExtendedGdiHeap) and the body's XP, if h is one */
+static OBJSTUB NEAR *stub_of(HANDLE h, XP *body)
+{
+    OBJSTUB NEAR *o;
+    XP __far *s;
+    WORD sz;
+    if (!h || (h & 1) || h > seg_limit(get_ds()) - sizeof(OBJSTUB) + 1)
+        return 0;
+    /* (KERNEL may give a 4-byte request a bigger free block whole) */
+    sz = LocalSize(h);
+    if (sz < sizeof(OBJSTUB))
+        return 0;
+    o = (OBJSTUB NEAR *)h;
+    if (o->idx >= bt_n || !(s = bt_slot(o->idx)) || !HIWORD(*s))
+        return 0;
+    /* the body names its stub (in wMetaList, unused by w16) */
+    if (((LPOBJHDR)xptr(*s))->wMagic != o->wMagic || ((LPOBJHDR)xptr(*s))->wMetaList != h)
+        return 0;
+    *body = *s;
+    return o;
+}
+
 /* An object's block in DGROUP is moveable and locked (objects never
-   move; GD2: handles 4 apart, as the local handle table's entries are) */
+   move; GD2: handles 4 apart, as the local handle table's entries are).
+   With ExtendedGdiHeap it is an OBJSTUB and the object is in GDI's heaps,
+   its header's wMetaList the stub's handle. */
 HANDLE obj_alloc(WORD magic, WORD size)
 {
     HANDLE h;
     LPOBJHDR o;
-    h = LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, size);
-    if (!h)
-        return 0;
-    LocalLock(h);
-    o = (OBJHDR NEAR *)DEREF(h);
+    XP body;
+    WORD idx;
+    if (gdi_extended) {
+        body = xalloc(size);
+        if (!body)
+            return 0;
+        if (!bt_new(body, &idx)) {
+            xfree(body);
+            return 0;
+        }
+        h = LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(OBJSTUB));
+        if (!h) {
+            bt_del(idx);
+            xfree(body);
+            return 0;
+        }
+        ((OBJSTUB NEAR *)h)->idx = idx;
+        ((OBJSTUB NEAR *)h)->wMagic = magic;
+        o = xptr(body);
+        o->wMetaList = h;
+    } else {
+        h = LocalAlloc(LMEM_MOVEABLE | LMEM_ZEROINIT, size);
+        if (!h)
+            return 0;
+        LocalLock(h);
+        o = (OBJHDR NEAR *)DEREF(h);
+    }
     o->wMagic = magic;
     o->dwCount = ++obj_seq;
     return h;
@@ -41,16 +135,24 @@ HANDLE obj_alloc(WORD magic, WORD size)
 /* the signature (with its flags) of a valid object handle, 0 if none */
 WORD obj_magic(HANDLE h)
 {
-    OBJHDR NEAR *o;
     WORD m;
-    if (!h || (h & 3) != 2 || h > seg_limit(get_ds()) - 1)
-        return 0;
-    if (LocalSize(h) < sizeof(OBJHDR))
-        return 0;
-    o = DEREF(h);
-    if (!o)
-        return 0;
-    m = o->wMagic;
+    if (gdi_extended) {
+        XP body;
+        OBJSTUB NEAR *s = stub_of(h, &body);
+        if (!s)
+            return 0;
+        m = s->wMagic;
+    } else {
+        OBJHDR NEAR *o;
+        if (!h || (h & 3) != 2 || h > seg_limit(get_ds()) - 1)
+            return 0;
+        if (LocalSize(h) < sizeof(OBJHDR))
+            return 0;
+        o = DEREF(h);
+        if (!o)
+            return 0;
+        m = o->wMagic;
+    }
     if ((m & MAGIC_MASK) < PEN_MAGIC || (m & MAGIC_MASK) > METAFILEDC_MAGIC)
         return 0;
     return m;
@@ -60,16 +162,22 @@ WORD obj_magic(HANDLE h)
 void __far *obj_get(HANDLE h, WORD magic)
 {
     WORD m = obj_magic(h);
+    XP body;
     if (!m || (magic && (m & MAGIC_MASK) != magic))
         return 0;
+    if (gdi_extended)
+        return stub_of(h, &body) ? xptr(body) : 0;
     return (OBJHDR NEAR *)DEREF(h);
 }
 
 void obj_set_magic(HANDLE h, WORD m)
 {
     LPOBJHDR o = obj_get(h, 0);
-    if (o)
-        o->wMagic = m;
+    if (!o)
+        return;
+    o->wMagic = m;
+    if (gdi_extended)
+        ((OBJSTUB NEAR *)h)->wMagic = m;
 }
 
 int obj_type(HANDLE h)
@@ -80,6 +188,17 @@ int obj_type(HANDLE h)
 
 void obj_free(HANDLE h)
 {
+    if (gdi_extended) {
+        XP body;
+        OBJSTUB NEAR *s = stub_of(h, &body);
+        if (!s)
+            return;
+        s->wMagic = 0;
+        bt_del(s->idx);
+        xfree(body);
+        LocalFree(h);
+        return;
+    }
     LocalUnlock(h);
     LocalFree(h);
 }
