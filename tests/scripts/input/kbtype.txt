@@ -8,7 +8,8 @@
 ; tests/inputrun.sh): Notepad's caret may show on any of them (w16's USER
 ; keeps it blinking while a menu is open; the boot-test cases freeze it
 ; with CursorBlinkRate=65535). Before each shot the screen must have held
-; still for 2 s (settle 60 2): on a loaded host Notepad can be seconds
+; still but for the caret's blink for 2 s (settlecaret 60 2: the caret
+; blinks in the sysdrv cases): on a loaded host Notepad can be seconds
 ; behind the keys (the caret still moving, the text not yet drawn), and a
 ; reference shot taken then cannot be matched (keys looked lost: KBREC
 ; and the scan-code logger showed every key arriving, 8 parallel runs)
@@ -38,46 +39,46 @@ type The
 key space
 type quick
 key space
-settle 30
+settlecaret 30 1
 type brown
 key space
 type fox
 key space
-settle 30
+settlecaret 30 1
 type jumps
 key space
 type over
 key space
-settle 30
+settlecaret 30 1
 type the
 key space
 type lazy
 key space
 type dog.
 key Return
-settle 30
+settlecaret 30 1
 type THE
 key space
 type QUICK
 key space
-settle 30
+settlecaret 30 1
 type BROWN
 key space
 type FOX
 key space
-settle 30
+settlecaret 30 1
 type 0123456789
 key Return
-settle 30
+settlecaret 30 1
 type `~!@#$%^
-settle 30
+settlecaret 30 1
 type &*()-_=+
-settle 30
+settlecaret 30 1
 type [{]}\|;:
-settle 30
+settlecaret 30 1
 type '",<.>/?
 key Return
-settle 30
+settlecaret 30 1
 key Caps_Lock
 type caps
 key space
@@ -86,7 +87,7 @@ key space
 type 42
 key Caps_Lock
 key Return
-settle 30
+settlecaret 30 1
 key KP_1
 key KP_2
 key KP_Add
@@ -95,7 +96,7 @@ key KP_Divide
 key KP_Subtract
 key KP_Decimal
 key KP_Enter
-settle 60 2
+settlecaret 60 2
 matchnow 01-typed 20 2
 key Up
 key Up
@@ -108,7 +109,7 @@ key Left
 key Left
 key BackSpace
 key Delete
-settle 60 2
+settlecaret 60 2
 matchnow 02-edited 20 2
 ; Alt menus: the Edit menu by Alt+E, then Search by Right. While a menu
 ; is open, Windows 3.1's USER leaves Notepad's caret as it was when the
@@ -118,19 +119,19 @@ matchnow 02-edited 20 2
 ; characters in (x 104; the Edit, Search and File menus all span 92-120)
 key ctrl+Home
 key Right Right Right Right Right Right Right Right Right Right Right
-settle 60 2
+settlecaret 60 2
 key alt+e
-settle 60 2
+settlecaret 60 2
 matchnow 03-editmenu 20 1.5
 key Right
-settle 60 2
+settlecaret 60 2
 matchnow 04-searchmenu 20 1.5
 key Escape
 key Escape
 ; Alt alone, then a letter: the File menu
 key alt
 key f
-settle 60 2
+settlecaret 60 2
 matchnow 05-filemenu 20 1.5
 key Escape
 key Escape
@@ -148,14 +149,14 @@ key alt+Tab
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 06-alttab 20 2
 markcolor 0000aa
 key alt+Tab
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 07-back 20 2
 ; the Task List
 markcolor 0000aa
@@ -163,14 +164,14 @@ key ctrl+Escape
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 08-tasklist 20 2
 markcolor 0000aa
 key Escape
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 09-closed 20 2
 ; Alt+Esc to Program Manager, Alt+Esc back
 markcolor 0000aa
@@ -178,19 +179,19 @@ key alt+Escape
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 10-altesc 20 2
 markcolor 0000aa
 key alt+Escape
 waitmoved 0000aa 500 20
 move 4 0
 move -4 0
-settle 60 2
+settlecaret 60 2
 matchnow 11-altesc-back 20 2
 ; closed without saving
 key alt+F4
-settle 60 2
+settlecaret 60 2
 matchnow 12-save 20 2
 key n
-settle 60 2
+settlecaret 60 2
 matchnow 13-closed 20 2
