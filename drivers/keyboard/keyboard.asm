@@ -998,7 +998,7 @@ TOASCII:
         jmp .r
 .down:  or al, al
         jnz .notzero
-        call lights
+        call lights_all
         jmp .zero_w
 .notzero:
         ; Alt+keypad: Alt held, Ctrl not, a keypad digit's scan code
@@ -1077,17 +1077,30 @@ TOASCII:
         pop bp
         retf 14
 
-; lights: the lock bits of the BIOS keyboard flags from the key-state
-; array at DS:SI (VK_CAPITAL, VK_NUMLOCK, VK_SCROLL toggled), then INT
-; 16h AH=01h, which has the BIOS set the keyboard's lights from them
-; (DDK, ToAscii; KB2 sees the call)
+; lights: the Caps Lock and Scroll Lock bits of the BIOS keyboard flags
+; from the key-state array at DS:SI (VK_CAPITAL, VK_SCROLL toggled), then
+; INT 16h AH=01h, which has the BIOS set the keyboard's lights from them
+; (DDK, ToAscii; KB2 sees the call). lights_all: Num Lock's bit too (VK 0,
+; SetKeyboardState). Num Lock's bit is otherwise the interrupt handler's:
+; it toggles it on the key and needs it at once for the keypad; a ToAscii
+; call that USER makes later, for an earlier key, setting it from that
+; key's state, put an old Num Lock state back between the handler's
+; toggle and the next keypad key (36 parallel runs on a loaded host: the
+; same scan codes gave VK_DOWN in one run, VK_NUMPAD2 in another). The
+; flags are changed with interrupts off: the handler writes them too.
+lights_all:
+        push bx
+        mov bl, F_CAPS | F_NUM | F_SCROLL
+        jmp short lights_
 lights:
+        push bx
+        mov bl, F_CAPS | F_SCROLL
+lights_:
         push ax
         push es
         mov ax, __0040H
         mov es, ax
-        mov ah, [es:KB_FLAG]
-        and ah, ~(F_CAPS | F_NUM | F_SCROLL)
+        xor ah, ah                      ; the bits from the array
         test byte [si + VK_CAPITAL], 1
         jz .c
         or ah, F_CAPS
@@ -1097,11 +1110,18 @@ lights:
 .n:     test byte [si + VK_SCROLL], 1
         jz .s
         or ah, F_SCROLL
-.s:     mov [es:KB_FLAG], ah
+.s:     and ah, bl
+        not bl
+        pushf
+        cli
+        and [es:KB_FLAG], bl
+        or [es:KB_FLAG], ah
+        popf
         pop es
         mov ah, 1
         int 16h
         pop ax
+        pop bx
         ret
 
 ; vk_char: AL = VK, DS:SI the key-state array -> AL the character for

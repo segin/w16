@@ -291,8 +291,15 @@ int __cdecl tmain(void)
     wc.lpszMenuName = 0;
     wc.lpszClassName = "KB2";
     RegisterClass(&wc);
-    hwnd = CreateWindow("KB2", "KB2", WS_POPUP | WS_CAPTION | WS_VISIBLE, 40, 40, 400, 300, 0, 0, hi, 0);
-    SetFocus(hwnd);
+    /* [w16] kb2bg=1: in the background (WIN.INI load=, another program
+       typed into): no visible window, the focus left alone; only the
+       scan codes and KBREC's records, after kb2secs seconds */
+    if (GetPrivateProfileInt("w16", "kb2bg", 0, "SYSTEM.INI"))
+        hwnd = CreateWindow("KB2", "KB2", WS_POPUP, 0, 0, 10, 10, 0, 0, hi, 0);
+    else {
+        hwnd = CreateWindow("KB2", "KB2", WS_POPUP | WS_CAPTION | WS_VISIBLE, 40, 40, 400, 300, 0, 0, hi, 0);
+        SetFocus(hwnd);
+    }
     sc_install();
     secs = GetPrivateProfileInt("w16", "kb2secs", 300, "SYSTEM.INI");
     /* [w16] kb2speed=N: KEYBOARD.SetSpeed(N) first (the typematic rate
