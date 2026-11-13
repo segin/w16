@@ -1008,6 +1008,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 test: dos fonts
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
+	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV
 	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1151,6 +1152,7 @@ W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
 W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
            $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+           $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
 # Calculator (ARCHITECTURE.md 15.3)
@@ -1170,7 +1172,8 @@ $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
-$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL: $(W16SYS)/%: $(DOS)/%
+$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+$(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
@@ -1564,6 +1567,34 @@ $(DOS)/CM1.EXE: $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o tests/apps
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/cm1.map file { $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o }
 dos: $(DOS)/CM1.EXE
+# ---- SYSTEM.DRV: w16's system driver (drivers/system; README.md there)
+$(B)/system/system.o: drivers/system/system.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/SYSTEM.DRV: $(B)/system/system.o drivers/system/system.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/system/system.lnk name $@ option map=$(B)/system/system.map \
+	    file { $(B)/system/system.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/SYSTEM.DRV
+install-tree: $(W16SYS)/SYSTEM.DRV
+$(W16SYS)/SYSTEM.DRV: $(DOS)/SYSTEM.DRV
+	@mkdir -p $(@D)
+	cp $< $@
+# ---- SYSTEM.DRV probes (drivers/system; README.md there): SY1.EXE calls
+# every export (tests/apps/sy1.c; run by tests/sysprobe.sh with Windows
+# 3.1's SYSTEM.DRV and with w16's); SYREC.DRV, a recording SYSTEM in front
+# of SYSTGT, a renamed copy of the driver under test (tests/apps/syrec.asm)
+$(B)/tests/sy1.o: tests/apps/sy1ref.h tests/apps/tklog.h
+$(DOS)/SY1.EXE: $(B)/tests/start.o $(B)/tests/sy1.o $(B)/tests/sy1s.o $(B)/tests/kb1s.o tests/apps/app.lnk tests/apps/sy1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/sy1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/sy1.map file { $(B)/tests/start.o $(B)/tests/sy1.o $(B)/tests/sy1s.o $(B)/tests/kb1s.o }
+$(DOS)/SYREC.DRV: $(B)/tests/syrec.o tests/apps/syrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/syrec.lnk name $@ option map=$(B)/tests/syrec.map file { $(B)/tests/syrec.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/SY1.EXE $(DOS)/SYREC.DRV
 # COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
 # renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
 $(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \

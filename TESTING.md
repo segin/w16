@@ -79,7 +79,7 @@ Boot-test settings:
 
 Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
-`tests/winoldap.sh`, `tests/mouseprobe.sh`, `tests/fonts.sh`,
+`tests/winoldap.sh`, `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`.
 
 Run the boot test from a copy if you will edit the scripts while it runs:

@@ -289,9 +289,13 @@ with Windows 3.1's COMM.DRV and once with w16's, and compares the logs.
   of step (UNVERIFIED cause: CM2 saw SYSTEM.DRV's count go neither back
   nor jump in 3 runs of 20 s and one across 65536 ms, without the
   driver's system-timer procedure reading it at the same time).
-- Seen once: commhost on COM2, which part C does not use, recorded a
-  lone byte FFh from Windows 3.1's driver's run (not understood; COM2's
-  far end now keeps a timed record too, `NAME.hosttime2`).
+- Now and then commhost recorded a lone data byte FFh at the start of a
+  run, with either driver, on a port the run may not even open: not the
+  guest's. DOSBox's nullmodem device sends three line states when it
+  connects, and the first state byte is whatever its variable held (00,
+  0Eh, 6Eh, FFh seen in commhost's timed records); FFh after the escape
+  read as a data byte FFh. commhost now takes every byte after an
+  escape in its first second as a state.
 
 ## Verified
 
