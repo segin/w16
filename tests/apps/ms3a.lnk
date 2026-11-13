@@ -1,0 +1,27 @@
+# wlink directives for MS3A.DRV (tests/apps/ms3a.asm): a recording MOUSE
+# driver in front of MOUSX (a renamed copy of the real one). Output name
+# and object come from the Makefile.
+format windows dll
+option quiet
+option modname=MOUSE
+option description 'MS3 recording mouse driver (w16 probe)'
+option start=libentry
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRE.1=T_1
+export ENABLE.2=T_2
+export DISABLE.3=T_3
+export MOUSEGETINTVECT.4=T_4
+export GETSETMOUSEDATA.5=T_5
+export CPLAPPLET.6=T_6
+export POWEREVENTPROC.7=T_7
+export WEP.8 resident
+export MS3LOG.20
+import X_1 MOUSX.1
+import X_2 MOUSX.2
+import X_3 MOUSX.3
+import X_4 MOUSX.4
+import X_5 MOUSX.5
+import X_6 MOUSX.6
+import X_7 MOUSX.7

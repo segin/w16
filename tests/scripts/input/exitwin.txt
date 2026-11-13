@@ -6,5 +6,6 @@ key x
 sleep 2
 shot 01-confirm
 key Return
-sleep 8
+waitexit 60
+sleep 2
 shot 02-dos

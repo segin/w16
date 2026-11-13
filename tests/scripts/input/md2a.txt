@@ -1,0 +1,364 @@
+; MD2 mode 4 (tests/apps/md2ax.c): a click to capture the mouse, then the same
+; motion and a left click, over and over
+click 1
+sleep 1
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5
+move 40 20
+sleep 0.5
+click 1
+sleep 0.5
+move -40 -20
+sleep 0.5

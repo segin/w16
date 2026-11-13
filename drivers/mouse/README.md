@@ -25,9 +25,9 @@ export table, `docs/exports/MOUSE.txt`). Only USER imports any of them
 | 2 | `Enable(lpEventProc)` | configures the device, takes IRQ 12, reports to the event procedure | DDK, Pietrek ch. 1 |
 | 3 | `Disable()` | disables the device, gives IRQ 12 back | DDK |
 | 4 | `MouseGetIntVect()` | 74h (-1 without a mouse) | DDK; MD1: 74h |
-| 5 | `GetSetMouseData` | returns DX:AX = 0002:0000 and takes 8 bytes of parameters off, as 3.1's did for zero parameters | MD1 (purpose UNVERIFIED) |
+| 5 | `GetSetMouseData(LPVOID, DWORD)` | Microsoft Mouse 8.20's private settings call: bits 15-31 get 3.1's error (AX 0900h, DX = HIWORD(dwFlags)); otherwise the buffer is left alone, AX 0, DX 2 after a get and 0 after a set; `RETF 8` | MD1, MD2A (Notes) |
 | 6 | `CplApplet(hwnd, code, l1, l2)` | FALSE: Control Panel shows its own Mouse dialog | DDK; MD1 |
-| 7 | `PowerEventProc` | returns 0 and takes 6 bytes off, as 3.1's did | MD1 (purpose UNVERIFIED) |
+| 7 | `PowerEventProc(WORD wEvent, DWORD)` | POWER.DRV's call, WM_POWER codes: on 2 and 3 while enabled the device is set up again; returns 0; `RETF 6` | MD1, MD2B (Notes) |
 | 8 | `WEP(bSystemExit)` | turns the mouse off if on; returns 1 (exported by name, resident) | DDK |
 
 **MOUSEINFO** (DDK): `msExist` and `msRelative` (chars), then
@@ -67,9 +67,12 @@ IRQ 12 for every byte). This driver uses both, each for what it does best:
 
 - **The BIOS for the device.** LibEntry finds the mouse with C205h
   (initialise, 3-byte packets), C201h (reset) and C204h (device ID);
-  Enable sets it up with C205h, C201h, C203h (8 counts/mm), C206h (1:1
-  scaling), C202h (40 reports/s), C207h (the packet handler) and C200h
-  (enable); Disable does C200h (disable) and C207h with 0:0. The BIOS
+  Enable sets it up as Windows 3.1's driver does, in its order: C205h,
+  C201h, C202h (10/s), C204h, C203h (8 counts/mm), C207h (the packet
+  handler), C206h (1:1 scaling), C202h (40 reports/s), C200h (enable);
+  Disable does C200h (disable) and C202h (100/s) as 3.1's does, and
+  C207h with 0:0, which 3.1's does not (w16's own: the BIOS should keep
+  no handler address into the DOS extender after Windows ends). The BIOS
   knows its controller's quirks (command timing, the aux-port enable, the
   controller command byte), works on every machine with a PS/2 port, and
   the standard-mode DOS extenders handle these calls from protected mode
@@ -82,9 +85,11 @@ IRQ 12 for every byte). This driver uses both, each for what it does best:
   interrupt at both PICs and assembles the packet itself: no switch to
   real mode per byte. Byte 0 must have bit 3 set, and a byte after a
   pause of more than a timer tick starts a new packet (resynchronises
-  after a lost byte). Without an auxiliary byte waiting, the interrupt
-  goes on to the previous handler: the BIOS, whose packet then reaches
-  the C207h handler, which decodes it the same way. Decoding: buttons
+  after a lost byte). Without an auxiliary byte waiting, the previous
+  handler (the BIOS) runs as an interrupt and returns to the driver; the
+  BIOS's packet reaches the C207h handler, which keeps it the same way.
+  Then, at the end of the IRQ, the packet goes to the event procedure
+  (below). Decoding: buttons
   from bits 0-1 of byte 0, 9-bit X and Y with the sign in bits 4 and 5,
   Y negated for the screen (more below).
 
@@ -96,7 +101,8 @@ DOSBox's built-in one answers), then C205h, C201h, C202h, C204h twice,
 C203h (BH 3), C207h, C206h (BH 1), C202h (BH 2), C200h (BH 1), and takes
 INT 74h in a way that makes the DOS extender hook the real-mode IVT
 entry too (DOSX's segment there afterwards). w16's driver gives the same
-trace without the INT 33h call and the second detection pass; it sets
+trace without the INT 33h call and the boot-time second detection pass
+(MD2B: 3.1's set-up after Enable and after a resume is the order above); it sets
 INT 74h with INT 21h AH=25h, which does the same (with DPMI 0205h,
 Microsoft's DOSX left the IVT alone), and it does so before enabling the
 device, so no packet can come before its handler is there (the gap that
@@ -112,11 +118,14 @@ like Windows 3.1's driver in the same place). DOSBox-X emulates the 8042
 auxiliary port with IRQ 12 and the BIOS services: there the first path
 is taken. Real hardware has both.
 
-**Packets as Windows 3.1's driver treats them** (MD1, with MS2 loaded
-for the BIOS's packets): the second packet after each Enable never
-reaches the event procedure (packets 0,0 / 5,0 / 40,0 came as 0,0 and
-40,0; 0,140 / 3,0 / 5,0 / 40,0 as 0,140, 5,0, 40,0; why is UNVERIFIED,
-w16's driver drops it the same way); the overflow bits are
+**Packets as Windows 3.1's driver treats them** (MD1; MD2C with MS3C
+giving the C207h handler packets of its choosing, see Notes): the event
+procedure is called at most once per IRQ 12, after the BIOS's INT 74h has
+returned, with the latest packet of that IRQ (earlier ones overwritten,
+not added); after each set-up the second IRQ that brings a packet reports
+nothing and leaves its packet pending, to be reported at the end of the
+next IRQ unless a newer packet replaces it first (with one packet per
+IRQ, the usual case, that is the "lost second packet"); the overflow bits are
 ignored, the 9-bit value reported as it is (DOSBox's 300-mickey step,
 sent with X overflow, came as 44); a packet with motion and a button
 change would be one event with both bits (the DDK allows it; DOSBox never
@@ -125,12 +134,12 @@ sends one, so UNVERIFIED against 3.1).
 **Interrupt time.** In Standard mode a hardware interrupt reaches the
 handler in protected mode on the interrupted stack (DOSX). Code and data
 are fixed segments, so they are present and in place at any time. The
-handler does no DOS or KERNEL calls. Events go through a ring of 8: the
-handler queues the decoded packet, ends the interrupt, enables
-interrupts and calls the event procedure; an IRQ 12 during that call
-only queues, and the outer call's loop delivers it (no nesting into
-USER). The BIOS path calls the event procedure with the BIOS's interrupt
-state (disabled).
+handler does no DOS or KERNEL calls. At the end of each IRQ 12 the
+pending packet is decoded, interrupts are enabled and the event
+procedure is called (3.1's calls it with interrupts enabled: MD1); an IRQ
+12 during that call leaves its packet pending for the next IRQ (no
+nesting into USER). On the 8042 path the per-IRQ rules above are applied
+with "the IRQ that completed a packet": an extrapolation, not observed.
 
 **386 Enhanced mode.** The DDK has the virtual mouse device (VMD,
 `[386Enh] mouse=*vmd`) virtualise the mouse for DOS boxes and talk to an
@@ -161,11 +170,11 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
 ## Not verified / not done
 
 - 386 Enhanced mode (above).
-- `GetSetMouseData` and `PowerEventProc`: what they do; only their stack
-  use and their results for zero parameters are known.
-- Packets with motion and a button change together (above); why the
-  second packet after Enable is lost, and whether it is when it carries
-  a button change (it is, here).
+- GetSetMouseData beyond its error for bits 15-31 and PowerEventProc
+  beyond the set-up on a resume (Notes).
+- Packets with motion and a button change together (above); why 3.1
+  holds a packet back after a set-up; whether a button change in an
+  earlier packet of a multi-packet IRQ survives (only motion was tested).
 - The 8042 path with real input: DOSBox 0.74 has no aux port, and in
   DOSBox-X xdotool's motion does not reach the guest under the harness
   (with Microsoft's driver neither: the pointer stays put), so the
@@ -178,3 +187,61 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
   (a DOS mouse driver that used one sets it again itself).
 - The INT 33h query Windows 3.1's driver makes: not needed for a PS/2
   mouse, not made.
+
+## Notes: the open questions, observed (MD2)
+
+Black-box probes of Windows 3.1's driver, headless DOSBox 0.74, Standard
+mode, Microsoft's KRNL286, DOSX and USER (findings and logs in
+`tests/apps/md2logs/a`, `b`, `c`, each with a `notes.md`):
+
+- **GetSetMouseData** (MD2A, `tests/md2aprobe.sh`; MS3A.DRV records every
+  call made to MOUSE): a private interface between Microsoft Mouse 8.20's
+  own programs (POINT.EXE, POINTLIB.DLL, POINTER.EXE) and its driver. Not
+  seen called by Windows 3.1 in Standard mode (USER calls only Inquire and
+  Enable at boot); Enhanced mode, the Control Panel's Mouse applet and
+  shutdown not covered. `GetSetMouseData(LPVOID lpData, DWORD dwFlags)`,
+  `RETF 8`. dwFlags bit 0: set (else get); bits 1-14 each name a field of
+  the buffer (bit 1 mouse type, 2 a byte (IRQ?), 3 the last packet's raw X
+  and Y, 4 the version 0820h Mouse 8.20's tools require, 6 two bytes, 8 X
+  and Y sensitivity, 9 a byte, 10 and 11 far pointers to acceleration
+  tables and profile names, 12 the active profile, 13 = 10 and 11, 14 a far
+  pointer to the MOUSE.INI path; 5 and 7 fail on PS/2). AX = 0 or error *
+  256 + bit (02 not available, 03-05 bad value, 09 undefined bit: bits
+  15-31, AX 0900h, DX = HIWORD(dwFlags), buffer untouched); one bad bit
+  fails the whole call; settings take effect inside the driver at once
+  (sensitivity and profiles scale what the event procedure gets). DX is
+  2 after gets, 0 after sets; whether the result is a DWORD is not known.
+  w16 implements the shape and the bits-15-31 error and leaves the buffer
+  alone otherwise: Mouse 8.20's Control Panel stops with its "requires
+  MOUSE.DRV version 8.20" message. Full support would need w16's own
+  tables and settings (never Microsoft's).
+- **PowerEventProc** (MD2B, `tests/md2bprobe.sh`; POWER.DRV from the
+  install disks, MS4B.COM an APM BIOS of ours): `WORD
+  PowerEventProc(WORD wEvent, DWORD dwParam)`, `RETF 6`, wEvent the first
+  word pushed (`[bp+10]`). Called by POWER.DRV at task time after it sends
+  WM_POWER, with WM_POWER's codes: suspend request (APM 0002h) gives
+  WM_POWER(1) then PowerEventProc(1,0); normal resume (0003h) (2,0);
+  critical resume (0004h) (3,0); a standby request gives nothing, its
+  resume (2,0). On 2 or 3 while enabled 3.1's driver runs Enable's set-up
+  again (the order above, without the boot-time detection pass) and the
+  packet hold-back starts over; on other codes or while disabled it makes
+  no recorded call. dwParam has no visible effect; it returns 0;
+  returning -1 to event 1 did not stop POWER.DRV's suspend. w16 does the
+  same. APM's protected-mode interface and Enhanced mode (VPOWERD) not
+  run.
+- **The packet after a set-up** (MD2C, `tests/md2cprobe.sh`,
+  `tests/md2cview.py`; MS3C.COM gives the handler MD2C's packets, several
+  per IRQ, held off or spaced): the rules under "Packets" above. 4 packets
+  per IRQ gave events 4 and 8; 8 in one IRQ the single event 8; with 3 s
+  between packets all 8 arrived, packet 2 one IRQ late, which a count of
+  packets cannot give. Enable (from disabled) and a resume re-arm it; a
+  GetSetMouseData set does not; a second Enable while enabled makes no
+  BIOS calls (and w16 changes only the event procedure then). Not DOSBox,
+  USER, the packets' content, timing or the DOS extender (the same under
+  w16's DOSX). Purpose unknown; measured on the BIOS path in DOSBox only.
+- **Disable:** 3.1's issues C200h BH 0, then C202h BH 5 (MD2A also saw INT
+  33h AX=0020h; MD2C no C207h 0:0). w16 matches the first two and keeps
+  its C207h 0:0 (above).
+- **MD1's timer:** with no window, KillTimer(0, 1) does not stop the timer
+  SetTimer chose (the id is SetTimer's return); harmless in MD1, which
+  waits once.
