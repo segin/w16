@@ -1237,6 +1237,11 @@ $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
+# the default SYSTEM.INI and WIN.INI (assets/; w16's own, laid out as 3.1's)
+install-tree: $(W16)/SYSTEM.INI $(W16)/WIN.INI
+$(W16)/SYSTEM.INI $(W16)/WIN.INI: $(W16)/%: assets/%
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
 $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
 $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
