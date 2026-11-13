@@ -89,16 +89,10 @@
 #              Windows repainted as it was before, text mode at the end
 #   woadosbat  the same with TEMP set by a batch file around WIN
 #              (C:\WINDOWS\GO.BAT: SET TEMP=C:\WINDOWS\TEMP, WIN /S) and w16's
-#              WIN.COM as well, as an
-#              AUTOEXEC.BAT does. EXPECTED TO FAIL (reported as xfail, not
-#              counted): w16's stack does not come back from the prompt
-#              (EnableOEMLayer is never reached). Observed: the batch file
-#              alone (WIN /S, SwapDisk= in SYSTEM.INI) comes back; the
-#              harness's output redirect makes no difference (DROPIN_NOREDIR=1);
-#              Microsoft's stack comes back. With w16's WIN.COM (master
-#              05e0494, its swap-path fixes) it comes back too and Windows is
-#              as before; what fails now is the prompt's first screen: no
-#              "Type EXIT ..." banner above DOSBox's (UNVERIFIED why)
+#              WIN.COM and DOSX as well, as an AUTOEXEC.BAT does: every w16
+#              part. Text mode (640x400) after Exit Windows: w16's ended in
+#              VGA graphics with the BIOS's text on it (WIN.COM set no mode
+#              after WSWAP, DOSX set back the logo's mode 12h)
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -885,9 +879,9 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             n=${n%%[. ]*}
             [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
         done
-        if [ $c = woadosbat ]; then     # expected to fail: see the case list
-            if [ "$r" = ok ]; then echo "ok   woadosbat: back from the prompt with TEMP from a batch file (it was expected to fail: take the mark off)"
-            else echo "xfail woadosbat: $r ($out/$c-w16; expected: TEMP from a batch file)"; fi
+        if [ $c = woadosbat ]; then
+            if [ "$r" = ok ]; then echo "ok   woadosbat: every w16 part, TEMP from a batch file: the prompt and back, text mode after Exit Windows"
+            else echo "FAIL woadosbat: $r ($out/$c-w16)"; fails=$((fails + 1)); fi
         elif [ "$r" = ok ]; then echo "ok   woados: the MS-DOS Prompt in text mode and back, text mode after Exit Windows"
         else echo "FAIL woados: $r ($out/woados-w16)"; fails=$((fails + 1)); fi ;;
     pmkeys)
