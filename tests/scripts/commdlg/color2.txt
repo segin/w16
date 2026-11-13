@@ -1,5 +1,7 @@
 ; ChooseColor: the 48 basic colours, each chosen with the keyboard
 ; (arrows from black, row 5 column 0, then Space) and taken with OK
+; (48 dialogs: more than the default two minutes)
+timeout 400
 cd1 color flags=0
 cd1 color flags=0
 cd1 color flags=0

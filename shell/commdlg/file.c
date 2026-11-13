@@ -41,7 +41,6 @@ typedef struct {
     LPSTR startdir;                     /* for OFN_NOCHANGEDIR */
     char caption[80];                   /* the window's caption */
     BOOL ended;                         /* EndDialog called */
-    BOOL pend_type, pend_drive;         /* selections made while dropped */
 } fstate;
 
 /* Flags bits the original sets in the caller's structure while a combo
@@ -838,6 +837,35 @@ static void end(fstate FAR *st, BOOL ok)
     EndDialog(st->dlg, ok);
 }
 
+/* a file type chosen: its pattern in the name box, selected (observed:
+   the whole text, the focus left where it is), its files listed */
+static void type_chosen(fstate FAR *st)
+{
+    int i = (int)SendDlgItemMessage(st->dlg, cmb1, CB_GETCURSEL, 0, 0);
+    st->ofn->nFilterIndex = st->has_custom ? i : i + 1;
+    pattern_text(st);
+    SendDlgItemMessage(st->dlg, edt1, EM_SETSEL, 0, MAKELPARAM(0, -1));
+    fill_files(st, cur_pattern(st));
+    notify_sel(st, cmb1, i, CD_LBSELCHANGE);
+}
+
+/* a drive chosen: go there */
+static void drive_chosen(fstate FAR *st)
+{
+    HWND dlg = st->dlg;
+    int i = (int)SendDlgItemMessage(dlg, cmb2, CB_GETCURSEL, 0, 0);
+    int d = LOWORD(SendDlgItemMessage(dlg, cmb2, CB_GETITEMDATA, i, 0));
+    if (i >= 0 && d != dos_getdrive()) {
+        if (change_drive(st, d)) {
+            refresh(st, NULL);
+        } else {
+            select_drive(st);
+            i = (int)SendDlgItemMessage(dlg, cmb2, CB_GETCURSEL, 0, 0);
+        }
+    }
+    notify_sel(st, cmb2, i, CD_LBSELCHANGE);
+}
+
 static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
 {
     fstate FAR *st;
@@ -928,71 +956,49 @@ static BOOL file_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp, BOOL save)
                 refresh(st, NULL);
             }
             return TRUE;
+        /* Observed (typesel1, drop1): a choice made in a dropped list
+           comes as CBN_CLOSEUP, CBN_SELCHANGE, then the dialog's own
+           WM_COMMAND 8000h (posted at the close-up; the Flags bit stays set
+           until it arrives, so it is still set when the dialog ends first);
+           a choice made with the list up (keys) is taken at its
+           CBN_SELCHANGE, without 8000h. */
         case cmb1:
             switch (HIWORD(lp)) {
-            case CBN_INIT:                  /* the type chosen: list it */
-                i = (int)SendDlgItemMessage(dlg, cmb1, CB_GETCURSEL, 0, 0);
-                st->ofn->nFilterIndex = st->has_custom ? i : i + 1;
-                pattern_text(st);
-                fill_files(st, cur_pattern(st));
-                notify_sel(st, cmb1, i, CD_LBSELCHANGE);
+            case CBN_INIT:
+                st->ofn->Flags &= ~OFN_TYPESDOWN;
+                type_chosen(st);
                 break;
             case CBN_DROPDOWN:
                 if (!st->ended)
                     st->ofn->Flags |= OFN_TYPESDOWN;
                 break;
             case CBN_CLOSEUP:
-                if (st->ended)
-                    break;
-                st->ofn->Flags &= ~OFN_TYPESDOWN;
-                if (st->pend_type) {
-                    st->pend_type = FALSE;
-                    SendMessage(dlg, WM_COMMAND, cmb1, MAKELONG(LOWORD(lp), CBN_INIT));
-                }
+                if (!st->ended)
+                    PostMessage(dlg, WM_COMMAND, cmb1, MAKELONG(LOWORD(lp), CBN_INIT));
                 break;
             case CBN_SELCHANGE:
-                if (st->ofn->Flags & OFN_TYPESDOWN)
-                    st->pend_type = TRUE;
-                else
-                    SendMessage(dlg, WM_COMMAND, cmb1, MAKELONG(LOWORD(lp), CBN_INIT));
+                if (!(st->ofn->Flags & OFN_TYPESDOWN))
+                    type_chosen(st);
                 break;
             }
             return TRUE;
         case cmb2:
             switch (HIWORD(lp)) {
-            case CBN_INIT: {                /* the drive chosen: go there */
-                int d;
-                i = (int)SendDlgItemMessage(dlg, cmb2, CB_GETCURSEL, 0, 0);
-                d = LOWORD(SendDlgItemMessage(dlg, cmb2, CB_GETITEMDATA, i, 0));
-                if (i >= 0 && d != dos_getdrive()) {
-                    if (change_drive(st, d)) {
-                        refresh(st, NULL);
-                    } else {
-                        select_drive(st);
-                        i = (int)SendDlgItemMessage(dlg, cmb2, CB_GETCURSEL, 0, 0);
-                    }
-                }
-                notify_sel(st, cmb2, i, CD_LBSELCHANGE);
+            case CBN_INIT:
+                st->ofn->Flags &= ~OFN_DRIVESDOWN;
+                drive_chosen(st);
                 break;
-            }
             case CBN_DROPDOWN:
                 if (!st->ended)
                     st->ofn->Flags |= OFN_DRIVESDOWN;
                 break;
             case CBN_CLOSEUP:
-                if (st->ended)
-                    break;
-                st->ofn->Flags &= ~OFN_DRIVESDOWN;
-                if (st->pend_drive) {
-                    st->pend_drive = FALSE;
-                    SendMessage(dlg, WM_COMMAND, cmb2, MAKELONG(LOWORD(lp), CBN_INIT));
-                }
+                if (!st->ended)
+                    PostMessage(dlg, WM_COMMAND, cmb2, MAKELONG(LOWORD(lp), CBN_INIT));
                 break;
             case CBN_SELCHANGE:
-                if (st->ofn->Flags & OFN_DRIVESDOWN)
-                    st->pend_drive = TRUE;
-                else
-                    SendMessage(dlg, WM_COMMAND, cmb2, MAKELONG(LOWORD(lp), CBN_INIT));
+                if (!(st->ofn->Flags & OFN_DRIVESDOWN))
+                    drive_chosen(st);
                 break;
             }
             return TRUE;

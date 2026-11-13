@@ -1,9 +1,9 @@
 convert/C01 0
 convert/C02 0
 convert/C03 0
-convert/C04 37545
-convert/C05 29377
-convert/C06 28791
+convert/C04 0
+convert/C05 0
+convert/C06 0
 dialogs/D_ABOUT 446
 dialogs/D_ADD 0
 dialogs/D_DEL 0
@@ -25,9 +25,9 @@ dialogs/M_HELP 0
 dialogs/M_SEARCH 0
 dialogs/M_VIEW 0
 files/F01 0
-files/F01B 37686
-files/F02 30206
-files/F03 29833
+files/F01B 0
+files/F02 0
+files/F03 0
 find/F1 0
 find/F2 0
 find/F3 0
