@@ -1520,6 +1520,21 @@ $(DOS)/CM1.EXE: $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o tests/apps
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/cm1.map file { $(B)/tests/start.o $(B)/tests/cm1.o $(B)/tests/md1s.o }
 dos: $(DOS)/CM1.EXE
+# COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
+# renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
+$(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \
+                    tests/apps/dll.lnk tests/apps/commrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/commrec.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/commrec.map file { $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o }
+dos: $(DOS)/COMMREC.DRV
+# CM2.EXE: USER's comm functions observed (tests/apps/cm2.c; tests/commusr.sh)
+$(B)/tests/cm2.o: tests/apps/cm2ref.h tests/apps/tklog.h
+$(DOS)/CM2.EXE: $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cm2.map file { $(B)/tests/start.o $(B)/tests/cm2.o $(B)/tests/md1s.o }
+dos: $(DOS)/CM2.EXE
 # ---- KEYBOARD.DRV: w16's keyboard driver (drivers/keyboard; README.md there)
 # KB1.EXE: every export called over all its inputs (tests/apps/kb1.c; run by
 # tests/kbprobe.sh with Windows 3.1's KEYBOARD.DRV and with w16's)

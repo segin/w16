@@ -1,0 +1,49 @@
+# COMMREC (tests/apps/commrec.c): a recording stand-in for COMM.DRV, built
+# as COMM.DRV with module name COMM and Windows 3.1's ordinals, in front of
+# the real driver renamed MCOM (SYSTEM\MCOM.DLL).
+@tests/apps/dll.lnk
+option modname=COMM
+option description 'COMMREC: COMM.DRV recorder'
+segment type code fixed preload
+segment type data fixed preload
+export INICOM.1
+export SETCOM.2
+export SETQUE.3
+export RECCOM.4
+export SNDCOM.5
+export CTX.6
+export TRMCOM.7
+export STACOM.8
+export CEXTFCN.9
+export CFLUSH.10
+export CEVT.11
+export CEVTGET.12
+export CSETBRK.13
+export CCLRBRK.14
+export GETDCB.15
+export WEP.16 resident
+export SUSPENDOPENCOMMPORTS.17
+export REACTIVATEOPENCOMMPORTS.18
+export COMMWRITESTRING.19
+export READCOMMSTRING.20
+export ENABLENOTIFICATION.100
+import M_INICOM MCOM.1
+import M_SETCOM MCOM.2
+import M_SETQUE MCOM.3
+import M_RECCOM MCOM.4
+import M_SNDCOM MCOM.5
+import M_CTX MCOM.6
+import M_TRMCOM MCOM.7
+import M_STACOM MCOM.8
+import M_CEXTFCN MCOM.9
+import M_CFLUSH MCOM.10
+import M_CEVT MCOM.11
+import M_CEVTGET MCOM.12
+import M_CSETBRK MCOM.13
+import M_CCLRBRK MCOM.14
+import M_GETDCB MCOM.15
+import M_SUSPEND MCOM.17
+import M_REACTIVATE MCOM.18
+import M_COMMWRITESTRING MCOM.19
+import M_READCOMMSTRING MCOM.20
+import M_ENABLENOTIFICATION MCOM.100
