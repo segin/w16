@@ -42,6 +42,14 @@ static void load_frame_bitmaps(void)
     bmRestoreD = LoadBitmap(0, MAKEINTRESOURCE(OBM_RESTORED));
 }
 
+/* the frame bitmaps for others (the MDI controls in a frame's menu bar,
+   mdi.c and menu.c): 0 OBM_CLOSE, 1 OBM_RESTORE, 2 OBM_RESTORED */
+HBITMAP frame_bitmap(int which)
+{
+    load_frame_bitmaps();
+    return which == 0 ? bmClose : which == 1 ? bmRestore : bmRestoreD;
+}
+
 void follow_icon_title(HWND h);
 void redraw_icon_title(HWND h);
 
@@ -812,7 +820,11 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                     if (PW(c)->hwndParent && valid_wnd(PW(c)->hwndParent) &&
                         ((PCLS)PW(PW(c)->hwndParent)->cls)->lpfnWndProc ==
                         (WNDPROC)MDIClientWndProc) {
-                        menu_track_bar(c, ' ');
+                        /* maximised, its system menu is in the frame's
+                           bar and opens there (mdi.c) */
+                        extern BOOL mdi_sysmenu_key(HWND c);
+                        if (!mdi_sysmenu_key(c))
+                            menu_track_bar(c, ' ');
                         return 0;
                     }
             }
