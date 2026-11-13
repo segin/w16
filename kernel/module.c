@@ -182,7 +182,7 @@ void module_register_kernel(const bootinfo FAR *bi)
     module FAR *m = mod_new(bi->seg_count);
     u16 i;
     if (!m) {
-        kputs("w16: out of memory\r\n");
+        kdbg("w16: out of memory\r\n");
         kexit_to_dos(0xFF);
     }
     for (i = 0; i < sizeof m->path - 1 && i < BOOT_PATHMAX && bi->path[i]; i++)
@@ -192,7 +192,7 @@ void module_register_kernel(const bootinfo FAR *bi)
     m->flags = ((const ne_header FAR *)MK_FP(bi->ne_sel, 0))->flags;
     m->ne_sel = mdb_build(MK_FP(bi->ne_sel, 0), m->path, 0, 0, 1);
     if (!m->ne_sel) {
-        kputs("w16: out of memory\r\n");
+        kdbg("w16: out of memory\r\n");
         kexit_to_dos(0xFF);
     }
     for (i = 0; i < bi->seg_count; i++) {
