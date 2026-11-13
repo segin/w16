@@ -6,7 +6,9 @@
         cpu 286
         org 100h
         jmp init
-NENT    equ 256
+%ifndef NENT
+%define NENT 256
+%endif
 old10:  dd 0
 old21:  dd 0
 old2f:  dd 0

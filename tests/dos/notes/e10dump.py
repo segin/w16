@@ -2,7 +2,7 @@ import struct, sys
 # e10dump.py E10.LOG: the ring in order, oldest first
 d = open(sys.argv[1], 'rb').read()
 pos, count = struct.unpack_from('<HH', d, 0)
-N = 256
+N = (len(d) - 4) // 78   # NENT (nasm -DNENT=512 for a longer ring)
 ring = d[4:4 + N * 14]
 text = d[4 + N * 14:4 + N * 14 + N * 32]
 tails = d[4 + N * 14 + N * 32:4 + N * 14 + N * 64]
