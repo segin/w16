@@ -62,6 +62,12 @@ What may **not** be copied out of Microsoft files:
 - **Data tables and constants beyond the interface,** even when they are only numbers. Example: Clock's circle table. Such values are computed, then corrected by black-box observation (screen pixels, GDI call logs), with the evidence recorded. Any copied data is removed from git history before merging.
 - **Microsoft branding:** product names, copyright lines and logos. These are never presented as w16's own. A Microsoft branding string in a UI is used only with the user's explicit decision for that string.
 
+**Test-only combinations with Microsoft's files (the user's decision, 2026-11-13).** For 1:1 comparison testing, a test may build a transient binary that combines w16's code with data taken from the reference install's own files, for example `tests/vgamsres.sh`, which links Microsoft's VGA.DRV resources into a scratch copy of w16's driver so that a screen comparison measures w16's drawing code and not its art. The user's reasoning: this is intermediate copying for verifying compatibility, as in *Sega v. Accolade* (9th Cir. 1992). Conditions:
+- the result is made in a scratch or build directory at test time, from the user's own reference install, and is never committed, put in the install tree, distributed or published;
+- it is only run and compared by the tests, never inspected to reproduce what it contains (no viewing of Microsoft's art, no copying of its data into w16);
+- the script says so in its header.
+w16's shipped files stay entirely w16's own.
+
 Notes:
 - The MIT licence on the MS-DOS repository has no explicit patent grant. Any relevant patents from the 1980s and early 1990s have expired.
 - MS-DOS 4.0 was co-developed with IBM, and IBM copyright notices appear in its sources. Microsoft published it under MIT, and the project relies on that in good faith.
