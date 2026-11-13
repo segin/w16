@@ -56,14 +56,8 @@ target=$msvga
 if [ -n "$drv" ]; then
     target=$drv
     if [ -n "$msres" ]; then
-        # the driver under test with Microsoft's resources: relink its
-        # objects (build/vga/vga.lnk lists them) with a .RES made from
-        # Microsoft's file (tools/ne2res.py)
-        python3 "$root/tools/ne2res.py" "$msvga" "$tmp/ms.res"
-        (cd "$root" && PATH=$W/binl64:$PATH WATCOM=$W \
-            wlink @build/vga/link.lnk name "$tmp/VGA.DRV" option resource="$tmp/ms.res" \
-            option map="$tmp/vga.map") > "$tmp/link.txt" 2>&1 || { cat "$tmp/link.txt"; exit 1; }
-        python3 "$root/tools/nemark.py" "$tmp/VGA.DRV" 3.10 > /dev/null
+        # the driver under test with Microsoft's resources (tests/vgamsres.sh)
+        "$root/tests/vgamsres.sh" "$tmp/VGA.DRV"
         target=$tmp/VGA.DRV
     fi
 fi

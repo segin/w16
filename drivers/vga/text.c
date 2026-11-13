@@ -24,7 +24,7 @@ typedef struct {
     WORD base;                          /* the font's offset in its segment */
     BYTE first, last, dflt, brk;
     short height;
-    BYTE bold;
+    BYTE bold;                          /* emboldened: 1 */
 } FONTCTX;
 
 static void font_ctx(FONTCTX *c, LPFONTINFO f, LPTEXTXFORM x)
@@ -36,10 +36,14 @@ static void font_ctx(FONTCTX *c, LPFONTINFO f, LPTEXTXFORM x)
     c->dflt = f->dfDefaultChar;
     c->brk = f->dfBreakChar;
     c->height = f->dfPixHeight;
-    /* emboldening (dpText TC_EA_DOUBLE): the glyph again one pixel
-       right when GDI asks for more weight than the font has
-       (UNVERIFIED against 3.1's rule) */
-    c->bold = x && x->txfWeight > f->dfWeight + 100;
+    /* Emboldening (dpText TC_EA_DOUBLE), when TEXTXFORM's txfAccelerator
+       has 200h (VG6, VGREC), as 3.1's driver does it: each glyph again one
+       pixel to the right, every character one pixel wider, the extent one
+       more (the overhang). The other bits are GDI's own simulations:
+       italic (400h: GDI calls ExtTextOut a band of two rows at a time,
+       each moved right), underline (800h) and strike-out (GDI's
+       polylines after the text). */
+    c->bold = x && (x->txfAccelerator & 0x200) ? 1 : 0;
 }
 
 /* the character table entry of character ch */
@@ -67,7 +71,7 @@ static int advances(FONTCTX *c, LPCSTR s, int n, LPSHORT widths, LPDRAWMODE dm, 
     int i, w, total = 0;
     for (i = 0; i < n; i++) {
         BYTE ch = (BYTE)s[i];
-        w = widths ? widths[i] : (int)char_width(c, ch);
+        w = widths ? widths[i] : (int)char_width(c, ch) + c->bold;
         if (!widths && dm) {
             if (dm->TBreakExtra && ch == (BYTE)(c->first + c->brk)) {
                 w += dm->BreakExtra;
@@ -172,7 +176,7 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     if (n < 0) {
         font_ctx(&c, f, xf);
         width = advances(&c, s, -n, widths, dm, NULL);
-        return MAKELONG(width, c.height);
+        return MAKELONG(width + c.bold, c.height);
     }
     if (!surf_get(&D, lpDev))
         return 0x80000000L;
@@ -214,14 +218,14 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     box.right = x + width + c.bold;
     box.bottom = y + c.height;
     if (!clip_rect(&box, &cr, &D))
-        return MAKELONG(width, c.height);
+        return MAKELONG(width + c.bold, c.height);
     if (D.screen)
         scr_begin(box.left, box.top, box.right, box.bottom);
     if (dm->bkMode == OPAQUE) {
         RECT o;
         o.left = x;
         o.top = y;
-        o.right = x + width;
+        o.right = x + width + c.bold;
         o.bottom = y + c.height;
         if (clip_rect(&o, &cr, &D))
             fill_solid(&D, o.left, o.top, o.right, o.bottom, 0xF0, bg, bg != 0);
@@ -238,7 +242,7 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     }
     if (D.screen)
         scr_end();
-    return MAKELONG(width, c.height);
+    return MAKELONG(width + c.bold, c.height);
 }
 
 /* DWORD ExtTextOut(lpDestDev, wDestXOrg, wDestYOrg, lpClipRect, lpString,
@@ -272,6 +276,6 @@ WORD EXPORT GetCharWidth(LPVOID lpDev, LPSHORT buf, WORD first, WORD last, LPFON
         return 0;
     font_ctx(&c, f, xf);
     for (ch = first; ch <= last && ch < 256; ch++)
-        *buf++ = (short)(char_width(&c, (BYTE)ch) + c.bold);
+        *buf++ = (short)(char_width(&c, (BYTE)ch) + 2 * c.bold);
     return 1;
 }

@@ -206,6 +206,25 @@
 #              SYSTEM.DRV under both Clocks: within their baseline
 #   sysprobe   tests/sysprobe.sh: SY1's and SYREC's logs, w16's
 #              SYSTEM.DRV against Microsoft's      identical
+#   vga        w16's VGA.DRV (drivers/vga) on Microsoft's stack, linked with
+#              Microsoft's resources (tests/vgamsres.sh: the art is then
+#              the same on both sides, the drawing code is compared) under
+#              real input: kbtype, tabs, alttab, helpmenus, pmkeys, icons,
+#              menus, dragoff, pmitems, pmclose, mdimax, about, every screen
+#              against Microsoft's VGA.DRV: 0 (the carets and Clock's icon
+#              left out as in kbd)
+#   vgaboot    plain boots with w16's VGA.DRV on Microsoft's stack: with
+#              Microsoft's resources against the all-Microsoft boot, 0
+#              pixels; with w16's own resources the boot must complete
+#   vgaall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+#              fonts) with w16's VGA.DRV (Microsoft's resources) against
+#              the same with Microsoft's VGA.DRV, kbtype     must be 0
+#   vgawoados  the woados script with w16's VGA.DRV (Disable to text mode
+#              for the DOS program, Enable back): the screens as
+#              all-Microsoft's up to the cursor
+#   vgaprobe   VG1 as the shell (the driver's values as programs see them:
+#              tests/apps/vg1.c), w16's VGA.DRV with its own resources
+#              against Microsoft's: identical logs
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -325,7 +344,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1758,6 +1777,133 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             echo "FAIL sysprobe: $(grep -m1 -E '^FAIL' "$out/sysprobe.txt" || echo 'see sysprobe.txt') ($out/sysprobe.txt)"
             fails=$((fails + 1))
         fi ;;
+    vga)
+        # w16's VGA.DRV (drivers/vga) with Microsoft's resources linked in
+        # (tests/vgamsres.sh, made in this run's directory for this part)
+        # on Microsoft's KRNL286, DOSX, USER and GDI under real input,
+        # every screen against the same script with Microsoft's VGA.DRV
+        # (helpmenus: Notepad's caret left out; icons: Clock's icon; tabs,
+        # kbtype: the caret is drawn by the driver on both sides and
+        # compared)
+        r=ok
+        for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about}; do
+            vdrv=$out/vga-msres-$s.drv
+            "$root/tests/vgamsres.sh" "$vdrv" > "$out/vga-msres-$s.txt" 2>&1 || { r="$s: tests/vgamsres.sh failed"; break; }
+            scr=$root/tests/scripts/input/$s.txt
+            case $s in
+            helpmenus) m="rectangle 14,42 20,61" ;;
+            icons) m="rectangle 160,400 220,445" ;;
+            *) m="rectangle 0,0 0,0" ;;
+            esac
+            b=25 t=220
+            case $s in pmkeys|pmitems|pmclose|mdimax) b=40 t=240 ;; esac
+            [ $s = icons ] && t=380
+            refrun vga-$s-ref vga "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/vga-$s-ref" -r
+            "$root/tests/inputrun.sh" -e "$out/vga-$s-ref/boot.png" -E "$out/vga-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/vga-$s-w16" -r \
+                -f "$vdrv=WINDOWS/SYSTEM/VGA.DRV" > "$out/vga-$s-w16.txt" 2>&1 || true
+            rm -f "$vdrv"
+            ls "$out/vga-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
+            for f in "$out/vga-$s-ref"/[0-9]*.png; do
+                g=$(basename "$f")
+                [ -f "$out/vga-$s-w16/$g" ] || { r="$s: no $g"; break; }
+                magick "$f" -fill black -draw "$m" "$out/vga-$s-a.png"
+                magick "$out/vga-$s-w16/$g" -fill black -draw "$m" "$out/vga-$s-b.png"
+                n=$(magick compare -metric AE "$out/vga-$s-b.png" "$out/vga-$s-a.png" "$out/vga-$s-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$s: $g: $n pixels differ"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   vga: 0 pixels (12 scripts with w16's VGA.DRV)"
+        else echo "FAIL vga: $r ($out)"; fails=$((fails + 1)); fi ;;
+    vgaboot)
+        # plain boots: w16's VGA.DRV with Microsoft's resources against the
+        # all-Microsoft boot (0 pixels), and with its own resources (w16's
+        # art: the boot must complete)
+        ref
+        "$root/tests/vgamsres.sh" "$out/vgaboot-msres.drv" > "$out/vgaboot-msres.txt" 2>&1 || true
+        boot vgaboot -r -f "$out/vgaboot-msres.drv=WINDOWS/SYSTEM/VGA.DRV"
+        rm -f "$out/vgaboot-msres.drv"
+        check vgaboot vgaboot ref
+        boot vgabootown -r -f "$root/build/dos/VGA.DRV=WINDOWS/SYSTEM/VGA.DRV"
+        if booted vgabootown; then echo "ok   vgaboot (own resources): the boot completes"
+        else echo "FAIL vgaboot (own resources): the boot did not complete ($out/vgabootown.txt)"; fails=$((fails + 1)); fi ;;
+    vgaall)
+        # every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
+        # fonts) with w16's VGA.DRV (Microsoft's resources) against the same
+        # with Microsoft's VGA.DRV, the kbtype script (not cached: both
+        # sides are w16's but for VGA.DRV)
+        fon=$root/build/fonts
+        scr=$root/tests/scripts/input/kbtype.txt
+        "$root/tests/vgamsres.sh" "$out/vgaall-msres.drv" > "$out/vgaall-msres.txt" 2>&1 || true
+        for k in ref w16; do
+            if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
+                -f "$out/vgaall-msres.drv=WINDOWS/SYSTEM/VGA.DRV"
+            else set -- -s -b 30 -t 240 "$scr" "$out/vgaall-$k"; fi
+            "$root/tests/inputrun.sh" "$@" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/vgaall-$k.txt" 2>&1 || true
+        done
+        rm -f "$out/vgaall-msres.drv"
+        r=ok
+        ls "$out/vgaall-ref"/[0-9]*.png > /dev/null 2>&1 || r="no screens"
+        for f in "$out/vgaall-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            g=$(basename "$f")
+            [ -f "$out/vgaall-w16/$g" ] || { r="no $g"; break; }
+            n=$(magick compare -metric AE "$out/vgaall-w16/$g" "$f" "$out/vgaall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="$g: $n pixels differ"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   vgaall: 0 pixels (every w16 part, w16's VGA.DRV against Microsoft's)"
+        else echo "FAIL vgaall: $r ($out)"; fails=$((fails + 1)); fi ;;
+    vgawoados)
+        # the MS-DOS Prompt (Standard mode: GDI's Disable puts the screen
+        # in text mode for the DOS program, Enable sets it up again) with
+        # w16's VGA.DRV (Microsoft's resources) on Microsoft's stack
+        # against all-Microsoft, as kbdwoados
+        scr=$root/tests/scripts/input/woados.txt
+        set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        "$root/tests/vgamsres.sh" "$out/vgawoados-msres.drv" > "$out/vgawoados-msres.txt" 2>&1 || true
+        refrun vgawoados-ref vgawoados env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/vgawoados-ref" -r "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/vgawoados-w16" -r "$@" \
+            -f "$out/vgawoados-msres.drv=WINDOWS/SYSTEM/VGA.DRV" > "$out/vgawoados-w16.txt" 2>&1 || true
+        rm -f "$out/vgawoados-msres.drv"
+        a=$out/vgawoados-w16 b=$out/vgawoados-ref r=ok
+        for s in 01-dos:640x400 02-ver:640x400 03-back:640x480 04-exit:640x400; do
+            f=${s%%:*} want=${s#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            if [ $f = 03-back ]; then
+                n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/vgawoados-$f-diff.png" 2>&1 >/dev/null || true)
+            else
+                n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/vgawoados-$f-diff.png" 2>&1 >/dev/null || true)
+            fi
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   vgawoados: the MS-DOS Prompt and back with w16's VGA.DRV"
+        else echo "FAIL vgawoados: $r ($out/vgawoados-w16)"; fails=$((fails + 1)); fi ;;
+    vgaprobe)
+        # VG1 as the shell: the driver's values as programs see them, w16's
+        # VGA.DRV with its own resources against Microsoft's (not cached)
+        for k in ms w16; do
+            set --; [ $k = w16 ] && set -- -w
+            "$root/tests/vgaprobe.sh" "$@" -p "$root/build/dos/VG1.EXE" -t 300 "$out/vgaprobe-$k" \
+                > "$out/vgaprobe-$k.txt" 2>&1 || true
+        done
+        if [ ! -s "$out/vgaprobe-ms/TK.LOG" ] || ! grep -q '^end' "$out/vgaprobe-ms/TK.LOG"; then
+            echo "FAIL vgaprobe: no complete log with Microsoft's VGA.DRV ($out/vgaprobe-ms)"; fails=$((fails + 1))
+        elif cmp -s "$out/vgaprobe-ms/TK.LOG" "$out/vgaprobe-w16/TK.LOG"; then
+            echo "ok   vgaprobe: VG1's logs identical ($(grep -c '^c ' "$out/vgaprobe-ms/TK.LOG") colours)"
+        else
+            echo "FAIL vgaprobe: VG1's logs differ ($out/vgaprobe-ms, $out/vgaprobe-w16)"; fails=$((fails + 1))
+        fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }
@@ -1787,6 +1933,7 @@ caseparts() {
     winfile) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
+    vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
     *) echo "$1" ;;
     esac
 }
@@ -1814,6 +1961,9 @@ partsummary() {
     mouse)
         if [ $pbad = 0 ]; then echo "ok   mouse: 0 pixels (dragoff, pmitems, pmclose, helpmenus with w16's MOUSE.DRV)"
         else echo "FAIL mouse: $pfirst ($out)"; fi ;;
+    vga)
+        if [ $pbad = 0 ]; then echo "ok   vga: 0 pixels ($pt scripts with w16's VGA.DRV)"
+        else echo "FAIL vga: $pfirst ($out)"; fi ;;
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;

@@ -30,81 +30,91 @@ static void put_pixel(int x, int y, BYTE rop, int idx)
     }
 }
 
-/* the styles' on/off runs in pixels, starting "on" (UNVERIFIED: 3.1's
-   own lengths and how they follow the line's direction) */
-static const BYTE style_runs[5][6] = {
-    { 0 },
-    { 18, 6, 0 },                       /* dashed */
-    { 3, 3, 0 },                        /* dotted */
-    { 9, 6, 3, 6, 0 },                  /* dash dot */
-    { 9, 3, 3, 3, 3, 3 }                /* dash dot dot */
-};
-static int style, style_i, style_left, style_on;
+/* Styled lines as Windows 3.1's VGA.DRV draws them (VG5: every style,
+   direction and slope, with an opaque and a transparent background,
+   polylines and separate LineTo calls): each style is an 8-bit mask, its
+   first bit first; one bit lasts 4 pixels of a line along x (|dx| > |dy|)
+   and 3 of a line along y or at 45 degrees, counted with an error term
+   that steps 3 or 4 per pixel and moves to the next bit at 12; the first
+   bit of an Output call lasts 4 pixels either way (the term starts at
+   12 - 4 steps). The mask and term go on from one segment of a polyline
+   to the next; each Output call starts again. */
+static const BYTE style_mask[5] = { 0xFF, 0xE7, 0xAA, 0xE4, 0xEA };
+static int style_bit, style_err, style_new;
+static BYTE style_m;
 
 static void style_start(int s)
 {
-    style = s >= LS_DASHED && s <= LS_DASHDOTDOT ? s : 0;
-    style_i = 0;
-    style_left = style ? style_runs[style][0] : 0;
-    style_on = 1;
+    style_m = s >= LS_DASHED && s <= LS_DASHDOTDOT ? style_mask[s] : 0xFF;
+    style_bit = 0;
+    style_new = 1;
+}
+
+/* a segment along x (or not) starts */
+static int style_step;
+static void style_segment(int xmajor)
+{
+    style_step = xmajor ? 3 : 4;
+    if (style_new) {
+        style_err = 12 - 4 * style_step;
+        style_new = 0;
+    }
 }
 
 /* the next pixel of a styled line: 1 on, 0 off */
 static int style_next(void)
 {
-    int on;
-    if (!style)
-        return 1;
-    on = style_on;
-    if (--style_left <= 0) {
-        style_i++;
-        if (style_i >= 6 || !style_runs[style][style_i])
-            style_i = 0;
-        style_left = style_runs[style][style_i];
-        style_on = !(style_i & 1);
+    int on = (style_m >> (7 - style_bit)) & 1;
+    style_err += style_step;
+    if (style_err >= 12) {
+        style_err -= 12;
+        style_bit = (style_bit + 1) & 7;
     }
     return on;
 }
 
-/* a line from (x0, y0) up to, not including, (x1, y1): Bresenham
-   (UNVERIFIED: 3.1's choice of pixel where the line passes between two) */
+/* A line from (x0, y0) up to, not including, (x1, y1). Its pixels, as
+   Windows 3.1's VGA.DRV's (VG5, every direction and slope): one per step
+   along the longer axis (the y axis at 45 degrees), the other coordinate
+   rounded to the nearest; exactly half way it goes to the side of the
+   line's upper end (the start when y0 <= y1, else the end). */
 static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, int bg)
 {
     int dx = x1 - x0, dy = y1 - y0, sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
-    int err, i, n;
+    int i, n, dmaj, dmin, base = 0, rem = 0, off, x, y, up = y0 > y1;
     if (dx < 0)
         dx = -dx;
     if (dy < 0)
         dy = -dy;
-    if (dx >= dy) {
-        n = dx;
-        err = 2 * dy - dx;
-        for (i = 0; i < n; i++) {
-            if (style_next())
-                put_pixel(x0, y0, rop, fg);
-            else if (bg >= 0)
-                put_pixel(x0, y0, bgrop, bg);
-            if (err > 0) {
-                y0 += sy;
-                err -= 2 * dx;
-            }
-            err += 2 * dy;
-            x0 += sx;
-        }
+    style_segment(dx > dy);
+    if (dx > dy) {
+        dmaj = dx;
+        dmin = dy;
     } else {
-        n = dy;
-        err = 2 * dx - dy;
-        for (i = 0; i < n; i++) {
-            if (style_next())
-                put_pixel(x0, y0, rop, fg);
-            else if (bg >= 0)
-                put_pixel(x0, y0, bgrop, bg);
-            if (err > 0) {
-                x0 += sx;
-                err -= 2 * dy;
-            }
-            err += 2 * dx;
-            y0 += sy;
+        dmaj = dy;
+        dmin = dx;
+    }
+    n = dmaj;
+    for (i = 0; i < n; i++) {
+        /* rem / dmaj: the fraction past base, of i * dmin / dmaj */
+        off = base;
+        if (2 * rem > dmaj || (2 * rem == dmaj && up))
+            off++;
+        if (dx > dy) {
+            x = x0 + sx * i;
+            y = y0 + sy * off;
+        } else {
+            y = y0 + sy * i;
+            x = x0 + sx * off;
+        }
+        if (style_next())
+            put_pixel(x, y, rop, fg);
+        else if (bg >= 0)
+            put_pixel(x, y, bgrop, bg);
+        rem += dmin;
+        if (rem >= dmaj) {
+            rem -= dmaj;
+            base++;
         }
     }
 }

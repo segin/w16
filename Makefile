@@ -1076,6 +1076,22 @@ $(DOS)/VG4.EXE: $(B)/tests/start.o $(B)/tests/vg4.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vg4.map file { $(B)/tests/start.o $(B)/tests/vg4.o }
 vgaprobes: $(DOS)/VG4.EXE
+# VG5.EXE: lines of every pen style (tests/apps/vg5.c)
+$(B)/tests/vg5.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG5.EXE: $(B)/tests/start.o $(B)/tests/vg5.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg5.map file { $(B)/tests/start.o $(B)/tests/vg5.o }
+vgaprobes: $(DOS)/VG5.EXE
+# VG6.EXE: text with every attribute (tests/apps/vg6.c)
+$(B)/tests/vg6.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG6.EXE: $(B)/tests/start.o $(B)/tests/vg6.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg6.map file { $(B)/tests/start.o $(B)/tests/vg6.o }
+vgaprobes: $(DOS)/VG6.EXE
+# the VGA probes are built with the rest (the boot test runs them)
+dos: $(DOS)/VGREC.DRV $(DOS)/VG1.EXE $(DOS)/VG3.EXE $(DOS)/VG4.EXE $(DOS)/VG5.EXE $(DOS)/VG6.EXE
 # GD2.EXE: a GDI that records every call and forwards it to GDI.EXE renamed
 # GDJ (tests/gdiboot.sh -L); its parameter table comes from Wine's
 # X11-licensed gdi.spec (wine-20020228, ARCHITECTURE.md 3), kept as
