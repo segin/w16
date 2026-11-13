@@ -319,6 +319,14 @@ int __cdecl tmain(void)
         TranslateMessage(&m);
         DispatchMessage(&m);
     }
+    /* two seconds more: the keys of Shift+F12 are released before the
+       records are read (else whether Shift's release made it was the
+       host's timing) */
+    ticks = 0;
+    while (ticks < 2 && GetMessage(&m, 0, 0, 0)) {
+        TranslateMessage(&m);
+        DispatchMessage(&m);
+    }
     KillTimer(hwnd, 1);
     sc_remove();
     wsprintf(line, "messages=%u\r\n", nmsg);
