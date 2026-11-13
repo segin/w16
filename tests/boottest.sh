@@ -8,6 +8,9 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
+#   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
+#              mode 3 afterwards, as 3.1's KERNEL ends Windows through
+#              USER's ExitWindows when the last task ends (ref and w16)
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
@@ -225,7 +228,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys}
+cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -499,6 +502,30 @@ runcase() {
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
+    lastexit)
+        # the shell (TK55) ends at once with exit code 5: Windows ends
+        # through USER's ExitWindows (KERNEL, last task); a batch file
+        # around WIN records WIN's ERRORLEVEL and the video mode after it
+        {
+            printf 'WIN /S /B > C:\\OUT.TXT\r\n'
+            for n in 9 8 7 6 5 4 3 2 1 0; do printf 'IF ERRORLEVEL %s GOTO E%s\r\n' $n $n; done
+            for n in 9 8 7 6 5 4 3 2 1 0; do printf ':E%s\r\nECHO rc %s> C:\\EL.TXT\r\nGOTO V\r\n' $n $n; done
+            printf ':V\r\nC:\\VIDMODE\r\n'
+            for n in 18 16 7 3 2 1 0; do printf 'IF ERRORLEVEL %s GOTO M%s\r\n' $n $n; done
+            for n in 18 16 7 3 2 1 0; do printf ':M%s\r\nECHO mode %s>> C:\\EL.TXT\r\nGOTO Z\r\n' $n $n; done
+            printf ':Z\r\n'
+        } > "$out/GO55.BAT"
+        set -- -c GO55 -f "$out/GO55.BAT=WINDOWS/GO55.BAT" -f "$root/build/dos/VIDMODE.COM=VIDMODE.COM" \
+            -f "$root/build/dos/TK55.EXE=TK55.EXE" -i 'boot:shell=C:\TK55.EXE'
+        r=ok
+        for k in ref w16; do
+            o=; [ $k = ref ] && o=-r
+            "$root/tests/dropin.sh" -t 60 -o "$out/lastexit-$k" $o "$@" > "$out/lastexit-$k.txt" 2>&1 || true
+            el=$(tr -d '\r' < "$out/lastexit-$k/c/EL.TXT" 2>/dev/null | tr '\n' ' ')
+            [ "$el" = "rc 0 mode 3 " ] || r="$k: $el (rc 0 mode 3 expected)"
+        done
+        if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
+        else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
     k286)   # an emulated 80286 (DOSBox-X cputype=286): w16's KRNL286 on
             # Microsoft's DOSX and on w16's, against Microsoft's KRNL286
             # there (mode switches back to real mode by processor reset)
