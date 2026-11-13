@@ -39,11 +39,14 @@ static void font_ctx(FONTCTX *c, LPFONTINFO f, LPTEXTXFORM x)
     /* Emboldening (dpText TC_EA_DOUBLE), when TEXTXFORM's txfAccelerator
        has 200h (VG6, VGREC), as 3.1's driver does it: each glyph again one
        pixel to the right, every character one pixel wider, the extent one
-       more (the overhang). The other bits are GDI's own simulations:
+       more (the overhang); not for a font that is bold already (System
+       asked for 900: GDI sets the bit, 3.1's driver draws it plain;
+       UNVERIFIED where between 400 and 700 the line is). The other bits
+       are GDI's own simulations:
        italic (400h: GDI calls ExtTextOut a band of two rows at a time,
        each moved right), underline (800h) and strike-out (GDI's
        polylines after the text). */
-    c->bold = x && (x->txfAccelerator & 0x200) ? 1 : 0;
+    c->bold = x && (x->txfAccelerator & 0x200) && f->dfWeight < 700 ? 1 : 0;
 }
 
 /* the character table entry of character ch */
@@ -174,9 +177,17 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     if (!f)
         return 0x80000000L;
     if (n < 0) {
+        /* the extent: as the box below (GDI's underline and strike-out
+           take their length from it) */
         font_ctx(&c, f, xf);
-        width = advances(&c, s, -n, widths, dm, NULL);
-        return MAKELONG(width + c.bold, c.height);
+        if (-n > 512)
+            n = -512;
+        width = advances(&c, s, -n, widths, dm, advbuf);
+        if (widths)
+            width = width - advbuf[-n - 1] + (int)char_width(&c, (BYTE)s[-n - 1]);
+        else
+            width += c.bold;
+        return MAKELONG(width, c.height);
     }
     if (!surf_get(&D, lpDev))
         return 0x80000000L;
@@ -212,20 +223,28 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     font_ctx(&c, f, xf);
     berr = dm->BreakErr;
     width = advances(&c, s, n, widths, dm, advbuf);
+    /* the text's box, which the background fills (OPAQUE) and the glyphs
+       are cut to: the extent, or with the caller's widths the last
+       character's own width after the others' widths (VG6: its bold
+       second strike falls outside and is cut) */
+    if (widths)
+        width = width - advbuf[n - 1] + (int)char_width(&c, (BYTE)s[n - 1]);
+    else
+        width += c.bold;
     dm->BreakErr = berr;
     box.left = x;
     box.top = y;
-    box.right = x + width + c.bold;
+    box.right = x + width;
     box.bottom = y + c.height;
     if (!clip_rect(&box, &cr, &D))
-        return MAKELONG(width + c.bold, c.height);
+        return 0;
     if (D.screen)
         scr_begin(box.left, box.top, box.right, box.bottom);
     if (dm->bkMode == OPAQUE) {
         RECT o;
         o.left = x;
         o.top = y;
-        o.right = x + width + c.bold;
+        o.right = x + width;
         o.bottom = y + c.height;
         if (clip_rect(&o, &cr, &D))
             fill_solid(&D, o.left, o.top, o.right, o.bottom, 0xF0, bg, bg != 0);
@@ -242,7 +261,7 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     }
     if (D.screen)
         scr_end();
-    return MAKELONG(width + c.bold, c.height);
+    return 0;                           /* VGREC: 3.1's driver returns 0 when it draws */
 }
 
 /* DWORD ExtTextOut(lpDestDev, wDestXOrg, wDestYOrg, lpClipRect, lpString,

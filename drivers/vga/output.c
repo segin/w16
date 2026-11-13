@@ -31,34 +31,39 @@ static void put_pixel(int x, int y, BYTE rop, int idx)
 }
 
 /* Styled lines as Windows 3.1's VGA.DRV draws them (VG5: every style,
-   direction and slope, with an opaque and a transparent background,
-   polylines and separate LineTo calls): each style is an 8-bit mask, its
-   first bit first; one bit lasts 4 pixels of a line along x (|dx| > |dy|)
-   and 3 of a line along y or at 45 degrees, counted with an error term
-   that steps 3 or 4 per pixel and moves to the next bit at 12; the first
-   bit of an Output call lasts 4 pixels either way (the term starts at
-   12 - 4 steps). The mask and term go on from one segment of a polyline
-   to the next; each Output call starts again. */
+   direction and slope, opaque and transparent, single lines, polylines of
+   mixed directions in one Output call and separate LineTo calls). Each
+   style is an 8-bit mask, its first bit first. A counter moves through a
+   bit in 12 units: 3 a pixel along a line in x (|dx| > |dy|), 4 along y
+   or at 45 degrees, so a bit lasts 4 or 3 pixels. Each Output call starts
+   the counter at 0 for a first segment in x, -1 in y (the first bit has 4
+   pixels either way). Through a polyline the mask and counter go on; at a
+   turn from a segment in x to one in y the pixels left of the bit are
+   kept (the counter becomes (4 c - 12) / 3, rounded down: the fit is the
+   same for any rounding), at a turn from y to x the counter is kept. */
 static const BYTE style_mask[5] = { 0xFF, 0xE7, 0xAA, 0xE4, 0xEA };
-static int style_bit, style_err, style_new;
+static int style_bit, style_err, style_step, style_first, style_prevx;
 static BYTE style_m;
 
 static void style_start(int s)
 {
     style_m = s >= LS_DASHED && s <= LS_DASHDOTDOT ? style_mask[s] : 0xFF;
     style_bit = 0;
-    style_new = 1;
+    style_first = 1;
 }
 
 /* a segment along x (or not) starts */
-static int style_step;
 static void style_segment(int xmajor)
 {
-    style_step = xmajor ? 3 : 4;
-    if (style_new) {
-        style_err = 12 - 4 * style_step;
-        style_new = 0;
+    if (style_first) {
+        style_err = xmajor ? 0 : -1;
+        style_first = 0;
+    } else if (style_prevx && !xmajor) {
+        int v = 4 * style_err - 12;
+        style_err = v >= 0 ? v / 3 : -((-v + 2) / 3);
     }
+    style_prevx = xmajor;
+    style_step = xmajor ? 3 : 4;
 }
 
 /* the next pixel of a styled line: 1 on, 0 off */

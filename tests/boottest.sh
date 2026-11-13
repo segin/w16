@@ -212,7 +212,8 @@
 #              real input: kbtype, tabs, alttab, helpmenus, pmkeys, icons,
 #              menus, dragoff, pmitems, pmclose, mdimax, about, every screen
 #              against Microsoft's VGA.DRV: 0 (the carets and Clock's icon
-#              left out as in kbd)
+#              left out as in kbd; in about, the free memory, which is
+#              more with w16's smaller driver)
 #   vgaboot    plain boots with w16's VGA.DRV on Microsoft's stack: with
 #              Microsoft's resources against the all-Microsoft boot, 0
 #              pixels; with w16's own resources the boot must complete
@@ -1793,6 +1794,8 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             case $s in
             helpmenus) m="rectangle 14,42 20,61" ;;
             icons) m="rectangle 160,400 220,445" ;;
+            # the About box's free memory: w16's driver is smaller
+            about) m="rectangle 318,334 380,346" ;;
             *) m="rectangle 0,0 0,0" ;;
             esac
             b=25 t=220

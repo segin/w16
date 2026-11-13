@@ -8,14 +8,18 @@ the Windows 3.1 DDK documents it, loads on real Windows 3.1 as well as on
 w16, and has no w16-only interfaces. `make` builds `build/dos/VGA.DRV`
 and puts it in the install tree (`build/w16/SYSTEM`).
 
-**Status: stage 1 of 5 done** (Standard mode): Windows 3.1 boots to
-Program Manager on it, and with Microsoft's resources linked in for the
-comparison the screen is pixel-identical to Microsoft's driver's
-(`tests/vgaprobe.sh`); every value programs can see through the driver
-(GDIINFO, system metrics and colours from its configuration resource,
-the stock fonts, GetNearestColor, the dithering of solid brushes on colour
-and monochrome bitmaps, the bitmap formats, Inquire, the VGA palette) is
-the same as with Microsoft's (VG1, VG3, VG4). See "Stages" below.
+**Status: stages 1 and 2 of 5 done** (Standard mode): Windows 3.1 boots
+to Program Manager on it, and with Microsoft's resources linked in for the
+comparison every screen of the boot test's `vga` scripts (twelve real-input
+sessions: typing, menus, dialogs, Task List, Alt+Tab, icons, dragging,
+MDI) is pixel-identical to Microsoft's driver's, as is the MS-DOS Prompt
+and back (Disable/Enable) and the all-w16 stack with it. Every value
+programs can see through the driver (GDIINFO, system metrics and colours
+from its configuration resource, the stock fonts, GetNearestColor, the
+dithering of solid brushes on colour and monochrome bitmaps, the bitmap
+formats, Inquire, the VGA palette) is the same as with Microsoft's (VG1,
+VG3), and so are lines of every style (VG5) and text with every
+attribute (VG6). See "Stages" below.
 
 ## Layout
 
@@ -124,6 +128,41 @@ order, take the thresholds of the 8 x 8 Bayer matrix in turn. On a
 monochrome bitmap the white pixels are the thresholds below (R + 2G + B +
 4) / 16, except levels 16 and 48, which have a diagonal pattern.
 
+### Lines (Output OS_POLYLINE)
+
+From VG5 (lines of every pen style in every direction and slope, opaque
+and transparent, single, polylines in one Output call, separate LineTo
+calls): one pixel per step of the longer axis (y at 45 degrees), the
+other coordinate rounded to nearest, a half going to the side of the
+line's upper end; the end point is not drawn. Styles are 8-bit masks
+(dashed E7h, dotted AAh, dash-dot E4h, dash-dot-dot EAh, first bit
+first); a counter goes through a bit in 12 units, 3 a pixel along x and
+4 along y (bits of 4 and 3 pixels), starting at 0 for a first segment in
+x and -1 in y; through a polyline the mask and counter go on, the
+counter kept at a turn from y to x and converted to keep the pixels
+left of the bit at a turn from x to y (4c - 12) / 3; each call starts
+again. UNVERIFIED: polylines that turn from a slanted y segment into an x
+one, or cross back over themselves (VG5's stars and pentagons, GD3's
+styled ellipses and arcs, which GDI draws as such polylines) differ by a
+pixel of phase here and there.
+
+### Text (ExtTextOut, StrBlt, GetCharWidth)
+
+From VG6 (raster fonts with bold, italic, underline, strike-out and
+their mixtures, opaque and transparent, clipped, with widths,
+justification and character extra) and VGREC: GDI asks for emboldening
+with 200h in TEXTXFORM's txfAccelerator; the driver strikes each glyph
+twice one pixel apart, makes each character one pixel wider and the
+extent one more (GetCharWidth: two more), unless the font is bold
+already (System asked for 900: plain). Italic (400h), underline (800h)
+and strike-out (1000h) GDI does itself: italic by calling ExtTextOut in
+bands of two rows moved right, the lines by polylines whose length is
+the driver's extent. With the caller's widths the text's box (its
+background, the cut of its glyphs, the extent) is the widths of all
+characters but the last plus the last one's own width. Drawing returns 0
+(3.1's driver does); measuring (count < 0) returns the extent in AX and
+the height in DX.
+
 ## Testing
 
 - `tests/vgaprobe.sh [-w] [-m] [-l] [-p PROBE] [-s] OUTDIR`: Windows 3.1
@@ -135,7 +174,16 @@ monochrome bitmap the white pixels are the thresholds below (R + 2G + B +
   of 4913 colours or the colours of `C:\VG1.IN`; the two drivers' logs
   must be identical.
 - `tests/vgacolor.sh` (VG3, VG4): the colours exhaustively; heavy, for the
-  build host.
+  build host. VG3 (all 2^24 colours, on the screen and on a monochrome
+  bitmap) gives identical files with both drivers.
+- VG5 (`tests/apps/vg5.c`): lines of every style; VG6
+  (`tests/apps/vg6.c`): text. Their logs are compared whole.
+- Boot-test cases (`tests/boottest.sh`): `vga` (twelve input scripts with
+  w16's driver and Microsoft's resources against Microsoft's driver, every
+  screen 0 pixels), `vgaboot` (plain boots: 0 pixels; with w16's own
+  resources the boot completes), `vgaall` (every w16 part with it),
+  `vgawoados` (the MS-DOS Prompt: Disable to text mode and Enable back),
+  `vgaprobe` (VG1's logs identical).
 
 ## Stages
 
@@ -146,8 +194,8 @@ monochrome bitmap the white pixels are the thresholds below (R + 2G + B +
    DeviceBitmapBits, SetDIBitsToDevice, FastBorder, SaveScreenBitmap, the
    software cursor, Enable/Disable, all 80 resources. Boots to Program
    Manager; pixel-identical boot screen with Microsoft's resources.
-2. Pixel-exact boot screens and scenarios (boot-test cases `vga`,
-   `vgaall`; `tests/gdiscenarios.sh`-style runs on both drivers).
+2. **Done**: pixel-exact boot screens and scenarios: the boot-test cases
+   above; lines and their styles (VG5) and text (VG6) as 3.1's.
 3. The full ROP set and every Output style checked by probes, styled
    lines as 3.1 draws them, DIBs (RLE, over 64K), screen switching
    (woados, winprompt), cursors, escapes, EnumObj's order.
@@ -156,11 +204,11 @@ monochrome bitmap the white pixels are the thresholds below (R + 2G + B +
 
 ## Not verified yet (UNVERIFIED)
 
-- Line pixels (Bresenham's choice between two pixels), styled lines'
-  lengths, hatch patterns, the monochrome value of a colour on a
-  monochrome bitmap (rgb_mono), ScanLR's start pixel, emboldening
-  (TC_EA_DOUBLE), colour -> monochrome BitBlt's background rule, EnumObj's
-  order, the escapes Control supports.
+- Styled polylines turning from slanted y segments to x ones (above),
+  hatch patterns, ScanLR's start pixel, colour -> monochrome BitBlt's
+  background rule, EnumObj's order, the escapes Control supports, DIBs in
+  RLE or over 64K, the dithering of all 2^24 colours (VG4: written, run on
+  the build host next).
 - That nothing but the driver reads OEMBIN 2 and STRINGS 1000/1010 (w16's
   hold a note).
 - 386 Enhanced mode (INT 2Fh 4000h-4007h, the grabber).
