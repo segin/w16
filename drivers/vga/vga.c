@@ -161,10 +161,14 @@ WORD EXPORT Control(LPVOID lpDevice, WORD fn, LPVOID in, LPVOID out)
     case QUERYESCSUPPORT:
         if (!in)
             return 0;
+        /* VG8: GETCOLORTABLE and QUERYESCSUPPORT 1, MOUSETRAILS -7
+           (UNVERIFIED meaning; the escape itself is not implemented) */
         switch (*(LPWORD)in) {
         case QUERYESCSUPPORT:
         case GETCOLORTABLE:
             return 1;
+        case MOUSETRAILS:
+            return (WORD)-7;
         }
         return 0;
     case GETCOLORTABLE:
@@ -181,47 +185,52 @@ WORD EXPORT Control(LPVOID lpDevice, WORD fn, LPVOID in, LPVOID out)
     return 0;
 }
 
-/* the colours EnumObj gives, in its order: the eight EGA colours the DDK
-   asks for first, then the other eight (UNVERIFIED against 3.1's order) */
-static const DWORD enum_colors[16] = {
-    0x000000L, 0xFFFFFFL, 0x0000FFL, 0x00FF00L, 0xFF0000L, 0x00FFFFL, 0xFF00FFL, 0xFFFF00L,
-    0x000080L, 0x008000L, 0x800000L, 0x008080L, 0x800080L, 0x808000L, 0x808080L, 0xC0C0C0L
-};
-
 typedef WORD (__far __pascal *ENUMPROC)(LPVOID, LPVOID);
 
-/* WORD EnumObj(lpDevice, wStyle, lpCallback, lpClientData) */
+/* WORD EnumObj(lpDevice, wStyle, lpCallback, lpClientData): what
+   Windows 3.1's driver enumerates (VG8, EnumObjects):
+   - pens: styles 0-4 (solid ... dash-dot-dot), each in the 16 colours
+     from white down to black (index order backwards), width 0;
+   - brushes: solid ones in every colour whose red, green and blue are
+     each 255, 192, 128, 64 or 0 (blue changing fastest, from 255 down),
+     then hatched ones, hatch 5 down to 0, each in the 16 colours from
+     white down to black.
+   The last callback's answer is returned (1 when it never said stop). */
 WORD EXPORT EnumObj(LPVOID lpDevice, WORD style, FARPROC cb, LPVOID data)
 {
+    static const BYTE levels[5] = { 255, 192, 128, 64, 0 };
     WORD r = 1;
-    int i, h;
+    int i, h, rr, gg, bb;
     (void)lpDevice;
     if (style == OBJ_PEN) {
         LPEN p;
-        for (i = 0; i < 16; i++) {
-            p.lopnStyle = LS_SOLID;
-            p.lopnWidth.x = 1;
-            p.lopnWidth.y = 0;
-            p.lopnColor = enum_colors[i];
-            r = ((ENUMPROC)cb)((LPVOID)&p, data);
-            if (!r)
-                return 0;
-        }
+        for (h = LS_SOLID; h <= LS_DASHDOTDOT; h++)
+            for (i = 15; i >= 0; i--) {
+                p.lopnStyle = h;
+                p.lopnWidth.x = 0;
+                p.lopnWidth.y = 0;
+                p.lopnColor = index_rgb(i);
+                r = ((ENUMPROC)cb)((LPVOID)&p, data);
+                if (!r)
+                    return 0;
+            }
     } else if (style == OBJ_BRUSH) {
         LBRUSH b;
-        for (i = 0; i < 16; i++) {
-            b.lbStyle = BS_SOLID;
-            b.lbColor = enum_colors[i];
-            b.lbHatch = 0;
-            b.lbBkColor = 0;
-            r = ((ENUMPROC)cb)((LPVOID)&b, data);
-            if (!r)
-                return 0;
-        }
-        for (h = 0; h < 6; h++)
-            for (i = 0; i < 16; i++) {
+        for (rr = 0; rr < 5; rr++)
+            for (gg = 0; gg < 5; gg++)
+                for (bb = 0; bb < 5; bb++) {
+                    b.lbStyle = BS_SOLID;
+                    b.lbColor = RGB(levels[rr], levels[gg], levels[bb]);
+                    b.lbHatch = 0;
+                    b.lbBkColor = 0;
+                    r = ((ENUMPROC)cb)((LPVOID)&b, data);
+                    if (!r)
+                        return 0;
+                }
+        for (h = 5; h >= 0; h--)
+            for (i = 15; i >= 0; i--) {
                 b.lbStyle = BS_HATCHED;
-                b.lbColor = enum_colors[i];
+                b.lbColor = index_rgb(i);
                 b.lbHatch = h;
                 b.lbBkColor = 0;
                 r = ((ENUMPROC)cb)((LPVOID)&b, data);

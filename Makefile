@@ -1097,6 +1097,14 @@ $(DOS)/VG7.EXE: $(B)/tests/start.o $(B)/tests/vg7.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vg7.map file { $(B)/tests/start.o $(B)/tests/vg7.o }
 vgaprobes: $(DOS)/VG7.EXE
+# VG8.EXE: EnumObj, escapes, flood fills (tests/apps/vg8.c)
+$(B)/tests/vg8.o: tests/apps/vg1ref.h tests/apps/tklog.h
+$(DOS)/VG8.EXE: $(B)/tests/start.o $(B)/tests/vg8.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg8.map file { $(B)/tests/start.o $(B)/tests/vg8.o }
+vgaprobes: $(DOS)/VG8.EXE
+dos: $(DOS)/VG8.EXE
 dos: $(DOS)/VG7.EXE
 # the VGA probes are built with the rest (the boot test runs them)
 dos: $(DOS)/VGREC.DRV $(DOS)/VG1.EXE $(DOS)/VG3.EXE $(DOS)/VG4.EXE $(DOS)/VG5.EXE $(DOS)/VG6.EXE
