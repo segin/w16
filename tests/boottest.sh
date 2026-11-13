@@ -102,6 +102,13 @@
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
+#   mdimax     a maximised MDI child's controls in the frame's menu bar:
+#              probe US18 as the shell on 3.1 and on w16's USER (its OBS
+#              lines identical), then Program Manager's Main group
+#              maximised, its system menu from the bar (Alt+-), File and
+#              Left, the restore button clicked, Accessories maximised,
+#              the Window menu, Ctrl+F4 (tests/scripts/input/mdimax.txt):
+#              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -265,7 +272,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm}
+cases=${*:-kernel dosx k286 lastexit wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu icons winfile pmitems pmclose write mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm mdimax}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -996,6 +1003,59 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmkeys: arrow keys move Program Manager's selection from the start (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmkeys: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mdimax)
+        # a maximised MDI child's controls in the frame's menu bar (user/mdi.c):
+        # probe US18 (tests/apps/us18.c) as the shell on Windows 3.1 and on
+        # w16's USER, the OBS lines of the two logs identical; then real
+        # input in Program Manager (tests/scripts/input/mdimax.txt) on w16's
+        # USER and GDI, with Microsoft's PROGMAN pixel for pixel and with
+        # w16's (its group icons left out), against all-Microsoft
+        us18() {   # LABEL dropin.sh options...: US18's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 150 -s "$out/$_l.png" -o "$out/$_l" \
+                -f "$root/build/dos/US18.EXE=US18.EXE" -i 'boot:shell=C:\US18.EXE' "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        us18 mdimax-us18ref -r
+        us18 mdimax-us18 -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
+        scr=$root/tests/scripts/input/mdimax.txt
+        refrun mdimax-ref mdimax "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/mdimax-ref" -r
+        "$root/tests/inputrun.sh" -e "$out/mdimax-ref/boot.png" -E "$out/mdimax-ref" -b 40 -t 240 "$scr" "$out/mdimax-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/mdimax-us.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -s -E "$out/mdimax-ref" -M "rectangle 60,310 300,342" -b 40 -t 240 "$scr" "$out/mdimax-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/mdimax-pm.txt" 2>&1 || true
+        r=ok
+        for k in us18ref us18; do
+            f=$out/mdimax-$k.log
+            if [ ! -f "$f" ] || ! grep -q '^US18 end' "$f"; then r="$k: US18 did not finish ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/mdimax-us18ref.log" > "$out/mdimax-us18ref.obs"
+            grep '^OBS [^~]' "$out/mdimax-us18.log" > "$out/mdimax-us18.obs"
+            cmp -s "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" ||
+                r="US18: $(diff "$out/mdimax-us18ref.obs" "$out/mdimax-us18.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/mdimax-us18ref.obs, mdimax-us18.obs)"
+        fi
+        for k in us pm; do
+            [ "$r" = ok ] || break
+            ls "$out/mdimax-ref"/[0-9]*.png > /dev/null 2>&1 || { r="no reference screens"; break; }
+            for f in "$out/mdimax-ref"/[0-9]*.png; do
+                s=$(basename "$f")
+                [ -f "$out/mdimax-$k/$s" ] || { r="$k: no $s"; break; }
+                m="rectangle 0,0 0,0"
+                [ $k = pm ] && m="rectangle 60,310 300,342"
+                magick "$f" -fill black -draw "$m" "$out/mdimax-a.png"
+                magick "$out/mdimax-$k/$s" -fill black -draw "$m" "$out/mdimax-b.png"
+                n=$(magick compare -metric AE "$out/mdimax-b.png" "$out/mdimax-a.png" "$out/mdimax-$k-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+        done
+        if [ "$r" = ok ]; then echo "ok   mdimax: US18 as 3.1; maximised groups' controls in the bar, 0 pixels (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL mdimax: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmitems)
         # an item dragged within Program Manager's Main group, then the
         # minimised Accessories group restored (in front, active):
