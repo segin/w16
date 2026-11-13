@@ -26,7 +26,7 @@ int cxSysCharMenu(void);
    LocalInit(h, 12h, 417h); menu structures and their item arrays go in
    the first, the items' strings in the second (Pietrek, Windows
    Internals, ch. 1, LoadWindows; Schulman, Undocumented Windows, ch. 6,
-   "USER Heaps"). Probe US13 confirmed it on 3.1: both are local heaps in
+   "USER Heaps"). Probe US14 confirmed it on 3.1: both are local heaps in
    USER-owned 420h-byte blocks, a CreateMenu block (fixed, 14h bytes) and
    the item arrays are in one, item texts (their length + 1) in the other,
    and nothing of a menu lands in DGROUP; each grows to 64K (2712 empty
@@ -111,7 +111,7 @@ typedef struct MITEM {          /* 1Ah bytes, as 3.1's ITEM (Schulman ch. 6) */
 } MITEM;
 typedef MITEM __far *LPMITEM;
 
-typedef struct MENU {           /* 14h bytes, as 3.1's (Schulman ch. 6; US13) */
+typedef struct MENU {           /* 14h bytes, as 3.1's (Schulman ch. 6; US14) */
     WORD   magic;               /* 'MU' */
     WORD   items;               /* menu-heap block of MITEMs */
     WORD   count;

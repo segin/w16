@@ -1,5 +1,5 @@
 /*
- * us13.c - probe US13: where USER keeps menus, and what they cost in
+ * us14.c - probe US14: where USER keeps menus, and what they cost in
  * "free system resources". Run as the shell on Windows 3.1
  * (tests/refrun.sh) and with w16's USER (tests/userboot.sh -n -s).
  *
@@ -16,7 +16,7 @@
  *    percentages along the way
  * Heap sizes and counts depend on what ran before, so most values are
  * printed as OBS ~ and compared by hand. Block sizes as TOOLHELP gives
- * them differ under KRNL286 (us13ref286.h).
+ * them differ under KRNL286 (us14ref286.h).
  *
  * Found on 3.1: GetFreeSystemResources' percentage of a heap is
  * GetHeapSpaces' free and total bytes, each in whole kilobytes, free * 100
@@ -27,8 +27,8 @@
 #include <windows.h>
 #include <toolhelp.h>
 
-#define TK_REF "us13ref.h"
-#define TK_REF286 "us13ref286.h"
+#define TK_REF "us14ref.h"
+#define TK_REF286 "us14ref286.h"
 #include "tklog.h"
 
 extern WORD FAR PASCAL WaitEvent(HTASK);
@@ -177,7 +177,7 @@ static void report(const char *tag0)
     }
 }
 
-/* the percentage of a heap as US13 found GetFreeSystemResources counts
+/* the percentage of a heap as US14 found GetFreeSystemResources counts
    it on 3.1: GetHeapSpaces' free and total in whole kilobytes */
 static WORD pct(WORD h)
 {
@@ -302,11 +302,11 @@ static void fill_windows(HINSTANCE hi)
     wc.hCursor = 0;
     wc.hbrBackground = 0;
     wc.lpszMenuName = NULL;
-    wc.lpszClassName = "US13";
+    wc.lpszClassName = "US14";
     RegisterClass(&wc);
-    top = CreateWindow("US13", "US13", WS_OVERLAPPED, 0, 0, 100, 100, NULL, NULL, hi, NULL);
+    top = CreateWindow("US14", "US14", WS_OVERLAPPED, 0, 0, 100, 100, NULL, NULL, hi, NULL);
     for (n = 0; n < 4000; n++) {
-        w = CreateWindow("US13", "", WS_CHILD, 0, 0, 10, 10, top, (HMENU)n, hi, NULL);
+        w = CreateWindow("US14", "", WS_CHILD, 0, 0, 10, 10, top, (HMENU)n, hi, NULL);
         if (!w)
             break;
         if (n % 16 == 15)
@@ -329,7 +329,7 @@ int __cdecl tmain(void)
     int i;
     WaitEvent(0);
     InitApp(hi);
-    out("US13 start\r\n");
+    out("US14 start\r\n");
     huser = GetModuleHandle("USER");
     hgdi = GetModuleHandle("GDI");
     gfsr = (PGFSR)GetProcAddress(huser, MAKEINTRESOURCE(284));
@@ -465,6 +465,6 @@ int __cdecl tmain(void)
     obs("GFSR(3)==GFSR(0)", gfsr(3) == gfsr(0));
     obs_env("GFSR(3)", gfsr(3));
     obs_env("GFSR(FFFF)", gfsr(0xFFFF));
-    out("US13 end\r\n");
+    out("US14 end\r\n");
     return 0;
 }

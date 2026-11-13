@@ -405,7 +405,7 @@ static int grow(const lheap *hp, u16 need)
     /* UNVERIFIED: what Windows does when this passes 64K. Asking for the
        whole 64K made a block of 10010h bytes here (the global heap's
        sizes round up): two tiles and a new selector, and the heap's old
-       one faulted at once (US13 filling USER's menu heap). FFF0h is the
+       one faulted at once (US14 filling USER's menu heap). FFF0h is the
        most that stays one segment (KRNL286 then gives 10000h). */
     if (size > SEG_MAX - 0x10)
         size = SEG_MAX - 0x10;

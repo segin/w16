@@ -300,7 +300,7 @@ static UINT min_u(UINT a, UINT b)
 /* GetFreeSystemResources (USER.284, 3.1 SDK): the percentage free of
    USER's heaps (GFSR_USERRESOURCES, 2), of GDI's (GFSR_GDIRESOURCES, 1)
    or the lower of the two (GFSR_SYSTEMRESOURCES, 0); USER's is the least
-   of its DGROUP's, the menu heap's and the menu-string heap's. Probe US13
+   of its DGROUP's, the menu heap's and the menu-string heap's. Probe US14
    on 3.1 fitted every value it saw, while menus, menu strings and
    windows filled each heap in turn, to heap_percent's rule. */
 UINT WINAPI GetFreeSystemResources(UINT what)
@@ -316,7 +316,7 @@ UINT WINAPI GetFreeSystemResources(UINT what)
         return user;
     if (what == GFSR_GDIRESOURCES)
         return gdi;
-    return what == GFSR_SYSTEMRESOURCES ? min_u(user, gdi) : 0;  /* US13: 0 for 3, FFFFh */
+    return what == GFSR_SYSTEMRESOURCES ? min_u(user, gdi) : 0;  /* US14: 0 for 3, FFFFh */
 }
 
 int WINAPI WEP(int n)
