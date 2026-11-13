@@ -1,7 +1,8 @@
 /*
  * us14.c - probe US14: where USER keeps menus, and what they cost in
  * "free system resources". Run as the shell on Windows 3.1
- * (tests/refrun.sh) and with w16's USER (tests/userboot.sh -n -s).
+ * (tests/refrun.sh) and with w16's USER (DROPIN_FIXED=1 tests/userboot.sh -n
+ * -t 120 -s: the probe runs about a minute).
  *
  * Pietrek (Windows Internals, ch. 1, LoadWindows) and Schulman
  * (Undocumented Windows, ch. 6, "USER Heaps") say 3.1's USER keeps menu
