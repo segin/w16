@@ -1,0 +1,3 @@
+# MD3.EXE (tests/apps/md3.c): the mouse stress probe
+@tests/apps/app.lnk
+import U_INITAPP USER.5

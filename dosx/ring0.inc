@@ -1012,10 +1012,12 @@ r0_rmx:
         ; then stayed in service for good: the pointer never moved again
         ; (1 boot in 5 with motion from second 16, autolock=false; never
         ; with Microsoft's DOSX: tests/dos/ms1.asm, TK49).
-        cmp word [pmvec+74h*4+2], G_HC3 | 3
-        jne .ps2go
+%ifndef NOPS2DROP                       ; (a test build without the drop:
+        cmp word [pmvec+74h*4+2], G_HC3 | 3 ; DOSXND.EXE, tests/mousestress.sh
+        jne .ps2go                      ; -D nd)
         cmp word [pmvec+74h*4], refstub_tab + 74h * 3
         je near .back
+%endif
 .ps2go: sub sp, C_SIZE
         mov si, sp
         mov ax, [ps2_pm]

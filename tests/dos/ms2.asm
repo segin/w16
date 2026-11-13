@@ -17,7 +17,9 @@
 ;          words: status, X, Y), 6 = it returned,
 ; kind 7 = INT 33h in (w3 = CX, w4 = DX), 8 = its return (AX, BX, CX, DX
 ;          out), 9 = INT 33h in, ES (AX = ES, BX = SI, w3 = DI).
-; The log stops when full (the first MAXREC records are kept).
+; The log stops when full (the first MAXREC records are kept); with "R"
+; on the command line (MS2 R) it wraps instead and keeps the last MAXREC
+; (count stays at MAXREC; the sequence numbers give the order).
         bits 16
         cpu 8086
         org 100h
@@ -36,16 +38,29 @@ old74   dd 0
 handler dd 0                    ; the real pointing-device handler
 logp    dw log                  ; where the records are (header + 20)
 old33   dd 0
+ring    dw 0                    ; "R": wrap around
+widx    dw 0                    ; the next record's index when wrapping
 
 ; rec: AX = kind; BX, CX, DX = the next three words
 rec:    push di
         push es
         push ax
-        mov di, [cs:count]
+        cmp word [cs:ring], 0
+        je .once
+        mov di, [cs:widx]               ; wrapping: the next slot
+        inc word [cs:widx]
+        cmp word [cs:widx], MAXREC
+        jb .cnt
+        mov word [cs:widx], 0
+.cnt:   cmp word [cs:count], MAXREC
+        jae .slot
+        inc word [cs:count]
+        jmp .slot
+.once:  mov di, [cs:count]
         cmp di, MAXREC
         jae .full
         inc word [cs:count]
-        push cx
+.slot:  push cx
         mov cl, 4
         shl di, cl
         pop cx
@@ -300,7 +315,15 @@ log:
         times MAXREC * 16 db 0
 end_res:
 
-init:   mov ax, 3515h
+init:   mov si, 81h                     ; "R" in the command tail: wrap
+.arg:   lodsb
+        cmp al, 13
+        je .args
+        and al, 0DFh
+        cmp al, 'R'
+        jne .arg
+        mov word [ring], 1
+.args:  mov ax, 3515h
         int 21h
         mov [old15], bx
         mov [old15 + 2], es

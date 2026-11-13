@@ -717,6 +717,13 @@ $(DOS)/DOSXT.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
 	@mkdir -p $(@D)
 	$(NASM) -f bin -dTRACE -I . -o $@ $<
 
+# DOSXND.EXE: without the drop of a PS/2 packet before the client takes
+# INT 74h (a test build: tests/mousestress.sh -D nd)
+$(DOS)/DOSXND.EXE: dosx/dosx.asm $(wildcard dosx/*.inc)
+	@mkdir -p $(@D)
+	$(NASM) -f bin -dNOPS2DROP -I . -o $@ $<
+dos: $(DOS)/DOSXND.EXE
+
 # DX6.EXE: a Windows program dumping the GDT/IDT (run as the shell)
 $(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
 	@mkdir -p $(@D)
@@ -1618,6 +1625,16 @@ $(DOS)/MOUSEPT.DRV: $(B)/mouse/mousept.o drivers/mouse/mouse.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mousept.map file { $< }
 	python3 tools/nemark.py $@ 3.10
+$(B)/mouse/mouselh.o: drivers/mouse/mouse.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DLATEHOOK -o $@ $<
+# MOUSELH.DRV: w16's driver enabling the device before it takes INT 74h,
+# as Windows 3.1's does (a test build: tests/mousestress.sh -M lh)
+$(DOS)/MOUSELH.DRV: $(B)/mouse/mouselh.o drivers/mouse/mouse.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mouselh.map file { $< }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/MOUSELH.DRV
 $(DOS)/MOUSEPF.DRV: $(B)/mouse/mousepf.o drivers/mouse/mouse.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @drivers/mouse/mouse.lnk name $@ option map=$(B)/mouse/mousepf.map file { $< }
@@ -1800,3 +1817,11 @@ install-tree: $(W16SYS)/VGA.DRV
 $(W16SYS)/VGA.DRV: $(DOS)/VGA.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+
+# MD3.EXE: the mouse stress probe (tests/apps/md3.c, tests/mousestress.sh)
+$(B)/tests/md3.o: tests/apps/md1ref.h tests/apps/tklog.h
+$(DOS)/MD3.EXE: $(B)/tests/start.o $(B)/tests/md3.o tests/apps/app.lnk tests/apps/md3.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md3.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/md3.map file { $(B)/tests/start.o $(B)/tests/md3.o }
+dos: $(DOS)/MD3.EXE

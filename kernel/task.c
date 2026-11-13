@@ -383,10 +383,14 @@ static void sti(void);
    on every pass as well; with it, DOSBox's mouse stopped for good after
    the first motion in up to half the boots with motion from the start
    (boot-test input, bootnolock.txt; drivers/mouse/README.md). */
+u16 idle_1689;          /* [w16] idle1689=1 (a test option): the call
+                           back on every pass, as a stress accelerator */
 static void idle(void)
 {
     sti();
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
+    if (idle_1689)
+        rm_int(0x2F, 0x1689, 1, 0, 0);
 }
 
 /* [w16] schedlog=1 (winboot.c): every switch is printed, with what
