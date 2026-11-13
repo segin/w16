@@ -130,7 +130,9 @@ out=$(cd "$out" && pwd)
 "$root/tests/dropin.sh" -n -o "$out/work" -i w16:watchdog=0 "$@" > /dev/null 2>&1 || true
 work=$out/work
 [ -f "$work/dosbox.conf" ] || { echo "dropin.sh did not prepare $work (bad options?)" >&2; exit 2; }
-rm -f "$work/c/WINDOWS/BOOTLOG.TXT" "$work/c/OUT.TXT"
+# the Windows directory (WINDOWS; W16 with dropin.sh -T)
+wdir=$(cat "$work/windir" 2>/dev/null || echo WINDOWS)
+rm -f "$work/c/$wdir/BOOTLOG.TXT" "$work/c/OUT.TXT"
 # INPUTRUN_NOLOCK=1: DOSBox's autolock=false, as an interactive session
 # may have it: the mouse moves without a click capturing it first
 # INPUTRUN_STAY=1: DOSBox stays at the DOS prompt when Windows ends (the
@@ -229,7 +231,7 @@ else
             same "$out/.boot-m.png" "$out/.boot-e.png" && ok=\$now
         elif [ -n "$expect" ]; then
             same "$out/.boot-b.png" "$expect" && ok=\$now
-        elif [ -n "\$prevt" ] && grep -aq 'INITDONE=Final USER' "$work/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null &&
+        elif [ -n "\$prevt" ] && grep -aq 'INITDONE=Final USER' "$work/c/$wdir/BOOTLOG.TXT" 2>/dev/null &&
              ! blank "$out/.boot-b.png"; then
             same "$out/.boot-b.png" "$out/.boot-a.png" && ok=\$prevt
         fi

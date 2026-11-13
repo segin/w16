@@ -1,9 +1,9 @@
 #!/bin/sh
 # Boot build/w16 (make install-tree) as a whole: every file of the tree is
 # laid over a scratch copy of the reference Windows 3.1 install (WIN.COM
-# and PROGMAN.EXE into WINDOWS\, SYSTEM\* into WINDOWS\SYSTEM\, the README
-# left out), KRNL386.EXE is removed, and "WIN /S /B" runs in headless
-# DOSBox (tests/dropin.sh). Then the reference itself (Microsoft's files,
+# and PROGMAN.EXE into WINDOWS\, SYSTEM\* into WINDOWS\SYSTEM\, the README,
+# PROGMAN.INI and the group files left out), KRNL386.EXE is removed, and
+# "WIN /S /B" runs in headless DOSBox (tests/dropin.sh). Then the reference itself (Microsoft's files,
 # KRNL286) the same way. Both screens are saved and compared.
 #   usage: tests/w16tree.sh [-t SECS] [-o DIR] [-R PNG]
 #     -R PNG  the reference's screen is PNG (a screenshot of the same
@@ -30,7 +30,9 @@ done
 mkdir -p "$out"
 set --
 for f in "$tree"/*; do
-    case $(basename "$f") in README.TXT|SYSTEM) continue ;; esac
+    # PROGMAN.INI and the groups name C:\W16 (the w16groups case of
+    # tests/boottest.sh boots them there): the reference's are kept
+    case $(basename "$f") in README.TXT|SYSTEM|PROGMAN.INI|*.GRP) continue ;; esac
     set -- "$@" -f "$f=WINDOWS/$(basename "$f")"
 done
 for f in "$tree"/SYSTEM/*; do

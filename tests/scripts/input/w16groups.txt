@@ -1,0 +1,57 @@
+; w16's default groups (assets/progman) in Program Manager, on a C: drive
+; holding only w16's install tree as C:\W16 (tests/boottest.sh w16groups):
+; Main's Read Me item opens README.TXT in Notepad (its association), Notepad
+; closed; the minimised Accessories group restored (Ctrl+Tab twice from
+; Main: Main, StartUp, Accessories is the z-order), its Notepad item run
+; and closed, then its Calculator item (two to the right) run and closed;
+; then Windows ended (File > Exit, Enter), which saves the groups.
+; Run with Microsoft's PROGMAN.EXE and with w16's on the same tree: the
+; screens must be the same (the minimised groups' own pictures left out)
+key Right
+match 01-readme 20 1
+shot 01-readme
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settlecaret 20 2
+matchnow 02-readme-notepad 20 2
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+match 03-back 20 2
+shot 03-back
+key ctrl+Tab
+sleep 0.5
+key ctrl+Tab
+sleep 1
+key Return
+match 04-accessories 20 3
+shot 04-accessories
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settlecaret 20 2
+matchnow 05-notepad 20 2
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+match 06-back 20 2
+shot 06-back
+key Right
+key Right
+sleep 0.5
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+match 07-calculator 20 3
+shot 07-calculator
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+match 08-back 20 2
+shot 08-back
+key alt+f
+key x
+sleep 2
+key Return
+waitexit 60

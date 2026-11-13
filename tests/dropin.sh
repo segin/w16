@@ -58,6 +58,11 @@
 #                KRNL286 and the 286 paths of the DOS extender; 386x:
 #                DOSBox-X as a 386, which checks segment limits)
 #     -w         use w16's WIN.COM (build/dos/WIN.COM) instead of Windows 3.1's
+#     -T DIR     boot DIR alone (an install tree, e.g. build/w16) as C:\W16:
+#                the C: drive holds nothing of the reference install but
+#                what -f copies in, and WIN runs from C:\W16 (its SYSTEM.INI
+#                and WIN.INI are the ones -i edits); -k and -x/-X still
+#                replace its KRNL286.EXE and DOSX.EXE when given
 # A plain WIN (without /S) in the scratch copy picks 386 Enhanced mode on
 # a 386 and stops with "Cannot find or load required file KRNL386.EXE",
 # since KRNL386.EXE is deleted there: that is how 3.1 picks its mode.
@@ -80,7 +85,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
+cmd='WIN /S /B' secs=60 tree= kset= shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
 w16:exitmsg=1
 w16:debuglog=C:\W16DBG.LOG'
 # [w16] DesktopVersion=0: w16 USER's desktop version stamp (user/deskver.c)
@@ -95,9 +100,10 @@ w16:DesktopVersion=0
 w16:DebugToAux=1"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
-while getopts k:c:t:f:i:s:e:W:no:rxX:wp: opt; do
+while getopts k:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do
     case $opt in
-    k) kernel=$OPTARG ;;
+    k) kernel=$OPTARG kset=1 ;;
+    T) tree=$(cd "$OPTARG" && pwd) ;;
     c) cmd=$OPTARG ;;
     t) secs=$OPTARG ;;
     f) files="$files
@@ -126,9 +132,19 @@ if [ -n "$keep" ]; then
 else
     work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 fi
-cp -r "$ref" "$work/c"
-sys=$work/c/WINDOWS/SYSTEM
-rm -f "$work/c/WINDOWS/BOOTLOG.TXT"
+# the Windows directory on C: (WINDOWS, or W16 with -T)
+wdir=WINDOWS
+if [ -n "$tree" ]; then
+    wdir=W16
+    mkdir -p "$work/c"
+    cp -r "$tree" "$work/c/W16"
+    [ -n "$kset" ] || useref=1        # the tree's own KERNEL
+else
+    cp -r "$ref" "$work/c"
+fi
+echo "$wdir" > "$work/windir"
+sys=$work/c/$wdir/SYSTEM
+rm -f "$work/c/$wdir/BOOTLOG.TXT"
 if [ -z "$useref" ]; then
     cp "$kernel" "$sys/KRNL286.EXE"
 fi
@@ -147,7 +163,7 @@ printf '%s\n' "$inis" | while IFS= read -r f; do
     WIN.INI:*) ini=WIN.INI f=${f#WIN.INI:} ;;
     *) ini=SYSTEM.INI ;;
     esac
-    python3 - "$work/c/WINDOWS/$ini" "$f" <<'PY'
+    python3 - "$work/c/$wdir/$ini" "$f" <<'PY'
 import sys
 path, spec = sys.argv[1], sys.argv[2]
 sec, kv = spec.split(':', 1)
@@ -196,7 +212,7 @@ pcspeaker=false
 [autoexec]
 mount c \"$work/c\"
 c:
-cd \\WINDOWS
+cd \\$wdir
 $cmd$redir
 echo WINEXIT >> C:\\OUT.TXT
 exit"
@@ -230,7 +246,7 @@ else
     mode=settle hold=${DROPIN_SETTLE:-5} bootlog=
     [ -z "$expect" ] || mode=expect hold=${DROPIN_HOLD:-2}
     [ -z "${DROPIN_FIXED:-}" ] || mode=fixed
-    case $(printf '%s' "$cmd" | tr a-z A-Z) in *' /B'*) bootlog=$work/c/WINDOWS/BOOTLOG.TXT ;; esac
+    case $(printf '%s' "$cmd" | tr a-z A-Z) in *' /B'*) bootlog=$work/c/$wdir/BOOTLOG.TXT ;; esac
     cat > "$work/shot.sh" <<SH
 #!/bin/sh
 # The emulator, with others running on the machine, now and then ends at
@@ -312,7 +328,7 @@ if [ -f "$work/c/W16DBG.LOG" ]; then
     echo "== w16 diagnostics (C:\\W16DBG.LOG, [w16] debuglog)"
     tr -d '\r' < "$work/c/W16DBG.LOG"
 fi
-log=$work/c/WINDOWS/BOOTLOG.TXT
+log=$work/c/$wdir/BOOTLOG.TXT
 echo "== BOOTLOG.TXT"
 if [ -f "$log" ]; then tr -d '\r' < "$log"; else echo "(none)"; fi
 echo "== summary"

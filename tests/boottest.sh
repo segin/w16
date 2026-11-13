@@ -117,6 +117,18 @@
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
+#   w16groups  w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
+#              for now with Microsoft's WSWAP.EXE and MMSOUND.DRV, sound.drv=
+#              mmsound.drv, which w16 does not have yet): its default
+#              PROGMAN.INI and groups (assets/progman) under real keys
+#              (tests/scripts/input/w16groups.txt): Main's Read Me opens
+#              README.TXT in Notepad, Accessories restored, its Notepad and
+#              Calculator run and closed, Windows ended. Microsoft's
+#              PROGMAN.EXE on the tree (it must read w16's group files: every
+#              item started, each screen differing from the one before) and
+#              w16's: every screen identical (the minimised groups' own
+#              pictures left out), and the group files and PROGMAN.INI
+#              saved at the end identical
 #   write      Windows Write (Microsoft's WRITE.EXE, WIN.INI run=): a line
 #              typed, the Character menu, the ruler, a second line, File >
 #              Exit and No (tests/scripts/input/write.txt); w16's WIN.COM,
@@ -364,7 +376,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1259,6 +1271,52 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmitems: item moved, group restored in front; MAIN.GRP identical (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmitems: $r ($out)"; fails=$((fails + 1)); fi ;;
+    w16groups)
+        # w16's install tree alone, with its default groups; Microsoft's
+        # Program Manager and w16's on it (not cached: the tree is w16's)
+        scr=$root/tests/scripts/input/w16groups.txt
+        rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
+        m="rectangle 60,310 300,342"
+        set -- -T "$root/build/w16" -f "$rsys/WSWAP.EXE=W16/SYSTEM/WSWAP.EXE" \
+            -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv
+        "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/w16groups-ms" "$@" \
+            -f "$rsys/../PROGMAN.EXE=W16/PROGMAN.EXE" > "$out/w16groups-ms.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -e "$out/w16groups-ms/boot.png" -m "$m" -E "$out/w16groups-ms" -M "$m" \
+            -b 40 -t 240 "$scr" "$out/w16groups-pm" "$@" > "$out/w16groups-pm.txt" 2>&1 || true
+        r=ok
+        for k in ms pm; do
+            d=$out/w16groups-$k
+            grep -q '^script done' "$d/input.log" 2>/dev/null || { r="$k: the script did not run to its end"; break; }
+            ! grep -q '^not moved' "$d/input.log" || { r="$k: a program did not come up or go ($d/input.log)"; break; }
+        done
+        # each step changed the screen (the reference: Microsoft's Program
+        # Manager started every item of w16's groups)
+        prev=boot
+        for s in 01-readme 02-readme-notepad 03-back 04-accessories 05-notepad 06-back 07-calculator 08-back; do
+            [ "$r" = ok ] || break
+            [ -f "$out/w16groups-ms/$s.png" ] || { r="ms: no $s.png"; break; }
+            case $s in 0[2457]*)
+                n=$(magick compare -metric AE "$out/w16groups-ms/$prev.png" "$out/w16groups-ms/$s.png" null: 2>&1 || true)
+                [ "${n%% *}" != 0 ] || r="ms: $s is the screen before it" ;;
+            esac
+            prev=$s
+        done
+        for f in "$out/w16groups-ms"/boot.png "$out/w16groups-ms"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$f")
+            [ -f "$out/w16groups-pm/$s" ] || { r="pm: no $s"; break; }
+            magick "$f" -fill black -draw "$m" "$out/w16groups-a.png"
+            magick "$out/w16groups-pm/$s" -fill black -draw "$m" "$out/w16groups-b.png"
+            n=$(magick compare -metric AE "$out/w16groups-b.png" "$out/w16groups-a.png" "$out/w16groups-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="pm: $s: $n pixels differ"
+        done
+        for f in MAIN.GRP ACCESSOR.GRP STARTUP.GRP PROGMAN.INI; do
+            [ "$r" = ok ] || break
+            cmp -s "$out/w16groups-ms/work/c/W16/$f" "$out/w16groups-pm/work/c/W16/$f" || r="$f saved differently"
+        done
+        if [ "$r" = ok ]; then echo "ok   w16groups: w16's tree alone, its groups read and run by Microsoft's and w16's Program Manager, 0 pixels, the same files saved"
+        else echo "FAIL w16groups: $r ($out)"; fails=$((fails + 1)); fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
