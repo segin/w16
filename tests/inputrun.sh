@@ -49,7 +49,10 @@
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     keydown KEYS / keyup KEYS  press or release keys only (a key held
 #                       while others are typed, e.g. Alt for Alt+keypad)
-#     type TEXT         type text
+#     type TEXT         type text (key and type: INPUTRUN_KEYDELAY ms between
+#                       keys, default 50; xdotool's 12 lost keys under load,
+#                       on Microsoft's side as on w16's: DOSBox took them in
+#                       bursts, apparently more than its keyboard buffer holds)
 #     sleep S           wait S seconds (fractions allowed)
 #     waitpixel X Y RRGGBB MAX     wait until the pixel at X,Y has that
 #     waitnotpixel X Y RRGGBB MAX  colour (has not), at most MAX seconds
@@ -405,10 +408,10 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     click) xdotool click "\${a:-1}" ;;
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;
-    key) xdotool key --window "\$wid" \$a \$b ;;
+    key) xdotool key --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" \$a \$b ;;
     keydown) xdotool keydown --window "\$wid" \$a \$b ;;
     keyup) xdotool keyup --window "\$wid" \$a \$b ;;
-    type) xdotool type --window "\$wid" "\$a \$b" ;;
+    type) xdotool type --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" "\$a \$b" ;;
     sleep) sleep "\$a" ;;
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;
