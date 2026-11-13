@@ -1,5 +1,5 @@
 ; dialogs: Open, Merge, Index, Add, Go To, Find, Autodial (and its
-; Setup part), Page Setup, Delete, the save prompt, the menus
+; Setup part), Page Setup, Delete, About, the save prompt, the menus
 blink 60000
 run CARDFILE.EXE
 wait 3000
@@ -93,6 +93,26 @@ wait 1000
 snap C:\D_DEL.BMP
 key 1B
 wait 300
+menu f
+char l
+wait 1500
+snap C:\D_PRALL.BMP
+key 0D
+wait 500
+menu f
+char r
+wait 1500
+snap C:\D_PRSET.BMP
+key 0D
+wait 500
+key 1B
+wait 500
+menu h
+char a
+wait 1500
+snap C:\D_ABOUT.BMP
+key 0D
+wait 500
 menu f
 char n
 wait 1000

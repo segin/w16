@@ -601,12 +601,99 @@ void ole_paste_special(void)
 
 /* ---- the Edit menu's object items ---- */
 
-static char obj_class[64];
+/* the object's class (from its OwnerLink or ObjectLink data) */
+static BOOL obj_class(PICTURE *p, char *cls, int size)
+{
+    static UINT owner, objlink;
+    HANDLE h = NULL;
+    LPSTR d;
+    if (!owner) {
+        owner = RegisterClipboardFormat("OwnerLink");
+        objlink = RegisterClipboardFormat("ObjectLink");
+    }
+    if (OleGetData(p->obj, p->otype == 1 ? objlink : owner, &h) != OLE_OK || !h)
+        return FALSE;
+    d = GlobalLock(h);
+    s_cpy(cls, d, size);
+    GlobalUnlock(h);
+    return cls[0] != 0;
+}
 
-/* Edit > Object: "&Object" when there is no object or it has no verbs;
-   else the object's verbs (strings 784-786: "<class> &Object" with a
-   popup of verbs, or "<verb> <class> &Object" for one). UNVERIFIED: the
-   exact texts, beyond the strings' shape. */
+/* a registry value without its '&' */
+static BOOL reg_text(LPCSTR key, char *out, int size)
+{
+    LONG n = size;
+    char t[80];
+    int i, j = 0;
+    if (RegQueryValue(HKEY_CLASSES_ROOT, key, t, &n) != ERROR_SUCCESS || !t[0])
+        return FALSE;
+    for (i = 0; t[i] && j < size - 1; i++)
+        if (t[i] != '&')
+            out[j++] = t[i];
+    out[j] = 0;
+    return TRUE;
+}
+
+static HMENU verbs_popup;
+
+/* Edit > Object (position 14): "&Object", grayed, without an object that
+   has verbs; else, observed with an embedded Paintbrush picture (CF14),
+   "Edit Paintbrush Picture &Object": the verb (registry, '&' dropped),
+   the class's readable name, "&Object" (string 779; the shapes "v c o"
+   and "c o", strings 784 and 785). With more than one verb: "<class>
+   &Object" and a popup of the verbs (UNVERIFIED: no such object was
+   observed). */
+static void object_item(HMENU edit, BOOL obj)
+{
+    char cls[64], name[80], key[120], verb[40], text[200];
+    int nverbs = 0, i;
+    HMENU pop = NULL;
+    if (verbs_popup) {
+        ModifyMenu(edit, EDIT_OBJECT_POS, MF_BYPOSITION | MF_STRING, IDM_OBJECT, load_str(IDS_OBJECTMENU));
+        DestroyMenu(verbs_popup);
+        verbs_popup = NULL;
+    }
+    if (!obj || g_pic.otype == 2 || !obj_class(&g_pic, cls, sizeof cls) ||
+        !reg_text(cls, name, sizeof name)) {
+        ModifyMenu(edit, EDIT_OBJECT_POS, MF_BYPOSITION | MF_STRING | MF_GRAYED, IDM_OBJECT,
+                   load_str(IDS_OBJECTMENU));
+        return;
+    }
+    for (i = 0; i < 16; i++) {
+        wsprintf(key, "%s\\protocol\\StdFileEditing\\verb\\%d", (LPSTR)cls, i);
+        if (!reg_text(key, verb, sizeof verb))
+            break;
+        nverbs++;
+        if (nverbs == 2) {
+            pop = CreatePopupMenu();
+            wsprintf(key, "%s\\protocol\\StdFileEditing\\verb\\0", (LPSTR)cls);
+            reg_text(key, text, sizeof text);
+            AppendMenu(pop, MF_STRING, IDM_VERB0, text);
+        }
+        if (pop)
+            AppendMenu(pop, MF_STRING, IDM_VERB0 + i, verb);
+    }
+    if (pop) {
+        s_cpy(text, name, sizeof text);
+        s_cat(text, " ", sizeof text);
+        s_cat(text, load_str(IDS_OBJECTMENU), sizeof text);
+        verbs_popup = pop;
+        ModifyMenu(edit, EDIT_OBJECT_POS, MF_BYPOSITION | MF_POPUP, (UINT)pop, text);
+        return;
+    }
+    if (nverbs == 1) {
+        wsprintf(key, "%s\\protocol\\StdFileEditing\\verb\\0", (LPSTR)cls);
+        reg_text(key, text, sizeof text);
+    } else {
+        s_cpy(text, load_str(IDS_EDITVERB), sizeof text);
+    }
+    s_cat(text, " ", sizeof text);
+    s_cat(text, name, sizeof text);
+    s_cat(text, " ", sizeof text);
+    s_cat(text, load_str(IDS_OBJECTMENU), sizeof text);
+    ModifyMenu(edit, EDIT_OBJECT_POS, MF_BYPOSITION | MF_STRING, IDM_VERB0, text);
+}
+
 void ole_menu(HMENU edit)
 {
     BOOL obj = !g_listview && g_pic.kind == PIC_OBJECT;
@@ -620,10 +707,9 @@ void ole_menu(HMENU edit)
                         ? MF_ENABLED : MF_GRAYED));
     EnableMenuItem(edit, IDM_LINKS, MF_BYCOMMAND |
                    (obj && g_pic.otype == 1 ? MF_ENABLED : MF_GRAYED));
-    EnableMenuItem(edit, IDM_OBJECT, MF_BYCOMMAND | (obj && g_pic.otype != 2 ? MF_ENABLED : MF_GRAYED));
+    object_item(edit, obj);
     /* Picture mode only (grayed in Text mode, enabled in Picture mode) */
     EnableMenuItem(edit, IDM_INSERTOBJECT, MF_BYCOMMAND | (!g_listview && g_picmode ? MF_ENABLED : MF_GRAYED));
-    (void)obj_class;
 }
 
 void ole_command(WORD id)

@@ -4,7 +4,9 @@
 # CARDFILE.EXE") runs on the reference Windows 3.1 once with the
 # original Cardfile and once with w16's (build/dos/CARDFILE.EXE), the two
 # at the same time (tests/cfrun.sh). Afterwards every card file the
-# script saved (C:\*.CRD) must be byte-identical, and so must WIN.INI
+# script saved (C:\*.CRD) must be byte-identical (tools/crdcmp.py: the
+# bits the original leaves undrawn in 3.0 pictures excepted), and so must
+# WIN.INI
 # (Autodial's settings); no screenshot may differ from the original's by
 # more pixels than tests/scripts/cf.baseline allows ("scenario/SHOT
 # count": what our own icon art costs, and differences still open). A
@@ -37,8 +39,10 @@ for n in $names; do
         b=$(basename "$f")
         if [ ! -f "$out/$n/w16/$b" ]; then
             result=FAIL; echo "  $n: $b missing"
-        elif ! cmp -s "$f" "$out/$n/w16/$b"; then
-            result=FAIL; echo "  $n: $b differs"
+        elif [ "$b" = WIN.INI ]; then
+            cmp -s "$f" "$out/$n/w16/$b" || { result=FAIL; echo "  $n: $b differs"; }
+        elif ! r=$(python3 -I "$root/tools/crdcmp.py" "$f" "$out/$n/w16/$b"); then
+            result=FAIL; echo "  $n: $b $r"
         fi
     done
     shots=""
