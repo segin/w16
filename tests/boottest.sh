@@ -1369,6 +1369,13 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # KEYBOARD.DRV (helpmenus: Notepad's caret left out as there;
         # icons: Clock's icon)
         kdrv=$root/build/dos/KEYBOARD.DRV
+        # carets keep the phase they start in, on both sides (WIN.INI
+        # CursorBlinkRate=65535, read by USER at boot, as SNAP's blinktime):
+        # how long the keys took (the host's load) must not decide whether
+        # Notepad's caret shows on a shot. A menu opened from the keyboard
+        # froze the caret in whatever phase it had (04-searchmenu: shown on
+        # one side, hidden on the other, 30 pixels)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         r=ok
         for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus}; do
             scr=$root/tests/scripts/input/$s.txt
@@ -1380,8 +1387,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             b=25 t=220
             [ $s = pmkeys ] && b=40
             [ $s = icons ] && t=380
-            refrun kbd-$s-ref kbd "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/kbd-$s-ref" -r
-            "$root/tests/inputrun.sh" -e "$out/kbd-$s-ref/boot.png" -E "$out/kbd-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/kbd-$s-w16" -r \
+            refrun kbd-$s-ref kbd "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/kbd-$s-ref" -r -i "$blink"
+            "$root/tests/inputrun.sh" -e "$out/kbd-$s-ref/boot.png" -E "$out/kbd-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/kbd-$s-w16" -r -i "$blink" \
                 -f "$kdrv=WINDOWS/SYSTEM/KEYBOARD.DRV" > "$out/kbd-$s-w16.txt" 2>&1 || true
             ls "$out/kbd-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
             for f in "$out/kbd-$s-ref"/[0-9]*.png; do
@@ -1405,11 +1412,13 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # KEYBOARD.DRV: not cached)
         fon=$root/build/fonts
         scr=$root/tests/scripts/input/kbtype.txt
+        # carets keep their starting phase on both sides (as in kbd)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         for k in ref w16; do
             if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
                 -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
-            "$root/tests/inputrun.sh" "$@" \
+            "$root/tests/inputrun.sh" "$@" -i "$blink" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
                 -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
@@ -1440,6 +1449,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         s=$root/tests/scripts/input/write.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/kbdwrite-WIN.INI"
         python3 "$root/tests/scripts/iniset.py" "$out/kbdwrite-WIN.INI" 'windows:run=WRITE.EXE'
+        # Write's caret keeps its starting phase on both sides (as in kbd)
+        python3 "$root/tests/scripts/iniset.py" "$out/kbdwrite-WIN.INI" 'windows:CursorBlinkRate=65535'
         refrun kbdwrite-ref kbdwrite "$root/tests/inputrun.sh" -s -b 25 -t 210 "$s" "$out/kbdwrite-ref" -r \
             -f "$out/kbdwrite-WIN.INI=WINDOWS/WIN.INI"
         "$root/tests/inputrun.sh" -e "$out/kbdwrite-ref/boot.png" -m "rectangle 27,46 28,61" -E "$out/kbdwrite-ref" \
