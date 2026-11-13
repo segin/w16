@@ -652,28 +652,29 @@ BOOL WINAPI FlashWindow(HWND h, BOOL invert)
    global atom table is a local atom table kept in a heap of USER's own
    (USER's GlobalAddAtom sets DS to it and calls KERNEL's AddAtom:
    Schulman, Undocumented Windows ch. 5; Pietrek, Windows Internals ch. 1,
-   GlobalInitAtom). w16 keeps it in USER's default data segment, where
-   RegisterWindowMessage and RegisterClipboardFormat put their atoms too
-   (UNVERIFIED: that 3.1's registered messages share the global table;
-   their values are C000h up either way) ---- */
+   GlobalInitAtom); US15 found it there (a 100h-byte heap at start, which
+   GlobalAddAtom grows) and RegisterWindowMessage's and
+   RegisterClipboardFormat's atoms not in it (GlobalFindAtom does not find
+   them: they are in USER's DGROUP atom table). w16 does the same
+   (uheap.c) ---- */
 ATOM WINAPI GlobalAddAtom(LPCSTR s)
 {
-    return AddAtom(s);
+    return ga_add(s);
 }
 
 ATOM WINAPI GlobalDeleteAtom(ATOM a)
 {
-    return DeleteAtom(a);
+    return ga_delete(a);
 }
 
 ATOM WINAPI GlobalFindAtom(LPCSTR s)
 {
-    return FindAtom(s);
+    return ga_find(s);
 }
 
 UINT WINAPI GlobalGetAtomName(ATOM a, LPSTR buf, int n)
 {
-    return GetAtomName(a, buf, n);
+    return ga_name(a, buf, n);
 }
 
 /* UNVERIFIED: 3.1's USER may also track the foreground palette and send

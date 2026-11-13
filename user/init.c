@@ -189,6 +189,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     hModUser = K_GETEXEPTR(hinst);
     ulog("USER init\r\n");
     InitAtomTable(37);                  /* UNVERIFIED size; atoms grow anyway */
+    uheaps_init();                      /* the global atom table's heap & co. */
 
     diag("INIT=Keyboard\r\n");
     KB_INQUIRE(kbinfo);

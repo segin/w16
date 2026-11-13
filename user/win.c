@@ -37,6 +37,8 @@ void byte_align(PWND w)
     }
 }
 void free_place(HWND h);
+void free_props(PWND w);
+void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
 
 PWND valid_wnd(HWND h)
@@ -105,11 +107,14 @@ BOOL is_visible(PWND w)
     return TRUE;
 }
 
+/* window text: a block of the string heap (uheap.c; 3.1 keeps it out of
+   DGROUP too: US15), WND+32 its handle, 0 for none (an empty text frees
+   it, as 3.1's does) */
 static void set_text(PWND w, LPCSTR s)
 {
     if (w->text)
-        LocalFree((HLOCAL)w->text);
-    w->text = (s && *s) ? local_strdup(s) : 0;
+        uh_free(&uhStr, w->text);
+    w->text = (s && *s) ? uh_strdup(s) : 0;
 }
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
@@ -183,7 +188,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             w->hwndOwner = top_level(parent);
         w->hMenu = (WORD)menu;
         if (!menu && c->lpszMenuName)
-            w->hMenu = (WORD)LoadMenu(hinst, c->lpszMenuName);
+            w->hMenu = (WORD)LoadMenu(hinst, class_menu_name(c));
     }
     if ((style & WS_VISIBLE) && hwndDesktop) {
         show = TRUE;
@@ -337,16 +342,13 @@ static void free_window(PWND w)
         dec_paint(w->hq);
     }
     if (w->text)
-        LocalFree((HLOCAL)w->text);
+        uh_free(&uhStr, w->text);
     if (!(w->style & WS_CHILD) && w->hMenu)
         DestroyMenu((HMENU)w->hMenu);
     if (w->hSysMenu)
         DestroyMenu((HMENU)w->hSysMenu);
-    while (w->props) {
-        WORD n = *(WORD __near *)w->props;
-        LocalFree((HLOCAL)w->props);
-        w->props = n;
-    }
+    free_props(w);
+    free_scroll(w);
     ((PCLS)w->cls)->cwnd--;
     w->cls = 0;
     w->flags |= 0x8000;
@@ -630,13 +632,13 @@ LONG def_gettext(PWND w, int n, LPSTR buf)
         buf[0] = 0;
         return 0;
     }
-    lstr_cpyn(buf, (LPCSTR)MAKELP(get_ds(), w->text), n);
+    lstr_cpyn(buf, (LPCSTR)UH_PTR(&uhStr, w->text), n);
     return lstr_len(buf);
 }
 
 LONG def_gettextlength(PWND w)
 {
-    return w->text ? lstr_len((LPCSTR)MAKELP(get_ds(), w->text)) : 0;
+    return w->text ? lstr_len((LPCSTR)UH_PTR(&uhStr, w->text)) : 0;
 }
 
 void def_settext(PWND w, LPCSTR s)
@@ -910,87 +912,165 @@ HWND WINAPI ChildWindowFromPoint(HWND parent, POINT pt)
     return c ? c : parent;
 }
 
-/* ---- properties: a list of local blocks {next, atom/string, data} ---- */
-typedef struct PROP { WORD next; ATOM atom; HANDLE data; WORD str; } PROP;
+/* ---- properties ----
+   As 3.1's (US15): a window's properties are one block, WND+36 its
+   handle, an entry of an atom and the data per property (4 bytes; 3.1's
+   grew by 4 a property), string names global atoms (3.1: GlobalFindAtom
+   finds a property's name while a window has it and not after). w16 keeps
+   the block in the object heap (uheap.c), not DGROUP. Entries with atom 0
+   are unused (a block can be larger than asked for). Atoms from C000h up
+   are names this list holds a reference to. */
+typedef struct PROP { ATOM atom; HANDLE data; } PROP;
+#define PROPS(w)    ((PROP __far *)UH_PTR(&uhObj, (w)->props))
 
-static PROP __near *find_prop(PWND w, LPCSTR name, WORD __near **link)
+static UINT nprops(PWND w)
 {
-    WORD __near *l = &w->props;
-    ATOM a = ISATOM(name) ? LOWORD((DWORD)name) : FindAtom(name);
-    while (*l) {
-        PROP __near *p = (PROP __near *)*l;
-        if (a && p->atom == a) {
-            if (link)
-                *link = l;
-            return p;
-        }
-        l = &p->next;
+    return w->props ? uh_size(&uhObj, w->props) / sizeof(PROP) : 0;
+}
+
+static ATOM prop_atom(LPCSTR name, BOOL add)
+{
+    if (ISATOM(name)) {
+        ATOM a = LOWORD((DWORD)name);
+        char b[64];
+        /* a string atom given as a number: one more reference, so that
+           every entry from C000h up holds one */
+        if (add && a >= 0xC000u && ga_name(a, b, sizeof b))
+            return ga_add(b);
+        return a;
     }
-    return 0;
+    return add ? ga_add(name) : ga_find(name);
+}
+
+static void prop_unref(ATOM a)
+{
+    if (a >= 0xC000u)
+        ga_delete(a);
+}
+
+/* the entry's index, -1 none */
+static int find_prop(PWND w, ATOM a)
+{
+    UINT i, n = nprops(w);
+    PROP __far *p = PROPS(w);
+    if (!a)
+        return -1;
+    for (i = 0; i < n; i++)
+        if (p[i].atom == a)
+            return i;
+    return -1;
 }
 
 BOOL WINAPI SetProp(HWND h, LPCSTR name, HANDLE data)
 {
     PWND w = valid_wnd(h);
-    PROP __near *p;
+    PROP __far *p;
+    UINT i, n;
+    ATOM a;
+    WORD b;
     if (!w)
         return FALSE;
-    p = find_prop(w, name, 0);
-    if (!p) {
-        ATOM a = ISATOM(name) ? LOWORD((DWORD)name) : AddAtom(name);
-        if (!a)
-            return FALSE;
-        p = (PROP __near *)LocalAlloc(LPTR, sizeof(PROP));
-        if (!p)
-            return FALSE;
-        p->atom = a;
-        p->str = !ISATOM(name);
-        p->next = w->props;
-        w->props = (WORD)p;
+    i = find_prop(w, prop_atom(name, FALSE));
+    if (i != (UINT)-1) {
+        PROPS(w)[i].data = data;
+        return TRUE;
     }
-    p->data = data;
+    a = prop_atom(name, TRUE);
+    if (!a)
+        return FALSE;
+    n = nprops(w);
+    p = PROPS(w);
+    for (i = 0; i < n && p[i].atom; i++)
+        ;
+    if (i == n) {
+        b = uh_realloc(&uhObj, w->props, (n + 1) * sizeof(PROP));
+        if (!b) {
+            prop_unref(a);
+            return FALSE;
+        }
+        w->props = b;
+    }
+    p = PROPS(w);
+    p[i].atom = a;
+    p[i].data = data;
     return TRUE;
 }
 
 HANDLE WINAPI GetProp(HWND h, LPCSTR name)
 {
     PWND w = valid_wnd(h);
-    PROP __near *p = w ? find_prop(w, name, 0) : (PROP __near *)0;
-    return p ? p->data : 0;
+    int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
+    return i >= 0 ? PROPS(w)[i].data : 0;
+}
+
+/* entry i goes: the last one takes its place, the block shrinks */
+static void drop_prop(PWND w, UINT i)
+{
+    UINT n = nprops(w);
+    PROP __far *p = PROPS(w);
+    prop_unref(p[i].atom);
+    while (n && !p[n - 1].atom)
+        n--;
+    if (n && i < n - 1)
+        p[i] = p[n - 1];
+    n--;
+    if (!n) {
+        uh_free(&uhObj, w->props);
+        w->props = 0;
+    } else {
+        WORD b;
+        p[n].atom = 0;
+        b = uh_realloc(&uhObj, w->props, n * sizeof(PROP));   /* smaller: in place */
+        if (b)
+            w->props = b;
+    }
 }
 
 HANDLE WINAPI RemoveProp(HWND h, LPCSTR name)
 {
     PWND w = valid_wnd(h);
-    WORD __near *link;
-    PROP __near *p = w ? find_prop(w, name, &link) : (PROP __near *)0;
+    int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
     HANDLE d;
-    if (!p)
+    if (i < 0)
         return 0;
-    d = p->data;
-    *link = p->next;
-    if (p->str)
-        DeleteAtom(p->atom);
-    LocalFree((HLOCAL)p);
+    d = PROPS(w)[i].data;
+    drop_prop(w, i);
     return d;
 }
 
+/* DestroyWindow: the properties left go, their names' references with
+   them */
+void free_props(PWND w)
+{
+    UINT i, n = nprops(w);
+    for (i = 0; i < n; i++)
+        prop_unref(PROPS(w)[i].atom);
+    uh_free(&uhObj, w->props);
+    w->props = 0;
+}
+
+/* newest first; the procedure may remove the property it is given (each
+   entry is read again after the call: nothing in the heap is held) */
 int WINAPI EnumProps(HWND h, PROPENUMPROC f)
 {
     PWND w = valid_wnd(h);
-    WORD p, n;
     int r = -1;
+    UINT i;
     char name[64];
     if (!w)
         return -1;
-    for (p = w->props; p; p = n) {
-        PROP __near *pp = (PROP __near *)p;
-        n = pp->next;
-        if (pp->str) {
-            GetAtomName(pp->atom, name, sizeof name);
-            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, name, pp->data);
+    for (i = nprops(w); i-- > 0;) {
+        PROP pp;
+        if (!(w = valid_wnd(h)) || i >= nprops(w))
+            break;
+        pp = PROPS(w)[i];
+        if (!pp.atom)
+            continue;
+        if (pp.atom >= 0xC000u) {
+            ga_name(pp.atom, name, sizeof name);
+            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, name, pp.data);
         } else
-            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, MAKEINTATOM(pp->atom), pp->data);
+            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, MAKEINTATOM(pp.atom), pp.data);
         if (!r)
             break;
     }

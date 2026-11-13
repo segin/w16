@@ -82,6 +82,11 @@ WORD __far __cdecl lh_realloc(WORD sel, WORD h, UINT size, UINT flags); /* the h
 WORD __far __cdecl lh_free(WORD sel, WORD h);                     /* in segment */
 UINT __far __cdecl lh_size(WORD sel, WORD h);                     /* sel */
 WORD __far __cdecl seg_limit(WORD sel);
+BOOL __far __cdecl at_init(WORD sel, int n);                      /* atom calls */
+ATOM __far __cdecl at_add(WORD sel, LPCSTR s);                    /* on the */
+ATOM __far __cdecl at_find(WORD sel, LPCSTR s);                   /* atom table */
+ATOM __far __cdecl at_delete(WORD sel, ATOM a);                   /* of the heap */
+UINT __far __cdecl at_name(WORD sel, ATOM a, LPSTR buf, int n);   /* in sel */
 WORD get_ds(void);
 #pragma aux get_ds = "mov ax, ds" value [ax];
 WORD get_ss(void);
@@ -137,25 +142,30 @@ PWND valid_wnd(HWND h);         /* NULL if h is not a live window */
 extern HWND hwndDesktop;
 
 /* ---- classes (class.c) ---- */
-typedef struct CLS {
-    WORD   next;                /* next class (near) */
-    ATOM   atom;                /* name, an atom in USER's local atom table */
-    WORD   style;
-    WNDPROC lpfnWndProc;
-    int    cbClsExtra, cbWndExtra;
-    HINSTANCE hInstance;        /* 0: system class */
-    HICON  hIcon;
-    HCURSOR hCursor;
-    HBRUSH hbrBackground;
-    LPCSTR lpszMenuName;        /* as given (far pointer or resource id) */
-    WORD   menuname;            /* local copy of a string menu name, or 0 */
-    WORD   cwnd;                /* windows of the class */
-    HMODULE hModule;
-    WORD   name;                /* local copy of a string name (0: integer atom) */
-    /* class extra bytes follow */
+typedef struct CLS {            /* layout: Schulman, Undocumented Windows ch. 6,
+                                   CLASS; offsets checked on 3.1 by US15 */
+    WORD   next;                /* 00 hcNext: next class (near) */
+    WORD   sig;                 /* 02 wSig: CLS_SIG */
+    ATOM   atom;                /* 04 atomCls: the name, in USER's DGROUP atom table */
+    WORD   hdce;                /* 06 hDCE: 0 (w16 has no CS_CLASSDC DC) */
+    WORD   cwnd;                /* 08 cClsWnds: windows of the class */
+    WORD   style;               /* 0A the WNDCLASS as given, but: */
+    WNDPROC lpfnWndProc;        /* 0C */
+    int    cbClsExtra, cbWndExtra; /* 10, 12 */
+    HMODULE hModule;            /* 14 hInstance: the module (3.1: GCW_HMODULE) */
+    HICON  hIcon;               /* 16 */
+    HCURSOR hCursor;            /* 18 */
+    HBRUSH hbrBackground;       /* 1A */
+    LPCSTR lpszMenuName;        /* 1C a resource id, 0, or a far pointer to
+                                   w16's copy of a string name (uhStr): its
+                                   selector taken again on every use */
+    LPCSTR lpszClassName;       /* 20 always 0 (3.1's too) */
+    /* class extra bytes follow (24) */
 } CLS;
+#define CLS_SIG 0x4B4E          /* "NK" (Schulman; US15 read it on 3.1) */
 typedef CLS __near *PCLS;
 PCLS find_class(LPCSTR name, HINSTANCE hinst);
+LPCSTR class_menu_name(PCLS c); /* lpszMenuName as GetClassInfo gives it */
 void register_system_classes(void);
 
 /* ---- queues (msg.c) ---- */
@@ -272,6 +282,29 @@ WORD menu_heap_sel(void);       /* the menu heap's selector */
 WORD menu_str_heap_sel(void);   /* the menu-string heap's */
 int  menu_bar_height(PWND w, int width);
 void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width);
+
+/* ---- USER's other heaps (uheap.c) ---- */
+typedef struct UHEAP {
+    HGLOBAL h;
+    WORD    sel;                /* taken again after each allocation */
+} UHEAP;
+extern UHEAP uhAtoms;           /* the global atom table (3.1's own heap) */
+extern UHEAP uhStr;             /* window text, class menu names */
+extern UHEAP uhObj;             /* properties, hooks, DCs, scroll bars... */
+extern WORD ext_user_heap;      /* [w16] ExtendedUserHeap=1 (win.c) */
+void uheaps_init(void);
+WORD uh_alloc(UHEAP *hp, UINT flags, UINT n);   /* a fixed block: 0 none */
+WORD uh_realloc(UHEAP *hp, WORD h, UINT n);     /* may move it; 0: failed */
+void uh_free(UHEAP *hp, WORD h);
+UINT uh_size(UHEAP *hp, WORD h);
+WORD uh_strdup(LPCSTR s);                       /* in uhStr */
+WORD uh_strdup_in(UHEAP *hp, LPCSTR s);
+ATOM ga_add(LPCSTR s);                          /* the global atom table */
+ATOM ga_find(LPCSTR s);
+ATOM ga_delete(ATOM a);
+UINT ga_name(ATOM a, LPSTR buf, int n);
+/* a block of a heap as a far pointer: never a cast of the handle */
+#define UH_PTR(hp, h)  ((void __far *)MK_FP((hp)->sel, (h)))
 
 /* ---- system values (init.c, sysmet.c) ---- */
 extern int  sysmet[SM_CMETRICS + 8];
