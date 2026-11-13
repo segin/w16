@@ -347,8 +347,13 @@ static void part_a(void)
     pops("CommWriteString(9)", dc(19, 4, 9, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb), 3));
     pops("ReadCommString(9)", dc(20, 4, 9, SELECTOROF((LPVOID)qb), OFFSETOF((LPVOID)qb), 3));
     pops("EnableNotification(9)", dc(100, 4, 9, 0, 0, 0));
-    /* ordinal 101, no name: what it takes off the stack */
-    pops("ordinal 101", dc(101, 0));
+    /* ordinal 101, no name: what it takes off the stack (its AX is the
+       caller's, left as it was: "~") */
+    {
+        DWORD r = dc(101, 0);
+        wsprintf(line, "OBS ordinal 101 popped %u\r\nOBS ~ordinal 101=%04X\r\n", res[0], LOWORD(r));
+        out(line);
+    }
     pops("SuspendOpenCommPorts", dc(17, 0) & 0);
     pops("ReactivateOpenCommPorts", dc(18, 0) & 0);
     /* LPT ids */
@@ -654,7 +659,10 @@ static void part_c(void)
     stat("C1 after read");
     r = WriteComm(cid, buf, pattern(buf, 300, 1));
     obs("C1 WriteComm", r);
-    stat("C1 written");
+    /* how much is left a moment after the write depends on how fast the
+       emulated machine runs against the line: "~" (Windows 3.1's driver
+       left 298 or 297 of the 300; so does w16's) */
+    stat("~C1 written");
     waitout(4000);
     pump(300);
     stat("C1 sent");
@@ -842,7 +850,9 @@ static void part_c(void)
     obs("ClearCommBreak", ClearCommBreak(cid));
     /* (bytes written during the break: on Windows 3.1 they stayed queued
        until the next write after ClearCommBreak, and in some runs the
-       second of three was lost: not compared) */
+       second of three was lost: not compared. Its driver can also lose
+       the second byte of the next command string to commhost, "#W150;"
+       arriving as "#150;": tests/commprobe.sh puts it back) */
     WriteComm(cid, "abc", 3);
     waitout(2000);
     pump(300);
