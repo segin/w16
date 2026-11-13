@@ -1,0 +1,483 @@
+; ChooseColor: the 48 basic colours, each chosen with the keyboard
+; (arrows from black, row 5 column 0, then Space) and taken with OK
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+cd1 color flags=0
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 26
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 20
+key 0D
+wait 4500
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 4500
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 20
+key 0D
+wait 2000

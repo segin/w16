@@ -37,6 +37,9 @@ for f in ${REFRUN_FILES:-}; do
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
+# w16's USER (when REFRUN_FILES brings it) as stock 3.1: no desktop version
+# stamp ([w16] DesktopVersion, user/deskver.c), as tests/dropin.sh does
+printf '\r\n[w16]\r\nDesktopVersion=0\r\n' >> "$work/c/WINDOWS/SYSTEM.INI"
 if [ -n "${REFRUN_GDLOG:-}" ]; then
     # REFRUN_GDLOG=1: record every GDI call in C:\GD.LOG (GD2, `make
     # gdprobes`, in front of the GDI renamed GDJ, as tests/gdiboot.sh -L;

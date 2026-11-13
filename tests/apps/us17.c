@@ -81,13 +81,17 @@ static HWND hMain, hCV, hCH, hCE;
 static char rec[256];           /* the scroll messages of a step */
 static char extra[64];          /* menu messages the window got */
 static int menuon;              /* [w16] ScrollBarMenu */
+static int handles;             /* the window moves the bar on SB_TOP and
+                                   SB_BOTTOM (most of the time it acts on
+                                   no scroll message at all, like a 3.x
+                                   program that ignores those two) */
 
 /* what the WM_TIMER does when it finds the menu up */
 enum { A_NONE, A_KEYS, A_ESC, A_CLICKITEM, A_RCLICKITEM, A_OUTSIDE };
 static int act, actarg, seen;
 static int clickx, clicky;      /* where the right click was */
 static const char *inspect;     /* the menu's expected items, or 0 */
-static char itag[16];
+static char itag[32];
 
 static void append(char *buf, int size, const char *s)
 {
@@ -161,6 +165,12 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
         wsprintf(b, "%c%d,%d,%s;", m == WM_VSCROLL ? 'V' : 'H', wp, (int)LOWORD(lp),
                  (LPSTR)ctlname(HIWORD(lp)));
         append(rec, sizeof rec, b);
+        if (handles && (wp == SB_TOP || wp == SB_BOTTOM)) {
+            if (HIWORD(lp))
+                SetScrollPos((HWND)HIWORD(lp), SB_CTL, wp == SB_TOP ? 0 : 100, TRUE);
+            else
+                SetScrollPos(h, m == WM_VSCROLL ? SB_VERT : SB_HORZ, wp == SB_TOP ? 0 : 100, TRUE);
+        }
         return 0;
     case WM_INITMENU:
     case WM_INITMENUPOPUP:
@@ -303,6 +313,47 @@ static int here(int at, int len, int arrow)
     return v > 100 ? 100 : (int)v;
 }
 
+/* what Top (SB_TOP) or Bottom (SB_BOTTOM) sends to a window that does not
+   move the bar for it: the code, then the thumb "dragged" to that end
+   (w16's fallback: 3.x programs such as Write ignore SB_TOP/SB_BOTTOM,
+   which 3.1 sends only from a scroll-bar control's keys) */
+static void want_end(char *want, char dir, int code, const char *ctl)
+{
+    int end = code == SB_TOP ? 0 : 100;
+    wsprintf(want, "%c%d,0,%s;%c%d,%d,%s;%c%d,%d,%s;%c%d,0,%s;", dir, code, (LPSTR)ctl,
+             dir, SB_THUMBTRACK, end, (LPSTR)ctl, dir, SB_THUMBPOSITION, end, (LPSTR)ctl,
+             dir, SB_ENDSCROLL, (LPSTR)ctl);
+}
+
+/* the bar's position */
+static void set_pos(const char *ctl, char dir, int pos)
+{
+    if (ctl[0] == 'w')
+        SetScrollPos(hMain, dir == 'V' ? SB_VERT : SB_HORZ, pos, TRUE);
+    else
+        SetScrollPos(ctl[1] == 'v' ? hCV : hCH, SB_CTL, pos, TRUE);
+}
+
+/* Top and Bottom for a window that handles them (no fallback), and for
+   one that ignores them with the bar already at that end (none either) */
+static void bar_ends(const char *tag, char dir, const char *ctl, int x, int y)
+{
+    char want[96], t[24];
+    int k;
+    for (k = 0; k < 2; k++) {
+        int code = k ? SB_BOTTOM : SB_TOP;
+        wsprintf(want, "%c%d,0,%s;%c%d,0,%s;", dir, code, (LPSTR)ctl, dir, SB_ENDSCROLL, (LPSTR)ctl);
+        handles = 1;
+        wsprintf(t, "%s.%s.handled", (LPSTR)tag, k ? (LPSTR)"bottom" : (LPSTR)"top");
+        step(t, x, y, A_KEYS, k + 1, want, 0);
+        handles = 0;
+        set_pos(ctl, dir, k ? 100 : 0);
+        wsprintf(t, "%s.%s.atend", (LPSTR)tag, k ? (LPSTR)"bottom" : (LPSTR)"top");
+        step(t, x, y, A_KEYS, k + 1, want, 0);
+        set_pos(ctl, dir, 50);
+    }
+}
+
 /* all seven items of one bar by keys, then the extras */
 static void bar_items(const char *tag, char dir, const char *ctl, int x, int y, int pos,
                       const char *items)
@@ -317,12 +368,15 @@ static void bar_items(const char *tag, char dir, const char *ctl, int x, int y, 
         if (k == 0)
             wsprintf(want, "%c%d,%d,%s;%c%d,%d,%s;%c%d,0,%s;", dir, SB_THUMBTRACK, pos, (LPSTR)ctl,
                      dir, SB_THUMBPOSITION, pos, (LPSTR)ctl, dir, SB_ENDSCROLL, (LPSTR)ctl);
+        else if (k == 1 || k == 2)
+            want_end(want, dir, codes[k], ctl);
         else
             wsprintf(want, "%c%d,0,%s;%c%d,0,%s;", dir, codes[k], (LPSTR)ctl, dir, SB_ENDSCROLL,
                      (LPSTR)ctl);
         wsprintf(t, "%s.%s", (LPSTR)tag, (LPSTR)names[k]);
         step(t, x, y, A_KEYS, k, want, k == 0 ? items : 0);
     }
+    bar_ends(tag, dir, ctl, x, y);
 }
 
 int __cdecl tmain(void)
@@ -334,7 +388,7 @@ int __cdecl tmain(void)
     WORD id;
     int arrowv = GetSystemMetrics(SM_CYVSCROLL), arrowh = GetSystemMetrics(SM_CXHSCROLL);
     int x, y, pos;
-    char want[64];
+    char want[96];
     WaitEvent(0);
     InitApp(tk_hinst);
     out("US17 start\r\n");
@@ -388,10 +442,10 @@ int __cdecl tmain(void)
     pos = here(y - (c.top - 1), c.bottom - c.top + 2, arrowv);
     bar_items("wv", 'V', "w", x, y, pos, vitems);
     step("wv.esc", x, y, A_ESC, 0, "", 0);
-    wsprintf(want, "V%d,0,w;V%d,0,w;", SB_BOTTOM, SB_ENDSCROLL);
+    want_end(want, 'V', SB_BOTTOM, "w");
     step("wv.clickbottom", x, y, A_CLICKITEM, 3, want, 0);
     /* the right button chooses too (TPM_RIGHTBUTTON) */
-    wsprintf(want, "V%d,0,w;V%d,0,w;", SB_TOP, SB_ENDSCROLL);
+    want_end(want, 'V', SB_TOP, "w");
     step("wv.rclicktop", x, y, A_RCLICKITEM, 2, want, 0);
     /* a click outside closes it */
     step("wv.outside", x, y, A_OUTSIDE, 0, "", 0);

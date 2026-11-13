@@ -1,0 +1,47 @@
+; observation: ChooseFont lists under the filtering flags; each OK at once
+; 1 raster face (MS Sans Serif 8pt bold), effects, underline+strikeout
+cd1 font flags=141 face=MS~Sans~Serif height=-11 weight=700 under=1 strike=1 rgb=808000
+; 2 no simulations
+cd1 font flags=1041 face=MS~Sans~Serif height=-11
+; 3 ANSI only, fixed pitch only
+cd1 font flags=4401
+; 4 TrueType only, use style
+cd1 font flags=40081 face=Courier~New style=Italic
+; 5 scalable only, no vector fonts, limit size 10..20
+cd1 font flags=22841 face=Times~New~Roman height=-40 min=10 max=20
+; 6 nothing asked for
+cd1 font flags=0
+; 7 max less than min
+cd1 font flags=2001 min=20 max=10
+; 8 size given by iPointSize only
+cd1 font flags=1 pt=140
+wait 3000
+dump
+key 0D
+wait 1500
+snap C:\F2.BMP
+dump
+key 0D
+wait 1500
+dump
+key 0D
+wait 1500
+snap C:\F4.BMP
+dump
+key 0D
+wait 1500
+snap C:\F5.BMP
+dump
+key 0D
+wait 1500
+snap C:\F6.BMP
+dump
+key 0D
+wait 1500
+dump
+key 0D
+wait 1500
+snap C:\F8.BMP
+dump
+key 0D
+wait 1500

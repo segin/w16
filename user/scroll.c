@@ -433,6 +433,16 @@ UINT menu_track_quiet(HMENU hm, int x, int y, HWND h);
 
 #define SBM_HERE 0x100          /* the items' ids: 100h + SB_ code */
 
+/* one command's message; with [w16] userlog=1 USER.LOG gets the code, the
+   position sent and the bar's position after it */
+static void sbm_send(HWND notify, UINT msg, int code, int pos, WORD ctl, HWND hwnd, int bar)
+{
+    send_message(notify, msg, code, MAKELONG(pos, ctl));
+    ulogx("sbmenu: code ", code);
+    ulogx("  pos sent ", pos);
+    ulogx("  bar's pos after ", IsWindow(hwnd) ? GetScrollPos(hwnd, bar) : 0xFFFF);
+}
+
 /* hwnd's bar (SB_VERT, SB_HORZ, SB_CTL) in rc (screen) right-clicked at pt
    (screen): the menu, and the command chosen sent to notify (the window
    for its own bars, the parent for a control) */
@@ -452,6 +462,7 @@ void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     HMENU hm;
     UINT cmd, msg;
     WORD ctl;
+    int bar2;
     if (!sb_menu_on || !IsWindowEnabled(hwnd))
         return;
     if ((s = info(hwnd, bar, &w)) == 0 || s->disabled || s->max <= s->min)
@@ -482,13 +493,35 @@ void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
         return;
     msg = vert ? WM_VSCROLL : WM_HSCROLL;
     ctl = bar == SB_CTL ? (WORD)hwnd : 0;
+    bar2 = bar == SB_CTL ? SB_CTL : vert ? SB_VERT : SB_HORZ;
     cmd -= SBM_HERE;
     if (cmd == SB_THUMBPOSITION) {
-        send_message(notify, msg, SB_THUMBTRACK, MAKELONG(here, ctl));
-        send_message(notify, msg, SB_THUMBPOSITION, MAKELONG(here, ctl));
+        sbm_send(notify, msg, SB_THUMBTRACK, here, ctl, hwnd, bar2);
+        sbm_send(notify, msg, SB_THUMBPOSITION, here, ctl, hwnd, bar2);
+    } else if (cmd == SB_TOP || cmd == SB_BOTTOM) {
+        /* On 3.1 SB_TOP and SB_BOTTOM come only from a scroll-bar
+           control's Home and End keys, never from a window's own bars, so
+           3.x programs may ignore them (Write: Top and Bottom did nothing,
+           its bar did not move). They are sent first, as later Windows
+           does; if the bar has not moved and is not at that end yet, the
+           thumb is "dragged" there as Scroll Here does, which every
+           program handles */
+        int before = GetScrollPos(hwnd, bar2), after, lo, hi, end;
+        sbm_send(notify, msg, cmd, 0, ctl, hwnd, bar2);
+        if (IsWindow(notify) && IsWindow(hwnd)) {
+            after = GetScrollPos(hwnd, bar2);
+            GetScrollRange(hwnd, bar2, &lo, &hi);
+            end = cmd == SB_TOP ? lo : hi;
+            if (after == before && after != end && hi > lo) {
+                ulog("sbmenu: not moved; the thumb dragged there\r\n");
+                sbm_send(notify, msg, SB_THUMBTRACK, end, ctl, hwnd, bar2);
+                sbm_send(notify, msg, SB_THUMBPOSITION, end, ctl, hwnd, bar2);
+            }
+        }
     } else
-        send_message(notify, msg, cmd, MAKELONG(0, ctl));
-    send_message(notify, msg, SB_ENDSCROLL, MAKELONG(0, ctl));
+        sbm_send(notify, msg, cmd, 0, ctl, hwnd, bar2);
+    if (IsWindow(notify))
+        sbm_send(notify, msg, SB_ENDSCROLL, 0, ctl, hwnd, bar2);
 }
 
 /* ---- the SCROLLBAR class: its SBINFO in the window extra bytes

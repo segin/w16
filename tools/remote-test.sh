@@ -49,6 +49,9 @@ out=$root/build/remote-$name
 mkdir -p "$out"
 
 echo "remote-test: $(git -C "$root" log --oneline -1) -> $host:$dir"
+# the build's commit for build/w16ver.h (the Makefile): a worktree's copy
+# there is no git checkout (first: an -e W16_BUILD=... still wins)
+envs="$(printf 'W16_BUILD=%s' "$(git -C "$root" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)" | base64 -w0)$envs"
 ssh -o BatchMode=yes "$host" "mkdir -p '$dir' '$base/../w16-refcache'"
 rsync -a --delete --exclude=/build/ --exclude=/.claude/ --exclude=/.tools \
     "$root/" "$host:$dir/"

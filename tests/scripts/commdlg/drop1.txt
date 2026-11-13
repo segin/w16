@@ -1,0 +1,49 @@
+; the combo boxes dropped down: notifications and the Flags bits 10000000h / 20000000h
+; a: types dropped (click), click its current item, Cancel
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
+; b: drives dropped, Escape, Cancel
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
+; c: types dropped, click another item, Cancel
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
+; d: types dropped, click its item, then OK on a file
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
+; e: drives dropped, click c:, then OK on a file
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=3 flags=31 hook=1
+wait 3000
+click 222 254
+wait 800
+snap C:\A1.BMP
+click 150 297
+wait 800
+click 469 109
+wait 1500
+; b
+click 407 255
+wait 800
+snap C:\B1.BMP
+key 1B
+wait 800
+click 469 109
+wait 1500
+; c
+click 222 254
+wait 800
+click 150 284
+wait 800
+snap C:\C1.BMP
+click 469 109
+wait 1500
+; d
+click 222 254
+wait 800
+click 150 297
+wait 800
+dblclick 120 117
+wait 1500
+; e
+click 407 255
+wait 800
+click 330 285
+wait 800
+dblclick 120 117
+wait 1500

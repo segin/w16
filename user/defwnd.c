@@ -851,6 +851,7 @@ LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         old = SelectObject((HDC)wp, sysbrush[COLOR_BACKGROUND]);
         PatBlt((HDC)wp, r.left, r.top, r.right - r.left, r.bottom - r.top, PATCOPY);
         SelectObject((HDC)wp, old);
+        deskver_paint((HDC)wp, &r);     /* w16's stamp; off: nothing */
         return 1;
     }
     case WM_NCCALCSIZE:
