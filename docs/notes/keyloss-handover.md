@@ -226,3 +226,10 @@ resolved to keyloss's grow(), which already caps at SEG_MAX = FFF0h):
   tests/dos/notes/input-probes.patch (not applied).
 - Next: (5) LocalNotify/LocalShrink, (6) ExitWindows when the last task
   ends. Full suites: tools/remote-test.sh (installation-05).
+- Final remote run on 531c5fe: make test pass, boot test 44/44 ok.
+- Added to the list (coordinator): winoldap/winoldapk/winoldapw failing
+  now and then by ~352.7 or 371.0 px (DOSBox's displayed image only;
+  GDI GetPixel reads the right frame; see commit 7480e1c's notes): make
+  the cases reliable without loosening thresholds (finish the
+  vgaonly/cycles sweep, or compare a GDI-side dump, or force a full
+  redraw before the shot). After (5) and (6).
