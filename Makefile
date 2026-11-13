@@ -1006,9 +1006,9 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	python3 tools/nemark.py $@ 3.10
 
 test: dos fonts
-	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
+	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
-	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV
+	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV
 	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1692,3 +1692,35 @@ $(W16SYS)/KEYBOARD.DRV: $(DOS)/KEYBOARD.DRV
 
 # COMMDLG.DLL and its probe (shell/commdlg/commdlg.mk)
 include shell/commdlg/commdlg.mk
+
+# ---- VGA.DRV: w16's VGA display driver (drivers/vga; README.md there):
+# C (large model, SS != DS, exports __loadds) and entry.asm, every segment
+# fixed; resources from tools/vgares.py (w16's art from make vgaart, the
+# configuration and stock-font data). build/vga/link.lnk names the objects
+# so tests/vgaprobe.sh -m can relink them with other resources.
+VCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -Idrivers/vga
+VOBJS   := $(B)/vga/entry.o $(B)/vga/vga.o $(B)/vga/surf.o $(B)/vga/rop.o $(B)/vga/color.o \
+           $(B)/vga/blt.o $(B)/vga/output.o $(B)/vga/text.o $(B)/vga/dib.o $(B)/vga/cursor.o \
+           $(B)/gdi/i4.o
+$(B)/vga/entry.o: drivers/vga/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/vga/%.o: drivers/vga/%.c drivers/vga/vga.h
+	@mkdir -p $(@D)
+	$(WCC) $(VCFLAGS) -fo=$@ $<
+$(B)/vga/vga.res: $(B)/vga/.stamp tools/vgares.py tools/fontc.py
+	python3 -B tools/vgares.py $(B)/vga $@
+$(B)/vga/link.lnk: drivers/vga/vga.lnk Makefile
+	@mkdir -p $(@D)
+	{ echo '@drivers/vga/vga.lnk'; echo 'file { $(VOBJS) }'; } > $@
+$(DOS)/VGA.DRV: $(VOBJS) $(B)/vga/link.lnk $(B)/vga/vga.res tools/nenoname.py tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/vga/link.lnk name $@ option map=$(B)/vga/vga.map \
+	    option resource=$(B)/vga/vga.res
+	python3 tools/nenoname.py $@ 501-502
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/VGA.DRV
+install-tree: $(W16SYS)/VGA.DRV
+$(W16SYS)/VGA.DRV: $(DOS)/VGA.DRV
+	@mkdir -p $(@D)
+	cp $< $@
