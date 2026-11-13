@@ -60,7 +60,9 @@ for n in $names; do
         if [ -z "$allowed" ]; then
             echo "  $n: $s has no baseline ($px pixels differ)"
             [ "${CF_BASELINE:-}" = update ] || result=FAIL
-        elif [ "$px" -gt "$allowed" ]; then
+            continue
+        fi
+        if [ "$px" -gt "$allowed" ]; then
             result=FAIL; echo "  $n: $s differs by $px pixels, baseline $allowed"
         elif [ "$px" -lt "$allowed" ]; then
             echo "  $n: $s improved: $px pixels (baseline $allowed)"

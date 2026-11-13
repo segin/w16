@@ -142,6 +142,10 @@ BOOL pic_mouse(UINT msg, int x, int y)
         return TRUE;
     switch (msg) {
     case WM_LBUTTONDOWN:
+        /* a drag that starts beside the picture does not move it
+           (picture scenario) */
+        if (x < g_pic.x || y < g_pic.y || x >= g_pic.x + g_pic.cx || y >= g_pic.y + g_pic.cy)
+            break;
         dragging = TRUE;
         grab.x = x - g_pic.x;
         grab.y = y - g_pic.y;
@@ -170,23 +174,24 @@ BOOL pic_mouse(UINT msg, int x, int y)
     return TRUE;
 }
 
-/* arrow keys move the picture a pixel at a time (UNVERIFIED step) */
+/* the arrow keys move the picture a character cell at a time: right,
+   right, down moved it 16, 15 on VGA (picture scenario) */
 void pic_key(WPARAM vk)
 {
     if (g_pic.kind == PIC_NONE)
         return;
     switch (vk) {
     case VK_LEFT:
-        g_pic.x--;
+        g_pic.x -= g_cx;
         break;
     case VK_RIGHT:
-        g_pic.x++;
+        g_pic.x += g_cx;
         break;
     case VK_UP:
-        g_pic.y--;
+        g_pic.y -= g_cy;
         break;
     case VK_DOWN:
-        g_pic.y++;
+        g_pic.y += g_cy;
         break;
     default:
         return;

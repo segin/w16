@@ -119,8 +119,15 @@ rectangle is x, y, x + width - 1, y + height - 1, type 2.
 
 **Objects saved as 3.0** (CF6). The picture becomes a monochrome bitmap one
 pixel wider and higher than its rectangle, the object drawn into the
-rectangle; the extra row and column are not drawn and hold whatever was in
-memory.
+rectangle; the extra row and column, and the row padding, are not drawn
+and hold whatever was in memory (`tools/crdcmp.py` ignores those bits when
+comparing).
+
+**Embedded objects** (CF14): Insert Object offers the classes registered
+for StdFileEditing (on the reference install Package, Paintbrush Picture,
+Sound). An embedded Paintbrush picture of the default size is object 0,
+class `PBrush`, format 2, rectangle 0,0,237,164, type 0; its stream (native
+data and presentation) is what OLECLI and the server write.
 
 ## Object numbers
 
@@ -133,7 +140,8 @@ header's value).
 
 ## Round trips
 
-Open and save without changes rewrites the same bytes for MGC files (the
-index fields included; the bodies are copied). For RRG files the objects
-go through OLECLI (OleLoadFromStream, OleSaveToStream) and come back as
-OLECLI writes them.
+Open and save without changes rewrites the same bytes, MGC and RRG alike
+(CF12: an RRG file with a static object came back byte for byte; the index
+fields are kept, the bodies copied). The scenarios in
+`tests/scripts/cf/` check every file w16's Cardfile writes against the
+original's.

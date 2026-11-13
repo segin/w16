@@ -490,7 +490,7 @@ LRESULT CALLBACK __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         paint_frame(w);
         return 0;
     case WM_SETFOCUS:
-        SetFocus(g_listview ? g_list : (g_picmode ? g_card : g_edit));
+        SetFocus(g_listview ? g_list : g_edit);
         return 0;
     case WM_INITMENU:
         enable_menus();

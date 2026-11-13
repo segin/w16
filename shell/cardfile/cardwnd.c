@@ -233,10 +233,12 @@ LRESULT CALLBACK __export EditWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_KEYDOWN:
         if (wp == VK_PRIOR || wp == VK_NEXT) {
-            if (GetKeyState(VK_CONTROL) < 0)
-                go_card(wp == VK_PRIOR ? 0 : g_ncards - 1);   /* UNVERIFIED */
-            else
-                go_next(wp == VK_PRIOR ? -1 : 1);
+            go_next(wp == VK_PRIOR ? -1 : 1);
+            return 0;
+        }
+        /* Ctrl+Home and Ctrl+End: the first and the last card (CF10) */
+        if ((wp == VK_HOME || wp == VK_END) && GetKeyState(VK_CONTROL) < 0) {
+            go_card(wp == VK_HOME ? 0 : g_ncards - 1);
             return 0;
         }
         if (GetKeyState(VK_CONTROL) < 0 && GetKeyState(VK_SHIFT) < 0 &&
