@@ -1581,12 +1581,6 @@ while read -r n c; do
     (
         # (cases use c, n and the like for their own purposes)
         _bt_c=$c _bt_n=$n _bt_t=$(date +%s) fails=0
-        # every case but the ones that time a serial line (comm) yields
-        # the processor (nice 10): comm's two runs then keep their pace
-        # when many cases run at once (at 12 jobs and more it failed in
-        # every run, by a byte, on a 40-thread host)
-        case " ${BOOTTEST_UNNICED-comm} " in *" ${c%@*} "*) ;; *)
-            renice -n 10 -p "$(exec sh -c 'echo $PPID')" > /dev/null 2>&1 || true ;; esac
         trap '[ -f "$out/.case-$_bt_n.fails" ] || fails=1; refkeep; echo "$_bt_c $(($(date +%s) - _bt_t))" > "$out/.case-$_bt_n.time"; touch "$out/.case-$_bt_n.done"' EXIT
         runcase "$c" > "$out/.case-$_bt_n.out" 2>&1
         echo "$fails" > "$out/.case-$_bt_n.fails"
