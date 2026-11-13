@@ -1283,6 +1283,13 @@ $(DOS)/US18.EXE: $(B)/tests/start.o $(B)/tests/us18.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us18.map file { $(B)/tests/start.o $(B)/tests/us18.o }
 dos: $(DOS)/US18.EXE
+# US19: dragging a scroll bar's thumb with real input (tests/apps/us19.c)
+$(B)/tests/us19.o: tests/apps/us19ref.h tests/apps/tklog.h
+$(DOS)/US19.EXE: $(B)/tests/start.o $(B)/tests/us19.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us19.map file { $(B)/tests/start.o $(B)/tests/us19.o }
+dos: $(DOS)/US19.EXE
 # US18A.EXE: US18 marked for Windows 3.10 (BS_USERBUTTON becomes a push button there)
 $(DOS)/US18A.EXE: $(DOS)/US18.EXE
 	cp $< $@

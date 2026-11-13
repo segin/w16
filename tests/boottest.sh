@@ -226,6 +226,14 @@
 #              compared in helpmenus, pmclose ...), so its run's screen,
 #              the menu left open (sbmenu-on.png), is kept to look at but
 #              not compared
+#   sbdrag     a scroll bar's thumb dragged with real input (the outline
+#              that follows the pointer, user/scroll.c): probe US19 as the
+#              shell (two bars that move with SB_THUMBTRACK, two that do
+#              not) and Microsoft's Notepad (45 lines typed), each under
+#              w16's USER and GDI on Microsoft's KRNL286 against
+#              all-Microsoft: every screen, mid-drag too, identical
+#              (Notepad's caret left out), and US19's WM_VSCROLL/WM_HSCROLL
+#              log identical (parts sbdrag@us, sbdrag@np)
 #   deskver    w16's desktop version stamp (a w16 extension,
 #              user/deskver.c; every other case runs with it off, as
 #              tests/dropin.sh's default [w16] DesktopVersion=0): with 0,
@@ -306,7 +314,7 @@
 # retries are logged under a lock. BOOTTEST_JOBS=1 runs one case at a time.
 # The cases that took longest last time (build/boottest-times.txt, kept
 # by each run) start first; the output stays in case order. Cases made of
-# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us,
+# independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us, sbdrag@us/np,
 # winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
 # the case's one line; a part can be run by name (tests/boottest.sh
 # allw16nolock@3).
@@ -325,7 +333,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag deskver icons winfile pmitems pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1333,6 +1341,63 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
         else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
+    sbdrag)
+        # a scroll bar's thumb dragged with real input (user/scroll.c,
+        # track_scrollbar): part us, probe US19 as the shell, its four bars
+        # (tests/scripts/input/sbdrag-us.txt); part np, Microsoft's
+        # Notepad (tests/scripts/input/sbdrag-np.txt); each under w16's
+        # USER and GDI on Microsoft's KRNL286 against all-Microsoft. Every
+        # screen, taken mid-drag, must be identical (Notepad's caret left
+        # out), and US19's log of WM_VSCROLL/WM_HSCROLL (code, position,
+        # the pointer then) identical to 3.1's
+        pk=${part:-us np}
+        r=ok
+        case " $pk " in *" us "*)
+        scr=$root/tests/scripts/input/sbdrag-us.txt
+        refrun sbdrag-usref sbdrag "$root/tests/inputrun.sh" -s -b 40 -t 300 "$scr" "$out/sbdrag-usref" -r \
+            -f "$root/build/dos/US19.EXE=US19.EXE" -i 'boot:shell=C:\US19.EXE'
+        "$root/tests/inputrun.sh" -e "$out/sbdrag-usref/boot.png" -E "$out/sbdrag-usref" -b 40 -t 300 "$scr" "$out/sbdrag-us" -r \
+            -f "$root/build/dos/US19.EXE=US19.EXE" -i 'boot:shell=C:\US19.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/sbdrag-us.txt" 2>&1 || true
+        for k in usref us; do
+            f=$out/sbdrag-$k/work/c/WINDOWS/TK.LOG
+            [ -f "$f" ] && tr -d '\r' < "$f" | grep '^MSG ' > "$out/sbdrag-$k.msg" || : > "$out/sbdrag-$k.msg"
+        done
+        if [ "$(grep -c ' 5 ' "$out/sbdrag-usref.msg")" -lt 10 ]; then
+            r="us: the reference's log has too few SB_THUMBTRACKs ($out/sbdrag-usref.msg)"
+        elif ! cmp -s "$out/sbdrag-usref.msg" "$out/sbdrag-us.msg"; then
+            r="us: the messages differ from 3.1's ($out/sbdrag-usref.msg, sbdrag-us.msg)"
+        fi
+        for f in "$out/sbdrag-usref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$f" .png)
+            [ -f "$out/sbdrag-us/$s.png" ] || { r="us: no $s"; break; }
+            n=$(magick compare -metric AE "$out/sbdrag-us/$s.png" "$f" "$out/sbdrag-us-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="us: $s: $n pixels differ ($out/sbdrag-us-$s-diff.png)"
+        done ;; esac
+        case " $pk " in *" np "*)
+        scr=$root/tests/scripts/input/sbdrag-np.txt
+        m="rectangle 14,42 18,60"       # the caret's place (it blinks)
+        refrun sbdrag-npref sbdrag "$root/tests/inputrun.sh" -s -b 40 -t 300 "$scr" "$out/sbdrag-npref" -r \
+            -i 'WIN.INI:windows:run=NOTEPAD.EXE'
+        "$root/tests/inputrun.sh" -e "$out/sbdrag-npref/boot.png" -m "$m" -E "$out/sbdrag-npref" -M "$m" -b 40 -t 300 "$scr" "$out/sbdrag-np" -r \
+            -i 'WIN.INI:windows:run=NOTEPAD.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/sbdrag-np.txt" 2>&1 || true
+        [ -f "$out/sbdrag-npref/04-end.png" ] || r="np: the reference has no screens ($out/sbdrag-npref)"
+        for f in "$out/sbdrag-npref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$f" .png)
+            [ -f "$out/sbdrag-np/$s.png" ] || { r="np: no $s"; break; }
+            magick "$out/sbdrag-np/$s.png" -fill black -draw "$m" "$out/sbdrag-np-a.png"
+            magick "$f" -fill black -draw "$m" "$out/sbdrag-np-b.png"
+            n=$(magick compare -metric AE "$out/sbdrag-np-a.png" "$out/sbdrag-np-b.png" "$out/sbdrag-np-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="np: $s: $n pixels differ ($out/sbdrag-np-$s-diff.png)"
+        done ;; esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Notepad), US19's messages as 3.1's"
+        else echo "FAIL sbdrag: $r"; fails=$((fails + 1)); fi ;;
     deskver)
         # the desktop's version stamp (a w16 extension, user/deskver.c):
         # off, w16's USER and GDI give 3.1's screen; on, every w16 part,
@@ -1789,7 +1854,7 @@ done
 # Parts. A case made of several independent sessions is split into parts
 # that are scheduled like cases (CASE@PART, run by name too): allw16nolock
 # (one part per run, its deliberate timings unchanged), pmdrop (w16
-# PROGMAN; PROGMAN and SHELL; USER and GDI), winfile (the comparison;
+# PROGMAN; PROGMAN and SHELL; USER and GDI), sbdrag (US19; Notepad), winfile (the comparison;
 # every w16 part), kbd and mouse (one part per script). A part records its result (partdone) and prints only
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
@@ -1797,6 +1862,7 @@ caseparts() {
     case $1 in
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
     pmdrop) echo "$1@pm $1@sh $1@us" ;;
+    sbdrag) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -1821,6 +1887,9 @@ partsummary() {
     pmdrop)
         if [ $pbad = 0 ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $pfirst"; fi ;;
+    sbdrag)
+        if [ $pbad = 0 ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Notepad), US19's messages as 3.1's"
+        else echo "FAIL sbdrag: $pfirst"; fi ;;
     kbd)
         if [ $pbad = 0 ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
         else echo "FAIL kbd: $pfirst ($out)"; fi ;;
