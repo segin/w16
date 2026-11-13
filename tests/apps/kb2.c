@@ -202,7 +202,10 @@ static void dump_kbrec(void)
                 break;
             }
             put(line);
-            if (r[25] != r[24]) {
+            if (r[25] != r[24] && o == 7) {
+                wsprintf(line, "~C   real-mode records %u\r\n", r[25] - r[24]);
+                put(line);
+            } else if (r[25] != r[24]) {
                 wsprintf(line, "C   real-mode records %u\r\n", r[25] - r[24]);
                 put(line);
             }
@@ -238,8 +241,26 @@ static void dump_kb4(void)
         put(line);
         for (i = 0; i < n; i++) {
             WORD FAR *e = (WORD FAR *)MAKELP(ls, h[10] + i * 16);
-            wsprintf(line, "R %u %04X %04X %04X %04X %04X ~tick=%04X #%u\r\n",
-                     e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+            /* INT 16h AH=01h (the lights): only AH, the BIOS flags and
+               ZF out count (AL, BX, CX are what the caller had); INT 15h
+               AH=4Fh: AX and CF out */
+            if (e[0] == 3 && (e[1] >> 8) == 1)
+                wsprintf(line, "R 3 01xx 17=%04X 96=%04X ~AX=%04X ~BX=%04X ~CX=%04X ~tick=%04X ~#%u\r\n",
+                         e[4], e[5], e[1], e[2], e[3], e[6], e[7]);
+            else if (e[0] == 4 && (e[1] >> 8) == 1)
+                wsprintf(line, "R 4 ZF=%u ~AX=%04X ~F=%04X ~tick=%04X ~#%u\r\n",
+                         (e[2] >> 6) & 1, e[1], e[2], e[6], e[7]);
+            else if (e[0] == 3)
+                wsprintf(line, "R 3 %04X 17=%04X 96=%04X ~BX=%04X ~CX=%04X ~tick=%04X ~#%u\r\n",
+                         e[1], e[4], e[5], e[2], e[3], e[6], e[7]);
+            else if (e[0] == 4)
+                wsprintf(line, "R 4 %04X ~F=%04X ~BX=%04X ~tick=%04X ~#%u\r\n", e[1], e[2], e[3], e[6], e[7]);
+            else if (e[0] == 5 || e[0] == 6)
+                wsprintf(line, "R %u %04X CF=%u ~F=%04X ~tick=%04X ~#%u\r\n", e[0], e[1], e[2] & 1, e[2],
+                         e[6], e[7]);
+            else
+                wsprintf(line, "R %u %04X %04X %04X %04X %04X ~tick=%04X ~#%u\r\n",
+                         e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
             put(line);
             if ((i & 15) == 15)
                 flush();
@@ -274,6 +295,17 @@ int __cdecl tmain(void)
     SetFocus(hwnd);
     sc_install();
     secs = GetPrivateProfileInt("w16", "kb2secs", 300, "SYSTEM.INI");
+    /* [w16] kb2speed=N: KEYBOARD.SetSpeed(N) first (the typematic rate
+       and delay it gives the keyboard show in the repeats counted) */
+    {
+        int sp = GetPrivateProfileInt("w16", "kb2speed", -1, "SYSTEM.INI");
+        if (sp != -1) {
+            FARPROC f = GetProcAddress(GetModuleHandle("KEYBOARD"), MAKEINTRESOURCE(7));
+            int r = f ? ((int (FAR PASCAL *)(int))f)(sp) : -2;
+            wsprintf(line, "SetSpeed(%d)=%d\r\n", sp, r);
+            put(line);
+        }
+    }
     SetTimer(hwnd, 1, 1000, NULL);
     out("listening\r\n");
     while (!done && ticks < secs && GetMessage(&m, 0, 0, 0)) {

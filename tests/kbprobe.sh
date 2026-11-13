@@ -19,9 +19,14 @@
 #        to USER's event procedure (registers, interrupt flag, the BIOS
 #        keyboard flags) and what reaches real mode (INT 9, INT 16h, INT
 #        15h AH=4Fh).
+#   rep  KB2 again with [w16] kb2speed=N (KEYBOARD.SetSpeed(N) first) and
+#        'a' held 3 seconds (tests/scripts/input/kbrepeat.txt), for N =
+#        31, 95, 0, 96: the typematic rate and delay SetSpeed gives the
+#        keyboard, as the number of repeats (within 3 of Windows 3.1's:
+#        the host's timing)
 # The logs, without the layout-dependent lines and fields ("~"), must be
 # identical.
-#   usage: tests/kbprobe.sh [-o DIR] [-m] [kb1] [kb2]   (default: both)
+#   usage: tests/kbprobe.sh [-o DIR] [-m] [kb1] [kb2] [rep]   (default: all)
 #     -m   Microsoft's driver only (to look at its logs)
 # Exit status 0 when every comparison made agrees.
 set -eu
@@ -36,7 +41,7 @@ while getopts o:m opt; do
     esac
 done
 shift $((OPTIND - 1))
-probes=${*:-kb1 kb2}
+probes=${*:-kb1 kb2 rep}
 [ -n "$out" ] || out=$root/build/kbprobe-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
@@ -48,7 +53,14 @@ sides="ms w16"
 fails=0
 
 # cmpf NAME A B: the logs without "~" lines and fields
-strip() { tr -d '\r' < "$1" | grep -av '^~' | grep -av '^OBS ~' | sed 's/ ~[^ ]*//g'; }
+# KB2's event-procedure calls happen at interrupt time, the calls into the
+# driver at task time: their interleaving is the host's timing, so the
+# two are compared as separate lists (the events first)
+strip() {
+    tr -d '\r' < "$1" | grep -av '^~' | grep -av '^OBS ~' | sed 's/ ~[^ ]*//g' > "$1.s"
+    grep -a '^E ' "$1.s" || true
+    grep -av '^E ' "$1.s" || true
+}
 cmpf() {
     strip "$2" > "$2.cmp"
     strip "$3" > "$3.cmp"
@@ -87,6 +99,23 @@ for p in $probes; do
             grep -aq '^KB2 done' "$out/kb2-$s.log" || { echo "FAIL kb2 $s: did not finish ($out/kb2-$s.log)"; fails=$((fails + 1)); }
         done
         [ -n "$msonly" ] || cmpf kb2 "$out/kb2-ms.log" "$out/kb2-w16.log" ;;
+    rep)
+        for n in 31 95 0 96; do
+            for s in $sides; do
+                if [ $s = ms ]; then set --; else set -- -f "$w16=WINDOWS/SYSTEM/KEYBOARD.DRV"; fi
+                "$root/tests/inputrun.sh" -b 30 -t 100 "$root/tests/scripts/input/kbrepeat.txt" "$out/rep$n-$s" -r \
+                    -f "$dos/KB2.EXE=KB2.EXE" -i 'boot:shell=C:\KB2.EXE' -i "w16:kb2speed=$n" "$@" \
+                    > "$out/rep$n-$s.txt" 2>&1 || true
+                c=$(tr -d '\r' < "$out/rep$n-$s/work/c/WINDOWS/TK.LOG" 2>/dev/null | grep -c '^M 0100 0041 401E' || true)
+                eval "rep_$s=\${c:-0}"
+            done
+            if [ -n "$msonly" ]; then echo "     rep $n: $rep_ms repeats"
+            elif [ "$rep_ms" -gt 0 ] && [ $((rep_ms - rep_w16)) -le 3 ] && [ $((rep_w16 - rep_ms)) -le 3 ]; then
+                echo "ok   rep $n: $rep_w16 repeats (Windows 3.1's driver: $rep_ms)"
+            else
+                echo "FAIL rep $n: $rep_w16 repeats, Windows 3.1's driver $rep_ms"; fails=$((fails + 1))
+            fi
+        done ;;
     *) echo "unknown probe $p" >&2; exit 2 ;;
     esac
 done

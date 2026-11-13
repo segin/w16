@@ -93,15 +93,8 @@ key KP_3
 key KP_0
 keyup Alt_L
 key Num_Lock
-; held keys: typematic repeats
-keydown a
-sleep 1.2
-keyup a
-keydown shift
-keydown Right
-sleep 0.8
-keyup Right
-keyup shift
+; (held keys, typematic repeats: tests/kbprobe.sh rep, kbrepeat.txt;
+; their number varies with the host's timing)
 key Print
 key alt+Print
 key ctrl+Print
