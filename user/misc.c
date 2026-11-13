@@ -205,10 +205,7 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
        SYSTEM.DisableSystemTimers, and GDI's Death on the screen's DC,
        which puts the display back in text mode. w16's USER skipped these
        and the graphics screen stayed up at the DOS prompt */
-    D_SETCURSOR(0);
-    MS_DISABLE();
-    KB_DISABLE();
-    S_DISABLESYSTEMTIMERS();
+    input_disable();
     G_DEATH(hdcScreen);
     /* KERNEL ends Windows (ExitKernel, KERNEL.2) with the code */
     {
@@ -376,8 +373,8 @@ HWND WINAPI GetSysModalWindow(void)
    WNetGetDirectoryType, Add/Cancel/RestoreConnection, WNetGetErrorText).
    UNVERIFIED for the print-queue and dialog ones. They were stubs
    returning 0, WN_SUCCESS: File Manager took every drive A-Z for a
-   connected network drive. WNetEnable/WNetDisable (521, 522; arguments
-   unknown) stay stubs. WNetGetUser(szUser, lpSize) pops 8 bytes (3.1 DDK;
+   connected network drive. WNetEnable/WNetDisable (521, 522): no
+   arguments, 1 (US11). WNetGetUser(szUser, lpSize) pops 8 bytes (3.1 DDK;
    Wine's 12 left US8's stack four bytes off on w16, not on 3.1). ---- */
 #ifndef WN_NOT_SUPPORTED
 #define WN_NOT_SUPPORTED 1
@@ -635,4 +632,63 @@ HPALETTE WINAPI SelectPalette(HDC hdc, HPALETTE h, BOOL bk)
 UINT WINAPI RealizePalette(HDC hdc)
 {
     return LOWORD(G_GDIREALIZEPALETTE(hdc));
+}
+
+WORD WINAPI U_WNETENABLE(void)                                  /* 521 */
+{
+    return 1;
+}
+
+WORD WINAPI U_WNETDISABLE(void)                                 /* 522 */
+{
+    return 1;
+}
+
+/* ---- undocumented exports whose argument sizes were not known (they
+   were stubs that popped nothing). US11 on Windows 3.1 measured what each
+   pops (Schulman, Undocumented Windows ch. 6, for the parameter lists);
+   those not here are correctly sized stubs returning 3.1's 0: IsTwoByte-
+   CharPrefix (BEAR51, 2 bytes), QuerySendMessage (10), LockInput (6),
+   LockMyTask (2), WinOldAppHackOMatic (4), GetUserLocalObjType (2),
+   hardware_event (register arguments, pops none), OldExitWindows (none:
+   Schulman; not called, it ends Windows). ---- */
+
+/* USER.275: no arguments; 1 (US11). UNVERIFIED that it is more than the
+   whole screen painted again */
+BOOL WINAPI U_REPAINTSCREEN(void)
+{
+    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    return TRUE;
+}
+
+/* USER.323 GetMessage2(lpMsg, hwnd, min, max, wRemove, bWait): the back
+   end of GetMessage and PeekMessage (Schulman); 14 bytes (US11: with
+   bWait FALSE and a message waiting, 1) */
+BOOL WINAPI U_GETMESSAGE2(MSG __far *m, HWND h, UINT lo, UINT hi, UINT remove, BOOL wait)
+{
+    if (!wait)
+        return PeekMessage(m, h, lo, hi, remove);
+    return GetMessage(m, h, lo, hi);
+}
+
+/* USER.343 GetFilePortName(LPOFSTRUCT): GDI's "Print to File" dialog
+   (Schulman); 4 bytes. w16 has no dialog yet: SP_USERABORT (-3), as if
+   cancelled. UNVERIFIED beyond the size */
+int WINAPI U_GETFILEPORTNAME(OFSTRUCT __far *of)
+{
+    (void)of;
+    return -3;
+}
+
+/* USER.372 GetInternalIconHeader(src, dst): 8 bytes; copies the 12 bytes
+   at src (an icon's CURSORICONINFO header: hot spot, size, width bytes,
+   planes, bits a pixel) to dst (US11: a pattern at src, 12 bytes of it at
+   dst, nothing more). Program Manager imports it. UNVERIFIED: the value
+   it returns (3.1's DX was src's selector) */
+DWORD WINAPI U_GETINTERNALICONHEADER(const BYTE __far *src, BYTE __far *dst)
+{
+    int i;
+    for (i = 0; i < 12; i++)
+        dst[i] = src[i];
+    return (DWORD)(const void __far *)src;
 }

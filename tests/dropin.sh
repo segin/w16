@@ -41,6 +41,8 @@
 #                seconds, at the latest after SECS seconds
 #     -n         only prepare the scratch drive (with -o) and dosbox.conf;
 #                do not start DOSBox
+# DROPIN_NOREDIR=1 in the environment: the command's output is not
+# redirected to C:\OUT.TXT (it goes to the screen).
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
 # The report ends with "== shot: after N s (how)" for -s: settled,
@@ -155,6 +157,8 @@ if [ -n "$usex" ]; then
     emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false"
     [ "$cpu" = 386x ] && cpu=386
 fi
+redir=" > C:\\OUT.TXT"
+[ -n "${DROPIN_NOREDIR:-}" ] && redir=
 common="[dosbox]
 $xdos
 memsize=16
@@ -171,7 +175,7 @@ pcspeaker=false
 mount c \"$work/c\"
 c:
 cd \\WINDOWS
-$cmd > C:\\OUT.TXT
+$cmd$redir
 echo WINEXIT >> C:\\OUT.TXT
 exit"
 printf '[sdl]\noutput=surface\n%s\n' "$common" > "$work/dosbox.conf"

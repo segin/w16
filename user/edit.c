@@ -181,7 +181,7 @@ static int tabbed_x(HDC hdc, PED e, WORD pos)
     if (pos <= ls)
         return 0;
     if (e->ntabs > 16) {
-        sp = (int *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+        sp = (int __near *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
         if (!sp)
             sp = stops;
     }
@@ -200,7 +200,7 @@ static void out_text(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, i
         int stops[16], k;
         int *sp = stops;
         if (e->ntabs > 16) {
-            sp = (int *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
+            sp = (int __near *)LocalAlloc(LPTR, e->ntabs * sizeof(int));
             if (!sp)
                 sp = stops;
         }
@@ -508,7 +508,7 @@ static WORD pos_from_x(HWND h, PED e, int x, int y)
     return st + i;
 }
 
-LRESULT WINAPI EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PED e;
     if (!valid_wnd(h))

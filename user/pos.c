@@ -397,6 +397,15 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (pl && !pl->title && (w = valid_wnd(h)) != 0)
                     pl->title = make_icon_title(h);
             }
+            /* a child minimised without activation gives the focus it
+               holds to its parent (3.1: Program Manager makes its groups
+               shown, then minimises the iconic ones with
+               SW_SHOWMINNOACTIVE; the arrow keys went to the Accessories
+               icon instead of Main. UNVERIFIED: that 3.1 gives it to the
+               parent rather than to nobody; Wine does for SW_HIDE) */
+            if ((cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE) && (w = valid_wnd(h)) != 0 &&
+                (w->style & WS_CHILD) && hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
+                set_focus(w->hwndParent);
             /* SW_MINIMIZE (Alt+Space N, the minimise box): the next
                top-level window becomes active (3.1 SDK; on 3.1 Program
                Manager is active again after Notepad is minimised - w16

@@ -961,6 +961,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	python3 tools/nemark.py $@ 3.10
 
 test: dos fonts
+	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap -name '*.c')
 	tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1174,6 +1175,28 @@ $(DOS)/US3.EXE: $(B)/tests/start.o $(B)/tests/us3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us3.map file { $(B)/tests/start.o $(B)/tests/us3.o }
 dos: $(DOS)/US3.EXE
+# US12: GetFocus inside WM_KILLFOCUS and WM_SETFOCUS (tests/apps/us12.c)
+$(B)/tests/us12.o: tests/apps/us12ref.h tests/apps/tklog.h
+$(DOS)/US12.EXE: $(B)/tests/start.o $(B)/tests/us12.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us12.map file { $(B)/tests/start.o $(B)/tests/us12.o }
+dos: $(DOS)/US12.EXE
+# US11: argument sizes of USER's undocumented exports; GetNextQueueWindow
+$(B)/tests/us11.o: tests/apps/us11ref.h tests/apps/tklog.h
+$(DOS)/US11.EXE: $(B)/tests/start.o $(B)/tests/us11.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us11.map file { $(B)/tests/start.o $(B)/tests/us11.o }
+dos: $(DOS)/US11.EXE
+# US10: DisableOEMLayer and EnableOEMLayer (tests/apps/us10.c)
+$(B)/tests/us10.o: tests/apps/us10ref.h tests/apps/tklog.h
+$(DOS)/US10.EXE: $(B)/tests/start.o $(B)/tests/us10.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us10.map file { $(B)/tests/start.o $(B)/tests/us10.o } \
+	    import EnableOEMLayer USER.3 import DisableOEMLayer USER.4
+dos: $(DOS)/US10.EXE
 # US9: DragObject and DragDetect (tests/apps/us9.c)
 $(B)/tests/us9.o: tests/apps/us9ref.h tests/apps/tklog.h tests/apps/shprobe.h
 $(DOS)/US9.EXE: $(B)/tests/start.o $(B)/tests/us9.o tests/apps/app.lnk

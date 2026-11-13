@@ -27,7 +27,7 @@ typedef struct {
     HANDLE h;                   /* 0: promised (delayed rendering) */
 } CLIPFMT;
 
-static CLIPFMT *clip_fmts;      /* LocalAlloc'd, clip_n used */
+static CLIPFMT __near *clip_fmts;      /* LocalAlloc'd, clip_n used */
 static WORD clip_n, clip_cap;
 static HWND hwndClipOpen, hwndClipOwner, hwndClipViewer;
 static HQUEUE hqClipOpen;
@@ -140,9 +140,9 @@ HANDLE WINAPI SetClipboardData(UINT fmt, HANDLE h)
     } else {
         if (clip_n == clip_cap) {
             WORD cap = clip_cap ? clip_cap * 2 : 8;
-            CLIPFMT *n = clip_fmts
-                ? (CLIPFMT *)LocalReAlloc((HLOCAL)clip_fmts, cap * sizeof(CLIPFMT), LMEM_MOVEABLE)
-                : (CLIPFMT *)LocalAlloc(LMEM_FIXED, cap * sizeof(CLIPFMT));
+            CLIPFMT __near *n = clip_fmts
+                ? (CLIPFMT __near *)LocalReAlloc((HLOCAL)clip_fmts, cap * sizeof(CLIPFMT), LMEM_MOVEABLE)
+                : (CLIPFMT __near *)LocalAlloc(LMEM_FIXED, cap * sizeof(CLIPFMT));
             if (!n)
                 return 0;
             clip_fmts = n;

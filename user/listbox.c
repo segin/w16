@@ -435,7 +435,7 @@ static void integral(HWND h, PLB lb)
                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PLB lb;
     if (!valid_wnd(h))
@@ -900,7 +900,7 @@ LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* the combo box's drop-down list (class ComboLBox) */
-LRESULT WINAPI ComboLBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ComboLBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_MOUSEACTIVATE)
         return MA_NOACTIVATE;
