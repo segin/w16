@@ -61,7 +61,7 @@ display, so they never open windows on your desktop.
 | Command | What it does | Time |
 |---|---|---|
 | `make test` | `tools/castcheck.py`, then the probe programs under w16's KERNEL with HDPMI16 (`tests/run-tests.sh`); with a reference install also the WIN.COM scenarios (`tests/wincom.sh`) and the font checks (`tests/fonts.sh -q`) | a few minutes |
-| `make boot-test` | boots real Windows 3.1 on w16's parts and compares every screen with the same boot on Microsoft's, pixel for pixel (`tests/boottest.sh`) | ~15 min at 3 jobs on a desktop; ~5 min at 12 jobs on 40 cores |
+| `make boot-test` | boots real Windows 3.1 on w16's parts and compares every screen with the same boot on Microsoft's, pixel for pixel (`tests/boottest.sh`) | ~15 min at 3 jobs on a desktop; ~5 min at 12 jobs on a 20-core, 40-thread server |
 | `tests/boottest.sh CASE ...` | only those boot-test cases (names and descriptions at the top of `tests/boottest.sh`) | |
 | `RUNTESTS_DPMI=dosx tests/run-tests.sh` | the probe programs on w16's own DOS extender instead of HDPMI16 | |
 
