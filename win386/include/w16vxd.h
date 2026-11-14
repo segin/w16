@@ -65,10 +65,16 @@ struct vpicd_link {
     void (*hw_int)(vu32 irq);
     /* VPICD's: the VMM is about to resume the VM: deliver what is pending */
     void (*resume)(void);
+    /* VPICD's: a simulated interrupt delivered with iret set has returned
+     * (its handler's IRET); innermost first */
+    void (*iret)(void);
+    /* the VMM's: can the VM take an interrupt now (during hw_int, resume
+     * or a service called then): interrupts on */
+    int (*can_deliver)(void);
     /* the VMM's: simulate interrupt vector vec into the current VM where it
-     * was interrupted (during hw_int or resume only): returns 0 if the VM
-     * cannot take it now (interrupts off) */
-    int (*deliver)(vu32 vec);
+     * was interrupted; iret: call iret when its handler returns. Returns 0
+     * if the VM cannot take it now */
+    int (*deliver)(vu32 vec, int iret);
     /* the VMM's: the System VM's handle and the PIC bases it had at start */
     vu32 sys_vm;
     vu32 rm_base1, rm_base2;

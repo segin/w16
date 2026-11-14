@@ -18,6 +18,12 @@ w16 repository's LICENSE):
   SYSTEM\USER.EXE         USER (windows, menus, dialogs, messages)
   SYSTEM\GDI.EXE          GDI (graphics)
   SYSTEM\WINOLDAP.MOD     runs DOS programs under w16
+  SYSTEM\WSWAP.EXE        the task switcher's w16 side: WIN.COM starts
+                          it, it starts DOSX.EXE, and it swaps w16
+                          out of memory for a DOS program and back
+  SYSTEM\DSWAP.EXE        the task switcher's DOS side: runs a DOS
+                          program full screen (Alt+Tab, Alt+Esc and
+                          Ctrl+Esc switch away from it)
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
@@ -71,10 +77,10 @@ overwriting the files above:
                           section that w16 lacks (MMSOUND.DRV: set
                           sound.drv=mmsound.drv in [boot]),
                           the other
-                          fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
-                          WIN.COM starts in Standard mode), and for DOS
-                          programs DSWAP.EXE and the VGACOLOR.2GR
-                          grabber
+                          fonts (*.FON, *.FOT, *.TTF), and for DOS
+                          programs the VGACOLOR.2GR grabber that
+                          SYSTEM.INI names (WINOLDAP.MOD looks for it;
+                          w16's DSWAP.EXE does not use it)
 
 Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or
 later DOSX starts KRNL386.EXE when it is there and KRNL286.EXE only when

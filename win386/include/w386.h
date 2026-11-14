@@ -28,7 +28,8 @@ typedef unsigned long  w_u32;
 #define W386_BP_DPMI    1       /* the DPMI mode-switch entry (INT 2Fh 1687h) */
 #define W386_BP_REFRET  2       /* end of a reflected interrupt/call from PM */
 #define W386_BP_PS2CB   3       /* the PS/2 pointing device handler (INT 15h C207h) of a PM client */
-#define W386_BP_FIRSTFREE 4     /* real-mode callbacks and V86 API entries */
+#define W386_BP_IRQIRET 4       /* the IRET of a simulated hardware interrupt (VPICD's VID_IRET_Proc) */
+#define W386_BP_FIRSTFREE 5     /* real-mode callbacks and V86 API entries */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */

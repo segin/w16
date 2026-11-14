@@ -899,7 +899,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -912,6 +912,11 @@ $(DOS)/VX5.EXE: $(B)/tests/start.o $(B)/tests/vx5.o $(B)/tests/vx3s.o tests/apps
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx5.map file { $(B)/tests/start.o $(B)/tests/vx5.o $(B)/tests/vx3s.o }
+$(B)/tests/vx8.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX8.EXE: $(B)/tests/start.o $(B)/tests/vx8.o $(B)/tests/vx3s.o $(B)/tests/vx8s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx8.map file { $(B)/tests/start.o $(B)/tests/vx8.o $(B)/tests/vx3s.o $(B)/tests/vx8s.o }
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
@@ -1302,6 +1307,28 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
 	python3 tools/nemark.py $@ 3.10
 
+# ---- WSWAP.EXE and DSWAP.EXE: the Standard-mode task switcher (swap/,
+# ARCHITECTURE.md 9.9). .COM-format programs (DOS loads any file without an
+# MZ header as one) under the names WIN.COM looks for; DSWAPD.EXE logs to
+# C:\DSWAP.DBG (a debugging build). SW1.COM: the probe they were observed
+# with (tests/dos/sw1.asm, tests/dos/sw1dump.py) ----
+dos: $(DOS)/WSWAP.EXE $(DOS)/DSWAP.EXE
+$(DOS)/WSWAP.EXE: swap/wswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -o $@ $<
+$(DOS)/DSWAP.EXE: swap/dswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -o $@ $<
+$(DOS)/DSWAPD.EXE: swap/dswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -dDEBUG -o $@ $<
+SWPROBES := $(DOS)/SW1.COM $(DOS)/DSWAPD.EXE
+swprobes: $(SWPROBES)
+dos: $(SWPROBES)
+$(DOS)/SW1.COM: tests/dos/sw1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
@@ -1314,6 +1341,11 @@ W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT 
            $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# the task switcher (swap/)
+install-tree: $(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE
+$(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE: $(W16SYS)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
 # Calculator (ARCHITECTURE.md 15.3)
 install-tree: $(W16)/CALC.EXE
 $(W16)/CALC.EXE: $(DOS)/CALC.EXE

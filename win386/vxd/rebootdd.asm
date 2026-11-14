@@ -26,8 +26,14 @@ REBOOT_DDB:
         ENTRY rb_ctl, _reboot_control
         ENTRY rb_api, _reboot_api
         ENTRY rb_cad, _reboot_cad
+        ENTRY rb_tmo, _reboot_time_out
 
         VXDCALL _vkd_define_hot_key, 0Dh, 01h
+        VXDCALL _vkd_force_keys, 0Dh, 07h
+        VXDCALL _vmm_map_flat, 1, 1Ch
+        VXDCALL _vmm_build_int_stack_frame, 1, 4Ch
+        VXDCALL _vmm_set_global_time_out, 1, 3Ch
+        VXDCALL _vmm_cancel_time_out, 1, 3Eh
         VXDCALL _vmm_begin_nest_v86_exec, 1, 82h
         VXDCALL _vmm_exec_int, 1, 84h
         VXDCALL _vmm_end_nest_exec, 1, 86h

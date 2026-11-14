@@ -154,6 +154,7 @@ u32 xbuf_size(void);
 /* dosx.c: INT 21h from protected mode */
 void dos_pm(struct cregs *r);
 void video_pm(struct cregs *r);
+void disk_pm(struct cregs *r, int vec);
 
 /* vxdapi.c */
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off);
@@ -172,11 +173,14 @@ struct svcregs {
 u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
 
 /* vxd.c */
-struct client_regs *vxd_client(struct cregs *r);
-void vxd_client_back(struct cregs *r);
+void vxd_client(struct cregs *r, struct client_regs *c);
+void vxd_client_back(struct cregs *r, struct client_regs *c);
 void vxd_init(void);
 extern struct vpicd_link *vpicd;
-int vmm_deliver(u32 vec);
+int vmm_deliver(u32 vec, int iret);
+int vmm_can_deliver(void);
+int vmm_build_int(u32 sel, u32 off);
+struct cregs *vmm_hold_delivery(struct cregs *r);
 void vxd_pm_app(int begin, struct cregs *r);
 void vxd_exit(struct cregs *r);
 void vxd_link(struct tframe *f);
@@ -201,6 +205,7 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw);
 int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
 void dpmi_ps2cb(struct cregs *r);
+void dpmi_build_int(struct cregs *r, u32 sel, u32 off);
 void dpmi_note_pm(struct cregs *r);                /* every trap from PM */                  /* the BIOS called the PS/2 handler */
 
 /* the PM breakpoints: HLT bytes in a ring-3 code segment (SEL_PMBP) */

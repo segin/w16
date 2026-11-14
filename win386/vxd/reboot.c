@@ -27,6 +27,13 @@
 #include "w16vxd.h"
 
 void __cdecl vkd_define_hot_key(struct vregs *r);
+void __cdecl vkd_force_keys(struct vregs *r);
+void __cdecl vmm_map_flat(struct vregs *r);
+void __cdecl vmm_build_int_stack_frame(struct vregs *r);
+void __cdecl vmm_set_global_time_out(struct vregs *r);
+void __cdecl vmm_cancel_time_out(struct vregs *r);
+extern char rb_tmo[];
+#pragma aux rb_tmo "*"
 void __cdecl vmm_begin_nest_v86_exec(struct vregs *r);
 void __cdecl vmm_exec_int(struct vregs *r);
 void __cdecl vmm_end_nest_exec(struct vregs *r);
@@ -45,6 +52,10 @@ static void zero(void *p, vu32 n) { vu8 *q = p; while (n--) *q++ = 0; }
 static void copy(void *d, const void *s, vu32 n) { vu8 *p = d; const vu8 *q = s; while (n--) *p++ = *q++; }
 
 static vu16 kern_sel, kern_off, sane_sel, sane_off;    /* 0201h */
+static vu8 *sane;                       /* the sanity byte (Map_Flat of 0201h's DS:SI) */
+#define SANITY_CHECK 0                  /* see reboot_cad */
+static int cad_state;                   /* 1: checking the sanity byte, 2: KERNEL's handler running */
+static vu32 tmo_handle;
 static vu32 sys_vm, client;
 
 /* ---- the VGA's state ---- */
@@ -111,8 +122,15 @@ static void bios_video(vu32 ax, vu32 bx, vu32 dx)
     vmm_exec_int(&r);
 }
 
-/* ---- the screen (Windows 3.1's layout: row, column, text; ARCHITECTURE.md 12.8) ---- */
-static const struct { vu8 row, col; const char *s; } lines[] = {
+/* ---- the screens (Windows 3.1's layout: row, column, text; measured
+ * from its screenshots, ARCHITECTURE.md 12.8; "w16" for "Windows" where
+ * it names the product). A: Ctrl+Alt+Del with nothing hung
+ * (tests/scripts/input/win386cad.txt); B: a task that does not respond,
+ * its module's name in the title (KERNEL's call, 0203h; tests/vx8run.sh
+ * with VX8 hanging); C: the system did not answer (seen when the sanity
+ * byte was not KERNEL's: VX8 mode 1) ---- */
+struct line { vu8 row, col; const char *s; };
+static const struct line lines_a[] = {
     { 8, 5, "Although you can use CTRL+ALT+DEL to quit an application that has" },
     { 9, 5, "stopped responding to the system, there is no application in this" },
     { 10, 5, "state." },
@@ -122,8 +140,31 @@ static const struct { vu8 row, col; const char *s; } lines[] = {
     { 16, 5, "*  Press CTRL+ALT+DEL again to restart your computer. You will" },
     { 17, 5, "   lose any unsaved information in all applications." },
     { 19, 27, "Press any key to continue" },
+    { 0, 0, 0 }
 };
-#define TITLE " w16 "                       /* Windows 3.1: " Windows " */
+static const struct line lines_b[] = {
+    { 10, 8, "This Windows application has stopped responding to the system." },
+    { 12, 5, "*  Press ESC to cancel and return to w16." },
+    { 13, 5, "*  Press ENTER to close this application that is not responding." },
+    { 14, 8, "You will lose any unsaved information in this application." },
+    { 15, 5, "*  Press CTRL+ALT+DEL again to restart your computer. You will" },
+    { 16, 8, "lose any unsaved information in all applications." },
+    { 18, 21, "Press ENTER for OK or ESC to Cancel: OK" },
+    { 0, 0, 0 }
+};
+static const struct line lines_c[] = {
+    { 10, 5, "The system is either busy or has become unstable.  You can wait and" },
+    { 11, 5, "see if the system becomes available again and continue working or you" },
+    { 12, 5, "can restart your computer." },
+    { 14, 5, "*  Press any key to return to w16 and wait." },
+    { 15, 5, "*  Press CTRL+ALT+DEL again to restart your computer. You will" },
+    { 16, 8, "lose any unsaved information in all applications." },
+    { 18, 27, "Press any key to continue" },
+    { 0, 0, 0 }
+};
+#define SCREEN_A 0
+#define SCREEN_B 1
+#define SCREEN_C 2
 
 static void put(vu32 row, vu32 col, const char *s, vu8 attr)
 {
@@ -131,32 +172,52 @@ static void put(vu32 row, vu32 col, const char *s, vu8 attr)
     while (*s) *v++ = (vu16)((attr << 8) | (vu8)*s++);
 }
 
-static void show_screen(void)
+/* the title, centred as Windows 3.1's: " Windows " (9) at column 35,
+ * " VX8.EXE " (9) at 35, " PROGMAN.EXE " (13) at 33 */
+static void title(vu32 row, const char *name)
 {
-    vu16 *v = (vu16 *)0xB8000;
-    vu32 i;
-    for (i = 0; i < 80 * 25; i++) v[i] = 0x1F20;
-    put(6, 40 - sizeof(TITLE) / 2, TITLE, 0x71);   /* centred: " Windows " at column 35 */
-    for (i = 0; i < sizeof(lines) / sizeof(lines[0]); i++)
-        put(lines[i].row, lines[i].col, lines[i].s, 0x1F);
+    char t[24];
+    vu32 n = 0;
+    t[n++] = ' ';
+    while (*name && n < 21) t[n++] = *name++;
+    t[n++] = ' ';
+    t[n] = 0;
+    put(row, 40 - (n + 1) / 2, t, 0x71);
 }
 
-/* the next key press from the controller; returns its scan code; *cad:
+static void show_screen(int kind, const char *name)
+{
+    vu16 *v = (vu16 *)0xB8000;
+    const struct line *l = kind == SCREEN_A ? lines_a : kind == SCREEN_B ? lines_b : lines_c;
+    vu32 i;
+    for (i = 0; i < 80 * 25; i++) v[i] = 0x1F20;
+    if (kind == SCREEN_A) title(6, "w16");             /* Windows 3.1: " Windows " */
+    else title(8, kind == SCREEN_B ? name : "WARNING!");
+    for (; l->s; l++) put(l->row, l->col, l->s, 0x1F);
+}
+
+/* the next key from the controller; returns its scan code; *cad:
  * Ctrl+Alt+Del again. Windows 3.1 (tests/scripts/input/win386cad.txt,
  * keys held and let go one by one) keeps the screen while the keys of
  * the hot key are held (the keyboard repeats Del meanwhile) and let go,
  * and goes back on a new key. So releases, the repeats of a key still
  * held (a make code with no break since) and Shift, Ctrl and Alt presses
- * are only tracked; Ctrl, Alt and Del are held at entry. A byte from the
- * pointing device (status bit 5, the auxiliary output buffer; IBM PS/2
- * keyboard controller) is not a key: mouse motion on a machine whose
- * controller passes it through port 60h must not end the screen. */
-static vu32 wait_key(int *cad)
+ * are only tracked; Ctrl, Alt and Del count as held at entry. A byte from
+ * the pointing device (status bit 5, the auxiliary output buffer; IBM
+ * PS/2 keyboard controller) is not a key: mouse motion on a machine whose
+ * controller passes it through port 60h must not end the screen. Screen
+ * B takes only Enter and Esc (Windows 3.1: Space did nothing). A release
+ * of a key pressed before the screen (Ctrl, Alt) is kept for the VM. */
+static vu8 held[128], seen[128];
+static vu8 orphans[16];
+static vu32 n_orphans;
+
+static vu32 wait_key(int kind, int *cad)
 {
-    static vu8 held[128];
     vu32 b, code, st, i;
-    for (i = 0; i < 128; i++) held[i] = 0;
+    for (i = 0; i < 128; i++) held[i] = seen[i] = 0;
     held[0x1D] = held[0x38] = held[0x53] = 1;   /* still held from the hot key */
+    n_orphans = 0;
     for (;;) {
         while (!((st = inb(0x64)) & 1))
             ;
@@ -164,24 +225,31 @@ static vu32 wait_key(int *cad)
         if (st & 0x20) continue;            /* the mouse's */
         if (b == 0xE0 || b == 0xE1) continue;
         code = b & 0x7F;
-        if (b & 0x80) { held[code] = 0; continue; }
+        if (b & 0x80) {
+            if (!seen[code] && code != 0x53 && n_orphans < sizeof(orphans))
+                orphans[n_orphans++] = (vu8)b;  /* pressed before: the VM's */
+            held[code] = 0;
+            continue;
+        }
         if (held[code]) continue;           /* a repeat */
-        held[code] = 1;
+        held[code] = seen[code] = 1;
         if (code == 0x1D || code == 0x38 || code == 0x2A || code == 0x36) continue;
         *cad = (code == 0x53 && held[0x1D] && held[0x38]);
+        if (*cad) return code;
+        if (kind == SCREEN_B && code != 0x01 && code != 0x1C) continue;
         return code;
     }
 }
 
-/* the hot key callback (AL scan code, AH 0 pressed) */
-void __cdecl reboot_cad(struct vregs *r)
+/* a screen until its key; returns the key's scan code */
+static vu32 screen(int kind, const char *name)
 {
     static struct client_regs saved;
     struct vregs s;
     vu8 mode;
+    vu32 key;
     int cad = 0;
 
-    if ((r->eax >> 8) & 0xFF) return;       /* only the press */
     zero(&s, sizeof(s));
     s.edi = (vu32)&saved;
     vmm_save_client_state(&s);
@@ -193,9 +261,10 @@ void __cdecl reboot_cad(struct vregs *r)
     mode = *(vu8 *)0x449;                   /* the BIOS's video mode */
     vga_save();
     bios_video(0x0003, 0, 0);
-    show_screen();
-    bios_video(0x0200, 0, (19 << 8) | 53);  /* the cursor after the prompt */
-    wait_key(&cad);
+    show_screen(kind, name);
+    /* the cursor: after the prompt (A, C), on its "OK" (B) */
+    bios_video(0x0200, 0, kind == SCREEN_A ? (19 << 8) | 53 : kind == SCREEN_B ? (18 << 8) | 58 : (18 << 8) | 53);
+    key = wait_key(kind, &cad);
     if (cad) {
         outb(0x64, 0xFE);                   /* a warm boot: the controller's reset line */
         for (;;)
@@ -203,11 +272,93 @@ void __cdecl reboot_cad(struct vregs *r)
     }
     bios_video(mode, 0, 0);
     vga_restore();
+    /* the VM saw Ctrl and Alt go down (VKD passed them on before Del, the
+     * hot key): their releases read here go to it now (VKD_Force_Keys),
+     * or its keyboard driver would keep them down (tests/scripts/input/
+     * win386cad.txt: Enter afterwards opens File Manager as under Windows
+     * 3.1). UNVERIFIED how Windows 3.1 gives them back */
+    if (n_orphans) {
+        zero(&s, sizeof(s));
+        s.esi = (vu32)orphans;
+        s.ecx = n_orphans;
+        vkd_force_keys(&s);
+    }
     zero(&s, sizeof(s));
     vmm_end_nest_exec(&s);
     zero(&s, sizeof(s));
     s.esi = (vu32)&saved;
     vmm_restore_client_state(&s);
+    return key;
+}
+
+static void screen_a(void)
+{
+    screen(SCREEN_A, 0);
+}
+
+static void time_out(vu32 ms)
+{
+    struct vregs s;
+    zero(&s, sizeof(s));
+    s.eax = ms;
+    s.esi = (vu32)rb_tmo;
+    vmm_set_global_time_out(&s);
+    tmo_handle = s.esi;
+}
+
+static void cancel_time_out(void)
+{
+    struct vregs s;
+    zero(&s, sizeof(s));
+    s.esi = tmo_handle;
+    vmm_cancel_time_out(&s);
+    tmo_handle = 0;
+}
+
+/* the hot key callback (AL scan code, AH 0 pressed). With KERNEL's
+ * handler known (0201h): the sanity byte zeroed, which KERNEL sets again
+ * whenever it runs (seen: 1 again within 20 s of zeroing it, each time,
+ * with Program Manager idle); a time-out then tells (UNVERIFIED: Windows
+ * 3.1's delay; 750 ms here) */
+void __cdecl reboot_cad(struct vregs *r)
+{
+    if ((r->eax >> 8) & 0xFF) return;       /* only the press */
+    if (cad_state) return;
+    /* NOT YET: the sanity check below works in DOSBox-X, but in plain
+     * DOSBox screen A failed to appear in 6 of 8 win386cad runs (keys held
+     * and let go one by one; cause not found: the handover note), so the
+     * screen comes at once as before */
+    if (!sane || !SANITY_CHECK) { screen_a(); return; }
+    *sane = 0;
+    cad_state = 1;
+    time_out(750);
+}
+
+/* the time-out (Set_Global_Time_Out) */
+void __cdecl reboot_time_out(struct vregs *r)
+{
+    struct vregs s;
+    (void)r;
+    tmo_handle = 0;
+    if (cad_state == 1) {
+        if (*sane) { cad_state = 0; screen_a(); return; }
+        /* KERNEL has not run: the current task does not let it. KERNEL's
+         * handler then runs as an interrupt of the VM (as Windows 3.1's
+         * Reboot device does, with Build_Int_Stack_Frame) */
+        zero(&s, sizeof(s));
+        s.ecx = kern_sel;
+        s.edx = kern_off;
+        vmm_build_int_stack_frame(&s);
+        cad_state = 2;
+        time_out(5000);
+        return;
+    }
+    if (cad_state == 2) {                   /* KERNEL's handler did not answer (UNVERIFIED delay) */
+        cad_state = 0;
+        screen(SCREEN_C, 0);
+        return;
+    }
+    cad_state = 0;
 }
 
 #define SYS_CRITICAL_INIT 0x00
@@ -239,7 +390,37 @@ void __cdecl reboot_api(struct vregs *r)
     case 0x0201:                            /* set KERNEL's Ctrl+Alt+Del handler */
         kern_sel = c->es; kern_off = (vu16)c->edi;
         sane_sel = c->ds; sane_off = (vu16)c->esi;
+        {
+            struct vregs s;
+            zero(&s, sizeof(s));
+            s.eax = (0x3C << 8) | 0x04;     /* Client_DS : Client_ESI */
+            vmm_map_flat(&s);
+            sane = s.eax == 0xFFFFFFFFu ? 0 : (vu8 *)s.eax;
+        }
         c->eflags &= ~VF_CF;
+        return;
+    case 0x0203:                            /* KERNEL: a task does not respond (ES:DI its module's name) */
+        /* observed: KERNEL's handler, run for a hung task (VX8), calls
+         * this with ES:DI "VX8.EXE", DS:SI its sanity byte's place, BX 7Dh,
+         * DX a selector (UNVERIFIED meanings); with carry back it ended
+         * Windows. Esc: AX 0, carry clear: KERNEL goes back to the task,
+         * as under Windows 3.1. Enter: AX 1 (UNVERIFIED; 2 did the same):
+         * KERNEL ends the task with INT 21h 4Ch, which the DPMI host
+         * still takes as KRNL386's own end (Windows ends: the open bug in
+         * the handover note) */
+        {
+            struct vregs s;
+            const char *name;
+            zero(&s, sizeof(s));
+            s.eax = (0x38 << 8) | 0x00;     /* Client_ES : Client_EDI */
+            vmm_map_flat(&s);
+            name = s.eax == 0xFFFFFFFFu ? "" : (const char *)s.eax;
+            cancel_time_out();              /* KERNEL answered: no screen C */
+            cad_state = 3;
+            c->eax = (c->eax & 0xFFFF0000u) | (screen(SCREEN_B, name) == 0x1C ? 1 : 0);
+            c->eflags &= ~VF_CF;
+            cad_state = 0;
+        }
         return;
     case 0x0202:                            /* get it */
         c->es = kern_sel;

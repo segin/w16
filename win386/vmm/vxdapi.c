@@ -95,7 +95,12 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
     r->cs = retcs;
     if (n >= NAPIS && n - NAPIS < next_ext) {
         /* the loaded device's own API procedure */
+        u32 ax = AX(r), bx = BX(r), cx = CX(r), dx = DX(r), si = SI(r), di = DI(r), ds = r->ds, es = r->es;
         vxd_call_api(vxd_pm_api(ext_id[n - NAPIS]), r);
+        /* a call the device refused (carry): traced, as for w16's own APIs */
+        if (r->eflags & EFL_CF)
+            trace("VxD API device %x: ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> carry\n",
+                  ext_id[n - NAPIS], ax, bx, cx, dx, si, di, ds, es);
         return;
     }
     if (n >= NAPIS) { r->eflags |= EFL_CF; return; }

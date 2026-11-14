@@ -88,9 +88,8 @@ static u32 *make_slots(u32 dev, u32 n)
     return slots;
 }
 
-static void client_from(struct cregs *r)
+static void client_fill(struct client_regs *c, struct cregs *r)
 {
-    struct client_regs *c = sys_client;
     if (!r) return;
     c->edi = r->edi; c->esi = r->esi; c->ebp = r->ebp; c->ebx = r->ebx;
     c->edx = r->edx; c->ecx = r->ecx; c->eax = r->eax;
@@ -132,10 +131,15 @@ static struct ddb vtd_ddb = {
 static u32 vtd_min_period = VTD_SLOWEST;   /* the shortest one asked for */
 static u32 vtd_requests[16], vtd_nreq;
 
-/* VTD takes IRQ 0 through VPICD (VPICD_Virtualize_IRQ), and its
- * VID_Hw_Int_Proc asks VPICD to simulate it into the System VM: the
- * System VM still sees every tick (the timer is not reprogrammed yet) */
-extern u8 vtd_hw_entry[];
+/* VTD takes IRQ 0 through VPICD (VPICD_Virtualize_IRQ, then
+ * VPICD_Physically_Unmask: the ticks keep coming whatever the VM masks),
+ * ends each tick on the hardware at once (VPICD_Phys_EOI) and passes it
+ * to the System VM (VPICD_Set_Int_Request); the VM's EOI clears the
+ * request (VID_EOI_Proc). The timer is not reprogrammed yet: the System
+ * VM sees every tick, unless several come while it is still in its
+ * handler (they are one request). Each tick also runs the VMM's
+ * time-outs. */
+extern u8 vtd_hw_entry[], vtd_eoi_entry[];
 static struct vid vtd_vid;
 static u32 vtd_irq;                     /* VPICD's handle */
 
@@ -146,27 +150,103 @@ static u32 svc_slot(u32 dev, u32 svc)
     return *(u32 *)(d->svc_table + svc * 4);
 }
 
+static void vpicd_call(u32 svc, u32 eax, u32 ebx)
+{
+    struct svcregs s;
+    memset(&s, 0, sizeof(s));
+    s.eax = eax;
+    s.ebx = ebx;
+    vmm_call_proc(svc_slot(3, svc), &s);
+}
+
 static void vtd_init(void)
 {
     struct svcregs s;
     memset(&s, 0, sizeof(s));
     vtd_vid.irq = 0;
     vtd_vid.hw_int_proc = (u32)vtd_hw_entry;
+    vtd_vid.eoi_proc = (u32)vtd_eoi_entry;
     vtd_vid.iret_time_out = 500;
     s.edi = (u32)&vtd_vid;
     vmm_call_proc(svc_slot(3, 0x01), &s);     /* VPICD_Virtualize_IRQ */
     if (s.eflags & EFL_CF) panic("VTD: VPICD would not give IRQ 0");
     vtd_irq = s.eax;
+    vpicd_call(0x09, vtd_irq, 0);             /* VPICD_Physically_Unmask */
+}
+
+/* ---- the VMM's time-outs (Set_Global_Time_Out, Cancel_Time_Out; the
+ * DDK's descriptions), counted in timer ticks (54.925 ms: the BIOS rate,
+ * not reprogrammed yet); the callback gets EBX the current VM, ECX the
+ * milliseconds since it was due, EDX its reference data, EBP the client
+ * registers ---- */
+struct tmo { struct tmo *next; u32 magic, due, proc, ref; };
+#define TMO_MAGIC 0x4F4D4954u               /* "TIMO" */
+static struct tmo *tmos;
+static u32 sys_ms, sys_us;                  /* time since start */
+
+static void tmo_tick(void)
+{
+    struct tmo **pp, *t;
+    struct svcregs s;
+    sys_us += 54925;
+    sys_ms += sys_us / 1000;
+    sys_us %= 1000;
+    for (pp = &tmos; (t = *pp) != NULL; ) {
+        if ((s32)(sys_ms - t->due) < 0) { pp = &t->next; continue; }
+        *pp = t->next;                      /* done: unlinked before it runs */
+        t->magic = 0;
+        memset(&s, 0, sizeof(s));
+        s.ebx = (u32)sys_cb;
+        s.ecx = sys_ms - t->due;
+        s.edx = t->ref;
+        s.ebp = (u32)sys_client;
+        vmm_call_proc(t->proc, &s);
+        kfree(t);
+        pp = &tmos;                         /* the callback may have changed the list */
+    }
+}
+
+static int tmo_service(u32 svc, struct svcregs *s)
+{
+    struct tmo *t, **pp;
+    switch (svc) {
+    case 0x3C:                              /* Set_Global_Time_Out: EAX ms, EDX ref, ESI proc -> ESI */
+        t = kmalloc(sizeof(*t));
+        if (!t) { s->esi = 0; return 1; }
+        t->magic = TMO_MAGIC;
+        t->due = sys_ms + s->eax;
+        t->proc = s->esi;
+        t->ref = s->edx;
+        t->next = tmos;
+        tmos = t;
+        s->esi = (u32)t;
+        return 1;
+    case 0x3E:                              /* Cancel_Time_Out: ESI the handle (0: nothing) */
+        for (pp = &tmos; (t = *pp) != NULL; pp = &t->next)
+            if ((u32)t == s->esi) {
+                *pp = t->next;
+                t->magic = 0;
+                kfree(t);
+                break;
+            }
+        return 1;
+    }
+    return 0;
 }
 
 /* VID_Hw_Int_Proc for IRQ 0 (vmmasm.asm calls it with the registers) */
 void __cdecl vtd_hw(struct svcregs *r)
 {
-    struct svcregs s;
-    memset(&s, 0, sizeof(s));
-    s.eax = vtd_irq;
-    s.ebx = (u32)sys_cb;
-    vmm_call_proc(svc_slot(3, 0x02), &s);     /* VPICD_Set_Int_Request */
+    vpicd_call(0x04, vtd_irq, 0);             /* VPICD_Phys_EOI */
+    vpicd_call(0x02, vtd_irq, (u32)sys_cb);   /* VPICD_Set_Int_Request */
+    tmo_tick();
+    r->eflags &= ~EFL_CF;
+}
+
+/* VID_EOI_Proc for IRQ 0: the VM has ended the tick */
+void __cdecl vtd_eoi(struct svcregs *r)
+{
+    vpicd_call(0x03, vtd_irq, (u32)sys_cb);   /* VPICD_Clear_Int_Request */
     r->eflags &= ~EFL_CF;
 }
 
@@ -251,6 +331,7 @@ void vxd_init(void)
               "Your w16 configuration is invalid. Run the w16 Setup program\n"
               "again to correct this problem.\n");
     vpicd->deliver = vmm_deliver;
+    vpicd->can_deliver = vmm_can_deliver;
     vpicd->sys_vm = (u32)sys_cb;
     vpicd->rm_base1 = info->pic1_base;
     vpicd->rm_base2 = info->pic2_base;
@@ -264,7 +345,7 @@ void vxd_init(void)
 /* KRNL386 entered protected mode (dpmi_switch) / ended (terminate_client) */
 void vxd_pm_app(int begin, struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     if (begin)
         broadcast(BEGIN_PM_APP, 0, sysvm.client32 ? 1 : 0, (u32)sys_acb, 0);
     else
@@ -275,29 +356,29 @@ void vxd_pm_app(int begin, struct cregs *r)
  * these to several devices in (w16: the reverse of the init order). */
 void vxd_exit(struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     broadcast(SYS_VM_TERMINATE, 0, 0, 0, 1);
     broadcast(SYSTEM_EXIT, 0, 0, 0, 1);
     broadcast(SYS_CRITICAL_EXIT, 0, 0, 0, 1);
 }
 
-/* the System VM's client registers for a device's I/O handler (io.c):
- * filled from r; vxd_client_back puts them back */
-struct client_regs *vxd_client(struct cregs *r)
+/* a client register structure of its own for a device's I/O handler
+ * (io.c), filled from r and put back after: the handler can make the VM
+ * take an interrupt (VPICD_Set_Int_Request) whose handler traps again,
+ * so a shared structure (sys_client) would be overwritten under it */
+static void client_store(struct cregs *r, struct client_regs *c);
+void vxd_client(struct cregs *r, struct client_regs *c)
 {
-    client_from(r);
-    return sys_client;
+    client_fill(c, r);
 }
 
-static void client_to(struct cregs *r);
-void vxd_client_back(struct cregs *r)
+void vxd_client_back(struct cregs *r, struct client_regs *c)
 {
-    client_to(r);
+    client_store(r, c);
 }
 
-static void client_to(struct cregs *r)
+static void client_store(struct cregs *r, struct client_regs *c)
 {
-    struct client_regs *c = sys_client;
     r->edi = c->edi; r->esi = c->esi; r->ebp = c->ebp; r->ebx = c->ebx;
     r->edx = c->edx; r->ecx = c->ecx; r->eax = c->eax;
     r->eip = c->eip; r->cs = c->cs; r->eflags = c->eflags; r->esp = c->esp;
@@ -319,9 +400,9 @@ u32 vxd_pm_api(u32 id)
  * client in r */
 void vxd_call_api(u32 proc, struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     vxd_control(proc, r->eax, (u32)sys_cb, r->esi, r->edx, r->edi, (u32)sys_client);
-    client_to(r);
+    client_store(r, sys_client);
 }
 
 /* ---- dynamic links ---- */
@@ -542,12 +623,25 @@ void __cdecl svc_dispatch(struct svcregs *s)
     case 0x0004:                        /* Test_Sys_VM_Handle */
         ZF_SET(s, s->ebx == (u32)sys_cb);
         return;
+    case 0x001C: {                      /* Map_Flat: AH, AL offsets in Client_Reg_Struc (AL FFh: offset 0) */
+        u8 *c = (u8 *)sys_client;
+        u32 seg = *(u16 *)(c + ((s->eax >> 8) & 0xFF));
+        u32 off = (s->eax & 0xFF) == 0xFF ? 0 : *(u32 *)(c + (s->eax & 0xFF));
+        if (sys_client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
+        else s->eax = sel_base(seg) + (sysvm.client32 ? off : (off & 0xFFFF));
+        return;
+    }
+    case 0x004C:                        /* Build_Int_Stack_Frame: CX:EDX the routine */
+        if (!vmm_build_int(s->ecx & 0xFFFF, s->edx)) s->eflags |= EFL_CF;
+        trace("VMM: Build_Int_Stack_Frame %x:%x%s\n", s->ecx & 0xFFFF, s->edx, (s->eflags & EFL_CF) ? " (not in PM)" : "");
+        return;
     case 0x0005:                        /* Validate_VM_Handle: carry clear if valid */
         if (s->ebx != (u32)sys_cb) s->eflags |= EFL_CF;
         return;
     }
     if (dev == 1 && list_service(svc, s)) return;
     if (dev == 1 && io_service(svc, s)) return;
+    if (dev == 1 && tmo_service(svc, s)) return;
     if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     panic("VxD service %x of device %x is not implemented yet (called from %x)",

@@ -1,0 +1,28 @@
+# the MS-DOS Prompt from Program Manager: VER, Alt+Tab to Windows and back,
+# EXIT, then Exit Windows
+sleep 32
+shot pm
+key Right Right Right Right
+sleep 1
+key Return
+sleep 10
+shot dos1
+type ver
+key Return
+sleep 3
+shot dos2
+key alt+Tab
+sleep 10
+shot win1
+key alt+Tab
+sleep 10
+shot dos3
+type exit
+key Return
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 12
+shot end
