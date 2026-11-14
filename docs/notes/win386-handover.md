@@ -108,3 +108,35 @@ Original plan: on Ctrl+Alt+Del call KERNEL's handler (0201h's ES:DI) in the Syst
 **6. DOS boxes (after 5; user report 2026-11-14).** In Enhanced mode (w16's WIN.COM + WIN386, Microsoft's KRNL386/USER/GDI/WINOLDAP) starting MS-DOS Prompt shows "Windows is not set up correctly..." and dismissing it ends Windows. The VMM trace ends: `VxD API SHELL (17): ax=1684 bx=17 cx=1196 dx=0 si=1E06 di=106 ds=11DF es=3B -> not implemented`, `VxD API SHELL: get version`, `DPMI: client ends (INT 21h AX=4C00)`, `VMM: exit, code 0`: WINOLDAP's Enhanced-mode path calls the SHELL device's (WSHELL, 0017h) PM API, which vxdapi.c answers only with function 0. Work: WSHELL (WINOLDAP's API, VM creation/switch services), DOSMGR, V86MMGR, VMPOLL, the DOS-box control messages (Create_VM ...). Check first whether 3.1 also ends Windows after that message when SHELL is missing (`device=*wshell` removed) or whether the exit is w16's bug; if a cheap fix makes the failure path return to Program Manager as 3.1 does, take it.
 
 Test assets: tests/vxpprobe.sh (VXP/VXQ), tests/apps/vx5.c, the win386, win386input and win386cad boot-test cases, the repeat script pattern of build/tmp/rep386input.sh (copies on installation-05 in /mnt/build/w16-runs/agent-a5-vxp/build/tmp/; rep386input2.sh takes EXTRA= for w16's KEYBOARD.DRV/MOUSE.DRV).
+
+## VDD services the 386 grabber needs (from the grabber agent)
+
+WINOA386.MOD's grabber (Microsoft's VGA.3GR and w16's,
+`drivers/grabber/vga3gr/`) reaches the VDD (device 000Ah) through its
+protected-mode API entry: INT 2Fh AX=1684h BX=000Ah from the System VM must
+give ES:DI = a callable entry. Calls (observed on 3.1 with GR3; details in
+docs/notes/grabber-handover.md "VGA.3GR"): EAX = function (only AX
+matters: Microsoft's grabber leaves garbage in the high word), EBX = the
+DOS box's VM handle, ES:EDI = a buffer in the caller's segment (16-bit
+offset), ECX its size; results in the registers and the buffer.
+
+- 0 Get_Version: EAX = 030Ah, 8 bytes "VIDEOVGA" to ES:EDI (both grabbers
+  refuse other strings / major versions).
+- 1 Get_Mem (28h bytes): dwords: linear addresses of planes 0-3 of the
+  VM's video memory (text modes: plane 0's address must show the text as at
+  B800:0000, char/attribute pairs, 160 bytes a row), a start offset (0),
+  the four sizes, one more address. The VM must not run until Free_Mem.
+- 2 Get_State (1Ch): mode, 0, flags (bit 1 = cursor tracking), rows (19h),
+  cursor column, row (words), cursor start, end (words), 16 palette
+  registers.
+- 3 Get_Mod (100h): flags word (8 controller, 10h memory, 20h cursor),
+  count, then text modes: changed cells in AL=left AH=top BL=right
+  BH=bottom (inclusive; FFFFh in AX and BX = all); graphics: count = 4 KB
+  pages of a plane, a bit per page from +4. Holds the VM (GetDisplayUpd)
+  until Free_Mem / Unlock_App.
+- 4 Clear_Mod, 5 Free_Mem, 9 Unlock_App: no buffer.
+- 6 Get_GrbMem (as 1), 8 Get_GrbState (as 2), 7 Free_Grab: the copy taken
+  at Alt+PrintScreen in a full-screen VM.
+WINOLDAP also passes RNG1DSSEL (7Bh, a flat selector) and the VM handle in
+the EXTPAINTSTRUC; w16's grabber maps the linear addresses with its own
+selectors (SetSelectorBase), so they must be valid in the System VM.

@@ -8,7 +8,7 @@ clipboard. SYSTEM.INI's `[boot]` names the two:
 | File | Mode | Loaded by | Kind | w16's |
 |---|---|---|---|---|
 | `VGACOLOR.2GR` (`286grabber=`) | Standard | DSWAP (real mode) | binary image | `vgacolor.asm` |
-| `VGA.3GR` (`386grabber=`) | 386 Enhanced | KERNEL, for WINOA386.MOD (module GRABBER) | NE DLL | see the VGA.3GR section, when there |
+| `VGA.3GR` (`386grabber=`) | 386 Enhanced | KERNEL, for WINOA386.MOD (module GRABBER) | NE DLL | `vga3gr/` (VGA.3GR section) |
 
 Spec and observations: ARCHITECTURE.md 9.11; the working notes:
 docs/notes/grabber-handover.md. Everything here was learnt from the DDK's
@@ -66,6 +66,59 @@ What it does:
 
 Not done: the EGA register interface calls 3.1's grabber makes (INT 10h
 F1h/F3h/F7h, for EGA.SYS); modes beyond the BIOS's standard ones.
+
+## VGA.3GR (`vga3gr/`)
+
+`make` builds `build/dos/VGA.3GR` (OpenWatcom C, large model, SS != DS,
+`-3` for the 32-bit registers of the VDD calls; nasm for the entry and the
+VDD call, `vga3gr/entry.asm`) and installs it in `build/w16/SYSTEM`. An NE
+DLL, module GRABBER, the 24 export names and ordinals of Windows 3.1's
+(`vga3gr/vga3gr.lnk`), a small fixed data segment (Microsoft's has none).
+The interface as observed, the call sequences, the EXTPAINTSTRUC offsets
+and the VDD API: docs/notes/grabber-handover.md "VGA.3GR".
+
+- **Screen data** from the VDD's PM API (INT 2Fh 1684h, device 000Ah):
+  Get_State, Get_Mod, Get_Mem / Free_Mem, Clear_Mod, Unlock_App, the grab
+  copies (Get_GrbState, Get_GrbMem, Free_Grab); the linear addresses
+  Get_Mem gives are read through four selectors of the grabber's own.
+- **Text modes**: the font from WINOLDAP's slots (AltFnt1-4 by 80/40
+  columns and 25/more rows), one TextOut per run of one attribute, colours
+  from the palette registers as EGA colours, PatBlt beyond the DOS screen,
+  UpdateScreen only the cells the VDD reports changed; the caret (shape
+  scaled from the cursor's scan lines, as 3.1's).
+- **Graphics modes**: 4-plane modes copied plane by plane into a bitmap in
+  VGA.DRV's format (SetBitmapBits, BitBlt), modes 04h-06h, 0Dh, 0Eh doubled
+  to 640x400 as 3.1 shows them; CGA modes in the CGA BIOS colours; 13h
+  cannot be windowed (WINOLDAP says so before the grabber is asked).
+- **Selection** (Mark, Shift+arrows): the DDK's functions on cell
+  boundaries; WINOLDAP inverts. **RenderSelection**: CF_OEMTEXT (lines
+  without trailing blanks, CR LF each, NUL) or CF_BITMAP (SetDIBits of
+  4-bit lines with the palette registers' colours); Alt+PrintScreen in
+  full screen uses the grab copies, GrabComplete frees them.
+- **SetPaintFnt** answers the full screen in pixels in the two words (the
+  DDK says cells); **GetDisplayUpd** stores the VDD's changed-cell
+  rectangle in the structure and adds 80h for cursor tracking.
+
+Tests: `tests/grabber3cmp.sh [-j N] [-n RUNS] -o DIR [text gfx grab misc]`
+runs each scenario of `tests/grabber3/` under Windows 3.1 386 Enhanced
+mode (all Microsoft's but the grabber) with Microsoft's VGA.3GR and with
+w16's, and compares every screenshot pixel by pixel and CB1's clipboard
+records; run it on the build host (`installation-05`). Probe: GR3.3GR
+(`tests/apps/gr3.asm`, `tests/grabber3.sh -r`/`-u`), GT3.COM.
+
+Results (installation-05, 2026-11-14, `-n 3`: 95 of 108 comparisons the
+same, every difference below repeated in all three runs but one), 3.1's
+VGA.3GR against w16's:
+text (painting, updates, scrolling lines, attributes, cursor shapes,
+Mark/Copy), misc (Font dialog 10x18 and back, Edit > Scroll, maximize,
+full screen and back) and grab (Alt+PrintScreen windowed and full-screen
+text) are pixel-identical with identical clipboards; gfx: 12h, 10h, 04h,
+06h identical, 0Dh and 0Eh differ around the BIOS-drawn title, the text
+screen with a changed DAC (GV1 03 p) differs (3.1 follows the DAC); the
+full-screen grab of a 12h screen gives a bitmap of the right size whose
+bits differ from 3.1's. Once 3.1's side lost the keys typed while GV1 left
+mode 12h (grab, run 2: its last screen still showed GV1). Open points:
+docs/notes/grabber-handover.md.
 
 ## Tests
 
