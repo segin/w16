@@ -1338,6 +1338,24 @@ $(DOS)/VGACOLOR.2GR: drivers/grabber/vgacolor.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# ---- VGA.3GR: w16's 386 Enhanced-mode display grabber (drivers/grabber/
+# vga3gr/, ARCHITECTURE.md 12.9): an NE DLL, module GRABBER ----
+G3CFLAGS := -q -bt=windows -ml -zu -zp1 -3 -s -zl -ox -wx -we -Idrivers/grabber/vga3gr \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+G3OBJS := $(B)/grab3/entry.o $(B)/grab3/vga3gr.o
+$(B)/grab3/entry.o: drivers/grabber/vga3gr/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/grab3/vga3gr.o: drivers/grabber/vga3gr/vga3gr.c drivers/grabber/vga3gr/grab.h
+	@mkdir -p $(@D)
+	$(WCC) $(G3CFLAGS) -fo=$@ $<
+$(DOS)/VGA.3GR: $(G3OBJS) drivers/grabber/vga3gr/vga3gr.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/grabber/vga3gr/vga3gr.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/grab3/vga3gr.map file { $(G3OBJS) }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/VGA.3GR
+
 # ---- the display grabbers' probes (ARCHITECTURE.md 9.11, tests/grabber.sh):
 # GR1.2GR, a recording stand-in grabber (the test appends the real one);
 # GV1.COM, a DOS program drawing a fixed screen in a given video mode;
@@ -1442,6 +1460,10 @@ $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
 # the display grabber (drivers/grabber/)
 install-tree: $(W16SYS)/VGACOLOR.2GR
 $(W16SYS)/VGACOLOR.2GR: $(DOS)/VGACOLOR.2GR
+	@mkdir -p $(@D)
+	cp $< $@
+install-tree: $(W16SYS)/VGA.3GR
+$(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
 	@mkdir -p $(@D)
 	cp $< $@
 
