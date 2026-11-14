@@ -104,16 +104,40 @@ def tones(s, rate, gap_ms, thresh, split):
     if cur:
         groups.append(cur)
     if split:
+        # cut where the half-period changes: the median of the 7 around
+        # each edge (a driver that restarts the 8254's count every 5 ms
+        # makes single odd half-periods, which the median passes over),
+        # more than 3% from the tone's so far, for 3 edges running
         out = []
         for g in groups:
-            start = 0
-            for k in range(2, len(g)):
-                h0, h1 = g[k - 1] - g[k - 2], g[k] - g[k - 1]
-                if h0 > 0 and abs(h1 - h0) / h0 > 0.25 and k - 1 - start > 2:
-                    out.append(g[start:k - 1 + 1])
-                    start = k
+            h = [g[k + 1] - g[k] for k in range(len(g) - 1)]
+            if len(h) < 4:
+                out.append(g)
+                continue
+            m = [sorted(h[max(0, k - 3):k + 4])[len(h[max(0, k - 3):k + 4]) // 2] for k in range(len(h))]
+            start, ref = 0, m[0]
+            k = 1
+            while k < len(m):
+                def off(j):
+                    return j < len(m) and abs(m[j] - ref) / ref > 0.03
+                if off(k) and off(k + 1) and off(k + 2) and k - start >= 2:
+                    # h[k] is the first half-period of the new tone: the
+                    # edge g[k] starts it (the median runs 3 ahead)
+                    c = k + 3 if k + 3 < len(m) and abs(h[k] - ref) / ref <= 0.03 else k
+                    c = min(c, len(m) - 1)
+                    # the first raw half-period off by more than 3%
+                    for j in range(k, min(k + 4, len(h))):
+                        if abs(h[j] - ref) / ref > 0.03:
+                            c = j
+                            break
+                    out.append(g[start:c + 1])
+                    start = c
+                    ref = m[min(c + 4, len(m) - 1)]
+                    k = c + 2
+                    continue
+                k += 1
             out.append(g[start:])
-        groups = out
+        groups = [x for x in out if x]
     res = []
     for g in groups:
         f = 0.0
@@ -127,7 +151,7 @@ def tones(s, rate, gap_ms, thresh, split):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--gap', type=float, default=30)
+    ap.add_argument("--gap", type=float, default=9)
     ap.add_argument('--thresh', type=int, default=2000)
     ap.add_argument('--split', action='store_true')
     ap.add_argument('--from', dest='frm', type=float, default=0)
