@@ -28,4 +28,22 @@ VPICD_DDB:
 
         ENTRY vpicd_ctl, _vpicd_control
         ENTRY vpicd_api, _vpicd_api
+        ENTRY vpicd_io_entry, _vpicd_io
+
+        VXDCALL _vmm_install_mult_io, 1, 95h
+        VXDCALL _vmm_simulate_io, 1, 94h
+
+; the PIC ports for Install_Mult_IO_Handlers (the DDK's VxD_IO table: a
+; word count, then a word port and a dword procedure each)
+global _vpicd_io_table
+_vpicd_io_table:
+        dw 4
+        dw 20h
+        dd vpicd_io_entry
+        dw 21h
+        dd vpicd_io_entry
+        dw 0A0h
+        dd vpicd_io_entry
+        dw 0A1h
+        dd vpicd_io_entry
         SERVICES _vpicd_service, 21

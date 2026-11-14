@@ -39,11 +39,6 @@ struct vm_cb {
     u32 status, high_linear, client_pointer, vmid;
 };
 
-/* a VMM service's registers (vmmasm.asm svc_common: PUSHAD, PUSHFD) */
-struct svcregs {
-    u32 edi, esi, ebp, esp0, ebx, edx, ecx, eax;
-    u32 eflags, id;
-};
 #pragma pack()
 
 extern struct ddb VMM_DDB;
@@ -140,7 +135,6 @@ static u32 vtd_requests[16], vtd_nreq;
 /* VTD takes IRQ 0 through VPICD (VPICD_Virtualize_IRQ), and its
  * VID_Hw_Int_Proc asks VPICD to simulate it into the System VM: the
  * System VM still sees every tick (the timer is not reprogrammed yet) */
-u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
 extern u8 vtd_hw_entry[];
 static struct vid vtd_vid;
 static u32 vtd_irq;                     /* VPICD's handle */
@@ -285,6 +279,20 @@ void vxd_exit(struct cregs *r)
     broadcast(SYS_VM_TERMINATE, 0, 0, 0, 1);
     broadcast(SYSTEM_EXIT, 0, 0, 0, 1);
     broadcast(SYS_CRITICAL_EXIT, 0, 0, 0, 1);
+}
+
+/* the System VM's client registers for a device's I/O handler (io.c):
+ * filled from r; vxd_client_back puts them back */
+struct client_regs *vxd_client(struct cregs *r)
+{
+    client_from(r);
+    return sys_client;
+}
+
+static void client_to(struct cregs *r);
+void vxd_client_back(struct cregs *r)
+{
+    client_to(r);
 }
 
 static void client_to(struct cregs *r)
@@ -539,6 +547,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
         return;
     }
     if (dev == 1 && list_service(svc, s)) return;
+    if (dev == 1 && io_service(svc, s)) return;
     if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     panic("VxD service %x of device %x is not implemented yet (called from %x)",

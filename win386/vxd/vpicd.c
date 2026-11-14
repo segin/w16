@@ -34,6 +34,9 @@
 
 /* the VxD runtime and the dynamic links (vpicdddb.asm, vxdrt.asm) */
 void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
+void __cdecl vmm_install_mult_io(struct vregs *r);
+void __cdecl vmm_simulate_io(struct vregs *r);
+extern vu8 vpicd_io_table[];
 
 static void outb(vu32 port, vu32 v);
 static vu32 inb(vu32 port);
@@ -299,6 +302,26 @@ void __cdecl vpicd_service(struct vregs *r)
     r->eflags |= VF_CF;
 }
 
+/* ---- the VM's accesses to the 8259s' ports (20h, 21h, A0h, A1h),
+ * trapped through the VMM (Install_Mult_IO_Handlers) since the VM's
+ * protected-mode code runs with IOPL 0 (ARCHITECTURE.md 12.3). For now
+ * they go to the hardware unchanged: the per-VM virtual PIC is the next
+ * step. A word or dword access goes to Simulate_IO (the DDK's
+ * Emulate_Non_Byte_IO), which comes back here byte by byte. ---- */
+#define IO_OUTPUT 0x04
+#define IO_SIZE   0x18
+#define IO_STRING 0x20
+
+void __cdecl vpicd_io(struct vregs *r)
+{
+    if (r->ecx & (IO_SIZE | IO_STRING)) {
+        vmm_simulate_io(r);
+        return;
+    }
+    if (r->ecx & IO_OUTPUT) outb(r->edx, r->eax);
+    else r->eax = (r->eax & ~0xFFu) | inb(r->edx);
+}
+
 /* ---- the control procedure ---- */
 #define SYS_CRITICAL_INIT 0x00
 #define SYS_CRITICAL_EXIT 0x06
@@ -312,6 +335,12 @@ void __cdecl vpicd_control(struct vregs *r)
         masks1 = inb(0x21);
         masks2 = inb(0xA1);
         pic_program(VPICD_BASE1, VPICD_BASE2);
+        {
+            struct vregs s;
+            s.edi = (vu32)vpicd_io_table;
+            s.eflags = 0;
+            vmm_install_mult_io(&s);
+        }
         break;
     case SYS_CRITICAL_EXIT:
         pic_program(vpicd_link.rm_base1, vpicd_link.rm_base2);

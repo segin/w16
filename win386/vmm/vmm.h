@@ -162,7 +162,18 @@ int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);
 
+/* a VMM service's registers (vmmasm.asm svc_common: PUSHAD, PUSHFD) */
+#pragma pack(1)
+struct svcregs {
+    u32 edi, esi, ebp, esp0, ebx, edx, ecx, eax;
+    u32 eflags, id;
+};
+#pragma pack()
+u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
+
 /* vxd.c */
+struct client_regs *vxd_client(struct cregs *r);
+void vxd_client_back(struct cregs *r);
 void vxd_init(void);
 extern struct vpicd_link *vpicd;
 int vmm_deliver(u32 vec);
@@ -172,6 +183,12 @@ void vxd_link(struct tframe *f);
 u32 vm_handle(void);
 u32 vxd_pm_api(u32 id);
 void vxd_call_api(u32 proc, struct cregs *r);
+
+/* io.c: I/O port trapping */
+void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */
+int io_trap(struct cregs *r, u8 *op);               /* IN/OUT/INS/OUTS that faulted */
+int io_service(u32 svc, struct svcregs *s);
+extern u32 io_traps;
 
 /* dpmi.c */
 void dpmi_init(void);
