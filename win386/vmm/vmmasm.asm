@@ -288,6 +288,22 @@ _vtd_hw_entry:
         lea esp, [esp+4]
         ret
 
+; VTD's VID_EOI_Proc (vxd.c vtd_eoi), the same way
+global _vtd_eoi_entry
+extern _vtd_eoi
+_vtd_eoi_entry:
+        push dword 0
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vtd_eoi
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]
+        ret
+
 ; u32 vxd_control(proc, msg, ebx, esi, edx, edi, ebp): call a VxD's
 ; control procedure with EAX = msg and those registers; returns its carry
 global _vxd_control

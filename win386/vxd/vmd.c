@@ -25,6 +25,11 @@
 
 void __cdecl vpicd_virtualize_irq(struct vregs *r);
 void __cdecl vpicd_set_int_request(struct vregs *r);
+void __cdecl vpicd_clear_int_request(struct vregs *r);
+void __cdecl vpicd_phys_eoi(struct vregs *r);
+void __cdecl vpicd_physically_unmask(struct vregs *r);
+extern char vmd_eoi[];
+#pragma aux vmd_eoi "*"
 void __cdecl vpicd_convert_int_to_irq(struct vregs *r);
 extern char vmd_hw[];                   /* vmdddb.asm: ENTRY for vmd_hw_int */
 #pragma aux vmd_hw "*"
@@ -47,10 +52,31 @@ static vu32 take_irq(vu32 irq)
     vmd_vid.irq = (vu16)irq;
     vmd_vid.options = 0;
     vmd_vid.hw_int_proc = (vu32)vmd_hw;
+    vmd_vid.eoi_proc = (vu32)vmd_eoi;
     vmd_vid.iret_time_out = 500;
     r.edi = (vu32)&vmd_vid;
     vpicd_virtualize_irq(&r);
-    return (r.eflags & VF_CF) ? 0 : r.eax;
+    if (r.eflags & VF_CF) return 0;
+    /* physically open whatever the VM masks: Windows 3.1 showed IRQ 12
+     * not physically masked (VXP's status 0 at System_Exit) after
+     * MOUSE.DRV had masked it in the VM (UNVERIFIED that this is how) */
+    irq = r.eax;
+    vregs_clear(&r);
+    r.eax = irq;
+    vpicd_physically_unmask(&r);
+    return irq;
+}
+
+/* VID_EOI_Proc: the VM's handler is done; the next mouse byte may come */
+void __cdecl vmd_eoi_proc(struct vregs *r)
+{
+    struct vregs s;
+    vregs_clear(&s);
+    s.eax = r->eax;
+    s.ebx = r->ebx;
+    vpicd_clear_int_request(&s);
+    vpicd_phys_eoi(&s);
+    r->eflags &= ~VF_CF;
 }
 
 /* VID_Hw_Int_Proc: the mouse's interrupt goes to its owner */

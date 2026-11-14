@@ -110,7 +110,7 @@ for n in $names; do
     for f in WC.LOG VX1.LOG VX4.LOG VX6.LOG VX7.LOG; do
         [ -f "$work/$n/c/$f" ] && { echo "---- $f"; tr -d '\r' < "$work/$n/c/$f"; }
     done
-    [ -f "$work/$n/com1.txt" ] && grep -aq '^VXP io\|^VXP Install' "$work/$n/com1.txt" && { echo "---- COM1 (VXI)"; tr -d '\r' < "$work/$n/com1.txt" | grep -a '^VXP io\|^VXP Install'; }
+    [ -f "$work/$n/com1.txt" ] && grep -aq '^VXP io' "$work/$n/com1.txt" && { echo "---- COM1 (VXI)"; tr -d '\r' < "$work/$n/com1.txt" | grep -a '^VXP'; }
     for o in "$work/$n"/c/O*.TXT; do
         [ -f "$o" ] || continue
         echo "---- $(basename "$o")"

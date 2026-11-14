@@ -29,6 +29,10 @@
 void __cdecl vpicd_virtualize_irq(struct vregs *r);
 void __cdecl vpicd_set_int_request(struct vregs *r);
 void __cdecl vpicd_phys_eoi(struct vregs *r);
+void __cdecl vpicd_clear_int_request(struct vregs *r);
+void __cdecl vpicd_physically_unmask(struct vregs *r);
+extern char vkd_eoi[];
+#pragma aux vkd_eoi "*"
 void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
 extern char vkd_hw[];
 #pragma aux vkd_hw "*"
@@ -124,7 +128,20 @@ void __cdecl vkd_hw_int(struct vregs *r)
     s.eax = r->eax;
     s.ebx = sys_vm;
     if (mine) vpicd_phys_eoi(&s);           /* the VM does not see it */
-    else vpicd_set_int_request(&s);
+    else vpicd_set_int_request(&s);         /* its EOI ends it (vkd_eoi_proc) */
+    r->eflags &= ~VF_CF;
+}
+
+/* VID_EOI_Proc for IRQ 1: the VM's handler is done with the byte; the
+ * controller's next one may come (the DDK's pattern) */
+void __cdecl vkd_eoi_proc(struct vregs *r)
+{
+    struct vregs s;
+    vregs_clear(&s);
+    s.eax = r->eax;
+    s.ebx = r->ebx;
+    vpicd_clear_int_request(&s);
+    vpicd_phys_eoi(&s);
     r->eflags &= ~VF_CF;
 }
 
@@ -192,11 +209,19 @@ void __cdecl vkd_control(struct vregs *r)
         vregs_clear(&s);
         vkd_vid.irq = 1;
         vkd_vid.hw_int_proc = (vu32)vkd_hw;
+        vkd_vid.eoi_proc = (vu32)vkd_eoi;
         vkd_vid.iret_time_out = 500;
         s.edi = (vu32)&vkd_vid;
         vpicd_virtualize_irq(&s);
         if (s.eflags & VF_CF) r->eflags |= VF_CF;
-        else irq_handle = s.eax;
+        else {
+            /* the hot keys come whatever the VM masks (UNVERIFIED: what
+             * Windows 3.1's VKD does with the physical mask) */
+            irq_handle = s.eax;
+            vregs_clear(&s);
+            s.eax = irq_handle;
+            vpicd_physically_unmask(&s);
+        }
     }
 }
 

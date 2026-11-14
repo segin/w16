@@ -534,14 +534,35 @@ static void exit_windows(struct cregs *r)
 struct vpicd_link *vpicd;
 static struct cregs *hw_r;              /* the VM's state, during hw_int/resume */
 
-int vmm_deliver(u32 vec)
+int vmm_can_deliver(void)
+{
+    return hw_r && (hw_r->eflags & EFL_IF);
+}
+
+/* iret: VPICD wants to know when the handler returns. In protected mode,
+ * and for a protected-mode handler of an interrupt in V86 mode, the
+ * handler runs to its return before this returns; a V86 handler gets a
+ * second frame above the interrupt's own, whose IRET reaches the IRQIRET
+ * breakpoint (v86_breakpoint), which then does the first frame's IRET. */
+int vmm_deliver(u32 vec, int iret)
 {
     struct cregs *r = hw_r;
     if (!r || !(r->eflags & EFL_IF)) return 0;
     if (r->eflags & EFL_VM) {
-        if (!dpmi_v86_hook(r, vec, 1)) v86_reflect(r, vec);
-    } else
+        if (dpmi_v86_hook(r, vec, 1)) {
+            if (iret) vpicd->iret();
+        } else {
+            v86_reflect(r, vec);
+            if (iret) {
+                v86_push16(r, (u16)r->eflags);
+                v86_push16(r, (u16)info->ldr_cs);
+                v86_push16(r, (u16)(info->bp_off + W386_BP_IRQIRET));
+            }
+        }
+    } else {
         dpmi_int(r, vec, 1);
+        if (iret) vpicd->iret();
+    }
     return 1;
 }
 
@@ -564,6 +585,17 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     case W386_BP_EXIT:   exit_windows(r); break;
     case W386_BP_DPMI:   dpmi_switch(r); break;
     case W386_BP_PS2CB:  dpmi_ps2cb(r); break;
+    case W386_BP_IRQIRET:               /* the interrupted code's own frame */
+        r->eip = v86_pop16(r);
+        r->cs = v86_pop16(r);
+        r->eflags = (r->eflags & 0xFFFF0000u) | v86_pop16(r) | EFL_IOPL;
+        {
+            struct cregs *saved = hw_r;
+            hw_r = r;
+            vpicd->iret();
+            hw_r = saved;
+        }
+        break;
     case W386_BP_REFRET:
         exec_return(r);
         if (0) {

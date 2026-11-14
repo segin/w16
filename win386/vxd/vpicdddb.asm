@@ -29,9 +29,12 @@ VPICD_DDB:
         ENTRY vpicd_ctl, _vpicd_control
         ENTRY vpicd_api, _vpicd_api
         ENTRY vpicd_io_entry, _vpicd_io
+        ENTRY vpicd_tmo, _vpicd_time_out
 
         VXDCALL _vmm_install_mult_io, 1, 95h
         VXDCALL _vmm_simulate_io, 1, 94h
+        VXDCALL _vmm_set_global_time_out, 1, 3Ch
+        VXDCALL _vmm_cancel_time_out, 1, 3Eh
 
 ; the PIC ports for Install_Mult_IO_Handlers (the DDK's VxD_IO table: a
 ; word count, then a word port and a dword procedure each)
