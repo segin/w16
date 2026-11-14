@@ -1,0 +1,31 @@
+# a PIF of our own (title "Probe Program", C:\WC1.COM, start-up directory
+# C:\WINDOWS\SYSTEM, parameters "?"): "a b" in the Parameters dialog; WC1
+# waits for a key (WCWAIT.TXT): Alt+Tab to Windows and back, then a key
+# opts: files=WC1 wait pif
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\PROBE.PIF
+key Return
+sleep 4
+shot params
+type a b
+key Return
+sleep 10
+shot run
+key alt+Tab
+sleep 10
+shot win
+key alt+Tab
+sleep 10
+shot run2
+key space
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 12
+shot end
