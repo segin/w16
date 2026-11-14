@@ -12,6 +12,15 @@
 # uses) runs every probe on both, the DOSX ones after a line
 # "== (DPMI host: dosx)"; WIN.COM and the fonts once.
 #
+# RUNTESTS_KERNEL=KRNL386 runs the probes under w16's KRNL386.EXE (the
+# same sources built with -DKRNL386: the differences Windows 3.1's KRNL386
+# shows) instead of KRNL286.EXE; RUNTESTS_KERNEL="KRNL286 KRNL386" (what
+# make test uses) runs them under both, the KRNL386 ones after a line
+# "== (KERNEL: KRNL386)". The probes' tables pick the KRNL386 values when
+# the kernel behaves like KRNL386 (tests/apps/tklog.h, k286()). DOSX starts
+# KRNL386.EXE when it is beside it (on a 386), so a KRNL286 run never has
+# one there.
+#
 # The probes run in parallel: RUNTESTS_JOBS at a time (default: the
 # host's threads, from nproc, at most 16), each in a scratch copy of its
 # directory (build/runtests-PID/N) with its own DOSBox, so their TK.LOG
@@ -23,12 +32,14 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 dos="$root/build/dos"
 status=0
 DOSRUN_DPMI=hdpmi
-# kern DIR\KRNL286.EXE: the command line that starts that KERNEL
+K=KRNL286
+# kern DIR\KRNL286.EXE: the command line that starts that KERNEL (the
+# kernel of the moment, $K)
 kern() {
     if [ "$DOSRUN_DPMI" = dosx ]; then
         printf '%sDOSX.EXE krnl286' "${1%KRNL286.EXE}"
     else
-        printf '%s' "$1"
+        printf '%s%s.EXE' "${1%KRNL286.EXE}" "$K"
     fi
 }
 # dosx_to DIR: with DOSX, DOSX.EXE beside the KRNL286.EXE in DIR
@@ -62,6 +73,8 @@ probe() {
     app=$1 want=$2 need=$3 c=$work/c$n
     cp -r "$dir" "$c"
     rm -f "$c/TK.LOG"
+    # only the kernel of the moment: DOSX would take a KRNL386.EXE first
+    [ "$K" = KRNL386 ] || find "$c" -name KRNL386.EXE -exec rm -f {} +
     echo "== $app"
     out=$("$root/tests/dosrun.sh" "$c" "$kernel $app.EXE" 2>&1)
     [ -f "$c/TK.LOG" ] && out=$(tr -d '\r' < "$c/TK.LOG"; printf '%s\n' "$out")
@@ -110,6 +123,7 @@ probes() {
     run TK17 0
     run TK17A 0
     run TK19 0
+    run TK58 0
     run TK50 0
     run TK2 255 "w16: call to unimplemented KERNEL.27"
 
@@ -119,10 +133,10 @@ probes() {
     # started as WIN.COM would, with windir=C:\WINDOWS in its environment
     # (WINENV.COM); it lives in C:\W16SYS, so the Windows directory can only
     # have come from windir.
-    stage="$work/$DOSRUN_DPMI-tk5root"
+    stage="$work/$K-$DOSRUN_DPMI-tk5root"
     rm -rf "$stage"
     mkdir -p "$stage/WINDOWS" "$stage/W16SYS"
-    cp "$dos/KRNL286.EXE" "$stage/W16SYS/"
+    cp "$dos/$K.EXE" "$stage/W16SYS/"
     dosx_to "$stage/W16SYS"
     cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TKID.TPL" "$stage/"
     # TK15 and TK16 (tasks) start their helpers from their own directory
@@ -143,10 +157,10 @@ probes() {
     # C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS
     # (WINENV.COM), a WIN.INI of our own, C:\TKTMP made before KERNEL starts,
     # PATH=C:\TKPATH;Z:\ and TEMP=C:\TKTMP.
-    stage="$work/$DOSRUN_DPMI-tk14root"
+    stage="$work/$K-$DOSRUN_DPMI-tk14root"
     rm -rf "$stage"
     mkdir -p "$stage/WINDOWS/SYSTEM"
-    cp "$dos/KRNL286.EXE" "$stage/WINDOWS/SYSTEM/"
+    cp "$dos/$K.EXE" "$stage/WINDOWS/SYSTEM/"
     dosx_to "$stage/WINDOWS/SYSTEM"
     cp "$dos/WINENV.COM" "$dos/TK14.EXE" "$stage/"
     printf '[windows]\r\nload=\r\n' > "$stage/WINDOWS/WIN.INI"
@@ -161,10 +175,10 @@ SET TEMP=C:\TKTMP'
     # TK6-TK10 (floating point; tests/tk6ref.sh) in DOSBox-X, with a
     # coprocessor and without one: KRNL286 and WIN87EM.DLL in C:\WINDOWS\SYSTEM,
     # KERNEL started through WINENV.COM with windir=C:\WINDOWS (as WIN.COM).
-    stage="$work/$DOSRUN_DPMI-tk6root"
+    stage="$work/$K-$DOSRUN_DPMI-tk6root"
     rm -rf "$stage"
     mkdir -p "$stage/WINDOWS/SYSTEM"
-    cp "$dos/KRNL286.EXE" "$dos/WIN87EM.DLL" "$stage/WINDOWS/SYSTEM/"
+    cp "$dos/$K.EXE" "$dos/WIN87EM.DLL" "$stage/WINDOWS/SYSTEM/"
     dosx_to "$stage/WINDOWS/SYSTEM"
     cp "$dos/WINENV.COM" "$stage/"
     for f in TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10; do
@@ -190,10 +204,14 @@ SET TEMP=C:\TKTMP'
 }
 # RUNTESTS_DPMI="hdpmi dosx" (make test): every probe on both, at once
 variants=${RUNTESTS_DPMI:-hdpmi}
-for DOSRUN_DPMI in $variants; do
-    export DOSRUN_DPMI
-    [ "$variants" = "$DOSRUN_DPMI" ] || note "== (DPMI host: $DOSRUN_DPMI)"
-    probes
+kernels=${RUNTESTS_KERNEL:-KRNL286}
+for K in $kernels; do
+    [ "$kernels" = "$K" ] || [ "$K" = KRNL286 ] || note "== (KERNEL: $K)"
+    for DOSRUN_DPMI in $variants; do
+        export DOSRUN_DPMI
+        [ "$variants" = "$DOSRUN_DPMI" ] || note "== (DPMI host: $DOSRUN_DPMI)"
+        probes
+    done
 done
 
 # the output, in order: the probes as they finish, then WIN.COM and fonts

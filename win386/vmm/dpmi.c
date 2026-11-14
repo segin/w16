@@ -664,23 +664,72 @@ u32 pm_lin(u32 sel, u32 off)
 
 /* INT 21h 4Ch, and 00h: KRNL386 ends Windows (File > Exit Windows) with
  * INT 21h AX=0001h (observed in w16's trace; Pietrek, Windows Internals
- * ch. 1, ExitKernel: "AH = 4CH, AX = exitCode"), DOS's old terminate. In
- * V86 mode AH=00h would take the PSP from the caller's CS, which is not
- * the client's PSP here: it ends the client as 4Ch with code 0 does
- * (DOS's AH=00h returns code 0). */
+ * ch. 1, ExitKernel: "AH = 4CH, AX = exitCode"), DOS's old terminate, with
+ * its own PSP current; and each task with AH=00h, AL the exit code, the
+ * task's PDB current (task_exit). In V86 mode AH=00h would take the PSP
+ * from the caller's CS, which is no PSP here: both become 4Ch (VX9 under
+ * Windows 3.1: a task's 002Ah reached DOS as 4C2Ah, KRNL386's own exit as
+ * 4C00h). */
 static int is_exit(struct cregs *r)
 {
-    if ((AX(r) >> 8) == 0x00) {
-        SETW(r->eax, 0x4C00);
-        return 1;
-    }
-    return (AX(r) >> 8) == 0x4C;
+    return (AX(r) >> 8) == 0x00 || (AX(r) >> 8) == 0x4C;
+}
+
+/* A task's exit: KRNL386 ends each task with INT 21h AH=00h (AL the exit
+ * code) while the task's PDB is DOS's current PSP, so that DOS closes its
+ * handles and tells the network, then carries on; DOS gets 4Ch. Observed with VX9
+ * (tests/dos/vx9.asm, tests/vx9run.sh) under Windows 3.1: KERNEL builds
+ * the PDB with the parent field (16h) a selector, its own PSP's, and the
+ * terminate address (0Ah) inside KRNL386's real-mode code, as protected
+ * mode sees them; but when the call reaches DOS in V86 mode the parent is
+ * KRNL386's PSP segment and the terminate address is the VMM's return
+ * breakpoint, the same address as the reflected INT 21h's return. DOS's
+ * terminate then makes KRNL386's PSP current and "returns" through that
+ * breakpoint, and KERNEL goes on (INT 21h 50h calls follow). Here the two
+ * fields are set for the call and put back after it, and the caller gets
+ * its own registers back: DOS's terminate loads registers from the
+ * parent's saved stack, nothing the caller asked for (UNVERIFIED what
+ * Windows 3.1 hands back; KERNEL does not use them, Pietrek, Windows
+ * Internals ch. 3, ExitCall). */
+static int task_exit(struct cregs *r)
+{
+    u16 pdb = info->sda_lin ? *(u16 *)(info->sda_lin + 0x10) : 0;
+    u8 *p;
+    u16 old_par, old_off, old_seg;
+    int par;
+    struct cregs v, pm = *r;
+
+    if (!pdb || pdb == sysvm.psp_seg) return 0;
+    p = (u8 *)((u32)pdb << 4);
+    old_off = *(u16 *)(p + 0x0A);
+    old_seg = *(u16 *)(p + 0x0C);
+    old_par = *(u16 *)(p + 0x16);
+    par = sel_to_seg(old_par);
+    trace("DPMI: task exit (INT 21h AX=%x), PDB %x, parent %x (%x)\n", AX(r), pdb, old_par, par);
+    if (par > 0) *(u16 *)(p + 0x16) = (u16)par;
+    *(u16 *)(p + 0x0A) = (u16)(info->bp_off + W386_BP_REFRET);
+    *(u16 *)(p + 0x0C) = info->ldr_cs;
+    v = pm;
+    SETW(v.eax, 0x4C00 | (AX(r) & 0xFF));
+    v.ss = 0; v.esp = 0;
+    v.ds = v.es = v.fs = v.gs = 0;
+    v86_int(&v, 0x21);
+    *(u16 *)(p + 0x0A) = old_off;
+    *(u16 *)(p + 0x0C) = old_seg;
+    *(u16 *)(p + 0x16) = old_par;
+    *r = pm;
+    set_cf(r, 0);
+    return 1;
 }
 
 static void terminate_client(struct cregs *r)
 {
     struct cregs v = sysvm.v86save, p;
-    trace("DPMI: client ends (INT 21h AX=%x)\n", AX(r));
+    if (task_exit(r)) return;
+    if ((AX(r) >> 8) == 0x00)
+        SETW(r->eax, 0x4C00);           /* DOS's AH=00h returns code 0 */
+    trace("DPMI: client ends (INT 21h AX=%x, PSP %x)\n", AX(r),
+          info->sda_lin ? *(u16 *)(info->sda_lin + 0x10) : 0);
     /* the client's own PSP current again first: KERNEL makes its tasks'
      * PDBs DOS's current PSP (INT 21h 50h), and DOS would end that one
      * and return to its parent, a selector (as w16's DOSX does) */
@@ -835,8 +884,19 @@ static u32 hstk_mask(void)
 /* every trap from protected mode (vmm.c): note how deep the host stack is */
 void dpmi_note_pm(struct cregs *r)
 {
-    if (hstk_depth && hstk_sel && (r->ss & 0xFFFF) == hstk_sel && (r->esp & hstk_mask()) < hstk_low)
-        hstk_low = r->esp & hstk_mask();
+    if (!hstk_sel) return;
+    if ((r->ss & 0xFFFF) == hstk_sel) {
+        if ((r->esp & hstk_mask()) < hstk_low)
+            hstk_low = r->esp & hstk_mask();
+    } else if (!hstk_depth)
+        hstk_low = HSTK_TOP;            /* nothing runs on the host stack now */
+}
+
+/* a hardware interrupt's handler (or a routine run on the host stack) is
+ * running in the VM */
+int dpmi_in_handler(void)
+{
+    return hstk_depth != 0;
 }
 
 static void hstk_make(void)
@@ -856,7 +916,6 @@ static void hstk_make(void)
 static u32 hstk_base(struct cregs *intr)
 {
     hstk_make();
-    if (!hstk_depth) return HSTK_TOP;
     if (intr && !(intr->eflags & EFL_VM) && (intr->ss & 0xFFFF) == hstk_sel
         && (intr->esp & hstk_mask()) < hstk_low)
         hstk_low = intr->esp & hstk_mask();
@@ -872,7 +931,7 @@ static void hstk_run(struct cregs *p)
     hstk_low = p->esp & hstk_mask();
     exec_v86(p);
     hstk_depth--;
-    hstk_low = hstk_depth ? saved_low : HSTK_TOP;
+    hstk_low = saved_low;
 }
 
 /* Run the client's protected-mode handler of hardware interrupt vec on
@@ -910,9 +969,15 @@ void dpmi_build_int(struct cregs *r, u32 sel, u32 off)
     pm_push(r, r->eflags & ~EFL_IOPL);
     pm_push(r, r->cs);
     pm_push(r, r->eip);
-    r->eflags &= ~(EFL_IF | EFL_TF);
+    /* IF stays as it was: with IOPL 0 the routine's IRET cannot set it
+     * again, and the VM would go on with interrupts off (UNVERIFIED what
+     * Windows 3.1 does; KERNEL's Ctrl+Alt+Del procedure is short) */
+    r->eflags &= ~EFL_TF;
     r->cs = sel;
     r->eip = off;
+    /* on the host stack: the frame is in use from now on (a hardware
+     * handler's frame must go below it) */
+    dpmi_note_pm(r);
 }
 
 int dpmi_v86_hook(struct cregs *r, int vec, int hw)
@@ -993,9 +1058,19 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
 {
     if (vec < 32 && sysvm.excvec_sel[vec]) {
         /* the DPMI 0.9 exception frame: return address, error code, IP,
-         * CS, FLAGS, SP, SS (words for a 16-bit client) */
+         * CS, FLAGS, SP, SS (words for a 16-bit client), on the host's
+         * locked stack (DPMI 0.9: exception handlers are called on a
+         * locked stack the host provides), never the faulting code's:
+         * KRNL386's ExitCall raises exception 6 on purpose to run the end
+         * of a task on that stack (Pietrek, Windows Internals ch. 3) and
+         * frees the task's own stack there, then makes an INT 21h; on the
+         * task's stack the frame and that call's words went to freed
+         * memory (resumed at 0:0 after the first task exit) */
         struct cregs o = *r;
+        u32 base = hstk_base(r);
         if (dpmi_verbose || (vec != 0x0B && vec != 6)) trace("[EXC %x err %x at %x:%x cr2 %x ds %x es %x fs %x gs %x ss:sp %x:%x ax %x bx %x nest %d]", vec, err, r->cs, r->eip, get_cr2(), r->ds, r->es, r->fs, r->gs, r->ss, r->esp, r->eax, r->ebx, exec_depth());
+        r->ss = hstk_sel;
+        r->esp = base;
         pm_push(r, o.ss);
         pm_push(r, o.esp);
         pm_push(r, o.eflags);
@@ -1007,13 +1082,34 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         r->cs = sysvm.excvec_sel[vec];
         r->eip = sysvm.excvec_off[vec];
         r->eflags &= ~(EFL_IF | EFL_TF);
+        hstk_low = r->esp & hstk_mask();
         return;
     }
-    {
-        u8 *c = (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+    if (vec == 1 && pmvec_default(1)) {
+        /* a single step nobody's handler takes: TF off, the client goes
+         * on. Seen right after KERNEL's Ctrl+Alt+Del procedure returned
+         * (run with Build_Int_Stack_Frame): TF in the flags it returned
+         * with. Who takes the step under Windows 3.1 is UNVERIFIED (RBIL:
+         * Reboot 0204h sets/resets a protected-mode INT 01h handler) */
+        trace("[EXC 1 at %x:%x: TF off]", r->cs, r->eip);
+        r->eflags &= ~EFL_TF;
+        return;
+    }
+    if (vec < 8 && !pmvec_default(vec)) {
+        /* no exception handler: exceptions 0-7 go to the client's
+         * protected-mode interrupt handler (DPMI 0.9) */
+        if (dpmi_verbose) trace("[EXC %x -> INT %x at %x:%x]", vec, vec, r->cs, r->eip);
+        pm_push(r, r->eflags & ~EFL_IOPL);
+        pm_push(r, r->cs);
+        pm_push(r, r->eip);
+        r->eflags &= ~(EFL_IF | EFL_TF);
+        r->cs = sysvm.pmvec_sel[vec];
+        r->eip = sysvm.pmvec_off[vec];
+        return;
+    }
+    {   /* the descriptor the error code names; never code bytes (ARCHITECTURE.md 3) */
         u8 *d = ldt_desc(err);
-        trace("code %x %x %x %x %x %x  desc(err) %x %x %x %x %x %x %x %x\n", c[0], c[1], c[2], c[3], c[4], c[5],
-              d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+        trace("desc(err) %x %x %x %x %x %x %x %x\n", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
     }
     panic("client exception %x err %x at %x:%x (eax %x ebx %x ds %x es %x fs %x gs %x ss:esp %x:%x cr2 %x)",
           vec, err, r->cs, r->eip, r->eax, r->ebx, r->ds, r->es, r->fs, r->gs, r->ss, r->esp, get_cr2());

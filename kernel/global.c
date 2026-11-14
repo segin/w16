@@ -111,6 +111,8 @@
  */
 #include "kernel.h"
 
+#ifndef KRNL386                 /* KRNL386: global386.c */
+
 #pragma pack(push, 1)
 typedef struct arena {
     u8  count;          /* 00 */
@@ -1463,14 +1465,23 @@ void heap_fail(const char *why, const char *where, u32 caller, u16 bad, u16 lseg
    the task ends: the owner is the current task's PDB. GMEM_SHARE blocks
    belong to the calling module (Pietrek); w16 takes the current task's
    module (UNVERIFIED for a DLL calling). */
+u16 galloc_cs;           /* kentry.asm GLOBALALLOCX: the caller's CS */
+
 u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
 {
     u16 owner = task_pdb();
     heap_check("GlobalAlloc", 0);
     if (flags & GMEM_SHARE) {
-        module FAR *m = task_module();
+        /* the calling module (GLOBALALLOCX notes the caller's CS):
+           observed (US14, tk99 scratch probe) that the blocks USER
+           allocates with GMEM_SHARE while Windows boots belong to USER
+           on 3.1; w16 gave them to KERNEL (no task module then) */
+        module FAR *m = galloc_cs ? module_of(galloc_cs) : NULL;
+        if (!m)
+            m = task_module();
         owner = m ? m->ne_sel : 0;
     }
+    galloc_cs = 0;
     return galloc(flags & ~(GA_REQ_DGROUP | GA_REQ_DISCCODE), size, owner, NULL);
 }
 
@@ -1979,3 +1990,5 @@ u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
     return gowner(h);
 }
+
+#endif /* !KRNL386 */

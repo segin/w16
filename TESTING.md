@@ -65,7 +65,9 @@ display, so they never open windows on your desktop.
 | `tests/boottest.sh CASE ...` | only those boot-test cases (names and descriptions at the top of `tests/boottest.sh`) | |
 | `RUNTESTS_DPMI=dosx tests/run-tests.sh` | the probe programs on w16's own DOS extender only (`hdpmi` only HDPMI16; `make test` uses `"hdpmi dosx"`) | |
 
-`make test` settings: `RUNTESTS_JOBS=N` probes at once (default: the
+`make test` settings: `RUNTESTS_KERNEL=KRNL286` or `KRNL386` runs the
+probes under one of w16's two kernels only (default both),
+`RUNTESTS_JOBS=N` probes at once (default: the
 machine's threads, at most 16), `WINCOM_JOBS=N` WIN.COM scenarios at once
 (default: half the threads, at most 12); `1` runs one at a time. Every probe
 runs in a scratch copy of its directory, so runs never share files.
@@ -115,8 +117,8 @@ Microsoft's KERNEL. `[w16] watchdog=0` stops w16's KERNEL from ending a
 boot that seems stuck (it is on in tests). `tests/dropin.sh` with no
 `-o` prints its full option list.
 
-386 Enhanced mode (`WIN /3`) needs DOSBox-X with `machine=svga_s3` and
-Microsoft's KRNL386 (w16 has no KRNL386 yet); `tests/win386.sh` shows the
+386 Enhanced mode (`WIN /3`) runs KRNL386.EXE: Microsoft's, or w16's with
+`tests/dropin.sh -3 -c 'WIN /3 /B'` (ARCHITECTURE.md 9.10); `tests/win386.sh` shows the
 setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through

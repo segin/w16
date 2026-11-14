@@ -224,6 +224,26 @@ void dos_pm(struct cregs *r)
         if (dta) memcpy(dta, (void *)(XB + 512), 43);
         return;
     }
+    case 0x11: case 0x12: {             /* FCB search: DS:DX, the result in the DTA */
+        /* 44 bytes in and out (an extended FCB at most) and a DTA here, as
+         * for 4Eh; w16's DOSX translates them too (TK36). File Manager
+         * reads the volume label this way (extended FCB, attribute 08h):
+         * reflected as they were, the label went to DOS's own DTA and
+         * the drive line showed "C: [" with nothing after */
+        struct cregs t;
+        u8 *dta = dta_set ? (u8 *)pm_lin(dta_sel, dta_off) : NULL;
+        u8 *fcb = (u8 *)pm_lin(r->ds, r->edx);
+        memset(&t, 0, sizeof(t));
+        t.eax = 0x1A00;
+        t.edx = 512;
+        call21(&t, XSEG, 0, 512, 0, 0, K_DX);
+        if (dta) memcpy((void *)(XB + 512), dta, 44);
+        memcpy((void *)XB, fcb, 44);
+        call21(r, XSEG, 0, 0, 0, 0, K_DX);
+        memcpy(fcb, (void *)XB, 44);
+        if (dta) memcpy(dta, (void *)(XB + 512), 44);
+        return;
+    }
     case 0x50: {                        /* set PSP: a selector */
         int seg = sel_to_seg(BX(r));
         if (seg < 0) break;

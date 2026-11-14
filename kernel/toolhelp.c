@@ -67,9 +67,28 @@ u16 thhook_w[0x50];
 #define TH_LOCKTDB      0x0A
 #define TH_SELTABLEN    0x0B
 #define TH_SELTABSTART  0x0C            /* dword */
+#ifdef KRNL386
+/* KRNL386 (TK51 under Microsoft's KRNL386): hGDI at 28h, hUSER 2Ah, the
+   shell's module 2Ch, as Schulman has them; the selector table's offset
+   and length come from global386.c (thhook_seltab) */
+#define TH_HGDI         0x14
+#define TH_HUSER        0x15
+#define TH_HSHELL       0x16
+static u32 th_seltab_off;
+static u16 th_seltab_len;
+
+void thhook_seltab(u32 off, u16 len)
+{
+    th_seltab_off = off;
+    th_seltab_len = len;
+    thhook_w[TH_SELTABLEN] = len;
+    *(u32 *)&thhook_w[TH_SELTABSTART] = off;
+}
+#else
 #define TH_HGDI         0x12
 #define TH_HUSER        0x13
 #define TH_HSHELL       0x14
+#endif
 
 static u32 hook_th;                     /* ToolHelpHook */
 static u32 hook_pt;                     /* RegisterPtrace */
@@ -91,8 +110,13 @@ void thhook_sync(void)
     /* UNVERIFIED with several tasks */
     thhook_w[TH_HEADPDB] = head ? *(u16 FAR *)MK_FP(head, 0x60) : 0;
     thhook_w[TH_LOCKTDB] = IsTaskLocked();
+#ifdef KRNL386
+    thhook_w[TH_SELTABLEN] = th_seltab_len;     /* observed: 8000h */
+    *(u32 *)&thhook_w[TH_SELTABSTART] = th_seltab_off;
+#else
     thhook_w[TH_SELTABLEN] = 0x3FFC;    /* observed */
     *(u32 *)&thhook_w[TH_SELTABSTART] = 0x72;
+#endif
     if (!thhook_w[TH_HGDI] && (x = module_find("GDI")) != NULL)
         thhook_w[TH_HGDI] = x->ne_sel;
     if (!thhook_w[TH_HUSER] && (x = module_find("USER")) != NULL)

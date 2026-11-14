@@ -2,8 +2,9 @@
 # Boot build/w16 (make install-tree) as a whole: every file of the tree is
 # laid over a scratch copy of the reference Windows 3.1 install (WIN.COM
 # and PROGMAN.EXE into WINDOWS\, SYSTEM\* into WINDOWS\SYSTEM\, the README,
-# PROGMAN.INI and the group files left out), KRNL386.EXE is removed, and
-# "WIN /S /B" runs in headless DOSBox (tests/dropin.sh). Then the reference itself (Microsoft's files,
+# PROGMAN.INI and the group files left out; the reference's KRNL386.EXE is
+# removed and the tree's own takes its place, so DOSX starts w16's KRNL386
+# on the 386), and "WIN /S /B" runs in headless DOSBox (tests/dropin.sh). Then the reference itself (Microsoft's files,
 # KRNL286) the same way. Both screens are saved and compared.
 #   usage: tests/w16tree.sh [-t SECS] [-o DIR] [-R PNG]
 #     -R PNG  the reference's screen is PNG (a screenshot of the same

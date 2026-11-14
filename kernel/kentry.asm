@@ -954,6 +954,24 @@ global %1
 %macro AFTER_REALLOC 0
         mov cx, ax
 %endmacro
+; GlobalAlloc: the caller's CS noted for the C function (a GMEM_SHARE
+; block belongs to the calling module), the stack left as it was
+extern GLOBALALLOC, _galloc_cs
+global GLOBALALLOCX
+GLOBALALLOCX:
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [bp + 4]
+        mov [_galloc_cs wrt DGROUP], ax
+        pop ax
+        pop ds
+        pop bp
+        jmp far GLOBALALLOC
+
 GHEAPAPI GLOBALLOCKX,    GLOBALLOCK,    1, AFTER_LOCK
 GHEAPAPI GLOBALUNLOCKX,  GLOBALUNLOCK,  1, AFTER_UNLOCK
 GHEAPAPI GLOBALFLAGSX,   GLOBALFLAGS,   1, AFTER_FLAGS

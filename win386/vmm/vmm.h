@@ -206,6 +206,7 @@ int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
 void dpmi_ps2cb(struct cregs *r);
 void dpmi_build_int(struct cregs *r, u32 sel, u32 off);
+int dpmi_in_handler(void);
 void dpmi_note_pm(struct cregs *r);                /* every trap from PM */                  /* the BIOS called the PS/2 handler */
 
 /* the PM breakpoints: HLT bytes in a ring-3 code segment (SEL_PMBP) */

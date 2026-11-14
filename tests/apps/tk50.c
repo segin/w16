@@ -690,7 +690,9 @@ static void t_hooks(void)
 static void t_stack(void)
 {
     HGLOBAL h = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 0x1000);
-    WORD s = (WORD)h, i, FAR *hp = (WORD FAR *)MAKELP(SEG(buf), 0);
+    /* the block's selector: under KRNL286 its handle, under KRNL386 the
+       handle | 1 (a fixed block's handle is even there: tk58.c) */
+    WORD s = SELECTOROF(GlobalLock(h)), i, FAR *hp = (WORD FAR *)MAKELP(SEG(buf), 0);
     WORD before[8];
     FARPROC to = kproc(108), back = kproc(109);
     if (!to || !back) {

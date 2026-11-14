@@ -53,8 +53,12 @@ static void copy(void *d, const void *s, vu32 n) { vu8 *p = d; const vu8 *q = s;
 
 static vu16 kern_sel, kern_off, sane_sel, sane_off;    /* 0201h */
 static vu8 *sane;                       /* the sanity byte (Map_Flat of 0201h's DS:SI) */
-#define SANITY_CHECK 0                  /* see reboot_cad */
-static int cad_state;                   /* 1: checking the sanity byte, 2: KERNEL's handler running */
+/* the sanity check (reboot_cad): screen A then appears in every run (12 of
+ * 12 on installation-05), but in 2 of 12 Space did not take it away (the
+ * screen shown from the time-out, inside IRQ 0's VTD procedure: cause not
+ * found; the handover note). Off: screen A at once, as before */
+#define SANITY_CHECK 0
+static int cad_state;                   /* 2: KERNEL's procedure due at an idle, 4: due now, 3: screen B up */
 static vu32 tmo_handle;
 static vu32 sys_vm, client;
 
@@ -316,44 +320,51 @@ static void cancel_time_out(void)
 }
 
 /* the hot key callback (AL scan code, AH 0 pressed). With KERNEL's
- * handler known (0201h): the sanity byte zeroed, which KERNEL sets again
- * whenever it runs (seen: 1 again within 20 s of zeroing it, each time,
- * with Program Manager idle); a time-out then tells (UNVERIFIED: Windows
- * 3.1's delay; 750 ms here) */
+ * handler known (0201h): the sanity byte zeroed and KERNEL's procedure
+ * run; a time-out then tells (UNVERIFIED: Windows 3.1's delay; 750 ms
+ * here): the byte set again, screen A; else screen C */
 void __cdecl reboot_cad(struct vregs *r)
 {
+    struct vregs s;
     if ((r->eax >> 8) & 0xFF) return;       /* only the press */
     if (cad_state) return;
-    /* NOT YET: the sanity check below works in DOSBox-X, but in plain
-     * DOSBox screen A failed to appear in 6 of 8 win386cad runs (keys held
-     * and let go one by one; cause not found: the handover note), so the
-     * screen comes at once as before */
     if (!sane || !SANITY_CHECK) { screen_a(); return; }
     *sane = 0;
-    cad_state = 1;
+    /* KERNEL's procedure as an interrupt of the VM (Windows 3.1's Reboot
+     * device calls Build_Int_Stack_Frame: docs/win386-services.md), made
+     * by the VMM when the VM next idles; it sets the byte again. If the VM
+     * has not idled after 750 ms the procedure runs where the VM is, and
+     * for a task that does not respond calls 0203h (screen B). Waiting
+     * for KERNEL to set the byte by itself (at a task switch or idle
+     * pass) left it 0 after 750 ms in a third of the runs under load */
+    cad_state = 2;
     time_out(750);
+    zero(&s, sizeof(s));
+    s.ecx = kern_sel;
+    s.edx = kern_off;
+    vmm_build_int_stack_frame(&s);
 }
 
 /* the time-out (Set_Global_Time_Out) */
 void __cdecl reboot_time_out(struct vregs *r)
 {
-    struct vregs s;
     (void)r;
     tmo_handle = 0;
-    if (cad_state == 1) {
-        if (*sane) { cad_state = 0; screen_a(); return; }
-        /* KERNEL has not run: the current task does not let it. KERNEL's
-         * handler then runs as an interrupt of the VM (as Windows 3.1's
-         * Reboot device does, with Build_Int_Stack_Frame) */
+    if (cad_state == 2 && *sane) { cad_state = 0; screen_a(); return; }
+    if (cad_state == 2) {
+        /* the VM has not idled: KERNEL's procedure now, where it is (the
+         * VMM makes the frame at once on a second call) */
+        struct vregs s;
         zero(&s, sizeof(s));
         s.ecx = kern_sel;
         s.edx = kern_off;
         vmm_build_int_stack_frame(&s);
-        cad_state = 2;
-        time_out(5000);
+        cad_state = 4;
+        time_out(750);
         return;
     }
-    if (cad_state == 2) {                   /* KERNEL's handler did not answer (UNVERIFIED delay) */
+    if (cad_state == 4 && *sane) { cad_state = 0; screen_a(); return; }
+    if (cad_state == 4) {                   /* KERNEL's handler did not answer (UNVERIFIED delay) */
         cad_state = 0;
         screen(SCREEN_C, 0);
         return;

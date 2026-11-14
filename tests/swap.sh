@@ -30,7 +30,8 @@
 #              w16's stack against all of Microsoft's (Microsoft's WSWAP
 #              does not run on w16's DOSX: it hands DOSX its memory
 #              through an XMS interface of its own). Block 183h (the DOS
-#              memory, which depends on WIN.COM's size) is left out too
+#              memory, which depends on WIN.COM's size) and what follows
+#              the block (4FEh on: WIN.COM's own data) are left out too
 #     -k FILE  this KRNL286.EXE on both sides; -K Microsoft's KRNL286
 # Prints PASS/FAIL per scenario; exit code = failures. Needs dosbox-x,
 # xdotool, ImageMagick and `make dos woprobes wcprobes`. Each scenario
@@ -48,7 +49,7 @@ while getopts o:wOxWk:K opt; do
     O) common="$common -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD" ;;
     x) common="$common -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE" ;;
     W) w16only="-f $dos/WIN.COM=WINDOWS/WIN.COM -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE"
-       mask="-m 183:2" ;;
+       mask="-m 183:2 -m 4FE:66" ;;
     k) krnl="-k $OPTARG" ;;
     K) krnl=-K ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
