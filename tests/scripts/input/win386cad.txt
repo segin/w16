@@ -1,11 +1,14 @@
 ; Ctrl+Alt+Del in 386 Enhanced mode with no application hung (tests/
 ; boottest.sh case win386cad): the screen Windows shows, then a key back
-; to Windows. The keys go down and come up as a person's do: held (the
-; keyboard repeats Del meanwhile), then let go one by one; the screen must
-; still be up after that (01-cad), and a new key takes it away (02-back)
+; to Windows. The keys go down and come up as a person's do: held, then
+; let go one by one; the screen must
+; still be up after that (01-cad), and a new key takes it away (02-back).
+; Then Return: Program Manager's selected item, File Manager, opens (03-key,
+; its caption): with the VM still holding Ctrl and Alt down (their releases
+; came while the screen was up) nothing happened
 sleep 2
 keydown ctrl+alt+Delete
-sleep 1.5
+sleep 0.3
 keyup Delete
 sleep 0.7
 keyup alt
@@ -16,3 +19,10 @@ shot 01-cad
 key space
 sleep 4
 shot 02-back
+key Return
+sleep 6
+shot 03-key
+; (Held for 1.5 s, with the keyboard repeating Del, w16's screen stays
+; too (checked by hand), but Windows 3.1 itself showed its "not responding"
+; screen for Program Manager in about half such runs on a loaded host: no
+; stable reference.)

@@ -7,7 +7,20 @@
 ;   VMM 0000h Get_VMM_Version, 0001h Get_Cur_VM_Handle,
 ;   0003h Get_Sys_VM_Handle; VTD 0000h VTD_Get_Version, 0002h
 ;   VTD_Get_Interrupt_Period.
-; Lines start with "VXP ". Built with BADLINK defined it is VXQ.386, which
+; Lines start with "VXP ". Built with IOPROBE defined it is VXI.386, which
+; also installs an I/O handler (Install_IO_Handler) for ports 2F0h and
+; 0E0h at Sys_Critical_Init and logs every call the VMM makes to it (the
+; I/O type in ECX, port, data, the client's CS:EIP and CX); the first six
+; different types it sees are taken as the plain byte/word/dword in/out
+; ones (VX7.COM, tests/dos/vx7.asm, makes those first) and answered
+; directly (input: 87654300h plus the call count), any other type goes to
+; Simulate_IO, which shows how it is broken down. It also virtualises IRQ
+; 10 (VPICD_Virtualize_IRQ, every VID procedure its own, logging the IRQ's
+; VPICD_Get_Complete_Status) and sets its request (VPICD_Set_Int_Request)
+; when the VM writes A5h to port 0E0h: VX7 then sees the interrupt, reads
+; the virtual PIC and EOIs, and the log shows the order of the calls (the
+; second time VX7's handler waits about a second with interrupts on, for
+; the IRET time-out of 500 ms). Built with BADLINK defined it is VXQ.386, which
 ; first calls service 0 of device 000Fh (not loaded): the dynamic-link
 ; failure. Sources: the Windows 3.1 DDK's Virtual Device
 ; Adaptation Guide (Declare_Virtual_Device, the control messages, VMMcall:
@@ -51,6 +64,8 @@ VXP_DDB:
         dw 0                    ; DDB_Flags
 %ifdef BADLINK
         db 'VXQ     '           ; DDB_Name
+%elifdef IOPROBE
+        db 'VXI     '           ; DDB_Name
 %else
         db 'VXP     '           ; DDB_Name
 %endif
@@ -131,6 +146,50 @@ vxp_control:
         ret
 
 services:
+%ifdef IOPROBE
+        mov esi, msg_ioi
+        call puts
+        mov esi, io_handler
+        mov edx, 2F0h
+        int 20h
+        dd 00010096h                    ; VMM, Install_IO_Handler
+        pushfd
+        pop eax
+        and eax, 1
+        call puthex
+        mov esi, io_handler
+        mov edx, 0E0h
+        int 20h
+        dd 00010096h
+        pushfd
+        pop eax
+        and eax, 1
+        call puthex
+        mov esi, io_handler             ; again: one handler per port
+        mov edx, 2F0h
+        int 20h
+        dd 00010096h
+        pushfd
+        pop eax
+        and eax, 1
+        call puthex
+        call crlf
+        mov esi, msg_virq
+        call puts
+        mov edi, irq_desc
+        int 20h
+        dd 00030001h                    ; VPICD_Virtualize_IRQ
+        mov [irq_h], eax
+        pushfd
+        pop ebx
+        and ebx, 1
+        call puthex
+        mov esi, msg_cf
+        call puts
+        mov eax, ebx
+        call puthex
+        call crlf
+%endif
 %ifdef BADLINK
         ; VXQ.386: a dynamic link to a device that is not loaded: VPD
         ; (000Fh, WfW 3.11's printer device, not in Windows 3.1). (With
@@ -220,6 +279,162 @@ services:
         CALLLOG msg_pce, 0003000Eh, 74h, 0, 0    ; VPICD_Convert_Int_To_IRQ 74h
         CALLLOG msg_pce2, 0003000Eh, 21h, 0, 0   ;   21h
         ret
+
+%ifdef IOPROBE
+; the I/O handler: EBX VM, ECX type, EDX port, EBP client registers, EAX
+; output data; input data back in EAX
+io_handler:
+        pushad
+        inc dword [io_count]
+        mov esi, msg_io
+        call puts
+        mov eax, ecx
+        call puthex
+        mov esi, msg_edx
+        call puts
+        mov eax, edx
+        call puthex
+        mov esi, msg_iodat
+        call puts
+        mov eax, [esp + 28]
+        call puthex
+        mov esi, msg_iocs
+        call puts
+        movzx eax, word [ebp + 28h]     ; Client_CS
+        call puthex
+        mov al, ':'
+        call putc
+        mov eax, [ebp + 24h]            ; Client_EIP
+        call puthex
+        mov esi, msg_iocx
+        call puts
+        mov eax, [ebp + 18h]            ; Client_ECX
+        call puthex
+        mov esi, msg_ioebx
+        call puts
+        mov eax, ebx
+        call puthex
+        call crlf
+        popad
+        ; a type seen among the first six: plain; else Simulate_IO
+        push esi
+        mov esi, io_types
+.t:     cmp esi, io_types + 6 * 4
+        jae .new
+        cmp dword [esi], -1
+        je .add
+        cmp [esi], ecx
+        je .plain
+        add esi, 4
+        jmp .t
+.add:   mov [esi], ecx
+.plain: pop esi
+        cmp edx, 0E0h
+        jne .r
+        cmp ecx, 4
+        jne .r
+        cmp al, 0A5h
+        jne .r
+        pushad
+        mov esi, msg_set
+        call puts
+        call irqstat
+        mov eax, [irq_h]
+        int 20h
+        dd 00030002h                    ; VPICD_Set_Int_Request (EBX the VM)
+        mov esi, msg_seta
+        call puts
+        call irqstat
+        popad
+.r:     mov eax, 87654300h
+        add eax, [io_count]
+        ret
+.new:   pop esi
+        int 20h
+        dd 00018094h                    ; VMMjmp Simulate_IO
+; " status=<VPICD_Get_Complete_Status ECX>" and the end of the line
+irqstat:
+        pushad
+        mov esi, msg_st
+        call puts
+        mov eax, [irq_h]
+        int 20h
+        dd 00030005h                    ; VPICD_Get_Complete_Status
+        mov eax, ecx
+        call puthex
+        call crlf
+        popad
+        ret
+
+; the VID procedures (EAX the handle, EBX the VM)
+vxi_hw: ret
+vxi_virt:
+        pushad
+        mov esi, msg_vvirt
+        call puts
+        call irqstat
+        popad
+        ret
+vxi_eoi:
+        pushad
+        mov esi, msg_veoi
+        call puts
+        call irqstat
+        mov eax, [irq_h]
+        int 20h
+        dd 00030003h                    ; VPICD_Clear_Int_Request
+        mov eax, [irq_h]
+        int 20h
+        dd 00030004h                    ; VPICD_Phys_EOI
+        mov esi, msg_veoi2
+        call puts
+        call irqstat
+        popad
+        ret
+vxi_mask:
+        pushad
+        mov esi, msg_vmask
+        call puts
+        mov eax, ecx
+        call puthex
+        call irqstat
+        popad
+        ret
+vxi_iret:
+        pushfd
+        pushad
+        mov esi, msg_viret
+        call puts
+        mov eax, [esp + 32]
+        and eax, 1
+        call puthex
+        call irqstat
+        popad
+        popfd
+        ret
+
+irq_desc dw 10, 0
+         dd vxi_hw, vxi_virt, vxi_eoi, vxi_mask, vxi_iret, 500
+irq_h    dd 0
+msg_virq db 'VXP VPICD_Virtualize_IRQ(10) eax=', 0
+msg_cf   db ' cf=', 0
+msg_st   db ' status=', 0
+msg_set  db 'VXP set request:', 0
+msg_seta db 'VXP after set:', 0
+msg_vvirt db 'VXP VID_Virt_Int_Proc:', 0
+msg_veoi db 'VXP VID_EOI_Proc:', 0
+msg_veoi2 db 'VXP after clear, phys EOI:', 0
+msg_vmask db 'VXP VID_Mask_Change_Proc ecx=', 0
+msg_viret db 'VXP VID_IRET_Proc cf=', 0
+io_count dd 0
+io_types dd -1, -1, -1, -1, -1, -1
+msg_ioi  db 'VXP Install_IO_Handler cf 2F0h, 0E0h, 2F0h again=', 0
+msg_io   db 'VXP io type=', 0
+msg_iodat db ' data=', 0
+msg_iocs db ' at=', 0
+msg_iocx db ' client_ecx=', 0
+msg_ioebx db ' ebx=', 0
+%endif
 
 ; at System_Exit: who owns the keyboard and the mouse after the session
 late:   call sysvm

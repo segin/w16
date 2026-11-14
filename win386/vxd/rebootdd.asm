@@ -28,6 +28,7 @@ REBOOT_DDB:
         ENTRY rb_cad, _reboot_cad
 
         VXDCALL _vkd_define_hot_key, 0Dh, 01h
+        VXDCALL _vkd_force_keys, 0Dh, 07h
         VXDCALL _vmm_begin_nest_v86_exec, 1, 82h
         VXDCALL _vmm_exec_int, 1, 84h
         VXDCALL _vmm_end_nest_exec, 1, 86h

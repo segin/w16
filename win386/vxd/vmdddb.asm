@@ -27,8 +27,12 @@ VMD_DDB:
         ENTRY vmd_ctl, _vmd_control
         ENTRY vmd_api, _vmd_api
         ENTRY vmd_hw, _vmd_hw_int
+        ENTRY vmd_eoi, _vmd_eoi_proc
         SERVICES _vmd_service, 3
 
         VXDCALL _vpicd_virtualize_irq, 3, 01h
         VXDCALL _vpicd_set_int_request, 3, 02h
+        VXDCALL _vpicd_clear_int_request, 3, 03h
+        VXDCALL _vpicd_phys_eoi, 3, 04h
+        VXDCALL _vpicd_physically_unmask, 3, 09h
         VXDCALL _vpicd_convert_int_to_irq, 3, 0Eh
