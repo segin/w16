@@ -224,7 +224,8 @@ with "the IRQ that completed a packet": an extrapolation, not observed.
 `[386Enh] mouse=*vmd`) virtualise the mouse for DOS boxes and talk to an
 MS-DOS mouse driver through INT 2Fh AX=1607h (DDK "Mouse Support for
 Non-Windows Applications"); the Windows mouse driver itself is the same.
-UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
+w16's driver under WIN386 (WIN /3) was tested by the user (2026-11-14): it
+works there as in Standard mode.
 
 ## Verified
 
@@ -248,7 +249,6 @@ UNVERIFIED here: w16's driver under WIN386 (VKD traps ports 60h/64h).
 
 ## Not verified / not done
 
-- 386 Enhanced mode (above).
 - GetSetMouseData: the meaning of bits 2, 6 and 9 and of the fields
   behind 5 and 7; the sensitivity curve between the observed points; how
   3.1 picks a profile's factor (w16: the larger of |X| and |Y|) and in
