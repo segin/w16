@@ -131,6 +131,14 @@ static void spk(const char *what)
     put(line);
 }
 
+static int waitticks(WORD n);
+static void tickedge(void)
+{
+    DWORD t = *ticks;
+    while (*ticks == t)
+        ;
+}
+
 static int waitticks(WORD n)
 {
     DWORD t0 = *ticks, spin = 0;
@@ -489,11 +497,11 @@ static void partC(void)
 }
 
 /* ---- D: playing ---- */
-/* wait until CountVoiceNotes(1) is n or less (at most 200 BIOS ticks) */
+/* wait until CountVoiceNotes(1) is n or less (at most 400 BIOS ticks) */
 static void countdown(int n)
 {
     DWORD t0 = *ticks;
-    while (callw(13, 1, 1, 0, 0, 0, 0) > n && *ticks - t0 < 200)
+    while (callw(13, 1, 1, 0, 0, 0, 0) > n && *ticks - t0 < 400)
         ;
 }
 
@@ -506,7 +514,11 @@ static void watch(const char *what, int maxticks)
         n = callw(13, 1, 1, 0, 0, 0, 0);
         s = spk_state() & 0x0E03;
         if (n != lastn || s != lasts) {
-            wsprintf(line, "OBS D %s: tick ~%lu count %d 61h&3=%u mode=%u\r\n", (LPSTR)what, *ticks - t0, n,
+            /* (the speaker off with a count left: the moment between the
+               last note's end and the count's going to 0, seen now and
+               then with both drivers: not compared) */
+            wsprintf(line, "OBS %sD %s: tick ~%lu count %d 61h&3=%u mode=%u\r\n",
+                     (LPSTR)((s & 3) == 0 && n > 0 ? "~" : ""), (LPSTR)what, *ticks - t0, n,
                      s & 3, (s >> 9) & 7);
             put(line);
             lastn = n, lasts = s;
@@ -541,7 +553,9 @@ static void partD(void)
     r = callw(11, 1, 0, 0, 0, 0, 0);
     wsprintf(line, "OBS D WaitSoundState(0) = %d ~%lu ticks\r\n", r, *ticks - t0);
     put(line);
-    /* StopSound in the middle */
+    /* StopSound in the middle (a marker first: the time between these
+       groups is BIOS ticks, whose phase is the run's) */
+    marker(1);
     for (i = 0; i < 4; i++)
         callw(4, 4, 1, 49, 4, 0, 0);
     callw(9, 0, 0, 0, 0, 0, 0);
@@ -554,6 +568,7 @@ static void partD(void)
     r = callw(13, 1, 1, 0, 0, 0, 0); res("D count after StopSound", r);
     watch("after stop", 10);
     /* WaitSoundState(0) while playing */
+    marker(2);
     for (i = 0; i < 3; i++)
         callw(4, 4, 1, 45, 8, 0, 0);
     callw(9, 0, 0, 0, 0, 0, 0);
@@ -563,6 +578,7 @@ static void partD(void)
     put(line);
     watch("after wait", 30);
     /* a frequency */
+    marker(3);
     callw(8, 4, 1, 1000, 0, 18, 0);
     callw(8, 4, 1, 0, 0, 9, 0);
     callw(8, 4, 1, 500, 0, 18, 0);
@@ -579,6 +595,7 @@ static void partE(void)
     static const WORD types[] = { 0, MB_ICONHAND, MB_ICONQUESTION, MB_ICONEXCLAMATION, MB_ICONASTERISK, 0xFFFF };
     int i;
     BOOL b = 2;
+    marker(4);
     SystemParametersInfo(SPI_GETBEEP, 0, &b, 0);
     wsprintf(line, "OBS E SPI_GETBEEP %d\r\n", b);
     put(line);
@@ -672,6 +689,29 @@ static void partG(void)
     m = pit0max(3);
     wsprintf(line, "OBS G channel 0 reload closed: %s ~%04X\r\n", (LPSTR)(m > 0xF000 ? "65536" : "less"), m);
     put(line);
+    /* the BIOS's ticks while notes play: two whole notes legato at tempo
+       32 (1500 driver ticks each, 7.5 s); the BIOS ticks counted from the
+       first's start (the count going to 1) to the end (0): 15 s */
+    callw(1, 0, 0, 0, 0, 0, 0);
+    callw(5, 5, 1, 32, 128, 1, 0);
+    callw(4, 4, 1, 37, 1, 0, 0);
+    callw(4, 4, 1, 49, 1, 0, 0);
+    {
+        DWORD ts = *ticks;
+        callw(9, 0, 0, 0, 0, 0, 0);
+        countdown(1);
+        wsprintf(line, "OBS ~G BIOS ticks from StartSound to the first note: %lu\r\n", *ticks - ts);
+        put(line);
+    }
+    {
+        DWORD t0 = *ticks;
+        WORD bt;
+        countdown(0);
+        bt = (WORD)(*ticks - t0);
+        wsprintf(line, "OBS G BIOS ticks during 15 s of notes: %u0 or so (~%u)\r\n", (bt + 5) / 10, bt);
+        put(line);
+    }
+    callw(2, 0, 0, 0, 0, 0, 0);
     flush();
 }
 
@@ -777,11 +817,11 @@ static void partH(void)
        in the low) and durations */
     {
         static const WORD fq[][2] = { { 100, 0 }, { 440, 0 }, { 440, 0x8000 }, { 1000, 0 },
-                                     { 3000, 0 }, { 37, 0 }, { 18, 0 }, { 0, 0 }, { 20000, 0 } };
+                                     { 3000, 0 }, { 37, 0 }, { 18, 0 }, { 0, 0 } };
         static const int du[] = { 1, 2, 3, 5, 10, 18 };
         for (i = 0; i < sizeof fq / sizeof fq[0]; i++) {
-            r = callw(8, 4, 1, fq[i][0], fq[i][1], 5, 0);
-            wsprintf(line, "OBS H7 SetVoiceSound(1,%u.%04X,5) = %d\r\n", fq[i][0], fq[i][1], r);
+            r = callw(8, 4, 1, fq[i][0], fq[i][1], 20, 0);
+            wsprintf(line, "OBS H7 SetVoiceSound(1,%u.%04X,20) = %d\r\n", fq[i][0], fq[i][1], r);
             put(line);
             callw(8, 4, 1, 0, 0, 3, 0);
         }
@@ -830,29 +870,33 @@ static void partP(void)
     t0 = *ticks;
     /* windows of 256 samples: the largest count seen in a window is
        about channel 2's divisor (mode 3 counts down from it by 2) */
-    while (*ticks - t0 < 16 && n < 3000 - 3) {
+    /* until the speaker is off and nothing is left (BIOS ticks are not
+       the measure: their phase against the driver's is the run's) */
+    while (*ticks - t0 < 40 && n < 3000 - 3) {
         WORD s = 0, c, k, wmax = 0, j;
+        if ((spk_state() & 3) == 0 && callw(13, 1, 1, 0, 0, 0, 0) == 0)
+            break;
         for (j = 0; j < 256; j++) {
             s = spk_state();
             c = pit2_count();
             if (c > wmax)
                 wmax = c;
         }
-        /* the divisor: exact below 64, else to within 1/32 */
-        for (j = 0; wmax >= 64; j++)
-            wmax >>= 1;
-        k = (s & 3) | ((s >> 9) & 7) << 2 | (wmax << j) << 5;
+        /* quiet (an ultrasonic divisor: below 64) or a tone; the divisor
+           itself is logged "~" (the window can straddle a change) */
+        (void)j;
+        k = (s & 3) | ((s >> 9) & 7) << 2 | (wmax < 64 ? 0 : 1) << 5;
         if (k != last) {
             buf[n++] = k;
-            buf[n++] = wmax << j;
+            buf[n++] = wmax;
             buf[n++] = (WORD)(*ticks - t0);
             last = k;
         }
     }
     for (i = 0; i < n; i += 3) {
         WORD k = buf[i];
-        wsprintf(line, "OBS P 61h&3=%u mode=%u ~divisor about %u ~tick %u\r\n", k & 3, (k >> 2) & 7,
-                 buf[i + 1], buf[i + 2]);
+        wsprintf(line, "OBS P 61h&3=%u mode=%u %s ~divisor=%u ~tick=%u\r\n", k & 3, (k >> 2) & 7,
+                 (LPSTR)(k >> 5 ? "tone" : "quiet"), buf[i + 1], buf[i + 2]);
         put(line);
     }
     callw(11, 1, 0, 0, 0, 0, 0);
@@ -920,7 +964,7 @@ static void partT(void)
     /* SetVoiceSound frequencies, 40 ticks each, a rest between */
     {
         static const WORD fq[] = { 37, 40, 55, 100, 220, 261, 262, 440, 523, 1000, 1500,
-                                   2000, 3000, 4000, 5000, 8000, 10000 };
+                                   2000, 3000, 4000, 5000 };
         for (i = 0; i < sizeof fq / sizeof fq[0]; i++) {
             callw(8, 4, 1, fq[i], 0, 80, 0);
             callw(8, 4, 1, 0, 0, 20, 0);
@@ -969,6 +1013,55 @@ static void partV(void)
         }
     callw(2, 0, 0, 0, 0, 0, 0);
     flush();
+}
+
+/* ---- W: the BIOS's ticks around StartSound: from StartSound to the
+   first note's start and to the end, with no quiet left over (after a
+   legato note), with 13 ticks (after a normal quarter at 120) and with
+   101 (after a quarter rest at 120: 100 + 1), and the BIOS ticks while
+   nothing plays as a check ---- */
+static void wcase(const char *what, int last)
+{
+    DWORD ts, t1;
+    /* the last item before: sets the quiet left over */
+    callw(5, 5, 1, 120, 128, last, 0);
+    if (last == 3) {
+        callw(5, 5, 1, 120, 128, 1, 0);
+        note(17, 37, 16, 0);
+        note(17, 0, 4, 0);
+    } else
+        note(17, 37, 16, 0);
+    callw(9, 0, 0, 0, 0, 0, 0);
+    callw(11, 1, 0, 0, 0, 0, 0);
+    waitticks(3);
+    callw(5, 5, 1, 32, 128, 1, 0);
+    note(17, 49, 2, 0);                 /* 3.75 s */
+    note(17, 37, 2, 0);
+    tickedge();
+    ts = *ticks;
+    callw(9, 0, 0, 0, 0, 0, 0);
+    countdown(1);
+    t1 = *ticks;
+    countdown(0);
+    wsprintf(line, "OBS ~W %s: BIOS ticks to the first note %lu, to the end %lu\r\n", (LPSTR)what,
+             t1 - ts, *ticks - ts);
+    put(line);
+    flush();
+}
+
+static void partW(void)
+{
+    DWORD t0;
+    callw(1, 0, 0, 0, 0, 0, 0);
+    tickedge();
+    t0 = *ticks;
+    waitticks(100);
+    wsprintf(line, "OBS W idle check: %lu\r\n", *ticks - t0);
+    put(line);
+    wcase("after legato", 1);
+    wcase("after normal", 0);
+    wcase("after a rest", 3);
+    callw(2, 0, 0, 0, 0, 0, 0);
 }
 
 /* ---- S: state: notes added while playing, StartSound twice, StopSound
@@ -1023,12 +1116,22 @@ static void partS(void)
         int last = -99, st;
         t0 = *ticks;
         while (*ticks - t0 < 30) {
-            int n = callw(13, 1, 1, 0, 0, 0, 0);
+            int n;
+            /* the status first: the bit is set as the count comes down to
+               the threshold, so the count read after it is that or less
+               (read before it, a tick could come between: seen with both
+               drivers) */
             st = callw(15, 0, 0, 0, 0, 0, 0);
-            if (st * 100 + n != last) {
-                wsprintf(line, "OBS S count %d status %d\r\n", n, st);
+            n = callw(13, 1, 1, 0, 0, 0, 0);
+            /* each count, and the count when the status bit is seen */
+            if (n != last) {
+                wsprintf(line, "OBS S count %d\r\n", n);
                 put(line);
-                last = st * 100 + n;
+                last = n;
+            }
+            if (st) {
+                wsprintf(line, "OBS S status set, count %d\r\n", n);
+                put(line);
             }
         }
         wsprintf(line, "OBS S status after %d, again %d\r\n", callw(15, 0, 0, 0, 0, 0, 0), callw(15, 0, 0, 0, 0, 0, 0));
@@ -1111,7 +1214,10 @@ static void records(HMODULE hs)
             wsprintf(line, k > 1 ? "%04X, " : "%04X", r[8 + k - 1]);
             put(line);
         }
-        wsprintf(line, ") = AX %04X DX %04X, %u bytes off\r\n", r[16], r[17], pop);
+        /* (DX only where it is a result, GetThresholdEvent's; AX not for
+           DoBeep, whose AX is what its loop left: "~", not compared) */
+        wsprintf(line, ") = %sAX=%04X %sDX=%04X, %u bytes off\r\n", (LPSTR)(ord == 17 ? "~" : ""), r[16],
+                 (LPSTR)(ord == 14 ? "" : "~"), r[17], pop);
         put(line);
     }
     flush();
@@ -1297,6 +1403,8 @@ int __cdecl tmain(void)
         partU();
     if (part('V'))
         partV();
+    if (part('W'))
+        partW();
     if (part('Q'))
         partQ();
     if (part('X'))

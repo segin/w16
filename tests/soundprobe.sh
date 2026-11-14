@@ -22,7 +22,12 @@
 #        tools/nerename.py): every call made to the driver from the boot
 #        to the end (USER's MessageBeep: DoBeep with the beep's type) must
 #        be the same
-#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec]   (default: all)
+#   allw16  the beeps (SN1 part E) on every w16 part (WIN.COM, DOSX,
+#        KRNL286, USER, GDI, MMSOUND.DRV) with SNDREC in front of the
+#        driver, against all of Microsoft's: the same calls (USER's
+#        DoBeep(type) for each MessageBeep) and the same beeps
+#   SOUNDPROBE_PARTS: sn1's parts (default ABCDEFGHSPTUV)
+#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec] [allw16]   (default: all)
 #     -m   Microsoft's driver only (to look at its logs)
 # Exit status 0 when every comparison made agrees.
 set -eu
@@ -37,7 +42,7 @@ while getopts o:m opt; do
     esac
 done
 shift $((OPTIND - 1))
-probes=${*:-sn1 queue rec}
+probes=${*:-sn1 queue rec allw16}
 [ -n "$out" ] || out=$root/build/soundprobe-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
@@ -73,7 +78,7 @@ run() {
     s=$1 n=$2 parts=$3; shift 3
     if [ "$s" = w16 ] && [ -z "${norepl:-}" ]; then set -- "$@" -f "$w16=WINDOWS/SYSTEM/MMSOUND.DRV"; fi
     DROPIN_CYCLES='fixed 10000' DROPIN_CAPTURE="$out/$n-$s.cap" \
-        "$root/tests/dropin.sh" -r -p 386 -t 600 -o "$out/$n-$s" \
+        "$root/tests/dropin.sh" ${kflag--r} -p 386 -t ${SOUNDPROBE_SECS:-1200} -o "$out/$n-$s" \
         -f "$dos/SN1.EXE=SN1.EXE" -f "$out/SNH.EXE=SNH.EXE" -i 'boot:shell=C:\SN1.EXE' \
         -i "w16:sn1parts=$parts" "$@" > "$out/$n-$s.txt" 2>&1 || true
     cp "$out/$n-$s/c/WINDOWS/TK.LOG" "$out/$n-$s.log" 2>/dev/null || : > "$out/$n-$s.log"
@@ -84,7 +89,7 @@ run() {
 for p in $probes; do
     case $p in
     sn1)
-        for s in $sides; do run $s sn1 ABCDEFGHSP & done
+        for s in $sides; do run $s sn1 "${SOUNDPROBE_PARTS:-ABCDEFGHSPTUV}" & done
         wait
         if [ -z "$msonly" ]; then
             cmpf sn1 "$out/sn1-ms.log" "$out/sn1-w16.log"
@@ -116,6 +121,40 @@ for p in $probes; do
         # (SNDREC is MMSOUND.DRV on both sides, the driver under test
         # SOUNT: norepl)
         [ -n "$msonly" ] || cmpf rec "$out/rec-ms.log" "$out/rec-w16.log" ;;
+    allw16)
+        # the beeps (part E) on every w16 part: WIN.COM, DOSX, KRNL286,
+        # USER, GDI and the sound driver, SNDREC in front of it, against
+        # all of Microsoft's with SNDREC in front of Microsoft's driver:
+        # the same calls (USER's DoBeep with each MessageBeep's type) and
+        # the same beeps on the recording
+        for s in $sides; do
+            if [ $s = ms ]; then
+                src=$ms
+                set -- -r
+            else
+                src=$w16
+                set -- -w -x -f "$dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE" -f "$dos/GDI.EXE=WINDOWS/SYSTEM/GDI.EXE"
+            fi
+            cp "$src" "$out/SOUNT-a$s.DLL"
+            python3 "$root/tools/nerename.py" "$out/SOUNT-a$s.DLL" --module SOUNT > /dev/null
+            kflag="$*" norepl=1 run $s allw16 E -f "$dos/SNDREC.DRV=WINDOWS/SYSTEM/MMSOUND.DRV" \
+                -f "$out/SOUNT-a$s.DLL=WINDOWS/SYSTEM/SOUNT.DLL" &
+        done
+        wait
+        for s in $sides; do
+            grep -aq '^REC USER.EXE: DoBeep' "$out/allw16-$s.log" ||
+                { echo "FAIL allw16 $s: no DoBeep from USER ($out/allw16-$s.log)"; fails=$((fails + 1)); }
+        done
+        if [ -z "$msonly" ]; then
+            cmpf allw16 "$out/allw16-ms.log" "$out/allw16-w16.log"
+            if python3 "$root/tools/tonecmp.py" "$out/allw16-ms.tones" "$out/allw16-w16.tones" > "$out/allw16-tones.txt"; then
+                echo "ok   allw16 sound: $(tail -1 "$out/allw16-tones.txt")"
+            else
+                echo "FAIL allw16 sound ($out/allw16-tones.txt):"
+                head -20 "$out/allw16-tones.txt"
+                fails=$((fails + 1))
+            fi
+        fi ;;
     *) echo "unknown probe $p" >&2; exit 2 ;;
     esac
 done
