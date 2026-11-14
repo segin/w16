@@ -469,6 +469,52 @@ static int list_service(u32 svc, struct svcregs *s)
     return 0;
 }
 
+/* ---- nested execution (the DDK's Begin_Nest_V86_Exec, Begin_Nest_Exec,
+ * Exec_Int, Resume_Exec, End_Nest_Exec, Save/Restore_Client_State): a
+ * device runs code in the System VM with the client registers (EBP's
+ * Client_Reg_Struc, w16's sys_client) and gets them back. w16 runs it
+ * synchronously in V86 mode on the VMM's reflection stack (the client's
+ * segment registers taken as V86 segments). UNVERIFIED: protected-mode
+ * nested execution (Begin_Nest_Exec in a PM client), which w16 runs in
+ * V86 mode too ---- */
+static int nest_level;
+
+static int nest_service(u32 svc, struct svcregs *s)
+{
+    struct cregs v;
+    struct client_regs *c = sys_client;
+    switch (svc) {
+    case 0x82:                          /* Begin_Nest_V86_Exec */
+    case 0x83:                          /* Begin_Nest_Exec */
+        nest_level++;
+        return 1;
+    case 0x84:                          /* Exec_Int: EAX the vector */
+        memset(&v, 0, sizeof(v));
+        v.eax = c->eax; v.ebx = c->ebx; v.ecx = c->ecx; v.edx = c->edx;
+        v.esi = c->esi; v.edi = c->edi; v.ebp = c->ebp;
+        v.ds = c->ds; v.es = c->es;
+        v.eflags = c->eflags;
+        v86_int(&v, s->eax & 0xFF);
+        c->eax = v.eax; c->ebx = v.ebx; c->ecx = v.ecx; c->edx = v.edx;
+        c->esi = v.esi; c->edi = v.edi; c->ebp = v.ebp;
+        c->ds = (u16)v.ds; c->es = (u16)v.es;
+        c->eflags = (c->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
+        return 1;
+    case 0x85:                          /* Resume_Exec: nothing is waiting here */
+        return 1;
+    case 0x86:                          /* End_Nest_Exec */
+        if (nest_level) nest_level--;
+        return 1;
+    case 0x8D:                          /* Save_Client_State: EDI a buffer */
+        memcpy((void *)s->edi, c, sizeof(*c));
+        return 1;
+    case 0x8E:                          /* Restore_Client_State: ESI a buffer */
+        memcpy(c, (void *)s->esi, sizeof(*c));
+        return 1;
+    }
+    return 0;
+}
+
 /* ---- the VMM's services ---- */
 void __cdecl svc_dispatch(struct svcregs *s)
 {
@@ -493,6 +539,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
         return;
     }
     if (dev == 1 && list_service(svc, s)) return;
+    if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     panic("VxD service %x of device %x is not implemented yet (called from %x)",
           svc, dev, *(u32 *)(s + 1));

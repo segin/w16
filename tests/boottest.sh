@@ -37,6 +37,11 @@
 #              Microsoft's WIN386.EXE: the pointer moves and the menus open
 #              (every shot 0 pixels), and the DOS prompt comes back in text
 #              mode (40 pixels: the cursor)
+#   win386cad  w16's WIN386.EXE (its REBOOT and VKD modules), Ctrl+Alt+Del
+#              in Program Manager and a key (tests/scripts/input/
+#              win386cad.txt), against Microsoft's WIN386.EXE: the text
+#              screen the same but where w16's text says "w16" (the title
+#              and row 15 left out), and Windows' screen afterwards 0 pixels
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -387,7 +392,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -780,6 +785,29 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386input: mouse, keys and Exit Windows as with Microsoft's WIN386"
         else echo "FAIL win386input: $r ($out/win386input-w16)"; fails=$((fails + 1)); fi ;;
+    win386cad)
+        scr=$root/tests/scripts/input/win386cad.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        refrun win386cad-ref win386cad env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/win386cad-ref" -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/win386cad-w16" \
+            -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386cad-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 02-back; do
+            a=$out/win386cad-w16/$s.png b=$out/win386cad-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            m="rectangle 0,0 0,0"
+            # the title (row 6) and "return to Windows" (row 15): w16's text
+            [ $s = 01-cad ] && m="rectangle 240,96 400,111 rectangle 40,240 360,255"
+            magick "$a" -fill black -draw "$m" "$out/win386cad-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386cad-b.png"
+            n=$(magick compare -metric AE "$out/win386cad-a.png" "$out/win386cad-b.png" "$out/win386cad-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386cad-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
+        else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the

@@ -25,13 +25,11 @@ struct vxdapi {
 
 static void api_default(struct cregs *r);
 static void api_vdd(struct cregs *r);
-static void api_reboot(struct cregs *r);
 
 static const struct vxdapi apis[] = {
     /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
      * (carry set), SHELL's BX is 1000h */
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
-    { 0x0009, "Reboot",   api_reboot,  0x0000, 0, 1 },
     { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
     { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
@@ -56,32 +54,6 @@ static void api_vdd(struct cregs *r)
 {
     if (AX(r) == 0x000C) {
         SETW(r->eax, BX(r));
-        r->eflags &= ~EFL_CF;
-        return;
-    }
-    api_default(r);
-}
-
-/* Reboot (Ralf Brown's Interrupt List 61, INT 2Fh 1684h BX=0009h):
- * 0201h sets KERNEL's Ctrl+Alt+Del handler (ES:DI) and the sanity-check
- * byte (DS:SI, kept as a linear address); 0202h returns the handler in
- * ES:DI. VX5 (Windows 3.1): 0202h gives back exactly what KERNEL set
- * (0117h:A5ADh), AX and the other registers unchanged, carry clear.
- * Ctrl+Alt+Del itself needs the keyboard virtualised (VKD): not yet. */
-static u32 reboot_sel, reboot_off, reboot_byte;
-
-static void api_reboot(struct cregs *r)
-{
-    switch (AX(r)) {
-    case 0x0201:
-        reboot_sel = r->es & 0xFFFF;
-        reboot_off = DI(r);
-        reboot_byte = pm_lin(r->ds, r->esi);
-        r->eflags &= ~EFL_CF;
-        return;
-    case 0x0202:
-        r->es = reboot_sel;
-        SETW(r->edi, reboot_off);
         r->eflags &= ~EFL_CF;
         return;
     }
