@@ -87,6 +87,13 @@ KRNL386's (TK51, TK53, TK58 equal 3.1's).
 
 ## Open (UNVERIFIED or not done)
 
+- (From the WIN386 agent, 2026-11-14; docs/notes/win386-handover.md step 5)
+  Microsoft's KRNL386 procedure, run by w16's REBOOT as an interrupt, returns
+  with TF set in its IRET frame every time, sets the sanity byte when the VM
+  was interrupted in KERNEL's idle HLT, and calls Reboot 0203h when the
+  interrupted CS:IP is not KERNEL's (it judges the task by it). w16's REBOOT
+  (check still off) makes the frame at the VM's next idle HLT, and at once
+  after 750 ms without one. w16's KRNL386 passes win386cad either way.
 - KERNEL's Ctrl+Alt+Del procedure only sets the sanity byte and IRETs:
   telling a hung task and Reboot 0203h (the "not responding" screen, then
   ending the task) are not done; the call Pietrek's ExitCall makes when
