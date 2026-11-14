@@ -41,6 +41,11 @@ your own, and `.tools/` is git-ignored so they are never committed.
 - Optional, for some probes: `.tools/ref/w386/cdrive/` and
   `.tools/ref/wfw311a/cdrive/` (Windows for Workgroups 3.11). Tests that need
   them say so.
+- Optional, for `tests/soundprobe.sh sb16`: `.tools/sb16/src/`, the
+  Sound Blaster 16 ASP driver disk images (`Sound_Blaster_16ASP_(Disk_1).img`,
+  `(Disk_2).img`); `tests/sb16setup.sh` installs them into a scratch copy
+  of the reference install (its header says what Creative's installer
+  changes).
 - Optional: `.tools/docs/` (reference books as text, used by the
   documentation, not by tests).
 
