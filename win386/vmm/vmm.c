@@ -36,6 +36,14 @@ static struct {
 static struct { u16 limit; u32 base; } gdtr, idtr;
 #pragma pack()
 
+/* trap port (1) or let it through (0): its bit in the I/O bitmap */
+void io_trap_bit(u32 port, int on)
+{
+    if (port > 0xFFFF) return;
+    if (on) tss.iomap[port >> 3] |= (u8)(1 << (port & 7));
+    else tss.iomap[port >> 3] &= (u8)~(1 << (port & 7));
+}
+
 static void tss_set_esp0(u32 v)
 {
     tss.esp0 = v;
@@ -612,7 +620,7 @@ static void heartbeat(struct cregs *r)
           ++hb_n, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
           exec_depth(), sysvm.last_cs, sysvm.last_ip);
     for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
-    trace(", PIC masks %x %x", inb(0x21), inb(0xA1));
+    trace(", PIC masks %x %x, trapped I/O %d", inb(0x21), inb(0xA1), io_traps);
     if (r->eflags & EFL_VM) {
         u8 *c = (u8 *)v86_lin(r->cs, r->eip);
         u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
@@ -691,7 +699,9 @@ void __cdecl trap(struct tframe *f)
                     dpmi_pmbp(r, r->eip);
                 else
                     r->eip++;           /* HLT: carry on (idle) */
-            } else if (r->eflags & EFL_VM)
+            } else if (!f->err && io_trap(r, op))
+                ;                       /* a trapped port */
+            else if (r->eflags & EFL_VM)
                 panic("V86 #GP at %x:%x op %x %x err %x", r->cs, r->eip, op[0], op[1], f->err);
             else if (!f->err && pm_cli_sti(r, op))
                 ;
