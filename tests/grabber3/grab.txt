@@ -1,4 +1,5 @@
-# grab: Alt+PrintScreen of a windowed text screen (GT3), Alt+Enter to full
+# grab: Alt+PrintScreen of a windowed text screen (GT3; no attribute line:
+# its blinking cells make the full-screen shot differ from run to run), Alt+Enter to full
 # screen and Alt+PrintScreen there (text, then graphics mode 12h), back to
 # the window
 sleep 60
@@ -10,8 +11,6 @@ sleep 15
 type gt3
 key Return
 sleep 5
-key a
-sleep 2
 shot w1
 key alt+Print
 sleep 5
