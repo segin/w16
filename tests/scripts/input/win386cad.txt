@@ -1,0 +1,10 @@
+; Ctrl+Alt+Del in 386 Enhanced mode with no application hung (tests/
+; boottest.sh case win386cad): the screen Windows shows, then a key back
+; to Windows
+sleep 2
+key ctrl+alt+Delete
+sleep 4
+shot 01-cad
+key space
+sleep 4
+shot 02-back

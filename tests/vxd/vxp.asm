@@ -19,6 +19,28 @@
 
 COM1    equ 3F8h
 
+; CALLLOG message, link, EAX, EBX (-1: the System VM), ECX: the call, then
+; EAX EBX ECX EDX and the flags (CF bit 0, ZF bit 6)
+%macro CALLLOG 5
+        mov esi, %1
+        call puts
+        mov eax, %3
+        mov ebx, %4
+        cmp ebx, -1
+        jne %%nb
+        mov ebx, [sysvm_h]
+%%nb:   mov ecx, %5
+        xor edx, edx
+        int 20h
+        dd %2
+        pushfd
+        pushad
+        call regdump
+        popad
+        popfd
+%endmacro
+
+
 segment _TEXT public align=16 class=CODE use32 flat
 global VXP_DDB
 VXP_DDB:
@@ -101,7 +123,10 @@ vxp_control:
         ret
 .notfirst:
         call crlf
-        popad
+        cmp edi, 5                      ; System_Exit
+        jne .nl
+        call late
+.nl:    popad
         clc
         ret
 
@@ -175,6 +200,63 @@ services:
         dd 00050002h
         call puthex
         call crlf
+        ; the keyboard, mouse and interrupt devices (ARCHITECTURE.md 12.8):
+        ; registers and flags after each call
+        CALLLOG msg_vkdv, 000D0000h, 0, 0, 0     ; VKD_Get_Version
+        CALLLOG msg_vkdo, 000D0008h, 0, 0, 0     ; VKD_Get_Kbd_Owner
+        call sysvm
+        CALLLOG msg_vkdp, 000D000Dh, 0, -1, 0    ; VKD_Peek_Msg_Key, EBX = System VM
+        CALLLOG msg_vmdv, 000C0000h, 0, 0, 0     ; VMD_Get_Version
+        CALLLOG msg_vmdo, 000C0002h, 0, 0, 0     ; VMD_Get_Mouse_Owner
+        CALLLOG msg_vmdt, 000C0001h, -74h, 0, 4  ; VMD_Set_Mouse_Type: INT 74h, type 4 (as MOUSE.DRV's BX=7404h)
+        CALLLOG msg_pcv, 00030000h, 0, 0, 0      ; VPICD_Get_Version
+        CALLLOG msg_pcb1, 0003000Bh, 1, 0, 0     ; VPICD_Get_IRQ_Complete_Status IRQ 1
+        CALLLOG msg_pcb5, 0003000Bh, 5, 0, 0     ;   IRQ 5 (no device)
+        CALLLOG msg_pcb0, 0003000Bh, 0, 0, 0     ;   IRQ 0
+        CALLLOG msg_pcbc, 0003000Bh, 12, 0, 0    ;   IRQ 12
+        CALLLOG msg_pcd1, 0003000Dh, 1, -1, 0    ; VPICD_Convert_IRQ_To_Int IRQ 1, System VM
+        CALLLOG msg_pcdc, 0003000Dh, 12, -1, 0   ;   IRQ 12
+        CALLLOG msg_pcdg, 0003000Dh, 16, -1, 0   ;   IRQ 16 (none)
+        CALLLOG msg_pce, 0003000Eh, 74h, 0, 0    ; VPICD_Convert_Int_To_IRQ 74h
+        CALLLOG msg_pce2, 0003000Eh, 21h, 0, 0   ;   21h
+        ret
+
+; at System_Exit: who owns the keyboard and the mouse after the session
+late:   call sysvm
+        CALLLOG msg_vkdo, 000D0008h, 0, 0, 0
+        CALLLOG msg_vmdo, 000C0002h, 0, 0, 0
+        CALLLOG msg_pcb1, 0003000Bh, 1, 0, 0
+        CALLLOG msg_pcbc, 0003000Bh, 12, 0, 0
+        ret
+
+; the System VM's handle into sysvm_h
+sysvm:  int 20h
+        dd 00010003h
+        mov [sysvm_h], ebx
+        ret
+
+; regdump: the PUSHAD frame and the flags above it (after the return address)
+regdump:
+        mov eax, [esp + 4 + 28]         ; EAX
+        call puthex
+        mov esi, msg_ebx
+        call puts
+        mov eax, [esp + 4 + 16]
+        call puthex
+        mov esi, msg_ecx
+        call puts
+        mov eax, [esp + 4 + 24]
+        call puthex
+        mov esi, msg_edx
+        call puts
+        mov eax, [esp + 4 + 20]
+        call puthex
+        mov esi, msg_fl
+        call puts
+        mov eax, [esp + 4 + 32]
+        and eax, 0041h
+        call puthex
+        call crlf
         ret
 
 ; serial output, polled
@@ -231,4 +313,22 @@ msg_sys  db 'VXP Get_Sys_VM_Handle ebx=', 0
 msg_cb   db 'VXP sysvm cb=', 0
 msg_vtdv db 'VXP VTD_Get_Version eax=', 0
 msg_vtdp db 'VXP VTD_Get_Interrupt_Period eax=', 0
+msg_vkdv db 'VXP VKD_Get_Version eax=', 0
+msg_vkdo db 'VXP VKD_Get_Kbd_Owner eax=', 0
+msg_vkdp db 'VXP VKD_Peek_Msg_Key eax=', 0
+msg_vmdv db 'VXP VMD_Get_Version eax=', 0
+msg_vmdo db 'VXP VMD_Get_Mouse_Owner eax=', 0
+msg_vmdt db 'VXP VMD_Set_Mouse_Type eax=', 0
+msg_pcv  db 'VXP VPICD_Get_Version eax=', 0
+msg_fl   db ' fl=', 0
+msg_pcb1 db 'VXP VPICD_Get_IRQ_Complete_Status(1) eax=', 0
+msg_pcb5 db 'VXP VPICD_Get_IRQ_Complete_Status(5) eax=', 0
+msg_pcb0 db 'VXP VPICD_Get_IRQ_Complete_Status(0) eax=', 0
+msg_pcbc db 'VXP VPICD_Get_IRQ_Complete_Status(12) eax=', 0
+msg_pcd1 db 'VXP VPICD_Convert_IRQ_To_Int(1) eax=', 0
+msg_pcdc db 'VXP VPICD_Convert_IRQ_To_Int(12) eax=', 0
+msg_pcdg db 'VXP VPICD_Convert_IRQ_To_Int(16) eax=', 0
+msg_pce  db 'VXP VPICD_Convert_Int_To_IRQ(74h) eax=', 0
+msg_pce2 db 'VXP VPICD_Convert_Int_To_IRQ(21h) eax=', 0
+sysvm_h  dd 0
 tail_done db 0
