@@ -30,17 +30,13 @@
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
 #              (tests/win386.sh: Microsoft's KRNL386 and the rest, against
-#              Microsoft's WIN386.EXE; both must reach Final USER init).
-#              Not in the default set yet: w16's boot is intermittent (an
-#              occasional #GP in a hardware interrupt handler, ARCHITECTURE.md
-#              12.3); run it by name: tests/boottest.sh win386
+#              Microsoft's WIN386.EXE; both must reach Final USER init)
 #   win386input  w16's WIN386.EXE with Microsoft's KRNL386 and the rest
 #              (WIN /3 /B), real mouse motion and keys, then File > Exit
 #              Windows (tests/scripts/input/win386input.txt), against
 #              Microsoft's WIN386.EXE: the pointer moves and the menus open
 #              (every shot 0 pixels), and the DOS prompt comes back in text
-#              mode (40 pixels: the cursor). Not in the default set yet
-#              (ARCHITECTURE.md 12.3)
+#              mode (40 pixels: the cursor)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -391,7 +387,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
