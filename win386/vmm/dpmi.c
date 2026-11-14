@@ -219,6 +219,8 @@ void dpmi_switch(struct cregs *r)
 /* ---- reflecting into V86 mode and back ---- */
 int dpmi_verbose;
 
+static int ps2_set_handler(struct cregs *r);
+
 /* An interrupt from protected mode that the client has not hooked: run the
  * V86 handler with the client's registers; DS and ES become segments where
  * their selectors map conventional memory. Results come back, and segment
@@ -229,6 +231,7 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     int ds, es;
 
     if (dpmi_verbose && !hw) trace("[R%x:%x]", vec, AX(r));
+    if (!hw && vec == 0x15 && AX(r) == 0xC207) return ps2_set_handler(r);
     v = pm;
     v.ss = 0; v.esp = 0;
     v.fs = v.gs = 0;
@@ -240,9 +243,11 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     }
     ds = sel_to_seg(pm.ds);
     es = sel_to_seg(pm.es);
-    if (ds < 0 && (pm.ds & 4))
+    /* most calls do not use DS or ES at all: noted only in the detailed
+     * trace (the serial port is slow, and the boot makes thousands) */
+    if (dpmi_verbose && ds < 0 && (pm.ds & 4))
         trace("DPMI: INT %x AX=%x: DS %x not in conventional memory\n", vec, AX(r), pm.ds);
-    if (es < 0 && (pm.es & 4))
+    if (dpmi_verbose && es < 0 && (pm.es & 4))
         trace("DPMI: INT %x AX=%x: ES %x not in conventional memory\n", vec, AX(r), pm.es);
     v.ds = ds < 0 ? 0 : ds;
     v.es = es < 0 ? 0 : es;
@@ -711,7 +716,10 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         if (index == 0x41) return;
         if (index == 0x21) { dos_pm(r); return; }
         if (index == 0x10) { video_pm(r); return; }
-        pm_v86_reflect(r, index, index >= 8 && index < 16);
+        /* the hardware interrupts' vectors (IRQ 0-7: 08h-0Fh, IRQ 8-15:
+         * 70h-77h) are reflected with the client's selectors left out:
+         * DS and ES hold whatever the interrupted code had */
+        pm_v86_reflect(r, index, (index >= 8 && index < 16) || (index >= 0x70 && index < 0x78));
         return;
     }
     if (index >= PMBP_API && index < PMBP_COUNT) {
@@ -790,6 +798,7 @@ static void run_hw_handler(int vec, u32 ccs, u32 cip, u32 cds, u32 cflags)
         set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
         hstk_sp = HSTK_TOP;
     }
+    if (vec < 0) return;
     memset(&p, 0, sizeof(p));
     p.ss = hstk_sel;
     p.esp = hstk_sp;
@@ -820,6 +829,75 @@ int dpmi_v86_hook(struct cregs *r, int vec, int hw)
     (void)hw;
     run_hw_handler(vec, sysvm.last_cs, sysvm.last_ip, sysvm.last_ds, r->eflags);
     return 1;
+}
+
+/* ---- the PS/2 pointing device handler (INT 15h AX=C207h) ----
+ * The BIOS calls the handler set with C207h far, from its IRQ 12 handler
+ * in V86 mode, with four words on the stack (pushed in this order: the
+ * status, the X data, the Y data, 0; IBM PS/2 BIOS interface) and pops them
+ * itself after the handler's RETF. A protected-mode client (MOUSE.DRV for
+ * a PS/2 mouse) passes a protected-mode ES:BX, which no V86 code can call,
+ * so the BIOS gets a V86 breakpoint instead, and the breakpoint calls the
+ * client's handler on the host's stack with the same four words, as the
+ * hardware interrupt handlers are run (run_hw_handler). Under Windows 3.1
+ * this is how MOUSE.DRV gets the mouse in 386 Enhanced mode (observed: the
+ * pointer moves; with the BIOS given the bare selector it did not).
+ * UNVERIFIED: the exact registers and stack Windows 3.1 gives the handler. */
+static u32 ps2_sel, ps2_off;
+
+static int ps2_set_handler(struct cregs *r)
+{
+    struct cregs v, pm = *r;
+
+    memset(&v, 0, sizeof(v));
+    v.eax = r->eax;
+    v.eflags = pm.eflags;
+    if ((r->es & 0xFFFF) || BX(r)) {
+        ps2_sel = r->es & 0xFFFF;
+        ps2_off = BX(r);
+        v.es = info->ldr_cs;
+        v.ebx = info->bp_off + W386_BP_PS2CB;
+    }
+    if (dpmi_verbose) trace("[PS2 handler %x:%x]", r->es, BX(r));
+    v86_int(&v, 0x15);
+    *r = pm;
+    SETW(r->eax, v.eax);
+    r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
+    if (!((r->es & 0xFFFF) || BX(r))) ps2_sel = ps2_off = 0;
+    return 1;
+}
+
+void dpmi_ps2cb(struct cregs *r)
+{
+    u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
+    u32 ip = sp[0], cs = sp[1], z = sp[2], y = sp[3], x = sp[4], status = sp[5];
+    struct cregs p;
+
+    /* the RETF back to the BIOS */
+    r->eip = ip;
+    r->cs = cs;
+    SETW(r->esp, (u16)r->esp + 4);
+    if (!sysvm.pm || !ps2_sel) return;
+    if (!hstk_sel) run_hw_handler(-1, 0, 0, 0, 0);     /* make the host stack */
+    memset(&p, 0, sizeof(p));
+    p.ss = hstk_sel;
+    p.esp = hstk_sp;
+    p.ds = p.es = sysvm.last_ds;
+    pm_push(&p, status);
+    pm_push(&p, x);
+    pm_push(&p, y);
+    pm_push(&p, z);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags = (r->eflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | EFL_IOPL | 2;
+    p.cs = ps2_sel;
+    p.eip = ps2_off;
+    {
+        u32 saved_sp = hstk_sp;
+        hstk_sp = p.esp & (sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu);
+        exec_v86(&p);
+        hstk_sp = saved_sp;
+    }
 }
 
 void dpmi_exception(struct cregs *r, int vec, u32 err)

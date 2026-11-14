@@ -494,6 +494,7 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     switch (idx) {
     case W386_BP_EXIT:   exit_windows(r); break;
     case W386_BP_DPMI:   dpmi_switch(r); break;
+    case W386_BP_PS2CB:  dpmi_ps2cb(r); break;
     case W386_BP_REFRET:
         exec_return(r);
         if (0) {

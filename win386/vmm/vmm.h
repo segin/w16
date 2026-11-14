@@ -170,6 +170,7 @@ u32 sel_base(u32 sel);
 int pm_v86_reflect(struct cregs *r, int vec, int hw);
 int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
+void dpmi_ps2cb(struct cregs *r);                  /* the BIOS called the PS/2 handler */
 
 /* the PM breakpoints: HLT bytes in a ring-3 code segment (SEL_PMBP) */
 #define PMBP_DEFAULT    0       /* 0-255: the default handler for INT n */
