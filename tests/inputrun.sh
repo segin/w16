@@ -150,14 +150,18 @@ fi
 # DOSBox boots it. 386 Enhanced mode's DOS boxes need it: on DOSBox's own
 # DOS, Windows 3.1's MS-DOS Prompt stays a blank screen (the WIN386
 # handover note, step 6). The image's files are copied back into OUTDIR/
-# work/c afterwards. No BOOTLOG.TXT during the run: use -b, not -s.
+# work/c afterwards. No BOOTLOG.TXT during the run: use -b, not -s. WIN's
+# output is not redirected to C:\OUT.TXT there: a DOS box inherits the
+# handles, and its COMMAND.COM then wrote everything into the file (a
+# black DOS box).
 if [ -n "${INPUTRUN_HDD:-}" ]; then
     dos=$root/.tools/msdos/build/src
     [ -f "$dos/BIOS/IO.SYS" ] || { echo "MS-DOS 4.00 not built (tools/msdos-build.sh)" >&2; exit 2; }
     [ -f "$root/build/hdd/MBR.BIN" ] || { echo "no build/hdd/MBR.BIN (make dos)" >&2; exit 2; }
     printf 'DEVICE=C:\\%s\\HIMEM.SYS\r\nFILES=40\r\nBUFFERS=20\r\n' "$wdir" > "$work/c/CONFIG.SYS"
     { printf '@ECHO OFF\r\nPATH C:\\%s;C:\\\r\n' "$wdir"
-      sed -n '/^\[autoexec\]/,$p' "$work/dosbox.conf" | sed '1,/^[cC]:$/d' | grep -v '^exit$' | sed 's/$/\r/'
+      sed -n '/^\[autoexec\]/,$p' "$work/dosbox.conf" | sed '1,/^[cC]:$/d' | grep -v '^exit$' |
+          sed 's/^\(WIN .*\) > C:\\OUT\.TXT$/\1/' | sed 's/$/\r/'
     } > "$work/c/AUTOEXEC.BAT"
     set --
     for f in "$work/c"/*; do set -- "$@" "$f=$(basename "$f")"; done
