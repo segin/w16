@@ -1,0 +1,31 @@
+; 386 Enhanced mode with w16's WIN386.EXE (tests/boottest.sh case
+; win386input): the mouse (MOUSE.DRV's PS/2 handler, run in protected mode
+; for the BIOS) and the keyboard reach Program Manager, then File > Exit
+; Windows ends Windows back at the DOS prompt
+click 1
+sleep 1
+jiggle 30
+home
+move 45 26
+sleep 1
+shot 01-moved
+jiggle 30
+move 100 80
+sleep 1
+key alt+h
+sleep 2
+shot 02-helpmenu
+key Escape
+sleep 1
+key Escape
+sleep 1
+shot 03-closed
+key alt+f
+sleep 1
+key x
+sleep 2
+shot 04-confirm
+key Return
+waitexit 60
+sleep 2
+shot 05-dos

@@ -34,6 +34,13 @@
 #              Not in the default set yet: w16's boot is intermittent (an
 #              occasional #GP in a hardware interrupt handler, ARCHITECTURE.md
 #              12.3); run it by name: tests/boottest.sh win386
+#   win386input  w16's WIN386.EXE with Microsoft's KRNL386 and the rest
+#              (WIN /3 /B), real mouse motion and keys, then File > Exit
+#              Windows (tests/scripts/input/win386input.txt), against
+#              Microsoft's WIN386.EXE: the pointer moves and the menus open
+#              (every shot 0 pixels), and the DOS prompt comes back in text
+#              mode (40 pixels: the cursor). Not in the default set yet
+#              (ARCHITECTURE.md 12.3)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -751,6 +758,32 @@ runcase() {
         else
             echo "FAIL win386: see $out/win386.txt and $out/win386/"; fails=$((fails + 1))
         fi ;;
+    win386input)
+        scr=$root/tests/scripts/input/win386input.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        # dropin.sh deletes KRNL386.EXE (so that WIN /S runs KRNL286): put back
+        refrun win386input-ref win386input env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/win386input-ref" -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/win386input-w16" \
+            -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386input-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-moved 02-helpmenu 03-closed 04-confirm; do
+            a=$out/win386input-w16/$s.png b=$out/win386input-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            n=$(magick compare -metric AE "$a" "$b" "$out/win386input-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386input-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then
+            a=$out/win386input-w16/05-dos.png b=$out/win386input-ref/05-dos.png
+            sz=$(magick identify -format '%wx%h' "$a" 2>/dev/null || true)
+            n=$(magick compare -metric AE "$a" "$b" "$out/win386input-05-dos-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "$sz" = 640x400 ] && [ "${n:-99999}" -le 40 ] || r="05-dos: screen $sz, $n pixels off Microsoft's"
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386input: mouse, keys and Exit Windows as with Microsoft's WIN386"
+        else echo "FAIL win386input: $r ($out/win386input-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the

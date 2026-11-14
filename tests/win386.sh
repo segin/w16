@@ -18,6 +18,11 @@
 #     -n        only w16's run (no reference run, no comparison)
 #     -i S:K=V  set key K in section S of SYSTEM.INI (repeatable), e.g.
 #               w16:vmmtrace=1 for the VMM's detailed trace (COM1)
+#     -c ARGS   WIN's arguments (default "/3 /B")
+#     -x ACTS   input once the boot is done, before the screenshot: xdotool
+#               words separated by ";" (e.g. "mousemove 300 200;sleep 1;
+#               click 1;key alt+f4"), sent to the DOSBox-X window; the
+#               screenshot follows SECS seconds later
 # Prints the VMM's trace (from COM1), KRNL386's BOOTLOG.TXT summary and the
 # comparison; exit status 0 when the screens are identical.
 set -eu
@@ -25,14 +30,16 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 [ -d "$ref" ] || ref=$(cd "$root/../../.." && pwd)/.tools/ref/win31/cdrive
-secs=10 maxsecs=300 out= norefrun= inis=
-while getopts t:m:o:ni: opt; do
+secs=10 maxsecs=300 out= norefrun= inis= winargs='/3 /B' acts=
+while getopts t:m:o:ni:c:x: opt; do
     case $opt in
     t) secs=$OPTARG ;;
     m) maxsecs=$OPTARG ;;
     o) out=$OPTARG ;;
     n) norefrun=1 ;;
     i) inis="$inis $OPTARG" ;;
+    c) winargs=$OPTARG ;;
+    x) acts=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -70,7 +77,7 @@ serial1=file file:$d/com1.txt
 mount c "$d/c"
 c:
 cd \\WINDOWS
-WIN /3 /B > C:\\OUT.TXT
+WIN $winargs > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
@@ -97,9 +104,24 @@ while [ \$s -lt $maxsecs ]; do
     sleep 1
     s=\$((s + 1))
 done
-sleep $secs
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
+acts='$acts'
+if [ -n "\$acts" ]; then
+    sleep 3
+    echo "\$acts" | tr ';' '\\n' | while read -r a; do
+        [ -n "\$a" ] || continue
+        case \$a in
+        sleep*) \$a ;;
+        mousemove*) xdotool mousemove --window "\$wid" \${a#mousemove } ;;
+        *) xdotool \$a ;;
+        esac
+    done
+fi
+sleep $secs
 import -window "\${wid:-root}" "$d/s.png"
+# the screen is taken: end DOSBox-X (by its PID) unless Windows is ending by
+# itself (WIN386_WAIT=1: let it run to its time limit)
+[ -n "${WIN386_WAIT:-}" ] || kill \$pid 2>/dev/null
 wait
 SH
     chmod +x "$d/shot.sh"
