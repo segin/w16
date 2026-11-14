@@ -73,6 +73,21 @@ _vxd_call:
         pop bp
         retf
 
+; u32 __cdecl k386_lsl(u16 sel): GetSelectorLimit under KRNL386 (observed,
+; tk17.c: LSL's 32-bit limit, 0 when LSL fails)
+global _k386_lsl
+_k386_lsl:
+        push bp
+        mov bp, sp
+        movzx eax, word [bp+6]
+        lsl eax, eax
+        jz .ok
+        xor eax, eax
+.ok:    mov edx, eax
+        shr edx, 16
+        pop bp
+        retf
+
 ; KERNEL's Ctrl+Alt+Del procedure (Reboot 0201h ES:DI). Windows 3.1's
 ; KRNL386 gives the Reboot device a procedure in its own code segment
 ; (TK57: 0202h returns ES = a KERNEL code selector); Pietrek ch. 3 says it

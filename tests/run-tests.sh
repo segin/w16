@@ -123,6 +123,7 @@ probes() {
     run TK17 0
     run TK17A 0
     run TK19 0
+    run TK58 0
     run TK50 0
     run TK2 255 "w16: call to unimplemented KERNEL.27"
 

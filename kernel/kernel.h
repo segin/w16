@@ -305,6 +305,8 @@ extern u16 k386_enhanced;               /* running under WIN386 */
 extern u16 k386_paging;                 /* with a paging file (WF_PAGING) */
 void k386_init(void);
 void k386_first_task(void);
+u16  gpage_lock(u16 h, int up);         /* global386.c: GlobalPageLock */
+void thhook_seltab(u32 off, u16 len);   /* toolhelp.c: THHOOK 16h, 18h */
 #endif
 
 #endif

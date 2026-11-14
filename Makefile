@@ -38,7 +38,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
@@ -115,7 +115,7 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 # extender: the extenders and w16's own interrupt paths keep only the low
 # halves of the registers); 386 instructions are written in the assembly
 # helpers where KRNL386's behaviour needs them (kernel/k386.asm) ----
-K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%) $(B)/kernel386/k386.o $(B)/kernel386/k386c.o
+K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%) $(B)/kernel386/k386.o $(B)/kernel386/k386c.o $(B)/kernel386/global386.o
 $(B)/kernel386/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -DKRNL386 -o $@ $<
@@ -125,6 +125,10 @@ $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 $(KBOOT_C:%=$(B)/kernel386/%.o) $(B)/kernel386/k386c.o: $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -dKRNL386 -nt=BOOT_TEXT -fo=$@ $<
+# KRNL386's global heap (global386.c) in a code segment of its own
+$(B)/kernel386/global386.o: kernel/global386.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -nt=HEAP_TEXT -fo=$@ $<
 $(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
@@ -155,7 +159,7 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tk3ref286.h tests/apps/tklog.h
-$(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tklog.h
+$(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tk53ref286.h tests/apps/tklog.h
 $(B)/tests/tk54.o: tests/apps/tk54ref.h tests/apps/tk54ref286.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
@@ -510,6 +514,13 @@ $(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o \
 	$(WLINK) @tests/apps/tk19.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk19.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o }
+
+# TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
+$(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
+$(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk58k.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk58.map file { $(B)/tests/start.o $(B)/tests/tk58.o }
 
 # TK12.EXE: the resource probe, with the resources of tk12.rc
 $(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tk12ref286.h tests/apps/tklog.h

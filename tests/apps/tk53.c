@@ -4,13 +4,15 @@
  * LocalInit, then each word of its heap information block (the near
  * pointer at offset 6 of the segment) set to 0 in turn and GlobalEntry-
  * Handle asked again; and the information block itself, dumped. Run as
- * the shell under tests/dropin.sh (-r for Microsoft's KRNL286): TOOLHELP
- * is Microsoft's either way.
+ * the shell under tests/dropin.sh (-r for Microsoft's KRNL286; -3 for
+ * w16's KRNL386, -3 -r for Microsoft's): TOOLHELP is Microsoft's either
+ * way. It looks for "LH" at 22h under KRNL286, at 28h under KRNL386.
  */
 #include <windows.h>
 #include <toolhelp.h>
 
-#define TK_REF "tk53ref.h"
+#define TK_REF "tk53ref.h"         /* Microsoft's KRNL386 (dropin.sh -3 -r) */
+#define TK_REF286 "tk53ref286.h"   /* where KRNL286 differs (dropin.sh -r) */
 #include "tklog.h"
 
 typedef BOOL (FAR PASCAL *PGEH)(GLOBALENTRY FAR *, HGLOBAL);
