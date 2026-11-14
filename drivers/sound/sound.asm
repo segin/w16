@@ -37,13 +37,13 @@
 ; bits 0-1) and makes channel 0 of the 8254 tick every 5966 counts
 ; (200 Hz, 5 ms; mode 2) with this driver's IRQ 0 handler in front of
 ; the one there before, which still gets 18.2 ticks a second. Two ticks
-; later the first queued item starts; each sounds as channel 2's divisor
-; for its sound ticks and then as divisor 16 (above hearing) for the rest
-; of its ticks; a rest is divisor 16 throughout. When the queue is empty
-; the speaker goes off and channel 0 back to 65536. A note's ticks: the
-; note's length at the tempo (quarter notes a minute) in 5 ms ticks,
-; truncated; its sound ticks 7/8 of that (normal), 3/4 (staccato), all
-; (legato), rounded. Dots, volume, envelopes and noise change nothing.
+; later (and any quiet left over from before) the first queued item
+; starts; each sounds as channel 2's divisor for its sound ticks and then
+; as divisor 16 (above hearing) for its quiet ticks; a rest is divisor 16
+; throughout. When the queue is empty the speaker goes off and channel 0
+; back to 65536. A note's ticks come from its length at the tempo
+; (quarter notes a minute) in half ticks (SetVoiceNote below). Dots,
+; volume, envelopes and noise change nothing.
         bits 16
         cpu 286
 
@@ -98,8 +98,6 @@ dleft   dw 0                            ; then the quiet left over
 leftover dw 0                           ; quiet ticks the last item had
                                         ; left when playing ended
 phase   db 0                            ; 0 none, 1 sound, 2 quiet
-ending  db 0                            ; the speaker is off; the next
-                                        ; tick ends playing
 cursnd  dw 0                            ; the item's sound ticks left
 curq    dw 0                            ; its quiet ticks left
 tempo   dw 120                          ; the accent
@@ -178,10 +176,12 @@ OPENSOUND:
         mov word [thresh], 0
         mov word [tstatus], 0
         mov ax, 1
+        xor dx, dx                      ; (3.1's: DX 0)
 .r:     epilog 0
 
 ; ---- 2: CloseSound(): playing stops, the queue goes. 0; when not open
-; the data segment (3.1's: its own data selector in AX then)
+; a value 3.1's leaves in AX (09D7h there; not its data selector): this
+; one returns its data selector
 global CLOSESOUND
 CLOSESOUND:
         prolog
@@ -295,28 +295,18 @@ additem:
         pop es
         ret
 
-; rnd: DX:AX + CX/2, divided by CX (CX a power of two) -> AX
-rnd:
-        push cx
-        shr cx, 1
-        add ax, cx
-        adc dx, 0
-        pop cx
-        div cx
-        ret
-
 ; ---- 4: SetVoiceNote(nVoice, nValue, nLength, nCdots): a note (1-84,
 ; 37 is C5) or a rest (0) of 1/nLength of a whole note, transposed by the
 ; accent's pitch (wrapping past 84). nLength is a byte: 0 queues nothing
 ; and returns nValue (3.1's did). nCdots is not looked at (3.1's played
 ; dotted notes as plain ones).
-; The note's time T = 48000 / (tempo * length) ticks (4 quarter notes of
-; 60000 / tempo ms in 5 ms ticks), kept in 1/16 ticks; as measured on
-; 3.1's (SN1 part T, every tempo and length legato, the modes at two
-; tempos): legato sounds round(T); normal sounds round(7T/8), then is
-; quiet for ceil(T/8); staccato round(3T/4), then ceil(T/4); a rest is
-; quiet for round(T) (and one more tick when something follows it: in
-; the tick routine).
+; The note's time, as measured on 3.1's (SN1 parts T, U and V: 78
+; combinations of tempo, length and mode, every one to the tick): in half
+; ticks (2.5 ms) H = 96000 / (tempo * length), truncated (4 quarter
+; notes of 60000 / tempo ms); the sounding part s = 7H/8 (normal) or
+; 3H/4 (staccato), truncated, or H (legato); it sounds (s + 1) / 2 ticks
+; and is quiet (H - s + 1) / 2. A rest is quiet (H + 1) / 2 ticks (and
+; one more when something follows it: in the tick routine).
 global SETVOICENOTE
 SETVOICENOTE:
         prolog
@@ -335,48 +325,43 @@ SETVOICENOTE:
         mov ax, [tempo]
         mul cx
         mov cx, ax
-        mov dx, 000Bh                   ; 768000 = 48000 * 16
-        mov ax, 0B800h
+        mov dx, 0001h                   ; 96000
+        mov ax, 7700h
         div cx
-        mov di, ax                      ; DI = T * 16
+        mov di, ax                      ; DI = H, half ticks
         or si, si
         jz .rest
+        mov bx, di                      ; legato: s = H
         mov ax, [mode]
         cmp ax, 1
-        je .leg
-        cmp ax, 2
+        je .snd
+        mov ax, di
+        cmp word [mode], 2
         je .stac
-        mov ax, di                      ; normal
-        mov dx, 7
+        mov dx, 7                       ; normal: 7H/8
         mul dx
-        mov cx, 128
-        call rnd
-        mov bx, ax                      ; round(7T/8)
-        mov ax, di
-        add ax, 127
-        xor dx, dx
-        div cx
-        mov cx, ax                      ; ceil(T/8)
-        jmp .note
-.stac:  mov ax, di
-        mov dx, 3
-        mul dx
-        mov cx, 64
-        call rnd
-        mov bx, ax                      ; round(3T/4)
-        mov ax, di
-        add ax, 63
-        xor dx, dx
-        div cx
-        mov cx, ax                      ; ceil(T/4)
-        jmp .note
-.leg:   mov ax, di
-        xor dx, dx
-        mov cx, 16
-        call rnd
+        shr dx, 1
+        rcr ax, 1
+        shr dx, 1
+        rcr ax, 1
+        shr dx, 1
+        rcr ax, 1
         mov bx, ax
-        xor cx, cx
-.note:  add si, [pitch]
+        jmp .snd
+.stac:  mov dx, 3                       ; staccato: 3H/4
+        mul dx
+        shr dx, 1
+        rcr ax, 1
+        shr dx, 1
+        rcr ax, 1
+        mov bx, ax
+.snd:   mov cx, di
+        sub cx, bx
+        inc cx
+        shr cx, 1                       ; quiet (H - s + 1) / 2
+        inc bx
+        shr bx, 1                       ; sound (s + 1) / 2
+        add si, [pitch]
         cmp si, 84
         jbe .n
         sub si, 84
@@ -384,11 +369,9 @@ SETVOICENOTE:
         shl si, 1
         mov ax, [notediv + si]
         jmp .add
-.rest:  mov ax, di
-        xor dx, dx
-        mov cx, 16
-        call rnd
-        mov cx, ax                      ; quiet round(T)
+.rest:  mov cx, di
+        inc cx
+        shr cx, 1                       ; quiet (H + 1) / 2
         xor bx, bx
         xor ax, ax
 .add:   call additem
@@ -474,7 +457,6 @@ STARTSOUND:
         mov [dleft], ax
         mov word [leftover], 0
         mov byte [phase], 0
-        mov byte [ending], 0
         mov byte [passthru], 0
         mov byte [playing], 1
         in al, 61h                      ; the speaker on (channel 2 keeps
@@ -508,14 +490,14 @@ stopall:
         ; normal quarter note, the next start came 2 + 13 ticks later)
         cmp byte [playing], 0
         je .fin
-        cmp byte [ending], 0
-        jne .fin
         mov ax, [curq]
         cmp byte [phase], 0
         jne .lo
         mov ax, [dleft]
 .lo:    mov [leftover], ax
 .fin:   call finish
+        mov ax, QUIET                   ; channel 2 quiet (3.1's: no burst
+        call ch2                        ; of the old tone at the next start)
         xor ax, ax
         mov [qcount], ax
         mov [qhead], ax
@@ -532,7 +514,6 @@ finish:
         je .r
         mov byte [playing], 0
         mov byte [phase], 0
-        mov byte [ending], 0
         mov byte [passthru], 1
         in al, 61h
         and al, 0FCh
@@ -754,17 +735,15 @@ tick_int:
 ;  - a note sounds its sound ticks, then is quiet for its quiet ticks; a
 ;    rest is quiet for its ticks and one more;
 ;  - when the queue is empty as an item's sound ends (or as a rest
-;    starts), the speaker goes off and the next tick playing ends: the
-;    item's quiet is left over for the next StartSound;
+;    starts), the speaker goes off (channel 2 keeps the note) and playing
+;    ends: the item's quiet is left over for the next StartSound (also
+;    when StopSound or CloseSound stop it, which make channel 2 quiet);
 ;  - the count goes down as an item starts; the threshold status bit is
 ;    set when it comes down to the threshold.
 tick:
         cmp byte [playing], 0
         je .r
-        cmp byte [ending], 0
-        je .ok
-        jmp finish
-.ok:    cmp word [burst], 0
+        cmp word [burst], 0
         je .left
         dec word [burst]
         jnz .r
@@ -791,10 +770,12 @@ tick:
 
 ; soundover: the item's sound has ended
 soundover:
-        mov ax, QUIET
-        call ch2
-        cmp word [qcount], 0
-        jne .more
+        cmp word [curq], 0              ; quiet after it: channel 2 quiet
+        je .q                           ; (3.1's: a note with no quiet,
+        mov ax, QUIET                   ; legato or SetVoiceSound, left
+        call ch2                        ; its tone in channel 2 at the end;
+.q:     cmp word [qcount], 0            ; a normal one left it quiet: the
+        jne .more                       ; next start had no burst)
         mov ax, [curq]
         mov [leftover], ax
         jmp startend
@@ -849,12 +830,7 @@ fetch:
 
 ; startend: the speaker off; playing ends at the next tick
 startend:
-        in al, 61h
-        and al, 0FCh
-        out 61h, al
-        mov byte [ending], 1
-        mov byte [phase], 0
-        ret
+        jmp finish
 
 ; ch2: channel 2's count = AX, without a control word (the mode stays as
 ; it was: 3, the BIOS's and DoBeep's). On 3.1's, recorded, every note's
