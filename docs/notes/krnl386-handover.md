@@ -147,3 +147,7 @@ under both kernels as the shell (Microsoft's USER, Standard mode). Run:
   modes), TK58 (both modes, both WIN386s): no FAIL under w16's KRNL386.
   TK50 under w16's KRNL386 equals Microsoft's KRNL386 except for which
   registers each export keeps.
+
+Results, branch krnl386-cad at af8c354 (master merged), installation-05:
+make test pass (both kernels, KRNL386 now built with -3 -zfp -zgp);
+boot test 92 of 92 (k386hung among them).
