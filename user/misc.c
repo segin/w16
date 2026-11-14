@@ -78,8 +78,9 @@ BOOL WINAPI U_ISUSERIDLE(void)
    missing key); SystemParametersInfo SPI_GETBEEP/SPI_SETBEEP read and set
    the flag. DoBeep is found by ordinal at the first beep: the driver
    module is loaded before USER (Pietrek ch. 1). ---- */
+typedef void (FAR PASCAL *DOBEEPFN)(UINT);
 static int beep_on = -1;
-static FARPROC do_beep;
+static DOBEEPFN do_beep;
 static int do_beep_found;
 
 static int beep_flag(void)
@@ -98,11 +99,11 @@ void WINAPI MessageBeep(UINT type)
         return;
     if (!do_beep_found) {
         HMODULE m = GetModuleHandle("SOUND");
-        do_beep = m ? GetProcAddress(m, MAKEINTRESOURCE(17)) : 0;
+        do_beep = m ? (DOBEEPFN)GetProcAddress(m, MAKEINTRESOURCE(17)) : 0;
         do_beep_found = 1;
     }
     if (do_beep)
-        ((void (FAR PASCAL *)(UINT))do_beep)(type);
+        do_beep(type);
 }
 
 /* ---- the caret: one, drawn by inverting, blinking ----

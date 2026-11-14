@@ -14,8 +14,8 @@ the other: the same number of tones, and for each tone
     measurement's half-period),
   - the time from the segment's first tone to its start within ONSET ms
     (default 7), and the time from the tone before within GAP ms
-    (default 7); 8 ms more for tones above 3 kHz (their edges are a few
-    samples apart in a 48 kHz recording).
+    (default 7); 8 ms more for tones above 3 kHz, 12 above 6 kHz (their
+    edges are a few samples apart in a 48 kHz recording).
 Tones shorter than --min ms (default 8: a tone of one 5 ms tick, which
 the recording breaks up differently on each run) are not compared;
 fragments of one tone (the same frequency within 3%, less than 10 ms
@@ -115,10 +115,10 @@ def main():
             # recording: the edges' times are coarser, and above 3 kHz the
             # recording loses or adds the odd edge at a tone's ends: its
             # start and length are known to about 2 ticks)
-            hi = p[2] >= 3000 or q[2] >= 3000
+            fmax = max(p[2], q[2])
+            hi = 0 if fmax < 3000 else 8 if fmax < 6000 else 12
             lim = {'freq': (a.freq if p[2] < 2000 else 1.5 * a.freq) if p[1] >= 40 else a.freqshort,
-                   'len': a.len + half + (8 if hi else 0),
-                   'onset': a.onset + (8 if hi else 0), 'gap': a.gap + (8 if hi else 0)}
+                   'len': a.len + half + hi, 'onset': a.onset + hi, 'gap': a.gap + hi}
             for key in d:
                 worst[key] = max(worst[key], d[key])
                 if d[key] > lim[key]:
