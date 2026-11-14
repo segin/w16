@@ -6,7 +6,7 @@
 ; DS:SI and ES:DI, around the real entry. Black box: only
 ; registers and data the caller passes are recorded, never code bytes:
 ; a dump from a code segment is zeros (ARCHITECTURE.md 3).
-;   void __cdecl __far vx10_setup(WORD bufsel)
+;   void __cdecl __far vx10_setup(WORD bufsel, WORD apimask, WORD inonly)
 ;   void __cdecl __far vx10_hook(int on)
 ; The buffer (one 64 KB segment): +0 records taken, +2 slots used, +4
 ; device of each slot (8 words), +20 the real entry of each slot (8
@@ -31,6 +31,11 @@ global _vx10_setup, _vx10_hook
 
 bufseg  dw 0
 old2f   dw 0, 0
+apimask dw 0                            ; vx10_setup's second argument: whose entries are
+                                        ; replaced: 1 SHELL, 2 VMD, 4 VKD, 8 VDD, 10h others
+inonly  dw 0                            ; vx10_setup's third: whose calls are recorded going in
+                                        ; only (the return address left alone: with SHELL's
+                                        ; changed, 3.1's DOS box started as an icon)
 
 ; ---- setup: the buffer's selector and the old INT 2Fh vector into this
 ; code segment, through a data alias ----
@@ -57,6 +62,10 @@ _vx10_setup:
         mov [es:old2f+2], cx
         mov ax, [bp+6]
         mov [es:bufseg], ax
+        mov ax, [bp+8]
+        mov [es:apimask], ax
+        mov ax, [bp+10]
+        mov [es:inonly], ax
         mov bx, es
         xor ax, ax
         mov es, ax
@@ -389,7 +398,26 @@ api_common:
         mov [fs:bx+2], ax
         record_in 2, 6, 4
 .call:  mov bx, [bp+F_REC]
+        mov si, [bp+2]                  ; the slot's device: in only?
+        shl si, 1
+        mov ax, [fs:4+si]
+        mov cx, 1
+        cmp ax, 0017h
+        je .m
+        mov cl, 2
+        cmp ax, 000Ch
+        je .m
+        mov cl, 4
+        cmp ax, 000Dh
+        je .m
+        mov cl, 8
+        cmp ax, 000Ah
+        je .m
+        mov cl, 10h
+.m:     test [cs:inonly], cx
+        jnz .go
         track 4, api_back
+.go:
         mov ax, [bp]
         mov [bp+F_OBP], ax
         mov si, [bp+2]
@@ -477,6 +505,21 @@ int_back:
         je .ret
         cmp ax, 0442h
         je .ret
+        mov cx, 1
+        cmp ax, 0017h
+        je .mask
+        mov cl, 2
+        cmp ax, 000Ch
+        je .mask
+        mov cl, 4
+        cmp ax, 000Dh
+        je .mask
+        mov cl, 8
+        cmp ax, 000Ah
+        je .mask
+        mov cl, 10h
+.mask:  test [cs:apimask], cx
+        jz .ret
         xor si, si
 .find:  cmp si, [fs:2]
         jae .new

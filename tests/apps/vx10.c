@@ -15,7 +15,8 @@
  *        esdi_out:<8 words>
  *   OBS ~api<n>=dev:<id> from:CS:IP ... the same
  * [vx10] secs= in WIN.INI: how long it records (default 300); hook=0: no
- * hook (a control run).
+ * hook (a control run); apis=MASK: whose VxD entries are replaced (1
+ * SHELL, 2 VMD, 4 VKD, 8 VDD, 16 others; default 31, 0: INT 2Fh only); quiet=N: nothing written to TK.LOG for the first N seconds.
  */
 #include <windows.h>
 
@@ -24,7 +25,7 @@
 
 extern WORD FAR PASCAL WaitEvent(HTASK);
 extern BOOL FAR PASCAL InitApp(HINSTANCE);
-extern void __cdecl __far vx10_setup(WORD bufsel);
+extern void __cdecl __far vx10_setup(WORD bufsel, WORD noapi);
 extern void __cdecl __far vx10_hook(int on);
 
 static WORD __far *buf;
@@ -72,6 +73,7 @@ int __cdecl tmain(void)
     MSG m;
     UINT id;
     int n, secs = GetProfileInt("vx10", "secs", 300);
+    int quiet = GetProfileInt("vx10", "quiet", 0);
 
     /* a whole application's start: started by WIN.INI run= without
      * InitApp, Program Manager then faulted in KRNL386 (0001:7D8F, under
@@ -85,7 +87,7 @@ int __cdecl tmain(void)
     GlobalPageLock((HGLOBAL)SELECTOROF(buf));
     /* the hook's code is called from other tasks: kept in memory */
     LockSegment((UINT)SELECTOROF((void __far *)vx10_hook));
-    vx10_setup(SELECTOROF(buf));
+    vx10_setup(SELECTOROF(buf), GetProfileInt("vx10", "apis", 0x1F));
     if (GetProfileInt("vx10", "hook", 1)) {
         vx10_hook(1);
         out("VX10 hooked\r\n");
@@ -94,7 +96,7 @@ int __cdecl tmain(void)
     for (n = 0; n < secs * 10 && GetMessage(&m, 0, 0, 0); ) {
         if (m.message == WM_TIMER && m.wParam == id) {
             n++;
-            flush();
+            if (n >= quiet * 10) flush();
         }
         DispatchMessage(&m);
     }
