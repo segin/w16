@@ -612,7 +612,10 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     p[0x80] = (u8)n;
     for (i = 0; i < n; i++)
         p[0x81 + i] = tail[1 + i];
-    p[0x81 + n] = '\r';
+    /* the CR; WINOLDAP's tail (loader.c start_oldapp) ends in LF, which
+       stays (WO1 on 3.1: "0F 00 'Z:\COMMAND.COM' 0A" at 80h after
+       InitTask) */
+    p[0x81 + n] = (tail && n == tail[0] && tail[1 + n] == '\n') ? '\n' : '\r';
     *(u16 FAR *)(p + 0x5C) = show ? show[0] : 2;
     *(u16 FAR *)(p + 0x5E) = show ? show[1] : 1;   /* UNVERIFIED w/o */
     if (cur_task)
@@ -857,8 +860,15 @@ void __cdecl inittask_c(regs16 FAR *r)
     inst[6] = sp;               /* 0Ch: lowest SP seen so far */
     inst[7] = sp;               /* 0Eh: stack bottom (highest address) */
 
+    /* the CR becomes a NUL; WINOLDAP's LF stays (WO1 on 3.1). w16 made it
+       a NUL too, and Microsoft's WINOLDAP, looking for the LF after the
+       program's path, went on past the PDB's end into the next TDB in
+       memory and wrote its NUL over the 0Ah there: a task's link to the
+       next one (0A17h became 0017h), and Windows faulted or hung when the
+       next DOS program started */
     end = 0x81 + (psp[0x80] < 0x7E ? psp[0x80] : 0x7E);
-    psp[end] = 0;
+    if (psp[end] != '\n')
+        psp[end] = 0;
     for (cmd = 0x81; cmd < end && (psp[cmd] == ' ' || psp[cmd] == '\t'); cmd++)
         ;
 
