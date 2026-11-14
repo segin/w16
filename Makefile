@@ -1900,3 +1900,12 @@ $(DOS)/MD3.EXE: $(B)/tests/start.o $(B)/tests/md3.o tests/apps/app.lnk tests/app
 	$(WLINK) @tests/apps/md3.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/md3.map file { $(B)/tests/start.o $(B)/tests/md3.o }
 dos: $(DOS)/MD3.EXE
+
+# VX9.COM (tests/dos/vx9.asm, the generic VX%.COM rule) and VX9A.EXE: a
+# task's exit as DOS sees it in 386 Enhanced mode (tests/vx9run.sh)
+$(B)/tests/vx9a.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX9A.EXE: $(B)/tests/start.o $(B)/tests/vx9a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx9a.map file { $(B)/tests/start.o $(B)/tests/vx9a.o }
+vxprobes: $(DOS)/VX9.COM $(DOS)/VX9A.EXE $(DOS)/TK51C.EXE
