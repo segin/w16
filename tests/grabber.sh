@@ -21,7 +21,7 @@
 #             with -O) and KERNEL: GV1.COM's screens (tests/dos/gv1.asm)
 #             switched away from and back to, PrintScreen; CB1.EXE
 #             (tests/apps/cb1.c) records the clipboard. Compared: the
-#             screenshots (up to 40 pixels: the cursor), CB1's log (window
+#             screenshots (up to 64 pixels: a cursor, wide in 40-column modes), CB1's log (window
 #             handles left out) and the bitmaps' bits. "# known: SHOT"
 #             lines name screenshots where 3.1's grabber is known to be
 #             wrong (they are reported, not failed).
@@ -160,7 +160,7 @@ win_scenario() {
         px=${px%%.*}
         echo "$s $px" >> "$d/pixels.txt"
         case $px in ''|*[!0-9]*) bad="$bad $s(?)" ;;
-        *) [ "$px" -le 40 ] && continue
+        *) [ "$px" -le 64 ] && continue
            case " $known " in *" $s "*) note="$note $s($px)" ;; *) bad="$bad $s($px)" ;; esac ;;
         esac
     done

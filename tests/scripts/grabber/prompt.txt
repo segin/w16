@@ -1,7 +1,7 @@
-# the MS-DOS Prompt (Program Manager's Main group): DIR, PrintScreen,
-# Alt+Tab to Windows (the text on the clipboard) and back, MODE CON
-# LINES=50... is not in DOSBox: CLS and DIR again, Alt+PrintScreen, to
-# Windows and back, EXIT
+# the MS-DOS Prompt (Program Manager's Main group): TYPE SYSTEM.INI,
+# PrintScreen, Alt+Tab to Windows (the text on the clipboard) and back,
+# CLS, TYPE WIN.INI, Alt+PrintScreen, to Windows and back, EXIT (no DIR:
+# its file times differ from run to run)
 # tmax: 200
 sleep 32
 key Right Right Right Right
@@ -9,7 +9,7 @@ sleep 1
 key Return
 sleep 8
 shot p1
-type dir
+type type c:\windows\system.ini
 key Return
 sleep 3
 shot p2
@@ -23,7 +23,7 @@ sleep 8
 shot p3
 type cls
 key Return
-type dir c:\windows\system\*.drv
+type type c:\windows\win.ini
 key Return
 sleep 3
 key alt+Print
