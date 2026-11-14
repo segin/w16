@@ -243,7 +243,12 @@ sw_api:
         jmp .walk
 .found: cmp si, 7
         jne .name
+        push bx
+        mov cl, [cs:block + SB_17E]     ; the one left goes second, the
+        call sw_front                   ; chosen one first, the others in
+        pop bx                          ; their order after them
         mov [cs:block + SB_17E], bl
+        mov cl, bl
         call sw_front
 .name:  call sw_rec                     ; BX -> the record (its name first)
         mov ax, bx
@@ -315,15 +320,16 @@ sw_free:
         pop cx
         ret
 
-; make record 17Eh the first in the ring (after record 15): the ring
-; rotated, the others keeping their order after it (3.1's WINOLDAP and
-; SI=7: 13 12 14 resuming 12 gives 12 14 13; tests/swap.sh -O two)
+; move record CL to the ring's front (after record 15). 3.1's WINOLDAP
+; and SI=7 make the chosen record first and the one left second, the
+; others keeping their order after them (resuming 12 from 14: 13 12 14 and
+; 14 12 13 both gave 12 14 13; tests/swap.sh -O two, tests/winoldap.sh
+; two): SI=7 moves the one left to the front, then the chosen one
 sw_front:
         push ax
         push cx
         push dx
         push si
-        mov cl, [cs:block + SB_17E]
         cmp cl, REC_WIN
         je .r
         mov bl, REC_WIN
@@ -331,32 +337,27 @@ sw_front:
         mov si, bx                      ; SI -> record 15
         cmp [cs:si + REC_NEXT], cl
         je .r
-        mov ch, REC_WIN                 ; CH: the one before 17Eh
-        mov dh, REC_WIN                 ; DH: the last before 15
-        mov dl, [cs:si + REC_NEXT]
+        mov dl, REC_WIN                 ; find the one before CL
         mov ah, 17
-.w:     cmp dl, REC_WIN
-        je .done
-        mov bl, dl
+.p:     mov bl, dl
         call sw_rec
         mov al, [cs:bx + REC_NEXT]
         cmp al, cl
-        jne .n
-        mov ch, dl
-.n:     mov dh, dl
+        je .unl
         mov dl, al
         dec ah
-        jnz .w
+        jnz .p
         jmp .r
-.done:  cmp ch, REC_WIN                 ; (not in the ring)
-        je .r
+.unl:   mov dx, bx                      ; DX -> the one before
+        mov bl, cl
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        push bx
+        mov bx, dx
+        mov [cs:bx + REC_NEXT], al      ; unlinked
+        pop bx
         mov al, [cs:si + REC_NEXT]
-        mov bl, dh
-        call sw_rec
-        mov [cs:bx + REC_NEXT], al      ; the last -> the old first
-        mov bl, ch
-        call sw_rec
-        mov byte [cs:bx + REC_NEXT], REC_WIN
+        mov [cs:bx + REC_NEXT], al      ; first after 15
         mov [cs:si + REC_NEXT], cl
 .r:     pop si
         pop dx

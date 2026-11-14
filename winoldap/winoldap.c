@@ -246,26 +246,40 @@ static void set_name(BYTE FAR *r, const char FAR *s)
     r[i] = 0;
 }
 
-/* make record r the first in the switching order (after Windows'): the
-   ring is rotated, the others keeping their order after it (Windows
-   3.1's WINOLDAP, resuming the second of three: 13 12 14 became 12 14 13,
-   not 12 13 14; tests/swap.sh -O two) */
-static void to_front(int r)
+/* move record r to the front of the switching order (after Windows') */
+static void move_front(int r)
 {
     BYTE FAR *w = recp(R_WINDOWS);
-    int p = R_WINDOWS, last = -1, q, guard;
-    if (w[R_NEXT] == r)
+    int p = R_WINDOWS, guard;
+    if (r < 0 || r >= R_WINDOWS || w[R_NEXT] == r)
         return;
-    for (q = w[R_NEXT], guard = 0; q < NREC && q != R_WINDOWS && guard < NREC; q = recp(q)[R_NEXT], guard++) {
-        if (recp(q)[R_NEXT] == r)
-            p = q;                      /* the one before r */
-        last = q;
+    for (guard = 0; guard < NREC; guard++) {    /* unlink */
+        BYTE FAR *q = recp(p);
+        if (q[R_NEXT] == r) {
+            q[R_NEXT] = recp(r)[R_NEXT];
+            break;
+        }
+        p = q[R_NEXT];
+        if (p >= NREC || p == R_WINDOWS)
+            return;
     }
-    if (p == R_WINDOWS || last < 0)
-        return;                         /* (r not in the ring) */
-    recp(last)[R_NEXT] = w[R_NEXT];     /* the first ones after the last */
-    recp(p)[R_NEXT] = R_WINDOWS;
+    recp(r)[R_NEXT] = w[R_NEXT];
     w[R_NEXT] = (BYTE)r;
+}
+
+/* record r first in the switching order, the Windows application the
+   user leaves second, the others in their order after them (Windows 3.1's
+   WINOLDAP resuming 12 from Windows: 13 12 14 and 14 12 13 both became
+   12 14 13; tests/swap.sh -O two, tests/winoldap.sh two) */
+static void to_front(int r)
+{
+    int q;
+    for (q = 0; q < R_WINDOWS; q++)
+        if (recp(q)[R_KIND] == 0x28) {
+            move_front(q);
+            break;
+        }
+    move_front(r);
 }
 
 /* the Windows application the user leaves: one record, made when the
