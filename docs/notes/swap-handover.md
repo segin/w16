@@ -89,9 +89,14 @@ black-box observed on 3.1, tested against Microsoft's.
   program, 3.1's WINOLDAP rotates the ring (13 12 14 -> 12 14 13), w16's
   moved the program to the front (12 13 14) (sw5 d vs O, #2). w16's
   WINOLDAP to_front and WIN.COM's SI=7 (sw_front) rotate now (consistent
-  with every SI=7 seen). Microsoft's DSWAP on w16's WIN.COM (-w) still
-  misses the first quick Alt+Tab and shows itself as the first title:
-  UNVERIFIED why (SI=6/7 return DI now as 3.1's).
+  with every SI=7 seen). Since then (da1ac03, run sw7): swap.sh -O two and
+  -w two PASS; the default six PASS (sw6); tests/winoldap.sh bat com
+  errors noswap pif PASS; full boot test 85/85 and make test pass (also
+  at 31601cf, swapall with the mouse).
+- Still open: swap.sh -W (w16's WIN.COM + WINOLDAP + DOSX on w16's side,
+  DOSBox-X, Microsoft's KRNL386): the icon (388 px, w16's own, known)
+  and in ctrlesc, nodisk, pif the run ends early (shots missing): w16's
+  DOSX under DOSBox-X with KRNL386 not looked at yet.
 - UNVERIFIED: 3.1's disk-space figure, Ctrl+Esc with several DOS
   programs, what SI=2's BX means (3.1's WIN.COM ignores the call unless
   BX=0), graphics-mode programs' screens (w16 saves VGA planes itself),
