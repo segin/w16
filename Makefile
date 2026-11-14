@@ -1264,7 +1264,10 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 # C:\DSWAP.DBG (a debugging build). SW1.COM: the probe they were observed
 # with (tests/dos/sw1.asm, tests/dos/sw1dump.py) ----
 dos: $(DOS)/WSWAP.EXE $(DOS)/DSWAP.EXE
-$(DOS)/WSWAP.EXE $(DOS)/DSWAP.EXE: $(DOS)/%.EXE: swap/%.asm swap/swap.inc
+$(DOS)/WSWAP.EXE: swap/wswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -o $@ $<
+$(DOS)/DSWAP.EXE: swap/dswap.asm swap/swap.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Iswap/ -o $@ $<
 $(DOS)/DSWAPD.EXE: swap/dswap.asm swap/swap.inc

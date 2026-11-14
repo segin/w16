@@ -12,7 +12,9 @@
 #   - the block snapshots, leaving out the linear address of WINOLDAP's
 #     buffer (185h, where KERNEL put it) and 163h-168h (Windows 3.1's WSWAP
 #     keeps its own XMS handle there; w16's has none);
-#   - C:\WC.LOG, what a DOS program (WC1.COM) was given;
+#   - C:\WC.LOG, what a DOS program (WC1.COM) was given (but its PSP, its
+#     environment's segment, the memory free and the vectors: w16's DSWAP
+#     is smaller and hooks other ones);
 #   - the swap files made in the swap directory (names, from DOSBox-X's
 #     file log, in order) and that none is left at the end;
 #   - the screenshots, pixel by pixel; on text screens the MS-DOS Prompt's
@@ -117,7 +119,10 @@ for n in $names; do
     blocks "$work/$n/w16" > "$work/$n/w16.blocks"
     diff -u "$work/$n/ms.blocks" "$work/$n/w16.blocks" > "$work/$n/blocks.diff" || bad="$bad blocks"
     for s in ms w16; do
-        if [ -f "$work/$n/$s/c/WC.LOG" ]; then tr -d '\r' < "$work/$n/$s/c/WC.LOG"; fi > "$work/$n/$s.wc"
+        # (where in memory the program is, how much is free and where the
+        # vectors point differ by design: w16's DSWAP is smaller)
+        if [ -f "$work/$n/$s/c/WC.LOG" ]; then tr -d '\r' < "$work/$n/$s/c/WC.LOG" |
+            grep -v '^psp=\|^envseg=\|^vec '; fi > "$work/$n/$s.wc"
         swapfiles "$work/$n/$s" > "$work/$n/$s.files"
     done
     diff -u "$work/$n/ms.wc" "$work/$n/w16.wc" > "$work/$n/wc.diff" || bad="$bad WC.LOG"

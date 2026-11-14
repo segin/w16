@@ -451,7 +451,12 @@ switch_out:
         jb .nodisk
         cmp bx, ax
         jb .nodisk
-.roomy: ; the state file
+.roomy: ; WINOLDAP's buffer must be there (block 185h)
+        call get_blk
+        mov ax, [es:di + B_LINEAR]
+        or ax, [es:di + B_LINEAR + 2]
+        jz .nodisk
+        ; the state file
         call state_name
         mov dx, r_name
         xor cx, cx
@@ -605,8 +610,16 @@ switch_out:
 .nodisk:
         ; the switch cannot be made: 172h = 08h for WINOLDAP, DOS's state
         ; as it was (Windows 3.1's WSWAP after WINOLDAP's "Insufficient disk
-        ; space" warning, ARCHITECTURE.md 9.8)
+        ; space" warning, ARCHITECTURE.md 9.8). Its block then (WO2): the
+        ; Windows application after the program current again and first in
+        ; the ring (as SI=7 BX=1 makes it), 173h = Windows' session
+        mov si, SW_BLOCK
+        call sw_call
+        mov bx, 1
+        mov si, SW_TAKE
+        call sw_call
         call get_blk
+        mov word [es:di + B_SID], (SESS_HI << 8) | SESS_WIN
         mov byte [es:di + B_FAIL], 08h
         mov bx, [w_psp]
         mov ah, 50h

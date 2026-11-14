@@ -1893,6 +1893,10 @@ fresh:  ; the arena's end (as WSWAP)
         or byte [es:di + B_FLAGS], 08h
         mov si, SW_COUNT
         call sw_call
+        call get_blk                    ; our session's number at 173h (a
+        mov al, [rec]                   ; WIN.COM finding 0 there ends
+        mov ah, SESS_HI                 ; with FFh)
+        mov [es:di + B_SID], ax
         mov ax, 4C00h
         int 21h
 
