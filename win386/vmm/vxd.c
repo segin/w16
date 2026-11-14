@@ -623,6 +623,18 @@ void __cdecl svc_dispatch(struct svcregs *s)
     case 0x0004:                        /* Test_Sys_VM_Handle */
         ZF_SET(s, s->ebx == (u32)sys_cb);
         return;
+    case 0x001C: {                      /* Map_Flat: AH, AL offsets in Client_Reg_Struc (AL FFh: offset 0) */
+        u8 *c = (u8 *)sys_client;
+        u32 seg = *(u16 *)(c + ((s->eax >> 8) & 0xFF));
+        u32 off = (s->eax & 0xFF) == 0xFF ? 0 : *(u32 *)(c + (s->eax & 0xFF));
+        if (sys_client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
+        else s->eax = sel_base(seg) + (sysvm.client32 ? off : (off & 0xFFFF));
+        return;
+    }
+    case 0x004C:                        /* Build_Int_Stack_Frame: CX:EDX the routine */
+        if (!vmm_build_int(s->ecx & 0xFFFF, s->edx)) s->eflags |= EFL_CF;
+        trace("VMM: Build_Int_Stack_Frame %x:%x%s\n", s->ecx & 0xFFFF, s->edx, (s->eflags & EFL_CF) ? " (not in PM)" : "");
+        return;
     case 0x0005:                        /* Validate_VM_Handle: carry clear if valid */
         if (s->ebx != (u32)sys_cb) s->eflags |= EFL_CF;
         return;

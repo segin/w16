@@ -548,6 +548,20 @@ struct cregs *vmm_hold_delivery(struct cregs *r)
     return o;
 }
 
+/* Build_Int_Stack_Frame (vxd.c) for a device called during a trap (a
+ * time-out, a hot key): the VM, where it was interrupted, takes an
+ * interrupt to sel:off when it goes on (an interrupt frame on its stack,
+ * IF and TF cleared). Only in protected mode here (UNVERIFIED: what
+ * Windows 3.1 does when the VM is in V86 mode; its Reboot device also
+ * uses the locked PM stack, not done here). 0: not possible */
+int vmm_build_int(u32 sel, u32 off)
+{
+    struct cregs *r = hw_r;
+    if (!r || (r->eflags & EFL_VM)) return 0;
+    dpmi_build_int(r, sel, off);
+    return 1;
+}
+
 int vmm_can_deliver(void)
 {
     return hw_r && (hw_r->eflags & EFL_IF);

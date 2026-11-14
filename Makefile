@@ -859,7 +859,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -872,6 +872,11 @@ $(DOS)/VX5.EXE: $(B)/tests/start.o $(B)/tests/vx5.o $(B)/tests/vx3s.o tests/apps
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx5.map file { $(B)/tests/start.o $(B)/tests/vx5.o $(B)/tests/vx3s.o }
+$(B)/tests/vx8.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX8.EXE: $(B)/tests/start.o $(B)/tests/vx8.o $(B)/tests/vx3s.o $(B)/tests/vx8s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx8.map file { $(B)/tests/start.o $(B)/tests/vx8.o $(B)/tests/vx3s.o $(B)/tests/vx8s.o }
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests

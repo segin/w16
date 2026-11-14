@@ -904,6 +904,17 @@ static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cd
 /* A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code
  * runs goes to the client's protected-mode handler if it installed one
  * (DPMI 0.9). */
+/* an interrupt frame on the client's stack and CS:IP at sel:off */
+void dpmi_build_int(struct cregs *r, u32 sel, u32 off)
+{
+    pm_push(r, r->eflags & ~EFL_IOPL);
+    pm_push(r, r->cs);
+    pm_push(r, r->eip);
+    r->eflags &= ~(EFL_IF | EFL_TF);
+    r->cs = sel;
+    r->eip = off;
+}
+
 int dpmi_v86_hook(struct cregs *r, int vec, int hw)
 {
     if (!sysvm.pm || pmvec_default(vec)) return 0;

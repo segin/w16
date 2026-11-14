@@ -1,0 +1,18 @@
+; VX8 (tests/vx8run.sh, mode 2: it never yields): Ctrl+Alt+Del, Escape,
+; Ctrl+Alt+Del again, Return. Windows 3.1: the "VX8.EXE ... has stopped
+; responding" screen, back to Windows (VX8 still hung), the screen again,
+; VX8 closed and Windows back.
+sleep 6
+key ctrl+alt+Delete
+sleep 4
+shot 01-cad
+key Escape
+sleep 3
+shot 02-esc
+key ctrl+alt+Delete
+sleep 4
+shot 03-cad2
+key Return
+sleep 5
+shot 04-ret
+sleep 2
