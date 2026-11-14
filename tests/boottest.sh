@@ -265,6 +265,20 @@
 #              SYSTEM.DRV under both Clocks: within their baseline
 #   sysprobe   tests/sysprobe.sh: SY1's and SYREC's logs, w16's
 #              SYSTEM.DRV against Microsoft's      identical
+#   sound      tests/soundprobe.sh sn1 (drivers/sound): SN1's interface
+#              parts and played groups with w16's MMSOUND.DRV against
+#              Microsoft's, in DOSBox-X with the sound recorded: the logs
+#              identical, the tones within tools/tonecmp.py's limits
+#   soundtime  the same for SN1's timing parts (T, U, V)
+#   soundrec   tests/soundprobe.sh queue rec allw16: the queue's capacity,
+#              SNDREC's record of every call to the driver, and the beeps
+#              on every w16 part (USER's MessageBeep to DoBeep) against
+#              all-Microsoft                      identical
+#   soundboot  plain boots with w16's MMSOUND.DRV: on Microsoft's stack and
+#              on w16's WIN.COM, DOSX, KRNL286, each against the
+#              all-Microsoft boot                 must be 0
+#   treealone  build/w16 alone as C:\W16, no file of Microsoft's on the
+#              drive (no DOS program run): must boot to its shell
 #   vga        w16's VGA.DRV (drivers/vga) on Microsoft's stack, linked with
 #              Microsoft's resources (tests/vgamsres.sh: the art is then
 #              the same on both sides, the drawing code is compared) under
@@ -423,7 +437,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -2352,6 +2366,44 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         else
             echo "FAIL sysclock: $(grep -m1 -E '^  ' "$out/sysclock.txt" || echo 'see sysclock.txt') ($out/sysclock.txt)"
             fails=$((fails + 1))
+        fi ;;
+    sound|soundtime|soundrec)
+        # tests/soundprobe.sh (drivers/sound): w16's MMSOUND.DRV against
+        # Microsoft's on Microsoft's stack (DOSBox-X, 10000 cycles a ms,
+        # the sound recorded; not cached: both runs each time). sound: SN1's
+        # interface parts and the played groups (logs identical, tones
+        # within tools/tonecmp.py's limits); soundtime: SN1's timing parts
+        # (T, U, V: every tempo, length and mode); soundrec: the queue's
+        # capacity, SNDREC's record of every call (USER's DoBeep), and the
+        # beeps on every w16 part
+        case $c in
+        sound) set -- sn1; sp=ABCDEFGHSP ;;
+        soundtime) set -- sn1; sp=TUV ;;
+        soundrec) set -- queue rec allw16; sp= ;;
+        esac
+        if SOUNDPROBE_PARTS=$sp "$root/tests/soundprobe.sh" -o "$out/$c" "$@" > "$out/$c.txt" 2>&1; then
+            echo "ok   $c: $(grep '^ok' "$out/$c.txt" | sed 's/^ok   //' | tr '\n' ';' | sed 's/;$//')"
+        else
+            echo "FAIL $c: $(grep -m1 -E '^FAIL' "$out/$c.txt" || echo "see $c.txt") ($out/$c.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    soundboot) # w16's MMSOUND.DRV in plain boots: on Microsoft's stack and
+            # on w16's WIN.COM, DOSX and KRNL286, each against the
+            # all-Microsoft boot         must be 0
+            ref
+            boot sndms -r -f "$root/build/dos/MMSOUND.DRV=WINDOWS/SYSTEM/MMSOUND.DRV"; check sndms sndms ref
+            boot sndallw16 -w -x -f "$root/build/dos/MMSOUND.DRV=WINDOWS/SYSTEM/MMSOUND.DRV"; check sndallw16 sndallw16 ref
+            expect= ;;
+    treealone)
+        # build/w16 alone as C:\W16 (dropin.sh -T with nothing added): no
+        # file of Microsoft's on the drive. Windows (no DOS program: the
+        # grabber VGACOLOR.2GR is not needed) must boot to Program Manager
+        expect=
+        boot treealone -T "$root/build/w16"
+        if booted treealone && grep -q '^shell: loaded' "$out/treealone.txt"; then
+            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell"
+        else
+            echo "FAIL treealone: the boot did not complete ($out/treealone.txt)"; fails=$((fails + 1))
         fi ;;
     sysprobe)
         # tests/sysprobe.sh: SY1 (every export, timers, the msec count,
