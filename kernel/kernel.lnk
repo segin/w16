@@ -27,7 +27,7 @@ export LOCALSIZE.10 resident
 export LOCALHANDLE.11 resident
 export LOCALFLAGS.12 resident
 export LOCALCOMPACT.13 resident
-export GLOBALALLOC.15 resident
+export GLOBALALLOC.15=GLOBALALLOCX resident
 export GLOBALREALLOC.16=GLOBALREALLOCX resident
 export GLOBALFREE.17=GLOBALFREEX resident
 export GLOBALLOCK.18=GLOBALLOCKX resident
