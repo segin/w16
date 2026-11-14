@@ -1978,3 +1978,10 @@ $(DOS)/VX9A.EXE: $(B)/tests/start.o $(B)/tests/vx9a.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx9a.map file { $(B)/tests/start.o $(B)/tests/vx9a.o }
 vxprobes: $(DOS)/VX9.COM $(DOS)/VX9A.EXE $(DOS)/TK51C.EXE
+# VX10.EXE: the DOS box API spy (tests/apps/vx10.c, tests/vx10run.sh)
+$(B)/tests/vx10.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX10.EXE: $(B)/tests/start.o $(B)/tests/vx10.o $(B)/tests/vx10s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx10.map file { $(B)/tests/start.o $(B)/tests/vx10.o $(B)/tests/vx10s.o }
+vxprobes: $(DOS)/VX10.EXE
