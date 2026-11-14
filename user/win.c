@@ -434,7 +434,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             send_message(h, WM_MOVE, 0, MAKELONG(mx, my));
         }
     }
-    /* WS_MINIMIZE: to its icon's place now (US23; user/pos.c) */
+    /* WS_MINIMIZE: to its icon's place now (US24; user/pos.c) */
     if ((style & (WS_MINIMIZE | WS_CHILD)) == WS_MINIMIZE && valid_wnd(h))
         minimize_new(h);
     if ((style & WS_CHILD) && !(exstyle & WS_EX_NOPARENTNOTIFY) && pw)

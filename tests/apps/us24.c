@@ -1,5 +1,5 @@
 /*
- * us23.c - probe US23: a top-level window created with WS_MINIMIZE (as
+ * us24.c - probe US24: a top-level window created with WS_MINIMIZE (as
  * WINOLDAP's icon window: WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU |
  * WS_MINIMIZEBOX | WS_CLIPSIBLINGS | WS_MINIMIZE, CW_USEDEFAULT, then
  * ShowWindow(SW_SHOWMINNOACTIVE)), and the same with WS_VISIBLE: where
@@ -8,7 +8,7 @@
  * user/win.c). Then, with an icon and a main window: GetNextQueueWindow's
  * ring from the icon (its title is no stop on it) and which SetWindowPos
  * flags activate the main window. Run as the shell on Windows 3.1 and on
- * w16's USER (tests/refrun.sh build/dos/US23.EXE; REFRUN_FILES=
+ * w16's USER (tests/refrun.sh build/dos/US24.EXE; REFRUN_FILES=
  * build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE) and compare the OBS lines:
  * equal but for window B (3.1 leaves a window made with WS_MINIMIZE |
  * WS_VISIBLE hidden; w16 shows it) and so the third icon's place.
@@ -90,7 +90,7 @@ int __cdecl tmain(void)
     MSG msg;
     WaitEvent(0);
     InitApp(hi);
-    out("US23 start\r\n");
+    out("US24 start\r\n");
     wc.style = 0;
     wc.lpfnWndProc = wnd_proc;
     wc.cbClsExtra = wc.cbWndExtra = 0;
@@ -99,15 +99,15 @@ int __cdecl tmain(void)
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wc.lpszMenuName = NULL;
-    wc.lpszClassName = "US23";
+    wc.lpszClassName = "US24";
     RegisterClass(&wc);
     /* a main window, so that the icons are not the only windows */
-    m = CreateWindow("US23", "US23 main", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 50, 300, 200,
+    m = CreateWindow("US24", "US24 main", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 50, 300, 200,
                      NULL, NULL, hi, NULL);
     state("main", m);
     out("A: WS_MINIMIZE, hidden\r\n");
     logging = 1;
-    w = CreateWindow("US23", "A", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
+    w = CreateWindow("US24", "A", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
                      WS_CLIPSIBLINGS | WS_MINIMIZE, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0,
                      NULL, NULL, hi, NULL);
     logging = 0;
@@ -118,7 +118,7 @@ int __cdecl tmain(void)
     state("A-shown", w);
     out("B: WS_MINIMIZE | WS_VISIBLE\r\n");
     logging = 1;
-    v = CreateWindow("US23", "B", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
+    v = CreateWindow("US24", "B", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
                      WS_CLIPSIBLINGS | WS_MINIMIZE | WS_VISIBLE, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0,
                      NULL, NULL, hi, NULL);
     logging = 0;
@@ -127,7 +127,7 @@ int __cdecl tmain(void)
     {
         HWND c;
         logging = 1;
-        c = CreateWindow("US23", "C", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
+        c = CreateWindow("US24", "C", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
                          WS_CLIPSIBLINGS | WS_MINIMIZE, 40, 30, 200, 100,
                          NULL, NULL, hi, NULL);
         logging = 0;
@@ -187,6 +187,6 @@ int __cdecl tmain(void)
     DestroyWindow(w);
     DestroyWindow(v);
     DestroyWindow(m);
-    out("US23 end\r\n");
+    out("US24 end\r\n");
     return 0;
 }

@@ -266,7 +266,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
 }
 
 /* without SWP_NOACTIVATE a shown top-level window is activated, whether
-   it is shown now or was already (3.1 SDK; US23 on 3.1: with an icon
+   it is shown now or was already (3.1 SDK; US24 on 3.1: with an icon
    active, SetWindowPos of the main window with SWP_SHOWWINDOW, with
    SWP_NOZORDER and with neither made it active, with SWP_NOACTIVATE not.
    Microsoft's WINOLDAP comes back to the Windows application that way;
@@ -308,7 +308,7 @@ static void icon_place(PWND w, POINT *pt)
     int n = 0;
     HWND s;
     pr = (w->style & WS_CHILD) ? parent->rcClient : PW(hwndDesktop)->rcWindow;
-    /* (hidden icons do not count: US23 on 3.1, a third icon made while
+    /* (hidden icons do not count: US24 on 3.1, a third icon made while
        the second was hidden took the second's place) */
     for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
         if (s != HW(w) && (PW(s)->style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE))
@@ -350,14 +350,14 @@ static PLACE *place_of(HWND h, BOOL create)
 
 /* CreateWindow of a top-level window with WS_MINIMIZE, after WM_CREATE:
    it goes to its icon's place, the size it was given kept as its normal
-   place (probe US23 on Windows 3.1: after WM_CREATE a move to 21,408,
+   place (probe US24 on Windows 3.1: after WM_CREATE a move to 21,408,
    36 x 36, WM_MOVE and WM_SIZE SIZE_MINIMIZED, still hidden;
    GetWindowPlacement then gives the icon's place and the given rectangle
    as normal). w16 left it at the given place and size: WINOLDAP's icon,
    made that way, showed as a window of CW_USEDEFAULT's size at 0,0 with
    the icon in its corner (Alt+Esc or Alt+Tab out of the MS-DOS Prompt).
    UNVERIFIED: child windows (not done for them); which place 3.1 takes
-   when other icons are hidden (US23's third window went to the second
+   when other icons are hidden (US24's third window went to the second
    place with a hidden icon there) */
 void minimize_new(HWND h)
 {

@@ -464,7 +464,7 @@ HWND WINAPI U_GETNEXTQUEUEWINDOW(HWND h, int way)
             t = GetWindow(h, way ? GW_HWNDLAST : GW_HWNDFIRST);
         if (!t || t == h)
             return 0;
-        /* (an icon's title is passed over: US23 on 3.1, the ring from an
+        /* (an icon's title is passed over: US24 on 3.1, the ring from an
            icon went main window, icon. w16 gave the title, and Microsoft's
            WINOLDAP entered it as the Windows application to come back
            to: after Alt+Esc its icon stayed active) */

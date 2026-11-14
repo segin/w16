@@ -129,7 +129,7 @@ active; a double click on the icon, Alt+Tab, a second prompt all work):
    as a 636x408 window at 0,0 with the icon in its corner, and a double
    click on the icon did nothing. Both USER: (a) CreateWindow with
    WS_MINIMIZE must move the window to its icon's place after WM_CREATE
-   (probe US23 on 3.1); w16's WINOLDAP makes its window that way, then
+   (probe US24 on 3.1); w16's WINOLDAP makes its window that way, then
    ShowWindow(SW_SHOWMINNOACTIVE) only showed it where it was; it also
    got no icon title. (b) WM_NCLBUTTONDBLCLK on an icon must restore it
    with or without a maximise box (WINOLDAP's has none). Not WSWAP,
@@ -142,7 +142,7 @@ active; a double click on the icon, Alt+Tab, a second prompt all work):
    returned the icon's title window, which Microsoft's WINOLDAP took for
    the Windows application to come back to, and SetWindowPos without
    SWP_NOACTIVATE (how it comes back to it) did not activate a window
-   already shown (US23 on 3.1: it does); (b) the double click as 1(b);
+   already shown (US24 on 3.1: it does); (b) the double click as 1(b);
    (c) the second MS-DOS Prompt hung Windows (with the trace below: a GP
    fault in thhook_sync, task link 0017h). KERNEL, not USER (tree +
    Microsoft's KRNL386: fine; 3.1 + w16's USER: fine): w16 put a CR
@@ -157,14 +157,14 @@ active; a double click on the icon, Alt+Tab, a second prompt all work):
 Fixes: user/win.c + user/pos.c (minimize_new, the icon title on show,
 hidden icons take no place, SetWindowPos activates), user/defwnd.c
 (icon double click, GetNextQueueWindow skips #32772), kernel/task.c (the
-LF). New: probe US23 (tests/apps/us23.c), boot-test case swapesc
+LF). New: probe US24 (tests/apps/us24.c), boot-test case swapesc
 (tests/scripts/input/swapesc.txt; parts k386, k286, mswoa: Alt+Esc out,
 the icon double-clicked, Alt+Tab out and in, a second prompt, EXIT in
 both, Exit Windows; screens' modes against 3.1's, the DOS screens as
 left, Windows as before the prompt, the icon's title as 3.1's),
 tests/scripts/iconbox.py, inputrun.sh `dclick`.
 
-Still open: US23's window made with WS_MINIMIZE | WS_VISIBLE stays
+Still open: US24's window made with WS_MINIMIZE | WS_VISIBLE stays
 hidden on 3.1 (w16 shows it); not needed by any WINOLDAP.
 
 Results (installation-05, f641f37 = these fixes with master 0b16a13
