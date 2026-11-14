@@ -58,6 +58,8 @@ LONG WINAPI U_SIGNALPROC(HANDLE h, WORD code, WORD exitfn, HINSTANCE hinst, HQUE
     ulogx("  handle ", (WORD)h);
     if (code == 0x20 || code == 0x666)
         app_exit((HTASK)h);
+    if (code == 0x20)
+        user_heaps_shrink();    /* not after a fault (Pietrek ch. 3) */
     return 0;
 }
 
