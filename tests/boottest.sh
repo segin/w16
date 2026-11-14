@@ -19,6 +19,15 @@
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
+#   k386       w16's KRNL386 in the KRNL386.EXE slot (Standard mode on a
+#              386: DOSX starts it), Microsoft's DOSX, USER, GDI and the
+#              rest, against Microsoft's KRNL386     must be 0
+#   k386all    w16's WIN.COM, DOSX, KRNL386, USER and GDI against the same
+#              Microsoft KRNL386 boot                must be 0
+#   k386e      386 Enhanced mode (WIN /3): w16's WIN386 and KRNL386 with
+#              Microsoft's USER, GDI and drivers against Microsoft's KRNL386
+#              on w16's WIN386, and w16's KRNL386 on Microsoft's WIN386
+#              against Microsoft's KRNL386 there   both must be 0
 #   wincom     w16's WIN.COM + KRNL286             must be 0
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
@@ -392,7 +401,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
+cases=${*:-kernel dosx k286 k386 k386all k386e lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -500,6 +509,7 @@ refkey() {
         case " $* " in *" -w "*) printf 'WIN.COM '; sha256sum < "$root/build/dos/WIN.COM" ;; esac
         case " $* " in *" -x "*) printf 'DOSX.EXE '; sha256sum < "$root/build/dos/DOSX.EXE" ;; esac
         case " $* " in *" -r "*) ;; *) printf 'KRNL286.EXE '; sha256sum < "$root/build/dos/KRNL286.EXE" ;; esac
+        case " $* " in *" -r "*) ;; *" -3 "*) printf 'KRNL386.EXE '; sha256sum < "$root/build/dos/KRNL386.EXE" ;; esac
         echo "code $k"
         codeof "$k"
     } > "$_rkf"
@@ -735,6 +745,24 @@ runcase() {
             boot k286 -p 286; check k286 k286 ref286
             boot k286x -x -p 286; check k286x k286x ref286
             expect= secs=$_s ;;
+    k386|k386all)
+            # Standard mode on a 386 runs KRNL386.EXE (DOSX takes it when
+            # it is there): Microsoft's KRNL386 is the reference
+            refrun ref386 k386 boot -3 -r; expect=$out/ref386.png
+            if [ $c = k386 ]; then boot k386 -3
+            else boot k386all -3 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"; fi
+            check $c $c ref386
+            expect= ;;
+    k386e)  # 386 Enhanced mode: WIN386 starts KRNL386.EXE (DOSBox, as the
+            # win386input case); w16's KRNL386 on w16's WIN386, then on
+            # Microsoft's, each against Microsoft's KRNL386 on the same WIN386
+            w386=$root/build/win386/WIN386.EXE
+            set -- -3 -c 'WIN /3 /B'
+            refrun ref386e k386e boot -r "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; expect=$out/ref386e.png
+            boot k386e "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; check k386e k386e ref386e
+            refrun ref386em k386e boot -r "$@"; expect=$out/ref386em.png
+            boot k386em "$@"; check k386em k386em ref386em
+            expect= ;;
     wincom) ref; boot wincom -w; check wincom wincom ref ;;
     allw16) ref; boot allw16 -w -x; check allw16 allw16 ref ;;
     user)   ref; boot user -r -f "$user=WINDOWS/SYSTEM/USER.EXE"

@@ -12,7 +12,9 @@ w16 repository's LICENSE):
   CALC.EXE                Calculator
   CARDFILE.EXE            Cardfile (needs COMMDLG.DLL and OLECLI.DLL in
                           SYSTEM; its help is CARDFILE.HLP)
-  SYSTEM\KRNL286.EXE      KERNEL
+  SYSTEM\KRNL286.EXE      KERNEL for an 80286
+  SYSTEM\KRNL386.EXE      KERNEL for a 386 or later (Standard and 386
+                          Enhanced mode)
   SYSTEM\USER.EXE         USER (windows, menus, dialogs, messages)
   SYSTEM\GDI.EXE          GDI (graphics)
   SYSTEM\WINOLDAP.MOD     runs DOS programs under w16
@@ -74,8 +76,9 @@ overwriting the files above:
                           programs DSWAP.EXE and the VGACOLOR.2GR
                           grabber
 
-Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
-it is there and w16's KRNL286.EXE only when it is not.
+Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or
+later DOSX starts KRNL386.EXE when it is there and KRNL286.EXE only when
+it is not, and WIN386.EXE (386 Enhanced mode) always KRNL386.EXE.
 
 Notepad uses your NOTEPAD.HLP (Windows directory) for Help; w16 ships no
 help text. Printing needs your printer's driver (installed with Control
