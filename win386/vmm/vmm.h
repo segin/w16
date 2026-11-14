@@ -120,6 +120,7 @@ extern u8 kstack_top[];
 /* vmm.c */
 void trace(const char *fmt, ...);
 void panic(const char *fmt, ...);
+void fatal(const char *fmt, ...);   /* end Windows with a message */
 void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */

@@ -30,6 +30,11 @@ typedef unsigned long  w_u32;
 #define W386_BP_PS2CB   3       /* the PS/2 pointing device handler (INT 15h C207h) of a PM client */
 #define W386_BP_FIRSTFREE 4     /* real-mode callbacks and V86 API entries */
 
+/* pm_go returns this when the VMM ended Windows before the System VM ran,
+ * with its message (CR LF lines) in the fatal_lin buffer */
+#define W386_FATAL      0xFFFF
+#define W386_FATAL_SIZE 512
+
 #pragma pack(1)
 struct w386_info {
     w_u32 magic;
@@ -66,6 +71,7 @@ struct w386_info {
     w_u32 vxd_count;    /* VxDs loaded after the VMM (SYSTEM.INI [386Enh]) */
     w_u32 vxd_list;     /* window offset of their DDBs' linear addresses */
     w_u32 tail_lin;     /* WIN386's command tail (PSP:80h), linear */
+    w_u32 fatal_lin;    /* a W386_FATAL_SIZE buffer of the loader's: the VMM's fatal message */
 };
 #pragma pack()
 

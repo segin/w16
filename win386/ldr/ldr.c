@@ -45,6 +45,7 @@ static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */   
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
 static unsigned v86cb_off, v86cb_seg;   /* Enable/Disable V86 mode callback (1605h) */
+static char fatalmsg[W386_FATAL_SIZE];  /* the VMM's message when it ends Windows early */
 
 /* ---- output ---- */
 static void out(const char *s)
@@ -661,6 +662,8 @@ int main(int argc, char **argv)
     info.refstk_top = (unsigned)(refstk + sizeof(refstk) - 16);
     info.psp = _psp;
     info.tail_lin = ((unsigned long)_psp << 4) + 0x80;
+    segread(&sr);
+    info.fatal_lin = ((unsigned long)sr.ds << 4) + (unsigned)fatalmsg;
     memset(pmbp, 0xF4, sizeof(pmbp));
     info.pmbp_off = (unsigned)pmbp;
     info.pmbp_count = sizeof(pmbp);
@@ -685,7 +688,15 @@ int main(int argc, char **argv)
     _ffree(page);
     _ffree(ini);
 
-    pm_go(&info);
+    if (pm_go(&info) == (int)W386_FATAL) {
+        /* the VMM ended Windows before the System VM ran: its message */
+        x.ax = 0x0400; xms_call(&x);
+        x.ax = 0x0D00; x.dx = xms_handle; xms_call(&x);
+        x.ax = 0x0A00; x.dx = xms_handle; xms_call(&x);
+        out(fatalmsg);
+        broadcast_1606();
+        return 0xFF;                    /* UNVERIFIED exit code */
+    }
     /* ---- from here on: V86 mode, the System VM ---- */
     code = run_kernel();
     code = pm_exit(code);

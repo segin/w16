@@ -96,9 +96,18 @@ void memcpy(void *d, const void *s, u32 n)
 }
 
 /* ---- trace on a serial port (COM1; DOSBox-X: serial1=file file:...) ---- */
+static void pic_init(u32 b1, u32 b2);
+static char *tbuf;                     /* fatal(): its message goes here */
+static u32 tbuf_len;
+
 static void tchar(int c)
 {
     int i;
+    if (tbuf) {
+        if (tbuf_len < W386_FATAL_SIZE - 1) tbuf[tbuf_len++] = (char)c;
+        tbuf[tbuf_len] = 0;
+        return;
+    }
     if (!info || !info->log_port) return;
     for (i = 0; i < 100000 && !(inb(info->log_port + 5) & 0x20); i++)
         ;
@@ -142,6 +151,30 @@ static void vtrace(const char *fmt, u32 *ap)
 void trace(const char *fmt, ...)
 {
     vtrace(fmt, (u32 *)&fmt + 1);
+}
+
+/* Windows ends with a message, as Windows 3.1's WIN386 does for an
+ * invalid dynamic link (ARCHITECTURE.md 12.2): before the System VM has
+ * run, back to the loader, which prints it and exits; later (UNVERIFIED
+ * what Windows 3.1 does then) the VMM stops with it in the trace. */
+static int vm_started;
+
+void fatal(const char *fmt, ...)
+{
+    trace("VMM: fatal: ");
+    vtrace(fmt, (u32 *)&fmt + 1);
+    if (!vm_started && info->fatal_lin) {
+        tbuf = (char *)info->fatal_lin;
+        tbuf_len = 0;
+        vtrace(fmt, (u32 *)&fmt + 1);
+        tbuf = 0;
+        info->exit_code = W386_FATAL;
+        info->ret_ss = info->v86_ss;    /* pm_go's own frame */
+        info->ret_sp = info->v86_sp;
+        pic_init(info->pic1_base, info->pic2_base);
+        to_realmode(info->rm_tramp);
+    }
+    for (;;) hlt();
 }
 
 void panic(const char *fmt, ...)
@@ -688,5 +721,6 @@ void __cdecl vmm_main(struct w386_info *inf)
     sysvm.r.eflags = (info->v86_flags & 0xFFFF & ~EFL_NT) | EFL_VM | EFL_IOPL | EFL_IF | 2;
     sysvm.refsp = info->refstk_top;
     trace("VMM: System VM at %x:%x\n", sysvm.r.cs, sysvm.r.eip);
+    vm_started = 1;
     resume(&sysvm.r);
 }

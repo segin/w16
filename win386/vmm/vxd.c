@@ -293,10 +293,25 @@ void vxd_link(struct tframe *f)
         slot = (u32)&vmm_slots[svc];
     else if (dev != 1 && (d = find_dev(dev)) != NULL && svc < d->svc_count && d->svc_table)
         slot = d->svc_table + svc * 4;
+    if (!slot && dev != 1) {
+        /* a device that is not loaded (or a service it does not have):
+         * VXQ.386 under Windows 3.1, linking to VPD (000Fh, not in 3.1) or
+         * to 7FFFh from Sys_Critical_Init, went on as if the call had
+         * returned, no message. The same here; the link is not made.
+         * UNVERIFIED: the registers 3.1 leaves, and later calls */
+        trace("VMM: dynamic link to device %x service %x from %x: not there, ignored\n",
+              dev, svc, f->eip - 2);
+        f->eip += 4;
+        return;
+    }
     if (!slot)
-        /* Windows 3.1's message (ARCHITECTURE.md 12.2), to the trace for
-         * now: UNVERIFIED how w16 should show it from here */
-        panic("Invalid VxD dynamic link call to device number %04x, service %04x.", dev, svc);
+        /* Windows 3.1's message for a link it refuses (ARCHITECTURE.md
+         * 12.2: the VMM's own link to VPICD when *vpicd is not loaded),
+         * "w16" for "Windows" (ARCHITECTURE.md 3). UNVERIFIED that 3.1
+         * refuses a VMM service number past its 242 this way */
+        fatal("Invalid VxD dynamic link call to device number %04x, service %04x.\n"
+              "Your w16 configuration is invalid. Run the w16 Setup program\n"
+              "again to correct this problem.\n", dev, svc);
     p[-2] = 0xFF;
     p[-1] = (id & 0x8000) ? 0x25 : 0x15;
     *(u32 *)p = slot;

@@ -40,7 +40,8 @@ I_TRACE         equ 96
 I_VXD_COUNT     equ 100
 I_VXD_LIST      equ 104
 I_TAIL_LIN      equ 108
-I_SIZE          equ 112
+I_FATAL_LIN     equ 112
+I_SIZE          equ 116
 
 BP_EXIT         equ 0
 BP_COUNT        equ 64

@@ -7,7 +7,9 @@
 ;   VMM 0000h Get_VMM_Version, 0001h Get_Cur_VM_Handle,
 ;   0003h Get_Sys_VM_Handle; VTD 0000h VTD_Get_Version, 0002h
 ;   VTD_Get_Interrupt_Period.
-; Lines start with "VXP ". Sources: the Windows 3.1 DDK's Virtual Device
+; Lines start with "VXP ". Built with BADLINK defined it is VXQ.386, which
+; first calls service 0 of device 000Fh (not loaded): the dynamic-link
+; failure. Sources: the Windows 3.1 DDK's Virtual Device
 ; Adaptation Guide (Declare_Virtual_Device, the control messages, VMMcall:
 ; INT 20h followed by a dword, service number in the low word and device
 ; ID in the high word); the DDB layout as win386/vmm/ddb.asm. Nothing here
@@ -25,7 +27,11 @@ VXP_DDB:
         dw 0                    ; DDB_Req_Device_Number: Undefined_Device_ID
         db 1, 0                 ; DDB_Dev_Major_Version, Minor
         dw 0                    ; DDB_Flags
+%ifdef BADLINK
+        db 'VXQ     '           ; DDB_Name
+%else
         db 'VXP     '           ; DDB_Name
+%endif
         dd 80000000h            ; DDB_Init_Order: Undefined_Init_Order
         dd vxp_control          ; DDB_Control_Proc
         dd 0                    ; DDB_V86_API_Proc
@@ -100,6 +106,14 @@ vxp_control:
         ret
 
 services:
+%ifdef BADLINK
+        ; VXQ.386: a dynamic link to a device that is not loaded: VPD
+        ; (000Fh, WfW 3.11's printer device, not in Windows 3.1). (With
+        ; an ID no device has, 7FFFh, Windows 3.1 went on as if nothing
+        ; happened.)
+        int 20h
+        dd 000F0000h
+%endif
         mov esi, msg_ver
         call puts
         int 20h
