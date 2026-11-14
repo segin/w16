@@ -1,0 +1,20 @@
+; VX8 (tests/vx8run.sh, modes with bit 0: VX8's handler in place of
+; KERNEL's): when the Reboot device zeroes the sanity byte and when it runs
+; the handler, relative to Ctrl+Alt+Del (VX8's TK.LOG: BIOS ticks); shots
+; 0.5 s and 3 s after the press, then a key, then Ctrl+Alt+Del again
+sleep 6
+key ctrl+alt+Delete
+sleep 0.5
+shot 01-cad05
+sleep 2.5
+shot 02-cad3
+key space
+sleep 3
+shot 03-back
+key ctrl+alt+Delete
+sleep 3
+shot 04-cad2
+key space
+sleep 3
+shot 05-back
+sleep 60

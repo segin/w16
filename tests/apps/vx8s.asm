@@ -19,6 +19,9 @@ global _vx8_setup, _vx8_handler
 buf_ptr dw 0, 0
 kern    dw 0, 0
 kds     dw 0
+flags   dw 0                    ; vx8_setflags: 1 log to the file, 2 set the
+                                ; sanity byte, 4 IRET instead of KERNEL's
+sanep   dw 0, 0                 ; the sanity byte (vx8_setflags)
 
 _vx8_setup:
         push bp
@@ -50,6 +53,31 @@ _vx8_setup:
         pop si
         pop ds
         pop bp
+        retf
+
+; void __cdecl __far vx8_setflags(WORD flags, BYTE __far *sane): through
+; the same data alias as vx8_setup
+global _vx8_setflags
+_vx8_setflags:
+        push bp
+        mov bp, sp
+        mov ax, 000Ah
+        mov bx, cs
+        int 31h
+        jc .x
+        mov es, ax
+        mov ax, [bp+6]
+        mov [es:flags], ax
+        mov ax, [bp+8]
+        mov [es:sanep], ax
+        mov ax, [bp+10]
+        mov [es:sanep+2], ax
+        mov bx, es
+        xor ax, ax
+        mov es, ax
+        mov ax, 0001h
+        int 31h
+.x:     pop bp
         retf
 
 _vx8_handler:
@@ -98,6 +126,31 @@ _vx8_handler:
         add di, 2
         loop .c
         sub di, 16                      ; the record's start
+        ; words 20-22: the BIOS tick count (0040:006Ch), the sanity byte
+        push ds
+        mov ax, 40h
+        mov ds, ax
+        mov ax, [6Ch]
+        mov [es:di+40], ax
+        mov ax, [6Eh]
+        mov [es:di+42], ax
+        pop ds
+        push ds
+        push bx
+        lds bx, [cs:sanep]
+        mov ax, ds
+        or ax, bx
+        jz .ns
+        mov al, [bx]
+        xor ah, ah
+        mov [es:di+44], ax
+        test word [cs:flags], 2
+        jz .ns
+        mov byte [bx], 1
+.ns:    pop bx
+        pop ds
+        test word [cs:flags], 1
+        jz .nolog
         ; append the record to C:\VX8H.LOG
         push bx
         push dx
@@ -129,14 +182,17 @@ _vx8_handler:
 .nf:    pop ds
         pop dx
         pop bx
-        pop cx
+.nolog: pop cx
         pop si
 .out:   pop bp
         popf
         pop ax
         pop di
         pop es
-        cmp word [cs:kds], 0
+        test word [cs:flags], 4
+        jz .k
+        iret
+.k:     cmp word [cs:kds], 0
         je .j
         mov ds, [cs:kds]
 .j:     jmp far [cs:kern]
