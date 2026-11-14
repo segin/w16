@@ -1,0 +1,37 @@
+# wlink directives for w16's VGA.3GR (drivers/grabber/vga3gr/): the 386
+# Enhanced-mode display grabber. Module name, export names and ordinals as
+# Windows 3.1's VGA.3GR has them (its NE tables, tools/neinfo.py); objects
+# and the output name come from the Makefile.
+format windows dll
+option quiet
+option modname=GRABBER
+option description 'w16 386 Enhanced-mode VGA display grabber'
+option start=grab_libentry
+segment type code moveable discardable
+segment type data fixed preload
+segment ENTRY_TEXT fixed preload
+export PAINTSCREEN.1
+export SCREENFREE.2
+export BEGINSELECTION.3
+export KEYSELECTION.4
+export MAKESELCTRECT.5
+export INVERTSELECTION.6
+export RENDERSELECTION.7
+export CONSSELECREC.8
+export ENDSELECTION.9
+export GETFONTLIST.10
+export SETPAINTFNT.11
+export UPDATESCREEN.12
+export CURSORON.13
+export CURSORPOSIT.14
+export CURSOROFF.15
+export CHECKGRBVERSION.16
+export ADJUSTINITENDPT.17
+export GETDISPLAYUPD.18
+export GRABEVENT.19
+export GRABCOMPLETE.20
+export GRBGETTEXTCOLOR.21
+export GRBUNLOCKAPP.22
+export TRANSLATEWINTOFSCREEN.23
+export WEP.24 resident
+library windows.lib

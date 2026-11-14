@@ -1,0 +1,44 @@
+# the MS-DOS Prompt (Program Manager's Main group): TYPE SYSTEM.INI,
+# PrintScreen, Alt+Tab to Windows (the text on the clipboard) and back,
+# CLS, TYPE WIN.INI, Alt+PrintScreen, to Windows and back, EXIT (no DIR:
+# its file times differ from run to run)
+# tmax: 200
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 8
+shot p1
+type type system.ini
+key Return
+sleep 3
+shot p2
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot w1
+key alt+Tab
+sleep 8
+shot p3
+type cls
+key Return
+type type win.ini
+key Return
+sleep 3
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot w2
+key alt+Tab
+sleep 8
+shot p4
+type exit
+key Return
+sleep 8
+shot end
+key alt+F4
+sleep 3
+key Return
+sleep 8

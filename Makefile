@@ -1331,6 +1331,63 @@ $(DOS)/SW1.COM: tests/dos/sw1.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# ---- VGACOLOR.2GR: w16's Standard-mode display grabber (drivers/grabber/,
+# ARCHITECTURE.md 9.11): a binary image (nasm -f bin) ----
+dos: $(DOS)/VGACOLOR.2GR
+$(DOS)/VGACOLOR.2GR: drivers/grabber/vgacolor.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# ---- VGA.3GR: w16's 386 Enhanced-mode display grabber (drivers/grabber/
+# vga3gr/, ARCHITECTURE.md 12.9): an NE DLL, module GRABBER ----
+G3CFLAGS := -q -bt=windows -ml -zu -zp1 -3 -s -zl -ox -wx -we -Idrivers/grabber/vga3gr \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+G3OBJS := $(B)/grab3/entry.o $(B)/grab3/vga3gr.o
+$(B)/grab3/entry.o: drivers/grabber/vga3gr/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/grab3/vga3gr.o: drivers/grabber/vga3gr/vga3gr.c drivers/grabber/vga3gr/grab.h
+	@mkdir -p $(@D)
+	$(WCC) $(G3CFLAGS) -fo=$@ $<
+$(DOS)/VGA.3GR: $(G3OBJS) drivers/grabber/vga3gr/vga3gr.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/grabber/vga3gr/vga3gr.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/grab3/vga3gr.map file { $(G3OBJS) }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/VGA.3GR
+
+# ---- the display grabbers' probes (ARCHITECTURE.md 9.11, tests/grabber.sh):
+# GR1.2GR, a recording stand-in grabber (the test appends the real one);
+# GV1.COM, a DOS program drawing a fixed screen in a given video mode;
+# CB1.EXE, a clipboard viewer that records every clipboard change ----
+GRPROBES := $(DOS)/GR1.2GR $(DOS)/GV1.COM $(DOS)/CB1.EXE $(DOS)/GRT.COM
+grprobes: $(GRPROBES)
+dos: $(GRPROBES)
+$(DOS)/GR1.2GR: tests/dos/gr1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/GRT.COM: tests/dos/grt.asm tests/dos/gvdraw.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/GV1.COM: tests/dos/gv1.asm tests/dos/gvdraw.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+# GR3.3GR: a recording 386 grabber in front of GRABTGT, a renamed copy of the
+# grabber under test (tests/apps/gr3.asm; tests/grabber3.sh)
+grprobes: $(DOS)/GR3.3GR $(DOS)/GT3.COM
+dos: $(DOS)/GR3.3GR $(DOS)/GT3.COM
+$(DOS)/GT3.COM: tests/dos/gt3.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/GR3.3GR: $(B)/tests/gr3.o tests/apps/gr3.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/gr3.lnk name $@ option map=$(B)/tests/gr3.map file { $(B)/tests/gr3.o }
+	python3 tools/nemark.py $@ 3.10
+$(DOS)/CB1.EXE: $(B)/tests/start.o $(B)/tests/cb1.o tests/apps/app.lnk tests/apps/cb1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/cb1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cb1.map file { $(B)/tests/start.o $(B)/tests/cb1.o }
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
@@ -1398,6 +1455,15 @@ $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+# the display grabber (drivers/grabber/)
+install-tree: $(W16SYS)/VGACOLOR.2GR
+$(W16SYS)/VGACOLOR.2GR: $(DOS)/VGACOLOR.2GR
+	@mkdir -p $(@D)
+	cp $< $@
+install-tree: $(W16SYS)/VGA.3GR
+$(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
 	@mkdir -p $(@D)
 	cp $< $@
 
@@ -1530,6 +1596,19 @@ $(DOS)/US21.EXE: $(B)/tests/start.o $(B)/tests/us21.o tests/apps/app.lnk tests/a
 	$(WLINK) @tests/apps/us21.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us21.map file { $(B)/tests/start.o $(B)/tests/us21.o }
 dos: $(DOS)/US21.EXE
+# US23: the system menu in the menu heaps; USER's heaps shrinking
+# (tests/apps/us23.c), with its helper task US23A (us23a.c)
+$(B)/tests/us23.o: tests/apps/us23ref.h tests/apps/us23ref286.h tests/apps/tklog.h
+$(DOS)/US23.EXE: $(B)/tests/start.o $(B)/tests/us23.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us23.map file { $(B)/tests/start.o $(B)/tests/us23.o }
+dos: $(DOS)/US23.EXE
+$(DOS)/US23A.EXE: $(B)/tests/start.o $(B)/tests/us23a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us23a.map file { $(B)/tests/start.o $(B)/tests/us23a.o }
+dos: $(DOS)/US23A.EXE
 # US22: what follows ReleaseCapture (tests/apps/us22.c)
 $(B)/tests/us22.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
@@ -1537,6 +1616,13 @@ $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us22.map file { $(B)/tests/start.o $(B)/tests/us22.o }
 dos: $(DOS)/US22.EXE
+# US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
+$(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
+$(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us24.map file { $(B)/tests/start.o $(B)/tests/us24.o }
+dos: $(DOS)/US24.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
@@ -2011,3 +2097,10 @@ $(DOS)/VX9A.EXE: $(B)/tests/start.o $(B)/tests/vx9a.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx9a.map file { $(B)/tests/start.o $(B)/tests/vx9a.o }
 vxprobes: $(DOS)/VX9.COM $(DOS)/VX9A.EXE $(DOS)/TK51C.EXE
+# VX10.EXE: the DOS box API spy (tests/apps/vx10.c, tests/vx10run.sh)
+$(B)/tests/vx10.o: tests/apps/vx3ref.h tests/apps/tklog.h
+$(DOS)/VX10.EXE: $(B)/tests/start.o $(B)/tests/vx10.o $(B)/tests/vx10s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx10.map file { $(B)/tests/start.o $(B)/tests/vx10.o $(B)/tests/vx10s.o }
+vxprobes: $(DOS)/VX10.EXE

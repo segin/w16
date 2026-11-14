@@ -114,3 +114,72 @@ black-box observed on 3.1, tested against Microsoft's.
   programs, what SI=2's BX means (3.1's WIN.COM ignores the call unless
   BX=0), graphics-mode programs' screens (w16 saves VGA planes itself),
   real DOS (DOSBox only: the INT 28h/SDA path is untested).
+
+## Alt+Esc / restore / second prompt on the install tree (2026-11-14)
+
+The user's hand test (DOSBox 0.74, Standard mode, build/w16 alone as
+C:\W16, `WIN /S`, so DOSX starts the tree's KRNL386) found two bugs the
+swap cases missed (swapall masked the top-left corner where the first
+showed). Bisected component by component against Windows 3.1's run of
+the same steps (build/aesc scratch runs; all of Microsoft's: Alt+Esc
+leaves the prompt as an icon "COMMAND" at 21,408, Program Manager
+active; a double click on the icon, Alt+Tab, a second prompt all work):
+
+1. All-w16: Alt+Esc (and Alt+Tab, any KERNEL) left WINOLDAP's window
+   as a 636x408 window at 0,0 with the icon in its corner, and a double
+   click on the icon did nothing. Both USER: (a) CreateWindow with
+   WS_MINIMIZE must move the window to its icon's place after WM_CREATE
+   (probe US24 on 3.1); w16's WINOLDAP makes its window that way, then
+   ShowWindow(SW_SHOWMINNOACTIVE) only showed it where it was; it also
+   got no icon title. (b) WM_NCLBUTTONDBLCLK on an icon must restore it
+   with or without a maximise box (WINOLDAP's has none). Not WSWAP,
+   DSWAP, WIN.COM, DOSX or KERNEL: Microsoft's WINOLDAP on the same tree
+   minimised correctly (it makes its window without WS_MINIMIZE and
+   shows it with SW_SHOWMINIMIZED), w16's WINOLDAP on Microsoft's USER
+   too.
+2. Microsoft's WINOLDAP on the tree: (a) after Alt+Esc its icon stayed
+   the active window (3.1: Program Manager): USER's GetNextQueueWindow
+   returned the icon's title window, which Microsoft's WINOLDAP took for
+   the Windows application to come back to, and SetWindowPos without
+   SWP_NOACTIVATE (how it comes back to it) did not activate a window
+   already shown (US24 on 3.1: it does); (b) the double click as 1(b);
+   (c) the second MS-DOS Prompt hung Windows (with the trace below: a GP
+   fault in thhook_sync, task link 0017h). KERNEL, not USER (tree +
+   Microsoft's KRNL386: fine; 3.1 + w16's USER: fine): w16 put a CR
+   after WINOLDAP's command tail and InitTask made it a NUL; 3.1 keeps
+   the LF (WO1). Microsoft's WINOLDAP searches for the LF after the
+   path, ran past the PDB (the second half of the 200h-byte TDB) into
+   the next TDB in memory and wrote 0 over the first 0Ah there: Program
+   Manager's TDB link 0A17h became 0017h when the first prompt started.
+   Found with KERNEL's import trace ([w16] trace=KERNEL.n,...) after a
+   temporary check of the task list at every traced call.
+
+Fixes: user/win.c + user/pos.c (minimize_new, the icon title on show,
+hidden icons take no place, SetWindowPos activates), user/defwnd.c
+(icon double click, GetNextQueueWindow skips #32772), kernel/task.c (the
+LF). New: probe US24 (tests/apps/us24.c), boot-test case swapesc
+(tests/scripts/input/swapesc.txt; parts k386, k286, mswoa: Alt+Esc out,
+the icon double-clicked, Alt+Tab out and in, a second prompt, EXIT in
+both, Exit Windows; screens' modes against 3.1's, the DOS screens as
+left, Windows as before the prompt, the icon's title as 3.1's),
+tests/scripts/iconbox.py, inputrun.sh `dclick`.
+
+Still open: US24's window made with WS_MINIMIZE | WS_VISIBLE stays
+hidden on 3.1 (w16 shows it); not needed by any WINOLDAP.
+
+Results (installation-05, f641f37 = these fixes with master 0b16a13
+merged): make test pass; full boot test 93 ok, 1 failure: k386cad, whose
+reference (Microsoft's KRNL386 on Microsoft's WIN386, run fresh, not from
+the cache) showed "PROGMAN.EXE has stopped responding" where w16's showed
+the no-application screen; k386cad alone twice afterwards: ok both times
+(a timing flake on the reference side under 13 jobs; reported, not
+chased: not swap code). swapesc ok (k386, k286, mswoa). The pre-fix
+build (1c30422 + the swapesc case, run dir agent-a6b330f175a42d3fb-old
+there) fails all three parts: k386/k286 "03-win: the icon's title none"
+(the 0,0 window), mswoa "03-win: the icon's title ... active 632" (the
+icon left active).
+
+Ctrl+Esc out of the prompt on the tree: Windows comes back with Program
+Manager active but no Task List, where 3.1 shows it: WINOLDAP (and USER's
+own Ctrl+Esc) run TASKMAN.EXE, and the install tree has none (w16 has no
+TASKMAN yet). Not a swap bug; open.

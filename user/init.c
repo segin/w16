@@ -216,6 +216,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
     input_init();
     register_system_classes();
     menu_heaps_init();
+    sysmenu_init();
     sbmenu_init();                      /* [w16] ScrollBarMenu (scroll.c) */
     deskver_init();                     /* [w16] DesktopVersion (deskver.c) */
     diag("INITDONE=Display Resources\r\n");

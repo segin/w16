@@ -24,6 +24,11 @@ w16 repository's LICENSE):
   SYSTEM\DSWAP.EXE        the task switcher's DOS side: runs a DOS
                           program full screen (Alt+Tab, Alt+Esc and
                           Ctrl+Esc switch away from it)
+  SYSTEM\VGACOLOR.2GR     the display grabber for DOS programs in
+                          Standard mode: saves and restores a DOS
+                          program's screen when it is switched away
+                          from and back to, and copies its text to the
+                          clipboard (PrintScreen)
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
@@ -77,10 +82,7 @@ overwriting the files above:
                           group files above are all it needs)
   SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
                           the other
-                          fonts (*.FON, *.FOT, *.TTF), and for DOS
-                          programs the VGACOLOR.2GR grabber that
-                          SYSTEM.INI names (WINOLDAP.MOD looks for it;
-                          w16's DSWAP.EXE does not use it)
+                          fonts (*.FON, *.FOT, *.TTF)
 
 Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or
 later DOSX starts KRNL386.EXE when it is there and KRNL286.EXE only when

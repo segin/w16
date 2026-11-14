@@ -1,0 +1,24 @@
+; the MS-DOS Prompt in 386 Enhanced mode (the WIN386 handover note, step
+; 6): File > Run COMMAND.COM in Program Manager, its first screen, VER,
+; DIR /W, EXIT, back in Windows
+sleep 4
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 12
+shot 01-dos
+type ver
+key Return
+sleep 2
+shot 02-ver
+type dir /w
+key Return
+sleep 3
+shot 03-dir
+type exit
+key Return
+sleep 10
+shot 04-back

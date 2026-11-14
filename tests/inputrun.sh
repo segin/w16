@@ -45,6 +45,7 @@
 #     jiggle N          N quick small pointer motions back and forth (a
 #                       stream of mouse interrupts)
 #     click [N]         press and release button N (1 left, 3 right)
+#     dclick [N]        double-click button N (two clicks 120 ms apart)
 #     down N / up N     press or release button N
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     keydown KEYS / keyup KEYS  press or release keys only (a key held
@@ -142,6 +143,40 @@ if [ -n "${INPUTRUN_STAY:-}" ]; then
 fi
 if [ -n "${INPUTRUN_NOLOCK:-}" ]; then
     sed -i 's/^\[sdl\]$/[sdl]\nautolock=false/' "$work/dosbox.conf"
+fi
+# INPUTRUN_HDD=1: Windows on a real DOS: the scratch drive becomes a hard
+# disk image with MS-DOS 4.00 (built from Microsoft's MIT-licensed source,
+# tools/msdos-build.sh), CONFIG.SYS loading the install's HIMEM.SYS, and
+# AUTOEXEC.BAT running the commands the autoexec would have run on C:;
+# DOSBox boots it. 386 Enhanced mode's DOS boxes need it: on DOSBox's own
+# DOS, Windows 3.1's MS-DOS Prompt stays a blank screen (the WIN386
+# handover note, step 6). The image's files are copied back into OUTDIR/
+# work/c afterwards. No BOOTLOG.TXT during the run: use -b, not -s. WIN's
+# output is not redirected to C:\OUT.TXT there: a DOS box inherits the
+# handles, and its COMMAND.COM then wrote everything into the file (a
+# black DOS box).
+if [ -n "${INPUTRUN_HDD:-}" ]; then
+    dos=$root/.tools/msdos/build/src
+    [ -f "$dos/BIOS/IO.SYS" ] || { echo "MS-DOS 4.00 not built (tools/msdos-build.sh)" >&2; exit 2; }
+    [ -f "$root/build/hdd/MBR.BIN" ] || { echo "no build/hdd/MBR.BIN (make dos)" >&2; exit 2; }
+    printf 'DEVICE=C:\\%s\\HIMEM.SYS\r\nFILES=40\r\nBUFFERS=20\r\n' "$wdir" > "$work/c/CONFIG.SYS"
+    { printf '@ECHO OFF\r\nPATH C:\\%s;C:\\\r\n' "$wdir"
+      sed -n '/^\[autoexec\]/,$p' "$work/dosbox.conf" | sed '1,/^[cC]:$/d' | grep -v '^exit$' |
+          sed 's/^\(WIN .*\) > C:\\OUT\.TXT$/\1/' | sed 's/$/\r/'
+    } > "$work/c/AUTOEXEC.BAT"
+    set --
+    for f in "$work/c"/*; do set -- "$@" "$f=$(basename "$f")"; done
+    python3 "$root/tools/mkhdd.py" "$work/hdd.img" --mbr "$root/build/hdd/MBR.BIN" \
+        --boot "$dos/BOOT/MSBOOT.BIN" --io "$dos/BIOS/IO.SYS" --dos "$dos/DOS/MSDOS.SYS" \
+        "$dos/CMD/COMMAND/COMMAND.COM" "$@" > "$work/mkhdd.log" 2>&1 || { cat "$work/mkhdd.log" >&2; exit 2; }
+    sed -i '/^\[autoexec\]/,$d' "$work/dosbox.conf"
+    # DOSBox-X (dropin.sh -p CPU) as tests/w386run.sh; DOSBox 0.74 booted
+    # it to "Disk read error" (w16's MBR reading the boot sector)
+    if grep -q '^quit warning' "$work/dosbox.conf"; then
+        printf '[autoexec]\nimgmount c "%s"\nboot c:\n' "$work/hdd.img" >> "$work/dosbox.conf"
+    else
+        printf '[autoexec]\nimgmount 2 "%s" -size 512,63,16,130 -fs none\nboot -l c\n' "$work/hdd.img" >> "$work/dosbox.conf"
+    fi
 fi
 # INPUTRUN_EARLY=1: the script's -b counts from when DOSBox's window
 # appears, not from 3 seconds after DOSBox starts
@@ -432,6 +467,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
     jiggle) i=0; while [ \$i -lt "\$a" ]; do xdotool mousemove_relative -- 7 5; xdotool mousemove_relative -- -7 -5; i=\$((i + 1)); done ;;
     click) xdotool click "\${a:-1}" ;;
+    dclick) xdotool click --repeat 2 --delay 120 "\${a:-1}" ;;
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;
     key) xdotool key --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" \$a \$b ;;
@@ -462,5 +498,8 @@ wait
 SH
 chmod +x "$work/run.sh"
 "$root/tests/xvfb.sh" "$work/run.sh" || true
+if [ -n "${INPUTRUN_HDD:-}" ]; then
+    MTOOLS_SKIP_CHECK=1 mcopy -s -o -n -i "$work/hdd.img@@32256" '::*' "$work/c/" 2>/dev/null || true
+fi
 echo "== OUT.TXT"; tr -d '\r' < "$work/c/OUT.TXT" 2>/dev/null || echo "(none)"
 echo "== input.log"; cat "$out/input.log"

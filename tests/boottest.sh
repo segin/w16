@@ -57,7 +57,15 @@
 #              win386cad.txt), against Microsoft's WIN386.EXE: the text
 #              screen the same but where w16's text says "w16" (the title
 #              and row 15 left out), Windows' screen afterwards 0 pixels,
-#              and Return then opens File Manager (its caption compared)
+#              and Return then opens File Manager (0 pixels but its file
+#              total: Windows 3.1's swap file; its icons in colour)
+#   win386hung w16's WIN386.EXE: Ctrl+Alt+Del with a task that never
+#              yields (VX8 mode 2, tests/scripts/input/vx8hung.txt), the
+#              "not responding" screen, Escape, again, Return (the task
+#              ended, Program Manager repainted), against Microsoft's
+#              WIN386.EXE: the screens but w16's text (row 12) and the
+#              blinking cursor, Windows afterwards 0 pixels (after Escape
+#              not compared: Windows 3.1's own repaint is half done there)
 #   win386close  w16's WIN386.EXE: File Manager, Notepad, Calculator and
 #              Clock opened and closed with Alt+F4 (tests/scripts/input/
 #              win386close.txt; a task's exit reaches V86 DOS), against
@@ -140,9 +148,18 @@
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
-#              Microsoft's VGACOLOR.2GR, the grabber): every part w16's,
+#              no file of Microsoft's): every part w16's (VGACOLOR.2GR and
+#              MMSOUND.DRV too),
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
+#   swapesc    the MS-DOS Prompt on w16's install tree alone, the user's
+#              steps (tests/scripts/input/swapesc.txt): Alt+Esc out (an
+#              icon, Program Manager active), the icon double-clicked,
+#              Alt+Tab out and in, a second prompt, EXIT in both, Exit
+#              Windows; parts k386 (the tree's KRNL386), k286 (KRNL286),
+#              mswoa (Microsoft's WINOLDAP.MOD): every screen's mode as
+#              Windows 3.1's, the DOS screens as the prompt was left,
+#              Windows' as before the prompt, the icon's title as 3.1's
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -293,6 +310,7 @@
 #   vgaall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
 #              fonts) with w16's VGA.DRV (Microsoft's resources) against
 #              the same with Microsoft's VGA.DRV, kbtype     must be 0
+#              (Notepad's caret left out where it may change phase)
 #   vgawoados  the woados script with w16's VGA.DRV (Disable to text mode
 #              for the DOS program, Enable back): the screens as
 #              all-Microsoft's up to the cursor
@@ -419,7 +437,7 @@
 # The cases that took longest last time (build/boottest-times.txt, kept
 # by each run) start first; the output stays in case order. Cases made of
 # independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us, sbdrag@us/np, edithandle@us/np,
-# winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
+# winfile@cmp/all, swapesc@k386/k286/mswoa, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
 # the case's one line; a part can be run by name (tests/boottest.sh
 # allw16nolock@3).
 set -eu
@@ -437,9 +455,16 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
+# Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
+# (56,104; later shots too): with CursorBlinkRate=65535 the caret still
+# changes phase once, 65.5 s after Notepad created it (its blink timer
+# runs on, as 3.1's), and under load 02-edited came on either side of that
+# (vgaall: 4 of 10 parallel runs, 30 pixels). Left out there; the rest of
+# each shot is compared to the pixel
+kbtypecaret="rectangle 16,119 17,133 rectangle 56,104 57,118"
 shell=$root/build/dos/SHELL.DLL
 fails=0
 
@@ -871,20 +896,52 @@ runcase() {
             n=${n%%[. ]*}
             [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386cad-$s-diff.png)"; break; }
         done
-        # Return afterwards opens File Manager: its caption only (its
-        # contents show the drive's label and Windows 3.1's swap file)
+        # Return afterwards opens File Manager: all of it but the file
+        # total (Windows 3.1's swap file); its bitmaps in colour (after
+        # the screen VGA.DRV once drew them black and white: the VGA's
+        # index registers were not put back)
         if [ "$r" = ok ]; then
             a=$out/win386cad-w16/03-key.png b=$out/win386cad-ref/03-key.png
             if [ -f "$a" ] && [ -f "$b" ]; then
-                magick "$a" -crop 360x16+140+5 +repage "$out/win386cad-a.png"
-                magick "$b" -crop 360x16+140+5 +repage "$out/win386cad-b.png"
+                m="rectangle 296,458 639,477"
+                magick "$a" -fill black -draw "$m" "$out/win386cad-a.png"
+                magick "$b" -fill black -draw "$m" "$out/win386cad-b.png"
                 n=$(magick compare -metric AE "$out/win386cad-a.png" "$out/win386cad-b.png" "$out/win386cad-03-key-diff.png" 2>&1 >/dev/null || true)
                 n=${n%%[. ]*}
-                [ "${n:-1}" = 0 ] || r="03-key: the caption differs by $n pixels ($out/win386cad-03-key-diff.png)"
+                [ "${n:-1}" = 0 ] || r="03-key: File Manager differs by $n pixels ($out/win386cad-03-key-diff.png)"
             else r="no 03-key screen"; fi
         fi
         if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
         else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
+    win386hung)
+        # a hung task's Ctrl+Alt+Del under w16's WIN386 (its REBOOT runs
+        # KERNEL's procedure, which calls Reboot 0203h): VX8 as in k386hung,
+        # Microsoft's KRNL386, against Microsoft's WIN386
+        scr=$root/tests/scripts/input/vx8hung.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/win386hung.ini"
+        python3 -I "$root/tests/scripts/iniset.py" "$out/win386hung.ini" 'windows:run=C:\VX8.EXE' 'vx8:mode=2'
+        set -- -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VX8.EXE=VX8.EXE" \
+            -f "$out/win386hung.ini=WINDOWS/WIN.INI"
+        refrun win386hung-ref win386hung env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" \
+            "$out/win386hung-ref" "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" "$out/win386hung-w16" "$@" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386hung-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 03-cad2 04-ret; do
+            a=$out/win386hung-w16/$s.png b=$out/win386hung-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # row 12 "return to w16." (columns 42-51); the cursor under OK
+            m="rectangle 0,0 0,0"
+            [ $s = 04-ret ] || m="rectangle 336,192 415,207 rectangle 464,300 471,303"
+            magick "$a" -fill black -draw "$m" "$out/win386hung-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386hung-b.png"
+            n=$(magick compare -metric AE "$out/win386hung-a.png" "$out/win386hung-b.png" "$out/win386hung-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386hung-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386hung: a hung task's Ctrl+Alt+Del, Escape and Return as with Microsoft's WIN386"
+        else echo "FAIL win386hung: $r ($out/win386hung-w16)"; fails=$((fails + 1)); fi ;;
     win386close)
         scr=$root/tests/scripts/input/win386close.txt
         k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
@@ -1437,7 +1494,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's; swapalt: prompt, VER, Alt+Tab to Windows and back, EXIT,
         # Exit Windows (swapalt.txt), the same way; swapall: that script
         # on w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-        # Microsoft's VGACOLOR.2GR, the grabber, which w16 has not yet).
+        # no file of Microsoft's: the grabber, VGACOLOR.2GR, and the sound
+        # driver, MMSOUND.DRV, are w16's).
         # Text screens against Microsoft's with the banner box (rows 1-5:
         # w16's says "w16") left out; Windows' screens against the same
         # run's screen before the prompt (Windows back as it was); up to
@@ -1463,7 +1521,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$scr" "$out/$c-w16" \
                 -T "$root/build/w16" \
-                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' \
+                -i 'NonWindowsApp:SwapDisk=C:\W16' \
                 > "$out/$c-w16.txt" 2>&1 || true
         else
             # shellcheck disable=SC2086
@@ -1496,6 +1554,74 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         [ -z "$left" ] || [ "$r" != ok ] || r="swap files left: $left"
         if [ "$r" = ok ]; then echo "ok   $c: w16's WSWAP/DSWAP, the DOS screens as 3.1's and Windows back as it was"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    swapesc)
+        # switching away from the MS-DOS Prompt and back on w16's install
+        # tree alone (build/w16 as C:\W16, as swapall), the user's steps
+        # (tests/scripts/input/swapesc.txt): Alt+Esc out, the icon
+        # double-clicked, Alt+Tab out and in, a second prompt, EXIT in
+        # both, Exit Windows. Parts: k386 (the tree as it is: DOSX starts
+        # its KRNL386), k286 (its KRNL386.EXE deleted: KRNL286), mswoa
+        # (Microsoft's WINOLDAP.MOD in it). Against Windows 3.1's run of
+        # the same (Microsoft's KRNL386): each screen's mode; the DOS
+        # screens against the part's own (its prompt says C:\W16>): the
+        # restored prompt as it was left (02-ver), the second prompt as the
+        # first (01-dos); Windows' screens against its own before the
+        # prompt, the icon row's corner (0,400-199,479) and the pointer
+        # left out, so
+        # Program Manager active and nothing else on the screen (bug: a
+        # CW_USEDEFAULT-sized window at 0,0 with the icon in its corner);
+        # in that corner the icon's title as 3.1's: the same place and
+        # width, not highlighted (bug: Microsoft's WINOLDAP's icon left
+        # active), none after both prompts ended; no ~WOA file left
+        rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
+        scr=$root/tests/scripts/input/swapesc.txt
+        refrun swapesc-ref swapesc env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 300 "$scr" "$out/swapesc-ref" \
+            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        r=ok
+        for k in ${part:-k386 k286 mswoa}; do
+            case $k in
+            k286)  set -- -f "W16/SYSTEM/KRNL386.EXE=-" ;;
+            mswoa) set -- -f "$rsys/WINOLDAP.MOD=W16/SYSTEM/WINOLDAP.MOD" ;;
+            *)     set -- ;;
+            esac
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
+                -T "$root/build/w16" \
+                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                > "$out/swapesc-$k.txt" 2>&1 || true
+            a=$out/swapesc-$k b=$out/swapesc-ref
+            for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
+                     05-win:640x480:w 06-dos:640x400:02-ver 07-win:640x480:w 08-dos2:640x400:01-dos \
+                     09-win:640x480:w 10-dos1:640x400:02-ver 11-win:640x480:w 12-exit:640x400:-; do
+                f=${s%%:*} rest=${s#*:} want=${rest%%:*} how=${rest#*:}
+                [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="$k: no $f"; break; }
+                for g in "$a" "$b"; do
+                    sz=$(magick identify -format '%wx%h' "$g/$f.png" 2>/dev/null)
+                    [ "$sz" = "$want" ] || { r="$k: $f: screen $sz, not $want ($g)"; break 2; }
+                done
+                case $how in
+                -)  n=0 ;;
+                w)  # (and the pointer's first place, the screen's middle: it
+                    # stays on the icon after the double click)
+                    m="rectangle 0,400 199,479 rectangle 316,236 339,263"
+                    magick "$a/$f.png" -fill black -draw "$m" "$out/swapesc-$k-a.png"
+                    magick "$a/00-before.png" -fill black -draw "$m" "$out/swapesc-$k-b.png"
+                    n=$(magick compare -metric AE "$out/swapesc-$k-a.png" "$out/swapesc-$k-b.png" "$out/swapesc-$k-$f-diff.png" 2>&1 >/dev/null || true)
+                    ta=$(python3 "$root/tests/scripts/iconbox.py" "$a/$f.png" | sed -n 's/.*\(title .*\)/\1/p')
+                    tb=$(python3 "$root/tests/scripts/iconbox.py" "$b/$f.png" | sed -n 's/.*\(title .*\)/\1/p')
+                    [ "$ta" = "$tb" ] || { r="$k: $f: the icon's ${ta:-title none} (3.1's: ${tb:-title none})"; break; } ;;
+                *)  n=$(magick compare -metric AE "$a/$f.png" "$a/$how.png" "$out/swapesc-$k-$f-diff.png" 2>&1 >/dev/null || true) ;;
+                esac
+                n=${n%%[. ]*}
+                [ "${n:-99999}" -le 40 ] || { r="$k: $f: $n pixels differ"; break; }
+            done
+            rm -f "$out/swapesc-$k-a.png" "$out/swapesc-$k-b.png"
+            left=$(ls "$a/work/c/W16" 2>/dev/null | grep -i '^~WOA' || true)
+            [ -z "$left" ] || [ "$r" != ok ] || r="$k: swap files left: $left"
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
+        else echo "FAIL swapesc: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmkeys)
         scr=$root/tests/scripts/input/pmkeys.txt
         refrun pmkeys-ref pmkeys "$root/tests/inputrun.sh" -s -b 40 -t 180 "$scr" "$out/pmkeys-ref" -r
@@ -2129,6 +2255,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus}; do
             scr=$root/tests/scripts/input/$s.txt
             case $s in
+            kbtype) m=$kbtypecaret ;;
             helpmenus) m="rectangle 14,42 20,61" ;;
             icons) m="rectangle 160,400 220,445" ;;
             *) m="rectangle 0,0 0,0" ;;
@@ -2164,7 +2291,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # carets keep their starting phase on both sides (as in kbd)
         blink='WIN.INI:windows:CursorBlinkRate=65535'
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -M "$kbtypecaret" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
                 -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
             "$root/tests/inputrun.sh" "$@" -i "$blink" \
@@ -2180,7 +2307,9 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             [ "$r" = ok ] || break
             g=$(basename "$f")
             [ -f "$out/kbdall-w16/$g" ] || { r="no $g"; break; }
-            n=$(magick compare -metric AE "$out/kbdall-w16/$g" "$f" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            magick "$f" -fill black -draw "$kbtypecaret" "$out/kbdall-a.png"
+            magick "$out/kbdall-w16/$g" -fill black -draw "$kbtypecaret" "$out/kbdall-b.png"
+            n=$(magick compare -metric AE "$out/kbdall-b.png" "$out/kbdall-a.png" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || r="$g: $n pixels differ ($out/kbdall-${g%.png}-diff.png)"
         done
@@ -2422,13 +2551,17 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # every screen against the same script with Microsoft's VGA.DRV
         # (helpmenus: Notepad's caret left out; icons: Clock's icon; tabs,
         # kbtype: the caret is drawn by the driver on both sides and
-        # compared)
+        # compared; carets keep the phase they start in on both sides,
+        # CursorBlinkRate=65535 as in kbd: the host's load must not decide
+        # whether a caret shows on a shot)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         r=ok
         for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about}; do
             vdrv=$out/vga-msres-$s.drv
             "$root/tests/vgamsres.sh" "$vdrv" > "$out/vga-msres-$s.txt" 2>&1 || { r="$s: tests/vgamsres.sh failed"; break; }
             scr=$root/tests/scripts/input/$s.txt
             case $s in
+            kbtype) m=$kbtypecaret ;;
             helpmenus) m="rectangle 14,42 20,61" ;;
             icons) m="rectangle 160,400 220,445" ;;
             # the About box's free memory: w16's driver is smaller
@@ -2438,8 +2571,8 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             b=25 t=220
             case $s in pmkeys|pmitems|pmclose|mdimax) b=40 t=240 ;; esac
             [ $s = icons ] && t=380
-            refrun vga-$s-ref vga "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/vga-$s-ref" -r
-            "$root/tests/inputrun.sh" -e "$out/vga-$s-ref/boot.png" -E "$out/vga-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/vga-$s-w16" -r \
+            refrun vga-$s-ref vga "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/vga-$s-ref" -r -i "$blink"
+            "$root/tests/inputrun.sh" -e "$out/vga-$s-ref/boot.png" -E "$out/vga-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/vga-$s-w16" -r -i "$blink" \
                 -f "$vdrv=WINDOWS/SYSTEM/VGA.DRV" > "$out/vga-$s-w16.txt" 2>&1 || true
             rm -f "$vdrv"
             ls "$out/vga-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
@@ -2476,12 +2609,16 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # sides are w16's but for VGA.DRV)
         fon=$root/build/fonts
         scr=$root/tests/scripts/input/kbtype.txt
+        # carets keep their starting phase on both sides (as in kbdall):
+        # with the blink on, matchnow under load could miss the reference's
+        # phase (01-typed: 28 pixels of Notepad's caret, one parallel run)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         "$root/tests/vgamsres.sh" "$out/vgaall-msres.drv" > "$out/vgaall-msres.txt" 2>&1 || true
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -M "$kbtypecaret" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
                 -f "$out/vgaall-msres.drv=WINDOWS/SYSTEM/VGA.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/vgaall-$k"; fi
-            "$root/tests/inputrun.sh" "$@" \
+            "$root/tests/inputrun.sh" "$@" -i "$blink" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
                 -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
@@ -2495,7 +2632,9 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             [ "$r" = ok ] || break
             g=$(basename "$f")
             [ -f "$out/vgaall-w16/$g" ] || { r="no $g"; break; }
-            n=$(magick compare -metric AE "$out/vgaall-w16/$g" "$f" "$out/vgaall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            magick "$f" -fill black -draw "$kbtypecaret" "$out/vgaall-a.png"
+            magick "$out/vgaall-w16/$g" -fill black -draw "$kbtypecaret" "$out/vgaall-b.png"
+            n=$(magick compare -metric AE "$out/vgaall-b.png" "$out/vgaall-a.png" "$out/vgaall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || { r="$g: $n pixels differ"; break; }
         done
@@ -2573,6 +2712,7 @@ caseparts() {
     sbdrag) echo "$1@us $1@np" ;;
     edithandle) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
+    swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -2616,6 +2756,9 @@ partsummary() {
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    swapesc)
+        if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
+        else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
     runbrowse)
         if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
         else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;

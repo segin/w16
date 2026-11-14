@@ -81,12 +81,15 @@ Boot-test settings:
 
 - `BOOTTEST_JOBS=N`: cases run at once (default 3). On a busy machine use fewer; timing-sensitive cases can fail under heavy load. Cases made of independent sessions run as parts that are scheduled separately (`allw16nolock@1` ... `@6`, `pmdrop@pm`, `winfile@cmp`, `kbd@kbtype`, ...; a part can be run by name) and are reported as one line; the longest cases of the last run start first.
 - `INPUTRUN_KEYDELAY=MS`: time between keys typed into DOSBox (default 50; with xdotool's 12 a loaded DOSBox lost keys).
+- `INPUTRUN_HDD=1`: `tests/inputrun.sh` boots the scratch drive as a hard disk image with MS-DOS 4.00 (`.tools/msdos`, `tools/msdos-build.sh`) and the install's HIMEM.SYS, in DOSBox-X (dropin's `-p 386`); needed for 386 Enhanced mode DOS boxes, which do not run on DOSBox's own DOS. DOSBox-X loses typed letters at the default delay: `INPUTRUN_KEYDELAY=150`.
 - `BOOTTEST_REFRESH=1`: rerun the Windows 3.1 reference boots instead of using the cache in `build/refcache/` (the cache is keyed on everything a reference depends on, so you rarely need this).
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
 Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
+`tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
+`tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`.
 
