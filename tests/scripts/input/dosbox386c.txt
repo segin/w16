@@ -1,0 +1,34 @@
+; the MS-DOS Prompt icon (DOSPRMPT.PIF) in 386 Enhanced mode, then
+; Alt+Esc back to Windows (the DOS box an icon), its Control menu,
+; Settings..., Window: the DOS box in a window; VER, EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-full
+key alt+Escape
+sleep 6
+shot 02-icon
+key alt+space
+sleep 2
+shot 03-menu
+key t
+sleep 3
+shot 04-settings
+key alt+w
+sleep 1
+key Return
+sleep 6
+shot 05-window
+type ver
+key Return
+sleep 3
+shot 06-ver
+type exit
+key Return
+sleep 8
+shot 07-back

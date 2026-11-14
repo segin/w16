@@ -57,7 +57,15 @@
 #              win386cad.txt), against Microsoft's WIN386.EXE: the text
 #              screen the same but where w16's text says "w16" (the title
 #              and row 15 left out), Windows' screen afterwards 0 pixels,
-#              and Return then opens File Manager (its caption compared)
+#              and Return then opens File Manager (0 pixels but its file
+#              total: Windows 3.1's swap file; its icons in colour)
+#   win386hung w16's WIN386.EXE: Ctrl+Alt+Del with a task that never
+#              yields (VX8 mode 2, tests/scripts/input/vx8hung.txt), the
+#              "not responding" screen, Escape, again, Return (the task
+#              ended, Program Manager repainted), against Microsoft's
+#              WIN386.EXE: the screens but w16's text (row 12) and the
+#              blinking cursor, Windows afterwards 0 pixels (after Escape
+#              not compared: Windows 3.1's own repaint is half done there)
 #   win386close  w16's WIN386.EXE: File Manager, Notepad, Calculator and
 #              Clock opened and closed with Alt+F4 (tests/scripts/input/
 #              win386close.txt; a task's exit reaches V86 DOS), against
@@ -431,7 +439,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -865,20 +873,52 @@ runcase() {
             n=${n%%[. ]*}
             [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386cad-$s-diff.png)"; break; }
         done
-        # Return afterwards opens File Manager: its caption only (its
-        # contents show the drive's label and Windows 3.1's swap file)
+        # Return afterwards opens File Manager: all of it but the file
+        # total (Windows 3.1's swap file); its bitmaps in colour (after
+        # the screen VGA.DRV once drew them black and white: the VGA's
+        # index registers were not put back)
         if [ "$r" = ok ]; then
             a=$out/win386cad-w16/03-key.png b=$out/win386cad-ref/03-key.png
             if [ -f "$a" ] && [ -f "$b" ]; then
-                magick "$a" -crop 360x16+140+5 +repage "$out/win386cad-a.png"
-                magick "$b" -crop 360x16+140+5 +repage "$out/win386cad-b.png"
+                m="rectangle 296,458 639,477"
+                magick "$a" -fill black -draw "$m" "$out/win386cad-a.png"
+                magick "$b" -fill black -draw "$m" "$out/win386cad-b.png"
                 n=$(magick compare -metric AE "$out/win386cad-a.png" "$out/win386cad-b.png" "$out/win386cad-03-key-diff.png" 2>&1 >/dev/null || true)
                 n=${n%%[. ]*}
-                [ "${n:-1}" = 0 ] || r="03-key: the caption differs by $n pixels ($out/win386cad-03-key-diff.png)"
+                [ "${n:-1}" = 0 ] || r="03-key: File Manager differs by $n pixels ($out/win386cad-03-key-diff.png)"
             else r="no 03-key screen"; fi
         fi
         if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
         else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
+    win386hung)
+        # a hung task's Ctrl+Alt+Del under w16's WIN386 (its REBOOT runs
+        # KERNEL's procedure, which calls Reboot 0203h): VX8 as in k386hung,
+        # Microsoft's KRNL386, against Microsoft's WIN386
+        scr=$root/tests/scripts/input/vx8hung.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/win386hung.ini"
+        python3 -I "$root/tests/scripts/iniset.py" "$out/win386hung.ini" 'windows:run=C:\VX8.EXE' 'vx8:mode=2'
+        set -- -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VX8.EXE=VX8.EXE" \
+            -f "$out/win386hung.ini=WINDOWS/WIN.INI"
+        refrun win386hung-ref win386hung env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" \
+            "$out/win386hung-ref" "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" "$out/win386hung-w16" "$@" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386hung-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 03-cad2 04-ret; do
+            a=$out/win386hung-w16/$s.png b=$out/win386hung-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # row 12 "return to w16." (columns 42-51); the cursor under OK
+            m="rectangle 0,0 0,0"
+            [ $s = 04-ret ] || m="rectangle 336,192 415,207 rectangle 464,300 471,303"
+            magick "$a" -fill black -draw "$m" "$out/win386hung-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386hung-b.png"
+            n=$(magick compare -metric AE "$out/win386hung-a.png" "$out/win386hung-b.png" "$out/win386hung-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386hung-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386hung: a hung task's Ctrl+Alt+Del, Escape and Return as with Microsoft's WIN386"
+        else echo "FAIL win386hung: $r ($out/win386hung-w16)"; fails=$((fails + 1)); fi ;;
     win386close)
         scr=$root/tests/scripts/input/win386close.txt
         k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
