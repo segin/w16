@@ -1132,5 +1132,8 @@ cl_dta: times 43 db 0
 
 m_noswitch: db 'w16 is not running in standard mode.', 0Dh, 0Ah, '$'
 m_nodosx:   db 'Cannot find DOSX.EXE.', 0Dh, 0Ah, '$'
+%ifdef PAD
+            times PAD db 0              ; (a test build: WSWAP larger)
+%endif
 
 t_end:

@@ -21,11 +21,16 @@
 #     banner box (rows 1-5) is left out, since w16's says "w16" where 3.1's
 #     says "Windows"; up to 40 pixels may differ (a cursor or caret).
 #
-#   usage: tests/swap.sh [-o DIR] [-w] [-O] [-x] [-k KRNL286.EXE | -K] [SCENARIO...]
+#   usage: tests/swap.sh [-o DIR] [-w] [-O] [-x] [-W] [-k KRNL286.EXE | -K] [SCENARIO...]
 #     -o DIR   keep everything in DIR (new): DIR/NAME/{ms,w16}/...
 #     -w       w16's WIN.COM (build/dos/WIN.COM) on both sides
 #     -O       w16's WINOLDAP.MOD on both sides
 #     -x       w16's DOSX.EXE on both sides
+#     -W       w16's WIN.COM, WINOLDAP.MOD and DOSX.EXE on w16's side only:
+#              w16's stack against all of Microsoft's (Microsoft's WSWAP
+#              does not run on w16's DOSX: it hands DOSX its memory
+#              through an XMS interface of its own). Block 183h (the DOS
+#              memory, which depends on WIN.COM's size) is left out too
 #     -k FILE  this KRNL286.EXE on both sides; -K Microsoft's KRNL286
 # Prints PASS/FAIL per scenario; exit code = failures. Needs dosbox-x,
 # xdotool, ImageMagick and `make dos woprobes wcprobes`. Each scenario
@@ -35,13 +40,15 @@ unset WAYLAND_DISPLAY
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 dos=$root/build/dos
-out= krnl= common=
-while getopts o:wOxk:K opt; do
+out= krnl= common= w16only= mask=
+while getopts o:wOxWk:K opt; do
     case $opt in
     o) out=$OPTARG ;;
     w) common="$common -f $dos/WIN.COM=WINDOWS/WIN.COM" ;;
     O) common="$common -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD" ;;
     x) common="$common -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE" ;;
+    W) w16only="-f $dos/WIN.COM=WINDOWS/WIN.COM -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE"
+       mask="-m 183:2" ;;
     k) krnl="-k $OPTARG" ;;
     K) krnl=-K ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
@@ -75,7 +82,7 @@ run_one() {   # run_one DIR SIDE OPTIONS SCRIPT
         -f "$work/files/WO2.INI=WO2.INI" -n 'windows:load=C:\WO2.EXE'
     if [ "$side" = w16 ]; then
         set -- "$@" -f "$dos/WSWAP.EXE=WINDOWS/SYSTEM/WSWAP.EXE" \
-            -f "$dos/DSWAP.EXE=WINDOWS/SYSTEM/DSWAP.EXE"
+            -f "$dos/DSWAP.EXE=WINDOWS/SYSTEM/DSWAP.EXE" $w16only
     fi
     pre='SET TEMP=C:\WINDOWS\TEMP' tmax=300
     for o in $opts; do
@@ -94,7 +101,8 @@ run_one() {   # run_one DIR SIDE OPTIONS SCRIPT
 
 blocks() {
     [ -f "$1/c/WO2.LOG" ] || { echo "(no WO2.LOG)"; return; }
-    python3 "$root/tools/woblk.py" "$1/c/WO2.LOG" -m 185:4 -m 163:6 | grep -v '185h then'
+    # shellcheck disable=SC2086
+    python3 "$root/tools/woblk.py" "$1/c/WO2.LOG" -m 185:4 -m 163:6 $mask | grep -v '185h then'
 }
 
 # the swap files made, in order, and those left at the end
@@ -122,7 +130,7 @@ for n in $names; do
         # (where in memory the program is, how much is free and where the
         # vectors point differ by design: w16's DSWAP is smaller)
         if [ -f "$work/$n/$s/c/WC.LOG" ]; then tr -d '\r' < "$work/$n/$s/c/WC.LOG" |
-            grep -v '^psp=\|^envseg=\|^vec '; fi > "$work/$n/$s.wc"
+            grep -v '^psp=\|^envseg=\|^vec ' | sed 's/parentenv=[0-9A-F]*//'; fi > "$work/$n/$s.wc"
         swapfiles "$work/$n/$s" > "$work/$n/$s.files"
     done
     diff -u "$work/$n/ms.wc" "$work/$n/w16.wc" > "$work/$n/wc.diff" || bad="$bad WC.LOG"

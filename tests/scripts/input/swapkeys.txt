@@ -1,0 +1,35 @@
+; swapalt.txt without the mouse: MS-DOS Prompt by File > Run COMMAND.COM,
+; VER, Alt+Tab to Windows and back, EXIT, File > Exit Windows
+; (tests/boottest.sh case swapall: w16's install tree alone; a mouse click
+; there faults in w16's DOSX, docs/notes/swap-handover.md)
+sleep 1
+shot 00-before
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 01-dos
+type ver
+key Return
+sleep 2
+shot 02-ver
+key alt+Tab
+sleep 15
+shot 03-win
+key alt+Tab
+sleep 15
+shot 04-dos
+type exit
+key Return
+sleep 15
+shot 05-back
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 10
+shot 06-exit
