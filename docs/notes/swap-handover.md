@@ -58,3 +58,45 @@ black-box observed on 3.1, tested against Microsoft's.
   ivt_out/vrestore_regs, the read-only swap file opened for writing,
   SI=2 needs BX=0 (3.1's WIN.COM looks at it), state_name lost AL.
 - Remote runs: build/swapw/rrun.sh CMD (rsync + make there).
+
+## Results so far (installation-05)
+
+- tests/swap.sh (Microsoft's stack, DOSBox-X): prompt, two, ctrlesc, pif,
+  exitwin, nodisk all PASS (blocks byte-identical but 163h-168h/185h, WC1's
+  record, swap files made and left, every screen).
+- Boot test: swapdos ok; swapalt, swapall fixed after the first runs
+  (INT 16h blocking reads; comparisons); w16groups, woados, woadosbat,
+  winprompt, winoldap*, wincom, allw16, exitwin, tree ok; make test pass;
+  tests/wincom.sh 25/25.
+
+## Open
+
+- **w16 DOSX + w16 WSWAP + a mouse click faults in DOSX** ("Standard Mode:
+  Fault in MS-DOS Extender", EC=4440 CS=0070 IP=14C1, every time, plain
+  DOSBox, w16's install tree; build/swapw/s/click.txt). Not with
+  Microsoft's DOSX on w16's WSWAP, not with Microsoft's WSWAP on w16's
+  DOSX, not with WSWAP 4 KB larger (so not the conventional-memory
+  layout). Difference that matters: Microsoft's WSWAP owns all XMS and
+  hands DOSX memory through its own XMS entry; w16's leaves DOSX to XMS
+  directly (as DOSX run on its own). Probably a w16 DOSX bug in the PS/2
+  path that its usual extended-memory layout hides: for the DOSX owner.
+  swapall runs by keys only meanwhile.
+- tests/swap.sh -W (w16 WIN.COM + WINOLDAP + DOSX on w16's side): the
+  switches work, but WO2's block log has an extra "block at start", and in
+  "two" after EXIT with another prompt swapped out w16's stack goes to
+  Windows where 3.1 resumes the other prompt directly (run sw3). Run sw4,
+  scenario two: with w16's WIN.COM on both sides (-w) Microsoft's and
+  w16's swappers already part at the first Alt+Tab; with w16's WINOLDAP
+  on both sides (-O) they part after an EXIT (3.1's swappers make a
+  fourth switch, w16's do not). On Microsoft's WIN.COM and WINOLDAP the
+  two are byte-identical, so some field w16's WIN.COM / WINOLDAP write
+  differently from 3.1's is read by Microsoft's swappers or by w16's:
+  compare the block snapshots of sw4 (installation-05:
+  /mnt/build/w16-runs/agent-a26a1e6e924e5e02b/build/sw4/{w,O}/two) next.
+  The single-program scenario passes on w16's whole stack in the boot
+  test (swapall); woadosbat/winprompt (w16's WIN.COM with Microsoft's
+  swappers) pass with the new WIN.COM.
+- UNVERIFIED: 3.1's disk-space figure, Ctrl+Esc with several DOS
+  programs, what SI=2's BX means (3.1's WIN.COM ignores the call unless
+  BX=0), graphics-mode programs' screens (w16 saves VGA planes itself),
+  real DOS (DOSBox only: the INT 28h/SDA path is untested).
