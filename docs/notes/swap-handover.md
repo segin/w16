@@ -87,12 +87,20 @@ black-box observed on 3.1, tested against Microsoft's.
   3.1's SI=2 also leaves the freed record's next = its next's next: w16's
   WIN.COM does that now. The ring-order difference itself: resuming a
   program, 3.1's WINOLDAP rotates the ring (13 12 14 -> 12 14 13), w16's
-  moved the program to the front (12 13 14) (sw5 d vs O, #2). w16's
-  WINOLDAP to_front and WIN.COM's SI=7 (sw_front) rotate now (consistent
-  with every SI=7 seen). Since then (da1ac03, run sw7): swap.sh -O two and
+  moved the program to the front (12 13 14) (sw5 d vs O, #2); but in
+  tests/winoldap.sh two 3.1's turned 14 12 13 into 12 14 13 as well, so
+  it is no rotation: resuming from the Windows application, 3.1's
+  WINOLDAP puts the program first and the Windows application second, the
+  rest after (winoldap.c to_front: move_front(Windows app), then the
+  program). WIN.COM's SI=7 rotates the ring (sw_rotate; every SI=7 seen
+  fits it, and Microsoft's DSWAP on w16's WIN.COM needs it: -w two). Since then (da1ac03, run sw7): swap.sh -O two and
   -w two PASS; the default six PASS (sw6); tests/winoldap.sh bat com
   errors noswap pif PASS; full boot test 85/85 and make test pass (also
   at 31601cf, swapall with the mouse).
+- After the last fixes: -O two, -w two, default two/ctrlesc PASS
+  (sw10); winoldap.sh prompt failed once on Microsoft's side under four
+  parallel runs (keys lost: its #2 switch never came) and passed alone
+  (sw9).
 - Still open: swap.sh -W (w16's WIN.COM + WINOLDAP + DOSX on w16's side,
   DOSBox-X, Microsoft's KRNL386): the icon (388 px, w16's own, known)
   and in ctrlesc, nodisk, pif the run ends early (shots missing): w16's
