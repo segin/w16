@@ -10,11 +10,12 @@
  * ARCHITECTURE.md 3): it saves the VGA's registers, planes and DAC, sets
  * text mode through the System VM's BIOS (Exec_Int), waits for a key on
  * the keyboard controller, then sets the old mode again and restores.
- * UNVERIFIED and not done: KERNEL's handler (set with 0201h) and the
- * sanity-check byte, i.e. telling a hung application from none (Windows
- * 3.1's "not responding" path, 0203h), and giving the VM the Ctrl and Alt
- * releases that come while the screen is up (VKD cannot put keys into the
- * VM until port 60h is trapped).
+ * KERNEL's handler (set with 0201h) and its sanity byte tell a hung
+ * application from none: the byte zeroed, KERNEL's procedure run in the
+ * VM, and the byte set again (screen A) or a 0203h call from it for the
+ * task that does not respond (screen B); neither: screen C (reboot_cad).
+ * The Ctrl and Alt releases read while a screen is up go to the VM with
+ * VKD_Force_Keys.
  *
  * The PM API (VX5; Ralf Brown's Interrupt List 61, INT 2Fh 1684h BX=0009h):
  * 0201h sets KERNEL's Ctrl+Alt+Del handler (ES:DI) and its sanity-check
@@ -53,22 +54,34 @@ static void copy(void *d, const void *s, vu32 n) { vu8 *p = d; const vu8 *q = s;
 
 static vu16 kern_sel, kern_off, sane_sel, sane_off;    /* 0201h */
 static vu8 *sane;                       /* the sanity byte (Map_Flat of 0201h's DS:SI) */
-/* the sanity check (reboot_cad): screen A then appears in every run (12 of
- * 12 on installation-05), but in 2 of 12 Space did not take it away (the
- * screen shown from the time-out, inside IRQ 0's VTD procedure: cause not
- * found; the handover note). Off: screen A at once, as before */
-#define SANITY_CHECK 0
-static int cad_state;                   /* 2: KERNEL's procedure due at an idle, 4: due now, 3: screen B up */
+/* the sanity check (reboot_cad); 0: screen A at once on Ctrl+Alt+Del */
+#define SANITY_CHECK 1
+static int cad_state;                   /* 2: KERNEL's procedure due at an idle, 4: due now, 3: a screen up */
+static int del_down;                    /* Del held (the hot key's press and release callbacks) */
 static vu32 tmo_handle;
 static vu32 sys_vm, client;
 
 /* ---- the VGA's state ---- */
 static vu8 seq[5], gc[9], crtc[25], attr[21], misc, dac[768];
+/* the index registers and the DAC's mask and write index: display
+ * drivers leave an index set (the Sequencer at Map Mask, the Graphics
+ * Controller at Bit Mask) and then write only the data port in their
+ * loops. Left at other values after the screen, Windows 3.1's VGA.DRV
+ * drew every bitmap from memory without its colours (icons, File
+ * Manager's: black and white) until it set them again */
+static vu8 seq_i, gc_i, crtc_i, attr_i, dac_mask, dac_w;
 static vu8 planes[4][65536];
 
 static void vga_save(void)
 {
     vu32 i, p;
+    seq_i = inb(0x3C4);
+    gc_i = inb(0x3CE);
+    crtc_i = inb(0x3D4);
+    inb(0x3DA);
+    attr_i = inb(0x3C0);                    /* with its palette-access bit */
+    dac_mask = inb(0x3C6);
+    dac_w = inb(0x3C8);
     misc = inb(0x3CC);
     for (i = 0; i < 5; i++) { outb(0x3C4, i); seq[i] = inb(0x3C5); }
     for (i = 0; i < 9; i++) { outb(0x3CE, i); gc[i] = inb(0x3CF); }
@@ -111,6 +124,14 @@ static void vga_restore(void)
     outb(0x3C0, 0x20);                      /* the screen on again */
     outb(0x3C8, 0);
     for (i = 0; i < 768; i++) outb(0x3C9, dac[i]);
+    /* the indexes as the driver left them */
+    outb(0x3C6, dac_mask);
+    outb(0x3C8, dac_w);
+    inb(0x3DA);
+    outb(0x3C0, attr_i | 0x20);
+    outb(0x3D4, crtc_i);
+    outb(0x3CE, gc_i);
+    outb(0x3C4, seq_i);
 }
 
 /* INT 10h in the System VM with AX, BX, DX */
@@ -220,7 +241,12 @@ static vu32 wait_key(int kind, int *cad)
 {
     vu32 b, code, st, i;
     for (i = 0; i < 128; i++) held[i] = seen[i] = 0;
-    held[0x1D] = held[0x38] = held[0x53] = 1;   /* still held from the hot key */
+    /* Ctrl and Alt count as held (their repeats and releases are only
+     * tracked either way); Del as the hot key last saw it: a screen shown
+     * from the time-out may come after Del was let go, and a new Del
+     * must then count */
+    held[0x1D] = held[0x38] = 1;
+    held[0x53] = (vu8)del_down;
     n_orphans = 0;
     for (;;) {
         while (!((st = inb(0x64)) & 1))
@@ -269,6 +295,7 @@ static vu32 screen(int kind, const char *name)
     /* the cursor: after the prompt (A, C), on its "OK" (B) */
     bios_video(0x0200, 0, kind == SCREEN_A ? (19 << 8) | 53 : kind == SCREEN_B ? (18 << 8) | 58 : (18 << 8) | 53);
     key = wait_key(kind, &cad);
+    del_down = held[0x53];
     if (cad) {
         outb(0x64, 0xFE);                   /* a warm boot: the controller's reset line */
         for (;;)
@@ -295,9 +322,25 @@ static vu32 screen(int kind, const char *name)
     return key;
 }
 
+/* a screen with no other Ctrl+Alt+Del taken meanwhile: from the time-out
+ * (IRQ 0's VTD procedure, the IRQ already ended on the PIC) the VM's BIOS
+ * calls (Exec_Int, interrupts on) let IRQ 1 in, and a Del the keyboard
+ * repeated while Ctrl and Alt were still down was a new hot key press:
+ * it started the check again, and its time-out showed screen A a second
+ * time after the key had taken the first away (2 of 12 remote win386cad
+ * runs, "Space did not dismiss the screen") */
+static vu32 screen_once(int kind, const char *name)
+{
+    vu32 key;
+    cad_state = 3;
+    key = screen(kind, name);
+    cad_state = 0;
+    return key;
+}
+
 static void screen_a(void)
 {
-    screen(SCREEN_A, 0);
+    screen_once(SCREEN_A, 0);
 }
 
 static void time_out(vu32 ms)
@@ -326,7 +369,8 @@ static void cancel_time_out(void)
 void __cdecl reboot_cad(struct vregs *r)
 {
     struct vregs s;
-    if ((r->eax >> 8) & 0xFF) return;       /* only the press */
+    if ((r->eax >> 8) & 0xFF) { del_down = 0; return; }    /* the release */
+    del_down = 1;
     if (cad_state) return;
     if (!sane || !SANITY_CHECK) { screen_a(); return; }
     *sane = 0;
@@ -350,7 +394,7 @@ void __cdecl reboot_time_out(struct vregs *r)
 {
     (void)r;
     tmo_handle = 0;
-    if (cad_state == 2 && *sane) { cad_state = 0; screen_a(); return; }
+    if (cad_state == 2 && *sane) { screen_a(); return; }
     if (cad_state == 2) {
         /* the VM has not idled: KERNEL's procedure now, where it is (the
          * VMM makes the frame at once on a second call) */
@@ -363,10 +407,9 @@ void __cdecl reboot_time_out(struct vregs *r)
         time_out(750);
         return;
     }
-    if (cad_state == 4 && *sane) { cad_state = 0; screen_a(); return; }
+    if (cad_state == 4 && *sane) { screen_a(); return; }
     if (cad_state == 4) {                   /* KERNEL's handler did not answer (UNVERIFIED delay) */
-        cad_state = 0;
-        screen(SCREEN_C, 0);
+        screen_once(SCREEN_C, 0);
         return;
     }
     cad_state = 0;
@@ -383,11 +426,12 @@ void __cdecl reboot_control(struct vregs *r)
         sys_vm = r->ebx;
     else if (r->eax == DEVICE_INIT) {
         /* Ctrl+Alt+Del: Del (53h, normal or extended), Ctrl and Alt down
-         * (w16 VKD's shift bits: Ctrl 2, Alt 4), on the press (1) */
+         * (w16 VKD's shift bits: Ctrl 2, Alt 4), on the press (1) and
+         * the release (2: Del's state for the screens) */
         zero(&s, sizeof(s));
         s.eax = 0xFF53;
         s.ebx = (6u << 16) | 6;
-        s.ecx = 1;
+        s.ecx = 3;
         s.esi = (vu32)rb_cad;
         vkd_define_hot_key(&s);
     }
@@ -427,10 +471,8 @@ void __cdecl reboot_api(struct vregs *r)
             vmm_map_flat(&s);
             name = s.eax == 0xFFFFFFFFu ? "" : (const char *)s.eax;
             cancel_time_out();              /* KERNEL answered: no screen C */
-            cad_state = 3;
-            c->eax = (c->eax & 0xFFFF0000u) | (screen(SCREEN_B, name) == 0x1C ? 1 : 0);
+            c->eax = (c->eax & 0xFFFF0000u) | (screen_once(SCREEN_B, name) == 0x1C ? 1 : 0);
             c->eflags &= ~VF_CF;
-            cad_state = 0;
         }
         return;
     case 0x0202:                            /* get it */
