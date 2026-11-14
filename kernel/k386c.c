@@ -79,6 +79,43 @@ static u32 vxd_entry(u16 id)
     return ((u32)r.es << 16) | r.di;
 }
 
+/* KERNEL's Ctrl+Alt+Del procedure (k386.asm), when the Reboot device
+   finds the sanity byte still 0 (KERNEL has not run: the running task
+   does not let it): the "not responding" screen through Reboot 0203h,
+   with the task's module file name (TK57/VX8 under 3.1: " VX8.EXE " as
+   the screen's title, ES:DI "VX8.EXE", BX 7Dh, CX 0). Returns 1 when the
+   task is to be ended (the answer AX nonzero: Enter), 0 to go on. */
+u16 __cdecl __far k386_cad(void)
+{
+    static char name[16];
+    module FAR *m = task_module();
+    regs16 r;
+    u32 e;
+    u16 i, n, b;
+    if (!cur_task || !m || !k386_enhanced)
+        return 0;
+    e = vxd_entry(0x0009);
+    if (!e)
+        return 0;
+    for (n = 0, b = 0; m->path[n]; n++)
+        if (m->path[n] == '\\' || m->path[n] == ':')
+            b = n + 1;
+    for (i = 0; m->path[b + i] && i < sizeof name - 1; i++)
+        name[i] = m->path[b + i];
+    name[i] = 0;
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x0203;
+    r.bx = 0x007D;
+    r.dx = cur_task;
+    r.es = FP_SEG((void FAR *)name);
+    r.di = FP_OFF((void FAR *)name);
+    r.ds = FP_SEG((void FAR *)&k386_sane);
+    r.si = FP_OFF((void FAR *)&k386_sane);
+    if (vxd_call(e, &r))
+        return 0;
+    return r.ax != 0;
+}
+
 /* The first task's InitTask (task.c): in Enhanced mode, KERNEL's
    Ctrl+Alt+Del procedure to the Reboot device (0201h) */
 void k386_first_task(void)

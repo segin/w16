@@ -96,23 +96,38 @@ _k386_lsl:
 ; Ctrl+Alt+Del Microsoft's Reboot device zeroes the byte, KERNEL sets it to
 ; 1 again whenever it runs, and the device makes the System VM take the
 ; procedure as an interrupt (Build_Int_Stack_Frame); for a hung task the
-; procedure calls Reboot 0203h (the "not responding" screen). w16's sets
-; the byte and returns (IRET): the screen for no hung application.
-; UNVERIFIED: telling a hung task, 0203h and ending the task.
+; procedure calls Reboot 0203h (the "not responding" screen) with ES:DI
+; the task's module file name, DS:SI the byte, BX 7Dh, CX 0, DX a
+; selector, and ends the task with INT 21h 4Ch when the answer (AX) is not
+; 0 (Enter), else returns to it (Esc). w16's does the same (k386c.c,
+; k386_cad: the device runs it only when KERNEL has not run for its
+; time-out, so the running task is the hung one). UNVERIFIED: DX's meaning
+; (w16: the task), the exit code (w16: 0), a call with no task running.
 segment _DATA
 global _k386_sane
 _k386_sane      db 1
 
 segment BOOT_TEXT
+extern _k386_cad                ; u16 __cdecl __far k386_cad(void)
 global reboot_proc
 reboot_proc:
+        pusha
         push ds
-        push ax
+        push es
         mov ax, DGROUP
         mov ds, ax
         mov byte [_k386_sane wrt DGROUP], 1
-        pop ax
+        cld
+        call far _k386_cad
+        or ax, ax
+        jnz .end
+        pop es
         pop ds
+        popa
         iret
+.end:   sti                             ; end the running task (Enter)
+        mov ax, 4C00h
+        int 21h                         ; does not come back
+        jmp .end
 
 %endif

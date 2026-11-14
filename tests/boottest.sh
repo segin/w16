@@ -31,6 +31,9 @@
 #   k386cad    Ctrl+Alt+Del in 386 Enhanced mode under Microsoft's WIN386
 #              (tests/scripts/input/win386cad.txt): w16's KRNL386 against
 #              Microsoft's, the Reboot screen and Windows after it equal
+#   k386hung   the same with a task that never yields (VX8 mode 2): the
+#              "not responding" screen, Escape, again, Return (the task
+#              ended): w16's KRNL386 against Microsoft's, every screen
 #   wincom     w16's WIN.COM + KRNL286             must be 0
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
@@ -416,7 +419,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -889,6 +892,33 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   k386cad: Ctrl+Alt+Del's screen and back as with Microsoft's KRNL386"
         else echo "FAIL k386cad: $r ($out/k386cad-w16)"; fails=$((fails + 1)); fi ;;
+    k386hung)
+        # Ctrl+Alt+Del with a hung task under Microsoft's WIN386: VX8
+        # (tests/apps/vx8.c, mode 2: never yields) started by WIN.INI run=,
+        # the vx8hung script (the "not responding" screen, Escape, again,
+        # Return: the task ended); w16's KRNL386 against Microsoft's, every
+        # screen (the cursor under OK blinks: left out)
+        scr=$root/tests/scripts/input/vx8hung.txt
+        cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/k386hung.ini"
+        python3 -I "$root/tests/scripts/iniset.py" "$out/k386hung.ini" 'windows:run=C:\VX8.EXE' 'vx8:mode=2'
+        set -- -c "WIN /3 /B" -f "$root/build/dos/VX8.EXE=VX8.EXE" -f "$out/k386hung.ini=WINDOWS/WIN.INI"
+        refrun k386hung-ref k386hung env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" \
+            "$out/k386hung-ref" -3 -r "$@"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 200 "$scr" "$out/k386hung-w16" \
+            -3 "$@" > "$out/k386hung-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 02-esc 03-cad2 04-ret; do
+            a=$out/k386hung-w16/$s.png b=$out/k386hung-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            m="rectangle 464,300 471,303"
+            magick "$a" -fill black -draw "$m" "$out/k386hung-a.png"
+            magick "$b" -fill black -draw "$m" "$out/k386hung-b.png"
+            n=$(magick compare -metric AE "$out/k386hung-a.png" "$out/k386hung-b.png" "$out/k386hung-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/k386hung-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   k386hung: a hung task's Ctrl+Alt+Del, Escape and Return as with Microsoft's KRNL386"
+        else echo "FAIL k386hung: $r ($out/k386hung-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the
