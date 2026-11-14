@@ -166,3 +166,20 @@ tests/scripts/iconbox.py, inputrun.sh `dclick`.
 
 Still open: US23's window made with WS_MINIMIZE | WS_VISIBLE stays
 hidden on 3.1 (w16 shows it); not needed by any WINOLDAP.
+
+Results (installation-05, f641f37 = these fixes with master 0b16a13
+merged): make test pass; full boot test 93 ok, 1 failure: k386cad, whose
+reference (Microsoft's KRNL386 on Microsoft's WIN386, run fresh, not from
+the cache) showed "PROGMAN.EXE has stopped responding" where w16's showed
+the no-application screen; k386cad alone twice afterwards: ok both times
+(a timing flake on the reference side under 13 jobs; reported, not
+chased: not swap code). swapesc ok (k386, k286, mswoa). The pre-fix
+build (1c30422 + the swapesc case, run dir agent-a6b330f175a42d3fb-old
+there) fails all three parts: k386/k286 "03-win: the icon's title none"
+(the 0,0 window), mswoa "03-win: the icon's title ... active 632" (the
+icon left active).
+
+Ctrl+Esc out of the prompt on the tree: Windows comes back with Program
+Manager active but no Task List, where 3.1 shows it: WINOLDAP (and USER's
+own Ctrl+Esc) run TASKMAN.EXE, and the install tree has none (w16 has no
+TASKMAN yet). Not a swap bug; open.
