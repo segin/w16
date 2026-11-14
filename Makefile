@@ -1331,6 +1331,34 @@ $(DOS)/SW1.COM: tests/dos/sw1.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 
+# ---- VGACOLOR.2GR: w16's Standard-mode display grabber (drivers/grabber/,
+# ARCHITECTURE.md 9.11): a binary image (nasm -f bin) ----
+dos: $(DOS)/VGACOLOR.2GR
+$(DOS)/VGACOLOR.2GR: drivers/grabber/vgacolor.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
+# ---- the display grabbers' probes (ARCHITECTURE.md 9.11, tests/grabber.sh):
+# GR1.2GR, a recording stand-in grabber (the test appends the real one);
+# GV1.COM, a DOS program drawing a fixed screen in a given video mode;
+# CB1.EXE, a clipboard viewer that records every clipboard change ----
+GRPROBES := $(DOS)/GR1.2GR $(DOS)/GV1.COM $(DOS)/CB1.EXE $(DOS)/GRT.COM
+grprobes: $(GRPROBES)
+dos: $(GRPROBES)
+$(DOS)/GR1.2GR: tests/dos/gr1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/GRT.COM: tests/dos/grt.asm tests/dos/gvdraw.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/GV1.COM: tests/dos/gv1.asm tests/dos/gvdraw.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Itests/dos/ -o $@ $<
+$(DOS)/CB1.EXE: $(B)/tests/start.o $(B)/tests/cb1.o tests/apps/app.lnk tests/apps/cb1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/cb1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cb1.map file { $(B)/tests/start.o $(B)/tests/cb1.o }
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
@@ -1398,6 +1426,11 @@ $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+# the display grabber (drivers/grabber/)
+install-tree: $(W16SYS)/VGACOLOR.2GR
+$(W16SYS)/VGACOLOR.2GR: $(DOS)/VGACOLOR.2GR
 	@mkdir -p $(@D)
 	cp $< $@
 
