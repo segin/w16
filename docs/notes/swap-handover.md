@@ -85,8 +85,13 @@ black-box observed on 3.1, tested against Microsoft's.
   Windows: after SI=2 and SI=5 it sets 178h bit 08h and SI=7 BX=1 (r13,
   SW1 with w16's WINOLDAP). w16's DSWAP now does the same (to_windows).
   3.1's SI=2 also leaves the freed record's next = its next's next: w16's
-  WIN.COM does that now. The WINOLDAP ring-order difference itself is
-  still open (swap.sh -W block diffs).
+  WIN.COM does that now. The ring-order difference itself: resuming a
+  program, 3.1's WINOLDAP rotates the ring (13 12 14 -> 12 14 13), w16's
+  moved the program to the front (12 13 14) (sw5 d vs O, #2). w16's
+  WINOLDAP to_front and WIN.COM's SI=7 (sw_front) rotate now (consistent
+  with every SI=7 seen). Microsoft's DSWAP on w16's WIN.COM (-w) still
+  misses the first quick Alt+Tab and shows itself as the first title:
+  UNVERIFIED why (SI=6/7 return DI now as 3.1's).
 - UNVERIFIED: 3.1's disk-space figure, Ctrl+Esc with several DOS
   programs, what SI=2's BX means (3.1's WIN.COM ignores the call unless
   BX=0), graphics-mode programs' screens (w16 saves VGA planes itself),

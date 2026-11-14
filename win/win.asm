@@ -315,45 +315,51 @@ sw_free:
         pop cx
         ret
 
-; move record 17Eh to the ring's front (after record 15)
+; make record 17Eh the first in the ring (after record 15): the ring
+; rotated, the others keeping their order after it (3.1's WINOLDAP and
+; SI=7: 13 12 14 resuming 12 gives 12 14 13; tests/swap.sh -O two)
 sw_front:
         push ax
         push cx
+        push dx
         push si
         mov cl, [cs:block + SB_17E]
         cmp cl, REC_WIN
         je .r
         mov bl, REC_WIN
         call sw_rec
-        cmp [cs:bx + REC_NEXT], cl
-        je .r
         mov si, bx                      ; SI -> record 15
-        mov ah, 17                      ; unlink it
-        mov bl, REC_WIN
-.p:     push bx
+        cmp [cs:si + REC_NEXT], cl
+        je .r
+        mov ch, REC_WIN                 ; CH: the one before 17Eh
+        mov dh, REC_WIN                 ; DH: the last before 15
+        mov dl, [cs:si + REC_NEXT]
+        mov ah, 17
+.w:     cmp dl, REC_WIN
+        je .done
+        mov bl, dl
         call sw_rec
         mov al, [cs:bx + REC_NEXT]
         cmp al, cl
         jne .n
-        push bx
-        mov bl, cl
-        call sw_rec
-        mov al, [cs:bx + REC_NEXT]
-        pop bx
-        mov [cs:bx + REC_NEXT], al
-        pop bx
-        jmp .ins
-.n:     pop bx
-        mov bl, al
+        mov ch, dl
+.n:     mov dh, dl
+        mov dl, al
         dec ah
-        jnz .p
+        jnz .w
         jmp .r
-.ins:   mov al, [cs:si + REC_NEXT]      ; then after record 15
-        mov bl, cl
+.done:  cmp ch, REC_WIN                 ; (not in the ring)
+        je .r
+        mov al, [cs:si + REC_NEXT]
+        mov bl, dh
         call sw_rec
-        mov [cs:bx + REC_NEXT], al
+        mov [cs:bx + REC_NEXT], al      ; the last -> the old first
+        mov bl, ch
+        call sw_rec
+        mov byte [cs:bx + REC_NEXT], REC_WIN
         mov [cs:si + REC_NEXT], cl
 .r:     pop si
+        pop dx
         pop cx
         pop ax
         ret
