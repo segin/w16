@@ -24,15 +24,18 @@ struct vxdapi {
 };
 
 static void api_default(struct cregs *r);
+static void api_vmd(struct cregs *r);
+static void api_vdd(struct cregs *r);
+static void api_reboot(struct cregs *r);
 
 static const struct vxdapi apis[] = {
     /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
      * (carry set), SHELL's BX is 1000h */
     { 0x0003, "VPICD",    api_default, 0x030A, 0, 0 },
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
-    { 0x0009, "Reboot",   api_default, 0x0000, 0, 1 },
-    { 0x000A, "VDD",      api_default, 0x030A, 0, 0 },
-    { 0x000C, "VMD",      api_default, 0x0300, 0, 0 },
+    { 0x0009, "Reboot",   api_reboot,  0x0000, 0, 1 },
+    { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
+    { 0x000C, "VMD",      api_vmd,     0x0300, 0, 0 },
     { 0x000D, "VKD",      api_default, 0x0200, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
     { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
@@ -48,6 +51,59 @@ static void api_default(struct cregs *r)
     trace("VxD API %s (%x): ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> not implemented\n",
           apis[cur_api].name, apis[cur_api].id, AX(r), BX(r), CX(r), DX(r), SI(r), DI(r), r->ds, r->es);
     r->eflags |= EFL_CF;
+}
+
+/* VMD. VX5 (Windows 3.1, w16's MOUSE.DRV in place so that its call is
+ * the first): AX=0100h with MOUSE.DRV's registers (BX=7404h CX=0071h
+ * DX=0500h) fails, carry set, every register as it was; a repeat too.
+ * UNVERIFIED what it is for (Ralf Brown's Interrupt List 61 lists 0100h
+ * for an older VMD as "possibly a NOP"). */
+static void api_vmd(struct cregs *r)
+{
+    if (AX(r) == 0x0100) {
+        r->eflags |= EFL_CF;
+        return;
+    }
+    api_default(r);
+}
+
+/* VDD. VX5 (Windows 3.1): AX=000Ch with VGA.DRV's registers (BX=9B0Ah
+ * CX=3101h DX=0 SI=01F4h DI=0106h) returns AX = BX, the others as they
+ * were, carry clear. UNVERIFIED what it does. */
+static void api_vdd(struct cregs *r)
+{
+    if (AX(r) == 0x000C) {
+        SETW(r->eax, BX(r));
+        r->eflags &= ~EFL_CF;
+        return;
+    }
+    api_default(r);
+}
+
+/* Reboot (Ralf Brown's Interrupt List 61, INT 2Fh 1684h BX=0009h):
+ * 0201h sets KERNEL's Ctrl+Alt+Del handler (ES:DI) and the sanity-check
+ * byte (DS:SI, kept as a linear address); 0202h returns the handler in
+ * ES:DI. VX5 (Windows 3.1): 0202h gives back exactly what KERNEL set
+ * (0117h:A5ADh), AX and the other registers unchanged, carry clear.
+ * Ctrl+Alt+Del itself needs the keyboard virtualised (VKD): not yet. */
+static u32 reboot_sel, reboot_off, reboot_byte;
+
+static void api_reboot(struct cregs *r)
+{
+    switch (AX(r)) {
+    case 0x0201:
+        reboot_sel = r->es & 0xFFFF;
+        reboot_off = DI(r);
+        reboot_byte = pm_lin(r->ds, r->esi);
+        r->eflags &= ~EFL_CF;
+        return;
+    case 0x0202:
+        r->es = reboot_sel;
+        SETW(r->edi, reboot_off);
+        r->eflags &= ~EFL_CF;
+        return;
+    }
+    api_default(r);
 }
 
 /* INT 2Fh 1684h in protected mode: the entry for device BX, or 0:0 */
