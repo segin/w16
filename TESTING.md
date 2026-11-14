@@ -117,6 +117,12 @@ boot that seems stuck (it is on in tests). `tests/dropin.sh` with no
 386 Enhanced mode (`WIN /3`) needs DOSBox-X with `machine=svga_s3` and
 Microsoft's KRNL386 (w16 has no KRNL386 yet); `tests/win386.sh` shows the
 setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
+Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
+case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
+`tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
+see the case in `tests/boottest.sh`). `tests/vxpprobe.sh ms|w16` loads the
+probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
+service results it saw (ARCHITECTURE.md 12.7).
 
 ## 5. Running on a remote host
 
