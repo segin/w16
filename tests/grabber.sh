@@ -147,7 +147,7 @@ win_scenario() {
     cblog "$d/ms" > "$d/ms.cb"; cblog "$d/w16" > "$d/w16.cb"
     if ! diff -u "$d/ms.cb" "$d/w16.cb" > "$d/cb.diff"; then
         # 3.1's grabber now and then leaves a PrintScreen's clipboard empty
-        # (DSWAP's grab gives no data; seen in 5 of 9 prompt runs): when
+        # (DSWAP's grab gives no data; seen in 5 of 12 prompt runs): when
         # w16's only has more, it is noted, not failed
         if grep -q '^-[^-]' "$d/cb.diff"; then bad="$bad clipboard"
         else note="$note clipboard(3.1's grab empty)"; fi

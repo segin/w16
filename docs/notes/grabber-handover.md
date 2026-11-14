@@ -86,8 +86,10 @@ writes every register and the DAC, then the BIOS fields. No hooks
   shots differ, reported as known), `ega`: PASS; `-O text`: PASS.
 - `prompt`: screens equal; the clipboard equal whenever both grabs give
   data. 3.1's grabber left the first PrintScreen's clipboard empty in 5 of
-  9 runs, w16's never (after a first run lost to xdotool dropping Shift
-  under load: the scenario now types no shifted characters); the script
+  12 runs; w16's once (the first run, where xdotool also dropped Shift
+  under load and a stray key reached the prompt: the scenario now types
+  no shifted characters). UNVERIFIED why 3.1's grab comes back empty; the
+  script
   notes that case instead of failing.
 - Full boot test at 6ec0d93 (tools/remote-test.sh): 92 ok, 0 failures,
   make test pass; swapall boots w16's install tree with w16's grabber and
