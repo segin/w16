@@ -1347,6 +1347,13 @@ static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
     kmemcpy(woa, sys_dir, n);
     if (n && woa[n - 1] != '\\')
         woa[n++] = '\\';
+#ifdef KRNL386
+    /* 386 Enhanced mode: WINOA386.MOD (Pietrek; UNVERIFIED: TK57 with
+       TK33 in its place saw nothing run) */
+    if (k386_enhanced)
+        kmemcpy(woa + n, "WINOA386.MOD", 13);
+    else
+#endif
     kmemcpy(woa + n, "WINOLDAP.MOD", 13);
     np.env = lp->env;
     np.cmd = tail;

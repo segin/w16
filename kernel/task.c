@@ -126,6 +126,12 @@ u16 get_winflags(void)
     /* BIOS equipment word (0040:0010), bit 1: math coprocessor present */
     if (*(u16 FAR *)MK_FP(dpmi_seg_to_desc(0x0040), 0x0010) & 2)
         f |= WF_80x87;
+#ifdef KRNL386
+    /* 386 Enhanced mode (TK57: 0C29h there, 0419h in Standard mode;
+       WF_PAGING with a paging file: k386c.c) */
+    if (k386_enhanced)
+        f = (f & ~WF_STANDARD) | WF_ENHANCED | (k386_paging ? WF_PAGING : 0);
+#endif
     return f;
 }
 
@@ -860,6 +866,9 @@ void __cdecl inittask_c(regs16 FAR *r)
     r->di = x->dg_hnd;
     r->es = pdb;
 
+#ifdef KRNL386
+    k386_first_task();          /* Enhanced mode: the Reboot device */
+#endif
     lib = TW(cur_task, TDB_LIBINIT);
     if (lib) {
         u16 n = *(u16 FAR *)MK_FP(lib, 0), i;

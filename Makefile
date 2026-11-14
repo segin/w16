@@ -42,7 +42,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE
@@ -115,14 +115,14 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 # extender: the extenders and w16's own interrupt paths keep only the low
 # halves of the registers); 386 instructions are written in the assembly
 # helpers where KRNL386's behaviour needs them (kernel/k386.asm) ----
-K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%)
+K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%) $(B)/kernel386/k386.o $(B)/kernel386/k386c.o
 $(B)/kernel386/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -DKRNL386 -o $@ $<
 $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -dKRNL386 -fo=$@ $<
-$(KBOOT_C:%=$(B)/kernel386/%.o): $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+$(KBOOT_C:%=$(B)/kernel386/%.o) $(B)/kernel386/k386c.o: $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -dKRNL386 -nt=BOOT_TEXT -fo=$@ $<
 $(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
@@ -296,6 +296,13 @@ $(DOS)/TK33.EXE: $(B)/tests/start.o $(B)/tests/tk33.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk33.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk33.map file { $(B)/tests/start.o $(B)/tests/tk33.o }
+
+# TK57.EXE: KERNEL in 386 Enhanced mode: WinFlags, the Reboot API (tk57s.asm)
+$(B)/tests/tk57.o: tests/apps/tk57ref.h tests/apps/tklog.h
+$(DOS)/TK57.EXE: $(B)/tests/start.o $(B)/tests/tk57.o $(B)/tests/tk57s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk57.map file { $(B)/tests/start.o $(B)/tests/tk57.o $(B)/tests/tk57s.o }
 
 # TK34.EXE: WinOldApCall, KERNEL.151 (tk34s.asm)
 $(B)/tests/tk34.o: tests/apps/tk34ref.h tests/apps/tklog.h

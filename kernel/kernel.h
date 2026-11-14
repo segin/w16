@@ -297,7 +297,15 @@ void kernel_psp(int on);                /* task.c: KERNEL's PSP current (1)
 #define WF_STANDARD     0x0010
 #define WF_ENHANCED     0x0020
 #define WF_80x87        0x0400
+#define WF_PAGING       0x0800
 extern u16 psp_sel;
+#ifdef KRNL386
+/* ---- k386c.c: KRNL386 in 386 Enhanced mode ---- */
+extern u16 k386_enhanced;               /* running under WIN386 */
+extern u16 k386_paging;                 /* with a paging file (WF_PAGING) */
+void k386_init(void);
+void k386_first_task(void);
+#endif
 
 #endif
 
