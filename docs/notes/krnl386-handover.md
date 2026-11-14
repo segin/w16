@@ -103,3 +103,14 @@ KRNL386's (TK51, TK53, TK58 equal 3.1's).
   moving the Burgermaster (THHOOK 18h changes then: UNVERIFIED whether
   TOOLHELP rereads it); Windows 3.1 had 3770 at 16 MB.
 - US14/US15 (USER heaps) have KRNL286 tables; not run under w16's KRNL386.
+
+## Test results (installation-05, tools/remote-test.sh, commit 93f8083)
+
+- `make test`: pass; 38 probes x 2 DPMI hosts x 2 kernels (KRNL286 and
+  KRNL386), 152 ok, with WIN.COM's scenarios and the font checks.
+- Full boot test: 90 cases, 0 failures (k386, k386all, k386e, k386em,
+  k386cad among them; tree now boots w16's KRNL386).
+- Not in make test, run as the shell (dropin.sh -3): TK51, TK53, TK57 (both
+  modes), TK58 (both modes, both WIN386s): no FAIL under w16's KRNL386.
+  TK50 under w16's KRNL386 equals Microsoft's KRNL386 except for which
+  registers each export keeps.
