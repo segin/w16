@@ -143,6 +143,14 @@
 #              Microsoft's MMSOUND.DRV and VGACOLOR.2GR): every part w16's,
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
+#   swapesc    the MS-DOS Prompt on w16's install tree alone, the user's
+#              steps (tests/scripts/input/swapesc.txt): Alt+Esc out (an
+#              icon, Program Manager active), the icon double-clicked,
+#              Alt+Tab out and in, a second prompt, EXIT in both, Exit
+#              Windows; parts k386 (the tree's KRNL386), k286 (KRNL286),
+#              mswoa (Microsoft's WINOLDAP.MOD): every screen's mode as
+#              Windows 3.1's, the DOS screens as the prompt was left,
+#              Windows' as before the prompt, the icon's title as 3.1's
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -405,7 +413,7 @@
 # The cases that took longest last time (build/boottest-times.txt, kept
 # by each run) start first; the output stays in case order. Cases made of
 # independent sessions run as parts (allw16nolock@1..6, pmdrop@pm/sh/us, sbdrag@us/np, edithandle@us/np,
-# winfile@cmp/all, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
+# winfile@cmp/all, swapesc@k386/k286/mswoa, kbd@SCRIPT, mouse@SCRIPT: see caseparts), scheduled like cases and summed up in
 # the case's one line; a part can be run by name (tests/boottest.sh
 # allw16nolock@3).
 set -eu
@@ -423,7 +431,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1482,6 +1490,74 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         [ -z "$left" ] || [ "$r" != ok ] || r="swap files left: $left"
         if [ "$r" = ok ]; then echo "ok   $c: w16's WSWAP/DSWAP, the DOS screens as 3.1's and Windows back as it was"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    swapesc)
+        # switching away from the MS-DOS Prompt and back on w16's install
+        # tree alone (build/w16 as C:\W16, as swapall), the user's steps
+        # (tests/scripts/input/swapesc.txt): Alt+Esc out, the icon
+        # double-clicked, Alt+Tab out and in, a second prompt, EXIT in
+        # both, Exit Windows. Parts: k386 (the tree as it is: DOSX starts
+        # its KRNL386), k286 (its KRNL386.EXE deleted: KRNL286), mswoa
+        # (Microsoft's WINOLDAP.MOD in it). Against Windows 3.1's run of
+        # the same (Microsoft's KRNL386): each screen's mode; the DOS
+        # screens against the part's own (its prompt says C:\W16>): the
+        # restored prompt as it was left (02-ver), the second prompt as the
+        # first (01-dos); Windows' screens against its own before the
+        # prompt, the icon row's corner (0,400-199,479) and the pointer
+        # left out, so
+        # Program Manager active and nothing else on the screen (bug: a
+        # CW_USEDEFAULT-sized window at 0,0 with the icon in its corner);
+        # in that corner the icon's title as 3.1's: the same place and
+        # width, not highlighted (bug: Microsoft's WINOLDAP's icon left
+        # active), none after both prompts ended; no ~WOA file left
+        rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
+        scr=$root/tests/scripts/input/swapesc.txt
+        refrun swapesc-ref swapesc env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 300 "$scr" "$out/swapesc-ref" \
+            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        r=ok
+        for k in ${part:-k386 k286 mswoa}; do
+            case $k in
+            k286)  set -- -f "W16/SYSTEM/KRNL386.EXE=-" ;;
+            mswoa) set -- -f "$rsys/WINOLDAP.MOD=W16/SYSTEM/WINOLDAP.MOD" ;;
+            *)     set -- ;;
+            esac
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
+                -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
+                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                > "$out/swapesc-$k.txt" 2>&1 || true
+            a=$out/swapesc-$k b=$out/swapesc-ref
+            for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
+                     05-win:640x480:w 06-dos:640x400:02-ver 07-win:640x480:w 08-dos2:640x400:01-dos \
+                     09-win:640x480:w 10-dos1:640x400:02-ver 11-win:640x480:w 12-exit:640x400:-; do
+                f=${s%%:*} rest=${s#*:} want=${rest%%:*} how=${rest#*:}
+                [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="$k: no $f"; break; }
+                for g in "$a" "$b"; do
+                    sz=$(magick identify -format '%wx%h' "$g/$f.png" 2>/dev/null)
+                    [ "$sz" = "$want" ] || { r="$k: $f: screen $sz, not $want ($g)"; break 2; }
+                done
+                case $how in
+                -)  n=0 ;;
+                w)  # (and the pointer's first place, the screen's middle: it
+                    # stays on the icon after the double click)
+                    m="rectangle 0,400 199,479 rectangle 316,236 339,263"
+                    magick "$a/$f.png" -fill black -draw "$m" "$out/swapesc-$k-a.png"
+                    magick "$a/00-before.png" -fill black -draw "$m" "$out/swapesc-$k-b.png"
+                    n=$(magick compare -metric AE "$out/swapesc-$k-a.png" "$out/swapesc-$k-b.png" "$out/swapesc-$k-$f-diff.png" 2>&1 >/dev/null || true)
+                    ta=$(python3 "$root/tests/scripts/iconbox.py" "$a/$f.png" | sed -n 's/.*\(title .*\)/\1/p')
+                    tb=$(python3 "$root/tests/scripts/iconbox.py" "$b/$f.png" | sed -n 's/.*\(title .*\)/\1/p')
+                    [ "$ta" = "$tb" ] || { r="$k: $f: the icon's ${ta:-title none} (3.1's: ${tb:-title none})"; break; } ;;
+                *)  n=$(magick compare -metric AE "$a/$f.png" "$a/$how.png" "$out/swapesc-$k-$f-diff.png" 2>&1 >/dev/null || true) ;;
+                esac
+                n=${n%%[. ]*}
+                [ "${n:-99999}" -le 40 ] || { r="$k: $f: $n pixels differ"; break; }
+            done
+            rm -f "$out/swapesc-$k-a.png" "$out/swapesc-$k-b.png"
+            left=$(ls "$a/work/c/W16" 2>/dev/null | grep -i '^~WOA' || true)
+            [ -z "$left" ] || [ "$r" != ok ] || r="$k: swap files left: $left"
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
+        else echo "FAIL swapesc: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmkeys)
         scr=$root/tests/scripts/input/pmkeys.txt
         refrun pmkeys-ref pmkeys "$root/tests/inputrun.sh" -s -b 40 -t 180 "$scr" "$out/pmkeys-ref" -r
@@ -2522,6 +2598,7 @@ caseparts() {
     sbdrag) echo "$1@us $1@np" ;;
     edithandle) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
+    swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -2565,6 +2642,9 @@ partsummary() {
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    swapesc)
+        if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
+        else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
     runbrowse)
         if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
         else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;

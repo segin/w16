@@ -1,0 +1,70 @@
+; Switching away from the MS-DOS Prompt and back, as a user does it
+; (tests/boottest.sh case swapesc): the prompt from File > Run COMMAND.COM,
+; VER, Alt+Esc to Windows (the prompt becomes an icon at the bottom left,
+; Program Manager active), the icon double-clicked (the prompt back as it
+; was left), Alt+Tab to Windows and Alt+Tab back, Alt+Tab to Windows, a
+; second prompt from File > Run, EXIT in it (Windows back, the first
+; prompt's icon still there), Alt+Tab to the first prompt (the icon is
+; next in Z order), EXIT, File > Exit Windows.
+; The pointer goes to the icon's top (40,412 on 640x480: "home", then 20
+; 206 X pixels, which DOSBox doubles) before the double click, so that
+; it stays clear of the icon's title below.
+click 1
+sleep 1
+shot 00-before
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 01-dos
+type ver
+key Return
+sleep 2
+shot 02-ver
+key alt+Escape
+sleep 15
+shot 03-win
+home
+move 20 206
+sleep 1
+dclick 1
+sleep 15
+shot 04-dos
+key alt+Tab
+sleep 15
+shot 05-win
+key alt+Tab
+sleep 15
+shot 06-dos
+key alt+Tab
+sleep 15
+shot 07-win
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 08-dos2
+type exit
+key Return
+sleep 15
+shot 09-win
+key alt+Tab
+sleep 15
+shot 10-dos1
+type exit
+key Return
+sleep 15
+shot 11-win
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 10
+shot 12-exit
