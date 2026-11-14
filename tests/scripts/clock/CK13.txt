@@ -1,5 +1,6 @@
 ; start minimized from CLOCK.INI, a second Clock restores it
 setdate 03/14/1993
+settime 09:05:30.50
 run CLOCK.EXE
 freeze 09:05:30.50 1500
 snap C:\P1.BMP
