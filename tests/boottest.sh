@@ -43,6 +43,11 @@
 #              screen the same but where w16's text says "w16" (the title
 #              and row 15 left out), Windows' screen afterwards 0 pixels,
 #              and Return then opens File Manager (its caption compared)
+#   win386close  w16's WIN386.EXE: File Manager, Notepad, Calculator and
+#              Clock opened and closed with Alt+F4 (tests/scripts/input/
+#              win386close.txt; a task's exit reaches V86 DOS), against
+#              Microsoft's WIN386.EXE: every shot 0 pixels (File Manager's
+#              file total, Notepad's caret left out)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -393,7 +398,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -822,6 +827,32 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
         else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
+    win386close)
+        scr=$root/tests/scripts/input/win386close.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        refrun win386close-ref win386close env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/win386close-ref" -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/win386close-w16" \
+            -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386close-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-winfile 02-closed 03-notepad 04-closed 05-calc 06-closed 07-closed; do
+            a=$out/win386close-w16/$s.png b=$out/win386close-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # File Manager: the status bar's file total left out (Windows
+            # 3.1's temporary swap file WIN386.SWP, 2 MB, is one of them:
+            # w16's WIN386 does not page); Notepad: the caret blinks
+            g=640x480+0+0 m="rectangle 0,0 0,0"
+            [ $s = 01-winfile ] && m="rectangle 296,458 639,477"
+            [ $s = 03-notepad ] && m="rectangle 16,44 17,58"
+            magick "$a" -crop $g +repage -fill black -draw "$m" "$out/win386close-a.png"
+            magick "$b" -crop $g +repage -fill black -draw "$m" "$out/win386close-b.png"
+            n=$(magick compare -metric AE "$out/win386close-a.png" "$out/win386close-b.png" "$out/win386close-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386close-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386close: File Manager, Notepad, Calculator and Clock closed as with Microsoft's WIN386"
+        else echo "FAIL win386close: $r ($out/win386close-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the
