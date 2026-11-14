@@ -213,6 +213,7 @@ sw_api:
         mov ah, [cs:block + SB_COUNT]
         pop bx
         mov si, sw_stub                 ; (3.1: 0B8Fh, UNVERIFIED)
+        mov di, block                   ; DI -> the block (3.1, SW1)
         iret
 .s4:    cmp si, 4
         jne .s6
@@ -252,6 +253,7 @@ sw_api:
         push cs
         pop es
         mov dx, cs
+        mov di, block                   ; DI -> the block (3.1, SW1)
         iret
 .other: shl si, 1                       ; no such function: AX unchanged
         iret
@@ -299,9 +301,12 @@ sw_free:
 .nop:
 .fr:    mov byte [cs:si + REC_FLAGS], 0
         mov byte [cs:si + REC_KIND], 80h
-        cmp cl, REC_WIN
-        je .nx
-        mov byte [cs:si + REC_NEXT], REC_WIN
+        cmp cl, REC_WIN                 ; (3.1's leaves the freed record's
+        je .nx                          ; next pointing to its next's
+        mov bl, ch                      ; next: SW1)
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        mov [cs:si + REC_NEXT], al
 .nx:    mov byte [cs:si + REC_SESS], 0
         mov byte [cs:si + REC_SESS + 1], 0
         mov byte [cs:si + REC_SESS + 2], 0

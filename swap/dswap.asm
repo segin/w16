@@ -969,6 +969,7 @@ sda_back:
 ctrl_esc:
         mov si, SW_BLOCK
         call sw_call
+to_windows:
         call get_blk
         or byte [es:di + B_FLAGS], 08h
         mov bx, 1
@@ -1908,7 +1909,22 @@ fresh:  ; the arena's end (as WSWAP)
         mov al, [es:di + B_CUR]
         mov ah, [rec]
         DBG 5
-        or byte [es:di + B_FLAGS], 08h
+        ; the session after ours not Windows' (another DOS program next in
+        ; the ring): back to Windows all the same, as Ctrl+Esc does (3.1's
+        ; DSWAP: SI=2, SI=5, 178h bit 08h, SI=7 BX=1 when the ring went on
+        ; to a DOS program; SW1 with w16's WINOLDAP, whose ring order made
+        ; it show)
+        push di
+        mov bl, [es:di + B_CUR]
+        mov al, REC_SIZE
+        mul bl
+        add di, ax
+        cmp byte [es:di + B_RECS + R_SESS], SESS_WIN
+        pop di
+        je .win
+        call to_windows
+        call get_blk
+.win:   or byte [es:di + B_FLAGS], 08h
         mov si, SW_COUNT
         call sw_call
         call get_blk                    ; our session's number at 173h (a
