@@ -43,6 +43,9 @@ w16 repository's LICENSE):
                           (for a standard PC/AT; on a machine that
                           needs another system driver, such as
                           HPSYSTEM.DRV, use that instead)
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
+                          old SOUND functions (voice queues of notes)
+                          on the PC speaker
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -71,9 +74,6 @@ overwriting the files above:
   Windows directory:      any applications you want (w16's INI and
                           group files above are all it needs)
   SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
-                          the drivers named in SYSTEM.INI's [boot]
-                          section that w16 lacks (MMSOUND.DRV: set
-                          sound.drv=mmsound.drv in [boot]),
                           the other
                           fonts (*.FON, *.FOT, *.TTF), and for DOS
                           programs the VGACOLOR.2GR grabber that

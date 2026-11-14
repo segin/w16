@@ -121,7 +121,7 @@
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
 #   swapall    swapalt by keys only (swapkeys.txt) on w16's install tree
 #              alone (build/w16 as C:\W16;
-#              Microsoft's MMSOUND.DRV and VGACOLOR.2GR): every part w16's,
+#              Microsoft's VGACOLOR.2GR, the grabber): every part w16's,
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
@@ -138,8 +138,8 @@
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   w16groups  w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-#              for now with Microsoft's MMSOUND.DRV, sound.drv=mmsound.drv,
-#              which w16 does not have yet; WSWAP is w16's): its default
+#              no file of Microsoft's but, in its first run, PROGMAN.EXE;
+#              WSWAP is w16's): its default
 #              PROGMAN.INI and groups (assets/progman) under real keys
 #              (tests/scripts/input/w16groups.txt): Main's Read Me opens
 #              README.TXT in Notepad, Accessories restored, its Notepad and
@@ -1307,7 +1307,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's; swapalt: prompt, VER, Alt+Tab to Windows and back, EXIT,
         # Exit Windows (swapalt.txt), the same way; swapall: that script
         # on w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-        # Microsoft's MMSOUND.DRV and VGACOLOR.2GR, which w16 has not yet).
+        # Microsoft's VGACOLOR.2GR, the grabber, which w16 has not yet).
         # Text screens against Microsoft's with the banner box (rows 1-5:
         # w16's says "w16") left out; Windows' screens against the same
         # run's screen before the prompt (Windows back as it was); up to
@@ -1333,7 +1333,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             # stack faults in w16's DOSX, docs/notes/swap-handover.md)
             shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$root/tests/scripts/input/swapkeys.txt" "$out/$c-w16" \
-                -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
+                -T "$root/build/w16" \
                 -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' \
                 > "$out/$c-w16.txt" 2>&1 || true
         else
@@ -1497,8 +1497,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         scr=$root/tests/scripts/input/w16groups.txt
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         m="rectangle 60,310 300,342"
-        set -- -T "$root/build/w16" \
-            -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv
+        set -- -T "$root/build/w16"
         "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/w16groups-ms" "$@" \
             -f "$rsys/../PROGMAN.EXE=W16/PROGMAN.EXE" > "$out/w16groups-ms.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -e "$out/w16groups-ms/boot.png" -m "$m" -E "$out/w16groups-ms" -M "$m" \
