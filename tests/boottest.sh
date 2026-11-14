@@ -1585,8 +1585,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             *)     set -- ;;
             esac
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
-                -T "$root/build/w16" \
-                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
                 > "$out/swapesc-$k.txt" 2>&1 || true
             a=$out/swapesc-$k b=$out/swapesc-ref
             for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
