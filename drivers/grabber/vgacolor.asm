@@ -467,6 +467,7 @@ get_block:
 ; compared); registers as get_block pushed them
 CGA_BITS equ 80 * 200
 cga_bitmap:
+        mov [cs:cga_mode], al
         les bx, [es:di+GR_DATA]
         mov ax, es
         or ax, bx
@@ -484,8 +485,11 @@ cga_bitmap:
         mov ax, 1               ; planes, bits a pixel
         stosw
         stosw
-        mov ax, 4800            ; width and height in 0.1 mm (as 3.1's)
-        stosw
+        mov ax, 2400            ; width and height in 0.1 mm (as 3.1's:
+        cmp byte [cs:cga_mode], 6 ; twice the width in modes 4 and 5)
+        je .w
+        mov ax, 4800
+.w:     stosw
         mov ax, 1800
         stosw
         mov ax, 0B800h
@@ -512,6 +516,7 @@ cga_bitmap:
         clc
         retf
 
+cga_mode: db 0
 gb_cols: dw 0
 gb_seg:  dw 0
 gb_page: dw 0
@@ -520,17 +525,37 @@ gb_rows: db 0
 gb_w:    db 0
 gb_h:    db 0
 
-; ---- the planes kept, for mode AL: all four, 64 KB each, whatever the
-; mode (pages, fonts and what a program keeps off the screen included; a
-; text mode's 32 KB window does not reach all of what its planes hold)
-plane_sizes:
-        mov byte [pl_all], 1
-        mov byte [pl_font], 0
+; ---- the video memory to (AH 40h) or from (AH 3Fh) the file BX, for
+; mode AL; CF on failure. EGA/VGA and text modes: all four planes, 64 KB
+; each, read and written as planes (chain-4 and odd/even off: pages,
+; fonts and what a program keeps off the screen included; a text mode's
+; 32 KB window does not reach all its planes hold), the sequencer and
+; graphics controller registers this changes put back from ES:0 after.
+; CGA modes 4-6: the 32 KB at B800:0 as the mode maps it (DOSBox-X showed
+; such a screen wrong after its planes were written back as planes).
+mem_io:
+        cmp al, 4
+        jb .planes
+        cmp al, 7
+        jae .planes
+        mov cx, 8000h
+        mov dx, 0B800h
+        jmp chunk_dx
+.planes:
+        push ax
+        call planar_on
+        pop ax
+        xor cx, cx
+.p:     xor dx, dx              ; 64 KB
+        call plane_io
+        jc .e
+        inc cx
+        cmp cx, 4
+        jb .p
+.e:     pushf
+        call regs_back
+        popf
         ret
-
-pl_len:  dw 0, 0, 0, 0
-pl_all:  db 0                   ; 1: 64 KB of each plane
-pl_font: db 0                   ; 1: 64 KB of plane 2 as well
 
 ; set the VGA for raw plane access (no chaining, no odd/even, A000h 64 KB,
 ; read mode 0, write mode 0, all bits, no set/reset, no rotation)
@@ -552,12 +577,10 @@ planar_on:
         ret
 
 ; BX = file, plane CL: write the plane to the file (AH 40h) or read it from
-; the file (AH 3Fh), DX bytes from A000:0 (0: 64 KB, in two halves); CF on
-; failure. CX kept.
+; the file (AH 3Fh), 64 KB through A000:0, in two halves; CF on failure.
+; CX kept.
 plane_io:
         push cx
-        push di
-        mov di, dx              ; the length
         push ax
         cmp ah, 40h
         jne .rd
@@ -571,29 +594,21 @@ plane_io:
         shl ah, cl
 .sel:   out dx, ax
         pop ax
-        mov cx, di
-        or cx, cx
-        jnz .one
         mov cx, 8000h
         mov dx, 0A000h
-        call chunk
+        call chunk_dx
         jc .e
         mov dx, 0A800h
-.one:   call chunk_dx
-.e:     pop di
-        pop cx
+        call chunk_dx
+.e:     pop cx
         ret
 
-; AH 3Fh/40h, BX handle, CX bytes at A000:0 (chunk) or DX:0 (chunk_dx)
-chunk:
+; AH 3Fh/40h, BX handle: CX bytes at DX:0; CF on failure. AX, CX kept.
 chunk_dx:
         push ax
         push cx
         push ds
-        cmp cx, di              ; (a single piece: from A000:0)
-        jne .s
-        mov dx, 0A000h
-.s:     mov ds, dx
+        mov ds, dx
         xor dx, dx
         int 21h
         pop ds
@@ -691,44 +706,22 @@ save_screen:
         ; the memory
         mov al, [es:SV_MODE]
         and al, 7Fh
-        call plane_sizes
         call make_file
         jc .nofile
-        mov bp, ax              ; the handle
-        call planar_on
-        xor cx, cx
-.p:     mov bx, cx
-        shl bx, 1
-        mov dx, [pl_len+bx]
-        cmp byte [pl_all], 0
-        jne .all
-        cmp cx, 2
-        jne .p1
-        cmp byte [pl_font], 0
-        je .pn
-.all:   xor dx, dx              ; 64 KB
-        jmp .p2
-.p1:    or dx, dx
-        jz .pn
-.p2:    mov bx, bp
+        mov bx, ax              ; the handle
+        mov al, [es:SV_MODE]
+        and al, 7Fh
         mov ah, 40h
-        call plane_io
+        call mem_io
+        pushf
+        mov ah, 3Eh
+        int 21h
+        popf
         jc .ferr
-.pn:    inc cx
-        cmp cx, 4
-        jb .p
-        mov bx, bp
-        mov ah, 3Eh
-        int 21h
         or byte [es:SV_FLAGS], 1
-        call regs_back
         jmp .done
-.ferr:  mov bx, bp
-        mov ah, 3Eh
-        int 21h
-        call drop_file
+.ferr:  call drop_file
         mov byte [es:SV_FILE], 0
-        call regs_back
 .nofile:
         ; no file: a text mode's page in the buffer
         call mode_kind
@@ -933,36 +926,15 @@ restore_screen:
         int 21h
         pop ds
         jc .nofile
-        mov bp, ax
+        mov bx, ax
         mov al, [es:SV_MODE]
         and al, 7Fh
-        call plane_sizes
-        call planar_on
-        xor cx, cx
-.p:     mov bx, cx
-        shl bx, 1
-        mov dx, [pl_len+bx]
-        cmp byte [pl_all], 0
-        jne .all
-        cmp cx, 2
-        jne .p1
-        cmp byte [pl_font], 0
-        je .pn
-.all:   xor dx, dx
-        jmp .p2
-.p1:    or dx, dx
-        jz .pn
-.p2:    mov bx, bp
         mov ah, 3Fh
-        call plane_io
-        jc .pe
-.pn:    inc cx
-        cmp cx, 4
-        jb .p
-.pe:    mov bx, bp
+        call mem_io
         mov ah, 3Eh
         int 21h
         call drop_file
+        jmp .regs
         jmp .regs
 .nofile:
         call text_back
