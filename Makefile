@@ -38,11 +38,11 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE
@@ -64,7 +64,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
+dos: $(DOS)/KRNL286.EXE $(DOS)/KRNL386.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) $(DOS)/PENWIN.DLL $(DOS)/MS1.COM \
@@ -108,6 +108,32 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
 	    option map=$(B)/kernel/krnl286.map file { $(KOBJS) }
 
+# ---- KRNL386.EXE: the same kernel/ sources built with -DKRNL386 (the
+# differences Windows 3.1's KRNL386 shows, each observed: see
+# docs/notes/krnl386-handover.md), its objects in build/kernel386. The C
+# code stays 286 code (wcc -3 made the boot fault inside the DOS
+# extender: the extenders and w16's own interrupt paths keep only the low
+# halves of the registers); 386 instructions are written in the assembly
+# helpers where KRNL386's behaviour needs them (kernel/k386.asm) ----
+K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%) $(B)/kernel386/k386.o $(B)/kernel386/k386c.o $(B)/kernel386/global386.o
+$(B)/kernel386/%.o: kernel/%.asm kernel/inc/intcall.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DKRNL386 -o $@ $<
+$(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -fo=$@ $<
+$(KBOOT_C:%=$(B)/kernel386/%.o) $(B)/kernel386/k386c.o: $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -nt=BOOT_TEXT -fo=$@ $<
+# KRNL386's global heap (global386.c) in a code segment of its own
+$(B)/kernel386/global386.o: kernel/global386.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -nt=HEAP_TEXT -fo=$@ $<
+$(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
+	    option map=$(B)/kernel386/krnl386.map file { $(K386OBJS) }
+
 # ---- WIN87EM.DLL: floating-point support (win87em/) ----
 $(B)/win87em/%.o: win87em/%.asm
 	@mkdir -p $(@D)
@@ -133,7 +159,7 @@ $(DOS)/TK%.EXE: $(B)/tests/start.o $(B)/tests/tk%.o tests/apps/app.lnk
 	    option map=$(B)/tests/tk$*.map file { $(B)/tests/start.o $(B)/tests/tk$*.o }
 
 $(B)/tests/tk3.o: tests/apps/tk3ref.h tests/apps/tk3ref286.h tests/apps/tklog.h
-$(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tklog.h
+$(B)/tests/tk53.o: tests/apps/tk53ref.h tests/apps/tk53ref286.h tests/apps/tklog.h
 $(B)/tests/tk54.o: tests/apps/tk54ref.h tests/apps/tk54ref286.h tests/apps/tklog.h
 $(B)/tests/tk4.o: tests/apps/tk4ref.h tests/apps/tklog.h
 $(B)/tests/tk5.o: tests/apps/tk5ref.h tests/apps/tklog.h
@@ -274,6 +300,13 @@ $(DOS)/TK33.EXE: $(B)/tests/start.o $(B)/tests/tk33.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk33.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk33.map file { $(B)/tests/start.o $(B)/tests/tk33.o }
+
+# TK57.EXE: KERNEL in 386 Enhanced mode: WinFlags, the Reboot API (tk57s.asm)
+$(B)/tests/tk57.o: tests/apps/tk57ref.h tests/apps/tklog.h
+$(DOS)/TK57.EXE: $(B)/tests/start.o $(B)/tests/tk57.o $(B)/tests/tk57s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk57.map file { $(B)/tests/start.o $(B)/tests/tk57.o $(B)/tests/tk57s.o }
 
 # TK34.EXE: WinOldApCall, KERNEL.151 (tk34s.asm)
 $(B)/tests/tk34.o: tests/apps/tk34ref.h tests/apps/tklog.h
@@ -481,6 +514,13 @@ $(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o \
 	$(WLINK) @tests/apps/tk19.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk19.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o }
+
+# TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
+$(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
+$(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk58k.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk58.map file { $(B)/tests/start.o $(B)/tests/tk58.o }
 
 # TK12.EXE: the resource probe, with the resources of tk12.rc
 $(B)/tests/tk12.o: tests/apps/tk12ref.h tests/apps/tk12ref286.h tests/apps/tklog.h
@@ -1068,7 +1108,7 @@ test: dos fonts grpcheck
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV
-	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
+	RUNTESTS_DPMI="hdpmi dosx" RUNTESTS_KERNEL="$${RUNTESTS_KERNEL:-KRNL286 KRNL386}" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
 # reference (tests/boottest.sh); run after every merge: make test does not
@@ -1267,6 +1307,28 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
 	python3 tools/nemark.py $@ 3.10
 
+# ---- WSWAP.EXE and DSWAP.EXE: the Standard-mode task switcher (swap/,
+# ARCHITECTURE.md 9.9). .COM-format programs (DOS loads any file without an
+# MZ header as one) under the names WIN.COM looks for; DSWAPD.EXE logs to
+# C:\DSWAP.DBG (a debugging build). SW1.COM: the probe they were observed
+# with (tests/dos/sw1.asm, tests/dos/sw1dump.py) ----
+dos: $(DOS)/WSWAP.EXE $(DOS)/DSWAP.EXE
+$(DOS)/WSWAP.EXE: swap/wswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -o $@ $<
+$(DOS)/DSWAP.EXE: swap/dswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -o $@ $<
+$(DOS)/DSWAPD.EXE: swap/dswap.asm swap/swap.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -Iswap/ -dDEBUG -o $@ $<
+SWPROBES := $(DOS)/SW1.COM $(DOS)/DSWAPD.EXE
+swprobes: $(SWPROBES)
+dos: $(SWPROBES)
+$(DOS)/SW1.COM: tests/dos/sw1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
@@ -1275,10 +1337,15 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
 W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
-           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/KRNL386.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
+# the task switcher (swap/)
+install-tree: $(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE
+$(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE: $(W16SYS)/%: $(DOS)/%
+	@mkdir -p $(@D)
+	cp $< $@
 # Calculator (ARCHITECTURE.md 15.3)
 install-tree: $(W16)/CALC.EXE
 $(W16)/CALC.EXE: $(DOS)/CALC.EXE
@@ -1324,7 +1391,7 @@ grpcheck: $(GRP_ICONS)
 	@echo "grpcheck: assets/progman/*.GRP match their definitions and w16's icons"
 	python3 tests/grpref.py
 .PHONY: groups grpcheck
-$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+$(W16SYS)/KRNL286.EXE $(W16SYS)/KRNL386.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
 $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@

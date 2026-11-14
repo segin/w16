@@ -19,6 +19,18 @@
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
+#   k386       w16's KRNL386 in the KRNL386.EXE slot (Standard mode on a
+#              386: DOSX starts it), Microsoft's DOSX, USER, GDI and the
+#              rest, against Microsoft's KRNL386     must be 0
+#   k386all    w16's WIN.COM, DOSX, KRNL386, USER and GDI against the same
+#              Microsoft KRNL386 boot                must be 0
+#   k386e      386 Enhanced mode (WIN /3): w16's WIN386 and KRNL386 with
+#              Microsoft's USER, GDI and drivers against Microsoft's KRNL386
+#              on w16's WIN386, and w16's KRNL386 on Microsoft's WIN386
+#              against Microsoft's KRNL386 there   both must be 0
+#   k386cad    Ctrl+Alt+Del in 386 Enhanced mode under Microsoft's WIN386
+#              (tests/scripts/input/win386cad.txt): w16's KRNL386 against
+#              Microsoft's, the Reboot screen and Windows after it equal
 #   wincom     w16's WIN.COM + KRNL286             must be 0
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
@@ -118,6 +130,17 @@
 #              part. Text mode (640x400) after Exit Windows: w16's ended in
 #              VGA graphics with the BIOS's text on it (WIN.COM set no mode
 #              after WSWAP, DOSX set back the logo's mode 12h)
+#   swapdos    the woados script with w16's WSWAP.EXE and DSWAP.EXE (the
+#              rest Microsoft's) against all of Microsoft's: the DOS screens
+#              the same but for the banner box (it says "w16"), Windows back
+#              as it was, text mode at the end, no ~WOA file left
+#   swapalt    the same with Alt+Tab to Windows and back to the prompt
+#              between VER and EXIT (tests/scripts/input/swapalt.txt)
+#   swapall    swapalt by keys only (swapkeys.txt) on w16's install tree
+#              alone (build/w16 as C:\W16;
+#              Microsoft's MMSOUND.DRV and VGACOLOR.2GR): every part w16's,
+#              the DOS screens against Microsoft's, Windows' against its
+#              own screen before the prompt
 #   pmkeys     Program Manager's arrow keys straight after it starts, then
 #              after a click on the workspace (pmkeys.txt): w16 USER+GDI and
 #              w16 PROGMAN against Microsoft's; the group icons left out
@@ -132,8 +155,8 @@
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   w16groups  w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-#              for now with Microsoft's WSWAP.EXE and MMSOUND.DRV, sound.drv=
-#              mmsound.drv, which w16 does not have yet): its default
+#              for now with Microsoft's MMSOUND.DRV, sound.drv=mmsound.drv,
+#              which w16 does not have yet; WSWAP is w16's): its default
 #              PROGMAN.INI and groups (assets/progman) under real keys
 #              (tests/scripts/input/w16groups.txt): Main's Read Me opens
 #              README.TXT in Notepad, Accessories restored, its Notepad and
@@ -398,7 +421,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -506,6 +529,7 @@ refkey() {
         case " $* " in *" -w "*) printf 'WIN.COM '; sha256sum < "$root/build/dos/WIN.COM" ;; esac
         case " $* " in *" -x "*) printf 'DOSX.EXE '; sha256sum < "$root/build/dos/DOSX.EXE" ;; esac
         case " $* " in *" -r "*) ;; *) printf 'KRNL286.EXE '; sha256sum < "$root/build/dos/KRNL286.EXE" ;; esac
+        case " $* " in *" -r "*) ;; *" -3 "*) printf 'KRNL386.EXE '; sha256sum < "$root/build/dos/KRNL386.EXE" ;; esac
         echo "code $k"
         codeof "$k"
     } > "$_rkf"
@@ -741,6 +765,24 @@ runcase() {
             boot k286 -p 286; check k286 k286 ref286
             boot k286x -x -p 286; check k286x k286x ref286
             expect= secs=$_s ;;
+    k386|k386all)
+            # Standard mode on a 386 runs KRNL386.EXE (DOSX takes it when
+            # it is there): Microsoft's KRNL386 is the reference
+            refrun ref386 k386 boot -3 -r; expect=$out/ref386.png
+            if [ $c = k386 ]; then boot k386 -3
+            else boot k386all -3 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"; fi
+            check $c $c ref386
+            expect= ;;
+    k386e)  # 386 Enhanced mode: WIN386 starts KRNL386.EXE (DOSBox, as the
+            # win386input case); w16's KRNL386 on w16's WIN386, then on
+            # Microsoft's, each against Microsoft's KRNL386 on the same WIN386
+            w386=$root/build/win386/WIN386.EXE
+            set -- -3 -c 'WIN /3 /B'
+            refrun ref386e k386e boot -r "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; expect=$out/ref386e.png
+            boot k386e "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; check k386e k386e ref386e
+            refrun ref386em k386e boot -r "$@"; expect=$out/ref386em.png
+            boot k386em "$@"; check k386em k386em ref386em
+            expect= ;;
     wincom) ref; boot wincom -w; check wincom wincom ref ;;
     allw16) ref; boot allw16 -w -x; check allw16 allw16 ref ;;
     user)   ref; boot user -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
@@ -853,6 +895,31 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386close: File Manager, Notepad, Calculator and Clock closed as with Microsoft's WIN386"
         else echo "FAIL win386close: $r ($out/win386close-w16)"; fails=$((fails + 1)); fi ;;
+    k386cad)
+        # Ctrl+Alt+Del in 386 Enhanced mode under Microsoft's WIN386, whose
+        # Reboot device zeroes KERNEL's sanity byte and runs KERNEL's
+        # handler (Reboot 0201h): w16's KRNL386 against Microsoft's, every
+        # screen (the win386cad script: the screen, a key back, Return)
+        scr=$root/tests/scripts/input/win386cad.txt
+        refrun k386cad-ref k386cad env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/k386cad-ref" -3 -r -c "WIN /3 /B"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/k386cad-w16" \
+            -3 -c "WIN /3 /B" > "$out/k386cad-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 02-back; do
+            a=$out/k386cad-w16/$s.png b=$out/k386cad-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # the cursor (row 19, column 53) blinks: either phase is right
+            m="rectangle 0,0 0,0"
+            [ $s = 01-cad ] && m="rectangle 424,304 431,319"
+            magick "$a" -fill black -draw "$m" "$out/k386cad-a.png"
+            magick "$b" -fill black -draw "$m" "$out/k386cad-b.png"
+            n=$(magick compare -metric AE "$out/k386cad-a.png" "$out/k386cad-b.png" "$out/k386cad-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/k386cad-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   k386cad: Ctrl+Alt+Del's screen and back as with Microsoft's KRNL386"
+        else echo "FAIL k386cad: $r ($out/k386cad-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the
@@ -1321,6 +1388,72 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             else echo "FAIL woadosbat: $r ($out/$c-w16)"; fails=$((fails + 1)); fi
         elif [ "$r" = ok ]; then echo "ok   woados: the MS-DOS Prompt in text mode and back, text mode after Exit Windows"
         else echo "FAIL woados: $r ($out/woados-w16)"; fails=$((fails + 1)); fi ;;
+    swapdos|swapalt|swapall)
+        # w16's WSWAP.EXE and DSWAP.EXE (ARCHITECTURE.md 9.9). swapdos: the
+        # woados script (prompt, VER, EXIT, Exit Windows) with only them
+        # w16's; swapalt: prompt, VER, Alt+Tab to Windows and back, EXIT,
+        # Exit Windows (swapalt.txt), the same way; swapall: that script
+        # on w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
+        # Microsoft's MMSOUND.DRV and VGACOLOR.2GR, which w16 has not yet).
+        # Text screens against Microsoft's with the banner box (rows 1-5:
+        # w16's says "w16") left out; Windows' screens against the same
+        # run's screen before the prompt (Windows back as it was); up to
+        # 40 pixels (the cursor). SwapDisk=C:\WINDOWS\TEMP as in woados
+        rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
+        sw="-f $root/build/dos/WSWAP.EXE=WINDOWS/SYSTEM/WSWAP.EXE -f $root/build/dos/DSWAP.EXE=WINDOWS/SYSTEM/DSWAP.EXE"
+        if [ $c = swapdos ]; then
+            scr=$root/tests/scripts/input/woados.txt rn=woados
+            shots="01-dos:640x400:t 02-ver:640x400:t 03-back:640x480:w 04-exit:640x400:r"
+            set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+            refrun woados-ref woados env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 130 "$scr" "$out/woados-ref" -r "$@"
+        else
+            scr=$root/tests/scripts/input/swapalt.txt rn=swapalt
+            shots="01-dos:640x400:t 02-ver:640x400:t 03-win:640x480:r 04-dos:640x400:t 05-back:640x480:r 06-exit:640x400:r"
+            set -- -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+            refrun swapalt-ref swapalt env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 170 "$scr" "$out/swapalt-ref" -r "$@"
+        fi
+        if [ $c = swapall ]; then
+            # (its prompt says C:\W16>, not C:\WINDOWS>: the DOS screens
+            # against its own instead, the prompt read back as it was left;
+            # Windows' against its own before the prompt, the DOS
+            # program's icon left out; keys only: a mouse click on this
+            # stack faults in w16's DOSX, docs/notes/swap-handover.md)
+            shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$root/tests/scripts/input/swapkeys.txt" "$out/$c-w16" \
+                -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
+                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' \
+                > "$out/$c-w16.txt" 2>&1 || true
+        else
+            # shellcheck disable=SC2086
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 170 "$scr" "$out/$c-w16" -r $sw "$@" \
+                > "$out/$c-w16.txt" 2>&1 || true
+        fi
+        a=$out/$c-w16 b=$out/$rn-ref r=ok
+        for s in $shots; do
+            f=${s%%:*} rest=${s#*:} want=${rest%%:*} how=${rest#*:}
+            [ -f "$a/$f.png" ] && [ -f "$b/$f.png" ] || { r="no $f"; break; }
+            sz=$(magick identify -format '%wx%h' "$a/$f.png" 2>/dev/null)
+            [ "$sz" = "$want" ] || { r="$f: screen $sz, not $want"; break; }
+            case $how in
+            w)  n=$(magick compare -metric AE "$a/$f.png" "$a/00-before.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true) ;;
+            t)  magick "$a/$f.png" -fill black -draw 'rectangle 0,16 639,95' "$out/$c-a.png"
+                magick "$b/$f.png" -fill black -draw 'rectangle 0,16 639,95' "$out/$c-b.png"
+                n=$(magick compare -metric AE "$out/$c-a.png" "$out/$c-b.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true) ;;
+            d)  n=$(magick compare -metric AE "$a/$f.png" "$a/02-ver.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true) ;;
+            i)  magick "$a/$f.png" -fill black -draw 'rectangle 0,0 79,39' -draw 'rectangle 0,400 199,479' "$out/$c-a.png"
+                magick "$a/00-before.png" -fill black -draw 'rectangle 0,0 79,39' -draw 'rectangle 0,400 199,479' "$out/$c-b.png"
+                n=$(magick compare -metric AE "$out/$c-a.png" "$out/$c-b.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true) ;;
+            s)  n=0 ;;
+            *)  n=$(magick compare -metric AE "$a/$f.png" "$b/$f.png" "$out/$c-$f-diff.png" 2>&1 >/dev/null || true) ;;
+            esac
+            n=${n%%[. ]*}
+            [ "${n:-99999}" -le 40 ] || { r="$f: $n pixels differ"; break; }
+        done
+        rm -f "$out/$c-a.png" "$out/$c-b.png"
+        left=$(ls "$a/work/c/WINDOWS/TEMP" "$a/work/c/W16" 2>/dev/null | grep -i '^~WOA' || true)
+        [ -z "$left" ] || [ "$r" != ok ] || r="swap files left: $left"
+        if [ "$r" = ok ]; then echo "ok   $c: w16's WSWAP/DSWAP, the DOS screens as 3.1's and Windows back as it was"
+        else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
     pmkeys)
         scr=$root/tests/scripts/input/pmkeys.txt
         refrun pmkeys-ref pmkeys "$root/tests/inputrun.sh" -s -b 40 -t 180 "$scr" "$out/pmkeys-ref" -r
@@ -1451,7 +1584,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         scr=$root/tests/scripts/input/w16groups.txt
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         m="rectangle 60,310 300,342"
-        set -- -T "$root/build/w16" -f "$rsys/WSWAP.EXE=W16/SYSTEM/WSWAP.EXE" \
+        set -- -T "$root/build/w16" \
             -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv
         "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/w16groups-ms" "$@" \
             -f "$rsys/../PROGMAN.EXE=W16/PROGMAN.EXE" > "$out/w16groups-ms.txt" 2>&1 || true

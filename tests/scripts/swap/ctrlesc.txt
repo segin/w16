@@ -1,0 +1,23 @@
+# Ctrl+Esc in the MS-DOS Prompt: Windows with its Task List; back with the
+# Task List's first entry; EXIT
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 10
+shot p1
+key ctrl+Escape
+sleep 10
+shot tasklist
+key Return
+sleep 10
+shot back1
+type exit
+key Return
+sleep 10
+shot back2
+key alt+F4
+sleep 3
+key Return
+sleep 12
+shot end

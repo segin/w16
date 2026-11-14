@@ -67,6 +67,32 @@
    zeroed and for no other one). w16 had KRNL386's (first and last
    sentinels and the discard total as dwords, the signature at 28h), and
    TOOLHELP found no local heap anywhere (US14's heap walk). */
+#ifdef KRNL386
+/* KRNL386's (tests/apps/tk53.c under Microsoft's KRNL386: "LH" at 28h is
+   the word TOOLHELP checks there; the block after LocalInit as dumped:
+   first sentinel 06h, last 0Ah and the discard total 10h dwords, handle
+   table 14h, free handle 16h, delta 18h (20h), a KERNEL near pointer 1Ah,
+   notify 1Eh, lock 22h, growth 24h (200h), minimum 26h; 2Ah bytes) */
+#define LI_CHECK        0x00
+#define LI_FREEZE       0x02
+#define LI_ITEMS        0x04    /* number of arenas */
+#define LI_FIRST        0x06    /* first sentinel (dword) */
+#define LI_LAST         0x0A    /* last sentinel (dword) */
+#define LI_NCOMPACT     0x0E    /* byte */
+#define LI_DISLEVEL     0x0F    /* byte */
+#define LI_DISTOTAL     0x10    /* dword */
+#define LI_HTABLE       0x14    /* newest handle table */
+#define LI_HFREE        0x16    /* first free handle */
+#define LI_HDELTA       0x18    /* entries per new handle table */
+#define LI_EXPAND       0x1A    /* (3.1: a near procedure in KERNEL) */
+#define LI_PSTATS       0x1C
+#define LI_NOTIFY       0x1E    /* far pointer, LocalNotify procedure */
+#define LI_LOCK         0x22
+#define LI_EXTRA        0x24    /* extra bytes when growing */
+#define LI_MINSIZE      0x26    /* last - first + 0Ah */
+#define LI_MAGIC        0x28
+#define LI_SIZE         0x2A
+#else
 #define LI_CHECK        0x00
 #define LI_FREEZE       0x02
 #define LI_ITEMS        0x04    /* number of arenas */
@@ -86,6 +112,7 @@
 #define LI_MINSIZE      0x20    /* last - first + 0Ah */
 #define LI_MAGIC        0x22
 #define LI_SIZE         0x24
+#endif
 
 #define LH_MAGIC        0x484C  /* "LH" */
 #define LH_HDELTA       0x0020
