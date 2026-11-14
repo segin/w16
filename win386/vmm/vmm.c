@@ -403,11 +403,19 @@ void exec_v86(struct cregs *v)
     memcpy(c.v, (void *)&c.res, sizeof(struct cregs));
 }
 
+/* the reflection stack's lowest safe SP (W386_REFSTK_SIZE bytes below its top) */
+static void refstk_check(void)
+{
+    if (sysvm.refsp < info->refstk_top - W386_REFSTK_SIZE + 256)
+        panic("the V86 reflection stack overflows (sp %x, %d nested calls)", sysvm.refsp, exec_depth());
+}
+
 /* INT vec in V86 mode with registers *v (SS:SP 0: the reflection stack) */
 void v86_int(struct cregs *v, int vec)
 {
     u16 *ivt = (u16 *)0;
     if (!v->ss && !(v->esp & 0xFFFF)) {
+        refstk_check();
         v->ss = info->refstk_seg;
         v->esp = sysvm.refsp;
     }
@@ -424,6 +432,7 @@ void v86_int(struct cregs *v, int vec)
 void v86_farcall(struct cregs *v, int iret)
 {
     if (!v->ss && !(v->esp & 0xFFFF)) {
+        refstk_check();
         v->ss = info->refstk_seg;
         v->esp = sysvm.refsp;
     }
@@ -611,6 +620,16 @@ void __cdecl trap(struct tframe *f)
     /* also at the breakpoints: a handler that chains with PUSHF, CALL FAR
      * has its own words below the frame */
     if (!(r->eflags & EFL_VM)) dpmi_note_pm(r);
+    /* V86 code running on the reflection stack (a reflected interrupt, a
+     * DOS or BIOS call made for the client): an interrupt that is then
+     * reflected again must build its frame below where that code is, not
+     * at the stack's start for this nesting level (the same as the host
+     * stack, dpmi.c). Before, the new frame overwrote the interrupted
+     * code's stack now and then: V86 code resumed at a garbage CS:IP, an
+     * invalid opcode reflected to the BIOS for ever (seen in about 1 in 7
+     * boots under load, while fonts loaded). */
+    if ((r->eflags & EFL_VM) && (u16)r->ss == info->refstk_seg && (u16)r->esp < sysvm.refsp)
+        sysvm.refsp = (u16)r->esp;
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
         int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;

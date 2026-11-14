@@ -39,7 +39,7 @@ extern void __far *xms_entry;
 #pragma aux xms_entry "_*"
 
 static struct w386_info info;
-static char refstk[2048];           /* V86 stack for interrupts reflected from PM */
+static char refstk[W386_REFSTK_SIZE + 16]; /* V86 stack for interrupts reflected from PM */
 static unsigned char pmbp[320];
 static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];

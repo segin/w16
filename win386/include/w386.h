@@ -34,6 +34,7 @@ typedef unsigned long  w_u32;
  * with its message (CR LF lines) in the fatal_lin buffer */
 #define W386_FATAL      0xFFFF
 #define W386_FATAL_SIZE 512
+#define W386_REFSTK_SIZE 8192   /* the V86 stack for interrupts reflected from PM */
 
 #pragma pack(1)
 struct w386_info {
