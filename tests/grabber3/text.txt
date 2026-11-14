@@ -1,0 +1,47 @@
+# text: a windowed DOS prompt running GT3 (tests/dos/gt3.asm): painting,
+# updates (new lines, scrolling, attributes, cursor), Mark and Copy
+sleep 60
+key alt+f
+key r
+type c:\winpr.pif
+key Return
+sleep 15
+type gt3
+key Return
+sleep 5
+shot t1
+key a
+sleep 3
+shot t2
+key l
+key l
+sleep 3
+shot t3
+key c
+sleep 2
+key s
+sleep 2
+shot t4
+key w
+sleep 3
+shot t5
+# Edit > Mark (system menu), start at 2,1, extend 6 right 2 down, Copy
+key alt+space
+key e
+key k
+sleep 2
+shot m1
+key Right Right Down
+sleep 1
+key shift+Right shift+Right shift+Right shift+Right shift+Right shift+Right shift+Down shift+Down
+sleep 2
+shot m2
+key Return
+sleep 4
+shot m3
+key q
+sleep 2
+type exit
+key Return
+sleep 5
+shot end

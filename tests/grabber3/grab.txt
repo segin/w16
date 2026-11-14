@@ -1,0 +1,42 @@
+# grab: Alt+PrintScreen of a windowed text screen (GT3), Alt+Enter to full
+# screen and Alt+PrintScreen there (text, then graphics mode 12h), back to
+# the window
+sleep 60
+key alt+f
+key r
+type c:\winpr.pif
+key Return
+sleep 15
+type gt3
+key Return
+sleep 5
+key a
+sleep 2
+shot w1
+key alt+Print
+sleep 5
+shot w2
+key alt+Return
+sleep 6
+shot full
+key alt+Print
+sleep 5
+key q
+sleep 2
+type gv1 12
+key Return
+sleep 6
+key alt+Print
+sleep 6
+key q
+sleep 2
+type cls
+key Return
+sleep 2
+key alt+Return
+sleep 6
+shot back
+type exit
+key Return
+sleep 5
+shot end

@@ -1354,6 +1354,17 @@ $(DOS)/GRT.COM: tests/dos/grt.asm tests/dos/gvdraw.inc
 $(DOS)/GV1.COM: tests/dos/gv1.asm tests/dos/gvdraw.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
+# GR3.3GR: a recording 386 grabber in front of GRABTGT, a renamed copy of the
+# grabber under test (tests/apps/gr3.asm; tests/grabber3.sh)
+grprobes: $(DOS)/GR3.3GR $(DOS)/GT3.COM
+dos: $(DOS)/GR3.3GR $(DOS)/GT3.COM
+$(DOS)/GT3.COM: tests/dos/gt3.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/GR3.3GR: $(B)/tests/gr3.o tests/apps/gr3.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/gr3.lnk name $@ option map=$(B)/tests/gr3.map file { $(B)/tests/gr3.o }
+	python3 tools/nemark.py $@ 3.10
 $(DOS)/CB1.EXE: $(B)/tests/start.o $(B)/tests/cb1.o tests/apps/app.lnk tests/apps/cb1.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/cb1.lnk name $@ libpath $(WATCOM)/lib286/win \
