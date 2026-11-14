@@ -49,7 +49,7 @@ while getopts o:wOxWk:K opt; do
     O) common="$common -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD" ;;
     x) common="$common -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE" ;;
     W) w16only="-f $dos/WIN.COM=WINDOWS/WIN.COM -f $dos/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD -f $dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE"
-       mask="-m 183:2 -m 4FE:42" ;;
+       mask="-m 183:2 -m 4FE:66" ;;
     k) krnl="-k $OPTARG" ;;
     K) krnl=-K ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
