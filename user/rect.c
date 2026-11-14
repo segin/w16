@@ -174,46 +174,56 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *r)
 }
 
 /* ---- DrawText ---- */
+/* A line with a prefix (&) or a tab is measured and drawn in pieces.
+   GetTextExtent counts a synthesized bold font's overhang once per call,
+   so each piece advances by its extent less the overhang and the line's
+   width counts it once: on 3.1 "Run &Minimized" in a bold MS Sans Serif
+   (Program Manager's Run box; COMMDLG's "File &Name:") is as wide as
+   without the prefix, w16 put the overhang between the pieces (boot test
+   runbrowse) */
 static int text_width(HDC hdc, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
-    int w = 0, i, start = 0;
+    int w = 0, i, start = 0, oh;
+    TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
+    oh = tm.tmOverhang;
     for (i = 0; i <= n; i++) {
         if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start)
-                w += LOWORD(GetTextExtent(hdc, s + start, i - start));
+                w += LOWORD(GetTextExtent(hdc, s + start, i - start)) - oh;
             if (i < n && tabs && s[i] == '\t')
                 w = (w / tabw + 1) * tabw;
             if (i < n && prefix && s[i] == '&' && i + 1 < n && s[i + 1] == '&') {
-                w += LOWORD(GetTextExtent(hdc, "&", 1));
+                w += LOWORD(GetTextExtent(hdc, "&", 1)) - oh;
                 i++;
             }
             start = i + 1;
         }
     }
-    return w;
+    return w > 0 ? w + oh : w;
 }
 
 static void draw_line(HDC hdc, int x, int y, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
     int i, start = 0, cx = x, ul = -1;
     TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
     for (i = 0; i <= n; i++) {
         if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start) {
                 TextOut(hdc, cx, y, s + start, i - start);
-                cx += LOWORD(GetTextExtent(hdc, s + start, i - start));
+                cx += LOWORD(GetTextExtent(hdc, s + start, i - start)) - tm.tmOverhang;
             }
             if (i < n && tabs && s[i] == '\t')
                 cx = x + ((cx - x) / tabw + 1) * tabw;
             else if (i < n && prefix && s[i] == '&') {
                 if (i + 1 < n && s[i + 1] == '&') {
                     TextOut(hdc, cx, y, "&", 1);
-                    cx += LOWORD(GetTextExtent(hdc, "&", 1));
+                    cx += LOWORD(GetTextExtent(hdc, "&", 1)) - tm.tmOverhang;
                     i++;
                 } else if (i + 1 < n && ul < 0) {
                     ul = cx;
                     /* underline the next character */
-                    GetTextMetrics(hdc, &tm);
                     {
                         int cw = LOWORD(GetTextExtent(hdc, s + i + 1, 1));
                         HPEN pen = CreatePen(PS_SOLID, 1, GetTextColor(hdc));
