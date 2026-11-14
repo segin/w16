@@ -265,9 +265,22 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     return TRUE;
 }
 
+/* without SWP_NOACTIVATE a shown top-level window is activated, whether
+   it is shown now or was already (3.1 SDK; US23 on 3.1: with an icon
+   active, SetWindowPos of the main window with SWP_SHOWWINDOW, with
+   SWP_NOZORDER and with neither made it active, with SWP_NOACTIVATE not.
+   Microsoft's WINOLDAP comes back to the Windows application that way;
+   w16 activated only a window being shown, and the DOS program's icon
+   stayed active). Here for the API only: USER's own calls are as they
+   were (UNVERIFIED which of them 3.1 makes without SWP_NOACTIVATE) */
 BOOL WINAPI SetWindowPos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags)
 {
-    return set_window_pos(h, after, x, y, cx, cy, flags);
+    BOOL r = set_window_pos(h, after, x, y, cx, cy, flags);
+    PWND w = valid_wnd(h);
+    if (r && w && !(flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) && !(w->style & WS_CHILD) &&
+        is_visible(w) && h != hwndActive)
+        activate_window(h, FALSE);
+    return r;
 }
 
 BOOL WINAPI MoveWindow(HWND h, int x, int y, int cx, int cy, BOOL repaint)
@@ -295,8 +308,10 @@ static void icon_place(PWND w, POINT *pt)
     int n = 0;
     HWND s;
     pr = (w->style & WS_CHILD) ? parent->rcClient : PW(hwndDesktop)->rcWindow;
+    /* (hidden icons do not count: US23 on 3.1, a third icon made while
+       the second was hidden took the second's place) */
     for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
-        if (s != HW(w) && (PW(s)->style & WS_MINIMIZE))
+        if (s != HW(w) && (PW(s)->style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE))
             n++;
     pt->x = (n % ((pr.right - pr.left) / cx)) * cx + (cx - sysmet[SM_CXICON]) / 2;
     pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx));
@@ -330,6 +345,42 @@ static PLACE *place_of(HWND h, BOOL create)
             OffsetRect(&p->normal, -PW(PW(h)->hwndParent)->rcClient.left,
                        -PW(PW(h)->hwndParent)->rcClient.top);
         return p;
+    }
+}
+
+/* CreateWindow of a top-level window with WS_MINIMIZE, after WM_CREATE:
+   it goes to its icon's place, the size it was given kept as its normal
+   place (probe US23 on Windows 3.1: after WM_CREATE a move to 21,408,
+   36 x 36, WM_MOVE and WM_SIZE SIZE_MINIMIZED, still hidden;
+   GetWindowPlacement then gives the icon's place and the given rectangle
+   as normal). w16 left it at the given place and size: WINOLDAP's icon,
+   made that way, showed as a window of CW_USEDEFAULT's size at 0,0 with
+   the icon in its corner (Alt+Esc or Alt+Tab out of the MS-DOS Prompt).
+   UNVERIFIED: child windows (not done for them); which place 3.1 takes
+   when other icons are hidden (US23's third window went to the second
+   place with a hidden icon there) */
+void minimize_new(HWND h)
+{
+    PWND w = valid_wnd(h);
+    PLACE *pl;
+    POINT pt;
+    if (!w)
+        return;
+    pl = place_of(h, TRUE);
+    icon_place(w, &pt);
+    if (pl) {
+        pl->icon = pt;
+        pl->hasicon = 1;
+    }
+    set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
+                   SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    if ((w = valid_wnd(h)) != 0 && (w->flags & WF_SENDSIZE)) {
+        w->flags &= ~WF_SENDSIZE;
+        send_message(h, WM_MOVE, 0, MAKELONG(w->rcClient.left, w->rcClient.top));
+        if ((w = valid_wnd(h)) != 0)
+            send_message(h, WM_SIZE, SIZE_MINIMIZED,
+                         MAKELONG(w->rcClient.right - w->rcClient.left,
+                                  w->rcClient.bottom - w->rcClient.top));
     }
 }
 
@@ -455,6 +506,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             send_message(h, WM_SHOWWINDOW, TRUE, 0);
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW |
                            (cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
+            /* an icon made by CreateWindow (WS_MINIMIZE) shown: its title
+               too (3.1: WINOLDAP's icon, "COMMAND" under it) */
+            if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && (w->style & WS_VISIBLE) &&
+                (pl = place_of(h, FALSE)) != 0 && !pl->title)
+                pl->title = make_icon_title(h);
         }
         return wasvis;
     case SW_SHOWMAXIMIZED:

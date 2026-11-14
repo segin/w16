@@ -464,7 +464,12 @@ HWND WINAPI U_GETNEXTQUEUEWINDOW(HWND h, int way)
             t = GetWindow(h, way ? GW_HWNDLAST : GW_HWNDFIRST);
         if (!t || t == h)
             return 0;
-        if ((PW(t)->style & (WS_VISIBLE | WS_DISABLED)) == WS_VISIBLE && GetLastActivePopup(t) == t)
+        /* (an icon's title is passed over: US23 on 3.1, the ring from an
+           icon went main window, icon. w16 gave the title, and Microsoft's
+           WINOLDAP entered it as the Windows application to come back
+           to: after Alt+Esc its icon stayed active) */
+        if ((PW(t)->style & (WS_VISIBLE | WS_DISABLED)) == WS_VISIBLE && GetLastActivePopup(t) == t &&
+            GetClassWord(t, GCW_ATOM) != 32772)
             return t;
     }
 }
@@ -656,6 +661,12 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NCLBUTTONDBLCLK:
         if (wp == HTSYSMENU)
             send_message(h, WM_SYSCOMMAND, SC_CLOSE, lp);
+        /* an icon double-clicked opens, maximise box or not (3.1: the
+           MS-DOS Prompt's icon, WINOLDAP's window has only a minimise
+           box, w16's WINOLDAP on Microsoft's USER as well; w16 did
+           nothing, and the DOS program could not be restored) */
+        else if (wp == HTCAPTION && (w->style & WS_MINIMIZE))
+            send_message(h, WM_SYSCOMMAND, SC_RESTORE, lp);
         else if (wp == HTCAPTION && (w->style & WS_MAXIMIZEBOX))
             send_message(h, WM_SYSCOMMAND, (w->style & (WS_MAXIMIZE | WS_MINIMIZE)) ? SC_RESTORE :
                          SC_MAXIMIZE, lp);

@@ -1537,6 +1537,13 @@ $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us22.map file { $(B)/tests/start.o $(B)/tests/us22.o }
 dos: $(DOS)/US22.EXE
+# US23: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us23.c)
+$(B)/tests/us23.o: tests/apps/us20ref.h tests/apps/tklog.h
+$(DOS)/US23.EXE: $(B)/tests/start.o $(B)/tests/us23.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us23.map file { $(B)/tests/start.o $(B)/tests/us23.o }
+dos: $(DOS)/US23.EXE
 # US16: what RegisterClass returns, for a 3.00 and a 3.10 program (tests/apps/us16.c)
 $(B)/tests/us16.o: tests/apps/us16ref.h tests/apps/tklog.h
 $(DOS)/US16.EXE: $(B)/tests/start.o $(B)/tests/us16.o tests/apps/app.lnk
