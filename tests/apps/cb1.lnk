@@ -1,0 +1,4 @@
+# CB1.EXE (tests/apps/cb1.c): clipboard viewer probe (tests/grabber.sh)
+@tests/apps/app.lnk
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5

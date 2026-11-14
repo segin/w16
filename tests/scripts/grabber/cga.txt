@@ -1,0 +1,86 @@
+# CGA modes 4 (palette changed), 5, 6: 3.1's grabber does not let DSWAP
+# switch away from them (Alt+Tab stays in the program); w16's does
+# GV1.COM (tests/dos/gv1.asm) in each mode from RUN.BAT; per mode: its
+# screen, PrintScreen, Alt+Tab to Windows and back, Alt+PrintScreen, to
+# Windows and back, "t" (a line of text through the BIOS), "q"
+# tmax: 246
+# known: m04_w1 m04_w2 m05_w1 m05_w2 m06_w1 m06_w2
+# run: C:\GV1.COM 04 p
+# run: C:\GV1.COM 05
+# run: C:\GV1.COM 06
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type c:\run.bat
+key Return
+sleep 10
+shot m04_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m04_w1
+key alt+Tab
+sleep 8
+shot m04_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m04_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m04_3
+type q
+sleep 6
+shot m05_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m05_w1
+key alt+Tab
+sleep 8
+shot m05_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m05_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m05_3
+type q
+sleep 6
+shot m06_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m06_w1
+key alt+Tab
+sleep 8
+shot m06_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m06_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m06_3
+type q
+sleep 6
+shot end
+key alt+F4
+sleep 3
+key Return
+sleep 8

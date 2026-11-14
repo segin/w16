@@ -148,7 +148,7 @@
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
-#              Microsoft's MMSOUND.DRV and VGACOLOR.2GR): every part w16's,
+#              Microsoft's MMSOUND.DRV): every part w16's (VGACOLOR.2GR too),
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
 #   swapesc    the MS-DOS Prompt on w16's install tree alone, the user's
@@ -1479,7 +1479,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's; swapalt: prompt, VER, Alt+Tab to Windows and back, EXIT,
         # Exit Windows (swapalt.txt), the same way; swapall: that script
         # on w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-        # Microsoft's MMSOUND.DRV and VGACOLOR.2GR, which w16 has not yet).
+        # Microsoft's MMSOUND.DRV, which w16 has not yet; the grabber,
+        # VGACOLOR.2GR, is w16's).
         # Text screens against Microsoft's with the banner box (rows 1-5:
         # w16's says "w16") left out; Windows' screens against the same
         # run's screen before the prompt (Windows back as it was); up to
@@ -1505,7 +1506,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$scr" "$out/$c-w16" \
                 -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
-                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' \
+                -i 'NonWindowsApp:SwapDisk=C:\W16' \
                 > "$out/$c-w16.txt" 2>&1 || true
         else
             # shellcheck disable=SC2086
