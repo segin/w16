@@ -659,10 +659,32 @@ u32 pm_lin(u32 sel, u32 off)
     return sel_base(sel) + (sysvm.client32 ? off : (off & 0xFFFF));
 }
 
+/* INT 21h 4Ch, and 00h: KRNL386 ends Windows (File > Exit Windows) with
+ * INT 21h AX=0001h (observed in w16's trace; Pietrek, Windows Internals
+ * ch. 1, ExitKernel: "AH = 4CH, AX = exitCode"), DOS's old terminate. In
+ * V86 mode AH=00h would take the PSP from the caller's CS, which is not
+ * the client's PSP here: it ends the client as 4Ch with code 0 does
+ * (DOS's AH=00h returns code 0). */
+static int is_exit(struct cregs *r)
+{
+    if ((AX(r) >> 8) == 0x00) {
+        SETW(r->eax, 0x4C00);
+        return 1;
+    }
+    return (AX(r) >> 8) == 0x4C;
+}
+
 static void terminate_client(struct cregs *r)
 {
-    struct cregs v = sysvm.v86save;
+    struct cregs v = sysvm.v86save, p;
     trace("DPMI: client ends (INT 21h AX=%x)\n", AX(r));
+    /* the client's own PSP current again first: KERNEL makes its tasks'
+     * PDBs DOS's current PSP (INT 21h 50h), and DOS would end that one
+     * and return to its parent, a selector (as w16's DOSX does) */
+    memset(&p, 0, sizeof(p));
+    p.eax = 0x5000;
+    p.ebx = sysvm.psp_seg;
+    v86_int(&p, 0x21);
     sysvm.pm = 0;
     v.eax = r->eax;
     v.ebx = r->ebx;
@@ -690,7 +712,7 @@ void dpmi_int(struct cregs *r, int vec, int hw)
         r->eip = sysvm.pmvec_off[vec];
         return;
     }
-    if (!hw && vec == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
+    if (!hw && vec == 0x21 && is_exit(r)) { terminate_client(r); return; }
     if (!hw && vec == 0x21) { dos_pm(r); return; }
     if (!hw && vec == 0x10) { video_pm(r); return; }
     /* INT 41h: the protected-mode debugger interface (AX=004Fh asks
@@ -710,7 +732,7 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         r->cs = pm_pop(r);
         r->eflags = (pm_pop(r) & 0xFFFF) | (r->eflags & 0xFFFF0000u);
         r->eflags |= EFL_IOPL;
-        if (index == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
+        if (index == 0x21 && is_exit(r)) { terminate_client(r); return; }
         if (index == 0x31) { dpmi_call(r); return; }
         if (index == 0x2F && int2f_pm(r)) return;
         if (index == 0x41) return;
