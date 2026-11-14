@@ -11,6 +11,11 @@
 #
 #   usage: tests/dropin.sh [options]
 #     -k FILE    the KERNEL to drop in (default build/dos/KRNL286.EXE)
+#     -3         drop w16's KRNL386 (build/dos/KRNL386.EXE) into the
+#                KRNL386.EXE slot instead, which DOSX on a 386 and WIN386
+#                start (KRNL386.EXE is then not deleted; KRNL286.EXE stays
+#                Microsoft's unless -k); with -r Microsoft's KRNL386 runs:
+#                the reference for -3; -K FILE: that file as KRNL386.EXE
 #     -c CMD     the command line (default "WIN /S /B")
 #     -t SECS    run time limit (default 60)
 #     -f SRC=DST copy SRC to C:\DST as well (repeatable), e.g. a test
@@ -86,7 +91,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 kernel=$root/build/dos/KRNL286.EXE
-cmd='WIN /S /B' secs=60 tree= kset= shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
+cmd='WIN /S /B' secs=60 tree= kset= kset386= k386= shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
 w16:exitmsg=1
 w16:debuglog=C:\W16DBG.LOG'
 # [w16] DesktopVersion=0: w16 USER's desktop version stamp (user/deskver.c)
@@ -101,9 +106,11 @@ w16:DesktopVersion=0
 w16:DebugToAux=1"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
-while getopts k:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do
+while getopts k:3K:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do
     case $opt in
     k) kernel=$OPTARG kset=1 ;;
+    3) k386=$root/build/dos/KRNL386.EXE ;;
+    K) k386=$OPTARG kset386=1 ;;
     T) tree=$(cd "$OPTARG" && pwd) ;;
     c) cmd=$OPTARG ;;
     t) secs=$OPTARG ;;
@@ -139,17 +146,23 @@ if [ -n "$tree" ]; then
     wdir=W16
     mkdir -p "$work/c"
     cp -r "$tree" "$work/c/W16"
-    [ -n "$kset" ] || useref=1        # the tree's own KERNEL
+    [ -n "$kset$kset386" ] || useref=1        # the tree's own KERNEL
 else
     cp -r "$ref" "$work/c"
 fi
 echo "$wdir" > "$work/windir"
 sys=$work/c/$wdir/SYSTEM
 rm -f "$work/c/$wdir/BOOTLOG.TXT"
-if [ -z "$useref" ]; then
-    cp "$kernel" "$sys/KRNL286.EXE"
+if [ -n "$k386" ]; then
+    # -3/-K: the KRNL386.EXE slot (DOSX on a 386 and WIN386 start it)
+    [ -n "$useref" ] || cp "$k386" "$sys/KRNL386.EXE"
+    if [ -n "$kset" ]; then cp "$kernel" "$sys/KRNL286.EXE"; fi
+else
+    if [ -z "$useref" ]; then
+        cp "$kernel" "$sys/KRNL286.EXE"
+    fi
+    rm -f "$sys/KRNL386.EXE"
 fi
-rm -f "$sys/KRNL386.EXE"
 if [ -n "$dosx" ]; then
     cp "$dosx" "$sys/DOSX.EXE"
 fi

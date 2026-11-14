@@ -64,7 +64,7 @@ ICONS    := $(foreach n,00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18
 all: host dos shell
 
 host: $(B)/host/nedump
-dos: $(DOS)/KRNL286.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
+dos: $(DOS)/KRNL286.EXE $(DOS)/KRNL386.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%.EXE) $(TESTDLLS:%=$(DOS)/%) \
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) $(DOS)/PENWIN.DLL $(DOS)/MS1.COM \
@@ -107,6 +107,28 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
 	    option map=$(B)/kernel/krnl286.map file { $(KOBJS) }
+
+# ---- KRNL386.EXE: the same kernel/ sources built with -DKRNL386 (the
+# differences Windows 3.1's KRNL386 shows, each observed: see
+# docs/notes/krnl386-handover.md), its objects in build/kernel386. The C
+# code stays 286 code (wcc -3 made the boot fault inside the DOS
+# extender: the extenders and w16's own interrupt paths keep only the low
+# halves of the registers); 386 instructions are written in the assembly
+# helpers where KRNL386's behaviour needs them (kernel/k386.asm) ----
+K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%)
+$(B)/kernel386/%.o: kernel/%.asm kernel/inc/intcall.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DKRNL386 -o $@ $<
+$(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -fo=$@ $<
+$(KBOOT_C:%=$(B)/kernel386/%.o): $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -dKRNL386 -nt=BOOT_TEXT -fo=$@ $<
+$(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
+	    option map=$(B)/kernel386/krnl386.map file { $(K386OBJS) }
 
 # ---- WIN87EM.DLL: floating-point support (win87em/) ----
 $(B)/win87em/%.o: win87em/%.asm
@@ -1063,7 +1085,7 @@ test: dos fonts grpcheck
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV
-	RUNTESTS_DPMI="hdpmi dosx" tests/run-tests.sh
+	RUNTESTS_DPMI="hdpmi dosx" RUNTESTS_KERNEL="$${RUNTESTS_KERNEL:-KRNL286 KRNL386}" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
 # reference (tests/boottest.sh); run after every merge: make test does not
@@ -1270,7 +1292,7 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
 W16TREE := $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE $(W16)/README.TXT \
-           $(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+           $(W16SYS)/KRNL286.EXE $(W16SYS)/KRNL386.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
            $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD \
            $(FONS:$(FNT)/%=$(W16SYS)/%)
 install-tree: $(W16TREE)
@@ -1319,7 +1341,7 @@ grpcheck: $(GRP_ICONS)
 	@echo "grpcheck: assets/progman/*.GRP match their definitions and w16's icons"
 	python3 tests/grpref.py
 .PHONY: groups grpcheck
-$(W16SYS)/KRNL286.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
+$(W16SYS)/KRNL286.EXE $(W16SYS)/KRNL386.EXE $(W16SYS)/DOSX.EXE $(W16SYS)/WIN87EM.DLL $(W16SYS)/SHELL.DLL \
 $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
