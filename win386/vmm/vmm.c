@@ -516,6 +516,22 @@ static u8 *code_ptr(struct cregs *r)
     return (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
 }
 
+/* A heartbeat in the trace every 20 s of timer ticks (BIOS rate): where the
+ * System VM is, how deep the nested calls go and how many of each
+ * hardware interrupt came, so that a hang shows where it is. */
+static u32 irq_count[16], hb_ticks, hb_n;
+
+static void heartbeat(struct cregs *r)
+{
+    int i;
+    hb_ticks = 0;
+    trace("VMM: heartbeat %d at %s %x:%x fl %x, depth %d, PM last %x:%x, irqs",
+          ++hb_n, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
+          exec_depth(), sysvm.last_cs, sysvm.last_ip);
+    for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
+    trace(", PIC masks %x %x\n", inb(0x21), inb(0xA1));
+}
+
 void __cdecl trap(struct tframe *f)
 {
     /* the client's state is worked on in this frame's own copy: handlers
@@ -547,9 +563,14 @@ void __cdecl trap(struct tframe *f)
         sysvm.last_ip = r->eip;
         sysvm.last_ds = r->ds;
     }
+    /* also at the breakpoints: a handler that chains with PUSHF, CALL FAR
+     * has its own words below the frame */
+    if (!(r->eflags & EFL_VM)) dpmi_note_pm(r);
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
         int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;
+        irq_count[irq]++;
+        if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
         if (r->eflags & EFL_VM) {
             if (!dpmi_v86_hook(r, v, 1)) v86_reflect(r, v);
         } else

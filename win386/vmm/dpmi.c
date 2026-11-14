@@ -648,7 +648,7 @@ int int2f_pm(struct cregs *r)
 }
 
 /* ---- interrupts in protected mode ---- */
-static void run_hw_handler(int vec, u32 ccs, u32 cip, u32 cds, u32 cflags);
+static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags);
 static int pmvec_default(int vec)
 {
     return sysvm.pmvec_sel[vec] == SEL_PMBP && sysvm.pmvec_off[vec] == (u32)vec;
@@ -699,7 +699,7 @@ void dpmi_int(struct cregs *r, int vec, int hw)
     if (!hw && vec == 0x2F && int2f_pm(r)) return;
     if (hw && !pmvec_default(vec)) {
         /* on the host's stack, as for an interrupt in V86 mode (VX4) */
-        run_hw_handler(vec, r->cs, r->eip, r->ds, r->eflags);
+        run_hw_handler(vec, r, r->cs, r->eip, r->ds, r->eflags);
         return;
     }
     if (!pmvec_default(vec)) {
@@ -790,12 +790,72 @@ void dpmi_pmbp(struct cregs *r, u32 index)
  * runs goes to the client's protected-mode handler if it installed one
  * (DPMI 0.9), on a stack of the host's; the handler's IRET reaches the
  * IRQRET breakpoint and the V86 code goes on. */
-static u32 hstk_sel, hstk_lin, hstk_sp;
+static u32 hstk_sel, hstk_lin;
 /* Windows 3.1 (VX4): SS 0087h with SP 0FF6h at the handler's entry, i.e.
  * a 4 KB stack of the host's, the same whether the interrupt came in V86
  * mode or in protected mode */
 #define HSTK_TOP  0x1000
 #define HSTK_SIZE 0x2000                /* mapped (zeros) above the top too: VX4 reads 0 there under Windows 3.1 */
+
+/* While a handler runs on the host stack (hstk_depth > 0) another
+ * interrupt can come: in its own code (interrupts enabled), or in V86 code
+ * it called (a DOS or BIOS call, a chained interrupt). The new frame must
+ * go below everything the running handlers have pushed: below the SP
+ * where it was interrupted when that was on the host stack, else below
+ * the lowest SP any of them had at a trap (hstk_low: the PM code that is
+ * waiting for V86 code trapped to get there). Before, each new frame went
+ * at the SP its outer handler had on entry, over what that handler had
+ * pushed since. UNVERIFIED how Windows 3.1 nests; VX4 saw only the
+ * outermost entry (SP 0FF6h). */
+static u32 hstk_depth, hstk_low = HSTK_TOP;
+
+static u32 hstk_mask(void)
+{
+    return sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu;
+}
+
+/* every trap from protected mode (vmm.c): note how deep the host stack is */
+void dpmi_note_pm(struct cregs *r)
+{
+    if (hstk_depth && hstk_sel && (r->ss & 0xFFFF) == hstk_sel && (r->esp & hstk_mask()) < hstk_low)
+        hstk_low = r->esp & hstk_mask();
+}
+
+static void hstk_make(void)
+{
+    u32 i, pg;
+    if (hstk_sel) return;
+    hstk_lin = 0x00300000;              /* below the client's blocks (4 MB up) */
+    for (i = 0; i < HSTK_SIZE; i += 4096) {
+        pg = page_alloc();
+        if (!pg || !map_page(hstk_lin + i, pg, 7)) panic("no memory for the host stack");
+    }
+    hstk_sel = ldt_alloc(1);
+    set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
+}
+
+/* where a new frame on the host stack starts; intr: the interrupted state */
+static u32 hstk_base(struct cregs *intr)
+{
+    hstk_make();
+    if (!hstk_depth) return HSTK_TOP;
+    if (intr && !(intr->eflags & EFL_VM) && (intr->ss & 0xFFFF) == hstk_sel
+        && (intr->esp & hstk_mask()) < hstk_low)
+        hstk_low = intr->esp & hstk_mask();
+    if (hstk_low < 0x100) panic("the host stack overflows (%d handlers)", hstk_depth);
+    return hstk_low;
+}
+
+/* run p (a frame on the host stack built from hstk_base) to its return */
+static void hstk_run(struct cregs *p)
+{
+    u32 saved_low = hstk_low;
+    hstk_depth++;
+    hstk_low = p->esp & hstk_mask();
+    exec_v86(p);
+    hstk_depth--;
+    hstk_low = hstk_depth ? saved_low : HSTK_TOP;
+}
 
 /* Run the client's protected-mode handler of hardware interrupt vec on
  * the host's stack, as Windows 3.1 does (VX4, ARCHITECTURE.md 12.6): the
@@ -803,27 +863,14 @@ static u32 hstk_sel, hstk_lin, hstk_sp;
  * breakpoint), then the client's own CS:IP where it was interrupted (or,
  * for an interrupt in V86 mode, where it last left protected mode); DS
  * and ES are the client's DS; interrupts off. Synchronous: returns when
- * the handler has returned. */
-static void run_hw_handler(int vec, u32 ccs, u32 cip, u32 cds, u32 cflags)
+ * the handler has returned. intr: the interrupted state. */
+static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags)
 {
     struct cregs p;
-    u32 saved_sp;
 
-    if (!hstk_sel) {
-        u32 i, pg;
-        hstk_lin = 0x00300000;          /* below the client's blocks (4 MB up) */
-        for (i = 0; i < HSTK_SIZE; i += 4096) {
-            pg = page_alloc();
-            if (!pg || !map_page(hstk_lin + i, pg, 7)) panic("no memory for the host stack");
-        }
-        hstk_sel = ldt_alloc(1);
-        set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
-        hstk_sp = HSTK_TOP;
-    }
-    if (vec < 0) return;
     memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(intr);
     p.ss = hstk_sel;
-    p.esp = hstk_sp;
     p.ds = p.es = cds;
     pm_push(&p, ccs);
     pm_push(&p, cip);
@@ -833,10 +880,7 @@ static void run_hw_handler(int vec, u32 ccs, u32 cip, u32 cds, u32 cflags)
     p.eflags = (cflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | EFL_IOPL | 2;
     p.cs = sysvm.pmvec_sel[vec];
     p.eip = sysvm.pmvec_off[vec];
-    saved_sp = hstk_sp;
-    hstk_sp = (p.esp & (sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu)) + 0;
-    exec_v86(&p);
-    hstk_sp = saved_sp;
+    hstk_run(&p);
 }
 
 /* A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code
@@ -849,7 +893,7 @@ int dpmi_v86_hook(struct cregs *r, int vec, int hw)
      * their handlers (VX4 looked at INT 08h only), and whether the flags
      * they return (INT 24h's AL, INT 23h's CF) come back to V86 mode */
     (void)hw;
-    run_hw_handler(vec, sysvm.last_cs, sysvm.last_ip, sysvm.last_ds, r->eflags);
+    run_hw_handler(vec, r, sysvm.last_cs, sysvm.last_ip, sysvm.last_ds, r->eflags);
     return 1;
 }
 
@@ -900,10 +944,9 @@ void dpmi_ps2cb(struct cregs *r)
     r->cs = cs;
     SETW(r->esp, (u16)r->esp + 4);
     if (!sysvm.pm || !ps2_sel) return;
-    if (!hstk_sel) run_hw_handler(-1, 0, 0, 0, 0);     /* make the host stack */
     memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(r);
     p.ss = hstk_sel;
-    p.esp = hstk_sp;
     p.ds = p.es = sysvm.last_ds;
     pm_push(&p, status);
     pm_push(&p, x);
@@ -914,12 +957,7 @@ void dpmi_ps2cb(struct cregs *r)
     p.eflags = (r->eflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | EFL_IOPL | 2;
     p.cs = ps2_sel;
     p.eip = ps2_off;
-    {
-        u32 saved_sp = hstk_sp;
-        hstk_sp = p.esp & (sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu);
-        exec_v86(&p);
-        hstk_sp = saved_sp;
-    }
+    hstk_run(&p);
 }
 
 void dpmi_exception(struct cregs *r, int vec, u32 err)
