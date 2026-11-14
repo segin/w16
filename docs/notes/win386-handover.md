@@ -43,6 +43,8 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 - **VPICD done** (ARCHITECTURE.md 12.8): module VPICD in the W3 table (win386/vxd/vpicd.c, vpicdddb.asm; runtime vxdrt.asm/vxdrt.inc; shared w16vxd.h). Owns the 8259s; the VMM hands every IRQ to it (struct vpicd_link via DDB ref data); VTD (in the VMM) takes IRQ 0 through it. All 21 services. VXP results equal 3.1's except IRQ 1/12 (no VKD/VMD yet). Not yet: virtual PIC per VM (needs IOPL 0 for PM clients + port trapping) — the big next VPICD step.
 - Bug met on the way: a request must be cleared *before* it is simulated (the VM's handler runs inside deliver(); traps on the way re-delivered it: a timer storm).
 
+- **VMD done** (win386/vxd/vmd.c, vmdddb.asm, module VMD): IRQ 12 taken from VPICD at Device_Init, every mouse interrupt passed to the System VM; services 0-2 and PM API as observed (VX5 replay and VXP equal 3.1's; IRQ 12's status at exit shows ECX=4, physically masked, where 3.1 showed 0: UNVERIFIED why). Input runs pass.
+
 ### Facts for VKD / VMD / REBOOT (observed on 3.1 with VXP and screenshots)
 - DDBs (readexe): VKD 000Dh 2.00 init 38000000h, 15 services, PM API; VMD 000Ch 3.00 init 34000000h, 3 services, V86+PM API; Reboot 0009h 2.00 init 24000000h, 0 services, PM API. W3 module names VKD, VMD, REBOOT.
 - VKD services (RBIL names, numbers): 0 Get_Version, 1 Define_Hot_Key, 2 Remove_Hot_Key, 3 Local_Enable, 4 Local_Disable, 5 Reflect_Hot_Key, 6 Cancel_Hot_Key_State, 7 Force_Keys, 8 Get_Kbd_Owner, 9 Define_Paste_Mode, 0Ah Start_Paste, 0Bh Cancel_Paste, 0Ch Get_Msg_Key, 0Dh Peek_Msg_Key, 0Eh Flush_Msg_Key_Queue. VMD: 0 Get_Version, 1 Set_Mouse_Type, 2 Get_Mouse_Owner.

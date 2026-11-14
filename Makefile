@@ -845,8 +845,11 @@ $(W386)/vxd/%.o: win386/vxd/%.asm $(W386VXDHDRS)
 W386VPICD := $(W386)/vxd/vpicdddb.o $(W386)/vxd/vpicd.o $(W386)/vxd/vxdrt.o
 $(W386)/VPICD.386: $(W386VPICD) win386/vxd/vpicd.lnk
 	$(WLINK) @win386/vxd/vpicd.lnk name $@ option map=$(W386)/vpicd.map file { $(W386VPICD) }
-W386MODS := VPICD=$(W386)/VPICD.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 tools/mkw3.py
+W386VMD := $(W386)/vxd/vmdddb.o $(W386)/vxd/vmd.o $(W386)/vxd/vxdrt.o
+$(W386)/VMD.386: $(W386VMD) win386/vxd/vmd.lnk
+	$(WLINK) @win386/vxd/vmd.lnk name $@ option map=$(W386)/vmd.map file { $(W386VMD) }
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)

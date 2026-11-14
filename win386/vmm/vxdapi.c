@@ -24,7 +24,6 @@ struct vxdapi {
 };
 
 static void api_default(struct cregs *r);
-static void api_vmd(struct cregs *r);
 static void api_vdd(struct cregs *r);
 static void api_reboot(struct cregs *r);
 
@@ -34,7 +33,6 @@ static const struct vxdapi apis[] = {
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
     { 0x0009, "Reboot",   api_reboot,  0x0000, 0, 1 },
     { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
-    { 0x000C, "VMD",      api_vmd,     0x0300, 0, 0 },
     { 0x000D, "VKD",      api_default, 0x0200, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
     { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
@@ -50,20 +48,6 @@ static void api_default(struct cregs *r)
     trace("VxD API %s (%x): ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> not implemented\n",
           apis[cur_api].name, apis[cur_api].id, AX(r), BX(r), CX(r), DX(r), SI(r), DI(r), r->ds, r->es);
     r->eflags |= EFL_CF;
-}
-
-/* VMD. VX5 (Windows 3.1, w16's MOUSE.DRV in place so that its call is
- * the first): AX=0100h with MOUSE.DRV's registers (BX=7404h CX=0071h
- * DX=0500h) fails, carry set, every register as it was; a repeat too.
- * UNVERIFIED what it is for (Ralf Brown's Interrupt List 61 lists 0100h
- * for an older VMD as "possibly a NOP"). */
-static void api_vmd(struct cregs *r)
-{
-    if (AX(r) == 0x0100) {
-        r->eflags |= EFL_CF;
-        return;
-    }
-    api_default(r);
 }
 
 /* VDD. VX5 (Windows 3.1): AX=000Ch with VGA.DRV's registers (BX=9B0Ah
