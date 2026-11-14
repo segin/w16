@@ -51,6 +51,8 @@ emsboard|vx1 ems=true|C:\VX2 eeee;WIN /3 > C:\O1.TXT;C:\WC2 !emsboard
 noini|vx1 rm=WINDOWS/SYSTEM.INI|WIN /3 > C:\O1.TXT;C:\WC2 !noini
 help|vx1|SYSTEM\WIN386 /? > C:\O1.TXT;C:\WC2 !help
 irq|vx4|WIN /3;C:\WC2 !irq
+vif|vx6|WIN /3;C:\WC2 !vif
+io|vx7 vxi ini=386Enh:+device=vxi.386|WIN /3;C:\WC2 !io
 krnl|-|WIN /3 /B > C:\O1.TXT;C:\WC2 !krnl
 '
 
@@ -67,6 +69,9 @@ run_one() {   # run_one DIR OPTIONS COMMANDS
              cp "$dos/WC3.COM" "$d/c/WINDOWS/SYSTEM/WIN386.EXE" ;;
         vx1) cp "$dos/VX1.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
         vx4) cp "$dos/VX4.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
+        vx6) cp "$dos/VX6.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
+        vx7) cp "$dos/VX7.COM" "$d/c/WINDOWS/SYSTEM/KRNL386.EXE" ;;
+        vxi) cp "$dos/VXI.386" "$d/c/WINDOWS/SYSTEM/VXI.386" ;;
         mem=*) mem=${o#mem=} ;;
         cpu=*) cpu=${o#cpu=} ;;
         nohimem) xms=false ;;
@@ -102,9 +107,10 @@ done
 wait
 for n in $names; do
     echo "======== $n"
-    for f in WC.LOG VX1.LOG VX4.LOG; do
+    for f in WC.LOG VX1.LOG VX4.LOG VX6.LOG VX7.LOG; do
         [ -f "$work/$n/c/$f" ] && { echo "---- $f"; tr -d '\r' < "$work/$n/c/$f"; }
     done
+    [ -f "$work/$n/com1.txt" ] && grep -aq '^VXP io\|^VXP Install' "$work/$n/com1.txt" && { echo "---- COM1 (VXI)"; tr -d '\r' < "$work/$n/com1.txt" | grep -a '^VXP io\|^VXP Install'; }
     for o in "$work/$n"/c/O*.TXT; do
         [ -f "$o" ] || continue
         echo "---- $(basename "$o")"
@@ -112,7 +118,7 @@ for n in $names; do
     done
     if [ -n "$outdir" ]; then
         mkdir -p "$outdir/$n"
-        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/VX4.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log "$work/$n"/com1.txt; do
+        for f in "$work/$n"/c/WC.LOG "$work/$n"/c/VX1.LOG "$work/$n"/c/VX4.LOG "$work/$n"/c/VX6.LOG "$work/$n"/c/VX7.LOG "$work/$n"/c/O*.TXT "$work/$n"/dosbox.log "$work/$n"/trace.log "$work/$n"/com1.txt; do
             [ -f "$f" ] && cp "$f" "$outdir/$n/"
         done
     fi
