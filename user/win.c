@@ -43,6 +43,7 @@ void byte_align(PWND w, BOOL made)
     }
 }
 void free_place(HWND h);
+void minimize_new(HWND h);
 void free_props(PWND w);
 void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
@@ -433,6 +434,9 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             send_message(h, WM_MOVE, 0, MAKELONG(mx, my));
         }
     }
+    /* WS_MINIMIZE: to its icon's place now (US24; user/pos.c) */
+    if ((style & (WS_MINIMIZE | WS_CHILD)) == WS_MINIMIZE && valid_wnd(h))
+        minimize_new(h);
     if ((style & WS_CHILD) && !(exstyle & WS_EX_NOPARENTNOTIFY) && pw)
         send_message(parent, WM_PARENTNOTIFY, WM_CREATE, MAKELONG(h, w->hMenu));
     if (show && valid_wnd(h)) {

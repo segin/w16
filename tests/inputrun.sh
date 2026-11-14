@@ -45,6 +45,7 @@
 #     jiggle N          N quick small pointer motions back and forth (a
 #                       stream of mouse interrupts)
 #     click [N]         press and release button N (1 left, 3 right)
+#     dclick [N]        double-click button N (two clicks 120 ms apart)
 #     down N / up N     press or release button N
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     keydown KEYS / keyup KEYS  press or release keys only (a key held
@@ -466,6 +467,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
     jiggle) i=0; while [ \$i -lt "\$a" ]; do xdotool mousemove_relative -- 7 5; xdotool mousemove_relative -- -7 -5; i=\$((i + 1)); done ;;
     click) xdotool click "\${a:-1}" ;;
+    dclick) xdotool click --repeat 2 --delay 120 "\${a:-1}" ;;
     down) xdotool mousedown "\$a" ;;
     up) xdotool mouseup "\$a" ;;
     key) xdotool key --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" \$a \$b ;;
