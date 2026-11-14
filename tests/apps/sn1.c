@@ -591,6 +591,19 @@ static void partD(void)
 }
 
 /* ---- E: the beeps ---- */
+/* wait n BIOS ticks reading messages (a sound MMSYSTEM plays goes on
+   only while the program lets other tasks run) */
+static void pause(WORD n)
+{
+    DWORD t0 = *ticks;
+    MSG m;
+    while (*ticks - t0 < n) {
+        while (PeekMessage(&m, 0, 0, 0, PM_REMOVE))
+            DispatchMessage(&m);
+        Yield();
+    }
+}
+
 static void partE(void)
 {
     static const WORD types[] = { 0, MB_ICONHAND, MB_ICONQUESTION, MB_ICONEXCLAMATION, MB_ICONASTERISK, 0xFFFF };
@@ -600,27 +613,35 @@ static void partE(void)
     SystemParametersInfo(SPI_GETBEEP, 0, &b, 0);
     wsprintf(line, "OBS E SPI_GETBEEP %d\r\n", b);
     put(line);
-    waitticks(10);
-    for (i = 0; i < 3; i++) {
-        callw(17, 0, 0, 0, 0, 0, 0);
-        regline("E DoBeep");
-        waitticks(8);
+    pause(10);
+    /* each beep followed by 2.2 s (a wave sound plays out) */
+    callw(17, 0, 0, 0, 0, 0, 0);
+    regline("E DoBeep");
+    pause(40);
+    for (i = 0; i < sizeof types / sizeof types[0]; i++) {
+        callw(17, 1, types[i], 0, 0, 0, 0);
+        wsprintf(line, "OBS E DoBeep(%04X)\r\n", types[i]);
+        put(line);
+        regline("E DoBeep(type)");
+        flush();
+        pause(40);
     }
     for (i = 0; i < sizeof types / sizeof types[0]; i++) {
         MessageBeep(types[i]);
         wsprintf(line, "OBS E MessageBeep(%04X)\r\n", types[i]);
         put(line);
         spk("E after MessageBeep");
-        waitticks(8);
+        flush();
+        pause(40);
     }
     /* DoBeep while the device is open */
     callw(1, 0, 0, 0, 0, 0, 0);
-    callw(17, 0, 0, 0, 0, 0, 0);
-    regline("E DoBeep while open");
-    waitticks(8);
+    callw(17, 1, 0, 0, 0, 0, 0);
+    regline("E DoBeep(0) while open");
+    pause(40);
     MessageBeep(0);
     put("OBS E MessageBeep(0) while open\r\n");
-    waitticks(8);
+    pause(40);
     callw(2, 0, 0, 0, 0, 0, 0);
     flush();
 }

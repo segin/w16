@@ -48,7 +48,8 @@ irq=5
 dma=1
 hdma=5
 mpu401=intelligent
-mpubase=330'
+mpubase=330
+enable asp=true'
 printf '%s\n' "$sbconf" > "$out/dosbox.conf"
 cat > "$out/install.conf" <<EOF
 [sdl]

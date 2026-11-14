@@ -71,7 +71,10 @@ strip() {
 cmpf() {
     strip "$2" > "$2.cmp"
     strip "$3" > "$3.cmp"
-    if cmp -s "$2.cmp" "$3.cmp"; then
+    if [ ! -s "$2.cmp" ]; then
+        echo "FAIL $1: no log ($2)"
+        fails=$((fails + 1))
+    elif cmp -s "$2.cmp" "$3.cmp"; then
         echo "ok   $1: identical ($(wc -l < "$2.cmp") lines)"
     else
         echo "FAIL $1: differs ($2.cmp $3.cmp):"
