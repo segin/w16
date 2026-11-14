@@ -563,7 +563,17 @@ static void heartbeat(struct cregs *r)
           ++hb_n, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
           exec_depth(), sysvm.last_cs, sysvm.last_ip);
     for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
-    trace(", PIC masks %x %x\n", inb(0x21), inb(0xA1));
+    trace(", PIC masks %x %x", inb(0x21), inb(0xA1));
+    if (r->eflags & EFL_VM) {
+        u8 *c = (u8 *)v86_lin(r->cs, r->eip);
+        u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
+        trace(", code");
+        for (i = 0; i < 8; i++) trace(" %02x", c[i]);
+        trace(", ss:sp %x:%x", r->ss, r->esp & 0xFFFF);
+        for (i = 0; i < 8; i++) trace(" %04x", sp[i]);
+        trace(", ax %x bx %x cx %x dx %x ds %x es %x", r->eax, r->ebx, r->ecx, r->edx, r->ds, r->es);
+    }
+    trace("\n");
 }
 
 void __cdecl trap(struct tframe *f)
