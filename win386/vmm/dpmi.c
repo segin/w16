@@ -892,6 +892,13 @@ void dpmi_note_pm(struct cregs *r)
         hstk_low = HSTK_TOP;            /* nothing runs on the host stack now */
 }
 
+/* a hardware interrupt's handler (or a routine run on the host stack) is
+ * running in the VM */
+int dpmi_in_handler(void)
+{
+    return hstk_depth != 0;
+}
+
 static void hstk_make(void)
 {
     u32 i, pg;
@@ -962,9 +969,15 @@ void dpmi_build_int(struct cregs *r, u32 sel, u32 off)
     pm_push(r, r->eflags & ~EFL_IOPL);
     pm_push(r, r->cs);
     pm_push(r, r->eip);
-    r->eflags &= ~(EFL_IF | EFL_TF);
+    /* IF stays as it was: with IOPL 0 the routine's IRET cannot set it
+     * again, and the VM would go on with interrupts off (UNVERIFIED what
+     * Windows 3.1 does; KERNEL's Ctrl+Alt+Del procedure is short) */
+    r->eflags &= ~EFL_TF;
     r->cs = sel;
     r->eip = off;
+    /* on the host stack: the frame is in use from now on (a hardware
+     * handler's frame must go below it) */
+    dpmi_note_pm(r);
 }
 
 int dpmi_v86_hook(struct cregs *r, int vec, int hw)
@@ -1070,6 +1083,28 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         r->eip = sysvm.excvec_off[vec];
         r->eflags &= ~(EFL_IF | EFL_TF);
         hstk_low = r->esp & hstk_mask();
+        return;
+    }
+    if (vec == 1 && pmvec_default(1)) {
+        /* a single step nobody's handler takes: TF off, the client goes
+         * on. Seen right after KERNEL's Ctrl+Alt+Del procedure returned
+         * (run with Build_Int_Stack_Frame): TF in the flags it returned
+         * with. Who takes the step under Windows 3.1 is UNVERIFIED (RBIL:
+         * Reboot 0204h sets/resets a protected-mode INT 01h handler) */
+        trace("[EXC 1 at %x:%x: TF off]", r->cs, r->eip);
+        r->eflags &= ~EFL_TF;
+        return;
+    }
+    if (vec < 8 && !pmvec_default(vec)) {
+        /* no exception handler: exceptions 0-7 go to the client's
+         * protected-mode interrupt handler (DPMI 0.9) */
+        if (dpmi_verbose) trace("[EXC %x -> INT %x at %x:%x]", vec, vec, r->cs, r->eip);
+        pm_push(r, r->eflags & ~EFL_IOPL);
+        pm_push(r, r->cs);
+        pm_push(r, r->eip);
+        r->eflags &= ~(EFL_IF | EFL_TF);
+        r->cs = sysvm.pmvec_sel[vec];
+        r->eip = sysvm.pmvec_off[vec];
         return;
     }
     {   /* the descriptor the error code names; never code bytes (ARCHITECTURE.md 3) */
