@@ -37,7 +37,10 @@ I_SDA_LIN       equ 88
 I_XBUF_SEG      equ 92
 I_XBUF_SIZE     equ 94
 I_TRACE         equ 96
-I_SIZE          equ 100
+I_VXD_COUNT     equ 100
+I_VXD_LIST      equ 104
+I_TAIL_LIN      equ 108
+I_SIZE          equ 112
 
 BP_EXIT         equ 0
 BP_COUNT        equ 64

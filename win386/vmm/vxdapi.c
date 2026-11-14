@@ -107,9 +107,23 @@ static void api_reboot(struct cregs *r)
 }
 
 /* INT 2Fh 1684h in protected mode: the entry for device BX, or 0:0 */
+/* devices loaded from SYSTEM.INI whose DDB has a PM API procedure: their
+ * own procedure answers (vxd.c), through entries after w16's own */
+static u32 ext_id[PMBP_COUNT - PMBP_API], next_ext;
+
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off)
 {
     u32 i;
+    if (vxd_pm_api(BX(r))) {
+        for (i = 0; i < next_ext && ext_id[i] != BX(r); i++)
+            ;
+        if (i == next_ext && NAPIS + next_ext < PMBP_COUNT - PMBP_API) ext_id[next_ext++] = BX(r);
+        if (i < next_ext) {
+            *sel = SEL_PMBP;
+            *off = PMBP_API + NAPIS + i;
+            return;
+        }
+    }
     for (i = 0; i < NAPIS; i++)
         if (apis[i].id == BX(r)) {
             *sel = SEL_PMBP;
@@ -125,6 +139,11 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
     u32 n = index - PMBP_API;
     r->eip = retip;
     r->cs = retcs;
+    if (n >= NAPIS && n - NAPIS < next_ext) {
+        /* the loaded device's own API procedure */
+        vxd_call_api(vxd_pm_api(ext_id[n - NAPIS]), r);
+        return;
+    }
     if (n >= NAPIS) { r->eflags |= EFL_CF; return; }
     cur_api = n;
     if (AX(r) == 0) {               /* get version */

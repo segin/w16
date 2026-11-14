@@ -63,6 +63,9 @@ struct w386_info {
     w_u16 xbuf_seg;     /* transfer buffer for DOS calls from PM (real mode) */
     w_u16 xbuf_size;    /* bytes */
     w_u32 trace;        /* SYSTEM.INI [w16] vmmtrace=1: detailed VMM trace */
+    w_u32 vxd_count;    /* VxDs loaded after the VMM (SYSTEM.INI [386Enh]) */
+    w_u32 vxd_list;     /* window offset of their DDBs' linear addresses */
+    w_u32 tail_lin;     /* WIN386's command tail (PSP:80h), linear */
 };
 #pragma pack()
 

@@ -214,6 +214,7 @@ void dpmi_switch(struct cregs *r)
     r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT)) | EFL_IOPL | EFL_IF;
     sysvm.dsel = dsel;
     sysvm.pm = 1;
+    vxd_pm_app(1, r);
 }
 
 /* ---- reflecting into V86 mode and back ---- */
@@ -685,6 +686,7 @@ static void terminate_client(struct cregs *r)
     p.eax = 0x5000;
     p.ebx = sysvm.psp_seg;
     v86_int(&p, 0x21);
+    vxd_pm_app(0, r);
     sysvm.pm = 0;
     v.eax = r->eax;
     v.ebx = r->ebx;

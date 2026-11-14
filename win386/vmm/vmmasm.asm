@@ -216,6 +216,49 @@ _hlt:   sti
 rmvec   dd 0
         dw 0
 
+; VxD services (vxd.c): each service's stub pushes its ID (device << 16 |
+; service) and jumps here; svc_dispatch gets the registers (PUSHAD order,
+; then the flags, then the ID) and changes them; they come back as the
+; service's results, flags included.
+global _svc_common
+extern _svc_dispatch
+_svc_common:
+        pushfd
+        pushad
+        cld
+        push esp
+        call _svc_dispatch
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]                ; the ID (LEA: the flags stay)
+        ret
+
+; u32 vxd_control(proc, msg, ebx, esi, edx, edi, ebp): call a VxD's
+; control procedure with EAX = msg and those registers; returns its carry
+global _vxd_control
+_vxd_control:
+        push ebp
+        push ebx
+        push esi
+        push edi
+        mov eax, [esp+20+4]
+        mov ebx, [esp+20+8]
+        mov esi, [esp+20+12]
+        mov edx, [esp+20+16]
+        mov edi, [esp+20+20]
+        mov ebp, [esp+20+24]
+        push dword [esp+20]             ; the procedure
+        pop ecx
+        call ecx
+        mov eax, 0
+        setc al
+        pop edi
+        pop esi
+        pop ebx
+        pop ebp
+        ret
+
 segment _DATA public align=4 class=DATA use32 flat
 global _trap_stubs
 _trap_stubs:

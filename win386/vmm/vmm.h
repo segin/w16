@@ -160,6 +160,15 @@ int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);
 
+/* vxd.c */
+void vxd_init(void);
+void vxd_pm_app(int begin, struct cregs *r);
+void vxd_exit(struct cregs *r);
+void vxd_link(struct tframe *f);
+u32 vm_handle(void);
+u32 vxd_pm_api(u32 id);
+void vxd_call_api(u32 proc, struct cregs *r);
+
 /* dpmi.c */
 void dpmi_init(void);
 void dpmi_switch(struct cregs *r);                 /* the V86 entry breakpoint */

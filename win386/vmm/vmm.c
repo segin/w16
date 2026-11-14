@@ -468,6 +468,7 @@ static void pic_init(u32 b1, u32 b2)
 static void exit_windows(struct cregs *r)
 {
     trace("VMM: exit, code %x\n", AX(r) & 0xFF);
+    vxd_exit(r);
     info->exit_code = AX(r);
     info->ret_ss = (u16)r->ss;
     info->ret_sp = (u16)r->esp;
@@ -543,6 +544,7 @@ void __cdecl trap(struct tframe *f)
 
     if (!(f->eflags & EFL_VM) && !(f->cs & 3)) {
         if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) return;     /* not expected: IF=0 in the VMM */
+        if (vec == 0x20) { vxd_link(f); return; }               /* a VxD's dynamic link */
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
@@ -673,6 +675,7 @@ void __cdecl vmm_main(struct w386_info *inf)
     lldt(SEL_LDT);
     pic_init(IRQ_BASE, IRQ_BASE + 8);
     dpmi_init();
+    vxd_init();
 
     /* the System VM: the loader, back from pm_go, in V86 mode */
     memset(&sysvm.r, 0, sizeof(sysvm.r));
