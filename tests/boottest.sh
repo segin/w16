@@ -2411,7 +2411,10 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # every screen against the same script with Microsoft's VGA.DRV
         # (helpmenus: Notepad's caret left out; icons: Clock's icon; tabs,
         # kbtype: the caret is drawn by the driver on both sides and
-        # compared)
+        # compared; carets keep the phase they start in on both sides,
+        # CursorBlinkRate=65535 as in kbd: the host's load must not decide
+        # whether a caret shows on a shot)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         r=ok
         for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about}; do
             vdrv=$out/vga-msres-$s.drv
@@ -2427,8 +2430,8 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             b=25 t=220
             case $s in pmkeys|pmitems|pmclose|mdimax) b=40 t=240 ;; esac
             [ $s = icons ] && t=380
-            refrun vga-$s-ref vga "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/vga-$s-ref" -r
-            "$root/tests/inputrun.sh" -e "$out/vga-$s-ref/boot.png" -E "$out/vga-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/vga-$s-w16" -r \
+            refrun vga-$s-ref vga "$root/tests/inputrun.sh" -s -b $b -t $t "$scr" "$out/vga-$s-ref" -r -i "$blink"
+            "$root/tests/inputrun.sh" -e "$out/vga-$s-ref/boot.png" -E "$out/vga-$s-ref" -M "$m" -b $b -t $t "$scr" "$out/vga-$s-w16" -r -i "$blink" \
                 -f "$vdrv=WINDOWS/SYSTEM/VGA.DRV" > "$out/vga-$s-w16.txt" 2>&1 || true
             rm -f "$vdrv"
             ls "$out/vga-$s-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$s: no screens"; break; }
@@ -2465,12 +2468,16 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # sides are w16's but for VGA.DRV)
         fon=$root/build/fonts
         scr=$root/tests/scripts/input/kbtype.txt
+        # carets keep their starting phase on both sides (as in kbdall):
+        # with the blink on, matchnow under load could miss the reference's
+        # phase (01-typed: 28 pixels of Notepad's caret, one parallel run)
+        blink='WIN.INI:windows:CursorBlinkRate=65535'
         "$root/tests/vgamsres.sh" "$out/vgaall-msres.drv" > "$out/vgaall-msres.txt" 2>&1 || true
         for k in ref w16; do
             if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
                 -f "$out/vgaall-msres.drv=WINDOWS/SYSTEM/VGA.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/vgaall-$k"; fi
-            "$root/tests/inputrun.sh" "$@" \
+            "$root/tests/inputrun.sh" "$@" -i "$blink" \
                 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
                 -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
