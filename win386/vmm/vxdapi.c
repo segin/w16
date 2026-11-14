@@ -33,7 +33,6 @@ static const struct vxdapi apis[] = {
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
     { 0x0009, "Reboot",   api_reboot,  0x0000, 0, 1 },
     { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
-    { 0x000D, "VKD",      api_default, 0x0200, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
     { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
     { 0x0021, "PageFile", api_default, 0x010A, 0, 0 },
