@@ -677,10 +677,8 @@ static void heartbeat(struct cregs *r)
     for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
     trace(", PIC masks %x %x, trapped I/O %d", inb(0x21), inb(0xA1), io_traps);
     if (r->eflags & EFL_VM) {
-        u8 *c = (u8 *)v86_lin(r->cs, r->eip);
+        /* registers and stack words only: never code bytes (ARCHITECTURE.md 3) */
         u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
-        trace(", code");
-        for (i = 0; i < 8; i++) trace(" %02x", c[i]);
         trace(", ss:sp %x:%x", r->ss, r->esp & 0xFFFF);
         for (i = 0; i < 8; i++) trace(" %04x", sp[i]);
         trace(", ax %x bx %x cx %x dx %x ds %x es %x", r->eax, r->ebx, r->ecx, r->edx, r->ds, r->es);
@@ -760,7 +758,7 @@ void __cdecl trap(struct tframe *f)
             } else if (!f->err && io_trap(r, op))
                 ;                       /* a trapped port */
             else if (r->eflags & EFL_VM)
-                panic("V86 #GP at %x:%x op %x %x err %x", r->cs, r->eip, op[0], op[1], f->err);
+                panic("V86 #GP at %x:%x err %x", r->cs, r->eip, f->err);
             else if (!f->err && pm_cli_sti(r, op))
                 ;
             else

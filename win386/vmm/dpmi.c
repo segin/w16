@@ -1072,11 +1072,9 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         hstk_low = r->esp & hstk_mask();
         return;
     }
-    {
-        u8 *c = (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+    {   /* the descriptor the error code names; never code bytes (ARCHITECTURE.md 3) */
         u8 *d = ldt_desc(err);
-        trace("code %x %x %x %x %x %x  desc(err) %x %x %x %x %x %x %x %x\n", c[0], c[1], c[2], c[3], c[4], c[5],
-              d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+        trace("desc(err) %x %x %x %x %x %x %x %x\n", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
     }
     panic("client exception %x err %x at %x:%x (eax %x ebx %x ds %x es %x fs %x gs %x ss:esp %x:%x cr2 %x)",
           vec, err, r->cs, r->eip, r->eax, r->ebx, r->ds, r->es, r->fs, r->gs, r->ss, r->esp, get_cr2());
