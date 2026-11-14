@@ -101,6 +101,11 @@ black-box observed on 3.1, tested against Microsoft's.
   (sw10); winoldap.sh prompt failed once on Microsoft's side under four
   parallel runs (keys lost: its #2 switch never came) and passed alone
   (sw9).
+- Final run on branch swap2 at c96973f (master merged): tests/swap.sh
+  all six PASS; tests/winoldap.sh all seven PASS; boot test 90 ok, 1
+  failure: sysclock "CK10: F1 improved: 0 pixels (baseline 30)" (an
+  improvement against a stored baseline, SYSTEM.DRV/Clock's, not swap's);
+  make test pass.
 - Still open: swap.sh -W (w16's WIN.COM + WINOLDAP + DOSX on w16's side,
   DOSBox-X, Microsoft's KRNL386): the icon (388 px, w16's own, known)
   and in ctrlesc, nodisk, pif the run ends early (shots missing): w16's
