@@ -25,7 +25,8 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 - MOUSE.DRV's INT 15h C207h (PS/2 handler) from PM: the BIOS gets a V86 breakpoint (W386_BP_PS2CB) that runs the PM handler on the host stack with status, X, Y, 0.
 - Exit Windows: KRNL386 ends with INT 21h AX=0001h; treated as 4C00h, after making the client's PSP current (as w16's DOSX).
 - Nested interrupts on the host stack overwrote the running handler's pushed data (the intermittent #GP/hang): hstk_base/hstk_run/dpmi_note_pm in dpmi.c.
-- VMM heartbeat in the trace every 20 s of ticks.
+- Nested interrupts on the V86 reflection stack overwrote the interrupted V86 code's stack (hang while fonts loaded, ~1 in 7 under load): traps from V86 code on that stack lower its start (vmm.c trap()); stack 8 KB with an overflow check. 40/40 boots after.
+- VMM heartbeat in the trace every 20 s of ticks: V86/PM position, code bytes, stack, registers, IRQ counts, PIC masks. Use it on any hang.
 
 ## Observed, not acted on
 
