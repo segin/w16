@@ -23,6 +23,7 @@
  *    during the boot (ARCHITECTURE.md 12.5).
  * The byte and the procedure: k386.asm (KERNEL sets the byte to 1 at
  * every task switch and idle pass: "whenever it runs").
+ * DOS programs: WINOA386.MOD and the 386 grabber (loader.c, TK57 "mod").
  * UNVERIFIED: the call Pietrek
  * describes when the last task ends (ExitCall) and Reboot 0100h for
  * ExitWindows(EW_REBOOTSYSTEM) (ExitKernel).

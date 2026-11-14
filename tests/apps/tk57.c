@@ -9,6 +9,8 @@
  *    KERNEL set with 0201h at its start (ES:DI its Ctrl+Alt+Del procedure,
  *    DS:SI the byte that tells a hung application from a running one):
  *    whether those are KERNEL's, and the byte's value;
+ *  - with the tail "mod": the module a DOS program (COMMAND.COM, left
+ *    running) runs under, by name and file;
  *  - with the tail "woa": which module KERNEL starts for a DOS program
  *    (WinExec of COMMAND.COM): TK33.EXE copied over WINOLDAP.MOD and
  *    WINOA386.MOD logs its own file name.
@@ -122,6 +124,36 @@ int __cdecl tmain(void)
         obs_str("WinExec module file", buf);
         for (i = 0; i < 200; i++)
             Yield();
+    }
+    if (tail[0] == 'm') {
+        /* which module a DOS program runs under: COMMAND.COM stays, its
+           WINOLDAP-type module with it */
+        HMODULE m;
+        out("WinExec COMMAND.COM (stays)\r\n");
+        h = WinExec("COMMAND.COM", SW_SHOWMINIMIZED);
+        obs(n("stays: WinExec > 32"), h > 32);
+        obs_env("stays: WinExec", h);
+        for (i = 0; i < 400; i++)
+            Yield();
+        m = GetModuleHandle("WINOLDAP");
+        obs(n("module WINOLDAP loaded"), m != 0);
+        buf[0] = 0;
+        if (m)
+            GetModuleFileName(m, buf, sizeof buf);
+        obs_str("module WINOLDAP file", buf);
+        m = GetModuleHandle("WINOA386");
+        obs(n("module WINOA386 loaded"), m != 0);
+        buf[0] = 0;
+        if (m)
+            GetModuleFileName(m, buf, sizeof buf);
+        obs_str("module WINOA386 file", buf);
+        m = GetModuleHandle("GRABBER");
+        obs(n("module GRABBER loaded"), m != 0);
+        buf[0] = 0;
+        if (m)
+            GetModuleFileName(m, buf, sizeof buf);
+        obs_str("module GRABBER file", buf);
+        obs(n("module GRABBER usage"), m ? GetModuleUsage(m) : 0);
     }
     out("TK57 done\r\n");
     return 0;

@@ -1326,6 +1326,12 @@ int module_init_dll(u16 hmod)
    then grows); the TDB's WINOLDAP flag (Pietrek: TDB 16h bit 0) is not
    set yet. */
 u16 KAPI LoadModule(const char FAR *name, void FAR *params);
+#ifdef KRNL386
+u16 KAPI LoadLibrary(const char FAR *name);
+int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
+                                 const char FAR *def, char FAR *buf, int n,
+                                 const char FAR *file);
+#endif
 
 static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
 {
@@ -1348,11 +1354,21 @@ static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
     if (n && woa[n - 1] != '\\')
         woa[n++] = '\\';
 #ifdef KRNL386
-    /* 386 Enhanced mode: WINOA386.MOD (Pietrek; UNVERIFIED: TK57 with
-       TK33 in its place saw nothing run) */
-    if (k386_enhanced)
+    /* 386 Enhanced mode (TK57 "mod", Microsoft's KRNL386 with COMMAND.COM
+       running: module WINOLDAP from SYSTEM\WINOA386.MOD, which imports
+       GRABBER; module GRABBER loaded from SYSTEM\VGA.3GR, SYSTEM.INI's
+       [boot] 386grabber, usage 2). w16 loads the grabber here, before
+       WINOA386.MOD, unless it is loaded (UNVERIFIED when 3.1 does) */
+    if (k386_enhanced) {
+        static char g[DOS_PATHMAX + 16];
         kmemcpy(woa + n, "WINOA386.MOD", 13);
-    else
+        if (!module_find("GRABBER")) {
+            kmemcpy(g, woa, n);
+            if (GetPrivateProfileString("boot", "386grabber", "", g + n,
+                                        (int)(sizeof g - n), "SYSTEM.INI") > 0)
+                LoadLibrary(g);
+        }
+    } else
 #endif
     kmemcpy(woa + n, "WINOLDAP.MOD", 13);
     np.env = lp->env;

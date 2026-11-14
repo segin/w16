@@ -46,7 +46,7 @@ segment more (HEAP_TEXT: global386.c), which nothing can see.
 | THHOOK | hGDI/hUSER/shell 24h-28h | 28h/2Ah/2Ch | TK51 | toolhelp.c |
 | GetWinFlags (Enhanced) | - | WF_ENHANCED (+WF_PAGING with a paging file in DPMI 0500h), CPU from DPMI 0400h | TK57 | k386c.c, task.c |
 | Reboot device | - | 0201h at the first InitTask (handler in KERNEL code, a sanity byte KERNEL keeps at 1) | TK57, VX8 (WIN386 notes) | k386c.c, k386.asm |
-| DOS programs (Enhanced) | WINOLDAP.MOD | WINOA386.MOD (Pietrek; UNVERIFIED: TK33 in its place did not log) | TK57 | loader.c |
+| DOS programs (Enhanced) | WINOLDAP.MOD | SYSTEM\WINOA386.MOD (module WINOLDAP), and module GRABBER from [boot] 386grabber (VGA.3GR, usage 2) | TK57 mod | loader.c |
 
 TOOLHELP: Microsoft's TOOLHELP.DLL picks the heap layout by itself; with
 the Burgermaster's selector limit forced above 64K on the KRNL286 layout
@@ -57,9 +57,14 @@ KRNL386's (TK51, TK53, TK58 equal 3.1's).
 
 ## Probes
 
-- TK57 (tests/apps/tk57.c, tk57s.asm; tk57ref.h from /S and /3): WinFlags,
-  INT 2Fh 1600h/1683h, Reboot 0202h; with tail `woa`, WinExec of a DOS
-  program (TK33 copied over WINOLDAP.MOD/WINOA386.MOD logs its file).
+- TK57 (tests/apps/tk57.c, tk57s.asm; tk57ref.h from `/S mod` and `/3
+  mod`): WinFlags, INT 2Fh 1600h/1683h, Reboot 0202h; with tail `mod`,
+  COMMAND.COM started and left running, then which modules (WINOLDAP's
+  file, GRABBER's file and usage) are loaded; with `woa`, WinExec of a
+  DOS program for TK33 copied over WINOLDAP.MOD/WINOA386.MOD. Run as the
+  shell: `tests/refrun.sh build/dos/TK57.EXE '/3 mod'`, or
+  `tests/dropin.sh -3 -c 'WIN /3 /B mod' -f build/dos/TK57.EXE=TK57.EXE
+  -i 'boot:shell=C:\TK57.EXE' -W TK.LOG -o DIR` for w16's.
 - TK58 (tests/apps/tk58.c, tk58k.lnk; tk58ref.h from /S and /3): the
   KRNL386 global heap, arena by arena, and TOOLHELP's view; in make test.
 - TK53 now has tk53ref.h (Microsoft's KRNL386, dropin.sh -3 -r) and
@@ -86,8 +91,10 @@ KRNL386's (TK51, TK53, TK58 equal 3.1's).
   telling a hung task and Reboot 0203h (the "not responding" screen, then
   ending the task) are not done; the call Pietrek's ExitCall makes when
   the last task ends; Reboot 0100h for ExitWindows(EW_REBOOTSYSTEM).
-- WINOA386.MOD: which module KRNL386 really starts in Enhanced mode
-  (TK57 woa with TK33 in both places logged nothing).
+- When KRNL386 loads the 386 grabber (w16: just before WINOA386.MOD, if
+  not loaded; 3.1 has it at usage 2 while COMMAND.COM runs) and whether it
+  is freed afterwards. TK33 copied over WINOA386.MOD logged nothing (TK57
+  woa): it imports no GRABBER and has another module name; not followed.
 - KRNL386's placement policy (which blocks go where, the discardable code
   fence), its GlobalCompact/GetFreeSpace values, its LRU sweeping, the
   meaning of THHOOK 1Ah-24h (1Ah 1, 1Ch/1Eh 032Fh, 20h 030Ah, 24h 005Eh
