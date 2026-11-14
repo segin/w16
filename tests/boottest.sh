@@ -1033,7 +1033,10 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         r=ok
         if [ "${part:-cmp}" = cmp ]; then
             refrun runbrowse-ref runbrowse "$root/tests/inputrun.sh" -s -b 30 -t 200 "$s" "$out/runbrowse-ref" -r
-            "$root/tests/inputrun.sh" -s -E "$out/runbrowse-ref" -M "rectangle 0,0 0,0" -b 30 -t 200 "$s" "$out/runbrowse-w16" -r \
+            # the Run box's caret left out (it blinks; with the known
+            # differences "matchnow" never finds the reference's phase)
+            m="rectangle 114,160 119,178"
+            "$root/tests/inputrun.sh" -s -E "$out/runbrowse-ref" -M "$m" -b 30 -t 200 "$s" "$out/runbrowse-w16" -r \
                 -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/runbrowse-w16.txt" 2>&1 || true
             # known differences, at most this many pixels per screen (each
             # its own w16 USER bug, UNVERIFIED rules, not yet fixed): the
@@ -1042,11 +1045,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             # selection, the Directories list box's height and the two
             # drop-down combo boxes (frame, height; Drives is owner-drawn,
             # 3.1 shows the drive's icon). Fewer is reported as better
-            for sb in 01-run:240 02-browse:2427 03-system:2427 04-run:253 05-closed:0; do
+            for sb in 01-run:226 02-browse:2427 03-system:2427 04-run:226 05-closed:0; do
                 s2=${sb%:*}.png f=$out/runbrowse-ref/${sb%:*}.png
                 [ -f "$f" ] || { r="reference screens missing"; break; }
                 [ -f "$out/runbrowse-w16/$s2" ] || { r="no $s2"; break; }
-                n=$(magick compare -metric AE "$out/runbrowse-w16/$s2" "$f" "$out/runbrowse-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "$m" "$out/runbrowse-a.png"
+                magick "$out/runbrowse-w16/$s2" -fill black -draw "$m" "$out/runbrowse-b.png"
+                n=$(magick compare -metric AE "$out/runbrowse-b.png" "$out/runbrowse-a.png" "$out/runbrowse-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%%[. ]*}
                 [ "${n:-99999}" -le "${sb#*:}" ] || { r="$s2: $n pixels differ (known: ${sb#*:})"; break; }
                 if [ "$n" -lt "${sb#*:}" ]; then echo "     runbrowse: $s2 better than known: $n pixels (${sb#*:})"; fi
