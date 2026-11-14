@@ -1,0 +1,57 @@
+# gfx: graphics modes in a window (GV1, tests/dos/gv1.asm): 12h, 0Dh, 0Eh,
+# 10h, 04h, 06h, then a text screen with a changed palette (GV1 03 p)
+sleep 60
+key alt+f
+key r
+type c:\winpr.pif
+key Return
+sleep 15
+type gv1 12
+key Return
+sleep 8
+shot g12
+key t
+sleep 3
+shot g12t
+key q
+sleep 2
+type gv1 0d
+key Return
+sleep 8
+shot g0d
+key q
+sleep 2
+type gv1 0e
+key Return
+sleep 8
+shot g0e
+key q
+sleep 2
+type gv1 10
+key Return
+sleep 8
+shot g10
+key q
+sleep 2
+type gv1 04
+key Return
+sleep 8
+shot g04
+key q
+sleep 2
+type gv1 06
+key Return
+sleep 8
+shot g06
+key q
+sleep 2
+type gv1 03 p
+key Return
+sleep 6
+shot t03p
+key q
+sleep 2
+type exit
+key Return
+sleep 5
+shot end

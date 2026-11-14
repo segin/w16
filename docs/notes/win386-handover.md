@@ -122,3 +122,35 @@ Original plan: on Ctrl+Alt+Del call KERNEL's handler (0201h's ES:DI) in the Syst
 - Next steps (proposed order): (a) find the hook's remaining effect (compare with hook=0) and get 3.1's full-screen text visible (DOSBox-X VGA/font; try machine=vgaonly; or windowed via PIF settings), so the reference shows VER/DIR output; (b) a probe VxD (VXP-style) on 3.1 logging the control messages for a DOS box (Create_VM, VM_Critical_Init, VM_Init, Sys_VM_Terminate..., Set_Device_Focus, VM_Suspend/Resume, Destroy_VM) and the SHELL/V86MMGR/DOSMGR services they lead to; (c) w16: a second V86 VM (own page directory for the first MB + HMA, copy of the System VM's DOS instance data as DOSMGR does), scheduler (time slices from VTD), SHELL DX=3/5/15h, VKD focus, VDD full-screen switch (save Windows' screen as REBOOT does, text mode for the VM), EXIT -> Destroy_VM -> WINOA386 closes; (d) windowed DOS boxes via the grabber (VDD API 2...), Alt+Enter/Alt+Tab/Ctrl+Esc; (e) boot-test cases against 3.1 on MS-DOS 4.00 (INPUTRUN_HDD) once the reference shows text.
 
 Test assets: tests/vxpprobe.sh (VXP/VXQ), tests/apps/vx5.c, the win386, win386input and win386cad boot-test cases, the repeat script pattern of build/tmp/rep386input.sh (copies on installation-05 in /mnt/build/w16-runs/agent-a5-vxp/build/tmp/; rep386input2.sh takes EXTRA= for w16's KEYBOARD.DRV/MOUSE.DRV).
+
+## VDD services the 386 grabber needs (from the grabber agent)
+
+WINOA386.MOD's grabber (Microsoft's VGA.3GR and w16's,
+`drivers/grabber/vga3gr/`) reaches the VDD (device 000Ah) through its
+protected-mode API entry: INT 2Fh AX=1684h BX=000Ah from the System VM must
+give ES:DI = a callable entry. Calls (observed on 3.1 with GR3; details in
+docs/notes/grabber-handover.md "VGA.3GR"): EAX = function (only AX
+matters: Microsoft's grabber leaves garbage in the high word), EBX = the
+DOS box's VM handle, ES:EDI = a buffer in the caller's segment (16-bit
+offset), ECX its size; results in the registers and the buffer.
+
+- 0 Get_Version: EAX = 030Ah, 8 bytes "VIDEOVGA" to ES:EDI (both grabbers
+  refuse other strings / major versions).
+- 1 Get_Mem (28h bytes): dwords: linear addresses of planes 0-3 of the
+  VM's video memory (text modes: plane 0's address must show the text as at
+  B800:0000, char/attribute pairs, 160 bytes a row), a start offset (0),
+  the four sizes, one more address. The VM must not run until Free_Mem.
+- 2 Get_State (1Ch): mode, 0, flags (bit 1 = cursor tracking), rows (19h),
+  cursor column, row (words), cursor start, end (words), 16 palette
+  registers.
+- 3 Get_Mod (100h): flags word (8 controller, 10h memory, 20h cursor),
+  count, then text modes: changed cells in AL=left AH=top BL=right
+  BH=bottom (inclusive; FFFFh in AX and BX = all); graphics: count = 4 KB
+  pages of a plane, a bit per page from +4. Holds the VM (GetDisplayUpd)
+  until Free_Mem / Unlock_App.
+- 4 Clear_Mod, 5 Free_Mem, 9 Unlock_App: no buffer.
+- 6 Get_GrbMem (as 1), 8 Get_GrbState (as 2), 7 Free_Grab: the copy taken
+  at Alt+PrintScreen in a full-screen VM.
+WINOLDAP also passes RNG1DSSEL (7Bh, a flat selector) and the VM handle in
+the EXTPAINTSTRUC; w16's grabber maps the linear addresses with its own
+selectors (SetSelectorBase), so they must be valid in the System VM.
