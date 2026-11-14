@@ -284,18 +284,36 @@ int15:  cmp ah, 4Fh
 .c:     jmp far [cs:old15]
 
 ; ---- where a switch can happen ----
-; INT 16h: a program waiting for a key
-int16:  cmp byte [cs:pending], 0
-        je .c
-        cmp ah, 00h
-        je .t
-        cmp ah, 01h
-        je .t
+; INT 16h: a program waiting for a key. A blocking read (AH=00h, 10h)
+; waits here, polling (01h, 11h) and halting between, so that a hot key
+; can switch while the program waits (the hot keys themselves give it no
+; key; plain DOSBox's shell reads with AH=00h)
+int16:  cmp ah, 00h
+        je .wait
         cmp ah, 10h
+        je .wait
+        cmp byte [cs:pending], 0
+        je .c
+        cmp ah, 01h
         je .t
         cmp ah, 11h
         jne .c
 .t:     call try_switch
+        jmp .c
+.wait:  push ax
+.w1:    cmp byte [cs:pending], 0
+        je .w2
+        call try_switch
+.w2:    pop ax
+        push ax
+        inc ah                          ; 01h, 11h: is there one?
+        pushf
+        call far [cs:old16]
+        jnz .key
+        sti
+        hlt
+        jmp .w1
+.key:   pop ax
 .c:     inc byte [cs:in_bios]
         pushf
         call far [cs:old16]
