@@ -7,7 +7,7 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 386 Enhanced mode boots to Program Manager and is usable (mouse, keyboard, display, exit) with w16's WIN386.EXE: first with Microsoft's KRNL386/USER/GDI/drivers, then with as many w16 parts as run there.
 1. Fix the INT 74h reflection with PM selectors in DS/ES, and the bad-CS resume after INT 2Fh 4003h. **Done.**
 2. w16's own VxD services that the System VM's drivers call (VMD, VDD, Reboot, VKD, VPICD, VTD...), observed black-box (probes) and from the DDK docs. **The boot's calls done** (VX5); Ctrl+Alt+Del, DOS boxes etc. later.
-3. The VxD loader: SYSTEM.INI [386Enh] device=, init-order control messages, INT 20h dynamic linking, third-party .386 files. **Next.**
+3. The VxD loader: SYSTEM.INI [386Enh] device=, init-order control messages, INT 20h dynamic linking, third-party .386 files. **First part done** (ARCHITECTURE.md 12.7): VXP.386 sees what it sees under 3.1; Microsoft's VTDAPI.386 loads and answers.
 4. Reliability: 10/10 on installation-05, then `win386` in the default boot-test cases; a case with mouse/keyboard input and exit. **Done**: 20/20 boots, 10/10 input runs; `win386` and `win386input` are default cases.
 
 ## How to run
@@ -31,9 +31,8 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 
 - PM API entry offsets (003Bh:0360h + 2n) are handed out in the order devices are first asked for, not device order. w16 uses device order.
 
-## Next: the VxD loader (step 3), plan
+## The VxD loader (step 3): state
 
-1. A test-only probe VxD of w16's own (VXP.386, nasm + wlink `format windows vxd`) that logs every control message (EAX, EBX, ESI) and a few VMM service results (Get_VMM_Version 0001h:0000h, Get_Cur_VM_Handle 0001h:0001h, Get_Sys_VM_Handle 0001h:0003h) to COM1; run under Microsoft's WIN386 with `device=vxp.386` added to [386Enh] (iniset.py replaces the first device= key: add an append mode or a distinct key) to get the reference order and values.
-2. The loader reads [386Enh] device= (and mouse=, display=, keyboard=, network=, ebios=): `*name` accepted when w16 provides it, else the observed "Cannot find a device file" message; files loaded from SYSTEM as LE (reuse the WIN386 module loader), handed to the VMM.
-3. The VMM: DDBs in init order, Sys_Critical_Init / Device_Init / Init_Complete (EBX = System VM handle, ESI = the command tail), INT 20h links patched to calls through service tables, the "Invalid VxD dynamic link" message for missing ones; System_Exit / Sys_Critical_Exit at exit.
-4. Then VTDAPI.386 (Microsoft's external, default device=vtdapi.386): 20 VMM and 4 VTD services.
+- Done: loader reads [386Enh] device=/mouse=/display=/keyboard=/network=/ebios=, loads files (LE, source-list fixups), *names accepted as w16 built-ins; VMM (win386/vmm/vxd.c) sorts by init order, sends 0,1,2,3 / 15h,16h / 4,5,6 as observed with VXP; INT 20h patched to CALL/JMP [slot]; services: VMM 0-5, lists 9Bh-A5h, VTD 0,2,3,4; 1684h for loaded devices' PM API.
+- Probe: `tests/vxpprobe.sh ms|w16` (DOSBox-X, keys for Exit Windows); `make vxprobes` builds VXP.386.
+- Next: more VMM services as devices need them (docs/win386-services.md), the dynamic-link failure shown on screen and Windows ended as 3.1 does, w16's VxDs as their own W3 modules, Create_VM etc. for DOS boxes, timer reprogramming for VTD_Begin_Min_Int_Period.
