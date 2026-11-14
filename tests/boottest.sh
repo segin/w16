@@ -798,8 +798,9 @@ runcase() {
             a=$out/win386cad-w16/$s.png b=$out/win386cad-ref/$s.png
             if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
             m="rectangle 0,0 0,0"
-            # the title (row 6) and "return to Windows" (row 15): w16's text
-            [ $s = 01-cad ] && m="rectangle 240,96 400,111 rectangle 40,240 360,255"
+            # the title (row 6) and "return to Windows" (row 15): w16's text;
+            # the cursor (row 19, column 53) blinks: either phase is right
+            [ $s = 01-cad ] && m="rectangle 240,96 400,111 rectangle 40,240 360,255 rectangle 424,304 431,319"
             magick "$a" -fill black -draw "$m" "$out/win386cad-a.png"
             magick "$b" -fill black -draw "$m" "$out/win386cad-b.png"
             n=$(magick compare -metric AE "$out/win386cad-a.png" "$out/win386cad-b.png" "$out/win386cad-$s-diff.png" 2>&1 >/dev/null || true)
