@@ -1530,6 +1530,19 @@ $(DOS)/US21.EXE: $(B)/tests/start.o $(B)/tests/us21.o tests/apps/app.lnk tests/a
 	$(WLINK) @tests/apps/us21.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us21.map file { $(B)/tests/start.o $(B)/tests/us21.o }
 dos: $(DOS)/US21.EXE
+# US23: the system menu in the menu heaps; USER's heaps shrinking
+# (tests/apps/us23.c), with its helper task US23A (us23a.c)
+$(B)/tests/us23.o: tests/apps/us23ref.h tests/apps/us23ref286.h tests/apps/tklog.h
+$(DOS)/US23.EXE: $(B)/tests/start.o $(B)/tests/us23.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us23.map file { $(B)/tests/start.o $(B)/tests/us23.o }
+dos: $(DOS)/US23.EXE
+$(DOS)/US23A.EXE: $(B)/tests/start.o $(B)/tests/us23a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us23a.map file { $(B)/tests/start.o $(B)/tests/us23a.o }
+dos: $(DOS)/US23A.EXE
 # US22: what follows ReleaseCapture (tests/apps/us22.c)
 $(B)/tests/us22.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
