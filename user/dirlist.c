@@ -28,26 +28,31 @@ typedef struct {
 } FINDBUF;
 #pragma pack()
 
-/* DOS through INT 21h (DOSX passes these through from protected mode) */
+/* DOS through INT 21h (DOSX passes these through from protected mode).
+   Every far pointer is passed with its selector in ES, named in the parm
+   list: Watcom orders a general-register pair itself (CX:DX puts the
+   segment in CX, but BX:DX puts it in DX), and dos_findfirst's [bx dx]
+   once loaded the offset into DS, a fault when the offset was not a valid
+   selector (File > Run > Browse... in an all-w16 session). */
 static BYTE dos_getdrive(void);
 #pragma aux dos_getdrive = "mov ah, 19h" "int 21h" value [al] modify [ax];
 static void dos_setdrive(BYTE d);
 #pragma aux dos_setdrive = "mov ah, 0Eh" "int 21h" parm [dl] modify [ax];
 static WORD dos_chdir(const char __far *p);
-#pragma aux dos_chdir = "push ds" "mov ds, cx" "mov ah, 3Bh" "int 21h" "sbb ax, ax" "pop ds" \
-    parm [cx dx] value [ax];
+#pragma aux dos_chdir = "push ds" "push es" "pop ds" "mov ah, 3Bh" "int 21h" "sbb ax, ax" "pop ds" \
+    parm [es dx] value [ax];
 static WORD dos_getcwd(BYTE drive, char __far *buf);
-#pragma aux dos_getcwd = "push ds" "mov ds, cx" "mov ah, 47h" "int 21h" "sbb ax, ax" "pop ds" \
-    parm [dl] [cx si] value [ax];
+#pragma aux dos_getcwd = "push ds" "push es" "pop ds" "mov ah, 47h" "int 21h" "sbb ax, ax" "pop ds" \
+    parm [dl] [es si] value [ax];
 static void __far *dos_getdta(void);
 #pragma aux dos_getdta = "push es" "mov ah, 2Fh" "int 21h" "mov dx, es" "mov ax, bx" "pop es" \
     value [dx ax] modify [bx];
 static void dos_setdta(void __far *p);
-#pragma aux dos_setdta = "push ds" "mov ds, cx" "mov ah, 1Ah" "int 21h" "pop ds" \
-    parm [cx dx] modify [ax];
+#pragma aux dos_setdta = "push ds" "push es" "pop ds" "mov ah, 1Ah" "int 21h" "pop ds" \
+    parm [es dx] modify [ax];
 static WORD dos_findfirst(const char __far *spec, WORD attr);
-#pragma aux dos_findfirst = "push ds" "mov ds, bx" "mov ah, 4Eh" "int 21h" "sbb ax, ax" "pop ds" \
-    parm [bx dx] [cx] value [ax];
+#pragma aux dos_findfirst = "push ds" "push es" "pop ds" "mov ah, 4Eh" "int 21h" "sbb ax, ax" "pop ds" \
+    parm [es dx] [cx] value [ax];
 static WORD dos_findnext(void);
 #pragma aux dos_findnext = "mov ah, 4Fh" "int 21h" "sbb ax, ax" value [ax];
 
