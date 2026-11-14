@@ -21,12 +21,16 @@ segment more (HEAP_TEXT: global386.c), which nothing can see.
   k386c.o, global386.o), `$(DOS)/KRNL386.EXE`, in `dos` and the install
   tree. global.c is empty under -DKRNL386, global386.c empty without it
   (and not linked into KRNL286).
-- The C code stays 286 code: with `wcc -3` the boot faulted inside
-  Microsoft's DOSX (GP at 005B:0B5C) and w16's DOSX ("Fault in MS-DOS
-  Extender", CS=0070 IP=0E46) while fonts loaded. Not investigated
-  further (UNVERIFIED cause: something keeping only the low halves of
-  32-bit registers). 386 instructions are in kernel/k386.asm only (LSL's
-  32-bit limit).
+- The C code is 386 code: `wcc -3 -zfp -zgp` (Makefile `K386C`). Plain
+  `-3` made the boot fault inside Microsoft's DOSX (GP at 005B:0B5C/0B58,
+  the error code an LDT selector) and w16's ("Fault in MS-DOS Extender").
+  Found (2026-11-14) by building one file at a time with -3: util.c,
+  task.c, loader.c each faulted alone; Watcom's 386 code generator keeps
+  selectors in FS (util.c: `mov fs,cx` / `mov dl,fs:[si]`), a selector
+  stays there after it is freed, and a 386 DOS extender saving and
+  reloading FS around an interrupt faults on it. With FS and GS pegged
+  the boot, make test and the boot test pass. Hand-written 386 code is in
+  kernel/k386.asm (LSL's 32-bit limit).
 
 ## Differences found and implemented (KRNL386 build only)
 
@@ -85,12 +89,41 @@ KRNL386's (TK51, TK53, TK58 equal 3.1's).
 - Install tree: SYSTEM\KRNL386.EXE; win/README.TXT updated;
   tests/w16tree.sh boots the tree's own KRNL386.
 
+## Ctrl+Alt+Del with a hung task (2026-11-14)
+
+KERNEL's procedure (k386.asm reboot_proc, k386c.c k386_cad), run by
+Microsoft's Reboot device as an interrupt when the sanity byte stayed 0,
+calls Reboot 0203h with ES:DI the running task's module file name
+("VX8.EXE"), DS:SI the sanity byte, BX 7Dh, CX 0, DX the task
+(UNVERIFIED: 3.1 passes "a selector"), and on AX nonzero (Return) ends the
+task with INT 21h 4C00h (exit code UNVERIFIED), else IRETs (Escape).
+Boot-test case k386hung (VX8 mode 2, tests/scripts/input/vx8hung.txt,
+Microsoft's WIN386): every screen equals Microsoft's KRNL386's, VX8 is
+closed and Windows back after Return. Under w16's WIN386 the procedure is
+not called yet: its REBOOT runs the sanity check only with SANITY_CHECK 1
+(win386/vxd/reboot.c), and ending a task there waits for the WIN386
+agent's fix of "closing any application ends Windows" (the task's INT 21h
+4Ch; docs/notes/win386-handover.md). For the WIN386 agent: w16's KRNL386
+sets the sanity byte at every task switch and idle pass and in the
+procedure, and ends the task with INT 21h 4C00h from inside the procedure
+(on whatever stack the interrupt frame was built on).
+
+## USER heaps (US14, US15)
+
+US14 failed 11 checks under w16's KRNL286 and KRNL386 alike (not a
+KRNL386 matter): USER's own local heaps (420h and 100h blocks, GMEM_SHARE,
+allocated while Windows boots) belonged to KERNEL, so TOOLHELP's walk
+skipped them; on 3.1 they belong to USER. GlobalAlloc now notes its
+caller's CS (kentry.asm GLOBALALLOCX) and gives a GMEM_SHARE block to the
+caller's module (commit f35db68, changes KRNL286.EXE). US14 and US15 pass
+under both kernels as the shell (Microsoft's USER, Standard mode). Run:
+`T=150 tests/dropin.sh [-3] -t 150 -f build/dos/US14.EXE=US14.EXE -i
+'boot:shell=C:\US14.EXE' -W TK.LOG -o DIR` (US15: -t 300).
+
 ## Open (UNVERIFIED or not done)
 
-- KERNEL's Ctrl+Alt+Del procedure only sets the sanity byte and IRETs:
-  telling a hung task and Reboot 0203h (the "not responding" screen, then
-  ending the task) are not done; the call Pietrek's ExitCall makes when
-  the last task ends; Reboot 0100h for ExitWindows(EW_REBOOTSYSTEM).
+- The call Pietrek's ExitCall makes when the last task ends; Reboot 0100h
+  for ExitWindows(EW_REBOOTSYSTEM).
 - When KRNL386 loads the 386 grabber (w16: just before WINOA386.MOD, if
   not loaded; 3.1 has it at usage 2 while COMMAND.COM runs) and whether it
   is freed afterwards. TK33 copied over WINOA386.MOD logged nothing (TK57

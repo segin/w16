@@ -110,25 +110,27 @@ $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 
 # ---- KRNL386.EXE: the same kernel/ sources built with -DKRNL386 (the
 # differences Windows 3.1's KRNL386 shows, each observed: see
-# docs/notes/krnl386-handover.md), its objects in build/kernel386. The C
-# code stays 286 code (wcc -3 made the boot fault inside the DOS
-# extender: the extenders and w16's own interrupt paths keep only the low
-# halves of the registers); 386 instructions are written in the assembly
-# helpers where KRNL386's behaviour needs them (kernel/k386.asm) ----
+# docs/notes/krnl386-handover.md), its objects in build/kernel386: 386
+# code (wcc -3), with FS and GS pegged (-zfp -zgp): left to the compiler,
+# it kept selectors in FS (util.c's string loops), and a 386 DOS
+# extender, saving and reloading FS around an interrupt, faulted on one
+# freed meanwhile (GP in DOSX with the selector as the error code). The
+# assembly helpers KRNL386 needs are kernel/k386.asm ----
+K386C := -3 -zfp -zgp -dKRNL386
 K386OBJS := $(KOBJS:$(B)/kernel/%=$(B)/kernel386/%) $(B)/kernel386/k386.o $(B)/kernel386/k386c.o $(B)/kernel386/global386.o
 $(B)/kernel386/%.o: kernel/%.asm kernel/inc/intcall.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -DKRNL386 -o $@ $<
 $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
-	$(WCC) $(KCFLAGS) -dKRNL386 -fo=$@ $<
+	$(WCC) $(KCFLAGS) $(K386C) -fo=$@ $<
 $(KBOOT_C:%=$(B)/kernel386/%.o) $(B)/kernel386/k386c.o: $(B)/kernel386/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
-	$(WCC) $(KCFLAGS) -dKRNL386 -nt=BOOT_TEXT -fo=$@ $<
+	$(WCC) $(KCFLAGS) $(K386C) -nt=BOOT_TEXT -fo=$@ $<
 # KRNL386's global heap (global386.c) in a code segment of its own
 $(B)/kernel386/global386.o: kernel/global386.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
-	$(WCC) $(KCFLAGS) -dKRNL386 -nt=HEAP_TEXT -fo=$@ $<
+	$(WCC) $(KCFLAGS) $(K386C) -nt=HEAP_TEXT -fo=$@ $<
 $(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
