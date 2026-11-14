@@ -64,7 +64,9 @@ black-box observed on 3.1, tested against Microsoft's.
 - tests/swap.sh (Microsoft's stack, DOSBox-X): prompt, two, ctrlesc, pif,
   exitwin, nodisk all PASS (blocks byte-identical but 163h-168h/185h, WC1's
   record, swap files made and left, every screen).
-- Boot test: swapdos ok; swapalt, swapall fixed after the first runs
+- Full boot test at 14d4f14 (master merged): 85 ok, 0 failures, swapdos,
+  swapalt, swapall, w16groups among them; make test pass.
+- Earlier boot tests: swapdos ok; swapalt, swapall fixed after the first runs
   (INT 16h blocking reads; comparisons); w16groups, woados, woadosbat,
   winprompt, winoldap*, wincom, allw16, exitwin, tree ok; make test pass;
   tests/wincom.sh 25/25.
