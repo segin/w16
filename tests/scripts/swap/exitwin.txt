@@ -1,0 +1,31 @@
+# Exit Windows with an MS-DOS Prompt swapped out: Windows 3.1 refuses
+# ("Application still active"); then the prompt ended, Windows ended
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 10
+key alt+Tab
+sleep 10
+shot win
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 5
+shot refused
+key Return
+sleep 3
+key alt+Tab
+sleep 10
+shot dos
+type exit
+key Return
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 12
+shot end

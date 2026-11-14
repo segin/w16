@@ -1,0 +1,18 @@
+# no room for a swap file: no TEMP and no hard disk, so the swap directory
+# is A:\ (WIN.COM, ARCHITECTURE.md 9.5); WINOLDAP warns, WSWAP cannot
+# switch (block 172h 08h) and the program's task ends
+# opts: notemp
+sleep 32
+key Right Right Right Right
+sleep 1
+key Return
+sleep 6
+shot nodisk
+key Return
+sleep 6
+shot after
+key alt+F4
+sleep 3
+key Return
+sleep 10
+shot end
