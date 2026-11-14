@@ -19,6 +19,8 @@
 #     -i S:K=V  set key K in section S of SYSTEM.INI (repeatable), e.g.
 #               w16:vmmtrace=1 for the VMM's detailed trace (COM1)
 #     -c ARGS   WIN's arguments (default "/3 /B")
+#     -f SRC=DST  copy SRC to C:\DST in both runs (repeatable), e.g.
+#               build/dos/VXP.386=WINDOWS/SYSTEM/VXP.386
 #     -x ACTS   input once the boot is done, before the screenshot: xdotool
 #               words separated by ";" (e.g. "mousemove 300 200;sleep 1;
 #               click 1;key alt+f4"), sent to the DOSBox-X window; the
@@ -30,8 +32,8 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 [ -d "$ref" ] || ref=$(cd "$root/../../.." && pwd)/.tools/ref/win31/cdrive
-secs=10 maxsecs=300 out= norefrun= inis= winargs='/3 /B' acts=
-while getopts t:m:o:ni:c:x: opt; do
+secs=10 maxsecs=300 out= norefrun= inis= winargs='/3 /B' acts= files=
+while getopts t:m:o:ni:c:x:f: opt; do
     case $opt in
     t) secs=$OPTARG ;;
     m) maxsecs=$OPTARG ;;
@@ -40,6 +42,7 @@ while getopts t:m:o:ni:c:x: opt; do
     i) inis="$inis $OPTARG" ;;
     c) winargs=$OPTARG ;;
     x) acts=$OPTARG ;;
+    f) files="$files $OPTARG" ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -53,6 +56,9 @@ run() {   # run NAME (w16|ms)
     cp -r "$ref" "$d/c"
     [ "$1" = w16 ] && cp "$root/build/win386/WIN386.EXE" "$d/c/WINDOWS/SYSTEM/WIN386.EXE"
     rm -f "$d/c/WINDOWS/BOOTLOG.TXT"
+    for f in $files; do
+        cp "${f%%=*}" "$d/c/${f#*=}"
+    done
     for i in $inis; do
         python3 -I "$root/tests/scripts/iniset.py" "$d/c/WINDOWS/SYSTEM.INI" "$i"
     done
