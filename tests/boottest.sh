@@ -139,8 +139,7 @@
 #              as it was, text mode at the end, no ~WOA file left
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
-#   swapall    swapalt by keys only (swapkeys.txt) on w16's install tree
-#              alone (build/w16 as C:\W16;
+#   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
 #              Microsoft's MMSOUND.DRV and VGACOLOR.2GR): every part w16's,
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
@@ -1446,10 +1445,9 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             # (its prompt says C:\W16>, not C:\WINDOWS>: the DOS screens
             # against its own instead, the prompt read back as it was left;
             # Windows' against its own before the prompt, the DOS
-            # program's icon left out; keys only: a mouse click on this
-            # stack faults in w16's DOSX, docs/notes/swap-handover.md)
+            # program's icon left out)
             shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
-            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$root/tests/scripts/input/swapkeys.txt" "$out/$c-w16" \
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$scr" "$out/$c-w16" \
                 -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
                 -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' \
                 > "$out/$c-w16.txt" 2>&1 || true

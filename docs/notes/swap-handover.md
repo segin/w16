@@ -73,31 +73,43 @@ black-box observed on 3.1, tested against Microsoft's.
 
 ## Open
 
-- **w16 DOSX + w16 WSWAP + a mouse click faults in DOSX** ("Standard Mode:
-  Fault in MS-DOS Extender", EC=4440 CS=0070 IP=14C1, every time, plain
-  DOSBox, w16's install tree; build/swapw/s/click.txt). Not with
-  Microsoft's DOSX on w16's WSWAP, not with Microsoft's WSWAP on w16's
-  DOSX, not with WSWAP 4 KB larger (so not the conventional-memory
-  layout). Difference that matters: Microsoft's WSWAP owns all XMS and
-  hands DOSX memory through its own XMS entry; w16's leaves DOSX to XMS
-  directly (as DOSX run on its own). Probably a w16 DOSX bug in the PS/2
-  path that its usual extended-memory layout hides: for the DOSX owner.
-  swapall runs by keys only meanwhile.
-- tests/swap.sh -W (w16 WIN.COM + WINOLDAP + DOSX on w16's side): the
-  switches work, but WO2's block log has an extra "block at start", and in
-  "two" after EXIT with another prompt swapped out w16's stack goes to
-  Windows where 3.1 resumes the other prompt directly (run sw3). Run sw4,
-  scenario two: with w16's WIN.COM on both sides (-w) Microsoft's and
-  w16's swappers already part at the first Alt+Tab; with w16's WINOLDAP
-  on both sides (-O) they part after an EXIT (3.1's swappers make a
-  fourth switch, w16's do not). On Microsoft's WIN.COM and WINOLDAP the
-  two are byte-identical, so some field w16's WIN.COM / WINOLDAP write
-  differently from 3.1's is read by Microsoft's swappers or by w16's:
-  compare the block snapshots of sw4 (installation-05:
-  /mnt/build/w16-runs/agent-a26a1e6e924e5e02b/build/sw4/{w,O}/two) next.
-  The single-program scenario passes on w16's whole stack in the boot
-  test (swapall); woadosbat/winprompt (w16's WIN.COM with Microsoft's
-  swappers) pass with the new WIN.COM.
+- FIXED (branch swap2, 1984a00): the DOSX fault on a mouse click with
+  w16's WSWAP. Root cause: DOSX never zeroed its BSS; the callback-stack
+  selector cache (cbsel) held old memory contents, and the first PS/2
+  packet (ring0.inc .ps2go -> cb_stacksel) loaded one (4440h) into DS.
+  Microsoft's WSWAP happened to leave zeros there. DOSX now zeroes its BSS
+  at start; swapall uses the mouse again.
+- Two programs off Microsoft's stack (sw4 -O): w16's WINOLDAP leaves the
+  ring as 15->12->13->14 where 3.1's has 12 before 14, so when prompt 12
+  ends the ring goes on to prompt 13. 3.1's DSWAP then still goes back to
+  Windows: after SI=2 and SI=5 it sets 178h bit 08h and SI=7 BX=1 (r13,
+  SW1 with w16's WINOLDAP). w16's DSWAP now does the same (to_windows).
+  3.1's SI=2 also leaves the freed record's next = its next's next: w16's
+  WIN.COM does that now. The ring-order difference itself: resuming a
+  program, 3.1's WINOLDAP rotates the ring (13 12 14 -> 12 14 13), w16's
+  moved the program to the front (12 13 14) (sw5 d vs O, #2); but in
+  tests/winoldap.sh two 3.1's turned 14 12 13 into 12 14 13 as well, so
+  it is no rotation: resuming from the Windows application, 3.1's
+  WINOLDAP puts the program first and the Windows application second, the
+  rest after (winoldap.c to_front: move_front(Windows app), then the
+  program). WIN.COM's SI=7 rotates the ring (sw_rotate; every SI=7 seen
+  fits it, and Microsoft's DSWAP on w16's WIN.COM needs it: -w two). Since then (da1ac03, run sw7): swap.sh -O two and
+  -w two PASS; the default six PASS (sw6); tests/winoldap.sh bat com
+  errors noswap pif PASS; full boot test 85/85 and make test pass (also
+  at 31601cf, swapall with the mouse).
+- After the last fixes: -O two, -w two, default two/ctrlesc PASS
+  (sw10); winoldap.sh prompt failed once on Microsoft's side under four
+  parallel runs (keys lost: its #2 switch never came) and passed alone
+  (sw9).
+- Final run on branch swap2 at c96973f (master merged): tests/swap.sh
+  all six PASS; tests/winoldap.sh all seven PASS; boot test 90 ok, 1
+  failure: sysclock "CK10: F1 improved: 0 pixels (baseline 30)" (an
+  improvement against a stored baseline, SYSTEM.DRV/Clock's, not swap's);
+  make test pass.
+- Still open: swap.sh -W (w16's WIN.COM + WINOLDAP + DOSX on w16's side,
+  DOSBox-X, Microsoft's KRNL386): the icon (388 px, w16's own, known)
+  and in ctrlesc, nodisk, pif the run ends early (shots missing): w16's
+  DOSX under DOSBox-X with KRNL386 not looked at yet.
 - UNVERIFIED: 3.1's disk-space figure, Ctrl+Esc with several DOS
   programs, what SI=2's BX means (3.1's WIN.COM ignores the call unless
   BX=0), graphics-mode programs' screens (w16 saves VGA planes itself),

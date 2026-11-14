@@ -8,6 +8,19 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         mov [imgseg], ax
         mov [psp_seg], es
         cld
+        ; the uninitialised data zeroed (but the stack we are on): DOS
+        ; does not clear the memory a program gets. The callback-stack
+        ; selector cache (cbsel) held whatever was there before, and with
+        ; w16's WSWAP below (Microsoft's leaves zeros there) the first PS/2
+        ; mouse packet loaded a stale "selector" (EC=4440: "Standard Mode:
+        ; Fault in MS-DOS Extender" at a click, w16's install tree)
+        push ds
+        pop es
+        mov di, bss_start
+        mov cx, init_stack - bss_start
+        xor al, al
+        rep stosb
+        mov es, [psp_seg]
         call cpu_detect
         jnc .cpuok
         mov dx, msg_cpu
