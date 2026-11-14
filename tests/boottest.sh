@@ -287,6 +287,7 @@
 #   vgaall     every w16 part (WIN.COM, DOSX, KRNL286, USER, GDI, PROGMAN,
 #              fonts) with w16's VGA.DRV (Microsoft's resources) against
 #              the same with Microsoft's VGA.DRV, kbtype     must be 0
+#              (Notepad's caret left out where it may change phase)
 #   vgawoados  the woados script with w16's VGA.DRV (Disable to text mode
 #              for the DOS program, Enable back): the screens as
 #              all-Microsoft's up to the cursor
@@ -434,6 +435,13 @@ mkdir -p "$out"
 cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
+# Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
+# (56,104; later shots too): with CursorBlinkRate=65535 the caret still
+# changes phase once, 65.5 s after Notepad created it (its blink timer
+# runs on, as 3.1's), and under load 02-edited came on either side of that
+# (vgaall: 4 of 10 parallel runs, 30 pixels). Left out there; the rest of
+# each shot is compared to the pixel
+kbtypecaret="rectangle 16,119 17,133 rectangle 56,104 57,118"
 shell=$root/build/dos/SHELL.DLL
 fails=0
 
@@ -2156,6 +2164,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         for s in ${part:-kbtype tabs alttab helpmenus pmkeys icons menus}; do
             scr=$root/tests/scripts/input/$s.txt
             case $s in
+            kbtype) m=$kbtypecaret ;;
             helpmenus) m="rectangle 14,42 20,61" ;;
             icons) m="rectangle 160,400 220,445" ;;
             *) m="rectangle 0,0 0,0" ;;
@@ -2191,7 +2200,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # carets keep their starting phase on both sides (as in kbd)
         blink='WIN.INI:windows:CursorBlinkRate=65535'
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/kbdall-ref/boot.png" -E "$out/kbdall-ref" -M "$kbtypecaret" -b 30 -t 240 "$scr" "$out/kbdall-$k" \
                 -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/kbdall-$k"; fi
             "$root/tests/inputrun.sh" "$@" -i "$blink" \
@@ -2207,7 +2216,9 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             [ "$r" = ok ] || break
             g=$(basename "$f")
             [ -f "$out/kbdall-w16/$g" ] || { r="no $g"; break; }
-            n=$(magick compare -metric AE "$out/kbdall-w16/$g" "$f" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            magick "$f" -fill black -draw "$kbtypecaret" "$out/kbdall-a.png"
+            magick "$out/kbdall-w16/$g" -fill black -draw "$kbtypecaret" "$out/kbdall-b.png"
+            n=$(magick compare -metric AE "$out/kbdall-b.png" "$out/kbdall-a.png" "$out/kbdall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || r="$g: $n pixels differ ($out/kbdall-${g%.png}-diff.png)"
         done
@@ -2421,6 +2432,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             "$root/tests/vgamsres.sh" "$vdrv" > "$out/vga-msres-$s.txt" 2>&1 || { r="$s: tests/vgamsres.sh failed"; break; }
             scr=$root/tests/scripts/input/$s.txt
             case $s in
+            kbtype) m=$kbtypecaret ;;
             helpmenus) m="rectangle 14,42 20,61" ;;
             icons) m="rectangle 160,400 220,445" ;;
             # the About box's free memory: w16's driver is smaller
@@ -2474,7 +2486,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         blink='WIN.INI:windows:CursorBlinkRate=65535'
         "$root/tests/vgamsres.sh" "$out/vgaall-msres.drv" > "$out/vgaall-msres.txt" 2>&1 || true
         for k in ref w16; do
-            if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
+            if [ $k = w16 ]; then set -- -e "$out/vgaall-ref/boot.png" -E "$out/vgaall-ref" -M "$kbtypecaret" -b 30 -t 240 "$scr" "$out/vgaall-$k" \
                 -f "$out/vgaall-msres.drv=WINDOWS/SYSTEM/VGA.DRV"
             else set -- -s -b 30 -t 240 "$scr" "$out/vgaall-$k"; fi
             "$root/tests/inputrun.sh" "$@" -i "$blink" \
@@ -2491,7 +2503,9 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             [ "$r" = ok ] || break
             g=$(basename "$f")
             [ -f "$out/vgaall-w16/$g" ] || { r="no $g"; break; }
-            n=$(magick compare -metric AE "$out/vgaall-w16/$g" "$f" "$out/vgaall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+            magick "$f" -fill black -draw "$kbtypecaret" "$out/vgaall-a.png"
+            magick "$out/vgaall-w16/$g" -fill black -draw "$kbtypecaret" "$out/vgaall-b.png"
+            n=$(magick compare -metric AE "$out/vgaall-b.png" "$out/vgaall-a.png" "$out/vgaall-${g%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
             [ "$n" = 0 ] || { r="$g: $n pixels differ"; break; }
         done
