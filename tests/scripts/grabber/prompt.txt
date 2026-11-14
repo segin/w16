@@ -9,7 +9,7 @@ sleep 1
 key Return
 sleep 8
 shot p1
-type type c:\windows\system.ini
+type type system.ini
 key Return
 sleep 3
 shot p2
@@ -23,7 +23,7 @@ sleep 8
 shot p3
 type cls
 key Return
-type type c:\windows\win.ini
+type type win.ini
 key Return
 sleep 3
 key alt+Print
