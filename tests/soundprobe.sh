@@ -26,8 +26,15 @@
 #        KRNL286, USER, GDI, MMSOUND.DRV) with SNDREC in front of the
 #        driver, against all of Microsoft's: the same calls (USER's
 #        DoBeep(type) for each MessageBeep) and the same beeps
+#   sb16 the beeps (SN1 part E) on the Sound Blaster 16 variant of the
+#        reference install (tests/sb16setup.sh, from the user's Creative
+#        disk images in .tools/sb16; SOUNDPROBE_SB16=DIR: one made before),
+#        DOSBox-X as an SB16: the logs identical and everything on the
+#        recording, the card's wave output too, the same (tools/wavenv.py)
+#        (not in the default list: it needs .tools/sb16)
 #   SOUNDPROBE_PARTS: sn1's parts (default ABCDEFGHSPTUV)
-#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec] [allw16]   (default: all)
+#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec] [allw16] [sb16]
+#        (default: sn1 queue rec allw16)
 #     -m   Microsoft's driver only (to look at its logs)
 # Exit status 0 when every comparison made agrees.
 set -eu
@@ -152,6 +159,35 @@ for p in $probes; do
             else
                 echo "FAIL allw16 sound ($out/allw16-tones.txt):"
                 head -20 "$out/allw16-tones.txt"
+                fails=$((fails + 1))
+            fi
+        fi ;;
+    sb16)
+        # the beeps (part E) on the Sound Blaster 16 variant of the
+        # reference install (tests/sb16setup.sh: Creative's drivers, wave
+        # through MMSYSTEM; DOSBox-X as an SB16), Microsoft's stack and each
+        # driver: the logs identical, and everything the recording holds
+        # (the speaker and the card's wave output, tools/wavenv.py) the same
+        sb=${SOUNDPROBE_SB16:-}
+        if [ -z "$sb" ]; then
+            sb=$out/sb16
+            "$root/tests/sb16setup.sh" "$sb" > "$out/sb16setup.txt" 2>&1 ||
+                { echo "FAIL sb16: no Sound Blaster 16 variant ($out/sb16setup.txt)"; fails=$((fails + 1)); continue; }
+        fi
+        for s in $sides; do
+            DROPIN_REF=$sb/c DROPIN_CONF=$(cat "$sb/dosbox.conf") run $s sb16 E &
+        done
+        wait
+        for s in $sides; do
+            python3 "$root/tools/wavenv.py" "$out/sb16-$s.cap"/*.wav > "$out/sb16-$s.env" 2>/dev/null || : > "$out/sb16-$s.env"
+        done
+        if [ -z "$msonly" ]; then
+            cmpf sb16 "$out/sb16-ms.log" "$out/sb16-w16.log"
+            if python3 "$root/tools/wavenv.py" --cmp "$out/sb16-ms.env" "$out/sb16-w16.env" > "$out/sb16-env.txt"; then
+                echo "ok   sb16 sound: $(tail -1 "$out/sb16-env.txt")"
+            else
+                echo "FAIL sb16 sound ($out/sb16-env.txt):"
+                head -20 "$out/sb16-env.txt"
                 fails=$((fails + 1))
             fi
         fi ;;

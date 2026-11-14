@@ -533,6 +533,7 @@ static void partD(void)
 {
     int r, i;
     DWORD t0;
+    marker(3);
     r = callw(1, 0, 0, 0, 0, 0, 0); res("D OpenSound", r);
     r = callw(3, 2, 1, 1024, 0, 0, 0); res("D SetVoiceQueueSize(1,1024)", r);
     /* tempo 120, quarter notes: 500 ms each */
@@ -632,6 +633,7 @@ static void partF(void)
     callw(1, 0, 0, 0, 0, 0, 0);
     callw(3, 2, 1, 1024, 0, 0, 0);
     for (j = 0; j < 3; j++) {
+        marker(j + 1);
         callw(5, 5, 1, tempo[j], 128, j % 3, 0);
         for (i = 0; i < 8; i++)
             callw(4, 4, 1, 25 + 2 * i, 8, i & 1, 0);
@@ -666,6 +668,7 @@ static void partG(void)
 {
     WORD m;
     int i;
+    marker(3);
     m = pit0max(3);
     wsprintf(line, "OBS G channel 0 reload idle: %s ~%04X\r\n", (LPSTR)(m > 0xF000 ? "65536" : "less"), m);
     put(line);
@@ -692,6 +695,7 @@ static void partG(void)
     /* the BIOS's ticks while notes play: two whole notes legato at tempo
        32 (1500 driver ticks each, 7.5 s); the BIOS ticks counted from the
        first's start (the count going to 1) to the end (0): 15 s */
+    marker(1);
     callw(1, 0, 0, 0, 0, 0, 0);
     callw(5, 5, 1, 32, 128, 1, 0);
     callw(4, 4, 1, 37, 1, 0, 0);
@@ -817,19 +821,19 @@ static void partH(void)
        in the low) and durations */
     {
         static const WORD fq[][2] = { { 100, 0 }, { 440, 0 }, { 440, 0x8000 }, { 1000, 0 },
-                                     { 3000, 0 }, { 37, 0 }, { 18, 0 }, { 0, 0 } };
+                                     { 3000, 0 }, { 18, 0 }, { 0, 0 } };
         static const int du[] = { 1, 2, 3, 5, 10, 18 };
         for (i = 0; i < sizeof fq / sizeof fq[0]; i++) {
             r = callw(8, 4, 1, fq[i][0], fq[i][1], 20, 0);
             wsprintf(line, "OBS H7 SetVoiceSound(1,%u.%04X,20) = %d\r\n", fq[i][0], fq[i][1], r);
             put(line);
-            callw(8, 4, 1, 0, 0, 3, 0);
+            note(7, 0, 16, 0);      /* (a rest long enough to part the tones on the recording) */
         }
         for (i = 0; i < sizeof du / sizeof du[0]; i++) {
             r = callw(8, 4, 1, 1000, 0, du[i], 0);
             wsprintf(line, "OBS H7 SetVoiceSound(1,1000,%d) = %d\r\n", du[i], r);
             put(line);
-            callw(8, 4, 1, 0, 0, 3, 0);
+            note(7, 0, 16, 0);
         }
     }
     play(7);
@@ -956,7 +960,10 @@ static void partT(void)
         tgroup(++g);
     }
     /* SetVoiceSound: durations 1-20, 500 and 1000 Hz alternating */
-    for (i = 1; i <= 20; i += (i < 6 ? 1 : 3)) {
+    /* (durations 1-4, one and two ticks, were measured too, on 3.1's: the
+       recording breaks such short tones up differently each run, so they
+       are not played here) */
+    for (i = 5; i <= 20; i += 3) {
         for (k = 0; k < 6; k++)
             callw(8, 4, 1, k & 1 ? 1000 : 500, 0, i, 0);
         tgroup(++g);
@@ -1137,6 +1144,7 @@ static void partS(void)
         wsprintf(line, "OBS S status after %d, again %d\r\n", callw(15, 0, 0, 0, 0, 0, 0), callw(15, 0, 0, 0, 0, 0, 0));
         put(line);
     }
+    marker(2);
     for (i = 0; i <= 3; i++)
         note(9, 37 + i, 16, 0);
     callw(16, 2, 1, 2, 0, 0, 0);

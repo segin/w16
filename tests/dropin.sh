@@ -54,6 +54,9 @@
 # DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
 # DROPIN_CONF: more dosbox.conf lines (sections and settings), e.g. a
 # [serial] section (tests/commprobe.sh)
+# DROPIN_REF=DIR: another C: drive to copy instead of the reference
+# install's (e.g. tests/sb16setup.sh's, the reference with Sound Blaster
+# 16 drivers installed)
 # DROPIN_CAPTURE=DIR: record the run's sound (DOSBox-X only, so with -p):
 # the PC speaker on, the mixer on, and the command run under DOSBox-X's
 # DX-CAPTURE /A, which writes a WAV file of everything the emulated
@@ -93,7 +96,7 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-ref=$root/.tools/ref/win31/cdrive
+ref=${DROPIN_REF:-$root/.tools/ref/win31/cdrive}
 kernel=$root/build/dos/KRNL286.EXE
 cmd='WIN /S /B' secs=60 tree= kset= kset386= k386= shot= keep= useref= dosx= cpu=386 usex= files= expect= prep= endfile= inis='w16:watchdog=15
 w16:exitmsg=1

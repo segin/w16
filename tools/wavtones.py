@@ -145,6 +145,14 @@ def tones(s, rate, gap_ms, thresh, split):
         if len(g) >= 3:
             half = (g[-1] - g[0]) / (len(g) - 1)
             f = rate / (2 * half)
+            if len(g) >= 9:
+                # the mean half-period, without the odd ones at the ends
+                # (a count written to the 8254 makes the first longer; the
+                # speaker turned off can cut the last)
+                h = sorted(g[k + 1] - g[k] for k in range(len(g) - 1))
+                cut = len(h) // 8
+                h = h[cut:len(h) - cut]
+                f = rate / (2 * (sum(h) / len(h)))
         res.append((g[0] / rate * 1000, (g[-1] - g[0] + half) / rate * 1000, f, len(g)))
     return res
 

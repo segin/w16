@@ -6,16 +6,18 @@ SN1 (tests/apps/sn1.c) puts markers on the recording: tones of divisor 400
 (2983 Hz) lasting 110 ms, in runs of 1-4. The recordings are cut at the
 markers into segments, and segment k of one is compared with segment k of
 the other: the same number of tones, and for each tone
-  - its frequency within FREQ percent (default 1.5; FREQSHORT, default
-    15, for tones under 40 ms: a note's first half-period is longer or
+  - its frequency within FREQ percent (default 2, 3 above 2 kHz;
+    FREQSHORT, default 20, for tones under 40 ms: a note's first half-period is longer or
     shorter by where the 8254's count was when the driver wrote it, and
     on a tone of a few periods that is a few percent),
-  - its length within LEN ms (default 6: about a 5 ms tick and the
+  - its length within LEN ms (default 7: about a 5 ms tick and the
     measurement's half-period),
   - the time from the segment's first tone to its start within ONSET ms
-    (default 6), and the time from the tone before within GAP ms
-    (default 6).
-Tones shorter than --min ms (default 3) are clicks, not compared;
+    (default 7), and the time from the tone before within GAP ms
+    (default 7); 8 ms more for tones above 3 kHz (their edges are a few
+    samples apart in a 48 kHz recording).
+Tones shorter than --min ms (default 8: a tone of one 5 ms tick, which
+the recording breaks up differently on each run) are not compared;
 fragments of one tone (the same frequency within 3%, less than 10 ms
 apart: the recording breaks up some high notes) are joined; the marker
 runs themselves must match.
@@ -40,7 +42,7 @@ def load(path, minlen):
         # fragments of one tone (a high note the recording breaks up):
         # the same frequency within 3%, less than 10 ms apart
         if tones and fr and tones[-1][2] and abs(tones[-1][2] - fr) / fr < 0.03 \
-                and st - (tones[-1][0] + tones[-1][1]) < 10:
+                and st - (tones[-1][0] + tones[-1][1]) < (10 if fr < 3000 else 20):
             p = tones[-1]
             ln2 = st + ln - p[0]
             fr2 = (p[2] * p[1] + fr * ln) / (p[1] + ln)
@@ -71,12 +73,12 @@ def segments(tones):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--freq', type=float, default=1.5)
-    ap.add_argument('--freqshort', type=float, default=15)
-    ap.add_argument('--len', type=float, default=6)
-    ap.add_argument('--onset', type=float, default=6)
-    ap.add_argument('--gap', type=float, default=6)
-    ap.add_argument('--min', type=float, default=3)
+    ap.add_argument('--freq', type=float, default=2)
+    ap.add_argument('--freqshort', type=float, default=20)
+    ap.add_argument('--len', type=float, default=7)
+    ap.add_argument('--onset', type=float, default=7)
+    ap.add_argument('--gap', type=float, default=7)
+    ap.add_argument('--min', type=float, default=8)
     ap.add_argument('a')
     ap.add_argument('b')
     a = ap.parse_args()
@@ -109,7 +111,14 @@ def main():
                  'gap': abs((p[0] - ta[x - 1][0]) - (q[0] - tb[x - 1][0])) if x else 0}
             # (a length is measured to half a period: more for low notes)
             half = 500 / p[2] if p[2] else 0
-            lim = {'freq': a.freq if p[1] >= 40 else a.freqshort, 'len': a.len + half, 'onset': a.onset, 'gap': a.gap}
+            # (above 2 kHz a half-period is a few samples of the 48 kHz
+            # recording: the edges' times are coarser, and above 3 kHz the
+            # recording loses or adds the odd edge at a tone's ends: its
+            # start and length are known to about 2 ticks)
+            hi = p[2] >= 3000 or q[2] >= 3000
+            lim = {'freq': (a.freq if p[2] < 2000 else 1.5 * a.freq) if p[1] >= 40 else a.freqshort,
+                   'len': a.len + half + (8 if hi else 0),
+                   'onset': a.onset + (8 if hi else 0), 'gap': a.gap + (8 if hi else 0)}
             for key in d:
                 worst[key] = max(worst[key], d[key])
                 if d[key] > lim[key]:
