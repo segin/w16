@@ -549,17 +549,55 @@ struct cregs *vmm_hold_delivery(struct cregs *r)
 }
 
 /* Build_Int_Stack_Frame (vxd.c) for a device called during a trap (a
- * time-out, a hot key): the VM, where it was interrupted, takes an
- * interrupt to sel:off when it goes on (an interrupt frame on its stack,
- * IF and TF cleared). Only in protected mode here (UNVERIFIED: what
- * Windows 3.1 does when the VM is in V86 mode; its Reboot device also
- * uses the locked PM stack, not done here). 0: not possible */
+ * time-out, a hot key): the VM takes an interrupt to sel:off (an interrupt
+ * frame on its stack, TF cleared). The Reboot device's only use: KERNEL's
+ * Ctrl+Alt+Del procedure, which tells from where the VM was interrupted
+ * whether the current task responds. Observed under w16 (CS:IP only):
+ * run where the VM was idle (KERNEL's idle loop, its HLT), the procedure
+ * set the sanity byte every time; run elsewhere (another place in KERNEL,
+ * an application, a driver's interrupt handler) it often did not, and
+ * REBOOT showed "busy or unstable" in about half the plain-DOSBox runs.
+ * So the frame waits for the VM's next idle HLT in protected mode
+ * (vmm_idle_hlt); a second call for the same routine while it waits (the
+ * VM has not idled: a task that does not respond) makes it at once, where
+ * the VM is, if that is protected mode outside a hardware interrupt's
+ * handler, else at the next such trap. UNVERIFIED how Windows 3.1 times
+ * it. */
+static u32 bint_sel, bint_off, bint_now;    /* a frame not yet made */
+
+static void build_int_now(struct cregs *r)
+{
+    trace("VMM: Build_Int_Stack_Frame at %x:%x\n", r->cs, r->eip);
+    dpmi_build_int(r, bint_sel, bint_off);
+    bint_sel = 0;
+}
+
+static int bint_ok(struct cregs *r)
+{
+    return bint_sel && sysvm.pm && !(r->eflags & EFL_VM) && !dpmi_in_handler();
+}
+
 int vmm_build_int(u32 sel, u32 off)
 {
     struct cregs *r = hw_r;
-    if (!r || (r->eflags & EFL_VM)) return 0;
-    dpmi_build_int(r, sel, off);
+    if (!r || !sysvm.pm) return 0;
+    bint_now = bint_sel == sel && bint_off == off;
+    bint_sel = sel;
+    bint_off = off;
+    if (bint_now && bint_ok(r)) build_int_now(r);
     return 1;
+}
+
+/* at the end of each trap: a frame due now */
+static void vmm_build_int_pending(struct cregs *r)
+{
+    if (bint_now && bint_ok(r)) build_int_now(r);
+}
+
+/* the VM's HLT in protected mode (idle): a waiting frame is made here */
+static void vmm_idle_hlt(struct cregs *r)
+{
+    if (bint_ok(r)) build_int_now(r);
 }
 
 int vmm_can_deliver(void)
@@ -753,8 +791,10 @@ void __cdecl trap(struct tframe *f)
             if (op[0] == 0xF4) {
                 if (!(r->eflags & EFL_VM) && r->cs == SEL_PMBP)
                     dpmi_pmbp(r, r->eip);
-                else
+                else {
                     r->eip++;           /* HLT: carry on (idle) */
+                    if (!(r->eflags & EFL_VM)) vmm_idle_hlt(r);
+                }
             } else if (!f->err && io_trap(r, op))
                 ;                       /* a trapped port */
             else if (r->eflags & EFL_VM)
@@ -786,6 +826,7 @@ void __cdecl trap(struct tframe *f)
             panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
                   r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
     }
+    vmm_build_int_pending(r);
     if (vpicd) vpicd->resume();         /* virtual interrupts VPICD has pending */
     hw_r = saved_hw_r;
     sysvm.r = local;
@@ -804,6 +845,7 @@ void __cdecl vmm_main(struct w386_info *inf)
         outb(info->log_port + 1, 0);
         outb(info->log_port + 3, 0x03);
         outb(info->log_port + 1, 0);
+        outb(info->log_port + 4, 0x03);  /* DTR, RTS: DOSBox's nullmodem sends then */
     }
     { extern int dpmi_verbose; dpmi_verbose = exec_trace = info->trace; }
     trace("w16 VMM: %d KB at %x, image %x+%x\n", info->xms_size >> 10, info->xms_phys,
