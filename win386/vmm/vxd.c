@@ -33,18 +33,6 @@ struct ddb {
     u32 svc_table, svc_count;
 };
 
-/* the DDK's Client_Reg_Struc */
-struct client_regs {
-    u32 edi, esi, ebp, esp0, ebx, edx, ecx, eax, error, eip;
-    u16 cs, p1;
-    u32 eflags, esp;
-    u16 ss, p2, es, p3, ds, p4, fs, p5, gs, p6;
-    u32 alt_eip;
-    u16 alt_cs, p7;
-    u32 alt_eflags, alt_esp;
-    u16 alt_ss, p8, alt_es, p9, alt_ds, p10, alt_fs, p11, alt_gs, p12;
-};
-
 /* the start of a VM control block (the DDK names its fields; the order
  * as observed) */
 struct vm_cb {
@@ -76,6 +64,7 @@ extern u8 svc_common[];
 #define VMM_SERVICES        242     /* Windows 3.1's VMM (docs/win386-vxds.md) */
 
 static struct ddb **devs;           /* in init order */
+static struct ddb *find_dev(u32 id);
 static u32 ndevs;
 static struct vm_cb *sys_cb;
 static struct client_regs *sys_client;
@@ -138,6 +127,7 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
 #define NBUILTIN 1
+static void vtd_init(void);
 static struct ddb vtd_ddb = {
     0, 0x030A, 0x0005, 3, 10, 0, { 'V', 'T', 'D', ' ', ' ', ' ', ' ', ' ' },
     0x14000000, 0, 0, 0, 0, 0, 0, 0, 8
@@ -146,6 +136,45 @@ static struct ddb vtd_ddb = {
 #define VTD_SLOWEST 0x36
 static u32 vtd_min_period = VTD_SLOWEST;   /* the shortest one asked for */
 static u32 vtd_requests[16], vtd_nreq;
+
+/* VTD takes IRQ 0 through VPICD (VPICD_Virtualize_IRQ), and its
+ * VID_Hw_Int_Proc asks VPICD to simulate it into the System VM: the
+ * System VM still sees every tick (the timer is not reprogrammed yet) */
+u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
+extern u8 vtd_hw_entry[];
+static struct vid vtd_vid;
+static u32 vtd_irq;                     /* VPICD's handle */
+
+static u32 svc_slot(u32 dev, u32 svc)
+{
+    struct ddb *d = find_dev(dev);
+    if (!d || !d->svc_table || svc >= d->svc_count) return 0;
+    return *(u32 *)(d->svc_table + svc * 4);
+}
+
+static void vtd_init(void)
+{
+    struct svcregs s;
+    memset(&s, 0, sizeof(s));
+    vtd_vid.irq = 0;
+    vtd_vid.hw_int_proc = (u32)vtd_hw_entry;
+    vtd_vid.iret_time_out = 500;
+    s.edi = (u32)&vtd_vid;
+    vmm_call_proc(svc_slot(3, 0x01), &s);     /* VPICD_Virtualize_IRQ */
+    if (s.eflags & EFL_CF) panic("VTD: VPICD would not give IRQ 0");
+    vtd_irq = s.eax;
+}
+
+/* VID_Hw_Int_Proc for IRQ 0 (vmmasm.asm calls it with the registers) */
+void __cdecl vtd_hw(struct svcregs *r)
+{
+    struct svcregs s;
+    memset(&s, 0, sizeof(s));
+    s.eax = vtd_irq;
+    s.ebx = (u32)sys_cb;
+    vmm_call_proc(svc_slot(3, 0x02), &s);     /* VPICD_Set_Int_Request */
+    r->eflags &= ~EFL_CF;
+}
 
 static void vtd_service(u32 svc, struct svcregs *s)
 {
@@ -216,7 +245,23 @@ void vxd_init(void)
             devs[j] = devs[j - 1];
         devs[j] = d;
     }
+    /* VPICD (w16's module) owns the interrupts: without it nothing runs.
+     * Windows 3.1 without *vpicd stops with this message (ARCHITECTURE.md
+     * 12.2: device 0003h, service 0001h, VPICD_Virtualize_IRQ) */
+    for (i = 0; i < ndevs; i++)
+        if (devs[i]->device_id == 3 && devs[i]->ref_data
+            && ((struct vpicd_link *)devs[i]->ref_data)->magic == VPICD_LINK_MAGIC)
+            vpicd = (struct vpicd_link *)devs[i]->ref_data;
+    if (!vpicd)
+        fatal("Invalid VxD dynamic link call to device number 0003, service 0001.\n"
+              "Your w16 configuration is invalid. Run the w16 Setup program\n"
+              "again to correct this problem.\n");
+    vpicd->deliver = vmm_deliver;
+    vpicd->sys_vm = (u32)sys_cb;
+    vpicd->rm_base1 = info->pic1_base;
+    vpicd->rm_base2 = info->pic2_base;
     broadcast(SYS_CRITICAL_INIT, info->tail_lin, 0, 0, 0);
+    vtd_init();
     broadcast(DEVICE_INIT, info->tail_lin, 0, 0, 0);
     broadcast(INIT_COMPLETE, info->tail_lin, 0, 0, 0);
     broadcast(SYS_VM_INIT, info->tail_lin, 0, 0, 0);

@@ -1,0 +1,5 @@
+# VPICD.386: w16's VPICD module (win386/vxd), an LE VxD, device 0003h
+format windows vxd
+option quiet
+option nodefaultlibs
+export VPICD_DDB.1

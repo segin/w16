@@ -812,7 +812,7 @@ W386     := $(B)/win386
 W386INC  := win386/include
 W386LDR  := $(W386)/ldr.o $(W386)/ldrasm.o
 W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o $(W386)/vxdapi.o $(W386)/vxd.o
-W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h
+W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h $(W386INC)/w16vxd.h
 .PHONY: win386
 win386: $(W386)/WIN386.EXE
 $(W386)/ldr.o: win386/ldr/ldr.c $(W386HDRS)
@@ -832,8 +832,22 @@ $(W386)/WIN386L.EXE: $(W386LDR)
 	    libpath $(WATCOM)/lib286/dos libpath $(WATCOM)/lib286 file { $(W386LDR) }
 $(W386)/VMM.386: $(W386VMM) win386/vmm/vmm.lnk
 	$(WLINK) @win386/vmm/vmm.lnk name $@ option map=$(W386)/vmm.map file { $(W386VMM) }
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 tools/mkw3.py
-	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386
+# w16's own VxD modules (win386/vxd: C and nasm, ARCHITECTURE.md 12.8),
+# each an LE VxD and a module of WIN386.EXE's W3 table under Windows 3.1's
+# module name
+W386VXDHDRS := $(W386INC)/w16vxd.h $(W386INC)/vxdrt.inc
+$(W386)/vxd/%.o: win386/vxd/%.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(W386)/vxd/%.o: win386/vxd/%.asm $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+W386VPICD := $(W386)/vxd/vpicdddb.o $(W386)/vxd/vpicd.o $(W386)/vxd/vxdrt.o
+$(W386)/VPICD.386: $(W386VPICD) win386/vxd/vpicd.lnk
+	$(WLINK) @win386/vxd/vpicd.lnk name $@ option map=$(W386)/vpicd.map file { $(W386VPICD) }
+W386MODS := VPICD=$(W386)/VPICD.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 tools/mkw3.py
+	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
 VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VXP.386 $(DOS)/VXQ.386

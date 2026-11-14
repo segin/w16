@@ -317,7 +317,7 @@ static int load_vmm(void)
  * UNVERIFIED: which other keys Windows 3.1 reads devices from, and what
  * it does with a name given twice (w16 loads it once). */
 static const char *const builtin[] = {
-    "vmd", "vnetbios", "dosnet", "ebios", "vddvga", "vkd", "vpicd", "vtd",
+    "vmd", "vnetbios", "dosnet", "ebios", "vddvga", "vkd", "vtd",
     "reboot", "vdmad", "vsd", "v86mmgr", "pageswap", "dosmgr", "vmpoll",
     "wshell", "blockdev", "pagefile", "vfd", "parity", "biosxlat", "vcd",
     "vmcpd", "combuff", "cdpscsi", "int13", "wdctrl", "qemmfix", 0

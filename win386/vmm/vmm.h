@@ -7,6 +7,7 @@
 #define VMM_H
 
 #include "w386.h"
+#include "w16vxd.h"
 
 typedef unsigned char  u8;
 typedef unsigned short u16;
@@ -163,6 +164,8 @@ u32 pm_lin(u32 sel, u32 off);
 
 /* vxd.c */
 void vxd_init(void);
+extern struct vpicd_link *vpicd;
+int vmm_deliver(u32 vec);
 void vxd_pm_app(int begin, struct cregs *r);
 void vxd_exit(struct cregs *r);
 void vxd_link(struct tframe *f);

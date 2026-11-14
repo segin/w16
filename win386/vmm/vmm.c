@@ -514,12 +514,29 @@ static void exit_windows(struct cregs *r)
     info->exit_code = AX(r);
     info->ret_ss = (u16)r->ss;
     info->ret_sp = (u16)r->esp;
-    pic_init(info->pic1_base, info->pic2_base);
+    if (!vpicd) pic_init(info->pic1_base, info->pic2_base);    /* else VPICD did, at Sys_Critical_Exit */
     to_realmode(info->rm_tramp);
 }
 
+/* ---- hardware interrupts: w16's VPICD module owns them (vxd.c finds
+ * it, w16vxd.h); the VMM hands each one over and simulates into the VM
+ * what VPICD asks for, where the VM was interrupted ---- */
+#define IRQ_BASE VPICD_BASE1
+struct vpicd_link *vpicd;
+static struct cregs *hw_r;              /* the VM's state, during hw_int/resume */
+
+int vmm_deliver(u32 vec)
+{
+    struct cregs *r = hw_r;
+    if (!r || !(r->eflags & EFL_IF)) return 0;
+    if (r->eflags & EFL_VM) {
+        if (!dpmi_v86_hook(r, vec, 1)) v86_reflect(r, vec);
+    } else
+        dpmi_int(r, vec, 1);
+    return 1;
+}
+
 /* ---- the trap dispatcher ---- */
-#define IRQ_BASE 0x50
 
 static void software_int(struct cregs *r, int vec)
 {
@@ -632,13 +649,12 @@ void __cdecl trap(struct tframe *f)
         sysvm.refsp = (u16)r->esp;
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
-        int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;
+        struct cregs *saved = hw_r;
         irq_count[irq]++;
         if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
-        if (r->eflags & EFL_VM) {
-            if (!dpmi_v86_hook(r, v, 1)) v86_reflect(r, v);
-        } else
-            dpmi_int(r, v, 1);
+        hw_r = r;
+        vpicd->hw_int(irq);
+        hw_r = saved;
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -678,6 +694,12 @@ void __cdecl trap(struct tframe *f)
         if ((r->cs & 3) != 3 || !(d[5] & 0x80) || (d[5] & 0x18) != 0x18)
             panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
                   r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
+    }
+    if (vpicd) {                        /* virtual interrupts VPICD has pending */
+        struct cregs *saved = hw_r;
+        hw_r = r;
+        vpicd->resume();
+        hw_r = saved;
     }
     sysvm.r = local;
     resume(&sysvm.r);
@@ -735,7 +757,7 @@ void __cdecl vmm_main(struct w386_info *inf)
     ltr(SEL_TSS);
     memset(ldt, 0, LDT_MAX * 8);
     lldt(SEL_LDT);
-    pic_init(IRQ_BASE, IRQ_BASE + 8);
+    /* the 8259s are VPICD's (it moves them to 50h/58h at Sys_Critical_Init) */
     dpmi_init();
     vxd_init();
 

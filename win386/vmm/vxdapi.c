@@ -31,7 +31,6 @@ static void api_reboot(struct cregs *r);
 static const struct vxdapi apis[] = {
     /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
      * (carry set), SHELL's BX is 1000h */
-    { 0x0003, "VPICD",    api_default, 0x030A, 0, 0 },
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
     { 0x0009, "Reboot",   api_reboot,  0x0000, 0, 1 },
     { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
