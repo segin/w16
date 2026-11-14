@@ -78,9 +78,20 @@ writes every register and the DAC, then the BIOS fields. No hooks
 (EnableSave/DisableSave do nothing). The RIL calls 3.1's grabber makes
 (INT 10h F1h/F3h/F7h, EGA.SYS's register interface) are not made.
 
-## Status / results
+## Status / results (installation-05, 2026-11-14)
 
-(see below; kept current)
+- `tests/grabber.sh grt`: PASS (every answer and GetBlock's data equal to
+  3.1's in modes 0-7, 0Dh-13h; w16's restore exact in every mode).
+- `text`, `cga` (3.1's never switches away in CGA modes: its Windows
+  shots differ, reported as known), `ega`: PASS; `-O text`: PASS.
+- `prompt`: screens equal; the clipboard equal whenever both grabs give
+  data. 3.1's grabber left the first PrintScreen's clipboard empty in 5 of
+  9 runs, w16's never (after a first run lost to xdotool dropping Shift
+  under load: the scenario now types no shifted characters); the script
+  notes that case instead of failing.
+- Full boot test at 6ec0d93 (tools/remote-test.sh): 92 ok, 0 failures,
+  make test pass; swapall boots w16's install tree with w16's grabber and
+  only Microsoft's MMSOUND.DRV.
 
 ## Open
 

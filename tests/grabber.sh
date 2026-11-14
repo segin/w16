@@ -141,12 +141,17 @@ win_scenario() {
     tmax=$(sed -n 's/^# tmax: //p' "$script"); [ -n "$tmax" ] || tmax=300
     sed -n 's/^# run: //p' "$script" | tr '\n' '\r' | sed 's/\r/\r\n/g' > "$work/files/RUN.BAT"
     known=$(sed -n 's/^# known: //p' "$script")
-    d=$work/$n
+    d=$work/$n bad= note=
     run_one "$d/ms" "$msgr" "$script" "$tmax"
     run_one "$d/w16" "$gr" "$script" "$tmax"
-    bad= note=
     cblog "$d/ms" > "$d/ms.cb"; cblog "$d/w16" > "$d/w16.cb"
-    diff -u "$d/ms.cb" "$d/w16.cb" > "$d/cb.diff" || bad="$bad clipboard"
+    if ! diff -u "$d/ms.cb" "$d/w16.cb" > "$d/cb.diff"; then
+        # 3.1's grabber now and then leaves a PrintScreen's clipboard empty
+        # (DSWAP's grab gives no data; seen in 5 of 9 prompt runs): when
+        # w16's only has more, it is noted, not failed
+        if grep -q '^-[^-]' "$d/cb.diff"; then bad="$bad clipboard"
+        else note="$note clipboard(3.1's grab empty)"; fi
+    fi
     for f in "$d"/ms/c/CB*.BIN; do
         [ -f "$f" ] || continue
         cmp -s "$f" "$d/w16/c/$(basename "$f")" || bad="$bad $(basename "$f")"
