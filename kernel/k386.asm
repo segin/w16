@@ -88,13 +88,31 @@ _k386_lsl:
         pop bp
         retf
 
-; KERNEL's Ctrl+Alt+Del procedure (Reboot 0201h ES:DI). Windows 3.1's
-; KRNL386 gives the Reboot device a procedure in its own code segment
-; (TK57: 0202h returns ES = a KERNEL code selector); Pietrek ch. 3 says it
-; serves the local reboot of a hung application. UNVERIFIED: how the
-; device calls it and what it is to do; w16's returns at once.
+; KERNEL's Ctrl+Alt+Del procedure (Reboot 0201h ES:DI) and the byte
+; given with it (DS:SI). Windows 3.1's KRNL386 gives the Reboot device a
+; procedure in its own code segment (TK57: 0202h returns ES = a KERNEL
+; code selector); Pietrek ch. 3: the local reboot of a hung application.
+; Observed by the WIN386 work (docs/notes/win386-handover.md, VX8): on
+; Ctrl+Alt+Del Microsoft's Reboot device zeroes the byte, KERNEL sets it to
+; 1 again whenever it runs, and the device makes the System VM take the
+; procedure as an interrupt (Build_Int_Stack_Frame); for a hung task the
+; procedure calls Reboot 0203h (the "not responding" screen). w16's sets
+; the byte and returns (IRET): the screen for no hung application.
+; UNVERIFIED: telling a hung task, 0203h and ending the task.
+segment _DATA
+global _k386_sane
+_k386_sane      db 1
+
+segment BOOT_TEXT
 global reboot_proc
 reboot_proc:
-        retf
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov byte [_k386_sane wrt DGROUP], 1
+        pop ax
+        pop ds
+        iret
 
 %endif

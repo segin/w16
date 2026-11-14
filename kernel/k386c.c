@@ -21,8 +21,9 @@
  *    (ch. 3, InitTask) has it done at the first task's InitTask, in
  *    Enhanced mode only (KRebootInit); w16's WIN386 saw the 0201h call
  *    during the boot (ARCHITECTURE.md 12.5).
- * UNVERIFIED: the byte's meaning (w16 gives a byte of 0), what the
- * procedure is to do and how it is called (k386.asm), the call Pietrek
+ * The byte and the procedure: k386.asm (KERNEL sets the byte to 1 at
+ * every task switch and idle pass: "whenever it runs").
+ * UNVERIFIED: the call Pietrek
  * describes when the last task ends (ExitCall) and Reboot 0100h for
  * ExitWindows(EW_REBOOTSYSTEM) (ExitKernel).
  */
@@ -34,10 +35,10 @@ extern int __cdecl int2f_pm(regs16 FAR *r);                 /* k386.asm */
 extern int __cdecl vxd_call(u32 entry, regs16 FAR *r);
 extern void __far reboot_proc(void);
 #pragma aux reboot_proc "*"
+extern u8 __cdecl k386_sane;            /* k386.asm: Reboot 0201h's byte */
 
 u16 k386_enhanced;              /* 386 Enhanced mode: running under WIN386 */
 u16 k386_paging;                /* the VMM pages to a paging file */
-static u8 reboot_sane;          /* the byte given with Reboot 0201h */
 static int reboot_done;
 
 /* At start-up: which mode (INT 2Fh 1600h, the DDK's "Enhanced Windows
@@ -93,8 +94,8 @@ void k386_first_task(void)
     r.ax = 0x0201;
     r.es = FP_SEG((void __far *)reboot_proc);
     r.di = FP_OFF((void __far *)reboot_proc);
-    r.ds = FP_SEG((void FAR *)&reboot_sane);
-    r.si = FP_OFF((void FAR *)&reboot_sane);
+    r.ds = FP_SEG((void FAR *)&k386_sane);
+    r.si = FP_OFF((void FAR *)&k386_sane);
     vxd_call(e, &r);
 }
 

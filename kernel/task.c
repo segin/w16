@@ -394,6 +394,9 @@ u16 idle_1689;          /* [w16] idle1689=1 (a test option): the call
 static void idle(void)
 {
     sti();
+#ifdef KRNL386
+    k386_sane = 1;              /* KERNEL runs: Reboot's sanity byte */
+#endif
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
     if (idle_1689)
         rm_int(0x2F, 0x1689, 1, 0, 0);
@@ -511,6 +514,9 @@ static void switch_to(u16 t)
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
     in_sched = 0;
+#ifdef KRNL386
+    k386_sane = 1;              /* KERNEL runs: Reboot's sanity byte */
+#endif
     task_switch(from ? (u16 FAR *)MK_FP(from, TDB_SSSP) : NULL,
                 TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));
     th_task_in();                       /* back in `from`: 0Eh */
