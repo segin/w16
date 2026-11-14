@@ -197,6 +197,12 @@ if [ -n "$usex" ]; then
 fi
 redir=" > C:\\OUT.TXT"
 [ -n "${DROPIN_NOREDIR:-}" ] && redir=
+# every boot starts at the same moment, Monday 15 June 1992 10:00
+# (CLOCKSET.COM, from a drive D: that is gone again before WIN starts):
+# screens never show the host's date or time (a reference cached on one
+# day and a w16 run on the next differed in Clock's minimised title)
+mkdir -p "$work/clock"
+cp "$root/build/dos/CLOCKSET.COM" "$work/clock/" || { echo "missing $root/build/dos/CLOCKSET.COM (make dos)" >&2; exit 2; }
 common="[dosbox]
 $xdos
 memsize=16
@@ -210,6 +216,9 @@ nosound=true
 [speaker]
 pcspeaker=false
 [autoexec]
+mount d \"$work/clock\"
+D:\\CLOCKSET
+mount -u d
 mount c \"$work/c\"
 c:
 cd \\$wdir

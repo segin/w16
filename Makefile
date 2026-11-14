@@ -424,6 +424,12 @@ $(DOS)/VIDMODE.COM: tests/dos/vidmode.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/VIDMODE.COM
+# CLOCKSET.COM: DOS's date and time set to a fixed moment (tests/dropin.sh,
+# before WIN: screens never show the host's clock)
+$(DOS)/CLOCKSET.COM: tests/dos/clockset.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/CLOCKSET.COM
 # MS1.COM: a real-mode TSR recording the PS/2 pointing-device calls (TK49 reads it)
 $(DOS)/MS1.COM: tests/dos/ms1.asm
 	@mkdir -p $(@D)
