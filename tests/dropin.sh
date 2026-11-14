@@ -49,6 +49,10 @@
 # DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
 # DROPIN_CONF: more dosbox.conf lines (sections and settings), e.g. a
 # [serial] section (tests/commprobe.sh)
+# DROPIN_CAPTURE=DIR: record the run's sound (DOSBox-X only, so with -p):
+# the PC speaker on, the mixer on, and the command run under DOSBox-X's
+# DX-CAPTURE /A, which writes a WAV file of everything the emulated
+# machine played to DIR (tests/soundprobe.sh)
 # The report ends with "== shot: after N s (how)" for -s: settled,
 # matched (-e), limit (SECS reached), exited (DOSBox ended first), fixed.
 #     -o DIR     keep the scratch C: drive in DIR (default: a temp dir)
@@ -202,6 +206,21 @@ if [ -n "$usex" ]; then
 fi
 redir=" > C:\\OUT.TXT"
 [ -n "${DROPIN_NOREDIR:-}" ] && redir=
+snd="[mixer]
+nosound=true
+[speaker]
+pcspeaker=false"
+if [ -n "${DROPIN_CAPTURE:-}" ]; then
+    [ -n "$usex" ] || { echo "DROPIN_CAPTURE needs DOSBox-X (-p)" >&2; exit 2; }
+    mkdir -p "$DROPIN_CAPTURE"
+    snd="[mixer]
+nosound=false
+[speaker]
+pcspeaker=true
+[dosbox]
+captures=$(cd "$DROPIN_CAPTURE" && pwd)"
+    cmd="DX-CAPTURE /A $cmd"
+fi
 # every boot starts at the same moment, Monday 15 June 1992 10:00
 # (CLOCKSET.COM, from a drive D: that is gone again before WIN starts):
 # screens never show the host's date or time (a reference cached on one
@@ -216,10 +235,7 @@ ${DROPIN_MACHINE:+machine=$DROPIN_MACHINE}
 core=normal
 cputype=${DROPIN_CPUTYPE:-$cpu}
 cycles=${DROPIN_CYCLES:-max}
-[mixer]
-nosound=true
-[speaker]
-pcspeaker=false
+$snd
 [autoexec]
 mount d \"$work/clock\"
 D:\\CLOCKSET
