@@ -570,28 +570,99 @@ HMENU WINAPI LoadMenu(HINSTANCE hinst, LPCSTR name)
 }
 
 /* ---- the system menu (UNVERIFIED wording and order: Windows 3.1's
-   own resource is to be compared on screen) ---- */
-static HMENU make_sysmenu(PWND w)
+   own resource is to be compared on screen) ----
+   US23 on 3.1: windows share one system menu that USER keeps from
+   start-up (Pietrek, LoadWindows: the template is loaded there); a
+   window's system menu costs nothing in the menu heaps until
+   GetSystemMenu(h, FALSE) gives it a copy of its own (130h bytes in the
+   menu heap and 64h in the string heap; a second call returns the same
+   copy, another window gets another); GetSystemMenu(h, TRUE) destroys
+   the copy and returns 0; DestroyWindow destroys it. A child window
+   with WS_SYSMENU gets the same items as a top-level one (also US18);
+   MDI children get Close Ctrl+F4 and Next Ctrl+F6 (a second shared menu,
+   made on first use: UNVERIFIED whether 3.1 keeps one). A window's menu loop shows its copy
+   if it has one, the shared menu otherwise. */
+static HMENU sysmenu_tpl, sysmenu_mdi_tpl;
+
+static HMENU make_sysmenu(BOOL mdi)
 {
     HMENU m = new_menu(MENU_POPUP | MENU_SYSMENU);
-    /* an MDI child's: a child of an MDICLIENT (US18: another child window
-       gets the top-level one, Close Alt+F4 and Switch To...) */
-    extern LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
-    BOOL child = (w->style & WS_CHILD) && valid_wnd(w->hwndParent) &&
-                 ((PCLS)PW(w->hwndParent)->cls)->lpfnWndProc == (WNDPROC)MDIClientWndProc;
     AppendMenu(m, MF_STRING, SC_RESTORE, "&Restore");
     AppendMenu(m, MF_STRING, SC_MOVE, "&Move");
     AppendMenu(m, MF_STRING, SC_SIZE, "&Size");
     AppendMenu(m, MF_STRING, SC_MINIMIZE, "Mi&nimize");
     AppendMenu(m, MF_STRING, SC_MAXIMIZE, "Ma&ximize");
     AppendMenu(m, MF_SEPARATOR, 0, NULL);
-    AppendMenu(m, MF_STRING, SC_CLOSE, child ? "&Close\tCtrl+F4" : "&Close\tAlt+F4");
-    if (child) {
+    AppendMenu(m, MF_STRING, SC_CLOSE, mdi ? "&Close\tCtrl+F4" : "&Close\tAlt+F4");
+    if (mdi) {
         AppendMenu(m, MF_SEPARATOR, 0, NULL);
         AppendMenu(m, MF_STRING, SC_NEXTWINDOW, "Nex&t\tCtrl+F6");
     } else {
         AppendMenu(m, MF_SEPARATOR, 0, NULL);
         AppendMenu(m, MF_STRING, SC_TASKLIST, "S&witch To...\tCtrl+Esc");
+    }
+    return m;
+}
+
+/* user_init, after the menu heaps: the shared system menu */
+void sysmenu_init(void)
+{
+    sysmenu_tpl = make_sysmenu(FALSE);
+}
+
+extern LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
+
+static BOOL is_mdi_child(PWND w)
+{
+    PWND p = (w->style & WS_CHILD) ? valid_wnd(w->hwndParent) : (PWND)0;
+    return p && ((PCLS)p->cls)->lpfnWndProc == (WNDPROC)MDIClientWndProc;
+}
+
+/* the shared system menu for a window */
+static HMENU sysmenu_shared(PWND w)
+{
+    if (!is_mdi_child(w)) {
+        if (!valid_menu(sysmenu_tpl))
+            sysmenu_tpl = make_sysmenu(FALSE);
+        return sysmenu_tpl;
+    }
+    if (!valid_menu(sysmenu_mdi_tpl))
+        sysmenu_mdi_tpl = make_sysmenu(TRUE);
+    return sysmenu_mdi_tpl;
+}
+
+/* the system menu a window's menu loop shows: its own copy, or the
+   shared one */
+static HMENU sysmenu_of(PWND w)
+{
+    return valid_menu((HMENU)w->hSysMenu) ? (HMENU)w->hSysMenu : sysmenu_shared(w);
+}
+
+/* a copy of menu `from`: items, flags, texts (no popups: a system menu
+   has none) */
+static HMENU copy_menu(HMENU from, WORD flags)
+{
+    HMENU m = new_menu(flags);
+    LPMENU f = valid_menu(from);
+    UINT i, n;
+    if (!m || !f)
+        return m;
+    n = f->count;
+    for (i = 0; i < n; i++) {
+        char text[128];
+        LPMITEM it = item_at(valid_menu(from), i);      /* again: AppendMenu allocates */
+        UINT fl = it->flags & ~MF_HILITE, id = it->id;
+        WORD t = it->text;
+        if (fl & MF_SEPARATOR)
+            AppendMenu(m, MF_SEPARATOR, 0, NULL);
+        else if (fl & (MF_BITMAP | MF_OWNERDRAW))
+            AppendMenu(m, fl, id, (LPCSTR)MAKELP(0, t));
+        else {
+            text[0] = 0;
+            if (t)
+                lstr_cpyn(text, STEXT(t), sizeof text);  /* out of the heap first */
+            AppendMenu(m, fl, id, text);
+        }
     }
     return m;
 }
@@ -607,9 +678,29 @@ HMENU WINAPI GetSystemMenu(HWND h, BOOL revert)
         w->hSysMenu = 0;
         return 0;
     }
-    if (!w->hSysMenu)
-        w->hSysMenu = (WORD)make_sysmenu(w);
+    if (!valid_menu((HMENU)w->hSysMenu))
+        w->hSysMenu = (WORD)copy_menu(sysmenu_shared(w), MENU_POPUP | MENU_SYSMENU);
     return (HMENU)w->hSysMenu;
+}
+
+/* USER's heaps given back when a task ends normally (Pietrek ch. 3,
+   the signal procedure; US23 on 3.1: DGROUP and both menu heaps back to
+   their start-up sizes after a task ended, even one that did nothing; a
+   task that goes on keeps them grown): with more than 4096 bytes free in
+   DGROUP, DGROUP and the menu heaps shrink as far as they go. */
+void user_heaps_shrink(void)
+{
+    UINT freeb = K_LOCALCOUNTFREE(), size = K_LOCALHEAPSIZE();
+    if (freeb <= 4096 || size < freeb)
+        return;
+    /* Pietrek's LocalHeapSize() - LocalCountFree() - 400h: never below
+       the blocks in use or LocalInit's span anyway; w16's USER uses less
+       than 400h of its DGROUP heap, where the difference would wrap */
+    LocalShrink(0, size - freeb > 0x400 ? size - freeb - 0x400 : 0);
+    if (msel)
+        LocalShrink((HLOCAL)msel, 0);
+    if (ssel)
+        LocalShrink((HLOCAL)ssel, 0);
 }
 
 /* the system menu's items enabled for the window's state, before
@@ -1246,7 +1337,7 @@ void sysmenu_states_of(HWND h, HMENU m);
 static void to_sysmenu(MLOOP *l, BOOL open)
 {
     select_bar(l, -1, FALSE);
-    l->bar = GetSystemMenu(l->owner, FALSE);
+    l->bar = sysmenu_of(PW(l->owner));
     l->sysmenu = TRUE;
     sysmenu_states_of(l->owner, l->bar);
     if (open) {
@@ -1510,7 +1601,7 @@ void menu_track_bar(HWND h, char key)
        system menu. Alt+letter without a menu bar used to open it as well,
        so Alt+H in a dialog or in Clock put up the system menu */
     if (key == ' ' || (!bar && !key && (w->style & WS_SYSMENU))) {
-        l.bar = GetSystemMenu(h, FALSE);
+        l.bar = sysmenu_of(w);
         l.sysmenu = TRUE;
         sysmenu_states(w, l.bar);
         send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
@@ -1646,7 +1737,7 @@ void menu_track_sys(HWND h)
     l.owner = h;
     l.barsel = -1;
     l.sel = -1;
-    l.bar = GetSystemMenu(h, FALSE);
+    l.bar = sysmenu_of(PW(h));
     l.sysmenu = TRUE;
     if (!(PW(h)->style & WS_CHILD))
         l.menubar = (HMENU)PW(h)->hMenu;

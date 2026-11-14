@@ -36,6 +36,8 @@ extern HMODULE __far __pascal K_GETEXEPTR(HANDLE);                   /* 133 */
 extern WORD   __far __pascal K_DIRECTEDYIELD(HTASK);                 /* 150 */
 extern WORD   __far __pascal K_GETTASKDS(void);                      /* 155 */
 extern DWORD  __far __pascal K_GETHEAPSPACES(WORD);                  /* 138 */
+extern UINT   __far __pascal K_LOCALCOUNTFREE(void);                 /* 161 */
+extern UINT   __far __pascal K_LOCALHEAPSIZE(void);                  /* 162 */
 extern WORD   __far __pascal K_GETEXPWINVER(HMODULE);                /* 167 */
 extern void   __far __pascal K_DIAGOUTPUT(LPCSTR);                   /* 340 */
 extern WORD   __far __pascal K_OLDYIELD(void);                       /* 117 */
@@ -293,6 +295,8 @@ void deskver_paint(HDC hdc, const RECT *rc);
 
 /* ---- menus (menu.c) ---- */
 void menu_heaps_init(void);
+void sysmenu_init(void);        /* the shared system menu */
+void user_heaps_shrink(void);   /* a task ended: give heap space back */
 void sbmenu_init(void);
 WORD menu_heap_sel(void);       /* the menu heap's selector */
 WORD menu_str_heap_sel(void);   /* the menu-string heap's */
