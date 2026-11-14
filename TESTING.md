@@ -41,6 +41,11 @@ your own, and `.tools/` is git-ignored so they are never committed.
 - Optional, for some probes: `.tools/ref/w386/cdrive/` and
   `.tools/ref/wfw311a/cdrive/` (Windows for Workgroups 3.11). Tests that need
   them say so.
+- Optional, for `tests/soundprobe.sh sb16`: `.tools/sb16/src/`, the
+  Sound Blaster 16 ASP driver disk images (`Sound_Blaster_16ASP_(Disk_1).img`,
+  `(Disk_2).img`); `tests/sb16setup.sh` installs them into a scratch copy
+  of the reference install (its header says what Creative's installer
+  changes).
 - Optional: `.tools/docs/` (reference books as text, used by the
   documentation, not by tests).
 
@@ -85,7 +90,7 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
-`tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/fonts.sh`,
+`tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`.
 
 Run the boot test from a copy if you will edit the scripts while it runs:

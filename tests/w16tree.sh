@@ -39,11 +39,9 @@ done
 for f in "$tree"/SYSTEM/*; do
     set -- "$@" -f "$f=WINDOWS/SYSTEM/$(basename "$f")"
 done
-# w16's SYSTEM.INI has no sound driver (w16 has none yet), and the boot
-# stops at an empty sound.drv= (after VGA.DRV): the reference's
-# MMSOUND.DRV for now
+# (the tree's SYSTEM.INI names its own sound driver, MMSOUND.DRV)
 "$root/tests/dropin.sh" -k "$tree/SYSTEM/KRNL286.EXE" -X "$tree/SYSTEM/DOSX.EXE" \
-    -i boot:sound.drv=mmsound.drv -i w16:watchdog=0 -t "$secs" -s "$out/w16.png" "$@" > "$out/w16.log" 2>&1 || true
+    -i w16:watchdog=0 -t "$secs" -s "$out/w16.png" "$@" > "$out/w16.log" 2>&1 || true
 if [ -n "$refpng" ]; then
     cp "$refpng" "$out/ref.png"
 else

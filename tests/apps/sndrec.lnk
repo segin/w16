@@ -1,0 +1,49 @@
+# wlink directives for SNDREC.DRV (tests/apps/sndrec.asm): a recording
+# SOUND driver in front of SOUNT (a renamed copy of the driver under
+# test). Output name and object come from the Makefile.
+format windows dll
+option quiet
+option modname=SOUND
+option description 'SNDREC recording sound driver (w16 probe)'
+option start=libentry
+option map
+segment type code fixed preload
+segment type data fixed preload
+export OPENSOUND.1=T_1
+export CLOSESOUND.2=T_2
+export SETVOICEQUEUESIZE.3=T_3
+export SETVOICENOTE.4=T_4
+export SETVOICEACCENT.5=T_5
+export SETVOICEENVELOPE.6=T_6
+export SETSOUNDNOISE.7=T_7
+export SETVOICESOUND.8=T_8
+export STARTSOUND.9=T_9
+export STOPSOUND.10=T_10
+export WAITSOUNDSTATE.11=T_11
+export SYNCALLVOICES.12=T_12
+export COUNTVOICENOTES.13=T_13
+export GETTHRESHOLDEVENT.14=T_14
+export GETTHRESHOLDSTATUS.15=T_15
+export SETVOICETHRESHOLD.16=T_16
+export DOBEEP.17=T_17
+export WEP.18=T_18 resident
+export SNRLOG.200
+import X_1 SOUNT.1
+import X_2 SOUNT.2
+import X_3 SOUNT.3
+import X_4 SOUNT.4
+import X_5 SOUNT.5
+import X_6 SOUNT.6
+import X_7 SOUNT.7
+import X_8 SOUNT.8
+import X_9 SOUNT.9
+import X_10 SOUNT.10
+import X_11 SOUNT.11
+import X_12 SOUNT.12
+import X_13 SOUNT.13
+import X_14 SOUNT.14
+import X_15 SOUNT.15
+import X_16 SOUNT.16
+import X_17 SOUNT.17
+import X_18 SOUNT.18
+import GETCURRENTTASK KERNEL.36

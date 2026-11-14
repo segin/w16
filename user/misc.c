@@ -70,9 +70,42 @@ BOOL WINAPI U_ISUSERIDLE(void)
     return !input_pending;
 }
 
+/* ---- MessageBeep: the sound driver's DoBeep (SOUND.17) with the beep's
+   type, as Windows 3.1's USER does (its NE imports name SOUND.17; SN1
+   with SNDREC in front of the driver saw USER call DoBeep(type) once for
+   every MessageBeep, whatever the type, the device open or not: probe
+   tests/soundprobe.sh rec). WIN.INI [windows] Beep turns it off (Pietrek,
+   Windows Internals ch. 2: USER reads Beep at its start-up, and
+   MessageBeep looks at the flag; "yes" by default, UNVERIFIED for a
+   missing key); SystemParametersInfo SPI_GETBEEP/SPI_SETBEEP read and set
+   the flag. DoBeep is found by ordinal at the first beep: the driver
+   module is loaded before USER (Pietrek ch. 1). ---- */
+typedef void (FAR PASCAL *DOBEEPFN)(UINT);
+static int beep_on = -1;
+static DOBEEPFN do_beep;
+static int do_beep_found;
+
+static int beep_flag(void)
+{
+    if (beep_on < 0) {
+        char b[8];
+        GetProfileString("windows", "Beep", "yes", b, sizeof b);
+        beep_on = lstrcmpi(b, "yes") == 0;
+    }
+    return beep_on;
+}
+
 void WINAPI MessageBeep(UINT type)
 {
-    (void)type;
+    if (!beep_flag())
+        return;
+    if (!do_beep_found) {
+        HMODULE m = GetModuleHandle("SOUND");
+        do_beep = m ? (DOBEEPFN)GetProcAddress(m, MAKEINTRESOURCE(17)) : 0;
+        do_beep_found = 1;
+    }
+    if (do_beep)
+        do_beep(type);
 }
 
 /* ---- the caret: one, drawn by inverting, blinking ----
@@ -288,9 +321,13 @@ int WINAPI GetKeyboardType(int which)
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
     WORD __far *w = (WORD __far *)pv;
-    (void)ui, (void)ini;
     switch (what) {
-    case SPI_GETBEEP: *w = 1; return TRUE;
+    case SPI_GETBEEP: *w = beep_flag(); return TRUE;
+    case SPI_SETBEEP:                   /* (UNVERIFIED: 3.1's writes "yes"/"no") */
+        beep_on = ui != 0;
+        if (ini & SPIF_UPDATEINIFILE)
+            WriteProfileString("windows", "Beep", beep_on ? "yes" : "no");
+        return TRUE;
     case SPI_GETMOUSE: w[0] = 2; w[1] = 0; w[2] = 1; return TRUE;     /* US2 */
     case SPI_GETBORDER: *w = sysmet[SM_CXFRAME] - 1; return TRUE;
     case SPI_GETKEYBOARDSPEED: *w = GetProfileInt("windows", "KeyboardSpeed", 31); return TRUE;

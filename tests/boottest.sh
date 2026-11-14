@@ -148,7 +148,8 @@
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
-#              Microsoft's MMSOUND.DRV): every part w16's (VGACOLOR.2GR too),
+#              no file of Microsoft's): every part w16's (VGACOLOR.2GR and
+#              MMSOUND.DRV too),
 #              the DOS screens against Microsoft's, Windows' against its
 #              own screen before the prompt
 #   swapesc    the MS-DOS Prompt on w16's install tree alone, the user's
@@ -173,8 +174,8 @@
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
 #   w16groups  w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-#              for now with Microsoft's MMSOUND.DRV, sound.drv=mmsound.drv,
-#              which w16 does not have yet; WSWAP is w16's): its default
+#              no file of Microsoft's but, in its first run, PROGMAN.EXE;
+#              WSWAP is w16's): its default
 #              PROGMAN.INI and groups (assets/progman) under real keys
 #              (tests/scripts/input/w16groups.txt): Main's Read Me opens
 #              README.TXT in Notepad, Accessories restored, its Notepad and
@@ -281,6 +282,20 @@
 #              SYSTEM.DRV under both Clocks: within their baseline
 #   sysprobe   tests/sysprobe.sh: SY1's and SYREC's logs, w16's
 #              SYSTEM.DRV against Microsoft's      identical
+#   sound      tests/soundprobe.sh sn1 (drivers/sound): SN1's interface
+#              parts and played groups with w16's MMSOUND.DRV against
+#              Microsoft's, in DOSBox-X with the sound recorded: the logs
+#              identical, the tones within tools/tonecmp.py's limits
+#   soundtime  the same for SN1's timing parts (T, U, V)
+#   soundrec   tests/soundprobe.sh queue rec allw16: the queue's capacity,
+#              SNDREC's record of every call to the driver, and the beeps
+#              on every w16 part (USER's MessageBeep to DoBeep) against
+#              all-Microsoft                      identical
+#   soundboot  plain boots with w16's MMSOUND.DRV: on Microsoft's stack and
+#              on w16's WIN.COM, DOSX, KRNL286, each against the
+#              all-Microsoft boot                 must be 0
+#   treealone  build/w16 alone as C:\W16, no file of Microsoft's on the
+#              drive (no DOS program run): must boot to its shell
 #   vga        w16's VGA.DRV (drivers/vga) on Microsoft's stack, linked with
 #              Microsoft's resources (tests/vgamsres.sh: the art is then
 #              the same on both sides, the drawing code is compared) under
@@ -446,7 +461,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1485,8 +1500,8 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # w16's; swapalt: prompt, VER, Alt+Tab to Windows and back, EXIT,
         # Exit Windows (swapalt.txt), the same way; swapall: that script
         # on w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
-        # Microsoft's MMSOUND.DRV, which w16 has not yet; the grabber,
-        # VGACOLOR.2GR, is w16's).
+        # no file of Microsoft's: the grabber, VGACOLOR.2GR, and the sound
+        # driver, MMSOUND.DRV, are w16's).
         # Text screens against Microsoft's with the banner box (rows 1-5:
         # w16's says "w16") left out; Windows' screens against the same
         # run's screen before the prompt (Windows back as it was); up to
@@ -1511,7 +1526,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             # program's icon left out)
             shots="01-dos:640x400:s 02-ver:640x400:s 03-win:640x480:i 04-dos:640x400:d 05-back:640x480:w 06-exit:640x400:s"
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 200 "$scr" "$out/$c-w16" \
-                -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
+                -T "$root/build/w16" \
                 -i 'NonWindowsApp:SwapDisk=C:\W16' \
                 > "$out/$c-w16.txt" 2>&1 || true
         else
@@ -1576,8 +1591,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             *)     set -- ;;
             esac
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
-                -T "$root/build/w16" -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv \
-                -f "$rsys/VGACOLOR.2GR=W16/SYSTEM/VGACOLOR.2GR" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
                 > "$out/swapesc-$k.txt" 2>&1 || true
             a=$out/swapesc-$k b=$out/swapesc-ref
             for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
@@ -1743,8 +1757,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         scr=$root/tests/scripts/input/w16groups.txt
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         m="rectangle 60,310 300,342"
-        set -- -T "$root/build/w16" \
-            -f "$rsys/MMSOUND.DRV=W16/SYSTEM/MMSOUND.DRV" -i boot:sound.drv=mmsound.drv
+        set -- -T "$root/build/w16"
         "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/w16groups-ms" "$@" \
             -f "$rsys/../PROGMAN.EXE=W16/PROGMAN.EXE" > "$out/w16groups-ms.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -e "$out/w16groups-ms/boot.png" -m "$m" -E "$out/w16groups-ms" -M "$m" \
@@ -2533,6 +2546,44 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         else
             echo "FAIL sysclock: $(grep -m1 -E '^  ' "$out/sysclock.txt" || echo 'see sysclock.txt') ($out/sysclock.txt)"
             fails=$((fails + 1))
+        fi ;;
+    sound|soundtime|soundrec)
+        # tests/soundprobe.sh (drivers/sound): w16's MMSOUND.DRV against
+        # Microsoft's on Microsoft's stack (DOSBox-X, 10000 cycles a ms,
+        # the sound recorded; not cached: both runs each time). sound: SN1's
+        # interface parts and the played groups (logs identical, tones
+        # within tools/tonecmp.py's limits); soundtime: SN1's timing parts
+        # (T, U, V: every tempo, length and mode); soundrec: the queue's
+        # capacity, SNDREC's record of every call (USER's DoBeep), and the
+        # beeps on every w16 part
+        case $c in
+        sound) set -- sn1; sp=ABCDEFGHSP ;;
+        soundtime) set -- sn1; sp=TUV ;;
+        soundrec) set -- queue rec allw16; sp= ;;
+        esac
+        if SOUNDPROBE_PARTS=$sp "$root/tests/soundprobe.sh" -o "$out/$c" "$@" > "$out/$c.txt" 2>&1; then
+            echo "ok   $c: $(grep '^ok' "$out/$c.txt" | sed 's/^ok   //' | tr '\n' ';' | sed 's/;$//')"
+        else
+            echo "FAIL $c: $(grep -m1 -E '^FAIL' "$out/$c.txt" || echo "see $c.txt") ($out/$c.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    soundboot) # w16's MMSOUND.DRV in plain boots: on Microsoft's stack and
+            # on w16's WIN.COM, DOSX and KRNL286, each against the
+            # all-Microsoft boot         must be 0
+            ref
+            boot sndms -r -f "$root/build/dos/MMSOUND.DRV=WINDOWS/SYSTEM/MMSOUND.DRV"; check sndms sndms ref
+            boot sndallw16 -w -x -f "$root/build/dos/MMSOUND.DRV=WINDOWS/SYSTEM/MMSOUND.DRV"; check sndallw16 sndallw16 ref
+            expect= ;;
+    treealone)
+        # build/w16 alone as C:\W16 (dropin.sh -T with nothing added): no
+        # file of Microsoft's on the drive. Windows (no DOS program: the
+        # grabber VGACOLOR.2GR is not needed) must boot to Program Manager
+        expect=
+        boot treealone -T "$root/build/w16"
+        if booted treealone && grep -q '^shell: loaded' "$out/treealone.txt"; then
+            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell"
+        else
+            echo "FAIL treealone: the boot did not complete ($out/treealone.txt)"; fails=$((fails + 1))
         fi ;;
     sysprobe)
         # tests/sysprobe.sh: SY1 (every export, timers, the msec count,

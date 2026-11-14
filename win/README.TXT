@@ -50,6 +50,9 @@ w16 repository's LICENSE):
                           (for a standard PC/AT; on a machine that
                           needs another system driver, such as
                           HPSYSTEM.DRV, use that instead)
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
+                          old SOUND functions (voice queues of notes)
+                          on the PC speaker
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
@@ -70,19 +73,17 @@ REG.DAT (the registration database) may be copied too; without one,
 w16's SHELL.DLL makes an empty one and fills it from WIN.INI's
 [embedding] section, as Windows 3.1 does.
 
-w16 is not complete yet. To boot it (Standard mode, WIN /S),
-copy these from your own Windows 3.1 installation into the same places
-(Windows directory or its SYSTEM subdirectory, as there), without
-overwriting the files above:
+This directory boots on its own (Standard mode, WIN /S): no file of
+Microsoft's is needed to reach Program Manager and run the programs
+above and DOS programs. w16 is not complete yet, though: programs that
+need what w16 does not have yet want these from your own Windows 3.1
+installation, copied into the same places (Windows directory or its
+SYSTEM subdirectory, as there) without overwriting the files above:
 
-  Windows directory:      any applications you want (w16's INI and
-                          group files above are all it needs)
-  SYSTEM:                 MMSYSTEM.DLL, OLECLI.DLL, OLESVR.DLL,
-                          the drivers named in SYSTEM.INI's [boot]
-                          section that w16 lacks (MMSOUND.DRV: set
-                          sound.drv=mmsound.drv in [boot]),
-                          the other
-                          fonts (*.FON, *.FOT, *.TTF)
+  Windows directory:      any applications you want
+  SYSTEM:                 MMSYSTEM.DLL (multimedia), OLECLI.DLL and
+                          OLESVR.DLL (OLE, e.g. Cardfile's pictures),
+                          the other fonts (*.FON, *.FOT, *.TTF)
 
 Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or
 later DOSX starts KRNL386.EXE when it is there and KRNL286.EXE only when

@@ -72,7 +72,7 @@ files, and where they go. Copy them in without overwriting w16's, then run
 
 The tree holds every w16 module that replaces part of Windows 3.1: WIN.COM,
 DOSX, KERNEL, USER, GDI, SHELL, COMMDLG, WINOLDAP, WIN87EM, the mouse,
-keyboard and comm drivers, the fonts and the applets. It also holds w16's
+keyboard, comm and sound drivers, the fonts and the applets. It also holds w16's
 default `SYSTEM.INI`, `WIN.INI` and `PROGMAN.INI` with three program
 groups (Main, Accessories, StartUp: `assets/`). The tree is meant to be
 installed as `C:\W16`; `PROGMAN.INI` names its groups there
