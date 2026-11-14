@@ -1817,6 +1817,39 @@ $(DOS)/SYREC.DRV: $(B)/tests/syrec.o tests/apps/syrec.lnk
 	$(WLINK) @tests/apps/syrec.lnk name $@ option map=$(B)/tests/syrec.map file { $(B)/tests/syrec.o }
 	python3 tools/nemark.py $@ 3.10
 dos: $(DOS)/SY1.EXE $(DOS)/SYREC.DRV
+# ---- MMSOUND.DRV: w16's sound driver, module SOUND (drivers/sound;
+# README.md there), with its note table from tools/sndtables.py
+$(B)/sound/sndtab.inc: tools/sndtables.py
+	@mkdir -p $(@D)
+	python3 tools/sndtables.py $@
+$(B)/sound/sound.o: drivers/sound/sound.asm $(B)/sound/sndtab.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -I$(B)/sound/ -o $@ $<
+$(DOS)/MMSOUND.DRV: $(B)/sound/sound.o drivers/sound/sound.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/sound/sound.lnk name $@ option map=$(B)/sound/sound.map \
+	    file { $(B)/sound/sound.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/MMSOUND.DRV
+install-tree: $(W16SYS)/MMSOUND.DRV
+$(W16SYS)/MMSOUND.DRV: $(DOS)/MMSOUND.DRV
+	@mkdir -p $(@D)
+	cp $< $@
+# ---- SN1.EXE: the sound driver observed (tests/apps/sn1.c; run by
+# tests/soundprobe.sh with Windows 3.1's MMSOUND.DRV and with w16's)
+$(B)/tests/sn1.o: tests/apps/sn1ref.h tests/apps/tklog.h
+$(DOS)/SN1.EXE: $(B)/tests/start.o $(B)/tests/sn1.o $(B)/tests/sn1s.o $(B)/tests/kb1s.o tests/apps/app.lnk tests/apps/sn1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/sn1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/sn1.map file { $(B)/tests/start.o $(B)/tests/sn1.o $(B)/tests/sn1s.o $(B)/tests/kb1s.o }
+dos: $(DOS)/SN1.EXE
+# SNDREC.DRV: a recording SOUND in front of SOUNT, a renamed copy of the
+# driver under test (tests/apps/sndrec.asm; tests/soundprobe.sh)
+$(DOS)/SNDREC.DRV: $(B)/tests/sndrec.o tests/apps/sndrec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/sndrec.lnk name $@ option map=$(B)/tests/sndrec.map file { $(B)/tests/sndrec.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/SNDREC.DRV
 # COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
 # renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
 $(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \
