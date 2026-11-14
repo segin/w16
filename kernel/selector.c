@@ -291,6 +291,14 @@ u16 KAPI SetSelectorBase(u16 sel, u32 base)                   /* KERNEL.187 */
 /* KRNL286 reads the descriptor's limit (observed: a free selector gave
    its free-list word), KRNL386 uses LSL (0 when that fails). w16 reads the
    descriptor; the granularity bit counts. */
+#ifdef KRNL386
+extern u32 __cdecl k386_lsl(u16 sel);           /* k386.asm */
+
+u32 KAPI GetSelectorLimit(u16 sel)                            /* KERNEL.188 */
+{
+    return sel ? k386_lsl(sel) : 0;
+}
+#else
 u32 KAPI GetSelectorLimit(u16 sel)                            /* KERNEL.188 */
 {
     desc8 d;
@@ -302,6 +310,7 @@ u32 KAPI GetSelectorLimit(u16 sel)                            /* KERNEL.188 */
         lim = (lim << 12) | 0xFFF;
     return lim;
 }
+#endif
 
 /* Observed: SetSelectorLimit(sel, n) stores n's low 20 bits as a byte
    limit (FFFFFFFFh gives FFFFFh, 100000h gives 0), whatever is
@@ -341,7 +350,11 @@ u16 KAPI PrestoChangoSelector(u16 src, u16 dst)               /* KERNEL.177 */
     d.b[5] ^= AR_CODE;
     if (!put_desc(dst, &d))
         return 0;
+#ifdef KRNL386
+    return dst | 1;                     /* observed (tk17.c) */
+#else
     return dst;                         /* KRNL286; KRNL386: dst | 1 */
+#endif
 }
 
 u16 KAPI AllocDStoCSAlias(u16 sel)                            /* KERNEL.171 */
@@ -382,8 +395,15 @@ u32 KAPI LongPtrAdd(u32 p, u32 add)                           /* KERNEL.180 */
 {
     u16 sel = (u16)(p >> 16), off = (u16)p;
     u32 base = GetSelectorBase(sel), inc = add + (off & 0xFFF0u);
+#ifdef KRNL386
+    /* KRNL386: FF0000h worked, 7FFF0000h did not (tk17.c, TK17A: 1 MB
+       steps up to E00000h); UNVERIFIED where between: 16 MB here */
+    if (add > 0xFFFFFFUL || inc < add)
+        return 0;
+#else
     if (add > 0xFFFFFUL || inc < add)
         return 0;
+#endif
     if (!dpmi_set_base(ldt_sel(sel), base + inc))
         return 0;
     return ((u32)sel << 16) | (off & 0x000F);
@@ -417,15 +437,23 @@ u16 KAPI GlobalDOSFree(u16 sel)                               /* KERNEL.185 */
 
 u16 KAPI GlobalPageLock(u16 h)                                /* KERNEL.191 */
 {
+#ifdef KRNL386
+    return h ? gpage_lock(h, 1) : 0;    /* global386.c */
+#else
     if (!h || !GlobalHandle(h))
         return 0;
     GlobalFix(h);
     return 1;
+#endif
 }
 
 u16 KAPI GlobalPageUnlock(u16 h)                              /* KERNEL.192 */
 {
+#ifdef KRNL386
+    return h ? gpage_lock(h, 0) : 0;
+#else
     if (h && GlobalHandle(h))
         GlobalUnfix(h);
     return 0;
+#endif
 }

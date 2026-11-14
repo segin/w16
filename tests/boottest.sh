@@ -19,6 +19,18 @@
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
+#   k386       w16's KRNL386 in the KRNL386.EXE slot (Standard mode on a
+#              386: DOSX starts it), Microsoft's DOSX, USER, GDI and the
+#              rest, against Microsoft's KRNL386     must be 0
+#   k386all    w16's WIN.COM, DOSX, KRNL386, USER and GDI against the same
+#              Microsoft KRNL386 boot                must be 0
+#   k386e      386 Enhanced mode (WIN /3): w16's WIN386 and KRNL386 with
+#              Microsoft's USER, GDI and drivers against Microsoft's KRNL386
+#              on w16's WIN386, and w16's KRNL386 on Microsoft's WIN386
+#              against Microsoft's KRNL386 there   both must be 0
+#   k386cad    Ctrl+Alt+Del in 386 Enhanced mode under Microsoft's WIN386
+#              (tests/scripts/input/win386cad.txt): w16's KRNL386 against
+#              Microsoft's, the Reboot screen and Windows after it equal
 #   wincom     w16's WIN.COM + KRNL286             must be 0
 #   allw16     w16's WIN.COM + DOSX + KRNL286      must be 0
 #   user       w16's USER on Microsoft's KRNL286   must be 0
@@ -43,6 +55,11 @@
 #              screen the same but where w16's text says "w16" (the title
 #              and row 15 left out), Windows' screen afterwards 0 pixels,
 #              and Return then opens File Manager (its caption compared)
+#   win386close  w16's WIN386.EXE: File Manager, Notepad, Calculator and
+#              Clock opened and closed with Alt+F4 (tests/scripts/input/
+#              win386close.txt; a task's exit reaches V86 DOS), against
+#              Microsoft's WIN386.EXE: every shot 0 pixels (File Manager's
+#              file total, Notepad's caret left out)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -403,7 +420,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -511,6 +528,7 @@ refkey() {
         case " $* " in *" -w "*) printf 'WIN.COM '; sha256sum < "$root/build/dos/WIN.COM" ;; esac
         case " $* " in *" -x "*) printf 'DOSX.EXE '; sha256sum < "$root/build/dos/DOSX.EXE" ;; esac
         case " $* " in *" -r "*) ;; *) printf 'KRNL286.EXE '; sha256sum < "$root/build/dos/KRNL286.EXE" ;; esac
+        case " $* " in *" -r "*) ;; *" -3 "*) printf 'KRNL386.EXE '; sha256sum < "$root/build/dos/KRNL386.EXE" ;; esac
         echo "code $k"
         codeof "$k"
     } > "$_rkf"
@@ -746,6 +764,24 @@ runcase() {
             boot k286 -p 286; check k286 k286 ref286
             boot k286x -x -p 286; check k286x k286x ref286
             expect= secs=$_s ;;
+    k386|k386all)
+            # Standard mode on a 386 runs KRNL386.EXE (DOSX takes it when
+            # it is there): Microsoft's KRNL386 is the reference
+            refrun ref386 k386 boot -3 -r; expect=$out/ref386.png
+            if [ $c = k386 ]; then boot k386 -3
+            else boot k386all -3 -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"; fi
+            check $c $c ref386
+            expect= ;;
+    k386e)  # 386 Enhanced mode: WIN386 starts KRNL386.EXE (DOSBox, as the
+            # win386input case); w16's KRNL386 on w16's WIN386, then on
+            # Microsoft's, each against Microsoft's KRNL386 on the same WIN386
+            w386=$root/build/win386/WIN386.EXE
+            set -- -3 -c 'WIN /3 /B'
+            refrun ref386e k386e boot -r "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; expect=$out/ref386e.png
+            boot k386e "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"; check k386e k386e ref386e
+            refrun ref386em k386e boot -r "$@"; expect=$out/ref386em.png
+            boot k386em "$@"; check k386em k386em ref386em
+            expect= ;;
     wincom) ref; boot wincom -w; check wincom wincom ref ;;
     allw16) ref; boot allw16 -w -x; check allw16 allw16 ref ;;
     user)   ref; boot user -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
@@ -832,6 +868,57 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
         else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
+    win386close)
+        scr=$root/tests/scripts/input/win386close.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        refrun win386close-ref win386close env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/win386close-ref" -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/win386close-w16" \
+            -r -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" \
+            -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386close-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-winfile 02-closed 03-notepad 04-closed 05-calc 06-closed 07-closed; do
+            a=$out/win386close-w16/$s.png b=$out/win386close-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # File Manager: the status bar's file total left out (Windows
+            # 3.1's temporary swap file WIN386.SWP, 2 MB, is one of them:
+            # w16's WIN386 does not page); Notepad: the caret blinks
+            g=640x480+0+0 m="rectangle 0,0 0,0"
+            [ $s = 01-winfile ] && m="rectangle 296,458 639,477"
+            [ $s = 03-notepad ] && m="rectangle 16,44 17,58"
+            magick "$a" -crop $g +repage -fill black -draw "$m" "$out/win386close-a.png"
+            magick "$b" -crop $g +repage -fill black -draw "$m" "$out/win386close-b.png"
+            n=$(magick compare -metric AE "$out/win386close-a.png" "$out/win386close-b.png" "$out/win386close-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386close-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386close: File Manager, Notepad, Calculator and Clock closed as with Microsoft's WIN386"
+        else echo "FAIL win386close: $r ($out/win386close-w16)"; fails=$((fails + 1)); fi ;;
+    k386cad)
+        # Ctrl+Alt+Del in 386 Enhanced mode under Microsoft's WIN386, whose
+        # Reboot device zeroes KERNEL's sanity byte and runs KERNEL's
+        # handler (Reboot 0201h): w16's KRNL386 against Microsoft's, every
+        # screen (the win386cad script: the screen, a key back, Return)
+        scr=$root/tests/scripts/input/win386cad.txt
+        refrun k386cad-ref k386cad env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" \
+            "$out/k386cad-ref" -3 -r -c "WIN /3 /B"
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 60 -t 240 "$scr" "$out/k386cad-w16" \
+            -3 -c "WIN /3 /B" > "$out/k386cad-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-cad 02-back; do
+            a=$out/k386cad-w16/$s.png b=$out/k386cad-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # the cursor (row 19, column 53) blinks: either phase is right
+            m="rectangle 0,0 0,0"
+            [ $s = 01-cad ] && m="rectangle 424,304 431,319"
+            magick "$a" -fill black -draw "$m" "$out/k386cad-a.png"
+            magick "$b" -fill black -draw "$m" "$out/k386cad-b.png"
+            n=$(magick compare -metric AE "$out/k386cad-a.png" "$out/k386cad-b.png" "$out/k386cad-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/k386cad-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   k386cad: Ctrl+Alt+Del's screen and back as with Microsoft's KRNL386"
+        else echo "FAIL k386cad: $r ($out/k386cad-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on
     # its default svga_s3, after the DOS program's text mode and back, the
     # displayed image now and then kept stale bytes 1000h-104Fh of the

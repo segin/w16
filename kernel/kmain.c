@@ -88,6 +88,9 @@ void __cdecl kmain(bootinfo FAR *pbi)
         ;
 
     dosx_init();
+#ifdef KRNL386
+    k386_init();
+#endif
     global_init();
     thunk_init();
     module_register_kernel(&bi);

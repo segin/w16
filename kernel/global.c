@@ -111,6 +111,8 @@
  */
 #include "kernel.h"
 
+#ifndef KRNL386                 /* KRNL386: global386.c */
+
 #pragma pack(push, 1)
 typedef struct arena {
     u8  count;          /* 00 */
@@ -1979,3 +1981,5 @@ u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
     return gowner(h);
 }
+
+#endif /* !KRNL386 */
