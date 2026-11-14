@@ -374,8 +374,11 @@ void v86_reflect(struct cregs *r, int vec)
  * moves below this frame while the V86 code runs, so traps during it
  * (interrupts, nested calls) work as usual. Depth is limited only by the
  * ring-0 stack. */
+static struct cregs *hw_r;              /* the VM's state VPICD delivers into (trap()) */
+
 struct execctx {
     u32 jb[6];
+    struct cregs *saved_hw_r;           /* trap() states end with longjmp: put back */
     struct execctx *prev;
     u32 saved_esp0;
     u16 saved_refsp;
@@ -394,6 +397,7 @@ void exec_v86(struct cregs *v)
     c.prev = cur_exec;
     c.saved_esp0 = kesp0;
     c.saved_refsp = sysvm.refsp;
+    c.saved_hw_r = hw_r;
     if (!k_setjmp((u32 *)c.jb)) {
         cur_exec = (struct execctx *)&c;
         if ((u16)v->ss == info->refstk_seg && (u16)v->esp < sysvm.refsp)
@@ -406,6 +410,7 @@ void exec_v86(struct cregs *v)
     }
     if (exec_trace) trace(">%x", c.res.eax & 0xFFFF);
     cur_exec = c.prev;
+    hw_r = c.saved_hw_r;
     kesp0 = c.saved_esp0;
     tss_set_esp0(kesp0);
     sysvm.refsp = c.saved_refsp;
@@ -532,7 +537,16 @@ static void exit_windows(struct cregs *r)
  * what VPICD asks for, where the VM was interrupted ---- */
 #define IRQ_BASE VPICD_BASE1
 struct vpicd_link *vpicd;
-static struct cregs *hw_r;              /* the VM's state, during hw_int/resume */
+
+/* io.c: no interrupt is simulated while a device's I/O handler runs (the
+ * VM's state is in the handler's client registers then); the trap's end
+ * (VPICD's resume) delivers what it set */
+struct cregs *vmm_hold_delivery(struct cregs *r)
+{
+    struct cregs *o = hw_r;
+    hw_r = r;
+    return o;
+}
 
 int vmm_can_deliver(void)
 {
@@ -589,12 +603,7 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
         r->eip = v86_pop16(r);
         r->cs = v86_pop16(r);
         r->eflags = (r->eflags & 0xFFFF0000u) | v86_pop16(r) | EFL_IOPL;
-        {
-            struct cregs *saved = hw_r;
-            hw_r = r;
-            vpicd->iret();
-            hw_r = saved;
-        }
+        vpicd->iret();
         break;
     case W386_BP_REFRET:
         exec_return(r);
@@ -670,7 +679,7 @@ void __cdecl trap(struct tframe *f)
     /* the client's state is worked on in this frame's own copy: handlers
      * may run nested V86 code (exec_v86), whose traps use sysvm.r */
     struct cregs local;
-    struct cregs *r = &local;
+    struct cregs *r = &local, *saved_hw_r;
     u32 vec = f->vec;
     u8 *op;
 
@@ -710,14 +719,17 @@ void __cdecl trap(struct tframe *f)
      * boots under load, while fonts loaded). */
     if ((r->eflags & EFL_VM) && (u16)r->ss == info->refstk_seg && (u16)r->esp < sysvm.refsp)
         sysvm.refsp = (u16)r->esp;
+    /* the state VPICD simulates interrupts into, for the whole trap: a
+     * device called during it (an I/O handler, a hot key) may set a
+     * request, which must go to this state (taken now if it has
+     * interrupts on, else at its STI), never to an outer one */
+    saved_hw_r = hw_r;
+    hw_r = r;
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
-        struct cregs *saved = hw_r;
         irq_count[irq]++;
         if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
-        hw_r = r;
         vpicd->hw_int(irq);
-        hw_r = saved;
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -762,12 +774,8 @@ void __cdecl trap(struct tframe *f)
             panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
                   r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
     }
-    if (vpicd) {                        /* virtual interrupts VPICD has pending */
-        struct cregs *saved = hw_r;
-        hw_r = r;
-        vpicd->resume();
-        hw_r = saved;
-    }
+    if (vpicd) vpicd->resume();         /* virtual interrupts VPICD has pending */
+    hw_r = saved_hw_r;
     sysvm.r = local;
     resume(&sysvm.r);
 }

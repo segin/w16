@@ -88,9 +88,8 @@ static u32 *make_slots(u32 dev, u32 n)
     return slots;
 }
 
-static void client_from(struct cregs *r)
+static void client_fill(struct client_regs *c, struct cregs *r)
 {
-    struct client_regs *c = sys_client;
     if (!r) return;
     c->edi = r->edi; c->esi = r->esi; c->ebp = r->ebp; c->ebx = r->ebx;
     c->edx = r->edx; c->ecx = r->ecx; c->eax = r->eax;
@@ -346,7 +345,7 @@ void vxd_init(void)
 /* KRNL386 entered protected mode (dpmi_switch) / ended (terminate_client) */
 void vxd_pm_app(int begin, struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     if (begin)
         broadcast(BEGIN_PM_APP, 0, sysvm.client32 ? 1 : 0, (u32)sys_acb, 0);
     else
@@ -357,29 +356,29 @@ void vxd_pm_app(int begin, struct cregs *r)
  * these to several devices in (w16: the reverse of the init order). */
 void vxd_exit(struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     broadcast(SYS_VM_TERMINATE, 0, 0, 0, 1);
     broadcast(SYSTEM_EXIT, 0, 0, 0, 1);
     broadcast(SYS_CRITICAL_EXIT, 0, 0, 0, 1);
 }
 
-/* the System VM's client registers for a device's I/O handler (io.c):
- * filled from r; vxd_client_back puts them back */
-struct client_regs *vxd_client(struct cregs *r)
+/* a client register structure of its own for a device's I/O handler
+ * (io.c), filled from r and put back after: the handler can make the VM
+ * take an interrupt (VPICD_Set_Int_Request) whose handler traps again,
+ * so a shared structure (sys_client) would be overwritten under it */
+static void client_store(struct cregs *r, struct client_regs *c);
+void vxd_client(struct cregs *r, struct client_regs *c)
 {
-    client_from(r);
-    return sys_client;
+    client_fill(c, r);
 }
 
-static void client_to(struct cregs *r);
-void vxd_client_back(struct cregs *r)
+void vxd_client_back(struct cregs *r, struct client_regs *c)
 {
-    client_to(r);
+    client_store(r, c);
 }
 
-static void client_to(struct cregs *r)
+static void client_store(struct cregs *r, struct client_regs *c)
 {
-    struct client_regs *c = sys_client;
     r->edi = c->edi; r->esi = c->esi; r->ebp = c->ebp; r->ebx = c->ebx;
     r->edx = c->edx; r->ecx = c->ecx; r->eax = c->eax;
     r->eip = c->eip; r->cs = c->cs; r->eflags = c->eflags; r->esp = c->esp;
@@ -401,9 +400,9 @@ u32 vxd_pm_api(u32 id)
  * client in r */
 void vxd_call_api(u32 proc, struct cregs *r)
 {
-    client_from(r);
+    client_fill(sys_client, r);
     vxd_control(proc, r->eax, (u32)sys_cb, r->esi, r->edx, r->edi, (u32)sys_client);
-    client_to(r);
+    client_store(r, sys_client);
 }
 
 /* ---- dynamic links ---- */

@@ -28,6 +28,8 @@ VKD_DDB:
         ENTRY vkd_api, _vkd_api
         ENTRY vkd_hw, _vkd_hw_int
         ENTRY vkd_eoi, _vkd_eoi_proc
+        ENTRY vkd_io60, _vkd_port60
+        ENTRY vkd_io64, _vkd_port64
         SERVICES _vkd_service, 15
 
         VXDCALL _vpicd_virtualize_irq, 3, 01h
@@ -35,3 +37,5 @@ VKD_DDB:
         VXDCALL _vpicd_phys_eoi, 3, 04h
         VXDCALL _vpicd_clear_int_request, 3, 03h
         VXDCALL _vpicd_physically_unmask, 3, 09h
+        VXDCALL _vmm_install_io_handler, 1, 96h
+        VXDCALL _vmm_simulate_io, 1, 94h

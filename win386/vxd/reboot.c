@@ -27,6 +27,7 @@
 #include "w16vxd.h"
 
 void __cdecl vkd_define_hot_key(struct vregs *r);
+void __cdecl vkd_force_keys(struct vregs *r);
 void __cdecl vmm_begin_nest_v86_exec(struct vregs *r);
 void __cdecl vmm_exec_int(struct vregs *r);
 void __cdecl vmm_end_nest_exec(struct vregs *r);
@@ -151,9 +152,10 @@ static void show_screen(void)
  * pointing device (status bit 5, the auxiliary output buffer; IBM PS/2
  * keyboard controller) is not a key: mouse motion on a machine whose
  * controller passes it through port 60h must not end the screen. */
+static vu8 held[128];
+
 static vu32 wait_key(int *cad)
 {
-    static vu8 held[128];
     vu32 b, code, st, i;
     for (i = 0; i < 128; i++) held[i] = 0;
     held[0x1D] = held[0x38] = held[0x53] = 1;   /* still held from the hot key */
@@ -203,6 +205,24 @@ void __cdecl reboot_cad(struct vregs *r)
     }
     bios_video(mode, 0, 0);
     vga_restore();
+    /* the VM saw Ctrl and Alt go down (VKD passed them on before Del, the
+     * hot key): the releases read here go to it now (VKD_Force_Keys), or
+     * its keyboard driver would keep them down (tests/scripts/input/
+     * win386cad.txt: Enter afterwards opens File Manager as under Windows
+     * 3.1). UNVERIFIED how Windows 3.1 gives them back (the DDK's message
+     * mode, VKD_Get_Msg_Key, is not described for this) */
+    {
+        vu8 rel[2];
+        vu32 n = 0;
+        if (!held[0x1D]) rel[n++] = 0x9D;
+        if (!held[0x38]) rel[n++] = 0xB8;
+        if (n) {
+            zero(&s, sizeof(s));
+            s.esi = (vu32)rel;
+            s.ecx = n;
+            vkd_force_keys(&s);
+        }
+    }
     zero(&s, sizeof(s));
     vmm_end_nest_exec(&s);
     zero(&s, sizeof(s));

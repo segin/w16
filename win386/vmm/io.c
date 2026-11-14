@@ -154,7 +154,8 @@ u32 io_traps;                           /* for the heartbeat (vmm.c) */
 int io_trap(struct cregs *r, u8 *op)
 {
     u32 n = 0, opsize32, addr32, rep = 0, seg = 0, type, port, len, data;
-    struct client_regs *c;
+    struct client_regs cr, *c = &cr;
+    struct cregs *held;
     int v86 = (r->eflags & EFL_VM) != 0;
 
     opsize32 = addr32 = v86 ? 0 : sysvm.client32;
@@ -207,15 +208,17 @@ int io_trap(struct cregs *r, u8 *op)
     if (v86 || !sysvm.client32) r->eip = (r->eip & 0xFFFF0000u) | (u16)(r->eip + len);
     else r->eip += len;
     io_traps++;
-    c = vxd_client(r);
+    vxd_client(r, c);
+    held = vmm_hold_delivery(NULL);
     data = dispatch(port, type, r->eax, c);
+    vmm_hold_delivery(held);
     if (!(type & (IO_OUTPUT | IO_STRING))) {
         u32 size = type & IO_SIZE;
         if (size == IO_BYTE) c->eax = (c->eax & ~0xFFu) | (data & 0xFF);
         else if (size == IO_WORD) c->eax = (c->eax & ~0xFFFFu) | (data & 0xFFFF);
         else c->eax = data;
     }
-    vxd_client_back(r);
+    vxd_client_back(r, c);
     return 1;
 }
 
