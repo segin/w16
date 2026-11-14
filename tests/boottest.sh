@@ -41,7 +41,8 @@
 #              in Program Manager and a key (tests/scripts/input/
 #              win386cad.txt), against Microsoft's WIN386.EXE: the text
 #              screen the same but where w16's text says "w16" (the title
-#              and row 15 left out), and Windows' screen afterwards 0 pixels
+#              and row 15 left out), Windows' screen afterwards 0 pixels,
+#              and Return then opens File Manager (its caption compared)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -807,6 +808,18 @@ runcase() {
             n=${n%%[. ]*}
             [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386cad-$s-diff.png)"; break; }
         done
+        # Return afterwards opens File Manager: its caption only (its
+        # contents show the drive's label and Windows 3.1's swap file)
+        if [ "$r" = ok ]; then
+            a=$out/win386cad-w16/03-key.png b=$out/win386cad-ref/03-key.png
+            if [ -f "$a" ] && [ -f "$b" ]; then
+                magick "$a" -crop 360x16+140+5 +repage "$out/win386cad-a.png"
+                magick "$b" -crop 360x16+140+5 +repage "$out/win386cad-b.png"
+                n=$(magick compare -metric AE "$out/win386cad-a.png" "$out/win386cad-b.png" "$out/win386cad-03-key-diff.png" 2>&1 >/dev/null || true)
+                n=${n%%[. ]*}
+                [ "${n:-1}" = 0 ] || r="03-key: the caption differs by $n pixels ($out/win386cad-03-key-diff.png)"
+            else r="no 03-key screen"; fi
+        fi
         if [ "$r" = ok ]; then echo "ok   win386cad: Ctrl+Alt+Del's screen and back as with Microsoft's WIN386"
         else echo "FAIL win386cad: $r ($out/win386cad-w16)"; fails=$((fails + 1)); fi ;;
     # The WINOLDAP cases run on DOSBox's plain VGA (machine=vgaonly): on

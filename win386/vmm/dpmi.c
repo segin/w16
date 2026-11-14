@@ -697,6 +697,16 @@ static void terminate_client(struct cregs *r)
     v86_reflect(r, 0x21);
 }
 
+/* INT 25h and 26h (absolute disk read/write) return with the flags still
+ * on the stack: DOS's interface, which the caller's POPF expects (seen:
+ * File Manager's INT 25h, then LAHF, POPF; without the word POPF took the
+ * caller's BP and set TF). The V86 call leaves its word on the reflection
+ * stack; the client gets one on its own. */
+static void disk_flags(struct cregs *r)
+{
+    pm_push(r, r->eflags & 0xFFFF & ~EFL_IOPL);
+}
+
 void dpmi_int(struct cregs *r, int vec, int hw)
 {
     if (!hw && vec == 0x31) { dpmi_call(r); return; }
@@ -726,6 +736,7 @@ void dpmi_int(struct cregs *r, int vec, int hw)
      * whether one is there); no debugger: nothing happens, as without
      * one under Windows 3.1 (UNVERIFIED that Windows does exactly this) */
     if (!hw && vec == 0x41) return;
+    if (!hw && (vec == 0x25 || vec == 0x26)) { disk_pm(r, vec); disk_flags(r); return; }
     pm_v86_reflect(r, vec, hw);
 }
 
@@ -747,6 +758,7 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         /* the hardware interrupts' vectors (IRQ 0-7: 08h-0Fh, IRQ 8-15:
          * 70h-77h) are reflected with the client's selectors left out:
          * DS and ES hold whatever the interrupted code had */
+        if (index == 0x25 || index == 0x26) { disk_pm(r, index); disk_flags(r); return; }
         pm_v86_reflect(r, index, (index >= 8 && index < 16) || (index >= 0x70 && index < 0x78));
         return;
     }

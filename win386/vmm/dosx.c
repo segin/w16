@@ -279,3 +279,64 @@ void video_pm(struct cregs *r)
     *r = pm;
     if (out) memcpy((void *)pm_lin(r->es, r->edx), (void *)XB, n);
 }
+
+/* INT 25h/26h (absolute disk read/write) from protected mode. DS:BX is
+ * the buffer (CX sectors from sector DX), or, with CX=FFFFh, a packet:
+ * the first sector (dword), the count (word) and the buffer (far
+ * pointer, a protected-mode one here). A buffer V86 DOS cannot see goes
+ * through the transfer buffer, a piece at a time (each piece a call of
+ * its own with the start sector moved on). The flags stay on the
+ * client's stack (dpmi.c). Sources: MS-DOS Programmer's Reference (INT
+ * 25h/26h, the >32 MB packet form). UNVERIFIED: sector sizes other than
+ * 512 bytes (taken as 512 here), and how Windows 3.1 splits a large
+ * transfer. */
+#define SECTOR 512
+
+void disk_pm(struct cregs *r, int vec)
+{
+    struct cregs v, pm = *r;
+    u32 big = CX(r) == 0xFFFF, first, count, bsel, boff, done = 0, n, max;
+    u8 *pkt;
+
+    if (big) {
+        pkt = (u8 *)pm_lin(r->ds, r->ebx);
+        first = *(u32 *)pkt;
+        count = *(u16 *)(pkt + 4);
+        boff = *(u16 *)(pkt + 6);
+        bsel = *(u16 *)(pkt + 8);
+    } else {
+        first = DX(r);
+        count = CX(r);
+        bsel = r->ds;
+        boff = BX(r);
+    }
+    if (direct(bsel) && !big) { pm_v86_reflect(r, vec, 0); return; }
+    max = (xbuf_size() - 16) / SECTOR;          /* the packet at the end */
+    if (!max) max = 1;
+    do {
+        n = count - done < max ? count - done : max;
+        if (vec == 0x26) memcpy((void *)XB, (void *)pm_lin(bsel, boff + done * SECTOR), n * SECTOR);
+        v = pm;
+        v.ss = 0; v.esp = 0;
+        v.ds = XSEG; v.es = 0; v.fs = v.gs = 0;
+        if (big) {
+            u8 *p = (u8 *)(XB + max * SECTOR);
+            *(u32 *)p = first + done;
+            *(u16 *)(p + 4) = (u16)n;
+            *(u16 *)(p + 6) = 0;
+            *(u16 *)(p + 8) = (u16)XSEG;
+            SETW(v.ebx, max * SECTOR);
+        } else {
+            SETW(v.ebx, 0);
+            SETW(v.ecx, n);
+            SETW(v.edx, first + done);
+        }
+        v86_int(&v, vec);
+        if (v.eflags & EFL_CF) break;
+        if (vec == 0x25) memcpy((void *)pm_lin(bsel, boff + done * SECTOR), (void *)XB, n * SECTOR);
+        done += n;
+    } while (done < count);
+    *r = pm;
+    r->eax = (r->eax & 0xFFFF0000u) | (v.eax & 0xFFFF);
+    r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
+}
