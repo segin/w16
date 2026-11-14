@@ -1,0 +1,20 @@
+; Program Manager's File > Run > Browse... (COMMDLG's Open box: USER's
+; DlgDirList and LB_DIR enumerate C:\WINDOWS), into the SYSTEM directory
+; by its name typed as the file name, Cancel, then the Run box cancelled
+; (tests/boottest.sh case runbrowse). In an all-w16 session the Browse
+; box once ended Windows with a fault in USER's LB_DIR (DOS FindFirst
+; given the file specification's offset as its selector)
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+matchnow 01-run 20 2
+key alt+b
+matchnow 02-browse 30 3
+type system
+key Return
+matchnow 03-system 30 3
+key Escape
+matchnow 04-run 20 2
+key Escape
+match 05-closed 20 2
+shot 05-closed

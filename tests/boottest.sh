@@ -145,6 +145,14 @@
 #   winfile    File Manager's drive bar and Ctrl+letter drives (real keys,
 #              tests/scripts/input/winfile.txt): w16 USER+GDI vs Microsoft's,
 #              then every w16 part must not fault
+#   runbrowse  Program Manager's File > Run > Browse... (COMMDLG's Open box
+#              on USER's DlgDirList/LB_DIR), into SYSTEM, Cancel, the Run
+#              box cancelled (tests/scripts/input/runbrowse.txt): w16 USER+GDI
+#              against Microsoft's, each screen within its known pixels
+#              (combo boxes, edit selection, a default button) (part cmp); every
+#              w16 part (COMMDLG, PROGMAN, SYSTEM.DRV, VGA.DRV, fonts ...)
+#              must not fault, the list must change, Program Manager as
+#              after the boot (part all; it ended Windows in LB_DIR)
 #   icons      Notepad, Calculator, Clock, Character Map and Paintbrush
 #              minimised, Accessories opened, Program Manager minimised,
 #              Alt+Esc from icon to icon (tests/scripts/input/icons.txt):
@@ -376,7 +384,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
+cases=${*:-kernel dosx k286 lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe vga vgaboot vgaall vgawoados vgaprobe}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 shell=$root/build/dos/SHELL.DLL
@@ -1010,6 +1018,65 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
+    runbrowse)
+        # Program Manager's File > Run > Browse... (COMMDLG's Open box,
+        # USER's DlgDirList and LB_DIR), into SYSTEM, Cancel, the Run box
+        # cancelled (tests/scripts/input/runbrowse.txt). Part cmp: w16's
+        # USER and GDI (Microsoft's COMMDLG and PROGMAN) against
+        # all-Microsoft, every screen within its known differences. Part all: every w16 part
+        # (COMMDLG, PROGMAN, SYSTEM.DRV, VGA.DRV ... too; its fonts and
+        # art are its own, so no pixel comparison): no fault (it ended
+        # Windows in LB_DIR, DOS FindFirst given the specification's
+        # offset as its selector), every screen taken, the list changed
+        # in SYSTEM, and Program Manager as it was after the boot
+        s=$root/tests/scripts/input/runbrowse.txt
+        r=ok
+        if [ "${part:-cmp}" = cmp ]; then
+            refrun runbrowse-ref runbrowse "$root/tests/inputrun.sh" -s -b 30 -t 200 "$s" "$out/runbrowse-ref" -r
+            "$root/tests/inputrun.sh" -s -E "$out/runbrowse-ref" -M "rectangle 0,0 0,0" -b 30 -t 200 "$s" "$out/runbrowse-w16" -r \
+                -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/runbrowse-w16.txt" 2>&1 || true
+            # known differences, at most this many pixels per screen (each
+            # its own w16 USER bug, UNVERIFIED rules, not yet fixed): the
+            # Run box's disabled default OK button drawn with the default
+            # border (3.1: none); in the Browse box the File Name edit's
+            # selection, the Directories list box's height and the two
+            # drop-down combo boxes (frame, height; Drives is owner-drawn,
+            # 3.1 shows the drive's icon). Fewer is reported as better
+            for sb in 01-run:240 02-browse:2427 03-system:2427 04-run:253 05-closed:0; do
+                s2=${sb%:*}.png f=$out/runbrowse-ref/${sb%:*}.png
+                [ -f "$f" ] || { r="reference screens missing"; break; }
+                [ -f "$out/runbrowse-w16/$s2" ] || { r="no $s2"; break; }
+                n=$(magick compare -metric AE "$out/runbrowse-w16/$s2" "$f" "$out/runbrowse-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%%[. ]*}
+                [ "${n:-99999}" -le "${sb#*:}" ] || { r="$s2: $n pixels differ (known: ${sb#*:})"; break; }
+                if [ "$n" -lt "${sb#*:}" ]; then echo "     runbrowse: $s2 better than known: $n pixels (${sb#*:})"; fi
+            done
+        fi
+        if [ "$r" = ok ] && [ "${part:-all}" = all ]; then
+            b=$root/build/dos fon=$root/build/fonts
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 40 -t 240 "$s" "$out/runbrowse-all" \
+                -w -x -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$b/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                -f "$b/COMMDLG.DLL=WINDOWS/SYSTEM/COMMDLG.DLL" -f "$b/WINOLDAP.MOD=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+                -f "$b/WIN87EM.DLL=WINDOWS/SYSTEM/WIN87EM.DLL" -f "$b/MOUSE.DRV=WINDOWS/SYSTEM/MOUSE.DRV" \
+                -f "$b/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV" -f "$b/SYSTEM.DRV=WINDOWS/SYSTEM/SYSTEM.DRV" \
+                -f "$b/VGA.DRV=WINDOWS/SYSTEM/VGA.DRV" \
+                -f "$fon/VGASYS.FON=WINDOWS/SYSTEM/VGASYS.FON" -f "$fon/VGAFIX.FON=WINDOWS/SYSTEM/VGAFIX.FON" \
+                -f "$fon/VGAOEM.FON=WINDOWS/SYSTEM/VGAOEM.FON" -f "$fon/SSERIFE.FON=WINDOWS/SYSTEM/SSERIFE.FON" \
+                > "$out/runbrowse-all.txt" 2>&1 || true
+            a=$out/runbrowse-all
+            if grep -aq "exception" "$a/work/c/OUT.TXT" 2>/dev/null; then r="every w16 part: a fault ($a/work/c/OUT.TXT)"
+            elif [ ! -f "$a/05-closed.png" ] || [ ! -f "$a/03-system.png" ] || [ ! -f "$a/boot.png" ]; then r="every w16 part: screens missing ($a)"
+            else
+                n=$(magick compare -metric AE "$a/03-system.png" "$a/02-browse.png" null: 2>&1 || true); n=${n%%[. ]*}
+                m=$(magick compare -metric AE "$a/05-closed.png" "$a/boot.png" "$out/runbrowse-all-diff.png" 2>&1 || true); m=${m%%[. ]*}
+                if [ "${n:-0}" -lt 100 ]; then r="every w16 part: the Browse box did not change to SYSTEM ($a)"
+                elif [ "$m" != 0 ]; then r="every w16 part: $m pixels differ from the boot's screen after the Run box ($a)"; fi
+            fi
+        fi
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
+        else echo "FAIL runbrowse: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmdrop)
         scr=$root/tests/scripts/input/pmdrop.txt
         refrun pmdrop-ref pmdrop "$root/tests/inputrun.sh" -s -b 40 -t 290 "$scr" "$out/pmdrop-ref" -r
@@ -2176,7 +2243,7 @@ done
 # Parts. A case made of several independent sessions is split into parts
 # that are scheduled like cases (CASE@PART, run by name too): allw16nolock
 # (one part per run, its deliberate timings unchanged), pmdrop (w16
-# PROGMAN; PROGMAN and SHELL; USER and GDI), sbdrag (US19; Notepad), winfile (the comparison;
+# PROGMAN; PROGMAN and SHELL; USER and GDI), sbdrag (US19; Notepad), winfile and runbrowse (the comparison;
 # every w16 part), kbd and mouse (one part per script). A part records its result (partdone) and prints only
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
@@ -2187,6 +2254,7 @@ caseparts() {
     sbdrag) echo "$1@us $1@np" ;;
     edithandle) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
+    runbrowse) echo "$1@cmp $1@all" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
@@ -2229,6 +2297,9 @@ partsummary() {
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    runbrowse)
+        if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
+        else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;
     esac
     [ $pbad = 0 ]
 }
