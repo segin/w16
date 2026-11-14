@@ -6,8 +6,10 @@
  * register structure); Windows 3.1 DDK INT 2Fh 1684h/1686h; observation of
  * Windows 3.1 (ARCHITECTURE.md 12.2: selectors, version values).
  *
- * Stage 1: one client; protected mode runs at ring 3 with IOPL 3 (so CLI,
- * STI and port I/O act directly: one VM only); interrupts the client has
+ * Stage 1: one client; protected mode runs at ring 3 with IOPL 0, as under
+ * Windows 3.1 (VX6, ARCHITECTURE.md 12.3): CLI and STI trap and the VMM
+ * sets the client's IF (vmm.c), POPF and IRET leave IF as it is, port I/O
+ * goes through the TSS's I/O bitmap; interrupts the client has
  * not hooked are reflected to V86 mode, with DS and ES translated when
  * their selectors map conventional memory on a paragraph boundary (INT
  * 21h and INT 10h calls with other pointers: dosx.c).
@@ -211,7 +213,7 @@ void dpmi_switch(struct cregs *r)
     r->es = psel;
     r->fs = r->gs = 0;
     if (!sysvm.client32) r->esp &= 0xFFFF;
-    r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT)) | EFL_IOPL | EFL_IF;
+    r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT | EFL_IOPL)) | EFL_IF;
     sysvm.dsel = dsel;
     sysvm.pm = 1;
     vxd_pm_app(1, r);
@@ -705,11 +707,14 @@ void dpmi_int(struct cregs *r, int vec, int hw)
         return;
     }
     if (!pmvec_default(vec)) {
-        /* the client's handler: an interrupt frame on its stack */
+        /* the client's handler: an interrupt frame on its stack. A
+         * software interrupt keeps the caller's IF (VX6 under Windows 3.1:
+         * the handler and the frame both show the caller's flags; with
+         * IOPL 0 the handler's IRET could not set IF again anyway) */
         pm_push(r, r->eflags);
         pm_push(r, r->cs);
         pm_push(r, r->eip);
-        r->eflags &= ~(EFL_IF | EFL_TF);
+        r->eflags &= ~EFL_TF;
         r->cs = sysvm.pmvec_sel[vec];
         r->eip = sysvm.pmvec_off[vec];
         return;
@@ -732,8 +737,7 @@ void dpmi_pmbp(struct cregs *r, u32 index)
          * to it: its interrupt frame is on the stack */
         r->eip = pm_pop(r);
         r->cs = pm_pop(r);
-        r->eflags = (pm_pop(r) & 0xFFFF) | (r->eflags & 0xFFFF0000u);
-        r->eflags |= EFL_IOPL;
+        r->eflags = (pm_pop(r) & 0xFFFF & ~EFL_IOPL) | (r->eflags & 0xFFFF0000u);
         if (index == 0x21 && is_exit(r)) { terminate_client(r); return; }
         if (index == 0x31) { dpmi_call(r); return; }
         if (index == 0x2F && int2f_pm(r)) return;
@@ -781,7 +785,7 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         err = pm_pop(r);                /* the handler's RETF took our address */
         ip = pm_pop(r); cs = pm_pop(r); fl = pm_pop(r); sp = pm_pop(r); ss = pm_pop(r);
         (void)err;
-        r->eip = ip; r->cs = cs; r->eflags = (fl & 0xFFFF) | EFL_IOPL; r->esp = sp; r->ss = ss;
+        r->eip = ip; r->cs = cs; r->eflags = fl & 0xFFFF & ~EFL_IOPL; r->esp = sp; r->ss = ss;
         return;
     }
     panic("unknown PM breakpoint %x", index);
@@ -879,7 +883,7 @@ static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cd
     pm_push(&p, (cflags & 0x0FD5) | EFL_IF | 2);
     pm_push(&p, SEL_PMBP);
     pm_push(&p, PMBP_IRQRET);
-    p.eflags = (cflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | EFL_IOPL | 2;
+    p.eflags = (cflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | 2;
     p.cs = sysvm.pmvec_sel[vec];
     p.eip = sysvm.pmvec_off[vec];
     hstk_run(&p);
@@ -956,7 +960,7 @@ void dpmi_ps2cb(struct cregs *r)
     pm_push(&p, z);
     pm_push(&p, SEL_PMBP);
     pm_push(&p, PMBP_IRQRET);
-    p.eflags = (r->eflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | EFL_IOPL | 2;
+    p.eflags = (r->eflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | 2;
     p.cs = ps2_sel;
     p.eip = ps2_off;
     hstk_run(&p);

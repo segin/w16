@@ -3,7 +3,8 @@
  *
  * Stage 1 (what is here): one virtual machine, the System VM, running the
  * loader and the program it EXECs (KRNL386) in V86 mode with IOPL 3, and a
- * DPMI 0.9 host for that program (dpmi.c). No VxDs are loaded yet; the
+ * DPMI 0.9 host for that program (dpmi.c), whose protected-mode code runs
+ * with IOPL 0 (pm_cli_sti). No VxDs are loaded yet; the
  * plan for them is in ARCHITECTURE.md 12.4.
  *
  * Sources: Intel 80386 Programmer's Reference Manual; 8259A data sheet
@@ -570,6 +571,28 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     }
 }
 
+/* CLI and STI from protected mode, where the client runs with IOPL 0 as
+ * under Windows 3.1 (VX6, ARCHITECTURE.md 12.3): they raise #GP and the
+ * VMM sets the client's IF, which is the VM's interrupt flag: PUSHF shows
+ * it, POPF and IRET cannot change it (the processor ignores IF there at
+ * CPL > IOPL), hardware interrupts reach the VM only while it is set
+ * (vmm_deliver), and a request VPICD holds is delivered at the next STI.
+ * V86 code keeps IOPL 3 (VX6: Windows 3.1's V86 flags are 3287h, and a
+ * V86 CLI clears the real IF). Prefixes before the opcode are skipped. */
+static int pm_cli_sti(struct cregs *r, u8 *op)
+{
+    u32 n = 0;
+    while (n < 14 && (op[n] == 0x66 || op[n] == 0x67 || op[n] == 0x26 || op[n] == 0x2E
+                      || op[n] == 0x36 || op[n] == 0x3E || op[n] == 0x64 || op[n] == 0x65
+                      || op[n] == 0xF2 || op[n] == 0xF3))
+        n++;
+    if (op[n] == 0xFA) r->eflags &= ~EFL_IF;
+    else if (op[n] == 0xFB) r->eflags |= EFL_IF;
+    else return 0;
+    r->eip = sysvm.client32 ? r->eip + n + 1 : ((r->eip & 0xFFFF0000u) | (u16)(r->eip + n + 1));
+    return 1;
+}
+
 static u8 *code_ptr(struct cregs *r)
 {
     if (r->eflags & EFL_VM) return (u8 *)v86_lin(r->cs, r->eip);
@@ -670,6 +693,8 @@ void __cdecl trap(struct tframe *f)
                     r->eip++;           /* HLT: carry on (idle) */
             } else if (r->eflags & EFL_VM)
                 panic("V86 #GP at %x:%x op %x %x err %x", r->cs, r->eip, op[0], op[1], f->err);
+            else if (!f->err && pm_cli_sti(r, op))
+                ;
             else
                 dpmi_exception(r, 13, f->err);
         }
