@@ -141,25 +141,35 @@ static void show_screen(void)
         put(lines[i].row, lines[i].col, lines[i].s, 0x1F);
 }
 
-/* the next key press from the controller (modifier presses and every
- * release only tracked); returns its scan code; *cad: Ctrl+Alt+Del */
+/* the next key press from the controller; returns its scan code; *cad:
+ * Ctrl+Alt+Del again. Windows 3.1 (tests/scripts/input/win386cad.txt,
+ * keys held and let go one by one) keeps the screen while the keys of
+ * the hot key are held (the keyboard repeats Del meanwhile) and let go,
+ * and goes back on a new key. So releases, the repeats of a key still
+ * held (a make code with no break since) and Shift, Ctrl and Alt presses
+ * are only tracked; Ctrl, Alt and Del are held at entry. A byte from the
+ * pointing device (status bit 5, the auxiliary output buffer; IBM PS/2
+ * keyboard controller) is not a key: mouse motion on a machine whose
+ * controller passes it through port 60h must not end the screen. */
 static vu32 wait_key(int *cad)
 {
-    int ctrl = 1, alt = 1, ext = 0;         /* still held from the hot key */
-    vu32 b, code;
+    static vu8 held[128];
+    vu32 b, code, st, i;
+    for (i = 0; i < 128; i++) held[i] = 0;
+    held[0x1D] = held[0x38] = held[0x53] = 1;   /* still held from the hot key */
     for (;;) {
-        while (!(inb(0x64) & 1))
+        while (!((st = inb(0x64)) & 1))
             ;
         b = inb(0x60);
-        if (b == 0xE0) { ext = 1; continue; }
+        if (st & 0x20) continue;            /* the mouse's */
+        if (b == 0xE0 || b == 0xE1) continue;
         code = b & 0x7F;
-        if (code == 0x1D) ctrl = !(b & 0x80);
-        else if (code == 0x38) alt = !(b & 0x80);
-        else if (code != 0x2A && code != 0x36 && !(b & 0x80)) {
-            *cad = (code == 0x53 && ctrl && alt);
-            return code;
-        }
-        ext = 0;
+        if (b & 0x80) { held[code] = 0; continue; }
+        if (held[code]) continue;           /* a repeat */
+        held[code] = 1;
+        if (code == 0x1D || code == 0x38 || code == 0x2A || code == 0x36) continue;
+        *cad = (code == 0x53 && held[0x1D] && held[0x38]);
+        return code;
     }
 }
 

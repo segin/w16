@@ -1,9 +1,17 @@
 ; Ctrl+Alt+Del in 386 Enhanced mode with no application hung (tests/
 ; boottest.sh case win386cad): the screen Windows shows, then a key back
-; to Windows
+; to Windows. The keys go down and come up as a person's do: held (the
+; keyboard repeats Del meanwhile), then let go one by one; the screen must
+; still be up after that (01-cad), and a new key takes it away (02-back)
 sleep 2
-key ctrl+alt+Delete
-sleep 4
+keydown ctrl+alt+Delete
+sleep 1.5
+keyup Delete
+sleep 0.7
+keyup alt
+sleep 0.7
+keyup ctrl
+sleep 2
 shot 01-cad
 key space
 sleep 4
