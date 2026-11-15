@@ -803,8 +803,13 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     u16 fh, i, shift, sel, ne_len;
     module FAR *m, *dup;
 
-    if (!open_search(name, ext, path, &fh, err))
+    if (!open_search(name, ext, path, &fh, err)) {
+        /* a library (LoadLibrary, or a module a program or DLL imports
+           from), not a program: KERNEL's "File Error" box (kmisc2.c) */
+        if (!program && (*err == LE_NOTFOUND || *err == LE_NOPATH))
+            file_error_box(name, ext);
         return NULL;
+    }
     if (!f_read(fh, mz, sizeof mz) || *(u16 *)mz != MZ_MAGIC ||
         (ne_base = *(u32 *)(mz + MZ_LFANEW_OFF)) == 0 ||
         !f_seek(fh, ne_base) || !f_read(fh, &h, sizeof h) || h.magic != NE_MAGIC) {

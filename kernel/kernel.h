@@ -63,10 +63,15 @@ extern u32  __cdecl old21;
 
 /* ---- winboot.c ---- */
 extern int winboot_active;
+extern int winboot_done;         /* FinalUserInit called: USER up */
 int  winboot_wanted(void);
 u16  winboot(void);
 void diag_load_start(const char FAR *name);
 void diag_load_end(const char FAR *name, u16 rc);
+
+/* ---- kmisc.c / kmisc2.c ---- */
+u16  error_mode(void);
+void file_error_box(const char FAR *name, const char *ext);
 
 /* ---- fault.c ---- */
 void fault_init(void);

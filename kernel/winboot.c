@@ -30,6 +30,7 @@
 #include "kernel.h"
 
 int winboot_active;             /* booting Windows (loader.c) */
+int winboot_done;               /* the boot is over: USER's FinalUserInit called */
 static int diag;                /* writing BOOTLOG.TXT */
 static int booting;             /* still logging loads */
 static char logpath[DOS_PATHMAX + 16];
@@ -341,6 +342,7 @@ u16 winboot(void)
     if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
         print_modmap();
     final_user_init();
+    winboot_done = 1;
     /* the boot is over: the watchdog ([w16] watchdog=SECONDS) watches the
        boot only. It kept running and, SECONDS after the last boot log line,
        reported "no boot progress" and ended a Windows that was only idle:

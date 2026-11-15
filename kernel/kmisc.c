@@ -152,6 +152,12 @@ u16 KAPI_ES GetExeVersion(void)
     return NE_HDR(module_first)->expver;
 }
 
+/* the current task's error mode (SetErrorMode) */
+u16 error_mode(void)
+{
+    return cur_task ? TW(cur_task, TDB_ERRMODE) : boot_errmode;
+}
+
 /* SetErrorMode (KERNEL.107): the task's error mode (TDB 18h); returns
    the previous one. */
 u16 KAPI_ES SetErrorMode(u16 mode)
