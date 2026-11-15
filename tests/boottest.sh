@@ -378,6 +378,12 @@
 #              border, a corner and the client area; w16's USER and GDI
 #              against all-Microsoft: every screen and US22's log of mouse
 #              messages and WM_SETCURSOR identical
+#   gpuser     USER's functions given a bad pointer, USER's "__GP" table
+#              (user/gp.asm): probe US27 as the shell in DOSBox-X (-p
+#              386x), every case Windows 3.1 came back from, its values
+#              checked against 3.1's (tests/apps/us27ref.h): w16's USER on
+#              Microsoft's KRNL286 and KRNL386 and w16's install tree on
+#              each KERNEL (parts gpuser@u286, @u386, @t286, @t386)
 #   holdbtn    the caption's minimize and maximize buttons and a scroll
 #              bar's arrows and shaft held down: probe US26 as the shell,
 #              w16's USER and GDI against all-Microsoft, every screen
@@ -486,7 +492,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2355,6 +2361,37 @@ open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Microsoft's and w16's Notepad, a fast drag), US19's messages as 3.1's"
         else echo "FAIL sbdrag: $r"; fails=$((fails + 1)); fi ;;
+    gpuser)
+        # USER's functions given a bad pointer (user/gp.asm): probe US27
+        # (tests/apps/us27.c) as the shell in DOSBox-X as a 386, which
+        # checks segment limits for string instructions (tools/us27ref.py);
+        # the probe checks each value against 3.1's (us27ref.h) and leaves
+        # out the cases that ended the task on 3.1. Every case must come
+        # back (one boot, "US27 end") with no FAIL line.
+        r=ok
+        for pk in ${part:-u286 u386 t286 t386}; do
+            dir=WINDOWS
+            case $pk in
+            u286) set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+            u386) set -- -r -3 -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+            t286) set -- -T "$root/build/w16"; dir=W16 ;;
+            t386) set -- -T "$root/build/w16" -3; dir=W16 ;;
+            esac
+            "$root/tests/dropin.sh" "$@" -p 386x -t 400 -o "$out/gpuser-$pk" \
+                -f "$root/build/dos/US27.EXE=US27.EXE" -i 'boot:shell=C:\US27.EXE' \
+                > "$out/gpuser-$pk.txt" 2>&1 || true
+            f=$out/gpuser-$pk.log
+            tr -d '\r' < "$out/gpuser-$pk/c/$dir/TK.LOG" > "$f" 2>/dev/null || : > "$f"
+            if ! grep -q '^US27 end' "$f"; then
+                r="$pk: US27 stopped after $(sed -n 's/^RUN //p' "$f" | tail -1) ($f)"
+            elif grep -q '^FAIL' "$f"; then
+                r="$pk: $(grep -c '^FAIL' "$f") values differ from 3.1's, first $(grep -m1 '^FAIL' "$f") ($f)"
+            fi
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   gpuser: US27's bad pointers as on 3.1"
+        else echo "FAIL gpuser: $r"; fails=$((fails + 1)); fi ;;
     deskver)
         # the desktop's version stamp (a w16 extension, user/deskver.c):
         # off, w16's USER and GDI give 3.1's screen; on, every w16 part,
@@ -3017,6 +3054,7 @@ caseparts() {
     pmdrop) echo "$1@pm $1@sh $1@us" ;;
     sbdrag) echo "$1@us $1@np $1@fast $1@npw" ;;
     edithandle) echo "$1@us $1@np" ;;
+    gpuser) echo "$1@u286 $1@u386 $1@t286 $1@t386" ;;
     winfile) echo "$1@cmp $1@all" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
@@ -3049,6 +3087,9 @@ partsummary() {
     edithandle)
         if [ $pbad = 0 ]; then echo "ok   edithandle: US20 as 3.1; Notepad opens, edits and saves a 31500-byte file as on 3.1 (0 pixels, same bytes)"
         else echo "FAIL edithandle: $pfirst"; fi ;;
+    gpuser)
+        if [ $pbad = 0 ]; then echo "ok   gpuser: US27's bad pointers as on 3.1 ($pt of $pt: w16's USER on Microsoft's KRNL286 and KRNL386, w16's tree on both)"
+        else echo "FAIL gpuser: $pfirst"; fi ;;
     sbdrag)
         if [ $pbad = 0 ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Microsoft's and w16's Notepad, a fast drag), US19's messages as 3.1's"
         else echo "FAIL sbdrag: $pfirst"; fi ;;
