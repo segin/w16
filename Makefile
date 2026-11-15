@@ -1206,6 +1206,14 @@ $(DOS)/VG8.EXE: $(B)/tests/start.o $(B)/tests/vg8.o tests/apps/app.lnk tests/app
 	    option map=$(B)/tests/vg8.map file { $(B)/tests/start.o $(B)/tests/vg8.o }
 vgaprobes: $(DOS)/VG8.EXE
 dos: $(DOS)/VG8.EXE
+# VG9.EXE: mouse trails, the MOUSETRAILS escape and the trail on the screen
+# (tests/apps/vg9.c, tests/vgatrails.sh)
+$(DOS)/VG9.EXE: $(B)/tests/start.o $(B)/tests/vg9.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vg9.map file { $(B)/tests/start.o $(B)/tests/vg9.o }
+vgaprobes: $(DOS)/VG9.EXE
+dos: $(DOS)/VG9.EXE
 dos: $(DOS)/VG7.EXE
 # the VGA probes are built with the rest (the boot test runs them)
 dos: $(DOS)/VGREC.DRV $(DOS)/VG1.EXE $(DOS)/VG3.EXE $(DOS)/VG4.EXE $(DOS)/VG5.EXE $(DOS)/VG6.EXE
