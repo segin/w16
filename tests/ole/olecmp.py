@@ -26,7 +26,7 @@ def norm_log(path):
         return ['(no log)']
     for line in open(path, errors='replace'):
         line = line.rstrip('\n')
-        if line.startswith('TASK '):
+        if line.startswith('TASK ') or line.startswith('OC1: ExitWindows refused'):
             continue
         line = re.sub(r'lh=[0-9A-F]{8}', 'lh=*', line)
         line = re.sub(r'dead:[0-9A-F]{4}', 'dead:*', line)
