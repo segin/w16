@@ -103,17 +103,21 @@ def summary(d):
 
 def check(ref, test):
     """0 when the test run's trail is the reference's but for the phase of
-    the ticks against the frames: MoveCursor and CheckCursor calls within
-    10 percent, the trail's usual length in motion within one image (the
+    the ticks against the frames: CheckCursor calls within 10 percent,
+    MoveCursor calls 75 to 110 percent of the reference's, the trail's usual length in motion within one image (the
     frames are taken at timer messages, a move or none after the tick),
     no more gaps between neighbouring images of twice the usual gap than
     the reference has (3 points more), and as many run-downs, each within
     one frame of the reference's"""
     A, B = summary(ref), summary(test)
     bad = []
-    for o, n in ((103, 'MoveCursor'), (104, 'CheckCursor')):
-        if abs(B[o] - A[o]) > A[o] / 10:
-            bad.append('%s calls %d against %d' % (n, B[o], A[o]))
+    # CheckCursor: one a tick on both; MoveCursor: as many as DOSBox made
+    # packets of the same xdotool stream, fewer on a loaded host (it adds
+    # up the motion of several host events in one): a quarter fewer at most
+    if abs(B[104] - A[104]) > A[104] / 10:
+        bad.append('CheckCursor calls %d against %d' % (B[104], A[104]))
+    if not 0.75 * A[103] <= B[103] <= 1.1 * A[103]:
+        bad.append('MoveCursor calls %d against %d' % (B[103], A[103]))
     if abs(B['median'] - A['median']) > 1:
         bad.append('trail length in motion %d against %d' % (B['median'], A['median']))
     # gaps: the share of gaps of twice the usual one or more (a position
