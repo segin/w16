@@ -1133,6 +1133,32 @@ $(B)/gdi/gd1stubs.asm $(B)/gdi/gd1.lnk &: tests/gdi/display.spec tools/mkgdlog.p
 	    $(B)/gdi/gd1.lnk DISPLAY 'DISPLAY : 100, 96, 96 : VGA Color Display'
 $(B)/gdi/gd1stubs.o: $(B)/gdi/gd1stubs.asm tests/gdi/gdlog.inc
 	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+# CURREC.DRV: a DISPLAY stand-in that only counts the calls and records
+# the cursor ones with their time and caller (tests/gdi/currec.asm,
+# tests/currec.sh; mouse trails, drivers/vga/README.md)
+vgaprobes: $(DOS)/CURREC.DRV
+dos: $(DOS)/CURREC.DRV
+# CR1.EXE: the cursor calls CURREC.DRV recorded, under real motion
+# (tests/apps/cr1.c, tests/currec.sh)
+$(DOS)/CR1.EXE: $(B)/tests/start.o $(B)/tests/cr1.o tests/apps/app.lnk tests/apps/md1.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/md1.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/cr1.map file { $(B)/tests/start.o $(B)/tests/cr1.o }
+dos: $(DOS)/CR1.EXE
+$(B)/gdi/crstubs.asm $(B)/gdi/currec.lnk &: tests/gdi/currec.spec tools/mkgdlog.py
+	@mkdir -p $(@D)
+	python3 tools/mkgdlog.py tests/gdi/currec.spec VGAREAL $(B)/gdi/crstubs.asm \
+	    $(B)/gdi/currec.lnk DISPLAY 'DISPLAY : 100, 96, 96 : VGA Color Display'
+	printf 'import __0040H KERNEL.193\nexport CURREC_INFO.900\nexport CURREC_RESET.901\n' >> $(B)/gdi/currec.lnk
+$(B)/gdi/crstubs.o: $(B)/gdi/crstubs.asm tests/gdi/gdlog.inc
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(B)/gdi/currec.o: tests/gdi/currec.asm tests/gdi/gdlog.inc
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<
+$(DOS)/CURREC.DRV: $(B)/gdi/currec.o $(B)/gdi/crstubs.o $(B)/gdi/currec.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @$(B)/gdi/currec.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/gdi/currec.map file { $(B)/gdi/currec.o $(B)/gdi/crstubs.o }
 $(B)/gdi/gdlog.o: tests/gdi/gdlog.asm tests/gdi/gdlog.inc
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -Itests/gdi/ -o $@ $<

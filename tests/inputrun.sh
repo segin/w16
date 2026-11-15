@@ -42,6 +42,9 @@
 #                       have left it, and further motion is lost)
 #     move DX DY        relative pointer motion (X pixels; see the shots
 #                       for where Windows put it)
+#     glide DX,DY N,S   N relative motions of DX,DY, S seconds apart, from
+#                       one xdotool (a steady stream: separate move commands
+#                       came about 0.4 s apart, each starting xdotool twice)
 #     jiggle N          N quick small pointer motions back and forth (a
 #                       stream of mouse interrupts)
 #     click [N]         press and release button N (1 left, 3 right)
@@ -465,6 +468,9 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     home) for i in 1 2 3 4 5 6 7 8; do xdotool mousemove_relative -- -100 -100; sleep 0.05; done ;;
     center) xdotool mousemove --window "\$wid" \$((WIDTH / 2)) \$((HEIGHT / 2)) ;;
     move) xdotool mousemove_relative -- "\$a" "\$b" ;;
+    glide) g= i=0
+        while [ \$i -lt "\${b%,*}" ]; do g="\$g mousemove_relative -- \${a%,*} \${a#*,} sleep \${b#*,}"; i=\$((i + 1)); done
+        xdotool \$g ;;
     jiggle) i=0; while [ \$i -lt "\$a" ]; do xdotool mousemove_relative -- 7 5; xdotool mousemove_relative -- -7 -5; i=\$((i + 1)); done ;;
     click) xdotool click "\${a:-1}" ;;
     dclick) xdotool click --repeat 2 --delay 120 "\${a:-1}" ;;
