@@ -218,9 +218,39 @@ w16's driver does all of the above (`vga.c` Control and trail_boot,
 drawn as before, but for the top row. One difference is kept: with
 trails off, 3.1's driver too leaves the cursor off after a drawing
 operation met it until the next CheckCursor (up to a tick); w16's draws
-it back as the operation ends (VG9's comparison leaves that frame out). MoveCursor and CheckCursor still only note the
-position while a drawing operation runs (busy): the positions in between
-are not added then. UNVERIFIED: 3.1's driver sometimes writes the
+it back as the operation ends (VG9's comparison leaves that frame out). MoveCursor and CheckCursor queue what they bring (each position, each
+tick, with interrupts off for the few instructions it takes) and whoever
+can draw takes the whole queue, so no position or tick is lost when one
+interrupt comes while another, or a drawing operation, is drawing the
+cursor.
+
+**In time, under real motion** (2026-11-15, a hand test on the install
+tree: "the trails are janky and disappear too quickly"). The frame
+comparison above masks the timer, so it never saw how often the stack
+calls the driver. `tests/currec.sh` puts CURREC.DRV (`tests/gdi/
+currec.asm`, a stand-in that forwards every call and records each
+cursor call's time, caller and arguments) in front of the driver and CR1
+(`tests/apps/cr1.c`) as the shell, under a steady stream of xdotool moves
+(`tests/scripts/input/trailmove.txt`, inputrun's `glide`); CR1 also keeps
+a frame at each timer message, and `tools/cr1stat.py` counts the arrows
+in it. On all-Microsoft 3.1, on Microsoft's stack with w16's VGA.DRV and
+on the tree alone (KRNL386), captured or not: MoveCursor from USER's
+mouse event procedure at interrupt time, about 50 a second (DOSBox's 40
+PS/2 reports a second, as the driver set them), the identical sequence of
+positions on all three; CheckCursor from SYSTEM.DRV's timer, 18.3 a
+second, one a tick, interrupts on, nowhere else. The calls were the
+same; w16's driver was not: CheckCursor runs with interrupts on, and a
+mouse interrupt in the middle of its drawing found busy set and kept
+only its last position, while a tick that came during MoveCursor's
+drawing was lost. The trail had gaps of two or three steps (19% of the
+gaps between neighbouring images against 0.5% on 3.1) and ran down
+unevenly. With the queue: 1%, and run-downs of 5-6 ticks as 3.1's. The
+trail's length in motion is 6 or 7 images on both (which one a frame
+shows depends on whether a move came between the tick and the timer
+message). w16's immediate redraw after drawing (trails off only, above)
+plays no part: with trails on a drawing operation that meets the trail
+leaves it off until the next tick or move, as 3.1's. Boot-test parts
+`trails@timed` and `trails@timednl` (the mouse not captured) check it. UNVERIFIED: 3.1's driver sometimes writes the
 positive value with a leading space (`MouseTrails= 7`), depending on
 something VG9 did not find (not the caller's stack; KERNEL alone writes
 `7`); w16 never does. 3.1 turned trails on at 7 for an escape of 1000

@@ -217,6 +217,24 @@ _xchg_busy:
         xor ah, ah
         retf
 
+; WORD __cdecl far irq_off(void): interrupts off, the FLAGS they had
+; returned; void __cdecl far irq_restore(WORD): those FLAGS back (the
+; DDK's EnterCrit and LeaveCrit: a few instructions around the queue the
+; cursor entries share, never cli/sti alone)
+global _irq_off, _irq_restore
+_irq_off:
+        pushf
+        pop ax
+        cli
+        retf
+_irq_restore:
+        push bp
+        mov bp, sp
+        push word [bp + 6]
+        popf
+        pop bp
+        retf
+
 ; the exports whose interface is not documented and that nothing was seen
 ; to call (VGREC): DO_POLYLINES (90), DO_SCANLINES (91), and the two
 ; ordinal-only entries 501 and 502. They do nothing and return 0.

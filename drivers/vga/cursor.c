@@ -8,8 +8,9 @@
  * keeps the cursor off whatever it draws (excluding it) and puts it back.
  * Here a drawing operation sets busy, takes the cursor off when its
  * rectangle meets the cursor's bytes, and draws it again when it ends;
- * MoveCursor and CheckCursor at interrupt time do nothing but note the
- * position while busy is set (CheckCursor catches up on the next tick).
+ * MoveCursor and CheckCursor at interrupt time queue their position or
+ * tick, and whoever holds busy (they, or a drawing operation ending)
+ * takes the whole queue before letting go.
  *
  * Mouse trails (DDK "Mouse Trails", the MOUSETRAILS escape: vga.c
  * Control), as Windows 3.1's VGA.DRV draws them (VG9, tests/apps/vg9.c:
@@ -46,15 +47,30 @@ volatile BYTE busy;
 static BYTE andm[32][4], xorm[32][4];
 static short hotx, hoty, cw, ch;
 static BYTE have_shape, xor_only;
-static volatile short curx = 320, cury = 240;
-static volatile BYTE pending;
 static BYTE need_redraw;
+
+/* What MoveCursor and CheckCursor bring, queued (with interrupts off for
+   the few instructions it takes: irq_off) whether or not the cursor can
+   be drawn now: the positions moved to, in order (the last TRAIL_MAX
+   kept: older ones would have left the trail anyway), and the ticks.
+   Whoever holds busy next takes them all: every position joins the trail
+   and every tick takes one image off, as if each had been drawn when it
+   came. Without the queue, a move that came while the cursor was being
+   drawn (CheckCursor runs with interrupts on, and a mouse interrupt comes
+   in the middle) kept only its last position, and a tick that came while
+   MoveCursor drew was lost: the trail had gaps and doubled images and
+   ran down unevenly (tests/currec.sh, the tree under real motion). */
+#define MQ (TRAIL_MAX + 1)
+static volatile short mqx[MQ], mqy[MQ];
+static volatile BYTE mq_n, age_n;
+extern WORD __cdecl __far irq_off(void);
+extern void __cdecl __far irq_restore(WORD f);
 
 /* the trail's settings (cursor_trail; vga.c keeps WIN.INI) */
 static BYTE trail_on;
 static BYTE trail_size = 1;
 /* the earlier positions (hot spots), oldest first; px, py: where the
-   cursor itself was last drawn */
+   cursor itself is */
 static short qx[TRAIL_MAX - 1], qy[TRAIL_MAX - 1];
 static BYTE qn;
 static short px = 320, py = 240;
@@ -164,7 +180,6 @@ static void erase(void)
 static void redraw(void)
 {
     int i;
-    pending = 0;
     need_redraw = 0;
     held = 0;
     erase();
@@ -172,8 +187,6 @@ static void redraw(void)
         return;
     for (i = 0; i < qn; i++)
         draw_at(qx[i] - hotx, qy[i] - hoty);
-    px = curx;
-    py = cury;
     draw_at(px - hotx, py - hoty);
 }
 
@@ -190,23 +203,83 @@ static void trail_pop(void)
     }
 }
 
-/* the cursor moved (MoveCursor, now or noted while busy): the position
-   it was drawn at joins the trail, unless the cursor is off (held) */
-static void trail_push(void)
+/* the cursor moved to x, y: where it was joins the trail, unless the
+   cursor is off (held, hidden) */
+static void move_to(short x, short y)
 {
-    if (trail_active() && !held && nd) {
+    if (trail_active() && !held && enabled) {
         if (qn >= trail_size - 1)
             trail_pop();
         qx[qn] = px;
         qy[qn] = py;
         qn++;
     }
+    px = x;
+    py = y;
 }
 
-static void moved(void)
+/* what the queue holds, taken (busy held by the caller): the moves, and
+   with ticks set the ticks too (a drawing operation ending takes only the
+   moves: after one that met the trail, the cursor stays off until a tick
+   or a move); then the cursor drawn again if anything changed */
+static void serve_queue(BYTE ticks)
 {
-    trail_push();
-    redraw();
+    short x[MQ], y[MQ];
+    BYTE n, a = 0, i, again = need_redraw;
+    WORD f = irq_off();
+    n = mq_n;
+    for (i = 0; i < n; i++) {
+        x[i] = mqx[i];
+        y[i] = mqy[i];
+    }
+    mq_n = 0;
+    if (ticks) {
+        a = age_n;
+        age_n = 0;
+    }
+    irq_restore(f);
+    for (i = 0; i < n; i++) {
+        move_to(x[i], y[i]);
+        held = 0;
+        again = 1;
+    }
+    if (a) {
+        if (held)
+            again = 1;
+        while (a-- && qn) {
+            trail_pop();
+            again = 1;
+        }
+    }
+    if (again)
+        redraw();
+}
+
+/* the queue served by whoever gets busy, until nothing is left in it */
+static void serve(void)
+{
+    for (;;) {
+        if (xchg_busy())
+            return;
+        serve_queue(1);
+        busy = 0;
+        if (!mq_n && !age_n)
+            return;
+    }
+}
+
+/* the queue emptied without drawing (a new shape, the screen given up):
+   the cursor goes to the last position moved to */
+static void drop_queue(void)
+{
+    WORD f = irq_off();
+    if (mq_n) {
+        px = mqx[mq_n - 1];
+        py = mqy[mq_n - 1];
+    }
+    mq_n = 0;
+    age_n = 0;
+    irq_restore(f);
 }
 
 /* everything off, the trail forgotten; drawn alone by the next
@@ -239,11 +312,10 @@ void cursor_exclude(int x0, int y0, int x1, int y1)
 
 void cursor_unexclude(void)
 {
-    if (pending)
-        moved();
-    else if (need_redraw)
-        redraw();
+    serve_queue(0);
     busy = 0;
+    if (mq_n)
+        serve();
 }
 
 void cursor_init(void)
@@ -251,6 +323,7 @@ void cursor_init(void)
     busy = 1;
     nd = 0;
     qn = 0;
+    drop_queue();
     redraw();
     busy = 0;
 }
@@ -260,6 +333,7 @@ void cursor_off(void)
     busy = 1;
     erase();
     qn = 0;
+    drop_queue();
     busy = 0;
 }
 
@@ -281,37 +355,33 @@ void __cdecl __far cur_move(short x, short y)
     /* 3.1's driver draws a cursor moved to row 0 as on row 1, whatever
        its hot spot (VG9: MoveCursor(x, 0) and (x, 1) give the same screen,
        the arrow's tip never on the top row; x 0 is not moved) */
+    WORD f;
     if (y == 0)
         y = 1;
-    curx = x;
-    cury = y;
-    if (xchg_busy()) {
-        pending = 1;
-        return;
+    f = irq_off();
+    if (mq_n == MQ) {
+        BYTE i;
+        for (i = 1; i < MQ; i++) {
+            mqx[i - 1] = mqx[i];
+            mqy[i - 1] = mqy[i];
+        }
+        mq_n--;
     }
-    moved();
-    busy = 0;
+    mqx[mq_n] = x;
+    mqy[mq_n] = y;
+    mq_n++;
+    irq_restore(f);
+    serve();
 }
 
 /* CheckCursor's body: interrupt time, every timer tick */
 void __cdecl __far cur_check(void)
 {
-    BYTE again = 0;
-    if (xchg_busy())
-        return;
-    if (pending) {
-        trail_push();
-        again = 1;
-    }
-    if (held || need_redraw)
-        again = 1;
-    else if (qn) {
-        trail_pop();
-        again = 1;
-    }
-    if (again)
-        redraw();
-    busy = 0;
+    WORD f = irq_off();
+    if (age_n < 255)
+        age_n++;
+    irq_restore(f);
+    serve();
 }
 
 /* SetCursor's body */
@@ -323,6 +393,7 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
     erase();
     qn = 0;
     held = 0;
+    drop_queue();
     if (!cs) {
         have_shape = 0;
         busy = 0;
