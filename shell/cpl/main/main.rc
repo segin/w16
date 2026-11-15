@@ -1,7 +1,8 @@
 /* main.rc - w16 MAIN.CPL resources. Dialog layouts follow the Windows 3.1
    MAIN.CPL dialog templates (positions, IDs, styles: format facts read
    with tools/resdump.py); the labels are the original's plain UI text;
-   the icons are w16's own (tools/cplicons.py). */
+   user-facing "Windows" reads "w16" (ARCHITECTURE.md 3, branding); the
+   icons are w16's own (tools/cplicons.py). */
 #include <windows.h>
 #include "maincpl.h"
 
@@ -28,7 +29,7 @@ BEGIN
     IDS_NAME_MOUSE,     "&Mouse"
     IDS_NAME_DATETIME,  "Date/&Time"
     IDS_NAME_DESKTOP,   "&Desktop"
-    600, "Changes the Windows screen colors"
+    600, "Changes the w16 screen colors"
     601, "Installs and removes printers, and sets printing options"
     602, "Adds and removes fonts and sets TrueType options"
     603, "Specifies international settings"

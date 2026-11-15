@@ -1,0 +1,55 @@
+; Control Panel (WIN.INI run=CONTROL.EXE) under real keys (tests/inputrun.sh;
+; boot-test case control): the window as it comes up, the selection moved
+; with the arrow keys (the status line follows), the Settings and Help
+; menus, the Keyboard applet opened with Enter and cancelled, F1-less
+; close with Alt+F4 (CONTROL.INI [MMCPL] written). The pointer goes to the
+; screen's bottom right corner first, on the desktop, so that it is an
+; arrow in every screen. The Keyboard dialog's focused scroll bar thumb
+; blinks: that shot is matchnow.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-start 30 2
+shot 01-start
+key Right
+sleep 0.3
+key Down
+match 02-moved 20 1
+shot 02-moved
+key End
+match 03-end 20 1
+shot 03-end
+key alt+s
+match 04-settings 20 1
+shot 04-settings
+key Escape
+key Escape
+sleep 0.5
+key alt+h
+match 05-help 20 1
+shot 05-help
+key Escape
+key Escape
+sleep 0.5
+key Home
+sleep 0.3
+key Right
+key Right
+key Right
+key Right
+key Right
+sleep 0.5
+key Return
+matchnow 06-keyboard 20 1
+key Escape
+match 07-back 20 1
+shot 07-back
+key alt+F4
+match 08-closed 30 2
+shot 08-closed

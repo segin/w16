@@ -1,6 +1,7 @@
 /* control.rc - w16 Control Panel resources. The menu and the strings are
    the original's plain UI labels (Windows 3.1 CONTROL.EXE, observed with
-   tools/resdump.py); the applet commands are inserted at run time. */
+   tools/resdump.py), with user-facing "Windows" as "w16" (ARCHITECTURE.md
+   3, branding); the applet commands are inserted at run time. */
 #include <windows.h>
 #include "control.h"
 
@@ -33,6 +34,6 @@ BEGIN
     IDS_TITLE,   "Control Panel"
     IDS_LOADING, "Loading "
     IDS_NOMEM,   "Not enough memory available for this task.\n\nQuit one or more applications to increase available memory, and then try again."
-    IDS_NOCPL,   "Cannot find the Control Panel components (files with .CPL extension).\n\n Verify that they are installed in your Windows SYSTEM directory."
+    IDS_NOCPL,   "Cannot find the Control Panel components (files with .CPL extension).\n\n Verify that they are installed in your w16 SYSTEM directory."
     IDS_ABOUT,   "Control Panel"
 END

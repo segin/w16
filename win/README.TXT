@@ -69,7 +69,8 @@ w16 repository's LICENSE):
   SYSTEM.INI, WIN.INI     w16's default settings (only w16's drivers,
                           fonts and programs)
   PROGMAN.INI             Program Manager's settings and its groups:
-  MAIN.GRP                  Main (MS-DOS Prompt, Read Me)
+  MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
+                            Panel)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)

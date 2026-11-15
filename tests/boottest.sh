@@ -388,6 +388,12 @@
 #              border, a corner and the client area; w16's USER and GDI
 #              against all-Microsoft: every screen and US22's log of mouse
 #              messages and WM_SETCURSOR identical
+#   control    Control Panel under real keys (WIN.INI run=CONTROL.EXE,
+#              tests/scripts/input/control.txt): w16's CONTROL.EXE with
+#              Microsoft's applets against Microsoft's, on all-Microsoft
+#              3.1 (part control@ms), w16's KRNL286 (@k286) and KRNL386
+#              (@k386); w16's install tree alone under its KRNL386 against
+#              its KRNL286 (@tree): every screen and CONTROL.INI identical
 #   gpuser     USER's functions given a bad pointer, USER's "__GP" table
 #              (user/gp.asm): probe US27 as the shell in DOSBox-X (-p
 #              386x), every case Windows 3.1 came back from, its values
@@ -502,7 +508,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1104,6 +1110,60 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   wincomswap: swap directories as 3.1's"
         else echo "FAIL wincomswap: $r"; fails=$((fails + 1)); fi ;;
+    control)
+        # Control Panel (tests/scripts/input/control.txt, real keys, WIN.INI
+        # run=CONTROL.EXE): w16's CONTROL.EXE against Microsoft's, with
+        # Microsoft's applets (MAIN.CPL, DRIVERS.CPL, SND.CPL), every screen
+        # and CONTROL.INI identical: on all-Microsoft 3.1 (part ms), on
+        # w16's KRNL286 (k286) and KRNL386 (k386, dropin.sh -3); then w16's
+        # install tree alone (its own CONTROL.EXE and MAIN.CPL) under its
+        # KRNL386 against the same under its KRNL286 (tree: every screen
+        # identical, CONTROL.INI too)
+        s=$root/tests/scripts/input/control.txt
+        r=ok
+        cmpshots() {   # cmpshots REFDIR W16DIR NAME
+            for f in "$1"/[0-9]*.png; do
+                sn=$(basename "$f")
+                [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                n=$(magick compare -metric AE "$2/$sn" "$f" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+            done
+            ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
+            [ "$r" = ok ] || return
+            cmp -s "$1"/c/*/CONTROL.INI "$2"/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
+        }
+        for pk in ${part:-ms k286 k386 tree}; do
+            case $pk in
+            tree)
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE'
+                rm -rf "$out/control-t286" "$out/control-t386"
+                "$root/tests/inputrun.sh" -s -b 40 -t 240 "$s" "$out/control-t286" "$@" \
+                    > "$out/control-t286.txt" 2>&1 || true
+                "$root/tests/inputrun.sh" -e "$out/control-t286/boot.png" -E "$out/control-t286" -b 40 -t 240 \
+                    "$s" "$out/control-t386" "$@" -3 > "$out/control-t386.txt" 2>&1 || true
+                cmpshots "$out/control-t286" "$out/control-t386" tree ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/control-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/control-WIN.INI" 'windows:run=CONTROL.EXE'
+                refrun control-ref control "$root/tests/inputrun.sh" -s -b 25 -t 240 "$s" "$out/control-ref" -r \
+                    -f "$out/control-WIN.INI=WINDOWS/WIN.INI"
+                case $pk in
+                ms)   set -- -r ;;
+                k286) set -- ;;
+                k386) set -- -3 ;;
+                esac
+                rm -rf "$out/control-$pk"
+                "$root/tests/inputrun.sh" -e "$out/control-ref/boot.png" -E "$out/control-ref" -b 25 -t 240 \
+                    "$s" "$out/control-$pk" "$@" -f "$out/control-WIN.INI=WINDOWS/WIN.INI" \
+                    -f "$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE" > "$out/control-$pk.txt" 2>&1 || true
+                cmpshots "$out/control-ref" "$out/control-$pk" "$pk" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   control: 0 pixels, CONTROL.INI identical"
+        else echo "FAIL control: $r ($out)"; fails=$((fails + 1)); fi ;;
     tree)
         ref
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
@@ -3115,6 +3175,7 @@ caseparts() {
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
+    control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
