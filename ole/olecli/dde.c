@@ -1056,13 +1056,8 @@ void dde_close_all(LPOBJ o)
             if (!PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys, MAKELONG(0, h)))
                 GlobalFree(h);
             PostMessage(o->hsrvsys, WM_DDE_TERMINATE, (WPARAM)o->hsys, 0);
-            /* the window goes a little later (observed: the server still
-               finds it there when it takes the TERMINATE) */
-            SetWindowLong(o->hsys, 0, 0);
-            PostMessage(o->hsys, WM_CLOSE, 0, 0);
-            o->hsys = NULL;
-        } else
-            kill_window(&o->hsys);
+        }
+        kill_window(&o->hsys);
     }
     o->hsrvdoc = o->hsrvsys = NULL;
     o->open = FALSE;

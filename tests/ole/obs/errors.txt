@@ -19,6 +19,8 @@ close 0
 getdata 0 CF_DIB
 save 0 C:\X0.BIN
 delete 0
+; let the server, told [StdExit], go before the next create
+wait 2500
 create 1 PBrush x4 none 0
 close 1
 save 1 C:\X1.BIN
