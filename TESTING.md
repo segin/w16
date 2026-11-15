@@ -91,7 +91,10 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
-`tests/dosxtest.sh`, `tests/win386.sh`.
+`tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
+Windows 3.1, booting again past the cases that end the task; makes the
+logs `tools/us27ref.py` and `tools/obsref.py` turn into
+`tests/apps/us27ref.h`).
 
 Run the boot test from a copy if you will edit the scripts while it runs:
 `cp tests/boottest.sh build/boottest-snapshot.sh && sh build/boottest-snapshot.sh`.
