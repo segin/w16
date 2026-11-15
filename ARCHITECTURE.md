@@ -1493,8 +1493,11 @@ document. INITIATE goes out as a broadcast (SendMessage to -1).
   client's OLETARGETDEVICE block). OleSetData pokes item "" with the
   client's format.
 - **Server-initiated**: DATA on "/Save" (flags 2000) updates Native and the
-  picture and gives OLE_SAVED after the last format; data on "/Close"
-  (a changed object closed by the user) gives OLE_CHANGED. TERMINATE gives
+  picture and gives OLE_SAVED after the last format. Data on "/Close"
+  (a changed object closed by the user, Yes to the server's question)
+  gives OLE_CHANGED; OLECLI then posts `[StdCloseDocument]` and gives
+  OLE_CLOSED at once, before the server's TERMINATE arrives (srvclose). If
+  that callback is missing, Write drops a newly inserted object. TERMINATE gives
   OLE_CLOSED. OleDelete and OleRelease of an open embedded object both send
   `[StdCloseDocument]`.
 - **Links**: (OleCreateLinkFromFile) INITIATE (class, file), then ADVISE
@@ -1583,11 +1586,18 @@ library (`i4.asm` has the 32-bit helpers and `__PIA`).
   `build/dos/OLESVR.DLL` once the OLESVR agent's is there. Every run is
   compared with the all-Microsoft one by `tests/ole/olecmp.py`.
 - Boot-test case **olecli**: part `tree` starts Cardfile from the install
-  tree's Accessories group, under its KRNL386 and its KRNL286; one part per
-  scenario runs olescenarios.sh. Case **missingdll@tree** takes OLECLI.DLL
+  tree's Accessories group, under its KRNL386 and its KRNL286; part
+  `cardw16` runs card1 with w16's Cardfile as the client
+  (`OLESCEN_FILES`); one part per scenario runs olescenarios.sh. Case **missingdll@tree** takes OLECLI.DLL
   out of its copy of the tree.
 
 Known differences, masked in olecmp:
+- In a Write document, Write's own object number (from the clock; Microsoft
+  against Microsoft differs there too), the word 8 bytes on, and the
+  property pages: olecmp compares the text and the pictures. Microsoft's
+  OLECLI gives the same values in every run there, w16's others (0x1257
+  against 0x1227; local offsets 0x30 apart). They look like Write's own
+  handles, which depend on the memory layout (UNVERIFIED).
 - The hMF word and the tail of a metafile in a stream.
 - The rounding of Native blocks past a .BMP's or RIFF's own size.
 - In the metafile OLECLI makes of a Paintbrush DIB, the row padding of the
