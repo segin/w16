@@ -24,8 +24,8 @@ static int scroll(int pos, int max, WPARAM code, int thumb)
     switch (code) {
     case SB_LINEUP:        pos--; break;
     case SB_LINEDOWN:      pos++; break;
-    case SB_PAGEUP:        pos -= max >= 8 ? max / 8 : 1; break;   /* UNVERIFIED step */
-    case SB_PAGEDOWN:      pos += max >= 8 ? max / 8 : 1; break;
+    case SB_PAGEUP:        pos -= (max + 1) / 4; break;  /* observed: rate 8, delay 1 */
+    case SB_PAGEDOWN:      pos += (max + 1) / 4; break;
     case SB_TOP:           pos = 0; break;
     case SB_BOTTOM:        pos = max; break;
     case SB_THUMBTRACK:
