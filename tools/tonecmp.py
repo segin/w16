@@ -19,7 +19,8 @@ the other: the same number of tones, and for each tone
 Tones shorter than --min ms (default 8: a tone of one 5 ms tick, which
 the recording breaks up differently on each run) are not compared;
 fragments of one tone (the same frequency within 3%, less than 10 ms
-apart: the recording breaks up some high notes) are joined; the marker
+apart, 20 above 3 kHz: the recording breaks up some high notes) are
+joined first, the short ones too; the marker
 runs themselves must match.
 
 usage: tonecmp.py [--freq P] [--freqshort P] [--len MS] [--onset MS] [--gap MS] [--min MS] A.txt B.txt
@@ -30,6 +31,11 @@ import argparse
 import sys
 
 
+def near(t, st, fr):
+    """t and a tone of frequency fr starting at st: fragments of one tone"""
+    return fr and t[2] and abs(t[2] - fr) / fr < 0.03 and st - (t[0] + t[1]) < (10 if fr < 3000 else 20)
+
+
 def load(path, minlen):
     tones = []
     for line in open(path):
@@ -37,19 +43,29 @@ def load(path, minlen):
         if not f or f[0] != 'tone':
             continue
         st, ln, fr, div = float(f[1]), float(f[3]), float(f[4]), int(f[6])
-        if ln < minlen:
-            continue
+        if not fr and ln < minlen:
+            continue                    # a click (under 3 edges)
         # fragments of one tone (a high note the recording breaks up):
-        # the same frequency within 3%, less than 10 ms apart
-        if tones and fr and tones[-1][2] and abs(tones[-1][2] - fr) / fr < 0.03 \
-                and st - (tones[-1][0] + tones[-1][1]) < (10 if fr < 3000 else 20):
-            p = tones[-1]
+        # the same frequency within 3%, less than 10 ms apart (20 above
+        # 3 kHz). Joined before short tones are dropped: a note whose
+        # first few ms the recording broke into pieces shorter than
+        # --min keeps its start (dropped first, the tone started where
+        # the first long piece did: tens of ms late, by where the
+        # recording's samples fell on its edges)
+        # (short pieces of another frequency between two such fragments,
+        # a few edges the recording put elsewhere, are passed over)
+        j = len(tones) - 1
+        while j >= 0 and tones[j][1] < minlen and not near(tones[j], st, fr):
+            j -= 1
+        if j >= 0 and near(tones[j], st, fr):
+            p = tones[j]
+            del tones[j:]
             ln2 = st + ln - p[0]
             fr2 = (p[2] * p[1] + fr * ln) / (p[1] + ln)
-            tones[-1] = (p[0], ln2, fr2, round(1193182 / fr2))
+            tones.append((p[0], ln2, fr2, round(1193182 / fr2)))
             continue
         tones.append((st, ln, fr, div))
-    return tones
+    return [t for t in tones if t[1] >= minlen]
 
 
 def is_marker(t):
