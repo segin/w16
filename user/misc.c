@@ -355,7 +355,21 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
         if (ini & SPIF_UPDATEINIFILE)
             WriteProfileString("windows", "Beep", beep_on ? "yes" : "no");
         return TRUE;
-    case SPI_GETMOUSE: w[0] = 2; w[1] = 0; w[2] = 1; return TRUE;     /* US2 */
+    case SPI_GETMOUSE:      /* WIN.INI's or the last SPI_SETMOUSE (US2: 2, 0, 1) */
+        mouse_accel((int __far *)w, NULL);
+        return TRUE;
+    case SPI_SETMOUSE:      /* thresholds 1 and 2, speed (3.1 SDK) */
+        mouse_accel(NULL, (const int __far *)w);
+        if (ini & SPIF_UPDATEINIFILE) {
+            char b[8];
+            wsprintf(b, "%d", w[0]);
+            WriteProfileString("windows", "MouseThreshold1", b);
+            wsprintf(b, "%d", w[1]);
+            WriteProfileString("windows", "MouseThreshold2", b);
+            wsprintf(b, "%d", w[2]);
+            WriteProfileString("windows", "MouseSpeed", b);
+        }
+        return TRUE;
     case SPI_GETBORDER: *w = sysmet[SM_CXFRAME] - 1; return TRUE;
     case SPI_GETKEYBOARDSPEED: *w = GetProfileInt("windows", "KeyboardSpeed", 31); return TRUE;
     case SPI_GETSCREENSAVETIMEOUT: *w = GetProfileInt("windows", "ScreenSaveTimeOut", 120); return TRUE;
