@@ -46,6 +46,7 @@ GDIINFO gdiinfo = {
 BYTE enabled;
 BYTE repaint_off;
 static BYTE first_enable = 1;
+static void trail_boot(void);          /* mouse trails: below */
 static BYTE bios_rows;                  /* 0040:0084 when Windows started */
 
 static BYTE __far *bios_data(WORD off)
@@ -122,6 +123,7 @@ WORD EXPORT Enable(LPVOID lpDevice, WORD style, LPCSTR type, LPCSTR file, LPVOID
            9.5) */
         bios_rows = *bios_data(0x84);
         first_enable = 0;
+        trail_boot();
     }
     hw_enable();
     enabled = 1;
@@ -154,6 +156,90 @@ WORD EXPORT Disable(LPVOID lpDevice)
 #define QUERYESCSUPPORT 8
 #define GETCOLORTABLE 5
 #define MOUSETRAILS 39
+
+/* ---- Mouse trails (DDK "Mouse Trails", MOUSETRAILS; the drawing is
+   cursor.c's). Observed on Windows 3.1's VGA.DRV with VG9
+   (tests/apps/vg9.c, drivers/vga/README.md):
+   - at the first Enable WIN.INI [windows] MouseTrails is read (absent:
+     -7): on when 0 or more, the size its absolute value cut to 1..7 (0
+     and words that are no number: on, size 1; 9: on, 7; -5: off, 5); the
+     driver writes nothing then;
+   - QUERYESCSUPPORT(MOUSETRAILS): the size, negative when off;
+   - MOUSETRAILS n, the result the same: 1..7 (more: 7) the size, on, and
+     MouseTrails=n written; 0 off, and MouseTrails=-size written when it
+     was on; -1 on, and MouseTrails=size written when it was off (WIN.INI
+     is not read: the size is the driver's); -2 off, -3 on, neither
+     writing; below -3 as -3, but -32768 as -1. Contrary to the DDK, -1
+     does not read WIN.INI and 0 writes nothing when already off.
+   - the cursor and trail come off the screen when the escape turns the
+     trail on or off or sets a size (cursor_trail); QUERYESCSUPPORT and an
+     escape that changes nothing leave them.
+   UNVERIFIED: 3.1's driver sometimes writes the positive value with a
+   leading space (" 7"), depending on something VG9 did not find (not the
+   caller's stack); w16 never does. 1000 (seen once) turned trails on at 7
+   without writing WIN.INI there. ---- */
+static BYTE trail_on;
+static BYTE trail_size = 7;
+
+static int trail_state(void)
+{
+    return trail_on ? trail_size : -(int)trail_size;
+}
+
+static void trail_write(int v)
+{
+    char b[4];
+    int i = 0;
+    if (v < 0) {
+        b[i++] = '-';
+        v = -v;
+    }
+    b[i++] = (char)('0' + v);
+    b[i] = 0;
+    WriteProfileString("windows", "MouseTrails", b);
+}
+
+static void trail_set(int on, int size)
+{
+    trail_on = (BYTE)on;
+    trail_size = (BYTE)size;
+    cursor_trail(on, size);
+}
+
+static void trail_boot(void)
+{
+    int v = GetProfileInt("windows", "MouseTrails", -7);
+    int on = v >= 0;
+    if (v < 0)
+        v = v == -32768 ? TRAIL_MAX : -v;
+    if (v < 1)
+        v = 1;
+    if (v > TRAIL_MAX)
+        v = TRAIL_MAX;
+    trail_set(on, v);
+}
+
+static int mouse_trails(int n)
+{
+    if (n >= 1) {
+        if (n > TRAIL_MAX)
+            n = TRAIL_MAX;
+        trail_set(1, n);
+        trail_write(n);
+    } else if (n == 0 || n == -2) {
+        if (trail_on) {
+            trail_set(0, trail_size);
+            if (n == 0)
+                trail_write(-(int)trail_size);
+        }
+    } else if (!trail_on) {
+        /* -1 (and -32768) write WIN.INI; -3 and below do not */
+        trail_set(1, trail_size);
+        if (n == -1 || n == -32768)
+            trail_write(trail_size);
+    }
+    return trail_state();
+}
 WORD EXPORT Control(LPVOID lpDevice, WORD fn, LPVOID in, LPVOID out)
 {
     (void)lpDevice;
@@ -161,16 +247,20 @@ WORD EXPORT Control(LPVOID lpDevice, WORD fn, LPVOID in, LPVOID out)
     case QUERYESCSUPPORT:
         if (!in)
             return 0;
-        /* VG8: GETCOLORTABLE and QUERYESCSUPPORT 1, MOUSETRAILS -7
-           (UNVERIFIED meaning; the escape itself is not implemented) */
+        /* VG8: GETCOLORTABLE and QUERYESCSUPPORT 1; MOUSETRAILS the
+           trail's state (VG9: the size, negative when off) */
         switch (*(LPWORD)in) {
         case QUERYESCSUPPORT:
         case GETCOLORTABLE:
             return 1;
         case MOUSETRAILS:
-            return (WORD)-7;
+            return (WORD)trail_state();
         }
         return 0;
+    case MOUSETRAILS:
+        if (!in)
+            return 0;
+        return (WORD)mouse_trails(*(LPSHORT)in);
     case GETCOLORTABLE:
         if (!in || !out)
             return 0;

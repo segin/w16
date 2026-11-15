@@ -64,7 +64,8 @@ SaveScreenBitmap, 101 Inquire, 102 SetCursor, 103 MoveCursor, 104
 CheckCursor, 400-403 PExtTextOut, PStrBlt, RExtTextOut, RStrBlt (here
 ExtTextOut and StrBlt), 500 UserRepaintDisable, 501 and 502 (no names).
 The driver imports KERNEL's `__A000H`, `__AHINCR`, `__WINFLAGS`,
-`__0040H` only.
+`__0040H`, and GetProfileInt and WriteProfileString (mouse trails' WIN.INI
+setting; Microsoft's imports them too).
 
 What crosses the interface was observed with **VGREC**
 (`tests/vgaprobe.sh -l`, `make vgaprobes`): a recording DISPLAY in front
@@ -165,6 +166,67 @@ characters but the last plus the last one's own width. Drawing returns 0
 (3.1's driver does); measuring (count < 0) returns the extent in AX and
 the height in DX.
 
+### Mouse trails (Control MOUSETRAILS, MoveCursor, CheckCursor)
+
+The DDK ("Mouse Trails", "MOUSETRAILS") gives the interface: escape 39,
+an int in, the driver draws the trail in MoveCursor and keeps WIN.INI
+[windows] MouseTrails. What Windows 3.1's VGA.DRV does was observed with
+VG9 (`tests/apps/vg9.c`, `tests/vgatrails.sh`): the probe calls the
+escape and the driver's own MoveCursor (103) and CheckCursor (104), and
+reads the screen back from the VGA's memory (with interrupts off, so no
+timer tick falls between the read map's setting and the reads) after
+each step; Control Panel's Mouse applet uses the escape the same way
+(ARCHITECTURE.md 14.5). Where it differs from the DDK, the observation
+wins:
+
+- **WIN.INI at boot.** The first Enable reads MouseTrails (absent: -7):
+  0 or more is on, the size its absolute value cut to 1..7 (0 and a
+  value that is no number: on, size 1; 9: on, 7; -5: off, 5). Nothing is
+  written then.
+- **The escape.** QUERYESCSUPPORT(39) answers the size, negative when
+  off (-7 with no MouseTrails). Escape n, returning the same: 1..7 (more:
+  7) sets the size, turns trails on and writes MouseTrails=n; 0 turns them
+  off and writes -size if they were on; -1 turns them on and writes the
+  size if they were off (WIN.INI is not read, unlike the DDK's text); -2
+  off and -3 on without writing; below -3 as -3, but -32768 as -1.
+- **The trail.** Every MoveCursor adds the position the cursor had (also
+  when it did not move), keeping at most size - 1 of them; every
+  CheckCursor drops the oldest, so a still pointer's trail runs down one
+  image a timer tick (55 ms). The images are drawn oldest first, each
+  over those before it, in the current shape; each is clipped at the
+  screen's edges like the cursor.
+- **Shapes.** No trail for a cursor whose AND mask has no 0 bit (the
+  I-beam: XOR only, as the DDK says); the cross and the hourglass have
+  one. SetCursor ends the trail and draws the new shape alone at once;
+  ShowCursor(FALSE) (USER's SetCursor(NULL)) takes everything off, and
+  the pointer comes back alone.
+- **Drawing.** A drawing operation whose rectangle meets any image (each
+  image's bytes, as for the cursor) takes the whole trail and the cursor
+  off; they stay off, the trail forgotten, until the next CheckCursor or
+  MoveCursor draws the cursor alone. Drawing that meets no image (also
+  inside the trail's bounds) leaves everything. So drawing under a trail
+  leaves no debris.
+- **The escape and the screen.** An escape that turns the trail on or
+  off or sets a size takes the cursor and trail off the same way; the
+  query and an escape that changes nothing leave them.
+
+- **The top row.** A cursor moved to row 0 is drawn as on row 1,
+  whatever its hot spot (also with trails off; column 0 is not moved).
+
+w16's driver does all of the above (`vga.c` Control and trail_boot,
+`cursor.c`); with trails off, or a size of 1, the cursor is excluded and
+drawn as before, but for the top row. One difference is kept: with
+trails off, 3.1's driver too leaves the cursor off after a drawing
+operation met it until the next CheckCursor (up to a tick); w16's draws
+it back as the operation ends (VG9's comparison leaves that frame out). MoveCursor and CheckCursor still only note the
+position while a drawing operation runs (busy): the positions in between
+are not added then. UNVERIFIED: 3.1's driver sometimes writes the
+positive value with a leading space (`MouseTrails= 7`), depending on
+something VG9 did not find (not the caller's stack; KERNEL alone writes
+`7`); w16 never does. 3.1 turned trails on at 7 for an escape of 1000
+without writing WIN.INI (seen once). Whether a later Enable (after a DOS
+program in Standard mode) reads WIN.INI again (w16: only the first).
+
 ## Testing
 
 - `tests/vgaprobe.sh [-w] [-m] [-l] [-p PROBE] [-s] OUTDIR`: Windows 3.1
@@ -190,7 +252,23 @@ the height in DX.
   screen 0 pixels), `vgaboot` (plain boots: 0 pixels; with w16's own
   resources the boot completes), `vgaall` (every w16 part with it),
   `vgawoados` (the MS-DOS Prompt: Disable to text mode and Enable back),
-  `vgaprobe` (VG1's logs identical).
+  `vgaprobe` (VG1's logs identical), `trails` (below).
+- VG9 (`tests/apps/vg9.c`, `tests/vgatrails.sh -p MODE OUTDIR`): mouse
+  trails. Mode `det` is the comparison: 23 cases of MoveCursor,
+  CheckCursor, SetCursor, ShowCursor, PatBlt and escape steps run with
+  the timer masked and interrupts off, a frame of the screen's top 200
+  rows kept after chosen steps (206 frames), so nothing depends on
+  timing; `escape` the escape's results and WIN.INI after each of 37
+  calls; `boot` the state WIN.INI gives at Enable and a trail. The other
+  modes (`full`, `more`, `late`) are the timed observations the
+  description above comes from (`tools/vg9png.py` turns VG9.BIN into
+  images: `--strip BIN PHASES Y H OUT` for one phase's frames one under
+  the other). Boot-test case `trails`: det, escape and boot (WIN.INI
+  MouseTrails=5) identical, logs and frames; real mouse motion with trails
+  on from WIN.INI (Program Manager and its Main group dragged, a menu
+  tracked under the trail; `tests/scripts/input/trails.txt`) and Control
+  Panel's Mouse applet turning trails on and off (`cpltrails.txt`), every
+  screen 0 pixels once the trail has run down, MouseTrails the same.
 
 ## Stages
 
@@ -212,7 +290,6 @@ the height in DX.
 ## Not verified yet (UNVERIFIED)
 
 - Styled polylines turning from slanted y segments to x ones (above).
-- The MOUSETRAILS escape itself (QUERYESCSUPPORT answers -7 as 3.1's).
 - DIBs in RLE (DeviceBitmapBits and SetDIBitsToDevice refuse them) or over
   64K; SetDIBitsToDevice beyond WinMine's use.
 - The dithering of all 2^24 colours (VG4, tests/vgacolor.sh: written, to

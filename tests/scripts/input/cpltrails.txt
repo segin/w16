@@ -1,0 +1,70 @@
+; Control Panel's Mouse applet turns mouse trails on and off (WIN.INI
+; run=CONTROL.EXE; boot-test case trails): the applet opened with keys,
+; Mouse Trails checked with Alt+T (the MOUSETRAILS escape: the driver
+; takes the pointer off, writes MouseTrails=7), the pointer moved with the
+; trail, unchecked (MouseTrails=-7) and moved again, checked again, OK,
+; the pointer moved, Control Panel closed, Windows ended (WIN.INI written
+; out). Each shot waits for the pointer to stop and the trail to run down
+; (match). WIN.INI's MouseTrails is compared afterwards.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+match 01-start 30 2
+shot 01-start
+key Home
+sleep 0.3
+key Right
+key Right
+key Right
+sleep 0.3
+key Return
+match 02-mouse 30 2
+shot 02-mouse
+key alt+t
+sleep 0.5
+move -20 -20
+sleep 0.05
+move -20 -20
+sleep 0.05
+move -20 -20
+sleep 0.05
+move -20 -20
+sleep 0.05
+move -20 -20
+match 03-on 20 2
+shot 03-on
+key alt+t
+sleep 0.5
+move -20 -10
+sleep 0.05
+move -20 -10
+sleep 0.05
+move -20 -10
+match 04-off 20 2
+shot 04-off
+key alt+t
+sleep 0.5
+move 20 10
+sleep 0.05
+move 20 10
+match 05-onagain 20 2
+shot 05-onagain
+key Return
+sleep 0.5
+move -30 -30
+sleep 0.05
+move -30 -30
+sleep 0.05
+move -30 -30
+match 06-ok 20 2
+shot 06-ok
+key alt+F4
+match 07-closed 30 2
+shot 07-closed
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

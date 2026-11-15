@@ -346,6 +346,14 @@
 #   vgaprobe   VG1 as the shell (the driver's values as programs see them:
 #              tests/apps/vg1.c), w16's VGA.DRV with its own resources
 #              against Microsoft's: identical logs
+#   trails     mouse trails: w16's VGA.DRV (Microsoft's resources) against
+#              Microsoft's on Microsoft's stack: VG9 (tests/vgatrails.sh:
+#              the escape, WIN.INI at Enable, the trail after each driver
+#              call, drawing under it; timing-free), logs and frames
+#              identical; real mouse motion with trails on from WIN.INI
+#              (a window dragged, a menu tracked under the trail) and
+#              Control Panel's Mouse applet turning them on and off, every
+#              screen once the trail has run down       must be 0
 #   input      real mouse and keyboard input (tests/inputrun.sh: xdotool on
 #              the virtual display, through the drivers' event procedures)
 #              all through the boot and after, then a menu by keyboard:
@@ -393,7 +401,11 @@
 #              Microsoft's applets against Microsoft's, on all-Microsoft
 #              3.1 (part control@ms), w16's KRNL286 (@k286) and KRNL386
 #              (@k386); w16's install tree alone under its KRNL386 against
-#              its KRNL286 (@tree): every screen and CONTROL.INI identical
+#              its KRNL286 (@tree): every screen and CONTROL.INI identical;
+#              @resize: tests/scripts/input/cprepaint.txt (the panel sized,
+#              scrolled, dialogs moved over it, Alt+Tab, minimized) against
+#              Microsoft's on all-Microsoft 3.1, every screen identical
+#              but for the minimized panel's icon
 #   cplclick   Control Panel's Keyboard, Mouse, Desktop and Color dialogs
 #              under real mouse clicks on each control (tests/scripts/input/
 #              cplclick-*.txt): w16's USER against Microsoft's (screens and
@@ -523,13 +535,14 @@ shift $((OPTIND - 1))
 mkdir -p "$out"
 # cplinicmp REF W16: two INI files the same, but for w16's branding of
 # Control Panel's built-in colour scheme: 3.1 writes [current] color
-# schemes=Windows Default where w16 writes w16 Default (shell/cpl/main)
+# schemes=Windows Default where w16 writes w16 Default (shell/cpl/main);
+# both sides read so (the tree parts compare w16 with w16)
 cplinicmp() {
     _a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$1"; echo .)
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1154,8 +1167,36 @@ runcase() {
             [ "$r" = ok ] || return
             cplinicmp "$1"/work/c/*/CONTROL.INI "$2"/work/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
         }
-        for pk in ${part:-ms k286 k386 tree}; do
+        for pk in ${part:-ms k286 k386 tree resize}; do
             case $pk in
+            resize)
+                # tests/scripts/input/cprepaint.txt: the panel sized smaller
+                # (its icons reflow, the status box's edge is redrawn),
+                # scrolled, applet dialogs moved over it, Alt+Tab, minimized;
+                # w16's CONTROL.EXE against Microsoft's on all-Microsoft 3.1
+                # (whose USER keeps a resized window's bits: w16's left the
+                # old icon layout there), the minimized panel's icon (w16's
+                # art) left out
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/control-rs-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/control-rs-WIN.INI" 'windows:run=CONTROL.EXE' 'windows:CursorBlinkRate=65535'
+                rs=$root/tests/scripts/input/cprepaint.txt
+                refrun control-rs-ref control "$root/tests/inputrun.sh" -s -b 25 -t 300 "$rs" "$out/control-rs-ref" -r \
+                    -f "$out/control-rs-WIN.INI=WINDOWS/WIN.INI"
+                rm -rf "$out/control-rs-w16"
+                "$root/tests/inputrun.sh" -e "$out/control-rs-ref/boot.png" -E "$out/control-rs-ref" -M "rectangle 23,410 54,441" \
+                    -b 25 -t 300 "$rs" "$out/control-rs-w16" -r -f "$out/control-rs-WIN.INI=WINDOWS/WIN.INI" \
+                    -f "$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE" > "$out/control-rs-w16.txt" 2>&1 || true
+                ls "$out/control-rs-ref"/[0-9]*.png > /dev/null 2>&1 || r="resize: no screens"
+                for f in "$out/control-rs-ref"/[0-9]*.png; do
+                    [ "$r" = ok ] || break
+                    sn=$(basename "$f")
+                    [ -f "$out/control-rs-w16/$sn" ] || { r="resize: no $sn"; break; }
+                    magick "$f" -fill black -draw "rectangle 23,410 54,441" "$out/control-rs-a.png"
+                    magick "$out/control-rs-w16/$sn" -fill black -draw "rectangle 23,410 54,441" "$out/control-rs-b.png"
+                    n=$(magick compare -metric AE "$out/control-rs-b.png" "$out/control-rs-a.png" "$out/resize-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || r="resize: $sn: $n pixels differ"
+                done ;;
             tree)
                 set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE'
                 rm -rf "$out/control-t286" "$out/control-t386"
@@ -3277,6 +3318,63 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         else
             echo "FAIL vgaprobe: VG1's logs differ ($out/vgaprobe-ms, $out/vgaprobe-w16)"; fails=$((fails + 1))
         fi ;;
+    trails)
+        # mouse trails (drivers/vga/README.md "Mouse trails"): w16's VGA.DRV
+        # with Microsoft's resources against Microsoft's VGA.DRV, on
+        # Microsoft's stack. Parts: det, escape, boot: VG9 as the shell
+        # (tests/vgatrails.sh: the escape's results and WIN.INI, the trail
+        # after every MoveCursor, CheckCursor, SetCursor, ShowCursor,
+        # drawing and escape, with interrupts off so that the frames do not
+        # depend on timing; boot: WIN.INI MouseTrails=5 read at Enable),
+        # logs and frames identical; input: trails on from WIN.INI, real
+        # mouse motion over the desktop, a window dragged and a menu
+        # tracked under the trail (tests/scripts/input/trails.txt); cpl:
+        # Control Panel's Mouse applet turning trails on and off with real
+        # keys and the pointer moved (cpltrails.txt), WIN.INI's MouseTrails
+        # the same. The input parts shoot each screen when the pointer has
+        # stopped and the trail run down: no trail, no debris, 0 pixels.
+        r=ok
+        for pt in ${part:-det escape boot input cpl}; do
+            case $pt in
+            det|escape|boot)
+                set --; [ $pt = boot ] && set -- -i WIN.INI:windows:MouseTrails=5
+                rm -rf "$out/trails-$pt"
+                "$root/tests/vgatrails.sh" -p $pt "$@" "$out/trails-$pt" > "$out/trails-$pt.txt" 2>&1 \
+                    || r="$pt: $(tail -1 "$out/trails-$pt.txt") ($out/trails-$pt)" ;;
+            input|cpl)
+                vdrv=$out/trails-msres-$pt.drv
+                "$root/tests/vgamsres.sh" "$vdrv" > "$out/trails-msres-$pt.txt" 2>&1 || { r="$pt: tests/vgamsres.sh failed"; break; }
+                if [ $pt = input ]; then
+                    scr=$root/tests/scripts/input/trails.txt
+                    set -- -i WIN.INI:windows:MouseTrails=7
+                else
+                    scr=$root/tests/scripts/input/cpltrails.txt
+                    set -- -i WIN.INI:windows:run=CONTROL.EXE
+                fi
+                set -- "$@" -i WIN.INI:windows:MouseSpeed=0 -i WIN.INI:windows:CursorBlinkRate=65535
+                refrun trails-$pt-ref trails "$root/tests/inputrun.sh" -s -b 25 -t 220 "$scr" "$out/trails-$pt-ref" -r "$@"
+                rm -rf "$out/trails-$pt-w16"
+                "$root/tests/inputrun.sh" -e "$out/trails-$pt-ref/boot.png" -E "$out/trails-$pt-ref" -b 25 -t 220 "$scr" \
+                    "$out/trails-$pt-w16" -r "$@" -f "$vdrv=WINDOWS/SYSTEM/VGA.DRV" > "$out/trails-$pt-w16.txt" 2>&1 || true
+                rm -f "$vdrv"
+                ls "$out/trails-$pt-ref"/[0-9]*.png > /dev/null 2>&1 || { r="$pt: no screens"; break; }
+                for f in "$out/trails-$pt-ref"/[0-9]*.png; do
+                    g=$(basename "$f")
+                    [ -f "$out/trails-$pt-w16/$g" ] || { r="$pt: no $g"; break; }
+                    n=$(magick compare -metric AE "$out/trails-$pt-w16/$g" "$f" "$out/trails-$pt-${g%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || { r="$pt: $g: $n pixels differ"; break; }
+                done
+                [ "$r" = ok ] || break
+                a=$(grep -i '^MouseTrails=' "$out/trails-$pt-ref"/work/c/WINDOWS/WIN.INI | tr -d '\r ')
+                b=$(grep -i '^MouseTrails=' "$out/trails-$pt-w16"/work/c/WINDOWS/WIN.INI | tr -d '\r ')
+                [ "$a" = "$b" ] || r="$pt: WIN.INI $a against $b" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   trails: VG9 identical, 0 pixels under real input, MouseTrails the same"
+        else echo "FAIL trails: $r ($out)"; fails=$((fails + 1)); fi ;;
     *) echo "unknown case $c" >&2; exit 2 ;;
     esac
 }
@@ -3312,13 +3410,14 @@ caseparts() {
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
-    control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
+    control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
     mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
+    trails) echo "$1@det $1@escape $1@boot $1@input $1@cpl" ;;
     *) echo "$1" ;;
     esac
 }
