@@ -525,7 +525,9 @@ mkdir -p "$out"
 # Control Panel's built-in colour scheme: 3.1 writes [current] color
 # schemes=Windows Default where w16 writes w16 Default (shell/cpl/main)
 cplinicmp() {
-    sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2" | cmp -s "$1" -
+    _a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$1"; echo .)
+    _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
+    [ "$_a" = "$_b" ]
 }
 cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE

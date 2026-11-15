@@ -7,7 +7,8 @@
 # out byte-identical, the CP1 applet probe's log (tests/apps/cp1.c) must
 # record the same calls, and no screenshot may differ from the original's by
 # more pixels than tests/scripts/cpl.baseline allows ("scenario/SHOT
-# count"; what w16's own icon art costs). CPL_BASELINE=update rewrites it.
+# count"; what w16's own icon art and the "w16 Default" scheme name
+# cost). CPL_BASELINE=update rewrites it.
 #
 # Directives, as SNAP comments (';!') in the scenario:
 #   ;! cp1                  CP1.CPL into WINDOWS\SYSTEM (both runs)
@@ -73,8 +74,11 @@ for n in $names; do
     result=ok
     for f in $inis; do
         # (w16 brands the built-in colour scheme "w16 Default": shell/cpl/main)
-        sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" |
-            cmp -s "$out/$n/orig/$f" - || { result=FAIL; echo "  $n: $f differs"; }
+        # (both sides through the same sed, which also ends an unended
+        # last line: the name aside, the bytes must be the same)
+        a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/orig/$f" 2>/dev/null; echo .)
+        b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" 2>/dev/null; echo .)
+        { [ -f "$out/$n/orig/$f" ] && [ -f "$out/$n/w16/$f" ] && [ "$a" = "$b" ]; } || { result=FAIL; echo "  $n: $f differs"; }
     done
     if [ -f "$out/$n/orig/CP1.LOG" ] || [ -f "$out/$n/w16/CP1.LOG" ]; then
         normlog "$out/$n/orig/CP1.LOG" > "$out/$n/orig/cp1.norm" 2>/dev/null || :
