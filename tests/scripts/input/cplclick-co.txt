@@ -400,58 +400,8 @@ sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
-sleep 1.5
+sleep 4
 matchnow 06-selector 20 1
-; colour field
-home
-home
-sleep 0.3
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-sleep 0.3
-click 1
-sleep 0.6
-; luminosity bar
-home
-home
-sleep 0.3
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 20
-sleep 0.05
-move 20 0
-sleep 0.05
-move 20 0
-sleep 0.05
-move 20 0
-sleep 0.05
-move 20 0
-sleep 0.05
-move 20 0
-sleep 0.05
-move 20 0
-sleep 0.05
-move 3 0
-sleep 0.05
-sleep 0.3
-click 1
-sleep 0.6
 ; hue: up arrow
 home
 home
@@ -481,6 +431,115 @@ sleep 0.05
 move 0 20
 sleep 0.05
 move 0 9
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; sat: up arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; sat: up arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; lum: down arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
 sleep 0.05
 sleep 0.3
 click 1
