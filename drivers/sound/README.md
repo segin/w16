@@ -145,7 +145,17 @@ the port state SN1 reads while notes play (parts D, G, P):
   on the recording (2983 Hz, 110 ms, in runs of 1-4) between its groups.
 - `tools/wavtones.py` finds the tones in a recording (the square wave's
   edges); `tools/tonecmp.py` compares two recordings segment by segment
-  between the markers.
+  between the markers. Above about 6 kHz a half-period is 3-4 samples
+  of the 48 kHz recording and `wavtones.py --split` breaks some notes
+  into pieces, differently for each placement of the samples on the
+  edges: DOSBox-X's recordings are the same run after run, but they
+  change with things as remote from the driver as the length of the run
+  directory's path (installation-05, master c94ba4e: the same recording
+  in run directories `w16` and `s16`, another in `snd-c94b`, as at
+  5cb41d9 and 3d4bc47). `tonecmp.py` therefore joins the pieces before
+  it drops the short ones; dropped first, a note broken up in its first
+  30 ms started that much late (the `sound` case's failure in directory
+  `w16`: segment 10's note 81, gap 36.5 ms; after the join 1.6 ms).
 - **SNDREC** (`tests/apps/sndrec.asm`): a recording SOUND in front of the
   driver under test (renamed SOUNT by `tools/nerename.py`): every call
   from the boot on with its caller, arguments, results and the bytes
