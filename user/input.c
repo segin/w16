@@ -41,6 +41,9 @@ int menu_mode;                  /* menu loops running: the arrow stays */
 static int cursor_level;        /* ShowCursor's count */
 static RECT __far rcClip;
 static int __far mthresh1 = 2, __far mthresh2, __far mspeed = 1;   /* acceleration */
+/* the buttons swapped (SwapMouseButton): read at interrupt time, so a far
+   variable, not sysmet[] in DGROUP (tools/irqcheck.py) */
+BOOL __far mouse_swapped;
 static int __far cxScreen, __far cyScreen;  /* sysmet's, for interrupt time */
 
 static DWORD lastclick_time;
@@ -182,7 +185,7 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
     }
     /* swapped buttons (SwapMouseButton, WIN.INI SwapMouseButtons): the
        physical left button is the right one from here on */
-    if (sysmet[SM_SWAPBUTTON])
+    if (mouse_swapped)
         ax = (ax & ~0x1E) | ((ax & 6) << 2) | ((ax & 0x18) >> 2);
     if (ax & 2) { keystate[VK_LBUTTON] |= 0x80; push_event(WM_LBUTTONDOWN, 0, MAKELONG(x, y)); }
     if (ax & 4) { keystate[VK_LBUTTON] &= ~0x80; push_event(WM_LBUTTONUP, 0, MAKELONG(x, y)); }
@@ -267,6 +270,7 @@ void input_init(void)
     mthresh1 = GetProfileInt("windows", "MouseThreshold1", 2);
     mthresh2 = GetProfileInt("windows", "MouseThreshold2", 0);
     mspeed = GetProfileInt("windows", "MouseSpeed", 1);
+    mouse_swapped = sysmet[SM_SWAPBUTTON];
     /* the display's cursor procedure, as fast as the system timer goes
        (US1: CreateSystemTimer(0, DISPLAY.CheckCursor)) */
     S_CREATESYSTEMTIMER(0, (FARPROC)D_CHECKCURSOR);

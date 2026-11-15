@@ -336,7 +336,8 @@ extern int  sysmet[SM_CMETRICS + 8];
 extern COLORREF syscolor[COLOR_BTNHIGHLIGHT + 1];
 extern HBRUSH sysbrush[COLOR_BTNHIGHLIGHT + 1];
 extern HBRUSH hbrGray;
-void mouse_accel(int __far *get, const int __far *set);   /* input.c */          /* the 50% gray pattern brush */
+void mouse_accel(int __far *get, const int __far *set);   /* input.c */
+extern BOOL __far mouse_swapped;                           /* input.c */          /* the 50% gray pattern brush */
 extern HINSTANCE hInstUser;
 extern HMODULE hModUser;
 extern HFONT hfontSys;

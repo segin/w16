@@ -326,6 +326,7 @@ BOOL WINAPI SwapMouseButton(BOOL swap)
 {
     BOOL old = sysmet[SM_SWAPBUTTON];
     sysmet[SM_SWAPBUTTON] = swap != 0;
+    mouse_swapped = swap != 0;
     return old;
 }
 
