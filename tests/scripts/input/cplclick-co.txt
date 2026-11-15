@@ -1,0 +1,161 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Color dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it; the pointer moves 2 pixels a unit,
+; 1 for moves of 1 or 2 units).
+click 1
+sleep 1
+; open Color
+home
+sleep 0.3
+move 16 31
+move 1 0
+sleep 0.3
+dclick 1
+sleep 0.6
+sleep 2
+match 01-open 20 1
+shot 01-open
+; Color Palette >>
+home
+sleep 0.3
+move 66 158
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+match 02-palette 20 1
+shot 02-palette
+; scheme combo box
+home
+sleep 0.3
+move 75 37
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Down
+sleep 0.4
+key Return
+sleep 0.4
+match 03-scheme 20 1
+shot 03-scheme
+; basic colour row 1 column 0
+home
+sleep 0.3
+move 145 71
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 04-basic 20 1
+shot 04-basic
+; element combo box
+home
+sleep 0.3
+move 187 36
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Down
+sleep 0.4
+key Return
+sleep 0.4
+; basic colour row 3 column 4
+home
+sleep 0.3
+move 203 93
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; custom colour 9
+home
+sleep 0.3
+move 159 154
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+match 05-element 20 1
+shot 05-element
+; Define Custom Colors...
+home
+sleep 0.3
+move 198 171
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1.5
+match 06-selector 20 1
+shot 06-selector
+; colour field
+home
+sleep 0.3
+move 50 50
+sleep 0.3
+click 1
+sleep 0.6
+; luminosity bar
+home
+sleep 0.3
+move 121 60
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; hue: up arrow
+home
+sleep 0.3
+move 84 124
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+; green: down arrow
+home
+sleep 0.3
+move 125 137
+sleep 0.3
+click 1
+sleep 0.6
+match 07-selector-set 20 1
+shot 07-selector-set
+; Add Color
+home
+sleep 0.3
+move 30 171
+sleep 0.3
+click 1
+sleep 0.6
+match 08-added 20 1
+shot 08-added
+; Close
+home
+sleep 0.3
+move 73 171
+sleep 0.3
+click 1
+sleep 0.6
+match 09-closed-selector 20 1
+shot 09-closed-selector
+; OK
+home
+sleep 0.3
+move 23 171
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+match 10-closed 20 1
+shot 10-closed

@@ -394,6 +394,12 @@
 #              3.1 (part control@ms), w16's KRNL286 (@k286) and KRNL386
 #              (@k386); w16's install tree alone under its KRNL386 against
 #              its KRNL286 (@tree): every screen and CONTROL.INI identical
+#   cplclick   Control Panel's Keyboard, Mouse, Desktop and Color dialogs
+#              under real mouse clicks on each control (tests/scripts/input/
+#              cplclick-*.txt): w16's USER against Microsoft's (screens and
+#              INI files), w16's applets against Microsoft's (INI files),
+#              the install tree under KRNL386 against KRNL286 (both); parts
+#              cplclick@kb-us, @kb-ms, @kb-tree, ... @co-tree
 #   gpuser     USER's functions given a bad pointer, USER's "__GP" table
 #              (user/gp.asm): probe US27 as the shell in DOSBox-X (-p
 #              386x), every case Windows 3.1 came back from, its values
@@ -508,7 +514,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1164,6 +1170,78 @@ runcase() {
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   control: 0 pixels, CONTROL.INI identical"
         else echo "FAIL control: $r ($out)"; fails=$((fails + 1)); fi ;;
+    cplclick)
+        # Control Panel's Keyboard, Mouse, Desktop and Color dialogs driven
+        # with real mouse clicks on each of their controls (tests/scripts/
+        # input/cplclick-*.txt, WIN.INI run=CONTROL.EXE), parts APPLET-STACK:
+        #   -us    w16's CONTROL.EXE and MAIN.CPL on Microsoft's 3.1 with
+        #          w16's USER, against the same on Microsoft's USER: every
+        #          screen and WIN.INI, CONTROL.INI, SYSTEM.INI identical
+        #   -ms    w16's CONTROL.EXE and MAIN.CPL against Microsoft's, all
+        #          else Microsoft's: the INI files identical (the screens
+        #          show w16's own icons)
+        #   -tree  w16's install tree alone under its KRNL386 against its
+        #          KRNL286: every screen and the INI files identical
+        # (until 2026-11-15 the controls inside a group box took no clicks
+        # on w16's USER: ARCHITECTURE.md 14)
+        r=ok
+        clkcmp() {   # clkcmp REFDIR W16DIR NAME SHOTS(0/1) WINDIR
+            if [ "$4" = 1 ]; then
+                for f in "$1"/[0-9]*.png; do
+                    sn=$(basename "$f")
+                    [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                    n=$(magick compare -metric AE "$2/$sn" "$f" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+                done
+                ls "$1"/[0-9]*.png > /dev/null 2>&1 || { r="$3: no screens"; return; }
+            fi
+            for i in WIN.INI CONTROL.INI SYSTEM.INI; do
+                cmp -s "$1/work/c/$5/$i" "$2/work/c/$5/$i" || { r="$3: $i differs"; return; }
+            done
+        }
+        for pk in ${part:-kb-us kb-ms kb-tree ms-us ms-ms ms-tree dk-us dk-ms dk-tree co-us co-ms co-tree}; do
+            ap=${pk%-*} st=${pk#*-}
+            s=$root/tests/scripts/input/cplclick-$ap.txt
+            case $st in
+            tree)
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE'
+                rm -rf "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386"
+                "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/cplclick-$ap-t286" "$@" \
+                    > "$out/cplclick-$ap-t286.txt" 2>&1 || true
+                "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-t286/boot.png" -E "$out/cplclick-$ap-t286" \
+                    -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
+                clkcmp "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386" "$pk" 1 W16 ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/cplclick-WIN.INI" 'windows:run=CONTROL.EXE'
+                set -- -f "$out/cplclick-WIN.INI=WINDOWS/WIN.INI"
+                w16cp="-f $root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE -f $root/build/dos/MAIN.CPL=WINDOWS/SYSTEM/MAIN.CPL"
+                if [ "$st" = us ]; then
+                    # shellcheck disable=SC2086
+                    refrun cplclick-$ap-ref cplclick "$root/tests/inputrun.sh" -s -b 25 -t 300 "$s" \
+                        "$out/cplclick-$ap-ref" -r "$@" $w16cp
+                    rm -rf "$out/cplclick-$ap-us"
+                    # shellcheck disable=SC2086
+                    "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-ref/boot.png" -E "$out/cplclick-$ap-ref" \
+                        -b 25 -t 300 "$s" "$out/cplclick-$ap-us" -r "$@" $w16cp \
+                        -f "$user=WINDOWS/SYSTEM/USER.EXE" > "$out/cplclick-$ap-us.txt" 2>&1 || true
+                    clkcmp "$out/cplclick-$ap-ref" "$out/cplclick-$ap-us" "$pk" 1 WINDOWS
+                else
+                    refrun cplclick-$ap-msref cplclick "$root/tests/inputrun.sh" -s -b 25 -t 300 "$s" \
+                        "$out/cplclick-$ap-msref" -r "$@"
+                    rm -rf "$out/cplclick-$ap-ms"
+                    # shellcheck disable=SC2086
+                    "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-msref/boot.png" -b 25 -t 300 "$s" \
+                        "$out/cplclick-$ap-ms" -r "$@" $w16cp > "$out/cplclick-$ap-ms.txt" 2>&1 || true
+                    clkcmp "$out/cplclick-$ap-msref" "$out/cplclick-$ap-ms" "$pk" 0 WINDOWS
+                fi ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   cplclick: every click as on 3.1"
+        else echo "FAIL cplclick: $r ($out)"; fails=$((fails + 1)); fi ;;
     tree)
         ref
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
@@ -3176,6 +3254,7 @@ caseparts() {
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
+    cplclick) for v in kb ms dk co; do printf "%s@%s-us %s@%s-ms %s@%s-tree " "$1" $v "$1" $v "$1" $v; done ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;

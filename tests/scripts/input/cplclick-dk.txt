@@ -1,0 +1,212 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Desktop dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it; the pointer moves 2 pixels a unit,
+; 1 for moves of 1 or 2 units).
+click 1
+sleep 1
+; open Desktop
+home
+sleep 0.3
+move 132 31
+move 1 0
+sleep 0.3
+dclick 1
+sleep 0.6
+sleep 2
+match 01-open 20 1
+shot 01-open
+; pattern combo box
+home
+sleep 0.3
+move 75 40
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Return
+sleep 0.4
+match 02-pattern 20 1
+shot 02-pattern
+; Fast Alt+Tab check box
+home
+sleep 0.3
+move 23 75
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 03-coolswitch 20 1
+shot 03-coolswitch
+; screen saver combo box
+home
+sleep 0.3
+move 75 100
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Return
+sleep 0.4
+; delay: up arrow
+home
+sleep 0.3
+move 84 108
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; delay: up arrow
+home
+sleep 0.3
+move 84 108
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; delay: down arrow
+home
+sleep 0.3
+move 84 114
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+match 04-saver 20 1
+shot 04-saver
+; wallpaper combo box
+home
+sleep 0.3
+move 65 134
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Return
+sleep 0.4
+; Center
+home
+sleep 0.3
+move 24 145
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 05-wallpaper 20 1
+shot 05-wallpaper
+; Tile
+home
+sleep 0.3
+move 62 145
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; icon spacing: up arrow
+home
+sleep 0.3
+move 153 131
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; icon spacing: down arrow
+home
+sleep 0.3
+move 153 137
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; icon spacing: down arrow
+home
+sleep 0.3
+move 153 137
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
+; Wrap Title
+home
+sleep 0.3
+move 107 144
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 06-icons 20 1
+shot 06-icons
+; granularity: up arrow
+home
+sleep 0.3
+move 87 166
+sleep 0.3
+click 1
+sleep 0.6
+; border width: up arrow
+home
+sleep 0.3
+move 87 177
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; border width box
+home
+sleep 0.3
+move 75 180
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+key BackSpace
+sleep 0.4
+type 5
+sleep 0.4
+match 07-grid 20 1
+shot 07-grid
+; blink bar: right arrow
+home
+sleep 0.3
+move 161 178
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; blink bar: left arrow
+home
+sleep 0.3
+move 104 178
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; blink bar: shaft
+home
+sleep 0.3
+move 125 178
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 08-blink 20 1
+shot 08-blink
+; OK
+home
+sleep 0.3
+move 163 30
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+match 09-closed 20 1
+shot 09-closed

@@ -1,0 +1,105 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Keyboard dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it; the pointer moves 2 pixels a unit,
+; 1 for moves of 1 or 2 units).
+click 1
+sleep 1
+; open Keyboard
+home
+sleep 0.3
+move 161 31
+move 1 0
+sleep 0.3
+dclick 1
+sleep 0.6
+sleep 2
+match 01-open 20 1
+shot 01-open
+; delay bar: right arrow
+home
+sleep 0.3
+move 110 54
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: left arrow
+home
+sleep 0.3
+move 18 54
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: left arrow
+home
+sleep 0.3
+move 18 54
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: shaft right of the thumb
+home
+sleep 0.3
+move 90 54
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+match 02-delay 20 1
+shot 02-delay
+; rate bar: left arrow
+home
+sleep 0.3
+move 18 81
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+; rate bar: shaft left of the thumb
+home
+sleep 0.3
+move 30 81
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+; rate bar: right arrow
+home
+sleep 0.3
+move 110 81
+move 1 1
+sleep 0.3
+click 1
+sleep 0.6
+match 03-rate 20 1
+shot 03-rate
+; Test box
+home
+sleep 0.3
+move 60 101
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+type abc
+sleep 0.4
+match 04-test 20 1
+shot 04-test
+; OK
+home
+sleep 0.3
+move 136 34
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+match 05-closed 20 1
+shot 05-closed
