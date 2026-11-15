@@ -180,6 +180,10 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
             push_event(WM_MOUSEMOVE, 0, MAKELONG(x, y));
         }
     }
+    /* swapped buttons (SwapMouseButton, WIN.INI SwapMouseButtons): the
+       physical left button is the right one from here on */
+    if (sysmet[SM_SWAPBUTTON])
+        ax = (ax & ~0x1E) | ((ax & 6) << 2) | ((ax & 0x18) >> 2);
     if (ax & 2) { keystate[VK_LBUTTON] |= 0x80; push_event(WM_LBUTTONDOWN, 0, MAKELONG(x, y)); }
     if (ax & 4) { keystate[VK_LBUTTON] &= ~0x80; push_event(WM_LBUTTONUP, 0, MAKELONG(x, y)); }
     if (ax & 8) { keystate[VK_RBUTTON] |= 0x80; push_event(WM_RBUTTONDOWN, 0, MAKELONG(x, y)); }
@@ -444,6 +448,23 @@ void WINAPI SetKeyboardState(BYTE __far *b)
         return;
     for (i = 0; i < 256; i++)
         qkeystate[i] = t[i];
+}
+
+/* the acceleration, for SystemParametersInfo's SPI_GETMOUSE/SPI_SETMOUSE
+   (Control Panel's Mouse Tracking Speed: w16 used to answer 2, 0, 1
+   whatever was set and ignore SPI_SETMOUSE, so the bar did nothing) */
+void mouse_accel(int __far *get, const int __far *set)
+{
+    if (get) {
+        get[0] = mthresh1;
+        get[1] = mthresh2;
+        get[2] = mspeed;
+    }
+    if (set) {
+        mthresh1 = set[0];
+        mthresh2 = set[1];
+        mspeed = set[2];
+    }
 }
 
 UINT WINAPI GetDoubleClickTime(void)
