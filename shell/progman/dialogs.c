@@ -157,16 +157,10 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             if (!cmd)
                 return TRUE;
             GetDlgItemText(dlg, IDC_RUNCMD, cmd, n);
-            /* observed (boot-test missingdll, File > Run "nosuch"): the
-               dialog is gone while the program starts; 3.1's error box
-               has none behind it, and the dialog is back after it */
-            ShowWindow(dlg, SW_HIDE);
             if (pm_exec(dlg, cmd, NULL, IsDlgButtonChecked(dlg, IDC_RUNMIN), TRUE)) {
                 EndDialog(dlg, IDOK);
                 if (g_minonrun)
                     ShowWindow(g_frame, SW_MINIMIZE);
-            } else {
-                ShowWindow(dlg, SW_SHOW);
             }
             mem_free(cmd);
             return TRUE;
