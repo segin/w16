@@ -3376,6 +3376,11 @@ partsummary() {
     runbrowse)
         if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
         else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;
+    *)  # any split case without a line of its own above (control,
+        # cplclick, mousespeed, ...): a failing part must never show only
+        # as a higher failure count
+        if [ $pbad = 0 ]; then echo "ok   $1: $pt of $pt parts"
+        else echo "FAIL $1: $pbad of $pt parts failed; first: $pfirst ($out)"; fi ;;
     esac
     [ $pbad = 0 ]
 }
