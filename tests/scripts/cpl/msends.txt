@@ -1,6 +1,8 @@
 ;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
 ; Mouse: Home on the tracking bar (fastest: 4 6 2), End on the double
 ; click bar (slowest: 900)
+; carets and focused scroll bar thumbs keep their phase
+blinktime 65535
 run CONTROL.EXE MOUSE
 wait 4000
 key 24

@@ -5,6 +5,8 @@
 ;! ini WINDOWS/WIN.INI windows:DoubleClickSpeed=450
 ; Mouse: where the bars start for values between the settings; one step
 ; faster on each bar
+; carets and focused scroll bar thumbs keep their phase
+blinktime 65535
 run CONTROL.EXE MOUSE
 wait 4000
 snap M0.BMP

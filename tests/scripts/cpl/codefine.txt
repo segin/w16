@@ -2,6 +2,8 @@
 ; Color: Define Custom Colors with Desktop's colour (192 192 192), then
 ; Red 255 typed (the HLS boxes follow), Add Color (into the first custom
 ; cell), Close, OK: CONTROL.INI [Custom Colors], WIN.INI Background
+; carets and focused scroll bar thumbs keep their phase
+blinktime 65535
 run CONTROL.EXE COLOR
 wait 4000
 alt p
