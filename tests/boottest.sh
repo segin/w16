@@ -346,7 +346,8 @@
 #              (Notepad's caret left out), and US19's WM_VSCROLL/WM_HSCROLL
 #              log identical; and a fast drag of US19's slow control with
 #              w16's MOUSE.DRV too: the outline where the pointer stopped
-#              (parts sbdrag@us, sbdrag@np, sbdrag@fast)
+#              (parts sbdrag@us, sbdrag@np, sbdrag@fast); and w16's own
+#              Notepad against Microsoft's (sbdrag@npw)
 #   edithandle an edit control's text in the local heap its hInstance names,
 #              EM_GETHANDLE, EM_SETHANDLE (user/edit.c): probe US20 as the
 #              shell, its OBS lines on w16's USER as on 3.1's; Microsoft's
@@ -358,6 +359,11 @@
 #              border, a corner and the client area; w16's USER and GDI
 #              against all-Microsoft: every screen and US22's log of mouse
 #              messages and WM_SETCURSOR identical
+#   holdbtn    the caption's minimize and maximize buttons and a scroll
+#              bar's arrows and shaft held down: probe US26 as the shell,
+#              w16's USER and GDI against all-Microsoft, every screen
+#              (pressed while held, raised off, nothing on a release off)
+#              and the messages identical, the arrow's repeat times as 3.1's
 #   mmerge     mouse moves made while a program is busy merge into one:
 #              probe US25 as the shell (events through mouse_event, then
 #              real input), w16's USER against all-Microsoft, its log of
@@ -461,7 +467,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2002,6 +2008,51 @@ open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   edithandle: US20 as 3.1; Notepad opens, edits and saves a 31500-byte file as on 3.1 (0 pixels, same bytes)"
         else echo "FAIL edithandle: $r"; fails=$((fails + 1)); fi ;;
+    holdbtn)
+        # the caption's minimize and maximize buttons and a scroll bar's
+        # arrows and shaft held down with real input (user/defwnd.c
+        # track_caption_button, user/scroll.c): probe US26 as the shell
+        # (tests/scripts/input/holdbtn.txt), w16's USER and GDI against
+        # all-Microsoft: every screen identical (buttons and arrows drawn
+        # pressed while held, raised when the pointer leaves, nothing done
+        # on a release off the button); US26's log identical but for the
+        # times and the number of SB_LINEDOWNs, which depend on how long
+        # the host held the button; and on w16 the arrow's repeats 200-250
+        # ms after the press, then 50-60 ms apart, none while the pointer
+        # was off it
+        scr=$root/tests/scripts/input/holdbtn.txt
+        refrun holdbtn-ref holdbtn "$root/tests/inputrun.sh" -s -b 40 -t 250 "$scr" "$out/holdbtn-ref" -r \
+            -f "$root/build/dos/US26.EXE=US26.EXE" -i 'boot:shell=C:\US26.EXE'
+        "$root/tests/inputrun.sh" -e "$out/holdbtn-ref/boot.png" -E "$out/holdbtn-ref" -b 40 -t 250 "$scr" "$out/holdbtn-w16" -r \
+            -f "$root/build/dos/US26.EXE=US26.EXE" -i 'boot:shell=C:\US26.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/holdbtn-w16.txt" 2>&1 || true
+        for k in ref w16; do
+            f=$out/holdbtn-$k/work/c/WINDOWS/TK.LOG
+            if [ -f "$f" ]; then tr -d '\r' < "$f" > "$out/holdbtn-$k.log"; else : > "$out/holdbtn-$k.log"; fi
+            grep -v '^VSCROLL 1 ' "$out/holdbtn-$k.log" | sed 's/ t=.*//' > "$out/holdbtn-$k.cmp"
+        done
+        r=ok
+        if ! grep -q '^VSCROLL 8 pos 100' "$out/holdbtn-ref.log"; then
+            r="the reference's log is not complete ($out/holdbtn-ref.log)"
+        elif ! cmp -s "$out/holdbtn-ref.cmp" "$out/holdbtn-w16.cmp"; then
+            r="US26's messages differ from 3.1's ($out/holdbtn-ref.cmp, holdbtn-w16.cmp)"
+        else
+            # the arrow's repeat times on w16
+            t=$(awk '/^VSCROLL 1 /{split($5, a, "="); t = a[2] + 0; if (n) d[n] = t - p; p = t; n++}
+                END {ok = n > 12 && d[1] >= 190 && d[1] <= 250; for (i = 2; i <= 11; i++) if (d[i] < 50 || d[i] > 60) ok = 0
+                     g = 0; for (i = 2; i < n; i++) if (d[i] > 500) g = 1; print (ok && g) ? "ok" : "bad"}' "$out/holdbtn-w16.log")
+            [ "$t" = ok ] || r="the arrow's repeats are not 200 ms then a tick apart, stopping off the arrow ($out/holdbtn-w16.log)"
+        fi
+        for g in "$out/holdbtn-ref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$g" .png)
+            [ -f "$out/holdbtn-w16/$s.png" ] || { r="no $s"; break; }
+            n=$(magick compare -metric AE "$out/holdbtn-w16/$s.png" "$g" "$out/holdbtn-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$s: $n pixels differ ($out/holdbtn-$s-diff.png)"
+        done
+        if [ "$r" = ok ]; then echo "ok   holdbtn: caption buttons and scroll-bar arrows held as on 3.1 (0 pixels, the messages, the arrow's repeat times)"
+        else echo "FAIL holdbtn: $r"; fails=$((fails + 1)); fi ;;
     mmerge)
         # mouse moves made while a program is busy merge into one
         # (user/input.c push_event): probe US25 (tests/apps/us25.c) as the
@@ -2041,7 +2092,7 @@ open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown
         # stops and after the release as 3.1's within 8 seconds (moves
         # made while the program is busy merged; without that the outline
         # falls seconds behind the pointer)
-        pk=${part:-us np fast}
+        pk=${part:-us np fast npw}
         r=ok
         case " $pk " in *" us "*)
         scr=$root/tests/scripts/input/sbdrag-us.txt
@@ -2083,6 +2134,23 @@ open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown
             n=${n%% *}
             [ "$n" = 0 ] || r="fast: $s: $n pixels differ, the outline behind the pointer? ($out/sbdrag-fast-$s-diff.png)"
         done ;; esac
+        case " $pk " in *" npw "*)
+        # w16's own Notepad (shell/notepad) on w16's USER and GDI against
+        # Microsoft's on 3.1: its thumb stays put while dragged, as 3.1's
+        scr=$root/tests/scripts/input/sbdrag-np.txt
+        m="rectangle 14,42 18,60"
+        refrun sbdrag-npref sbdrag "$root/tests/inputrun.sh" -s -b 40 -t 300 "$scr" "$out/sbdrag-npref" -r             -i 'WIN.INI:windows:run=NOTEPAD.EXE'
+        "$root/tests/inputrun.sh" -e "$out/sbdrag-npref/boot.png" -m "$m" -E "$out/sbdrag-npref" -M "$m" -b 40 -t 300 "$scr" "$out/sbdrag-npw" -r             -i 'WIN.INI:windows:run=NOTEPAD.EXE' -f "$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE"             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/sbdrag-npw.txt" 2>&1 || true
+        for f in "$out/sbdrag-npref"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s=$(basename "$f" .png)
+            [ -f "$out/sbdrag-npw/$s.png" ] || { r="npw: no $s"; break; }
+            magick "$out/sbdrag-npw/$s.png" -fill black -draw "$m" "$out/sbdrag-npw-a.png"
+            magick "$f" -fill black -draw "$m" "$out/sbdrag-npw-b.png"
+            n=$(magick compare -metric AE "$out/sbdrag-npw-a.png" "$out/sbdrag-npw-b.png" "$out/sbdrag-npw-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="npw: $s: $n pixels differ ($out/sbdrag-npw-$s-diff.png)"
+        done ;; esac
         case " $pk " in *" np "*)
         scr=$root/tests/scripts/input/sbdrag-np.txt
         m="rectangle 14,42 18,60"       # the caret's place (it blinks)
@@ -2103,7 +2171,7 @@ open(sys.argv[1], "w", newline="\r\n").write("".join("Line %03d: the quick brown
             [ "$n" = 0 ] || r="np: $s: $n pixels differ ($out/sbdrag-np-$s-diff.png)"
         done ;; esac
         if [ -n "$part" ]; then partdone "$r"
-        elif [ "$r" = ok ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Notepad, a fast drag), US19's messages as 3.1's"
+        elif [ "$r" = ok ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Microsoft's and w16's Notepad, a fast drag), US19's messages as 3.1's"
         else echo "FAIL sbdrag: $r"; fails=$((fails + 1)); fi ;;
     deskver)
         # the desktop's version stamp (a w16 extension, user/deskver.c):
@@ -2760,7 +2828,7 @@ caseparts() {
     case $1 in
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
     pmdrop) echo "$1@pm $1@sh $1@us" ;;
-    sbdrag) echo "$1@us $1@np $1@fast" ;;
+    sbdrag) echo "$1@us $1@np $1@fast $1@npw" ;;
     edithandle) echo "$1@us $1@np" ;;
     winfile) echo "$1@cmp $1@all" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
@@ -2793,7 +2861,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   edithandle: US20 as 3.1; Notepad opens, edits and saves a 31500-byte file as on 3.1 (0 pixels, same bytes)"
         else echo "FAIL edithandle: $pfirst"; fi ;;
     sbdrag)
-        if [ $pbad = 0 ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Notepad, a fast drag), US19's messages as 3.1's"
+        if [ $pbad = 0 ]; then echo "ok   sbdrag: 0 pixels mid-drag (US19's four bars, Microsoft's and w16's Notepad, a fast drag), US19's messages as 3.1's"
         else echo "FAIL sbdrag: $pfirst"; fi ;;
     kbd)
         if [ $pbad = 0 ]; then echo "ok   kbd: 0 pixels (kbtype, tabs, alttab, helpmenus, pmkeys, icons, menus with w16's KEYBOARD.DRV)"
