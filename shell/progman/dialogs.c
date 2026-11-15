@@ -67,8 +67,17 @@ int run_dialog(HWND owner, FARPROC proc, int id)
 /* Start a program. cmd is a command line; a document name is opened with
    the program associated with its extension (WinExec does not do that,
    ShellExecute does, Windows 3.1). dir, if given, becomes the current
-   directory first. */
-BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized)
+   directory first. run: from File > Run (the error text differs).
+   Observed on Windows 3.1 (boot-test case missingdll; probe screenshots):
+   when the program or a DLL it imports is not found (2) Program Manager
+   says "Cannot find file %s (or one of its components)..." in an
+   "Application Execution Error" box (exclamation icon, OK), %s being an
+   item's command line as stored ("CARDFILE.EXE"), and for File > Run
+   the program, a blank and the parameters ("nosuch foo", and "nosuch "
+   with none: two blanks before "(or"). UNVERIFIED: an item with
+   parameters; the texts of the other errors (w16: IDS_EXECFAIL). */
+BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized,
+             BOOL run)
 {
     LPSTR line, params;
     UINT r;
@@ -97,6 +106,22 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
     r = (UINT)ShellExecute(owner, NULL, line, *params ? params : NULL, NULL, show);
     if (r == 31)                        /* no association: try it as a program */
         r = WinExec(cmd, show);
+    if (r == 2) {
+        LPSTR t = NULL;
+        if (run) {
+            t = mem_alloc(s_len(line) + s_len(params) + 2);
+            if (t) {
+                lstrcpy(t, line);
+                lstrcat(t, " ");
+                lstrcat(t, params);
+            }
+        }
+        ask(owner, IDS_EXECERROR, IDS_EXECNOTFOUND, t ? t : cmd, MB_OK | MB_ICONEXCLAMATION);
+        if (t)
+            mem_free(t);
+        mem_free(line);
+        return FALSE;
+    }
     if (r < 32) {
         message(owner, IDS_EXECFAIL, cmd);
         mem_free(line);
@@ -132,7 +157,7 @@ BOOL CALLBACK __export RunDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             if (!cmd)
                 return TRUE;
             GetDlgItemText(dlg, IDC_RUNCMD, cmd, n);
-            if (pm_exec(dlg, cmd, NULL, IsDlgButtonChecked(dlg, IDC_RUNMIN))) {
+            if (pm_exec(dlg, cmd, NULL, IsDlgButtonChecked(dlg, IDC_RUNMIN), TRUE)) {
                 EndDialog(dlg, IDOK);
                 if (g_minonrun)
                     ShowWindow(g_frame, SW_MINIMIZE);

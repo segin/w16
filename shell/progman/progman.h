@@ -145,6 +145,8 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_ABOUTMEM        23
 #define IDS_INVALIDPATH     24
 #define IDS_NOASSOC         25
+#define IDS_EXECERROR       26  /* the caption of the two below */
+#define IDS_EXECNOTFOUND    27
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -232,7 +234,7 @@ LPSTR browse_file(HWND owner, int filter_ids);  /* full path, capitals */
 BOOL browse_register(void);                     /* 2.x: pmcombo, pmdirlist */
 
 /* ---- dialogs.c: program execution ---- */
-BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized);
+BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized, BOOL run);
 
 /* ---- iconx.c: icons read from .ICO, NE (3.x and 2.x) and PE files ---- */
 int   iconx_count(const char FAR *path);

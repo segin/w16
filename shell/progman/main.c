@@ -174,7 +174,7 @@ static void run_list(const char *key, BOOL minimized)
         if (*p)
             *p++ = 0;
         if (*w)
-            pm_exec(g_frame, w, NULL, minimized);
+            pm_exec(g_frame, w, NULL, minimized, FALSE);
     }
     mem_free(list);
 }
@@ -395,7 +395,7 @@ static void command(HWND hwnd, WORD id)
         help_on_help(hwnd);
         break;
     case IDM_TUTORIAL:
-        pm_exec(hwnd, "WINTUTOR.EXE", NULL, FALSE);
+        pm_exec(hwnd, "WINTUTOR.EXE", NULL, FALSE, FALSE);
         break;
     case IDM_ABOUT:
         cmd_about(hwnd);

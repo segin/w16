@@ -993,7 +993,7 @@ BOOL group_open_selected(HWND hwnd)
     if (!g || !g->sel || !group_get_props(hwnd, &ip))
         return FALSE;
     /* run the program from its own path, in the working directory */
-    ok = pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized);
+    ok = pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized, FALSE);
     itemprops_free(&ip);
     if (ok && g_minonrun)
         ShowWindow(g_frame, SW_MINIMIZE);
@@ -1832,7 +1832,7 @@ void group_run_all(HWND hwnd)
         itemprops ip;
         g->sel = t;                     /* group_get_props reads the selection */
         if (group_get_props(hwnd, &ip)) {
-            pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized);
+            pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized, FALSE);
             itemprops_free(&ip);
         }
     }
