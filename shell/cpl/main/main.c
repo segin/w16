@@ -50,6 +50,9 @@ static void run(HWND parent, int applet)
     case AP_COLOR:
         color_applet(parent);
         break;
+    case AP_DESKTOP:
+        desktop_applet(parent);
+        break;
     case AP_MOUSE:
         mouse_applet(parent);
         break;

@@ -23,6 +23,14 @@ cosave/C0 0
 cosave/C1 0
 coscheme/C0 733
 coscheme/C1 733
+dkgrid/D1 227
+dkicons/D1 227
+dkopen/D0 227
+dkopen/D1 227
+dkpattern/D1 227
+dkrange/D1 227
+dksaver/D1 227
+dkwall/D1 227
 grow/S0 0
 grow/S1 0
 kbmove/K0 546
@@ -34,8 +42,8 @@ mmcpl/S0 0
 msends/M1 227
 msmove/M0 227
 msmove/M1 227
-msstart/M0 201
-msswap/M1 201
+msstart/M0 227
+msswap/M1 227
 newinq/M1 0
 newinq/S0 0
 newinq3/S0 0

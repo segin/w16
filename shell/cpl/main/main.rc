@@ -74,6 +74,11 @@ BEGIN
     IDS_SCHEME_BRACKET, "The scheme name cannot include left or right brackets ([ ])."
     IDS_SCHEME_BLANK,   "The scheme name cannot be blank."
     IDS_SCHEME_REMOVE,  "Are you sure you want to remove the %s color scheme?"
+    IDS_DK_REMOVEPAT,   "Are you sure you want to remove the %s pattern?"
+    IDS_DK_GRAN,        "Grid Granularity entry must be between %d and %d."
+    IDS_DK_BORDER,      "Specify a value for the Border Width between %d and %d."
+    IDS_DK_SPACING,     "Specify a value for Icon Spacing between %d and %d."
+    IDS_DK_DELAY,       "Specify a value for the Screen Saver Delay between %d and %d."
 
 END
 
@@ -188,4 +193,69 @@ BEGIN
     CONTROL "&Add Color", IDC_CC_ADD, "button", 0x50030000, 4, 174, 45, 14
     CONTROL "&Close", IDOK, "button", 0x50030001, 52, 174, 45, 14
     CONTROL "&Help", IDC_HELP, "button", 0x50030000, 100, 174, 45, 14
+END
+
+DLG_DESKTOP DIALOG 8, 2, 200, 208
+STYLE 0x80C800C0
+CAPTION "Desktop"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Pattern", 99, "button", 0x50000007, 4, 6, 130, 40
+    CONTROL "&Name:", 99, "static", 0x50020000, 10, 18, 20, 10
+    CONTROL "", IDC_DK_PATTERN, "combobox", 0x50210103, 32, 16, 90, 64
+    CONTROL "Edit &Pattern...", IDC_DK_EDITPAT, "button", 0x50010000, 44, 30, 60, 14
+    CONTROL "Applications", -1, "button", 0x50000007, 4, 48, 130, 27
+    CONTROL "Fast ""A&lt+Tab"" Switching", IDC_DK_COOLSWITCH, "button", 0x50030003, 10, 61, 118, 9
+    CONTROL "Screen Saver", -1, "button", 0x50000007, 4, 77, 192, 40
+    CONTROL "N&ame:", -1, "static", 0x50020000, 10, 90, 20, 10
+    CONTROL "", IDC_DK_SAVER, "combobox", 0x50230103, 32, 89, 90, 64
+    CONTROL "&Delay:", -1, "static", 0x50020000, 9, 105, 46, 8
+    CONTROL "", IDC_DK_DELAY, "edit", 0x50830000, 57, 103, 24, 12
+    CONTROL "Minutes", -1, "static", 0x50020000, 92, 105, 41, 8
+    CONTROL "", IDC_DK_DELAYA, "cpArrow", 0x50820000, 81, 103, 7, 12
+    CONTROL "T&est", IDC_DK_TEST, "button", 0x50030000, 146, 84, 44, 14
+    CONTROL "Set&up...", IDC_DK_SETUP, "button", 0x50030000, 146, 101, 44, 14
+    CONTROL "Wallpaper", 99, "button", 0x50000007, 4, 119, 94, 40
+    CONTROL "&File:", 99, "static", 0x50020000, 10, 133, 20, 10
+    CONTROL "", IDC_DK_WALLPAPER, "combobox", 0x502101C2, 32, 131, 62, 64
+    CONTROL "&Center", IDC_DK_CENTER, "button", 0x50030004, 11, 145, 39, 12
+    CONTROL "&Tile", IDC_DK_TILE, "button", 0x50000004, 54, 145, 32, 12
+    CONTROL "Icons", 99, "button", 0x50000007, 102, 119, 94, 40
+    CONTROL "&Spacing:", 99, "static", 0x50020000, 107, 133, 57, 9
+    CONTROL "", IDC_DK_SPACING, "edit", 0x50830000, 142, 131, 18, 12
+    CONTROL "", IDC_DK_SPACINGA, "cpArrow", 0x50820000, 160, 131, 7, 12
+    CONTROL "Pixels", 99, "static", 0x50020000, 172, 133, 20, 9
+    CONTROL "&Wrap Title", IDC_DK_WRAP, "button", 0x50030003, 106, 145, 50, 9
+    CONTROL "Cursor Blink &Rate", -1, "button", 0x50020007, 102, 162, 94, 42
+    CONTROL "Slow", -1, "static", 0x50020000, 104, 178, 40, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 135, 178, 40, 9
+    CONTROL "", IDC_DK_BLINK, "scrollbar", 0x50030002, 104, 187, 71, 10
+    CONTROL "", IDC_DK_BLINKER, "static", 0x50000000, 184, 181, 1, 8
+    CONTROL "Sizing Grid", 99, "button", 0x50000007, 4, 162, 94, 42
+    CONTROL "&Granularity:", 99, "static", 0x50020000, 8, 176, 54, 9
+    CONTROL "", IDC_DK_GRAN, "edit", 0x50830000, 66, 174, 18, 12
+    CONTROL "", IDC_DK_GRANA, "cpArrow", 0x50820000, 84, 174, 7, 12
+    CONTROL "&Border Width:", -1, "static", 0x50020000, 8, 190, 54, 9
+    CONTROL "", IDC_DK_BORDER, "edit", 0x50830000, 66, 188, 18, 12
+    CONTROL "", IDC_DK_BORDERA, "cpArrow", 0x50820000, 84, 188, 7, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 154, 3, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 154, 20, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 154, 40, 40, 14
+END
+DLG_EDITPATTERN DIALOG 0, 70, 200, 118
+STYLE 0x80C800C0
+CAPTION "Desktop - Edit Pattern"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Name", 99, "static", 0x50020000, 4, 6, 46, 9
+    CONTROL "", IDC_EP_NAME, "combobox", 0x50210102, 54, 4, 94, 64
+    CONTROL "Sample", 99, "static", 0x50020000, 4, 22, 40, 9
+    CONTROL "", IDC_EP_SAMPLE, "static", 0x50000007, 4, 32, 46, 82
+    CONTROL "", IDC_EP_GRID, "static", 0x50000007, 58, 24, 90, 90
+    CONTROL "&Add", IDC_EP_ADD, "button", 0x50030000, 158, 68, 40, 14
+    CONTROL "&Change", IDC_EP_CHANGE, "button", 0x50010000, 158, 84, 40, 14
+    CONTROL "&Remove", IDC_EP_REMOVE, "button", 0x50010000, 158, 100, 40, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 158, 3, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 158, 20, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 158, 40, 40, 14
 END

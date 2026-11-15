@@ -1,0 +1,22 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: granularity 5, border width 4, cursor blink two steps faster,
+; Fast Alt+Tab off
+run CONTROL.EXE DESKTOP
+wait 4000
+alt g
+wait 300
+type 5
+alt b
+wait 300
+type 4
+wait 300
+alt r
+wait 300
+key 27
+key 27
+wait 300
+alt l
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

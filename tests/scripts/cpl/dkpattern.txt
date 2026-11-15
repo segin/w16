@@ -1,0 +1,11 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: the next pattern (50% Gray): WIN.INI Pattern= its bits
+run CONTROL.EXE DESKTOP
+wait 4000
+alt n
+wait 300
+key 28
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

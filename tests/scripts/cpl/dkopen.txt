@@ -1,0 +1,10 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: the dialog, OK with nothing changed (CoolSwitch, IconSpacing,
+; TileWallPaper appended; SYSTEM.INI SCRNSAVE.EXE=(None))
+run CONTROL.EXE DESKTOP
+wait 4000
+snap D0.BMP
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

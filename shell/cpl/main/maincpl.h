@@ -65,10 +65,17 @@
 #define IDS_SCHEME_BRACKET  106
 #define IDS_SCHEME_BLANK    107
 #define IDS_SCHEME_REMOVE   236
+#define IDS_DK_REMOVEPAT    239
+#define IDS_DK_GRAN         208
+#define IDS_DK_BORDER       214
+#define IDS_DK_SPACING      218
+#define IDS_DK_DELAY        220
 
 /* dialogs (the original's resource IDs) */
 #define DLG_KEYBOARD        5
 #define DLG_MOUSE           6
+#define DLG_DESKTOP         8
+#define DLG_EDITPATTERN     34
 #define DLG_CUSTOMCOLOR     26
 #define DLG_SAVESCHEME      27
 #define DLG_COLOR           100
@@ -111,6 +118,34 @@
 #define IDC_CC_BLUEA        725
 #define IDC_CC_ADD          731
 
+/* Desktop */
+#define IDC_DK_PATTERN      102
+#define IDC_DK_EDITPAT      103
+#define IDC_DK_WALLPAPER    105
+#define IDC_DK_CENTER       107
+#define IDC_DK_TILE         108
+#define IDC_DK_GRAN         113
+#define IDC_DK_GRANA        114
+#define IDC_DK_SPACING      116
+#define IDC_DK_SPACINGA     117
+#define IDC_DK_WRAP         118
+#define IDC_DK_COOLSWITCH   121
+#define IDC_DK_BORDER       954
+#define IDC_DK_BORDERA      955
+#define IDC_DK_BLINK        958
+#define IDC_DK_BLINKER      959
+#define IDC_DK_SAVER        960
+#define IDC_DK_DELAY        961
+#define IDC_DK_DELAYA       962
+#define IDC_DK_TEST         963
+#define IDC_DK_SETUP        964
+#define IDC_EP_GRID         101
+#define IDC_EP_NAME         102
+#define IDC_EP_ADD          109
+#define IDC_EP_CHANGE       110
+#define IDC_EP_REMOVE       111
+#define IDC_EP_SAMPLE       115
+
 /* Mouse */
 #define IDC_MS_SWAP         500
 #define IDC_MS_L            503
@@ -138,5 +173,6 @@ void cpl_help(HWND dlg, int applet);
 void keyboard_applet(HWND parent);
 void mouse_applet(HWND parent);
 void color_applet(HWND parent);
+void desktop_applet(HWND parent);
 
 #endif
