@@ -177,7 +177,11 @@ static int prepare(JOB *j, LPCSTR file, LPCSTR op, LPCSTR params)
     OFSTRUCT of;
     char name[160];
     const char __far *e;
-    j->cmd[0] = j->prog[0] = 0;
+    j->cmd[0] = j->prog[0] = j->regprog[0] = 0;
+    /* a program has no association: without this, a program WinExec
+       could not start (2: a DLL it imports missing) took ShellExecute
+       into the Program Not Found dialog with a garbage name */
+    j->registered = 0;
     if (!file || !*file)
         return 2;
     lstrcpyn(name, file, sizeof name - 4);
