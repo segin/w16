@@ -178,9 +178,9 @@ same: not a KRNL386 matter). Causes:
 - Left: w16's USER draws SysErrorBox as a system-modal message box (3.1's
   is its own full-width box and leaves the captions active), and its
   MessageBox lays the long text out with other margins: boot-test
-  missingdll masks those boxes in its every-w16-part run. The tree still
-  cannot start Cardfile without an OLECLI.DLL (a w16 OLECLI, Cardfile
-  loading OLECLI only when needed, or no Cardfile item: for the user).
+  missingdll masks those boxes in its every-w16-part run. The tree has
+  w16's own OLECLI.DLL since (ole/olecli, ARCHITECTURE.md 16; boot-test
+  olecli@tree): Cardfile starts from it under both kernels.
 
 **Program Manager without its groups at the default place, a thin blue
 bar at the bottom** (a tester's; the user cannot reproduce it by hand).
