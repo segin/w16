@@ -392,6 +392,14 @@ LRESULT WINAPI __loadds ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             return DLGC_STATIC;
         return DLGC_BUTTON;
     }
+    case WM_NCHITTEST:
+        /* a group box lets the mouse through to what it frames (on 3.1 the
+           controls inside a group box that comes first in the dialog
+           template take clicks: Control Panel's Keyboard, Mouse, Desktop,
+           Color dialogs, Microsoft's MAIN.CPL as w16's) */
+        if (btype(h) == BS_GROUPBOX)
+            return HTTRANSPARENT;
+        break;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
         if (btype(h) == BS_GROUPBOX)

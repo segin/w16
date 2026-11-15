@@ -1044,6 +1044,34 @@ static HWND child_from_point(HWND parent, POINT pt, BOOL skiphidden)
     return 0;
 }
 
+/* the window under pt below `above' (a window WM_NCHITTEST called
+   HTTRANSPARENT): the next sibling under it in z-order that contains pt,
+   descended into as WindowFromPoint does; none, the parent */
+HWND window_below(HWND above, POINT pt)
+{
+    PWND w = valid_wnd(above);
+    HWND h;
+    if (!w)
+        return 0;
+    for (h = w->hwndNext; h; h = PW(h)->hwndNext) {
+        PWND s = PW(h);
+        if ((s->style & WS_VISIBLE) && PtInRect(&s->rcWindow, pt))
+            break;
+    }
+    if (!h)
+        return w->hwndParent ? w->hwndParent : hwndDesktop;
+    for (;;) {
+        PWND c = PW(h);
+        HWND d;
+        if ((c->style & WS_DISABLED) || (c->style & WS_MINIMIZE) || !PtInRect(&c->rcClient, pt))
+            return h;
+        d = child_from_point(h, pt, TRUE);
+        if (!d)
+            return h;
+        h = d;
+    }
+}
+
 HWND WINAPI WindowFromPoint(POINT pt)
 {
     HWND h = hwndDesktop, c;

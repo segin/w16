@@ -592,7 +592,16 @@ static HWND key_target(void)
 }
 
 /* the window the mouse is over, and the hit-test code */
-static HWND mouse_target(POINT pt, int *hit)
+/* The window that gets a mouse event: the topmost one under the pointer,
+   except that one of the reading task's windows answering WM_NCHITTEST
+   with HTTRANSPARENT passes it to the window below (3.1 SDK, WM_NCHITTEST;
+   observed: a group box in front of the controls it frames - Control
+   Panel's dialogs - takes no clicks on 3.1). w16 used to give the event to
+   the transparent window, which dropped it: every control inside a group
+   box was dead to the mouse. */
+HWND window_below(HWND above, POINT pt);
+
+static HWND mouse_target(HQUEUE hq, POINT pt, int *hit)
 {
     HWND h;
     if (hwndCapture && valid_wnd(hwndCapture)) {
@@ -600,6 +609,14 @@ static HWND mouse_target(POINT pt, int *hit)
         return hwndCapture;
     }
     h = WindowFromPoint(pt);
+    /* each step goes to a later sibling or out to a parent: it ends */
+    while (h && h != hwndDesktop) {
+        PWND w = valid_wnd(h);
+        if (!w || w->hq != hq ||
+            (int)send_message(h, WM_NCHITTEST, 0, MAKELONG(pt.x, pt.y)) != HTTRANSPARENT)
+            break;
+        h = window_below(h, pt);
+    }
     if (!h)
         h = hwndDesktop;
     *hit = HTCLIENT;
@@ -661,7 +678,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
             POINT pt;
             pt.x = LOWORD(e.lParam);
             pt.y = HIWORD(e.lParam);
-            target = mouse_target(pt, &hit);
+            target = mouse_target(hq, pt, &hit);
             w = valid_wnd(target);
             /* another task's window takes it from there; the desktop's
                (no queue: it belongs to no task) whoever reads first. A
