@@ -26,7 +26,7 @@
 #define DOC_CLASS "OleDocWndClass"
 
 /* what a step waits for */
-enum { W_NONE, W_ACK, W_DATA, W_TERM, W_DOCTERM, W_SYSTERM };
+enum { W_NONE, W_ACK, W_DATA, W_TERM, W_DOCTERM, W_SYSTERM, W_SYSTERM_KEEP };
 
 static HWND g_initiating;       /* the window whose INITIATE is out */
 static HWND g_answer;           /* the first server that answered */
@@ -575,7 +575,7 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
            new document again (the object stays blank, no error) */
         if (o->advfail) {
             o->advfail = FALSE;
-            insert_next(o, ST_WAIT_SYSTERM, 0, NULL, 0);
+            insert_next(o, ST_WAIT_SYSTERM, 0, NULL, 1);
             insert_next(o, ST_WAIT_DOCTERM, 0, NULL, 0);
             insert_next(o, ST_EXEC, 0, dde_exec_str("StdCloseDocument", NULL, NULL), 0);
         } else if (s->arg)
@@ -626,7 +626,7 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
             PostMessage(o->hsrvsys, WM_DDE_TERMINATE, (WPARAM)o->hsys, 0);
             return R_WAIT;
         }
-        o->wait = W_SYSTERM;
+        o->wait = s->arg ? W_SYSTERM_KEEP : W_SYSTERM;
         return R_WAIT;
     }
     return R_NEXT;
@@ -947,6 +947,11 @@ static void on_terminate(LPOBJ o, HWND w, HWND from)
             if (o->wait != W_NONE)
                 step_fail(o, OLE_ERROR_TERMINATE);
         }
+    } else if (w == o->hsys && o->wait == W_SYSTERM_KEEP) {
+        /* after a refused advise: the server's end is noted and the window
+           kept; it is answered only when the object goes, with [StdExit]
+           (observed: OleDelete then sends StdExit and TERMINATE from it) */
+        step_next(o);
     } else if (w == o->hsys) {
         if (o->wait != W_TERM)
             PostMessage(from, WM_DDE_TERMINATE, (WPARAM)w, 0);
@@ -1051,8 +1056,13 @@ void dde_close_all(LPOBJ o)
             if (!PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys, MAKELONG(0, h)))
                 GlobalFree(h);
             PostMessage(o->hsrvsys, WM_DDE_TERMINATE, (WPARAM)o->hsys, 0);
-        }
-        kill_window(&o->hsys);
+            /* the window goes a little later (observed: the server still
+               finds it there when it takes the TERMINATE) */
+            SetWindowLong(o->hsys, 0, 0);
+            PostMessage(o->hsys, WM_CLOSE, 0, 0);
+            o->hsys = NULL;
+        } else
+            kill_window(&o->hsys);
     }
     o->hsrvdoc = o->hsrvsys = NULL;
     o->open = FALSE;
