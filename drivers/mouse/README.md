@@ -59,6 +59,19 @@ does none of that. Its own scaling, the sensitivity and acceleration
 profiles that only Microsoft Mouse 8.20's programs set through
 GetSetMouseData (Notes), is 1:1 until they change it, as 3.1's is.
 
+**A call still running** (2026-11-15, mouse trails on the install tree:
+`tests/currec.sh`, drivers/vga/README.md). The event procedure is not
+called again while a call is in progress (an IRQ 12 during it); the
+packet waits for the next IRQ. Packets that came meanwhile used to
+replace it, motion and all: with w16's VGA.DRV drawing a seven-image
+trail in MoveCursor, USER's call outlasted the next packet often enough
+that under a steady stream the tree got a sixth fewer moves than Windows
+3.1 and the pointer fell 140 pixels behind on a 600-pixel sweep (with
+Windows 3.1's MOUSE.DRV in the same tree nothing was lost). Now the
+motion of a packet replaced while it waited for a call to return is
+added to the next one reported. Packets of one IRQ, and the one held
+back after a set-up, still replace each other as 3.1's do (MD2C).
+
 ## Hardware path, and why
 
 Two ways to read a PS/2 mouse: the PS/2 BIOS's pointing-device services

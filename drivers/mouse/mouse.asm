@@ -96,6 +96,10 @@ newpkt          db 0                    ; a packet came during this IRQ
 nirq            db 0                    ; IRQs that brought one since the
                                         ; last set-up (counts up to 2)
 busy            db 0                    ; the event procedure is running
+busyheld        db 0                    ; the pending packet waits because it
+                                        ; was (an IRQ 12 during the call)
+carry_x         dw 0                    ; the motion of packets it replaced
+carry_y         dw 0                    ; meanwhile (screen signs)
 
 ; GetSetMouseData's settings (the fields of its buffer, MD2A: tests/apps/
 ; md2logs/a/notes.md). The values a get returns on a PS/2 setup are what
@@ -877,6 +881,7 @@ bios_packet:
         mov ax, DGROUP
         mov ds, ax
         mov word [idx wrt DGROUP], 0
+        call carry
         mov al, [bp + 12]               ; status
         mov [p_b0 wrt DGROUP], al
         mov al, [bp + 10]               ; X
@@ -889,6 +894,50 @@ bios_packet:
         pop ax
         pop bp
         retf
+
+; decode: DL byte 0, BL X, CL Y -> BX, CX the motion (screen signs: Y
+; down). X and Y: 9-bit two's complement, the sign bits in byte 0. The
+; overflow bits are not looked at: Windows 3.1's driver reports the 9-bit
+; value as it is (MD1: DOSBox's 300-mickey step, sent with X overflow as
+; 44, came to the event procedure as 44)
+decode:
+        xor bh, bh
+        test dl, P_XSIGN
+        jz .y
+        mov bh, 0FFh
+.y:     xor ch, ch
+        test dl, P_YSIGN
+        jz .yok
+        mov ch, 0FFh
+.yok:   neg cx                          ; the device counts up, the screen down
+        ret
+
+; carry: a new packet is about to replace the pending one. While the
+; pending one waits for the event procedure to return (busyheld), its
+; motion is kept and reported with the next: a packet that came while
+; USER was still busy with the last one (MoveCursor drawing a mouse
+; trail: tests/currec.sh) lost its motion, and the pointer fell behind
+; the hand (with Windows 3.1's MOUSE.DRV nothing was lost there). Packets
+; of one IRQ, or the one held back after a set-up, still replace each
+; other as 3.1's do (MD2C).
+carry:
+        cmp byte [pending wrt DGROUP], 0
+        je .ret
+        cmp byte [busyheld wrt DGROUP], 0
+        je .ret
+        push bx
+        push cx
+        push dx
+        mov dl, [p_b0 wrt DGROUP]
+        mov bl, [p_x wrt DGROUP]
+        mov cl, [p_y wrt DGROUP]
+        call decode
+        add [carry_x wrt DGROUP], bx
+        add [carry_y wrt DGROUP], cx
+        pop dx
+        pop cx
+        pop bx
+.ret:   ret
 
 ; aux_byte: AL = the next byte from the device. Collects packets; byte 0
 ; always has bit 3 set, and a packet's bytes come together: a byte after
@@ -919,6 +968,7 @@ aux_byte:
         mov [idx wrt DGROUP], bx
 .ret:   ret
 .full:  mov word [idx wrt DGROUP], 0
+        call carry
         mov al, [pkt wrt DGROUP]
         mov [p_b0 wrt DGROUP], al
         mov al, [pkt + 1 wrt DGROUP]
@@ -937,7 +987,11 @@ aux_byte:
 ; event procedure): its packet then stays pending for the next IRQ.
 endirq:
         cmp byte [busy wrt DGROUP], 0
-        jne .ret
+        je .free
+        mov al, [pending wrt DGROUP]
+        mov [busyheld wrt DGROUP], al
+        ret
+.free:
         cmp byte [newpkt wrt DGROUP], 0
         je .report
         cmp byte [nirq wrt DGROUP], 2
@@ -952,21 +1006,16 @@ endirq:
         mov dl, [p_b0 wrt DGROUP]
         mov bl, [p_x wrt DGROUP]
         mov cl, [p_y wrt DGROUP]
-        ; X and Y: 9-bit two's complement, the sign bits in byte 0. The
-        ; overflow bits are not looked at: Windows 3.1's driver reports
-        ; the 9-bit value as it is (MD1: DOSBox's 300-mickey step, sent
-        ; with X overflow as 44, came to the event procedure as 44)
-        xor bh, bh
-        test dl, P_XSIGN
-        jz .y
-        mov bh, 0FFh
-.y:     xor ch, ch
-        test dl, P_YSIGN
-        jz .yok
-        mov ch, 0FFh
-.yok:   neg cx                          ; the device counts up, the screen down
+        call decode
         mov [raw_x wrt DGROUP], bx
         mov [raw_y wrt DGROUP], cx
+        xor ax, ax                      ; and what packets it replaced
+        mov [busyheld wrt DGROUP], al   ; while the last call ran brought
+        xchg ax, [carry_x wrt DGROUP]
+        add bx, ax
+        xor ax, ax
+        xchg ax, [carry_y wrt DGROUP]
+        add cx, ax
         xor ax, ax
         mov si, bx
         or si, cx
