@@ -120,7 +120,27 @@ static void paint(HWND h, PCB c, HDC hdc)
             SetTextColor(hdc, tc);
             SetBkColor(hdc, bc);
         }
-        if (kind(h) == CBS_DROPDOWNLIST) {
+        if (kind(h) == CBS_DROPDOWNLIST &&
+            (GetWindowLong(h, GWL_STYLE) & (CBS_OWNERDRAWFIXED | CBS_OWNERDRAWVARIABLE))) {
+            /* an owner-drawn selection box: the owner draws it (observed
+               on 3.1 with Control Panel's Color dialog: one WM_DRAWITEM,
+               ODA_DRAWENTIRE, the item 3 pixels in, the font's height
+               high, ending 2 pixels before the button; with the focus
+               ODS_SELECTED | ODS_FOCUS, without it neither). w16 used to
+               draw the item's string itself ("name=values") */
+            DRAWITEMSTRUCT di;
+            di.CtlType = ODT_COMBOBOX;
+            di.CtlID = GetWindowWord(h, GWW_ID);
+            di.itemID = (UINT)(int)send_message(c->list, LB_GETCURSEL, 0, 0);
+            di.itemAction = ODA_DRAWENTIRE;
+            di.itemState = c->focus ? ODS_SELECTED | ODS_FOCUS : 0;
+            di.hwndItem = h;
+            di.hDC = hdc;
+            SetRect(&di.rcItem, 3, 3, c->button.left - 2, 3 + c->itemh);
+            di.itemData = di.itemID == (UINT)-1 ? 0 :
+                          send_message(c->list, LB_GETITEMDATA, di.itemID, 0);
+            send_message(GetParent(h), WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
+        } else if (kind(h) == CBS_DROPDOWNLIST) {
             int i = (int)send_message(c->list, LB_GETCURSEL, 0, 0);
             char buf[256];
             RECT t;
