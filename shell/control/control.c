@@ -813,13 +813,20 @@ static BOOL register_classes(void)
     wc.lpszClassName = cls_frame;
     if (!RegisterClass(&wc))
         return FALSE;
-    wc.style = CS_DBLCLKS;
+    /* the icon list and the status line are drawn whole again when their
+       size changes: their layout depends on it (the columns, the status
+       box's right edge). Observed on 3.1 under its USER, which keeps a
+       resized window's bits: narrowed, the panel reflows its icons and
+       redraws the status box's edge (w16 kept the old ones; w16's USER
+       repaints resized windows whole, which hid it). UNVERIFIED: whether
+       3.1's classes have these styles or the panel invalidates. */
+    wc.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = ListProc;
     wc.hIcon = NULL;
     wc.lpszClassName = cls_list;
     if (!RegisterClass(&wc))
         return FALSE;
-    wc.style = 0;
+    wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = TextProc;
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     wc.lpszClassName = cls_text;

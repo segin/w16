@@ -401,7 +401,11 @@
 #              Microsoft's applets against Microsoft's, on all-Microsoft
 #              3.1 (part control@ms), w16's KRNL286 (@k286) and KRNL386
 #              (@k386); w16's install tree alone under its KRNL386 against
-#              its KRNL286 (@tree): every screen and CONTROL.INI identical
+#              its KRNL286 (@tree): every screen and CONTROL.INI identical;
+#              @resize: tests/scripts/input/cprepaint.txt (the panel sized,
+#              scrolled, dialogs moved over it, Alt+Tab, minimized) against
+#              Microsoft's on all-Microsoft 3.1, every screen identical
+#              but for the minimized panel's icon
 #   cplclick   Control Panel's Keyboard, Mouse, Desktop and Color dialogs
 #              under real mouse clicks on each control (tests/scripts/input/
 #              cplclick-*.txt): w16's USER against Microsoft's (screens and
@@ -1160,8 +1164,36 @@ runcase() {
             [ "$r" = ok ] || return
             cplinicmp "$1"/work/c/*/CONTROL.INI "$2"/work/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
         }
-        for pk in ${part:-ms k286 k386 tree}; do
+        for pk in ${part:-ms k286 k386 tree resize}; do
             case $pk in
+            resize)
+                # tests/scripts/input/cprepaint.txt: the panel sized smaller
+                # (its icons reflow, the status box's edge is redrawn),
+                # scrolled, applet dialogs moved over it, Alt+Tab, minimized;
+                # w16's CONTROL.EXE against Microsoft's on all-Microsoft 3.1
+                # (whose USER keeps a resized window's bits: w16's left the
+                # old icon layout there), the minimized panel's icon (w16's
+                # art) left out
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/control-rs-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/control-rs-WIN.INI" 'windows:run=CONTROL.EXE' 'windows:CursorBlinkRate=65535'
+                rs=$root/tests/scripts/input/cprepaint.txt
+                refrun control-rs-ref control "$root/tests/inputrun.sh" -s -b 25 -t 300 "$rs" "$out/control-rs-ref" -r \
+                    -f "$out/control-rs-WIN.INI=WINDOWS/WIN.INI"
+                rm -rf "$out/control-rs-w16"
+                "$root/tests/inputrun.sh" -e "$out/control-rs-ref/boot.png" -E "$out/control-rs-ref" -M "rectangle 23,410 54,441" \
+                    -b 25 -t 300 "$rs" "$out/control-rs-w16" -r -f "$out/control-rs-WIN.INI=WINDOWS/WIN.INI" \
+                    -f "$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE" > "$out/control-rs-w16.txt" 2>&1 || true
+                ls "$out/control-rs-ref"/[0-9]*.png > /dev/null 2>&1 || r="resize: no screens"
+                for f in "$out/control-rs-ref"/[0-9]*.png; do
+                    [ "$r" = ok ] || break
+                    sn=$(basename "$f")
+                    [ -f "$out/control-rs-w16/$sn" ] || { r="resize: no $sn"; break; }
+                    magick "$f" -fill black -draw "rectangle 23,410 54,441" "$out/control-rs-a.png"
+                    magick "$out/control-rs-w16/$sn" -fill black -draw "rectangle 23,410 54,441" "$out/control-rs-b.png"
+                    n=$(magick compare -metric AE "$out/control-rs-b.png" "$out/control-rs-a.png" "$out/resize-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || r="resize: $sn: $n pixels differ"
+                done ;;
             tree)
                 set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE'
                 rm -rf "$out/control-t286" "$out/control-t386"
@@ -3375,7 +3407,7 @@ caseparts() {
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
-    control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
+    control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
     mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;
