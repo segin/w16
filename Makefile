@@ -1427,9 +1427,10 @@ $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
-# the default SYSTEM.INI and WIN.INI (assets/; w16's own, laid out as 3.1's)
-install-tree: $(W16)/SYSTEM.INI $(W16)/WIN.INI
-$(W16)/SYSTEM.INI $(W16)/WIN.INI: $(W16)/%: assets/%
+# the default SYSTEM.INI, WIN.INI and CONTROL.INI (assets/; w16's own, laid out
+# as 3.1's; CONTROL.INI: Control Panel's colour schemes, w16's own)
+install-tree: $(W16)/SYSTEM.INI $(W16)/WIN.INI $(W16)/CONTROL.INI
+$(W16)/SYSTEM.INI $(W16)/WIN.INI $(W16)/CONTROL.INI: $(W16)/%: assets/%
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
 # Program Manager's default groups (assets/progman: PROGMAN.INI and the

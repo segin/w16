@@ -79,6 +79,11 @@ static const COLORREF basic[48] = {
 static char s_cpl_ini[] = "CONTROL.INI";
 static char s_schemes[] = "color schemes";
 static char s_current[] = "current";
+/* the built-in scheme is "w16 Default" (branding: main.rc); Windows 3.1's
+   name for it, "Windows Default", is still recognised in CONTROL.INI (a
+   3.1 installation's [current] color schemes=, or a key of that name in
+   [color schemes]) and refused as a name to save under */
+static char s_stock_default[] = "Windows Default";
 static char s_custom[] = "Custom Colors";
 
 static COLORREF cur[NCOLORS];           /* the colours being edited */
@@ -438,7 +443,8 @@ static HLOCAL section_keys(const char *sec)
     }
 }
 
-/* "name=values" items: Windows Default first, then the file's schemes */
+/* "name=values" items: w16 Default (3.1: Windows Default) first, then the
+   file's schemes */
 static int fill_schemes(const char *select)
 {
     HWND cb = GetDlgItem(hdlg, IDC_CO_SCHEMES);
@@ -449,12 +455,12 @@ static int fill_schemes(const char *select)
     LoadString(g_hinst, IDS_DEFAULT_SCHEME, name, sizeof name);
     wsprintf(item, "%s=%s", (LPSTR)name, (LPSTR)default_scheme);
     SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)item);
-    if (!lstrcmpi(name, select))
+    if (!lstrcmpi(name, select) || !lstrcmpi(s_stock_default, select))
         sel = 0;
     if ((keys = section_keys(s_schemes)) != NULL) {
         const char *k;
         for (k = (const char *)LocalLock(keys); *k; k += lstrlen(k) + 1) {
-            if (!lstrcmpi(k, name))
+            if (!lstrcmpi(k, name) || !lstrcmpi(k, s_stock_default))
                 continue;
             n = wsprintf(item, "%s=", (LPSTR)k);
             GetPrivateProfileString(s_schemes, k, "", item + n, sizeof item - n, s_cpl_ini);
@@ -567,7 +573,7 @@ BOOL FAR PASCAL __loadds SaveSchemeProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
             }
             if (!save_name[0])
                 bad = IDS_SCHEME_BLANK;
-            else if (!lstrcmpi(save_name, def))
+            else if (!lstrcmpi(save_name, def) || !lstrcmpi(save_name, s_stock_default))
                 bad = IDS_SCHEME_DEFAULT;
             if (bad) {
                 message(dlg, bad, "", MB_OK | MB_ICONEXCLAMATION, &r);

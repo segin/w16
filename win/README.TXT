@@ -68,6 +68,9 @@ w16 repository's LICENSE):
   SYSTEM\SSERIFE.FON      MS Sans Serif font
   SYSTEM.INI, WIN.INI     w16's default settings (only w16's drivers,
                           fonts and programs)
+  CONTROL.INI             Control Panel's colour schemes (w16 Default
+                          is built in; Evergreen, Ocean, Plum, Brick,
+                          Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
                             Panel)

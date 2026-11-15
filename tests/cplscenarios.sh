@@ -72,7 +72,9 @@ for n in $names; do
     wait
     result=ok
     for f in $inis; do
-        cmp -s "$out/$n/orig/$f" "$out/$n/w16/$f" || { result=FAIL; echo "  $n: $f differs"; }
+        # (w16 brands the built-in colour scheme "w16 Default": shell/cpl/main)
+        sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" |
+            cmp -s "$out/$n/orig/$f" - || { result=FAIL; echo "  $n: $f differs"; }
     done
     if [ -f "$out/$n/orig/CP1.LOG" ] || [ -f "$out/$n/w16/CP1.LOG" ]; then
         normlog "$out/$n/orig/CP1.LOG" > "$out/$n/orig/cp1.norm" 2>/dev/null || :

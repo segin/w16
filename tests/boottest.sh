@@ -521,6 +521,12 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
+# cplinicmp REF W16: two INI files the same, but for w16's branding of
+# Control Panel's built-in colour scheme: 3.1 writes [current] color
+# schemes=Windows Default where w16 writes w16 Default (shell/cpl/main)
+cplinicmp() {
+    sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2" | cmp -s "$1" -
+}
 cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
@@ -1144,7 +1150,7 @@ runcase() {
             done
             ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
             [ "$r" = ok ] || return
-            cmp -s "$1"/work/c/*/CONTROL.INI "$2"/work/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
+            cplinicmp "$1"/work/c/*/CONTROL.INI "$2"/work/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
         }
         for pk in ${part:-ms k286 k386 tree}; do
             case $pk in
@@ -1204,7 +1210,7 @@ runcase() {
                 ls "$1"/[0-9]*.png > /dev/null 2>&1 || { r="$3: no screens"; return; }
             fi
             for i in WIN.INI CONTROL.INI SYSTEM.INI; do
-                cmp -s "$1/work/c/$5/$i" "$2/work/c/$5/$i" || { r="$3: $i differs"; return; }
+                cplinicmp "$1/work/c/$5/$i" "$2/work/c/$5/$i" || { r="$3: $i differs"; return; }
             done
         }
         if [ "$c" = cplclickus ]; then dparts="kb-us ms-us dk-us co-us"
