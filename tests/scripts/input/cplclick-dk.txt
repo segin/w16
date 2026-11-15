@@ -2,25 +2,38 @@
 ; driven with real mouse clicks on each of its controls (and a few keys),
 ; then OK and Control Panel closed; the screens and the INI files are
 ; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
-; dialog at the place 3.1 opens it; the pointer moves 2 pixels a unit,
-; 1 for moves of 1 or 2 units).
+; dialog at the place 3.1 opens it). The case sets WIN.INI MouseSpeed=0:
+; without acceleration the pointer moves one pixel a unit whatever the
+; host's timing (with it, how DOSBox splits a move decides).
 click 1
 sleep 1
-; open Desktop
+; Control Panel's caption (activates it)
 home
 sleep 0.3
-move 132 31
-move 1 0
+move 100 10
+move 100 0
+move 15 0
 sleep 0.3
-dclick 1
+click 1
 sleep 0.6
+; open Desktop
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Return
+sleep 0.4
 sleep 2
 matchnow 01-open 20 1
 ; pattern combo box: open
 home
 sleep 0.3
-move 75 40
-move 0 1
+move 100 81
+move 50 0
 sleep 0.3
 click 1
 sleep 0.6
@@ -29,8 +42,8 @@ sleep 0.4
 ; pattern combo box: close
 home
 sleep 0.3
-move 75 40
-move 0 1
+move 100 81
+move 50 0
 sleep 0.3
 click 1
 sleep 0.6
@@ -38,8 +51,8 @@ matchnow 02-pattern 20 1
 ; Fast Alt+Tab check box
 home
 sleep 0.3
-move 23 75
-move 0 1
+move 46 100
+move 0 51
 sleep 0.3
 click 1
 sleep 0.6
@@ -47,7 +60,8 @@ matchnow 03-coolswitch 20 1
 ; screen saver combo box: open
 home
 sleep 0.3
-move 75 100
+move 100 100
+move 50 100
 sleep 0.3
 click 1
 sleep 0.6
@@ -56,31 +70,35 @@ sleep 0.4
 ; screen saver combo box: close
 home
 sleep 0.3
-move 75 100
+move 100 100
+move 50 100
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: up arrow
 home
 sleep 0.3
-move 84 108
-move 1 0
+move 100 100
+move 69 100
+move 0 16
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: up arrow
 home
 sleep 0.3
-move 84 108
-move 1 0
+move 100 100
+move 69 100
+move 0 16
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: down arrow
 home
 sleep 0.3
-move 84 114
-move 1 0
+move 100 100
+move 69 100
+move 0 28
 sleep 0.3
 click 1
 sleep 0.6
@@ -88,7 +106,9 @@ matchnow 04-saver 20 1
 ; wallpaper combo box: open
 home
 sleep 0.3
-move 65 134
+move 100 100
+move 30 100
+move 0 68
 sleep 0.3
 click 1
 sleep 0.6
@@ -97,15 +117,18 @@ sleep 0.4
 ; wallpaper combo box: close
 home
 sleep 0.3
-move 65 134
+move 100 100
+move 30 100
+move 0 68
 sleep 0.3
 click 1
 sleep 0.6
 ; Center
 home
 sleep 0.3
-move 24 145
-move 0 1
+move 48 100
+move 0 100
+move 0 91
 sleep 0.3
 click 1
 sleep 0.6
@@ -113,40 +136,48 @@ matchnow 05-wallpaper 20 1
 ; Tile
 home
 sleep 0.3
-move 62 145
-move 0 1
+move 100 100
+move 24 100
+move 0 91
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: up arrow
 home
 sleep 0.3
-move 153 131
-move 1 0
+move 100 100
+move 100 100
+move 100 62
+move 7 0
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: down arrow
 home
 sleep 0.3
-move 153 137
-move 1 0
+move 100 100
+move 100 100
+move 100 74
+move 7 0
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: down arrow
 home
 sleep 0.3
-move 153 137
-move 1 0
+move 100 100
+move 100 100
+move 100 74
+move 7 0
 sleep 0.3
 click 1
 sleep 0.6
 ; Wrap Title
 home
 sleep 0.3
-move 107 144
-move 0 1
+move 100 100
+move 100 100
+move 14 89
 sleep 0.3
 click 1
 sleep 0.6
@@ -154,23 +185,30 @@ matchnow 06-icons 20 1
 ; granularity: up arrow
 home
 sleep 0.3
-move 87 166
+move 100 100
+move 74 100
+move 0 100
+move 0 32
 sleep 0.3
 click 1
 sleep 0.6
 ; border width: up arrow
 home
 sleep 0.3
-move 87 177
-move 0 1
+move 100 100
+move 74 100
+move 0 100
+move 0 55
 sleep 0.3
 click 1
 sleep 0.6
 ; border width box
 home
 sleep 0.3
-move 75 180
-move 0 1
+move 100 100
+move 50 100
+move 0 100
+move 0 61
 sleep 0.3
 click 1
 sleep 0.6
@@ -182,24 +220,30 @@ matchnow 07-grid 20 1
 ; blink bar: right arrow
 home
 sleep 0.3
-move 161 178
-move 0 1
+move 100 100
+move 100 100
+move 100 100
+move 22 57
 sleep 0.3
 click 1
 sleep 0.6
 ; blink bar: left arrow
 home
 sleep 0.3
-move 104 178
-move 0 1
+move 100 100
+move 100 100
+move 8 100
+move 0 57
 sleep 0.3
 click 1
 sleep 0.6
 ; blink bar: shaft
 home
 sleep 0.3
-move 125 178
-move 0 1
+move 100 100
+move 100 100
+move 50 100
+move 0 57
 sleep 0.3
 click 1
 sleep 0.6
@@ -207,8 +251,10 @@ matchnow 08-blink 20 1
 ; OK
 home
 sleep 0.3
-move 163 30
-move 0 1
+move 100 61
+move 100 0
+move 100 0
+move 26 0
 sleep 0.3
 click 1
 sleep 0.6
@@ -217,3 +263,8 @@ key alt+F4
 sleep 0.4
 sleep 2
 matchnow 09-closed 20 1
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

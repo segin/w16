@@ -2,49 +2,65 @@
 ; driven with real mouse clicks on each of its controls (and a few keys),
 ; then OK and Control Panel closed; the screens and the INI files are
 ; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
-; dialog at the place 3.1 opens it; the pointer moves 2 pixels a unit,
-; 1 for moves of 1 or 2 units).
+; dialog at the place 3.1 opens it). The case sets WIN.INI MouseSpeed=0:
+; without acceleration the pointer moves one pixel a unit whatever the
+; host's timing (with it, how DOSBox splits a move decides).
 click 1
 sleep 1
-; open Keyboard
+; Control Panel's caption (activates it)
 home
 sleep 0.3
-move 161 31
-move 1 0
+move 100 10
+move 100 0
+move 15 0
 sleep 0.3
-dclick 1
+click 1
 sleep 0.6
+; open Keyboard
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Return
+sleep 0.4
 sleep 2
 matchnow 01-open 20 1
 ; delay bar: right arrow
 home
 sleep 0.3
-move 110 54
-move 1 1
+move 100 100
+move 100 9
+move 21 0
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: left arrow
 home
 sleep 0.3
-move 18 54
-move 1 1
+move 37 100
+move 0 9
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: left arrow
 home
 sleep 0.3
-move 18 54
-move 1 1
+move 37 100
+move 0 9
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: shaft right of the thumb
 home
 sleep 0.3
-move 90 54
-move 0 1
+move 100 100
+move 80 9
 sleep 0.3
 click 1
 sleep 0.6
@@ -52,24 +68,25 @@ matchnow 02-delay 20 1
 ; rate bar: left arrow
 home
 sleep 0.3
-move 18 81
-move 1 1
+move 37 100
+move 0 63
 sleep 0.3
 click 1
 sleep 0.6
 ; rate bar: shaft left of the thumb
 home
 sleep 0.3
-move 30 81
-move 0 1
+move 60 100
+move 0 63
 sleep 0.3
 click 1
 sleep 0.6
 ; rate bar: right arrow
 home
 sleep 0.3
-move 110 81
-move 1 1
+move 100 100
+move 100 63
+move 21 0
 sleep 0.3
 click 1
 sleep 0.6
@@ -77,8 +94,9 @@ matchnow 03-rate 20 1
 ; Test box
 home
 sleep 0.3
-move 60 101
-move 0 1
+move 100 100
+move 20 100
+move 0 3
 sleep 0.3
 click 1
 sleep 0.6
@@ -88,8 +106,9 @@ matchnow 04-test 20 1
 ; OK
 home
 sleep 0.3
-move 136 34
-move 0 1
+move 100 69
+move 100 0
+move 72 0
 sleep 0.3
 click 1
 sleep 0.6
@@ -98,3 +117,8 @@ key alt+F4
 sleep 0.4
 sleep 2
 matchnow 05-closed 20 1
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

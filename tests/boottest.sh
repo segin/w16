@@ -1205,7 +1205,8 @@ runcase() {
             s=$root/tests/scripts/input/cplclick-$ap.txt
             case $st in
             tree)
-                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE'
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE' \
+                    -i 'WIN.INI:windows:MouseSpeed=0'
                 rm -rf "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386"
                 "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/cplclick-$ap-t286" "$@" \
                     > "$out/cplclick-$ap-t286.txt" 2>&1 || true
@@ -1214,7 +1215,8 @@ runcase() {
                 clkcmp "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386" "$pk" 1 W16 ;;
             *)
                 cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-WIN.INI"
-                python3 "$root/tests/scripts/iniset.py" "$out/cplclick-WIN.INI" 'windows:run=CONTROL.EXE'
+                python3 "$root/tests/scripts/iniset.py" "$out/cplclick-WIN.INI" 'windows:run=CONTROL.EXE' \
+                    'windows:MouseSpeed=0'
                 set -- -f "$out/cplclick-WIN.INI=WINDOWS/WIN.INI"
                 w16cp="-f $root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE -f $root/build/dos/MAIN.CPL=WINDOWS/SYSTEM/MAIN.CPL"
                 if [ "$st" = us ]; then
