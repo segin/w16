@@ -194,6 +194,17 @@ static void fill(HDC hdc, int x, int y, int cx, int cy, int color)
     SelectObject(hdc, old);
 }
 
+/* the caption button held down (track_caption_button): drawn pressed
+   while the pointer is on it */
+static HWND btn_hwnd;
+static int btn_hit;
+static BOOL btn_down;
+
+static BOOL btn_pressed(PWND w, int hit)
+{
+    return btn_down && btn_hit == hit && HW(w) == btn_hwnd;
+}
+
 static void draw_caption(HDC hdc, PWND w, BOOL active)
 {
     RECT r, t;
@@ -233,12 +244,14 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
     bx = t.right;
     if (w->style & WS_MAXIMIZEBOX) {
         bx -= sysmet[SM_CXSIZE] + 1;
-        blt_bitmap(hdc, (w->style & WS_MAXIMIZE) ? bmRestore : bmZoom, bx, t.top, 0,
+        blt_bitmap(hdc, (w->style & WS_MAXIMIZE) ? (btn_pressed(w, HTMAXBUTTON) ? bmRestoreD : bmRestore) :
+                   btn_pressed(w, HTMAXBUTTON) ? bmZoomD : bmZoom, bx, t.top, 0,
                    sysmet[SM_CXSIZE] + 1, t.bottom - t.top);
     }
     if (w->style & WS_MINIMIZEBOX) {
         bx -= sysmet[SM_CXSIZE] + 1;
-        blt_bitmap(hdc, bmReduce, bx, t.top, 0, sysmet[SM_CXSIZE] + 1, t.bottom - t.top);
+        blt_bitmap(hdc, btn_pressed(w, HTMINBUTTON) ? bmReduceD : bmReduce, bx, t.top, 0,
+                   sysmet[SM_CXSIZE] + 1, t.bottom - t.top);
     }
     t.right = bx;
     fill(hdc, t.left, t.top, t.right - t.left, t.bottom - t.top,
@@ -495,6 +508,109 @@ static LONG def_ctlcolor(HDC hdc, int type)
     return (LONG)(WORD)sysbrush[COLOR_WINDOW];
 }
 
+/* a caption button's rectangle (window coordinates), as draw_caption
+   places it */
+static void caption_button_rect(PWND w, int hit, RECT *b)
+{
+    RECT r;
+    int bx;
+    caption_rect(w, &r);
+    bx = r.right - 1;
+    if (w->style & WS_MAXIMIZEBOX) {
+        bx -= sysmet[SM_CXSIZE] + 1;
+        if (hit == HTMAXBUTTON) {
+            SetRect(b, bx, r.top + 1, bx + sysmet[SM_CXSIZE] + 1, r.bottom - 1);
+            return;
+        }
+    }
+    bx -= sysmet[SM_CXSIZE] + 1;
+    SetRect(b, bx, r.top + 1, bx + sysmet[SM_CXSIZE] + 1, r.bottom - 1);
+}
+
+static void draw_caption_button(HWND h, int hit)
+{
+    PWND w = valid_wnd(h);
+    HDC hdc;
+    RECT b;
+    BOOL down;
+    HBITMAP bm;
+    if (!w || !is_visible(w) || (w->style & WS_MINIMIZE) || !has_caption(w))
+        return;
+    load_frame_bitmaps();
+    caption_button_rect(w, hit, &b);
+    down = btn_pressed(w, hit);
+    if (hit == HTMINBUTTON)
+        bm = down ? bmReduceD : bmReduce;
+    else if (w->style & WS_MAXIMIZE)
+        bm = down ? bmRestoreD : bmRestore;
+    else
+        bm = down ? bmZoomD : bmZoom;
+    if ((hdc = GetWindowDC(h)) == 0)
+        return;
+    blt_bitmap(hdc, bm, b.left, b.top, 0, b.right - b.left, b.bottom - b.top);
+    ReleaseDC(h, hdc);
+}
+
+/* the minimize or maximize (restore) button pressed: drawn pressed while
+   the pointer is on it, raised when it leaves, the command sent on a
+   release on it, nothing on a release elsewhere (3.1, US26: SC_MAXIMIZE
+   came after the release; a release off the minimize button sent
+   nothing; the "D" bitmaps while held) */
+static void track_caption_button(HWND h, int hit)
+{
+    PWND w = valid_wnd(h);
+    RECT b;
+    MSG m;
+    BOOL was;
+    if (!w)
+        return;
+    caption_button_rect(w, hit, &b);
+    OffsetRect(&b, w->rcWindow.left, w->rcWindow.top);
+    btn_hwnd = h;
+    btn_hit = hit;
+    btn_down = TRUE;
+    draw_caption_button(h, hit);
+    SetCapture(h);
+    for (;;) {
+        if (!PeekMessage(&m, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            if (PeekMessage(&m, 0, WM_PAINT, WM_PAINT, PM_REMOVE)) {
+                DispatchMessage(&m);
+                continue;
+            }
+            if (!valid_wnd(h) || GetCapture() != h)
+                break;
+            WaitMessage();
+            continue;
+        }
+        if (!valid_wnd(h))
+            break;
+        if (m.message == WM_MOUSEMOVE || m.message == WM_LBUTTONUP) {
+            BOOL in = PtInRect(&b, m.pt);
+            if (in != btn_down) {
+                btn_down = in;
+                draw_caption_button(h, hit);
+            }
+        }
+        if (m.message == WM_LBUTTONUP)
+            break;
+    }
+    was = btn_down;
+    btn_down = FALSE;
+    btn_hwnd = 0;
+    if (GetCapture() == h)
+        ReleaseCapture();
+    if (!(w = valid_wnd(h)))
+        return;
+    draw_caption_button(h, hit);
+    if (!was)
+        return;
+    if (hit == HTMINBUTTON)
+        send_message(h, WM_SYSCOMMAND, SC_MINIMIZE, MAKELONG(m.pt.x, m.pt.y));
+    else
+        send_message(h, WM_SYSCOMMAND, (w->style & WS_MAXIMIZE) ? SC_RESTORE : SC_MAXIMIZE,
+                     MAKELONG(m.pt.x, m.pt.y));
+}
+
 static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
 {
     switch (cmd & 0xFFF0) {
@@ -507,6 +623,22 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     case SC_SIZE:
         track_window(h, (cmd & 0xF) ? HTLEFT + (cmd & 0xF) - 1 : HTBOTTOMRIGHT, (cmd & 0xF) == 0);
         break;
+    case SC_VSCROLL:
+    case SC_HSCROLL: {
+        /* a press on a window's scroll bar comes here (3.1, US26:
+           WM_NCLBUTTONDOWN with HTVSCROLL sent WM_SYSCOMMAND SC_VSCROLL
+           before any WM_VSCROLL. UNVERIFIED: its low four bits) */
+        RECT v, hz;
+        POINT pt;
+        BOOL vert = (cmd & 0xFFF0) == SC_VSCROLL;
+        window_scrollbar_rects(w, &v, &hz);
+        OffsetRect(&v, w->rcWindow.left, w->rcWindow.top);
+        OffsetRect(&hz, w->rcWindow.left, w->rcWindow.top);
+        pt.x = (int)LOWORD(lp);
+        pt.y = (int)HIWORD(lp);
+        track_scrollbar(h, h, vert ? SB_VERT : SB_HORZ, vert ? &v : &hz, pt);
+        break;
+    }
     case SC_MINIMIZE:
         ShowWindow(h, SW_MINIMIZE);
         break;
@@ -621,26 +753,16 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             send_message(h, WM_SYSCOMMAND, SC_MOUSEMENU, lp);
             break;
         case HTVSCROLL:
-        case HTHSCROLL: {
-            RECT v, hz;
-            POINT pt;
+        case HTHSCROLL:
             if (!(w->style & WS_CHILD) && h != hwndActive)
                 activate_window(h, TRUE);
             if (!(w = valid_wnd(h)))
                 return 0;
-            window_scrollbar_rects(w, &v, &hz);
-            OffsetRect(&v, w->rcWindow.left, w->rcWindow.top);
-            OffsetRect(&hz, w->rcWindow.left, w->rcWindow.top);
-            pt.x = (int)LOWORD(lp);
-            pt.y = (int)HIWORD(lp);
-            track_scrollbar(h, h, wp == HTVSCROLL ? SB_VERT : SB_HORZ, wp == HTVSCROLL ? &v : &hz, pt);
+            send_message(h, WM_SYSCOMMAND, wp == HTVSCROLL ? SC_VSCROLL : SC_HSCROLL, lp);
             break;
-        }
         case HTMINBUTTON:
-            send_message(h, WM_SYSCOMMAND, SC_MINIMIZE, lp);
-            break;
         case HTMAXBUTTON:
-            send_message(h, WM_SYSCOMMAND, (w->style & WS_MAXIMIZE) ? SC_RESTORE : SC_MAXIMIZE, lp);
+            track_caption_button(h, wp);
             break;
         }
         return 0;
