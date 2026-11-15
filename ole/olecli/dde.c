@@ -575,6 +575,7 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
            new document again (the object stays blank, no error) */
         if (o->advfail) {
             o->advfail = FALSE;
+            insert_next(o, ST_WAIT_SYSTERM, 0, NULL, 0);
             insert_next(o, ST_WAIT_DOCTERM, 0, NULL, 0);
             insert_next(o, ST_EXEC, 0, dde_exec_str("StdCloseDocument", NULL, NULL), 0);
         } else if (s->arg)
@@ -582,6 +583,7 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
         return R_NEXT;
 
     case ST_BECOME_EMBEDDED:
+        obj_set_number(o);
         gfree(o->htopic);
         o->htopic = obj_embedded_topic(o);
         return R_NEXT;

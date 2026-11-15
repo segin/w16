@@ -175,7 +175,8 @@ OLESTATUS OLEAPI OleCreateFromFile(LPCSTR protocol, LPOLECLIENT c, LPCSTR cls,
     o->type = OT_EMBEDDED;
     o->hclass = gstr_new(cls);
     set_render(o, r, f);
-    obj_set_number(o);
+    /* its number comes once it is made (observed: a file not found
+       takes none) */
     o->htopic = gstr_new(file);
     dde_start(o, OLE_CREATEFROMFILE);
     dde_add(o, ST_CONNECT_DOC, 0, NULL, SW_HIDE);
