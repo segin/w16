@@ -3340,7 +3340,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # the cursor calls (CURREC.DRV in front of the driver) and a frame at
         # each timer message under a steady stream of moves and two stops
         # (tests/scripts/input/trailmove*.txt); tools/cr1stat.py --check:
-        # ticks within 10%, moves 75-110% (DOSBox merges motion under load),
+        # moves and ticks within 10%,
         # the trail's length within one image (the tick's
         # phase against the frames), no positions missing from it, the same
         # run-downs within a frame.

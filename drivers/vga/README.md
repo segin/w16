@@ -249,8 +249,20 @@ trail's length in motion is 6 or 7 images on both (which one a frame
 shows depends on whether a move came between the tick and the timer
 message). w16's immediate redraw after drawing (trails off only, above)
 plays no part: with trails on a drawing operation that meets the trail
-leaves it off until the next tick or move, as 3.1's. Boot-test parts
-`trails@timed` and `trails@timednl` (the mouse not captured) check it. UNVERIFIED: 3.1's driver sometimes writes the
+leaves it off until the next tick or move, as 3.1's. A second fault
+showed on a loaded host: the tree got a sixth fewer moves than 3.1 from
+the same stream and the pointer fell behind the hand. Swapping parts
+(Microsoft's MOUSE.DRV, USER, SYSTEM.DRV, KEYBOARD.DRV, GDI, KRNL286 or
+KRNL386 into the tree, w16's into Microsoft's stack) found it in two
+places together: w16's MOUSE.DRV dropped the motion of packets that came
+while USER's call was still running (its README), and only w16's VGA.DRV
+with trails on made that call long enough, by drawing seven images with
+the map mask set for every row. Both fixed: the mouse driver keeps that
+motion, and an image is drawn plane by plane (four port writes, not a
+hundred and twenty-eight) with its shifted masks made once per shape and
+shift. Now the tree gets the same moves as 3.1, captured and not, under
+the boot test's load. Boot-test parts `trails@timed` and
+`trails@timednl` (the mouse not captured) check all of it. UNVERIFIED: 3.1's driver sometimes writes the
 positive value with a leading space (`MouseTrails= 7`), depending on
 something VG9 did not find (not the caller's stack; KERNEL alone writes
 `7`); w16 never does. 3.1 turned trails on at 7 for an escape of 1000

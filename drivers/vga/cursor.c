@@ -99,44 +99,63 @@ static int trail_active(void)
     return trail_on && trail_size > 1 && have_shape && !xor_only;
 }
 
-static void draw_at(short x, short y)
+/* the shape's masks moved right by 0-7 bits, five bytes a row (the AND
+   mask padded with 1s: the screen kept; the XOR mask with 0s), made when
+   first needed after SetCursor */
+static BYTE mab[8][32][5], mxb[8][32][5];
+static BYTE mvalid;                     /* bit n: shift n made */
+
+static void masks(int sh)
 {
-    int r, c, p, sy, col, sh, bx;
-    BYTE __far *l;
+    int r, c, k;
     DWORD a, xr;
-    BYTE ab[5], xb[5], v;
-    BYTE (*sv)[32][5] = save[nd];
-    bx = x >= 0 ? x >> 3 : -((-x + 7) >> 3);
-    sh = x - bx * 8;
-    scr_reset();
-    for (r = 0; r < ch && r < 32; r++) {
-        sy = y + r;
-        if (sy < 0 || sy >= 480)
-            continue;
+    for (r = 0; r < 32; r++) {
         a = ((DWORD)andm[r][0] << 24) | ((DWORD)andm[r][1] << 16) |
             ((DWORD)andm[r][2] << 8) | andm[r][3];
         xr = ((DWORD)xorm[r][0] << 24) | ((DWORD)xorm[r][1] << 16) |
              ((DWORD)xorm[r][2] << 8) | xorm[r][3];
-        /* five bytes: the row's 32 bits moved right by sh, the AND
-           mask padded with 1s (screen kept), the XOR mask with 0s */
         for (c = 0; c < 5; c++) {
-            int k = 24 - 8 * c + sh;
-            ab[c] = (BYTE)(k >= 0 ? a >> k : a << -k);
-            xb[c] = (BYTE)(k >= 0 ? xr >> k : xr << -k);
+            k = 24 - 8 * c + sh;
+            mab[sh][r][c] = (BYTE)(k >= 0 ? a >> k : a << -k);
+            mxb[sh][r][c] = (BYTE)(k >= 0 ? xr >> k : xr << -k);
         }
         if (sh)
-            ab[0] |= (BYTE)(0xFF << (8 - sh));
-        ab[4] |= (BYTE)(0xFF >> sh);
-        for (p = 0; p < 4; p++) {
-            scr_plane(p);
-            l = (BYTE __far *)MK_FP(vga_sel, (WORD)sy * 80);
-            for (c = 0; c < 5; c++) {
-                col = bx + c;
-                if (col < 0 || col >= 80)
-                    continue;
-                v = l[col];
+            mab[sh][r][0] |= (BYTE)(0xFF << (8 - sh));
+        mab[sh][r][4] |= (BYTE)(0xFF >> sh);
+    }
+    mvalid |= (BYTE)(1 << sh);
+}
+
+/* an image of the shape at x, y (top left), on top of what is there, the
+   bytes under it kept in save[nd]. Plane by plane: the map mask and read
+   map are set four times an image, not four times a row (port writes are
+   what drawing a trail of seven images at every mouse interrupt costs) */
+static void draw_at(short x, short y)
+{
+    int r, c, p, sy, sh, bx, c0, c1, r0, r1;
+    BYTE __far *l;
+    BYTE v;
+    BYTE (*sv)[32][5] = save[nd];
+    bx = x >= 0 ? x >> 3 : -((-x + 7) >> 3);
+    sh = x - bx * 8;
+    if (!(mvalid & (1 << sh)))
+        masks(sh);
+    c0 = bx < 0 ? -bx : 0;
+    c1 = bx + 5 > 80 ? 80 - bx : 5;
+    r0 = y < 0 ? -y : 0;
+    r1 = ch < 32 ? ch : 32;
+    if (y + r1 > 480)
+        r1 = 480 - y;
+    scr_reset();
+    for (p = 0; p < 4; p++) {
+        scr_plane(p);
+        for (r = r0; r < r1; r++) {
+            sy = y + r;
+            l = (BYTE __far *)MK_FP(vga_sel, (WORD)sy * 80 + bx);
+            for (c = c0; c < c1; c++) {
+                v = l[c];
                 sv[p][r][c] = v;
-                l[col] = (BYTE)((v & ab[c]) ^ xb[c]);
+                l[c] = (BYTE)((v & mab[sh][r][c]) ^ mxb[sh][r][c]);
             }
         }
     }
@@ -399,6 +418,7 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
         busy = 0;
         return;
     }
+    mvalid = 0;
     hotx = cs->csHotX;
     hoty = cs->csHotY;
     cw = cs->csWidth > 32 ? 32 : cs->csWidth;
