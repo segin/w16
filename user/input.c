@@ -54,9 +54,49 @@ static BOOL in_filter_ok(UINT m, UINT lo, UINT hi)
     return (!lo && !hi) || (m >= lo && m <= hi);
 }
 
+/* the MK_ key state now (interrupt time: keystate is far data) */
+static WORD mk_state(void)
+{
+    WORD keys = 0;
+    if (keystate[VK_LBUTTON] & 0x80) keys |= MK_LBUTTON;
+    if (keystate[VK_RBUTTON] & 0x80) keys |= MK_RBUTTON;
+    if (keystate[VK_MBUTTON] & 0x80) keys |= MK_MBUTTON;
+    if (keystate[VK_SHIFT] & 0x80) keys |= MK_SHIFT;
+    if (keystate[VK_CONTROL] & 0x80) keys |= MK_CONTROL;
+    return keys;
+}
+
 static void push_event(WORD msg, WORD wp, DWORD lp)
 {
-    WORD f = irq_off();
+    WORD f;
+    /* a mouse event keeps the buttons and keys as they were when it
+       happened (3.1, US25: a press and a release made while the program
+       was busy came as WM_LBUTTONDOWN with MK_LBUTTON, the moves between
+       with it, the release and the moves after without; w16 gave them
+       all the state at the time they were read) */
+    if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST)
+        wp = mk_state();
+    f = irq_off();
+    /* a move after a move still queued replaces it: the program gets one
+       WM_MOUSEMOVE at the latest point, not one for every place the
+       pointer passed while it was busy (3.1, US25: eight moves fed while
+       the probe read no messages, one a tick or all in one tick, came as
+       one message at the last point; a press or a release in between
+       keeps the moves on either side of it). Without this a drag loop
+       that draws at each move (the scroll-bar thumb's outline) fell
+       behind the pointer */
+    if (msg == WM_MOUSEMOVE && sq_count) {
+        SYSEV *l = &sysq[(sq_head + sq_count - 1) % NSYSQ];
+        if (l->msg == WM_MOUSEMOVE) {
+            l->wParam = wp;
+            l->lParam = lp;
+            l->time = tickcount;
+            irq_restore(f);
+            if (hqInput)
+                set_wakebit(hqInput, QS_MOUSE);
+            return;
+        }
+    }
     if (sq_count < NSYSQ) {
         SYSEV *e = &sysq[(sq_head + sq_count) % NSYSQ];
         e->msg = msg;
@@ -652,7 +692,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     if (valid_wnd(target))
                         ScreenToClient(target, &c);
                     m->message = e.msg;
-                    m->wParam = 0;
+                    m->wParam = e.wParam;   /* the keys then (push_event) */
                     m->lParam = MAKELONG(c.x, c.y);
                 }
                 return TRUE;
@@ -737,15 +777,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
             m->hwnd = target;
             m->time = e.time;
             m->pt = pt;
-            {
-                WORD keys = 0;
-                if (keystate[VK_LBUTTON] & 0x80) keys |= MK_LBUTTON;
-                if (keystate[VK_RBUTTON] & 0x80) keys |= MK_RBUTTON;
-                if (keystate[VK_MBUTTON] & 0x80) keys |= MK_MBUTTON;
-                if (keystate[VK_SHIFT] & 0x80) keys |= MK_SHIFT;
-                if (keystate[VK_CONTROL] & 0x80) keys |= MK_CONTROL;
-                m->wParam = keys;
-            }
+            m->wParam = e.wParam;       /* the keys then (push_event) */
             m->message = e.msg;
             if ((e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN)) {
                 if (e.msg == lastclick_msg && target == lastclick_hwnd &&

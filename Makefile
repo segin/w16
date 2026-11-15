@@ -1616,6 +1616,13 @@ $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us22.map file { $(B)/tests/start.o $(B)/tests/us22.o }
 dos: $(DOS)/US22.EXE
+# US25: mouse moves made while a program is busy (tests/apps/us25.c)
+$(B)/tests/us25.o: tests/apps/us25ref.h tests/apps/tklog.h
+$(DOS)/US25.EXE: $(B)/tests/start.o $(B)/tests/us25.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us25.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us25.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us25.map file { $(B)/tests/start.o $(B)/tests/us25.o $(B)/tests/mevent.o }
+dos: $(DOS)/US25.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

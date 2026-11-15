@@ -27,7 +27,7 @@
 extern WORD FAR PASCAL WaitEvent(HTASK);
 extern BOOL FAR PASCAL InitApp(HINSTANCE);
 
-static HWND hMain, hCV, hCH;
+static HWND hMain, hCV, hCH, hSL;
 static int vtrack = 50;         /* the window's vertical bar's last
                                    SB_THUMBTRACK, shown in the client area */
 static RECT rcShow = { 100, 100, 200, 120 };
@@ -40,6 +40,8 @@ static const char *barname(WORD ctl)
         return "cv";
     if ((HWND)ctl == hCH)
         return "ch";
+    if ((HWND)ctl == hSL)
+        return "sl";
     return "?";
 }
 
@@ -54,7 +56,7 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
         HWND bw = ctl ? ctl : h;
         /* which bars move with the thumb: the window's horizontal one
            and the vertical control */
-        BOOL tracks = ctl ? ctl == hCV : m == WM_HSCROLL;
+        BOOL tracks = ctl ? ctl == hCV || ctl == hSL : m == WM_HSCROLL;
         int pos = (int)LOWORD(lp);
         POINT pt;
         GetCursorPos(&pt);
@@ -62,6 +64,14 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
                  (LPSTR)barname(HIWORD(lp)), wp, wp == SB_THUMBTRACK || wp == SB_THUMBPOSITION ? pos : 0,
                  GetScrollPos(bw, bar), pt.x, pt.y);
         out(b);
+        /* the slow control: a second for each SB_THUMBTRACK, as a slow program
+           that redraws a lot would take (a drag of its thumb shows
+           whether the moves made meanwhile pile up) */
+        if (ctl == hSL && wp == SB_THUMBTRACK) {
+            DWORD t = GetTickCount() + 1000;
+            while (GetTickCount() < t)
+                ;
+        }
         /* the window's vertical bar: the tracked position drawn by
            WM_PAINT, the area only invalidated here (does a drag let the
            window paint?) */
@@ -130,6 +140,10 @@ int __cdecl tmain(void)
                        (HMENU)1, tk_hinst, NULL);
     hCH = CreateWindow("ScrollBar", "", WS_CHILD | WS_VISIBLE | SBS_HORZ, 60, 10, 150, 17, hMain,
                        (HMENU)2, tk_hinst, NULL);
+    hSL = CreateWindow("ScrollBar", "", WS_CHILD | WS_VISIBLE | SBS_VERT, 240, 10, 17, 150, hMain,
+                       (HMENU)3, tk_hinst, NULL);
+    SetScrollRange(hSL, SB_CTL, 0, 100, FALSE);
+    SetScrollPos(hSL, SB_CTL, 0, FALSE);
     SetScrollRange(hCV, SB_CTL, 0, 100, FALSE);
     SetScrollPos(hCV, SB_CTL, 50, FALSE);
     SetScrollRange(hCH, SB_CTL, 0, 100, FALSE);
@@ -143,6 +157,9 @@ int __cdecl tmain(void)
     out(b);
     GetWindowRect(hCH, &r);
     wsprintf(b, "OBS ~ch=%d,%d,%d,%d\r\n", r.left, r.top, r.right, r.bottom);
+    out(b);
+    GetWindowRect(hSL, &r);
+    wsprintf(b, "OBS ~sl=%d,%d,%d,%d\r\n", r.left, r.top, r.right, r.bottom);
     out(b);
     while (GetMessage(&m, 0, 0, 0)) {
         TranslateMessage(&m);
