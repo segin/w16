@@ -1566,7 +1566,10 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 [ "$r" = ok ] || break
                 s2=$(basename "$f")
                 [ -f "$d-286/$s2" ] || { r="KRNL286: no $s2"; break; }
-                n=$(magick compare -metric AE "$d-286/$s2" "$f" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                # Cardfile's caret left out (its blink)
+                magick "$f" -fill black -draw "rectangle 16,144 20,164" "$d-a.png"
+                magick "$d-286/$s2" -fill black -draw "rectangle 16,144 20,164" "$d-b.png"
+                n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ between KRNL386 and KRNL286"; break; }
             done ;;

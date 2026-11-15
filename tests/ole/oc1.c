@@ -1539,6 +1539,9 @@ int __cdecl tmain(void)
     WaitEvent(0);
     inst = (HINSTANCE)init_regs[5];
     InitApp(inst);
+    /* carets keep their phase (screens of programs OC1 drives compare
+       pixel for pixel; the blink would flip one at random) */
+    SetCaretBlinkTime(65535U);
     client_vtbl.CallBack = ClientCallBack;
     stream_vtbl.Get = StreamGet;
     stream_vtbl.Put = (void FAR *)StreamPut;
