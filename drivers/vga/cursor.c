@@ -1,6 +1,6 @@
 /*
- * cursor.c - the mouse pointer (a software cursor), Inquire, and
- * SaveScreenBitmap.
+ * cursor.c - the mouse pointer (a software cursor) and its trail, Inquire,
+ * and SaveScreenBitmap.
  *
  * DDK ("Cursor"; SetCursor, MoveCursor, CheckCursor): USER sets the shape
  * (a CURSORSHAPE: AND mask then XOR mask, 32 x 32 here), calls MoveCursor
@@ -10,6 +10,30 @@
  * rectangle meets the cursor's bytes, and draws it again when it ends;
  * MoveCursor and CheckCursor at interrupt time do nothing but note the
  * position while busy is set (CheckCursor catches up on the next tick).
+ *
+ * Mouse trails (DDK "Mouse Trails", the MOUSETRAILS escape: vga.c
+ * Control), as Windows 3.1's VGA.DRV draws them (VG9, tests/apps/vg9.c:
+ * its MoveCursor and CheckCursor called directly, the screen read back
+ * from the VGA's memory; drivers/vga/README.md):
+ * - the trail is the cursor's earlier positions: every MoveCursor adds
+ *   the position the cursor had (also when it does not change), at most
+ *   trail size - 1 of them (the oldest goes); every CheckCursor takes the
+ *   oldest away, so the trail runs down one image a tick once the pointer
+ *   stops;
+ * - the images are drawn oldest first, each over the ones before it, all
+ *   of the current shape;
+ * - no trail for a cursor whose AND mask has no 0 bit (XOR only: the
+ *   I-beam), as the DDK says;
+ * - SetCursor (a new shape, or none: ShowCursor) ends the trail: the new
+ *   shape is drawn alone at once;
+ * - a drawing operation that meets any image takes the whole trail and
+ *   the cursor off, and they stay off (the trail forgotten) until the next
+ *   CheckCursor or MoveCursor draws the cursor alone; drawing that meets
+ *   none leaves them;
+ * - an escape that changes the trail (cursor_trail) takes everything off
+ *   the same way.
+ * With trails off (or a trail size of 1) the cursor is excluded and drawn
+ * again exactly as before.
  *
  * Interrupt-time code: everything here and in surf.c's register helpers
  * touches only this driver's fixed data segment (tools/irqcheck.py
@@ -21,12 +45,28 @@ volatile BYTE busy;
 
 static BYTE andm[32][4], xorm[32][4];
 static short hotx, hoty, cw, ch;
-static BYTE have_shape;
+static BYTE have_shape, xor_only;
 static volatile short curx = 320, cury = 240;
 static volatile BYTE pending;
-static BYTE drawn, need_redraw;
-static short dx0, dy0;                  /* where it is drawn: top left */
-static BYTE save[4][32][5];
+static BYTE need_redraw;
+
+/* the trail's settings (cursor_trail; vga.c keeps WIN.INI) */
+static BYTE trail_on;
+static BYTE trail_size = 1;
+/* the earlier positions (hot spots), oldest first; px, py: where the
+   cursor itself was last drawn */
+static short qx[TRAIL_MAX - 1], qy[TRAIL_MAX - 1];
+static BYTE qn;
+static short px = 320, py = 240;
+/* off after a drawing operation met the trail, or an escape: drawn alone
+   by the next CheckCursor or MoveCursor */
+static BYTE held;
+
+/* the images on the screen, oldest first: top left, and the screen bytes
+   under each (four planes, 32 rows, 5 bytes) */
+static BYTE nd;
+static short ix[TRAIL_MAX], iy[TRAIL_MAX];
+static BYTE save[TRAIL_MAX][4][32][5];
 
 extern BYTE __cdecl __far xchg_busy(void);
 
@@ -38,12 +78,18 @@ static void footprint(short x, short *x0, short *x1)
     *x1 = *x0 + 40;
 }
 
+static int trail_active(void)
+{
+    return trail_on && trail_size > 1 && have_shape && !xor_only;
+}
+
 static void draw_at(short x, short y)
 {
     int r, c, p, sy, col, sh, bx;
     BYTE __far *l;
     DWORD a, xr;
     BYTE ab[5], xb[5], v;
+    BYTE (*sv)[32][5] = save[nd];
     bx = x >= 0 ? x >> 3 : -((-x + 7) >> 3);
     sh = x - bx * 8;
     scr_reset();
@@ -73,62 +119,119 @@ static void draw_at(short x, short y)
                 if (col < 0 || col >= 80)
                     continue;
                 v = l[col];
-                save[p][r][c] = v;
+                sv[p][r][c] = v;
                 l[col] = (BYTE)((v & ab[c]) ^ xb[c]);
             }
         }
     }
-    dx0 = x;
-    dy0 = y;
-    drawn = 1;
+    ix[nd] = x;
+    iy[nd] = y;
+    nd++;
 }
 
+/* every image off, the newest first */
 static void erase(void)
 {
     int r, c, p, sy, col, bx;
     BYTE __far *l;
-    if (!drawn)
+    if (!nd)
         return;
-    bx = dx0 >= 0 ? dx0 >> 3 : -((-dx0 + 7) >> 3);
     scr_reset();
-    for (p = 0; p < 4; p++) {
-        scr_plane(p);
-        for (r = 0; r < ch && r < 32; r++) {
-            sy = dy0 + r;
-            if (sy < 0 || sy >= 480)
-                continue;
-            l = (BYTE __far *)MK_FP(vga_sel, (WORD)sy * 80);
-            for (c = 0; c < 5; c++) {
-                col = bx + c;
-                if (col >= 0 && col < 80)
-                    l[col] = save[p][r][c];
+    while (nd) {
+        BYTE (*sv)[32][5];
+        nd--;
+        sv = save[nd];
+        bx = ix[nd] >= 0 ? ix[nd] >> 3 : -((-ix[nd] + 7) >> 3);
+        for (p = 0; p < 4; p++) {
+            scr_plane(p);
+            for (r = 0; r < ch && r < 32; r++) {
+                sy = iy[nd] + r;
+                if (sy < 0 || sy >= 480)
+                    continue;
+                l = (BYTE __far *)MK_FP(vga_sel, (WORD)sy * 80);
+                for (c = 0; c < 5; c++) {
+                    col = bx + c;
+                    if (col >= 0 && col < 80)
+                        l[col] = sv[p][r][c];
+                }
             }
         }
     }
-    drawn = 0;
 }
 
-/* the cursor where it should be (busy held by the caller) */
+/* the cursor and its trail where they should be (busy held by the
+   caller) */
 static void redraw(void)
 {
-    short x, y;
+    int i;
     pending = 0;
+    need_redraw = 0;
+    held = 0;
     erase();
     if (!enabled || !have_shape)
         return;
-    x = curx - hotx;
-    y = cury - hoty;
-    draw_at(x, y);
-    need_redraw = 0;
+    for (i = 0; i < qn; i++)
+        draw_at(qx[i] - hotx, qy[i] - hoty);
+    px = curx;
+    py = cury;
+    draw_at(px - hotx, py - hoty);
+}
+
+/* the oldest earlier position dropped */
+static void trail_pop(void)
+{
+    int i;
+    if (!qn)
+        return;
+    qn--;
+    for (i = 0; i < qn; i++) {
+        qx[i] = qx[i + 1];
+        qy[i] = qy[i + 1];
+    }
+}
+
+/* the cursor moved (MoveCursor, now or noted while busy): the position
+   it was drawn at joins the trail, unless the cursor is off (held) */
+static void trail_push(void)
+{
+    if (trail_active() && !held && nd) {
+        if (qn >= trail_size - 1)
+            trail_pop();
+        qx[qn] = px;
+        qy[qn] = py;
+        qn++;
+    }
+}
+
+static void moved(void)
+{
+    trail_push();
+    redraw();
+}
+
+/* everything off, the trail forgotten; drawn alone by the next
+   CheckCursor or MoveCursor */
+static void hold(void)
+{
+    erase();
+    qn = 0;
+    held = 1;
 }
 
 void cursor_exclude(int x0, int y0, int x1, int y1)
 {
     short fx0, fx1;
-    if (!drawn)
+    int i;
+    for (i = 0; i < nd; i++) {
+        footprint(ix[i], &fx0, &fx1);
+        if (x0 < fx1 && x1 > fx0 && y0 < iy[i] + ch && y1 > iy[i])
+            break;
+    }
+    if (i == nd)
         return;
-    footprint(dx0, &fx0, &fx1);
-    if (x0 < fx1 && x1 > fx0 && y0 < dy0 + ch && y1 > dy0) {
+    if (trail_active())
+        hold();
+    else {
         erase();
         need_redraw = 1;
     }
@@ -136,7 +239,9 @@ void cursor_exclude(int x0, int y0, int x1, int y1)
 
 void cursor_unexclude(void)
 {
-    if (need_redraw || pending)
+    if (pending)
+        moved();
+    else if (need_redraw)
         redraw();
     busy = 0;
 }
@@ -144,8 +249,8 @@ void cursor_unexclude(void)
 void cursor_init(void)
 {
     busy = 1;
-    drawn = 0;
-    need_redraw = 1;
+    nd = 0;
+    qn = 0;
     redraw();
     busy = 0;
 }
@@ -154,28 +259,57 @@ void cursor_off(void)
 {
     busy = 1;
     erase();
+    qn = 0;
+    busy = 0;
+}
+
+/* the trail turned on or off, or its size set (Control, MOUSETRAILS):
+   everything off until the next CheckCursor or MoveCursor */
+void cursor_trail(int on, int size)
+{
+    while (xchg_busy())
+        ;
+    hold();
+    trail_on = (BYTE)(on != 0);
+    trail_size = (BYTE)size;
     busy = 0;
 }
 
 /* MoveCursor's body (entry.asm saved the registers): interrupt time */
 void __cdecl __far cur_move(short x, short y)
 {
+    /* 3.1's driver draws a cursor moved to row 0 as on row 1, whatever
+       its hot spot (VG9: MoveCursor(x, 0) and (x, 1) give the same screen,
+       the arrow's tip never on the top row; x 0 is not moved) */
+    if (y == 0)
+        y = 1;
     curx = x;
     cury = y;
     if (xchg_busy()) {
         pending = 1;
         return;
     }
-    redraw();
+    moved();
     busy = 0;
 }
 
 /* CheckCursor's body: interrupt time, every timer tick */
 void __cdecl __far cur_check(void)
 {
+    BYTE again = 0;
     if (xchg_busy())
         return;
-    if (pending || need_redraw)
+    if (pending) {
+        trail_push();
+        again = 1;
+    }
+    if (held || need_redraw)
+        again = 1;
+    else if (qn) {
+        trail_pop();
+        again = 1;
+    }
+    if (again)
         redraw();
     busy = 0;
 }
@@ -187,6 +321,8 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
     while (xchg_busy())
         ;
     erase();
+    qn = 0;
+    held = 0;
     if (!cs) {
         have_shape = 0;
         busy = 0;
@@ -197,10 +333,13 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
     cw = cs->csWidth > 32 ? 32 : cs->csWidth;
     ch = cs->csHeight > 32 ? 32 : cs->csHeight;
     wb = cs->csWidthBytes;
+    xor_only = 1;
     for (r = 0; r < 32; r++)
         for (c = 0; c < 4; c++) {
             andm[r][c] = r < ch && c < wb ? cs->csBits[r * wb + c] : 0xFF;
             xorm[r][c] = r < ch && c < wb ? cs->csBits[(cs->csHeight + r) * wb + c] : 0;
+            if (andm[r][c] != 0xFF && c * 8 < cw)
+                xor_only = 0;
         }
     have_shape = 1;
     redraw();
