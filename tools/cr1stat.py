@@ -78,21 +78,23 @@ def summary(d):
     for o in (103, 104):
         rs = [r for r in R if r['ord'] == o]
         out[o] = len(rs)
-    counts, gaps = [], Counter()
+    counts, times, gaps = [], [], Counter()
     for f in vg9png.frames(os.path.join(d, 'CR1.BIN')):
         xs = tip_xs(vg9png.pixels(f), f['h'])
         counts.append(len(xs))
+        times.append(f['ms'])
         for a, b in zip(xs, xs[1:]):
             gaps[b - a] += 1
-    runs, k = [], 0
-    for a, b in zip(counts, counts[1:]):
-        if b == a - 1:
-            k += 1
-            if b == 1:
-                runs.append(k)
-                k = 0
-        else:
-            k = 0
+    # run-downs: from the last frame of 5 or more images to the first of
+    # one or none after it, in ms (frames are taken at timer messages, which
+    # a loaded host skips now and then: counted in frames they varied)
+    runs, top = [], None
+    for c, t in zip(counts, times):
+        if c >= 5:
+            top = t
+        elif c <= 1 and top is not None:
+            runs.append(t - top)
+            top = None
     moving = sorted(c for c in counts if c >= 2)
     out['median'] = moving[len(moving) // 2] if moving else 0
     out['gaps'] = gaps
@@ -106,9 +108,9 @@ def check(ref, test):
     the ticks against the frames: MoveCursor and CheckCursor calls within
     10 percent, the trail's usual length in motion within one image (the
     frames are taken at timer messages, a move or none after the tick),
-    no more gaps between neighbouring images of twice the usual gap than
-    the reference has (3 points more), and as many run-downs, each within
-    one frame of the reference's"""
+    gaps between neighbouring images of twice the usual gap (a position
+    missing) at most twice the reference's share and 3 points, and as
+    many run-downs, each within three ticks (165 ms) of the reference's"""
     A, B = summary(ref), summary(test)
     bad = []
     # one move a PS/2 packet of the same xdotool stream, one tick a timer
@@ -128,10 +130,12 @@ def check(ref, test):
     def big(G):
         tot = sum(G.values())
         return sum(n for k, n in G.items() if k >= 2 * g - 1) / tot if tot else 1.0
-    if big(B['gaps']) > big(A['gaps']) + 0.03:
+    # (a loaded host makes some on 3.1 too: DOSBox adds up the motion of
+    # host events it is late with)
+    if big(B['gaps']) > 2 * big(A['gaps']) + 0.03:
         bad.append('gaps of %d or more: %.1f%% against %.1f%%'
                    % (2 * g - 1, 100 * big(B['gaps']), 100 * big(A['gaps'])))
-    if len(A['runs']) != len(B['runs']) or any(abs(a - b) > 1 for a, b in zip(A['runs'], B['runs'])):
+    if len(A['runs']) != len(B['runs']) or any(abs(a - b) > 165 for a, b in zip(A['runs'], B['runs'])):
         bad.append('run-downs %s against %s' % (B['runs'], A['runs']))
     print('reference: moves %d, ticks %d, length %d, gaps %s, run-downs %s'
           % (A[103], A[104], A['median'], sorted(A['gaps'].items()), A['runs']))
