@@ -25,6 +25,7 @@
 
 extern u16 KAPI LAlloc(u16 ds, u16 flags, u16 n);
 extern u16 KAPI LFree(u16 ds, u16 h);
+extern u32 ptr_room(const void FAR *p, int write);          /* kmisc.c */
 
 #define DS_ATOMTABLE    0x08
 #define ATOM_BUCKETS    37      /* default table size (observed) */
@@ -127,6 +128,18 @@ static int atom_direct(const char FAR *s, u16 *atom, u16 *len)
     if (FP_SEG(s) == 0) {               /* MAKEINTATOM */
         *atom = FP_OFF(s) < ATOM_STRING ? FP_OFF(s) : 0;
         return 1;
+    }
+    /* a bad name, or one running past its segment's end: 0 (3.1's lets
+       it fault and recovers, its "__GP" table; US27: USER's
+       RegisterClipboardFormat, RegisterWindowMessage) */
+    {
+        u32 i, rd = ptr_room(s, 0);
+        for (i = 0; i < rd && s[(u16)i]; i++)
+            ;
+        if (i >= rd) {
+            *atom = 0;
+            return 1;
+        }
     }
     if (int_name(s, &v)) {
         *atom = v < ATOM_STRING ? v : 0;
@@ -234,16 +247,26 @@ u16 KAPI ADEL(u16 ds, u16 atom)                                 /* KERNEL.71 */
 }
 
 /* copy at most n - 1 characters and a NUL (nothing if n <= 0); returns
-   the characters copied (observed for string and integer atoms) */
+   the characters copied (observed for string and integer atoms). A
+   buffer that ends first, or a bad one: what fits is written, 0 returned
+   (3.1's copy faults there and is recovered, its "__GP" table; US27:
+   USER's GetClipboardFormatName and GetClassName) */
 static u16 copy_name(char FAR *buf, int n, const char FAR *s, u16 len)
 {
     u16 i;
+    u32 wr;
     if (n <= 0)
         return 0;
     if (len > (u16)(n - 1))
         len = (u16)(n - 1);
-    for (i = 0; i < len; i++)
+    wr = ptr_room(buf, 1);
+    for (i = 0; i < len; i++) {
+        if (i >= wr)
+            return 0;
         buf[i] = s[i];
+    }
+    if (len >= wr)
+        return 0;
     buf[len] = 0;
     return len;
 }
