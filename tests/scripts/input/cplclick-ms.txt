@@ -128,7 +128,54 @@ sleep 0.3
 click 1
 sleep 0.6
 matchnow 03-swap 20 1
-; Swap Left/Right Buttons again
+; the left button held while swapped: the right box shows it
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+down 1
+sleep 0.8
+matchnow 04-swap-leftdown 20 1
+up 1
+sleep 0.5
+; (now the physical right button clicks)
+; Swap Left/Right Buttons again, with the physical right button
 home
 home
 sleep 0.3
@@ -155,7 +202,7 @@ sleep 0.05
 move 12 0
 sleep 0.05
 sleep 0.3
-click 1
+click 3
 sleep 0.6
 ; Mouse Trails
 home
@@ -186,7 +233,7 @@ sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
-matchnow 04-trails 20 1
+matchnow 05-trails 20 1
 ; TEST box double-clicked
 home
 home
@@ -216,7 +263,88 @@ sleep 0.05
 sleep 0.3
 dclick 1
 sleep 0.6
-matchnow 05-testbox 20 1
+matchnow 06-testbox 20 1
+; TEST box double-clicked again
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 1
+sleep 0.05
+sleep 0.3
+dclick 1
+sleep 0.6
+matchnow 07-testbox2 20 1
+; the buttons held down over the dialog: the picture shows them
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+down 1
+sleep 0.8
+matchnow 08-leftdown 20 1
+up 1
+sleep 0.5
+down 3
+sleep 0.8
+matchnow 09-rightdown 20 1
+up 3
+sleep 0.5
 ; tracking bar: right arrow
 home
 home
@@ -282,7 +410,7 @@ sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
-matchnow 06-tracking 20 1
+matchnow 10-tracking 20 1
 home
 home
 sleep 0.3
@@ -310,7 +438,7 @@ move 6 4
 sleep 0.2
 move 6 4
 sleep 0.2
-matchnow 07-travel 20 1
+matchnow 11-travel 20 1
 ; OK with Return (the pointer now accelerates)
 key Return
 sleep 0.4
@@ -318,7 +446,7 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-matchnow 08-closed 20 1
+matchnow 12-closed 20 1
 ; end Windows: the INI files written out
 key alt+F4
 sleep 1
