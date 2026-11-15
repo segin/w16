@@ -16,6 +16,9 @@
 #                build/dos/OLESVR.DLL); default "w16:ms", plus "ms:w16
 #                w16:w16" when build/dos/OLESVR.DLL exists
 #   OLESCEN_JOBS  runs at once (default 1: one DOSBox at a time)
+#   OLESCEN_FILES more files for every run, refrun.sh's SRC=PATH form, e.g.
+#                 build/dos/CARDFILE.EXE=WINDOWS/CARDFILE.EXE (w16's Cardfile
+#                 as the client program on both sides)
 # Exit status: the number of failed scenario/combination pairs.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -38,7 +41,7 @@ names=${*:-$(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//')}
 jobs=${OLESCEN_JOBS:-1}
 # the launch scenario's stand-in server
 printf 'PBRUSH.EXE\r\n' > "$out/OCSRV.TXT"
-export OCRUN_FILES="$root/build/dos/OCSRV.EXE $out/OCSRV.TXT"
+export OCRUN_FILES="$root/build/dos/OCSRV.EXE $out/OCSRV.TXT ${OLESCEN_FILES:-}"
 export OCRUN_TIMEOUT=${OCRUN_TIMEOUT:-240}
 
 run() {     # run NAME CLIENT SERVER

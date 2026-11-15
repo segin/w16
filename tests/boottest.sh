@@ -155,7 +155,8 @@
 #              per OLE scenario tests/ole/obs/NAME.txt (tests/olescenarios.sh
 #              NAME): on the reference install, w16's OLECLI against
 #              Microsoft's: the client's calls and callbacks, the DDE
-#              conversation, the saved streams and OleDraw's pixels equal
+#              conversation, the saved streams and OleDraw's pixels equal;
+#              part cardw16: card1 with w16's Cardfile as the client
 ##   treek386   w16's install tree alone under its KRNL386 against the same
 #              under its KRNL286, every shot 0 pixels; parts items (every
 #              item of the default groups opened, tests/scripts/input/
@@ -1569,6 +1570,12 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ between KRNL386 and KRNL286"; break; }
             done ;;
+        cardw16)
+            # w16's Cardfile as the client (card1), with each OLECLI
+            OLESCEN_FILES="$root/build/dos/CARDFILE.EXE=WINDOWS/CARDFILE.EXE" \
+                "$root/tests/olescenarios.sh" -o "$out/olecli-$part" card1 > "$out/olecli-$part.txt" 2>&1 || true
+            grep -q '^ok ' "$out/olecli-$part.txt" && ! grep -q '^FAIL' "$out/olecli-$part.txt" ||
+                r="$part: $(grep -m1 '^FAIL' "$out/olecli-$part.txt" || echo 'no result') ($out/olecli-$part)" ;;
         *)
             "$root/tests/olescenarios.sh" -o "$out/olecli-$part" "$part" > "$out/olecli-$part.txt" 2>&1 || true
             grep -q '^ok ' "$out/olecli-$part.txt" && ! grep -q '^FAIL' "$out/olecli-$part.txt" ||
@@ -3065,7 +3072,7 @@ caseparts() {
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
-    olecli) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
+    olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -3116,7 +3123,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   treek386: the tree under its KRNL386 as under its KRNL286 (every item of its groups; Clock and Calculator over the desktop stamp)"
         else echo "FAIL treek386: $pfirst ($out)"; fi ;;
     olecli)
-        if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 1)) OLE scenarios as with Microsoft's OLECLI"
+        if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 2)) OLE scenarios as with Microsoft's OLECLI, and card1 with w16's Cardfile"
         else echo "FAIL olecli: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
