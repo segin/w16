@@ -147,7 +147,16 @@
 #              as it was, text mode at the end, no ~WOA file left
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
-#   treek386   w16's install tree alone under its KRNL386 against the same
+#   olecli     w16's OLECLI.DLL (ARCHITECTURE.md 16), parts: tree, w16's
+#              install tree alone (with its OLECLI.DLL): Cardfile from the
+#              Accessories group, under its KRNL386 and KRNL286
+#              (tests/scripts/input/cardtree.txt): Cardfile's window must
+#              open, the screens the same under both kernels; and one part
+#              per OLE scenario tests/ole/obs/NAME.txt (tests/olescenarios.sh
+#              NAME): on the reference install, w16's OLECLI against
+#              Microsoft's: the client's calls and callbacks, the DDE
+#              conversation, the saved streams and OleDraw's pixels equal
+##   treek386   w16's install tree alone under its KRNL386 against the same
 #              under its KRNL286, every shot 0 pixels; parts items (every
 #              item of the default groups opened, tests/scripts/input/
 #              treeitems.txt; Program Manager and Main where PROGMAN.INI
@@ -486,7 +495,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1504,11 +1513,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="every w16 part: $s2: $n pixels differ"; break; }
             done
+            # (the tree has w16's OLECLI.DLL since 2026-11-14: taken out here)
             s=$root/tests/scripts/input/missingdlltree.txt
-            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-t386" -T "$root/build/w16" -3 \
+            tdel="-f W16/SYSTEM/OLECLI.DLL=-"
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-t386" -T "$root/build/w16" -3 $tdel \
                 > "$out/missingdll-t386.txt" 2>&1 || true
             "$root/tests/inputrun.sh" -e "$out/missingdll-t386/boot.png" -E "$out/missingdll-t386" -b 40 -t 200 \
-                "$s" "$out/missingdll-t286" -T "$root/build/w16" > "$out/missingdll-t286.txt" 2>&1 || true
+                "$s" "$out/missingdll-t286" -T "$root/build/w16" $tdel > "$out/missingdll-t286.txt" 2>&1 || true
             ls "$out/missingdll-t386"/0[1-4]*.png > /dev/null 2>&1 || r="KRNL386: no screens"
             for f in "$out/missingdll-t386"/0[1-4]*.png; do
                 [ "$r" = ok ] || break
@@ -1533,6 +1544,38 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   missingdll: 0 pixels, the same return codes"
         else echo "FAIL missingdll: $r ($out)"; fails=$((fails + 1)); fi ;;
+    olecli)
+        r=ok
+        case ${part:-tree} in
+        tree)
+            s=$root/tests/scripts/input/cardtree.txt
+            d=$out/olecli-tree
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$d-386" -T "$root/build/w16" -3 \
+                > "$d-386.txt" 2>&1 || true
+            "$root/tests/inputrun.sh" -e "$d-386/boot.png" -E "$d-386" -b 40 -t 200 \
+                "$s" "$d-286" -T "$root/build/w16" > "$d-286.txt" 2>&1 || true
+            grep -q '^script done' "$d-386/input.log" 2>/dev/null || r="KRNL386: the script did not finish ($d-386/input.log)"
+            # Cardfile's window, active, over Program Manager: its caption
+            if [ "$r" = ok ]; then
+                px=$(magick "$d-386/02-cardfile.png" -format "%[hex:p{300,12}]" info: 2>/dev/null)
+                case $px in 0000AA*) ;; *) r="KRNL386: no active Cardfile window ($px at 300,12)" ;; esac
+            fi
+            for f in "$d-386"/[0-9]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f")
+                [ -f "$d-286/$s2" ] || { r="KRNL286: no $s2"; break; }
+                n=$(magick compare -metric AE "$d-286/$s2" "$f" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ between KRNL386 and KRNL286"; break; }
+            done ;;
+        *)
+            "$root/tests/olescenarios.sh" -o "$out/olecli-$part" "$part" > "$out/olecli-$part.txt" 2>&1 || true
+            grep -q '^ok ' "$out/olecli-$part.txt" && ! grep -q '^FAIL' "$out/olecli-$part.txt" ||
+                r="$part: $(grep -m1 '^FAIL' "$out/olecli-$part.txt" || echo 'no result') ($out/olecli-$part)" ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   olecli"
+        else echo "FAIL olecli: $r ($out)"; fails=$((fails + 1)); fi ;;
     treek386)
         # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
         # under its own KRNL386 (-3: what DOSX starts on a 386, and what
@@ -3021,6 +3064,7 @@ caseparts() {
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
+    olecli) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
@@ -3070,6 +3114,9 @@ partsummary() {
     treek386)
         if [ $pbad = 0 ]; then echo "ok   treek386: the tree under its KRNL386 as under its KRNL286 (every item of its groups; Clock and Calculator over the desktop stamp)"
         else echo "FAIL treek386: $pfirst ($out)"; fi ;;
+    olecli)
+        if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 1)) OLE scenarios as with Microsoft's OLECLI"
+        else echo "FAIL olecli: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;

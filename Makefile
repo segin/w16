@@ -1415,6 +1415,11 @@ install-tree: $(W16)/CARDFILE.EXE
 $(W16)/CARDFILE.EXE: $(DOS)/CARDFILE.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+# the OLE client library Cardfile imports (ole/olecli/; ARCHITECTURE.md 16)
+install-tree: $(W16SYS)/OLECLI.DLL
+$(W16SYS)/OLECLI.DLL: $(DOS)/OLECLI.DLL
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
