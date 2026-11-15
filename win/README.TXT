@@ -7,32 +7,91 @@ w16 repository's LICENSE):
 
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
-  SYSTEM\KRNL286.EXE      KERNEL
+  NOTEPAD.EXE             Notepad
+  CLOCK.EXE               Clock
+  CALC.EXE                Calculator
+  CARDFILE.EXE            Cardfile (needs COMMDLG.DLL and OLECLI.DLL in
+                          SYSTEM; its help is CARDFILE.HLP)
+  SYSTEM\KRNL286.EXE      KERNEL for an 80286
+  SYSTEM\KRNL386.EXE      KERNEL for a 386 or later (Standard and 386
+                          Enhanced mode)
+  SYSTEM\USER.EXE         USER (windows, menus, dialogs, messages)
+  SYSTEM\GDI.EXE          GDI (graphics)
+  SYSTEM\WINOLDAP.MOD     runs DOS programs under w16
+  SYSTEM\WSWAP.EXE        the task switcher's w16 side: WIN.COM starts
+                          it, it starts DOSX.EXE, and it swaps w16
+                          out of memory for a DOS program and back
+  SYSTEM\DSWAP.EXE        the task switcher's DOS side: runs a DOS
+                          program full screen (Alt+Tab, Alt+Esc and
+                          Ctrl+Esc switch away from it)
+  SYSTEM\VGACOLOR.2GR     the display grabber for DOS programs in
+                          Standard mode: saves and restores a DOS
+                          program's screen when it is switched away
+                          from and back to, and copies its text to the
+                          clipboard (PrintScreen)
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
+  SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
+                          the registration database REG.DAT, icons,
+                          About boxes)
+  SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
+                          Print Setup, Font, Color, Find, Replace)
+  SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
+                          serial, bus or InPort mouse, use your own
+                          Windows 3.1 MOUSE.DRV instead)
+  SYSTEM\COMM.DRV         the serial (COM1-COM4) and parallel
+                          (LPT1-LPT3) port driver
+  SYSTEM\KEYBOARD.DRV     the keyboard driver (US layout, code page
+                          437; for another layout or code page use
+                          your own Windows 3.1 KEYBOARD.DRV and its
+                          KBD*.DLL instead)
+  SYSTEM\SYSTEM.DRV       the system driver: timers, the millisecond
+                          count, coprocessor state, drive types
+                          (for a standard PC/AT; on a machine that
+                          needs another system driver, such as
+                          HPSYSTEM.DRV, use that instead)
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
+                          old SOUND functions (voice queues of notes)
+                          on the PC speaker
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
   SYSTEM\SSERIFE.FON      MS Sans Serif font
+  SYSTEM.INI, WIN.INI     w16's default settings (only w16's drivers,
+                          fonts and programs)
+  PROGMAN.INI             Program Manager's settings and its groups:
+  MAIN.GRP                  Main (MS-DOS Prompt, Read Me)
+  ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
+                            Clock)
+  STARTUP.GRP               StartUp (empty)
 
-It is not a complete Windows yet. To boot it (Standard mode, WIN /S),
-copy these from your own Windows 3.1 installation into the same places
-(Windows directory or its SYSTEM subdirectory, as there), without
-overwriting the files above:
+This directory is meant to be C:\W16: PROGMAN.INI names the group files
+as C:\W16\MAIN.GRP and so on. Installed elsewhere, change the [Groups]
+lines of PROGMAN.INI to match.
 
-  Windows directory:      SYSTEM.INI, WIN.INI, PROGMAN.INI, the *.GRP
-                          group files, and any applications you want
-  SYSTEM:                 USER.EXE, GDI.EXE, SHELL.DLL, MMSYSTEM.DLL,
-                          the drivers named in SYSTEM.INI's [boot]
-                          section (SYSTEM.DRV, KEYBOARD.DRV, MOUSE.DRV,
-                          VGA.DRV, MMSOUND.DRV, COMM.DRV, ...), the other
-                          fonts (*.FON, *.FOT, *.TTF), WSWAP.EXE (which
-                          WIN.COM starts in Standard mode), and for DOS
-                          programs WINOLDAP.MOD, DSWAP.EXE and the
-                          VGACOLOR.2GR grabber
+REG.DAT (the registration database) may be copied too; without one,
+w16's SHELL.DLL makes an empty one and fills it from WIN.INI's
+[embedding] section, as Windows 3.1 does.
 
-Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
-it is there and w16's KRNL286.EXE only when it is not.
+This directory boots on its own (Standard mode, WIN /S): no file of
+Microsoft's is needed to reach Program Manager and run the programs
+above and DOS programs. w16 is not complete yet, though: programs that
+need what w16 does not have yet want these from your own Windows 3.1
+installation, copied into the same places (Windows directory or its
+SYSTEM subdirectory, as there) without overwriting the files above:
+
+  Windows directory:      any applications you want
+  SYSTEM:                 MMSYSTEM.DLL (multimedia), OLECLI.DLL and
+                          OLESVR.DLL (OLE, e.g. Cardfile's pictures),
+                          the other fonts (*.FON, *.FOT, *.TTF)
+
+Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or
+later DOSX starts KRNL386.EXE when it is there and KRNL286.EXE only when
+it is not, and WIN386.EXE (386 Enhanced mode) always KRNL386.EXE.
+
+Notepad uses your NOTEPAD.HLP (Windows directory) for Help; w16 ships no
+help text. Printing needs your printer's driver (installed with Control
+Panel, as on Windows 3.1).
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.

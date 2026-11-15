@@ -1,0 +1,25 @@
+; the minute and the day change
+setdate 03/14/1993
+run CLOCK.EXE
+cmd 1
+freeze 10:09:57.00 1500
+settime 10:09:58.00
+wait 4000
+freeze 10:10:01.50 1000
+snap C:\M1.BMP
+freeze 23:59:57.00 1500
+settime 23:59:58.00
+wait 4000
+freeze 00:00:01.50 1000
+snap C:\M2.BMP
+dump
+cmd 2
+setdate 03/14/1993
+freeze 23:59:57.00 1500
+settime 23:59:58.00
+wait 4000
+freeze 00:00:01.50 1000
+snap C:\M3.BMP
+dump
+close
+wait 1000

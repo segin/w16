@@ -1,0 +1,3 @@
+# KB2.EXE (tests/apps/kb2.c): the keyboard driver under real input
+@tests/apps/app.lnk
+import U_INITAPP USER.5

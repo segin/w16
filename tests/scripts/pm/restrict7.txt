@@ -1,0 +1,22 @@
+; [Restrictions] EditLevel=4: nothing changed; Properties all disabled.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO EditLevel=4>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+char p
+wait 1000
+snap C:\X1.BMP
+key 1B
+wait 500
+childcmd F020
+wait 800
+menu f
+char p
+wait 1000
+snap C:\X2.BMP
+key 1B
+wait 500
+menu f
+char x
+wait 1500

@@ -1,0 +1,3 @@
+# MD1.EXE (tests/apps/md1.c, md1s.asm): the mouse driver interface probe
+@tests/apps/app.lnk
+import U_INITAPP USER.5

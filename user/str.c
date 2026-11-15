@@ -12,10 +12,23 @@
  */
 #include "user.h"
 
+/* overlapping blocks are fine (memmove): a list box makes room for an
+   item by moving those after it up one place in the same block, which a
+   forward copy smeared over the rest (File Manager's sorted owner-drawn
+   file list: every item after the insertion point became the same one,
+   its WM_COMPAREITEM then got stale data, and on w16's KERNEL its lstrcat
+   faulted, back to DOS) */
 void fmemcpy(void __far *d, const void __far *s, WORD n)
 {
     BYTE __far *dd = (BYTE __far *)d;
     const BYTE __far *ss = (const BYTE __far *)s;
+    if (FP_SEG(dd) == FP_SEG(ss) && FP_OFF(dd) > FP_OFF(ss) && FP_OFF(dd) - FP_OFF(ss) < n) {
+        dd += n;
+        ss += n;
+        while (n--)
+            *--dd = *--ss;
+        return;
+    }
     while (n--)
         *dd++ = *ss++;
 }
@@ -157,8 +170,9 @@ LPSTR WINAPI AnsiPrev(LPCSTR start, LPCSTR s)
    01h-1Fh, then 20h-2Fh, 3Ah-40h, 5Bh-60h, 7Bh-BFh in code order, D7h,
    DFh, the accented letters C0h/E0h ... (each upper case before its lower
    case for lstrcmp), F7h after F6h, then digits 0-9, then A a B b ... Z z. */
-static BYTE weight[256];
-static BYTE tiebreak[256];
+/* (far: out of DGROUP, whose room is windows' and classes') */
+static BYTE __far weight[256];
+static BYTE __far tiebreak[256];
 
 static void make_weights(void)
 {

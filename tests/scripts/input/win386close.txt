@@ -1,0 +1,46 @@
+; Applications opened and closed in 386 Enhanced mode with w16's WIN386.EXE
+; (tests/boottest.sh case win386close): each close ends a task, which
+; KRNL386 does with INT 21h AH=00h in V86 DOS (ARCHITECTURE.md 12.3,
+; tests/vx9run.sh); once that ended Windows. File Manager (Program
+; Manager's selected item: Return), then Notepad, Clock and Calculator
+; from File > Run, each closed with Alt+F4; a shot with each one open (its
+; caption) and after each close (Program Manager back)
+sleep 2
+key Return
+sleep 7
+shot 01-winfile
+key alt+F4
+sleep 4
+shot 02-closed
+key alt+f
+sleep 1
+key r
+sleep 2
+type notepad
+key Return
+sleep 5
+shot 03-notepad
+key alt+F4
+sleep 4
+shot 04-closed
+key alt+f
+sleep 1
+key r
+sleep 2
+type calc
+key Return
+sleep 5
+shot 05-calc
+key alt+F4
+sleep 4
+shot 06-closed
+key alt+f
+sleep 1
+key r
+sleep 2
+type clock
+key Return
+sleep 5
+key alt+F4
+sleep 4
+shot 07-closed

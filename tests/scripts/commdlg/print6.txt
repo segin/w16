@@ -1,0 +1,70 @@
+; PrintDlg with two printers (PostScript as the default on LPT2:, the
+; LaserJet on FILE: and LPT1:) and one whose driver is missing
+; Window handles not compared (nohwnd): from the second call on ours are
+; one USER block further on (UNVERIFIED: which 12-byte USER allocation the
+; Print dialog leaves behind or the original frees)
+nohwnd
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+expand PSCRIPT.DR_ WINDOWS/SYSTEM/PSCRIPT.DRV
+ini WINDOWS/WIN.INI windows:device=Apple LaserWriter Plus,PSCRIPT,LPT2:
+ini WINDOWS/WIN.INI devices:Apple LaserWriter Plus=PSCRIPT,LPT2:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,FILE:,LPT1:
+ini WINDOWS/WIN.INI devices:Gone Printer=NODRV,COM1:
+ini WINDOWS/WIN.INI PrinterPorts:Apple LaserWriter Plus=PSCRIPT,LPT2:,15,45
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,FILE:,15,45,LPT1:,15,45
+ini WINDOWS/WIN.INI PrinterPorts:Gone Printer=NODRV,COM1:,15,45
+; a: RETURNDEFAULT (PostScript)
+cd1 print flags=400
+; b: Print, OK
+cd1 print flags=1000 hook=1 copies=1
+cd1 wait 1000
+; c: Setup: the list of printers, choose the LaserJet, OK
+cd1 print flags=2040 hook=1
+cd1 wait 1000
+; d: Print with c's handles: Setup, choose the missing one, OK, OK
+cd1 print flags=3000 hook=1 keep=1 copies=1
+wait 3000
+; b
+snap C:\B1.BMP
+dump
+clickid 1
+wait 2500
+; c
+snap C:\C1.BMP
+dump
+clickid 470
+wait 600
+clickid 470
+wait 600
+key 28
+wait 1500
+snap C:\C2.BMP
+dump
+clickid 1
+wait 2500
+; d
+snap C:\D1.BMP
+dump
+clickid 400
+wait 1500
+clickid 470
+wait 600
+clickid 470
+wait 600
+key 28
+wait 1500
+snap C:\D2.BMP
+dump
+key 0D
+wait 1000
+snap C:\D3.BMP
+clickid 1
+wait 1500
+clickid 1
+wait 1500
+key 1B
+wait 1000
+key 1B
+wait 1000

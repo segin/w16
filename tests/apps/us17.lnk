@@ -1,0 +1,5 @@
+# US17.EXE (tests/apps/us17.c): the scroll-bar menu; mouse input through mouse_event
+@tests/apps/app.lnk
+import S_CREATESYSTEMTIMER SYSTEM.2
+import S_KILLSYSTEMTIMER SYSTEM.3
+import U_MOUSE_EVENT USER.299

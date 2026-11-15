@@ -1,0 +1,7 @@
+# WO2.EXE (tests/apps/wo2.c, wo2s.asm): protected-mode interrupt spy
+@tests/apps/app.lnk
+library toolhelp.lib
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5
+import GETWINOLDAPHOOKS KERNEL.344
+segment WO2_HOOK fixed preload

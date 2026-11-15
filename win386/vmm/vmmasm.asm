@@ -216,6 +216,119 @@ _hlt:   sti
 rmvec   dd 0
         dw 0
 
+; VxD services (vxd.c): each service's stub pushes its ID (device << 16 |
+; service) and jumps here; svc_dispatch gets the registers (PUSHAD order,
+; then the flags, then the ID) and changes them; they come back as the
+; service's results, flags included.
+global _svc_common
+extern _svc_dispatch
+_svc_common:
+        pushfd
+        pushad
+        cld
+        push esp
+        call _svc_dispatch
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]                ; the ID (LEA: the flags stay)
+        ret
+
+; u32 vmm_call_proc(proc, struct svcregs *r): call proc (a service or a
+; VxD's procedure) with r's registers; r gets them back with the flags
+global _vmm_call_proc
+_vmm_call_proc:
+        push ebx
+        push esi
+        push edi
+        push ebp
+        mov ebp, [esp+24]
+        push ebp
+        push dword [esp+24]             ; proc
+        mov eax, [ebp+28]
+        mov ebx, [ebp+16]
+        mov ecx, [ebp+24]
+        mov edx, [ebp+20]
+        mov esi, [ebp+4]
+        mov edi, [ebp+0]
+        push dword [ebp+32]
+        popfd
+        mov ebp, [ebp+8]
+        call [esp]
+        lea esp, [esp+4]
+        xchg ebp, [esp]
+        mov [ebp+28], eax
+        mov [ebp+16], ebx
+        mov [ebp+24], ecx
+        mov [ebp+20], edx
+        mov [ebp+4], esi
+        mov [ebp+0], edi
+        pop dword [ebp+8]
+        pushfd
+        pop dword [ebp+32]
+        pop ebp
+        pop edi
+        pop esi
+        pop ebx
+        ret
+
+; VTD's VID_Hw_Int_Proc (vxd.c vtd_hw): the registers as a struct svcregs
+global _vtd_hw_entry
+extern _vtd_hw
+_vtd_hw_entry:
+        push dword 0                    ; the ID word
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vtd_hw
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]
+        ret
+
+; VTD's VID_EOI_Proc (vxd.c vtd_eoi), the same way
+global _vtd_eoi_entry
+extern _vtd_eoi
+_vtd_eoi_entry:
+        push dword 0
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vtd_eoi
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]
+        ret
+
+; u32 vxd_control(proc, msg, ebx, esi, edx, edi, ebp): call a VxD's
+; control procedure with EAX = msg and those registers; returns its carry
+global _vxd_control
+_vxd_control:
+        push ebp
+        push ebx
+        push esi
+        push edi
+        mov eax, [esp+20+4]
+        mov ebx, [esp+20+8]
+        mov esi, [esp+20+12]
+        mov edx, [esp+20+16]
+        mov edi, [esp+20+20]
+        mov ebp, [esp+20+24]
+        push dword [esp+20]             ; the procedure
+        pop ecx
+        call ecx
+        mov eax, 0
+        setc al
+        pop edi
+        pop esi
+        pop ebx
+        pop ebp
+        ret
+
 segment _DATA public align=4 class=DATA use32 flat
 global _trap_stubs
 _trap_stubs:

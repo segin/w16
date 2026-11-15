@@ -1,0 +1,22 @@
+# push-button corners: rounded corner pieces (cell layout UNVERIFIED)
+# w16 guess: three 10x10 cells, each a circle whose quarters are the four
+# corners: outline, default-button (thick) outline, filled mask
+name OBM_BTNCORNERS
+type bitmap
+id 32758
+size 30x10
+bpp 1
+header core
+cells 10x10 3x1
+
+pixels
+---####------####------####---
+--##--##----######----######--
+-#------#--###--###--########-
+##------#####----#############
+#--------###------############
+#--------###------############
+##------#####----#############
+-#------#--###--###--########-
+--##--##----######----######--
+---####------####------####---

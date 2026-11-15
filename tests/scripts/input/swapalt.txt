@@ -1,0 +1,37 @@
+; MS-DOS Prompt by File > Run COMMAND.COM, VER, Alt+Tab to Windows (WSWAP
+; swaps the prompt out, Windows back in), Alt+Tab back to the prompt
+; (DSWAP reads it back: the same screen), EXIT, then File > Exit Windows
+; (tests/boottest.sh cases swapalt and swapall: w16's WSWAP.EXE and
+; DSWAP.EXE, ARCHITECTURE.md 9.9)
+click 1
+sleep 1
+shot 00-before
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 01-dos
+type ver
+key Return
+sleep 2
+shot 02-ver
+key alt+Tab
+sleep 15
+shot 03-win
+key alt+Tab
+sleep 15
+shot 04-dos
+type exit
+key Return
+sleep 15
+shot 05-back
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 10
+shot 06-exit

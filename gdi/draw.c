@@ -32,14 +32,14 @@
 
 /* ---- output helpers (screen coordinates) ---- */
 
-static int wide_polyline(NPDC dc, POINT __far *p, int n, int w);
-static int pen_width(NPDC dc);
+static int wide_polyline(LPDC dc, POINT __far *p, int n, int w);
+static int pen_width(LPDC dc);
 
-static int out_polyline(NPDC dc, POINT __far *p, int n)
+static int out_polyline(LPDC dc, POINT __far *p, int n)
 {
     DRVOUTPUT fn = (DRVOUTPUT)dc->dev->fn[DRV_OUTPUT];
     LPVOID pen = dc_ppen(dc);
-    NPRGN rao = dc_rao(dc);
+    LPRGN rao = dc_rao(dc);
     RECT box;
     WORD k;
     int i;
@@ -74,14 +74,14 @@ static int out_polyline(NPDC dc, POINT __far *p, int n)
 
 /* a span list: rows of [x0, x1) pairs, filled with the brush (or the pen) */
 typedef struct {
-    NPDC dc;
+    LPDC dc;
     int usePen;
     int begun;
     POINT pts[1 + 2 * 64];
     int npts;
 } SPANS;
 
-static void spans_begin(SPANS *s, NPDC dc, int usePen)
+static void spans_begin(SPANS *s, LPDC dc, int usePen)
 {
     s->dc = dc;
     s->usePen = usePen;
@@ -91,7 +91,7 @@ static void spans_begin(SPANS *s, NPDC dc, int usePen)
 
 static void spans_flush_row(SPANS *s)
 {
-    NPDC dc = s->dc;
+    LPDC dc = s->dc;
     DRVOUTPUT fn = (DRVOUTPUT)dc->dev->fn[DRV_OUTPUT];
     LPVOID pen = s->usePen ? dc_ppen(dc) : 0, br = s->usePen ? 0 : dc_pbrush(dc);
     if (s->npts <= 1)
@@ -107,13 +107,13 @@ static void spans_flush_row(SPANS *s)
 /* one row's spans, clipped to the composite region */
 static void spans_row(SPANS *s, int y, int *xs, int n)
 {
-    NPDC dc = s->dc;
-    NPRGN rao = rgn_ptr(dc->hRao);
+    LPDC dc = s->dc;
+    LPRGN rao = rgn_ptr(dc->hRao);
     WORD k;
     int i;
     s->npts = 0;
     for (k = 0; k < rao->n; k++) {
-        NPRECT c = &rao->r[k];
+        RECT __far * c = &rao->r[k];
         if (y < c->top || y >= c->bottom)
             continue;
         for (i = 0; i + 1 < n; i += 2) {
@@ -138,31 +138,31 @@ static void spans_row(SPANS *s, int y, int *xs, int n)
 
 static void spans_end(SPANS *s)
 {
-    NPDC dc = s->dc;
+    LPDC dc = s->dc;
     if (s->begun)
         ((DRVOUTPUT)dc->dev->fn[DRV_OUTPUT])(dc->lpPDevice, OS_ENDNSCAN, 0, 0, 0, 0, &dc->dm, 0);
 }
 
-static int brush_hollow(NPDC dc)
+static int brush_hollow(LPDC dc)
 {
-    BRUSHOBJ NEAR *b = obj_get(dc->hBrush, BRUSH_MAGIC);
+    LPBRUSHOBJ b = obj_get(dc->hBrush, BRUSH_MAGIC);
     return !b || b->lb.lbStyle == 1;
 }
 
-static PENOBJ NEAR *pen_of(NPDC dc)
+static LPPENOBJ pen_of(LPDC dc)
 {
     return obj_get(dc->hPen, PEN_MAGIC);
 }
 
-static int pen_null(NPDC dc)
+static int pen_null(LPDC dc)
 {
-    PENOBJ NEAR *p = pen_of(dc);
+    LPPENOBJ p = pen_of(dc);
     return !p || p->lp.lopnStyle == 5;
 }
 
-static int pen_width(NPDC dc)
+static int pen_width(LPDC dc)
 {
-    PENOBJ NEAR *p = pen_of(dc);
+    LPPENOBJ p = pen_of(dc);
     int w;
     if (!p)
         return 1;
@@ -173,14 +173,14 @@ static int pen_width(NPDC dc)
 }
 
 /* points from logical to screen coordinates, in a local buffer */
-static HLOCAL to_screen(NPDC dc, const POINT __far *p, int n, int close)
+static XP to_screen(LPDC dc, const POINT __far *p, int n, int close)
 {
-    HLOCAL h = LocalAlloc(LMEM_FIXED, (n + 1) * sizeof(POINT));
-    POINT NEAR *q;
+    XP h = xalloc((n + 1) * sizeof(POINT));
+    POINT __far *q;
     int i;
     if (!h)
         return 0;
-    q = (POINT NEAR *)h;
+    q = (POINT __far *)xptr(h);
     for (i = 0; i < n; i++)
         q[i] = p[i];
     dc_lp_to_dp(dc, (int __far *)(POINT __far *)q, n);
@@ -318,15 +318,15 @@ static void ellipse_fill(SPANS *s, int l, int t, int r, int b)
 /* the outline: per row the pixels between this row's end and the
    neighbouring row's, as runs joined diagonally (3.1's outline polyline
    is made of such runs) */
-static void ellipse_outline(NPDC dc, int l, int t, int r, int b)
+static void ellipse_outline(LPDC dc, int l, int t, int r, int b)
 {
     int h = b - t, y, n = 0, half = t + (h - 1) / 2;
-    HLOCAL hp = LocalAlloc(LMEM_FIXED, (4 * h + 8) * sizeof(POINT));
-    POINT NEAR *p;
+    XP hp = xalloc((4 * h + 8) * sizeof(POINT));
+    POINT __far *p;
     int x0, x1, px0, px1, nx0, nx1;
     if (!hp || h <= 0)
         return;
-    p = (POINT NEAR *)hp;
+    p = (POINT __far *)xptr(hp);
     ellipse_row(l, t, r, b, t, &x0, &x1);
     p[n].x = x0; p[n].y = t; n++;
     p[n].x = x1; p[n].y = t; n++;
@@ -365,7 +365,7 @@ static void ellipse_outline(NPDC dc, int l, int t, int r, int b)
     }
     p[n++] = p[0];
     out_polyline(dc, (POINT __far *)p, n);
-    LocalFree(hp);
+    xfree(hp);
 }
 
 /* ---- wide pens: UNVERIFIED geometry (3.1's not observed in detail) ----
@@ -390,7 +390,7 @@ static long isqrt(long v)
     return r;
 }
 
-static int wide_polyline(NPDC dc, POINT __far *p, int n, int w)
+static int wide_polyline(LPDC dc, POINT __far *p, int n, int w)
 {
     SPANS s;
     int i, y;
@@ -426,7 +426,7 @@ static int wide_polyline(NPDC dc, POINT __far *p, int n, int w)
 
 /* ---- API ---- */
 
-static void dev_box(NPDC dc, int l, int t, int r, int b, RECT *o)
+static void dev_box(LPDC dc, int l, int t, int r, int b, RECT *o)
 {
     int p[4];
     p[0] = l;
@@ -442,7 +442,7 @@ static void dev_box(NPDC dc, int l, int t, int r, int b, RECT *o)
 
 BOOL GDIAPI LineTo(HDC hdc, int x, int y)                         /* GDI.19 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     POINT p[2];
     if (!dc)
         return FALSE;
@@ -463,8 +463,8 @@ BOOL GDIAPI LineTo(HDC hdc, int x, int y)                         /* GDI.19 */
 
 BOOL GDIAPI Polyline(HDC hdc, const POINT __far *pts, int n)      /* GDI.37 */
 {
-    NPDC dc = dc_out(hdc);
-    HLOCAL h;
+    LPDC dc = dc_out(hdc);
+    XP h;
     if (!dc || n < 2)
         return FALSE;
     if (pen_null(dc))
@@ -473,13 +473,13 @@ BOOL GDIAPI Polyline(HDC hdc, const POINT __far *pts, int n)      /* GDI.37 */
     if (!h)
         return FALSE;
     dc = dc_get(hdc);
-    out_polyline(dc, (POINT __far *)(POINT NEAR *)h, n);
-    LocalFree(h);
+    out_polyline(dc, (POINT __far *)xptr(h), n);
+    xfree(h);
     return TRUE;
 }
 
 /* the frame of a box with a wide pen: four filled bands */
-static void wide_frame(NPDC dc, RECT *r, int w)
+static void wide_frame(LPDC dc, RECT *r, int w)
 {
     SPANS s;
     int y, in = w / 2, out_ = (w - 1) / 2;
@@ -504,7 +504,7 @@ static void wide_frame(NPDC dc, RECT *r, int w)
 
 BOOL GDIAPI Rectangle(HDC hdc, int l, int t, int r, int b)        /* GDI.27 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     RECT rc;
     int nopen, w;
     if (!dc)
@@ -528,7 +528,7 @@ BOOL GDIAPI Rectangle(HDC hdc, int l, int t, int r, int b)        /* GDI.27 */
         in.bottom--;
         if (in.left < in.right && in.top < in.bottom) {
             if (dc->dm.Rop2 == R2_COPYPEN) {
-                NPRGN rao = dc_rao(dc);
+                LPRGN rao = dc_rao(dc);
                 WORD k;
                 DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];
                 LPVOID br = dc_pbrush(dc);
@@ -576,16 +576,16 @@ BOOL GDIAPI Rectangle(HDC hdc, int l, int t, int r, int b)        /* GDI.27 */
 
 static BOOL polygon(HDC hdc, const POINT __far *pts, int n, int close_outline)
 {
-    NPDC dc = dc_out(hdc);
-    HLOCAL h;
-    POINT NEAR *q;
+    LPDC dc = dc_out(hdc);
+    XP h;
+    POINT __far *q;
     if (!dc || n < 2)
         return FALSE;
     h = to_screen(dc, pts, n, 1);
     if (!h)
         return FALSE;
     dc = dc_get(hdc);
-    q = (POINT NEAR *)h;
+    q = (POINT __far *)xptr(h);
     if (!brush_hollow(dc) && n > 2) {
         SPANS s;
         spans_begin(&s, dc, 0);
@@ -594,7 +594,7 @@ static BOOL polygon(HDC hdc, const POINT __far *pts, int n, int close_outline)
     }
     if (!pen_null(dc) && close_outline)
         out_polyline(dc, (POINT __far *)q, n + 1);
-    LocalFree(h);
+    xfree(h);
     return TRUE;
 }
 
@@ -616,7 +616,7 @@ BOOL GDIAPI PolyPolygon(HDC hdc, const POINT __far *pts, const int __far *counts
 
 BOOL GDIAPI Ellipse(HDC hdc, int l, int t, int r, int b)          /* GDI.24 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     RECT rc;
     int nopen;
     if (!dc)
@@ -639,11 +639,11 @@ BOOL GDIAPI Ellipse(HDC hdc, int l, int t, int r, int b)          /* GDI.24 */
 /* UNVERIFIED: round rectangles as a rectangle with elliptic corners */
 BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GDI.28 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     RECT rc;
     int nopen, y, w, h, n = 0;
-    HLOCAL hp;
-    POINT NEAR *p;
+    XP hp;
+    POINT __far *p;
     SPANS s;
     if (!dc)
         return FALSE;
@@ -681,10 +681,10 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
         spans_end(&s);
     }
     if (!nopen) {
-        hp = LocalAlloc(LMEM_FIXED, (2 * (rc.bottom - rc.top) + 4) * sizeof(POINT));
+        hp = xalloc((2 * (rc.bottom - rc.top) + 4) * sizeof(POINT));
         if (!hp)
             return FALSE;
-        p = (POINT NEAR *)hp;
+        p = (POINT __far *)xptr(hp);
         for (y = rc.top; y < rc.bottom; y++) {
             int ey, x0, x1;
             if (y < rc.top + h / 2)
@@ -713,7 +713,7 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
         }
         p[n++] = p[0];
         out_polyline(dc, (POINT __far *)p, n);
-        LocalFree(hp);
+        xfree(hp);
     }
     return TRUE;
 }
@@ -738,11 +738,11 @@ static int in_arc(int x, int y, int sx, int sy, int ex, int ey)
 
 static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, int y4, int kind)
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     RECT rc;
     int p3[2], p4[2], cx, cy, y, n = 0, nopen;
-    HLOCAL hp;
-    POINT NEAR *p;
+    XP hp;
+    POINT __far *p;
     if (!dc)
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
@@ -754,14 +754,14 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
     p3[0] += dc->dcOrg.x - cx; p3[1] += dc->dcOrg.y - cy;
     p4[0] += dc->dcOrg.x - cx; p4[1] += dc->dcOrg.y - cy;
     nopen = pen_null(dc);
-    hp = LocalAlloc(LMEM_FIXED, (2 * (rc.bottom - rc.top) + 8) * sizeof(POINT));
+    hp = xalloc((2 * (rc.bottom - rc.top) + 8) * sizeof(POINT));
     if (!hp)
         return FALSE;
-    p = (POINT NEAR *)hp;
+    p = (POINT __far *)xptr(hp);
     /* walk the outline counter-clockwise from the right-hand side's top */
     {
         int start = -1, i, m = 0, total;
-        POINT NEAR *o = p;
+        POINT __far *o = p;
         for (y = rc.bottom - 1; y >= rc.top; y--) {     /* right side, up */
             int x0, x1;
             ellipse_row(rc.left, rc.top, rc.right, rc.bottom, y, &x0, &x1);
@@ -782,14 +782,14 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
         if (start < 0)
             start = 0;
         {
-            HLOCAL hq = LocalAlloc(LMEM_FIXED, (total + 4) * sizeof(POINT));
-            POINT NEAR *q;
+            XP hq = xalloc((total + 4) * sizeof(POINT));
+            POINT __far *q;
             if (!hq) {
-                LocalFree(hp);
+                xfree(hp);
                 return FALSE;
             }
-            q = (POINT NEAR *)hq;
-            p = (POINT NEAR *)hp;
+            q = (POINT __far *)xptr(hq);
+            p = (POINT __far *)xptr(hp);
             for (i = 0; i < total; i++) {
                 POINT pt = p[(start + i) % total];
                 if (in_arc(pt.x - cx, pt.y - cy, p3[0], p3[1], p4[0], p4[1]))
@@ -808,10 +808,10 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
             }
             if (!nopen && n > 1)
                 out_polyline(dc, (POINT __far *)q, n);
-            LocalFree(hq);
+            xfree(hq);
         }
     }
-    LocalFree(hp);
+    xfree(hp);
     return TRUE;
 }
 
@@ -848,7 +848,7 @@ static HRGN rgn_from_rows(int t, int b, int l, int r, int kind)
         rgn_set_rect(row, x0, y, x1 + 1, y + 1);
         rgn_combine(h, h, row, RGN_OR);
     }
-    obj_free(row);
+    rgn_free(row);
     return h;
 }
 
@@ -866,15 +866,15 @@ HRGN GDIAPI CreateEllipticRgnIndirect(const RECT __far *rc)       /* GDI.55 */
 HRGN GDIAPI CreatePolygonRgn(const POINT __far *pts, int n, int mode) /* GDI.63 */
 {
     HRGN h = rgn_new(0, 0, 0, 0), row;
-    POINT NEAR *p;
-    HLOCAL hp;
+    POINT __far *p;
+    XP hp;
     int i, y, ymin, ymax;
     if (!h || n < 3)
         return h;
-    hp = LocalAlloc(LMEM_FIXED, n * sizeof(POINT));
+    hp = xalloc(n * sizeof(POINT));
     if (!hp)
         return h;
-    p = (POINT NEAR *)hp;
+    p = (POINT __far *)xptr(hp);
     for (i = 0; i < n; i++)
         p[i] = pts[i];
     ymin = ymax = p[0].y;
@@ -911,7 +911,7 @@ HRGN GDIAPI CreatePolygonRgn(const POINT __far *pts, int n, int mode) /* GDI.63 
             }
         }
     }
-    obj_free(row);
-    LocalFree(hp);
+    rgn_free(row);
+    xfree(hp);
     return h;
 }

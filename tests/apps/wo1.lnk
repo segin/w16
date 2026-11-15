@@ -1,0 +1,12 @@
+# WO1.MOD (tests/apps/wo1.c, wo1s.asm): a logging stand-in for WINOLDAP.MOD,
+# with its module name and exports
+@tests/apps/app.lnk
+option modname=WINOLDAP
+option description 'w16 WINOLDAP probe WO1'
+import K_WAITEVENT KERNEL.30
+import U_INITAPP USER.5
+import GETWINOLDAPHOOKS KERNEL.344
+import GETCURRENTPDB KERNEL.37
+import WINOLDAPCALL KERNEL.151
+export WNDPROC.1
+export DIALOGPROC.2

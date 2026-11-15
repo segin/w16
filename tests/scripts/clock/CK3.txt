@@ -1,0 +1,33 @@
+; digital at several sizes (embossed from a font height of 54)
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+movewin 10 10 300 200
+freeze 10:09:30.50 1500
+snap C:\D2.BMP
+movewin 10 10 151 330
+freeze 10:09:30.50 1500
+snap C:\D3.BMP
+movewin 10 10 102 90
+freeze 10:09:30.50 1500
+snap C:\D4.BMP
+movewin 10 10 400 400
+freeze 10:09:30.50 1500
+snap C:\D5.BMP
+movewin 10 10 640 480
+freeze 10:09:30.50 1500
+snap C:\D6.BMP
+movewin 10 10 102 60
+freeze 10:09:30.50 1500
+snap C:\D7.BMP
+movewin 10 10 500 70
+freeze 10:09:30.50 1500
+snap C:\D8.BMP
+movewin 10 10 640 140
+freeze 10:09:30.50 1500
+snap C:\D9.BMP
+movewin 10 10 360 200
+freeze 10:09:30.50 1500
+snap C:\D10.BMP
+close
+wait 1000

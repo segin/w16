@@ -1,0 +1,9 @@
+; A held key's typematic repeats (tests/kbprobe.sh rep): KB2 as the shell
+; has called KEYBOARD.SetSpeed([w16] kb2speed) first; 'a' held 3 s
+sleep 3
+keydown a
+sleep 3
+keyup a
+sleep 1
+key shift+F12
+waitexit 60

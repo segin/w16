@@ -1,0 +1,109 @@
+; Minimised programs on the desktop and Program Manager's Accessories
+; group (tests/inputrun.sh; boot-test case icons): Notepad, Calculator,
+; Clock, Character Map and Paintbrush started from File > Run and
+; minimised with Alt+Space N, then Accessories opened with Ctrl+Tab (three times:
+; StartUp, Games, Accessories) and
+; Enter.
+; Each step waits for its state, not a fixed time (on a loaded machine
+; fixed waits were too short and the keys went to the window active
+; before): the Run dialog up (Program Manager's caption, at 100,54, no
+; longer the active blue), the program's window active (the active blue
+; caption elsewhere than the Run dialog's) and done drawing (the screen
+; still: Program Manager ends its Run dialog only when the program waits
+; for messages; until then it is disabled, and minimising the program
+; would activate an icon instead, as on 3.1), Program Manager active
+; again after the program is minimised
+; Shots of screens without a blinking caret wait for their state, not a
+; fixed time (match NAME 20 S): the reference's run waits until the screen
+; has held still for as long as the old sleep was, a w16 run until its
+; screen equals the reference's shot (tests/inputrun.sh): on a loaded
+; machine a repaint could still be under way after the sleep, or the
+; program still busy (the hourglass held still), and the shot caught it.
+; Shots with a caret keep their fixed delay after the last key (the
+; caret's blink phase)
+click 1
+sleep 1
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type notepad
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+key alt+space
+key n
+waitpixel 100 54 0000aa 20
+sleep 1
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type calc
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+key alt+space
+key n
+waitpixel 100 54 0000aa 20
+sleep 1
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type clock
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+key alt+space
+key n
+waitpixel 100 54 0000aa 20
+sleep 1
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type charmap
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+key alt+space
+key n
+waitpixel 100 54 0000aa 20
+sleep 1
+key alt+f
+key r
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type pbrush
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+key alt+space
+key n
+waitpixel 100 54 0000aa 20
+sleep 1
+match 01-icons 20 2
+shot 01-icons
+key ctrl+Tab
+key ctrl+Tab
+key ctrl+Tab
+sleep 1
+key Return
+match 02-accessories 20 3
+shot 02-accessories
+key alt+space
+key n
+match 03-pm-icon 20 3
+shot 03-pm-icon
+key alt+Escape
+match 04-next 20 2
+shot 04-next
+key alt+Escape
+match 05-next 20 2
+shot 05-next

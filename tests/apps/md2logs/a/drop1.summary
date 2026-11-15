@@ -1,0 +1,88 @@
+  BIOS AX=C205 BX=0300
+  BIOS AX=C201 BX=0300
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C205 BX=03FF
+  BIOS AX=C201 BX=03FF
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+PHASE A Disable+Enable (ticks 23343)
+  BIOS AX=C200 BX=0046
+  BIOS AX=C202 BX=0546
+  BIOS AX=C205 BX=0346
+  BIOS AX=C201 BX=0346
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+  == A Disable+Enable: events 0..5 (depth 0, deepest 1; cursor 358,240; ticks 31691)
+  packets x: [0, 1, 2, 3, 4, 5, 6]
+  events  x: [2, 3, 4, 5, 6]
+PHASE B PowerEventProc(2) (ticks 31691)
+  P (0002 0000 0000) -> AX=0000 BX=01BC CX=1404 DX=0000 fl=3202 pop=6
+  BIOS AX=C205 BX=0322
+  BIOS AX=C201 BX=0322
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+  == B PowerEventProc(2): events 5..14 (depth 0, deepest 1; cursor 443,240; ticks 40040)
+  packets x: [7, 8, 9, 1, 2, 3, 4, 5, 6, 7]
+  events  x: [7, 9, 1, 2, 3, 4, 5, 6, 7]
+PHASE C Disable+Enable (ticks 40040)
+  BIOS AX=C200 BX=0046
+  BIOS AX=C202 BX=0546
+  BIOS AX=C205 BX=0346
+  BIOS AX=C201 BX=0346
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+  == C Disable+Enable: events 14..22 (depth 0, deepest 1; cursor 512,240; ticks 48388)
+  packets x: [8, 9, 1, 2, 3, 4, 5, 6, 7]
+  events  x: [8, 1, 2, 3, 4, 5, 6, 7]
+PHASE D GetSetMouseData set (ticks 48388)
+  == D GetSetMouseData set: events 22..31 (depth 0, deepest 1; cursor 599,240; ticks 56737)
+  packets x: [8, 9, 1, 2, 3, 4, 5, 6, 7]
+  events  x: [8, 9, 1, 2, 3, 4, 5, 6, 7]
+PHASE E Disable+Enable, PowerEventProc(1) (ticks 56737)
+  P (0001 0000 0000) -> AX=0000 BX=2222 CX=3333 DX=0000 fl=3203 pop=6
+  BIOS AX=C200 BX=0059
+  BIOS AX=C202 BX=0559
+  BIOS AX=C205 BX=0359
+  BIOS AX=C201 BX=0359
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+  == E Disable+Enable, PowerEventProc(1): events 31..39 (depth 0, deepest 1; cursor 639,240; ticks 65086)
+  BIOS AX=C200 BX=0065
+  BIOS AX=C202 BX=0565
+  BIOS AX=C205 BX=0365
+  BIOS AX=C201 BX=0365
+  BIOS AX=C202 BX=00AA
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C206 BX=01BC
+  BIOS AX=C202 BX=02BC
+  BIOS AX=C200 BX=01BC
+  packets x: [8, 9, 1, 2, 3, 4, 5, 6, 7]
+  events  x: [8, 1, 2, 3, 4, 5, 6, 7]

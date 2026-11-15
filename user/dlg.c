@@ -29,6 +29,20 @@
 #define DW_CX       22          /* base units */
 #define DW_CY       24
 #define DW_MODAL    26
+#define DW_EDITSEG  28          /* the edit controls' segment (no DS_LOCALEDIT) */
+
+HANDLE edit_segment(void);
+
+/* the dialog going (win.c, after its children): its edit controls'
+   segment with it (3.1: GlobalSize 0 after DestroyWindow, US20) */
+void dlg_free_editseg(HWND h)
+{
+    HANDLE g = (HANDLE)GetWindowWord(h, DW_EDITSEG);
+    if (g) {
+        SetWindowWord(h, DW_EDITSEG, 0);
+        GlobalFree(g);
+    }
+}
 
 HBRUSH sys_brush(HBRUSH b);
 
@@ -141,7 +155,10 @@ LRESULT WINAPI DefDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CHARTOITEM:
     case WM_QUERYDRAGICON:
     case WM_INITDIALOG:
-        if (handled || msg == WM_INITDIALOG)
+        /* without a dialog procedure: TRUE, the focus as usual */
+        if (msg == WM_INITDIALOG)
+            return GetWindowLong(h, DW_PROC) ? r : TRUE;
+        if (handled)
             return r;
         break;
     default:
@@ -256,8 +273,14 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         {
             LOGFONT lf;
             fmemset(&lf, 0, sizeof lf);
-            lf.lfHeight = -(pts * GetDeviceCaps(hdcScreen, LOGPIXELSY) / 72);
+            /* the height rounded, and "Helv" made "MS Sans Serif" (3.1:
+               Terminal's dialogs, 8-point Helv in their templates, have a
+               font whose LOGFONT reads MS Sans Serif, height -11; w16
+               kept Helv and truncated 10.67 to -10) */
+            lf.lfHeight = -((pts * GetDeviceCaps(hdcScreen, LOGPIXELSY) + 36) / 72);
             lf.lfWeight = FW_BOLD;      /* UNVERIFIED: 3.1 dialog fonts are bold */
+            if (!lstr_cmpi(face, "Helv"))
+                face = "MS Sans Serif";
             lstr_cpyn(lf.lfFaceName, face, LF_FACESIZE);
             font = CreateFontIndirect(&lf);
         }
@@ -294,16 +317,27 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         if (o && !(style & DS_ABSALIGN))
             OffsetRect(&r, o->rcClient.left, o->rcClient.top);
     }
-    /* kept on the screen (US4: the dialog at y 10 units starts at 0) */
+    /* kept on the screen (US4: the dialog at y 10 units starts at 0;
+       Calculator's, 240 x 158 units at 310,65, comes up on 3.1 at
+       154,110, against the screen's right and bottom edges. UNVERIFIED:
+       w16 puts it at 150,106 - its window is 4 pixels wider and taller
+       than 3.1's, unexplained) */
+    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN])
+        OffsetRect(&r, sysmet[SM_CXSCREEN] - r.right, 0);
+    if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
+        OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)
         OffsetRect(&r, -r.left, 0);
     if (menu)
         hmenu = LoadMenu(hinst, menu);
+    /* the style keeps DS_SETFONT and DS_MODALFRAME, and the controls get
+       WS_EX_NOPARENTNOTIFY (3.1: Terminal's and COMMDLG's dialogs read
+       back 14C800C0h and 40800040h, their controls exstyle 4) */
     h = create_window((style & DS_MODALFRAME) ? WS_EX_DLGMODALFRAME : 0,
                       cls ? cls : MAKEINTRESOURCE(32770), caption,
-                      style & ~(WS_VISIBLE | DS_SETFONT | DS_MODALFRAME | DS_ABSALIGN |
+                      style & ~(WS_VISIBLE | DS_ABSALIGN |
                                 DS_SYSMODAL | DS_LOCALEDIT | DS_NOIDLEMSG),
                       r.left, r.top, r.right - r.left, r.bottom - r.top, owner, hmenu,
                       hinst, NULL);
@@ -315,7 +349,7 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     SetWindowWord(h, DW_CX, ux);
     SetWindowWord(h, DW_CY, uy);
     SetWindowWord(h, DW_DEFID, IDOK);
-    SetWindowWord(h, DW_MODAL, modal);
+    SetWindowWord(h, DW_MODAL, modal | (modal && (style & DS_SYSMODAL) ? 4 : 0));
     /* the items */
     for (i = 0; i < n; i++) {
         int ix = ((const int __far *)p)[0], iy = ((const int __far *)p)[1];
@@ -337,8 +371,20 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             q = skip_sz(q, &text);
         {
             BYTE extra = *q++;
-            c = create_window(0, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
-                              du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, hinst,
+            HINSTANCE ihinst = hinst;
+            /* edit controls keep their text in a segment of the dialog's
+               own, one for all of them, unless DS_LOCALEDIT (3.1 SDK;
+               US20: both edits' hInstance a 2000-byte segment, the
+               dialog's the application's) */
+            if (!(style & DS_LOCALEDIT) && !lstr_cmpi(icls, "Edit")) {
+                HANDLE g = (HANDLE)GetWindowWord(h, DW_EDITSEG);
+                if (!g && (g = edit_segment()) != 0)
+                    SetWindowWord(h, DW_EDITSEG, (WORD)g);
+                if (g)
+                    ihinst = (HINSTANCE)g;
+            }
+            c = create_window(WS_EX_NOPARENTNOTIFY, icls, text, is | WS_CHILD, du(ix, ux, 4), du(iy, uy, 8),
+                              du(icx, ux, 4), du(icy, uy, 8), h, (HMENU)id, ihinst,
                               extra ? (void __far *)q : NULL);
             q += extra;
         }
@@ -354,10 +400,20 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     }
     if (font)
         send_message(h, WM_SETFONT, (WPARAM)font, FALSE);
-    if (call_wndproc((WNDPROC)proc, (WORD)hinst, h, WM_INITDIALOG, (WPARAM)focus, param) &&
-        valid_wnd(h)) {
-        if (focus)
+    /* WM_INITDIALOG goes to the window, so a dialog of its own class
+       (Calculator: CLASS "SciCalc", no dialog procedure) gets it in its
+       class's procedure; DefDlgProc hands it on to the dialog procedure.
+       It was called straight, NULL included: a GP fault in USER */
+    if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
+        /* TRUE: the focus goes to the first tab stop even where the
+           procedure set it elsewhere meanwhile (3.1: Program Manager's
+           Exit dialog sets it to Cancel and answers TRUE, and OK has
+           it) */
+        if (focus) {
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
+            if (hwndFocus && IsChild(h, hwndFocus))
+                set_dlg_focus(h, focus);
+        }
     }
     if (!valid_wnd(h))
         return 0;
@@ -412,9 +468,17 @@ static int modal_loop(HWND h, HWND owner)
     MSG m;
     int code;
     BOOL ownerwas = FALSE;
+    /* DS_SYSMODAL: the system-modal window while it runs (3.1 SDK;
+       Program Manager's Exit dialog: a click on Program Manager does
+       nothing) */
+    BOOL sysmodal = (GetWindowWord(h, DW_MODAL) & 4) != 0;
+    HWND oldsm = sysmodal ? SetSysModalWindow(h) : 0;
     if (owner && valid_wnd(owner)) {
         ownerwas = !EnableWindow(owner, FALSE);
     }
+    /* bit 1: EndDialog enables the owner again (it was enabled before);
+       bit 2: system modal */
+    SetWindowWord(h, DW_MODAL, (ownerwas ? 3 : 1) | (sysmodal ? 4 : 0));
     ShowWindow(h, SW_SHOWNORMAL);
     UpdateWindow(h);
     while (valid_wnd(h) && !GetWindowWord(h, DW_ENDED)) {
@@ -430,6 +494,8 @@ static int modal_loop(HWND h, HWND owner)
             send_message(owner ? owner : h, WM_ENTERIDLE, MSGF_DIALOGBOX, MAKELONG(h, 0));
     }
     code = valid_wnd(h) ? (int)GetWindowWord(h, DW_ENDCODE) : -1;
+    if (sysmodal)
+        SetSysModalWindow(oldsm);
     if (owner && valid_wnd(owner) && ownerwas)
         EnableWindow(owner, TRUE);
     if (valid_wnd(h)) {
@@ -491,6 +557,15 @@ void WINAPI EndDialog(HWND h, int code)
     SetWindowWord(h, DW_ENDCODE, code);
     if (!GetWindowWord(h, DW_MODAL))
         return;
+    /* the owner enabled before the dialog hides, so the activation goes
+       back to it (ShellAbout's dialog left Program Manager inactive and
+       deaf otherwise); a dialog its program hid already (Program
+       Manager's Run, before WinExec) is not active and gives nothing */
+    {
+        PWND w = valid_wnd(h);
+        if ((GetWindowWord(h, DW_MODAL) & 2) && w && w->hwndOwner && valid_wnd(w->hwndOwner))
+            EnableWindow(w->hwndOwner, TRUE);
+    }
     ShowWindow(h, SW_HIDE);
     PostMessage(h, WM_NULL, 0, 0);      /* wake the modal loop */
 }

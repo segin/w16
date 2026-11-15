@@ -1,0 +1,197 @@
+; Typing in Notepad through the keyboard driver (tests/inputrun.sh;
+; boot-test cases kbd and kbdall): letters, Shift, digits, punctuation,
+; Caps Lock, the keypad with Num Lock, arrows and selection, Alt menus,
+; Ctrl accelerators (copy, paste), Alt+Tab, Ctrl+Esc (the Task List),
+; Alt+Esc, Alt+F4. DOSBox keeps Ctrl+F1..F12, Alt+Enter and Alt+Pause for
+; itself: none of them here.
+; Every shot is taken in the caret's phase (matchnow NAME MAX S,
+; tests/inputrun.sh): Notepad's caret may show on any of them (w16's USER
+; keeps it blinking while a menu is open; the boot-test cases freeze it
+; with CursorBlinkRate=65535). Before each shot the screen must have held
+; still but for the caret's blink for 2 s (settlecaret 60 2: the caret
+; blinks in the sysdrv cases): on a loaded host Notepad can be seconds
+; behind the keys (the caret still moving, the text not yet drawn), and a
+; reference shot taken then cannot be matched (keys looked lost: KBREC
+; and the scan-code logger showed every key arriving, 8 parallel runs)
+; DOSBox takes the mouse (for the pointer moves below; the pointer is on
+; Program Manager's Main group, away from its items)
+click 1
+sleep 1
+key alt+f
+key r
+; the Run dialog up (Program Manager's caption no longer active), then
+; Notepad's window active and drawn (as in tabs.txt)
+waitnotpixel 100 54 0000aa 15
+sleep 0.5
+type notepad
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 10
+; The text goes in a few keys at a time, each piece once the screen has
+; held still (Notepad caught up): on a loaded host the emulator can fall
+; seconds behind and then take a burst of keys at once, more than USER's
+; system queue holds (120 events, Pietrek; w16's USER as 3.1's): the rest
+; is dropped (36 parallel runs: every event reached USER through the
+; driver, but in one run Notepad never got Shift, /, Space). (A piece
+; cannot begin or end with a space: the script reader drops them.)
+type The
+key space
+type quick
+key space
+settlecaret 30 1
+type brown
+key space
+type fox
+key space
+settlecaret 30 1
+type jumps
+key space
+type over
+key space
+settlecaret 30 1
+type the
+key space
+type lazy
+key space
+type dog.
+key Return
+settlecaret 30 1
+type THE
+key space
+type QUICK
+key space
+settlecaret 30 1
+type BROWN
+key space
+type FOX
+key space
+settlecaret 30 1
+type 0123456789
+key Return
+settlecaret 30 1
+type `~!@#$%^
+settlecaret 30 1
+type &*()-_=+
+settlecaret 30 1
+type [{]}\|;:
+settlecaret 30 1
+type '",<.>/?
+key Return
+settlecaret 30 1
+key Caps_Lock
+type caps
+key space
+type On,
+key space
+type 42
+key Caps_Lock
+key Return
+settlecaret 30 1
+key KP_1
+key KP_2
+key KP_Add
+key KP_Multiply
+key KP_Divide
+key KP_Subtract
+key KP_Decimal
+key KP_Enter
+settlecaret 60 2
+matchnow 01-typed 20 2
+key Up
+key Up
+key Home
+key shift+End
+key ctrl+c
+key ctrl+End
+key ctrl+v
+key Left
+key Left
+key BackSpace
+key Delete
+settlecaret 60 2
+matchnow 02-edited 20 2
+; Alt menus: the Edit menu by Alt+E, then Search by Right. While a menu
+; is open, Windows 3.1's USER leaves Notepad's caret as it was when the
+; menu opened, shown or hidden, by the blink's phase then: one side's shot
+; had it, the other's not (30 pixels, kbd and sysdrv). So the caret goes
+; first to where every one of these menus covers it: the first line, 11
+; characters in (x 104; the Edit, Search and File menus all span 92-120)
+key ctrl+Home
+key Right Right Right Right Right Right Right Right Right Right Right
+settlecaret 60 2
+key alt+e
+settlecaret 60 2
+matchnow 03-editmenu 20 1.5
+key Right
+settlecaret 60 2
+matchnow 04-searchmenu 20 1.5
+key Escape
+key Escape
+; Alt alone, then a letter: the File menu
+key alt
+key f
+settlecaret 60 2
+matchnow 05-filemenu 20 1.5
+key Escape
+key Escape
+; to Program Manager and back. The pointer stays in the screen's middle;
+; the window that comes up under it sets its shape (Program Manager's
+; and the Task List's the arrow, Notepad's text the I-beam) only when a
+; mouse message comes: without one, Windows 3.1's and w16's pointer stayed
+; the I-beam over the Task List for 20 s in some runs and changed in
+; others. After each switch, once the new window is active (the active
+; caption elsewhere: waitmoved), the pointer is moved 4 pixels and back
+; (the mouse taken by DOSBox with the click at the start): the mouse
+; messages set the shape on both sides
+markcolor 0000aa
+key alt+Tab
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 06-alttab 20 2
+markcolor 0000aa
+key alt+Tab
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 07-back 20 2
+; the Task List
+markcolor 0000aa
+key ctrl+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 08-tasklist 20 2
+markcolor 0000aa
+key Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 09-closed 20 2
+; Alt+Esc to Program Manager, Alt+Esc back
+markcolor 0000aa
+key alt+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 10-altesc 20 2
+markcolor 0000aa
+key alt+Escape
+waitmoved 0000aa 500 20
+move 4 0
+move -4 0
+settlecaret 60 2
+matchnow 11-altesc-back 20 2
+; closed without saving
+key alt+F4
+settlecaret 60 2
+matchnow 12-save 20 2
+key n
+settlecaret 60 2
+matchnow 13-closed 20 2

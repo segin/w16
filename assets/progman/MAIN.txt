@@ -1,0 +1,17 @@
+# w16's default Main group (tools/mkgrp.py -> MAIN.GRP; `make groups`).
+# Layout as Windows 3.1 Setup's Main: normal (show 1), the window at
+# 0,0-416,202 in Program Manager's workspace, never minimized; items on the
+# 75 x 72 grid from x 21, five to a row. Only what w16 ships: the MS-DOS
+# prompt (COMMAND.COM through WINOLDAP; the icon is Program Manager's
+# stock DOS-prompt icon, index 9, as Setup's MS-DOS Prompt uses) and the
+# install tree's README.TXT, opened by its association (WIN.INI
+# [Extensions] txt=notepad.exe), with Notepad's icon, as Setup's Read Me
+# names README.WRI and Write's icon. Commands and icon files are bare
+# names, found in the w16 directory (or on the PATH), as Setup writes them.
+file MAIN.GRP
+name Main
+show 1
+rect 0 0 416 202
+min  -1 -1
+item MS-DOS Prompt | COMMAND.COM | PROGMAN.EXE 9
+item Read Me | README.TXT | NOTEPAD.EXE

@@ -1,0 +1,3 @@
+# TK2.EXE (tests/apps/tk2.c): an import KERNEL does not have
+@tests/apps/app.lnk
+import K_NOSUCH KERNEL.27

@@ -32,7 +32,10 @@ HQUEUE create_queue(HTASK task, WORD size)
     QUEUE __far *q;
     if (!size)
         size = 8;
-    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE,
+    /* fixed: the event procedures and the timer tick set its wake bits
+       at interrupt time, and a moveable block can be in the middle of
+       moving then (GlobalLock does not stop that in protected mode) */
+    g = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT | GMEM_SHARE,
                     sizeof(QUEUE) + (size - 1) * sizeof(QMSG));
     if (!g)
         return 0;
@@ -63,18 +66,27 @@ void destroy_queue(HQUEUE hq)
     GlobalFree(LOWORD(GlobalHandle(hq)));
 }
 
+/* SetWakeBit2 (Pietrek, Windows Internals ch. 7): the bits are set, and
+   the task gets an event only when it waits for one of them (its wake
+   mask), the mask then cleared: one event per wait. w16 posted an event
+   for every bit set, waiting or not: a task that read its messages
+   without waiting piled them up (Program Manager had 60 with its caret
+   blinking), and its WaitEvent then returned at once that many times */
 void set_wakebit(HQUEUE hq, WORD bits)
 {
     QUEUE __far *q;
-    WORD f;
+    WORD f, post;
     if (!hq)
         return;
     q = q_of(hq);
     f = irq_off();
     q->wakebits |= bits;
     q->changebits |= bits;
+    post = (bits & q->wakemask) != 0;
+    if (post)
+        q->wakemask = 0;
     irq_restore(f);
-    if (q->task)
+    if (post && q->task)
         K_POSTEVENT(q->task);
 }
 
@@ -194,6 +206,45 @@ LRESULT WINAPI CallWindowProc(FARPROC f, HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return call_wndproc((WNDPROC)f, w ? (WORD)w->hInstance : 0, h, msg, wp, lp);
 }
 
+/* DestroyWindow: the messages posted to the window and not yet read go
+   (3.1 does not deliver them; a WM_NULL that EndDialog posted to wake a
+   common dialog's modal loop outlived the dialog, its handle was reused
+   by SNAP's next window, and the message reached that) */
+void purge_window_msgs(HQUEUE hq, HWND h)
+{
+    QUEUE __far *q;
+    WORD i, k, f;
+    if (!hq)
+        return;
+    q = q_of(hq);
+    f = irq_off();
+    for (i = k = 0; i < q->count; i++) {
+        QMSG __far *m = &q->msgs[(q->head + i) % q->size];
+        if (m->msg.hwnd == h)
+            continue;
+        if (k != i)
+            q->msgs[(q->head + k) % q->size] = *m;
+        k++;
+    }
+    q->count = k;
+    if (!k)
+        q->wakebits &= ~QS_POSTMESSAGE;
+    irq_restore(f);
+}
+
+/* the reply given: straight to the sender (Pietrek, Windows Internals ch.
+   7: ReplyMessage DirectedYields to the sending task). Without it the
+   receiver went on and read input that was not for it: Program Manager,
+   answering the WM_NCACTIVATE a program just started sent its hidden Run
+   dialog, ended the dialog, became active for a moment and took the
+   Alt+Space N typed for the program (boot-test icons on a loaded machine;
+   3.1 never did) */
+static void reply_yield(HQUEUE from)
+{
+    if (from && from != cur_hq())
+        K_DIRECTEDYIELD(q_of(from)->task);
+}
+
 static void receive_sent(HQUEUE hq)
 {
     QUEUE __far *q;
@@ -211,10 +262,13 @@ static void receive_sent(HQUEUE hq)
         s->result = w ? call_wnd(w, s->hwnd, s->msg, s->wParam, s->lParam) : 0;
         q = q_of(hq);
         if (q->insend == (WORD)s && !s->done) {
+            HQUEUE from = s->from;
             s->done = 1;
-            set_wakebit(s->from, QS_SMRESULT);
-        }
-        q->insend = outer;
+            set_wakebit(from, QS_SMRESULT);
+            q->insend = outer;
+            reply_yield(from);
+        } else
+            q->insend = outer;
     }
 }
 
@@ -307,9 +361,11 @@ void WINAPI ReplyMessage(LRESULT r)
         return;
     s = (PSMSG)q_of(hq)->insend;
     if (!s->done) {
+        HQUEUE from = s->from;
         s->result = r;
         s->done = 1;
-        set_wakebit(s->from, QS_SMRESULT);
+        set_wakebit(from, QS_SMRESULT);
+        reply_yield(from);
     }
 }
 
@@ -357,6 +413,10 @@ static BOOL posted_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MS
     return FALSE;
 }
 
+void idle_cursor_check(HQUEUE hq);
+void journal_poll(void);
+BOOL journal_active(void);
+
 static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOOL wait)
 {
     HQUEUE hq = cur_hq();
@@ -368,6 +428,7 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         q = q_of(hq);
         q->changebits = 0;
         receive_sent(hq);
+        journal_poll();         /* WH_JOURNALPLAYBACK's next event, if due */
         if (posted_message(hq, hf, lo, hi, remove, m))
             break;
         q = q_of(hq);
@@ -395,8 +456,14 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         }
         q = q_of(hq);
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
-        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending)
-            K_WAITEVENT(0);
+        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending) {
+            idle_cursor_check(hq);
+            /* a playback's events come by polling: no sleep meanwhile */
+            if (journal_active())
+                K_OLDYIELD();
+            else if (!input_pending)
+                K_WAITEVENT(0);
+        }
         else if (input_pending && !(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)))
             K_OLDYIELD();
     }
@@ -404,6 +471,19 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     q->msgtime = m->time;
     q->msgpos = MAKELONG(m->pt.x, m->pt.y);
     return TRUE;
+}
+
+/* USER.332, UserYield: what KERNEL's Yield is for a task with a queue
+   (Pietrek ch. 6): the inter-task SendMessages waiting for the task are
+   answered before it gives up the processor and again when it gets it
+   back, so no sender stays blocked on a task that is only yielding.
+   (A stub here used to make every Yield of such a task do nothing.) */
+void WINAPI U_USERYIELD(void)
+{
+    HQUEUE hq = cur_hq();
+    receive_sent(hq);
+    K_OLDYIELD();
+    receive_sent(cur_hq());
 }
 
 BOOL WINAPI GetMessage(MSG __far *m, HWND h, UINT lo, UINT hi)
@@ -425,13 +505,19 @@ void WINAPI WaitMessage(void)
     if (!hq)
         return;
     for (;;) {
+        /* the wake mask first, then the look: a bit set in between still
+           posts the event WaitEvent takes (set_wakebit) */
+        q_of(hq)->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
         receive_sent(hq);
         q = q_of(hq);
         if (q->count || q->quit || q->npaint || q->ntimer || input_pending)
             return;
         if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE | PM_NOYIELD))
             return;
-        q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
+        if (journal_active()) {         /* playback input comes by polling */
+            K_OLDYIELD();
+            continue;
+        }
         K_WAITEVENT(0);
     }
 }
@@ -440,7 +526,7 @@ LONG WINAPI DispatchMessage(const MSG __far *m)
 {
     PWND w;
     LONG r;
-    if (m->message == WM_TIMER && m->lParam)
+    if ((m->message == WM_TIMER || m->message == WM_SYSTIMER) && m->lParam)
         return call_wndproc((WNDPROC)m->lParam, 0, m->hwnd, m->message, m->wParam,
                             GetTickCount());
     w = valid_wnd(m->hwnd);

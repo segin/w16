@@ -1,0 +1,31 @@
+; ChooseFont's sample in several fonts and sizes (its placement), with
+; the chosen font's metrics logged (CD1 tm=1)
+cd1 font flags=141 face=Times~New~Roman height=-40 tm=1
+cd1 font flags=141 face=MS~Sans~Serif height=-11 tm=1
+cd1 font flags=141 face=Courier~New height=-27 weight=700 tm=1
+cd1 font flags=141 face=Arial height=-96 tm=1
+cd1 font flags=141 face=Script height=-30 italic=1 tm=1
+cd1 font flags=141 face=System height=-16 tm=1
+cd1 font flags=141 face=Roman height=-8 under=1 tm=1
+wait 3000
+snap C:\S1.BMP
+key 0D
+wait 1500
+snap C:\S2.BMP
+key 0D
+wait 1500
+snap C:\S3.BMP
+key 0D
+wait 1500
+snap C:\S4.BMP
+key 0D
+wait 1500
+snap C:\S5.BMP
+key 0D
+wait 1500
+snap C:\S6.BMP
+key 0D
+wait 1500
+snap C:\S7.BMP
+key 0D
+wait 1500

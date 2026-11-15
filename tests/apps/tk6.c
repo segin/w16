@@ -210,6 +210,14 @@ static void fpm_rep(const char *t, int dx_ok)
     ob(t, -1, "spd", r[R_SPD]);
 }
 
+/* C0, C2 and C3 (4500h) of a status word read after FDIV or FSQRT, whose
+   condition codes Intel leaves undefined (FPREM's only on an invalid
+   operand): under DOSBox-X they come back now 0 and now 4000h or 0100h,
+   from Windows 3.1's own run too (TK6 on Microsoft's KRNL286 and WIN87EM:
+   15 of 24 runs with C3 or C0 set in 87.div0.sw and the three after
+   it), so they are left out of the comparison */
+#define SW_DEFINED(sw) ((sw) & ~0x4500)
+
 static void fpm_state(const char *t)
 {
     char b[64];
@@ -227,7 +235,7 @@ static void fpm_state(const char *t)
     b[i - 2] = 's';
     b[i - 1] = 'w';
     b[i] = 0;
-    ob(b, -1, NULL, fpu_sw());
+    ob(b, -1, NULL, SW_DEFINED(fpu_sw()));
 }
 
 static void dbl(double v)
@@ -515,14 +523,14 @@ static void probe_exceptions(void)
     h_calls = 0;
     fpm(4, 0x133B, 0);                  /* ZE unmasked */
     sw = fpu_div0();
-    ob("div0.sw", -1, NULL, sw);
+    ob("div0.sw", -1, NULL, SW_DEFINED(sw));
     ob("div0.cw", -1, NULL, cwm(fpu_cw()));
     handler_report("div0.h");
     h_calls = 0;
     fpu_clex();
     fpm(4, 0x133E, 0);                  /* IM unmasked */
     sw = fpu_invalid();
-    ob("inv.sw", -1, NULL, sw);
+    ob("inv.sw", -1, NULL, SW_DEFINED(sw));
     handler_report("inv.h");
     fpu_clex();
 
@@ -581,9 +589,9 @@ static void probe_details(void)
     fpm(9, 0, 0);
     fpm(4, 0x133F, 0);
     fpu_clex();
-    ob("inv.masked.sw", -1, NULL, fpu_invalid());
+    ob("inv.masked.sw", -1, NULL, SW_DEFINED(fpu_invalid()));
     fpu_clex();
-    ob("div0.masked.sw", -1, NULL, fpu_div0());
+    ob("div0.masked.sw", -1, NULL, SW_DEFINED(fpu_div0()));
     fpm(8, 0, 0);
     ob("masked.f8", -1, NULL, r[R_AX]);
     fpm(9, 0, 0);

@@ -1,0 +1,2 @@
+# TK48.EXE (tests/apps/tk48.c): INT 15h C2xxh and INT 33h from protected mode
+@tests/apps/app.lnk

@@ -8,6 +8,19 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         mov [imgseg], ax
         mov [psp_seg], es
         cld
+        ; the uninitialised data zeroed (but the stack we are on): DOS
+        ; does not clear the memory a program gets. The callback-stack
+        ; selector cache (cbsel) held whatever was there before, and with
+        ; w16's WSWAP below (Microsoft's leaves zeros there) the first PS/2
+        ; mouse packet loaded a stale "selector" (EC=4440: "Standard Mode:
+        ; Fault in MS-DOS Extender" at a click, w16's install tree)
+        push ds
+        pop es
+        mov di, bss_start
+        mov cx, init_stack - bss_start
+        xor al, al
+        rep stosb
+        mov es, [psp_seg]
         call cpu_detect
         jnc .cpuok
         mov dx, msg_cpu
@@ -625,7 +638,13 @@ cleanup:
         cmp byte [client_active], 0
         je .nc
         call client_rm_reset
-.nc:    ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
+.nc:    ; (the video mode is left as the client left it: Microsoft's DOSX
+        ; makes no INT 10h call after Windows' display driver set mode 3
+        ; (E10, docs/notes/keyloss-handover.md); it is WIN.COM that sets
+        ; text mode after WSWAP. w16's DOSX used to set back the mode it
+        ; found at its start: 12h, the logo's, and Windows ended in VGA
+        ; graphics with the BIOS's text on it)
+        ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
         cmp byte [did1605], 0
         je .nc2
         mov dx, 1

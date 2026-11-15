@@ -1,0 +1,51 @@
+; PrintDlg: cancel, handles passed back in, wDefault's bits, nested Setup
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+; a: Print, Cancel (DEVMODE kept, DEVNAMES not)
+cd1 print flags=1000 hook=1 copies=1
+; b: RETURNDEFAULT with the DEVMODE passed in
+cd1 print flags=400 keep=1
+cd1 err
+; c: Setup with only the DEVMODE: a specific printer; OK
+cd1 print flags=2040 hook=1 keep=1
+; d: RETURNDEFAULT, RETURNIC
+cd1 print flags=600
+; e: Print with both handles, Setup button, OK there, OK
+cd1 print flags=3000 hook=1 keep=1 copies=3
+; f: Setup with both handles, Cancel
+cd1 print flags=2040 hook=1 keep=1
+; g: Print with both handles, Cancel
+cd1 print flags=1000 hook=1 keep=1
+; h: Setup, Cancel
+cd1 print flags=2040 hook=1
+wait 3000
+; a
+clickid 2
+wait 1500
+; c
+snap C:\C1.BMP
+clickid 1
+wait 1500
+; e
+clickid 400
+wait 1500
+snap C:\E1.BMP
+dump
+clickid 1
+wait 1500
+snap C:\E2.BMP
+clickid 1
+wait 1500
+; f
+clickid 2
+wait 1500
+; g
+clickid 2
+wait 1500
+; h
+clickid 2
+wait 1500

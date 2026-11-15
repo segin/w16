@@ -1,0 +1,135 @@
+; Notepad (Microsoft's, started by WIN.INI run=, untitled) and its
+; vertical scroll bar: 45 short lines typed, Ctrl+Home, then the thumb
+; dragged with real input. Notepad's edit control scrolls the text on
+; SB_THUMBTRACK, but Notepad moves the bar only on SB_THUMBPOSITION: on 3.1
+; the thumb stays at the top while its outline and the text follow the
+; pointer (tests/inputrun.sh; boot-test case sbdrag, part np).
+; Text is typed rather than loaded: w16's edit control has no
+; EM_GETHANDLE yet, which Notepad needs to open a file. The horizontal bar
+; is left to the probe (US6: w16's edit control's horizontal scale
+; differs). Long moves are split (one of 312 units went elsewhere); the
+; pointer moves 1 pixel a unit for moves of 1 or 2 units, 2 for longer
+click 1
+sleep 0.5
+type Line 01
+key Return
+type Line 02
+key Return
+type Line 03
+key Return
+type Line 04
+key Return
+type Line 05
+key Return
+type Line 06
+key Return
+type Line 07
+key Return
+type Line 08
+key Return
+type Line 09
+key Return
+type Line 10
+key Return
+type Line 11
+key Return
+type Line 12
+key Return
+type Line 13
+key Return
+type Line 14
+key Return
+type Line 15
+key Return
+type Line 16
+key Return
+type Line 17
+key Return
+type Line 18
+key Return
+type Line 19
+key Return
+type Line 20
+key Return
+type Line 21
+key Return
+type Line 22
+key Return
+type Line 23
+key Return
+type Line 24
+key Return
+type Line 25
+key Return
+type Line 26
+key Return
+type Line 27
+key Return
+type Line 28
+key Return
+type Line 29
+key Return
+type Line 30
+key Return
+type Line 31
+key Return
+type Line 32
+key Return
+type Line 33
+key Return
+type Line 34
+key Return
+type Line 35
+key Return
+type Line 36
+key Return
+type Line 37
+key Return
+type Line 38
+key Return
+type Line 39
+key Return
+type Line 40
+key Return
+type Line 41
+key Return
+type Line 42
+key Return
+type Line 43
+key Return
+type Line 44
+key Return
+type Line 45
+key ctrl+Home
+matchnow 00-typed 20 1
+; the vertical bar: x 616-632, y 40-387, thumb at 616,57
+home
+sleep 0.3
+move 104 32
+move 104 0
+move 104 0
+sleep 0.5
+down 1
+matchnow 01-pressed 20 1
+move 0 30
+matchnow 02-down60 20 1
+move 0 45
+matchnow 03-down150 20 1
+move 0 50
+move 0 33
+matchnow 04-end 20 1
+move 4 0
+matchnow 05-x632 20 1
+move 3 0
+matchnow 06-x638-off 20 1
+move -7 0
+matchnow 07-back 20 1
+move 0 -50
+up 1
+matchnow 08-released 20 1
+; the pointer to the desktop below Notepad
+home
+sleep 0.3
+move 100 100
+move 100 120
+matchnow 09-end 20 1

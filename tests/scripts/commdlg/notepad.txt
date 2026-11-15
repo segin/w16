@@ -1,0 +1,36 @@
+; Notepad's common dialogs: Open, Save As, Find, Page Setup is its own,
+; Print Setup (a printer installed)
+nocd1
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+run NOTEPAD.EXE
+wait 2500
+menu f
+char o
+wait 2000
+snap C:\N1.BMP
+dump
+key 1B
+wait 800
+menu f
+char a
+wait 2000
+snap C:\N2.BMP
+key 1B
+wait 800
+menu s
+char f
+wait 1500
+snap C:\N3.BMP
+key 1B
+wait 800
+menu f
+char t
+wait 2500
+snap C:\N4.BMP
+key 1B
+wait 800
+close
+wait 1500
