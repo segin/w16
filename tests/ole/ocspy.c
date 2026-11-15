@@ -48,7 +48,7 @@ static void append(const char FAR *s, WORD n)
     _lclose(f);
 }
 
-void FAR PASCAL __export __loadds SpyLog(const char FAR *s)
+void FAR PASCAL __loadds SpyLog(const char FAR *s)
 {
     WORD n = 0;
     while (s[n])
@@ -458,7 +458,7 @@ static void note_task(HWND w)
     flush();
 }
 
-LRESULT CALLBACK __export __loadds SpyGetMsg(int code, WPARAM wp, LPARAM lp)
+LRESULT CALLBACK __loadds SpyGetMsg(int code, WPARAM wp, LPARAM lp)
 {
     if (code >= 0 && ((MSG FAR *)lp)->hwnd)
         note_task(((MSG FAR *)lp)->hwnd);
@@ -489,7 +489,7 @@ typedef struct {
     HWND hwnd;
 } CWP;
 
-LRESULT CALLBACK __export __loadds SpyCallWnd(int code, WPARAM wp, LPARAM lp)
+LRESULT CALLBACK __loadds SpyCallWnd(int code, WPARAM wp, LPARAM lp)
 {
     if (code >= 0) {
         CWP FAR *c = (CWP FAR *)lp;
@@ -532,7 +532,7 @@ void __cdecl __far spy_fault(WORD no, WORD cs, WORD ip, WORD ax)
     flush();
 }
 
-void FAR PASCAL __export __loadds SpyStart(HINSTANCE h, WORD bytes)
+void FAR PASCAL __loadds SpyStart(HINSTANCE h, WORD bytes)
 {
     if (!fault_hooked)
         fault_hooked = InterruptRegister(NULL, (FARPROC)SPYFAULTHOOK);
@@ -547,7 +547,7 @@ void FAR PASCAL __export __loadds SpyStart(HINSTANCE h, WORD bytes)
     (void)dump_all;
 }
 
-void FAR PASCAL __export __loadds SpyStop(void)
+void FAR PASCAL __loadds SpyStop(void)
 {
     if (fault_hooked)
         InterruptUnRegister(NULL);
@@ -560,7 +560,7 @@ void FAR PASCAL __export __loadds SpyStop(void)
 }
 
 /* the name OC1 should show for a window, as the DDE lines show it */
-void FAR PASCAL __export __loadds SpyWinName(HWND w, char FAR *out, WORD cb)
+void FAR PASCAL __loadds SpyWinName(HWND w, char FAR *out, WORD cb)
 {
     WORD i;
     lp_ = 0;
