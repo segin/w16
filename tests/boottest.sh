@@ -3333,9 +3333,27 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # keys and the pointer moved (cpltrails.txt), WIN.INI's MouseTrails
         # the same. The input parts shoot each screen when the pointer has
         # stopped and the trail run down: no trail, no debris, 0 pixels.
+        # timed, timednl: the trail in time, with the timer running, on w16's
+        # install tree alone (KRNL386; its VGA.DRV with Microsoft's
+        # resources, for the arrow) against all-Microsoft 3.1, the mouse
+        # captured and not (autolock=false): tests/currec.sh, CR1 recording
+        # the cursor calls (CURREC.DRV in front of the driver) and a frame at
+        # each timer message under a steady stream of moves and two stops
+        # (tests/scripts/input/trailmove*.txt); tools/cr1stat.py --check:
+        # calls within 10%, the trail's length within one image (the tick's
+        # phase against the frames), no positions missing from it, the same
+        # run-downs within a frame.
         r=ok
-        for pt in ${part:-det escape boot input cpl}; do
+        for pt in ${part:-det escape boot input cpl timed timednl}; do
             case $pt in
+            timed|timednl)
+                ts=$root/tests/scripts/input/trailmove.txt nl=
+                [ $pt = timednl ] && ts=$root/tests/scripts/input/trailmove-nolock.txt nl=1
+                refrun trails-$pt-ref trails env INPUTRUN_NOLOCK=$nl "$root/tests/currec.sh" -s ms -F -t 14 "$ts" "$out/trails-$pt-ref"
+                rm -rf "$out/trails-$pt-w16"
+                INPUTRUN_NOLOCK=$nl "$root/tests/currec.sh" -s tree -F -t 14 "$ts" "$out/trails-$pt-w16" > "$out/trails-$pt-w16.txt" 2>&1 || true
+                python3 "$root/tools/cr1stat.py" --check "$out/trails-$pt-ref" "$out/trails-$pt-w16" > "$out/trails-$pt.txt" 2>&1 \
+                    || r="$pt: $(grep -m1 -E 'DIFF|Error|rror' "$out/trails-$pt.txt") ($out/trails-$pt.txt)" ;;
             det|escape|boot)
                 set --; [ $pt = boot ] && set -- -i WIN.INI:windows:MouseTrails=5
                 rm -rf "$out/trails-$pt"
@@ -3417,7 +3435,7 @@ caseparts() {
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
-    trails) echo "$1@det $1@escape $1@boot $1@input $1@cpl" ;;
+    trails) echo "$1@det $1@escape $1@boot $1@input $1@cpl $1@timed $1@timednl" ;;
     *) echo "$1" ;;
     esac
 }
