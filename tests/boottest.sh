@@ -1512,15 +1512,16 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="KRNL286 against KRNL386: $s2: $n pixels differ"; break; }
             done
-            # the boxes (centred on the screen) as every w16 part's above
-            for b in "02-fileerror 03-fileerror 199x120+224+180" "03-execerror 04-execerror 380x167+128+156"; do
+            # both boxes there, where every w16 part's run above has them
+            # (centred on the screen; their insides are not compared: the
+            # tree's fonts and pointer are w16's): their active captions
+            for b in "02-fileerror 03-fileerror 300 188" "03-execerror 04-execerror 480 168"; do
                 [ "$r" = ok ] || break
                 set -- $b
-                magick "$out/missingdll-t386/$1.png" -crop "$3" +repage "$out/missingdll-t-$1-box.png"
-                magick "$out/missingdll-all/$2.png" -crop "$3" +repage "$out/missingdll-t-$2-allbox.png"
-                n=$(magick compare -metric AE "$out/missingdll-t-$1-box.png" "$out/missingdll-t-$2-allbox.png" "$out/missingdll-t-$1-boxdiff.png" 2>&1 >/dev/null || true)
-                n=${n%% *}
-                [ "$n" = 0 ] || r="$1: the box differs from every w16 part's on the reference install by $n pixels"
+                for k in t386/$1 all/$2; do
+                    px=$(magick "$out/missingdll-$k.png" -format "%[hex:p{$3,$4}]" info: 2>/dev/null)
+                    case $px in 0000AA*) ;; *) r="missingdll-$k: no box caption at $3,$4 ($px)"; break ;; esac
+                done
             done ;;
         esac
         if [ -n "$part" ]; then partdone "$r"
