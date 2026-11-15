@@ -147,6 +147,17 @@
 #              as it was, text mode at the end, no ~WOA file left
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
+#   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
+#              imports it), parts pm, tk59, tree: Program Manager's Cardfile
+#              item and File > Run "nosuch" (tests/scripts/input/
+#              missingdll.txt) with w16's KRNL286, w16's KRNL386, and every
+#              w16 part, against all of Microsoft's (KERNEL's "File Error"
+#              box, Program Manager's "Application Execution Error"): every
+#              shot 0 pixels (the group icons left out for w16's PROGMAN);
+#              TK59 as the shell under both w16 kernels against Microsoft's
+#              KRNL386: every box and every return code the same; w16's
+#              install tree alone (no OLECLI.DLL) under its KRNL386 and
+#              KRNL286: the same screens, the boxes as 3.1's
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
 #              no file of Microsoft's): every part w16's (VGACOLOR.2GR and
 #              MMSOUND.DRV too),
@@ -455,7 +466,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1390,6 +1401,116 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   pmdrop: 0 pixels, MAIN.GRP identical (w16 PROGMAN; w16 PROGMAN and SHELL; w16 USER and GDI)"
         else echo "FAIL pmdrop: $r"; fails=$((fails + 1)); fi ;;
+    missingdll)
+        # a program whose DLL is missing (SYSTEM\OLECLI.DLL, which Cardfile
+        # imports, deleted). Parts: pm, the reference install's Cardfile
+        # item and File > Run "nosuch" (missingdll.txt) against all of
+        # Microsoft's: w16's KRNL286, w16's KRNL386 (Microsoft's rest),
+        # and w16's KRNL286, USER, GDI, SHELL and PROGMAN (the group
+        # icons' pictures left out); tk59, TK59 as the shell
+        # (tests/apps/tk59.c: LoadLibrary, WinExec, LoadModule with the
+        # error mode 0 and 8000h) under both of w16's kernels against
+        # Microsoft's KRNL386: every box (shots) and every return code
+        # (TK.LOG) the same; tree, w16's install tree alone (no OLECLI.DLL
+        # there) under its KRNL386 and its KRNL286 (missingdlltree.txt):
+        # the same screens under both, and both boxes as 3.1's (the boxes'
+        # insides against the pm reference's). Until 2026-11-14 the tree
+        # showed SHELL's "Program Not Found" dialog with a garbage name
+        # (ShellExecute read an uninitialised flag) and KERNEL no box.
+        r=ok
+        del="-f WINDOWS/SYSTEM/OLECLI.DLL=-"
+        s=$root/tests/scripts/input/missingdll.txt
+        m="rectangle 60,310 300,342"
+        refrun missingdll-ref missingdll "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-ref" -r $del
+        case ${part:-pm} in
+        pm)
+            "$root/tests/inputrun.sh" -e "$out/missingdll-ref/boot.png" -E "$out/missingdll-ref" -b 40 -t 200 \
+                "$s" "$out/missingdll-k286" $del > "$out/missingdll-k286.txt" 2>&1 || true
+            "$root/tests/inputrun.sh" -e "$out/missingdll-ref/boot.png" -E "$out/missingdll-ref" -b 40 -t 200 \
+                "$s" "$out/missingdll-k386" -3 $del > "$out/missingdll-k386.txt" 2>&1 || true
+            ls "$out/missingdll-ref"/0[1-7]*.png > /dev/null 2>&1 || r="the reference has no screens"
+            for k in k286 k386; do
+                [ "$r" = ok ] || break
+                for f in "$out/missingdll-ref"/0[1-7]*.png; do
+                    s2=$(basename "$f")
+                    [ -f "$out/missingdll-$k/$s2" ] || { r="$k: no $s2"; break; }
+                    n=$(magick compare -metric AE "$out/missingdll-$k/$s2" "$f" "$out/missingdll-$k-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || { r="$k: $s2: $n pixels differ"; break; }
+                done
+            done ;;
+        tk59)
+            t59="$del -f $root/build/dos/TK59.EXE=TK59.EXE -i boot:shell=C:\\TK59.EXE"
+            s=$root/tests/scripts/input/tk59.txt
+            refrun missingdll-tk59ref missingdll "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-tk59ref" -r $t59
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-tk59k286" $t59 > "$out/missingdll-tk59k286.txt" 2>&1 || true
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-tk59k386" -3 $t59 > "$out/missingdll-tk59k386.txt" 2>&1 || true
+            log=work/c/WINDOWS/TK.LOG
+            grep -q '^TK59 done' "$out/missingdll-tk59ref/$log" 2>/dev/null || r="the reference's TK59 did not finish"
+            for k in k286 k386; do
+                [ "$r" = ok ] || break
+                d=$out/missingdll-tk59$k
+                grep -q '^TK59 done' "$d/$log" 2>/dev/null || { r="$k: TK59 did not finish"; break; }
+                if ! diff "$out/missingdll-tk59ref/$log" "$d/$log" > "$d.logdiff"; then r="$k: TK.LOG differs ($d.logdiff)"; break; fi
+                for f in "$out/missingdll-tk59ref"/[0-9]*.png; do
+                    s2=$(basename "$f")
+                    [ -f "$d/$s2" ] || { r="$k: no $s2"; break; }
+                    n=$(magick compare -metric AE "$d/$s2" "$f" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || { r="$k: $s2: $n pixels differ"; break; }
+                done
+            done ;;
+        tree)
+            # every w16 part on the reference install first: its screens
+            # against 3.1's but the boxes and the group icons (w16's USER
+            # draws SysErrorBox as a system-modal message box, which also
+            # takes the activation: 3.1's leaves the captions active; its
+            # MessageBox lays the long text out with other margins and its
+            # own icon: UNVERIFIED 3.1's rules); its boxes are then what
+            # the tree's must show
+            "$root/tests/inputrun.sh" -s -E "$out/missingdll-ref" -M "$m" -b 40 -t 200 \
+                "$s" "$out/missingdll-all" $del -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+                -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                > "$out/missingdll-all.txt" 2>&1 || true
+            fe="rectangle 70,50 580,330" ee="rectangle 125,152 512,328"
+            for f in "$out/missingdll-ref"/0[1-7]*.png; do
+                s2=$(basename "$f")
+                [ -f "$out/missingdll-all/$s2" ] || { r="every w16 part: no $s2"; break; }
+                case $s2 in 03-*) mm="$m $fe" ;; 04-*|06-*) mm="$m $ee" ;; *) mm=$m ;; esac
+                magick "$f" -fill black -draw "$mm" "$out/missingdll-all-a.png"
+                magick "$out/missingdll-all/$s2" -fill black -draw "$mm" "$out/missingdll-all-b.png"
+                n=$(magick compare -metric AE "$out/missingdll-all-b.png" "$out/missingdll-all-a.png" "$out/missingdll-all-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="every w16 part: $s2: $n pixels differ"; break; }
+            done
+            s=$root/tests/scripts/input/missingdlltree.txt
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$out/missingdll-t386" -T "$root/build/w16" -3 \
+                > "$out/missingdll-t386.txt" 2>&1 || true
+            "$root/tests/inputrun.sh" -e "$out/missingdll-t386/boot.png" -E "$out/missingdll-t386" -b 40 -t 200 \
+                "$s" "$out/missingdll-t286" -T "$root/build/w16" > "$out/missingdll-t286.txt" 2>&1 || true
+            ls "$out/missingdll-t386"/0[1-4]*.png > /dev/null 2>&1 || r="KRNL386: no screens"
+            for f in "$out/missingdll-t386"/0[1-4]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f")
+                [ -f "$out/missingdll-t286/$s2" ] || { r="KRNL286: no $s2"; break; }
+                n=$(magick compare -metric AE "$out/missingdll-t286/$s2" "$f" "$out/missingdll-t-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="KRNL286 against KRNL386: $s2: $n pixels differ"; break; }
+            done
+            # the boxes (centred on the screen) as every w16 part's above
+            for b in "02-fileerror 03-fileerror 199x120+224+180" "03-execerror 04-execerror 380x167+128+156"; do
+                [ "$r" = ok ] || break
+                set -- $b
+                magick "$out/missingdll-t386/$1.png" -crop "$3" +repage "$out/missingdll-t-$1-box.png"
+                magick "$out/missingdll-all/$2.png" -crop "$3" +repage "$out/missingdll-t-$2-allbox.png"
+                n=$(magick compare -metric AE "$out/missingdll-t-$1-box.png" "$out/missingdll-t-$2-allbox.png" "$out/missingdll-t-$1-boxdiff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || r="$1: the box differs from every w16 part's on the reference install by $n pixels"
+            done ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   missingdll: 0 pixels, the same return codes"
+        else echo "FAIL missingdll: $r ($out)"; fails=$((fails + 1)); fi ;;
     cardfile)
         s=$root/tests/scripts/input/cardfile.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cardfile-WIN.INI"
@@ -2713,6 +2834,7 @@ caseparts() {
     winfile) echo "$1@cmp $1@all" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
+    missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
@@ -2758,6 +2880,9 @@ partsummary() {
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
+    missingdll)
+        if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
+        else echo "FAIL missingdll: $pfirst ($out)"; fi ;;
     runbrowse)
         if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
         else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;
