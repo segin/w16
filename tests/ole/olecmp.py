@@ -30,6 +30,10 @@ def norm_log(path):
             continue
         line = re.sub(r'lh=[0-9A-F]{8}', 'lh=*', line)
         line = re.sub(r'dead:[0-9A-F]{4}', 'dead:*', line)
+        # instance handles (memory layout) and Write's object names (its
+        # own, from the time: "WINWRITE%(Untitled)%6af987fe#001")
+        line = re.sub(r'^WinExec = \d+', 'WinExec = *', line)
+        line = re.sub(r'(%)[0-9a-f]{8}(#\d{3})', r'\1*\2', line)
         line = re.sub(r'(OCSRV .*psptail=[0-9A-F]{4}:)"(.*)', lambda m: m.group(1) + '*', line)
         # the hMF word of a METAFILEPICT put to or got from a stream
         line = re.sub(r'^((?:PUT|GET) 8 @\d+ [0-9A-F]{12})[0-9A-F]{4}', r'\1****', line)

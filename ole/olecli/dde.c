@@ -881,14 +881,12 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
         return;
     }
     /* advise data: one callback when the batch is complete */
-    if (last_of_batch(o, cf)) {
-        if (saved)
-            callback(o, OLE_SAVED);
-        else if (!closed)
-            callback(o, OLE_CHANGED);
-        else
-            o->changed = TRUE;
-    }
+    /* (the data on "/Close", sent when the server closes a changed
+       object, is OLE_CHANGED: Write, given nothing then, dropped the new
+       object; UNVERIFIED by a probe client: tests/ole/obs/srvclose.txt) */
+    (void)closed;
+    if (last_of_batch(o, cf))
+        callback(o, saved ? OLE_SAVED : OLE_CHANGED);
 }
 
 /* the index of the next step op from the current one, or 0xFFFF */

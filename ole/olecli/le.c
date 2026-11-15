@@ -189,9 +189,11 @@ OLESTATUS OLEAPI OleCreateFromFile(LPCSTR protocol, LPOLECLIENT c, LPCSTR cls,
 static void add_link_advises(LPOBJ o)
 {
     WORD pf = obj_advise_pres(o);
-    dde_add(o, ST_ADVISE, cf_native, NULL, IT_LINK);
+    /* UNVERIFIED: a link updated on save advises "<item>/Save" */
+    WORD it = o->update == oleupdate_onsave ? IT_LINKSAVE : IT_LINK;
+    dde_add(o, ST_ADVISE, cf_native, NULL, it);
     if (pf)                             /* UNVERIFIED: order for presentations */
-        dde_add(o, ST_ADVISE, pf, NULL, IT_LINK);
+        dde_add(o, ST_ADVISE, pf, NULL, it);
     dde_add(o, ST_ADVISE, cf_binary, NULL, IT_DOCNAME);
 }
 
@@ -367,15 +369,14 @@ OLESTATUS OLEAPI LeActivate(LPOLEOBJECT p, UINT verb, BOOL show, BOOL focus,
             dde_add(o, ST_POKE, cf_native, poke_block(cf_native, o->hnative), IT_NONE);
         add_embedded_advises(o);
     } else if (o->type == OT_LINK && !o->open) {
-        /* observed: a server that had the file open is just told the
-           verb; one started for it is advised and asked for data first */
-        WORD at;
+        /* observed: a link updated always (the default) is advised and
+           asked for its data before the verb; one updated on call only
+           gets the verb */
         dde_add(o, ST_CONNECT_DOC, 0, NULL, SW_SHOWNORMAL);
-        at = o->nsteps;
-        dde_add(o, ST_SKIP_UNLESS_LAUNCHED, 0, NULL, 0);
-        add_link_advises(o);
-        add_requests(o, IT_LINK);
-        dde_set_arg(o, at, o->nsteps - at - 1);
+        if (o->update != oleupdate_oncall) {
+            add_link_advises(o);
+            add_requests(o, IT_LINK);
+        }
     }
     /* "[StdDoVerbItem("<item>",<verb>,<show>,<!focus>)]": the last
        argument is the opposite of fTakeFocus (observed both ways) */
