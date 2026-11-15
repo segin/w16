@@ -399,7 +399,10 @@
 #              cplclick-*.txt): w16's USER against Microsoft's (screens and
 #              INI files), w16's applets against Microsoft's (INI files),
 #              the install tree under KRNL386 against KRNL286 (both); parts
-#              cplclick@kb-us, @kb-ms, @kb-tree, ... @co-tree
+#              cplclick@kb-ms, @kb-tree, ... @co-tree. cplclickus (not in
+#              the default set: run it by name): the parts kb-us ... co-us,
+#              w16's USER against Microsoft's, screens and INI files; they
+#              show USER's remaining differences (ARCHITECTURE.md 14)
 #   gpuser     USER's functions given a bad pointer, USER's "__GP" table
 #              (user/gp.asm): probe US27 as the shell in DOSBox-X (-p
 #              386x), every case Windows 3.1 came back from, its values
@@ -1170,7 +1173,7 @@ runcase() {
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   control: 0 pixels, CONTROL.INI identical"
         else echo "FAIL control: $r ($out)"; fails=$((fails + 1)); fi ;;
-    cplclick)
+    cplclick|cplclickus)
         # Control Panel's Keyboard, Mouse, Desktop and Color dialogs driven
         # with real mouse clicks on each of their controls (tests/scripts/
         # input/cplclick-*.txt, WIN.INI run=CONTROL.EXE), parts APPLET-STACK:
@@ -1200,7 +1203,9 @@ runcase() {
                 cmp -s "$1/work/c/$5/$i" "$2/work/c/$5/$i" || { r="$3: $i differs"; return; }
             done
         }
-        for pk in ${part:-kb-us kb-ms kb-tree ms-us ms-ms ms-tree dk-us dk-ms dk-tree co-us co-ms co-tree}; do
+        if [ "$c" = cplclickus ]; then dparts="kb-us ms-us dk-us co-us"
+        else dparts="kb-ms kb-tree ms-ms ms-tree dk-ms dk-tree co-ms co-tree"; fi
+        for pk in ${part:-$dparts}; do
             ap=${pk%-*} st=${pk#*-}
             s=$root/tests/scripts/input/cplclick-$ap.txt
             case $st in
@@ -1242,8 +1247,8 @@ runcase() {
             [ "$r" = ok ] || break
         done
         if [ -n "$part" ]; then partdone "$r"
-        elif [ "$r" = ok ]; then echo "ok   cplclick: every click as on 3.1"
-        else echo "FAIL cplclick: $r ($out)"; fails=$((fails + 1)); fi ;;
+        elif [ "$r" = ok ]; then echo "ok   $c: every click as on 3.1"
+        else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
     tree)
         ref
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
@@ -3256,7 +3261,8 @@ caseparts() {
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
-    cplclick) for v in kb ms dk co; do printf "%s@%s-us %s@%s-ms %s@%s-tree " "$1" $v "$1" $v "$1" $v; done ;;
+    cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
+    cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;

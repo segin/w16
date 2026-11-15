@@ -141,8 +141,8 @@ BOOL FAR PASCAL __loadds MouseProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             switch (wp) {
             case SB_LINEUP:        v += DBL_STEP; break;
             case SB_LINEDOWN:      v -= DBL_STEP; break;
-            case SB_PAGEUP:        v += 4 * DBL_STEP; break;    /* UNVERIFIED */
-            case SB_PAGEDOWN:      v -= 4 * DBL_STEP; break;
+            case SB_PAGEUP:        v += 10 * DBL_STEP; break;   /* observed: 160 */
+            case SB_PAGEDOWN:      v -= 10 * DBL_STEP; break;
             case SB_TOP:           v = DBL_MIN; break;
             case SB_BOTTOM:        v = DBL_MAX; break;
             case SB_THUMBPOSITION: v = DBL_MAX - (long)LOWORD(lp) * DBL_STEP; break;
