@@ -6,7 +6,7 @@
 # tests/inputrun.sh plays SCRIPT; C:\CR1.LOG (and C:\CR1.BIN with -F) to
 # OUTDIR. Mouse trails (drivers/vga/README.md).
 #
-#   usage: tests/currec.sh [-s STACK] [-F] [-t SECS] SCRIPT OUTDIR
+#   usage: tests/currec.sh [-s STACK] [-F] [-t SECS] [-p] SCRIPT OUTDIR [dropin.sh options...]
 #     -s ms     all of Microsoft's Windows 3.1 (default)
 #     -s vga    Microsoft's 3.1 with w16's VGA.DRV (build/dos/VGA.DRV)
 #     -s tree   w16's install tree alone (build/w16 as C:\W16), KRNL386
@@ -34,8 +34,10 @@ while getopts s:Ft:p opt; do
     esac
 done
 shift $((OPTIND - 1))
-[ $# -eq 2 ] || { sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2; }
 script=$1 out=$2
+shift 2
+extra="$*"
 [ -e "$out" ] && { echo "$out exists" >&2; exit 2; }
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -60,7 +62,7 @@ INPUTRUN_FULL=1 "$root/tests/inputrun.sh" -b 30 -t $((secs + 70)) "$script" "$ou
     -f "$out/CURREC.DRV=$sys/CURREC.DRV" -f "$out/VGAREAL.DLL=$sys/VGAREAL.DLL" \
     -f "$root/build/dos/CR1.EXE=CR1.EXE" -f "$out/CR1.IN=CR1.IN" \
     -i boot:display.drv=CURREC.DRV $start \
-    -i WIN.INI:windows:MouseTrails=7 -i WIN.INI:windows:MouseSpeed=0 > "$out/run.txt" 2>&1 || true
+    -i WIN.INI:windows:MouseTrails=7 -i WIN.INI:windows:MouseSpeed=0 $extra > "$out/run.txt" 2>&1 || true
 for f in CR1.LOG CR1.BIN; do
     [ -f "$out/run/work/c/$f" ] && cp "$out/run/work/c/$f" "$out/$f"
 done
