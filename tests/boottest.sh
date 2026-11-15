@@ -1131,7 +1131,7 @@ runcase() {
             done
             ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
             [ "$r" = ok ] || return
-            cmp -s "$1"/c/*/CONTROL.INI "$2"/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
+            cmp -s "$1"/work/c/*/CONTROL.INI "$2"/work/c/*/CONTROL.INI || r="$3: CONTROL.INI differs"
         }
         for pk in ${part:-ms k286 k386 tree}; do
             case $pk in
