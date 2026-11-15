@@ -1584,8 +1584,16 @@ int __cdecl tmain(void)
     }
     say("OC1 done");
     SpyStop();
-    /* as the shell, end the session explicitly: a plain exit of the shell
-       task with OLECLI loaded did not end Windows (observed) */
-    ExitWindows(0, 0);
+    /* end the session (Program Manager is the shell: ocrun.sh). A program
+       still busy may refuse once (seen under load on the test host):
+       try again for a while, saying so */
+    {
+        int k;
+        for (k = 0; k < 30; k++) {
+            ExitWindows(0, 0);
+            say("OC1: ExitWindows refused, again");
+            pump(1000);
+        }
+    }
     return 0;
 }
