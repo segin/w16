@@ -12,6 +12,7 @@ extern WORD __cdecl init_regs[7];       /* ax bx cx dx si di es */
 extern WORD FAR PASCAL WaitEvent(HTASK);
 extern BOOL FAR PASCAL InitApp(HINSTANCE);
 void FAR PASCAL SpyLog(const char FAR *s);
+UINT FAR PASCAL GetCurrentPDB(void);    /* KERNEL.37 */
 
 static char line[400];
 static WORD lp_;
@@ -51,6 +52,20 @@ int __cdecl tmain(void)
     }
     put("\" show=");
     puthex(init_regs[3]);
+    {   /* the PSP's command tail as KERNEL built it: length, bytes */
+        BYTE FAR *psp = (BYTE FAR *)MAKELP(GetCurrentPDB(), 0x80);
+        put(" psptail=");
+        puthex(psp[0]);
+        put(":\"");
+        for (i = 1; i <= psp[0] + 1 && i < 128; i++) {
+            if (psp[i] < 32 || psp[i] == '"' || psp[i] == '\\') {
+                put("\\x");
+                puthex(psp[i]);
+            } else
+                line[lp_++] = psp[i];
+        }
+        put("\"");
+    }
     put("\r\n");
     line[lp_] = 0;
     SpyLog(line);

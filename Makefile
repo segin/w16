@@ -980,6 +980,32 @@ $(DOS)/OCSRV.EXE: $(B)/tests/start.o $(B)/ole/ocsrv.o $(DOS)/OCSPY.DLL tests/app
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ole/ocsrv.map file { $(B)/tests/start.o $(B)/ole/ocsrv.o } \
 	    import SPYLOG OCSPY.1
+# OLECLI.DLL: large model, its own DS in every entry (__loadds), no C library
+OLCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -dSTRICT -Iole/olecli \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+OLOBJS  := $(B)/ole/olentry.o $(B)/ole/olecli.o $(B)/ole/le.o $(B)/ole/dde.o \
+           $(B)/ole/stream.o $(B)/ole/pres.o $(B)/ole/clip.o $(B)/ole/reg.o \
+           $(B)/ole/defs.o $(B)/ole/i4.o
+$(B)/ole/olentry.o: ole/olecli/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/%.o: ole/olecli/%.c ole/olecli/olecli.h
+	@mkdir -p $(@D)
+	$(WCC) $(OLCFLAGS) -fo=$@ $<
+$(B)/ole/olecli.res: ole/olecli/olecli.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(B)/ole/exports.lnk: tools/mkoleexp.py docs/exportdb/exports.csv $(wildcard ole/olecli/*.c) ole/olecli/entry.asm
+	@mkdir -p $(@D)
+	python3 tools/mkoleexp.py $@
+$(DOS)/OLECLI.DLL: $(OLOBJS) $(B)/ole/olecli.res ole/olecli/olecli.lnk $(B)/ole/exports.lnk \
+                   tools/nestripnames.py tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @ole/olecli/olecli.lnk @$(B)/ole/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/olecli.map option resource=$(B)/ole/olecli.res file { $(OLOBJS) }
+	python3 tools/nestripnames.py $@ OLECLI_
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/OLECLI.DLL
 oleprobes: $(DOS)/OC1.EXE $(DOS)/OCSPY.DLL $(DOS)/OCSRV.EXE
 dos: oleprobes
 .PHONY: oleprobes

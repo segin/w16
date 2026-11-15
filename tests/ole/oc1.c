@@ -675,7 +675,7 @@ static void dump_handle(OLECLIPFORMAT f, HANDLE h)
         putdec(HIWORD(dim));
         {
             DWORD n = (DWORD)bm.bmWidthBytes * bm.bmHeight * bm.bmPlanes;
-            HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, n);
+            HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n);
             if (g) {
                 BYTE __huge *p = (BYTE __huge *)GlobalLock(g);
                 GetBitmapBits(h, n, (void FAR *)p);
@@ -721,7 +721,7 @@ static void save_dib(HDC dc, HBITMAP bm, int cx, int cy, const char *file)
     } bmi;
     BITMAPFILEHEADER fh;
     DWORD stride = ((cx * 4 + 31) / 32) * 4, n = stride * cy;
-    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, n);
+    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n);
     BYTE __huge *p;
     HFILE f;
     if (!g)
@@ -1286,6 +1286,21 @@ static void cmd(char *l)
         if (s == OLE_OK || s == OLE_WARN_DELETE_DATA)
             dump_handle(f, h);
         flush();
+        {   /* "getdata <i> <fmt> <file>": also the data (for a
+               METAFILEPICT its metafile's bits) into a file */
+            char *file = word();
+            if (*file && (s == OLE_OK || s == OLE_WARN_DELETE_DATA) && h) {
+                if (f == CF_METAFILEPICT) {
+                    METAFILEPICT FAR *m = (METAFILEPICT FAR *)GlobalLock(h);
+                    HMETAFILE c = CopyMetaFile(m->hMF, NULL);
+                    HGLOBAL bits = GetMetaFileBits(c);
+                    GlobalUnlock(h);
+                    write_file(file, bits, GlobalSize(bits));
+                    GlobalFree(bits);
+                } else if (f != CF_BITMAP && f != CF_PALETTE)
+                    write_file(file, h, GlobalSize(h));
+            }
+        }
     } else if (same(c, "requestdata")) {
         OLECLIPFORMAT f;
         i = idx();
@@ -1464,6 +1479,44 @@ static void cmd(char *l)
             w = GetActiveWindow();
         PostMessage(w, WM_KEYDOWN, vk, 1);
         PostMessage(w, WM_KEYUP, vk, 0xC0000001L);
+    } else if (same(c, "type") || same(c, "char") || same(c, "alt")) {
+        /* keyboard input for the focus window, as SNAP (tests/apps/snap.c)
+           gives it: WM_CHAR per character; alt: WM_SYSCHAR with the
+           context bit */
+        HWND w = GetFocus();
+        char *t = rest();
+        BOOL alt = same(c, "alt");
+        if (!w)
+            w = GetActiveWindow();
+        if (same(c, "char") || alt)
+            t[1] = 0;
+        for (; *t; t++) {
+            PostMessage(w, alt ? WM_SYSCHAR : WM_CHAR, (BYTE)*t, alt ? 0x20000001L : 1L);
+            pump(30);
+        }
+        pump(200);
+    } else if (same(c, "keymenu")) {
+        /* Alt+letter for the active window's menu */
+        HWND w = GetActiveWindow();
+        char *t = rest();
+        PostMessage(w, WM_SYSCOMMAND, SC_KEYMENU, (BYTE)t[0]);
+        pump(200);
+    } else if (same(c, "kids")) {
+        /* the children of the active window (dialog controls) */
+        HWND w = GetActiveWindow(), k;
+        char b[128];
+        say("children:");
+        for (k = w ? GetWindow(w, GW_CHILD) : NULL; k; k = GetWindow(k, GW_HWNDNEXT)) {
+            put("  ");
+            GetClassName(k, b, sizeof b);
+            put(b);
+            put(" id=");
+            putdec(GetDlgCtrlID(k));
+            put(" ");
+            GetWindowText(k, b, sizeof b);
+            putqs(b);
+            flush();
+        }
     } else if (same(c, "wins")) {
         say("windows:");
         EnumWindows((WNDENUMPROC)EnumWin, 0);
