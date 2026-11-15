@@ -1381,6 +1381,10 @@ separately. w16's OLECLI is in `ole/olecli/`; the OLESVR agent's notes are
   never got to run it. `tests/ole/obsrun.sh` runs `tests/ole/obs/*.txt`
   three at a time. `tests/ole/olecmp.py` compares two runs (logs, streams,
   bitmaps) after masking what differs by nature (see 16.4).
+  OC1 ends the session with ExitWindows after 2 seconds of message pumping
+  (with a server still exiting, the session never ended) and holds
+  carets in their phase (SetCaretBlinkTime 65535) so that screenshots of
+  the programs it drives compare.
 
 Observation hazard: Microsoft's OLECLI calls an OLESTREAM's Get/Put with a
 DS that is not the client's or its own (OC1's export-prolog Put faulted on
