@@ -777,6 +777,42 @@ void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
 
 /* ---- the SCROLLBAR class: its SBINFO in the window extra bytes
    (Windows 3.1's class has 10: US2) ---- */
+/* A scroll bar control with the focus shows it as a gray caret over its
+   thumb, two pixels in from the thumb's edges (observed on 3.1: the
+   Keyboard and Mouse dialogs' bars blink so); it follows the thumb */
+static BOOL sb_thumb_rect(HWND h, PWND w, SBINFO *s, RECT *t)
+{
+    RECT r;
+    BOOL vert = (w->style & SBS_VERT) != 0;
+    int len, arrow, p;
+    GetClientRect(h, &r);
+    len = vert ? r.bottom : r.right;
+    arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
+    if (len < 2 * arrow)
+        arrow = len / 2;
+    if (s->max <= s->min || len <= 3 * arrow - 2 || (w->style & SBS_SIZEBOX))
+        return FALSE;
+    p = thumb_pos(len, arrow, s);
+    if (vert)
+        SetRect(t, 0, p, r.right, p + arrow);
+    else
+        SetRect(t, p, 0, p + arrow, r.bottom);
+    return TRUE;
+}
+
+static void sb_caret(HWND h, PWND w, SBINFO *s, BOOL create)
+{
+    RECT t;
+    if (!sb_thumb_rect(h, w, s, &t))
+        return;
+    if (create) {
+        CreateCaret(h, (HBITMAP)1, t.right - t.left - 4, t.bottom - t.top - 4);
+        SetCaretPos(t.left + 2, t.top + 2);
+        ShowCaret(h);
+    } else
+        SetCaretPos(t.left + 2, t.top + 2);
+}
+
 LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
@@ -791,7 +827,11 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT: {
         PAINTSTRUCT ps;
         RECT r;
-        HDC hdc = BeginPaint(h, &ps);
+        HDC hdc;
+        BOOL focus = GetFocus() == h;
+        if (focus)
+            HideCaret(h);
+        hdc = BeginPaint(h, &ps);
         GetClientRect(h, &r);
         if (w->style & SBS_SIZEBOX)
             FillRect(hdc, &r, sysbrush[COLOR_BTNFACE]);
@@ -800,8 +840,18 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             ghost_repaint(hdc, h, SB_CTL, &r, (w->style & SBS_VERT) != 0);
         }
         EndPaint(h, &ps);
+        if (focus) {
+            sb_caret(h, w, s, FALSE);
+            ShowCaret(h);
+        }
         return 0;
     }
+    case WM_SETFOCUS:
+        sb_caret(h, w, s, TRUE);
+        return 0;
+    case WM_KILLFOCUS:
+        DestroyCaret();
+        return 0;
     case WM_ERASEBKGND:
         return 1;
     case WM_LBUTTONDOWN:
@@ -811,6 +861,10 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         GetWindowRect(h, &r);
         pt.x = (int)LOWORD(lp) + r.left;
         pt.y = (int)HIWORD(lp) + r.top;
+        /* a tab stop takes the focus (UNVERIFIED on 3.1: the bars probed
+           had it already) */
+        if ((w->style & WS_TABSTOP) && GetFocus() != h)
+            SetFocus(h);
         track_scrollbar(h, GetParent(h), SB_CTL, &r, pt);
         return 0;
     }

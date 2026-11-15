@@ -124,6 +124,24 @@ void WINAPI MessageBeep(UINT type)
 static HWND hwndCaret;
 static int caret_x, caret_y, caret_cx, caret_cy, caret_hide, caret_on, caret_phase;
 static UINT caret_blink;
+static BOOL caret_gray;         /* CreateCaret's (HBITMAP)1: a gray caret */
+
+/* invert the caret's rectangle: black (DSTINVERT), or a gray caret
+   through the 50% pattern aligned with the screen (observed: a focused
+   scroll bar control's thumb, the pixels where x + y is odd change) */
+static void caret_blt(HDC hdc)
+{
+    if (caret_gray) {
+        DWORD org = GetDCOrg(hdc);
+        HBRUSH ob;
+        UnrealizeObject(hbrGray);
+        SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+        ob = SelectObject(hdc, hbrGray);
+        PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, PATINVERT);
+        SelectObject(hdc, ob);
+    } else
+        PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+}
 
 static void caret_draw(void)
 {
@@ -131,7 +149,7 @@ static void caret_draw(void)
     if (!hwndCaret || !valid_wnd(hwndCaret))
         return;
     hdc = get_dc(hwndCaret, FALSE, 0, 0);
-    PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+    caret_blt(hdc);
     release_dc(hwndCaret, hdc);
     caret_on ^= 1;
 }
@@ -200,7 +218,7 @@ void caret_invert_in(const RECT *rc)
     sv = SaveDC(hdc);
     IntersectClipRect(hdc, rc->left - w->rcClient.left, rc->top - w->rcClient.top,
                       rc->right - w->rcClient.left, rc->bottom - w->rcClient.top);
-    PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
+    caret_blt(hdc);
     RestoreDC(hdc, sv);
     release_dc(hwndCaret, hdc);
 }
@@ -214,8 +232,8 @@ void WINAPI CreateCaret(HWND h, HBITMAP bm, int cx, int cy)
     caret_hide = 1;
     caret_on = 0;
     caret_phase = 1;
+    caret_gray = bm == (HBITMAP)1;
     caret_timer(TRUE);
-    (void)bm;
 }
 
 void WINAPI DestroyCaret(void)
