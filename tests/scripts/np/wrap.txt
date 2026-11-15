@@ -1,0 +1,44 @@
+; NP5: Word Wrap, saving without its line breaks; Select All, Copy, Paste
+; get OUT2.TXT
+; log
+run NOTEPAD.EXE
+wait 3000
+menu e
+char w
+wait 500
+info
+type aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn oooo pppp qqqq rrrr ssss tttt uuuu vvvv wwww xxxx yyyy zzzz
+wait 500
+info
+snap C:\WRAP.BMP
+menu e
+wait 300
+snap C:\MEDITW.BMP
+key 1B
+key 1B
+menu e
+char a
+wait 300
+menu e
+char c
+wait 300
+key 23
+menu e
+char p
+wait 500
+info
+snap C:\PASTE.BMP
+menu e
+char w
+wait 500
+info
+snap C:\UNWRAP.BMP
+menu f
+char a
+wait 1500
+type C:\OUT2.TXT
+key 0D
+wait 1500
+dump
+close
+wait 800

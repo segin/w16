@@ -9,13 +9,22 @@
 # seconds each takes a screenshot; the two are compared pixel for pixel.
 # Microsoft's KRNL386, USER, GDI and drivers run in both.
 #
-#   usage: tests/win386.sh [-t SECS] [-o DIR] [-n] [-i S:K=V]...
-#     -t SECS   time before the screenshot (default 45)
+#   usage: tests/win386.sh [-t SECS] [-m MAXSECS] [-o DIR] [-n] [-i S:K=V]...
+#     -t SECS   time between the end of KERNEL's boot log (INITDONE=TSRQuery)
+#               and the screenshot (default 10)
+#     -m MAXSECS  the most to wait for that end (default 300: busy hosts)
 #     -o DIR    where the screenshots, boot logs and the VMM's trace go
 #               (default build/win386-<timestamp>)
 #     -n        only w16's run (no reference run, no comparison)
 #     -i S:K=V  set key K in section S of SYSTEM.INI (repeatable), e.g.
 #               w16:vmmtrace=1 for the VMM's detailed trace (COM1)
+#     -c ARGS   WIN's arguments (default "/3 /B")
+#     -f SRC=DST  copy SRC to C:\DST in both runs (repeatable), e.g.
+#               build/dos/VXP.386=WINDOWS/SYSTEM/VXP.386
+#     -x ACTS   input once the boot is done, before the screenshot: xdotool
+#               words separated by ";" (e.g. "mousemove 300 200;sleep 1;
+#               click 1;key alt+f4"), sent to the DOSBox-X window; the
+#               screenshot follows SECS seconds later
 # Prints the VMM's trace (from COM1), KRNL386's BOOTLOG.TXT summary and the
 # comparison; exit status 0 when the screens are identical.
 set -eu
@@ -23,13 +32,17 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 ref=$root/.tools/ref/win31/cdrive
 [ -d "$ref" ] || ref=$(cd "$root/../../.." && pwd)/.tools/ref/win31/cdrive
-secs=45 out= norefrun= inis=
-while getopts t:o:ni: opt; do
+secs=10 maxsecs=300 out= norefrun= inis= winargs='/3 /B' acts= files=
+while getopts t:m:o:ni:c:x:f: opt; do
     case $opt in
     t) secs=$OPTARG ;;
+    m) maxsecs=$OPTARG ;;
     o) out=$OPTARG ;;
     n) norefrun=1 ;;
     i) inis="$inis $OPTARG" ;;
+    c) winargs=$OPTARG ;;
+    x) acts=$OPTARG ;;
+    f) files="$files $OPTARG" ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -43,6 +56,9 @@ run() {   # run NAME (w16|ms)
     cp -r "$ref" "$d/c"
     [ "$1" = w16 ] && cp "$root/build/win386/WIN386.EXE" "$d/c/WINDOWS/SYSTEM/WIN386.EXE"
     rm -f "$d/c/WINDOWS/BOOTLOG.TXT"
+    for f in $files; do
+        cp "${f%%=*}" "$d/c/${f#*=}"
+    done
     for i in $inis; do
         python3 -I "$root/tests/scripts/iniset.py" "$d/c/WINDOWS/SYSTEM.INI" "$i"
     done
@@ -67,20 +83,51 @@ serial1=file file:$d/com1.txt
 mount c "$d/c"
 c:
 cd \\WINDOWS
-WIN /3 /B > C:\\OUT.TXT
+WIN $winargs > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
     cat > "$d/shot.sh" <<SH
 #!/bin/sh
-SDL_AUDIODRIVER=dummy timeout $((secs + 5)) dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >"$d/dosbox.log" 2>&1 &
-pid=\$!
-sleep 3
-# DOSBox-X gone already: it found no display (another Xvfb took ours); retry
-kill -0 \$pid 2>/dev/null || exit 7
-sleep $((secs - 3))
+# SDL often fails to open a fresh Xvfb display on a busy host ("Couldn't
+# open X11 display" although the server answers): try again, here
+t=0
+while :; do
+    SDL_AUDIODRIVER=dummy timeout $((maxsecs + 10)) dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >"$d/dosbox.log" 2>&1 &
+    pid=\$!
+    sleep 3
+    kill -0 \$pid 2>/dev/null && break
+    grep -q 'open X11 display' "$d/dosbox.log" || exit 7
+    t=\$((t + 1))
+    [ \$t -lt 20 ] || exit 7
+done
+# the screen: SECS seconds after KERNEL's boot log reaches its end (or
+# Windows ended), at most MAXSECS after the start (a busy host is slow)
+s=3
+while [ \$s -lt $maxsecs ]; do
+    grep -q 'INITDONE=TSRQuery' "$d/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null && break
+    kill -0 \$pid 2>/dev/null || break
+    sleep 1
+    s=\$((s + 1))
+done
 wid=\$(xdotool search --name DOSBox 2>/dev/null | head -1)
+acts='$acts'
+if [ -n "\$acts" ]; then
+    sleep 3
+    echo "\$acts" | tr ';' '\\n' | while read -r a; do
+        [ -n "\$a" ] || continue
+        case \$a in
+        sleep*) \$a ;;
+        mousemove*) xdotool mousemove --window "\$wid" \${a#mousemove } ;;
+        *) xdotool \$a ;;
+        esac
+    done
+fi
+sleep $secs
 import -window "\${wid:-root}" "$d/s.png"
+# the screen is taken: end DOSBox-X (by its PID) unless Windows is ending by
+# itself (WIN386_WAIT=1: let it run to its time limit)
+[ -n "${WIN386_WAIT:-}" ] || kill \$pid 2>/dev/null
 wait
 SH
     chmod +x "$d/shot.sh"
@@ -93,7 +140,7 @@ SH
         xvfb-run -n $n -s '-screen 0 1024x768x24' "$d/shot.sh" >>"$d/xvfb.log" 2>&1 || echo "try $try display $n: $?" >>"$d/xvfb.log"
         # DOSBox-X ran unless it found no X display
         [ -s "$d/dosbox.log" ] && ! grep -q "open X11 display" "$d/dosbox.log" && break
-        rm -f "$d/s.png" "$d/dosbox.log"
+        cat "$d/dosbox.log" >> "$d/xvfb.log" 2>/dev/null; rm -f "$d/s.png" "$d/dosbox.log"
         try=$((try + 1))
         sleep 1
     done

@@ -4,7 +4,9 @@
 format windows
 option quiet
 option start=start
-option stack=8k
+option stack=16k
+# 8k overflowed in nested dialogs (Program Item Properties > Browse,
+# tests/scripts/pm2/browse.txt hung on Windows/386 2.11)
 option heapsize=16k
 option description 'w16 Program Manager'
 segment class 'CODE' fixed preload

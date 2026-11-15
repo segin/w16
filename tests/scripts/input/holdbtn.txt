@@ -1,0 +1,70 @@
+; probe US26 (tests/apps/us26.c) as the shell: the caption's buttons
+; and the scroll bar's arrows and shaft held down with real input, the
+; screens taken while held, after dragging off and back, and after the
+; release (tests/inputrun.sh; boot-test case holdbtn). Window at 40,40
+; to 360,280: minimize button 319-336, maximize 338-355 (y 44-61); the
+; vertical bar x 340-356, up arrow y 62-78, the thumb 78-94 (at 0), down
+; arrow 260-276. The pointer moves 1 pixel a unit for moves of 1 or 2
+; units, 2 for longer ones
+click 1
+sleep 1
+; maximize: pressed, dragged off, back, released on it
+home
+sleep 0.3
+move 173 26
+sleep 0.5
+down 1
+match 01-max-pressed 20 1
+shot 01-max-pressed
+move 0 15
+match 02-max-off 20 1
+shot 02-max-off
+move 0 -15
+match 03-max-back 20 1
+shot 03-max-back
+up 1
+match 04-max-released 20 1
+shot 04-max-released
+; minimize: pressed, released off it (nothing happens)
+home
+sleep 0.3
+move 163 26
+sleep 0.5
+down 1
+match 05-min-pressed 20 1
+shot 05-min-pressed
+move 0 15
+sleep 0.3
+up 1
+match 06-min-cancelled 20 1
+shot 06-min-cancelled
+; the shaft below the thumb held (the bar at 0): pages until the thumb
+; reaches the pointer (at 70)
+home
+sleep 0.3
+move 174 100
+sleep 0.5
+down 1
+sleep 3
+match 07-page-held 20 1
+shot 07-page-held
+up 1
+match 08-page-released 20 1
+shot 08-page-released
+; the down arrow held, dragged off, back, released
+home
+sleep 0.3
+move 174 134
+sleep 0.5
+down 1
+sleep 1.5
+shot 09-arrow-held
+move 15 0
+sleep 1
+shot 10-arrow-off
+move -15 0
+sleep 0.5
+shot 11-arrow-back
+up 1
+match 12-arrow-released 20 1
+shot 12-arrow-released

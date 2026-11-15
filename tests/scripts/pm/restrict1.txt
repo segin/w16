@@ -1,0 +1,34 @@
+; PROGMAN.INI [Restrictions] NoRun=1, NoSaveSettings=1: Run and Save
+; Settings on Exit grayed (the latter unchecked); an option toggled is
+; still written, the window and Order= are not, on exit nor with Shift.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoRun=1>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoSaveSettings=1>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\R1.BMP
+key 1B
+key 1B
+wait 300
+menu o
+wait 500
+snap C:\R2.BMP
+key 1B
+key 1B
+wait 300
+menu o
+char a
+wait 800
+move 10 10 500 400
+wait 500
+kdown 10
+menu f
+char x
+kup 10
+wait 1500
+snap C:\R3.BMP
+menu f
+char x
+wait 1500

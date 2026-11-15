@@ -11,6 +11,7 @@
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
+# REFRUN_GDLOG=1: log every GDI call to C:\GD.LOG (see below).
 # REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
 # flags); REFRUN_FPU=false then runs without a coprocessor.
 # Standard mode (/S) on a 386 or later runs KRNL386.EXE; KRNL286.EXE only
@@ -31,10 +32,28 @@ name=$(basename "$exe" | tr a-z A-Z)
 cp "$exe" "$work/c/$name"
 for f in ${REFRUN_FILES:-}; do
     case $f in
-    *=*) cp "${f%%=*}" "$work/c/${f#*=}" ;;          # src=path/under/C
+    *=*) mkdir -p "$(dirname "$work/c/${f#*=}")"           # src=path/under/C
+         cp "${f%%=*}" "$work/c/${f#*=}" ;;
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
+# w16's USER (when REFRUN_FILES brings it) as stock 3.1: no desktop version
+# stamp ([w16] DesktopVersion, user/deskver.c), as tests/dropin.sh does
+printf '\r\n[w16]\r\nDesktopVersion=0\r\n' >> "$work/c/WINDOWS/SYSTEM.INI"
+if [ -n "${REFRUN_GDLOG:-}" ]; then
+    # REFRUN_GDLOG=1: record every GDI call in C:\GD.LOG (GD2, `make
+    # gdprobes`, in front of the GDI renamed GDJ, as tests/gdiboot.sh -L;
+    # REFRUN_GET=GD.LOG fetches it)
+    sys=$work/c/WINDOWS/SYSTEM
+    cp "$sys/GDI.EXE" "$sys/GDJ.DLL"
+    python3 "$root/tools/nerename.py" "$sys/GDJ.DLL" --module GDJ
+    python3 "$root/tools/ne2res.py" "$sys/GDI.EXE" "$work/gdi.res"
+    b=$root/build/gdi
+    (cd "$root" && PATH=${WATCOM:-/opt/watcom}/binl64:$PATH WATCOM=${WATCOM:-/opt/watcom} \
+        wlink @$b/gd2.lnk name "$sys/GDI.EXE" libpath ${WATCOM:-/opt/watcom}/lib286/win \
+        $( [ -s "$work/gdi.res" ] && echo option resource="$work/gdi.res" ) \
+        file { $b/gdlog.o $b/gd2stubs.o $b/gd2log.o }) >/dev/null
+fi
 if [ -n "${REFRUN_SHELL:-}" ]; then
     # REFRUN_SHELL=PROG: PROG is the shell and our program starts from
     # WIN.INI's load= line (to test a program as the Windows shell)
@@ -78,12 +97,14 @@ echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
-[ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
+# the files asked for are collected even after a timeout (to see how far
+# a hung session got)
 if [ -n "${REFRUN_OUT:-}" ]; then
     mkdir -p "$REFRUN_OUT"
     for f in "$work"/c/*.BMP; do [ -f "$f" ] && cp "$f" "$REFRUN_OUT/"; done
     for f in ${REFRUN_GET:-}; do [ -f "$work/c/$f" ] && cp "$work/c/$f" "$REFRUN_OUT/"; done
 fi
+[ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
 for log in "$work/c/WINDOWS/TK.LOG" "$work/c/TK.LOG"; do   # cwd varies
     [ -f "$log" ] && tr -d '\r' < "$log"
 done

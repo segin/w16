@@ -24,18 +24,16 @@ struct vxdapi {
 };
 
 static void api_default(struct cregs *r);
+static void api_vdd(struct cregs *r);
+static void api_shell(struct cregs *r);
 
 static const struct vxdapi apis[] = {
     /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
      * (carry set), SHELL's BX is 1000h */
-    { 0x0003, "VPICD",    api_default, 0x030A, 0, 0 },
     { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
-    { 0x0009, "Reboot",   api_default, 0x0000, 0, 1 },
-    { 0x000A, "VDD",      api_default, 0x030A, 0, 0 },
-    { 0x000C, "VMD",      api_default, 0x0300, 0, 0 },
-    { 0x000D, "VKD",      api_default, 0x0200, 0, 0 },
+    { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
-    { 0x0017, "SHELL",    api_default, 0x030A, 0x1000, 0 },
+    { 0x0017, "SHELL",    api_shell,   0x030A, 0x1000, 0 },
     { 0x0021, "PageFile", api_default, 0x010A, 0, 0 },
     { 0x0442, "VTDAPI",   api_default, 0x0001, 0, 0 },
 };
@@ -50,10 +48,56 @@ static void api_default(struct cregs *r)
     r->eflags |= EFL_CF;
 }
 
+/* VDD. VX5 (Windows 3.1): AX=000Ch with VGA.DRV's registers (BX=9B0Ah
+ * CX=3101h DX=0 SI=01F4h DI=0106h) returns AX = BX, the others as they
+ * were, carry clear. UNVERIFIED what it does. */
+static void api_vdd(struct cregs *r)
+{
+    if (AX(r) == 0x000C) {
+        SETW(r->eax, BX(r));
+        r->eflags &= ~EFL_CF;
+        return;
+    }
+    api_default(r);
+}
+
+/* SHELL. Its PM API takes the function in DX, not AX (VX10, tests/apps/
+ * vx10.c, Windows 3.1 on MS-DOS 4.00: WINOA386 calls it first with AX
+ * still 1684h and DX 0, and gets AX 030Ah, BX 1000h, carry clear; then
+ * DX 9 -> DX 007Bh, DX 3 (AX 1902h, BX 00F0h, CX 07CFh, SI 8, ES:DI a
+ * block) -> AX C000h, the new VM's handle as WINOA386 then passes it in
+ * BX; DX 5, DX 15h: the WIN386 handover note, step 6). Only function 0
+ * so far; the others are traced and fail (UNVERIFIED how 3.1 fails). */
+static void api_shell(struct cregs *r)
+{
+    if (DX(r) == 0) {
+        SETW(r->eax, 0x030A);
+        SETW(r->ebx, 0x1000);
+        r->eflags &= ~EFL_CF;
+        trace("VxD API SHELL: get version (DX 0)\n");
+        return;
+    }
+    api_default(r);
+}
+
 /* INT 2Fh 1684h in protected mode: the entry for device BX, or 0:0 */
+/* devices loaded from SYSTEM.INI whose DDB has a PM API procedure: their
+ * own procedure answers (vxd.c), through entries after w16's own */
+static u32 ext_id[PMBP_COUNT - PMBP_API], next_ext;
+
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off)
 {
     u32 i;
+    if (vxd_pm_api(BX(r))) {
+        for (i = 0; i < next_ext && ext_id[i] != BX(r); i++)
+            ;
+        if (i == next_ext && NAPIS + next_ext < PMBP_COUNT - PMBP_API) ext_id[next_ext++] = BX(r);
+        if (i < next_ext) {
+            *sel = SEL_PMBP;
+            *off = PMBP_API + NAPIS + i;
+            return;
+        }
+    }
     for (i = 0; i < NAPIS; i++)
         if (apis[i].id == BX(r)) {
             *sel = SEL_PMBP;
@@ -69,13 +113,31 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
     u32 n = index - PMBP_API;
     r->eip = retip;
     r->cs = retcs;
+    if (n >= NAPIS && n - NAPIS < next_ext) {
+        /* the loaded device's own API procedure */
+        u32 ax = AX(r), bx = BX(r), cx = CX(r), dx = DX(r), si = SI(r), di = DI(r), ds = r->ds, es = r->es;
+        vxd_call_api(vxd_pm_api(ext_id[n - NAPIS]), r);
+        /* a call the device refused (carry): traced, as for w16's own APIs */
+        if (r->eflags & EFL_CF)
+            trace("VxD API device %x: ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> carry\n",
+                  ext_id[n - NAPIS], ax, bx, cx, dx, si, di, ds, es);
+        return;
+    }
     if (n >= NAPIS) { r->eflags |= EFL_CF; return; }
     cur_api = n;
-    if (AX(r) == 0) {               /* get version */
+    if (AX(r) == 0 && apis[n].id != 0x0017) {   /* get version (SHELL's: by DX) */
         SETW(r->eax, apis[n].ver_ax);
         SETW(r->ebx, apis[n].ver_bx);
         if (apis[n].ver_cf) r->eflags |= EFL_CF; else r->eflags &= ~EFL_CF;
         trace("VxD API %s: get version\n", apis[n].name);
+        if (apis[n].id == 0x000A && (r->es & ~3u)) {
+            /* VDD: the display type's name, 8 bytes at ES:DI (VX10,
+             * Windows 3.1 with VDDVGA: "VIDEOVGA"; the grabber, VGA.3GR,
+             * compares it with its own and otherwise WINOA386 says "386
+             * System display type mismatch.") */
+            u8 *p = (u8 *)(sel_base(r->es) + DI(r));
+            memcpy(p, "VIDEOVGA", 8);
+        }
         return;
     }
     apis[n].fn(r);

@@ -1,0 +1,26 @@
+# wlink directives for w16's SYSTEM.DRV (drivers/system/). Object file and
+# output name come from the Makefile. Module name and ordinals as Windows
+# 3.1's SYSTEM.DRV has them (its NE export table, docs/exports/SYSTEM.txt;
+# tools/neinfo.py). Code and data are fixed: IRQ 0 can come at any time,
+# and the timer procedures are called from it.
+format windows dll
+option modname=SYSTEM
+option description 'w16 system driver'
+option start=libentry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+export INQUIRESYSTEM.1
+export CREATESYSTEMTIMER.2
+export KILLSYSTEMTIMER.3
+export ENABLESYSTEMTIMERS.4
+export DISABLESYSTEMTIMERS.5
+export GETSYSTEMMSECCOUNT.6
+export GET80X87SAVESIZE.7
+export SAVE80X87STATE.8
+export RESTORE80X87STATE.9
+export WEP.10 resident
+export A20_PROC.20
+import NOHOOKDOSCALL KERNEL.101
+import __0040H KERNEL.193

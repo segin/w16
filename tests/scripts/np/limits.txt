@@ -1,0 +1,57 @@
+; NP7: file size: a 51190-byte file of 64-character lines (the largest
+; the original opens with such lines), a 70000-byte one (too large for
+; either), a missing file (create it), an empty file saved (deleted),
+; /P with no printer, scrolling a long file
+; gen 51190 64 BIG.TXT
+; gen 70000 64 HUGE.TXT
+; files EMPTY.TXT
+; get NEWFILE.TXT EMPTY.TXT
+; log
+run NOTEPAD.EXE C:\BIG.TXT
+wait 4000
+dump
+info
+key 22
+key 22
+key 22
+info
+snap C:\BIG.BMP
+close
+wait 800
+run NOTEPAD.EXE C:\HUGE.TXT
+wait 4000
+dump
+snap C:\HUGE.BMP
+key 0D
+wait 800
+dump
+close
+wait 800
+run NOTEPAD.EXE C:\NEWFILE.TXT
+wait 2500
+dump
+snap C:\NEWFILE.BMP
+char y
+wait 1000
+dump
+close
+wait 800
+run NOTEPAD.EXE C:\EMPTY.TXT
+wait 2500
+menu f
+char s
+wait 1000
+dump
+snap C:\EMPTY.BMP
+key 0D
+wait 800
+dump
+close
+wait 800
+run NOTEPAD.EXE /P C:\BIG.TXT
+wait 4000
+dump
+snap C:\PRINTP.BMP
+key 0D
+wait 1000
+dump

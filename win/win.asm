@@ -68,6 +68,8 @@ SB_RC       equ 171h        ; Windows' exit code, written by WSWAP
 SB_ROWS     equ 177h        ; 19h: 25 (UNVERIFIED: screen rows?)
 SB_K1       equ 178h        ; 02h 70h 00h 30h (UNVERIFIED)
 SB_COUNT    equ 17Ch        ; counted down by SI=2, read by SI=4
+SB_17D      equ 17Dh        ; 1 when WSWAP ended to run a DOS program
+SB_17E      equ 17Eh        ; 0Fh; less 2 at each SI=3 (UNVERIFIED meaning)
 SB_K2       equ 17Dh        ; 00h 0Fh FFh FFh (UNVERIFIED)
 SB_DOSX     equ 189h        ; DOSX.EXE's full path, ASCIIZ
 SB_TASKS    equ 1F0h        ; 15 records of 32h bytes (the switcher's
@@ -77,6 +79,15 @@ TK_FLAG     equ 12h
 TK_HANDLE   equ 19h
 TK_NAME     equ 1Bh
 SB_TAIL2    equ 4DEh        ; 22h bytes seen after them (UNVERIFIED)
+B_RECS      equ 1D9h        ; the same records seen from their start
+REC_SIZE    equ 32h         ;   (ARCHITECTURE.md 9.8, 9.9): 16 of them,
+REC_FLAGS   equ 28h         ;   number 15 Windows itself
+REC_KIND    equ 29h
+REC_NEXT    equ 2Ah
+REC_SESS    equ 2Bh         ; +2Bh, +2Ch the session, +2Dh swapped out
+REC_WIN     equ 15
+SB_SID      equ 173h        ; the session to run next (word; 0 a new one)
+SB_WINSID   equ 16Dh        ; Windows' session (100Fh) while swapped out
 SB_SWAPID   equ 4F2h        ; WSWAP's swap file number, while it runs
 SB_SIZE     equ 500h        ; (Windows 3.1's startup info follows)
 
@@ -88,6 +99,7 @@ f_int23orig: dd 0           ; INT 23h at start (LOSE.COM saved it too)
 mode:       db 0            ; 2 standard, 3 386 enhanced
 cpu_type:   db 0            ; 0 8086, 2 80286, 3 80386 or later
 vid_mode:   db 3            ; video mode at start
+vid_cursor: dw 0607h        ; cursor shape at start (0040:0060h)
 exit_code:  db 0
 save_ss:    dw 0
 save_sp:    dw 0
@@ -97,11 +109,16 @@ pblock:     dw 0            ; EXEC parameter block: environment,
 pb_tail:    dw 80h, 0       ;   command tail,
 pb_fcb1:    dw 5Ch, 0       ;   our own FCBs (as Windows 3.1's WIN.COM)
 pb_fcb2:    dw 6Ch, 0
+; the block's constants (also for a restart: resident)
+sb_tail2:   db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0FFh, 0FFh, 0FFh, 0FFh, 0, 0
+            db 0, 46h, 68h, 0Fh, 0, 0, 0, 0, 0, 0FFh, 0FFh, '0310', 1, 0, 0
+sb_k1:      db 02h, 70h, 00h, 30h, 00h, 00h, 0Fh, 0FFh, 0FFh
 wswap_tail: db 2, ' ', 8, 0Dh   ; WSWAP's tail, as Windows 3.1 gives it
                                 ; (UNVERIFIED: what the 08h means)
 s_windir:   db 'windir='
 windir:     times PATHMAX db 0  ; WIN.COM's directory, no trailing "\"
 prog_path:  times PATHMAX db 0  ; WIN386.EXE or WSWAP.EXE
+dswap_path: times PATHMAX db 0  ; DSWAP.EXE (standard mode's DOS programs)
 ; ExitWindowsExec's buffer (INT 2Fh AX=4B20h returns DX:CX = it). What
 ; KERNEL writes there is UNVERIFIED (WC9 could not make Windows 3.1 call
 ; it); w16 takes a program path, a blank, its arguments.
@@ -124,6 +141,12 @@ sw_x        equ block + SB_TASKS + (SB_NTASKS - 1) * SB_TASKLEN + TK_NAME
 
         align 2
 block:      times SB_SIZE db 0
+; INT 2Fh AX=4A05h SI=2's buffer: CX paragraphs (10h, from WSWAP and
+; DSWAP), zeros (WC3 on Windows 3.1: the 64 bytes at the DX:AX it returns
+; were 0 for both callers, DX 010Fh in two runs where WIN.COM was at
+; 0192h and 0194h: memory of its own, not its code)
+SW_BUFP     equ 10h
+sw_buf:     times SW_BUFP * 16 db 0
 
 ; ---- the INT 2Fh handler ----
 int2f:
@@ -149,7 +172,10 @@ int2f:
 .chain: jmp far [cs:old2f]
 
 ; INT 2Fh AX=4A05h: the switcher's interface, function in SI (observed on
-; Windows 3.1 with WC3 and WC5/WC6; the meanings are guesses)
+; Windows 3.1 with WC3, WC5/WC6 and SW1, tests/dos/sw1.asm; ARCHITECTURE.md
+; 9.5, 9.9). Records: 16 of 32h bytes from block+1D9h, record 15 is
+; Windows itself; +2Ah the next in switching order (a ring through 15),
+; +2Bh/+2Ch the session (swap file number), 17Eh the current record.
 sw_api:
         cmp si, 5
         jne .s2
@@ -159,38 +185,185 @@ sw_api:
         mov si, 0Ah
         iret
 .s2:    cmp si, 2
+        jne .s3
+        ; the session at 17Eh has ended (DSWAP when its program ends,
+        ; WSWAP when Windows does): its record freed and unlinked, 17Eh its
+        ; next, 17Ch one less (FFh when Windows' was the last). DX:AX ->
+        ; a zeroed buffer of CX paragraphs (10h; 3.1: memory of its own,
+        ; UNVERIFIED what for), DI -> the block
+        push ax
+        push bx
+        call sw_free
+        pop bx
+        pop ax
+        mov dx, cs
+        mov ax, sw_buf
+        mov si, sw_x
+        mov di, block
+        iret
+.s3:    cmp si, 3
         jne .s4
-        dec byte [cs:block + SB_COUNT]
-        sub dx, 5                       ; a far pointer relative to DX,
-        mov ax, sw_stub + 50h           ; as Windows 3.1 returns (UNVERIFIED
-        mov si, sw_x                    ; what WSWAP does with it)
+        ; WSWAP about to run a DOS program: 17Eh := its record's next (the
+        ; program WINOLDAP put first); AX = 17Ch:17Eh (3.1: 020Dh)
+        push bx
+        mov bl, [cs:block + SB_17E]
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        mov [cs:block + SB_17E], al
+        mov ah, [cs:block + SB_COUNT]
+        pop bx
+        mov si, sw_stub                 ; (3.1: 0B8Fh, UNVERIFIED)
+        mov di, block                   ; DI -> the block (3.1, SW1)
         iret
 .s4:    cmp si, 4
         jne .s6
-        ; WSWAP keeps the number of its swap file (~WOA<n>.TMP) at block
-        ; + 4F2h while it runs; after this call Windows 3.1's block has 0
-        ; there, and WSWAP started again (restart) begins afresh rather
-        ; than resuming (WC3 block dumps; UNVERIFIED that SI=4 is what
-        ; clears it)
-        mov word [cs:block + SB_SWAPID], 0
-        mov al, [cs:block + SB_COUNT]
-        xor ah, ah
+        ; the word at 17Ch (the sessions besides Windows', 17Dh)
+        mov ax, [cs:block + SB_COUNT]
+        mov di, block                   ; DI -> the block (as SI=5's AX)
         mov si, 8
         iret
 .s6:    cmp si, 6
-        jne .s7
+        je .s67
+        cmp si, 7
+        jne .other
+.s67:   ; ES:AX (and DX:SI) -> the name of the record BX steps after 17Eh
+        ; in the ring (DSWAP's Alt+Tab title); SI=7 makes it the current
+        ; one and moves it to the ring's front, after record 15 (3.1: SW1)
+        push bx
+        push cx
+        mov cx, bx
+        mov bl, [cs:block + SB_17E]
+.walk:  jcxz .found
+        push bx
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        pop bx
+        mov bl, al
+        dec cx
+        jmp .walk
+.found: cmp si, 7
+        jne .name
+        mov [cs:block + SB_17E], bl
+        call sw_rotate
+.name:  call sw_rec                     ; BX -> the record (its name first)
+        mov ax, bx
+        mov si, bx
+        pop cx
+        pop bx
         push cs
         pop es
-.s7:    cmp si, 7
-        ja .other
-        cmp si, 6
-        jb .other
-        mov ax, sw_x
-        mov si, ax
         mov dx, cs
+        mov di, block                   ; DI -> the block (3.1, SW1)
         iret
 .other: shl si, 1                       ; no such function: AX unchanged
         iret
+
+; BL = a record's number -> BX = its offset in our segment
+sw_rec: push ax
+        mov al, bl
+        and al, 0Fh
+        mov ah, REC_SIZE
+        mul ah
+        add ax, block + B_RECS
+        mov bx, ax
+        pop ax
+        ret
+
+; free record 17Eh: unlinked from the ring, 17Eh its next, 17Ch less one
+sw_free:
+        push cx
+        push si
+        mov bl, [cs:block + SB_17E]
+        mov cl, bl                      ; CL = the record
+        call sw_rec
+        mov si, bx
+        mov ch, [cs:si + REC_NEXT]      ; CH = its next
+        ; the one before it in the ring
+        mov bl, REC_WIN
+        mov ah, 17
+.prev:  push bx
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        cmp al, cl
+        je .gotp
+        pop bx
+        mov bl, al
+        dec ah
+        jnz .prev
+        jmp .nop
+.gotp:  cmp cl, ch                      ; (alone in the ring: 15 at the end)
+        je .self
+        mov [cs:bx + REC_NEXT], ch
+        pop bx
+        mov [cs:block + SB_17E], ch
+        jmp .fr
+.self:  pop bx
+.nop:
+.fr:    mov byte [cs:si + REC_FLAGS], 0
+        mov byte [cs:si + REC_KIND], 80h
+        cmp cl, REC_WIN                 ; (3.1's leaves the freed record's
+        je .nx                          ; next pointing to its next's
+        mov bl, ch                      ; next: SW1)
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        mov [cs:si + REC_NEXT], al
+.nx:    mov byte [cs:si + REC_SESS], 0
+        mov byte [cs:si + REC_SESS + 1], 0
+        mov byte [cs:si + REC_SESS + 2], 0
+        dec byte [cs:block + SB_COUNT]
+        pop si
+        pop cx
+        ret
+
+; SI=7: record 17Eh first in the ring (after record 15), the ring rotated,
+; the others keeping their cyclic order (fits every SI=7 seen on 3.1, and
+; Microsoft's DSWAP on w16's WIN.COM needs it: tests/swap.sh -w two;
+; WINOLDAP's resume orders differently: winoldap.c to_front)
+sw_rotate:
+        push ax
+        push cx
+        push dx
+        push si
+        mov cl, [cs:block + SB_17E]
+        cmp cl, REC_WIN
+        je .r
+        mov bl, REC_WIN
+        call sw_rec
+        mov si, bx                      ; SI -> record 15
+        cmp [cs:si + REC_NEXT], cl
+        je .r
+        mov ch, REC_WIN                 ; CH: the one before 17Eh
+        mov dh, REC_WIN                 ; DH: the last before 15
+        mov dl, [cs:si + REC_NEXT]
+        mov ah, 17
+.w:     cmp dl, REC_WIN
+        je .done
+        mov bl, dl
+        call sw_rec
+        mov al, [cs:bx + REC_NEXT]
+        cmp al, cl
+        jne .n
+        mov ch, dl
+.n:     mov dh, dl
+        mov dl, al
+        dec ah
+        jnz .w
+        jmp .r
+.done:  cmp ch, REC_WIN                 ; (not in the ring)
+        je .r
+        mov al, [cs:si + REC_NEXT]
+        mov bl, dh
+        call sw_rec
+        mov [cs:bx + REC_NEXT], al      ; the last -> the old first
+        mov bl, ch
+        call sw_rec
+        mov byte [cs:bx + REC_NEXT], REC_WIN
+        mov [cs:si + REC_NEXT], cl
+.r:     pop si
+        pop dx
+        pop cx
+        pop ax
+        ret
 
 sw_stub:
         retf
@@ -262,35 +435,133 @@ launch:
         int 10h
         pop ax
         jmp .code
-.std:   ; standard mode: WSWAP leaves Windows' exit code in the block; if
-        ; it did not end the way it should, Windows 3.1's WIN.COM exits
-        ; with FFh
+.std:   ; standard mode. WSWAP ends for good when Windows does (its INT
+        ; 2Fh 4A05h SI=2 has freed record 15: 17Ch FFh), or to run a DOS
+        ; program; DSWAP ends when the program does or is switched away
+        ; from. Windows 3.1's WIN.COM then runs the session of record 17Eh
+        ; with its number at 173h (the record's bytes 2Bh, 2Ch; 0 for a new
+        ; program) as long as Windows is swapped out (16Dh, which WSWAP
+        ; sets when it swaps Windows out and clears when Windows ends; a
+        ; KERNEL ending with an error never swapped): WSWAP for Windows'
+        ; (0Fh), DSWAP for a DOS program's,
+        ; after setting the video mode (INT 10h AX=0003h before each, not
+        ; before the first WSWAP; SW1, tests/dos/sw1.asm; ARCHITECTURE.md
+        ; 9.9). A WSWAP that never marked the block (16Fh, a stand-in that
+        ; does not talk to us) ends WIN with FFh, as 3.1's
+        cmp byte [block + SB_DONE], 0
+        je .noapp
+        cmp word [block + SB_WINSID], 0 ; Windows not swapped out: it has
+        je .noapp                       ; ended (WSWAP clears 16Dh then)
+        cmp byte [block + SB_COUNT], 0FFh
+        je .noapp
+        mov bl, [block + SB_17E]
+        call sw_rec
+        cmp byte [bx + REC_KIND], 80h   ; (a free record: nothing to run)
+        je .noapp
+        mov ax, [bx + REC_SESS]
+        mov [block + SB_SID], ax
+        call vid_restore
+        cmp al, REC_WIN
+        jne .dos
+        jmp .run                        ; Windows: WSWAP
+.dos:   cmp byte [dswap_path], 0
+        je .direct
+        ; DSWAP.EXE (found in the system directory as WSWAP is, at the
+        ; start: dswap_path), with WSWAP's tail " \x08"
+        mov dx, dswap_path
+        mov bx, pblock
+        call exec
+        jmp .std
+.direct:
+        ; without DSWAP.EXE: the program at 189h itself (no banner, no
+        ; switching), then its record freed as DSWAP's SI=2 does
+        mov ax, [env_seg]
+        mov [exec_pb], ax
+        mov word [exec_pb + 2], block + SB_TAIL
+        mov [exec_pb + 4], cs
+        mov [exec_pb + 8], cs
+        mov [exec_pb + 12], cs
+        mov dx, block + SB_DOSX
+        mov bx, exec_pb
+        call exec
+        mov word [exec_pb + 2], exec_tail
+        call sw_free
+        or byte [block + SB_K1], 08h
+        jmp .std
+.noapp: ; WSWAP leaves Windows' exit code in the block; if it did not end
+        ; the way it should, Windows 3.1's WIN.COM exits with FFh
         mov al, [block + SB_RC]
         cmp byte [block + SB_DONE], 0
-        jne .code
+        jne .sck
         cmp byte [block + SB_COUNT], 0
-        jne .code
+        jne .sck
         mov al, 0FFh
+.sck:   test al, al                     ; (the screen: see .std)
+        jz .svid
+        cmp al, 42h
+        je .svid
+        cmp al, 44h
+        jne .code
+.svid:  call vid_restore
 .code:  cmp al, 42h                     ; EW_RESTARTWINDOWS
         je .again
         cmp al, 44h                     ; ExitWindowsExec
         jne .exit
         call exec_program
-.again: cmp byte [mode], 2               ; standard mode: the video mode
-        jne .again2                     ; is set again before WSWAP runs
-        push ax                         ; again (enhanced: done above)
-        mov al, [vid_mode]
-        xor ah, ah
-        int 10h
-        pop ax
-.again2:
+.again:                                 ; (the video mode: set above)
+        ; Windows' record (15) and the switching state as at the start: a
+        ; WSWAP started again for a restart then begins afresh rather than
+        ; resuming (it looks at record 15's session, 4F2h). UNVERIFIED what
+        ; 3.1's WIN.COM does here: its block after a restart was not dumped
+        mov si, sb_k1
+        mov di, block + SB_K1
+        mov cx, 9
+        rep movsb
+        mov si, sb_tail2
+        mov di, block + SB_TAIL2
+        mov cx, 22h
+        rep movsb
+        mov word [block + SB_SID], 0
+        mov byte [block + SB_DONE], 0
         mov byte [80h], 0               ; restarted Windows gets no tail
         mov byte [81h], 0Dh
         mov byte [block + SB_TAIL], 0
         mov byte [block + SB_TAIL + 1], 0Dh
         jmp .run
 .exit:  push ax
-        push ds
+        cmp byte [mode], 2
+        jne .unh
+        ; MS-DOS 5 task switcher clients: the switcher is going (3.1's
+        ; WIN.COM in standard mode: INT 2Fh 4B01h, then each client's
+        ; function with AX=7, BX=1, ES:DI=0:0; SW1)
+        xor bx, bx
+        mov es, bx
+        xor cx, cx
+        xor dx, dx
+        mov ax, 4B01h
+        int 2Fh
+.cl:    mov ax, es
+        or ax, bx
+        jz .cld
+        push word [es:bx + 2]
+        push word [es:bx]
+        push word [es:bx + 6]
+        push word [es:bx + 4]
+        mov bp, sp
+        xor di, di
+        mov es, di
+        mov bx, 1
+        mov ax, 7
+        call far [bp]
+        add sp, 4
+        pop bx
+        pop es
+        jmp .cl
+.cld:   push cs
+        pop ds
+        push cs
+        pop es
+.unh:   push ds
         lds dx, [old2f]                 ; unhook INT 2Fh
         mov ax, 252Fh
         int 21h
@@ -298,6 +569,20 @@ launch:
         pop ax
         mov ah, 4Ch
         int 21h
+
+; the video mode and cursor shape found at the start; keeps AX
+vid_restore:
+        push ax
+        push cx
+        mov al, [vid_mode]
+        xor ah, ah
+        int 10h
+        mov cx, [vid_cursor]
+        mov ax, 0100h
+        int 10h
+        pop cx
+        pop ax
+        ret
 
 ; EXEC DS:DX with the parameter block at ES:BX (CS); keeps SS:SP
 exec:
@@ -430,6 +715,12 @@ init:
         mov ah, 0Fh
         int 10h
         mov [vid_mode], al
+        push es
+        mov ax, 40h
+        mov es, ax
+        mov ax, [es:60h]                ; the BIOS's cursor shape
+        mov [vid_cursor], ax
+        pop es
         call check_win_version          ; exits if Windows is running
         call parse_flags
         call check_cpu
@@ -471,7 +762,12 @@ init:
         call logo_off
         mov si, m_notfound
         jmp fail
-.wswap: call fill_block
+.wswap: mov si, n_dswap               ; DSWAP for DOS programs (.std)
+        mov di, dswap_path
+        call find_file
+        jnc .dswap
+        mov byte [dswap_path], 0
+.dswap: call fill_block
         jmp .hook
 .enh:   mov si, n_win386
         mov di, prog_path
@@ -1044,20 +1340,37 @@ sft_link:
 
 ; The swap directories: SYSTEM.INI [NonWindowsApp] SwapDisk= if it is a
 ; directory, else the TEMP variable's if it is one, else the root of the
-; first hard disk (A:\ without one: SYSINI.WRI); each with a "\" at the
-; end. The second: TEMP's directory if it is one, else that root.
-; (Windows 3.1's second directory has quirks w16 does not copy: ARCHITECTURE
-; 9.5.)
+; first local drive; each with a "\" at the end. The second: that drive's
+; current directory (ARCHITECTURE 9.5).
+;
+; The drive: the first from A: that INT 21h 4409h (IOCTL: remote?) accepts
+; and 4408h (removable?) does not call removable. Windows 3.1's WIN.COM
+; asks 4408h/4409h there and no INT 13h (DOSBox-X's log); in DOSBox,
+; where 4409h fails for A: and B:, it chose C:, in DOSBox-X, where 4409h
+; answers for A: (no disk; 4408h fails), A:. It used to be INT 13h 08h's
+; first hard disk, A: without one, which in DOSBox (no BIOS hard disk)
+; gave A: where 3.1 gave C:, and the DOS prompt (WINOLDAP) could not swap.
+; UNVERIFIED: the remote and removable tests (neither emulator has one).
 swap_dirs:
-        mov ah, 08h                     ; BIOS: is there a hard disk?
-        mov dl, 80h                     ; (UNVERIFIED: how Windows 3.1's
-        int 13h                         ; WIN.COM decides; DOSBox-X with
-        push cs                         ; a mounted directory gives A:\)
+        push cs
         pop es
-        mov al, 'A'
-        jc .hd
-        test dl, dl
-        jz .hd
+        mov bl, 1
+.dr:    mov ax, 4409h
+        int 21h
+        jc .drn
+        test dh, 10h                    ; DX bit 12: remote
+        jnz .drn
+        mov ax, 4408h
+        int 21h
+        jc .dry                         ; no answer: not removable
+        test ax, ax
+        jz .drn                         ; 0: removable
+.dry:   mov al, bl
+        add al, 'A' - 1
+        jmp .hd
+.drn:   inc bl
+        cmp bl, 26
+        jbe .dr
         mov al, 'C'
 .hd:    mov di, root_dir
         stosb
@@ -1095,11 +1408,32 @@ swap_dirs:
         mov si, root_dir
 .s1:    mov di, block + SB_SWAP1
         call copy_slash
-        ; the second: TEMP's directory (not a root); Windows 3.1's WIN.COM,
-        ; when SwapDisk= did not give the first, puts the root's drive
-        ; letter on it and a second "\" at the end (C:\TMP: A:\TMP\\, seen
-        ; with WC4); else the root
+        ; the second, when that drive is the current one: its current
+        ; directory. Windows 3.1's in DOSBox: C:\WINDOWS\ started from
+        ; C:\WINDOWS, C:\TMP\ from C:\TMP, C:\A\ from C:\A, whatever TEMP
+        ; is; C:\ when started from Z:. Otherwise (DOSBox-X: the drive is
+        ; A:, the current one C:) TEMP's directory (not a root) with the
+        ; drive's letter on it and a second "\" when SwapDisk= did not give
+        ; the first (C:\TMP: A:\TMP\\, seen with WC4), else the root.
+        ; UNVERIFIED: the rule behind both (3.1's buffer after a failed
+        ; INT 21h 47h for A: in DOSBox-X?)
+        mov ah, 19h
+        int 21h
+        add al, 'A'
+        cmp al, [root_dir]
+        jne .nocwd
+        mov si, cwd_buf + 3
+        xor dl, dl
+        mov ah, 47h
+        int 21h
+        jc .nocwd
+        mov ax, [root_dir]
+        mov [cwd_buf], ax
+        mov byte [cwd_buf + 2], '\'
+        mov si, cwd_buf
         mov di, block + SB_SWAP2
+        jmp .s2
+.nocwd: mov di, block + SB_SWAP2
         mov si, temp_dir
         cmp byte [si], 0
         je .s2root
@@ -1404,8 +1738,23 @@ show_logo:
         jne .r
         mov [lg_h], ax
         mov [lg_bmp], si
+        ; the BIOS's row count (0040:0084h, rows - 1) is put back after the
+        ; mode set: Windows 3.1's WIN.COM leaves the one from before the
+        ; logo (observed, a stand-in for WSWAP dumping the BIOS data area:
+        ; 18h from 80x25, 31h from 50 lines; the rest as mode 12h sets it).
+        ; Windows' display driver reads it when it starts and restores that
+        ; text mode when it ends: with mode 12h's 1Dh it gave the 8x8 font
+        ; (50 lines) after Windows instead of 80x25
+        push es
+        mov ax, 40h
+        mov es, ax
+        mov al, [es:84h]
+        mov [bios_rows], al
         mov ax, 0012h                   ; VGA 640 x 480, 16 colours
         int 10h
+        mov al, [bios_rows]
+        mov [es:84h], al
+        pop es
         ; palette registers 0-15 -> DAC 0-15, then the bitmap's colours
         push cs
         pop es
@@ -1669,6 +2018,7 @@ temp_dir:   times PATHMAX db 0
 swap_dir:   times PATHMAX db 0
 swap_ok:    db 0
 isdir_save: times 68 db 0
+cwd_buf:    times 68 db 0
 INIBUF      equ 512
 INILINE     equ 256
 ini_h:      dw 0
@@ -1679,6 +2029,7 @@ ini_buf:    times INIBUF db 0
 ini_line:   times INILINE db 0
 file_end:   dw 0
 lg_bmp:     dw 0
+bios_rows:  db 0
 lg_w:       dw 0
 lg_h:       dw 0
 lg_x0:      dw 0
@@ -1687,13 +2038,11 @@ lg_rows:    dw 0
 pal_regs:   db 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0
 dac:        times 48 db 0
 line:       times 640 db 0
-sb_tail2:   db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0FFh, 0FFh, 0FFh, 0FFh, 0, 0
-            db 0, 46h, 68h, 0Fh, 0, 0, 0, 0, 0, 0FFh, 0FFh, '0310', 1, 0, 0
-sb_k1:      db 02h, 70h, 00h, 30h, 00h, 00h, 0Fh, 0FFh, 0FFh
 
 n_win386:   db 'win386.exe', 0
 n_dosx:     db 'dosx.exe', 0
 n_wswap:    db 'wswap.exe', 0
+n_dswap:    db 'dswap.exe', 0
 n_system:   db 'system\', 0
 n_sysini:   db 'system.ini', 0
 n_krnl286:  db 'krnl286', 0
@@ -1702,52 +2051,53 @@ n_nonwin:   db 'NonWindowsApp', 0
 n_swapdisk: db 'SwapDisk', 0
 
 ; ---- messages: as Windows 3.1's WIN.COM writes them (WC2, redirected
-; output), line ends and all ----
+; output), line ends and all, except that the product is called w16
+; (ARCHITECTURE.md 3, branding; tests/wincom.sh maps it back) ----
 m_dosver:   db 'Must have MS-DOS version 3.10 or greater', 0Ah, 0Dh, 0
 m_dosver_d: db 'Must have MS-DOS version 3.10 or greater', 0Ah, 0Dh, '$'
-m_cannot:   db 'Your computer cannot run Windows in either standard or 386', 0Ah, 0Dh
+m_cannot:   db 'Your computer cannot run w16 in either standard or 386', 0Ah, 0Dh
             db 'enhanced mode.', 0Ah, 0Dh, 0
 m_no386:    db 'Cannot run in 386 enhanced mode;', 0Ah, 0Dh
             db 'enter WIN to run in standard mode.', 0Ah, 0Dh, 0
 m_himem:    db 'Missing HIMEM.SYS;', 0Ah, 0Dh
-            db 'Make sure that the file is in your Windows directory and that its', 0Ah, 0Dh
+            db 'Make sure that the file is in your w16 directory and that its', 0Ah, 0Dh
             db 'location is correctly specified in your CONFIG.SYS file.', 0Ah, 0Dh, 0
 m_nodosx:   db 'Cannot find DOSX.EXE needed to run in standard mode;', 0Ah, 0Dh
-            db 'check to ensure the path is correct or reinstall Windows.', 0Ah, 0Dh, 0
+            db 'check to ensure the path is correct or reinstall w16.', 0Ah, 0Dh, 0
 m_nowin386: db 'Cannot find WIN386.EXE needed to run in 386 enhanced mode;', 0Ah, 0Dh
-            db 'check to ensure the path is correct or reinstall Windows.', 0Ah, 0Dh, 0
+            db 'check to ensure the path is correct or reinstall w16.', 0Ah, 0Dh, 0
 m_real:     db 0Dh, 0Ah
-            db 'This version of Windows does not run in real mode.', 0Dh, 0Ah
+            db 'This version of w16 does not run in real mode.', 0Dh, 0Ah
             db 0Dh, 0Ah
-            db 'To run Windows in standard mode, type win /s.', 0Dh, 0Ah
-            db 'To run Windows in 386 enhanced mode, type win /3.', 0Dh, 0Ah, 0
-m_run_std:  db 'You are already running Standard mode Windows.', 0Dh, 0Ah, 0
-m_run_enh:  db 'You are already running Enhanced mode Windows.', 0Dh, 0Ah
+            db 'To run w16 in standard mode, type win /s.', 0Dh, 0Ah
+            db 'To run w16 in 386 enhanced mode, type win /3.', 0Dh, 0Ah, 0
+m_run_std:  db 'You are already running Standard mode w16.', 0Dh, 0Ah, 0
+m_run_enh:  db 'You are already running Enhanced mode w16.', 0Dh, 0Ah
             db 0FEh, ' Press ALT+ENTER to switch this MS-DOS prompt between a window', 0Dh, 0Ah
             db '  and a full screen.', 0Dh, 0Ah, 0
-m_run:      db 'You are already running Windows.', 0Dh, 0Ah, 0
+m_run:      db 'You are already running w16.', 0Dh, 0Ah, 0
 m_run_tail: db 0FEh, ' Type Exit and press Enter to quit this MS-DOS prompt and', 0Dh, 0Ah
-            db '  return to Windows.', 0Dh, 0Ah
-            db 0FEh, ' Press ALT+TAB to switch to Windows or another application', 0Dh, 0Ah, 0
+            db '  return to w16.', 0Dh, 0Ah
+            db 0FEh, ' Press ALT+TAB to switch to w16 or another application', 0Dh, 0Ah, 0
 m_help:     db 0Dh, 0Ah
-            db 'Starts Windows.', 0Dh, 0Ah
+            db 'Starts w16.', 0Dh, 0Ah
             db 0Dh, 0Ah
             db 'WIN [/3] [/S] [/B] [/D:[F][S][V][X]]', 0Dh, 0Ah
             db 0Dh, 0Ah
-            db '/3    Starts Windows in 386 enhanced mode.', 0Dh, 0Ah
-            db '/S    Starts Windows in standard mode.', 0Dh, 0Ah
+            db '/3    Starts w16 in 386 enhanced mode.', 0Dh, 0Ah
+            db '/S    Starts w16 in standard mode.', 0Dh, 0Ah
             db '/B    Creates a file, BOOTLOG.TXT, that records system messages generated', 0Dh, 0Ah
             db '      during system startup (boot).', 0Dh, 0Ah
-            db '/D    Used for troubleshooting when Windows does not start correctly.', 0Dh, 0Ah
+            db '/D    Used for troubleshooting when w16 does not start correctly.', 0Dh, 0Ah
             db '  :F  Turns off 32-bit disk access.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: 32BitDiskAccess=FALSE.', 0Dh, 0Ah
-            db '  :S  Specifies that Windows should not use ROM address space between', 0Dh, 0Ah
+            db '  :S  Specifies that w16 should not use ROM address space between', 0Dh, 0Ah
             db '      F000:0000 and 1 MB for a break point.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: SystemROMBreakPoint=FALSE.', 0Dh, 0Ah
             db '  :V  Specifies that the ROM routine will handle interrupts from the hard', 0Dh, 0Ah
             db '      disk controller.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: VirtualHDIRQ=FALSE.', 0Dh, 0Ah
-            db '  :X  Excludes all of the adapter area from the range of memory that Windows', 0Dh, 0Ah
+            db '  :X  Excludes all of the adapter area from the range of memory that w16', 0Dh, 0Ah
             db '      scans to find unused space.', 0Dh, 0Ah
             db '      Equivalent to SYSTEM.INI file setting: EMMExclude=A000-FFFF.', 0Dh, 0Ah
             db 0Dh, 0Ah, 0

@@ -35,6 +35,8 @@ static u16 filecdr_task;
    end of ExitWindows (Pietrek). UNVERIFIED: the exit code. */
 void KAPI ExitKernel(void)
 {
+    win_screen = 0;                     /* USER's ExitWindows disabled the
+                                           display: text mode */
     trace_print();                      /* [w16] trace, if any */
     kexit_to_dos(0);
 }
@@ -150,6 +152,12 @@ u16 KAPI_ES GetExeVersion(void)
     return NE_HDR(module_first)->expver;
 }
 
+/* the current task's error mode (SetErrorMode) */
+u16 error_mode(void)
+{
+    return cur_task ? TW(cur_task, TDB_ERRMODE) : boot_errmode;
+}
+
 /* SetErrorMode (KERNEL.107): the task's error mode (TDB 18h); returns
    the previous one. */
 u16 KAPI_ES SetErrorMode(u16 mode)
@@ -168,16 +176,8 @@ u16 KAPI_ES SetErrorMode(u16 mode)
 /* GlobalPageLock / GlobalPageUnlock (191, 192): selector.c (as observed,
    tests/apps/tk17.c). GlobalWire/Fix and friends are in global.c. */
 
-/* KbdRst (KERNEL.123): Schulman: does nothing in Standard and 386
-   Enhanced mode. CVWBreak (205), Bunny_351 (351): nothing either. */
-void KAPI KbdRst(void)
-{
-}
-
-void KAPI CVWBreak(void)
-{
-}
-
+/* KbdRst (KERNEL.123), CVWBreak (205), DoSignal (139): khook.asm.
+   Bunny_351 (351): Schulman: nothing. */
 void KAPI Bunny351(void)
 {
 }
@@ -226,12 +226,6 @@ u32 KAPI GetHeapSpaces(u16 h)
     return ((u32)total << 16) | (u16)(total - used);
 }
 
-/* DoSignal (KERNEL.139): Schulman: KEYBOARD's Ctrl-Break, sent to the
-   focus window's task through its signal handler. TODO: nothing yet. */
-void KAPI DoSignal(void)
-{
-}
-
 /* GetCurPID (KERNEL.157): Schulman: returns 0 in Windows 3.x. */
 u32 KAPI GetCurPID(u32 dw)
 {
@@ -248,9 +242,9 @@ u32 KAPI GetCurPID(u32 dw)
    logged, 0 returned). */
 u32 KAPI WinOldApCall(u16 fn)
 {
-    kputs("w16: WinOldApCall ");
-    kputhex(fn);
-    kputs("\r\n");
+    kdbg("w16: WinOldApCall ");
+    kdbghex(fn);
+    kdbg("\r\n");
     if (fn == 0)
         return 0;
     return ((u32)psp_sel << 16) | fn;
@@ -266,20 +260,20 @@ static u32 woa_hook;
 
 u16 KAPI RegisterWinOldApHook(u16 a, u16 b, u16 c)
 {
-    kputs("w16: RegisterWinOldApHook ");
-    kputhex(a);
-    kputs(" ");
-    kputhex(b);
-    kputs(" ");
-    kputhex(c);
-    kputs("\r\n");
+    kdbg("w16: RegisterWinOldApHook ");
+    kdbghex(a);
+    kdbg(" ");
+    kdbghex(b);
+    kdbg(" ");
+    kdbghex(c);
+    kdbg("\r\n");
     woa_hook = ((u32)b << 16) | c;
     return 1;
 }
 
 u32 KAPI GetWinOldApHooks(void)
 {
-    kputs("w16: GetWinOldApHooks\r\n");
+    kdbg("w16: GetWinOldApHooks\r\n");
     return woa_hook;
 }
 
@@ -327,13 +321,15 @@ u16 KAPI IsRomModule(u16 h)
 
 /* LogError (KERNEL.324), LogParamError (325): the debugging KERNEL
    reports these; the retail one passes them on to the notification hook
-   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek). */
-void KAPI LogError(u16 err, void FAR *info)
+   (Schulman: 66h, 67h; toolhelp.c) and does nothing else (Pietrek).
+   Observed (tests/apps/tk50.c, KRNL286): AX and DX come back as they
+   went in; khook.asm's LOGERROR and LOGPARAMERROR keep them around these */
+void KAPI LogError_(u16 err, void FAR *info)
 {
     th_logerror(err, info);
 }
 
-void KAPI LogParamError(u16 err, void FAR *proc, void FAR *param)
+void KAPI LogParamError_(u16 err, void FAR *proc, void FAR *param)
 {
     th_logparamerror(err, proc, param);
 }
@@ -349,11 +345,6 @@ static u16 lar(u16 sel);
     "ok:" \
     parm [dx] value [ax] modify exact [ax];
 
-static u16 lsl(u16 sel);
-#pragma aux lsl = \
-    "xor ax, ax" \
-    "lsl ax, dx" \
-    parm [dx] value [ax] modify exact [ax];
 
 /* access rights byte (LAR's bits 8-15), 0 if not accessible */
 static u8 rights(u16 sel)
@@ -375,7 +366,18 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     }
     if (n == 0)
         return 1;
-    return off + n - 1 <= lsl(sel);     /* UNVERIFIED: expand-down */
+    return off + n - 1 <= sel_lim16(sel);     /* UNVERIFIED: expand-down */
+}
+
+/* how many bytes from p on can be read (write 0) or written (write 1)
+   before the segment's limit: 0 for a bad selector (string.c, atom.c:
+   copying up to where 3.1's would fault, US27) */
+u32 ptr_room(const void FAR *p, int write)
+{
+    u16 sel = FP_SEG(p), off = FP_OFF(p);
+    if (!range_ok(sel, off, 1, write))
+        return 0;
+    return (u32)sel_lim16(sel) - off + 1;
 }
 
 u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
@@ -391,7 +393,7 @@ u16 KAPI IsBadWritePtr(void FAR *p, u16 n)
 u16 KAPI IsBadCodePtr(void FAR *p)
 {
     u8 ar = rights(FP_SEG(p));
-    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= lsl(FP_SEG(p)));
+    return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= sel_lim16(FP_SEG(p)));
 }
 
 u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
@@ -399,7 +401,7 @@ u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
     u16 sel = FP_SEG(p), off = FP_OFF(p), lim, i;
     if (!range_ok(sel, off, 1, 0))
         return 1;
-    lim = lsl(sel);
+    lim = sel_lim16(sel);
     for (i = 0; i < max; i++) {
         if ((u32)off + i > lim)
             return 1;
@@ -437,14 +439,30 @@ u16 KAPI IsBadHugeWritePtr(void FAR *p, u32 n)
 }
 
 /* lstrcpyn (KERNEL.353, SDK): copy at most n - 1 characters and a NUL;
-   returns dst. */
+   returns dst. 3.1's lets a bad pointer fault and recovers (its "__GP"
+   table): what it copied before the fault stays (US27: USER's
+   DlgDirSelect into a buffer 4 bytes from a segment's end left the 4
+   bytes "FILE" there and returned 0). w16 copies as far and returns
+   NULL. */
 char FAR * KAPI lstrcpyn(char FAR *dst, const char FAR *src, u16 n)
 {
     u16 i = 0;
+    u32 rd, wr;
     if (!n)
         return dst;
-    for (; i + 1 < n && src[i]; i++)
+    rd = ptr_room(src, 0);
+    wr = ptr_room(dst, 1);
+    for (; i + 1 < n; i++) {
+        if (i >= rd)
+            return NULL;
+        if (!src[i])
+            break;
+        if (i >= wr)
+            return NULL;
         dst[i] = src[i];
+    }
+    if (i >= wr)
+        return NULL;
     dst[i] = 0;
     return dst;
 }

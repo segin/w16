@@ -1,0 +1,5 @@
+# REBOOT.386: w16's REBOOT module (win386/vxd), an LE VxD, device 0009h
+format windows vxd
+option quiet
+option nodefaultlibs
+export REBOOT_DDB.1

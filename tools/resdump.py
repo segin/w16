@@ -1,22 +1,45 @@
 #!/usr/bin/env python3
-"""resdump - an NE module's dialogs, menus, string tables and accelerator
-tables printed as text (for writing w16's own .rc files to the same layout).
+"""resdump - print an NE file's resources as readable text.
 
-Reads the NE resource table and the Win16 resource formats (DIALOG, MENU,
-STRING, ACCELERATOR: published file formats, ARCHITECTURE.md 3); no code is
-read. The output is for looking at, at test time; it is never committed.
+Decodes the published Win16 resource formats (NE resource table; menu,
+dialog, string table, accelerator and version templates, as documented
+in the Windows 3.1 SDK) of a module, so that a program's UI can be
+observed as data (ARCHITECTURE.md 3: resources are data, not code).
+Bitmaps, icons and cursors are listed with their size only.
 
-usage: resdump.py FILE [TYPE...]     TYPE: DIALOG MENU STRING ACCELERATOR
+usage: resdump.py FILE.EXE [TYPE...]     (TYPE: menu dialog string accel
+                                          or a number; default: all)
 """
-import os
 import struct
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from neimports import NE  # noqa: E402
+TYPES = {1: 'cursor', 2: 'bitmap', 3: 'icon', 4: 'menu', 5: 'dialog',
+         6: 'string', 7: 'fontdir', 8: 'font', 9: 'accel', 10: 'rcdata',
+         12: 'groupcursor', 14: 'groupicon', 16: 'version'}
 
-CLS = {0x80: 'BUTTON', 0x81: 'EDIT', 0x82: 'STATIC', 0x83: 'LISTBOX',
-       0x84: 'SCROLLBAR', 0x85: 'COMBOBOX'}
+
+def resources(d):
+    ne = struct.unpack_from('<I', d, 0x3C)[0]
+    rt = ne + struct.unpack_from('<H', d, ne + 0x24)[0]
+    if rt == ne + struct.unpack_from('<H', d, ne + 0x26)[0]:
+        return
+    shift = struct.unpack_from('<H', d, rt)[0]
+    p = rt + 2
+
+    def rname(v):
+        if v & 0x8000:
+            return v & 0x7FFF
+        q = rt + v
+        return d[q + 1:q + 1 + d[q]].decode('latin-1')
+    while True:
+        tid, cnt = struct.unpack_from('<HH', d, p)
+        if tid == 0:
+            break
+        p += 8
+        for _ in range(cnt):
+            off, ln, flags, rid = struct.unpack_from('<HHHH', d, p)
+            p += 12
+            yield rname(tid), rname(rid), flags, d[off << shift:(off << shift) + (ln << shift)]
 
 
 def cstr(b, p):
@@ -24,96 +47,111 @@ def cstr(b, p):
     return b[p:e].decode('latin-1'), e + 1
 
 
-def nameord(b, p):
-    if b[p] == 0xFF:
-        return '#%d' % struct.unpack_from('<H', b, p + 1)[0], p + 3
-    return cstr(b, p)
+def menu(b):
+    out = []
+    pos = [4]
+
+    def level(depth):
+        while pos[0] < len(b):
+            fl = struct.unpack_from('<H', b, pos[0])[0]
+            pos[0] += 2
+            if fl & 0x10:
+                s, pos[0] = cstr(b, pos[0])
+                out.append('  ' * depth + 'POPUP %r flags=%04X' % (s, fl))
+                level(depth + 1)
+            else:
+                mid = struct.unpack_from('<H', b, pos[0])[0]
+                s, pos[0] = cstr(b, pos[0] + 2)
+                out.append('  ' * depth + 'ITEM %r id=%d flags=%04X' % (s, mid, fl))
+            if fl & 0x80:
+                return
+    level(0)
+    return '\n'.join(out)
 
 
-def dialog(blob):
-    style, n, x, y, cx, cy = struct.unpack_from('<IBhhhh', blob, 0)
+def dialog(b):
+    style, n, x, y, cx, cy = struct.unpack_from('<IBhhhh', b, 0)
     p = 13
-    menu, p = nameord(blob, p)
-    cls, p = cstr(blob, p)
-    cap, p = cstr(blob, p)
-    print(f'  DIALOG {x}, {y}, {cx}, {cy} style={style:08X} menu="{menu}" class="{cls}"')
-    print(f'  CAPTION "{cap}"')
-    if style & 0x40:  # DS_SETFONT
-        pt = struct.unpack_from('<H', blob, p)[0]
-        face, p = cstr(blob, p + 2)
-        print(f'  FONT {pt}, "{face}"')
+    out = []
+
+    def sz(p):
+        if b[p] == 0xFF:
+            return '#%d' % struct.unpack_from('<H', b, p + 1)[0], p + 3
+        return cstr(b, p)
+    mn, p = sz(p)
+    cl, p = cstr(b, p)
+    cap, p = cstr(b, p)
+    line = 'DIALOG %d,%d,%d,%d style=%08X menu=%r class=%r caption=%r' % (
+        x, y, cx, cy, style, mn, cl, cap)
+    if style & 0x40:
+        pt = struct.unpack_from('<H', b, p)[0]
+        f, p = cstr(b, p + 2)
+        line += ' font=%d,%r' % (pt, f)
+    out.append(line)
     for _ in range(n):
-        x, y, cx, cy, cid, st = struct.unpack_from('<hhhhHI', blob, p)
+        x, y, cx, cy, cid, st = struct.unpack_from('<hhhhHI', b, p)
         p += 14
-        if blob[p] & 0x80:
-            c = CLS.get(blob[p], '#%02X' % blob[p])
+        if b[p] & 0x80:
+            cls = {0x80: 'BUTTON', 0x81: 'EDIT', 0x82: 'STATIC', 0x83: 'LISTBOX',
+                   0x84: 'SCROLLBAR', 0x85: 'COMBOBOX'}.get(b[p], hex(b[p]))
             p += 1
         else:
-            c, p = cstr(blob, p)
-        if blob[p] == 0xFF:
-            t = '#%d' % struct.unpack_from('<H', blob, p + 1)[0]
+            cls, p = cstr(b, p)
+        if b[p] == 0xFF:
+            txt = '#%d' % struct.unpack_from('<H', b, p + 1)[0]
             p += 3
         else:
-            t, p = cstr(blob, p)
-        extra = blob[p]
+            txt, p = cstr(b, p)
+        extra = b[p]
         p += 1 + extra
-        print(f'    {c:10} {cid:5} {x:4},{y:4},{cx:4},{cy:4} style={st:08X} "{t}"')
+        out.append('  %-9s %r id=%d %d,%d,%d,%d style=%08X' % (cls, txt, cid, x, y, cx, cy, st))
+    return '\n'.join(out)
 
 
-def menu_tree(blob):
-    def walk(p, depth):
-        while True:
-            fl = struct.unpack_from('<H', blob, p)[0]
-            p += 2
-            if fl & 0x10:
-                t, p = cstr(blob, p)
-                print('  ' * depth + f'POPUP "{t}" flags={fl:04X}')
-                p = walk(p, depth + 1)
-            else:
-                mid = struct.unpack_from('<H', blob, p)[0]
-                t, p = cstr(blob, p + 2)
-                print('  ' * depth + f'ITEM {mid:5} "{t}" flags={fl:04X}')
-            if fl & 0x80:
-                return p
-    walk(4, 1)
+def strings(b, rid):
+    out = []
+    p = 0
+    for i in range(16):
+        if p >= len(b):
+            break
+        n = b[p]
+        if n:
+            out.append('  %d %r' % ((rid - 1) * 16 + i, b[p + 1:p + 1 + n].decode('latin-1')))
+        p += 1 + n
+    return '\n'.join(out)
 
 
-def strings(rid, blob):
-    p, k = 0, 0
-    base = (rid - 1) * 16
-    while p < len(blob):
-        ln = blob[p]
-        if ln:
-            print(f'  {base + k:5} "{blob[p + 1:p + 1 + ln].decode("latin-1")}"')
-        p += 1 + ln
-        k += 1
-
-
-def accel(blob):
-    for p in range(0, len(blob), 5):
-        fl, key, cmd = struct.unpack_from('<BHH', blob, p)
-        print(f'  key={key:04X} cmd={cmd} flags={fl:02X}')
+def accel(b):
+    out = []
+    for p in range(0, len(b) - 4, 5):
+        fl, key, cmd = struct.unpack_from('<BHH', b, p)
+        out.append('  key=%04X id=%d flags=%02X' % (key, cmd, fl))
         if fl & 0x80:
             break
+    return '\n'.join(out)
 
 
 def main():
-    ne = NE(sys.argv[1])
-    want = set(a.upper() for a in sys.argv[2:])
-    for t, i, size, fl, blob in ne.resources():
-        if want and t not in want:
+    d = open(sys.argv[1], 'rb').read()
+    want = sys.argv[2:]
+    for t, r, fl, b in resources(d):
+        tn = TYPES.get(t, t)
+        if want and str(tn) not in want and str(t) not in want:
             continue
-        if t == 'DIALOG':
-            print(f'DIALOG {i}')
-            dialog(blob)
-        elif t == 'MENU':
-            print(f'MENU {i}')
-            menu_tree(blob)
-        elif t == 'STRING':
-            strings(i, blob)
-        elif t == 'ACCELERATOR':
-            print(f'ACCELERATOR {i}')
-            accel(blob)
+        print('== %s %r flags=%04X size=%d' % (tn, r, fl, len(b)))
+        try:
+            if t == 4:
+                print(menu(b))
+            elif t == 5:
+                print(dialog(b))
+            elif t == 6:
+                print(strings(b, r))
+            elif t == 9:
+                print(accel(b))
+            elif t in (10, 16):
+                print('  ' + b.hex())
+        except (IndexError, ValueError, struct.error) as e:
+            print('  (decode error: %s)' % e)
 
 
 if __name__ == '__main__':

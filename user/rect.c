@@ -4,114 +4,156 @@
  */
 #include "user.h"
 
+/* A caller's RECT is read and written through gp_copy (gp.asm), whose
+   faults KERNEL recovers through USER's "__GP" table: what Windows 3.1
+   does with a bad one (probe US27, Windows 3.1's results in
+   tests/apps/us27ref.h) is in each function's comment. A freed or
+   not-present selector (US27's F and P) faults on its first use; a RECT
+   whose end is past the segment's limit (E) is read or written up to the
+   limit. */
+#define RSIZE sizeof(RECT)
+
+/* a bad RECT: nothing written; the part below the limit is */
 void WINAPI SetRect(RECT __far *r, int l, int t, int ri, int b)
 {
-    r->left = l;
-    r->top = t;
-    r->right = ri;
-    r->bottom = b;
+    RECT n;
+    n.left = l;
+    n.top = t;
+    n.right = ri;
+    n.bottom = b;
+    gp_copy(r, &n, RSIZE);
 }
 
 void WINAPI SetRectEmpty(RECT __far *r)
 {
-    r->left = r->top = r->right = r->bottom = 0;
+    gp_fill(r, 0, RSIZE);
 }
 
+/* either one bad: as much copied as could be (3.1: a source past the
+   limit gives the destination its left and top) */
 void WINAPI CopyRect(RECT __far *d, const RECT __far *s)
 {
-    *d = *s;
+    gp_copy(d, s, RSIZE);
 }
 
+/* (3.1 returns no constant for a bad RECT: whatever AX held) */
 BOOL WINAPI IsRectEmpty(const RECT __far *r)
 {
-    return r->left >= r->right || r->top >= r->bottom;
+    RECT a;
+    if (gp_copy(&a, r, RSIZE) != RSIZE)
+        return TRUE;
+    return a.left >= a.right || a.top >= a.bottom;
 }
 
 BOOL WINAPI PtInRect(const RECT __far *r, POINT p)
 {
-    return p.x >= r->left && p.x < r->right && p.y >= r->top && p.y < r->bottom;
+    RECT a;
+    if (gp_copy(&a, r, RSIZE) != RSIZE)
+        return FALSE;
+    return p.x >= a.left && p.x < a.right && p.y >= a.top && p.y < a.bottom;
 }
 
+/* the fields that could be read are changed (3.1: left and top of a
+   RECT at a segment's edge) */
 void WINAPI OffsetRect(RECT __far *r, int dx, int dy)
 {
-    r->left += dx;
-    r->right += dx;
-    r->top += dy;
-    r->bottom += dy;
+    RECT a;
+    WORD n = gp_copy(&a, r, RSIZE) & ~1;
+    a.left += dx;
+    a.right += dx;
+    a.top += dy;
+    a.bottom += dy;
+    gp_copy(r, &a, n);
 }
 
 void WINAPI InflateRect(RECT __far *r, int dx, int dy)
 {
-    r->left -= dx;
-    r->right += dx;
-    r->top -= dy;
-    r->bottom += dy;
+    RECT a;
+    WORD n = gp_copy(&a, r, RSIZE) & ~1;
+    a.left -= dx;
+    a.right += dx;
+    a.top -= dy;
+    a.bottom += dy;
+    gp_copy(r, &a, n);
 }
 
+/* a bad source: d made empty, FALSE (3.1) */
 BOOL WINAPI IntersectRect(RECT __far *d, const RECT __far *a, const RECT __far *b)
 {
-    RECT r;
-    r.left = a->left > b->left ? a->left : b->left;
-    r.top = a->top > b->top ? a->top : b->top;
-    r.right = a->right < b->right ? a->right : b->right;
-    r.bottom = a->bottom < b->bottom ? a->bottom : b->bottom;
-    if (r.left >= r.right || r.top >= r.bottom) {
-        SetRectEmpty(d);
+    RECT r, x, y;
+    if (gp_copy(&x, a, RSIZE) != RSIZE || gp_copy(&y, b, RSIZE) != RSIZE) {
+        gp_fill(d, 0, RSIZE);
         return FALSE;
     }
-    *d = r;
-    return TRUE;
+    r.left = x.left > y.left ? x.left : y.left;
+    r.top = x.top > y.top ? x.top : y.top;
+    r.right = x.right < y.right ? x.right : y.right;
+    r.bottom = x.bottom < y.bottom ? x.bottom : y.bottom;
+    if (r.left >= r.right || r.top >= r.bottom) {
+        gp_fill(d, 0, RSIZE);
+        return FALSE;
+    }
+    return gp_copy(d, &r, RSIZE) == RSIZE;
 }
 
+/* a bad source: d left as it was, TRUE (3.1) */
 BOOL WINAPI UnionRect(RECT __far *d, const RECT __far *a, const RECT __far *b)
 {
-    if (IsRectEmpty(a)) {
-        if (IsRectEmpty(b)) {
-            SetRectEmpty(d);
-            return FALSE;
-        }
-        *d = *b;
+    RECT x, y, r;
+    BOOL ex, ey;
+    if (gp_copy(&x, a, RSIZE) != RSIZE || gp_copy(&y, b, RSIZE) != RSIZE)
         return TRUE;
+    ex = x.left >= x.right || x.top >= x.bottom;
+    ey = y.left >= y.right || y.top >= y.bottom;
+    if (ex && ey) {
+        gp_fill(d, 0, RSIZE);
+        return FALSE;
     }
-    if (IsRectEmpty(b)) {
-        *d = *a;
-        return TRUE;
+    if (ex)
+        r = y;
+    else if (ey)
+        r = x;
+    else {
+        r.left = x.left < y.left ? x.left : y.left;
+        r.top = x.top < y.top ? x.top : y.top;
+        r.right = x.right > y.right ? x.right : y.right;
+        r.bottom = x.bottom > y.bottom ? x.bottom : y.bottom;
     }
-    {
-        RECT r;
-        r.left = a->left < b->left ? a->left : b->left;
-        r.top = a->top < b->top ? a->top : b->top;
-        r.right = a->right > b->right ? a->right : b->right;
-        r.bottom = a->bottom > b->bottom ? a->bottom : b->bottom;
-        *d = r;
-    }
+    gp_copy(d, &r, RSIZE);
     return TRUE;
 }
 
+/* a bad source: d left as it was, TRUE (3.1) */
 BOOL WINAPI SubtractRect(RECT __far *d, const RECT __far *a, const RECT __far *b)
 {
-    RECT i;
-    *d = *a;
-    if (!IntersectRect(&i, a, b))
-        return !IsRectEmpty(d);
-    if (i.top == a->top && i.bottom == a->bottom) {
-        if (i.left == a->left)
-            d->left = i.right;
-        else if (i.right == a->right)
-            d->right = i.left;
-    } else if (i.left == a->left && i.right == a->right) {
-        if (i.top == a->top)
-            d->top = i.bottom;
-        else if (i.bottom == a->bottom)
-            d->bottom = i.top;
+    RECT i, x, y, r;
+    if (gp_copy(&x, a, RSIZE) != RSIZE || gp_copy(&y, b, RSIZE) != RSIZE)
+        return TRUE;
+    r = x;
+    if (IntersectRect(&i, &x, &y)) {
+        if (i.top == x.top && i.bottom == x.bottom) {
+            if (i.left == x.left)
+                r.left = i.right;
+            else if (i.right == x.right)
+                r.right = i.left;
+        } else if (i.left == x.left && i.right == x.right) {
+            if (i.top == x.top)
+                r.top = i.bottom;
+            else if (i.bottom == x.bottom)
+                r.bottom = i.top;
+        }
     }
-    return !IsRectEmpty(d);
+    gp_copy(d, &r, RSIZE);
+    return !(r.left >= r.right || r.top >= r.bottom);
 }
 
+/* either one bad: FALSE (3.1) */
 BOOL WINAPI EqualRect(const RECT __far *a, const RECT __far *b)
 {
-    return a->left == b->left && a->top == b->top && a->right == b->right &&
-           a->bottom == b->bottom;
+    RECT x, y;
+    if (gp_copy(&x, a, RSIZE) != RSIZE || gp_copy(&y, b, RSIZE) != RSIZE)
+        return FALSE;
+    return x.left == y.left && x.top == y.top && x.right == y.right && x.bottom == y.bottom;
 }
 
 /* brushes 1..COLOR+1 mean system colour brushes (3.1 SDK, hbrBackground) */
@@ -122,18 +164,28 @@ HBRUSH sys_brush(HBRUSH b)
     return b;
 }
 
-int WINAPI FillRect(HDC hdc, const RECT __far *r, HBRUSH b)
+/* a bad RECT: 0, nothing drawn (3.1) */
+int WINAPI FillRect(HDC hdc, const RECT __far *rp, HBRUSH b)
 {
-    HBRUSH old = SelectObject(hdc, sys_brush(b));
+    RECT a, *r = &a;
+    HBRUSH old;
+    if (gp_copy(&a, rp, RSIZE) != RSIZE)
+        return 0;
+    old = SelectObject(hdc, sys_brush(b));
     PatBlt(hdc, r->left, r->top, r->right - r->left, r->bottom - r->top, PATCOPY);
     SelectObject(hdc, old);
     return 1;
 }
 
-int WINAPI FrameRect(HDC hdc, const RECT __far *r, HBRUSH b)
+int WINAPI FrameRect(HDC hdc, const RECT __far *rp, HBRUSH b)
 {
-    HBRUSH old = SelectObject(hdc, sys_brush(b));
-    int w = r->right - r->left, h = r->bottom - r->top;
+    RECT a, *r = &a;
+    HBRUSH old;
+    int w, h;
+    if (gp_copy(&a, rp, RSIZE) != RSIZE)
+        return 0;
+    old = SelectObject(hdc, sys_brush(b));
+    w = r->right - r->left, h = r->bottom - r->top;
     if (w > 0 && h > 0) {
         PatBlt(hdc, r->left, r->top, w, 1, PATCOPY);
         PatBlt(hdc, r->left, r->bottom - 1, w, 1, PATCOPY);
@@ -144,19 +196,26 @@ int WINAPI FrameRect(HDC hdc, const RECT __far *r, HBRUSH b)
     return 1;
 }
 
-void WINAPI InvertRect(HDC hdc, const RECT __far *r)
+void WINAPI InvertRect(HDC hdc, const RECT __far *rp)
 {
+    RECT a, *r = &a;
+    if (gp_copy(&a, rp, RSIZE) != RSIZE)
+        return;
     PatBlt(hdc, r->left, r->top, r->right - r->left, r->bottom - r->top, DSTINVERT);
 }
 
-void WINAPI DrawFocusRect(HDC hdc, const RECT __far *r)
+void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
 {
     /* the dots on the screen's squares where x + y is even (US4): the
        gray pattern the other way round from the one GrayString uses,
        patterns being aligned to the screen */
     static HBRUSH dots;
     HBRUSH old;
-    int w = r->right - r->left, h = r->bottom - r->top;
+    RECT a, *r = &a;
+    int w, h;
+    if (gp_copy(&a, rp, RSIZE) != RSIZE)
+        return;
+    w = r->right - r->left, h = r->bottom - r->top;
     if (!dots) {
         static WORD bits[8] = { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55 };
         HBITMAP b = CreateBitmap(8, 8, 1, 1, bits);
@@ -174,46 +233,56 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *r)
 }
 
 /* ---- DrawText ---- */
+/* A line with a prefix (&) or a tab is measured and drawn in pieces.
+   GetTextExtent counts a synthesized bold font's overhang once per call,
+   so each piece advances by its extent less the overhang and the line's
+   width counts it once: on 3.1 "Run &Minimized" in a bold MS Sans Serif
+   (Program Manager's Run box; COMMDLG's "File &Name:") is as wide as
+   without the prefix, w16 put the overhang between the pieces (boot test
+   runbrowse) */
 static int text_width(HDC hdc, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
-    int w = 0, i, start = 0;
+    int w = 0, i, start = 0, oh;
+    TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
+    oh = tm.tmOverhang;
     for (i = 0; i <= n; i++) {
         if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start)
-                w += LOWORD(GetTextExtent(hdc, s + start, i - start));
+                w += LOWORD(GetTextExtent(hdc, s + start, i - start)) - oh;
             if (i < n && tabs && s[i] == '\t')
                 w = (w / tabw + 1) * tabw;
             if (i < n && prefix && s[i] == '&' && i + 1 < n && s[i + 1] == '&') {
-                w += LOWORD(GetTextExtent(hdc, "&", 1));
+                w += LOWORD(GetTextExtent(hdc, "&", 1)) - oh;
                 i++;
             }
             start = i + 1;
         }
     }
-    return w;
+    return w > 0 ? w + oh : w;
 }
 
 static void draw_line(HDC hdc, int x, int y, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
     int i, start = 0, cx = x, ul = -1;
     TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
     for (i = 0; i <= n; i++) {
         if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start) {
                 TextOut(hdc, cx, y, s + start, i - start);
-                cx += LOWORD(GetTextExtent(hdc, s + start, i - start));
+                cx += LOWORD(GetTextExtent(hdc, s + start, i - start)) - tm.tmOverhang;
             }
             if (i < n && tabs && s[i] == '\t')
                 cx = x + ((cx - x) / tabw + 1) * tabw;
             else if (i < n && prefix && s[i] == '&') {
                 if (i + 1 < n && s[i + 1] == '&') {
                     TextOut(hdc, cx, y, "&", 1);
-                    cx += LOWORD(GetTextExtent(hdc, "&", 1));
+                    cx += LOWORD(GetTextExtent(hdc, "&", 1)) - tm.tmOverhang;
                     i++;
                 } else if (i + 1 < n && ul < 0) {
                     ul = cx;
                     /* underline the next character */
-                    GetTextMetrics(hdc, &tm);
                     {
                         int cw = LOWORD(GetTextExtent(hdc, s + i + 1, 1));
                         HPEN pen = CreatePen(PS_SOLID, 1, GetTextColor(hdc));
@@ -245,12 +314,16 @@ static int floor_half(int v)
     return v >= 0 ? v / 2 : -((-v + 1) / 2);
 }
 
+/* a bad string or RECT: 0, nothing drawn, the RECT as it was (3.1) */
 int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
 {
     TEXTMETRIC tm;
     int lh, y, total = 0, tabw;
     BOOL prefix = !(fmt & DT_NOPREFIX), tabs = (fmt & DT_EXPANDTABS) != 0;
-    int width = r->right - r->left;
+    int width;
+    if (GP_BAD(s) || GP_BAD(r))
+        return 0;
+    width = r->right - r->left;
     if (n < 0)
         n = lstr_len(s);
     GetTextMetrics(hdc, &tm);
@@ -358,11 +431,15 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
     return total;
 }
 
+/* a bad string or tab array: 0, nothing drawn (3.1) */
 LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
                           int __far *tabs, int origin)
 {
-    int i, start = 0, cx = x, k = 0, h = HIWORD(GetTextExtent(hdc, "A", 1));
-    int deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    int i, start = 0, cx = x, k = 0, h, deftab;
+    if (GP_BAD(s) || GP_BAD(tabs))
+        return 0;
+    h = HIWORD(GetTextExtent(hdc, "A", 1));
+    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start) {
@@ -388,10 +465,14 @@ LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
     return MAKELONG(cx - x, h);
 }
 
+/* a bad string or tab array: 0 (3.1) */
 DWORD WINAPI GetTabbedTextExtent(HDC hdc, LPCSTR s, int n, int ntabs, int __far *tabs)
 {
-    int i, start = 0, cx = 0, k = 0, h = HIWORD(GetTextExtent(hdc, "A", 1));
-    int deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    int i, start = 0, cx = 0, k = 0, h, deftab;
+    if (GP_BAD(s) || GP_BAD(tabs))
+        return 0;
+    h = HIWORD(GetTextExtent(hdc, "A", 1));
+    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start)
@@ -421,6 +502,9 @@ BOOL WINAPI GrayString(HDC hdc, HBRUSH br, GRAYSTRINGPROC f, LPARAM data, int n,
     HBITMAP bm, old;
     HBRUSH ob;
     COLORREF tc, bc;
+    /* a bad string (no output function): 0 (3.1: its GDI call faults) */
+    if (!f && GP_BAD(data))
+        return FALSE;
     if (!f && !n)
         n = lstr_len((LPCSTR)data);
     if (!cx || !cy) {

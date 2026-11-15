@@ -17,7 +17,7 @@ import struct
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODS = ['USER', 'GDI', 'DISPLAY', 'KEYBOARD', 'MOUSE', 'SYSTEM', 'SOUND', 'COMM', 'KERNEL']
+MODS = ['USER', 'GDI', 'DISPLAY', 'KEYBOARD', 'MOUSE', 'SYSTEM', 'SOUND', 'COMM', 'KERNEL', 'GRABBER']
 SPEC = {'USER': 'user', 'GDI': 'gdi', 'DISPLAY': 'display', 'KEYBOARD': 'keyboard',
         'MOUSE': 'mouse', 'SYSTEM': 'system', 'SOUND': 'sound', 'COMM': 'comm',
         'KERNEL': 'kernel'}
@@ -40,6 +40,13 @@ def load_specs():
                                                and m.group(2).startswith('pascal') else None)
     for k, v in EXTRA.items():
         out[k] = v
+    # module 9: the 386 grabber recorder's marks (tests/apps/gr3.asm), the
+    # grabber's export n entered (ordinal n) and returned (n + 100)
+    from gr3dump import NAMES as GN
+    for n, nm in enumerate(GN):
+        if nm:
+            out[('GRABBER', n)] = ('>' + nm, None)
+            out[('GRABBER', n + 100)] = ('<' + nm, None)
     return out
 
 

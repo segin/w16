@@ -1,0 +1,43 @@
+; CF3: 3.0-format Save As and the character set of card text
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Index é
+key 0D
+wait 300
+type caf
+char é
+char ü
+char ß
+type x
+wait 300
+menu f
+char a
+wait 1500
+snap C:\SAVEAS.BMP
+alt t
+wait 300
+key 28
+wait 300
+key 0D
+wait 300
+snap C:\SAVEAS3.BMP
+dump
+alt n
+wait 300
+type C:\CF3A.CRD
+key 0D
+wait 1500
+snap C:\AFTER3.BMP
+dump
+key 0D
+wait 1500
+dump
+menu f
+char a
+wait 1500
+type C:\CF3B.CRD
+key 0D
+wait 1500
+dump

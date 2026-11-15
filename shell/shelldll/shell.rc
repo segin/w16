@@ -1,0 +1,101 @@
+/*
+ * shell.rc - w16 SHELL.DLL resources (ARCHITECTURE.md 13).
+ *
+ * The dialogs reproduce the layout of Windows 3.1's (probe SH8 dumped
+ * every control of the running dialogs; tools/dlgunits.py turned the
+ * pixels into these dialog units). Their generic texts are the same as
+ * Windows 3.1's, since programs and users see them; the strings that name
+ * Microsoft's product are w16's own (marked BRANDING, awaiting a
+ * decision), and the About box's picture is w16's artwork.
+ */
+#include <windows.h>
+#include "shell.h"
+
+BMP_LOGO BITMAP "shlogo.bmp"
+
+/* ShellAbout's dialog: the caption and IDC_LINE1 are wsprintf formats */
+DLG_ABOUT DIALOG 19, 20, 220, 158
+STYLE DS_MODALFRAME | WS_POPUP | WS_CLIPSIBLINGS | WS_CAPTION | WS_SYSMENU
+CAPTION "About %s"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "", IDC_ABICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 10, 3, 18, 20
+    CONTROL "w16 %s", IDC_LINE1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 5, 127, 10   /* BRANDING */
+    CONTROL "", IDC_VERSION, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 15, 100, 10
+    CONTROL "Copyright \251 the w16 contributors", -1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 25, 145, 10   /* BRANDING */
+    CONTROL "", IDC_OTHER, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 35, 145, 20
+    CONTROL "This product is licensed to:", 0x270F, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 55, 145, 10
+    CONTROL "User Name goes here", IDC_USER, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 65, 145, 10
+    CONTROL "Organization Name goes here", IDC_ORG, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 75, 145, 10
+    CONTROL "", 0x270E, "Static", SS_BLACKRECT | WS_CHILD | WS_VISIBLE, 45, 85, 172, 1
+    CONTROL "", IDC_SERIAL, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 93, 165, 20
+    CONTROL "", 0x270D, "Static", SS_BLACKRECT | WS_CHILD | WS_VISIBLE, 45, 115, 172, 1
+    CONTROL "Real Mode", IDC_MODE, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 120, 150, 10
+    CONTROL "Memory:", IDC_MEMLABEL, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 130, 70, 10
+    CONTROL "", IDC_MEM, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 120, 130, 74, 10
+    CONTROL "Expanded Memory", IDC_RESLABEL, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 140, 70, 10
+    CONTROL "", IDC_RES, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 120, 140, 65, 10
+    CONTROL "SMARTDrive Using", IDC_SMARTLABEL, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 150, 70, 10
+    CONTROL "", IDC_SMART, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 120, 150, 65, 10
+    CONTROL "OK", IDOK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 177, 5, 40, 14
+END
+
+/* ShellExecute's question for a missing program (FindExeDlgProc) */
+DLG_FINDEXE DIALOG 19, 20, 210, 82
+STYLE DS_MODALFRAME | WS_POPUP | WS_CLIPSIBLINGS | WS_CAPTION | WS_SYSMENU
+CAPTION "Program Not Found"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "Cannot find %s.\n\nThis program is needed to run files with extension '%s'.", IDC_FE_TEXT, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 5, 5, 134, 40
+    CONTROL "Location of %s:", IDC_FE_LOCLABEL, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 5, 49, 134, 10
+    CONTROL "", IDC_FE_EDIT, "Edit", ES_LEFT | ES_AUTOHSCROLL | ES_OEMCONVERT | WS_BORDER | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 3, 61, 134, 12
+    CONTROL "OK", IDOK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 165, 6, 40, 14
+    CONTROL "Cancel", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 165, 23, 40, 14
+    CONTROL "&Locate...", IDC_FE_LOCATE, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 165, 40, 40, 14
+    CONTROL "&Help", IDC_FE_HELP, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 165, 61, 40, 14
+END
+
+/* the Locate... dialog: a template for COMMDLG's GetOpenFileName (its
+   control ids are COMMDLG's); the file controls are out of sight */
+DLG_LOCATE DIALOG 10, 10, 158, 165
+STYLE DS_MODALFRAME | WS_CLIPSIBLINGS | WS_CAPTION | WS_SYSMENU
+CAPTION "Locate"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "Locate the directory where this program may be found:", -1, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, 5, 5, 147, 20
+    CONTROL "", 0x480, "Edit", ES_AUTOHSCROLL | ES_OEMCONVERT | ES_READONLY | WS_CHILD | WS_VISIBLE, 5, 26, 60, 12
+    CONTROL "", 0x501, "Static", SS_LEFT | WS_CHILD | WS_VISIBLE, 67, 28, 87, 9
+    CONTROL "&Directories:", -1, "Static", SS_LEFT | WS_CHILD | WS_VISIBLE, 5, 40, 92, 9
+    CONTROL "", 0x440, "Static", SS_LEFT | WS_CHILD | WS_VISIBLE, 5, 50, 92, 9
+    CONTROL "", 0x461, "ListBox", LBS_STANDARD | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_DISABLENOSCROLL | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 5, 62, 92, 64
+    CONTROL "Dri&ves:", -1, "Static", SS_LEFT | WS_CHILD | WS_VISIBLE, 5, 135, 92, 9
+    CONTROL "", 0x471, "ComboBox", CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | CBS_AUTOHSCROLL | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 5, 145, 92, 68
+    CONTROL "OK", IDOK, "Button", BS_DEFPUSHBUTTON | WS_GROUP | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 104, 63, 50, 14
+    CONTROL "Cancel", IDCANCEL, "Button", BS_PUSHBUTTON | WS_GROUP | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 104, 81, 50, 14
+    CONTROL "&Help", 0x40E, "Button", BS_PUSHBUTTON | WS_GROUP | WS_TABSTOP | WS_CHILD | WS_VISIBLE, 104, 121, 50, 14
+    CONTROL "", 0x460, "ListBox", LBS_NOTIFY | LBS_SORT | LBS_HASSTRINGS | WS_BORDER | WS_CHILD | WS_VISIBLE, -100, -100, 11, 9
+    CONTROL "", 0x410, "Button", BS_AUTOCHECKBOX | WS_CHILD | WS_VISIBLE, -99, -100, 10, 10
+    CONTROL "", 0x441, "Static", SS_LEFT | WS_GROUP | WS_CHILD | WS_VISIBLE, -99, -100, 10, 10
+    CONTROL "", 0x470, "ComboBox", CBS_DROPDOWNLIST | CBS_AUTOHSCROLL | WS_CHILD | WS_VISIBLE, -99, -100, 10, 12
+END
+
+STRINGTABLE
+BEGIN
+    IDS_REGDAT,      "REG.DAT"
+    IDS_REALMODE,    "Real Mode"
+    IDS_REALLARGE,   "Real Mode (Large Frame EMS)"
+    IDS_REALSMALL,   "Real Mode (Small Frame EMS)"
+    IDS_STANDARD,    "Standard Mode"
+    IDS_ENHANCED,    "386 Enhanced Mode"
+    IDS_RESOURCES,   "System Resources:"
+    IDS_VERSION,     "Version %s %s"
+    IDS_DEBUG,       "(Debug)"
+    IDS_KBFREE,      "%s KB Free"
+    IDS_KBFREEEMS,   "%s KB Free (%s KB in EMS)"
+    IDS_PCTFREE,     "%d%% Free"
+    IDS_CANTFIND,    "Cannot find file '%s'."
+    IDS_FOUND,       "(found)"
+    IDS_NOTFOUND,    "(not found)"
+    IDS_NOCOMMDLG,   "Cannot load COMMDLG.DLL"
+    IDS_CLOSENOOPEN, "\r\nSHELL.DLL: RegCloseKey called with no corresponding RegOpenKey"
+END

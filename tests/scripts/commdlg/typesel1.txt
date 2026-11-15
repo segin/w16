@@ -1,0 +1,45 @@
+; Choosing another file type (the types list) in Open and Save As: the
+; name box's text, its selection and the focus afterwards; then a typed
+; name (does it replace the pattern?)
+cd1 open filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=1 hook=1 flags=20
+cd1 save filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=1 hook=1 flags=20
+wait 3000
+click 222 254
+wait 800
+click 150 284
+wait 800
+focus
+info
+snap C:\T1.BMP
+type win.ini
+wait 300
+snap C:\T2.BMP
+key 0D
+wait 1500
+; Save As
+click 222 254
+wait 800
+click 150 284
+wait 800
+focus
+info
+snap C:\T3.BMP
+type new.bmp
+wait 300
+snap C:\T4.BMP
+key 0D
+wait 1500
+; Save As again, the type chosen with the name box keeping the focus
+; (SNAP's cbsel: CB_SETCURSEL and CBN_SELCHANGE, as Cardfile's scenarios
+; do): a typed name replaces the pattern
+cd1 save filter=Text|*.txt|Bitmaps|*.bmp|All|*.* index=1 hook=1 flags=20
+wait 2000
+cbsel 470 1
+wait 800
+info
+snap C:\T5.BMP
+type new.bmp
+wait 300
+snap C:\T6.BMP
+key 1B
+wait 1500

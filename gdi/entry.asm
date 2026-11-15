@@ -19,6 +19,7 @@ segment _NULL
         times 16 db 0                   ; the instance data KERNEL keeps here
 
 extern LOCALINIT                        ; KERNEL.4
+extern LOCALALLOC, LOCALREALLOC, LOCALFREE, LOCALSIZE
 extern __AHINCR                         ; KERNEL.114 (constant)
 
 segment _DATA
@@ -112,3 +113,62 @@ gdi_unimpl_entry:
         pop ds
         pop bp
         retn 2
+
+; lh_alloc, lh_realloc, lh_free, lh_size: KERNEL's LocalAlloc, LocalReAlloc,
+; LocalFree and LocalSize on the local heap in another segment (GDI's own
+; heaps, heap.c): DS is that segment for the call (the Local* functions
+; work on the caller's DS, 3.1 SDK) and GDI's own again afterwards.
+; WORD __far __cdecl lh_alloc(WORD sel, WORD flags, WORD size)
+global _lh_alloc
+_lh_alloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; flags
+        push word [bp+10]       ; size
+        call far LOCALALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_realloc(WORD sel, WORD h, WORD size, WORD flags)
+global _lh_realloc
+_lh_realloc:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]        ; h
+        push word [bp+10]       ; size
+        push word [bp+12]       ; flags
+        call far LOCALREALLOC
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_free(WORD sel, WORD h)
+global _lh_free
+_lh_free:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALFREE
+        pop ds
+        pop bp
+        retf
+
+; WORD __far __cdecl lh_size(WORD sel, WORD h)
+global _lh_size
+_lh_size:
+        push bp
+        mov bp, sp
+        push ds
+        mov ds, [bp+6]
+        push word [bp+8]
+        call far LOCALSIZE
+        pop ds
+        pop bp
+        retf

@@ -1,0 +1,68 @@
+; Cardfile (WIN.INI run=CARDFILE.EXE) under real keys (tests/inputrun.sh;
+; boot-test case cardfile): typing, Index (F6), Add (F7), Ctrl+Shift+
+; letter, PgUp, List view and its arrow keys, Find, Autodial, the Edit
+; menu, File > Exit and No to saving. The pointer goes to the screen's
+; bottom right corner first, on the desktop, so that it is an arrow in
+; every screen. Each shot is matchnow (the caret blinks): a w16 run takes
+; the first frame equal to the reference's.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+matchnow 01-start 20 1
+type Ann Smith
+matchnow 02-typed 20 1
+key F6
+matchnow 03-index 20 1.5
+type Smith, Ann
+key Return
+matchnow 04-indexed 20 1
+key F7
+sleep 0.5
+type Brown
+key Return
+sleep 0.5
+type 555-1234
+matchnow 05-added 20 1
+key ctrl+shift+s
+matchnow 06-jump 20 1
+key Prior
+matchnow 07-pgup 20 1
+key alt+v
+sleep 0.5
+key l
+matchnow 08-list 20 1.5
+key Down
+matchnow 09-listdown 20 1
+key alt+v
+sleep 0.5
+key c
+matchnow 10-card 20 1.5
+key alt+s
+sleep 0.5
+key f
+matchnow 11-find 20 1.5
+key Escape
+sleep 0.5
+key F5
+matchnow 12-dial 20 1.5
+key Escape
+sleep 0.5
+key alt+e
+matchnow 13-editmenu 20 1.5
+key Escape
+key Escape
+sleep 0.5
+key alt+f
+sleep 0.5
+key x
+matchnow 14-save 20 1.5
+key n
+matchnow 15-closed 20 2

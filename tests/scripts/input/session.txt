@@ -1,0 +1,64 @@
+; an interactive session on Program Manager for hunting hangs
+; (tests/inputrun.sh; boot-test case allw16input): clicks on the desktop
+; and Program Manager, menus by mouse and keyboard, a drag, Notepad
+; started, typed into and closed, a group opened by double-click
+click 1
+sleep 1
+home
+move 300 220
+click 1
+sleep 1
+shot 01-desktop
+home
+move 20 20
+click 1
+sleep 1.5
+shot 02-filemenu
+key Escape
+key Escape
+sleep 1
+home
+move 100 90
+click 1
+sleep 1
+shot 03-clickpm
+key alt+f
+key r
+sleep 4
+type notepad
+key Return
+sleep 8
+shot 04-notepad
+type hello
+sleep 1
+key alt+F4
+sleep 3
+shot 05-save
+key n
+sleep 3
+shot 06-closed
+home
+move 150 31
+down 1
+sleep 0.5
+move 20 20
+sleep 0.5
+up 1
+sleep 2
+shot 07-dragged
+home
+move 40 190
+click 1
+click 1
+sleep 3
+shot 08-group
+key alt+h
+sleep 1
+shot 09-help
+key Escape
+key Escape
+sleep 1
+home
+move 250 200
+sleep 1
+shot 10-end

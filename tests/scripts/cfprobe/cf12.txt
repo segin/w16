@@ -1,0 +1,55 @@
+; CF12: object numbers: what Open and Save do to them
+; (needs PIC30.CRD and PIC31.CRD from tests/scripts/cf)
+run CARDFILE.EXE C:\PIC30.CRD
+wait 3000
+menu f
+char a
+wait 1500
+type C:\X1.CRD
+key 0D
+wait 1500
+menu f
+char o
+wait 1500
+type C:\PIC30.CRD
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+type C:\X2.CRD
+key 0D
+wait 1500
+menu f
+char o
+wait 1500
+type C:\PIC31.CRD
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+type C:\X3.CRD
+key 0D
+wait 1500
+key 76
+wait 300
+type b
+key 0D
+wait 300
+menu f
+char a
+wait 1500
+type C:\X4.CRD
+key 0D
+wait 1500
+menu f
+char o
+wait 1500
+type C:\X4.CRD
+key 0D
+wait 1500
+menu f
+char s
+wait 1500
+dump

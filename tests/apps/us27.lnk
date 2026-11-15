@@ -1,0 +1,3 @@
+# US27.EXE (tests/apps/us27.c): USER's functions given a bad pointer
+@tests/apps/app.lnk
+import HASGPHANDLER KERNEL.338

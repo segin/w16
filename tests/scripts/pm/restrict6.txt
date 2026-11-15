@@ -1,0 +1,20 @@
+; [Restrictions] EditLevel=3: no command lines changed.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO EditLevel=3>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\W1.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char p
+wait 1000
+snap C:\W2.BMP
+key 1B
+wait 500
+menu f
+char x
+wait 1500

@@ -8,7 +8,9 @@
  * client or window corner in screen coordinates (SetDCOrg) and, when the
  * DC is released, resets it to the default state saved at boot
  * (GetDCState/SetDCState). A window of a CS_OWNDC class keeps a DC of its
- * own. ZOI: the cache grows when all its DCs are out.
+ * own. ZOI: the cache grows when all its DCs are out. The DCE records are
+ * blocks of the object heap (uheap.c; 3.1 has them in DGROUP, 10h bytes
+ * for a CS_OWNDC window: US15), reached through DC_() by handle.
  */
 #include "user.h"
 
@@ -19,7 +21,8 @@ typedef struct DCE {
     WORD   flags;               /* DCE_* */
     HRGN   clip;                /* extra clipping (BeginPaint's update region) */
 } DCE;
-typedef DCE __near *PDCE;
+typedef DCE __far *PDCE;
+#define DC_(h)  ((PDCE)UH_PTR(&uhObj, (h)))
 #define DCE_WINDOW  1           /* GetWindowDC: the whole window */
 #define DCE_OWN     2           /* a CS_OWNDC window's */
 #define DCE_INUSE   4
@@ -32,20 +35,25 @@ static char szDisplay[16] = "DISPLAY";
 HDC hdcScreen, hdcMem, hdcState;
 HRGN hrgnTmp1, hrgnTmp2;
 
-static PDCE new_dce(void)
+/* a new DC in the cache: its DCE's handle, 0 if none */
+static WORD new_dce(void)
 {
-    PDCE d = (PDCE)LocalAlloc(LPTR, sizeof(DCE));
-    if (!d)
+    HDC hdc = CreateDC(szDisplay, NULL, NULL, NULL);
+    WORD h;
+    PDCE d;
+    if (!hdc)
         return 0;
-    d->hdc = CreateDC(szDisplay, NULL, NULL, NULL);
-    if (!d->hdc) {
-        LocalFree((HLOCAL)d);
+    h = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, sizeof(DCE));
+    if (!h) {
+        DeleteDC(hdc);
         return 0;
     }
-    G_MAKEOBJECTPRIVATE(d->hdc, TRUE);
+    G_MAKEOBJECTPRIVATE(hdc, TRUE);
+    d = DC_(h);
+    d->hdc = hdc;
     d->next = dces;
-    dces = (WORD)d;
-    return d;
+    dces = h;
+    return h;
 }
 
 void dc_init(void)
@@ -78,13 +86,20 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
     while (p->hwndParent) {
         PWND parent = PW(p->hwndParent);
         BOOL clipsib = (p->style & WS_CLIPSIBLINGS) || !(p->style & WS_CHILD);
-        if (parent->hwndParent) {           /* the desktop is the screen */
-            SetRectRgn(hrgnTmp1, parent->rcClient.left, parent->rcClient.top,
-                       parent->rcClient.right, parent->rcClient.bottom);
-            CombineRgn(r, r, hrgnTmp1, RGN_AND);
+        /* inside a minimised window: nothing (its children are hidden
+           with it; IsWindowVisible still says TRUE) */
+        if (parent->style & WS_MINIMIZE) {
+            SetRectRgn(r, 0, 0, 0, 0);
+            return r;
         }
+        /* cut to the parent's client area; for a top-level window the
+           desktop's, the screen (Windows 3.1's USER does: the GDI agent
+           saw its visible regions end at the screen's edges) */
+        SetRectRgn(hrgnTmp1, parent->rcClient.left, parent->rcClient.top,
+                   parent->rcClient.right, parent->rcClient.bottom);
+        CombineRgn(r, r, hrgnTmp1, RGN_AND);
         if (clipsib) {
-            for (s = parent->hwndChild; s && s != (HWND)(WORD)p; s = PW(s)->hwndNext) {
+            for (s = parent->hwndChild; s && s != HW(p); s = PW(s)->hwndNext) {
                 PWND sw = PW(s);
                 if (!(sw->style & WS_VISIBLE))
                     continue;
@@ -95,7 +110,7 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
         }
         p = parent;
     }
-    if (clipchildren) {
+    if (clipchildren && !(w->style & WS_MINIMIZE)) {
         for (s = w->hwndChild; s; s = PW(s)->hwndNext) {
             PWND sw = PW(s);
             RECT c;
@@ -135,6 +150,7 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
 {
     PWND w = h ? valid_wnd(h) : PW(hwndDesktop);
     PDCE d;
+    WORD dh;
     PCLS c;
     if (!w)
         return 0;
@@ -142,25 +158,26 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
         h = hwndDesktop;
     c = (PCLS)w->cls;
     if ((c->style & CS_OWNDC) && !window) {
-        for (d = (PDCE)dces; d; d = (PDCE)d->next)
-            if ((d->flags & DCE_OWN) && d->hwnd == h)
+        for (dh = dces; dh; dh = DC_(dh)->next)
+            if ((DC_(dh)->flags & DCE_OWN) && DC_(dh)->hwnd == h)
                 break;
-        if (!d) {
-            d = new_dce();
-            if (!d)
+        if (!dh) {
+            dh = new_dce();
+            if (!dh)
                 return 0;
-            d->flags = DCE_OWN;
-            d->hwnd = h;
+            DC_(dh)->flags = DCE_OWN;
+            DC_(dh)->hwnd = h;
         }
     } else {
-        for (d = (PDCE)dces; d; d = (PDCE)d->next)
-            if (!(d->flags & (DCE_INUSE | DCE_OWN)))
+        for (dh = dces; dh; dh = DC_(dh)->next)
+            if (!(DC_(dh)->flags & (DCE_INUSE | DCE_OWN)))
                 break;
-        if (!d && !(d = new_dce()))
+        if (!dh && !(dh = new_dce()))
             return 0;
-        d->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
-        d->hwnd = h;
+        DC_(dh)->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
+        DC_(dh)->hwnd = h;
     }
+    d = DC_(dh);        /* (nothing below allocates in the object heap) */
     if (flags & 1)
         d->flags |= DCE_CLIPCHILDREN;
     if (d->clip)
@@ -177,8 +194,9 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
 int release_dc(HWND h, HDC hdc)
 {
     PDCE d;
-    for (d = (PDCE)dces; d; d = (PDCE)d->next)
-        if (d->hdc == hdc) {
+    WORD dh;
+    for (dh = dces; dh; dh = d->next)
+        if ((d = DC_(dh))->hdc == hdc) {
             if (d->clip) {
                 DeleteObject(d->clip);
                 d->clip = 0;
@@ -200,8 +218,9 @@ int release_dc(HWND h, HDC hdc)
 void free_window_dcs(HWND h)
 {
     PDCE d;
-    for (d = (PDCE)dces; d; d = (PDCE)d->next)
-        if (d->hwnd == h) {
+    WORD dh;
+    for (dh = dces; dh; dh = d->next)
+        if ((d = DC_(dh))->hwnd == h) {
             if (d->flags & DCE_OWN) {
                 d->flags = 0;
                 G_SETDCSTATE(d->hdc, hdcState);
@@ -215,8 +234,9 @@ void free_window_dcs(HWND h)
 void refresh_dcs(void)
 {
     PDCE d;
-    for (d = (PDCE)dces; d; d = (PDCE)d->next)
-        if (d->hwnd && valid_wnd(d->hwnd) && (d->flags & (DCE_INUSE | DCE_OWN)))
+    WORD dh;
+    for (dh = dces; dh; dh = d->next)
+        if ((d = DC_(dh))->hwnd && valid_wnd(d->hwnd) && (d->flags & (DCE_INUSE | DCE_OWN)))
             setup_dc(d, PW(d->hwnd));
 }
 

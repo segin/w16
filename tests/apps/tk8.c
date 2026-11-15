@@ -131,6 +131,11 @@ static void rep_bytes(const char *op, WORD i, const BYTE *p, WORD nwords)
 /* flags (and condition codes if cc), handler calls and code */
 static void rep_sw(const char *op, WORD i, int cc)
 {
+    /* an invalid operand leaves the condition codes undefined (Intel):
+       under DOSBox-X FPREM of 1.0 by 0 gave C3 now and then where 3.1's
+       run had C0, and 3.1's own runs vary the same way (TK6) */
+    if (cc && (swv & 0x0001))
+        cc = 0;
     ob(op, i, "s", swv & (cc ? 0x473F : 0x003F), env_flags && !have87);
     ob(op, i, "h", h_calls ? (h_calls << 8) | (h_regs[0] & 0xFF) : 0, 0);
 }

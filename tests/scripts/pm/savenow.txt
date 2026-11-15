@@ -1,0 +1,17 @@
+; Shift+File>Exit saves the settings now, with Save Settings on Exit off
+run PROGMAN.EXE
+wait 3000
+menu o
+char s
+wait 800
+move 10 10 500 400
+wait 500
+kdown 10
+menu f
+char x
+kup 10
+wait 1500
+snap C:\Q1.BMP
+menu f
+char x
+wait 1500

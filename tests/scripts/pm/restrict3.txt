@@ -1,0 +1,31 @@
+; [Restrictions] NoFileMenu=1: no File menu; F7, F8, Del, Alt+Enter do
+; nothing; Enter still opens the item (File Manager).
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO NoFileMenu=1>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+snap C:\T1.BMP
+menu f
+wait 500
+snap C:\T2.BMP
+key 1B
+key 1B
+key 76
+wait 800
+key 77
+wait 800
+key 2E
+wait 800
+kdown 12
+kdown 0D
+kup 0D
+kup 12
+wait 1000
+snap C:\T3.BMP
+key 0D
+wait 4000
+snap C:\T4.BMP
+close
+wait 1500
+close
+wait 1500

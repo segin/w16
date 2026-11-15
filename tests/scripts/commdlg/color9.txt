@@ -1,0 +1,12 @@
+; ChooseColor without an owner window (where the dialog goes), and with a
+; hook that sees the set-up of a full dialog, then OK
+cd1 color flags=0 owner=0
+cd1 color flags=12 rgb=00FF00 hook=1
+wait 7000
+snap C:\N1.BMP
+dump
+key 1B
+wait 7000
+snap C:\N2.BMP
+key 0D
+wait 3000

@@ -1,0 +1,66 @@
+/*
+ * clock.rc - Clock's resources.
+ *
+ * The menu, its command IDs and the Font dialog's layout (dialog units,
+ * control IDs and styles: COMMDLG's ChooseFont needs every control of its
+ * standard dialog, so the hidden ones are here too) are the original's,
+ * read as data from its resources and confirmed by SNAP.EXE dumps
+ * (ARCHITECTURE.md 15.2). The icon is our own (tools/clockicon.py).
+ */
+#include <windows.h>
+#include "clock.h"
+
+IDI_CLOCK ICON "clock.ico"
+
+IDM_MENU MENU
+BEGIN
+    POPUP "&Settings"
+    BEGIN
+        MENUITEM "&Analog", IDM_ANALOG
+        MENUITEM "&Digital", IDM_DIGITAL
+        MENUITEM SEPARATOR
+        MENUITEM "Set &Font...", IDM_SETFONT
+        MENUITEM SEPARATOR
+        MENUITEM "&No Title", IDM_NOTITLE
+        MENUITEM SEPARATOR
+        MENUITEM "&Seconds", IDM_SECONDS
+        MENUITEM "Da&te", IDM_DATE
+        MENUITEM SEPARATOR
+        MENUITEM "A&bout Clock...", IDM_ABOUT
+    END
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPNAME "Clock"
+    IDS_NOTIMER "Not enough timing resources for Clock. Close other applications and try again."
+    IDS_TOPMOST "Always on &Top"
+END
+
+/* ChooseFont's template: only the face list, OK, Cancel and the sample
+   show; the style, size, effects and script controls sit off the dialog.
+   (CONTROL makes a control visible unless told NOT WS_VISIBLE.) */
+IDD_FONT DIALOG 17, 71, 171, 129
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+CAPTION "Font"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Font:", 1088, "Static", 0x50020000L, 6, 3, 40, 8
+    CONTROL "", 1136, "ComboBox", 0x50210351L, 6, 12, 94, 54
+    CONTROL "", 1089, "Static", 0x40020000L | NOT WS_VISIBLE, 197, 99, 2, 7
+    CONTROL "", 1137, "ComboBox", 0x50200001L, 189, 102, 10, 8
+    CONTROL "", 1090, "Static", 0x40020000L | NOT WS_VISIBLE, 184, 92, 9, 8
+    CONTROL "", 1138, "ComboBox", 0x50000311L, 179, 99, 24, 17
+    CONTROL "", 1072, "Button", 0x40000007L | NOT WS_VISIBLE, 181, 85, 15, 29
+    CONTROL "", 1040, "Button", 0x40000003L | NOT WS_VISIBLE, 182, 90, 9, 10
+    CONTROL "", 1041, "Button", 0x40000003L | NOT WS_VISIBLE, 179, 96, 2, 10
+    CONTROL "", 1091, "Static", 0x40020000L | NOT WS_VISIBLE, 181, 104, 30, 8
+    CONTROL "", 1139, "ComboBox", 0x50000253L, 179, 99, 21, 13
+    CONTROL "", 1026, "Button", 0x50030000L, 185, 96, 4, 4
+    CONTROL "", 1038, "Button", 0x50030000L, 183, 92, 7, 5
+    CONTROL "OK", IDOK, "Button", 0x50030001L, 128, 10, 40, 14
+    CONTROL "Cancel", IDCANCEL, "Button", 0x50030000L, 128, 27, 40, 14
+    CONTROL "Sample", 1073, "Button", 0x50020007L, 8, 70, 160, 49
+    CONTROL "", 1093, "Static", 0x50000081L, 195, 95, 12, 5
+    CONTROL "AaBbYyZz", 1092, "Static", 0x40020081L | NOT WS_VISIBLE, 14, 79, 149, 37
+END

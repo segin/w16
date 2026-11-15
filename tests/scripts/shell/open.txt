@@ -1,0 +1,20 @@
+; Opening documents from File Manager (ShellExecute, the associations of
+; WIN.INI [extensions] and the registration database): a text file
+; (Notepad), a Write document, and a file without an association
+run WINFILE.EXE
+wait 4000
+snap C:\FM.BMP
+dump
+key 09
+wait 500
+dblitem 11
+wait 3000
+snap C:\OPENTXT.BMP
+close
+wait 1000
+dblitem 5
+wait 2000
+snap C:\NOASSOC.BMP
+dump
+key 0D
+wait 500

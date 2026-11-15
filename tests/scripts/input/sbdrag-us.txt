@@ -1,0 +1,113 @@
+; probe US19 (tests/apps/us19.c) as the shell: each of its four scroll
+; bars' thumbs dragged with real input (tests/inputrun.sh; boot-test case
+; sbdrag, part us). The window's vertical bar and the horizontal control
+; move only on SB_THUMBPOSITION, the window's horizontal bar and the
+; vertical control on every SB_THUMBTRACK. Screens mid-drag: the thumb's
+; outline following the pointer, at the ends of its travel, and back at
+; its start with the pointer just out of the bar's room (4 pixels beside
+; it, 1 above or below) and just in. Window at 40,40 to 360,280 (US19's
+; log has the rectangles); the pointer moves 1 pixel a unit for moves of
+; 1 or 2 units, 2 for longer ones
+click 1
+sleep 1
+; the window's vertical bar, x 340-356, y 62-260; thumb 340,153
+home
+sleep 0.3
+move 174 80
+sleep 0.5
+down 1
+match 01-wv-pressed 20 1
+shot 01-wv-pressed
+move 0 10
+match 02-wv-down20 20 1
+shot 02-wv-down20
+move 6 0
+match 03-wv-x360 20 1
+shot 03-wv-x360
+move 1 0
+match 04-wv-x361 20 1
+shot 04-wv-x361
+move -7 0
+match 05-wv-back 20 1
+shot 05-wv-back
+move 0 40
+move 0 1
+match 06-wv-y261 20 1
+shot 06-wv-y261
+move 0 1
+match 07-wv-y262 20 1
+shot 07-wv-y262
+move 0 -50
+up 1
+match 08-wv-released 20 1
+shot 08-wv-released
+; the window's horizontal bar, y 260-276; thumb 184,260
+home
+sleep 0.3
+move 96 134
+sleep 0.5
+down 1
+match 09-wh-pressed 20 1
+shot 09-wh-pressed
+move 20 0
+match 10-wh-right40 20 1
+shot 10-wh-right40
+move 0 5
+match 11-wh-y278 20 1
+shot 11-wh-y278
+move 0 -5
+match 12-wh-back 20 1
+shot 12-wh-back
+up 1
+match 13-wh-released 20 1
+shot 13-wh-released
+; the vertical control, x 64-80, y 73-192; thumb 64,124
+home
+sleep 0.3
+move 36 66
+sleep 0.5
+down 1
+match 14-cv-pressed 20 1
+shot 14-cv-pressed
+move 0 10
+match 15-cv-down20 20 1
+shot 15-cv-down20
+move -6 0
+match 16-cv-x60 20 1
+shot 16-cv-x60
+move -1 0
+match 17-cv-x59 20 1
+shot 17-cv-x59
+up 1
+match 18-cv-released 20 1
+shot 18-cv-released
+; the horizontal control, x 104-253, y 73-89; thumb 171,73
+home
+sleep 0.3
+move 89 40
+sleep 0.5
+down 1
+match 19-ch-pressed 20 1
+shot 19-ch-pressed
+move 0 -4
+match 20-ch-y72 20 1
+shot 20-ch-y72
+move 0 -1
+match 21-ch-y71 20 1
+shot 21-ch-y71
+move 0 1
+move 30 0
+match 22-ch-right 20 1
+shot 22-ch-right
+move 30 0
+match 23-ch-far 20 1
+shot 23-ch-far
+up 1
+match 24-ch-released 20 1
+shot 24-ch-released
+home
+sleep 0.3
+move 100 100
+move 100 100
+match 25-end 20 1
+shot 25-end

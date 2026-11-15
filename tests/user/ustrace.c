@@ -52,6 +52,7 @@ static WORD cap = 40;
 static shadow sh[NSHADOW];
 static WORD nsh;
 static WORD polls;
+static WORD exiting;                   /* ExitWindows entered */
 static char binname[] = "C:\\USTRACE.BIN";
 static char cntname[] = "C:\\USCOUNT.BIN";
 
@@ -289,8 +290,13 @@ void __far __pascal __loadds TRREC(WORD modid, WORD ord, WORD pmask, WORD abytes
     }
     if (modid == 0 && (ord == 108 || ord == 109 || ord == 112 || ord == 7)) {
         polls++;
+        if (ord == 7)
+            exiting = 1;
         flush();
-    }
+    } else if (exiting && modid != 0)
+        /* after ExitWindows: each of USER's calls out (task time) is
+           written at once, as Windows ends without another poll */
+        flush();
 }
 
 /* the return stub's frame: es ds di si bp sp bx dx cx ax fl bp [slot0

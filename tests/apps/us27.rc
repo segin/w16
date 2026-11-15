@@ -1,0 +1,21 @@
+/* us27.rc - resources of probe US27 (tests/apps/us27.c) */
+#include <windows.h>
+
+STRINGTABLE
+BEGIN
+    1, "Hello world"
+END
+
+A ACCELERATORS
+BEGIN
+    "a", 1
+END
+
+D DIALOG 10, 10, 120, 90
+STYLE WS_CHILD | WS_VISIBLE
+FONT 8, "Helv"
+BEGIN
+    EDITTEXT 10, 5, 5, 100, 12, ES_AUTOHSCROLL
+    LISTBOX 11, 5, 20, 100, 30, LBS_HASSTRINGS | WS_VSCROLL
+    COMBOBOX 12, 5, 55, 100, 40, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL
+END

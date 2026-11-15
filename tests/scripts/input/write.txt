@@ -1,0 +1,42 @@
+; Windows Write (Microsoft's WRITE.EXE, started by WIN.INI run=): a line
+; typed, the Character menu, the ruler, a second line, File > Exit and No
+; to saving (tests/inputrun.sh; boot-test case write). The pointer goes to
+; the screen's bottom right corner first, on the desktop under Write's
+; window, so that it is an arrow in every screen.
+; Each shot (matchnow NAME 20 S): the reference's run shoots S seconds
+; after the last key, as before; a w16 run takes the first frame equal to
+; the reference's shot, the carets' places and the Yes button left out
+; (tests/inputrun.sh -M): on a loaded host the last typed letter was not
+; drawn yet a second after it was typed
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+matchnow 01-start 20 1
+type Hello from w16
+matchnow 02-typed 20 1
+key alt+c
+matchnow 03-character 20 1.5
+key Escape
+key Escape
+sleep 0.5
+key alt+d
+sleep 0.5
+key r
+matchnow 04-ruler 20 1.5
+key Return
+type Second line
+matchnow 05-second 20 1
+key alt+f
+sleep 0.5
+key x
+matchnow 06-save 20 1.5
+key n
+matchnow 07-closed 20 2

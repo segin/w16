@@ -46,6 +46,7 @@ extern void __cdecl dos_setdrive(int drive);
 #define B_17A       0x17A       /* 0Fh 10h tasks 01h */
 #define B_COUNT     0x17C       /* tasks in the list (not counting Windows') */
 #define B_17E       0x17E       /* 0Fh as a switch starts */
+#define B_DOSMEM    0x183       /* paragraphs DOS programs get */
 #define B_LINEAR    0x185       /* linear address of a buffer for Windows' low memory */
 #define B_PROGRAM   0x189       /* the program's path (else DOSX's) */
 #define B_RECORDS   0x1D9       /* task records: name at +0 */
@@ -246,11 +247,11 @@ static void set_name(BYTE FAR *r, const char FAR *s)
 }
 
 /* move record r to the front of the switching order (after Windows') */
-static void to_front(int r)
+static void move_front(int r)
 {
     BYTE FAR *w = recp(R_WINDOWS);
     int p = R_WINDOWS, guard;
-    if (w[R_NEXT] == r)
+    if (r < 0 || r >= R_WINDOWS || w[R_NEXT] == r)
         return;
     for (guard = 0; guard < NREC; guard++) {    /* unlink */
         BYTE FAR *q = recp(p);
@@ -260,10 +261,25 @@ static void to_front(int r)
         }
         p = q[R_NEXT];
         if (p >= NREC || p == R_WINDOWS)
-            break;
+            return;
     }
     recp(r)[R_NEXT] = w[R_NEXT];
     w[R_NEXT] = (BYTE)r;
+}
+
+/* record r first in the switching order, the Windows application the
+   user leaves second, the others in their order after them (Windows 3.1's
+   WINOLDAP resuming 12 from Windows: 13 12 14 and 14 12 13 both became
+   12 14 13; tests/swap.sh -O two, tests/winoldap.sh two) */
+static void to_front(int r)
+{
+    int q;
+    for (q = 0; q < R_WINDOWS; q++)
+        if (recp(q)[R_KIND] == 0x28) {
+            move_front(q);
+            break;
+        }
+    move_front(r);
 }
 
 /* the Windows application the user leaves: one record, made when the
@@ -391,10 +407,17 @@ static void do_switch(void)
     /* the buffer WSWAP keeps Windows' low memory in while the program
        runs: allocated for each switch and freed after it, as Windows 3.1's
        (its INT 31h 0006h comes before every INT 2Fh 4B80h, and the address
-       at 185h changes between switches). 8A000h bytes were observed with
-       640 KB of conventional memory, i.e. all of it above 1600h:0;
-       UNVERIFIED how Windows 3.1 sizes it */
-    hbuf = GlobalAlloc(GMEM_MOVEABLE, (DWORD)(woa_memtop() - 0x1600) << 4);
+       at 185h changes between switches). Its size is block 183h (the
+       paragraphs DOS programs get) times 16 plus 1000 bytes, fixed and
+       zero-initialised: Microsoft's WINOLDAP on w16's KERNEL asks
+       GlobalAlloc(0040h, 9DB08h) with 183h = 9D72h, and on Windows 3.1's
+       KRNL286 the buffer's selector has limit DB0Fh (9DB10h bytes); with
+       16 KB less DOS memory (LOADFIX -16) 183h = 9926h and the limit 964Fh
+       (99650h = 99648h rounded to a paragraph). WSWAP writes more than
+       640 KB - 1600h:0 there: on w16's KRNL286 the image starts at 03FBh,
+       so a buffer of (top - 1600h) x 16 bytes was overrun. */
+    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT,
+                       ((DWORD)*(WORD FAR *)(blk + B_DOSMEM) << 4) + 1000);
     if (!hbuf) {
         message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
         if (!started) {
@@ -665,7 +688,7 @@ static BOOL setup(LPSTR cmd)
        programs get (block 183h, paragraphs; 96ACh = 603 K in DOSBox),
        observed with no TEMP and no hard disk: "A", "603 K" */
     {
-        DWORD need = (DWORD)*(WORD FAR *)(blk + 0x183) << 4;
+        DWORD need = (DWORD)*(WORD FAR *)(blk + B_DOSMEM) << 4;
         char d = blk[B_SWAPDIR];
         if (d >= 'a' && d <= 'z')
             d -= 'a' - 'A';

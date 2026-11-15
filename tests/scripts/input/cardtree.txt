@@ -1,0 +1,20 @@
+; boot-test case olecli@tree: w16's install tree alone (with w16's
+; OLECLI.DLL, which CARDFILE.EXE imports), the minimised Accessories group
+; restored (Ctrl+Tab twice from Main: Main, StartUp, Accessories), its
+; Cardfile item (right of Notepad) started: Cardfile's window, then closed
+; with Alt+F4.
+key ctrl+Tab
+sleep 0.5
+key ctrl+Tab
+sleep 1
+key Return
+match 01-acc 20 2
+shot 01-acc
+key Right
+sleep 0.5
+key Return
+match 02-cardfile 20 2
+shot 02-cardfile
+key alt+F4
+match 03-back 20 2
+shot 03-back

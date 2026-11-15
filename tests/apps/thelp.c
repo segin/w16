@@ -7,6 +7,7 @@
  * command line, then every message its window receives, to TK.LOG:
  *     HELP cmdline "<text>"
  *     HELP msg <msg> wp=<word> lp=<hi>:<lo>
+ *     HELP msgname "<name>"                              a registered one's
  *     HELP block <handle> size=<n>: <bytes in hex>      if lp names one
  *     HELP text "<string>"                               strings in it
  * The window class is the one USER looks for (UNVERIFIED recall:
@@ -110,6 +111,16 @@ LRESULT CALLBACK __export HelpWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         out(":");
         outhex(LOWORD(lp), 4);
         out("\r\n");
+        if (msg >= 0xC000) {
+            /* a registered message: its name (they share the atom table
+               with clipboard formats) */
+            char nm[64];
+            if (GetClipboardFormatName(msg, nm, sizeof nm)) {
+                out("HELP msgname \"");
+                out(nm);
+                out("\"\r\n");
+            }
+        }
         if (msg >= WM_USER || msg < 0x100) {
             block(LOWORD(lp));
             if (HIWORD(lp) && HIWORD(lp) != LOWORD(lp))

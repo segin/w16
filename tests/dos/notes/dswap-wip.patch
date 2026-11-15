@@ -1,0 +1,74 @@
+diff --git a/win/win.asm b/win/win.asm
+index 5aa237a..bba03c2 100644
+--- a/win/win.asm
++++ b/win/win.asm
+@@ -104,6 +104,7 @@ wswap_tail: db 2, ' ', 8, 0Dh   ; WSWAP's tail, as Windows 3.1 gives it
+ s_windir:   db 'windir='
+ windir:     times PATHMAX db 0  ; WIN.COM's directory, no trailing "\"
+ prog_path:  times PATHMAX db 0  ; WIN386.EXE or WSWAP.EXE
++dswap_path: times PATHMAX db 0  ; DSWAP.EXE (standard mode's DOS programs)
+ ; ExitWindowsExec's buffer (INT 2Fh AX=4B20h returns DX:CX = it). What
+ ; KERNEL writes there is UNVERIFIED (WC9 could not make Windows 3.1 call
+ ; it); w16 takes a program path, a blank, its arguments.
+@@ -126,6 +127,12 @@ sw_x        equ block + SB_TASKS + (SB_NTASKS - 1) * SB_TASKLEN + TK_NAME
+ 
+         align 2
+ block:      times SB_SIZE db 0
++; INT 2Fh AX=4A05h SI=2's buffer: CX paragraphs (10h, from WSWAP and
++; DSWAP), zeros (WC3 on Windows 3.1: the 64 bytes at the DX:AX it
++; returns were 0 for both, DX 010Fh in two runs where WIN.COM was at 0192h
++; and 0194h: memory of its own, not its code)
++SW_BUFP     equ 10h
++sw_buf:     times SW_BUFP * 16 db 0
+ 
+ ; ---- the INT 2Fh handler ----
+ int2f:
+@@ -162,10 +169,13 @@ sw_api:
+         iret
+ .s2:    cmp si, 2
+         jne .s4
++        ; DX:AX -> a zeroed buffer (sw_buf). w16 returned a pointer into
++        ; its own code, which DSWAP wrote over (it hung). UNVERIFIED: what
++        ; the callers keep there, sizes other than CX = 10h paragraphs
+         dec byte [cs:block + SB_COUNT]
+-        sub dx, 5                       ; a far pointer relative to DX,
+-        mov ax, sw_stub + 50h           ; as Windows 3.1 returns (UNVERIFIED
+-        mov si, sw_x                    ; what WSWAP does with it)
++        mov dx, cs
++        mov ax, sw_buf
++        mov si, sw_x
+         iret
+ .s4:    cmp si, 3
+         jne .s4b
+@@ -296,6 +306,23 @@ launch:
+         je .noapp
+         cmp byte [block + SB_17D], 1
+         jne .noapp
++        ; 3.1's WIN.COM runs DSWAP.EXE (from the system directory, with
++        ; WSWAP's tail " \x08"), which sets up the text screen (80x25),
++        ; shows the MS-DOS Prompt's banner ("Type EXIT and press ENTER to
++        ; quit this MS-DOS prompt ...") and runs the program itself (E10,
++        ; an INT 21h/10h recorder: WIN.COM's EXECs wswap.exe, dosx.exe,
++        ; krnl286.exe, then dswap.exe " \x08", which runs Z:\COMMAND.COM;
++        ; then wswap.exe again). w16 ran the program at 189h itself: no
++        ; banner, and the text mode Windows left. Without DSWAP, as before.
++        mov si, n_dswap
++        mov di, dswap_path
++        call find_file
++        jc .direct
++        mov dx, dswap_path
++        mov bx, pblock
++        call exec
++        jmp .run
++.direct:
+         mov ax, [env_seg]
+         mov [exec_pb], ax
+         mov word [exec_pb + 2], block + SB_TAIL
+@@ -1802,6 +1829,7 @@ sb_k1:      db 02h, 70h, 00h, 30h, 00h, 00h, 0Fh, 0FFh, 0FFh
+ n_win386:   db 'win386.exe', 0
+ n_dosx:     db 'dosx.exe', 0
+ n_wswap:    db 'wswap.exe', 0
++n_dswap:    db 'dswap.exe', 0
+ n_system:   db 'system\', 0
+ n_sysini:   db 'system.ini', 0
+ n_krnl286:  db 'krnl286', 0

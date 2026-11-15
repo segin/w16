@@ -1,0 +1,28 @@
+; [Restrictions] EditLevel=2: no items created, deleted, moved, copied.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO EditLevel=2>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\V1.BMP
+key 1B
+key 1B
+wait 300
+key 2E
+wait 800
+key 76
+wait 800
+menu f
+char n
+wait 800
+snap C:\V2.BMP
+menu f
+char p
+wait 1000
+snap C:\V3.BMP
+key 1B
+wait 500
+menu f
+char x
+wait 1500

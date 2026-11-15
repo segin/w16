@@ -25,6 +25,7 @@
 
 extern u16 KAPI LAlloc(u16 ds, u16 flags, u16 n);
 extern u16 KAPI LFree(u16 ds, u16 h);
+extern u32 ptr_room(const void FAR *p, int write);          /* kmisc.c */
 
 #define DS_ATOMTABLE    0x08
 #define ATOM_BUCKETS    37      /* default table size (observed) */
@@ -41,11 +42,6 @@ extern u16 KAPI LFree(u16 ds, u16 h);
 #define W(s, o)  (*(u16 FAR *)MK_FP((s), (o)))
 #define B(s, o)  (*(u8 FAR *)MK_FP((s), (o)))
 
-static u16 sel_limit(u16 sel);
-#pragma aux sel_limit = \
-    "xor ax, ax" \
-    "lsl ax, dx" \
-    parm [dx] value [ax] modify exact [ax];
 
 /* the case folding atoms use (observed: a-z, E0h-FEh but F7h) */
 static u8 fold(u8 c)
@@ -133,6 +129,18 @@ static int atom_direct(const char FAR *s, u16 *atom, u16 *len)
         *atom = FP_OFF(s) < ATOM_STRING ? FP_OFF(s) : 0;
         return 1;
     }
+    /* a bad name, or one running past its segment's end: 0 (3.1's lets
+       it fault and recovers, its "__GP" table; US27: USER's
+       RegisterClipboardFormat, RegisterWindowMessage) */
+    {
+        u32 i, rd = ptr_room(s, 0);
+        for (i = 0; i < rd && s[(u16)i]; i++)
+            ;
+        if (i >= rd) {
+            *atom = 0;
+            return 1;
+        }
+    }
     if (int_name(s, &v)) {
         *atom = v < ATOM_STRING ? v : 0;
         return 1;
@@ -166,7 +174,8 @@ u16 KAPI AFIND(u16 ds, const char FAR *s)                       /* KERNEL.69 */
 
 u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
 {
-    char name[ATOM_MAXLEN + 1];
+    static char name[ATOM_MAXLEN + 1];     /* not on the caller's stack
+                                                  (KERNEL audit #16) */
     u16 atom, len, t, slot, prev, e, i;
     t = table_of(ds);
     if (atom_direct(s, &atom, &len))
@@ -203,7 +212,7 @@ u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
 /* the entry of string atom `atom` if it is one in DS's table, else 0 */
 static u16 entry_of(u16 ds, u16 atom, u16 *slot, u16 *prev)
 {
-    u16 e = atom << 2, t = W(ds, DS_ATOMTABLE), lim = sel_limit(ds), len, x;
+    u16 e = atom << 2, t = W(ds, DS_ATOMTABLE), lim = sel_lim16(ds), len, x;
     if (!t || !e || e > lim || lim - e < AE_NAME)
         return 0;
     len = B(ds, e + AE_LEN);
@@ -223,7 +232,7 @@ u16 KAPI ADEL(u16 ds, u16 atom)                                 /* KERNEL.71 */
         /* observed on 3.1: 0 for C000h and FFFFh; for other non-atoms an
            unrelated nonzero value (04EFh / 0297h). UNVERIFIED: w16 returns
            the atom, as the SDK documents for a failure. */
-        if (atom == ATOM_STRING || (u16)(atom << 2) > sel_limit(ds))
+        if (atom == ATOM_STRING || (u16)(atom << 2) > sel_lim16(ds))
             return 0;
         return atom;
     }
@@ -238,16 +247,26 @@ u16 KAPI ADEL(u16 ds, u16 atom)                                 /* KERNEL.71 */
 }
 
 /* copy at most n - 1 characters and a NUL (nothing if n <= 0); returns
-   the characters copied (observed for string and integer atoms) */
+   the characters copied (observed for string and integer atoms). A
+   buffer that ends first, or a bad one: what fits is written, 0 returned
+   (3.1's copy faults there and is recovered, its "__GP" table; US27:
+   USER's GetClipboardFormatName and GetClassName) */
 static u16 copy_name(char FAR *buf, int n, const char FAR *s, u16 len)
 {
     u16 i;
+    u32 wr;
     if (n <= 0)
         return 0;
     if (len > (u16)(n - 1))
         len = (u16)(n - 1);
-    for (i = 0; i < len; i++)
+    wr = ptr_room(buf, 1);
+    for (i = 0; i < len; i++) {
+        if (i >= wr)
+            return 0;
         buf[i] = s[i];
+    }
+    if (len >= wr)
+        return 0;
     buf[len] = 0;
     return len;
 }

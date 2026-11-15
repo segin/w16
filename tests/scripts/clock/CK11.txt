@@ -1,0 +1,11 @@
+; About Clock
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+cmd 4
+wait 1500
+snap C:\B1.BMP
+key 1B
+wait 500
+close
+wait 1000

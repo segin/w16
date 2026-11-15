@@ -1,0 +1,26 @@
+; the server closes the object itself: Paintbrush's File > Exit & Return,
+; Yes to its question (the "/Close" advise data, then its TERMINATEs): the
+; callbacks the client gets; then the same with No
+spy
+doc 0 OCDOC
+create 0 PBrush obj0 draw 0
+menu pbParent Exit
+wait 2500
+wins
+key 0x0D
+wait 2500
+wins
+queryopen 0
+status 0
+save 0 C:\S0.BIN
+create 1 SoundRec snd1 draw 0
+menu SoundRec Exit
+wait 2500
+wins
+key 0x0D
+wait 2500
+queryopen 1
+save 1 C:\S1.BIN
+delete 0
+delete 1
+revokedoc 0

@@ -13,36 +13,160 @@ HWND hwndDesktop;
 /* CS_BYTEALIGNCLIENT: the client area's left edge goes to the nearest
    multiple of 8 on screen (probe US5: asked for x 10 and 333, Windows 3.1
    put such windows at 12 and 332, their client areas at 16 and 336) */
-void byte_align(PWND w)
+void byte_align(PWND w, BOOL made)
 {
     int dx;
     WORD cs = ((PCLS)w->cls)->style;
-    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & WS_CHILD))
+    /* CS_BYTEALIGNWINDOW only when the window is made, not when it is
+       moved (US18 on 3.1: a dialog-class window made at x 221 went to 224,
+       moved to 213 and to 230 it stayed there; Terminal centres its
+       dialogs at 220) */
+    if (!made)
+        cs &= ~CS_BYTEALIGNWINDOW;
+    /* not an icon (3.1: Notepad's, CS_BYTEALIGNCLIENT, minimised at 21
+       like the rest; w16 had it at 24) */
+    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & (WS_CHILD | WS_MINIMIZE)))
         return;
     /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
        message boxes are at 136, 168, 120 where centring gives 137, 169,
        122) */
+    /* nearest multiple of 8 also left of the screen: (x + 4) & ~7 (C's
+       division rounds towards zero, which put a window dragged partly off
+       the left edge 8 pixels right of where Windows 3.1 puts it) */
     if (cs & CS_BYTEALIGNCLIENT)
-        dx = (w->rcClient.left + 4) / 8 * 8 - w->rcClient.left;
+        dx = ((w->rcClient.left + 4) & ~7) - w->rcClient.left;
     else
-        dx = (w->rcWindow.left + 4) / 8 * 8 - w->rcWindow.left;
+        dx = ((w->rcWindow.left + 4) & ~7) - w->rcWindow.left;
     if (dx) {
         OffsetRect(&w->rcWindow, dx, 0);
         OffsetRect(&w->rcClient, dx, 0);
     }
 }
 void free_place(HWND h);
+void minimize_new(HWND h);
+void free_props(PWND w);
+void free_scroll(PWND w);
+void purge_window_msgs(HQUEUE hq, HWND h);
+
+/* ---- where a window's WND is ----
+   Normally (the layout 3.1's tools know, Schulman ch. 6) the WND and its
+   extra bytes are one fixed block of USER's DGROUP and the HWND is its
+   offset: PW(h) is DGROUP:h.
+   [w16] ExtendedUserHeap=1 (SYSTEM.INI, read at start-up; off by default)
+   moves them out: the HWND is still the offset of a fixed DGROUP block,
+   but a 4-byte stub {heap number with STUB_SIG, offset}, and the WND
+   follows a word holding the HWND in a block of one of up to NWNDHEAPS
+   window heaps (local heaps in 64K global blocks of their own, made whole
+   so their selectors never change). A window then costs DGROUP the stub
+   alone, as Windows 95 did, and thousands fit; but a program that reads
+   USER's data directly (Spy-type tools, desktop replacements, debuggers,
+   some hook DLLs; TOOLHELP's heap walk shows stubs where WNDs were) does
+   not find the WND at DGROUP:HWND. Everything else reaches windows through
+   PW/HW/valid_wnd, the one code path both layouts share. */
+#define NWNDHEAPS 16
+#define STUB_SIG  0x5700        /* 'W' in the high byte, the heap's number low */
+typedef struct STUB {
+    WORD sig;
+    WORD off;                   /* the window heap's block: the HWND, then the WND */
+} STUB;
+static UHEAP uhWnd[NWNDHEAPS];
+static int nwndheaps;
+static WND dummy_wnd;           /* PW of a handle that is no window (ext mode) */
+
+static BOOL add_wnd_heap(void)
+{
+    HGLOBAL g;
+    WORD sel;
+    if (nwndheaps >= NWNDHEAPS)
+        return FALSE;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0xFFF0);
+    if (!g)
+        return FALSE;
+    sel = HIWORD(GlobalHandle((UINT)g));
+    if (!LocalInit(sel, 0x12, 0xFFEF)) {
+        GlobalFree(g);
+        return FALSE;
+    }
+    uhWnd[nwndheaps].h = g;
+    uhWnd[nwndheaps].sel = sel;
+    nwndheaps++;
+    return TRUE;
+}
+
+PWND wnd_of(WORD h)
+{
+    STUB __near *st;
+    if (!h)
+        return 0;
+    if (!ext_user_heap)
+        return (PWND)MK_FP(get_ds(), h);
+    st = (STUB __near *)h;
+    if ((st->sig & 0xFF00) != STUB_SIG || (st->sig & 0xFF) >= nwndheaps)
+        return (PWND)(WND __near *)&dummy_wnd;
+    return (PWND)MK_FP(uhWnd[st->sig & 0xFF].sel, st->off + 2);
+}
+
+HWND hwnd_of(PWND w)
+{
+    if (!w)
+        return 0;
+    return ext_user_heap ? (HWND)((WORD __far *)w)[-1] : (HWND)FP_OFF(w);
+}
+
+/* a new window's block of size bytes, zeroed: its handle, 0 if no room */
+static HWND alloc_wnd(WORD size)
+{
+    STUB __near *st;
+    WORD i, off = 0;
+    if (!ext_user_heap)
+        return (HWND)LocalAlloc(LPTR, size);
+    st = (STUB __near *)LocalAlloc(LPTR, sizeof(STUB));
+    if (!st)
+        return 0;
+    for (i = 0; !off; i++) {
+        if (i == nwndheaps && !add_wnd_heap())
+            break;
+        off = uh_alloc(&uhWnd[i], LMEM_FIXED | LMEM_ZEROINIT, size + 2);
+    }
+    if (!off) {
+        LocalFree((HLOCAL)st);
+        return 0;
+    }
+    i--;
+    *(WORD __far *)MK_FP(uhWnd[i].sel, off) = (WORD)st;
+    st->sig = STUB_SIG | i;
+    st->off = off;
+    return (HWND)(WORD)st;
+}
+
+static void free_wnd(HWND h)
+{
+    STUB __near *st = (STUB __near *)(WORD)h;
+    if (ext_user_heap)
+        uh_free(&uhWnd[st->sig & 0xFF], st->off);
+    LocalFree((HLOCAL)h);
+}
 
 PWND valid_wnd(HWND h)
 {
-    PWND w = PW(h);
+    PWND w;
     WORD sz;
     if (!h || ((WORD)h & 1))
         return 0;
     /* a live window is a local block of ours that points to a class */
     sz = LocalSize((HLOCAL)h);
-    if (sz < sizeof(WND) || LocalHandle((UINT)h) != (HLOCAL)h)
+    if (sz < (ext_user_heap ? sizeof(STUB) : sizeof(WND)) || LocalHandle((UINT)h) != (HLOCAL)h)
         return 0;
+    if (ext_user_heap) {
+        STUB __near *st = (STUB __near *)(WORD)h;
+        UHEAP *hp;
+        if ((st->sig & 0xFF00) != STUB_SIG || (st->sig & 0xFF) >= nwndheaps || (st->off & 1))
+            return 0;
+        hp = &uhWnd[st->sig & 0xFF];
+        if (uh_size(hp, st->off) < sizeof(WND) + 2 || *(WORD __far *)MK_FP(hp->sel, st->off) != (WORD)h)
+            return 0;
+    }
+    w = PW(h);
     if (!w->cls || (w->flags & 0x8000))
         return 0;
     return w;
@@ -53,7 +177,7 @@ HWND top_level(HWND h)
     PWND w = valid_wnd(h);
     while (w && (w->style & WS_CHILD) && w->hwndParent)
         w = PW(w->hwndParent);
-    return (HWND)(WORD)w;
+    return HW(w);
 }
 
 void unlink_window(PWND w)
@@ -63,7 +187,7 @@ void unlink_window(PWND w)
     if (!p)
         return;
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)
-        if (*link == (HWND)(WORD)w) {
+        if (*link == HW(w)) {
             *link = w->hwndNext;
             break;
         }
@@ -79,7 +203,7 @@ void link_window(PWND w, HWND after)
         return;
     if (after == HWND_TOP) {
         w->hwndNext = p->hwndChild;
-        p->hwndChild = (HWND)(WORD)w;
+        p->hwndChild = HW(w);
         return;
     }
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)
@@ -88,7 +212,7 @@ void link_window(PWND w, HWND after)
             break;
         }
     w->hwndNext = *link;
-    *link = (HWND)(WORD)w;
+    *link = HW(w);
 }
 
 BOOL is_visible(PWND w)
@@ -99,16 +223,26 @@ BOOL is_visible(PWND w)
     return TRUE;
 }
 
-static void set_text(PWND w, LPCSTR s)
+/* window text: a block of a string heap (uheap.c; 3.1 keeps it out of
+   DGROUP too: US15), WND+32 its handle, 0 for none (an empty text frees
+   it, as 3.1's does), the heap's number in the flags. FALSE: no room for
+   it (3.1's CreateWindow fails then: US15) */
+#define TEXTPTR(w)  ((LPCSTR)UH_PTR(&uhStrs[TEXTHEAP(w)], (w)->text))
+static BOOL set_text(PWND w, LPCSTR s)
 {
+    WORD heap, t = 0;
+    if (s && *s && !(t = uh_text(s, &heap)))
+        return FALSE;
     if (w->text)
-        LocalFree((HLOCAL)w->text);
-    w->text = (s && *s) ? local_strdup(s) : 0;
+        uh_free(&uhStrs[TEXTHEAP(w)], w->text);
+    w->text = t;
+    w->flags = (w->flags & ~WF_TEXTHEAP) | (t ? (DWORD)heap << 16 : 0);
+    return TRUE;
 }
 
 /* WM_GETMINMAXINFO's defaults (3.1 SDK; the maximised size covers the
    frame off screen) */
-static void minmax(PWND w, MINMAXINFO __far *mm)
+void minmax(PWND w, MINMAXINFO __far *mm)
 {
     int cxf = sysmet[SM_CXFRAME], cyf = sysmet[SM_CYFRAME];
     if (!(w->style & WS_THICKFRAME)) {
@@ -155,10 +289,10 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     pw = parent ? valid_wnd(parent) : (PWND)0;
     if ((style & WS_CHILD) && !pw)
         return 0;
-    w = (PWND)LocalAlloc(LPTR, sizeof(WND) + c->cbWndExtra);
-    if (!w)
+    h = alloc_wnd(sizeof(WND) + c->cbWndExtra);
+    if (!h)
         return 0;
-    h = (HWND)(WORD)w;
+    w = PW(h);
     w->cls = (WORD)c;
     c->cwnd++;
     w->hInstance = hinst;
@@ -177,15 +311,18 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             w->hwndOwner = top_level(parent);
         w->hMenu = (WORD)menu;
         if (!menu && c->lpszMenuName)
-            w->hMenu = (WORD)LoadMenu(hinst, c->lpszMenuName);
+            w->hMenu = (WORD)LoadMenu(hinst, class_menu_name(c));
     }
     if ((style & WS_VISIBLE) && hwndDesktop) {
         show = TRUE;
         style &= ~WS_VISIBLE;
     }
     w->style = style;
-    if (title && !ISATOM(title))
-        set_text(w, title);
+    if (title && !ISATOM(title) && !set_text(w, title)) {
+        c->cwnd--;
+        free_wnd(h);
+        return 0;
+    }
 
     /* default position and size */
     if (!(style & (WS_CHILD | WS_POPUP))) {
@@ -197,8 +334,18 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             if (cy != CW_USEDEFAULT && cy)
                 sw = cy;                /* y of CW_USEDEFAULT: the show command */
             if (cx == CW_USEDEFAULT) {
-                cx = sysmet[SM_CXSCREEN] * 3 / 4;
-                cy = sysmet[SM_CYSCREEN] * 3 / 4;
+                /* the screen's width less a frame, down to the row of
+                   icons, and with CS_BYTEALIGNCLIENT a client area a
+                   whole number of 8 pixels wide (started first on 3.1 on
+                   640x480: Terminal 636x408 at 0,0; Notepad, whose class
+                   has CS_BYTEALIGNCLIENT, 632x408, then moved to x 4.
+                   UNVERIFIED for later, cascaded ones, and whether the
+                   client width is aligned in other cases too) */
+                int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] : sysmet[SM_CXBORDER];
+                cx = sysmet[SM_CXSCREEN] - x - sysmet[SM_CXFRAME];
+                cy = sysmet[SM_CYSCREEN] - y - sysmet[SM_CYICONSPACING];
+                if (c->style & CS_BYTEALIGNCLIENT)
+                    cx -= (cx - 2 * fx) % 8;
             }
         } else if (cx == CW_USEDEFAULT) {
             cx = sysmet[SM_CXSCREEN] * 3 / 4;
@@ -259,7 +406,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     calc_client(w);
-    byte_align(w);
+    byte_align(w, TRUE);
     r = send_message(h, WM_CREATE, 0, (LPARAM)(CREATESTRUCT __far *)&cs);
     if (!valid_wnd(h))
         return 0;
@@ -268,7 +415,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     w->flags |= WF_CREATED;
-    if (!(style & WS_CHILD) || 1) {
+    /* a window made invisible gets WM_SIZE and WM_MOVE when it is first
+       shown (3.1 trace: Notepad's main window got none in CreateWindow;
+       its WM_SIZE handler places its edit control, which did not exist
+       yet, so w16's early WM_SIZE left the edit at 0,0 instead of 8,2) */
+    if (!(style & WS_VISIBLE))
+        w->flags |= WF_SENDSIZE;
+    else {
         send_message(h, WM_SIZE, SIZE_RESTORED,
                      MAKELONG(w->rcClient.right - w->rcClient.left,
                               w->rcClient.bottom - w->rcClient.top));
@@ -281,6 +434,9 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             send_message(h, WM_MOVE, 0, MAKELONG(mx, my));
         }
     }
+    /* WS_MINIMIZE: to its icon's place now (US24; user/pos.c) */
+    if ((style & (WS_MINIMIZE | WS_CHILD)) == WS_MINIMIZE && valid_wnd(h))
+        minimize_new(h);
     if ((style & WS_CHILD) && !(exstyle & WS_EX_NOPARENTNOTIFY) && pw)
         send_message(parent, WM_PARENTNOTIFY, WM_CREATE, MAKELONG(h, w->hMenu));
     if (show && valid_wnd(h)) {
@@ -293,10 +449,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     return valid_wnd(h) ? h : 0;
 }
 
+/* a bad class name or title: 0, no window (3.1, US27) */
 HWND WINAPI CreateWindow(LPCSTR cls, LPCSTR title, DWORD style, int x, int y,
                          int cx, int cy, HWND parent, HMENU menu, HINSTANCE hinst,
                          void __far *param)
 {
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
     return create_window(0, cls, title, style, x, y, cx, cy, parent, menu, hinst, param);
 }
 
@@ -304,12 +463,14 @@ HWND WINAPI CreateWindowEx(DWORD ex, LPCSTR cls, LPCSTR title, DWORD style, int 
                            int cx, int cy, HWND parent, HMENU menu, HINSTANCE hinst,
                            void __far *param)
 {
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
     return create_window(ex, cls, title, style, x, y, cx, cy, parent, menu, hinst, param);
 }
 
 static void free_window(PWND w)
 {
-    HWND h = (HWND)(WORD)w;
+    HWND h = HW(w);
     kill_window_timers(h);
     if (w->hrgnUpdate) {
         if ((WORD)w->hrgnUpdate > 1)
@@ -321,20 +482,17 @@ static void free_window(PWND w)
         dec_paint(w->hq);
     }
     if (w->text)
-        LocalFree((HLOCAL)w->text);
+        uh_free(&uhStrs[TEXTHEAP(w)], w->text);
     if (!(w->style & WS_CHILD) && w->hMenu)
         DestroyMenu((HMENU)w->hMenu);
     if (w->hSysMenu)
         DestroyMenu((HMENU)w->hSysMenu);
-    while (w->props) {
-        WORD n = *(WORD __near *)w->props;
-        LocalFree((HLOCAL)w->props);
-        w->props = n;
-    }
+    free_props(w);
+    free_scroll(w);
     ((PCLS)w->cls)->cwnd--;
     w->cls = 0;
     w->flags |= 0x8000;
-    LocalFree((HLOCAL)w);
+    free_wnd(h);
 }
 
 static void destroy_tree(HWND h)
@@ -344,6 +502,11 @@ static void destroy_tree(HWND h)
     if (!w)
         return;
     w->flags |= WF_DESTROYING;
+    clip_window_destroyed(h);       /* clip.c: WM_RENDERALLFORMATS first */
+    {
+        void savebits_forget(HWND h);
+        savebits_forget(h);
+    }
     send_message(h, WM_DESTROY, 0, 0);
     while ((w = valid_wnd(h)) != 0 && (c = w->hwndChild) != 0) {
         PWND cw = valid_wnd(c);
@@ -356,10 +519,15 @@ static void destroy_tree(HWND h)
     }
     if ((w = valid_wnd(h)) == 0)
         return;
+    if (w->flags & WF_DLG) {
+        void dlg_free_editseg(HWND h);
+        dlg_free_editseg(h);
+    }
     free_place(h);
     send_message(h, WM_NCDESTROY, 0, 0);
     if ((w = valid_wnd(h)) == 0)
         return;
+    purge_window_msgs(w->hq, h);
     unlink_window(w);
     free_window(w);
 }
@@ -399,8 +567,8 @@ BOOL destroy_window(HWND h)
                        SWP_NOSIZE | SWP_NOZORDER);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    if (h == hwndCapture || IsChild(h, hwndCapture))
-        hwndCapture = 0;
+    if (hwndCapture && (h == hwndCapture || IsChild(h, hwndCapture)))
+        ReleaseCapture();       /* the input queue goes back with it */
     destroy_tree(h);
     if (hwndFocus && !valid_wnd(hwndFocus))
         hwndFocus = 0;
@@ -500,7 +668,7 @@ HWND WINAPI GetWindow(HWND h, UINT cmd)
     case GW_HWNDLAST:
         if (!w->hwndParent)
             return 0;
-        for (r = (HWND)(WORD)w; PW(r)->hwndNext; r = PW(r)->hwndNext)
+        for (r = HW(w); PW(r)->hwndNext; r = PW(r)->hwndNext)
             ;
         return r;
     case GW_HWNDNEXT:
@@ -593,33 +761,39 @@ int WINAPI GetWindowTextLength(HWND h)
     return (int)send_message(h, WM_GETTEXTLENGTH, 0, 0);
 }
 
+/* a bad string: the text as it was (3.1) */
 void WINAPI SetWindowText(HWND h, LPCSTR s)
 {
+    if (GP_BAD(s))
+        return;
     if (valid_wnd(h))
         send_message(h, WM_SETTEXT, 0, (LPARAM)s);
 }
 
-/* DefWindowProc's part */
+/* DefWindowProc's part; a bad buffer (WM_GETTEXT) or string (WM_SETTEXT):
+   0, the text as it was (3.1) */
 LONG def_gettext(PWND w, int n, LPSTR buf)
 {
-    if (n <= 0)
+    if (n <= 0 || GP_BAD(buf))
         return 0;
     if (!w->text) {
         buf[0] = 0;
         return 0;
     }
-    lstr_cpyn(buf, (LPCSTR)MAKELP(get_ds(), w->text), n);
+    lstr_cpyn(buf, TEXTPTR(w), n);
     return lstr_len(buf);
 }
 
 LONG def_gettextlength(PWND w)
 {
-    return w->text ? lstr_len((LPCSTR)MAKELP(get_ds(), w->text)) : 0;
+    return w->text ? lstr_len(TEXTPTR(w)) : 0;
 }
 
-void def_settext(PWND w, LPCSTR s)
+BOOL def_settext(PWND w, LPCSTR s)
 {
-    set_text(w, s);
+    if (GP_BAD(s))
+        return FALSE;
+    return set_text(w, s);
 }
 
 /* ---- window words and longs ---- */
@@ -754,12 +928,16 @@ BOOL WINAPI EnumTaskWindows(HTASK t, WNDENUMPROC f, LPARAM lp)
     return TRUE;
 }
 
+/* a bad class name or title: 0 (3.1, US27) */
 HWND WINAPI FindWindow(LPCSTR cls, LPCSTR title)
 {
     HWND h;
     char buf[128];
-    PCLS c = cls ? find_class(cls, 0) : (PCLS)0;
+    PCLS c;
     ATOM a = 0;
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
+    c = cls ? find_class(cls, 0) : (PCLS)0;
     if (cls) {
         if (ISATOM(cls))
             a = LOWORD((DWORD)cls);
@@ -796,23 +974,35 @@ HWND WINAPI GetLastActivePopup(HWND h)
     return w->hwndLastActive && valid_wnd(w->hwndLastActive) ? w->hwndLastActive : h;
 }
 
-/* ---- coordinates ---- */
+/* ---- coordinates ----
+   A caller's POINTs and RECTs through gp_copy (gp.asm): a bad one is left
+   as it was, the part of one below a segment's limit changed (3.1, US27) */
+static void offset_points(POINT __far *p, UINT n, int dx, int dy)
+{
+    POINT a;
+    WORD k;
+    while (n--) {
+        k = gp_copy(&a, p, sizeof a) & ~1;
+        a.x += dx;
+        a.y += dy;
+        if (gp_copy(p, &a, k) != sizeof a)
+            return;
+        p++;
+    }
+}
+
 void WINAPI ClientToScreen(HWND h, POINT __far *p)
 {
     PWND w = valid_wnd(h);
-    if (w) {
-        p->x += w->rcClient.left;
-        p->y += w->rcClient.top;
-    }
+    if (w)
+        offset_points(p, 1, w->rcClient.left, w->rcClient.top);
 }
 
 void WINAPI ScreenToClient(HWND h, POINT __far *p)
 {
     PWND w = valid_wnd(h);
-    if (w) {
-        p->x -= w->rcClient.left;
-        p->y -= w->rcClient.top;
-    }
+    if (w)
+        offset_points(p, 1, -w->rcClient.left, -w->rcClient.top);
 }
 
 void WINAPI MapWindowPoints(HWND from, HWND to, POINT __far *p, UINT n)
@@ -823,18 +1013,14 @@ void WINAPI MapWindowPoints(HWND from, HWND to, POINT __far *p, UINT n)
         dx += w->rcClient.left, dy += w->rcClient.top;
     if (to && (w = valid_wnd(to)) != 0)
         dx -= w->rcClient.left, dy -= w->rcClient.top;
-    while (n--) {
-        p->x += dx;
-        p->y += dy;
-        p++;
-    }
+    offset_points(p, n, dx, dy);
 }
 
 void WINAPI GetWindowRect(HWND h, RECT __far *r)
 {
     PWND w = valid_wnd(h);
     if (w)
-        *r = w->rcWindow;
+        gp_copy(r, &w->rcWindow, sizeof(RECT));
 }
 
 void WINAPI GetClientRect(HWND h, RECT __far *r)
@@ -888,87 +1074,171 @@ HWND WINAPI ChildWindowFromPoint(HWND parent, POINT pt)
     return c ? c : parent;
 }
 
-/* ---- properties: a list of local blocks {next, atom/string, data} ---- */
-typedef struct PROP { WORD next; ATOM atom; HANDLE data; WORD str; } PROP;
+/* ---- properties ----
+   As 3.1's (US15): a window's properties are one block, WND+36 its
+   handle, an entry of an atom and the data per property (4 bytes; 3.1's
+   grew by 4 a property), string names global atoms (3.1: GlobalFindAtom
+   finds a property's name while a window has it and not after). w16 keeps
+   the block in the object heap (uheap.c), not DGROUP. Entries with atom 0
+   are unused (a block can be larger than asked for). Atoms from C000h up
+   are names this list holds a reference to. */
+typedef struct PROP { ATOM atom; HANDLE data; } PROP;
+#define PROPS(w)    ((PROP __far *)UH_PTR(&uhObj, (w)->props))
 
-static PROP __near *find_prop(PWND w, LPCSTR name, WORD __near **link)
+static UINT nprops(PWND w)
 {
-    WORD __near *l = &w->props;
-    ATOM a = ISATOM(name) ? LOWORD((DWORD)name) : FindAtom(name);
-    while (*l) {
-        PROP __near *p = (PROP __near *)*l;
-        if (a && p->atom == a) {
-            if (link)
-                *link = l;
-            return p;
-        }
-        l = &p->next;
-    }
-    return 0;
+    return w->props ? uh_size(&uhObj, w->props) / sizeof(PROP) : 0;
 }
 
+static ATOM prop_atom(LPCSTR name, BOOL add)
+{
+    if (ISATOM(name)) {
+        ATOM a = LOWORD((DWORD)name);
+        char b[64];
+        /* a string atom given as a number: one more reference, so that
+           every entry from C000h up holds one */
+        if (add && a >= 0xC000u && ga_name(a, b, sizeof b))
+            return ga_add(b);
+        return a;
+    }
+    return add ? ga_add(name) : ga_find(name);
+}
+
+static void prop_unref(ATOM a)
+{
+    if (a >= 0xC000u)
+        ga_delete(a);
+}
+
+/* the entry's index, -1 none */
+static int find_prop(PWND w, ATOM a)
+{
+    UINT i, n = nprops(w);
+    PROP __far *p = PROPS(w);
+    if (!a)
+        return -1;
+    for (i = 0; i < n; i++)
+        if (p[i].atom == a)
+            return i;
+    return -1;
+}
+
+/* A bad name: FALSE, 0 (3.1, US27; GetProp and RemoveProp too). A name
+   that runs past its segment's end: TRUE, nothing set (3.1: KERNEL's
+   atom code faults on it and recovers, and SetProp still returns TRUE;
+   UNVERIFIED what 3.1 stores then) */
 BOOL WINAPI SetProp(HWND h, LPCSTR name, HANDLE data)
 {
     PWND w = valid_wnd(h);
-    PROP __near *p;
-    if (!w)
+    PROP __far *p;
+    UINT i, n;
+    ATOM a;
+    WORD b;
+    if (!w || GP_BAD(name))
         return FALSE;
-    p = find_prop(w, name, 0);
-    if (!p) {
-        ATOM a = ISATOM(name) ? LOWORD((DWORD)name) : AddAtom(name);
-        if (!a)
-            return FALSE;
-        p = (PROP __near *)LocalAlloc(LPTR, sizeof(PROP));
-        if (!p)
-            return FALSE;
-        p->atom = a;
-        p->str = !ISATOM(name);
-        p->next = w->props;
-        w->props = (WORD)p;
+    if (!ISATOM(name) && HIWORD(gp_strlen(name, 0xFFFF)))
+        return TRUE;
+    i = find_prop(w, prop_atom(name, FALSE));
+    if (i != (UINT)-1) {
+        PROPS(w)[i].data = data;
+        return TRUE;
     }
-    p->data = data;
+    a = prop_atom(name, TRUE);
+    if (!a)
+        return FALSE;
+    n = nprops(w);
+    p = PROPS(w);
+    for (i = 0; i < n && p[i].atom; i++)
+        ;
+    if (i == n) {
+        b = uh_realloc(&uhObj, w->props, (n + 1) * sizeof(PROP));
+        if (!b) {
+            prop_unref(a);
+            return FALSE;
+        }
+        w->props = b;
+    }
+    p = PROPS(w);
+    p[i].atom = a;
+    p[i].data = data;
     return TRUE;
 }
 
 HANDLE WINAPI GetProp(HWND h, LPCSTR name)
 {
-    PWND w = valid_wnd(h);
-    PROP __near *p = w ? find_prop(w, name, 0) : (PROP __near *)0;
-    return p ? p->data : 0;
+    PWND w = GP_BAD(name) ? 0 : valid_wnd(h);
+    int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
+    return i >= 0 ? PROPS(w)[i].data : 0;
+}
+
+/* entry i goes: the last one takes its place, the block shrinks */
+static void drop_prop(PWND w, UINT i)
+{
+    UINT n = nprops(w);
+    PROP __far *p = PROPS(w);
+    prop_unref(p[i].atom);
+    while (n && !p[n - 1].atom)
+        n--;
+    if (n && i < n - 1)
+        p[i] = p[n - 1];
+    n--;
+    if (!n) {
+        uh_free(&uhObj, w->props);
+        w->props = 0;
+    } else {
+        WORD b;
+        p[n].atom = 0;
+        b = uh_realloc(&uhObj, w->props, n * sizeof(PROP));   /* smaller: in place */
+        if (b)
+            w->props = b;
+    }
 }
 
 HANDLE WINAPI RemoveProp(HWND h, LPCSTR name)
 {
-    PWND w = valid_wnd(h);
-    WORD __near *link;
-    PROP __near *p = w ? find_prop(w, name, &link) : (PROP __near *)0;
+    PWND w = GP_BAD(name) ? 0 : valid_wnd(h);
+    int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
     HANDLE d;
-    if (!p)
+    if (i < 0)
         return 0;
-    d = p->data;
-    *link = p->next;
-    if (p->str)
-        DeleteAtom(p->atom);
-    LocalFree((HLOCAL)p);
+    d = PROPS(w)[i].data;
+    drop_prop(w, i);
     return d;
 }
 
+/* DestroyWindow: the properties left go, their names' references with
+   them */
+void free_props(PWND w)
+{
+    UINT i, n = nprops(w);
+    for (i = 0; i < n; i++)
+        prop_unref(PROPS(w)[i].atom);
+    uh_free(&uhObj, w->props);
+    w->props = 0;
+}
+
+/* newest first; the procedure may remove the property it is given (each
+   entry is read again after the call: nothing in the heap is held) */
 int WINAPI EnumProps(HWND h, PROPENUMPROC f)
 {
     PWND w = valid_wnd(h);
-    WORD p, n;
     int r = -1;
+    UINT i;
     char name[64];
     if (!w)
         return -1;
-    for (p = w->props; p; p = n) {
-        PROP __near *pp = (PROP __near *)p;
-        n = pp->next;
-        if (pp->str) {
-            GetAtomName(pp->atom, name, sizeof name);
-            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, name, pp->data);
+    for (i = nprops(w); i-- > 0;) {
+        PROP pp;
+        if (!(w = valid_wnd(h)) || i >= nprops(w))
+            break;
+        pp = PROPS(w)[i];
+        if (!pp.atom)
+            continue;
+        if (pp.atom >= 0xC000u) {
+            ga_name(pp.atom, name, sizeof name);
+            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, name, pp.data);
         } else
-            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, MAKEINTATOM(pp->atom), pp->data);
+            r = ((int (__far __pascal *)(HWND, LPCSTR, HANDLE))f)(h, MAKEINTATOM(pp.atom), pp.data);
         if (!r)
             break;
     }

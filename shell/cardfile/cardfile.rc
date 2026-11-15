@@ -1,0 +1,361 @@
+/*
+ * cardfile.rc - w16 Cardfile resources.
+ *
+ * Menu, accelerators, dialog layouts (in dialog units, with the original
+ * templates' "Helv" 8 font) and message texts match Windows 3.1's
+ * Cardfile, read as data from its NE resources (tools/nerc.py) and
+ * checked against screenshots of it, with "w16" for "Windows" in
+ * messages (ARCHITECTURE.md 3, branding). The icon is our own artwork
+ * (tools/mkcardicon.py).
+ */
+#include <windows.h>
+#include "cardfile.h"
+
+#define CF_FONT FONT 8, "Helv"
+
+IDI_CARDFILE ICON "cardfile.ico"
+
+IDM_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New",                    IDM_NEW
+        MENUITEM "&Open...",                IDM_OPEN
+        MENUITEM "&Save",                   IDM_SAVE
+        MENUITEM "Save &As...",             IDM_SAVEAS
+        MENUITEM "&Print",                  IDM_PRINT
+        MENUITEM "Print A&ll",              IDM_PRINTALL
+        MENUITEM "Page Se&tup...",          IDM_PAGESETUP
+        MENUITEM "P&rint Setup...",         IDM_PRINTSETUP
+        MENUITEM "&Merge...",               IDM_MERGE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                   IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z",           IDM_UNDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X",            IDM_CUT
+        MENUITEM "&Copy\tCtrl+C",           IDM_COPY
+        MENUITEM "&Paste\tCtrl+V",          IDM_PASTE
+        MENUITEM "Paste &Link",             IDM_PASTELINK
+        MENUITEM "Paste &Special...",       IDM_PASTESPECIAL
+        MENUITEM "&Index...\tF6",           IDM_INDEX
+        MENUITEM "&Restore",                IDM_RESTORE
+        MENUITEM SEPARATOR
+        MENUITEM "Te&xt",                   IDM_TEXT, CHECKED
+        MENUITEM "Pictur&e",                IDM_PICTURE
+        MENUITEM SEPARATOR
+        MENUITEM "Lin&k...",                IDM_LINKS
+        MENUITEM "&Object",                 IDM_OBJECT
+        MENUITEM "I&nsert Object...",       IDM_INSERTOBJECT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Card",                   IDM_CARDVIEW
+        MENUITEM "&List",                   IDM_LISTVIEW
+    END
+    POPUP "&Card"
+    BEGIN
+        MENUITEM "&Add...\tF7",             IDM_ADD
+        MENUITEM "&Delete",                 IDM_DELETE
+        MENUITEM "Du&plicate",              IDM_DUPLICATE
+        MENUITEM "Au&todial...\tF5",        IDM_AUTODIAL
+    END
+    POPUP "&Search"
+    BEGIN
+        MENUITEM "&Go To...\tF4",           IDM_GOTO
+        MENUITEM "&Find...",                IDM_FIND
+        MENUITEM "Find &Next\tF3",          IDM_FINDNEXT
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents",               IDM_HELPCONTENTS
+        MENUITEM "&Search for Help On...",  IDM_HELPSEARCH
+        MENUITEM "&How to Use Help",        IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Cardfile...",      IDM_ABOUT
+    END
+END
+
+IDA_MAIN ACCELERATORS
+BEGIN
+    VK_INSERT,  IDM_COPY,           VIRTKEY, CONTROL
+    VK_F1,      IDM_HELPCONTENTS,   VIRTKEY
+    VK_F3,      IDM_FINDNEXT,       VIRTKEY
+    VK_F4,      IDM_GOTO,           VIRTKEY
+    VK_F5,      IDM_AUTODIAL,       VIRTKEY
+    VK_F6,      IDM_INDEX,          VIRTKEY
+    VK_F7,      IDM_ADD,            VIRTKEY
+    VK_BACK,    IDM_UNDO,           VIRTKEY, ALT
+    "Z",        IDM_UNDO,           VIRTKEY, CONTROL
+    "X",        IDM_CUT,            VIRTKEY, CONTROL
+    "C",        IDM_COPY,           VIRTKEY, CONTROL
+    "V",        IDM_PASTE,          VIRTKEY, CONTROL
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DELETE,         "Delete ""%%""?"
+    IDS_SAVECHANGES,    "%%\nThis file has changed.\n\nSave current changes?"
+    IDS_CARDS,          " Cards"
+    IDS_CARD,           " Card"
+    IDS_ONECARD,        " 1 Card"
+    IDS_UNTITLED,       "(Untitled)"
+    IDS_CARDDATA,       "Cardfile data"
+    IDS_CARDFILE,       "Cardfile"
+    IDS_APPNAME,        "Cardfile"
+    IDS_PICKUP,         "Pick up the phone."
+    IDS_TITLE,          "Cardfile"
+    IDS_BADMARGINS,     "Margin values are not within expected ranges.\n\nPlease verify that margin values are valid positive numbers."
+    IDS_CARDVIEW,       "Card View"
+    IDS_LISTVIEW,       "List View"
+    IDS_HELPFILE,       "cardfile.hlp"
+    IDS_CANTDIAL,       "Cannot dial the number. Check Control Panel to see that the modem is installed properly, and check the modem cables to see that they are connected properly."
+    IDS_NOMEMPRINTPIC,  "Not enough memory to print picture.\nQuit one or more applications to increase available memory, and then try again."
+    IDS_NOMEM,          "Not enough memory to perform this operation.\nQuit one or more applications to increase available memory, and then try again."
+    IDS_BADNAME,        "Filename not valid.\n\nPlease verify that a valid filename is given."
+    IDS_NOTEXTCLIP,     "Cannot paste from Clipboard.\nPlease verify that the Clipboard contains text."
+    IDS_DISKFULL,       "Not enough disk space to save file.\nDelete one or more files to increase available disk space, and then try again."
+    IDS_NOTEMP,         "Cannot create temporary file.\nDelete one or more files to increase available disk space, and then try again."
+    IDS_NOMEMCARD,      "Not enough memory to save card.\nQuit one or more applications to increase available memory, and then try again."
+    IDS_NOMEMRUN,       "Not enough memory to run Cardfile.\nQuit one or more applications to increase available memory, and then try again."
+    IDS_BADFORMAT,      "The selected file is not in the correct format for use with Cardfile. Create a new file or open a file with the .CRD extension."
+    IDS_NOTFOUND,       "Cannot find %%."
+    IDS_NOMEMREAD,      "Not enough memory to read card.\nClose one or more applications to increase available memory, and try again."
+    IDS_CANTPRINT,      "Cannot print.\nBe sure that the printer is connected and set up properly."
+    IDS_NOPICCLIP,      "Cannot paste from Clipboard.\nPlease verify that the Clipboard contains a picture."
+    IDS_CANTDIAL2,      "Cannot dial the number. Check Control Panel to see that the modem is installed properly, and check the modem cables to see that they are connected properly."
+    IDS_CANTSAVE,       "%%\nCannot save this file."
+    IDS_NOMEMPRINT,     "Not enough memory to print.\nQuit one or more applications to increase available memory, and then try again."
+    IDS_NODISKPRINT,    "Not enough disk space to print.\nDelete one or more files to increase available disk space, and then try again."
+    IDS_PLAIN,          "%%"
+    IDS_EXT,            "CRD"
+    IDS_DEFHEADER,      "&f"
+    IDS_DEFFOOTER,      "Page &p"
+    IDS_DEFLEFT,        ".75"
+    IDS_DEFRIGHT,       ".75"
+    IDS_DEFTOP,         "1.00"
+    IDS_DEFBOTTOM,      "1.00"
+    IDS_HFCODES,        "fFpPtTdDcCrRlL"
+    IDS_REOPEN,         "Failed to reopen file %%"
+    IDS_CANTSAVE2,      "Cardfile cannot save %%."
+    IDS_CANTSAVE3,      "Cardfile cannot save %%. Try using the Save As command to save the file to another filename. If this doesn't work, then the file cannot be saved."
+    IDS_CANTOPEN,       "%%\nCannot open this file for you to work in.\nFile is read-only or is being used by another application."
+    IDS_CANTEXIT,       "Cannot exit Cardfile."
+    IDS_READONLY,       "A read-only file cannot be changed and saved. If you want to save this version of %%, use the Save As command to save the file to a different file name."
+    IDS_READONLY2,      "A read-only file cannot be changed and saved. If you want to save this version of %%, use the Save As command to save the file to a different file name or use the Properties command in File Manager to change the file attributes."
+    IDS_TEXTTOOLONG,    "Cannot paste text onto the card. The text on the Clipboard is too long to fit on a Cardfile card."
+    IDS_CANTCREATE,     "Cannot save %s because %s cannot be created."
+    IDS_NOMEMCOPYOBJ,   "Not enough memory to copy the object. Quit one or more applications to increase available memory, and then try again."
+    IDS_NOSERVER,       "The server application cannot be found. Make sure the directory containing the application is included in the PATH in your AUTOEXEC.BAT file or try reinstalling the application."
+    IDS_CANTVIEW,       "This card cannot be viewed. Delete the card."
+    IDS_LINKBROKEN,     "Link cannot be updated.\n\nThe link is broken or the server application cannot be found. Recreate the link. If that doesn't work, make sure the directory containing the application is in the PATH in your AUTOEXEC.BAT file. Or reinstall the application."
+    IDS_NOOLE,          "Cannot open card file. You are missing the necessary files to open this card file. Make sure that OLECLI.DLL and OLESVR.DLL are in your w16 SYSTEM directory. If these files are missing, try reinstalling w16."
+    IDS_SERVERBUSY,     "Command cannot be processed because the server application is busy. Wait until the server is free. Or try to determine which server is unavailable, switch to it, and then complete or cancel the action that is causing the application to be busy."
+    IDS_OLEFAILED,      "Asynchronous OLE operation failed."
+    IDS_LINKNOUPDATE,   "The linked information cannot be updated. Either delete the link and recreate it or use the Change Link button in the Link dialog box to redefine the source document for the link."
+    IDS_NOCLIP,         "Failed to obtain clipboard."
+    IDS_NOSERVER2,      "Object not created because server application could not be found. Make sure that the application is setup on your system and that the directory containing the application is included in the PATH in your AUTOEXEC.BAT file. Or reinstall the application."
+    IDS_PRINTDRV,       "Unable to load printer driver. Either there is insufficient memory or w16 is unable to find the printer-driver file.  Use the Printers option in Control Panel to check the printer driver."
+    IDS_NOTOLE,         "This is not an embedded or linked object. You cannot activate it."
+    IDS_NOUNDO,         "You will not be able to use the Undo command to undo this action."
+    IDS_BUSYNAMED,      "%s server is busy. Wait to see if the server becomes available. Or try to determine which server application is unavailable, switch to it, and then complete or cancel the action that is causing the application to be unavailable."
+    IDS_OPENOBJPASTE,   "You are trying to paste into a card that already contains an open embedded object. Before you can complete this paste operation, you must close the object by closing the server application."
+    IDS_OPENOBJDEL,     "This card contains an open embedded object. Before you can delete the object, you must close it by closing the server application."
+    IDS_SAVE30,         "Cardfile 3.0 did not support linked or embedded objects. If any linked or embedded objects exist in this file, they will be deleted or altered when you save this file in the 3.0 format.\n\nDo you want to save the file in the Cardfile 3.0 format?"
+    IDS_FILTERCRD,      "Card File (*.CRD)"
+    IDS_OPENTITLE,      "Open"
+    IDS_SAVEASTITLE,    "Save As"
+    IDS_FILTER30,       "3.0 Card File (*.CRD)"
+    IDS_MERGETITLE,     "File Merge"
+    IDS_CHANGELINK,     "Change Link"
+    IDS_FILTERALL,      "All Files (*.*)"
+    IDS_VALIDATE,       "&Validate"
+    IDS_OBJECTN,        "Object #%d"
+    IDS_UPDATEEMB,      "Update Embedded object?"
+    IDS_INSERTBUSY,     "Insert Object is in progress.\n\nWait for Insert Object to be completed, and try again."
+    IDS_OBJECTMENU,     "&Object"
+    IDS_PICTURE,        "Picture"
+    IDS_BITMAP,         "Bitmap"
+    IDS_HASLINKS,       "This file contains links to other documents.\nThese links may need updating.\n\nUse the Edit, Link command to update links."
+    IDS_OBJECT,         "Object"
+    IDS_VERBFMT1,       "c o"
+    IDS_VERBFMT2,       "v c o"
+    IDS_EDITVERB,       "Edit"
+END
+
+IDD_INDEX DIALOG 24, 22, 223, 47
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Index"
+CF_FONT
+BEGIN
+    LTEXT           "&Index Line:", -1, 4, 8, 44, 8
+    CONTROL         "", IDC_EDIT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP, 52, 6, 164, 12
+    DEFPUSHBUTTON   "OK", IDOK, 60, 24, 40, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 120, 24, 40, 14, WS_GROUP
+END
+
+IDD_ADD DIALOG 21, 24, 193, 47
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Add"
+CF_FONT
+BEGIN
+    LTEXT           "&Add:", -1, 4, 8, 16, 8
+    CONTROL         "", IDC_EDIT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP, 24, 6, 164, 12
+    DEFPUSHBUTTON   "OK", IDOK, 46, 24, 40, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 106, 24, 40, 14, WS_GROUP
+END
+
+IDD_GOTO DIALOG 21, 24, 105, 48
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Go To"
+CF_FONT
+BEGIN
+    LTEXT           "&Go To:", -1, 4, 8, 24, 8
+    CONTROL         "", IDC_EDIT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP, 32, 6, 68, 12
+    DEFPUSHBUTTON   "OK", IDOK, 7, 24, 40, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 57, 24, 40, 14, WS_GROUP
+END
+
+IDD_PRINTING DIALOG 20, 20, 90, 64
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Cardfile"
+CF_FONT
+BEGIN
+    DEFPUSHBUTTON   "Cancel", IDCANCEL, 29, 44, 32, 14, WS_GROUP
+    CTEXT           "Now Printing", -1, 0, 8, 90, 8
+    CONTROL         "text", IDC_PRINTFILE, "Static", SS_CENTER | SS_NOPREFIX | WS_GROUP, 0, 18, 90, 8
+END
+
+IDD_AUTODIAL DIALOG 32, 10, 163, 160
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Autodial"
+CF_FONT
+BEGIN
+    CONTROL         "", IDC_SEP1, "Static", SS_CENTER | WS_GROUP, 2, 58, 146, 5
+    CONTROL         "", IDC_SEP2, "Static", SS_LEFT, 3, 145, 147, 5
+    LTEXT           "&Number:", -1, 5, 5, 27, 12
+    CONTROL         "", IDC_DIALNUM, "Edit", WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL, 34, 5, 64, 12
+    LTEXT           "Pre&fix:", -1, 5, 22, 28, 10
+    CONTROL         "", IDC_PREFIX, "Edit", WS_BORDER | WS_TABSTOP, 34, 22, 30, 12
+    CONTROL         "&Use Prefix", IDC_USEPREFIX, "Button", BS_CHECKBOX | WS_TABSTOP | WS_GROUP, 5, 38, 50, 12
+    DEFPUSHBUTTON   "OK", IDOK, 106, 5, 40, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 106, 22, 40, 14, WS_GROUP
+    PUSHBUTTON      "&Setup >>", IDC_SETUP, 106, 38, 40, 14, WS_GROUP
+    GROUPBOX        "Dial &Type", -1, 5, 68, 70, 27, WS_GROUP
+    CONTROL         "Tone", IDC_TONE, "Button", BS_RADIOBUTTON | WS_TABSTOP | WS_GROUP, 9, 81, 33, 12
+    CONTROL         "Pulse", IDC_PULSE, "Button", BS_RADIOBUTTON | WS_TABSTOP, 42, 81, 31, 12
+    GROUPBOX        "&Port", -1, 5, 99, 70, 39, WS_GROUP
+    CONTROL         "COM1", IDC_COM1, "Button", BS_RADIOBUTTON | WS_TABSTOP | WS_GROUP, 9, 110, 31, 12
+    CONTROL         "COM2", IDC_COM1 + 1, "Button", BS_RADIOBUTTON | WS_TABSTOP, 9, 122, 31, 12
+    CONTROL         "COM3", IDC_COM1 + 2, "Button", BS_RADIOBUTTON | WS_TABSTOP, 42, 110, 31, 12
+    CONTROL         "COM4", IDC_COM1 + 3, "Button", BS_RADIOBUTTON | WS_TABSTOP, 42, 123, 31, 12
+    GROUPBOX        "&Baud Rate", -1, 87, 68, 69, 65, WS_GROUP
+    CONTROL         "110", IDC_BAUD110, "Button", BS_RADIOBUTTON | WS_TABSTOP | WS_GROUP, 91, 81, 23, 12
+    CONTROL         "300", IDC_BAUD110 + 1, "Button", BS_RADIOBUTTON | WS_TABSTOP, 91, 93, 28, 12
+    CONTROL         "1200", IDC_BAUD110 + 2, "Button", BS_RADIOBUTTON | WS_TABSTOP, 91, 105, 27, 12
+    CONTROL         "2400", IDC_BAUD110 + 3, "Button", BS_RADIOBUTTON | WS_TABSTOP, 91, 117, 28, 12
+    CONTROL         "4800", IDC_BAUD110 + 4, "Button", BS_RADIOBUTTON | WS_TABSTOP, 122, 81, 27, 12
+    CONTROL         "9600", IDC_BAUD110 + 5, "Button", BS_RADIOBUTTON | WS_TABSTOP, 122, 93, 27, 12
+    CONTROL         "19200", IDC_BAUD110 + 6, "Button", BS_RADIOBUTTON | WS_TABSTOP, 122, 105, 31, 12
+END
+
+IDD_PAGESETUP DIALOG 10, 10, 162, 95
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Page Setup"
+CF_FONT
+BEGIN
+    LTEXT           "&Header:", -1, 7, 6, 37, 10
+    CONTROL         "", IDC_HEADER, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 43, 6, 60, 12
+    LTEXT           "&Footer:", -1, 7, 25, 33, 10
+    CONTROL         "", IDC_FOOTER, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 43, 25, 60, 12
+    CONTROL         "Margins", -1, "Button", BS_GROUPBOX, 5, 42, 150, 49
+    LTEXT           "&Left:", -1, 12, 56, 25, 10
+    CONTROL         "", IDC_LEFT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 36, 54, 35, 12
+    LTEXT           "&Right:", -1, 80, 56, 25, 10
+    CONTROL         "", IDC_RIGHT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 110, 55, 35, 12
+    LTEXT           "&Top:", -1, 12, 73, 25, 10
+    CONTROL         "", IDC_TOP, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 35, 73, 35, 12
+    LTEXT           "&Bottom:", -1, 80, 74, 30, 10
+    CONTROL         "", IDC_BOTTOM, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 110, 73, 35, 12
+    DEFPUSHBUTTON   "OK", IDOK, 115, 3, 40, 16, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 115, 22, 40, 16, WS_GROUP
+END
+
+IDD_LINKS DIALOG 12, 34, 291, 97
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Link"
+CF_FONT
+BEGIN
+    CONTROL         "Link:", -1, "Button", BS_GROUPBOX, 4, 1, 238, 26
+    CONTROL         "", IDC_LINKLIST, "Static", SS_LEFT, 5, 12, 80, 8
+    CONTROL         "", IDC_LINKSRC, "Static", SS_LEFT, 85, 12, 80, 8
+    CONTROL         "", IDC_LINKTYPE, "Static", SS_LEFT, 165, 12, 69, 8
+    CONTROL         "Update:", -1, "Static", SS_LEFT, 8, 46, 30, 9
+    CONTROL         "Au&tomatic", IDC_LINKAUTO, "Button", BS_RADIOBUTTON | WS_TABSTOP | WS_GROUP, 39, 44, 46, 14
+    CONTROL         "&Manual", IDC_LINKMANUAL, "Button", BS_RADIOBUTTON | WS_TABSTOP, 89, 44, 42, 14
+    CONTROL         "&Update Now", IDC_UPDATENOW, "Button", BS_PUSHBUTTON | WS_TABSTOP, 26, 63, 58, 14
+    CONTROL         "Ca&ncel Link", IDC_CANCELLINK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 91, 63, 58, 14
+    CONTROL         "C&hange Link...", IDC_CHANGELINK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 156, 63, 58, 14
+    CONTROL         "OK", IDOK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 249, 6, 37, 14
+    CONTROL         "Cancel", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP, 249, 25, 37, 14
+    CONTROL         "&Activate", IDC_ACTIVATE, "Button", BS_PUSHBUTTON | WS_TABSTOP, 249, 44, 37, 14
+    CONTROL         "&Edit", IDC_EDITLINK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_GROUP, 249, 63, 37, 14
+END
+
+IDD_INVALIDLINK DIALOG 9, 25, 107, 38
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION
+CAPTION "Cardfile"
+BEGIN
+    CONTROL         "Link unavailable.", 100, "Static", SS_CENTER, 3, 5, 102, 8
+    CONTROL         "OK", IDOK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 12, 18, 36, 14
+    CONTROL         "&Link...", IDC_FIXLINK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 59, 18, 36, 14
+END
+
+IDD_PASTESPECIAL DIALOG 87, 52, 171, 77
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Paste Special"
+CF_FONT
+BEGIN
+    CONTROL         "&Paste", IDC_PSPASTE, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP, 119, 9, 46, 14
+    CONTROL         "Paste &Link", IDC_PSLINK, "Button", BS_PUSHBUTTON | WS_TABSTOP, 119, 32, 46, 14
+    CONTROL         "Cancel", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP, 119, 55, 46, 14
+    CONTROL         "Source:", IDC_PSSRCLABEL, "Static", SS_LEFT, 5, 6, 27, 8
+    CONTROL         "", IDC_PSSOURCE, "Static", SS_LEFT, 35, 6, 77, 9
+    CONTROL         "", IDC_PSITEM, "Static", SS_LEFT, 12, 15, 95, 16
+    CONTROL         "&Data Type:", -1, "Static", SS_LEFT, 4, 32, 50, 9
+    CONTROL         "", IDC_TYPELIST, "ListBox", LBS_NOTIFY | WS_VSCROLL | WS_BORDER | WS_TABSTOP, 3, 43, 110, 36
+END
+
+IDD_INSERTOBJECT DIALOG 82, 56, 180, 62
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Insert New Object"
+CF_FONT
+BEGIN
+    CONTROL         "OK", IDOK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP, 139, 6, 35, 14
+    CONTROL         "Cancel", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP, 139, 28, 35, 14
+    CONTROL         "&Object Type:", -1, "Static", SS_LEFT, 7, 3, 50, 9
+    CONTROL         "", IDC_TYPELIST, "ListBox", LBS_NOTIFY | LBS_SORT | WS_VSCROLL | WS_BORDER | WS_TABSTOP, 6, 14, 125, 40
+END
+
+/* Find: COMMDLG's FindText with this template (the original's, with
+   "Match Whole Word Only" placed outside the box) */
+IDD_FIND2 DIALOG 30, 73, 236, 62
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+CAPTION "Find"
+CF_FONT
+BEGIN
+    CONTROL         "Fi&nd What:", -1, "Static", SS_LEFT, 4, 8, 42, 8
+    CONTROL         "", IDC_FINDTEXT, "Edit", WS_BORDER | WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL, 47, 7, 128, 12
+    CONTROL         "Match &Whole Word Only", 1040, "Button", CF_CHECK | WS_TABSTOP | WS_GROUP, 4, 99, 100, 12
+    CONTROL         "Match &Case", IDC_MATCHCASE, "Button", CF_CHECK | WS_TABSTOP, 4, 38, 64, 12
+    CONTROL         "Direction", -1, "Button", BS_GROUPBOX, 107, 26, 68, 28
+    CONTROL         "&Up", IDC_FINDUP, "Button", CF_RADIO | WS_TABSTOP | WS_GROUP, 111, 38, 20, 12
+    CONTROL         "&Down", IDC_FINDDOWN, "Button", CF_RADIO | WS_TABSTOP, 138, 38, 30, 12
+    DEFPUSHBUTTON   "&Find Next", IDOK, 182, 5, 50, 14, WS_GROUP
+    PUSHBUTTON      "Cancel", IDCANCEL, 182, 23, 50, 14, WS_GROUP
+    PUSHBUTTON      "&Help", 1038, 182, 45, 50, 14, WS_GROUP
+END
+
+

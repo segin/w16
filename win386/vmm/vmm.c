@@ -3,7 +3,8 @@
  *
  * Stage 1 (what is here): one virtual machine, the System VM, running the
  * loader and the program it EXECs (KRNL386) in V86 mode with IOPL 3, and a
- * DPMI 0.9 host for that program (dpmi.c). No VxDs are loaded yet; the
+ * DPMI 0.9 host for that program (dpmi.c), whose protected-mode code runs
+ * with IOPL 0 (pm_cli_sti). No VxDs are loaded yet; the
  * plan for them is in ARCHITECTURE.md 12.4.
  *
  * Sources: Intel 80386 Programmer's Reference Manual; 8259A data sheet
@@ -34,6 +35,14 @@ static struct {
 } tss;
 static struct { u16 limit; u32 base; } gdtr, idtr;
 #pragma pack()
+
+/* trap port (1) or let it through (0): its bit in the I/O bitmap */
+void io_trap_bit(u32 port, int on)
+{
+    if (port > 0xFFFF) return;
+    if (on) tss.iomap[port >> 3] |= (u8)(1 << (port & 7));
+    else tss.iomap[port >> 3] &= (u8)~(1 << (port & 7));
+}
 
 static void tss_set_esp0(u32 v)
 {
@@ -96,9 +105,18 @@ void memcpy(void *d, const void *s, u32 n)
 }
 
 /* ---- trace on a serial port (COM1; DOSBox-X: serial1=file file:...) ---- */
+static void pic_init(u32 b1, u32 b2);
+static char *tbuf;                     /* fatal(): its message goes here */
+static u32 tbuf_len;
+
 static void tchar(int c)
 {
     int i;
+    if (tbuf) {
+        if (tbuf_len < W386_FATAL_SIZE - 1) tbuf[tbuf_len++] = (char)c;
+        tbuf[tbuf_len] = 0;
+        return;
+    }
     if (!info || !info->log_port) return;
     for (i = 0; i < 100000 && !(inb(info->log_port + 5) & 0x20); i++)
         ;
@@ -142,6 +160,30 @@ static void vtrace(const char *fmt, u32 *ap)
 void trace(const char *fmt, ...)
 {
     vtrace(fmt, (u32 *)&fmt + 1);
+}
+
+/* Windows ends with a message, as Windows 3.1's WIN386 does for an
+ * invalid dynamic link (ARCHITECTURE.md 12.2): before the System VM has
+ * run, back to the loader, which prints it and exits; later (UNVERIFIED
+ * what Windows 3.1 does then) the VMM stops with it in the trace. */
+static int vm_started;
+
+void fatal(const char *fmt, ...)
+{
+    trace("VMM: fatal: ");
+    vtrace(fmt, (u32 *)&fmt + 1);
+    if (!vm_started && info->fatal_lin) {
+        tbuf = (char *)info->fatal_lin;
+        tbuf_len = 0;
+        vtrace(fmt, (u32 *)&fmt + 1);
+        tbuf = 0;
+        info->exit_code = W386_FATAL;
+        info->ret_ss = info->v86_ss;    /* pm_go's own frame */
+        info->ret_sp = info->v86_sp;
+        pic_init(info->pic1_base, info->pic2_base);
+        to_realmode(info->rm_tramp);
+    }
+    for (;;) hlt();
 }
 
 void panic(const char *fmt, ...)
@@ -332,8 +374,11 @@ void v86_reflect(struct cregs *r, int vec)
  * moves below this frame while the V86 code runs, so traps during it
  * (interrupts, nested calls) work as usual. Depth is limited only by the
  * ring-0 stack. */
+static struct cregs *hw_r;              /* the VM's state VPICD delivers into (trap()) */
+
 struct execctx {
     u32 jb[6];
+    struct cregs *saved_hw_r;           /* trap() states end with longjmp: put back */
     struct execctx *prev;
     u32 saved_esp0;
     u16 saved_refsp;
@@ -352,6 +397,7 @@ void exec_v86(struct cregs *v)
     c.prev = cur_exec;
     c.saved_esp0 = kesp0;
     c.saved_refsp = sysvm.refsp;
+    c.saved_hw_r = hw_r;
     if (!k_setjmp((u32 *)c.jb)) {
         cur_exec = (struct execctx *)&c;
         if ((u16)v->ss == info->refstk_seg && (u16)v->esp < sysvm.refsp)
@@ -364,10 +410,18 @@ void exec_v86(struct cregs *v)
     }
     if (exec_trace) trace(">%x", c.res.eax & 0xFFFF);
     cur_exec = c.prev;
+    hw_r = c.saved_hw_r;
     kesp0 = c.saved_esp0;
     tss_set_esp0(kesp0);
     sysvm.refsp = c.saved_refsp;
     memcpy(c.v, (void *)&c.res, sizeof(struct cregs));
+}
+
+/* the reflection stack's lowest safe SP (W386_REFSTK_SIZE bytes below its top) */
+static void refstk_check(void)
+{
+    if (sysvm.refsp < info->refstk_top - W386_REFSTK_SIZE + 256)
+        panic("the V86 reflection stack overflows (sp %x, %d nested calls)", sysvm.refsp, exec_depth());
 }
 
 /* INT vec in V86 mode with registers *v (SS:SP 0: the reflection stack) */
@@ -375,6 +429,7 @@ void v86_int(struct cregs *v, int vec)
 {
     u16 *ivt = (u16 *)0;
     if (!v->ss && !(v->esp & 0xFFFF)) {
+        refstk_check();
         v->ss = info->refstk_seg;
         v->esp = sysvm.refsp;
     }
@@ -391,6 +446,7 @@ void v86_int(struct cregs *v, int vec)
 void v86_farcall(struct cregs *v, int iret)
 {
     if (!v->ss && !(v->esp & 0xFFFF)) {
+        refstk_check();
         v->ss = info->refstk_seg;
         v->esp = sysvm.refsp;
     }
@@ -468,15 +524,115 @@ static void pic_init(u32 b1, u32 b2)
 static void exit_windows(struct cregs *r)
 {
     trace("VMM: exit, code %x\n", AX(r) & 0xFF);
+    vxd_exit(r);
     info->exit_code = AX(r);
     info->ret_ss = (u16)r->ss;
     info->ret_sp = (u16)r->esp;
-    pic_init(info->pic1_base, info->pic2_base);
+    if (!vpicd) pic_init(info->pic1_base, info->pic2_base);    /* else VPICD did, at Sys_Critical_Exit */
     to_realmode(info->rm_tramp);
 }
 
+/* ---- hardware interrupts: w16's VPICD module owns them (vxd.c finds
+ * it, w16vxd.h); the VMM hands each one over and simulates into the VM
+ * what VPICD asks for, where the VM was interrupted ---- */
+#define IRQ_BASE VPICD_BASE1
+struct vpicd_link *vpicd;
+
+/* io.c: no interrupt is simulated while a device's I/O handler runs (the
+ * VM's state is in the handler's client registers then); the trap's end
+ * (VPICD's resume) delivers what it set */
+struct cregs *vmm_hold_delivery(struct cregs *r)
+{
+    struct cregs *o = hw_r;
+    hw_r = r;
+    return o;
+}
+
+/* Build_Int_Stack_Frame (vxd.c) for a device called during a trap (a
+ * time-out, a hot key): the VM takes an interrupt to sel:off (an interrupt
+ * frame on its stack, TF cleared). The Reboot device's only use: KERNEL's
+ * Ctrl+Alt+Del procedure, which tells from where the VM was interrupted
+ * whether the current task responds. Observed under w16 (CS:IP only):
+ * run where the VM was idle (KERNEL's idle loop, its HLT), the procedure
+ * set the sanity byte every time; run elsewhere (another place in KERNEL,
+ * an application, a driver's interrupt handler) it often did not, and
+ * REBOOT showed "busy or unstable" in about half the plain-DOSBox runs.
+ * So the frame waits for the VM's next idle HLT in protected mode
+ * (vmm_idle_hlt); a second call for the same routine while it waits (the
+ * VM has not idled: a task that does not respond) makes it at once, where
+ * the VM is, if that is protected mode outside a hardware interrupt's
+ * handler, else at the next such trap. UNVERIFIED how Windows 3.1 times
+ * it. */
+static u32 bint_sel, bint_off, bint_now;    /* a frame not yet made */
+
+static void build_int_now(struct cregs *r)
+{
+    trace("VMM: Build_Int_Stack_Frame at %x:%x\n", r->cs, r->eip);
+    dpmi_build_int(r, bint_sel, bint_off);
+    bint_sel = 0;
+}
+
+static int bint_ok(struct cregs *r)
+{
+    return bint_sel && sysvm.pm && !(r->eflags & EFL_VM) && !dpmi_in_handler();
+}
+
+int vmm_build_int(u32 sel, u32 off)
+{
+    struct cregs *r = hw_r;
+    if (!r || !sysvm.pm) return 0;
+    bint_now = bint_sel == sel && bint_off == off;
+    bint_sel = sel;
+    bint_off = off;
+    if (bint_now && bint_ok(r)) build_int_now(r);
+    return 1;
+}
+
+/* at the end of each trap: a frame due now */
+static void vmm_build_int_pending(struct cregs *r)
+{
+    if (bint_now && bint_ok(r)) build_int_now(r);
+}
+
+/* the VM's HLT in protected mode (idle): a waiting frame is made here */
+static void vmm_idle_hlt(struct cregs *r)
+{
+    if (bint_ok(r)) build_int_now(r);
+}
+
+int vmm_can_deliver(void)
+{
+    return hw_r && (hw_r->eflags & EFL_IF);
+}
+
+/* iret: VPICD wants to know when the handler returns. In protected mode,
+ * and for a protected-mode handler of an interrupt in V86 mode, the
+ * handler runs to its return before this returns; a V86 handler gets a
+ * second frame above the interrupt's own, whose IRET reaches the IRQIRET
+ * breakpoint (v86_breakpoint), which then does the first frame's IRET. */
+int vmm_deliver(u32 vec, int iret)
+{
+    struct cregs *r = hw_r;
+    if (!r || !(r->eflags & EFL_IF)) return 0;
+    if (r->eflags & EFL_VM) {
+        if (dpmi_v86_hook(r, vec, 1)) {
+            if (iret) vpicd->iret();
+        } else {
+            v86_reflect(r, vec);
+            if (iret) {
+                v86_push16(r, (u16)r->eflags);
+                v86_push16(r, (u16)info->ldr_cs);
+                v86_push16(r, (u16)(info->bp_off + W386_BP_IRQIRET));
+            }
+        }
+    } else {
+        dpmi_int(r, vec, 1);
+        if (iret) vpicd->iret();
+    }
+    return 1;
+}
+
 /* ---- the trap dispatcher ---- */
-#define IRQ_BASE 0x50
 
 static void software_int(struct cregs *r, int vec)
 {
@@ -494,6 +650,13 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     switch (idx) {
     case W386_BP_EXIT:   exit_windows(r); break;
     case W386_BP_DPMI:   dpmi_switch(r); break;
+    case W386_BP_PS2CB:  dpmi_ps2cb(r); break;
+    case W386_BP_IRQIRET:               /* the interrupted code's own frame */
+        r->eip = v86_pop16(r);
+        r->cs = v86_pop16(r);
+        r->eflags = (r->eflags & 0xFFFF0000u) | v86_pop16(r) | EFL_IOPL;
+        vpicd->iret();
+        break;
     case W386_BP_REFRET:
         exec_return(r);
         if (0) {
@@ -509,10 +672,56 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     }
 }
 
+/* CLI and STI from protected mode, where the client runs with IOPL 0 as
+ * under Windows 3.1 (VX6, ARCHITECTURE.md 12.3): they raise #GP and the
+ * VMM sets the client's IF, which is the VM's interrupt flag: PUSHF shows
+ * it, POPF and IRET cannot change it (the processor ignores IF there at
+ * CPL > IOPL), hardware interrupts reach the VM only while it is set
+ * (vmm_deliver), and a request VPICD holds is delivered at the next STI.
+ * V86 code keeps IOPL 3 (VX6: Windows 3.1's V86 flags are 3287h, and a
+ * V86 CLI clears the real IF). Prefixes before the opcode are skipped. */
+static int pm_cli_sti(struct cregs *r, u8 *op)
+{
+    u32 n = 0;
+    while (n < 14 && (op[n] == 0x66 || op[n] == 0x67 || op[n] == 0x26 || op[n] == 0x2E
+                      || op[n] == 0x36 || op[n] == 0x3E || op[n] == 0x64 || op[n] == 0x65
+                      || op[n] == 0xF2 || op[n] == 0xF3))
+        n++;
+    if (op[n] == 0xFA) r->eflags &= ~EFL_IF;
+    else if (op[n] == 0xFB) r->eflags |= EFL_IF;
+    else return 0;
+    r->eip = sysvm.client32 ? r->eip + n + 1 : ((r->eip & 0xFFFF0000u) | (u16)(r->eip + n + 1));
+    return 1;
+}
+
 static u8 *code_ptr(struct cregs *r)
 {
     if (r->eflags & EFL_VM) return (u8 *)v86_lin(r->cs, r->eip);
     return (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+}
+
+/* A heartbeat in the trace every 20 s of timer ticks (BIOS rate): where the
+ * System VM is, how deep the nested calls go and how many of each
+ * hardware interrupt came, so that a hang shows where it is. */
+static u32 irq_count[16], hb_ticks, hb_n;
+
+static void heartbeat(struct cregs *r)
+{
+    int i;
+    hb_ticks = 0;
+    trace("VMM: heartbeat %d at %s %x:%x fl %x, depth %d, PM last %x:%x, irqs",
+          ++hb_n, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
+          exec_depth(), sysvm.last_cs, sysvm.last_ip);
+    for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
+    trace(", PIC masks %x %x, trapped I/O %d", inb(0x21), inb(0xA1), io_traps);
+    if (r->eflags & EFL_VM) {
+        /* registers and stack words only: never code bytes (ARCHITECTURE.md 3) */
+        u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
+        trace(", ss:sp %x:%x", r->ss, r->esp & 0xFFFF);
+        for (i = 0; i < 8; i++) trace(" %04x", sp[i]);
+        trace(", ax %x bx %x cx %x dx %x ds %x es %x", r->eax, r->ebx, r->ecx, r->edx, r->ds, r->es);
+    }
+    trace("\n");
 }
 
 void __cdecl trap(struct tframe *f)
@@ -520,12 +729,13 @@ void __cdecl trap(struct tframe *f)
     /* the client's state is worked on in this frame's own copy: handlers
      * may run nested V86 code (exec_v86), whose traps use sysvm.r */
     struct cregs local;
-    struct cregs *r = &local;
+    struct cregs *r = &local, *saved_hw_r;
     u32 vec = f->vec;
     u8 *op;
 
     if (!(f->eflags & EFL_VM) && !(f->cs & 3)) {
         if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) return;     /* not expected: IF=0 in the VMM */
+        if (vec == 0x20) { vxd_link(f); return; }               /* a VxD's dynamic link */
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
@@ -541,13 +751,35 @@ void __cdecl trap(struct tframe *f)
         r->fs = f->fs & 0xFFFF; r->gs = f->gs & 0xFFFF;
     }
 
+    if (!(r->eflags & EFL_VM) && r->cs != SEL_PMBP) {
+        sysvm.last_cs = r->cs;
+        sysvm.last_ip = r->eip;
+        sysvm.last_ds = r->ds;
+    }
+    /* also at the breakpoints: a handler that chains with PUSHF, CALL FAR
+     * has its own words below the frame */
+    if (!(r->eflags & EFL_VM)) dpmi_note_pm(r);
+    /* V86 code running on the reflection stack (a reflected interrupt, a
+     * DOS or BIOS call made for the client): an interrupt that is then
+     * reflected again must build its frame below where that code is, not
+     * at the stack's start for this nesting level (the same as the host
+     * stack, dpmi.c). Before, the new frame overwrote the interrupted
+     * code's stack now and then: V86 code resumed at a garbage CS:IP, an
+     * invalid opcode reflected to the BIOS for ever (seen in about 1 in 7
+     * boots under load, while fonts loaded). */
+    if ((r->eflags & EFL_VM) && (u16)r->ss == info->refstk_seg && (u16)r->esp < sysvm.refsp)
+        sysvm.refsp = (u16)r->esp;
+    /* the state VPICD simulates interrupts into, for the whole trap: a
+     * device called during it (an I/O handler, a hot key) may set a
+     * request, which must go to this state (taken now if it has
+     * interrupts on, else at its STI), never to an outer one */
+    saved_hw_r = hw_r;
+    hw_r = r;
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
-        int v = irq < 8 ? 0x08 + irq : 0x70 + irq - 8;
-        if (r->eflags & EFL_VM) {
-            if (!dpmi_v86_hook(r, v, 1)) v86_reflect(r, v);
-        } else
-            dpmi_int(r, v, 1);
+        irq_count[irq]++;
+        if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
+        vpicd->hw_int(irq);
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -559,10 +791,16 @@ void __cdecl trap(struct tframe *f)
             if (op[0] == 0xF4) {
                 if (!(r->eflags & EFL_VM) && r->cs == SEL_PMBP)
                     dpmi_pmbp(r, r->eip);
-                else
+                else {
                     r->eip++;           /* HLT: carry on (idle) */
-            } else if (r->eflags & EFL_VM)
-                panic("V86 #GP at %x:%x op %x %x err %x", r->cs, r->eip, op[0], op[1], f->err);
+                    if (!(r->eflags & EFL_VM)) vmm_idle_hlt(r);
+                }
+            } else if (!f->err && io_trap(r, op))
+                ;                       /* a trapped port */
+            else if (r->eflags & EFL_VM)
+                panic("V86 #GP at %x:%x err %x", r->cs, r->eip, f->err);
+            else if (!f->err && pm_cli_sti(r, op))
+                ;
             else
                 dpmi_exception(r, 13, f->err);
         }
@@ -588,6 +826,9 @@ void __cdecl trap(struct tframe *f)
             panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
                   r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
     }
+    vmm_build_int_pending(r);
+    if (vpicd) vpicd->resume();         /* virtual interrupts VPICD has pending */
+    hw_r = saved_hw_r;
     sysvm.r = local;
     resume(&sysvm.r);
 }
@@ -604,6 +845,7 @@ void __cdecl vmm_main(struct w386_info *inf)
         outb(info->log_port + 1, 0);
         outb(info->log_port + 3, 0x03);
         outb(info->log_port + 1, 0);
+        outb(info->log_port + 4, 0x03);  /* DTR, RTS: DOSBox's nullmodem sends then */
     }
     { extern int dpmi_verbose; dpmi_verbose = exec_trace = info->trace; }
     trace("w16 VMM: %d KB at %x, image %x+%x\n", info->xms_size >> 10, info->xms_phys,
@@ -644,8 +886,9 @@ void __cdecl vmm_main(struct w386_info *inf)
     ltr(SEL_TSS);
     memset(ldt, 0, LDT_MAX * 8);
     lldt(SEL_LDT);
-    pic_init(IRQ_BASE, IRQ_BASE + 8);
+    /* the 8259s are VPICD's (it moves them to 50h/58h at Sys_Critical_Init) */
     dpmi_init();
+    vxd_init();
 
     /* the System VM: the loader, back from pm_go, in V86 mode */
     memset(&sysvm.r, 0, sizeof(sysvm.r));
@@ -658,5 +901,6 @@ void __cdecl vmm_main(struct w386_info *inf)
     sysvm.r.eflags = (info->v86_flags & 0xFFFF & ~EFL_NT) | EFL_VM | EFL_IOPL | EFL_IF | 2;
     sysvm.refsp = info->refstk_top;
     trace("VMM: System VM at %x:%x\n", sysvm.r.cs, sysvm.r.eip);
+    vm_started = 1;
     resume(&sysvm.r);
 }

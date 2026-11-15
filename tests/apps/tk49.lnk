@@ -1,0 +1,3 @@
+# TK49.EXE (tests/apps/tk49.c): writes out MS1.COM's log
+@tests/apps/app.lnk
+import U_INITAPP USER.5

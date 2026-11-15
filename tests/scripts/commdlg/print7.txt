@@ -1,0 +1,32 @@
+; Print Setup's Options... (the driver's own dialog through ExtDeviceMode)
+expand HPPCL.DR_ WINDOWS/SYSTEM/HPPCL.DRV
+expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+expand FINSTALL.DL_ WINDOWS/SYSTEM/FINSTALL.DLL
+ini WINDOWS/WIN.INI windows:device=HP LaserJet Series II,HPPCL,LPT1:
+ini WINDOWS/WIN.INI devices:HP LaserJet Series II=HPPCL,LPT1:
+ini WINDOWS/WIN.INI PrinterPorts:HP LaserJet Series II=HPPCL,LPT1:,15,45
+; a: landscape, Options: what the driver shows; Cancel there; OK
+cd1 print flags=2040 hook=1
+cd1 wait 1000
+; b: Options, OK there, OK
+cd1 print flags=2040 hook=1 keep=1
+wait 3000
+clickid 421
+wait 500
+clickid 400
+wait 2500
+snap C:\A1.BMP
+dump
+key 1B
+wait 1500
+snap C:\A2.BMP
+clickid 1
+wait 2500
+; b
+clickid 400
+wait 2500
+key 0D
+wait 1500
+snap C:\B1.BMP
+clickid 1
+wait 2000

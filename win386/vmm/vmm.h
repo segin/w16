@@ -7,6 +7,7 @@
 #define VMM_H
 
 #include "w386.h"
+#include "w16vxd.h"
 
 typedef unsigned char  u8;
 typedef unsigned short u16;
@@ -86,6 +87,7 @@ struct vm {
     u16 refsp;              /* the reflection stack pointer (info->refstk_seg) */
     u16 psp_seg;
     u32 dsel;               /* the client's first DS selector */
+    u32 last_cs, last_ip, last_ds;  /* where the client last left protected mode */
     u32 pmvec_sel[256];     /* protected-mode interrupt vectors (0205h) */
     u32 pmvec_off[256];
     u32 excvec_sel[32];     /* exception handlers (0203h) */
@@ -119,6 +121,7 @@ extern u8 kstack_top[];
 /* vmm.c */
 void trace(const char *fmt, ...);
 void panic(const char *fmt, ...);
+void fatal(const char *fmt, ...);   /* end Windows with a message */
 void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
@@ -151,6 +154,7 @@ u32 xbuf_size(void);
 /* dosx.c: INT 21h from protected mode */
 void dos_pm(struct cregs *r);
 void video_pm(struct cregs *r);
+void disk_pm(struct cregs *r, int vec);
 
 /* vxdapi.c */
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off);
@@ -158,6 +162,37 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs);
 int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);
+
+/* a VMM service's registers (vmmasm.asm svc_common: PUSHAD, PUSHFD) */
+#pragma pack(1)
+struct svcregs {
+    u32 edi, esi, ebp, esp0, ebx, edx, ecx, eax;
+    u32 eflags, id;
+};
+#pragma pack()
+u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
+
+/* vxd.c */
+void vxd_client(struct cregs *r, struct client_regs *c);
+void vxd_client_back(struct cregs *r, struct client_regs *c);
+void vxd_init(void);
+extern struct vpicd_link *vpicd;
+int vmm_deliver(u32 vec, int iret);
+int vmm_can_deliver(void);
+int vmm_build_int(u32 sel, u32 off);
+struct cregs *vmm_hold_delivery(struct cregs *r);
+void vxd_pm_app(int begin, struct cregs *r);
+void vxd_exit(struct cregs *r);
+void vxd_link(struct tframe *f);
+u32 vm_handle(void);
+u32 vxd_pm_api(u32 id);
+void vxd_call_api(u32 proc, struct cregs *r);
+
+/* io.c: I/O port trapping */
+void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */
+int io_trap(struct cregs *r, u8 *op);               /* IN/OUT/INS/OUTS that faulted */
+int io_service(u32 svc, struct svcregs *s);
+extern u32 io_traps;
 
 /* dpmi.c */
 void dpmi_init(void);
@@ -169,6 +204,10 @@ u32 sel_base(u32 sel);
 int pm_v86_reflect(struct cregs *r, int vec, int hw);
 int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
+void dpmi_ps2cb(struct cregs *r);
+void dpmi_build_int(struct cregs *r, u32 sel, u32 off);
+int dpmi_in_handler(void);
+void dpmi_note_pm(struct cregs *r);                /* every trap from PM */                  /* the BIOS called the PS/2 handler */
 
 /* the PM breakpoints: HLT bytes in a ring-3 code segment (SEL_PMBP) */
 #define PMBP_DEFAULT    0       /* 0-255: the default handler for INT n */

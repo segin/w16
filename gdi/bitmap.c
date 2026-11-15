@@ -23,7 +23,7 @@ extern WORD __cdecl gdi_ahincr;         /* entry.asm: KERNEL's __AHINCR */
 
 LPPBITMAP bm_pbitmap(HBITMAP h)
 {
-    BITMAPOBJ NEAR *b = obj_get(h, BITMAP_MAGIC);
+    LPBITMAPOBJ b = obj_get(h, BITMAP_MAGIC);
     if (!b || !b->hBits)
         return 0;
     return (LPPBITMAP)MAKELP(b->sel, 0);
@@ -45,7 +45,7 @@ BYTE __far *bm_scan(LPPBITMAP pb, int y)
 HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WORD flags)
 {
     HANDLE hb;
-    BITMAPOBJ NEAR *b;
+    LPBITMAPOBJ b;
     LPPBITMAP pb;
     WORD wb, scan;
     DWORD total;
@@ -58,12 +58,8 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
     hb = obj_alloc(BITMAP_MAGIC, sizeof(BITMAPOBJ));
     if (!hb)
         return 0;
-    b = DEREF(hb);
+    b = obj_get(hb, BITMAP_MAGIC);
     b->flags = flags;
-    b->width = w;
-    b->height = h;
-    b->planes = planes;
-    b->bpp = bpp;
     if (total + PBM_HDR <= 0xFFF0L) {
         b->hBits = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, PBM_HDR + total);
         if (!b->hBits)
@@ -81,7 +77,7 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
         pb->bmBits = GlobalLock(b->hHuge);
         pb->bmSegmentIndex = gdi_ahincr;
     }
-    b = DEREF(hb);
+    b = obj_get(hb, BITMAP_MAGIC);
     b->sel = SELECTOROF(pb);
     pb->bmType = 0;
     pb->bmWidth = w;
@@ -99,7 +95,7 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
             mem_copy(bm_scan(pb, y), (const BYTE __far *)bits + (DWORD)y * scan, scan);
     return hb;
 fail:
-    b = DEREF(hb);
+    b = obj_get(hb, BITMAP_MAGIC);
     if (b->hBits)
         GlobalFree(b->hBits);
     if (b->hHuge)
@@ -108,9 +104,45 @@ fail:
     return 0;
 }
 
+/* a pattern brush's own copy of the bitmap's top-left 8 x 8 pixels: a
+   global block (locked) with a PBITMAP and the bits, as a bitmap's own */
+HGLOBAL bm_pattern_copy(HBITMAP h)
+{
+    LPPBITMAP src = bm_pbitmap(h), d;
+    HGLOBAL g;
+    WORD wb, y, p, w;
+    if (!src)
+        return 0;
+    wb = (WORD)(((8 * (WORD)src->bmBitsPixel + 15) >> 4) << 1);
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, PBM_HDR + wb * src->bmPlanes * 8);
+    d = g ? GlobalLock(g) : 0;
+    if (!d) {
+        if (g)
+            GlobalFree(g);
+        return 0;
+    }
+    src = bm_pbitmap(h);
+    d->bmType = 0;
+    d->bmWidth = 8;
+    d->bmHeight = 8;
+    d->bmWidthBytes = wb;
+    d->bmPlanes = src->bmPlanes;
+    d->bmBitsPixel = src->bmBitsPixel;
+    d->bmBits = (BYTE __far *)d + PBM_HDR;
+    d->bmWidthPlanes = (DWORD)wb * 8;
+    d->bmScanSegment = (short)(65536L / (wb * d->bmPlanes));
+    d->bmFillBytes = (short)(65536L % (wb * d->bmPlanes));
+    d->bmlpPDevice = src->bmlpPDevice;
+    w = min(src->bmWidthBytes, wb);
+    for (y = 0; y < 8 && (int)y < src->bmHeight; y++)
+        for (p = 0; p < src->bmPlanes; p++)
+            mem_copy(bm_scan(d, y) + p * wb, bm_scan(src, y) + p * src->bmWidthBytes, w);
+    return g;
+}
+
 void bm_free(HBITMAP h)
 {
-    BITMAPOBJ NEAR *b = obj_get(h, BITMAP_MAGIC);
+    LPBITMAPOBJ b = obj_get(h, BITMAP_MAGIC);
     if (!b)
         return;
     if (b->hHuge) {
@@ -144,7 +176,7 @@ HBITMAP GDIAPI CreateUserBitmap(int w, int h, BYTE planes, BYTE bpp, const void 
 
 HBITMAP GDIAPI CreateCompatibleBitmap(HDC hdc, int w, int h)       /* GDI.51 */
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     LPPBITMAP pb;
     HBITMAP hb;
     if (!dc)
@@ -165,7 +197,7 @@ HBITMAP GDIAPI CreateCompatibleBitmap(HDC hdc, int w, int h)       /* GDI.51 */
 HBITMAP GDIAPI CreateDiscardableBitmap(HDC hdc, int w, int h)      /* GDI.156 */
 {
     HBITMAP hb = CreateCompatibleBitmap(hdc, w, h);
-    BITMAPOBJ NEAR *b = obj_get(hb, BITMAP_MAGIC);
+    LPBITMAPOBJ b = obj_get(hb, BITMAP_MAGIC);
     if (b)
         b->flags |= BMF_DISCARDABLE;
     return hb;
@@ -226,7 +258,7 @@ LONG GDIAPI SetBitmapBits(HBITMAP h, DWORD n, const void __far *buf) /* GDI.106 
 
 DWORD GDIAPI SetBitmapDimension(HBITMAP h, int x, int y)           /* GDI.163 */
 {
-    BITMAPOBJ NEAR *b = obj_get(h, BITMAP_MAGIC);
+    LPBITMAPOBJ b = obj_get(h, BITMAP_MAGIC);
     DWORD old;
     if (!b)
         return 0;
@@ -238,7 +270,7 @@ DWORD GDIAPI SetBitmapDimension(HBITMAP h, int x, int y)           /* GDI.163 */
 
 DWORD GDIAPI GetBitmapDimension(HBITMAP h)                         /* GDI.162 */
 {
-    BITMAPOBJ NEAR *b = obj_get(h, BITMAP_MAGIC);
+    LPBITMAPOBJ b = obj_get(h, BITMAP_MAGIC);
     return b ? MAKELONG(b->sizeX, b->sizeY) : 0;
 }
 
@@ -295,7 +327,7 @@ static void __far *dib_info(const void __far *bmi, WORD usage, BYTE __far *buf)
 static int dib_bits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
                     void __far *bmi, WORD usage, int get)
 {
-    NPDC dc = dc_get(hdc);
+    LPDC dc = dc_get(hdc);
     LPPBITMAP pb = bm_pbitmap(hbm);
     BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
     void __far *bi;
@@ -371,11 +403,11 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
                              WORD start, WORD n, void __far *bits, void __far *bmi,
                              WORD usage)                           /* GDI.443 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
     void __far *bi;
     DRVSETDIBTODEV fn;
-    NPRGN rao;
+    LPRGN rao;
     int p[2], X, Y;
     RECT d;
     WORD k;

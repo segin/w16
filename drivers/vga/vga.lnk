@@ -1,0 +1,53 @@
+# wlink directives for w16's VGA.DRV (drivers/vga/). Object files,
+# resources and the output name come from the Makefile (build/vga/link.lnk
+# lists them, so tests/vgaprobe.sh -m can relink with other resources).
+# Module name, ordinals and names as Windows 3.1's VGA.DRV has them (its
+# NE tables: docs/exports/DISPLAY.txt, tools/neinfo.py); 501 and 502 have
+# no names there (tools/nenoname.py). Every segment fixed: MoveCursor and
+# CheckCursor run at interrupt time (tools/irqcheck.py --fixed).
+format windows dll
+option modname=DISPLAY
+option description 'DISPLAY : 100, 96, 96 : w16 VGA color display'
+option start=vga_libentry
+option quiet
+segment type code fixed preload
+segment type data fixed preload
+export BITBLT.1
+export COLORINFO.2
+export CONTROL.3
+export DISABLE.4
+export ENABLE.5
+export ENUMDFONTS.6
+export ENUMOBJ.7
+export OUTPUT.8
+export PIXEL.9
+export REALIZEOBJECT.10
+export STRBLT.11
+export SCANLR.12
+export DEVICEMODE.13
+export EXTTEXTOUT.14
+export GETCHARWIDTH.15
+export DEVICEBITMAP.16
+export FASTBORDER.17
+export SETATTRIBUTE.18
+export DEVICEBITMAPBITS.19
+export CREATEBITMAP.20
+export DIBSCREENBLT.21
+export DO_POLYLINES.90
+export DO_SCANLINES.91
+export SAVESCREENBITMAP.92
+export INQUIRE.101
+export SETCURSOR.102
+export MOVECURSOR.103
+export CHECKCURSOR.104
+export PEXTTEXTOUT.400=EXTTEXTOUT
+export PSTRBLT.401=STRBLT
+export REXTTEXTOUT.402=EXTTEXTOUT
+export RSTRBLT.403=STRBLT
+export USERREPAINTDISABLE.500
+export ORD501.501
+export ORD502.502
+import __A000H KERNEL.174
+import __AHINCR KERNEL.114
+import __WINFLAGS KERNEL.178
+import __0040H KERNEL.193

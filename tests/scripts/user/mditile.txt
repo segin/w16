@@ -1,0 +1,27 @@
+; MDI cascade and tile in Program Manager: three groups open, then
+; Window > Cascade, Window > Tile (window rectangles in TK.LOG)
+run PROGMAN.EXE
+wait 4000
+dump
+childcmd F040
+wait 500
+childcmd F120
+wait 1000
+childcmd F040
+wait 500
+childcmd F120
+wait 1000
+dump
+snap C:\MDI1.BMP
+menu w
+wait 500
+char c
+wait 1500
+dump
+snap C:\MDI2.BMP
+menu w
+wait 500
+char t
+wait 1500
+dump
+snap C:\MDI3.BMP

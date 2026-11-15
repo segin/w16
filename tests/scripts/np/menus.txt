@@ -1,0 +1,41 @@
+; NP1: the window, its menus and the About box
+; log
+run NOTEPAD.EXE
+wait 3000
+dump
+info
+snap C:\MAIN.BMP
+menu f
+wait 300
+snap C:\MFILE.BMP
+key 1B
+key 1B
+menu e
+wait 300
+snap C:\MEDIT.BMP
+key 1B
+key 1B
+menu s
+wait 300
+snap C:\MSEARCH.BMP
+key 1B
+key 1B
+menu h
+wait 300
+snap C:\MHELP.BMP
+key 1B
+key 1B
+type Hello, world! The quick brown fox.
+wait 300
+menu e
+wait 300
+snap C:\MEDIT2.BMP
+key 1B
+key 1B
+info
+menu h
+char a
+wait 1000
+snap C:\ABOUT.BMP
+key 1B
+wait 300

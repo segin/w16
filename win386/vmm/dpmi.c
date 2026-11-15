@@ -6,8 +6,10 @@
  * register structure); Windows 3.1 DDK INT 2Fh 1684h/1686h; observation of
  * Windows 3.1 (ARCHITECTURE.md 12.2: selectors, version values).
  *
- * Stage 1: one client; protected mode runs at ring 3 with IOPL 3 (so CLI,
- * STI and port I/O act directly: one VM only); interrupts the client has
+ * Stage 1: one client; protected mode runs at ring 3 with IOPL 0, as under
+ * Windows 3.1 (VX6, ARCHITECTURE.md 12.3): CLI and STI trap and the VMM
+ * sets the client's IF (vmm.c), POPF and IRET leave IF as it is, port I/O
+ * goes through the TSS's I/O bitmap; interrupts the client has
  * not hooked are reflected to V86 mode, with DS and ES translated when
  * their selectors map conventional memory on a paragraph boundary (INT
  * 21h and INT 10h calls with other pointers: dosx.c).
@@ -211,13 +213,16 @@ void dpmi_switch(struct cregs *r)
     r->es = psel;
     r->fs = r->gs = 0;
     if (!sysvm.client32) r->esp &= 0xFFFF;
-    r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT)) | EFL_IOPL | EFL_IF;
+    r->eflags = (r->eflags & ~(EFL_VM | EFL_CF | EFL_NT | EFL_IOPL)) | EFL_IF;
     sysvm.dsel = dsel;
     sysvm.pm = 1;
+    vxd_pm_app(1, r);
 }
 
 /* ---- reflecting into V86 mode and back ---- */
 int dpmi_verbose;
+
+static int ps2_set_handler(struct cregs *r);
 
 /* An interrupt from protected mode that the client has not hooked: run the
  * V86 handler with the client's registers; DS and ES become segments where
@@ -229,6 +234,7 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     int ds, es;
 
     if (dpmi_verbose && !hw) trace("[R%x:%x]", vec, AX(r));
+    if (!hw && vec == 0x15 && AX(r) == 0xC207) return ps2_set_handler(r);
     v = pm;
     v.ss = 0; v.esp = 0;
     v.fs = v.gs = 0;
@@ -240,9 +246,11 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     }
     ds = sel_to_seg(pm.ds);
     es = sel_to_seg(pm.es);
-    if (ds < 0 && (pm.ds & 4))
+    /* most calls do not use DS or ES at all: noted only in the detailed
+     * trace (the serial port is slow, and the boot makes thousands) */
+    if (dpmi_verbose && ds < 0 && (pm.ds & 4))
         trace("DPMI: INT %x AX=%x: DS %x not in conventional memory\n", vec, AX(r), pm.ds);
-    if (es < 0 && (pm.es & 4))
+    if (dpmi_verbose && es < 0 && (pm.es & 4))
         trace("DPMI: INT %x AX=%x: ES %x not in conventional memory\n", vec, AX(r), pm.es);
     v.ds = ds < 0 ? 0 : ds;
     v.es = es < 0 ? 0 : es;
@@ -643,6 +651,7 @@ int int2f_pm(struct cregs *r)
 }
 
 /* ---- interrupts in protected mode ---- */
+static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags);
 static int pmvec_default(int vec)
 {
     return sysvm.pmvec_sel[vec] == SEL_PMBP && sysvm.pmvec_off[vec] == (u32)vec;
@@ -653,10 +662,82 @@ u32 pm_lin(u32 sel, u32 off)
     return sel_base(sel) + (sysvm.client32 ? off : (off & 0xFFFF));
 }
 
+/* INT 21h 4Ch, and 00h: KRNL386 ends Windows (File > Exit Windows) with
+ * INT 21h AX=0001h (observed in w16's trace; Pietrek, Windows Internals
+ * ch. 1, ExitKernel: "AH = 4CH, AX = exitCode"), DOS's old terminate, with
+ * its own PSP current; and each task with AH=00h, AL the exit code, the
+ * task's PDB current (task_exit). In V86 mode AH=00h would take the PSP
+ * from the caller's CS, which is no PSP here: both become 4Ch (VX9 under
+ * Windows 3.1: a task's 002Ah reached DOS as 4C2Ah, KRNL386's own exit as
+ * 4C00h). */
+static int is_exit(struct cregs *r)
+{
+    return (AX(r) >> 8) == 0x00 || (AX(r) >> 8) == 0x4C;
+}
+
+/* A task's exit: KRNL386 ends each task with INT 21h AH=00h (AL the exit
+ * code) while the task's PDB is DOS's current PSP, so that DOS closes its
+ * handles and tells the network, then carries on; DOS gets 4Ch. Observed with VX9
+ * (tests/dos/vx9.asm, tests/vx9run.sh) under Windows 3.1: KERNEL builds
+ * the PDB with the parent field (16h) a selector, its own PSP's, and the
+ * terminate address (0Ah) inside KRNL386's real-mode code, as protected
+ * mode sees them; but when the call reaches DOS in V86 mode the parent is
+ * KRNL386's PSP segment and the terminate address is the VMM's return
+ * breakpoint, the same address as the reflected INT 21h's return. DOS's
+ * terminate then makes KRNL386's PSP current and "returns" through that
+ * breakpoint, and KERNEL goes on (INT 21h 50h calls follow). Here the two
+ * fields are set for the call and put back after it, and the caller gets
+ * its own registers back: DOS's terminate loads registers from the
+ * parent's saved stack, nothing the caller asked for (UNVERIFIED what
+ * Windows 3.1 hands back; KERNEL does not use them, Pietrek, Windows
+ * Internals ch. 3, ExitCall). */
+static int task_exit(struct cregs *r)
+{
+    u16 pdb = info->sda_lin ? *(u16 *)(info->sda_lin + 0x10) : 0;
+    u8 *p;
+    u16 old_par, old_off, old_seg;
+    int par;
+    struct cregs v, pm = *r;
+
+    if (!pdb || pdb == sysvm.psp_seg) return 0;
+    p = (u8 *)((u32)pdb << 4);
+    old_off = *(u16 *)(p + 0x0A);
+    old_seg = *(u16 *)(p + 0x0C);
+    old_par = *(u16 *)(p + 0x16);
+    par = sel_to_seg(old_par);
+    trace("DPMI: task exit (INT 21h AX=%x), PDB %x, parent %x (%x)\n", AX(r), pdb, old_par, par);
+    if (par > 0) *(u16 *)(p + 0x16) = (u16)par;
+    *(u16 *)(p + 0x0A) = (u16)(info->bp_off + W386_BP_REFRET);
+    *(u16 *)(p + 0x0C) = info->ldr_cs;
+    v = pm;
+    SETW(v.eax, 0x4C00 | (AX(r) & 0xFF));
+    v.ss = 0; v.esp = 0;
+    v.ds = v.es = v.fs = v.gs = 0;
+    v86_int(&v, 0x21);
+    *(u16 *)(p + 0x0A) = old_off;
+    *(u16 *)(p + 0x0C) = old_seg;
+    *(u16 *)(p + 0x16) = old_par;
+    *r = pm;
+    set_cf(r, 0);
+    return 1;
+}
+
 static void terminate_client(struct cregs *r)
 {
-    struct cregs v = sysvm.v86save;
-    trace("DPMI: client ends (INT 21h AX=%x)\n", AX(r));
+    struct cregs v = sysvm.v86save, p;
+    if (task_exit(r)) return;
+    if ((AX(r) >> 8) == 0x00)
+        SETW(r->eax, 0x4C00);           /* DOS's AH=00h returns code 0 */
+    trace("DPMI: client ends (INT 21h AX=%x, PSP %x)\n", AX(r),
+          info->sda_lin ? *(u16 *)(info->sda_lin + 0x10) : 0);
+    /* the client's own PSP current again first: KERNEL makes its tasks'
+     * PDBs DOS's current PSP (INT 21h 50h), and DOS would end that one
+     * and return to its parent, a selector (as w16's DOSX does) */
+    memset(&p, 0, sizeof(p));
+    p.eax = 0x5000;
+    p.ebx = sysvm.psp_seg;
+    v86_int(&p, 0x21);
+    vxd_pm_app(0, r);
     sysvm.pm = 0;
     v.eax = r->eax;
     v.ebx = r->ebx;
@@ -665,27 +746,46 @@ static void terminate_client(struct cregs *r)
     v86_reflect(r, 0x21);
 }
 
+/* INT 25h and 26h (absolute disk read/write) return with the flags still
+ * on the stack: DOS's interface, which the caller's POPF expects (seen:
+ * File Manager's INT 25h, then LAHF, POPF; without the word POPF took the
+ * caller's BP and set TF). The V86 call leaves its word on the reflection
+ * stack; the client gets one on its own. */
+static void disk_flags(struct cregs *r)
+{
+    pm_push(r, r->eflags & 0xFFFF & ~EFL_IOPL);
+}
+
 void dpmi_int(struct cregs *r, int vec, int hw)
 {
     if (!hw && vec == 0x31) { dpmi_call(r); return; }
     if (!hw && vec == 0x2F && int2f_pm(r)) return;
+    if (hw && !pmvec_default(vec)) {
+        /* on the host's stack, as for an interrupt in V86 mode (VX4) */
+        run_hw_handler(vec, r, r->cs, r->eip, r->ds, r->eflags);
+        return;
+    }
     if (!pmvec_default(vec)) {
-        /* the client's handler: an interrupt frame on its stack */
+        /* the client's handler: an interrupt frame on its stack. A
+         * software interrupt keeps the caller's IF (VX6 under Windows 3.1:
+         * the handler and the frame both show the caller's flags; with
+         * IOPL 0 the handler's IRET could not set IF again anyway) */
         pm_push(r, r->eflags);
         pm_push(r, r->cs);
         pm_push(r, r->eip);
-        r->eflags &= ~(EFL_IF | EFL_TF);
+        r->eflags &= ~EFL_TF;
         r->cs = sysvm.pmvec_sel[vec];
         r->eip = sysvm.pmvec_off[vec];
         return;
     }
-    if (!hw && vec == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
+    if (!hw && vec == 0x21 && is_exit(r)) { terminate_client(r); return; }
     if (!hw && vec == 0x21) { dos_pm(r); return; }
     if (!hw && vec == 0x10) { video_pm(r); return; }
     /* INT 41h: the protected-mode debugger interface (AX=004Fh asks
      * whether one is there); no debugger: nothing happens, as without
      * one under Windows 3.1 (UNVERIFIED that Windows does exactly this) */
     if (!hw && vec == 0x41) return;
+    if (!hw && (vec == 0x25 || vec == 0x26)) { disk_pm(r, vec); disk_flags(r); return; }
     pm_v86_reflect(r, vec, hw);
 }
 
@@ -697,15 +797,18 @@ void dpmi_pmbp(struct cregs *r, u32 index)
          * to it: its interrupt frame is on the stack */
         r->eip = pm_pop(r);
         r->cs = pm_pop(r);
-        r->eflags = (pm_pop(r) & 0xFFFF) | (r->eflags & 0xFFFF0000u);
-        r->eflags |= EFL_IOPL;
-        if (index == 0x21 && (AX(r) >> 8) == 0x4C) { terminate_client(r); return; }
+        r->eflags = (pm_pop(r) & 0xFFFF & ~EFL_IOPL) | (r->eflags & 0xFFFF0000u);
+        if (index == 0x21 && is_exit(r)) { terminate_client(r); return; }
         if (index == 0x31) { dpmi_call(r); return; }
         if (index == 0x2F && int2f_pm(r)) return;
         if (index == 0x41) return;
         if (index == 0x21) { dos_pm(r); return; }
         if (index == 0x10) { video_pm(r); return; }
-        pm_v86_reflect(r, index, index >= 8 && index < 16);
+        /* the hardware interrupts' vectors (IRQ 0-7: 08h-0Fh, IRQ 8-15:
+         * 70h-77h) are reflected with the client's selectors left out:
+         * DS and ES hold whatever the interrupted code had */
+        if (index == 0x25 || index == 0x26) { disk_pm(r, index); disk_flags(r); return; }
+        pm_v86_reflect(r, index, (index >= 8 && index < 16) || (index >= 0x70 && index < 0x78));
         return;
     }
     if (index >= PMBP_API && index < PMBP_COUNT) {
@@ -743,7 +846,7 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         err = pm_pop(r);                /* the handler's RETF took our address */
         ip = pm_pop(r); cs = pm_pop(r); fl = pm_pop(r); sp = pm_pop(r); ss = pm_pop(r);
         (void)err;
-        r->eip = ip; r->cs = cs; r->eflags = (fl & 0xFFFF) | EFL_IOPL; r->esp = sp; r->ss = ss;
+        r->eip = ip; r->cs = cs; r->eflags = fl & 0xFFFF & ~EFL_IOPL; r->esp = sp; r->ss = ss;
         return;
     }
     panic("unknown PM breakpoint %x", index);
@@ -754,55 +857,220 @@ void dpmi_pmbp(struct cregs *r, u32 index)
  * runs goes to the client's protected-mode handler if it installed one
  * (DPMI 0.9), on a stack of the host's; the handler's IRET reaches the
  * IRQRET breakpoint and the V86 code goes on. */
-static u32 hstk_sel, hstk_lin, hstk_sp;
-#define HSTK_SIZE 0x4000
+static u32 hstk_sel, hstk_lin;
+/* Windows 3.1 (VX4): SS 0087h with SP 0FF6h at the handler's entry, i.e.
+ * a 4 KB stack of the host's, the same whether the interrupt came in V86
+ * mode or in protected mode */
+#define HSTK_TOP  0x1000
+#define HSTK_SIZE 0x2000                /* mapped (zeros) above the top too: VX4 reads 0 there under Windows 3.1 */
+
+/* While a handler runs on the host stack (hstk_depth > 0) another
+ * interrupt can come: in its own code (interrupts enabled), or in V86 code
+ * it called (a DOS or BIOS call, a chained interrupt). The new frame must
+ * go below everything the running handlers have pushed: below the SP
+ * where it was interrupted when that was on the host stack, else below
+ * the lowest SP any of them had at a trap (hstk_low: the PM code that is
+ * waiting for V86 code trapped to get there). Before, each new frame went
+ * at the SP its outer handler had on entry, over what that handler had
+ * pushed since. UNVERIFIED how Windows 3.1 nests; VX4 saw only the
+ * outermost entry (SP 0FF6h). */
+static u32 hstk_depth, hstk_low = HSTK_TOP;
+
+static u32 hstk_mask(void)
+{
+    return sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu;
+}
+
+/* every trap from protected mode (vmm.c): note how deep the host stack is */
+void dpmi_note_pm(struct cregs *r)
+{
+    if (!hstk_sel) return;
+    if ((r->ss & 0xFFFF) == hstk_sel) {
+        if ((r->esp & hstk_mask()) < hstk_low)
+            hstk_low = r->esp & hstk_mask();
+    } else if (!hstk_depth)
+        hstk_low = HSTK_TOP;            /* nothing runs on the host stack now */
+}
+
+/* a hardware interrupt's handler (or a routine run on the host stack) is
+ * running in the VM */
+int dpmi_in_handler(void)
+{
+    return hstk_depth != 0;
+}
+
+static void hstk_make(void)
+{
+    u32 i, pg;
+    if (hstk_sel) return;
+    hstk_lin = 0x00300000;              /* below the client's blocks (4 MB up) */
+    for (i = 0; i < HSTK_SIZE; i += 4096) {
+        pg = page_alloc();
+        if (!pg || !map_page(hstk_lin + i, pg, 7)) panic("no memory for the host stack");
+    }
+    hstk_sel = ldt_alloc(1);
+    set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
+}
+
+/* where a new frame on the host stack starts; intr: the interrupted state */
+static u32 hstk_base(struct cregs *intr)
+{
+    hstk_make();
+    if (intr && !(intr->eflags & EFL_VM) && (intr->ss & 0xFFFF) == hstk_sel
+        && (intr->esp & hstk_mask()) < hstk_low)
+        hstk_low = intr->esp & hstk_mask();
+    if (hstk_low < 0x100) panic("the host stack overflows (%d handlers)", hstk_depth);
+    return hstk_low;
+}
+
+/* run p (a frame on the host stack built from hstk_base) to its return */
+static void hstk_run(struct cregs *p)
+{
+    u32 saved_low = hstk_low;
+    hstk_depth++;
+    hstk_low = p->esp & hstk_mask();
+    exec_v86(p);
+    hstk_depth--;
+    hstk_low = saved_low;
+}
+
+/* Run the client's protected-mode handler of hardware interrupt vec on
+ * the host's stack, as Windows 3.1 does (VX4, ARCHITECTURE.md 12.6): the
+ * frame is IP, CS, FLAGS of a return into the host (the IRQRET
+ * breakpoint), then the client's own CS:IP where it was interrupted (or,
+ * for an interrupt in V86 mode, where it last left protected mode); DS
+ * and ES are the client's DS; interrupts off. Synchronous: returns when
+ * the handler has returned. intr: the interrupted state. */
+static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags)
+{
+    struct cregs p;
+
+    memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(intr);
+    p.ss = hstk_sel;
+    p.ds = p.es = cds;
+    pm_push(&p, ccs);
+    pm_push(&p, cip);
+    pm_push(&p, (cflags & 0x0FD5) | EFL_IF | 2);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags = (cflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | 2;
+    p.cs = sysvm.pmvec_sel[vec];
+    p.eip = sysvm.pmvec_off[vec];
+    hstk_run(&p);
+}
+
+/* A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code
+ * runs goes to the client's protected-mode handler if it installed one
+ * (DPMI 0.9). */
+/* an interrupt frame on the client's stack and CS:IP at sel:off */
+void dpmi_build_int(struct cregs *r, u32 sel, u32 off)
+{
+    pm_push(r, r->eflags & ~EFL_IOPL);
+    pm_push(r, r->cs);
+    pm_push(r, r->eip);
+    /* IF stays as it was: with IOPL 0 the routine's IRET cannot set it
+     * again, and the VM would go on with interrupts off (UNVERIFIED what
+     * Windows 3.1 does; KERNEL's Ctrl+Alt+Del procedure is short) */
+    r->eflags &= ~EFL_TF;
+    r->cs = sel;
+    r->eip = off;
+    /* on the host stack: the frame is in use from now on (a hardware
+     * handler's frame must go below it) */
+    dpmi_note_pm(r);
+}
 
 int dpmi_v86_hook(struct cregs *r, int vec, int hw)
 {
-    struct cregs p;
-    u32 saved_sp;
-
     if (!sysvm.pm || pmvec_default(vec)) return 0;
-    if (!hstk_sel) {
-        u32 i, pg;
-        hstk_lin = 0x00300000;          /* below the client's blocks (4 MB up) */
-        for (i = 0; i < HSTK_SIZE; i += 4096) {
-            pg = page_alloc();
-            if (!pg || !map_page(hstk_lin + i, pg, 7)) return 0;
-        }
-        hstk_sel = ldt_alloc(1);
-        set_desc(ldt_desc(hstk_sel), hstk_lin, HSTK_SIZE - 1, 0xF2, sysvm.client32 ? 0x4 : 0);
-        hstk_sp = HSTK_SIZE;
-    }
+    /* INT 1Ch/23h/24h the same way. UNVERIFIED: what Windows 3.1 gives
+     * their handlers (VX4 looked at INT 08h only), and whether the flags
+     * they return (INT 24h's AL, INT 23h's CF) come back to V86 mode */
     (void)hw;
+    run_hw_handler(vec, r, sysvm.last_cs, sysvm.last_ip, sysvm.last_ds, r->eflags);
+    return 1;
+}
+
+/* ---- the PS/2 pointing device handler (INT 15h AX=C207h) ----
+ * The BIOS calls the handler set with C207h far, from its IRQ 12 handler
+ * in V86 mode, with four words on the stack (pushed in this order: the
+ * status, the X data, the Y data, 0; IBM PS/2 BIOS interface) and pops them
+ * itself after the handler's RETF. A protected-mode client (MOUSE.DRV for
+ * a PS/2 mouse) passes a protected-mode ES:BX, which no V86 code can call,
+ * so the BIOS gets a V86 breakpoint instead, and the breakpoint calls the
+ * client's handler on the host's stack with the same four words, as the
+ * hardware interrupt handlers are run (run_hw_handler). Under Windows 3.1
+ * this is how MOUSE.DRV gets the mouse in 386 Enhanced mode (observed: the
+ * pointer moves; with the BIOS given the bare selector it did not).
+ * UNVERIFIED: the exact registers and stack Windows 3.1 gives the handler. */
+static u32 ps2_sel, ps2_off;
+
+static int ps2_set_handler(struct cregs *r)
+{
+    struct cregs v, pm = *r;
+
+    memset(&v, 0, sizeof(v));
+    v.eax = r->eax;
+    v.eflags = pm.eflags;
+    if ((r->es & 0xFFFF) || BX(r)) {
+        ps2_sel = r->es & 0xFFFF;
+        ps2_off = BX(r);
+        v.es = info->ldr_cs;
+        v.ebx = info->bp_off + W386_BP_PS2CB;
+    }
+    if (dpmi_verbose) trace("[PS2 handler %x:%x]", r->es, BX(r));
+    v86_int(&v, 0x15);
+    *r = pm;
+    SETW(r->eax, v.eax);
+    r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
+    if (!((r->es & 0xFFFF) || BX(r))) ps2_sel = ps2_off = 0;
+    return 1;
+}
+
+void dpmi_ps2cb(struct cregs *r)
+{
+    u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
+    u32 ip = sp[0], cs = sp[1], z = sp[2], y = sp[3], x = sp[4], status = sp[5];
+    struct cregs p;
+
+    /* the RETF back to the BIOS */
+    r->eip = ip;
+    r->cs = cs;
+    SETW(r->esp, (u16)r->esp + 4);
+    if (!sysvm.pm || !ps2_sel) return;
     memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(r);
     p.ss = hstk_sel;
-    p.esp = hstk_sp;
-    p.ds = p.es = sysvm.dsel;
-    p.eflags = (r->eflags & 0x0FD5 & ~EFL_TF) | EFL_IOPL | 2;
-    p.eflags |= EFL_IF;
-    pm_push(&p, p.eflags);
+    p.ds = p.es = sysvm.last_ds;
+    pm_push(&p, status);
+    pm_push(&p, x);
+    pm_push(&p, y);
+    pm_push(&p, z);
     pm_push(&p, SEL_PMBP);
     pm_push(&p, PMBP_IRQRET);
-    p.eflags &= ~EFL_IF;
-    p.cs = sysvm.pmvec_sel[vec];
-    p.eip = sysvm.pmvec_off[vec];
-    saved_sp = hstk_sp;
-    hstk_sp = p.esp & (sysvm.client32 ? 0xFFFFFFFFu : 0xFFFFu);
-    exec_v86(&p);
-    hstk_sp = saved_sp;
-    /* flags the handler changed (CF etc. for INT 23h/24h) */
-    if (!hw) r->eflags = (r->eflags & ~0x8D5u) | (p.eflags & 0x8D5u);
-    return 1;
+    p.eflags = (r->eflags & 0x0FD5 & ~(EFL_TF | EFL_IF)) | 2;
+    p.cs = ps2_sel;
+    p.eip = ps2_off;
+    hstk_run(&p);
 }
 
 void dpmi_exception(struct cregs *r, int vec, u32 err)
 {
     if (vec < 32 && sysvm.excvec_sel[vec]) {
         /* the DPMI 0.9 exception frame: return address, error code, IP,
-         * CS, FLAGS, SP, SS (words for a 16-bit client) */
+         * CS, FLAGS, SP, SS (words for a 16-bit client), on the host's
+         * locked stack (DPMI 0.9: exception handlers are called on a
+         * locked stack the host provides), never the faulting code's:
+         * KRNL386's ExitCall raises exception 6 on purpose to run the end
+         * of a task on that stack (Pietrek, Windows Internals ch. 3) and
+         * frees the task's own stack there, then makes an INT 21h; on the
+         * task's stack the frame and that call's words went to freed
+         * memory (resumed at 0:0 after the first task exit) */
         struct cregs o = *r;
+        u32 base = hstk_base(r);
         if (dpmi_verbose || (vec != 0x0B && vec != 6)) trace("[EXC %x err %x at %x:%x cr2 %x ds %x es %x fs %x gs %x ss:sp %x:%x ax %x bx %x nest %d]", vec, err, r->cs, r->eip, get_cr2(), r->ds, r->es, r->fs, r->gs, r->ss, r->esp, r->eax, r->ebx, exec_depth());
+        r->ss = hstk_sel;
+        r->esp = base;
         pm_push(r, o.ss);
         pm_push(r, o.esp);
         pm_push(r, o.eflags);
@@ -814,13 +1082,34 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         r->cs = sysvm.excvec_sel[vec];
         r->eip = sysvm.excvec_off[vec];
         r->eflags &= ~(EFL_IF | EFL_TF);
+        hstk_low = r->esp & hstk_mask();
         return;
     }
-    {
-        u8 *c = (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+    if (vec == 1 && pmvec_default(1)) {
+        /* a single step nobody's handler takes: TF off, the client goes
+         * on. Seen right after KERNEL's Ctrl+Alt+Del procedure returned
+         * (run with Build_Int_Stack_Frame): TF in the flags it returned
+         * with. Who takes the step under Windows 3.1 is UNVERIFIED (RBIL:
+         * Reboot 0204h sets/resets a protected-mode INT 01h handler) */
+        trace("[EXC 1 at %x:%x: TF off]", r->cs, r->eip);
+        r->eflags &= ~EFL_TF;
+        return;
+    }
+    if (vec < 8 && !pmvec_default(vec)) {
+        /* no exception handler: exceptions 0-7 go to the client's
+         * protected-mode interrupt handler (DPMI 0.9) */
+        if (dpmi_verbose) trace("[EXC %x -> INT %x at %x:%x]", vec, vec, r->cs, r->eip);
+        pm_push(r, r->eflags & ~EFL_IOPL);
+        pm_push(r, r->cs);
+        pm_push(r, r->eip);
+        r->eflags &= ~(EFL_IF | EFL_TF);
+        r->cs = sysvm.pmvec_sel[vec];
+        r->eip = sysvm.pmvec_off[vec];
+        return;
+    }
+    {   /* the descriptor the error code names; never code bytes (ARCHITECTURE.md 3) */
         u8 *d = ldt_desc(err);
-        trace("code %x %x %x %x %x %x  desc(err) %x %x %x %x %x %x %x %x\n", c[0], c[1], c[2], c[3], c[4], c[5],
-              d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+        trace("desc(err) %x %x %x %x %x %x %x %x\n", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
     }
     panic("client exception %x err %x at %x:%x (eax %x ebx %x ds %x es %x fs %x gs %x ss:esp %x:%x cr2 %x)",
           vec, err, r->cs, r->eip, r->eax, r->ebx, r->ds, r->es, r->fs, r->gs, r->ss, r->esp, get_cr2());
