@@ -1,0 +1,72 @@
+; boot-test case treek386@items: w16's install tree alone, every Program
+; Manager item of its default groups opened: Main's MS-DOS Prompt (EXIT
+; typed at once) and Read Me (Notepad, closed), then the Accessories group
+; restored (Ctrl+Tab twice from Main: Main, StartUp, Accessories) and its
+; Notepad, Cardfile (no OLECLI.DLL in the tree: KERNEL's File Error box,
+; Program Manager's Application Execution Error box), Calculator and Clock
+; (each closed with Alt+F4). Run under the tree's KRNL386 and KRNL286: the
+; same screens (Clock's own, its time, not compared).
+key Return
+sleep 6
+type exit
+key Return
+match 01-dosback 30 2
+shot 01-dosback
+key Right
+sleep 0.5
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settlecaret 20 2
+matchnow 02-readme 20 2
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+match 03-back 20 2
+shot 03-back
+key ctrl+Tab
+sleep 0.5
+key ctrl+Tab
+sleep 1
+key Return
+match 04-acc 20 2
+shot 04-acc
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settlecaret 20 2
+matchnow 05-notepad 20 2
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+key Right
+sleep 0.5
+key Return
+match 06-fileerror 20 2
+shot 06-fileerror
+key Return
+match 07-execerror 20 2
+shot 07-execerror
+key Return
+match 08-back 20 2
+shot 08-back
+key Right
+sleep 0.5
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+match 09-calc 20 2
+shot 09-calc
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+key Right
+sleep 0.5
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settle 20 2
+shot 10-clock
+key alt+F4
+match 11-end 20 2
+shot 11-end

@@ -147,6 +147,12 @@
 #              as it was, text mode at the end, no ~WOA file left
 #   swapalt    the same with Alt+Tab to Windows and back to the prompt
 #              between VER and EXIT (tests/scripts/input/swapalt.txt)
+#   treek386   w16's install tree alone under its KRNL386 against the same
+#              under its KRNL286, every shot 0 pixels; parts items (every
+#              item of the default groups opened, tests/scripts/input/
+#              treeitems.txt; Program Manager and Main where PROGMAN.INI
+#              has them at boot) and desk (Clock and Calculator moved over
+#              the desktop version stamp, treedesk.txt)
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -195,7 +201,8 @@
 #              item started, each screen differing from the one before) and
 #              w16's: every screen identical (the minimised groups' own
 #              pictures left out), and the group files and PROGMAN.INI
-#              saved at the end identical
+#              saved at the end identical; w16's again under the tree's
+#              KRNL386 (-3), the same
 #   write      Windows Write (Microsoft's WRITE.EXE, WIN.INI run=): a line
 #              typed, the Character menu, the ruler, a second line, File >
 #              Exit and No (tests/scripts/input/write.txt); w16's WIN.COM,
@@ -306,7 +313,8 @@
 #              on w16's WIN.COM, DOSX, KRNL286, each against the
 #              all-Microsoft boot                 must be 0
 #   treealone  build/w16 alone as C:\W16, no file of Microsoft's on the
-#              drive (no DOS program run): must boot to its shell
+#              drive (no DOS program run): must boot to its shell, under
+#              its KRNL286 and its KRNL386
 #   vga        w16's VGA.DRV (drivers/vga) on Microsoft's stack, linked with
 #              Microsoft's resources (tests/vgamsres.sh: the art is then
 #              the same on both sides, the drawing code is compared) under
@@ -472,7 +480,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge edithandle capcursor deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile missingdll treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1517,6 +1525,52 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   missingdll: 0 pixels, the same return codes"
         else echo "FAIL missingdll: $r ($out)"; fails=$((fails + 1)); fi ;;
+    treek386)
+        # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
+        # under its own KRNL386 (-3: what DOSX starts on a 386, and what
+        # users of the tree run) against the same under its KRNL286, every
+        # shot 0 pixels. Parts: items, every item of the default groups
+        # opened (tests/scripts/input/treeitems.txt; the groups visible at
+        # boot); desk, Clock and Calculator over the desktop version stamp
+        # (treedesk.txt, [w16] DesktopVersion=1; Clock's client area, its
+        # time, left out). Until 2026-11-14 the tree's own tests ran
+        # KRNL286 only.
+        r=ok
+        case ${part:-items} in
+        items) s=$root/tests/scripts/input/treeitems.txt mk="rectangle 0,0 0,0"
+               set -- -i 'NonWindowsApp:SwapDisk=C:\W16' ;;
+        desk)  s=$root/tests/scripts/input/treedesk.txt mk="rectangle 0,18 212,186"
+               set -- -i w16:DesktopVersion=1 ;;
+        esac
+        d=$out/treek386-${part:-items}
+        "$root/tests/inputrun.sh" -s -B -b 40 -t 240 "$s" "$d-386" -T "$root/build/w16" -3 "$@" \
+            > "$d-386.txt" 2>&1 || true
+        "$root/tests/inputrun.sh" -e "$d-386/boot.png" -E "$d-386" -M "$mk" -b 40 -t 240 \
+            "$s" "$d-286" -T "$root/build/w16" "$@" > "$d-286.txt" 2>&1 || true
+        grep -q '^script done' "$d-386/input.log" 2>/dev/null || r="KRNL386: the script did not finish ($d-386/input.log)"
+        # the groups at boot: Program Manager's window where PROGMAN.INI
+        # puts it (its caption, 68+52,48+8) and Main's caption
+        if [ "$r" = ok ]; then
+            for p in "120 56" "100 103"; do
+                set -- $p
+                px=$(magick "$d-386/boot.png" -format "%[hex:p{$1,$2}]" info: 2>/dev/null)
+                case $px in 0000AA*) ;; *) r="KRNL386: no Program Manager window or Main group where PROGMAN.INI has them at boot ($px at $1,$2)" ;; esac
+            done
+        fi
+        for f in "$d-386"/boot.png "$d-386"/[0-9]*.png; do
+            [ "$r" = ok ] || break
+            s2=$(basename "$f")
+            [ "$s2" = 10-clock.png ] && continue
+            [ -f "$d-286/$s2" ] || { r="KRNL286: no $s2"; break; }
+            magick "$f" -fill black -draw "$mk" "$d-a.png"
+            magick "$d-286/$s2" -fill black -draw "$mk" "$d-b.png"
+            n=$(magick compare -metric AE "$d-a.png" "$d-b.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || { r="${part:-items}: $s2: $n pixels differ between KRNL386 and KRNL286"; break; }
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   treek386: the tree under KRNL386 as under KRNL286"
+        else echo "FAIL treek386: $r ($out)"; fails=$((fails + 1)); fi ;;
     cardfile)
         s=$root/tests/scripts/input/cardfile.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cardfile-WIN.INI"
@@ -1883,8 +1937,11 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             -f "$rsys/../PROGMAN.EXE=W16/PROGMAN.EXE" > "$out/w16groups-ms.txt" 2>&1 || true
         "$root/tests/inputrun.sh" -e "$out/w16groups-ms/boot.png" -m "$m" -E "$out/w16groups-ms" -M "$m" \
             -b 40 -t 240 "$scr" "$out/w16groups-pm" "$@" > "$out/w16groups-pm.txt" 2>&1 || true
+        # and w16's under the tree's KRNL386 (-3), as users of the tree run it
+        "$root/tests/inputrun.sh" -e "$out/w16groups-ms/boot.png" -m "$m" -E "$out/w16groups-ms" -M "$m" \
+            -b 40 -t 240 "$scr" "$out/w16groups-pm386" "$@" -3 > "$out/w16groups-pm386.txt" 2>&1 || true
         r=ok
-        for k in ms pm; do
+        for k in ms pm pm386; do
             d=$out/w16groups-$k
             grep -q '^script done' "$d/input.log" 2>/dev/null || { r="$k: the script did not run to its end"; break; }
             ! grep -q '^not moved' "$d/input.log" || { r="$k: a program did not come up or go ($d/input.log)"; break; }
@@ -1901,21 +1958,23 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             esac
             prev=$s
         done
+        for k in pm pm386; do
         for f in "$out/w16groups-ms"/boot.png "$out/w16groups-ms"/[0-9]*.png; do
             [ "$r" = ok ] || break
             s=$(basename "$f")
-            [ -f "$out/w16groups-pm/$s" ] || { r="pm: no $s"; break; }
+            [ -f "$out/w16groups-$k/$s" ] || { r="$k: no $s"; break; }
             magick "$f" -fill black -draw "$m" "$out/w16groups-a.png"
-            magick "$out/w16groups-pm/$s" -fill black -draw "$m" "$out/w16groups-b.png"
-            n=$(magick compare -metric AE "$out/w16groups-b.png" "$out/w16groups-a.png" "$out/w16groups-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+            magick "$out/w16groups-$k/$s" -fill black -draw "$m" "$out/w16groups-b.png"
+            n=$(magick compare -metric AE "$out/w16groups-b.png" "$out/w16groups-a.png" "$out/w16groups-$k-${s%.png}-diff.png" 2>&1 >/dev/null || true)
             n=${n%% *}
-            [ "$n" = 0 ] || r="pm: $s: $n pixels differ"
+            [ "$n" = 0 ] || r="$k: $s: $n pixels differ"
         done
         for f in MAIN.GRP ACCESSOR.GRP STARTUP.GRP PROGMAN.INI; do
             [ "$r" = ok ] || break
-            cmp -s "$out/w16groups-ms/work/c/W16/$f" "$out/w16groups-pm/work/c/W16/$f" || r="$f saved differently"
+            cmp -s "$out/w16groups-ms/work/c/W16/$f" "$out/w16groups-$k/work/c/W16/$f" || r="$k: $f saved differently"
         done
-        if [ "$r" = ok ]; then echo "ok   w16groups: w16's tree alone, its groups read and run by Microsoft's and w16's Program Manager, 0 pixels, the same files saved"
+        done
+        if [ "$r" = ok ]; then echo "ok   w16groups: w16's tree alone, its groups read and run by Microsoft's and w16's Program Manager (KRNL286; w16's also under KRNL386), 0 pixels, the same files saved"
         else echo "FAIL w16groups: $r ($out)"; fails=$((fails + 1)); fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
@@ -2699,12 +2758,17 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # build/w16 alone as C:\W16 (dropin.sh -T with nothing added): no
         # file of Microsoft's on the drive. Windows (no DOS program: the
         # grabber VGACOLOR.2GR is not needed) must boot to Program Manager
+        # under its KRNL286 and (treealone386, -3: what DOSX starts on a
+        # 386, as users of the tree run it) its KRNL386
         expect=
         boot treealone -T "$root/build/w16"
-        if booted treealone && grep -q '^shell: loaded' "$out/treealone.txt"; then
-            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell"
+        boot treealone386 -T "$root/build/w16" -3
+        if ! booted treealone || ! grep -q '^shell: loaded' "$out/treealone.txt"; then
+            echo "FAIL treealone: the boot did not complete under KRNL286 ($out/treealone.txt)"; fails=$((fails + 1))
+        elif ! booted treealone386 || ! grep -q '^shell: loaded' "$out/treealone386.txt"; then
+            echo "FAIL treealone: the boot did not complete under KRNL386 ($out/treealone386.txt)"; fails=$((fails + 1))
         else
-            echo "FAIL treealone: the boot did not complete ($out/treealone.txt)"; fails=$((fails + 1))
+            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell under KRNL286 and KRNL386"
         fi ;;
     sysprobe)
         # tests/sysprobe.sh: SY1 (every export, timers, the msec count,
@@ -2887,6 +2951,7 @@ caseparts() {
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
+    treek386) echo "$1@items $1@desk" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;
@@ -2932,6 +2997,9 @@ partsummary() {
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
+    treek386)
+        if [ $pbad = 0 ]; then echo "ok   treek386: the tree under its KRNL386 as under its KRNL286 (every item of its groups; Clock and Calculator over the desktop stamp)"
+        else echo "FAIL treek386: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;
