@@ -50,10 +50,28 @@
 #define IDS_NAME_DESKTOP    56
 #define IDS_INFO_COLOR      600     /* + the name's offset from 48 */
 #define IDS_NOTYET          4000    /* w16's own */
+#define IDS_ELEMENT         4100    /* + scheme index: Screen Element names */
+#define IDS_SAMPLE_ACTIVE   93
+#define IDS_SAMPLE_INACTIVE 94
+#define IDS_SAMPLE_MENU     95
+#define IDS_SAMPLE_WINTEXT  96
+#define IDS_SAMPLE_DISABLED 97
+#define IDS_SAMPLE_HILIGHTED 98
+#define IDS_DEFAULT_SCHEME  99
+#define IDS_SCHEME_NOREMOVE 100
+#define IDS_SAMPLE_OK       108
+#define IDS_SCHEME_DEFAULT  104
+#define IDS_SCHEME_EQUAL    105
+#define IDS_SCHEME_BRACKET  106
+#define IDS_SCHEME_BLANK    107
+#define IDS_SCHEME_REMOVE   236
 
 /* dialogs (the original's resource IDs) */
 #define DLG_KEYBOARD        5
 #define DLG_MOUSE           6
+#define DLG_CUSTOMCOLOR     26
+#define DLG_SAVESCHEME      27
+#define DLG_COLOR           100
 
 
 /* common control IDs */
@@ -63,6 +81,35 @@
 #define IDC_KB_TEST         600
 #define IDC_KB_SPEED        601
 #define IDC_KB_DELAY        603
+
+/* Color */
+#define IDC_CO_SAVE         711
+#define IDC_CO_REMOVE       712
+#define IDC_CO_PALETTE      714
+#define IDC_CO_SCHEMES      715
+#define IDC_CO_ELEMENT      716
+#define IDC_CO_SAMPLE       717
+#define IDC_CO_DEFINE       719
+#define IDC_CO_BASIC        32
+#define IDC_CO_CUSTOM       80
+#define IDC_SS_NAME         711
+#define IDC_CC_LUM          702
+#define IDC_CC_HUE          703
+#define IDC_CC_SAT          704
+#define IDC_CC_LUMV         705
+#define IDC_CC_RED          706
+#define IDC_CC_GREEN        707
+#define IDC_CC_BLUE         708
+#define IDC_CC_SAMPLE       709
+#define IDC_CC_SPECTRUM     710
+#define IDC_CC_SOLID        713
+#define IDC_CC_HUEA         720
+#define IDC_CC_SATA         721
+#define IDC_CC_LUMA         722
+#define IDC_CC_REDA         723
+#define IDC_CC_GREENA       724
+#define IDC_CC_BLUEA        725
+#define IDC_CC_ADD          731
 
 /* Mouse */
 #define IDC_MS_SWAP         500
@@ -90,5 +137,6 @@ void cpl_help(HWND dlg, int applet);
 /* applets */
 void keyboard_applet(HWND parent);
 void mouse_applet(HWND parent);
+void color_applet(HWND parent);
 
 #endif

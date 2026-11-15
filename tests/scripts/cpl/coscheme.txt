@@ -1,0 +1,21 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: a scheme chosen (Arizona, the first after Windows Default), OK
+; ([colors], [current]); then Windows Default again in a second session
+run CONTROL.EXE COLOR
+wait 4000
+alt s
+wait 300
+key 28
+wait 500
+snap C0.BMP
+key 0D
+wait 2000
+run CONTROL.EXE COLOR
+wait 3000
+alt s
+wait 300
+key 26
+wait 500
+snap C1.BMP
+key 0D
+wait 2000

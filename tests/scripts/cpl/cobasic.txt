@@ -1,0 +1,21 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: the palette open, Desktop given basic colour row 1 column 0
+; (red) and Window Background row 3 column 4 (blue) by clicking; OK
+; ([current] color schemes= empty)
+run CONTROL.EXE COLOR
+wait 4000
+alt p
+wait 800
+mclick 290 143
+wait 500
+snap C0.BMP
+alt e
+wait 300
+key 28
+key 28
+wait 300
+mclick 406 187
+wait 500
+snap C1.BMP
+key 0D
+wait 2000

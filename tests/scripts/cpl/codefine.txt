@@ -1,0 +1,25 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: Define Custom Colors with Desktop's colour (192 192 192), then
+; Red 255 typed (the HLS boxes follow), Add Color (into the first custom
+; cell), Close, OK: CONTROL.INI [Custom Colors], WIN.INI Background
+run CONTROL.EXE COLOR
+wait 4000
+alt p
+wait 800
+alt d
+wait 1500
+snap C0.BMP
+alt r
+wait 300
+type 255
+wait 800
+snap C1.BMP
+dump
+alt a
+wait 800
+snap C2.BMP
+key 0D
+wait 800
+snap C3.BMP
+key 0D
+wait 2000

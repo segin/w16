@@ -39,6 +39,42 @@ BEGIN
     607, "Changes the date and time of your computer's clock"
     608, "Changes the look of your desktop"
     IDS_NOTYET,         "This applet is not part of w16 yet."
+    IDS_ELEMENT + 0, "Desktop"
+    IDS_ELEMENT + 1, "Application Workspace"
+    IDS_ELEMENT + 2, "Window Background"
+    IDS_ELEMENT + 3, "Window Text"
+    IDS_ELEMENT + 4, "Menu Bar"
+    IDS_ELEMENT + 5, "Menu Text"
+    IDS_ELEMENT + 6, "Active Title Bar"
+    IDS_ELEMENT + 7, "Inactive Title Bar"
+    IDS_ELEMENT + 8, "Active Title Bar Text"
+    IDS_ELEMENT + 9, "Active Border"
+    IDS_ELEMENT + 10, "Inactive Border"
+    IDS_ELEMENT + 11, "Window Frame"
+    IDS_ELEMENT + 12, "Scroll Bars"
+    IDS_ELEMENT + 13, "Button Face"
+    IDS_ELEMENT + 14, "Button Shadow"
+    IDS_ELEMENT + 15, "Button Text"
+    IDS_ELEMENT + 16, "Disabled Text"
+    IDS_ELEMENT + 17, "Highlight"
+    IDS_ELEMENT + 18, "Highlighted Text"
+    IDS_ELEMENT + 19, "Inactive Title Bar Text"
+    IDS_ELEMENT + 20, "Button Highlight"
+    IDS_SAMPLE_ACTIVE,  "Active"
+    IDS_SAMPLE_INACTIVE, "Inactive"
+    IDS_SAMPLE_MENU,    "File  Edit"
+    IDS_SAMPLE_WINTEXT, "Window Text"
+    IDS_SAMPLE_DISABLED, "Disabled"
+    IDS_SAMPLE_HILIGHTED, "Highlighted"
+    IDS_DEFAULT_SCHEME, "Windows Default"
+    IDS_SCHEME_NOREMOVE, "Cannot remove the %s color scheme."
+    IDS_SAMPLE_OK,      "OK"
+    IDS_SCHEME_DEFAULT, "You cannot change the Windows Default color scheme.\n\nSpecify a new name for the color scheme."
+    IDS_SCHEME_EQUAL,   "The scheme name cannot include an equal sign (=)."
+    IDS_SCHEME_BRACKET, "The scheme name cannot include left or right brackets ([ ])."
+    IDS_SCHEME_BLANK,   "The scheme name cannot be blank."
+    IDS_SCHEME_REMOVE,  "Are you sure you want to remove the %s color scheme?"
+
 END
 
 DLG_KEYBOARD DIALOG 6, 0, 170, 116
@@ -86,4 +122,70 @@ BEGIN
     CONTROL "OK", IDOK, "button", 0x50030001, 160, 4, 36, 14
     CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 160, 20, 36, 14
     CONTROL "&Help", IDC_HELP, "button", 0x50030000, 160, 40, 36, 14
+END
+DLG_COLOR DIALOG 2, 0, 300, 194
+STYLE 0x80C800C0
+CAPTION "Color"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Color &Schemes", -1, "button", 0x50000007, 4, 2, 138, 44
+    CONTROL "", IDC_CO_SCHEMES, "combobox", 0x50230213, 6, 14, 134, 54
+    CONTROL "S&ave Scheme", IDC_CO_SAVE, "button", 0x50030000, 6, 30, 64, 14
+    CONTROL "Re&move Scheme", IDC_CO_REMOVE, "button", 0x50030000, 76, 30, 64, 14
+    CONTROL "", IDC_CO_SAMPLE, "static", 0x5000000A, 4, 48, 138, 112
+    CONTROL "Color &Palette >>", IDC_CO_PALETTE, "button", 0x50030000, 4, 162, 138, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 4, 178, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 53, 178, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 102, 178, 40, 14
+    CONTROL "Screen &Element:", -1, "static", 0x50020000, 154, 2, 128, 9
+    CONTROL "", IDC_CO_ELEMENT, "combobox", 0x50230003, 154, 12, 114, 62
+    CONTROL "&Basic Colors:", -1, "static", 0x50020000, 154, 32, 128, 9
+    CONTROL "", IDC_CO_BASIC, "static", 0x5003000A, 154, 42, 140, 86
+    CONTROL "&Custom Colors:", -1, "static", 0x50020000, 154, 134, 128, 9
+    CONTROL "", IDC_CO_CUSTOM, "static", 0x5003000A, 154, 144, 140, 28
+    CONTROL "&Define Custom Colors...", IDC_CO_DEFINE, "button", 0x50030000, 154, 178, 140, 14
+END
+DLG_SAVESCHEME DIALOG 132, 64, 144, 74
+STYLE 0x80C800C0
+CAPTION "Save Scheme"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Save this color scheme as", -1, "static", 0x50020001, 0, 5, 144, 9
+    CONTROL "", IDC_SS_NAME, "edit", 0x50810080, 10, 34, 124, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 13, 55, 32, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 53, 55, 32, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 93, 55, 32, 14
+END
+DLG_CUSTOMCOLOR DIALOG 0, 0, 150, 190
+STYLE 0x80C80040
+CAPTION "Custom Color Selector"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_CC_LUM, "static", 0x5000000A, 130, 4, 8, 112
+    CONTROL "", IDC_CC_SPECTRUM, "static", 0x50000007, 4, 4, 114, 112
+    CONTROL "", IDC_CC_SAMPLE, "static", 0x50000007, 4, 124, 42, 26
+    CONTROL "&o", IDC_CC_SOLID, "button", 0x50000000, 1000, 1000, 36, 14
+    CONTROL "Color|", -1, "static", 0x50020002, 4, 152, 21, 14
+    CONTROL "S&olid", -1, "static", 0x50020000, 25, 152, 21, 14
+    CONTROL "H&ue:", -1, "static", 0x50020002, 48, 126, 20, 9
+    CONTROL "", IDC_CC_HUE, "edit", 0x50830000, 70, 124, 18, 12
+    CONTROL "", IDC_CC_HUEA, "cpArrow", 0x50820000, 88, 124, 7, 12
+    CONTROL "&Sat:", -1, "static", 0x50020002, 48, 140, 20, 9
+    CONTROL "", IDC_CC_SAT, "edit", 0x50830000, 70, 138, 18, 12
+    CONTROL "", IDC_CC_SATA, "cpArrow", 0x50820000, 88, 138, 7, 12
+    CONTROL "&Lum:", -1, "static", 0x50020002, 48, 154, 20, 9
+    CONTROL "", IDC_CC_LUMV, "edit", 0x50830000, 70, 152, 18, 12
+    CONTROL "", IDC_CC_LUMA, "cpArrow", 0x50820000, 88, 152, 7, 12
+    CONTROL "&Red:", -1, "static", 0x50020002, 96, 126, 24, 9
+    CONTROL "", IDC_CC_RED, "edit", 0x50830000, 122, 124, 18, 12
+    CONTROL "", IDC_CC_REDA, "cpArrow", 0x50820000, 140, 124, 7, 12
+    CONTROL "&Green:", -1, "static", 0x50020002, 96, 140, 24, 9
+    CONTROL "", IDC_CC_GREEN, "edit", 0x50830000, 122, 138, 18, 12
+    CONTROL "", IDC_CC_GREENA, "cpArrow", 0x50820000, 140, 138, 7, 12
+    CONTROL "&Blue:", -1, "static", 0x50020002, 96, 154, 24, 9
+    CONTROL "", IDC_CC_BLUE, "edit", 0x50830000, 122, 152, 18, 12
+    CONTROL "", IDC_CC_BLUEA, "cpArrow", 0x50820000, 140, 152, 7, 12
+    CONTROL "&Add Color", IDC_CC_ADD, "button", 0x50030000, 4, 174, 45, 14
+    CONTROL "&Close", IDOK, "button", 0x50030001, 52, 174, 45, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 100, 174, 45, 14
 END

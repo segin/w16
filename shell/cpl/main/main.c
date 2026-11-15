@@ -47,6 +47,9 @@ static void not_yet(HWND parent, int applet)
 static void run(HWND parent, int applet)
 {
     switch (applet) {
+    case AP_COLOR:
+        color_applet(parent);
+        break;
     case AP_MOUSE:
         mouse_applet(parent);
         break;
@@ -85,10 +88,13 @@ LONG FAR PASCAL __loadds CPlApplet(HWND hwnd, UINT msg, LPARAM l1, LPARAM l2)
 }
 
 /* ---- cpArrow ----
-   Observed (pixels): a black box, its inside COLOR_BTNFACE, split by a
-   black line 9 pixels below the top; an up arrow whose base is 2 rows
-   above the line and a down arrow from 3 rows below it, each 6 rows of
-   1, 3, 3, 5, 5, 7 pixels, centred. */
+   Observed (pixels, dumps): the controls have WS_BORDER (USER draws the
+   black box) and are one pixel wider than their template says (13 pixels
+   for 7 dialog units, in the Desktop and Custom Color dialogs: UNVERIFIED
+   whether the rule is "odd width"); inside, COLOR_BTNFACE split by a black
+   line 9/20 of the window's height down; an up arrow whose base is 2 rows
+   above the line and a down arrow from 3 rows below it, each 6 rows of 1,
+   3, 3, 5, 5, 7 pixels, centred. */
 static void arrow_paint(HWND w, HDC dc)
 {
     RECT r, t;
@@ -98,7 +104,6 @@ static void arrow_paint(HWND w, HDC dc)
     face = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
     black = GetStockObject(BLACK_BRUSH);
     FillRect(dc, &r, face);
-    FrameRect(dc, &r, black);
     mid = r.top + 9 * (r.bottom - r.top) / 20;
     SetRect(&t, r.left, mid, r.right, mid + 1);
     FillRect(dc, &t, black);
@@ -116,6 +121,14 @@ static void arrow_paint(HWND w, HDC dc)
 LRESULT FAR PASCAL __loadds ArrowProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_CREATE: {
+        RECT r;
+        GetWindowRect(w, &r);
+        if (!((r.right - r.left) & 1))
+            SetWindowPos(w, NULL, 0, 0, r.right - r.left + 1, r.bottom - r.top,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        break;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(w, &ps);
