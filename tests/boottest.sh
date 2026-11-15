@@ -403,6 +403,10 @@
 #              the default set: run it by name): the parts kb-us ... co-us,
 #              w16's USER against Microsoft's, screens and INI files; they
 #              show USER's remaining differences (ARCHITECTURE.md 14)
+#   mousespeed the pointer's travel for a fixed motion at acceleration 0 0 0
+#              and 4 6 2 (WIN.INI MouseThreshold1/2, MouseSpeed): w16's USER
+#              (parts @s0-us, @s2-us) and w16's USER with w16's MOUSE.DRV
+#              (@s0-drv, @s2-drv) against all-Microsoft 3.1: the same place
 #   gpuser     USER's functions given a bad pointer, USER's "__GP" table
 #              (user/gp.asm): probe US27 as the shell in DOSBox-X (-p
 #              386x), every case Windows 3.1 came back from, its values
@@ -517,7 +521,7 @@ shift $((OPTIND - 1))
 [ -n "$out" ] || out=$root/build/boottest-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1249,6 +1253,46 @@ runcase() {
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c: every click as on 3.1"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mousespeed)
+        # the pointer's travel for a fixed motion at two acceleration
+        # settings (tests/scripts/input/mousespeed.txt; WIN.INI
+        # MouseThreshold1/2 MouseSpeed 0 0 0 and 4 6 2): w16's USER, and
+        # w16's USER with w16's MOUSE.DRV, against all-Microsoft 3.1, the
+        # screens (where the pointer ends) identical. Parts s0-us, s2-us,
+        # s0-drv, s2-drv
+        s=$root/tests/scripts/input/mousespeed.txt
+        r=ok
+        for pk in ${part:-s0-us s2-us s0-drv s2-drv}; do
+            sv=${pk%-*} st=${pk#*-}
+            wi=$out/mousespeed-$sv-WIN.INI
+            cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$wi"
+            case $sv in
+            s0) python3 "$root/tests/scripts/iniset.py" "$wi" 'windows:MouseThreshold1=0' \
+                    'windows:MouseThreshold2=0' 'windows:MouseSpeed=0' ;;
+            s2) python3 "$root/tests/scripts/iniset.py" "$wi" 'windows:MouseThreshold1=4' \
+                    'windows:MouseThreshold2=6' 'windows:MouseSpeed=2' ;;
+            esac
+            refrun mousespeed-$sv-ref mousespeed "$root/tests/inputrun.sh" -s -b 25 -t 150 "$s" \
+                "$out/mousespeed-$sv-ref" -r -f "$wi=WINDOWS/WIN.INI"
+            set -- -f "$user=WINDOWS/SYSTEM/USER.EXE"
+            [ "$st" = drv ] && set -- "$@" -f "$root/build/dos/MOUSE.DRV=WINDOWS/SYSTEM/MOUSE.DRV"
+            rm -rf "$out/mousespeed-$pk"
+            "$root/tests/inputrun.sh" -e "$out/mousespeed-$sv-ref/boot.png" -E "$out/mousespeed-$sv-ref" \
+                -b 25 -t 150 "$s" "$out/mousespeed-$pk" -r -f "$wi=WINDOWS/WIN.INI" "$@" \
+                > "$out/mousespeed-$pk.txt" 2>&1 || true
+            f=$out/mousespeed-$sv-ref/01-travel.png
+            if [ ! -f "$out/mousespeed-$pk/01-travel.png" ]; then r="$pk: no shot"
+            else
+                n=$(magick compare -metric AE "$out/mousespeed-$pk/01-travel.png" "$f" \
+                    "$out/mousespeed-$pk-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || r="$pk: $n pixels differ (the pointer elsewhere)"
+            fi
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   mousespeed: the pointer travels as on 3.1"
+        else echo "FAIL mousespeed: $r ($out)"; fails=$((fails + 1)); fi ;;
     tree)
         ref
         if "$root/tests/w16tree.sh" -t "$secs" -o "$out/tree" -R "$out/ref.png" > "$out/tree.txt" 2>&1; then
@@ -3263,6 +3307,7 @@ caseparts() {
     control) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
+    mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;
     vga) for v in kbtype tabs alttab helpmenus pmkeys icons menus dragoff pmitems pmclose mdimax about; do printf '%s@%s ' "$1" $v; done ;;

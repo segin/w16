@@ -283,6 +283,34 @@ sleep 0.3
 click 1
 sleep 0.6
 matchnow 06-tracking 20 1
+home
+home
+sleep 0.3
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+matchnow 07-travel 20 1
 ; OK with Return (the pointer now accelerates)
 key Return
 sleep 0.4
@@ -290,7 +318,7 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-matchnow 07-closed 20 1
+matchnow 08-closed 20 1
 ; end Windows: the INI files written out
 key alt+F4
 sleep 1
