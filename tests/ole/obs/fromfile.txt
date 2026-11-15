@@ -1,0 +1,26 @@
+; embedding a file, the clipboard, creating from and linking to the clipboard
+spy
+doc 0 OCDOC
+fromfile 0 PBrush C:\WINDOWS\ARCADE.BMP - ff0 draw 0
+querytype 0
+save 0 C:\F0.BIN
+copy 0
+clipdump
+qclip StdFileEditing draw 0
+qlink StdFileEditing draw 0
+qclip Static draw 0
+fromclip 1 StdFileEditing fc1 draw 0
+querytype 1
+save 1 C:\F1.BIN
+linkclip 2 StdFileEditing lc2 draw 0
+querytype 2
+equal 0 1
+clone 0 3
+querytype 3
+save 3 C:\F3.BIN
+enumobjs 0
+delete 0
+delete 1
+delete 2
+delete 3
+revokedoc 0

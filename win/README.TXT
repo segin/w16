@@ -10,8 +10,7 @@ w16 repository's LICENSE):
   NOTEPAD.EXE             Notepad
   CLOCK.EXE               Clock
   CALC.EXE                Calculator
-  CARDFILE.EXE            Cardfile (needs COMMDLG.DLL and OLECLI.DLL in
-                          SYSTEM; its help is CARDFILE.HLP)
+  CARDFILE.EXE            Cardfile (its help is CARDFILE.HLP)
   SYSTEM\KRNL286.EXE      KERNEL for an 80286
   SYSTEM\KRNL386.EXE      KERNEL for a 386 or later (Standard and 386
                           Enhanced mode)
@@ -34,6 +33,11 @@ w16 repository's LICENSE):
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
                           About boxes)
+  SYSTEM\OLECLI.DLL      the OLE client library: objects (pictures,
+                          sounds, packages) embedded in or linked to
+                          documents, as Cardfile and Write keep them;
+                          editing one needs its program (the server),
+                          e.g. your Paintbrush, and OLESVR.DLL
   SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
                           Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
@@ -81,8 +85,8 @@ installation, copied into the same places (Windows directory or its
 SYSTEM subdirectory, as there) without overwriting the files above:
 
   Windows directory:      any applications you want
-  SYSTEM:                 MMSYSTEM.DLL (multimedia), OLECLI.DLL and
-                          OLESVR.DLL (OLE, e.g. Cardfile's pictures),
+  SYSTEM:                 MMSYSTEM.DLL (multimedia), OLESVR.DLL (OLE
+                          servers such as Paintbrush need it),
                           the other fonts (*.FON, *.FOT, *.TTF)
 
 Do not copy your KRNL386.EXE or KRNL286.EXE over w16's: on a 386 or

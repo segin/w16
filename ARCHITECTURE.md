@@ -1345,6 +1345,309 @@ w16's Cardfile is a 1:1 replacement for Windows 3.1's (`make shell` builds `buil
 
 **Tests.** `tests/cardscenarios.sh` runs the scenarios in `tests/scripts/cf/` (basic, files, stack, dialogs, picture, object, convert, merge, autodial) with the original and with ours on the reference 3.1 at the same time; every saved card file must be identical (crdcmp), WIN.INI too, and screenshots may differ only as `tests/scripts/cf.baseline` allows (the About box's icon, and Paintbrush's window, which opens maximized for ours and normal for the original: UNVERIFIED why). `CF_COMMDLG=w16` runs ours on w16's COMMDLG.DLL (17; baseline `tests/scripts/cf-commdlg.baseline`): the dialogs match but for COMMDLG's own icon art (files and convert once failed after a Save As type change: w16's COMMDLG left the File Name box unselected; fixed, 17). Carets are kept from blinking (SNAP `blink 60000`). The boot-test case `cardfile` plays real keys into both Cardfiles on all-Microsoft 3.1 (`tests/scripts/input/cardfile.txt`): every screen identical. `tests/cardhelp.sh` compares the WinHelp requests.
 
+## 16. OLE
+
+OLE 1.0 is two DLLs: OLECLI.DLL, the client library that Write, Cardfile
+and Packager import (40 of its 259 ordinals, docs/exportdb), and OLESVR.DLL,
+the server library of Paintbrush, Sound Recorder and Packager. They talk to
+each other only through DDE messages, so the two can be replaced
+separately. w16's OLECLI is in `ole/olecli/`; the OLESVR agent's notes are
+§16.8 onwards.
+
+### 16.1 Observation tools (probes OC1, OC2, OC3)
+
+- **OC1** (`tests/ole/oc1.c`) is a scripted OLE client. It runs a script
+  `C:\OC.TXT` through the documented client API and logs every call with
+  its arguments and OLESTATUS, every client callback, and every OLESTREAM
+  Get/Put with its size and first bytes. The command list is in the
+  source. It also drives other programs: `menu <class> <item>`, `type`,
+  `keymenu`, `wmclose`, `wins`, `snap`.
+- **OC2** (OCSPY.DLL, `tests/ole/ocspy.c`) installs system-wide
+  WH_GETMESSAGE and WH_CALLWNDPROC hooks and logs every WM_DDE_* message
+  of every task. Windows are shown as `module:class#n`, numbered in the
+  order the log first sees them, so that two runs can be compared. Atoms
+  and clipboard formats are shown by name, and data handles by size,
+  checksum and first bytes. Posted messages are logged when their receiver
+  removes them from its queue, so the log shows the order of retrieval, not
+  of posting. A message posted to a window that is already destroyed never
+  shows up. The spy also logs faults (TOOLHELP InterruptRegister) with
+  their CS:IP and module/segment.
+- **OC3** (OCSRV.EXE) records how a server is started. It is registered as
+  a class's `server` in the scratch REG.DAT (`regset`), logs its command
+  line, the show command and the raw PSP tail, then starts the real server
+  with the same command line.
+- `tests/ole/ocrun.sh <script> <outdir> [OLECLI.DLL]` runs one script on a
+  scratch copy of the reference 3.1. Program Manager is the shell and OC1
+  starts from `load=`: with an OLECLI importer as `shell=`, the session
+  never got to run it. `tests/ole/obsrun.sh` runs `tests/ole/obs/*.txt`
+  three at a time. `tests/ole/olecmp.py` compares two runs (logs, streams,
+  bitmaps) after masking what differs by nature (see 16.4).
+  OC1 ends the session with ExitWindows after 2 seconds of message pumping
+  (with a server still exiting, the session never ended) and holds
+  carets in their phase (SetCaretBlinkTime 65535) so that screenshots of
+  the programs it drives compare.
+
+Observation hazard: Microsoft's OLECLI calls an OLESTREAM's Get/Put with a
+DS that is not the client's or its own (OC1's export-prolog Put faulted on
+`mov ds,ax` with AX=00FE). A client's stream methods must load their own
+DS (MakeProcInstance or `__loadds`).
+
+### 16.2 The API as observed (Microsoft's OLECLI 3.1, OC1)
+
+- `OleQueryClientVersion` = 0x00001001. `OleIsDcMeta`: 1 for a metafile DC.
+- `OleRegisterClientDoc` returns a handle `ssss:0000` (a global block).
+  `OleRevokeClientDoc` with objects left gives OLE_ERROR_NOT_EMPTY.
+  `OleRenameClientDoc`, `OleSavedClientDoc` and `OleRevertClientDoc` send
+  nothing for objects that are not open. `OleEnumObjects` gives the
+  objects in creation order, then NULL with OLE_OK.
+- Operations that need the server return OLE_WAIT_FOR_RELEASE. The client
+  then gets OLE_RELEASE, and OleQueryReleaseMethod names the operation
+  (OLE_CREATE, OLE_UPDATE, OLE_CLOSE, OLE_ACTIVATE, OLE_OTHER for pokes and
+  OleExecute, OLE_REQUESTDATA, OLE_SETDATA, OLE_CREATEFROMFILE,
+  OLE_CREATELINKFROMFILE, OLE_LOADFROMSTREAM, OLE_CREATEINVISIBLE). The
+  INITIATE broadcasts and the server start happen inside the call. A
+  refused EXECUTE or POKE (OleExecute, OleSetData) still ends with
+  OLE_OK as the release error.
+- Callbacks: OLE_CHANGED after an update (OleUpdate, OleRequestData, a
+  link's data); OLE_SAVED when the server sends the `/Save` advise (after
+  the last format of the batch: Native, then the picture); OLE_CLOSED when
+  the server ends the document conversation; OLE_RELEASE at the end of
+  each asynchronous operation.
+- Errors observed: an unregistered class gives OLE_ERROR_CLASS (no object).
+  A missing file gives OLE_ERROR_OPEN, for OleCreateFromFile and links.
+  An empty clipboard makes `OleQueryCreateFromClip` (StdFileEditing and
+  Static) and `OleQueryLinkFromClip` return OLE_ERROR_FORMAT. Linking from
+  a clipboard that has no ObjectLink gives OLE_ERROR_CLIPBOARD (no
+  object). A NULL object gives OLE_ERROR_OBJECT. A blank object (no data
+  yet) gives OLE_ERROR_BLANK from OleQueryBounds (rect 0,0,0,0),
+  OleDraw, OleGetData of the picture, and OleSaveToStream. OleSaveToStream
+  writes the header, class, topic and item first (27 bytes for PBrush).
+- `OleQueryBounds` is in HIMETRIC as `0,0,cx,-cy`. A metafile picture's
+  extents are used as they are. A DIB's pixels are scaled by
+  `pixels*100000/biXPelsPerMeter` (640x442 at 3780 is 16931x11693).
+- `OleQuerySize` is exactly the byte count OleSaveToStream writes.
+- `OleEnumFormats`: an embedded object gives "Native", "OwnerLink",
+  CF_METAFILEPICT. A link gives "ObjectLink", "Native", CF_METAFILEPICT.
+- `OleGetData`: Native and the object's own picture come back with OLE_OK
+  (they stay OLECLI's). A metafile made for a Paintbrush object comes back
+  with OLE_WARN_DELETE_DATA. OwnerLink (embedded) and ObjectLink (link)
+  are "class\0topic\0item\0\0" in a block rounded up by GlobalAlloc, whose
+  tail is not cleared. The other one gives OLE_ERROR_FORMAT.
+- `OleCopyToClipboard`: an embedded object puts "Native", "OwnerLink" and
+  CF_METAFILEPICT. A link puts "OwnerLink" (holding class, file and item),
+  "Native" and CF_METAFILEPICT.
+- `OleCreateFromClip` (StdFileEditing) and `OleClone` are synchronous
+  (OLE_OK, no DDE), and so is `OleCreateInvisible` with fLaunch FALSE.
+  `OleEqual` on two copies is OLE_OK.
+- `OleSetBounds`, `OleSetHostNames`, `OleSetColorScheme` and
+  `OleSetTargetDevice` on an object that is not open return OLE_OK and
+  send nothing.
+- `OleDraw` of a metafile picture into a metafile DC fails with
+  OLE_ERROR_DRAW, after it has recorded SaveDC and IntersectClipRect.
+  Drawing a Paintbrush object into one works.
+
+### 16.3 The DDE protocol (OLECLI side)
+
+OLECLI makes hidden top-level windows: `OleSrvrWndClass` (title "") for a
+server's system topic and `OleDocWndClass` (title "Window Name") for a
+document. INITIATE goes out as a broadcast (SendMessage to -1).
+
+- **Finding a server.** For a new or embedded object, OLECLI INITIATEs
+  (class, "OLEsystem"), then (class, "System"). If nobody answers, it
+  destroys that window and starts the server with
+  `LoadModule(<server>, tail " -Embedding [file]", show)`. The server
+  comes from REG.DAT, `<class>\protocol\StdFileEditing\server`. The
+  string's first character, the space, is taken as the length byte, so the
+  server's PSP tail has length 32 and its command line is "-Embedding " or
+  "-Embedding <file>" (OC3). The show command is SW_SHOWNORMAL to create
+  or activate and SW_HIDE for a file or a link. A new window then
+  INITIATEs (class, "OLEsystem") once. For a link or a file, OLECLI first
+  INITIATEs (class, <file>) on a document window, then tries the system
+  topic, then starts the server with the file name and INITIATEs
+  (class, <file>).
+- **Embedded document names**: `<doc class>%<doc name>%<object name>#nnn`
+  (e.g. `OC1%OCDOC%obj0#001`). nnn counts up from 001 for each embedded
+  object OLECLI names: one created, loaded, made from a file or the
+  clipboard, cloned, or renamed with OleRename. Links don't take a number.
+- **OleCreate**: EXECUTE `[StdNewDocument("<class>","<name>")]` on the
+  system topic, then INITIATE (class, name). Then ADVISE "/Save" Native,
+  ADVISE "/Save" <picture>, ADVISE "/Close" Native, ADVISE "/Close"
+  <picture> (DDEADVISE flags 8000: fAckReq), and EXECUTE
+  `[StdShowItem("")]`. Then OLE_RELEASE. OleCreateInvisible leaves out
+  StdShowItem. If the server refuses an advise (PBrush refuses CF_DIB),
+  OLECLI sends `[StdCloseDocument]` instead and still ends with OLE_OK; the
+  object stays blank.
+- **OleActivate** of an embedded object that is not open: EXECUTE
+  `[StdEditDocument("<name>")]` on the system topic, INITIATE the document,
+  POKE item "" Native (DDEPOKE flags 0: OLECLI frees the data), the four
+  ADVISEs, then EXECUTE `[StdDoVerbItem("",<verb>,<TRUE|FALSE: fShow>,
+  <TRUE|FALSE: NOT fTakeFocus>)]`. The last argument is the inverse of
+  fTakeFocus (seen both ways).
+- **OleUpdate** of an open embedded object: REQUEST item "" Native, then
+  the picture, then OLE_CHANGED. The DATA comes back with flags 3000
+  (fResponse|fRelease).
+- **OleClose** of an embedded object: EXECUTE `[StdCloseDocument]`. The
+  server then TERMINATEs the document and the system conversations, and
+  OLECLI answers each TERMINATE and destroys its window. On OleDelete,
+  OLECLI sends `[StdExit]` and TERMINATE on a system conversation whose
+  server window is still there.
+- **Pokes** (only while open): `StdHostNames` (format "Binary": WORD 0,
+  WORD offset of the document name, "app\0doc\0"), `StdDocDimensions`
+  ("Binary": the words cx,-cy,cx,-cy of the rectangle, whatever its
+  origin), `StdColorScheme` (the LOGPALETTE), `StdTargetDevice` (the
+  client's OLETARGETDEVICE block). OleSetData pokes item "" with the
+  client's format.
+- **Server-initiated**: DATA on "/Save" (flags 2000) updates Native and the
+  picture and gives OLE_SAVED after the last format. Data on "/Close"
+  (a changed object closed by the user, Yes to the server's question)
+  gives OLE_CHANGED; OLECLI then posts `[StdCloseDocument]` and gives
+  OLE_CLOSED at once, before the server's TERMINATE arrives (srvclose). If
+  that callback is missing, Write drops a newly inserted object. TERMINATE gives
+  OLE_CLOSED. OleDelete and OleRelease of an open embedded object both send
+  `[StdCloseDocument]`.
+- **Links**: (OleCreateLinkFromFile) INITIATE (class, file), then ADVISE
+  item <item> Native (no /Save), ADVISE "StdDocumentName" "Binary", REQUEST
+  Native, OLE_CHANGED. If the server shows no visible window (OLECLI
+  started it hidden), TERMINATE. A link loaded from a stream whose server
+  has the file open connects and stays connected (hot link). OleActivate
+  of a link that is not connected starts the server shown (when it is not
+  running), connects as above and sends StdDoVerbItem; a link set to
+  oleupdate_oncall gets StdDoVerbItem alone, with no advise or request.
+  OleUpdate of a link that is not connected connects, REQUESTs Native and
+  lets the server go again. OleClose of a link just TERMINATEs.
+  OleCreateFromFile is the same, but without the advises; its server is let
+  go after the REQUEST.
+
+### 16.4 The stream format
+
+Each field is its own Put call, in this order (see `ole/olecli/stream.c`;
+the published MS-OLEDS "OLE 1.0 format" describes the same layout):
+
+    DWORD 0x00000501, DWORD 1 link | 2 embedded | 3 static
+    string class        DWORD length incl. NUL + bytes; "" is DWORD 0 alone
+    embedded: string topic (""), string item (""), DWORD size, Native
+              (size = the Native block's GlobalSize: 141558-byte BMP -> 141600)
+    link:     string file, string item, string network name, DWORD 0,
+              DWORD update option
+    picture:  DWORD 0x0501, DWORD 0 (none) | 5, string class:
+      "METAFILEPICT": DWORD xExt, DWORD -yExt, DWORD 8+n, METAFILEPICT as
+                      in memory (mm, xExt, yExt, the hMF handle value!),
+                      n bytes of metafile = its GlobalSize (past the
+                      metafile's own size: whatever memory held)
+      other (generic): DWORD 0 + string format name (a registered format),
+                      DWORD size, data
+
+Two fields are non-deterministic in Microsoft's own output: the hMF word,
+and a metafile's bytes past its mtSize up to the GlobalSize rounding. The
+same document saved twice by Microsoft's OLECLI differs there, so
+byte-identity is checked with those bytes masked (`olecmp.py`).
+
+Paintbrush (class "PBrush", render draw) gets special treatment: OLECLI's
+built-in handler (the PBxxx exports). Only Native is advised and
+requested; the Native data is a .BMP file; the embedded object is saved
+with no picture (format 0); bounds and drawing come from the DIB; OleGetData
+of CF_METAFILEPICT builds a metafile: SetWindowOrg(0,0), SetWindowExt(w,h),
+CreatePalette of the DIB's colours, SelectPalette, RealizePalette,
+StretchDIBits(SRCCOPY, DIB_RGB_COLORS), then the stock palette selected and
+realized again and the DIB palette deleted. A PBrush link is saved with a
+generic picture: class "PBrush", format "Native", the BMP file.
+
+### 16.5 w16's OLECLI.DLL
+
+`ole/olecli/`, built into `build/dos/OLECLI.DLL` and installed as
+`build/w16/SYSTEM/OLECLI.DLL` (the tree's Cardfile imports it). Large
+model; every entry point loads OLECLI's DS (`OLEAPI`: `__loadds`); no C
+library (`i4.asm` has the 32-bit helpers and `__PIA`).
+
+- **Exports**: all 259 of 3.1's ordinals, with the same names and
+  residency (`tools/mkoleexp.py` from `docs/exportdb`). The OleXxx calls
+  validate the object and call through its vtbl, whose entries are the LExxx
+  exports. MF/BM/DIB/GEN share the LE methods. The ERRxxx methods return
+  OLE_ERROR_STATIC. DEFxxx and the PB creation entries are the
+  object-handler interface. The 81 ordinals 955-1035 have no name in 3.1
+  and nothing imports them: they are stubs returning 0, made ordinal-only
+  by `tools/nestripnames.py`, since wlink cannot export without a name.
+  The resources are 3.1's dialog CONNECTDLG ("Connect Network Drive"), its
+  two strings and a VERSIONINFO.
+- `olecli.c`: client documents, objects (shared global blocks that stay
+  locked; a far pointer to one is the OLEOBJECT) and the API. `le.c`:
+  the vtbl and the creation functions. `dde.c`: the DDE engine. An
+  operation is a list of steps (connect, execute, advise, request, poke,
+  terminate, ...). Steps run inside the API call until one has to wait for
+  a posted answer; the window procedure then carries on, and the list ends
+  with OLE_RELEASE. `stream.c`, `pres.c`, `clip.c`, `reg.c` and `defs.c`
+  hold the rest.
+- Blocks Microsoft's OLECLI leaves uninitialised (the rounding of Native
+  copies, poke blocks) are zeroed, so w16's output is deterministic.
+- A build with `-dOLETRACE` logs every step to `C:\OLECLI.LOG`.
+
+### 16.6 Tests
+
+- `tests/olescenarios.sh [NAME...]` runs each scenario `tests/ole/obs/NAME.txt`
+  (OC1 scripts, among them `write1` and `card1`, in which OC1 drives
+  Write and Cardfile: Insert Object > Paintbrush Picture, Exit & Return,
+  save, reopen) with Microsoft's OLECLI and OLESVR and with each other
+  combination: `-c "w16:ms ms:w16 w16:w16"`, where the server side is
+  `build/dos/OLESVR.DLL` once the OLESVR agent's is there. Every run is
+  compared with the all-Microsoft one by `tests/ole/olecmp.py`.
+- Boot-test case **olecli**: part `tree` starts Cardfile from the install
+  tree's Accessories group, under its KRNL386 and its KRNL286; part
+  `cardw16` runs card1 with w16's Cardfile as the client
+  (`OLESCEN_FILES`); one part per scenario runs olescenarios.sh. Case **missingdll@tree** takes OLECLI.DLL
+  out of its copy of the tree.
+
+Known differences, masked in olecmp:
+- In a Write document, Write's own object number (from the clock; Microsoft
+  against Microsoft differs there too), the word 8 bytes on, and the
+  property pages: olecmp compares the text and the pictures. Microsoft's
+  OLECLI gives the same values in every run there, w16's others (0x1257
+  against 0x1227; local offsets 0x30 apart). They look like Write's own
+  handles, which depend on the memory layout (UNVERIFIED).
+- The hMF word and the tail of a metafile in a stream.
+- The rounding of Native blocks past a .BMP's or RIFF's own size.
+- In the metafile OLECLI makes of a Paintbrush DIB, the row padding of the
+  DIB in the StretchDIBits record. Microsoft's differs from the Native
+  DIB's in a way that is the same every run, but w16 doesn't reproduce it.
+  UNVERIFIED: perhaps it goes through a device bitmap first.
+
+### 16.7 UNVERIFIED, and not done
+
+- These were not observed: OleCreateFromTemplate
+  (`[StdNewFromTemplate("class","name","template")]` is a guess);
+  StdOpenDocument for a running server that lacks the document;
+  OleReconnect and OleCopyFromLink of a link that is not connected;
+  OleLockServer/OleUnlockServer; OleSetData and OleExecute on an object
+  that is not open (w16: Native taken, or OLE_ERROR_NOT_OPEN); links with
+  oleupdate_onsave (w16 advises "<item>/Save"); links with a picture
+  other than Paintbrush's; static objects' stream layout; BITMAP and DIB
+  presentations in streams; the OLE_QUERY_PAINT rate (w16: every 64
+  metafile records); OLE_QUERY_RETRY on a busy server (not implemented);
+  how long OLECLI waits for a server it started (w16: 30 s of INITIATEs).
+- The parameters of DEFxxx, PBxxx, CHECKNETDRIVE and SETNEXTNETDRIVE,
+  and what ordinals 955-1035 do.
+- Object handlers (a class's `handler` key) are not loaded. The network
+  dialog is never brought up; links on network drives keep their name
+  (SETNETNAME, WNetGetConnection), but nothing is reconnected.
+- Microsoft's OLECLI calls a client's OLESTREAM methods with a foreign DS
+  (16.1); w16 calls them with its own. A client that relies on either is
+  broken on 3.1 anyway.
+
+### 16.8 What w16's OLESVR needs (seen from the client side)
+
+The conversation above is the contract: a system topic "OLEsystem" (and
+"System") on a hidden window that answers INITIATE with the class name.
+EXECUTE takes StdNewDocument, StdEditDocument, StdOpenDocument,
+StdCloseDocument, StdExit, StdShowItem and StdDoVerbItem with arguments as
+quoted; a refused advise of an unsupported format must be NACKed. ADVISE
+takes "/Save" and "/Close" items for embedded objects, "" and
+"StdDocumentName" for links. REQUEST and POKE take Native and the picture
+(DATA flags 3000 for a request, 2000 for advise data). The "Binary" pokes
+StdHostNames, StdDocDimensions, StdColorScheme and StdTargetDevice have
+the layouts in 16.3. TERMINATE comes first from the server when the user
+closes it. Servers are started as `<server> -Embedding [file]`, with
+SW_SHOWNORMAL or SW_HIDE. OLECLI copies every picture it is sent: blocks
+the server owns may go when it exits.
+
 ## 17. COMMDLG
 
 w16's `COMMDLG.DLL` (`shell/commdlg/`, `build/dos/COMMDLG.DLL`, installed as `SYSTEM\COMMDLG.DLL` by `make install-tree`) is a drop-in replacement for Windows 3.1's common dialog library: copied over the original in a scratch copy of the reference install, its dialogs are meant to look and behave as the original's for every program (Notepad, Write, Paintbrush, Cardfile, Program Manager's Browse, Control Panel, ...). Windows 3.x only: w16 builds no Windows 2.x COMMDLG (the user's decision: 2.x builds are Program Manager's alone). Everything here was observed black-box on the reference 3.1 with the probe CD1 (`tests/apps/cd1.c`: calls each function with the flags and values of a script line and logs the returned structure, the hook's messages and which window procedures the dialog's controls have) driven by SNAP; the original's dialog templates, strings and bitmaps were read as data (`tools/nedlg.py`, a resource listing). Nothing was disassembled.

@@ -1,0 +1,25 @@
+; PBrush embedded: host names, server-side Update and Exit, save, reload,
+; activate the loaded object, close
+spy
+doc 0 OCDOC
+create 0 PBrush obj0 draw 0
+hostnames 0 OC1App "OC1 Doc"
+wins
+menu pbParent Update
+wait 2000
+menu pbParent Exit
+wait 3000
+wins
+save 0 C:\E0.BIN
+delete 0
+load 1 C:\E0.BIN StdFileEditing obj1
+querytype 1
+bounds 1
+activate 1 0 1 1
+wait 2000
+wins
+snap C:\S1.BMP
+close 1
+save 1 C:\E1.BIN
+release 1
+revokedoc 0

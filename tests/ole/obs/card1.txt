@@ -1,0 +1,43 @@
+; Cardfile as the OLE client (OC1 drives it, its DDE spy logs Cardfile's
+; OLECLI talking to Paintbrush): Edit > Insert Object >
+; Paintbrush Picture, Paintbrush's File > Exit & Return (Yes to its
+; update question), the cards saved
+; as C:\C1.CRD; then opened again
+spy
+run CARDFILE.EXE
+wait 2500
+menu Cardfile Insert Object
+wait 1500
+kids
+key 0x24
+key 0x28
+wait 300
+key 0x0D
+wait 4000
+wins
+snap C:\C1.BMP
+menu pbParent Exit
+wait 2500
+wins
+key 0x0D
+wait 2500
+wins
+snap C:\C2.BMP
+menu Cardfile Save As
+wait 1500
+kids
+type C:\C1.CRD
+key 0x0D
+wait 2500
+wins
+snap C:\C3.BMP
+wmclose Cardfile
+wait 2000
+wins
+run CARDFILE.EXE C:\C1.CRD
+wait 3000
+wins
+snap C:\C4.BMP
+wmclose Cardfile
+wait 2000
+wins

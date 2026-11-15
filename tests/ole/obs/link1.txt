@@ -1,0 +1,32 @@
+; a link to a Paintbrush file
+spy
+doc 0 OCDOC
+linkfile 0 PBrush C:\WINDOWS\ARCADE.BMP - lnk0 draw 0
+; let the server it started hidden go (it ends after the TERMINATE)
+wait 2000
+querytype 0
+getlinkopt 0
+bounds 0
+enumfmts 0
+save 0 C:\L0.BIN
+update 0
+outofdate 0
+setlinkopt 0 2
+getlinkopt 0
+activate 0 0 1 1
+wait 2000
+wins
+close 0
+getdata 0 ObjectLink
+getdata 0 OwnerLink
+qname 0
+copy 0
+clipdump
+delete 0
+load 1 C:\L0.BIN StdFileEditing lnk1
+querytype 1
+reconnect 1
+update 1
+save 1 C:\L1.BIN
+release 1
+revokedoc 0

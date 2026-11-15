@@ -1415,6 +1415,11 @@ install-tree: $(W16)/CARDFILE.EXE
 $(W16)/CARDFILE.EXE: $(DOS)/CARDFILE.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+# the OLE client library Cardfile imports (ole/olecli/; ARCHITECTURE.md 16)
+install-tree: $(W16SYS)/OLECLI.DLL
+$(W16SYS)/OLECLI.DLL: $(DOS)/OLECLI.DLL
+	@mkdir -p $(@D)
+	cp $< $@
 all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
@@ -1750,6 +1755,69 @@ $(DOS)/US5.EXE: $(B)/tests/start.o $(B)/tests/us5.o $(B)/tests/us5.res tests/app
 	    option map=$(B)/tests/us5.map option resource=$(B)/tests/us5.res \
 	    file { $(B)/tests/start.o $(B)/tests/us5.o }
 dos: $(DOS)/US5.EXE
+
+# ---- OLE (ARCHITECTURE.md 16): OLECLI.DLL (ole/olecli/) and its probes ----
+# OC1.EXE: scripted OLE client probe; OCSPY.DLL: its log and DDE spy
+# (tests/olescenarios.sh, tests/ole/*.txt)
+OCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we \
+           -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+$(B)/ole/i4.o: ole/olecli/i4.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/%.o: tests/ole/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(OCFLAGS) -fo=$@ $<
+$(B)/ole/dllstart.o: tests/apps/dllstart.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/ocfault.o: tests/ole/ocfault.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(DOS)/OCSPY.DLL: $(B)/ole/dllstart.o $(B)/ole/ocspy.o $(B)/ole/ocfault.o $(B)/ole/i4.o tests/ole/ocspy.lnk tests/apps/dll.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/ole/ocspy.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/ocspy.map file { $(B)/ole/dllstart.o $(B)/ole/ocspy.o $(B)/ole/ocfault.o $(B)/ole/i4.o } \
+	    library toolhelp.lib
+$(DOS)/OC1.EXE: $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/oc1.map option stack=40k file { $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o } \
+	    library olecli.lib library shell.lib import SPYLOG OCSPY.1 import SPYSTART OCSPY.2 \
+	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4
+$(DOS)/OCSRV.EXE: $(B)/tests/start.o $(B)/ole/ocsrv.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/ocsrv.map file { $(B)/tests/start.o $(B)/ole/ocsrv.o } \
+	    import SPYLOG OCSPY.1
+# OLECLI.DLL: large model, its own DS in every entry (__loadds), no C library
+OLCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -dSTRICT -Iole/olecli \
+            -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+OLOBJS  := $(B)/ole/olentry.o $(B)/ole/olecli.o $(B)/ole/le.o $(B)/ole/dde.o \
+           $(B)/ole/stream.o $(B)/ole/pres.o $(B)/ole/clip.o $(B)/ole/reg.o \
+           $(B)/ole/defs.o $(B)/ole/i4.o
+$(B)/ole/olentry.o: ole/olecli/entry.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ole/%.o: ole/olecli/%.c ole/olecli/olecli.h
+	@mkdir -p $(@D)
+	$(WCC) $(OLCFLAGS) -fo=$@ $<
+$(B)/ole/olecli.res: ole/olecli/olecli.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(B)/ole/exports.lnk: tools/mkoleexp.py docs/exportdb/exports.csv $(wildcard ole/olecli/*.c) ole/olecli/entry.asm
+	@mkdir -p $(@D)
+	python3 tools/mkoleexp.py $@
+$(DOS)/OLECLI.DLL: $(OLOBJS) $(B)/ole/olecli.res ole/olecli/olecli.lnk $(B)/ole/exports.lnk \
+                   tools/nestripnames.py tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @ole/olecli/olecli.lnk @$(B)/ole/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ole/olecli.map option resource=$(B)/ole/olecli.res file { $(OLOBJS) }
+	python3 tools/nestripnames.py $@ OLECLI_
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/OLECLI.DLL
+oleprobes: $(DOS)/OC1.EXE $(DOS)/OCSPY.DLL $(DOS)/OCSRV.EXE
+dos: oleprobes
+.PHONY: oleprobes
 
 # ---- SHELL.DLL probes (tests/apps/shN.c; ARCHITECTURE.md 13): run as the
 # shell on Windows 3.1 and with w16's SHELL.DLL (tests/shellprobe.sh)
