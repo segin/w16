@@ -722,13 +722,17 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_GETFONT:
         return (LONG)(WORD)E(e)->font;
     case WM_SETTEXT:
+        /* a bad string, a bad buffer (WM_GETTEXT, EM_GETLINE, EM_REPLACESEL):
+           0, the text as it was (3.1) */
+        if (GP_BAD(lp))
+            return 0;
         set_text(e, (LPCSTR)lp);
         E(e)->modified = 0;
         refresh(h, e);
         notify(h, e, EN_CHANGE);
         return 1;
     case WM_GETTEXT:
-        if ((int)wp <= 0)
+        if ((int)wp <= 0 || GP_BAD(lp))
             return 0;
     {
         /* the control's length of what is in the block (US20) */
@@ -889,6 +893,8 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 1;
     }
     case EM_REPLACESEL:
+        if (GP_BAD(lp))
+            return 0;
         replace_sel(h, e, (LPCSTR)lp);
         return 0;
     case EM_LIMITTEXT:
@@ -930,7 +936,10 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_LINEFROMCHAR:
         return line_of(e, (int)wp == -1 ? E(e)->sel1 : wp);
     case EM_GETLINE: {
-        WORD st, n, max = *(WORD __far *)lp;
+        WORD st, n, max;
+        if (GP_BAD(lp))
+            return 0;
+        max = *(WORD __far *)lp;
         if ((int)wp >= line_count(e))
             return 0;
         st = line_start(e, wp);

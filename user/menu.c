@@ -425,10 +425,11 @@ UINT WINAPI GetMenuState(HMENU h, UINT what, UINT flags)
     return it->flags;
 }
 
+/* a bad buffer: 0 (3.1, US27) */
 int WINAPI GetMenuString(HMENU h, UINT what, LPSTR buf, int n, UINT flags)
 {
     LPMITEM it = find_it(h, what, flags);
-    if (!it || n <= 0)
+    if (!it || n <= 0 || GP_BAD(buf))
         return 0;
     if ((it->flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR)) || !it->text) {
         buf[0] = 0;
@@ -512,24 +513,39 @@ void WINAPI DrawMenuBar(HWND h)
         send_message(h, WM_NCPAINT, 1, 0);
 }
 
-/* ---- loading ---- */
-static const BYTE __far *load_items(HMENU h, const BYTE __far *p)
+/* ---- loading ----
+   A template is read only up to its segment's limit (*left bytes): one
+   that runs past it gives NULL (US27: a caller's template past a
+   segment's end; the emulators the tests run in do not fault there, and
+   a block of zeros went on for ever) */
+static const BYTE __far *load_items(HMENU h, const BYTE __far *p, DWORD *left)
 {
     for (;;) {
-        UINT flags = *(const WORD __far *)p, id = 0;
+        UINT flags, id = 0;
         LPCSTR text;
-        p += 2;
+        if (*left < 2)
+            return NULL;
+        flags = *(const WORD __far *)p;
+        p += 2, *left -= 2;
         if (!(flags & MF_POPUP)) {
+            if (*left < 2)
+                return NULL;
             id = *(const WORD __far *)p;
-            p += 2;
+            p += 2, *left -= 2;
         }
         text = (LPCSTR)p;
-        while (*p)
-            p++;
-        p++;
+        while (*left && *p)
+            p++, (*left)--;
+        if (!*left)
+            return NULL;
+        p++, (*left)--;
         if (flags & MF_POPUP) {
             HMENU sub = CreatePopupMenu();
-            p = load_items(sub, p);
+            p = load_items(sub, p, left);
+            if (!p) {
+                DestroyMenu(sub);
+                return NULL;
+            }
             AppendMenu(h, (flags & ~MF_END) | MF_POPUP, (UINT)sub, text);
         } else if (!id && !*text && !(flags & ~MF_END))
             AppendMenu(h, MF_SEPARATOR, 0, NULL);
@@ -540,20 +556,35 @@ static const BYTE __far *load_items(HMENU h, const BYTE __far *p)
     }
 }
 
+/* a bad template or name: 0 (3.1, US27; LoadMenu too) */
 HMENU WINAPI LoadMenuIndirect(const void __far *tmpl)
 {
     const BYTE __far *p = (const BYTE __far *)tmpl;
-    HMENU h = CreateMenu();
-    if (!h)
+    HMENU h;
+    WORD lim, extra;
+    DWORD left;
+    if (GP_BAD(tmpl) || !tmpl)
         return 0;
-    p += 4 + ((const WORD __far *)p)[1];        /* the header and its extra bytes */
-    load_items(h, p);
+    lim = seg_limit(FP_SEG(p));
+    left = FP_OFF(p) > lim ? 0 : (DWORD)lim - FP_OFF(p) + 1;
+    if (left < 4)
+        return 0;
+    extra = ((const WORD __far *)p)[1];         /* the header and its extra bytes */
+    if (left < 4 + (DWORD)extra)
+        return 0;
+    p += 4 + extra;
+    left -= 4 + extra;
+    h = CreateMenu();
+    if (h && !load_items(h, p, &left)) {
+        DestroyMenu(h);
+        return 0;
+    }
     return h;
 }
 
 HMENU WINAPI LoadMenu(HINSTANCE hinst, LPCSTR name)
 {
-    HRSRC r = FindResource(hinst, name, RT_MENU);
+    HRSRC r = GP_BAD(name) ? 0 : FindResource(hinst, name, RT_MENU);
     HGLOBAL g;
     HMENU h = 0;
     void __far *p;

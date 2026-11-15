@@ -6,9 +6,10 @@
  */
 #include "user.h"
 
+/* a bad name: 0 (3.1, US27) */
 HACCEL WINAPI LoadAccelerators(HINSTANCE hinst, LPCSTR name)
 {
-    HRSRC r = FindResource(hinst, name, RT_ACCELERATOR);
+    HRSRC r = GP_BAD(name) ? 0 : FindResource(hinst, name, RT_ACCELERATOR);
     return r ? (HACCEL)LoadResource(hinst, r) : 0;
 }
 
@@ -19,7 +20,7 @@ int WINAPI TranslateAccelerator(HWND h, HACCEL ha, MSG __far *m)
     UINT key;
     BOOL virt;
     int found = 0;
-    if (!ha || !valid_wnd(h))
+    if (!ha || !valid_wnd(h) || GP_BAD(m))     /* a bad MSG: 0 (3.1, US27) */
         return 0;
     switch (m->message) {
     case WM_KEYDOWN:

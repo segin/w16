@@ -112,12 +112,16 @@ BOOL WINAPI IsCharUpper(char c)        { return is_upper(c); }
 BOOL WINAPI IsCharLower(char c)        { return is_lower(c); }
 BOOL WINAPI IsCharAlphaNumeric(char c) { return IsCharAlpha(c) || ((BYTE)c >= '0' && (BYTE)c <= '9'); }
 
-/* AnsiUpper/AnsiLower: with a selector of 0 the argument is a character */
+/* AnsiUpper/AnsiLower: with a selector of 0 the argument is a character.
+   A bad string: NULL (3.1; AnsiUpperBuff/AnsiLowerBuff 0, AnsiNext and
+   AnsiPrev NULL too) */
 LPSTR WINAPI AnsiUpper(LPSTR s)
 {
     LPSTR p;
     if (!HIWORD((DWORD)s))
         return (LPSTR)MAKELP(0, to_upper((BYTE)LOWORD((DWORD)s)));
+    if (GP_BAD(s))
+        return NULL;
     for (p = s; *p; p++)
         *p = to_upper(*p);
     return s;
@@ -128,6 +132,8 @@ LPSTR WINAPI AnsiLower(LPSTR s)
     LPSTR p;
     if (!HIWORD((DWORD)s))
         return (LPSTR)MAKELP(0, to_lower((BYTE)LOWORD((DWORD)s)));
+    if (GP_BAD(s))
+        return NULL;
     for (p = s; *p; p++)
         *p = to_lower(*p);
     return s;
@@ -136,6 +142,8 @@ LPSTR WINAPI AnsiLower(LPSTR s)
 UINT WINAPI AnsiUpperBuff(LPSTR s, UINT n)
 {
     UINT i;
+    if (GP_BAD(s))
+        return 0;
     if (!n)
         n = 0x10000L > 0xFFFF ? 0xFFFF : 0;     /* 0 means 64K (3.1 SDK) */
     for (i = 0; i < n; i++)
@@ -146,6 +154,8 @@ UINT WINAPI AnsiUpperBuff(LPSTR s, UINT n)
 UINT WINAPI AnsiLowerBuff(LPSTR s, UINT n)
 {
     UINT i;
+    if (GP_BAD(s))
+        return 0;
     if (!n)
         n = 0xFFFF;
     for (i = 0; i < n; i++)
@@ -155,11 +165,15 @@ UINT WINAPI AnsiLowerBuff(LPSTR s, UINT n)
 
 LPSTR WINAPI AnsiNext(LPCSTR s)
 {
+    if (GP_BAD(s))
+        return NULL;
     return (LPSTR)(*s ? s + 1 : s);
 }
 
 LPSTR WINAPI AnsiPrev(LPCSTR start, LPCSTR s)
 {
+    if (GP_BAD(start) || GP_BAD(s))
+        return NULL;
     return (LPSTR)(s > start ? s - 1 : s);
 }
 
@@ -248,10 +262,19 @@ int lstr_cmpi(LPCSTR a, LPCSTR b)
 
 /* ---- wsprintf (the 3.1 SDK's format: %[-][#][0][width][.precision]
    [l]{d,i,u,x,X,c,s,%}; '+' and ' ' are not flags: US2 printed "+d") ---- */
+/* A bad output buffer: 0. A bad format or argument list: an empty
+   string, 0. A %s argument that is bad: an empty string in its place
+   (3.1, US27: KERNEL's lstrlen of it gives 0). */
 int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
 {
     const BYTE __far *ap = (const BYTE __far *)args;
     LPSTR o = out;
+    if (GP_BAD(out))
+        return 0;
+    if (GP_BAD(fmt) || GP_BAD(args)) {
+        *out = 0;
+        return 0;
+    }
     while (*fmt) {
         char buf[16], *b;
         LPCSTR s;
@@ -338,6 +361,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
             ap += 4;
             if (!s)
                 s = "(null)";       /* UNVERIFIED: what 3.1 prints for NULL */
+            else if (GP_BAD(s))
+                s = "";
             break;
         case 0:
             continue;
@@ -391,7 +416,7 @@ int WINAPI LoadString(HINSTANCE hinst, UINT id, LPSTR buf, int n)
     const BYTE __far *p;
     UINT i;
     int len = 0;
-    if (n <= 0 || !buf)
+    if (n <= 0 || !buf || GP_BAD(buf))         /* a bad buffer: 0 (3.1) */
         return 0;
     r = FindResource(hinst, MAKEINTRESOURCE((id >> 4) + 1), RT_STRING);
     if (!r) {

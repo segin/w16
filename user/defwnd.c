@@ -123,7 +123,19 @@ void nc_calcsize(PWND w, RECT *r)
    round, with a one-line menu bar when menu is set (3.1 SDK; scroll
    bars not counted). Calculator sizes itself with it: 259 x 230 client,
    WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX and a menu, 261 x 270 on 3.1. */
-void WINAPI AdjustWindowRectEx(RECT FAR *r, DWORD style, BOOL menu, DWORD exstyle)
+static void adjust_rect(RECT *r, DWORD style, BOOL menu, DWORD exstyle);
+
+/* a bad RECT: left as it was; the fields of one at a segment's edge that
+   can be read are changed (3.1, US27) */
+void WINAPI AdjustWindowRectEx(RECT FAR *rp, DWORD style, BOOL menu, DWORD exstyle)
+{
+    RECT a;
+    WORD n = gp_copy(&a, rp, sizeof a) & ~1;
+    adjust_rect(&a, style, menu, exstyle);
+    gp_copy(rp, &a, n);
+}
+
+static void adjust_rect(RECT *r, DWORD style, BOOL menu, DWORD exstyle)
 {
     /* nc_calcsize's rules on the style alone (its WND is a near pointer
        into USER's segment) */

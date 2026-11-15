@@ -356,6 +356,19 @@ void fmemset(void __far *d, BYTE v, WORD n);
 #define iabs(x)    ((x) < 0 ? -(x) : (x))
 #define WM_SYSTIMER 0x0118      /* SetSystemTimer's message (Wine, X11-era) */
 
+/* ---- a caller's memory (gp.asm): every access inside a "__GP" range,
+   recovered by KERNEL's fault handler (USER.484; ARCHITECTURE.md 9.4,
+   probe US27) ---- */
+BOOL  __far __cdecl gp_sel(const void __far *p);        /* the selector loads */
+WORD  __far __cdecl gp_copy(void __far *d, const void __far *s, WORD n);
+WORD  __far __cdecl gp_fill(void __far *d, BYTE v, WORD n);
+DWORD __far __cdecl gp_strlen(LPCSTR s, WORD max);      /* hi 1: it faulted */
+/* A pointer whose selector does not load (freed, not present). Windows
+   3.1's functions given one fault on its first use and return, having
+   done nothing (US27: what each returns is in its comment); w16's check
+   first. NULL and an atom (selector 0) pass. */
+#define GP_BAD(p)  (!gp_sel((const void __far *)(p)))
+
 /* ---- resources (icon.c) ---- */
 HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor);
 void draw_icon(HDC hdc, int x, int y, HICON h);

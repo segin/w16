@@ -74,15 +74,20 @@ static int du(int v, int u, int d)
     return (int)(p >= 0 ? (p + d / 2) / d : -((-p + d / 2) / d));
 }
 
-void WINAPI MapDialogRect(HWND h, RECT __far *r)
+/* a bad RECT: left as it was (3.1, US27) */
+void WINAPI MapDialogRect(HWND h, RECT __far *rp)
 {
     int cx = GetWindowWord(h, DW_CX), cy = GetWindowWord(h, DW_CY);
+    RECT a, *r = &a;
+    if (gp_copy(&a, rp, sizeof a) != sizeof a)
+        return;
     if (!cx)
         cx = cxSysChar, cy = cySysChar;
     r->left = du(r->left, cx, 4);
     r->right = du(r->right, cx, 4);
     r->top = du(r->top, cy, 8);
     r->bottom = du(r->bottom, cy, 8);
+    gp_copy(rp, &a, sizeof a);
 }
 
 /* ---- the dialog manager ---- */
@@ -433,14 +438,27 @@ static const BYTE __far *find_template(HINSTANCE hinst, LPCSTR name, HGLOBAL *g)
     return (const BYTE __far *)LockResource(*g);
 }
 
+/* A caller's template whose header (style, item count, position and
+   size: 13 bytes) cannot be read: no dialog, 0 (3.1, US27: a freed or
+   not-present selector, 4 bytes before a segment's end) */
+static BOOL template_ok(const void __far *t)
+{
+    BYTE h[13];
+    return gp_copy(h, t, sizeof h) == sizeof h;
+}
+
 HWND WINAPI CreateDialogIndirectParam(HINSTANCE hinst, const void __far *t, HWND owner,
                                       DLGPROC proc, LPARAM param)
 {
+    if (!template_ok(t))
+        return 0;
     return create_dialog(hinst, (const BYTE __far *)t, owner, proc, param, FALSE);
 }
 
 HWND WINAPI CreateDialogIndirect(HINSTANCE hinst, const void __far *t, HWND owner, DLGPROC proc)
 {
+    if (!template_ok(t))
+        return 0;
     return create_dialog(hinst, (const BYTE __far *)t, owner, proc, 0, FALSE);
 }
 
@@ -616,11 +634,14 @@ void WINAPI SetDlgItemInt(HWND h, int id, UINT v, BOOL sign)
     SetDlgItemText(h, id, b);
 }
 
+/* a bad lpTranslated: 0 (3.1) */
 UINT WINAPI GetDlgItemInt(HWND h, int id, BOOL __far *ok, BOOL sign)
 {
     char b[16], *p = b;
     long v = 0;
     BOOL neg = FALSE, any = FALSE;
+    if (GP_BAD(ok))
+        return 0;
     GetDlgItemText(h, id, b, sizeof b);
     while (*p == ' ')
         p++;
@@ -736,6 +757,8 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
 {
     UINT code;
     HWND c;
+    if (GP_BAD(m))                      /* a bad MSG: FALSE (3.1, US27) */
+        return FALSE;
     if (!valid_wnd(dlg) || (m->hwnd != dlg && !IsChild(dlg, m->hwnd)))
         return FALSE;
     if (m->message != WM_KEYDOWN && m->message != WM_CHAR && m->message != WM_SYSCHAR) {

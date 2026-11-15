@@ -350,9 +350,11 @@ int WINAPI ShowCursor(BOOL show)
     return cursor_level;
 }
 
+/* A caller's POINT, RECT and key state array through gp_copy (gp.asm): a
+   bad one is left as it was, nothing set from it (3.1, US27) */
 void WINAPI GetCursorPos(POINT __far *p)
 {
-    *p = ptCursor;
+    gp_copy(p, &ptCursor, sizeof(POINT));
 }
 
 /* A window appeared, went or moved where the pointer is: a mouse move
@@ -403,15 +405,17 @@ void WINAPI SetCursorPos(int x, int y)
 
 void WINAPI ClipCursor(const RECT __far *r)
 {
-    if (r)
-        rcClip = *r;
-    else
+    RECT a;
+    if (r) {
+        if (gp_copy(&a, r, sizeof a) == sizeof a)
+            rcClip = a;
+    } else
         SetRect(&rcClip, 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN]);
 }
 
 void WINAPI GetClipCursor(RECT __far *r)
 {
-    *r = rcClip;
+    gp_copy(r, &rcClip, sizeof(RECT));
 }
 
 /* ---- key state ---- */
@@ -429,16 +433,17 @@ int WINAPI GetAsyncKeyState(int vk)
 
 void WINAPI GetKeyboardState(BYTE __far *b)
 {
-    int i;
-    for (i = 0; i < 256; i++)
-        b[i] = qkeystate[i];
+    gp_copy(b, qkeystate, 256);
 }
 
 void WINAPI SetKeyboardState(BYTE __far *b)
 {
+    BYTE t[256];
     int i;
+    if (gp_copy(t, b, 256) != 256)
+        return;
     for (i = 0; i < 256; i++)
-        qkeystate[i] = b[i];
+        qkeystate[i] = t[i];
 }
 
 UINT WINAPI GetDoubleClickTime(void)
@@ -876,6 +881,8 @@ BOOL WINAPI TranslateMessage(const MSG __far *m)
     DWORD ch = 0;
     int n;
     UINT cm;
+    if (GP_BAD(m))                      /* a bad MSG: FALSE (3.1, US27) */
+        return FALSE;
     if (m->message != WM_KEYDOWN && m->message != WM_SYSKEYDOWN)
         return FALSE;
     GetKeyboardState(ks);

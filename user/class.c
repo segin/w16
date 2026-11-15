@@ -127,9 +127,14 @@ static PCLS register_class(const WNDCLASS __far *wc, BOOL system)
    class; Pietrek (Windows Internals, ch. 4): "either 0, 1, or the atom
    handle of the class name". The version is the registering module's
    (wc->hInstance's). */
+/* A bad WNDCLASS, class name or menu name: 0 (3.1, US27) */
 ATOM WINAPI RegisterClass(const WNDCLASS __far *wc)
 {
     PCLS c;
+    WNDCLASS a;
+    if (gp_copy(&a, wc, sizeof a) != sizeof a || GP_BAD(a.lpszClassName) ||
+        GP_BAD(a.lpszMenuName))
+        return 0;
     c = register_class(wc, FALSE);
     if (!c)
         return 0;
@@ -155,9 +160,13 @@ BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
     return TRUE;
 }
 
+/* a bad class name or WNDCLASS: FALSE (3.1, US27) */
 BOOL WINAPI GetClassInfo(HINSTANCE hinst, LPCSTR name, WNDCLASS __far *wc)
 {
-    PCLS c = find_class(name, hinst);
+    PCLS c;
+    if (GP_BAD(name) || GP_BAD(wc))
+        return FALSE;
+    c = find_class(name, hinst);
     if (!c)
         return FALSE;
     wc->style = c->style;
@@ -174,11 +183,12 @@ BOOL WINAPI GetClassInfo(HINSTANCE hinst, LPCSTR name, WNDCLASS __far *wc)
     return c->atom;
 }
 
+/* a bad buffer: 0 (3.1) */
 int WINAPI GetClassName(HWND h, LPSTR buf, int n)
 {
     PWND w = valid_wnd(h);
     PCLS c;
-    if (!w || n <= 0)
+    if (!w || n <= 0 || GP_BAD(buf))
         return 0;
     c = (PCLS)w->cls;
     if (c->atom < 0xC000u) {

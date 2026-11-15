@@ -365,14 +365,18 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
     return (HICON)h;
 }
 
+/* a bad name: 0 (3.1, US27; LoadBitmap too) */
 HICON WINAPI LoadIcon(HINSTANCE hinst, LPCSTR name)
 {
-    HICON r = load_icon_cursor(hinst, name, FALSE);
-    return r;
+    if (GP_BAD(name))
+        return 0;
+    return load_icon_cursor(hinst, name, FALSE);
 }
 
 HCURSOR WINAPI LoadCursor(HINSTANCE hinst, LPCSTR name)
 {
+    if (GP_BAD(name))
+        return 0;
     return (HCURSOR)load_icon_cursor(hinst, name, TRUE);
 }
 
@@ -406,6 +410,8 @@ HICON WINAPI CreateIcon(HINSTANCE hinst, int cx, int cy, BYTE planes, BYTE bpp,
                         const void __far *andb, const void __far *xorb)
 {
     (void)hinst;
+    if (GP_BAD(andb) || GP_BAD(xorb))   /* bad bits: 0 (3.1, US27) */
+        return 0;
     return (HICON)create_icon(cx / 2, cy / 2, cx, cy, planes, bpp, andb, xorb);
 }
 
@@ -413,6 +419,8 @@ HCURSOR WINAPI CreateCursor(HINSTANCE hinst, int hx, int hy, int cx, int cy,
                             const void __far *andb, const void __far *xorb)
 {
     (void)hinst;
+    if (GP_BAD(andb) || GP_BAD(xorb))
+        return 0;
     return (HCURSOR)create_icon(hx, hy, cx, cy, 1, 1, andb, xorb);
 }
 
@@ -497,7 +505,7 @@ BOOL WINAPI DrawIcon(HDC hdc, int x, int y, HICON h)
 HBITMAP WINAPI LoadBitmap(HINSTANCE hinst, LPCSTR name)
 {
     HMODULE mod = hinst ? K_GETEXEPTR(hinst) : hModDisplay;
-    HRSRC r = FindResource(mod, name, RT_BITMAP);
+    HRSRC r = GP_BAD(name) ? 0 : FindResource(mod, name, RT_BITMAP);
     HGLOBAL g;
     const BITMAPINFOHEADER __far *bi;
     HBITMAP bm = 0;

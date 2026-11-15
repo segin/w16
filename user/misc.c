@@ -320,7 +320,16 @@ int WINAPI GetKeyboardType(int which)
 
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
-    WORD __far *w = (WORD __far *)pv;
+    WORD __far *w;
+    LOGFONT none;
+    if (GP_BAD(pv))                     /* a bad pvParam: FALSE (3.1, US27) */
+        return FALSE;
+    /* a NULL one: TRUE, nothing written (3.1, US27's N cases; the probe's
+       emulator does not fault on a null selector's memory, so whether 3.1
+       writes nowhere or lets it fault is not known: UNVERIFIED) */
+    if (!pv)
+        pv = &none;
+    w = (WORD __far *)pv;
     switch (what) {
     case SPI_GETBEEP: *w = beep_flag(); return TRUE;
     case SPI_SETBEEP:                   /* (UNVERIFIED: 3.1's writes "yes"/"no") */
@@ -335,8 +344,8 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
     case SPI_GETSCREENSAVEACTIVE: *w = GetProfileInt("windows", "ScreenSaveActive", 0); return TRUE;
     case SPI_GETGRIDGRANULARITY: *w = GetProfileInt("desktop", "GridGranularity", 0); return TRUE;
     case SPI_GETKEYBOARDDELAY: *w = GetProfileInt("windows", "KeyboardDelay", 2); return TRUE;
-    case SPI_ICONHORIZONTALSPACING: if (pv) *w = sysmet[SM_CXICONSPACING]; return TRUE;
-    case SPI_ICONVERTICALSPACING: if (pv) *w = sysmet[SM_CYICONSPACING]; return TRUE;
+    case SPI_ICONHORIZONTALSPACING: *w = sysmet[SM_CXICONSPACING]; return TRUE;
+    case SPI_ICONVERTICALSPACING: *w = sysmet[SM_CYICONSPACING]; return TRUE;
     case SPI_GETICONTITLEWRAP: *w = GetProfileInt("desktop", "IconTitleWrap", 1); return TRUE;
     case SPI_GETMENUDROPALIGNMENT: *w = 0; return TRUE;
     case SPI_GETFASTTASKSWITCH: *w = 1; return TRUE;

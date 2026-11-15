@@ -449,10 +449,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     return valid_wnd(h) ? h : 0;
 }
 
+/* a bad class name or title: 0, no window (3.1, US27) */
 HWND WINAPI CreateWindow(LPCSTR cls, LPCSTR title, DWORD style, int x, int y,
                          int cx, int cy, HWND parent, HMENU menu, HINSTANCE hinst,
                          void __far *param)
 {
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
     return create_window(0, cls, title, style, x, y, cx, cy, parent, menu, hinst, param);
 }
 
@@ -460,6 +463,8 @@ HWND WINAPI CreateWindowEx(DWORD ex, LPCSTR cls, LPCSTR title, DWORD style, int 
                            int cx, int cy, HWND parent, HMENU menu, HINSTANCE hinst,
                            void __far *param)
 {
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
     return create_window(ex, cls, title, style, x, y, cx, cy, parent, menu, hinst, param);
 }
 
@@ -756,16 +761,20 @@ int WINAPI GetWindowTextLength(HWND h)
     return (int)send_message(h, WM_GETTEXTLENGTH, 0, 0);
 }
 
+/* a bad string: the text as it was (3.1) */
 void WINAPI SetWindowText(HWND h, LPCSTR s)
 {
+    if (GP_BAD(s))
+        return;
     if (valid_wnd(h))
         send_message(h, WM_SETTEXT, 0, (LPARAM)s);
 }
 
-/* DefWindowProc's part */
+/* DefWindowProc's part; a bad buffer (WM_GETTEXT) or string (WM_SETTEXT):
+   0, the text as it was (3.1) */
 LONG def_gettext(PWND w, int n, LPSTR buf)
 {
-    if (n <= 0)
+    if (n <= 0 || GP_BAD(buf))
         return 0;
     if (!w->text) {
         buf[0] = 0;
@@ -782,6 +791,8 @@ LONG def_gettextlength(PWND w)
 
 BOOL def_settext(PWND w, LPCSTR s)
 {
+    if (GP_BAD(s))
+        return FALSE;
     return set_text(w, s);
 }
 
@@ -917,12 +928,16 @@ BOOL WINAPI EnumTaskWindows(HTASK t, WNDENUMPROC f, LPARAM lp)
     return TRUE;
 }
 
+/* a bad class name or title: 0 (3.1, US27) */
 HWND WINAPI FindWindow(LPCSTR cls, LPCSTR title)
 {
     HWND h;
     char buf[128];
-    PCLS c = cls ? find_class(cls, 0) : (PCLS)0;
+    PCLS c;
     ATOM a = 0;
+    if (GP_BAD(cls) || GP_BAD(title))
+        return 0;
+    c = cls ? find_class(cls, 0) : (PCLS)0;
     if (cls) {
         if (ISATOM(cls))
             a = LOWORD((DWORD)cls);
@@ -959,23 +974,35 @@ HWND WINAPI GetLastActivePopup(HWND h)
     return w->hwndLastActive && valid_wnd(w->hwndLastActive) ? w->hwndLastActive : h;
 }
 
-/* ---- coordinates ---- */
+/* ---- coordinates ----
+   A caller's POINTs and RECTs through gp_copy (gp.asm): a bad one is left
+   as it was, the part of one below a segment's limit changed (3.1, US27) */
+static void offset_points(POINT __far *p, UINT n, int dx, int dy)
+{
+    POINT a;
+    WORD k;
+    while (n--) {
+        k = gp_copy(&a, p, sizeof a) & ~1;
+        a.x += dx;
+        a.y += dy;
+        if (gp_copy(p, &a, k) != sizeof a)
+            return;
+        p++;
+    }
+}
+
 void WINAPI ClientToScreen(HWND h, POINT __far *p)
 {
     PWND w = valid_wnd(h);
-    if (w) {
-        p->x += w->rcClient.left;
-        p->y += w->rcClient.top;
-    }
+    if (w)
+        offset_points(p, 1, w->rcClient.left, w->rcClient.top);
 }
 
 void WINAPI ScreenToClient(HWND h, POINT __far *p)
 {
     PWND w = valid_wnd(h);
-    if (w) {
-        p->x -= w->rcClient.left;
-        p->y -= w->rcClient.top;
-    }
+    if (w)
+        offset_points(p, 1, -w->rcClient.left, -w->rcClient.top);
 }
 
 void WINAPI MapWindowPoints(HWND from, HWND to, POINT __far *p, UINT n)
@@ -986,18 +1013,14 @@ void WINAPI MapWindowPoints(HWND from, HWND to, POINT __far *p, UINT n)
         dx += w->rcClient.left, dy += w->rcClient.top;
     if (to && (w = valid_wnd(to)) != 0)
         dx -= w->rcClient.left, dy -= w->rcClient.top;
-    while (n--) {
-        p->x += dx;
-        p->y += dy;
-        p++;
-    }
+    offset_points(p, n, dx, dy);
 }
 
 void WINAPI GetWindowRect(HWND h, RECT __far *r)
 {
     PWND w = valid_wnd(h);
     if (w)
-        *r = w->rcWindow;
+        gp_copy(r, &w->rcWindow, sizeof(RECT));
 }
 
 void WINAPI GetClientRect(HWND h, RECT __far *r)
@@ -1100,6 +1123,10 @@ static int find_prop(PWND w, ATOM a)
     return -1;
 }
 
+/* A bad name: FALSE, 0 (3.1, US27; GetProp and RemoveProp too). A name
+   that runs past its segment's end: TRUE, nothing set (3.1: KERNEL's
+   atom code faults on it and recovers, and SetProp still returns TRUE;
+   UNVERIFIED what 3.1 stores then) */
 BOOL WINAPI SetProp(HWND h, LPCSTR name, HANDLE data)
 {
     PWND w = valid_wnd(h);
@@ -1107,8 +1134,10 @@ BOOL WINAPI SetProp(HWND h, LPCSTR name, HANDLE data)
     UINT i, n;
     ATOM a;
     WORD b;
-    if (!w)
+    if (!w || GP_BAD(name))
         return FALSE;
+    if (!ISATOM(name) && HIWORD(gp_strlen(name, 0xFFFF)))
+        return TRUE;
     i = find_prop(w, prop_atom(name, FALSE));
     if (i != (UINT)-1) {
         PROPS(w)[i].data = data;
@@ -1137,7 +1166,7 @@ BOOL WINAPI SetProp(HWND h, LPCSTR name, HANDLE data)
 
 HANDLE WINAPI GetProp(HWND h, LPCSTR name)
 {
-    PWND w = valid_wnd(h);
+    PWND w = GP_BAD(name) ? 0 : valid_wnd(h);
     int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
     return i >= 0 ? PROPS(w)[i].data : 0;
 }
@@ -1167,7 +1196,7 @@ static void drop_prop(PWND w, UINT i)
 
 HANDLE WINAPI RemoveProp(HWND h, LPCSTR name)
 {
-    PWND w = valid_wnd(h);
+    PWND w = GP_BAD(name) ? 0 : valid_wnd(h);
     int i = w ? find_prop(w, prop_atom(name, FALSE)) : -1;
     HANDLE d;
     if (i < 0)

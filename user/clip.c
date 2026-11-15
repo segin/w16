@@ -228,7 +228,7 @@ UINT WINAPI RegisterClipboardFormat(LPCSTR name)
 
 int WINAPI GetClipboardFormatName(UINT fmt, LPSTR buf, int n)
 {
-    if (fmt < 0xC000)
+    if (fmt < 0xC000 || GP_BAD(buf))    /* a bad buffer: 0 (3.1, US27) */
         return 0;
     return GetAtomName((ATOM)fmt, buf, n);
 }

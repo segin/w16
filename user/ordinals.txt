@@ -4,7 +4,8 @@
 # docs/user/exports.txt); argument sizes from Wine's spec file, wine-20020228
 # (X11 licence, Copyright (c) 1993-2002 the Wine project authors; see
 # ARCHITECTURE.md 3), and for the class window procedures from the SDK.
-# tools/mkuserexp.py makes the export list and the stubs from it.
+# tools/mkuserexp.py makes the export list and the stubs from it. __GP (484)
+# is no function but the fault table KERNEL reads (user/gp.asm).
 
    1 MESSAGEBOX                   -    12
    2 OLDEXITWINDOWS               -    0
@@ -385,6 +386,7 @@
  481 HARDWARE_EVENT               -    0
  482 ENABLESCROLLBAR              -    6
  483 SYSTEMPARAMETERSINFO         -    10
+ 484 __GP                         res  0
  499 WNETERRORTEXT                -    8
  501 WNETOPENJOB                  -    14
  502 WNETCLOSEJOB                 -    10

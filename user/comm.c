@@ -173,6 +173,8 @@ int WINAPI OpenComm(LPCSTR name, UINT in, UINT out)
     BYTE dcb[DCB_SIZE];
     int len, id, r, i;
     PORT *p;
+    if (GP_BAD(name))                   /* a bad name: -1 (3.1, US27) */
+        return -1;
     id = port_name(name, &len);
     if (id < 0 || (name[len] == ':' ? name[len + 1] : name[len]) != 0)
         return IE_BADID;

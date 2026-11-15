@@ -281,6 +281,8 @@ DWORD WINAPI GetSysColor(int i)
 void WINAPI SetSysColors(int n, const int __far *idx, const COLORREF __far *rgb)
 {
     int i;
+    if (GP_BAD(idx) || GP_BAD(rgb))     /* a bad array: nothing (3.1, US27) */
+        return;
     for (i = 0; i < n; i++)
         if (idx[i] >= 0 && idx[i] <= COLOR_BTNHIGHLIGHT)
             syscolor[idx[i]] = rgb[i];

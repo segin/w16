@@ -666,11 +666,12 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     }
 }
 
+/* a bad WINDOWPLACEMENT: FALSE (3.1, US27; SetWindowPlacement too) */
 BOOL WINAPI GetWindowPlacement(HWND h, WINDOWPLACEMENT __far *p)
 {
     PWND w = valid_wnd(h);
     PLACE *pl;
-    if (!w)
+    if (!w || GP_BAD(p))
         return FALSE;
     pl = place_of(h, FALSE);
     p->length = sizeof(WINDOWPLACEMENT);
@@ -697,7 +698,7 @@ BOOL WINAPI SetWindowPlacement(HWND h, const WINDOWPLACEMENT __far *p)
 {
     PWND w = valid_wnd(h);
     PLACE *pl;
-    if (!w)
+    if (!w || GP_BAD(p))
         return FALSE;
     pl = place_of(h, TRUE);
     if (!pl)

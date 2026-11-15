@@ -486,14 +486,20 @@ void WINAPI U_USERYIELD(void)
     receive_sent(cur_hq());
 }
 
+/* A bad MSG: GetMessage -1, PeekMessage FALSE, the message left in the
+   queue; DispatchMessage 0 (3.1, US27) */
 BOOL WINAPI GetMessage(MSG __far *m, HWND h, UINT lo, UINT hi)
 {
+    if (GP_BAD(m))
+        return -1;
     get_message(m, h, lo, hi, PM_REMOVE, TRUE);
     return m->message != WM_QUIT;
 }
 
 BOOL WINAPI PeekMessage(MSG __far *m, HWND h, UINT lo, UINT hi, UINT flags)
 {
+    if (GP_BAD(m))
+        return FALSE;
     return get_message(m, h, lo, hi, flags, FALSE);
 }
 
@@ -526,6 +532,8 @@ LONG WINAPI DispatchMessage(const MSG __far *m)
 {
     PWND w;
     LONG r;
+    if (GP_BAD(m))
+        return 0;
     if ((m->message == WM_TIMER || m->message == WM_SYSTIMER) && m->lParam)
         return call_wndproc((WNDPROC)m->lParam, 0, m->hwnd, m->message, m->wParam,
                             GetTickCount());

@@ -149,8 +149,11 @@ LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp)
     return c && *c ? call_from(*c, code, wp, lp) : 0;
 }
 
+/* a bad MSG: FALSE (3.1, US27) */
 BOOL WINAPI CallMsgFilter(MSG __far *m, int code)
 {
+    if (GP_BAD(m))
+        return FALSE;
     if (call_hook(WH_SYSMSGFILTER, code, 0, (LPARAM)m))
         return TRUE;
     return call_hook(WH_MSGFILTER, code, 0, (LPARAM)m) != 0;

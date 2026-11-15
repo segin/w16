@@ -300,6 +300,8 @@ void WINAPI GetScrollRange(HWND hwnd, int bar, int __far *min, int __far *max)
 {
     PWND w = valid_wnd(hwnd);
     SBINFO *s;
+    if (GP_BAD(min) || GP_BAD(max))     /* either bad: neither set (3.1, US27) */
+        return;
     /* a window that has never had that bar: 0, 0 (3.1: Terminal's main
        window and its dialogs; w16 made the bar's state, 0-100, to read
        it) */

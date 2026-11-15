@@ -161,6 +161,8 @@ static BOOL children_of(HWND parent)
     return !(PW(parent)->style & WS_CLIPCHILDREN);
 }
 
+/* A caller's RECT through gp_copy (gp.asm). A bad one: nothing
+   invalidated or validated; GetUpdateRect, RedrawWindow FALSE (3.1, US27) */
 void WINAPI InvalidateRect(HWND h, const RECT __far *rc, BOOL erase)
 {
     RECT r;
@@ -170,8 +172,8 @@ void WINAPI InvalidateRect(HWND h, const RECT __far *rc, BOOL erase)
     }
     if (!valid_wnd(h))
         return;
-    if (rc)
-        r = *rc;
+    if (rc && gp_copy(&r, rc, sizeof r) != sizeof r)
+        return;
     invalidate(h, 0, rc ? &r : 0, erase, children_of(h), FALSE);
 }
 
@@ -211,8 +213,8 @@ static void validate(HWND h, HRGN rgn, const RECT *rc)
 void WINAPI ValidateRect(HWND h, const RECT __far *rc)
 {
     RECT r;
-    if (rc)
-        r = *rc;
+    if (rc && gp_copy(&r, rc, sizeof r) != sizeof r)
+        return;
     validate(h, 0, rc ? &r : 0);
 }
 
@@ -225,7 +227,7 @@ BOOL WINAPI GetUpdateRect(HWND h, RECT __far *rc, BOOL erase)
 {
     PWND w = valid_wnd(h);
     RECT r;
-    if (!w)
+    if (!w || GP_BAD(rc))
         return FALSE;
     if (!w->hrgnUpdate) {
         if (rc)
@@ -307,12 +309,13 @@ BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
     return TRUE;
 }
 
+/* a bad PAINTSTRUCT: 0, the update region left (3.1, US27) */
 HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
 {
     PWND w = valid_wnd(h);
     HRGN upd;
     BOOL erase;
-    if (!w)
+    if (!w || GP_BAD(ps))
         return 0;
     HideCaret(h);
     if (w->flags & WF_UPDATENC) {
@@ -347,8 +350,11 @@ HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
     return ps->hdc;
 }
 
+/* a bad PAINTSTRUCT: nothing (3.1, US27) */
 void WINAPI EndPaint(HWND h, const PAINTSTRUCT __far *ps)
 {
+    if (GP_BAD(ps))
+        return;
     release_dc(h, ps->hdc);
     ShowCaret(h);
 }
@@ -387,8 +393,8 @@ BOOL WINAPI RedrawWindow(HWND h, const RECT __far *rc, HRGN rgn, UINT flags)
         h = hwndDesktop;
     if (!valid_wnd(h))
         return FALSE;
-    if (rc)
-        r = *rc;
+    if (rc && gp_copy(&r, rc, sizeof r) != sizeof r)
+        return FALSE;
     if (flags & RDW_INVALIDATE)
         invalidate(h, rgn, rc ? &r : 0, (flags & RDW_ERASE) != 0,
                    (flags & RDW_ALLCHILDREN) || (!(flags & RDW_NOCHILDREN) && children_of(h)),
@@ -419,10 +425,11 @@ void refresh_dcs(void);
 
 /* ScrollWindow: w16 repaints instead of copying bits (UNVERIFIED: the
    result on screen equals Windows' when the window paints the same) */
+/* a bad RECT: nothing (3.1, US27) */
 void WINAPI ScrollWindow(HWND h, int dx, int dy, const RECT __far *rc, const RECT __far *clip)
 {
     PWND w = valid_wnd(h);
-    if (!w)
+    if (!w || GP_BAD(rc) || GP_BAD(clip))
         return;
     if (!rc)
         offset_children(w, dx, dy);
@@ -449,11 +456,17 @@ BOOL WINAPI ScrollDC(HDC hdc, int dx, int dy, const RECT __far *scroll,
 {
     RECT box, src, cl, dst;
     HRGN a, b;
-    if (!hdc)
+    /* a bad selector for any RECT: FALSE; a RECT past its segment's
+       limit: TRUE, nothing scrolled (3.1, US27) */
+    if (!hdc || GP_BAD(scroll) || GP_BAD(clip) || GP_BAD(rcupdate))
         return FALSE;
     GetClipBox(hdc, &box);
-    src = scroll ? *scroll : box;
-    cl = clip ? *clip : src;
+    src = box;
+    if (scroll && gp_copy(&src, scroll, sizeof src) != sizeof src)
+        return TRUE;
+    cl = src;
+    if (clip && gp_copy(&cl, clip, sizeof cl) != sizeof cl)
+        return TRUE;
     IntersectRect(&src, &src, &cl);
     dst = src;
     OffsetRect(&dst, dx, dy);

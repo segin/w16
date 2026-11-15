@@ -1489,7 +1489,7 @@ dos: $(DOS)/USTRACE.DLL
 USER_C   := $(wildcard user/*.c)
 # uentry.o first: its _NULL (class BEGDATA) must start DGROUP, the 16 bytes
 # of instance data KERNEL keeps there (the atom table pointer at 8, ...)
-USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o)
+USER_OBJ := $(B)/user/uentry.o $(USER_C:user/%.c=$(B)/user/u_%.o) $(B)/user/gp.o
 # -zc: string literals and const data in the code segments, not DGROUP,
 # whose room is windows' and classes' (ARCHITECTURE.md 10.3, US15)
 UUCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -zc -ox -wx -we \
@@ -1516,14 +1516,22 @@ $(B)/user/u_deskver.o: UUCFLAGS += -i=$(B)
 $(B)/user/uentry.o: user/uentry.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
+# gp.asm: what touches a caller's memory, and the "__GP" table (USER.484)
+$(B)/user/gp.o: user/gp.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
 $(B)/user/stubs.asm $(B)/user/exports.lnk &: $(USER_OBJ) user/ordinals.txt tools/mkuserexp.py
 	python3 tools/mkuserexp.py user/ordinals.txt $(B)/user/exports.lnk $(B)/user/stubs.asm $(USER_OBJ)
 $(B)/user/stubs.o: $(B)/user/stubs.asm
 	$(NASM) $(NFLAGS) -o $@ $<
-$(DOS)/USER.EXE: $(USER_OBJ) $(B)/user/stubs.o $(B)/user/exports.lnk user/user.lnk
+# tools/nemovsel.py: no entry-table entries for the __loadds selector
+# fixups wlink links through movable entries (the entry table holds
+# Windows 3.1's USER exports only)
+$(DOS)/USER.EXE: $(USER_OBJ) $(B)/user/stubs.o $(B)/user/exports.lnk user/user.lnk tools/nemovsel.py
 	@mkdir -p $(@D)
 	$(WLINK) @user/user.lnk @$(B)/user/exports.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/user/user.map file { $(USER_OBJ) $(B)/user/stubs.o }
+	python3 tools/nemovsel.py $@
 user: $(DOS)/USER.EXE
 dos: $(DOS)/USER.EXE
 .PHONY: user
