@@ -151,7 +151,8 @@ static HLOCAL section_keys(const char *sec)
         int n;
         if (!h)
             return NULL;
-        n = GetPrivateProfileString(sec, NULL, "", (char *)h, size, s_cpl_ini);
+        n = GetPrivateProfileString(sec, NULL, "", LocalLock(h), size, s_cpl_ini);
+        LocalUnlock(h);
         if ((UINT)n < size - 2 || size >= 0x8000)
             return h;
         LocalFree(h);
@@ -168,7 +169,7 @@ static void fill_patterns(HWND cb, const char *current)
     SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)s_none);
     if ((keys = section_keys(s_patterns)) != NULL) {
         const char *k;
-        for (k = (const char *)keys; *k; k += lstrlen(k) + 1) {
+        for (k = (const char *)LocalLock(keys); *k; k += lstrlen(k) + 1) {
             if (!lstrcmpi(k, s_none))
                 continue;
             SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)k);
@@ -214,9 +215,11 @@ static void fill_savers(HWND dlg)
             /* the item data: an atom-free copy of the path */
             {
                 HLOCAL h = LocalAlloc(LMEM_FIXED, lstrlen(full) + 1);
-                if (h)
-                    lstrcpy((char *)h, full);
-                SendMessage(cb, CB_SETITEMDATA, i, (LPARAM)(WORD)h);
+                if (h) {
+                    lstrcpy(LocalLock(h), full);
+                    LocalUnlock(h);
+                }
+                SendMessage(cb, CB_SETITEMDATA, i, MAKELPARAM(h, 0));
             }
         }
         lstrcpy(path + n, "*.SCR");
@@ -225,8 +228,10 @@ static void fill_savers(HWND dlg)
         int k, m = (int)SendMessage(cb, CB_GETCOUNT, 0, 0);
         for (k = 1; k < m; k++) {
             HLOCAL h = (HLOCAL)LOWORD(SendMessage(cb, CB_GETITEMDATA, k, 0));
-            if (h && !lstrcmpi((char *)h, cur))
+            if (h && !lstrcmpi(LocalLock(h), cur))
                 sel = k;
+            if (h)
+                LocalUnlock(h);
         }
     }
     SendMessage(cb, CB_SETCURSEL, sel, 0);
@@ -339,7 +344,9 @@ static BOOL apply(HWND dlg)
     i = (int)SendMessage(sv, CB_GETCURSEL, 0, 0);
     if (i > 0) {
         HLOCAL h = (HLOCAL)LOWORD(SendMessage(sv, CB_GETITEMDATA, i, 0));
-        lstrcpy(s, h ? (char *)h : s_none);
+        lstrcpy(s, h ? (char *)LocalLock(h) : s_none);
+        if (h)
+            LocalUnlock(h);
     } else
         lstrcpy(s, s_none);
     WritePrivateProfileString("boot", "SCRNSAVE.EXE", s, "SYSTEM.INI");
@@ -621,7 +628,8 @@ BOOL FAR PASCAL __loadds DesktopProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             HLOCAL h = i > 0 ? (HLOCAL)LOWORD(SendMessage(sv, CB_GETITEMDATA, i, 0)) : NULL;
             char cmd[180];
             if (h) {
-                wsprintf(cmd, "%s %s", (LPSTR)(char *)h, (LPSTR)(wp == IDC_DK_TEST ? "/s" : "/c"));
+                wsprintf(cmd, "%s %s", (LPSTR)LocalLock(h), (LPSTR)(wp == IDC_DK_TEST ? "/s" : "/c"));
+                LocalUnlock(h);
                 WinExec(cmd, SW_SHOWNORMAL);
             }
             return TRUE;

@@ -429,7 +429,8 @@ static HLOCAL section_keys(const char *sec)
         int n;
         if (!h)
             return NULL;
-        n = GetPrivateProfileString(sec, NULL, "", (char *)h, size, s_cpl_ini);
+        n = GetPrivateProfileString(sec, NULL, "", LocalLock(h), size, s_cpl_ini);
+        LocalUnlock(h);
         if ((UINT)n < size - 2 || size >= 0x8000)
             return h;
         LocalFree(h);
@@ -452,7 +453,7 @@ static int fill_schemes(const char *select)
         sel = 0;
     if ((keys = section_keys(s_schemes)) != NULL) {
         const char *k;
-        for (k = (const char *)keys; *k; k += lstrlen(k) + 1) {
+        for (k = (const char *)LocalLock(keys); *k; k += lstrlen(k) + 1) {
             if (!lstrcmpi(k, name))
                 continue;
             n = wsprintf(item, "%s=", (LPSTR)k);
