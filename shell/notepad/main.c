@@ -300,7 +300,13 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_VSCROLL:
     case WM_HSCROLL:
         SendMessage(g_edit, msg, wp, lp);
-        sync_scroll();
+        /* not while the thumb is dragged: the text follows it, the bar's
+           own thumb stays until the release (3.1's Notepad: its thumb
+           stayed at the top through a drag while the text scrolled,
+           then went to SB_THUMBPOSITION's place; tests/boottest.sh
+           sbdrag) */
+        if (wp != SB_THUMBTRACK)
+            sync_scroll();
         return 0;
     case WM_INITMENUPOPUP:
         /* observed: opening any menu updates every item (Print is grayed

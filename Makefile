@@ -1623,6 +1623,13 @@ $(DOS)/US25.EXE: $(B)/tests/start.o $(B)/tests/us25.o $(B)/tests/mevent.o tests/
 	$(WLINK) @tests/apps/us25.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us25.map file { $(B)/tests/start.o $(B)/tests/us25.o $(B)/tests/mevent.o }
 dos: $(DOS)/US25.EXE
+# US26: the caption's buttons and the scroll bars' arrows held down (tests/apps/us26.c)
+$(B)/tests/us26.o: tests/apps/us26ref.h tests/apps/tklog.h
+$(DOS)/US26.EXE: $(B)/tests/start.o $(B)/tests/us26.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us26.map file { $(B)/tests/start.o $(B)/tests/us26.o }
+dos: $(DOS)/US26.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk
