@@ -20,10 +20,18 @@
  *   450 -> 466).
  * - Both bars take Home (SB_TOP) as their Fast end and End as Slow.
  * - SwapMouseButtons=yes / no, when the box was changed.
- * - MouseTrails is written as soon as the box is clicked: 7 when checked,
- *   -7 when unchecked (the length is kept, negative when off); Cancel
- *   writes the old state back (absent and unchanged: not written; turned
- *   on, then Cancel: -7).
+ * - Mouse Trails goes through the display driver's MOUSETRAILS escape
+ *   (Windows 3.1 DDK, "Mouse Trails": the driver draws the trail and keeps
+ *   WIN.INI MouseTrails, positive on, negative off): -1 turns it on, 0 off,
+ *   as the box is clicked; Cancel puts back the old state. The box is
+ *   checked when QUERYESCSUPPORT(MOUSETRAILS) answers a positive trail
+ *   length, and disabled when it answers 0 (no trails). Observed in
+ *   WIN.INI with Microsoft's VGA.DRV: 7 when checked, -7 when unchecked,
+ *   absent and unchanged not written, turned on then Cancel -7.
+ * - A mouse button held down over the dialog (not on a control) shows in
+ *   the picture: the left (right) button's box inverted while it is down;
+ *   double-clicking the TEST box inverts it, at the double-click speed the
+ *   bar has just set (observed on 3.1 with real input).
  * - With the buttons swapped the L and R boxes swap their labels.
  * Keys written before the tracking keys (observed: SwapMouseButtons
  * appended before them).
@@ -68,9 +76,53 @@ static void put_int(const char *key, int v)
     WriteProfileString("windows", key, b);
 }
 
+#define MOUSETRAILS 39             /* the display driver escape (DDK) */
+#define ABS(v) ((v) < 0 ? -(v) : (v))
+
+static int trails_query(void)
+{
+    HDC dc = GetDC(NULL);
+    int n = MOUSETRAILS, r = Escape(dc, QUERYESCSUPPORT, sizeof n, (LPCSTR)&n, NULL);
+    ReleaseDC(NULL, dc);
+    return r;
+}
+
 static void put_trails(BOOL on)
 {
-    put_int("MouseTrails", on ? trails_len : -trails_len);
+    HDC dc = GetDC(NULL);
+    int n = on ? -1 : 0;
+    Escape(dc, MOUSETRAILS, sizeof n, (LPCSTR)&n, NULL);
+    ReleaseDC(NULL, dc);
+}
+
+/* the picture: a box of the dialog inverted inside its frame */
+static void invert_ctl(HWND dlg, int id)
+{
+    RECT r;
+    HDC dc;
+    GetWindowRect(GetDlgItem(dlg, id), &r);
+    ScreenToClient(dlg, (POINT FAR *)&r.left);
+    ScreenToClient(dlg, (POINT FAR *)&r.right);
+    InflateRect(&r, -1, -1);
+    dc = GetDC(dlg);
+    InvertRect(dc, &r);
+    ReleaseDC(dlg, dc);
+}
+
+static BOOL down_l, down_r, test_on;
+static DWORD last_click;
+static POINT last_pt;
+
+static BOOL in_ctl(HWND dlg, int id, LPARAM lp)
+{
+    RECT r;
+    POINT pt;
+    GetWindowRect(GetDlgItem(dlg, id), &r);
+    ScreenToClient(dlg, (POINT FAR *)&r.left);
+    ScreenToClient(dlg, (POINT FAR *)&r.right);
+    pt.x = (int)LOWORD(lp);
+    pt.y = (int)HIWORD(lp);
+    return PtInRect(&r, pt);
 }
 
 /* WIN.INI booleans: yes, on, true or a nonzero number */
@@ -112,13 +164,12 @@ BOOL FAR PASCAL __loadds MouseProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         swap0 = profile_bool("SwapMouseButtons");
         CheckDlgButton(dlg, IDC_MS_SWAP, swap0);
         show_swap(dlg, swap0);
-        trails_len = GetProfileInt("windows", "MouseTrails", 0);
+        trails_len = trails_query();
         trails0 = trails_len > 0;
-        if (trails_len < 0)
-            trails_len = -trails_len;
-        if (!trails_len)
-            trails_len = 7;
         CheckDlgButton(dlg, IDC_MS_TRAILS, trails0);
+        EnableWindow(GetDlgItem(dlg, IDC_MS_TRAILS), trails_len != 0);
+        down_l = down_r = test_on = FALSE;
+        last_click = 0;
         return TRUE;
     }
     case WM_HSCROLL: {
@@ -156,6 +207,51 @@ BOOL FAR PASCAL __loadds MouseProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         }
         return TRUE;
     }
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+        if (!down_l) {
+            down_l = TRUE;
+            invert_ctl(dlg, IDC_MS_LBOX);
+        }
+        if (in_ctl(dlg, IDC_MS_TEST, lp)) {
+            /* a double click: the dialog's class may give WM_LBUTTONDBLCLK,
+               else two downs within the double-click time and size */
+            DWORD t = GetMessageTime();
+            BOOL dbl = msg == WM_LBUTTONDBLCLK ||
+                       (last_click && t - last_click <= GetDoubleClickTime() &&
+                        ABS((int)LOWORD(lp) - last_pt.x) <= GetSystemMetrics(SM_CXDOUBLECLK) / 2 &&
+                        ABS((int)HIWORD(lp) - last_pt.y) <= GetSystemMetrics(SM_CYDOUBLECLK) / 2);
+            if (dbl) {
+                test_on = !test_on;
+                invert_ctl(dlg, IDC_MS_TEST);
+                last_click = 0;
+            } else {
+                last_click = t;
+                last_pt.x = (int)LOWORD(lp);
+                last_pt.y = (int)HIWORD(lp);
+            }
+        } else
+            last_click = 0;
+        return TRUE;
+    case WM_LBUTTONUP:
+        if (down_l) {
+            down_l = FALSE;
+            invert_ctl(dlg, IDC_MS_LBOX);
+        }
+        return TRUE;
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONDBLCLK:
+        if (!down_r) {
+            down_r = TRUE;
+            invert_ctl(dlg, IDC_MS_RBOX);
+        }
+        return TRUE;
+    case WM_RBUTTONUP:
+        if (down_r) {
+            down_r = FALSE;
+            invert_ctl(dlg, IDC_MS_RBOX);
+        }
+        return TRUE;
     case WM_COMMAND:
         switch (wp) {
         case IDC_MS_SWAP: {     /* a plain BS_CHECKBOX: toggled here */
