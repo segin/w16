@@ -15,8 +15,7 @@ sleep 0.3
 dclick 1
 sleep 0.6
 sleep 2
-match 01-open 20 1
-shot 01-open
+matchnow 01-open 20 1
 ; tracking bar: right arrow
 home
 sleep 0.3
@@ -39,8 +38,7 @@ move 19 55
 sleep 0.3
 click 1
 sleep 0.6
-match 02-tracking 20 1
-shot 02-tracking
+matchnow 02-tracking 20 1
 ; double click bar: left arrow
 home
 sleep 0.3
@@ -57,8 +55,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 03-dblclk 20 1
-shot 03-dblclk
+matchnow 03-dblclk 20 1
 ; Swap Left/Right Buttons
 home
 sleep 0.3
@@ -67,8 +64,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 04-swap 20 1
-shot 04-swap
+matchnow 04-swap 20 1
 ; Swap Left/Right Buttons again
 home
 sleep 0.3
@@ -84,8 +80,7 @@ move 106 109
 sleep 0.3
 click 1
 sleep 0.6
-match 05-trails 20 1
-shot 05-trails
+matchnow 05-trails 20 1
 ; TEST box double-clicked
 home
 sleep 0.3
@@ -94,8 +89,7 @@ move 0 1
 sleep 0.3
 dclick 1
 sleep 0.6
-match 06-testbox 20 1
-shot 06-testbox
+matchnow 06-testbox 20 1
 ; OK
 home
 sleep 0.3
@@ -107,5 +101,4 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-match 07-closed 20 1
-shot 07-closed
+matchnow 07-closed 20 1

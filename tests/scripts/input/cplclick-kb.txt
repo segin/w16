@@ -15,8 +15,7 @@ sleep 0.3
 dclick 1
 sleep 0.6
 sleep 2
-match 01-open 20 1
-shot 01-open
+matchnow 01-open 20 1
 ; delay bar: right arrow
 home
 sleep 0.3
@@ -49,8 +48,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 02-delay 20 1
-shot 02-delay
+matchnow 02-delay 20 1
 ; rate bar: left arrow
 home
 sleep 0.3
@@ -75,8 +73,7 @@ move 1 1
 sleep 0.3
 click 1
 sleep 0.6
-match 03-rate 20 1
-shot 03-rate
+matchnow 03-rate 20 1
 ; Test box
 home
 sleep 0.3
@@ -87,8 +84,7 @@ click 1
 sleep 0.6
 type abc
 sleep 0.4
-match 04-test 20 1
-shot 04-test
+matchnow 04-test 20 1
 ; OK
 home
 sleep 0.3
@@ -101,5 +97,4 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-match 05-closed 20 1
-shot 05-closed
+matchnow 05-closed 20 1

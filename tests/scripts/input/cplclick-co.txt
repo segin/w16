@@ -15,8 +15,7 @@ sleep 0.3
 dclick 1
 sleep 0.6
 sleep 2
-match 01-open 20 1
-shot 01-open
+matchnow 01-open 20 1
 ; Color Palette >>
 home
 sleep 0.3
@@ -25,9 +24,8 @@ move 1 0
 sleep 0.3
 click 1
 sleep 0.6
-match 02-palette 20 1
-shot 02-palette
-; scheme combo box
+matchnow 02-palette 20 1
+; scheme combo box: open
 home
 sleep 0.3
 move 75 37
@@ -38,10 +36,14 @@ key Down
 sleep 0.4
 key Down
 sleep 0.4
-key Return
-sleep 0.4
-match 03-scheme 20 1
-shot 03-scheme
+; scheme combo box: close
+home
+sleep 0.3
+move 75 37
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 03-scheme 20 1
 ; basic colour row 1 column 0
 home
 sleep 0.3
@@ -50,9 +52,8 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 04-basic 20 1
-shot 04-basic
-; element combo box
+matchnow 04-basic 20 1
+; element combo box: open
 home
 sleep 0.3
 move 187 36
@@ -64,8 +65,14 @@ key Down
 sleep 0.4
 key Down
 sleep 0.4
-key Return
-sleep 0.4
+; element combo box: close
+home
+sleep 0.3
+move 187 36
+move 1 0
+sleep 0.3
+click 1
+sleep 0.6
 ; basic colour row 3 column 4
 home
 sleep 0.3
@@ -82,8 +89,7 @@ move 1 1
 sleep 0.3
 click 1
 sleep 0.6
-match 05-element 20 1
-shot 05-element
+matchnow 05-element 20 1
 ; Define Custom Colors...
 home
 sleep 0.3
@@ -93,8 +99,7 @@ sleep 0.3
 click 1
 sleep 0.6
 sleep 1.5
-match 06-selector 20 1
-shot 06-selector
+matchnow 06-selector 20 1
 ; colour field
 home
 sleep 0.3
@@ -125,8 +130,7 @@ move 125 137
 sleep 0.3
 click 1
 sleep 0.6
-match 07-selector-set 20 1
-shot 07-selector-set
+matchnow 07-selector-set 20 1
 ; Add Color
 home
 sleep 0.3
@@ -134,8 +138,7 @@ move 30 171
 sleep 0.3
 click 1
 sleep 0.6
-match 08-added 20 1
-shot 08-added
+matchnow 08-added 20 1
 ; Close
 home
 sleep 0.3
@@ -143,8 +146,7 @@ move 73 171
 sleep 0.3
 click 1
 sleep 0.6
-match 09-closed-selector 20 1
-shot 09-closed-selector
+matchnow 09-closed-selector 20 1
 ; OK
 home
 sleep 0.3
@@ -157,5 +159,4 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-match 10-closed 20 1
-shot 10-closed
+matchnow 10-closed 20 1

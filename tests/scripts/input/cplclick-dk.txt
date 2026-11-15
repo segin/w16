@@ -15,9 +15,8 @@ sleep 0.3
 dclick 1
 sleep 0.6
 sleep 2
-match 01-open 20 1
-shot 01-open
-; pattern combo box
+matchnow 01-open 20 1
+; pattern combo box: open
 home
 sleep 0.3
 move 75 40
@@ -27,10 +26,15 @@ click 1
 sleep 0.6
 key Down
 sleep 0.4
-key Return
-sleep 0.4
-match 02-pattern 20 1
-shot 02-pattern
+; pattern combo box: close
+home
+sleep 0.3
+move 75 40
+move 0 1
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 02-pattern 20 1
 ; Fast Alt+Tab check box
 home
 sleep 0.3
@@ -39,9 +43,8 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 03-coolswitch 20 1
-shot 03-coolswitch
-; screen saver combo box
+matchnow 03-coolswitch 20 1
+; screen saver combo box: open
 home
 sleep 0.3
 move 75 100
@@ -50,8 +53,13 @@ click 1
 sleep 0.6
 key Down
 sleep 0.4
-key Return
-sleep 0.4
+; screen saver combo box: close
+home
+sleep 0.3
+move 75 100
+sleep 0.3
+click 1
+sleep 0.6
 ; delay: up arrow
 home
 sleep 0.3
@@ -76,9 +84,8 @@ move 1 0
 sleep 0.3
 click 1
 sleep 0.6
-match 04-saver 20 1
-shot 04-saver
-; wallpaper combo box
+matchnow 04-saver 20 1
+; wallpaper combo box: open
 home
 sleep 0.3
 move 65 134
@@ -87,8 +94,13 @@ click 1
 sleep 0.6
 key Down
 sleep 0.4
-key Return
-sleep 0.4
+; wallpaper combo box: close
+home
+sleep 0.3
+move 65 134
+sleep 0.3
+click 1
+sleep 0.6
 ; Center
 home
 sleep 0.3
@@ -97,8 +109,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 05-wallpaper 20 1
-shot 05-wallpaper
+matchnow 05-wallpaper 20 1
 ; Tile
 home
 sleep 0.3
@@ -139,8 +150,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 06-icons 20 1
-shot 06-icons
+matchnow 06-icons 20 1
 ; granularity: up arrow
 home
 sleep 0.3
@@ -168,8 +178,7 @@ key BackSpace
 sleep 0.4
 type 5
 sleep 0.4
-match 07-grid 20 1
-shot 07-grid
+matchnow 07-grid 20 1
 ; blink bar: right arrow
 home
 sleep 0.3
@@ -194,8 +203,7 @@ move 0 1
 sleep 0.3
 click 1
 sleep 0.6
-match 08-blink 20 1
-shot 08-blink
+matchnow 08-blink 20 1
 ; OK
 home
 sleep 0.3
@@ -208,5 +216,4 @@ sleep 1
 key alt+F4
 sleep 0.4
 sleep 2
-match 09-closed 20 1
-shot 09-closed
+matchnow 09-closed 20 1
