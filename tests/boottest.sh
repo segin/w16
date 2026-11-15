@@ -1480,17 +1480,18 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             # draws SysErrorBox as a system-modal message box, which also
             # takes the activation: 3.1's leaves the captions active; its
             # MessageBox lays the long text out with other margins and its
-            # own icon: UNVERIFIED 3.1's rules); its boxes are then what
-            # the tree's must show
+            # own icon: UNVERIFIED 3.1's rules; and 3.1's File > Run dialog
+            # is gone behind its error box, w16's still there); its boxes
+            # are then what the tree's must show
             "$root/tests/inputrun.sh" -s -E "$out/missingdll-ref" -M "$m" -b 40 -t 200 \
                 "$s" "$out/missingdll-all" $del -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
                 -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
                 > "$out/missingdll-all.txt" 2>&1 || true
-            fe="rectangle 70,50 580,330" ee="rectangle 125,152 512,328"
+            fe="rectangle 70,50 580,330" ee="rectangle 125,152 512,328" rd="rectangle 100,95 490,265"
             for f in "$out/missingdll-ref"/0[1-7]*.png; do
                 s2=$(basename "$f")
                 [ -f "$out/missingdll-all/$s2" ] || { r="every w16 part: no $s2"; break; }
-                case $s2 in 03-*) mm="$m $fe" ;; 04-*|06-*) mm="$m $ee" ;; *) mm=$m ;; esac
+                case $s2 in 03-*) mm="$m $fe" ;; 04-*) mm="$m $ee" ;; 06-*) mm="$m $ee $rd" ;; *) mm=$m ;; esac
                 magick "$f" -fill black -draw "$mm" "$out/missingdll-all-a.png"
                 magick "$out/missingdll-all/$s2" -fill black -draw "$mm" "$out/missingdll-all-b.png"
                 n=$(magick compare -metric AE "$out/missingdll-all-b.png" "$out/missingdll-all-a.png" "$out/missingdll-all-${s2%.png}-diff.png" 2>&1 >/dev/null || true)

@@ -169,9 +169,12 @@ same: not a KRNL386 matter). Causes:
   already. Program Manager then says "Cannot find file CARDFILE.EXE (or one
   of its components). Check to ensure ..." ("Application Execution
   Error"; for File > Run the program, a blank and the parameters, so
-  "nosuch  (or" with two blanks), the Run dialog hidden meanwhile. w16's
-  KERNEL (kmisc2.c file_error_box, called from loader.c load_body; after
-  the boot only, UNVERIFIED during it) and PROGMAN now do the same.
+  "nosuch  (or" with two blanks), the Run dialog gone meanwhile and back
+  afterwards. w16's KERNEL (kmisc2.c file_error_box, called from loader.c
+  load_body; after the boot only, UNVERIFIED during it) and PROGMAN now
+  give the same boxes. Not done: the Run dialog's going (hiding it before
+  WinExec left Program Manager inactive after a DOS program returned:
+  boot-test woados; reverted).
 - Left: w16's USER draws SysErrorBox as a system-modal message box (3.1's
   is its own full-width box and leaves the captions active), and its
   MessageBox lays the long text out with other margins: boot-test
