@@ -1589,6 +1589,9 @@ int __cdecl tmain(void)
        try again for a while, saying so */
     {
         int k;
+        /* a server still on its way out when ExitWindows asked it: the
+           session never ended (seen with the embed1 scenario) */
+        pump(2000);
         for (k = 0; k < 30; k++) {
             ExitWindows(0, 0);
             say("OC1: ExitWindows refused, again");
