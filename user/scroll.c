@@ -412,10 +412,56 @@ static void ghost(HDC hdc, const RECT *rc, BOOL vert, int off)
 /* after a bar of hwnd was drawn in rc of hdc: the outline again on it if
    it is the one being dragged (SetScrollPos from SB_THUMBTRACK paints the
    bar under the outline; the paint and the outline clipped alike) */
+/* the arrow held down (sba_part SB_LINEUP or SB_LINEDOWN, 0 none) */
+static HWND sba_hwnd;
+static int sba_bar, sba_part;
+
+/* arrow part (SB_LINEUP: up or left) of the bar in rc of hdc, pressed or
+   not, placed as draw_scrollbar places it */
+static void arrow(HDC hdc, const RECT *rc, BOOL vert, int part, BOOL pressed)
+{
+    int len = vert ? rc->bottom - rc->top : rc->right - rc->left;
+    int thick = vert ? rc->right - rc->left : rc->bottom - rc->top;
+    int a = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
+    int ath = thick, k;
+    load_arrows();
+    if (len < 2 * a)
+        a = len / 2;
+    if (vert && thick > sysmet[SM_CXVSCROLL])
+        ath = sysmet[SM_CXVSCROLL];
+    else if (!vert && thick > sysmet[SM_CYHSCROLL])
+        ath = sysmet[SM_CYHSCROLL];
+    k = vert ? (part == SB_LINEUP ? 0 : 1) : (part == SB_LINEUP ? 3 : 2);
+    if (pressed)
+        k += 4;
+    if (vert)
+        blt(hdc, rc->left, part == SB_LINEUP ? rc->top : rc->bottom - a, ath, a, bmArrow[k]);
+    else
+        blt(hdc, part == SB_LINEUP ? rc->left : rc->right - a, rc->top, a, ath, bmArrow[k]);
+}
+
 static void ghost_repaint(HDC hdc, HWND hwnd, int bar, const RECT *rc, BOOL vert)
 {
     if (sbt_off >= 0 && hwnd == sbt_hwnd && bar == sbt_bar)
         ghost(hdc, rc, vert, sbt_off);
+    /* an arrow held down stays pressed when the program redraws the bar
+       (3.1, US26: the down arrow pressed while SB_LINEDOWN moved the
+       thumb) */
+    if (sba_part && hwnd == sba_hwnd && bar == sba_bar)
+        arrow(hdc, rc, vert, sba_part, TRUE);
+}
+
+/* the arrow drawn pressed or raised now; rc the bar on the screen */
+static void arrow_now(HWND hwnd, const RECT *rc, BOOL vert, int part, BOOL pressed)
+{
+    PWND w = valid_wnd(hwnd);
+    HDC hdc;
+    RECT r = *rc;
+    if (!w || !is_visible(w) || (hdc = GetWindowDC(hwnd)) == 0)
+        return;
+    OffsetRect(&r, -w->rcWindow.left, -w->rcWindow.top);
+    arrow(hdc, &r, vert, part, pressed);
+    ReleaseDC(hwnd, hdc);
 }
 
 /* the outline moved to off (-1: taken away); rc the bar in screen
@@ -451,13 +497,41 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     UINT msg = vert ? WM_VSCROLL : WM_HSCROLL;
     LPARAM lp = bar == SB_CTL ? MAKELONG(0, hwnd) : 0;
     MSG m;
-    DWORD next = GetTickCount() + 400;
+    DWORD next = GetTickCount() + 200;
     int off0 = thumb_pos(len, arrow, s), pos0 = s->pos, last = s->pos, min = s->min, max = s->max;
-    RECT near_;
+    RECT near_, arect;
+    BOOL in = TRUE, line = part == SB_LINEUP || part == SB_LINEDOWN;
+    UINT tid = 0;
     SetCapture(hwnd);
-    if (part != SB_THUMBTRACK)
+    if (part != SB_THUMBTRACK) {
+        /* an arrow or the shaft held down (3.1, US26): the code sent at
+           the press, again 200 ms later (at the next 55 ms tick: 220),
+           then at every tick, while the pointer is on the arrow - drawn
+           pressed meanwhile, raised when the pointer leaves it, the
+           repeats stopping until it is back - or, for the shaft, on the
+           same side of the thumb (a page down at 63 put the thumb under
+           the pointer: no more pages). A timer of USER's wakes the loop */
+        arect = *rc;
+        if (vert) {
+            if (part == SB_LINEUP)
+                arect.bottom = arect.top + arrow;
+            else
+                arect.top = arect.bottom - arrow;
+        } else {
+            if (part == SB_LINEUP)
+                arect.right = arect.left + arrow;
+            else
+                arect.left = arect.right - arrow;
+        }
+        if (line) {
+            sba_hwnd = hwnd;
+            sba_bar = bar;
+            sba_part = part;
+            arrow_now(hwnd, rc, vert, part, TRUE);
+        }
+        tid = SetTimer(hwnd, 0xFFF7, 50, NULL);
         send_message(notify, msg, part, lp);
-    else {
+    } else {
         /* the pointer's room: the bar widened 4 pixels left and right,
            1 up and down (3.1, VGA; UNVERIFIED on other displays) */
         near_ = *rc;
@@ -476,9 +550,23 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
         if ((s = info(hwnd, bar, &w)) == 0)
             break;
         if (!PeekMessage(&m, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
-            if (part != SB_THUMBTRACK && (long)(GetTickCount() - next) >= 0) {
+            if (part != SB_THUMBTRACK && !line && in) {
+                /* the shaft: still on the same side of the thumb? */
+                POINT p;
+                GetCursorPos(&p);
+                in = PtInRect(rc, p) &&
+                     hit_part(vert ? p.y - rc->top : p.x - rc->left, len, arrow, s) == part;
+            }
+            if (part != SB_THUMBTRACK && in && (long)(GetTickCount() - next) >= 0) {
                 send_message(notify, msg, part, lp);
                 next = GetTickCount() + 50;
+                continue;
+            }
+            /* USER's own timer: only a wake-up; the program's go on */
+            if (tid && PeekMessage(&m, hwnd, WM_TIMER, WM_TIMER, PM_REMOVE)) {
+                if (m.wParam != 0xFFF7)
+                    DispatchMessage(&m);
+                continue;
             }
             /* the task's windows repaint meanwhile (3.1: US19's window,
                which only invalidates on SB_THUMBTRACK, showed each tracked
@@ -489,6 +577,20 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
             }
             WaitMessage();
             continue;
+        }
+        if (m.message == WM_MOUSEMOVE && line) {
+            BOOL now = PtInRect(&arect, m.pt);
+            if (now != in) {
+                in = now;
+                sba_part = in ? part : 0;
+                arrow_now(hwnd, rc, vert, part, in);
+            }
+        }
+        if (m.message == WM_MOUSEMOVE && part != SB_THUMBTRACK && !line) {
+            if ((s = info(hwnd, bar, &w)) == 0)
+                break;
+            in = PtInRect(rc, m.pt) &&
+                 hit_part(vert ? m.pt.y - rc->top : m.pt.x - rc->left, len, arrow, s) == part;
         }
         if (m.message == WM_MOUSEMOVE && part == SB_THUMBTRACK) {
             int off = off0, pos = pos0;
@@ -520,6 +622,15 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
             }
             break;
         }
+    }
+    if (tid)
+        KillTimer(hwnd, 0xFFF7);
+    if (line) {
+        BOOL was = sba_part != 0;
+        sba_part = 0;
+        sba_hwnd = 0;
+        if (was && IsWindow(hwnd))
+            arrow_now(hwnd, rc, vert, part, FALSE);
     }
     if (part == SB_THUMBTRACK) {
         /* (the window went during the drag) */
