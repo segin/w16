@@ -1638,6 +1638,19 @@ $(DOS)/US26.EXE: $(B)/tests/start.o $(B)/tests/us26.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us26.map file { $(B)/tests/start.o $(B)/tests/us26.o }
 dos: $(DOS)/US26.EXE
+# US27: USER's functions given a bad pointer, USER's "__GP" (tests/apps/us27.c,
+# us27s.asm: the TOOLHELP fault callback; us27.rc)
+$(B)/tests/us27.o: tests/apps/us27ref.h tests/apps/tklog.h
+$(B)/tests/us27.res: tests/apps/us27.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US27.EXE: $(B)/tests/start.o $(B)/tests/us27.o $(B)/tests/us27s.o $(B)/tests/us27.res \
+                 tests/apps/app.lnk tests/apps/us27.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us27.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us27.map option resource=$(B)/tests/us27.res \
+	    file { $(B)/tests/start.o $(B)/tests/us27.o $(B)/tests/us27s.o }
+dos: $(DOS)/US27.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

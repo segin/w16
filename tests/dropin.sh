@@ -44,7 +44,8 @@
 #                time limit
 #     -W FILE    without -s: end the run as soon as C:\FILE (a path under
 #                C:\, e.g. a probe's log) exists and has not changed for 2
-#                seconds, at the latest after SECS seconds
+#                seconds (DROPIN_WSECS in the environment: that many), at
+#                the latest after SECS seconds
 #     -n         only prepare the scratch drive (with -o) and dosbox.conf;
 #                do not start DOSBox
 # DROPIN_NOREDIR=1 in the environment: the command's output is not
@@ -279,7 +280,7 @@ if [ -z "$shot" ] && [ -n "$endfile" ]; then
         sleep 0.5
         st=$(stat -c '%s %Y' "$work/c/$endfile" 2>/dev/null) || continue
         if [ "$st" != "$last" ]; then last=$st since=$(date +%s); continue; fi
-        if [ $(($(date +%s) - since)) -ge 2 ]; then kill "$dpid" 2>/dev/null; break; fi
+        if [ $(($(date +%s) - since)) -ge ${DROPIN_WSECS:-2} ]; then kill "$dpid" 2>/dev/null; break; fi
     done
     wait "$dpid" 2>/dev/null || true
 elif [ -z "$shot" ]; then
