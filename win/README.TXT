@@ -58,10 +58,10 @@ w16 repository's LICENSE):
   SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
                           old SOUND functions (voice queues of notes)
                           on the PC speaker
-  SYSTEM\MAIN.CPL         Control Panel's applets: Keyboard and Mouse
-                          work; Color, Fonts, Ports, Desktop, Printers,
-                          International and Date/Time are not w16's
-                          yet
+  SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
+                          Keyboard and Mouse work; Fonts, Ports,
+                          Printers, International and Date/Time are not
+                          w16's yet
   SYSTEM\VGASYS.FON       System font
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
