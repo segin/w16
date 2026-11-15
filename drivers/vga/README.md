@@ -192,7 +192,9 @@ wins:
 - **The trail.** Every MoveCursor adds the position the cursor had (also
   when it did not move), keeping at most size - 1 of them; every
   CheckCursor drops the oldest, so a still pointer's trail runs down one
-  image a timer tick (55 ms). The images are drawn oldest first, each
+  image a timer tick (55 ms), as the probes see 3.1's driver do (but see
+  "The run-down" below: w16's default is slower). The images are drawn
+  oldest first, each
   over those before it, in the current shape; each is clipped at the
   screen's edges like the cursor.
 - **Shapes.** No trail for a cursor whose AND mask has no 0 bit (the
@@ -262,7 +264,24 @@ motion, and an image is drawn plane by plane (four port writes, not a
 hundred and twenty-eight) with its shifted masks made once per shape and
 shift. Now the tree gets the same moves as 3.1, captured and not, under
 the boot test's load. Boot-test parts `trails@timed` and
-`trails@timednl` (the mouse not captured) check all of it. UNVERIFIED: 3.1's driver sometimes writes the
+`trails@timednl` (the mouse not captured) check all of it.
+
+**The run-down** (2026-11-15). Compared by hand with real Windows 3.1
+booted interactively in DOSBox with the same settings (the mouse not
+captured), 3.1's trail took about 550-600 ms to run down after the
+pointer stopped, w16's about half that. That figure is the user's
+observation, not a probe's: in VG9 and CR1 3.1's driver drops an image
+per CheckCursor call, one a tick. So w16's driver now drops a still
+trail's oldest image every second tick, the first on the first tick
+after the last move (seven images gone in 11 ticks, 604 ms); while the
+pointer moves (a move between ticks) it still drops one a tick, so the
+trail's length in motion is unchanged. SYSTEM.INI `[w16]
+MouseTrailDecay=N` sets the ticks per image (1: one a tick, as in the
+probes); `tests/vgatrails.sh` runs both drivers with 1, and
+`trails@timed`/`@timednl` expect a run-down from six images to one of
+440-660 ms instead of 3.1's measured 275.
+
+UNVERIFIED: 3.1's driver sometimes writes the
 positive value with a leading space (`MouseTrails= 7`), depending on
 something VG9 did not find (not the caller's stack; KERNEL alone writes
 `7`); w16 never does. 3.1 turned trails on at 7 for an escape of 1000

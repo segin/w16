@@ -302,12 +302,14 @@ void cursor_unexclude(void);
 void cursor_init(void);
 void cursor_off(void);
 void cursor_trail(int on, int size);
+void cursor_decay(int ticks);
 /* the most cursor images a trail has: the DDK's bound for MOUSETRAILS
    ("up to a maximum of 7 total cursor images") */
 #define TRAIL_MAX 7
 
 /* KERNEL (vga.lnk imports them, as Windows 3.1's VGA.DRV does) */
 int __far __pascal GetProfileInt(LPCSTR app, LPCSTR key, int def);
+int __far __pascal GetPrivateProfileInt(LPCSTR app, LPCSTR key, int def, LPCSTR file);
 BOOL __far __pascal WriteProfileString(LPCSTR app, LPCSTR key, LPCSTR value);
 
 /* save screen (misc.c) */

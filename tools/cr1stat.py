@@ -85,12 +85,13 @@ def summary(d):
         times.append(f['ms'])
         for a, b in zip(xs, xs[1:]):
             gaps[b - a] += 1
-    # run-downs: from the last frame of 5 or more images to the first of
-    # one or none after it, in ms (frames are taken at timer messages, which
-    # a loaded host skips now and then: counted in frames they varied)
+    # run-downs: from the last frame of 6 or more images (the pointer
+    # moving, or just stopped) to the first of one or none after it, in ms
+    # (frames are taken at timer messages, which a loaded host skips now
+    # and then: counted in frames they varied)
     runs, top = [], None
     for c, t in zip(counts, times):
-        if c >= 5:
+        if c >= 6:
             top = t
         elif c <= 1 and top is not None:
             runs.append(t - top)
@@ -103,6 +104,12 @@ def summary(d):
     return out
 
 
+# a still trail's run-down from six images (or seven, a tick after the
+# stop) to one: 10 ticks of 54.9 ms at an image every two ticks, give or
+# take two ticks for the frames' phase
+RUNDOWN = (440, 660)
+
+
 def check(ref, test):
     """0 when the test run's trail is the reference's but for the phase of
     the ticks against the frames: MoveCursor and CheckCursor calls within
@@ -110,7 +117,11 @@ def check(ref, test):
     frames are taken at timer messages, a move or none after the tick),
     gaps between neighbouring images of twice the usual gap (a position
     missing) at most twice the reference's share and 3 points, and as
-    many run-downs, each within three ticks (165 ms) of the reference's"""
+    many run-downs, each 440 to 660 ms long (RUNDOWN): w16's trail runs
+    down an image every two ticks, seven in about 600 ms, as 3.1's looked
+    to the user booted interactively (drivers/vga/README.md); in the
+    harness 3.1's driver drops one a tick, so its run-downs are printed
+    but not the measure"""
     A, B = summary(ref), summary(test)
     bad = []
     # one move a PS/2 packet of the same xdotool stream, one tick a timer
@@ -135,8 +146,9 @@ def check(ref, test):
     if big(B['gaps']) > 2 * big(A['gaps']) + 0.03:
         bad.append('gaps of %d or more: %.1f%% against %.1f%%'
                    % (2 * g - 1, 100 * big(B['gaps']), 100 * big(A['gaps'])))
-    if len(A['runs']) != len(B['runs']) or any(abs(a - b) > 165 for a, b in zip(A['runs'], B['runs'])):
-        bad.append('run-downs %s against %s' % (B['runs'], A['runs']))
+    if len(A['runs']) != len(B['runs']) or any(not RUNDOWN[0] <= b <= RUNDOWN[1] for b in B['runs']):
+        bad.append('run-downs %s (ms; %d of them, each %d-%d ms expected)'
+                   % (B['runs'], len(A['runs']), RUNDOWN[0], RUNDOWN[1]))
     print('reference: moves %d, ticks %d, length %d, gaps %s, run-downs %s'
           % (A[103], A[104], A['median'], sorted(A['gaps'].items()), A['runs']))
     print('test:      moves %d, ticks %d, length %d, gaps %s, run-downs %s'

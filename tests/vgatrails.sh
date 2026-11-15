@@ -18,6 +18,10 @@
 #   status 0, else 1 (tools/vg9png.py --cmp; differing frames as images in
 #   OUTDIR/diff). 3.1's driver sometimes writes MouseTrails with a leading
 #   space (README.md: UNVERIFIED when): "ini= 7" is compared as "ini=7".
+#   Both runs have SYSTEM.INI [w16] MouseTrailDecay=1: w16's driver then
+#   drops a still trail's oldest image every CheckCursor, as 3.1's does when
+#   called so (its own default, an image every 2 ticks, is set from how
+#   3.1's trail looked to the user: drivers/vga/README.md)
 set -eu
 unset DISPLAY WAYLAND_DISPLAY
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -41,7 +45,7 @@ for side in ms w16; do
     rm -rf "${out:?}/$side"
     if [ $side = ms ]; then set --; else set -- -D "$drv" -m; fi
     # shellcheck disable=SC2086
-    "$root/tests/vgaprobe.sh" "$@" $ini -p "$root/build/dos/VG9.EXE" -f "$out/VG9.IN=VG9.IN" \
+    "$root/tests/vgaprobe.sh" "$@" $ini -i w16:MouseTrailDecay=1 -p "$root/build/dos/VG9.EXE" -f "$out/VG9.IN=VG9.IN" \
         -g VG9.BIN -t 400 "$out/$side" > "$out/$side.txt" 2>&1 || true
 done
 r=0

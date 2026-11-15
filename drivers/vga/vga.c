@@ -209,7 +209,14 @@ static void trail_set(int on, int size)
 static void trail_boot(void)
 {
     int v = GetProfileInt("windows", "MouseTrails", -7);
+    /* a still trail runs down an image every 2 ticks (the first on the
+       first tick): about 600 ms for seven images, as Windows 3.1's trail
+       looked to the user, booted interactively in DOSBox (550-600 ms; set
+       from that observation, not measured by a probe: VG9 and CR1 see
+       3.1's driver drop one image per CheckCursor call). SYSTEM.INI [w16]
+       MouseTrailDecay=1: one a tick, what the probes compare with 3.1. */
     int on = v >= 0;
+    cursor_decay(GetPrivateProfileInt("w16", "MouseTrailDecay", 2, "SYSTEM.INI"));
     if (v < 0)
         v = v == -32768 ? TRAIL_MAX : -v;
     if (v < 1)

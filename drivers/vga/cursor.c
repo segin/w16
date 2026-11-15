@@ -77,6 +77,10 @@ static short px = 320, py = 240;
 /* off after a drawing operation met the trail, or an escape: drawn alone
    by the next CheckCursor or MoveCursor */
 static BYTE held;
+/* how a still trail runs down: an image every decay ticks, the first on
+   the first tick after a move (decay 2: seven images gone in 11 ticks,
+   604 ms; cursor_decay, [w16] MouseTrailDecay) */
+static BYTE decay = 2, phase;
 
 /* the images on the screen, oldest first: top left, and the screen bytes
    under each (four planes, 32 rows, 5 bytes) */
@@ -262,12 +266,19 @@ static void serve_queue(BYTE ticks)
         held = 0;
         again = 1;
     }
+    if (n)
+        phase = (BYTE)(decay - 1);
     if (a) {
         if (held)
             again = 1;
-        while (a-- && qn) {
-            trail_pop();
-            again = 1;
+        while (a--) {
+            if (++phase < decay)
+                continue;
+            phase = 0;
+            if (qn) {
+                trail_pop();
+                again = 1;
+            }
         }
     }
     if (again)
@@ -366,6 +377,12 @@ void cursor_trail(int on, int size)
     trail_on = (BYTE)(on != 0);
     trail_size = (BYTE)size;
     busy = 0;
+}
+
+/* ticks per image of a still trail's run-down (vga.c, at Enable) */
+void cursor_decay(int ticks)
+{
+    decay = (BYTE)(ticks < 1 ? 1 : ticks > 255 ? 255 : ticks);
 }
 
 /* MoveCursor's body (entry.asm saved the registers): interrupt time */
