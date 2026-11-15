@@ -213,6 +213,11 @@ a stale DC origin or visible region, UNVERIFIED.
 
 New boot-test cases: missingdll (parts pm, tk59, tree), treek386 (items,
 desk); treealone and w16groups now also run the tree under KRNL386.
+Results at c7cad31 (master merged), installation-05: make test pass; boot
+test 104 of 104. Seen once in an earlier full run (at 7607cd4) and not in
+the rerun or the final run: swapesc@k386 "09-win: the icon's title 38 60
+active 632 (3.1's: title 37 54 active 0)", the tree's KRNL386 with the
+MS-DOS Prompt icon after Alt+Esc: an intermittent difference to chase.
 
 ## Test results (installation-05, tools/remote-test.sh, commit 93f8083)
 
