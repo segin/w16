@@ -9,10 +9,30 @@ click 1
 sleep 1
 ; Control Panel's caption (activates it)
 home
+home
 sleep 0.3
-move 100 10
-move 100 0
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
 move 15 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -33,70 +53,207 @@ sleep 2
 matchnow 01-open 20 1
 ; delay bar: right arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 9
-move 21 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 1 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: left arrow
 home
+home
 sleep 0.3
-move 37 100
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 9
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: left arrow
 home
+home
 sleep 0.3
-move 37 100
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 9
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay bar: shaft right of the thumb
 home
+home
 sleep 0.3
-move 100 100
-move 80 9
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 02-delay 20 1
 ; rate bar: left arrow
 home
+home
 sleep 0.3
-move 37 100
-move 0 63
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; rate bar: shaft left of the thumb
 home
+home
 sleep 0.3
-move 60 100
-move 0 63
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; rate bar: right arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 63
-move 21 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 1 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 03-rate 20 1
 ; Test box
 home
+home
 sleep 0.3
-move 100 100
-move 20 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 3
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -105,10 +262,36 @@ sleep 0.4
 matchnow 04-test 20 1
 ; OK
 home
+home
 sleep 0.3
-move 100 69
-move 100 0
-move 72 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 12 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6

@@ -9,10 +9,30 @@ click 1
 sleep 1
 ; Control Panel's caption (activates it)
 home
+home
 sleep 0.3
-move 100 10
-move 100 0
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
 move 15 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -29,81 +49,236 @@ sleep 2
 matchnow 01-open 20 1
 ; double click bar: left arrow
 home
+home
 sleep 0.3
-move 38 100
-move 0 75
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 15
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; double click bar: shaft
 home
+home
 sleep 0.3
-move 100 100
-move 50 75
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 15
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 02-dblclk 20 1
 ; Swap Left/Right Buttons
 home
+home
 sleep 0.3
-move 100 100
-move 100 95
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 15
+sleep 0.05
 move 12 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 03-swap 20 1
 ; Swap Left/Right Buttons again
 home
+home
 sleep 0.3
-move 100 100
-move 100 95
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 15
+sleep 0.05
 move 12 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; Mouse Trails
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
 move 12 18
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 04-trails 20 1
 ; TEST box double-clicked
 home
+home
 sleep 0.3
-move 100 100
-move 6 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 1
+sleep 0.05
 sleep 0.3
 dclick 1
 sleep 0.6
 matchnow 05-testbox 20 1
 ; tracking bar: right arrow
 home
+home
 sleep 0.3
-move 100 100
-move 87 10
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 7 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; tracking bar: left arrow
 home
+home
 sleep 0.3
-move 38 100
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 10
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; tracking bar: left arrow
 home
+home
 sleep 0.3
-move 38 100
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 10
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6

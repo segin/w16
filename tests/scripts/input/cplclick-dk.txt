@@ -9,10 +9,30 @@ click 1
 sleep 1
 ; Control Panel's caption (activates it)
 home
+home
 sleep 0.3
-move 100 10
-move 100 0
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
 move 15 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -31,9 +51,24 @@ sleep 2
 matchnow 01-open 20 1
 ; pattern combo box: open
 home
+home
 sleep 0.3
-move 100 81
-move 50 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 1
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -41,27 +76,76 @@ key Down
 sleep 0.4
 ; pattern combo box: close
 home
+home
 sleep 0.3
-move 100 81
-move 50 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 1
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 02-pattern 20 1
 ; Fast Alt+Tab check box
 home
+home
 sleep 0.3
-move 46 100
-move 0 51
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 03-coolswitch 20 1
 ; screen saver combo box: open
 home
+home
 sleep 0.3
-move 100 100
-move 50 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -69,46 +153,153 @@ key Down
 sleep 0.4
 ; screen saver combo box: close
 home
+home
 sleep 0.3
-move 100 100
-move 50 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: up arrow
 home
+home
 sleep 0.3
-move 100 100
-move 69 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 16
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: up arrow
 home
+home
 sleep 0.3
-move 100 100
-move 69 100
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
 move 0 16
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; delay: down arrow
 home
+home
 sleep 0.3
-move 100 100
-move 69 100
-move 0 28
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 8
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 04-saver 20 1
 ; wallpaper combo box: open
 home
+home
 sleep 0.3
-move 100 100
-move 30 100
-move 0 68
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 8
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -116,99 +307,395 @@ key Down
 sleep 0.4
 ; wallpaper combo box: close
 home
+home
 sleep 0.3
-move 100 100
-move 30 100
-move 0 68
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 8
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; Center
 home
+home
 sleep 0.3
-move 48 100
-move 0 100
-move 0 91
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 8 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 05-wallpaper 20 1
 ; Tile
 home
+home
 sleep 0.3
-move 100 100
-move 24 100
-move 0 91
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 4 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: up arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 100 62
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 2
+sleep 0.05
+move 20 0
+sleep 0.05
 move 7 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: down arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 100 74
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 0
+sleep 0.05
 move 7 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; icon spacing: down arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 100 74
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 0
+sleep 0.05
 move 7 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; Wrap Title
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 14 89
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 14 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 9
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 06-icons 20 1
 ; granularity: up arrow
 home
+home
 sleep 0.3
-move 100 100
-move 74 100
-move 0 100
-move 0 32
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 14 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 12
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; border width: up arrow
 home
+home
 sleep 0.3
-move 100 100
-move 74 100
-move 0 100
-move 0 55
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 14 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 15
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; border width box
 home
+home
 sleep 0.3
-move 100 100
-move 50 100
-move 0 100
-move 0 61
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 1
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
@@ -219,42 +706,172 @@ sleep 0.4
 matchnow 07-grid 20 1
 ; blink bar: right arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 100 100
-move 22 57
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 2 20
+sleep 0.05
+move 0 17
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; blink bar: left arrow
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 8 100
-move 0 57
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 8 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 17
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 ; blink bar: shaft
 home
+home
 sleep 0.3
-move 100 100
-move 100 100
-move 50 100
-move 0 57
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 17
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
 matchnow 08-blink 20 1
 ; OK
 home
+home
 sleep 0.3
-move 100 61
-move 100 0
-move 100 0
-move 26 0
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 1
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 6 0
+sleep 0.05
 sleep 0.3
 click 1
 sleep 0.6
