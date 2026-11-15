@@ -58,3 +58,21 @@ take a null selector for a fault at the first byte.
 
 See ARCHITECTURE.md 9.4 and 10.3 (USER's `__GP`): K327, the cases 3.1
 ends the task for, what is not checked.
+
+## Results (2026-11-15, installation-05)
+
+- 3.1, US27 through tests/us27run.sh, DOSBox-X -p 386x: two runs on
+  Microsoft's KRNL286 and two on KRNL386, the four logs identical in
+  every checked value (us27ref.h: 932 values). Four task ends out of the
+  hooks' reach on both KERNELs (CreateDialogIndirect NULL, LbAddString
+  and CbAddString freed, MapDialogRect at a segment's end): Application
+  Errors, no silent end.
+- w16 (US27 in check mode, one boot each, no FAIL, no task end): w16's
+  USER on Microsoft's KRNL286 and KRNL386, w16's install tree on w16's
+  KRNL286 and KRNL386 (boot-test case gpuser, its 4 parts ok).
+- tools/remote-test.sh at 50d9f38 (master merged): make test pass; boot
+  test 105 ok, 1 failure: holdbtn ("the arrow's repeats are not 200 ms
+  then a tick apart") with the host at load 30 from other users. Alone
+  it passed 3 times of 3 on this branch and once on master; three
+  holdbtn copies run together fail the same way on master (they share
+  one output directory), so that is not this work's.
