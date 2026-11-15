@@ -83,6 +83,8 @@ struct OBJ {
     BYTE advflags;              /* which advise item delivered data */
     BOOL changed;
     BOOL advfail;               /* the server refused an advise */
+    HGLOBAL hloose;             /* a command posted without waiting */
+    BOOL closing;               /* closed after "/Close" data; TERMINATE due */
     BOOL launched_now;          /* this operation started the server */
     BOOL free_after;            /* free the object after OLE_RELEASE */
     HGLOBAL hlinkdata;          /* OwnerLink/ObjectLink given by GetData */

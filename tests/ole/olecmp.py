@@ -162,6 +162,34 @@ def mf_mask(d, off=0):
     return d
 
 
+def wri_part(d):
+    """a Write document's text and pictures (header fcMac), with the OLE
+    objects' number (Write's own, from the clock) and the word after it
+    masked. Left out: the word 8 bytes on and the character and paragraph
+    property pages. Microsoft's OLECLI gives the same bytes there in every
+    run, w16's others: by their values (0x1257 against 0x1227, local
+    offsets 0x30 apart) they look like Write's own handles, which depend on
+    the memory layout. UNVERIFIED that they are handles."""
+    d = bytearray(d)
+    if len(d) < 18 or d[:2] not in (b'\x31\xbe', b'\x32\xbe'):
+        return bytes(d)
+    fcmac = struct.unpack_from('<I', d, 14)[0]
+    p = 128
+    while True:
+        p = d.find(b'\xe4\x00', p, fcmac)
+        if p < 0:
+            break
+        # the OLE picture header: mm 0xE4 ... the object number at +24,
+        # cbHeader 40 at +30; the stream follows the 40 bytes
+        if p + 40 <= len(d) and struct.unpack_from('<H', d, p + 30)[0] == 40:
+            for i in list(range(p + 24, p + 28)) + list(range(p + 32, p + 36)):
+                d[i] = 0
+            p += 40
+        else:
+            p += 2
+    return masked(bytes(d[:fcmac]))
+
+
 def masked(d):
     """the file with the bytes that differ by nature zeroed: in an OLE
     stream, or in the OLE streams inside a document (Write, Cardfile)"""
@@ -220,6 +248,8 @@ def main():
             continue
         if n.endswith('.BMP'):
             same = bmp_pixels(pa) == bmp_pixels(pb)
+        elif n.endswith('.WRI'):
+            same = wri_part(open(pa, 'rb').read()) == wri_part(open(pb, 'rb').read())
         else:
             same = masked(open(pa, 'rb').read()) == masked(open(pb, 'rb').read())
         if not same:

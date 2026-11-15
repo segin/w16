@@ -797,8 +797,11 @@ static void on_ack(LPOBJ o, HWND w, HWND from, LPARAM lp)
     BOOL ok = (status & 0x8000) != 0;
     WORD op;
     if (o->wait != W_ACK && o->wait != W_DATA) {
-        /* an answer nobody waits for: drop its atom */
-        if (hi >= 0xC000)
+        /* an answer nobody waits for: the command it returns, or its atom */
+        if (hi && hi == (WORD)o->hloose) {
+            GlobalFree(o->hloose);
+            o->hloose = NULL;
+        } else if (hi >= 0xC000)
             GlobalDeleteAtom(hi);
         return;
     }
@@ -884,9 +887,21 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
     /* (the data on "/Close", sent when the server closes a changed
        object, is OLE_CHANGED: Write, given nothing then, dropped the new
        object; UNVERIFIED by a probe client: tests/ole/obs/srvclose.txt) */
-    (void)closed;
-    if (last_of_batch(o, cf))
-        callback(o, saved ? OLE_SAVED : OLE_CHANGED);
+    if (!last_of_batch(o, cf))
+        return;
+    callback(o, saved ? OLE_SAVED : OLE_CHANGED);
+    if (closed && o->hdoc && o->hsrvdoc && o->wait == W_NONE) {
+        /* observed: after the "/Close" data OLECLI sends
+           [StdCloseDocument] and the client gets OLE_CLOSED at once, before
+           the server's TERMINATE (which is then just answered) */
+        HGLOBAL c = dde_exec_str("StdCloseDocument", NULL, NULL);
+        if (!PostMessage(o->hsrvdoc, WM_DDE_EXECUTE, (WPARAM)o->hdoc, MAKELONG(0, c)))
+            GlobalFree(c);
+        else
+            o->hloose = c;
+        o->closing = TRUE;
+        callback(o, OLE_CLOSED);
+    }
 }
 
 /* the index of the next step op from the current one, or 0xFFFF */
@@ -924,8 +939,9 @@ static void on_terminate(LPOBJ o, HWND w, HWND from)
             o->cur = at;
             step_next(o);
         } else {
-            if (o->type == OT_EMBEDDED)
+            if (o->type == OT_EMBEDDED && !o->closing)
                 callback(o, OLE_CLOSED);
+            o->closing = FALSE;
             if (o->wait != W_NONE)
                 step_fail(o, OLE_ERROR_TERMINATE);
         }
