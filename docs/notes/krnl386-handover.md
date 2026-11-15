@@ -144,6 +144,73 @@ under both kernels as the shell (Microsoft's USER, Standard mode). Run:
   TOOLHELP rereads it); Windows 3.1 had 3770 at 16 MB.
 - US14/US15 (USER heaps) have KRNL286 tables; not run under w16's KRNL386.
 
+## The tree under KRNL386: three user reports (2026-11-14)
+
+Three reports from sessions of the distribution zip (w16-0.1-34e54c1,
+`make install-tree`) under KRNL386 in DOSBox 0.74-3.
+
+**Cardfile from Accessories: "Program Not Found ... '<garbage>'.exe"**
+(the user's own; reproduced headless at once, and under KRNL286 just the
+same: not a KRNL386 matter). Causes:
+- The tree has no OLECLI.DLL and CARDFILE.EXE imports it (as 3.1's does),
+  so the load fails with 2 (with Microsoft's OLECLI.DLL added, Cardfile
+  starts and works under w16's KRNL386: the user, by hand).
+- SHELL's ShellExecute (shell/shelldll/exec.c prepare()) returned for a
+  program before association() had set `registered`; with WinExec's 2 the
+  stack garbage sent it into the Program Not Found dialog with an
+  uninitialised name. Fixed.
+- What 3.1 does instead (TK59 as the shell, tests/apps/tk59.c, and
+  Program Manager, screenshots): KERNEL puts up USER's SysErrorBox "File
+  Error" / "Cannot find OLECLI.DLL" (Close) for a library that cannot be
+  found: LoadLibrary of a missing DLL ("NOSUCH.DLL"; "nosuch" gives
+  "NOSUCH"; C:\NODIR\NOSUCH.DLL, error 3, gives "NOSUCH.DLL") and a
+  program importing one (WinExec, LoadModule); not for a missing program
+  itself, nor with SetErrorMode(8000h). The return codes (2, 3) w16 gave
+  already. Program Manager then says "Cannot find file CARDFILE.EXE (or one
+  of its components). Check to ensure ..." ("Application Execution
+  Error"; for File > Run the program, a blank and the parameters, so
+  "nosuch  (or" with two blanks), the Run dialog hidden meanwhile. w16's
+  KERNEL (kmisc2.c file_error_box, called from loader.c load_body; after
+  the boot only, UNVERIFIED during it) and PROGMAN now do the same.
+- Left: w16's USER draws SysErrorBox as a system-modal message box (3.1's
+  is its own full-width box and leaves the captions active), and its
+  MessageBox lays the long text out with other margins: boot-test
+  missingdll masks those boxes in its every-w16-part run. The tree still
+  cannot start Cardfile without an OLECLI.DLL (a w16 OLECLI, Cardfile
+  loading OLECLI only when needed, or no Cardfile item: for the user).
+
+**Program Manager without its groups at the default place, a thin blue
+bar at the bottom** (a tester's; the user cannot reproduce it by hand).
+Not reproduced. Tried on installation-05, the tree under KRNL386 (and
+KRNL286 where marked), screenshots: WIN /S from C:\W16 (the baseline),
+from C:\ as W16\WIN, as C:\W16\WIN.COM, in lower case c:\w16\win, from
+Z: as C:\W16\WIN, through PATH=C:\W16, from C:\W16\SYSTEM as ..\WIN,
+TEMP unset, DOSBox's EMS and UMBs off, machine=vgaonly, cycles=fixed 3000,
+MS-DOS 4.00 on a FAT image in DOSBox-X (INPUTRUN_HDD=1, both kernels, from
+C:\W16 and from C:\; it needs an XMS driver, which the tree does not ship:
+WIN.COM says "Missing HIMEM.SYS"): all show the groups where PROGMAN.INI
+has them. Near misses: C: mounted at the W16 folder itself (WIN.COM at
+C:\WIN.COM) gives Program Manager at PROGMAN.INI's place but no groups
+(PROGMAN.INI names C:\W16\MAIN.GRP etc.; w16's Program Manager drops a
+group file it cannot find without a word: UNVERIFIED what 3.1's says);
+DOSBox's xms=false gives WIN.COM's "cannot run w16" message. Not tried:
+other DOSBox builds, core= and memsize= (dropin.sh fixes core=normal and
+memsize=16). Boot-test treek386@items now checks the window and Main where
+PROGMAN.INI has them, under KRNL386.
+
+**A grey band with the version stamp across the top while running Clock
+and Calculator** (the same tester's). Not reproduced: Clock and Calculator
+started, Calculator and Program Manager moved over the stamp and back,
+both closed, with [w16] DesktopVersion=1: every screen the same under
+KRNL386 and KRNL286 (boot-test treek386@desk). The look fits the desktop's
+WM_ERASEBKGND (user/defwnd.c: PatBlt of the client rectangle, then
+deskver_paint at its bottom right) drawn through a DC whose origin or clip
+region is wrong (the stamp at the bottom of a 65-pixel band, over Clock):
+a stale DC origin or visible region, UNVERIFIED.
+
+New boot-test cases: missingdll (parts pm, tk59, tree), treek386 (items,
+desk); treealone and w16groups now also run the tree under KRNL386.
+
 ## Test results (installation-05, tools/remote-test.sh, commit 93f8083)
 
 - `make test`: pass; 38 probes x 2 DPMI hosts x 2 kernels (KRNL286 and
