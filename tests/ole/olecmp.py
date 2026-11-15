@@ -47,7 +47,7 @@ def norm_log(path):
         line = re.sub(r'("Native"(?: = OLE_OK)?:? size=\d+) sum=[0-9A-F]{8}', r'\1 sum=*', line)
         line = re.sub(r'pixels sum=[0-9A-F]{8}', 'pixels sum=*', line)
         line = re.sub(r'^(DDE P POKE .* size=\d+) sum=[0-9A-F]{8}', r'\1 sum=*', line)
-        line = re.sub(r'^(OleSaveToStream = .*bytes=\d+ puts=\d+) sum=\S+', r'\1', line)
+        line = re.sub(r'^((?:OleSaveToStream = )?\S+ bytes=\d+ puts=\d+) sum=\S+', r'\1', line)
         # poke blocks of StdDocDimensions etc. carry the last block's bytes
         m = re.match(r'(DDE P POKE .*item="Std\w+" flags=0000 fmt="Binary") size=\d+ sum=\S+ (\S+)', line)
         if m:
@@ -130,19 +130,60 @@ class Stream:
             self.body(self.s())
 
 
+def mf_mask(d, off=0):
+    """zero the row padding of the DIBs in a metafile's records (DIB
+    StretchBlt 0B41, StretchDIBits 0F43): Microsoft's OLECLI's metafile of
+    a Paintbrush picture has other padding bytes than its Native DIB
+    (deterministic, but not reproduced: ARCHITECTURE.md 16)"""
+    end = off + mf_size(bytes(d), off)
+    p = off + 18
+    while p + 6 <= end:
+        n, fn = struct.unpack_from('<IH', d, p)
+        if n < 3:
+            break
+        if fn in (0x0B41, 0x0F43):
+            bi = p + 6 + (2 * 11 if fn == 0x0F43 else 2 * 10)
+            if bi + 40 <= len(d) and struct.unpack_from('<I', d, bi)[0] == 40:
+                w, h, _, bpp = struct.unpack_from('<iiHH', d, bi + 4)
+                used = struct.unpack_from('<I', d, bi + 32)[0]
+                ncol = used if used else (1 << bpp if bpp <= 8 else 0)
+                bits = bi + 40 + 4 * ncol
+                row = (w * bpp + 31) // 32 * 4
+                data = (w * bpp + 7) // 8
+                for y in range(abs(h)):
+                    for i in range(bits + y * row + data, bits + (y + 1) * row):
+                        if i < len(d):
+                            d[i] = 0
+        p += 2 * n
+    return d
+
+
 def masked(d):
+    """the file with the bytes that differ by nature zeroed: in an OLE
+    stream, or in the OLE streams inside a document (Write, Cardfile)"""
     d = bytearray(d)
-    if d[:4] == b'\x01\x05\x00\x00':
-        st = Stream(bytes(d))
-        try:
-            st.walk()
-        except struct.error:
-            return bytes(d)
-        for a, b in st.mask:
-            for i in range(a, min(b, len(d))):
-                d[i] = 0
-    elif d[:4] == b'\x01\x00\x09\x00':
-        d = d[:mf_size(bytes(d))]
+    if d[:4] == b'\x01\x00\x09\x00':
+        return bytes(mf_mask(d)[:mf_size(bytes(d))])
+    if d[:2] == b'BM' or d[:4] == b'RIFF':
+        k = payload(bytes(d))
+        return bytes(d[:k] if k else d)
+    raw = bytes(d)
+    p = raw.find(b'\x01\x05\x00\x00')
+    while p >= 0:
+        if p + 12 <= len(raw) and struct.unpack_from('<I', raw, p + 4)[0] in (1, 2, 3) \
+                and 0 < struct.unpack_from('<I', raw, p + 8)[0] < 256:
+            st = Stream(raw)
+            st.p = p
+            try:
+                st.walk()
+                for a, b in st.mask:
+                    for i in range(a, min(b, len(d))):
+                        d[i] = 0
+                p = raw.find(b'\x01\x05\x00\x00', max(st.p, p + 1))
+                continue
+            except (struct.error, IndexError):
+                pass
+        p = raw.find(b'\x01\x05\x00\x00', p + 1)
     return bytes(d)
 
 

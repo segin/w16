@@ -297,13 +297,18 @@ static OLESTATUS finish(LPOBJ o, BOOL del)
     if (o->busy)
         return OLE_BUSY;
     if (o->hdoc && o->open) {
+        /* an open embedded object's document is closed, by OleDelete as
+           by OleRelease (observed: [StdCloseDocument], then the server
+           ends both conversations); a link's conversation just ends */
         dde_start(o, del ? OLE_DELETE : OLE_NONE);
-        if (del && o->type == OT_EMBEDDED) {
+        if (o->type == OT_EMBEDDED) {
             dde_add(o, ST_EXEC, 0, dde_exec_str("StdCloseDocument", NULL, NULL), 0);
             dde_add(o, ST_WAIT_DOCTERM, 0, NULL, 0);
-        } else
+            dde_add(o, ST_WAIT_SYSTERM, 0, NULL, 0);
+        } else {
             dde_add(o, ST_TERMINATE, 0, NULL, 0);
-        dde_add(o, ST_CLOSE_SYS, 0, NULL, 0);
+            dde_add(o, ST_CLOSE_SYS, 0, NULL, 0);
+        }
         o->free_after = TRUE;
         s = dde_run(o);
         if (s == OLE_WAIT_FOR_RELEASE)

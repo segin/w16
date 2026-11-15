@@ -579,3 +579,20 @@ BOOL OLEAPI OleIsDcMeta(HDC dc)
 {
     return GetDeviceCaps(dc, TECHNOLOGY) == DT_METAFILE;
 }
+
+#ifdef OLETRACE
+void olecli_trace(LPCSTR fmt, ...)
+{
+    char b[300];
+    int n = wvsprintf(b, fmt, (LPSTR)(&fmt + 1));
+    HFILE f = _lopen("C:\\OLECLI.LOG", OF_WRITE);
+    if (f == HFILE_ERROR)
+        f = _lcreat("C:\\OLECLI.LOG", 0);
+    if (f == HFILE_ERROR)
+        return;
+    _llseek(f, 0, 2);
+    _lwrite(f, b, n);
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
+}
+#endif

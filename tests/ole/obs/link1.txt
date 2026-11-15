@@ -2,6 +2,8 @@
 spy
 doc 0 OCDOC
 linkfile 0 PBrush C:\WINDOWS\ARCADE.BMP - lnk0 draw 0
+; let the server it started hidden go (it ends after the TERMINATE)
+wait 2000
 querytype 0
 getlinkopt 0
 bounds 0

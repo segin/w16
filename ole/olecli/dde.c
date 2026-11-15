@@ -653,6 +653,8 @@ static OLESTATUS run(LPOBJ o, BOOL from_api)
             return OLE_OK;
         }
         s = steps(o);
+        TRACE(("step %d/%d op %d arg %d launched_now %d open %d", o->cur, o->nsteps,
+               s[o->cur].op, s[o->cur].arg, o->launched_now, o->open));
         r = step_do(o, &s[o->cur], &err);
         GlobalUnlock(o->hsteps);
         if (r == R_WAIT) {
@@ -945,6 +947,9 @@ LRESULT OLEAPI OleWndProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     LPOBJ o;
     if (m < WM_DDE_FIRST || m > WM_DDE_LAST)
         return DefWindowProc(w, m, wp, lp);
+    if (m == WM_DDE_ACK)
+        TRACE(("ack to %x initiating %x from %x lp %lx", (WORD)w, (WORD)g_initiating,
+               (WORD)wp, lp));
     if (m == WM_DDE_ACK && w == g_initiating) {
         /* an answer to our INITIATE (sent): the atoms are the server's */
         if (!g_answer)

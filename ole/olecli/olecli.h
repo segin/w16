@@ -254,7 +254,12 @@ HGLOBAL dde_exec_str3(LPCSTR cmd, LPCSTR a, LPCSTR b, LPCSTR c);
 OLESTATUS clip_copy(LPOBJ o);
 OLESTATUS clip_query(LPCSTR protocol, OLEOPT_RENDER r, OLECLIPFORMAT f, BOOL link);
 
-/* debugging: off in builds */
-#define TRACE(s)
+/* debugging: a build with -dOLETRACE appends to C:\OLECLI.LOG */
+#ifdef OLETRACE
+void olecli_trace(LPCSTR fmt, ...);
+#define TRACE(x) olecli_trace x
+#else
+#define TRACE(x)
+#endif
 
 #endif

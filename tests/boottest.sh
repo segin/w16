@@ -1552,7 +1552,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             d=$out/olecli-tree
             "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$d-386" -T "$root/build/w16" -3 \
                 > "$d-386.txt" 2>&1 || true
-            "$root/tests/inputrun.sh" -e "$d-386/boot.png" -E "$d-386" -b 40 -t 200 \
+            # (the match leaves out Cardfile's blinking caret)
+            "$root/tests/inputrun.sh" -e "$d-386/boot.png" -E "$d-386" -M "rectangle 16,144 20,164" -b 40 -t 200 \
                 "$s" "$d-286" -T "$root/build/w16" > "$d-286.txt" 2>&1 || true
             grep -q '^script done' "$d-386/input.log" 2>/dev/null || r="KRNL386: the script did not finish ($d-386/input.log)"
             # Cardfile's window, active, over Program Manager: its caption
