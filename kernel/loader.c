@@ -24,6 +24,9 @@
 #define LE_BADEXE       11      /* LoadModule of a program that is not a
                                    Windows module: a document, a .COM, a
                                    .BAT, a DOS .EXE (SH14) */
+#define LE_WIN32        21      /* LoadModule of a 32-bit program (a PE
+                                   file) without Win32s (SH14); the SDK:
+                                   "requires 32-bit extensions" */
 
 /* UNVERIFIED: these are w16's own choices or documented values not yet
    seen on Windows. */
@@ -40,6 +43,13 @@
 static u16 defer_sel;
 static u16 last_libinit;        /* the list the last program load made */
 static int last_not_ne;         /* the last load's file was no NE file */
+static int last_pe;             /* ... but a PE file (a 32-bit program) */
+
+/* [w16] PEError (winboot.c; default 1): WinExec of a 32-bit program (a
+   PE file) when Win32s is not installed gives 21 instead of running the
+   program's MS-DOS stub through WINOLDAP, as Windows 3.1 does. 0: 3.1's
+   behaviour. */
+u16 pe_error = 1;
 
 /* Windows' own modules that w16 does not provide yet. A program that
    imports from one of them still loads: the imports go to the
@@ -814,13 +824,18 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             file_error_box(name, ext);
         return NULL;
     }
+    h.magic = 0;
     if (!f_read(fh, mz, sizeof mz) || *(u16 *)mz != MZ_MAGIC ||
         (ne_base = *(u32 *)(mz + MZ_LFANEW_OFF)) == 0 ||
         !f_seek(fh, ne_base) || !f_read(fh, &h, sizeof h) || h.magic != NE_MAGIC) {
         f_close(fh);
         *err = LE_BADFORMAT;
-        if (load_depth == 1)
+        if (load_depth == 1) {
             last_not_ne = 1;
+            /* "PE\0\0" where the NE header would be: a 32-bit Windows
+               program (the published PE format) */
+            last_pe = h.magic == PE_MAGIC && ((u16 *)&h)[1] == 0;
+        }
         return NULL;
     }
     if (!(h.flags & NEF_LIBRARY) && !program) {
@@ -1326,6 +1341,30 @@ int module_init_dll(u16 hmod)
                     module_instance(m), 0, 0) != 0;
 }
 
+/* Whether Win32s is installed: its loader, W32SYS.DLL, is found. Observed
+   on Windows 3.1 (no Win32s; DOSBox-X's file log, SH14 and Program
+   Manager's Run of a PE file, Standard and 386 Enhanced mode): after
+   reading the file's MZ header and the 64 bytes at e_lfanew, KERNEL looks
+   for W32SYS.DLL as a library is searched (the current directory, the
+   Windows directory, SYSTEM, the task's directory, the PATH), once only:
+   later PE files in the same session were not followed by another
+   search. w16 does the same search, once, and closes the file again.
+   UNVERIFIED (no Win32s in the reference install): what 3.1 does with a
+   W32SYS.DLL it finds; w16 then starts the file as without PEError. */
+static int win32s_installed(void)
+{
+    static int known, found;
+    char path[DOS_PATHMAX];
+    u16 fh, err;
+    if (!known) {
+        known = 1;
+        found = open_search("W32SYS.DLL", NULL, path, &fh, &err);
+        if (found)
+            f_close(fh);
+    }
+    return found;
+}
+
 /* A DOS program (a file that is not a Windows module): Windows starts
    WINOLDAP.MOD from the system directory in its place (Standard mode;
    WINOA386.MOD in 386 Enhanced mode; Pietrek). Observed on 3.1 (TK33,
@@ -1396,14 +1435,19 @@ static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
    of a loaded one; the result is the hInstance, after the new task has
    run until it yielded. Errors as LoadLibrary's, but a file that is
    no Windows module (a document, a .COM, a .BAT, a DOS .EXE) gives 11
-   and starts nothing (SH14): only WinExec hands those to WINOLDAP.
+   and starts nothing (SH14): only WinExec hands those to WINOLDAP. A
+   32-bit program (a PE file) gives 21 (SH14, both modes; Win32s not
+   installed), and WinExec hands it to WINOLDAP too: DOS runs its MS-DOS
+   stub ("This program cannot be run in DOS mode." in most). With [w16]
+   PEError=1 (the default) and no Win32s, WinExec gives 21 as well and
+   starts nothing, for the shell to say so.
    oldapp: WinExec's call. */
 static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
 {
     const loadparms FAR *lp = params;
     module FAR *m;
     u16 err, libinit, ad, r;
-    int not_ne;
+    int not_ne, is_pe;
 
     if (params == (void FAR *)-1L)
         return LoadLibrary(name);
@@ -1418,15 +1462,27 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
         return LE_NOTFOUND;             /* UNVERIFIED */
     last_libinit = 0;
     last_not_ne = 0;
+    last_pe = 0;
     m = load_file(name, NULL, 1, &err);
     libinit = last_libinit;
     last_libinit = 0;
     not_ne = last_not_ne;
     last_not_ne = 0;
+    is_pe = last_pe;
+    last_pe = 0;
     if (m)
         uses(m, 1);
     sweep();
     if (!m && err == LE_BADFORMAT && not_ne && lp) {
+        if (is_pe) {
+            /* Windows 3.1 then looks for Win32s' W32SYS.DLL; without it
+               LoadModule gives 21, WinExec hands the file to WINOLDAP
+               (DOS runs the program's stub) */
+            int w32s = win32s_installed();
+            if (oldapp && winboot_active && (w32s || !pe_error))
+                return start_oldapp(name, lp);
+            return LE_WIN32;
+        }
         if (oldapp && winboot_active)
             return start_oldapp(name, lp);
         return LE_BADEXE;

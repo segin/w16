@@ -113,10 +113,15 @@ w16:debuglog=C:\W16DBG.LOG'
 # [w16] NotepadAccelerators=0: w16's Notepad with the original's menu and
 # accelerators only (no Ctrl+N/O/S/P/A/F), as stock 3.1, so its menus
 # compare with 3.1's (shell/notepad/main.c)
+# [w16] PEError=0: WinExec of a 32-bit program (a PE file) without Win32s
+# hands it to WINOLDAP, which runs its MS-DOS stub, as stock 3.1; w16's
+# default gives 21 and Program Manager a box (kernel/loader.c; boot-test
+# case runpe)
 inis="$inis
 w16:DesktopVersion=0
 w16:DebugToAux=1
-w16:NotepadAccelerators=0"
+w16:NotepadAccelerators=0
+w16:PEError=0"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
 while getopts k:3K:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do

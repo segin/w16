@@ -292,6 +292,10 @@ u16 winboot(void)
             extern u16 debug_to_aux;
             debug_to_aux = GetPrivateProfileInt("w16", "DebugToAux", 0, sysini) != 0;
         }
+        {
+            extern u16 pe_error;        /* loader.c */
+            pe_error = GetPrivateProfileInt("w16", "PEError", 1, sysini) != 0;
+        }
     }
     {
         /* [w16] debuglog=FILE: w16's own diagnostics (util.c kdbg) */

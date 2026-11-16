@@ -25,11 +25,12 @@ There are two kinds of key:
 | `NotepadAccelerators` | `1` | `0` | w16's Notepad | Later Windows' Notepad keys, shown in its menus: Ctrl+N New, Ctrl+O Open, Ctrl+S Save, Ctrl+P Print, Ctrl+A Select All, Ctrl+F Find, and F1 shown for Contents. `0` gives 3.1's exact menu and accelerator table. |
 | `ExtendedUserHeap` | `0` | `0` | USER | Windows kept outside USER's DGROUP, so far more windows fit. Can break programs that read USER's internal structures, so it is off by default. |
 | `ExtendedGdiHeap` | `0` | `0` | GDI | GDI objects kept outside GDI's DGROUP, so far more objects fit. Can break programs that read GDI's internal structures, so it is off by default. |
+| `PEError` | `1` | `0` | KERNEL | Starting a 32-bit program (a PE file, e.g. a Windows 95 program) when Win32s is not installed (no W32SYS.DLL where libraries are searched): WinExec returns 21 and starts nothing, and w16's Program Manager says "Cannot run *file*. This 32-bit program requires Win32s, which is not installed." `0`: as 3.1, the program's MS-DOS stub runs as a DOS program ("This program cannot be run in DOS mode."). LoadModule returns 21 either way, as on 3.1. |
 | `MouseTrailDecay` | `2` | — | VGA.DRV | With Mouse Trails on, how many timer ticks (55 ms each) a stopped pointer's trail takes to drop each image: `2` fades a full trail in about 0.6 s, as Windows 3.1 looks when used; `1` drops one image a tick, as 3.1's driver does when driven directly by a probe. |
 | `DebugToAux` | `0` | `1` | KERNEL | Where OutputDebugString's text goes with no debugger. `1`: always to DOS handle 3 (AUX), as 3.1's retail KERNEL does (in DOSBox AUX is the console, so the text is painted over Windows' screen). `0`: to AUX only when it is not the console, and always to `debuglog`. |
 
 w16's test harness writes the stock values (`DesktopVersion=0`,
-`NotepadAccelerators=0`, `DebugToAux=1`) for every test that compares
+`NotepadAccelerators=0`, `DebugToAux=1`, `PEError=0`) for every test that compares
 with Windows 3.1; another value is set per test with `tests/dropin.sh
 -i w16:KEY=VALUE` or the `DROPIN_INI` environment variable (TESTING.md).
 
@@ -58,6 +59,7 @@ ScrollBarMenu=0
 DesktopVersion=0
 NotepadAccelerators=0
 DebugToAux=1
+PEError=0
 ; while debugging
 debuglog=C:\W16DBG.LOG
 watchdog=15

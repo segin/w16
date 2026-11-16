@@ -23,6 +23,8 @@
 
 /* ---- NE header (64 bytes, at file offset given by MZ_LFANEW_OFF) ---- */
 #define NE_MAGIC        0x454E          /* "NE" */
+#define PE_MAGIC        0x4550          /* "PE" (then two zero bytes): a
+                                           32-bit program, the PE format */
 
 typedef struct ne_header {
     u16 magic;          /* 00 "NE" */
