@@ -1746,7 +1746,10 @@ UNVERIFIED (not observed, or inferred from one case): what a server's own task e
 
 ### 16.12 Tests and results
 
-RESULTS
+- `tests/olesvrscen.sh [-c COMBOS] [NAME...]`: the 18 scripts of `tests/olesvr/scripts` (raw DDE: raw, single, exec, bad, block, reinit, relq, reuse, wins; OLECLI driven by OS2: basic, link, multi, notify, pblink with Paintbrush, Packager and Sound Recorder, pbrush; the UI through SNAP: wrpb and wredit (Write embeds and edits a Paintbrush picture, saves a .WRI), cardpb (Cardfile, a .CRD)) with Microsoft's OLESVR and OLECLI and with w16's OLESVR: the DDE log and callbacks (`tests/olesvr/osnorm.py`: OS1's and OS2's waits, Write's clock-made object ids, uninitialised block tails masked), the saved files (masked as `tests/ole/olecmp.py` does) and the screens (Cardfile's caret masked) must be equal.
+- Results (installation-05, 2026-11-16): w16's OLESVR against Microsoft's, with Microsoft's OLECLI: 16 of 18 equal; block and multi then differed only in a timing-dependent log line and an uninitialised tail, which the probes and the comparison now leave out (rerun pending). OC1's scenarios (`tests/olescenarios.sh -c "w16:ms ms:w16 w16:w16"`, 16.6): all 36 pairs equal, so w16's OLECLI and OLESVR work together and with Microsoft's in all four combinations.
+- With w16's OLECLI, OS2 shows OLECLI differences OC1 does not (for the OLECLI side, 16.5): the clipboard formats registered in another order (Native's number differs), no INITIATE (class, "System") before starting a server, a link advised on Native instead of the picture, StdDocDimensions in a 32-byte block, and, when an embedded object is edited again, StdHostNames poked as format 6 without its two offset words (Paintbrush's caption then lacks "Paintbrush Picture in").
+- Boot-test case **olesvr**: part `tree` (the install tree alone, w16's OLECLI and OLESVR, the reference's Paintbrush and REG.DAT for the test only: Cardfile inserts a Paintbrush picture; every shot against the same tree with Microsoft's OLESVR) and one part per scenario (`olesvrscen.sh -c w16-ms`).
 
 ## 17. COMMDLG
 
