@@ -26,6 +26,32 @@ void mem_free(void FARP *p)
     }
 }
 
+/* A command's working copy: in the library's local heap (as a plain
+   copy would not disturb the global heap, whose layout clients' blocks
+   inherit), in a global block when it does not fit there. */
+char FARP *tmp_dup(const char FARP *s)
+{
+    int n = str_len(s) + 1;
+    HLOCAL h = n < 0x4000 ? LocalAlloc(LMEM_FIXED, n) : NULL;
+    char FARP *d;
+    if (h) {
+        d = (char FARP *)MAKELP(SELECTOROF((void FAR *)&svr_inst), (WORD)h);
+        str_cpy(d, s);
+        return d;
+    }
+    return str_dup(s);
+}
+
+void tmp_free(char FARP *p)
+{
+    if (!p)
+        return;
+    if (SELECTOROF(p) == SELECTOROF((void FAR *)&svr_inst))
+        LocalFree((HLOCAL)OFFSETOF(p));
+    else
+        mem_free(p);
+}
+
 int str_len(const char FARP *s)
 {
     int n = 0;

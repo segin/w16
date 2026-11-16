@@ -27,6 +27,7 @@ typedef struct CONV {
     HWND client;
     BOOL terminating;       /* we posted (or will post) WM_DDE_TERMINATE */
     BOOL term_posted;
+    BOOL closing;           /* the client's TERMINATE is being handled */
 } CONV;
 
 /* an advise: client wants data of format cf when the item changes (kind
@@ -109,6 +110,8 @@ extern WORD cf_native, cf_ownerlink, cf_objectlink, cf_binary;
 void FARP *mem_alloc(DWORD n);
 void mem_free(void FARP *p);
 char FARP *str_dup(const char FARP *s);
+char FARP *tmp_dup(const char FARP *s);
+void tmp_free(char FARP *p);
 int str_len(const char FARP *s);
 void str_cpy(char FARP *d, const char FARP *s);
 BOOL str_ieq(const char FARP *a, const char FARP *b);

@@ -483,7 +483,7 @@ static WORD doc_execute(DOC FARP *d, HWND client, HGLOBAL hcmd)
     int n;
     if (!src)
         return 0;
-    t = str_dup(src);
+    t = tmp_dup(src);
     GlobalUnlock(hcmd);
     if (!t)
         return 0;
@@ -518,7 +518,7 @@ static WORD doc_execute(DOC FARP *d, HWND client, HGLOBAL hcmd)
             status = 0x8000;
     }
 done:
-    mem_free(t);
+    tmp_free(t);
     return status;
 }
 
@@ -536,7 +536,10 @@ static WORD doc_poke(DOC FARP *d, HWND client, const char FARP *name, HGLOBAL bl
         /* {client name offset, document name offset, names} */
         const char FAR *base = (const char FAR *)(v + 4);
         DWORD room = size > 8 ? size - 8 : 0;
-        const char FAR *cn = v[2] < room ? base + v[2] : "";
+        /* observed: the client name is taken at the start of the names
+           whatever the first word says (OLECLI writes 0 there); an offset
+           past the block reads beyond it on 3.1, w16 gives "" */
+        const char FAR *cn = room ? base : "";
         const char FAR *dn = v[3] < room ? base + v[3] : "";
         if (d->lpdoc)
             r = d->lpdoc->lpvtbl->SetHostNames(d->lpdoc, (LPSTR)cn, (LPSTR)dn);
@@ -856,13 +859,23 @@ OLESTATUS FAR PASCAL __loadds OLEREVERTSERVERDOC(LHSERVERDOC lh)
 
 /* Revokes one object: it is released, and the conversations that used
    it end (observed with OLECLI, which has one conversation per object). */
+static void term_now(DOC FARP *d, HWND client)
+{
+    CONV FARP *c = conv_find(d->convs, client);
+    if (c && !c->term_posted) {
+        c->terminating = c->term_posted = TRUE;
+        PostMessage(client, WM_DDE_TERMINATE, (WPARAM)d->hwnd, 0);
+    }
+}
+
 OLESTATUS FAR PASCAL __loadds OLEREVOKEOBJECT(LPOLECLIENT cl)
 {
     ITEM FARP *it = item_from(cl), FARP *FARP *pp;
     DOC FARP *d;
     CONV FARP *u;
     ADV FARP *a;
-    BOOL any = FALSE;
+    if (!cl)
+        return OLE_ERROR_ADDRESS;       /* observed */
     if (!it)
         return OLE_ERROR_HANDLE;
     d = it->doc;
@@ -873,22 +886,12 @@ OLESTATUS FAR PASCAL __loadds OLEREVOKEOBJECT(LPOLECLIENT cl)
         }
     if (it->obj)
         it->obj->lpvtbl->Release(it->obj);
-    for (u = it->users; u; u = u->next) {
-        CONV FARP *c = conv_find(d->convs, u->client);
-        if (c && !c->terminating) {
-            c->terminating = TRUE;
-            any = TRUE;
-        }
-    }
-    for (a = it->advs; a; a = a->next) {
-        CONV FARP *c = conv_find(d->convs, a->client);
-        if (c && !c->terminating) {
-            c->terminating = TRUE;
-            any = TRUE;
-        }
-    }
-    if (any)
-        PostMessage(d->hwnd, WM_SVR_TERMINATE, 0, 0);
+    /* each client of the object gets its TERMINATE now, object by
+       object (observed order) */
+    for (u = it->users; u; u = u->next)
+        term_now(d, u->client);
+    for (a = it->advs; a; a = a->next)
+        term_now(d, a->client);
     item_free(it);
     return OLE_OK;
 }

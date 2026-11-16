@@ -7,11 +7,19 @@ Writes RUNDIR/os.cmp: the DDE log (os.log) without OS1's "step wait"
 lines (OS1's script runs from a timer, so where they fall depends on
 timing) and with the object identifiers clients put in document names
 ("WINWRITE%(Untitled)%6af17234#001": Write uses the time) masked. Each
-saved file (e.g. OLE1.WRI) becomes FILE.norm with those identifiers,
-stored as little-endian double words, zeroed.
+saved file (e.g. OLE1.WRI) becomes FILE.norm, masked as the OLECLI tests
+mask theirs (tests/ole/olecmp.py: a Write document's text and pictures
+only, OLE streams without the hMF word and metafile tails).
 """
+import os
 import re
 import sys
+
+# olecmp.py's helpers, without running its main()
+_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ole',
+                         'olecmp.py')).read()
+_olecmp = {}
+exec(compile(_src[:_src.rindex('main()')], 'olecmp.py', 'exec'), _olecmp)
 
 run = sys.argv[1]
 try:
@@ -23,13 +31,22 @@ out = []
 for line in log.splitlines():
     if line.startswith('OS1 step wait '):
         continue
-    out.append(re.sub(r'%[0-9a-f]{8}#', '%XXXXXXXX#', line))
+    line = re.sub(r'%[0-9a-f]{8}#', '%XXXXXXXX#', line)
+    # blocks the client filled (POKE) and the copies servers get of them
+    # ("data" lines) end in uninitialised memory up to the rounding of
+    # GlobalSize: their checksum and bytes past the first 16 are not
+    # compared (OLESVR's own DATA blocks are zero-filled, and compared)
+    if ' POKE item=' in line or line.startswith('  data fmt='):
+        line = re.sub(r'sum=[0-9A-F]{4} \[((?:\\[0-9A-F]{2}|[^\\\]]){0,16}).*', r'sum=* [\1...', line)
+    out.append(line)
 open(run + '/os.cmp', 'w', encoding='latin-1').write('\n'.join(out) + '\n')
 for f in sys.argv[2:]:
     try:
         data = open(run + '/' + f, 'rb').read()
     except OSError:
         continue
-    for i in ids:
-        data = data.replace(int(i, 16).to_bytes(4, 'little'), b'\0\0\0\0')
+    if f.upper().endswith('.WRI'):
+        data = _olecmp['wri_part'](data)
+    else:
+        data = _olecmp['masked'](data)
     open(run + '/' + f + '.norm', 'wb').write(data)

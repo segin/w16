@@ -45,8 +45,10 @@ static int ndocs(SRV FARP *s)
 static BOOL any_conv(SRV FARP *s)
 {
     DOC FARP *d;
-    if (s->convs)
-        return TRUE;
+    CONV FARP *c;
+    for (c = s->convs; c; c = c->next)
+        if (!c->closing)
+            return TRUE;
     for (d = s->docs; d; d = d->next)
         if (d->convs)
             return TRUE;
@@ -390,7 +392,7 @@ static WORD sys_execute(SRV FARP *s, HWND client, HGLOBAL hcmd)
     OLESTATUS r;
     if (!src)
         return 0;
-    t = str_dup(src);
+    t = tmp_dup(src);
     GlobalUnlock(hcmd);
     if (!t)
         return 0;
@@ -484,7 +486,7 @@ static WORD sys_execute(SRV FARP *s, HWND client, HGLOBAL hcmd)
             status = 0x8000;
     }
 done:
-    mem_free(t);
+    tmp_free(t);
     return status;
 }
 
@@ -521,13 +523,21 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         if (!c->terminating || !c->term_posted)
             PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
-        conv_remove(&s->convs, client);
         /* observed: the end of a system conversation lets the server go
-           only when it is an OLE_SERVER_MULTI one without documents */
+           only when it is an OLE_SERVER_MULTI one without documents. The
+           conversation still counts while the server hears of it: a
+           server that revokes itself in Release (Packager) sends it a
+           second TERMINATE, and goes when Release returns. */
+        c->closing = TRUE;
+        if (!s->revoking && s->use == OLE_SERVER_MULTI && !ndocs(s))
+            srv_check_release(s);
+        if (s->revoking && !c->term_posted) {
+            c->term_posted = TRUE;
+            PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
+        }
+        conv_remove(&s->convs, client);
         if (s->revoking)
             srv_try_finish(s);
-        else if (s->use == OLE_SERVER_MULTI && !ndocs(s))
-            srv_check_release(s);
         return 0;
     case WM_DDE_ACK:
         return 0;
