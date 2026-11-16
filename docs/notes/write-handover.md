@@ -1,4 +1,14 @@
-# WRITE.EXE handover (branch worktree-agent-a31abeccd3aa6d661)
+# WRITE.EXE handover (branch worktree-agent-a31abeccd3aa6d661, continued in worktree-agent-aea9fceec5754718c)
+
+## Session 2 (agent-aea9fceec5754718c) progress, newest last
+
+- Coordinator: taskman@tree 21-dosesc fails on master before Write too (not Write's); cplclick@co-tree and trails@timed are known master issues. Steps 1-2 below are therefore done/void.
+- Remote runs: `tools/remote-run.sh -n agent-aea9fceec5754718c-wr` (one DOSBox at a time; the user has not approved bypassing remote-test.sh's slots for anything heavy).
+- fd576fd: object twips = HIMETRIC -> screen pixels (HORZSIZE/HORZRES) -> twips (step 3 done; WR16 confirms 5 DIB sizes). wri.py cmp skips static DIB tails and METAFILEPICT hMF.
+- 6161a07: steps 4, 5, 6 done. Tall pictures in 16-pixel bands (view.c LINE.yp/picH, cpTop+ypTop, line_next/line_prev/layout_band); caret off-screen rule caret_mid = (h/16)/2*16 (probe WR19, three window heights); thumb range 0-255, pos = round(top*255/mac) with pictures counted as 40 and +32 during a typing run (probe WR20, WR18); caret after paste/typing rules (WR3, WR9 F1, WR16, WR17). New scenarios WR17, WR18. SNAP's `ckey c 24` does not reach 3.1's Write: scripts use kdown 11/kdown 24/kup 24/kup 11. Probe results: build/ref/wr19, build/ref/wr20 (not committed; analysis scripts were throwaway, the numbers are in ARCHITECTURE.md 15.6).
+- 8491923: step 8 (explicit page breaks): Ctrl+Enter = character 12 ending its paragraph, dotted line, no caret before it (WR21). Confirm Page Breaks (Repaginate's option) still not done.
+- Whole Write suite (WR1-WR10, WR15-WR18, WR21, WR11 help) pixel-identical and file-identical at 8491923 (write.baseline all 0).
+
 
 State on 2026-11-16, last commit before this note e0f0df1. Everything below is committed; the tree is clean.
 
@@ -85,14 +95,9 @@ tree run), cplclick@co-tree 02-palette (6330 against 18927 before: varies), trai
 
 ## Next steps, in order
 
-1. Investigate taskman@tree (above); then cplclick@co-tree. If taskman, cplclick or trails fail again, compare with master's own run before blaming Write. The tree contains WRITE.EXE and the new ACCESSOR.GRP, so look at any tree script that picks Accessories items by position.
-2. Run one full `tools/remote-test.sh` (make test plus the full boot test) and report the result.
-3. Object size in twips (WR10, WR15): find the HIMETRIC-to-twips rule (probe several sizes of pasted pictures).
-4. Tall pictures in bands (WR10 I3: 3.1 scrolls inside a picture).
-5. Caret rule after typing that follows a menu (WR3, WR9 F1).
-6. Vertical scroll bar range (WR2 R2).
+1-6: done or void (see Session 2 above). Run one full `tools/remote-test.sh -n <name>` at the end of each session.
 7. The ruler (Document > Ruler On; our own art for its buttons).
-8. Confirm Page Breaks and the page-break character 12.
+8. Confirm Page Breaks (character 12 done: WR21).
 9. Headers and footers in printing.
 10. Move/Size Picture.
 11. Links, Paste Link, Paste Special; the Object verb menu.
