@@ -52,6 +52,11 @@ for line in log.splitlines():
     # with it when it saves and pokes the object back)
     if 'fmt=Native' in line and '[OS1NATIVE\\00' in line:
         line = re.sub(r'sum=[0-9A-F]{4} \[OS1NATIVE\\00.*', lambda m: 'sum=* [OS1NATIVE\\00...', line)
+    # a server window that goes while its task ends sometimes sends the
+    # client a second TERMINATE on 3.1 (Paintbrush, Packager: the same run
+    # gives one or two, by timing): repeats are not compared
+    if out and line == out[-1] and '(gone) -> ' in line and line.endswith(' TERMINATE'):
+        continue
     out.append(line)
 open(run + '/os.cmp', 'w', encoding='latin-1').write('\n'.join(out) + '\n')
 for f in sys.argv[2:]:
