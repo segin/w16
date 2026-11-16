@@ -391,6 +391,8 @@ static int x_of(const LINE *ln, DWORD cp)
     DWORD pf, pl;
     ATOM32 pa;
     int x = ln->xLeft, sp = 0;
+    if (ln->picture)                    /* a picture is one unit */
+        return cp > ln->cpFirst ? ln->xLeft + ln->width : ln->xLeft;
     para_at(&g_doc, ln->cpFirst, &pf, &pl, &pa);
     pap_decode(&g_doc, pa, &pap);
     for (c = ln->cpFirst; c < cp && c < ln->cpLim && c < g_doc.cpMac; c++) {

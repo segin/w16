@@ -1,0 +1,11 @@
+; WR6: show a document with pictures pasted in the original (a DIB and a
+; metafile, stored as OLE static objects), save it unchanged
+; prep: pastepic PICS.WRI
+run WRITE.EXE C:\PICS.WRI
+wait 3000
+snap C:\S1.BMP
+menu f
+char s
+wait 2000
+close
+wait 1000

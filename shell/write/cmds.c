@@ -947,7 +947,7 @@ void menu_update(HMENU m)
     EnableMenuItem(m, IDM_UNDO, MF_GRAYED);
     EnableMenuItem(m, IDM_PASTESPECIAL, MF_GRAYED);
     EnableMenuItem(m, IDM_PASTELINK, MF_GRAYED);
-    EnableMenuItem(m, IDM_LINKS, MF_GRAYED);
+    EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
     EnableMenuItem(m, IDM_OBJECT, MF_GRAYED);
     EnableMenuItem(m, IDM_MOVEPICT, MF_GRAYED);
     EnableMenuItem(m, IDM_SIZEPICT, MF_GRAYED);

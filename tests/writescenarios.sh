@@ -17,7 +17,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$root/build/ref/wrscen/$(date +%Y%m%d-%H%M%S)
 mkdir -p "$out"
-names=${*:-$(cd "$root/tests/scripts/write" && ls *.txt | sed 's/\.txt$//')}
+names=${*:-$(cd "$root/tests/scripts/write" && ls WR*.txt | sed 's/\.txt$//')}
 status=0
 base=$root/tests/scripts/write.baseline
 [ -f "$base" ] || : > "$base"
@@ -30,6 +30,26 @@ for n in $names; do
         mkdir -p "$out/$n/in"
         cp "$ref/$f" "$out/$n/in/"              # scratch copies only
         inputs="$inputs $out/$n/in/$(basename "$f")"
+    done
+    # "; prep: SCRIPT FILE": first run tests/scripts/write/SCRIPT.txt with
+    # the original Write and give FILE (which it saved) to both runs
+    # (documents only the original can make yet, e.g. with pictures);
+    # "; mkpic: FILE" makes the test picture (mkpic.py) for SNAP clipbmp
+    for f in $(sed -n 's/^; mkpic: *//p' "$script"); do
+        mkdir -p "$out/$n/in"
+        python3 -I "$root/tests/scripts/write/mkpic.py" "$out/$n/in/$f"
+        inputs="$inputs $out/$n/in/$f"
+    done
+    sed -n 's/^; prep: *//p' "$script" | while read -r ps pf; do
+        "$root/tests/wrobs.sh" "$root/tests/scripts/write/$ps.txt" "$out/$n/prep" \
+            $(sed -n 's/^; mkpic: *//p' "$root/tests/scripts/write/$ps.txt" | while read -r p; do
+                  mkdir -p "$out/$n/prep-in"; python3 -I "$root/tests/scripts/write/mkpic.py" "$out/$n/prep-in/$p"
+                  echo "$out/$n/prep-in/$p"; done) > /dev/null
+        mkdir -p "$out/$n/in"
+        cp "$out/$n/prep/$pf" "$out/$n/in/$pf"
+    done
+    for pf in $(sed -n 's/^; prep: *[^ ]* *//p' "$script"); do
+        inputs="$inputs $out/$n/in/$pf"
     done
     "$root/tests/wrobs.sh" "$script" "$out/$n/orig" $inputs > /dev/null
     WROBS_EXE=$root/build/dos/WRITE.EXE "$root/tests/wrobs.sh" "$script" "$out/$n/w16" $inputs > /dev/null

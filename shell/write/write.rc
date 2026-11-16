@@ -108,11 +108,12 @@ BEGIN
     END
 END
 
-/* observed (MW_ACCTB): F1 sends 62192 (F2F0h), which no menu item has;
-   F2 Copy (UNVERIFIED purpose, as observed), F3-F8 as the menu shows */
+/* observed (MW_ACCTB): F1 sends 62192 (F2F0h), which no menu item has
+   (Help Index: WR11); F2 Copy (UNVERIFIED purpose, as observed), F3-F8
+   as the menu shows */
 MW_ACCTB ACCELERATORS
 BEGIN
-    VK_F1, 62192, VIRTKEY
+    VK_F1, IDM_HELPF1, VIRTKEY
     VK_F2, IDM_COPY, VIRTKEY
     VK_F3, IDM_FINDAGAIN, VIRTKEY
     VK_F4, IDM_GOTO, VIRTKEY

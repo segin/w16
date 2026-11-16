@@ -83,6 +83,7 @@ static BOOL ask_save(void)
 static void new_doc(void)
 {
     doc_new(&g_doc);
+    saveFormat = FMT_WRI;
     g_path[0] = 0;
     set_title();
     view_reset();
@@ -125,6 +126,7 @@ static BOOL open_path(LPCSTR path)
 {
     BOOL isText;
     int r = doc_load(&g_doc, path, &isText);
+    saveFormat = FMT_WRI;
     if (r == LOAD_NOTWRI) {
         FARPROC fp = MakeProcInstance((FARPROC)ConvertDlgProc, g_hinst);
         int a = DialogBoxParam(g_hinst, MAKEINTRESOURCE(IDD_CONVERT), g_frame, (DLGPROC)fp,
@@ -133,6 +135,7 @@ static BOOL open_path(LPCSTR path)
         if (a == IDCANCEL)
             return FALSE;
         r = doc_load_text(&g_doc, path);
+        saveFormat = FMT_TEXT;
         /* UNVERIFIED: Convert treats the text as OEM (ANSI after) */
     }
     if (r == LOAD_NOFILE) {
@@ -226,7 +229,9 @@ static BOOL file_dialog(BOOL save, char *path)
     ofn.hwndOwner = g_frame;
     ofn.hInstance = g_hinst;
     ofn.lpstrFilter = filter;
-    ofn.nFilterIndex = 1;
+    /* the format the document came in: a converted text file is saved
+       as text unless another type is chosen (WR8) */
+    ofn.nFilterIndex = saveFormat == FMT_TEXT ? 4 : saveFormat == FMT_WORD ? 2 : 1;
     ofn.lpstrFile = path;
     ofn.nMaxFile = PATH_MAX_DOS;
     ofn.lpstrTitle = title;
@@ -391,6 +396,7 @@ static LRESULT command(HWND w, WORD id)
     case IDM_PASTE:
         cmd_paste();
         break;
+    case IDM_HELPF1:                    /* F1 (the original's 62192) */
     case IDM_HELPCONTENTS:
         help(HELP_INDEX, 0);
         break;
@@ -468,7 +474,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return ask_save();
     case WM_DESTROY:
 #ifndef W16_WIN2
-        WinHelp(w, NULL, HELP_QUIT, 0);
+        help(HELP_QUIT, 0);             /* with WRITE.HLP named (WR11) */
 #endif
         PostQuitMessage(0);
         return 0;
@@ -524,16 +530,18 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
     while (GetMessage(&m, NULL, 0, 0)) {
-        if (find_dialog() && IsDialogMessage(find_dialog(), &m))
-            continue;
         /* Ctrl+B, I, U, Z, X, C, V are character accelerators, but a
            character without Ctrl down is typed: Tab is 09h like Ctrl+I
-           (observed: a Tab posted as WM_CHAR is a tab, WR4) */
-        if ((m.message == WM_CHAR && m.wParam < ' ' && GetKeyState(VK_CONTROL) >= 0) ||
-            !TranslateAccelerator(g_frame, accel, &m)) {
-            TranslateMessage(&m);
-            DispatchMessage(&m);
-        }
+           (observed: a Tab posted as WM_CHAR is a tab, WR4). The
+           accelerators come before the Find dialog's keys: F1 there asks
+           for Help (WR11; UNVERIFIED for the other keys) */
+        if (!(m.message == WM_CHAR && m.wParam < ' ' && GetKeyState(VK_CONTROL) >= 0) &&
+            TranslateAccelerator(g_frame, accel, &m))
+            continue;
+        if (find_dialog() && IsDialogMessage(find_dialog(), &m))
+            continue;
+        TranslateMessage(&m);
+        DispatchMessage(&m);
     }
     doc_free(&g_doc);
     return m.wParam;

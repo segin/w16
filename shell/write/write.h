@@ -69,6 +69,7 @@
 #define IDM_HELPSEARCH      4609
 #define IDM_HELPHELP        4610
 #define IDM_ABOUT           4611
+#define IDM_HELPF1          62192       /* F1's accelerator: Help Index (WR11) */
 
 /* dialogs: the original's resource IDs */
 #define IDD_CONVERT         3

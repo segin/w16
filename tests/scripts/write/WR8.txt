@@ -1,0 +1,18 @@
+; WR8: open a text file (SETUP.TXT): the "convert to Write format"
+; prompt, Convert, the document as shown, Save As C:\WR8.WRI
+; files: SETUP.TXT
+run WRITE.EXE C:\SETUP.TXT
+wait 3000
+snap C:\C1.BMP
+dump
+key 0D
+wait 3000
+snap C:\C2.BMP
+menu f
+char a
+wait 1500
+type C:\WR8.WRI
+key 0D
+wait 3000
+close
+wait 1500

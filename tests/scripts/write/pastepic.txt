@@ -1,0 +1,26 @@
+; pastepic (not a scenario of its own: WR6 runs it with the original
+; first): paste a bitmap and a metafile picture, save C:\PICS.WRI
+; mkpic: PIC.BMP
+run WRITE.EXE
+wait 3000
+type before
+key 0D
+clipbmp C:\PIC.BMP
+menu e
+char p
+wait 1500
+type after
+key 0D
+clipmf
+menu e
+char p
+wait 1500
+type end
+menu f
+char a
+wait 1500
+type C:\PICS.WRI
+key 0D
+wait 2000
+close
+wait 1000
