@@ -241,8 +241,11 @@ ATOM32 pap_atom(DOC *d, const PAPX *p)
  * yaHeader, yaFooter; then 720, 0, 1080, 10440 (constant in every file
  * seen; meaning UNVERIFIED); zeros to cch 102. */
 
+/* the first page number FFFFh means "1" (SDK ch. 8, 8.3.3: "reserved;
+   must be FFFFh"; WR13: a new document's SEP has it); Page Layout
+   stores the number typed (WR4: 2) */
 static const WORD sep_template[] = {
-    0x0200, 15840, 12240, 1, 1440, 12960, 1800, 8640, 0x0100, 1080, 14760,
+    0x0200, 15840, 12240, 0xFFFF, 1440, 12960, 1800, 8640, 0x0100, 1080, 14760,
     720, 0, 1080, 10440
 };
 
@@ -255,7 +258,8 @@ void sep_decode(DOC *d, SEPX *s)
         v[i] = (d->hasSep && d->sep[0] >= 2 * i + 2) ? *(WORD *)(b + 2 * i) : sep_template[i];
     s->yaMac = v[1];
     s->xaMac = v[2];
-    s->pgnFirst = v[3];
+    s->pgnFirst = v[3] == 0xFFFF ? 1 : v[3];
+    s->pgnRaw = v[3];
     s->yaTop = v[4];
     s->dyaText = v[5];
     s->xaLeft = v[6];
@@ -278,7 +282,7 @@ void sep_encode(DOC *d, const SEPX *s)
     }
     w[1] = s->yaMac;
     w[2] = s->xaMac;
-    w[3] = s->pgnFirst;
+    w[3] = s->pgnRaw;
     w[4] = s->yaTop;
     w[5] = s->dyaText;
     w[6] = s->xaLeft;

@@ -60,7 +60,8 @@ for n in $names; do
         [ "$b" = SNAP.TXT ] && continue         # the script itself
         if [ ! -f "$out/$n/w16/$b" ]; then
             result=FAIL; echo "  $n: $b not saved"
-        elif [ "${b##*.}" = WRI ]; then
+        elif [ "${b##*.}" = WRI ] && [ "$(head -c 2 "$f" | od -An -tx1 | tr -d ' ')" = 31be -o \
+               "$(head -c 2 "$f" | od -An -tx1 | tr -d ' ')" = 32be ]; then
             python3 -I "$root/tools/wri.py" cmp "$f" "$out/$n/w16/$b" > "$out/$n/$b.cmp" ||
                 { result=FAIL; echo "  $n: $b differs: $(cat "$out/$n/$b.cmp")"; }
         else

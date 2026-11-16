@@ -129,7 +129,10 @@ static BOOL open_path(LPCSTR path)
     saveFormat = FMT_WRI;
     if (r == LOAD_NOTWRI) {
         FARPROC fp = MakeProcInstance((FARPROC)ConvertDlgProc, g_hinst);
-        int a = DialogBoxParam(g_hinst, MAKEINTRESOURCE(IDD_CONVERT), g_frame, (DLGPROC)fp,
+        /* the prompt comes before Write's window is shown, owned by no
+           window: placed from the screen's corner (WR8: at 32,12) */
+        int a = DialogBoxParam(g_hinst, MAKEINTRESOURCE(IDD_CONVERT),
+                               IsWindowVisible(g_frame) ? g_frame : NULL, (DLGPROC)fp,
                                IDS_TEXTDOC);
         FreeProcInstance(fp);
         if (a == IDCANCEL)
@@ -445,6 +448,16 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SIZE:
         place_children(LOWORD(lp), HIWORD(lp));
         return 0;
+    case WM_ERASEBKGND: {
+        /* the corner between the scroll bars shows the scroll bar colour
+           (WR6, with other colour schemes) */
+        RECT r;
+        HBRUSH b = CreateSolidBrush(GetSysColor(COLOR_SCROLLBAR));
+        GetClientRect(w, &r);
+        FillRect((HDC)wp, &r, b);
+        DeleteObject(b);
+        return 1;
+    }
     case WM_SETFOCUS:
         SetFocus(g_docwnd);
         return 0;
@@ -498,12 +511,12 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
         /* CS_BYTEALIGNCLIENT, as 3.1's own frames (Program Manager's:
            GCW_STYLE 1000h): the client area and the menu bar on 8-pixel
            boundaries; observed here as the first window at (4, 0) */
-        wc.style = CS_BYTEALIGNCLIENT;
+        wc.style = CS_BYTEALIGNCLIENT | CS_OWNDC | CS_HREDRAW | CS_VREDRAW;   /* 1023h (WR14) */
         wc.lpfnWndProc = FrameWndProc;
         wc.hInstance = hi;
         wc.hIcon = LoadIcon(hi, MAKEINTRESOURCE(IDI_WRITE));
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)(COLOR_SCROLLBAR + 1);   /* the corner between the bars (WR6) */
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);      /* the class's (WR14: 6) */
         wc.lpszMenuName = "MW_MENU";
         wc.lpszClassName = s_frame;
         if (!RegisterClass(&wc) || !view_register(hi))

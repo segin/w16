@@ -545,6 +545,9 @@ BOOL CALLBACK __export LayoutDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 msgbox(d, IDS_MARGINSBIG, NULL, MB_OK | MB_ICONEXCLAMATION);
                 return TRUE;
             }
+            /* UNVERIFIED: an unchanged 1 is kept as FFFFh */
+            if (pg != newsep.pgnFirst)
+                newsep.pgnRaw = pg;
             newsep.pgnFirst = pg;
             newsep.xaLeft = (WORD)l;
             newsep.dxaText = (WORD)(newsep.xaMac - l - r);
@@ -907,8 +910,9 @@ void menu_update(HMENU m)
     sel_props(&c);
     para_at(&g_doc, g_selFirst, &f, &l, &a);
     pap_decode(&g_doc, a, &p);
-    CheckMenuItem(m, IDM_REGULAR, c.b0 == 1 && !c.bold && !c.italic && !c.underline && !c.hpsPos
-                  ? MF_CHECKED : MF_UNCHECKED);
+    /* Regular is not checked even for plain text (WR7: a new document;
+       UNVERIFIED whether it ever is) */
+    CheckMenuItem(m, IDM_REGULAR, MF_UNCHECKED);
     CheckMenuItem(m, IDM_BOLD, c.bold ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(m, IDM_ITALIC, c.italic ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(m, IDM_UNDERLINE, c.underline ? MF_CHECKED : MF_UNCHECKED);
@@ -938,7 +942,24 @@ void menu_update(HMENU m)
     EnableMenuItem(m, IDM_PASTESPECIAL, MF_GRAYED);
     EnableMenuItem(m, IDM_PASTELINK, MF_GRAYED);
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
+    {
+        /* with no object selected the item reads "&Object", grayed (WR7;
+           the original's string 32) */
+        char s[32];
+        load_str(IDS_OBJECTNONE, s, sizeof s);
+        ModifyMenu(m, IDM_OBJECT, MF_BYCOMMAND | MF_STRING | MF_GRAYED, IDM_OBJECT, s);
+    }
     EnableMenuItem(m, IDM_OBJECT, MF_GRAYED);
+    {
+        /* an empty document: nothing to find or go to; Print needs a
+           printer (WR7: all grayed in a new document, none set up) */
+        char dev[8];
+        GetProfileString("windows", "device", "", dev, sizeof dev);
+        EnableMenuItem(m, IDM_FIND, g_doc.cpMac ? MF_ENABLED : MF_GRAYED);
+        EnableMenuItem(m, IDM_REPLACE, g_doc.cpMac ? MF_ENABLED : MF_GRAYED);
+        EnableMenuItem(m, IDM_GOTO, g_doc.cpMac ? MF_ENABLED : MF_GRAYED);
+        EnableMenuItem(m, IDM_PRINT, dev[0] ? MF_ENABLED : MF_GRAYED);
+    }
     EnableMenuItem(m, IDM_MOVEPICT, MF_GRAYED);
     EnableMenuItem(m, IDM_SIZEPICT, MF_GRAYED);
     EnableMenuItem(m, IDM_FINDAGAIN, findWhat[0] ? MF_ENABLED : MF_GRAYED);

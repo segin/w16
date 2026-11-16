@@ -273,16 +273,15 @@ int doc_load(DOC *d, LPCSTR path, BOOL *isText)
 }
 
 /* A text file (or a Word document's text, UNVERIFIED) as a Write
-   document: paragraphs at CR LF, default properties. */
+   document: paragraphs at CR LF, a new document's properties (Arial,
+   10 points: WR8 shows SETUP.TXT so). */
 int doc_load_text(DOC *d, LPCSTR path)
 {
     DWORD i, start = 0;
     int r = read_file(path);
     if (r != LOAD_OK)
         return r;
-    doc_init(d);
-    font_code(d, "Arial", FF_SWISS);    /* UNVERIFIED: the font converted
-                                           text gets */
+    doc_new(d);
     if (!hm_resize(&d->text, flen + 1024)) {
         hm_free(&fbuf);
         return LOAD_NOMEM;
@@ -296,7 +295,7 @@ int doc_load_text(DOC *d, LPCSTR path)
                 char buf[256];
                 WORD k = (WORD)(lim - o > sizeof buf ? sizeof buf : lim - o);
                 hm_get(&fbuf, o, buf, k);
-                doc_insert(d, d->cpMac, buf, k, 0);
+                doc_insert(d, d->cpMac, buf, k, d->chpNew);
                 o += k;
             }
             start = lim;

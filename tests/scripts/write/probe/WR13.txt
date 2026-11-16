@@ -1,0 +1,33 @@
+; WR13 (probe, the original only: tests/wrobs.sh): a header with a page
+; number and a footer, then saved, to see how headers and footers are
+; stored. Page Header's buttons are clicked at their places in the WR12
+; window dump: Insert Page # (170,257)-(282,280), Return to Document
+; (377,257)-(526,280).
+run WRITE.EXE
+wait 3000
+type Body text
+menu d
+char h
+wait 1500
+type Head
+mclick 226 268
+wait 800
+snap C:\H1.BMP
+mclick 450 268
+wait 1500
+snap C:\H2.BMP
+menu d
+char f
+wait 1500
+type Foot line
+mclick 450 268
+wait 1500
+snap C:\F1.BMP
+menu f
+char a
+wait 1500
+type C:\WR13.WRI
+key 0D
+wait 2000
+close
+wait 1000

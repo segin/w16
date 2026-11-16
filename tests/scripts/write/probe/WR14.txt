@@ -1,0 +1,18 @@
+; WR14 (probe, the original only): the vertical scroll bar's range and
+; position (SNAP info) in README.WRI at the top, after Page Down, after
+; Ctrl+End
+; files: README.WRI
+run WRITE.EXE C:\README.WRI
+wait 4000
+info
+key 22
+wait 1000
+info
+key 22
+wait 1000
+info
+ckey c 23
+wait 2000
+info
+close
+wait 1500

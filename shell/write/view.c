@@ -181,6 +181,19 @@ static void layout_line(DWORD cp, LINE *ln)
     ln->cpFirst = cp;
     ln->para = pi;
     ln->picture = FALSE;
+    if (pap.rhc & 6) {
+        /* a header or footer paragraph (SDK ch. 8, 8.3.1: rhc bits 1-2;
+           they come before the body, 8.3.2): not shown in the document
+           (UNVERIFIED: shown only in the Header/Footer views) */
+        ln->cpFirst = cp;
+        ln->cpLim = pl;
+        ln->paraEnd = TRUE;
+        ln->endMark = FALSE;
+        ln->xLeft = XP0;
+        ln->width = ln->height = ln->ascent = 0;
+        ln->nspaces = ln->extra = 0;
+        return;
+    }
     if (pap.fGraphics && pl <= g_doc.cpMac) {
         /* a picture: the whole paragraph, one line its height
            (UNVERIFIED: the original splits tall pictures into bands) */
@@ -825,10 +838,27 @@ void view_select(DWORD first, DWORD lim, BOOL show)
     caret_place();
 }
 
+/* the first character of the body: after the header and footer
+   paragraphs at the start (SDK ch. 8, 8.3.2) */
+static DWORD body_start(void)
+{
+    DWORD i, f, l;
+    ATOM32 a;
+    PAPX p;
+    for (i = 0; i + 1 < g_doc.nparas; i++) {
+        para_get(&g_doc, i, &f, &l, &a);
+        pap_decode(&g_doc, a, &p);
+        if (!(p.rhc & 6))
+            return f;
+    }
+    para_get(&g_doc, g_doc.nparas - 1, &f, &l, &a);
+    return f;
+}
+
 void view_reset(void)
 {
-    cpTop = 0;
-    g_selFirst = g_selLim = selAnchor = 0;
+    cpTop = body_start();
+    g_selFirst = g_selLim = selAnchor = cpTop;
     xpScroll = 0;
     g_insChpValid = FALSE;
     fonts_free();

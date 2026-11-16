@@ -133,6 +133,7 @@
 #define IDS_NOPATH          8220
 #define IDS_CANTSAVE        16390
 #define IDS_CANTPRINT       8226
+#define IDS_OBJECTNONE      32
 #define IDS_PAGE1           28672
 #define IDS_WRITE           28676
 #define IDS_UNTITLED        28677
@@ -211,6 +212,7 @@ typedef struct {                        /* decoded PAP */
 typedef struct {                        /* section (page layout) */
     WORD yaMac, xaMac;                  /* page size, twips */
     WORD pgnFirst;                      /* first page number */
+    WORD pgnRaw;                        /* as stored: FFFFh for the default */
     WORD yaTop, dyaText, xaLeft, dxaText;
     WORD yaHeader, yaFooter;            /* header/footer distance */
 } SEPX;
