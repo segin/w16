@@ -24,10 +24,12 @@ s=$root/tests/ddeml/scripts
 mkdir -p "$out"
 # NAME+x: the script with every "start X" made "startx X", so that the
 # other copies use the srv library (two libraries in one session)
-case $name in
-*+x) base=${name%+x}; sed 's/^start /startx /' "$s/$base.dm" ;;
-*)   base=$name; cat "$s/$name.dm" ;;
-esac | sed 's/$/\r/' > "$out/DM.TXT"
+base=${name%+x}
+if [ "$base" != "$name" ]; then
+    sed 's/^start /startx /' "$s/$base.dm"
+else
+    cat "$s/$name.dm"
+fi | sed 's/$/\r/' > "$out/DM.TXT"
 name=$base
 lib() { if [ "$1" = w16 ]; then echo "$dos/DDEML.DLL"; else echo "$ref"; fi; }
 cp "$(lib "$srv")" "$out/DDEMX.DLL"

@@ -176,6 +176,15 @@
 #              callbacks, the saved documents and the screens equal (the
 #              olecli case runs OC1's scenarios in all four OLECLI/OLESVR
 #              combinations)
+#   ddeml      w16's DDEML.DLL (ARCHITECTURE.md, DDEML), parts: tree286 and
+#              tree386, w16's install tree alone under its KRNL286 / KRNL386
+#              with DM.EXE as the shell (tests/ddeml/ddtree.sh: a DDEML
+#              server and client in two copies, then a DDEML client driving
+#              the tree's Program Manager), the log equal to the same tree
+#              with Microsoft's DDEML.DLL; and one part per DDEML scenario
+#              (tests/ddemlscen.sh NAME, NAME+x): on the reference install,
+#              w16's DDEML against Microsoft's in every client/server
+#              combination, the logs equal
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -607,7 +616,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc olecli olesvr ddeml treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2253,6 +2262,32 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   olesvr"
         else echo "FAIL olesvr: $r ($out)"; fails=$((fails + 1)); fi ;;
+    ddeml)
+        r=ok
+        case ${part:-tree286} in
+        tree286|tree386)
+            # DM.EXE as the shell of the install tree alone, with w16's
+            # DDEML and with Microsoft's: the same calls and callbacks
+            k=${part#tree}
+            d=$out/ddeml-$part
+            "$root/tests/ddeml/ddtree.sh" "$d-ms" ms "$k" > "$d-ms.txt" 2>&1 || true
+            "$root/tests/ddeml/ddtree.sh" "$d-w16" w16 "$k" > "$d-w16.txt" 2>&1 || true
+            for l in ms w16; do
+                [ -s "$d-$l/os.log" ] || { r="$l: no log ($d-$l.txt)"; break; }
+                grep -q '^A end' "$d-$l/os.log" || { r="$l: the script did not finish ($d-$l/os.log)"; break; }
+                python3 "$root/tests/ddeml/dmnorm.py" "$d-$l/os.log" > "$d-$l/os.cmp"
+            done
+            if [ "$r" = ok ] && ! diff "$d-ms/os.cmp" "$d-w16/os.cmp" > "$d.diff"; then
+                r="$part: the log differs from Microsoft's DDEML's ($d.diff)"
+            fi ;;
+        *)
+            "$root/tests/ddemlscen.sh" -o "$out/ddeml-$part" "$part" > "$out/ddeml-$part.txt" 2>&1 || true
+            grep -q '^== .*: ok' "$out/ddeml-$part.txt" && ! grep -q '^== .*FAIL\|no log' "$out/ddeml-$part.txt" ||
+                r="$part: $(grep -m1 'FAIL\|no log' "$out/ddeml-$part.txt" || echo 'no result') ($out/ddeml-$part)" ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   ddeml"
+        else echo "FAIL ddeml: $r ($out)"; fails=$((fails + 1)); fi ;;
     treek386)
         # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
         # under its own KRNL386 (-3: what DOSX starts on a 386, and what
@@ -3953,6 +3988,7 @@ caseparts() {
     runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
+    ddeml) printf '%s@tree286 %s@tree386 ' "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
@@ -4021,6 +4057,9 @@ partsummary() {
     olesvr)
         if [ $pbad = 0 ]; then echo "ok   olesvr: a Paintbrush picture embedded in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's OLESVR"
         else echo "FAIL olesvr: $pfirst ($out)"; fi ;;
+    ddeml)
+        if [ $pbad = 0 ]; then echo "ok   ddeml: DDEML in the tree under both kernels as with Microsoft's DDEML; $((pt - 2)) DDEML scenarios as with Microsoft's DDEML in every client/server combination"
+        else echo "FAIL ddeml: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;

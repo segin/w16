@@ -12,13 +12,25 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
 
 ## Status
 
-- [ ] probe DM.EXE (tests/ddeml/dm.c) + harness tests/ddeml/dmrun.sh
+- [x] probe DM.EXE (tests/ddeml/dm.c) + tests/ddeml/dmrun.sh + tests/ddemlscen.sh
+  (commits d19c0c2, fc59623). Run: `tools/remote-run.sh -n ddeml-agent -g
+  build/dmscen tests/ddemlscen.sh -o build/dmscen [NAME...]` (-n: ms only).
+  Scripts in tests/ddeml/scripts; NAME+x = other copies on the srv library
+  (DMX.EXE/DDEMX.DLL renamed copies). x*.dm = raw-value explorations, not
+  compared.
 - [ ] observations recorded (ARCHITECTURE.md new chapter "DDEML")
-- [ ] shell/ddeml/ implementation
+- [x] shell/ddeml/ first implementation (fc59623): inst.c hsz.c data.c conv.c
+  mon.c entry.asm ddeml.rc ddeml.lnk; builds, exports match (+ linker's
+  unnamed 40-42). NOT yet run: iterate on tests/ddemlscen.sh diffs.
 - [ ] tests/ddemlscen.sh (combos), progman scenario, boot cases
 - [ ] README.TXT, make test, full boot test
 
 ## Notes
+
+- PROBE BUG FIXED: OpenWatcom's ddeml.h declares DdeAccessData with a near
+  result; the probe's monitor/access output before fc59623 was garbage
+  (read its own DS). The probe now imports DDEACCESSDATAF = DDEML.17.
+- Status mask on callback results: r & 0xC00F (80F7->8007, 4155->4005).
 
 ### Observed on 3.1 (explore1, raw values)
 - idInst = MAKELONG(near ptr/handle of instance data, counter) e.g. 000202C0,

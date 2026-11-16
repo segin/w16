@@ -45,6 +45,11 @@ w16 repository's LICENSE):
                           e.g. your Paintbrush
   SYSTEM\OLESVR.DLL       the OLE server library, which programs such
                           as Paintbrush use to serve those objects
+  SYSTEM\DDEML.DLL        the DDE Management Library: conversations,
+                          transactions and advise loops between
+                          programs through dynamic data exchange, for
+                          programs that use DDEML instead of DDE
+                          messages
   SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
                           Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
