@@ -153,6 +153,7 @@ typedef struct {
     BOOL paraEnd;                       /* last line of its paragraph */
     BOOL picture;                       /* a picture paragraph */
     int yp, picH;                       /* a picture's band: its first row, the picture's height */
+    BOOL pageBreak;                     /* a page break (character 12) alone */
 } LINE;
 
 /* Tall pictures are laid out in bands, lines of BAND pixels (the last one
@@ -205,6 +206,7 @@ static void layout_line(DWORD cp, LINE *ln)
     ln->para = pi;
     ln->picture = FALSE;
     ln->yp = ln->picH = 0;
+    ln->pageBreak = FALSE;
     if ((pap.rhc & 6) && !hf_mode()) {
         /* a header or footer paragraph (SDK ch. 8, 8.3.1: rhc bits 1-2;
            they come before the body, 8.3.2): not shown in the document
@@ -274,6 +276,16 @@ static void layout_line(DWORD cp, LINE *ln)
                 c++;
             c++;
             ln->paraEnd = TRUE;
+            break;
+        }
+        if (ch == 12) {
+            /* a page break (Ctrl+Enter) ends its paragraph and has a
+               line of its own: the text before it ends there (WR21) */
+            if (c == cp) {
+                c++;
+                ln->paraEnd = TRUE;
+                ln->pageBreak = TRUE;
+            }
             break;
         }
         if (ch == '\t')
@@ -386,6 +398,13 @@ static DWORD line_start(DWORD cp)
             return s;
         s = ln.cpLim;
     }
+}
+
+/* the length of the paragraph mark that ends at lim: CR LF, or a page
+   break (character 12) */
+static DWORD mark_len(DWORD lim)
+{
+    return lim > 0 && doc_ch(&g_doc, lim - 1) == 12 ? 1 : 2;
 }
 
 /* the line at (cp, yp): yp is the band's first row in a picture */
@@ -541,7 +560,9 @@ static void caret_place(void)
             caretX = x_of(&l[i], g_selFirst) - CARET_W + 1;   /* WR1 */
             caretY = y;
             caretH = l[i].height;
-            caretShown = TRUE;
+            /* before a page break 3.1 shows no caret (WR21: after Up onto
+               it and after typing there; UNVERIFIED: where it is) */
+            caretShown = !l[i].pageBreak;
             break;
         }
         y += l[i].height;
@@ -665,7 +686,7 @@ static void paint_line(HDC dc, const LINE *ln, int y)
         /* a piece: same run, no tab, no paragraph mark */
         while (c + n < lim && c + n < rl && n < sizeof buf) {
             BYTE ch = doc_ch(&g_doc, c + n);
-            if (ch == '\t' || ch == '\r' || ch == '\n' || ch == 1)
+            if (ch == '\t' || ch == '\r' || ch == '\n' || ch == 1 || ch == 12)
                 break;
             buf[n++] = ch;
         }
@@ -704,6 +725,20 @@ static void paint_line(HDC dc, const LINE *ln, int y)
     }
     if (ln->endMark)
         end_mark(dc, x, y + ln->ascent);
+    if (ln->pageBreak) {
+        /* a dotted line, 2 rows of 2 pixels on and 2 off, from a pixel
+           right of the text's left edge to the window's right edge, its
+           rows 2 and 1 above the baseline (WR21 with Arial 10; other
+           fonts UNVERIFIED) */
+        RECT cr, q;
+        int xx;
+        HBRUSH b = GetStockObject(BLACK_BRUSH);
+        GetClientRect(g_docwnd, &cr);
+        for (xx = XP0 + 1 - xpScroll; xx < cr.right; xx += 4) {
+            SetRect(&q, xx, y + ln->ascent - 2, xx + 2 > cr.right ? cr.right : xx + 2, y + ln->ascent);
+            FillRect(dc, &q, b);
+        }
+    }
     }
 }
 
@@ -860,7 +895,7 @@ static DWORD cp_from_point(int x, int y)
         if (y < yy + l[i].height || i + 1 == nlines) {
             DWORD lim = l[i].cpLim;
             if (l[i].paraEnd && lim > l[i].cpFirst && !l[i].endMark)
-                lim -= 2;               /* before the paragraph mark */
+                lim -= mark_len(lim);   /* before the paragraph mark */
             if (lim > g_doc.cpMac)
                 lim = g_doc.cpMac;
             cp = l[i].cpFirst;
@@ -1102,7 +1137,7 @@ void view_char(WORD ch)
 
 static void view_char2(WORD ch, char *s)
 {
-    if (ch >= ' ' || ch == '\t' || ch == '\r' || ch == '\b')
+    if (ch >= ' ' || ch == '\t' || ch == '\r' || ch == '\n' || ch == '\b')
         undo_save(IDS_TYPING);
     if (ch == '\b') {
         if (g_selLim > g_selFirst) {
@@ -1122,6 +1157,10 @@ static void view_char2(WORD ch, char *s)
     }
     if (ch == '\r') {
         replace_sel("\r\n", 2);
+        return;
+    }
+    if (ch == '\n') {                   /* Ctrl+Enter: a page break (WR21) */
+        replace_sel("\f", 1);
         return;
     }
     if (ch < ' ' && ch != '\t')
@@ -1156,7 +1195,7 @@ static DWORD cp_at_x(DWORD s, int x)
     layout_line(s, &ln);
     lim = ln.cpLim;
     if (ln.paraEnd && !ln.endMark && lim >= 2)
-        lim -= 2;
+        lim -= mark_len(lim);
     if (lim > g_doc.cpMac)
         lim = g_doc.cpMac;
     for (c = s; c < lim; c++) {
@@ -1247,7 +1286,7 @@ void view_key(WPARAM vk)
             layout_line(line_start(cp), &ln);
             to = ln.cpLim;
             if (ln.paraEnd && !ln.endMark)
-                to -= 2;
+                to -= mark_len(to);
             if (to > g_doc.cpMac)
                 to = g_doc.cpMac;
         }

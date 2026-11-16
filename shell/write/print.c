@@ -105,7 +105,7 @@ static DWORD do_line(PDEV *p, DWORD cp, DWORD pf, DWORD pl, const PAPX *pap, int
         CHPX chp;
         BYTE ch = doc_ch(&g_doc, c);
         int w;
-        if (ch == '\r' || ch == '\n') {
+        if (ch == '\r' || ch == '\n' || ch == 12) {
             c = c + 1 < lim && ch == '\r' ? c + 2 : c + 1;
             brk = 0;
             break;
@@ -247,6 +247,16 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
             if (next <= cp)
                 break;
             cp = next;
+        }
+        /* a page break (character 12) ends its paragraph: the next one
+           starts a page (UNVERIFIED against 3.1, which has no printer
+           in the reference install) */
+        if (pl > pf && pl <= g_doc.cpMac && doc_ch(&g_doc, pl - 1) == 12 && pl < g_doc.cpMac) {
+            if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
+                return FALSE;
+            y = 0;
+            if (page)
+                page(++pgn, pl);
         }
     }
     release_font(p);

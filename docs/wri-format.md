@@ -285,6 +285,7 @@ pixel left of where text starts.
 ## Not yet observed (plan)
 
 Linked objects (Paste Link), Write 3.0 pictures, page breaks inserted by
-Repaginate,
+Repaginate (a manual page break, Ctrl+Enter, is character 12 ending its
+paragraph, the paragraph's fcLim right after it: WR21),
 decimal tabs, the 3.0 Write save format and Word for DOS output. Each
 gets a WR probe; this file grows with them.
