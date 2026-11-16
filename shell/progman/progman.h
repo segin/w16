@@ -149,6 +149,7 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_EXECNOTFOUND    27
 #define IDS_NOASSOCRUN      28  /* starting a document without one */
 #define IDS_EXECDENIED      29  /* error 5 */
+#define IDS_EXECWIN32       30  /* error 21: a 32-bit program, no Win32s */
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;

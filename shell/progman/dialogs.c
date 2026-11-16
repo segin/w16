@@ -158,6 +158,17 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
         mem_free(line);
         return FALSE;
     }
+    if (r == 21) {
+        /* a 32-bit program (a PE file) and no Win32s: w16's KERNEL gives
+           21 for it with [w16] PEError=1 (its default; kernel/loader.c).
+           Windows 3.1's ShellExecute runs the program's MS-DOS stub
+           instead, and Program Manager 3.1, given a 21 (by w16's KERNEL),
+           says "Unexpected DOS error: 21." in this box: the text is w16's
+           own */
+        exec_error(owner, run, IDS_EXECWIN32, line);
+        mem_free(line);
+        return FALSE;
+    }
     if (r < 32) {
         message(owner, IDS_EXECFAIL, cmd);
         mem_free(line);
