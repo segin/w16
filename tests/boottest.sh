@@ -234,6 +234,14 @@
 #              TrueType, Write's text is Arial): identical screens, leaving
 #              out the caret (it blinks) and in the save box the Yes button
 #              (w16's MessageBox puts it 2 pixels right: UNVERIFIED rule)
+#   w16write   w16's Write (WRITE.EXE, WIN.INI run=) under real keys
+#              (tests/scripts/input/w16write.txt: typing, the Character,
+#              Paragraph and Edit menus, Ctrl+B, Centered, Exit without
+#              saving), carets not blinking: against Microsoft's Write on
+#              all-Microsoft 3.1, w16's on all-Microsoft (part ms), on w16's
+#              KRNL286 (k286) and KRNL386 (k386): every screen identical;
+#              w16's install tree alone under its KRNL386 against the same
+#              under its KRNL286 (tree; no TrueType there)
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without
@@ -555,7 +563,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write w16write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1508,6 +1516,50 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    w16write)
+        s=$root/tests/scripts/input/w16write.txt
+        r=ok
+        wrcmp() {   # wrcmp REFDIR W16DIR NAME
+            for f in "$1"/[0-9]*.png; do
+                sn=$(basename "$f")
+                [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                n=$(magick compare -metric AE "$2/$sn" "$f" "$out/w16write-$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+            done
+            ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
+        }
+        for pk in ${part:-ms k286 k386 tree}; do
+            case $pk in
+            tree)
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=WRITE.EXE' -i 'WIN.INI:windows:CursorBlinkRate=65535'
+                rm -rf "$out/w16write-t286" "$out/w16write-t386"
+                "$root/tests/inputrun.sh" -s -b 40 -t 240 "$s" "$out/w16write-t286" "$@" \
+                    > "$out/w16write-t286.txt" 2>&1 || true
+                "$root/tests/inputrun.sh" -e "$out/w16write-t286/boot.png" -E "$out/w16write-t286" -b 40 -t 240 \
+                    "$s" "$out/w16write-t386" "$@" -3 > "$out/w16write-t386.txt" 2>&1 || true
+                wrcmp "$out/w16write-t286" "$out/w16write-t386" tree ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/w16write-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/w16write-WIN.INI" 'windows:run=WRITE.EXE' 'windows:CursorBlinkRate=65535'
+                refrun w16write-ref w16write "$root/tests/inputrun.sh" -s -b 25 -t 240 "$s" "$out/w16write-ref" -r \
+                    -f "$out/w16write-WIN.INI=WINDOWS/WIN.INI"
+                case $pk in
+                ms)   set -- -r ;;
+                k286) set -- ;;
+                k386) set -- -3 ;;
+                esac
+                rm -rf "$out/w16write-$pk"
+                "$root/tests/inputrun.sh" -e "$out/w16write-ref/boot.png" -E "$out/w16write-ref" -b 25 -t 240 \
+                    "$s" "$out/w16write-$pk" "$@" -f "$out/w16write-WIN.INI=WINDOWS/WIN.INI" \
+                    -f "$root/build/dos/WRITE.EXE=WINDOWS/WRITE.EXE" > "$out/w16write-$pk.txt" 2>&1 || true
+                wrcmp "$out/w16write-ref" "$out/w16write-$pk" "$pk" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   w16write: 0 pixels"
+        else echo "FAIL w16write: $r ($out)"; fails=$((fails + 1)); fi ;;
     write)
         s=$root/tests/scripts/input/write.txt
         cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/write-WIN.INI"
@@ -3475,6 +3527,7 @@ caseparts() {
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
+    w16write) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
     mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;

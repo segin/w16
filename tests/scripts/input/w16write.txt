@@ -1,0 +1,50 @@
+; w16's Write against 3.1's (tests/boottest.sh w16write; WIN.INI run=
+; WRITE.EXE): a line typed, the Character and Paragraph menus, Bold with
+; Ctrl+B and more text, Centered, a second line, the Edit menu, File >
+; Exit and No to saving (real keys, tests/inputrun.sh). The pointer goes
+; to the desktop under Write's window first, so that it is an arrow in
+; every screen. The carets' places are left out (the write case's masks).
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+matchnow 01-start 20 1
+type Hello from w16
+matchnow 02-typed 20 1
+key alt+c
+matchnow 03-character 20 1.5
+key Escape
+key Escape
+sleep 0.5
+key alt+p
+matchnow 04-paragraph 20 1.5
+key Escape
+key Escape
+sleep 0.5
+key ctrl+b
+key space
+type bold
+matchnow 05-bold 20 1
+key alt+p
+sleep 0.5
+key c
+matchnow 06-centered 20 1.5
+key Return
+type Second line
+matchnow 07-second 20 1
+key alt+e
+matchnow 08-edit 20 1.5
+key Escape
+key Escape
+sleep 0.5
+key alt+f
+sleep 0.5
+key x
+matchnow 09-save 20 1.5
+key n
+matchnow 10-closed 20 2

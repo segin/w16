@@ -2,8 +2,8 @@
 ; holding only w16's install tree as C:\W16 (tests/boottest.sh w16groups):
 ; Main's Read Me item opens README.TXT in Notepad (its association), Notepad
 ; closed; the minimised Accessories group restored (Ctrl+Tab twice from
-; Main: Main, StartUp, Accessories is the z-order), its Notepad item run
-; and closed, then its Calculator item (two to the right) run and closed;
+; Main: Main, StartUp, Accessories is the z-order), its Notepad item (the
+; second, after Write) run and closed, then its Calculator item (two to the right) run and closed;
 ; then Windows ended (File > Exit, Enter), which saves the groups.
 ; Run with Microsoft's PROGMAN.EXE and with w16's on the same tree: the
 ; screens must be the same (the minimised groups' own pictures left out)
@@ -27,6 +27,8 @@ sleep 1
 key Return
 match 04-accessories 20 3
 shot 04-accessories
+key Right
+sleep 0.5
 markcolor 0000aa
 key Return
 waitmoved 0000aa 500 30
