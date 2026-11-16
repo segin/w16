@@ -1,0 +1,15 @@
+run PROGMAN.EXE
+connect
+; the command block as the ACK returns it (TDDE logs it: block="..."):
+; 3.1 writes a NUL at the end of each argument of a known command
+exec [CreateGroup(Blk A)]
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(NOTEPAD.EXE,Note Pad)]
+exec [AddItem(C:\WINDOWS\CALC.EXE,Calc,C:\WINDOWS\CALC.EXE,0,96,0,C:\WINDOWS,0,1)]
+exec [AddItem("WRITE.EXE README.WRI","Read, Me")]
+exec  [ReplaceItem(Calc)] [AddItem( CLOCK.EXE , Clock )]
+exec [Bogus(x,y)]
+exec [DeleteItem(Nope)]
+exec [CreateGroup("Blk B",BLKB.GRP)][ShowGroup("Blk B",2)]
+exec [DeleteGroup(Blk B)][DeleteGroup(Blk A)]
+disconnect
