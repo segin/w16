@@ -88,11 +88,17 @@ int run_dialog(HWND owner, FARPROC proc, int id)
    (w16: IDS_EXECFAIL). */
 static void exec_error(HWND owner, BOOL run, int ids, const char FAR *arg)
 {
+    /* hidden with SetWindowPos, which leaves the activation alone (the
+       box takes it; ShowWindow would hand it to another window first) */
     if (run)
-        ShowWindow(owner, SW_HIDE);
+        SetWindowPos(owner, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE |
+                     SWP_NOSIZE | SWP_NOZORDER);
     ask(owner, IDS_EXECERROR, ids, arg, MB_OK | MB_ICONEXCLAMATION | MB_SYSTEMMODAL);
-    if (run)
-        ShowWindow(owner, SW_SHOW);
+    if (run) {
+        SetWindowPos(owner, 0, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOZORDER);
+        SetActiveWindow(owner);
+    }
 }
 
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized,
