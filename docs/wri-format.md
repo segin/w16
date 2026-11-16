@@ -99,9 +99,14 @@ rebuild`):
 - CHP runs: neighbours with equal properties are merged; every FOD has
   its own FPROP, even when an earlier FOD of the page has the same bytes.
 - PAP runs: one FOD per paragraph (equal neighbours are not merged). A
-  FOD whose FPROP bytes equal the page's last stored FPROP shares it;
-  equal bytes further back are stored again (NETWORKS.WRI). UNVERIFIED:
-  whether a default FOD in between ends the sharing.
+  FOD whose FPROP bytes equal the previous FOD's shares its FPROP; equal
+  bytes further back, or after a default (FFFFh) FOD, are stored again
+  (NETWORKS.WRI, WR6).
+- CHP runs are merged as they stand in the original's piece table, which
+  is not always the merged form: a document saved right after pasting a
+  picture has one run where the re-saved document has three (WR6). On
+  loading, the 40-byte header of each picture paragraph gets the default
+  character properties (FFFFh) when the document is saved again.
 - FODs fill from byte 4 up, FPROPs from byte 126 down; the next FOD goes
   to a new page when its 6 bytes plus its FPROP (1 + cch, unless shared)
   no longer fit between them.
@@ -210,8 +215,49 @@ between saves of the same document, so no writer can match them, and
 middle of every FKP page; each SEP, SETB, PGTB and FFNTB page after its
 structure. w16's Write writes zeros there.
 
+## Pictures and OLE objects
+
+A picture is a paragraph of its own: PAP byte 0 3Dh, byte 16 bit 10h
+set (cch 17 in WR7). Its text is a 40-byte header followed by the data,
+with no CR LF: the PAP FOD alone ends it. Pasting a bitmap (CF_DIB and
+CF_BITMAP on the clipboard) or a metafile picture into 3.1's Write stores
+an OLE object even when no server is involved (WR7), and the header's
+wIdent becomes BE32h. Header, as seen for objects:
+
+| offset | size | |
+|---|---|---|
+| 0 | word | mm: E4h for an OLE object (88h a bitmap and 1-8 a metafile's mapping mode in Write 3.0 pictures: UNVERIFIED, from the shape of the header) |
+| 2 | word | xExt (0 for objects) |
+| 4 | word | yExt (0) |
+| 6 | word | 1 |
+| 8 | word | horizontal offset from the left indent (0) |
+| 10 | word | width shown, twips (608 for a 40-pixel DIB; 2874 for a 2 x 1 inch metafile: how they are derived from the object's HIMETRIC size is UNVERIFIED) |
+| 12 | word | height shown, twips (295; 1437) |
+| 14 | word | 0 |
+| 16 | dword | size of the data after the header |
+| 20 | dword | 0 |
+| 24 | dword | an object number, different in every session (6AF16C57h, then +4 for the next object): undefined for comparisons |
+| 28 | word | 0 |
+| 30 | word | header size, 40 |
+| 32 | word | 0 |
+| 34 | word | varies between objects (10BFh, 10B7h; UNVERIFIED: a handle) |
+| 36 | word | horizontal scale, per mille (1000) |
+| 38 | word | vertical scale (1000) |
+
+The data is what OLECLI's OleSaveToStream writes: dword 0501h (OLE
+version), dword format (3 static; 2 embedded and 1 linked, UNVERIFIED
+until the Insert Object probe), dword length and the class name with its
+NUL ("DIB", "METAFILEPICT"), dword width and dword height in HIMETRIC
+(height negative: 1058 x -529 for 40 x 20 pixels), dword size, then the
+data: a packed DIB (its size rounded up to the global block's, 512 for
+504 bytes of DIB); for METAFILEPICT the 16-bit METAFILEPICT (mm 8, xExt
+5080, yExt 2540, a stale hMF word) and the metafile's bits. On screen the
+picture is as wide and tall as the twips say (rounded to pixels), a
+pixel left of where text starts.
+
 ## Not yet observed (plan)
 
-Pictures (metafile, bitmap), OLE objects, headers and footers, page
-breaks inserted by Repaginate, decimal tabs, the 3.0 Write save format and
-Word for DOS output. Each gets a WR probe; this file grows with them.
+Embedded and linked objects (Insert Object, Paste Link), Write 3.0
+pictures, headers and footers, page breaks inserted by Repaginate,
+decimal tabs, the 3.0 Write save format and Word for DOS output. Each
+gets a WR probe; this file grows with them.

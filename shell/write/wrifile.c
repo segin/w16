@@ -106,6 +106,14 @@ static void emit_ent(DOC *d, DWORD lim, ATOM32 a)
     (*emit_n)++;
 }
 
+static ATOM32 chp_default_atom(DOC *d, ATOM32 a, WORD unused)
+{
+    (void)d;
+    (void)a;
+    (void)unused;
+    return 0;                           /* atom 0: no bytes, FFFFh */
+}
+
 int doc_load(DOC *d, LPCSTR path, BOOL *isText)
 {
     WORD pnPara, pnFntb, pnSep, pnSetb, pnPgtb, pnFfntb, pnMac, pnChar;
@@ -243,6 +251,23 @@ int doc_load(DOC *d, LPCSTR path, BOOL *isText)
         d->hasFfntb = TRUE;
     }
     hm_free(&fbuf);
+    /* the header of every picture has the default character properties
+       once loaded (WR6: the original's re-save writes FFFFh for those 40
+       bytes even when the file had them in a text run) */
+    for (i = 0; i < d->nparas; i++) {
+        DWORD pf, pl;
+        ATOM32 pa;
+        PAPX p;
+        para_get(d, i, &pf, &pl, &pa);
+        pap_decode(d, pa, &p);
+        if (p.fGraphics && pl <= d->cpMac && pl >= pf + 40) {
+            WORD cbh = 0;
+            doc_get(d, pf + 30, (char FAR *)&cbh, 2);
+            if (cbh < 40 || pf + cbh > pl)
+                cbh = 40;
+            doc_set_chp(d, pf, pf + cbh, chp_default_atom, 0);
+        }
+    }
     d->dirty = FALSE;
     return LOAD_OK;
 }
@@ -326,6 +351,7 @@ static void write_fkps(DOC *d, HMEM *tab, DWORD n, BOOL chp)
                 break;
             if (!len) {
                 bf = 0xFFFF;
+                lastLen = -1;           /* a default FOD ends the sharing (WR6) */
             } else if (share) {
                 bf = lastBf;
             } else {

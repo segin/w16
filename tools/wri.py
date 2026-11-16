@@ -99,6 +99,14 @@ class Doc:
             r.append((self.pnPgtb * PAGE + 4 + 6 * w(self.page(self.pnPgtb), 0), self.pnFfntb * PAGE))
         if self.pnFfntb != self.pnMac:
             r.append((self.ffntb_end(), self.pnMac * PAGE))
+        # OLE objects: header word 34 changes with every save (WR6)
+        fc = PAGE
+        for _, _, fods in self.paps():
+            for fcl, _, pr in fods:
+                if pr and len(pr) > 16 and pr[16] & 0x10 and fc + 36 <= self.fcMac \
+                        and w(self.data, fc) == 0xE4:
+                    r.append((fc + 34, fc + 36))
+                fc = fcl
         return r
 
     def ffntb_end(self):
@@ -237,7 +245,7 @@ def build_fkps(fcFirst, runs, merge):
     only), FODs from byte 4 up, FPROPs packed down from byte 127; a PAP
     FOD whose FPROP has the same bytes as the last FPROP stored in the page
     shares it (identical FPROPs further back are stored again, NETWORKS.WRI;
-    UNVERIFIED: whether a default FOD in between breaks the sharing), each
+    a default FOD in between ends the sharing, WR6), each
     CHP FOD has its own (merge implies CHP); a new page
     when the next FOD (and its FPROP if new) no longer fits; the next
     page's fcFirst is the last fcLim before it."""
@@ -267,6 +275,7 @@ def build_fkps(fcFirst, runs, merge):
                 break
             if pr is None:
                 bf = 0xFFFF
+                last = None             # a default FOD ends the sharing (WR6)
             elif pr == last and not merge:
                 bf = lastbf
             else:
