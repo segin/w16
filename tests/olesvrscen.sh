@@ -67,8 +67,15 @@ for n in $names; do
             b=$(basename "$bmp")
             if [ ! -f "$d/$b" ]; then
                 result="FAIL (no $b)"
-            elif command -v compare > /dev/null; then
-                px=$(compare -metric AE "$bmp" "$d/$b" "$d/${b%.BMP}-diff.png" 2>&1 | cut -d' ' -f1 | cut -d. -f1 || true)
+            elif command -v magick > /dev/null; then
+                # NAME.mask: ImageMagick -draw primitives painted black on
+                # both shots first (what differs by nature: a caret's blink)
+                mask=
+                if [ -f "$s/$n.mask" ]; then mask=$(cat "$s/$n.mask"); fi
+                magick "$bmp" -fill black -draw "${mask:-point 0,0}" "$d/${b%.BMP}-ref.png"
+                magick "$d/$b" -fill black -draw "${mask:-point 0,0}" "$d/${b%.BMP}-run.png"
+                px=$(magick compare -metric AE "$d/${b%.BMP}-ref.png" "$d/${b%.BMP}-run.png" \
+                    "$d/${b%.BMP}-diff.png" 2>&1 | cut -d' ' -f1 | cut -d. -f1 || true)
                 [ "$px" = 0 ] || result="FAIL ($b: $px pixels differ)"
             elif ! cmp -s "$bmp" "$d/$b"; then
                 result="FAIL ($b differs)"
