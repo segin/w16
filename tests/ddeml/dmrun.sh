@@ -22,7 +22,13 @@ dos=$root/build/dos
 ref=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/DDEML.DLL
 s=$root/tests/ddeml/scripts
 mkdir -p "$out"
-sed 's/$/\r/' "$s/$name.dm" > "$out/DM.TXT"
+# NAME+x: the script with every "start X" made "startx X", so that the
+# other copies use the srv library (two libraries in one session)
+case $name in
+*+x) base=${name%+x}; sed 's/^start /startx /' "$s/$base.dm" ;;
+*)   base=$name; cat "$s/$name.dm" ;;
+esac | sed 's/$/\r/' > "$out/DM.TXT"
+name=$base
 lib() { if [ "$1" = w16 ]; then echo "$dos/DDEML.DLL"; else echo "$ref"; fi; }
 cp "$(lib "$srv")" "$out/DDEMX.DLL"
 python3 "$root/tools/nerename.py" "$out/DDEMX.DLL" --module DDEMX > /dev/null

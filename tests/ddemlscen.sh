@@ -28,18 +28,36 @@ while getopts o:c:n opt; do
 done
 shift $((OPTIND - 1))
 s=$root/tests/ddeml/scripts
-names=${*:-$(cd "$s" && ls *.dm | grep -v "^x" | sed "s/\.dm$//")}
-combos="ms-ms $combos"
+# every script, and NAME+x for those that start other copies (those
+# copies then use the server library; tests/ddeml/dmrun.sh)
+if [ $# = 0 ]; then
+    names=
+    for f in $(cd "$s" && ls *.dm | grep -v "^x"); do
+        n=${f%.dm}
+        names="$names $n"
+        if grep -q '^start ' "$s/$f"; then names="$names $n+x"; fi
+    done
+else
+    names=$*
+fi
+allcombos="ms-ms $combos"
 mkdir -p "$out"
 echo "ddemlscen: $out"
-for c in $combos; do
-    for n in $names; do echo "$n $c"; done
+# a script that starts no other copy uses one library: CLIENT only
+combos_of() {
+    case $1 in
+    *+x) echo "$allcombos" ;;
+    *)   for c in $allcombos; do case $c in *-ms) echo "$c" ;; esac; done ;;
+    esac
+}
+for n in $names; do
+    for c in $(combos_of "$n"); do echo "$n $c"; done
 done | xargs -P "${DDEMLSCEN_JOBS:-6}" -L 1 sh -c \
     'c=$3; "$0/tests/ddeml/dmrun.sh" "$2" "$1/$2-$c" "${c%-*}" "${c#*-}" > /dev/null 2>&1 || true' \
     "$root" "$out"
 status=0
 for n in $names; do
-    for c in $combos; do
+    for c in $(combos_of "$n"); do
         d=$out/$n-$c
         if [ -s "$d/os.log" ]; then
             python3 "$root/tests/ddeml/dmnorm.py" "$d/os.log" > "$d/os.cmp"
@@ -48,7 +66,7 @@ for n in $names; do
         fi
     done
     ref=$out/$n-ms-ms
-    for c in $combos; do
+    for c in $(combos_of "$n"); do
         [ "$c" = ms-ms ] && continue
         d=$out/$n-$c
         result=ok
@@ -57,8 +75,8 @@ for n in $names; do
         elif ! diff "$ref/os.cmp" "$d/os.cmp" > "$d/os.diff"; then
             result="FAIL (log differs: $d/os.diff)"
         fi
-        if [ -f "$s/$n.get" ]; then
-            for f in $(cat "$s/$n.get"); do
+        if [ -f "$s/${n%+x}.get" ]; then
+            for f in $(cat "$s/${n%+x}.get"); do
                 b=$(basename "$f")
                 if [ ! -f "$ref/$b" ] || ! cmp -s "$ref/$b" "$d/$b"; then
                     result="FAIL ($b differs)"

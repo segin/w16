@@ -48,6 +48,9 @@
 #include <ddeml.h>
 #include "../olesvr/osspy.h"
 
+/* the OpenWatcom header declares a near result; the SDK has BYTE FAR * */
+extern BYTE FAR * FAR PASCAL DdeAccessDataF(HDDEDATA, DWORD FAR *);
+
 #define P OsPrintf
 
 extern WORD __cdecl init_regs[7];
@@ -642,7 +645,7 @@ static void monitor(HDDEDATA hd, DWORD ev)
             GlobalUnlock((HGLOBAL)LOWORD(hd));
         }
     }
-    p = DdeAccessData(hd, &cb);
+    p = DdeAccessDataF(hd, &cb);
     if (!p) {
         P("%c mon ev=%lx no data", letter, ev);
         return;
@@ -1263,7 +1266,7 @@ static void step(char *l)
     } else if (eq(w, "access")) {
         HDDEDATA d = (HDDEDATA)svalue('d', tok(&a, NULL));
         DWORD cb = 0xFFFFL;
-        LPBYTE p = DdeAccessData(d, &cb);
+        LPBYTE p = DdeAccessDataF(d, &cb);
         P("%c DdeAccessData(%s) -> %s size=%lu %q", letter, (LPSTR)sname('d', (DWORD)d),
           (LPSTR)(p ? "ptr" : "NULL"), cb, p ? (LPSTR)p : (LPSTR)"");
         if (p && rawvals)

@@ -1,0 +1,50 @@
+/*
+ * ddeml.rc - DDEML.DLL's resources: the termination dialog as Windows
+ * 3.1's DDEML has it (its layout, IDs and text are interface facts read
+ * with tools/nedlg.py; ARCHITECTURE.md 3, "format facts"; "Windows" in
+ * the caption and texts is rebranded "w16", ARCHITECTURE.md 3), and
+ * w16's version resource.
+ */
+#include <windows.h>
+
+TERMDIALOG DIALOG 91, 34, 181, 137
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_SYSMODAL
+CAPTION "w16 DDE"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "An application using DDE did not respond to the system's exit command.", 101, 7, 7, 168, 23
+    LTEXT "Choose Retry to attempt to close the application and return to w16.", 102, 27, 32, 148, 24
+    LTEXT "Choose Continue to repeatedly attempt to close the application and return to w16.", 103, 27, 58, 148, 24
+    LTEXT "Choose Close to exit the application that is not responding.  You may lose any unsaved information in this application.", 104, 27, 84, 148, 24
+    DEFPUSHBUTTON "Retry", 4, 15, 117, 40, 14
+    PUSHBUTTON "Continue", 5, 70, 117, 40, 14
+    PUSHBUTTON "Close", 3, 125, 117, 40, 14
+    LTEXT "*", 108, 21, 33, 6, 24
+    LTEXT "*", 109, 21, 59, 6, 24
+    LTEXT "*", 110, 21, 85, 6, 24
+END
+1 VERSIONINFO
+FILEVERSION 3, 10, 0, 0
+PRODUCTVERSION 3, 10, 0, 0
+FILEOS 0x10001L
+FILETYPE 2
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName", "w16 project\0"
+            VALUE "FileDescription", "DDE Management Library\0"
+            VALUE "FileVersion", "3.10\0"
+            VALUE "InternalName", "DDEML\0"
+            VALUE "LegalCopyright", "MIT licence, see the w16 repository\0"
+            VALUE "OriginalFilename", "DDEML.DLL\0"
+            VALUE "ProductName", "w16\0"
+            VALUE "ProductVersion", "3.10\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

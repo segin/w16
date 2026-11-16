@@ -20,6 +20,14 @@ xact c1 request Item CF_TEXT - async
 xact c1 request Item CF_TEXT - async
 xact c3 request Item CF_TEXT - async
 wait 300
+xact c1 poke Item CF_TEXT text:p async
+xact c1 exec 0 CF_TEXT text:[e] async
+wait 300
+connlist Svc 0
+wins
+B: wins
+next l1
+disclist l1
 mkdata d1 abc Item CF_TEXT
 mkdata d2 abc Item CF_TEXT own
 access d2

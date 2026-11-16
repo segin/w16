@@ -8,4 +8,6 @@ import _OsPrintf OSSPY.3
 import OSDUMPDATA OSSPY.4
 import OSSETQUIET OSSPY.5
 import OSSPYSENT OSSPY.10
+# the OpenWatcom header gives DdeAccessData a near result: the SDK's far one
+import DDEACCESSDATAF DDEML.17
 library ddeml.lib
