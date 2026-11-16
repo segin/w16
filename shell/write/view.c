@@ -1201,6 +1201,9 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_SETFOCUS:
+        /* back from a dialog the caret stays off until it blinks (WR1,
+           WR4: none after Save As or Page Layout) */
+        caretDefer = TRUE;
         SetTimer(w, TIMER_CARET, GetCaretBlinkTime(), NULL);
         caret_place();
         return 0;

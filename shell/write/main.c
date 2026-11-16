@@ -473,6 +473,11 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_HSCROLL:
         SendMessage(g_docwnd, WM_HSCROLL, wp, lp);
         return 0;
+    case WM_INITMENU:
+        /* the caret shows when a menu is entered (WR3, w16write: the
+           caret that typing left off is there with the menu open) */
+        view_caret_now();
+        return 0;
     case WM_INITMENUPOPUP:
         if (!HIWORD(lp))
             menu_update((HMENU)wp);
@@ -550,6 +555,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
     }
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
+    view_caret_now();
     while (GetMessage(&m, NULL, 0, 0)) {
         /* Ctrl+B, I, U, Z, X, C, V are character accelerators, but a
            character without Ctrl down is typed: Tab is 09h like Ctrl+I

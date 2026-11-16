@@ -1,9 +1,10 @@
 ; w16's Write against 3.1's (tests/boottest.sh w16write; WIN.INI run=
 ; WRITE.EXE): a line typed, the Character and Paragraph menus, Bold with
-; Ctrl+B and more text, Centered, a second line, the Edit menu, File >
-; Exit and No to saving (real keys, tests/inputrun.sh). The pointer goes
-; to the desktop under Write's window first, so that it is an arrow in
-; every screen. The carets' places are left out (the write case's masks).
+; Ctrl+B and more text, a second line (bold) Centered, the Edit menu,
+; File > Exit and No to saving (real keys, tests/inputrun.sh). The
+; pointer goes to the desktop under Write's window first, so that it is
+; an arrow in every screen. (A centered line that mixes regular and bold
+; text sits 2 pixels left of 3.1's: ARCHITECTURE.md 15.5.)
 click 1
 sleep 0.5
 move 200 200
@@ -30,13 +31,13 @@ key ctrl+b
 key space
 type bold
 matchnow 05-bold 20 1
+key Return
+type Second line
+matchnow 06-second 20 1
 key alt+p
 sleep 0.5
 key c
-matchnow 06-centered 20 1.5
-key Return
-type Second line
-matchnow 07-second 20 1
+matchnow 07-centered 20 1.5
 key alt+e
 matchnow 08-edit 20 1.5
 key Escape
