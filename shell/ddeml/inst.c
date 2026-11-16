@@ -212,6 +212,8 @@ LRESULT FAR PASCAL __loadds SubframeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM 
 
 /* ---- the DMLAPI ---- */
 
+static void register_classes(void);
+
 UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res)
 {
     INST NEAR *in;
@@ -233,6 +235,7 @@ UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res
     }
     if (!ddeml_kbcp) {
         ddeml_kbcp = (WORD)GetKBCodePage();
+        register_classes();
         /* 3.1's DDEML adds these three global atoms at its first
            DdeInitialize (seen with tests/ddeml/scripts/xatoms.dm: they
            appear then, in this order, and stay); their place in USER's
@@ -452,14 +455,22 @@ static void reg(LPCSTR name, WNDPROC proc, int extra)
    show five; the handles its later windows get (tests/ddeml/scripts/
    xatoms.dm) put exactly one class more in USER's heap (each moves them
    0x44 bytes): w16's sixth is its monitors' class (its name UNVERIFIED) */
-int FAR __cdecl ddeml_init(WORD hinst)
+static void register_classes(void)
 {
-    ddeml_inst = (HINSTANCE)hinst;
     reg(CLS_FRAME, SubframeWndProc, 4);
     reg(CLS_DMG, DmgWndProc, 6);
     reg(CLS_CLIENT, ClientWndProc, 6);
     reg(CLS_SERVER, ServerWndProc, 6);
     reg(CLS_HOLD, SubframeWndProc, 8);
     reg(CLS_MON, MonitorWndProc, 2);
+}
+
+/* the library's entry (entry.asm). The classes are registered at the
+   first DdeInitialize, not here: with another library's instance made
+   first, 3.1's window handles show its classes were not yet in USER's
+   heap (tests/ddeml/scripts/raw.dm as raw+x) */
+int FAR __cdecl ddeml_init(WORD hinst)
+{
+    ddeml_inst = (HINSTANCE)hinst;
     return 1;
 }

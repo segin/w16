@@ -2023,8 +2023,10 @@ memory past the data; the comparison stops at the first NUL).
   (one library) and NAME+x (the other copies on the other library), with
   Microsoft's DDEML and w16's in every client/server combination
   (ms-ms is the reference), and compares the logs after
-  `tests/ddeml/dmnorm.py`: data blocks up to their first NUL, and the
-  window handle inside instance-specific names (a USER-heap value).
+  `tests/ddeml/dmnorm.py`: data blocks up to their first NUL (3.1 does
+  not clear them; the tail is whatever the memory held). Atom values and
+  the frame window in instance-specific names are compared as they are
+  (18.6).
 - Boot-test case **ddeml**: parts tree286 and tree386 (`tests/ddeml/
   ddtree.sh`: the install tree alone under w16's KRNL286 / KRNL386, DM.EXE
   as the shell, a DDEML server and client and a DDEML client driving
@@ -2048,13 +2050,9 @@ memory past the data; the comparison stops at the first NUL).
     traffic (two MF_HSZ_INFO events per DdeCreateStringHandle, more for
     every message it posts), which w16 does not mirror; w16 sends one
     event per documented occasion.
-  - **progman**: everything but the spelling of the "PROGMAN" atom: with
-    3.1's DDEML the global atom already exists as "Progman" before the
-    probe creates its string handle; with w16's it is created as
-    "PROGMAN". 3.1's DDEML appears to make global atoms of its own at
-    DdeInitialize (perhaps the classes of the top-level windows, its
-    InitEnum export), which would also explain why w16's atoms come out
-    14 lower (UNVERIFIED).
+  - progman (and the tree parts) differed in the spelling of the
+    "PROGMAN" atom until w16 made 3.1's own atoms (18.6); they are equal
+    now.
 
 ### 18.5 UNVERIFIED, and not done
 
@@ -2062,11 +2060,31 @@ memory past the data; the comparison stops at the first NUL).
   shown: w16's DdeUninitialize waits up to 10 seconds for answers.
 - Monitors: the blocks follow the SDK structures; only the sequence was
   compared (above).
-- HDDEDATA, HCONVLIST and the low word of transaction IDs are w16's own
-  values; handle values 3.1 gives that depend on USER's heap (instance
-  frames, atoms) differ, as w16 registers its window classes differently
-  (which classes 3.1's DDEML registers beyond the five seen is unknown).
+- HDDEDATA, HCONVLIST, the low words of idInst and transaction IDs and
+  the conversation windows' extra words are w16's own values (addresses
+  inside the library); the probe logs them by name only.
+- The sixth window class's name (18.6) is w16's guess.
 - Not probed: DdeReconnect inside XTYP_DISCONNECT, CF_BITMAP/
   CF_METAFILEPICT data (3.1 imports GDI's CopyMetaFile and BitBlt, so it
   probably copies such data for HDATA_APPOWNED handles; w16 copies the
   block only), 386 Enhanced mode, WfW 3.11's DDEML.
+
+### 18.6 Matching 3.1's atoms and window handles
+
+Atom values and window handles are places in USER's heap, so they come
+out as 3.1's only when the library asks USER for the same things in the
+same order. Found with `tests/ddeml/scripts/xatoms.dm` (every global atom
+listed before and after each call, window handles shown):
+- At its first DdeInitialize, 3.1's DDEML adds three global atoms, in
+  this order, and keeps them: "Progman", "Who" and "Made me?". (Hence
+  "PROGMAN" reading back as "Progman" in any session that used DDEML.)
+- Its classes are registered at that first DdeInitialize, not when the
+  library loads (with another library's instance made first, 3.1's
+  handles show none of them yet in USER's heap), before the atoms.
+- Six classes: the five its windows show (DMGFrame, DMGClass,
+  DMGClientClass, DMGServerClass, DMGHoldingClass) and one more, which
+  no window of the probes ever used: every class moves later handles by
+  0x44 bytes, and only six put w16's DMGFrame and DMGClass at 3.1's
+  handles. w16 registers its monitors' class there.
+With these, instance-specific names ("Svc:(143c)") and string handle
+values are compared unmasked.

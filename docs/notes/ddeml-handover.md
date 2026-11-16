@@ -136,3 +136,12 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   that the probe reads the blocks correctly).
 - progman: find which global atoms 3.1's DdeInitialize makes (atomq for
   window class names before/after init).
+
+### Task 2 (2026-11-17): no masking of atoms and frame handles
+- Found (xatoms.dm): first DdeInitialize adds atoms "Progman", "Who",
+  "Made me?" and registers six classes (lazily, before the atoms).
+  w16 does the same (inst.c); dmnorm no longer masks ":(hwnd)", the probe
+  prints atom values again. progman, tree parts fixed by this.
+- Remaining masking: data block tails after the first NUL only.
+- Still differing: conn (lists with several servers), monitor (event
+  stream) - not attempted in task 2.
