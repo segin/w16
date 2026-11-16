@@ -2316,6 +2316,8 @@ $(W16)/CONTROL.EXE: $(DOS)/CONTROL.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16SYS)/MAIN.CPL: $(DOS)/MAIN.CPL
+	@mkdir -p $(@D)
+	cp $< $@
 
 # ---- OLESVR (ole/olesvr/; ARCHITECTURE.md 16) and its probes ----
 # OS1 (a logging OLE server), OS2 (driver: OLE and raw DDE client) and
