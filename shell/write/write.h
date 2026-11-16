@@ -196,6 +196,7 @@ typedef struct {                        /* decoded CHP */
     BYTE bold, italic, underline;
     signed char hpsPos;                 /* > 0 superscript, < 0 subscript */
     BYTE b0;                            /* byte 0 (1 = "Regular", docs) */
+    BYTE special;                       /* byte 3 bit 6: "(page)" (SDK ch. 8) */
 } CHPX;
 
 typedef struct {                        /* decoded PAP */
@@ -347,6 +348,10 @@ void  sel_props(CHPX *c);
 /* ---- commands (cmds.c), main (main.c) ---- */
 void  cmd_char(WORD id);
 void  cmd_undo(void);
+int   hf_mode(void);
+HWND  hf_dialog(void);
+BOOL  parse_measure(const char *s, long *tw, BOOL allowNeg);
+void  fmt_measure(char *s, long tw);
 void  cmd_print(void);
 void  cmd_printsetup(void);
 void  cmd_repaginate(void);

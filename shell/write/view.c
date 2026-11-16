@@ -120,6 +120,18 @@ static int pos_px(int hpsPos)
     return MulDiv(hpsPos, dpiY, 96);
 }
 
+/* the width of "(page)", how a page number shows on screen */
+static int page_w(const FONTC *f)
+{
+    static const char s[] = "(page)";
+    int i, w = 0;
+    if (!f)
+        return 48;
+    for (i = 0; s[i]; i++)
+        w += f->width[(BYTE)s[i]];
+    return w;
+}
+
 static int tw2px(long tw)
 {
     return (int)((tw * dpiX + (tw >= 0 ? 720 : -720)) / 1440);
@@ -181,7 +193,7 @@ static void layout_line(DWORD cp, LINE *ln)
     ln->cpFirst = cp;
     ln->para = pi;
     ln->picture = FALSE;
-    if (pap.rhc & 6) {
+    if ((pap.rhc & 6) && !hf_mode()) {
         /* a header or footer paragraph (SDK ch. 8, 8.3.1: rhc bits 1-2;
            they come before the body, 8.3.2): not shown in the document
            (UNVERIFIED: shown only in the Header/Footer views) */
@@ -247,7 +259,7 @@ static void layout_line(DWORD cp, LINE *ln)
         if (ch == '\t')
             w = tab_stop(&pap, x, XP0) - x;
         else
-            w = f ? f->width[ch] : 8;
+            w = ch == 1 ? page_w(f) : f ? f->width[ch] : 8;
         if (x + w > xMax && c > cp && ch != ' ') {
             if (haveBrk) {
                 c = brk;
@@ -420,7 +432,7 @@ static int x_of(const LINE *ln, DWORD cp)
         if (ch == '\t')
             x = tab_stop(&pap, x, XP0);
         else
-            x += f ? f->width[ch] : 8;
+            x += ch == 1 ? page_w(f) : f ? f->width[ch] : 8;
         if (ch == ' ' && ln->nspaces) {
             x += ln->extra / ln->nspaces + (sp < ln->extra % ln->nspaces);
             sp++;
@@ -580,7 +592,7 @@ static void paint_line(HDC dc, const LINE *ln, int y)
         /* a piece: same run, no tab, no paragraph mark */
         while (c + n < lim && c + n < rl && n < sizeof buf) {
             BYTE ch = doc_ch(&g_doc, c + n);
-            if (ch == '\t' || ch == '\r' || ch == '\n')
+            if (ch == '\t' || ch == '\r' || ch == '\n' || ch == 1)
                 break;
             buf[n++] = ch;
         }
@@ -607,8 +619,13 @@ static void paint_line(HDC dc, const LINE *ln, int y)
         }
         {
             BYTE ch = doc_ch(&g_doc, c);
-            if (ch == '\t')
+            if (ch == '\t') {
                 x = tab_stop(&pap, x + xpScroll, XP0) - xpScroll;
+            } else if (ch == 1) {
+                /* the page number: "(page)" on screen (SDK ch. 8) */
+                TextOut(dc, x, y + ln->ascent - f->tmAscent - up, "(page)", 6);
+                x += page_w(f);
+            }
             c++;
         }
     }
@@ -845,6 +862,8 @@ static DWORD body_start(void)
     DWORD i, f, l;
     ATOM32 a;
     PAPX p;
+    if (hf_mode())
+        return 0;
     for (i = 0; i + 1 < g_doc.nparas; i++) {
         para_get(&g_doc, i, &f, &l, &a);
         pap_decode(&g_doc, a, &p);

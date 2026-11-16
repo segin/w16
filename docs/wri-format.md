@@ -227,6 +227,20 @@ between saves of the same document, so no writer can match them, and
 middle of every FKP page; each SEP, SETB, PGTB and FFNTB page after its
 structure. w16's Write writes zeros there.
 
+## Headers and footers
+
+(WR13, SDK ch. 8 8.3.1-8.3.2.) A running head is one or more paragraphs at
+the very start of the text, before the body: PAP byte 16 (rhc) 6 for a
+header, 7 for a footer, plus 8 for Print on First Page; byte 0 60; the
+page's left and right margins as its left and right indents (1800 and
+1800 with Page Layout's 1.25" margins); cch 17. A new one goes to the
+start of the text: a footer made after a header comes before it. Insert
+Page # puts character 1 in the text, its CHP with byte 3 bit 6 set
+(fSpecial; shown as "(page)"). Making a running head writes the SEP
+(with the first page number FFFFh) and SETB. Write shows the heads only
+in the Header and Footer views (window title HEADER or FOOTER, the
+modeless Page Header / Page Footer box).
+
 ## Pictures and OLE objects
 
 A picture is a paragraph of its own: PAP byte 0 3Dh, byte 16 bit 10h
@@ -269,7 +283,7 @@ pixel left of where text starts.
 
 ## Not yet observed (plan)
 
-Embedded and linked objects (Insert Object, Paste Link), Write 3.0
-pictures, headers and footers, page breaks inserted by Repaginate,
+Linked objects (Paste Link), Write 3.0 pictures, page breaks inserted by
+Repaginate,
 decimal tabs, the 3.0 Write save format and Word for DOS output. Each
 gets a WR probe; this file grows with them.

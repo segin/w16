@@ -283,7 +283,7 @@ void cmd_para(WORD id)
 /* ---- measurements: "1.5", "1.5"", "3.8 cm", "12 pt", "6 p10",
    "8 p12", "2 li"; shown as inches with two decimals, e.g. 0.50" ---- */
 
-static BOOL parse_measure(const char *s, long *tw, BOOL allowNeg)
+BOOL parse_measure(const char *s, long *tw, BOOL allowNeg)
 {
     long whole = 0, frac = 0, div = 1, unit = 1440;
     BOOL neg = FALSE, any = FALSE;
@@ -328,7 +328,7 @@ static BOOL parse_measure(const char *s, long *tw, BOOL allowNeg)
     return TRUE;
 }
 
-static void fmt_measure(char *s, long tw)
+void fmt_measure(char *s, long tw)
 {
     long h;
     char d[12];
@@ -809,11 +809,6 @@ void cmd_fonts(void)
 
 /* ---- Header and Footer: plan (docs/wri-format.md has the format) ---- */
 
-void cmd_header(BOOL footer)
-{
-    (void)footer;
-    MessageBeep(0);
-}
 
 /* ---- the clipboard: plain text for now ---- */
 

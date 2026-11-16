@@ -1,0 +1,33 @@
+; WR10: Edit > Insert Object > Paintbrush Picture (the second class in
+; the list), Paintbrush's File > Exit & Return (Yes to updating), the
+; document saved as C:\WR10.WRI: the embedded object as Write stores it,
+; and drawn
+run WRITE.EXE
+wait 3000
+type Before the picture.
+key 0D
+menu e
+char i
+wait 1500
+snap C:\I1.BMP
+dump
+key 24
+key 28
+wait 300
+key 0D
+wait 5000
+snap C:\I2.BMP
+menu f
+char x
+wait 2500
+key 0D
+wait 3000
+snap C:\I3.BMP
+menu f
+char a
+wait 1500
+type C:\WR10.WRI
+key 0D
+wait 2500
+close
+wait 2000

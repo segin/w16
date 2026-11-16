@@ -318,6 +318,12 @@ static void help(UINT cmd, DWORD data)
 static LRESULT command(HWND w, WORD id)
 {
     char path[PATH_MAX_DOS];
+    /* files are handled with the document, not a running head being
+       edited: back to the document first (UNVERIFIED: the original's
+       way) */
+    if (hf_mode() && (id == IDM_SAVE || id == IDM_SAVEAS || id == IDM_NEW || id == IDM_OPEN ||
+                      id == IDM_PRINT || id == IDM_REPAGINATE || id == IDM_EXIT))
+        SendMessage(hf_dialog(), WM_COMMAND, IDOK, 0);
     switch (id) {
     case IDM_NEW:
         if (ask_save())
@@ -482,6 +488,8 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CLOSE:
+        if (hf_mode())
+            SendMessage(hf_dialog(), WM_COMMAND, IDOK, 0);
         if (ask_save())
             DestroyWindow(w);
         return 0;
@@ -552,6 +560,8 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
             TranslateAccelerator(g_frame, accel, &m))
             continue;
         if (find_dialog() && IsDialogMessage(find_dialog(), &m))
+            continue;
+        if (hf_dialog() && IsDialogMessage(hf_dialog(), &m))
             continue;
         TranslateMessage(&m);
         DispatchMessage(&m);

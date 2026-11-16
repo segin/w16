@@ -124,6 +124,7 @@ void chp_default(CHPX *c)
     c->bold = c->italic = c->underline = 0;
     c->hpsPos = 0;
     c->b0 = 1;
+    c->special = 0;
 }
 
 void chp_decode(DOC *d, ATOM32 a, CHPX *c)
@@ -138,6 +139,7 @@ void chp_decode(DOC *d, ATOM32 a, CHPX *c)
     c->ftc = (b[1] >> 2) | ((WORD)(b[4] & 7) << 6);
     c->hps = b[2];
     c->underline = b[3] & 1;
+    c->special = (b[3] >> 6) & 1;
     c->hpsPos = (signed char)b[5];
 }
 
@@ -148,7 +150,7 @@ ATOM32 chp_atom(DOC *d, const CHPX *c)
     b[0] = c->b0;
     b[1] = (BYTE)((c->bold ? 1 : 0) | (c->italic ? 2 : 0) | ((c->ftc & 0x3F) << 2));
     b[2] = c->hps;
-    b[3] = c->underline ? 1 : 0;
+    b[3] = (BYTE)((c->underline ? 1 : 0) | (c->special ? 0x40 : 0));
     b[4] = (BYTE)((c->ftc >> 6) & 7);
     b[5] = (BYTE)c->hpsPos;
     for (n = 6; n > 0 && b[n - 1] == chp_def[n - 1]; n--)
