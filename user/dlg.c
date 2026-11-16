@@ -296,13 +296,24 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     r.bottom = r.top + du(cy, uy, 8);
     /* the window rectangle around that client area */
     {
+        /* a dialog frame for DS_MODALFRAME or WS_DLGFRAME without
+           WS_BORDER; WS_CAPTION (WS_BORDER | WS_DLGFRAME) alone is a
+           border, as for any window (adjust_rect, defwnd.c): Calculator's
+           template, 00CA0000h at 310,65 for 240 x 158 units, comes up on
+           3.1 at 154,110, 261 x 269 (probe TM1, ARCHITECTURE.md 15.5);
+           with a dialog frame w16 had it at 150,106, 265 x 276. Probe TM4
+           shows 3.1 doing the same with DS_SETFONT (Character Map's
+           template: 16,34, 611 x 213), but w16 keeps the old rule there
+           for now: with the window where 3.1 makes it, Character Map on
+           w16's USER leaves a stray glyph on the desktop left of its
+           window (boot-test case icons; open, ARCHITECTURE.md 15.5) */
+        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME ||
+                    ((style & DS_SETFONT) && (style & WS_DLGFRAME));
         int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
-                 ((style & DS_MODALFRAME) || (style & WS_DLGFRAME)) ?
-                 sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
+                 dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
         int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] :
-                 ((style & DS_MODALFRAME) || (style & WS_DLGFRAME)) ?
-                 sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
+                 dlgf ? sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CYBORDER] : 0;
         int top = fy;
         if ((style & WS_CAPTION) == WS_CAPTION)
@@ -322,13 +333,14 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         if (o && !(style & DS_ABSALIGN))
             OffsetRect(&r, o->rcClient.left, o->rcClient.top);
     }
-    /* kept on the screen (US4: the dialog at y 10 units starts at 0;
-       Calculator's, 240 x 158 units at 310,65, comes up on 3.1 at
-       154,110, against the screen's right and bottom edges. UNVERIFIED:
-       w16 puts it at 150,106 - its window is 4 pixels wider and taller
-       than 3.1's, unexplained) */
-    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN])
-        OffsetRect(&r, sysmet[SM_CXSCREEN] - r.right, 0);
+    /* kept on the screen (US4: the dialog at y 10 units starts at 0).
+       On the right SM_CXDLGFRAME short of the edge: Calculator's, 240 x
+       158 units at 310,65, 482 wide, comes up on 3.1 at 154,110, and
+       dialogs (#32770, byte-aligned) of that template at 152; 490 wide
+       at 144 (probes TM1, TM4: ARCHITECTURE.md 15.5). UNVERIFIED whether
+       the bottom keeps such a margin too */
+    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME])
+        OffsetRect(&r, sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME] - r.right, 0);
     if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
         OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)

@@ -478,14 +478,32 @@ static void do_switch(void)
                 SetActiveWindow(w);
         }
     }
-    if (blk[B_178] & 0x08)                      /* Ctrl+Esc */
-        WinExec("TASKMAN.EXE", SW_SHOWNORMAL);
+    if (blk[B_178] & 0x08) {                    /* Ctrl+Esc */
+        /* the Task List as USER starts it: SYSTEM.INI [boot] taskman.exe=
+           with "0 0" (probe TM1 as taskman.exe= on 3.1: Microsoft's
+           WINOLDAP's Ctrl+Esc ran it with that command line, SW_SHOWNORMAL;
+           ARCHITECTURE.md 15.5) */
+        char cmd[0x92];
+        int n = GetPrivateProfileString("boot", "taskman.exe", "taskman.exe", cmd, 0x82, "SYSTEM.INI");
+        lstrcpy(cmd + n, " 0 0");
+        WinExec(cmd, SW_SHOWNORMAL);
+    }
 }
 
 /* ---- the window ---- */
 LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    /* no text to WM_GETTEXT (3.1: GetWindowText of Microsoft's WINOLDAP's
+       window gives "", probe TM1, and the Task List does not list it,
+       while USER titles its icon with the program's name, the window's
+       own text: ARCHITECTURE.md 15.5) */
+    case WM_GETTEXT:
+        if (wp && lp)
+            *(LPSTR)lp = 0;
+        return 0;
+    case WM_GETTEXTLENGTH:
+        return 0;
     case WM_QUERYOPEN:
         PostMessage(h, WM_USER, 0, 0);
         return FALSE;

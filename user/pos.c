@@ -15,6 +15,7 @@ void refresh_dcs(void);
 void byte_align(PWND w, BOOL made);
 void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
+static void icon_title_above(HWND h);
 HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
 void invalidate_screen_except(const RECT *rc, const RECT *except);
@@ -65,7 +66,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     PWND w = valid_wnd(h), parent;
     WINDOWPOS wp;
     RECT oldwin, oldcli;
-    BOOL wasvis, nowvis, changed, restored = FALSE;
+    BOOL wasvis, nowvis, changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
     UINT asked = flags;
@@ -111,6 +112,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     wasvis = is_visible(w);
 
     /* Z order */
+    if (!(flags & SWP_NOZORDER) && w->hwndParent == hwndDesktop) {
+        if (after == (HWND)-1)          /* HWND_TOPMOST */
+            w->exstyle |= WS_EX_TOPMOST;
+        else if (after == (HWND)-2)     /* HWND_NOTOPMOST */
+            w->exstyle &= ~WS_EX_TOPMOST;
+    }
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
         if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
             HWND s;
@@ -126,6 +133,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             unlink_window(w);
             link_window(w, after == (HWND)-1 ? HWND_TOP : (after == (HWND)-2 ? HWND_TOP : after));
             changed = TRUE;
+            zmoved = TRUE;
         }
     }
     /* place */
@@ -240,6 +248,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
+    /* an icon moved in the Z order takes its title along, just above it
+       (3.1: a minimised Calculator sent to the bottom left its title
+       under Program Manager with it; w16's stayed on top: boot-test case
+       taskman. TM1 and TM2 on 3.1 list a title right before its icon) */
+    if (zmoved && (w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE))
+        icon_title_above(h);
     if (!(w = valid_wnd(h)))
         return TRUE;
     wp.x = w->rcWindow.left - px;
@@ -766,6 +780,20 @@ void follow_icon_title(HWND h)
     PLACE *p = place_of(h, FALSE);
     if (p && p->title)
         move_icon_title(p->title, h);
+}
+
+/* an icon's title put right above it in the Z order */
+static void icon_title_above(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    HWND t, prev;
+    if (!p || !(t = p->title) || !valid_wnd(t) || PW(t)->hwndParent != PW(h)->hwndParent)
+        return;
+    prev = GetWindow(h, GW_HWNDPREV);
+    if (prev == t)
+        return;
+    set_window_pos(t, prev ? prev : HWND_TOP, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
 void WINAPI CloseWindow(HWND h)

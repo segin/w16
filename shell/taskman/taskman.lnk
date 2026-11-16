@@ -1,0 +1,8 @@
+# wlink directives for TASKMAN.EXE (objects and output come from the Makefile)
+format windows
+option quiet
+option start=start
+option stack=3k
+option heapsize=512
+option description 'w16 Task List'
+library windows.lib

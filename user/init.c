@@ -238,9 +238,11 @@ int __far __cdecl user_init(HINSTANCE hinst)
 }
 
 /* USER.400, called by KERNEL once the shell is loaded, before it runs */
+void load_taskman_name(void);          /* defwnd.c */
 void WINAPI FinalUserInit(void)
 {
     diag("INIT=Final USER\r\n");
+    load_taskman_name();
     G_FINALGDIINIT(hbrGray);
     booted = 1;
     diag("INITDONE=Final USER\r\n");
