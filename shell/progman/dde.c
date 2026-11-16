@@ -17,7 +17,7 @@
  *   of the commands run (see ends below).
  * - WM_DDE_TERMINATE is answered with a sent WM_DDE_TERMINATE.
  * Observed with the DDE spy (tests/ole/ocspy.c run by OC1, ARCHITECTURE.md
- * 9.6) on TDDE and on the 7-Zip 26.05 16-bit installer: the same
+ * 16.1, 9.6) on TDDE and on the 7-Zip 26.05 16-bit installer: the same
  * messages, atoms, status words and data as 3.1's Program Manager. One
  * difference remains: 3.1 answered the installer's whole conversation
  * within one 55 ms tick, w16 takes about 0.5 s (each command writes the

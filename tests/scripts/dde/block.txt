@@ -11,5 +11,7 @@ exec  [ReplaceItem(Calc)] [AddItem( CLOCK.EXE , Clock )]
 exec [Bogus(x,y)]
 exec [DeleteItem(Nope)]
 exec [CreateGroup("Blk B",BLKB.GRP)][ShowGroup("Blk B",2)]
-exec [DeleteGroup(Blk B)][DeleteGroup(Blk A)]
+exec [ShowGroup(Blk A,1)][DeleteItem(Clock)][DeleteItem("Read, Me")]
+; (no DeleteGroup: when 3.1 writes Order= then is not known, see
+; ARCHITECTURE.md 9.6)
 disconnect
