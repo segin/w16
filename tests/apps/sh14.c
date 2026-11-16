@@ -2,7 +2,8 @@
  * sh14.c - SH14: what starting a name does, for every kind of name, through
  * each of the four ways a shell has: FindExecutable, ShellExecute (SHELL),
  * WinExec and LoadModule (KERNEL). Names: a Windows program (with and
- * without its extension, with parameters), a .COM, a .BAT, a file without
+ * without its extension, with parameters), a .COM, a DOS .EXE, a 32-bit
+ * Windows program (a PE image), a .BAT, a file without
  * an extension, registered documents (.TXT, .WRI), unregistered extensions
  * (.ABC, .XYZ), an extension WIN.INI maps to a missing program, a class
  * whose program is missing, missing files and directories, directories.
@@ -71,6 +72,76 @@ static void mkfile(const char *path, const void FAR *data, UINT n)
     HFILE f = _lcreat(path, 0);
     _lwrite(f, data, n);
     _lclose(f);
+}
+
+static void put16(BYTE *p, UINT o, WORD v)
+{
+    p[o] = (BYTE)v;
+    p[o + 1] = (BYTE)(v >> 8);
+}
+
+static void put32(BYTE *p, UINT o, DWORD v)
+{
+    put16(p, o, LOWORD(v));
+    put16(p, o + 2, HIWORD(v));
+}
+
+/* a 32-bit Windows program (a minimal PE32 image, the published PE/COFF
+   layout; the same bytes as tests/scripts/runassocfiles.py's PE.EXE):
+   mz[]'s header and code as its MS-DOS stub (2 pages, relocations at
+   40h, e_lfanew 80h), "PE\0\0", the file header (i386, one section,
+   optional header E0h bytes, flags 010Fh), the optional header (PE32,
+   entry and code at 1000h, image base 400000h, alignment 1000h/200h,
+   OS and subsystem 4.0, image 2000h, headers 200h, GUI, 1 MB/4 KB stack
+   and heap, 16 empty directories), .text at 200h: RET. 400h bytes. */
+static void mkpe(const char *path)
+{
+    static BYTE f[0x400];
+    UINT o;
+    for (o = 0; o < sizeof mz; o++)
+        f[o] = mz[o];
+    f[2] = 0;                           /* last page full, 2 pages */
+    f[4] = 2;
+    f[0x0A] = 0x10;                     /* minimum 10h paragraphs */
+    f[0x0E] = 0x40;                     /* SS 40h: the stack past the image */
+    f[0x3C] = 0x80;                     /* e_lfanew */
+    o = 0x80;
+    f[o] = 'P';
+    f[o + 1] = 'E';
+    put16(f, o + 4, 0x14C);
+    put16(f, o + 6, 1);
+    put16(f, o + 20, 0xE0);
+    put16(f, o + 22, 0x010F);
+    o += 24;
+    put16(f, o, 0x10B);
+    f[o + 2] = 2;
+    f[o + 3] = 50;
+    put32(f, o + 4, 0x200);
+    put32(f, o + 16, 0x1000);
+    put32(f, o + 20, 0x1000);
+    put32(f, o + 24, 0x2000);
+    put32(f, o + 28, 0x400000L);
+    put32(f, o + 32, 0x1000);
+    put32(f, o + 36, 0x200);
+    put16(f, o + 40, 4);
+    put16(f, o + 48, 4);
+    put32(f, o + 56, 0x2000);
+    put32(f, o + 60, 0x200);
+    put16(f, o + 68, 2);
+    put32(f, o + 72, 0x100000L);
+    put32(f, o + 76, 0x1000);
+    put32(f, o + 80, 0x100000L);
+    put32(f, o + 84, 0x1000);
+    put32(f, o + 92, 16);
+    o += 0xE0;
+    lstrcpy((LPSTR)(f + o), ".text");
+    put32(f, o + 8, 1);
+    put32(f, o + 12, 0x1000);
+    put32(f, o + 16, 0x200);
+    put32(f, o + 20, 0x200);
+    put32(f, o + 36, 0x60000020L);
+    f[0x200] = 0xC3;
+    mkfile(path, f, sizeof f);
 }
 
 static void copyfile(const char *from, const char *to)
@@ -295,6 +366,7 @@ int __cdecl tmain(void)
     copyfile("C:\\SH5.EXE", "C:\\RA\\P.EXE");
     mkfile("C:\\RA\\C.COM", com, sizeof com);
     mkfile("C:\\RA\\X.EXE", mz, sizeof mz);
+    mkpe("C:\\RA\\PE.EXE");
     mkfile("C:\\RA\\B.BAT", "ECHO BAT>C:\\RANBAT.TXT\r\n", 24);
     mkfile("C:\\RA\\N", com, sizeof com);
     mkfile("C:\\RA\\A.TXT", com, sizeof com);
@@ -314,6 +386,7 @@ int __cdecl tmain(void)
     all("exe.noext", "C:\\RA\\P", "c");
     all("com", "C:\\RA\\C.COM", NULL);
     all("dosexe", "C:\\RA\\X.EXE", NULL);
+    all("pe", "C:\\RA\\PE.EXE", NULL);
     all("bat", "C:\\RA\\B.BAT", NULL);
     all("noext", "C:\\RA\\N", NULL);
     all("txt", "C:\\RA\\A.TXT", NULL);
