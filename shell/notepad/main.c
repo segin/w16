@@ -25,6 +25,11 @@
  *   undo, Cut/Copy/Delete if text is selected, Paste if the clipboard
  *   holds text, Print if a printer is set up.
  *   Several copies may run at once.
+ *
+ * w16's own, on unless SYSTEM.INI [w16] NotepadAccelerators=0 (stock 3.1:
+ * the original's menu and MAINACC): menu IDM_MENU_W16 and W16ACC, the
+ * same with later Windows' Notepad keys added (Ctrl+N, O, S, P, A, F) and
+ * shown in the menu (ARCHITECTURE.md 15.1).
  */
 #include "notepad.h"
 #include <shellapi.h>
@@ -385,18 +390,22 @@ static BOOL parse_cmdline(LPSTR cmd, char *file)
 int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
 {
     char title[48], file[DOS_PATH];
-    BOOL print;
+    BOOL print, keys;
     MSG msg;
 
     g_hinst = hinst;
     if (!hprev && !register_class(hinst))
         return 1;
-    g_accel = LoadAccelerators(hinst, "MAINACC");
+    /* [w16] NotepadAccelerators (default 1; 0 is stock 3.1): the class
+       keeps the original's menu, which 0 gets; 1 gives this window w16's
+       copy with the added keys shown, and their table */
+    keys = GetPrivateProfileInt("w16", "NotepadAccelerators", 1, "SYSTEM.INI") != 0;
+    g_accel = LoadAccelerators(hinst, keys ? "W16ACC" : "MAINACC");
     g_findmsg = RegisterWindowMessage(FINDMSGSTRING);
     LoadString(hinst, IDS_APPNAME, title, sizeof title);
     if (!CreateWindow(cls_main, title, WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL,
                       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL,
-                      NULL,
+                      keys ? LoadMenu(hinst, MAKEINTRESOURCE(IDM_MENU_W16)) : NULL,
                       hinst, NULL))
         return 1;
     set_title();

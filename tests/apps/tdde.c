@@ -4,7 +4,8 @@
  * Talks to the "PROGMAN" DDE service the way an installer does, with the
  * raw DDE messages of the Windows SDK, and logs every answer to TK.LOG:
  *     DDE ack <n> server class="..." text="..."      replies to INITIATE
- *     DDE exec "<command>" ack=<status word>         WM_DDE_ACK status
+ *     DDE exec "<command>" ack=<status word> block="<the command block
+ *         as the ACK returned it, NULs as \x00>"   WM_DDE_ACK
  *     DDE data "<item>" flags=<word> fmt=<n> "<text, CR/LF shown as \r\n>"
  * The script C:\DDE.TXT holds one line per step:
  *     exec <command string>        WM_DDE_EXECUTE
@@ -24,6 +25,7 @@ extern BOOL FAR PASCAL InitApp(HINSTANCE);
 static HWND me, server;
 static int acks;
 static BOOL got_ack, got_data, got_term;
+static WORD exec_len;                   /* the command block's string length */
 static char script[4096];
 
 static void out(const char FAR *s)
@@ -121,6 +123,29 @@ LRESULT CALLBACK __export ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         out(" ack=");
         outhex(LOWORD(lp));
+        if (HIWORD(lp) && exec_len) {
+            /* the command block as it came back (3.1's Program Manager
+               writes into it), NULs shown as \x00 */
+            const char FAR *b = (const char FAR *)GlobalLock((HGLOBAL)HIWORD(lp));
+            if (b) {
+                WORD i = 0;
+                out(" block=\"");
+                while (i < exec_len) {
+                    WORD k = 0;
+                    while (i + k < exec_len && b[i + k])
+                        k++;
+                    out_escaped(b + i, k);
+                    i += k;
+                    if (i < exec_len) {
+                        out("\\x00");
+                        i++;
+                    }
+                }
+                out("\"");
+                GlobalUnlock((HGLOBAL)HIWORD(lp));
+            }
+        }
+        exec_len = 0;
         if (HIWORD(lp))
             GlobalFree((HGLOBAL)HIWORD(lp));    /* the command block */
         out("\r\n");
@@ -194,6 +219,7 @@ static void step(char *l)
         out_escaped(arg, n);
         out("\"");
         got_ack = FALSE;
+        exec_len = n;
         if (!PostMessage(server, WM_DDE_EXECUTE, (WPARAM)me, MAKELPARAM(0, h)))
             out(" post failed\r\n");
         else {

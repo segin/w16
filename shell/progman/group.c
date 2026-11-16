@@ -76,6 +76,7 @@ typedef struct item {
     WORD cbtags;
     HICON hicon;
     BOOL own_icon;
+    WORD lorder;                        /* place in a DDE request's list */
 } item;
 
 typedef struct group {
@@ -94,6 +95,7 @@ typedef struct group {
     WORD cbgtags;
     item FAR *sel;
     BOOL dirty;                         /* items changed since written */
+    WORD nadded;                        /* items added since loading */
     BOOL have_replaced;                 /* DDE ReplaceItem: next position */
     int replaced_x, replaced_y;
     WORD replaced_z;
@@ -230,7 +232,8 @@ static void make_icon(item FAR *t)
     }
 }
 
-/* Append item t at the end of the data order. */
+/* Append item t at the end of the data order; it is the newest in the
+   DDE listing's order (lorder) too. */
 static void data_append(group FAR *g, item FAR *t)
 {
     item FAR * FAR *pp = &g->dfirst;
@@ -238,6 +241,7 @@ static void data_append(group FAR *g, item FAR *t)
         pp = &(*pp)->dnext;
     t->dnext = NULL;
     *pp = t;
+    t->lorder = 0x7FFF - g->nadded++;
 }
 
 static void data_remove(group FAR *g, item FAR *t)
@@ -378,6 +382,10 @@ static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
         best->tags = NULL;
         data_append(g, best);
     }
+    /* listed (DDE request) in rgiItems order, after those added since */
+    for (i = 0; i < g->nz; i++)
+        g->z[i]->lorder = 0x8000 + i;
+    g->nadded = 0;
 
     /* tags: keep each with its item (by slot), others with the group */
     if (fsize > size) {
@@ -726,7 +734,10 @@ HWND group_create(const char FAR *name, const char FAR *path, int ininum)
     g->show = 0;
     g->pmin.x = g->pmin.y = 0;
     copy(g->hdr18, new_hdr18, 8);
+    /* and one empty item slot (observed: cItems 1 in a new group's file,
+       tests/scripts/dde/names.txt), which its first item takes */
     g->z = (item FAR * FAR *)mem_alloc(sizeof(item FAR *));
+    g->cap = 1;
     if (!g->name || !g->z || !open_window(g, FALSE)) {
         free_group(g);
         return NULL;
@@ -1544,9 +1555,31 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
     t = (item FAR *)mem_alloc(sizeof(item));
     if (!t)
         return FALSE;
-    if (!set_fields(t, ip->desc, ip->cmd, ip->dir, ip->hotkey, ip->minimized)) {
-        free_item(t);
-        return FALSE;
+    {
+        /* DDE AddItem without a working directory, of a command with a
+           path: the command's directory is the working directory (observed:
+           the 7-Zip 16-bit installer's AddItem(C:\7-Zip\7ZFM16.EXE,...,0)
+           gave the item a path tag "C:\7-Zip\"; the installer checks it in
+           the group file and reported "shortcut verification failed"
+           without it). UNVERIFIED for the Properties dialog. */
+        LPSTR cdir = NULL;
+        BOOL ok;
+        const char FAR *c = skip_blanks(ip->cmd);
+        int d = dir_part(c, word_len(c));
+        if (ip->dde && !skip_blanks(ip->dir ? ip->dir : "")[0] && d) {
+            cdir = mem_alloc(d + 1);
+            if (!cdir) {
+                free_item(t);
+                return FALSE;
+            }
+            s_cpy(cdir, c, d + 1);
+        }
+        ok = set_fields(t, ip->desc, ip->cmd, cdir ? cdir : ip->dir, ip->hotkey, ip->minimized);
+        mem_free(cdir);
+        if (!ok) {
+            free_item(t);
+            return FALSE;
+        }
     }
     if (ip->iconpath && ip->iconpath[0])        /* DDE AddItem's icon */
         set_icon(t, ip->iconpath, ip->iconindex);
@@ -1852,6 +1885,11 @@ HWND group_find(const char FAR *name)
 
 void group_show(HWND hwnd, int show)
 {
+    /* observed (tests/scripts/dde/names.txt): ShowGroup(name,1) for a
+       group already shown restored neither activated it nor restored
+       the maximised group in front (UNVERIFIED for the other commands) */
+    if (show == SW_SHOWNORMAL && IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd))
+        return;
     if (show == SW_SHOWMAXIMIZED)
         SendMessage(g_client, WM_MDIMAXIMIZE, (WPARAM)hwnd, 0);
     else
@@ -1864,13 +1902,30 @@ void group_show(HWND hwnd, int show)
 /* A group as the DDE request for its name answers (observed):
      "name",path,items,show
      "item","command",workdir,iconpath,x,y,iconindex,hotkey,minimized
-   items top of the z-order first, each line ending CR LF. */
+   each line ending CR LF. show is the window's state: 1 restored and
+   active, 4 restored (another group active), 7 minimised and not active,
+   3 maximised (observed, tests/scripts/dde/names.txt); 2 minimised and
+   active (UNVERIFIED). The items: those added since the group was loaded,
+   newest first, then the loaded ones in their file's rgiItems order
+   (observed: Main of Setup's MAIN.GRP from File Manager to Read Me; the
+   7-Zip installer's two new items, Uninstall first; UNVERIFIED for a
+   file whose rgiItems order is not its data order). */
+static WORD dde_show(HWND hwnd)
+{
+    BOOL active = (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0) == hwnd;
+    if (IsZoomed(hwnd))
+        return SW_SHOWMAXIMIZED;
+    if (IsIconic(hwnd))
+        return active ? SW_SHOWMINIMIZED : SW_SHOWMINNOACTIVE;
+    return active ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
+}
+
 LPSTR group_dde_text(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     LPSTR s;
     char num[8];
-    WORD i;
+    WORD i, last = 0;
     BOOL ok;
     if (!g)
         return NULL;
@@ -1879,19 +1934,20 @@ LPSTR group_dde_text(HWND hwnd)
          s_append(&s, ",");
     s_utoa(num, g->nz);
     ok = ok && s_append(&s, num) && s_append(&s, ",");
-    s_utoa(num, IsIconic(hwnd) ? SW_SHOWMINIMIZED : IsZoomed(hwnd) ? SW_SHOWMAXIMIZED
-                                                                  : SW_SHOWNORMAL);
+    s_utoa(num, dde_show(hwnd));
     ok = ok && s_append(&s, num) && s_append(&s, "\r\n");
-    /* observed: newest item first (the reverse of the file's data order) */
-    for (i = g->nz; ok && i-- > 0;) {
+    for (i = 0; ok && i < g->nz; i++) {
         item FAR *keep = g->sel;
         itemprops ip;
-        item FAR *t = g->dfirst;
+        item FAR *t = NULL;
         WORD k;
-        for (k = 0; t && k < i; k++)
-            t = t->dnext;
+        for (k = 0; k < g->nz; k++)     /* the next in lorder */
+            if (g->z[k]->lorder >= last && (!t || g->z[k]->lorder < t->lorder) &&
+                (i == 0 || g->z[k]->lorder != last))
+                t = g->z[k];
         if (!t)
             break;
+        last = t->lorder;
         g->sel = t;
         if (!group_get_props(hwnd, &ip)) {
             g->sel = keep;

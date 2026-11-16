@@ -109,9 +109,13 @@ w16:debuglog=C:\W16DBG.LOG'
 # 3.1 (in DOSBox AUX is the console: the text shows on the screen); w16's
 # default writes it there only when AUX is not the console (boot-test
 # case odstring)
+# [w16] NotepadAccelerators=0: w16's Notepad with the original's menu and
+# accelerators only (no Ctrl+N/O/S/P/A/F), as stock 3.1, so its menus
+# compare with 3.1's (shell/notepad/main.c)
 inis="$inis
 w16:DesktopVersion=0
-w16:DebugToAux=1"
+w16:DebugToAux=1
+w16:NotepadAccelerators=0"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
 while getopts k:3K:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do
