@@ -2025,7 +2025,12 @@ memory past the data; the comparison stops at the first NUL).
   ddtree.sh`: the install tree alone under w16's KRNL286 / KRNL386, DM.EXE
   as the shell, a DDEML server and client and a DDEML client driving
   w16's Program Manager; the log equal to the same tree with Microsoft's
-  DDEML), and one part per scenario and combination.
+  DDEML), and one part per scenario and combination. Full run
+  (installation-05, 2026-11-16, 76b6b94): the parts strings, data, xact,
+  advise, flags, uninit, raw (with +x) ok; tree286 and tree386 differ
+  only in the "Progman" atom spelling (below: w16's own Program Manager
+  shows it too, so 3.1's DDEML is what makes the "Progman" atom);
+  conn, conn+x, monitor, monitor+x, progman as below.
 - Results (installation-05, 2026-11-16): strings, data, xact, advise,
   flags, uninit and raw (and their +x runs in every combination) equal
   Microsoft's: 18 of 27 compared pairs. Not equal yet:

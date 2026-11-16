@@ -23,7 +23,7 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   mon.c entry.asm ddeml.rc ddeml.lnk; builds, exports match (+ linker's
   unnamed 40-42). NOT yet run: iterate on tests/ddemlscen.sh diffs.
 - [x] tests/ddemlscen.sh (combos), progman scenario, boot case ddeml (tree286, tree386, scenarios)
-- [x] README.TXT; [ ] make test + full boot test running (remote-test.sh -n ddeml-agent; results in build/remote-ddeml-agent/)
+- [x] README.TXT; [x] make test: pass; full boot test 114 ok, 3 FAIL: ddeml (parts conn, conn+x, monitor, monitor+x, progman, tree286, tree386 - the known gaps; tree parts differ only in the "Progman" atom), holdbtn (scroll-arrow repeat timing) and taskman@tree (21-dosesc.png 974 px) - neither uses DDEML, not investigated
 
 ## Notes
 
