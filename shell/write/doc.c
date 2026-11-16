@@ -337,6 +337,39 @@ void doc_free(DOC *d)
     m_set(d, 0, sizeof *d);
 }
 
+static BOOL hm_copy(HMEM *d, const HMEM *s)
+{
+    d->h = NULL;
+    d->p = NULL;
+    d->size = 0;
+    if (!s->h)
+        return TRUE;
+    if (!hm_resize(d, s->size))
+        return FALSE;
+    {
+        DWORD o;
+        for (o = 0; o < s->size;) {
+            WORD k = hm_span(o, s->size - o);
+            m_cpy(hm_ptr(d, o), hm_ptr(s, o), k);
+            o += k;
+        }
+    }
+    return TRUE;
+}
+
+/* a copy of the whole document (Undo keeps one) */
+BOOL doc_copy(DOC *d, const DOC *s)
+{
+    *d = *s;
+    if (hm_copy(&d->text, &s->text) && hm_copy(&d->runs, &s->runs) &&
+        hm_copy(&d->paras, &s->paras) && hm_copy(&d->atoms, &s->atoms) &&
+        hm_copy(&d->pool, &s->pool) && hm_copy(&d->fonts, &s->fonts) &&
+        hm_copy(&d->pgtb, &s->pgtb))
+        return TRUE;
+    doc_free(d);
+    return FALSE;
+}
+
 /* an empty document: the end paragraph only, the default properties */
 void doc_init(DOC *d)
 {
@@ -500,6 +533,10 @@ static BOOL run_split(DOC *d, DWORD cp)
     return ent_insert(&d->runs, &d->nruns, i, &e);
 }
 
+/* set while inserting picture data: its bytes make no paragraphs */
+static BOOL noSplit;
+static DWORD forcePara;                 /* 1 + the paragraph to extend */
+
 BOOL doc_insert(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
 {
     DWORD i, k, first, lim, pi;
@@ -552,13 +589,18 @@ BOOL doc_insert(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
             run_merge(d, i - 1);
     }
     /* paragraphs: shift, then split at each CR LF inserted */
-    pi = para_at(d, cp, &first, &lim, &pa);
+    if (forcePara) {
+        pi = forcePara - 1;
+        para_get(d, pi, &first, &lim, &pa);
+    } else {
+        pi = para_at(d, cp, &first, &lim, &pa);
+    }
     for (k = pi; k < d->nparas; k++) {
         ent_get(&d->paras, k, &e);
         e.lim += n;
         ent_put(&d->paras, k, &e);
     }
-    for (k = 0; k + 1 < n; k++) {
+    for (k = 0; k + 1 < n && !noSplit; k++) {
         if (s[(WORD)k] == '\r' && s[(WORD)k + 1] == '\n') {
             e.lim = cp + k + 2;
             e.atom = pa;
@@ -669,4 +711,37 @@ BOOL doc_set_chp(DOC *d, DWORD cp, DWORD cpLim, ATOM32 (*fn)(DOC *, ATOM32, WORD
 BOOL doc_terminate_last(DOC *d, ATOM32 chp)
 {
     return doc_insert(d, d->cpMac, "\r\n", 2, chp);
+}
+
+/* A paragraph of its own at cp (a paragraph start), with properties pap:
+   for pictures, whose bytes are no text (no CR LF ends them) */
+BOOL doc_insert_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp, ATOM32 pap)
+{
+    ENT e;
+    DWORD pi, pf, pl;
+    ATOM32 a;
+    BOOL ok;
+    pi = para_at(d, cp, &pf, &pl, &a);
+    noSplit = TRUE;
+    ok = doc_insert(d, cp, s, n, chp);
+    noSplit = FALSE;
+    if (!ok)
+        return FALSE;
+    e.lim = cp + n;
+    e.atom = pap;
+    return ent_insert(&d->paras, &d->nparas, pi, &e);
+}
+
+/* more bytes for the picture paragraph that holds cp - 1 */
+BOOL doc_append_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
+{
+    BOOL ok;
+    DWORD pf, pl;
+    ATOM32 pa;
+    noSplit = TRUE;
+    forcePara = para_at(d, cp ? cp - 1 : 0, &pf, &pl, &pa) + 1;
+    ok = doc_insert(d, cp, s, n, chp);
+    forcePara = 0;
+    noSplit = FALSE;
+    return ok;
 }

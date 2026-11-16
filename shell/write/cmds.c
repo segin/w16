@@ -11,6 +11,59 @@
 #include "write.h"
 #include <commdlg.h>
 
+/* ---- Undo: one level, a copy of the document taken before the change
+   (typing: before the first character of a run of typing); Undo swaps
+   it with the document, so a second Undo redoes. The Edit menu names the
+   kind: "&Undo Typing", "&Undo Editing", "&Undo Formatting" (the
+   original's strings; WR12 saw "Undo Typing" after typing). UNVERIFIED:
+   which commands are which kind beyond typing. ---- */
+
+static DOC undoDoc;
+static WORD undoKind;                   /* 0: nothing to undo */
+static DWORD undoFirst, undoLim;
+static BOOL typingRun;
+
+void undo_save(WORD kind)
+{
+    if (kind == IDS_TYPING && typingRun && undoKind == IDS_TYPING)
+        return;
+    doc_free(&undoDoc);
+    undoKind = doc_copy(&undoDoc, &g_doc) ? kind : 0;
+    undoFirst = g_selFirst;
+    undoLim = g_selLim;
+    typingRun = kind == IDS_TYPING;
+}
+
+void undo_end_typing(void)
+{
+    typingRun = FALSE;
+}
+
+void undo_clear(void)
+{
+    doc_free(&undoDoc);
+    undoKind = 0;
+    typingRun = FALSE;
+}
+
+void cmd_undo(void)
+{
+    DOC t;
+    DWORD f = g_selFirst, l = g_selLim;
+    if (!undoKind)
+        return;
+    t = g_doc;
+    g_doc = undoDoc;
+    undoDoc = t;
+    g_doc.dirty = TRUE;
+    typingRun = FALSE;
+    g_selFirst = g_selLim = 0;
+    view_changed(0);
+    view_select(undoFirst, undoLim, TRUE);
+    undoFirst = f;
+    undoLim = l;
+}
+
 /* ---- character formatting ---- */
 
 /* Reduce and Enlarge Font step through a list of sizes: observed 8, 10,
@@ -111,6 +164,8 @@ static ATOM32 chp_setfont(DOC *d, ATOM32 a, WORD unused)
 
 static void apply_chp(ATOM32 (*fn)(DOC *, ATOM32, WORD), WORD arg)
 {
+    if (g_selFirst != g_selLim)
+        undo_save(IDS_FORMATTING);
     if (g_selFirst == g_selLim) {
         CHPX c;
         ATOM32 a;
@@ -167,6 +222,7 @@ static void apply_pap(void (*fn)(PAPX *, WORD), WORD arg, BOOL all, BOOL normal)
     DWORD pi, pl, i, f, l;
     ATOM32 a;
     PAPX p;
+    undo_save(IDS_FORMATTING);
     if (all) {
         pi = 0;
         pl = g_doc.nparas - 1;
@@ -508,6 +564,7 @@ BOOL CALLBACK __export LayoutDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 void cmd_pagelayout(void)
 {
     if (run_dialog(IDD_PAGELAYOUT, LayoutDlgProc) == IDOK) {
+        undo_save(IDS_FORMATTING);
         sep_encode(&g_doc, &newsep);
         g_doc.dirty = TRUE;
         view_changed(0);
@@ -627,6 +684,7 @@ static void replace_sel_text(void)
     CHPX c;
     ATOM32 a;
     DWORD cp = g_selFirst;
+    undo_save(IDS_EDITING);
     sel_props(&c);
     a = chp_atom(&g_doc, &c);
     doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
@@ -762,6 +820,8 @@ void cmd_cut_copy(BOOL cut)
     HGLOBAL h;
     if (!n)
         return;
+    if (cut)
+        undo_save(IDS_EDITING);
     h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
     if (!h)
         return;
@@ -808,6 +868,7 @@ void cmd_paste(void)
         CHPX c;
         ATOM32 a;
         DWORD cp = g_selFirst;
+        undo_save(IDS_EDITING);
         m.h = h;
         m.p = (BYTE FAR *)GlobalLock(h);
         m.size = size;
@@ -863,7 +924,17 @@ void menu_update(HMENU m)
     EnableMenuItem(m, IDM_CUT, sel ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_COPY, sel ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_PASTE, IsClipboardFormatAvailable(CF_TEXT) ? MF_ENABLED : MF_GRAYED);
-    EnableMenuItem(m, IDM_UNDO, MF_GRAYED);
+    {
+        char s[64], k[24];
+        if (undoKind) {
+            load_str(IDS_UNDO, s, sizeof s);
+            load_str(undoKind, k, sizeof k);
+            s_cat(s, k, sizeof s);
+            s_cat(s, "\tCtrl+Z", sizeof s);
+            ModifyMenu(m, IDM_UNDO, MF_BYCOMMAND | MF_STRING, IDM_UNDO, s);
+        }
+        EnableMenuItem(m, IDM_UNDO, undoKind ? MF_ENABLED : MF_GRAYED);
+    }
     EnableMenuItem(m, IDM_PASTESPECIAL, MF_GRAYED);
     EnableMenuItem(m, IDM_PASTELINK, MF_GRAYED);
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */

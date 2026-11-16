@@ -1,0 +1,500 @@
+/*
+ * ole.c - w16 Write: OLE objects through OLECLI.DLL (OLE 1.0).
+ *
+ * The document is registered as class "WINWRITE" with its name (or
+ * "(Untitled)"); an object's name is its header's dwObjNum as 8 hex
+ * digits, so embedded documents are "WINWRITE%<doc>%<num>#nnn" as
+ * observed on 3.1 (ARCHITECTURE.md 16.10). An object paragraph's data is
+ * OLECLI's stream (16.4); the object is loaded from it when it is first
+ * drawn (OleLoadFromStream, protocol "Static" for static objects, else
+ * "StdFileEditing") and drawn with OleDraw. When the server reports new
+ * data (OLE_CHANGED, OLE_SAVED, and OLE_CHANGED before OLE_CLOSED for a
+ * changed object closed by the user: without it a new object would be
+ * lost, 16.3) the object is saved into its paragraph again
+ * (OleSaveToStream). Insert Object lists the classes of the registration
+ * database that have a StdFileEditing server.
+ *
+ * Calls used are those 3.1's Write imports (ARCHITECTURE.md 15.5).
+ * UNVERIFIED: the exact order of Write's own OLECLI calls (an OC1 log of
+ * Write against this one is the next check: tests/olescenarios.sh with
+ * OLESCEN_FILES=build/dos/WRITE.EXE=WINDOWS/WRITE.EXE).
+ */
+#include "write.h"
+#include <ole.h>
+#include <shellapi.h>
+
+#define PICHDR 40
+
+typedef struct {
+    OLECLIENT cl;                       /* first: OLECLI passes it back */
+    DWORD num;                          /* dwObjNum */
+    LPOLEOBJECT obj;
+    BOOL failed;                        /* could not load: drawn by pict.c */
+    BOOL dirty;                         /* new data to store */
+} WOBJ;
+
+typedef struct {
+    OLESTREAM st;
+    DWORD cp, lim;                      /* reading: the document's text */
+    HMEM out;                           /* writing */
+    DWORD outLen;
+} WSTREAM;
+
+static LHCLIENTDOC lhdoc;
+static OLECLIENTVTBL clvt;
+static OLESTREAMVTBL stvt;
+static HLOCAL hobjs;                    /* WOBJ * table, grows as needed */
+static int nobjs;
+static BOOL inited;
+static DWORD lastNum;
+
+/* ---- streams ----
+ * OLECLI hands Get and Put blocks that may be larger than 64K (Native
+ * data): huge pointers, stepped through in pieces that stay inside one
+ * 64K segment of the block. */
+
+static BYTE FAR *huge_add(const void FAR *p, DWORD n)
+{
+    DWORD lin = OFFSETOF(p) + n;
+    return (BYTE FAR *)MAKELP(SELECTOROF(p) + HIWORD(lin) * ahincr(), LOWORD(lin));
+}
+
+DWORD CALLBACK __export StreamGet(LPOLESTREAM s, void FAR *buf, DWORD n)
+{
+    WSTREAM *w = (WSTREAM *)OFFSETOF(s);    /* ours, in our data segment */
+    DWORD got = 0;
+    while (got < n && w->cp < w->lim) {
+        BYTE FAR *d = huge_add(buf, got);
+        DWORD k = 0x10000L - OFFSETOF(d);
+        if (k > n - got)
+            k = n - got;
+        if (k > w->lim - w->cp)
+            k = w->lim - w->cp;
+        if (k > 0xFFF0L)
+            k = 0xFFF0L;
+        doc_get(&g_doc, w->cp, (char FAR *)d, k);
+        w->cp += k;
+        got += k;
+    }
+    return got;
+}
+
+DWORD CALLBACK __export StreamPut(LPOLESTREAM s, const void FAR *buf, DWORD n)
+{
+    WSTREAM *w = (WSTREAM *)OFFSETOF(s);
+    DWORD done = 0;
+    if (w->outLen + n > w->out.size && !hm_resize(&w->out, w->outLen + n + 1024))
+        return 0;
+    while (done < n) {
+        BYTE FAR *src = huge_add(buf, done);
+        DWORD k = 0x10000L - OFFSETOF(src);
+        if (k > n - done)
+            k = n - done;
+        if (k > 0xFFF0L)
+            k = 0xFFF0L;
+        hm_put(&w->out, w->outLen + done, src, k);
+        done += k;
+    }
+    w->outLen += n;
+    return n;
+}
+
+/* ---- the object table ---- */
+
+static WOBJ **objs(void)
+{
+    return hobjs ? (WOBJ **)LocalLock(hobjs) : NULL;
+}
+
+static WOBJ *find_obj(DWORD num)
+{
+    WOBJ **t = objs(), *o = NULL;
+    int i;
+    for (i = 0; i < nobjs; i++)
+        if (t[i]->num == num) {
+            o = t[i];
+            break;
+        }
+    if (hobjs)
+        LocalUnlock(hobjs);
+    return o;
+}
+
+static WOBJ *add_obj(DWORD num)
+{
+    WOBJ *o = (WOBJ *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(WOBJ));
+    HLOCAL h;
+    WOBJ **t;
+    if (!o)
+        return NULL;
+    h = hobjs ? LocalReAlloc(hobjs, (nobjs + 1) * sizeof(WOBJ *), LMEM_MOVEABLE)
+              : LocalAlloc(LMEM_MOVEABLE, sizeof(WOBJ *));
+    if (!h) {
+        LocalFree((HLOCAL)o);
+        return NULL;
+    }
+    hobjs = h;
+    t = (WOBJ **)LocalLock(hobjs);
+    t[nobjs++] = o;
+    LocalUnlock(hobjs);
+    o->cl.lpvtbl = &clvt;
+    o->num = num;
+    return o;
+}
+
+/* the picture paragraph holding object num: its bounds */
+static BOOL find_para(DWORD num, DWORD *pf, DWORD *pl)
+{
+    DWORD i;
+    for (i = 0; i < g_doc.nparas; i++) {
+        ATOM32 a;
+        PAPX p;
+        para_get(&g_doc, i, pf, pl, &a);
+        pap_decode(&g_doc, a, &p);
+        if (p.fGraphics && *pl <= g_doc.cpMac && *pl >= *pf + PICHDR) {
+            WORD mm = 0;
+            DWORD n = 0;
+            doc_get(&g_doc, *pf, (char FAR *)&mm, 2);
+            doc_get(&g_doc, *pf + 24, (char FAR *)&n, 4);
+            if (mm == 0xE4 && n == num)
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void obj_name(char *s, DWORD num)
+{
+    int i;
+    for (i = 7; i >= 0; i--, num >>= 4)
+        s[i] = "0123456789ABCDEF"[(WORD)num & 15];
+    s[8] = 0;
+}
+
+/* HIMETRIC to twips (UNVERIFIED: the original's arithmetic, ARCHITECTURE
+   docs/wri-format.md: 1058 HIMETRIC were stored as 608) */
+static int hm2tw(long hm)
+{
+    if (hm < 0)
+        hm = -hm;
+    return (int)((hm * 1440 + 1270) / 2540);
+}
+
+/* store the object's stream (and size) in its paragraph */
+static void store(WOBJ *o)
+{
+    WSTREAM ws;
+    DWORD pf, pl, o2;
+    BYTE hdr[PICHDR];
+    RECT r;
+    LONG type = 0;
+    ATOM32 pap, chp, dchp;
+    DWORD i, rf, rl;
+    if (!o->obj || !find_para(o->num, &pf, &pl))
+        return;
+    m_set(&ws, 0, sizeof ws);
+    ws.st.lpstbl = &stvt;
+    if (OleSaveToStream(o->obj, &ws.st) != OLE_OK || !ws.outLen) {
+        hm_free(&ws.out);
+        return;
+    }
+    doc_get(&g_doc, pf, (char FAR *)hdr, PICHDR);
+    *(DWORD *)(hdr + 16) = ws.outLen;
+    if (OleQueryType(o->obj, &type) == OLE_OK)
+        *(WORD *)(hdr + 6) = type == OT_STATIC ? 1 : type == OT_LINK ? 3 : 2;
+    if (OleQueryBounds(o->obj, &r) == OLE_OK && r.right != r.left) {
+        *(WORD *)(hdr + 10) = hm2tw((long)r.right - r.left);
+        *(WORD *)(hdr + 12) = hm2tw((long)r.bottom - r.top);
+    }
+    i = para_at(&g_doc, pf, &rf, &rl, &pap);
+    (void)i;
+    run_at(&g_doc, pf, &rf, &rl, &chp);
+    run_at(&g_doc, pl > pf + PICHDR ? pf + PICHDR : pf, &rf, &rl, &dchp);
+    doc_delete(&g_doc, pf, pl - pf);
+    doc_insert_para(&g_doc, pf, (const char FAR *)hdr, PICHDR, chp, pap);
+    for (o2 = 0; o2 < ws.outLen;) {
+        char buf[512];
+        WORD k = (WORD)(ws.outLen - o2 > sizeof buf ? sizeof buf : ws.outLen - o2);
+        hm_get(&ws.out, o2, buf, k);
+        doc_append_para(&g_doc, pf + PICHDR + o2, buf, k, dchp);
+        o2 += k;
+    }
+    hm_free(&ws.out);
+    o->dirty = FALSE;
+    view_changed(pf);
+}
+
+int CALLBACK __export ClientCallBack(LPOLECLIENT c, OLE_NOTIFICATION n, LPOLEOBJECT obj)
+{
+    WOBJ *o = (WOBJ *)(WORD)(DWORD)c;
+    (void)obj;
+    switch (n) {
+    case OLE_CHANGED:
+    case OLE_SAVED:
+        o->dirty = TRUE;
+        PostMessage(g_frame, WM_USER + 1, 0, (LPARAM)o->num);
+        break;
+    case OLE_CLOSED:
+        PostMessage(g_frame, WM_USER + 1, 1, (LPARAM)o->num);
+        break;
+    case OLE_QUERY_PAINT:
+    case OLE_QUERY_RETRY:
+        return TRUE;
+    default:
+        break;
+    }
+    return TRUE;
+}
+
+/* the frame's WM_USER + 1: an object's data changed (wp 0) or it closed */
+void ole_notify(WPARAM wp, LPARAM lp)
+{
+    WOBJ *o = find_obj((DWORD)lp);
+    (void)wp;
+    if (o && o->dirty) {
+        store(o);
+        g_doc.dirty = TRUE;
+    }
+}
+
+static void wait_release(LPOLEOBJECT obj, OLESTATUS st)
+{
+    MSG m;
+    if (st != OLE_WAIT_FOR_RELEASE)
+        return;
+    while (OleQueryReleaseStatus(obj) == OLE_BUSY) {
+        if (GetMessage(&m, NULL, 0, 0)) {
+            TranslateMessage(&m);
+            DispatchMessage(&m);
+        }
+    }
+}
+
+/* ---- the client document ---- */
+
+void ole_init(void)
+{
+    char name[PATH_MAX_DOS];
+    if (!inited) {
+        *(FARPROC *)&clvt.CallBack = MakeProcInstance((FARPROC)ClientCallBack, g_hinst);
+        *(FARPROC *)&stvt.Get = MakeProcInstance((FARPROC)StreamGet, g_hinst);
+        *(FARPROC *)&stvt.Put = MakeProcInstance((FARPROC)StreamPut, g_hinst);
+        inited = TRUE;
+    }
+    ole_done();
+    if (g_path[0])
+        s_cpy(name, g_path, sizeof name);
+    else
+        load_str(IDS_UNTITLED, name, sizeof name);
+    if (OleRegisterClientDoc("WINWRITE", name, 0, &lhdoc) != OLE_OK)
+        lhdoc = 0;
+}
+
+void ole_done(void)
+{
+    WOBJ **t = objs();
+    int i;
+    for (i = 0; i < nobjs; i++) {
+        if (t[i]->obj)
+            wait_release(t[i]->obj, OleDelete(t[i]->obj));
+        LocalFree((HLOCAL)t[i]);
+    }
+    if (hobjs) {
+        LocalUnlock(hobjs);
+        LocalFree(hobjs);
+    }
+    hobjs = NULL;
+    nobjs = 0;
+    if (lhdoc)
+        OleRevokeClientDoc(lhdoc);
+    lhdoc = 0;
+}
+
+void ole_saved(void)
+{
+    char name[PATH_MAX_DOS];
+    if (!lhdoc)
+        return;
+    s_cpy(name, g_path, sizeof name);
+    OleRenameClientDoc(lhdoc, name);
+    OleSavedClientDoc(lhdoc);
+}
+
+/* ---- drawing ---- */
+
+static WOBJ *load(DWORD pf, DWORD pl)
+{
+    DWORD num = 0;
+    WORD type = 0;
+    WOBJ *o;
+    WSTREAM ws;
+    char name[9];
+    OLESTATUS st;
+    doc_get(&g_doc, pf + 24, (char FAR *)&num, 4);
+    doc_get(&g_doc, pf + 6, (char FAR *)&type, 2);
+    o = find_obj(num);
+    if (o)
+        return o;
+    o = add_obj(num);
+    if (!o || !lhdoc)
+        return o;
+    m_set(&ws, 0, sizeof ws);
+    ws.st.lpstbl = &stvt;
+    ws.cp = pf + PICHDR;
+    ws.lim = pl;
+    obj_name(name, num);
+    st = OleLoadFromStream(&ws.st, type == 1 ? "Static" : "StdFileEditing", &o->cl, lhdoc,
+                           name, &o->obj);
+    if (st == OLE_WAIT_FOR_RELEASE)
+        wait_release(o->obj, st);
+    else if (st != OLE_OK)
+        o->obj = NULL;
+    o->failed = o->obj == NULL;
+    return o;
+}
+
+/* draw the object paragraph [pf, pl) into r; FALSE: draw it otherwise */
+BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r)
+{
+    WOBJ *o;
+    if (!lhdoc)
+        return FALSE;
+    o = load(pf, pl);
+    if (!o || !o->obj)
+        return FALSE;
+    return OleDraw(o->obj, dc, r, NULL, NULL) == OLE_OK;
+}
+
+/* double-click: the server opens the object */
+void ole_activate(DWORD pf, DWORD pl, const RECT *r)
+{
+    WOBJ *o = load(pf, pl);
+    if (o && o->obj)
+        wait_release(o->obj, OleActivate(o->obj, OLEVERB_PRIMARY, TRUE, TRUE, g_docwnd, r));
+}
+
+/* ---- Insert Object ---- */
+
+static char newClass[64];
+
+BOOL CALLBACK __export InsertObjDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    if (msg == WM_INITDIALOG) {
+        HKEY root;
+        char key[64], val[128], path[96];
+        DWORD i;
+        HWND lb = GetDlgItem(d, 265);
+        /* the registration database: every class with a StdFileEditing
+           server, by its readable name; the class name kept as item data */
+        if (RegOpenKey(HKEY_CLASSES_ROOT, NULL, &root) == ERROR_SUCCESS) {
+            for (i = 0; RegEnumKey(root, i, key, sizeof key) == ERROR_SUCCESS; i++) {
+                LONG cb = sizeof val;
+                HKEY k;
+                if (key[0] == '.')
+                    continue;
+                s_cpy(path, key, sizeof path);
+                s_cat(path, "\\protocol\\StdFileEditing\\server", sizeof path);
+                if (RegOpenKey(HKEY_CLASSES_ROOT, path, &k) != ERROR_SUCCESS)
+                    continue;
+                RegCloseKey(k);
+                if (RegQueryValue(HKEY_CLASSES_ROOT, key, val, &cb) != ERROR_SUCCESS || !val[0])
+                    continue;
+                {
+                    int ix = (int)SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)val);
+                    char *c = (char *)LocalAlloc(LMEM_FIXED, s_len(key) + 1);
+                    if (c) {
+                        s_cpy(c, key, s_len(key) + 1);
+                        SendMessage(lb, LB_SETITEMDATA, ix, (LPARAM)(WORD)c);
+                    }
+                }
+            }
+            RegCloseKey(root);
+        }
+        SendMessage(lb, LB_SETCURSEL, 0, 0);
+        return TRUE;
+    }
+    if (msg == WM_COMMAND) {
+        HWND lb = GetDlgItem(d, 265);
+        if (wp == IDOK || (wp == 265 && HIWORD(lp) == LBN_DBLCLK)) {
+            int ix = (int)SendMessage(lb, LB_GETCURSEL, 0, 0);
+            if (ix >= 0) {
+                char *c = (char *)(WORD)SendMessage(lb, LB_GETITEMDATA, ix, 0);
+                s_cpy(newClass, c, sizeof newClass);
+            }
+            wp = ix >= 0 ? IDOK : IDCANCEL;
+        }
+        if (wp == IDOK || wp == IDCANCEL) {
+            int i, n = (int)SendMessage(lb, LB_GETCOUNT, 0, 0);
+            for (i = 0; i < n; i++)
+                LocalFree((HLOCAL)(WORD)SendMessage(lb, LB_GETITEMDATA, i, 0));
+            EndDialog(d, wp);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void cmd_insertobj(void)
+{
+    FARPROC fp;
+    int r;
+    DWORD num, cp, pf, pl;
+    WOBJ *o;
+    char name[9];
+    BYTE hdr[PICHDR];
+    ATOM32 pa, chp;
+    PAPX p;
+    CHPX c;
+    if (!lhdoc)
+        return;
+    fp = MakeProcInstance((FARPROC)InsertObjDlgProc, g_hinst);
+    r = DialogBox(g_hinst, "DTCREATE", g_frame, (DLGPROC)fp);
+    FreeProcInstance(fp);
+    if (r != IDOK || !newClass[0])
+        return;
+    /* the object's number: the clock, as the original's (ARCHITECTURE.md
+       16.6), never the same twice */
+    num = GetCurrentTime();
+    if (num <= lastNum)
+        num = lastNum + 1;
+    lastNum = num;
+    o = add_obj(num);
+    if (!o)
+        return;
+    /* a paragraph of its own at the caret: after a paragraph mark first
+       when the caret is inside a paragraph (UNVERIFIED) */
+    if (g_selLim > g_selFirst)
+        doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
+    cp = g_selFirst;
+    para_at(&g_doc, cp, &pf, &pl, &pa);
+    sel_props(&c);
+    chp = chp_atom(&g_doc, &c);
+    if (cp != pf) {
+        doc_insert(&g_doc, cp, "\r\n", 2, chp);
+        cp += 2;
+    }
+    pap_default(&p);
+    p.rhc = 0x10;                       /* a picture (SDK ch. 8, WR7) */
+    p.fGraphics = TRUE;
+    pa = pap_atom(&g_doc, &p);
+    m_set(hdr, 0, sizeof hdr);
+    *(WORD *)hdr = 0xE4;
+    *(WORD *)(hdr + 6) = 2;             /* embedded */
+    *(DWORD *)(hdr + 24) = num;
+    *(WORD *)(hdr + 30) = PICHDR;
+    *(WORD *)(hdr + 36) = 1000;
+    *(WORD *)(hdr + 38) = 1000;
+    doc_insert_para(&g_doc, cp, (const char FAR *)hdr, PICHDR, 0, pa);
+    g_doc.ident = 0xBE32;
+    g_selFirst = g_selLim = cp + PICHDR;
+    view_changed(cp);
+    obj_name(name, num);
+    r = OleCreate("StdFileEditing", &o->cl, newClass, lhdoc, name, &o->obj, olerender_draw, 0);
+    if (r == OLE_WAIT_FOR_RELEASE)
+        wait_release(o->obj, r);
+    else if (r != OLE_OK) {
+        o->obj = NULL;
+        o->failed = TRUE;
+    }
+}

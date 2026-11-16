@@ -8,3 +8,4 @@ option description 'w16 Write'
 library windows.lib
 library shell.lib
 library commdlg.lib
+library olecli.lib

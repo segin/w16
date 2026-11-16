@@ -84,6 +84,8 @@ static void new_doc(void)
     saveFormat = FMT_WRI;
     g_path[0] = 0;
     set_title();
+    ole_init();
+    undo_clear();
     view_reset();
 }
 
@@ -156,6 +158,8 @@ static BOOL open_path(LPCSTR path)
         AnsiUpper(g_path);
     }
     set_title();
+    ole_init();
+    undo_clear();
     view_reset();
     return TRUE;
 }
@@ -326,7 +330,10 @@ static LRESULT command(HWND w, WORD id)
     case IDM_SAVE:
         if (!g_path[0])
             return command(w, IDM_SAVEAS);
-        return save_to(g_path);
+        if (!save_to(g_path))
+            return FALSE;
+        ole_saved();
+        return TRUE;
     case IDM_SAVEAS:
         s_cpy(path, g_path, sizeof path);
         if (!file_dialog(TRUE, path))
@@ -336,6 +343,7 @@ static LRESULT command(HWND w, WORD id)
         s_cpy(g_path, path, sizeof g_path);
         AnsiUpper(g_path);
         set_title();
+        ole_saved();
         return TRUE;
     case IDM_EXIT:
         PostMessage(w, WM_CLOSE, 0, 0);
@@ -390,6 +398,13 @@ static LRESULT command(HWND w, WORD id)
         break;
     case IDM_HELPHELP:
         help(HELP_HELPONHELP, 0);
+        break;
+    case IDM_UNDO:
+        cmd_undo();
+        break;
+    case IDM_INSERTOBJ:
+        undo_save(IDS_EDITING);
+        cmd_insertobj();
         break;
     case IDM_ABOUT:
         about();
@@ -450,7 +465,11 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_QUERYENDSESSION:
         return ask_save();
+    case WM_USER + 1:                   /* ole.c: an object changed */
+        ole_notify(wp, lp);
+        return 0;
     case WM_DESTROY:
+        ole_done();
         help(HELP_QUIT, 0);             /* with WRITE.HLP named (WR11) */
         PostQuitMessage(0);
         return 0;

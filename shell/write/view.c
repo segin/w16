@@ -531,8 +531,13 @@ static void paint_line(HDC dc, const LINE *ln, int y)
         page_mark(dc, -xpScroll, y + ln->ascent);
     if (ln->picture) {
         PICT pic;
+        RECT r;
         pict_read(ln->cpFirst, ln->cpLim, &pic);
-        pict_draw(dc, &pic, ln->xLeft - xpScroll, y, ln->width, ln->height);
+        SetRect(&r, ln->xLeft - xpScroll, y, ln->xLeft - xpScroll + ln->width, y + ln->height);
+        /* an OLE object: OLECLI draws it (an embedded Paintbrush picture
+           has no picture of its own in the stream); else ours */
+        if (pic.mm != 0xE4 || !ole_draw(dc, ln->cpFirst, ln->cpLim, &r))
+            pict_draw(dc, &pic, ln->xLeft - xpScroll, y, ln->width, ln->height);
         return;
     }
     {
@@ -894,6 +899,8 @@ void view_char(WORD ch)
 {
     char s[2];
     caret_defer();
+    if (ch >= ' ' || ch == '\t' || ch == '\r' || ch == '\b')
+        undo_save(IDS_TYPING);
     if (ch == '\b') {
         if (g_selLim > g_selFirst) {
             doc_delete(&g_doc, g_selFirst, g_selLim - g_selFirst);
@@ -986,6 +993,10 @@ void view_key(WPARAM vk)
     DWORD to = cp;
     LINE ln;
     caretDefer = FALSE;
+    if (vk == VK_DELETE)
+        undo_save(IDS_EDITING);
+    else
+        undo_end_typing();
     switch (vk) {
     case VK_LEFT:
         if (!shift && g_selFirst != g_selLim)
@@ -1146,9 +1157,28 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CHAR:
         view_char(wp);
         return 0;
+    case WM_LBUTTONDBLCLK: {
+        /* on an object: open it in its server */
+        LINE *l = lines();
+        int i, yy = YP0;
+        for (i = 0; i < nlines; i++) {
+            if ((int)HIWORD(lp) >= yy && (int)HIWORD(lp) < yy + l[i].height && l[i].picture) {
+                RECT r;
+                DWORD f = l[i].cpFirst, li = l[i].cpLim;
+                SetRect(&r, l[i].xLeft, yy, l[i].xLeft + l[i].width, yy + l[i].height);
+                LocalUnlock(hlines);
+                ole_activate(f, li, &r);
+                return 0;
+            }
+            yy += l[i].height;
+        }
+        LocalUnlock(hlines);
+        return 0;
+    }
     case WM_LBUTTONDOWN: {
         DWORD cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
         SetFocus(w);
+        undo_end_typing();
         if (wp & MK_SHIFT) {
             view_select(cp < selAnchor ? cp : selAnchor, cp < selAnchor ? selAnchor : cp, FALSE);
         } else {

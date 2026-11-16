@@ -255,6 +255,7 @@ extern DOC g_doc;
 void   doc_init(DOC *d);
 void   doc_new(DOC *d);
 void   doc_free(DOC *d);
+BOOL   doc_copy(DOC *d, const DOC *s);
 BYTE   doc_ch(DOC *d, DWORD cp);
 DWORD  doc_get(DOC *d, DWORD cp, char FAR *buf, DWORD n);
 ATOM32 atom_intern(DOC *d, const BYTE FAR *b, WORD len);
@@ -278,6 +279,8 @@ BOOL   doc_insert(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp);
 BOOL   doc_delete(DOC *d, DWORD cp, DWORD n);
 BOOL   doc_set_chp(DOC *d, DWORD cp, DWORD cpLim, ATOM32 (*fn)(DOC *, ATOM32, WORD), WORD arg);
 BOOL   doc_terminate_last(DOC *d, ATOM32 chp);
+BOOL   doc_insert_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp, ATOM32 pap);
+BOOL   doc_append_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp);
 WORD   font_code(DOC *d, const char FAR *name, BYTE ffid);
 FFN FAR *font_get(DOC *d, WORD ftc);
 /* files (wrifile.c) */
@@ -309,6 +312,14 @@ typedef struct {
     BITMAP bm;
 } PICT;
 BOOL pict_read(DWORD cp, DWORD cpLim, PICT *p);
+/* OLE objects (ole.c) */
+void ole_init(void);
+void ole_done(void);
+void ole_saved(void);
+void ole_notify(WPARAM wp, LPARAM lp);
+BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r);
+void ole_activate(DWORD pf, DWORD pl, const RECT *r);
+void cmd_insertobj(void);
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */
@@ -332,6 +343,10 @@ void  sel_props(CHPX *c);
 
 /* ---- commands (cmds.c), main (main.c) ---- */
 void  cmd_char(WORD id);
+void  cmd_undo(void);
+void  undo_save(WORD kind);
+void  undo_end_typing(void);
+void  undo_clear(void);
 void  cmd_para(WORD id);
 void  cmd_indents(void);
 void  cmd_tabs(void);

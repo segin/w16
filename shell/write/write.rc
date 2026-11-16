@@ -415,3 +415,15 @@ BEGIN
     CONTROL "OK", 1, "Button", 0x50010001L, 97, 44, 40, 14
 END
 
+/* Insert Object (the original's DTCREATE; the list holds the classes of
+   the registration database that have an editing server) */
+DTCREATE DIALOG 82, 56, 180, 62
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Insert Object"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", 265, "Listbox", 0x50A10003L, 6, 14, 125, 40
+    CONTROL "OK", 1, "Button", 0x50010001L, 139, 6, 35, 14
+    CONTROL "Cancel", 2, "Button", 0x50010000L, 139, 28, 35, 14
+    CONTROL "&Object Type:", -1, "Static", 0x50000000L, 7, 3, 50, 9
+END
