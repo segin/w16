@@ -548,7 +548,8 @@ static void xact_done(CONV NEAR *c, XACT NEAR *x, HGLOBAL data)
     }
     {
         HDDEDATA hd = data ? data_wrap(c->inst, data, TRUE, x->item)
-                    : (x->err ? 0 : (HDDEDATA)1);
+                    : x->err ? 0
+                    : data_handle(data_new(c->inst, NULL, DF_TEMP | DF_USED, x->item, x->fmt));
         DWORD id = MAKELONG((WORD)x, x->id);
         UINT type = x->type;
         WORD status = x->status;
@@ -669,7 +670,7 @@ static BOOL client_data(CONV NEAR *c, WPARAM wp, LPARAM lp)
                 GlobalFree(h);
             return TRUE;
         }
-        x->status = DDE_FACK;
+        x->status = 0;                  /* XACT_COMPLETE's dwData2 (3.1) */
         x->err = 0;
         xact_done(c, x, h);
         return TRUE;
@@ -764,10 +765,14 @@ LRESULT FAR PASCAL __loadds ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
             if (c->mode == CM_LIST) {
                 CONV NEAR *n = conv_new(c->inst, TRUE, c->inst->dmg);
                 if (n) {
+                    CONV NEAR *s = local_window((HWND)wp, CLS_SERVER) ? conv_of_window((HWND)wp)
+                                 : (CONV NEAR *)0;
                     n->mode = CM_LIST;
                     n->svcreq = addref(c->svcreq);
                     bcopy(&n->cc, &c->cc, sizeof(CONVCONTEXT));
                     client_connected(n, (HWND)wp, LOWORD(lp), HIWORD(lp));
+                    if (s)
+                        s->partner = n->hwnd;
                 }
                 return 0;
             }

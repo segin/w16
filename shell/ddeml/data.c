@@ -39,7 +39,7 @@ static WORD hdr(DATA NEAR *d)
 
 static DWORD dsize(DATA NEAR *d)
 {
-    DWORD n = GlobalSize(d->h);
+    DWORD n = d->h ? GlobalSize(d->h) : 0;
     return n >= hdr(d) ? n - hdr(d) : 0;
 }
 
