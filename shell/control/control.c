@@ -19,7 +19,8 @@
  * Sans Serif the names are drawn in) and SM_CYICON + 6 + the font height
  * (51) high, filled row by row. The icon sits 6 pixels below the cell top,
  * centred; the name right under it, centred; the selected applet's name
- * on COLOR_HIGHLIGHT exactly as wide as its text. The list shows
+ * on COLOR_ACTIVECAPTION in COLOR_CAPTIONTEXT, exactly as wide as its
+ * text. The list shows
  * (list width - 18) / cell width columns.
  *
  * Applets. MAIN.CPL from the SYSTEM directory first, then each module named
@@ -490,8 +491,14 @@ static void draw_item(HDC dc, int i)
     SetRect(&t, x, r.top + 6 + GetSystemMetrics(SM_CYICON), x + a->width,
             r.top + 6 + GetSystemMetrics(SM_CYICON) + font_h);
     if (i == cur) {
-        SetBkColor(dc, GetSysColor(COLOR_HIGHLIGHT));
-        SetTextColor(dc, GetSysColor(COLOR_HIGHLIGHTTEXT));
+        /* the caption's colours, active or not (observed on 3.1 with
+           WIN.INI ActiveTitle, TitleText, Hilight and HilightText all
+           different: the name on ActiveTitle in TitleText, also while
+           another window is active; with the Arizona scheme it is dark
+           gray, the nearest solid colour to its ActiveTitle). w16 used
+           COLOR_HIGHLIGHT, the same colour in the default scheme only */
+        SetBkColor(dc, GetSysColor(COLOR_ACTIVECAPTION));
+        SetTextColor(dc, GetSysColor(COLOR_CAPTIONTEXT));
         ExtTextOut(dc, x, t.top, ETO_OPAQUE | ETO_CLIPPED, &t, a->name, lstrlen(a->name), NULL);
     } else {
         SetBkColor(dc, GetSysColor(COLOR_WINDOW));
