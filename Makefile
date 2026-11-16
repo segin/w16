@@ -974,6 +974,12 @@ all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1
+W16TREE += $(W16)/WRITE.EXE
+install-tree: $(W16)/WRITE.EXE
+$(W16)/WRITE.EXE: $(DOS)/WRITE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 $(W16)/README.TXT: win/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@

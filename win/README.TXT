@@ -7,6 +7,7 @@ w16 repository's LICENSE):
 
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
+  WRITE.EXE               Write
   SYSTEM\KRNL286.EXE      KERNEL
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
@@ -33,6 +34,10 @@ overwriting the files above:
 
 Do not copy KRNL386.EXE: on a 386 or later, DOSX starts KRNL386.EXE when
 it is there and w16's KRNL286.EXE only when it is not.
+
+Write uses COMMDLG.DLL, OLECLI.DLL and SHELL.DLL from SYSTEM, and shows
+TrueType fonts (Arial is a new document's font); its help is your
+Windows' WRITE.HLP, copied into the Windows directory.
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
