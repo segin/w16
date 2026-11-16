@@ -45,6 +45,19 @@ Every piece of knowledge in w16 must have a recorded source. When a fact, struct
 | Test-only tools (DOSBox, HDPMI16, the user-supplied reference Windows copies) | **Not shipped** | Used to build and test only; kept out of the repository (`.tools/`). |
 | Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not licensed by MIT. Use only to describe compatibility, never as the product's name. |
 
+**References.** The documentation w16 relies on, under the "facts only" rules above (no sample code, headers or macro bodies; a fact taken from them is confirmed by a probe wherever it can be). Cite them by author, title and chapter or page:
+
+- Microsoft Corporation. *Microsoft Windows Programmer's Reference, Volume 1: Overview.* Windows 3.1 SDK. Microsoft Press, 1992. ISBN 1-55615-453-4. Doc. PC28915-0492.
+- Microsoft Corporation. *Microsoft Windows Programmer's Reference, Volume 2: Functions.* Windows 3.1 SDK. Microsoft Press, 1992. ISBN 1-55615-463-1. Doc. PC28916-0492.
+- Microsoft Corporation. *Microsoft Windows Programmer's Reference, Volume 3: Messages, Structures, and Macros.* Windows 3.1 SDK. Microsoft Press, 1992. ISBN 1-55615-464-X. Doc. PC28917-0492. (Its macros are documentation of C helper macros; Volume 4's assembly-language macros, ch. 14, are Microsoft code and excluded.)
+- Microsoft Corporation. *Microsoft Windows Programmer's Reference, Volume 4: Resources.* Windows 3.1 SDK. Microsoft Press, 1992. ISBN 1-55615-494-1. Doc. PC30211-0492. File formats: bitmaps, icons and cursors, clipboard, metafile, fonts, Program Manager groups, NE executables and resources, Write, Calendar, object modules and libraries, symbol files, resource scripts, Help.
+- Microsoft Corporation. *Microsoft Windows Multimedia Programmer's Guide.* Windows 3.1 SDK, 1992. Doc. PC30253-0492.
+- Microsoft Corporation. *The Windows Interface: An Application Design Guide.* Windows 3.1 SDK, 1992. Doc. PC28921-0692.
+- Microsoft Corporation. *Microsoft Windows 3.1 Device Driver Kit: Device Driver Adaptation Guide* and *Virtual Device Adaptation Guide.* 1992.
+- Microsoft Corporation. *Microsoft Windows 3.1 Device Driver Kit: Installation.* 1992. Doc. PC29131-0392.
+- Schulman, Andrew, David Maxey and Matt Pietrek. *Undocumented Windows.* Addison-Wesley, 1992.
+- Pietrek, Matt. *Windows Internals: The Implementation of the Windows Operating Environment.* Addison-Wesley, 1993.
+
 **Format facts versus data (the user's rule, 2026-11-09).** Windows' file formats may be parsed: NE, LE and W3 headers, import and export tables, resource tables, and the structure of resources. What a compatible replacement needs to look and behave identically may be reproduced in w16's own source files. Wine follows the same practice. This covers:
 - dialog-template layouts: control positions, IDs, classes and styles;
 - menu structures and command IDs;
