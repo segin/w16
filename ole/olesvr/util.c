@@ -8,18 +8,31 @@ HINSTANCE svr_inst;
 SRV FARP *svr_list;
 WORD cf_native, cf_ownerlink, cf_objectlink, cf_binary;
 
-/* ---- memory: fixed, shared global blocks (they outlive no task: each
-   server's are freed when it is revoked) ---- */
+/* ---- memory (each server's is freed when it is revoked) ---- */
 
+/* Small blocks come from the library's local heap, as Windows 3.1's
+   OLESVR keeps its own (it imports LocalAlloc): the global heap, whose
+   free blocks clients' DDE blocks reuse, then looks as it does with 3.1's.
+   What does not fit there goes to a shared global block: no limit. */
 void FARP *mem_alloc(DWORD n)
 {
-    HGLOBAL h = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT | GMEM_SHARE, n ? n : 1);
+    HGLOBAL h;
+    if (n < 0x1000) {
+        HLOCAL l = LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (UINT)(n ? n : 1));
+        if (l)
+            return MAKELP(SELECTOROF((void FAR *)&svr_inst), (WORD)l);
+    }
+    h = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT | GMEM_SHARE, n ? n : 1);
     return h ? GlobalLock(h) : NULL;
 }
 
 void mem_free(void FARP *p)
 {
-    if (p) {
+    if (!p)
+        return;
+    if (SELECTOROF(p) == SELECTOROF((void FAR *)&svr_inst)) {
+        LocalFree((HLOCAL)OFFSETOF(p));
+    } else {
         HGLOBAL h = (HGLOBAL)LOWORD(GlobalHandle(SELECTOROF(p)));
         GlobalUnlock(h);
         GlobalFree(h);
@@ -156,6 +169,23 @@ void conv_unlink(HWND w, CONV FARP **l, HWND client)
         RemoveProp(w, n);
     }
     conv_remove(l, client);
+}
+
+/* a revoke meets conversations whose client has already sent TERMINATE
+   (it is being handled): they get theirs and end at once */
+void conv_close_now(HWND w, CONV FARP **l)
+{
+    CONV FARP *c = *l, FARP *n;
+    for (; c; c = n) {
+        n = c->next;
+        if (c->closing) {
+            if (!c->term_posted) {
+                c->term_posted = TRUE;
+                PostMessage(c->client, WM_DDE_TERMINATE, (WPARAM)w, 0);
+            }
+            conv_unlink(w, l, c->client);
+        }
+    }
 }
 
 void conv_remove(CONV FARP **l, HWND client)

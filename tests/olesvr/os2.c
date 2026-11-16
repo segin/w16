@@ -259,7 +259,7 @@ LRESULT CALLBACK __export ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 static HGLOBAL ddeblock(WORD flags, WORD cf, const char *text)
 {
     WORD n = lstrlen(text) + 1;
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 4);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 4);
     WORD FAR *p = h ? (WORD FAR *)GlobalLock(h) : NULL;
     if (!p)
         return NULL;
@@ -352,7 +352,7 @@ static void winfo(HWND h, int depth)
 
 static BOOL israw(const char *l)
 {
-    static const char *raw[] = { "init", "exec", "req", "poke", "advise", "unadvise",
+    static const char *raw[] = { "init", "exec", "req", "poke", "pokehost", "advise", "unadvise",
                                  "term", "ackdata" };
     int i;
     for (i = 0; i < (int)(sizeof raw / sizeof raw[0]); i++)
@@ -497,6 +497,25 @@ static void step(char *l)
             a = word(&arg);
             cf = format(word(&arg));
             post_wait(WM_DDE_POKE, MAKELPARAM(ddeblock(0x2000, cf, arg), GlobalAddAtom(a)));
+        } else if (!lstrcmpi(l, "pokehost")) {
+            /* StdHostNames as OLECLI sends it: Binary {0, offset of the
+               document name, "client\0document\0"} */
+            WORD cn, dn;
+            HGLOBAL h;
+            BYTE FAR *p;
+            a = word(&arg);
+            cn = lstrlen(a) + 1;
+            dn = lstrlen(arg) + 1;
+            h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, 8 + cn + dn);
+            p = (BYTE FAR *)GlobalLock(h);
+            ((WORD FAR *)p)[0] = 0x2000;
+            ((WORD FAR *)p)[1] = RegisterClipboardFormat("Binary");
+            ((WORD FAR *)p)[2] = 0;
+            ((WORD FAR *)p)[3] = cn;
+            lstrcpy((LPSTR)p + 8, a);
+            lstrcpy((LPSTR)p + 8 + cn, arg);
+            GlobalUnlock(h);
+            post_wait(WM_DDE_POKE, MAKELPARAM(h, GlobalAddAtom("StdHostNames")));
         } else if (!lstrcmpi(l, "advise")) {
             WORD cf, fl;
             a = word(&arg);

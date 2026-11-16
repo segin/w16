@@ -27,7 +27,7 @@ exec [StdCloseDocument]
 req StdDocumentName CF_TEXT
 req StdDocumentName 1
 req Native Native
-poke StdHostNames 1 hello
+pokehost RawSys RawSysDoc
 term
 init OS1Probe RAWDOC
 req StdDocumentName 1
@@ -40,8 +40,8 @@ req item1 1
 req item1 2
 req item1 8
 req "" Native
-poke StdHostNames 1 RawClient
-poke StdHostNames Native RawClient
+pokehost RawClient RawDoc
+pokehost "" ""
 poke StdDocDimensions 1 x
 poke StdColorScheme 1 x
 poke StdTargetDevice 1 x

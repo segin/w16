@@ -50,8 +50,9 @@ static BOOL any_conv(SRV FARP *s)
         if (!c->closing)
             return TRUE;
     for (d = s->docs; d; d = d->next)
-        if (d->convs)
-            return TRUE;
+        for (c = d->convs; c; c = c->next)
+            if (!c->closing)
+                return TRUE;
     return FALSE;
 }
 
@@ -159,6 +160,7 @@ OLESTATUS FAR PASCAL __loadds OLEREVOKESERVER(LHSERVER lh)
             doc_revoke(d);
     }
     s->busy = FALSE;
+    conv_close_now(s->hwnd, &s->convs);
     for (c = s->convs; c; c = c->next)
         c->terminating = TRUE;
     if (s->convs)
@@ -528,21 +530,22 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         c = conv_find(s->convs, client);
         if (!c)
             return 0;
-        if (!c->terminating || !c->term_posted)
-            PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
         /* observed: the end of a system conversation lets the server go
-           only when it is an OLE_SERVER_MULTI one without documents. The
-           conversation still counts while the server hears of it: a
-           server that revokes itself in Release (Packager) sends it a
-           second TERMINATE, and goes when Release returns. */
+           only when it is an OLE_SERVER_MULTI one without documents.
+           Release comes before the answering TERMINATE: a server that
+           revokes itself in Release gets OLE_OK at once (the client has
+           gone), and the client gets one TERMINATE (relq scenario) */
         c->closing = TRUE;
         if (!s->revoking && s->use == OLE_SERVER_MULTI && !ndocs(s))
             srv_check_release(s);
-        if (s->revoking && !c->term_posted) {
-            c->term_posted = TRUE;
-            PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
+        if (!srv_from((LHSERVER)s))
+            return 0;                   /* revoked and gone meanwhile */
+        c = conv_find(s->convs, client);
+        if (c) {
+            if (!c->term_posted)
+                PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
+            conv_unlink(s->hwnd, &s->convs, client);
         }
-        conv_unlink(s->hwnd, &s->convs, client);
         if (s->revoking)
             srv_try_finish(s);
         return 0;

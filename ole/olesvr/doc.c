@@ -192,6 +192,7 @@ OLESTATUS doc_revoke(DOC FARP *d)
             it->obj->lpvtbl->Release(it->obj);
         item_free(it);
     }
+    conv_close_now(d->hwnd, &d->convs);
     for (c = d->convs; c; c = c->next)
         c->terminating = TRUE;
     if (d->convs) {
@@ -701,19 +702,26 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_DDE_TERMINATE: {
         SRV FARP *s = d->srv;
-        if (!c->term_posted)
-            PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
-        conv_unlink(d->hwnd, &d->convs, client);
+        /* as on the system topic: Release (when no conversation is
+           left) before the answer, which a revoke inside Release gives */
+        c->closing = TRUE;
+        if (!d->revoking)
+            srv_check_release(s);
+        if (!doc_from((LHSERVERDOC)d))
+            return 0;                   /* revoked and gone meanwhile */
+        c = conv_find(d->convs, client);
+        if (c) {
+            if (!c->term_posted)
+                PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
+            conv_unlink(d->hwnd, &d->convs, client);
+        }
         adv_drop_client(&d->renames, client);
         for (it = d->items; it; it = it->next) {
             adv_drop_client(&it->advs, client);
             conv_remove(&it->users, client);
         }
-        if (d->revoking) {
-            if (!d->convs)
-                doc_finish(d);
-        } else
-            srv_check_release(s);
+        if (d->revoking && !d->convs)
+            doc_finish(d);
         return 0;
     }
     case WM_DDE_ACK:                    /* to our DATA: nothing to do */

@@ -9,7 +9,7 @@ exec [StdNewDocument("OS1Probe","BLK")]
 term
 init OS1Probe BLK
 req item1 Native
-poke StdHostNames 1 x
+pokehost BlockClient BlockDoc
 advise item1 Native 32768
 exec [StdShowItem("item1")]
 wait 8000
