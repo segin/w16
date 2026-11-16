@@ -1,0 +1,133 @@
+; boot-test case cpclose (tests/inputrun.sh): Control Panel's applets
+; opened over the panel and closed, OK and Cancel, by mouse and keys; the
+; screen after each close is compared (see tests/boottest.sh). Color: a
+; scheme picked from the drop-down list with the mouse, then OK (the new
+; colours: SetSysColors, WM_SYSCOLORCHANGE, everything repainted) or
+; Cancel, and OK with nothing changed; Keyboard and
+; Mouse: OK and Cancel; Desktop: a pattern picked from its list and
+; Cancel, then OK with none (WIN.INI CursorBlinkRate=65535, so that its blink sample and a
+; focused scroll bar's caret hold still). A list dropped and hidden after a
+; selection is what left Control Panel's status line unpainted on w16's
+; USER (2026-11-16). Generated from tests/scripts/input/cpclose.src by
+; tools/inputgoto.py (coordinates: Windows 3.1's dialogs at the places
+; 3.1 opens them); the case sets WIN.INI MouseSpeed=0, so the pointer
+; moves one pixel a unit.
+click 1
+sleep 1
+; Control Panel's caption (activates it)
+goto 215 10
+click 1
+sleep 0.5
+match 01-start 30 2
+shot 01-start
+; Color (double click), the scheme list's second item, OK
+goto 32 64
+dclick 1
+settle 30 2
+goto 241 76
+click 1
+settle 10 1
+goto 60 106
+click 1
+settle 10 1
+goto 47 342
+click 1
+match 02-color-ok 30 2
+shot 02-color-ok
+; Color, the third item, Cancel
+goto 32 64
+dclick 1
+settle 30 2
+goto 241 76
+click 1
+settle 10 1
+goto 60 121
+click 1
+settle 10 1
+goto 130 342
+click 1
+match 03-color-cancel 30 2
+shot 03-color-cancel
+; Color, OK with nothing changed (OK still sets the colours and sends
+; WM_SYSCOLORCHANGE). The rest runs in the scheme picked first: with a
+; scheme other than the first selected, the same click in the dropped list
+; picked another scheme on 3.1 than on w16's USER
+goto 32 64
+dclick 1
+settle 30 2
+goto 47 342
+click 1
+match 04-color-same 30 2
+shot 04-color-same
+; Color from the keyboard (Settings menu), closed with Escape
+key alt+s
+sleep 0.5
+key c
+settle 30 2
+key Escape
+match 05-color-esc 30 2
+shot 05-color-esc
+; Keyboard, OK
+goto 322 64
+dclick 1
+settle 30 2
+goto 272 69
+click 1
+match 06-kb-ok 30 2
+shot 06-kb-ok
+; Keyboard (Return), Escape
+key Return
+settle 30 2
+key Escape
+match 07-kb-cancel 30 2
+shot 07-kb-cancel
+; Mouse, OK
+goto 206 64
+dclick 1
+settle 30 2
+goto 332 76
+click 1
+match 08-mouse-ok 30 2
+shot 08-mouse-ok
+; Mouse, Cancel
+goto 206 64
+dclick 1
+settle 30 2
+goto 332 102
+click 1
+match 09-mouse-cancel 30 2
+shot 09-mouse-cancel
+; Desktop, the pattern list's second item (50% Gray), Cancel
+goto 264 64
+dclick 1
+settle 30 2
+goto 150 81
+click 1
+settle 10 1
+goto 100 110
+click 1
+settle 10 1
+goto 325 89
+click 1
+match 10-desk-cancel 30 2
+shot 10-desk-cancel
+; Desktop, the list dropped and (None) picked again, OK (the last: its OK
+; writes CursorBlinkRate, which the case sets to 65535 so that nothing
+; blinks; not a pattern: w16's USER does not draw desktop patterns yet)
+goto 264 64
+dclick 1
+settle 30 2
+goto 150 81
+click 1
+settle 10 1
+goto 100 97
+click 1
+settle 10 1
+goto 325 61
+click 1
+match 11-desk-ok 30 2
+shot 11-desk-ok
+; the pointer off the panel, on the desktop
+goto 600 460
+match 12-end 30 2
+shot 12-end

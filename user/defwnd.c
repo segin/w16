@@ -1041,7 +1041,12 @@ LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         RECT r;
         HBRUSH old;
         GetClientRect(h, &r);
+        /* the pattern aligned with the screen: a cache DC can come with
+           the brush origin another user left (the gray caret's sets it
+           to 1); 3.1's dithered desktop had one phase everywhere, w16's
+           changed from one repaint to the next (boot-test cpclose) */
         UnrealizeObject(sysbrush[COLOR_BACKGROUND]);
+        SetBrushOrg((HDC)wp, 0, 0);
         old = SelectObject((HDC)wp, sysbrush[COLOR_BACKGROUND]);
         PatBlt((HDC)wp, r.left, r.top, r.right - r.left, r.bottom - r.top, PATCOPY);
         SelectObject((HDC)wp, old);

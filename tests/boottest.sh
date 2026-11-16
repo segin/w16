@@ -462,6 +462,13 @@
 #              the default set: run it by name): the parts kb-us ... co-us,
 #              w16's USER against Microsoft's, screens and INI files; they
 #              show USER's remaining differences (ARCHITECTURE.md 14)
+#   cpclose    Control Panel's applets opened over the panel and closed,
+#              OK and Cancel, a scheme or pattern picked from a dropped
+#              list or none (tests/scripts/input/cpclose.txt, generated
+#              from cpclose.src by tools/inputgoto.py): every screen after
+#              a close as on 3.1, for w16's USER with Microsoft's applets
+#              (@us) and with w16's (@usw), w16's CONTROL.EXE (@ctl); the
+#              install tree under KRNL386 against KRNL286 (@tree)
 #   mousespeed the pointer's travel for a fixed motion at acceleration 0 0 0
 #              and 4 6 2 (WIN.INI MouseThreshold1/2, MouseSpeed): w16's USER
 #              (parts @s0-us, @s2-us) and w16's USER with w16's MOUSE.DRV
@@ -589,7 +596,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1428,6 +1435,78 @@ runcase() {
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c: every click as on 3.1"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    cpclose)
+        # Control Panel's applets opened over the panel and closed
+        # (tests/scripts/input/cpclose.txt: Color with a scheme picked
+        # from its drop-down list, OK and Cancel; Desktop with a pattern
+        # picked, Cancel and OK; Keyboard and Mouse, OK and Cancel; mouse
+        # and keys; WIN.INI run=CONTROL.EXE, MouseSpeed=0, CursorBlinkRate
+        # 65535: nothing blinks), every screen
+        # after a close compared, parts:
+        #   us    w16's USER with Microsoft's CONTROL.EXE and MAIN.CPL
+        #         against all-Microsoft 3.1
+        #   usw   w16's USER with w16's CONTROL.EXE and MAIN.CPL against
+        #         the same on Microsoft's USER
+        #   ctl   w16's CONTROL.EXE (Microsoft's MAIN.CPL) against
+        #         all-Microsoft 3.1
+        #   tree  w16's install tree alone under its KRNL386 against its
+        #         KRNL286
+        # (until 2026-11-16 w16's USER left Control Panel's status line
+        # unpainted, showing the Color dialog's sample, when a dropped
+        # list was hidden after a selection: ARCHITECTURE.md 14.4)
+        s=$root/tests/scripts/input/cpclose.txt
+        r=ok
+        ccmp() {   # ccmp REFDIR W16DIR NAME
+            for f in "$1"/[0-9]*.png; do
+                sn=$(basename "$f")
+                [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                n=$(magick compare -metric AE "$2/$sn" "$f" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+            done
+            ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
+        }
+        for pk in ${part:-us usw ctl tree}; do
+            case $pk in
+            tree)
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE' \
+                    -i 'WIN.INI:windows:MouseSpeed=0' -i 'WIN.INI:windows:CursorBlinkRate=65535'
+                rm -rf "$out/cpclose-t286" "$out/cpclose-t386"
+                "$root/tests/inputrun.sh" -s -b 40 -t 600 "$s" "$out/cpclose-t286" "$@" \
+                    > "$out/cpclose-t286.txt" 2>&1 || true
+                "$root/tests/inputrun.sh" -e "$out/cpclose-t286/boot.png" -E "$out/cpclose-t286" \
+                    -b 40 -t 600 "$s" "$out/cpclose-t386" "$@" -3 > "$out/cpclose-t386.txt" 2>&1 || true
+                ccmp "$out/cpclose-t286" "$out/cpclose-t386" tree ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cpclose-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/cpclose-WIN.INI" 'windows:run=CONTROL.EXE' \
+                    'windows:MouseSpeed=0' 'windows:CursorBlinkRate=65535'
+                set -- -r -f "$out/cpclose-WIN.INI=WINDOWS/WIN.INI"
+                w16cp="-f $root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE -f $root/build/dos/MAIN.CPL=WINDOWS/SYSTEM/MAIN.CPL"
+                case $pk in
+                usw)
+                    # shellcheck disable=SC2086
+                    refrun cpclose-wref cpclose "$root/tests/inputrun.sh" -s -b 25 -t 600 "$s" \
+                        "$out/cpclose-wref" "$@" $w16cp
+                    rd=$out/cpclose-wref
+                    set -- "$@" $w16cp -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+                *)
+                    refrun cpclose-ref cpclose "$root/tests/inputrun.sh" -s -b 25 -t 600 "$s" \
+                        "$out/cpclose-ref" "$@"
+                    rd=$out/cpclose-ref
+                    if [ "$pk" = us ]; then set -- "$@" -f "$user=WINDOWS/SYSTEM/USER.EXE"
+                    else set -- "$@" -f "$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE"; fi ;;
+                esac
+                rm -rf "$out/cpclose-$pk"
+                "$root/tests/inputrun.sh" -e "$rd/boot.png" -E "$rd" -b 25 -t 600 "$s" \
+                    "$out/cpclose-$pk" "$@" > "$out/cpclose-$pk.txt" 2>&1 || true
+                ccmp "$rd" "$out/cpclose-$pk" "$pk" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   cpclose: every screen after a close as on 3.1"
+        else echo "FAIL cpclose: $r ($out)"; fails=$((fails + 1)); fi ;;
     mousespeed)
         # the pointer's travel for a fixed motion at two acceleration
         # settings (tests/scripts/input/mousespeed.txt; WIN.INI
@@ -3746,6 +3825,7 @@ caseparts() {
     taskman) echo "$1@ms $1@k286 $1@us $1@usall $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
+    cpclose) echo "$1@us $1@usw $1@ctl $1@tree" ;;
     mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;
     kbd) echo "$1@kbtype $1@tabs $1@alttab $1@helpmenus $1@pmkeys $1@icons $1@menus" ;;
     mouse) echo "$1@dragoff $1@pmitems $1@pmclose $1@helpmenus" ;;

@@ -149,7 +149,7 @@ void redraw_screen(void)
 void validate_all(PWND w)
 {
     if (w->hrgnUpdate) {
-        DeleteObject(w->hrgnUpdate);
+        delete_private(w->hrgnUpdate);
         w->hrgnUpdate = 0;
     }
     w->flags &= ~(WF_UPDATENC | WF_ERASEBKGND | WF_INTERNALPAINT);
@@ -201,7 +201,7 @@ static void validate(HWND h, HRGN rgn, const RECT *rc)
         r = CreateRectRgn(rc->left + w->rcClient.left, rc->top + w->rcClient.top,
                           rc->right + w->rcClient.left, rc->bottom + w->rcClient.top);
     if (CombineRgn(w->hrgnUpdate, w->hrgnUpdate, r, RGN_DIFF) == NULLREGION) {
-        DeleteObject(w->hrgnUpdate);
+        delete_private(w->hrgnUpdate);
         w->hrgnUpdate = 0;
         w->flags &= ~(WF_UPDATENC | WF_ERASEBKGND);
         if (!(w->flags & WF_INTERNALPAINT))
@@ -283,6 +283,23 @@ static HWND find_paint(HWND h, HQUEUE hq)
     return 0;
 }
 
+/* the windows of this queue waiting to paint that do not show (hidden,
+   or inside a hidden or minimised window) leave the paint count; they
+   keep their update regions, and showing them invalidates them again */
+static void drop_hidden_paints(HWND h, HQUEUE hq, BOOL shown)
+{
+    HWND c;
+    PWND w = PW(h);
+    if (!(w->style & WS_VISIBLE))
+        shown = FALSE;
+    if (!shown && w->hq == hq)
+        no_paint(w);
+    if (w->style & WS_MINIMIZE)
+        shown = FALSE;
+    for (c = w->hwndChild; c; c = PW(c)->hwndNext)
+        drop_hidden_paints(c, hq, shown);
+}
+
 BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
 {
     HWND h;
@@ -292,7 +309,15 @@ BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
     h = find_paint(hf ? hf : hwndDesktop, hq);
     if (!h) {
         if (!hf) {
-            /* nothing visible to paint: the count is stale */
+            /* nothing that shows has anything to paint: what is counted
+               are windows that do not show. Their counts go with their
+               flags: the count was once set to 0 here with the flags
+               left, and the hidden windows, destroyed later, took their
+               counts from windows that did need painting (Control
+               Panel's status line, left with the Color dialog's sample
+               on it after the scheme box's dropped list, invalidated by
+               the selection, was hidden: 2026-11-16) */
+            drop_hidden_paints(hwndDesktop, hq, TRUE);
             q->npaint = 0;
             q->wakebits &= ~QS_PAINT;
         }

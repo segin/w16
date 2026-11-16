@@ -129,29 +129,38 @@ static HGLOBAL make_block(const BYTE __far *res, BOOL cursor)
 }
 
 /* pick the image of an icon/cursor directory that suits the display:
-   32x32, the most colours the display has (UNVERIFIED: Windows' exact
-   choice among several) */
+   32x32, the most bits per pixel the display has, and among those the
+   most colours it has (an icon entry's bColorCount, 3.1 SDK vol. 4, 1.2.1;
+   a cursor's is 0). Observed on 3.1: DRIVERS.CPL's and SND.CPL's icons
+   have two 4-bit images, of 8 and of 16 colours, and VGA shows the
+   16-colour one (w16 took the first, the 8-colour one, in other colours).
+   UNVERIFIED: Windows' choice in other cases */
 static WORD pick(const BYTE __far *dir, BOOL cursor)
 {
     WORD n = ((const WORD __far *)dir)[2], i, best = 0;
-    int bestbits = -1;
+    int bestbits = -1, bestcol = -1;
     int maxbits = GetDeviceCaps(hdcScreen, PLANES) * GetDeviceCaps(hdcScreen, BITSPIXEL);
+    int maxcol = GetDeviceCaps(hdcScreen, NUMCOLORS);
     for (i = 0; i < n; i++) {
         const BYTE __far *e = dir + 6 + 14 * i;
-        int w, bits;
+        int w, bits, col = 0;
         if (cursor) {
             w = ((const WORD __far *)e)[0];
             bits = ((const WORD __far *)e)[3];
         } else {
             w = e[0];
             bits = ((const WORD __far *)e)[3];
+            col = e[2];
         }
         if (w != 32 && n > 1)
             continue;
         if (bits > maxbits)
             continue;
-        if (bits > bestbits) {
+        if (col > maxcol && maxcol > 0)
+            col = -1;           /* more colours than shown: a last choice */
+        if (bits > bestbits || (bits == bestbits && col > bestcol)) {
             bestbits = bits;
+            bestcol = col;
             best = ((const WORD __far *)e)[6];
         }
     }

@@ -104,12 +104,28 @@ static void load_colors(void)
     }
 }
 
+/* DeleteObject of an object USER made private (MakeObjectPrivate, so
+   that it outlives the task that happened to be current): public again
+   first. Measured on 3.1's GDI (GetHeapSpaces before and after, the
+   install's own GDI.EXE under w16's USER): DeleteObject of a private
+   region returned TRUE and freed nothing; every update region USER made
+   stayed, and Control Panel's Desktop applet, whose blink sample is
+   shown and hidden every 1.2 s, used up GDI's heap in a few minutes
+   (CreateRectRgn then failed, and USER hung) */
+void delete_private(HANDLE h)
+{
+    if (!h)
+        return;
+    G_MAKEOBJECTPRIVATE(h, FALSE);
+    DeleteObject(h);
+}
+
 void make_sysbrushes(void)
 {
     int i;
     for (i = 0; i <= COLOR_BTNHIGHLIGHT; i++) {
         if (sysbrush[i])
-            DeleteObject(sysbrush[i]);
+            delete_private(sysbrush[i]);
         sysbrush[i] = CreateSolidBrush(syscolor[i]);
         G_MAKEOBJECTPRIVATE(sysbrush[i], TRUE);
     }

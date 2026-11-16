@@ -47,6 +47,7 @@ extern int   __far __pascal G_SELECTVISRGN(HDC, HRGN);               /* 105 */
 extern HDC   __far __pascal G_GETDCSTATE(HDC);                       /* 179 */
 extern void  __far __pascal G_SETDCSTATE(HDC, HDC);                  /* 180 */
 extern void  __far __pascal G_MAKEOBJECTPRIVATE(HANDLE, BOOL);       /* 463 */
+void delete_private(HANDLE h);          /* init.c: DeleteObject of a private object */
 extern HPALETTE __far __pascal G_GDISELECTPALETTE(HDC, HPALETTE, BOOL); /* 361 */
 extern DWORD __far __pascal G_GDIREALIZEPALETTE(HDC);              /* 362 */
 extern BOOL  __far __pascal G_ISGDIOBJECT(HANDLE);                   /* 462 */
