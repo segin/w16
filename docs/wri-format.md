@@ -6,10 +6,16 @@ original Write was driven by scripted input on the reference install
 documents it saved were compared with each other and with Microsoft's own
 .WRI files (README.WRI, NETWORKS.WRI, PRINTERS.WRI, SYSINI.WRI,
 WININI.WRI from Windows 3.1, PRACTICE.WRI from Windows/386 2.11). No
-Windows code was read (ARCHITECTURE.md 3). No published specification
-was found to cite (searches for one turned up only identification data,
-e.g. PRONOM's signature entries x-fmt/4 and x-fmt/371); the field names
-below are w16's own.
+Windows code was read (ARCHITECTURE.md 3).
+
+The format is also documented in the Windows 3.1 SDK: Microsoft
+Corporation, *Microsoft Windows Programmer's Reference, Volume 4:
+Resources* (Microsoft Press, 1992), chapter 8 "Write File Format" ("SDK
+ch. 8" below); the field names here are its names where it has one. That
+chapter was used for facts only, and each was checked against files 3.1's
+Write writes; where Write's files differ from the chapter, this document
+says what Write does. Most of what follows was observed first and agrees
+with the chapter; what the chapter added is marked "SDK ch. 8".
 
 `tools/wri.py` implements everything here: `dump` decodes a file, `cmp`
 compares two files ignoring the bytes the original leaves undefined, and
@@ -64,7 +70,9 @@ treats it, like any non-Write file, as one to convert.
 
 ## Text
 
-The text bytes, in the Windows character set. Paragraphs end in CR LF.
+The text bytes, in the Windows character set. Paragraphs end in CR LF;
+SDK ch. 8 adds character 12 for an explicit page break and 9 for a tab
+(page breaks: not yet observed).
 The rest of the last text page is undefined: the original leaves stale
 memory there (WR2: re-saving WININI.WRI changed those bytes).
 
@@ -73,8 +81,9 @@ paragraph FOD reaches fcMac + 2, as if a CR LF followed the text. If the
 text does not end in CR LF, the last paragraph's text belongs to that
 end paragraph (WR1: "Hello world", one FOD to fcMac + 2). Applying any
 paragraph format to that last paragraph first gives it a real CR LF (in
-the last character's properties); the end paragraph then has the same
-properties as it (WR3, WR4).
+the properties typing would have there, WR8); the end paragraph then has
+the same properties as it (WR3, WR4). (SDK ch. 8 says the last
+paragraph FOD ends at fcMac; Write's own files end it at fcMac + 2.)
 
 ## FKP pages
 
@@ -135,7 +144,7 @@ gives 12, Reduce from 12 gives 10, then 8.
 
 | byte | size | |
 |---|---|---|
-| 0 | byte | 3Ch (3Dh in some of Microsoft's files; meaning UNVERIFIED) |
+| 0 | byte | 61 (3Dh) by default (SDK ch. 8, 8.3.1: "reserved"); Write sets 60 (3Ch) on a paragraph that was given any format but Normal |
 | 1 | byte | alignment: 0 left, 1 centered, 2 right, 3 justified |
 | 2 | word | 30 |
 | 4 | word | right indent |
@@ -143,32 +152,34 @@ gives 12, Reduce from 12 gives 10, then 8.
 | 8 | word | first-line indent, relative to the left indent |
 | 10 | word | line spacing: 240 single, 360 1 1/2, 480 double |
 | 12 | 4 | 0 |
-| 16 | byte | running-head bits (headers and footers; plan: the header probes) |
+| 16 | byte | SDK ch. 8: bit 0 footer (0 header), bits 1-2 nonzero for a header or footer paragraph, bit 3 print on the first page, bit 4 picture (observed, WR7) |
 | 17 | 5 | 0 |
-| 22 | 4 x n | tab stops: word position (from the left margin), byte 0 left / 3 decimal (UNVERIFIED: decimal not yet observed), byte 0 |
+| 22 | 4 x n | tab stops: word position (from the left margin), byte 0 left / 3 decimal (SDK ch. 8; decimal not yet observed), byte 0 |
 
-The default is {3Ch, 0, 30, 0, 0, 0, 240, ...}. An FPROP keeps the bytes
-up to the last one that differs from the default; with tab stops it keeps
-them all plus one empty (zero) stop (WR4: two stops give cch 34;
-README.WRI's eleven give 70). A paragraph that was formatted at all keeps
-at least one byte: Left on a centered paragraph is stored as cch 1, {3Ch}
-(WR5); only Normal stores none (FFFFh, WR3). New paragraphs (Enter) take
+The default is {61, 0, 30, 0, 0, 0, 240, 0...} (SDK ch. 8). An FPROP
+keeps the bytes up to the last one that differs from the default; with
+tab stops it keeps them all plus one empty (zero) stop (WR4: two stops
+give cch 34; README.WRI's eleven give 70). Since any format but Normal
+sets byte 0 to 60, a formatted paragraph keeps at least that byte: Left
+on a centered paragraph is stored as cch 1, {3Ch} (WR5); Normal gives the
+default, stored as none (FFFFh, WR3), which the SDK forbids ("cch greater
+than or equal to 1") but Write itself writes. New paragraphs (Enter) take
 the properties of the paragraph they were split from. Tab stops set with
 Document > Tabs go to every paragraph (WR4); indents and alignment to the
 selected ones.
 
 ## Section properties (SEP)
 
-One page, written only once the page layout was set (WR4; UNVERIFIED:
-whether OK on an unchanged Page Layout writes it). cch is 102 in every
-file seen; after it:
+One page, written only once the page layout was set (WR4; the SDK: when
+the section properties differ from the defaults). cch is 102 in every
+file seen (the SDK says at most 16); after it:
 
 | offset | size | |
 |---|---|---|
-| 0 | word | 0200h |
+| 0 | word | 0200h (SDK ch. 8: "reserved; must be zero") |
 | 2 | word | page height (15840) |
 | 4 | word | page width (12240) |
-| 6 | word | first page number (1) |
+| 6 | word | first page number (1; Page Layout's "Start Page Numbers At"; the SDK: "reserved, must be FFFFh") |
 | 8 | word | top margin (1440) |
 | 10 | word | text height (12960 = height - top - bottom margin) |
 | 12 | word | left margin (1800) |
@@ -183,11 +194,12 @@ The rest of the page is undefined (stale memory).
 
 ## Section table (SETB)
 
-Present with a SEP: word count 2, word count 2, then two 10-byte entries
+Present with a SEP: word count 2, word count 2 (csedMax, "undefined" in
+the SDK), then two 10-byte entries
 {dword cp, word fn, dword fc}: (text length, fn, the SEP page's fc) and
 (text length + 1, 7FFFh, FFFFFFFFh). fn is 1 for a new document, 2 for
-one Write read from a file (WR4, WR5: SYSINI.WRI's 4 became 2;
-UNVERIFIED: presumably Write's internal file number). The rest of the
+one Write read from a file (WR4, WR5: SYSINI.WRI's 4 became 2; the SDK
+calls it "undefined"). The rest of the
 page is undefined.
 
 ## Page table (PGTB)
@@ -226,17 +238,17 @@ wIdent becomes BE32h. Header, as seen for objects:
 
 | offset | size | |
 |---|---|---|
-| 0 | word | mm: E4h for an OLE object (88h a bitmap and 1-8 a metafile's mapping mode in Write 3.0 pictures: UNVERIFIED, from the shape of the header) |
+| 0 | word | mm: E4h for an OLE object; for a picture (SDK ch. 8, 8.2.2) the header starts with a METAFILEPICT whose mm is E3h for a bitmap, else the metafile's mapping mode |
 | 2 | word | xExt (0 for objects) |
 | 4 | word | yExt (0) |
-| 6 | word | 1 |
+| 6 | word | object type: 1 static (WR7; SDK ch. 8: 2 embedded, 3 link) |
 | 8 | word | horizontal offset from the left indent (0) |
 | 10 | word | width shown, twips (608 for a 40-pixel DIB; 2874 for a 2 x 1 inch metafile: how they are derived from the object's HIMETRIC size is UNVERIFIED) |
 | 12 | word | height shown, twips (295; 1437) |
 | 14 | word | 0 |
 | 16 | dword | size of the data after the header |
 | 20 | dword | 0 |
-| 24 | dword | an object number, different in every session (6AF16C57h, then +4 for the next object): undefined for comparisons |
+| 24 | dword | dwObjNum: the object's name as 8 hex digits (SDK ch. 8); a new number in every session (6AF16C57h, then +4 for the next object), kept on re-saving |
 | 28 | word | 0 |
 | 30 | word | header size, 40 |
 | 32 | word | 0 |

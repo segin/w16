@@ -1106,7 +1106,7 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
 	python3 tools/nemark.py $@ 3.10
 
-# ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.1), Windows 3.1
+# ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.5), Windows 3.1
 # only ----
 WR_C     := main doc wrifile view cmds pict util
 SHELL_WR := $(B)/shell/start.o $(B)/shell/write/i4.o $(WR_C:%=$(B)/shell/write/%.o)

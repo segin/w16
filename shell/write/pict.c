@@ -3,25 +3,23 @@
  *
  * A picture is a paragraph of its own whose PAP has bit 10h of byte 16
  * set; its "text" is a 40-byte header and the picture data, with no
- * CR LF (WR7). Header (WR7 for objects; the rest from the layout of
- * Write 3.0 pictures, UNVERIFIED until a 3.0 document is probed):
- *    0 mm         88h bitmap, E4h OLE object (WR7), else a metafile's
- *                 mapping mode
- *    2 xExt, 4 yExt  metafile extents
- *    8 dxaOffset  from the left indent
- *   10 dxaSize, 12 dyaSize   shown size, twips
- *   16 BITMAP (14 bytes) for bitmaps; for objects the data size (dword)
- *      and an object number (dword at 24) the original makes up per
- *      session
- *   30 cbHeader (40), 32 cbSize (dword, old pictures)
- *   36 mx, 38 my  scale, per mille (1000)
- * An object's data is OLECLI's stream (OleSaveToStream): version 0501h,
- * format (1 linked, 2 embedded, 3 static), then for a static object the
- * class name ("DIB", "METAFILEPICT", "BITMAP": dword length with NUL,
- * the name), width and height in HIMETRIC, the data size and the data;
- * embedded and linked objects have class, topic and item names, native
- * data, then a presentation object of the same shape (OLE 1.0's stream
- * layout as documented with OLE 1.0; the linked case UNVERIFIED).
+ * CR LF. The headers are documented in the Windows 3.1 SDK (Programmer's
+ * Reference vol. 4, ch. 8 "Write File Format", 8.2.2) and were confirmed
+ * for objects by WR6/WR7:
+ *   picture: 0-7 METAFILEPICT (mm E3h: bitmap bits follow, a Write-only
+ *            value; else metafile bits), 8 dxaOffset, 10 dxaSize,
+ *            12 dyaSize, 14 cbOldSize, 16 BITMAP (14 bytes, bitmaps),
+ *            30 cbHeader, 32 cbSize (dword), 36 mx, 38 my (per mille)
+ *   object:  0 mm E4h, 6 object type (1 static), 8 dxaOffset, 10 dxaSize,
+ *            12 dyaSize, 16 dwDataSize, 24 dwObjNum (the object's name),
+ *            30 cbHeader, 36 mx, 38 my
+ * An object's data is OLECLI's stream (OleSaveToStream, ARCHITECTURE.md
+ * 16.4): version 0501h, format (1 linked, 2 embedded, 3 static), then for
+ * a static object the class name ("DIB", "METAFILEPICT", "BITMAP": dword
+ * length with NUL, the name), width and height in HIMETRIC, the data size
+ * and the data; embedded and linked objects have class, topic and item
+ * names, native data (embedded), then a presentation object of the same
+ * shape (the linked case UNVERIFIED here).
  *
  * w16 draws what it can read itself: DIBs and metafiles (static or as
  * an object's presentation) and old bitmaps. Activating objects goes
@@ -55,7 +53,7 @@ BOOL pict_read(DWORD cp, DWORD cpLim, PICT *p)
         p->my = 1000;
     p->cpData = cp + (WORD)rd(cp + 30, 2);
     p->cbData = cpLim - p->cpData;
-    if (p->mm == 0x88) {
+    if (p->mm == 0xE3) {
         p->kind = PK_BITMAP;
         doc_get(&g_doc, cp + 16, (char FAR *)&p->bm, 14);
     } else if (p->mm == 0xE4) {

@@ -191,11 +191,9 @@ static void apply_pap(void (*fn)(PAPX *, WORD), WORD arg, BOOL all, BOOL normal)
             pap_default(&q);
             q.ntabs = p.ntabs;
             m_cpy(q.tab, p.tab, sizeof q.tab);
-            {
-                extern ATOM32 pap_atom_x(DOC *, const PAPX *, BOOL);
-                para_set(&g_doc, i, pap_atom_x(&g_doc, &q, FALSE));
-            }
+            para_set(&g_doc, i, pap_atom(&g_doc, &q));
         } else {
+            p.b0 = 0x3C;                /* formatted (WR5) */
             para_set(&g_doc, i, pap_atom(&g_doc, &p));
         }
     }

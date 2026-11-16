@@ -157,22 +157,27 @@ ATOM32 chp_atom(DOC *d, const CHPX *c)
 }
 
 /* ---- paragraph properties ----
- * Bytes (observed, WR3/WR4): 0: 3Ch (3Dh in some of Microsoft's files);
- * 1: alignment; 2-3: 30; 4-5 right indent, 6-7 left indent, 8-9 first
- * line (relative to the left indent), 10-11 line spacing (240 single),
- * all twips; 16: running-head bits; 22 on: tab stops {dxa, jc, 0}.
- * The FPROP keeps bytes up to the last one that differs from the default;
- * with tab stops, up to and including an empty stop after the last one.
- * A paragraph that was formatted at all stores at least 1 byte (cch 1
- * "3C" for an explicit Left, WR5); Normal stores none (WR3). */
+ * The layout and the default {61, 0, 30, 0, ..., 240 at 10} are from the
+ * Windows 3.1 SDK (Programmer's Reference vol. 4, ch. 8 "Write File
+ * Format", 8.3.1): 1: alignment; 4-5 right indent, 6-7 left indent, 8-9
+ * first line (relative to the left indent), 10-11 line spacing, twips;
+ * 16: bit 0 footer, bits 1-2 header/footer paragraph, bit 3 print on the
+ * first page, bit 4 picture; 22 on: tab stops {dxa, jc (3 decimal), 0}.
+ * Observed (WR3-WR5): byte 0 is 60 (3Ch) once any paragraph format other
+ * than Normal was applied, so such a paragraph stores at least that byte
+ * (Left on a centered paragraph: cch 1, "3C"); Normal gives the default
+ * (61, nothing stored). The FPROP keeps bytes up to the last that differs
+ * from the default; with tab stops, up to and including an empty stop
+ * after the last one (WR4). */
 
 static const BYTE pap_def[PAP_TABS] = {
-    0x3C, 0, 30, 0, 0, 0, 0, 0, 0, 0, 240, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    0x3D, 0, 30, 0, 0, 0, 0, 0, 0, 0, 240, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
 void pap_default(PAPX *p)
 {
     m_set(p, 0, sizeof *p);
+    p->b0 = 0x3D;
     p->dyaLine = 240;
 }
 
@@ -184,13 +189,14 @@ void pap_decode(DOC *d, ATOM32 a, PAPX *p)
         b[i] = pap_def[i];
     for (i = n > PAP_TABS ? n : PAP_TABS; i < PAP_LEN; i++)
         b[i] = 0;
+    p->b0 = b[0];
     p->jc = b[1] & 3;
     p->dxaRight = *(int *)(b + 4);
     p->dxaLeft = *(int *)(b + 6);
     p->dxaLeft1 = *(int *)(b + 8);
     p->dyaLine = *(int *)(b + 10);
     p->rhc = b[16];
-    p->fGraphics = (b[16] & 0x10) != 0;     /* UNVERIFIED */
+    p->fGraphics = (b[16] & 0x10) != 0;
     for (i = 0; i < NTABS; i++) {
         int dxa = *(int *)(b + PAP_TABS + 4 * i);
         if (!dxa)
@@ -201,13 +207,13 @@ void pap_decode(DOC *d, ATOM32 a, PAPX *p)
     p->ntabs = i;
 }
 
-/* explicit: the paragraph was formatted (stores at least 1 byte) */
-ATOM32 pap_atom_x(DOC *d, const PAPX *p, BOOL expl)
+ATOM32 pap_atom(DOC *d, const PAPX *p)
 {
     BYTE b[PAP_LEN];
     int n, i;
     m_cpy(b, pap_def, PAP_TABS);
     m_set(b + PAP_TABS, 0, PAP_LEN - PAP_TABS);
+    b[0] = p->b0;
     b[1] = p->jc;
     *(int *)(b + 4) = p->dxaRight;
     *(int *)(b + 6) = p->dxaLeft;
@@ -226,14 +232,7 @@ ATOM32 pap_atom_x(DOC *d, const PAPX *p, BOOL expl)
         for (n = PAP_TABS; n > 0 && b[n - 1] == pap_def[n - 1]; n--)
             ;
     }
-    if (expl && n == 0)
-        n = 1;
     return atom_intern(d, b, (WORD)n);
-}
-
-ATOM32 pap_atom(DOC *d, const PAPX *p)
-{
-    return pap_atom_x(d, p, TRUE);
 }
 
 /* ---- section ----

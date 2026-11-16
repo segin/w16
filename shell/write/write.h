@@ -197,6 +197,7 @@ typedef struct {                        /* decoded CHP */
 } CHPX;
 
 typedef struct {                        /* decoded PAP */
+    BYTE b0;                            /* byte 0: 61 default, 60 formatted */
     BYTE jc;                            /* 0 left 1 center 2 right 3 justify */
     int dxaRight, dxaLeft, dxaLeft1;    /* twips */
     int dyaLine;                        /* 240 single, 360, 480 */
@@ -348,7 +349,6 @@ extern char g_path[];                   /* document path, "" if Untitled */
 #define PATH_MAX_DOS 144                /* DOS: drive + 64-char path + name */
 extern BOOL g_backup;
 HWND  find_dialog(void);
-ATOM32 pap_atom_x(DOC *d, const PAPX *p, BOOL expl);
 void  dos_rename(LPCSTR from, LPCSTR to);   /* i4.asm */
 
 #endif
