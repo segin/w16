@@ -2,9 +2,14 @@ run CARDFILE.EXE
 wait 3000
 menu e
 wait 500
+char e
+wait 500
+menu e
+wait 500
+key 26
+wait 300
 snap C:\CARD0.BMP
-dump
-char i
+key 0D
 wait 2000
 dump
 key 28

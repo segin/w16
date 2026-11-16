@@ -988,3 +988,9 @@ $(DOS)/OLESVR.DLL: $(OSVOBJS) ole/olesvr/olesvr.lnk tools/nemark.py
 	$(WLINK) @ole/olesvr/olesvr.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/olesvr/olesvr.map file { $(OSVOBJS) }
 	python3 tools/nemark.py $@ 3.10
+# in the install tree as WINDOWS\SYSTEM\OLESVR.DLL
+W16TREE += $(W16SYS)/OLESVR.DLL
+install-tree: $(W16SYS)/OLESVR.DLL
+$(W16SYS)/OLESVR.DLL: $(DOS)/OLESVR.DLL
+	@mkdir -p $(@D)
+	cp $< $@
