@@ -90,6 +90,8 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
+`tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
+probe's log section by section; the boot-test case `lzexpand` runs it),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
 Windows 3.1, booting again past the cases that end the task; makes the
