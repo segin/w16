@@ -7,25 +7,32 @@
 # OLESVRs: the four combinations. The DDE logs (every WM_DDE_* message
 # and every callback into the servers, tests/olesvr/osspy.c), the files
 # the scenario saves and its screenshots must equal the reference's.
-#   usage: tests/olesvrscen.sh [-o OUTDIR] [-k] [NAME...]   (default: all)
-# -k keeps going on differences (the exit status still reports them).
+#   usage: tests/olesvrscen.sh [-o OUTDIR] [-c COMBOS] [NAME...]   (default: all)
+# -c the combinations SERVER-CLIENT to compare with ms-ms (default "w16-ms",
+#    plus "ms-w16 w16-w16" when build/dos/OLECLI.DLL exists). The probes
+#    drive OLECLI further than the OLECLI tests do (tests/olescenarios.sh),
+#    so with w16's OLECLI they also show its differences.
 # OUTDIR defaults to a fresh build/olesvrscen-<date>-<time>.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$root/build/olesvrscen-$(date +%Y%m%d-%H%M%S)
-while getopts o:k opt; do
+combos=
+while getopts o:c: opt; do
     case $opt in
     o) out=$OPTARG ;;
-    k) ;;
+    c) combos=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 s=$root/tests/olesvr/scripts
 names=${*:-$(cd "$s" && ls *.os2 | sed 's/\.os2$//')}
-combos="ms-ms w16-ms"
-if [ -f "$root/build/dos/OLECLI.DLL" ]; then combos="$combos ms-w16 w16-w16"; fi
+if [ -z "$combos" ]; then
+    combos=w16-ms
+    if [ -f "$root/build/dos/OLECLI.DLL" ]; then combos="$combos ms-w16 w16-w16"; fi
+fi
+combos="ms-ms $combos"
 mkdir -p "$out"
 echo "olesvrscen: $out"
 # every scenario in every combination, a few at a time

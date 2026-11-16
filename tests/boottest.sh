@@ -171,9 +171,11 @@
 #              olesvrtree.txt); every shot equal to the same tree with
 #              Microsoft's OLESVR.DLL; and one part per OLESVR scenario
 #              tests/olesvr/scripts/NAME.os2 (tests/olesvrscen.sh NAME): on
-#              the reference install, w16's OLESVR (and w16's OLECLI) in
-#              every combination: the DDE conversation and the servers'
-#              callbacks, the saved documents and the screens equal
+#              the reference install, w16's OLESVR against Microsoft's
+#              (Microsoft's OLECLI): the DDE conversation and the servers'
+#              callbacks, the saved documents and the screens equal (the
+#              olecli case runs OC1's scenarios in all four OLECLI/OLESVR
+#              combinations)
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -1878,7 +1880,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ from Microsoft's OLESVR"; break; }
             done ;;
         *)
-            "$root/tests/olesvrscen.sh" -o "$out/olesvr-$part" "$part" > "$out/olesvr-$part.txt" 2>&1 || true
+            # w16's OLESVR against Microsoft's, with Microsoft's OLECLI (the
+            # four combinations are the olecli case's, with OC1)
+            "$root/tests/olesvrscen.sh" -o "$out/olesvr-$part" -c w16-ms "$part" > "$out/olesvr-$part.txt" 2>&1 || true
             grep -q '^== .*: ok' "$out/olesvr-$part.txt" && ! grep -q '^== .*FAIL' "$out/olesvr-$part.txt" ||
                 r="$part: $(grep -m1 'FAIL' "$out/olesvr-$part.txt" || echo 'no result') ($out/olesvr-$part)" ;;
         esac
@@ -3544,7 +3548,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 2)) OLE scenarios as with Microsoft's OLECLI, and card1 with w16's Cardfile"
         else echo "FAIL olecli: $pfirst ($out)"; fi ;;
     olesvr)
-        if [ $pbad = 0 ]; then echo "ok   olesvr: Cardfile inserts a Paintbrush picture in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's, in every OLECLI/OLESVR combination"
+        if [ $pbad = 0 ]; then echo "ok   olesvr: Cardfile inserts a Paintbrush picture in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's OLESVR"
         else echo "FAIL olesvr: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
