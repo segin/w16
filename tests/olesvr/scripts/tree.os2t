@@ -1,0 +1,18 @@
+; boot-test case olesvr@tree: OS2 as the shell of w16's install tree alone
+; (w16's KERNEL, USER, GDI, SHELL, OLECLI; the reference's Paintbrush and
+; REG.DAT for the test only), once with w16's OLESVR and once with
+; Microsoft's: a Paintbrush picture embedded, updated, closed, deleted
+doc TREE
+create PBrush
+wait 3000
+query
+wins
+update
+query
+close
+wins
+savestream
+delete
+revokedoc
+wait 2000
+waitgone PBRUSH

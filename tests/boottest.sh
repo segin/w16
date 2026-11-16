@@ -166,10 +166,10 @@
 #   olesvr     w16's OLESVR.DLL (ARCHITECTURE.md 16.9), parts: tree, w16's
 #              install tree alone with w16's OLECLI and OLESVR (and, for the
 #              test only, the reference's PBRUSH.EXE, PBRUSH.DLL, REG.DAT)
-#              under its KRNL386: Cardfile inserts a Paintbrush picture,
-#              Exit & Return, the card shows it (tests/scripts/input/
-#              olesvrtree.txt); every shot equal to the same tree with
-#              Microsoft's OLESVR.DLL; and one part per OLESVR scenario
+#              under its KRNL386: OS2 as the shell embeds, updates and
+#              closes a Paintbrush picture (tests/olesvr/ostree.sh), the
+#              log equal to the same tree with Microsoft's OLESVR.DLL; and
+#              one part per OLESVR scenario
 #              tests/olesvr/scripts/NAME.os2 (tests/olesvrscen.sh NAME): on
 #              the reference install, w16's OLESVR against Microsoft's
 #              (Microsoft's OLECLI): the DDE conversation and the servers'
@@ -1848,37 +1848,23 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         r=ok
         case ${part:-tree} in
         tree)
-            s=$root/tests/scripts/input/olesvrtree.txt
+            # OS2 (an OLE client through w16's OLECLI) as the shell of the
+            # install tree alone: a Paintbrush picture embedded, updated,
+            # closed (tests/olesvr/ostree.sh), with Microsoft's OLESVR and
+            # with w16's: the same calls, results and OLESVR windows
             d=$out/olesvr-tree
-            ref=$root/.tools/ref/win31/cdrive/WINDOWS
-            # Paintbrush (the server) and the registration database are
-            # the reference's, for this test only: w16 has neither
-            pbx="-f $ref/PBRUSH.EXE=W16/PBRUSH.EXE -f $ref/PBRUSH.DLL=W16/PBRUSH.DLL -f $ref/REG.DAT=W16/REG.DAT"
-            # shellcheck disable=SC2086
-            "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$d-ms" -T "$root/build/w16" -3 $pbx \
-                -f "$ref/SYSTEM/OLESVR.DLL=W16/SYSTEM/OLESVR.DLL" > "$d-ms.txt" 2>&1 || true
-            # shellcheck disable=SC2086
-            "$root/tests/inputrun.sh" -e "$d-ms/boot.png" -E "$d-ms" -M "rectangle 16,144 20,164" -b 40 -t 300 \
-                "$s" "$d-w16" -T "$root/build/w16" -3 $pbx > "$d-w16.txt" 2>&1 || true
+            "$root/tests/olesvr/ostree.sh" "$d-ms" ms > "$d-ms.txt" 2>&1 || true
+            "$root/tests/olesvr/ostree.sh" "$d-w16" w16 > "$d-w16.txt" 2>&1 || true
             for k in ms w16; do
-                grep -q '^script done' "$d-$k/input.log" 2>/dev/null || { r="$k: the script did not finish ($d-$k/input.log)"; break; }
+                [ -s "$d-$k/os.log" ] || { r="$k: no log ($d-$k.txt)"; break; }
+                python3 "$root/tests/olesvr/osnorm.py" "$d-$k"
+                grep -q '^OS2 end' "$d-$k/os.log" || { r="$k: the script did not finish ($d-$k/os.log)"; break; }
+                grep -A3 '^OS2 create PBrush' "$d-$k/os.log" | grep -q 'released -> 0 OK' ||
+                    { r="$k: Paintbrush did not serve the object ($d-$k/os.log)"; break; }
             done
-            # Paintbrush's window, active (its caption), on the object
-            if [ "$r" = ok ]; then
-                px=$(magick "$d-w16/04-pbrush.png" -format "%[hex:p{300,12}]" info: 2>/dev/null)
-                case $px in 0000AA*) ;; *) r="no active Paintbrush window ($px at 300,12)" ;; esac
-            fi
-            for f in "$d-ms"/[0-9]*.png; do
-                [ "$r" = ok ] || break
-                s2=$(basename "$f")
-                [ -f "$d-w16/$s2" ] || { r="w16: no $s2"; break; }
-                # Cardfile's caret left out (its blink)
-                magick "$f" -fill black -draw "rectangle 16,144 20,164" "$d-a.png"
-                magick "$d-w16/$s2" -fill black -draw "rectangle 16,144 20,164" "$d-b.png"
-                n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
-                n=${n%% *}
-                [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ from Microsoft's OLESVR"; break; }
-            done ;;
+            if [ "$r" = ok ] && ! diff "$d-ms/os.cmp" "$d-w16/os.cmp" > "$d.diff"; then
+                r="tree: the log differs from Microsoft's OLESVR's ($d.diff)"
+            fi ;;
         *)
             # w16's OLESVR against Microsoft's, with Microsoft's OLECLI (the
             # four combinations are the olecli case's, with OC1)
@@ -3548,7 +3534,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 2)) OLE scenarios as with Microsoft's OLECLI, and card1 with w16's Cardfile"
         else echo "FAIL olecli: $pfirst ($out)"; fi ;;
     olesvr)
-        if [ $pbad = 0 ]; then echo "ok   olesvr: Cardfile inserts a Paintbrush picture in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's OLESVR"
+        if [ $pbad = 0 ]; then echo "ok   olesvr: a Paintbrush picture embedded in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's OLESVR"
         else echo "FAIL olesvr: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
