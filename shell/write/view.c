@@ -880,6 +880,13 @@ static DWORD body_start(void)
     return f;
 }
 
+/* the caret shows at once (after the Header view, WR9) */
+void view_caret_now(void)
+{
+    caretDefer = FALSE;
+    caret_place();
+}
+
 void view_reset(void)
 {
     cpTop = body_start();
@@ -1194,7 +1201,6 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_SETFOCUS:
-        caretDefer = FALSE;
         SetTimer(w, TIMER_CARET, GetCaretBlinkTime(), NULL);
         caret_place();
         return 0;

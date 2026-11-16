@@ -324,6 +324,7 @@ void ole_notify(WPARAM wp, LPARAM lp);
 BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r);
 void ole_activate(DWORD pf, DWORD pl, const RECT *r);
 void cmd_insertobj(void);
+BOOL ole_paste(void);
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */
@@ -334,6 +335,7 @@ extern ATOM32 g_insChp;                 /* properties for typing */
 extern BOOL g_insChpValid;
 BOOL  view_register(HINSTANCE);
 void  view_reset(void);
+void  view_caret_now(void);
 void  view_changed(DWORD cp);           /* text changed at or after cp */
 void  view_select(DWORD first, DWORD lim, BOOL show);
 void  view_layout(void);

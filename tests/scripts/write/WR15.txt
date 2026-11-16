@@ -1,0 +1,27 @@
+; WR15: paste a bitmap and a metafile picture (3.1 stores them as OLE
+; static objects, WR7), save C:\PICS.WRI (WR6 runs the same with the
+; original first, as its input)
+; mkpic: PIC.BMP
+run WRITE.EXE
+wait 3000
+type before
+key 0D
+clipbmp C:\PIC.BMP
+menu e
+char p
+wait 1500
+type after
+key 0D
+clipmf
+menu e
+char p
+wait 1500
+type end
+menu f
+char a
+wait 1500
+type C:\PICS.WRI
+key 0D
+wait 2000
+close
+wait 1000

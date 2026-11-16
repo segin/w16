@@ -857,6 +857,8 @@ void cmd_cut_copy(BOOL cut)
 void cmd_paste(void)
 {
     HGLOBAL h;
+    if (ole_paste())
+        return;
     if (!OpenClipboard(g_frame))
         return;
     h = GetClipboardData(CF_TEXT);
@@ -922,7 +924,9 @@ void menu_update(HMENU m)
     CheckMenuItem(m, IDM_DOUBLE, p.dyaLine == 480 ? MF_CHECKED : MF_UNCHECKED);
     EnableMenuItem(m, IDM_CUT, sel ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_COPY, sel ? MF_ENABLED : MF_GRAYED);
-    EnableMenuItem(m, IDM_PASTE, IsClipboardFormatAvailable(CF_TEXT) ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_PASTE, IsClipboardFormatAvailable(CF_TEXT) || IsClipboardFormatAvailable(CF_BITMAP) ||
+                   IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_METAFILEPICT)
+                   ? MF_ENABLED : MF_GRAYED);
     {
         char s[64], k[24];
         if (undoKind) {

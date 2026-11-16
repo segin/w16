@@ -457,24 +457,16 @@ BOOL CALLBACK __export InsertObjDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
     return FALSE;
 }
 
-void cmd_insertobj(void)
+/* A new object paragraph at the caret (type 1 static, 2 embedded): its
+   table entry, its name in name; the caret goes after it */
+static WOBJ *new_obj_para(WORD type, char *name)
 {
-    FARPROC fp;
-    int r;
     DWORD num, cp, pf, pl;
     WOBJ *o;
-    char name[9];
     BYTE hdr[PICHDR];
     ATOM32 pa, chp;
     PAPX p;
     CHPX c;
-    if (!lhdoc)
-        return;
-    fp = MakeProcInstance((FARPROC)InsertObjDlgProc, g_hinst);
-    r = DialogBox(g_hinst, "DTCREATE", g_frame, (DLGPROC)fp);
-    FreeProcInstance(fp);
-    if (r != IDOK || !newClass[0])
-        return;
     /* the object's number: the clock, as the original's (ARCHITECTURE.md
        16.6), never the same twice */
     num = GetCurrentTime();
@@ -483,7 +475,7 @@ void cmd_insertobj(void)
     lastNum = num;
     o = add_obj(num);
     if (!o)
-        return;
+        return NULL;
     /* a paragraph of its own at the caret: after a paragraph mark first
        when the caret is inside a paragraph (UNVERIFIED) */
     if (g_selLim > g_selFirst)
@@ -502,7 +494,7 @@ void cmd_insertobj(void)
     pa = pap_atom(&g_doc, &p);
     m_set(hdr, 0, sizeof hdr);
     *(WORD *)hdr = 0xE4;
-    *(WORD *)(hdr + 6) = 2;             /* embedded */
+    *(WORD *)(hdr + 6) = type;
     *(DWORD *)(hdr + 24) = num;
     *(WORD *)(hdr + 30) = PICHDR;
     *(WORD *)(hdr + 36) = 1000;
@@ -513,6 +505,25 @@ void cmd_insertobj(void)
     g_selFirst = g_selLim = cp + PICHDR;
     view_changed(cp);
     obj_name(name, num);
+    return o;
+}
+
+void cmd_insertobj(void)
+{
+    FARPROC fp;
+    int r;
+    WOBJ *o;
+    char name[9];
+    if (!lhdoc)
+        return;
+    fp = MakeProcInstance((FARPROC)InsertObjDlgProc, g_hinst);
+    r = DialogBox(g_hinst, "DTCREATE", g_frame, (DLGPROC)fp);
+    FreeProcInstance(fp);
+    if (r != IDOK || !newClass[0])
+        return;
+    o = new_obj_para(2, name);
+    if (!o)
+        return;
     r = OleCreate("StdFileEditing", &o->cl, newClass, lhdoc, name, &o->obj, olerender_draw, 0);
     if (r == OLE_WAIT_FOR_RELEASE)
         wait_release(o->obj, r);
@@ -522,4 +533,41 @@ void cmd_insertobj(void)
     }
     if (o->obj)
         host_names(o->obj);
+}
+
+/* Paste: an object on the clipboard (Native and OwnerLink) is embedded;
+   a picture alone (a bitmap, a DIB, a metafile picture) becomes a static
+   object (WR7: 3.1 stores a pasted picture as one). TRUE when done. */
+BOOL ole_paste(void)
+{
+    WOBJ *o;
+    char name[9];
+    const char *proto;
+    OLESTATUS st;
+    if (!lhdoc)
+        return FALSE;
+    if (OleQueryCreateFromClip("StdFileEditing", olerender_draw, 0) == OLE_OK)
+        proto = "StdFileEditing";
+    else if (!IsClipboardFormatAvailable(CF_TEXT) &&
+             OleQueryCreateFromClip("Static", olerender_draw, 0) == OLE_OK)
+        proto = "Static";
+    else
+        return FALSE;
+    o = new_obj_para((WORD)(proto[0] == 'S' && proto[1] == 't' && proto[2] == 'a' ? 1 : 2), name);
+    if (!o)
+        return TRUE;
+    if (!OpenClipboard(g_frame))
+        return TRUE;
+    st = OleCreateFromClip(proto, &o->cl, lhdoc, name, &o->obj, olerender_draw, 0);
+    CloseClipboard();
+    if (st == OLE_WAIT_FOR_RELEASE)
+        wait_release(o->obj, st);
+    else if (st != OLE_OK)
+        o->obj = NULL;
+    o->failed = o->obj == NULL;
+    if (o->obj) {
+        o->dirty = TRUE;
+        store(o);
+    }
+    return TRUE;
 }

@@ -190,6 +190,7 @@ static void hf_return(HWND d)
     view_changed(0);
     view_select(savedFirst, savedLim, TRUE);
     SetFocus(g_docwnd);
+    view_caret_now();
 }
 
 BOOL CALLBACK __export HeadDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
