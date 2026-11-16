@@ -198,6 +198,12 @@
 #              pixels (group icons, carets left out), no document run as a
 #              DOS program; the install tree alone under both kernels
 #              (runassoctree.txt)
+#   runpe      File > Run of a 32-bit program (a PE file whose MS-DOS stub
+#              leaves C:\RANCOM.TXT; tests/scripts/input/runpe.txt), parts
+#              k286, k386: w16's PROGMAN and SHELL on w16's kernels with
+#              [w16] PEError=0 against all of Microsoft's: every screen
+#              3.1's, the stub run; on286, on386: PEError=1: w16's box,
+#              nothing run, the Run box back, then the boot's screen
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
 #              no file of Microsoft's): every part w16's (VGACOLOR.2GR and
 #              MMSOUND.DRV too),
@@ -607,7 +613,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2177,6 +2183,80 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   runassoc: every kind of name as on 3.1"
         else echo "FAIL runassoc: $r ($out)"; fails=$((fails + 1)); fi ;;
+    runpe)
+        # Program Manager's File > Run of a 32-bit program (a PE file;
+        # ARCHITECTURE.md 9.8, [w16] PEError; tests/scripts/input/runpe.txt).
+        # Parts k286, k386: w16's PROGMAN and SHELL on w16's KRNL286 and
+        # KRNL386 with PEError=0 (the harness's stock value) against all of
+        # Microsoft's: every screen 3.1's (the group icons and the Run
+        # box's caret left out) and the program's MS-DOS stub run in both
+        # (C:\RANCOM.TXT). Parts on286, on386: the same with PEError=1:
+        # the box (an active caption over the desktop), the same on both
+        # kernels; Escape brings back the Run box as it was typed, a
+        # second Escape the screen after the boot; nothing started
+        # (no C:\RANCOM.TXT: WINOLDAP never ran the stub).
+        r=ok
+        python3 -I "$root/tests/scripts/runassocfiles.py" "$out/runpe-files"
+        s=$root/tests/scripts/input/runpe.txt
+        set -- -f "$out/runpe-files/PE.EXE=RA/PE.EXE"
+        w="-f $shell=WINDOWS/SYSTEM/SHELL.DLL -f $root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE"
+        m="rectangle 60,310 300,342 rectangle 114,160 348,178"
+        refrun runpe-ref runpe "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/runpe-ref" -r "$@"
+        ls "$out/runpe-ref"/0[0-3]*.png > /dev/null 2>&1 || r="the reference has no screens"
+        [ "$r" != ok ] || [ -f "$out/runpe-ref/work/c/RANCOM.TXT" ] || r="the reference did not run the stub"
+        # pecmp A B LABEL: A and B (masked) equal, else r says so
+        pecmp() {
+            magick "$1" -fill black -draw "$m" "$d-a.png"
+            magick "$2" -fill black -draw "$m" "$d-b.png"
+            n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-$3-diff.png" 2>&1 >/dev/null || true)
+            n=${n%% *}
+            [ "$n" = 0 ] || r="$part: $3: $n pixels differ ($d-$3-diff.png)"
+        }
+        case ${part:-k286} in
+        k286|k386)
+            k=; [ $part = k386 ] && k=-3
+            d=$out/runpe-$part
+            # Microsoft's USER, back from the DOS program, leaves a stray
+            # repaint on Program Manager's caption in about half the runs,
+            # its own reference runs included (4 all-Microsoft runs: 2;
+            # rows 51-52 from x 68 to 579, the frame's inner line and the
+            # caption's first row, 352 or 374 pixels; case winoldap's check
+            # meets it too): left out
+            m="$m rectangle 68,51 579,52"
+            # shellcheck disable=SC2086
+            "$root/tests/inputrun.sh" -s -E "$out/runpe-ref" -M "$m" -b 40 -t 300 "$s" "$d" $k "$@" $w \
+                > "$d.txt" 2>&1 || true
+            [ "$r" != ok ] || [ -f "$d/work/c/RANCOM.TXT" ] || r="$part: the stub did not run (no C:\\RANCOM.TXT)"
+            for f in "$out/runpe-ref"/0[0-3]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f" .png)
+                [ -f "$d/$s2.png" ] || { r="$part: no $s2"; break; }
+                pecmp "$f" "$d/$s2.png" "$s2"
+            done ;;
+        on286|on386)
+            k=; [ $part = on386 ] && k=-3
+            d=$out/runpe-$part
+            # shellcheck disable=SC2086
+            "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$d" $k "$@" $w -i w16:PEError=1 \
+                > "$d.txt" 2>&1 || true
+            grep -q '^script done' "$d/input.log" 2>/dev/null || r="$part: the script did not finish ($d/input.log)"
+            [ "$r" != ok ] || [ ! -f "$d/work/c/RANCOM.TXT" ] || r="$part: the stub ran (C:\\RANCOM.TXT)"
+            if [ "$r" = ok ]; then
+                px=$(magick "$d/01-run.png" -format "%[hex:p{200,186}]" info: 2>/dev/null)
+                case $px in 0000AA*) ;; *) r="$part: 01-run: no box (no active caption at 200,186: $px)" ;; esac
+            fi
+            [ "$r" != ok ] || pecmp "$d/00-typed.png" "$d/02-back.png" back
+            [ "$r" != ok ] || pecmp "$d/boot.png" "$d/03-end.png" end
+            # the box itself the same on both kernels (the other part's
+            # run, once it is there)
+            o=$out/runpe-on286; [ $part = on286 ] && o=$out/runpe-on386
+            if [ "$r" = ok ] && [ -f "$o/01-run.png" ]; then
+                pecmp "$o/01-run.png" "$d/01-run.png" box
+            fi ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   runpe: a 32-bit program's stub as on 3.1 (PEError=0); the box, nothing run (PEError=1)"
+        else echo "FAIL runpe: $r ($out)"; fails=$((fails + 1)); fi ;;
     olecli)
         r=ok
         case ${part:-tree} in
@@ -3951,6 +4031,7 @@ caseparts() {
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree" ;;
+    runpe) echo "$1@k286 $1@k386 $1@on286 $1@on386" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;

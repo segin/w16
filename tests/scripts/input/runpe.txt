@@ -1,0 +1,23 @@
+; boot-test case runpe: Program Manager's File > Run of a 32-bit program
+; (C:\RA\PE.EXE, a PE image made by tests/scripts/runassocfiles.py whose
+; MS-DOS stub writes C:\RANCOM.TXT when DOS runs it). Windows 3.1 (no
+; Win32s) runs the stub through WINOLDAP; w16 with [w16] PEError=1 shows
+; a box instead and starts nothing.
+key alt+f
+key r
+sleep 1
+type C:\RA\PE.EXE
+sleep 1
+shot 00-typed
+key Return
+; 3.1: the stub runs and Program Manager is back; PEError=1: the box
+match 01-run 30 3
+shot 01-run
+; PEError=1: closes the box, the Run box is back as typed; 3.1: nothing
+key Escape
+match 02-back 20 2
+shot 02-back
+; PEError=1: closes the Run box
+key Escape
+match 03-end 20 2
+shot 03-end
