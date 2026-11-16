@@ -5,6 +5,8 @@
 ; pointer goes to the desktop under Write's window first, so that it is
 ; an arrow in every screen. (A centered line that mixes regular and bold
 ; text sits 2 pixels left of 3.1's: ARCHITECTURE.md 15.5.)
+; Shots after typing wait 2.5 s: on a loaded host the install tree's
+; KRNL286 run had not drawn all of the typed line after 1 s.
 click 1
 sleep 0.5
 move 200 200
@@ -16,7 +18,7 @@ sleep 0.3
 move 200 200
 matchnow 01-start 20 1
 type Hello from w16
-matchnow 02-typed 20 1
+matchnow 02-typed 20 2.5
 key alt+c
 matchnow 03-character 20 1.5
 key Escape
@@ -30,10 +32,10 @@ sleep 0.5
 key ctrl+b
 key space
 type bold
-matchnow 05-bold 20 1
+matchnow 05-bold 20 2.5
 key Return
 type Second line
-matchnow 06-second 20 1
+matchnow 06-second 20 2.5
 key alt+p
 sleep 0.5
 key c
