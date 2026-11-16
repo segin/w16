@@ -32,13 +32,15 @@ static HWND mainwnd;
 static char cls_name[64] = "OS1Probe";
 static LHSERVER lhsrv;
 static BOOL revoking, embedding, quitting;
-static int quit_mode;                   /* /Q, /QQ: quit on Release */
+static int quit_mode;                   /* /Q, /QQ, /QD: quit on Release */
 
 /* ---- forced return codes ---- */
 
 #define NFORCE 16
 static struct { char name[24]; int code; } force[NFORCE];
 static int nforce;
+
+static void revoke_doc(struct DOC *d);
 
 static int forced(const char *name, int normal)
 {
@@ -51,7 +53,7 @@ static int forced(const char *name, int normal)
 
 /* ---- documents and objects ---- */
 
-typedef struct {
+typedef struct DOC {
     OLESERVERDOC d;
     LHSERVERDOC lh;
     char name[128];
@@ -228,9 +230,15 @@ OLESTATUS CALLBACK __export SrvRelease(LPOLESERVER s)
     } else if (!revoking && quit_mode == 1) {
         /* /Q: quit when let go, later (a posted WM_CLOSE revokes) */
         PostMessage(mainwnd, WM_CLOSE, 0, 0);
-    } else if (!revoking && quit_mode == 2) {
-        /* /QQ: revoke at once, inside Release */
+    } else if (!revoking && quit_mode >= 2) {
+        /* /QQ: revoke at once, inside Release; /QD: the documents first,
+           as Paintbrush does (UNVERIFIED that it does) */
         OLESTATUS r;
+        int i;
+        if (quit_mode == 3)
+            for (i = 0; i < NDOC; i++)
+                if (docs[i].used && docs[i].lh && !docs[i].revoking)
+                    revoke_doc(&docs[i]);
         revoking = TRUE;
         r = OleRevokeServer(lhsrv);
         P("  OleRevokeServer -> %d %s", r, (const char FAR *)stname(r));
@@ -249,7 +257,7 @@ OLESTATUS CALLBACK __export SrvExecute(LPOLESERVER s, HGLOBAL h)
 
 /* ---- document vtable ---- */
 
-static void revoke_doc(DOC *d)
+static void revoke_doc(struct DOC *d)
 {
     OLESTATUS r;
     d->revoking = TRUE;
@@ -840,6 +848,8 @@ int FAR __cdecl tmain(void)
             embedding = TRUE;
         else if (prefix(a, "/C:"))
             lstrcpy(cls_name, a + 3);
+        else if (prefix(a, "/QD"))
+            quit_mode = 3;
         else if (prefix(a, "/QQ"))
             quit_mode = 2;
         else if (prefix(a, "/Q"))

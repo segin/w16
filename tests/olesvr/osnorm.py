@@ -28,7 +28,16 @@ except OSError:
     sys.exit(0)
 ids = sorted(set(re.findall(r'%([0-9a-f]{8})#', log)))
 out = []
+item = False
 for line in log.splitlines():
+    # the properties of object windows (WIN 2 ... ItemWndClass) hold a
+    # handle of the library's own heap: not compared
+    if line.startswith('WIN '):
+        item = 'ItemWndClass' in line
+    elif item and line.startswith('    prop '):
+        line = re.sub(r' = [0-9A-F]{4}$', ' = *', line)
+    else:
+        item = False
     if line.startswith('OS1 step wait '):
         continue
     line = re.sub(r'%[0-9a-f]{8}#', '%XXXXXXXX#', line)

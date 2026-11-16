@@ -107,8 +107,34 @@ static void adv_drop_client(ADV FARP *FARP *l, HWND client)
     }
 }
 
+/* Windows 3.1's OLESVR keeps each client that advised on an object as a
+   property of the object's window, named as in conv_link (observed; its
+   value looked like a handle of the library's: w16 puts the near address
+   of the client's first advise there). Called after advises changed. */
+static void item_props(ITEM FARP *it, HWND client)
+{
+    ADV FARP *a;
+    char n[6];
+    if (!it->hwnd || !IsWindow(it->hwnd))
+        return;
+    conv_propname(client, n);
+    for (a = it->advs; a; a = a->next)
+        if (a->client == client)
+            break;
+    if (a) {
+        if (!GetProp(it->hwnd, n))
+            SetProp(it->hwnd, n, (HANDLE)OFFSETOF(a));
+    } else
+        RemoveProp(it->hwnd, n);
+}
+
 static void item_free(ITEM FARP *it)
 {
+    while (it->advs) {                  /* their properties go first */
+        HWND c = it->advs->client;
+        adv_drop_client(&it->advs, c);
+        item_props(it, c);
+    }
     if (it->hwnd && IsWindow(it->hwnd)) {
         SetWindowLong(it->hwnd, 0, 0);
         DestroyWindow(it->hwnd);
@@ -661,6 +687,7 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             } else if ((it = item_get(d, name, client, &r)) != NULL && item_has_format(it, cf)) {
                 if (adv_add(&it->advs, adv_new(client, kind, cf, flags, text))) {
                     ADV FARP *e;
+                    item_props(it, client);
                     st = 0x8000;
                     /* the latest advise of a kind sets fDeferUpd for all of
                        the client's advises of that kind (observed) */
@@ -688,8 +715,10 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
                 if (adv_remove(&d->renames, client, cf, text))
                     st = 0x8000;
             } else if ((it = item_get(d, name, client, &r)) != NULL &&
-                       adv_remove(&it->advs, client, cf, text))
+                       adv_remove(&it->advs, client, cf, text)) {
+                item_props(it, client);
                 st = 0x8000;
+            }
         }
         ack(client, w, st, atom);
         return 0;
@@ -718,6 +747,7 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         adv_drop_client(&d->renames, client);
         for (it = d->items; it; it = it->next) {
             adv_drop_client(&it->advs, client);
+            item_props(it, client);
             conv_remove(&it->users, client);
         }
         if (d->revoking && !d->convs)
@@ -839,7 +869,7 @@ OLESTATUS FAR PASCAL __loadds OLERENAMESERVERDOC(LHSERVERDOC lh, LPCSTR name)
         ATOM at;
         if (!c || c->terminating)
             continue;
-        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
+        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 1);
         p = h ? (char FAR *)GlobalLock(h) : NULL;
         if (!p)
             continue;

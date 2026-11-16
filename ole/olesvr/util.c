@@ -138,7 +138,7 @@ CONV FARP *conv_add(CONV FARP **l, HWND client)
    handle as four "hex" digits made as '0' + nibble, so 117Ch is "@117<";
    the value is the handle). w16 does the same: the properties take the
    same room in USER's heap, and programs may look at them. */
-static void conv_propname(HWND client, char *n)
+void conv_propname(HWND client, char *n)
 {
     int i;
     n[0] = '@';

@@ -32,12 +32,15 @@ static BOOL reg_has(const char FARP *cls, const char *sub)
     return RegQueryValue(HKEY_CLASSES_ROOT, key, val, &n) == ERROR_SUCCESS;
 }
 
-static int ndocs(SRV FARP *s)
+/* documents a client made on the system topic (StdNewDocument and the
+   like) that no client has connected to yet */
+static int npending(SRV FARP *s)
 {
     int n = 0;
     DOC FARP *d;
     for (d = s->docs; d; d = d->next)
-        n++;
+        if (d->pending)
+            n++;
     return n;
 }
 
@@ -222,14 +225,7 @@ static void dispatch(SRV FARP *s, QMSG FARP *q)
     p = GetWindowLong(q->hwnd, 0);
     if (!p)
         return;
-    if (q->hwnd == s->hwnd && q->msg == WM_DDE_TERMINATE) {
-        /* observed (scenario block): a system-topic TERMINATE that waited
-           in the queue is answered, but the conversation stays on the
-           books: the server is not let go when its last document goes,
-           and that client's next INITIATE is not answered */
-        if (conv_find(s->convs, (HWND)q->wp))
-            PostMessage((HWND)q->wp, WM_DDE_TERMINATE, (WPARAM)s->hwnd, 0);
-    } else if (q->hwnd == s->hwnd)
+    if (q->hwnd == s->hwnd)
         srv_dde(s, q->hwnd, q->msg, q->wp, q->lp);
     else
         doc_dde((DOC FARP *)p, q->hwnd, q->msg, q->wp, q->lp);
@@ -531,12 +527,14 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (!c)
             return 0;
         /* observed: the end of a system conversation lets the server go
-           only when it is an OLE_SERVER_MULTI one without documents.
+           only when it is an OLE_SERVER_MULTI one, and no document made
+           on the system topic still waits for its client (Packager, whose
+           closed document stays registered, is let go).
            Release comes before the answering TERMINATE: a server that
            revokes itself in Release gets OLE_OK at once (the client has
            gone), and the client gets one TERMINATE (relq scenario) */
         c->closing = TRUE;
-        if (!s->revoking && s->use == OLE_SERVER_MULTI && !ndocs(s))
+        if (!s->revoking && s->use == OLE_SERVER_MULTI && !npending(s))
             srv_check_release(s);
         if (!srv_from((LHSERVER)s))
             return 0;                   /* revoked and gone meanwhile */
@@ -584,10 +582,6 @@ LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (s->use == OLE_SERVER_MULTI && s->docs)
             return 0;
         if (topic != find_atom("OLEsystem") && topic != find_atom("System"))
-            return 0;
-        /* a client already in conversation with the system topic gets
-           no second one (UNVERIFIED but for the case above) */
-        if (conv_find(s->convs, (HWND)wp))
             return 0;
         if (!conv_link(s->hwnd, &s->convs, (HWND)wp))
             return 0;

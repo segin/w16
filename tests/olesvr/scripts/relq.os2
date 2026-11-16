@@ -1,6 +1,7 @@
 ; servers that quit when OLESVR lets them go (Release): later (/Q: a
 ; posted WM_CLOSE revokes) or at once inside Release (/QQ), after a raw
-; client ends a system conversation or a document conversation
+; client ends a system conversation or a document conversation (/QD:
+; the documents revoked first, then the server)
 reg OS1Probe=OS1 Probe
 reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
 run C:\OS1.EXE -Embedding /Q
@@ -16,6 +17,13 @@ term
 wait 3000
 waitgone OS1
 run C:\OS1.EXE -Embedding /QQ C:\LNK.OS1
+wait 2000
+init OS1Probe C:\LNK.OS1
+req i1 Native
+term
+wait 3000
+waitgone OS1
+run C:\OS1.EXE -Embedding /QD C:\LNK.OS1
 wait 2000
 init OS1Probe C:\LNK.OS1
 req i1 Native
