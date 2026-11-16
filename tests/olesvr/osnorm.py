@@ -47,6 +47,11 @@ for line in log.splitlines():
     # compared (OLESVR's own DATA blocks are zero-filled, and compared)
     if ' POKE item=' in line or line.startswith('  data fmt='):
         line = re.sub(r'sum=[0-9A-F]{4} \[((?:\\[0-9A-F]{2}|[^\\\]]){0,16}).*', r'sum=* [\1...', line)
+    # OS1's own Native is the 10 bytes "OS1NATIVE\0": what follows in a
+    # block is its rounding, from memory nobody set (OLECLI copies blocks
+    # with it when it saves and pokes the object back)
+    if 'fmt=Native' in line and '[OS1NATIVE\\00' in line:
+        line = re.sub(r'sum=[0-9A-F]{4} \[OS1NATIVE\\00.*', lambda m: 'sum=* [OS1NATIVE\\00...', line)
     out.append(line)
 open(run + '/os.cmp', 'w', encoding='latin-1').write('\n'.join(out) + '\n')
 for f in sys.argv[2:]:
