@@ -221,6 +221,15 @@ static void store(WOBJ *o)
     }
     hm_free(&ws.out);
     o->dirty = FALSE;
+    /* a caret inside the object goes after it (typing never goes into a
+       picture's bytes) */
+    {
+        DWORD end = pf + PICHDR + ws.outLen;
+        if (g_selFirst > pf && g_selFirst < end)
+            g_selFirst = end;
+        if (g_selLim > pf && g_selLim < end)
+            g_selLim = end;
+    }
     view_changed(pf);
 }
 
