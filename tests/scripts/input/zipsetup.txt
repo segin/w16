@@ -1,0 +1,20 @@
+; boot-test case zipsetup: the 7-Zip 26.05 16-bit installer (C:\7ZSETW16.EXE,
+; the user's file, copied in at test time) from Program Manager's File > Run;
+; its dialog's Install (Return): the files go to C:\7-Zip and the installer
+; asks Program Manager by DDE for its group and two items; its report box,
+; OK; the new group as Program Manager shows it.
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type C:\7ZSETW16.EXE
+sleep 0.5
+key Return
+match 01-setup 60 3
+shot 01-setup
+key Return
+match 02-report 120 5
+shot 02-report
+key Return
+match 03-group 60 3
+shot 03-group

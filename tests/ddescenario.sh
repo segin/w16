@@ -5,10 +5,11 @@
 # Program Manager on the reference Windows 3.1. The logged DDE answers
 # and the resulting group files and PROGMAN.INI must be identical.
 #   usage: tests/ddescenario.sh [script...]    (default: all)
+# DDESCEN_OUT: the results directory (default build/ref/ddescen).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out=$root/build/ref/ddescen
+out=${DDESCEN_OUT:-$root/build/ref/ddescen}
 files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/DDETEST.GRP WINDOWS/DDEKEEP.GRP WINDOWS/MAIN0.GRP WINDOWS/COLLIDEO.GRP WINDOWS/COLLIDET.GRP WINDOWS/COLLIDE0.GRP"
 names=${*:-$(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//')}
 status=0
