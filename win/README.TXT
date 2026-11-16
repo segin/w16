@@ -12,6 +12,9 @@ w16 repository's LICENSE):
   CALC.EXE                Calculator
   CARDFILE.EXE            Cardfile (its help is CARDFILE.HLP)
   CONTROL.EXE             Control Panel
+  TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
+                          on the desktop): switch to, close, cascade or
+                          tile the programs' windows, arrange icons
   SYSTEM\KRNL286.EXE      KERNEL for an 80286
   SYSTEM\KRNL386.EXE      KERNEL for a 386 or later (Standard and 386
                           Enhanced mode)
