@@ -21,6 +21,9 @@
 #define LE_NOPATH       3
 #define LE_BADFORMAT    20      /* not MZ, or MZ without an NE header */
 #define LE_PROGRAM      5       /* LoadLibrary of a program (tk15.c) */
+#define LE_BADEXE       11      /* LoadModule of a program that is not a
+                                   Windows module: a document, a .COM, a
+                                   .BAT, a DOS .EXE (SH14) */
 
 /* UNVERIFIED: these are w16's own choices or documented values not yet
    seen on Windows. */
@@ -36,6 +39,7 @@
    a count word, then hModules. */
 static u16 defer_sel;
 static u16 last_libinit;        /* the list the last program load made */
+static int last_not_ne;         /* the last load's file was no NE file */
 
 /* Windows' own modules that w16 does not provide yet. A program that
    imports from one of them still loads: the imports go to the
@@ -815,6 +819,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         !f_seek(fh, ne_base) || !f_read(fh, &h, sizeof h) || h.magic != NE_MAGIC) {
         f_close(fh);
         *err = LE_BADFORMAT;
+        if (load_depth == 1)
+            last_not_ne = 1;
         return NULL;
     }
     if (!(h.flags & NEF_LIBRARY) && !program) {
@@ -1388,12 +1394,16 @@ static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
    Pietrek) a program gives 5. A program starts a task: a new module,
    whose DLLs are initialised in the task's InitTask, or another instance
    of a loaded one; the result is the hInstance, after the new task has
-   run until it yielded. Errors as LoadLibrary's. */
-u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
+   run until it yielded. Errors as LoadLibrary's, but a file that is
+   no Windows module (a document, a .COM, a .BAT, a DOS .EXE) gives 11
+   and starts nothing (SH14): only WinExec hands those to WINOLDAP.
+   oldapp: WinExec's call. */
+static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
 {
     const loadparms FAR *lp = params;
     module FAR *m;
     u16 err, libinit, ad, r;
+    int not_ne;
 
     if (params == (void FAR *)-1L)
         return LoadLibrary(name);
@@ -1407,14 +1417,20 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
     if (!FP_SEG(name))
         return LE_NOTFOUND;             /* UNVERIFIED */
     last_libinit = 0;
+    last_not_ne = 0;
     m = load_file(name, NULL, 1, &err);
     libinit = last_libinit;
     last_libinit = 0;
+    not_ne = last_not_ne;
+    last_not_ne = 0;
     if (m)
         uses(m, 1);
     sweep();
-    if (!m && err == LE_BADFORMAT && winboot_active && lp)
-        return start_oldapp(name, lp);
+    if (!m && err == LE_BADFORMAT && not_ne && lp) {
+        if (oldapp && winboot_active)
+            return start_oldapp(name, lp);
+        return LE_BADEXE;
+    }
     if (!m)
         return err;
     if (m->flags & NEF_LIBRARY)
@@ -1431,6 +1447,11 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
         return LE_NOMEM;
     }
     return r;
+}
+
+u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
+{
+    return load_module(name, params, 0);
 }
 
 /* WinExec (KERNEL.166): LoadModule with the command line split into the
@@ -1490,7 +1511,13 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
     lp.cmd = tail;
     lp.show = shw;
     lp.reserved = 0;
-    return LoadModule(name, &lp);
+    /* a .PIF goes to WINOLDAP unopened: a missing one gives WINOLDAP's
+       "Cannot find the specified file." box and its instance (SH14) */
+    n = kstrlen(name);
+    if (n >= 4 && name[n - 4] == '.' && (name[n - 3] | 0x20) == 'p' &&
+        (name[n - 2] | 0x20) == 'i' && (name[n - 1] | 0x20) == 'f' && winboot_active)
+        return start_oldapp(name, &lp);
+    return load_module(name, &lp, 1);
 }
 
 
