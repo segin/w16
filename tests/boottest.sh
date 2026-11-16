@@ -2145,6 +2145,15 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 [ "$r" = ok ] || break
                 [ ! -f "${d}$k/work/c/RANCOM.TXT" ] || r="KRNL$k: a document ran as a DOS program (C:\\RANCOM.TXT)"
             done
+            # back to the screen after the boot once the Run box and
+            # Notepad have gone (w16's USER put back a stale image of the
+            # Run box there: savebits.c)
+            for s2 in 03-back 05-end; do
+                [ "$r" = ok ] || break
+                n=$(magick compare -metric AE "${d}386/$s2.png" "${d}386/boot.png" "$d-$s2-boot-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || r="KRNL386: $s2: $n pixels differ from the screen after the boot ($d-$s2-boot-diff.png)"
+            done
             # the box (its active caption) over the Run box; Notepad's
             # window (active) for the .TXT
             if [ "$r" = ok ]; then
