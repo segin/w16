@@ -18,12 +18,12 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   Scripts in tests/ddeml/scripts; NAME+x = other copies on the srv library
   (DMX.EXE/DDEMX.DLL renamed copies). x*.dm = raw-value explorations, not
   compared.
-- [ ] observations recorded (ARCHITECTURE.md new chapter "DDEML")
+- [x] observations recorded: ARCHITECTURE.md §18 (with what still differs, 18.4/18.5)
 - [x] shell/ddeml/ first implementation (fc59623): inst.c hsz.c data.c conv.c
   mon.c entry.asm ddeml.rc ddeml.lnk; builds, exports match (+ linker's
   unnamed 40-42). NOT yet run: iterate on tests/ddemlscen.sh diffs.
-- [ ] tests/ddemlscen.sh (combos), progman scenario, boot cases
-- [ ] README.TXT, make test, full boot test
+- [x] tests/ddemlscen.sh (combos), progman scenario, boot case ddeml (tree286, tree386, scenarios)
+- [x] README.TXT; [ ] make test + full boot test running (remote-test.sh -n ddeml-agent; results in build/remote-ddeml-agent/)
 
 ## Notes
 
@@ -128,3 +128,11 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   it to ARCHITECTURE.md (after §17) with the final results.
 - Still to do: make test + full boot test (tools/remote-test.sh -n
   ddeml-agent), report.
+
+### Next steps (if continuing)
+- conn: DdeConnectList orders (see ARCHITECTURE.md 18.4) - compare
+  build/dmscen/conn*/os.diff after `tests/ddemlscen.sh conn conn+x`.
+- monitor: mirror 3.1's MF_HSZ_INFO traffic (xmon.dm with raw values now
+  that the probe reads the blocks correctly).
+- progman: find which global atoms 3.1's DdeInitialize makes (atomq for
+  window class names before/after init).
