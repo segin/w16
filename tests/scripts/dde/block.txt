@@ -11,7 +11,19 @@ exec  [ReplaceItem(Calc)] [AddItem( CLOCK.EXE , Clock )]
 exec [Bogus(x,y)]
 exec [DeleteItem(Nope)]
 exec [CreateGroup("Blk B",BLKB.GRP)][ShowGroup("Blk B",2)]
-exec [ShowGroup(Blk A,1)][DeleteItem(Clock)][DeleteItem("Read, Me")]
+; which group item commands go to: the active one (ShowGroup(name,1)
+; does not activate a restored group behind another); a failed command
+; ends the run, after every command was parsed; an unknown one: none run
+request Blk A
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(CALC.EXE,AfterShow)]
+exec [DeleteItem(Nope)][AddItem(CLOCK.EXE,AfterFail)]
+exec [Bogus()][AddItem(CLOCK.EXE,AfterBogus)]
+exec [ShowGroup(Blk A,2)]
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(CALC.EXE,AfterRestore)]
+request Blk A
+request Blk B
 ; (no DeleteGroup: when 3.1 writes Order= then is not known, see
 ; ARCHITECTURE.md 9.6)
 disconnect

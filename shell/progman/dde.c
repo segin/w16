@@ -27,8 +27,6 @@
 #include "progman.h"
 #include <dde.h>
 
-static HWND dde_group;                  /* the group AddItem and friends use */
-
 /* Where each argument of the commands run ends in the client's command
    block: 3.1's Program Manager writes a NUL there (observed with TDDE,
    tests/scripts/dde/block.txt: "[AddItem(NOTEPAD.EXE,Note Pad)]" comes
@@ -38,9 +36,12 @@ static HWND dde_group;                  /* the group AddItem and friends use */
    writes them into the block before the ACK. */
 static WORD FAR *ends;
 static WORD nends, capends;
+static BOOL noting;                     /* the first pass: note them */
 
 static void add_end(WORD at)
 {
+    if (!noting)
+        return;
     if (nends == capends) {
         WORD FAR *n = (WORD FAR *)mem_realloc((LPSTR)ends, (DWORD)(capends + 16) * sizeof(WORD));
         if (!n)
@@ -165,10 +166,11 @@ static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name
     return TRUE;
 }
 
+/* AddItem, DeleteItem and ReplaceItem work on the active group (SDK;
+   observed: after ShowGroup(A,1) left restored group A behind the active
+   B, AddItem went to B) */
 static HWND current_group(void)
 {
-    if (dde_group && IsWindow(dde_group))
-        return dde_group;
     return (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
 }
 
@@ -184,7 +186,7 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         if (!g)
             return FALSE;
         group_show(g, SW_SHOWNORMAL);
-        dde_group = g;
+        SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)g, 0);
         return TRUE;
     }
     if (!s_icmp(name, "ShowGroup")) {
@@ -192,15 +194,12 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         if (!g)
             return FALSE;
         group_show(g, a->argc > 1 ? arg_int(a, 1) : SW_SHOWNORMAL);
-        dde_group = g;
         return TRUE;
     }
     if (!s_icmp(name, "DeleteGroup")) {
         g = group_find(arg(a, 0));
         if (!g)
             return FALSE;
-        if (g == dde_group)
-            dde_group = NULL;
         delete_group(g);
         return TRUE;
     }
@@ -274,7 +273,14 @@ static const char *const known[] = {
     "ReplaceItem", "ExitProgman"
 };
 
-static BOOL execute(HWND frame, const char FAR *cmds)
+/* One pass over the commands: the first parses them all and notes
+   where their arguments end, stopping at an unknown command (nothing is
+   run then); the second runs them in order up to the first that fails.
+   Observed: "[DeleteItem(Nope)][AddItem(CLOCK.EXE,After)]" came back with
+   both commands' NULs and added nothing; "[Bogus()][AddItem(...)]" came
+   back untouched (tests/scripts/dde/block.txt). UNVERIFIED: what a known
+   command before an unknown one does. */
+static BOOL pass(HWND frame, const char FAR *cmds, BOOL run)
 {
     const char FAR *s = cmds;
     for (;;) {
@@ -289,17 +295,28 @@ static BOOL execute(HWND frame, const char FAR *cmds)
         if (*s++ != '[')
             return FALSE;
         ok = parse_command(cmds, &s, &name, &a);
-        /* an unknown command's arguments are left as they are */
         for (k = 0; name && k < sizeof known / sizeof known[0] && s_icmp(name, known[k]); k++)
             ;
-        if (!name || k == sizeof known / sizeof known[0])
-            nends = had;
-        ok = ok && run_command(frame, name, &a);
+        if (!name || k == sizeof known / sizeof known[0]) {
+            nends = had;                /* an unknown command is left as it is */
+            ok = FALSE;
+        }
+        if (ok && run)
+            ok = run_command(frame, name, &a);
         mem_free(name);
         mem_free(a.buf);
         if (!ok)
             return FALSE;
     }
+}
+
+static BOOL execute(HWND frame, const char FAR *cmds)
+{
+    BOOL ok;
+    noting = TRUE;
+    ok = pass(frame, cmds, FALSE);
+    noting = FALSE;
+    return ok && pass(frame, cmds, TRUE);
 }
 
 /* ---- requests ---- */
