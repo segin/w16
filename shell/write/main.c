@@ -402,6 +402,15 @@ static LRESULT command(HWND w, WORD id)
     case IDM_UNDO:
         cmd_undo();
         break;
+    case IDM_PRINT:
+        cmd_print();
+        break;
+    case IDM_PRINTSETUP:
+        cmd_printsetup();
+        break;
+    case IDM_REPAGINATE:
+        cmd_repaginate();
+        break;
     case IDM_INSERTOBJ:
         undo_save(IDS_EDITING);
         cmd_insertobj();

@@ -132,6 +132,7 @@
 #define IDS_NOMEMORY        8219
 #define IDS_NOPATH          8220
 #define IDS_CANTSAVE        16390
+#define IDS_CANTPRINT       8226
 #define IDS_PAGE1           28672
 #define IDS_WRITE           28676
 #define IDS_UNTITLED        28677
@@ -344,6 +345,9 @@ void  sel_props(CHPX *c);
 /* ---- commands (cmds.c), main (main.c) ---- */
 void  cmd_char(WORD id);
 void  cmd_undo(void);
+void  cmd_print(void);
+void  cmd_printsetup(void);
+void  cmd_repaginate(void);
 void  undo_save(WORD kind);
 void  undo_end_typing(void);
 void  undo_clear(void);

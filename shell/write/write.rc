@@ -174,6 +174,7 @@ BEGIN
     IDS_SAVECHANGES, "%s\nThis document has changed.\n\nSave current changes?"
     IDS_NOMEMORY, "Not enough memory for Write to complete this operation.\n\nQuit one or more applications to increase available memory, and then try again."
     IDS_NOPATH, "Path does not exist.\n\nPlease verify that the correct path is given."
+    IDS_CANTPRINT, "Cannot print.\n\nBe sure that your printer is connected properly, and use the Printers option in Control Panel to verify that the printer is configured properly."
     IDS_CANTSAVE, "Cannot save file.\n\nMake sure that the file or disk is not damaged."
     IDS_PAGE1, "Page 1"
     IDS_WRITE, "Write"
