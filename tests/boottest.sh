@@ -163,6 +163,17 @@
 #              treeitems.txt; Program Manager and Main where PROGMAN.INI
 #              has them at boot) and desk (Clock and Calculator moved over
 #              the desktop version stamp, treedesk.txt)
+#   olesvr     w16's OLESVR.DLL (ARCHITECTURE.md 16.9), parts: tree, w16's
+#              install tree alone with w16's OLECLI and OLESVR (and, for the
+#              test only, the reference's PBRUSH.EXE, PBRUSH.DLL, REG.DAT)
+#              under its KRNL386: Cardfile inserts a Paintbrush picture,
+#              Exit & Return, the card shows it (tests/scripts/input/
+#              olesvrtree.txt); every shot equal to the same tree with
+#              Microsoft's OLESVR.DLL; and one part per OLESVR scenario
+#              tests/olesvr/scripts/NAME.os2 (tests/olesvrscen.sh NAME): on
+#              the reference install, w16's OLESVR (and w16's OLECLI) in
+#              every combination: the DDE conversation and the servers'
+#              callbacks, the saved documents and the screens equal
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -542,7 +553,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1831,6 +1842,49 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   olecli"
         else echo "FAIL olecli: $r ($out)"; fails=$((fails + 1)); fi ;;
+    olesvr)
+        r=ok
+        case ${part:-tree} in
+        tree)
+            s=$root/tests/scripts/input/olesvrtree.txt
+            d=$out/olesvr-tree
+            ref=$root/.tools/ref/win31/cdrive/WINDOWS
+            # Paintbrush (the server) and the registration database are
+            # the reference's, for this test only: w16 has neither
+            pbx="-f $ref/PBRUSH.EXE=W16/PBRUSH.EXE -f $ref/PBRUSH.DLL=W16/PBRUSH.DLL -f $ref/REG.DAT=W16/REG.DAT"
+            # shellcheck disable=SC2086
+            "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$d-ms" -T "$root/build/w16" -3 $pbx \
+                -f "$ref/SYSTEM/OLESVR.DLL=W16/SYSTEM/OLESVR.DLL" > "$d-ms.txt" 2>&1 || true
+            # shellcheck disable=SC2086
+            "$root/tests/inputrun.sh" -e "$d-ms/boot.png" -E "$d-ms" -M "rectangle 16,144 20,164" -b 40 -t 300 \
+                "$s" "$d-w16" -T "$root/build/w16" -3 $pbx > "$d-w16.txt" 2>&1 || true
+            for k in ms w16; do
+                grep -q '^script done' "$d-$k/input.log" 2>/dev/null || { r="$k: the script did not finish ($d-$k/input.log)"; break; }
+            done
+            # Paintbrush's window, active (its caption), on the object
+            if [ "$r" = ok ]; then
+                px=$(magick "$d-w16/04-pbrush.png" -format "%[hex:p{300,12}]" info: 2>/dev/null)
+                case $px in 0000AA*) ;; *) r="no active Paintbrush window ($px at 300,12)" ;; esac
+            fi
+            for f in "$d-ms"/[0-9]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f")
+                [ -f "$d-w16/$s2" ] || { r="w16: no $s2"; break; }
+                # Cardfile's caret left out (its blink)
+                magick "$f" -fill black -draw "rectangle 16,144 20,164" "$d-a.png"
+                magick "$d-w16/$s2" -fill black -draw "rectangle 16,144 20,164" "$d-b.png"
+                n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="tree: $s2: $n pixels differ from Microsoft's OLESVR"; break; }
+            done ;;
+        *)
+            "$root/tests/olesvrscen.sh" -o "$out/olesvr-$part" "$part" > "$out/olesvr-$part.txt" 2>&1 || true
+            grep -q '^== .*: ok' "$out/olesvr-$part.txt" && ! grep -q '^== .*FAIL' "$out/olesvr-$part.txt" ||
+                r="$part: $(grep -m1 'FAIL' "$out/olesvr-$part.txt" || echo 'no result') ($out/olesvr-$part)" ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   olesvr"
+        else echo "FAIL olesvr: $r ($out)"; fails=$((fails + 1)); fi ;;
     treek386)
         # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
         # under its own KRNL386 (-3: what DOSX starts on a 386, and what
@@ -3428,6 +3482,7 @@ caseparts() {
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
+    olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
@@ -3488,6 +3543,9 @@ partsummary() {
     olecli)
         if [ $pbad = 0 ]; then echo "ok   olecli: Cardfile from the tree under both kernels; $((pt - 2)) OLE scenarios as with Microsoft's OLECLI, and card1 with w16's Cardfile"
         else echo "FAIL olecli: $pfirst ($out)"; fi ;;
+    olesvr)
+        if [ $pbad = 0 ]; then echo "ok   olesvr: Cardfile inserts a Paintbrush picture in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's, in every OLECLI/OLESVR combination"
+        else echo "FAIL olesvr: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;

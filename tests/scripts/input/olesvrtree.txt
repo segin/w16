@@ -1,0 +1,49 @@
+; boot-test case olesvr@tree: w16's install tree alone with w16's OLECLI
+; and OLESVR (and, test-only, the reference's PBRUSH.EXE, PBRUSH.DLL and
+; REG.DAT), against the same tree with Microsoft's OLESVR.DLL. Cardfile
+; from the Accessories group (as cardtree.txt), Edit > Picture, Edit >
+; Insert Object > Paintbrush Picture: Paintbrush opens on the embedded
+; object; File > Exit & Return, Yes to the update; the card shows the
+; picture. Then Cardfile is closed without saving.
+key ctrl+Tab
+sleep 0.5
+key ctrl+Tab
+sleep 1
+key Return
+match 01-acc 20 2
+shot 01-acc
+key Right
+sleep 0.5
+key Return
+match 02-cardfile 20 2
+shot 02-cardfile
+key alt+e
+sleep 0.5
+key e
+sleep 1
+key alt+e
+sleep 0.5
+key Up
+sleep 0.3
+key Return
+match 03-insert 20 2
+shot 03-insert
+key Down
+sleep 0.3
+key Return
+match 04-pbrush 40 3
+shot 04-pbrush
+key alt+f
+sleep 0.5
+key x
+match 05-update 30 2
+shot 05-update
+key Return
+match 06-card 40 3
+shot 06-card
+key alt+F4
+match 07-save 20 2
+shot 07-save
+key n
+match 08-back 20 2
+shot 08-back
