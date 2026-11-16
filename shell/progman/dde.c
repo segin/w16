@@ -13,12 +13,44 @@
  *   menu order, each followed by CR LF; a group's name gives its
  *   contents (group_dde_text). The data block has fResponse and fRelease
  *   set (3000h), no fAckReq.
+ * - The command block comes back with a NUL at the end of each argument
+ *   of the commands run (see ends below).
+ * - WM_DDE_TERMINATE is answered with a sent WM_DDE_TERMINATE.
+ * Observed with the DDE spy (tests/ole/ocspy.c run by OC1, ARCHITECTURE.md
+ * 16.1, 9.6) on TDDE and on the 7-Zip 26.05 16-bit installer: the same
+ * messages, atoms, status words and data as 3.1's Program Manager. One
+ * difference remains: 3.1 answered the installer's whole conversation
+ * within one 55 ms tick, w16 takes about 0.5 s (each command writes the
+ * group file).
  * Raw DDE messages exist since Windows 2.0, so both builds have this.
  */
 #include "progman.h"
 #include <dde.h>
 
-static HWND dde_group;                  /* the group AddItem and friends use */
+/* Where each argument of the commands run ends in the client's command
+   block: 3.1's Program Manager writes a NUL there (observed with TDDE,
+   tests/scripts/dde/block.txt: "[AddItem(NOTEPAD.EXE,Note Pad)]" comes
+   back as "[AddItem(NOTEPAD.EXE\0Note Pad\0]"; a quoted argument's
+   closing quote, an unquoted one's first trailing blank or its ',' or ')'
+   becomes the NUL; nothing for an unknown command). w16 parses a copy and
+   writes them into the block before the ACK. */
+static WORD FAR *ends;
+static WORD nends, capends;
+static BOOL noting;                     /* the first pass: note them */
+
+static void add_end(WORD at)
+{
+    if (!noting)
+        return;
+    if (nends == capends) {
+        WORD FAR *n = (WORD FAR *)mem_realloc((LPSTR)ends, (DWORD)(capends + 16) * sizeof(WORD));
+        if (!n)
+            return;
+        ends = n;
+        capends += 16;
+    }
+    ends[nends++] = at;
+}
 
 /* ---- execute strings: [Command(arg,"arg, with comma",...)]... ---- */
 
@@ -44,8 +76,9 @@ static int arg_int(const args *a, int n)
     return s_atoi(&p);
 }
 
-/* Parse one "Name(args)" at *ps (after '['); fills name and a. */
-static BOOL parse_command(const char FAR **ps, LPSTR *name, args *a)
+/* Parse one "Name(args)" at *ps (after '['); fills name and a, and
+   notes where each argument ends (offsets from base, add_end). */
+static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name, args *a)
 {
     const char FAR *s = *ps;
     const char FAR *n0;
@@ -71,8 +104,10 @@ static BOOL parse_command(const char FAR **ps, LPSTR *name, args *a)
             LPSTR one = s_dup("");
             char c[2];
             BOOL quoted = FALSE;
+            const char FAR *end;
             while (*s == ' ')
                 s++;
+            end = s;
             c[1] = 0;
             while (*s && one) {
                 if (*s == '"') {
@@ -82,6 +117,8 @@ static BOOL parse_command(const char FAR **ps, LPSTR *name, args *a)
                 }
                 if (!quoted && (*s == ',' || *s == ')'))
                     break;
+                if (quoted || *s != ' ')
+                    end = s + 1;
                 c[0] = *s++;
                 if (!s_append(&one, c)) {
                     mem_free(one);
@@ -90,6 +127,8 @@ static BOOL parse_command(const char FAR **ps, LPSTR *name, args *a)
             }
             if (!one)
                 return FALSE;
+            if (*end)
+                add_end((WORD)(end - base));
             {                           /* trailing blanks */
                 int k = s_len(one);
                 while (k > 0 && one[k - 1] == ' ')
@@ -127,10 +166,11 @@ static BOOL parse_command(const char FAR **ps, LPSTR *name, args *a)
     return TRUE;
 }
 
+/* AddItem, DeleteItem and ReplaceItem work on the active group (SDK;
+   observed: after ShowGroup(A,1) left restored group A behind the active
+   B, AddItem went to B) */
 static HWND current_group(void)
 {
-    if (dde_group && IsWindow(dde_group))
-        return dde_group;
     return (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
 }
 
@@ -146,7 +186,7 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         if (!g)
             return FALSE;
         group_show(g, SW_SHOWNORMAL);
-        dde_group = g;
+        SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)g, 0);
         return TRUE;
     }
     if (!s_icmp(name, "ShowGroup")) {
@@ -154,15 +194,12 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         if (!g)
             return FALSE;
         group_show(g, a->argc > 1 ? arg_int(a, 1) : SW_SHOWNORMAL);
-        dde_group = g;
         return TRUE;
     }
     if (!s_icmp(name, "DeleteGroup")) {
         g = group_find(arg(a, 0));
         if (!g)
             return FALSE;
-        if (g == dde_group)
-            dde_group = NULL;
         delete_group(g);
         return TRUE;
     }
@@ -231,25 +268,55 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
     return FALSE;                       /* observed: unknown -> negative ack */
 }
 
-static BOOL execute(HWND frame, const char FAR *cmds)
+static const char *const known[] = {
+    "CreateGroup", "ShowGroup", "DeleteGroup", "Reload", "AddItem", "DeleteItem",
+    "ReplaceItem", "ExitProgman"
+};
+
+/* One pass over the commands: the first parses them all and notes
+   where their arguments end, stopping at an unknown command (nothing is
+   run then); the second runs them in order up to the first that fails.
+   Observed: "[DeleteItem(Nope)][AddItem(CLOCK.EXE,After)]" came back with
+   both commands' NULs and added nothing; "[Bogus()][AddItem(...)]" came
+   back untouched (tests/scripts/dde/block.txt). UNVERIFIED: what a known
+   command before an unknown one does. */
+static BOOL pass(HWND frame, const char FAR *cmds, BOOL run)
 {
     const char FAR *s = cmds;
     for (;;) {
         LPSTR name;
         args a;
         BOOL ok;
+        WORD had = nends, k;
         while (*s == ' ' || *s == '\r' || *s == '\n' || *s == '\t')
             s++;
         if (!*s)
             return TRUE;
         if (*s++ != '[')
             return FALSE;
-        ok = parse_command(&s, &name, &a) && run_command(frame, name, &a);
+        ok = parse_command(cmds, &s, &name, &a);
+        for (k = 0; name && k < sizeof known / sizeof known[0] && s_icmp(name, known[k]); k++)
+            ;
+        if (!name || k == sizeof known / sizeof known[0]) {
+            nends = had;                /* an unknown command is left as it is */
+            ok = FALSE;
+        }
+        if (ok && run)
+            ok = run_command(frame, name, &a);
         mem_free(name);
         mem_free(a.buf);
         if (!ok)
             return FALSE;
     }
+}
+
+static BOOL execute(HWND frame, const char FAR *cmds)
+{
+    BOOL ok;
+    noting = TRUE;
+    ok = pass(frame, cmds, FALSE);
+    noting = FALSE;
+    return ok && pass(frame, cmds, TRUE);
 }
 
 /* ---- requests ---- */
@@ -338,8 +405,17 @@ LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp)
             GlobalUnlock(h);
         }
         if (copy) {
+            WORD n = s_len(copy), k;
+            char FAR *p;
+            nends = 0;
             ok = execute(frame, copy);
             mem_free(copy);
+            if (nends && (p = (char FAR *)GlobalLock(h)) != NULL) {
+                for (k = 0; k < nends; k++)
+                    if (ends[k] < n)
+                        p[ends[k]] = 0;
+                GlobalUnlock(h);
+            }
         }
         PostMessage((HWND)wp, WM_DDE_ACK, (WPARAM)frame, MAKELPARAM(ok ? 0x8000 : 0, h));
         return 0;
@@ -348,7 +424,12 @@ LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp)
         answer_request(frame, (HWND)wp, LOWORD(lp), (ATOM)HIWORD(lp));
         return 0;
     case WM_DDE_TERMINATE:
-        PostMessage((HWND)wp, WM_DDE_TERMINATE, (WPARAM)frame, 0);
+        /* answered with SendMessage, each time one comes (observed with
+           the OCSPY DDE spy: TDDE's TERMINATE got one sent back; the 7-Zip
+           16-bit installer, which answers a server's TERMINATE with
+           another, got two) */
+        if (IsWindow((HWND)wp))
+            SendMessage((HWND)wp, WM_DDE_TERMINATE, (WPARAM)frame, 0);
         return 0;
     case WM_DDE_ACK:                    /* to our data: nothing more to do */
         if (HIWORD(lp))

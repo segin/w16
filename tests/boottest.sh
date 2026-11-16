@@ -226,6 +226,21 @@
 #              pictures left out), and the group files and PROGMAN.INI
 #              saved at the end identical; w16's again under the tree's
 #              KRNL386 (-3), the same
+#   ddescen    Program Manager's DDE interface (tests/ddescenario.sh, a part
+#              per tests/scripts/dde/*.txt): TDDE's answers, the command
+#              blocks the ACKs return, the group files and PROGMAN.INI with
+#              w16's PROGMAN as with Microsoft's, on the reference install
+#   zipsetup   a third-party installer's raw DDE with Program Manager: the
+#              7-Zip 26.05 Windows 3.0/3.1x setup (copied in at test time
+#              from $W16_7ZSETUP, default ~/Downloads/7zsetw16.exe; skipped
+#              without it) from File > Run (tests/scripts/input/
+#              zipsetup.txt) against all of Microsoft's (KRNL386): pm, w16's
+#              PROGMAN on Microsoft's rest, every screen 0 pixels (the
+#              minimised groups' pictures left out), the new 7ZIP2605.GRP
+#              and PROGMAN.INI byte for byte; tree, w16's install tree alone
+#              under KRNL386 and KRNL286: 3.1's 7ZIP2605.GRP, PROGMAN.INI
+#              naming it last, the group's window active, both kernels'
+#              screens the same
 #   write      Windows Write (Microsoft's WRITE.EXE, WIN.INI run=): a line
 #              typed, the Character menu, the ruler, a second line, File >
 #              Exit and No (tests/scripts/input/write.txt); w16's WIN.COM,
@@ -555,7 +570,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1859,7 +1874,10 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 [ -s "$d-$k/os.log" ] || { r="$k: no log ($d-$k.txt)"; break; }
                 python3 "$root/tests/olesvr/osnorm.py" "$d-$k"
                 grep -q '^OS2 end' "$d-$k/os.log" || { r="$k: the script did not finish ($d-$k/os.log)"; break; }
-                grep -A6 '^OS2 create PBrush' "$d-$k/os.log" | grep -q 'released -> 0 OK' ||
+                # (up to the next OS2 command: since 2026-11-15 the spy's
+                # DDE lines come in between on w16's USER too)
+                awk '/^OS2 create PBrush/ { on = 1; next } on && /^OS2 / { exit } on' "$d-$k/os.log" |
+                    grep -q 'released -> 0 OK' ||
                     { r="$k: Paintbrush did not serve the object ($d-$k/os.log)"; break; }
             done
             if [ "$r" = ok ] && ! diff "$d-ms/os.cmp" "$d-w16/os.cmp" > "$d.diff"; then
@@ -2326,6 +2344,107 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   w16groups: w16's tree alone, its groups read and run by Microsoft's and w16's Program Manager (KRNL286; w16's also under KRNL386), 0 pixels, the same files saved"
         else echo "FAIL w16groups: $r ($out)"; fails=$((fails + 1)); fi ;;
+    ddescen)
+        # Program Manager's DDE interface probed with TDDE (tests/
+        # ddescenario.sh, one part per tests/scripts/dde/*.txt): Microsoft's
+        # and w16's PROGMAN on the reference install, the logged answers
+        # (with the command block each ACK returns) and the group files and
+        # PROGMAN.INI identical. names.txt covers the group file names the
+        # 7-Zip 16-bit installer's CreateGroup needed (zipsetup)
+        r=ok
+        DDESCEN_OUT=$out/ddescen-$part "$root/tests/ddescenario.sh" "$part" > "$out/ddescen-$part.txt" 2>&1 || true
+        grep -q "^== $part: ok" "$out/ddescen-$part.txt" ||
+            r="$part: $(grep -v '^==' "$out/ddescen-$part.txt" | head -3 | tr '\n' ' ') ($out/ddescen-$part)"
+        partdone "$r" ;;
+    zipsetup)
+        # A third-party installer that talks raw DDE to Program Manager:
+        # 7-Zip 26.05's Windows 3.0/3.1x setup (the user's file, copied in
+        # at test time from $W16_7ZSETUP, default ~/Downloads/7zsetw16.exe,
+        # never committed; without it the case is skipped). From File >
+        # Run, Install, its report, OK (tests/scripts/input/zipsetup.txt).
+        # The reference: all of Microsoft's (KRNL386). Parts: pm, w16's
+        # PROGMAN on Microsoft's rest: every shot 0 pixels, the group file
+        # and PROGMAN.INI byte for byte; t386 and t286, w16's install tree
+        # alone under its KRNL386, then KRNL286: the same group file as 3.1's
+        # (7ZIP2605.GRP: the name from the group's letters and digits; its
+        # two items, their icons and working directories), PROGMAN.INI
+        # naming it last in [Groups] and Order=, the group's window active
+        # at the end, the two kernels' screens the same. Until 2026-11-15
+        # w16's PROGMAN refused CreateGroup ("7-ZIP26..GRP") and w16's
+        # USER cut the report at 255 characters ("...CreateGroup. WA").
+        r=ok
+        zs=${W16_7ZSETUP:-$HOME/Downloads/7zsetw16.exe}
+        if [ ! -f "$zs" ]; then
+            echo "skip" > "$out/.zipsetup-skip"
+            partdone ok
+        else
+            s=$root/tests/scripts/input/zipsetup.txt
+            cp "$zs" "$out/7ZSETW16.EXE"
+            zf="-f $out/7ZSETW16.EXE=7ZSETW16.EXE"
+            caret="rectangle 66,88 76,110"
+            refrun zipsetup-ref zipsetup "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/zipsetup-ref" -r -3 $zf
+            rd=$out/zipsetup-ref
+            grep -q '^script done' "$rd/input.log" 2>/dev/null || r="the reference did not run to its end ($rd/input.log)"
+            [ "$r" != ok ] || [ -f "$rd/work/c/WINDOWS/7ZIP2605.GRP" ] || r="the reference made no 7ZIP2605.GRP"
+            d=$out/zipsetup-$part
+            case $part in
+            pm)
+                # (the minimised groups' pictures left out: w16's own art;
+                # and the setup dialog's blinking caret)
+                m="rectangle 60,310 300,342 $caret"
+                [ "$r" = ok ] && "$root/tests/inputrun.sh" -e "$rd/boot.png" -m "$m" -E "$rd" -M "$m" -b 40 -t 300 "$s" "$d" -r -3 $zf \
+                    -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$d.txt" 2>&1 || true
+                for f in "$rd"/[0-9]*.png; do
+                    [ "$r" = ok ] || break
+                    s2=$(basename "$f")
+                    [ -f "$d/$s2" ] || { r="pm: no $s2"; break; }
+                    magick "$f" -fill black -draw "$m" "$d-a.png"
+                    magick "$d/$s2" -fill black -draw "$m" "$d-b.png"
+                    n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || r="pm: $s2: $n pixels differ"
+                done
+                for f in 7ZIP2605.GRP PROGMAN.INI; do
+                    [ "$r" = ok ] || break
+                    cmp -s "$rd/work/c/WINDOWS/$f" "$d/work/c/WINDOWS/$f" || r="pm: $f differs from 3.1's"
+                done ;;
+            tree)
+                # under KRNL386 first, then KRNL286 against its shots
+                for k in t386 t286; do
+                    [ "$r" = ok ] || break
+                    d=$out/zipsetup-$k
+                    if [ $k = t386 ]; then
+                        "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$d" -T "$root/build/w16" -3 $zf > "$d.txt" 2>&1 || true
+                    else
+                        "$root/tests/inputrun.sh" -e "$out/zipsetup-t386/boot.png" -E "$out/zipsetup-t386" -M "$caret" \
+                            -b 40 -t 300 "$s" "$d" -T "$root/build/w16" $zf > "$d.txt" 2>&1 || true
+                    fi
+                    w=$d/work/c/W16
+                    grep -q '^script done' "$d/input.log" 2>/dev/null || { r="$k: the script did not run to its end ($d/input.log)"; break; }
+                    cmp -s "$rd/work/c/WINDOWS/7ZIP2605.GRP" "$w/7ZIP2605.GRP" ||
+                        { r="$k: 7ZIP2605.GRP $( [ -f "$w/7ZIP2605.GRP" ] && echo "differs from 3.1's" || echo "not made")"; break; }
+                    gl=$(tr -d '\r' < "$w/PROGMAN.INI" | sed -n '/^\[Groups\]/,/^\[/p' | grep '^Group' | tail -1)
+                    case $gl in Group*=C:\\W16\\7ZIP2605.GRP) ;; *) r="$k: PROGMAN.INI's last group is '$gl'"; break ;; esac
+                    gn=${gl%%=*}; gn=${gn#Group}
+                    tr -d '\r' < "$w/PROGMAN.INI" | grep -q "^Order=.* $gn\$" || { r="$k: Order= does not end with $gn"; break; }
+                    # the new group's window, active, over Main (its caption; one
+                    # cascade step higher than on 3.1: the tree has three groups)
+                    px=$(magick "$d/03-group.png" -format "%[hex:p{360,168}]" info: 2>/dev/null)
+                    case $px in 0000AA*) ;; *) r="$k: no active group window at 360,168 ($px)"; break ;; esac
+                done
+                for f in "$out/zipsetup-t386"/[0-9]*.png; do
+                    [ "$r" = ok ] || break
+                    s2=$(basename "$f")
+                    [ -f "$out/zipsetup-t286/$s2" ] || { r="t286: no $s2"; break; }
+                    magick "$f" -fill black -draw "$caret" "$out/zipsetup-t-a.png"
+                    magick "$out/zipsetup-t286/$s2" -fill black -draw "$caret" "$out/zipsetup-t-b.png"
+                    n=$(magick compare -metric AE "$out/zipsetup-t-b.png" "$out/zipsetup-t-a.png" "$out/zipsetup-t286-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                    n=${n%% *}
+                    [ "$n" = 0 ] || r="t286: $s2: $n pixels differ from KRNL386's"
+                done ;;
+            esac
+            partdone "$r"
+        fi ;;
     icons)
         # Clock's icon shows the time (and its digits are GDI's font
         # matching): left out of the comparison
@@ -3474,6 +3593,8 @@ caseparts() {
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
+    zipsetup) echo "$1@pm $1@tree" ;;
+    ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
@@ -3539,6 +3660,10 @@ partsummary() {
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;
+    zipsetup)
+        if [ -f "$out/.zipsetup-skip" ]; then echo "skip zipsetup: no installer (\$W16_7ZSETUP, default ~/Downloads/7zsetw16.exe)"
+        elif [ $pbad = 0 ]; then echo "ok   zipsetup: the 7-Zip 16-bit installer's group and items as on 3.1 (w16's PROGMAN on Microsoft's rest: 0 pixels, the same files; the tree under KRNL386 and KRNL286: 3.1's group file)"
+        else echo "FAIL zipsetup: $pfirst ($out)"; fi ;;
     runbrowse)
         if [ $pbad = 0 ]; then echo "ok   runbrowse: w16 USER and GDI within the known pixels; every w16 part: no fault, Browse into SYSTEM and back"
         else echo "FAIL runbrowse: $pfirst ($out)"; fi ;;

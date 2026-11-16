@@ -12,6 +12,7 @@
  * words or "quoted"; "-" is a NULL string.
  *
  *   spy [bytes]                     start the DDE spy (bytes of data shown)
+ *   spytimes 0|1                    DDE lines with their time (ms) or not
  *   doc <d> <name>                  OleRegisterClientDoc("OC1", name) -> doc d
  *   use <d>                         later objects go into doc d
  *   revokedoc|saveddoc|revertdoc <d>; renamedoc <d> <name>
@@ -49,6 +50,7 @@ extern BOOL FAR PASCAL InitApp(HINSTANCE);
 void FAR PASCAL SpyLog(const char FAR *s);
 void FAR PASCAL SpyStart(HINSTANCE h, WORD bytes);
 void FAR PASCAL SpyStop(void);
+void FAR PASCAL SpyTimes(WORD on);
 void FAR PASCAL SpyWinName(HWND w, char FAR *out, WORD cb);
 void FAR PASCAL hmemcpy(void __huge *, const void __huge *, long);
 
@@ -874,6 +876,8 @@ static void cmd(char *l)
     if (same(c, "spy")) {
         long b = num();
         SpyStart(NULL, b ? (WORD)b : 32);
+    } else if (same(c, "spytimes")) {
+        SpyTimes((WORD)num());
     } else if (same(c, "wait")) {
         pump(num());
     } else if (same(c, "waitrel")) {

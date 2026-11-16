@@ -6,8 +6,10 @@
  * first; a hook is task-local when installed with a task, else system
  * wide. w16 calls WH_MSGFILTER/WH_SYSMSGFILTER from CallMsgFilter, and
  * WH_SHELL with HSHELL_WINDOWCREATED/DESTROYED/ACTIVATESHELLWINDOW (3.1
- * SDK); the other types are kept but not yet called (UNVERIFIED which
- * places Windows 3.1 calls them from).
+ * SDK), WH_JOURNALPLAYBACK from input.c, WH_GETMESSAGE from GetMessage
+ * and PeekMessage and WH_CALLWNDPROC from SendMessage (msg.c); the other
+ * types are kept but not yet called (UNVERIFIED which places Windows 3.1
+ * calls them from).
  *
  * A hook is a block of the object heap (uheap.c; 3.1 keeps its 10h-byte
  * hook blocks in DGROUP: US15), reached through HK(); no pointer into the

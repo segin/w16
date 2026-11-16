@@ -1,0 +1,134 @@
+run PROGMAN.EXE
+connect
+; group file names made from the group's name (CreateGroup without a
+; file): which characters stay, the length, names already in use
+exec [CreateGroup(7-Zip 26.05 - 16-bit)]
+request 7-Zip 26.05 - 16-bit
+exec [DeleteGroup(7-Zip 26.05 - 16-bit)]
+exec [CreateGroup("Q!Z")]
+request Q!Z
+exec [DeleteGroup("Q!Z")]
+exec [CreateGroup("Q#Z")]
+request Q#Z
+exec [DeleteGroup("Q#Z")]
+exec [CreateGroup("Q$Z")]
+request Q$Z
+exec [DeleteGroup("Q$Z")]
+exec [CreateGroup("Q%Z")]
+request Q%Z
+exec [DeleteGroup("Q%Z")]
+exec [CreateGroup("Q&Z")]
+request Q&Z
+exec [DeleteGroup("Q&Z")]
+exec [CreateGroup("Q'Z")]
+request Q'Z
+exec [DeleteGroup("Q'Z")]
+exec [CreateGroup("Q*Z")]
+request Q*Z
+exec [DeleteGroup("Q*Z")]
+exec [CreateGroup("Q+Z")]
+request Q+Z
+exec [DeleteGroup("Q+Z")]
+exec [CreateGroup("Q-Z")]
+request Q-Z
+exec [DeleteGroup("Q-Z")]
+exec [CreateGroup("Q.Z")]
+request Q.Z
+exec [DeleteGroup("Q.Z")]
+exec [CreateGroup("Q/Z")]
+request Q/Z
+exec [DeleteGroup("Q/Z")]
+exec [CreateGroup("Q:Z")]
+request Q:Z
+exec [DeleteGroup("Q:Z")]
+exec [CreateGroup("Q;Z")]
+request Q;Z
+exec [DeleteGroup("Q;Z")]
+exec [CreateGroup("Q<Z")]
+request Q<Z
+exec [DeleteGroup("Q<Z")]
+exec [CreateGroup("Q=Z")]
+request Q=Z
+exec [DeleteGroup("Q=Z")]
+exec [CreateGroup("Q>Z")]
+request Q>Z
+exec [DeleteGroup("Q>Z")]
+exec [CreateGroup("Q?Z")]
+request Q?Z
+exec [DeleteGroup("Q?Z")]
+exec [CreateGroup("Q@Z")]
+request Q@Z
+exec [DeleteGroup("Q@Z")]
+exec [CreateGroup("Q[Z")]
+request Q[Z
+exec [DeleteGroup("Q[Z")]
+exec [CreateGroup("Q\Z")]
+request Q\Z
+exec [DeleteGroup("Q\Z")]
+exec [CreateGroup("Q]Z")]
+request Q]Z
+exec [DeleteGroup("Q]Z")]
+exec [CreateGroup("Q^Z")]
+request Q^Z
+exec [DeleteGroup("Q^Z")]
+exec [CreateGroup("Q_Z")]
+request Q_Z
+exec [DeleteGroup("Q_Z")]
+exec [CreateGroup("Q`Z")]
+request Q`Z
+exec [DeleteGroup("Q`Z")]
+exec [CreateGroup("Q{Z")]
+request Q{Z
+exec [DeleteGroup("Q{Z")]
+exec [CreateGroup("Q|Z")]
+request Q|Z
+exec [DeleteGroup("Q|Z")]
+exec [CreateGroup("Q}Z")]
+request Q}Z
+exec [DeleteGroup("Q}Z")]
+exec [CreateGroup("Q~Z")]
+request Q~Z
+exec [DeleteGroup("Q~Z")]
+exec [CreateGroup("Q,Z")]
+request Q,Z
+exec [DeleteGroup("Q,Z")]
+exec [CreateGroup("Q(Z")]
+request Q(Z
+exec [DeleteGroup("Q(Z")]
+exec [CreateGroup("Q)Z")]
+request Q)Z
+exec [DeleteGroup("Q)Z")]
+exec [CreateGroup("Q€Z")]
+request Q€Z
+exec [DeleteGroup("Q€Z")]
+exec [CreateGroup("qlower z")]
+request qlower z
+exec [DeleteGroup("qlower z")]
+exec [CreateGroup("Abcdefghijkl")]
+request Abcdefghijkl
+exec [DeleteGroup("Abcdefghijkl")]
+exec [CreateGroup("x.y.z.w")]
+request x.y.z.w
+exec [DeleteGroup("x.y.z.w")]
+exec [CreateGroup("  Lead")]
+request   Lead
+exec [DeleteGroup("  Lead")]
+exec [CreateGroup(M a i n)]
+request M a i n
+exec [CreateGroup(Collide One)]
+exec [CreateGroup(Collide Two)]
+exec [CreateGroup(Collide-Three)]
+request Collide One
+request Collide Two
+request Collide-Three
+; the show field of groups not active: restored, minimised, maximised
+request Main
+request Accessories
+exec [ShowGroup(Collide Two,3)]
+request Collide Two
+request Collide One
+exec [ShowGroup(Main,1)]
+request Collide Two
+request Main
+request Groups
+disconnect
