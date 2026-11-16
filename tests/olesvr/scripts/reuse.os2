@@ -1,0 +1,26 @@
+; the handles windows get after OLESVR's are destroyed (USER's heap: the
+; order and sizes of OLESVR's windows show in which handles later windows
+; get); a document with two objects is closed, then a server revoked
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding /S
+wait 2000
+init OS1Probe OLEsystem
+exec [StdNewDocument("OS1Probe","W1")]
+wins
+term
+init OS1Probe W1
+req i1 Native
+req i2 Native
+wins
+mkwins 4
+exec [StdCloseDocument]
+wait 1000
+term
+mkwins 4
+init OS1Probe OLEsystem
+exec [StdExit]
+wait 2000
+term
+waitgone OS1
+mkwins 6

@@ -315,6 +315,16 @@ static BOOL task_of(const char *module)
     return GetModuleHandle(module) != NULL;
 }
 
+BOOL CALLBACK __export PropProc(HWND h, LPCSTR name, HANDLE v)
+{
+    if (SELECTOROF(name))
+        P("    prop %q = %x", name, (WORD)v);
+    else
+        P("    prop #%x = %x", OFFSETOF(name), (WORD)v);
+    (void)h;
+    return TRUE;
+}
+
 /* a window's class and instance details (OLESVR's windows: "wins") */
 static void winfo(HWND h, int depth)
 {
@@ -324,12 +334,18 @@ static void winfo(HWND h, int depth)
     GetWindowRect(h, &r);
     t[0] = 0;
     GetWindowText(h, t, sizeof t);
-    P("WIN %d %w title=%q style=%lx ex=%lx cls.style=%x cbwnd=%d cbcls=%d id=%x parent=%w "
-      "owner=%w visible=%d rect=%d,%d,%d,%d menu=%x", depth, h, (LPCSTR)t, GetWindowLong(h, GWL_STYLE),
+    P("WIN %d %w h=%x title=%q style=%lx ex=%lx cls.style=%x cbwnd=%d cbcls=%d id=%x parent=%w "
+      "owner=%w visible=%d rect=%d,%d,%d,%d menu=%x", depth, h, (WORD)h, (LPCSTR)t, GetWindowLong(h, GWL_STYLE),
       GetWindowLong(h, GWL_EXSTYLE), GetClassWord(h, GCW_STYLE),
       GetClassWord(h, GCW_CBWNDEXTRA), GetClassWord(h, GCW_CBCLSEXTRA),
       GetWindowWord(h, GWW_ID), GetParent(h), GetWindow(h, GW_OWNER), IsWindowVisible(h),
       r.left, r.top, r.right, r.bottom, GetMenu(h) ? 1 : 0);
+    {
+        static FARPROC pp;
+        if (!pp)
+            pp = MakeProcInstance((FARPROC)PropProc, inst);
+        EnumProps(h, (PROPENUMPROC)pp);
+    }
     for (k = GetWindow(h, GW_CHILD); k; k = GetWindow(k, GW_HWNDNEXT))
         winfo(k, depth + 1);
 }
@@ -374,6 +390,32 @@ static void step(char *l)
                 !lstrcmp(c, "ItemWndClass"))
                 winfo(h, 0);
         }
+    } else if (!lstrcmpi(l, "mkwins")) {
+        /* which handles new windows get (USER's heap after OLESVR's
+           windows went): N windows with 8 extra bytes, then freed */
+        static BOOL reg;
+        HWND w[16];
+        int i, n = num((const char **)&arg);
+        if (!reg) {
+            WNDCLASS wc;
+            wc.style = 0;
+            wc.lpfnWndProc = DefWindowProc;
+            wc.cbClsExtra = 0;
+            wc.cbWndExtra = 8;
+            wc.hInstance = inst;
+            wc.hIcon = NULL;
+            wc.hCursor = NULL;
+            wc.hbrBackground = NULL;
+            wc.lpszMenuName = NULL;
+            wc.lpszClassName = "OS2Probe8";
+            reg = RegisterClass(&wc);
+        }
+        for (i = 0; i < n && i < 16; i++) {
+            w[i] = CreateWindow("OS2Probe8", "Doc", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL, inst, NULL);
+            P("    window %d h=%x", i, (WORD)w[i]);
+        }
+        for (i = 0; i < n && i < 16; i++)
+            DestroyWindow(w[i]);
     } else if (!lstrcmpi(l, "waitgone")) {
         int n = 0;
         while (task_of(arg) && n++ < 600)

@@ -120,6 +120,44 @@ CONV FARP *conv_add(CONV FARP **l, HWND client)
     return c;
 }
 
+/* Windows 3.1's OLESVR keeps each client of a server or document window
+   as a property of that window too (observed: named "@" and the client's
+   handle as four "hex" digits made as '0' + nibble, so 117Ch is "@117<";
+   the value is the handle). w16 does the same: the properties take the
+   same room in USER's heap, and programs may look at them. */
+static void conv_propname(HWND client, char *n)
+{
+    int i;
+    n[0] = '@';
+    for (i = 0; i < 4; i++)
+        n[1 + i] = (char)('0' + (((WORD)client >> (12 - 4 * i)) & 15));
+    n[5] = 0;
+}
+
+CONV FARP *conv_link(HWND w, CONV FARP **l, HWND client)
+{
+    CONV FARP *c = conv_find(*l, client);
+    char n[6];
+    if (c)
+        return c;
+    c = conv_add(l, client);
+    if (c && w && IsWindow(w)) {
+        conv_propname(client, n);
+        SetProp(w, n, (HANDLE)client);
+    }
+    return c;
+}
+
+void conv_unlink(HWND w, CONV FARP **l, HWND client)
+{
+    char n[6];
+    if (w && IsWindow(w) && conv_find(*l, client)) {
+        conv_propname(client, n);
+        RemoveProp(w, n);
+    }
+    conv_remove(l, client);
+}
+
 void conv_remove(CONV FARP **l, HWND client)
 {
     CONV FARP *FARP *pp;

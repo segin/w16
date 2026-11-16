@@ -65,7 +65,7 @@ static void srv_free(SRV FARP *s)
             break;
         }
     while (s->convs)
-        conv_remove(&s->convs, s->convs->client);
+        conv_unlink(s->hwnd, &s->convs, s->convs->client);
     while ((q = s->queue) != NULL) {
         s->queue = q->next;
         mem_free(q);
@@ -220,7 +220,14 @@ static void dispatch(SRV FARP *s, QMSG FARP *q)
     p = GetWindowLong(q->hwnd, 0);
     if (!p)
         return;
-    if (q->hwnd == s->hwnd)
+    if (q->hwnd == s->hwnd && q->msg == WM_DDE_TERMINATE) {
+        /* observed (scenario block): a system-topic TERMINATE that waited
+           in the queue is answered, but the conversation stays on the
+           books: the server is not let go when its last document goes,
+           and that client's next INITIATE is not answered */
+        if (conv_find(s->convs, (HWND)q->wp))
+            PostMessage((HWND)q->wp, WM_DDE_TERMINATE, (WPARAM)s->hwnd, 0);
+    } else if (q->hwnd == s->hwnd)
         srv_dde(s, q->hwnd, q->msg, q->wp, q->lp);
     else
         doc_dde((DOC FARP *)p, q->hwnd, q->msg, q->wp, q->lp);
@@ -535,7 +542,7 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             c->term_posted = TRUE;
             PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
         }
-        conv_remove(&s->convs, client);
+        conv_unlink(s->hwnd, &s->convs, client);
         if (s->revoking)
             srv_try_finish(s);
         return 0;
@@ -575,7 +582,11 @@ LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         if (topic != find_atom("OLEsystem") && topic != find_atom("System"))
             return 0;
-        if (!conv_add(&s->convs, (HWND)wp))
+        /* a client already in conversation with the system topic gets
+           no second one (UNVERIFIED but for the case above) */
+        if (conv_find(s->convs, (HWND)wp))
+            return 0;
+        if (!conv_link(s->hwnd, &s->convs, (HWND)wp))
             return 0;
         {
             char tn[16];
@@ -594,7 +605,7 @@ LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             for (c = s->convs; c; c = n) {
                 n = c->next;
                 if (!IsWindow(c->client))
-                    conv_remove(&s->convs, c->client);
+                    conv_unlink(s->hwnd, &s->convs, c->client);
             }
         }
         if (s->revoking)

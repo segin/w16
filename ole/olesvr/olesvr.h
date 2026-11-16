@@ -119,6 +119,8 @@ BOOL str_ieq(const char FARP *a, const char FARP *b);
 CONV FARP *conv_find(CONV FARP *l, HWND client);
 CONV FARP *conv_add(CONV FARP **l, HWND client);
 void conv_remove(CONV FARP **l, HWND client);
+CONV FARP *conv_link(HWND w, CONV FARP **l, HWND client);
+void conv_unlink(HWND w, CONV FARP **l, HWND client);
 void huge_copy(void FAR *dst, const void FAR *src, DWORD n);
 HGLOBAL data_block(WORD flags, WORD cf, HGLOBAL h);
 HGLOBAL data_value(HGLOBAL block, WORD cf);

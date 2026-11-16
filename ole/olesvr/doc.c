@@ -142,7 +142,7 @@ void doc_destroy(DOC FARP *d)
     }
     adv_free_all(&d->renames);
     while (d->convs)
-        conv_remove(&d->convs, d->convs->client);
+        conv_unlink(d->hwnd, &d->convs, d->convs->client);
     if (d->target)
         GlobalFree(d->target);
     if (d->atom)
@@ -703,7 +703,7 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         SRV FARP *s = d->srv;
         if (!c->term_posted)
             PostMessage(client, WM_DDE_TERMINATE, (WPARAM)w, 0);
-        conv_remove(&d->convs, client);
+        conv_unlink(d->hwnd, &d->convs, client);
         adv_drop_client(&d->renames, client);
         for (it = d->items; it; it = it->next) {
             adv_drop_client(&it->advs, client);
@@ -734,7 +734,7 @@ LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (d->revoking || s->revoking || !app || app != s->atom ||
             topic != d->atom || !topic)
             return 0;
-        if (!conv_add(&d->convs, (HWND)wp))
+        if (!conv_link(d->hwnd, &d->convs, (HWND)wp))
             return 0;
         d->pending = FALSE;
         SendMessage((HWND)wp, WM_DDE_ACK, (WPARAM)w,
@@ -747,7 +747,7 @@ LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         for (c = d->convs; c; c = n) {  /* clients that are gone */
             n = c->next;
             if (!IsWindow(c->client))
-                conv_remove(&d->convs, c->client);
+                conv_unlink(d->hwnd, &d->convs, c->client);
         }
         if (d->revoking && !d->convs)
             doc_finish(d);
