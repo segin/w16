@@ -2,7 +2,7 @@
 ; Manager item of its default groups opened: Main's MS-DOS Prompt (EXIT
 ; typed at once) and Read Me (Notepad, closed), then the Accessories group
 ; restored (Ctrl+Tab twice from Main: Main, StartUp, Accessories) and its
-; Notepad, Cardfile (until 2026-11-14 the tree had no OLECLI.DLL: KERNEL's
+; Notepad (the second item, after Write), Cardfile (until 2026-11-14 the tree had no OLECLI.DLL: KERNEL's
 ; File Error box, Program Manager's Application Execution Error box; now
 ; Cardfile's window, closed), Calculator and Clock
 ; (each closed with Alt+F4). Run under the tree's KRNL386 and KRNL286: the
@@ -32,6 +32,8 @@ sleep 1
 key Return
 match 04-acc 20 2
 shot 04-acc
+key Right
+sleep 0.5
 markcolor 0000aa
 key Return
 waitmoved 0000aa 500 30
