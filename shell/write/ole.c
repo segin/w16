@@ -122,7 +122,7 @@ static WOBJ *find_obj(DWORD num)
 
 static WOBJ *add_obj(DWORD num)
 {
-    WOBJ *o = (WOBJ *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(WOBJ));
+    WOBJ *o = (WOBJ NEAR *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(WOBJ));
     HLOCAL h;
     WOBJ **t;
     if (!o)
@@ -235,7 +235,7 @@ static void store(WOBJ *o)
 
 int CALLBACK __export ClientCallBack(LPOLECLIENT c, OLE_NOTIFICATION n, LPOLEOBJECT obj)
 {
-    WOBJ *o = (WOBJ *)(WORD)(DWORD)c;
+    WOBJ *o = (WOBJ NEAR *)OFFSETOF(c);   /* ours: in our data segment */
     (void)obj;
     switch (n) {
     case OLE_CHANGED:
@@ -433,10 +433,10 @@ BOOL CALLBACK __export InsertObjDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                     continue;
                 {
                     int ix = (int)SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)val);
-                    char *c = (char *)LocalAlloc(LMEM_FIXED, s_len(key) + 1);
+                    char *c = (char NEAR *)LocalAlloc(LMEM_FIXED, s_len(key) + 1);
                     if (c) {
                         s_cpy(c, key, s_len(key) + 1);
-                        SendMessage(lb, LB_SETITEMDATA, ix, (LPARAM)(WORD)c);
+                        SendMessage(lb, LB_SETITEMDATA, ix, (LPARAM)(WORD)c);    /* castcheck: ok (a near pointer as data) */
                     }
                 }
             }
@@ -450,7 +450,7 @@ BOOL CALLBACK __export InsertObjDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == IDOK || (wp == 265 && HIWORD(lp) == LBN_DBLCLK)) {
             int ix = (int)SendMessage(lb, LB_GETCURSEL, 0, 0);
             if (ix >= 0) {
-                char *c = (char *)(WORD)SendMessage(lb, LB_GETITEMDATA, ix, 0);
+                char *c = (char NEAR *)(WORD)SendMessage(lb, LB_GETITEMDATA, ix, 0);
                 s_cpy(newClass, c, sizeof newClass);
             }
             wp = ix >= 0 ? IDOK : IDCANCEL;

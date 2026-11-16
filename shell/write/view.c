@@ -58,7 +58,7 @@ static FONTC *font_for(const CHPX *c)
             f->italic == c->italic && f->underline == c->underline)
             return f;
     }
-    f = (FONTC *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(FONTC));
+    f = (FONTC NEAR *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(FONTC));
     if (!f)
         return nfonts ? fonttab[0] : NULL;
     t = (FONTC **)(fonttab ? LocalReAlloc((HLOCAL)fonttab, (nfonts + 1) * sizeof(FONTC *), LMEM_MOVEABLE)
