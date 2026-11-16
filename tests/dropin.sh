@@ -18,7 +18,8 @@
 #                the reference for -3; -K FILE: that file as KRNL386.EXE
 #     -c CMD     the command line (default "WIN /S /B")
 #     -t SECS    run time limit (default 60)
-#     -f SRC=DST copy SRC to C:\DST as well (repeatable), e.g. a test
+#     -f SRC=DST copy SRC to C:\DST as well (repeatable; its directories
+#                are made), e.g. a test
 #                program; DST "-" deletes SRC (a path under C:\) instead
 #     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable;
 #                S:+K=V adds another K line, e.g. 386Enh:+device=x.386);
@@ -181,7 +182,8 @@ fi
 printf '%s\n' "$files" | while IFS= read -r f; do
     [ -n "$f" ] || continue
     src=${f%%=*} dst=${f#*=}
-    if [ "$dst" = - ]; then rm -f "$work/c/$src"; else cp "$src" "$work/c/$dst"; fi
+    if [ "$dst" = - ]; then rm -f "$work/c/$src"
+    else mkdir -p "$(dirname "$work/c/$dst")"; cp "$src" "$work/c/$dst"; fi
 done
 printf '%s\n' "$inis" | while IFS= read -r f; do
     [ -n "$f" ] || continue

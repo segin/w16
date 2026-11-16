@@ -1999,7 +1999,7 @@ dos: oleprobes
 
 # ---- SHELL.DLL probes (tests/apps/shN.c; ARCHITECTURE.md 13): run as the
 # shell on Windows 3.1 and with w16's SHELL.DLL (tests/shellprobe.sh)
-SHPROBES := SH1 SH2 SH3 SH4 SH5 SH6 SH7 SH8 SH9 SH10 SH11 SH12 SH13
+SHPROBES := SH1 SH2 SH3 SH4 SH5 SH6 SH7 SH8 SH9 SH10 SH11 SH12 SH13 SH14
 $(B)/tests/sh%.o: tests/apps/sh%.c tests/apps/sh%ref.h tests/apps/shprobe.h tests/apps/tklog.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -fo=$@ $<

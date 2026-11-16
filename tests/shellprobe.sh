@@ -37,7 +37,7 @@ rm -rf "$out"; mkdir -p "$out"
 # what each probe needs besides itself
 d=$root/build/dos
 case $probe in
-SH4)  files="$files $d/SH5.EXE=SH5.EXE" ;;
+SH4|SH14) files="$files $d/SH5.EXE=SH5.EXE" ;;
 SH6)  python3 -B "$root/tools/mkshfiles.py" "$root/build/shell/res" "$out/files"
       files="$files $out/files/SHI.ICO=SHI.ICO $out/files/SHI2.ICO=SHI2.ICO $out/files/SHX.XYZ=SHX.XYZ"
       files="$files $d/WINENV.COM=SHD.COM $d/DOSX.EXE=SHMZ.EXE" ;;
