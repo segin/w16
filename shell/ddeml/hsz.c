@@ -140,7 +140,7 @@ DWORD DMLAPI DdeQueryString(DWORD id, HSZ h, LPCSTR cbuf, DWORD max, int cp)
         return 0;
     }
     if (HIWORD(h))
-        wsprintf(t, "%s:(%x)", (LPSTR)b, HIWORD(h));
+        wsprintf(t, "%s:(%04x)", (LPSTR)b, HIWORD(h));
     else
         lstrcpy(t, b);
     n = (WORD)lstrlen(t);

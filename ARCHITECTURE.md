@@ -1925,7 +1925,7 @@ DdeQueryString copies at most max-1 characters (max 0: nothing, 0), with
 a NULL buffer returns the length; for hsz 0 it returns 0 and empties the
 buffer. DdeCmpStringHandles compares values (0 smallest). An
 instance-specific name is MAKELONG(base atom, the instance's DMGFrame);
-its string is "Svc:(143c)", the window in lower-case hex.
+its string is "Svc:(143c)", the window as four lower-case hex digits ("Svc:(0d14)").
 
 Data handles: a handle is a DDE block: WORD flags, WORD format, data
 (GlobalAlloc of cb+4, not cleared). Made with no item name it has no
@@ -2017,7 +2017,7 @@ memory past the data; the comparison stops at the first NUL).
 
 - `tests/ddemlscen.sh [-c COMBOS] [-n] [NAME...]` runs every script of
   `tests/ddeml/scripts` (strings, data, conn, xact, advise, flags,
-  monitor, uninit, raw: DDEML against raw DDE both ways, progman: a
+  monitor, uninit, transact (the client transactions), raw: DDEML against raw DDE both ways, progman: a
   DDEML client driving 3.1's Program Manager with CreateGroup, AddItem,
   ShowGroup, DeleteItem, Groups and group requests, ExitProgman) as NAME
   (one library) and NAME+x (the other copies on the other library), with
@@ -2037,7 +2037,7 @@ memory past the data; the comparison stops at the first NUL).
   only in the "Progman" atom spelling (below: w16's own Program Manager
   shows it too, so 3.1's DDEML is what makes the "Progman" atom);
   conn, conn+x, monitor, monitor+x, progman as below.
-- Results (installation-05, 2026-11-16): strings, data, xact, advise,
+- Results (installation-05, 2026-11-16): strings, data, transact, advise,
   flags, uninit and raw (and their +x runs in every combination) equal
   Microsoft's: 18 of 27 compared pairs. Not equal yet:
   - **conn**: DdeConnectList with several servers. With a local server,
