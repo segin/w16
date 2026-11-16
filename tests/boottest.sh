@@ -185,6 +185,17 @@
 #              (tests/ddemlscen.sh NAME, NAME+x): on the reference install,
 #              w16's DDEML against Microsoft's in every client/server
 #              combination, the logs equal
+#   lzexpand   w16's LZEXPAND.DLL (ARCHITECTURE.md, LZEXPAND): the probe
+#              LZP.EXE (tests/lzexpand/lzp.c, every function on files made
+#              at test time) as the shell with Microsoft's LZEXPAND and
+#              with w16's, the logs compared section by section
+#              (tests/lzexpand/lzscen.sh, lzcmp.py); parts s and 3: the
+#              reference install in Standard and 386 Enhanced mode, every
+#              section but the three below (VerInstallFile of 3.1's VER.DLL
+#              included); tree286 and tree386: w16's install tree alone
+#              under its KRNL286 / KRNL386 (tests/lzexpand/lztree.sh), the
+#              same sections; quirks: the sections eof, zero and long
+#              matches, where w16 still differs (ARCHITECTURE.md, LZEXPAND)
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -622,7 +633,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2368,6 +2379,39 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   ddeml"
         else echo "FAIL ddeml: $r ($out)"; fails=$((fails + 1)); fi ;;
+    lzexpand)
+        # the sections of the probe's log that must equal Microsoft's, and
+        # the ones where w16 is known to differ (quirks)
+        r=ok
+        d=$out/lzexpand-${part:-s}
+        case ${part:-s} in
+        s|3)
+            "$root/tests/lzexpand/lzscen.sh" -m "/$(echo "${part:-s}" | tr s S)" -o "$d" start LZInit LZOpenFile \
+                LZRead LZSeek LZClose LZCopy LZStart GetExpandedName limit tasks "seek back" \
+                VER.DLL end > "$d.txt" 2>&1 || true
+            grep -q '^== .*: ok' "$d.txt" && ! grep -q 'FAIL' "$d.txt" ||
+                r="$part: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
+        tree286|tree386)
+            k=${part#tree}
+            "$root/tests/lzexpand/lztree.sh" "$d-ms" ms "$k" > "$d-ms.txt" 2>&1 || true
+            "$root/tests/lzexpand/lztree.sh" "$d-w16" w16 "$k" > "$d-w16.txt" 2>&1 || true
+            for l in ms w16; do
+                [ -s "$d-$l/lzp.log" ] || { r="$l: no log ($d-$l.txt)"; break; }
+                grep -q '^LZP end' "$d-$l/lzp.log" || { r="$l: the probe did not finish ($d-$l/lzp.log)"; break; }
+            done
+            if [ "$r" = ok ]; then
+                python3 "$root/tests/lzexpand/lzcmp.py" "$d-ms/lzp.log" "$d-w16/lzp.log" "$d-cmp" \
+                    start LZInit LZOpenFile LZRead LZSeek LZClose LZCopy LZStart GetExpandedName \
+                    limit tasks "seek back" VER.DLL end > "$d.txt" 2>&1 ||
+                    r="$part: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"
+            fi ;;
+        quirks)
+            "$root/tests/lzexpand/lzscen.sh" -m /S -o "$d" eof zero "long matches" > "$d.txt" 2>&1 || true
+            grep -q 'FAIL' "$d.txt" && r="quirks: $(grep -c FAIL "$d.txt") section(s) differ: $(grep FAIL "$d.txt" | sed 's/^== [^ ]* //; s/: FAIL.*//' | tr '\n' ' ')($d)" ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   lzexpand"
+        else echo "FAIL lzexpand: $r ($out)"; fails=$((fails + 1)); fi ;;
     treek386)
         # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
         # under its own KRNL386 (-3: what DOSX starts on a 386, and what
@@ -4070,6 +4114,7 @@ caseparts() {
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     ddeml) printf '%s@tree286 %s@tree386 ' "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
+    lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
@@ -4129,6 +4174,9 @@ partsummary() {
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
+    lzexpand)
+        if [ $pbad = 0 ]; then echo "ok   lzexpand: LZEXPAND's probe log as with Microsoft's (Standard and 386 Enhanced mode, the tree under both kernels, VerInstallFile), and its quirk sections too"
+        else echo "FAIL lzexpand: $pfirst ($out)"; fi ;;
     treek386)
         if [ $pbad = 0 ]; then echo "ok   treek386: the tree under its KRNL386 as under its KRNL286 (every item of its groups; Clock and Calculator over the desktop stamp)"
         else echo "FAIL treek386: $pfirst ($out)"; fi ;;
