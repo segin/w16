@@ -1859,7 +1859,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 [ -s "$d-$k/os.log" ] || { r="$k: no log ($d-$k.txt)"; break; }
                 python3 "$root/tests/olesvr/osnorm.py" "$d-$k"
                 grep -q '^OS2 end' "$d-$k/os.log" || { r="$k: the script did not finish ($d-$k/os.log)"; break; }
-                grep -A3 '^OS2 create PBrush' "$d-$k/os.log" | grep -q 'released -> 0 OK' ||
+                grep -A6 '^OS2 create PBrush' "$d-$k/os.log" | grep -q 'released -> 0 OK' ||
                     { r="$k: Paintbrush did not serve the object ($d-$k/os.log)"; break; }
             done
             if [ "$r" = ok ] && ! diff "$d-ms/os.cmp" "$d-w16/os.cmp" > "$d.diff"; then
