@@ -539,6 +539,7 @@ static DWORD xidvalue(const char *s)
 static char *d2name(UINT type, DWORD d2)
 {
     static char b[24];
+    (void)type;
     wsprintf(b, "%08lX", d2);
     return b;
 }
