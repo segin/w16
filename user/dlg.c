@@ -296,13 +296,18 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     r.bottom = r.top + du(cy, uy, 8);
     /* the window rectangle around that client area */
     {
+        /* a dialog frame for DS_MODALFRAME or WS_DLGFRAME without
+           WS_BORDER; WS_CAPTION (WS_BORDER | WS_DLGFRAME) alone is a
+           border, as for any window (adjust_rect, defwnd.c): Calculator's
+           template, 00CA0000h at 310,65 for 240 x 158 units, comes up on
+           3.1 at 154,110, 261 x 269 (probe TM1, ARCHITECTURE.md 15.5);
+           with a dialog frame w16 had it at 150,106, 265 x 276 */
+        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME;
         int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
-                 ((style & DS_MODALFRAME) || (style & WS_DLGFRAME)) ?
-                 sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
+                 dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
         int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] :
-                 ((style & DS_MODALFRAME) || (style & WS_DLGFRAME)) ?
-                 sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
+                 dlgf ? sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CYBORDER] : 0;
         int top = fy;
         if ((style & WS_CAPTION) == WS_CAPTION)
@@ -322,13 +327,14 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
         if (o && !(style & DS_ABSALIGN))
             OffsetRect(&r, o->rcClient.left, o->rcClient.top);
     }
-    /* kept on the screen (US4: the dialog at y 10 units starts at 0;
-       Calculator's, 240 x 158 units at 310,65, comes up on 3.1 at
-       154,110, against the screen's right and bottom edges. UNVERIFIED:
-       w16 puts it at 150,106 - its window is 4 pixels wider and taller
-       than 3.1's, unexplained) */
-    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN])
-        OffsetRect(&r, sysmet[SM_CXSCREEN] - r.right, 0);
+    /* kept on the screen (US4: the dialog at y 10 units starts at 0).
+       On the right SM_CXDLGFRAME short of the edge: Calculator's, 240 x
+       158 units at 310,65, 482 wide, comes up on 3.1 at 154,110, and
+       dialogs (#32770, byte-aligned) of that template at 152; 490 wide
+       at 144 (probes TM1, TM4: ARCHITECTURE.md 15.5). UNVERIFIED whether
+       the bottom keeps such a margin too */
+    if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME])
+        OffsetRect(&r, sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME] - r.right, 0);
     if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
         OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)
@@ -804,7 +810,9 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
             break;
         }
         case VK_ESCAPE:
-            if (!(code & DLGC_WANTALLKEYS)) {
+            /* (not Ctrl+Esc: in 3.1's Task List it neither cancels nor
+               starts another; boot-test case taskman) */
+            if (!(code & DLGC_WANTALLKEYS) && !(GetKeyState(VK_CONTROL) & 0x8000)) {
                 c = GetDlgItem(dlg, IDCANCEL);
                 if (!c || IsWindowEnabled(c))
                     send_message(dlg, WM_COMMAND, IDCANCEL, MAKELONG(c, BN_CLICKED));

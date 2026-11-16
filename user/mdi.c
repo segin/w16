@@ -9,6 +9,7 @@
  * the active child is maximised.
  */
 #include "user.h"
+LONG def_gettext(PWND w, int n, LPSTR buf);     /* win.c: a window's own text */
 
 void menu_track_bar(HWND h, char key);
 HBRUSH sys_brush(HBRUSH b);
@@ -996,14 +997,19 @@ static void desk_area(PWND p, BOOL icons, RECT *a)
         a->bottom -= sysmet[SM_CYICONSPACING];
 }
 
+/* (exactly there: on 3.1 tiled Notepad, CS_BYTEALIGNCLIENT, stays at
+   x 0, its client at 4; boot-test case taskman) */
+extern BOOL no_byte_align;
 static void desk_place(HWND h, int x, int y, int cx, int cy)
 {
     if (IsZoomed(h))
         ShowWindow(h, SW_RESTORE);
     if (!valid_wnd(h))
         return;
+    no_byte_align = TRUE;
     set_window_pos(h, 0, x, y, cx, cy, SWP_NOACTIVATE | SWP_NOZORDER |
                    ((PW(h)->style & WS_THICKFRAME) ? 0 : SWP_NOSIZE));
+    no_byte_align = FALSE;
 }
 
 #define DESK_MAX 128
@@ -1159,7 +1165,7 @@ static void title_place(HWND t, PWND w)
     char text[80];
     HFONT old;
     PWND p = PW(w->hwndParent);
-    GetWindowText(HW(w), text, sizeof text);
+    def_gettext(w, sizeof text, text);  /* its own text, not WM_GETTEXT: see below */
     old = SelectObject(hdc, icon_font());
     SetRect(&r, 0, 0, sysmet[SM_CXICONSPACING] - 2, 0);
     DrawText(hdc, text, -1, &r, DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
@@ -1219,7 +1225,11 @@ LRESULT WINAPI __loadds IconTitleWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             GetClientRect(h, &r);
             FillRect(hdc, &r, sysbrush[active ? COLOR_ACTIVECAPTION :
                                         (w->style & WS_CHILD) ? COLOR_APPWORKSPACE : COLOR_BACKGROUND]);
-            GetWindowText(w->hwndOwner, text, sizeof text);
+            /* the owner's own text, not what it answers to WM_GETTEXT (3.1:
+               WINOLDAP's window gives GetWindowText "" - probe TM1, and the
+               Task List leaves it out - while its icon is titled with the
+               program's name: ARCHITECTURE.md 15.5) */
+            def_gettext(o, sizeof text, text);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_WINDOWTEXT]);
             /* the text one pixel in from the left (Program Manager's

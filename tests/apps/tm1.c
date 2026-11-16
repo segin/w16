@@ -6,7 +6,7 @@
  * to C:\TM1.LOG: the command line, nCmdShow, hPrevInstance, the pointer's
  * place, the active and focus windows, and every top-level window in Z
  * order (handle, class, title, style, extended style, owner, task,
- * IsWinOldApTask, last active popup); then it ends. With "/s" on its
+ * IsWinOldApTask, last active popup, rectangle); then it ends. With "/s" on its
  * command line it stays (a dialog-less wait of 5 s, messages pumped) so
  * that a second start finds it running.
  */
@@ -34,6 +34,12 @@ static void logwin(HWND h)
              GetWindow(h, GW_OWNER), t, IsWinOldApTask(t) ? 1 : 0, IsWindowVisible(h) ? 1 : 0,
              IsIconic(h) ? 1 : 0, IsWindowEnabled(h) ? 1 : 0, GetLastActivePopup(h), (LPSTR)title);
     out(b);
+    {
+        RECT r;
+        GetWindowRect(h, &r);
+        wsprintf(b, "        at %d,%d %dx%d\r\n", r.left, r.top, r.right - r.left, r.bottom - r.top);
+        out(b);
+    }
 }
 
 int PASCAL WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show)

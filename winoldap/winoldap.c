@@ -494,6 +494,16 @@ static void do_switch(void)
 LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    /* no text to WM_GETTEXT (3.1: GetWindowText of Microsoft's WINOLDAP's
+       window gives "", probe TM1, and the Task List does not list it,
+       while USER titles its icon with the program's name, the window's
+       own text: ARCHITECTURE.md 15.5) */
+    case WM_GETTEXT:
+        if (wp && lp)
+            *(LPSTR)lp = 0;
+        return 0;
+    case WM_GETTEXTLENGTH:
+        return 0;
     case WM_QUERYOPEN:
         PostMessage(h, WM_USER, 0, 0);
         return FALSE;

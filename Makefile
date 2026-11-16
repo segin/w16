@@ -1698,6 +1698,12 @@ $(DOS)/TM3.EXE: $(B)/tests/start.o $(B)/tests/tm3.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tm3.map file { $(B)/tests/start.o $(B)/tests/tm3.o }
 dos: $(DOS)/TM3.EXE
+$(B)/tests/tm4.o: tests/apps/tm3ref.h tests/apps/tklog.h
+$(DOS)/TM4.EXE: $(B)/tests/start.o $(B)/tests/tm4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tm4.map file { $(B)/tests/start.o $(B)/tests/tm4.o }
+dos: $(DOS)/TM4.EXE
 $(DOS)/TM1.EXE $(DOS)/TM2.EXE: $(DOS)/TM%.EXE: $(B)/shell/start.o $(B)/tests/tm%.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
