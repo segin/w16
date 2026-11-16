@@ -25,10 +25,6 @@ def norm(line):
     m = PROBEDATA.search(line)
     if m:
         line = line[:m.start()] + 'size=%s "%s"' % (m.group(1), m.group(2).split('\\x00')[0])
-    # an instance-specific service name holds its DMGFrame window's handle,
-    # which depends on how USER's heap was used before (the library's own
-    # window classes, at load): not compared
-    line = re.sub(r':\([0-9a-f]{1,4}\)"', ':(hwnd)"', line)
     # the spy shows an EXECUTE's commands up to their NUL already
     return line
 

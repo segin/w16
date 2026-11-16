@@ -231,8 +231,16 @@ UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res
             in->flags &= ~IF_CLIENTONLY;
         return DMLERR_NO_ERROR;
     }
-    if (!ddeml_kbcp)
+    if (!ddeml_kbcp) {
         ddeml_kbcp = (WORD)GetKBCodePage();
+        /* 3.1's DDEML adds these three global atoms at its first
+           DdeInitialize (seen with tests/ddeml/scripts/xatoms.dm: they
+           appear then, in this order, and stay); their place in USER's
+           heap decides the values of every atom made after them */
+        GlobalAddAtom("Progman");
+        GlobalAddAtom("Who");
+        GlobalAddAtom("Made me?");
+    }
     in = (INST NEAR *)nalloc(sizeof(INST));
     if (!in)
         return DMLERR_SYS_ERROR;
@@ -440,7 +448,10 @@ static void reg(LPCSTR name, WNDPROC proc, int extra)
     RegisterClass(&wc);
 }
 
-/* the library's entry (entry.asm): its window classes */
+/* the library's entry (entry.asm): its window classes. 3.1's windows
+   show five; the handles its later windows get (tests/ddeml/scripts/
+   xatoms.dm) put exactly one class more in USER's heap (each moves them
+   0x44 bytes): w16's sixth is its monitors' class (its name UNVERIFIED) */
 int FAR __cdecl ddeml_init(WORD hinst)
 {
     ddeml_inst = (HINSTANCE)hinst;
@@ -449,7 +460,6 @@ int FAR __cdecl ddeml_init(WORD hinst)
     reg(CLS_CLIENT, ClientWndProc, 6);
     reg(CLS_SERVER, ServerWndProc, 6);
     reg(CLS_HOLD, SubframeWndProc, 8);
-    reg(CLS_LIST, ConvListWndProc, 2);
     reg(CLS_MON, MonitorWndProc, 2);
     return 1;
 }

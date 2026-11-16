@@ -343,10 +343,8 @@ static char *hszname(HSZ h)
             DWORD n = DdeQueryString(ID, h, q, sizeof q, 0);
             q[n < sizeof q ? (WORD)n : sizeof q - 1] = 0;
             wsprintf(o, "i\"%s\"/\"%s\"", (LPSTR)a, (LPSTR)q);
-        } else if (rawvals)
+        } else
             wsprintf(o, "h?%08lX", (DWORD)h);
-        else
-            lstrcpy(o, "h?");
     }
     if (rawvals)
         wsprintf(o + lstrlen(o), "[%08lX]", (DWORD)h);
@@ -541,8 +539,6 @@ static DWORD xidvalue(const char *s)
 static char *d2name(UINT type, DWORD d2)
 {
     static char b[24];
-    if (type == XTYP_ADVSTOP)
-        return hszname((HSZ)d2);
     wsprintf(b, "%08lX", d2);
     return b;
 }
@@ -1086,7 +1082,14 @@ static void step(char *l)
     } else if (eq(w, "hszval")) {
         char *s = tok(&a, &q);
         HSZ h = gethsz(s, q);
-        P("%c   atom-match=%d", letter, GlobalFindAtom(s) == LOWORD(h) && !HIWORD(h));
+        P("%c   value %lx atom-match=%d", letter, (DWORD)h, GlobalFindAtom(s) == LOWORD(h) && !HIWORD(h));
+    } else if (eq(w, "atoms")) {
+        /* every global atom: value and string (exploration) */
+        WORD v;
+        char b[80];
+        for (v = 0xC000; v != 0; v++)
+            if (GlobalGetAtomName(v, b, sizeof b))
+                P("%c   atom %x %q", letter, v, (LPSTR)b);
     } else if (eq(w, "atomq")) {
         /* the global atom of a string: does it exist, and how many
            GlobalDeleteAtom calls remove it (they are put back after) */
@@ -1104,10 +1107,8 @@ static void step(char *l)
     } else if (eq(w, "freehsz") || eq(w, "keephsz")) {
         HSZ h = arghsz(&a);
         BOOL r = eq(w, "freehsz") ? DdeFreeStringHandle(ID, h) : DdeKeepStringHandle(ID, h);
-        /* (Keep returns the atom: shown as such, its value is USER's) */
-        P("%c %s(%s) -> %s", letter, (LPSTR)(eq(w, "freehsz") ? "DdeFreeStringHandle" : "DdeKeepStringHandle"),
-          (LPSTR)hszname(h), (LPSTR)(h && (WORD)r == LOWORD(h) && r != 1 ? "the atom"
-                                     : r ? "1" : "0"));
+        P("%c %s(%s) -> %x", letter, (LPSTR)(eq(w, "freehsz") ? "DdeFreeStringHandle" : "DdeKeepStringHandle"),
+          (LPSTR)hszname(h), (WORD)r);
         err();
     } else if (eq(w, "qstr")) {
         HSZ h = arghsz(&a);
