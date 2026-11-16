@@ -478,8 +478,16 @@ static void do_switch(void)
                 SetActiveWindow(w);
         }
     }
-    if (blk[B_178] & 0x08)                      /* Ctrl+Esc */
-        WinExec("TASKMAN.EXE", SW_SHOWNORMAL);
+    if (blk[B_178] & 0x08) {                    /* Ctrl+Esc */
+        /* the Task List as USER starts it: SYSTEM.INI [boot] taskman.exe=
+           with "0 0" (probe TM1 as taskman.exe= on 3.1: Microsoft's
+           WINOLDAP's Ctrl+Esc ran it with that command line, SW_SHOWNORMAL;
+           ARCHITECTURE.md 15.5) */
+        char cmd[0x92];
+        int n = GetPrivateProfileString("boot", "taskman.exe", "taskman.exe", cmd, 0x82, "SYSTEM.INI");
+        lstrcpy(cmd + n, " 0 0");
+        WinExec(cmd, SW_SHOWNORMAL);
+    }
 }
 
 /* ---- the window ---- */

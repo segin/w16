@@ -111,6 +111,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     wasvis = is_visible(w);
 
     /* Z order */
+    if (!(flags & SWP_NOZORDER) && w->hwndParent == hwndDesktop) {
+        if (after == (HWND)-1)          /* HWND_TOPMOST */
+            w->exstyle |= WS_EX_TOPMOST;
+        else if (after == (HWND)-2)     /* HWND_NOTOPMOST */
+            w->exstyle &= ~WS_EX_TOPMOST;
+    }
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
         if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
             HWND s;

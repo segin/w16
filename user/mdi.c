@@ -939,6 +939,166 @@ void WINAPI U_SCROLLCHILDREN(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         ScrollWindow(h, pos - np, 0, NULL, NULL);
 }
 
+/* ---- the desktop's windows: TileChildWindows, CascadeChildWindows and
+   ArrangeIconicWindows(desktop), the Task List's Tile, Cascade and
+   Arrange Icons. Measured on Windows 3.1 with probe TM3 (tests/apps/
+   tm3.c, ARCHITECTURE.md 15.5), 640x480:
+   - the windows: the parent's visible children that are not owned and not
+     minimised (with MDITILE_SKIPDISABLED, 2, not disabled either); a
+     maximised one is restored first; one without WS_THICKFRAME is only
+     moved; Z order is kept;
+   - the area: the parent's client, less a row of icons
+     (SM_CYICONSPACING) at the bottom when a visible child is minimised;
+   - Tile: in columns, filled top to bottom, the windows taken from the
+     top of the Z order. With s = the integer square root of the count,
+     MDITILE_VERTICAL (0) makes count / s columns, MDITILE_HORIZONTAL (1)
+     s columns; each column holds count / columns windows, the last
+     (count % columns) columns one more. A cell is area / columns wide
+     and area / (its column's windows) high, at whole multiples of that
+     (3 columns of 640: 213 wide at 0, 213, 426);
+   - Cascade: from the bottom of the Z order up, the i-th at (i mod k) *
+     step down and right, step SM_CYCAPTION + 2 (22), where k - 1 is the
+     area's height / 3 / step (7 on 480 lines, 6 with icons): all of them
+     area - (k - 1) * step in size (486 x 326), however many there are;
+   - both return 1.
+   - ArrangeIconicWindows: the visible minimised children go to slots
+     SM_CXICONSPACING apart from the left, rows SM_CYICONSPACING high from
+     the bottom up (an icon at x + (spacing - SM_CXICON) / 2, at the row's
+     top: 21,408 first); they are taken in the order of the slot row
+     nearest to each icon's top (bottom row first), then left to right;
+     it returns the number of icons. */
+static int desk_list(PWND p, HWND *list, int max, WORD flags, BOOL *icons)
+{
+    HWND s;
+    int n = 0;
+    *icons = FALSE;
+    for (s = p->hwndChild; s; s = PW(s)->hwndNext) {
+        PWND sw = PW(s);
+        if (!(sw->style & WS_VISIBLE))
+            continue;
+        if (sw->style & WS_MINIMIZE) {
+            if (!sw->hwndOwner)
+                *icons = TRUE;
+            continue;
+        }
+        if (sw->hwndOwner || ((flags & MDITILE_SKIPDISABLED) && (sw->style & WS_DISABLED)))
+            continue;
+        if (n < max)
+            list[n++] = s;
+    }
+    return n;
+}
+
+static void desk_area(PWND p, BOOL icons, RECT *a)
+{
+    SetRect(a, 0, 0, p->rcClient.right - p->rcClient.left, p->rcClient.bottom - p->rcClient.top);
+    if (icons)
+        a->bottom -= sysmet[SM_CYICONSPACING];
+}
+
+static void desk_place(HWND h, int x, int y, int cx, int cy)
+{
+    if (IsZoomed(h))
+        ShowWindow(h, SW_RESTORE);
+    if (!valid_wnd(h))
+        return;
+    set_window_pos(h, 0, x, y, cx, cy, SWP_NOACTIVATE | SWP_NOZORDER |
+                   ((PW(h)->style & WS_THICKFRAME) ? 0 : SWP_NOSIZE));
+}
+
+#define DESK_MAX 128
+WORD WINAPI TileChildWindows(HWND parent, WORD flags)
+{
+    PWND p = valid_wnd(parent);
+    HWND *list;
+    BOOL icons;
+    RECT a;
+    int n, s, cols, col, k = 0;
+    if (!p)
+        return 0;
+    list = (HWND __near *)LocalAlloc(LPTR, DESK_MAX * sizeof(HWND));
+    if (!list)
+        return 0;
+    n = desk_list(p, list, DESK_MAX, flags, &icons);
+    desk_area(p, icons, &a);
+    for (s = 1; (s + 1) * (s + 1) <= n; s++)
+        ;
+    cols = (flags & MDITILE_HORIZONTAL) ? s : n / s;
+    if (cols < 1)
+        cols = 1;
+    for (col = 0; col < cols && k < n; col++) {
+        int rows = n / cols + (col >= cols - n % cols ? 1 : 0), row;
+        int cw = a.right / cols, rh = a.bottom / rows;
+        for (row = 0; row < rows && k < n; row++, k++)
+            desk_place(list[k], col * cw, row * rh, cw, rh);
+    }
+    LocalFree((HLOCAL)list);
+    return 1;
+}
+
+WORD WINAPI CascadeChildWindows(HWND parent, WORD flags)
+{
+    PWND p = valid_wnd(parent);
+    HWND *list;
+    BOOL icons;
+    RECT a;
+    int n, i, step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER], k;
+    if (!p)
+        return 0;
+    list = (HWND __near *)LocalAlloc(LPTR, DESK_MAX * sizeof(HWND));
+    if (!list)
+        return 0;
+    n = desk_list(p, list, DESK_MAX, flags, &icons);
+    desk_area(p, icons, &a);
+    k = a.bottom / 3 / step + 1;
+    for (i = 0; i < n; i++) {
+        int o = ((n - 1 - i) % k) * step;
+        desk_place(list[i], o, o, a.right - (k - 1) * step, a.bottom - (k - 1) * step);
+    }
+    LocalFree((HLOCAL)list);
+    return 1;
+}
+
+static UINT desk_icons(PWND p)
+{
+    HWND list[48], s;
+    int key[48];
+    int n = 0, i, j, cx = sysmet[SM_CXICONSPACING], cy = sysmet[SM_CYICONSPACING];
+    int h = p->rcClient.bottom - p->rcClient.top, per;
+    for (s = p->hwndChild; s && n < 48; s = PW(s)->hwndNext) {
+        PWND sw = PW(s);
+        int y, row, best = 0, d, bd = 0x7FFF;
+        if ((sw->style & (WS_MINIMIZE | WS_VISIBLE)) != (WS_MINIMIZE | WS_VISIBLE))
+            continue;
+        y = sw->rcWindow.top - p->rcClient.top;
+        for (row = 0; h - cy * (row + 1) + cy > 0; row++) {
+            d = y - (h - cy * (row + 1));
+            if (d < 0)
+                d = -d;
+            if (d < bd)
+                bd = d, best = row;
+        }
+        /* (the key: the row, then the left edge) */
+        key[n] = best * 2048 + (sw->rcWindow.left - p->rcClient.left + 1024) / 1;
+        list[n++] = s;
+    }
+    /* insertion sort, stable */
+    for (i = 1; i < n; i++)
+        for (j = i; j > 0 && key[j - 1] > key[j]; j--) {
+            int t = key[j];
+            HWND u = list[j];
+            key[j] = key[j - 1], list[j] = list[j - 1];
+            key[j - 1] = t, list[j - 1] = u;
+        }
+    per = (p->rcClient.right - p->rcClient.left) / cx;
+    if (per < 1)
+        per = 1;
+    for (i = 0; i < n; i++)
+        set_window_pos(list[i], 0, (i % per) * cx + (cx - sysmet[SM_CXICON]) / 2, h - cy * (1 + i / per),
+                       0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    return n;
+}
+
 /* minimised children in rows along the bottom (UNVERIFIED spacing) */
 UINT WINAPI ArrangeIconicWindows(HWND parent)
 {
@@ -948,6 +1108,8 @@ UINT WINAPI ArrangeIconicWindows(HWND parent)
     int width, n = 0;
     if (!p)
         return 0;
+    if (parent == hwndDesktop)
+        return desk_icons(p);
     width = p->rcClient.right - p->rcClient.left;
     x = 0;
     y = p->rcClient.bottom - p->rcClient.top - cy;

@@ -202,8 +202,15 @@ void link_window(PWND w, HWND after)
     if (!p)
         return;
     if (after == HWND_TOP) {
-        w->hwndNext = p->hwndChild;
-        p->hwndChild = HW(w);
+        /* a top-level window that is not topmost goes under the topmost
+           ones (WS_EX_TOPMOST: SetWindowPos HWND_TOPMOST, as Windows
+           3.1's Task List makes itself) */
+        link = &p->hwndChild;
+        if (HW(p) == hwndDesktop && !(w->exstyle & WS_EX_TOPMOST))
+            while (*link && *link != HW(w) && (PW(*link)->exstyle & WS_EX_TOPMOST))
+                link = &PW(*link)->hwndNext;
+        w->hwndNext = *link;
+        *link = HW(w);
         return;
     }
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)

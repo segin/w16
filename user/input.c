@@ -33,6 +33,7 @@ static BYTE __far qkeystate[256];     /* GetKeyState's: as of the last message *
 POINT __far ptCursor;
 WORD lastkey;
 void switch_window(HWND cur, BOOL tobottom);                   /* the last key pressed: Alt alone opens the menu */
+void start_taskman(int x, int y);                             /* the Task List (defwnd.c) */
 HWND hwndCapture, hwndFocus, hwndActive;
 HQUEUE __far hqInput;
 static HCURSOR hcurCurrent;
@@ -894,7 +895,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     if (e.msg == WM_SYSKEYDOWN && (vk == VK_TAB || vk == VK_ESCAPE))
                         switch_window(0, FALSE);
                     else if (e.msg == WM_KEYDOWN && vk == VK_ESCAPE && (qkeystate[VK_CONTROL] & 0x80))
-                        WinExec("taskman.exe", SW_SHOWNORMAL);
+                        start_taskman(0, 0);
                     continue;
                 }
                 target = hwndActive;
