@@ -870,10 +870,7 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
         default:
-            /* other keys to DefWindowProc: Ctrl+Esc there opens the Task
-               List (3.1: Ctrl+Esc in Notepad's text, boot-test case
-               taskman; w16's edit control swallowed it) */
-            return DefWindowProc(h, msg, wp, lp);
+            return 0;
         }
         E(e)->sel1 = p;
         if (!shift)

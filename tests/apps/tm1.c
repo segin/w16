@@ -37,7 +37,8 @@ static void logwin(HWND h)
     {
         RECT r;
         GetWindowRect(h, &r);
-        wsprintf(b, "        at %d,%d %dx%d\r\n", r.left, r.top, r.right - r.left, r.bottom - r.top);
+        wsprintf(b, "        at %d,%d %dx%d cs=%04X\r\n", r.left, r.top, r.right - r.left, r.bottom - r.top,
+                 GetClassWord(h, GCW_STYLE));
         out(b);
     }
 }

@@ -2,7 +2,8 @@
  * tm4.c - probe TM4: the window rectangle CreateDialogIndirect gives
  * top-level dialogs of a few frame styles (ARCHITECTURE.md 15.5: Windows
  * 3.1's Calculator is such a dialog, template style 00CA0000h at 310,65,
- * 240 x 158 units, no font). Run as the shell; logs to TK.LOG, per style
+ * 240 x 158 units, no font; Character Map's, 84CA0040h with 8 point
+ * Helv at 9,33, 348 x 118). Run as the shell; logs to TK.LOG, per style
  * and place: the window and client rectangles as made.
  */
 #include <windows.h>
@@ -20,7 +21,7 @@ BOOL FAR PASCAL __export __loadds tm4_dlg(HWND h, UINT m, WPARAM wp, LPARAM lp)
 }
 
 /* a DLGTEMPLATE with no items, menu, class or font */
-static BYTE tpl[32];
+static BYTE tpl[48];
 
 static void one(HINSTANCE hi, DWORD style, int x, int y, int cx, int cy)
 {
@@ -37,6 +38,10 @@ static void one(HINSTANCE hi, DWORD style, int x, int y, int cx, int cy)
     *p++ = 0;                                   /* menu */
     *p++ = 0;                                   /* class */
     *p++ = 'T'; *p++ = 0;                       /* caption */
+    if (style & DS_SETFONT) {                   /* 8 point Helv */
+        *(int *)p = 8; p += 2;
+        lstrcpy((LPSTR)p, "Helv"); p += 5;
+    }
     h = CreateDialogIndirect(hi, (LPCSTR)tpl, 0, (DLGPROC)tm4_dlg);
     if (!h) {
         wsprintf(b, "style %08lX at %d,%d %dx%d: none\r\n", style, x, y, cx, cy);
@@ -64,6 +69,9 @@ int __cdecl tmain(void)
         one(hi, st[i], 10, 10, 100, 50);
         one(hi, st[i], 310, 65, 240, 158);
     }
+    /* Character Map's template: 84CA0040h, 8 point Helv */
+    one(hi, 0x84CA0040L, 9, 33, 348, 118);
+    one(hi, 0x84CA00C0L, 9, 33, 348, 118);
     out("done\r\n");
     return 0;
 }

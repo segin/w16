@@ -301,8 +301,14 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
            border, as for any window (adjust_rect, defwnd.c): Calculator's
            template, 00CA0000h at 310,65 for 240 x 158 units, comes up on
            3.1 at 154,110, 261 x 269 (probe TM1, ARCHITECTURE.md 15.5);
-           with a dialog frame w16 had it at 150,106, 265 x 276 */
-        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME;
+           with a dialog frame w16 had it at 150,106, 265 x 276. Probe TM4
+           shows 3.1 doing the same with DS_SETFONT (Character Map's
+           template: 16,34, 611 x 213), but w16 keeps the old rule there
+           for now: with the window where 3.1 makes it, Character Map on
+           w16's USER leaves a stray glyph on the desktop left of its
+           window (boot-test case icons; open, ARCHITECTURE.md 15.5) */
+        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME ||
+                    ((style & DS_SETFONT) && (style & WS_DLGFRAME));
         int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
                  dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
@@ -810,9 +816,7 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
             break;
         }
         case VK_ESCAPE:
-            /* (not Ctrl+Esc: in 3.1's Task List it neither cancels nor
-               starts another; boot-test case taskman) */
-            if (!(code & DLGC_WANTALLKEYS) && !(GetKeyState(VK_CONTROL) & 0x8000)) {
+            if (!(code & DLGC_WANTALLKEYS)) {
                 c = GetDlgItem(dlg, IDCANCEL);
                 if (!c || IsWindowEnabled(c))
                     send_message(dlg, WM_COMMAND, IDCANCEL, MAKELONG(c, BN_CLICKED));

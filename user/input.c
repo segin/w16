@@ -886,6 +886,19 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     qkeystate[vk] |= 0x80;
                 }
             }
+            /* Ctrl+Esc: the active window gets WM_SYSCOMMAND SC_TASKLIST,
+               whatever has the focus (3.1: from Character Map, a dialog,
+               and from Notepad's text the Task List came up - probe TM1;
+               TM2's window got the SC_TASKLIST; the key itself is not
+               delivered here: UNVERIFIED whether 3.1 delivers it too) */
+            if (e.msg == WM_KEYDOWN && (BYTE)e.wParam == VK_ESCAPE &&
+                (qkeystate[VK_CONTROL] & 0x80) && !(qkeystate[VK_MENU] & 0x80)) {
+                if (hwndActive && valid_wnd(hwndActive))
+                    send_message(top_level(hwndActive), WM_SYSCOMMAND, SC_TASKLIST, 0);
+                else
+                    start_taskman(0, 0);
+                continue;
+            }
             if (!w) {
                 if (!hwndActive) {
                     /* nothing active (the active program ended and no

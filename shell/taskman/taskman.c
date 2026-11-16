@@ -171,6 +171,15 @@ BOOL FAR PASCAL __export TaskManDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
     case WM_TASKLIST_END:
         EndDialog(dlg, 0);
         return TRUE;
+    case WM_SYSCOMMAND:
+        /* Ctrl+Esc in the Task List (USER sends the active window
+           SC_TASKLIST): nothing (3.1: no other Task List came up, this
+           one stayed where it was) */
+        if ((wp & 0xFFF0) == SC_TASKLIST) {
+            SetWindowLong(dlg, DWL_MSGRESULT, 0);
+            return TRUE;
+        }
+        return FALSE;
     case WM_COMMAND:
         switch (wp) {
         case IDC_LIST:
