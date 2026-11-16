@@ -1106,7 +1106,23 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
 	python3 tools/nemark.py $@ 3.10
 
-# ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.5), Windows 3.1
+# ---- shell: TASKMAN.EXE, the Task List (shell/taskman; ARCHITECTURE.md 15.5) ----
+SHELL_TM := $(B)/shell/start.o $(B)/shell/taskman/taskman.o
+shell: $(DOS)/TASKMAN.EXE
+$(B)/shell/taskman/taskman.o: shell/taskman/taskman.c shell/taskman/taskman.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/taskman/taskman.res: shell/taskman/taskman.rc shell/taskman/taskman.h
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/taskman -fo=$@ $<
+$(DOS)/TASKMAN.EXE: $(SHELL_TM) $(B)/shell/taskman/taskman.res shell/taskman/taskman.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/taskman/taskman.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/taskman/taskman.map \
+	    option resource=$(B)/shell/taskman/taskman.res file { $(SHELL_TM) }
+	python3 tools/nemark.py $@ 3.10
+
+# ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.6), Windows 3.1
 # only ----
 WR_C     := main doc wrifile view cmds pict ole print hdrftr util
 SHELL_WR := $(B)/shell/start.o $(B)/shell/write/i4.o $(WR_C:%=$(B)/shell/write/%.o)
@@ -1469,6 +1485,11 @@ install-tree: $(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE
 $(W16SYS)/WSWAP.EXE $(W16SYS)/DSWAP.EXE: $(W16SYS)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# the Task List (ARCHITECTURE.md 15.5), in the Windows directory as on 3.1
+install-tree: $(W16)/TASKMAN.EXE
+$(W16)/TASKMAN.EXE: $(DOS)/TASKMAN.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Calculator (ARCHITECTURE.md 15.3)
 install-tree: $(W16)/CALC.EXE
 $(W16)/CALC.EXE: $(DOS)/CALC.EXE
@@ -1706,6 +1727,25 @@ $(DOS)/US22.EXE: $(B)/tests/start.o $(B)/tests/us22.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us22.map file { $(B)/tests/start.o $(B)/tests/us22.o }
 dos: $(DOS)/US22.EXE
+# TM1, TM2: the Task List's start and what it lists and does (tests/apps/
+# tm1.c, tm2.c; ARCHITECTURE.md 15.5)
+$(B)/tests/tm3.o: tests/apps/tm3ref.h tests/apps/tklog.h
+$(DOS)/TM3.EXE: $(B)/tests/start.o $(B)/tests/tm3.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tm3.map file { $(B)/tests/start.o $(B)/tests/tm3.o }
+dos: $(DOS)/TM3.EXE
+$(B)/tests/tm4.o: tests/apps/tm3ref.h tests/apps/tklog.h
+$(DOS)/TM4.EXE: $(B)/tests/start.o $(B)/tests/tm4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tm4.map file { $(B)/tests/start.o $(B)/tests/tm4.o }
+dos: $(DOS)/TM4.EXE
+$(DOS)/TM1.EXE $(DOS)/TM2.EXE: $(DOS)/TM%.EXE: $(B)/shell/start.o $(B)/tests/tm%.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tm$*.map file { $(B)/shell/start.o $(B)/tests/tm$*.o }
+dos: $(DOS)/TM1.EXE $(DOS)/TM2.EXE
 # US25: mouse moves made while a program is busy (tests/apps/us25.c)
 $(B)/tests/us25.o: tests/apps/us25ref.h tests/apps/tklog.h
 $(DOS)/US25.EXE: $(B)/tests/start.o $(B)/tests/us25.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us25.lnk
@@ -1921,7 +1961,7 @@ $(DOS)/OC1.EXE: $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o $(DOS)/OCSPY.DLL
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ole/oc1.map option stack=40k file { $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o } \
 	    library olecli.lib library shell.lib import SPYLOG OCSPY.1 import SPYSTART OCSPY.2 \
-	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4
+	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4 import SPYTIMES OCSPY.8
 $(DOS)/OCSRV.EXE: $(B)/tests/start.o $(B)/ole/ocsrv.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
@@ -2353,6 +2393,8 @@ $(W16)/CONTROL.EXE: $(DOS)/CONTROL.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16SYS)/MAIN.CPL: $(DOS)/MAIN.CPL
+	@mkdir -p $(@D)
+	cp $< $@
 
 # ---- OLESVR (ole/olesvr/; ARCHITECTURE.md 16) and its probes ----
 # OS1 (a logging OLE server), OS2 (driver: OLE and raw DDE client) and

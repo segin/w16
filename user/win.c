@@ -13,10 +13,13 @@ HWND hwndDesktop;
 /* CS_BYTEALIGNCLIENT: the client area's left edge goes to the nearest
    multiple of 8 on screen (probe US5: asked for x 10 and 333, Windows 3.1
    put such windows at 12 and 332, their client areas at 16 and 336) */
+BOOL no_byte_align;             /* set around Tile/Cascade's moves (mdi.c) */
 void byte_align(PWND w, BOOL made)
 {
     int dx;
     WORD cs = ((PCLS)w->cls)->style;
+    if (no_byte_align)
+        return;
     /* CS_BYTEALIGNWINDOW only when the window is made, not when it is
        moved (US18 on 3.1: a dialog-class window made at x 221 went to 224,
        moved to 213 and to 230 it stayed there; Terminal centres its
@@ -33,7 +36,12 @@ void byte_align(PWND w, BOOL made)
     /* nearest multiple of 8 also left of the screen: (x + 4) & ~7 (C's
        division rounds towards zero, which put a window dragged partly off
        the left edge 8 pixels right of where Windows 3.1 puts it) */
-    if (cs & CS_BYTEALIGNCLIENT)
+    /* a CS_BYTEALIGNCLIENT window being made: up to the next multiple
+       (3.1: Notepad made at 22,22 by CW_USEDEFAULT, its client at 26, came
+       at 28, client 32: boot-test case taskman; at 0 it comes at 4) */
+    if ((cs & CS_BYTEALIGNCLIENT) && made)
+        dx = ((w->rcClient.left + 7) & ~7) - w->rcClient.left;
+    else if (cs & CS_BYTEALIGNCLIENT)
         dx = ((w->rcClient.left + 4) & ~7) - w->rcClient.left;
     else
         dx = ((w->rcWindow.left + 4) & ~7) - w->rcWindow.left;
@@ -202,8 +210,15 @@ void link_window(PWND w, HWND after)
     if (!p)
         return;
     if (after == HWND_TOP) {
-        w->hwndNext = p->hwndChild;
-        p->hwndChild = HW(w);
+        /* a top-level window that is not topmost goes under the topmost
+           ones (WS_EX_TOPMOST: SetWindowPos HWND_TOPMOST, as Windows
+           3.1's Task List makes itself) */
+        link = &p->hwndChild;
+        if (HW(p) == hwndDesktop && !(w->exstyle & WS_EX_TOPMOST))
+            while (*link && *link != HW(w) && (PW(*link)->exstyle & WS_EX_TOPMOST))
+                link = &PW(*link)->hwndNext;
+        w->hwndNext = *link;
+        *link = HW(w);
         return;
     }
     for (link = &p->hwndChild; *link; link = &PW(*link)->hwndNext)
@@ -327,7 +342,9 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     /* default position and size */
     if (!(style & (WS_CHILD | WS_POPUP))) {
         if (x == CW_USEDEFAULT) {
-            int step = sysmet[SM_CYCAPTION] + sysmet[SM_CYFRAME];
+            /* (22 on VGA: on 3.1 the second window, after Notepad at 0,
+               came at 22,22: Clock under TM2, ARCHITECTURE.md 15.5) */
+            int step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER];
             x = y = (cascade++ % 8) * step;
             if (y + step > sysmet[SM_CYSCREEN] / 2)
                 cascade = 0;

@@ -1,0 +1,29 @@
+run PROGMAN.EXE
+connect
+; the command block as the ACK returns it (TDDE logs it: block="..."):
+; 3.1 writes a NUL at the end of each argument of a known command
+exec [CreateGroup(Blk A)]
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(NOTEPAD.EXE,Note Pad)]
+exec [AddItem(C:\WINDOWS\CALC.EXE,Calc,C:\WINDOWS\CALC.EXE,0,96,0,C:\WINDOWS,0,1)]
+exec [AddItem("WRITE.EXE README.WRI","Read, Me")]
+exec  [ReplaceItem(Calc)] [AddItem( CLOCK.EXE , Clock )]
+exec [Bogus(x,y)]
+exec [DeleteItem(Nope)]
+exec [CreateGroup("Blk B",BLKB.GRP)][ShowGroup("Blk B",2)]
+; which group item commands go to: the active one (ShowGroup(name,1)
+; does not activate a restored group behind another); a failed command
+; ends the run, after every command was parsed; an unknown one: none run
+request Blk A
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(CALC.EXE,AfterShow)]
+exec [DeleteItem(Nope)][AddItem(CLOCK.EXE,AfterFail)]
+exec [Bogus()][AddItem(CLOCK.EXE,AfterBogus)]
+exec [ShowGroup(Blk A,2)]
+exec [ShowGroup(Blk A,1)]
+exec [AddItem(CALC.EXE,AfterRestore)]
+request Blk A
+request Blk B
+; (no DeleteGroup: when 3.1 writes Order= then is not known, see
+; ARCHITECTURE.md 9.6)
+disconnect

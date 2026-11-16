@@ -43,6 +43,7 @@
 /* ---- resources ---- */
 #define IDI_NOTEPAD         1
 #define IDM_MENU            1
+#define IDM_MENU_W16        2           /* w16's: with later Windows' keys */
 #define IDD_PRINTING        12
 #define IDD_PAGESETUP       14
 

@@ -14,7 +14,7 @@
  * (OleSaveToStream). Insert Object lists the classes of the registration
  * database that have a StdFileEditing server.
  *
- * Calls used are those 3.1's Write imports (ARCHITECTURE.md 15.5).
+ * Calls used are those 3.1's Write imports (ARCHITECTURE.md 15.6).
  * UNVERIFIED: the exact order of Write's own OLECLI calls (an OC1 log of
  * Write against this one is the next check: tests/olescenarios.sh with
  * OLESCEN_FILES=build/dos/WRITE.EXE=WINDOWS/WRITE.EXE).

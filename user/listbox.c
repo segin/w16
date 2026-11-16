@@ -225,8 +225,19 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         else
             TextOut(hdc, r.left + 2, r.top, s, lstr_len(s));
     }
-    if (lb->focus && i == lb->caret)
+    if (lb->focus && i == lb->caret) {
+        /* on a selected item the dots invert the highlight where the
+           pattern is white and leave it where it is black (3.1: the Task
+           List's selected item, white on blue, has a dotted yellow and
+           blue rectangle; drawn in the item's white text and the list's
+           white background it was a solid line: boot-test case taskman).
+           UNVERIFIED for an unselected focus item, left as it was */
+        if (it->sel) {
+            SetTextColor(hdc, RGB(255, 255, 255));
+            SetBkColor(hdc, RGB(0, 0, 0));
+        }
         DrawFocusRect(hdc, &r);
+    }
 }
 
 static void paint(HWND h, PLB lb, HDC hdc)

@@ -1,0 +1,129 @@
+; The Task List (TASKMAN.EXE) under real keys and clicks (tests/inputrun.sh;
+; boot-test case taskman). WIN.INI run=CLOCK.EXE CALC.EXE NOTEPAD.EXE:
+; Notepad covers the others (Clock's seconds tick). The pointer goes to
+; the screen's bottom right corner first, on the desktop.
+; Ctrl+Esc (the list, centred); a double-click on its second item
+; (Calculator comes up); Ctrl+Esc, Down, Escape; a double-click on the
+; desktop in the corner (the list at the point, kept on the screen),
+; Escape; Alt+Space N (Calculator minimised); Ctrl+Esc, End and Enter
+; (its icon restored); Ctrl+Esc and Cascade, then Tile (Clock shows: its
+; time is left out of the comparison); Ctrl+Esc, "c" (Clock) and End Task
+; (Clock closes); Tile with Shift held; Alt+Space N (the active window
+; minimised), Ctrl+Esc and Arrange Icons; Ctrl+Esc, Escape; then Program
+; Manager ("p", Enter), File > Run COMMAND.COM (a full-screen MS-DOS
+; Prompt) and Ctrl+Esc there: Windows with the Task List.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 00-start 30 2
+shot 00-start
+key ctrl+Escape
+match 01-list 20 1
+shot 01-list
+home
+move 115 93
+sleep 1
+dclick 1
+match 02-dclickitem 20 1
+shot 02-dclickitem
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+key ctrl+Escape
+match 03-list 20 1
+shot 03-list
+key Down
+match 04-down 20 1
+shot 04-down
+key Escape
+sleep 1
+dclick 1
+match 05-dclick 20 1
+shot 05-dclick
+key Escape
+match 06-esc 20 1
+shot 06-esc
+key alt+space
+sleep 1
+key n
+match 07-min 20 1
+shot 07-min
+key ctrl+Escape
+sleep 2
+key End
+match 08-end 20 1
+shot 08-end
+key Return
+match 09-restore 20 1
+shot 09-restore
+key ctrl+Escape
+sleep 2
+key alt+c
+match 10-cascade 20 1
+shot 10-cascade
+key ctrl+Escape
+sleep 2
+key alt+t
+match 11-tile 20 1
+shot 11-tile
+key ctrl+Escape
+sleep 2
+key c
+match 12-c 20 1
+shot 12-c
+key alt+e
+match 13-endtask 20 1
+shot 13-endtask
+key ctrl+Escape
+sleep 2
+keydown shift
+key alt+t
+keyup shift
+match 14-htile 20 1
+shot 14-htile
+key alt+space
+sleep 1
+key n
+match 15-min 20 1
+shot 15-min
+key ctrl+Escape
+sleep 2
+key alt+a
+match 16-arrange 20 1
+shot 16-arrange
+key ctrl+Escape
+match 17-list 20 1
+shot 17-list
+key Escape
+match 18-esc 20 1
+shot 18-esc
+key ctrl+Escape
+sleep 2
+key p
+sleep 1
+key Return
+match 19-pm 20 1
+shot 19-pm
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 20-dos
+key ctrl+Escape
+sleep 15
+match 21-dosesc 20 2
+shot 21-dosesc

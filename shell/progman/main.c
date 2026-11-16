@@ -140,7 +140,9 @@ void ini_set_group(int n, const char FAR *path)
 /* Remove GroupN=. With `order` (from order_string before the group's
    window went away), also write that as Order=: observed, deleting a
    group writes Order= without leading blank and still naming the deleted
-   group, until Order= is next written in full. */
+   group, until Order= is next written in full. UNVERIFIED as a rule:
+   with two groups made by DDE CreateGroup, 3.1 wrote no Order= when
+   either or both were deleted (ARCHITECTURE.md 9.6). */
 void ini_remove_group(int n, LPSTR order)
 {
     char key[12];

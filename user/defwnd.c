@@ -442,6 +442,28 @@ LONG nc_hittest(PWND w, POINT pt)
 }
 
 /* the next visible, enabled top-level window after cur, activated */
+/* The Task List: SYSTEM.INI [boot] taskman.exe= (default taskman.exe;
+   Pietrek, Windows Internals ch. 2: USER reads it at start-up), run with
+   WinExec, SW_SHOWNORMAL, and the command line "X Y": the point of a
+   double-click on the desktop, "0 0" for Ctrl+Esc and the system menu's
+   Switch To (probe TM1 as taskman.exe= on 3.1, ARCHITECTURE.md 15.5) */
+static char taskman_name[0x82];
+
+void load_taskman_name(void)
+{
+    GetPrivateProfileString("boot", "taskman.exe", "taskman.exe", taskman_name, sizeof taskman_name,
+                            "SYSTEM.INI");
+}
+
+void start_taskman(int x, int y)
+{
+    char cmd[sizeof taskman_name + 16];
+    if (!taskman_name[0])
+        load_taskman_name();
+    wsprintf(cmd, "%s %d %d", (LPSTR)taskman_name, x, y);
+    WinExec(cmd, SW_SHOWNORMAL);
+}
+
 void switch_window(HWND cur, BOOL tobottom)
 {
     HWND t, first = 0;
@@ -463,6 +485,21 @@ void switch_window(HWND cur, BOOL tobottom)
        from Notepad's icon to Calculator's leaves both minimised) */
     if (IsIconic(first) && !tobottom)
         ShowWindow(first, SW_RESTORE);
+}
+
+/* USER.172 SwitchToThisWindow(hwnd, fRestore) (Schulman, Undocumented
+   Windows: the Task List's Switch To; fRestore restores an icon). On 3.1
+   (probe TM2 under the Task List, ARCHITECTURE.md 15.5) the window is
+   activated and brought to the top, then an icon gets WM_SYSCOMMAND
+   SC_RESTORE (it answers WM_QUERYOPEN and is restored by DefWindowProc).
+   UNVERIFIED: fRestore FALSE (only activated here) */
+void WINAPI SwitchToThisWindow(HWND h, BOOL restore)
+{
+    if (!valid_wnd(h))
+        return;
+    activate_window(h, FALSE);
+    if (restore && IsIconic(h))
+        send_message(h, WM_SYSCOMMAND, SC_RESTORE, 0);
 }
 
 /* USER.274 GetNextQueueWindow(hwnd, nWhichWay): the top-level window a
@@ -678,7 +715,7 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
         break;
     }
     case SC_TASKLIST:
-        WinExec("taskman.exe", SW_SHOWNORMAL);
+        start_taskman(0, 0);
         break;
     }
     (void)w, (void)lp;
@@ -998,7 +1035,7 @@ LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_LBUTTONDBLCLK:
         /* a double-click on the desktop: the Task List (3.1 User's Guide) */
-        WinExec("taskman.exe", SW_SHOWNORMAL);
+        start_taskman((int)LOWORD(lp), (int)HIWORD(lp));
         return 0;
     case WM_ERASEBKGND: {
         RECT r;

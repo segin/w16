@@ -277,11 +277,21 @@ u32 KAPI GetWinOldApHooks(void)
     return woa_hook;
 }
 
-/* IsWinOldApTask (KERNEL.158): w16 has no WINOLDAP yet. */
+/* IsWinOldApTask (KERNEL.158): TRUE for a task of WINOLDAP, the module
+   that runs a DOS program (WINOLDAP.MOD, WINOA386.MOD: module name
+   WINOLDAP). Windows 3.1's Task List asks it at End Task (Schulman,
+   Undocumented Windows ch. 1; ARCHITECTURE.md 15.5). Schulman's listing
+   shows 3.1 reading bit 0 of a flag word at 48h of the task's PDB, which
+   its loader sets for WINOLDAP; w16 asks the task's module instead (the
+   same tasks). 0 for anything that is not a task. */
+u16 KAPI IsTask(u16 h);
 u16 KAPI IsWinOldApTask(u16 htask)
 {
-    (void)htask;
-    return 0;
+    module FAR *m;
+    if (!htask || !IsTask(htask))
+        return 0;
+    m = module_of(*(u16 FAR *)MK_FP(htask, 0x1E));       /* TDB: hModule */
+    return m && kstricmp(m->name, "WINOLDAP") == 0;
 }
 
 

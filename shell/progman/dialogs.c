@@ -317,10 +317,17 @@ static BOOL is_blank(const char FAR *s)
 }
 
 /* The file for a new group: as typed (default directory: Windows', and
-   extension .GRP), or made from the description: blanks dropped, first
-   eight characters, upper case (observed: "Test Group" -> TESTGROU.GRP).
-   UNVERIFIED: how the original avoids a name already in use; here digits
-   replace the end of the name. */
+   extension .GRP), or made from the description: its first eight letters
+   and digits, upper case, everything else dropped (observed with
+   tests/scripts/dde/names.txt: "Test Group" -> TESTGROU.GRP, "7-Zip
+   26.05 - 16-bit" -> 7ZIP2605.GRP, "Q<c>Z" -> QZ.GRP for every other
+   printable character and 80h, "x.y.z.w" -> XYZW.GRP; until 2026-11-15
+   w16 kept the punctuation, made 7-ZIP26..GRP and failed the 7-Zip 16-bit
+   installer's CreateGroup). A name already in use gets a digit from 0,
+   appended or replacing the eighth character (observed: MAIN0.GRP next
+   to MAIN.GRP, COLLIDE0.GRP next to COLLIDET.GRP); UNVERIFIED after 9.
+   UNVERIFIED: a name with no letter or digit ("---") and letters above
+   7Fh ("Q\xE9Z"): 3.1 acknowledged CreateGroup but made no group. */
 static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
 {
     char windir[144];                   /* DOS path bound (OFSTRUCT) */
@@ -357,13 +364,13 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
             s_append(&path, ".GRP");
         return path;
     }
-    for (; *desc && n < 8; desc++)
-        if (*desc != ' ') {
-            char ch = *desc;
-            if (ch >= 'a' && ch <= 'z')
-                ch -= 'a' - 'A';
+    for (; *desc && n < 8; desc++) {
+        char ch = *desc;
+        if (ch >= 'a' && ch <= 'z')
+            ch -= 'a' - 'A';
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9'))
             base[n++] = ch;
-        }
+    }
     if (!n)
         base[n++] = 'G';
     base[n] = 0;
@@ -373,7 +380,7 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
         s_cpy(name, base, sizeof name);
         if (tries) {
             int d;
-            s_utoa(digits, tries);
+            s_utoa(digits, tries - 1);
             d = s_len(digits);
             s_cpy(name + (n + d > 8 ? 8 - d : n), digits, sizeof name - 8 + d);
         }

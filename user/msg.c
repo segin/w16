@@ -200,6 +200,30 @@ LONG call_wnd(PWND w, HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return call_wndproc(w->lpfnWndProc, (WORD)w->hInstance, h, msg, wp, lp);
 }
 
+extern BOOL hook_set(int type);
+extern LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp);
+
+/* A sent message to its window procedure, through the WH_CALLWNDPROC
+   hooks first (3.1 SDK, CallWndProc: lParam points at the message's
+   lParam, wParam, message and window, in that order in memory, which
+   the hook may change; wParam nonzero for a message another task sent:
+   UNVERIFIED which value 3.1 passes). Until 2026-11-15 w16 never called
+   them, so a DDE spy (tests/ole/ocspy.c) saw nothing on w16's USER. */
+static LONG call_sent(PWND w, HWND h, UINT msg, WPARAM wp, LPARAM lp, BOOL other)
+{
+    struct { LPARAM lParam; WPARAM wParam; UINT message; HWND hwnd; } c;
+    if (!hook_set(WH_CALLWNDPROC))
+        return call_wnd(w, h, msg, wp, lp);
+    c.lParam = lp;
+    c.wParam = wp;
+    c.message = msg;
+    c.hwnd = h;
+    call_hook(WH_CALLWNDPROC, HC_ACTION, other, (LPARAM)(void __far *)&c);
+    if (c.hwnd != h && (w = valid_wnd(c.hwnd)) == NULL)
+        return 0;
+    return call_wnd(w, c.hwnd, c.message, c.wParam, c.lParam);
+}
+
 LRESULT WINAPI CallWindowProc(FARPROC f, HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
@@ -259,7 +283,7 @@ static void receive_sent(HQUEUE hq)
         outer = q->insend;
         q->insend = (WORD)s;
         w = valid_wnd(s->hwnd);
-        s->result = w ? call_wnd(w, s->hwnd, s->msg, s->wParam, s->lParam) : 0;
+        s->result = w ? call_sent(w, s->hwnd, s->msg, s->wParam, s->lParam, TRUE) : 0;
         q = q_of(hq);
         if (q->insend == (WORD)s && !s->done) {
             HQUEUE from = s->from;
@@ -293,7 +317,7 @@ LONG send_message(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     me = cur_hq();
     to = w->hq;
     if (!to || to == me || !me || !booted)
-        return call_wnd(w, h, msg, wp, lp);
+        return call_sent(w, h, msg, wp, lp, FALSE);
     /* another task's window */
     s = (PSMSG)LocalAlloc(LPTR, sizeof(SMSG));
     if (!s)
@@ -470,6 +494,10 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     q = q_of(hq);
     q->msgtime = m->time;
     q->msgpos = MAKELONG(m->pt.x, m->pt.y);
+    /* WH_GETMESSAGE (3.1 SDK, GetMsgProc: lParam the MSG, which the hook
+       may change); UNVERIFIED whether 3.1 calls it for PM_NOREMOVE too */
+    if (hook_set(WH_GETMESSAGE))
+        call_hook(WH_GETMESSAGE, HC_ACTION, 0, (LPARAM)m);
     return TRUE;
 }
 

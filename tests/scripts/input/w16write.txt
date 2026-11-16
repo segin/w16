@@ -4,7 +4,7 @@
 ; File > Exit and No to saving (real keys, tests/inputrun.sh). The
 ; pointer goes to the desktop under Write's window first, so that it is
 ; an arrow in every screen. (A centered line that mixes regular and bold
-; text sits 2 pixels left of 3.1's: ARCHITECTURE.md 15.5.)
+; text sits 2 pixels left of 3.1's: ARCHITECTURE.md 15.6.)
 ; Shots after typing wait 2.5 s: on a loaded host the install tree's
 ; KRNL286 run had not drawn all of the typed line after 1 s.
 click 1

@@ -1,0 +1,28 @@
+/* taskman.rc - w16 Task List resources. The dialog is laid out as Windows
+   3.1's TASKMAN.EXE dialog 10 (template, control IDs, classes, styles and
+   labels: format facts, ARCHITECTURE.md 3; observed with tools/nerc.py). */
+#include <windows.h>
+#include "taskman.h"
+
+IDD_TASKLIST DIALOG 30, 22, 160, 107
+STYLE WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+CAPTION "Task List"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_LIST, "LISTBOX", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | WS_TABSTOP | LBS_NOTIFY,
+            3, 3, 154, 63
+    CONTROL "&Switch To", IDOK, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+            1, 70, 45, 14
+    CONTROL "&End Task", IDC_ENDTASK, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            52, 70, 45, 14
+    CONTROL "Cancel", IDCANCEL, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            103, 70, 55, 14
+    CONTROL "", IDC_LINE, "STATIC", WS_CHILD | WS_VISIBLE | SS_BLACKRECT,
+            0, 87, 160, 1
+    CONTROL "&Cascade", IDC_CASCADE, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            1, 90, 45, 14
+    CONTROL "&Tile", IDC_TILE, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            52, 90, 45, 14
+    CONTROL "&Arrange Icons", IDC_ARRANGE, "BUTTON", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            103, 90, 55, 14
+END
