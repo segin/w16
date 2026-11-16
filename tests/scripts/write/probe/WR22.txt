@@ -1,0 +1,52 @@
+; WR22: Edit > Move Picture and Size Picture from the keyboard on a pasted
+; 40 x 20 picture: selected with Shift+Left (real keys), Move Picture
+; (M1), five Right (M2), Enter (M3); Size Picture (Z1), three Right and two
+; Down (Z2: the page box shows the scale), Enter (Z3); saved as C:\WR22.WRI
+; mkpic: PIC.DIB
+run WRITE.EXE
+wait 3000
+clipbmp C:\PIC.DIB
+menu e
+char p
+wait 1500
+kdown 10
+kdown 25
+kup 25
+kup 10
+wait 500
+menu e
+char m
+wait 500
+snap C:\M1.BMP
+key 27
+key 27
+key 27
+key 27
+key 27
+wait 500
+snap C:\M2.BMP
+key 0D
+wait 500
+snap C:\M3.BMP
+menu e
+char s
+wait 500
+snap C:\Z1.BMP
+key 27
+key 27
+key 27
+key 28
+key 28
+wait 500
+snap C:\Z2.BMP
+key 0D
+wait 500
+snap C:\Z3.BMP
+menu f
+char a
+wait 1500
+type C:\WR22.WRI
+key 0D
+wait 2000
+close
+wait 1000

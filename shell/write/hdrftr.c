@@ -97,6 +97,7 @@ static void hf_return(HWND d)
     DWORD i, cp, at, before;
     long dist;
     BOOL first = IsDlgButtonChecked(d, 6);
+    BOOL typed = view_last_typed();
     char buf[32];
     SEPX s;
     t = g_doc;
@@ -197,7 +198,11 @@ static void hf_return(HWND d)
     view_changed(0);
     view_select(savedFirst, savedLim, TRUE);
     SetFocus(g_docwnd);
-    view_caret_now();
+    /* the caret shows at once, unless typing was the last thing done in
+       the head (WR9: shown after Insert Page #, not after typing the
+       footer; UNVERIFIED beyond these) */
+    if (!typed)
+        view_caret_now();
 }
 
 BOOL CALLBACK __export HeadDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)

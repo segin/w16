@@ -1,0 +1,344 @@
+; WR20 (probe, the original only: tests/wrobs.sh, REFRUN_TIMEOUT=400):
+; the vertical scroll bar's thumb against the top line. 40 lines
+; "line N" typed, Ctrl+Home, then the down arrow clicked one line at a
+; time (shots A00-A39); then 100 more characters on the last line and
+; the same again (B00-B39).
+run WRITE.EXE
+wait 3000
+type line 1
+key 0D
+type line 2
+key 0D
+type line 3
+key 0D
+type line 4
+key 0D
+type line 5
+key 0D
+type line 6
+key 0D
+type line 7
+key 0D
+type line 8
+key 0D
+type line 9
+key 0D
+type line 10
+key 0D
+type line 11
+key 0D
+type line 12
+key 0D
+type line 13
+key 0D
+type line 14
+key 0D
+type line 15
+key 0D
+type line 16
+key 0D
+type line 17
+key 0D
+type line 18
+key 0D
+type line 19
+key 0D
+type line 20
+key 0D
+type line 21
+key 0D
+type line 22
+key 0D
+type line 23
+key 0D
+type line 24
+key 0D
+type line 25
+key 0D
+type line 26
+key 0D
+type line 27
+key 0D
+type line 28
+key 0D
+type line 29
+key 0D
+type line 30
+key 0D
+type line 31
+key 0D
+type line 32
+key 0D
+type line 33
+key 0D
+type line 34
+key 0D
+type line 35
+key 0D
+type line 36
+key 0D
+type line 37
+key 0D
+type line 38
+key 0D
+type line 39
+key 0D
+type line 40
+key 0D
+kdown 11
+kdown 24
+kup 24
+kup 11
+wait 500
+snap C:\A00.BMP
+click 624 379
+wait 300
+snap C:\A01.BMP
+click 624 379
+wait 300
+snap C:\A02.BMP
+click 624 379
+wait 300
+snap C:\A03.BMP
+click 624 379
+wait 300
+snap C:\A04.BMP
+click 624 379
+wait 300
+snap C:\A05.BMP
+click 624 379
+wait 300
+snap C:\A06.BMP
+click 624 379
+wait 300
+snap C:\A07.BMP
+click 624 379
+wait 300
+snap C:\A08.BMP
+click 624 379
+wait 300
+snap C:\A09.BMP
+click 624 379
+wait 300
+snap C:\A10.BMP
+click 624 379
+wait 300
+snap C:\A11.BMP
+click 624 379
+wait 300
+snap C:\A12.BMP
+click 624 379
+wait 300
+snap C:\A13.BMP
+click 624 379
+wait 300
+snap C:\A14.BMP
+click 624 379
+wait 300
+snap C:\A15.BMP
+click 624 379
+wait 300
+snap C:\A16.BMP
+click 624 379
+wait 300
+snap C:\A17.BMP
+click 624 379
+wait 300
+snap C:\A18.BMP
+click 624 379
+wait 300
+snap C:\A19.BMP
+click 624 379
+wait 300
+snap C:\A20.BMP
+click 624 379
+wait 300
+snap C:\A21.BMP
+click 624 379
+wait 300
+snap C:\A22.BMP
+click 624 379
+wait 300
+snap C:\A23.BMP
+click 624 379
+wait 300
+snap C:\A24.BMP
+click 624 379
+wait 300
+snap C:\A25.BMP
+click 624 379
+wait 300
+snap C:\A26.BMP
+click 624 379
+wait 300
+snap C:\A27.BMP
+click 624 379
+wait 300
+snap C:\A28.BMP
+click 624 379
+wait 300
+snap C:\A29.BMP
+click 624 379
+wait 300
+snap C:\A30.BMP
+click 624 379
+wait 300
+snap C:\A31.BMP
+click 624 379
+wait 300
+snap C:\A32.BMP
+click 624 379
+wait 300
+snap C:\A33.BMP
+click 624 379
+wait 300
+snap C:\A34.BMP
+click 624 379
+wait 300
+snap C:\A35.BMP
+click 624 379
+wait 300
+snap C:\A36.BMP
+click 624 379
+wait 300
+snap C:\A37.BMP
+click 624 379
+wait 300
+snap C:\A38.BMP
+click 624 379
+wait 300
+snap C:\A39.BMP
+kdown 11
+kdown 23
+kup 23
+kup 11
+wait 300
+type xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+type yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+kdown 11
+kdown 24
+kup 24
+kup 11
+wait 500
+snap C:\B00.BMP
+click 624 379
+wait 300
+snap C:\B01.BMP
+click 624 379
+wait 300
+snap C:\B02.BMP
+click 624 379
+wait 300
+snap C:\B03.BMP
+click 624 379
+wait 300
+snap C:\B04.BMP
+click 624 379
+wait 300
+snap C:\B05.BMP
+click 624 379
+wait 300
+snap C:\B06.BMP
+click 624 379
+wait 300
+snap C:\B07.BMP
+click 624 379
+wait 300
+snap C:\B08.BMP
+click 624 379
+wait 300
+snap C:\B09.BMP
+click 624 379
+wait 300
+snap C:\B10.BMP
+click 624 379
+wait 300
+snap C:\B11.BMP
+click 624 379
+wait 300
+snap C:\B12.BMP
+click 624 379
+wait 300
+snap C:\B13.BMP
+click 624 379
+wait 300
+snap C:\B14.BMP
+click 624 379
+wait 300
+snap C:\B15.BMP
+click 624 379
+wait 300
+snap C:\B16.BMP
+click 624 379
+wait 300
+snap C:\B17.BMP
+click 624 379
+wait 300
+snap C:\B18.BMP
+click 624 379
+wait 300
+snap C:\B19.BMP
+click 624 379
+wait 300
+snap C:\B20.BMP
+click 624 379
+wait 300
+snap C:\B21.BMP
+click 624 379
+wait 300
+snap C:\B22.BMP
+click 624 379
+wait 300
+snap C:\B23.BMP
+click 624 379
+wait 300
+snap C:\B24.BMP
+click 624 379
+wait 300
+snap C:\B25.BMP
+click 624 379
+wait 300
+snap C:\B26.BMP
+click 624 379
+wait 300
+snap C:\B27.BMP
+click 624 379
+wait 300
+snap C:\B28.BMP
+click 624 379
+wait 300
+snap C:\B29.BMP
+click 624 379
+wait 300
+snap C:\B30.BMP
+click 624 379
+wait 300
+snap C:\B31.BMP
+click 624 379
+wait 300
+snap C:\B32.BMP
+click 624 379
+wait 300
+snap C:\B33.BMP
+click 624 379
+wait 300
+snap C:\B34.BMP
+click 624 379
+wait 300
+snap C:\B35.BMP
+click 624 379
+wait 300
+snap C:\B36.BMP
+click 624 379
+wait 300
+snap C:\B37.BMP
+click 624 379
+wait 300
+snap C:\B38.BMP
+click 624 379
+wait 300
+snap C:\B39.BMP
+close
+wait 1000
+key 4E
+wait 1000

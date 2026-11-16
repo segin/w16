@@ -1,0 +1,28 @@
+; WR21: a manual page break (Ctrl+Enter, real keys) between two lines:
+; how it shows (P1), Up onto it (P2), typing there (P3), and how it is
+; saved (C:\WR21.WRI)
+run WRITE.EXE
+wait 3000
+type one
+kdown 11
+kdown 0D
+kup 0D
+kup 11
+wait 300
+type two
+wait 300
+snap C:\P1.BMP
+key 26
+wait 300
+snap C:\P2.BMP
+type X
+wait 300
+snap C:\P3.BMP
+menu f
+char a
+wait 1500
+type C:\WR21.WRI
+key 0D
+wait 2000
+close
+wait 1000

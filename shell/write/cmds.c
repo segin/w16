@@ -39,6 +39,11 @@ void undo_end_typing(void)
     typingRun = FALSE;
 }
 
+BOOL undo_typing(void)
+{
+    return typingRun;
+}
+
 void undo_clear(void)
 {
     doc_free(&undoDoc);
@@ -570,6 +575,9 @@ void cmd_pagelayout(void)
         undo_save(IDS_FORMATTING);
         sep_encode(&g_doc, &newsep);
         g_doc.dirty = TRUE;
+        /* the document laid out again: the caret off until it blinks
+           (WR4 L2, though shown before the menu; Save As keeps it, WR23) */
+        view_caret_defer();
         view_changed(0);
     }
 }
@@ -857,6 +865,10 @@ void cmd_cut_copy(BOOL cut)
 void cmd_paste(void)
 {
     HGLOBAL h;
+    /* after a paste the caret stays off until it blinks, unless the
+       window scrolled (pictures: WR16, WR17; text UNVERIFIED) */
+    view_caret_defer();
+    undo_end_typing();                  /* WR17: the thumb's count */
     if (ole_paste())
         return;
     if (!OpenClipboard(g_frame))

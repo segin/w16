@@ -1,0 +1,61 @@
+; WR17: a tall picture in the document: where Write scrolls when pasting
+; leaves the caret below the window (A1), then Ctrl+Home and the vertical
+; scroll bar's down arrow clicked step by step (A2-A6: how far one line
+; down moves inside a picture), Page Down by the bar (A7), Ctrl+End (A8);
+; SNAP info logs the scroll bar's range and position after each
+; mkpic: P7X301.DIB
+run WRITE.EXE
+wait 3000
+type top
+key 0D
+clipbmp C:\P7X301.DIB
+menu e
+char p
+wait 1500
+clipbmp C:\P7X301.DIB
+menu e
+char p
+wait 1500
+snap C:\A1.BMP
+info
+kdown 11
+kdown 24
+kup 24
+kup 11
+wait 500
+snap C:\A2.BMP
+click 624 379
+wait 500
+snap C:\A3.BMP
+info
+click 624 379
+wait 500
+snap C:\A4.BMP
+click 624 379
+wait 500
+click 624 379
+wait 500
+snap C:\A5.BMP
+info
+click 624 379
+wait 500
+click 624 379
+wait 500
+click 624 379
+wait 500
+snap C:\A6.BMP
+click 624 300
+wait 500
+snap C:\A7.BMP
+info
+kdown 11
+kdown 23
+kup 23
+kup 11
+wait 500
+snap C:\A8.BMP
+info
+close
+wait 1000
+key 4E
+wait 1000

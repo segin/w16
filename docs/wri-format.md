@@ -257,8 +257,8 @@ wIdent becomes BE32h. Header, as seen for objects:
 | 4 | word | yExt (0) |
 | 6 | word | object type: 1 static (WR7; SDK ch. 8: 2 embedded, 3 link) |
 | 8 | word | horizontal offset from the left indent (0) |
-| 10 | word | width shown, twips (608 for a 40-pixel DIB; 2874 for a 2 x 1 inch metafile: how they are derived from the object's HIMETRIC size is UNVERIFIED) |
-| 12 | word | height shown, twips (295; 1437) |
+| 10 | word | width shown, twips: the object's HIMETRIC width (OleQueryBounds) turned into screen pixels and back as the mapping modes MM_HIMETRIC and MM_TWIPS do, from HORZSIZE and HORZRES: px = round(hm * HORZRES / (100 * HORZSIZE)), twips = round(px * HORZSIZE * 1440 / (25.4 * HORZRES)). On VGA (208 mm, 640 pixels): 1058 HIMETRIC (a 40-pixel DIB) is 33 pixels, 608 twips; 5080 (2 inches) 2874; 16931 (WR10) 9600; DIBs 123 and 250 pixels wide 1843 and 3740 (WR16) |
+| 12 | word | height shown, twips, the same way with VERTSIZE and VERTRES (VGA: 156 mm, 480): 529 HIMETRIC is 16 pixels, 295 twips; 2540 is 1437; 11693 is 6633; DIBs 77, 301 and 3 pixels tall 1161, 4514 and 37 (WR16) |
 | 14 | word | 0 |
 | 16 | dword | size of the data after the header |
 | 20 | dword | 0 |
@@ -276,14 +276,26 @@ until the Insert Object probe), dword length and the class name with its
 NUL ("DIB", "METAFILEPICT"), dword width and dword height in HIMETRIC
 (height negative: 1058 x -529 for 40 x 20 pixels), dword size, then the
 data: a packed DIB (its size rounded up to the global block's, 512 for
-504 bytes of DIB); for METAFILEPICT the 16-bit METAFILEPICT (mm 8, xExt
+504 bytes of DIB, the bytes after the DIB stale memory: 24 of them in
+every DIB of WR16); for METAFILEPICT the 16-bit METAFILEPICT (mm 8, xExt
 5080, yExt 2540, a stale hMF word) and the metafile's bits. On screen the
 picture is as wide and tall as the twips say (rounded to pixels), a
 pixel left of where text starts.
 
+## Word for DOS output (WR23)
+
+Save As > "Word for DOS (*.DOC)" writes the same header, text and CHP and
+PAP FKP pages as a .WRI, then nothing more: no SEP, SETB, PGTB or FFNTB
+page (pnFntb, pnSep, pnSetb, pnPgtb and pnFfntb all equal the page after
+the PAP FKPs) and pnMac (word 48, offset 96) is 0; wIdent stays BE31h,
+wTool AB00h. "Word for DOS/Txt Only (*.DOC)" writes the text alone, as
+Text Files does. Observed for a new document without page layout,
+repagination or pictures; the rest UNVERIFIED.
+
 ## Not yet observed (plan)
 
 Linked objects (Paste Link), Write 3.0 pictures, page breaks inserted by
-Repaginate,
-decimal tabs, the 3.0 Write save format and Word for DOS output. Each
+Repaginate (a manual page break, Ctrl+Enter, is character 12 ending its
+paragraph, the paragraph's fcLim right after it: WR21),
+decimal tabs and the 3.0 Write save format. Each
 gets a WR probe; this file grows with them.

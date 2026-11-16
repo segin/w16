@@ -397,6 +397,11 @@ int doc_save(DOC *d, LPCSTR path, int format)
     WORD pnChar, pnPara, pnFntb, pnSep, pnSetb, pnPgtb, pnFfntb;
     WORD o;
     char buf[PAGE];
+    /* Word for DOS (WR23): the same text and FKP pages, then no section,
+       page or font table (pnSep to pnFfntb all point past the FKPs) and
+       pnMac 0. UNVERIFIED: a document with Page Layout set, or after
+       Repaginate, and documents with pictures */
+    BOOL word = format == FMT_WORD;
     wf = OpenFile(path, &of, OF_CREATE | OF_WRITE);
     if (wf == HFILE_ERROR)
         return 0;
@@ -429,12 +434,12 @@ int doc_save(DOC *d, LPCSTR path, int format)
     pnPara = pn;
     write_fkps(d, &d->paras, d->nparas, FALSE);
     pnFntb = pnSep = pn;                /* Write has no footnotes */
-    if (d->hasSep) {
+    if (d->hasSep && !word) {
         m_cpy(page, d->sep, d->sep[0] + 1 > PAGE ? PAGE : d->sep[0] + 1);
         put_page();
     }
     pnSetb = pn;
-    if (d->hasSep) {
+    if (d->hasSep && !word) {
         WORD *w = (WORD *)page;
         w[0] = 2;                       /* cSed, cSedMax */
         w[1] = 2;
@@ -447,7 +452,7 @@ int doc_save(DOC *d, LPCSTR path, int format)
         put_page();
     }
     pnPgtb = pn;
-    if (d->npages) {
+    if (d->npages && !word) {
         DWORD i;
         WORD n = (WORD)d->npages;
         o = 0;
@@ -463,7 +468,7 @@ int doc_save(DOC *d, LPCSTR path, int format)
             put_page();
     }
     pnFfntb = pn;
-    if (d->hasFfntb) {
+    if (d->hasFfntb && !word) {
         DWORD i;
         WORD n = (WORD)d->nfonts, cb, z = 0, ff = 0xFFFF;
         o = 0;
@@ -499,7 +504,7 @@ int doc_save(DOC *d, LPCSTR path, int format)
     *(WORD *)(page + 24) = pnSetb;
     *(WORD *)(page + 26) = pnPgtb;
     *(WORD *)(page + 28) = pnFfntb;
-    *(WORD *)(page + 96) = pn;
+    *(WORD *)(page + 96) = word ? 0 : pn;
     (void)pnChar;
     _llseek(wf, 0, 0);
     if (_lwrite(wf, (LPCSTR)page, PAGE) != PAGE)

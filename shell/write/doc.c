@@ -606,9 +606,13 @@ BOOL doc_insert(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
         e.lim += n;
         ent_put(&d->paras, k, &e);
     }
-    for (k = 0; k + 1 < n && !noSplit; k++) {
-        if (s[(WORD)k] == '\r' && s[(WORD)k + 1] == '\n') {
-            e.lim = cp + k + 2;
+    for (k = 0; k < n && !noSplit; k++) {
+        /* paragraphs end with CR LF, or with a page break (character 12:
+           WR21, the paragraph's fcLim right after it) */
+        if ((k + 1 < n && s[(WORD)k] == '\r' && s[(WORD)k + 1] == '\n') || s[(WORD)k] == 12) {
+            if (s[(WORD)k] != 12)
+                k++;
+            e.lim = cp + k + 1;
             e.atom = pa;
             if (!ent_insert(&d->paras, &d->nparas, pi, &e))
                 return FALSE;
