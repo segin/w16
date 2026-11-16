@@ -295,6 +295,7 @@ int    doc_save(DOC *d, LPCSTR path, int format);
 #define FMT_WRI     0
 #define FMT_WORD    1
 #define FMT_TEXT    2
+#define FMT_WORDTXT 3                   /* Word for DOS/Txt Only: text (WR23) */
 #define LOAD_OK         0
 #define LOAD_NOFILE     1
 #define LOAD_NOTWRI     2               /* text or Word file: ask to convert */
@@ -337,6 +338,7 @@ extern BOOL g_insChpValid;
 BOOL  view_register(HINSTANCE);
 void  view_reset(void);
 void  view_caret_now(void);
+void  view_caret_menu(void);
 void  view_caret_defer(void);
 BOOL  view_last_typed(void);
 void  view_changed(DWORD cp);           /* text changed at or after cp */

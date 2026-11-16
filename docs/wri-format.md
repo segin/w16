@@ -282,10 +282,20 @@ every DIB of WR16); for METAFILEPICT the 16-bit METAFILEPICT (mm 8, xExt
 picture is as wide and tall as the twips say (rounded to pixels), a
 pixel left of where text starts.
 
+## Word for DOS output (WR23)
+
+Save As > "Word for DOS (*.DOC)" writes the same header, text and CHP and
+PAP FKP pages as a .WRI, then nothing more: no SEP, SETB, PGTB or FFNTB
+page (pnFntb, pnSep, pnSetb, pnPgtb and pnFfntb all equal the page after
+the PAP FKPs) and pnMac (word 48, offset 96) is 0; wIdent stays BE31h,
+wTool AB00h. "Word for DOS/Txt Only (*.DOC)" writes the text alone, as
+Text Files does. Observed for a new document without page layout,
+repagination or pictures; the rest UNVERIFIED.
+
 ## Not yet observed (plan)
 
 Linked objects (Paste Link), Write 3.0 pictures, page breaks inserted by
 Repaginate (a manual page break, Ctrl+Enter, is character 12 ending its
 paragraph, the paragraph's fcLim right after it: WR21),
-decimal tabs, the 3.0 Write save format and Word for DOS output. Each
+decimal tabs and the 3.0 Write save format. Each
 gets a WR probe; this file grows with them.

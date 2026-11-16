@@ -8,6 +8,10 @@
 - 6161a07: steps 4, 5, 6 done. Tall pictures in 16-pixel bands (view.c LINE.yp/picH, cpTop+ypTop, line_next/line_prev/layout_band); caret off-screen rule caret_mid = (h/16)/2*16 (probe WR19, three window heights); thumb range 0-255, pos = round(top*255/mac) with pictures counted as 40 and +32 during a typing run (probe WR20, WR18); caret after paste/typing rules (WR3, WR9 F1, WR16, WR17). New scenarios WR17, WR18. SNAP's `ckey c 24` does not reach 3.1's Write: scripts use kdown 11/kdown 24/kup 24/kup 11. Probe results: build/ref/wr19, build/ref/wr20 (not committed; analysis scripts were throwaway, the numbers are in ARCHITECTURE.md 15.6).
 - 8491923: step 8 (explicit page breaks): Ctrl+Enter = character 12 ending its paragraph, dotted line, no caret before it (WR21). Confirm Page Breaks (Repaginate's option) still not done.
 - Whole Write suite (WR1-WR10, WR15-WR18, WR21, WR11 help) pixel-identical and file-identical at 8491923 (write.baseline all 0).
+- Full `tools/remote-test.sh -n agent-aea9fceec5754718c` at 96c90e5 (boottest-102934): make test pass; boot 110 ok, 4 FAIL: taskman@tree 21-dosesc 974.869 (known, master too), cplclick@co-tree and trails@timed (known master issues), control@tree 06-keyboard 3799 px (the Keyboard applet's Repeat Rate bar; passed on an immediate rerun with w16write: intermittent, timing under load; not Write's).
+- Step 12 (part): Word for DOS save = .WRI pages up to the PAP FKPs, pnMac 0, no SEP/SETB/PGTB/FFNTB; "Word for DOS/Txt Only" = text (WR23, file-identical). wri.py reads pnMac 0 files; writescenarios compares .DOC with wri.py cmp. Back from a dialog the caret has its state from before the menu that led there (view_caret_menu; WR1 S4, WR4 L2, WR23 T1).
+- Step 10 observed only: probe/WR22.txt (Move Picture: gray outline, 8 px per Right, Enter moves the picture; Size Picture: see its shots). Not implemented: Move/Size are still grayed in w16's Write.
+- Known: SNAP posts WM_CHAR 9 from `type` with a tab: 3.1's Write did not insert it in WR23's first version (the handover said it does for WR4's Tabs); not investigated.
 
 
 State on 2026-11-16, last commit before this note e0f0df1. Everything below is committed; the tree is clean.
@@ -99,9 +103,9 @@ tree run), cplclick@co-tree 02-palette (6330 against 18927 before: varies), trai
 7. The ruler (Document > Ruler On; our own art for its buttons).
 8. Confirm Page Breaks (character 12 done: WR21).
 9. Headers and footers in printing.
-10. Move/Size Picture.
+10. Move/Size Picture (run tests/scripts/write/probe/WR22.txt with tests/wrobs.sh to see the original; ARCHITECTURE.md 15.6).
 11. Links, Paste Link, Paste Special; the Object verb menu.
-12. Word for DOS and text-only save.
+12. Word for DOS with Page Layout set, after Repaginate, with pictures (WR23 covers a plain new document); the 3.0 save format.
 13. A centered or right-aligned line mixing regular and bold sits 2 px off (ARCHITECTURE.md 15.6).
 
 ## Rules recap

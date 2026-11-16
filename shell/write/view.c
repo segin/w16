@@ -27,6 +27,7 @@ static DWORD selAnchor;                 /* the fixed end while extending */
 static BOOL caretOn, caretShown, caretDefer;
 static BOOL typing;                     /* view_char at work */
 static BOOL lastTyped;                  /* the last edit was typing */
+static BOOL menuShown, deferBeforeMenu; /* a menu showed the caret */
 static int caretX, caretY, caretH;
 static int dpiX = 96, dpiY = 96;
 static int xpScroll;                    /* horizontal scroll, pixels */
@@ -576,6 +577,7 @@ static void caret_place(void)
    original's caret is not seen after text was typed) */
 static void caret_defer(void)
 {
+    menuShown = FALSE;
     caretDefer = TRUE;
     if (GetFocus() == g_docwnd)
         SetTimer(g_docwnd, TIMER_CARET, GetCaretBlinkTime(), NULL);
@@ -1027,6 +1029,18 @@ static DWORD body_start(void)
     return f;
 }
 
+/* entering a menu shows the caret (WR3, w16write); a dialog the menu
+   leads to gives back the state from before the menu (WR1 S4, WR4 L2:
+   off after typing at the end; WR23: shown) */
+void view_caret_menu(void)
+{
+    if (!menuShown)
+        deferBeforeMenu = caretDefer;
+    menuShown = TRUE;
+    caretDefer = FALSE;
+    caret_place();
+}
+
 /* the caret shows at once (after the Header view, WR9) */
 void view_caret_now(void)
 {
@@ -1241,7 +1255,7 @@ void view_key(WPARAM vk)
     DWORD cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
     DWORD to = cp;
     LINE ln;
-    caretDefer = FALSE;
+    caretDefer = menuShown = FALSE;
     if (vk == VK_DELETE)
         undo_save(IDS_EDITING);
     else
@@ -1386,9 +1400,11 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_SETFOCUS:
-        /* back from a dialog the caret stays off until it blinks (WR1,
-           WR4: none after Save As or Page Layout) */
-        caretDefer = TRUE;
+        /* back from a dialog the caret is as it was before the menu
+           that led there (view_caret_menu) */
+        if (menuShown)
+            caretDefer = deferBeforeMenu;
+        menuShown = FALSE;
         SetTimer(w, TIMER_CARET, GetCaretBlinkTime(), NULL);
         caret_place();
         return 0;

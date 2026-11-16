@@ -1,0 +1,43 @@
+; WR23: one document saved in the other formats of Save As's type list:
+; Word for DOS (C:\WORD.DOC, entry 1), Word for DOS/Txt Only (C:\WTXT.DOC,
+; entry 2) and Text Files (C:\PLAIN.TXT, entry 3); text with bold and a
+; centred paragraph
+run WRITE.EXE
+wait 3000
+type plain 
+menu c
+char b
+type bold
+key 0D
+menu p
+char c
+type centred
+menu f
+char a
+wait 1500
+cbsel 470 1
+wait 300
+type C:\WORD.DOC
+key 0D
+wait 2500
+menu f
+char a
+wait 1500
+cbsel 470 2
+wait 300
+type C:\WTXT.DOC
+key 0D
+wait 2500
+menu f
+char a
+wait 1500
+cbsel 470 3
+wait 300
+type C:\PLAIN.TXT
+key 0D
+wait 2500
+snap C:\T1.BMP
+close
+wait 1000
+key 4E
+wait 1000

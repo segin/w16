@@ -575,6 +575,9 @@ void cmd_pagelayout(void)
         undo_save(IDS_FORMATTING);
         sep_encode(&g_doc, &newsep);
         g_doc.dirty = TRUE;
+        /* the document laid out again: the caret off until it blinks
+           (WR4 L2, though shown before the menu; Save As keeps it, WR23) */
+        view_caret_defer();
         view_changed(0);
     }
 }

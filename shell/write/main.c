@@ -233,7 +233,8 @@ static BOOL file_dialog(BOOL save, char *path)
     ofn.lpstrFilter = filter;
     /* the format the document came in: a converted text file is saved
        as text unless another type is chosen (WR8) */
-    ofn.nFilterIndex = saveFormat == FMT_TEXT ? 4 : saveFormat == FMT_WORD ? 2 : 1;
+    ofn.nFilterIndex = saveFormat == FMT_TEXT ? 4 : saveFormat == FMT_WORD ? 2 :
+                       saveFormat == FMT_WORDTXT ? 3 : 1;
     ofn.lpstrFile = path;
     ofn.nMaxFile = PATH_MAX_DOS;
     ofn.lpstrTitle = title;
@@ -245,8 +246,8 @@ static BOOL file_dialog(BOOL save, char *path)
         ok = GetSaveFileName(&ofn);
         FreeProcInstance(hook);
         if (ok) {
-            saveFormat = ofn.nFilterIndex == 4 ? FMT_TEXT :
-                         ofn.nFilterIndex == 2 || ofn.nFilterIndex == 3 ? FMT_WORD : FMT_WRI;
+            saveFormat = ofn.nFilterIndex == 4 ? FMT_TEXT : ofn.nFilterIndex == 3 ? FMT_WORDTXT :
+                         ofn.nFilterIndex == 2 ? FMT_WORD : FMT_WRI;
             WriteProfileString(s_ini, "Backup", g_backup ? "1" : "0");
         }
     } else {
@@ -259,8 +260,8 @@ static BOOL file_dialog(BOOL save, char *path)
 static BOOL save_to(LPCSTR path)
 {
     int fmt = saveFormat;
-    if (fmt == FMT_WORD)
-        fmt = FMT_WRI;                  /* Word for DOS: not yet (plan) */
+    if (fmt == FMT_WORDTXT)
+        fmt = FMT_TEXT;                 /* the text alone (WR23) */
     if (g_backup) {
         /* the old file becomes name.BKP (UNVERIFIED: the original's
            backup naming for .WRI) */
@@ -476,7 +477,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_INITMENU:
         /* the caret shows when a menu is entered (WR3, w16write: the
            caret that typing left off is there with the menu open) */
-        view_caret_now();
+        view_caret_menu();
         return 0;
     case WM_INITMENUPOPUP:
         if (!HIWORD(lp))

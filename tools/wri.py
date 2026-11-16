@@ -48,6 +48,11 @@ class Doc:
         (self.pnPara, self.pnFntb, self.pnSep, self.pnSetb, self.pnPgtb,
          self.pnFfntb) = struct.unpack_from('<6H', b, 18)
         self.pnMac = w(b, 96)
+        # a Word for DOS file (pnMac 0, WR23): the pages end with the
+        # (absent) font table
+        self.word = self.pnMac == 0
+        if self.word:
+            self.pnMac = self.pnFfntb
         self.pnChar = (self.fcMac + PAGE - 1) // PAGE
         self.text = b[PAGE:self.fcMac]
 
