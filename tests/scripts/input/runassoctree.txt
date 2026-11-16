@@ -1,0 +1,29 @@
+; boot-test case runassoc@tree: w16's install tree alone, Program Manager's
+; File > Run with a document whose extension has no association
+; (C:\RA\U.ABC, a tiny .COM program that would write C:\RANCOM.TXT if DOS
+; ran it): Program Manager's "Application Execution Error" box, OK, the
+; Run box still up, Cancel; then a text file (an association in w16's
+; WIN.INI): Notepad opens it, Alt+F4.
+key alt+f
+key r
+sleep 1
+type C:\RA\U.ABC
+key Return
+match 01-abc 20 2
+shot 01-abc
+key Return
+match 02-run 20 2
+shot 02-run
+key Escape
+match 03-back 20 2
+shot 03-back
+key alt+f
+key r
+sleep 1
+type C:\RA\A.TXT
+key Return
+match 04-txt 30 3
+shot 04-txt
+key alt+F4
+match 05-end 20 2
+shot 05-end

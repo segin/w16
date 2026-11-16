@@ -65,7 +65,32 @@ void savebits_forget_all(void)
         drop(nsaved - 1);
 }
 
-/* the window is about to show at w->rcWindow */
+/* does a visible window from s on (siblings and their children) still
+   have to paint some of rc (screen coordinates)? */
+static BOOL pending(HWND s, const RECT *rc)
+{
+    RECT box;
+    for (; s; s = PW(s)->hwndNext) {
+        PWND w = PW(s);
+        if (!(w->style & WS_VISIBLE))
+            continue;
+        if ((WORD)w->hrgnUpdate == 1) {             /* the whole window */
+            if (IntersectRect(&box, &w->rcWindow, rc))
+                return TRUE;
+        } else if (w->hrgnUpdate && RectInRegion(w->hrgnUpdate, rc))
+            return TRUE;
+        if (w->hwndChild && pending(w->hwndChild, rc))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* the window is about to show at w->rcWindow. Not over a place a window
+   under it has yet to paint: the image would be stale, and the paint,
+   which then comes while this window covers the place, validates it
+   (Program Manager's error box over the place its Run dialog had just
+   left: the Run dialog came back over the box's stale image, and its
+   own image, put back when it closed, showed the old dialog) */
 void savebits_show(HWND h)
 {
     PWND w = valid_wnd(h);
@@ -79,6 +104,8 @@ void savebits_show(HWND h)
     savebits_forget(h);
     SetRect(&scr, 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN]);
     if (!IntersectRect(&rc, &w->rcWindow, &scr))
+        return;
+    if (pending(w->hwndNext, &rc))
         return;
     cx = rc.right - rc.left;
     cy = rc.bottom - rc.top;

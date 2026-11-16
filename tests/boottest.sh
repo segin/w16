@@ -187,6 +187,17 @@
 #              KRNL386: every box and every return code the same; w16's
 #              install tree alone (no OLECLI.DLL) under its KRNL386 and
 #              KRNL286: the same screens, the boxes as 3.1's
+#   runassoc   starting names of every kind (programs, documents with and
+#              without an association, missing files, directories), parts
+#              probe, pm, pmk286, pmk386, tree: SH14 (FindExecutable,
+#              ShellExecute, WinExec, LoadModule) with w16's SHELL on both
+#              of w16's kernels against 3.1's results; Program Manager's
+#              File > Run of each kind (tests/scripts/input/runassoc.txt)
+#              with w16's PROGMAN and SHELL on Microsoft's KERNEL and on
+#              both of w16's against all of Microsoft's: every screen 0
+#              pixels (group icons, carets left out), no document run as a
+#              DOS program; the install tree alone under both kernels
+#              (runassoctree.txt)
 #   swapall    swapalt on w16's install tree alone (build/w16 as C:\W16;
 #              no file of Microsoft's): every part w16's (VGACOLOR.2GR and
 #              MMSOUND.DRV too),
@@ -596,7 +607,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2042,6 +2053,121 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   missingdll: 0 pixels, the same return codes"
         else echo "FAIL missingdll: $r ($out)"; fails=$((fails + 1)); fi ;;
+    runassoc)
+        # starting names of every kind (ARCHITECTURE.md 13.4). Part probe:
+        # SH14 as the shell (FindExecutable, ShellExecute, WinExec and
+        # LoadModule with programs, documents with and without an
+        # association, missing files, directories) with w16's SHELL on
+        # w16's KRNL286 and KRNL386 (Standard mode): no FAIL against 3.1's
+        # table (tests/apps/sh14ref.h) and every observation, strings too,
+        # the same as Microsoft's KRNL386 and SHELL give. Parts pm, pmk286,
+        # pmk386: Program Manager's File > Run of each kind of name
+        # (runassoc.txt: an unassociated document with and without
+        # parameters, a missing document, a file without an extension, a
+        # directory, an extension mapped to a missing program, a directory
+        # with an extension, a text file) with w16's PROGMAN and SHELL on
+        # Microsoft's KERNEL, w16's KRNL286, w16's KRNL386: every screen
+        # 3.1's (the group icons' pictures and the blinking carets left
+        # out) and nothing run as a DOS program (no C:\RANCOM.TXT). Part
+        # tree: w16's install tree alone under its KRNL386 and KRNL286
+        # (runassoctree.txt): the box, nothing run, Notepad for a .TXT,
+        # the same screens under both kernels. Until 2026-11-16 w16's
+        # Program Manager ran a document without an association with
+        # WinExec, which hands it to WINOLDAP: DOS ran it as a .COM program.
+        r=ok
+        python3 -I "$root/tests/scripts/runassocfiles.py" "$out/runassoc-files"
+        rf=$out/runassoc-files
+        set -- -f "$rf/U.ABC=RA/U.ABC" -f "$rf/N=RA/N" -f "$rf/M.W1Q=RA/M.W1Q" -f "$rf/D=RA/D.ABC/D" \
+            -f "$rf/A.TXT=RA/A.TXT"
+        case ${part:-probe} in
+        probe)
+            p="-f $root/build/dos/SH14.EXE=SH14.EXE -f $root/build/dos/SH5.EXE=SH5.EXE"
+            log=c/WINDOWS/TK.LOG
+            # shellcheck disable=SC2086
+            refrun runassoc-pref runassoc "$root/tests/dropin.sh" -3 -r -t 500 -W SH14.END \
+                -o "$out/runassoc-pref" $p -i 'boot:shell=C:\SH14.EXE'
+            for k in k286 k386; do
+                o=; [ $k = k386 ] && o=-3
+                # shellcheck disable=SC2086
+                "$root/tests/dropin.sh" $o -t 500 -W SH14.END -o "$out/runassoc-p$k" $p \
+                    -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -i 'boot:shell=C:\SH14.EXE' \
+                    > "$out/runassoc-p$k.txt" 2>&1 &
+            done
+            wait
+            obsof() { grep -a '^OBS' "$1" | tr -d '\r'; }
+            grep -aq '^SH14 done' "$out/runassoc-pref/$log" 2>/dev/null || r="the reference's SH14 did not finish"
+            for k in k286 k386; do
+                [ "$r" = ok ] || break
+                d=$out/runassoc-p$k
+                grep -aq '^SH14 done' "$d/$log" 2>/dev/null || { r="$k: SH14 did not finish ($d/$log)"; break; }
+                f=$(grep -a '^FAIL' "$d/$log" | head -1 | tr -d '\r')
+                [ -z "$f" ] || { r="$k: $f ($d/$log)"; break; }
+                obsof "$out/runassoc-pref/$log" > "$d.ref"
+                obsof "$d/$log" > "$d.obs"
+                diff "$d.ref" "$d.obs" > "$d.obsdiff" || { r="$k: observations differ from 3.1's ($d.obsdiff)"; break; }
+            done ;;
+        pm|pmk286|pmk386)
+            s=$root/tests/scripts/input/runassoc.txt
+            set -- "$@" -i 'WIN.INI:Extensions:w1q=C:\NOPE.EXE ^.w1q'
+            refrun runassoc-ref runassoc "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/runassoc-ref" -r "$@"
+            # left out: the group icons' pictures (w16's own), the Run
+            # box's and Notepad's blinking carets
+            m="rectangle 60,310 300,342 rectangle 114,160 348,178 rectangle 14,44 18,62"
+            case $part in pm) k=-r ;; pmk286) k= ;; pmk386) k=-3 ;; esac
+            d=$out/runassoc-$part
+            # shellcheck disable=SC2086
+            "$root/tests/inputrun.sh" -s -E "$out/runassoc-ref" -M "$m" -b 40 -t 300 "$s" "$d" $k "$@" \
+                -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                > "$d.txt" 2>&1 || true
+            ls "$out/runassoc-ref"/[01]*.png > /dev/null 2>&1 || r="the reference has no screens"
+            [ ! -f "$out/runassoc-ref/work/c/RANCOM.TXT" ] || r="the reference ran a document as a DOS program"
+            [ ! -f "$d/work/c/RANCOM.TXT" ] || r="$part: a document ran as a DOS program (C:\\RANCOM.TXT)"
+            for f in "$out/runassoc-ref"/[01]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f")
+                [ -f "$d/$s2" ] || { r="$part: no $s2"; break; }
+                magick "$f" -fill black -draw "$m" "$d-a.png"
+                magick "$d/$s2" -fill black -draw "$m" "$d-b.png"
+                n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$part: $s2: $n pixels differ"; break; }
+            done ;;
+        tree)
+            s=$root/tests/scripts/input/runassoctree.txt
+            d=$out/runassoc-t
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "${d}386" -T "$root/build/w16" -3 "$@" \
+                > "${d}386.txt" 2>&1 || true
+            m="rectangle 14,44 18,62 rectangle 114,160 348,178"
+            "$root/tests/inputrun.sh" -e "${d}386/boot.png" -E "${d}386" -M "$m" -b 40 -t 200 \
+                "$s" "${d}286" -T "$root/build/w16" "$@" > "${d}286.txt" 2>&1 || true
+            grep -q '^script done' "${d}386/input.log" 2>/dev/null || r="KRNL386: the script did not finish (${d}386/input.log)"
+            for k in 386 286; do
+                [ "$r" = ok ] || break
+                [ ! -f "${d}$k/work/c/RANCOM.TXT" ] || r="KRNL$k: a document ran as a DOS program (C:\\RANCOM.TXT)"
+            done
+            # the box (its active caption) over the Run box; Notepad's
+            # window (active) for the .TXT
+            if [ "$r" = ok ]; then
+                for b in "01-abc 300 178" "04-txt 300 12"; do
+                    set -- $b
+                    px=$(magick "${d}386/$1.png" -format "%[hex:p{$2,$3}]" info: 2>/dev/null)
+                    case $px in 0000AA*) ;; *) r="KRNL386: $1: no active caption at $2,$3 ($px)"; break ;; esac
+                done
+            fi
+            for f in "${d}386"/[0-9]*.png; do
+                [ "$r" = ok ] || break
+                s2=$(basename "$f")
+                [ -f "${d}286/$s2" ] || { r="KRNL286: no $s2"; break; }
+                magick "$f" -fill black -draw "$m" "$d-a.png"
+                magick "${d}286/$s2" -fill black -draw "$m" "$d-b.png"
+                n=$(magick compare -metric AE "$d-b.png" "$d-a.png" "$d-${s2%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="KRNL286 against KRNL386: $s2: $n pixels differ"; break; }
+            done ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   runassoc: every kind of name as on 3.1"
+        else echo "FAIL runassoc: $r ($out)"; fails=$((fails + 1)); fi ;;
     olecli)
         r=ok
         case ${part:-tree} in
@@ -3815,6 +3941,7 @@ caseparts() {
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
+    runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
@@ -3888,6 +4015,9 @@ partsummary() {
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"
         else echo "FAIL missingdll: $pfirst ($out)"; fi ;;
+    runassoc)
+        if [ $pbad = 0 ]; then echo "ok   runassoc: every kind of name as on 3.1: SH14 (w16's SHELL on both kernels), Program Manager's Run (0 pixels, nothing run as DOS), the tree under both kernels"
+        else echo "FAIL runassoc: $pfirst ($out)"; fi ;;
     zipsetup)
         if [ -f "$out/.zipsetup-skip" ]; then echo "skip zipsetup: no installer (\$W16_7ZSETUP, default ~/Downloads/7zsetw16.exe)"
         elif [ $pbad = 0 ]; then echo "ok   zipsetup: the 7-Zip 16-bit installer's group and items as on 3.1 (w16's PROGMAN on Microsoft's rest: 0 pixels, the same files; the tree under KRNL386 and KRNL286: 3.1's group file)"

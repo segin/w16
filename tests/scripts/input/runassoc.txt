@@ -1,0 +1,100 @@
+; boot-test case runassoc: Program Manager's File > Run with names of each
+; kind (the files made by the case: C:\RA\U.ABC etc., each document a tiny
+; .COM program that would write C:\RANCOM.TXT if DOS ran it). For each:
+; the screen after OK (a box, or nothing), Return (the box's default
+; button), the screen then, Escape (the Run box, if it is still there).
+; 1: an unassociated document
+key alt+f
+key r
+sleep 1
+type C:\RA\U.ABC
+key Return
+match 01-abc 20 2
+shot 01-abc
+key Return
+match 02-abc 20 2
+shot 02-abc
+key Escape
+; 2: the same with parameters
+key alt+f
+key r
+sleep 1
+type C:\RA\U.ABC x y
+key Return
+match 03-args 20 2
+shot 03-args
+key Return
+match 04-args 20 2
+shot 04-args
+key Escape
+; 3: a missing document
+key alt+f
+key r
+sleep 1
+type C:\RA\NONE.ABC
+key Return
+match 05-none 20 2
+shot 05-none
+key Return
+match 06-none 20 2
+shot 06-none
+key Escape
+; 4: a file without an extension (Program Manager's Run adds .EXE?)
+key alt+f
+key r
+sleep 1
+type C:\RA\N
+key Return
+match 07-noext 20 2
+shot 07-noext
+key Return
+match 08-noext 20 2
+shot 08-noext
+key Escape
+; 5: a directory
+key alt+f
+key r
+sleep 1
+type C:\RA
+key Return
+match 09-dir 20 2
+shot 09-dir
+key Return
+match 10-dir 20 2
+shot 10-dir
+key Escape
+; 6: an extension WIN.INI maps to a missing program
+key alt+f
+key r
+sleep 1
+type C:\RA\M.W1Q
+key Return
+match 11-w1q 20 2
+shot 11-w1q
+key Return
+match 12-w1q 20 2
+shot 12-w1q
+key Escape
+; 7: a directory with an extension (ShellExecute's 5)
+key alt+f
+key r
+sleep 1
+type C:\RA\D.ABC
+key Return
+match 13-dirabc 20 2
+shot 13-dirabc
+key Return
+match 14-dirabc 20 2
+shot 14-dirabc
+key Escape
+; 8: an associated document: Notepad opens it (closed again)
+key alt+f
+key r
+sleep 1
+type C:\RA\A.TXT
+key Return
+match 15-txt 30 3
+shot 15-txt
+key alt+F4
+match 16-end 20 2
+shot 16-end
