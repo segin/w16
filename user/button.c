@@ -77,12 +77,32 @@ static BOOL CALLBACK __loadds gray_out(HDC hdc, LPARAM data, int n)
     return TRUE;
 }
 
-/* a disabled control's text is grayed with GrayString's checkerboard,
-   not drawn in COLOR_GRAYTEXT (US4: "Radio 3", the "Gray" button) */
+static void draw_text(HDC hdc, LPSTR text, RECT *rc, UINT fmt, BOOL gray);
+
+/* a control's text in rc */
 static void draw_label(HWND h, HDC hdc, RECT *rc, UINT fmt, BOOL gray)
 {
-    char text[256];
-    GetWindowText(h, text, sizeof text);
+    char buf[256];
+    LPSTR text = buf;
+    HGLOBAL big = 0;
+    int n = GetWindowTextLength(h);
+    /* a longer text whole, as 3.1 shows it (a message box's: the 7-Zip
+       16-bit installer's failure report, 377 characters; this buffer cut it at
+       255, ending "...CreateGroup.\r\nWA") */
+    if (n >= (int)sizeof buf && (big = GlobalAlloc(GMEM_MOVEABLE, (DWORD)n + 1)) != 0)
+        text = (LPSTR)GlobalLock(big);
+    GetWindowText(h, text, big ? n + 1 : sizeof buf);
+    draw_text(hdc, text, rc, fmt, gray);
+    if (big) {
+        GlobalUnlock(big);
+        GlobalFree(big);
+    }
+}
+
+/* a disabled control's text is grayed with GrayString's checkerboard,
+   not drawn in COLOR_GRAYTEXT (US4: "Radio 3", the "Gray" button) */
+static void draw_text(HDC hdc, LPSTR text, RECT *rc, UINT fmt, BOOL gray)
+{
     if (gray) {
         RECT c;
         int x, y;
