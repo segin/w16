@@ -27,6 +27,8 @@ static HWND seen_w[256];        /* window numbering (a probe's table) */
 static WORD n_seen;
 static DWORD last_key[4];
 static WORD verbose = 32;       /* bytes of each data object shown */
+static BOOL times;              /* SpyTimes: each DDE line's time */
+static DWORD t0;
 
 extern WORD __cdecl lib_regs[12];       /* dllstart.asm: DI = instance */
 
@@ -338,6 +340,10 @@ static const char *const names[] = {
 static void log_dde(char how, HWND to, UINT msg, WPARAM wp, LPARAM lp)
 {
     WORD lo = LOWORD(lp), hi = HIWORD(lp);
+    if (times) {                        /* ms since SpyTimes(1) */
+        putdec(GetTickCount() - t0);
+        put(" ");
+    }
     put("DDE ");
     putc_(how);
     putc_(' ');
@@ -557,6 +563,14 @@ void FAR PASCAL __loadds SpyStop(void)
     if (hk_call)
         UnhookWindowsHookEx(hk_call);
     hk_get = hk_call = NULL;
+}
+
+/* SpyTimes(1): the DDE lines start with the milliseconds since this call
+   (to see the timing of a conversation; logs to be compared leave it 0) */
+void FAR PASCAL __loadds SpyTimes(WORD on)
+{
+    times = on != 0;
+    t0 = GetTickCount();
 }
 
 /* the name OC1 should show for a window, as the DDE lines show it */

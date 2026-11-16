@@ -1884,7 +1884,7 @@ $(DOS)/OC1.EXE: $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o $(DOS)/OCSPY.DLL
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ole/oc1.map option stack=40k file { $(B)/tests/start.o $(B)/ole/oc1.o $(B)/ole/i4.o } \
 	    library olecli.lib library shell.lib import SPYLOG OCSPY.1 import SPYSTART OCSPY.2 \
-	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4
+	    import SPYSTOP OCSPY.3 import SPYWINNAME OCSPY.4 import SPYTIMES OCSPY.8
 $(DOS)/OCSRV.EXE: $(B)/tests/start.o $(B)/ole/ocsrv.o $(DOS)/OCSPY.DLL tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \

@@ -8,3 +8,4 @@ export SPYWINNAME.4
 export SPYGETMSG.5
 export SPYCALLWND.6
 export SPYFAULTHOOK.7
+export SPYTIMES.8
