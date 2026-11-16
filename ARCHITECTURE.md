@@ -2037,9 +2037,11 @@ memory past the data; the comparison stops at the first NUL).
   only in the "Progman" atom spelling (below: w16's own Program Manager
   shows it too, so 3.1's DDEML is what makes the "Progman" atom);
   conn, conn+x, monitor, monitor+x, progman as below.
-- Results (installation-05, 2026-11-16): strings, data, transact, advise,
-  flags, uninit and raw (and their +x runs in every combination) equal
-  Microsoft's: 18 of 27 compared pairs. Not equal yet:
+- Results (installation-05, 2026-11-17, boot case ddeml): strings,
+  data, transact, advise, flags, uninit, raw (each also +x, in every
+  combination), progman, tree286 and tree386 equal Microsoft's, with no
+  masking beyond the data tails (atom values and instance names
+  included, 18.6). Not equal yet:
   - **conn**: DdeConnectList with several servers. With a local server,
     3.1 orders the list and pairs the extra client windows with the
     servers in an order w16 does not reproduce yet; with a server of
@@ -2050,9 +2052,6 @@ memory past the data; the comparison stops at the first NUL).
     traffic (two MF_HSZ_INFO events per DdeCreateStringHandle, more for
     every message it posts), which w16 does not mirror; w16 sends one
     event per documented occasion.
-  - progman (and the tree parts) differed in the spelling of the
-    "PROGMAN" atom until w16 made 3.1's own atoms (18.6); they are equal
-    now.
 
 ### 18.5 UNVERIFIED, and not done
 

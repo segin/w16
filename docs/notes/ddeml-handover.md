@@ -145,3 +145,8 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
 - Remaining masking: data block tails after the first NUL only.
 - Still differing: conn (lists with several servers), monitor (event
   stream) - not attempted in task 2.
+- Also fixed in task 2: "Svc:(%04x)" four digits; EC_ENABLEONE re-disables;
+  EXECUTE without data still gets a block; CONVINFO of a pending xact gives
+  XST_*SENT; WM_TIMER on server windows (a server's own sync xact).
+  xact.dm renamed transact.dm (the x prefix had kept it out of every run).
+- Boot case ddeml now: all parts ok except conn, conn+x, monitor, monitor+x.
