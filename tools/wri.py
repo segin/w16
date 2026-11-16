@@ -99,13 +99,16 @@ class Doc:
             r.append((self.pnPgtb * PAGE + 4 + 6 * w(self.page(self.pnPgtb), 0), self.pnFfntb * PAGE))
         if self.pnFfntb != self.pnMac:
             r.append((self.ffntb_end(), self.pnMac * PAGE))
-        # OLE objects: header word 34 changes with every save (WR6)
+        # OLE objects: header word 34 changes with every save (WR6); the
+        # object number at 24 (dwObjNum, SDK ch. 8) is made from the clock
+        # when an object is made (WR10)
         fc = PAGE
         for _, _, fods in self.paps():
             for fcl, _, pr in fods:
                 if pr and len(pr) > 16 and pr[16] & 0x10 and fc + 36 <= self.fcMac \
                         and w(self.data, fc) == 0xE4:
                     r.append((fc + 34, fc + 36))
+                    r.append((fc + 24, fc + 28))
                 fc = fcl
         return r
 

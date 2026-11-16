@@ -136,7 +136,15 @@ static void hf_return(HWND d)
             DWORD rf, rl;
             ATOM32 ra, ga;
             WORD len;
-            run_at(&t, t.cpMac - 1, &rf, &rl, &ra);
+            /* the paragraph mark in the last character's properties, but
+               never as a page number (WR9) */
+            {
+                CHPX c;
+                run_at(&t, t.cpMac - 1, &rf, &rl, &ra);
+                chp_decode(&t, ra, &c);
+                c.special = 0;
+                ra = chp_atom(&t, &c);
+            }
             len = atom_get(&t, ra, b);
             ga = atom_intern(&g_doc, b, len);
             doc_insert(&g_doc, at + t.cpMac, "\r\n", 2, ga);
@@ -198,8 +206,7 @@ BOOL CALLBACK __export HeadDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
         case 3: {                       /* Insert Page #: "(page)" */
             CHPX c;
             sel_props(&c);
-            c.special = 1;
-            c.b0 = 0;
+            c.special = 1;              /* byte 0 as it was (WR9) */
             {
                 DWORD cp = g_selFirst;
                 if (g_selLim > g_selFirst)
@@ -208,14 +215,12 @@ BOOL CALLBACK __export HeadDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 g_selFirst = g_selLim = cp + 1;
                 view_changed(cp);
             }
-            SetFocus(g_docwnd);
             return TRUE;
         }
         case 4:                         /* Clear */
             doc_delete(&g_doc, 0, g_doc.cpMac);
             g_selFirst = g_selLim = 0;
             view_changed(0);
-            SetFocus(g_docwnd);
             return TRUE;
         case IDOK:
         case IDCANCEL:

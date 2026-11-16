@@ -320,6 +320,26 @@ void ole_saved(void)
     OleSavedClientDoc(lhdoc);
 }
 
+/* The names the server shows: Write's and the document's (WR10: an
+   embedded Paintbrush picture's window reads "Paintbrush Picture in
+   (Untitled)"). UNVERIFIED: the client name, and a saved document's name
+   as its file name without the path. */
+static void host_names(LPOLEOBJECT obj)
+{
+    char app[16], doc[PATH_MAX_DOS];
+    const char *p, *base;
+    load_str(IDS_WRITE, app, sizeof app);
+    if (g_path[0]) {
+        for (p = base = g_path; *p; p++)
+            if (*p == '\\' || *p == ':')
+                base = p + 1;
+        s_cpy(doc, base, sizeof doc);
+    } else {
+        load_str(IDS_UNTITLED, doc, sizeof doc);
+    }
+    wait_release(obj, OleSetHostNames(obj, app, doc));
+}
+
 /* ---- drawing ---- */
 
 static WOBJ *load(DWORD pf, DWORD pl)
@@ -369,8 +389,10 @@ BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r)
 void ole_activate(DWORD pf, DWORD pl, const RECT *r)
 {
     WOBJ *o = load(pf, pl);
-    if (o && o->obj)
+    if (o && o->obj) {
         wait_release(o->obj, OleActivate(o->obj, OLEVERB_PRIMARY, TRUE, TRUE, g_docwnd, r));
+        host_names(o->obj);
+    }
 }
 
 /* ---- Insert Object ---- */
@@ -485,7 +507,8 @@ void cmd_insertobj(void)
     *(WORD *)(hdr + 30) = PICHDR;
     *(WORD *)(hdr + 36) = 1000;
     *(WORD *)(hdr + 38) = 1000;
-    doc_insert_para(&g_doc, cp, (const char FAR *)hdr, PICHDR, 0, pa);
+    /* in the typing properties (WR10: one run with the text around it) */
+    doc_insert_para(&g_doc, cp, (const char FAR *)hdr, PICHDR, chp, pa);
     g_doc.ident = 0xBE32;
     g_selFirst = g_selLim = cp + PICHDR;
     view_changed(cp);
@@ -497,4 +520,6 @@ void cmd_insertobj(void)
         o->obj = NULL;
         o->failed = TRUE;
     }
+    if (o->obj)
+        host_names(o->obj);
 }

@@ -226,6 +226,12 @@ static void layout_line(DWORD cp, LINE *ln)
         ln->nspaces = ln->extra = 0;
         return;
     }
+    if (pap.rhc & 6) {
+        /* a running head's indents count from the page's edges: the
+           margins are taken off (WR9: indents 1800 show at indent 0) */
+        pap.dxaLeft -= sep.xaLeft;
+        pap.dxaRight -= sep.xaMac - sep.xaLeft - sep.dxaText;
+    }
     xStart = XP0 + tw2px(pap.dxaLeft + (cp == pf ? pap.dxaLeft1 : 0));
     if (xStart < XP0)
         xStart = XP0;
@@ -671,7 +677,7 @@ static void paint(HWND w)
     SetBkMode(dc, TRANSPARENT);
     l = lines();
     for (i = 0; i < nlines; i++) {
-        if (y + l[i].height > ps.rcPaint.top && y < ps.rcPaint.bottom)
+        if (l[i].height && y + l[i].height > ps.rcPaint.top && y < ps.rcPaint.bottom)
             paint_line(dc, &l[i], y);
         y += l[i].height;
     }
@@ -918,6 +924,7 @@ void sel_props(CHPX *c)
             cp--;
     }
     props_at(cp, c);
+    c->special = 0;                     /* typing after "(page)" is text */
 }
 
 static ATOM32 typing_chp(void)
@@ -1187,6 +1194,7 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_SETFOCUS:
+        caretDefer = FALSE;
         SetTimer(w, TIMER_CARET, GetCaretBlinkTime(), NULL);
         caret_place();
         return 0;
