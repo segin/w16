@@ -1,0 +1,31 @@
+; merge: File > Merge of a 3.0 file into the cards, then saved
+; needs: THREE.CRD
+blink 60000
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Mid
+key 0D
+wait 300
+type mid body
+menu f
+char m
+wait 1500
+type C:\THREE.CRD
+key 0D
+wait 1500
+snap C:\G01.BMP
+menu v
+char l
+wait 500
+snap C:\G02.BMP
+menu v
+char c
+wait 500
+menu f
+char a
+wait 1500
+type C:\MERGED.CRD
+key 0D
+wait 1500

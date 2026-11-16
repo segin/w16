@@ -1,0 +1,15 @@
+;! cp1
+;! file cp1-nq2.ini CP1.INI
+; CPL_NEWINQUIRE answered with dwSize set but returning 1: the answer is
+; used, no CPL_INQUIRE; '&' in a name: the menu's mnemonic
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+menu s
+wait 500
+snap M1.BMP
+key 1B
+key 1B
+wait 300
+close
+wait 2000

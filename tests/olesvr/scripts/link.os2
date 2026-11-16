@@ -1,0 +1,31 @@
+; links: OS1 with a file it registers as a document (C:\LNK.OS1), the
+; client links to an item of it; OS1's script (link.os1) changes, saves
+; and renames the document and revokes it
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OS1Probe\protocol\StdFileEditing\verb\0=Edit
+reg .os1=OS1Probe
+doc OS2LINK
+linkfile OS1Probe C:\LNK.OS1 item1
+query
+update
+activate 0
+wait 12000
+query
+update
+close
+reconnect
+update
+wait 1000
+savestream
+delete
+; embedding from a file and from a template
+embfile OS1Probe C:\EMB.OS1
+close
+delete
+template C:\TPL.OS1
+close
+delete
+revokedoc
+wait 2000
+waitgone OS1

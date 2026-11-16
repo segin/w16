@@ -1,0 +1,45 @@
+; NP6: Find: found, not found, Find Next (F3), Match Case, Up
+; files FOX.TXT
+; log
+run NOTEPAD.EXE C:\FOX.TXT
+wait 2500
+menu s
+char f
+wait 1000
+type quick
+key 0D
+wait 800
+info
+snap C:\FIND1.BMP
+key 0D
+wait 800
+info
+snap C:\FIND2.BMP
+key 0D
+wait 800
+dump
+snap C:\NOTFOUND.BMP
+key 0D
+wait 500
+alt c
+wait 300
+key 0D
+wait 800
+dump
+key 0D
+wait 500
+alt u
+wait 300
+key 0D
+wait 800
+info
+snap C:\FINDUP.BMP
+key 1B
+wait 500
+key 72
+wait 800
+dump
+info
+snap C:\F3.BMP
+key 1B
+wait 300

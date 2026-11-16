@@ -123,6 +123,9 @@ LRESULT CALLBACK __export HotkeyWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_KILLFOCUS:
         DestroyCaret();
         return 0;
+    case WM_ENABLE:
+        InvalidateRect(w, NULL, TRUE);
+        return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(w, &ps);
@@ -131,6 +134,12 @@ LRESULT CALLBACK __export HotkeyWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         text_of(w, text, sizeof text);
         SetBkColor(dc, GetSysColor(COLOR_WINDOW));
         SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+#ifndef W16_WIN2
+        /* disabled (EditLevel=4): grayed text, as an edit control's
+           (observed) */
+        if (!IsWindowEnabled(w))
+            SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
+#endif
         TextOut(dc, 1, 1, text, s_len(text));    /* observed position */
         if (old)
             SelectObject(dc, old);

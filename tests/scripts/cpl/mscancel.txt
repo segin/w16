@@ -1,0 +1,14 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Mouse: everything changed, then Cancel: nothing written
+run CONTROL.EXE MOUSE
+wait 4000
+key 24
+wait 300
+key 09
+key 24
+wait 300
+alt s
+alt t
+wait 300
+key 1B
+wait 2000

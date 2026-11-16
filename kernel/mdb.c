@@ -114,15 +114,19 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
     u8 FAR *t;
     ne_header FAR *h;
 
+    /* the sum in 32 bits first: a file whose tables add up past 64K
+       wrapped the offsets before the check (KERNEL audit, low) */
+    total = (u32)o_seg + ((u32)nseg << 3) + ((u32)nseg << 1) /* MDB_SEGSIZE */ +
+            rs_len + rn_len + mr_len +
+            im_len + en_len + 1 + LF_HEAD - 1 + plen + 1;
+    if (total > 0xFFF0UL || !galloc(GMEM_FIXED, total, 0, &sel))
+        return 0;
     o_rs = o_seg + MDB_SEGSIZE * nseg;
     o_rn = o_rs + rs_len;
     o_mr = o_rn + rn_len;
     o_im = o_mr + mr_len;
     o_en = o_im + im_len;
     o_lf = o_en + en_len;
-    total = (u32)o_lf + 1 + LF_HEAD - 1 + plen + 1;
-    if (total > 0xFFF0UL || !galloc(GMEM_FIXED, total, 0, &sel))
-        return 0;
     /* observed on 3.1 (tests/apps/tk51.c, TOOLHELP's GlobalEntryHandle):
        a module table is its own owner; TOOLHELP then calls it GT_MODULE */
     FarSetOwner(sel, sel);

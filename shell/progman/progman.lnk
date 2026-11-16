@@ -8,3 +8,4 @@ option description 'w16 Program Manager'
 library windows.lib
 library shell.lib
 library commdlg.lib
+import DRAGOBJECT USER.464

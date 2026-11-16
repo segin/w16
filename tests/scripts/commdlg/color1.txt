@@ -1,0 +1,23 @@
+; ChooseColor: the dialog small, full, with an initial colour, hooks
+; a: plain, Cancel
+cd1 color flags=0
+; b: full open, hook, initial colour (RGBINIT), OK
+cd1 color flags=33 rgb=0000FF hook=1 cust=FF0000,00FF00,808080
+; c: prevent full open, help, a colour not in the basic set
+cd1 color flags=D rgb=123456
+; d: errors: size, hook missing
+cd1 color flags=10 hook=0
+cd1 color size=10
+wait 3000
+snap C:\A1.BMP
+dump
+key 1B
+wait 1500
+snap C:\B1.BMP
+dump
+key 0D
+wait 1500
+snap C:\C1.BMP
+dump
+key 1B
+wait 1500

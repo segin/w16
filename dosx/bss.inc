@@ -10,6 +10,8 @@ pmvec           resd 256
 excvec          resd 32
 rmorig          resd NHOOK
 rmhooked        resb NHOOK
+                alignb 2
+ps2_pm          resd 1                  ; INT 15h C207h: the client's handler
 cbsel           resw CBSEL_MAX
 cb_static       resb CB_STATIC * 8
 rm_dta          resb 128

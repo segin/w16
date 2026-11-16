@@ -1,0 +1,18 @@
+center
+move 0 -20
+move 0 -20
+move 0 -20
+move 0 -20
+move 0 -20
+move 0 -20
+move 0 -20
+click 1
+keydown shift
+sleep 0.5
+keyup shift
+sleep 1
+glide 4,0 150,0.02
+sleep 2
+glide -4,0 150,0.02
+sleep 3
+shot end

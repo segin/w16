@@ -1,0 +1,69 @@
+# wlink directives for w16's SHELL.DLL (shell/shelldll/; ARCHITECTURE.md 13).
+# Objects, resources and the output name come from the Makefile. Ordinals,
+# names and residency are Windows 3.1's (docs/exportdb/exports.csv): WEP's
+# name is resident, the others' non-resident; 104-128 have no name
+# (tools/nenoname.py removes the placeholder names after linking).
+format windows dll
+option modname=SHELL
+option description 'w16 SHELL'
+option start=libentry
+option heapsize=2k
+option packcode=0xFFF0
+option quiet
+segment type code moveable discardable preload
+segment type data fixed preload
+library windows.lib
+export REGOPENKEY.1
+export REGCREATEKEY.2
+export REGCLOSEKEY.3
+export REGDELETEKEY.4
+export REGSETVALUE.5
+export REGQUERYVALUE.6
+export REGENUMKEY.7
+export WEP.8 resident
+export DRAGACCEPTFILES.9
+export DRAGQUERYFILE.11
+export DRAGFINISH.12
+export DRAGQUERYPOINT.13
+export SHELLEXECUTE.20
+export FINDEXECUTABLE.21
+export SHELLABOUT.22
+export WCI.32
+export ABOUTDLGPROC.33
+export EXTRACTICON.34
+export EXTRACTASSOCIATEDICON.36
+export DOENVIRONMENTSUBST.37
+export FINDENVIRONMENTSTRING.38
+export INTERNALEXTRACTICON.39
+export HERETHARBETYGARS.100
+export FINDEXEDLGPROC.101
+export REGISTERSHELLHOOK.102
+export SHELLHOOKPROC.103
+export SHELL_104.104
+export SHELL_105.105
+export SHELL_106.106
+export _SHELL_107.107
+export SHELL_108.108
+export SHELL_109.109
+export SHELL_110.110
+export SHELL_111.111
+export SHELL_112.112
+export SHELL_113.113
+export SHELL_114.114
+export SHELL_115.115
+export SHELL_116.116
+export SHELL_117.117
+export SHELL_118.118
+export SHELL_119.119
+export SHELL_120.120
+export _SHELL_121.121
+export SHELL_122.122
+export SHELL_123.123
+export SHELL_124.124
+export SHELL_125.125
+export SHELL_126.126
+export _SHELL_127.127
+export _SHELL_128.128
+import DIRECTRESALLOC KERNEL.168
+import GETICONID USER.455
+import LOADICONHANDLER USER.456

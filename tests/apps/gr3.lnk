@@ -1,0 +1,64 @@
+# wlink directives for GR3 (tests/apps/gr3.asm): a recording 386 grabber
+# (module GRABBER, VGA.3GR's names and ordinals) in front of GRABTGT, a
+# scratch copy of the grabber under test renamed at test time.
+format windows dll
+option quiet
+option modname=GRABBER
+option description 'GR3 recording 386 grabber (w16 probe)'
+option start=libentry
+option map
+segment type code fixed preload
+segment type data fixed preload
+export PAINTSCREEN.1=T_1
+export SCREENFREE.2=T_2
+export BEGINSELECTION.3=T_3
+export KEYSELECTION.4=T_4
+export MAKESELCTRECT.5=T_5
+export INVERTSELECTION.6=T_6
+export RENDERSELECTION.7=T_7
+export CONSSELECREC.8=T_8
+export ENDSELECTION.9=T_9
+export GETFONTLIST.10=T_10
+export SETPAINTFNT.11=T_11
+export UPDATESCREEN.12=T_12
+export CURSORON.13=T_13
+export CURSORPOSIT.14=T_14
+export CURSOROFF.15=T_15
+export CHECKGRBVERSION.16=T_16
+export ADJUSTINITENDPT.17=T_17
+export GETDISPLAYUPD.18=T_18
+export GRABEVENT.19=T_19
+export GRABCOMPLETE.20=T_20
+export GRBGETTEXTCOLOR.21=T_21
+export GRBUNLOCKAPP.22=T_22
+export TRANSLATEWINTOFSCREEN.23=T_23
+export WEP.24 resident
+import X_1 GRABTGT.1
+import X_2 GRABTGT.2
+import X_3 GRABTGT.3
+import X_4 GRABTGT.4
+import X_5 GRABTGT.5
+import X_6 GRABTGT.6
+import X_7 GRABTGT.7
+import X_8 GRABTGT.8
+import X_9 GRABTGT.9
+import X_10 GRABTGT.10
+import X_11 GRABTGT.11
+import X_12 GRABTGT.12
+import X_13 GRABTGT.13
+import X_14 GRABTGT.14
+import X_15 GRABTGT.15
+import X_16 GRABTGT.16
+import X_17 GRABTGT.17
+import X_18 GRABTGT.18
+import X_19 GRABTGT.19
+import X_20 GRABTGT.20
+import X_21 GRABTGT.21
+import X_22 GRABTGT.22
+import X_23 GRABTGT.23
+import __0040H KERNEL.193
+import GETMODULEHANDLE KERNEL.47
+import GETPROCADDRESS KERNEL.50
+import ALLOCSELECTOR KERNEL.175
+import SETSELECTORBASE KERNEL.187
+import SETSELECTORLIMIT KERNEL.189

@@ -1,0 +1,15 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: a screen saver (Blank Screen) and a delay of 5 minutes
+run CONTROL.EXE DESKTOP
+wait 4000
+alt a
+wait 300
+key 28
+wait 300
+alt d
+wait 300
+type 5
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

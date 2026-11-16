@@ -1,0 +1,13 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: icon spacing 99, Wrap Title off (IconTitleWrap=0 written)
+run CONTROL.EXE DESKTOP
+wait 4000
+alt s
+wait 300
+type 99
+wait 300
+alt w
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

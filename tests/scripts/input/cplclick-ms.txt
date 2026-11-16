@@ -1,0 +1,454 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Mouse dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it). The case sets WIN.INI MouseSpeed=0:
+; without acceleration the pointer moves one pixel a unit whatever the
+; host's timing (with it, how DOSBox splits a move decides).
+click 1
+sleep 1
+; Control Panel's caption (activates it)
+home
+home
+sleep 0.3
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 15 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; open Mouse
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Return
+sleep 0.4
+sleep 2
+matchnow 01-open 20 1
+; double click bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 15
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; double click bar: shaft
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 15
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 02-dblclk 20 1
+; Swap Left/Right Buttons
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 15
+sleep 0.05
+move 12 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 03-swap 20 1
+; the left button held while swapped: the right box shows it
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+down 1
+sleep 0.8
+matchnow 04-swap-leftdown 20 1
+up 1
+sleep 0.5
+; (now the physical right button clicks)
+; Swap Left/Right Buttons again, with the physical right button
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 15
+sleep 0.05
+move 12 0
+sleep 0.05
+sleep 0.3
+click 3
+sleep 0.6
+; Mouse Trails
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 12 18
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 05-trails 20 1
+; TEST box double-clicked
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 1
+sleep 0.05
+sleep 0.3
+dclick 1
+sleep 0.6
+matchnow 06-testbox 20 1
+; TEST box double-clicked again
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 1
+sleep 0.05
+sleep 0.3
+dclick 1
+sleep 0.6
+matchnow 07-testbox2 20 1
+; the buttons held down over the dialog: the picture shows them
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+down 1
+sleep 0.8
+matchnow 08-leftdown 20 1
+up 1
+sleep 0.5
+down 3
+sleep 0.8
+matchnow 09-rightdown 20 1
+up 3
+sleep 0.5
+; tracking bar: right arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 7 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; tracking bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 10
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; tracking bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 18 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 10
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 10-tracking 20 1
+home
+home
+sleep 0.3
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+move 6 4
+sleep 0.2
+matchnow 11-travel 20 1
+; OK with Return (the pointer now accelerates)
+key Return
+sleep 0.4
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+matchnow 12-closed 20 1
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

@@ -171,7 +171,7 @@ int s_atoi(const char FAR **ps)
 int ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags)
 {
     /* our own resource strings: these buffers fit all of them */
-    char fmt[128], title[40];
+    char fmt[200], title[40];
     LPSTR text;
     int i, j = 0, r;
     LoadString(g_hinst, ids, fmt, sizeof fmt);

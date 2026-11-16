@@ -11,12 +11,10 @@
  * right of the page box. Save As writes [MSWrite] Backup=0|1 to WIN.INI.
  */
 #include "write.h"
-#ifndef W16_WIN2
 #include <commdlg.h>
 #include <shellapi.h>
 /* SHELL.22; not in OpenWatcom's shellapi.h */
 int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
-#endif
 
 HINSTANCE g_hinst;
 HWND g_frame, g_pageinfo, g_hscroll, g_vscroll;
@@ -162,7 +160,6 @@ static BOOL open_path(LPCSTR path)
     return TRUE;
 }
 
-#ifndef W16_WIN2
 static char filter[256];
 
 static void make_filter(BOOL save)
@@ -212,11 +209,9 @@ BOOL CALLBACK __export SaveHook(HWND d, UINT msg, WPARAM wp, LPARAM lp)
         g_backup = IsDlgButtonChecked(d, 0x410);
     return FALSE;
 }
-#endif
 
 static BOOL file_dialog(BOOL save, char *path)
 {
-#ifndef W16_WIN2
     OPENFILENAME ofn;
     char title[32], ext[4];
     FARPROC hook = NULL;
@@ -252,9 +247,6 @@ static BOOL file_dialog(BOOL save, char *path)
         ok = GetOpenFileName(&ofn);
     }
     return ok;
-#else
-    return dlg2_file(save, path);
-#endif
 }
 
 static BOOL save_to(LPCSTR path)
@@ -304,23 +296,16 @@ static BOOL save_to(LPCSTR path)
 
 static void about(void)
 {
-#ifndef W16_WIN2
     char t[32];
     load_str(IDS_WRITE, t, sizeof t);
     ShellAbout(g_frame, t, "", LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_WRITE)));
-#endif
 }
 
 static void help(UINT cmd, DWORD data)
 {
-#ifndef W16_WIN2
     char f[16];
     load_str(IDS_HELPFILE, f, sizeof f);
     WinHelp(g_frame, f, cmd, data);
-#else
-    (void)cmd;
-    (void)data;
-#endif
 }
 
 static LRESULT command(HWND w, WORD id)
@@ -418,9 +403,6 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_CREATE:
         g_frame = w;
-#ifdef W16_WIN2
-        SetMenu(w, menu2_load("MW_MENU"));
-#endif
         /* created in this order: the window dump lists the children
            horizontal bar, vertical bar, page box, text (WR1) */
         g_hscroll = CreateWindow("ScrollBar", NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SBS_HORZ,
@@ -433,10 +415,8 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
                      0, 0, 0, 0, w, NULL, g_hinst, NULL);
         SetScrollRange(g_vscroll, SB_CTL, 0, 100, FALSE);
         SetScrollRange(g_hscroll, SB_CTL, 0, 100, FALSE);
-#ifndef W16_WIN2
         DragAcceptFiles(w, TRUE);       /* both have WS_EX_ACCEPTFILES (WR1) */
         DragAcceptFiles(g_docwnd, TRUE);
-#endif
         return 0;
     case WM_SIZE:
         place_children(LOWORD(lp), HIWORD(lp));
@@ -456,7 +436,6 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_COMMAND:
         return command(w, wp);
-#ifndef W16_WIN2
     case WM_DROPFILES: {
         char path[PATH_MAX_DOS];
         DragQueryFile((HDROP)wp, 0, path, sizeof path);
@@ -465,7 +444,6 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             new_doc();
         return 0;
     }
-#endif
     case WM_CLOSE:
         if (ask_save())
             DestroyWindow(w);
@@ -473,9 +451,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_QUERYENDSESSION:
         return ask_save();
     case WM_DESTROY:
-#ifndef W16_WIN2
         help(HELP_QUIT, 0);             /* with WRITE.HLP named (WR11) */
-#endif
         PostQuitMessage(0);
         return 0;
     }
@@ -500,11 +476,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
         wc.hIcon = LoadIcon(hi, MAKEINTRESOURCE(IDI_WRITE));
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)(COLOR_SCROLLBAR + 1);   /* the corner between the bars (WR6) */
-#ifdef W16_WIN2
-        wc.lpszMenuName = NULL;         /* built in WM_CREATE (compat2.c) */
-#else
         wc.lpszMenuName = "MW_MENU";
-#endif
         wc.lpszClassName = s_frame;
         if (!RegisterClass(&wc) || !view_register(hi))
             return 0;

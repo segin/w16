@@ -1,0 +1,64 @@
+; boot-test case treek386@desk: w16's install tree alone with its desktop
+; version stamp on ([w16] DesktopVersion=1), Clock and Calculator started
+; from File > Run, Calculator moved over the stamp and back, Program
+; Manager moved there and back, both closed: the desktop repainted under
+; them. Run under the tree's KRNL386 and KRNL286: the same screens (Clock's
+; client area, its time, left out). A tester saw, under KRNL386, the
+; desktop painted over Clock with the stamp in the wrong place.
+key alt+f
+key r
+sleep 1
+type clock
+key Return
+settle 20 2
+shot 01-clock
+key alt+Tab
+sleep 1
+key alt+f
+key r
+sleep 1
+type calc
+key Return
+settle 20 2
+shot 02-calc
+key alt+space
+key m
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right
+key Return
+settle 20 2
+shot 03-calcmoved
+key alt+space
+key m
+key Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up
+key Return
+settle 20 2
+shot 04-calcup
+key alt+Tab
+settle 20 2
+shot 05-tab
+key alt+space
+key m
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right Right
+key Return
+settle 20 2
+shot 06-moved2
+key alt+space
+key m
+key Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up
+key Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left Left
+key Return
+settle 20 2
+shot 07-back2
+key alt+Tab
+settle 20 2
+shot 08-tab
+key alt+F4
+settle 20 2
+shot 09-close1
+key alt+Tab
+settle 20 2
+key alt+F4
+settle 20 2
+shot 10-close2

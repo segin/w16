@@ -1,0 +1,27 @@
+; OLESVR's windows (class details, titles, children) at each stage: a
+; server, a document, objects with clients, two documents (OS1 /S)
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding /S
+wait 2000
+wins
+init OS1Probe OLEsystem
+exec [StdNewDocument("OS1Probe","W1")]
+exec [StdNewDocument("OS1Probe","W2")]
+wins
+term
+init OS1Probe W1
+req i1 Native
+advise i2 Native 32768
+req i1 OwnerLink
+wins
+exec [StdCloseDocument]
+wait 1000
+term
+wins
+init OS1Probe OLEsystem
+exec [StdExit]
+wait 2000
+term
+wins
+waitgone OS1

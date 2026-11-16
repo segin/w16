@@ -1,0 +1,6 @@
+# SY1.EXE (tests/apps/sy1.c, sy1s.asm, kb1s.asm): the system driver
+# interface probe
+@tests/apps/app.lnk
+import U_INITAPP USER.5
+import __0000H KERNEL.183
+import K_GETEXEPTR KERNEL.133

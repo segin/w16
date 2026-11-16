@@ -1,0 +1,24 @@
+; PrintDlg without a printer, and with a printer whose driver is missing
+; a: no default printer, warning
+cd1 print flags=0
+cd1 wait 500
+; b: no default printer, PD_NOWARNING
+cd1 print flags=80
+; c: RETURNDEFAULT
+cd1 print flags=400
+; d: Print Setup
+cd1 print flags=40
+cd1 wait 500
+; e: structure size and hook checks
+cd1 print flags=0 size=10
+cd1 print flags=1000
+cd1 print flags=2000
+wait 2500
+snap C:\A1.BMP
+dump
+key 0D
+wait 1500
+snap C:\D1.BMP
+dump
+key 0D
+wait 1500

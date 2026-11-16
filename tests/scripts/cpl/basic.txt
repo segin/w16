@@ -1,0 +1,32 @@
+; Control Panel with the stock applets: the window, moving the selection
+; (the status line follows), the Settings and Help menus, closing
+; (CONTROL.INI [MMCPL] NumApps, X, Y, W, H)
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+key 27
+wait 300
+snap S1.BMP
+key 28
+wait 300
+snap S2.BMP
+key 23
+wait 300
+snap S3.BMP
+key 24
+wait 300
+snap S4.BMP
+menu s
+wait 500
+snap M1.BMP
+key 1B
+key 1B
+wait 300
+menu h
+wait 500
+snap M2.BMP
+key 1B
+key 1B
+wait 300
+close
+wait 2000

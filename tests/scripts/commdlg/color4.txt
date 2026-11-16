@@ -1,0 +1,86 @@
+; ChooseColor: hue and saturation typed into the edits; where the
+; cross and the lum bar's arrow go
+cd1 color flags=3 rgb=0000FF
+wait 6000
+alt h
+type 0
+alt s
+type 240
+alt l
+type 120
+key 09
+wait 1500
+snap C:\H0.BMP
+dump
+alt h
+type 40
+alt s
+type 240
+alt l
+type 60
+key 09
+wait 1500
+snap C:\H1.BMP
+dump
+alt h
+type 80
+alt s
+type 120
+alt l
+type 200
+key 09
+wait 1500
+snap C:\H2.BMP
+dump
+alt h
+type 120
+alt s
+type 60
+alt l
+type 30
+key 09
+wait 1500
+snap C:\H3.BMP
+dump
+alt h
+type 239
+alt s
+type 240
+alt l
+type 120
+key 09
+wait 1500
+snap C:\H4.BMP
+dump
+alt h
+type 200
+alt s
+type 10
+alt l
+type 239
+key 09
+wait 1500
+snap C:\H5.BMP
+dump
+alt h
+type 100
+alt s
+type 200
+alt l
+type 1
+key 09
+wait 1500
+snap C:\H6.BMP
+dump
+alt h
+type 30
+alt s
+type 100
+alt l
+type 180
+key 09
+wait 1500
+snap C:\H7.BMP
+dump
+key 0D
+wait 2000

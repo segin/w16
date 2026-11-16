@@ -8,9 +8,7 @@
  * down in docs/wri-format.md (the file format) and ARCHITECTURE.md
  * ("Write" under 15 Applets).
  *
- * Built medium model, no C runtime. One source tree, two builds: the 3.x
- * one and the Windows 2.x one (W16_WIN2: 8086 code, no COMMDLG, OLE,
- * WinHelp, TrueType; see compat2.c).
+ * Built medium model, no C runtime; Windows 3.1 only.
  */
 #ifndef WRITE_H
 #define WRITE_H
@@ -81,14 +79,12 @@
 #define IDD_FIND            12
 #define IDD_REPLACE         13
 #define IDD_GOTO            14
-#define IDD_FONTS2          15          /* the 2.x build's font dialog */
 #define IDD_INDENTS         16
 #define IDD_HEADER          17
 #define IDD_FOOTER          18
 #define IDD_TABS            19
 #define IDD_PAGELAYOUT      20
 #define IDD_MARGINS         21
-#define IDD_OPEN2           30          /* the 2.x build's file dialog */
 
 /* strings: the original's IDs (string tables, tools/nerc.py) */
 #define IDS_UNDO            1
@@ -354,7 +350,5 @@ extern BOOL g_backup;
 HWND  find_dialog(void);
 ATOM32 pap_atom_x(DOC *d, const PAPX *p, BOOL expl);
 void  dos_rename(LPCSTR from, LPCSTR to);   /* i4.asm */
-BOOL  dlg2_file(BOOL save, char *path);     /* compat2.c, 2.x build */
-HMENU menu2_load(LPCSTR name);
 
 #endif

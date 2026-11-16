@@ -1,0 +1,23 @@
+; OleBlockServer: OS1 blocks at once (block.os1) and unblocks after 6 s;
+; meanwhile raw DDE requests arrive on both topics
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+run C:\OS1.EXE -Embedding
+wait 2000
+init OS1Probe OLEsystem
+exec [StdNewDocument("OS1Probe","BLK")]
+term
+init OS1Probe BLK
+req item1 Native
+pokehost BlockClient BlockDoc
+advise item1 Native 32768
+exec [StdShowItem("item1")]
+wait 8000
+req item1 Native
+exec [StdCloseDocument]
+wait 1000
+term
+init OS1Probe OLEsystem
+exec [StdExit]
+wait 2000
+waitgone OS1

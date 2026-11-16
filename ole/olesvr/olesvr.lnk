@@ -1,0 +1,40 @@
+# wlink directives for OLESVR.DLL (ole/olesvr/; ARCHITECTURE.md 16).
+# Ordinals, names and residency are those of Windows 3.1's OLESVR
+# (docs/exportdb/exports.csv): WEP resident, the rest non-resident.
+# Ordinals 21-31 are the library's internal window and helper procedures;
+# nothing imports them (exportdb), w16 exports its own counterparts there.
+format windows dll
+option modname=OLESVR
+option description 'w16 OLE 1.0 server library'
+option start=svr_libentry
+option quiet
+option map
+option heapsize=4096
+segment type code loadoncall moveable discardable
+segment ENTRY_TEXT fixed preload
+segment type data moveable preload
+library windows.lib
+library shell.lib
+export WEP.1 resident
+export OLEREGISTERSERVER.2
+export OLEREVOKESERVER.3
+export OLEBLOCKSERVER.4
+export OLEUNBLOCKSERVER.5
+export OLEREGISTERSERVERDOC.6
+export OLEREVOKESERVERDOC.7
+export OLERENAMESERVERDOC.8
+export OLEREVERTSERVERDOC.9
+export OLESAVEDSERVERDOC.10
+export OLEREVOKEOBJECT.11
+export OLEQUERYSERVERVERSION.12
+export SRVRWNDPROC.21
+export DOCWNDPROC.22
+export ITEMWNDPROC.23
+export SENDDATAMSG.24
+export FINDITEMWND.25
+export ITEMCALLBACK.26
+export TERMINATECLIENTS.27
+export TERMINATEDOCCLIENTS.28
+export DELETECLIENTINFO.29
+export SENDRENAMEMSG.30
+export ENUMFORTERMINATE.31

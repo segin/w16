@@ -1,0 +1,12 @@
+wait 7000
+changed
+wait 1000
+saved
+wait 1000
+closed
+wait 1000
+revokeobj
+wait 1000
+changed
+wait 1000
+revokesrv

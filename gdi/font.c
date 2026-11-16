@@ -24,7 +24,8 @@
  */
 #include "gdi.h"
 
-NPFONT fonts;
+/* the font table: FONTENTs in GDI's heaps (heap.c), linked by XP */
+XP fonts;
 
 #define RT_FONTDIR 7
 #define RT_FONT 8
@@ -86,11 +87,12 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
     n = *(WORD __far *)p;
     p += 2;
     for (i = 0; i < n; i++) {
-        NPFONT f = (NPFONT)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(FONTENT));
+        XP xf = xalloc(sizeof(FONTENT));
+        LPFONT f = xptr(xf);
         BYTE __far *e = p + 2;
         const char __far *dev, *face;
         int k;
-        if (!f)
+        if (!xf)
             break;
         f->hMod = h;
         f->resId = *(WORD __far *)p;
@@ -115,7 +117,7 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         for (k = 0; file && k < 12 && file[k]; k++)
             f->file[k] = file[k];
         f->next = fonts;
-        fonts = f;
+        fonts = xf;
         added++;
         gdi_log("font: ");
         gdi_log(f->face);
@@ -162,11 +164,12 @@ int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
 
 BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
 {
-    NPFONT *pp = &fonts;
+    XP __far *pp = &fonts;
     HINSTANCE h = 0;
     int found = 0;
     while (*pp) {
-        NPFONT f = *pp;
+        XP xf = *pp;
+        LPFONT f = xptr(xf);
         if (file && SELECTOROF(file) ? !str_icmp(f->file, file) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
             *pp = f->next;
             h = f->hMod;
@@ -178,7 +181,7 @@ BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
                 GlobalUnlock(f->hMem);
                 GlobalFree(f->hMem);
             }
-            LocalFree((HLOCAL)f);
+            xfree(xf);
             found = 1;
             continue;
         }
@@ -203,7 +206,7 @@ static void substitute(LPCSTR face, char *out)
         GetProfileString("FontSubstitutes", name, name, out, LF_FACESIZE);
 }
 
-static long penalty(NPFONT f, const LOGFONT __far *lf, const char *face)
+static long penalty(LPFONT f, const LOGFONT __far *lf, const char *face)
 {
     long p = 0;
     int want, have, d;
@@ -239,17 +242,17 @@ static long penalty(NPFONT f, const LOGFONT __far *lf, const char *face)
     return p;
 }
 
-static NPFONT font_map(const LOGFONT __far *lf)
+static XP font_map(const LOGFONT __far *lf)
 {
     char face[LF_FACESIZE];
-    NPFONT f, best = 0;
+    XP x, best = 0;
     long bp = 0x7FFFFFFFL;
     substitute(lf->lfFaceName, face);
-    for (f = fonts; f; f = f->next) {
-        long p = penalty(f, lf, face);
+    for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+        long p = penalty(xptr(x), lf, face);
         if (p < bp) {
             bp = p;
-            best = f;
+            best = x;
         }
     }
     return best;
@@ -263,7 +266,7 @@ static NPFONT font_map(const LOGFONT __far *lf)
    character table of 3.x entries (width, 32-bit offset) at 94h, the bits
    right after it (dfBitsOffset 5DAh for 225 + 1 characters) and the face
    name moved by as much (dfFace 171Ah). */
-static LPFONTINFO font_info(NPFONT f)
+static LPFONTINFO font_info(LPFONT f)
 {
     HRSRC r;
     BYTE __far *p, __far *base;
@@ -320,47 +323,64 @@ static LPFONTINFO font_info(NPFONT f)
     return fi;
 }
 
-NPFONT font_realize(NPDC dc)
+LPFONT dc_font(LPDC dc)
 {
-    FONTOBJ NEAR *fo = obj_get(dc->hFont, FONT_MAGIC);
-    NPFONT f;
-    LPFONTINFO fi;
+    return dc->xFont ? (LPFONT)xptr(dc->xFont) : (LPFONT)0;
+}
+
+LPFONT font_realize(LPDC dc)
+{
+    LPFONTOBJ fo = obj_get(dc->hFont, FONT_MAGIC);
+    XP x;
+    LPFONT f;
     LOGFONT lf;
+    int i;
     if (!fo)
         return 0;
-    if (dc->pfont && dc->hFontOf == dc->hFont && dc->lpPDevOfFont == dc->lpPDevice)
-        return dc->pfont;
-    lf = fo->lf;
+    if (dc->xFont && dc->hFontOf == dc->hFont && dc->lpPDevOfFont == dc->lpPDevice)
+        return xptr(dc->xFont);
+    /* the object's block ends after the face name */
+    mem_set(&lf, 0, sizeof lf);
+    mem_copy(&lf, &fo->lf, LF_FIXEDPART);
+    for (i = 0; i < LF_FACESIZE - 1 && fo->lf.lfFaceName[i]; i++)
+        lf.lfFaceName[i] = fo->lf.lfFaceName[i];
     /* the driver first: device fonts (none on VGA: RealizeObject gives 0) */
     ((DRVREALIZE)dc->dev->fn[DRV_REALIZEOBJECT])(dc->lpPDevice, OBJ_FONT, &lf, 0, 0);
-    f = font_map(&lf);
-    if (!f)
+    x = font_map(&lf);
+    if (!x)
         return 0;
+    f = xptr(x);
     gdi_log("font_realize: ");
     gdi_log(lf.lfFaceName);
     gdi_loghex(" -> height", f->height);
     gdi_log(f->face);
     gdi_log("\r\n");
-    fi = font_info(f);
-    if (!fi)
+    if (!font_info(f))
         return 0;
-    dc->pfont = f;
+    dc->xFont = x;
     dc->hFontOf = dc->hFont;
     dc->lpPDevOfFont = dc->lpPDevice;
-    mem_set(&dc->xform, 0, sizeof dc->xform);
-    dc->xform.txfHeight = fi->dfPixHeight;
-    dc->xform.txfWidth = fi->dfAvgWidth;
-    dc->xform.txfWeight = fi->dfWeight;
+    return f;
+}
+
+/* the TEXTXFORM the driver gets for the DC's realized font f */
+void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx)
+{
+    LPFONTOBJ fo = obj_get(dc->hFont, FONT_MAGIC);
+    LPFONTINFO fi = f->fi;
+    mem_set(tx, 0, sizeof *tx);
+    tx->txfHeight = fi->dfPixHeight;
+    tx->txfWidth = fi->dfAvgWidth;
+    tx->txfWeight = fi->dfWeight;
     /* bold by the driver (dpText TC_EA_DOUBLE: doubling the weight):
        3.1's dialogs show MS Sans Serif 8 bold, which SSERIFE.FON lacks.
        UNVERIFIED: the threshold, and the TEXTXFORM 3.1 passes (weight,
        accelerator bit, overhang 1) */
-    if (lf.lfWeight >= 600 && fi->dfWeight < 600 &&
+    if (fo && fo->lf.lfWeight >= 600 && fi->dfWeight < 600 &&
         (dc->dev->info.dpText & 0x0200)) {
-        dc->xform.txfWeight = 700;
-        dc->xform.txfAccelerator |= 0x0200;
-        dc->xform.txfOverhang = 1;
+        tx->txfWeight = 700;
+        tx->txfAccelerator |= 0x0200;
+        tx->txfOverhang = 1;
     }
     /* UNVERIFIED: simulated underline, strike-out, italic */
-    return f;
 }

@@ -1,0 +1,78 @@
+; Files dragged from File Manager onto Program Manager's groups
+; (journalled mouse input; File Manager above, Program Manager below).
+; Only files with icons of their own or of an associated program: a DOS
+; program's or a .PIF's item would hold our own icon art in its bits.
+;pre MD C:\PMDROP
+;pre COPY C:\WINDOWS\CALC.EXE C:\PMDROP\CALC.EXE
+;pre COPY C:\WINDOWS\NOTEPAD.EXE C:\PMDROP\NOTEPAD.EXE
+;pre COPY C:\WINDOWS\WRITE.EXE C:\PMDROP\WRITE.EXE
+;pre ECHO hello> C:\PMDROP\README.TXT
+;pre ECHO data> C:\PMDROP\DATA.XYZ
+run WINFILE.EXE
+wait 3000
+move 0 0 640 250
+wait 500
+; the tree: C:\PMDROP (calc 113, data 129, notepad 145, readme 161,
+; write 177 in the directory list)
+mclick 60 113
+wait 1500
+run PROGMAN.EXE
+wait 3000
+move 0 250 640 230
+wait 500
+; Main maximized: room for the new items without scroll bars
+childcmd F030
+wait 1000
+; two files (Calc and Notepad, Ctrl+click): the next free cells
+mclick 300 113
+kdown 11
+mclick 300 145
+kup 11
+wait 500
+mdown 300 145
+mmove 300 170
+mmove 500 420
+mup 500 420
+wait 2000
+snap C:\DA1.BMP
+; one document with an association: where it is dropped
+mdown 300 161
+mmove 300 186
+mmove 330 440
+mup 330 440
+wait 2000
+snap C:\DA2.BMP
+; one without: "Invalid Path", Cancel
+mdown 300 129
+mmove 300 154
+mmove 420 440
+mup 420 440
+wait 2000
+snap C:\DA3.BMP
+key 1B
+wait 1000
+snap C:\DA4.BMP
+; on the menu bar (the frame): not taken
+mdown 300 177
+mmove 300 202
+mmove 330 280
+mup 330 280
+wait 1500
+; Main restored, minimized and the icons arranged; one file on its icon
+childcmd F120
+wait 800
+childcmd F020
+wait 800
+menu w
+char a
+wait 1000
+mdown 300 177
+mmove 300 202
+mmove 272 420
+mup 272 420
+wait 2000
+snap C:\DA5.BMP
+close
+wait 1500
+close
+wait 1500

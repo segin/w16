@@ -159,7 +159,6 @@ void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h)
                 g = NULL;
                 done = TRUE;
             }
-#ifndef W16_WIN2
         } else if (p->kind == PK_DIB) {
             BITMAPINFOHEADER FAR *bi = (BITMAPINFOHEADER FAR *)GlobalLock(g);
             int ncol = bi->biClrUsed ? (int)bi->biClrUsed :
@@ -169,7 +168,6 @@ void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h)
                           (BITMAPINFO FAR *)bi, DIB_RGB_COLORS, SRCCOPY);
             GlobalUnlock(g);
             done = TRUE;
-#endif
         } else if (p->kind == PK_BITMAP) {
             BYTE FAR *bits = (BYTE FAR *)GlobalLock(g);
             HBITMAP bm = CreateBitmap(p->bm.bmWidth, p->bm.bmHeight, p->bm.bmPlanes,

@@ -1,0 +1,17 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: Remove Scheme on Arizona, Yes: the key goes, the next scheme
+; (Black Leather Jacket) is selected; OK
+run CONTROL.EXE COLOR
+wait 4000
+alt s
+wait 300
+key 28
+wait 300
+alt m
+wait 800
+snap C0.BMP
+key 0D
+wait 800
+snap C1.BMP
+key 0D
+wait 2000

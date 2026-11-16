@@ -28,22 +28,13 @@
    for one, must not give its caller back an ES holding the freed
    selector. kapi.h (tools/kapiprag.py, at build time) gives every KAPI
    and KAPI_ES function a convention that changes only AX, DX and ES, so
-   the compiler saves BX and CX; __saveregs saves ES. UNVERIFIED: the
-   carry flag, which 3.1 also keeps in some exports. */
+   the compiler saves BX and CX; __saveregs saves ES. Where 3.1 leaves
+   something its callers use in CX (GlobalLock, the local heap: TK43),
+   kentry.asm's export thunks set it. UNVERIFIED: the carry flag, which
+   3.1 also keeps in some exports. */
 #pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx es]
 #include "kapi.h"
 
-/* Exported APIs keep every register but DX:AX (and DS, SI, DI, BP, as
-   any Pascal procedure keeps): observed on Windows 3.1 (TK24, TK31),
-   KERNEL's exports keep BX, CX and ES, and Microsoft's own modules rely
-   on it (Write after GetVersion, MOUSE.DRV after GetDOSEnvironment).
-   kapi.h (tools/kapiprag.py, at build time) gives every KAPI function
-   this convention; the compiler then saves what a function changes (ES
-   too: -r in KCFLAGS). Calls through pointers to other modules' code
-   keep the ordinary Pascal convention. UNVERIFIED: the carry flag,
-   which 3.1 also keeps in some exports. */
-#pragma aux kapi_conv "^" parm reverse routine [] value struct float struct caller [] modify [ax dx]
-#include "kapi.h"
 #define NULL    ((void *)0)
 
 #define MK_FP(s, o)  ((void __far *)(((u32)(u16)(s) << 16) | (u16)(o)))
@@ -72,10 +63,15 @@ extern u32  __cdecl old21;
 
 /* ---- winboot.c ---- */
 extern int winboot_active;
+extern int winboot_done;         /* FinalUserInit called: USER up */
 int  winboot_wanted(void);
 u16  winboot(void);
 void diag_load_start(const char FAR *name);
 void diag_load_end(const char FAR *name, u16 rc);
+
+/* ---- kmisc.c / kmisc2.c ---- */
+u16  error_mode(void);
+void file_error_box(const char FAR *name, const char *ext);
 
 /* ---- fault.c ---- */
 void fault_init(void);
@@ -95,6 +91,11 @@ int  kstricmp(const char FAR *a, const char FAR *b);
 int  kstrnicmp_p(const char FAR *a, const u8 FAR *pstr);  /* vs length-prefixed */
 void kputs(const char FAR *s);
 void kputhex(u16 v);
+void kdbg(const char FAR *s);           /* util.c: w16's diagnostics */
+void kdbg_file(const char FAR *s);
+void kdbghex(u16 v);
+void kdbg_init(const char FAR *path);
+extern u16 win_screen;
 void kputdec(u16 v);
 void kexit_to_dos(u8 code);
 
@@ -181,6 +182,13 @@ typedef struct module {
     u16 dg_min;                 /* the DGROUP's minimum allocation in the
                                    file (the module table's includes the
                                    heap and the stack, as on 3.1) */
+    u16 ending;                 /* loader.c: its WEP is running */
+    u16 dg_snap_of;             /* the DGROUP selector dg_snap was taken
+                                   from (its fixups name it) */
+    u16 lib_ran;                /* loader.c: a DLL's initialisation ran
+                                   (or it has none): its WEP may run */
+    u16 rsrc_ready;             /* resource.c: its resource table's
+                                   handles are KERNEL's (rsrc_init) */
     char path[DOS_PATHMAX];
     modseg seg[1];              /* seg_count entries */
 } module;
@@ -207,6 +215,7 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
               int is_kernel);
 
 extern module FAR *module_first;        /* KERNEL */
+u16 sel_lim16(u16 sel);                 /* selector.c: limit, at most FFFFh */
 void     module_register_kernel(const bootinfo FAR *bi);
 module FAR *module_load_program(const char FAR *path, u16 *err);
 module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit);
@@ -267,6 +276,7 @@ u16  task_prev_instance(module FAR *m);
 void __cdecl inittask_c(regs16 FAR *r);
 void __cdecl task_exit_c(u16 code);
 void KAPI OldYield(void);
+void KAPI Yield(void);
 u32  KAPI_ES GetCurrentTask(void);
 u16  get_winflags(void);
 /* ---- toolhelp.c: THHOOK and the notification hooks ---- */
@@ -283,6 +293,8 @@ void th_task_exit(u16 code);
 void th_logerror(u16 err, void FAR *info);
 void th_logparamerror(u16 err, void FAR *proc, void FAR *param);
 u32  fatal_exit_hook(void);
+void kernel_psp(int on);                /* task.c: KERNEL's PSP current (1)
+                                           or the running task's again (0) */
 #define WF_PMODE        0x0001
 #define WF_CPU286       0x0002
 #define WF_CPU386       0x0004
@@ -290,6 +302,25 @@ u32  fatal_exit_hook(void);
 #define WF_STANDARD     0x0010
 #define WF_ENHANCED     0x0020
 #define WF_80x87        0x0400
+#define WF_PAGING       0x0800
 extern u16 psp_sel;
+#ifdef KRNL386
+/* ---- k386c.c: KRNL386 in 386 Enhanced mode ---- */
+extern u16 k386_enhanced;               /* running under WIN386 */
+extern u16 k386_paging;                 /* with a paging file (WF_PAGING) */
+void k386_init(void);
+void k386_first_task(void);
+extern u8 __cdecl k386_sane;            /* k386.asm: Reboot's sanity byte */
+u16  gpage_lock(u16 h, int up);         /* global386.c: GlobalPageLock */
+void thhook_seltab(u32 off, u16 len);   /* toolhelp.c: THHOOK 16h, 18h */
+#endif
 
 #endif
+
+/* global.c: [w16] heapcheck=1, the heaps checked at each heap call and
+   task switch (where: the API or event; caller: its CS:IP or 0) */
+extern u16 heap_check_on;
+extern u32 api_caller;
+void heap_check(const char *where, u32 caller);
+void local_heap_check(const char *where, u16 ds);
+void heap_fail(const char *why, const char *where, u32 caller, u16 bad, u16 lseg, u16 lbad);

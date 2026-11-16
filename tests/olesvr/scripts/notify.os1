@@ -1,0 +1,24 @@
+wait 6000
+changed
+wait 1000
+saved
+wait 1000
+saveddoc
+wait 1000
+closed
+wait 1000
+renamed
+wait 1000
+renamedoc C:\RENAMED.OS1
+wait 1000
+renamedoc C:\A_MUCH_LONGER_DOCUMENT_NAME_THAN_BEFORE.OS1
+wait 1000
+revokeobj
+wait 1000
+changed
+wait 1000
+regdoc C:\SECOND.OS1
+wait 500
+revokedoc
+wait 1000
+revokesrv

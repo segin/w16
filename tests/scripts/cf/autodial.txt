@@ -1,0 +1,26 @@
+; autodial: F5 with a number on the card, Setup, Pulse, COM2, 2400 baud,
+; Use Prefix; dialing (no modem: COM2 still opens in DOSBox) and the
+; settings in WIN.INI
+blink 60000
+run CARDFILE.EXE
+wait 3000
+type Ann (555) 123-4567 home
+key 74
+wait 1000
+snap C:\A01.BMP
+alt s
+wait 500
+alt u
+alt p
+wait 300
+snap C:\A02.BMP
+key 0D
+wait 3000
+snap C:\A03.BMP
+key 0D
+wait 1000
+key 74
+wait 1000
+snap C:\A04.BMP
+key 1B
+wait 500

@@ -38,14 +38,12 @@ BEGIN
         MENUITEM "Cu&t\tCtrl+X", IDM_CUT
         MENUITEM "&Copy\tCtrl+C", IDM_COPY
         MENUITEM "&Paste\tCtrl+V", IDM_PASTE
-#ifndef W16_WIN2
         MENUITEM "Paste Sp&ecial...", IDM_PASTESPECIAL
         MENUITEM "Paste &Link", IDM_PASTELINK
         MENUITEM SEPARATOR
         MENUITEM "Lin&ks...", IDM_LINKS
         MENUITEM "&Object...", IDM_OBJECT
         MENUITEM "&Insert Object...", IDM_INSERTOBJ
-#endif
         MENUITEM SEPARATOR
         MENUITEM "&Move Picture", IDM_MOVEPICT
         MENUITEM "&Size Picture", IDM_SIZEPICT
@@ -189,9 +187,7 @@ END
 IDD_CONVERT DIALOG 22, 22, 220, 60
 STYLE WR_DLGSTYLE
 CAPTION "Write"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     ICON 32515, -1, 15, 8, 0, 0
     CONTROL "", 99, "Static", 0x50020001L, 35, 14, 180, 20
@@ -203,9 +199,7 @@ END
 IDD_PRINTING DIALOG 20, 20, 90, 64
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Write"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Now Printing", -1, "Static", 0x50020001L, 0, 8, 90, 8
     CONTROL "", 100, "Static", 0x50020081L, 0, 18, 90, 8
@@ -215,9 +209,7 @@ END
 IDD_REPAGINATE DIALOG 90, 100, 155, 45
 STYLE WR_DLGSTYLE
 CAPTION "Repaginate Document"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Confirm Page &Breaks", 3, "Button", 0x50030002L, 5, 15, 100, 12
     CONTROL "OK", 1, "Button", 0x50030001L, 110, 5, 40, 14
@@ -227,9 +219,7 @@ END
 IDD_REPAGINATING DIALOG 15, 50, 94, 50
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Write"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Repaginating", -1, "Static", 0x50020001L, 5, 5, 84, 8
     CONTROL "document", -1, "Static", 0x50020001L, 5, 14, 84, 8
@@ -239,9 +229,7 @@ END
 IDD_CONFIRMBREAK DIALOG 90, 120, 192, 50
 STYLE WR_DLGSTYLE
 CAPTION "Repaginating Document"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Use up and down buttons", -1, "Static", 0x50020000L, 5, 5, 92, 8
     CONTROL "to move page break", -1, "Static", 0x50020000L, 5, 14, 72, 8
@@ -256,9 +244,7 @@ END
 IDD_KEEPBREAK DIALOG 90, 100, 135, 58
 STYLE WR_DLGSTYLE
 CAPTION "Repaginating Document"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     ICON 32515, -1, 5, 5, 0, 0
     CONTROL "Would you like to keep", -1, "Static", 0x50020000L, 30, 7, 92, 12
@@ -271,9 +257,7 @@ END
 IDD_FIND DIALOG 30, 73, 236, 62
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Find"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 8, 42, 8
     CONTROL "", 7, "Edit", 0x50830080L, 47, 7, 128, 12
@@ -286,9 +270,7 @@ END
 IDD_REPLACE DIALOG 36, 44, 257, 80
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Replace"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "Fi&nd What:", -1, "Static", 0x50000000L, 4, 9, 48, 8
     CONTROL "", 7, "Edit", 0x50830080L, 54, 7, 114, 12
@@ -305,9 +287,7 @@ END
 IDD_GOTO DIALOG 87, 63, 95, 40
 STYLE WR_DLGSTYLE
 CAPTION "Go To"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Page Number:", -1, "Static", 0x50020000L, 5, 7, 55, 12
     CONTROL "", 3, "Edit", 0x50810080L, 69, 5, 21, 12
@@ -315,32 +295,10 @@ BEGIN
     CONTROL "Cancel", 2, "Button", 0x50030000L, 50, 22, 40, 14
 END
 
-IDD_FONTS2 DIALOG 80, 36, 180, 100
-STYLE WR_DLGSTYLE
-CAPTION "Fonts"
-#ifndef W16_WIN2
-FONT 8, "Helv"
-#endif
-BEGIN
-    CONTROL "Font &Name:", -1, "Static", 0x50020000L, 5, 5, 45, 12
-    CONTROL "", 3, "Edit", 0x50810080L, 5, 16, 125, 12
-    CONTROL "&Fonts:", -1, "Static", 0x50020000L, 5, 33, 24, 12
-    CONTROL "", 4, "Listbox", 0x50A10003L, 5, 47, 105, 48
-    CONTROL "&Sizes:", -1, "Static", 0x50020000L, 115, 41, 24, 12
-    CONTROL "", 6, "Listbox", 0x50A10003L, 115, 55, 24, 40
-    CONTROL "&Point", -1, "Static", 0x50020000L, 144, 61, 20, 12
-    CONTROL "", 5, "Edit", 0x50810080L, 144, 83, 30, 12
-    CONTROL "Size:", -1, "Static", 0x50020000L, 144, 70, 20, 12
-    CONTROL "OK", 1, "Button", 0x50030001L, 135, 5, 40, 14
-    CONTROL "Cancel", 2, "Button", 0x50030000L, 135, 25, 40, 14
-END
-
 IDD_INDENTS DIALOG 28, 36, 150, 52
 STYLE WR_DLGSTYLE
 CAPTION "Indents"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Left Indent:", -1, "Static", 0x50020000L, 3, 7, 48, 12
     CONTROL "", 3, "Edit", 0x50810080L, 56, 5, 40, 12
@@ -355,9 +313,7 @@ END
 IDD_HEADER DIALOG 80, 110, 228, 42
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Page Header"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Distance from Top:", -1, "Static", 0x50020000L, 5, 7, 70, 12
     CONTROL "", 5, "Edit", 0x50810080L, 85, 5, 33, 12
@@ -370,9 +326,7 @@ END
 IDD_FOOTER DIALOG 80, 110, 228, 42
 STYLE WR_DLGSTYLE | WS_VISIBLE
 CAPTION "Page Footer"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Distance from Bottom:", -1, "Static", 0x50020000L, 5, 7, 80, 12
     CONTROL "", 5, "Edit", 0x50810080L, 95, 5, 33, 12
@@ -385,9 +339,7 @@ END
 IDD_TABS DIALOG 26, 41, 278, 97
 STYLE WR_DLGSTYLE
 CAPTION "Tabs"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Positions:", -1, "Static", 0x50020000L, 3, 7, 40, 12
     CONTROL "", 4, "Edit", 0x50830080L, 45, 5, 38, 12
@@ -425,9 +377,7 @@ END
 IDD_PAGELAYOUT DIALOG 26, 30, 180, 110
 STYLE WR_DLGSTYLE
 CAPTION "Page Layout"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     CONTROL "&Start Page Numbers At:", -1, "Static", 0x50020000L, 5, 7, 88, 12
     CONTROL "", 3, "Edit", 0x50810080L, 95, 5, 30, 12
@@ -450,9 +400,7 @@ END
 IDD_MARGINS DIALOG 50, 20, 235, 65
 STYLE WR_DLGSTYLE
 CAPTION "Write"
-#ifndef W16_WIN2
 FONT 8, "Helv"
-#endif
 BEGIN
     ICON 32515, -1, 5, 5, 0, 0
     CONTROL "Current printer cannot print outside these margins", -1, "Static", 0x50020000L, 30, 5, 200, 12
@@ -467,15 +415,3 @@ BEGIN
     CONTROL "OK", 1, "Button", 0x50010001L, 97, 44, 40, 14
 END
 
-#ifdef W16_WIN2
-/* the 2.x build's Open / Save As (no COMMDLG on 2.x) */
-IDD_OPEN2 DIALOG 20, 20, 180, 44
-STYLE WR_DLGSTYLE
-CAPTION "Write"
-BEGIN
-    CONTROL "File &Name:", -1, "Static", 0x50020000L, 5, 7, 45, 10
-    CONTROL "", 3, "Edit", 0x50810080L, 52, 5, 123, 12
-    CONTROL "OK", 1, "Button", 0x50030001L, 40, 24, 40, 14
-    CONTROL "Cancel", 2, "Button", 0x50030000L, 100, 24, 40, 14
-END
-#endif

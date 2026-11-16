@@ -84,6 +84,8 @@ def main():
          'library windows.lib',
          'segment type code fixed preload', 'segment type data fixed preload']
     names = []
+    if any(e[2] == 'count' for e in ents):
+        A.append('extern gdl_cnt')
     for i, (o, name, mode, args) in enumerate(ents):
         sym = f'R_{o}'
         A.append(f'extern {sym}')
@@ -91,6 +93,12 @@ def main():
         A.append(f'global E_{o}')
         if mode == 'pass':
             A.append(f'E_{o}: jmp (seg {sym}):{sym}')
+        elif mode == 'count':
+            # tests/gdi/currec.asm: the call's time, caller and first
+            # two argument words recorded, then the real entry
+            A.append(f'E_{o}: push word {i}')
+            A.append(f'        push word {o}')
+            A.append('        jmp gdl_cnt')
         else:
             A.append(f'E_{o}: push word {i}')
             A.append(f'        push word {i}')
@@ -110,7 +118,7 @@ def main():
     A.append(f'_gdl_count dw {len(names)}')
     A.append('_gdl_tab:')
     for i, (o, name, mode, args, nb) in enumerate(names):
-        A.append(f'        dw {o}, {["log", "raw", "pass"].index(mode)}, {nb}, gdn{i} wrt DGROUP, DGROUP, gda{i} wrt DGROUP, DGROUP')
+        A.append(f'        dw {o}, {["log", "raw", "pass", "count"].index(mode)}, {nb}, gdn{i} wrt DGROUP, DGROUP, gda{i} wrt DGROUP, DGROUP')
     A.append('segment CONST')
     for i, (o, name, mode, args, nb) in enumerate(names):
         A.append(f'gdn{i} db "{name}", 0')

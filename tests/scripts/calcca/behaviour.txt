@@ -1,0 +1,517 @@
+run CALC.EXE
+# standard: clicks % sqrt 1/x
+c 50+10[235,122]
+c 50+10[235,122]=
+c 50*10[235,122]
+c 50*10[235,122]=
+c 50-10[235,122]
+c 50/10[235,122]
+c 7[235,122]
+c 7[235,122]=
+c 50+[235,122]
+c 2[235,86]
+c 2N[235,86]
+c 4[235,158]
+c 0[235,158]
+c 50+10[235,122][235,122]
+c 200*5[235,122]+1=
+c 50+10'%
+c 50+10'%=
+c 2'@
+c 3'r
+# standard: chains
+c 2+3*4=
+c 2+3+
+c 2+3+4
+c 2+3+4+
+c 2+*3=
+c 2*+3=
+c 2+-3=
+c 2+=
+c 2+==
+c 2*==
+c 2-==
+c 2/==
+c 2+3==
+c 2+3=5=
+c 2+3=5+=
+c 5N
+c 5NN
+c 0N
+c 5=N
+c 5+N
+c 5+3N=
+c 1.5N
+c N5
+c 2+3eN
+c 2+3e4=
+c 2+3b=
+c 12345bbbbbb
+c 12345bbbbbb1
+c 2+3=b
+c 2+3=e
+c 2+3=5
+c 2+3=.5
+c .
+c ..
+c .5.5
+c 2+3=N
+c 9r
+c 9rr
+c 2+9r=
+c 2+3r
+c 2+3@
+c 3@@
+c 2+3=@
+c 1.5r
+c 0.5@
+c Q
+c 5S
+c 5SR
+c 5SQR
+c 5SPRP
+c 5SPPR
+c 5S7R
+c 5S2+R=
+c 5S0SR
+c 5NS2PR
+c 5S5NPR
+c 1x2=
+c 1e2
+c 2+3e=
+c 2+e3=
+c 5*=*=
+c 7/2=*2=
+c 2+3*4==
+c 10-3==
+c 10/4==
+c 1+1=+1=
+c 2=3=
+# error state behaviour (standard)
+c 0r5
+c 0r+5=
+c 0r=
+c 0re
+c 0re5
+c 0rN
+c 0rb
+c 0rS
+c 0rQR
+c 1/0=
+c 1/0=5
+c 1/0=e5
+c 5N@5
+c 0r.
+# copy formats
+c 1.50
+c 0.
+c -
+c 5N
+c 1.5N
+c 123456789012345
+c 1/3=
+{305}
+# scientific: precedence
+c 2+3*4=
+c 2*3+4=
+c 2*3+4*5=
+c 2+3*4y2=
+c 2y3*2=
+c 2*3y2=
+c 2+3%2=
+c 7%3*2=
+c 2*7%3=
+c 1+6&3=
+c 6&3+1=
+c 1|2+4=
+c 6^3+1=
+c 1+6^3=
+c 1L2+1=
+c 1+1L2=
+c 2+3*
+c 2+3*4+
+c 2+3*4*
+c 2*3+4*5+
+c 2-3-4=
+c 2/3/4=
+c 100/10/2=
+c 2y3y2=
+c 2+3=
+c 2+3==
+c 2*3==
+c 2+3*4==
+c 2+*3=
+c 2*+3=
+c 2+3*=
+c 2+3*4+=
+c (2+3)*4=
+c 2*(3+4)=
+c ((2+3)*4
+c ((2+3)*4)
+c ((2+3)*4))
+c (2+3
+c (2+3=
+c )
+c 2)
+c (
+c (5
+c ((((((((((((((((((((((((((
+c (((((((((((((((((((((((((((1+2=
+c ((((((((((((((((((((((((((5)
+c 2*(3
+c 2*(3)
+c 2*(3)=
+c 2+(3*4)+5=
+c 2*(3+4
+c (2)
+c ()
+c (=
+c 2+(=
+c 5+(3
+# scientific: inv hyp state
+c i
+c h
+c ih
+c ii
+c 2i+3=
+c i2+3=
+c i5
+c 9is
+c 0.5is
+c 9ih
+c 2y3=
+c ip
+c ipp
+c iS
+c iQ
+c 2hs
+c 2h
+c 2h3
+c 2hN
+c h2+3=
+c i(
+c i)
+c 2iy3=i
+c 27i#
+c 8i#
+c 8Ni#
+c 2i@
+c 2ix
+c 2im
+# scientific: functions misc
+c 5!
+c 0!
+c 1!
+c 2.5!
+c 0.5!
+c 3N!
+c 170!
+c 171!
+c 20!
+c 25!
+c 69!
+c 100!
+c 12.0!
+c 2.1!
+c 1x2!
+c 3.5!
+c 1.5!
+c 170.5!
+c 5;
+c 5.5;
+c 5.5N;
+c 5.5Ni;
+c 5.5i;
+c 5i;
+c 1.5m
+c 1.5im
+c 1.3im
+c 1.30im
+c 1.59im
+c 1.6im
+c 1.9999im
+c 2.5Nm
+c 2.5Nim
+c 0.1m
+c 45.5m
+c 45.505m
+c 45.505im
+c 1x20m
+c 1x20im
+c 1x15m
+c pm
+c 123.456789m
+c 123.456789im
+c 2n
+c 1n
+c 0n
+c 1Nn
+c 2in
+c 1000in
+c 709in
+c 710in
+c 1N1000in
+c 2l
+c 0l
+c 3il
+c 308il
+c 309il
+c 1x5l
+c 0.001l
+c 4@
+c 4#
+c 4i@
+c 4i#
+c 27Ni#
+c 2y10=
+c 2yN1=
+c 2y0.5=
+c 2Ny0.5=
+c 2Ny2=
+c 2Ny3=
+c 0y0=
+c 0yN1=
+c 0y2=
+c 2y1024=
+c 2y1023=
+c 10y308=
+c 10y309=
+c 10yN308=
+c 10yN323=
+c 10yN324=
+c 8iy3=
+c 8Niy3=
+c 8iy0=
+c 8iyN3=
+c 2iy0.5=
+c p
+c ip
+c 2p
+c 2p3
+c 2+p=
+c 1x
+c 1x2
+c 1x2N
+c 1x2N3
+c 1xN2
+c 1x23
+c 1x234
+c 1x2345
+c 1x307
+c 1x308
+c 1x30
+c 1x3b
+c 1x34b
+c 1x34bb
+c 1x34bbb
+c 1.5x2.5
+c 1x2.
+c 1x2x3
+c 1x2v
+c x5
+c 0x5
+c 12345.6789v
+c 12345.6789vv
+c v5
+c v5+1=
+c v123456
+c v0.001
+c v1/3=
+c v1x300
+c 1/3=v
+c v2+3=
+c 1x5=v
+c 1x16=v
+c 1x15=
+c 1x14=
+c 1x13=
+c 1x12=
+c 1xN13=
+c 1xN12=
+c 5Nx3
+c 5x3N
+c 5x3NN
+c 5x3NNN
+# scientific: trig
+w c 0s
+w c 30s
+w c 45s
+w c 60s
+w c 90s
+w c 180s
+w c 270s
+w c 360s
+w c 720s
+w c 1s
+w c 1o
+w c 1t
+w c 90o
+w c 90t
+w c 180t
+w c 45t
+w c 1x10s
+w c 1x15s
+w c 1x16s
+w c 1x17s
+w c 1x18s
+w c 1x20s
+w c 1x100s
+w c 1x300s
+w c 30Ns
+w c 0.5is
+w c 1is
+w c 1.5is
+w c 0.5io
+w c 1Nio
+w c 2io
+w c 1it
+w c 1x300it
+w c 0.5hs
+w c 0.5ho
+w c 0.5ht
+w c 0.5ihs
+w c 1iho
+w c 0.5iho
+w c 0.5iht
+w c 1iht
+w c 2iht
+w c 1x3hs
+w c 710hs
+w c 711hs
+w c ps
+w c po
+w c pt
+w c p/2=t
+w c p/2=s
+w c p*2=s
+u c 0s
+u c 30s
+u c 45s
+u c 60s
+u c 90s
+u c 180s
+u c 270s
+u c 360s
+u c 720s
+u c 1s
+u c 1o
+u c 1t
+u c 90o
+u c 90t
+u c 180t
+u c 45t
+u c 1x10s
+u c 1x15s
+u c 1x16s
+u c 1x17s
+u c 1x18s
+u c 1x20s
+u c 1x100s
+u c 1x300s
+u c 30Ns
+u c 0.5is
+u c 1is
+u c 1.5is
+u c 0.5io
+u c 1Nio
+u c 2io
+u c 1it
+u c 1x300it
+u c 0.5hs
+u c 0.5ho
+u c 0.5ht
+u c 0.5ihs
+u c 1iho
+u c 0.5iho
+u c 0.5iht
+u c 1iht
+u c 2iht
+u c 1x3hs
+u c 710hs
+u c 711hs
+u c ps
+u c po
+u c pt
+u c p/2=t
+u c p/2=s
+u c p*2=s
+z c 0s
+z c 30s
+z c 45s
+z c 60s
+z c 90s
+z c 180s
+z c 270s
+z c 360s
+z c 720s
+z c 1s
+z c 1o
+z c 1t
+z c 90o
+z c 90t
+z c 180t
+z c 45t
+z c 1x10s
+z c 1x15s
+z c 1x16s
+z c 1x17s
+z c 1x18s
+z c 1x20s
+z c 1x100s
+z c 1x300s
+z c 30Ns
+z c 0.5is
+z c 1is
+z c 1.5is
+z c 0.5io
+z c 1Nio
+z c 2io
+z c 1it
+z c 1x300it
+z c 0.5hs
+z c 0.5ho
+z c 0.5ht
+z c 0.5ihs
+z c 1iho
+z c 0.5iho
+z c 0.5iht
+z c 1iht
+z c 2iht
+z c 1x3hs
+z c 710hs
+z c 711hs
+z c ps
+z c po
+z c pt
+z c p/2=t
+z c p/2=s
+z c p*2=s
+w
+# scientific: memory
+c 5S
+c R
+c Q
+c R
+c 7S3PR
+c 7S7NPR
+c 0S
+c 5SQ
+c 1/3=SR*3=
+# error state (scientific)
+c 0r5
+c 0r(
+c 0rH
+c 0rG
+c 0ri
+c 0rh
+c 0rw
+c 0ru
+c 0rx
+c 0rv
+c 0rT
+c 0rS
+c 0re
+c 0rec
+c 1/0=
+c 0r5S
+J c

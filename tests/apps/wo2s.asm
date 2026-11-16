@@ -32,13 +32,14 @@ segment _BSS public align=2 class=BSS use16
 group DGROUP _DATA CONST CONST2 _BSS
 
 segment _DATA
-global _bufsel, _bufpos, _dropped, _n1680, _sel40, _f21, _f31
+global _bufsel, _bufpos, _dropped, _n1680, _sel40, _f21, _f31, _lsl06
 global _watchcs, _blksel, _blkoff, _snapsel, _nsnap, _blk_dx, _blk_ax, _linsel
 global _snap_now
 _bufsel  dw 0
 _bufpos  dw 0
 _dropped dw 0
 _n1680   dw 0
+_lsl06   dw 0                   ; limit of the selector of the last INT 31h 0006h
 _sel40   dw 0
 ; functions recorded: one bit per AH
 _f21     times 32 db 0
@@ -289,6 +290,16 @@ _hook_remove:
         mov ax, [bp + 6]
         mov [es:di + 38], ax            ; flags out
         mov word [es:di + 44], 2
+%if %1 = 31h
+        cmp word [es:di + 2], 0006h     ; 0006h: note the selector's limit
+        jne .nl                         ; (WINOLDAP's buffer: its size)
+        push ax
+        lsl ax, bx
+        jnz .nl0
+        mov [_lsl06], ax
+.nl0:   pop ax
+.nl:
+%endif
 %if %1 = 21h
         cmp byte [es:di + 3], 0Bh       ; the DOS call after INT 2Fh 4B80h:
         jne .nb                         ; the switch happens inside it

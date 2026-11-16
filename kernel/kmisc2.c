@@ -328,6 +328,51 @@ void KAPI UndefDynlink(void)
     FatalAppExit(0, "Call to Undefined Dynalink");
 }
 
+/* KERNEL's "File Error" box for a library that cannot be found: observed
+   on Windows 3.1 (tests/apps/tk59.c, as the shell, screenshots; boot-test
+   case missingdll) for LoadLibrary("NOSUCH.DLL") and for WinExec or
+   LoadModule of a program importing a DLL that is missing ("Cannot find
+   OLECLI.DLL": the module reference's name with .DLL); the call then
+   returns 2; for LoadLibrary("nosuch") "Cannot find NOSUCH" (upper case,
+   no extension added), for LoadLibrary("C:\\NODIR\\NOSUCH.DLL") (3, path
+   not found) "Cannot find NOSUCH.DLL" (the base name). Not for a program
+   that is itself missing (WinExec, LoadModule), nor with
+   SetErrorMode(SEM_NOOPENFILEERRORBOX, 8000h). The box is USER's
+   SysErrorBox("Cannot find NAME", "File Error", 0, 8000h | 8, 0): one
+   Close button, as FatalAppExit's (the same layout, pixel for pixel).
+   UNVERIFIED: during the boot (w16: no box); upper-casing beyond a-z. */
+void file_error_box(const char FAR *name, const char *ext)
+{
+    char t[16 + DOS_PATHMAX];
+    const char FAR *base;
+    u16 n, i;
+    module FAR *u;
+    if (!winboot_done || (error_mode() & 0x8000) || !cur_task)
+        return;
+    u = module_find("USER");
+    if (!u)
+        return;
+    for (base = name, i = 0; name[i]; i++)      /* the base name only */
+        if (name[i] == '\\' || name[i] == '/' || name[i] == ':')
+            base = name + i + 1;
+    kmemcpy(t, "Cannot find ", 12);
+    n = 12;
+    for (i = 0; base[i] && n < sizeof t - 6; i++)
+        t[n++] = base[i];
+    for (i = 0; ext && ext[i] && n < sizeof t - 1; i++)
+        t[n++] = ext[i];
+    t[n] = 0;
+    for (i = 12; i < n; i++)            /* upper case */
+        if (t[i] >= 'a' && t[i] <= 'z')
+            t[i] -= 'a' - 'A';
+    {
+        syserrbox_fn box = (syserrbox_fn)GetProcAddress(u->ne_sel,
+                                                        (const char FAR *)MK_FP(0, 320));
+        if (box)
+            box(t, "File Error", 0, 0x8008, 0);
+    }
+}
+
 /* DebugBreak (KERNEL.203, SDK): a breakpoint for a debugger. Observed
    (TK52): with no debugger the retail KERNEL returns and the program
    goes on. UNVERIFIED: what a debugger (TOOLHELP's InterruptRegister)

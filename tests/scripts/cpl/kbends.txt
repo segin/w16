@@ -1,0 +1,19 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Keyboard: End on the delay bar (Short: 0), Home on the rate bar (Slow:
+; 0); then Cancel in a second session keeps them
+run CONTROL.EXE KEYBOARD
+wait 4000
+key 23
+wait 300
+key 09
+wait 300
+key 24
+wait 300
+key 0D
+wait 2000
+run CONTROL.EXE KEYBOARD
+wait 3000
+key 24
+wait 300
+key 1B
+wait 2000

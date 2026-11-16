@@ -359,18 +359,12 @@ void doc_init(DOC *d)
 }
 
 /* a new document: one font, Arial (FF_SWISS), and 10-point text
-   (observed: a new document's first run is {1, 0, 20}, WR1). The 2.x
-   build has no TrueType: Helv (UNVERIFIED: what Write does without
-   Arial). */
+   (observed: a new document's first run is {1, 0, 20}, WR1). */
 void doc_new(DOC *d)
 {
     CHPX c;
     doc_init(d);
-#ifdef W16_WIN2
-    font_code(d, "Helv", FF_SWISS);
-#else
     font_code(d, "Arial", FF_SWISS);
-#endif
     chp_default(&c);
     c.hps = 20;
     d->chpNew = chp_atom(d, &c);

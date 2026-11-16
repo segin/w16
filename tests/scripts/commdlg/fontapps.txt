@@ -1,0 +1,36 @@
+; ChooseFont as Write (Character > Fonts...), Clock (Settings > Set
+; Font...) and Paintbrush (Text > Fonts...) call it
+nocd1
+run WRITE.EXE
+wait 3000
+menu c
+char f
+wait 2000
+snap C:\W1.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+run CLOCK.EXE
+wait 3000
+menu s
+char f
+wait 2000
+snap C:\K1.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+run PBRUSH.EXE
+wait 4000
+menu t
+char f
+wait 2000
+snap C:\P1.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500

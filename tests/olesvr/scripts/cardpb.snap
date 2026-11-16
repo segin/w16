@@ -1,0 +1,40 @@
+run CARDFILE.EXE
+wait 3000
+menu e
+wait 500
+char e
+wait 500
+menu e
+wait 500
+key 26
+wait 300
+snap C:\CARD0.BMP
+key 0D
+wait 2000
+dump
+key 28
+wait 300
+key 0D
+wait 6000
+dump
+menu f
+wait 500
+char x
+wait 3000
+dump
+key 0D
+wait 3000
+snap C:\CARD1.BMP
+menu f
+wait 500
+char a
+wait 2000
+type C:\OLE3.CRD
+key 0D
+wait 3000
+dump
+menu f
+wait 500
+char x
+wait 3000
+dump

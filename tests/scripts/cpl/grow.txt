@@ -1,0 +1,12 @@
+;! cp1
+;! file cp1-20.ini CP1.INI
+; 31 applets: more than the default window holds, so Control Panel sizes
+; itself to six columns
+run CONTROL.EXE
+wait 5000
+snap S0.BMP
+key 23
+wait 300
+snap S1.BMP
+close
+wait 2000

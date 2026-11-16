@@ -1,0 +1,26 @@
+; embed a Paintbrush picture through OLECLI, as Write and Cardfile do
+doc OS2DOC
+create PBrush
+wait 3000
+hostnames OS2 OS2DOC
+bounds 0 0 100 50
+target
+colors
+query
+update
+getdata Native
+getdata 3
+activate 0
+wait 2000
+close
+savestream
+loadstream
+activate 0
+wait 3000
+close
+delete
+obj 0
+delete
+revokedoc
+wait 3000
+waitgone PBRUSH

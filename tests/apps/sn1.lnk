@@ -1,0 +1,5 @@
+# SN1.EXE (tests/apps/sn1.c, sn1s.asm, kb1s.asm): the sound driver
+# interface probe
+@tests/apps/app.lnk
+import U_INITAPP USER.5
+import K_GETEXEPTR KERNEL.133

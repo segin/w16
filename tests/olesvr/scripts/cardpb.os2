@@ -1,0 +1,6 @@
+; Cardfile embeds a new Paintbrush picture (Edit > Insert Object),
+; returns to Cardfile and saves C:\OLE3.CRD (UI steps in cardpb.snap)
+run C:\SNAP.EXE
+wait 1000
+waitgone SNAP
+wait 2000

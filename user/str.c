@@ -12,10 +12,23 @@
  */
 #include "user.h"
 
+/* overlapping blocks are fine (memmove): a list box makes room for an
+   item by moving those after it up one place in the same block, which a
+   forward copy smeared over the rest (File Manager's sorted owner-drawn
+   file list: every item after the insertion point became the same one,
+   its WM_COMPAREITEM then got stale data, and on w16's KERNEL its lstrcat
+   faulted, back to DOS) */
 void fmemcpy(void __far *d, const void __far *s, WORD n)
 {
     BYTE __far *dd = (BYTE __far *)d;
     const BYTE __far *ss = (const BYTE __far *)s;
+    if (FP_SEG(dd) == FP_SEG(ss) && FP_OFF(dd) > FP_OFF(ss) && FP_OFF(dd) - FP_OFF(ss) < n) {
+        dd += n;
+        ss += n;
+        while (n--)
+            *--dd = *--ss;
+        return;
+    }
     while (n--)
         *dd++ = *ss++;
 }
@@ -99,12 +112,16 @@ BOOL WINAPI IsCharUpper(char c)        { return is_upper(c); }
 BOOL WINAPI IsCharLower(char c)        { return is_lower(c); }
 BOOL WINAPI IsCharAlphaNumeric(char c) { return IsCharAlpha(c) || ((BYTE)c >= '0' && (BYTE)c <= '9'); }
 
-/* AnsiUpper/AnsiLower: with a selector of 0 the argument is a character */
+/* AnsiUpper/AnsiLower: with a selector of 0 the argument is a character.
+   A bad string: NULL (3.1; AnsiUpperBuff/AnsiLowerBuff 0, AnsiNext and
+   AnsiPrev NULL too) */
 LPSTR WINAPI AnsiUpper(LPSTR s)
 {
     LPSTR p;
     if (!HIWORD((DWORD)s))
         return (LPSTR)MAKELP(0, to_upper((BYTE)LOWORD((DWORD)s)));
+    if (GP_BAD(s))
+        return NULL;
     for (p = s; *p; p++)
         *p = to_upper(*p);
     return s;
@@ -115,6 +132,8 @@ LPSTR WINAPI AnsiLower(LPSTR s)
     LPSTR p;
     if (!HIWORD((DWORD)s))
         return (LPSTR)MAKELP(0, to_lower((BYTE)LOWORD((DWORD)s)));
+    if (GP_BAD(s))
+        return NULL;
     for (p = s; *p; p++)
         *p = to_lower(*p);
     return s;
@@ -123,6 +142,8 @@ LPSTR WINAPI AnsiLower(LPSTR s)
 UINT WINAPI AnsiUpperBuff(LPSTR s, UINT n)
 {
     UINT i;
+    if (GP_BAD(s))
+        return 0;
     if (!n)
         n = 0x10000L > 0xFFFF ? 0xFFFF : 0;     /* 0 means 64K (3.1 SDK) */
     for (i = 0; i < n; i++)
@@ -133,6 +154,8 @@ UINT WINAPI AnsiUpperBuff(LPSTR s, UINT n)
 UINT WINAPI AnsiLowerBuff(LPSTR s, UINT n)
 {
     UINT i;
+    if (GP_BAD(s))
+        return 0;
     if (!n)
         n = 0xFFFF;
     for (i = 0; i < n; i++)
@@ -142,11 +165,15 @@ UINT WINAPI AnsiLowerBuff(LPSTR s, UINT n)
 
 LPSTR WINAPI AnsiNext(LPCSTR s)
 {
+    if (GP_BAD(s))
+        return NULL;
     return (LPSTR)(*s ? s + 1 : s);
 }
 
 LPSTR WINAPI AnsiPrev(LPCSTR start, LPCSTR s)
 {
+    if (GP_BAD(start) || GP_BAD(s))
+        return NULL;
     return (LPSTR)(s > start ? s - 1 : s);
 }
 
@@ -157,8 +184,9 @@ LPSTR WINAPI AnsiPrev(LPCSTR start, LPCSTR s)
    01h-1Fh, then 20h-2Fh, 3Ah-40h, 5Bh-60h, 7Bh-BFh in code order, D7h,
    DFh, the accented letters C0h/E0h ... (each upper case before its lower
    case for lstrcmp), F7h after F6h, then digits 0-9, then A a B b ... Z z. */
-static BYTE weight[256];
-static BYTE tiebreak[256];
+/* (far: out of DGROUP, whose room is windows' and classes') */
+static BYTE __far weight[256];
+static BYTE __far tiebreak[256];
 
 static void make_weights(void)
 {
@@ -234,10 +262,19 @@ int lstr_cmpi(LPCSTR a, LPCSTR b)
 
 /* ---- wsprintf (the 3.1 SDK's format: %[-][#][0][width][.precision]
    [l]{d,i,u,x,X,c,s,%}; '+' and ' ' are not flags: US2 printed "+d") ---- */
+/* A bad output buffer: 0. A bad format or argument list: an empty
+   string, 0. A %s argument that is bad: an empty string in its place
+   (3.1, US27: KERNEL's lstrlen of it gives 0). */
 int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
 {
     const BYTE __far *ap = (const BYTE __far *)args;
     LPSTR o = out;
+    if (GP_BAD(out))
+        return 0;
+    if (GP_BAD(fmt) || GP_BAD(args)) {
+        *out = 0;
+        return 0;
+    }
     while (*fmt) {
         char buf[16], *b;
         LPCSTR s;
@@ -324,6 +361,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
             ap += 4;
             if (!s)
                 s = "(null)";       /* UNVERIFIED: what 3.1 prints for NULL */
+            else if (GP_BAD(s))
+                s = "";
             break;
         case 0:
             continue;
@@ -377,7 +416,7 @@ int WINAPI LoadString(HINSTANCE hinst, UINT id, LPSTR buf, int n)
     const BYTE __far *p;
     UINT i;
     int len = 0;
-    if (n <= 0 || !buf)
+    if (n <= 0 || !buf || GP_BAD(buf))         /* a bad buffer: 0 (3.1) */
         return 0;
     r = FindResource(hinst, MAKEINTRESOURCE((id >> 4) + 1), RT_STRING);
     if (!r) {

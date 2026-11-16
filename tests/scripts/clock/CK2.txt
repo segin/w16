@@ -1,0 +1,33 @@
+; analog at several sizes
+setdate 03/14/1993
+run CLOCK.EXE
+freeze 10:09:30.50 1500
+cmd 1
+freeze 10:09:30.50 1500
+snap C:\A1.BMP
+menu s
+freeze 10:09:30.50 800
+snap C:\MSET.BMP
+key 1B
+key 1B
+movewin 10 10 300 200
+freeze 10:09:30.50 1500
+snap C:\A2.BMP
+movewin 10 10 151 330
+freeze 10:09:30.50 1500
+snap C:\A3.BMP
+movewin 10 10 102 90
+freeze 10:09:30.50 1500
+snap C:\A4.BMP
+movewin 10 10 400 400
+freeze 10:09:30.50 1500
+snap C:\A5.BMP
+movewin 10 10 640 480
+freeze 10:09:30.50 1500
+snap C:\A6.BMP
+movewin 10 10 102 60
+freeze 10:09:30.50 1500
+snap C:\A7.BMP
+dump
+close
+wait 1000

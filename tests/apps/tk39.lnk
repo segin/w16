@@ -1,0 +1,2 @@
+# TK39.EXE (tests/apps/tk39.c): calls given a bad pointer (__GP recovery)
+@tests/apps/app.lnk

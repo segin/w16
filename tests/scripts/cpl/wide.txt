@@ -1,0 +1,30 @@
+;! cp1
+;! file cp1-wide.ini CP1.INI
+; three CP1 applets after the stock ones, one with a very long name: the
+; cell width follows the widest name, the window grows to the screen's
+; width; choosing an applet sends CPL_SELECT and CPL_DBLCLK
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+key 27
+wait 300
+key 23
+wait 300
+key 25
+wait 300
+key 25
+wait 300
+snap S1.BMP
+key 0D
+wait 1500
+snap S2.BMP
+key 0D
+wait 1000
+menu s
+wait 500
+snap M1.BMP
+key 1B
+key 1B
+wait 300
+close
+wait 2000

@@ -1,0 +1,14 @@
+; The Registration Info Editor reads the database (RegEnumKey,
+; RegQueryValue): its basic view, then the advanced view (/V)
+run REGEDIT.EXE
+wait 3000
+snap C:\REGEDIT.BMP
+dump
+close
+wait 1000
+run REGEDIT.EXE /V
+wait 3000
+snap C:\REGEDITV.BMP
+dump
+close
+wait 1000

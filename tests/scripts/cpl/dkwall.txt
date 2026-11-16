@@ -1,0 +1,13 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: a wallpaper (the first file), Center
+run CONTROL.EXE DESKTOP
+wait 4000
+alt f
+wait 300
+key 28
+wait 300
+alt c
+wait 500
+snap D1.BMP
+key 0D
+wait 2000

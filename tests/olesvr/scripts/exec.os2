@@ -1,0 +1,46 @@
+; StdExecute registered: commands OLESVR does not know go to the server's
+; and document's Execute; OLECLI's OleExecute, target device and color
+; scheme reach OS1
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OS1Probe\protocol\StdFileEditing\verb\0=Edit
+reg OS1Probe\protocol\StdExecute\server=C:\OS1.EXE
+doc OS2EXEC
+create OS1Probe
+hostnames OS2 OS2EXEC
+bounds 0 0 100 50
+target
+colors
+execute [MyCommand(1,"two")]
+execute [StdShowItem("")]
+update
+getdata Native
+wait 500
+close
+delete
+run C:\OS1.EXE -Embedding /S
+wait 2000
+init OS1Probe OLEsystem
+exec [MyCommand(1,"two")]
+exec [Bogus]
+exec [StdNewDocument("OS1Probe","X1")][MyCommand(3)]
+exec [MyCommand(4)][StdNewDocument("OS1Probe","X2")]
+exec garbage
+term
+init OS1Probe X1
+req i1 Native
+exec [MyDocCommand("x")]
+exec [StdShowItem("i1")][MyDocCommand("y")]
+exec junk
+poke StdTargetDevice 1 x
+req i2 Native
+req i1 Native
+exec [StdCloseDocument]
+wait 1000
+term
+init OS1Probe OLEsystem
+exec [StdExit]
+wait 2000
+term
+revokedoc
+waitgone OS1

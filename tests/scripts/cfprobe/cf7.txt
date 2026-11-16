@@ -1,0 +1,23 @@
+; CF7: an embedded object (Insert Object, Paintbrush)
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type Obj
+key 0D
+wait 300
+cmd 135
+wait 1500
+snap C:\INSOBJ.BMP
+dump
+key 0D
+wait 6000
+snap C:\SERVER.BMP
+dump
+menu f
+wait 500
+snap C:\PBFILE.BMP
+key 1B
+key 1B
+wait 300
+dump

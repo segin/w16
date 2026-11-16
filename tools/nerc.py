@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""nerc - print an NE file's menus, dialogs, string tables and
-accelerators as .rc-like text (for reading resource templates as data).
+"""nerc - list an NE file's menus, dialogs, string tables and accelerators
+as readable text (for observation; ARCHITECTURE.md 3 allows resources,
+dialog and menu templates as data).
 
-The NE resource table and the 16-bit resource formats (MENU, DIALOG,
-STRINGTABLE, ACCELERATORS) are published formats (Windows 3.1 SDK; the
-resource formats are documented in the SDK's "Resource formats" notes).
-Only resource data is decoded here, never code (ARCHITECTURE.md 3).
+Reads the NE resource table (published format) and decodes the 16-bit
+resource formats documented in the Windows 3.1 SDK (MENUITEMTEMPLATE,
+DLGTEMPLATE, string tables of 16 counted strings, ACCELTABLEENTRY).
+Windows 2.x files use the same formats. Nothing here is copied into
+w16's sources: it is a reading aid; w16 writes its own .rc files.
 
-usage: nerc.py FILE.EXE [type...]     type: menu dialog string accel
-       nerc.py --rc FILE.EXE NAME...   the named dialogs as compilable
-                                       DIALOG statements (layout data for
-                                       a w16 .rc; check every string)
+usage: nerc.py FILE.EXE [menu|dialog|string|accel|list]...
 """
 import struct
 import sys
+
+TYPES = {1: 'CURSOR', 2: 'BITMAP', 3: 'ICON', 4: 'MENU', 5: 'DIALOG', 6: 'STRING',
+         7: 'FONTDIR', 8: 'FONT', 9: 'ACCELERATORS', 10: 'RCDATA', 12: 'GROUP_CURSOR',
+         14: 'GROUP_ICON', 16: 'VERSION'}
+CLASSES = {0x80: 'BUTTON', 0x81: 'EDIT', 0x82: 'STATIC', 0x83: 'LISTBOX',
+           0x84: 'SCROLLBAR', 0x85: 'COMBOBOX'}
 
 
 def resources(d):
     ne = struct.unpack_from('<I', d, 0x3C)[0]
     rt = ne + struct.unpack_from('<H', d, ne + 0x24)[0]
+    if rt == ne + struct.unpack_from('<H', d, ne + 0x26)[0]:
+        return
     shift = struct.unpack_from('<H', d, rt)[0]
     p = rt + 2
 
@@ -38,175 +45,120 @@ def resources(d):
             yield rname(tid), rname(rid), flags, d[off << shift:(off << shift) + (ln << shift)]
 
 
+def cstr(b, i):
+    j = b.index(b'\0', i)
+    return b[i:j].decode('latin-1'), j + 1
+
+
 def q(s):
-    return '"' + s.replace('\\', '\\\\').replace('"', '""').replace('\t', '\\t') \
-        .replace('\x08', '\\b').replace('\n', '\\n').replace('\r', '\\r') + '"'
-
-
-def cstr(b, p):
-    e = b.index(b'\0', p)
-    return b[p:e].decode('cp1252', 'replace'), e + 1
+    return '"' + s.replace('\t', '\\t').replace('\b', '\\b').replace('"', '""') + '"'
 
 
 def menu(b):
     out = []
-    p = 4                               # version, header size
+    i = 4                                       # version, header size
+    depth = [1 << 30]
 
-    def items(p, depth):
+    def walk(i, ind):
         while True:
-            fl = struct.unpack_from('<H', b, p)[0]
-            p += 2
-            if fl & 0x10:               # MF_POPUP
-                s, p = cstr(b, p)
-                out.append('  ' * depth + 'POPUP %s  /* flags %04X */' % (q(s), fl))
-                p = items(p, depth + 1)
+            fl = struct.unpack_from('<H', b, i)[0]
+            i += 2
+            if fl & 0x10:                       # MF_POPUP
+                s, i = cstr(b, i)
+                out.append('  ' * ind + 'POPUP %s flags=%04X' % (q(s), fl))
+                i = walk(i, ind + 1)
             else:
-                mid = struct.unpack_from('<H', b, p)[0]
-                s, p = cstr(b, p + 2)
-                if not s and not mid and not (fl & ~0x80):
-                    out.append('  ' * depth + 'MENUITEM SEPARATOR')
-                else:
-                    out.append('  ' * depth + 'MENUITEM %s, %d  /* flags %04X */' % (q(s), mid, fl))
-            if fl & 0x80:               # MF_END
-                return p
-    items(p, 0)
-    return '\n'.join(out)
-
-
-CLS = {0x80: 'BUTTON', 0x81: 'EDIT', 0x82: 'STATIC', 0x83: 'LISTBOX',
-       0x84: 'SCROLLBAR', 0x85: 'COMBOBOX'}
+                mid = struct.unpack_from('<H', b, i)[0]
+                i += 2
+                s, i = cstr(b, i)
+                out.append('  ' * ind + ('MENUITEM %s, %d flags=%04X' % (q(s), mid, fl) if s or mid
+                                          else 'MENUITEM SEPARATOR'))
+            if fl & 0x80:                       # MF_END
+                return i
+    walk(i, 0)
+    return out
 
 
 def dialog(b):
-    style, n, x, y, cx, cy = struct.unpack_from('<IBhhhh', b, 0)
-    p = 13
-
-    def sz(p):
-        if b[p] == 0xFF:
-            return '#%d' % struct.unpack_from('<H', b, p + 1)[0], p + 3
-        return cstr(b, p)
-    mn, p = sz(p)
-    cl, p = cstr(b, p)
-    cap, p = cstr(b, p)
-    out = ['DIALOG %d, %d, %d, %d  STYLE %08X  MENU %s  CLASS %s' % (x, y, cx, cy, style, q(mn), q(cl)),
-           'CAPTION %s' % q(cap)]
-    if style & 0x40:                    # DS_SETFONT
-        pt = struct.unpack_from('<H', b, p)[0]
-        f, p = cstr(b, p + 2)
-        out.append('FONT %d, %s' % (pt, q(f)))
-    for _ in range(n):
-        x, y, cx, cy, cid, st = struct.unpack_from('<hhhhHI', b, p)
-        p += 14
-        if b[p] & 0x80:
-            c = CLS.get(b[p], '#%02X' % b[p])
-            p += 1
-        else:
-            c, p = cstr(b, p)
-        if b[p] == 0xFF:
-            t = '#%d' % struct.unpack_from('<H', b, p + 1)[0]
-            p += 3
-        else:
-            t, p = cstr(b, p)
-            t = q(t)
-        extra = b[p]
-        p += 1 + extra
-        out.append('  CONTROL %s, %d, %s, %08X, %d, %d, %d, %d' % (t, cid, c, st, x, y, cx, cy))
-    return '\n'.join(out)
-
-
-def dialog_rc(name, b):
-    """one dialog as an .rc DIALOG statement: every control as CONTROL
-    with its exact class, style, id and rectangle"""
-    style, n, x, y, cx, cy = struct.unpack_from('<IBhhhh', b, 0)
-    p = 13
-
-    def sz(p):
-        if b[p] == 0xFF:
-            return None, p + 3
-        return cstr(b, p)
-    mn, p = sz(p)
-    cl, p = cstr(b, p)
-    cap, p = cstr(b, p)
-    out = ['%s DIALOG %d, %d, %d, %d' % (name, x, y, cx, cy),
-           'STYLE 0x%08XL' % style, 'CAPTION %s' % q(cap)]
-    if style & 0x40:
-        pt = struct.unpack_from('<H', b, p)[0]
-        f, p = cstr(b, p + 2)
-        out.append('FONT %d, %s' % (pt, q(f)))
-    out.append('BEGIN')
-    for _ in range(n):
-        x, y, cx, cy, cid, st = struct.unpack_from('<hhhhHI', b, p)
-        p += 14
-        if b[p] & 0x80:
-            c = q(CLS.get(b[p], '#%02X' % b[p]).capitalize())
-            p += 1
-        else:
-            c, p = cstr(b, p)
-            c = q(c)
-        if b[p] == 0xFF:
-            t = struct.unpack_from('<H', b, p + 1)[0]
-            p += 3
-            out.append('    ICON %d, %d, %d, %d, %d, %d' % (t, cid if cid != 0xFFFF else -1, x, y, cx, cy))
-        else:
-            t, p = cstr(b, p)
-            out.append('    CONTROL %s, %d, %s, 0x%08XL, %d, %d, %d, %d' % (
-                q(t), cid if cid != 0xFFFF else -1, c, st, x, y, cx, cy))
-        p += 1 + b[p]
-    out.append('END')
-    return '\n'.join(out)
-
-
-def strings(b, block):
     out = []
-    p = 0
-    for i in range(16):
-        if p >= len(b):
+    style, n, x, y, cx, cy = struct.unpack_from('<IBhhhh', b, 0)
+    i = 13
+    if b[i] == 0xFF:
+        mn = 'id %d' % struct.unpack_from('<H', b, i + 1)[0]
+        i += 3
+    else:
+        mn, i = cstr(b, i)
+    cls, i = cstr(b, i)
+    cap, i = cstr(b, i)
+    out.append('DIALOG %d, %d, %d, %d style=%08X menu=%s class=%s caption=%s' %
+               (x, y, cx, cy, style, mn, q(cls), q(cap)))
+    if style & 0x40:                            # DS_SETFONT
+        pt = struct.unpack_from('<H', b, i)[0]
+        face, i = cstr(b, i + 2)
+        out.append('FONT %d, %s' % (pt, q(face)))
+    for _ in range(n):
+        x, y, cx, cy, cid, st = struct.unpack_from('<hhhhHI', b, i)
+        i += 14
+        if b[i] & 0x80:
+            c = CLASSES.get(b[i], '%02X' % b[i])
+            i += 1
+        else:
+            c, i = cstr(b, i)
+        if b[i] == 0xFF:
+            t = '#%d' % struct.unpack_from('<H', b, i + 1)[0]
+            i += 3
+        else:
+            t, i = cstr(b, i)
+            t = q(t)
+        extra = b[i]
+        i += 1 + extra
+        out.append('  CONTROL %s, %d, %s, %08X, %d, %d, %d, %d' % (t, cid, c, st, x, y, cx, cy))
+    return out
+
+
+def strings(b, rid):
+    out = []
+    base = (rid - 1) * 16
+    i = 0
+    for k in range(16):
+        if i >= len(b):
             break
-        n = b[p]
+        n = b[i]
+        s = b[i + 1:i + 1 + n].decode('latin-1')
+        i += 1 + n
         if n:
-            out.append('  %d, %s' % ((block - 1) * 16 + i, q(b[p + 1:p + 1 + n].decode('cp1252'))))
-        p += 1 + n
-    return '\n'.join(out)
+            out.append('  %d %s' % (base + k, q(s)))
+    return out
 
 
 def accel(b):
     out = []
-    p = 0
-    while p + 5 <= len(b):
-        fl, key, cmd = struct.unpack_from('<BHH', b, p)
-        p += 5
-        out.append('  key %04X (%s), %d, flags %02X' % (key, repr(chr(key)) if 32 < key < 127 else '', cmd, fl))
+    for i in range(0, len(b) - 4, 5):
+        fl, key, cmd = struct.unpack_from('<BHH', b, i)
+        out.append('  key=%04X cmd=%d flags=%02X' % (key, cmd, fl))
         if fl & 0x80:
             break
-    return '\n'.join(out)
+    return out
 
 
 def main():
-    if sys.argv[1] == '--rc':
-        d = open(sys.argv[2], 'rb').read()
-        want = sys.argv[3:]
-        for t, n, fl, b in resources(d):
-            if t == 5 and str(n) in want:
-                print(dialog_rc(n, b))
-                print()
-        return
     d = open(sys.argv[1], 'rb').read()
-    want = set(sys.argv[2:]) or {'menu', 'dialog', 'string', 'accel'}
-    kinds = {4: 'menu', 5: 'dialog', 6: 'string', 9: 'accel'}
-    for t, n, fl, b in resources(d):
-        k = kinds.get(t)
-        if k not in want:
-            continue
-        print('/* %s %s (flags %04X) */' % (k, n, fl))
-        if k == 'menu':
-            print(menu(b))
-        elif k == 'dialog':
-            print(dialog(b))
-        elif k == 'string':
-            print(strings(b, n))
-        else:
-            print(accel(b))
-        print()
+    want = set(sys.argv[2:]) or {'menu', 'dialog', 'string', 'accel', 'list'}
+    for t, rid, fl, b in resources(d):
+        tn = TYPES.get(t, t)
+        if 'list' in want:
+            print('%s %s flags=%04X size=%d' % (tn, rid, fl, len(b)))
+        if tn == 'MENU' and 'menu' in want:
+            print('MENU %s' % rid)
+            print('\n'.join(menu(b)))
+        elif tn == 'DIALOG' and 'dialog' in want:
+            print('DIALOG %s' % rid)
+            print('\n'.join(dialog(b)))
+        elif tn == 'STRING' and 'string' in want:
+            print('\n'.join(strings(b, rid)))
+        elif tn == 'ACCELERATORS' and 'accel' in want:
+            print('ACCELERATORS %s' % rid)
+            print('\n'.join(accel(b)))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,40 @@
+run WRITE.EXE
+wait 3000
+type Paintbrush picture:
+key 0D
+menu e
+wait 500
+dump
+char i
+wait 2000
+dump
+snap C:\WRPB1.BMP
+key 28
+wait 300
+key 0D
+wait 6000
+dump
+snap C:\WRPB2.BMP
+menu f
+wait 500
+dump
+char x
+wait 3000
+dump
+key 0D
+wait 3000
+snap C:\WRPB3.BMP
+dump
+menu f
+wait 500
+char a
+wait 2000
+type C:\OLE1.WRI
+key 0D
+wait 3000
+dump
+menu f
+wait 500
+char x
+wait 3000
+dump

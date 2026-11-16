@@ -12,12 +12,19 @@
 #   - the switcher block WSWAP reads (WC4.COM as WSWAP.EXE).
 # Values that depend on where things are in memory (segments, offsets of
 # WIN.COM's handler and data, free memory) are left out of the comparison.
+# w16's messages call the product "w16" where Microsoft's say "Windows"
+# (ARCHITECTURE.md 3, branding): "w16" is read as "Windows" in the screen
+# rows and in what WIN.COM wrote (Microsoft's never has "w16"), so every
+# other byte is still compared.
 #
 #   usage: tests/wincom.sh [-k] [-v] [SCENARIO...]
 #     -k  keep the scratch directories (printed)
 #     -v  show both outputs, not just the differences
 # Scenario names: see the list below (default: all). Needs dosbox-x and
 # `make dos wcprobes`. Prints PASS/FAIL per scenario; exit code = failures.
+# WINCOM_JOBS scenarios run at once (default: the host's threads / 2, at
+# most 12; each runs two DOSBox-X, Microsoft's WIN.COM and w16's, in
+# scratch directories of its own); the output keeps the scenarios' order.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -107,7 +114,8 @@ run_one() {   # run_one DIR WINCOM OPTIONS COMMANDS
         dosbox-x -nogui -fastlaunch -conf "$d/dosbox.conf" >/dev/null 2>&1 || true
     # the record, without what depends on memory layout
     {
-        [ -f "$d/c/WC.LOG" ] && tr -d '\r' < "$d/c/WC.LOG" | sed \
+        [ -f "$d/c/WC.LOG" ] && tr -d '\r' < "$d/c/WC.LOG" | LC_ALL=C sed \
+            -e '/^|/s/w16/Windows/g' \
             -e 's/^psp=.*parentprog=[^ ]* \(top=[0-9A-F]*\).*/\1/' \
             -e 's/^\(envseg\)=.*/\1/' \
             -e 's/^parenttail=80 .*/parenttail=(WIN386 reuses its PSP)/' \
@@ -131,32 +139,60 @@ run_one() {   # run_one DIR WINCOM OPTIONS COMMANDS
         for o in "$d"/c/O*.TXT; do
             [ -f "$o" ] || continue
             echo "== $(basename "$o")"
-            od -An -c "$o"
+            LC_ALL=C sed 's/w16/Windows/g' "$o" | od -An -c
         done
     } > "$d/result.txt"
+}
+
+# scenario NAME: run it both ways and judge; the verdict to $work/NAME.out,
+# 1 in $work/NAME.fail when it failed
+scenario() {
+    n=$1
+    line=$(printf '%s\n' "$scenarios" | grep "^$n|")
+    opts=$(printf '%s' "$line" | cut -d'|' -f2)
+    cmds=$(printf '%s' "$line" | cut -d'|' -f3-)
+    run_one "$work/$n/ms" "$ref/WINDOWS/WIN.COM" "$opts" "$cmds" &
+    run_one "$work/$n/w16" "$dos/WIN.COM" "$opts" "$cmds" &
+    wait
+    {
+        if [ ! -s "$work/$n/ms/result.txt" ]; then
+            echo "FAIL $n (no record from Windows 3.1's WIN.COM)"
+            echo 1 > "$work/$n.fail"
+        elif diff -u "$work/$n/ms/result.txt" "$work/$n/w16/result.txt" > "$work/$n/diff.txt"; then
+            echo "PASS $n"
+        else
+            echo "FAIL $n"
+            sed 's/^/    /' "$work/$n/diff.txt"
+            echo 1 > "$work/$n.fail"
+        fi
+        [ -n "$verbose" ] && { echo "---- $n (Windows 3.1)"; cat "$work/$n/ms/result.txt"; }
+    } > "$work/$n.out.new"
+    mv "$work/$n.out.new" "$work/$n.out"
 }
 
 failures=0
 names=$(printf '%s\n' "$scenarios" | sed -n 's/^\([a-z0-9]*\)|.*/\1/p')
 [ $# -gt 0 ] && names=$*
 for n in $names; do
-    line=$(printf '%s\n' "$scenarios" | grep "^$n|") || { echo "no scenario $n" >&2; exit 2; }
-    opts=$(printf '%s' "$line" | cut -d'|' -f2)
-    cmds=$(printf '%s' "$line" | cut -d'|' -f3-)
-    run_one "$work/$n/ms" "$ref/WINDOWS/WIN.COM" "$opts" "$cmds" &
-    run_one "$work/$n/w16" "$dos/WIN.COM" "$opts" "$cmds" &
-    wait
-    if [ ! -s "$work/$n/ms/result.txt" ]; then
-        echo "FAIL $n (no record from Windows 3.1's WIN.COM)"
-        failures=$((failures + 1))
-    elif diff -u "$work/$n/ms/result.txt" "$work/$n/w16/result.txt" > "$work/$n/diff.txt"; then
-        echo "PASS $n"
-    else
-        echo "FAIL $n"
-        sed 's/^/    /' "$work/$n/diff.txt"
-        failures=$((failures + 1))
-    fi
-    [ -n "$verbose" ] && { echo "---- $n (Windows 3.1)"; cat "$work/$n/ms/result.txt"; }
+    printf '%s\n' "$scenarios" | grep -q "^$n|" || { echo "no scenario $n" >&2; exit 2; }
 done
+jobs=${WINCOM_JOBS:-$(n=$(nproc 2>/dev/null || echo 2); n=$((n / 2)); [ $n -lt 1 ] && n=1; [ $n -gt 12 ] && n=12; echo $n)}
+pids=
+running() {
+    r=0
+    for p in $pids; do kill -0 "$p" 2>/dev/null && r=$((r + 1)); done
+    echo $r
+}
+for n in $names; do
+    while [ "$(running)" -ge "$jobs" ]; do sleep 0.2; done
+    scenario "$n" < /dev/null &
+    pids="$pids $!"
+done
+for n in $names; do
+    while [ ! -f "$work/$n.out" ]; do sleep 0.2; done
+    cat "$work/$n.out"
+    [ ! -f "$work/$n.fail" ] || failures=$((failures + 1))
+done
+wait
 echo "wincom: $failures failure(s)"
 exit $failures

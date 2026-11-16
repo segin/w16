@@ -1,0 +1,10 @@
+;! cp1
+;! file cp1-wide.ini CP1.INI
+; "CONTROL x": the applet named x (any case) opens over the disabled
+; window; Control Panel closes when it returns
+run CONTROL.EXE x
+wait 4000
+snap S0.BMP
+key 0D
+wait 3000
+snap S1.BMP

@@ -1,0 +1,44 @@
+; Sound Recorder (a server without a built-in handler): the generic
+; metafile path, pokes, execute, data requests, renames, reload/activate
+spy
+doc 0 OCDOC
+create 0 SoundRec snd0 draw 0
+hostnames 0 OC1App "OC1 Doc"
+setbounds 0 0 0 100 50
+colors 0
+target 0
+requestdata 0 CF_METAFILEPICT
+execute 0 [StdFoo()]
+setdata 0 CF_TEXT C:\OC.TXT
+enumfmts 0
+bounds 0
+update 0
+bounds 0
+close 0
+save 0 C:\S0.BIN
+renamedoc 0 NEWDOC
+rename 0 snd0b
+qname 0
+saveddoc 0
+revertdoc 0
+load 1 C:\S0.BIN StdFileEditing snd1
+querytype 1
+bounds 1
+size 1
+draw 1 C:\D1.BMP 80 80
+drawmeta 1 80 80
+activate 1 1 1 1
+wait 1500
+wins
+menu SoundRec Update
+wait 1500
+wmclose SoundRec
+wait 2000
+wins
+close 1
+save 1 C:\S1.BIN
+copy 1
+clipdump
+release 1
+delete 0
+revokedoc 0

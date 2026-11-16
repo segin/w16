@@ -1,0 +1,261 @@
+/* main.rc - w16 MAIN.CPL resources. Dialog layouts follow the Windows 3.1
+   MAIN.CPL dialog templates (positions, IDs, styles: format facts read
+   with tools/resdump.py); the labels are the original's plain UI text;
+   user-facing "Windows" reads "w16" (ARCHITECTURE.md 3, branding); the
+   icons are w16's own (tools/cplicons.py). */
+#include <windows.h>
+#include "maincpl.h"
+
+IDI_COLOR    ICON "color.ico"
+IDI_FONTS    ICON "fonts.ico"
+IDI_PORTS    ICON "ports.ico"
+IDI_MOUSE    ICON "mouse.ico"
+IDI_DESKTOP  ICON "desktop.ico"
+IDI_KEYBOARD ICON "keyboard.ico"
+IDI_PRINTERS ICON "printers.ico"
+IDI_INTL     ICON "intl.ico"
+IDI_DATETIME ICON "datetime.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_NOMEM,          "Not enough memory available for this task.\n\nQuit one or more applications to increase available memory, and then try again."
+    IDS_CONTROLPANEL,   "Control Panel"
+    IDS_NAME_COLOR,     "&Color"
+    IDS_NAME_PRINTERS,  "&Printers"
+    IDS_NAME_FONTS,     "&Fonts"
+    IDS_NAME_INTL,      "&International"
+    IDS_NAME_PORTS,     "P&orts"
+    IDS_NAME_KEYBOARD,  "&Keyboard"
+    IDS_NAME_MOUSE,     "&Mouse"
+    IDS_NAME_DATETIME,  "Date/&Time"
+    IDS_NAME_DESKTOP,   "&Desktop"
+    600, "Changes the w16 screen colors"
+    601, "Installs and removes printers, and sets printing options"
+    602, "Adds and removes fonts and sets TrueType options"
+    603, "Specifies international settings"
+    604, "Specifies communications settings for serial ports"
+    605, "Specifies the keyboard repeat rate and delay"
+    606, "Changes settings for your mouse"
+    607, "Changes the date and time of your computer's clock"
+    608, "Changes the look of your desktop"
+    IDS_NOTYET,         "This applet is not part of w16 yet."
+    IDS_ELEMENT + 0, "Desktop"
+    IDS_ELEMENT + 1, "Application Workspace"
+    IDS_ELEMENT + 2, "Window Background"
+    IDS_ELEMENT + 3, "Window Text"
+    IDS_ELEMENT + 4, "Menu Bar"
+    IDS_ELEMENT + 5, "Menu Text"
+    IDS_ELEMENT + 6, "Active Title Bar"
+    IDS_ELEMENT + 7, "Inactive Title Bar"
+    IDS_ELEMENT + 8, "Active Title Bar Text"
+    IDS_ELEMENT + 9, "Active Border"
+    IDS_ELEMENT + 10, "Inactive Border"
+    IDS_ELEMENT + 11, "Window Frame"
+    IDS_ELEMENT + 12, "Scroll Bars"
+    IDS_ELEMENT + 13, "Button Face"
+    IDS_ELEMENT + 14, "Button Shadow"
+    IDS_ELEMENT + 15, "Button Text"
+    IDS_ELEMENT + 16, "Disabled Text"
+    IDS_ELEMENT + 17, "Highlight"
+    IDS_ELEMENT + 18, "Highlighted Text"
+    IDS_ELEMENT + 19, "Inactive Title Bar Text"
+    IDS_ELEMENT + 20, "Button Highlight"
+    IDS_SAMPLE_ACTIVE,  "Active"
+    IDS_SAMPLE_INACTIVE, "Inactive"
+    IDS_SAMPLE_MENU,    "File  Edit"
+    IDS_SAMPLE_WINTEXT, "Window Text"
+    IDS_SAMPLE_DISABLED, "Disabled"
+    IDS_SAMPLE_HILIGHTED, "Highlighted"
+    IDS_DEFAULT_SCHEME, "w16 Default"
+    IDS_SCHEME_NOREMOVE, "Cannot remove the %s color scheme."
+    IDS_SAMPLE_OK,      "OK"
+    IDS_SCHEME_DEFAULT, "You cannot change the w16 Default color scheme.\n\nSpecify a new name for the color scheme."
+    IDS_SCHEME_EQUAL,   "The scheme name cannot include an equal sign (=)."
+    IDS_SCHEME_BRACKET, "The scheme name cannot include left or right brackets ([ ])."
+    IDS_SCHEME_BLANK,   "The scheme name cannot be blank."
+    IDS_SCHEME_REMOVE,  "Are you sure you want to remove the %s color scheme?"
+    IDS_DK_REMOVEPAT,   "Are you sure you want to remove the %s pattern?"
+    IDS_DK_GRAN,        "Grid Granularity entry must be between %d and %d."
+    IDS_DK_BORDER,      "Specify a value for the Border Width between %d and %d."
+    IDS_DK_SPACING,     "Specify a value for Icon Spacing between %d and %d."
+    IDS_DK_DELAY,       "Specify a value for the Screen Saver Delay between %d and %d."
+
+END
+
+DLG_KEYBOARD DIALOG 6, 0, 170, 116
+STYLE 0x80C800C0
+CAPTION "Keyboard"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Keyboard Speed", -1, "button", 0x50000007, 6, 6, 120, 103
+    CONTROL "&Delay Before First Repeat", -1, "static", 0x50020000, 10, 17, 100, 9
+    CONTROL "Long", -1, "static", 0x50020000, 10, 26, 50, 9
+    CONTROL "Short", -1, "static", 0x50020002, 73, 26, 50, 9
+    CONTROL "", IDC_KB_DELAY, "scrollbar", 0x50010000, 10, 35, 112, 12
+    CONTROL "&Repeat Rate", -1, "static", 0x50020000, 10, 50, 50, 9
+    CONTROL "Slow", -1, "static", 0x50020000, 10, 59, 50, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 72, 59, 50, 9
+    CONTROL "", IDC_KB_SPEED, "scrollbar", 0x50010000, 10, 68, 112, 12
+    CONTROL "&Test:", -1, "static", 0x50020000, 10, 83, 50, 9
+    CONTROL "", IDC_KB_TEST, "edit", 0x50810000, 10, 93, 112, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 130, 10, 36, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 130, 28, 36, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 130, 48, 36, 14
+END
+DLG_MOUSE DIALOG 10, 10, 200, 108
+STYLE 0x80C800C0
+CAPTION "Mouse"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Mouse Tracking Speed", -1, "button", 0x50000007, 4, 4, 96, 36
+    CONTROL "Slow", -1, "static", 0x50020000, 6, 16, 44, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 54, 16, 44, 9
+    CONTROL "", IDC_MS_TRACK, "scrollbar", 0x50030000, 6, 26, 92, 12
+    CONTROL "&Double Click Speed", -1, "button", 0x50000007, 4, 44, 96, 60
+    CONTROL "Slow", -1, "static", 0x50020000, 6, 56, 44, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 54, 56, 44, 9
+    CONTROL "", IDC_MS_DBLCLK, "scrollbar", 0x50030000, 6, 66, 92, 12
+    CONTROL "", IDC_MS_TEST, "static", 0x50000007, 31, 80, 36, 16
+    CONTROL "TEST", -1, "static", 0x50020081, 33, 84, 32, 9
+    CONTROL "&Swap Left/Right Buttons", IDC_MS_SWAP, "button", 0x50030002, 104, 78, 158, 12
+    CONTROL "Mouse &Trails", IDC_MS_TRAILS, "button", 0x50030003, 104, 92, 158, 12
+    CONTROL "", IDC_MS_BOX, "static", 0x50000007, 108, 21, 42, 50
+    CONTROL "", IDC_MS_LBOX, "static", 0x50000007, 108, 21, 21, 14
+    CONTROL "", IDC_MS_RBOX, "static", 0x50000007, 129, 21, 21, 14
+    CONTROL "L", IDC_MS_L, "static", 0x50020081, 109, 24, 19, 8
+    CONTROL "R", IDC_MS_R, "static", 0x50020081, 130, 24, 19, 8
+    CONTROL "OK", IDOK, "button", 0x50030001, 160, 4, 36, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 160, 20, 36, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 160, 40, 36, 14
+END
+DLG_COLOR DIALOG 2, 0, 300, 194
+STYLE 0x80C800C0
+CAPTION "Color"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Color &Schemes", -1, "button", 0x50000007, 4, 2, 138, 44
+    CONTROL "", IDC_CO_SCHEMES, "combobox", 0x50230213, 6, 14, 134, 54
+    CONTROL "S&ave Scheme", IDC_CO_SAVE, "button", 0x50030000, 6, 30, 64, 14
+    CONTROL "Re&move Scheme", IDC_CO_REMOVE, "button", 0x50030000, 76, 30, 64, 14
+    CONTROL "", IDC_CO_SAMPLE, "static", 0x5000000A, 4, 48, 138, 112
+    CONTROL "Color &Palette >>", IDC_CO_PALETTE, "button", 0x50030000, 4, 162, 138, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 4, 178, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 53, 178, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 102, 178, 40, 14
+    CONTROL "Screen &Element:", -1, "static", 0x50020000, 154, 2, 128, 9
+    CONTROL "", IDC_CO_ELEMENT, "combobox", 0x50230003, 154, 12, 114, 62
+    CONTROL "&Basic Colors:", -1, "static", 0x50020000, 154, 32, 128, 9
+    CONTROL "", IDC_CO_BASIC, "static", 0x5003000A, 154, 42, 140, 86
+    CONTROL "&Custom Colors:", -1, "static", 0x50020000, 154, 134, 128, 9
+    CONTROL "", IDC_CO_CUSTOM, "static", 0x5003000A, 154, 144, 140, 28
+    CONTROL "&Define Custom Colors...", IDC_CO_DEFINE, "button", 0x50030000, 154, 178, 140, 14
+END
+DLG_SAVESCHEME DIALOG 132, 64, 144, 74
+STYLE 0x80C800C0
+CAPTION "Save Scheme"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Save this color scheme as", -1, "static", 0x50020001, 0, 5, 144, 9
+    CONTROL "", IDC_SS_NAME, "edit", 0x50810080, 10, 34, 124, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 13, 55, 32, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 53, 55, 32, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 93, 55, 32, 14
+END
+DLG_CUSTOMCOLOR DIALOG 0, 0, 150, 190
+STYLE 0x80C80040
+CAPTION "Custom Color Selector"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_CC_LUM, "static", 0x5000000A, 130, 4, 8, 112
+    CONTROL "", IDC_CC_SPECTRUM, "static", 0x50000007, 4, 4, 114, 112
+    CONTROL "", IDC_CC_SAMPLE, "static", 0x50000007, 4, 124, 42, 26
+    CONTROL "&o", IDC_CC_SOLID, "button", 0x50000000, 1000, 1000, 36, 14
+    CONTROL "Color|", -1, "static", 0x50020002, 4, 152, 21, 14
+    CONTROL "S&olid", -1, "static", 0x50020000, 25, 152, 21, 14
+    CONTROL "H&ue:", -1, "static", 0x50020002, 48, 126, 20, 9
+    CONTROL "", IDC_CC_HUE, "edit", 0x50830000, 70, 124, 18, 12
+    CONTROL "", IDC_CC_HUEA, "cpArrow", 0x50820000, 88, 124, 7, 12
+    CONTROL "&Sat:", -1, "static", 0x50020002, 48, 140, 20, 9
+    CONTROL "", IDC_CC_SAT, "edit", 0x50830000, 70, 138, 18, 12
+    CONTROL "", IDC_CC_SATA, "cpArrow", 0x50820000, 88, 138, 7, 12
+    CONTROL "&Lum:", -1, "static", 0x50020002, 48, 154, 20, 9
+    CONTROL "", IDC_CC_LUMV, "edit", 0x50830000, 70, 152, 18, 12
+    CONTROL "", IDC_CC_LUMA, "cpArrow", 0x50820000, 88, 152, 7, 12
+    CONTROL "&Red:", -1, "static", 0x50020002, 96, 126, 24, 9
+    CONTROL "", IDC_CC_RED, "edit", 0x50830000, 122, 124, 18, 12
+    CONTROL "", IDC_CC_REDA, "cpArrow", 0x50820000, 140, 124, 7, 12
+    CONTROL "&Green:", -1, "static", 0x50020002, 96, 140, 24, 9
+    CONTROL "", IDC_CC_GREEN, "edit", 0x50830000, 122, 138, 18, 12
+    CONTROL "", IDC_CC_GREENA, "cpArrow", 0x50820000, 140, 138, 7, 12
+    CONTROL "&Blue:", -1, "static", 0x50020002, 96, 154, 24, 9
+    CONTROL "", IDC_CC_BLUE, "edit", 0x50830000, 122, 152, 18, 12
+    CONTROL "", IDC_CC_BLUEA, "cpArrow", 0x50820000, 140, 152, 7, 12
+    CONTROL "&Add Color", IDC_CC_ADD, "button", 0x50030000, 4, 174, 45, 14
+    CONTROL "&Close", IDOK, "button", 0x50030001, 52, 174, 45, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 100, 174, 45, 14
+END
+
+DLG_DESKTOP DIALOG 8, 2, 200, 208
+STYLE 0x80C800C0
+CAPTION "Desktop"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Pattern", 99, "button", 0x50000007, 4, 6, 130, 40
+    CONTROL "&Name:", 99, "static", 0x50020000, 10, 18, 20, 10
+    CONTROL "", IDC_DK_PATTERN, "combobox", 0x50210103, 32, 16, 90, 64
+    CONTROL "Edit &Pattern...", IDC_DK_EDITPAT, "button", 0x50010000, 44, 30, 60, 14
+    CONTROL "Applications", -1, "button", 0x50000007, 4, 48, 130, 27
+    CONTROL "Fast ""A&lt+Tab"" Switching", IDC_DK_COOLSWITCH, "button", 0x50030003, 10, 61, 118, 9
+    CONTROL "Screen Saver", -1, "button", 0x50000007, 4, 77, 192, 40
+    CONTROL "N&ame:", -1, "static", 0x50020000, 10, 90, 20, 10
+    CONTROL "", IDC_DK_SAVER, "combobox", 0x50230103, 32, 89, 90, 64
+    CONTROL "&Delay:", -1, "static", 0x50020000, 9, 105, 46, 8
+    CONTROL "", IDC_DK_DELAY, "edit", 0x50830000, 57, 103, 24, 12
+    CONTROL "Minutes", -1, "static", 0x50020000, 92, 105, 41, 8
+    CONTROL "", IDC_DK_DELAYA, "cpArrow", 0x50820000, 81, 103, 7, 12
+    CONTROL "T&est", IDC_DK_TEST, "button", 0x50030000, 146, 84, 44, 14
+    CONTROL "Set&up...", IDC_DK_SETUP, "button", 0x50030000, 146, 101, 44, 14
+    CONTROL "Wallpaper", 99, "button", 0x50000007, 4, 119, 94, 40
+    CONTROL "&File:", 99, "static", 0x50020000, 10, 133, 20, 10
+    CONTROL "", IDC_DK_WALLPAPER, "combobox", 0x502101C2, 32, 131, 62, 64
+    CONTROL "&Center", IDC_DK_CENTER, "button", 0x50030004, 11, 145, 39, 12
+    CONTROL "&Tile", IDC_DK_TILE, "button", 0x50000004, 54, 145, 32, 12
+    CONTROL "Icons", 99, "button", 0x50000007, 102, 119, 94, 40
+    CONTROL "&Spacing:", 99, "static", 0x50020000, 107, 133, 57, 9
+    CONTROL "", IDC_DK_SPACING, "edit", 0x50830000, 142, 131, 18, 12
+    CONTROL "", IDC_DK_SPACINGA, "cpArrow", 0x50820000, 160, 131, 7, 12
+    CONTROL "Pixels", 99, "static", 0x50020000, 172, 133, 20, 9
+    CONTROL "&Wrap Title", IDC_DK_WRAP, "button", 0x50030003, 106, 145, 50, 9
+    CONTROL "Cursor Blink &Rate", -1, "button", 0x50020007, 102, 162, 94, 42
+    CONTROL "Slow", -1, "static", 0x50020000, 104, 178, 40, 9
+    CONTROL "Fast", -1, "static", 0x50020002, 135, 178, 40, 9
+    CONTROL "", IDC_DK_BLINK, "scrollbar", 0x50030002, 104, 187, 71, 10
+    CONTROL "", IDC_DK_BLINKER, "static", 0x50000000, 184, 181, 1, 8
+    CONTROL "Sizing Grid", 99, "button", 0x50000007, 4, 162, 94, 42
+    CONTROL "&Granularity:", 99, "static", 0x50020000, 8, 176, 54, 9
+    CONTROL "", IDC_DK_GRAN, "edit", 0x50830000, 66, 174, 18, 12
+    CONTROL "", IDC_DK_GRANA, "cpArrow", 0x50820000, 84, 174, 7, 12
+    CONTROL "&Border Width:", -1, "static", 0x50020000, 8, 190, 54, 9
+    CONTROL "", IDC_DK_BORDER, "edit", 0x50830000, 66, 188, 18, 12
+    CONTROL "", IDC_DK_BORDERA, "cpArrow", 0x50820000, 84, 188, 7, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 154, 3, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 154, 20, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 154, 40, 40, 14
+END
+DLG_EDITPATTERN DIALOG 0, 70, 200, 118
+STYLE 0x80C800C0
+CAPTION "Desktop - Edit Pattern"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Name", 99, "static", 0x50020000, 4, 6, 46, 9
+    CONTROL "", IDC_EP_NAME, "combobox", 0x50210102, 54, 4, 94, 64
+    CONTROL "Sample", 99, "static", 0x50020000, 4, 22, 40, 9
+    CONTROL "", IDC_EP_SAMPLE, "static", 0x50000007, 4, 32, 46, 82
+    CONTROL "", IDC_EP_GRID, "static", 0x50000007, 58, 24, 90, 90
+    CONTROL "&Add", IDC_EP_ADD, "button", 0x50030000, 158, 68, 40, 14
+    CONTROL "&Change", IDC_EP_CHANGE, "button", 0x50010000, 158, 84, 40, 14
+    CONTROL "&Remove", IDC_EP_REMOVE, "button", 0x50010000, 158, 100, 40, 14
+    CONTROL "OK", IDOK, "button", 0x50030001, 158, 3, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 158, 20, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 158, 40, 40, 14
+END

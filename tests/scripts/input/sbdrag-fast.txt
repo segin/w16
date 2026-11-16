@@ -1,0 +1,61 @@
+; a fast drag of US19's slow control (a second for each SB_THUMBTRACK): the
+; pointer moved in 40 quick 2-pixel steps and stopped; the screen must
+; soon show the outline and the thumb where the pointer stopped: mouse
+; moves made while the program is busy merge into one (3.1; probe US25),
+; so it is not still working through every place the pointer passed (a
+; USER without that falls seconds behind). tests/inputrun.sh; boot-test
+; case sbdrag, part fast. The control is at 284,73 to 301,223, its thumb
+; at the top
+click 1
+sleep 1
+home
+sleep 0.3
+move 146 48
+sleep 0.5
+down 1
+sleep 0.5
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+move 0 2
+match 01-fast 8 1
+shot 01-fast
+up 1
+match 02-released 8 1
+shot 02-released

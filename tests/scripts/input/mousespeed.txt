@@ -1,0 +1,38 @@
+; boot-test case mousespeed: a fixed motion of the pointer, small spaced
+; steps then larger ones from the top left corner, with the acceleration
+; WIN.INI sets (the case runs it with MouseThreshold1/2 and MouseSpeed at
+; 0 0 0 and at 4 6 2); where the pointer ends is in the shot. USER, not
+; the mouse driver, accelerates (3.1 SDK, SPI_SETMOUSE).
+click 1
+sleep 1
+key Escape
+sleep 0.5
+home
+home
+sleep 0.5
+move 2 1
+sleep 0.2
+move 2 1
+sleep 0.2
+move 2 1
+sleep 0.2
+move 2 1
+sleep 0.2
+move 5 3
+sleep 0.2
+move 5 3
+sleep 0.2
+move 5 3
+sleep 0.2
+move 5 3
+sleep 0.2
+move 9 7
+sleep 0.2
+move 9 7
+sleep 0.2
+move 9 7
+sleep 0.2
+move 9 7
+sleep 0.2
+match 01-travel 20 1
+shot 01-travel

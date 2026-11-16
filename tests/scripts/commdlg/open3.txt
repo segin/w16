@@ -1,0 +1,55 @@
+; GetOpenFileName: the combo boxes' keyboard (F4, Down) and focus moves
+cd1 open filter=Text~Files~(*.TXT)|*.txt|Bitmaps|*.bmp;*.pcx|All~Files~(*.*)|*.* index=3 flags=11
+cd1 open filter=Text~Files~(*.TXT)|*.txt|Bitmaps|*.bmp;*.pcx|All~Files~(*.*)|*.* index=1 flags=11
+wait 3000
+alt d
+wait 500
+focus
+snap C:\O1.BMP
+alt t
+wait 500
+focus
+key 73
+wait 800
+snap C:\O2.BMP
+key 28
+wait 800
+focus
+snap C:\O3.BMP
+key 1B
+wait 500
+alt v
+wait 500
+focus
+key 73
+wait 800
+snap C:\O4.BMP
+key 28
+wait 800
+focus
+snap C:\O5.BMP
+key 1B
+wait 500
+focus
+key 1B
+wait 1500
+; the second: the mouse
+click 300 160
+wait 500
+focus
+snap C:\O6.BMP
+dblclick 300 175
+wait 1000
+snap C:\O7.BMP
+click 150 255
+wait 800
+snap C:\O8.BMP
+key 1B
+wait 500
+click 380 255
+wait 800
+snap C:\O9.BMP
+key 1B
+wait 500
+key 1B
+wait 1000

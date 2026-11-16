@@ -1,0 +1,27 @@
+; argument checking (bad.os1 runs OS1's "bad" step) and which registration
+; entries OleRegisterServer wants
+reg OS1Probe=OS1 Probe
+reg OS1Probe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OSAProbe\protocol\StdFileEditing\verb\0=Edit
+reg OSBProbe\protocol\StdFileEditing\server=C:\OS1.EXE
+reg OSCProbe\protocol\StdExecute\server=C:\OS1.EXE
+reg OSDProbe\protocol=x
+reg OSEProbe\protocol\StdFileEditing=x
+run C:\OS1.EXE /C:OSAProbe
+wait 1500
+run C:\OS1.EXE /C:OSBProbe
+wait 1500
+run C:\OS1.EXE /C:OSCProbe
+wait 1500
+run C:\OS1.EXE /C:OSDProbe
+wait 1500
+run C:\OS1.EXE /C:OSEProbe
+wait 1500
+run C:\OS1.EXE /C:osbprobe
+wait 1500
+run C:\OS1.EXE -Embedding
+wait 6000
+init OS1Probe OLEsystem
+exec [StdNewDocument("OS1Probe","AFTERBAD")]
+term
+wait 1000

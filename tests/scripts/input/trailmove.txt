@@ -1,0 +1,15 @@
+; continuous mouse motion for the cursor-call counts and the trail
+; (tests/currec.sh; mouse trails, drivers/vga/README.md): from the
+; screen's middle 4 pixels right every 20 ms for 3 s (one xdotool: a
+; steady stream), still 2 s, the same back to the left, still 3 s.
+; Shift held and let go starts CR1's recording
+click 1
+keydown shift
+sleep 0.5
+keyup shift
+sleep 1
+glide 4,0 150,0.02
+sleep 2
+glide -4,0 150,0.02
+sleep 3
+shot end

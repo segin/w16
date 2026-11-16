@@ -1,0 +1,12 @@
+;! ini WINDOWS/CONTROL.INI MMCPL:NumApps=12
+;! ini WINDOWS/CONTROL.INI MMCPL:X=50
+;! ini WINDOWS/CONTROL.INI MMCPL:Y=60
+;! ini WINDOWS/CONTROL.INI MMCPL:W=300
+;! ini WINDOWS/CONTROL.INI MMCPL:H=200
+; a saved window rectangle with a different NumApps: the icons do not fit,
+; so the window is resized to six columns at the saved position
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+close
+wait 2000

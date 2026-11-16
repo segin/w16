@@ -9,9 +9,7 @@
  * paragraph; Indents and alignment to the selected ones).
  */
 #include "write.h"
-#ifndef W16_WIN2
 #include <commdlg.h>
-#endif
 
 /* ---- character formatting ---- */
 
@@ -724,82 +722,9 @@ void cmd_findagain(void)
 
 /* ---- Fonts ---- */
 
-#ifdef W16_WIN2
-/* Windows 2.x: no CHOOSEFONT; the Fonts dialog Write's own resources
-   carry (dialog 15: name field, font list, size list, point size) */
-int CALLBACK __export enum_face(const LOGFONT FAR *lf, const TEXTMETRIC FAR *tm, int type, LPARAM lp)
-{
-    (void)tm;
-    (void)type;
-    if (SendMessage((HWND)LOWORD(lp), LB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)lf->lfFaceName) < 0)
-        SendMessage((HWND)LOWORD(lp), LB_ADDSTRING, 0, (LPARAM)lf->lfFaceName);
-    return 1;
-}
-
-BOOL CALLBACK __export Fonts2DlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
-{
-    (void)lp;
-    if (msg == WM_INITDIALOG) {
-        CHPX c;
-        FFN FAR *f;
-        HDC dc = GetDC(d);
-        FARPROC fp = MakeProcInstance((FARPROC)enum_face, g_hinst);
-        static const BYTE sizes[] = { 8, 10, 12, 14, 18, 24 };
-        int i;
-        EnumFonts(dc, NULL, (FONTENUMPROC)fp, (LPSTR)MAKELONG(GetDlgItem(d, 4), 0));
-        FreeProcInstance(fp);
-        ReleaseDC(d, dc);
-        for (i = 0; i < sizeof sizes; i++) {
-            char s[4];
-            s_utoa(s, sizes[i]);
-            SendDlgItemMessage(d, 6, LB_ADDSTRING, 0, (LPARAM)(LPSTR)s);
-        }
-        sel_props(&c);
-        f = font_get(&g_doc, c.ftc);
-        SetDlgItemText(d, 3, f->name);
-        SetDlgItemInt(d, 5, c.hps / 2, FALSE);
-        return TRUE;
-    }
-    if (msg == WM_COMMAND) {
-        char s[LF_FACESIZE + 1];
-        int i;
-        if (wp == 4 && HIWORD(lp) == LBN_SELCHANGE) {
-            i = (int)SendDlgItemMessage(d, 4, LB_GETCURSEL, 0, 0);
-            SendDlgItemMessage(d, 4, LB_GETTEXT, i, (LPARAM)(LPSTR)s);
-            SetDlgItemText(d, 3, s);
-            return TRUE;
-        }
-        if (wp == 6 && HIWORD(lp) == LBN_SELCHANGE) {
-            i = (int)SendDlgItemMessage(d, 6, LB_GETCURSEL, 0, 0);
-            SendDlgItemMessage(d, 6, LB_GETTEXT, i, (LPARAM)(LPSTR)s);
-            SetDlgItemText(d, 5, s);
-            return TRUE;
-        }
-        if (wp == IDOK) {
-            BOOL ok;
-            UINT pt = GetDlgItemInt(d, 5, &ok, FALSE);
-            if (!ok || pt < 4 || pt > 127) {
-                msgbox(d, IDS_FONTSIZE, NULL, MB_OK | MB_ICONEXCLAMATION);
-                return TRUE;
-            }
-            GetDlgItemText(d, 3, s, sizeof s);
-            font_ftc = font_code(&g_doc, s, 0);
-            font_hps = (BYTE)(pt * 2);
-            EndDialog(d, IDOK);
-            return TRUE;
-        }
-        if (wp == IDCANCEL) {
-            EndDialog(d, IDCANCEL);
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-#endif
 
 void cmd_fonts(void)
 {
-#ifndef W16_WIN2
     CHOOSEFONT cf;
     LOGFONT lf;
     CHPX c;
@@ -821,10 +746,6 @@ void cmd_fonts(void)
     font_ftc = font_code(&g_doc, lf.lfFaceName, (BYTE)(lf.lfPitchAndFamily & 0xF0));
     font_hps = (BYTE)(cf.iPointSize / 5);
     apply_chp(chp_setfont, 0);
-#else
-    if (run_dialog(IDD_FONTS2, Fonts2DlgProc) == IDOK)
-        apply_chp(chp_setfont, 0);
-#endif
 }
 
 /* ---- Header and Footer: plan (docs/wri-format.md has the format) ---- */

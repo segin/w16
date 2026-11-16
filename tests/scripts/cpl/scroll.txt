@@ -1,0 +1,15 @@
+;! cp1
+;! file cp1-40.ini CP1.INI
+; 51 applets: six columns, the screen's height, a vertical scroll bar;
+; End scrolls the last applet into view
+run CONTROL.EXE
+wait 6000
+snap S0.BMP
+key 23
+wait 500
+snap S1.BMP
+key 24
+wait 500
+snap S2.BMP
+close
+wait 2000

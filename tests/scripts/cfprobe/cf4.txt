@@ -1,0 +1,24 @@
+; CF4: index line limit (narrow and wide letters), card text limit
+run CARDFILE.EXE
+wait 3000
+key 75
+wait 300
+type iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+wait 300
+snap C:\IDXI.BMP
+key 0D
+wait 300
+key 76
+wait 300
+type WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+wait 300
+snap C:\IDXW.BMP
+key 0D
+wait 300
+menu f
+char a
+wait 1500
+type C:\CF4.CRD
+key 0D
+wait 1500
+dump

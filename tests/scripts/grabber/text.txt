@@ -1,0 +1,84 @@
+# text modes 3, 1, 7 (3 with the palette and blink changed)
+# GV1.COM (tests/dos/gv1.asm) in each mode from RUN.BAT; per mode: its
+# screen, PrintScreen, Alt+Tab to Windows and back, Alt+PrintScreen, to
+# Windows and back, "t" (a line of text through the BIOS), "q"
+# tmax: 246
+# run: C:\GV1.COM 03 p
+# run: C:\GV1.COM 01
+# run: C:\GV1.COM 07
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type c:\run.bat
+key Return
+sleep 10
+shot m03_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m03_w1
+key alt+Tab
+sleep 8
+shot m03_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m03_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m03_3
+type q
+sleep 6
+shot m01_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m01_w1
+key alt+Tab
+sleep 8
+shot m01_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m01_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m01_3
+type q
+sleep 6
+shot m07_1
+key Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m07_w1
+key alt+Tab
+sleep 8
+shot m07_2
+key alt+Print
+sleep 3
+key alt+Tab
+sleep 8
+shot m07_w2
+key alt+Tab
+sleep 8
+type t
+sleep 2
+shot m07_3
+type q
+sleep 6
+shot end
+key alt+F4
+sleep 3
+key Return
+sleep 8

@@ -2,8 +2,7 @@
 ; 16-bit code (Write is linked without the C library), and KERNEL's
 ; __AHINCR for huge blocks. Register interface (OpenWatcom's): multiply
 ; DX:AX by CX:BX giving DX:AX; divide DX:AX by CX:BX giving the quotient
-; in DX:AX and the remainder in CX:BX; other registers kept. 8086 code,
-; so the same object serves the Windows 2.x build.
+; in DX:AX and the remainder in CX:BX; other registers kept.
 
         bits 16
         cpu 8086
