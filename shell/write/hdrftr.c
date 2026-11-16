@@ -94,7 +94,7 @@ static void show_distance(HWND d)
 static void hf_return(HWND d)
 {
     DOC t;
-    DWORD i, cp, at;
+    DWORD i, cp, at, before;
     long dist;
     BOOL first = IsDlgButtonChecked(d, 6);
     char buf[32];
@@ -110,6 +110,7 @@ static void hf_return(HWND d)
             font_code(&g_doc, f.name, f.ffid);
         }
     }
+    before = g_doc.cpMac;
     if (headExisted)
         doc_delete(&g_doc, headFirst, headLim - headFirst);
     at = headExisted ? headFirst : 0;
@@ -180,6 +181,12 @@ static void hf_return(HWND d)
     }
     sep_encode(&g_doc, &s);
     doc_free(&t);
+    /* the body moved by what the head grew or shrank (WR9: the caret is
+       where it was in the text) */
+    if (savedFirst >= at) {
+        savedFirst = savedFirst + g_doc.cpMac - before;
+        savedLim = savedLim + g_doc.cpMac - before;
+    }
     g_doc.dirty = TRUE;
     mode = 0;
     DestroyWindow(hfDlg);
