@@ -1407,6 +1407,10 @@ LRESULT FAR PASCAL __loadds ServerWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
     case WM_DDE_ACK:
         server_ack(c, LOWORD(lp), HIWORD(lp));
         return 0;
+    case WM_TIMER:
+        /* a synchronous transaction a server made on its own
+           conversation (3.1 posts it, and it times out) */
+        return ClientWndProc(w, msg, wp, lp);
     case WM_DDE_TERMINATE:
         if ((HWND)wp == c->partner)
             server_term(c);
