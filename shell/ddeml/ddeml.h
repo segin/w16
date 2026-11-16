@@ -33,6 +33,7 @@
 /* private messages between DDEML's own windows */
 #define WM_DMG_CALLBACK  (WM_USER + 0x60)  /* DMGClass: lParam -> CBARGS */
 #define WM_DMG_MONITOR   (WM_USER + 0x61)  /* monitor window: lParam -> event */
+#define WM_DMG_RUN       (WM_USER + 0x62)  /* client: run the held advise data */
 
 typedef struct tagINST INST;
 typedef struct tagCONV CONV;
@@ -134,6 +135,8 @@ struct tagCONV {
     ATOM litem;
     BOOL dead;                          /* TERMINATE sent or received */
     BOOL incb;                          /* a callback of this conv is running */
+    BOOL initiating;                    /* its INITIATE is being sent */
+    BOOL runposted;                     /* WM_DMG_RUN is on its way */
 };
 
 struct tagCLIST {

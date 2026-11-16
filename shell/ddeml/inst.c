@@ -247,7 +247,9 @@ UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res
         in->flags |= IF_CLIENTONLY;
     in->next = ddeml_insts;
     ddeml_insts = in;
-    in->dmg = CreateWindow(CLS_DMG, "", WS_CLIPSIBLINGS | WS_CAPTION, 0, 0, 0, 0, NULL, NULL,
+    /* an overlapped window and a popup: USER makes their styles
+       04C00000 and 84000000, as 3.1's are */
+    in->dmg = CreateWindow(CLS_DMG, "", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
                            ddeml_inst, NULL);
     if (in->dmg) {
         SetWindowWord(in->dmg, 0, (WORD)in);
@@ -255,7 +257,7 @@ UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res
         SetWindowWord(in->dmg, 4, 0);
     }
     if (!(in->flags & IF_MONITOR)) {
-        in->frame = CreateWindow(CLS_FRAME, "", WS_POPUP | WS_DISABLED, 0, 0, 0, 0, NULL, NULL,
+        in->frame = CreateWindow(CLS_FRAME, "", WS_POPUP, 0, 0, 0, 0, NULL, NULL,
                                  ddeml_inst, NULL);
         if (in->frame) {
             SetWindowWord(in->frame, 0, (WORD)in);
@@ -296,22 +298,27 @@ BOOL DMLAPI DdeUninitialize(DWORD id)
         for (c = in->convs; c; c = c->next)
             if (!c->dead)
                 conv_terminate(c, FALSE);
-        /* wait for the partners' answers */
-        for (;;) {
-            BOOL all = TRUE;
+        /* wait for the partners' answers: until every partner window
+           has gone (a partner's TERMINATE may still be queued then) */
+        {
             DWORD end = GetCurrentTime() + 10000;
-            for (c = in->convs; c; c = c->next)
-                if (c->partner && IsWindow(c->partner) && IsWindow(c->hwnd))
-                    all = FALSE;
-            if (all || (long)(GetCurrentTime() - end) >= 0)
-                break;
-            {
-                MSG m;
-                if (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
+            MSG m;
+            for (;;) {
+                BOOL all = TRUE;
+                while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
                     TranslateMessage(&m);
                     DispatchMessage(&m);
-                } else
-                    Yield();
+                }
+                for (c = in->convs; c; c = c->next)
+                    if (c->partner && IsWindow(c->partner) && c->hwnd && IsWindow(c->hwnd))
+                        all = FALSE;
+                if (all || (long)(GetCurrentTime() - end) >= 0)
+                    break;
+                Yield();
+            }
+            while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&m);
+                DispatchMessage(&m);
             }
         }
         while (in->convs)
@@ -339,8 +346,8 @@ UINT DMLAPI DdeGetLastError(DWORD id)
 {
     INST NEAR *in = inst_find(id);
     UINT e;
-    if (!in)
-        return ddeml_lasterr;
+    if (!in)                            /* as 3.1 */
+        return id ? DMLERR_INVALIDPARAMETER : ddeml_lasterr;
     e = in->lasterr;
     in->lasterr = 0;
     return e;

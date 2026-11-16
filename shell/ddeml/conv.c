@@ -249,7 +249,9 @@ static CONV NEAR *client_start(INST NEAR *in, HSZ svc, HSZ topic, CONVCONTEXT FA
     if (pcc)
         bcopy(&c->cc, pcc, sizeof(CONVCONTEXT));
     c->convst = XST_INIT1;
+    c->initiating = TRUE;
     SendMessage((HWND)-1, WM_DDE_INITIATE, (WPARAM)c->hwnd, MAKELPARAM(LOWORD(svc), LOWORD(topic)));
+    c->initiating = FALSE;
     return c;
 }
 
@@ -437,6 +439,9 @@ HCONV DMLAPI DdeReconnect(HCONV hc)
     }
     return conv_handle(n);
 }
+
+static void run_queue(CONV NEAR *c, BOOL one);
+static BOOL blocked(CONV NEAR *c);
 
 /* ---- transactions: the client side ---- */
 
@@ -678,7 +683,7 @@ static BOOL client_data(CONV NEAR *c, WPARAM wp, LPARAM lp)
         if (blocked(c))
             return FALSE;
         for (l = c->links; l; l = l->next)
-            if (l->item == item && (h ? l->fmt == fmt : (l->opts & 0x4000) != 0))
+            if (l->item == item && (!h || l->fmt == fmt))
                 break;
         if (!h && l)
             fmt = l->fmt;
@@ -751,7 +756,7 @@ LRESULT FAR PASCAL __loadds ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
         return DefWindowProc(w, msg, wp, lp);
     switch (msg) {
     case WM_DDE_ACK:
-        if (InSendMessage() && c->convst == XST_INIT1) {
+        if (InSendMessage() && c->initiating) {
             if (!c->partner) {
                 client_connected(c, (HWND)wp, LOWORD(lp), HIWORD(lp));
                 return 0;
@@ -783,8 +788,28 @@ LRESULT FAR PASCAL __loadds ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
             GlobalDeleteAtom(HIWORD(lp));
             return 0;
         }
-        if (!client_data(c, wp, lp))
+        {
+            HGLOBAL h = (HGLOBAL)LOWORD(lp);
+            WORD FAR *p = h ? (WORD FAR *)GlobalLock(h) : NULL;
+            BOOL response = p && (p[0] & 0x1000);
+            if (p)
+                GlobalUnlock(h);
+            if (response) {
+                if (!client_data(c, wp, lp))
+                    queue_msg(c, msg, wp, lp, FALSE);
+                return 0;
+            }
+            /* advise data: held, and given to the callback once the
+               DATA messages already posted have been taken (as 3.1) */
             queue_msg(c, msg, wp, lp, FALSE);
+            if (!c->runposted && PostMessage(w, WM_DMG_RUN, 0, 0))
+                c->runposted = TRUE;
+        }
+        return 0;
+    case WM_DMG_RUN:
+        c->runposted = FALSE;
+        if (!blocked(c))
+            run_queue(c, FALSE);
         return 0;
     case WM_DDE_TERMINATE:
         if ((HWND)wp == c->partner)

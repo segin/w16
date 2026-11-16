@@ -343,8 +343,10 @@ static char *hszname(HSZ h)
             DWORD n = DdeQueryString(ID, h, q, sizeof q, 0);
             q[n < sizeof q ? (WORD)n : sizeof q - 1] = 0;
             wsprintf(o, "i\"%s\"/\"%s\"", (LPSTR)a, (LPSTR)q);
-        } else
+        } else if (rawvals)
             wsprintf(o, "h?%08lX", (DWORD)h);
+        else
+            lstrcpy(o, "h?");
     }
     if (rawvals)
         wsprintf(o + lstrlen(o), "[%08lX]", (DWORD)h);
@@ -536,6 +538,15 @@ static DWORD xidvalue(const char *s)
     return 0;
 }
 
+static char *d2name(UINT type, DWORD d2)
+{
+    static char b[24];
+    if (type == XTYP_ADVSTOP)
+        return hszname((HSZ)d2);
+    wsprintf(b, "%08lX", d2);
+    return b;
+}
+
 static char *d1name(UINT type, DWORD d1)
 {
     static char b[24];
@@ -567,11 +578,11 @@ static HDDEDATA cbcommon(int slot, UINT type, UINT fmt, HCONV conv, HSZ h1, HSZ 
     }
     if (type == XTYP_XACT_COMPLETE)
         addxid(d1);
-    P("%s cb %s(%x) fmt=%s conv=%s hsz1=%s hsz2=%s data=%s d1=%s d2=%lx", (LPSTR)who,
+    P("%s cb %s(%x) fmt=%s conv=%s hsz1=%s hsz2=%s data=%s d1=%s d2=%s", (LPSTR)who,
       (LPSTR)xtname(type), type, (LPSTR)fmtname(fmt), (LPSTR)sname('c', (DWORD)conv),
       (LPSTR)hszname(h1), (LPSTR)hszname(h2),
       (LPSTR)(d == (HDDEDATA)1 ? "TRUE" : snew('d', (DWORD)d)),
-      (LPSTR)d1name(type, d1), d2);
+      (LPSTR)d1name(type, d1), (LPSTR)d2name(type, d2));
     if ((type == XTYP_CONNECT || type == XTYP_WILDCONNECT) && d1) {
         CONVCONTEXT FAR *cc = (CONVCONTEXT FAR *)d1;
         P("%c   cc cb=%u flags=%u country=%u cp=%d lang=%lx sec=%lx", letter, cc->cb, cc->wFlags,
@@ -1075,8 +1086,7 @@ static void step(char *l)
     } else if (eq(w, "hszval")) {
         char *s = tok(&a, &q);
         HSZ h = gethsz(s, q);
-        P("%c   value %lx atom-match=%d", letter, (DWORD)h,
-          GlobalFindAtom(s) == LOWORD(h) && !HIWORD(h));
+        P("%c   atom-match=%d", letter, GlobalFindAtom(s) == LOWORD(h) && !HIWORD(h));
     } else if (eq(w, "atomq")) {
         /* the global atom of a string: does it exist, and how many
            GlobalDeleteAtom calls remove it (they are put back after) */
@@ -1094,8 +1104,10 @@ static void step(char *l)
     } else if (eq(w, "freehsz") || eq(w, "keephsz")) {
         HSZ h = arghsz(&a);
         BOOL r = eq(w, "freehsz") ? DdeFreeStringHandle(ID, h) : DdeKeepStringHandle(ID, h);
-        P("%c %s(%s) -> %d", letter, (LPSTR)(eq(w, "freehsz") ? "DdeFreeStringHandle" : "DdeKeepStringHandle"),
-          (LPSTR)hszname(h), r);
+        /* (Keep returns the atom: shown as such, its value is USER's) */
+        P("%c %s(%s) -> %s", letter, (LPSTR)(eq(w, "freehsz") ? "DdeFreeStringHandle" : "DdeKeepStringHandle"),
+          (LPSTR)hszname(h), (LPSTR)(h && (WORD)r == LOWORD(h) && r != 1 ? "the atom"
+                                     : r ? "1" : "0"));
         err();
     } else if (eq(w, "qstr")) {
         HSZ h = arghsz(&a);
@@ -1167,6 +1179,15 @@ static void step(char *l)
     } else if (eq(w, "cwin")) {
         DWORD c = svalue('c', tok(&a, NULL));
         P("%c   conv %s low=%w high=%x", letter, (LPSTR)sname('c', c), LOWORD(c), HIWORD(c));
+    } else if (eq(w, "status")) {
+        HCONV c = (HCONV)svalue('c', tok(&a, NULL));
+        CONVINFO i;
+        UINT r;
+        i.cb = sizeof i;
+        r = DdeQueryConvInfo(c, QID_SYNC, &i);
+        P("%c DdeQueryConvInfo(%s) -> %u status=%x convst=%u user=%lx", letter,
+          (LPSTR)sname('c', (DWORD)c), r, r ? i.wStatus : 0, r ? i.wConvst : 0, r ? i.hUser : 0L);
+        err();
     } else if (eq(w, "info")) {
         HCONV c = (HCONV)svalue('c', tok(&a, NULL));
         char *x = tok(&a, NULL);

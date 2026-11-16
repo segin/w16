@@ -15,7 +15,7 @@ xact c1 advstart+ackreq Ack CF_TEXT - 2000
 xact c1 advstart+ackreq+nodata AckWarm CF_TEXT - 2000
 xact c1 advstart Hot Private - 2000
 C: xact c1 advstart Hot CF_TEXT - 2000
-info c1
+status c1
 B: postadv Topic Hot
 B: postadv Topic Warm2
 xact c1 request Warm2 CF_TEXT - 2000
@@ -38,7 +38,7 @@ B: postadv Topic Ack
 B: postadv Topic Ack
 B: postadv Topic Ack
 wait 300
-info c1
+status c1
 ret ADVDATA ack
 enable c1 all
 wait 500
