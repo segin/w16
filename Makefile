@@ -2419,6 +2419,19 @@ $(DOS)/OS1.EXE $(DOS)/OS2.EXE: $(DOS)/OS%.EXE: $(B)/tests/start.o $(B)/olesvr/te
 	@mkdir -p $(@D)
 	$(WLINK) @tests/olesvr/os.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/olesvr/tests/os$*.map file { $(B)/tests/start.o $(B)/olesvr/tests/os$*.o }
+# ---- DDEML probes (tests/ddeml/; ARCHITECTURE.md, DDEML) ----
+# DM.EXE: DDEML client/server/monitor and raw-DDE peer, logging through
+# OSSPY.DLL (tests/olesvr); tests/ddeml/dmrun.sh, tests/ddemlscen.sh
+dmprobes: $(DOS)/DM.EXE $(DOS)/OSSPY.DLL
+dos: $(DOS)/DM.EXE
+.PHONY: dmprobes
+$(B)/ddeml/tests/dm.o: tests/ddeml/dm.c tests/olesvr/osspy.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/DM.EXE: $(B)/tests/start.o $(B)/ddeml/tests/dm.o tests/apps/app.lnk tests/ddeml/dm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/ddeml/dm.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ddeml/tests/dm.map file { $(B)/tests/start.o $(B)/ddeml/tests/dm.o }
 # OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
 # SS != DS (it runs on its callers' stacks)
 OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win

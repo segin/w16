@@ -1,0 +1,11 @@
+# wlink directives for DM.EXE (tests/ddeml/dm.c), the DDEML probe, with
+# its imports from OSSPY.DLL (tests/olesvr/osspy.lnk)
+@tests/apps/app.lnk
+option stack=16k
+import OSSPYSTART OSSPY.1
+import OSSPYSTOP OSSPY.2
+import _OsPrintf OSSPY.3
+import OSDUMPDATA OSSPY.4
+import OSSETQUIET OSSPY.5
+import OSSPYSENT OSSPY.10
+library ddeml.lib

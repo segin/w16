@@ -22,5 +22,7 @@ void FAR __cdecl OsPrintf(const char FAR *fmt, ...);
 void FAR PASCAL OsDumpData(WORD cf, HGLOBAL h, WORD offset);
 /* 0: log only; 1: echo to nothing else (reserved) */
 void FAR PASCAL OsSetQuiet(BOOL quiet);
+/* TRUE: log every sent WM_DDE_* message too (default: INITIATE and ACK) */
+void FAR PASCAL OsSpySent(BOOL on);
 
 #endif
