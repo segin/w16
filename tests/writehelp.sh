@@ -5,7 +5,8 @@
 # build/dos/WRITE.EXE, while tests/apps/thelp.c stands in for WINHELP.EXE
 # and logs each request (SNAP "mark N" lines label them). The requests
 # (command, topic, help file, data) must be the same. The method is
-# tests/helpscenarios.sh's (Program Manager).
+# tests/helpscenarios.sh's (Program Manager), with what USER leaves
+# uninitialised in the request block left out.
 #   usage: tests/writehelp.sh [NAME...]     output: build/ref/writehelp/
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -29,8 +30,15 @@ for n in $names; do
             "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt" 2>&1 || true
         grep -a '^HELP \(msg 0477\|block\|text\)' "$d/log.txt" | awk '
             /msg 0477/ { mark = substr($4, 4); next }
-            /block/    { printf "%smark %s cmd %s%s topic %s%s%s%s", sep, mark, $8, $7, $12, $11, $10, $9; sep = "\n"; next }
-            /text/     { sub(/^HELP text @[0-9A-F]+ /, ""); printf " %s", $0 }
+            /block/    { cmd = $8 $7
+                         # HELP_KEY and HELP_PARTIALKEY carry a string: the
+                         # topic word is then whatever the block held
+                         t = (cmd == "0101" || cmd == "0105") ? "-" : $12 $11 $10 $9
+                         printf "%smark %s cmd %s topic %s", sep, mark, cmd, t; sep = "\n"; next }
+            # strings: the name of the help file; the rest of a block is memory
+            # USER did not clear (on 3.1 it holds whatever the caller
+            # freed: "Write ", "page")
+            /text/     { sub(/^HELP text @[0-9A-F]+ /, ""); if ($0 ~ /\.HLP"$/) printf " %s", $0 }
             END { print "" }' > "$d/requests.txt"
     done
     if cmp -s "$root/build/ref/writehelp/$n/orig/requests.txt" "$root/build/ref/writehelp/$n/w16/requests.txt"; then

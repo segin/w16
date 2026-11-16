@@ -1525,9 +1525,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             for f in "$1"/[0-9]*.png; do
                 sn=$(basename "$f")
                 [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
-                magick "$f" -fill black -draw "point 639,479" "$out/w16write-a.png"
-                magick "$2/$sn" -fill black -draw "point 639,479" "$out/w16write-b.png"
-                n=$(magick compare -metric AE "$out/w16write-b.png" "$out/w16write-a.png" "$out/w16write-$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                magick "$f" -fill black -draw "point 639,479" "$out/w16write-$3-a.png"
+                magick "$2/$sn" -fill black -draw "point 639,479" "$out/w16write-$3-b.png"
+                n=$(magick compare -metric AE "$out/w16write-$3-b.png" "$out/w16write-$3-a.png" "$out/w16write-$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
             done

@@ -933,7 +933,8 @@ void menu_update(HMENU m)
             load_str(IDS_UNDO, s, sizeof s);
             load_str(undoKind, k, sizeof k);
             s_cat(s, k, sizeof s);
-            s_cat(s, "\tCtrl+Z", sizeof s);
+            load_str(IDS_UNDOKEY, k, sizeof k);     /* "  \tCtrl+Z" */
+            s_cat(s, k, sizeof s);
             ModifyMenu(m, IDM_UNDO, MF_BYCOMMAND | MF_STRING, IDM_UNDO, s);
         }
         EnableMenuItem(m, IDM_UNDO, undoKind ? MF_ENABLED : MF_GRAYED);

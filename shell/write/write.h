@@ -134,6 +134,7 @@
 #define IDS_CANTSAVE        16390
 #define IDS_CANTPRINT       8226
 #define IDS_OBJECTNONE      32
+#define IDS_UNDOKEY         28692
 #define IDS_PAGE1           28672
 #define IDS_WRITE           28676
 #define IDS_UNTITLED        28677
