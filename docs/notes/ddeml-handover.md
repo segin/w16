@@ -110,3 +110,21 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   TERMINATE every conv (creation order).
 - DdeNameService(0, FILTERON/OFF) returns 0. init with any afCmd works
   (no validation seen); reinit too. CLIENTONLY: ns reg DLL_USAGE.
+
+### Status 2026-11-16 (late)
+- After fixes, ddemlscen: strings, data, xact, advise, flags, raw equal in
+  all combinations. Open: conn (ConnectList with several servers: 3.1's
+  client, on a 2nd ACK from a NON-local server, TERMINATEs it at once and
+  re-INITIATEs that server from a new client window; a P TERMINATE goes
+  between its own client windows; local servers: ACKs kept, new windows),
+  monitor (event sequence: 3.1 sends 2 MF_HSZ_INFO per string create etc.,
+  internal atom traffic), progman (3.1's DDEML at DdeInitialize seems to
+  create global atoms for the top-level windows' classes (InitEnum?):
+  "Progman" atom exists before the probe's create in the ms run; w16
+  shows "PROGMAN"; also the cause of atom values being 14 lower in w16),
+  uninit (fixed?: request XACT_COMPLETE d2 0).
+- Boot case ddeml added (tests/boottest.sh), README.TXT updated.
+- ARCHITECTURE.md chapter 18 drafted in the scratchpad (arch.md): append
+  it to ARCHITECTURE.md (after §17) with the final results.
+- Still to do: make test + full boot test (tools/remote-test.sh -n
+  ddeml-agent), report.
