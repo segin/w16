@@ -4,8 +4,8 @@
 ; scheme picked from the drop-down list with the mouse, then OK (the new
 ; colours: SetSysColors, WM_SYSCOLORCHANGE, everything repainted) or
 ; Cancel, and OK with nothing changed; Keyboard and
-; Mouse: OK and Cancel; Desktop: a pattern picked from its list, Cancel,
-; then OK (WIN.INI CursorBlinkRate=65535, so that its blink sample and a
+; Mouse: OK and Cancel; Desktop: a pattern picked from its list and
+; Cancel, then OK with none (WIN.INI CursorBlinkRate=65535, so that its blink sample and a
 ; focused scroll bar's caret hold still). A list dropped and hidden after a
 ; selection is what left Control Panel's status line unpainted on w16's
 ; USER (2026-11-16). Generated from tests/scripts/input/cpclose.src by
@@ -111,15 +111,16 @@ goto 325 89
 click 1
 match 10-desk-cancel 30 2
 shot 10-desk-cancel
-; Desktop, 50% Gray, OK (the last: its OK writes CursorBlinkRate, which the
-; case sets to 65535 so that nothing blinks)
+; Desktop, the list dropped and (None) picked again, OK (the last: its OK
+; writes CursorBlinkRate, which the case sets to 65535 so that nothing
+; blinks; not a pattern: w16's USER does not draw desktop patterns yet)
 goto 264 64
 dclick 1
 settle 30 2
 goto 150 81
 click 1
 settle 10 1
-goto 100 110
+goto 100 97
 click 1
 settle 10 1
 goto 325 61
