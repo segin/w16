@@ -946,7 +946,8 @@ HDDEDATA DMLAPI DdeClientTransaction(LPVOID pData, DWORD cb, HCONV hc, HSZ item,
         if (d)
             h = data_take(d, t == XTYP_POKE ? 0x2000 : 0);
         else {
-            h = data_block(in, pData, cb, a != 0, fmt);
+            /* no data at all still makes a block (3.1: 32 bytes, not cleared) */
+            h = data_block(in, pData, cb ? cb : 1, a != 0, fmt);
             if (h && a) {
                 WORD FAR *p = (WORD FAR *)GlobalLock(h);
                 p[0] = 0x2000;
@@ -1357,11 +1358,17 @@ void conv_unblock(CONV NEAR *c, UINT cmd)
         c->status |= ST_BLOCKED;
         return;
     }
-    c->status &= ~ST_BLOCKED;
-    run_queue(c, cmd == EC_ENABLEONE);
-    c = conv_find(conv_handle(c));
-    if (c && cmd == EC_ENABLEONE && c->queue)
-        c->status |= ST_BLOCKED;
+    {
+        /* EC_ENABLEONE: one transaction, then the conversation is
+           disabled again (3.1: a new one after it is held) */
+        HCONV hc = conv_handle(c);
+        BOOL had = c->queue != NULL;
+        c->status &= ~(ST_BLOCKED | ST_BLOCKNEXT);
+        run_queue(c, cmd == EC_ENABLEONE);
+        c = conv_find(hc);
+        if (c && cmd == EC_ENABLEONE)
+            c->status |= had ? ST_BLOCKED : ST_BLOCKNEXT;
+    }
 }
 
 BOOL conv_waiting(CONV NEAR *c)
@@ -1392,6 +1399,9 @@ LRESULT FAR PASCAL __loadds ServerWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
                 queue_msg(c, msg, wp, lp, TRUE);
                 c->status |= ST_BLOCKED;
             }
+        } else if ((c = conv_of_window(w)) != NULL && (c->status & ST_BLOCKNEXT)) {
+            c->status &= ~ST_BLOCKNEXT;
+            c->status |= ST_BLOCKED;
         }
         return 0;
     case WM_DDE_ACK:
@@ -1482,6 +1492,12 @@ UINT DMLAPI DdeQueryConvInfo(HCONV hc, DWORD xid, CONVINFO FAR *pci)
     ci.wType = x ? x->type : c->ltype;
     ci.wStatus = c->status;
     ci.wConvst = c->convst;
+    if (x && x->state == XS_WAIT) {   /* the transaction's own state (3.1) */
+        UINT t = x->type & ~(XTYPF_NODATA | XTYPF_ACKREQ);
+        ci.wConvst = t == XTYP_REQUEST ? XST_REQSENT : t == XTYP_POKE ? XST_POKESENT
+                   : t == XTYP_EXECUTE ? XST_EXECSENT : t == XTYP_ADVSTART ? XST_ADVSENT
+                   : XST_UNADVSENT;
+    }
     ci.wLastError = c->lasterr;
     ci.hConvList = c->list ? (HCONVLIST)MAKELONG((WORD)c->list, SELECTOROF((void FAR *)&ddeml_insts)) : 0;
     bcopy(&ci.ConvCtxt, &c->cc, sizeof(CONVCONTEXT));

@@ -98,7 +98,7 @@ xact c1 request Item CF_TEXT - 2000
 B: lasterr
 B: enable c1 all
 wait 300
-B: cbdo REQUEST xact c1 request Item CF_TEXT - 2000
+B: cbdo REQUEST xact c1 request Item CF_TEXT - 500
 xact c1 request Item CF_TEXT - 2000
 B: lasterr
 disc c1
