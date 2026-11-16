@@ -1,0 +1,47 @@
+; probe US25 (tests/apps/us25.c) as the shell: a right click makes it
+; busy for 4 seconds, during which the pointer moves six times, the left
+; button is pressed, the pointer moves four times, the button is released
+; and the pointer moves three times; then US25 logs the mouse messages it
+; gets (tests/inputrun.sh; boot-test case mmerge). Window at 40,40 to
+; 440,340
+click 1
+sleep 1
+home
+sleep 0.3
+move 120 95
+sleep 0.5
+click 3
+sleep 0.3
+move 5 0
+sleep 0.1
+move 5 0
+sleep 0.1
+move 5 0
+sleep 0.1
+move 5 0
+sleep 0.1
+move 5 0
+sleep 0.1
+move 5 0
+sleep 0.1
+down 1
+sleep 0.1
+move 0 5
+sleep 0.1
+move 0 5
+sleep 0.1
+move 0 5
+sleep 0.1
+move 0 5
+sleep 0.1
+up 1
+sleep 0.1
+move -5 0
+sleep 0.1
+move -5 0
+sleep 0.1
+move -5 0
+sleep 5
+click 3
+sleep 1
+shot 01-done

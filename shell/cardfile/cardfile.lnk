@@ -1,0 +1,11 @@
+# wlink directives for CARDFILE.EXE (objects and output come from the Makefile)
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=8k
+option description 'w16 Cardfile'
+library windows.lib
+library shell.lib
+library commdlg.lib
+library olecli.lib

@@ -1,0 +1,5 @@
+# VMD.386: w16's VMD module (win386/vxd), an LE VxD, device 000Ch
+format windows vxd
+option quiet
+option nodefaultlibs
+export VMD_DDB.1

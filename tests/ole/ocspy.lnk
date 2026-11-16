@@ -1,0 +1,10 @@
+# OCSPY.DLL (tests/ole/ocspy.c): the DDE spy and log of the OLE probes
+@tests/apps/dll.lnk
+option modname=OCSPY
+export SPYLOG.1
+export SPYSTART.2
+export SPYSTOP.3
+export SPYWINNAME.4
+export SPYGETMSG.5
+export SPYCALLWND.6
+export SPYFAULTHOOK.7

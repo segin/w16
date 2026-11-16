@@ -1,0 +1,42 @@
+; GetOpenFileName with OFN_ALLOWMULTISELECT: selecting several files with
+; Shift+Down, the edit, the returned list; a custom filter
+; a: three files selected
+cd1 open filter=Text|*.txt|All|*.* index=2 flags=200 ftitle=40 max=400
+; b: one file typed
+cd1 open filter=Text|*.txt|All|*.* index=2 flags=200 max=400
+; c: a custom filter shown first (index 0), the user's pattern kept
+cd1 open filter=Text|*.txt|All|*.* index=0 custom=40 cfilt=Mine|*.ini ftitle=40
+; d: custom buffer with an empty description; typed pattern
+cd1 open filter=Text|*.txt|All|*.* index=1 custom=40 ftitle=40
+wait 3000
+key 09
+wait 300
+key 28
+wait 300
+kdown 10
+key 28
+key 28
+kup 10
+wait 600
+snap C:\M1.BMP
+dump
+key 0D
+wait 1500
+; b
+type win.ini
+key 0D
+wait 1500
+; c
+snap C:\C1.BMP
+dump
+type system.ini
+key 0D
+wait 1500
+; d
+type *.ini
+key 0D
+wait 800
+snap C:\D1.BMP
+type win.ini
+key 0D
+wait 1500

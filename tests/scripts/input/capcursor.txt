@@ -1,0 +1,47 @@
+; probe US22 (tests/apps/us22.c) as the shell: the mouse captured by a
+; press in its client area, the pointer moved while captured, then
+; released without moving (tests/inputrun.sh; boot-test case capcursor).
+; Window at 40,40 to 360,280; its left sizing border x 40-43
+click 1
+sleep 1
+; released over the window's left sizing border (x 42)
+home
+sleep 0.3
+move 100 75
+sleep 0.5
+down 1
+sleep 0.5
+move -79 0
+match 01-captured 20 1
+shot 01-captured
+up 1
+match 02-released 20 1
+shot 02-released
+; released over the window's bottom right corner (sizing both ways)
+home
+sleep 0.3
+move 100 75
+sleep 0.5
+down 1
+sleep 0.5
+move 79 64
+match 03-captured 20 1
+shot 03-captured
+up 1
+match 04-released 20 1
+shot 04-released
+; released over the client area after visiting the border
+home
+sleep 0.3
+move 100 75
+sleep 0.5
+down 1
+sleep 0.5
+move -79 0
+sleep 0.5
+move 79 0
+match 05-captured 20 1
+shot 05-captured
+up 1
+match 06-released 20 1
+shot 06-released

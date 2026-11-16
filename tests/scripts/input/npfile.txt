@@ -1,0 +1,30 @@
+; Microsoft's Notepad with a 30 KB file (WIN.INI run=C:\NPFILE.TXT, the
+; .TXT association starting Notepad with it): the file shown, a page
+; down, a line typed at the end (Ctrl+End) and one at the start
+; (Ctrl+Home), File > Save, then Notepad closed (tests/inputrun.sh;
+; boot-test case npfile, which also compares the saved file's bytes).
+; The pointer is left on the desktop below Notepad's window
+click 1
+sleep 0.5
+home
+sleep 0.3
+move 100 100
+move 100 120
+matchnow 01-opened 30 1
+key Next
+key Next
+matchnow 02-pagedown 20 1
+key ctrl+End
+type Added at the end by the npfile test.
+matchnow 03-end 20 1
+key ctrl+Home
+type Added at the start.
+matchnow 04-start 20 1
+key alt+f
+sleep 0.5
+key s
+sleep 2
+matchnow 05-saved 20 1
+key alt+F4
+sleep 2
+matchnow 06-closed 20 1

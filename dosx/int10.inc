@@ -190,8 +190,17 @@ v_out:  push si
 ; op_int15 (ring 0, from int15_stub): INT 15h from protected mode. AH=C0h
 ; (system configuration) returns ES:BX pointing at a table in the BIOS:
 ; ES becomes a selector for it (MOUSE.DRV reads the feature bytes there
-; to look for a PS/2 mouse port). Microsoft's DOSX has its own INT 15h
-; handler too (DX1: vector 15h); what else it translates is UNVERIFIED.
+; to look for a PS/2 mouse port). AH=C207h (set the pointing-device
+; handler; MOUSE.DRV gives it a protected-mode ES:BX) gives the BIOS
+; ps2_entry instead, which far-calls the handler in protected mode with
+; the BIOS's four words. Observed with Microsoft's DOSX (TK47, a handler
+; of its own in a block below 1 MB given to C207h): it runs in protected
+; mode, on a stack that is neither the caller's nor the block, with the
+; BIOS's words (the last pushed first: 0, Y, X, status 08h). Passed on
+; as it was (w16 before), the BIOS called the selector:offset as a
+; real-mode address once the mouse was enabled and input stopped.
+; Microsoft's DOSX has its own INT 15h handler too (DX1: vector 15h);
+; what else it translates is UNVERIFIED.
 op_int15:
         sub sp, R_SIZE
         mov bx, sp
@@ -203,12 +212,31 @@ op_int15:
         mov [bx+R_DS], ax
         mov ax, [bp+F_ES]
         mov [bx+R_ES], ax
-        push ss
+        ; C207h (set the pointing-device handler): ES:BX is a
+        ; protected-mode address; the BIOS gets ps2_entry, which calls it
+        ; (0:0, no handler, goes as it is)
+        cmp word [bp+F_AX], 0C207h
+        jne .call
+        mov ax, [bp+F_BX]
+        or ax, [bp+F_ES]
+        jz .call
+        mov ax, [bp+F_BX]
+        mov [ps2_pm], ax
+        mov ax, [bp+F_ES]
+        mov [ps2_pm+2], ax
+        mov word [bx+R_EBX], ps2_entry
+        mov ax, [imgseg]
+        mov [bx+R_ES], ax
+.call:  push ss
         pop es
         mov ax, 1500h
         xor cx, cx
         call r0_rmcall
-        cmp byte [bp+F_AX+1], 0C0h
+        cmp word [bp+F_AX], 0C207h
+        jne .nb
+        mov ax, [bp+F_BX]               ; the client's BX back
+        mov [bx+R_EBX], ax
+.nb:    cmp byte [bp+F_AX+1], 0C0h
         jne .d
         test word [bx+R_FL], FL_CF
         jnz .d

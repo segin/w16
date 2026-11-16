@@ -5,3 +5,4 @@ export ID_GET.1
 export ID_SETWEP.2
 export ID_INFO.3
 export WEP.4 resident
+export ID_SETWEPFREE.5

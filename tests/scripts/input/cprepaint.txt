@@ -1,0 +1,100 @@
+; Control Panel repainting (WIN.INI run=CONTROL.EXE, real keys): the frame
+; sized smaller from the left and from the top (the icons reflow, the scroll
+; bar comes), the icon view scrolled, maximized and restored, applet dialogs
+; moved over the panel and closed, Alt+Tab to Program Manager and back,
+; minimized and restored. The pointer goes to the screen's bottom right
+; corner first, on the desktop, so that it is an arrow in every screen.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-start 30 2
+shot 01-start
+key alt+space
+sleep 0.3
+key s
+sleep 0.3
+key Left
+key Right Right Right Right Right Right Right Right Right Right Right Right
+key Return
+match 02-narrow 20 1
+shot 02-narrow
+key alt+space
+sleep 0.3
+key s
+sleep 0.3
+key Up
+key Down Down Down Down Down Down Down Down Down Down
+key Return
+match 03-short 20 1
+shot 03-short
+key End
+match 04-end 20 1
+shot 04-end
+key Home
+match 05-home 20 1
+shot 05-home
+key alt+space
+sleep 0.3
+key x
+match 06-max 20 1
+shot 06-max
+key alt+space
+sleep 0.3
+key r
+match 07-restored 20 1
+shot 07-restored
+key Return
+match 08-color 30 2
+shot 08-color
+key alt+space
+sleep 0.3
+key m
+sleep 0.3
+key Left Left Left Left Left Left Left Left Left Left Up Up Up Up Up Up
+key Return
+match 09-colormoved 20 1
+shot 09-colormoved
+key Escape
+match 10-colorclosed 20 1
+shot 10-colorclosed
+key Right
+key Right
+key Right
+key Right
+sleep 0.3
+key Return
+match 11-desktop 30 2
+shot 11-desktop
+key alt+space
+sleep 0.3
+key m
+sleep 0.3
+key Right Right Right Right Right Right Right Right Down Down Down Down Down Down Down Down
+key Return
+match 12-deskmoved 20 1
+shot 12-deskmoved
+key Escape
+match 13-deskclosed 20 1
+shot 13-deskclosed
+key alt+Tab
+match 14-progman 20 1
+shot 14-progman
+key alt+Tab
+match 15-back 20 1
+shot 15-back
+key alt+space
+sleep 0.3
+key n
+match 16-min 20 1
+shot 16-min
+key alt+Tab
+sleep 0.5
+key alt+Tab
+match 17-alttab 20 1
+shot 17-alttab

@@ -1,0 +1,5 @@
+# VXP.386: the probe VxD (tests/vxd/vxp.asm), an LE VxD with no device ID
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXP_DDB.1

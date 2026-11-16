@@ -1,0 +1,44 @@
+; Write as the OLE client (OC1 drives it, its DDE spy logs Write's OLECLI
+; talking to Paintbrush): some text, Edit > Insert Object > Paintbrush
+; Picture, Paintbrush's File > Exit & Return, the document saved as
+; C:\W1.WRI; then opened again and the object activated and closed
+spy
+run WRITE.EXE
+wait 2500
+type Before the picture.
+key 0x0D
+menu MSWRITE_MENU Insert Object
+wait 1500
+kids
+key 0x24
+key 0x28
+wait 300
+key 0x0D
+wait 4000
+wins
+snap C:\W1.BMP
+menu pbParent Exit
+wait 2500
+wins
+key 0x0D
+wait 2500
+wins
+snap C:\W2.BMP
+menu MSWRITE_MENU Save As
+wait 1500
+kids
+type C:\W1.WRI
+key 0x0D
+wait 2500
+wins
+snap C:\W3.BMP
+wmclose MSWRITE_MENU
+wait 2000
+wins
+run WRITE.EXE C:\W1.WRI
+wait 3000
+wins
+snap C:\W4.BMP
+wmclose MSWRITE_MENU
+wait 2000
+wins

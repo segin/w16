@@ -1,0 +1,3 @@
+# TK51.EXE (tests/apps/tk51.c, tk51s.asm, tk50s.asm): THHOOK, ToolHelpHook,
+# TOOLHELP
+@tests/apps/app.lnk

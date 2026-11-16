@@ -1,0 +1,28 @@
+; ShellAbout under real input (tests/inputrun.sh, tests/shellinput.sh):
+; Program Manager's Help > About, closed with the mouse-free Return, then
+; Notepad's (started with File > Run), closed by clicking OK
+key alt+h
+sleep 1
+key a
+sleep 3
+shot 01-progman-about
+key Return
+sleep 2
+shot 02-closed
+key alt+f
+key r
+sleep 4
+type notepad
+key Return
+sleep 8
+key alt+h
+sleep 1
+key a
+sleep 3
+shot 03-notepad-about
+key Escape
+sleep 2
+shot 04-closed
+key alt+F4
+sleep 2
+shot 05-notepad-closed

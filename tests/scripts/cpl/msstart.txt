@@ -1,0 +1,20 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI windows:MouseThreshold1=6
+;! ini WINDOWS/WIN.INI windows:MouseThreshold2=10
+;! ini WINDOWS/WIN.INI windows:MouseSpeed=2
+;! ini WINDOWS/WIN.INI windows:DoubleClickSpeed=450
+; Mouse: where the bars start for values between the settings; one step
+; faster on each bar
+; carets and focused scroll bar thumbs keep their phase
+blinktime 65535
+run CONTROL.EXE MOUSE
+wait 4000
+snap M0.BMP
+key 27
+wait 300
+key 09
+wait 300
+key 27
+wait 300
+key 0D
+wait 2000

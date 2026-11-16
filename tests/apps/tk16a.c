@@ -42,6 +42,13 @@ static void args(const char FAR *p, char *mode)
     v = sh ? sh->v[slot] : NULL;
 }
 
+/* TK16I (tools/mkiterated.py) stores this as one iterated record */
+static char iter_pat[16] = "ABABABABABABABAB";
+
+/* a far pointer to the program's own data, made by a fixup in DGROUP */
+static WORD self_word;
+static WORD FAR *self_ptr = &self_word;
+
 /* before InitTask: the PSP's tail (ES at entry) gives the slot */
 void __cdecl pre_init(void)
 {
@@ -68,6 +75,18 @@ int __cdecl tmain(void)
         return 1;
     v[W_RAN] = 1;
     v[W_HPREV] = init_regs[4];
+    v[W_SELF] = SELECTOROF(self_ptr) == entry_regs[8];
+    for (i = 0; i < 16 && iter_pat[i] == ((i & 1) ? 'B' : 'A'); i++)
+        ;
+    v[W_ITER] = i == 16;
+    v[W_EBX] = entry_regs[1];
+    v[W_ECX] = entry_regs[2];
+    v[W_ICX] = init_regs[2];
+    {
+        WORD mt = (WORD)GetModuleHandle((LPCSTR)MAKELP(0, init_regs[5]));
+        v[W_MT10] = mt ? *(WORD FAR *)MAKELP(mt, 0x10) : 0xFFFF;
+        v[W_MT12] = mt ? *(WORD FAR *)MAKELP(mt, 0x12) : 0xFFFF;
+    }
     /* the tail as it was: InitTask put a NUL where the CR was */
     v[W_TAILLEN] = psp[0x80];
     for (i = 0; i < 24; i++)
@@ -104,5 +123,25 @@ int __cdecl tmain(void)
     if (mode == 'W')
         for (n = 0; n < 400 && !sh->go; n++)
             K_YIELD();
+    if (mode == 'V') {
+        WORD q[8], t = (WORD)GetCurrentTask();
+        for (i = 0; i < 8; i++)
+            q[i] = 0;
+        q[0] = 0x3500;
+        dos_int21((WORD FAR *)q);
+        v[W_V0] = q[1];
+        v[W_V0 + 1] = q[7];
+        v[W_T32] = *(WORD FAR *)MAKELP(t, 0x32);
+        v[W_T32 + 1] = *(WORD FAR *)MAKELP(t, 0x34);
+    }
+    if (mode == 'P') {
+        OFSTRUCT of;
+        v[W_PFOUND] = OpenFile("TK16P.TXT", &of, OF_EXIST) != HFILE_ERROR;
+    }
+    if (mode == 'H') {
+        v[W_HC0] = SetHandleCount(0);
+        v[W_HC1] = SetHandleCount(30);
+    }
+    v[W_DONE] = 1;
     return 0;
 }

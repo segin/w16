@@ -1,0 +1,16 @@
+# wlink directives for OLECLI.DLL (ole/olecli/; ARCHITECTURE.md 16). The
+# object files, the output name and the export table (build/ole/exports.lnk,
+# made by tools/mkoleexp.py) come from the Makefile. Ordinals, names and
+# residency are the real module's (docs/exportdb).
+format windows dll
+option modname=OLECLI
+option description 'w16 Object Linking and Embedding Client Library'
+option start=olecli_libentry
+option quiet
+option map
+option heapsize=1024
+segment type code moveable discardable
+segment ENTRY_TEXT fixed preload
+segment type data moveable preload
+library windows.lib
+library shell.lib

@@ -1,0 +1,4 @@
+# MD2A.EXE (tests/apps/md2a.c, md2ax.c, md2as.asm, md1s.asm): GetSetMouseData observed
+@tests/apps/app.lnk
+library toolhelp.lib
+import U_INITAPP USER.5

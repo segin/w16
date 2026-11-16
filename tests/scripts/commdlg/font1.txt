@@ -1,0 +1,35 @@
+; observation: ChooseFont basics
+; 1 screen fonts, effects, hook (procs), OK at once
+cd1 font flags=109 hook=11
+; 2 init from LOGFONT: Arial 16px bold italic, OK
+cd1 font flags=141 face=Arial height=-16 weight=700 italic=1 rgb=FF
+; 3 no effects, OK
+cd1 font flags=1
+; 4 printer fonts without a DC
+cd1 font flags=2
+; 6 nothing asked for
+cd1 font flags=0
+wait 3000
+snap C:\F1.BMP
+dump
+key 0D
+wait 1500
+snap C:\F2.BMP
+dump
+key 0D
+wait 1500
+snap C:\F3.BMP
+key 0D
+wait 1500
+snap C:\F4.BMP
+dump
+key 0D
+wait 1500
+snap C:\F5.BMP
+dump
+key 0D
+wait 1500
+snap C:\F6.BMP
+dump
+key 0D
+wait 1500

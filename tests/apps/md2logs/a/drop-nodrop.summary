@@ -1,0 +1,68 @@
+  BIOS AX=C205 BX=03E4
+  BIOS AX=C201 BX=03E4
+  BIOS AX=C204 BX=00AA
+  BIOS AX=C205 BX=03FF
+  BIOS AX=C201 BX=03FF
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C206 BX=01AA
+  BIOS AX=C202 BX=02AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C200 BX=010D
+PHASE A Disable+Enable (ticks 23288)
+  BIOS AX=C200 BX=0046
+  BIOS AX=C207 BX=0889
+  BIOS AX=C205 BX=0300
+  BIOS AX=C201 BX=0300
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C206 BX=01AA
+  BIOS AX=C202 BX=02AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C200 BX=010D
+  == A Disable+Enable: events 0..6 (depth 0, deepest 1; cursor 359,240; ticks 31636)
+  packets x: [0, 1, 2, 3, 4, 5, 6]
+  events  x: [1, 2, 3, 4, 5, 6]
+PHASE B PowerEventProc(2) (ticks 31636)
+  P (0002 0000 0000) -> AX=0000 BX=2222 CX=3333 DX=0000 fl=3246 pop=6
+  == B PowerEventProc(2): events 6..15 (depth 0, deepest 1; cursor 446,240; ticks 39985)
+  packets x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+  events  x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+PHASE C Disable+Enable (ticks 39985)
+  BIOS AX=C200 BX=0046
+  BIOS AX=C207 BX=0889
+  BIOS AX=C205 BX=0300
+  BIOS AX=C201 BX=0300
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C206 BX=01AA
+  BIOS AX=C202 BX=02AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C200 BX=010D
+  == C Disable+Enable: events 15..24 (depth 0, deepest 1; cursor 533,240; ticks 48334)
+  packets x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+  events  x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+PHASE D GetSetMouseData set (ticks 48334)
+  == D GetSetMouseData set: events 24..33 (depth 0, deepest 1; cursor 620,240; ticks 56682)
+  packets x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+  events  x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+PHASE E Disable+Enable, PowerEventProc(1) (ticks 56682)
+  P (0001 0000 0000) -> AX=0000 BX=2222 CX=3333 DX=0000 fl=3246 pop=6
+  BIOS AX=C200 BX=0059
+  BIOS AX=C207 BX=0889
+  BIOS AX=C205 BX=0300
+  BIOS AX=C201 BX=0300
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C206 BX=01AA
+  BIOS AX=C202 BX=02AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C200 BX=010D
+  == E Disable+Enable, PowerEventProc(1): events 33..42 (depth 0, deepest 1; cursor 639,240; ticks 65031)
+  BIOS AX=C200 BX=0065
+  BIOS AX=C207 BX=0889
+  BIOS AX=C205 BX=0300
+  BIOS AX=C201 BX=0300
+  BIOS AX=C203 BX=03AA
+  BIOS AX=C206 BX=01AA
+  BIOS AX=C202 BX=02AA
+  BIOS AX=C207 BX=0889
+  BIOS AX=C200 BX=010D
+  packets x: [7, 8, 9, 1, 2, 3, 4, 5, 6]
+  events  x: [7, 8, 9, 1, 2, 3, 4, 5, 6]

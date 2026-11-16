@@ -9,6 +9,8 @@
 # what our own icon art and the known menu-bar spacing difference cost; a
 # count above it fails, a count below it is reported so the baseline can
 # be tightened. PM_BASELINE=update rewrites the baseline from this run.
+# A scenario's lines ";pre <DOS command>" (comments to SNAP) run before
+# Windows starts, e.g. to set up PROGMAN.INI [Restrictions] or test files.
 #   usage: tests/pmscenarios.sh [scenario...]    (default: all)
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -31,7 +33,8 @@ for n in $names; do
             sed 's/^run PROGMAN.EXE$/run C:\\PROGMAN.EXE/; s/$/\r/' "$root/tests/scripts/pm/$n.txt" > "$d/SNAP.TXT"
             extra=$root/build/dos/PROGMAN.EXE
         fi
-        REFRUN_FILES="$d/SNAP.TXT $extra" REFRUN_OUT=$d REFRUN_GET="$files" \
+        pre=$(sed -n 's/^;pre //p' "$root/tests/scripts/pm/$n.txt")
+        REFRUN_PRE="$pre" REFRUN_FILES="$d/SNAP.TXT $extra" REFRUN_OUT=$d REFRUN_GET="$files" \
             "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt"
     done
     result=ok

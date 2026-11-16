@@ -1,0 +1,20 @@
+# menu arrow: an item that opens a cascading menu
+name OBM_MNARROW
+type bitmap
+id 32739
+size 7x11
+bpp 1
+header info
+
+pixels
+-------
+-------
+--#----
+--##---
+--###--
+--####-
+--###--
+--##---
+--#----
+-------
+-------

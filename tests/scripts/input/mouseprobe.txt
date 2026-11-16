@@ -1,0 +1,39 @@
+; mouse driver probe (tests/mouseprobe.sh, MD1 as the shell listening):
+; motion in each direction, a fast sweep, left, right and middle clicks,
+; a double click, a left drag, both buttons together
+click 1
+sleep 1
+move 5 0
+sleep 0.5
+move 40 0
+sleep 0.5
+move 0 30
+sleep 0.5
+move -25 0
+sleep 0.5
+move 0 -15
+sleep 0.5
+move 300 200
+sleep 0.5
+move -300 -200
+sleep 0.5
+click 1
+sleep 0.7
+click 3
+sleep 0.7
+click 2
+sleep 0.7
+click 1
+click 1
+sleep 0.7
+down 1
+move 20 10
+move 20 10
+up 1
+sleep 0.7
+down 3
+down 1
+up 3
+up 1
+sleep 1
+shot end

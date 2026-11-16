@@ -1,0 +1,21 @@
+; how servers are started: OCSRV.EXE (logs its command line) stands in as
+; Paintbrush's server and starts PBRUSH.EXE with the same command line
+; (OCRUN_FILES must bring OCSRV.EXE and OCSRV.TXT = "PBRUSH.EXE")
+spy
+regset PBrush\protocol\StdFileEditing\server C:\OCSRV.EXE
+doc 0 OCDOC
+create 0 PBrush obj0 draw 0
+wins
+close 0
+linkfile 1 PBrush C:\WINDOWS\ARCADE.BMP - lnk1 draw 0
+wins
+activate 1 0 1 0
+close 1
+fromfile 2 PBrush C:\WINDOWS\ARCADE.BMP - ff2 draw 0
+createinv 3 PBrush inv3 draw 0 1
+wins
+close 3
+createinv 4 PBrush inv4 draw 0 0
+querytype 4
+close 4
+revokedoc 0

@@ -13,6 +13,16 @@
 #define TK_REF286 "tk3ref286.h"
 #include "tklog.h"
 
+/* the heap information block's fields (offsets from pHeap): KRNL286's
+   block is 24h bytes, KRNL386's 2Ah (sentinels and the discard total as
+   dwords); tests/apps/tk53.c */
+#define LI_LAST    (k286() ? 0x08 : 0x0A)
+#define LI_NCOMP   (k286() ? 0x0A : 0x0E)
+#define LI_HTABLE  (k286() ? 0x0E : 0x14)
+#define LI_HFREE   (k286() ? 0x10 : 0x16)
+#define LI_FIRSTBLK (k286() ? 0x28 : 0x30)
+
+
 static WORD ds(void)
 {
     return entry_regs[E_DS];
@@ -50,7 +60,7 @@ static void probe_initial(void)
     check(ph == (WORD)GlobalSize(hinst()) - entry_regs[E_CX] + 0x10,
           "heap is the last CX bytes of DGROUP, pHeap at its start + 10h");
     check(*w_at(ds(), ph + 6) == ph - 0x10 &&
-          *w_at(ds(), ph + 0x0A) == (WORD)GlobalSize(hinst()) - 0x0C,
+          *w_at(ds(), ph + LI_LAST) == (WORD)GlobalSize(hinst()) - 0x0C,
           "heap info: first and last sentinel");
 }
 
@@ -72,7 +82,7 @@ static void probe_blocks(void)
     obs("fixed LocalUnlock again", LocalUnlock(h1));
     obs_env("fixed LocalHandle", (WORD)LocalHandle((UINT)h1));
     obs("fixed LocalHandle(h+2)", (WORD)LocalHandle((UINT)h1 + 2));
-    check((WORD)h1 == *w_at(ds(), 6) + 0x30, "first fixed block follows the heap info");
+    check((WORD)h1 == *w_at(ds(), 6) + LI_FIRSTBLK, "first fixed block follows the heap info");
     check((WORD)LocalLock(h1) == (WORD)h1 && LocalHandle((UINT)h1) == h1,
           "fixed: handle == pointer == LocalLock == LocalHandle");
 
@@ -417,7 +427,7 @@ static void probe_other(void)
         obsn("grow: GlobalSize", sizes[k], (WORD)GlobalSize(g));
         obsn("grow: LocalCompact after", sizes[k],
              (WORD)call_ds(sel, (void FAR *)LocalCompact, 1, 0, 0, 0));
-        obsn("grow: last", sizes[k], *w_at(sel, *w_at(sel, 6) + 0x0A));
+        obsn("grow: last", sizes[k], *w_at(sel, *w_at(sel, 6) + LI_LAST));
         if (k == 0)
             dump("grow100.info", sel, *w_at(sel, 6), 0x16);
         h = (WORD)call_ds(sel, (void FAR *)LocalAlloc, 2, LMEM_MOVEABLE, sizes[k], 0);
@@ -442,7 +452,7 @@ static void probe_other(void)
         obsn("LocalInit(start,509)", starts[k], LocalInit(sel, starts[k], 509));
         obsn("LocalInit pHeap", starts[k], *w_at(sel, 6));
         obsn("LocalInit first", starts[k], *w_at(sel, *w_at(sel, 6) + 6));
-        obsn("LocalInit last", starts[k], *w_at(sel, *w_at(sel, 6) + 0x0A));
+        obsn("LocalInit last", starts[k], *w_at(sel, *w_at(sel, 6) + LI_LAST));
         obsn("LocalInit minsize", starts[k], *w_at(sel, *w_at(sel, 6) + 0x26));
         GlobalUnlock(g);
         GlobalFree(g);
@@ -502,45 +512,45 @@ static void probe_more(void)
     /* the dislevel/ncompact bytes (+0E) */
     sel = new_heap(&g);
     ph = *w_at(sel, 6);
-    obs("+0E after LocalInit", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalInit", *w_at(sel, ph + LI_NCOMP));
     LC(sel, 0);
-    obs("+0E after LocalCompact(0)", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalCompact(0)", *w_at(sel, ph + LI_NCOMP));
     LA(sel, LMEM_FIXED, 10);
-    obs("+0E after LocalAlloc fixed", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalAlloc fixed", *w_at(sel, ph + LI_NCOMP));
     LC(sel, 0);
-    obs("+0E after LocalCompact(0) 2", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalCompact(0) 2", *w_at(sel, ph + LI_NCOMP));
     LC(sel, 0xFFFF);
-    obs("+0E after LocalCompact(FFFF)", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalCompact(FFFF)", *w_at(sel, ph + LI_NCOMP));
     LA(sel, LMEM_FIXED, 10);
-    obs("+0E after LocalAlloc fixed 2", *w_at(sel, ph + 0x0E));
+    obs("+0E after LocalAlloc fixed 2", *w_at(sel, ph + LI_NCOMP));
     drop_heap(g);
 
     /* handle table overflow, in the task's own heap */
     ph = *w_at(ds(), 6);
-    t1 = *w_at(ds(), ph + 0x14);
+    t1 = *w_at(ds(), ph + LI_HTABLE);
     obs_env("ht: htable before", t1);
-    obs_env("ht: hfree before", *w_at(ds(), ph + 0x16));
+    obs_env("ht: hfree before", *w_at(ds(), ph + LI_HFREE));
     obs("ht: htable before-pHeap", t1 - ph);
     for (i = 0; i < 40; i++)
         m[i] = LocalAlloc(LMEM_MOVEABLE, 2);
-    t2 = *w_at(ds(), ph + 0x14);
+    t2 = *w_at(ds(), ph + LI_HTABLE);
     obs_env("ht: htable after 40", t2);
-    obs_env("ht: hfree after 40", *w_at(ds(), ph + 0x16));
+    obs_env("ht: hfree after 40", *w_at(ds(), ph + LI_HFREE));
     obs("ht: table2 count", *w_at(ds(), t2));
     obs("ht: table2 link==table1", *w_at(ds(), t2 + 2 + 4 * 0x20) == t1);
-    obs("ht: hfree after 40-table2", *w_at(ds(), ph + 0x16) - t2);
+    obs("ht: hfree after 40-table2", *w_at(ds(), ph + LI_HFREE) - t2);
     obs("ht: handle 32-table2", (WORD)m[32] - t2);
     obs("ht: items", *w_at(ds(), ph + 4));
     for (i = 0; i < 40; i++)
         obsn("ht: handle-first", i, (WORD)m[i] - (WORD)m[0]);
-    dump("ht: table2", ds(), *w_at(ds(), ph + 0x14) - 4, 0x10);
-    dump("ht: table2 end", ds(), *w_at(ds(), ph + 0x14) + 0x7C, 0x6);
+    dump("ht: table2", ds(), *w_at(ds(), ph + LI_HTABLE) - 4, 0x10);
+    dump("ht: table2 end", ds(), *w_at(ds(), ph + LI_HTABLE) + 0x7C, 0x6);
     for (i = 0; i < 40; i++)
         LocalFree(m[i]);
-    obs_env("ht: htable freed", *w_at(ds(), ph + 0x14));
-    obs_env("ht: hfree freed", *w_at(ds(), ph + 0x16));
-    obs("ht: htable freed==table2", *w_at(ds(), ph + 0x14) == t2);
-    obs("ht: hfree freed==last freed", *w_at(ds(), ph + 0x16) == (WORD)m[39]);
+    obs_env("ht: htable freed", *w_at(ds(), ph + LI_HTABLE));
+    obs_env("ht: hfree freed", *w_at(ds(), ph + LI_HFREE));
+    obs("ht: htable freed==table2", *w_at(ds(), ph + LI_HTABLE) == t2);
+    obs("ht: hfree freed==last freed", *w_at(ds(), ph + LI_HFREE) == (WORD)m[39]);
     obs("ht: items freed", *w_at(ds(), ph + 4));
 
     /* odd requests */
@@ -590,6 +600,76 @@ static void probe_more(void)
     LocalFree((HLOCAL)h);
 }
 
+static WORD cur_ds(void);
+#pragma aux cur_ds = "mov ax, ds" value [ax];
+static WORD cur_ss(void);
+#pragma aux cur_ss = "mov ax, ss" value [ax];
+
+/* The task's own heap filled until LocalAlloc fails: the heap's segment
+   (DGROUP, also the stack) grows towards 64K and stays where it is, on
+   the same selector (Pietrek, LocalNotifyDefault: at most 64K less 16
+   bytes). w16 once grew it to a full 64K, two selector tiles, and moved
+   it to new selectors, leaving DS and SS on freed ones. */
+UINT WINAPI LocalHeapSize(void);     /* KERNEL.162, not in windows.h */
+
+static void probe_full(void)
+{
+    HLOCAL h[80], d, r, s[64];
+    WORD n, i, k;
+    BYTE FAR *q;
+    /* a discardable moveable block with a pattern, grown below once the
+       heap is full: room only by discarding, the block itself included */
+    d = LocalAlloc(LMEM_MOVEABLE | LMEM_DISCARDABLE, 0x100);
+    q = d ? (BYTE FAR *)LocalLock(d) : NULL;
+    if (q)
+        for (i = 0; i < 0x100; i++)
+            q[i] = (BYTE)(i + 1);
+    if (d)
+        LocalUnlock(d);
+    for (n = 0; n < 80; n++)
+        if ((h[n] = LocalAlloc(LMEM_FIXED, 0x400)) == 0)
+            break;
+    obs("full: LocalAlloc failed before 80", n < 80);
+    obs("full: DS the same", cur_ds() == ds());
+    obs("full: SS the same", cur_ss() == ds());
+    obs("full: GlobalHandle(DS)==hInstance", LOWORD(GlobalHandle(ds())) == hinst());
+    /* the size it ends at depends on this program's data (KRNL286 FFF0h,
+       KRNL386 10000h or FEC0h as the probe changed); never more than 64K */
+    obs("full: GlobalSize(DGROUP) at most 10000h", GlobalSize(hinst()) <= 0x10000L);
+    obs_env("full: GlobalSize(DGROUP) low", LOWORD(GlobalSize(hinst())));
+    obs_env("full: GlobalSize(DGROUP) high", HIWORD(GlobalSize(hinst())));
+    for (k = 0; k < 64; k++)            /* the last small pieces */
+        if ((s[k] = LocalAlloc(LMEM_MOVEABLE, 0x20)) == 0)
+            break;
+    /* a gap of eight of them: too small for the grown block, enough
+       with the block's own space */
+    for (i = 0; i < 8 && i < k; i++)
+        LocalFree(s[i]);
+    r = d ? LocalReAlloc(d, 0x180, LMEM_MOVEABLE) : 0;
+    obs("full: discardable grown, ret==h", r == d);
+    obs("full: discardable grown, ret==0", r == 0);
+    obs("full: discardable grown, discarded", d ? (LocalFlags(d) & LMEM_DISCARDED) != 0 : 0xFFFF);
+    q = d && !(LocalFlags(d) & LMEM_DISCARDED) ? (BYTE FAR *)LocalLock(d) : NULL;
+    obs("full: discardable grown, bytes 0,FF", q ? q[0] | (q[0xFF] << 8) : 0);
+    if (q)
+        LocalUnlock(d);
+    if (d)
+        LocalFree(d);
+    while (k > 8)
+        LocalFree(s[--k]);
+    for (i = 0; i < n; i++)
+        LocalFree(h[i]);
+    /* everything freed again: LocalShrink (Pietrek: compacts the heap to
+       fit its non-discardable blocks into the size asked for) */
+    /* recorded, not checked: DGROUP's size depends on the stack and
+       data before the heap (3.1, Standard: 3FEh, LocalHeapSize 3F4h,
+       DGROUP 6A20h, back near the module's 1K heap; w16 under make test:
+       3FEh, 3F4h, 6970h). LocalShrink itself: tests/apps/tk54.c */
+    obs_env("shrink: LocalShrink(0, 0)", LocalShrink(0, 0));
+    obs_env("shrink: LocalHeapSize after", LocalHeapSize());
+    obs_env("shrink: GlobalSize(DGROUP) after", LOWORD(GlobalSize(hinst())));
+}
+
 int __cdecl tmain(void)
 {
     out("TK3 start\r\n");
@@ -604,6 +684,7 @@ int __cdecl tmain(void)
     probe_compact();
     probe_other();
     probe_more();
+    probe_full();
     out("TK3 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

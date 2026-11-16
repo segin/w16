@@ -27,7 +27,15 @@ typedef unsigned long  w_u32;
 #define W386_BP_EXIT    0       /* the loader: leave Windows (AX = exit code) */
 #define W386_BP_DPMI    1       /* the DPMI mode-switch entry (INT 2Fh 1687h) */
 #define W386_BP_REFRET  2       /* end of a reflected interrupt/call from PM */
-#define W386_BP_FIRSTFREE 3     /* real-mode callbacks and V86 API entries */
+#define W386_BP_PS2CB   3       /* the PS/2 pointing device handler (INT 15h C207h) of a PM client */
+#define W386_BP_IRQIRET 4       /* the IRET of a simulated hardware interrupt (VPICD's VID_IRET_Proc) */
+#define W386_BP_FIRSTFREE 5     /* real-mode callbacks and V86 API entries */
+
+/* pm_go returns this when the VMM ended Windows before the System VM ran,
+ * with its message (CR LF lines) in the fatal_lin buffer */
+#define W386_FATAL      0xFFFF
+#define W386_FATAL_SIZE 512
+#define W386_REFSTK_SIZE 8192   /* the V86 stack for interrupts reflected from PM */
 
 #pragma pack(1)
 struct w386_info {
@@ -62,6 +70,10 @@ struct w386_info {
     w_u16 xbuf_seg;     /* transfer buffer for DOS calls from PM (real mode) */
     w_u16 xbuf_size;    /* bytes */
     w_u32 trace;        /* SYSTEM.INI [w16] vmmtrace=1: detailed VMM trace */
+    w_u32 vxd_count;    /* VxDs loaded after the VMM (SYSTEM.INI [386Enh]) */
+    w_u32 vxd_list;     /* window offset of their DDBs' linear addresses */
+    w_u32 tail_lin;     /* WIN386's command tail (PSP:80h), linear */
+    w_u32 fatal_lin;    /* a W386_FATAL_SIZE buffer of the loader's: the VMM's fatal message */
 };
 #pragma pack()
 

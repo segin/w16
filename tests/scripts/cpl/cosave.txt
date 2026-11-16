@@ -1,0 +1,19 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: a colour changed, then Save Scheme as "Mine": [color schemes]
+; Mine=..., [current] Mine; OK
+run CONTROL.EXE COLOR
+wait 4000
+alt p
+wait 800
+mclick 290 143
+wait 500
+alt a
+wait 800
+snap C0.BMP
+type Mine
+wait 300
+key 0D
+wait 800
+snap C1.BMP
+key 0D
+wait 2000

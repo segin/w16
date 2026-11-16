@@ -5,9 +5,12 @@
  * "<mode> <slot> <TK16's DS> <offset of tk16sh> <TK16's hTask>". Modes:
  *   R  report and exit
  *   W  report, then Yield() until TK16 sets `go`, then exit
+ *   H  report, with its handle counts (W_HC0, W_HC1), and exit
+ *   V  report, with its INT 0 vector and its TDB's 32h (W_V0, W_T32)
+ *   P  report, with whether OpenFile finds TK16P.TXT (W_PFOUND)
  */
 #define TK16_SLOTS  4
-#define TK16_SLOTW  48
+#define TK16_SLOTW  64
 
 typedef struct {
     WORD go;
@@ -28,5 +31,20 @@ enum {
     W_ENVPATH,          /* 4 words: the bytes after that */
     W_ENVPATH_END = W_ENVPATH + 3,
     W_ENV,              /* 8 words: the start of the environment */
-    W_COUNT = W_ENV + 8
+    W_DONE = W_ENV + 8, /* set as it returns from its main */
+    W_HC0,              /* mode H: SetHandleCount(0) */
+    W_HC1,              /* mode H: then SetHandleCount(30) */
+    W_EBX,              /* BX at entry (stack size) */
+    W_ECX,              /* CX at entry (heap size) */
+    W_ICX,              /* CX after InitTask */
+    W_MT10,             /* its module table: heap size */
+    W_MT12,             /* its module table: stack size */
+    W_SELF,             /* a static far pointer to its own data: its
+                           selector is DS at entry */
+    W_ITER,             /* its "ABAB..." array as it should be (TK16I has
+                           it as an iterated record) */
+    W_V0,               /* mode V: 2 words, INT 21h 35h for INT 0 */
+    W_T32 = W_V0 + 2,   /* mode V: 2 words, its TDB at 32h */
+    W_PFOUND = W_T32 + 2,   /* mode P: OpenFile found TK16P.TXT */
+    W_COUNT
 };

@@ -1,0 +1,35 @@
+; CF15: Find: a match on another card, Find Next, and the not-found message
+run CARDFILE.EXE
+wait 3000
+type first card apple
+key 76
+wait 300
+type B
+key 0D
+wait 300
+type second has apple too
+key 21
+wait 300
+menu s
+char f
+wait 1000
+type apple
+key 0D
+wait 1000
+snap C:\F1.BMP
+dump
+key 1B
+wait 300
+key 72
+wait 1000
+snap C:\F2.BMP
+menu s
+char f
+wait 1000
+type zzz
+key 0D
+wait 1000
+snap C:\F3.BMP
+dump
+key 0D
+wait 300

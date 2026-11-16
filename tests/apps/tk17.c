@@ -34,6 +34,8 @@ extern WORD __cdecl get_desc(WORD sel, BYTE FAR *buf);
 extern WORD __cdecl cur_cs(void);
 extern WORD __cdecl cur_ds(void);
 extern WORD __cdecl ret_ax(void FAR *fn, WORD arg);
+extern WORD __cdecl call_es(void FAR *fn, WORD arg);
+extern WORD __cdecl call_with_ds(void FAR *fn, WORD arg);
 
 /* not in win16.h (names from windows.lib) */
 UINT WINAPI AllocCStoDSAlias(UINT);
@@ -836,6 +838,95 @@ void dos_last(void)
 }
 
 
+#ifdef TK17A
+/* Pointer checks and string functions in the first 64K of a 96K block:
+   its first selector's limit goes past FFFFh on a 386 (17FFFh); w16 read
+   it with a 16-bit LSL (7FFFh) and called offsets beyond 7FFFh bad */
+static void huge_ptrs(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0x18000L);
+    char FAR *b = h ? (char FAR *)GlobalLock(h) : NULL;
+    char FAR *p;
+    if (!b) {
+        obs("hp: GlobalAlloc(18000h)", 0);
+        return;
+    }
+    p = b + 0x9000;
+    p[0] = 'x';
+    p[1] = 0;
+    obs("hp: IsBadReadPtr(9000h,10h)", IsBadReadPtr(p, 0x10));
+    obs("hp: IsBadWritePtr(9000h,10h)", IsBadWritePtr(p, 0x10));
+    obs("hp: IsBadStringPtr(9000h)", IsBadStringPtr(p, 0xFFFF));
+    obs("hp: IsBadReadPtr(FFF0h,10h)", IsBadReadPtr(b + 0xFFF0, 0x10));
+    obs("hp: lstrlen(9000h)", lstrlen(p));
+    obs("hp: lstrcpy(9100h, 9000h)==dst", lstrcpy(b + 0x9100, p) == b + 0x9100);
+    obs("hp: copied", (BYTE)b[0x9100]);
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
+
+/* A discarded block brought back bigger than 64K (more tiles than it
+   had) */
+static void disc_grow(void)
+{
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DISCARDABLE, 0x100), r;
+    if (!h) {
+        obs("dg: GlobalAlloc", 0);
+        return;
+    }
+    GlobalDiscard(h);
+    obs("dg: discarded", (GlobalFlags(h) & GMEM_DISCARDED) != 0);
+    r = GlobalReAlloc(h, 0x18000L, GMEM_MOVEABLE);
+    obs("dg: GlobalReAlloc(18000h) != 0", r != 0);
+    obs("dg: same handle", r == h);
+    obs("dg: GlobalSize hi", r ? HIWORD(GlobalSize(r)) : 0xFFFF);
+    obs("dg: not discarded", r ? !(GlobalFlags(r) & GMEM_DISCARDED) : 0xFFFF);
+    if (r) {
+        BYTE FAR *p = (BYTE FAR *)GlobalLock(r);
+        obs("dg: lock", p != NULL);
+        if (p) {
+            p[0x9000] = 0x5A;
+            obs("dg: byte at 9000h", p[0x9000]);
+            GlobalUnlock(r);
+        }
+        GlobalFree(r);
+    } else
+        GlobalFree(h);
+}
+#endif
+
+#ifdef TK17A
+/* FreeSelector with the selector in ES, and on the second selector of a
+   huge block (last: either may end the probe) */
+static void free_tiles(void)
+{
+    FARPROC fs = GetProcAddress(GetModuleHandle("KERNEL"), "FreeSelector");
+    WORD s = AllocSelector(cur_ds()), t;
+    HGLOBAL h;
+    /* Pietrek (GlobalFree): the caller's DS, if it is the block freed,
+       comes back 0 */
+    {
+        FARPROC gf = GetProcAddress(GetModuleHandle("KERNEL"), "GlobalFree");
+        HGLOBAL g = GlobalAlloc(GMEM_FIXED, 0x40);
+        WORD gs = g ? SELECTOROF(GlobalLock(g)) : 0;
+        obs("fs: DS after GlobalFree(DS)", gs ? call_with_ds((void FAR *)gf, gs) : 0xFFFF);
+    }
+    obs("fs: ES after FreeSelector(ES)", s ? call_es((void FAR *)fs, s) : 0xFFFF);
+    obs("fs: freed", s ? !sel_ok(s) : 0xFFFF);
+    h = GlobalAlloc(GMEM_MOVEABLE, 0x18000L);
+    t = h ? (WORD)(GlobalHandle(h) >> 16) : 0;
+    if (!t) {
+        obs("fs: huge block", 0);
+        return;
+    }
+    obs("fs: FreeSelector(tile 1)", FreeSelector(t + inc_));
+    obs("fs: tile 1 still there", sel_ok(t + inc_));
+    obs("fs: GlobalSize hi after", HIWORD(GlobalSize(h)));
+    obs("fs: GlobalFree", (WORD)GlobalFree(h));
+    obs("fs: tile 1 after GlobalFree", sel_ok(t + inc_));
+}
+#endif
+
 int __cdecl tmain(void)
 {
 #ifdef TK17A
@@ -849,8 +940,11 @@ int __cdecl tmain(void)
     /* TK17A: huge blocks, in a fresh program (TK17's earlier steps left
        Windows 3.1 unable to finish these) */
     huge_blocks();
+    huge_ptrs();
+    disc_grow();
     lpa_more();
     dos_last();
+    free_tiles();
 #else
     constants();
     alloc_selector();

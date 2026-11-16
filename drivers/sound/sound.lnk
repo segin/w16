@@ -1,0 +1,35 @@
+# wlink directives for w16's MMSOUND.DRV (drivers/sound/). Object file and
+# output name come from the Makefile. Module name and ordinals as Windows
+# 3.1's MMSOUND.DRV (and SOUND.DRV, the same file) has them (its NE export
+# table, docs/exports/SOUND.txt; tools/neinfo.py). Code and data are
+# fixed: the IRQ 0 handler runs the queue.
+format windows dll
+option modname=SOUND
+option description 'w16 sound driver'
+option start=libentry
+option quiet
+option map
+segment type code fixed preload
+segment type data fixed preload
+export OPENSOUND.1
+export CLOSESOUND.2
+export SETVOICEQUEUESIZE.3
+export SETVOICENOTE.4
+export SETVOICEACCENT.5
+export SETVOICEENVELOPE.6
+export SETSOUNDNOISE.7
+export SETVOICESOUND.8
+export STARTSOUND.9
+export STOPSOUND.10
+export WAITSOUNDSTATE.11
+export SYNCALLVOICES.12
+export COUNTVOICENOTES.13
+export GETTHRESHOLDEVENT.14
+export GETTHRESHOLDSTATUS.15
+export SETVOICETHRESHOLD.16
+export DOBEEP.17
+export WEP.18 resident
+import GLOBALALLOC KERNEL.15
+import GLOBALFREE KERNEL.17
+import GLOBALLOCK KERNEL.18
+import YIELD KERNEL.29

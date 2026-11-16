@@ -1,0 +1,3 @@
+# KB1.EXE (tests/apps/kb1.c, md1s.asm): the keyboard driver interface probe
+@tests/apps/app.lnk
+import U_INITAPP USER.5

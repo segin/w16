@@ -1,0 +1,26 @@
+; Program Manager dragged by its caption down over the desktop's version
+; stamp (user/deskver.c), dropped there partly covering it, then dragged
+; back (tests/inputrun.sh; boot-test case deskver). The stamp must be
+; repainted with the desktop, under the window, and be whole again once
+; the window has left. Each shot waits for its state (match NAME 20 S).
+click 1
+sleep 1
+home
+move 150 31
+sleep 0.5
+down 1
+sleep 0.5
+move 0 45
+match 01-down-moving 20 1
+shot 01-down-moving
+up 1
+match 02-down 20 2
+shot 02-down
+down 1
+sleep 0.5
+move 0 -45
+match 03-back-moving 20 1
+shot 03-back-moving
+up 1
+match 04-back 20 2
+shot 04-back

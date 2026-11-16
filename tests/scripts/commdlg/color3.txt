@@ -1,0 +1,17 @@
+; ChooseColor: full open, initial colours, the spectrum and lum bar
+cd1 color flags=2
+cd1 color flags=3 rgb=0080FF cust=FF0000,00FF00,808080
+cd1 color flags=3 rgb=123456
+wait 6000
+snap C:\F1.BMP
+dump
+key 1B
+wait 6000
+snap C:\F2.BMP
+dump
+key 0D
+wait 6000
+snap C:\F3.BMP
+dump
+key 0D
+wait 2000

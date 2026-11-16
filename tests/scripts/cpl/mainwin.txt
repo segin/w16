@@ -1,0 +1,17 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Control Panel with w16's MAIN.CPL: the same applets, names and
+; descriptions (the icons are w16's own art)
+run CONTROL.EXE
+wait 4000
+snap S0.BMP
+key 23
+wait 300
+snap S1.BMP
+menu s
+wait 500
+snap M1.BMP
+key 1B
+key 1B
+wait 300
+close
+wait 2000

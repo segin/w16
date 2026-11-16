@@ -30,6 +30,7 @@
 #include "kernel.h"
 
 int winboot_active;             /* booting Windows (loader.c) */
+int winboot_done;               /* the boot is over: USER's FinalUserInit called */
 static int diag;                /* writing BOOTLOG.TXT */
 static int booting;             /* still logging loads */
 static char logpath[DOS_PATHMAX + 16];
@@ -76,6 +77,12 @@ static void diag_write(const char FAR *s)
     dos(0x4202, fh, 0, 0, 0, &cf);
     dos(0x4000, fh, kstrlen(s), FP_OFF(s), FP_SEG(s), &cf);
     dos(0x3E00, fh, 0, 0, 0, &cf);
+}
+
+/* DiagQuery (KERNEL.339, toolhelp.c): writing BOOTLOG.TXT? */
+int diag_query(void)
+{
+    return diag;
 }
 
 static void diag_init(void)
@@ -173,21 +180,21 @@ static void print_modmap(void)
     module FAR *m;
     u16 i;
     for (m = module_first; m; m = m->next) {
-        kputs("w16: ");
-        kputs(m->name);
-        kputs(" rec=");
-        kputhex(m->self);
-        kputs(" hmod=");
-        kputhex(m->ne_sel);
+        kdbg("w16: ");
+        kdbg(m->name);
+        kdbg(" rec=");
+        kdbghex(m->self);
+        kdbg(" hmod=");
+        kdbghex(m->ne_sel);
         for (i = 0; i < m->seg_count; i++) {
-            kputs(" ");
-            kputdec(i + 1);
-            kputs("=");
-            kputhex(m->seg[i].sel);
+            kdbg(" ");
+            kdbghex(i + 1);
+            kdbg("=");
+            kdbghex(m->seg[i].sel);
         }
-        kputs(" ");
-        kputs(m->path);
-        kputs("\r\n");
+        kdbg(" ");
+        kdbg(m->path);
+        kdbg("\r\n");
     }
 }
 
@@ -275,6 +282,23 @@ u16 winboot(void)
                             sysini);
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
+    {
+        extern u16 sched_log, exit_msg, idle_1689;
+        sched_log = GetPrivateProfileInt("w16", "schedlog", 0, sysini);
+        idle_1689 = GetPrivateProfileInt("w16", "idle1689", 0, sysini);
+        heap_check_on = GetPrivateProfileInt("w16", "heapcheck", 0, sysini);
+        exit_msg = GetPrivateProfileInt("w16", "exitmsg", 0, sysini);
+        {
+            extern u16 debug_to_aux;
+            debug_to_aux = GetPrivateProfileInt("w16", "DebugToAux", 0, sysini) != 0;
+        }
+    }
+    {
+        /* [w16] debuglog=FILE: w16's own diagnostics (util.c kdbg) */
+        static char dbg[80];
+        GetPrivateProfileString("w16", "debuglog", "", dbg, sizeof dbg, sysini);
+        kdbg_init(dbg);
+    }
     if (take_switch_b())
         diag_init();
     booting = 1;
@@ -287,6 +311,8 @@ u16 winboot(void)
     boot_load("fonts.fon", "FONTS.FON");
     boot_load("oemfonts.fon", "OEMFONTS.FON");
     boot_load(NULL, "GDI.EXE");
+    win_screen = 1;                     /* USER's initialisation enables
+                                           the display: graphics from here */
     boot_load(NULL, "USER.EXE");
 
     /* the shell: its command tail is the rest of KERNEL's, without the
@@ -301,6 +327,7 @@ u16 winboot(void)
     tail[1 + n - i] = '\r';
     diag_load_start(shell);
     m = module_load_program_init(shell, &err, &libinit);
+    thhook_set_shell(m ? m->ne_sel : 0);   /* THHOOK 28h (toolhelp.c) */
     ad = m ? NE_HDR(m)->auto_data : 0;
     if (m && (!ad || ad > m->seg_count ||
               !task_create(m, m->seg[ad - 1].sel, m->seg[ad - 1].hnd, 0,
@@ -315,8 +342,14 @@ u16 winboot(void)
     if (GetPrivateProfileInt("w16", "modmap", 0, sysini))
         print_modmap();
     final_user_init();
-    /* the watchdog keeps running: a debugging aid, it reports where the
-       system is after SECONDS without a boot log line */
+    winboot_done = 1;
+    /* the boot is over: the watchdog ([w16] watchdog=SECONDS) watches the
+       boot only. It kept running and, SECONDS after the last boot log line,
+       reported "no boot progress" and ended a Windows that was only idle:
+       tests/dropin.sh -p 286 with a fixed-time screenshot (DROPIN_FIXED=1,
+       -t 150) showed a black screen, which looked like a boot failure on
+       the 80286 */
+    wd_stop();
     task_boot_tdb_end();
     {
         u16 rc = task_boot();           /* back when the last task ends */

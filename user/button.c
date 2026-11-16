@@ -38,7 +38,7 @@ static void set_state(HWND h, BYTE s)
 static HFONT btn_font(HWND h)
 {
     PWND w = valid_wnd(h);
-    return w ? *(HFONT __near *)(WND_EXTRA(w) + 1) : 0;
+    return w ? *(HFONT __far *)(WND_EXTRA(w) + 1) : 0;
 }
 
 static UINT btype(HWND h)
@@ -327,16 +327,25 @@ static void clicked(HWND h)
     notify(h, BN_CLICKED);
 }
 
-LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     BYTE s;
     if (!valid_wnd(h))
         return 0;
     s = state(h);
     switch (msg) {
-    case WM_CREATE:
+    case WM_CREATE: {
+        /* BS_USERBUTTON in a program marked for 3.10 is a push button
+           (US18 on 3.1: made by such a program, by CreateWindow or a
+           dialog template, it reads back 0; by one marked 3.00 it stays
+           8. Terminal's status bar, Stop and Pause, are such buttons) */
+        PWND w = valid_wnd(h);
+        if (w && (w->style & 0x0F) == BS_USERBUTTON &&
+            K_GETEXPWINVER(K_GETEXEPTR(w->hInstance)) >= 0x030A)
+            w->style &= ~0x0FL;
         set_state(h, 0);
         return 0;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(h, &ps);
@@ -354,7 +363,7 @@ LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_SETFONT: {
         PWND w = valid_wnd(h);
-        *(HFONT __near *)(WND_EXTRA(w) + 1) = (HFONT)wp;
+        *(HFONT __far *)(WND_EXTRA(w) + 1) = (HFONT)wp;
         if (LOWORD(lp))
             redraw(h);
         return 0;
@@ -383,6 +392,14 @@ LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             return DLGC_STATIC;
         return DLGC_BUTTON;
     }
+    case WM_NCHITTEST:
+        /* a group box lets the mouse through to what it frames (on 3.1 the
+           controls inside a group box that comes first in the dialog
+           template take clicks: Control Panel's Keyboard, Mouse, Desktop,
+           Color dialogs, Microsoft's MAIN.CPL as w16's) */
+        if (btype(h) == BS_GROUPBOX)
+            return HTTRANSPARENT;
+        break;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
         if (btype(h) == BS_GROUPBOX)
@@ -464,7 +481,7 @@ LRESULT WINAPI ButtonWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 /* ---- STATIC: extra bytes 0-1 the font, 2-3 the icon (US2: 6 bytes) ---- */
-LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+LRESULT WINAPI __loadds StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PWND w = valid_wnd(h);
     UINT type;
@@ -476,7 +493,24 @@ LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (type == SS_ICON) {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
             HICON ic = cs->lpszName ? LoadIcon(cs->hInstance, cs->lpszName) : 0;
-            *(WORD __near *)(WND_EXTRA(w) + 2) = (WORD)ic;
+            /* an icon not the program's own is a system one (3.1: Program
+               Manager's Exit dialog names icon 32516 and shows
+               IDI_ASTERISK); "#n" is n */
+            if (!ic && cs->lpszName && !HIWORD((DWORD)cs->lpszName))
+                ic = LoadIcon(0, cs->lpszName);
+            else if (!ic && cs->lpszName) {
+                LPCSTR s = cs->lpszName;
+                if (s[0] == '#') {
+                    WORD n = 0;
+                    for (s++; *s >= '0' && *s <= '9'; s++)
+                        n = n * 10 + (*s - '0');
+                    ic = LoadIcon(cs->hInstance, MAKEINTRESOURCE(n));
+                    if (!ic)
+                        ic = LoadIcon(0, MAKEINTRESOURCE(n));
+                } else
+                    ic = LoadIcon(0, cs->lpszName);
+            }
+            *(WORD __far *)(WND_EXTRA(w) + 2) = (WORD)ic;
             if (ic)
                 SetWindowPos(h, 0, 0, 0, sysmet[SM_CXICON], sysmet[SM_CYICON],
                              SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -486,7 +520,7 @@ LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         PAINTSTRUCT ps;
         RECT r;
         HDC hdc = BeginPaint(h, &ps);
-        HFONT f = *(HFONT __near *)WND_EXTRA(w), old = 0;
+        HFONT f = *(HFONT __far *)WND_EXTRA(w), old = 0;
         GetClientRect(h, &r);
         if (f)
             old = SelectObject(hdc, f);
@@ -509,7 +543,7 @@ LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             break;
         }
         case SS_ICON: {
-            HICON ic = (HICON)*(WORD __near *)(WND_EXTRA(w) + 2);
+            HICON ic = (HICON)*(WORD __far *)(WND_EXTRA(w) + 2);
             FillRect(hdc, &r, ctl_brush(h, hdc, CTLCOLOR_STATIC));
             if (ic)
                 DrawIcon(hdc, 0, 0, ic);
@@ -538,20 +572,20 @@ LRESULT WINAPI StaticWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         InvalidateRect(h, NULL, TRUE);
         return 0;
     case WM_SETFONT:
-        *(HFONT __near *)WND_EXTRA(w) = (HFONT)wp;
+        *(HFONT __far *)WND_EXTRA(w) = (HFONT)wp;
         if (LOWORD(lp))
             InvalidateRect(h, NULL, TRUE);
         return 0;
     case WM_GETFONT:
-        return *(WORD __near *)WND_EXTRA(w);
+        return *(WORD __far *)WND_EXTRA(w);
     case STM_SETICON: {
-        WORD old = *(WORD __near *)(WND_EXTRA(w) + 2);
-        *(WORD __near *)(WND_EXTRA(w) + 2) = wp;
+        WORD old = *(WORD __far *)(WND_EXTRA(w) + 2);
+        *(WORD __far *)(WND_EXTRA(w) + 2) = wp;
         InvalidateRect(h, NULL, TRUE);
         return old;
     }
     case STM_GETICON:
-        return *(WORD __near *)(WND_EXTRA(w) + 2);
+        return *(WORD __far *)(WND_EXTRA(w) + 2);
     case WM_NCHITTEST:
         return HTTRANSPARENT;
     case WM_GETDLGCODE:

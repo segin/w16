@@ -1,0 +1,3 @@
+# TK50.EXE (tests/apps/tk50.c, tk50s.asm): the KERNEL exports w16 lacked
+@tests/apps/app.lnk
+export PATCHME.1

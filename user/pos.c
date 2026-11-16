@@ -12,9 +12,16 @@
 #include "user.h"
 
 void refresh_dcs(void);
-void byte_align(PWND w);
+void byte_align(PWND w, BOOL made);
+void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
+HWND next_to_activate(HWND h);
 void invalidate_screen(const RECT *rc);
+void invalidate_screen_except(const RECT *rc, const RECT *except);
+void invalidate_window_screen_rgn(HWND h, HRGN rgn);
+void savebits_show(HWND h);
+BOOL savebits_restore(HWND h, const RECT *oldwin);
+void savebits_forget(HWND h);
 
 void calc_client(PWND w)
 {
@@ -29,8 +36,8 @@ void calc_client(PWND w)
     }
     OffsetRect(&r, -px, -py);
     p.rgrc[0] = r;
-    send_message((HWND)(WORD)w, WM_NCCALCSIZE, FALSE, (LPARAM)(NCCALCSIZE_PARAMS __far *)&p);
-    if (!valid_wnd((HWND)(WORD)w))
+    send_message(HW(w), WM_NCCALCSIZE, FALSE, (LPARAM)(NCCALCSIZE_PARAMS __far *)&p);
+    if (!valid_wnd(HW(w)))
         return;
     w->rcClient = p.rgrc[0];
     OffsetRect(&w->rcClient, px, py);
@@ -58,8 +65,10 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     PWND w = valid_wnd(h), parent;
     WINDOWPOS wp;
     RECT oldwin, oldcli;
-    BOOL wasvis, nowvis, changed;
+    BOOL wasvis, nowvis, changed, restored = FALSE;
+    HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
+    UINT asked = flags;
     if (!w || h == hwndDesktop)
         return FALSE;
     parent = PW(w->hwndParent);
@@ -104,6 +113,16 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     /* Z order */
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
         if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
+            HWND s;
+            if (wasvis) {
+                above = CreateRectRgn(0, 0, 0, 0);
+                for (s = PW(w->hwndParent)->hwndChild; s && s != h; s = PW(s)->hwndNext)
+                    if (PW(s)->style & WS_VISIBLE) {
+                        HRGN t = CreateRectRgnIndirect(&PW(s)->rcWindow);
+                        CombineRgn(above, above, t, RGN_OR);
+                        DeleteObject(t);
+                    }
+            }
             unlink_window(w);
             link_window(w, after == (HWND)-1 ? HWND_TOP : (after == (HWND)-2 ? HWND_TOP : after));
             changed = TRUE;
@@ -115,7 +134,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         calc_client(w);
         if (!(w = valid_wnd(h)))
             return FALSE;
-        byte_align(w);
+        byte_align(w, FALSE);
         if (w->rcClient.left != oldcli.left || w->rcClient.top != oldcli.top)
             move_children(w, w->rcClient.left - oldcli.left, w->rcClient.top - oldcli.top);
         if (w->hrgnUpdate)
@@ -125,26 +144,100 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!(w = valid_wnd(h)))
             return FALSE;
     }
-    if (flags & SWP_SHOWWINDOW)
+    if (flags & SWP_SHOWWINDOW) {
+        /* CS_SAVEBITS: the screen under it kept (savebits.c) */
+        if (!(w->style & WS_CHILD) && (((PCLS)w->cls)->style & CS_SAVEBITS))
+            savebits_show(h);
         w->style |= WS_VISIBLE;
+    }
     if (flags & SWP_HIDEWINDOW) {
         w->style &= ~WS_VISIBLE;
+        /* CS_SAVEBITS: the image under it back now, before another
+           window is activated and comes up over its place (Windows
+           Write's File > Open box: the owner, brought up first, hid the
+           place from the image, and the box stayed on screen) */
+        if (wasvis)
+            restored = savebits_restore(h, &oldwin);
         if (h == hwndFocus || IsChild(h, hwndFocus))
             set_focus(0);
+        /* the active window hidden by SetWindowPos stays the active one
+           (ShowWindow(SW_HIDE) moves the activation, see there) */
     }
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
               !(flags & SWP_NOZORDER) || (flags & SWP_FRAMECHANGED);
     refresh_dcs();
+    /* (not for popup menus: a menu opened under the pointer from the
+       keyboard keeps its first item selected) */
+    if (changed && (wasvis || nowvis) && GetClassWord(h, GCW_ATOM) != 32768) {
+        pointer_changed(&oldwin);
+        if (!EqualRect(&oldwin, &w->rcWindow))
+            pointer_changed(&w->rcWindow);
+    }
+    if (wasvis && nowvis && !EqualRect(&oldwin, &w->rcWindow))
+        savebits_forget(h);
     if (changed && !(flags & SWP_NOREDRAW)) {
-        /* what was under the old place, and the window in its new one */
-        if (wasvis)
-            invalidate_screen(&oldwin);
-        if (nowvis)
-            invalidate_screen(&w->rcWindow);
+        if (nowvis && ((flags & SWP_NOZORDER) || !w->hwndParent ||
+                       PW(w->hwndParent)->hwndChild == h)) {
+            /* above its siblings: what it left uncovered, and the window
+               itself; not what it now covers. Observed on 3.1 (throwaway
+               probe, a child moved with MoveWindow(..., FALSE) and shown
+               over its parent, which has no WS_CLIPCHILDREN): the parent
+               got no WM_PAINT for it. Windows Write shows its ruler that
+               way and paints it at once (UpdateWindow); w16 also gave the
+               main window the ruler's place, and its paint then erased the
+               ruler */
+            if (wasvis)
+                invalidate_screen_except(&oldwin, &w->rcWindow);
+            if (wasvis && above && EqualRect(&oldwin, &w->rcWindow) &&
+                !(flags & SWP_FRAMECHANGED)) {
+                /* only brought up: what was covered (3.1, the same probe:
+                   a window activated again after a popup over it went
+                   was painted only where the popup had been) */
+                invalidate_window_screen_rgn(h, above);
+            } else
+                invalidate(h, 0, 0, TRUE, TRUE, TRUE);
+        } else {
+            /* what was under the old place (unless the image under it was
+               put back), and the window in its new one */
+            if (wasvis && !restored)
+                invalidate_screen(&oldwin);
+            if (nowvis)
+                invalidate_screen(&w->rcWindow);
+        }
+    }
+    if (above) {
+        DeleteObject(above);
+        above = 0;
+    }
+    if ((flags & SWP_SHOWWINDOW) && (w->flags & WF_SENDSIZE)) {
+        /* the WM_SIZE and WM_MOVE CreateWindow held back */
+        PWND pw = (w->style & WS_CHILD) ? PW(w->hwndParent) : (PWND)0;
+        w->flags &= ~WF_SENDSIZE;
+        send_message(h, WM_SIZE, (w->style & WS_MINIMIZE) ? SIZE_MINIMIZED :
+                     (w->style & WS_MAXIMIZE) ? SIZE_MAXIMIZED : SIZE_RESTORED,
+                     MAKELONG(w->rcClient.right - w->rcClient.left,
+                              w->rcClient.bottom - w->rcClient.top));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+        send_message(h, WM_MOVE, 0, MAKELONG(w->rcClient.left - (pw ? pw->rcClient.left : 0),
+                                             w->rcClient.top - (pw ? pw->rcClient.top : 0)));
+        if (!(w = valid_wnd(h)))
+            return FALSE;
     }
     if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
         activate_window(h, FALSE);
+    /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
+       DefMDIChildProc turns into the MDI child's activation (3.1, File
+       Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
+       WM_CHILDACTIVATE as it is shown); also when ShowWindow maximises or
+       restores one already shown (US18: WM_MDIMAXIMIZE or ShowWindow
+       SW_SHOWMAXIMIZED on a child that is not the active one activates it
+       before its WM_SIZE). UNVERIFIED: on moves and sizes without
+       SWP_NOACTIVATE too, as the SDK says */
+    if (((flags & SWP_SHOWWINDOW) || (asked & (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) ==
+         (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
+        send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
     if (!(w = valid_wnd(h)))
@@ -153,25 +246,41 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     wp.y = w->rcWindow.top - py;
     wp.cx = w->rcWindow.right - w->rcWindow.left;
     wp.cy = w->rcWindow.bottom - w->rcWindow.top;
-    wp.flags = flags;
+    wp.flags = flags & ~(SWP_NOMOVE | SWP_NOSIZE);     /* what did change, below */
     if (!EqualRect(&oldwin, &w->rcWindow) || (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
         !(flags & SWP_NOZORDER)) {
-        if (EqualRect(&oldwin, &w->rcWindow))
-            wp.flags |= SWP_NOMOVE | SWP_NOSIZE;
-        else {
-            if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top)
-                wp.flags |= SWP_NOMOVE;
-            if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy)
-                wp.flags |= SWP_NOSIZE;
-        }
+        /* moved or sized: the window or its client area (US18: on 3.1 a
+           scroll bar a window's WM_SIZE takes away gives it a second
+           WM_SIZE with the larger client area; w16 sent none, and Program
+           Manager's group maximised from its icon kept its scroll bars) */
+        if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
+            oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
+            wp.flags |= SWP_NOMOVE;
+        if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy &&
+            oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
+            oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
+            wp.flags |= SWP_NOSIZE;
         send_message(h, WM_WINDOWPOSCHANGED, 0, (LPARAM)(WINDOWPOS __far *)&wp);
     }
     return TRUE;
 }
 
+/* without SWP_NOACTIVATE a shown top-level window is activated, whether
+   it is shown now or was already (3.1 SDK; US24 on 3.1: with an icon
+   active, SetWindowPos of the main window with SWP_SHOWWINDOW, with
+   SWP_NOZORDER and with neither made it active, with SWP_NOACTIVATE not.
+   Microsoft's WINOLDAP comes back to the Windows application that way;
+   w16 activated only a window being shown, and the DOS program's icon
+   stayed active). Here for the API only: USER's own calls are as they
+   were (UNVERIFIED which of them 3.1 makes without SWP_NOACTIVATE) */
 BOOL WINAPI SetWindowPos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags)
 {
-    return set_window_pos(h, after, x, y, cx, cy, flags);
+    BOOL r = set_window_pos(h, after, x, y, cx, cy, flags);
+    PWND w = valid_wnd(h);
+    if (r && w && !(flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) && !(w->style & WS_CHILD) &&
+        is_visible(w) && h != hwndActive)
+        activate_window(h, FALSE);
+    return r;
 }
 
 BOOL WINAPI MoveWindow(HWND h, int x, int y, int cx, int cy, BOOL repaint)
@@ -199,8 +308,10 @@ static void icon_place(PWND w, POINT *pt)
     int n = 0;
     HWND s;
     pr = (w->style & WS_CHILD) ? parent->rcClient : PW(hwndDesktop)->rcWindow;
+    /* (hidden icons do not count: US24 on 3.1, a third icon made while
+       the second was hidden took the second's place) */
     for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
-        if (s != (HWND)(WORD)w && (PW(s)->style & WS_MINIMIZE))
+        if (s != HW(w) && (PW(s)->style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE))
             n++;
     pt->x = (n % ((pr.right - pr.left) / cx)) * cx + (cx - sysmet[SM_CXICON]) / 2;
     pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx));
@@ -213,6 +324,7 @@ static void icon_place(PWND w, POINT *pt)
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
 HWND make_icon_title(HWND h);
 void move_icon_title(HWND t, HWND h);
+HWND next_to_activate(HWND h);
 #define PLACEPROP MAKEINTATOM(0x7E16)   /* w16's private property */
 
 static PLACE *place_of(HWND h, BOOL create)
@@ -236,10 +348,63 @@ static PLACE *place_of(HWND h, BOOL create)
     }
 }
 
+/* CreateWindow of a top-level window with WS_MINIMIZE, after WM_CREATE:
+   it goes to its icon's place, the size it was given kept as its normal
+   place (probe US24 on Windows 3.1: after WM_CREATE a move to 21,408,
+   36 x 36, WM_MOVE and WM_SIZE SIZE_MINIMIZED, still hidden;
+   GetWindowPlacement then gives the icon's place and the given rectangle
+   as normal). w16 left it at the given place and size: WINOLDAP's icon,
+   made that way, showed as a window of CW_USEDEFAULT's size at 0,0 with
+   the icon in its corner (Alt+Esc or Alt+Tab out of the MS-DOS Prompt).
+   UNVERIFIED: child windows (not done for them); which place 3.1 takes
+   when other icons are hidden (US24's third window went to the second
+   place with a hidden icon there) */
+void minimize_new(HWND h)
+{
+    PWND w = valid_wnd(h);
+    PLACE *pl;
+    POINT pt;
+    if (!w)
+        return;
+    pl = place_of(h, TRUE);
+    icon_place(w, &pt);
+    if (pl) {
+        pl->icon = pt;
+        pl->hasicon = 1;
+    }
+    set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
+                   SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    if ((w = valid_wnd(h)) != 0 && (w->flags & WF_SENDSIZE)) {
+        w->flags &= ~WF_SENDSIZE;
+        send_message(h, WM_MOVE, 0, MAKELONG(w->rcClient.left, w->rcClient.top));
+        if ((w = valid_wnd(h)) != 0)
+            send_message(h, WM_SIZE, SIZE_MINIMIZED,
+                         MAKELONG(w->rcClient.right - w->rcClient.left,
+                                  w->rcClient.bottom - w->rcClient.top));
+    }
+}
+
+static BOOL restore_noact;      /* restore_noactivate under way */
+
+/* a maximised or minimised window restored without being activated (an
+   MDI child giving its maximised state to the one activated: mdi.c) */
+void restore_noactivate(HWND h)
+{
+    restore_noact = TRUE;
+    ShowWindow(h, SW_RESTORE);
+    restore_noact = FALSE;
+}
+
+static BOOL same_size(const RECT *a, const RECT *b)
+{
+    return a->right - a->left == b->right - b->left && a->bottom - a->top == b->bottom - b->top;
+}
+
 BOOL WINAPI ShowWindow(HWND h, int cmd)
 {
     PWND w = valid_wnd(h);
     BOOL wasvis;
+    RECT sized;
     UINT f = SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
     PLACE *pl;
     if (!w)
@@ -251,11 +416,27 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             return FALSE;
         send_message(h, WM_SHOWWINDOW, FALSE, 0);
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
+        /* the active window hidden by ShowWindow: its owner becomes
+           active if it can take it, else the next visible, enabled
+           top-level window, or none. SetWindowPos(SWP_HIDEWINDOW), with
+           or without SWP_NOACTIVATE, leaves the hidden window active on
+           3.1 (throwaway probe: an active popup hidden while its owner
+           was disabled, an icon of the same program shown: SetWindowPos
+           left the popup active, ShowWindow made the icon active; a new
+           window shown then was activated, and destroying the hidden
+           popup with nothing else shown gave the activation to its
+           enabled owner). Program Manager hides its Run dialog with
+           SetWindowPos before WinExec: w16 activated the next window
+           there, with the owner disabled an icon (Notepad's in the
+           boot-test icons), and keys typed before the program's window
+           came up (a loaded machine) went to that icon. UNVERIFIED:
+           3.1's next window (the probe's ShowWindow chose the icon over
+           another program's open window; next_to_activate prefers open
+           windows) */
         if (h == hwndActive && (w = valid_wnd(h)) != 0) {
-            HWND t;
-            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
-                if (t != h && (PW(t)->style & WS_VISIBLE) && !(PW(t)->style & WS_DISABLED))
-                    break;
+            HWND t = w->hwndOwner;
+            if (!t || !valid_wnd(t) || !(PW(t)->style & WS_VISIBLE) || (PW(t)->style & WS_DISABLED))
+                t = next_to_activate(h);
             activate_window(t, FALSE);
         }
         return wasvis;
@@ -279,18 +460,57 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 icon_place(w, &pt);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
                            (cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
             if ((w = valid_wnd(h)) != 0) {
-                send_message(h, WM_SIZE, SIZE_MINIMIZED, 0);
+                /* with the icon's client size, as from WM_WINDOWPOSCHANGED
+                   (it was 0 x 0: w16's Clock sized its icon's digits to
+                   it, and they came out huge and cut off); it comes from
+                   there, once (US18), but for a size that stays the same */
+                if (same_size(&sized, &w->rcWindow))
+                    send_message(h, WM_SIZE, SIZE_MINIMIZED,
+                                 MAKELONG(w->rcClient.right - w->rcClient.left,
+                                          w->rcClient.bottom - w->rcClient.top));
                 if (pl && !pl->title && (w = valid_wnd(h)) != 0)
                     pl->title = make_icon_title(h);
+            }
+            /* a child minimised without activation gives the focus it
+               holds to its parent (3.1: Program Manager makes its groups
+               shown, then minimises the iconic ones with
+               SW_SHOWMINNOACTIVE; the arrow keys went to the Accessories
+               icon instead of Main. UNVERIFIED: that 3.1 gives it to the
+               parent rather than to nobody; Wine does for SW_HIDE) */
+            if ((cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE) && (w = valid_wnd(h)) != 0 &&
+                (w->style & WS_CHILD) && hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
+                set_focus(w->hwndParent);
+            /* SW_MINIMIZE (Alt+Space N, the minimise box): the next
+               top-level window becomes active (3.1 SDK; on 3.1 Program
+               Manager is active again after Notepad is minimised - w16
+               left Notepad's icon active, and the keys went to it). The
+               minimised window goes to the bottom of the Z order: with
+               Notepad, Calculator, Clock, Character Map and Paintbrush
+               minimised in that order, minimising Program Manager makes
+               Notepad's icon active, and Alt+Esc then goes Calculator,
+               Clock (observed on 3.1) */
+            if (cmd == SW_MINIMIZE && h == hwndActive && (w = valid_wnd(h)) != 0 &&
+                !(w->style & WS_CHILD)) {
+                HWND t;
+                set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                t = next_to_activate(h);
+                if (t)
+                    activate_window(t, FALSE);
             }
         } else if (!wasvis) {
             send_message(h, WM_SHOWWINDOW, TRUE, 0);
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW |
                            (cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
+            /* an icon made by CreateWindow (WS_MINIMIZE) shown: its title
+               too (3.1: WINOLDAP's icon, "COMMAND" under it) */
+            if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && (w->style & WS_VISIBLE) &&
+                (pl = place_of(h, FALSE)) != 0 && !pl->title)
+                pl->title = make_icon_title(h);
         }
         return wasvis;
     case SW_SHOWMAXIMIZED:
@@ -305,6 +525,17 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (w->style & WS_CHILD)
                     OffsetRect(&pl->normal, -PW(w->hwndParent)->rcClient.left,
                                -PW(w->hwndParent)->rcClient.top);
+            } else if (pl) {
+                /* maximised from its icon: the icon's place kept, its
+                   title gone, as when restored (the title stayed behind
+                   a maximised MDI child made from an icon) */
+                pl->icon.x = w->rcWindow.left;
+                pl->icon.y = w->rcWindow.top;
+                if (w->style & WS_CHILD) {
+                    pl->icon.x -= PW(w->hwndParent)->rcClient.left;
+                    pl->icon.y -= PW(w->hwndParent)->rcClient.top;
+                }
+                pl->hasicon = 1;
             }
             if (w->style & WS_CHILD) {
                 PWND p = PW(w->hwndParent);
@@ -322,14 +553,33 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
             if (!(w = valid_wnd(h)))
                 return wasvis;
+            /* an icon opened: WM_QUERYOPEN first, FALSE keeps it an icon
+               (3.1 SDK; US18: 3.1 sends it after WM_GETMINMAXINFO when an
+               MDI child is maximised from its icon. Program Manager's
+               groups answer it, and without it a group maximised from its
+               icon kept scroll bars it had no need of) */
+            if (w->style & WS_MINIMIZE) {
+                if (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h)))
+                    return wasvis;
+                if (pl && pl->title) {
+                    destroy_window(pl->title);
+                    pl->title = 0;
+                }
+                if (!(w = valid_wnd(h)))
+                    return wasvis;
+            }
             w->style &= ~WS_MINIMIZE;
             w->style |= WS_MAXIMIZE;
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
                            mm.ptMaxSize.x, mm.ptMaxSize.y,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            if ((w = valid_wnd(h)) != 0)
+            /* WM_SIZE comes from DefWindowProc's WM_WINDOWPOSCHANGED, once
+               (US18: one WM_SIZE per maximise or restore on 3.1; w16 sent
+               a second here); here only when the size stayed the same */
+            if ((w = valid_wnd(h)) != 0 && same_size(&sized, &w->rcWindow))
                 send_message(h, WM_SIZE, SIZE_MAXIMIZED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
@@ -342,6 +592,10 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     case SW_RESTORE:
         if (w->style & (WS_MINIMIZE | WS_MAXIMIZE)) {
             RECT r;
+            /* an icon opened: WM_QUERYOPEN first (3.1 SDK) */
+            if ((w->style & WS_MINIMIZE) &&
+                (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h))))
+                return wasvis;
             pl = place_of(h, FALSE);
             if (w->style & WS_MINIMIZE) {
                 if (!pl)
@@ -364,12 +618,27 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             w->style &= ~(WS_MINIMIZE | WS_MAXIMIZE);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            sized = w->rcWindow;
             set_window_pos(h, 0, r.left, r.top, r.right - r.left, r.bottom - r.top,
-                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            if ((w = valid_wnd(h)) != 0)
+                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
+                           (restore_noact ? SWP_NOACTIVATE : 0));
+            if ((w = valid_wnd(h)) != 0 && same_size(&sized, &w->rcWindow))
                 send_message(h, WM_SIZE, SIZE_RESTORED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
+            /* restored: activated and on top (3.1 SDK: SW_RESTORE and
+               SW_SHOWNORMAL activate; a Program Manager group restored
+               from its icon comes up in front, active). A child gets
+               WM_CHILDACTIVATE, which an MDI child turns into its
+               activation; w16 left it where it was in the Z order */
+            if ((w = valid_wnd(h)) != 0 && !restore_noact) {
+                if (!(w->style & WS_CHILD))
+                    activate_window(h, FALSE);
+                else {
+                    set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    send_message(h, WM_CHILDACTIVATE, 0, 0);
+                }
+            }
             return wasvis;
         }
         /* fall through */
@@ -383,18 +652,26 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
         send_message(h, WM_SHOWWINDOW, TRUE, 0);
         if (!(w = valid_wnd(h)))
             return FALSE;
+        /* a child keeps its place in the Z order (US18: three hidden
+           children shown with SW_SHOW or SW_SHOWNORMAL stay in the order
+           they were made on 3.1; w16 brought each to the top, and
+           COMMDLG's dialogs, which show their controls one by one, came
+           out with their tab order backwards: Terminal's Send Text File,
+           Tab from the file name went to Strip LF) */
         set_window_pos(h, (cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? 0 : HWND_TOP,
                        0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
-                       ((cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? SWP_NOACTIVATE | SWP_NOZORDER : 0));
+                       ((cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? SWP_NOACTIVATE | SWP_NOZORDER : 0) |
+                       ((w->style & WS_CHILD) ? SWP_NOZORDER : 0));
         return FALSE;
     }
 }
 
+/* a bad WINDOWPLACEMENT: FALSE (3.1, US27; SetWindowPlacement too) */
 BOOL WINAPI GetWindowPlacement(HWND h, WINDOWPLACEMENT __far *p)
 {
     PWND w = valid_wnd(h);
     PLACE *pl;
-    if (!w)
+    if (!w || GP_BAD(p))
         return FALSE;
     pl = place_of(h, FALSE);
     p->length = sizeof(WINDOWPLACEMENT);
@@ -421,7 +698,7 @@ BOOL WINAPI SetWindowPlacement(HWND h, const WINDOWPLACEMENT __far *p)
 {
     PWND w = valid_wnd(h);
     PLACE *pl;
-    if (!w)
+    if (!w || GP_BAD(p))
         return FALSE;
     pl = place_of(h, TRUE);
     if (!pl)
@@ -439,6 +716,27 @@ BOOL WINAPI SetWindowPlacement(HWND h, const WINDOWPLACEMENT __far *p)
     return TRUE;
 }
 
+/* the window to activate when h stops being the active one: the first
+   visible, enabled top-level window in Z order other than h, not an icon
+   title (#32772, a popup owned by a minimised window), one that is not
+   minimised first. UNVERIFIED: 3.1's order of preference */
+HWND next_to_activate(HWND h)
+{
+    HWND t, icon = 0;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
+        PWND tw = PW(t);
+        if (t == h || !(tw->style & WS_VISIBLE) || (tw->style & (WS_DISABLED | WS_CHILD)))
+            continue;
+        if (tw->hwndOwner && valid_wnd(tw->hwndOwner) && (PW(tw->hwndOwner)->style & WS_MINIMIZE))
+            continue;
+        if (!(tw->style & WS_MINIMIZE))
+            return t;
+        if (!icon)
+            icon = t;
+    }
+    return icon;
+}
+
 /* a window going away: its placement record and icon title */
 void free_place(HWND h)
 {
@@ -451,6 +749,15 @@ void free_place(HWND h)
     l = (HLOCAL)RemoveProp(h, PLACEPROP);
     if (l)
         LocalFree(l);
+}
+
+/* a minimised window activated, deactivated or renamed: its title
+   repainted whole */
+void redraw_icon_title(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    if (p && p->title && valid_wnd(p->title))
+        RedrawWindow(p->title, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
 }
 
 /* a minimised window moved: its title follows */

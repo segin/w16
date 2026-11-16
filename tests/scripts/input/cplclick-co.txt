@@ -1,0 +1,723 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Color dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it). The case sets WIN.INI MouseSpeed=0:
+; without acceleration the pointer moves one pixel a unit whatever the
+; host's timing (with it, how DOSBox splits a move decides).
+click 1
+sleep 1
+; Control Panel's caption (activates it)
+home
+home
+sleep 0.3
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 15 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; open Color
+key Return
+sleep 0.4
+sleep 2
+matchnow 01-open 20 1
+; Color Palette >>
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 13 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 16
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 02-palette 20 1
+; scheme combo box: open
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Down
+sleep 0.4
+; scheme combo box: close
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 03-scheme 20 1
+; basic colour row 1 column 0
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 10 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 04-basic 20 1
+; element combo box: open
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 12
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 15 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+key Down
+sleep 0.4
+key Down
+sleep 0.4
+; element combo box: close
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 12
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 15 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; basic colour row 3 column 4
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 7
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 6 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; custom colour 9
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 19 9
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 05-element 20 1
+; Define Custom Colors...
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 2
+sleep 0.05
+move 20 0
+sleep 0.05
+move 17 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+sleep 4
+matchnow 06-selector 20 1
+; hue: up arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 9
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; sat: up arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; sat: up arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 11
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; lum: down arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 9 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; green: down arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 10 20
+sleep 0.05
+move 0 14
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 07-selector-set 20 1
+; Add Color
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 2
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 08-added 20 1
+; Close
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 2
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 09-closed-selector 20 1
+; OK
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 7 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 2
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+matchnow 10-closed 20 1
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

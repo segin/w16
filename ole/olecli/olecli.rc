@@ -1,0 +1,53 @@
+/*
+ * olecli.rc - OLECLI.DLL's resources: the "Connect Network Drive" dialog
+ * that a link to a disconnected network drive brings up, and its error
+ * message (the layout and texts of Windows 3.1's, for UI fidelity; read
+ * from the reference module's resource table, ARCHITECTURE.md 16.7).
+ */
+#include <windows.h>
+
+CONNECTDLG DIALOG 76, 55, 155, 76
+STYLE 0x80C80080L
+CAPTION "Connect Network Drive"
+BEGIN
+    CONTROL "D&rive:", -1, "static", 0x50020002L, 9, 7, 40, 9
+    CONTROL "", 500, "combobox", 0x50230003L, 53, 3, 20, 40
+    CONTROL "&Network Path:", -1, "static", 0x50020002L, 3, 21, 46, 8
+    CONTROL "", 502, "edit", 0x50830480L, 53, 20, 96, 12
+    CONTROL "Pass&word:", -1, "static", 0x50020002L, 13, 37, 36, 10
+    CONTROL "", 501, "edit", 0x508304A0L, 53, 35, 60, 12
+    CONTROL "&Connect", 1, "button", 0x50010001L, 23, 54, 42, 14
+    CONTROL "C&ancel", 2, "button", 0x50030000L, 91, 55, 43, 14
+END
+
+STRINGTABLE
+BEGIN
+    600, "Network Error"
+    601, "Unable to connect to network drive."
+END
+
+1 VERSIONINFO
+FILEVERSION 3, 10, 0, 0
+PRODUCTVERSION 3, 10, 0, 0
+FILEOS 0x10001L
+FILETYPE 2
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName", "w16 project\0"
+            VALUE "FileDescription", "Object Linking and Embedding Client Library\0"
+            VALUE "FileVersion", "1.10.000\0"
+            VALUE "InternalName", "OLECLI\0"
+            VALUE "LegalCopyright", "MIT licence, see the w16 repository\0"
+            VALUE "OriginalFilename", "OLECLI.DLL\0"
+            VALUE "ProductName", "w16\0"
+            VALUE "ProductVersion", "3.10\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

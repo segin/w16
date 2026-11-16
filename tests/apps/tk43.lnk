@@ -1,0 +1,2 @@
+# TK43.EXE (tests/apps/tk43.c, tk31s.asm): BX, CX, ES after the global-heap calls
+@tests/apps/app.lnk

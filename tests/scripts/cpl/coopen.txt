@@ -1,0 +1,11 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Color: the dialog as it opens (collapsed), widened with Color Palette
+; >>, OK with nothing changed (all of WIN.INI [colors] written)
+run CONTROL.EXE COLOR
+wait 4000
+snap C0.BMP
+alt p
+wait 1000
+snap C1.BMP
+key 0D
+wait 2000

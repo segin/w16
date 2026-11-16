@@ -1,0 +1,56 @@
+; NP2: the dialogs: Find, Open, Save As with no text, Page Setup and a
+; wrong margin, Print Setup with no printer, the changed-text question
+; log
+run NOTEPAD.EXE
+wait 3000
+menu s
+char f
+wait 1000
+dump
+snap C:\FIND.BMP
+key 1B
+wait 300
+menu f
+char o
+wait 1500
+dump
+snap C:\OPEN.BMP
+key 1B
+wait 300
+menu f
+char a
+wait 1500
+dump
+snap C:\NOTEXT.BMP
+key 1B
+wait 300
+menu f
+char t
+wait 1000
+dump
+snap C:\PAGESET.BMP
+key 09
+key 09
+type abc
+key 0D
+wait 800
+dump
+snap C:\MARGIN.BMP
+key 0D
+wait 500
+key 1B
+wait 300
+menu f
+char r
+wait 1500
+dump
+snap C:\PRSETUP.BMP
+key 1B
+wait 300
+type x
+close
+wait 1000
+dump
+snap C:\CLOSEQ.BMP
+key 1B
+wait 500

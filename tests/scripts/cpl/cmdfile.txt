@@ -1,0 +1,9 @@
+;! cp1
+;! file cp1-wide.ini CP1.INI
+; "CONTROL CP1.CPL": only that file, no window, its first applet
+run CONTROL.EXE CP1.CPL
+wait 4000
+snap S0.BMP
+key 0D
+wait 3000
+snap S1.BMP

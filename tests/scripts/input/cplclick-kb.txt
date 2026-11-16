@@ -1,0 +1,307 @@
+; boot-test case cplclick (tests/inputrun.sh): Control Panel's Keyboard dialog
+; driven with real mouse clicks on each of its controls (and a few keys),
+; then OK and Control Panel closed; the screens and the INI files are
+; compared (see tests/boottest.sh). Generated (coordinates: Windows 3.1's
+; dialog at the place 3.1 opens it). The case sets WIN.INI MouseSpeed=0:
+; without acceleration the pointer moves one pixel a unit whatever the
+; host's timing (with it, how DOSBox splits a move decides).
+click 1
+sleep 1
+; Control Panel's caption (activates it)
+home
+home
+sleep 0.3
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 15 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; open Keyboard
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Right
+sleep 0.4
+key Return
+sleep 0.4
+sleep 2
+matchnow 01-open 20 1
+; delay bar: right arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 1 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 9
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 9
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; delay bar: shaft right of the thumb
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 02-delay 20 1
+; rate bar: left arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; rate bar: shaft left of the thumb
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+; rate bar: right arrow
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 1 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+matchnow 03-rate 20 1
+; Test box
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 3
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+type abc
+sleep 0.4
+matchnow 04-test 20 1
+; OK
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 9
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 12 0
+sleep 0.05
+sleep 0.3
+click 1
+sleep 0.6
+sleep 1
+key alt+F4
+sleep 0.4
+sleep 2
+matchnow 05-closed 20 1
+; end Windows: the INI files written out
+key alt+F4
+sleep 1
+key Return
+waitexit 60

@@ -1,0 +1,206 @@
+; mouse trails on from WIN.INI at boot (the case sets MouseTrails=7 and
+; MouseSpeed=0), under real mouse motion (tests/inputrun.sh; boot-test
+; case trails): the pointer moved in steps over the desktop and Program
+; Manager, Program Manager dragged by its caption (the moving frame is
+; drawn under the trail), its File menu pulled down with the button held
+; and the pointer run over the items (the highlight is drawn under the
+; trail), let go off the menu, the Main group dragged by its caption.
+; With MouseSpeed=0 a move is that many pixels (moves of at most 20:
+; larger ones were cut short); Program Manager's caption is at y 55, its
+; File menu at 90,79, Main's caption at y 100, before the drag moves them
+; by 60,30. Each shot waits for the pointer to stop and
+; the trail to run down (match): the screens then show no trail, and
+; whatever was drawn under it must have left no debris.
+click 1
+sleep 1
+home
+sleep 0.3
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+match 01-moved 20 2
+shot 01-moved
+move -10 -10
+sleep 0.05
+move -10 -10
+sleep 0.05
+move -10 -10
+sleep 0.05
+move -10 -10
+match 02-back 20 2
+shot 02-back
+home
+sleep 0.3
+move 20 3
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 3
+sleep 0.05
+move 20 4
+sleep 0.05
+move 20 4
+sleep 0.5
+down 1
+sleep 0.3
+move 20 10
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 10
+match 03-dragging 20 2
+shot 03-dragging
+up 1
+match 04-dropped 20 2
+shot 04-dropped
+home
+sleep 0.3
+move 18 13
+sleep 0.05
+move 19 14
+sleep 0.05
+move 19 13
+sleep 0.05
+move 19 14
+sleep 0.05
+move 18 14
+sleep 0.05
+move 19 13
+sleep 0.05
+move 19 14
+sleep 0.05
+move 19 14
+sleep 0.5
+down 1
+sleep 0.3
+move 0 10
+sleep 0.05
+move 0 10
+sleep 0.05
+move 0 10
+sleep 0.05
+move 0 10
+sleep 0.05
+move 0 10
+match 05-menu 20 2
+shot 05-menu
+move 0 -10
+sleep 0.05
+move 0 -10
+sleep 0.05
+move 0 -10
+match 06-menuup 20 2
+shot 06-menuup
+move 20 13
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 14
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 13
+sleep 0.05
+move 20 14
+sleep 0.3
+up 1
+match 07-closed 20 2
+shot 07-closed
+home
+sleep 0.3
+move 19 7
+sleep 0.05
+move 19 8
+sleep 0.05
+move 20 7
+sleep 0.05
+move 19 8
+sleep 0.05
+move 20 8
+sleep 0.05
+move 19 7
+sleep 0.05
+move 19 8
+sleep 0.05
+move 20 8
+sleep 0.05
+move 19 7
+sleep 0.05
+move 20 8
+sleep 0.05
+move 19 8
+sleep 0.05
+move 19 7
+sleep 0.05
+move 20 8
+sleep 0.05
+move 19 8
+sleep 0.05
+move 20 7
+sleep 0.05
+move 19 8
+sleep 0.05
+move 20 8
+sleep 0.5
+down 1
+sleep 0.3
+move -10 20
+sleep 0.05
+move -10 20
+sleep 0.05
+move -10 20
+match 08-maindrag 20 2
+shot 08-maindrag
+up 1
+match 09-maindropped 20 2
+shot 09-maindropped

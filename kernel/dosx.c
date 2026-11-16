@@ -87,9 +87,14 @@ static int dos_alloc(regs16 FAR *r)
     }
     sel = dpmi_alloc_desc(n);
     if (!sel) {
+        u16 e;
         rm21(0x4900, 0, seg, &max, &max);
+        /* as DOS's own failure: BX = the largest block there is (it was
+           0; KERNEL audit, low) */
+        if (!rm21(0x4800, 0xFFFF, 0, &e, &max))
+            max = 0;
         r->ax = 8;
-        r->bx = 0;
+        r->bx = max;
         return 1;
     }
     set_tiles(sel, seg, r->bx);

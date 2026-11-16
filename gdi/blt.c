@@ -16,9 +16,9 @@
 #define NEEDS_SRC(rop) ((((rop) >> 2) ^ (rop)) & 0x330000L)
 
 /* intersect [l,t,r,b) with rect k of the composite region; 0 if empty */
-static int clip_to(NPRGN rao, WORD k, int *l, int *t, int *r, int *b)
+static int clip_to(LPRGN rao, WORD k, int *l, int *t, int *r, int *b)
 {
-    NPRECT c = &rao->r[k];
+    RECT __far * c = &rao->r[k];
     if (*l < c->left) *l = c->left;
     if (*t < c->top) *t = c->top;
     if (*r > c->right) *r = c->right;
@@ -27,9 +27,9 @@ static int clip_to(NPRGN rao, WORD k, int *l, int *t, int *r, int *b)
 }
 
 /* the driver BitBlt over the clip region; dest rect in screen coords */
-static void blt_out(NPDC dc, int x, int y, int w, int h, DC __far *src, int sx, int sy, DWORD rop)
+static void blt_out(LPDC dc, int x, int y, int w, int h, DC __far *src, int sx, int sy, DWORD rop)
 {
-    NPRGN rao = dc_rao(dc);
+    LPRGN rao = dc_rao(dc);
     DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];
     LPVOID pbr = dc_pbrush(dc);
     WORD k;
@@ -46,7 +46,7 @@ static void blt_out(NPDC dc, int x, int y, int w, int h, DC __far *src, int sx, 
 }
 
 /* device rectangle of a logical one (normalised) */
-static void dev_rect(NPDC dc, int x, int y, int w, int h, int *px, int *py, int *pw, int *ph)
+static void dev_rect(LPDC dc, int x, int y, int w, int h, int *px, int *py, int *pw, int *ph)
 {
     int p[4];
     p[0] = x;
@@ -62,7 +62,7 @@ static void dev_rect(NPDC dc, int x, int y, int w, int h, int *px, int *py, int 
 
 BOOL GDIAPI PatBlt(HDC hdc, int x, int y, int w, int h, DWORD rop) /* GDI.29 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     int dx, dy, dw, dh;
     if (!dc)
         return FALSE;
@@ -72,12 +72,12 @@ BOOL GDIAPI PatBlt(HDC hdc, int x, int y, int w, int h, DWORD rop) /* GDI.29 */
     return TRUE;
 }
 
-BOOL stretch_blt(NPDC dc, int dx, int dy, int dw, int dh, NPDC sdc, int sx, int sy,
+BOOL stretch_blt(LPDC dc, int dx, int dy, int dw, int dh, LPDC sdc, int sx, int sy,
                  int sw, int sh, DWORD rop);
 
 BOOL GDIAPI BitBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, int ys, DWORD rop) /* GDI.34 */
 {
-    NPDC dc = dc_out(hdc), sdc = 0;
+    LPDC dc = dc_out(hdc), sdc = 0;
     int dx, dy, dw, dh, sx = 0, sy = 0, sw, sh;
     if (!dc)
         return FALSE;
@@ -103,7 +103,7 @@ BOOL GDIAPI BitBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, int ys
    stretches. UNVERIFIED: 3.1's sampling; here each destination pixel
    takes the source pixel at floor(i * src / dst), through a temporary
    bitmap of the destination's format, then one BitBlt. */
-BOOL stretch_blt(NPDC dc, int dx, int dy, int dw, int dh, NPDC sdc, int sx, int sy,
+BOOL stretch_blt(LPDC dc, int dx, int dy, int dw, int dh, LPDC sdc, int sx, int sy,
                  int sw, int sh, DWORD rop)
 {
     DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];
@@ -144,7 +144,7 @@ BOOL stretch_blt(NPDC dc, int dx, int dy, int dw, int dh, NPDC sdc, int sx, int 
 BOOL GDIAPI StretchBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, int ys,
                        int ws, int hs, DWORD rop)                  /* GDI.35 */
 {
-    NPDC dc = dc_out(hdc), sdc;
+    LPDC dc = dc_out(hdc), sdc;
     int dx, dy, dw, dh, sx, sy, sw, sh;
     if (!dc)
         return FALSE;
@@ -170,9 +170,9 @@ BOOL GDIAPI StretchBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, in
 /* USER's window frames (Schulman ch. 8: the driver's FastBorder) */
 BOOL GDIAPI FastWindowFrame(HDC hdc, const RECT __far *rc, int xw, int yw, DWORD rop) /* GDI.400 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     DRVFASTBORDER fn;
-    NPRGN rao;
+    LPRGN rao;
     RECT r;
     WORD k;
     WORD res = 0;
@@ -200,7 +200,7 @@ BOOL GDIAPI FastWindowFrame(HDC hdc, const RECT __far *rc, int xw, int yw, DWORD
 
 COLORREF GDIAPI SetPixel(HDC hdc, int x, int y, COLORREF c)        /* GDI.31 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     int p[2];
     DWORD pc, rgb;
     if (!dc)
@@ -220,7 +220,7 @@ COLORREF GDIAPI SetPixel(HDC hdc, int x, int y, COLORREF c)        /* GDI.31 */
 
 COLORREF GDIAPI GetPixel(HDC hdc, int x, int y)                    /* GDI.83 */
 {
-    NPDC dc = dc_out(hdc);
+    LPDC dc = dc_out(hdc);
     int p[2];
     DWORD pc;
     if (!dc)
@@ -240,8 +240,8 @@ COLORREF GDIAPI GetPixel(HDC hdc, int x, int y)                    /* GDI.83 */
 
 static BOOL rgn_blt(HDC hdc, HRGN hrgn, HBRUSH hbr, DWORD rop)
 {
-    NPDC dc = dc_out(hdc);
-    NPRGN r;
+    LPDC dc = dc_out(hdc);
+    LPRGN r;
     HBRUSH old = 0;
     WORD k;
     if (!dc || !(r = rgn_ptr(hrgn)))
@@ -303,8 +303,8 @@ BOOL GDIAPI FrameRgn(HDC hdc, HRGN hrgn, HBRUSH hbr, int w, int h) /* GDI.41 */
     rgn_combine(a, a, b, RGN_AND);
     rgn_combine(frame, hrgn, a, RGN_DIFF);
     r = FillRgn(hdc, frame, hbr);
-    obj_free(a);
-    obj_free(b);
-    obj_free(frame);
+    rgn_free(a);
+    rgn_free(b);
+    rgn_free(frame);
     return r;
 }

@@ -1,0 +1,23 @@
+# a PIF of our own (tools/mkpif.py): title "Probe Program", program
+# C:\WC1.COM, start-up directory C:\WINDOWS\SYSTEM, parameters "?" (the
+# Parameters dialog); type "a b" there
+# opts: files=WC1 wait pif
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\PROBE.PIF
+key Return
+sleep 4
+shot params
+type a b
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

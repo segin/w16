@@ -61,6 +61,12 @@ static HGLOBAL make_block(const BYTE __far *res, BOOL cursor)
         return 0;                       /* UNVERIFIED: 2.x-format resources */
     cx = (int)bi->biWidth;
     cy = (int)bi->biHeight / 2;
+    /* an icon's "hot spot" is its centre (3.1: Program Manager's .GRP
+       files keep 16,16 in the icon headers DumpIcon gives) */
+    if (!cursor) {
+        hotx = cx / 2;
+        hoty = cy / 2;
+    }
     nc = dib_colors(bi);
     xorbits = res + bi->biSize + nc * sizeof(RGBQUAD);
     {
@@ -227,6 +233,78 @@ static HGLOBAL dib_handler(HGLOBAL hmem, HMODULE mod, HRSRC res, BOOL cursor)
     return blk;
 }
 
+/* USER.459, DumpIcon(lpInfo, lpLen, lplpAND, lplpXOR) (Schulman ch. 6;
+   the third parameter is the AND mask's, as Program Manager's .GRP files
+   show, not the XOR image's as written there): the parts of an icon/cursor
+   block (CURSORICONINFO, which is the
+   ICONHDR above): the header's length, where the XOR image and the AND
+   mask are; the result's low word the bytes of one plane, its high word
+   those of the whole image. Program Manager writes its .GRP icons with
+   it - a stub answering 0 left its pointers unset, and it faulted on
+   w16's USER when an item was dropped on it. */
+DWORD WINAPI U_DUMPICON(BYTE __far *info, WORD __far *len, BYTE __far * __far *andp,
+                        BYTE __far * __far *xorp)
+{
+    const ICONHDR __far *h = (const ICONHDR __far *)info;
+    DWORD plane, andsize;
+    if (!info)
+        return 0;
+    andsize = (DWORD)h->wbytes * h->cy;
+    plane = (DWORD)(((h->cx * h->bpp + 15) / 16) * 2) * h->cy;
+    if (len)
+        *len = sizeof(ICONHDR);
+    if (andp)
+        *andp = info + sizeof(ICONHDR);
+    if (xorp)
+        *xorp = info + sizeof(ICONHDR) + andsize;
+    return MAKELONG((WORD)plane, (WORD)(plane * h->planes));
+}
+
+/* USER.455, GetIconID(hRes, type): the id of the image LoadIcon would
+   take from an icon (type 3) or cursor (1) group directory block (the
+   RT_GROUP_ICON/CURSOR resource as read; Schulman ch. 6). SHELL's
+   ExtractIcon asks it (ARCHITECTURE.md 13). The choice is pick()'s. */
+WORD WINAPI U_GETICONID(HGLOBAL h, DWORD type)
+{
+    const BYTE __far *dir = h ? (const BYTE __far *)GlobalLock(h) : 0;
+    WORD id;
+    if (!dir)
+        return 0;
+    id = pick(dir, type == 1);
+    GlobalUnlock(h);
+    return id;
+}
+
+/* USER.456, LoadIconHandler(hRes, bNew): the RT_ICON image in hRes (a
+   DIB when bNew, as SHELL reads it from the file) made a device icon in
+   that same block, reallocated (Schulman ch. 6); the block is the
+   HICON. UNVERIFIED: bNew FALSE (2.x-format icons): left as they are. */
+HICON WINAPI U_LOADICONHANDLER(HGLOBAL h, BOOL bnew)
+{
+    BYTE __far *p;
+    HGLOBAL blk;
+    DWORD n;
+    if (!h || !bnew)
+        return (HICON)h;
+    p = (BYTE __far *)GlobalLock(h);
+    if (!p)
+        return 0;
+    blk = is_dib(p, FALSE) ? make_block(p, FALSE) : 0;
+    GlobalUnlock(h);
+    if (!blk)
+        return 0;
+    n = GlobalSize(blk);
+    if (!GlobalReAlloc(h, n, GMEM_MOVEABLE)) {
+        GlobalFree(blk);
+        return 0;
+    }
+    fmemcpy(GlobalLock(h), GlobalLock(blk), (WORD)n);
+    GlobalUnlock(h);
+    GlobalUnlock(blk);
+    GlobalFree(blk);
+    return (HICON)h;
+}
+
 HGLOBAL WINAPI U_LOADDIBICONHANDLER(HGLOBAL hmem, HMODULE mod, HRSRC res)
 {
     return dib_handler(hmem, mod, res, FALSE);
@@ -287,14 +365,18 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
     return (HICON)h;
 }
 
+/* a bad name: 0 (3.1, US27; LoadBitmap too) */
 HICON WINAPI LoadIcon(HINSTANCE hinst, LPCSTR name)
 {
-    HICON r = load_icon_cursor(hinst, name, FALSE);
-    return r;
+    if (GP_BAD(name))
+        return 0;
+    return load_icon_cursor(hinst, name, FALSE);
 }
 
 HCURSOR WINAPI LoadCursor(HINSTANCE hinst, LPCSTR name)
 {
+    if (GP_BAD(name))
+        return 0;
     return (HCURSOR)load_icon_cursor(hinst, name, TRUE);
 }
 
@@ -328,6 +410,8 @@ HICON WINAPI CreateIcon(HINSTANCE hinst, int cx, int cy, BYTE planes, BYTE bpp,
                         const void __far *andb, const void __far *xorb)
 {
     (void)hinst;
+    if (GP_BAD(andb) || GP_BAD(xorb))   /* bad bits: 0 (3.1, US27) */
+        return 0;
     return (HICON)create_icon(cx / 2, cy / 2, cx, cy, planes, bpp, andb, xorb);
 }
 
@@ -335,6 +419,8 @@ HCURSOR WINAPI CreateCursor(HINSTANCE hinst, int hx, int hy, int cx, int cy,
                             const void __far *andb, const void __far *xorb)
 {
     (void)hinst;
+    if (GP_BAD(andb) || GP_BAD(xorb))
+        return 0;
     return (HCURSOR)create_icon(hx, hy, cx, cy, 1, 1, andb, xorb);
 }
 
@@ -419,7 +505,7 @@ BOOL WINAPI DrawIcon(HDC hdc, int x, int y, HICON h)
 HBITMAP WINAPI LoadBitmap(HINSTANCE hinst, LPCSTR name)
 {
     HMODULE mod = hinst ? K_GETEXEPTR(hinst) : hModDisplay;
-    HRSRC r = FindResource(mod, name, RT_BITMAP);
+    HRSRC r = GP_BAD(name) ? 0 : FindResource(mod, name, RT_BITMAP);
     HGLOBAL g;
     const BITMAPINFOHEADER __far *bi;
     HBITMAP bm = 0;

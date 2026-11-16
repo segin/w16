@@ -1,0 +1,37 @@
+; [Restrictions] EditLevel=1: no group created, deleted or changed.
+;pre ECHO [Restrictions]>>C:\WINDOWS\PROGMAN.INI
+;pre ECHO EditLevel=1>>C:\WINDOWS\PROGMAN.INI
+run PROGMAN.EXE
+wait 3000
+menu f
+wait 500
+snap C:\U1.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char n
+wait 1000
+snap C:\U2.BMP
+key 1B
+wait 500
+childcmd F020
+wait 800
+menu f
+wait 500
+snap C:\U3.BMP
+key 1B
+key 1B
+wait 300
+menu f
+char p
+wait 1000
+snap C:\U4.BMP
+key 1B
+wait 500
+key 2E
+wait 800
+snap C:\U5.BMP
+menu f
+char x
+wait 1500
