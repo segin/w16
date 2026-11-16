@@ -446,7 +446,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
                                   0, 0, 0, 0, w, NULL, g_hinst, NULL);
         CreateWindow("MSWRITE_DOC", NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
                      0, 0, 0, 0, w, NULL, g_hinst, NULL);
-        SetScrollRange(g_vscroll, SB_CTL, 0, 100, FALSE);
+        SetScrollRange(g_vscroll, SB_CTL, 0, 255, FALSE);  /* WR20 */
         SetScrollRange(g_hscroll, SB_CTL, 0, 100, FALSE);
         DragAcceptFiles(w, TRUE);       /* both have WS_EX_ACCEPTFILES (WR1) */
         DragAcceptFiles(g_docwnd, TRUE);

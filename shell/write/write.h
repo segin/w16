@@ -337,6 +337,8 @@ extern BOOL g_insChpValid;
 BOOL  view_register(HINSTANCE);
 void  view_reset(void);
 void  view_caret_now(void);
+void  view_caret_defer(void);
+BOOL  view_last_typed(void);
 void  view_changed(DWORD cp);           /* text changed at or after cp */
 void  view_select(DWORD first, DWORD lim, BOOL show);
 void  view_layout(void);
@@ -360,6 +362,7 @@ void  cmd_printsetup(void);
 void  cmd_repaginate(void);
 void  undo_save(WORD kind);
 void  undo_end_typing(void);
+BOOL  undo_typing(void);
 void  undo_clear(void);
 void  cmd_para(WORD id);
 void  cmd_indents(void);

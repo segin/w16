@@ -1,0 +1,83 @@
+; WR18: typing lines until the caret leaves the window: where Write
+; scrolls (S1: the first line below; S2, S3: the next ones), then the
+; same with Down at the bottom after Ctrl+Home and Page Down (S4, S5)
+run WRITE.EXE
+wait 3000
+type line 1
+key 0D
+type line 2
+key 0D
+type line 3
+key 0D
+type line 4
+key 0D
+type line 5
+key 0D
+type line 6
+key 0D
+type line 7
+key 0D
+type line 8
+key 0D
+type line 9
+key 0D
+type line 10
+key 0D
+type line 11
+key 0D
+type line 12
+key 0D
+type line 13
+key 0D
+type line 14
+key 0D
+type line 15
+key 0D
+type line 16
+key 0D
+type line 17
+key 0D
+type line 18
+key 0D
+type line 19
+key 0D
+type line 20
+key 0D
+wait 500
+snap C:\S1.BMP
+info
+type line 21
+key 0D
+wait 500
+snap C:\S2.BMP
+type line 22
+key 0D
+type line 23
+key 0D
+wait 500
+snap C:\S3.BMP
+info
+kdown 11
+kdown 24
+kup 24
+kup 11
+wait 500
+key 22
+wait 500
+snap C:\S4.BMP
+info
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 500
+snap C:\S5.BMP
+info
+close
+wait 1000
+key 4E
+wait 1000

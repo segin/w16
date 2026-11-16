@@ -22,8 +22,11 @@ ATOM32 g_insChp;
 BOOL g_insChpValid;
 
 static DWORD cpTop;                     /* first cp of the top line */
+static int ypTop;                       /* its band, in a picture */
 static DWORD selAnchor;                 /* the fixed end while extending */
 static BOOL caretOn, caretShown, caretDefer;
+static BOOL typing;                     /* view_char at work */
+static BOOL lastTyped;                  /* the last edit was typing */
 static int caretX, caretY, caretH;
 static int dpiX = 96, dpiY = 96;
 static int xpScroll;                    /* horizontal scroll, pixels */
@@ -149,7 +152,15 @@ typedef struct {
     BOOL endMark;                       /* the document's end is here */
     BOOL paraEnd;                       /* last line of its paragraph */
     BOOL picture;                       /* a picture paragraph */
+    int yp, picH;                       /* a picture's band: its first row, the picture's height */
 } LINE;
+
+/* Tall pictures are laid out in bands, lines of BAND pixels (the last one
+   the rest), so that the window can start or end inside a picture: the
+   arrows scroll by a band (WR17: 16 pixels a click), and a picture's
+   lower part shows at the window's top (WR10, WR16, WR17).
+   UNVERIFIED: whether 16 follows a font's height. */
+#define BAND        16
 
 static SEPX sep;
 
@@ -193,6 +204,7 @@ static void layout_line(DWORD cp, LINE *ln)
     ln->cpFirst = cp;
     ln->para = pi;
     ln->picture = FALSE;
+    ln->yp = ln->picH = 0;
     if ((pap.rhc & 6) && !hf_mode()) {
         /* a header or footer paragraph (SDK ch. 8, 8.3.1: rhc bits 1-2;
            they come before the body, 8.3.2): not shown in the document
@@ -222,7 +234,9 @@ static void layout_line(DWORD cp, LINE *ln)
            at 28; UNVERIFIED: why) */
         ln->xLeft--;
         ln->width = tw2px(MulDiv(pic.dxaSize, pic.mx, 1000));
-        ln->height = ln->ascent = MulDiv(MulDiv(pic.dyaSize, pic.my, 1000), dpiY, 1440);
+        ln->picH = MulDiv(MulDiv(pic.dyaSize, pic.my, 1000), dpiY, 1440);
+        ln->yp = 0;
+        ln->height = ln->ascent = ln->picH < BAND ? ln->picH : BAND;
         ln->nspaces = ln->extra = 0;
         return;
     }
@@ -374,6 +388,48 @@ static DWORD line_start(DWORD cp)
     }
 }
 
+/* the line at (cp, yp): yp is the band's first row in a picture */
+static void layout_band(DWORD cp, int yp, LINE *ln)
+{
+    layout_line(cp, ln);
+    if (ln->picture && yp > 0 && yp < ln->picH) {
+        ln->yp = yp;
+        ln->height = ln->ascent = ln->picH - yp < BAND ? ln->picH - yp : BAND;
+    }
+}
+
+/* the line after ln: FALSE at the end of the document */
+static BOOL line_next(const LINE *ln, DWORD *cp, int *yp)
+{
+    if (ln->picture && ln->yp + ln->height < ln->picH) {
+        *cp = ln->cpFirst;
+        *yp = ln->yp + ln->height;
+        return TRUE;
+    }
+    if (ln->endMark || ln->cpLim <= ln->cpFirst)
+        return FALSE;
+    *cp = ln->cpLim;
+    *yp = 0;
+    return TRUE;
+}
+
+/* the line before (cp, yp): FALSE at the start of the document */
+static BOOL line_prev(DWORD cp, int yp, DWORD *pcp, int *pyp)
+{
+    LINE ln;
+    if (yp > 0) {
+        *pcp = cp;
+        *pyp = yp > BAND ? yp - BAND : 0;
+        return TRUE;
+    }
+    if (cp == 0)
+        return FALSE;
+    *pcp = line_before(cp);
+    layout_line(*pcp, &ln);
+    *pyp = ln.picture && ln.picH > BAND ? (ln.picH - 1) / BAND * BAND : 0;
+    return TRUE;
+}
+
 /* ---- the visible lines ---- */
 
 static HLOCAL hlines;
@@ -389,13 +445,14 @@ void view_layout(void)
     RECT r;
     int y;
     DWORD cp = cpTop;
+    int yp = ypTop;
     LINE ln, *l;
     sep_decode(&g_doc, &sep);
     GetClientRect(g_docwnd, &r);
     nlines = 0;
     for (y = YP0; y < r.bottom;) {
         HLOCAL h;
-        layout_line(cp, &ln);
+        layout_band(cp, yp, &ln);
         h = hlines ? LocalReAlloc(hlines, (nlines + 1) * sizeof(LINE), LMEM_MOVEABLE)
                    : LocalAlloc(LMEM_MOVEABLE, sizeof(LINE));
         if (!h)
@@ -405,9 +462,8 @@ void view_layout(void)
         l[nlines++] = ln;
         LocalUnlock(hlines);
         y += ln.height;
-        if (ln.endMark || ln.cpLim <= cp)
+        if (!line_next(&ln, &cp, &yp))
             break;
-        cp = ln.cpLim;
     }
 }
 
@@ -504,6 +560,11 @@ static void caret_defer(void)
         SetTimer(g_docwnd, TIMER_CARET, GetCaretBlinkTime(), NULL);
 }
 
+void view_caret_defer(void)
+{
+    caret_defer();
+}
+
 /* ---- painting ---- */
 
 /* The end mark: a 6 x 6 currency-sign shape (a ring with four corner
@@ -558,17 +619,23 @@ static BOOL page_starts(DWORD cp)
 
 static void paint_line(HDC dc, const LINE *ln, int y)
 {
-    if (page_starts(ln->cpFirst))
+    if (!ln->yp && page_starts(ln->cpFirst))
         page_mark(dc, -xpScroll, y + ln->ascent);
     if (ln->picture) {
+        /* ln: the visible bands of one picture together; the picture is
+           drawn whole, clipped to them */
         PICT pic;
         RECT r;
+        int top = y - ln->yp;
         pict_read(ln->cpFirst, ln->cpLim, &pic);
-        SetRect(&r, ln->xLeft - xpScroll, y, ln->xLeft - xpScroll + ln->width, y + ln->height);
+        SaveDC(dc);
+        IntersectClipRect(dc, ln->xLeft - xpScroll, y, ln->xLeft - xpScroll + ln->width, y + ln->height);
+        SetRect(&r, ln->xLeft - xpScroll, top, ln->xLeft - xpScroll + ln->width, top + ln->picH);
         /* an OLE object: OLECLI draws it (an embedded Paintbrush picture
            has no picture of its own in the stream); else ours */
         if (pic.mm != 0xE4 || !ole_draw(dc, ln->cpFirst, ln->cpLim, &r))
-            pict_draw(dc, &pic, ln->xLeft - xpScroll, y, ln->width, ln->height);
+            pict_draw(dc, &pic, ln->xLeft - xpScroll, top, ln->width, ln->picH);
+        RestoreDC(dc, -1);
         return;
     }
     {
@@ -677,9 +744,13 @@ static void paint(HWND w)
     SetBkMode(dc, TRANSPARENT);
     l = lines();
     for (i = 0; i < nlines; i++) {
-        if (l[i].height && y + l[i].height > ps.rcPaint.top && y < ps.rcPaint.bottom)
-            paint_line(dc, &l[i], y);
-        y += l[i].height;
+        LINE t = l[i];
+        /* a picture's bands are drawn together */
+        while (t.picture && i + 1 < nlines && l[i + 1].picture && l[i + 1].cpFirst == t.cpFirst)
+            t.height += l[++i].height;
+        if (t.height && y + t.height > ps.rcPaint.top && y < ps.rcPaint.bottom)
+            paint_line(dc, &t, y);
+        y += t.height;
     }
     LocalUnlock(hlines);
     paint_sel(dc);
@@ -691,9 +762,38 @@ static void paint(HWND w)
 
 /* ---- scroll bars and the page number ---- */
 
+/* The thumb: range 0-255, position the top line's cp in 255ths of the
+   document, rounded (WR20: 80 positions in two documents; it does not
+   move while the top is inside a picture, WR17). While a run of typing
+   goes on, the document counts 32 characters more (WR18: 90 * 255 / 212
+   and / 230 for 180 and 198 characters; UNVERIFIED: why). */
+/* cp as the thumb counts it: a picture paragraph counts as its 40-byte
+   header (WR10, WR16, WR17: "top" and two pictures make 85) */
+static DWORD scroll_cp(DWORD cp)
+{
+    DWORD i, f, l, r = cp;
+    ATOM32 a;
+    PAPX p;
+    for (i = 0; i < g_doc.nparas; i++) {
+        para_get(&g_doc, i, &f, &l, &a);
+        if (f >= cp)
+            break;
+        pap_decode(&g_doc, a, &p);
+        if (l > cp)
+            l = cp;
+        if (p.fGraphics && l - f > 40)
+            r -= l - f - 40;
+    }
+    return r;
+}
+
 static void vscroll_update(void)
 {
-    int pos = g_doc.cpMac ? (int)((cpTop * 100) / (g_doc.cpMac + 2)) : 0;
+    DWORD mac = scroll_cp(g_doc.cpMac) + (undo_typing() ? 32 : 0);
+    DWORD top = scroll_cp(cpTop);
+    int pos = mac ? (int)((top * 510 + mac) / (mac * 2)) : 0;
+    if (pos > 255)
+        pos = 255;
     SetScrollPos(g_vscroll, SB_CTL, pos, TRUE);
 }
 
@@ -810,34 +910,46 @@ static void redraw(void)
     view_update_pageinfo();
 }
 
+/* When the caret leaves the window below, its line goes to the middle:
+   the lines above it are taken (from the caret's line back) until they
+   are at least this tall: half the window's whole 16-pixel lines, in
+   pixels. Window 346 pixels tall: 160 (WR10, WR16, WR17, WR18); 238: 112
+   (WR19). */
+static int caret_mid(int h)
+{
+    return (h / BAND) / 2 * BAND;
+}
+
 void view_scroll_to_caret(void)
 {
     DWORD cp = g_selLim > g_selFirst && g_selLim != selAnchor ? g_selLim : g_selFirst;
     if (cp < cpTop) {
         cpTop = line_start(cp);
+        ypTop = 0;
         redraw();
         return;
     }
     if (!visible(cp)) {
-        /* make the caret's line the last full one: from its start, back
-           up while the lines still fit */
+        /* the caret's line to the middle (caret_mid) */
         RECT r;
-        int h = 0;
-        DWORD s = line_start(cp);
+        int h = 0, yp = 0, ypp;
+        DWORD s = line_start(cp), p;
         LINE ln;
         GetClientRect(g_docwnd, &r);
-        layout_line(s, &ln);
-        h = ln.height;
-        while (s > 0) {
-            DWORD p = line_before(s);
-            layout_line(p, &ln);
-            if (YP0 + h + ln.height > r.bottom)
-                break;
+        while (h < caret_mid(r.bottom) && line_prev(s, yp, &p, &ypp)) {
+            layout_band(p, ypp, &ln);
             h += ln.height;
             s = p;
+            yp = ypp;
         }
         cpTop = s;
+        ypTop = yp;
         redraw();
+        /* a pasted picture that scrolls the window leaves the caret
+           shown, one that does not leaves it off (WR16, WR17); typing
+           leaves it off either way (WR18) */
+        if (!typing)
+            caretDefer = FALSE;
     }
 }
 
@@ -890,6 +1002,7 @@ void view_caret_now(void)
 void view_reset(void)
 {
     cpTop = body_start();
+    ypTop = 0;
     g_selFirst = g_selLim = selAnchor = cpTop;
     xpScroll = 0;
     g_insChpValid = FALSE;
@@ -899,13 +1012,23 @@ void view_reset(void)
 }
 
 /* text changed from cp on: lay out again and repaint */
+BOOL view_last_typed(void)
+{
+    return lastTyped;
+}
+
 void view_changed(DWORD cp)
 {
+    LINE ln;
     (void)cp;
+    lastTyped = typing;
     if (cpTop > g_doc.cpMac)
         cpTop = line_start(g_doc.cpMac);
     else
         cpTop = line_start(cpTop);
+    layout_line(cpTop, &ln);
+    if (!ln.picture || ypTop >= ln.picH)
+        ypTop = 0;
     caret_hide();
     redraw();
     view_scroll_to_caret();
@@ -958,10 +1081,27 @@ static void replace_sel(const char FAR *s, DWORD n)
     view_changed(cp);
 }
 
+static void view_char2(WORD ch, char *s);
+
 void view_char(WORD ch)
 {
     char s[2];
     caret_defer();
+    typing = TRUE;
+    view_char2(ch, s);
+    typing = FALSE;
+    /* typed on the end mark's line (the document's last), the caret stays
+       off until it blinks (WR1, WR18); in a paragraph before
+       it, it shows (WR3: typing before the paragraph mark that Paragraph >
+       Normal added). UNVERIFIED beyond these */
+    if (g_selFirst == g_selLim && line_start(g_selFirst) != line_start(g_doc.cpMac)) {
+        caretDefer = FALSE;
+        caret_place();
+    }
+}
+
+static void view_char2(WORD ch, char *s)
+{
     if (ch >= ' ' || ch == '\t' || ch == '\r' || ch == '\b')
         undo_save(IDS_TYPING);
     if (ch == '\b') {
@@ -1035,17 +1175,24 @@ static void page_move(BOOL down)
 {
     RECT r;
     LINE ln;
-    int h = 0;
+    int h = 0, yp;
+    DWORD p;
     GetClientRect(g_docwnd, &r);
     for (;;) {
-        DWORD p = down ? cpTop : line_before(cpTop);
-        if (!down && cpTop == 0)
-            break;
-        layout_line(p, &ln);
-        if ((down && ln.endMark) || h + ln.height > r.bottom - YP0)
-            break;
+        if (down) {
+            layout_band(cpTop, ypTop, &ln);
+            if (ln.endMark || h + ln.height > r.bottom - YP0 || !line_next(&ln, &p, &yp))
+                break;
+        } else {
+            if (!line_prev(cpTop, ypTop, &p, &yp))
+                break;
+            layout_band(p, yp, &ln);
+            if (h + ln.height > r.bottom - YP0)
+                break;
+        }
         h += ln.height;
-        cpTop = down ? ln.cpLim : p;
+        cpTop = p;
+        ypTop = yp;
     }
 }
 
@@ -1151,24 +1298,23 @@ static void vscroll(WPARAM code, int pos)
     LINE ln;
     switch (code) {
     case SB_LINEUP:
-        if (cpTop == 0)
+        if (!line_prev(cpTop, ypTop, &cpTop, &ypTop))
             return;
-        cpTop = line_before(cpTop);
         break;
     case SB_LINEDOWN:
-        layout_line(cpTop, &ln);
-        if (ln.endMark)
+        layout_band(cpTop, ypTop, &ln);
+        if (ln.endMark || !line_next(&ln, &cpTop, &ypTop))
             return;
-        cpTop = ln.cpLim;
         break;
     case SB_PAGEUP:
     case SB_PAGEDOWN:
         page_move(code == SB_PAGEDOWN);
         break;
     case SB_THUMBPOSITION:
-        cpTop = line_start((DWORD)pos * (g_doc.cpMac + 2) / 100);
+        cpTop = line_start((DWORD)pos * g_doc.cpMac / 255);
         if (cpTop > g_doc.cpMac)
             cpTop = line_start(g_doc.cpMac);
+        ypTop = 0;
         break;
     default:
         return;
@@ -1231,7 +1377,7 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             if ((int)HIWORD(lp) >= yy && (int)HIWORD(lp) < yy + l[i].height && l[i].picture) {
                 RECT r;
                 DWORD f = l[i].cpFirst, li = l[i].cpLim;
-                SetRect(&r, l[i].xLeft, yy, l[i].xLeft + l[i].width, yy + l[i].height);
+                SetRect(&r, l[i].xLeft, yy - l[i].yp, l[i].xLeft + l[i].width, yy - l[i].yp + l[i].picH);
                 LocalUnlock(hlines);
                 ole_activate(f, li, &r);
                 return 0;

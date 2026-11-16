@@ -1,0 +1,586 @@
+; WR19 (probe, the original only: tests/wrobs.sh with the pictures
+; P7X400.DIB .. P7X415.DIB from mkpic.py, REFRUN_TIMEOUT=400): where
+; Write scrolls when a paste leaves the caret below the window, for
+; frames 300, 360 and 456 pixels tall (documents 238, 298 and 394) and
+; pictures of every height modulo 16 (tall pictures are shown in
+; bands: WR17). Shots H<cy>_<h>.BMP.
+run WRITE.EXE
+wait 3000
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X400.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_400.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X401.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_401.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X402.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_402.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X403.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_403.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X404.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_404.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X405.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_405.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X406.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_406.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X407.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_407.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X408.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_408.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X409.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_409.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X410.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_410.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X411.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_411.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X412.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_412.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X413.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_413.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X414.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_414.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 300
+wait 300
+clipbmp C:\P7X415.DIB
+menu e
+char p
+wait 1200
+snap C:\H300_415.BMP
+info
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X400.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_400.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X401.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_401.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X402.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_402.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X403.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_403.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X404.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_404.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X405.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_405.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X406.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_406.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X407.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_407.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X408.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_408.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X409.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_409.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X410.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_410.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X411.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_411.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X412.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_412.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X413.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_413.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X414.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_414.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 360
+wait 300
+clipbmp C:\P7X415.DIB
+menu e
+char p
+wait 1200
+snap C:\H360_415.BMP
+info
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X400.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_400.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X401.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_401.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X402.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_402.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X403.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_403.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X404.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_404.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X405.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_405.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X406.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_406.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X407.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_407.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X408.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_408.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X409.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_409.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X410.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_410.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X411.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_411.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X412.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_412.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X413.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_413.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X414.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_414.BMP
+menu f
+char n
+wait 500
+key 4E
+wait 800
+movewin 4 0 632 456
+wait 300
+clipbmp C:\P7X415.DIB
+menu e
+char p
+wait 1200
+snap C:\H456_415.BMP
+info
+close
+wait 1000
+key 4E
+wait 1000
