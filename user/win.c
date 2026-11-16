@@ -491,7 +491,7 @@ static void free_window(PWND w)
     kill_window_timers(h);
     if (w->hrgnUpdate) {
         if ((WORD)w->hrgnUpdate > 1)
-            DeleteObject(w->hrgnUpdate);
+            delete_private(w->hrgnUpdate);
         w->hrgnUpdate = 0;
     }
     if (w->flags & WF_INPAINT) {

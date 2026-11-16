@@ -36,7 +36,7 @@ static WORD nsaved, capsaved;
 static void drop(WORD i)
 {
     if (saved[i].bm)
-        DeleteObject(saved[i].bm);
+        delete_private(saved[i].bm);
     saved[i] = saved[--nsaved];
 }
 

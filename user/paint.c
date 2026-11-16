@@ -149,7 +149,7 @@ void redraw_screen(void)
 void validate_all(PWND w)
 {
     if (w->hrgnUpdate) {
-        DeleteObject(w->hrgnUpdate);
+        delete_private(w->hrgnUpdate);
         w->hrgnUpdate = 0;
     }
     w->flags &= ~(WF_UPDATENC | WF_ERASEBKGND | WF_INTERNALPAINT);
@@ -201,7 +201,7 @@ static void validate(HWND h, HRGN rgn, const RECT *rc)
         r = CreateRectRgn(rc->left + w->rcClient.left, rc->top + w->rcClient.top,
                           rc->right + w->rcClient.left, rc->bottom + w->rcClient.top);
     if (CombineRgn(w->hrgnUpdate, w->hrgnUpdate, r, RGN_DIFF) == NULLREGION) {
-        DeleteObject(w->hrgnUpdate);
+        delete_private(w->hrgnUpdate);
         w->hrgnUpdate = 0;
         w->flags &= ~(WF_UPDATENC | WF_ERASEBKGND);
         if (!(w->flags & WF_INTERNALPAINT))
