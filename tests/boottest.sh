@@ -419,6 +419,17 @@
 #              scrolled, dialogs moved over it, Alt+Tab, minimized) against
 #              Microsoft's on all-Microsoft 3.1, every screen identical
 #              but for the minimized panel's icon
+#   taskman    the Task List (tests/scripts/input/taskman.txt: Ctrl+Esc, a
+#              double-click on the desktop, Switch To an icon, Cascade,
+#              Tile, End Task, Tile with Shift, Arrange Icons, a double-click
+#              on an item, Ctrl+Esc from a full-screen MS-DOS Prompt; Clock,
+#              Calculator, Notepad) against Microsoft's TASKMAN on
+#              all-Microsoft 3.1, every screen to the pixel (Clock's ticking
+#              face left out): w16's TASKMAN on all-Microsoft 3.1 (part ms)
+#              and on w16's KRNL286 (k286); w16's USER with
+#              Microsoft's TASKMAN (us) and with w16's (usall); w16's
+#              install tree alone under its KRNL386 against its KRNL286
+#              (tree: every screen identical)
 #   cplclick   Control Panel's Keyboard, Mouse, Desktop and Color dialogs
 #              under real mouse clicks on each control (tests/scripts/input/
 #              cplclick-*.txt): w16's USER against Microsoft's (screens and
@@ -555,7 +566,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups pmclose write cardfile control taskman cplclick mousespeed missingdll olecli olesvr treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1239,6 +1250,85 @@ runcase() {
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   control: 0 pixels, CONTROL.INI identical"
         else echo "FAIL control: $r ($out)"; fails=$((fails + 1)); fi ;;
+    taskman)
+        # the Task List (shell/taskman; ARCHITECTURE.md 15.5) under real
+        # keys and clicks (tests/scripts/input/taskman.txt; WIN.INI
+        # run=CLOCK.EXE CALC.EXE NOTEPAD.EXE, the caret not blinking)
+        # against Microsoft's TASKMAN on all-Microsoft 3.1. Clock's seconds
+        # tick: left out are its strip at the left of the first screens and
+        # Notepad's caret there (tmbase), and Clock's time in the tiled
+        # screens (tmtime; and from every wait for a screen). Parts: ms
+        # (w16's TASKMAN, all else Microsoft's), k286 (w16's TASKMAN on
+        # w16's KRNL286), us (w16's USER, Microsoft's TASKMAN),
+        # usall (w16's USER and TASKMAN), tree (w16's install tree
+        # alone under its KRNL386 against its KRNL286)
+        s=$root/tests/scripts/input/taskman.txt
+        tmbase="rectangle 0,0 29,227 rectangle 39,64 42,82"
+        tmtime="rectangle 330,90 630,145"        # Clock's time when tiled
+        tmmask() {   # the shot's mask
+            case $1 in
+            11-tile|12-c) echo "$tmbase $tmtime" ;;
+            *) echo "$tmbase" ;;
+            esac
+        }
+        r=ok tmextra=
+        tmcmp() {   # tmcmp REFDIR W16DIR NAME
+            ls "$1"/[0-9]*.png > /dev/null 2>&1 || { r="$3: no screens"; return; }
+            for f in "$1"/[0-9]*.png; do
+                sn=$(basename "$f")
+                [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                m="$(tmmask "${sn%.png}") $tmextra"
+                magick "$f" -fill black -draw "$m" "$out/taskman-$3-a.png"
+                magick "$2/$sn" -fill black -draw "$m" "$out/taskman-$3-b.png"
+                n=$(magick compare -metric AE "$out/taskman-$3-b.png" "$out/taskman-$3-a.png" "$out/taskman-$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+            done
+            rm -f "$out/taskman-$3-a.png" "$out/taskman-$3-b.png"
+        }
+        for pk in ${part:-ms k286 us usall tree}; do
+            case $pk in
+            tree)
+                tmextra=
+                set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CLOCK.EXE CALC.EXE NOTEPAD.EXE' \
+                    -i 'WIN.INI:windows:CursorBlinkRate=65535' \
+                    -i 'NonWindowsApp:SwapDisk=C:\W16'
+                rm -rf "$out/taskman-t286" "$out/taskman-t386"
+                "$root/tests/inputrun.sh" -s -b 40 -t 600 "$s" "$out/taskman-t286" "$@" \
+                    > "$out/taskman-t286.txt" 2>&1 || true
+                "$root/tests/inputrun.sh" -e "$out/taskman-t286/boot.png" -E "$out/taskman-t286" -M "$tmbase $tmtime" \
+                    -b 40 -t 600 "$s" "$out/taskman-t386" "$@" -3 > "$out/taskman-t386.txt" 2>&1 || true
+                tmcmp "$out/taskman-t286" "$out/taskman-t386" tree ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/taskman-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/taskman-WIN.INI" 'windows:run=CLOCK.EXE CALC.EXE NOTEPAD.EXE' \
+                    'windows:CursorBlinkRate=65535'
+                refrun taskman-ref taskman "$root/tests/inputrun.sh" -s -b 40 -t 400 "$s" "$out/taskman-ref" -r \
+                    -f "$out/taskman-WIN.INI=WINDOWS/WIN.INI" -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+                tm=$root/build/dos/TASKMAN.EXE
+                # (w16's USER: the pointer, parked in the bottom right
+                # corner, is redrawn as Program Manager's sizing arrow when
+                # the Task List ends; 3.1 keeps the arrow until it moves)
+                tmextra=
+                case $pk in us*) tmextra="rectangle 615,450 639,479" ;; esac
+                case $pk in
+                ms)    set -- -r -f "$tm=WINDOWS/TASKMAN.EXE" ;;
+                k286)  set -- -f "$tm=WINDOWS/TASKMAN.EXE" ;;
+                us)    set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+                usall) set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE" \
+                           -f "$tm=WINDOWS/TASKMAN.EXE" ;;
+                esac
+                rm -rf "$out/taskman-$pk"
+                "$root/tests/inputrun.sh" -e "$out/taskman-ref/boot.png" -E "$out/taskman-ref" -M "$tmbase $tmtime" \
+                    -b 40 -t 600 "$s" "$out/taskman-$pk" "$@" -f "$out/taskman-WIN.INI=WINDOWS/WIN.INI" \
+                    -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' > "$out/taskman-$pk.txt" 2>&1 || true
+                tmcmp "$out/taskman-ref" "$out/taskman-$pk" "$pk" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   taskman: every screen as Microsoft's Task List's"
+        else echo "FAIL taskman: $r ($out)"; fails=$((fails + 1)); fi ;;
     cplclick|cplclickus)
         # Control Panel's Keyboard, Mouse, Desktop and Color dialogs driven
         # with real mouse clicks on each of their controls (tests/scripts/
@@ -3489,6 +3579,7 @@ caseparts() {
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     treek386) echo "$1@items $1@desk" ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
+    taskman) echo "$1@ms $1@k286 $1@us $1@usall $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;
     mousespeed) echo "$1@s0-us $1@s2-us $1@s0-drv $1@s2-drv" ;;

@@ -3,8 +3,8 @@
  * Ctrl+Esc and on a double-click on the desktop (ARCHITECTURE.md 15.5).
  *
  * Observed on Windows 3.1 (black box: screens, probes TM1 and TM2, and
- * TASKMAN's calls into USER and KERNEL recorded by USTRACE forwarders,
- * tests/taskman.sh):
+ * TASKMAN's calls into USER and KERNEL recorded by USTRACE forwarders;
+ * boot-test case taskman):
  *
  * Start. USER runs SYSTEM.INI [boot] taskman.exe= (default TASKMAN.EXE)
  * with WinExec, SW_SHOWNORMAL; the command line is "X Y" in decimal: the
@@ -33,9 +33,11 @@
  * End Task: a window that is disabled (it has a modal dialog up) is not
  * closed: the dialog ends, MessageBeep(0), and the switch above (to its
  * dialog). Otherwise the dialog ends, the window's task is checked with
- * IsWinOldApTask; a DOS program's window ... (see end_task()); any other
- * window is switched to as above and posted WM_CLOSE (if it is still a
- * window).
+ * IsWinOldApTask, the window is switched to as above and posted WM_CLOSE
+ * (if it is still a window and enabled). UNVERIFIED for a DOS program's
+ * window: in Standard mode WINOLDAP's window has no text and is not
+ * listed; Schulman (ch. 1) says End Task cannot end a DOS box, so it is
+ * only switched to here.
  * Cascade, Tile, Arrange Icons: the dialog hides itself, then
  * CascadeChildWindows(desktop, 0), TileChildWindows(desktop, Shift held ?
  * MDITILE_HORIZONTAL : MDITILE_VERTICAL), ArrangeIconicWindows(desktop),
@@ -100,7 +102,7 @@ static void end_task(HWND dlg)
     }
     EndDialog(dlg, 1);
     if (IsWinOldApTask(GetWindowTask(h))) {
-        /* a DOS program: see the header */
+        /* a DOS program: only switched to (see the header) */
         switch_to(dlg);
         return;
     }
