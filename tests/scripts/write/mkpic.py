@@ -1,9 +1,16 @@
 """mkpic.py OUT.BMP: a 40 x 20, 16-colour test picture for Write's picture
-probes (our own: colour bars and a frame), as a Windows 3.x .BMP"""
+probes (our own: colour bars and a frame), as a Windows 3.x .BMP file. A
+name P<w>X<h>.DIB (e.g. P123X77.DIB, the same format; not .BMP, which the
+scenarios take for screenshots) gives that size instead."""
+import os
+import re
 import struct
 import sys
 
 W, H = 40, 20
+m = re.fullmatch(r'P(\d+)X(\d+)\.DIB', os.path.basename(sys.argv[1]).upper())
+if m:
+    W, H = int(m.group(1)), int(m.group(2))
 PAL = [(0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0), (0, 0, 128), (128, 0, 128),
        (0, 128, 128), (192, 192, 192), (128, 128, 128), (255, 0, 0), (0, 255, 0),
        (255, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255)]
@@ -19,7 +26,7 @@ rows = b''
 for y in range(H - 1, -1, -1):
     r = bytearray()
     for x in range(0, W, 2):
-        r.append((px(x, y) << 4) | px(x + 1, y))
+        r.append((px(x, y) << 4) | (px(x + 1, y) if x + 1 < W else 0))
     while len(r) % 4:
         r.append(0)
     rows += bytes(r)

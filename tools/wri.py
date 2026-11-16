@@ -109,8 +109,38 @@ class Doc:
                         and w(self.data, fc) == 0xE4:
                     r.append((fc + 34, fc + 36))
                     r.append((fc + 24, fc + 28))
+                    r += self.static_stale(fc + 40, fcl)
                 fc = fcl
         return r
+
+    def static_stale(self, o, lim):
+        """a static DIB object's stream (OLECLI's: version, format 3, class
+        "DIB", HIMETRIC size, data size, the packed DIB) holds more data
+        than the DIB needs: the last bytes (24 in WR16) are stale memory,
+        different with every run. A static METAFILEPICT's data starts with
+        the 16-bit METAFILEPICT, whose hMF (word 6) is a stale handle."""
+        b = self.data
+        try:
+            if dw(b, o + 4) != 3:
+                return []
+            n = dw(b, o + 8)
+            d = o + 12 + n + 12
+            if b[o + 12:o + 12 + n] == b'METAFILEPICT\0' and d + 8 <= lim:
+                return [(d + 6, d + 8)]
+            if b[o + 12:o + 12 + n] != b'DIB\0':
+                return []
+            size = dw(b, d - 4)
+            bits, planes, ncol, img = w(b, d + 14), w(b, d + 12), dw(b, d + 32), dw(b, d + 20)
+            if not ncol and bits * planes <= 8:
+                ncol = 1 << (bits * planes)
+            if not img:
+                img = ((dw(b, d + 4) * bits * planes + 31) // 32) * 4 * abs(dw(b, d + 8))
+            end = d + dw(b, d) + 4 * ncol + img
+            if end < d + size <= lim:
+                return [(end, d + size)]
+        except (IndexError, struct.error):
+            pass
+        return []
 
     def ffntb_end(self):
         """file offset just past the font table's terminating zero word"""

@@ -171,13 +171,44 @@ static void obj_name(char *s, DWORD num)
     s[8] = 0;
 }
 
-/* HIMETRIC to twips (UNVERIFIED: the original's arithmetic, ARCHITECTURE
-   docs/wri-format.md: 1058 HIMETRIC were stored as 608) */
-static int hm2tw(long hm)
+/* HIMETRIC to twips by way of the screen's pixels, as the MM_HIMETRIC
+   and MM_TWIPS mapping modes do it from HORZSIZE/HORZRES (VERTSIZE/
+   VERTRES): the size in pixels (rounded), then those pixels in twips
+   (px * mm * 14400 / (254 * res), rounded). Black-box (WR10, WR15, WR16), on VGA (208 x 156 mm, 640 x 480):
+   1058 x 529 HIMETRIC gives 33 x 16 pixels, stored as 608 x 295;
+   5080 x 2540 gives 2874 x 1437; 16931 x 11693 gives 9600 x 6633. */
+static int hm2tw(long hm, BOOL vert)
 {
+    static int mm[2], res[2];
+    long px, ext;
+    int i = vert ? 1 : 0;
+    if (!res[0]) {
+        HDC dc = GetDC(NULL);
+        mm[0] = GetDeviceCaps(dc, HORZSIZE);
+        mm[1] = GetDeviceCaps(dc, VERTSIZE);
+        res[0] = GetDeviceCaps(dc, HORZRES);
+        res[1] = GetDeviceCaps(dc, VERTRES);
+        ReleaseDC(NULL, dc);
+    }
     if (hm < 0)
         hm = -hm;
-    return (int)((hm * 1440 + 1270) / 2540);
+    if (!mm[i] || !res[i])
+        return (int)((hm * 1440 + 1270) / 2540);
+    ext = (long)mm[i] * 100;
+    px = (hm * res[i] * 2 + ext) / (ext * 2);
+    /* px * mm * 14400 / (254 * res) with the fraction reduced, so that
+       the product stays in a long */
+    {
+        long n = 14400, d = 254L * res[i], a = n, b = d, t;
+        while (b) {
+            t = a % b;
+            a = b;
+            b = t;
+        }
+        n /= a;
+        d /= a;
+        return (int)((px * mm[i] * n * 2 + d) / (d * 2));
+    }
 }
 
 /* store the object's stream (and size) in its paragraph */
@@ -203,8 +234,8 @@ static void store(WOBJ *o)
     if (OleQueryType(o->obj, &type) == OLE_OK)
         *(WORD *)(hdr + 6) = type == OT_STATIC ? 1 : type == OT_LINK ? 3 : 2;
     if (OleQueryBounds(o->obj, &r) == OLE_OK && r.right != r.left) {
-        *(WORD *)(hdr + 10) = hm2tw((long)r.right - r.left);
-        *(WORD *)(hdr + 12) = hm2tw((long)r.bottom - r.top);
+        *(WORD *)(hdr + 10) = hm2tw((long)r.right - r.left, FALSE);
+        *(WORD *)(hdr + 12) = hm2tw((long)r.bottom - r.top, TRUE);
     }
     i = para_at(&g_doc, pf, &rf, &rl, &pap);
     (void)i;

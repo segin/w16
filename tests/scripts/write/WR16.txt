@@ -1,0 +1,29 @@
+; WR16: pasted pictures of several sizes, to pin down how Write turns an
+; object's HIMETRIC size (OleQueryBounds) into the twips it stores
+; (ole.c hm2tw: by way of the screen's pixels and HORZSIZE/VERTSIZE)
+; mkpic: P123X77.DIB
+; mkpic: P7X301.DIB
+; mkpic: P250X3.DIB
+run WRITE.EXE
+wait 3000
+clipbmp C:\P123X77.DIB
+menu e
+char p
+wait 1500
+clipbmp C:\P7X301.DIB
+menu e
+char p
+wait 1500
+clipbmp C:\P250X3.DIB
+menu e
+char p
+wait 1500
+snap C:\S1.BMP
+menu f
+char a
+wait 1500
+type C:\SIZES.WRI
+key 0D
+wait 2000
+close
+wait 1000
