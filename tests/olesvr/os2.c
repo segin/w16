@@ -315,6 +315,25 @@ static BOOL task_of(const char *module)
     return GetModuleHandle(module) != NULL;
 }
 
+/* a window's class and instance details (OLESVR's windows: "wins") */
+static void winfo(HWND h, int depth)
+{
+    char t[64];
+    HWND k;
+    RECT r;
+    GetWindowRect(h, &r);
+    t[0] = 0;
+    GetWindowText(h, t, sizeof t);
+    P("WIN %d %w title=%q style=%lx ex=%lx cls.style=%x cbwnd=%d cbcls=%d id=%x parent=%w "
+      "owner=%w visible=%d rect=%d,%d,%d,%d menu=%x", depth, h, (LPCSTR)t, GetWindowLong(h, GWL_STYLE),
+      GetWindowLong(h, GWL_EXSTYLE), GetClassWord(h, GCW_STYLE),
+      GetClassWord(h, GCW_CBWNDEXTRA), GetClassWord(h, GCW_CBCLSEXTRA),
+      GetWindowWord(h, GWW_ID), GetParent(h), GetWindow(h, GW_OWNER), IsWindowVisible(h),
+      r.left, r.top, r.right, r.bottom, GetMenu(h) ? 1 : 0);
+    for (k = GetWindow(h, GW_CHILD); k; k = GetWindow(k, GW_HWNDNEXT))
+        winfo(k, depth + 1);
+}
+
 static BOOL israw(const char *l)
 {
     static const char *raw[] = { "init", "exec", "req", "poke", "advise", "unadvise",
@@ -345,6 +364,16 @@ static void step(char *l)
             P("    failed");
     } else if (!lstrcmpi(l, "wait")) {
         pump(num((const char **)&arg), NULL);
+    } else if (!lstrcmpi(l, "wins")) {
+        /* every top-level window of OLESVR's classes, with its children */
+        HWND h;
+        for (h = GetWindow(GetDesktopWindow(), GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+            char c[32];
+            GetClassName(h, c, sizeof c);
+            if (!lstrcmp(c, "SrvrWndClass") || !lstrcmp(c, "DocWndClass") ||
+                !lstrcmp(c, "ItemWndClass"))
+                winfo(h, 0);
+        }
     } else if (!lstrcmpi(l, "waitgone")) {
         int n = 0;
         while (task_of(arg) && n++ < 600)

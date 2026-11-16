@@ -65,10 +65,10 @@ DOC FARP *doc_new(SRV FARP *s, const char FARP *name, LPOLESERVERDOC lpdoc)
     d->name = str_dup(name ? name : "");
     d->atom = name && *name ? GlobalAddAtom(name) : 0;
     /* UNVERIFIED: the window's title and style (it is never shown) */
-    /* a child of the server's window, which passes it the INITIATEs for
-       document topics (in the order of the documents: observed, the
-       oldest answers first) */
-    d->hwnd = CreateWindow("DocWndClass", name, WS_CHILD, 0, 0, 0, 0, s->hwnd, NULL,
+    /* a child of the server's window titled "Doc" (observed), which
+       passes it the INITIATEs for document topics (in the order of the
+       documents: observed, the oldest answers first) */
+    d->hwnd = CreateWindow("DocWndClass", "Doc", WS_CHILD, 0, 0, 0, 0, s->hwnd, NULL,
                            svr_inst, NULL);
     if (!d->name || !d->hwnd) {
         if (d->hwnd)
@@ -109,6 +109,10 @@ static void adv_drop_client(ADV FARP *FARP *l, HWND client)
 
 static void item_free(ITEM FARP *it)
 {
+    if (it->hwnd && IsWindow(it->hwnd)) {
+        SetWindowLong(it->hwnd, 0, 0);
+        DestroyWindow(it->hwnd);
+    }
     adv_free_all(&it->advs);
     while (it->users)
         conv_remove(&it->users, it->users->client);
@@ -228,6 +232,12 @@ ITEM FARP *item_get(DOC FARP *d, const char FARP *name, HWND client, OLESTATUS F
             return NULL;
         }
         it->obj = obj;
+        /* each object has a child window of its document's, "ITEM"
+           (observed) */
+        it->hwnd = CreateWindow("ItemWndClass", "ITEM", WS_CHILD, 0, 0, 0, 0, d->hwnd, NULL,
+                                svr_inst, NULL);
+        if (it->hwnd)
+            SetWindowLong(it->hwnd, 0, (LONG)it);
         for (pp = &d->items; *pp; pp = &(*pp)->next)
             ;
         *pp = it;
@@ -760,8 +770,7 @@ LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(w, msg, wp, lp);
 }
 
-/* ItemWndClass: registered as Windows 3.1's OLESVR does; w16 keeps its
-   objects in lists rather than in windows */
+/* ItemWndClass: an object's window (it gets no messages of its own) */
 LRESULT FAR PASCAL __loadds ITEMWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
     return DefWindowProc(w, msg, wp, lp);

@@ -125,8 +125,8 @@ OLESTATUS FAR PASCAL __loadds OLEREGISTERSERVER(LPCSTR cls, LPOLESERVER lpsrv,
        INITIATE spelt in other case sees the registered spelling) */
     s->atom = GlobalAddAtom(cls);
     s->execute = reg_has(cls, "\\protocol\\StdExecute\\server");
-    /* UNVERIFIED: the window's title and style (it is never shown) */
-    s->hwnd = CreateWindow("SrvrWndClass", cls, WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
+    /* observed: a hidden overlapped window titled "Srvr" */
+    s->hwnd = CreateWindow("SrvrWndClass", "Srvr", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
                            svr_inst, NULL);
     if (!s->cls || !s->hwnd) {
         if (s->hwnd)
@@ -633,7 +633,7 @@ int FAR __cdecl svr_init(WORD inst)
     svr_inst = (HINSTANCE)inst;
     wc.style = 0;
     wc.cbClsExtra = 0;
-    wc.cbWndExtra = sizeof(LONG);
+    wc.cbWndExtra = 8;                  /* observed (w16 uses the first 4) */
     wc.hInstance = svr_inst;
     wc.hIcon = NULL;
     wc.hCursor = NULL;
@@ -647,6 +647,7 @@ int FAR __cdecl svr_init(WORD inst)
     wc.lpszClassName = "DocWndClass";
     if (!RegisterClass(&wc))
         return 0;
+    wc.cbWndExtra = 4;                  /* observed */
     wc.lpfnWndProc = ITEMWNDPROC;
     wc.lpszClassName = "ItemWndClass";
     if (!RegisterClass(&wc))

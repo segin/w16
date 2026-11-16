@@ -55,6 +55,7 @@ typedef struct ITEM {
     ADV FARP *advs;
     CONV FARP *users;                   /* clients that used the item */
     WORD target_gen;                    /* the target device it has */
+    HWND hwnd;                          /* its ItemWndClass window */
     char name[1];
 } ITEM;
 
