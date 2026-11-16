@@ -1,0 +1,29 @@
+# wlink directives for LZEXPAND.DLL (shell/lzexpand/; ARCHITECTURE.md,
+# LZEXPAND). Names, ordinals and residency are those of Windows 3.1's
+# LZEXPAND (tools/neinfo.py): 1-10 the SDK's functions, WEP and
+# ___EXPORTEDSTUB resident. 3.1's entry table has unnamed, unexported
+# entries 13-30 (its internal far calls), which nothing can import.
+format windows dll
+option modname=LZEXPAND
+option description 'w16 file expansion library'
+option start=lz_libentry
+option quiet
+option map
+option heapsize=1024
+option alignment=16
+segment type code loadoncall moveable discardable
+segment ENTRY_TEXT fixed preload
+segment type data moveable preload
+library windows.lib
+export LZCOPY.1
+export LZOPENFILE.2
+export LZINIT.3
+export LZSEEK.4
+export LZREAD.5
+export LZCLOSE.6
+export LZSTART.7
+export COPYLZFILE.8
+export LZDONE.9
+export GETEXPANDEDNAME.10
+export WEP.11 resident
+export ___EXPORTEDSTUB.12 resident
