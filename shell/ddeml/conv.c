@@ -286,7 +286,7 @@ static CLIST NEAR *list_find(HCONVLIST h)
     CLIST NEAR *l;
     for (in = ddeml_insts; in; in = in->next)
         for (l = in->lists; l; l = l->next)
-            if ((HWND)LOWORD(h) == l->hwnd)
+            if (LOWORD(h) == (WORD)l && HIWORD(h) == SELECTOROF((void FAR *)&ddeml_insts))
                 return l;
     return NULL;
 }
@@ -321,7 +321,8 @@ HCONVLIST DMLAPI DdeConnectList(DWORD id, HSZ svc, HSZ topic, HCONVLIST old, CON
         return 0;
     }
     l->inst = in;
-    l->hwnd = newwin(in, CLS_LIST, in->dmg, WS_CHILD, 0);
+    holding(in);
+    l->hwnd = NULL;                     /* a list has no window */
     l->next = in->lists;
     in->lists = l;
     c = client_start(in, svc, topic, pcc, CM_LIST);
@@ -355,7 +356,7 @@ HCONVLIST DMLAPI DdeConnectList(DWORD id, HSZ svc, HSZ topic, HCONVLIST old, CON
                 c->list = l;
         list_drop(ol);
     }
-    return (HCONVLIST)MAKELONG(l->hwnd, 0);
+    return (HCONVLIST)MAKELONG((WORD)l, SELECTOROF((void FAR *)&ddeml_insts));
 }
 
 HCONV DMLAPI DdeQueryNextServer(HCONVLIST hl, HCONV prev)
@@ -1482,7 +1483,7 @@ UINT DMLAPI DdeQueryConvInfo(HCONV hc, DWORD xid, CONVINFO FAR *pci)
     ci.wStatus = c->status;
     ci.wConvst = c->convst;
     ci.wLastError = c->lasterr;
-    ci.hConvList = c->list ? (HCONVLIST)MAKELONG(c->list->hwnd, 0) : 0;
+    ci.hConvList = c->list ? (HCONVLIST)MAKELONG((WORD)c->list, SELECTOROF((void FAR *)&ddeml_insts)) : 0;
     bcopy(&ci.ConvCtxt, &c->cc, sizeof(CONVCONTEXT));
     n = (UINT)(pci->cb < sizeof ci ? pci->cb : sizeof ci);
     bcopy(pci, &ci, n);
