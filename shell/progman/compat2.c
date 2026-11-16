@@ -347,8 +347,16 @@ HINSTANCE FAR pm_ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPC
     (void)w;
     (void)op;
     (void)dir;
-    /* a program runs as it is; a document through its associated program */
+    /* a program runs as it is; a document through its associated program;
+       a document without one is not run (31, as 3.1's SHELL: run as a
+       program, DOS would take it for a .COM program) */
     if ((UINT)pm_FindExecutable(file, NULL, prog) <= 32) {
+        const char FAR *e = file + s_len(file);
+        while (e > file && e[-1] != '.' && e[-1] != '\\')
+            e--;
+        if (e > file && e[-1] == '.' && s_icmp(e, "EXE") && s_icmp(e, "COM") &&
+            s_icmp(e, "BAT") && s_icmp(e, "PIF"))
+            return (HINSTANCE)31;
         cmd = s_dup(file);
     } else {
         cmd = s_dup(prog);

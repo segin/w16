@@ -74,8 +74,27 @@ int run_dialog(HWND owner, FARPROC proc, int id)
    "Application Execution Error" box (exclamation icon, OK), %s being an
    item's command line as stored ("CARDFILE.EXE"), and for File > Run
    the program, a blank and the parameters ("nosuch foo", and "nosuch "
-   with none: two blanks before "(or"). UNVERIFIED: an item with
-   parameters; the texts of the other errors (w16: IDS_EXECFAIL). */
+   with none: two blanks before "(or"). A document whose extension has
+   no association (ShellExecute's 31) starts nothing: "No application is
+   associated with the specified file. Create an association by using
+   File Manager." in the same box (boot-test case runassoc); a directory,
+   a missing file or an association to a missing program is error 2, the
+   box above; a directory with an extension is 5: "Access to the
+   specified device, path, or file is denied.". The box has a thin frame
+   (system modal: pixel for pixel the box Microsoft's USER draws for
+   MB_SYSTEMMODAL, runassoc) and the Run dialog is hidden while it is up,
+   then shown again, active, the command line as typed.
+   UNVERIFIED: an item with parameters; the texts of the other errors
+   (w16: IDS_EXECFAIL). */
+static void exec_error(HWND owner, BOOL run, int ids, const char FAR *arg)
+{
+    if (run)
+        ShowWindow(owner, SW_HIDE);
+    ask(owner, IDS_EXECERROR, ids, arg, MB_OK | MB_ICONEXCLAMATION | MB_SYSTEMMODAL);
+    if (run)
+        ShowWindow(owner, SW_SHOW);
+}
+
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized,
              BOOL run)
 {
@@ -104,8 +123,14 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
     if (*params)
         *params++ = 0;
     r = (UINT)ShellExecute(owner, NULL, line, *params ? params : NULL, NULL, show);
-    if (r == 31)                        /* no association: try it as a program */
-        r = WinExec(cmd, show);
+    if (r == 31) {
+        /* no association (SE_ERR_NOASSOC): nothing starts. WinExec would
+           hand the document to WINOLDAP and DOS would run it as a .COM
+           program (Windows 3.1's WinExec does that too: probe SH14) */
+        exec_error(owner, run, IDS_NOASSOCRUN, NULL);
+        mem_free(line);
+        return FALSE;
+    }
     if (r == 2) {
         LPSTR t = NULL;
         if (run) {
@@ -116,9 +141,14 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
                 lstrcat(t, params);
             }
         }
-        ask(owner, IDS_EXECERROR, IDS_EXECNOTFOUND, t ? t : cmd, MB_OK | MB_ICONEXCLAMATION);
+        exec_error(owner, run, IDS_EXECNOTFOUND, t ? t : cmd);
         if (t)
             mem_free(t);
+        mem_free(line);
+        return FALSE;
+    }
+    if (r == 5) {
+        exec_error(owner, run, IDS_EXECDENIED, NULL);
         mem_free(line);
         return FALSE;
     }

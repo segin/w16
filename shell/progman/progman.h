@@ -147,6 +147,8 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_NOASSOC         25
 #define IDS_EXECERROR       26  /* the caption of the two below */
 #define IDS_EXECNOTFOUND    27
+#define IDS_NOASSOCRUN      28  /* starting a document without one */
+#define IDS_EXECDENIED      29  /* error 5 */
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
