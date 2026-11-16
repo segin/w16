@@ -1,0 +1,55 @@
+# wlink directives for DDEML.DLL (shell/ddeml/; ARCHITECTURE.md, DDEML).
+# Ordinals, names and residency are those of Windows 3.1's DDEML
+# (tools/neimports.py --exports DDEML): WEP resident, the rest
+# non-resident; 3.1 has no ordinal 25. 28-35, 38 and 39 are the
+# library's window, hook, enumeration and dialog procedures, which
+# nothing imports; w16 exports its own there.
+format windows dll
+option modname=DDEML
+option description 'w16 DDE Management Library'
+option start=ddeml_libentry
+option quiet
+option map
+option heapsize=8192
+segment type code loadoncall moveable discardable
+segment ENTRY_TEXT fixed preload
+segment type data moveable preload
+library windows.lib
+export WEP.1 resident
+export DDEINITIALIZE.2
+export DDEUNINITIALIZE.3
+export DDECONNECTLIST.4
+export DDEQUERYNEXTSERVER.5
+export DDEDISCONNECTLIST.6
+export DDECONNECT.7
+export DDEDISCONNECT.8
+export DDEQUERYCONVINFO.9
+export DDESETUSERHANDLE.10
+export DDECLIENTTRANSACTION.11
+export DDEABANDONTRANSACTION.12
+export DDEPOSTADVISE.13
+export DDECREATEDATAHANDLE.14
+export DDEADDDATA.15
+export DDEGETDATA.16
+export DDEACCESSDATA.17=DMLACCESSDATA
+export DDEUNACCESSDATA.18
+export DDEFREEDATAHANDLE.19
+export DDEGETLASTERROR.20
+export DDECREATESTRINGHANDLE.21
+export DDEFREESTRINGHANDLE.22
+export DDEQUERYSTRING.23
+export DDEKEEPSTRINGHANDLE.24
+export DDEENABLECALLBACK.26
+export DDENAMESERVICE.27
+export CLIENTWNDPROC.28
+export SERVERWNDPROC.29
+export SUBFRAMEWNDPROC.30
+export DMGWNDPROC.31
+export CONVLISTWNDPROC.32
+export MONITORWNDPROC.33
+export DDESENDHOOKPROC.34
+export DDEPOSTHOOKPROC.35
+export DDECMPSTRINGHANDLES.36
+export DDERECONNECT.37
+export INITENUM.38
+export TERMDLGPROC.39

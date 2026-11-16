@@ -1,0 +1,32 @@
+; w16's install tree alone (tests/ddeml/ddtree.sh): a DDEML server and
+; client in two copies, and a DDEML client driving the tree's Program
+; Manager through XTYP_EXECUTE and XTYP_REQUEST
+start B
+init 0
+B: init 0
+B: ns Svc reg
+conn Svc Topic
+info c1
+xact c1 request Item CF_TEXT - 2000
+xact c1 poke Item CF_TEXT text:pokedata 2000
+xact c1 exec 0 CF_TEXT text:[cmd(1)] 2000
+xact c1 advstart Item CF_TEXT - 2000
+B: postadv Topic Item
+xact c1 advstop Item CF_TEXT - 2000
+xact c1 request Item CF_TEXT - async
+wait 300
+disc c1
+B: uninit
+quit B
+run PROGMAN.EXE
+wait 3000
+conn PROGMAN PROGMAN
+info c.
+xact c. request Groups CF_TEXT - 5000
+xact c. exec 0 CF_TEXT text:[CreateGroup(DdeTree)] 5000
+xact c. exec 0 CF_TEXT "text:[AddItem(notepad.exe,DDE Notepad)]" 5000
+xact c. request Groups CF_TEXT - 5000
+xact c. request DdeTree CF_TEXT - 5000
+xact c. exec 0 CF_TEXT text:[DeleteGroup(DdeTree)] 5000
+disc c.
+uninit

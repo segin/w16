@@ -14,6 +14,7 @@
 static const char logname[] = "C:\\OS.LOG";
 static HHOOK hk_get, hk_call, hk_cbt;
 static HINSTANCE self;
+static BOOL logsent;                    /* OsSpySent: every sent DDE message */
 
 typedef struct { LPARAM lParam; WPARAM wParam; UINT message; HWND hwnd; } CWP;
 
@@ -460,8 +461,8 @@ LRESULT FAR PASCAL __loadds OsCallWndHook(int code, WPARAM wp, LPARAM lp)
 {
     if (code >= 0 && lp) {
         CWP FAR *c = (CWP FAR *)lp;
-        if (c->message == WM_DDE_INITIATE ||
-            (c->message == WM_DDE_ACK))
+        if (c->message == WM_DDE_INITIATE || c->message == WM_DDE_ACK ||
+            (logsent && c->message >= WM_DDE_FIRST && c->message <= WM_DDE_LAST))
             ddemsg(TRUE, c->hwnd, c->message, c->wParam, c->lParam);
     }
     return CallNextHookEx(hk_call, code, wp, lp);
@@ -499,6 +500,13 @@ void FAR PASCAL __loadds OsSpyStop(void)
     if (hk_cbt)
         UnhookWindowsHookEx(hk_cbt);
     hk_get = hk_call = hk_cbt = NULL;
+}
+
+/* log every WM_DDE_* message sent with SendMessage, not only INITIATE
+   and its ACKs (the DDEML probe: DDEML sends TERMINATE) */
+void FAR PASCAL __loadds OsSpySent(BOOL on)
+{
+    logsent = on;
 }
 
 void FAR PASCAL __loadds OsSetQuiet(BOOL q)

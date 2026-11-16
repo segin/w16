@@ -183,7 +183,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `TOOLHELP.DLL` | TOOLHELP | Task, module, heap and global walkers; notifications | P1 |
 | `VER.DLL` | VER | Version resources, `VerInstallFile` | P1 |
 | `LZEXPAND.DLL` | LZEXPAND | LZ decompression (`COMPRESS.EXE` format) | P1 |
-| `DDEML.DLL` | DDEML | DDE Management Library | P1 |
+| `DDEML.DLL` | DDEML | DDE Management Library (w16: `shell/ddeml/`, §18) | P1 |
 | `OLECLI.DLL` | OLECLI | OLE 1.0 client | P1 |
 | `OLESVR.DLL` | OLESVR | OLE 1.0 server | P1 |
 | `MMSYSTEM.DLL` | MMSYSTEM | Multimedia: wave, MIDI, aux, joystick, timer, MCI, mmio | P1 |
@@ -1857,3 +1857,216 @@ w16's `COMMDLG.DLL` (`shell/commdlg/`, `build/dos/COMMDLG.DLL`, installed as `SY
 **Print / Print Setup** (`print.c`): the printer from WIN.INI or hDevNames, the driver loaded and its ExtDeviceMode/DeviceCapabilities used for DEVMODE, quality, paper sizes and sources; DEVNAMES as the original lays it out (device name first at offset 8, wDefault with DN_DEFAULTPRN and two more bits: 4000h on a DEVNAMES this call made, 8000h set by the Print dialog), PD_RETURNDEFAULT, the page and copies checks and messages, the "Default Printer (... on ...)" texts, Options... (ExtDeviceMode with DM_PROMPT), the orientation picture (our own icons).
 
 **Tests.** `tests/commdlgscen.sh` runs each `tests/scripts/commdlg/*.txt` on the reference 3.1 twice, with Microsoft's COMMDLG and ours, and compares CD1.LOG (structures, hook messages) and every screenshot against `tests/scripts/commdlg.baseline` (what our own pictures cost). Scenarios: open1-3, multi1, fbehav (messages and returned fields), drop1 (the combo boxes), typesel1, scroll1, find1, color1-9, hls1, font1-6, fontapps, print1-7, obs-procs (window procedures, observation only), and with the programs themselves notepad and apps (Program Manager's Browse, Write, Paintbrush, Cardfile). `-n` runs the original only, for observation. Every scenario starts with SNAP `blinktime 65535`: carets keep their phase. Known: the screens differ by our own pictures (the baseline); print6 compares without window handles (`nohwnd`: from its second call ours are one 12-byte USER block further on, UNVERIFIED why); font5's sample in a 72-point face is placed differently (4644 pixels, in the baseline; UNVERIFIED rule). The boot test's `commdlg` case runs open1, find1, color1, font1 and print1. Printer drivers come from the reference Setup disks (`tools/szdd.py` expands them into the scratch install).
+
+## 18. DDEML
+
+DDEML.DLL, the DDE Management Library, wraps the DDE message protocol in
+an API of instances, string handles, data handles, conversations and
+transactions (Programmer's Reference Vol. 1 ch. 5, Vol. 2 Dde*, Vol. 3
+XTYP_* and the structures). Windows 3.1's has 38 exports (module DDEML,
+ordinals 1-39 without 25; `tools/neimports.py --exports DDEML`) and
+imports only KERNEL, USER, GDI and KEYBOARD. Nothing in the 3.1 or WfW
+3.11 installs imports it; applications ship expecting it. w16's is in
+`shell/ddeml/` and installed as `SYSTEM\DDEML.DLL`.
+
+### 18.1 Observation tools (DM.EXE)
+
+- `DM.EXE` (`tests/ddeml/dm.c`, `make dmprobes`) plays every part: DDEML
+  client, server and monitor, raw-DDE client and server. Copies run at
+  once, named by a letter; A is the shell and runs `C:\DM.TXT`, a line
+  `B: command` runs in copy B (posted, A pumps meanwhile). It logs every
+  call with its result and DdeGetLastError, every callback (type, format,
+  conversation, strings, data, dwData1/2, the answer it gives) through
+  OSSPY.DLL (§16.9), whose hooks log every WM_DDE_* message; since this
+  chapter OSSPY also logs sent ones on request (OsSpySent, ordinal 10:
+  DDEML sends TERMINATE). Handles are named, not shown: strings by their
+  string, conversations, lists, instances and data handles as c1, l1, i1,
+  d1 in order of first sight (a data handle a call makes always gets a
+  new name), transaction IDs by their counter (x0001). `raw on` shows the
+  values (the x*.dm explorations).
+- The OpenWatcom `ddeml.h` declares DdeAccessData with a near result; the
+  probe imports ordinal 17 as DdeAccessDataF with the SDK's far one (and
+  w16's DDEML exports its own function under that ordinal).
+- `tests/ddeml/dmrun.sh NAME OUT [cli] [srv]` runs one script on a scratch
+  copy of the reference 3.1. `startx X` starts `DMX.EXE`: DM.EXE whose
+  import of DDEML is renamed DDEMX, with DDEMX.DLL a copy of the server
+  library renamed (tools/nerename.py; test-only, made in the run
+  directory), so that two DDEML libraries talk in one session. A run
+  `NAME+x` turns every `start` into `startx`.
+
+### 18.2 Windows 3.1's DDEML as observed
+
+Instances and windows:
+- `DdeInitialize` makes a top-level DMGClass window (style 04C00000, 6
+  extra bytes) and then a DMGFrame (84000000, 4 bytes; a monitor gets
+  none). idInst is MAKELONG(an address in the library, a counter); one
+  counter, from 2, numbers instances and every conversation and holding
+  window. HCONV is MAKELONG(the conversation's window, its number). A
+  client conversation is a DMGClientClass child of DMGClass; a server
+  one a DMGServerClass child of the instance's DMGHoldingClass child of
+  DMGClass. No validation of afCmd was seen (any value initialises);
+  calling it again with an instance changes its filters.
+- `DdeGetLastError` with an instance returns its error and clears it;
+  with 0 the library's (DLL_NOT_INITIALIZED at first), with any other
+  invalid id INVALIDPARAMETER.
+- `DdeUninitialize`: UNREGISTER for its names to every other instance,
+  TERMINATE to every conversation in the order they were made, waits for
+  the partners' answers, frees the strings it still holds; a second call
+  fails with INVALIDPARAMETER.
+
+Strings: a string handle is the string's global atom (HIWORD 0), shared
+by all instances and tasks, case-insensitive; each create adds a
+reference, Keep adds one and returns the atom, Free removes one, and
+DdeUninitialize removes those an instance still holds. Code page 0,
+CP_WINANSI or GetKBCodePage() (437 here) only, else INVALIDPARAMETER.
+"" gives 0 without an error. With idInst 0 the atom is made all the same
+(error DLL_NOT_INITIALIZED); with a dead id, 0 and INVALIDPARAMETER.
+DdeQueryString copies at most max-1 characters (max 0: nothing, 0), with
+a NULL buffer returns the length; for hsz 0 it returns 0 and empties the
+buffer. DdeCmpStringHandles compares values (0 smallest). An
+instance-specific name is MAKELONG(base atom, the instance's DMGFrame);
+its string is "Svc:(143c)", the window in lower-case hex.
+
+Data handles: a handle is a DDE block: WORD flags, WORD format, data
+(GlobalAlloc of cb+4, not cleared). Made with no item name it has no
+header (an EXECUTE block). Its size is GlobalSize less the header.
+DdeGetData past the end: 0, INVALIDPARAMETER. DdeAddData past the end
+reallocates (the gap zeroed), same handle. afCmd other than 0 and
+HDATA_APPOWNED: INVALIDPARAMETER. Freeing a handle twice crashes 3.1.
+
+Connecting:
+- DdeConnect sends INITIATE (SendMessage -1) with the two atoms. A server
+  instance answers when its filter allows (FILTERINITS: always on at
+  first; DdeNameService(0, DNS_FILTEROFF) lets every service in; with
+  the filter on, a NULL service needs a registered name). XTYP_CONNECT
+  (hsz1 topic, hsz2 service, dwData1 the client's CONVCONTEXT if the
+  client is a DDEML window of the same library, else 0, dwData2 same
+  instance); NULL service or topic: XTYP_WILDCONNECT, whose HSZPAIR list
+  makes one conversation each. The server sends ACK, then
+  XTYP_CONNECT_CONFIRM. A second ACK to one DdeConnect: the client sends
+  TERMINATE at once (SendMessage), so the server gets XTYP_DISCONNECT and
+  then CONNECT_CONFIRM with conversation 0; a server of the same library
+  does not answer a DdeConnect that already has its server.
+- DdeConnectList: every ACK becomes a conversation (new client windows);
+  given an old list, new conversations duplicating its ones (service and
+  topic) are terminated, the old ones move to the new list and the old
+  handle dies.
+- REGISTER/UNREGISTER (DdeNameService, DdeUninitialize) reach every
+  instance in the z-order of their DMGClass windows, newest first,
+  inside the call; DdeNameService(0, FILTERON/OFF) returns 0;
+  CLIENTONLY instances get DLL_USAGE.
+- DdeDisconnect posts TERMINATE and returns; the partner's TERMINATE
+  destroys the window later. A partner's TERMINATE gives
+  XTYP_DISCONNECT, then the answer, from the destroyed window. The handle
+  is dead afterwards (DdeReconnect: NO_CONV_ESTABLISHED).
+
+Transactions:
+- REQUEST: DATA flags 3000 back; a sync request returns a data handle the
+  application frees, lpuResult untouched. POKE: block flags 2000. EXECUTE
+  with item 0: the command block alone; with an item: a block with the
+  DDE header (flags 2000) goes as the command. ADVSTART: DDEADVISE options
+  always with 2000 set (6000 NODATA, A000 ACKREQ, E000 both). Only the
+  low word of lpuResult is written (the ACK status). A server's callback
+  result is sent as result & C00F. NACK: NOTPROCESSED, busy: BUSY,
+  timeout: DATA/POKE/EXEC/ADV/UNADVACKTIMEOUT.
+- A data handle given to DdeClientTransaction goes as it is: its own
+  format word wins over uFmt, its flags get 2000.
+- Async: TRUE, the ID MAKELONG(address, per-conversation counter from 1);
+  XTYP_XACT_COMPLETE with dwData1 the ID and dwData2 the status.
+  DdeAbandonTransaction(conv, 0) and (0, 0) drop them all.
+- A local partner (a server window of the same library) that has the
+  matching CBF_FAIL_ flag makes DdeClientTransaction fail at once: 0, no
+  message, NO_ERROR.
+- Server: CBR_BLOCK holds the transaction and blocks the conversation;
+  DdeEnableCallback one/all runs held callbacks inside the call;
+  EC_QUERYWAITING says whether any are held. DdeEnableCallback works
+  inside a callback, and so does a synchronous transaction inside
+  XACT_COMPLETE.
+- Advise: links are kept newest first per conversation; DdePostAdvise
+  walks the server conversations newest first and calls XTYP_ADVREQ with
+  dwData1 the number of later links with the same item and format;
+  NODATA links get a DATA with no data, without ADVREQ. An ACKREQ link
+  whose last DATA is unanswered gets no ADVREQ; the ACK then brings one
+  with CADV_LATEACK. The client takes all DATA already posted before it
+  calls the callbacks, and acknowledges a DATA without data always.
+  UNADVISE of an unknown link: NACK without a callback; XTYP_ADVSTOP's
+  dwData2 is the item.
+- CONVINFO after a synchronous transaction: item, format and type come
+  from freed memory on 3.1 (the probe's DS shows through); a new client
+  conversation reports fmt CF_TEXT, type XTYP_CONNECT, status 0015
+  (0011 with a raw server), a server one 0001 with no partner.
+
+### 18.3 w16's DDEML.DLL
+
+`shell/ddeml/`: `inst.c` (instances, DMGClass/DMGFrame, errors, name
+service, the callback), `hsz.c` (string handles), `data.c` (data
+handles), `conv.c` (connecting, lists, the client and server windows,
+transactions, advise loops, blocking, CONVINFO), `mon.c` (monitors and
+their hooks), `entry.asm`, `ddeml.rc` (3.1's TERMDIALOG layout, w16
+wording, and a version resource), `ddeml.lnk` (the 38 ordinals and
+names; the linker adds unnamed entries 40-42). Large model, SS != DS,
+every entry loads DDEML's DS; marked a 3.00 module as 3.1's is; imports
+KERNEL, USER and KEYBOARD only. Every record (instance, name, string
+reference, data handle, conversation, transaction, link, held message,
+list) is a linked list node in DDEML's local heap: the one bound is that
+64K segment. The windows, handle layouts, counters and orders of 18.2
+are reproduced; data blocks are allocated zeroed (3.1's hold stale
+memory past the data; the comparison stops at the first NUL).
+
+### 18.4 Tests and results
+
+- `tests/ddemlscen.sh [-c COMBOS] [-n] [NAME...]` runs every script of
+  `tests/ddeml/scripts` (strings, data, conn, xact, advise, flags,
+  monitor, uninit, raw: DDEML against raw DDE both ways, progman: a
+  DDEML client driving 3.1's Program Manager with CreateGroup, AddItem,
+  ShowGroup, DeleteItem, Groups and group requests, ExitProgman) as NAME
+  (one library) and NAME+x (the other copies on the other library), with
+  Microsoft's DDEML and w16's in every client/server combination
+  (ms-ms is the reference), and compares the logs after
+  `tests/ddeml/dmnorm.py`: data blocks up to their first NUL, and the
+  window handle inside instance-specific names (a USER-heap value).
+- Boot-test case **ddeml**: parts tree286 and tree386 (`tests/ddeml/
+  ddtree.sh`: the install tree alone under w16's KRNL286 / KRNL386, DM.EXE
+  as the shell, a DDEML server and client and a DDEML client driving
+  w16's Program Manager; the log equal to the same tree with Microsoft's
+  DDEML), and one part per scenario and combination. Full run
+  (installation-05, 2026-11-16, 76b6b94): the parts strings, data, xact,
+  advise, flags, uninit, raw (with +x) ok; tree286 and tree386 differ
+  only in the "Progman" atom spelling (below: w16's own Program Manager
+  shows it too, so 3.1's DDEML is what makes the "Progman" atom);
+  conn, conn+x, monitor, monitor+x, progman as below.
+- Results (installation-05, 2026-11-16): strings, data, xact, advise,
+  flags, uninit and raw (and their +x runs in every combination) equal
+  Microsoft's: 18 of 27 compared pairs. Not equal yet:
+  - **conn**: DdeConnectList with several servers. With a local server,
+    3.1 orders the list and pairs the extra client windows with the
+    servers in an order w16 does not reproduce yet; with a server of
+    another library, 3.1's client TERMINATEs each extra answer at once
+    and INITIATEs that server again from a new client window (and posts
+    a TERMINATE between its own client windows); w16 keeps the answer.
+  - **monitor**: the event stream. 3.1's DDEML reports its own string
+    traffic (two MF_HSZ_INFO events per DdeCreateStringHandle, more for
+    every message it posts), which w16 does not mirror; w16 sends one
+    event per documented occasion.
+  - **progman**: everything but the spelling of the "PROGMAN" atom: with
+    3.1's DDEML the global atom already exists as "Progman" before the
+    probe creates its string handle; with w16's it is created as
+    "PROGMAN". 3.1's DDEML appears to make global atoms of its own at
+    DdeInitialize (perhaps the classes of the top-level windows, its
+    InitEnum export), which would also explain why w16's atoms come out
+    14 lower (UNVERIFIED).
+
+### 18.5 UNVERIFIED, and not done
+
+- The termination dialog (TERMDIALOG) is in the resources but never
+  shown: w16's DdeUninitialize waits up to 10 seconds for answers.
+- Monitors: the blocks follow the SDK structures; only the sequence was
+  compared (above).
+- HDDEDATA, HCONVLIST and the low word of transaction IDs are w16's own
+  values; handle values 3.1 gives that depend on USER's heap (instance
+  frames, atoms) differ, as w16 registers its window classes differently
+  (which classes 3.1's DDEML registers beyond the five seen is unknown).
+- Not probed: DdeReconnect inside XTYP_DISCONNECT, CF_BITMAP/
+  CF_METAFILEPICT data (3.1 imports GDI's CopyMetaFile and BitBlt, so it
+  probably copies such data for HDATA_APPOWNED handles; w16 copies the
+  block only), 386 Enhanced mode, WfW 3.11's DDEML.
