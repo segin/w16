@@ -3,9 +3,9 @@
 
 usage: osnorm.py RUNDIR [SAVEDFILE...]
 
-Writes RUNDIR/os.cmp: the DDE log (os.log) without OS1's "step wait"
-lines (OS1's script runs from a timer, so where they fall depends on
-timing) and with the object identifiers clients put in document names
+Writes RUNDIR/os.cmp: the DDE log (os.log) without the "wait" lines of
+OS1 and OS2 (OS1's script runs from a timer and a server OS2 starts logs
+while OS2 waits, so where they fall depends on timing) and with the object identifiers clients put in document names
 ("WINWRITE%(Untitled)%6af17234#001": Write uses the time) masked. Each
 saved file (e.g. OLE1.WRI) becomes FILE.norm, masked as the OLECLI tests
 mask theirs (tests/ole/olecmp.py: a Write document's text and pictures
@@ -38,7 +38,7 @@ for line in log.splitlines():
         line = re.sub(r' = [0-9A-F]{4}$', ' = *', line)
     else:
         item = False
-    if line.startswith('OS1 step wait '):
+    if line.startswith('OS1 step wait ') or line.startswith('OS2 wait '):
         continue
     line = re.sub(r'%[0-9a-f]{8}#', '%XXXXXXXX#', line)
     # blocks the client filled (POKE) and the copies servers get of them

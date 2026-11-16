@@ -477,7 +477,23 @@ OLESTATUS CALLBACK __export ObjSetData(LPOLEOBJECT o, OLECLIPFORMAT cf, HANDLE h
     if (cf == cf_native && h) {
         if (ob->native)
             GlobalFree(ob->native);
-        ob->native = (HGLOBAL)h;        /* the server owns it now */
+        /* the server owns it now. OS1 keeps a zero-filled copy without
+           its last 4 bytes: past the poked value's own size the block
+           OLESVR made holds uninitialised memory (both OLESVRs), which
+           would otherwise come back in GetData */
+        {
+            DWORD n = GlobalSize((HGLOBAL)h), i;
+            HGLOBAL c = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n);
+            BYTE FAR *src = (BYTE FAR *)GlobalLock((HGLOBAL)h), FAR *dst = c ? GlobalLock(c) : NULL;
+            if (dst) {
+                for (i = 0; i + 4 < n; i++)
+                    dst[(WORD)i] = src[(WORD)i];
+                GlobalUnlock(c);
+            }
+            GlobalUnlock((HGLOBAL)h);
+            GlobalFree((HGLOBAL)h);
+            ob->native = c;
+        }
     } else if (h && !forced("KeepSetData", 0))
         GlobalFree((HGLOBAL)h);
     RET("SetData", OLE_OK);
