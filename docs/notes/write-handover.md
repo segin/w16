@@ -75,9 +75,17 @@ Not covered yet:
 - c2e833f: castcheck.
 - e0f0df1: tree scripts step over Write.
 
+## Rerun at e0f0df1 (boottest-084318)
+
+make test: pass. w16write, w16groups, olecli, missingdll, treek386: ok. FAIL: taskman@tree
+21-dosesc 974.869 pixels (the same count as in boottest-080355, so deterministic, not load:
+check whether it comes from the tree's new WRITE.EXE/ACCESSOR.GRP, e.g. against master's own
+tree run), cplclick@co-tree 02-palette (6330 against 18927 before: varies), trails@timed
+(MoveCursor counts: timing, fails in other agents' runs too).
+
 ## Next steps, in order
 
-1. Read the result of the run in progress. If taskman, cplclick or trails fail again, compare with master's own run before blaming Write. The tree contains WRITE.EXE and the new ACCESSOR.GRP, so look at any tree script that picks Accessories items by position.
+1. Investigate taskman@tree (above); then cplclick@co-tree. If taskman, cplclick or trails fail again, compare with master's own run before blaming Write. The tree contains WRITE.EXE and the new ACCESSOR.GRP, so look at any tree script that picks Accessories items by position.
 2. Run one full `tools/remote-test.sh` (make test plus the full boot test) and report the result.
 3. Object size in twips (WR10, WR15): find the HIMETRIC-to-twips rule (probe several sizes of pasted pictures).
 4. Tall pictures in bands (WR10 I3: 3.1 scrolls inside a picture).
