@@ -2490,6 +2490,39 @@ install-tree: $(W16SYS)/LZEXPAND.DLL
 $(W16SYS)/LZEXPAND.DLL: $(DOS)/LZEXPAND.DLL
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- VER.DLL (shell/ver/; ARCHITECTURE.md, VER): large model, SS != DS
+# (it runs on its callers' stacks), every entry loads its DS
+VERCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=VER_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+VEROBJS   := $(B)/ver/entry.o $(B)/ver/ver.o
+ver: $(DOS)/VER.DLL
+dos: $(DOS)/VER.DLL
+.PHONY: ver
+$(B)/ver/%.o: shell/ver/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/ver/%.o: shell/ver/%.c shell/ver/ver.h
+	@mkdir -p $(@D)
+	$(WCC) $(VERCFLAGS) -fo=$@ $<
+$(B)/ver/verver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Version checking and file installation library" \
+	    FileVersion=3.10 InternalName=VER \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=VER.DLL ProductName=w16 ProductVersion=3.10
+$(B)/ver/ver.res: shell/ver/ver.rc $(B)/ver/verver.bin
+	@mkdir -p $(@D)
+	cd $(B)/ver && $(WRC) -q -r -bt=windows -fo=ver.res $(CURDIR)/shell/ver/ver.rc
+$(DOS)/VER.DLL: $(VEROBJS) $(B)/ver/ver.res shell/ver/ver.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/ver/ver.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ver/ver.map option resource=$(B)/ver/ver.res file { $(VEROBJS) }
+	python3 tools/nemark.py $@ 3.00 8301 08
+install-tree: $(W16SYS)/VER.DLL
+$(W16SYS)/VER.DLL: $(DOS)/VER.DLL
+	@mkdir -p $(@D)
+	cp $< $@
 # ---- LZP.EXE, the LZEXPAND probe (tests/lzexpand/; ARCHITECTURE.md,
 # LZEXPAND): tests/lzexpand/lzrun.sh, tests/lzexpand/lzscen.sh ----
 lzprobes: $(DOS)/LZP.EXE

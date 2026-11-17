@@ -1,0 +1,27 @@
+# wlink directives for VER.DLL (shell/ver/; ARCHITECTURE.md, VER). Names,
+# ordinals and residency are those of Windows 3.1's VER (tools/neinfo.py):
+# WEP 1 resident, the SDK's functions 2, 3 and 6-11 (4 and 5 unused). 3.1's
+# entry table has unnamed, unexported entries 12-20 (its own far calls),
+# which nothing can import.
+format windows dll
+option modname=VER
+option description 'w16 version checking and file installation library'
+option start=ver_libentry
+option quiet
+option map
+option heapsize=512
+option alignment=16
+segment type code loadoncall moveable discardable
+segment ENTRY_TEXT fixed preload
+segment type data moveable preload
+library windows.lib
+library lzexpand.lib
+export WEP.1 resident
+export GETFILERESOURCESIZE.2
+export GETFILERESOURCE.3
+export GETFILEVERSIONINFOSIZE.6
+export GETFILEVERSIONINFO.7
+export VERFINDFILE.8
+export VERINSTALLFILE.9
+export VERLANGUAGENAME.10
+export VERQUERYVALUE.11

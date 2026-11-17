@@ -1,0 +1,8 @@
+/*
+ * ver.rc - VER.DLL's version resource, written by tools/mkver.py (the
+ * Makefile; OpenWatcom's 16-bit VERSIONINFO is not readable by 3.1's
+ * VER.DLL, ARCHITECTURE.md 20). The numbers are 3.1's (3.10.0.103, read
+ * with tools/neres.py: programs check the library's version), the texts
+ * w16's (ARCHITECTURE.md 3).
+ */
+1 16 MOVEABLE PURE "verver.bin"
