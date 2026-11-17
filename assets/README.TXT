@@ -28,17 +28,19 @@ w16 repository's LICENSE):
   SYSTEM\DSWAP.EXE        the task switcher's DOS side: runs a DOS
                           program full screen (Alt+Tab, Alt+Esc and
                           Ctrl+Esc switch away from it)
+  SYSTEM\VGA.DRV         the display driver (VGA, 640x480, 16 colours)
   SYSTEM\VGACOLOR.2GR     the display grabber for DOS programs in
                           Standard mode: saves and restores a DOS
                           program's screen when it is switched away
                           from and back to, and copies its text to the
                           clipboard (PrintScreen)
+  SYSTEM\VGA.3GR         the display grabber for 386 Enhanced mode
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
                           About boxes)
-  SYSTEM\OLECLI.DLL      the OLE client library: objects (pictures,
+  SYSTEM\OLECLI.DLL       the OLE client library: objects (pictures,
                           sounds, packages) embedded in or linked to
                           documents, as Cardfile and Write keep them;
                           editing one needs its program (the server),
@@ -109,7 +111,12 @@ installation, copied into the same places (Windows directory or its
 SYSTEM subdirectory, as there) without overwriting the files above:
 
   Windows directory:      any applications you want
+  Windows directory:      MORICONS.DLL (Program Manager's extra icons)
   SYSTEM:                 MMSYSTEM.DLL (multimedia),
+                          VER.DLL (version information; used by
+                          installers),
+                          TOOLHELP.DLL (used by debuggers and system
+                          utilities),
                           the other fonts (*.FON, *.FOT, *.TTF),
                           DRIVERS.CPL and SND.CPL (Control Panel's
                           Drivers and Sound)
@@ -125,6 +132,16 @@ Panel, as on Windows 3.1).
 Write's new documents are in Arial, a TrueType font: copy your Windows'
 *.FOT and *.TTF files into SYSTEM. Its help is your WRITE.HLP (Windows
 directory).
+
+32-bit programs (PE files) run only with Microsoft's Win32s
+installed; without it Program Manager says so instead of starting
+them.
+
+w16's own settings are in the [w16] section of SYSTEM.INI. Each of its
+additions to Windows 3.1 (the scroll-bar shortcut menu, the version
+stamp on the desktop, Notepad's Ctrl+O/Ctrl+S keys and so on) can be
+switched back to Windows 3.1's behaviour there; the repository's
+docs/w16-settings.md lists every key.
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.

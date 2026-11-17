@@ -1471,7 +1471,7 @@ $(DOS)/CB1.EXE: $(B)/tests/start.o $(B)/tests/cb1.o tests/apps/app.lnk tests/app
 # ---- install-tree: build/w16, a Windows 3.1-style directory with w16's
 # programs only, each where Windows 3.1 keeps it (the reference install:
 # WIN.COM and PROGMAN.EXE in the Windows directory, the rest in SYSTEM).
-# win/README.TXT says what to copy in from one's own Windows to boot it.
+# assets/README.TXT says what to copy in from one's own Windows to boot it.
 # tests/w16tree.sh boots it. build/dos stays as it is.
 W16     := $(B)/w16
 W16SYS  := $(W16)/SYSTEM
@@ -1520,7 +1520,7 @@ install-tree: $(W16)/WRITE.EXE
 $(W16)/WRITE.EXE: $(DOS)/WRITE.EXE
 	@mkdir -p $(@D)
 	cp $< $@
-$(W16)/README.TXT: win/README.TXT
+$(W16)/README.TXT: assets/README.TXT
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
 # the default SYSTEM.INI, WIN.INI and CONTROL.INI (assets/; w16's own, laid out
@@ -2096,7 +2096,7 @@ $(DOS)/MS2.COM: tests/dos/ms2.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/MD1.EXE $(DOS)/MS2.COM
-# the install tree gets it too (build/w16/SYSTEM, win/README.TXT)
+# the install tree gets it too (build/w16/SYSTEM, assets/README.TXT)
 install-tree: $(W16SYS)/MOUSE.DRV
 $(W16SYS)/MOUSE.DRV: $(DOS)/MOUSE.DRV
 	@mkdir -p $(@D)
