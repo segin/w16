@@ -69,3 +69,11 @@ before refills (a caller's _llseek shows through).
   18-byte files to separate the pass-ending rule.
 - Drive Setup-style callers through their UI (DRIVERS.CPL Add, MAIN.CPL
   Fonts Add) in a boot case.
+
+## Full run (installation-05, 2026-11-16, a97e23a)
+
+make test: pass. Boot test: 115 ok, 4 FAIL: lzexpand (part quirks only,
+as expected), and three not touched by this work: holdbtn (scroll-arrow
+repeat timing) and ddeml (tree286, the "Progman" atom), both failing
+before this branch (ddeml-handover.md), and trails (part timed: one
+run-down 439 ms against 440-660 expected, a timing margin under load).
