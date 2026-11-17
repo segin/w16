@@ -45,6 +45,26 @@ def ver4(s):
     return (a << 16) | b, (c << 16) | d
 
 
+def fixed(file, product=None, os=0x10001, type=1, subtype=0, flagsmask=0x3F, flags=0,
+          signature=0xFEEF04BD, strucver=0x00010000):
+    """a VS_FIXEDFILEINFO (52 bytes); versions as "a.b.c.d" strings"""
+    fms, fls = ver4(file)
+    pms, pls = ver4(product or file)
+    return struct.pack('<13I', signature, strucver, fms, fls, pms, pls, flagsmask, flags,
+                       os, type, subtype, 0, 0)
+
+
+def versioninfo(fixedinfo, tables=(('040904E4', ()),), translations=((0x409, 1252),)):
+    """a whole VS_VERSION_INFO block: tables is [(lang-cp key, [(name,
+    value)])], translations [(lang, code page)] (Translation's value)"""
+    sfi = node('StringFileInfo', children=[
+        node(key, children=[node(k, v.encode('latin-1') + b'\0') for k, v in strs])
+        for key, strs in tables])
+    vfi = node('VarFileInfo', children=[
+        node('Translation', b''.join(struct.pack('<HH', l, c) for l, c in translations))])
+    return node('VS_VERSION_INFO', fixedinfo, [sfi, vfi])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('out')
@@ -59,20 +79,11 @@ def main():
     ap.add_argument('--translation', default='409,1252')
     ap.add_argument('strings', nargs='*')
     a = ap.parse_args()
-    fms, fls = ver4(a.file)
-    pms, pls = ver4(a.product or a.file)
-    fixed = struct.pack('<13I', 0xFEEF04BD, 0x00010000, fms, fls, pms, pls,
-                        int(a.flagsmask, 16), int(a.flags, 16), int(a.os, 16),
-                        int(a.type, 16), int(a.subtype, 16), 0, 0)
-    strs = []
-    for kv in a.strings:
-        k, v = kv.split('=', 1)
-        strs.append(node(k, v.encode('latin-1') + b'\0'))
+    ff = fixed(a.file, a.product, int(a.os, 16), int(a.type, 16), int(a.subtype, 16),
+               int(a.flagsmask, 16), int(a.flags, 16))
+    strs = [tuple(kv.split('=', 1)) for kv in a.strings]
     lang, cp = (int(x, 16) if i == 0 else int(x) for i, x in enumerate(a.translation.split(',')))
-    sfi = node('StringFileInfo', children=[node(a.lang, children=strs)])
-    vfi = node('VarFileInfo', children=[node('Translation', struct.pack('<HH', lang, cp))])
-    root = node('VS_VERSION_INFO', fixed, [sfi, vfi])
-    open(a.out, 'wb').write(root)
+    open(a.out, 'wb').write(versioninfo(ff, [(a.lang, strs)], [(lang, cp)]))
 
 
 if __name__ == '__main__':

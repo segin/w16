@@ -11,6 +11,7 @@
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
+# REFRUN_DDRIVE = a host directory whose copy is mounted as D: as well
 # REFRUN_GDLOG=1: log every GDI call to C:\GD.LOG (see below).
 # REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
 # flags); REFRUN_FPU=false then runs without a coprocessor.
@@ -66,6 +67,9 @@ if [ -n "${REFRUN_SHELL:-}" ]; then
 else
     sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
 fi
+if [ -n "${REFRUN_DDRIVE:-}" ]; then
+    cp -r "$REFRUN_DDRIVE" "$work/d"
+fi
 cputype=386
 if [ -n "${REFRUN_CPU:-}" ]; then
     REFRUN_X=1 cputype=$REFRUN_CPU
@@ -92,6 +96,7 @@ nosound=true
 pcspeaker=false
 [autoexec]
 mount c "$work/c"
+${REFRUN_DDRIVE:+mount d $work/d}
 c:
 ${REFRUN_KRNL286:+COPY C:\\WINDOWS\\SYSTEM\\KRNL286.EXE C:\\WINDOWS\\SYSTEM\\KRNL386.EXE > NUL}
 ${REFRUN_PRE:-}

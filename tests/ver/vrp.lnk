@@ -1,0 +1,4 @@
+# wlink directives for VRP.EXE (tests/ver/vrp.c), the VER.DLL probe
+@tests/apps/app.lnk
+option stack=16k
+library ver.lib

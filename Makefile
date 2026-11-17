@@ -2502,6 +2502,18 @@ $(DOS)/LZP.EXE: $(B)/tests/start.o $(B)/lzexpand/tests/lzp.o tests/apps/app.lnk 
 	@mkdir -p $(@D)
 	$(WLINK) @tests/lzexpand/lzp.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/lzexpand/tests/lzp.map file { $(B)/tests/start.o $(B)/lzexpand/tests/lzp.o }
+# ---- VRP.EXE, the VER.DLL probe (tests/ver/; ARCHITECTURE.md, VER):
+# tests/ver/vrun.sh, tests/ver/vscen.sh ----
+verprobes: $(DOS)/VRP.EXE
+dos: $(DOS)/VRP.EXE
+.PHONY: verprobes
+$(B)/ver/tests/vrp.o: tests/ver/vrp.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/VRP.EXE: $(B)/tests/start.o $(B)/ver/tests/vrp.o tests/apps/app.lnk tests/ver/vrp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/ver/vrp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ver/tests/vrp.map file { $(B)/tests/start.o $(B)/ver/tests/vrp.o }
 # OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
 # SS != DS (it runs on its callers' stacks)
 OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
