@@ -40,8 +40,10 @@ with Windows 3.1; another value is set per test with `tests/dropin.sh
 |---|---|---|---|
 | `debuglog=FILE` | none | KERNEL | Writes w16's own diagnostics to FILE: parameter-error notes (HandleParamError), WinOldApCall, calls to unimplemented imports, `schedlog`, `modmap` and a copy of OutputDebugString's text. Without it they go to standard output only while no Windows screen is up. |
 | `trace=MOD.ORD,...` | none | KERNEL | Records every call to the listed imports (caller, registers, arguments) for the fault reports and `debuglog`. |
+| `tracefrom=MODULE` | none | KERNEL | With `trace`: only the calls made from MODULE's code (e.g. `MMSYSTEM`), so that other callers do not push them out of the ring. |
 | `modmap=1` | `0` | KERNEL | Prints every module's selectors once the shell is loaded (and when Windows fails at boot). |
 | `watchdog=SECONDS` | `0` (off) | KERNEL | If the boot makes no progress for SECONDS, prints where the processor has been and exits. The test harness sets 15. |
+| `hangwatch=SECONDS` | `0` (off) | KERNEL | After the boot: if SECONDS pass with no task switch and no pass of KERNEL's idle loop, prints where the processor has been (as `watchdog`, with the `trace` ring) and exits. For hangs of the whole system once Windows is up (`tests/qtplay.sh` sets 30). A program that computes for that long without yielding trips it too. |
 | `exitmsg=1` | `0` | KERNEL | Prints `w16: back to DOS, code N` when Windows ends. 3.1 prints nothing. |
 | `schedlog=1` | `0` | KERNEL | Logs every task switch with what caused it (start, Yield, OldYield, DirectedYield, WaitEvent). |
 | `heapcheck=1` | `0` | KERNEL | Checks the global heap and the caller's local heap at every allocation, free, lock and task switch; at the first inconsistency it reports what is wrong and where, and ends Windows. Slow. |

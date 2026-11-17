@@ -280,6 +280,15 @@ u16 winboot(void)
     fault_init();
     GetPrivateProfileString("w16", "trace", "", trace_list, sizeof trace_list,
                             sysini);
+    {
+        extern char trace_from[9];      /* thunk.c */
+        u16 i;
+        GetPrivateProfileString("w16", "tracefrom", "", trace_from, sizeof trace_from,
+                                sysini);
+        for (i = 0; trace_from[i]; i++)
+            if (trace_from[i] >= 'a' && trace_from[i] <= 'z')
+                trace_from[i] -= 'a' - 'A';
+    }
     task_boot_tdb();
     wd_start(GetPrivateProfileInt("w16", "watchdog", 0, sysini));
     {
@@ -354,6 +363,12 @@ u16 winboot(void)
        -t 150) showed a black screen, which looked like a boot failure on
        the 80286 */
     wd_stop();
+    /* [w16] hangwatch=SECONDS (a debugging aid): after the boot, SECONDS
+       without a task switch and without KERNEL's idle loop (task.c) make
+       the watchdog report where the processor has been, as the boot's
+       does: a program that hangs all of Windows (a loop that never
+       yields, an interrupt-time call that never returns) */
+    wd_start(GetPrivateProfileInt("w16", "hangwatch", 0, sysini));
     task_boot_tdb_end();
     {
         u16 rc = task_boot();           /* back when the last task ends */

@@ -397,6 +397,7 @@ static void idle(void)
 #ifdef KRNL386
     k386_sane = 1;              /* KERNEL runs: Reboot's sanity byte */
 #endif
+    wd_progress();                      /* [w16] hangwatch (winboot.c) */
     rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
     if (idle_1689)
         rm_int(0x2F, 0x1689, 1, 0, 0);
@@ -485,6 +486,7 @@ static void switch_to(u16 t)
     static u16 have87 = 0xFFFF;
 
     heap_check("task switch", 0);
+    wd_progress();                      /* [w16] hangwatch (winboot.c) */
 
     if (sched_log) {
         kdbg("w16 sw ");

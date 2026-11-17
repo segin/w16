@@ -177,11 +177,20 @@ static u16 trpos, trcount;
 /* called by trace_entry (kentry.asm) with the thunk's index and the
    caller's frame (return IP, CS, arguments) and registers; returns the
    real target */
+char trace_from[9];     /* [w16] tracefrom=MODULE (winboot.c): only its calls */
+
 u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
 {
     tblock FAR *b = block_of(idx, 0);
     trrec *r = &trring[trpos];
     u16 i;
+    if (trace_from[0]) {
+        module FAR *m = module_of(frame[1]);
+        for (i = 0; m && i < 9 && m->name[i] == trace_from[i] && trace_from[i]; i++)
+            ;
+        if (!m || i == 9 || m->name[i] != trace_from[i])
+            return b ? b->info[idx % TB_COUNT].real : 0;
+    }
     trpos = (trpos + 1) % TR_N;
     trcount++;
     r->idx = idx;

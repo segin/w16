@@ -74,6 +74,8 @@ void fault_init(void)
     hook(0x0E, fault_entry_0Eh);
 }
 
+static u16 lar_any(u16 sel);
+#pragma aux lar_any = "lar ax, ax" "jz l1" "xor ax, ax" "l1:" parm [ax] value [ax];
 static u16 lsl(u16 sel);
 #pragma aux lsl = \
     "xor ax, ax" \
@@ -229,6 +231,13 @@ void __cdecl fault_report(void)
     kputhex(f[2]);
     where(f[3]);
     reg("err", f[1]);
+    if (f[1] & 0xFFF8) {
+        /* the selector the error code names (its RPL is not in the code):
+           its access rights and what it is (QuickTime's movie player:
+           MMSYSTEM loading SS with an even global handle) */
+        reg("ar", lar_any(f[1] | 7));
+        where(f[1] | 7);
+    }
     kputs("\r\n");
     reg("AX", f[7]);
     reg("BX", f[8]);
