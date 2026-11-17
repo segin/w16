@@ -130,6 +130,26 @@ pixel-identical, the same length.
   Microsoft's USER and on w16's, plain, with DRT.DLL a boot driver, and
   under KRNL386: identical.
 
+## The full run (installation-05, 2026-11-17)
+
+`tools/remote-test.sh -n w16-qt -e W16_QTDIR=/mnt/build/w16-qtfiles`:
+118 boot-test cases ok, `quicktime` and `drivers` among them; zipsetup
+skipped (no 7-Zip installer there). Four failures, none from this work:
+
+- taskman (part tree, 21-dosesc, 974 pixels), ddeml (conn, w16-ms) and
+  lzexpand (quirks) fail the same way on master 89db308 (rerun there);
+- soundtime (one 220 Hz tone 11.2 ms longer than its twin, the limit
+  9.3) fails in this checkout every time and passes in master's, although
+  every file on the drive is the same in both (Microsoft's KRNL286, USER
+  and MMSYSTEM, the identical w16 MMSOUND.DRV and SN1.EXE); the two
+  sides' tone lengths shift by a few ms between the checkouts, the
+  Microsoft side too. Left for whoever owns the sound tests.
+
+make test failed in that run on TK1, TK17 and TK58 (programs under KERNEL
+alone kept GMEM_FIXED fixed: no Windows boot ever "ended"); fixed
+(18d74a0), and make test then passed, with the KRNL386 boot cases, tree,
+drivers and quicktime run again: all ok.
+
 ## Left over (not the hang; seen in the same run)
 
 The installer's boxes look different under w16's install tree, all of
