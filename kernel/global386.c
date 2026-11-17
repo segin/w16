@@ -1608,8 +1608,34 @@ u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
             m = task_module();
         owner = m ? m->ne_sel : 0;
     }
+    /* A fixed block only for KERNEL and for DLLs, and for anyone while
+       Windows boots: once it is up, GMEM_FIXED from a program's code
+       gives a moveable block (Pietrek ch. 2, GbTop, which decides by the
+       module of the calling code segment). Observed with DRP's driver
+       (tests/drv/drt.c): GlobalAlloc(GMEM_FIXED [| GMEM_SHARE], 600h)
+       from a DLL gives an odd handle, the selector, as KRNL286 does; the
+       same from a program an even one (TK58). MMSYSTEM uses its fixed
+       block's handle as its interrupt stack's SS (timeSetEvent), so with
+       an even handle every multimedia timer callback faulted (QuickTime's
+       movie player, docs/notes/quicktime-handover.md). */
+    if (!(flags & GMEM_MOVEABLE) && winboot_done && galloc_cs) {
+        module FAR *m = module_of(galloc_cs);
+        if (m && m != module_first && !(m->flags & NEF_LIBRARY))
+            flags |= GMEM_MOVEABLE;
+    }
     galloc_cs = 0;
-    return galloc(flags & ~(GA_REQ_DGROUP | GA_REQ_DISCCODE), size, owner, NULL);
+    {
+        u16 h = galloc(flags & ~(GA_REQ_DGROUP | GA_REQ_DISCCODE), size, owner, NULL);
+        aid a;
+        /* a fixed block's handle is its selector (odd), as under KRNL286
+           (DRP's driver, above); a moveable one's the selector with bit
+           0 clear */
+        if (h && !(flags & GMEM_MOVEABLE) && !(h & 1) && find(h, &a) == FB_BLOCK) {
+            AR(a)->handle = h | 1;
+            h |= 1;
+        }
+        return h;
+    }
 }
 
 static u16 realloc_discarded(u16 h, u32 size, u16 flags)

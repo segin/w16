@@ -948,6 +948,18 @@ global %1
 %macro AFTER_FREE 0
         xor cx, cx
         xor dx, dx
+%ifdef KRNL386
+        ; KRNL386 returns FS = GS = 0, whatever they held (DRP, tests/drv/
+        ; drp.c "galloc": FS and GS holding the freed block, and GS holding
+        ; DS, all came back 0; KRNL286 keeps them). QuickTime frees blocks
+        ; it still has in FS: DOSX faulted popping the dead selector into
+        ; FS on the way back from an interrupt (docs/notes/
+        ; quicktime-handover.md)
+        push cx
+        db 8Eh, 0E1h            ; mov fs, cx
+        db 8Eh, 0E9h            ; mov gs, cx
+        pop cx
+%endif
 %endmacro
 %macro AFTER_NONE 0
 %endmacro
