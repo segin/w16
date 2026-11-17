@@ -1,0 +1,62 @@
+; tests/qtplay.sh: QuickTime for Windows 2.1.2's installer (C:\TMP\QTINSTAL.EXE,
+; the user's file, copied in at test time) from Program Manager's File > Run:
+; the licence (Agree), Begin Install (Install), Check Existing Versions
+; (Start), Complete Install (Install), Success (Play Sample), which starts
+; the Movie Player with SAMPLE.MOV; Space plays it (about 10 seconds on 3.1),
+; a shot every 2 seconds. Until 2026-11-17 w16 hung for good at the Play
+; Sample step (docs/notes/quicktime-handover.md).
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type C:\TMP\QTINSTAL.EXE
+sleep 0.5
+key Return
+settle 90 3
+shot 01-license
+key Return
+settle 90 3
+shot 02-begin
+key Return
+settle 180 4
+shot 03-check
+key Return
+settle 180 4
+shot 04-complete
+key Return
+settle 240 5
+shot 05-success
+key Return
+settle 120 5
+shot 06-player
+key space
+sleep 2
+shot p01
+sleep 2
+shot p02
+sleep 2
+shot p03
+sleep 2
+shot p04
+sleep 2
+shot p05
+sleep 2
+shot p06
+sleep 2
+shot p07
+sleep 2
+shot p08
+sleep 2
+shot p09
+sleep 2
+shot p10
+sleep 2
+shot p11
+sleep 2
+shot p12
+sleep 2
+shot p13
+sleep 2
+shot p14
+sleep 2
+shot p15

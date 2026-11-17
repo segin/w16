@@ -196,6 +196,19 @@
 #              under its KRNL286 / KRNL386 (tests/lzexpand/lztree.sh), the
 #              same sections; quirks: the sections eof, zero and long
 #              matches, where w16 still differs (ARCHITECTURE.md, LZEXPAND)
+#   drivers    USER's installable drivers (ARCHITECTURE.md 10.7): the probe
+#              DRP.EXE and its driver DRT.DLL (tests/drv/drun.sh) on w16's
+#              USER and on Microsoft's (KRNL286), again with DRT.DLL a boot
+#              driver, and under KRNL386 (w16's KRNL386 and USER against
+#              Microsoft's: GlobalAlloc's handles too), the logs identical
+#   quicktime  QuickTime for Windows 2.1.2's installer and its sample movie
+#              (tests/qtplay.sh; the installer copied in at test time from
+#              $W16_QTDIR, default ~/Downloads/qtw16; skipped without it):
+#              stock 3.1 against w16's install tree laid over it as a user
+#              does (KRNL386): the Movie Player's window, the movie played,
+#              its last frame 0 pixels and its length within 2 s of 3.1's.
+#              Until 2026-11-17 w16 hung for good there (docs/notes/
+#              quicktime-handover.md)
 #   ver        w16's VER.DLL (ARCHITECTURE.md 20): the probe VRP.EXE
 #              (tests/ver/vrp.c, every function on files made at test time)
 #              as the shell with Microsoft's VER.DLL and with w16's, the
@@ -649,7 +662,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2428,6 +2441,22 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   lzexpand"
         else echo "FAIL lzexpand: $r ($out)"; fails=$((fails + 1)); fi ;;
+    drivers)
+        # USER's installable drivers (ARCHITECTURE.md 10.7)
+        if "$root/tests/drv/drun.sh" -o "$out/drivers" > "$out/drivers.txt" 2>&1; then
+            echo "ok   drivers: DRP's log on w16's USER as on Microsoft's (KRNL286, a boot driver, KRNL386)"
+        else
+            echo "FAIL drivers: $(grep -m1 FAIL "$out/drivers.txt") ($out/drivers.txt)"; fails=$((fails + 1))
+        fi ;;
+    quicktime)
+        # QuickTime's installer and sample movie (tests/qtplay.sh)
+        "$root/tests/qtplay.sh" -o "$out/quicktime" > "$out/quicktime.txt" 2>&1 || true
+        if grep -q '^skip' "$out/quicktime.txt"; then sed -n 's/^skip qtplay/skip quicktime/p' "$out/quicktime.txt"
+        elif grep -q '^ok' "$out/quicktime.txt"; then
+            echo "ok   quicktime: installs and plays its sample movie as on 3.1 ($(grep -m1 '^plays' "$out/quicktime.txt"))"
+        else
+            echo "FAIL quicktime: $(grep -m1 FAIL "$out/quicktime.txt" | sed 's/^FAIL qtplay: //') ($out/quicktime.txt)"; fails=$((fails + 1))
+        fi ;;
     ver)
         # w16's VER.DLL against Microsoft's (ARCHITECTURE.md 20); nothing
         # masked: two runs of Microsoft's give identical logs

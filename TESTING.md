@@ -96,6 +96,14 @@ probe's log section by section; the boot-test case `lzexpand` runs it),
 section by section; `tests/ver/vtree.sh`, `vmods.sh` and `vfonts.sh` for
 the install tree, w16's modules' versions and Control Panel's Fonts
 applet; the boot-test case `ver` runs them all),
+`tests/drv/drun.sh` (USER's installable drivers: the probe DRP and its
+driver DRT on w16's USER against Microsoft's; the boot-test case
+`drivers`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
+its sample movie played on w16's tree laid over 3.1, against stock 3.1;
+the installer, Apple's, comes from `$W16_QTDIR`, default
+`~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
+`-m FILE` puts Microsoft's file back for bisection; the boot-test case
+`quicktime`),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
 Windows 3.1, booting again past the cases that end the task; makes the
