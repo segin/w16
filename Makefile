@@ -2571,6 +2571,25 @@ $(DOS)/VRP.EXE: $(B)/tests/start.o $(B)/ver/tests/vrp.o tests/apps/app.lnk tests
 	@mkdir -p $(@D)
 	$(WLINK) @tests/ver/vrp.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ver/tests/vrp.map file { $(B)/tests/start.o $(B)/ver/tests/vrp.o }
+# ---- DRP.EXE and DRT.DLL, the installable-driver probe and its driver
+# (tests/drv/; ARCHITECTURE.md 10.7): tests/drv/drun.sh ----
+drvprobes: $(DOS)/DRP.EXE $(DOS)/DRT.DLL
+dos: $(DOS)/DRP.EXE $(DOS)/DRT.DLL
+.PHONY: drvprobes
+$(B)/drv/tests/drp.o: tests/drv/drp.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(B)/drv/tests/drt.o: tests/drv/drt.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(DOS)/DRP.EXE: $(B)/tests/start.o $(B)/drv/tests/drp.o tests/apps/app.lnk tests/drv/drp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/drv/drp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/drv/tests/drp.map file { $(B)/tests/start.o $(B)/drv/tests/drp.o }
+$(DOS)/DRT.DLL: $(B)/tests/dllstart.o $(B)/drv/tests/drt.o tests/apps/dll.lnk tests/drv/drt.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/drv/drt.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/drv/tests/drt.map file { $(B)/tests/dllstart.o $(B)/drv/tests/drt.o }
 # OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
 # SS != DS (it runs on its callers' stacks)
 OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win

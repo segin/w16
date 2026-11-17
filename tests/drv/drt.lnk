@@ -1,0 +1,4 @@
+# DRT.DLL (tests/drv/drt.c), the driver the DRP probe opens
+@tests/apps/dll.lnk
+option modname=DRT
+export DRIVERPROC.1

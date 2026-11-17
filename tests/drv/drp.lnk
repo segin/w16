@@ -1,0 +1,3 @@
+# wlink directives for DRP.EXE (tests/drv/drp.c), the installable-driver probe
+@tests/apps/app.lnk
+option stack=16k

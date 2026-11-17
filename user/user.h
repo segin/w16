@@ -351,6 +351,9 @@ void lstr_cpyn(LPSTR d, LPCSTR s, WORD n);
 int  lstr_cmpi(LPCSTR a, LPCSTR b);
 WORD local_strdup(LPCSTR s);    /* a local (USER heap) copy, 0 for NULL */
 void diag(LPCSTR s);            /* DiagOutput, for BOOTLOG.TXT */
+void open_boot_drivers(void);           /* driver.c */
+void drivers_task_exit(BOOL killed);
+void drivers_exit_session(void);
 void ulog(LPCSTR s);            /* w16's own log (C:\USER.LOG, [w16] userlog=1) */
 void ulogx(LPCSTR s, WORD v);
 #define ISATOM(p)  (HIWORD((DWORD)(p)) == 0)

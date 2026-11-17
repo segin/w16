@@ -263,26 +263,8 @@ void WINAPI FinalUserInit(void)
     booted = 1;
     diag("INITDONE=Final USER\r\n");
     diag("INIT=Installable Drivers\r\n");
-    {
-        /* SYSTEM.INI [boot] drivers=: loaded as libraries; UNVERIFIED that
-           this is all 3.1 does (it sends them DRV_LOAD; US1 saw MMSYSTEM's
-           DriverProc call DefDriverProc for message 1) */
-        char list[128];
-        char *p, *q;
-        GetPrivateProfileString("boot", "drivers", "", list, sizeof list, "SYSTEM.INI");
-        for (p = list; *p;) {
-            while (*p == ' ' || *p == ',')
-                p++;
-            for (q = p; *q && *q != ' ' && *q != ','; q++)
-                ;
-            if (q == p)
-                break;
-            if (*q)
-                *q++ = 0;
-            LoadLibrary(p);
-            p = q;
-        }
-    }
+    /* (the boot drivers, [boot] drivers=, are opened at the shell's
+       InitApp: driver.c) */
     diag("INITDONE=Installable Drivers\r\n");
 }
 

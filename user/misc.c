@@ -56,8 +56,10 @@ LONG WINAPI U_SIGNALPROC(HANDLE h, WORD code, WORD exitfn, HINSTANCE hinst, HQUE
     (void)exitfn, (void)hinst, (void)hq;
     ulogx("SignalProc code ", code);
     ulogx("  handle ", (WORD)h);
-    if (code == 0x20 || code == 0x666)
+    if (code == 0x20 || code == 0x666) {
+        drivers_task_exit(code == 0x666);
         app_exit((HTASK)h);
+    }
     if (code == 0x20)
         user_heaps_shrink();    /* not after a fault (Pietrek ch. 3) */
     return 0;
@@ -306,6 +308,7 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
     diag("INITDONE=TSRQuery\r\n");
     for (h = PW(hwndDesktop)->hwndChild; h; h = PW(h)->hwndNext)
         send_message(h, WM_ENDSESSION, TRUE, 0);
+    drivers_exit_session();             /* DRV_EXITSESSION ... (driver.c) */
     /* then, as 3.1's USER does (US1 trace of ExitWindows, Microsoft's
        USER between forwarders; Pietrek ch. 1): the cursor off
        (DISPLAY.SetCursor(NULL)), MOUSE.Disable, KEYBOARD.Disable,
