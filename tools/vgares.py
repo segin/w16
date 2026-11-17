@@ -29,7 +29,7 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fontc import vs_node  # noqa: E402
+import mkver  # noqa: E402  (tools/mkver.py: the version resource)
 
 RT_CURSOR, RT_BITMAP, RT_ICON = 1, 2, 3
 RT_GROUP_CURSOR, RT_GROUP_ICON, RT_VERSION = 12, 14, 16
@@ -111,8 +111,9 @@ def note(s):
 
 
 def version():
-    fixed = struct.pack('<13I', 0xFEEF04BD, 0x00010000, 0x00030000 | 10, 0, 0x00030000 | 10, 0,
-                        0x3F, 0, 0x00010001, 3, 4, 0, 0)   # VFT_DRV, VFT2_DRV_DISPLAY
+    # 3.1's numbers (3.10.0.103: VerInstallFile compares it as it compares
+    # 3.1's driver), VFT_DRV, VFT2_DRV_DISPLAY; written by tools/mkver.py
+    fixed = mkver.fixed('3.10.0.103', None, 0x00010001, 3, 4)
     info = [('CompanyName', 'the w16 contributors'),
             ('FileDescription', 'w16 VGA display driver'),
             ('FileVersion', '3.10'),
@@ -121,10 +122,7 @@ def version():
             ('OriginalFilename', 'VGA.DRV'),
             ('ProductName', 'w16'),
             ('ProductVersion', '3.10')]
-    strings = b''.join(vs_node(k, v.encode('latin-1') + b'\0') for k, v in info)
-    sfi = vs_node('StringFileInfo', b'', vs_node('040904E4', b'', strings))
-    vfi = vs_node('VarFileInfo', b'', vs_node('Translation', struct.pack('<HH', 0x0409, 0x04E4)))
-    return vs_node('VS_VERSION_INFO', fixed, sfi + vfi)
+    return mkver.versioninfo(fixed, [('040904E4', info)], [(0x409, 1252)])
 
 
 def rname(v):

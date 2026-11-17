@@ -56,6 +56,7 @@ import argparse
 import os
 import re
 import struct
+import mkver  # tools/mkver.py: the version resource
 import sys
 
 HDR2 = 118          # .FNT header size, version 2.0 (with dfReserved)
@@ -343,35 +344,18 @@ def stub():
     return (hdr + b'\0\0\0\0' + body).ljust(size, b'\0')
 
 
-def vs_node(key, value=b'', children=b''):
-    """a 16-bit VERSIONINFO block: cbBlock, cbValue, szKey, the value and
-    the children, each starting on a 4-byte boundary; cbBlock does not
-    count the padding after the block"""
-    node = struct.pack('<HH', 0, len(value)) + key.encode('latin-1') + b'\0'
-    node += b'\0' * ((-len(node)) % 4) + value
-    if children:
-        node += b'\0' * ((-len(node)) % 4) + children
-    node = struct.pack('<H', len(node)) + node[2:]
-    return node + b'\0' * ((-len(node)) % 4)
-
-
 def version_resource(info):
     """VS_VERSION_INFO with a fixed part and English (US), Windows ANSI
-    strings"""
+    strings, written by tools/mkver.py (the layout Windows 3.1's VER.DLL
+    reads, ARCHITECTURE.md 20). The numbers: info's _version (a.b.c.d),
+    else its FileVersion string with zeros; type VFT_FONT, subtype
+    info's _subtype (default 1)"""
     def vnum(s):
-        p = [int(x) for x in (s.split('.') + ['0', '0', '0'])[:4]]
-        return (p[0] << 16) | p[1], (p[2] << 16) | p[3]
-    fv = vnum(info.get('FileVersion', '1.0'))
-    pv = vnum(info.get('ProductVersion', info.get('FileVersion', '1.0')))
-    fixed = struct.pack('<13I', 0xFEEF04BD, 0x00010000, fv[0], fv[1], pv[0], pv[1],
-                        0x3F, 0, 0x00010001, 4, int(info.pop('_subtype', '1')), 0, 0)
-    strings = b''
-    for k, v in info.items():
-        strings += vs_node(k, v.encode('latin-1') + b'\0')
-    table = vs_node('040904E4', b'', strings)
-    sfi = vs_node('StringFileInfo', b'', table)
-    vfi = vs_node('VarFileInfo', b'', vs_node('Translation', struct.pack('<HH', 0x0409, 0x04E4)))
-    return vs_node('VS_VERSION_INFO', fixed, sfi + vfi)
+        return '.'.join((s.split('.') + ['0', '0', '0'])[:4])
+    num = info.pop('_version', None) or vnum(info.get('FileVersion', '1.0'))
+    sub = int(info.pop('_subtype', '1'))
+    fixed = mkver.fixed(num, num, 0x00010001, 4, sub)
+    return mkver.versioninfo(fixed, [('040904E4', list(info.items()))], [(0x409, 1252)])
 
 
 def fon(fonts, module, desc, info):

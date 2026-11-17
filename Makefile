@@ -951,6 +951,7 @@ $(B)/hdd/MBR.BIN: tools/dos/mbr.asm
 FNT     := $(B)/fonts
 FONTC   := python3 tools/fontc.py
 FONTINFO = --info CompanyName=w16 --info FileVersion=3.10 --info ProductVersion=3.10 \
+           --info _version=3.10.0.103 \
            --info "LegalCopyright=Copyright (c) 2026 the w16 contributors, MIT licence" \
            --info ProductName=w16
 FONS    := $(FNT)/VGASYS.FON $(FNT)/VGAFIX.FON $(FNT)/VGAOEM.FON $(FNT)/SSERIFE.FON
@@ -1067,9 +1068,17 @@ $(B)/shell/calc/fixrqq.o: tests/apps/fixrqq.asm
 $(B)/shell/res/calc.ico: tools/mkcalcicon.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 tools/mkcalcicon.py $@
-$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico
+$(B)/shell/calc/calcver.bin: tools/mkver.py
 	@mkdir -p $(@D)
-	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -fo=$@ $<
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 1 \
+	    "CompanyName=the w16 contributors" "FileDescription=w16 Calculator" \
+	    FileVersion=3.10 InternalName=Calc \
+	    "LegalCopyright=Copyright (c) 2026 the w16 contributors (MIT licence)" \
+	    OriginalFilename=CALC.EXE ProductName=w16 ProductVersion=3.10
+$(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico \
+    $(B)/shell/calc/calcver.bin
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/calc -i=$(B)/shell/res -i=$(B)/shell/calc -fo=$@ $<
 $(DOS)/CALC.EXE: $(CALC_OBJ) $(B)/shell/calc/calc.res shell/calc/calc.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @shell/calc/calc.lnk name $@ libpath $(WATCOM)/lib286/win \
@@ -1979,9 +1988,17 @@ $(B)/ole/olentry.o: ole/olecli/entry.asm
 $(B)/ole/%.o: ole/olecli/%.c ole/olecli/olecli.h
 	@mkdir -p $(@D)
 	$(WCC) $(OLCFLAGS) -fo=$@ $<
-$(B)/ole/olecli.res: ole/olecli/olecli.rc
+$(B)/ole/olecliver.bin: tools/mkver.py
 	@mkdir -p $(@D)
-	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+	python3 tools/mkver.py $@ --file 1.10.0.0 --product 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Object Linking and Embedding Client Library" \
+	    FileVersion=1.10.000 InternalName=OLECLI \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=OLECLI.DLL ProductName=w16 ProductVersion=3.10
+$(B)/ole/olecli.res: ole/olecli/olecli.rc $(B)/ole/olecliver.bin
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/ole -fo=$@ $<
 $(B)/ole/exports.lnk: tools/mkoleexp.py docs/exportdb/exports.csv $(wildcard ole/olecli/*.c) ole/olecli/entry.asm
 	@mkdir -p $(@D)
 	python3 tools/mkoleexp.py $@
@@ -2433,9 +2450,16 @@ $(B)/ddeml/%.o: shell/ddeml/%.asm
 $(B)/ddeml/%.o: shell/ddeml/%.c shell/ddeml/ddeml.h
 	@mkdir -p $(@D)
 	$(WCC) $(DMLCFLAGS) -fo=$@ $<
-$(B)/ddeml/ddeml.res: shell/ddeml/ddeml.rc
+$(B)/ddeml/ddemlver.bin: tools/mkver.py
 	@mkdir -p $(@D)
-	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" "FileDescription=DDE Management Library" \
+	    FileVersion=3.10 InternalName=DDEML \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=DDEML.DLL ProductName=w16 ProductVersion=3.10
+$(B)/ddeml/ddeml.res: shell/ddeml/ddeml.rc $(B)/ddeml/ddemlver.bin
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/ddeml -fo=$@ $<
 $(DOS)/DDEML.DLL: $(DMLOBJS) $(B)/ddeml/ddeml.res shell/ddeml/ddeml.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @shell/ddeml/ddeml.lnk name $@ libpath $(WATCOM)/lib286/win \
