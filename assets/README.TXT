@@ -117,8 +117,6 @@ SYSTEM subdirectory, as there) without overwriting the files above:
   Windows directory:      any applications you want
   Windows directory:      MORICONS.DLL (Program Manager's extra icons)
   SYSTEM:                 MMSYSTEM.DLL (multimedia),
-                          VER.DLL (version information; used by
-                          installers),
                           TOOLHELP.DLL (used by debuggers and system
                           utilities),
                           the other fonts (*.FON, *.FOT, *.TTF),
