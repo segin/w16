@@ -2458,6 +2458,50 @@ $(DOS)/DM.EXE: $(B)/tests/start.o $(B)/ddeml/tests/dm.o tests/apps/app.lnk tests
 	@mkdir -p $(@D)
 	$(WLINK) @tests/ddeml/dm.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ddeml/tests/dm.map file { $(B)/tests/start.o $(B)/ddeml/tests/dm.o }
+# ---- LZEXPAND.DLL (shell/lzexpand/; ARCHITECTURE.md, LZEXPAND): large
+# model, SS != DS (it runs on its callers' stacks), every entry loads its DS
+LZXCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=LZEXPAND_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+LZXOBJS   := $(B)/lzexpand/entry.o $(B)/lzexpand/lzexp.o
+lzexpand: $(DOS)/LZEXPAND.DLL
+dos: $(DOS)/LZEXPAND.DLL
+.PHONY: lzexpand
+$(B)/lzexpand/%.o: shell/lzexpand/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/lzexpand/%.o: shell/lzexpand/%.c shell/lzexpand/lzexpand.h
+	@mkdir -p $(@D)
+	$(WCC) $(LZXCFLAGS) -fo=$@ $<
+$(B)/lzexpand/lzver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" "FileDescription=File expansion library" \
+	    FileVersion=3.10 InternalName=LZEXPAND \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=LZEXPAND.DLL ProductName=w16 ProductVersion=3.10
+$(B)/lzexpand/lzexpand.res: shell/lzexpand/lzexpand.rc $(B)/lzexpand/lzver.bin
+	@mkdir -p $(@D)
+	cd $(B)/lzexpand && $(WRC) -q -r -bt=windows -fo=lzexpand.res $(CURDIR)/shell/lzexpand/lzexpand.rc
+$(DOS)/LZEXPAND.DLL: $(LZXOBJS) $(B)/lzexpand/lzexpand.res shell/lzexpand/lzexpand.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/lzexpand/lzexpand.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/lzexpand/lzexpand.map option resource=$(B)/lzexpand/lzexpand.res file { $(LZXOBJS) }
+	python3 tools/nemark.py $@ 3.00 8301 08
+install-tree: $(W16SYS)/LZEXPAND.DLL
+$(W16SYS)/LZEXPAND.DLL: $(DOS)/LZEXPAND.DLL
+	@mkdir -p $(@D)
+	cp $< $@
+# ---- LZP.EXE, the LZEXPAND probe (tests/lzexpand/; ARCHITECTURE.md,
+# LZEXPAND): tests/lzexpand/lzrun.sh, tests/lzexpand/lzscen.sh ----
+lzprobes: $(DOS)/LZP.EXE
+dos: $(DOS)/LZP.EXE
+.PHONY: lzprobes
+$(B)/lzexpand/tests/lzp.o: tests/lzexpand/lzp.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(DOS)/LZP.EXE: $(B)/tests/start.o $(B)/lzexpand/tests/lzp.o tests/apps/app.lnk tests/lzexpand/lzp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/lzexpand/lzp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/lzexpand/tests/lzp.map file { $(B)/tests/start.o $(B)/lzexpand/tests/lzp.o }
 # OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
 # SS != DS (it runs on its callers' stacks)
 OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win

@@ -182,7 +182,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `WIN87EM.DLL` | WIN87EM | x87 emulator / FPU support. Most C runtimes import it. w16: `win87em/` (§9.2, floating-point findings) | P0 |
 | `TOOLHELP.DLL` | TOOLHELP | Task, module, heap and global walkers; notifications | P1 |
 | `VER.DLL` | VER | Version resources, `VerInstallFile` | P1 |
-| `LZEXPAND.DLL` | LZEXPAND | LZ decompression (`COMPRESS.EXE` format) | P1 |
+| `LZEXPAND.DLL` | LZEXPAND | LZ decompression (`COMPRESS.EXE` format; w16: `shell/lzexpand/`, §19) | P1 |
 | `DDEML.DLL` | DDEML | DDE Management Library (w16: `shell/ddeml/`, §18) | P1 |
 | `OLECLI.DLL` | OLECLI | OLE 1.0 client | P1 |
 | `OLESVR.DLL` | OLESVR | OLE 1.0 server | P1 |
@@ -2087,3 +2087,207 @@ listed before and after each call, window handles shown):
   handles. w16 registers its monitors' class there.
 With these, instance-specific names ("Svc:(143c)") and string handle
 values are compared unmasked.
+
+## 19. LZEXPAND
+
+LZEXPAND.DLL reads files compressed with COMPRESS.EXE, the `*.??_` files
+of setup disks (Programmer's Reference Vol. 1 ch. 9, Vol. 2: CopyLZFile,
+GetExpandedName, LZClose, LZCopy, LZDone, LZInit, LZOpenFile, LZRead,
+LZSeek, LZStart). Windows 3.1's (module LZEXPAND, "Windows file expansion
+library", flags 8301h, flags2 08h, expected version 3.00, file version
+3.10.0.103) exports those ten as ordinals 1-10, WEP 11 and
+___EXPORTEDSTUB 12 (both resident); its entries 13-30 are unnamed and not
+exported (its own far calls). It imports only KERNEL and USER's
+IsCharUpper, IsCharLower and lstrcmp. In the 3.1 install SETUP.EXE,
+DRIVERS.CPL, MAIN.CPL and VER.DLL import it (`tools/neimports.py
+--importers LZEXPAND`). w16's is in `shell/lzexpand/`, installed as
+`SYSTEM\LZEXPAND.DLL`.
+
+The file format is the publicly documented "SZDD" one: a 14-byte header
+(`SZDD` 88h F0h 27h 33h, the algorithm byte `A`, the last character of
+the name for COMPRESS's /r or 0, the expanded size), then LZSS: a flag
+byte, eight items low bit first, a set bit a literal byte, a clear one a
+2-byte match (a 12-bit position in a 4096-byte ring that starts filled
+with spaces and is written from 4096 - 16, a 4-bit length - 3). COMPRESS
+writes matches of at most 16 bytes (seen in its output of the probe's
+files: the 3.0 SDK's COMPRESS.EXE 1.00, run once by hand in DOSBox; the
+tests use no Microsoft file), although the format allows 18.
+
+### 19.1 Observation tools
+
+- `LZP.EXE` (`tests/lzexpand/lzp.c`, `make lzprobes`), run as the shell
+  (`tests/lzexpand/lzrun.sh OUTDIR ms|w16 [/S|/3]`), calls every function
+  and logs each result, the bytes read (count, a checksum, the first and
+  last bytes), the position LZSeek reports and the underlying DOS file's
+  position, OFSTRUCTs, and the next DOS handle a task would get, to
+  `C:\LZP.LOG`, in sections (`== NAME`). A second copy started with
+  WinExec is the second task. `LZRUN_ARG` runs the explorations instead
+  (`x`, `y`, `w`, `z`, `q`, `k`, `v`; lzp.c's header).
+- Its files are made at test time by `tests/lzexpand/mkinputs.py` with
+  w16's own compressor `tools/szddenc.py` (greedy hash-chain matching,
+  16 bytes at most unless asked for 18): text, binary data past 64K,
+  empty and plain files, a wrong algorithm byte, headers cut short,
+  streams cut short between items and inside a match, header sizes
+  smaller and larger than the data, MS-DOS 5's older "SZ" variant, a
+  match into the primed spaces, names for GetExpandedName's rules, 18
+  files for the handle limit, and 18-byte-match variants.
+- Two runs of Microsoft's library give identical logs: nothing is masked
+  (`tests/lzexpand/lzcmp.py` compares section by section).
+
+### 19.2 Windows 3.1's LZEXPAND as observed
+
+Handles:
+- A compressed file gets the handle 400h + slot, 16 slots (the 17th
+  LZOpenFile or LZInit: LZERROR_GLOBALLOC, -5; LZOpenFile closes the file
+  then, LZInit does not). Slots are taken in turn after the one taken
+  last, not the lowest free one (1024, 1025, ... 1039, then 1024 again if
+  free). Plain files get their DOS handle back. The table is the
+  library's: another task can read a handle a task opened (the same
+  decoder), and a task that ends leaves its handles open (no clean-up).
+- Values 400h-40Fh are LZ handles for every function; any other value is
+  a DOS handle passed to _lread/_llseek/_lclose (LZRead of a negative
+  count: LZERROR_BADVALUE first). An LZ handle not open: LZRead and LZSeek
+  LZERROR_GLOBLOCK (-6), LZCopy LZERROR_BADINHANDLE, LZClose nothing.
+
+LZInit seeks the file to 0 and reads 14 bytes: not the magic (or fewer
+bytes): back to 0, the DOS handle is returned; an algorithm other than
+`A`: LZERROR_UNKNOWNALG (-8), the file left at 14 and open; else an LZ
+handle, the file at 14. A bad DOS handle: LZERROR_BADINHANDLE. The older
+"SZ" variant is a plain file. LZClose of an LZ handle closes its file.
+
+LZOpenFile calls OpenFile; if that fails it tries again with the name
+COMPRESS gives: the last character of a 3-character extension made `_`,
+`_` added to a shorter one, `._` added without one ("X.TXT" X.TX_, "X.A"
+X.A_, "X" X._), the OFSTRUCT the second try's. Only OF_READ, alone or
+with OF_SHARE_ flags, goes on to LZInit (OF_READWRITE, OF_WRITE,
+OF_EXIST, OF_PARSE, OF_REOPEN, OF_CREATE, OF_DELETE: OpenFile's result as
+it is); if LZInit fails its error is returned and the file closed.
+
+GetExpandedName opens the name with OpenFile (the search path applies):
+not found, LZERROR_BADINHANDLE (-1) and the buffer untouched; else the
+name as given is copied and, for a compressed file (magic and a full
+header; the algorithm not checked) whose name ends with `_` in an
+extension (not "UNDER_", nor with only a dot in a directory), the `_`
+becomes the header's character: lower case if the first letter of the
+whole string is lower case ("c:\lz\TEXT.TX_" gives `t`), else upper
+case, ASCII letters only (E9h stays E9h); a character 0 ends the name
+there and drops a dot before it ("NONE0._" NONE0). It returns 1.
+
+LZRead (LZSeek only moves the position: origins 0, 1, 2 from the start,
+the position, the header's size; a result below 0 or another origin
+LZERROR_BADVALUE, -7; past the end allowed):
+- cb < 0: LZERROR_BADVALUE; at or past the header's size: 0.
+- Expanding is done in passes into the ring, each copied out to the
+  caller when it ends. A match is begun while fewer than 1009 bytes of
+  the pass are out, a literal while fewer than 1010 (2 fewer while
+  skipping to a position after a seek). Expanding goes on to one item
+  past the end of the request and stops at the header's size: a header
+  saying less than the data gives everything up to the end of the item
+  that crosses it (a size of 100 gives 114 bytes). A file whose data ends
+  within its first 1024 bytes ends its first pass after the first item.
+- The file is read 1024 bytes at a time from wherever its pointer is (a
+  caller's _llseek between reads changes what is expanded); it is
+  positioned only when expanding starts from the beginning.
+- A read before the start of the last pass expands again from the
+  beginning; one within it copies from the ring.
+- A pass longer than 1024 bytes fails: LZERROR_READ (-3). Only matches of
+  17 or 18 bytes, which COMPRESS does not write, make one, so 3.1 reads
+  COMPRESS's files of any size in one read, but streams of other
+  compressors with long matches fail on some reads from 2048 bytes up
+  (and on smaller ones started late in a pass). The bytes of earlier
+  passes are delivered, the position is the failing pass's start, the
+  next read expands from the beginning; 3.1 still expands to the end of
+  the request first (its file position shows it).
+- Data that ends before the header's size: LZERROR_READ, the position
+  the failing pass's start (looking ahead past the data does not fail).
+  After data that ends between items, reads from there on fail again;
+  after data that ends inside a match, a read at that place.
+- LZRead(h, buf, 0) as the first read of a new handle leaves 3.1's handle
+  expanding wrongly from then on: literals come out, matches give zeros,
+  in some sequences raw compressed bytes (`== zero`: its uninitialised
+  buffers, not reproduced). A 0-byte read later returns 0 and changes
+  nothing.
+
+LZCopy and CopyLZFile (the same function; LZStart returns 1 and keeps the
+buffers until LZDone): from an LZ handle the file is expanded from its
+start, whatever the handle's position, which it leaves alone; a DOS
+handle is checked like LZInit (seek 0, header) and a plain file copied
+whole from its start. It reads 32K at a time and writes 32K at a time,
+from the destination's start (what was there is overwritten, not cut).
+Results: the expanded size; a bad source LZERROR_BADINHANDLE; a write
+that fails LZERROR_BADOUTHANDLE (-2); a wrong algorithm -8; data ending
+between items: what was expanded is written, then LZERROR_READ; data
+ending inside a match: nothing more is written and the destination's
+pointer goes back to 0, LZERROR_READ; a header size below the data:
+everything to the end of the crossing item written, LZERROR_READ.
+
+Standard and 386 Enhanced mode behave the same.
+
+### 19.3 w16's LZEXPAND.DLL
+
+`shell/lzexpand/`: `lzexp.c` (everything), `lzexpand.h` (the decoder's
+record and the observed constants), `entry.asm` (entry point, WEP,
+___EXPORTEDSTUB returning 0), `lzexpand.lnk` (the twelve ordinals, names
+and residency; 16-byte alignment as 3.1's), `lzexpand.rc` with
+`tools/mkver.py`'s version resource (3.1's numbers, w16's texts). Large
+model, SS != DS, every entry loads its DS. `tools/nemark.py` now also
+sets the module flags (8301h and flags2 08h, as 3.1's) besides the
+expected version. Each slot is a moveable GMEM_SHARE block (the
+library's: handles outlive tasks) holding the decoder: the position, the
+bytes expanded, the start of the last pass, the ring and a 1024-byte
+input buffer; it follows 19.2, including the passes and their limits, so
+that the same reads fail.
+
+OpenWatcom's resource compiler writes a 16-bit VERSIONINFO whose length
+words exceed its data (by 12 bytes in DDEML's and LZEXPAND's, from the
+strings' value lengths), and 3.1's VER.DLL then finds no version:
+GetFileVersionInfoSize returns 0 for w16's DDEML.DLL as well.
+LZEXPAND's version block is written by `tools/mkver.py` (the SDK's
+VS_VERSIONINFO layout) and included as a type-16 resource; the probe
+checks it through VER.DLL. DDEML and the other w16 modules with a
+VERSIONINFO still have the problem (not changed here).
+
+### 19.4 Tests and results
+
+- `tests/lzexpand/lzscen.sh [-m MODES] [-n] [SECTION...]`: the probe with
+  Microsoft's LZEXPAND and with w16's on the reference install, per mode
+  (/S and /3), the logs compared per section. `tests/lzexpand/lztree.sh
+  OUTDIR ms|w16 286|386`: the probe in w16's install tree alone under its
+  KRNL286 or KRNL386, with w16's LZEXPAND or Microsoft's copied in (and
+  the reference VER.DLL for both: w16 builds none).
+- The probe's VER.DLL section is the real 3.1 caller: VerInstallFile
+  (Setup's way of installing a file: LZOpenFile, then LZCopy) of
+  compressed, renamed (/r), plain, cut, missing and short-header files,
+  forced and not, and GetFileVersionInfo/VerQueryValue of LZEXPAND.DLL.
+- Boot-test case **lzexpand**: parts s, 3, tree286 and tree386 compare
+  every section but eof, zero and long matches; part quirks compares
+  those three. Results (installation-05, 2026-11-16): s, 3, tree286 and
+  tree386 equal Microsoft's in every section (LZInit, LZOpenFile,
+  LZRead, LZSeek, LZClose, LZCopy, LZStart, GetExpandedName, limit,
+  tasks, seek back, VER.DLL); quirks differs as below.
+- Still different (the same lines on the reference install and in the
+  tree):
+  - **eof**: after a second failure on TRUNC.TX_ (data cut inside a
+    match) a read further on returns, on 3.1, the bytes from 6 places
+    earlier (stale ring state); w16 returns the right bytes.
+  - **zero**: a 0-byte LZRead as a new handle's first read: 3.1's garbage
+    is not reproduced; w16 reads correctly.
+  - **long matches**: of 28 bisections and 6 reads on 18-byte-match
+    streams, two differ: FAR18 after a 1-byte read (3.1's next pass
+    starts one byte earlier) and BIG18 after a 2000-byte read (3.1 ends a
+    pass before a match that crosses 4096 bytes of output, but ending one
+    there disagrees with CUT5000, a COMPRESS-style file, which w16
+    follows).
+
+### 19.5 UNVERIFIED, and not done
+
+- LZERROR_WRITE (-4) for a short write (a full disk) is assumed; only a
+  failing write (-2) was seen. LZERROR_GLOBLOCK from a failing GlobalLock
+  and LZERROR_GLOBALLOC from a failing GlobalAlloc were not provoked.
+- Whether 3.1 positions the file before the first read of a handle that
+  LZInit made (w16 does; LZInit leaves it at 14 in both).
+- ___EXPORTEDSTUB's purpose; nothing in the 3.1 or WfW 3.11 installs
+  imports it. WfW 3.11's LZEXPAND (67 entries, the same 12 exported
+  names) was not probed.
+- Not driven through their own interfaces: Setup's LZCopy/LZStart,
+  DRIVERS.CPL and MAIN.CPL's font installation (VER.DLL stands for them).

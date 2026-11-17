@@ -1,0 +1,5 @@
+# wlink directives for LZP.EXE (tests/lzexpand/lzp.c), the LZEXPAND probe
+@tests/apps/app.lnk
+option stack=16k
+library lzexpand.lib
+library ver.lib

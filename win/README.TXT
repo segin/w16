@@ -50,6 +50,10 @@ w16 repository's LICENSE):
                           programs through dynamic data exchange, for
                           programs that use DDEML instead of DDE
                           messages
+  SYSTEM\LZEXPAND.DLL     the file expansion library: lets programs and
+                          installers read and copy files compressed
+                          with COMPRESS (the *.??_ files on setup
+                          disks)
   SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
                           Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
