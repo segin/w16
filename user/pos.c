@@ -66,7 +66,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     PWND w = valid_wnd(h), parent;
     WINDOWPOS wp;
     RECT oldwin, oldcli;
-    BOOL wasvis, nowvis, changed, restored = FALSE, zmoved = FALSE;
+    BOOL wasvis, nowvis, changed, send_changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
     UINT asked = flags;
@@ -174,6 +174,36 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     nowvis = is_visible(w);
     changed = !EqualRect(&oldwin, &w->rcWindow) || wasvis != nowvis ||
               !(flags & SWP_NOZORDER) || (flags & SWP_FRAMECHANGED);
+    /* WM_WINDOWPOSCHANGED tells what this call did, decided now: the
+       messages sent below (WM_SIZE and WM_MOVE held back since
+       CreateWindow, WM_CHILDACTIVATE) can make the window move itself,
+       and that move has a WM_WINDOWPOSCHANGED of its own. w16 compared
+       the place at the end with the one before, so a window shown for
+       the first time that moved itself on its first WM_MOVE got a
+       second WM_MOVE from this call's message, and moved again:
+       QuickTime's movie window, shown by its player, went 32 pixels
+       further right than on 3.1 (docs/notes/quicktime-handover.md) */
+    wp.x = w->rcWindow.left - px;
+    wp.y = w->rcWindow.top - py;
+    wp.cx = w->rcWindow.right - w->rcWindow.left;
+    wp.cy = w->rcWindow.bottom - w->rcWindow.top;
+    wp.flags = flags & ~(SWP_NOMOVE | SWP_NOSIZE);     /* what did change, below */
+    send_changed = !EqualRect(&oldwin, &w->rcWindow) ||
+                   (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
+                   !(flags & SWP_NOZORDER);
+    if (send_changed) {
+        /* moved or sized: the window or its client area (US18: on 3.1 a
+           scroll bar a window's WM_SIZE takes away gives it a second
+           WM_SIZE with the larger client area; w16 sent none, and Program
+           Manager's group maximised from its icon kept its scroll bars) */
+        if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
+            oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
+            wp.flags |= SWP_NOMOVE;
+        if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy &&
+            oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
+            oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
+            wp.flags |= SWP_NOSIZE;
+    }
     refresh_dcs();
     /* (not for popup menus: a menu opened under the pointer from the
        keyboard keeps its first item selected) */
@@ -256,26 +286,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         icon_title_above(h);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    wp.x = w->rcWindow.left - px;
-    wp.y = w->rcWindow.top - py;
-    wp.cx = w->rcWindow.right - w->rcWindow.left;
-    wp.cy = w->rcWindow.bottom - w->rcWindow.top;
-    wp.flags = flags & ~(SWP_NOMOVE | SWP_NOSIZE);     /* what did change, below */
-    if (!EqualRect(&oldwin, &w->rcWindow) || (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
-        !(flags & SWP_NOZORDER)) {
-        /* moved or sized: the window or its client area (US18: on 3.1 a
-           scroll bar a window's WM_SIZE takes away gives it a second
-           WM_SIZE with the larger client area; w16 sent none, and Program
-           Manager's group maximised from its icon kept its scroll bars) */
-        if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
-            oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
-            wp.flags |= SWP_NOMOVE;
-        if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy &&
-            oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
-            oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
-            wp.flags |= SWP_NOSIZE;
+    if (send_changed)
         send_message(h, WM_WINDOWPOSCHANGED, 0, (LPARAM)(WINDOWPOS __far *)&wp);
-    }
     return TRUE;
 }
 
@@ -812,4 +824,113 @@ void WINAPI ShowOwnedPopups(HWND h, BOOL show)
     for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
         if (PW(t)->hwndOwner == h)
             ShowWindow(t, show ? SW_SHOWNA : SW_HIDE);
+}
+
+/* ---- BeginDeferWindowPos, DeferWindowPos, EndDeferWindowPos (3.1 SDK):
+   the positions are kept in a global block (the handle) and EndDefer-
+   WindowPos makes them with SetWindowPos, one window after another in
+   the order given. UNVERIFIED: 3.1 moves them all at once (one repaint),
+   what the block is (here a moveable global block: count, room, the
+   entries) and whether a second DeferWindowPos for the same window
+   replaces the first (here it does, as later Windows documents). A bad
+   handle: 0 / FALSE. ---- */
+typedef struct DWPENT { HWND h, after; int x, y, cx, cy; UINT flags; } DWPENT;
+typedef struct DWPHDR { WORD magic, count, room; } DWPHDR;
+#define DWP_MAGIC 0x5744                /* "DW" */
+
+static DWPHDR __far *dwp_lock(HDWP d)
+{
+    DWPHDR __far *p;
+    if (!d)
+        return 0;
+    p = (DWPHDR __far *)GlobalLock((HGLOBAL)d);
+    if (p && (GlobalSize((HGLOBAL)d) < sizeof(DWPHDR) || p->magic != DWP_MAGIC)) {
+        GlobalUnlock((HGLOBAL)d);
+        return 0;
+    }
+    return p;
+}
+
+HDWP WINAPI BeginDeferWindowPos(int n)
+{
+    HGLOBAL g;
+    DWPHDR __far *p;
+    if (n < 0)
+        return 0;
+    if (n < 1)
+        n = 1;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT,
+                    sizeof(DWPHDR) + (DWORD)n * sizeof(DWPENT));
+    if (!g)
+        return 0;
+    p = (DWPHDR __far *)GlobalLock(g);
+    p->magic = DWP_MAGIC;
+    p->count = 0;
+    p->room = n;
+    GlobalUnlock(g);
+    return (HDWP)g;
+}
+
+HDWP WINAPI DeferWindowPos(HDWP d, HWND h, HWND after, int x, int y, int cx, int cy, UINT flags)
+{
+    DWPHDR __far *p = dwp_lock(d);
+    DWPENT __far *e;
+    WORD i;
+    if (!p)
+        return 0;
+    if (!valid_wnd(h)) {
+        GlobalUnlock((HGLOBAL)d);
+        return 0;
+    }
+    e = (DWPENT __far *)(p + 1);
+    for (i = 0; i < p->count && e[i].h != h; i++)
+        ;
+    if (i == p->count) {
+        if (p->count == p->room) {
+            HGLOBAL g;
+            WORD room = p->room * 2;
+            GlobalUnlock((HGLOBAL)d);
+            g = GlobalReAlloc((HGLOBAL)d, sizeof(DWPHDR) + (DWORD)room * sizeof(DWPENT),
+                              GMEM_MOVEABLE | GMEM_ZEROINIT);
+            if (!g) {
+                /* the whole sequence fails (3.1 SDK) */
+                GlobalFree((HGLOBAL)d);
+                return 0;
+            }
+            d = (HDWP)g;
+            p = (DWPHDR __far *)GlobalLock(g);
+            p->room = room;
+            e = (DWPENT __far *)(p + 1);
+        }
+        p->count++;
+    }
+    e[i].h = h;
+    e[i].after = after;
+    e[i].x = x;
+    e[i].y = y;
+    e[i].cx = cx;
+    e[i].cy = cy;
+    e[i].flags = flags;
+    GlobalUnlock((HGLOBAL)d);
+    return d;
+}
+
+BOOL WINAPI EndDeferWindowPos(HDWP d)
+{
+    DWPHDR __far *p = dwp_lock(d);
+    WORD i, n;
+    if (!p)
+        return FALSE;
+    n = p->count;
+    GlobalUnlock((HGLOBAL)d);
+    for (i = 0; i < n; i++) {
+        DWPENT e;
+        p = (DWPHDR __far *)GlobalLock((HGLOBAL)d);
+        e = ((DWPENT __far *)(p + 1))[i];
+        GlobalUnlock((HGLOBAL)d);
+        if (valid_wnd(e.h))
+            SetWindowPos(e.h, e.after, e.x, e.y, e.cx, e.cy, e.flags);
+    }
+    GlobalFree((HGLOBAL)d);
+    return TRUE;
 }
