@@ -27,6 +27,7 @@ static char line[700];
 static BYTE __far *buf;                 /* 8192 bytes */
 static BYTE __far *buf2;                /* 8192 bytes */
 static int hasd;                        /* D: exists */
+static char windir[80];                 /* the Windows directory */
 
 /* no C runtime (-zl) */
 static void fill(void FAR *d, int c, unsigned n)
@@ -95,6 +96,27 @@ static char *shows(const BYTE FAR *p, int n)
     }
     s[k] = 0;
     return s;
+}
+
+/* a path with C:\WINDOWS (or c:\windows) at its start as one in the
+   Windows directory this runs in (C:\W16 in w16's install tree) */
+static const char *wp(const char *p)
+{
+    static char bufs[6][144];
+    static int k;
+    static const char pre[] = "c:\\windows";
+    char *b;
+    int i;
+    for (i = 0; i < 10 && (p[i] | 0x20) == (pre[i] | 0x20); i++)
+        ;
+    if (i < 10 || (p[10] && p[10] != '\\'))
+        return p;
+    b = bufs[k++ % 6];
+    lstrcpy(b, windir);
+    if (p[0] == 'c')
+        AnsiLower(b);
+    lstrcat(b, p + 10);
+    return b;
 }
 
 /* ---- MS-DOS calls (INT 21h; DOSX and WIN386 pass them on) ---- */
@@ -458,6 +480,7 @@ static void size1(const char *p, const char *shown)
 {
     DWORD h = 0xDEADBEEFL, n;
     BOOL r;
+    p = wp(p);
     n = GetFileVersionInfoSize(p, &h);
     lg(" %s: size %ld handle %08lX", (LPSTR)shown, n, h);
     if (n) {
@@ -733,6 +756,9 @@ static void ff(UINT fl, const char *file, const char *win, const char *app, UINT
 {
     char cur[300], dst[300];
     UINT cl = curlen, dl = dstlen, r;
+    file = wp(file);
+    win = wp(win);
+    app = wp(app);
     fill(cur, 0x55, sizeof cur);
     fill(dst, 0x55, sizeof dst);
     r = VerFindFile(fl, file, win, app, cur, &cl, dst, &dl);
@@ -778,8 +804,8 @@ static void t_find(void)
         ff(0, "NOWHERE.DLL", "C:\\WINDOWS", "C:\\VT\\APP", lens[j][0], lens[j][1]);
     }
     /* files in use: loaded modules */
-    h1 = LoadLibrary("C:\\WINDOWS\\SYSTEM\\VUSE.DLL");
-    h2 = LoadLibrary("C:\\WINDOWS\\SYSTEM\\VUSEX.DLL");
+    h1 = LoadLibrary(wp("C:\\WINDOWS\\SYSTEM\\VUSE.DLL"));
+    h2 = LoadLibrary(wp("C:\\WINDOWS\\SYSTEM\\VUSEX.DLL"));
     h3 = LoadLibrary("C:\\VT\\OTHER\\VUSE2.DLL");
     lg(" loaded VUSE %s, VUSEX (module XUSE) %s, OTHER\\VUSE2 %s", (LPSTR)(h1 >= 32 ? "ok" : "no"),
        (LPSTR)(h2 >= 32 ? "ok" : "no"), (LPSTR)(h3 >= 32 ? "ok" : "no"));
@@ -797,7 +823,7 @@ static void t_find(void)
         FreeLibrary(h3);
     ff(0, "VUSE.DLL", "C:\\WINDOWS", "C:\\VT\\APP", 300, 300);
     {
-        HFILE f = _lopen("C:\\WINDOWS\\SYSTEM\\VUSE.DLL", OF_READ);
+        HFILE f = _lopen(wp("C:\\WINDOWS\\SYSTEM\\VUSE.DLL"), OF_READ);
         lg(" VUSE.DLL open with _lopen");
         ff(0, "VUSE.DLL", "C:\\WINDOWS", "C:\\VT\\APP", 300, 300);
         _lclose(f);
@@ -828,7 +854,7 @@ static void t_find(void)
     ff(0, "VFSYS.DLL", "C:\\WINDOWS", "\\", 300, 300);
     ff(0, "VFSYS.DLL", "C:\\WINDOWS", "\\VT\\APP", 300, 300);
     ff(VFFF_ISSHAREDFILE, "VFAPP.DLL", "C:\\WINDOWS", "APP", 300, 300);
-    dos_chdir("C:\\WINDOWS");
+    dos_chdir(windir);
     if (hasd) {
         ff(0, "V300.DLL", "C:\\WINDOWS", "D:\\VT\\SRC", 300, 300);
         ff(0, "VFSYS.DLL", "C:\\WINDOWS", "D:\\VT\\DST", 300, 300);
@@ -841,13 +867,13 @@ static void t_kernel(void)
     static const char *const n[] = { "C:\\WINDOWS\\SYSTEM\\VUSEX.DLL", "VUSEX.DLL", "VUSEX",
                                      "XUSE", "XUSE.DLL", "C:\\WINDOWS\\SYSTEM\\XUSE.DLL",
                                      "C:\\VT\\VUSEX.DLL", "c:\\windows\\system\\vusex.dll", 0 };
-    HINSTANCE h = LoadLibrary("C:\\WINDOWS\\SYSTEM\\VUSEX.DLL");
+    HINSTANCE h = LoadLibrary(wp("C:\\WINDOWS\\SYSTEM\\VUSEX.DLL"));
     HMODULE x = GetModuleHandle("XUSE");
     int i;
     lg("== kernel");
     for (i = 0; n[i]; i++) {
-        HMODULE m = GetModuleHandle(n[i]);
-        lg(" GetModuleHandle(%s) %s", (LPSTR)n[i], (LPSTR)(!m ? "0" : m == x ? "XUSE" : "other"));
+        HMODULE m = GetModuleHandle(wp(n[i]));
+        lg(" GetModuleHandle(%s) %s", (LPSTR)wp(n[i]), (LPSTR)(!m ? "0" : m == x ? "XUSE" : "other"));
     }
     FreeLibrary(h);
 }
@@ -1112,7 +1138,7 @@ static void t_inst(void)
     dos_chdir("C:\\VT");
     tmp[0] = 0;
     vi(0, "V300.DLL", "T.DLL", "SRC", "DST", "DST", tmp, 144);
-    dos_chdir("C:\\WINDOWS");
+    dos_chdir(windir);
     clean();
     place("V310.DLL", "C:\\VT\\DST", "T.DLL");
     tmp[0] = 0;
@@ -1183,7 +1209,7 @@ static void t_inst(void)
     dos_chdir("C:\\VT");
     tmp[0] = 0;
     vi(0, "V400.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "DST", tmp, 144);
-    dos_chdir("C:\\WINDOWS");
+    dos_chdir(windir);
     /* forced with a temporary name that is not there, or another name */
     clean();
     place("V310.DLL", "C:\\VT\\DST", "T.DLL");
@@ -1332,6 +1358,7 @@ int __cdecl __far tmain(void)
     f = _lcreat(logname, 0);
     _lclose(f);
     hasd = dos_getattr("D:\\VT\\DST\\KEEP") >= 0;
+    GetWindowsDirectory(windir, sizeof windir);
     lg("VRP start; D: %s", (LPSTR)(hasd ? "yes" : "no"));
     fixdates("C:\\VT\\SRC");
     fixdates("C:\\VT\\POOL");

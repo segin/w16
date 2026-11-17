@@ -56,6 +56,10 @@
 # DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
 # DROPIN_CONF: more dosbox.conf lines (sections and settings), e.g. a
 # [serial] section (tests/commprobe.sh)
+# DROPIN_TREEDIR=NAME: with -T, the tree goes to C:\NAME instead of C:\W16
+# (tests/ver/vtree.sh: WINDOWS, so that paths compare with 3.1's)
+# DROPIN_DDRIVE=DIR: a copy of DIR mounted as D: as well (after the
+# clock is set; tests/ver/vtree.sh)
 # DROPIN_REF=DIR: another C: drive to copy instead of the reference
 # install's (e.g. tests/sb16setup.sh's, the reference with Sound Blaster
 # 16 drivers installed)
@@ -161,9 +165,9 @@ fi
 # the Windows directory on C: (WINDOWS, or W16 with -T)
 wdir=WINDOWS
 if [ -n "$tree" ]; then
-    wdir=W16
+    wdir=${DROPIN_TREEDIR:-W16}
     mkdir -p "$work/c"
-    cp -r "$tree" "$work/c/W16"
+    cp -r "$tree" "$work/c/$wdir"
     [ -n "$kset$kset386" ] || useref=1        # the tree's own KERNEL
 else
     cp -r "$ref" "$work/c"
@@ -253,6 +257,7 @@ fi
 # (CLOCKSET.COM, from a drive D: that is gone again before WIN starts):
 # screens never show the host's date or time (a reference cached on one
 # day and a w16 run on the next differed in Clock's minimised title)
+[ -z "${DROPIN_DDRIVE:-}" ] || { rm -rf "$work/d"; cp -r "$DROPIN_DDRIVE" "$work/d"; }
 mkdir -p "$work/clock"
 cp "$root/build/dos/CLOCKSET.COM" "$work/clock/" || { echo "missing $root/build/dos/CLOCKSET.COM (make dos)" >&2; exit 2; }
 common="[dosbox]
@@ -269,6 +274,7 @@ mount d \"$work/clock\"
 D:\\CLOCKSET
 mount -u d
 mount c \"$work/c\"
+${DROPIN_DDRIVE:+mount d \"$work/d\"}
 c:
 cd \\$wdir
 $cmd$redir
