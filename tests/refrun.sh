@@ -95,8 +95,8 @@ nosound=true
 [speaker]
 pcspeaker=false
 [autoexec]
-mount c "$work/c"
-${REFRUN_DDRIVE:+mount d $work/d}
+mount c "$work/c"${REFRUN_DDRIVE:+
+mount d $work/d}
 c:
 ${REFRUN_KRNL286:+COPY C:\\WINDOWS\\SYSTEM\\KRNL286.EXE C:\\WINDOWS\\SYSTEM\\KRNL386.EXE > NUL}
 ${REFRUN_PRE:-}

@@ -273,8 +273,8 @@ $snd
 mount d \"$work/clock\"
 D:\\CLOCKSET
 mount -u d
-mount c \"$work/c\"
-${DROPIN_DDRIVE:+mount d \"$work/d\"}
+mount c \"$work/c\"${DROPIN_DDRIVE:+
+mount d \"$work/d\"}
 c:
 cd \\$wdir
 $cmd$redir
