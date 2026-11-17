@@ -774,7 +774,8 @@ static void t_find(void)
                                          "VFPATH.DLL", "VFCWD.DLL", "VFEXE.DLL", "VFBOTH.DLL",
                                          "VFAPPW.DLL", "vfsys.dll", "VER.DLL", 0 };
     static const char *const apps[] = { "C:\\VT\\APP", "C:\\VT\\APP\\", "c:\\vt\\app",
-                                        "C:\\WINDOWS\\SYSTEM", "C:\\WINDOWS", "c:\\windows\\system\\",
+                                        "C:\\WINDOWS\\SYSTEM", "C:\\WINDOWS",
+                                        "c:\\windows\\system\\",
                                         "", "C:\\", "C:\\VT\\NOTTHERE", 0 };
     static const UINT lens[][2] = { { 0, 0 }, { 1, 1 }, { 5, 300 }, { 300, 5 },
                                     { 18, 18 }, { 19, 19 }, { 20, 20 }, { 11, 11 }, { 12, 12 } };
@@ -873,7 +874,8 @@ static void t_kernel(void)
     lg("== kernel");
     for (i = 0; n[i]; i++) {
         HMODULE m = GetModuleHandle(wp(n[i]));
-        lg(" GetModuleHandle(%s) %s", (LPSTR)wp(n[i]), (LPSTR)(!m ? "0" : m == x ? "XUSE" : "other"));
+        lg(" GetModuleHandle(%s) %s", (LPSTR)wp(n[i]),
+           (LPSTR)(!m ? "0" : m == x ? "XUSE" : "other"));
     }
     FreeLibrary(h);
 }

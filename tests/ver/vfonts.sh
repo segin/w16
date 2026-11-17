@@ -61,6 +61,7 @@ c=$out/work/c
         else echo "${f#$c/}: not there"; fi
     done
     ls "$c"/WINDOWS/SYSTEM | grep -i '^temp\.' || true
-    tr -d '\r' < "$c/WINDOWS/WIN.INI" | sed -n '/^\[fonts\]/,/^\[/p' | grep -i 'w16' || echo "WIN.INI: no w16 font"
+    tr -d '\r' < "$c/WINDOWS/WIN.INI" | sed -n '/^\[fonts\]/,/^\[/p' | grep -i 'w16' ||
+        echo "WIN.INI: no w16 font"
 } > "$out/fonts.txt" 2>&1
 cat "$out/fonts.txt"

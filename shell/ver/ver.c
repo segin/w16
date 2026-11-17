@@ -460,6 +460,8 @@ UINT VAPI VerFindFile(UINT flags, LPCSTR lpszFilename, LPCSTR lpszWinDir, LPCSTR
     BOOL shared = flags & VFFF_ISSHAREDFILE, found;
     UINT r = 0, need, n;
     (void)lpszWinDir;
+    if (!lpszAppDir)
+        lpszAppDir = "";
     GetWindowsDirectory(win, sizeof win);
     GetSystemDirectory(sys, sizeof sys);
     full[0] = 0;

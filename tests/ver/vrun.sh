@@ -30,7 +30,8 @@ if [ -n "${VRUN_ARG:-}" ]; then
     printf '%s' "$VRUN_ARG" > "$out/VRP.ARG"
     files="$files $out/VRP.ARG"
 fi
-REFRUN_X=${VRUN_X:-} REFRUN_FILES="$files" REFRUN_OUT=$out REFRUN_GET="VRP.LOG" REFRUN_DDRIVE=$out/in/d \
+REFRUN_X=${VRUN_X:-} REFRUN_FILES="$files" REFRUN_OUT=$out REFRUN_GET="VRP.LOG" \
+    REFRUN_DDRIVE=$out/in/d \
     REFRUN_PRE='SET PATH=C:\VT\PATH;Z:\' \
     REFRUN_TIMEOUT=${VRUN_TIMEOUT:-300} "$root/tests/refrun.sh" "$dos/VRP.EXE" "$mode" \
     > "$out/refrun.txt" 2>&1 || true
