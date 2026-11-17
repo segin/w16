@@ -78,6 +78,20 @@ cases ("Croato-Serbian (latin)", "Serbo-Croatian (cyrillic)").
   callers; WfW 3.11's VER.DLL and its WINFILE Properties (VerQueryValue,
   VerLanguageName).
 
-## Full run
+## Full run (installation-05, 2026-11-16, 1c13991)
 
-(see the end of this note once the full run is done)
+make test: pass. Boot test: 116 ok, 4 FAIL; ver passes (every part).
+- lzexpand: part quirks only, as before (lzexpand-handover.md).
+- ddeml: part conn (w16-ms: conversation handles and TERMINATE order);
+  fails the same on master 7efdc85 (run w16-ver-base), not this work.
+- taskman: part tree, 21-dosesc.png; passed on a rerun (timing).
+- soundtime: SN1 segment 44 11.2 ms long against a 9.27 limit, failing
+  every time in the run directory w16-ver and passing every time in
+  w16-ver-base (master) and w16-ver-tst (this branch, ea1cd74): the
+  result depends on the run directory's path (DOSBox-X's emulated timing
+  is otherwise deterministic here), not on the code. Worth a look by
+  whoever owns tests/soundprobe.sh.
+After the merge of master (README.TXT moved to assets/), README.TXT
+lists VER.DLL among w16's files and no longer among those to copy from
+Windows 3.1; dropin.sh and refrun.sh no longer leave an empty autoexec
+line without a D: drive (ea1cd74); ver@tree286 and ver@x rerun: ok.
