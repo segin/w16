@@ -181,7 +181,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `SHELL.DLL` | SHELL | Drag-drop, `ShellExecute`, registration database (`Reg*`), `ExtractIcon`. w16: `shell/shelldll/` (§13) | P0 |
 | `WIN87EM.DLL` | WIN87EM | x87 emulator / FPU support. Most C runtimes import it. w16: `win87em/` (§9.2, floating-point findings) | P0 |
 | `TOOLHELP.DLL` | TOOLHELP | Task, module, heap and global walkers; notifications | P1 |
-| `VER.DLL` | VER | Version resources, `VerInstallFile` | P1 |
+| `VER.DLL` | VER | Version resources, `VerInstallFile` (w16: `shell/ver/`, §20) | P1 |
 | `LZEXPAND.DLL` | LZEXPAND | LZ decompression (`COMPRESS.EXE` format; w16: `shell/lzexpand/`, §19) | P1 |
 | `DDEML.DLL` | DDEML | DDE Management Library (w16: `shell/ddeml/`, §18) | P1 |
 | `OLECLI.DLL` | OLECLI | OLE 1.0 client | P1 |
@@ -2244,8 +2244,8 @@ strings' value lengths), and 3.1's VER.DLL then finds no version:
 GetFileVersionInfoSize returns 0 for w16's DDEML.DLL as well.
 LZEXPAND's version block is written by `tools/mkver.py` (the SDK's
 VS_VERSIONINFO layout) and included as a type-16 resource; the probe
-checks it through VER.DLL. DDEML and the other w16 modules with a
-VERSIONINFO still have the problem (not changed here).
+checks it through VER.DLL. Every other w16 module with a version
+resource now has one from `tools/mkver.py` too (§20.5).
 
 ### 19.4 Tests and results
 
@@ -2254,7 +2254,7 @@ VERSIONINFO still have the problem (not changed here).
   (/S and /3), the logs compared per section. `tests/lzexpand/lztree.sh
   OUTDIR ms|w16 286|386`: the probe in w16's install tree alone under its
   KRNL286 or KRNL386, with w16's LZEXPAND or Microsoft's copied in (and
-  the reference VER.DLL for both: w16 builds none).
+  the tree's own VER.DLL, w16's, §20, for both).
 - The probe's VER.DLL section is the real 3.1 caller: VerInstallFile
   (Setup's way of installing a file: LZOpenFile, then LZCopy) of
   compressed, renamed (/r), plain, cut, missing and short-header files,
@@ -2291,3 +2291,245 @@ VERSIONINFO still have the problem (not changed here).
   names) was not probed.
 - Not driven through their own interfaces: Setup's LZCopy/LZStart,
   DRIVERS.CPL and MAIN.CPL's font installation (VER.DLL stands for them).
+
+## 20. VER
+
+VER.DLL reads version resources and installs files after comparing
+versions (Programmer's Reference Vol. 2: GetFileResource,
+GetFileResourceSize, GetFileVersionInfo, GetFileVersionInfoSize,
+VerFindFile, VerInstallFile, VerLanguageName, VerQueryValue; Vol. 3:
+VS_FIXEDFILEINFO; Vol. 4: the VERSIONINFO resource; Vol. 1 ch. 9:
+installation). Windows 3.1's (module VER, "VER - A Version stamping
+library", flags 8301h, flags2 08h, expected version 3.00, file version
+3.10.0.103) exports WEP 1 (resident, in a fixed segment) and the eight
+functions as 2, 3 and 6-11 (4 and 5 do not exist); entries 12-20 are
+unnamed and not exported (`tools/neinfo.py`). It imports KERNEL,
+KEYBOARD's AnsiToOem and OemToAnsi, USER's LoadString and lstrcmpi, and
+LZEXPAND's LZCopy, LZOpenFile, LZSeek, LZRead and LZClose. In the 3.1
+install SETUP.EXE, DRIVERS.CPL and MAIN.CPL import it (WfW 3.11: also
+WINFILE, WINSETUP, WFWSETUP; `tools/neimports.py --importers VER`).
+w16's is in `shell/ver/`, installed as `SYSTEM\VER.DLL`.
+
+### 20.1 Observation tools
+
+- `VRP.EXE` (`tests/ver/vrp.c`, `make verprobes`), run as the shell
+  (`tests/ver/vrun.sh OUTDIR ms|w16 [/S|/3]`), calls every function and
+  logs the results, the buffers filled (with a fill pattern around them),
+  lengths, pointers as offsets into the block, and after each
+  VerInstallFile the destination and current directories (names,
+  attributes, contents), to `C:\VRP.LOG`, in sections (`== NAME`:
+  exports, resource, size, query, language, find, install, modules).
+  `C:\VRP.ARG` selects sections (`k`: KERNEL's GetModuleHandle with file
+  names, an exploration not compared).
+- Its files are made at test time by `tests/ver/mkinputs.py`: version
+  blocks by `tools/mkver.py` (now importable: `fixed()`, `versioninfo()`),
+  well formed and broken (OpenWatcom's lengths, root lengths from 0 to
+  past the resource, wrong key, signature, structure version, value
+  lengths, short keys, children cut short); NE modules by `tools/mkne.py`
+  (new: resource-only libraries, loadable like a .FON, with integer and
+  named types and names and table lengths that disagree with the data);
+  compressed copies by `tools/szddenc.py`; sources and destinations for
+  every VerInstallFile case; copies for VerFindFile in the application,
+  Windows, system, current, program and PATH directories; a D: drive
+  (`tests/refrun.sh`'s new `REFRUN_DDRIVE`).
+- `tests/ver/vscen.sh` runs both libraries per mode and
+  `tests/ver/vcmp.py` compares the logs per section. Two runs of
+  Microsoft's library give identical logs: nothing is masked.
+
+### 20.2 Windows 3.1's VER.DLL as observed
+
+Reading resources:
+- Files are opened with LZOpenFile and read with LZSeek and LZRead: a
+  compressed file is read as it expands, and a name that is not there is
+  tried with COMPRESS's name (`X.DLL` finds `X.DL_`). OpenFile's search
+  applies to names without a path.
+- The resource is looked for in the NE resource table: the file must
+  start with "MZ", its new header with "NE"; a resource table at the
+  resident-name table's offset means none. Only integer types and names
+  are found: a named type or name (also the exact upper-case name, or a
+  "#16" string) never is.
+- GetFileResourceSize: the table's length (length << shift), the file
+  offset to `*lpdwFileOffset`; 0, and the offset untouched, if not found.
+  GetFileResource with an offset reads dwResLen bytes from there whatever
+  the file is (a text file's bytes too), TRUE only if all were read; with
+  0 it looks the resource up and reads at most its length.
+- GetFileVersionInfoSize looks up type 16, name 1 only (a version
+  resource named 2 or "VS_VERSION_INFO" is not found; with names 1 and 2,
+  name 1 wherever it is). The handle is the resource's file offset, set as
+  soon as the resource is found, even when 0 is returned. It returns the
+  root's wLength when that is not 0, not more than the table's length, and
+  the dword at offset 20 is FEEF04BDh; nothing else is checked (not the
+  key, wValueLength or the structure version). OpenWatcom's blocks fail
+  there: their wLength exceeds the resource (by 12 bytes with eight
+  strings). GetFileVersionInfo is GetFileResource(16, 1): the handle is an
+  offset, read from as it is.
+
+VerQueryValue walks the block: the path's names between backslashes
+(empty ones skipped: "", "\" and "\\" are the root; a leading backslash
+is optional; "/" is an ordinary character) are compared with each child's
+key regardless of case; the children of a node start after its value on a
+4-byte boundary from the block's start (the same offsets at any address)
+and each must end within its parent, so a block whose lengths are too
+long loses its later children (OpenWatcom's: CompanyName is found, the
+other strings and VarFileInfo are not). A node of 4 bytes or less ends
+the search (a root length of 0 or 4: nothing, not even the root); the key
+is read no further than the parent's end (for the root, its own), so a
+root of length 5 or 8 has its value at 8. The value is after the key,
+wValueLength bytes; nothing is written when the path is not found.
+
+VerLanguageName: 45 identifiers have names (the SDK's list, with
+"Croato-Serbian (latin)" and "Serbo-Croatian (cyrillic)" in lower case),
+every other value 0-FFFFh gives "Unknown Language". The return value is
+the whole name's length; the buffer gets at most cbLang - 1 characters
+and a NUL, and with cbLang 0 the whole name. w16's table was written from
+the probe's log of all 65536 identifiers (`== language`), nothing else.
+
+VerFindFile:
+- The current copy is looked for in the application's directory, then
+  the Windows and system directories (for a shared file: Windows, system,
+  application), then with OpenFile's search (current directory, program's
+  directory, PATH). lpszWinDir is not used. The directory is the found
+  path's (OpenFile's, upper case) less the file name, the root keeping its
+  backslash; nothing found: "".
+- Recommended: the system directory for a shared file (VFFF_ISSHAREDFILE
+  is bit 0; other bits are ignored), else lpszAppDir as given with one
+  backslash at its end removed, its length counted with it ("C:\" gives
+  "C:", length 4).
+- VFF_CURNEDEST when the two strings differ regardless of case (also when
+  nothing was found and lpszAppDir is not empty); VFF_FILEINUSE when a
+  loaded module's file is the one found, whatever the module's name (a
+  module of that name from another directory does not count, an open file
+  neither).
+- A buffer too small is left alone and VFF_BUFFTOOSMALL set; the length
+  is always set to what is needed; when the destination does not fit,
+  VFF_CURNEDEST is left out.
+
+VerInstallFile:
+- Forced, with a name in lpszTmpFile that exists in the destination
+  directory: that file is installed (the second call); the source is not
+  read and nothing is compared. A name that is not there, or not forced:
+  the name is ignored.
+- Else the source (lpszSrcDir and lpszSrcFilename joined; an empty
+  directory leaves the name to OpenFile's search) is opened with
+  LZOpenFile (failing, also for an unknown algorithm: VIF_CANNOTREADSRC)
+  and expanded with LZCopy into "temp.NNN" in the destination directory,
+  NNN the first unused of 000, 001, ... 009, 00A, in hexadecimal (a
+  missing directory: VIF_CANNOTCREATE; data that does not expand:
+  VIF_CANNOTREADSRC, the file deleted).
+- Unless forced, it is compared with the destination file (never with the
+  copy in lpszCurDir), and only when that has a version (a malformed one
+  counts as none): a source without one, or with a lower file version
+  (the product version and the OS are not compared): VIF_SRCOLD; another
+  file type or subtype: VIF_DIFFTYPE; a language and code page of the old
+  file's Translation that the new one's lacks (code page 0 in the old
+  one matching any), both having a Translation: VIF_DIFFLANG (code-page
+  differences too: VIF_DIFFCODEPG was never returned, also for 932, 1200,
+  437 or FFFFh); VIF_MISMATCH with any of these.
+- A read-only destination: VIF_WRITEPROT alone (forced too), the
+  temporary file deleted. A destination in use (a loaded module's file):
+  VIF_FILEINUSE alone, forced too. Differences: those bits, VIF_TEMPFILE
+  and the temporary name (its length with the NUL to *lpwTmpFileLen); a
+  buffer too small: VIF_BUFFTOOSMALL instead, the length needed, the file
+  deleted.
+- Else the destination is deleted (one that cannot be, such as a
+  directory of that name: VIF_CANNOTDELETE | VIF_ACCESSVIOLATION, the
+  temporary file deleted), the temporary file renamed to it, and the copy
+  in lpszCurDir deleted, unless VIFF_DONTDELETEOLD is given, lpszCurDir
+  is NULL or "", or it names the destination's directory however spelt
+  ("c:\vt\dst\", or relative); a copy there in use:
+  VIF_CANNOTDELETECUR (the new file stays installed). On success
+  lpszTmpFile and its length are not written.
+
+Standard and 386 Enhanced mode behave the same.
+
+### 20.3 w16's VER.DLL
+
+`shell/ver/`: `ver.c` (everything), `ver.h` (the SDK's constants),
+`entry.asm` (entry point, WEP, __AHINCR), `ver.lnk` (names, ordinals,
+WEP resident in a fixed segment, 16-byte alignment), `ver.rc` with
+`tools/mkver.py`'s version resource (3.1's numbers, w16's texts); the
+module flags and expected version are set by `tools/nemark.py`. Large
+model, SS != DS, every entry loads its DS. It follows 20.2 throughout.
+Where 3.1's way is not visible, w16's choices are: a file is in use when
+it is the file of one of the loaded modules, walked from KERNEL's along
+the module table's link at offset 6 (Pietrek ch. 3) and compared by full
+name (3.1's KERNEL finds modules by file name in GetModuleHandle, w16's
+does not, 20.6); names go through AnsiToOem before MS-DOS calls and
+OpenFile's results through OemToAnsi; a shared copy of Windows is taken
+to be one whose system directory is not inside its Windows directory
+(UNVERIFIED, 20.7).
+
+### 20.4 Tests and results
+
+- `tests/ver/vscen.sh [-m MODES] [-n] [SECTION...]`: both libraries on
+  the reference install, the logs compared per section;
+  `VRUN_X=1 tests/ver/vrun.sh` runs in DOSBox-X, which keeps read-only
+  attributes (DOSBox drops them); `tests/ver/vtree.sh OUTDIR ms|w16
+  286|386`: w16's install tree alone, booted at C:\WINDOWS
+  (`tests/dropin.sh`'s new `DROPIN_TREEDIR` and `DROPIN_DDRIVE`) so that
+  its log compares with 3.1's line for line; `tests/ver/vmods.sh`: w16's
+  modules (20.5); `tests/ver/vfonts.sh`: Control Panel's Fonts applet.
+- Boot-test case **ver**, parts s, 3, x, tree286, tree386, mods, fonts,
+  fontsnew. Results (installation-05, 2026-11-16): every part passes.
+  s and 3: all eight sections equal Microsoft's (about 50 files sized and
+  read, 2000 VerQueryValue calls, 140 VerFindFile, 190 VerInstallFile);
+  x: the install section equal in DOSBox-X; tree286 and tree386: w16's VER
+  on w16's KERNELs gives 3.1's own log. w16's VER with w16's LZEXPAND on
+  the reference install gives the same log too.
+- The real caller: MAIN.CPL (Fonts > Add, `tests/scripts/input/
+  cplfonts.txt`, real keys) adds w16's test font W16TEST.FON with
+  Microsoft's VER.DLL and with w16's: every screen 0 pixels, the same file
+  in the system directory, the same WIN.INI line. With a newer
+  W16TEST.FON (4.0) already in the system directory, both install the new
+  one as W16TEST0.FON beside it.
+- Microsoft's VER.DLL on w16's KERNEL is not used as a reference: there
+  its GetFileResource with offset 0 overwrote a local of its caller (the
+  probe's length variable; the probe's next fill then overran its buffer
+  and faulted under KRNL286), and it misses modules whose name differs
+  from their file's (20.6). w16's own VER does neither.
+
+### 20.5 w16's modules' version resources
+
+OpenWatcom's `wrc` writes a 16-bit VERSIONINFO whose strings' value
+lengths count one byte more than it writes ("text\0" in the script) and
+whose lengths are padded as if that byte were there, so the root claims
+more than the resource holds: 3.1's VER.DLL finds no version at all, and
+a block that fits still loses every string after the first (20.2). Every
+w16 module with a version resource now gets it from `tools/mkver.py`:
+CALC.EXE, DDEML.DLL, OLECLI.DLL (their `.rc` files include the block as
+type 16), the fonts (`tools/fontc.py`) and VGA.DRV (`tools/vgares.py`),
+as LZEXPAND.DLL and VER.DLL already did. Their numbers are now 3.1's
+(3.10.0.103; OLECLI's file version 1.10.0.0, as 3.1's), so that an
+installer's VerInstallFile compares them as it compares 3.1's files; the
+texts are w16's. `tests/ver/vmods.sh` reads every file of the install
+tree through both VER.DLLs: the ten with a version resource (CALC.EXE,
+DDEML.DLL, LZEXPAND.DLL, OLECLI.DLL, VER.DLL, VGA.DRV and the four fonts)
+give their fixed part, translation and eight strings, identically.
+
+### 20.6 Found on the way (KERNEL)
+
+- 3.1's GetModuleHandle with a name that has an extension matches the
+  file names of loaded modules, not their module names, and ignores the
+  directory: "VUSEX.DLL" and "C:\VT\VUSEX.DLL" find module XUSE loaded
+  from C:\WINDOWS\SYSTEM\VUSEX.DLL; "VUSEX" and "XUSE.DLL" find nothing
+  (probe section `k`). w16's KERNEL takes the base name as a module name
+  (kernel/module.c's UNVERIFIED note); not changed here.
+- Microsoft's VER.DLL's GetFileResource with offset 0, on w16's KRNL286
+  and KRNL386, overwrites a dword of its caller's stack (20.4); not
+  investigated.
+
+### 20.7 UNVERIFIED, and not done
+
+- A shared copy of Windows (Setup /N): how 3.1 tells, and that shared
+  files then go to the Windows directory (SDK), were not observed.
+- VIF_OUTOFSPACE (assumed for a failing write), VIF_OUTOFMEMORY,
+  VIF_CANNOTRENAME, VIF_SHARINGVIOLATION, VIF_CANNOTREADDST and
+  VIF_DIFFCODEPG were not provoked; a read-only copy in lpszCurDir
+  neither (DOSBox-X deletes read-only files).
+- Names with characters above 127 (ANSI/OEM conversion): DOSBox's host
+  file names make them unreliable.
+- Dates: whether the installed file keeps the source's date was not
+  compared (DOSBox did not keep the dates the probe set).
+- WfW 3.11's VER.DLL (3.11.0.300, the same exported names) was not
+  probed; 3.1's Setup and DRIVERS.CPL were not driven through their own
+  interfaces.

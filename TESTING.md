@@ -92,6 +92,10 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
 probe's log section by section; the boot-test case `lzexpand` runs it),
+`tests/ver/vscen.sh` (w16's VER.DLL against Microsoft's, the probe's log
+section by section; `tests/ver/vtree.sh`, `vmods.sh` and `vfonts.sh` for
+the install tree, w16's modules' versions and Control Panel's Fonts
+applet; the boot-test case `ver` runs them all),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
 Windows 3.1, booting again past the cases that end the task; makes the
