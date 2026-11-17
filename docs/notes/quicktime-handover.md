@@ -121,8 +121,11 @@ pixel-identical, the same length.
   checks: no hang (hangwatch=30), the movie plays, its last frame and its
   length as on 3.1 (see the script's header for what is compared).
   Needs $W16_QTDIR/QTINSTAL.EXE; skips without it. `-m FILE` leaves w16's
-  file out (bisection). On master 89db308 it fails: w16 never reaches
-  the Player's screen (hangwatch: no progress, USER and QTIM:7).
+  file out (bisection). On master 89db308 it fails ("the movie did not
+  play on w16": the screen froze on the collapsed "sample" window, and
+  hangwatch ended Windows); with the fixes it passes (the movie's area
+  134x176 at the same place, its last frame 0 pixels off, about 12 s on
+  both).
 - `tests/drv/drun.sh` (boot-test case `drivers`): DRP's log on
   Microsoft's USER and on w16's, plain, with DRT.DLL a boot driver, and
   under KRNL386: identical.
