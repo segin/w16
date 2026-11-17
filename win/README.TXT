@@ -54,6 +54,10 @@ w16 repository's LICENSE):
                           installers read and copy files compressed
                           with COMPRESS (the *.??_ files on setup
                           disks)
+  SYSTEM\VER.DLL          the version library: reads the version
+                          information of programs and libraries, and
+                          lets installers copy a file only when it is
+                          not older than the one already there
   SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
                           Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a

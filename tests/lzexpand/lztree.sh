@@ -3,9 +3,8 @@
 # under its KRNL286 or, with 386, its KRNL386): the probe LZP.EXE
 # (tests/lzexpand/lzp.c) as the shell, with w16's LZEXPAND.DLL or, with
 # LIB ms, Microsoft's (copied into the scratch tree for the test only).
-# The probe imports VER.DLL (its VerInstallFile section), which w16 does
-# not build: the reference install's is copied into the scratch tree for
-# both runs (test-only, ARCHITECTURE.md 3). OUTDIR/lzp.log is the log.
+# The probe imports VER.DLL (its VerInstallFile section): the tree's own,
+# w16's (ARCHITECTURE.md 20). OUTDIR/lzp.log is the log.
 #   usage: tests/lzexpand/lztree.sh OUTDIR [ms|w16] [286|386]
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -18,7 +17,6 @@ rm -rf "$out/work" "$out/in" "$out/SYS" "$out/lzp.log"
 python3 "$root/tests/lzexpand/mkinputs.py" "$out/in"
 : > "$out/KEEP"
 set -- -f "$dos/LZP.EXE=W16/LZP.EXE" -f "$dos/LZP.EXE=LZP.EXE" \
-    -f "$ref/SYSTEM/VER.DLL=W16/SYSTEM/VER.DLL" \
     -f "$out/SYS/SYSFILE.TX_=W16/SYSTEM/SYSFILE.TX_" -f "$out/KEEP=LZOUT/KEEP"
 for f in $(cd "$out/in" && find . -type f | sed 's|^\./||'); do
     set -- "$@" -f "$out/in/$f=LZ/$f"

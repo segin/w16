@@ -1,0 +1,47 @@
+; Control Panel's Fonts applet adds a font (WIN.INI run=CONTROL.EXE; boot-
+; test case ver, part fonts): MAIN.CPL, a 3.1 caller of VER.DLL
+; (GetFileResource, VerFindFile, VerInstallFile), copies C:\VTF\W16TEST.FON
+; into the system directory. The pointer goes to the screen's bottom right
+; corner first, so that it is an arrow in every screen. Keys: Fonts is
+; the second icon; Add...; the font list; OK copies the font.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-panel 30 2
+shot 01-panel
+key Home
+sleep 0.3
+key Right
+sleep 0.3
+key Return
+match 02-fonts 30 2
+shot 02-fonts
+key alt+a
+match 03-add 30 2
+shot 03-add
+key alt+d
+sleep 0.3
+key Up
+sleep 0.3
+key Return
+match 04-root 30 2
+shot 04-root
+key Down
+sleep 0.3
+key Return
+match 05-vtf 30 2
+shot 05-vtf
+key alt+f
+sleep 0.3
+key Home
+match 06-selected 30 2
+shot 06-selected
+key Return
+match 07-added 60 3
+shot 07-added

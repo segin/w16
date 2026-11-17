@@ -196,6 +196,22 @@
 #              under its KRNL286 / KRNL386 (tests/lzexpand/lztree.sh), the
 #              same sections; quirks: the sections eof, zero and long
 #              matches, where w16 still differs (ARCHITECTURE.md, LZEXPAND)
+#   ver        w16's VER.DLL (ARCHITECTURE.md 20): the probe VRP.EXE
+#              (tests/ver/vrp.c, every function on files made at test time)
+#              as the shell with Microsoft's VER.DLL and with w16's, the
+#              logs compared section by section (tests/ver/vscen.sh,
+#              vcmp.py); parts s and 3: the reference install in Standard
+#              and 386 Enhanced mode, every section; x: the install section
+#              in DOSBox-X (which keeps read-only attributes); tree286 and
+#              tree386: w16's install tree alone under its KRNL286 / KRNL386
+#              at C:\WINDOWS (tests/ver/vtree.sh) against 3.1's own log;
+#              mods: every file of the install tree read through both
+#              VER.DLLs, all ten version resources readable by 3.1's
+#              (tests/ver/vmods.sh); fonts and fontsnew: a real 3.1 caller,
+#              Control Panel's Fonts applet (MAIN.CPL) adding a font under
+#              real keys with each VER.DLL, with nothing installed and over
+#              a newer copy (tests/ver/vfonts.sh), every screen 0 pixels
+#              and the same files installed
 #   missingdll a program whose DLL is missing (OLECLI.DLL deleted; Cardfile
 #              imports it), parts pm, tk59, tree: Program Manager's Cardfile
 #              item and File > Run "nosuch" (tests/scripts/input/
@@ -633,7 +649,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2412,6 +2428,57 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   lzexpand"
         else echo "FAIL lzexpand: $r ($out)"; fails=$((fails + 1)); fi ;;
+    ver)
+        # w16's VER.DLL against Microsoft's (ARCHITECTURE.md 20); nothing
+        # masked: two runs of Microsoft's give identical logs
+        r=ok
+        d=$out/ver-${part:-s}
+        case ${part:-s} in
+        s|3)
+            "$root/tests/ver/vscen.sh" -m "/$(echo "${part:-s}" | tr s S)" -o "$d" > "$d.txt" 2>&1 || true
+            grep -q '^== .*: ok' "$d.txt" && ! grep -q 'FAIL' "$d.txt" ||
+                r="$part: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
+        x)
+            for l in ms w16; do
+                VRUN_X=1 VRUN_ARG=i "$root/tests/ver/vrun.sh" "$d/$l" "$l" > /dev/null 2>&1 || true
+                grep -q '^VRP end' "$d/$l/vrp.log" 2>/dev/null || { r="x: no complete log from $l ($d/$l)"; break; }
+            done
+            [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d/ms/vrp.log" "$d/w16/vrp.log" "$d/cmp" \
+                > "$d.txt" 2>&1 || r="x: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; } ;;
+        tree286|tree386)
+            k=${part#tree}
+            "$root/tests/ver/vrun.sh" "$d-ref" ms > /dev/null 2>&1 || true
+            "$root/tests/ver/vtree.sh" "$d-w16" w16 "$k" > "$d-w16.txt" 2>&1 || true
+            for l in ref w16; do
+                grep -q '^VRP end' "$d-$l/vrp.log" 2>/dev/null || { r="$part: no complete log ($d-$l)"; break; }
+            done
+            [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d-ref/vrp.log" "$d-w16/vrp.log" "$d-cmp" \
+                > "$d.txt" 2>&1 || r="$part: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; } ;;
+        mods)
+            "$root/tests/ver/vmods.sh" "$d" > "$d.txt" 2>&1 ||
+                r="mods: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d.txt)" ;;
+        fonts|fontsnew)
+            [ "$part" = fontsnew ] && export VFONTS_NEWER=1
+            "$root/tests/ver/vfonts.sh" "$d-ms" ms > /dev/null 2>&1 || true
+            "$root/tests/ver/vfonts.sh" "$d-w16" w16 -e "$d-ms" > /dev/null 2>&1 || true
+            unset VFONTS_NEWER
+            ls "$d-ms"/0*.png > /dev/null 2>&1 || r="$part: no screens from Microsoft's ($d-ms)"
+            for f in "$d-ms"/0*.png; do
+                [ "$r" = ok ] || break
+                sn=$(basename "$f")
+                [ -f "$d-w16/$sn" ] || { r="$part: no $sn ($d-w16)"; break; }
+                n=$(magick compare -metric AE "$d-w16/$sn" "$f" "$out/ver-$part-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || r="$part: $sn: $n pixels differ ($d-w16)"
+            done
+            [ "$r" = ok ] && ! cmp -s "$d-ms/fonts.txt" "$d-w16/fonts.txt" &&
+                r="$part: other files installed ($d-ms/fonts.txt, $d-w16/fonts.txt)"
+            [ "$r" = ok ] && ! grep -q '^WINDOWS/SYSTEM/W16TEST.*: the new one' "$d-ms/fonts.txt" &&
+                r="$part: Microsoft's run installed nothing ($d-ms/fonts.txt)" ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   ver"
+        else echo "FAIL ver: $r ($out)"; fails=$((fails + 1)); fi ;;
     treek386)
         # w16's install tree alone (dropin.sh -T, nothing of Microsoft's)
         # under its own KRNL386 (-3: what DOSX starts on a 386, and what
@@ -4115,6 +4182,7 @@ caseparts() {
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     ddeml) printf '%s@tree286 %s@tree386 ' "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
+    ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
@@ -4174,6 +4242,9 @@ partsummary() {
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
+    ver)
+        if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1), w16's modules' versions, Control Panel's Fonts applet"
+        else echo "FAIL ver: $pfirst ($out)"; fi ;;
     lzexpand)
         if [ $pbad = 0 ]; then echo "ok   lzexpand: LZEXPAND's probe log as with Microsoft's (Standard and 386 Enhanced mode, the tree under both kernels, VerInstallFile), and its quirk sections too"
         else echo "FAIL lzexpand: $pfirst ($out)"; fi ;;
