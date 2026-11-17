@@ -1618,7 +1618,9 @@ u16 KAPI GlobalAlloc(u16 flags, u32 size)                     /* KERNEL.15 */
        block's handle as its interrupt stack's SS (timeSetEvent), so with
        an even handle every multimedia timer callback faulted (QuickTime's
        movie player, docs/notes/quicktime-handover.md). */
-    if (!(flags & GMEM_MOVEABLE) && winboot_done && galloc_cs) {
+    /* (booting: Windows' boot until USER's FinalUserInit; a program run
+       by KERNEL alone, the probes of tests/run-tests.sh, is past it) */
+    if (!(flags & GMEM_MOVEABLE) && (winboot_done || !winboot_active) && galloc_cs) {
         module FAR *m = module_of(galloc_cs);
         if (m && m != module_first && !(m->flags & NEF_LIBRARY))
             flags |= GMEM_MOVEABLE;
