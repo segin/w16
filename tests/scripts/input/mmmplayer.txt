@@ -1,0 +1,59 @@
+; Media Player (MPLAYER.EXE, MCI: WIN.INI run=; tests/mmsystem/mprog.sh
+; mplayer): its window as it opens (the Device menu lists the [mci]
+; devices), File Open with C:\WINDOWS\CHIMES.WAV (MCIWAVE), Play (the
+; focused button: Space) and the window after it; then CANYON.MID
+; through File Open, which keeps the Sound device: MCIWAVE refuses it and
+; Media Player shows mciGetErrorString's text; then Device, MIDI
+; Sequencer (MCISEQ) and CANYON.MID opened (not played: the position
+; would be timing). The pointer goes to the bottom right first, out of
+; the way.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-open 30 2
+shot 01-open
+key alt+d
+sleep 1
+match 02-device 20 2
+shot 02-device
+key Escape
+sleep 0.5
+key Escape
+sleep 0.5
+key alt+f
+sleep 0.5
+key o
+match 03-filedlg 30 2
+shot 03-filedlg
+type C:\WINDOWS\CHIMES.WAV
+key Return
+match 04-chimes 30 2
+shot 04-chimes
+key space
+sleep 4
+match 05-played 30 2
+shot 05-played
+key alt+f
+sleep 0.5
+key o
+match 06-filedlg 30 2
+shot 06-filedlg
+type C:\WINDOWS\CANYON.MID
+key Return
+match 07-error 30 2
+shot 07-error
+key Return
+sleep 1
+key alt+d
+sleep 0.5
+key m
+match 08-seqdlg 30 2
+shot 08-seqdlg
+type C:\WINDOWS\CANYON.MID
+key Return
+match 09-canyon 30 2
+shot 09-canyon

@@ -174,8 +174,19 @@ static void mcistrings(struct rec *t, WORD msg, BYTE *dst, int find)
         for (o = msg == 3 ? 2 : 4; o + 4 <= t->n2 && t->ns < NSTR; o += msg == 3 ? 10 : 4) {
             DWORD v = *(DWORD *)(t->b2 + o);
             BYTE c;
-            if ((HIWORD(v) & 4) && md_valid(HIWORD(v)) && md_peek((void __far *)v, &c, 1))
-                t->soff[t->ns++] = (BYTE)o;
+            WORD n;
+            if (!(HIWORD(v) & 4) || !md_valid(HIWORD(v)))
+                continue;
+            /* a string: printable text up to its NUL (a number that
+               happens to be a valid selector points to anything) */
+            for (n = 0; n < LSTR - 1; n++)
+                if (!md_peek((BYTE __far *)v + n, &c, 1) || !c || c < ' ' || c > '~')
+                    break;
+            if (n < LSTR - 1 && c && (c < ' ' || c > '~'))
+                continue;
+            if (!n && !md_peek((void __far *)v, &c, 1))
+                continue;
+            t->soff[t->ns++] = (BYTE)o;
         }
     }
     for (k = 0; k < t->ns; k++) {

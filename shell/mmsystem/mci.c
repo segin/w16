@@ -1110,8 +1110,11 @@ static DWORD sound(DWORD flags, DWORD FAR *sp)
 }
 
 /* a command to one device, the driver's answer whole (mciSendString needs
-   its high word) */
-static DWORD command(UINT dev, UINT msg, DWORD flags, DWORD parms)
+   its high word). For an application (app), 3.1 leaves only the low word
+   of the block's second DWORD when the driver answered
+   MCI_RESOURCE_RETURNED, whatever the message (MMP: Media Player's Eject
+   button reads "can eject" as MCIWAVE's FALSE) */
+static DWORD command(UINT dev, UINT msg, DWORD flags, DWORD parms, int app)
 {
     struct mcidev *d;
     DWORD r;
@@ -1125,15 +1128,17 @@ static DWORD command(UINT dev, UINT msg, DWORD flags, DWORD parms)
     if (msg == MCI_SOUND)
         return sound(flags, (DWORD FAR *)parms);
     if (dev == MCI_ALL_DEVICE_ID) {
-        /* each of the task's devices in turn; UNVERIFIED: what 3.1 answers
-           when several fail (MCIERR_MULTIPLE assumed) */
+        /* each of the task's devices in turn; any answer but 0 counts as
+           a failure, two or more give MCIERR_MULTIPLE, and nothing is
+           taken out of the block (MMP: two drivers answering
+           MCI_RESOURCE_RETURNED alone gave 280) */
         HTASK t = GetCurrentTask();
         DWORD last = 0;
         int i, nerr = 0;
         for (i = 1; i <= NDEV; i++)
             if (devs[i] && devs[i]->task == t) {
-                r = command(i, msg, flags, parms);
-                if (LOWORD(r)) {
+                r = command(i, msg, flags, parms, 0);
+                if (r) {
                     nerr++;
                     last = r;
                 }
@@ -1148,9 +1153,11 @@ static DWORD command(UINT dev, UINT msg, DWORD flags, DWORD parms)
     if (msg == MCI_CLOSE) {
         r = send(d, MCI_CLOSE_DRIVER, flags, parms);
         unload(dev);
-        return r;
-    }
-    return send(d, msg, flags, parms);
+    } else
+        r = send(d, msg, flags, parms);
+    if (app && (r & MCI_RESOURCE_RETURNED) && parms)
+        ((DWORD FAR *)parms)[1] &= 0xFFFF;
+    return r;
 }
 
 /* an error as the application gets it: the low word, and for a driver's
@@ -1165,7 +1172,7 @@ static DWORD errout(DWORD r, UINT dev)
 
 DWORD MMAPI MCISENDCOMMAND(UINT dev, UINT msg, DWORD flags, DWORD parms)
 {
-    DWORD r = command(dev, msg, flags, parms);
+    DWORD r = command(dev, msg, flags, parms, 1);
     return LOWORD(r) ? errout(r, dev) : 0;
 }
 
@@ -1530,7 +1537,7 @@ static DWORD sendstring(LPCSTR cmd, LPSTR ret, UINT size, HWND hwnd)
         goto closeauto;
     if (autoopen)
         ps.flags |= MCI_NOTIFY;
-    r = command(id, entrymsg(entry), ps.flags, (DWORD)ps.blk);
+    r = command(id, entrymsg(entry), ps.flags, (DWORD)ps.blk, 0);
     if (LOWORD(r)) {
         r = errout(r, id);
         goto out;
@@ -1540,7 +1547,7 @@ static DWORD sendstring(LPCSTR cmd, LPSTR ret, UINT size, HWND hwnd)
     goto out;
 closeauto:
     if (autoopen)
-        command(id, MCI_CLOSE, 0, 0);
+        command(id, MCI_CLOSE, 0, 0, 0);
 out:
     LocalFree(hb);
     LocalFree(hc);
@@ -1562,7 +1569,7 @@ void mci_notified(UINT dev)
     DWORD blk[8];                       /* 3.1's: a block on the stack */
     if (d && d->autoopen) {
         blk[0] = 0;
-        command(dev, MCI_CLOSE, 0, (DWORD)(LPVOID)blk);
+        command(dev, MCI_CLOSE, 0, (DWORD)(LPVOID)blk, 0);
     }
 }
 
@@ -1574,7 +1581,7 @@ void mci_taskexit(void)
     int i;
     for (i = 1; i <= NDEV; i++)
         if (devs[i] && devs[i]->task == t)
-            command(i, MCI_CLOSE, 0, 0);
+            command(i, MCI_CLOSE, 0, 0, 0);
 }
 
 /* ---- the other exports ---- */

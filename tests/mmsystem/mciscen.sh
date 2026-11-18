@@ -22,6 +22,7 @@ done
 shift $((OPTIND - 1))
 cases=${*:-e1:explore1.txt:plain e2:explore2.txt:plain e4:explore4.txt:plain \
 e6:explore6.txt:plain e8:explore8.txt:plain e9:explore9.txt:plain e10:explore10.txt:plain \
+e11:explore11.txt:plain \
 e3:explore3.txt:plain \
 e5:explore5.txt:shim e7:explore7.txt:shim}
 [ -n "$out" ] || out=$root/build/mciscen-$(date +%H%M%S)

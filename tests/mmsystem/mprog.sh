@@ -8,6 +8,8 @@
 #   sound     Control Panel's Sound applet (SND.CPL): its lists, then Test
 #             with a sound picked
 #   midimap   Control Panel's MIDI Mapper applet (MIDIMAP.DRV)
+#   mplayer   Media Player (layer 4, MCI): its Device menu, CHIMES.WAV
+#             opened (MCIWAVE.DRV) and played, CANYON.MID opened (MCISEQ)
 #   usage: tests/mmsystem/mprog.sh OUTDIR ms|w16 PROG [-e REFDIR]
 # -e REFDIR: the Microsoft run's directory (the w16 run waits for the same
 # screens). OUTDIR gets the shots (0*.png).
@@ -28,7 +30,8 @@ cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$tmp/WIN.INI"
 case $prog in
 soundrec) run='C:\WINDOWS\DING.WAV' ;;     # run= starts the program each word names: the file opens Sound Recorder
 sound|midimap) run=CONTROL.EXE ;;
-*) echo "PROG: soundrec, sound or midimap" >&2; exit 2 ;;
+mplayer) run=MPLAYER.EXE ;;
+*) echo "PROG: soundrec, sound, midimap or mplayer" >&2; exit 2 ;;
 esac
 python3 "$root/tests/scripts/iniset.py" "$tmp/WIN.INI" "windows:run=$run" \
     'windows:CursorBlinkRate=65535'

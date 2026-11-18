@@ -221,9 +221,13 @@
 #              $W16_QTDIR); dev (layer 3: MMP's device sections over
 #              Windows 3.1's own Sound Blaster and MIDI Mapper
 #              drivers with the logging drivers MDS*.DRV between them,
-#              tests/mmsystem/mdscen.sh); prog (Sound Recorder playing
+#              tests/mmsystem/mdscen.sh); mci (layer 4: MMP's MCI
+#              scripts over the test driver MCT.DRV and over 3.1's
+#              MCIWAVE and MCISEQ behind logging drivers,
+#              tests/mmsystem/mciscen.sh); prog (Sound Recorder playing
 #              DING.WAV, Control Panel's Sound applet testing a sound, the
-#              MIDI Mapper applet: every screen 0 pixels off,
+#              MIDI Mapper applet, Media Player opening and playing a
+#              .WAV and opening a .MID: every screen 0 pixels off,
 #              tests/mmsystem/mprog.sh)
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
@@ -2516,8 +2520,11 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         dev)
             "$root/tests/mmsystem/mdscen.sh" -o "$d" > "$d.txt" 2>&1 ||
                 r="dev: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
+        mci)
+            "$root/tests/mmsystem/mciscen.sh" -o "$d" > "$d.txt" 2>&1 ||
+                r="mci: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
         prog)
-            for p in soundrec sound midimap; do
+            for p in soundrec sound midimap mplayer; do
                 "$root/tests/mmsystem/mprog.sh" "$d/$p-ms" ms $p > /dev/null 2>&1 || true
                 "$root/tests/mmsystem/mprog.sh" "$d/$p-w16" w16 $p -e "$d/$p-ms" > /dev/null 2>&1 || true
                 ls "$d/$p-ms"/0*.png > /dev/null 2>&1 || { r="prog: no screens of $p from Microsoft's ($d)"; break; }
@@ -4322,7 +4329,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
-    mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@prog" ;;
+    mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -4390,7 +4397,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
     mmsystem)
-        if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; the device drivers' messages as 3.1's; Sound Recorder, Sound and MIDI Mapper as on 3.1; QuickTime's movie as on 3.1"
+        if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; the device drivers' messages as 3.1's; MCI as 3.1's (MCT.DRV, MCIWAVE, MCISEQ); Sound Recorder, Sound, MIDI Mapper and Media Player as on 3.1; QuickTime's movie as on 3.1"
         else echo "FAIL mmsystem: $pfirst ($out)"; fi ;;
     timer)
         if [ $pbad = 0 ]; then echo "ok   timer: TPR's log and TMS's record of every message as with Microsoft's TIMER.DRV (Standard, 386 Enhanced), the timings within their limits; QuickTime's movie as on 3.1"

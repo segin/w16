@@ -1,0 +1,37 @@
+# exploration 11: what mciSendCommand leaves in the block when the driver
+# answers with the MCI_*_RETURNED flags
+s open mct alias m1
+s open t519 alias a
+t 0 0
+t 2 4020E
+t 3 20E
+c 1 814 100 w 0 4
+c 1 80B 100 w 0 7
+t 1 10000
+c 1 814 100 w 0 4
+c 1 80B 100 w 0 7
+c 1 1234 0 w 0 7
+c 1 80A 100 w 0 7
+t 1 110000
+c 1 814 100 w 0 4
+t 1 20000
+c 1 814 100 w 0 4
+t 1 40000
+c 1 814 100 w 0 4
+t 1 80000
+c 1 814 100 w 0 4
+t 1 100000
+c 1 814 100 w 0 4
+t 1 10105
+c 1 814 100 w 0 4
+t 1 10000
+c 2 814 100 w 0 4
+c 2 843 20000 w 0 0
+c FFFF 808 0 w 0 0
+t 0 0
+T four
+t 4 4
+t 1 80000
+c 1 80A 100 w b:20 20
+t 0 0
+s close all
