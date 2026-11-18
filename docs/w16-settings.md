@@ -39,7 +39,7 @@ with Windows 3.1; another value is set per test with `tests/dropin.sh
 | Key | Default | Read by | What it does |
 |---|---|---|---|
 | `debuglog=FILE` | none | KERNEL | Writes w16's own diagnostics to FILE: parameter-error notes (HandleParamError), WinOldApCall, calls to unimplemented imports, `schedlog`, `modmap` and a copy of OutputDebugString's text. Without it they go to standard output only while no Windows screen is up. |
-| `trace=MOD.ORD,...` | none | KERNEL | Records every call to the listed imports (caller, registers, arguments) for the fault reports and `debuglog`. |
+| `trace=MOD.ORD,...` | none | KERNEL | Records every call to the listed imports (caller, AX, BX, CX, DX, SI, DI, the first six argument words), the last 400, printed in the fault, watchdog and hangwatch reports and when Windows ends. Only imports bound by the loader: procedures a module gets with GetProcAddress are not traced. |
 | `tracefrom=MODULE` | none | KERNEL | With `trace`: only the calls made from MODULE's code (e.g. `MMSYSTEM`), so that other callers do not push them out of the ring. |
 | `modmap=1` | `0` | KERNEL | Prints every module's selectors once the shell is loaded (and when Windows fails at boot). |
 | `watchdog=SECONDS` | `0` (off) | KERNEL | If the boot makes no progress for SECONDS, prints where the processor has been and exits. The test harness sets 15. |

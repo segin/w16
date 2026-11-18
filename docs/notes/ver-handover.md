@@ -53,25 +53,44 @@ cases ("Croato-Serbian (latin)", "Serbo-Croatian (cyrillic)").
   keeps read-only attributes (VIF_WRITEPROT); it does let read-only files
   be deleted, unlike DOS.
 
-## Found on the way (not VER's)
+## Found on the way (not VER's): both fixed 2026-11-18
 
 - KERNEL: 3.1's GetModuleHandle("VUSEX.DLL") and
   GetModuleHandle("C:\\any\\VUSEX.DLL") find a module named XUSE loaded
   from VUSEX.DLL (file-name match, directory ignored); "VUSEX" and
-  "XUSE.DLL" find nothing. w16's maps the base name to a module name.
-  Reproduce: `VRUN_ARG=k tests/ver/vrun.sh OUT ms`. Not changed.
+  "XUSE.DLL" find nothing. w16's mapped the base name to a module name.
+  Reproduce: `VRUN_ARG=k tests/ver/vrun.sh OUT ms`. Fixed: probe TK60
+  (tests/apps/tk60.c, in make test) has 3.1's whole rule, the same under
+  KRNL286 and KRNL386 in both modes; ARCHITECTURE.md 9.2 ("Finding
+  loaded modules by name"):
+  - GetModuleHandle: the whole string against the module names
+    (regardless of case), then against the loaded modules' file names (a
+    file name that begins the string's last component: "TKFA.DLLX" finds
+    TKFA.DLL's module; "TKFA" does not; directories ignored).
+  - LoadLibrary/LoadModule/WinExec: the file names first, then the base
+    name (last component up to its first dot) against the module names.
+  - A file whose module name is already loaded is loaded as a second
+    module of that name (w16 used to give the loaded one).
+  - LoadLibrary("") and LoadModule("") write the word 2 at the string's
+    offset 2.
 - KERNEL: Microsoft's VER.DLL on w16's KRNL286/KRNL386
   (`tests/ver/vtree.sh OUT ms 286`): GetFileResource(..., 0, n, buf)
-  overwrites the caller's local `n` (it came back as 25632); the probe's
-  next fill then overran its 8 KB buffer and KRNL286 faulted in the
-  global heap's arena code. On Microsoft's KERNEL, with w16's LZEXPAND
-  too, it does not happen, so a w16 KERNEL difference. Not investigated.
+  changed the caller's `n` (it came back as 25632 = 6420h). Cause: VRP
+  keeps `n` in SI:DI; VER calls KERNEL's IsROMModule (323, taken with
+  GetProcAddress at start-up), which removes 6 bytes of arguments on 3.1
+  but removed 2 on w16, so VER's epilogue popped the file name's offset
+  (6420h) into SI. Found with `[w16] trace=` (it records SI and DI now)
+  and `tracefrom=VER`; 3.1's argument size measured with TK31 (it now
+  logs "SP moved" for each export that does not remove exactly what it
+  was passed). Fixed: IsROMModule and IsROMFile are RETF 6 in
+  kernel/khook.asm. The ver boot case's tree286 and tree386 parts now run
+  Microsoft's VER.DLL on w16's tree (against 3.1's log) and w16's VER
+  against it.
 - OpenWatcom's wrc VERSIONINFO defect (ARCHITECTURE.md 20.5): any future
   module must take its version block from tools/mkver.py.
 
 ## Next steps (if continuing)
 
-- The two KERNEL findings above.
 - A shared-Windows setup (Setup /N) to see where VerFindFile puts shared
   files and how VER tells.
 - DRIVERS.CPL's Add (an OEMSETUP.INF disk) and 3.1 Setup as further real

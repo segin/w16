@@ -313,9 +313,9 @@ DEFINEHANDLETABLE:
 ; remove 6 bytes of arguments (a call with one word ended TK50 and TK31
 ; there: the 4 bytes more came off the caller's frame), return AX = 0
 ; with the carry clear, and keep BX, CX, DX, SI, DI, BP and ES.
-; Microsoft's VER.DLL calls IsROMModule through GetProcAddress in
-; GetFileResource with its file name: w16's RETF 2 left 4 bytes on VER's
-; stack, its epilogue then popped the file name's offset into its
+; Microsoft's VER.DLL calls IsROMModule through GetProcAddress as it
+; reads a file's resources: w16's RETF 2 left 4 bytes on VER's stack, and
+; its epilogue then popped one of them, the file name's offset, into its
 ; caller's SI (ARCHITECTURE.md 20.6).
 global ISROMMODULE
 ISROMMODULE:
