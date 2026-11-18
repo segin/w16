@@ -815,7 +815,7 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     ne_header h;
     u32 ne_base;
     u16 fh, i, shift, sel, ne_len;
-    module FAR *m, *dup;
+    module FAR *m;
 
     if (!open_search(name, ext, path, &fh, err)) {
         /* a library (LoadLibrary, or a module a program or DLL imports
@@ -908,20 +908,14 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     if (!NE_HDR(m)->expver)
         NE_HDR(m)->expver = 0x0201;
 
-    /* A library whose module is already loaded (under another file name)
-       gives that module. A program does not: observed (tests/apps/tk16.c,
-       "renamed"), a copy of a running program under another file name is
-       a module of its own on 3.1 (hPrevInstance 0, the first one's usage
-       still 1), with its own DGROUP; w16 started it on the running
-       instance's DGROUP. Windows 3.1 compares the file's base name with
-       the loaded module names before opening anything (observed).
-       UNVERIFIED: the library case. */
-    for (dup = module_first; dup && (m->flags & NEF_LIBRARY); dup = dup->next)
-        if (kstricmp(dup->name, m->name) == 0) {
-            f_close(fh);
-            destroy(m);
-            return dup;
-        }
+    /* A file read here is a module of its own even when a module of the
+       same name is loaded: the module names are compared only before the
+       file is opened (find_loaded). Observed on 3.1: a copy of a running
+       program under another file name (tests/apps/tk16.c, "renamed": its
+       own DGROUP, hPrevInstance 0, the first one's usage still 1), and a
+       library TKFD.DLL whose module is called TKFC loaded while module
+       TKFC (from TKFB.DLL) is (tests/apps/tk60.c: two modules TKFC, each
+       used once; GetModuleHandle("TKFC") then finds the first). */
     mod_link(m);
 
     if (h.nonres_len) {
@@ -1078,18 +1072,28 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     return m;
 }
 
-/* LoadLibrary / LoadModule of a DLL. Observed on Windows 3.1: a loaded
-   module is found by the base name of the argument, whatever the path
-   (even C:\TKNODIR\TKDLB.DLL, a directory that does not exist), and by
-   MAKELP(0, hModule); then its usage count goes up and nothing is read. */
+/* LoadLibrary / LoadModule (and WinExec). Observed on Windows 3.1: a
+   loaded module is found by MAKELP(0, hModule), or by name whatever the
+   path (even C:\TKNODIR\TKDLB.DLL, a directory that does not exist); then
+   its usage count goes up and nothing is read. By name (tests/apps/
+   tk60.c, KRNL286 and KRNL386, both modes): first by file name as
+   module_find_file (with module TKFB loaded from TKFA.DLL, "TKFA.DLL"
+   and "TKFA.DLLX" find it; with TKFN loaded, "TKFNX" and "TKFN.DLL" find
+   that rather than a module named TKFN), then the base name (the last
+   component up to its first dot) as a module name (with only TKFA.DLL
+   loaded, "C:\TKMN\TKFB.DLL", "TKFB.EXE" and "C:\X\TKFB" find module
+   TKFB and TKFB.DLL is not read), as Pietrek describes (LMAlreadyLoaded:
+   FindExeFile, then FindExeInfo). */
 static module FAR *find_loaded(const char FAR *name)
 {
     char base[MODNAME_MAX + 1];
+    module FAR *m;
     if (!FP_SEG(name))
         return module_of(FP_OFF(name));
-    if (mod_base_name(name, base))
-        return module_find((const char FAR *)base);
-    return NULL;
+    m = module_find_file(name);
+    if (!m && mod_base_name(name, base))
+        m = module_find((const char FAR *)base);
+    return m;
 }
 
 static module FAR *acquire(const char FAR *name, u16 *err)
@@ -1146,10 +1150,25 @@ module FAR *module_load_program(const char FAR *path, u16 *err)
    not found (also when a module it imports is missing), 3 path not
    found, 20 not an NE file (a text file, an MZ file without NE header),
    0 when its initialisation returns 0. */
+/* An empty name. Observed on Windows 3.1 (tests/apps/tk60.c, KRNL286 and
+   KRNL386, both modes): LoadLibrary("") and LoadModule("") give 2 and
+   write the word 2 at the string's offset 2 (bytes 2 and 3; as OpenFile
+   sets an OFSTRUCT's nErrCode), the caller's bytes past its NUL;
+   GetModuleHandle("") writes nothing. */
+static int empty_name(const char FAR *name)
+{
+    if (!FP_SEG(name) || name[0])
+        return 0;
+    *(u16 FAR *)(name + 2) = LE_NOTFOUND;
+    return 1;
+}
+
 u16 KAPI LoadLibrary(const char FAR *name)                     /* KERNEL.95 */
 {
     u16 err, r;
     module FAR *m;
+    if (empty_name(name))
+        return LE_NOTFOUND;
     if (FP_SEG(name))
         diag_load_start(name);
     m = acquire(name, &err);
@@ -1507,6 +1526,8 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
 
 u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
 {
+    if (empty_name(name))
+        return LE_NOTFOUND;
     return load_module(name, params, 0);
 }
 

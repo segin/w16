@@ -127,7 +127,7 @@ probes() {
     run TK50 0
     run TK2 255 "w16: call to unimplemented KERNEL.27"
 
-    # TK5 (DLL loading) and TK11 (module tables), laid out like the reference
+    # TK5 (DLL loading), TK11 (module tables) and TK60 (modules by name), laid out like the reference
     # runs (tests/tk5ref.sh): the DLLs in the Windows directory C:\WINDOWS,
     # TK5.EXE, TK11.EXE and TKID.TPL in C:\, C:\TKPATH on the PATH. KERNEL is
     # started as WIN.COM would, with windir=C:\WINDOWS in its environment
@@ -138,7 +138,7 @@ probes() {
     mkdir -p "$stage/WINDOWS" "$stage/W16SYS"
     cp "$dos/$K.EXE" "$stage/W16SYS/"
     dosx_to "$stage/W16SYS"
-    cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TKID.TPL" "$stage/"
+    cp "$dos/WINENV.COM" "$dos/TK5.EXE" "$dos/TK11.EXE" "$dos/TK60.EXE" "$dos/TKID.TPL" "$stage/"
     # TK15 and TK16 (tasks) start their helpers from their own directory
     cp "$dos/TK15.EXE" "$dos/TK15A.EXE" "$stage/"
     cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$dos/TK16S.EXE" "$dos/TK16I.EXE" "$stage/"
@@ -152,6 +152,7 @@ probes() {
     run TK11 0
     run TK15 0
     run TK16 0
+    run TK60 0
 
     # TK14 (profiles and files), laid out like tests/tk14ref.sh: TK14.EXE in
     # C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS

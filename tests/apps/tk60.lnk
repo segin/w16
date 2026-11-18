@@ -1,0 +1,3 @@
+# TK60.EXE (tests/apps/tk60.c): module name TKSIXTY, not its file's
+@tests/apps/app.lnk
+option modname=TKSIXTY

@@ -38,7 +38,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
@@ -517,6 +517,12 @@ $(DOS)/TK19.EXE: $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o \
 	    option map=$(B)/tests/tk19.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk19.o $(B)/tests/tk19n.o }
 
+# TK60.EXE: finding loaded modules by name (module TKSIXTY: tk60.lnk)
+$(B)/tests/tk60.o: tests/apps/tk60ref.h tests/apps/tklog.h
+$(DOS)/TK60.EXE: $(B)/tests/start.o $(B)/tests/tk60.o tests/apps/app.lnk tests/apps/tk60.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk60.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk60.map file { $(B)/tests/start.o $(B)/tests/tk60.o }
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk

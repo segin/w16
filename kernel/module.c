@@ -208,12 +208,56 @@ void module_register_kernel(const bootinfo FAR *bi)
     loader_init(m->path);
 }
 
+/* The loaded module whose module name is name, regardless of case (the
+   whole string: no path, no extension). */
 module FAR *module_find(const char FAR *name)
 {
     module FAR *m;
     for (m = module_first; m; m = m->next)
         if (kstricmp(m->name, name) == 0)
             return m;
+    return NULL;
+}
+
+/* A path's last component: what follows its last \, / or :. */
+static const char FAR *last_part(const char FAR *s)
+{
+    const char FAR *p, *r = s;
+    for (p = s; *p; p++)
+        if (*p == '\\' || *p == '/' || *p == ':')
+            r = p + 1;
+    return r;
+}
+
+static char upc(char c)
+{
+    return c >= 'a' && c <= 'z' ? (char)(c - 32) : c;
+}
+
+/* The first loaded module (in list order) whose file name begins the
+   last component of name, regardless of case: the directories are not
+   compared, and whatever follows the file name in name is ignored.
+   Observed on Windows 3.1 (tests/apps/tk60.c, KRNL286 and KRNL386,
+   Standard and 386 Enhanced mode alike): for a module loaded from
+   C:\TKMN\TKFA.DLL, "TKFA.DLL", "C:\NOWHERE\TKFA.DLL", "C:TKFA.DLL",
+   "C:/X/TKFA.DLL", "tkfa.dll", "TKFA.DLLX" and "TKFA.DLL." match;
+   "TKFA", "TKFA.", "TKFA.DL" and "TKFA.DLL\X" do not; for one loaded from
+   C:\TKMN\TKFN (no extension), "TKFN", "TKFN.", "TKFNX" and "TKFN.DLL"
+   match. */
+module FAR *module_find_file(const char FAR *name)
+{
+    const char FAR *n = last_part(name);
+    module FAR *m;
+    for (m = module_first; m; m = m->next) {
+        const char FAR *f = last_part(m->path);
+        u16 i;
+        if (!f[0])
+            continue;
+        for (i = 0; f[i] && upc(f[i]) == upc(n[i]); i++)
+            ;
+        if (!f[i])
+            return m;
+    }
     return NULL;
 }
 
@@ -348,23 +392,28 @@ int mod_base_name(const char FAR *name, char *base)
 /* ---- API ---- */
 
 /* Observed on Windows 3.1: the hModule is the selector of the module's
-   NE header in memory (odd: RPL bits set; word 0 is "NE"); names match
-   regardless of case; "TK4.EXE" and "C:\TK4.EXE" find module TK4, "TK4 "
-   does not; MAKELP(0, handle) looks a handle up; NULL gives 0.
-   UNVERIFIED: whether a file name is matched against the module name (as
-   here) or the module's file name; they were the same in the probe. */
+   NE header in memory (odd: RPL bits set; word 0 is "NE"); MAKELP(0, h)
+   looks a handle up (an hModule, an hInstance, hInstance | 1, a code
+   selector; not an hTask); NULL gives 0.
+   A name (tests/apps/tk60.c, the same under KRNL286 and KRNL386, in
+   Standard and 386 Enhanced mode): first the whole string is compared
+   with the module names, regardless of case ("TKFB" and "tkfb" find
+   module TKFB; "TKFB.", "TKFB ", "C:\X\TKFB" and "TKFB.DLL" do not); then
+   with the modules' file names as module_find_file does ("TKFA.DLL" and
+   "C:\X\TKFA.DLL" find module TKFB loaded from TKFA.DLL; "TKFA" does
+   not). With a module TKFN and another module loaded from the file TKFN,
+   "TKFN" finds the module named TKFN. */
 u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
 {
-    char base[MODNAME_MAX + 1];
     module FAR *m;
 
     if (!FP_SEG(name)) {
         m = module_of(FP_OFF(name));
         return m ? m->ne_sel : 0;
     }
-    if (!mod_base_name(name, base))
-        return 0;
-    m = module_find((const char FAR *)base);
+    m = module_find(name);
+    if (!m)
+        m = module_find_file(name);
     return m ? m->ne_sel : 0;
 }
 

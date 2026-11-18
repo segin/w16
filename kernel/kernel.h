@@ -220,6 +220,7 @@ void     module_register_kernel(const bootinfo FAR *bi);
 module FAR *module_load_program(const char FAR *path, u16 *err);
 module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libinit);
 module FAR *module_find(const char FAR *name);
+module FAR *module_find_file(const char FAR *name);
 module FAR *module_of(u16 h);
 u16      module_instance(module FAR *m);
 int      module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const);
