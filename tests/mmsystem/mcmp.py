@@ -19,9 +19,14 @@ MASKS = [
     # runs (3202h, 3212h)
     (re.compile(r'^(  StackEnter: .* flags )([0-9A-F]{4})'),
      lambda m: m.group(1) + '%04X' % (int(m.group(2), 16) & ~0x10)),
+    # the owner GetExePtr gives for the interrupt stack: TIMER in some of
+    # 3.1's runs, MMSYSTEM in others
+    (re.compile(r'(size 600 owner )\w+'), r'\1(owner)'),
     # a timer callback's SI (left over from the timer driver's code)
     (re.compile(r'^(  cb \d+: ax .* si )[0-9A-F]{4}( di [0-9A-F]{4} ds TIMER)'),
      lambda m: m.group(1) + '(si)' + m.group(2)),
+    # GetTempFileName's number (MMIO_GETTEMP): from the time and the task
+    (re.compile(r'(name "C:\\WINDOWS\\~...)[0-9A-F]{4}(\.TMP")'), r'\1(n)\2'),
     # the word above MMTASK's stack (not the task's: whatever was there)
     (re.compile(r'^(  task: ret to .* beyond: \S+ \S+ \S+ )[0-9A-F]{4}'),
      lambda m: m.group(1) + '(any)'),

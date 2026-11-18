@@ -45,6 +45,7 @@ extern GETDRIVERMODULEHANDLE            ; USER.254
 extern DEFDRIVERPROC                    ; USER.255
 extern _mm_init                         ; int __cdecl __far mm_init(void)
 extern _mm_makestack                    ; void __cdecl __far mm_makestack(void)
+extern __AHINCR                         ; KERNEL.114
 
 TDRV_KILL       equ 0800h               ; the timer driver's messages
 TDRV_SET        equ 0804h               ; (ARCHITECTURE.md 21.2)
@@ -98,6 +99,12 @@ mm_libentry:
         pop di
         pop si
         pop ds
+        retf
+
+; WORD __cdecl __far mm_ahincr(void): KERNEL's selector increment
+global _mm_ahincr
+_mm_ahincr:
+        mov ax, __AHINCR
         retf
 
 global WEP

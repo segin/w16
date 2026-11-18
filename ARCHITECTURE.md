@@ -186,7 +186,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `DDEML.DLL` | DDEML | DDE Management Library (w16: `shell/ddeml/`, §18) | P1 |
 | `OLECLI.DLL` | OLECLI | OLE 1.0 client | P1 |
 | `OLESVR.DLL` | OLESVR | OLE 1.0 server | P1 |
-| `MMSYSTEM.DLL` | MMSYSTEM | Multimedia: wave, MIDI, aux, joystick, timer, MCI, mmio | P1 |
+| `MMSYSTEM.DLL` | MMSYSTEM | Multimedia: wave, MIDI, aux, joystick, timer, MCI, mmio (w16: `shell/mmsystem/`, §23; core and mmio done) | P1 |
 | `MCI*.DRV` (`MCIWAVE.DRV`, `MCISEQ.DRV`, `MCICDA.DRV`) | MCI* | MCI device drivers | P2 |
 | `MSADLIB.DRV`, `SNDBLST.DRV`, etc. | (varies) | Hardware audio drivers (`DriverProc`) | P2 |
 | `WINMEM32.DLL` | WINMEM32 | 32-bit memory access for 16-bit apps | P2 |
@@ -2995,3 +2995,163 @@ the runs.
 - Dr. Watson with a fault: under DOSBox 3.1 itself showed nothing and
   went no further.
 - WfW 3.11 (no importer of TOOLHELP there) was not probed.
+
+## 23. MMSYSTEM.DLL
+
+MMSYSTEM.DLL is Windows 3.1's multimedia system library (Multimedia
+Programmer's Guide; the Multimedia Programmer's Reference is not among
+the documents w16 has). Windows 3.1's (module MMSYSTEM, description
+`System APIs for Multimedia`, flags 8309h, flags2 08h, expected version
+3.10, file version 3.10.0.103) exports WEP 1, sndPlaySound 2,
+mmsystemGetVersion 5, DriverProc 6 (WEP and DriverProc resident),
+OutputDebugStr 30, DriverCallback 31, StackEnter 32, StackLeave 33,
+MMDRVINSTALL 34, the joystick (101-109), MIDI (201-216, 301-313), aux
+(350-354), wave (401-421, 501-514), timer (601-607), MCI (701-717),
+mmTask (900-905), Drv* (1100-1104) and mmio (1210-1226) functions: 136
+entries (`tools/neinfo.py`). It is a `[boot] drivers=` driver (10.7):
+USER opens it at the shell's InitApp, and its DRV_LOAD opens the timer
+driver (21) and the joystick driver. MMTASK.TSK (module MMTASK, flags
+030Ah, a 4 KB stack, 1Ch bytes of data; imports InitTask, WaitEvent,
+OldYield, InitApp and SetMessageQueue only) is the program
+mmTaskCreate starts. 3.1's importers in the reference install: Media
+Player, Sound Recorder, MCISEQ, MCIWAVE, MIDIMAP, SND.CPL and
+TIMER.DRV; QuickTime for Windows' QTIM.DLL (mmio, wave out, MIDI out,
+time*) and MCIQTW.DRV (the MCI driver helpers).
+
+w16's is built in layers (`docs/notes/mmsystem-handover.md` has the
+plan, the state and the raw observations): 1 the core, 2 MMIO (both
+done), 3 wave, MIDI, aux, joystick and sndPlaySound, 4 MCI. The
+functions of the layers not done are stubs that take the documented
+arguments and answer as when no device is there (no devices, no MCI
+driver).
+
+### 23.1 Observation tools
+
+- **MMP.EXE** (`tests/mmsystem/mmp.c`, `mmio.c`) and its library
+  **MMC.DLL** (`mmc.c`, `mmcs.asm`), run as the shell
+  (`tests/mmsystem/mrun.sh OUT ms|w16`, sections in `MRUN_ARG`): the
+  drivers open at boot and MMSYSTEM's DriverProc through USER, the Drv*
+  functions, DriverCallback with every type and bad target (MMC's
+  callback records every register, the stack and the caller), the
+  interrupt stack (StackEnter/StackLeave nested with marker registers,
+  before and after it exists), timeSetEvent's checks, the mmTask
+  functions and the task MMTASK starts (MMC's task function logs its
+  registers, frame, command tail, data segment and queue size), what
+  OutputDebugStr does (INT 21h and INT 41h hooked), the argument sizes
+  of the undocumented exports (a pop counter), and the MMIO sections:
+  FOURCCs, DOS files and RIFF chunks (the file's bytes dumped), memory
+  files, buffering as a custom I/O procedure sees it (MMC's "TST "
+  procedure logs every message and the MMIOINFO fields it owns),
+  errors, the file-name flags, procedures and rename.
+- `tests/mmsystem/mcmp.py` compares two logs (masks for what differs
+  between two runs of Microsoft's own, known differences explained);
+  `tests/mmsystem/mscen.sh` runs core, mmio and the timer probe (21.1,
+  `TRUN_MM=w16`) with both MMSYSTEMs and compares them (boot-test case
+  `mmsystem`, parts core, mmio, timer, qt).
+
+### 23.2 Windows 3.1's MMSYSTEM as observed (layers 1 and 2)
+
+- mmsystemGetVersion 0101h. After boot the open drivers are TIMER
+  (handle 2) and MMSYSTEM (1); the midimapper is not opened at boot.
+  MMSYSTEM's DriverProc answers 1 to DRV_INSTALL and
+  DRV_EXITAPPLICATION, 0 to the other messages tried. The Drv*
+  functions are USER's OpenDriver, CloseDriver, SendDriverMessage,
+  GetDriverModuleHandle and DefDriverProc.
+- **DriverCallback**(dwCallback, uFlags, hDevice, uMessage, dwUser, dw1,
+  dw2): type uFlags & 7; DCB_WINDOW (1) PostMessage(window, uMessage,
+  hDevice, dw1) and DCB_TASK (2) PostAppMessage likewise, answering
+  what USER answers (0 for window or task 0); DCB_FUNCTION (3) calls
+  dwCallback(hDevice, uMessage, dwUser, dw1, dw2) and answers 1, or 0
+  when its selector is not code; other types 0. Unless DCB_NOSWITCH (8)
+  the function runs on the interrupt stack when it is free. It gets AX
+  = its code segment's access rights (FB00h), BX = hDevice, CX = ES =
+  the caller's SS, the caller's DX, SI, DI and DS, flags with PF.
+- **The interrupt stack**: one 600h-byte block (GlobalAlloc(GMEM_SHARE)),
+  made by the first timeSetEvent. StackEnter switches to it (SP 05FCh,
+  the old SS:SP above, carry clear) when it exists and is free; else it
+  stays, one word lower, carry set; StackLeave undoes either. Every
+  register but SS:SP is kept. A timer callback through TIMER.DRV runs at
+  SP 05C2h on it (21.2).
+- **Timer services**: as 21.2 says; timeSetEvent refuses a callback
+  that is not code (NULL, data, 0001:0000) with 11 (MMSYSERR_INVALPARAM)
+  without asking the driver.
+- **OutputDebugStr** does nothing observable (no INT 21h, no INT 41h).
+- **Tasks**: mmTaskCreate(fn, &hTask, dwInst) starts MMTASK.TSK and
+  returns 0 at once with the task's handle; KERNEL's LoadModule runs the
+  new task first, which yields back after its start-up; mmTaskCreate
+  puts fn and dwInst in its data at 10h and 14h; the task then calls
+  fn with DX:AX and the stack holding dwInst (SI 0, DI the instance, ES
+  0, BP over a 0 at the stack's top), its queue holding 64 messages, and
+  ends when fn returns. The command tail is empty. mmTaskSignal(h) is
+  PostAppMessage(h, WM_USER, 0, 0); mmTaskBlock dispatches window
+  messages and returns the number of the first task message;
+  mmGetCurrentTask is GetCurrentTask.
+- **Argument sizes** of the undocumented exports: MMDRVINSTALL 8 bytes,
+  JOYSETCALIBRATION 26 (the joystick ID and six pointers); MCIPARSECOMMAND
+  faults with zeros (UNVERIFIED).
+- **MMIO** (the Programmer's Guide ch. 7 for the interface): a buffer is
+  filled by one MMIOM_READ of its whole size and written back by one
+  MMIOM_WRITEFLUSH of the bytes in it; MMSYSTEM keeps the file's place
+  itself (lBufOffset) and tells the procedure to seek only when its
+  lDiskOffset is not where the next read or write goes, so a seek inside
+  the buffer moves the pointer, any other one empties the buffer at the
+  new place without a message, and SEEK_END asks the procedure at once;
+  without a buffer the same holds for every read and write. Writes past
+  a full buffer flush it; mmioAdvance and mmioSetInfo take pchNext,
+  pchEndRead and MMIO_DIRTY from the caller. mmioOpen keeps the flags it
+  was given (MMIO_CREATE, MMIO_ALLOCBUF) in dwFlags, htask stays 0, the
+  default buffer is 8192 bytes, and the caller's MMIOINFO only gets
+  wErrorRet (257 for a missing file); MMIO_PARSE, MMIO_EXIST,
+  MMIO_DELETE are OpenFile's (EXIST and PARSE copy the full name back;
+  a failed DELETE answers 262), MMIO_GETTEMP is GetTempFileName's with
+  the name from its fourth character as the prefix; all answer 1. A
+  compound name "NAME.EXT+ELEMENT" picks the procedure installed for
+  EXT; mmioRename of a plain name goes to DOS. mmioStringToFOURCC takes
+  four bytes whatever they are (a 0 becomes a space); flags other than
+  MMIO_TOUPPER give FFFFFFFFh. RIFF: created chunks are MMIO_DIRTY and
+  mmioAscend writes their size and a pad byte; mmioDescend skips
+  chunks by seeking past them before it checks the parent's end (so a
+  failed search can leave the file far past its end). Memory files keep
+  everything in the buffer: SEEK_END counts back from the end (3.1's
+  answers -1 to a negative offset). Bad handles: 5 (or -1, 265, 0).
+
+### 23.3 w16's MMSYSTEM.DLL
+
+`shell/mmsystem/`: `mmfix.asm` (one fixed
+code segment, with a fixed data segment: StackEnter/StackLeave,
+DriverCallback, the time* functions with 3.1's jumps, calls and frames,
+mmTaskSignal, the Drv* jumps), `core.c` (DriverProc, the interrupt
+stack, mmTask*; mmTaskCreate finds the new task by its instance in
+KERNEL's task list), `mmio.c` (MMIO with the DOS and memory procedures:
+MMSYSTEM's own handles are global blocks on a list),
+`stubs.c` (the later layers), `mmtask.asm` (MMTASK.TSK). Installed as
+`SYSTEM\MMSYSTEM.DLL` and `SYSTEM\MMTASK.TSK`.
+
+### 23.4 Tests and results
+
+`tests/mmsystem/mscen.sh` on installation-05 (boot-test case
+`mmsystem`): core (145 lines) identical but four known differences (the
+mmTask function's BX, CX and DI and its code selector: handle values and
+leftovers of 3.1's MMTASK start-up), the prestack section identical, the
+MMIO sections (270 lines) identical, TPR plain and with TMS.DRV
+passing `tests/timer/tcmp.py` with w16's MMSYSTEM over w16's TIMER.DRV
+against Microsoft's two (with Microsoft's TIMER.DRV under both
+MMSYSTEMs every exact line is identical too). `qt`: QuickTime's sample
+movie with w16's MMSYSTEM, MMTASK and TIMER.DRV over stock 3.1 plays as
+on 3.1 (same window, last frame 0 pixels off, 12 s); with layer 1 alone
+its player could not open the movie (it reads it through mmio).
+
+### 23.5 UNVERIFIED, and not done
+
+- Layers 3 (wave, MIDI, aux, joystick, sndPlaySound) and 4 (MCI): stubs.
+- The interrupt stack's flags after a switch (AF differs between 3.1's
+  runs), and which module owns the block (TIMER or MMSYSTEM in 3.1's
+  runs); the mmTask function's BX and CX.
+- MCIPARSECOMMAND's arguments; MMDRVINSTALL's meaning (w16 answers 0).
+- MMIO: SEEK_END with a positive offset in a memory file; growing memory
+  files; buffers over 64 KB; the DOS procedure's position after DOS
+  refuses a seek (w16's goes to the end, which matches the one case
+  seen); MMIO_GLOBALPROC across tasks; a procedure installed twice.
+- 386 Enhanced mode and KRNL286 were not run for layers 1-2 (the timer
+  probe ran in Standard mode).
+

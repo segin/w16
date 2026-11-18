@@ -5,6 +5,8 @@
 #          MMSYSTEM against w16's (tests/mmsystem/mrun.sh), compared by
 #          tests/mmsystem/mcmp.py; also its section S alone (StackEnter
 #          before there is an interrupt stack)
+#   mmio   MMP.EXE's MMIO sections (FDMBE: tests/mmsystem/mmio.c) the same
+#          way
 #   timer  the timer probe TPR.EXE (tests/timer/tpr.c), plain and with the
 #          logging driver TMS.DRV: Microsoft's MMSYSTEM over Microsoft's
 #          TIMER.DRV against w16's MMSYSTEM over w16's TIMER.DRV, compared
@@ -22,7 +24,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-core timer}
+parts=${*:-core mmio timer}
 [ -n "$out" ] || out=$root/build/mscen-$(date +%H%M%S)
 mkdir -p "$out"
 m=$root/tests/mmsystem t=$root/tests/timer
@@ -33,6 +35,9 @@ for p in $parts; do
         "$m/mrun.sh" "$out/core-w16" w16 > "$out/core-w16.txt" 2>&1 &
         MRUN_ARG=S "$m/mrun.sh" "$out/pre-ms" ms > "$out/pre-ms.txt" 2>&1 &
         MRUN_ARG=S "$m/mrun.sh" "$out/pre-w16" w16 > "$out/pre-w16.txt" 2>&1 & ;;
+    mmio)
+        MRUN_ARG=FDMBE "$m/mrun.sh" "$out/mmio-ms" ms > "$out/mmio-ms.txt" 2>&1 &
+        MRUN_ARG=FDMBE "$m/mrun.sh" "$out/mmio-w16" w16 > "$out/mmio-w16.txt" 2>&1 & ;;
     timer)
         for k in plain shim; do
             "$t/trun.sh" "$out/timer-ms-$k" ms $k > "$out/timer-ms-$k.txt" 2>&1 &
@@ -57,6 +62,8 @@ for p in $parts; do
     core)
         cmp core "$m/mcmp.py" "$out/core-ms/mmp.log" "$out/core-w16/mmp.log"
         cmp prestack "$m/mcmp.py" "$out/pre-ms/mmp.log" "$out/pre-w16/mmp.log" ;;
+    mmio)
+        cmp mmio "$m/mcmp.py" "$out/mmio-ms/mmp.log" "$out/mmio-w16/mmp.log" ;;
     timer)
         for k in plain shim; do
             cmp "timer-$k" "$t/tcmp.py" "$out/timer-ms-$k/tpr.log" "$out/timer-w16-$k/tpr.log"

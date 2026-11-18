@@ -213,12 +213,12 @@
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
 #              driver, DriverCallback, interrupt stack, tasks; mcmp.py),
+#              mmio (MMP's MMIO sections: DOS, memory and custom files),
 #              timer (TPR.EXE, plain and with TMS.DRV: Microsoft's
 #              MMSYSTEM and TIMER.DRV against w16's two; tcmp.py); qt
 #              (QuickTime's sample movie on stock 3.1 with w16's MMSYSTEM,
 #              MMTASK and TIMER.DRV: tests/qtplay.sh -t; skipped without
-#              $W16_QTDIR) is not in the default parts until MMIO and
-#              wave are done (mmsystem@qt runs it)
+#              $W16_QTDIR)
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -2504,7 +2504,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         r=ok
         d=$out/mmsystem-${part:-core}
         case ${part:-core} in
-        core|timer)
+        core|mmio|timer)
             "$root/tests/mmsystem/mscen.sh" -o "$d" "${part:-core}" > "$d.txt" 2>&1 ||
                 r="${part:-core}: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
         qt)
@@ -4299,7 +4299,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
-    mmsystem) echo "$1@core $1@timer" ;;
+    mmsystem) echo "$1@core $1@mmio $1@timer $1@qt" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;

@@ -107,7 +107,13 @@ driver DRT on w16's USER against Microsoft's; the boot-test case
 Microsoft's under Microsoft's MMSYSTEM: the probe TPR's log, plain and
 with the logging driver TMS.DRV between them, compared by
 `tests/timer/tcmp.py`; one run alone: `tests/timer/trun.sh`; the
-boot-test case `timer`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
+boot-test case `timer`), `tests/mmsystem/mscen.sh [core|mmio|timer]`
+(w16's MMSYSTEM.DLL against Microsoft's on the reference 3.1: the probe
+MMP's core and MMIO sections compared by `tests/mmsystem/mcmp.py`, and
+TPR with w16's MMSYSTEM and TIMER.DRV against Microsoft's two; one run
+alone: `tests/mmsystem/mrun.sh OUT ms|w16` with `MRUN_ARG` the sections;
+the boot-test case `mmsystem`, whose part `qt` plays QuickTime's movie
+with w16's MMSYSTEM, MMTASK and TIMER.DRV), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;

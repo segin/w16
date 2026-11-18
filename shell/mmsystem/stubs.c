@@ -679,142 +679,22 @@ UINT MMAPI MCIGETCREATORTASK(WORD a0)
     return 0;
 }
 
-UINT MMAPI MMIOOPEN(DWORD a0, DWORD a1, DWORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return 0;
-}
 
-UINT MMAPI MMIOCLOSE(WORD a0, WORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return MMIOERR_BASE + 4;
-}
 
-LONG MMAPI MMIOREAD(WORD a0, DWORD a1, DWORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return -1;
-}
 
-LONG MMAPI MMIOWRITE(WORD a0, DWORD a1, DWORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return -1;
-}
 
-LONG MMAPI MMIOSEEK(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return -1;
-}
 
-UINT MMAPI MMIOGETINFO(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return MMSYSERR_INVALHANDLE;
-}
 
-UINT MMAPI MMIOSETINFO(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return MMSYSERR_INVALHANDLE;
-}
 
-UINT MMAPI MMIOSETBUFFER(WORD a0, DWORD a1, DWORD a2, WORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return MMSYSERR_INVALHANDLE;
-}
 
-UINT MMAPI MMIOFLUSH(WORD a0, WORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return MMSYSERR_INVALHANDLE;
-}
 
-UINT MMAPI MMIOADVANCE(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return MMSYSERR_INVALHANDLE;
-}
 
-DWORD MMAPI MMIOSTRINGTOFOURCC(DWORD a0, WORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return 0;
-}
 
-DWORD MMAPI MMIOINSTALLIOPROC(DWORD a0, DWORD a1, DWORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return 0;
-}
 
-LONG MMAPI MMIOSENDMESSAGE(WORD a0, WORD a1, DWORD a2, DWORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return 0;
-}
 
-UINT MMAPI MMIODESCEND(WORD a0, DWORD a1, DWORD a2, WORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return MMIOERR_BASE + 9;
-}
 
-UINT MMAPI MMIOASCEND(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return MMIOERR_BASE + 6;
-}
 
-UINT MMAPI MMIOCREATECHUNK(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return MMIOERR_BASE + 6;
-}
 
-UINT MMAPI MMIORENAME(DWORD a0, DWORD a1, DWORD a2, DWORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return MMIOERR_BASE + 1;
-}
 
 /* Not documented; how many bytes of arguments each pops was measured on
    Windows 3.1 (tests/mmsystem/mmp.c, section pops) */

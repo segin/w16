@@ -19,7 +19,8 @@
  * 41h), pops [p] (how many bytes of arguments the undocumented
  * MMDRVINSTALL and JOYSETCALIBRATION take; MCIPARSECOMMAND faults on
  * 3.1 with zeros), prestack [S] (StackEnter before anything made the interrupt
- * stack: run alone).
+ * stack: run alone); the MMIO sections F, D, M, B and E (mmio.c's header;
+ * not in the default run).
  *
  * Sources: Windows 3.1 SDK, Multimedia Programmer's Guide (the timer
  * services), Programmer's Reference Vol. 1 ch. 25 and Vol. 2 (installable
@@ -44,6 +45,7 @@ extern WORD getsp(void);
 #pragma aux getsp = "mov ax, sp" value [ax];
 
 extern WORD FAR PASCAL K_GETEXEPTR(WORD h);     /* KERNEL.133 */
+extern void mmio_sections(char c);              /* mmio.c */
 extern BOOL FAR PASCAL MM_DRIVERCALLBACK(DWORD cb, WORD flags, WORD dev, WORD msg,
                                          DWORD user, DWORD dw1, DWORD dw2); /* .31 */
 extern WORD FAR PASCAL MM_TASKCREATE(FARPROC f, WORD FAR *ph, DWORD inst); /* .900 */
@@ -58,7 +60,7 @@ extern HINSTANCE FAR PASCAL MM_DRVGETMODULEHANDLE(HDRVR);         /* .1103 */
 extern LRESULT FAR PASCAL MM_DRVDEFDRIVERPROC(DWORD, HDRVR, UINT, LPARAM, LPARAM); /* .1104 */
 
 static const char logname[] = "C:\\MMP.LOG";
-static char line[600];
+char line[600];
 static char args[40];
 static struct mmcstate FAR *st;
 static HWND hwnd;
@@ -66,7 +68,7 @@ static HINSTANCE hinst;
 static FARPROC cb, taskfn, stackfn, hookfn;
 static WORD callsp;
 
-static void put(const char FAR *s, int n)
+void put(const char FAR *s, int n)
 {
     HFILE f = _lopen(logname, OF_WRITE);
     if (f == HFILE_ERROR)
@@ -77,7 +79,7 @@ static void put(const char FAR *s, int n)
     _lclose(f);
 }
 
-static void lg(const char *fmt, ...)
+void lg(const char *fmt, ...)
 {
     int n = wvsprintf(line, fmt, (LPSTR)(&fmt + 1));
     line[n++] = '\r';
@@ -476,6 +478,7 @@ int __cdecl __far tmain(void)
         case 'k': lg("== task"); sec_task(); break;
         case 'o': lg("== ods"); sec_ods(); break;
         case 'p': lg("== pops"); sec_pops(); break;
+        case 'F': case 'D': case 'M': case 'B': case 'E': mmio_sections(*a); break;
         }
         pump();
     }

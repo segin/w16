@@ -2616,7 +2616,7 @@ $(W16SYS)/TOOLHELP.DLL: $(DOS)/TOOLHELP.DLL
 # large model, SS != DS (it runs on its callers' stacks and at interrupt
 # time), every entry loads its DS ----
 MMCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=MM_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
-MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
+MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/mmio.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
 mmsystem: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 dos: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 .PHONY: mmsystem
@@ -2647,10 +2647,7 @@ $(DOS)/MMTASK.TSK: $(B)/mmsystem/mmtask.o shell/mmsystem/mmtask.lnk tools/nemark
 	$(WLINK) @shell/mmsystem/mmtask.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/mmsystem/mmtask.map file { $(B)/mmsystem/mmtask.o }
 	python3 tools/nemark.py $@ 3.10 030A 08
-# not in the install tree yet: QuickTime's player needs MMIO and wave
-# (docs/notes/mmsystem-handover.md); `make mmsystem-tree` puts them there
-mmsystem-tree: $(W16SYS)/MMSYSTEM.DLL $(W16SYS)/MMTASK.TSK
-.PHONY: mmsystem-tree
+install-tree: $(W16SYS)/MMSYSTEM.DLL $(W16SYS)/MMTASK.TSK
 $(W16SYS)/MMSYSTEM.DLL: $(DOS)/MMSYSTEM.DLL
 	@mkdir -p $(@D)
 	cp $< $@
@@ -2744,10 +2741,14 @@ $(B)/mmsystem/tests/mmp.o: tests/mmsystem/mmp.c tests/mmsystem/mmc.h
 $(B)/mmsystem/tests/mmc.o: tests/mmsystem/mmc.c tests/mmsystem/mmc.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
-$(DOS)/MMP.EXE: $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o tests/apps/app.lnk tests/mmsystem/mmp.lnk
+$(B)/mmsystem/tests/mmio.o: tests/mmsystem/mmio.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+MMPOBJS := $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o $(B)/mmsystem/tests/mmio.o
+$(DOS)/MMP.EXE: $(MMPOBJS) tests/apps/app.lnk tests/mmsystem/mmp.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/mmsystem/mmp.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/mmsystem/tests/mmp.map file { $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o }
+	    option map=$(B)/mmsystem/tests/mmp.map file { $(MMPOBJS) }
 MMCOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mmc.o $(B)/mmsystem/tests/mmcs.o
 $(DOS)/MMC.DLL: $(MMCOBJS) tests/apps/dll.lnk tests/mmsystem/mmc.lnk
 	@mkdir -p $(@D)

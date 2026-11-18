@@ -25,27 +25,24 @@ MMSYSTEM.DLL). All DOSBox work on installation-05, run name `w16-mmsys`
 - `shell/mmsystem/`: `mmfix.asm` (fixed code: entry, StackEnter/Leave,
   DriverCallback, the time* functions, mmTaskSignal, the Drv* jumps,
   OutputDebugStr), `core.c` (DriverProc, mmsystemGetVersion, the
-  interrupt stack, mmTaskCreate/Block/Yield), `stubs.c` (every export of
-  the later layers: right argument sizes, "no device" answers),
+  interrupt stack, mmTaskCreate/Block/Yield), `mmio.c` (layer 2: every
+  mmio* function, the DOS and MEM procedures), `stubs.c` (every export
+  of the later layers: right argument sizes, "no device" answers),
   `mmsys.h`, `mmsystem.lnk` (all 136 exports, 3.1's ordinals and
   residency; DRIVERPROC = MMDRIVERPROC since windows.h has a DRIVERPROC
   type), `mmsystem.rc` (version 3.10.0.103), `mmtask.asm`/`mmtask.lnk`
   (MMTASK.TSK). Makefile: `make mmsystem`; flags 8309h/08h, 030Ah/08h.
-  NOT in the install tree yet (`make mmsystem-tree` copies them there):
-  with layer 1 alone QuickTime's player says "Could not open movie
-  sample.mov" (QTIM.DLL imports mmio* 1210-1224, wave out 401-416, MIDI
-  out, time*; MCIQTW.DRV the mci driver helpers). Install it (hook
-  mmsystem-tree into install-tree, assets/README.TXT) once the
-  `mmsystem@qt` part passes.
-- `tests/mmsystem/`: MMP.EXE (`mmp.c`, the layer-1 probe, sections in
-  its header), MMC.DLL (`mmc.c`, `mmcs.asm`: callbacks, the mmTask
-  function, StackEnter with markers, INT 21h/41h hooks, a pop counter),
+  Installed as SYSTEM\MMSYSTEM.DLL and SYSTEM\MMTASK.TSK (since layer
+  2: with layer 1 alone QuickTime's player said "Could not open movie
+  sample.mov"; QTIM.DLL reads movies through mmio).
+- `tests/mmsystem/`: MMP.EXE (`mmp.c`, the probe, sections in its
+  header; `mmio.c` its MMIO sections F D M B E), MMC.DLL (`mmc.c`,
+  `mmcs.asm`: callbacks, the mmTask function, StackEnter with markers,
+  INT 21h/41h hooks, a pop counter, the logging "TST " I/O procedure),
   `mrun.sh` (one run, ms|w16), `mcmp.py` (masks and known differences,
-  each explained), `mscen.sh` (parts core, timer: everything at once and
-  compared). `tests/timer/trun.sh` takes TRUN_MM=w16.
-- Boot-test case `mmsystem` (parts core, timer; qt runs by name,
-  mmsystem@qt, and joins the default parts once it passes).
-
+  each explained), `mscen.sh` (parts core, mmio, timer: everything at
+  once and compared). `tests/timer/trun.sh` takes TRUN_MM=w16.
+- Boot-test case `mmsystem` (parts core, mmio, timer, qt).
 ## Status
 
 - [x] Layer 1: skeleton, DriverProc/boot driver, StackEnter/StackLeave,
@@ -57,10 +54,12 @@ MMSYSTEM.DLL). All DOSBox work on installation-05, run name `w16-mmsys`
   identical (the timings differ by 3.1's driver's own faults). Boot-test
   run (remote, w16-mmsys): mmsystem core and timer, timer, drivers,
   treealone ok.
-- [ ] Layer 2: MMIO (1210-1226)
+- [x] Layer 2: MMIO (1210-1226). mscen.sh mmio: 270 lines identical;
+  QuickTime's movie plays with w16's MMSYSTEM as on 3.1 (mmsystem@qt).
 - [ ] Layer 3: wave/MIDI/aux/joystick, sndPlaySound
 - [ ] Layer 4: MCI
-- [ ] ARCHITECTURE.md 23, assets/README.TXT, the install tree (see Layout)
+- [x] ARCHITECTURE.md 23 (23.2 has the observations in order),
+  TESTING.md, assets/README.TXT, the install tree
 
 ## Layer 1 observations (MMP on 3.1, Microsoft's KRNL386, Standard mode)
 
@@ -121,10 +120,55 @@ MMSYSTEM.DLL). All DOSBox work on installation-05, run name `w16-mmsys`
   but handle values follow the heap; the function's selector in the
   task's data likewise.
 
-## Next: layer 2 (MMIO)
+## Layer 2 observations
 
-Probe MMIO the same way: a new section set (or MIP.EXE) doing every
-documented case of the Multimedia Programmer's Guide ch. 8-9 (DOS and
-memory files, buffered and not, RIFF descend/ascend/create, custom I/O
-procedures and mmioInstallIOProc, mmioRename, mmioStringToFOURCC, errors)
-and logging results, on 3.1 and w16, compared by a mcmp-like script.
+ARCHITECTURE.md 23.2 (MMIO) has them; the raw logs are MMP's sections
+F D M B E (`MRUN_ARG=FDMBE tests/mmsystem/mrun.sh OUT ms`). Things that
+took a second run to see: the probe's C argument lists are evaluated
+right to left (a "then at" query beside a call runs before it); an
+unbuffered file's place is MMSYSTEM's (seeks send nothing until the
+next read or write); 3.1 takes mmioSeek(-1, SEEK_SET) on an unbuffered
+file as the place -1. Masks added: GetTempFileName's number, the
+interrupt stack's owner.
+
+## Next: layer 3 (wave, MIDI, aux, joystick, sndPlaySound)
+
+Where to resume. Nothing of layer 3 is written; `stubs.c` answers 0
+devices. Plan:
+
+1. A logging pass-through driver, like TMS.DRV (tests/timer/tms.c) but
+   for the device drivers: it loads the real driver (Microsoft's
+   SNDBLST2.DRV/SB16 wave driver, MIDIMAP.DRV, MSADLIB.DRV ...) as a
+   library and forwards its DriverProc *and* its exported message
+   entries (wodMessage, widMessage, modMessage, midMessage, auxMessage:
+   check the real drivers' NE exports with tools/neinfo.py; MMSYSTEM
+   calls them directly with (uDeviceID, uMsg, dwUser, dwParam1,
+   dwParam2), which is the protocol to observe), logging every call,
+   pointers' contents and results into the probe's log. Put it in
+   SYSTEM.INI `[drivers] wave=shim.drv` with the real file name in its
+   own key.
+2. The SB16 setup: `tests/sb16setup.sh` installs the user's SB16 drivers
+   into a scratch reference copy (never commit them); the MMSOUND.DRV
+   handover has the DOSBox SB16 settings. Run the probe there with
+   Microsoft's MMSYSTEM through the shim, then with w16's.
+3. Probe (new MMP sections): *GetNumDevs with 0, 1, 2 drivers and with
+   wave1= wave2= keys (the numbering, the mapper's ID FFFFh), DevCaps,
+   open/close with each flag (WAVE_FORMAT_QUERY, WAVE_ALLOWSYNC,
+   CALLBACK_*), prepare/unprepare/write and the header flags
+   (WHDR_PREPARED, DONE, INQUEUE) and which of these MMSYSTEM does
+   itself (GlobalPageLock of headers?) and which it sends, the error
+   numbers for bad IDs/handles, the *GetErrorText strings for every
+   number 0-255 (by calling 3.1's function: never from its resources),
+   GetID, Message pass-through, volume, midiOutCachePatches, aux, joy*
+   (no joystick driver in the reference: the answers without one), and
+   sndPlaySound with WIN.INI [sounds] names, files, SND_* flags (a wave
+   driver needed: SB16 setup; also what happens with none).
+4. Real programs: Sound Recorder, Media Player, SND.CPL, MIDI Mapper
+   (Control Panel) on the SB16 setup, with Microsoft's MMSYSTEM and
+   w16's; screenshots compared.
+
+Layer 4 (MCI) after that: see the task's list (core command table from
+the Programmer's Guide, mciLoadCommandResource, [mci] and [mci
+extensions], MCIWAVE/MCISEQ/MCIQTW). MCIQTW.DRV imports DriverCallback,
+mciLoadCommandResource, mciSet/GetDriverData, mciDriverYield,
+mciDriverNotify and mciFreeCommandResource.

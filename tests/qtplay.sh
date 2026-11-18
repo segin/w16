@@ -5,9 +5,10 @@
 # reported a hang with: a scratch copy of the reference install with every
 # file of w16's install tree (build/w16, `make install-tree`) copied over
 # Microsoft's in WINDOWS and WINDOWS\SYSTEM, except the INI, GRP and README
-# files (3.1's INI files stay, as do MMSYSTEM, TIMER.DRV, the MCI drivers,
-# TOOLHELP, ...), started with WIN /S; WIN.COM, DOSX and KRNL386 are w16's
-# (on a 386 DOSX starts KRNL386). tests/scripts/input/qtplay.txt runs the
+# files (3.1's INI files stay, as do the MCI drivers and whatever the tree
+# lacks; MMSYSTEM, TIMER.DRV and TOOLHELP are w16's now), started with
+# WIN /S; WIN.COM, DOSX and KRNL386 are w16's (on a 386 DOSX starts
+# KRNL386). tests/scripts/input/qtplay.txt runs the
 # installer (C:\TMP\QTINSTAL.EXE) from Program Manager, answers its five
 # boxes, lets "Play Sample" start the Movie Player with SAMPLE.MOV, and
 # plays it with Space, a shot every 2 seconds.

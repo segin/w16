@@ -141,19 +141,6 @@ typedef struct {
     WORD hmmio;
 } MINFO;
 
-static const char *fcc(DWORD f)
-{
-    static char b[4][12];
-    static int k;
-    char *r = b[k++ & 3];
-    int i;
-    for (i = 0; i < 4; i++) {
-        BYTE c = (BYTE)(f >> (8 * i));
-        r[i] = c >= 32 && c < 127 ? c : '.';
-    }
-    r[4] = 0;
-    return r;
-}
 
 LRESULT FAR PASCAL __loadds MMCIOPROC(LPSTR lpi, UINT msg, LPARAM l1, LPARAM l2)
 {
@@ -167,8 +154,8 @@ LRESULT FAR PASCAL __loadds MMCIOPROC(LPSTR lpi, UINT msg, LPARAM l1, LPARAM l2)
                 msg, l1 ? (LPSTR)l1 : (LPSTR)"(null)", l2, m->dwFlags, m->lDiskOffset,
                 m->adwInfo[0], m->adwInfo[1], m->adwInfo[2]);
         else
-            mlg("    io msg %04X l1 %s l2 %08lX: flags %08lX disk %ld info %08lX %08lX %08lX",
-                msg, (LPSTR)(msg <= 1 || msg == 5 ? "(buffer)" : fcc(0)), l2, m->dwFlags,
+            mlg("    io msg %04X l1 %s%ld l2 %08lX: flags %08lX disk %ld info %08lX %08lX %08lX",
+                msg, (LPSTR)(msg <= 1 || msg == 5 ? "(buffer) " : ""), msg <= 1 || msg == 5 ? 0L : l1, l2, m->dwFlags,
                 m->lDiskOffset, m->adwInfo[0], m->adwInfo[1], m->adwInfo[2]);
         if (msg <= 1 || msg == 5) {
             /* where the buffer is, relative to MMIO's own buffer */

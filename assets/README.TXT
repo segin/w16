@@ -87,8 +87,14 @@ w16 repository's LICENSE):
                           millisecond timer and timer events behind the
                           time* functions of MMSYSTEM.DLL (timeGetTime,
                           timeSetEvent ...), which programs that play
-                          sound, music or video use; MMSYSTEM.DLL
-                          itself still comes from your Windows (below)
+                          sound, music or video use
+  SYSTEM\MMSYSTEM.DLL     the multimedia system library: its timer
+                          services, multimedia file I/O (mmio*), the
+                          installable-driver and task services; sound
+                          devices and MCI are not w16's yet (with
+                          programs that need them, use your own
+                          Windows 3.1 MMSYSTEM.DLL instead)
+  SYSTEM\MMTASK.TSK       the multimedia library's helper task
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
                           Printers, International and Date/Time are not
@@ -126,11 +132,8 @@ SYSTEM subdirectory, as there) without overwriting the files above:
 
   Windows directory:      any applications you want
   Windows directory:      MORICONS.DLL (Program Manager's extra icons)
-  SYSTEM:                 MMSYSTEM.DLL (multimedia; SYSTEM.INI here
-                          already names it, [boot] drivers=mmsystem.dll,
-                          and its timer, [drivers] timer=timer.drv:
-                          w16's TIMER.DRV; without MMSYSTEM.DLL those
-                          lines do nothing),
+  SYSTEM:                 the sound and MCI drivers (*.DRV named in
+                          SYSTEM.INI [drivers] and [mci]),
                           the other fonts (*.FON, *.FOT, *.TTF),
                           DRIVERS.CPL and SND.CPL (Control Panel's
                           Drivers and Sound)
