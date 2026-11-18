@@ -79,6 +79,12 @@ w16 repository's LICENSE):
   SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
                           old SOUND functions (voice queues of notes)
                           on the PC speaker
+  SYSTEM\TIMER.DRV        the multimedia timer driver: the
+                          millisecond timer and timer events behind the
+                          time* functions of MMSYSTEM.DLL (timeGetTime,
+                          timeSetEvent ...), which programs that play
+                          sound, music or video use; MMSYSTEM.DLL
+                          itself still comes from your Windows (below)
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
                           Printers, International and Date/Time are not
@@ -116,7 +122,11 @@ SYSTEM subdirectory, as there) without overwriting the files above:
 
   Windows directory:      any applications you want
   Windows directory:      MORICONS.DLL (Program Manager's extra icons)
-  SYSTEM:                 MMSYSTEM.DLL (multimedia),
+  SYSTEM:                 MMSYSTEM.DLL (multimedia; SYSTEM.INI here
+                          already names it, [boot] drivers=mmsystem.dll,
+                          and its timer, [drivers] timer=timer.drv:
+                          w16's TIMER.DRV; without MMSYSTEM.DLL those
+                          lines do nothing),
                           TOOLHELP.DLL (used by debuggers and system
                           utilities),
                           the other fonts (*.FON, *.FOT, *.TTF),
