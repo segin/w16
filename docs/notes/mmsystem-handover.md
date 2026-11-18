@@ -216,7 +216,15 @@ its end, neither matched: left as is), qt (MCIQTW.DRV on
 /mnt/build/w16-qtfiles/ref-installed/c, `-e W16_QTDIR=...`) identical on
 the MCI side. `mprog.sh mplayer`: Media Player's nine screens 0 pixels
 off. The fix that Media Player needed: mciSendCommand clears the high word
-of the block's second DWORD after a MCI_RESOURCE_RETURNED answer.
+of the block's second DWORD after a MCI_RESOURCE_RETURNED answer. Full
+run (remote-test.sh -n w16-mci -e W16_QTDIR=/mnt/build/w16-qtfiles, at
+06f64f5): make test passes; boot test 122 ok, 3 failures, all known on
+master: ddeml (conn), lzexpand (quirks), soundtime (sometimes). Every
+mmsystem part (core mmio timer qt dev mci prog), timer, toolhelp and
+quicktime passed. The mmsystem@timer flake (timeKillEvent 97) was not seen
+in two runs of the part; an earlier partial run saw timer@s's shim
+timing 102 ms off (a 100 ms limit) and toolhelp@ref386's Microsoft side
+not finishing, both on Microsoft's MMSYSTEM and passing in the full run.
 
 Observed on 3.1 (explore1-11; raw logs in build/mci, not kept):
 - Driver protocol: OpenDriver (USER: message 0, DRV_LOAD, DRV_ENABLE for

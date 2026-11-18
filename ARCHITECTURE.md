@@ -3395,7 +3395,9 @@ MCISEQ's background task ends is compared apart (23.5). With
 `$W16_QTDIR/ref-installed/c` (a QuickTime-installed drive) the case qt
 opens, queries and plays QuickTime's sample movie through MCIQTW.DRV:
 the commands and MCIQTW's records identical (QuickTime's own streaming of
-the sound through the wave driver follows the clock: left out).
+the sound through the wave driver follows the clock: left out). Full run
+(2026-11-18): make test passes, the boot test 122 ok with only the
+failures known before (ddeml conn, lzexpand quirks, soundtime).
 
 ### 23.5 UNVERIFIED, and not done
 
