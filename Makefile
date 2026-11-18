@@ -2624,13 +2624,13 @@ $(B)/toolhelp/tests/%.o: tests/toolhelp/%.asm
 $(B)/toolhelp/tests/thp.res: tests/toolhelp/thp.rc
 	@mkdir -p $(@D)
 	cd $(B)/toolhelp/tests && $(WRC) -q -r -bt=windows -fo=thp.res $(CURDIR)/tests/toolhelp/thp.rc
-THPOBJS := $(B)/tests/start.o $(B)/toolhelp/tests/thp.o $(B)/toolhelp/tests/thps.o
+THPOBJS := $(B)/toolhelp/tests/thstart.o $(B)/toolhelp/tests/thp.o $(B)/toolhelp/tests/thps.o
 $(DOS)/THP.EXE: $(THPOBJS) $(B)/toolhelp/tests/thp.res tests/apps/app.lnk tests/toolhelp/thp.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/toolhelp/thp.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/toolhelp/tests/thp.map option resource=$(B)/toolhelp/tests/thp.res \
 	    file { $(THPOBJS) }
-THCOBJS := $(B)/tests/start.o $(B)/toolhelp/tests/thc.o $(B)/toolhelp/tests/thps.o \
+THCOBJS := $(B)/toolhelp/tests/thstart.o $(B)/toolhelp/tests/thc.o $(B)/toolhelp/tests/thps.o \
            $(B)/toolhelp/tests/thcs.o
 $(DOS)/THC.EXE: $(THCOBJS) tests/apps/app.lnk tests/toolhelp/thc.lnk
 	@mkdir -p $(@D)
