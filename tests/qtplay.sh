@@ -51,7 +51,7 @@
 #     report, no hangwatch report in OUT.TXT) to its last shot; Program
 #     Manager is back the same after File > Exit as after Alt+F4 (c5-exit
 #     and c7-closed equal, and not c4-paused, the player); Exit Windows
-#     ends Windows (WIN returns; w16: "back to DOS, code 0000"). The
+#     ends Windows (WIN returns; w16's KERNEL: "back to DOS, code 0000"). The
 #     screens in between (c1-c8) are saved, not compared.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
@@ -204,10 +204,13 @@ closed() {
     elif [ "$(px "$2/c5-exit.png" "$2/c7-closed.png")" != 0 ] ||
          [ "$(px "$2/c5-exit.png" "$2/c4-paused.png")" = 0 ]; then
         fail "the close sequence on $1: Program Manager not back the same after File > Exit and Alt+F4 ($2/c5-exit.png, c7-closed.png)"
-    elif ! grep -aq WINEXIT "$o" 2>/dev/null; then
+    elif grep -a 'back to DOS, code' "$o" 2>/dev/null | grep -aqv 'code 0000'; then
+        # w16's KERNEL says how Windows ended ([w16] exitmsg)
+        fail "the close sequence on $1: Windows ended with $(grep -a -m1 'back to DOS' "$o") ($2)"
+    elif ! grep -aq 'WINEXIT\|back to DOS, code 0000' "$o" 2>/dev/null; then
+        # WIN back at the prompt (the autoexec's WINEXIT; a w16 run ends
+        # DOSBox there)
         fail "the close sequence on $1: Exit Windows did not end Windows ($2)"
-    elif [ "$1" = w16 ] && ! grep -aq 'back to DOS, code 0000' "$o"; then
-        fail "the close sequence on w16: Windows ended with $(grep -a -m1 'back to DOS' "$o" || echo 'no exit message') ($2)"
     else
         echo "the close sequence on $1: closed, reopened, paused, File > Exit, Alt+F4, Exit Windows: survived"
     fi
