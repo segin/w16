@@ -1,0 +1,11 @@
+# TPR.EXE (tests/timer/tpr.c, tprs.asm), the timer probe
+@tests/apps/app.lnk
+option stack=16k
+import K_GETEXEPTR KERNEL.133
+import TPCCALLBACK TPC.2
+import TPCSTATE TPC.3
+library mmsystem.lib
+import TPCHOOK TPC.4
+import TPCIRQ TPC.5
+import TPCARM TPC.6
+import TPCSTACK TPC.7

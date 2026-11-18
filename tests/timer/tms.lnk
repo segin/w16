@@ -1,0 +1,13 @@
+# TMS.DRV (tests/timer/tms.c, tms.asm), the logging pass-through timer
+# driver: DriverProc forwards to the real TIMER.DRV. Code and data fixed:
+# MMSYSTEM calls it at interrupt time too.
+@tests/apps/dll.lnk
+option modname=TMS
+segment type code fixed preload
+segment type data fixed preload
+export WEP.1 resident
+export DRIVERPROC.2 resident
+export TMSDUMPTO.3
+export TMSSET.4
+export TMSCOUNT.5
+import K_GETEXEPTR KERNEL.133

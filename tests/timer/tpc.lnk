@@ -1,0 +1,17 @@
+# TPC.DLL (tests/timer/tpc.c, tpcs.asm), the timer probe's callback DLL.
+# Code and data fixed: the callback runs at interrupt time.
+@tests/apps/dll.lnk
+option modname=TPC
+segment type code fixed preload
+segment type data fixed preload
+export WEP.1 resident
+export TPCCALLBACK.2
+export TPCSTATE.3
+import __0040H KERNEL.193
+library mmsystem.lib
+export TPCHOOK.4
+export TPCIRQ.5
+export TPCARM.6
+export TPCSTACK.7
+import STACKENTER MMSYSTEM.32
+import STACKLEAVE MMSYSTEM.33
