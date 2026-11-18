@@ -71,8 +71,9 @@ MASKS = [
     (re.compile(r'^(  cb h \S+ msg 03C[3-6] .* dw2 )[0-9A-F]{8}'), r'\1(time)'),
 ]
 
-# lines of timings: never compared
-SKIP = re.compile(r'^~')
+# lines of timings: never compared (also the WM_TIMER ticks MMSYSTEM's
+# window gets while a sound ends: how many come in a pump is timing)
+SKIP = re.compile(r"^~|^  to MMSYSTEM's window: 0113 ")
 
 KNOWN = [
     # The task function's BX, CX and DI: the instance handle of MMTASK's

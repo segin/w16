@@ -1334,7 +1334,7 @@ static void sec_snd(void)
             while (GetTickCount() - t < 100)
                 Yield();
             flush();
-            if (k % 10 == 9)
+            if (k == 59)
                 lg("  %d s of messages", (k + 1) / 10);
         }
         (void)t0;

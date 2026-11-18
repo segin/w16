@@ -1,4 +1,4 @@
-; Sound Recorder opens C:\WINDOWS\DING.WAV (WIN.INI run=; tests/mmsystem/
+; Sound Recorder opens C:\WINDOWS\DING.WAV (WIN.INI run= the file; tests/mmsystem/
 ; mprog.sh soundrec) and plays it: its window as it opens (the length
 ; from the file, the buttons enabled with a wave device), then Space on
 ; the focused Play button and the window once the sound has played. The

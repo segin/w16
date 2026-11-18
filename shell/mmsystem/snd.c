@@ -103,10 +103,11 @@ LRESULT MMAPI mm_sndwndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     /* 3.1's (MMP section x, the messages its window gets): MM_WOM_DONE
        starts a timer (ID 1); the device is closed at a WM_TIMER that finds
        the sound playing done, and the timer killed; until then it ticks
-       on, across new sounds. UNVERIFIED: the period (under 100 ms) */
+       on, across new sounds. UNVERIFIED: the period (about 500 ms: no tick
+       between two 0.5 s apart in MMP's pumping, one at the end) */
     if (msg == MM_WOM_DONE) {
         if (hwo && wp == hwo)
-            SetTimer(h, 1, 100, NULL);
+            SetTimer(h, 1, 500, NULL);
         return 0;
     }
     if (msg == WM_TIMER && wp == 1) {

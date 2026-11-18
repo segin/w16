@@ -26,7 +26,7 @@ for f in SNDBLST2 MSADLIB; do
 done
 cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$tmp/WIN.INI"
 case $prog in
-soundrec) run='SOUNDREC.EXE C:\WINDOWS\DING.WAV' ;;
+soundrec) run='C:\WINDOWS\DING.WAV' ;;     # run= starts the program each word names: the file opens Sound Recorder
 sound|midimap) run=CONTROL.EXE ;;
 *) echo "PROG: soundrec, sound or midimap" >&2; exit 2 ;;
 esac
