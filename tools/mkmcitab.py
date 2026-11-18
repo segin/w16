@@ -36,7 +36,9 @@ def const(kw, flag, values):
 
 
 # ---- the core table: the commands every device has ----
-OPEN = [('type', 0x2000, STRING), ('element', 0x200, STRING),
+# the element's DWORD has no keyword of its own (3.1: "element x" is
+# refused); a keyword that cannot be typed keeps its place
+OPEN = [('type', 0x2000, STRING), ('\\001', 0x200, STRING),
         ('alias', 0x400, STRING), ('shareable', 0x100, FLAG)]
 FORMATS = [('milliseconds', 0), ('ms', 0)]
 SETCORE = [('door open', 0x100, FLAG), ('door closed', 0x200, FLAG),

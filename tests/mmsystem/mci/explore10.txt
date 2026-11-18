@@ -1,0 +1,25 @@
+# exploration 10: a rectangle's return buffer, unknown open keywords
+s open t519 alias a
+s/r13 where a source
+s/r16 where a source
+s/r20 where a source
+s/r24 where a source
+s/r27 where a source
+s/r28 where a source
+s/r30 where a source
+s/r40 where a source
+t 0 0
+t 2 40001
+t 3 FFFE
+t 2 80003
+t 3 4
+s/r16 where a source
+s/r27 where a source
+s/r28 where a source
+t 0 0
+s close a
+s open mct nosuch
+s open mct alias b nosuch 5
+s open mct shareable shareable
+s open mct alias c alias d
+s close all

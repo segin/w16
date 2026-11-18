@@ -1083,6 +1083,8 @@ static DWORD sysinfo(UINT dev, DWORD flags, struct sysinfoparms FAR *sp)
 /* MCI_BREAK: the default yield procedure with the key (MMP) */
 static DWORD dobreak(struct mcidev *d, DWORD flags, DWORD FAR *bp)
 {
+    if ((flags & MCI_BREAK_KEY) && (flags & MCI_BREAK_OFF))
+        return E_FLAGS_NOT_COMPATIBLE;
     if (flags & MCI_BREAK_KEY) {
         if (!bp)
             return E_NULL_PARAMETER_BLOCK;
@@ -1204,7 +1206,7 @@ static DWORD stropen(LPSTR dtok, LPSTR args, HWND hwnd, UINT *pid)
     LPCSTR own;
     UINT id;
     DWORD r, f;
-    int isnew = 0, i;
+    int isnew = 0, i, seen = 0;
     HLOCAL hb;
     /* the type and alias keywords, looked for before the driver is
        loaded */
@@ -1212,15 +1214,27 @@ static DWORD stropen(LPSTR dtok, LPSTR args, HWND hwnd, UINT *pid)
     for (s = scan; *(s = (char *)skipb(s));) {
         if (token((LPSTR FAR *)&s, (LPSTR FAR *)&t))
             break;
-        if (!lstrcmpi(t, "type") || !lstrcmpi(t, "alias")) {
+        if (!lstrcmpi(t, "shareable") || !lstrcmpi(t, "notify") || !lstrcmpi(t, "wait")) {
+            int bit = lower(t[0]) == 's' ? 1 : lower(t[0]) == 'n' ? 2 : 4;
+            if (seen & bit)
+                return E_DUPLICATE_FLAGS;       /* before the driver loads */
+            seen |= bit;
+        } else if (!lstrcmpi(t, "type") || !lstrcmpi(t, "alias")) {
+            int bit = lower(t[0]) == 't' ? 8 : 16;
             char *v;
+            if (seen & bit)
+                return E_DUPLICATE_FLAGS;
+            seen |= bit;
+            if (!*skipb(s))
+                return E_MISSING_STRING_ARGUMENT;   /* before the driver loads */
             if (token((LPSTR FAR *)&s, (LPSTR FAR *)&v))
                 break;
             if (lower(t[0]) == 't')
                 x = v;
             else
                 y = v;
-        }
+        } else if (!lstrcmpi(t, "element"))
+            return E_INVALID_DEVICE_NAME;   /* 3.1 (MMP); UNVERIFIED why */
     }
     for (bang = dtok; *bang && *bang != '!'; bang++)
         ;
@@ -1358,6 +1372,8 @@ static DWORD convert(DWORD r, WORD rt, LPDWORD blk, LPSTR ret, UINT size, struct
     }
     if (rt == CT_RECT) {
         WORD FAR *w = (WORD FAR *)&blk[1];
+        if (size < 28)                  /* four "%d" and blanks (MMP) */
+            return E_PARAM_OVERFLOW;
         wsprintf(tmp, "%d %d %d %d", (int)w[0], (int)w[1], (int)w[2], (int)w[3]);
         if (size)
             lstrcpyn(ret, tmp, size);
