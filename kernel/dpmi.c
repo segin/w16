@@ -22,9 +22,39 @@ u16 dpmi_alloc_desc(u16 n)
     return call(&r) ? r.ax : 0;
 }
 
+/* FS and GS on a 386 (the C code never uses them: KRNL286 is 286 code,
+   KRNL386 is built with -zfp -zgp) */
+static u16 fs_of(void);
+#pragma aux fs_of = 0x8C 0xE0 value [ax] modify exact [ax];          /* mov ax, fs */
+static u16 gs_of(void);
+#pragma aux gs_of = 0x8C 0xE8 value [ax] modify exact [ax];          /* mov ax, gs */
+static void fs_zero(void);
+#pragma aux fs_zero = 0x31 0xC0 0x8E 0xE0 modify exact [ax];         /* xor ax, ax; mov fs, ax */
+static void gs_zero(void);
+#pragma aux gs_zero = 0x31 0xC0 0x8E 0xE8 modify exact [ax];         /* xor ax, ax; mov gs, ax */
+static u16 has_fsgs = 0xFFFF;   /* a 386 or later (unknown: FFFFh) */
+
+/* A selector still in FS or GS when it is freed: zeroed first. The DOS
+   extender reloads FS and GS when its INT 31h returns (w16's DOSX at the
+   POP FS of its call gate's exit, Microsoft's in its ring-3 code) and at
+   every interrupt, so a dead one there ended Windows ("Standard Mode:
+   Fault in MS-DOS Extender", error code the selector). Windows 3.1's
+   KERNEL puts a freed selector on its own free list (Pietrek, ch. 2,
+   Free_Sel) and never hands it back to the host, so this never comes up
+   there: QuickTime's Movie Player ends with one of its blocks in FS, and
+   KRNL286 freed that block with the task (docs/notes/
+   quicktime-handover.md, "Closing the player"). */
 void dpmi_free_desc(u16 sel)
 {
     regs16 r;
+    if (has_fsgs == 0xFFFF)
+        has_fsgs = dpmi_cpu_type() >= 3;
+    if (has_fsgs) {
+        if (!((fs_of() ^ sel) & 0xFFFC))
+            fs_zero();
+        if (!((gs_of() ^ sel) & 0xFFFC))
+            gs_zero();
+    }
     r.ax = 0x0001;
     r.bx = sel;
     call(&r);
