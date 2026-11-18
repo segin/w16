@@ -155,12 +155,14 @@ multi|sb16, MRUN_SHIM=1), `mdscen.sh` (cases NAME:SOUND:SHIM:SECTIONS,
 Recorder, SND.CPL, MIDI Mapper), boot-test parts `mmsystem@dev` and
 `mmsystem@prog`. `mcmp.py` masks: each one says why.
 
-Configuration sb2 (Windows 3.1's own SNDBLST2.DRV and MSADLIB.DRV from
+Configuration sb2 (Windows 3.1's own SNDBLST2.DRV from
 .tools/ref/win31/src, keys as Setup writes them: wave= midi=
-sndblst2.drv, midi1=msadlib.drv) is the one used. MSADLIB finds no Ad
-Lib in DOSBox (DRVM_INIT 3, 0 devices), so MIDI out is SNDBLST2's port
-and the MIDI Mapper's "Ad Lib" setup fails with 68 (MIDIERR_NODEVICE), as
-on 3.1. Creative's SB16 drivers: SB16SND.DRV wants ASP.SYS (mrun loads it
+sndblst2.drv) is the one used. Setup's midi1=msadlib.drv is left out:
+MSADLIB.DRV finds DOSBox's OPL in some runs and not in others (DRV_ENABLE
+1 or 0, DRVM_INIT 8 or 3, 1 or 0 devices), which moves the MIDI IDs; the
+earlier runs with it showed a driver with 0 devices staying open. MIDI
+out is SNDBLST2's port, and the MIDI Mapper's "Ad Lib" setup fails with
+68 (MIDIERR_NODEVICE), as on 3.1. Creative's SB16 drivers: SB16SND.DRV wants ASP.SYS (mrun loads it
 with DOSBox-X's DEVICE) and then stops at "Incorrect MIDIPORT setting in
 the SYSTEM.INI file" even with [sndblst.drv] port/int/dma/hdma/midiport
 set: not used. Pitfalls met: a probe call that hands the driver NULL or

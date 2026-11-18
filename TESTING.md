@@ -115,8 +115,8 @@ alone: `tests/mmsystem/mrun.sh OUT ms|w16` with `MRUN_ARG` the sections;
 the boot-test case `mmsystem`, whose part `qt` plays QuickTime's movie
 with w16's MMSYSTEM, MMTASK and TIMER.DRV),
 `tests/mmsystem/mdscen.sh [-m] [NAME:SOUND:SHIM:SECTIONS...]` (layer 3:
-MMP's device sections over Windows 3.1's own Sound Blaster, Ad Lib and
-MIDI Mapper drivers, expanded from the reference's Setup files, with the
+MMP's device sections over Windows 3.1's own Sound Blaster and MIDI
+Mapper drivers, expanded from the reference's Setup files, with the
 logging drivers MDS*.DRV between them and MMSYSTEM, both MMSYSTEMs
 compared; `-m` Microsoft's only; `mrun.sh`'s `MRUN_SND` and `MRUN_SHIM`
 for one run; part `dev` of the boot-test case `mmsystem`),

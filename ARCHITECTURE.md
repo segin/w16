@@ -3065,8 +3065,8 @@ no MCI driver is there.
   sndPlaySound, b MessageBeep) print the records after every step, with
   the probe's handles, headers and callbacks by name.
   `tests/mmsystem/mrun.sh` (MRUN_SND none, sb2: Windows 3.1's own
-  SNDBLST2.DRV and MSADLIB.DRV from its Setup files with the keys Setup
-  writes, multi: several keys, sb16: Creative's drivers, MRUN_SHIM=1) and
+  SNDBLST2.DRV from its Setup files with the keys Setup writes (MSADLIB.DRV
+  left out: its Ad Lib detection in DOSBox varies from run to run), multi: several keys, sb16: Creative's drivers, MRUN_SHIM=1) and
   `tests/mmsystem/mdscen.sh` (every case with both MMSYSTEMs, compared by
   `mcmp.py`); `tests/mmsystem/mprog.sh` runs Sound Recorder, Control
   Panel's Sound and MIDI Mapper applets with real keys.
@@ -3238,7 +3238,7 @@ its player could not open the movie (it reads it through mmio).
 `dev` (`tests/mmsystem/mdscen.sh`, layer 3): MMP's device sections with
 both MMSYSTEMs over the same Microsoft drivers through MDS*.DRV, every
 record of every message and callback compared: no devices (with the
-mapper's shim), SNDBLST2/MSADLIB/MIDIMAP (n, e, w, i, m, j a y, x, b,
+mapper's shim), SNDBLST2/MIDIMAP (n, e, w, i, m, j a y, x, b,
 and all of them without the shims) and several keys (multi): identical
 after `mcmp.py`'s masks, which hide only what the heap, the stack and
 the drivers' own leftovers decide (MMSYSTEM's internal handles and

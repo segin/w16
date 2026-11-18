@@ -219,7 +219,7 @@
 #              (QuickTime's sample movie on stock 3.1 with w16's MMSYSTEM,
 #              MMTASK and TIMER.DRV: tests/qtplay.sh -t; skipped without
 #              $W16_QTDIR); dev (layer 3: MMP's device sections over
-#              Windows 3.1's own Sound Blaster, Ad Lib and MIDI Mapper
+#              Windows 3.1's own Sound Blaster and MIDI Mapper
 #              drivers with the logging drivers MDS*.DRV between them,
 #              tests/mmsystem/mdscen.sh); prog (Sound Recorder playing
 #              DING.WAV, Control Panel's Sound applet testing a sound, the
