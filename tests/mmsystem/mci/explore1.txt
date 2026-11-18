@@ -1,0 +1,110 @@
+# exploration 1: error texts, sysinfo, opening MCT, the driver handshake
+: error texts
+e 0 400
+e 401 1300
+E 257 0
+E 257 1
+E 257 5
+E 257 -1
+E 600 10
+: sysinfo
+s sysinfo all quantity
+s sysinfo all name 1
+s sysinfo all name 2
+s sysinfo all name 3
+s sysinfo all name 4
+s sysinfo all name 5
+s sysinfo all name 9
+s sysinfo all quantity open
+s sysinfo all name 1 open
+s sysinfo waveaudio quantity
+s sysinfo waveaudio name 1
+s sysinfo waveaudio name 2
+s sysinfo sequencer quantity
+s sysinfo other quantity
+s sysinfo mct quantity
+s sysinfo nosuch quantity
+s sysinfo waveaudio installname
+s sysinfo all installname
+s/r3 sysinfo all name 1
+s/r-1 sysinfo all name 1
+s sysinfo
+s sysinfo all
+: open mct
+s open mct
+s close mct
+s open mct alias m1
+s status m1 mode
+s info m1 product
+s capability m1 can play
+s sysinfo m1 installname
+s sysinfo all quantity open
+s sysinfo all name 1 open
+s sysinfo other quantity open
+s sysinfo other name 1 open
+s open mct alias m1
+s open mct alias m2
+s open mct
+s open mct shareable alias m3
+i m1
+i m2
+i m3
+i mct
+i M1
+s close m2
+s close m3
+s play m1
+s play m1 from 10 to 20
+s play m1 from 10 to 20 notify
+w 300
+s play m1 from 10 to 20 wait
+s seek m1 to start
+s seek m1 to end
+s seek m1 to 5
+s stop m1
+s pause m1
+s resume m1
+s record m1
+s set m1 time format milliseconds
+s set m1 time format ms
+s set m1 time format frames
+s set m1 door open
+s set m1 audio all off
+s set m1 video on
+s status m1 position
+s status m1 length
+s status m1 length track 3
+s status m1 number of tracks
+s status m1 media present
+s status m1 time format
+s status m1 ready
+s status m1 current track
+s status m1 start position
+s capability m1 can record
+s capability m1 has audio
+s capability m1 has video
+s capability m1 device type
+s capability m1 uses files
+s capability m1 compound device
+s capability m1 can eject
+s capability m1 can save
+s info m1 file
+s save m1 a.wav
+s load m1 a.wav
+s cue m1
+s delete m1
+s spin m1 up
+s step m1
+s escape m1 hello
+s sound m1
+s sound default
+s sound SystemAsterisk
+s break m1 on 65
+s break m1 off
+s nosuch m1
+s status m1 nosuch
+s status m1
+s
+s close m1
+s close all
+s sysinfo all quantity open

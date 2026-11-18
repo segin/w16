@@ -1,0 +1,16 @@
+# MCT.DRV (tests/mmsystem/mct.c, mdsent.asm), the probe's test MCI
+# driver: DriverProc, MctSet and MctStr; its MCI helpers through
+# MMSYSLOG.DLL, which records them.
+@tests/mmsystem/mds.lnk
+option modname=MCT
+option description 'mct:[MCI] w16 test driver'
+export DRIVERPROC.2 resident
+export MCTSET.10
+export MCTSTR.11
+import MCILOADCOMMANDRESOURCE MMSYSLOG.705
+import MCIFREECOMMANDRESOURCE MMSYSLOG.713
+import MCISETDRIVERDATA MMSYSLOG.707
+import MCIGETDRIVERDATA MMSYSLOG.708
+import MCIDRIVERYIELD MMSYSLOG.710
+import MCIDRIVERNOTIFY MMSYSLOG.711
+import MCIGETCREATORTASK MMSYSLOG.717

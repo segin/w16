@@ -131,6 +131,26 @@ if [ -n "${MRUN_SHIM:-}" ]; then
     drv midimapper midimap.drv MDSM2
     shimargs="$shimargs -f $dos/MMSYSLOG.DLL=WINDOWS/SYSTEM/MMSYSLOG.DLL"
 fi
+if [ -n "${MRUN_MCI:-}" ]; then
+    # layer 4: the MCI script (MMP's section Q, tests/mmsystem/mmci.c),
+    # the test MCI driver MCT.DRV and MMSYSLOG; with MRUN_MCISHIM=1 the
+    # reference's MCIWAVE.DRV and MCISEQ.DRV behind the logging drivers
+    # MDSC1 and MDSC2, scratch copies with their imports of MMSYSTEM
+    # renamed to MMSYSLOG (their calls of MMSYSTEM's MCI helpers recorded)
+    cp "$MRUN_MCI" "$out/MCI.TXT"
+    shimargs="$shimargs -f $out/MCI.TXT=MCI.TXT -f $dos/MCT.DRV=WINDOWS/SYSTEM/MCT.DRV"
+    case $shimargs in *MMSYSLOG*) ;; *) shimargs="$shimargs -f $dos/MMSYSLOG.DLL=WINDOWS/SYSTEM/MMSYSLOG.DLL" ;; esac
+    if [ -n "${MRUN_MCISHIM:-}" ]; then
+        for f in MCIWAVE MCISEQ; do
+            cp "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/$f.DRV" "$out/drv/"
+            python3 -I "$root/tools/nerename.py" "$out/drv/$f.DRV" --import MMSYSTEM=MMSYSLOG > /dev/null
+            shimargs="$shimargs -f $out/drv/$f.DRV=WINDOWS/SYSTEM/$f.DRV"
+        done
+        shimargs="$shimargs -f $dos/MDSC1.DRV=WINDOWS/SYSTEM/MDSC1.DRV -f $dos/MDSC2.DRV=WINDOWS/SYSTEM/MDSC2.DRV"
+        shimargs="$shimargs -i mci:WaveAudio=mdsc1.drv -i mmslog:MDSC1=mciwave.drv"
+        shimargs="$shimargs -i mci:Sequencer=mdsc2.drv -i mmslog:MDSC2=mciseq.drv"
+    fi
+fi
 # shellcheck disable=SC2086
 [ -n "$shimargs" ] && set -- "$@" $shimargs
 if [ -n "${MRUN_INI:-}" ]; then

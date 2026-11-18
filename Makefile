@@ -2748,7 +2748,11 @@ $(B)/mmsystem/tests/mmio.o: tests/mmsystem/mmio.c
 $(B)/mmsystem/tests/mmdev.o: tests/mmsystem/mmdev.c tests/mmsystem/mmc.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -fo=$@ $<
-MMPOBJS := $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o $(B)/mmsystem/tests/mmio.o $(B)/mmsystem/tests/mmdev.o $(B)/gdi/i4.o
+$(B)/mmsystem/tests/mmci.o: tests/mmsystem/mmci.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+MMPOBJS := $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o $(B)/mmsystem/tests/mmio.o $(B)/mmsystem/tests/mmdev.o \
+           $(B)/mmsystem/tests/mmci.o $(B)/gdi/i4.o
 $(DOS)/MMP.EXE: $(MMPOBJS) tests/apps/app.lnk tests/mmsystem/mmp.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/mmsystem/mmp.lnk name $@ libpath $(WATCOM)/lib286/win \
@@ -2760,8 +2764,8 @@ $(DOS)/MMC.DLL: $(MMCOBJS) tests/apps/dll.lnk tests/mmsystem/mmc.lnk
 	    option map=$(B)/mmsystem/tests/mmc.map file { $(MMCOBJS) }
 # MMSYSLOG.DLL and the logging pass-through device drivers MDS*.DRV
 # (tests/mmsystem/mdl.c, mds.c): the variants differ in module name and
-# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux)
-MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1
+# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux, C MCI)
+MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1 MDSC1 MDSC2 MDSC3 MDSC4
 mmprobes: $(DOS)/MMSYSLOG.DLL $(patsubst %,$(DOS)/%.DRV,$(MDSVARS))
 $(B)/mmsystem/tests/mdl.o: tests/mmsystem/mdl.c tests/mmsystem/mdl.h
 	@mkdir -p $(@D)
@@ -2776,11 +2780,27 @@ $(DOS)/MMSYSLOG.DLL: $(MDLOBJS) tests/apps/dll.lnk tests/mmsystem/mdl.lnk
 	    option map=$(B)/mmsystem/tests/mdl.map file { $(MDLOBJS) }
 MDSOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mds.o $(B)/mmsystem/tests/mdsent.o
 $(DOS)/MDS%.DRV: $(MDSOBJS) tests/apps/dll.lnk tests/mmsystem/mds.lnk tests/mmsystem/mdsw.lnk \
-	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk
+	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk tests/mmsystem/mdsc.lnk
 	@mkdir -p $(@D)
 	v=$$(echo $* | cut -c1 | tr A-Z a-z); \
 	$(WLINK) @tests/mmsystem/mds$$v.lnk option modname=MDS$* name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/mmsystem/tests/mds$*.map file { $(MDSOBJS) }
+# MCT.DRV, the MCI probe's test MCI driver (tests/mmsystem/mct.c), with
+# its command table (mct.rc)
+mmprobes: $(DOS)/MCT.DRV
+$(B)/mmsystem/tests/mct.o: tests/mmsystem/mct.c tests/mmsystem/mdl.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(B)/mmsystem/tests/mct.res: tests/mmsystem/mct.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -fo=$@ $<
+MCTOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mct.o $(B)/mmsystem/tests/mdsent.o
+$(DOS)/MCT.DRV: $(MCTOBJS) $(B)/mmsystem/tests/mct.res tests/apps/dll.lnk tests/mmsystem/mds.lnk \
+	    tests/mmsystem/mct.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/mmsystem/mct.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/mmsystem/tests/mct.map option resource=$(B)/mmsystem/tests/mct.res \
+	    file { $(MCTOBJS) }
 # ---- the timer probe (tests/timer/; ARCHITECTURE.md 21): TPR.EXE, its
 # callback DLL TPC.DLL and the logging pass-through driver TMS.DRV;
 # tests/timer/trun.sh, tests/timer/tscen.sh ----

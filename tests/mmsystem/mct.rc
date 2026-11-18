@@ -1,0 +1,47 @@
+/*
+ * mct.rc - MCT.DRV's resources (tests/mmsystem/mct.c): its own command
+ * table, written for the probe in the format MCI drivers' tables have
+ * (each item a NUL-terminated keyword, a DWORD and a WORD type: 0
+ * MCI_COMMAND_HEAD with the message, 1 MCI_STRING, 2 MCI_INTEGER, 3
+ * MCI_END_COMMAND, 4 MCI_RETURN with the return type, 5 MCI_FLAG, 6
+ * MCI_END_COMMAND_LIST, 7 MCI_RECT, 8 MCI_CONSTANT, 9 MCI_END_CONSTANT;
+ * the format as Wine's mmddk.h of before 2002, X11 licence, gives it),
+ * with every type of item, so that the probe sees how MMSYSTEM parses
+ * and lays out each. Its verbs and keywords are the probe's own.
+ */
+mcttab RCDATA
+BEGIN
+    "zap\0", 0x0900L, 0,
+    "\0", 2L, 4,
+    "notify\0", 1L, 5,
+    "wait\0", 2L, 5,
+    "num\0", 0x100L, 2,
+    "text\0", 0x200L, 1,
+    "box\0", 0x400L, 7,
+    "mode\0", 0x800L, 8,
+    "fast\0", 1L, 2,
+    "slow\0", 2L, 2,
+    "\0", 0L, 9,
+    "flag\0", 0x1000L, 5,
+    "two words\0", 0x2000L, 5,
+    "\0", 0L, 3,
+    "zaps\0", 0x0901L, 0,
+    "\0", 1L, 4,
+    "notify\0", 1L, 5,
+    "wait\0", 2L, 5,
+    "\0", 0L, 3,
+    "zapr\0", 0x0902L, 0,
+    "\0", 7L, 4,
+    "notify\0", 1L, 5,
+    "wait\0", 2L, 5,
+    "\0", 0L, 3,
+    "status\0", 0x0814L, 0,
+    "\0", 2L, 4,
+    "notify\0", 1L, 5,
+    "wait\0", 2L, 5,
+    "\0", 0x100L, 8,
+    "zip\0", 0x4001L, 2,
+    "\0", 0L, 9,
+    "\0", 0L, 3,
+    "\0", 0L, 6
+END

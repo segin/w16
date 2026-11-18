@@ -1,0 +1,102 @@
+# exploration 6: MCT's table, mciExecute, keys named after types, sizes
+: custom table
+s open mctc alias c
+s zap c
+s zap c num 5 text hello box 1 2 3 4 mode slow flag two words
+s zap c mode fast
+s zap c mode 7
+s zap c mode
+s zap c box 1 2 3
+s zap c box 1 2 3 4 5
+s zap c text
+s zap c two
+s zap c words
+s zap c notify wait
+s zaps c
+t 0 0
+T a string
+t 4 4
+s zaps c
+t 0 0
+t 2 40001
+t 2 80002
+t 2 C0003
+t 2 100004
+s zapr c
+t 0 0
+s status c zip
+s status c mode
+s status c position
+s close c
+: sizes
+s open mct alias m1
+t 0 0
+t 2 40004
+s/r1 status m1 position
+s/r2 status m1 position
+s/r3 status m1 position
+s/r1 sysinfo all quantity
+s/r2 sysinfo all quantity
+s/r3 sysinfo all quantity
+s/r4 sysinfo all quantity
+t 0 0
+T four
+t 4 4
+s/r1 info m1 product
+s/r4 info m1 product
+s/r5 info m1 product
+s/r0 info m1 product
+t 0 0
+s/r3 sysinfo all name 1
+E 264 80
+: keyword spacing
+s set m1 time  format ms
+s set m1 time format  ms
+s set m1 door  open
+s status m1 number  of tracks
+s close m1
+: keys named after types
+s open videodisc alias v
+s spin v up
+s step v by 2
+s escape v hello
+s set v time format track
+s status v disc size
+s play v fast
+s capability v cav
+s close v
+s open overlay alias o
+s put o destination at 1 2 3 4
+s window o handle 5
+s where o source
+s freeze o
+s status o window handle
+s close o
+s open animation1 alias a
+s put a destination
+s realize a normal
+s update a hdc 5
+s step a reverse
+s close a
+s open animation alias a2
+s close a2
+s sysinfo animation quantity
+s sysinfo animation name 1
+s sysinfo videodisc quantity
+s open mct type videodisc alias tv
+s close tv
+s open x.mct type videodisc alias tv
+s spin tv up
+s close tv
+: mciExecute
+x open mct alias x1
+x status x1 mode
+x status x1 nosuch
+x nosuch x1
+x status nodev mode
+x status x1
+x
+x close x1
+x status x1 mode
+x open nodev
+x play q.mct notify

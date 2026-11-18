@@ -1,0 +1,177 @@
+# exploration 2: what MMSYSTEM makes of a driver's answers; the parser
+: 264
+E 264 60
+: returns of status (integer)
+s open mct alias m1
+t 0 0
+t 2 40000
+t 3 0
+s status m1 mode
+t 2 43039
+t 3 0
+s status m1 mode
+t 1 10000
+t 2 4020E
+t 3 20E
+s status m1 mode
+t 2 40000
+t 3 219
+s status m1 mode
+t 2 40000
+t 3 3E7
+s status m1 mode
+t 2 40001
+t 3 1
+t 1 110000
+s status m1 mode
+t 1 20000
+t 2 40201
+t 3 3
+s status m1 position
+t 1 40000
+t 2 40201
+t 3 403
+s status m1 position
+t 1 80000
+s status m1 position
+t 1 30000
+s status m1 position
+t 1 100000
+s status m1 position
+t 2 4FFFF
+t 3 FFFF
+t 1 0
+s status m1 position
+t 1 105
+s status m1 position
+t 1 10105
+s status m1 position
+t 1 200
+s status m1 position
+t 1 3E8
+s status m1 position
+t 1 FFFF
+s status m1 position
+t 1 12340000
+s status m1 position
+t 2 40000
+t 3 0
+t 1 0
+s/r1 status m1 position
+s/r0 status m1 position
+s/r2 status m1 position
+s/r-1 status m1 position
+s/r-2 status m1 position
+t 2 41234
+t 3 0
+s/r4 status m1 position
+s/r5 status m1 position
+: capability (integer)
+t 1 10000
+t 2 40001
+t 3 214
+s capability m1 can play
+t 2 40000
+t 3 213
+s capability m1 can play
+: info (string)
+t 0 0
+T Hello there
+t 4 4
+s info m1 product
+s/r3 info m1 product
+s/r6 info m1 product
+s/r-1 info m1 product
+t 1 80000
+s info m1 product
+t 1 10000
+s info m1 product
+t 0 0
+s info m1 product
+: open's return
+s/r1 open mct alias m2
+s/r0 open mct alias m3
+s/r-1 open mct alias m4
+s close m2
+s close m3
+s close m4
+s sysinfo all quantity open
+: sysinfo name buffer sizes
+s/r3 sysinfo all name 1
+s/r10 sysinfo all name 1
+s/r9 sysinfo all name 1
+s/r1 sysinfo all quantity
+s/r0 sysinfo all quantity
+s/r2 sysinfo all quantity
+s/r-1 sysinfo all quantity
+: parser
+s status  m1   mode
+s STATUS M1 MODE
+s status m1 Mode
+s status "m1" mode
+s status "m1"mode
+s status "m1 mode
+s status m1 "mode"
+s status m1 mode mode
+s status m1 mode position
+s status m1 position track
+s status m1 position track x
+s status m1 position track 3x
+s status m1 position track -3
+s status m1 position track 0x10
+s status m1 position track 4294967295
+s status m1 position track 4294967296
+s status m1 position track 99999999999
+s status m1 position track 3 track 4
+s status m1 mode notify
+s/c0 status m1 mode notify
+s/c1234 status m1 mode notify
+s status m1 mode wait notify
+s play m1 from
+s play m1 from 1 from 2
+s play m1 to 5 from 6
+s play m1 from5
+s set m1 time format
+s set m1 time
+s set m1 time format milliseconds ms
+s set m1 audio left
+s set m1 audio
+s set m1 audio all on off
+s save m1
+s save m1 "a b.wav"
+s save m1 "a b.wav"x
+s save m1 a.wav b.wav
+s save m1 ""
+s load m1 "a
+s seek m1 to start to end
+s seek m1 to
+s seek m1 to 5 to start
+s status m1	mode
+s status m1 mode
+s  status m1 mode
+s status
+s status
+s close m1
+: notify and wait flags with a notifying driver
+s open mct alias m1
+t 0 0
+t 5 1
+s play m1 notify
+w 200
+s/c0 play m1 notify
+w 200
+s play m1
+w 200
+t 5 2
+s play m1 notify
+w 200
+t 0 0
+s close m1 notify
+w 200
+s sysinfo all quantity open notify
+w 200
+s/c0 sysinfo all quantity open notify
+w 200
+s break all on 66 notify
+w 200
+s close all

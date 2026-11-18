@@ -48,6 +48,7 @@ extern WORD getsp(void);
 extern WORD FAR PASCAL K_GETEXEPTR(WORD h);     /* KERNEL.133 */
 extern void mmio_sections(char c);              /* mmio.c */
 extern void dev_sections(char c);               /* mmdev.c */
+extern void mci_section(void);                  /* mmci.c */
 struct mmcstate FAR *dev_st;                    /* for mmdev.c */
 HWND dev_hwnd;
 FARPROC dev_cb;
@@ -489,6 +490,7 @@ int __cdecl __far tmain(void)
         case 'F': case 'D': case 'M': case 'B': case 'E': mmio_sections(*a); break;
         case 'n': case 'e': case 'w': case 'i': case 'm': case 'j': case 'a': case 'y':
         case 'x': case 'b': case 'l': case 'z': dev_sections(*a); break;
+        case 'Q': lg("== mci"); mci_section(); break;
         }
         pump();
     }

@@ -1,0 +1,173 @@
+# exploration 8: "open" through a type table (key "animation", MCT
+# reporting 519), the rest of the type tables' keywords, sizes, numbers
+: open through the animation table
+s open animation alias abcdefghij
+s close abcdefghij
+s close animation
+s open animation alias abcdefghij parent 5 style 7 nostatic
+s close all
+s open animation alias ab
+s close all
+s open animation
+s close animation
+s open animation notify alias ab
+w 100
+s close all
+s open animation shareable alias abcdefghijklmnop
+s close all
+s open animation type animation alias abcdefghijklmnop
+s close all
+s open x.mct type animation alias abcdefghijklmnop
+s close all
+s open animation alias "quoted alias" style 7
+s close all
+s open animation style 7 alias abcdefghijklmnop
+s close all
+s open   animation   alias   abcdefghijklmnop
+s close all
+s open animation alias ab parent
+s open animation alias ab style
+s open animation alias ab nosuch
+s open animation1 alias abcdefghij parent 5 style 7 nostatic
+s close all
+s open animation1 alias ab buffer 3
+s open overlay alias abcdefghij parent 5 style 7
+s close all
+c 0 803 2400 w 0 s:animation 0 s:abcdef 5 6 =1
+c $1 804 0 w
+c 0 803 72400 w 0 s:animation 0 s:abcdef 5 6 =1
+c $1 804 0 w
+: open keywords per type table
+s open t519 alias d parent 5
+s open t519 alias d style 7
+s open t519 alias d nostatic
+s open t515 alias e parent 5
+s open t515 alias e style 7
+s open t522 alias f buffer 4
+s open t514 alias g parent 5
+s close all
+: more keywords
+s open t519 alias a
+s capability a windows
+s capability a max windows
+s capability a palettes
+s capability a has video
+s set a time format milliseconds
+s set a time format ms
+s set a time format 3
+s set a audio left on
+s set a video off
+s status a mode
+s status a length
+s status a position
+s status a ready
+s status a time format
+s status a current track
+s status a number of tracks
+s status a start position
+s status a media present
+s info a product
+s info a file
+s info a window text
+s play a from 1 to 2 fast
+s window a handle default
+s window a state 5 text abc stretch
+s update a
+s update a at 1 2 3 4
+s where a source
+s close a
+s open t515 alias o
+s capability o windows
+s capability o max windows
+s capability o can freeze
+s load o x.dat at 1 2 3 4
+s save o x.dat at 1 2 3 4
+s load o x.dat
+s set o time format ms
+s set o video on
+s status o mode
+s close o
+s open t516 alias c
+s capability c can eject
+s capability c can play
+s set c time format msf
+s set c time format tmsf
+s set c time format milliseconds
+s set c time format ms
+s set c door open
+s status c media present
+s status c current track
+s status c position track 2
+s seek c to 3
+s play c from 1 to 2
+s close c
+s open t514 alias v
+s set v time format hms
+s set v time format msf
+s set v time format frames
+s set v time format track
+s set v time format ms
+s status v mode
+s status v media present
+s escape v hello
+s escape v "hello world"
+s seek v reverse to 5
+s play v fast reverse
+s capability v can reverse
+s info v product
+s close v
+s open t522 alias w
+s set w time format ms
+s set w time format bytes
+s set w time format samples
+s set w format tag 3
+s set w any input any output
+s status w input
+s status w output
+s status w length track 1
+s record w insert from 1 to 2
+s save w x.wav
+s info w file
+s close w
+s open t523 alias q
+s set q time format ms
+s set q time format song pointer
+s set q port 0
+s set q master none
+s set q slave file
+s set q offset 1:2:3:4
+s status q port
+s status q length
+s close q
+: numbers
+s open mct alias m1
+s status m1 position track -2147483648
+s status m1 position track -2147483649
+s status m1 position track -3000000000
+s status m1 position track 2147483648
+s status m1 position track 3000000000
+s set m1 time format 3
+s set m1 time format 0
+s set m1 audio 5
+s set m1 time format -1
+: integer return sizes
+t 0 0
+t 2 40004
+s/r4 status m1 position
+s/r5 status m1 position
+s/r6 status m1 position
+s/r8 status m1 position
+s/r10 status m1 position
+s/r11 status m1 position
+s/r12 status m1 position
+s/r13 status m1 position
+s/r16 status m1 position
+s/r20 status m1 position
+s/r5 sysinfo all quantity
+s/r8 sysinfo all quantity
+s/r11 sysinfo all quantity
+s/r12 sysinfo all quantity
+s/r13 sysinfo all quantity
+s/r16 sysinfo all quantity
+t 0 0
+s close all

@@ -1,0 +1,256 @@
+# exploration 4: custom tables, opening, auto-open, IDs, yield, break,
+# mciExecute, the helpers
+: the custom table
+s open mctc alias c
+s zap c
+s zap c num 5 text hello box 1 2 3 4 mode slow flag two words
+s zap c mode fast
+s zap c mode 7
+s zap c mode
+s zap c box 1 2 3
+s zap c box 1 2 3 4 5
+s zap c text
+s zap c two
+s zap c words
+s zap c notify wait
+s zaps c
+t 0 0
+T a string
+t 4 4
+s zaps c
+t 0 0
+t 2 40001
+t 2 80002
+t 2 C0003
+t 2 100004
+s zapr c
+t 0 0
+s status c zip
+s status c mode
+s status c position
+s play c from 1 to 2
+s info c product
+s capability c can play
+s close c
+: sizes and flags
+s open mct alias m1
+t 0 0
+t 2 40004
+s/r1 status m1 position
+s/r2 status m1 position
+s/r3 status m1 position
+t 0 0
+t 2 4FFFF
+t 3 FFFF
+s/r6 status m1 position
+s/r7 status m1 position
+s/r8 status m1 position
+s status m1 position track -4294967295
+s status m1 position track 04294967295
+s status m1 position track 00000000001
+s status m1 position track +5
+t 0 0
+t 2 40201
+t 3 403
+t 1 60000
+s status m1 position
+t 1 A0000
+s status m1 position
+t 1 C0000
+s status m1 position
+t 1 50000
+s status m1 position
+t 1 1FF
+s status m1 position
+t 1 FFFF0200
+s status m1 position
+t 1 10000
+t 2 40000
+t 3 214
+s capability m1 can play
+t 0 0
+t 1 10000
+t 2 40000
+t 3 213
+s capability m1 can play
+t 0 0
+: error strings with a device
+e 512
+e 66048
+e 65793
+e 131584
+: device IDs
+s open mct alias m2
+s open mct alias m3
+s close m2
+s open mct alias m4
+s open mct alias m5
+s close m3
+s close m1
+s open mct alias m6
+s sysinfo all quantity open
+s sysinfo all name 1 open
+s sysinfo all name 2 open
+s sysinfo all name 3 open
+s close all
+: elements and extensions
+s open x.mct
+s close x.mct
+s open x.mct alias e1
+s open x.mct alias e2
+s open x.mct shareable alias e3
+s close all
+s open c:\x.mct type mct alias e1
+s open mct!y.mct alias e2
+s open y.mct type t522 alias e3
+s open y.nox
+s open y.nox type mct
+s open y. type mct alias e4
+s open .mct
+s sysinfo all name 1 open
+s sysinfo all name 2 open
+s sysinfo all name 3 open
+s sysinfo all name 4 open
+s sysinfo e1 installname
+s sysinfo e2 installname
+s close all
+: new
+s open new type mct alias n1
+s open new type mct
+s open new
+s close n1
+: auto-open
+s play z.mct
+s status z.mct mode
+s sysinfo all quantity open
+s close z.mct
+s play z.mct notify
+s status mct mode
+s sysinfo all quantity open
+s close mct
+s info z.mct product
+s sysinfo all quantity open
+s close all
+: by command
+c 0 803 2000 w 0 s:mct 0 0 =1
+c $1 804 0 w
+c 0 803 2400 w 0 s:mct 0 s:k1 =1
+c 0 803 2400 w 0 s:mct 0 s:k1
+c 0 803 3000 w 0 209 0 0 =2
+c 0 803 3000 w 0 20209 0 0 =3
+c 0 803 3000 w 0 30209 0 0
+c 0 803 3000 w 0 205 0 0
+c 0 803 2200 w 0 s:mct s:q.mct 0 =4
+c 0 803 200 w 0 0 s:q.mct 0
+c 0 803 2A00 w 0 s:mct 1234 0
+c 0 803 2000 -
+c 0 803 0 w 0 0 0 0
+c 0 803 2000 w 0 s:nosuch 0 0
+c 0 803 2000 w 0 s:mct.drv 0 0 =5
+c 0 803 2000 w 0 s:c:\windows\system\mct.drv 0 0 =6
+c 0 803 2000 w 0 s:mct 0 0 0 0 0 0
+c $1 814 100 w 0 4
+c $1 814 100 -
+c 50 814 100 w 0 4
+c 0 814 100 w 0 4
+c FFFF 814 100 w 0 4
+c FFFF 808 0 w
+c FFFF 808 2 w
+c $1 810 100 w b:20 20 0 209
+c 0 810 100 w b:20 20 0 209
+c 0 810 400 w b:20 20 1 209
+c 0 810 500 w b:20 20 1 209
+c FFFF 810 500 w b:20 20 2 209
+c FFFF 810 300 w b:20 20 0 0
+c FFFF 810 700 w b:20 20 1 0
+c $1 810 800 w b:20 20 0 0
+c $2 810 800 w b:20 3 0 0
+c FFFF 810 0 w b:20 20 0 0
+c 0 810 100 w b:20 20 0 0
+c 0 810 100 w b:20 20 0 1
+c $1 811 100 w 41 0
+c $1 811 300 w 41 w
+c $1 811 400 w
+c 0 811 400 w
+c $1 812 100 w s:SystemAsterisk
+c $1 812 0 w
+c $1 1234 0 w
+c $1 7FF 0 w
+c $1 900 0 w
+c $1 801 0 w
+c $1 802 0 w
+c FFFF 804 0 w
+i all
+i ALL
+i
+i mct
+s sysinfo all quantity open
+: yield
+s open mct alias m1
+y $0 g
+i m1
+c 0 803 2400 w 0 s:mct 0 s:y1 =1
+y $1 g
+y $1 c
+y $1 s 1234
+y $1 g
+y $1 r 0
+t 0 0
+t 6 3
+s play y1 wait
+y $1 r 1
+s play y1 wait
+t 6 10003
+s play y1 wait
+y $1 n 4567
+y $1 g
+s play y1 wait
+s break y1 on 41
+y $1 g
+s break y1 on 41 return 5
+s break y1 off
+y $1 g
+c $1 811 100 w 42 0
+y $1 g
+c $1 811 200 w 0 0 w
+y $1 g
+c $1 811 400 w
+y $1 g
+y 99 g
+y 99 s 1
+y FFFF g
+: helpers
+d $1
+t 0 0
+t 7 1
+s status y1 mode
+s status y1 mode
+d $1
+d 99
+d 0
+s close all
+: tables from the application
+l MCT.DRV mcttab 0
+l MCT.DRV mcttab 0
+f 0
+f 1
+f 2
+f 3
+f 2
+f 40
+f FFFF
+l MCT.DRV nosuch 0
+l 0 mcttab 0
+l MCT.DRV mcttab 522
+l MCT.DRV #1 0
+: mciExecute
+x open mct alias x1
+x status x1 mode
+x status x1 nosuch
+x nosuch x1
+x
+x close x1
+x status x1 mode
+: mciGetDeviceIDFromElementID
+i/ 0 mct
+i/ 1234 other

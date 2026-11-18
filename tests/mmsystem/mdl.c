@@ -37,12 +37,15 @@ extern void __cdecl __far md_sti(WORD fl);
 extern WORD FAR PASCAL K_GETEXEPTR(WORD h);     /* KERNEL.133 */
 
 #define NREC 170
-#define PK1 64
-#define PK2 16
+#define PK1 72
+#define PK2 48
+#define NSTR 3          /* strings kept behind an MCI parameter block */
+#define LSTR (PK1 / NSTR)
 
 #define RT_CALL 1       /* a call of a shim's entry */
 #define RT_DCB  2       /* DriverCallback from a renamed driver */
 #define RT_FWD  3       /* another MMSYSTEM function from a renamed driver */
+#define RT_RET  4       /* an MCI driver helper from a renamed driver, with its result */
 
 struct rec {
     BYTE type, shim, kind, depth;
@@ -50,6 +53,7 @@ struct rec {
     DWORD id, user, p1, p2, r;
     BYTE n1, n2, nu, nf;
     BYTE b1[PK1], a1[PK1], b2[PK2], a2[PK2], bu[4], au[4], bf[18];
+    BYTE ns, soff[NSTR];        /* MCI: the strings in b1 (before), a1 (after) */
 };
 
 static struct rec recs[NREC];
@@ -113,8 +117,11 @@ static void peeks(WORD kind, WORD msg, DWORD p2, WORD *s1, WORD *s2, WORD *su, W
     *s1 = *s2 = *su = *sf = 0;
     switch (kind) {
     case MDK_DRV:
-        if (msg == 3)                   /* DRV_OPEN: the options */
+        if (msg == 3) {                 /* DRV_OPEN: the options */
             *s1 = 16;
+            *s2 = 10;                   /* an MCI driver's MCI_OPEN_DRIVER_PARMS */
+        } else if (msg >= 0x800)        /* MCI commands: the parameter block */
+            *s2 = PK2;
         break;
     case MDK_WOD:
     case MDK_WID:
@@ -152,6 +159,32 @@ static void peeks(WORD kind, WORD msg, DWORD p2, WORD *s1, WORD *s2, WORD *su, W
         else if (msg == 5)
             *s1 = 4;
         break;
+    }
+}
+
+/* the strings an MCI parameter block points to (any DWORD from offset 4
+   on that is a readable far pointer; DRV_OPEN's MCI_OPEN_DRIVER_PARMS
+   has its one at 2; LDT selectors only), LSTR - 1 bytes of each at most, into dst; the first
+   call (before) finds them, the second (after) reads the same ones */
+static void mcistrings(struct rec *t, WORD msg, BYTE *dst, int find)
+{
+    WORD o, k, n;
+    if (find) {
+        t->ns = 0;
+        for (o = msg == 3 ? 2 : 4; o + 4 <= t->n2 && t->ns < NSTR; o += msg == 3 ? 10 : 4) {
+            DWORD v = *(DWORD *)(t->b2 + o);
+            BYTE c;
+            if ((HIWORD(v) & 4) && md_valid(HIWORD(v)) && md_peek((void __far *)v, &c, 1))
+                t->soff[t->ns++] = (BYTE)o;
+        }
+    }
+    for (k = 0; k < t->ns; k++) {
+        BYTE *d = dst + k * LSTR;
+        BYTE __far *v = *(BYTE __far **)(t->b2 + t->soff[k]);
+        for (n = 0; n < LSTR - 1; n++)
+            if (!md_peek(v + n, d + n, 1) || !d[n])
+                break;
+        d[n] = 0;
     }
 }
 
@@ -199,6 +232,11 @@ DWORD FAR PASCAL __loadds MlCall(WORD shim, WORD kind, FARPROC real, WORD flags,
         t->nf = 0;
         if (sf && t->n1 >= 6)
             t->nf = (BYTE)md_peek(*(void __far * FAR *)(t->b1 + 2), t->bf, sf);
+        t->ns = 0;
+        if (kind == MDK_DRV && t->n2 && msg >= 0x800)
+            mcistrings(t, msg, t->b1, 1);
+        else if (kind == MDK_DRV && t->n2 && msg == 3)
+            mcistrings(t, msg, t->a1, 1);       /* b1 holds DRV_OPEN's p1 */
     }
     if (real) {
         if (kind == MDK_DRV)
@@ -208,12 +246,14 @@ DWORD FAR PASCAL __loadds MlCall(WORD shim, WORD kind, FARPROC real, WORD flags,
     }
     if (t) {
         t->r = r;
-        if (t->n1)
+        if (t->n1 && !(kind == MDK_DRV && msg == 3))     /* DRV_OPEN: a1 holds strings */
             md_peek((void __far *)p1, t->a1, t->n1);
         if (t->n2)
             md_peek((void __far *)p2, t->a2, t->n2);
         if (t->nu)
             md_peek((void __far *)user, t->au, t->nu);
+        if (t->ns && msg != 3)
+            mcistrings(t, msg, t->a1, 0);
     }
     --depth;
     return r;
@@ -229,6 +269,7 @@ void __cdecl __far md_dcb(WORD retcs, WORD fl, struct dcbargs __far *a)
     if (!t)
         return;
     t->type = RT_DCB;
+    t->ns = 0;
     t->shim = 0;
     t->kind = 0;
     t->depth = (BYTE)(depth + 1);
@@ -258,6 +299,7 @@ void __cdecl __far md_fwd(WORD ord, WORD retcs, WORD __far *a)
     if (!t)
         return;
     t->type = RT_FWD;
+    t->ns = 0;
     t->msg = ord;
     t->retcs = retcs;
     t->depth = (BYTE)(depth + 1);
@@ -265,6 +307,34 @@ void __cdecl __far md_fwd(WORD ord, WORD retcs, WORD __far *a)
         ((WORD *)t->b1)[i] = a[i];
     t->n1 = 16;
     t->n2 = t->nu = t->nf = 0;
+}
+
+/* an MCI driver helper called by a renamed driver: its ordinal, its
+   arguments and its result (mdlent.asm) */
+void __cdecl __far md_ret(WORD ord, WORD retcs, WORD __far *a, WORD nbytes, DWORD r)
+{
+    struct rec *t = newrec();
+    WORD i;
+    if (!t)
+        return;
+    t->type = RT_RET;
+    t->msg = ord;
+    t->retcs = retcs;
+    t->depth = (BYTE)(depth + 1);
+    t->r = r;
+    for (i = 0; i < nbytes / 2 && i < 8; i++)
+        ((WORD *)t->b1)[i] = a[i];
+    t->n1 = (BYTE)(nbytes / 2);
+    t->n2 = t->nu = t->nf = t->ns = 0;
+    /* mciLoadCommandResource: its name (a resource name or a number) */
+    if (ord == 705 && t->n1 == 4 && a[2] != 0) {
+        BYTE __far *v = MAKELP(a[2], a[1]);
+        for (i = 0; i < LSTR - 1; i++)
+            if (!md_peek(v + i, t->a1 + i, 1) || !t->a1[i])
+                break;
+        t->a1[i] = 0;
+        t->ns = 1;
+    }
 }
 
 void FAR PASCAL __loadds MlName(DWORD value, LPCSTR name)
@@ -450,6 +520,48 @@ static char *bytes(char *p, struct rec *t, const char *what, const BYTE *b, cons
     return p;
 }
 
+/* an MCI parameter block (or DRV_OPEN's MCI_OPEN_DRIVER_PARMS) before
+   and after: the bytes up to the last one either has that is not 0, the
+   string pointers found shown as "pppppppp" (their values are the heap's) */
+static char *hexm(char *p, struct rec *t, const BYTE *b, int n)
+{
+    static const char x[] = "0123456789ABCDEF";
+    int i, k;
+    for (i = 0; i < n; i++) {
+        for (k = 0; k < t->ns; k++)
+            if (i >= t->soff[k] && i < t->soff[k] + 4)
+                break;
+        if (k < t->ns) {
+            *p++ = 'p';
+            *p++ = 'p';
+        } else {
+            *p++ = x[b[i] >> 4];
+            *p++ = x[b[i] & 15];
+        }
+    }
+    *p = 0;
+    return p;
+}
+
+static char *mciblock(char *p, struct rec *t)
+{
+    int n = t->n2;
+    while (n > 4 && !t->b2[n - 1] && !t->a2[n - 1])
+        n--;
+    n = (n + 3) & ~3;
+    if (n > t->n2)
+        n = t->n2;
+    p += wsprintf(p, " [p2 ");
+    p = hexm(p, t, t->b2, n);
+    if (!same(t->a2, t->b2, n)) {
+        p += wsprintf(p, " -> ");
+        p = hexm(p, t, t->a2, n);
+    }
+    *p++ = ']';
+    *p = 0;
+    return p;
+}
+
 static LPSTR who(WORD cs)
 {
     const char *m = modname(cs);
@@ -471,6 +583,7 @@ void FAR PASCAL __loadds MlDump(LPCSTR name)
         return;
     for (i = 0; i < nrec; i++) {
         struct rec *t = &recs[i];
+        WORD k;
         p = line;
         if (t->type == RT_CALL) {
             p += wsprintf(p, "  MD %s %s %04X dev ", (LPSTR)shims[t->shim],
@@ -494,12 +607,21 @@ void FAR PASCAL __loadds MlDump(LPCSTR name)
                 p += wsprintf(p, "\"]");
             } else if (t->n1)
                 p = bytes(p, t, "p1", t->b1, t->a1, t->n1);
-            if (t->n2)
+            if (t->n2 && t->kind == MDK_DRV && (t->msg >= 0x800 || t->msg == 3))
+                p = mciblock(p, t);
+            else if (t->n2)
                 p = bytes(p, t, "p2", t->b2, t->a2, t->n2);
             if (t->nu)
                 p = bytes(p, t, "user", t->bu, t->au, t->nu);
             if (t->nf)
                 p = bytes(p, t, "fmt", t->bf, 0, t->nf);
+            for (k = 0; k < t->ns; k++) {
+                const char *b = (const char *)(t->msg == 3 ? t->a1 : t->b1) + k * LSTR;
+                const char *a = (const char *)t->a1 + k * LSTR;
+                p += wsprintf(p, " +%u\"%s\"", t->soff[k], (LPSTR)b);
+                if (lstrcmp(a, b))
+                    p += wsprintf(p, "->\"%s\"", (LPSTR)a);
+            }
         } else if (t->type == RT_DCB) {
             p += wsprintf(p, "  DCB cb ");
             p = val(p, t->id, 1);
@@ -513,6 +635,15 @@ void FAR PASCAL __loadds MlDump(LPCSTR name)
                           t->depth, who(t->retcs));
             if (t->n1)
                 p = bytes(p, t, "p1", t->b1, 0, t->n1);
+        } else if (t->type == RT_RET) {
+            const WORD *w = (const WORD *)t->b1;
+            int k;
+            p += wsprintf(p, "  FWD MMSYSTEM.%u from=%s args", t->msg, who(t->retcs));
+            for (k = 0; k < t->n1; k++)
+                p += wsprintf(p, " %04X", w[k]);
+            if (t->ns)
+                p += wsprintf(p, " \"%s\"", (LPSTR)t->a1);
+            p += wsprintf(p, " -> %08lX d=%d", t->r, t->depth);
         } else {
             const WORD *w = (const WORD *)t->b1;
             p += wsprintf(p, "  FWD MMSYSTEM.%u from=%s args %04X %04X %04X %04X %04X %04X %04X %04X",

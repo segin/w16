@@ -1,0 +1,79 @@
+# exploration 5: the real drivers' commands (MCISEQ has no table of its
+# own, MCIWAVE loads one), with their records
+: sequencer
+s open sequencer alias q
+s status q tempo
+s set q tempo 100
+s status q division type
+s status q port
+s set q port mapper
+s set q time format song pointer
+s set q time format smpte 25
+s status q time format
+s set q time format ms
+s status q time format
+s status q mode
+s status q media present
+s capability q can play
+s capability q device type
+s info q product
+s info q file
+s status q slave
+s set q slave file
+s spin q up
+s close q
+: waveaudio
+s open waveaudio alias w
+s status w channels
+s set w channels 2
+s capability w inputs
+s capability w device type
+s cue w
+s cue w output
+s delete w
+s info w input
+s info w product
+s info w file
+s status w level
+s status w mode
+s status w time format
+s set w time format bytes
+s set w time format samples
+s set w time format frames
+s status w format tag
+s set w format tag pcm
+s status w alignment
+s status w media present
+s capability w can save
+s capability w has audio
+s capability w can record
+s spin w up
+s close w
+: elements
+s open c:\windows\chimes.wav alias w
+s status w length
+s status w mode
+s status w channels
+s status w samplespersec
+s info w file
+s set w time format bytes
+s status w length
+s play w wait
+s status w position
+s close w
+s open c:\windows\canyon.mid alias q
+s status q length
+s status q tempo
+s status q division type
+s info q file
+s close q
+: types reported by the drivers
+s open sequencer alias q
+s capability q device type
+s sysinfo sequencer quantity open
+s sysinfo sequencer name 1 open
+s sysinfo waveaudio quantity open
+s open waveaudio alias w
+s sysinfo waveaudio quantity open
+s sysinfo all quantity open
+s close all

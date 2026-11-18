@@ -1,0 +1,44 @@
+# exploration 7: how MMSYSTEM opens MCIWAVE (a driver with a table of its
+# own), and play to the end with notify
+s open waveaudio alias w
+s close w
+s open waveaudio alias w
+s close w
+s open waveaudio
+s close waveaudio
+s open waveaudio alias w buffer 4
+s close w
+s open waveaudio alias w notify
+w 300
+s close w
+s open waveaudio shareable alias w
+s close w
+s open waveaudio type waveaudio alias w
+s close w
+s open c:\windows\chimes.wav
+s close c:\windows\chimes.wav
+s open c:\windows\chimes.wav type waveaudio alias w2
+s play w2 notify
+w 3000
+s status w2 mode
+s play w2 from 0 to 100 wait
+s status w2 position
+s close w2
+s open c:\windows\canyon.mid alias q
+s play q from 0 to 500 notify
+w 1500
+s status q mode
+s close q notify
+w 500
+s open c:\windows\chimes.wav alias w3
+s open c:\windows\chimes.wav alias w4
+s open c:\windows\chimes.wav shareable alias w5
+s open c:\windows\chimes.wav shareable alias w6
+s close all
+s play c:\windows\chimes.wav
+s sysinfo all quantity open
+w 2000
+s sysinfo all quantity open
+s play c:\windows\chimes.wav wait
+s sysinfo all quantity open
+s close all

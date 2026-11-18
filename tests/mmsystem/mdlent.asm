@@ -20,15 +20,26 @@ segment _TEXT public align=16 class=CODE use16
 
 extern _md_dcb                  ; void __cdecl __far md_dcb(WORD retcs, WORD fl, void __far *args)
 extern _md_fwd                  ; void __cdecl __far md_fwd(WORD ord, WORD retcs, WORD __far *args)
+extern _md_ret                  ; void __cdecl __far md_ret(WORD ord, WORD retcs, WORD __far *args,
+                                ;                           WORD nbytes, DWORD result)
 
-; the MMSYSTEM functions passed on, and where (filled by md_resolve)
-%define FWDS 31, 32, 33, 201, 202, 204, 205, 206, 207, 208, 209, 210, 213, 214, 216, 601, 602, 603, 605, 606, 607
+; the MMSYSTEM functions passed on, and where (filled by libmain,
+; tests/mmsystem/mdl.c): every one Windows 3.1's TIMER.DRV, MIDIMAP.DRV,
+; MCIWAVE.DRV and MCISEQ.DRV and QuickTime's MCIQTW.DRV import (their NE
+; import tables, tools/neimports.py), in slot order
+%define FWDS 31, 32, 33, 201, 202, 204, 205, 206, 207, 208, 209, 210, 213, 214, 216, \
+        601, 602, 603, 605, 606, 607, \
+        401, 402, 404, 405, 406, 407, 408, 409, 410, 411, 412, 420, \
+        501, 502, 504, 505, 506, 507, 508, 509, 510, 511, 513, \
+        705, 707, 708, 710, 711, 713, 717, 900, 902, 903, 904, 905, \
+        1210, 1211, 1212, 1213, 1214, 1223, 1224, 1225, 1226
+%define NFWD 65
 
 segment _DATA
 global _md_ords, _md_tbl, _md_nfwd
 _md_ords        dw FWDS
-_md_nfwd        dw 21
-_md_tbl         times 21 dd 0
+_md_nfwd        dw NFWD
+_md_tbl         times NFWD dd 0
 
 segment _TEXT
 
@@ -125,6 +136,102 @@ TIMEENDPERIOD:
         jumpon 19
 TIMEGETTIME:
         jumpon 20
+
+; passed on unrecorded: name, slot
+%macro plain 2
+global %1
+%1:
+        jumpon %2
+%endmacro
+        plain WAVEOUTGETNUMDEVS, 21
+        plain WAVEOUTGETDEVCAPS, 22
+        plain WAVEOUTOPEN, 23
+        plain WAVEOUTCLOSE, 24
+        plain WAVEOUTPREPAREHEADER, 25
+        plain WAVEOUTUNPREPAREHEADER, 26
+        plain WAVEOUTWRITE, 27
+        plain WAVEOUTPAUSE, 28
+        plain WAVEOUTRESTART, 29
+        plain WAVEOUTRESET, 30
+        plain WAVEOUTGETPOSITION, 31
+        plain WAVEOUTGETID, 32
+        plain WAVEINGETNUMDEVS, 33
+        plain WAVEINGETDEVCAPS, 34
+        plain WAVEINOPEN, 35
+        plain WAVEINCLOSE, 36
+        plain WAVEINPREPAREHEADER, 37
+        plain WAVEINUNPREPAREHEADER, 38
+        plain WAVEINADDBUFFER, 39
+        plain WAVEINSTART, 40
+        plain WAVEINSTOP, 41
+        plain WAVEINRESET, 42
+        plain WAVEINGETID, 43
+        plain MMTASKCREATE, 51
+        plain MMTASKBLOCK, 52
+        plain MMTASKSIGNAL, 53
+        plain MMGETCURRENTTASK, 54
+        plain MMTASKYIELD, 55
+        plain MMIOOPEN, 56
+        plain MMIOCLOSE, 57
+        plain MMIOREAD, 58
+        plain MMIOWRITE, 59
+        plain MMIOSEEK, 60
+        plain MMIODESCEND, 61
+        plain MMIOASCEND, 62
+        plain MMIOCREATECHUNK, 63
+        plain MMIORENAME, 64
+
+; the MCI driver helpers: called (a copy of the arguments, the caller's
+; DS kept) and recorded with their result, md_ret(ord, return CS, the
+; arguments, their size, DX:AX): name, ordinal, slot, argument bytes
+%macro mcirec 4
+global %1
+%1:
+        push bp
+        mov bp, sp                      ; [bp+4] CS, [bp+6] the arguments
+        push ds
+        push si
+        push di
+        push es
+        lea si, [bp + 6 + %4]
+        mov cx, %4 / 2
+%%cp:   sub si, 2
+        push word [ss:si]
+        loop %%cp
+        mov ax, DGROUP
+        mov ds, ax
+        call far [_md_tbl + 4 * %3]
+        mov cx, DGROUP
+        mov ds, cx
+        push dx
+        push ax
+        cld
+        push dx
+        push ax
+        push word %4
+        push ss
+        lea ax, [bp + 6]
+        push ax
+        push word [bp + 4]
+        push word %2
+        call far _md_ret
+        add sp, 14
+        pop ax
+        pop dx
+        pop es
+        pop di
+        pop si
+        pop ds
+        pop bp
+        retf %4
+%endmacro
+        mcirec MCILOADCOMMANDRESOURCE, 705, 44, 8
+        mcirec MCISETDRIVERDATA, 707, 45, 6
+        mcirec MCIGETDRIVERDATA, 708, 46, 2
+        mcirec MCIDRIVERYIELD, 710, 47, 2
+        mcirec MCIDRIVERNOTIFY, 711, 48, 6
+        mcirec MCIFREECOMMANDRESOURCE, 713, 49, 2
+        mcirec MCIGETCREATORTASK, 717, 50, 2
 
 ; WORD __cdecl __far md_peek(const void __far *src, void __far *dst,
 ;                            WORD n): copies n bytes when src's selector
