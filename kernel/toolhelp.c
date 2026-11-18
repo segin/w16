@@ -158,16 +158,18 @@ void th_loadsegs(module FAR *m)
     u16 i;
     if (!th_hooked())
         return;
+    /* ES:DI the module name in the module table's resident-name table
+       (observed: ES is the hModule; the entry's ordinal, 0, ends it) */
     for (i = 0; i < m->seg_count; i++)
         notify(0x50, i, m->seg[i].sel, 0, MOD_SEG(m, i)->flags,
-               FP_OFF(m->name), FP_SEG(m->name));
+               NE_HDR(m)->resname_off + 1, m->ne_sel);
 }
 
 /* a DLL's initialisation is next: cs:ip its entry point (0:0 for none) */
 void th_startdll(module FAR *m, u16 cs, u16 ip)
 {
     if (th_hooked())
-        notify(0x64, ip, cs, 0, m->ne_sel, 0, 0);
+        notify(0x64, ip, cs, 0, m->ne_sel, 0, m->ne_sel);    /* ES too (observed) */
 }
 
 /* a module is deleted: the notification, then one per freed segment in
