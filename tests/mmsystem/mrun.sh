@@ -13,13 +13,15 @@
 # 16 at 220h, IRQ 5, DMA 1 and 5, MPU-401 at 330h, an OPL3 at 388h):
 #   none (default)  the reference as it is: no wave, MIDI or aux driver,
 #                   [drivers] midimapper=midimap.drv
-#   sb2   Windows 3.1's own SNDBLST2.DRV (wave and MIDI, Sound Blaster 1.5)
-#         and MSADLIB.DRV (MIDI, Ad Lib), expanded from the reference's
-#         Setup files (.tools/ref/win31/src), with the keys Setup writes
-#         (wave= midi= sndblst2.drv, midi1=msadlib.drv), [sndblst.drv]
-#         port=220 int=5
+#   sb2   Windows 3.1's own SNDBLST2.DRV (wave and MIDI, Sound Blaster 1.5),
+#         expanded from the reference's Setup files (.tools/ref/win31/src),
+#         with the keys Setup writes (wave= midi= sndblst2.drv),
+#         [sndblst.drv] port=220 int=5. Setup's midi1=msadlib.drv is left
+#         out: MSADLIB.DRV finds DOSBox's OPL in some runs and not in
+#         others (its DRV_ENABLE 1 or 0, 1 or 0 devices), which changes
+#         the MIDI IDs
 #   multi  for the numbering: wave=, wave2= and wave10= (all SNDBLST2),
-#         midi= (MSADLIB), midi1= (SNDBLST2), aux= (MSADLIB: no auxMessage)
+#         midi= (SNDBLST2), aux= (MIDIMAP.DRV: no auxMessage)
 #   sb16  Creative's Sound Blaster 16 drivers as tests/sb16setup.sh
 #         installs them (MRUN_SB16=DIR: its output, default build/sb16;
 #         SB16SND.DRV wave, SB16FM.DRV MIDI, SB16AUX.DRV aux), in DOSBox-X
@@ -87,21 +89,20 @@ sb2)
     done
     drv wave sndblst2.drv MDSW1
     drv midi sndblst2.drv MDSW2
-    drv midi1 msadlib.drv MDSM1
     set -- "$@" -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
     export DROPIN_CONF="$sbconf" ;;
 multi)
     # the numbering: SNDBLST2 under wave, wave2 (a gap in the keys) and
-    # wave10 (past 9), MIDI from MSADLIB and SNDBLST2, an aux key whose
-    # driver has no auxMessage
+    # wave10 (past 9), MIDI from SNDBLST2, an aux key whose driver has no
+    # auxMessage (MIDIMAP.DRV)
     for f in SNDBLST2 MSADLIB; do
         python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/$f.DR_" "$out/drv/$f.DRV"
     done
     drv wave sndblst2.drv MDSW1
     drv wave2 sndblst2.drv MDSW2
-    drv midi msadlib.drv MDSM1
-    drv midi1 sndblst2.drv MDSW3
-    drv aux msadlib.drv MDSM3
+    drv midi sndblst2.drv MDSW3
+    cp "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/MIDIMAP.DRV" "$out/drv/"
+    drv aux midimap.drv MDSM3
     drv wave10 sndblst2.drv MDSW4
     set -- "$@" -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
     export DROPIN_CONF="$sbconf" ;;

@@ -17,8 +17,10 @@ import sys
 MASKS = [
     # StackEnter's flags after a switch: AF differs between two of 3.1's
     # runs (3202h, 3212h)
+    # (and SF in a later pair: 3286h; the arithmetic flags after the
+    # switch are left from 3.1's own code)
     (re.compile(r'^(  StackEnter: .* flags )([0-9A-F]{4})'),
-     lambda m: m.group(1) + '%04X' % (int(m.group(2), 16) & ~0x10)),
+     lambda m: m.group(1) + '%04X' % (int(m.group(2), 16) & ~0xD5)),
     # the owner GetExePtr gives for the interrupt stack: TIMER in some of
     # 3.1's runs, MMSYSTEM in others
     (re.compile(r'(size 600 owner )\w+'), r'\1(owner)'),

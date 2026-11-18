@@ -1,7 +1,7 @@
 #!/bin/sh
 # Real 3.1 programs over MMSYSTEM (layer 3; ARCHITECTURE.md 23.4), with
 # Microsoft's MMSYSTEM.DLL or w16's (and MMTASK.TSK), on the reference
-# install with Windows 3.1's own Sound Blaster and Ad Lib drivers set up as
+# install with Windows 3.1's own Sound Blaster driver set up as
 # tests/mmsystem/mrun.sh's MRUN_SND=sb2 (DOSBox as a Sound Blaster 16),
 # driven by real keys (tests/inputrun.sh):
 #   soundrec  Sound Recorder opens DING.WAV and plays it
@@ -34,7 +34,7 @@ python3 "$root/tests/scripts/iniset.py" "$tmp/WIN.INI" "windows:run=$run" \
     'windows:CursorBlinkRate=65535'
 set -- -r -f "$tmp/WIN.INI=WINDOWS/WIN.INI" \
     -f "$tmp/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV" -f "$tmp/MSADLIB.DRV=WINDOWS/SYSTEM/MSADLIB.DRV" \
-    -i 'drivers:wave=sndblst2.drv' -i 'drivers:midi=sndblst2.drv' -i 'drivers:midi1=msadlib.drv' \
+    -i 'drivers:wave=sndblst2.drv' -i 'drivers:midi=sndblst2.drv' \
     -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
 [ "$mm" = w16 ] && set -- "$@" -f "$root/build/dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
     -f "$root/build/dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
