@@ -33,6 +33,9 @@
 # renamed to MMSYSLOG (tools/nerename.py), so that the log shows what
 # MMSYSTEM sends the drivers and what they call back.
 # MRUN_X=1: in DOSBox-X (sb16 always is).
+# MRUN_QT=1: the drive is $W16_QTDIR/ref-installed/c (Windows 3.1 with
+# QuickTime for Windows installed by its own installer, as tests/qtplay.sh
+# does), so that MCIQTW.DRV can be reached through MCI.
 # MRUN_INI: more -i settings for tests/dropin.sh, one per line.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -58,6 +61,10 @@ set -- "$@" -i 'WIN.INI:sounds:MmpBad=C:\NOFILE.WAV, A missing file' \
     -i 'WIN.INI:sounds:MmpNoComma=C:\WINDOWS\TADA.WAV' \
     -i 'WIN.INI:sounds:MmpSpaces=  ding.wav  ,  Spaces' \
     -i 'WIN.INI:sounds:MmpEmpty='
+if [ -n "${MRUN_QT:-}" ]; then
+    DROPIN_REF=${W16_QTDIR:-$HOME/Downloads/qtw16}/ref-installed/c
+    export DROPIN_REF
+fi
 snd=${MRUN_SND:-none}
 sbconf='[sblaster]
 sbtype=sb16
@@ -149,6 +156,15 @@ if [ -n "${MRUN_MCI:-}" ]; then
         shimargs="$shimargs -f $dos/MDSC1.DRV=WINDOWS/SYSTEM/MDSC1.DRV -f $dos/MDSC2.DRV=WINDOWS/SYSTEM/MDSC2.DRV"
         shimargs="$shimargs -i mci:WaveAudio=mdsc1.drv -i mmslog:MDSC1=mciwave.drv"
         shimargs="$shimargs -i mci:Sequencer=mdsc2.drv -i mmslog:MDSC2=mciseq.drv"
+        # QuickTime's MCIQTW.DRV, when the drive has it (MRUN_QT below)
+        q=${DROPIN_REF:-}/WINDOWS/SYSTEM/MCIQTW.DRV
+        if [ -n "${DROPIN_REF:-}" ] && [ -f "$q" ]; then
+            cp "$q" "$out/drv/MCIQTW.DRV"
+            python3 -I "$root/tools/nerename.py" "$out/drv/MCIQTW.DRV" --import MMSYSTEM=MMSYSLOG > /dev/null
+            shimargs="$shimargs -f $out/drv/MCIQTW.DRV=WINDOWS/SYSTEM/MCIQTW.DRV"
+            shimargs="$shimargs -f $dos/MDSC3.DRV=WINDOWS/SYSTEM/MDSC3.DRV"
+            shimargs="$shimargs -i mci:QTWVideo=mdsc3.drv -i mmslog:MDSC3=mciqtw.drv"
+        fi
     fi
 fi
 # shellcheck disable=SC2086

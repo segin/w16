@@ -8,7 +8,9 @@ differs between two runs of Microsoft's own MMSYSTEM (each one seen in
 such a pair of runs); KNOWN lists what differs between Microsoft's and
 w16's for a reason given there: those lines are shown, not failed.
 
-usage: mcmp.py MS.log W16.log
+usage: mcmp.py [--drop REGEX] MS.log W16.log
+  --drop REGEX  leave out the lines it matches on both sides (a case that
+                compares only part of what is logged says why)
 Exit status 0 when they agree.
 """
 import re
@@ -138,10 +140,17 @@ def norm(lines, rules):
 
 
 def main():
-    if len(sys.argv) != 3:
+    args = sys.argv[1:]
+    drop = None
+    if len(args) == 4 and args[0] == '--drop':
+        drop = re.compile(args[1])
+        args = args[2:]
+    if len(args) != 2:
         sys.exit(__doc__)
-    la = [l for l in open(sys.argv[1], errors="replace").read().splitlines() if not SKIP.match(l)]
-    lb = [l for l in open(sys.argv[2], errors="replace").read().splitlines() if not SKIP.match(l)]
+    la = [l for l in open(args[0], errors="replace").read().splitlines()
+          if not SKIP.match(l) and not (drop and drop.match(l))]
+    lb = [l for l in open(args[1], errors="replace").read().splitlines()
+          if not SKIP.match(l) and not (drop and drop.match(l))]
     ea = sorted(re.sub(r' d=\d', '', l) for l in la if TASKEXIT.match(l))
     eb = sorted(re.sub(r' d=\d', '', l) for l in lb if TASKEXIT.match(l))
     if ea or eb:

@@ -4,7 +4,9 @@
 # compared by tests/mmsystem/mcmp.py (ARCHITECTURE.md 23). A case is
 # NAME:SCRIPT:KIND, SCRIPT a file in tests/mmsystem/mci/, KIND plain (the
 # test driver MCT.DRV) or shim (also Windows 3.1's Sound Blaster driver,
-# MCIWAVE and MCISEQ behind logging drivers: tests/mmsystem/mcirun.sh).
+# MCIWAVE and MCISEQ behind logging drivers: tests/mmsystem/mcirun.sh)
+# or qt (QuickTime's MCIQTW.DRV too, on $W16_QTDIR/ref-installed/c: run
+# by default when that drive is there).
 #   usage: tests/mmsystem/mciscen.sh [-o OUTDIR] [-m] [CASE...]
 #     -m   Microsoft's MMSYSTEM only
 # Exit status 0 when every pair agrees.
@@ -25,6 +27,9 @@ e6:explore6.txt:plain e8:explore8.txt:plain e9:explore9.txt:plain e10:explore10.
 e11:explore11.txt:plain \
 e3:explore3.txt:plain \
 e5:explore5.txt:shim e7:explore7.txt:shim}
+# QuickTime's MCIQTW.DRV: only with a QuickTime-installed drive
+qt=${W16_QTDIR:-$HOME/Downloads/qtw16}/ref-installed/c
+[ -z "${*:-}" ] && [ -d "$qt" ] && cases="$cases qt:qtw.txt:qt"
 [ -n "$out" ] || out=$root/build/mciscen-$(date +%H%M%S)
 mkdir -p "$out"
 sides="ms w16"
@@ -46,7 +51,16 @@ for c in $cases; do
     if [ ! -s "$a" ] || [ ! -s "$b" ]; then
         echo "FAIL $n: no log"; fails=$((fails + 1)); continue
     fi
-    if python3 "$root/tests/mmsystem/mcmp.py" "$a" "$b" > "$out/cmp-$n.txt" 2>&1; then
+    set --
+    # qt: QuickTime streams the movie's sound itself (QTIM.DLL's wave
+    # output, its task messages carrying handles), at times that follow
+    # the clock: compared are the MCI commands and MCIQTW's records, but
+    # the global handle MCIQTW keeps as its device's data (where the heap
+    # put it), how often it yields (mciDriverYield) while it waits, and
+    # PostMessage's answer to its notification (the probe's queue holds
+    # QTIM's messages then; the MM_MCINOTIFY itself is compared)
+    case $c in *:qt) set -- --drop '^  (MD MDS[WM]|DCB |task message |MD lost |FWD MMSYSTEM\.7(0[78]|1[01]) from=MCIQTW)' ;; esac
+    if python3 "$root/tests/mmsystem/mcmp.py" "$@" "$a" "$b" > "$out/cmp-$n.txt" 2>&1; then
         echo "ok   $n: $(tail -n 1 "$out/cmp-$n.txt")"
     else
         echo "FAIL $n: $(grep -m1 FAIL "$out/cmp-$n.txt") ($out/cmp-$n.txt)"; fails=$((fails + 1))

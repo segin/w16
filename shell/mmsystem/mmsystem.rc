@@ -2,11 +2,15 @@
  * mmsystem.rc - MMSYSTEM.DLL's resources (ARCHITECTURE.md 23): the
  * version resource, written by tools/mkver.py (the Makefile;
  * ARCHITECTURE.md 20.5; the numbers are 3.1's, 3.10.0.103, the texts
- * w16's), and the error texts of the wave and MIDI functions
- * (waveOutGetErrorText etc., shell/mmsystem/dev.c), string n for error
- * n. The texts are what Windows 3.1's waveOutGetErrorText and
- * midiOutGetErrorText return for each number (tests/mmsystem/mmdev.c,
- * section e): an application shows them to its users.
+ * w16's), the error texts of the wave and MIDI functions
+ * (waveOutGetErrorText etc., shell/mmsystem/dev.c) and of MCI with the
+ * strings MCI drivers' answers name (mciGetErrorString and returned
+ * strings, shell/mmsystem/mci.c), string n for error n, and the MCI
+ * command tables (tools/mkmcitab.py). The texts are what Windows 3.1's
+ * waveOutGetErrorText, midiOutGetErrorText and mciGetErrorString return
+ * for each number (tests/mmsystem/mmdev.c section e,
+ * tests/mmsystem/mci/explore1.txt): an application shows them to its
+ * users.
  */
 1 16 MOVEABLE PURE "mmver.bin"
 

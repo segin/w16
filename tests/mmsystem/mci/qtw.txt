@@ -1,0 +1,28 @@
+# QuickTime for Windows' MCI driver MCIQTW.DRV (behind MDSC3) on the
+# QuickTime-installed drive (tests/mmsystem/mcirun.sh qt): its sample
+# movie opened by its extension ([mci extensions] mov=QTWVideo), queried,
+# played to the end with wait, and closed; then with notify
+s sysinfo all quantity
+s sysinfo all name 4
+s open c:\windows\sample.mov alias m
+s capability m device type
+s capability m can play
+s capability m has video
+s info m product
+s status m mode
+s status m length
+s status m time format
+s status m media present
+s set m time format ms
+s status m length
+s where m destination
+s play m wait
+s status m mode
+s status m position
+s seek m to start
+s play m notify
+w 15000
+s status m mode
+s close m
+s open qtwvideo alias q
+s close q

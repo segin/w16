@@ -3020,9 +3020,9 @@ time*) and MCIQTW.DRV (the MCI driver helpers).
 
 w16's is built in layers (`docs/notes/mmsystem-handover.md` has the
 plan, the state and the raw observations): 1 the core, 2 MMIO, 3 wave,
-MIDI, aux, joystick and sndPlaySound (all three done), 4 MCI. The MCI
-functions are stubs that take the documented arguments and answer as when
-no MCI driver is there.
+MIDI, aux, joystick and sndPlaySound, 4 MCI, the Media Control Interface
+(all four done: every export is w16's own; only MCIPARSECOMMAND, which
+3.1 faults on with zeros, is a stub).
 
 ### 23.1 Observation tools
 
@@ -3069,9 +3069,30 @@ no MCI driver is there.
   left out: its Ad Lib detection in DOSBox varies from run to run), multi: several keys, sb16: Creative's drivers, MRUN_SHIM=1) and
   `tests/mmsystem/mdscen.sh` (every case with both MMSYSTEMs, compared by
   `mcmp.py`); `tests/mmsystem/mprog.sh` runs Sound Recorder, Control
-  Panel's Sound and MIDI Mapper applets with real keys.
+  Panel's Sound and MIDI Mapper applets and Media Player with real keys.
+- **MCI (layer 4).** MMP's section Q (`tests/mmsystem/mmci.c`) runs a
+  script, `C:\MCI.TXT`: command strings (mciSendString, with any return
+  size and callback), mciSendCommand with blocks written in the script,
+  mciExecute (its message box read and closed), mciGetErrorString, the
+  yield procedures, the driver helpers from the application and the
+  command tables. **MCT.DRV** (`tests/mmsystem/mct.c`, `mct.rc`) is a test
+  MCI driver: [mci] lines name it with options (`type=N` the device type
+  it reports, `table=NAME` a command table of its own written for the
+  probe with every item type), the script sets its answers (return value,
+  DWORDs and strings written into the block, notification, mciDriverYield
+  calls) and MMSYSLOG records every DriverProc call with the parameter
+  block before and after and the strings it points to, and its calls of
+  MMSYSTEM's MCI helpers with their results. **MDSC*.DRV** put MMSYSLOG
+  between MMSYSTEM and 3.1's MCIWAVE.DRV and MCISEQ.DRV (and QuickTime's
+  MCIQTW.DRV), whose imports of MMSYSTEM go through it (renamed, as for
+  the device drivers). `tests/mmsystem/mcirun.sh` runs one script (plain:
+  MCT.DRV; shim: also the Sound Blaster driver and the MCI drivers behind
+  MDSC; qt: on a QuickTime-installed drive), `tests/mmsystem/mciscen.sh`
+  every script (`tests/mmsystem/mci/*.txt`) with both MMSYSTEMs, compared
+  by `mcmp.py`; `tests/mmsystem/mci/gentypes.py` writes the survey of
+  every documented device-type command (explore3).
 
-### 23.2 Windows 3.1's MMSYSTEM as observed (layers 1, 2 and 3)
+### 23.2 Windows 3.1's MMSYSTEM as observed (layers 1 to 4)
 
 - mmsystemGetVersion 0101h. After boot the open drivers are TIMER
   (handle 2) and MMSYSTEM (1); the midimapper is not opened at boot.
@@ -3205,6 +3226,109 @@ no MCI driver is there.
   (MMSYSERR_NODRIVER), joyGetNumDevs 0, joySetCapture with a bad window
   165 first.
 
+**MCI (layer 4;** MMP's section Q with MCT.DRV, and 3.1's MCIWAVE, MCISEQ
+and QuickTime's MCIQTW behind MDSC; the scripts are
+`tests/mmsystem/mci/explore1-11.txt` and `qtw.txt`):
+
+- **Opening a device** loads its driver with USER's OpenDriver(file,
+  NULL, lParam) on the file of its [mci] line, lParam an
+  MCI_OPEN_DRIVER_PARMS {WORD wDeviceID (the new ID), LPCSTR lpstrParams
+  (the line's options; DRV_OPEN's own lParam1 is USER's empty string),
+  WORD wCustomCommandTable FFFFh, WORD wType 0} on the stack, which the
+  driver fills; then MCI_OPEN_DRIVER (0801h) with the open's flags and
+  block. Every later command goes by SendDriverMessage(message, flags,
+  block), any message number (0900h, 1234h, even 07FFh from
+  mciSendCommand); a close is MCI_CLOSE_DRIVER (0802h, the close's flags
+  and block) then CloseDriver. MCIWAVE loads its table at DRV_LOAD.
+- **Devices**: IDs are the lowest free from 1; aliases are the task's,
+  case-insensitive; an alias is always passed (ALIAS added: the device
+  name, or the element), except for a type or element given by number; a
+  command's own block is patched for the call (the alias pointer, a type
+  ID turned into its [mci] key's name: "other2" for HIWORD 2) and put
+  back after, the device ID left in it. A device is named by its [mci]
+  key, a type's name (the type's first key: "animation" opens
+  "animation1"), a driver's file without a path, or an element: [mci
+  extensions] by extension (unknown: 263), "type X", "X!element", "new"
+  (needs an alias: 299). An element may be opened twice without
+  shareable (the driver decides). A missing driver: 266.
+- **Command tables**: a command string is looked up in the driver's own
+  table, then its type's table, then the core table. 3.1 has type tables
+  for videodisc, overlay, cdaudio, animation, waveaudio and sequencer (not
+  vcr, dat, scanner, digitalvideo, other), chosen by the [mci] key's name
+  when it names a type ("videodisc", "animation1"), else by the type the
+  driver reported. The core table has open, close, play, record, seek,
+  stop, pause, resume, set, status, capability, info, sysinfo, break,
+  sound, save and load ("media present" and "info file" are the type
+  tables'). A value's DWORD follows from its item's place in the table
+  (after dwCallback; the return value first; a rectangle takes two). A
+  type's table takes a table number like a driver's (the lowest free from
+  1; 0 is the core table) and goes with its last device;
+  mciLoadCommandResource loads the same resource twice as two tables,
+  FFFFh when missing or with no module; mciFreeCommandResource: TRUE once.
+- **"open" through a device's own entry** (the driver's or its type's
+  table has "open": MCIWAVE; the animation, overlay and waveaudio types):
+  the arguments are parsed again after DRV_OPEN into a fresh zeroed block
+  with no device ID and the window only with notify, and every string
+  parsed then reaches the driver 4 bytes into a copy of itself (alias
+  "abcdefghij" as "efghij", type "waveaudio" as "audio"); the device token
+  and the default alias are not affected. Before the driver loads, a
+  repeated keyword (295) and type or alias without a value (269) are
+  refused, and "element" (263); an unknown keyword fails after DRV_OPEN
+  (the driver closed again: 259).
+- **The parser**: blanks and tabs separate words; case does not matter;
+  quoted strings (305 extra characters after, 294 no closing quote; a
+  quoted keyword is no keyword: 290); a keyword of several words matches
+  with any blanks between; integers are decimal with a "-" (the signed
+  range), no "+" or "0x" (270), and a positive one wraps past 2^32 unless
+  a digit multiplies past 429496729 (270); "a:b:c:d" packs bytes; a
+  constant also takes an integer; errors: repeated keyword 295, two values
+  of one constant or break on with off 284, unknown keyword 259 (290 where
+  the values themselves are keywords, status), unknown command 261,
+  missing integer 270, missing constant 312, missing string 269, no
+  command 267, no device 292, "all" with a command that returns a value
+  279.
+- **Answers**: an integer becomes "%ld" (signed) and needs 12 bytes (268,
+  as do a rectangle "%d %d %d %d" under 28 and a quantity under 12); size
+  0 is no buffer. MCI_RESOURCE_RETURNED: string HIWORD(value) of
+  MMSYSTEM's table (or the driver's with MCI_RESOURCE_DRIVER), LoadString
+  cut to the size; colonized "%02d:%02d:%02d" and ":%02d" for four, both
+  flags "01:02:03:"; precedence resource, colonized, integer-returned (the
+  value read through as a pointer), plain. A string return gets the
+  caller's buffer and size (NULL: NULL and 0), unchecked after;
+  mciSendString puts a NUL in the buffer's first byte first. sysinfo
+  quantity writes the DWORD into the buffer and formats it in place.
+  Errors: the low word, a driver's own (512 up) with the device ID in the
+  high word. mciSendCommand leaves only the low word of the block's
+  second DWORD when the driver answered MCI_RESOURCE_RETURNED (Media
+  Player reads MCIWAVE's "can eject" so); "all" sends to each of the
+  task's devices in ID order, takes nothing out, and two non-zero answers
+  give 280.
+- **System commands**: sysinfo (quantity, name N, open, installname; by
+  [mci] keys in file order, a type counting the keys named after it, or
+  the task's open devices in ID order; name ignores the buffer's size;
+  posts MM_MCINOTIFY itself, lParam 0); break (on N: MMSYSTEM's yield
+  procedure with data N, hwnd; off; neither 273); sound (sndPlaySound;
+  262 when it fails).
+- **Notification**: the string path always puts the window argument in
+  dwCallback; drivers post with mciDriverNotify (PostMessage
+  MM_MCINOTIFY, status, device ID; its answer). **Auto-open**: a command
+  to a name not open opens it with MMSYSTEM's window as callback and
+  sends the command with notify to that window, which closes the device
+  when notified (with a block on its stack it never filled); "notify" from
+  the caller: 300; "close" of an unknown name: 263.
+- **Yield**: each device starts with MMSYSTEM's yield procedure and data
+  VK_CANCEL; mciSetYieldProc refuses NULL; mciDriverYield calls the
+  procedure and answers what it answers. **Helpers**: creator task,
+  driver data, 0 or FALSE for a bad ID.
+- **mciGetErrorString** reads MMSYSTEM's string table (the texts are
+  3.1's: wave and MIDI 0-69, MCI 257-349, device types, modes, time
+  formats and the rest 513-1227): size 0 or NULL 0; else the text cut to
+  the size, FALSE when there is none; with a device ID in the high word
+  and an error from 512 the driver's string, its device gone 278's text.
+  **mciExecute**: the command string with no buffer or window; on an
+  error a message box without owner, caption the device token, the
+  error's text, MB_ICONHAND.
+
 ### 23.3 w16's MMSYSTEM.DLL
 
 `shell/mmsystem/`: `mmfix.asm` (one fixed
@@ -3217,8 +3341,16 @@ MMSYSTEM's own handles are global blocks on a list),
 `dev.c` (layer 3: the device drivers opened at DRV_LOAD, every wave, MIDI
 and aux function with 3.1's checks, the handles as blocks of its local
 heap on a list, the error texts from its string table), `snd.c`
-(sndPlaySound and MMSYSTEM's window "#42", SystemStart at boot),
-`stubs.c` (MCI and the joystick functions without a driver),
+(sndPlaySound and MMSYSTEM's window "#42", SystemStart at boot; the
+window also closes the devices MCI opened for one command), `mci.c`
+(layer 4: devices, the driver protocol, the command-string parser over
+the three tables, answers to strings, the system commands, auto-open,
+yield, notification, the helpers, command tables, mciGetErrorString and
+mciExecute), the tables written by `tools/mkmcitab.py` (w16's own core
+and six type tables, RCDATA in the driver tables' documented format,
+built from the documented commands and checked keyword by keyword on 3.1:
+23.2), the MCI texts in `mmsystem.rc` (3.1's mciGetErrorString's),
+`stubs.c` (the joystick functions without a driver, MCIPARSECOMMAND),
 `mmtask.asm` (MMTASK.TSK). Installed as `SYSTEM\MMSYSTEM.DLL` and
 `SYSTEM\MMTASK.TSK`.
 
@@ -3247,13 +3379,43 @@ stack in what it hands back, garbage in fields 3.1 leaves unset, MIDI
 time stamps) and the timings (the "~" lines, WM_TIMER ticks). `prog`
 (`tests/mmsystem/mprog.sh`): Sound Recorder opening and playing
 DING.WAV, Control Panel's Sound applet testing a sound and the MIDI
-Mapper applet: every screen 0 pixels off from 3.1's with Microsoft's
-MMSYSTEM.
+Mapper applet, Media Player (its Device menu, CHIMES.WAV opened and
+played, CANYON.MID refused by MCIWAVE with its error box and opened with
+the MIDI Sequencer): every screen 0 pixels off from 3.1's with
+Microsoft's MMSYSTEM. `mci` (`tests/mmsystem/mciscen.sh`, layer 4): the
+eleven MCI scripts with both MMSYSTEMs over MCT.DRV (e3: 2025 lines, every
+documented device-type command for each of the eleven types) and over
+3.1's MCIWAVE and MCISEQ behind MDSC (e5, e7): every line identical after
+`mcmp.py`'s masks, which hide what heaps and stacks decide (MCIWAVE's
+header fields and MMTIME it leaves unset, the block on 3.1's stack its
+auto-close hands the driver, DX left by the helpers that answer a BOOL,
+a driver's stack address and instance, the bytes past a short string in
+3.1's open reparse); the drivers' DRV_EXITAPPLICATION when MCIWAVE's or
+MCISEQ's background task ends is compared apart (23.5). With
+`$W16_QTDIR/ref-installed/c` (a QuickTime-installed drive) the case qt
+opens, queries and plays QuickTime's sample movie through MCIQTW.DRV:
+the commands and MCIQTW's records identical (QuickTime's own streaming of
+the sound through the wave driver follows the clock: left out).
 
 ### 23.5 UNVERIFIED, and not done
 
-- Layer 4 (MCI): stubs. Media Player needs it (not compared yet; it
-  lists the `[mci]` devices).
+- Layer 4 (MCI): w16's MMTASK task ends as soon as its function returns;
+  3.1's later, at a step two Microsoft runs agree on (MCIWAVE's task
+  after the next commands; one or two OldYield calls before the end did
+  not reproduce it), so the drivers' DRV_EXITAPPLICATION comes at another
+  step (mcmp.py compares those records apart). Not observed: what 3.1
+  does with a task's devices when it ends (w16 closes them at
+  MMSYSTEM's DRV_EXITAPPLICATION); MMSYSTEM's default yield procedure
+  beyond its answer 0 (w16: the break key, pressed while the break
+  window is active, answers -1; break off disables it); MCI_SOUND's
+  flags; open by a driver's file name takes the options of the first
+  [mci] line naming that file with options (one case seen); "element"
+  refused with 263 (why); a type table registered with
+  mciLoadCommandResource's type; the bytes 3.1 shows past a copied
+  string of up to four characters in the open reparse (its heap);
+  "open" through the custom table of a driver whose [mci] key is not a
+  type's name (QuickTime's MCIQTW has none); mciGetDeviceIDFromElementID
+  (nothing opened by element ID seen); MCIPARSECOMMAND.
 - Layer 3: a joystick driver (none in the reference: only the answers
   without one; the joy* functions with a driver are still stubs); the
   sndPlaySound timer's period (about 500 ms) and whether 3.1 caches a

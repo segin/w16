@@ -120,9 +120,16 @@ Mapper drivers, expanded from the reference's Setup files, with the
 logging drivers MDS*.DRV between them and MMSYSTEM, both MMSYSTEMs
 compared; `-m` Microsoft's only; `mrun.sh`'s `MRUN_SND` and `MRUN_SHIM`
 for one run; part `dev` of the boot-test case `mmsystem`),
-`tests/mmsystem/mprog.sh OUT ms|w16 soundrec|sound|midimap [-e REFDIR]`
-(Sound Recorder, Control Panel's Sound and MIDI Mapper applets with real
-keys over the same drivers; part `prog`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
+`tests/mmsystem/mprog.sh OUT ms|w16 soundrec|sound|midimap|mplayer [-e REFDIR]`
+(Sound Recorder, Control Panel's Sound and MIDI Mapper applets and Media
+Player with real keys over the same drivers; part `prog`),
+`tests/mmsystem/mciscen.sh [-m] [NAME:SCRIPT:KIND...]` (layer 4, MCI:
+MMP's MCI scripts, `tests/mmsystem/mci/*.txt`, over the test MCI driver
+MCT.DRV and over 3.1's MCIWAVE and MCISEQ behind the logging drivers
+MDSC*.DRV, both MMSYSTEMs compared; with `$W16_QTDIR/ref-installed/c`, a
+QuickTime-installed drive, also QuickTime's MCIQTW.DRV; one run alone:
+`tests/mmsystem/mcirun.sh OUT ms|w16 SCRIPT [plain|shim|qt]`; part
+`mci`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;

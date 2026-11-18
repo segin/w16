@@ -92,11 +92,12 @@ w16 repository's LICENSE):
                           services, multimedia file I/O (mmio*), the
                           installable-driver and task services, the
                           wave, MIDI and auxiliary sound devices through
-                          your sound card's Windows 3.1 drivers, and
-                          sndPlaySound (Sound Recorder, Control Panel's
-                          Sound and MIDI Mapper work); MCI is not w16's
-                          yet (for programs that need it, such as Media
-                          Player, use your own Windows 3.1 MMSYSTEM.DLL)
+                          your sound card's Windows 3.1 drivers,
+                          sndPlaySound, and the Media Control Interface
+                          (MCI) over your MCI drivers (Sound Recorder,
+                          Media Player, Control Panel's Sound and MIDI
+                          Mapper, and QuickTime for Windows' MCI driver
+                          work)
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
