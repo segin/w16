@@ -1,0 +1,14 @@
+# wlink directives for MMTASK.TSK (shell/mmsystem/mmtask.asm;
+# ARCHITECTURE.md 23): module MMTASK, a 4 KB stack, no local heap, as
+# 3.1's (tools/neinfo.py)
+format windows
+option modname=MMTASK
+option description 'w16 multimedia task'
+option start=start
+option quiet
+option map
+option stack=4096
+option alignment=16
+segment type code moveable preload discardable
+segment type data moveable preload
+library windows.lib

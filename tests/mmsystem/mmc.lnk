@@ -1,0 +1,22 @@
+# MMC.DLL (tests/mmsystem/mmc.c, mmcs.asm), the MMSYSTEM probe's library.
+# Code and data fixed: callbacks may run at interrupt time.
+@tests/apps/dll.lnk
+option modname=MMC
+segment type code fixed preload
+segment type data fixed preload
+export WEP.1 resident
+export MMCCALLBACK.2
+export MMCTASK.3
+export MMCSTACK.4
+export MMCHOOK.5
+export MMCSTATE.6
+export MMCPOPS.7
+export MMCIOPROC.8
+export MMCDISK.9
+import K_GETEXEPTR KERNEL.133
+import K_GETCURRENTPDB KERNEL.37
+import MM_TASKBLOCK MMSYSTEM.902
+import MM_GETCURRENTTASK MMSYSTEM.904
+import STACKENTER MMSYSTEM.32
+import STACKLEAVE MMSYSTEM.33
+library toolhelp.lib

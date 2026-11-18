@@ -7,7 +7,8 @@
 #   usage: tests/timer/trun.sh OUTDIR ms|w16 [shim|plain] [/S|/3] [k286|k386]
 # k386 (default): Microsoft's KRNL386; k286: Microsoft's KRNL286 (Standard
 # mode only). TRUN_ARG: the sections to run (C:\TPR.ARG, tpr.c's header).
-# TRUN_X=1: in DOSBox-X instead of DOSBox.
+# TRUN_X=1: in DOSBox-X instead of DOSBox. TRUN_MM=w16: w16's MMSYSTEM.DLL
+# and MMTASK.TSK (build/dos) instead of Microsoft's.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -18,6 +19,10 @@ rm -rf "$out/run" "$out/tpr.log" "$out/TPR.ARG"
 set -- -f "$dos/TPR.EXE=TPR.EXE" -f "$dos/TPC.DLL=WINDOWS/SYSTEM/TPC.DLL" \
     -i 'boot:shell=C:\TPR.EXE' -c "WIN $mode" -t "${TRUN_TIMEOUT:-300}" -W TPR.LOG -o "$out/run"
 [ "$drv" = w16 ] && set -- "$@" -f "$dos/TIMER.DRV=WINDOWS/SYSTEM/TIMER.DRV"
+if [ "${TRUN_MM:-ms}" = w16 ]; then
+    set -- "$@" -f "$dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
+        -f "$dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
+fi
 if [ "$shim" = shim ]; then
     set -- "$@" -f "$dos/TMS.DRV=WINDOWS/SYSTEM/TMS.DRV" -i 'drivers:timer=tms.drv'
 fi

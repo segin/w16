@@ -1,0 +1,6 @@
+/*
+ * mmsystem.rc - MMSYSTEM.DLL's version resource, written by
+ * tools/mkver.py (the Makefile; ARCHITECTURE.md 20.5). The numbers are
+ * 3.1's (3.10.0.103), the texts w16's.
+ */
+1 16 MOVEABLE PURE "mmver.bin"

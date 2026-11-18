@@ -209,6 +209,16 @@
 #              its last frame 0 pixels and its length within 2 s of 3.1's.
 #              Until 2026-11-17 w16 hung for good there (docs/notes/
 #              quicktime-handover.md)
+#   mmsystem   w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
+#              against Microsoft's, on the reference 3.1
+#              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
+#              driver, DriverCallback, interrupt stack, tasks; mcmp.py),
+#              timer (TPR.EXE, plain and with TMS.DRV: Microsoft's
+#              MMSYSTEM and TIMER.DRV against w16's two; tcmp.py); qt
+#              (QuickTime's sample movie on stock 3.1 with w16's MMSYSTEM,
+#              MMTASK and TIMER.DRV: tests/qtplay.sh -t; skipped without
+#              $W16_QTDIR) is not in the default parts until MMIO and
+#              wave are done (mmsystem@qt runs it)
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -685,7 +695,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2489,6 +2499,24 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   timer"
         else echo "FAIL timer: $r ($out)"; fails=$((fails + 1)); fi ;;
+    mmsystem)
+        # w16's MMSYSTEM.DLL against Microsoft's (ARCHITECTURE.md 23)
+        r=ok
+        d=$out/mmsystem-${part:-core}
+        case ${part:-core} in
+        core|timer)
+            "$root/tests/mmsystem/mscen.sh" -o "$d" "${part:-core}" > "$d.txt" 2>&1 ||
+                r="${part:-core}: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
+        qt)
+            "$root/tests/qtplay.sh" -t "MMSYSTEM.DLL MMTASK.TSK TIMER.DRV" -o "$d" > "$d.txt" 2>&1 || true
+            if grep -q '^skip' "$d.txt"; then r=ok
+            elif ! grep -q '^ok' "$d.txt"; then
+                r="qt: $(grep -m1 FAIL "$d.txt" | sed 's/^FAIL qtplay: //') ($d.txt)"
+            fi ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   mmsystem"
+        else echo "FAIL mmsystem: $r ($out)"; fails=$((fails + 1)); fi ;;
     quicktime)
         # QuickTime's installer and sample movie (tests/qtplay.sh)
         "$root/tests/qtplay.sh" -o "$out/quicktime" > "$out/quicktime.txt" 2>&1 || true
@@ -4271,6 +4299,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
+    mmsystem) echo "$1@core $1@timer" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -4337,6 +4366,9 @@ partsummary() {
     ver)
         if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
+    mmsystem)
+        if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; QuickTime's movie as on 3.1"
+        else echo "FAIL mmsystem: $pfirst ($out)"; fi ;;
     timer)
         if [ $pbad = 0 ]; then echo "ok   timer: TPR's log and TMS's record of every message as with Microsoft's TIMER.DRV (Standard, 386 Enhanced), the timings within their limits; QuickTime's movie as on 3.1"
         else echo "FAIL timer: $pfirst ($out)"; fi ;;

@@ -2612,6 +2612,51 @@ install-tree: $(W16SYS)/TOOLHELP.DLL
 $(W16SYS)/TOOLHELP.DLL: $(DOS)/TOOLHELP.DLL
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- MMSYSTEM.DLL and MMTASK.TSK (shell/mmsystem/; ARCHITECTURE.md 23):
+# large model, SS != DS (it runs on its callers' stacks and at interrupt
+# time), every entry loads its DS ----
+MMCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=MM_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
+mmsystem: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
+dos: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
+.PHONY: mmsystem
+$(B)/mmsystem/%.o: shell/mmsystem/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/mmsystem/%.o: shell/mmsystem/%.c shell/mmsystem/mmsys.h
+	@mkdir -p $(@D)
+	$(WCC) $(MMCFLAGS) -fo=$@ $<
+$(B)/mmsystem/mmver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Multimedia system library" \
+	    FileVersion=3.1 InternalName=mmsystem.dll \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=mmsystem.dll ProductName=w16 ProductVersion=3.1
+$(B)/mmsystem/mmsystem.res: shell/mmsystem/mmsystem.rc $(B)/mmsystem/mmver.bin
+	@mkdir -p $(@D)
+	cd $(B)/mmsystem && $(WRC) -q -r -bt=windows -fo=mmsystem.res $(CURDIR)/shell/mmsystem/mmsystem.rc
+$(DOS)/MMSYSTEM.DLL: $(MMOBJS) $(B)/mmsystem/mmsystem.res shell/mmsystem/mmsystem.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/mmsystem/mmsystem.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/mmsystem/mmsystem.map option resource=$(B)/mmsystem/mmsystem.res file { $(MMOBJS) }
+	python3 tools/nemark.py $@ 3.10 8309 08
+$(DOS)/MMTASK.TSK: $(B)/mmsystem/mmtask.o shell/mmsystem/mmtask.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/mmsystem/mmtask.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/mmsystem/mmtask.map file { $(B)/mmsystem/mmtask.o }
+	python3 tools/nemark.py $@ 3.10 030A 08
+# not in the install tree yet: QuickTime's player needs MMIO and wave
+# (docs/notes/mmsystem-handover.md); `make mmsystem-tree` puts them there
+mmsystem-tree: $(W16SYS)/MMSYSTEM.DLL $(W16SYS)/MMTASK.TSK
+.PHONY: mmsystem-tree
+$(W16SYS)/MMSYSTEM.DLL: $(DOS)/MMSYSTEM.DLL
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16SYS)/MMTASK.TSK: $(DOS)/MMTASK.TSK
+	@mkdir -p $(@D)
+	cp $< $@
 # ---- LZP.EXE, the LZEXPAND probe (tests/lzexpand/; ARCHITECTURE.md,
 # LZEXPAND): tests/lzexpand/lzrun.sh, tests/lzexpand/lzscen.sh ----
 lzprobes: $(DOS)/LZP.EXE
@@ -2685,6 +2730,29 @@ $(DOS)/DRT.DLL: $(B)/tests/dllstart.o $(B)/drv/tests/drt.o tests/apps/dll.lnk te
 	@mkdir -p $(@D)
 	$(WLINK) @tests/drv/drt.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/drv/tests/drt.map file { $(B)/tests/dllstart.o $(B)/drv/tests/drt.o }
+# ---- MMP.EXE and MMC.DLL, the MMSYSTEM probe and its library
+# (tests/mmsystem/; ARCHITECTURE.md 23): tests/mmsystem/mrun.sh ----
+mmprobes: $(DOS)/MMP.EXE $(DOS)/MMC.DLL
+dos: mmprobes
+.PHONY: mmprobes
+$(B)/mmsystem/tests/%.o: tests/mmsystem/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/mmsystem/tests/mmp.o: tests/mmsystem/mmp.c tests/mmsystem/mmc.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(B)/mmsystem/tests/mmc.o: tests/mmsystem/mmc.c tests/mmsystem/mmc.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(DOS)/MMP.EXE: $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o tests/apps/app.lnk tests/mmsystem/mmp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/mmsystem/mmp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/mmsystem/tests/mmp.map file { $(B)/tests/start.o $(B)/mmsystem/tests/mmp.o }
+MMCOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mmc.o $(B)/mmsystem/tests/mmcs.o
+$(DOS)/MMC.DLL: $(MMCOBJS) tests/apps/dll.lnk tests/mmsystem/mmc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/mmsystem/mmc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/mmsystem/tests/mmc.map file { $(MMCOBJS) }
 # ---- the timer probe (tests/timer/; ARCHITECTURE.md 21): TPR.EXE, its
 # callback DLL TPC.DLL and the logging pass-through driver TMS.DRV;
 # tests/timer/trun.sh, tests/timer/tscen.sh ----
