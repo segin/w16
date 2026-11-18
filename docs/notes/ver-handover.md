@@ -114,3 +114,10 @@ After the merge of master (README.TXT moved to assets/), README.TXT
 lists VER.DLL among w16's files and no longer among those to copy from
 Windows 3.1; dropin.sh and refrun.sh no longer leave an empty autoexec
 line without a D: drive (ea1cd74); ver@tree286 and ver@x rerun: ok.
+
+## Full run after the KERNEL fixes (installation-05, 2026-11-18, a166e92)
+
+make test: pass (TK60 under both kernels, HDPMI16 and w16's DOSX). Boot
+test: 119 ok, 2 FAIL, both known on master ec0c926: ddeml (part conn,
+w16-ms) and lzexpand (part quirks: eof, zero, long matches). ver passes
+in every part, the tree parts now with Microsoft's VER.DLL too.
