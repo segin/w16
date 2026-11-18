@@ -96,6 +96,11 @@ probe's log section by section; the boot-test case `lzexpand` runs it),
 section by section; `tests/ver/vtree.sh`, `vmods.sh` and `vfonts.sh` for
 the install tree, w16's modules' versions and Control Panel's Fonts
 applet; the boot-test case `ver` runs them all),
+`tests/toolhelp/thscen.sh` (w16's TOOLHELP.DLL against Microsoft's: the
+probe THP in groups of sections on 3.1 under both kernels and in 386
+Enhanced mode and on w16's tree, the logs compared by
+`tests/toolhelp/thcmp.py`; `thwatson.sh` Dr. Watson with each; the
+boot-test case `toolhelp` runs them through `tests/toolhelp/thcase.sh`),
 `tests/drv/drun.sh` (USER's installable drivers: the probe DRP and its
 driver DRT on w16's USER against Microsoft's; the boot-test case
 `drivers`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and

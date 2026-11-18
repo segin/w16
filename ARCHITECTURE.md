@@ -180,7 +180,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `COMMDLG.DLL` | COMMDLG | Common dialogs (Open/Save, Color, Font, Print, Find/Replace) | P0 |
 | `SHELL.DLL` | SHELL | Drag-drop, `ShellExecute`, registration database (`Reg*`), `ExtractIcon`. w16: `shell/shelldll/` (§13) | P0 |
 | `WIN87EM.DLL` | WIN87EM | x87 emulator / FPU support. Most C runtimes import it. w16: `win87em/` (§9.2, floating-point findings) | P0 |
-| `TOOLHELP.DLL` | TOOLHELP | Task, module, heap and global walkers; notifications | P1 |
+| `TOOLHELP.DLL` | TOOLHELP | Task, module, heap and global walkers; notifications (w16: `shell/toolhelp/`, §22) | P1 |
 | `VER.DLL` | VER | Version resources, `VerInstallFile` (w16: `shell/ver/`, §20) | P1 |
 | `LZEXPAND.DLL` | LZEXPAND | LZ decompression (`COMPRESS.EXE` format; w16: `shell/lzexpand/`, §19) | P1 |
 | `DDEML.DLL` | DDEML | DDE Management Library (w16: `shell/ddeml/`, §18) | P1 |
@@ -2571,3 +2571,234 @@ give their fixed part, translation and eight strings, identically.
 - WfW 3.11's VER.DLL (3.11.0.300, the same exported names) was not
   probed; 3.1's Setup and DRIVERS.CPL were not driven through their own
   interfaces.
+
+## 22. TOOLHELP.DLL
+
+TOOLHELP.DLL is the Tool Helper library debuggers and system utilities
+use (Programmer's Reference Vol. 1 ch. 8; Vol. 2, the 34 functions; Vol.
+3, GLOBALENTRY, LOCALENTRY, MODULEENTRY, TASKENTRY, STACKTRACEENTRY,
+CLASSENTRY, MEMMANINFO, SYSHEAPINFO, TIMERINFO, the NFY* structures and
+the constants). Windows 3.1's (module TOOLHELP, "TOOLHELP - Debug/Tool
+Helper library", flags 8309h, flags2 08h, expected version 3.00, file
+version 3.10; a fixed code segment 1 and a fixed DGROUP 2) exports WEP 1
+(resident) and GlobalHandleToSel 50 to TaskSwitch 83 (`tools/neinfo.py`).
+In the 3.1 install Dr. Watson (17 of its functions) and Packager
+(NotifyRegister) import it; QuickTime 2.1.2's QTIM.DLL, QTOLE.DLL,
+QTHNDLR.DLL and QTNOTIFY.EXE too (`tools/neimports.py --importers
+TOOLHELP`). w16's is in `shell/toolhelp/`, installed as
+`SYSTEM\TOOLHELP.DLL`.
+
+Microsoft's TOOLHELP reads Windows 3.1's own structures: THHOOK, the
+global heap's arenas and Burgermaster (KRNL286's and KRNL386's layouts),
+local heaps' information blocks, module tables, task databases, USER's
+class list. w16's KERNEL and USER keep those structures in 3.1's layouts
+already (§6.11, §9.2, §9.7, §9.10, §10), so w16's TOOLHELP walks w16's
+own structures in those layouts, and it works under Microsoft's KERNEL
+too. Where it needs KERNEL it uses what 3.1's KERNEL offers:
+ToolHelpHook (KERNEL.341) for the notifications, the scheduler's frame
+on a waiting task's stack for TaskGetCSIP, TaskSetCSIP, TaskSwitch and
+StackTraceFirst (w16's KERNEL now leaves 3.1's frame), DPMI 0203h/0205h
+for the faults, USER's UserSeeUserDo (USER.216) for the first class.
+
+### 22.1 Observation tools
+
+- `THP.EXE` (`tests/toolhelp/thp.c`, `thps.asm`; its child `THC.EXE`,
+  its library `THD.DLL`; `make thprobes`), run as the shell
+  (`tests/toolhelp/thrun.sh OUTDIR ms|w16 SYSTEM`), calls every function
+  in states it makes and logs the results section by section (letters in
+  C:\THP.ARG): e (dwSize and NULL checks, GlobalHandleToSel), g (the
+  global heap: GlobalInfo, the three walks, GlobalEntryHandle on blocks
+  of every kind and on non-blocks, GlobalEntryModule, a walk from an
+  entry on), l (local heaps: its own, one LocalInit made in a block,
+  USER's, GDI's with the objects it makes counted by type), m (modules),
+  t (tasks, with THC waiting), s (stack traces: frames of known kinds,
+  odd and even BP, near and far; the waiting child's; BP after
+  InitTask), c (classes, UserSeeUserDo), i (SystemHeapInfo, MemManInfo,
+  TimerCount), r (MemoryRead/Write: huge blocks, limits, code, an alias),
+  n (what KERNEL itself reports to a raw ToolHelpHook procedure; then
+  NotifyRegister's notifications for strings, THD loaded and freed, a
+  program run, NF_TASKSWITCH, NF_RIP, LogError and LogParamError, two
+  callbacks in order), x (InterruptRegister: the child's faults
+  restarted, ended with TerminateApp, passed on to its own callback; the
+  probe's own), k (the scheduler's frame, TaskGetCSIP, TaskSetCSIP,
+  TaskSwitch, TerminateApp), d (both TOOLHELPs side by side, below), w
+  (Dr. Watson). Handles and selectors are logged by what they are ("dg.s"
+  its DGROUP's selector, "M:USER", "T:child", "?"), raw numbers in "%"
+  lines; every structure is filled with EEh first, so a field a function
+  leaves alone shows.
+- Section d loads a second TOOLHELP beside TOOLHELP.DLL: the other one
+  (Microsoft's beside w16's, or w16's beside Microsoft's) renamed
+  TOOLHLPM by `tools/nerename.py` at test time (a test-only combination,
+  §3), and asks both the same questions in the same state: every entry
+  of the three global walks, GlobalEntryHandle of every block (by handle
+  and by selector), every local heap found, GlobalEntryModule of every
+  segment of every module, the module, task and class walks,
+  SystemHeapInfo, MemManInfo, GlobalHandleToSel, a stack trace; each
+  structure compared byte for byte ("d: 0 difference(s)").
+- `tests/toolhelp/thscen.sh` runs the probe in groups of sections, a boot
+  each (a crash costs one group), on ref286 (3.1's KRNL286,
+  `REFRUN_KRNL286`), ref386 (KRNL386, Standard mode), ref3 (386 Enhanced
+  mode), tree286 and tree386 (w16's tree alone, its KRNL286 / KRNL386),
+  with either TOOLHELP; `thcmp.py` compares the logs section by section
+  (`--raw` the numbers too, `--mask FILE` lines left out or rewritten,
+  each explained in the file). `tests/toolhelp/thwatson.sh`: Dr. Watson
+  with each TOOLHELP.
+
+### 22.2 Windows 3.1's TOOLHELP as observed
+
+Common to all: a structure's dwSize must be its size exactly, else
+FALSE; NULL gives FALSE (GlobalNext(NULL) faults under KRNL286 and is
+not tried); MemManInfo returns TRUE whatever it gets, NULL too.
+
+- **GlobalHandleToSel**: the value with bit 0 set, whatever it is (0
+  gives 1).
+- **Global heap** (KRNL286 / KRNL386): wcItems = the Burgermaster's count
+  + 1 (a walk visits one less), wcItemsFree and wcItemsLRU its counts.
+  dwAddress = the arena's address (the block's less 10h) / the block's;
+  dwBlockSize; hBlock; wcLock = arena byte 0 ('M' 4Dh for a fixed block,
+  'Z' for the last sentinel) / the lock count; wcPageLock 0 / the
+  page-lock count; wFlags = the arena's flags (04h DGROUP, 08h
+  discardable code) | 0100h (GF_PDB_OWNER) for a PDB's block, whose
+  hOwner is then the task, not the PDB; wHeapPresent by the "LH" at the
+  heap information block's 22h / 28h; dwNext the next arena (selector /
+  offset), 0 at the last sentinel; dwNextAlt 0 in a walk of the whole
+  heap and after GlobalEntryHandle, else the next in the LRU ring (newest
+  first, 0 when it comes round) or the free list (KRNL286: the walk stops
+  before the last sentinel; KRNL386: the sentinel is its last entry).
+  wType: FREE (owner 0), SENTINEL (FFFFh), INTERNAL (the Burgermaster,
+  FFFDh, and "not there" arenas, FFFCh: never BURGERMASTER), MODULE (a
+  module's table), TASK (a task database), RESOURCE with wData the type
+  (but a font file's fonts are UNKNOWN), a module's segment with wData
+  its number: DGROUP or DATA when its arena has the DGROUP flag (DGROUP
+  for the automatic data segment), else CODE (3.1's KERNEL's own data
+  segment, whose arena lacks it, is CODE); all else UNKNOWN.
+  GlobalEntryHandle takes a handle or a selector and fails for a
+  discarded block, an alias, a huge block's second selector; any flags
+  but 1 (LRU) and 2 (FREE) walk the whole heap.
+- **Local heaps**: wAddress = the arena + 4 (fixed and free blocks) or
+  + 6 (moveable, whose handle is at the arena + 4); wSize = the next
+  arena less wAddress, less 2 more under KRNL286; wcLock from the handle;
+  wType from GDI's objects (their second word, 'GO' + type - 1), 0 in
+  USER's (retail), FFh for free; hHeap the selector; the walk ends before
+  the last sentinel (LocalInfo's count is one more), and the call that
+  ends it fills in the sentinel and sets wNext to 0. LocalInfo answers
+  for any block (the word at its pointer + 4), LocalFirst only for a
+  heap.
+- **Modules, tasks**: the module list from THHOOK 04h, names from the
+  resident-name table, the path from the module table's file record;
+  ModuleFindName compares exactly ("user" finds nothing);
+  ModuleFindHandle takes the handle or selector. Tasks from THHOOK 0Eh;
+  szModule is the TDB's 8 bytes as they are and a NUL; wPSPOffset is the
+  PDB's selector; wSS:wSP the TDB's 02h; the stack fields from the stack
+  segment's instance data.
+- **Stack traces**: StackTraceFirst refuses the current task and starts
+  from the scheduler's frame (BP at 10h, the address at 12h); a frame is
+  far when the saved BP is odd, or when the word above the return IP is
+  a code selector of the caller's privilege whose limit takes the IP,
+  else near (Schulman ch. 10, as observed); a chain ends at a BP of 0 or
+  one not above the last. hModule and wSegment are left alone for a
+  selector outside the global heap. InitTask returns with a zero word
+  pushed on the caller's stack and BP pointing at it (SP 2 less than at
+  the call), so a trace ends with the start-up code's frame.
+- **Classes**: UserSeeUserDo(5) gives the first class; a class: 00h the
+  next, 04h its atom (USER's), 14h its module (CLASSENTRY.hInst).
+- **SystemHeapInfo**: GetFreeSystemResources' percentages and the two
+  DGROUPs' selectors. **MemManInfo**: DPMI 0500h's first nine values as
+  they are, wPageSize 1000h. **TimerCount**: in Standard mode the tick
+  count and how far the 8253 has got (never going back); in 386 Enhanced
+  mode the VTD's (Schulman), not GetTickCount's count.
+- **MemoryRead/Write**: any selector there is (an alias too), up to its
+  limit (a request past it is cut short, one beginning past it gives 0);
+  code is written too.
+- **Notifications**: KERNEL's codes (§9.7) turned into NFY_*; LOADSEG's
+  wType is the segment's flags as the module table has them, wcInstance
+  0; FREESEG for each segment of a module deleted, a library's automatic
+  data segment and module table first, the rest (and a program's) in an
+  order that changes from boot to boot. The callbacks are called in the
+  order they were registered until one returns TRUE; NF_TASKSWITCH adds
+  TASKIN/TASKOUT, NF_RIP the RIP notification; LogError and
+  LogParamError reach every callback (NFYLOGERROR 10 bytes,
+  NFYLOGPARAMERROR 14). NotifyRegister takes a NULL procedure and, under
+  KRNL286, any task handle; one registration a task. A callback left by
+  a task that ended without NotifyUnRegister is still called (the probe
+  ended there); w16's drops an ended task's callbacks.
+- **Interrupts**: InterruptRegister takes a NULL procedure too, one a
+  task. The callback runs on the faulting task's stack as that task,
+  with [SP] the return into TOOLHELP, then AX, the number (0, 3 with the
+  IP after INT 3, 6 ...), a handle, the fault's IP, CS, flags; RETF
+  passes it on (the next callback, then Windows), removing 10 bytes and
+  IRET restarts, TerminateApp ends the task (exit code FFh). Under DOSBox
+  a write to a code segment, a null selector and a stack past its limit
+  do not fault, so those were not observed.
+- **Task control**: TaskGetCSIP of the current task is 0; TaskSetCSIP
+  returns the old address and the task goes on at the new one when next
+  run; TaskSwitch runs it there at once as that task (with DS its TDB
+  under 3.1); TerminateApp(another task, NO_UAE_BOX) ends it with exit
+  code FFh and returns.
+
+### 22.3 w16's TOOLHELP.DLL
+
+`shell/toolhelp/toolhelp.c` (modules, tasks, information, notifications,
+interrupts, task control, stack traces, classes), `global.c` (the global
+and local heaps, MemoryRead/Write), `entry.asm` (the procedure KERNEL's
+hook calls, the DPMI exception handlers and the protected-mode vectors 1
+and 3, the dispatch that runs the callbacks on the faulting stack and
+passes a fault on by letting it happen again into the handler before
+ours, TaskSwitch's entry, the 8253, the VTD), `th.h`. Large model, SS !=
+DS, every export loads its DS; code and data fixed and preloaded, as
+3.1's. Registrations are kept in growing lists in its local heap (no
+limit) and dropped when a task ends (EXITTASK) or is ended by
+TerminateApp. The notification hook is installed while anyone has a
+callback, the fault handlers while anyone has an interrupt callback; a
+fault in a "__GP" range (KERNEL's HasGPHandler) is Windows' own and not
+reported.
+
+Changes elsewhere: the scheduler's frame is 3.1's (DX BX ES CX AX DI SI
+DS, BP at 10h, the address at 12h: `kernel/kentry.asm` task_switch,
+`task.c` a new task's first frame); InitTask leaves 3.1's zero word and
+BP (`kentry.asm`); a deleted module's FREESEG notifications come in
+3.1's order and the segment-load (50h) and DLL-start (64h) ones with ES
+the hModule, the name in the resident-name table (`kernel/toolhelp.c`);
+USER's UserSeeUserDo (USER.216) answers requests 1-5 (`user/class.c`);
+`tests/refrun.sh` kills a DOSBox that ignores the time limit's TERM.
+
+Found and left (`tests/toolhelp/tree.mask`): 3.1 gives a code segment
+one byte more than its minimum allocation, rounded (2B0h: 2D0h under
+KRNL286; 0E0h: 100h under KRNL386), w16's loader its minimum allocation;
+3.1's KERNEL frees a module's segments in an order that changes from boot
+to boot (it seems, their places in the heap), w16's in segment order
+after the automatic data segment and the module table.
+
+### 22.4 Tests and results
+
+Boot-test case `toolhelp` (`tests/toolhelp/thcase.sh`): parts ref286,
+ref386, ref3 (3.1 with each TOOLHELP: the logs equal, section d's counts
+aside, `same.mask`; section d without a difference), tree286, tree386
+(w16's tree alone with w16's TOOLHELP against 3.1 with Microsoft's;
+`tree.mask` names each difference, all of them w16's modules', not
+TOOLHELP's), watson (Dr. Watson started, watching a program, closed: its
+log with each TOOLHELP as with Microsoft's, on 3.1 and on w16's tree),
+qt (QuickTime's player on w16's tree laid over 3.1, which brings w16's
+TOOLHELP; `tests/qtplay.sh`, `W16_QTDIR`).
+
+Microsoft's TOOLHELP on w16's tree: every read-only function answers as
+w16's does (section d, structure for structure); it fails where w16's
+system is not 3.1's underneath: MemoryWrite to a code segment ends
+Windows, its fault handlers never see a fault (w16's KERNEL reports it
+instead), and TaskSwitch and TerminateApp did not complete (sections r,
+x, k end there). docs/notes/toolhelp-handover.md has the details and
+the runs.
+
+### 22.5 UNVERIFIED, and not done
+
+- Low-stack faults (number | 8000h, SS:SP pushed), Ctrl+Alt+SysRq
+  (100h), INT 1, NFY_RIP and NFY_INCHAR (a debugging KERNEL's), stack
+  and GP faults (DOSBox does not raise them): w16's TOOLHELP has none of
+  the first two, reports the others as it does the faults observed.
+- The callback frame's "handle" word (3.1: an offset of TOOLHELP's own;
+  w16: 0) and the AX a callback gets (TOOLHELP's DS in both).
+- TerminateApp(UAE_BOX): w16's calls FatalAppExit(0, NULL) in the task,
+  whose box was not compared with 3.1's.
+- Dr. Watson with a fault: under DOSBox 3.1 itself showed nothing and
+  went no further.
+- WfW 3.11 (no importer of TOOLHELP there) was not probed.
