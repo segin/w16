@@ -167,7 +167,7 @@ Each **module name** (as named in `NE` headers and import tables) must exist wit
 | `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON` | — | `fonts.fon`, `fixedfon.fon`, `oemfonts.fon` | System, fixed and OEM fonts | P0 |
 | `MMSOUND.DRV` (3.1's `SOUND.DRV` is the same file) | SOUND | `sound.drv` | MessageBeep's beep and the legacy `OpenSound` API on the speaker (w16's: `drivers/sound/`, §6.7) | P1 |
 | `COMM.DRV` | COMM | `comm.drv` | Serial and parallel ports (w16's: `drivers/comm/`, §6.7) | P1 |
-| `TIMER.DRV` | TIMER | `[drivers] timer` | Multimedia high-resolution timer | P1 |
+| `TIMER.DRV` | TIMER | `[drivers] timer` | Multimedia high-resolution timer, MMSYSTEM's (w16's: `drivers/timer/`, §21) | P1 |
 | `MIDIMAP.DRV` | MIDIMAP | `[drivers] midimapper` | MIDI mapper | P2 |
 | `POWER.DRV` | POWER | `[drivers]` | APM | P3 |
 | `LANGxxx.DLL` | LANGxxx | `language.dll` | Language and collation (default is built-in) | P2 |
@@ -253,6 +253,8 @@ w16's drivers live under `drivers/`, one directory each with a README (what it i
 **`drivers/system/`: w16's `SYSTEM.DRV`** (Standard mode), in NASM (`make` builds `build/dos/SYSTEM.DRV`): module SYSTEM with Windows 3.1's eleven ordinals (InquireSystem 1, CreateSystemTimer 2, KillSystemTimer 3, EnableSystemTimers 4, DisableSystemTimers 5, GetSystemMsecCount 6, Get80x87SaveSize 7, Save80x87State 8, Restore80x87State 9, WEP 10, A20_Proc 20), each popping what 3.1's pops (4, 6, 2, 0, 0, 0, 0, 4, 4, 2, 2 bytes). Undocumented in the DDK; facts from the NE tables, Schulman ch. 9, Pietrek ch. 1 and black-box observation. Eight timers with 3.1's handles (18h-50h; COMM, USER's cursor timer, KERNEL's LRU sweep and USER's SetTimer timer take four at boot), each called every max(1, rate * 1000 / 54925) ticks; INT 8 chained to the BIOS first, then the msec count (+54.925 ms a tick, only while enabled), then the timers due with interrupts on, AX the handle, DS the driver's, no reentry (a tick during the procedures counts the msec and nothing else); the PIT is not reprogrammed. InquireSystem: 54925 for the timer resolution; drive types from the BIOS's floppy count (B: 1:0 on a one-floppy machine) and DOS IOCTL 4409h/4408h. `tests/sysprobe.sh`: SY1 (`tests/apps/sy1.c`: every export, registers, 30 timer rates, a timer procedure's context, reentrancy, the msec count against the BIOS ticks, Disable/Enable) and SYREC (`tests/apps/syrec.asm`, a recording SYSTEM in front of the driver under test: every call from boot to exit) identical with 3.1's driver and w16's. Boot-test cases `sysdrv`, `sysdrvall`, `sysdrvwoados`, `sysboot`, `sysclock`, `sysprobe`. Not verified: 386 Enhanced mode, machines without a coprocessor, remote and CD-ROM drives (`drivers/system/README.md`).
 
 **`drivers/sound/`: w16's `MMSOUND.DRV`** (Standard mode), the sound driver in NASM (`make` builds `build/dos/MMSOUND.DRV`; w16's SYSTEM.INI names it, `sound.drv=mmsound.drv`): module SOUND with Windows 3.1's 18 ordinals (OpenSound ... SetVoiceThreshold 1-16, DoBeep 17, WEP 18; 3.1's MMSOUND.DRV and SOUND.DRV are the same file), each popping the bytes 3.1's pops (0, 0, 4, 8, 10, 6, 4, 8, 0, 0, 2, 0, 2, 0, 0, 4, 2, 2). Observed black-box with SN1 (`tests/apps/sn1.c`) in DOSBox-X with the run's sound recorded (`tests/dropin.sh` DROPIN_CAPTURE: DOSBox-X's `DX-CAPTURE /A`; `tools/wavtones.py` reads the speaker's tones back, `tools/tonecmp.py` compares two recordings) and SNDREC (`tests/apps/sndrec.asm`, a recording SOUND in front of the driver). What 3.1's driver does: USER's MessageBeep calls DoBeep(type) (any type; MMSYSTEM is not involved), which sounds 749 Hz (divisor 1593) on the speaker for a CPU loop of about 64,000 instructions (6.7 ms at 10000 DOSBox cycles a ms); the SOUND API is a real one-voice queue (6 bytes a note, 192 by default) played on the speaker from its own IRQ 0 handler with the 8254's channel 0 at 200 Hz while playing (the old handler still gets 18.2 ticks a second), notes 1-84 (37 is C5) in equal temperament, lengths, tempos and the normal/legato/staccato modes timed to the 5 ms tick by rules measured over 78 combinations (`drivers/sound/README.md`); dots, volume, envelopes, noise and SyncAllVoices do nothing. w16's USER now calls DoBeep from MessageBeep too (`user/misc.c`). `tests/soundprobe.sh` (sn1, queue, rec, allw16) compares both drivers' logs (identical) and their recordings (tones within `tonecmp.py`'s limits); boot-test cases `sound`, `soundtime`, `soundrec`, `soundboot`, `treealone` (build/w16 alone, no file of Microsoft's). Not verified: 386 Enhanced mode; calls that never returned on 3.1's (WaitSoundState(S_THRESHOLD) with nothing playing, notes after SetVoiceQueueSize(0)) return on w16's.
+
+**`drivers/timer/`: w16's `TIMER.DRV`**, MMSYSTEM's multimedia timer driver in NASM (`make` builds `build/dos/TIMER.DRV`; w16's SYSTEM.INI names it, `[drivers] timer=timer.drv`, with `[boot] drivers=mmsystem.dll`): module TIMER with 3.1's WEP 1 and DriverProc 2 and its six undocumented messages (kill 0800h, set 0804h, time 0808h, capabilities 080Ch, begin and end period 0810h, 0814h), found black-box with the logging driver TMS.DRV between Microsoft's MMSYSTEM and Microsoft's TIMER.DRV; 15 events (8 in 386 Enhanced mode) with 3.1's IDs, the 8254 at the shortest period asked for (1-55 ms), the BIOS tick, GetTickCount and SYSTEM.DRV's timers kept at their rate, callbacks through MMSYSTEM's StackEnter and DriverCallback as 3.1's. `tests/timer/tscen.sh` and the boot-test case `timer` compare the probe TPR's log and TMS's record with Microsoft's driver and with w16's, and play QuickTime's movie with w16's driver. 3.1's own timing faults are not copied; in 386 Enhanced mode the timing runs on VTD's virtual 8254, not VTDAPI.386 (§21).
 
 ### 6.8 Design Note: UI Fidelity
 
@@ -2571,3 +2573,194 @@ give their fixed part, translation and eight strings, identically.
 - WfW 3.11's VER.DLL (3.11.0.300, the same exported names) was not
   probed; 3.1's Setup and DRIVERS.CPL were not driven through their own
   interfaces.
+
+## 21. TIMER.DRV
+
+TIMER.DRV is the installable driver (10.7) behind MMSYSTEM's timer
+services (Multimedia Programmer's Guide ch. 6; Programmer's Reference
+Vol. 2: timeBeginPeriod, timeEndPeriod, timeGetDevCaps,
+timeGetSystemTime, timeGetTime, timeKillEvent, timeSetEvent; Vol. 3:
+TIMECAPS, MMTIME). MMSYSTEM opens it from its own DRV_LOAD with
+OpenDriver("timer"), SYSTEM.INI `[drivers] timer=timer.drv`. The SDK
+documents only the application's side; nothing documents what MMSYSTEM
+asks of the driver. Windows 3.1's (module TIMER, description
+`timer:Timer`, flags 8309h, flags2 08h, expected version 3.10, file
+version 3.10.0.103, an installable driver) has four segments (DriverProc
+in a fixed one) and exports WEP 1 and DRIVERPROC 2, both resident. It
+imports KERNEL's GetVersion, LocalInit, GlobalWire, __WinFlags,
+GetSelectorBase and GlobalPageLock, USER's MessageBox and LoadString, and
+MMSYSTEM's DriverCallback (31), StackEnter (32) and StackLeave (33); its
+strings are "Timer Driver" and a message that VTDAPI.386 is missing
+(`tools/neinfo.py`, `tools/resdump.py`). Windows for Workgroups 3.11's is
+the same file. w16's is in `drivers/timer/` (README there), installed as
+`SYSTEM\TIMER.DRV`; the install tree's SYSTEM.INI names it, and
+`[boot] drivers=mmsystem.dll` (MMSYSTEM.DLL itself is still the user's,
+assets/README.TXT; w16's USER skips a boot driver it cannot find without
+a message, `user/driver.c`, so the lines do nothing without it).
+
+### 21.1 Observation tools
+
+- **TMS.DRV** (`tests/timer/tms.c`, `tmsent.asm`): a pass-through timer
+  driver. `[drivers] timer=tms.drv` puts it where MMSYSTEM opens its
+  driver; it loads the real TIMER.DRV (Microsoft's or w16's) as a library
+  and hands every DriverProc call on unchanged, recording the message,
+  identifier, handle, both parameters, 16 bytes behind each parameter that
+  is a readable far pointer (before and after), the result, the interrupt
+  flag, the caller's module (USER, MMSYSTEM, or the application when
+  MMSYSTEM jumped) and the nesting depth. The records live in its fixed
+  data; the probe prints them after each call ("  TMS ..."), and DRV_FREE
+  prints the last ones at Windows' end. Black-box observation between two
+  Microsoft modules (§3).
+- **TPR.EXE** (`tests/timer/tpr.c`, `tprs.asm`), run as the shell
+  (`tests/timer/trun.sh OUTDIR ms|w16 [shim|plain] [/S|/3]`): every time*
+  function in every mode, and the 8254's channel 0 (latched count,
+  read-back status), the PIC, the BIOS tick count, DOS's clock, the CMOS
+  clock, GetTickCount and WM_TIMER around them; sections and their letters
+  in its header. Lines starting with "~" are measurements.
+- **TPC.DLL** (`tests/timer/tpc.c`, `tpcs.asm`): the callback, in a DLL's
+  fixed code as the SDK asks; records every register at entry, the caller,
+  timeGetTime, the BIOS ticks, channel 0's count, the PIC's in-service
+  register, the task and the nesting depth, and can kill its own event,
+  set another, wait with interrupts enabled or call time* functions. It
+  also has an INT 8 hook in front of the driver's (counting interrupts and
+  logging channel 0's count at each: when callbacks come, in interrupts)
+  and calls MMSYSTEM's StackEnter and StackLeave with marker registers.
+- `tests/timer/tscen.sh [/S|/3]` runs TPR with Microsoft's driver and
+  with w16's, plain and with TMS.DRV, and `tests/timer/tcmp.py` compares
+  each pair (boot-test case `timer`).
+
+### 21.2 Windows 3.1's TIMER.DRV as observed
+
+**Messages** (TMS.DRV's records). MMSYSTEM calls DriverProc directly with
+identifier 0 and the driver's handle, timeGetTime by a jump, so that the
+driver returns straight to the application:
+
+| Message | Parameters | Result, Standard mode |
+|---|---|---|
+| 0800h kill event | lParam1 the ID | 0; 97 (TIMERR_NOCANDO) for an ID not in use (also after a one-shot event fired) |
+| 0804h set event | lParam1 -> {WORD wDelay, WORD wResolution, DWORD lpFunction, DWORD dwUser, WORD wFlags} (MMSYSTEM's copy) | the ID (DX 0); 0 for wDelay 0 or with 15 events set; any resolution and flags taken |
+| 0808h system time | | DX:AX milliseconds since the driver started (36-90 ms after KERNEL's GetTickCount began, over runs) |
+| 080Ch capabilities | lParam1 -> TIMECAPS, lParam2 its size | {wPeriodMin 1, wPeriodMax 65535} and 0 for size 4; 97 and nothing written otherwise |
+| 0810h begin period | lParam1 | 0 for 1-55 ms, counted; 97 for 0 and for 56 up |
+| 0814h end period | lParam1 | 0 for a period begun; 97 otherwise |
+
+timeGetSystemTime with a size below 8 answers 129 (TIMERR_STRUCT) without
+calling the driver; timeSetEvent with a NULL callback answers non-zero
+without calling it either (MMSYSTEM's own). Through USER: message 0 0,
+DRV_LOAD 1, DRV_ENABLE 1, DRV_OPEN 1 (opened at boot as handle 2, inside
+MMSYSTEM's DRV_LOAD), DRV_INSTALL 2, DRV_EXITAPPLICATION 0,
+DRV_EXITSESSION 0, DRV_DISABLE 1, DRV_FREE 0, any other message 0.
+
+**Events.** Fifteen at once; an event takes the lowest free slot 1-15 and
+its ID is (count << 4) | slot, the count going up by one with every event
+set (1 to FFFh, then 1 again). Flags bit 0 makes it periodic; with bit 15
+set it is never called (a one-shot one disappears when it is due; a
+periodic one stays); other bits change nothing. A task's end changes
+nothing: its events go on being called and its periods stay begun (the
+driver's DRV_EXITAPPLICATION answers 0 and does nothing).
+
+**The callback** is called at interrupt time after the end of interrupt
+(the PIC's in-service register 0), interrupts enabled (flags 3206h), on
+MMSYSTEM's interrupt stack (SS a 600h block, SP 05C2h at entry; GetExePtr
+of that block gives TIMER.DRV), with the driver's DS, ES = SS, AX FB00h,
+BX the ID, CX = SS, DX 0, the interrupted task current, the arguments
+(ID, 0, dwUser, 0, 0). It is never reentered, and no other event is
+called while it runs. StackEnter, called with marker registers, keeps
+every register but SS:SP (SP 05FCh: the old SS:SP pushed on the new
+stack) and the flags; StackLeave gives SS:SP back.
+
+**The 8254.** From its start the driver runs channel 0 in mode 2 (status
+B4h), at 65536 counts while nothing needs more. timeBeginPeriod and
+timeSetEvent set it at once (control word and count: the count restarts)
+to the shortest of the periods begun and the active events' resolutions
+(wResolution, or wDelay when that is 0), 1-55 ms at P x 1193.18 counts
+(65536 for 55): timeBeginPeriod(10) gives 11932, an event of resolution 5
+5966, one of 30 ms and resolution 0 35795. It goes back when the event or
+period ends. timeGetTime steps by 1 ms whatever the period (the count is
+interpolated). The BIOS time of day, GetTickCount (SYSTEM.DRV), DOS's
+clock and WM_TIMER keep their rate under a 1 ms period and a 1 ms event:
+109-110 BIOS ticks, 5987-6042 ms of GetTickCount, 55-56 WM_TIMER of
+100 ms over 6 CMOS seconds.
+
+**When callbacks come** (TPR's sections trace and kin, counted in timer
+interrupts; DOSBox gives the same numbers run after run). An event is
+timed at its own resolution when nothing asks for less: a 3 ms periodic
+one first after the 55 ms period under way ends, then every 3 ms; a 7 ms
+one under timeBeginPeriod(7) every 7 ms from 14. A one-shot event comes at
+the first interrupt after its delay (at period 10: 10 ms at the 2nd
+interrupt, 20 at the 3rd, 30 at the 4th). 3.1's driver also has faults,
+the same in every run, which w16's does not copy:
+- after it restarts the 8254, its clock gains a whole 55 ms period (an
+  event of d < 55 ms with resolution 0 is called at the 2nd interrupt, d
+  ms after it was set, but timeGetTime in it reads 55 + 2d);
+- at the 55 ms period some one-shot events come one interrupt early (100
+  and 109 ms after 55 ms, 150 after 110, 200 after 165, 250 after 220),
+  and some under shorter periods at the first interrupt (45 ms at period
+  10, 30 at period 1);
+- after a 1 ms periodic event is killed, events set within the next
+  second or so are not called at all (periodic events of 2-25 ms: no call
+  in a second; one-shot events of 10-100 ms: none; a one-shot event and a
+  periodic one set together: neither in 150 ms). With TMS.DRV between
+  MMSYSTEM and the driver the timing shifts and this does not happen.
+
+**386 Enhanced mode.** The driver leaves the timing to VTDAPI.386 (its
+string 2 says so) and answers differently: timeGetDevCaps takes any size
+from 4; timeBeginPeriod, timeEndPeriod and timeKillEvent answer 0 to
+anything; 8 events at once, IDs (count << 3) | slot (slots 0-7, the
+count from 2), returned sign-extended in DX:AX (FFFF8118h); flags bit 1
+(not bit 15) marks an event never called. Every timing is exact (a
+one-shot event of d ms after d ms, a periodic one every d ms); callbacks
+come from VTDAPI's side (another stack, SP 0FECh, ES not SS, BX 0,
+CX 000Dh, flags 0246h). timeGetTime there runs 1.7% slower than the BIOS
+ticks (1998 ms in 37 ticks) and starts about half a second before
+KERNEL's GetTickCount.
+
+### 21.3 w16's TIMER.DRV
+
+`drivers/timer/timer.asm` (NASM): everything in 21.2's tables, the slots,
+IDs and flags, the 8254 policy (mode 2, the shortest period, restarted at
+once), and callbacks through StackEnter, DriverCallback (DCB_FUNCTION)
+and StackLeave with 3.1's SP, DX and register contents but SI and DI
+(left over from the driver's code; 3.1's change from call to call). Its
+first set-event message calls StackEnter and StackLeave once at task
+time, when MMSYSTEM makes its interrupt stack: the stack is then
+TIMER.DRV's, as with 3.1's, when the first event is set in the probe's
+context section (with its event section first, GetExePtr still gives
+MMSYSTEM: UNVERIFIED why). The clock counts the 8254's counts exactly,
+also across restarts, and calls the INT 8 handler before it (SYSTEM.DRV,
+DOSX, the BIOS) once per 65536 counts; events fire at the first interrupt
+after their time, so w16's one-shot events come within their delay plus
+one period, and its clock never jumps. 386 Enhanced mode: the same, on
+VTD's virtual 8254, with 3.1's answers there (above); no VTDAPI. POPF
+does not restore the interrupt flag of Windows' code in 386 Enhanced mode
+(it runs below IOPL): the first version left interrupts off for good
+after a timeGetTime, and every `cli` is now undone with `sti`.
+
+### 21.4 Tests and results
+
+`tests/timer/tscen.sh` (boot-test case `timer`, parts `s`, `3`, `qt`) on
+installation-05. Standard mode, plain: TPR's 225 lines identical with
+Microsoft's driver and with w16's, 42 measurements within `tcmp.py`'s
+limits; with TMS.DRV: TMS's record of every message identical (1042
+lines) after the masks `tcmp.py` lists (the time values, the nesting
+depth, two selectors), which differ between two runs of Microsoft's own
+or with the size of the driver's segments. 386 Enhanced mode: the same
+lines identical, the timings shown (21.2, 21.5). `qt`: QuickTime for
+Windows 2.1.2's sample movie on stock 3.1 with only w16's TIMER.DRV
+(`tests/qtplay.sh -t TIMER.DRV`) plays as on 3.1: the same window, the
+last frame 0 pixels off, 12 s on both; the case `quicktime` (the whole
+install tree over 3.1) now uses w16's TIMER.DRV too, and passes.
+
+### 21.5 UNVERIFIED, and not done
+
+- 386 Enhanced mode timing: without VTDAPI.386, VTD's virtual 8254 makes
+  w16's one-shot events 20-80 ms late and a 5 ms periodic event about 65
+  calls a second instead of 200; the callbacks run on MMSYSTEM's stack.
+  VTDAPI's interface (reached through INT 2Fh AX=1684h) was not observed;
+  a logging hook in TMS.DRV, put in before the real driver loads, could
+  record it.
+- 3.1's timing faults (21.2) are not copied. In 386 Enhanced mode the ID
+  count may also count a refused event (it starts at 2: not told apart).
+- Who owns MMSYSTEM's interrupt stack when the first event set is the
+  probe's event section (w16: MMSYSTEM; 3.1: TIMER.DRV).
+- NULL pointers (TPR's section n), an 80286, w16's WIN386, real hardware.
