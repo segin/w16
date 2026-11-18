@@ -162,6 +162,21 @@ static void peeks(WORD kind, WORD msg, DWORD p2, WORD *s1, WORD *s2, WORD *su, W
     }
 }
 
+static const char *modname(WORD sel);
+
+/* a selector strings are taken from: the probe's stack (its data) or a
+   multimedia module's (a number that happens to be some system
+   selector is no string) */
+static int strmod(WORD sel)
+{
+    const char *m = modname(sel);
+    if (!m)
+        return 0;
+    return !lstrcmp(m, "stack") || !lstrcmp(m, "MMSYSTEM") || !lstrcmp(m, "MMP") ||
+           !lstrcmp(m, "MCT") || (m[0] == 'M' && m[1] == 'C' && m[2] == 'I') ||
+           (m[0] == 'M' && m[1] == 'D' && m[2] == 'S') || (m[0] == 'Q' && m[1] == 'T');
+}
+
 /* the strings an MCI parameter block points to (any DWORD from offset 4
    on that is a readable far pointer; DRV_OPEN's MCI_OPEN_DRIVER_PARMS
    has its one at 2; LDT selectors only), LSTR - 1 bytes of each at most, into dst; the first
@@ -175,7 +190,7 @@ static void mcistrings(struct rec *t, WORD msg, BYTE *dst, int find)
             DWORD v = *(DWORD *)(t->b2 + o);
             BYTE c;
             WORD n;
-            if (!(HIWORD(v) & 4) || !md_valid(HIWORD(v)))
+            if (!(HIWORD(v) & 4) || !md_valid(HIWORD(v)) || !strmod(HIWORD(v)))
                 continue;
             /* a string: printable text up to its NUL (a number that
                happens to be a valid selector points to anything) */
