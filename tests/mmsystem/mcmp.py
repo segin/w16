@@ -30,7 +30,49 @@ MASKS = [
     # the word above MMTASK's stack (not the task's: whatever was there)
     (re.compile(r'^(  task: ret to .* beyond: \S+ \S+ \S+ )[0-9A-F]{4}'),
      lambda m: m.group(1) + '(any)'),
+    # ---- the device sections (layer 3; tests/mmsystem/mmdev.c) ----
+    # the handles MMSYSTEM gives its own sounds (sndPlaySound) and its
+    # window's handle, which the probe has not named: from the heaps
+    (re.compile(r'(\[p1 h )(?!0000)[0-9A-F]{4}\b'), r'\1(h)'),
+    (re.compile(r'^(  DCB cb \S+ flags \S+ dev )[0-9A-F]{4}\b'), r'\1(h)'),
+    (re.compile(r'\bcb 0000[0-9A-F]{4}\b'), 'cb (wnd)'),
+    # MMSYSTEM's own sound headers (sndPlaySound): where its block is (it
+    # may be gone when the record is printed), and the fields it leaves as
+    # they were in that memory (rec, user, next, reserved)
+    (re.compile(r'(\{data )(\[\w+\]|[0-9A-F]{8})( len \S+ rec )\S+( user )\S+'
+                r'( flags \S+( loops \S+)? next )\S+( res )\S+\}'),
+     lambda m: m.group(1) + '(ptr)' + m.group(3) + '(x)' + m.group(4) + '(x)' +
+     m.group(5) + '(x)' + m.group(7) + '(x)}'),
+    (re.compile(r'( p1 )(\[MMSYSTEM\]|[0-9A-F]{8})( p2 \S+ -> \S+ .*\{data \(ptr\))'),
+     r'\1(ptr)\3'),
+    (re.compile(r'^(  DCB .* p1 )(\[MMSYSTEM\]|[0-9A-F]{8})( p2 .*\{data \(ptr\))'),
+     r'\1(ptr)\3'),
+    # what is on the stack where WODM_OPEN's instance goes before the
+    # driver writes it
+    (re.compile(r'\[user [0-9A-F]{8}( ->|\])'), r'[user (x)\1'),
+    # a header's reserved field as the probe prints it: the driver's own
+    # pointer (its data segment's selector follows the heap)
+    (re.compile(r'( next \S+ res )(?!00000000)[0-9A-F]{8}\b'), r'\1(drv)'),
+    # MIDIMAP's calls back into MMSYSTEM: its stack offsets follow how much
+    # stack the MMSYSTEM below it took; the buffer it hands
+    # midiOutGetDevCaps is its stack as it was
+    (re.compile(r'^(  FWD MMSYSTEM\.\d+ from=\S+ args ).*'), r'\1(args)'),
+    (re.compile(r'^(  MD \S+ mod 0002 .* d=2 from=MMSYSTEM \[p1 )[0-9A-F]+ -> '), r'\1(stack) -> '),
+    # the messages MMSYSTEM's window gets: its own sound's handle and
+    # header
+    (re.compile(r"^(  to MMSYSTEM's window: \S+ wParam )[0-9A-F]{4}( lParam )(?!00000000)[0-9A-F]{8}"),
+     r'\1(h)\2(ptr)'),
+    (re.compile(r"^(  to MMSYSTEM's window: \S+ wParam )[0-9A-F]{4}( lParam 00000000)"), r'\1(h)\2'),
+    # the MIDI mapper's capabilities as MIDIMAP leaves them: after the
+    # name's end, its stack (MDSM2 is the mapper's shim in mrun.sh)
+    (re.compile(r'^(  MD MDSM2 mod 0002 .* -> )[0-9A-F]+\]'), r'\1(caps)]'),
+    # MIDI input's time stamps (MIM_DATA .. MIM_LONGERROR: dw2)
+    (re.compile(r'^(  DCB .* msg 03C[3-6] .* p2 )[0-9A-F]{8}'), r'\1(time)'),
+    (re.compile(r'^(  cb h \S+ msg 03C[3-6] .* dw2 )[0-9A-F]{8}'), r'\1(time)'),
 ]
+
+# lines of timings: never compared
+SKIP = re.compile(r'^~')
 
 KNOWN = [
     # The task function's BX, CX and DI: the instance handle of MMTASK's
@@ -57,8 +99,8 @@ def norm(lines, rules):
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
-    a = norm(open(sys.argv[1], errors='replace').read().splitlines(), MASKS)
-    b = norm(open(sys.argv[2], errors='replace').read().splitlines(), MASKS)
+    a = norm([l for l in open(sys.argv[1], errors="replace").read().splitlines() if not SKIP.match(l)], MASKS)
+    b = norm([l for l in open(sys.argv[2], errors="replace").read().splitlines() if not SKIP.match(l)], MASKS)
     ka = norm(a, KNOWN)
     kb = norm(b, KNOWN)
     if len(a) != len(b):

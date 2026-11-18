@@ -191,6 +191,11 @@ void dev_load(void)
         loadone("midimapper", C_MID, &in);     /* MIDIMAP has none: closed */
     }
     loadkeys("aux", C_AUX, -1);
+    /* the interrupt stack the drivers' callbacks run on: 3.1's exists
+       with a wave driver loaded (MMP: a DriverCallback function of
+       SNDBLST2's is not on the caller's stack); UNVERIFIED: when it is made */
+    if (ndrv[C_WOD] || ndrv[C_WID] || ndrv[C_MOD] || ndrv[C_MID] || ndrv[C_AUX])
+        mm_makestack();
 }
 
 /* the driver and its own device number for an ID */
@@ -354,8 +359,8 @@ static DWORD message(int cls, WORD hv, UINT m, DWORD p1, DWORD p2)
    flags but the loop bits (wave out only) are cleared before the driver
    is asked; MMSYSTEM's own preparation (the driver's 8) fails with 7 for
    a NULL lpData; UNPREPARE: queued 33, not prepared 0 without the
-   driver; WRITE/ADDBUFFER: queued 33, not prepared 34 (64 MIDI), WHDR_DONE
-   cleared before the driver. UNVERIFIED for MIDI: the flag checks (the
+   driver; WRITE/ADDBUFFER: queued 33, not prepared 34 (64 MIDI); WRITE
+   clears WHDR_DONE before the driver, ADDBUFFER leaves it. UNVERIFIED for MIDI: the flag checks (the
    same rule with the MHDR_ flags assumed). */
 struct hdr {
     LPSTR data;
@@ -366,14 +371,19 @@ struct hdrrule {
     UINT size;
     DWORD valid, keep, inq;
     UINT busy, unprep;
+    DWORD clear;                        /* cleared before WRITE/ADDBUFFER */
 };
 
+/* UNVERIFIED for MIDI: which flags are cleared (output as wave output,
+   input as wave input assumed) */
 static const struct hdrrule wout = { 32, 0x8000001FL, 0x0000000CL, WHDR_INQUEUE,
-                                     WAVERR_STILLPLAYING, WAVERR_UNPREPARED };
+                                     WAVERR_STILLPLAYING, WAVERR_UNPREPARED, WHDR_DONE };
 static const struct hdrrule win = { 32, 0x8000001FL, 0, WHDR_INQUEUE, WAVERR_STILLPLAYING,
-                                    WAVERR_UNPREPARED };
-static const struct hdrrule midi = { 28, 0x80000007L, 0, MHDR_INQUEUE, MIDIERR_STILLPLAYING,
-                                     MIDIERR_UNPREPARED };
+                                    WAVERR_UNPREPARED, 0 };
+static const struct hdrrule mout = { 28, 0x80000007L, 0, MHDR_INQUEUE, MIDIERR_STILLPLAYING,
+                                     MIDIERR_UNPREPARED, WHDR_DONE };
+static const struct hdrrule min = { 28, 0x80000007L, 0, MHDR_INQUEUE, MIDIERR_STILLPLAYING,
+                                    MIDIERR_UNPREPARED, 0 };
 
 static UINT badhdr(struct hdr FAR *p, UINT size, const struct hdrrule *r)
 {
@@ -440,7 +450,7 @@ static UINT write(int cls, WORD hv, struct hdr FAR *p, UINT size, UINT m,
         return rl->busy;
     if (!(p->flags & WHDR_PREPARED))
         return rl->unprep;
-    p->flags &= ~WHDR_DONE;
+    p->flags &= ~rl->clear;
     return (UINT)msg(h, m, (DWORD)p, size);
 }
 
@@ -785,32 +795,32 @@ UINT MMAPI MIDIINCLOSE(WORD h)
 
 UINT MMAPI MIDIOUTPREPAREHEADER(WORD h, LPVOID p, UINT size)
 {
-    return prepare(C_MOD, h, p, size, MODM_PREPARE, &midi);
+    return prepare(C_MOD, h, p, size, MODM_PREPARE, &mout);
 }
 
 UINT MMAPI MIDIINPREPAREHEADER(WORD h, LPVOID p, UINT size)
 {
-    return prepare(C_MID, h, p, size, MIDM_PREPARE, &midi);
+    return prepare(C_MID, h, p, size, MIDM_PREPARE, &min);
 }
 
 UINT MMAPI MIDIOUTUNPREPAREHEADER(WORD h, LPVOID p, UINT size)
 {
-    return unprepare(C_MOD, h, p, size, MODM_UNPREPARE, &midi);
+    return unprepare(C_MOD, h, p, size, MODM_UNPREPARE, &mout);
 }
 
 UINT MMAPI MIDIINUNPREPAREHEADER(WORD h, LPVOID p, UINT size)
 {
-    return unprepare(C_MID, h, p, size, MIDM_UNPREPARE, &midi);
+    return unprepare(C_MID, h, p, size, MIDM_UNPREPARE, &min);
 }
 
 UINT MMAPI MIDIOUTLONGMSG(WORD h, LPVOID p, UINT size)
 {
-    return write(C_MOD, h, p, size, MODM_LONGDATA, &midi);
+    return write(C_MOD, h, p, size, MODM_LONGDATA, &mout);
 }
 
 UINT MMAPI MIDIINADDBUFFER(WORD h, LPVOID p, UINT size)
 {
-    return write(C_MID, h, p, size, MIDM_ADDBUFFER, &midi);
+    return write(C_MID, h, p, size, MIDM_ADDBUFFER, &min);
 }
 
 UINT MMAPI MIDIOUTSHORTMSG(WORD hv, DWORD m)

@@ -66,6 +66,8 @@ static WORD hwo;                        /* the sound playing (0: none) */
 static HGLOBAL hblock;                  /* its block (the file, or a header) */
 static SNDHDR FAR *hdr;
 
+/* the end of a sound: the device closed; its block stays until the next
+   sound or a stop (3.1's is still there when the sound has ended) */
 static void finish(void)
 {
     if (!hwo)
@@ -73,6 +75,10 @@ static void finish(void)
     WAVEOUTUNPREPAREHEADER(hwo, hdr, sizeof *hdr);
     WAVEOUTCLOSE(hwo);
     hwo = 0;
+}
+
+static void release(void)
+{
     if (hblock) {
         GlobalUnlock(hblock);
         GlobalFree(hblock);
@@ -83,19 +89,31 @@ static void finish(void)
 
 static void stop(void)
 {
-    if (!hwo)
-        return;
-    WAVEOUTRESET(hwo);
-    finish();
+    if (hwo) {
+        /* a sound that has ended and waits for the timer is not reset */
+        if (!(hdr && (hdr->dwFlags & WHDR_DONE)))
+            WAVEOUTRESET(hwo);
+        finish();
+    }
+    release();
 }
 
 LRESULT MMAPI mm_sndwndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
+    /* 3.1's (MMP section x, the messages its window gets): MM_WOM_DONE
+       starts a timer (ID 1); the device is closed at a WM_TIMER that finds
+       the sound playing done, and the timer killed; until then it ticks
+       on, across new sounds. UNVERIFIED: the period (under 100 ms) */
     if (msg == MM_WOM_DONE) {
-        /* the sound playing (a stale message of one stopped before is
-           left alone) */
-        if (hwo && wp == hwo && hdr && (LPVOID)lp == (LPVOID)hdr && (hdr->dwFlags & WHDR_DONE))
+        if (hwo && wp == hwo)
+            SetTimer(h, 1, 100, NULL);
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == 1) {
+        if (!hwo || (hdr && (hdr->dwFlags & WHDR_DONE))) {
+            KillTimer(h, 1);
             finish();
+        }
         return 0;
     }
     return DefWindowProc(h, msg, wp, lp);
@@ -206,11 +224,17 @@ static BOOL start(LPVOID fmt, LPSTR data, DWORD dlen, UINT flags)
     hdr->lpData = data;
     hdr->dwBufferLength = dlen;
     hdr->dwUser = (DWORD)fmt;
-    hdr->dwFlags = (flags & SND_LOOP) ? WHDR_BEGINLOOP | WHDR_ENDLOOP : 0;
-    hdr->dwLoops = (flags & SND_LOOP) ? 0xFFFFFFFFL : 0;
+    hdr->dwFlags = 0;
+    hdr->dwLoops = 0;
     if (WAVEOUTPREPAREHEADER(h, hdr, sizeof *hdr)) {
         WAVEOUTCLOSE(h);
         return FALSE;
+    }
+    /* the loop is set after the preparation (3.1's driver sees flags 0 and
+       dwLoops 0 at PREPARE) */
+    if (flags & SND_LOOP) {
+        hdr->dwFlags |= WHDR_BEGINLOOP | WHDR_ENDLOOP;
+        hdr->dwLoops = 0xFFFFFFFFL;
     }
     if (WAVEOUTWRITE(h, hdr, sizeof *hdr)) {
         WAVEOUTUNPREPAREHEADER(h, hdr, sizeof *hdr);
@@ -257,8 +281,13 @@ static BOOL playname(LPCSTR name, UINT flags)
     return TRUE;
 }
 
+UINT MMAPI WAVEOUTGETNUMDEVS(void);
+
 BOOL MMAPI SNDPLAYSOUND(LPCSTR name, UINT flags)
 {
+    /* without a wave device: FALSE, whatever the arguments (NULL too) */
+    if (!WAVEOUTGETNUMDEVS())
+        return FALSE;
     if (!name || (!(flags & SND_MEMORY) && !*name)) {
         stop();
         return TRUE;

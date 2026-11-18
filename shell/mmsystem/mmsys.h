@@ -61,6 +61,9 @@ extern HINSTANCE __cdecl mm_hinst;
 /* dev.c */
 void dev_load(void);
 
+/* core.c */
+void __cdecl __far __loadds mm_makestack(void);
+
 /* snd.c */
 void snd_init(void);
 

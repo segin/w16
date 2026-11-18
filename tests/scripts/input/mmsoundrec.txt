@@ -1,0 +1,18 @@
+; Sound Recorder opens C:\WINDOWS\DING.WAV (WIN.INI run=; tests/mmsystem/
+; mprog.sh soundrec) and plays it: its window as it opens (the length
+; from the file, the buttons enabled with a wave device), then Space on
+; the focused Play button and the window once the sound has played. The
+; pointer goes to the bottom right first, out of the way.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-open 30 2
+shot 01-open
+key space
+sleep 3
+match 02-played 30 2
+shot 02-played

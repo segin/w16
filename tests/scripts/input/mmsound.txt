@@ -1,0 +1,25 @@
+; Control Panel's Sound applet (SND.CPL; WIN.INI run=CONTROL.EXE;
+; tests/mmsystem/mprog.sh sound): End picks the last icon, Return opens
+; it; the applet's lists ([sounds] events, the .WAV files), then the
+; second event picked and Test (sndPlaySound). The pointer goes to the
+; bottom right first, out of the way.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-panel 30 2
+shot 01-panel
+key End
+sleep 0.5
+key Return
+match 02-sound 30 2
+shot 02-sound
+key Down
+sleep 0.5
+key alt+t
+sleep 3
+match 03-test 30 2
+shot 03-test

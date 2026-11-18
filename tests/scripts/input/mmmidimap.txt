@@ -1,0 +1,20 @@
+; Control Panel's MIDI Mapper applet (MIDIMAP.DRV's CPlApplet; WIN.INI
+; run=CONTROL.EXE; tests/mmsystem/mprog.sh midimap): End, then Left to
+; the icon before the last one, Return; the applet's main dialog. The
+; pointer goes to the bottom right first, out of the way.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+match 01-panel 30 2
+shot 01-panel
+key End
+sleep 0.5
+key Left
+sleep 0.5
+key Return
+match 02-midimap 30 2
+shot 02-midimap

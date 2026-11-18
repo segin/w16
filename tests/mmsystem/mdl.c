@@ -124,7 +124,7 @@ static void peeks(WORD kind, WORD msg, DWORD p2, WORD *s1, WORD *s2, WORD *su, W
         case 4: *s1 = caps; break;              /* GETDEVCAPS */
         case 5: *s1 = 14; *su = 4; *sf = 18; break;     /* OPEN */
         case 7: case 8: case 9: *s1 = 32; break;        /* PREPARE UNPREPARE WRITE/ADDBUFFER */
-        case 13: *s1 = 12; break;               /* GETPOS (WIDM 60) */
+        case 13: *s1 = p2 < 12 ? (WORD)p2 : 12; break; /* GETPOS (WIDM 60): MMTIME */
         case 14: case 16: case 18: *s1 = 4; break;      /* GETPITCH GETVOLUME GETPLAYBACKRATE */
         }
         if (kind == MDK_WID && (msg == 10 || msg == 11 || msg == 12))
@@ -484,7 +484,15 @@ void FAR PASCAL __loadds MlDump(LPCSTR name)
             p = val(p, t->p2, t->n2 != 0);
             p += wsprintf(p, " -> %08lX if=%d d=%d from=%s", t->r, (t->flags & 0x200) != 0,
                           t->depth, who(t->retcs));
-            if (t->n1)
+            if (t->n1 && t->kind == MDK_DRV && t->msg == 3) {
+                /* DRV_OPEN's options: the string (what follows it is the
+                   caller's stack) */
+                int i;
+                p += wsprintf(p, " [p1 \"");
+                for (i = 0; i < t->n1 && t->b1[i]; i++)
+                    *p++ = t->b1[i];
+                p += wsprintf(p, "\"]");
+            } else if (t->n1)
                 p = bytes(p, t, "p1", t->b1, t->a1, t->n1);
             if (t->n2)
                 p = bytes(p, t, "p2", t->b2, t->a2, t->n2);

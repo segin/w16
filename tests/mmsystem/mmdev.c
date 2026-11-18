@@ -47,6 +47,9 @@ typedef void (FAR PASCAL *MLPROBE)(WORD, HTASK);
 static MLDUMP mldump;
 static MLNAME mlname;
 static WORD cbmark, booted;
+static HWND mmwnd;
+static int quietwnd;            /* the boot: its order against the records is timing */
+extern void windows(void);
 
 extern WORD getss2(void);
 #pragma aux getss2 = "mov ax, ss" value [ax];
@@ -122,6 +125,10 @@ static void flush(void)
             lg("  window message %04X wParam %s lParam %s", m.message, (LPSTR)hs(m.wParam),
                (LPSTR)vs(m.lParam));
         else {
+            /* MMSYSTEM's own window's messages, before it gets them */
+            if (m.hwnd && m.hwnd == mmwnd && !quietwnd)
+                lg("  to MMSYSTEM's window: %04X wParam %s lParam %s", m.message,
+                   (LPSTR)hs(m.wParam), (LPSTR)vs(m.lParam));
             TranslateMessage(&m);
             DispatchMessage(&m);
         }
@@ -197,6 +204,17 @@ static void caps(const char *what, CAPSFN f, UINT n)
             continue;
         fill(b, sizeof b, 0xEE);
         r = f(ids[k], b, 80);
+        if (!r) {
+            /* what a driver leaves in szPname after the name's end (MIDIMAP:
+               its stack) is not MMSYSTEM's */
+            int i, z = 0;
+            for (i = 8; i < 40; i++) {
+                if (z)
+                    b[i] = 0;
+                else if (!b[i])
+                    z = 1;
+            }
+        }
         p = line;
         p += wsprintf(p, "%sGetDevCaps(%04X, size 80) = %u:", (LPSTR)what, ids[k], r);
         if (!r) {
@@ -221,11 +239,9 @@ static void caps(const char *what, CAPSFN f, UINT n)
         lg("%s", (LPSTR)line);
         flush();
     }
-    r = f(0, NULL, 80);
-    lg("%sGetDevCaps(0, NULL, 80) = %u", (LPSTR)what, r);
-    flush();
-    /* (0001:0000 is handed to the driver too; that, and the error texts
-       given 0001:0000, left 3.1 unstable later on: not tried) */
+    /* (NULL and 0001:0000 are handed to the driver as they are; 3.1 was
+       unstable afterwards, as after an error text into 0001:0000: not
+       tried) */
 }
 
 static void sec_numbering(void)
@@ -1244,11 +1260,13 @@ BOOL FAR PASCAL __export mmwin(HWND h, LPARAM l)
         GetClassName(h, c, sizeof c);
         lg("  window: class \"%s\", MMSYSTEM's, %s", (LPSTR)c,
            (LPSTR)(IsWindowVisible(h) ? "visible" : "hidden"));
+        mmwnd = h;
+        name((DWORD)(WORD)h, "mmwnd");
     }
     return TRUE;
 }
 
-static void windows(void)
+void windows(void)
 {
     FARPROC f = MakeProcInstance((FARPROC)mmwin, 0);
     EnumWindows((WNDENUMPROC)f, 0);
@@ -1305,6 +1323,23 @@ static void sec_snd(void)
     pause(1000);
     flush();
     snd("flags FF00", "SystemDefault", 0xFF00);
+    /* when MMSYSTEM lets go of a sound that has ended: messages pumped
+       for 6 s after an asynchronous one, its records as they come */
+    snd("SystemDefault, async", "SystemDefault", SND_ASYNC);
+    {
+        DWORD t0 = GetTickCount(), last = 0;
+        int k;
+        for (k = 0; k < 60; k++) {
+            DWORD t = GetTickCount();
+            while (GetTickCount() - t < 100)
+                Yield();
+            flush();
+            if (k % 10 == 9)
+                lg("  %d s of messages", (k + 1) / 10);
+        }
+        (void)t0;
+        (void)last;
+    }
     /* memory images */
     fh = _lopen("C:\\WINDOWS\\DING.WAV", OF_READ);
     len = fh == HFILE_ERROR ? 0 : _llseek(fh, 0, 2);
@@ -1362,11 +1397,14 @@ void dev_sections(char c)
         DWORD t0 = GetTickCount();
         booted = 1;
         lg("== boot");
+        windows();
+        quietwnd = 1;
         while (GetTickCount() - t0 < 4000) {
             flush();
             Yield();
         }
         flush();
+        quietwnd = 0;
     }
     switch (c) {
     case 'l': listdrv(); break;
