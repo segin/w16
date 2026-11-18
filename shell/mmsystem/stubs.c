@@ -1,8 +1,8 @@
 /*
  * stubs.c - w16's MMSYSTEM.DLL: the exports not written yet
  * (ARCHITECTURE.md 23; docs/notes/mmsystem-handover.md has the plan):
- * MCI (layer 4) and the joystick functions, which answer as 3.1's do
- * without a joystick driver (MMP section y: 6, joySetCapture's window
+ * the joystick functions, which answer as 3.1's do without a joystick
+ * driver (MMP section y: 6, joySetCapture's window
  * checked first). Each takes the arguments the Multimedia Programmer's
  * Guide gives it (a Pascal function pops them) and answers as when no
  * device or driver is there. Generated once from a table; edited by hand
@@ -59,130 +59,6 @@ UINT MMAPI JOYSETTHRESHOLD(WORD a0, WORD a1)
     (void)a1;
     return MMSYSERR_NODRIVER;
 }
-
-DWORD MMAPI MCISENDCOMMAND(WORD a0, WORD a1, DWORD a2, DWORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return MCIERR_BASE + 1;
-}
-
-DWORD MMAPI MCISENDSTRING(DWORD a0, DWORD a1, WORD a2, WORD a3)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return MCIERR_BASE + 7;
-}
-
-UINT MMAPI MCIGETDEVICEID(DWORD a0)
-{
-    (void)a0;
-    return 0;
-}
-
-UINT MMAPI MCILOADCOMMANDRESOURCE(WORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return 0xFFFF;
-}
-
-BOOL MMAPI MCIGETERRORSTRING(DWORD a0, DWORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return FALSE;
-}
-
-BOOL MMAPI MCISETDRIVERDATA(WORD a0, DWORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return FALSE;
-}
-
-DWORD MMAPI MCIGETDRIVERDATA(WORD a0)
-{
-    (void)a0;
-    return 0;
-}
-
-UINT MMAPI MCIDRIVERYIELD(WORD a0)
-{
-    (void)a0;
-    return 0;
-}
-
-BOOL MMAPI MCIDRIVERNOTIFY(WORD a0, WORD a1, WORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return FALSE;
-}
-
-BOOL MMAPI MCIEXECUTE(DWORD a0)
-{
-    (void)a0;
-    return FALSE;
-}
-
-BOOL MMAPI MCIFREECOMMANDRESOURCE(WORD a0)
-{
-    (void)a0;
-    return FALSE;
-}
-
-BOOL MMAPI MCISETYIELDPROC(WORD a0, DWORD a1, DWORD a2)
-{
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    return FALSE;
-}
-
-UINT MMAPI MCIGETDEVICEIDFROMELEMENTID(DWORD a0, DWORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return 0;
-}
-
-DWORD MMAPI MCIGETYIELDPROC(WORD a0, DWORD a1)
-{
-    (void)a0;
-    (void)a1;
-    return 0;
-}
-
-UINT MMAPI MCIGETCREATORTASK(WORD a0)
-{
-    (void)a0;
-    return 0;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* Not documented; how many bytes of arguments each pops was measured on
    Windows 3.1 (tests/mmsystem/mmp.c, section pops) */

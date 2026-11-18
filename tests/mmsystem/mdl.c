@@ -181,9 +181,12 @@ static void mcistrings(struct rec *t, WORD msg, BYTE *dst, int find)
     for (k = 0; k < t->ns; k++) {
         BYTE *d = dst + k * LSTR;
         BYTE __far *v = *(BYTE __far **)(t->b2 + t->soff[k]);
-        for (n = 0; n < LSTR - 1; n++)
+        for (n = 0; n < LSTR - 1; n++) {
             if (!md_peek(v + n, d + n, 1) || !d[n])
                 break;
+            if (d[n] < ' ')
+                d[n] = '?';             /* one line per record */
+        }
         d[n] = 0;
     }
 }

@@ -66,5 +66,10 @@ void __cdecl __far __loadds mm_makestack(void);
 
 /* snd.c */
 void snd_init(void);
+HWND __cdecl snd_window(void);
+
+/* mci.c */
+void mci_notified(UINT dev);
+void mci_taskexit(void);
 
 #endif

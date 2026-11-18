@@ -76,7 +76,9 @@ LRESULT MMAPI MMDRIVERPROC(DWORD id, HDRVR h, UINT msg, LPARAM l1, LPARAM l2)
     case DRV_OPEN:
     case DRV_CLOSE:
     case DRV_INSTALL:                   /* 1 on 3.1 (MMP, drivers) */
+        return 1;
     case DRV_EXITAPPLICATION:           /* 1 on 3.1 */
+        mci_taskexit();
         return 1;
     }
     return 0;

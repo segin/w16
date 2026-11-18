@@ -110,6 +110,10 @@ LRESULT MMAPI mm_sndwndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             SetTimer(h, 1, 500, NULL);
         return 0;
     }
+    if (msg == 0x03B9) {                /* MM_MCINOTIFY: an auto-opened MCI device done */
+        mci_notified(LOWORD(lp));
+        return 0;
+    }
     if (msg == WM_TIMER && wp == 1) {
         if (!hwo || (hdr && (hdr->dwFlags & WHDR_DONE))) {
             KillTimer(h, 1);
@@ -118,6 +122,13 @@ LRESULT MMAPI mm_sndwndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     return DefWindowProc(h, msg, wp, lp);
+}
+
+/* MMSYSTEM's window: also the callback of the MCI devices mciSendString
+   opens for one command (mci.c) */
+HWND __cdecl snd_window(void)
+{
+    return sndwnd;
 }
 
 void snd_init(void)

@@ -166,11 +166,11 @@ global %1
         plain WAVEINSTOP, 41
         plain WAVEINRESET, 42
         plain WAVEINGETID, 43
-        plain MMTASKCREATE, 51
-        plain MMTASKBLOCK, 52
-        plain MMTASKSIGNAL, 53
-        plain MMGETCURRENTTASK, 54
-        plain MMTASKYIELD, 55
+        fwd MMTASKCREATE, 900, 51
+        fwd MMTASKBLOCK, 902, 52
+        fwd MMTASKSIGNAL, 903, 53
+        fwd MMGETCURRENTTASK, 904, 54
+        fwd MMTASKYIELD, 905, 55
         plain MMIOOPEN, 56
         plain MMIOCLOSE, 57
         plain MMIOREAD, 58

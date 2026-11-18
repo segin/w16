@@ -2617,7 +2617,7 @@ $(W16SYS)/TOOLHELP.DLL: $(DOS)/TOOLHELP.DLL
 # time), every entry loads its DS ----
 MMCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=MM_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
 MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/mmio.o $(B)/mmsystem/dev.o \
-            $(B)/mmsystem/snd.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
+            $(B)/mmsystem/snd.o $(B)/mmsystem/mci.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
 mmsystem: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 dos: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 .PHONY: mmsystem
@@ -2635,9 +2635,12 @@ $(B)/mmsystem/mmver.bin: tools/mkver.py
 	    FileVersion=3.1 InternalName=mmsystem.dll \
 	    "LegalCopyright=MIT licence, see the w16 repository" \
 	    OriginalFilename=mmsystem.dll ProductName=w16 ProductVersion=3.1
-$(B)/mmsystem/mmsystem.res: shell/mmsystem/mmsystem.rc $(B)/mmsystem/mmver.bin
+$(B)/mmsystem/mcitab.rc: tools/mkmcitab.py
 	@mkdir -p $(@D)
-	cd $(B)/mmsystem && $(WRC) -q -r -bt=windows -fo=mmsystem.res $(CURDIR)/shell/mmsystem/mmsystem.rc
+	python3 tools/mkmcitab.py $@
+$(B)/mmsystem/mmsystem.res: shell/mmsystem/mmsystem.rc $(B)/mmsystem/mmver.bin $(B)/mmsystem/mcitab.rc
+	@mkdir -p $(@D)
+	cd $(B)/mmsystem && $(WRC) -q -r -bt=windows -i=. -fo=mmsystem.res $(CURDIR)/shell/mmsystem/mmsystem.rc
 $(DOS)/MMSYSTEM.DLL: $(MMOBJS) $(B)/mmsystem/mmsystem.res shell/mmsystem/mmsystem.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @shell/mmsystem/mmsystem.lnk name $@ libpath $(WATCOM)/lib286/win \
