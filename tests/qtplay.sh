@@ -83,6 +83,10 @@ mkdir -p "$out"
 tree=$root/build/w16
 [ -f "$tree/WIN.COM" ] || { echo "no $tree (make install-tree)" >&2; exit 2; }
 script=$root/tests/scripts/input/qtplay.txt
+# the script for a side: @WINDIR@ is its Windows directory
+side_script() { sed "s/@WINDIR@/C:\\\\$1/g" "$script" > "$out/qtplay-$1.txt"; }
+side_script WINDOWS
+side_script W16
 ms() {
     case " $msfiles " in *" $1 "*) return 0 ;; esac
     [ -n "$only" ] || return 1
@@ -118,11 +122,13 @@ w16opts="$*"
 newref=
 if [ -z "$refdir" ]; then
     refdir=$out/ref newref=1
-    "$root/tests/inputrun.sh" -s -b 40 -t 900 "$script" "$refdir" -r -3 \
+    "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtplay-WINDOWS.txt" "$refdir" -r -3 \
         -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" > "$out/ref.txt" 2>&1 &
 fi
 # shellcheck disable=SC2086
-"$root/tests/inputrun.sh" -s -b 40 -t 900 "$script" "$out/w16" \
+wscript=$out/qtplay-WINDOWS.txt
+[ -z "$treek" ] || wscript=$out/qtplay-W16.txt
+"$root/tests/inputrun.sh" -s -b 40 -t 900 "$wscript" "$out/w16" \
     -i w16:hangwatch=30 $w16opts > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)

@@ -5,11 +5,12 @@
 ; the Movie Player with SAMPLE.MOV; Space plays it (about 10 seconds on 3.1),
 ; a shot every 2 seconds. Until 2026-11-17 w16 hung for good at the Play
 ; Sample step (docs/notes/quicktime-handover.md). Then the close sequence:
-; File > Close (the movie), File > Open SAMPLE.MOV (the Open box starts in
-; the Windows directory, where the installer put it), Space twice (play,
-; pause), File > Exit; Return in Program Manager starts the Movie Player
-; again (the QuickTime group's Movie Player is selected), File > Open the
-; movie, Space, Alt+F4; Alt+F4 and Return end Windows. Until 2026-11-18
+; File > Close (the movie), File > Open the Windows directory's SAMPLE.MOV
+; (the Open box starts in the installer's C:\TMP; tests/qtplay.sh puts the
+; Windows directory, C:\WINDOWS or C:\W16, for @WINDIR@), Space twice
+; (play, pause), File > Exit; Program Manager's File > Run starts the
+; Movie Player again, File > Open the movie, Space, Alt+F4; Alt+F4 and
+; Return end Windows. Until 2026-11-18
 ; closing the player ended Windows on w16's tree alone ("Standard Mode:
 ; Fault in MS-DOS Extender").
 key alt+f
@@ -77,7 +78,7 @@ sleep 0.5
 key o
 settle 30 3
 shot c2-open
-type SAMPLE.MOV
+type @WINDIR@\SAMPLE.MOV
 key Return
 settle 60 3
 shot c3-reopened
@@ -91,6 +92,12 @@ sleep 0.5
 key x
 settle 60 3
 shot c5-exit
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type @WINDIR@\PLAYER.EXE
+sleep 0.5
 key Return
 settle 60 3
 shot c6-player
@@ -98,7 +105,7 @@ key alt+f
 sleep 0.5
 key o
 settle 30 3
-type SAMPLE.MOV
+type @WINDIR@\SAMPLE.MOV
 key Return
 settle 60 3
 shot c6b-opened
