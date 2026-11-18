@@ -1,9 +1,12 @@
 /*
- * stubs.c - w16's MMSYSTEM.DLL: the exports of the layers not written
- * yet (ARCHITECTURE.md 23; docs/notes/mmsystem-handover.md has the
- * plan). Each takes the arguments the Multimedia Programmer's Guide gives
- * it (a Pascal function pops them) and answers as when no device or
- * driver is there. Generated once from a table; edited by hand since.
+ * stubs.c - w16's MMSYSTEM.DLL: the exports not written yet
+ * (ARCHITECTURE.md 23; docs/notes/mmsystem-handover.md has the plan):
+ * MCI (layer 4) and the joystick functions, which answer as 3.1's do
+ * without a joystick driver (MMP section y: 6, joySetCapture's window
+ * checked first). Each takes the arguments the Multimedia Programmer's
+ * Guide gives it (a Pascal function pops them) and answers as when no
+ * device or driver is there. Generated once from a table; edited by hand
+ * since.
  */
 #include "mmsys.h"
 
