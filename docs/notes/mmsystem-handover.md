@@ -56,7 +56,7 @@ MMSYSTEM.DLL). All DOSBox work on installation-05, run name `w16-mmsys`
   treealone ok.
 - [x] Layer 2: MMIO (1210-1226). mscen.sh mmio: 270 lines identical;
   QuickTime's movie plays with w16's MMSYSTEM as on 3.1 (mmsystem@qt).
-- [ ] Layer 3: wave/MIDI/aux/joystick, sndPlaySound (in progress, below)
+- [x] Layer 3: wave/MIDI/aux/joystick, sndPlaySound (below)
 - [ ] Layer 4: MCI
 - [x] ARCHITECTURE.md 23 (23.2 has the observations in order),
   TESTING.md, assets/README.TXT, the install tree
@@ -131,89 +131,60 @@ next read or write); 3.1 takes mmioSeek(-1, SEEK_SET) on an unbuffered
 file as the place -1. Masks added: GetTempFileName's number, the
 interrupt stack's owner.
 
-## Layer 3 (wave, MIDI, aux, joystick, sndPlaySound): in progress
+## Layer 3 (wave, MIDI, aux, joystick, sndPlaySound): done
 
-Run name `w16-mmsys3`. Tools (committed): MMSYSLOG.DLL + MDS*.DRV
-(tests/mmsystem/mdl.c, mds.c: logging pass-through device drivers; a
-scratch copy of the real driver gets its imports of MMSYSTEM renamed to
-MMSYSLOG, so DriverCallback and MIDIMAP's midiOut* calls are seen too),
-MMP's device sections (mmdev.c: n e w i m j a y x b; l lists the open
-drivers, z is 3 s of messages; the first device section waits 4 s and
-logs the boot), `mrun.sh` with MRUN_SND=none|sb2|multi|sb16 and
-MRUN_SHIM=1, `mdscen.sh` (cases NAME:SOUND:SHIM:SECTIONS, `-m`
-Microsoft's only). Configuration sb2 (Windows 3.1's own SNDBLST2.DRV and
-MSADLIB.DRV from .tools/ref/win31/src, keys as Setup writes them) is the
-main one. Creative's SB16 drivers: SB16SND.DRV wants ASP.SYS (mrun loads
-it with DOSBox-X's DEVICE) and then stops at "Incorrect MIDIPORT setting
-in the SYSTEM.INI file" even with [sndblst.drv] port/int/dma/hdma/
-midiport set: not used. MSADLIB finds no Ad Lib in DOSBox (DRVM_INIT 3,
-0 devices). Pitfalls: a probe call that handed the driver 0001:0000 left
-SNDBLST2 broken later (removed); a NULL handle pointer opens the device
-with no handle (done last in its section); C argument lists are
-evaluated right to left (GetID lines fixed); the -W wait needs 40 s
-(mrun's default now) on a loaded host.
+Run name `w16-mmsys3`. ARCHITECTURE.md 23.2 has the facts in order
+(device drivers, MMSYSTEM's own checks, sndPlaySound, MessageBeep,
+joystick), 23.4 the results, 23.5 what is UNVERIFIED.
 
-Observed so far (Microsoft's MMSYSTEM over SNDBLST2/MSADLIB/MIDIMAP):
-- Boot: drivers opened at boot (by USER: message 0, DRV_LOAD,
-  DRV_ENABLE, DRV_OPEN with options ""), one OpenDriver per key and
-  direction: "wave" for wodMessage (DRVM_INIT 100, then WODM_GETNUMDEVS
-  3), "wave" again for widMessage (100, WIDM_GETNUMDEVS 50), "midi" for
-  mod (100, 1) and mid (100, 53), "midi1" likewise, then "midimapper"
-  (mod 100, 1; its mid open closed again). An open whose entry is
-  missing is closed at once. The mapper is opened only when there are
-  MIDI output devices. Then MMSYSTEM plays SystemStart asynchronously.
-- sndPlaySound: MMSYSTEM's hidden window (class "#42", an integer atom)
-  gets the callbacks: WODM_OPEN with CALLBACK_WINDOW|WAVE_ALLOWSYNC
-  (00010002), instance 0, the WAVEFORMAT inside the file image read into
-  one global block (the header in the same block; its rec/user/next/res
-  left as they were: masked), PREPARE (driver 8: MMSYSTEM sets
-  WHDR_PREPARED itself), WRITE; on WOM_DONE (the window, dispatched in
-  the caller's message loop) UNPREPARE and CLOSE. SND_SYNC waits for the
-  end. NULL or "" stops (WODM_RESET, then the same clean-up), answer 1.
-  Names: the [sounds] key first (case-insensitive; the file before the
-  comma, blanks trimmed; no comma: the whole value), else a file (OpenFile
-  search: "chimes.wav" works, "tada" does not); missing or not a wave:
-  SystemDefault unless SND_NODEFAULT (then 0 and no driver call).
-  SND_NOSTOP while one plays: 0. SND_LOOP needs SND_ASYNC (with SND_SYNC:
-  0); loops are WHDR_BEGINLOOP|ENDLOOP, dwLoops FFFFFFFF. Unknown flags
-  (FF00): 0. SND_MEMORY plays the caller's image in place (header in a
-  small block of MMSYSTEM's); not RIFF: 0 even without NODEFAULT. A new
-  sound stops the one playing first.
-- MessageBeep goes through MMSOUND.DRV to sndPlaySound, asynchronously:
-  0 SystemDefault, 10h SystemHand, 20h SystemQuestion, 30h
-  SystemExclamation, 40h SystemAsterisk, 50h the default, FFFFh nothing
-  through MMSYSTEM (the speaker); each stops the sound before.
-- Error texts (by calling 3.1's functions; probe section e): 0-11 and
-  32-35 for wave, the MMSYSERR texts and 64-69 for MIDI; other numbers 9
-  (MMSYSERR_BADERRNUM) with "" written; size 0: 0, nothing written; NULL
-  buffer: 9; truncated to size-1 characters.
-- waveOutOpen: flags other than QUERY|ALLOWSYNC: 10 (handle untouched);
-  callback type > 3, a window that is not one, a function that is not
-  code: 11 (handle untouched); then *phwo = 0, bad ID 2, then the driver:
-  WODM_OPEN(p1 -> WAVEOPENDESC{hWave, lpFormat (the caller's), dwCallback,
-  dwInstance}, p2 = the caller's flags, user -> a DWORD on the stack); a
-  query has hWave 0 and no handle; a NULL format goes to the driver (32).
-  A NULL handle pointer opens the device. WAVE_MAPPER for a query asks
-  device 0.
-- Wave in: prepare/unprepare go to the driver (8: MMSYSTEM sets/clears
-  WHDR_PREPARED); AddBuffer of an unprepared header 34 without the
-  driver; unprepare of a queued (INQUEUE) header 33 without the driver;
-  GetPosition passes size and pointer through; Close with buffers: the
-  driver's 33; Message passes any number; handles are typed (an output
-  handle to waveIn*: 5); stale handles 5.
-- MIDI: midiOutOpen sets *ph = 0 before checking flags (10 for flag 1;
-  callback type 4: 11); MODM_OPEN user -> the handle's own DWORD; the
-  mapper (FFFF) goes to the midimapper driver (MIDIMAP looks for its
-  setup's devices with midiOutGetNumDevs/GetDevCaps: 68 when absent).
-- aux, joystick without drivers: 2 (bad ID) / 6 (FFFF; no joystick
-  driver); joySetCapture with a bad window: 165 first.
+Code: `shell/mmsystem/dev.c` (the drivers opened at DRV_LOAD, every wave,
+MIDI and aux function, the error texts from `mmsystem.rc`'s string
+table), `snd.c` (sndPlaySound, MMSYSTEM's window "#42", SystemStart at
+boot), `stubs.c` (MCI; joystick without a driver), `mmfix.asm`
+(mm_iscode, mm_hinst set at load).
 
-Next steps: the wave/MIDI logs of build/m3 (probe fixes), then w16's
-implementation (shell/mmsystem/dev.c, snd.c), mdscen.sh comparisons,
-real programs (Sound Recorder, Media Player, SND.CPL, MIDI Mapper).
+Tools: MMSYSLOG.DLL + MDS*.DRV (tests/mmsystem/mdl.c, mds.c: logging
+pass-through device drivers; a scratch copy of the real driver has its
+imports of MMSYSTEM renamed to MMSYSLOG, so DriverCallback and MIDIMAP's
+midiOut* calls are recorded too), MMP's device sections (mmdev.c: n e w i
+m j a y x b; l lists the open drivers, z is 3 s of messages; the first
+device section waits 4 s and logs the boot; MMSYSTEM's window's messages
+are logged as "to MMSYSTEM's window"), `mrun.sh` (MRUN_SND=none|sb2|
+multi|sb16, MRUN_SHIM=1), `mdscen.sh` (cases NAME:SOUND:SHIM:SECTIONS,
+`-m` Microsoft's only), `mprog.sh` + tests/scripts/input/mm*.txt (Sound
+Recorder, SND.CPL, MIDI Mapper), boot-test parts `mmsystem@dev` and
+`mmsystem@prog`. `mcmp.py` masks: each one says why.
 
-Layer 4 (MCI) after that: see the task's list (core command table from
-the Programmer's Guide, mciLoadCommandResource, [mci] and [mci
-extensions], MCIWAVE/MCISEQ/MCIQTW). MCIQTW.DRV imports DriverCallback,
+Configuration sb2 (Windows 3.1's own SNDBLST2.DRV and MSADLIB.DRV from
+.tools/ref/win31/src, keys as Setup writes them: wave= midi=
+sndblst2.drv, midi1=msadlib.drv) is the one used. MSADLIB finds no Ad
+Lib in DOSBox (DRVM_INIT 3, 0 devices), so MIDI out is SNDBLST2's port
+and the MIDI Mapper's "Ad Lib" setup fails with 68 (MIDIERR_NODEVICE), as
+on 3.1. Creative's SB16 drivers: SB16SND.DRV wants ASP.SYS (mrun loads it
+with DOSBox-X's DEVICE) and then stops at "Incorrect MIDIPORT setting in
+the SYSTEM.INI file" even with [sndblst.drv] port/int/dma/hdma/midiport
+set: not used. Pitfalls met: a probe call that hands the driver NULL or
+0001:0000 (caps), or an error text into 0001:0000, left 3.1 unstable
+later (the -W wait then saw a stalled log): removed; a NULL handle pointer
+opens the device with no handle (done last in its section); C argument
+lists are evaluated right to left; the -W wait needs 40 s (mrun's
+default) on a loaded host.
+
+Results (2026-11-18): mdscen.sh, all ten cases identical after the masks;
+mprog.sh: every screen of the three programs 0 pixels off.
+
+Not done (23.5): Media Player (needs MCI: layer 4), a joystick driver,
+QuickTime's sound (qtplay runs without a wave driver), w16's MMSOUND.DRV
+handing MessageBeep to sndPlaySound as 3.1's does, Creative's drivers.
+
+## Next: layer 4 (MCI)
+
+Where to start: the stubs in `stubs.c` (mci*). The task's list: the core
+command table from the Programmer's Guide, mciLoadCommandResource, [mci]
+and [mci extensions], MCIWAVE/MCISEQ/MCIQTW. The layer 3 tools carry over:
+MCIWAVE.DRV and MCISEQ.DRV (in .tools/ref/win31/src, and installed by
+Setup in the reference) are installable drivers that call the wave and
+MIDI functions, so MDS*.DRV under them shows what MCI makes of a command;
+mprog.sh can take Media Player (MPLAYER.EXE) next. MCIQTW.DRV imports DriverCallback,
 mciLoadCommandResource, mciSet/GetDriverData, mciDriverYield,
 mciDriverNotify and mciFreeCommandResource.

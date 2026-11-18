@@ -113,7 +113,16 @@ MMP's core and MMIO sections compared by `tests/mmsystem/mcmp.py`, and
 TPR with w16's MMSYSTEM and TIMER.DRV against Microsoft's two; one run
 alone: `tests/mmsystem/mrun.sh OUT ms|w16` with `MRUN_ARG` the sections;
 the boot-test case `mmsystem`, whose part `qt` plays QuickTime's movie
-with w16's MMSYSTEM, MMTASK and TIMER.DRV), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
+with w16's MMSYSTEM, MMTASK and TIMER.DRV),
+`tests/mmsystem/mdscen.sh [-m] [NAME:SOUND:SHIM:SECTIONS...]` (layer 3:
+MMP's device sections over Windows 3.1's own Sound Blaster, Ad Lib and
+MIDI Mapper drivers, expanded from the reference's Setup files, with the
+logging drivers MDS*.DRV between them and MMSYSTEM, both MMSYSTEMs
+compared; `-m` Microsoft's only; `mrun.sh`'s `MRUN_SND` and `MRUN_SHIM`
+for one run; part `dev` of the boot-test case `mmsystem`),
+`tests/mmsystem/mprog.sh OUT ms|w16 soundrec|sound|midimap [-e REFDIR]`
+(Sound Recorder, Control Panel's Sound and MIDI Mapper applets with real
+keys over the same drivers; part `prog`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;

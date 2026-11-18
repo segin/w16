@@ -90,10 +90,13 @@ w16 repository's LICENSE):
                           sound, music or video use
   SYSTEM\MMSYSTEM.DLL     the multimedia system library: its timer
                           services, multimedia file I/O (mmio*), the
-                          installable-driver and task services; sound
-                          devices and MCI are not w16's yet (with
-                          programs that need them, use your own
-                          Windows 3.1 MMSYSTEM.DLL instead)
+                          installable-driver and task services, the
+                          wave, MIDI and auxiliary sound devices through
+                          your sound card's Windows 3.1 drivers, and
+                          sndPlaySound (Sound Recorder, Control Panel's
+                          Sound and MIDI Mapper work); MCI is not w16's
+                          yet (for programs that need it, such as Media
+                          Player, use your own Windows 3.1 MMSYSTEM.DLL)
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,

@@ -3019,11 +3019,10 @@ TIMER.DRV; QuickTime for Windows' QTIM.DLL (mmio, wave out, MIDI out,
 time*) and MCIQTW.DRV (the MCI driver helpers).
 
 w16's is built in layers (`docs/notes/mmsystem-handover.md` has the
-plan, the state and the raw observations): 1 the core, 2 MMIO (both
-done), 3 wave, MIDI, aux, joystick and sndPlaySound, 4 MCI. The
-functions of the layers not done are stubs that take the documented
-arguments and answer as when no device is there (no devices, no MCI
-driver).
+plan, the state and the raw observations): 1 the core, 2 MMIO, 3 wave,
+MIDI, aux, joystick and sndPlaySound (all three done), 4 MCI. The MCI
+functions are stubs that take the documented arguments and answer as when
+no MCI driver is there.
 
 ### 23.1 Observation tools
 
@@ -3047,9 +3046,32 @@ driver).
   between two runs of Microsoft's own, known differences explained);
   `tests/mmsystem/mscen.sh` runs core, mmio and the timer probe (21.1,
   `TRUN_MM=w16`) with both MMSYSTEMs and compares them (boot-test case
-  `mmsystem`, parts core, mmio, timer, qt).
+  `mmsystem`, parts core, mmio, timer, qt, dev, prog).
+- **MDS*.DRV and MMSYSLOG.DLL** (`tests/mmsystem/mds.c`, `mdl.c`): logging
+  pass-through device drivers. `[drivers] wave=mdsw1.drv` with `[mmslog]
+  MDSW1=sndblst2.drv` puts one where MMSYSTEM opens a wave (MIDI, aux)
+  driver; it loads the real one and hands every DriverProc and
+  wodMessage/widMessage/modMessage/midMessage/auxMessage call to
+  MMSYSLOG, which records it (the arguments, the bytes behind the pointers
+  before and after, the result, the caller) and makes it. A scratch copy
+  of the real driver with its imports of MMSYSTEM renamed to MMSYSLOG
+  (`tools/nerename.py`) has MMSYSLOG between it and MMSYSTEM too: each
+  DriverCallback and each MIDI call (MIDIMAP's) is recorded and passed on
+  by a far jump with the stack as it was. The variants export what the
+  real drivers do (W: SNDBLST2's five entries; F: Creative's SB16FM; M:
+  DriverProc and modMessage; A: auxMessage). MMP's device sections
+  (`tests/mmsystem/mmdev.c`: n numbering and capabilities, e error texts,
+  w and i wave output and input, m and j MIDI, a aux, y joystick, x
+  sndPlaySound, b MessageBeep) print the records after every step, with
+  the probe's handles, headers and callbacks by name.
+  `tests/mmsystem/mrun.sh` (MRUN_SND none, sb2: Windows 3.1's own
+  SNDBLST2.DRV and MSADLIB.DRV from its Setup files with the keys Setup
+  writes, multi: several keys, sb16: Creative's drivers, MRUN_SHIM=1) and
+  `tests/mmsystem/mdscen.sh` (every case with both MMSYSTEMs, compared by
+  `mcmp.py`); `tests/mmsystem/mprog.sh` runs Sound Recorder, Control
+  Panel's Sound and MIDI Mapper applets with real keys.
 
-### 23.2 Windows 3.1's MMSYSTEM as observed (layers 1 and 2)
+### 23.2 Windows 3.1's MMSYSTEM as observed (layers 1, 2 and 3)
 
 - mmsystemGetVersion 0101h. After boot the open drivers are TIMER
   (handle 2) and MMSYSTEM (1); the midimapper is not opened at boot.
@@ -3115,6 +3137,74 @@ driver).
   everything in the buffer: SEEK_END counts back from the end (3.1's
   answers -1 to a negative offset). Bad handles: 5 (or -1, 265, 0).
 
+- **Device drivers** (layer 3; MMP's device sections over Windows 3.1's
+  own SNDBLST2.DRV, MSADLIB.DRV and MIDIMAP.DRV with the logging drivers
+  MDS*.DRV between them and MMSYSTEM). MMSYSTEM opens them at boot (its
+  DRV_LOAD, after the timer), one OpenDriver per `[drivers]` key and
+  direction: `wave` for wodMessage, `wave` again for widMessage, then
+  `wave1` ... `wave9` (a gap is skipped, `wave10` is not read), the `midi`
+  keys for modMessage and midMessage, `midimapper` (modMessage; only when
+  there are MIDI output devices), the `aux` keys. An open whose entry the
+  driver does not export is closed at once. Each entry gets DRVM_INIT
+  (100) and its GETNUMDEVS; a driver with 0 devices stays open. IDs follow
+  that order, each driver's devices together; the messages are Wine's
+  mmddk.h numbers (WODM_* 3-20, WIDM_* 50-60, MODM_* 1-13, MIDM_* 53-62,
+  AUXDM_* 3-6), called directly as xxxMessage(device, msg, dwUser, p1,
+  p2) with dwUser the instance the driver wrote at OPEN (wave: through a
+  pointer to a DWORD on MMSYSTEM's stack; MIDI: to the handle's own
+  field). The callbacks (WOM_*, WIM_*, MOM_*, MIM_*) are the drivers' own
+  DriverCallback calls (a function callback with DCB_NOSWITCH set by
+  SNDBLST2); the drivers' callbacks run on MMSYSTEM's interrupt stack,
+  which exists once drivers are loaded. Then MMSYSTEM plays SystemStart.
+- **Checks MMSYSTEM makes itself** (everything else reaches the driver
+  unchanged, NULL pointers and odd sizes included): handles are typed (a
+  wave output handle given to waveIn*: 5); waveOutOpen/waveInOpen: flags
+  other than WAVE_FORMAT_QUERY|WAVE_ALLOWSYNC 10, a callback type above 3,
+  a window that is not one or a function that is not code 11 (the handle
+  untouched), then *phwo = 0, a bad ID 2 (WAVE_MAPPER: each device in
+  turn); a query has hWave 0 and allocates nothing; a NULL handle pointer
+  opens the device anyway. midiOutOpen sets *phmo = 0 first; flags 10;
+  FFFFh goes to the midimapper (6 without one). GetDevCaps: FFFFh 6 (MIDI
+  out: the mapper's), a bad ID 2, size 0 answers 0 without the driver.
+  Volume functions take IDs (a handle is a bad ID: 2). xxxMessage with a
+  bad handle answers 0. Headers (WAVEHDR 32 bytes, MIDIHDR 28): NULL or
+  another size 11; dwFlags with bits other than 1Fh and bit 31 11;
+  PREPARE of a prepared header 0 without the driver, otherwise the flags
+  cleared (wave out keeps the loop bits) and the driver asked; its 8
+  (MMSYSERR_NOTSUPPORTED, SNDBLST2's answer) makes MMSYSTEM set
+  WHDR_PREPARED itself (7 for a NULL lpData); UNPREPARE: queued 33, not
+  prepared 0 without the driver, the driver's 8: WHDR_PREPARED cleared;
+  WRITE/ADDBUFFER: queued 33, not prepared 34 (MIDI 64); WRITE clears
+  WHDR_DONE first, ADDBUFFER does not. Closing while buffers play is the
+  driver's business (SNDBLST2 closes, 0). The error texts (string n for
+  error n; MMSYSERR 0-11, WAVERR 32-35, MIDIERR 64-69, taken by calling
+  3.1's functions): size 0 answers 0, NULL 9, another number "" and 9.
+- **sndPlaySound** (Programmer's Guide ch. 4; MMP section x): nothing
+  without a wave output device (FALSE, NULL too). A hidden window of
+  MMSYSTEM's, class "#42", receives the callbacks: waveOutOpen(WAVE_MAPPER,
+  the format inside the image, the window, instance 0,
+  CALLBACK_WINDOW|WAVE_ALLOWSYNC), one header over the data (dwFlags and
+  dwLoops 0 at PREPARE; BEGINLOOP|ENDLOOP and FFFFFFFFh after it for
+  SND_LOOP), WRITE. MM_WOM_DONE starts a timer (ID 1); the WM_TIMER that
+  finds the sound done unprepares and closes. A file is read whole into
+  one block, the header in front (dwUser the format's address), kept until
+  the next sound; SND_MEMORY plays the caller's image in place. Names:
+  `[sounds]` first (case-insensitive, the file before the comma, blanks
+  trimmed), else a file as OpenFile finds it (no ".wav" added); missing
+  or not a wave: SystemDefault unless SND_NODEFAULT (FALSE, no driver
+  call); a memory image that is not RIFF: FALSE. NULL or "" stops (RESET
+  unless done, UNPREPARE, CLOSE) and answers TRUE; each new sound stops
+  the last; SND_NOSTOP while one plays, SND_LOOP without SND_ASYNC and
+  unknown flags: FALSE. SND_SYNC returns when it has played.
+- **MessageBeep** goes through MMSYSTEM on 3.1: USER's DoBeep in
+  MMSOUND.DRV hands it to sndPlaySound asynchronously (0 SystemDefault,
+  10h SystemHand, 20h SystemQuestion, 30h SystemExclamation, 40h
+  SystemAsterisk, 50h the default; FFFFh the speaker), each stopping the
+  sound before (MMP section b; w16's MMSOUND.DRV does not yet).
+- **Joystick** (no driver in the reference install): everything 6
+  (MMSYSERR_NODRIVER), joyGetNumDevs 0, joySetCapture with a bad window
+  165 first.
+
 ### 23.3 w16's MMSYSTEM.DLL
 
 `shell/mmsystem/`: `mmfix.asm` (one fixed
@@ -3124,8 +3214,13 @@ mmTaskSignal, the Drv* jumps), `core.c` (DriverProc, the interrupt
 stack, mmTask*; mmTaskCreate finds the new task by its instance in
 KERNEL's task list), `mmio.c` (MMIO with the DOS and memory procedures:
 MMSYSTEM's own handles are global blocks on a list),
-`stubs.c` (the later layers), `mmtask.asm` (MMTASK.TSK). Installed as
-`SYSTEM\MMSYSTEM.DLL` and `SYSTEM\MMTASK.TSK`.
+`dev.c` (layer 3: the device drivers opened at DRV_LOAD, every wave, MIDI
+and aux function with 3.1's checks, the handles as blocks of its local
+heap on a list, the error texts from its string table), `snd.c`
+(sndPlaySound and MMSYSTEM's window "#42", SystemStart at boot),
+`stubs.c` (MCI and the joystick functions without a driver),
+`mmtask.asm` (MMTASK.TSK). Installed as `SYSTEM\MMSYSTEM.DLL` and
+`SYSTEM\MMTASK.TSK`.
 
 ### 23.4 Tests and results
 
@@ -3140,10 +3235,38 @@ MMSYSTEMs every exact line is identical too). `qt`: QuickTime's sample
 movie with w16's MMSYSTEM, MMTASK and TIMER.DRV over stock 3.1 plays as
 on 3.1 (same window, last frame 0 pixels off, 12 s); with layer 1 alone
 its player could not open the movie (it reads it through mmio).
+`dev` (`tests/mmsystem/mdscen.sh`, layer 3): MMP's device sections with
+both MMSYSTEMs over the same Microsoft drivers through MDS*.DRV, every
+record of every message and callback compared: no devices (with the
+mapper's shim), SNDBLST2/MSADLIB/MIDIMAP (n, e, w, i, m, j a y, x, b,
+and all of them without the shims) and several keys (multi): identical
+after `mcmp.py`'s masks, which hide only what the heap, the stack and
+the drivers' own leftovers decide (MMSYSTEM's internal handles and
+blocks, the driver's pointer in a header's reserved field, MIDIMAP's
+stack in what it hands back, garbage in fields 3.1 leaves unset, MIDI
+time stamps) and the timings (the "~" lines, WM_TIMER ticks). `prog`
+(`tests/mmsystem/mprog.sh`): Sound Recorder opening and playing
+DING.WAV, Control Panel's Sound applet testing a sound and the MIDI
+Mapper applet: every screen 0 pixels off from 3.1's with Microsoft's
+MMSYSTEM.
 
 ### 23.5 UNVERIFIED, and not done
 
-- Layers 3 (wave, MIDI, aux, joystick, sndPlaySound) and 4 (MCI): stubs.
+- Layer 4 (MCI): stubs. Media Player needs it (not compared yet; it
+  lists the `[mci]` devices).
+- Layer 3: a joystick driver (none in the reference: only the answers
+  without one; the joy* functions with a driver are still stubs); the
+  sndPlaySound timer's period (about 500 ms) and whether 3.1 caches a
+  sound by name; when 3.1 makes the interrupt stack (w16: when the
+  drivers load); the MIDI header flag checks (assumed as the wave ones);
+  WAVE_MAPPER with more than one device (which error when none takes the
+  format); a task callback's check; an unwritable error-text buffer (3.1
+  answered 0 to 0001:0000 and was unstable afterwards); SystemStart
+  without a `[sounds]` entry; whether 3.1 plays SystemExit itself.
+  Creative's SB16 drivers (SB16SND.DRV stops at "Incorrect MIDIPORT
+  setting" in DOSBox-X), so only Windows 3.1's own drivers were observed;
+  QuickTime's sound (its probe runs without a wave driver); w16's
+  MMSOUND.DRV still beeps on the speaker where 3.1's calls sndPlaySound.
 - The interrupt stack's flags after a switch (AF differs between 3.1's
   runs), and which module owns the block (TIMER or MMSYSTEM in 3.1's
   runs); the mmTask function's BX and CX.
