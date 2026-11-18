@@ -5,8 +5,12 @@
  *   01 BX  02 CX  04 SI  08 DI  10 BP  20 ES  40 carry  80 DS
  * (DX:AX is the result). Windows 3.1's own code relies on some of these
  * (TK24: GetTaskQueueDS/ES, GetDOSEnvironment); w16's KERNEL is mostly C,
- * which keeps only SI, DI, BP and DS. Run as the shell (tests/dropin.sh,
- * and -r for Windows 3.1) and compare.
+ * which keeps only SI, DI, BP and DS. A procedure that does not remove
+ * exactly the arguments passed also logs "NAME SP moved" (bytes removed
+ * less bytes passed): IsROMModule and IsROMFile remove 6 on 3.1. Also
+ * LZEXPAND's file calls (callmod), which VER.DLL makes. Run as the shell
+ * (tests/dropin.sh, and -r or tests/refrun.sh for Windows 3.1) and
+ * compare.
  */
 #include <windows.h>
 
@@ -14,6 +18,7 @@
 #include "tklog.h"
 
 extern WORD __cdecl w_regs[10];
+extern WORD __cdecl w_spd;
 extern void __cdecl __far w_call(FARPROC fn, int nargs, WORD a0, WORD a1,
                                   WORD a2, WORD a3, WORD a4, WORD a5);
 
@@ -23,11 +28,16 @@ static char shl[] = "SHELL.DLL";
 static char one[] = "#1";
 static char sec[] = "windows";
 static char key[] = "Beep";
+static char tfile[] = "C:\\TK31.TMP";
+static OFSTRUCT ofs;
+
+static HMODULE callmod;                 /* 0: KERNEL */
 
 static void call(const char *name, WORD ord, int n, WORD a0, WORD a1, WORD a2,
                  WORD a3, WORD a4, WORD a5)
 {
-    FARPROC f = GetProcAddress(GetModuleHandle("KERNEL"), MAKEINTRESOURCE(ord));
+    FARPROC f = GetProcAddress(callmod ? callmod : GetModuleHandle("KERNEL"),
+                               MAKEINTRESOURCE(ord));
     WORD m = 0, ds = SELECTOROF((void FAR *)buf);
     char n2[48];
     if (!f) {
@@ -46,6 +56,11 @@ static void call(const char *name, WORD ord, int n, WORD a0, WORD a1, WORD a2,
     lstrcpy(n2, name);
     lstrcat(n2, " kept");
     obs(n2, m);
+    if (w_spd) {                        /* arguments not removed exactly */
+        lstrcpy(n2, name);
+        lstrcat(n2, " SP moved");
+        obs(n2, w_spd);
+    }
 }
 
 #define SEG(p) SELECTOROF((void FAR *)(p))
@@ -96,6 +111,50 @@ int __cdecl tmain(void)
     call("IsBadReadPtr(334)", 334, 3, ds, OFF(buf), 4, 0, 0, 0);
     call("GetHeapSpaces(138)", 138, 1, user, 0, 0, 0, 0, 0);
     call("GetAppCompatFlags(354)", 354, 1, 0, 0, 0, 0, 0, 0);
+    /* the file calls (VER.DLL and LZEXPAND.DLL use them) */
+    call("_lcreat(83)", 83, 3, ds, OFF(tfile), 0, 0, 0, 0);
+    h = w_regs[0];
+    call("_lwrite(86)", 86, 4, h, ds, OFF(buf), 16, 0, 0);
+    call("_lclose(81)", 81, 1, h, 0, 0, 0, 0, 0);
+    call("_lopen(85)", 85, 3, ds, OFF(tfile), 0, 0, 0, 0);
+    h = w_regs[0];
+    call("_llseek(84)", 84, 4, h, 0, 4, 0, 0, 0);
+    call("_lread(82)", 82, 4, h, ds, OFF(buf), 8, 0, 0);
+    call("_lclose(81) again", 81, 1, h, 0, 0, 0, 0, 0);
+    call("OpenFile(74)", 74, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_READ, 0);
+    h = w_regs[0];
+    call("_lclose(81) of OpenFile's", 81, 1, h, 0, 0, 0, 0, 0);
+    call("OpenFile(74) OF_EXIST", 74, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_EXIST, 0);
+    call("OpenFile(74) OF_DELETE", 74, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_DELETE, 0);
+    call("OpenFile(74) missing", 74, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_READ, 0);
+    /* IsROMModule and IsROMFile (Schulman: one HANDLE each); VER.DLL
+       calls ordinal 323 through GetProcAddress */
+    out("-- IsROMModule\r\n");
+    call("IsROMModule(323) 6 words", 323, 6, ds, OFF(str), ds, OFF(str), ds, OFF(str));
+    obs("IsROMModule(323) 6 words AX", w_regs[0]);
+    obs("IsROMModule(323) 6 words DX", w_regs[3]);
+    out("-- IsROMFile\r\n");
+    call("IsROMFile(326) 6 words", 326, 6, ds, OFF(str), ds, OFF(str), ds, OFF(str));
+    obs("IsROMFile(326) 6 words AX", w_regs[0]);
+    /* LZEXPAND's file calls (VER.DLL's GetFileResource uses them) */
+    call("_lcreat(83) for LZ", 83, 3, ds, OFF(tfile), 0, 0, 0, 0);
+    h = w_regs[0];
+    call("_lwrite(86) for LZ", 86, 4, h, ds, OFF(buf), 128, 0, 0);
+    call("_lclose(81) for LZ", 81, 1, h, 0, 0, 0, 0, 0);
+    callmod = (HMODULE)LoadLibrary("LZEXPAND.DLL");
+    if ((WORD)callmod >= 32) {
+        callmod = GetModuleHandle("LZEXPAND");
+        call("LZOpenFile(LZEXPAND.2)", 2, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_READ, 0);
+        h = w_regs[0];
+        call("LZSeek(LZEXPAND.4)", 4, 4, h, 0, 0x40, 0, 0, 0);
+        call("LZRead(LZEXPAND.5)", 5, 4, h, ds, OFF(buf), 8, 0, 0);
+        call("LZSeek(LZEXPAND.4) 1", 4, 4, h, 0, 2, 1, 0, 0);
+        call("LZRead(LZEXPAND.5) 2", 5, 4, h, ds, OFF(buf), 2, 0, 0);
+        call("LZClose(LZEXPAND.6)", 6, 1, h, 0, 0, 0, 0, 0);
+        FreeLibrary(callmod);
+        callmod = 0;
+    }
+    call("OpenFile(74) OF_DELETE for LZ", 74, 5, ds, OFF(tfile), ds, OFF(&ofs), OF_DELETE, 0);
     out("TK31 done, failures=");
     outhex((WORD)failures);
     out("\r\n");

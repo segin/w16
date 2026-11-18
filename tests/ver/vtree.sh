@@ -7,12 +7,11 @@
 # the log compares with the reference install's as it is: the probe's
 # files (tests/ver/mkinputs.py) go to C:\VT, C:\WINDOWS and D:\VT;
 # C:\VT\PATH is on the PATH. OUTDIR/vrp.log is the log.
-# Microsoft's VER.DLL on w16's KERNEL (LIB ms) is not a reference: its
-# GetFileResource with offset 0 overwrites a local of its caller there
-# (ARCHITECTURE.md 20.4); the boot test compares the tree's log with
-# tests/ver/vrun.sh's of 3.1.
+# The boot test (case ver, parts tree286 and tree386) compares LIB ms's
+# log with tests/ver/vrun.sh's of 3.1, and LIB w16's with LIB ms's.
 #   usage: tests/ver/vtree.sh OUTDIR [ms|w16] [286|386]
 # VTREE_ARG: the sections to run (C:\VRP.ARG; vrp.c's header).
+# VTREE_FILES: more files for the tree, HOSTPATH=PATH (as dropin's -f).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -31,6 +30,8 @@ if [ -n "${VTREE_ARG:-}" ]; then
     set -- "$@" -f "$out/VRP.ARG=VRP.ARG"
 fi
 if [ "$lib" = ms ]; then set -- "$@" -f "$ref/SYSTEM/VER.DLL=WINDOWS/SYSTEM/VER.DLL"; fi
+# VTREE_FILES: more HOSTPATH=PATH files (e.g. Microsoft's LZEXPAND.DLL)
+for f in ${VTREE_FILES:-}; do set -- "$@" -f "$f"; done
 if [ "$k" = 386 ]; then set -- "$@" -3; fi
 # the probe started as C:\VRP.EXE, as tests/refrun.sh starts it (its
 # directory is one OpenFile searches)

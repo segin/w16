@@ -167,10 +167,11 @@ void where(u16 sel);             /* fault.c */
 /* ---- the import trace (a debugging aid for the Windows boot) ----
    SYSTEM.INI [w16] trace=MOD.ORD,MOD.ORD,... makes the loader bind those
    imports to trace thunks: each call is recorded (thunk, caller CS:IP,
-   AX, BX, CX, DX and the first 6 stack words above the return address)
+   AX, BX, CX, DX, SI, DI and the first 6 stack words above the return
+   address)
    in a ring the fault and watchdog reports print. */
 #define TR_N 400
-typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, arg[6]; } trrec;
+typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, si, di, arg[6]; } trrec;
 static trrec trring[TR_N];
 static u16 trpos, trcount;
 
@@ -200,6 +201,8 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     r->bx = bx;
     r->cx = cx;
     r->dx = dx;
+    r->si = frame[-9];                  /* trace_entry's saved SI and DI */
+    r->di = frame[-10];
     for (i = 0; i < 6; i++)
         r->arg[i] = frame[2 + i];
     return b ? b->info[idx % TB_COUNT].real : 0;
@@ -234,6 +237,8 @@ void trace_print(void)
         kputs(" bx="); kputhex(r->bx);
         kputs(" cx="); kputhex(r->cx);
         kputs(" dx="); kputhex(r->dx);
+        kputs(" si="); kputhex(r->si);
+        kputs(" di="); kputhex(r->di);
         kputs(" args");
         for (j = 0; j < 6; j++) {
             kputs(" ");

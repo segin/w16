@@ -322,12 +322,7 @@ void KAPI WriteOutProfiles(void)
 {
 }
 
-/* IsRomModule (KERNEL.323): no ROM Windows here. */
-u16 KAPI IsRomModule(u16 h)
-{
-    (void)h;
-    return 0;
-}
+/* IsRomModule (KERNEL.323): khook.asm, with IsRomFile. */
 
 /* LogError (KERNEL.324), LogParamError (325): the debugging KERNEL
    reports these; the retail one passes them on to the notification hook

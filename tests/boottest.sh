@@ -217,7 +217,8 @@
 #              and 386 Enhanced mode, every section; x: the install section
 #              in DOSBox-X (which keeps read-only attributes); tree286 and
 #              tree386: w16's install tree alone under its KRNL286 / KRNL386
-#              at C:\WINDOWS (tests/ver/vtree.sh) against 3.1's own log;
+#              at C:\WINDOWS (tests/ver/vtree.sh), Microsoft's VER.DLL there
+#              against 3.1's own log and w16's against Microsoft's;
 #              mods: every file of the install tree read through both
 #              VER.DLLs, all ten version resources readable by 3.1's
 #              (tests/ver/vmods.sh); fonts and fontsnew: a real 3.1 caller,
@@ -2475,14 +2476,19 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d/ms/vrp.log" "$d/w16/vrp.log" "$d/cmp" \
                 > "$d.txt" 2>&1 || r="x: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; } ;;
         tree286|tree386)
+            # Microsoft's VER.DLL on w16's tree against 3.1's own log, and
+            # w16's VER.DLL on the tree against Microsoft's there
             k=${part#tree}
             "$root/tests/ver/vrun.sh" "$d-ref" ms > /dev/null 2>&1 || true
+            "$root/tests/ver/vtree.sh" "$d-ms" ms "$k" > "$d-ms.txt" 2>&1 || true
             "$root/tests/ver/vtree.sh" "$d-w16" w16 "$k" > "$d-w16.txt" 2>&1 || true
-            for l in ref w16; do
+            for l in ref ms w16; do
                 grep -q '^VRP end' "$d-$l/vrp.log" 2>/dev/null || { r="$part: no complete log ($d-$l)"; break; }
             done
-            [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d-ref/vrp.log" "$d-w16/vrp.log" "$d-cmp" \
-                > "$d.txt" 2>&1 || r="$part: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; } ;;
+            [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d-ref/vrp.log" "$d-ms/vrp.log" "$d-cmpms" \
+                > "$d.txt" 2>&1 || r="$part: Microsoft's VER on the tree: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; }
+            [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d-ms/vrp.log" "$d-w16/vrp.log" "$d-cmp" \
+                >> "$d.txt" 2>&1 || r="$part: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; } ;;
         mods)
             "$root/tests/ver/vmods.sh" "$d" > "$d.txt" 2>&1 ||
                 r="mods: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d.txt)" ;;
@@ -4272,7 +4278,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;
     ver)
-        if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1), w16's modules' versions, Control Panel's Fonts applet"
+        if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
     lzexpand)
         if [ $pbad = 0 ]; then echo "ok   lzexpand: LZEXPAND's probe log as with Microsoft's (Standard and 386 Enhanced mode, the tree under both kernels, VerInstallFile), and its quirk sections too"

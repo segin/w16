@@ -816,7 +816,8 @@ static void t_swaparea(void)
 }
 
 /* IsROMFile (KERNEL.326) with 0 and with KERNEL's hModule ended the probe on
-   Windows 3.1 (KRNL286), so it is only tried on request */
+   Windows 3.1 (KRNL286), so it is only tried on request. Why (TK31): it
+   removes 6 bytes of arguments, not the one word passed here */
 static int try_romfile;
 
 static void t_romfile(void)
@@ -911,7 +912,8 @@ int __cdecl tmain(void)
        (Schulman). Not called: CVWBreak (205), which the keyboard
        interrupt handler jumps to (Schulman: an interrupt procedure), and
        IsRomModule (323); each, called as a far procedure, ended the probe
-       on 3.1 (KRNL286) */
+       on 3.1 (KRNL286); IsRomModule with one word because it removes 6
+       bytes of arguments (TK31) */
     if (K0("DoSignal", 139, 0)) {
         res("DoSignal", "AX", r_ax);
         res("DoSignal", "DX", r_dx);

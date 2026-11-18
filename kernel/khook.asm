@@ -307,12 +307,22 @@ DEFINEHANDLETABLE:
         xor dx, dx
         retf 2
 
-; IsROMFile (KERNEL.326): Schulman: FALSE outside ROM Windows, one word
-; argument. UNVERIFIED: both calls TK50 tried ended the probe on 3.1.
+; IsROMModule (KERNEL.323) and IsROMFile (KERNEL.326): FALSE outside ROM
+; Windows (Schulman). Schulman gives each one HANDLE argument, but
+; observed on Windows 3.1 (tests/apps/tk31.c, KRNL286 and KRNL386) both
+; remove 6 bytes of arguments (a call with one word ended TK50 and TK31
+; there: the 4 bytes more came off the caller's frame), return AX = 0
+; with the carry clear, and keep BX, CX, DX, SI, DI, BP and ES.
+; Microsoft's VER.DLL calls IsROMModule through GetProcAddress in
+; GetFileResource with its file name: w16's RETF 2 left 4 bytes on VER's
+; stack, its epilogue then popped the file name's offset into its
+; caller's SI (ARCHITECTURE.md 20.6).
+global ISROMMODULE
+ISROMMODULE:
 global ISROMFILE
 ISROMFILE:
         xor ax, ax
-        retf 2
+        retf 6
 
 ; LocalNotify (KERNEL.14): local.c's LNotify with the caller's DS
 extern LNOTIFY

@@ -1,7 +1,9 @@
 ; tk31s.asm - TK31's register-level caller: call a far Pascal procedure
 ; with up to 6 word arguments and known values in every register (ES =
 ; the caller's DS, carry set); record the registers afterwards in
-; w_regs (ax bx cx dx si di bp ds es flags).
+; w_regs (ax bx cx dx si di bp ds es flags); w_spd: SP afterwards less
+; SP before the arguments were pushed (0: the procedure removed exactly
+; its arguments).
         bits 16
         cpu 286
 segment _DATA public align=2 class=DATA use16
@@ -12,6 +14,9 @@ group DGROUP _DATA CONST CONST2 _BSS
 segment _DATA
 global _w_regs
 _w_regs times 10 dw 0
+global _w_spd
+_w_spd  dw 0
+w_sp0   dw 0
 w_fn    dd 0
 w_bp    dw 0
 segment _TEXT public align=16 class=CODE use16
@@ -32,6 +37,7 @@ _w_call:
         mov [w_fn + 2 wrt DGROUP], ax
         mov cx, [bp + 10]
         lea si, [bp + 12]
+        mov [w_sp0 wrt DGROUP], sp
 .push:  jcxz .go
         push word [ss:si]
         add si, 2
@@ -57,6 +63,9 @@ _w_call:
         pop word [_w_regs wrt DGROUP]
         pop word [_w_regs + 14 wrt DGROUP]
         pop word [_w_regs + 18 wrt DGROUP]
+        mov ax, sp
+        sub ax, [w_sp0 wrt DGROUP]
+        mov [_w_spd wrt DGROUP], ax
         mov [_w_regs + 2 wrt DGROUP], bx
         mov [_w_regs + 4 wrt DGROUP], cx
         mov [_w_regs + 6 wrt DGROUP], dx
