@@ -2616,7 +2616,8 @@ $(W16SYS)/TOOLHELP.DLL: $(DOS)/TOOLHELP.DLL
 # large model, SS != DS (it runs on its callers' stacks and at interrupt
 # time), every entry loads its DS ----
 MMCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=MM_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
-MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/mmio.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
+MMOBJS   := $(B)/mmsystem/mmfix.o $(B)/mmsystem/core.o $(B)/mmsystem/mmio.o $(B)/mmsystem/dev.o \
+            $(B)/mmsystem/snd.o $(B)/mmsystem/stubs.o $(B)/gdi/i4.o
 mmsystem: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 dos: $(DOS)/MMSYSTEM.DLL $(DOS)/MMTASK.TSK
 .PHONY: mmsystem

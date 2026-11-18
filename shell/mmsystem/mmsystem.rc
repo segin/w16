@@ -1,6 +1,37 @@
 /*
- * mmsystem.rc - MMSYSTEM.DLL's version resource, written by
- * tools/mkver.py (the Makefile; ARCHITECTURE.md 20.5). The numbers are
- * 3.1's (3.10.0.103), the texts w16's.
+ * mmsystem.rc - MMSYSTEM.DLL's resources (ARCHITECTURE.md 23): the
+ * version resource, written by tools/mkver.py (the Makefile;
+ * ARCHITECTURE.md 20.5; the numbers are 3.1's, 3.10.0.103, the texts
+ * w16's), and the error texts of the wave and MIDI functions
+ * (waveOutGetErrorText etc., shell/mmsystem/dev.c), string n for error
+ * n. The texts are what Windows 3.1's waveOutGetErrorText and
+ * midiOutGetErrorText return for each number (tests/mmsystem/mmdev.c,
+ * section e): an application shows them to its users.
  */
 1 16 MOVEABLE PURE "mmver.bin"
+
+STRINGTABLE MOVEABLE DISCARDABLE
+BEGIN
+    0,  "The specified command was carried out."
+    1,  "Undefined external error."
+    2,  "A device ID has been used that is out of range for your system."
+    3,  "The driver was not enabled."
+    4,  "The specified device is already in use. Wait until it is free, and then try again."
+    5,  "The specified device handle is invalid."
+    6,  "There is no driver installed on your system."
+    7,  "Not enough memory available for this task. Quit one or more applications to increase available memory, and then try again."
+    8,  "This function is not supported. Use the Capabilities function to determine which functions and messages the driver supports."
+    9,  "An error number was specified that is not defined in the system."
+    10, "An invalid flag was passed to a system function."
+    11, "An invalid parameter was passed to a system function."
+    32, "The specified format is not supported or cannot be translated. Use the Capabilities function to determine the supported formats."
+    33, "Cannot perform this operation while media data is still playing. Reset the device, or wait until the data is finished playing."
+    34, "The wave header was not prepared. Use the Prepare function to prepare the header, and then try again."
+    35, "Cannot open the device without using the WAVE_ALLOWSYNC flag. Use the flag, and then try again."
+    64, "The MIDI header was not prepared. Use the Prepare function to prepare the header, and then try again."
+    65, "Cannot perform this operation while media data is still playing. Reset the device, or wait until the data is finished playing."
+    66, "A MIDI map was not found. There may be a problem with the driver, or the MIDIMAP.CFG file may be corrupt or missing."
+    67, "The port is transmitting data to the device. Wait until the data has been transmitted, and then try again."
+    68, "The current MIDI Mapper setup refers to a MIDI device that is not installed on the system. Use MIDI Mapper to edit the setup."
+    69, "The current MIDI setup is damaged. Copy the original MIDIMAP.CFG file to the Windows SYSTEM directory, and then try again."
+END

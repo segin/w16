@@ -18,7 +18,7 @@
 #         Setup files (.tools/ref/win31/src), with the keys Setup writes
 #         (wave= midi= sndblst2.drv, midi1=msadlib.drv), [sndblst.drv]
 #         port=220 int=5
-#   multi  for the numbering: wave=, wave2= and wave10= (SNDBLST2, SNDBLST),
+#   multi  for the numbering: wave=, wave2= and wave10= (all SNDBLST2),
 #         midi= (MSADLIB), midi1= (SNDBLST2), aux= (MSADLIB: no auxMessage)
 #   sb16  Creative's Sound Blaster 16 drivers as tests/sb16setup.sh
 #         installs them (MRUN_SB16=DIR: its output, default build/sb16;
@@ -91,18 +91,18 @@ sb2)
     set -- "$@" -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
     export DROPIN_CONF="$sbconf" ;;
 multi)
-    # the numbering: two wave drivers with a gap in the keys (wave, wave2),
-    # MIDI from SNDBLST2 and MSADLIB, an aux key whose driver has no
-    # auxMessage, a key past 9 (wave10)
-    for f in SNDBLST2 SNDBLST MSADLIB; do
+    # the numbering: SNDBLST2 under wave, wave2 (a gap in the keys) and
+    # wave10 (past 9), MIDI from MSADLIB and SNDBLST2, an aux key whose
+    # driver has no auxMessage
+    for f in SNDBLST2 MSADLIB; do
         python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/$f.DR_" "$out/drv/$f.DRV"
     done
     drv wave sndblst2.drv MDSW1
-    drv wave2 sndblst.drv MDSW2
+    drv wave2 sndblst2.drv MDSW2
     drv midi msadlib.drv MDSM1
     drv midi1 sndblst2.drv MDSW3
     drv aux msadlib.drv MDSM3
-    drv wave10 sndblst.drv MDSW4
+    drv wave10 sndblst2.drv MDSW4
     set -- "$@" -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
     export DROPIN_CONF="$sbconf" ;;
 sb16)

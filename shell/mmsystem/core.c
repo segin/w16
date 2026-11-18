@@ -17,7 +17,9 @@
  */
 #include "mmsys.h"
 
-HINSTANCE mm_hinst;
+BOOL MMAPI SNDPLAYSOUND(LPCSTR name, UINT flags);    /* snd.c */
+
+HINSTANCE __cdecl mm_hinst;               /* set by mm_libentry (mmfix.asm) */
 static HDRVR joydrv;
 
 int __cdecl __far mm_init(void)
@@ -61,6 +63,12 @@ LRESULT MMAPI MMDRIVERPROC(DWORD id, HDRVR h, UINT msg, LPARAM l1, LPARAM l2)
     switch (msg) {
     case DRV_LOAD:
         load();
+        /* layer 3: the device drivers, MMSYSTEM's window, the start-up
+           sound (3.1 plays SystemStart itself after opening the drivers;
+           UNVERIFIED: whether SystemDefault would stand in for it) */
+        dev_load();
+        snd_init();
+        SNDPLAYSOUND("SystemStart", 0x0001 | 0x0002);
         return 1;
     case DRV_ENABLE:
     case DRV_DISABLE:

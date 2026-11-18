@@ -224,8 +224,8 @@ static void caps(const char *what, CAPSFN f, UINT n)
     r = f(0, NULL, 80);
     lg("%sGetDevCaps(0, NULL, 80) = %u", (LPSTR)what, r);
     flush();
-    /* (0001:0000 is handed to the driver too, and SNDBLST2.DRV is not
-       well afterwards: not tried) */
+    /* (0001:0000 is handed to the driver too; that, and the error texts
+       given 0001:0000, left 3.1 unstable later on: not tried) */
 }
 
 static void sec_numbering(void)
@@ -312,8 +312,6 @@ static void errtext(const char *what, ERRFN f)
         lg("%sGetErrorText(40, NULL, 128) = %u", (LPSTR)what, r);
         r = f(2, NULL, 128);
         lg("%sGetErrorText(2, NULL, 128) = %u", (LPSTR)what, r);
-        r = f(2, (LPSTR)0x00010000L, 128);
-        lg("%sGetErrorText(2, 0001:0000, 128) = %u", (LPSTR)what, r);
     }
     flush();
 }
@@ -435,6 +433,85 @@ static void wopen(const char *what, UINT id, LPWAVEFORMAT f, DWORD cb, DWORD ins
     flush();
 }
 
+/* the header checks: prepare, unprepare and write (add) with bad
+   headers, sizes and flags, nothing playing */
+typedef UINT (FAR PASCAL *HDRFN)(HWAVEOUT, LPWAVEHDR, UINT);
+
+static void hdrtry(const char *what, HDRFN f, HWAVEOUT h, LPWAVEHDR p, UINT size)
+{
+    UINT r = f(h, p, size);
+    lg("  %s = %u, %s", (LPSTR)what, r, (LPSTR)(p ? wflags(p) : "-"));
+    flush();
+}
+
+static void hdrmatrix(HWAVEOUT h, int in)
+{
+    static const DWORD fl[] = { WHDR_DONE, WHDR_INQUEUE, WHDR_BEGINLOOP | WHDR_ENDLOOP, 0x20,
+                                0x100, 0x80000000L, WHDR_PREPARED, WHDR_PREPARED | WHDR_DONE,
+                                WHDR_PREPARED | WHDR_INQUEUE, WHDR_PREPARED | 0x100 };
+    HDRFN prep = in ? (HDRFN)waveInPrepareHeader : (HDRFN)waveOutPrepareHeader;
+    HDRFN unprep = in ? (HDRFN)waveInUnprepareHeader : (HDRFN)waveOutUnprepareHeader;
+    HDRFN wr = in ? (HDRFN)waveInAddBuffer : (HDRFN)waveOutWrite;
+    char b[60];
+    int k;
+    UINT r;
+    lg("header checks (%s):", (LPSTR)(in ? "waveIn" : "waveOut"));
+    sethdr(wh1, data1, 1102, 0, 0);
+    hdrtry("prepare(NULL)", prep, h, NULL, sizeof(WAVEHDR));
+    hdrtry("unprepare(NULL)", unprep, h, NULL, sizeof(WAVEHDR));
+    hdrtry("write(NULL)", wr, h, NULL, sizeof(WAVEHDR));
+    hdrtry("prepare(size 0)", prep, h, wh1, 0);
+    hdrtry("prepare(size 31)", prep, h, wh1, sizeof(WAVEHDR) - 1);
+    hdrtry("prepare(size 33)", prep, h, wh1, sizeof(WAVEHDR) + 1);
+    hdrtry("unprepare(size 31)", unprep, h, wh1, sizeof(WAVEHDR) - 1);
+    hdrtry("write(size 31)", wr, h, wh1, sizeof(WAVEHDR) - 1);
+    hdrtry("write(not prepared)", wr, h, wh1, sizeof(WAVEHDR));
+    hdrtry("unprepare(not prepared)", unprep, h, wh1, sizeof(WAVEHDR));
+    for (k = 0; k < sizeof fl / sizeof fl[0]; k++) {
+        sethdr(wh1, data1, 1102, fl[k], 0);
+        wsprintf(b, "prepare(flags %08lX)", fl[k]);
+        hdrtry(b, prep, h, wh1, sizeof(WAVEHDR));
+        if (wh1->dwFlags & WHDR_PREPARED) {
+            wsprintf(b, "unprepare(flags %08lX)", wh1->dwFlags);
+            hdrtry(b, unprep, h, wh1, sizeof(WAVEHDR));
+        }
+        sethdr(wh1, data1, 1102, fl[k], 0);
+        wsprintf(b, "unprepare(flags %08lX)", fl[k]);
+        hdrtry(b, unprep, h, wh1, sizeof(WAVEHDR));
+    }
+    sethdr(wh1, NULL, 1102, 0, 0);
+    hdrtry("prepare(data NULL)", prep, h, wh1, sizeof(WAVEHDR));
+    if (wh1->dwFlags & WHDR_PREPARED)
+        hdrtry("unprepare(data NULL)", unprep, h, wh1, sizeof(WAVEHDR));
+    sethdr(wh1, data1, 0, 0, 0);
+    hdrtry("prepare(length 0)", prep, h, wh1, sizeof(WAVEHDR));
+    if (wh1->dwFlags & WHDR_PREPARED)
+        hdrtry("unprepare(length 0)", unprep, h, wh1, sizeof(WAVEHDR));
+    sethdr(wh1, data1, 1102, 0, 0);
+    hdrtry("prepare", prep, h, wh1, sizeof(WAVEHDR));
+    hdrtry("prepare again", prep, h, wh1, sizeof(WAVEHDR));
+    /* a prepared header with other flags given to write (nothing goes
+       out: the header is taken back by a reset) */
+    {
+        static const DWORD wf[] = { WHDR_INQUEUE, 0x100, WHDR_DONE, 0x80000000L };
+        for (k = 0; k < sizeof wf / sizeof wf[0]; k++) {
+            wh1->dwFlags = WHDR_PREPARED | wf[k];
+            wsprintf(b, "write(flags %08lX)", wh1->dwFlags);
+            r = wr(h, wh1, sizeof(WAVEHDR));
+            lg("  %s = %u, %s", (LPSTR)b, r, (LPSTR)wflags(wh1));
+            flush();
+            if (!r) {
+                r = in ? waveInReset((HWAVEIN)h) : waveOutReset(h);
+                waitfor(&wh1->dwFlags, WHDR_DONE, 3000);
+                lg("  reset = %u, %s", r, (LPSTR)wflags(wh1));
+                flush();
+            }
+        }
+    }
+    wh1->dwFlags = WHDR_PREPARED;
+    hdrtry("unprepare", unprep, h, wh1, sizeof(WAVEHDR));
+}
+
 static void sec_waveout(void)
 {
     HWAVEOUT h, h2;
@@ -505,39 +582,7 @@ static void sec_waveout(void)
     r = waveOutGetID((HWAVEOUT)dev_hwnd, &id);
     lg("waveOutGetID(a window) = %u", r);
     flush();
-    /* headers */
-    sethdr(wh1, data1, 2205, 0, 0);
-    r = waveOutPrepareHeader(h, NULL, sizeof(WAVEHDR));
-    lg("waveOutPrepareHeader(NULL) = %u", r);
-    flush();
-    r = waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR) - 1);
-    lg("waveOutPrepareHeader(size 31) = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutPrepareHeader(h, wh1, 0);
-    lg("waveOutPrepareHeader(size 0) = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR) + 8);
-    lg("waveOutPrepareHeader(size 40) = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutUnprepareHeader(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutUnprepareHeader = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutUnprepareHeader(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutUnprepareHeader again = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutWrite(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutWrite(not prepared) = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    sethdr(wh1, data1, 2205, WHDR_DONE | WHDR_INQUEUE | 0x0100, 0);
-    r = waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutPrepareHeader(flags 0111) = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutPrepareHeader again = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
-    r = waveOutUnprepareHeader(h, wh1, sizeof(WAVEHDR));
-    lg("waveOutUnprepareHeader = %u, %s", r, (LPSTR)wflags(wh1));
-    flush();
+    hdrmatrix(h, 0);
     sethdr(wh1, data1, 2205, 0, 0);
     sethdr(wh2, data2, 1103, 0, 0);
     r = waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR));
@@ -560,8 +605,6 @@ static void sec_waveout(void)
     lg("waveOutUnprepareHeader(2, queued) = %u, %s", r, (LPSTR)wflags(wh2));
     r = waveOutWrite(h, wh1, sizeof(WAVEHDR));
     lg("waveOutWrite(1 again, queued) = %u, %s", r, (LPSTR)wflags(wh1));
-    r = waveOutClose(h);
-    lg("waveOutClose(playing) = %u", r);
     flush();
     waitfor(&wh2->dwFlags, WHDR_DONE, 3000);
     lg("played: 1 %s; 2 %s", (LPSTR)wflags(wh1), (LPSTR)wflags(wh2));
@@ -743,6 +786,26 @@ static void sec_waveout(void)
         lg("waveOutClose = %u", waveOutClose(h));
         flush();
     }
+    /* closing while a buffer plays */
+    wopen("function", 0, (LPWAVEFORMAT)&fmt11, (DWORD)dev_cb, 0x5A5A0007L, CALLBACK_FUNCTION, &h, "hwo");
+    if (!waveOutGetID(h, &id)) {
+        sethdr(wh1, data1, 2205, 0, 0);
+        waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR));
+        r = waveOutWrite(h, wh1, sizeof(WAVEHDR));
+        lg("waveOutWrite = %u", r);
+        r = waveOutClose(h);
+        lg("waveOutClose(playing) = %u, %s", r, (LPSTR)wflags(wh1));
+        flush();
+        if (r) {
+            lg("waveOutReset = %u", waveOutReset(h));
+            lg("waveOutUnprepareHeader = %u", waveOutUnprepareHeader(h, wh1, sizeof(WAVEHDR)));
+            lg("waveOutClose = %u", waveOutClose(h));
+        } else {
+            waitfor(&wh1->dwFlags, WHDR_DONE, 3000);
+            lg("after: %s", (LPSTR)wflags(wh1));
+        }
+        flush();
+    }
     /* last: the device stays open, the handle nowhere */
     wopen("NULL handle pointer", 0, (LPWAVEFORMAT)&fmt11, 0, 0, 0, NULL, 0);
 }
@@ -777,6 +840,7 @@ static void sec_wavein(void)
         return;
     id = 0xEEEE;
     { UINT gr = waveInGetID(h, &id); lg("waveInGetID = %u, %04X", gr, id); }
+    hdrmatrix((HWAVEOUT)h, 1);
     sethdr(wh1, data1, 1102, 0, 0);
     sethdr(wh2, data2, 1103, 0, 0);
     r = waveInAddBuffer(h, wh1, sizeof(WAVEHDR));

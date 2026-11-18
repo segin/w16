@@ -44,6 +44,7 @@ extern SENDDRIVERMESSAGE                ; USER.251
 extern GETDRIVERMODULEHANDLE            ; USER.254
 extern DEFDRIVERPROC                    ; USER.255
 extern _mm_init                         ; int __cdecl __far mm_init(void)
+extern _mm_hinst                        ; HINSTANCE mm_hinst (core.c)
 extern _mm_makestack                    ; void __cdecl __far mm_makestack(void)
 extern __AHINCR                         ; KERNEL.114
 
@@ -88,6 +89,7 @@ mm_libentry:
         push si
         push di
         push es
+        mov [_mm_hinst], di             ; core.c's mm_hinst
         jcxz .noheap
         push ds
         push word 0
@@ -503,3 +505,18 @@ DRVDEFDRIVERPROC:   jmp far DEFDRIVERPROC
 global OUTPUTDEBUGSTR
 OUTPUTDEBUGSTR:
         retf 4
+
+; WORD __cdecl __far mm_iscode(WORD sel): 1 when sel is a code segment
+; (LAR), as the callback checks need (shell/mmsystem/dev.c)
+global _mm_iscode
+_mm_iscode:
+        push bp
+        mov bp, sp
+        xor ax, ax
+        lar dx, [bp + 6]
+        jnz .r
+        test dx, 0800h
+        jz .r
+        inc ax
+.r:     pop bp
+        retf

@@ -56,6 +56,12 @@ extern FARPROC __cdecl mm_tproc;        /* its DriverProc */
 extern WORD __cdecl mm_istack;          /* the interrupt stack */
 
 /* core.c */
-extern HINSTANCE mm_hinst;
+extern HINSTANCE __cdecl mm_hinst;
+
+/* dev.c */
+void dev_load(void);
+
+/* snd.c */
+void snd_init(void);
 
 #endif
