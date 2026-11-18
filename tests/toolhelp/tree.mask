@@ -74,3 +74,23 @@ s/^TaskGetCSIP\(child\): cs=(KRNL386|KRNL286|\?) /TaskGetCSIP(child): cs=KERNEL 
 # a locked RCDATA resource: under w16's KRNL386 the block's handle is not
 # the one LoadResource returned (UNVERIFIED: which form w16 gives)
 ^GlobalEntryHandle\(RCDATA locked\)
+# the order KERNEL frees a library's code segments in (THD's 2, 3, 4):
+# under 3.1's KRNL286 it changed from one boot to the next, the same
+# KERNEL, in what it reported to a raw hook (section n) as in the
+# FREESEGs: it seems to follow where the segments are in the global heap
+# (UNVERIFIED)
+s/^raw ([0-9]+): 52 bx=seg[2-4] /raw \1: 52 bx=seg* /
+s/FREESEG THD\.seg[2-4] /FREESEG THD.seg* /
+# a code segment's size: 3.1 gives it one byte more than its minimum
+# allocation, rounded (THP's 2B0h-byte segment: 2D0h under KRNL286, 0E0h:
+# 100h under KRNL386), w16 its minimum allocation, rounded (a finding for
+# w16's loader, not TOOLHELP's)
+^ours: CODE data=[0-9]+ size=
+^GlobalEntryModule\(own,[0-9]\): 1 CODE
+^GlobalEntryHandle\(own CS\): 1 CODE
+# the end of a waiting task's frames (w16's USER has one frame more)
+^child trace [0-9]+: 0$
+# KERNEL's registers TOOLHELP does not use (raw hook, section n): 3.1
+# leaves something in CX at 52h and in BX at 65h, w16 0
+s/^(raw [0-9]+: 52 bx=[^ ]+) cx=[^ ]+ es=[^ ]+$/\1 cx=* es=*/
+s/^(raw [0-9]+: 65) bx=[^ ]+ /\1 bx=* /

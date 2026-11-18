@@ -9,3 +9,12 @@
 # global heap is not laid out alike in two boots (the two TOOLHELPs' own
 # segments differ in size)
 ^d walk (ALL|LRU|FREE): [0-9]+ entries$
+# the order KERNEL frees a library's code segments in (THD's 2, 3, 4):
+# under 3.1's KRNL286 it changed from one boot to the next, the same
+# KERNEL, in what it reported to a raw hook (section n) as in the
+# FREESEGs: it seems to follow where the segments are in the global heap
+# (UNVERIFIED)
+s/^raw ([0-9]+): 52 bx=seg[2-4] /raw \1: 52 bx=seg* /
+s/FREESEG THD\.seg[2-4] /FREESEG THD.seg* /
+# likewise the order a program's segments are freed in when it ends
+s/FREESEG (THC\.seg[0-9]|M:THC|child\.dg\.s|\?) task=/FREESEG (THC) task=/
