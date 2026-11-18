@@ -4,7 +4,7 @@
  */
 #ifndef MMC_H
 #define MMC_H
-#define MMC_NREC 16
+#define MMC_NREC 40
 struct mmcrec {                 /* one call of MMCCALLBACK */
     /* ES DS DI SI BP SP BX DX CX AX FLAGS BP0 RETIP RETCS, then the
      * arguments dw2 dw1 dwUser msg h (8 words) */

@@ -20,7 +20,8 @@
  * MMDRVINSTALL and JOYSETCALIBRATION take; MCIPARSECOMMAND faults on
  * 3.1 with zeros), prestack [S] (StackEnter before anything made the interrupt
  * stack: run alone); the MMIO sections F, D, M, B and E (mmio.c's header;
- * not in the default run).
+ * not in the default run); the device sections n, e, w, i, m, j, a, y, x
+ * and b (layer 3: mmdev.c's header; not in the default run).
  *
  * Sources: Windows 3.1 SDK, Multimedia Programmer's Guide (the timer
  * services), Programmer's Reference Vol. 1 ch. 25 and Vol. 2 (installable
@@ -46,6 +47,10 @@ extern WORD getsp(void);
 
 extern WORD FAR PASCAL K_GETEXEPTR(WORD h);     /* KERNEL.133 */
 extern void mmio_sections(char c);              /* mmio.c */
+extern void dev_sections(char c);               /* mmdev.c */
+struct mmcstate FAR *dev_st;                    /* for mmdev.c */
+HWND dev_hwnd;
+FARPROC dev_cb;
 extern BOOL FAR PASCAL MM_DRIVERCALLBACK(DWORD cb, WORD flags, WORD dev, WORD msg,
                                          DWORD user, DWORD dw1, DWORD dw2); /* .31 */
 extern WORD FAR PASCAL MM_TASKCREATE(FARPROC f, WORD FAR *ph, DWORD inst); /* .900 */
@@ -466,6 +471,9 @@ int __cdecl __far tmain(void)
     wc.lpszClassName = "MmpWnd";
     RegisterClass(&wc);
     hwnd = CreateWindow("MmpWnd", "MMP", WS_OVERLAPPED, 0, 0, 100, 50, 0, 0, hi, NULL);
+    dev_st = st;
+    dev_hwnd = hwnd;
+    dev_cb = cb;
     pump();
     for (; *a; a++) {
         switch (*a) {
@@ -479,6 +487,8 @@ int __cdecl __far tmain(void)
         case 'o': lg("== ods"); sec_ods(); break;
         case 'p': lg("== pops"); sec_pops(); break;
         case 'F': case 'D': case 'M': case 'B': case 'E': mmio_sections(*a); break;
+        case 'n': case 'e': case 'w': case 'i': case 'm': case 'j': case 'a': case 'y':
+        case 'x': case 'b': case 'l': case 'z': dev_sections(*a); break;
         }
         pump();
     }

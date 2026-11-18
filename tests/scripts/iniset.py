@@ -1,10 +1,24 @@
 import sys
 # iniset.py FILE SECTION:KEY=VALUE ...: set keys in a CRLF .INI file (tests)
 # SECTION:+KEY=VALUE adds the line at the section's end even when the key
-# is there already (e.g. one more [386Enh] device=)
+# is there already (e.g. one more [386Enh] device=); SECTION:-KEY= removes
+# the key's lines
 path = sys.argv[1]
 for spec in sys.argv[2:]:
     sec, kv = spec.split(':', 1)
+    if kv.startswith('-'):
+        key = kv[1:].split('=', 1)[0].strip().lower()
+        lines = open(path, 'rb').read().decode('latin-1').split('\r\n')
+        out, cur = [], None
+        for l in lines:
+            s = l.strip()
+            if s.startswith('['):
+                cur = s[1:s.find(']')].lower()
+            elif cur == sec.lower() and '=' in s and s.split('=')[0].strip().lower() == key:
+                continue
+            out.append(l)
+        open(path, 'wb').write('\r\n'.join(out).encode('latin-1'))
+        continue
     key, val = kv.split('=', 1)
     if key.startswith('+'):
         key = key[1:]

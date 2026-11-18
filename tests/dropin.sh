@@ -22,7 +22,8 @@
 #                are made), e.g. a test
 #                program; DST "-" deletes SRC (a path under C:\) instead
 #     -i S:K=V   set key K to V in section S of SYSTEM.INI (repeatable;
-#                S:+K=V adds another K line, e.g. 386Enh:+device=x.386);
+#                S:+K=V adds another K line, e.g. 386Enh:+device=x.386;
+#                S:-K= removes K);
 #                -i WIN.INI:S:K=V edits WIN.INI instead
 #     -s PNG     also take a screenshot (DOSBox on a virtual X display,
 #                tests/xvfb.sh, never the user's desktop) once Windows has
@@ -200,9 +201,9 @@ printf '%s\n' "$inis" | while IFS= read -r f; do
     WIN.INI:*) ini=WIN.INI f=${f#WIN.INI:} ;;
     *) ini=SYSTEM.INI ;;
     esac
-    # S:+K=V: one more K line in S (tests/scripts/iniset.py)
+    # S:+K=V: one more K line in S; S:-K=: K removed (tests/scripts/iniset.py)
     case $f in
-    *:+*) python3 -I "$root/tests/scripts/iniset.py" "$work/c/$wdir/$ini" "$f"; continue ;;
+    *:+*|[!:]*:-*) python3 -I "$root/tests/scripts/iniset.py" "$work/c/$wdir/$ini" "$f"; continue ;;
     esac
     python3 - "$work/c/$wdir/$ini" "$f" <<'PY'
 import sys

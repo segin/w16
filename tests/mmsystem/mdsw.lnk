@@ -1,0 +1,10 @@
+# MDSW*.DRV (tests/mmsystem/mds.c, mdsent.asm), a logging pass-through
+# device driver with the entries of a wave driver that has MIDI entries
+# too (SNDBLST2.DRV, Creative's SB16SND.DRV); the Makefile adds the module
+# name. Code and data fixed: MMSYSTEM may call it at interrupt time.
+@tests/mmsystem/mds.lnk
+export DRIVERPROC.1 resident
+export WODMESSAGE.2
+export WIDMESSAGE.3
+export MODMESSAGE.4
+export MIDMESSAGE.5

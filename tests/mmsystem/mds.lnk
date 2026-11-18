@@ -1,0 +1,8 @@
+# The part of every MDS*.DRV variant's wlink directives (mdsw.lnk,
+# mdsf.lnk, mdsm.lnk, mdsa.lnk): tests/mmsystem/mds.c, mdsent.asm.
+@tests/apps/dll.lnk
+segment type code fixed preload
+segment type data fixed preload
+export WEP.6 resident
+import MLREGISTER MMSYSLOG.MLREGISTER
+import MLCALL MMSYSLOG.MLCALL

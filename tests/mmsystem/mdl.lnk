@@ -1,0 +1,38 @@
+# MMSYSLOG.DLL (tests/mmsystem/mdl.c, mdlent.asm), the records of the
+# logging pass-through device drivers MDS*.DRV, and what a driver whose
+# imports were renamed from MMSYSTEM calls (passed on to MMSYSTEM by the
+# same ordinals). Code and data fixed: used at interrupt time.
+@tests/apps/dll.lnk
+option modname=MMSYSLOG
+segment type code fixed preload
+segment type data fixed preload
+export WEP.1 resident
+export DRIVERCALLBACK.31
+export STACKENTER.32
+export STACKLEAVE.33
+export MIDIOUTGETNUMDEVS.201
+export MIDIOUTGETDEVCAPS.202
+export MIDIOUTOPEN.204
+export MIDIOUTCLOSE.205
+export MIDIOUTPREPAREHEADER.206
+export MIDIOUTUNPREPAREHEADER.207
+export MIDIOUTSHORTMSG.208
+export MIDIOUTLONGMSG.209
+export MIDIOUTRESET.210
+export MIDIOUTCACHEPATCHES.213
+export MIDIOUTCACHEDRUMPATCHES.214
+export MIDIOUTMESSAGE.216
+export TIMEGETSYSTEMTIME.601
+export TIMESETEVENT.602
+export TIMEKILLEVENT.603
+export TIMEBEGINPERIOD.605
+export TIMEENDPERIOD.606
+export TIMEGETTIME.607
+export MLREGISTER.1001
+export MLCALL.1002
+export MLDUMP.1003
+export MLNAME.1004
+export MLPROBE.1005
+export MLQUIET.1006
+export MLCOUNT.1007
+import K_GETEXEPTR KERNEL.133

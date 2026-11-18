@@ -1,0 +1,8 @@
+# MDSF*.DRV (tests/mmsystem/mds.c), a logging pass-through device driver
+# with the entries of Creative's SB16FM.DRV (MIDI out and in, auxiliary);
+# the Makefile adds the module name.
+@tests/mmsystem/mds.lnk
+export DRIVERPROC.1 resident
+export MODMESSAGE.2
+export MIDMESSAGE.3
+export AUXMESSAGE.4
