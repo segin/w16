@@ -105,7 +105,7 @@ WIN $mode > C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout ${REFRUN_TIMEOUT:-120} $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 ${REFRUN_TIMEOUT:-120} $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
 # the files asked for are collected even after a timeout (to see how far
 # a hung session got)
 if [ -n "${REFRUN_OUT:-}" ]; then

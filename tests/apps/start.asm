@@ -32,6 +32,9 @@ global _entry_regs, _init_regs
 _entry_regs     times 11 dw 0
 ; {ax, bx, cx, dx, si, di, es}
 _init_regs      times 7 dw 0
+; BP and SP after InitTask (tests/toolhelp/thp.c: stack traces)
+global _init_bpsp
+_init_bpsp      times 2 dw 0
 
 segment _TEXT
 global start
@@ -55,6 +58,8 @@ start:
         mov [_init_regs + 8 wrt DGROUP], si
         mov [_init_regs + 10 wrt DGROUP], di
         mov [_init_regs + 12 wrt DGROUP], es
+        mov [_init_bpsp + 0 wrt DGROUP], bp
+        mov [_init_bpsp + 2 wrt DGROUP], sp
         call far _tmain
         mov ah, 4Ch
         int 21h

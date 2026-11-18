@@ -1,0 +1,7 @@
+# wlink directives for THC.EXE, the TOOLHELP.DLL probe's child (tests/
+# toolhelp/thc.c)
+@tests/apps/app.lnk
+option stack=8k
+segment type code preload moveable
+segment type data preload moveable
+option packcode=0
