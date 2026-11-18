@@ -205,10 +205,15 @@
 #              (tests/qtplay.sh; the installer copied in at test time from
 #              $W16_QTDIR, default ~/Downloads/qtw16; skipped without it):
 #              stock 3.1 against w16's install tree laid over it as a user
-#              does (KRNL386): the Movie Player's window, the movie played,
-#              its last frame 0 pixels and its length within 2 s of 3.1's.
-#              Until 2026-11-17 w16 hung for good there (docs/notes/
-#              quicktime-handover.md)
+#              does (KRNL386; part over), and against the tree alone as
+#              C:\W16 (parts tree, KRNL286, and tree386): the Movie
+#              Player's window, the movie played, its last frame 0 pixels
+#              and its length within 2 s of 3.1's; then the close sequence
+#              (close and reopen the movie, pause, File > Exit, start
+#              again, Alt+F4, Exit Windows) lived through on both sides.
+#              Until 2026-11-17 w16 hung for good there, until 2026-11-18
+#              closing the player on the tree alone ended Windows (docs/
+#              notes/quicktime-handover.md)
 #   mmsystem   w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
@@ -2548,14 +2553,21 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         elif [ "$r" = ok ]; then echo "ok   mmsystem"
         else echo "FAIL mmsystem: $r ($out)"; fails=$((fails + 1)); fi ;;
     quicktime)
-        # QuickTime's installer and sample movie (tests/qtplay.sh)
-        "$root/tests/qtplay.sh" -o "$out/quicktime" > "$out/quicktime.txt" 2>&1 || true
-        if grep -q '^skip' "$out/quicktime.txt"; then sed -n 's/^skip qtplay/skip quicktime/p' "$out/quicktime.txt"
-        elif grep -q '^ok' "$out/quicktime.txt"; then
-            echo "ok   quicktime: installs and plays its sample movie as on 3.1 ($(grep -m1 '^plays' "$out/quicktime.txt"))"
-        else
-            echo "FAIL quicktime: $(grep -m1 FAIL "$out/quicktime.txt" | sed 's/^FAIL qtplay: //') ($out/quicktime.txt)"; fails=$((fails + 1))
-        fi ;;
+        # QuickTime's installer, sample movie and close sequence
+        # (tests/qtplay.sh): over (w16's tree laid over 3.1), tree (the
+        # tree alone, KRNL286), tree386 (the tree alone, KRNL386)
+        d=$out/quicktime-${part:-over} qto=
+        case ${part:-over} in
+        tree) qto="-T 286" ;;
+        tree386) qto="-T 386" ;;
+        esac
+        # shellcheck disable=SC2086
+        "$root/tests/qtplay.sh" $qto -o "$d" > "$d.txt" 2>&1 || true
+        if grep -q '^ok\|^skip' "$d.txt"; then r=ok
+        else r="${part:-over}: $(grep -m1 FAIL "$d.txt" || echo 'no result') ($d.txt)"; fi
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   quicktime"
+        else echo "FAIL quicktime: $r"; fails=$((fails + 1)); fi ;;
     toolhelp)
         # w16's TOOLHELP.DLL against Microsoft's (tests/toolhelp/thcase.sh)
         d=$out/toolhelp-${part:-ref286}
@@ -4329,6 +4341,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
+    quicktime) echo "$1@over $1@tree $1@tree386" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;

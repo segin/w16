@@ -11,19 +11,29 @@
 # KRNL386). tests/scripts/input/qtplay.txt runs the
 # installer (C:\TMP\QTINSTAL.EXE) from Program Manager, answers its five
 # boxes, lets "Play Sample" start the Movie Player with SAMPLE.MOV, and
-# plays it with Space, a shot every 2 seconds.
+# plays it with Space, a shot every 2 seconds; then closes and reopens the
+# movie, pauses it, ends the player with File > Exit, starts it again from
+# Program Manager, opens the movie, ends it with Alt+F4, and ends Windows
+# (the close sequence: closing the player ended Windows with "Standard
+# Mode: Fault in MS-DOS Extender" on w16's tree alone, 2026-11-18).
+# With -T the w16 side is instead w16's install tree alone (build/w16 as
+# C:\W16, nothing of Microsoft's: tests/dropin.sh -T, the user's setup),
+# QuickTime installed into it the same way.
 #
 # QuickTime is Apple's: its installer is never committed. It is copied in
 # at test time from $W16_QTDIR (default ~/Downloads/qtw16), which must
 # hold QTINSTAL.EXE (what QUICKTIM.EXE or QTEASY16.EXE unpacks); without it
 # the test says so and passes (exit 0, "skip").
 #
-#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-t "FILE ..."] [-R REFDIR]
+#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-t "FILE ..."] [-T 286|386] [-R REFDIR]
 #     -m "FILE ..."  leave these files of the tree out (Microsoft's stay;
 #                    KRNL386.EXE: Microsoft's KRNL386 runs): bisection
 #     -t "FILE ..."  only these files of the tree (e.g. TIMER.DRV: the
 #                    boot-test case timer); everything else, KRNL386 and
 #                    DOSX too, stays Microsoft's
+#     -T 286|386     w16's install tree alone, under its KRNL286 (what
+#                    tests/dropin.sh -T boots: it leaves KRNL386.EXE out) or
+#                    its KRNL386
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # Checks (exit 1 if one fails):
 #   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=30:
@@ -36,7 +46,13 @@
 #     the same rectangle, and the frame (all but the controller's 16 rows)
 #     is identical; the controller's pixels are counted, not checked;
 #   - it takes as long: the first shot showing the last frame is within one
-#     shot (2 s) of 3.1's (printed: "plays in about N s").
+#     shot (2 s) of 3.1's (printed: "plays in about N s");
+#   - the close sequence, on each side: Windows lives through it (no fault
+#     report, no hangwatch report in OUT.TXT) to its last shot; Program
+#     Manager is back the same after File > Exit as after Alt+F4 (c5-exit
+#     and c7-closed equal, and not c4-paused, the player); Exit Windows
+#     ends Windows (WIN returns; w16: "back to DOS, code 0000"). The
+#     screens in between (c1-c8) are saved, not compared.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
 # the installer's boxes differ (docs/notes/quicktime-handover.md, "Left
@@ -44,12 +60,14 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= msfiles= refdir= only=
-while getopts o:m:t:R: opt; do
+out= msfiles= refdir= only= treek=
+while getopts o:m:t:T:R: opt; do
     case $opt in
     o) out=$OPTARG ;;
     m) msfiles=$OPTARG ;;
     t) only=$OPTARG ;;
+    T) treek=$OPTARG
+       case $treek in 286|386) ;; *) echo "-T 286 or -T 386" >&2; exit 2 ;; esac ;;
     R) refdir=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
@@ -88,16 +106,24 @@ k386=$tree/SYSTEM/KRNL386.EXE
 ms KRNL386.EXE && k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
 dx=$tree/SYSTEM/DOSX.EXE
 ms DOSX.EXE && dx=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/DOSX.EXE
+set -- "$@" -3 -K "$k386" -X "$dx"
+if [ -n "$treek" ]; then
+    # the tree alone as C:\W16, its own KERNEL and DOSX; the installer
+    # puts QuickTime there
+    set -- -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" -T "$tree"
+    [ "$treek" = 286 ] || set -- "$@" -3
+fi
 w16opts="$*"
 
+newref=
 if [ -z "$refdir" ]; then
-    refdir=$out/ref
-    "$root/tests/inputrun.sh" -s -b 40 -t 600 "$script" "$refdir" -r -3 \
+    refdir=$out/ref newref=1
+    "$root/tests/inputrun.sh" -s -b 40 -t 900 "$script" "$refdir" -r -3 \
         -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" > "$out/ref.txt" 2>&1 &
 fi
 # shellcheck disable=SC2086
-"$root/tests/inputrun.sh" -s -b 40 -t 600 "$script" "$out/w16" \
-    -3 -K "$k386" -X "$dx" -i w16:hangwatch=30 $w16opts > "$out/w16.txt" 2>&1 || true
+"$root/tests/inputrun.sh" -s -b 40 -t 900 "$script" "$out/w16" \
+    -i w16:hangwatch=30 $w16opts > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
 
@@ -161,5 +187,29 @@ else
         echo "plays in about $(( ${re#0} * 2 )) s on 3.1, $(( ${we#0} * 2 )) s on w16"
     fi
 fi
+# the close sequence (after the movie's end): side NAME DIR
+closed() {
+    o=$2/work/c/OUT.TXT
+    why=$(grep -a -m1 'Fault in MS-DOS Extender\|exception\|no boot progress\|caused a' "$o" 2>/dev/null || true)
+    if [ -n "$why" ]; then
+        fail "the close sequence on $1: $why ($2)"
+    elif [ ! -f "$2/c8-exitwin.png" ]; then
+        fail "the close sequence on $1 did not get to its end ($2/input.log)"
+    elif [ "$(px "$2/c5-exit.png" "$2/c7-closed.png")" != 0 ] ||
+         [ "$(px "$2/c5-exit.png" "$2/c4-paused.png")" = 0 ]; then
+        fail "the close sequence on $1: Program Manager not back the same after File > Exit and Alt+F4 ($2/c5-exit.png, c7-closed.png)"
+    elif ! grep -aq WINEXIT "$o" 2>/dev/null; then
+        fail "the close sequence on $1: Exit Windows did not end Windows ($2)"
+    elif [ "$1" = w16 ] && ! grep -aq 'back to DOS, code 0000' "$o"; then
+        fail "the close sequence on w16: Windows ended with $(grep -a -m1 'back to DOS' "$o" || echo 'no exit message') ($2)"
+    else
+        echo "the close sequence on $1: closed, reopened, paused, File > Exit, Alt+F4, Exit Windows: survived"
+    fi
+}
+if [ -f "$refdir/p15.png" ]; then
+    # a -R run made before the close sequence existed has none
+    [ -z "$newref" ] && [ ! -f "$refdir/c1-closed.png" ] || closed 3.1 "$refdir"
+fi
+[ ! -f "$w/p15.png" ] || closed w16 "$w"
 if [ $fails = 0 ]; then echo "ok   qtplay: QuickTime installs and plays its sample movie as on 3.1 ($out)"; fi
 exit $(( fails > 0 ))
