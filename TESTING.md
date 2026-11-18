@@ -98,11 +98,15 @@ the install tree, w16's modules' versions and Control Panel's Fonts
 applet; the boot-test case `ver` runs them all),
 `tests/drv/drun.sh` (USER's installable drivers: the probe DRP and its
 driver DRT on w16's USER against Microsoft's; the boot-test case
-`drivers`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
+`drivers`), `tests/timer/tscen.sh [/S|/3]` (w16's TIMER.DRV against
+Microsoft's under Microsoft's MMSYSTEM: the probe TPR's log, plain and
+with the logging driver TMS.DRV between them, compared by
+`tests/timer/tcmp.py`; one run alone: `tests/timer/trun.sh`; the
+boot-test case `timer`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
-`-m FILE` puts Microsoft's file back for bisection; the boot-test case
+`-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case
 `quicktime`),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on

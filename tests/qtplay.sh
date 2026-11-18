@@ -17,9 +17,12 @@
 # hold QTINSTAL.EXE (what QUICKTIM.EXE or QTEASY16.EXE unpacks); without it
 # the test says so and passes (exit 0, "skip").
 #
-#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-R REFDIR]
+#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-t "FILE ..."] [-R REFDIR]
 #     -m "FILE ..."  leave these files of the tree out (Microsoft's stay;
 #                    KRNL386.EXE: Microsoft's KRNL386 runs): bisection
+#     -t "FILE ..."  only these files of the tree (e.g. TIMER.DRV: the
+#                    boot-test case timer); everything else, KRNL386 and
+#                    DOSX too, stays Microsoft's
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # Checks (exit 1 if one fails):
 #   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=30:
@@ -40,11 +43,12 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= msfiles= refdir=
-while getopts o:m:R: opt; do
+out= msfiles= refdir= only=
+while getopts o:m:t:R: opt; do
     case $opt in
     o) out=$OPTARG ;;
     m) msfiles=$OPTARG ;;
+    t) only=$OPTARG ;;
     R) refdir=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
@@ -60,7 +64,12 @@ mkdir -p "$out"
 tree=$root/build/w16
 [ -f "$tree/WIN.COM" ] || { echo "no $tree (make install-tree)" >&2; exit 2; }
 script=$root/tests/scripts/input/qtplay.txt
-ms() { case " $msfiles " in *" $1 "*) return 0 ;; esac; return 1; }
+ms() {
+    case " $msfiles " in *" $1 "*) return 0 ;; esac
+    [ -n "$only" ] || return 1
+    case " $only " in *" $1 "*) return 1 ;; esac
+    return 0
+}
 
 # the w16 side: the tree over the reference install
 set -- -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE"

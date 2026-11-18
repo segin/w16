@@ -209,6 +209,15 @@
 #              its last frame 0 pixels and its length within 2 s of 3.1's.
 #              Until 2026-11-17 w16 hung for good there (docs/notes/
 #              quicktime-handover.md)
+#   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
+#              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
+#              Microsoft's TIMER.DRV and with w16's, plain and with the
+#              logging driver TMS.DRV between them (tests/timer/tscen.sh,
+#              tcmp.py): parts s (Standard mode) and 3 (386 Enhanced mode,
+#              its documented differences shown); qt: QuickTime's sample
+#              movie on stock 3.1 with only w16's TIMER.DRV against stock
+#              3.1 (tests/qtplay.sh -t TIMER.DRV; skipped without
+#              $W16_QTDIR)
 #   ver        w16's VER.DLL (ARCHITECTURE.md 20): the probe VRP.EXE
 #              (tests/ver/vrp.c, every function on files made at test time)
 #              as the shell with Microsoft's VER.DLL and with w16's, the
@@ -663,7 +672,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2449,6 +2458,24 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else
             echo "FAIL drivers: $(grep -m1 FAIL "$out/drivers.txt") ($out/drivers.txt)"; fails=$((fails + 1))
         fi ;;
+    timer)
+        # w16's TIMER.DRV against Microsoft's under Microsoft's MMSYSTEM
+        r=ok
+        d=$out/timer-${part:-s}
+        case ${part:-s} in
+        s|3)
+            "$root/tests/timer/tscen.sh" -o "$d" "/$(echo "${part:-s}" | tr s S)" > "$d.txt" 2>&1 ||
+                r="$part: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)" ;;
+        qt)
+            "$root/tests/qtplay.sh" -t TIMER.DRV -o "$d" > "$d.txt" 2>&1 || true
+            if grep -q '^skip' "$d.txt"; then r=ok
+            elif ! grep -q '^ok' "$d.txt"; then
+                r="qt: $(grep -m1 FAIL "$d.txt" | sed 's/^FAIL qtplay: //') ($d.txt)"
+            fi ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   timer"
+        else echo "FAIL timer: $r ($out)"; fails=$((fails + 1)); fi ;;
     quicktime)
         # QuickTime's installer and sample movie (tests/qtplay.sh)
         "$root/tests/qtplay.sh" -o "$out/quicktime" > "$out/quicktime.txt" 2>&1 || true
@@ -4218,6 +4245,7 @@ caseparts() {
     ddeml) printf '%s@tree286 %s@tree386 ' "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
+    timer) echo "$1@s $1@3 $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
@@ -4280,6 +4308,9 @@ partsummary() {
     ver)
         if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
+    timer)
+        if [ $pbad = 0 ]; then echo "ok   timer: TPR's log and TMS's record of every message as with Microsoft's TIMER.DRV (Standard, 386 Enhanced), the timings within their limits; QuickTime's movie as on 3.1"
+        else echo "FAIL timer: $pfirst ($out)"; fi ;;
     lzexpand)
         if [ $pbad = 0 ]; then echo "ok   lzexpand: LZEXPAND's probe log as with Microsoft's (Standard and 386 Enhanced mode, the tree under both kernels, VerInstallFile), and its quirk sections too"
         else echo "FAIL lzexpand: $pfirst ($out)"; fi ;;
