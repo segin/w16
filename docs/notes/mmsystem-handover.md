@@ -173,7 +173,14 @@ lists are evaluated right to left; the -W wait needs 40 s (mrun's
 default) on a loaded host.
 
 Results (2026-11-18): mdscen.sh, all ten cases identical after the masks;
-mprog.sh: every screen of the three programs 0 pixels off.
+mprog.sh: every screen of the three programs 0 pixels off. Full run
+(remote-test.sh, make test and the whole boot test): make test passes;
+boot test 121 ok, 4 failures: ddeml (conn) and lzexpand (quirks), known
+on master; taskman@tree (known to fail now and then); mmsystem@timer
+(timer-shim: one timeKillEvent of a 500 ms one-shot event answered 97,
+the event already fired, with w16's TIMER.DRV under load; the part
+passed when run again alone: a timing flake of w16's TIMER.DRV, not
+of layer 3, to look at).
 
 Not done (23.5): Media Player (needs MCI: layer 4), a joystick driver,
 QuickTime's sound (qtplay runs without a wave driver), w16's MMSOUND.DRV
