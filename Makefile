@@ -2579,6 +2579,39 @@ install-tree: $(W16SYS)/VER.DLL
 $(W16SYS)/VER.DLL: $(DOS)/VER.DLL
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- TOOLHELP.DLL (shell/toolhelp/; ARCHITECTURE.md 22): large model,
+# SS != DS (it runs on its callers' stacks), every entry loads its DS
+THCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=TH_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+THOBJS   := $(B)/toolhelp/entry.o $(B)/toolhelp/toolhelp.o $(B)/toolhelp/global.o $(B)/gdi/i4.o
+toolhelp: $(DOS)/TOOLHELP.DLL
+dos: $(DOS)/TOOLHELP.DLL
+.PHONY: toolhelp
+$(B)/toolhelp/%.o: shell/toolhelp/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/toolhelp/%.o: shell/toolhelp/%.c shell/toolhelp/th.h
+	@mkdir -p $(@D)
+	$(WCC) $(THCFLAGS) -fo=$@ $<
+$(B)/toolhelp/thver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Windows Debug/Tool helper library" \
+	    FileVersion=3.10 InternalName=TOOLHELP \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=TOOLHELP.DLL ProductName=w16 ProductVersion=3.10
+$(B)/toolhelp/toolhelp.res: shell/toolhelp/toolhelp.rc $(B)/toolhelp/thver.bin
+	@mkdir -p $(@D)
+	cd $(B)/toolhelp && $(WRC) -q -r -bt=windows -fo=toolhelp.res $(CURDIR)/shell/toolhelp/toolhelp.rc
+$(DOS)/TOOLHELP.DLL: $(THOBJS) $(B)/toolhelp/toolhelp.res shell/toolhelp/toolhelp.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/toolhelp/toolhelp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/toolhelp/toolhelp.map option resource=$(B)/toolhelp/toolhelp.res file { $(THOBJS) }
+	python3 tools/nemark.py $@ 3.00 8309 08
+install-tree: $(W16SYS)/TOOLHELP.DLL
+$(W16SYS)/TOOLHELP.DLL: $(DOS)/TOOLHELP.DLL
+	@mkdir -p $(@D)
+	cp $< $@
 # ---- LZP.EXE, the LZEXPAND probe (tests/lzexpand/; ARCHITECTURE.md,
 # LZEXPAND): tests/lzexpand/lzrun.sh, tests/lzexpand/lzscen.sh ----
 lzprobes: $(DOS)/LZP.EXE
@@ -2603,6 +2636,36 @@ $(DOS)/VRP.EXE: $(B)/tests/start.o $(B)/ver/tests/vrp.o tests/apps/app.lnk tests
 	@mkdir -p $(@D)
 	$(WLINK) @tests/ver/vrp.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/ver/tests/vrp.map file { $(B)/tests/start.o $(B)/ver/tests/vrp.o }
+# ---- THP.EXE, THC.EXE and THD.DLL: the TOOLHELP.DLL probe, its child and
+# its library (tests/toolhelp/; ARCHITECTURE.md 22): tests/toolhelp/thrun.sh
+thprobes: $(DOS)/THP.EXE $(DOS)/THC.EXE $(DOS)/THD.DLL
+dos: $(DOS)/THP.EXE $(DOS)/THC.EXE $(DOS)/THD.DLL
+.PHONY: thprobes
+$(B)/toolhelp/tests/%.o: tests/toolhelp/%.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(B)/toolhelp/tests/%.o: tests/toolhelp/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/toolhelp/tests/thp.res: tests/toolhelp/thp.rc
+	@mkdir -p $(@D)
+	cd $(B)/toolhelp/tests && $(WRC) -q -r -bt=windows -fo=thp.res $(CURDIR)/tests/toolhelp/thp.rc
+THPOBJS := $(B)/toolhelp/tests/thstart.o $(B)/toolhelp/tests/thp.o $(B)/toolhelp/tests/thps.o
+$(DOS)/THP.EXE: $(THPOBJS) $(B)/toolhelp/tests/thp.res tests/apps/app.lnk tests/toolhelp/thp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/toolhelp/thp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/toolhelp/tests/thp.map option resource=$(B)/toolhelp/tests/thp.res \
+	    file { $(THPOBJS) }
+THCOBJS := $(B)/toolhelp/tests/thstart.o $(B)/toolhelp/tests/thc.o $(B)/toolhelp/tests/thps.o \
+           $(B)/toolhelp/tests/thcs.o
+$(DOS)/THC.EXE: $(THCOBJS) tests/apps/app.lnk tests/toolhelp/thc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/toolhelp/thc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/toolhelp/tests/thc.map file { $(THCOBJS) }
+$(DOS)/THD.DLL: $(B)/tests/dllstart.o $(B)/toolhelp/tests/thd.o tests/apps/dll.lnk tests/toolhelp/thd.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/toolhelp/thd.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/toolhelp/tests/thd.map file { $(B)/tests/dllstart.o $(B)/toolhelp/tests/thd.o }
 # ---- DRP.EXE and DRT.DLL, the installable-driver probe and its driver
 # (tests/drv/; ARCHITECTURE.md 10.7): tests/drv/drun.sh ----
 drvprobes: $(DOS)/DRP.EXE $(DOS)/DRT.DLL

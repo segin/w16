@@ -1,0 +1,96 @@
+# tree.mask - what tests/toolhelp/thcmp.py leaves out when it compares
+# the probe's log on w16's install tree with w16's TOOLHELP against its
+# log on Windows 3.1 with Microsoft's (tests/toolhelp/thcase.sh, parts
+# tree286 and tree386; ARCHITECTURE.md 22). Every line here is a
+# difference of w16's own modules (its KERNEL, USER, GDI, drivers, fonts),
+# not of TOOLHELP: TOOLHELP reports what is there, and section d shows
+# that Microsoft's TOOLHELP reports the same on w16's tree.
+#
+# ---- the global heap (section g) ----
+# how many blocks there are, and which are in the LRU list: other modules,
+# other blocks
+^walk (ALL|LRU): size!=GlobalSize 0, address!=base [0-9]+$
+^walk LRU: first
+# a program's module table: fixed under w16's KRNL286 (wcLock 4Dh, its
+# handle its selector) and of another size (w16 keeps no copy of the
+# resident names it does not use)
+^ours: MODULE data=0 size=
+^GlobalEntryHandle\(own module\)
+# w16 keeps a copy of a program's DGROUP as loaded, owned by its module
+# (kernel/loader.c, for further instances); Windows 3.1 has a 48-byte
+# (KRNL386: 32-byte) fixed block of the task's instead (UNVERIFIED what)
+^ours: UNKNOWN data=0 size=4[0-9][0-9][0-9][0-9] lock=(77|0) plock=0 flags=0000 heap=0 block=\? owner=M:THP$
+^ours: UNKNOWN data=0 size=(48|32) lock=77 plock=(0|1) flags=0000 heap=0 block=\? owner=T:self$
+# other modules' blocks: w16's KERNEL, USER and GDI are not Microsoft's
+# (their segments, sizes; w16's KERNEL's code is not in the global heap)
+^GlobalEntryHandle\((BurgerMaster|USER|USER DS|KERNEL)\)
+^GlobalEntryModule\((USER|KERNEL|GDI),1\)
+# ---- local heaps (section l) ----
+# GDI's objects: w16's GDI keeps a region in three blocks of its heap,
+# 3.1's in two
+^GDI heap type (6|15)
+# ---- modules (section m) ----
+# the modules Windows loads, their usage counts, KERNEL's file name: 3.1
+# loads more fonts; the reference's KRNL286 is run as KRNL386.EXE
+^module (KERNEL|SYSTEM|KEYBOARD|MOUSE|DISPLAY|SOUND|COMM|GDI|USER|FONTS|OEMFONTS|FIXFONTS|SSERIFE|COURE|SERIFE|SYMBOLE|ROMAN|SCRIPT|MODERN|SMALLE)
+^Module(FindName|FindHandle)\(KERNEL\)
+# ---- classes (section c) ----
+# USER's classes: w16's USER registers its own set, in its own order, and
+# keeps them in its DGROUP (UserSeeUserDo request 4); 3.1's elsewhere
+^UserSeeUserDo\(4\)
+^class
+^classes:
+# ---- stack traces (section s) ----
+# a waiting task's frames in KERNEL and USER: other code (the child's own
+# frames are compared)
+^child trace [0-9]+: 1 task=T:child ss=child.dg.s cs=\?\((KRNL386|KRNL286|USER|\?)\)
+s/^child trace [0-9]+: (1 task=T:child ss=child.dg.s cs=\?\(THC\))/child trace: \1/
+# ---- notifications (sections n, x, k) ----
+# NFYLOADSEG.wType: the segment's flags in the module table, whose high
+# bits w16's KERNEL keeps otherwise (bit 0400h: UNVERIFIED meaning)
+s/ type=[0-9]+ inst=/ type=* inst=/
+# the order in which a program's segments are freed when it ends: w16's
+# KERNEL frees them in segment order
+s/FREESEG (THC\.seg[0-9]|M:THC|child\.dg\.s|\?) task=/FREESEG (THC) task=/
+# ---- task control (section k) ----
+# the frame the scheduler leaves (TaskGetCSIP's address at 12h, BP at 10h
+# are compared through the functions): its other words are KERNEL's own
+# registers; 3.1's scheduler has a task's TDB in DS when it switches
+^child frame
+s/ ds=(T:child|\?)$/ ds=*/
+# TaskGetCSIP: the scheduler's code, in KERNEL, which w16 does not keep in
+# the global heap (no module name for it)
+s/^TaskGetCSIP\(child\): cs=(KRNL386|KRNL286|\?) /TaskGetCSIP(child): cs=KERNEL /
+# ---- information (section i) ----
+# DPMI's largest free block: DOSX's (3.1 under KRNL286: 0) or w16's
+^MemManInfo: largest==
+# ---- section d: counts ----
+^d (walk|modules|classes|stack frames|tasks)
+# ---- KRNL386 only ----
+# a code segment without relocations (THP's fourth) gets 20h bytes more
+# under 3.1's KRNL386 than w16's gives it (UNVERIFIED why)
+^ours: CODE data=4 size=(224|256) 
+^GlobalEntryModule\(own,4\): 1 CODE data=4 size=(224|256) 
+# a locked RCDATA resource: under w16's KRNL386 the block's handle is not
+# the one LoadResource returned (UNVERIFIED: which form w16 gives)
+^GlobalEntryHandle\(RCDATA locked\)
+# the order KERNEL frees a library's code segments in (THD's 2, 3, 4):
+# under 3.1's KRNL286 it changed from one boot to the next, the same
+# KERNEL, in what it reported to a raw hook (section n) as in the
+# FREESEGs: it seems to follow where the segments are in the global heap
+# (UNVERIFIED)
+s/^raw ([0-9]+): 52 bx=seg[2-4] /raw \1: 52 bx=seg* /
+s/FREESEG THD\.seg[2-4] /FREESEG THD.seg* /
+# a code segment's size: 3.1 gives it one byte more than its minimum
+# allocation, rounded (THP's 2B0h-byte segment: 2D0h under KRNL286, 0E0h:
+# 100h under KRNL386), w16 its minimum allocation, rounded (a finding for
+# w16's loader, not TOOLHELP's)
+^ours: CODE data=[0-9]+ size=
+^GlobalEntryModule\(own,[0-9]\): 1 CODE
+^GlobalEntryHandle\(own CS\): 1 CODE
+# the end of a waiting task's frames (w16's USER has one frame more)
+^child trace [0-9]+: 0$
+# KERNEL's registers TOOLHELP does not use (raw hook, section n): 3.1
+# leaves something in CX at 52h and in BX at 65h, w16 0
+s/^(raw [0-9]+: 52 bx=[^ ]+) cx=[^ ]+ es=[^ ]+$/\1 cx=* es=*/
+s/^(raw [0-9]+: 65) bx=[^ ]+ /\1 bx=* /

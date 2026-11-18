@@ -158,30 +158,38 @@ void th_loadsegs(module FAR *m)
     u16 i;
     if (!th_hooked())
         return;
+    /* ES:DI the module name in the module table's resident-name table
+       (observed: ES is the hModule; the entry's ordinal, 0, ends it) */
     for (i = 0; i < m->seg_count; i++)
         notify(0x50, i, m->seg[i].sel, 0, MOD_SEG(m, i)->flags,
-               FP_OFF(m->name), FP_SEG(m->name));
+               NE_HDR(m)->resname_off + 1, m->ne_sel);
 }
 
 /* a DLL's initialisation is next: cs:ip its entry point (0:0 for none) */
 void th_startdll(module FAR *m, u16 cs, u16 ip)
 {
     if (th_hooked())
-        notify(0x64, ip, cs, 0, m->ne_sel, 0, 0);
+        notify(0x64, ip, cs, 0, m->ne_sel, 0, m->ne_sel);    /* ES too (observed) */
 }
 
-/* a module is deleted: the notification, then one per freed segment */
+/* a module is deleted: the notification, then one per freed segment in
+   Windows 3.1's order (tests/toolhelp/thp.c, section n, a library freed
+   and a program ending: its automatic data segment, the module table,
+   then the other segments in order) */
 void th_delmodule(module FAR *m)
 {
-    u16 i;
+    u16 i, dg;
     if (!th_hooked())
         return;
     notify(0x65, 0, 0, 0, 0, 0, m->ne_sel);
-    for (i = 0; i < m->seg_count; i++)
-        if (m->seg[i].hnd)
-            notify(0x52, m->seg[i].sel, 0, 0, 0, 0, 0);
+    dg = m->ne_sel ? NE_HDR(m)->auto_data : 0;
+    if (dg && dg <= m->seg_count && m->seg[dg - 1].hnd)
+        notify(0x52, m->seg[dg - 1].sel, 0, 0, 0, 0, 0);
     if (m->ne_sel)
         notify(0x52, m->ne_sel, 0, 0, 0, 0, 0);
+    for (i = 0; i < m->seg_count; i++)
+        if (m->seg[i].hnd && i + 1 != dg)
+            notify(0x52, m->seg[i].sel, 0, 0, 0, 0, 0);
 }
 
 void th_task_out(void)

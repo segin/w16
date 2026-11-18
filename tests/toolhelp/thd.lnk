@@ -1,0 +1,7 @@
+# wlink directives for THD.DLL, the library the TOOLHELP.DLL probe loads
+# (tests/toolhelp/thd.c)
+@tests/apps/dll.lnk
+option modname=THD
+segment type code preload moveable
+segment type data preload moveable
+option packcode=0

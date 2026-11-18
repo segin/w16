@@ -1,0 +1,8 @@
+# wlink directives for THP.EXE, the TOOLHELP.DLL probe (tests/toolhelp/
+# thp.c): every segment PRELOAD, so that Windows 3.1, which loads
+# segments on demand, has them all in memory as w16 does
+@tests/apps/app.lnk
+option stack=16k
+segment type code preload moveable
+segment type data preload moveable
+option packcode=0

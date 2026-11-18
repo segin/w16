@@ -60,6 +60,10 @@ w16 repository's LICENSE):
                           information of programs and libraries, and
                           lets installers copy a file only when it is
                           not older than the one already there
+  SYSTEM\TOOLHELP.DLL     the tool helper library, which debuggers and
+                          system utilities use: lists of modules,
+                          tasks, classes and memory blocks, stack
+                          traces, notifications and fault handling
   SYSTEM\COMMDLG.DLL      the common dialogs (Open, Save As, Print,
                           Print Setup, Font, Color, Find, Replace)
   SYSTEM\MOUSE.DRV        the mouse driver, for a PS/2 mouse (with a
@@ -127,8 +131,6 @@ SYSTEM subdirectory, as there) without overwriting the files above:
                           and its timer, [drivers] timer=timer.drv:
                           w16's TIMER.DRV; without MMSYSTEM.DLL those
                           lines do nothing),
-                          TOOLHELP.DLL (used by debuggers and system
-                          utilities),
                           the other fonts (*.FON, *.FOT, *.TTF),
                           DRIVERS.CPL and SND.CPL (Control Panel's
                           Drivers and Sound)

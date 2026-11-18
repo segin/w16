@@ -227,22 +227,27 @@ int21_handler:
 
 ; ---------------------------------------------------------------------------
 ; void __cdecl task_switch(u16 far *save, u16 ss, u16 sp)
-; Push the registers a task keeps across a switch (BP, DS, ES, SI, DI, BX,
-; CX, DX), store SS:SP at *save (SP first; not if save is NULL), load the
-; other task's SS:SP and pop its registers: it returns from its own
-; task_switch, or, for a new task, into task_tramp (task.c builds that
-; frame). UNVERIFIED: the registers Windows itself keeps (Pietrek lists
-; BP, DS, SI, DI, AX, CX, ES, BX, DX); AX is not kept here.
+; Push the registers a task keeps across a switch, store SS:SP at *save
+; (SP first; not if save is NULL), load the other task's SS:SP and pop its
+; registers: it returns from its own task_switch, or, for a new task, into
+; task_tramp (task.c builds that frame). The frame a parked task's TDB
+; 02h points at is Windows 3.1's, which TOOLHELP and debuggers read and
+; change (TaskGetCSIP, TaskSetCSIP, TaskSwitch, StackTraceFirst): DX BX
+; ES CX AX DI SI DS (Pietrek, Windows Internals ch. 6, lists these), then
+; BP at 10h and the far address the task goes on at at 12h (Schulman,
+; Undocumented Windows ch. 10; observed under Windows 3.1 with
+; tests/toolhelp/thp.c, section k). AX is not given back to the task.
 global _task_switch
 _task_switch:
         push bp
         mov bp, sp
         push ds
-        push es
         push si
         push di
-        push bx
+        push ax
         push cx
+        push es
+        push bx
         push dx
         mov ax, [bp+10]                 ; ss
         mov dx, [bp+12]                 ; sp
@@ -256,16 +261,17 @@ _task_switch:
         mov ss, ax
         mov sp, dx
         pop dx
-        pop cx
         pop bx
-        pop di
-        pop si
         pop ax                          ; ES: it may name a block freed
         verr ax                         ; since (an ended task's TDB)
         jz .es
         xor ax, ax
 .es:
         mov es, ax
+        pop cx
+        pop ax
+        pop di
+        pop si
         pop ds
         pop bp
         retf
@@ -347,6 +353,23 @@ INITTASK:
         pop ds
         pop es
         popf
+        ; Windows 3.1 returns with a zero word pushed on the caller's stack
+        ; and BP pointing at it (observed with tests/toolhelp/thp.c,
+        ; section s: SP is 2 less than at the call, BP = SP, [BP] = 0), so
+        ; that a chain of frames (a stack trace) ends with the start-up
+        ; code's frame. Moves the return address down a word; no flag
+        ; changes.
+        push ax                         ; the room
+        push ax
+        mov bp, sp                      ; [bp] AX [bp+2] room [bp+4] IP [bp+6] CS
+        mov ax, [bp+4]
+        mov [bp+2], ax
+        mov ax, [bp+6]
+        mov [bp+4], ax
+        mov word [bp+6], 0
+        pop ax
+        mov bp, sp
+        lea bp, [bp+4]                  ; the zero word: SP once returned
         retf
 
 ; ---------------------------------------------------------------------------

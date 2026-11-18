@@ -344,3 +344,25 @@ void register_system_classes(void)
     sysclass("MDIClient", 0, (WNDPROC)MDIClientWndProc, 16,
              (HBRUSH)(COLOR_APPWORKSPACE + 1), IDC_ARROW);
 }
+
+/* UserSeeUserDo (USER.216): TOOLHELP's way into USER's default heap
+   (Schulman, Undocumented Windows ch. 6, facts only): request 1
+   LocalAlloc(p1, p3) in USER's heap, 2 LocalFree(p1), 3 LocalCompact(p3),
+   4 USER's data segment, 5 the first class of the class list (ClassFirst,
+   TOOLHELP); any other -1. The result in the low word, the high word 0.
+   Requests 4 and 5 as Windows 3.1's (tests/toolhelp/thp.c, section c). */
+static WORD cur_ds(void);
+#pragma aux cur_ds = "mov ax, ds" value [ax];
+
+DWORD WINAPI U_USERSEEUSERDO(WORD req, WORD p1, WORD p2, WORD p3)
+{
+    (void)p2;
+    switch (req) {
+    case 1: return (WORD)LocalAlloc(p1, p3);
+    case 2: return (WORD)LocalFree((HLOCAL)p1);
+    case 3: return LocalCompact(p3);
+    case 4: return cur_ds();
+    case 5: return classes;
+    }
+    return 0xFFFFFFFFUL;
+}

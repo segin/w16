@@ -655,21 +655,24 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
         dsize = 0xFFF0UL;
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
     {
-        u16 FAR *s = MK_FP(dg_sel, sp - 24);
-        s[11] = m->seg[h->cs - 1].sel;  /* entry CS:IP */
-        s[10] = h->ip;
-        s[9] = FP_SEG((void FAR *)task_tramp);
-        s[8] = FP_OFF((void FAR *)task_tramp);
-        s[7] = 0;                       /* BP */
-        s[6] = dg_sel;                  /* DS */
-        s[5] = pdb;                     /* ES */
-        s[4] = hprev;                   /* SI */
-        s[3] = dg_hnd;                  /* DI */
-        s[2] = h->stack_size;           /* BX */
-        s[1] = h->heap_size;            /* CX */
+        /* kentry.asm's frame, Windows 3.1's: DX BX ES CX AX DI SI DS BP,
+           then the address the task goes on at */
+        u16 FAR *s = MK_FP(dg_sel, sp - 26);
+        s[12] = m->seg[h->cs - 1].sel;  /* entry CS:IP */
+        s[11] = h->ip;
+        s[10] = FP_SEG((void FAR *)task_tramp);
+        s[9] = FP_OFF((void FAR *)task_tramp);
+        s[8] = 0;                       /* BP */
+        s[7] = dg_sel;                  /* DS */
+        s[6] = hprev;                   /* SI */
+        s[5] = dg_hnd;                  /* DI */
+        s[4] = 0;                       /* AX */
+        s[3] = h->heap_size;            /* CX */
+        s[2] = pdb;                     /* ES */
+        s[1] = h->stack_size;           /* BX */
         s[0] = 0;                       /* DX */
     }
-    TW(t, TDB_SSSP) = sp - 24;
+    TW(t, TDB_SSSP) = sp - 26;
     TW(t, TDB_SSSP + 2) = dg_sel;
 
     x->self = xsel;
