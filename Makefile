@@ -2267,6 +2267,32 @@ install-tree: $(W16SYS)/MMSOUND.DRV
 $(W16SYS)/MMSOUND.DRV: $(DOS)/MMSOUND.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- TIMER.DRV: w16's multimedia timer driver, module TIMER (drivers/timer;
+# README.md there; ARCHITECTURE.md 21)
+$(B)/timer/timer.o: drivers/timer/timer.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/timer/timerver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 3 --subtype 8 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Multimedia timer driver" \
+	    FileVersion=3.10 InternalName=timer.drv \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=timer.drv ProductName=w16 ProductVersion=3.10
+$(B)/timer/timer.res: drivers/timer/timer.rc $(B)/timer/timerver.bin
+	@mkdir -p $(@D)
+	cd $(B)/timer && $(WRC) -q -r -bt=windows -fo=timer.res $(CURDIR)/drivers/timer/timer.rc
+$(DOS)/TIMER.DRV: $(B)/timer/timer.o $(B)/timer/timer.res drivers/timer/timer.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/timer/timer.lnk name $@ option map=$(B)/timer/timer.map \
+	    option resource=$(B)/timer/timer.res file { $(B)/timer/timer.o }
+	python3 tools/nemark.py $@ 3.10 8309 08
+dos: $(DOS)/TIMER.DRV
+install-tree: $(W16SYS)/TIMER.DRV
+$(W16SYS)/TIMER.DRV: $(DOS)/TIMER.DRV
+	@mkdir -p $(@D)
+	cp $< $@
 # ---- SN1.EXE: the sound driver observed (tests/apps/sn1.c; run by
 # tests/soundprobe.sh with Windows 3.1's MMSOUND.DRV and with w16's)
 $(B)/tests/sn1.o: tests/apps/sn1ref.h tests/apps/tklog.h
@@ -2596,6 +2622,33 @@ $(DOS)/DRT.DLL: $(B)/tests/dllstart.o $(B)/drv/tests/drt.o tests/apps/dll.lnk te
 	@mkdir -p $(@D)
 	$(WLINK) @tests/drv/drt.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/drv/tests/drt.map file { $(B)/tests/dllstart.o $(B)/drv/tests/drt.o }
+# ---- the timer probe (tests/timer/; ARCHITECTURE.md 21): TPR.EXE, its
+# callback DLL TPC.DLL and the logging pass-through driver TMS.DRV;
+# tests/timer/trun.sh, tests/timer/tscen.sh ----
+timerprobes: $(DOS)/TPR.EXE $(DOS)/TPC.DLL $(DOS)/TMS.DRV
+dos: timerprobes
+.PHONY: timerprobes
+$(B)/timer/tests/%.o: tests/timer/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/timer/tests/tpr.o: tests/timer/tpr.c tests/timer/tpc.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+$(B)/timer/tests/%.o: tests/timer/%.c tests/timer/tpc.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(DOS)/TPR.EXE: $(B)/tests/start.o $(B)/timer/tests/tpr.o $(B)/timer/tests/tprs.o tests/apps/app.lnk tests/timer/tpr.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/timer/tpr.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/timer/tests/tpr.map file { $(B)/tests/start.o $(B)/timer/tests/tpr.o $(B)/timer/tests/tprs.o }
+$(DOS)/TPC.DLL: $(B)/tests/dllstart.o $(B)/timer/tests/tpc.o $(B)/timer/tests/tpcs.o tests/apps/dll.lnk tests/timer/tpc.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/timer/tpc.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/timer/tests/tpc.map file { $(B)/tests/dllstart.o $(B)/timer/tests/tpc.o $(B)/timer/tests/tpcs.o }
+$(DOS)/TMS.DRV: $(B)/tests/dllstart.o $(B)/timer/tests/tms.o $(B)/timer/tests/tmsent.o tests/apps/dll.lnk tests/timer/tms.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/timer/tms.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/timer/tests/tms.map file { $(B)/tests/dllstart.o $(B)/timer/tests/tms.o $(B)/timer/tests/tmsent.o }
 # OLESVR.DLL: w16's OLE 1.0 server library (ole/olesvr/); large model,
 # SS != DS (it runs on its callers' stacks)
 OSVCFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=OLESVR_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win

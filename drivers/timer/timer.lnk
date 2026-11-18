@@ -1,0 +1,22 @@
+# wlink directives for w16's TIMER.DRV (drivers/timer/). Object file,
+# resources and output name come from the Makefile. Module name, ordinals,
+# residency and description as Windows 3.1's TIMER.DRV has them (its NE
+# tables, tools/neinfo.py): WEP 1 and DriverProc 2, both resident. Code
+# and data are fixed: the INT 8 handler and DriverProc run at interrupt
+# time.
+format windows dll
+option modname=TIMER
+option description 'timer:Timer'
+option start=libentry
+option quiet
+option map
+option alignment=16
+segment type code fixed preload
+segment type data fixed preload
+export WEP.1 resident
+export DRIVERPROC.2 resident
+import __WINFLAGS KERNEL.178
+import DEFDRIVERPROC USER.255
+import DRIVERCALLBACK MMSYSTEM.31
+import STACKENTER MMSYSTEM.32
+import STACKLEAVE MMSYSTEM.33

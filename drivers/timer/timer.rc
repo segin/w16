@@ -1,0 +1,12 @@
+/*
+ * timer.rc - TIMER.DRV's resources: the string table (string 1, the
+ * driver's name, as Windows 3.1's TIMER.DRV has it; 3.1's string 2 is a
+ * message about VTDAPI.386, which this driver does not use) and the
+ * version resource written by tools/mkver.py (the numbers and file type
+ * 3.1's, 3.10.0.103, an installable driver; the texts w16's).
+ */
+STRINGTABLE
+BEGIN
+    1, "Timer Driver"
+END
+1 16 MOVEABLE PURE "timerver.bin"
