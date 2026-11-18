@@ -1,0 +1,50 @@
+# wlink directives for TOOLHELP.DLL (shell/toolhelp/; ARCHITECTURE.md 22).
+# Names, ordinals and residency are those of Windows 3.1's TOOLHELP
+# (tools/neinfo.py): WEP 1 resident, the functions 50-83. Its code is
+# fixed: the fault handlers and the notification hook run at any time.
+format windows dll
+option modname=TOOLHELP
+option description 'w16 debug and tool helper library'
+option start=th_libentry
+option quiet
+option map
+option heapsize=512
+option alignment=16
+segment type code fixed preload
+segment type data fixed preload
+library windows.lib
+export WEP.1 resident
+export GLOBALHANDLETOSEL.50
+export GLOBALFIRST.51
+export GLOBALNEXT.52
+export GLOBALINFO.53
+export GLOBALENTRYHANDLE.54
+export GLOBALENTRYMODULE.55
+export LOCALINFO.56
+export LOCALFIRST.57
+export LOCALNEXT.58
+export MODULEFIRST.59
+export MODULENEXT.60
+export MODULEFINDNAME.61
+export MODULEFINDHANDLE.62
+export TASKFIRST.63
+export TASKNEXT.64
+export TASKFINDHANDLE.65
+export STACKTRACEFIRST.66
+export STACKTRACECSIPFIRST.67
+export STACKTRACENEXT.68
+export CLASSFIRST.69
+export CLASSNEXT.70
+export SYSTEMHEAPINFO.71
+export MEMMANINFO.72
+export NOTIFYREGISTER.73
+export NOTIFYUNREGISTER.74
+export INTERRUPTREGISTER.75
+export INTERRUPTUNREGISTER.76
+export TERMINATEAPP.77
+export MEMORYREAD.78
+export MEMORYWRITE.79
+export TIMERCOUNT.80
+export TASKSETCSIP.81
+export TASKGETCSIP.82
+export TASKSWITCH.83
