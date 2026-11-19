@@ -168,8 +168,10 @@ The audit's Low list is numbered here in its order (36 items).
 - heapcheck boots (`tools/remote-test.sh -b -e DROPIN_INI=w16:heapcheck=1`, quicktime@over, quicktime@tree386, toolhelp@tree386, all KRNL386): no heapcheck report, Windows ended with code 0 each time (before, KRNL386 stopped at the first free arena after the first sentinel). The two QuickTime parts' screens differed from 3.1's because heapcheck makes everything slow, as documented; toolhelp@tree386 passed.
 - Full boot test at 77756b5: 121 ok, 4 failures, all known on master 9ed316c: ddeml (conn), lzexpand (quirks), taskman (tree, 21-dosesc), mmsystem (timer). QuickTime (all parts) and toolhelp passed.
 
+- After H11, medium 25, L3 and L24 (fe9594a, on master 14d77ae): make test pass (TK62's new sections pass on both kernels, both DOS extenders; one TK61 run failed its KRNL286/DOSX FS/GS checks once and passed when run again: intermittent, not touched here); full boot test 122 ok, 3 failures, all known on master (holdbtn, ddeml conn, lzexpand quirks).
+
 ## Left (open)
 
-- Medium 33: GetCodeHandle/GlobalHandle of KERNEL's own segments (put them in the selector table).
+- Medium 33: GetCodeHandle/GlobalHandle of KERNEL's own segments. KERNEL's segments are the bootstrap's conventional memory, outside the heap; giving them arenas and selector-table entries (fixed, owner KERNEL) is a design change of its own, not started.
 - Medium 37, 39; Low L5, L6, L19, L27, L30, L31: not probed.
 - Low L4 (LocalCompact(-1) past 32 blocks), L12 (the bootstrap's relocation records), L32 (OF_PROMPT, OF_CANCEL, OF_SEARCH).
