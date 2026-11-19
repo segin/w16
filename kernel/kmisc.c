@@ -321,14 +321,20 @@ u16 KAPI GetExpWinVer(u16 h)
     return m ? NE_HDR(m)->expver : 0;
 }
 
-/* DirectResAlloc (KERNEL.168): SDK-era AllocResource without a
-   resource: a moveable block of `size` bytes. UNVERIFIED: the flags and
-   the owner. */
+/* DirectResAlloc (KERNEL.168): AllocResource without a resource
+   (Schulman: owned by the module of hInstance, through GetExePtr).
+   Observed (TK62 "directres"): a moveable block owned by the module;
+   the flags are a resource's, 1000h making it discardable (0 and 10h do
+   not). w16 gave the task a plain moveable block (KERNEL audit, L27).
+   UNVERIFIED: an hInstance that is no module's (w16: the caller's
+   block, as before). */
 u16 KAPI DirectResAlloc(u16 hinst, u16 flags, u16 size)
 {
-    (void)hinst;
-    (void)flags;
-    return GlobalAlloc(GMEM_MOVEABLE, size);
+    module FAR *m = module_of(hinst);
+    u16 f = GMEM_MOVEABLE | ((flags & 0x1000) ? GMEM_DISCARDABLE : 0);
+    if (!m)
+        return GlobalAlloc(f, size);
+    return galloc(f, size, m->ne_sel, NULL);
 }
 
 

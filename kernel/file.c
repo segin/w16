@@ -15,6 +15,7 @@
 #define OF_PARSE        0x0100
 #define OF_DELETE       0x0200
 #define OF_VERIFY       0x0400
+#define OF_SEARCH       0x0400          /* (the same bit) */
 #define OF_CREATE       0x1000
 #define OF_EXIST        0x4000
 #define OF_REOPEN       0x8000
@@ -333,8 +334,19 @@ static void str_to(char FAR *d, const char *s)
 /* Try to open `name` (no path) in the directories OpenFile searches,
    observed on Windows 3.1 (a copy in each, removed one by one): the
    current directory, the Windows directory, the system directory, the
-   directory of the running task's program, the PATH directories. */
-static u16 search_open(const char FAR *name, u16 mode, char *found)
+   directory of the running task's program, the PATH directories.
+   Observed (TK62 "openerr"): the search ends at the first directory
+   where DOS fails with anything but "file not found" or "path not
+   found" (no handle left: 4; a directory of that name: 5) with that
+   error, even when a later directory holds the file; w16 reported 2
+   for every failure (KERNEL audit, medium 37). *errp is 2 when the
+   file is nowhere. */
+static int so_stop(u16 fh, u16 err)
+{
+    return fh != HFILE_ERROR || (err != DOSE_NOFILE && err != 3);
+}
+
+static u16 search_open(const char FAR *name, u16 mode, char *found, u16 *errp)
 {
     char *dir = so_dir;
     const char FAR *p;
@@ -358,8 +370,10 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
             break;
         }
         if (join_canon(dir, name, found, &err) &&
-            (fh = dos_open(found, mode, &err)) != HFILE_ERROR)
+            so_stop(fh = dos_open(found, mode, &err), err)) {
+            *errp = err;
             return fh;
+        }
     }
     for (p = file_env("PATH"); p && *p; ) {
         u16 n = 0;
@@ -370,14 +384,27 @@ static u16 search_open(const char FAR *name, u16 mode, char *found)
                 dir[i] = p[i];
             dir[n] = 0;
             if (join_canon(dir, name, found, &err) &&
-                (fh = dos_open(found, mode, &err)) != HFILE_ERROR)
+                so_stop(fh = dos_open(found, mode, &err), err)) {
+                *errp = err;
                 return fh;
+            }
         }
         p += n;
         if (*p == ';')
             p++;
     }
+    *errp = DOSE_NOFILE;
     return HFILE_ERROR;
+}
+
+/* the name after its last '\', '/' or ':' */
+static const char FAR *base_name(const char FAR *name)
+{
+    const char FAR *b = name;
+    for (; *name; name++)
+        if (*name == '\\' || *name == '/' || *name == ':')
+            b = name + 1;
+    return b;
 }
 
 u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.74 */
@@ -409,13 +436,28 @@ u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.
         fh = dos_create(path, 0, &err);
     } else if (file_has_path(name)) {
         fh = dos_open(path, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, &err);
+        /* OF_SEARCH (the same bit as OF_VERIFY): a file that is not at
+           its path is looked for by its name, as a name without a path
+           is (observed, TK62 "ofsearch": "C:\TK62NO\TKDG.DLL" found in
+           the Windows directory; KERNEL audit, L32). UNVERIFIED: what is
+           reported when it is nowhere (w16: the path's error) */
+        if (fh == HFILE_ERROR && (flags & OF_SEARCH) &&
+            (err == DOSE_NOFILE || err == 3) && *base_name(name)) {
+            char *found = of_found;
+            u16 e2;
+            fh = search_open(base_name(name),
+                             (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, found, &e2);
+            if (fh != HFILE_ERROR)
+                kmemcpy(path, found, sizeof of_path);
+            else if (so_stop(fh, e2))
+                err = e2;
+        }
     } else {
         char *found = of_found;
-        fh = search_open(name, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, found);
-        if (fh != HFILE_ERROR)
+        fh = search_open(name, (flags & (OF_EXIST | OF_DELETE)) ? 0 : mode, found, &err);
+        if (fh != HFILE_ERROR)          /* (a failure reports the name in
+                                           the current directory: observed) */
             kmemcpy(path, found, sizeof of_path);
-        else
-            err = DOSE_NOFILE;
     }
     if (fh == HFILE_ERROR) {
         /* observed: cBytes and fFixedDisk are left alone */
@@ -579,7 +621,9 @@ u16 KAPI GetTempFileName(u8 drive, const char FAR *prefix, u16 unique,
 
     if (drive & TF_FORCEDRIVE) {
         /* observed: "C:~TKP12AB.TMP", the drive's current directory */
-        dir[0] = upc((char)(drive & 0x7F));
+        /* observed (TK62 "tempname"): 80h alone is the current drive
+           ("C:~TKP1234.TMP"; w16 made "~TKP1234.TMP": KERNEL audit, L31) */
+        dir[0] = (drive & 0x7F) ? upc((char)(drive & 0x7F)) : (char)('A' + cur_drive());
         dir[1] = ':';
         dir[2] = 0;
     } else {
@@ -645,10 +689,14 @@ u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136
         return 0;
     if (r.dx & 0x1000)
         return DRIVE_REMOTE;
+    /* observed (TK62 "drivetype"): a drive where 4408h fails (a DOSBox
+       floppy mount as F:) is fixed, as SYSTEM.DRV's InquireSystem says
+       (Schulman: GetDriveType wraps it); w16 said 0 (KERNEL audit,
+       medium 39) */
     rinit(&r, 0x4408);
     r.bx = drive + 1;
     if (!dos_call(&r))
-        return 0;
+        return DRIVE_FIXED;
     return r.ax == 0 ? DRIVE_REMOVABLE : DRIVE_FIXED;
 }
 

@@ -2048,8 +2048,11 @@ u32 KAPI GetFreeSpace(u16 flags)                              /* KERNEL.169 */
     u16 a;
     u32 t = dpmi_largest();
     for (a = hp->first; ; a = AR(a)->next) {
+        /* observed (TK62 "freespace", KRNL286): a fixed discardable
+           block is not counted (it is never discarded); w16 counted it
+           (KERNEL audit, L5) */
         if (is_free(a) || (!flags && discardable(a) &&
-                           (AR(a)->count == 0 || (AR(a)->handle & 1))))
+                           AR(a)->count == 0 && !(AR(a)->handle & 1)))
             t += (u32)TOTAL(a) << 4;
         if (a == hp->last)
             break;

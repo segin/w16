@@ -63,6 +63,29 @@ static int i31(void)
     return int31(&r);
 }
 
+/* DOS memory freed from protected mode: INT 21h AH=49h in real mode
+   (DPMI 0300h) */
+static struct {
+    u32 edi, esi, ebp, res, ebx, edx, ecx, eax;
+    u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
+} rmc;
+
+static void dos_free_rm(u16 para)
+{
+    u16 i;
+    for (i = 0; i < sizeof rmc; i++)
+        ((u8 *)&rmc)[i] = 0;
+    rmc.eax = 0x4900;
+    rmc.es = para;
+    r.ax = 0x0300;
+    r.bx = 0x21;
+    r.cx = 0;
+    r.di = (u16)&rmc;
+    r.ds = 0;
+    r.es = get_ds();
+    int31(&r);
+}
+
 static void fail(const char *msg)
 {
     say("w16 boot: ");
@@ -397,6 +420,11 @@ void __cdecl boot_main(void)
     for (i = 0; i < h.seg_count; i++)
         if (rel_count[i])
             relocate(i);
+    /* the relocation records are not needed again (KERNEL audit, L12:
+       they stayed allocated) */
+    for (i = 0; i < h.seg_count; i++)
+        if (rel_para[i])
+            dos_free_rm(rel_para[i]);
     for (i = 0; i < h.seg_count; i++) {
         const ne_segment __far *s =
             (const ne_segment __far *)MK_FP(bi.ne_sel, h.seg_off) + i;

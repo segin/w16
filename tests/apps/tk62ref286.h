@@ -2,9 +2,13 @@
  * reference run (Standard mode, tests/refrun.sh REFRUN_KRNL286=1):
  *   TK62-win31-286.log
  * the values that differ from the table of:
- *   tk62ref.h
+ *   TK62-win31-S.log
+ *   TK62-win31-3.log
  * Not checked where they differ (w16 does not implement KRNL286):
  *   -x 'big: FFFD0'
  * Do not edit; regenerate when the probe changes. */
 { "big: FFFD0 ok", 0x0000, 1 },
 { "rights: raw read", 0x0000 },
+{ "freespace: 1 class", 0x0001 },
+{ "freespace: fixed discard ret", 0x0000 },
+{ "freespace: fixed discard flags", 0x0100 },
