@@ -1,5 +1,29 @@
 /*
- * sb16.rc - SB16.DRV's resources: the version resource written by
- * tools/mkver.py (an installable sound driver).
+ * sb16.rc - SB16.DRV's resources: the configuration dialog (DRV_CONFIGURE,
+ * sb16.c; w16's own layout: there is no Windows 3.1 dialog for this card
+ * to follow) and the version resource written by tools/mkver.py (an
+ * installable sound driver).
  */
+#include <windows.h>
+
+SB16SETUP DIALOG 20, 20, 168, 112
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Sound Blaster 16 Setup"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT "&Port (hex):", -1, 8, 10, 76, 8
+    EDITTEXT 101, 88, 8, 32, 12
+    LTEXT "&Interrupt:", -1, 8, 26, 76, 8
+    EDITTEXT 102, 88, 24, 32, 12
+    LTEXT "8-bit &DMA channel:", -1, 8, 42, 76, 8
+    EDITTEXT 103, 88, 40, 32, 12
+    LTEXT "16-bit D&MA channel:", -1, 8, 58, 76, 8
+    EDITTEXT 104, 88, 56, 32, 12
+    LTEXT "MPU-401 p&ort (hex):", -1, 8, 74, 76, 8
+    EDITTEXT 105, 88, 72, 32, 12
+    DEFPUSHBUTTON "OK", IDOK, 128, 8, 34, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 128, 26, 34, 14
+    LTEXT "Changes take effect when Windows is restarted.", -1, 8, 92, 154, 16
+END
+
 1 16 MOVEABLE PURE "sb16ver.bin"

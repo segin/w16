@@ -9,7 +9,7 @@
                           of four notes for MCISEQ), SBP.TXT (the script of
                           tests/sb16/sbp.c) and manifest.txt (what the
                           recording must hold, in order)
-  sbaudio.py cmp CAP.wav DIR [LOG]
+  sbaudio.py cmp CAP.wav DIR [MANIFEST]
                           reads DOSBox-X's recording (DX-CAPTURE /A: 16-bit
                           stereo), cuts it where it is silent, and checks
                           each piece against the manifest (below); exit
@@ -32,6 +32,9 @@ The checks, per manifest line:
   wavr FILE               a sound of Windows 3.1's (CHIMES.WAV, DING.WAV):
                           the same but for the length, at least 75% of the
                           file's (its quiet end counts as silence)
+  total MS                the pieces left last at least MS milliseconds
+                          in all (QuickTime's sample movie's sound track:
+                          nothing to compare it with)
   notes K1 K2 ...         one piece per MIDI note, its pitch (zero
                           crossings over its middle) within 1% of the
                           note's (the sine SoundFont of tools/mksf2.py
@@ -166,6 +169,14 @@ def gen(d):
     man.append('rest')
     open(os.path.join(d, 'SBP.TXT'), 'w', newline='\r\n').write('\n'.join(script) + '\n')
     open(os.path.join(d, 'manifest.txt'), 'w').write('\n'.join(man) + '\n')
+    # QuickTime for Windows' sample movie through its MCI driver (MCIQTW,
+    # on a drive QuickTime's installer set up: sbaudio.sh's qt sides): its
+    # sound track through SB16.DRV: about 4.5 s of sound in all (a phrase
+    # of 1.4 s, short beats a second apart, a closing phrase of 1.9 s, the
+    # same under either MMSYSTEM)
+    qt = ['mci open C:\\WINDOWS\\SAMPLE.MOV alias q', 'mci play q wait', 'mci close q', 'pause 600']
+    open(os.path.join(d, 'SBPQT.TXT'), 'w', newline='\r\n').write('\n'.join(qt) + '\n')
+    open(os.path.join(d, 'qtmanifest.txt'), 'w').write('skip 1\ntotal 4000\n')
 
 
 # ---- the recording ----
@@ -252,15 +263,15 @@ def pitch(x, rate):
     return (len(t) - 1) * rate / (t[-1] - t[0]) if len(t) > 2 else 0.0
 
 
-def cmp(cap, d):
+def cmp(cap, d, manifest='manifest.txt'):
     ch, rate, bits, chans = readwav(cap)
     if ch == 1:
         chans = [chans[0], chans[0]]
     ps = pieces(chans, rate)
-    man = [l.split() for l in open(os.path.join(d, 'manifest.txt')) if l.strip()]
+    man = [l.split() for l in open(os.path.join(d, manifest)) if l.strip()]
     need = sum(int(m[1]) if m[0] == 'skip' else len(m) - 1 if m[0] == 'notes' else
-               0 if m[0] == 'rest' else 1 for m in man)
-    rest = man and man[-1][0] == 'rest'
+               0 if m[0] in ('rest', 'total') else 1 for m in man)
+    rest = man and man[-1][0] in ('rest', 'total')
     print('recording: %d Hz, %.1f s, %d pieces (%d expected)' % (rate, len(chans[0]) / rate, len(ps), need))
     fails = 0
     if len(ps) != need and not (rest and len(ps) > need):
@@ -273,6 +284,13 @@ def cmp(cap, d):
     for m in man:
         if m[0] == 'skip':
             k += int(m[1])
+        elif m[0] == 'total':
+            got = sum(e - s for s, e in ps[k:]) * 1000 / rate
+            ok = got >= int(m[1])
+            print('%s sound: %.0f ms in %d pieces (at least %s)' % ('ok  ' if ok else 'FAIL', got,
+                                                                  len(ps) - k, m[1]))
+            k = len(ps)
+            fails += not ok
         elif m[0] in ('wav', 'wavr'):
             name, loops = m[1], int(m[2]) if len(m) > 2 else 1
             want_db = float(m[3]) if len(m) > 3 else 0.0
@@ -338,4 +356,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'gen':
         gen(sys.argv[2])
     elif sys.argv[1] == 'cmp':
-        sys.exit(cmp(sys.argv[2], sys.argv[3]))
+        sys.exit(cmp(*sys.argv[2:5]))

@@ -16,8 +16,13 @@
 # tests/sb16/sbaudio.py cmp checks the recording against the material and
 # SBP's log is checked: every header done, the positions, the recordings'
 # sizes.
-#   usage: tests/sb16/sbaudio.sh [-o OUTDIR] [ms|w16 ...]
-# ms: Microsoft's MMSYSTEM.DLL, w16: w16's (and MMTASK.TSK); default both.
+# The sides qtms and qtw16 play QuickTime for Windows' sample movie
+# through its MCI driver instead, on $W16_QTDIR/ref-installed/c (Windows
+# 3.1 with QuickTime installed by its own installer, as tests/qtplay.sh
+# makes it): its sound track must come out (4 s of sound or more).
+#   usage: tests/sb16/sbaudio.sh [-o OUTDIR] [ms|w16|qtms|qtw16 ...]
+# ms: Microsoft's MMSYSTEM.DLL, w16: w16's (and MMTASK.TSK); default ms
+# and w16, and qtms and qtw16 when the QuickTime drive is there.
 # Exit status 0 when every check passes.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -30,7 +35,10 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-sides=${*:-ms w16}
+qtc=${W16_QTDIR:-$HOME/Downloads/qtw16}/ref-installed/c
+if [ $# -gt 0 ]; then sides=$*
+elif [ -d "$qtc" ]; then sides="ms w16 qtms qtw16"
+else sides="ms w16"; fi
 [ -n "$out" ] || out=$root/build/sbaudio-$(date +%H%M%S)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -41,9 +49,10 @@ python3 "$root/tests/sb16/sbaudio.py" gen "$mat"
 python3 "$root/tools/mksf2.py" "$mat/sine.sf2"
 cp "$root/.tools/ref/win31/cdrive/WINDOWS/CHIMES.WAV" "$root/.tools/ref/win31/cdrive/WINDOWS/DING.WAV" "$mat/"
 run() {
-    s=$1 d=$out/$1
+    s=$1 d=$out/$1 script=$mat/SBP.TXT
     rm -rf "$d" "$d.cap"
-    set -- -r -3 -p 386 -f "$dos/SBP.EXE=SBP.EXE" -f "$mat/SBP.TXT=SBP.TXT" \
+    case $s in qt*) script=$mat/SBPQT.TXT ;; esac
+    set -- -r -3 -p 386 -f "$dos/SBP.EXE=SBP.EXE" -f "$script=SBP.TXT" \
         -f "$dos/SB16.DRV=WINDOWS/SYSTEM/SB16.DRV" -i 'boot:shell=C:\SBP.EXE' \
         -i 'drivers:wave=sb16.drv' -i 'drivers:midi=sb16.drv' -i 'drivers:aux=sb16.drv' \
         -i 'sb16.drv:port=220' -i 'sb16.drv:int=5' -i 'sb16.drv:dma=1' -i 'sb16.drv:hdma=5' \
@@ -51,7 +60,8 @@ run() {
     for f in "$mat"/T*.WAV "$mat/SCALE.MID"; do
         set -- "$@" -f "$f=SB16T/$(basename "$f")"
     done
-    if [ "$s" = w16 ]; then
+    case $s in qt*) export DROPIN_REF="$qtc" ;; *) unset DROPIN_REF ;; esac
+    if [ "$s" = w16 ] || [ "$s" = qtw16 ]; then
         set -- "$@" -f "$dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
             -f "$dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
     fi
@@ -126,7 +136,9 @@ EOF
     if [ -z "$cap" ]; then
         echo "FAIL $s: no recording ($d.cap)"; fails=$((fails + 1)); continue
     fi
-    if python3 "$root/tests/sb16/sbaudio.py" cmp "$cap" "$mat" > "$d.cmp" 2>&1; then
+    man=manifest.txt
+    case $s in qt*) man=qtmanifest.txt ;; esac
+    if python3 "$root/tests/sb16/sbaudio.py" cmp "$cap" "$mat" $man > "$d.cmp" 2>&1; then
         echo "ok   $s sound: $(grep -c '^ok' "$d.cmp") checks ($d.cmp)"
     else
         echo "FAIL $s sound ($d.cmp):"; grep -v '^ok' "$d.cmp" | head -20

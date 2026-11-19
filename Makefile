@@ -1233,7 +1233,8 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 test: dos fonts grpcheck
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
-	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV
+	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV \
+	    $(DOS)/SB16.DRV
 	RUNTESTS_DPMI="hdpmi dosx" RUNTESTS_KERNEL="$${RUNTESTS_KERNEL:-KRNL286 KRNL386}" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -2387,7 +2388,7 @@ $(B)/sb16/sb16ver.bin: tools/mkver.py
 	    OriginalFilename=sb16.drv ProductName=w16 ProductVersion=3.10
 $(B)/sb16/sb16.res: drivers/sb16/sb16.rc $(B)/sb16/sb16ver.bin
 	@mkdir -p $(@D)
-	cd $(B)/sb16 && $(WRC) -q -r -bt=windows -fo=sb16.res $(CURDIR)/drivers/sb16/sb16.rc
+	cd $(B)/sb16 && $(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=sb16.res $(CURDIR)/drivers/sb16/sb16.rc
 $(DOS)/SB16.DRV: $(SB16OBJS) $(B)/sb16/sb16.res drivers/sb16/sb16.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @drivers/sb16/sb16.lnk name $@ libpath $(WATCOM)/lib286/win \

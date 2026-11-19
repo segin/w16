@@ -301,6 +301,11 @@ static void enable(void)
     if (enabled)
         return;
     enabled = 1;
+    /* 386 Enhanced mode: not without a VxD that gives the system VM the
+       card's ports, IRQ and DMA (README): no devices, and the card left
+       alone */
+    if (GetWinFlags() & WF_ENHANCED)
+        return;
     config();
     if (sb_dspver >= 0x400 && sb_dma8 < 4 && sb_dma16 >= 5 && sb_dma16 <= 7 && dmaalloc()) {
         mpu_ok = (BYTE)mpu_reset();
@@ -335,9 +340,53 @@ static void disable(void)
     }
 }
 
+/* ---- the configuration dialog (DRV_CONFIGURE; sb16.rc): the five
+   settings as SYSTEM.INI [sb16.drv] has them, the ones in use shown;
+   OK writes them and asks for Windows to be restarted ---- */
+#define IDC_PORT 101
+#define IDC_INT  102
+#define IDC_DMA  103
+#define IDC_HDMA 104
+#define IDC_MPU  105
+static const char *const keys[5] = { "port", "int", "dma", "hdma", "mpuport" };
+
+BOOL FAR PASCAL __export __loadds SbSetupProc(HWND d, UINT m, WPARAM w, LPARAM l)
+{
+    char b[16];
+    int i;
+    (void)l;
+    switch (m) {
+    case WM_INITDIALOG:
+        wsprintf(b, "%X", sb_port);
+        SetDlgItemText(d, IDC_PORT, b);
+        SetDlgItemInt(d, IDC_INT, sb_irq, FALSE);
+        SetDlgItemInt(d, IDC_DMA, sb_dma8, FALSE);
+        SetDlgItemInt(d, IDC_HDMA, sb_dma16, FALSE);
+        wsprintf(b, "%X", sb_mpu);
+        SetDlgItemText(d, IDC_MPU, b);
+        return TRUE;
+    case WM_COMMAND:
+        if (w == IDOK) {
+            for (i = 0; i < 5; i++) {
+                GetDlgItemText(d, IDC_PORT + i, b, sizeof b);
+                WritePrivateProfileString(inisect, keys[i], b, "system.ini");
+            }
+            EndDialog(d, DRVCNF_RESTART);
+            return TRUE;
+        }
+        if (w == IDCANCEL) {
+            EndDialog(d, DRVCNF_CANCEL);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 /* exported as DRIVERPROC (sb16.lnk; windows.h has a type of that name) */
 LRESULT ENTRY SB_DRIVERPROC(DWORD id, HDRVR h, UINT msg, LPARAM l1, LPARAM l2)
 {
+    int r;
     switch (msg) {
     case 0:
         return 0;
@@ -354,7 +403,10 @@ LRESULT ENTRY SB_DRIVERPROC(DWORD id, HDRVR h, UINT msg, LPARAM l1, LPARAM l2)
     case DRV_FREE:
         return 1;
     case DRV_QUERYCONFIGURE:
-        return 0;
+        return 1;
+    case DRV_CONFIGURE:
+        r = DialogBox((HINSTANCE)sb_hinst, "SB16SETUP", (HWND)LOWORD(l1), (DLGPROC)SbSetupProc);
+        return r < 0 ? DRVCNF_CANCEL : r;
     case DRV_INSTALL:
         return DRVCNF_RESTART;
     case DRV_REMOVE:

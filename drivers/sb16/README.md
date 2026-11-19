@@ -118,8 +118,8 @@ reset, a MIDI long message) on the caller's, as SNDBLST2's.
 ## Not done, not verified
 
 - No OPL3 FM synthesiser device (it would need a patch set of w16's own:
-  README of the handover); the MIDI aux device sets the FM's volume only.
-- 386 Enhanced mode: not supported. It needs a VxD that virtualises the
+  docs/notes/sb16-handover.md); the MIDI aux device sets the FM's volume only.
+- 386 Enhanced mode: the driver offers no devices there. It would need a VxD that virtualises the
   card's ports, the DMA channels (VDMAD: the buffer's physical address)
   and the IRQ for the system VM, and the DMA buffer page-locked; without
   one the driver is not safe there.
