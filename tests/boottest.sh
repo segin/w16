@@ -117,6 +117,17 @@
 #              DOSX, KRNL286, USER, GDI, SHELL, PROGMAN) against all of
 #              Microsoft's: the DOS prompt must come back, in text mode,
 #              the same screen up to the cursor (40 pixels)
+#   exittree   File > Exit Windows > OK (exitwin.txt) on w16's install
+#              tree laid over Windows 3.1 (every file of build/w16 but the
+#              INI, GRP and README files over Microsoft's, 3.1's own INI
+#              files: a user's hand session), in plain DOSBox. Parts: e386
+#              (WIN /3 under w16's WIN386.EXE), e386ms (WIN /3 under
+#              Microsoft's WIN386.EXE), std (WIN /S). Each must end
+#              cleanly: KERNEL's "back to DOS", no fault report, the DOS
+#              prompt in text mode. Until 2026-11-19 e386 ended in a
+#              general protection fault in USER (KERNEL left the task's
+#              PDB current for its INT 21h 4Ch: the DPMI host took that
+#              for the task's exit and returned)
 #   runfront   Program Manager's File > Run starts Notepad with real keys
 #              (tests/scripts/input/runfront.txt): Notepad must end up the
 #              active window, Program Manager's caption inactive; w16's
@@ -718,7 +729,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1814,6 +1825,39 @@ runcase() {
         else
             echo "FAIL exitwin: screens missing ($out/exitwin-w16)"; fails=$((fails + 1))
         fi ;;
+    exittree)
+        # w16's install tree over 3.1, as tests/w16tree.sh lays it (the
+        # tree's KRNL386 in the KRNL386.EXE slot), Exit Windows from
+        # Program Manager; see the header
+        tree=$root/build/w16
+        set -- -k "$tree/SYSTEM/KRNL286.EXE" -X "$tree/SYSTEM/DOSX.EXE"
+        for f in "$tree"/*; do
+            case $(basename "$f") in README.TXT|SYSTEM|*.INI|*.GRP) continue ;; esac
+            set -- "$@" -f "$f=WINDOWS/$(basename "$f")"
+        done
+        for f in "$tree"/SYSTEM/*; do set -- "$@" -f "$f=WINDOWS/SYSTEM/$(basename "$f")"; done
+        k=${part:-e386}
+        case $k in
+        e386)   set -- "$@" -c "WIN /3 /B" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" ;;
+        e386ms) set -- "$@" -c "WIN /3 /B" ;;
+        *)      set -- "$@" -c "WIN /S /B" ;;
+        esac
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 90 -t 240 "$root/tests/scripts/input/exitwin.txt" \
+            "$out/exittree-$k" "$@" > "$out/exittree-$k.txt" 2>&1 || true
+        r=ok
+        o=$out/exittree-$k/work/c/OUT.TXT
+        a=$out/exittree-$k/02-dos.png
+        if [ ! -f "$a" ]; then r="no 02-dos screen"
+        elif grep -aq 'exception\|w16: fault\|watchdog' "$o" 2>/dev/null; then r="a fault: $(grep -a -m1 'exception\|fault\|watchdog' "$o" | tr -d '\r')"
+        elif ! grep -aq 'w16: back to DOS, code 0000' "$o" 2>/dev/null; then r="KERNEL did not end Windows (no \"back to DOS\")"
+        elif ! grep -q '^Windows ended' "$out/exittree-$k/input.log"; then r="WIN did not return"
+        else
+            sz=$(magick identify -format '%wx%h' "$a" 2>/dev/null)
+            [ "$sz" = 640x400 ] || r="the DOS screen is $sz, not text mode"
+        fi
+        [ "$r" = ok ] && echo "ok   exittree@$k: Windows ended cleanly, the DOS prompt back in text mode" \
+            || echo "     exittree@$k: $r ($out/exittree-$k)"
+        partdone "$r" ;;
     runfront|runfrontk)
         if [ $c = runfront ]; then set -- -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
         else set --; fi
@@ -4403,6 +4447,7 @@ caseparts() {
     edithandle) echo "$1@us $1@np" ;;
     gpuser) echo "$1@u286 $1@u386 $1@t286 $1@t386" ;;
     winfile) echo "$1@cmp $1@all" ;;
+    exittree) echo "$1@e386 $1@e386ms $1@std" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
@@ -4473,6 +4518,9 @@ partsummary() {
     winfile)
         if [ $pbad = 0 ]; then echo "ok   winfile: 0 pixels (focus dots, status bar, error box left out); every w16 part: no fault"
         else echo "FAIL winfile: $pfirst ($out)"; fi ;;
+    exittree)
+        if [ $pbad = 0 ]; then echo "ok   exittree: Exit Windows on w16's tree over 3.1 ends cleanly (w16's WIN386, Microsoft's WIN386, Standard mode)"
+        else echo "FAIL exittree: $pfirst ($out)"; fi ;;
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;

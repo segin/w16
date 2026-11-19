@@ -32,9 +32,13 @@ static u32 filecdr_proc;
 static u16 filecdr_task;
 
 /* ExitKernel (KERNEL.2): leave Windows, back to DOS. USER calls it at the
-   end of ExitWindows (Pietrek). UNVERIFIED: the exit code. */
-void KAPI ExitKernel(void)
+   end of ExitWindows with one word, the exit code (Pietrek, ch. 1:
+   "ExitKernel( ExitCode)"), and it pops that word: should it ever return,
+   the caller's stack stays right (it popped none). UNVERIFIED: the exit
+   code DOS gets (0 here). */
+void KAPI ExitKernel(u16 code)
 {
+    (void)code;
     win_screen = 0;                     /* USER's ExitWindows disabled the
                                            display: text mode */
     trace_print();                      /* [w16] trace, if any */

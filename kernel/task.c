@@ -1272,7 +1272,7 @@ u16 KAPI SetSigHandler(u32 proc, u32 FAR *old, u16 FAR *oldtype, u16 type, u16 o
    of the exit call), hInstance = the task's, hQueue = its queue.
    UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
 extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
-void KAPI ExitKernel(void);              /* kmisc.c */
+void KAPI ExitKernel(u16 code);         /* kmisc.c */
 
 void __cdecl task_signal_exit(u16 ax)
 {
@@ -1296,7 +1296,7 @@ void __cdecl task_signal_exit(u16 ax)
         if (u && module_entry(u, 7, &sel, &off, &is_const) && !is_const) {
             typedef u16 (__far __pascal *ewproc)(u32 rc, u16 reserved);
             ((ewproc)(((u32)sel << 16) | off))(0, 0);
-            ExitKernel();
+            ExitKernel(0);
         }
     }
     p = *(u32 FAR *)MK_FP(t, 0x2A);
