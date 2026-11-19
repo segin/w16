@@ -245,15 +245,12 @@ u32 KAPI KGetCodeHandle(u32 proc)
     if (m) {                    /* KERNEL's segments are not in the heap */
         u16 i;
         for (i = 0; i < m->seg_count; i++)
-            if ((m->seg[i].sel | 3) == (hi | 3)) {
-                /* KERNEL's own: its selector, 0 from GlobalHandle (3.1
-                   gave its segment's handle, TK62 "codehandle": KERNEL
-                   audit, medium 33) */
-                u16 h = (u16)GlobalHandle(hi);
-                if (!h)
-                    h = m->seg[i].hnd ? m->seg[i].hnd : m->seg[i].sel;
-                return ((u32)m->seg[i].sel << 16) | h;
-            }
+            if ((m->seg[i].sel | 3) == (hi | 3))
+                /* AX = GlobalHandle's, as on 3.1 (TK50); there it is the
+                   segment's handle (TK62 "codehandle"), here 0: KERNEL's
+                   segments are not heap blocks (KERNEL audit, medium 33,
+                   open) */
+                return ((u32)m->seg[i].sel << 16) | (u16)GlobalHandle(hi);
     }
     gh = GlobalHandle(hi);
     if (!(u16)gh)
