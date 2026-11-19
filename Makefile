@@ -1788,6 +1788,14 @@ $(DOS)/US27.EXE: $(B)/tests/start.o $(B)/tests/us27.o $(B)/tests/us27s.o $(B)/te
 	    option map=$(B)/tests/us27.map option resource=$(B)/tests/us27.res \
 	    file { $(B)/tests/start.o $(B)/tests/us27.o $(B)/tests/us27s.o }
 dos: $(DOS)/US27.EXE
+# US28: where WM_MDICREATE puts CW_USEDEFAULT children as they come and go
+# (tests/apps/us28.c)
+$(B)/tests/us28.o: tests/apps/us28ref.h tests/apps/tklog.h
+$(DOS)/US28.EXE: $(B)/tests/start.o $(B)/tests/us28.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us28.map file { $(B)/tests/start.o $(B)/tests/us28.o }
+dos: $(DOS)/US28.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

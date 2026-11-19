@@ -21,7 +21,9 @@ HBRUSH sys_brush(HBRUSH b);
 #define MDI_COUNT     6
 #define MDI_MAXED     8         /* the maximised child whose controls are in the frame's bar */
 #define MDI_FRAMETEXT 10        /* the frame's own title: a block of the string heap, 0 none */
-#define MDI_SCROLL    12        /* the WS_VSCROLL/WS_HSCROLL it was made with */
+#define MDI_SCROLL    12        /* low byte: HIWORD of the WS_VSCROLL/WS_HSCROLL it
+                                   was made with; high byte: the children made so
+                                   far (mdi_create's cascade place) */
 #define MDI_FROMICON  14        /* the maximised child was an icon before */
 
 HBITMAP frame_bitmap(int which);
@@ -360,15 +362,24 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
     {
         /* the default place and size: with step the cascade's (22), the
            client's height holds k = height / (3 step) steps; the size is
-           the client's less k steps each way, the n-th child k-cycling
+           the client's less k steps each way, the i-th child k-cycling
            down and right by a step (Windows 3.1: File Manager's first
            directory window in a 632 x 411 client, 500 x 279 at 0,0;
-           the formula is also Wine's, its 16-bit MDI) */
+           the formula is also Wine's, its 16-bit MDI). i counts every
+           child the client has made, those at a place of their own and
+           those destroyed since too (probe US28 on 3.1, a 592 x 373
+           client, k = 5: three children at 0, 22, 44; the second
+           destroyed, the next at 66; all destroyed, the next at 88; one
+           made at 10,10, the next one step further on; after 110 back to
+           0. QuickTime's Movie Player: a movie closed and opened again
+           comes back a step lower). UNVERIFIED: past 255 children (w16
+           keeps a byte) */
         int step = sysmet[SM_CYCAPTION] + 2 * sysmet[SM_CYBORDER];
         int w = cw->rcClient.right - cw->rcClient.left, ht = cw->rcClient.bottom - cw->rcClient.top;
         int k = ht / (3 * step);
+        int i = (WORD)GetWindowWord(client, MDI_SCROLL) >> 8;
         if (x == (int)CW_USEDEFAULT)
-            x = y = step * (n % (k + 1));
+            x = y = step * (i % (k + 1));
         if (cx == (int)CW_USEDEFAULT) {
             cx = w - step * k;
             cy = ht - step * k;
@@ -390,6 +401,7 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
         return 0;
     }
     SetWindowWord(client, MDI_COUNT, n + 1);
+    SetWindowWord(client, MDI_SCROLL, (WORD)GetWindowWord(client, MDI_SCROLL) + 0x100);
     /* a new child's system menu has Minimize grayed until it is first
        maximised (US18: 3.1's GetMenuState on a new child's system menu,
        also for one that never passes WM_SIZE on; UNVERIFIED why) */
@@ -867,7 +879,7 @@ BOOL WINAPI TranslateMDISysAccel(HWND client, MSG __far *m)
 void WINAPI CalcChildScroll(HWND h, WORD sb)
 {
     PWND w = valid_wnd(h);
-    WORD want = (WORD)GetWindowWord(h, MDI_SCROLL);
+    WORD want = (WORD)GetWindowWord(h, MDI_SCROLL) & 0xFF;
     RECT u, c;
     HWND s;
     int bar;
