@@ -686,7 +686,16 @@ void FAR PASCAL __loadds MlDump(LPCSTR name)
         int n = wsprintf(line, "  MD lost %u\r\n", lost);
         _lwrite(f, line, n);
     }
-    nrec = 0;
-    lost = 0;
+    {
+        /* a record made at interrupt time after the loop's last look (a
+           driver's callback) stays for the next dump: clearing them all
+           here lost one now and then */
+        WORD fl = md_cli(), k;
+        for (k = 0; i + k < nrec; k++)
+            recs[k] = recs[i + k];
+        nrec = k;
+        lost = 0;
+        md_sti(fl);
+    }
     _lclose(f);
 }
