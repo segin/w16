@@ -54,6 +54,7 @@ void destroy_queue(HQUEUE hq)
     if (!hq)
         return;
     kill_queue_timers(hq);
+    smsg_queue_gone(hq, 0);
     f = irq_off();
     for (l = &hqFirst; *l; l = &q_of(*l)->next)
         if (*l == hq) {
@@ -167,6 +168,15 @@ void WINAPI PostQuitMessage(int code)
     set_wakebit(hq, QS_POSTMESSAGE);
 }
 
+static void move_windows(HWND h, HQUEUE old, HQUEUE hq)
+{
+    for (; h; h = PW(h)->hwndNext) {
+        if (PW(h)->hq == old)
+            PW(h)->hq = hq;
+        move_windows(PW(h)->hwndChild, old, hq);
+    }
+}
+
 BOOL WINAPI SetMessageQueue(int size)
 {
     HQUEUE old = cur_hq(), hq;
@@ -182,12 +192,14 @@ BOOL WINAPI SetMessageQueue(int size)
         QUEUE __far *o = q_of(old), __far *n = q_of(hq);
         n->hinst = o->hinst;
         n->expwinver = o->expwinver;
-        {
-            HWND w;
-            for (w = PW(hwndDesktop)->hwndChild; w; w = PW(w)->hwndNext)
-                if (PW(w)->hq == old)
-                    PW(w)->hq = hq;
-        }
+        /* every window of the old queue, child windows too, and its
+           timers and sent messages: only the top-level windows moved, and
+           the rest kept the freed queue (USER audit, item 15) */
+        move_windows(PW(hwndDesktop)->hwndChild, old, hq);
+        move_queue_timers(old, hq);
+        smsg_queue_gone(old, hq);
+        if (hqInput == old)
+            hqInput = hq;
         destroy_queue(old);
     }
     K_SETTASKQUEUE(0, hq);
@@ -269,30 +281,142 @@ static void reply_yield(HQUEUE from)
         K_DIRECTEDYIELD(q_of(from)->task);
 }
 
+/* ---- the records of inter-task SendMessages (SMSG) ----
+   A record is the sender's: it frees it when the reply has come, unless
+   the receiver is still in the call (held), which then frees it when the
+   call returns (orphan). So neither side touches a freed record: a
+   ReplyMessage used to let the sender go on and free it while the
+   receiver's window procedure still ran, and the receiver then wrote the
+   result into the freed block (USER audit, item 1). Every record in
+   flight is on one list, so a task that ends can complete the ones sent to
+   it and let go of the ones it sent (smsg_queue_gone). */
+static WORD smsgs;
+
+/* what a sender gets when its receiver's task ends before replying
+   (probe US29, section se) */
+#define SMSG_DEAD_RESULT 0L
+
+static void smsg_free(PSMSG s)
+{
+    WORD *l;
+    for (l = &smsgs; *l; l = &((PSMSG)*l)->all)
+        if (*l == (WORD)s) {
+            *l = s->all;
+            break;
+        }
+    LocalFree((HLOCAL)s);
+}
+
+/* s out of its receiver's list if it still waits there: TRUE if it did */
+static BOOL smsg_unqueue(PSMSG s)
+{
+    QUEUE __far *tq;
+    WORD __far *l;
+    if (!s->to)
+        return FALSE;
+    tq = q_of(s->to);
+    for (l = &tq->sent; *l; l = &((PSMSG)*l)->next)
+        if (*l == (WORD)s) {
+            *l = s->next;
+            s->next = 0;
+            if (!tq->sent)
+                tq->wakebits &= ~QS_SENDMESSAGE;
+            return TRUE;
+        }
+    return FALSE;
+}
+
+static void smsg_reply(PSMSG s, LONG r)
+{
+    s->result = r;
+    s->done = 1;
+    set_wakebit(s->from, QS_SMRESULT);
+}
+
+/* The queue hq goes (its task has ended, or SetMessageQueue replaced it:
+   then by nhq). What was sent to it and not answered is answered with 0
+   (Pietrek ch. 3: AppExit's FlushSentMessages; the value: probe US29,
+   section se), what its task sent is let go: the receivers no longer
+   reply to its queue, and free the record when their call returns. */
+void smsg_queue_gone(HQUEUE hq, HQUEUE nhq)
+{
+    PSMSG s;
+    WORD n;
+    for (s = (PSMSG)smsgs; s; s = (PSMSG)n) {
+        n = s->all;
+        if (nhq) {
+            if (s->to == hq && smsg_unqueue(s)) {
+                QUEUE __far *q = q_of(nhq);
+                WORD __far *l;
+                for (l = &q->sent; *l; l = &((PSMSG)*l)->next)
+                    ;
+                *l = (WORD)s;
+                s->to = nhq;
+                set_wakebit(nhq, QS_SENDMESSAGE);
+            } else if (s->to == hq)
+                s->to = nhq;
+            if (s->from == hq)
+                s->from = nhq;
+            continue;
+        }
+        if (s->to == hq) {
+            /* its receiver is gone; held: it ended inside the call, which
+               never returns */
+            smsg_unqueue(s);
+            s->to = 0;
+            s->held = 0;
+            if (s->orphan || !s->from) {
+                smsg_free(s);
+                continue;
+            }
+            if (!s->done)
+                smsg_reply(s, SMSG_DEAD_RESULT);
+        } else if (s->from == hq) {
+            /* its sender is gone: nobody waits for the reply */
+            s->from = 0;
+            if (s->held)
+                s->orphan = 1;
+            else {
+                smsg_unqueue(s);
+                smsg_free(s);
+            }
+        }
+    }
+}
+
 static void receive_sent(HQUEUE hq)
 {
     QUEUE __far *q;
     PSMSG s;
-    while (hq && (q = q_of(hq))->sent) {
+    (void)hq;
+    while ((hq = cur_hq()) != 0 && (q = q_of(hq))->sent) {
         WORD outer;
         PWND w;
+        LONG r;
+        HQUEUE from;
         s = (PSMSG)q->sent;
         q->sent = s->next;
+        s->next = 0;
         if (!q->sent)
             q->wakebits &= ~QS_SENDMESSAGE;
         outer = q->insend;
         q->insend = (WORD)s;
+        s->held = 1;
         w = valid_wnd(s->hwnd);
-        s->result = w ? call_sent(w, s->hwnd, s->msg, s->wParam, s->lParam, TRUE) : 0;
-        q = q_of(hq);
-        if (q->insend == (WORD)s && !s->done) {
-            HQUEUE from = s->from;
-            s->done = 1;
-            set_wakebit(from, QS_SMRESULT);
-            q->insend = outer;
-            reply_yield(from);
-        } else
-            q->insend = outer;
+        r = w ? call_sent(w, s->hwnd, s->msg, s->wParam, s->lParam, TRUE) : 0;
+        /* still here: held kept the sender (or its end) from freeing it */
+        if ((hq = cur_hq()) != 0)
+            q_of(hq)->insend = outer;
+        s->held = 0;
+        if (s->orphan) {
+            smsg_free(s);
+            continue;
+        }
+        if (s->done)            /* ReplyMessage answered it */
+            continue;
+        from = s->from;
+        smsg_reply(s, r);       /* the sender may free it from here on */
+        reply_yield(from);
     }
 }
 
@@ -323,52 +447,43 @@ LONG send_message(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     if (!s)
         return 0;
     s->from = me;
+    s->to = to;
     s->hwnd = h;
     s->msg = msg;
     s->wParam = wp;
     s->lParam = lp;
+    s->all = smsgs;
+    smsgs = (WORD)s;
     {
         QUEUE __far *tq = q_of(to);
-        if (!tq->sent)
-            tq->sent = (WORD)s;
-        else {
-            PSMSG t = (PSMSG)tq->sent;
-            while (t->next)
-                t = (PSMSG)t->next;
-            t->next = (WORD)s;
-        }
+        WORD __far *l;
+        for (l = &tq->sent; *l; l = &((PSMSG)*l)->next)
+            ;
+        *l = (WORD)s;
     }
     set_wakebit(to, QS_SENDMESSAGE);
     while (!s->done) {
         receive_sent(me);
         if (s->done)
             break;
-        if (!valid_wnd(h)) {
-            /* the window went away with the call still queued: unlink it */
-            QUEUE __far *tq = q_of(to);
-            if (tq->sent == (WORD)s) {
-                tq->sent = s->next;
-                s->done = 1;
-            } else {
-                PSMSG t;
-                for (t = (PSMSG)tq->sent; t; t = (PSMSG)t->next)
-                    if (t->next == (WORD)s) {
-                        t->next = s->next;
-                        s->done = 1;
-                        break;
-                    }
-            }
-            if (s->done)
-                break;
+        /* the window went away with the call still queued: unlink it */
+        if (!valid_wnd(h) && smsg_unqueue(s)) {
+            s->done = 1;
+            break;
         }
+        me = cur_hq();
         q_of(me)->wakemask = QS_SENDMESSAGE | QS_SMRESULT;
-        K_DIRECTEDYIELD(q_of(to)->task);
+        if (s->to)
+            K_DIRECTEDYIELD(q_of(s->to)->task);
         if (!s->done && !(q_of(me)->wakebits & (QS_SENDMESSAGE | QS_SMRESULT)))
             K_WAITEVENT(0);
         q_of(me)->wakebits &= ~QS_SMRESULT;
     }
     r = s->result;
-    LocalFree((HLOCAL)s);
+    if (s->held)
+        s->orphan = 1;          /* the receiver frees it (receive_sent) */
+    else
+        smsg_free(s);
     return r;
 }
 
@@ -383,12 +498,10 @@ void WINAPI ReplyMessage(LRESULT r)
     PSMSG s;
     if (!hq || !q_of(hq)->insend)
         return;
-    s = (PSMSG)q_of(hq)->insend;
-    if (!s->done) {
+    s = (PSMSG)q_of(hq)->insend;        /* held: not freed under us */
+    if (!s->done && !s->orphan && s->from) {
         HQUEUE from = s->from;
-        s->result = r;
-        s->done = 1;
-        set_wakebit(from, QS_SMRESULT);
+        smsg_reply(s, r);
         reply_yield(from);
     }
 }
@@ -544,7 +657,9 @@ void WINAPI WaitMessage(void)
         q_of(hq)->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
         receive_sent(hq);
         q = q_of(hq);
-        if (q->count || q->quit || q->npaint || q->ntimer || input_pending)
+        /* a timer by its wake bit: one a filtered GetMessage passed over
+           keeps its count but not the bit (timer.c, timer_message) */
+        if (q->count || q->quit || q->npaint || (q->wakebits & QS_TIMER) || input_pending)
             return;
         if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE | PM_NOYIELD))
             return;

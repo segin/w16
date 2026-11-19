@@ -141,12 +141,10 @@ ATOM WINAPI RegisterClass(const WNDCLASS __far *wc)
     return K_GETEXPWINVER(K_GETEXEPTR(wc->hInstance)) >= 0x030A ? c->atom : 1;
 }
 
-BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
+/* a class out of the list: its menu name, atom, class DC and block go */
+static void free_class(PCLS c)
 {
-    PCLS c = find_class(name, hinst);
     WORD *link;
-    if (!c || IS_SYSTEM(c) || c->cwnd)
-        return FALSE;
     for (link = &classes; *link; link = &((PCLS)*link)->next)
         if (*link == (WORD)c) {
             *link = c->next;
@@ -156,8 +154,40 @@ BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
         uh_free(&uhStr, LOWORD((DWORD)c->lpszMenuName));
     if (c->atom >= 0xC000u)
         DeleteAtom(c->atom);
+    if (c->hdce)
+        free_class_dc(c);
+    c->sig = 0;
     LocalFree((HLOCAL)c);
+}
+
+BOOL WINAPI UnregisterClass(LPCSTR name, HINSTANCE hinst)
+{
+    PCLS c = find_class(name, hinst);
+    if (!c || IS_SYSTEM(c) || c->cwnd)
+        return FALSE;
+    free_class(c);
     return TRUE;
+}
+
+/* A module goes: its classes with it, CS_GLOBALCLASS ones too (Pietrek,
+   Windows Internals ch. 3: ModuleUnload's PurgeClass when the last
+   instance of a program ends; US29 cl on 3.1: a program's classes are
+   there while a second instance runs and gone after the last, and a
+   DLL's when it is freed). w16 never removed them: a class's procedure
+   was left pointing into the freed module, and the module's next run,
+   given the same handle, could not register its classes again (USER
+   audit, item 5). A class some window still has stays. */
+void purge_classes(HMODULE m)
+{
+    WORD n;
+    PCLS c;
+    if (!m || m == hModUser)
+        return;
+    for (c = (PCLS)classes; c; c = (PCLS)n) {
+        n = c->next;
+        if (c->hModule == m && !c->cwnd)
+            free_class(c);
+    }
 }
 
 /* a bad class name or WNDCLASS: FALSE (3.1, US27) */

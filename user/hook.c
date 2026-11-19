@@ -26,11 +26,16 @@ typedef struct HOOK {
     HTASK  task;                /* 0: every task */
     HINSTANCE hinst;
     WORD   old;                 /* installed with the 3.0 SetWindowsHook */
+    HQUEUE hq;                  /* the installing task's queue */
+    HMODULE module;             /* where the procedure is (hinst's module) */
+    WORD   busy;                /* calls of the procedure running */
+    WORD   dead;                /* unhooked while busy: freed after */
 } HOOK;
 typedef HOOK __far *PHOOK;
 #define HK(h)   ((PHOOK)UH_PTR(&uhObj, (h)))
 
 static WORD chains[NHOOKTYPES];
+BOOL hook_set(int type);
 
 static WORD *chain(int type)
 {
@@ -52,6 +57,8 @@ static WORD add_hook(int type, HOOKPROC proc, HINSTANCE hinst, HTASK task, BOOL 
     h->hinst = hinst;
     h->task = task;
     h->old = old;
+    h->hq = cur_hq();
+    h->module = K_GETEXEPTR(hinst ? (HANDLE)hinst : (HANDLE)SELECTOROF(proc));
     h->next = *c;
     *c = hh;
     return hh;
@@ -63,18 +70,42 @@ HHOOK WINAPI SetWindowsHookEx(int type, HOOKPROC proc, HINSTANCE hinst, HTASK ta
     return h ? (HHOOK)MAKELONG(h, 0x4B48) : 0;          /* "HK" */
 }
 
+/* the first live hook from h on */
+static WORD live(WORD h)
+{
+    while (h && HK(h)->dead)
+        h = HK(h)->next;
+    return h;
+}
+
 /* the 3.0 interface: returns the previous hook procedure (3.1 SDK), which
    the caller passes to DefHookProc */
 HOOKPROC WINAPI SetWindowsHook(int type, HOOKPROC proc)
 {
-    WORD *c = chain(type);
-    HOOKPROC prev = c && *c ? HK(*c)->proc : 0;
+    WORD *c = chain(type), first = c ? live(*c) : 0;
+    HOOKPROC prev = first ? HK(first)->proc : 0;
     if (!add_hook(type, proc, 0, 0, TRUE))
         return 0;
     return prev;
 }
 
-/* a hook block of ours: in the heap, its type's chain has it */
+/* h out of its chain and freed */
+static void free_hook(WORD h)
+{
+    WORD *c = chain(HK(h)->type), __far *l;
+    for (l = c; *l; l = &HK(*l)->next)
+        if (*l == h) {
+            *l = HK(h)->next;
+            break;
+        }
+    uh_free(&uhObj, h);
+}
+
+/* a hook block of ours: in the heap, its type's chain has it. One whose
+   procedure is running (it unhooks itself, then calls CallNextHookEx with
+   its own handle, as programs do) stays in the chain, passed over, until
+   that call returns: freed at once, its next link was read from a freed
+   block (USER audit, item 6) */
 static BOOL unhook(WORD h)
 {
     WORD *c, __far *l;
@@ -85,8 +116,12 @@ static BOOL unhook(WORD h)
         return FALSE;
     for (l = c; *l; l = &HK(*l)->next)
         if (*l == h) {
-            *l = HK(h)->next;
-            uh_free(&uhObj, h);
+            if (HK(h)->dead)
+                return FALSE;
+            if (HK(h)->busy)
+                HK(h)->dead = 1;
+            else
+                free_hook(h);
             return TRUE;
         }
     return FALSE;
@@ -102,20 +137,30 @@ BOOL WINAPI UnhookWindowsHook(int type, HOOKPROC proc)
     WORD *c = chain(type), h;
     if (!c)
         return FALSE;
-    for (h = *c; h; h = HK(h)->next)
+    for (h = live(*c); h; h = live(HK(h)->next))
         if (HK(h)->proc == proc)
             return unhook(h);
     return FALSE;
+}
+
+/* the procedure of hook h; h is held (busy) during the call */
+static LRESULT call_one(WORD h, int code, WPARAM wp, LPARAM lp)
+{
+    HOOKPROC f = HK(h)->proc;
+    LRESULT r;
+    HK(h)->busy++;
+    r = ((LRESULT (__far __pascal *)(int, WPARAM, LPARAM))f)(code, wp, lp);
+    if (!--HK(h)->busy && HK(h)->dead)
+        free_hook(h);
+    return r;
 }
 
 static LRESULT call_from(WORD h, int code, WPARAM wp, LPARAM lp)
 {
     HTASK me = GetCurrentTask();
     for (; h; h = HK(h)->next)
-        if (!HK(h)->task || HK(h)->task == me) {
-            HOOKPROC f = HK(h)->proc;
-            return ((LRESULT (__far __pascal *)(int, WPARAM, LPARAM))f)(code, wp, lp);
-        }
+        if (!HK(h)->dead && (!HK(h)->task || HK(h)->task == me))
+            return call_one(h, code, wp, lp);
     return 0;
 }
 
@@ -136,11 +181,9 @@ LRESULT WINAPI DefHookProc(int code, WPARAM wp, LPARAM lp, HOOKPROC __far *next)
         return 0;
     for (t = 0; t < NHOOKTYPES; t++) {
         WORD h;
-        for (h = chains[t]; h; h = HK(h)->next)
-            if (HK(h)->proc == *next) {
-                HOOKPROC f = HK(h)->proc;
-                return ((LRESULT (__far __pascal *)(int, WPARAM, LPARAM))f)(code, wp, lp);
-            }
+        for (h = live(chains[t]); h; h = live(HK(h)->next))
+            if (HK(h)->proc == *next)
+                return call_one(h, code, wp, lp);
     }
     return 0;
 }
@@ -149,6 +192,44 @@ LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp)
 {
     WORD *c = chain(type);
     return c && *c ? call_from(*c, code, wp, lp) : 0;
+}
+
+/* Hooks that outlive what they belong to go (Pietrek, Windows Internals
+   ch. 3: AppExit's UnhookHooks, and ModuleUnload's for the module when
+   its last instance ends or a task faults). US29 hk on 3.1: a
+   system-wide hook in a DLL, set by a task that then ended, is still
+   called while the DLL stays loaded; so a task's end takes the hooks for
+   that task alone, and a module's end the hooks whose procedure is in
+   it. w16 kept them all: a system-wide hook in a DLL that was freed left
+   its procedure dangling (USER audit, item 6). */
+static void unhook_if(int what, WORD v)
+{
+    int t;
+    for (t = 0; t < NHOOKTYPES; t++) {
+        WORD h, n;
+        for (h = chains[t]; h; h = n) {
+            PHOOK k = HK(h);
+            n = k->next;
+            if (k->dead)
+                continue;
+            if ((what == 0 && k->task == (HTASK)v) ||
+                (what == 1 && k->module == (HMODULE)v))
+                unhook(h);
+        }
+    }
+}
+
+void hooks_queue_gone(HQUEUE hq, HTASK task)
+{
+    (void)hq;
+    if (task)
+        unhook_if(0, (WORD)task);
+}
+
+void hooks_module_gone(HMODULE m)
+{
+    if (m)
+        unhook_if(1, (WORD)m);
 }
 
 /* a bad MSG: FALSE (3.1, US27) */
@@ -161,6 +242,32 @@ BOOL WINAPI CallMsgFilter(MSG __far *m, int code)
     return call_hook(WH_MSGFILTER, code, 0, (LPARAM)m) != 0;
 }
 
+/* WH_CBT (US30 cbt): nonzero refuses what code announces */
+LRESULT cbt_hook(int code, WPARAM wp, LPARAM lp)
+{
+    return hook_set(WH_CBT) ? call_hook(WH_CBT, code, wp, lp) : 0;
+}
+
+/* WH_KEYBOARD, WH_MOUSE (US30 kbd, mouse): HC_ACTION as the message is
+   taken from the system queue (nonzero: thrown away), HC_NOREMOVE at a
+   PM_NOREMOVE look */
+LRESULT kbd_hook(int code, WPARAM vk, LPARAM data)
+{
+    return hook_set(WH_KEYBOARD) ? call_hook(WH_KEYBOARD, code, vk, data) : 0;
+}
+
+LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit)
+{
+    MOUSEHOOKSTRUCT ms;
+    if (!hook_set(WH_MOUSE))
+        return 0;
+    ms.pt = pt;
+    ms.hwnd = h;
+    ms.wHitTestCode = hit;
+    ms.dwExtraInfo = 0;
+    return call_hook(WH_MOUSE, code, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms);
+}
+
 /* WH_SHELL notifications (3.1 SDK: HSHELL_*) */
 void shell_notify(int code, HWND h)
 {
@@ -171,5 +278,5 @@ void shell_notify(int code, HWND h)
 BOOL hook_set(int type)
 {
     WORD *c = chain(type);
-    return c && *c;
+    return c && live(*c);
 }

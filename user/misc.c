@@ -29,20 +29,47 @@ void __far __pascal __loadds UNIMPL(WORD ord)
 }
 
 /* ---- task exit ---- */
-static void app_exit(HTASK task)
+static void app_exit(HTASK task, BOOL fault)
 {
     HQUEUE hq = K_GETTASKQUEUE(task);
+    HMODULE m;
     HWND h, n;
     if (!hq)
         return;
+    /* the module (InitApp's instance): it goes when this is its last
+       instance */
+    m = K_GETEXEPTR(q_of(hq)->hinst);
+    /* nobody waits for its replies, and it waits for none (Pietrek ch. 3,
+       AppExit: FlushSentMessages; again in destroy_queue for what comes
+       while its windows are destroyed) */
+    smsg_queue_gone(hq, 0);
+    /* its hooks and the hooks for it alone (AppExit: UnhookHooks) */
+    hooks_queue_gone(hq, task);
     /* its top-level windows (and their children) */
+    /* from the top again after each (a WM_DESTROY can change the list),
+       passing over those already being destroyed: a task that ended
+       inside a WM_DESTROY left its window linked, and the loop came back
+       to it for ever (USER audit, item 4) */
     for (h = PW(hwndDesktop)->hwndChild; h; h = n) {
-        n = PW(h)->hwndNext;
-        if (PW(h)->hq == hq) {
+        PWND w = PW(h);
+        n = w->hwndNext;
+        if (w->hq == hq && !(w->flags & WF_DESTROYING)) {
             destroy_window(h);
             n = PW(hwndDesktop)->hwndChild;
         }
     }
+    /* and those: out of the tree, freed */
+    for (h = PW(hwndDesktop)->hwndChild; h; h = n) {
+        n = PW(h)->hwndNext;
+        if (PW(h)->hq == hq)
+            destroy_abandoned(h);
+    }
+    /* the last instance: the module's hooks and classes (ModuleUnload;
+       the hooks after a fault too) */
+    if (m && (fault || GetModuleUsage(m) <= 1))
+        hooks_module_gone(m);
+    if (m && GetModuleUsage(m) <= 1)
+        purge_classes(m);
     kill_queue_timers(hq);
     if (hqInput == hq)
         hqInput = 0;
@@ -58,7 +85,16 @@ LONG WINAPI U_SIGNALPROC(HANDLE h, WORD code, WORD exitfn, HINSTANCE hinst, HQUE
     ulogx("  handle ", (WORD)h);
     if (code == 0x20 || code == 0x666) {
         drivers_task_exit(code == 0x666);
-        app_exit((HTASK)h);
+        app_exit((HTASK)h, code == 0x666);
+    }
+    /* a DLL freed (after its WEP; Pietrek ch. 3, DelModule): its hooks and
+       classes go (US29 cl, hk) */
+    if (code == 0x80) {
+        HMODULE m = K_GETEXEPTR(h);
+        if (!m)
+            m = (HMODULE)h;
+        hooks_module_gone(m);
+        purge_classes(m);
     }
     if (code == 0x20)
         user_heaps_shrink();    /* not after a fault (Pietrek ch. 3) */
