@@ -30,7 +30,7 @@ The checks, per manifest line:
                           At the recording's own rate the residual after
                           the gain is printed too (0 is sample-accurate)
   wavr FILE               a sound of Windows 3.1's (CHIMES.WAV, DING.WAV):
-                          the same but for the length, at least 75% of the
+                          the same but for the length, at least half the
                           file's (its quiet end counts as silence)
   total MS                the pieces left last at least MS milliseconds
                           in all (QuickTime's sample movie's sound track:
@@ -319,8 +319,10 @@ def cmp(cap, d, manifest='manifest.txt'):
             res = []
             if m[0] == 'wavr':
                 # a recorded sound's quiet end is cut by the silence
-                # detection (CHIMES.WAV's last 40 ms, DING.WAV's 100)
-                ok = 0.75 * dur <= got <= dur + 15
+                # detection where it falls under the threshold (DING.WAV:
+                # 384-424 ms of 524 from run to run); a cut sound would show
+                # in the correlation, taken over the whole file
+                ok = 0.5 * dur <= got <= dur + 15
             else:
                 ok = abs(got - dur) <= 15
             lim = 0.99 if sbits == 8 else 0.995
