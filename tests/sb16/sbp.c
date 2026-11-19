@@ -21,6 +21,7 @@
  *                       100 ms between, then midiOutReset
  *   mci STRING          mciSendString(STRING) with the probe's window;
  *                       logs the answer and the returned string
+ *   snd FILE            sndPlaySound(FILE, SND_SYNC); logs the answer
  * Sources: the Multimedia Programmer's Guide (the wave, MIDI, MMIO and
  * MCI functions, the RIFF WAVE layout); the probe only calls them.
  */
@@ -399,7 +400,10 @@ int __cdecl __far tmain(void)
             rec(ms, rate, bits, (WORD)num(&p, 0));
         } else if (is(cmd, "notes"))
             notes();
-        else if (is(cmd, "mci")) {
+        else if (is(cmd, "snd")) {
+            char *fn = word(&p);
+            lg("snd %s = %u", (LPSTR)fn, sndPlaySound(fn, SND_SYNC));
+        } else if (is(cmd, "mci")) {
             while (*p == ' ')
                 p++;
             mci(p);

@@ -7,7 +7,8 @@
 # DROPIN_CAPTURE: DX-CAPTURE /A at a 44100 Hz mixer), and plays the test
 # material of tests/sb16/sbaudio.py: eight WAV files in 8 and 16 bits,
 # mono and stereo, 8000 to 44100 Hz (four headers each; one looped three
-# times; one at a lower wave volume), records twice (input), plays seven
+# times; one at a lower wave volume), Windows 3.1's CHIMES.WAV through MCI
+# (MCIWAVE) and DING.WAV through sndPlaySound, records twice (input), plays seven
 # notes through the MPU-401 and a MIDI file through MCISEQ on port 0.
 # DOSBox-X's own synthesiser (mididevice=synth: FluidSynth into its mixer)
 # plays the MIDI with tools/mksf2.py's sine
@@ -38,6 +39,7 @@ mat=$out/mat
 rm -rf "$mat"
 python3 "$root/tests/sb16/sbaudio.py" gen "$mat"
 python3 "$root/tools/mksf2.py" "$mat/sine.sf2"
+cp "$root/.tools/ref/win31/cdrive/WINDOWS/CHIMES.WAV" "$root/.tools/ref/win31/cdrive/WINDOWS/DING.WAV" "$mat/"
 run() {
     s=$1 d=$out/$1
     rm -rf "$d" "$d.cap"
@@ -100,7 +102,7 @@ for l in log:
         want = size * loops
         if b != want or s != want // align or t != 1 or abs(ms - want // align * 1000 // rate) > 1:
             bad.append(l + ' (want %d bytes)' % want)
-    if re.search(r'= [1-9]\d*$', l) and 'mciSendString' not in l:
+    if re.search(r'= [1-9]\d*$', l) and not l.startswith('snd '):
         bad.append(l)
     m = re.match(r'rec .*: (\d+) headers of (\d+) bytes', l)
     if m:
@@ -108,6 +110,8 @@ for l in log:
     m = re.match(r'  recorded (\d+) bytes', l)
     if m and int(m.group(1)) != recwant:
         bad.append(l + ' (want %d)' % recwant)
+    if l.startswith('snd ') and not l.endswith('= 1'):
+        bad.append(l)
     m = re.match(r'mci ".*" = (\d+)', l)
     if m and m.group(1) != '0':
         bad.append(l)

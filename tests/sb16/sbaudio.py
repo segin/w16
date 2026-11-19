@@ -29,6 +29,9 @@ The checks, per manifest line:
                           of the first file) relative to the first file.
                           At the recording's own rate the residual after
                           the gain is printed too (0 is sample-accurate)
+  wavr FILE               a sound of Windows 3.1's (CHIMES.WAV, DING.WAV):
+                          the same but for the length, at least 75% of the
+                          file's (its quiet end counts as silence)
   notes K1 K2 ...         one piece per MIDI note, its pitch (zero
                           crossings over its middle) within 1% of the
                           note's (the sine SoundFont of tools/mksf2.py
@@ -145,6 +148,12 @@ def gen(d):
     # step on the SB16's mixer (Creative's guide): 14 dB down
     script += ['vol C000 C000', 'play C:\\SB16T\\T3.WAV 2', 'vol FFFF FFFF', 'pause 600']
     man.append('wav T3.WAV 1 -14')
+    # Windows 3.1's own sounds (the reference install's, copied into DIR
+    # at test time by sbaudio.sh): CHIMES.WAV through MCI (MCIWAVE, auto-
+    # opened), DING.WAV through sndPlaySound
+    script += ['mci play C:\\WINDOWS\\CHIMES.WAV wait', 'pause 600',
+               'snd C:\\WINDOWS\\DING.WAV', 'pause 600']
+    man += ['wavr CHIMES.WAV', 'wavr DING.WAV']
     # recording: no sound
     script += ['rec 1000 11025 8 1', 'rec 500 22050 16 2', 'pause 300']
     # MIDI through the MPU-401
@@ -264,8 +273,8 @@ def cmp(cap, d):
     for m in man:
         if m[0] == 'skip':
             k += int(m[1])
-        elif m[0] == 'wav':
-            name, loops = m[1], int(m[2])
+        elif m[0] in ('wav', 'wavr'):
+            name, loops = m[1], int(m[2]) if len(m) > 2 else 1
             want_db = float(m[3]) if len(m) > 3 else 0.0
             sch, srate, sbits, src = readwav(os.path.join(d, name))
             s, e = ps[k]
@@ -279,7 +288,12 @@ def cmp(cap, d):
             dur = len(src[0]) / srate * 1000
             got = (e - s) * 1000 / rate
             res = []
-            ok = abs(got - dur) <= 15
+            if m[0] == 'wavr':
+                # a recorded sound's quiet end is cut by the silence
+                # detection (CHIMES.WAV's last 40 ms, DING.WAV's 100)
+                ok = 0.75 * dur <= got <= dur + 15
+            else:
+                ok = abs(got - dur) <= 15
             lim = 0.99 if sbits == 8 else 0.995
             lv = []
             for c in range(2):
