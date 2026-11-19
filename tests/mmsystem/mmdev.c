@@ -802,15 +802,22 @@ static void sec_waveout(void)
         lg("waveOutClose = %u", waveOutClose(h));
         flush();
     }
-    /* closing while a buffer plays */
+    /* closing with a buffer queued: MMSYSTEM leaves it to the driver. The
+       device is paused first, so that the buffer waits: while one plays,
+       SNDBLST2's WODM_CLOSE waits for it by timeGetTime, and 3.1's
+       TIMER.DRV's clock now and then steps 55 ms back (ARCHITECTURE.md
+       21.2), which ends that wait at once in some runs (under both
+       MMSYSTEMs: the buffer never done, and every later open of the
+       driver's answering 3) */
     wopen("function", 0, (LPWAVEFORMAT)&fmt11, (DWORD)dev_cb, 0x5A5A0007L, CALLBACK_FUNCTION, &h, "hwo");
     if (!waveOutGetID(h, &id)) {
         sethdr(wh1, data1, 2205, 0, 0);
         waveOutPrepareHeader(h, wh1, sizeof(WAVEHDR));
+        lg("waveOutPause = %u", waveOutPause(h));
         r = waveOutWrite(h, wh1, sizeof(WAVEHDR));
         lg("waveOutWrite = %u", r);
         r = waveOutClose(h);
-        lg("waveOutClose(playing) = %u, %s", r, (LPSTR)wflags(wh1));
+        lg("waveOutClose(queued, paused) = %u, %s", r, (LPSTR)wflags(wh1));
         flush();
         if (r) {
             lg("waveOutReset = %u", waveOutReset(h));
