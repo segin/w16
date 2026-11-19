@@ -770,6 +770,13 @@ void __cdecl task_exit_c(u16 code)
     if (boot_tdb && t == boot_tdb)
         kexit_to_dos((u8)code);         /* while booting: back to DOS */
 
+    /* KRNL386: FS and GS 0 before the task's blocks go (as its
+       GlobalFree): a task ending with one of its blocks in FS lived on
+       under Microsoft's DOSX with 3.1's KRNL386, which ends Windows at the
+       next timer tick with a freed selector in FS (TK61 "task", "deadfs").
+       KRNL286 leaves them (3.1's KRNL286 ended Windows there: "Fault in
+       MS-DOS Extender") */
+    api_fsgs0();
     in_sched = 1;
     if (TW(t, TDB_LIBINIT))
         GlobalFree(TW(t, TDB_LIBINIT));
@@ -1149,7 +1156,7 @@ u16 KAPI_ES GetTaskDS(void)                                      /* KERNEL.155 *
 /* Observed: the argument itself when it is a task's selector (whatever
    its RPL bits: hTask & ~1 came back as hTask & ~1), else 0 (the
    hInstance, hModule, PDB and 0 give 0). */
-u16 KAPI IsTask(u16 h)                                        /* KERNEL.320 */
+u16 KAPI_ES IsTask(u16 h)                                      /* KERNEL.320 */
 {
     return task_of(h) ? h : 0;
 }

@@ -37,6 +37,23 @@
 
 #define NULL    ((void *)0)
 
+/* On the way out of some exports 3.1 leaves ES = 0 (both kernels) and,
+   KRNL386, FS = 0 (TK61 "live": LockSegment, UnlockSegment, GlobalFix,
+   GlobalUnfix, GlobalPageLock, GlobalPageUnlock; FS also GlobalSize and
+   GlobalFlags). KRNL386 C code never uses FS or GS (-zfp -zgp). */
+void api_es0(void);
+#pragma aux api_es0 = "push 0" "pop es" modify exact [es];
+#ifdef KRNL386
+void api_fs0(void);
+#pragma aux api_fs0 = 0x6A 0x00 0x0F 0xA1 modify exact [];      /* push 0; pop fs */
+void api_fsgs0(void);
+#pragma aux api_fsgs0 = 0x6A 0x00 0x0F 0xA1 0x6A 0x00 0x0F 0xA9 modify exact [];
+                                                /* push 0; pop fs; push 0; pop gs */
+#else
+#define api_fs0()
+#define api_fsgs0()
+#endif
+
 #define MK_FP(s, o)  ((void __far *)(((u32)(u16)(s) << 16) | (u16)(o)))
 #define FP_SEG(p)    ((u16)((u32)(void __far *)(p) >> 16))
 #define FP_OFF(p)    ((u16)(u32)(void __far *)(p))

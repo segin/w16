@@ -6,10 +6,10 @@
  * GlobalDOSAlloc/GlobalDOSFree and GlobalPageLock/Unlock. (GlobalFix,
  * GlobalWire and GlobalHandleNoRIP are the global heap's: global.c.)
  *
- * Descriptors are managed through DPMI 0.9 (dpmi.c). Windows 3.1's KERNEL
- * keeps its own free list in the LDT (Pietrek, "Windows Internals"); w16
- * allocates each selector from the DPMI host, which a DPMI client cannot
- * tell apart except by the selector values.
+ * Descriptors are managed through DPMI 0.9 (dpmi.c). Freed selectors go
+ * where Windows 3.1 puts them (dpmi.c, TK61): back to the DPMI host at
+ * once under KRNL286, onto KERNEL's own free list in the LDT under
+ * KRNL386 (Pietrek, "Windows Internals", ch. 2).
  *
  * Behaviour observed on Windows 3.1 with tests/apps/tk17.c, KRNL286 (which
  * w16 follows where it differs from KRNL386) and KRNL386 in Standard and
@@ -435,7 +435,7 @@ u16 KAPI GlobalDOSFree(u16 sel)                               /* KERNEL.185 */
    (KRNL386 returns a page-lock count: 1, 2, then 1, 0.) DOSX does not
    page, so nothing is page-locked (UNVERIFIED: DPMI 0004h/0600h). */
 
-u16 KAPI GlobalPageLock(u16 h)                                /* KERNEL.191 */
+static u16 gpagelock(u16 h)
 {
 #ifdef KRNL386
     return h ? gpage_lock(h, 1) : 0;    /* global386.c */
@@ -447,7 +447,14 @@ u16 KAPI GlobalPageLock(u16 h)                                /* KERNEL.191 */
 #endif
 }
 
-u16 KAPI GlobalPageUnlock(u16 h)                              /* KERNEL.192 */
+u16 KAPI GlobalPageLock(u16 h)                                /* KERNEL.191 */
+{
+    u16 r = gpagelock(h);
+    api_fs0(); api_es0();
+    return r;
+}
+
+static u16 gpageunlock(u16 h)
 {
 #ifdef KRNL386
     return h ? gpage_lock(h, 0) : 0;
@@ -456,4 +463,11 @@ u16 KAPI GlobalPageUnlock(u16 h)                              /* KERNEL.192 */
         GlobalUnfix(h);
     return 0;
 #endif
+}
+
+u16 KAPI GlobalPageUnlock(u16 h)                              /* KERNEL.192 */
+{
+    u16 r = gpageunlock(h);
+    api_fs0(); api_es0();
+    return r;
 }

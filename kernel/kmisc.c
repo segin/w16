@@ -284,7 +284,7 @@ u32 KAPI GetWinOldApHooks(void)
    shows 3.1 reading bit 0 of a flag word at 48h of the task's PDB, which
    its loader sets for WINOLDAP; w16 asks the task's module instead (the
    same tasks). 0 for anything that is not a task. */
-u16 KAPI IsTask(u16 h);
+u16 KAPI_ES IsTask(u16 h);
 u16 KAPI IsWinOldApTask(u16 htask)
 {
     module FAR *m;

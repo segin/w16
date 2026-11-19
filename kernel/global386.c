@@ -184,6 +184,10 @@ static void set_access(u16 s, u8 rights)
     r.ax = 0x0009;
     r.bx = s;
     r.cx = rights | (cpl << 5);
+    /* a discarded block's (not present): the AVL bit set too, as 3.1's
+       (TK61 "discarded ar" 1073h, descriptor byte 6 10h, both kernels) */
+    if (!(rights & 0x80))
+        r.cx |= 0x1000;
     r.ds = r.es = 0;
     dpmi31(&r);
 }
@@ -1903,9 +1907,16 @@ u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
     return AR(a)->count;
 }
 
-u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
+static u32 gsize386(u16 h)
 {
     return gsize_of_sel(h);
+}
+
+u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
+{
+    u32 r = gsize386(h);
+    api_fs0();
+    return r;
 }
 
 u32 KAPI_ES GlobalHandle(u16 sel)                             /* KERNEL.21 */
@@ -1922,7 +1933,7 @@ u32 KAPI_ES GlobalHandle(u16 sel)                             /* KERNEL.21 */
 
 /* observed (tk58.c): the lock count shows for every block, fixed ones
    too (GlobalFix) */
-u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
+static u16 gflags386(u16 h)
 {
     aid a;
     u16 f;
@@ -1949,9 +1960,16 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
     return 0;
 }
 
+u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
+{
+    u16 r = gflags386(h);
+    api_fs0();
+    return r;
+}
+
 /* observed (tk17.c, KRNL386): LockSegment of a fixed block returns its
    handle (even), not h | 1 */
-u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+static u16 lockseg(u16 seg)
 {
     aid a;
     if (find(seg, &a) != FB_BLOCK)
@@ -1961,7 +1979,14 @@ u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
     return AR(a)->handle;
 }
 
-u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+{
+    u16 r = lockseg(seg);
+    api_fs0(); api_es0();
+    return r;
+}
+
+static u16 unlockseg(u16 seg)
 {
     aid a;
     if (find(seg, &a) != FB_BLOCK)
@@ -1969,6 +1994,13 @@ u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
     if (!is_fixed(AR(a)->handle | 1) && discardable(a) && AR(a)->count)
         AR(a)->count--;
     return AR(a)->handle;
+}
+
+u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+{
+    u16 r = unlockseg(seg);
+    api_fs0(); api_es0();
+    return r;
 }
 
 static u32 largest_free(void)
@@ -2086,7 +2118,7 @@ u32 KAPI GetFreeSpace(u16 flags)                              /* KERNEL.169 */
 
 /* observed (tk58.c, tk17.c): under KRNL386 GlobalFix counts for fixed
    blocks too; AX is the handle passed */
-u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
+static u16 gfix(u16 h)
 {
     aid a;
     if (find(h, &a) == FB_BLOCK && AR(a)->count < 0xFF && AR(a)->owner != OWN_BURGER)
@@ -2094,12 +2126,26 @@ u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
     return h;
 }
 
-u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
+u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
+{
+    u16 r = gfix(h);
+    api_fs0(); api_es0();
+    return r;
+}
+
+static u16 gunfix(u16 h)
 {
     aid a;
     if (find(h, &a) == FB_BLOCK && AR(a)->count && AR(a)->owner != OWN_BURGER)
         AR(a)->count--;
     return h;
+}
+
+u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
+{
+    u16 r = gunfix(h);
+    api_fs0(); api_es0();
+    return r;
 }
 
 void KAPI FarSetOwner(u16 h, u16 owner)                       /* KERNEL.403 */

@@ -14,47 +14,148 @@ static int call(regs16 *r)
     return !dpmi31(r);              /* 1 = success */
 }
 
+/* What happens to a freed selector (Windows 3.1, black-box: TK61,
+   tests/apps/tk61.c; ARCHITECTURE.md 9.2):
+ *  - KRNL286 (Standard mode) gives it back to DOSX at once with INT 31h
+ *    0001h: the next 0000h hands it out again, and its descriptor is
+ *    DOSX's free one. FS and GS keep it (FreeSelector, GlobalFree, a
+ *    task's end): w16 does the same.
+ *  - KRNL386 (both modes) keeps it on its own list (Pietrek, "Windows
+ *    Internals", ch. 2, Get_Sel and Free_Sel), never given back to the
+ *    DPMI host: written through the LDT's own selector (INT 2Fh 168Ah
+ *    "MS-DOS", 0100h; k386c.c) as access byte 0, byte 6 0Fh (so not
+ *    free to the host either), base 0, and in limit bits 0-15 the LDT
+ *    offset of the next free one (FFFFh at the end). LAR, LSL, VERR and
+ *    VERW fail on it. The last one freed is the first handed out (also
+ *    to AllocSelector(0) and GlobalAlloc); several at once are the first
+ *    on the list that starts a run of free ones going up. Without the
+ *    LDT's selector (a host without the vendor API) KRNL386 would give
+ *    them back as KRNL286 does (Pietrek: Free_Sel, GDTDsc 0).
+ * A freed selector left in FS or GS: the DOS extender's business
+ * (dosx/ring0.inc fsgs_restore, win386/vmm/vmmasm.asm fixsel). */
+#ifdef KRNL386
+u16 ldt_alias;                  /* k386c.c: the LDT's selector, 0: none */
+static u16 free_head = 0xFFFF;  /* LDT offset of the first free one */
+
+static u16 lsl16(u16 sel);
+#pragma aux lsl16 = \
+    "xor ax, ax"                                            \
+    0x0F 0x03 0xC3              /* lsl ax, bx */            \
+    parm [bx] value [ax] modify exact [ax];
+
+static u8 FAR *ldt_at(u16 off)
+{
+    return (u8 FAR *)MK_FP(ldt_alias, off);
+}
+
+/* the descriptor at LDT offset off is within the alias */
+static int ldt_ok(u16 off)
+{
+    u16 lim = lsl16(ldt_alias);
+    return off <= lim && lim - off >= 7;
+}
+
+static int on_list(u16 off)
+{
+    u8 FAR *d;
+    if (!ldt_ok(off))
+        return 0;
+    d = ldt_at(off);
+    return d[5] == 0 && d[6] == 0x0F;
+}
+
+static u16 next_of(u16 off)
+{
+    return *(u16 FAR *)ldt_at(off);
+}
+
+/* takes off out of the list (prev: the one before it, FFFFh: the head) */
+static void unlink_sel(u16 off, u16 prev)
+{
+    if (prev == 0xFFFF)
+        free_head = next_of(off);
+    else
+        *(u16 FAR *)ldt_at(prev) = next_of(off);
+}
+
+/* n selectors from the list, or 0 */
+static u16 list_take(u16 n)
+{
+    u16 e, prev = 0xFFFF, i, steps = 0, p, q;
+    u8 FAR *d;
+    if (!ldt_alias || !n)
+        return 0;
+    for (e = free_head; e != 0xFFFF; prev = e, e = next_of(e)) {
+        if (++steps > 8192 || !ldt_ok(e))
+            return 0;
+        for (i = 1; i < n; i++)
+            if (!on_list(e + 8 * i))
+                break;
+        if (i == n)
+            break;
+    }
+    if (e == 0xFFFF)
+        return 0;
+    unlink_sel(e, prev);
+    for (i = 1; i < n; i++) {
+        /* the run's others, wherever they are on the list */
+        for (q = 0xFFFF, p = free_head; p != 0xFFFF && p != e + 8 * i;
+             q = p, p = next_of(p))
+            ;
+        if (p != 0xFFFF)
+            unlink_sel(p, q);
+    }
+    for (i = 0; i < n; i++) {
+        /* as a fresh descriptor from the host: data, present, base and
+           limit 0 */
+        d = ldt_at(e + 8 * i);
+        d[0] = d[1] = d[2] = d[3] = d[4] = d[6] = d[7] = 0;
+        d[5] = (u8)(0x93 | (cpl << 5));
+    }
+    return e | 4 | cpl;
+}
+
+/* sel onto the list; 0 when it cannot be (then the host gets it) */
+static int list_put(u16 sel)
+{
+    u16 off = sel & 0xFFF8;
+    u8 FAR *d;
+    if (!ldt_alias || !(sel & 4) || !ldt_ok(off))
+        return 0;
+    d = ldt_at(off);
+    if (d[5] == 0 && d[6] == 0x0F)
+        return 1;                       /* already free: w16 keeps the
+                                           list whole (3.1 handed such a
+                                           selector out twice, TK17) */
+    d[5] = 0;
+    d[6] = 0x0F;
+    d[2] = d[3] = d[4] = d[7] = 0;
+    *(u16 FAR *)d = free_head;
+    free_head = off;
+    return 1;
+}
+#endif
+
 u16 dpmi_alloc_desc(u16 n)
 {
     regs16 r;
+#ifdef KRNL386
+    u16 s = list_take(n);
+    if (s)
+        return s;
+#endif
     r.ax = 0x0000;
     r.cx = n;
     return call(&r) ? r.ax : 0;
 }
 
-/* FS and GS on a 386 (the C code never uses them: KRNL286 is 286 code,
-   KRNL386 is built with -zfp -zgp) */
-static u16 fs_of(void);
-#pragma aux fs_of = 0x8C 0xE0 value [ax] modify exact [ax];          /* mov ax, fs */
-static u16 gs_of(void);
-#pragma aux gs_of = 0x8C 0xE8 value [ax] modify exact [ax];          /* mov ax, gs */
-static void fs_zero(void);
-#pragma aux fs_zero = 0x31 0xC0 0x8E 0xE0 modify exact [ax];         /* xor ax, ax; mov fs, ax */
-static void gs_zero(void);
-#pragma aux gs_zero = 0x31 0xC0 0x8E 0xE8 modify exact [ax];         /* xor ax, ax; mov gs, ax */
-static u16 has_fsgs = 0xFFFF;   /* a 386 or later (unknown: FFFFh) */
-
-/* A selector still in FS or GS when it is freed: zeroed first. The DOS
-   extender reloads FS and GS when its INT 31h returns (w16's DOSX at the
-   POP FS of its call gate's exit, Microsoft's in its ring-3 code) and at
-   every interrupt, so a dead one there ended Windows ("Standard Mode:
-   Fault in MS-DOS Extender", error code the selector). Windows 3.1's
-   KERNEL puts a freed selector on its own free list (Pietrek, ch. 2,
-   Free_Sel) and never hands it back to the host, so this never comes up
-   there: QuickTime's Movie Player ends with one of its blocks in FS, and
-   KRNL286 freed that block with the task (docs/notes/
-   quicktime-handover.md, "Closing the player"). */
 void dpmi_free_desc(u16 sel)
 {
     regs16 r;
-    if (has_fsgs == 0xFFFF)
-        has_fsgs = dpmi_cpu_type() >= 3;
-    if (has_fsgs) {
-        if (!((fs_of() ^ sel) & 0xFFFC))
-            fs_zero();
-        if (!((gs_of() ^ sel) & 0xFFFC))
-            gs_zero();
-    }
+#ifdef KRNL386
+    if (list_put(sel))
+        return;
+#endif
     r.ax = 0x0001;
     r.bx = sel;
     call(&r);

@@ -221,6 +221,10 @@ static void set_access(u16 s, u8 rights)
     r.ax = 0x0009;
     r.bx = s;
     r.cx = rights | (cpl << 5);
+    /* a discarded block's (not present): the AVL bit set too, as 3.1's
+       (TK61 "discarded ar" 1073h, descriptor byte 6 10h, both kernels) */
+    if (!(rights & 0x80))
+        r.cx |= 0x1000;
     r.ds = r.es = 0;
     dpmi31(&r);
 }
@@ -1193,9 +1197,13 @@ static void free_block(u16 a)
     if (discardable(a))
         lru_remove(a);
     *seltab(s) = 0;
+    /* the arenas first (the next free one merged, then the block's own),
+       then the block's selectors: KRNL286 hands them to DOSX in that
+       order (TK61, tests/apps/tk61.c with C:\TK61DIAG.FLG: DOSX's free
+       chain after each GlobalFree) */
+    release(a);
     for (i = 0; i < n; i++)
         dpmi_free_desc(s + i * sel_inc);
-    release(a);
 }
 
 static void free_discarded(u16 h)
@@ -1660,8 +1668,16 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     old = (u32)AR(a)->size << 4;
     if (tot < cur) {
         /* shrink in place; the rest becomes free (UNVERIFIED: 3.1 was
-           seen to move a shrunk moveable block down) */
-        u16 r = sel_new(lin_of(a) + ((u32)tot << 4), 0xF);
+           seen to move a shrunk moveable block down). The tiles no
+           longer needed go first, then the rest's arena is made: 3.1's
+           KRNL286 handed the last freed tile out again as that arena
+           (TK61 "shrink") */
+        u16 r, nt = tiles(((u32)tot - 1) << 4);
+        for (cur = nt; cur < n; cur++)
+            dpmi_free_desc(s + cur * sel_inc);
+        n = nt;
+        cur = TOTAL(a);
+        r = sel_new(lin_of(a) + ((u32)tot << 4), 0xF);
         if (r) {
             mark_free(r);
             AR(r)->size = cur - tot - 1;
@@ -1806,7 +1822,7 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
    moveable block stays 0), as GlobalLock; both return the handle.
    UNVERIFIED: LockSegment(-1) (the caller's DS: __loadds has replaced DS
    by then). */
-u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+static u16 lockseg(u16 seg)
 {
     u16 a;
     if (find(seg, &a) != FB_BLOCK)
@@ -1816,7 +1832,14 @@ u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
     return AR(a)->handle;
 }
 
-u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+{
+    u16 r = lockseg(seg);
+    api_es0();
+    return r;
+}
+
+static u16 unlockseg(u16 seg)
 {
     u16 a;
     if (find(seg, &a) != FB_BLOCK)
@@ -1824,6 +1847,13 @@ u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
     if (!(AR(a)->handle & 1) && discardable(a) && AR(a)->count)
         AR(a)->count--;
     return AR(a)->handle;
+}
+
+u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+{
+    u16 r = unlockseg(seg);
+    api_es0();
+    return r;
 }
 
 static u32 largest_free(void)
@@ -1960,7 +1990,7 @@ u32 KAPI GetFreeSpace(u16 flags)                              /* KERNEL.169 */
 /* GlobalFix: moveable blocks only (observed). GlobalFix and GlobalUnfix
    are void; observed (tests/apps/tk17.c): AX is the handle passed
    afterwards, for both. */
-u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
+static u16 gfix(u16 h)
 {
     u16 a;
     if (find(h, &a) != FB_BLOCK)
@@ -1970,12 +2000,26 @@ u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
     return h;
 }
 
-u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
+u16 KAPI GlobalFix(u16 h)                                     /* KERNEL.197 */
+{
+    u16 r = gfix(h);
+    api_es0();
+    return r;
+}
+
+static u16 gunfix(u16 h)
 {
     u16 a;
     if (find(h, &a) == FB_BLOCK && !(AR(a)->handle & 1) && AR(a)->count)
         AR(a)->count--;
     return h;
+}
+
+u16 KAPI GlobalUnfix(u16 h)                                   /* KERNEL.198 */
+{
+    u16 r = gunfix(h);
+    api_es0();
+    return r;
 }
 
 /* The owner word of a block's arena (Schulman). */

@@ -37,6 +37,17 @@ extern int __cdecl vxd_call(u32 entry, regs16 FAR *r);
 extern void __far reboot_proc(void);
 #pragma aux reboot_proc "*"
 extern u8 __cdecl k386_sane;            /* k386.asm: Reboot 0201h's byte */
+extern u16 ldt_alias;                   /* dpmi.c */
+
+/* VERW: 1 if sel is a writeable data segment for us */
+static u16 verw_ok(u16 sel);
+#pragma aux verw_ok = \
+    "xor ax, ax"                                            \
+    0x0F 0x00 0xEB              /* verw bx */               \
+    "jnz short l1"                                          \
+    "inc ax"                                                \
+    "l1:"                                                   \
+    parm [bx] value [ax] modify exact [ax];
 
 u16 k386_enhanced;              /* 386 Enhanced mode: running under WIN386 */
 u16 k386_paging;                /* the VMM pages to a paging file */
@@ -47,8 +58,28 @@ static int reboot_done;
    else the major version) */
 void k386_init(void)
 {
+    static const char msdos[] = "MS-DOS";
     regs16 r;
     u8 al;
+    u32 e;
+    /* The LDT's own selector, for KERNEL's list of free selectors
+       (dpmi.c): the DOS extender's vendor API, INT 2Fh 168Ah with DS:SI =
+       "MS-DOS" (AL 0 and the entry in ES:DI), the entry with AX = 0100h
+       (CF clear and the selector in AX), kept if VERW accepts it (Pietrek,
+       "Windows Internals", ch. 1; DOSX and WIN386 give it: ARCHITECTURE.md
+       9.6, 12) */
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x168A;
+    r.ds = FP_SEG((void FAR *)msdos);
+    r.si = FP_OFF((void FAR *)msdos);
+    int2f_pm(&r);
+    e = ((u32)r.es << 16) | r.di;
+    if ((u8)r.ax == 0 && e) {
+        kmemset(&r, 0, sizeof r);
+        r.ax = 0x0100;
+        if (!vxd_call(e, &r) && verw_ok(r.ax))
+            ldt_alias = r.ax;
+    }
     kmemset(&r, 0, sizeof r);
     r.ax = 0x1600;
     int2f_pm(&r);
