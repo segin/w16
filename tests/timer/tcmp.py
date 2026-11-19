@@ -12,14 +12,20 @@ justified by the spread of repeated runs of Microsoft's own stack or by a
 documented difference (docs/notes/timer-handover.md):
 
   stime     timeGetTime - GetTickCount: the two clocks' starting points
-            (the driver's enable against KERNEL's start): 3.1's runs gave
-            -36 to -90 ms: within 100 ms
+            (the driver's enable against KERNEL's start): w16's between
+            -1000 and 55 ms. 3.1's runs gave -36 to -90 ms on an idle
+            host and down to -469 under load (the boot's emulated length
+            grows with the host's load, on both sides alike); a clock not
+            started at the driver's enable would be seconds off
   rate      ticks within 1, the clocks within 60 ms over 37 BIOS ticks
   steps     timeGetTime's smallest and largest step over 220 ms: 1 and 1
             on w16 (3.1's also 1 and 1, except when its clock went back:
             a "largest step" near 2^32, never asked of w16)
-  pit       channel 0's period: within 64 counts (it is sampled; 3.1's
-            runs spread by up to 33)
+  pit       channel 0's period: within 64 counts or 0.5%, whichever is
+            more (it is sampled, the largest count over 3 BIOS ticks:
+            3.1's runs spread by up to 33 on an idle host, up to 164 at
+            54-55 ms under load; one millisecond more or less
+            is 1193 counts, 1.8% at 55 ms)
   ids       exact
   oneshot   w16's event is called once, no sooner than its delay and no
             later than the delay plus the 8254's period then (its
@@ -37,9 +43,16 @@ documented difference (docs/notes/timer-handover.md):
             lost, about 1); another event's depth while a callback waits
             exact (1: not called inside it), its calls shown; the waiting
             one-shot event's calls and kill exact (1 and 97)
-  tod       BIOS ticks within 2, the clocks within 60 ms, callbacks within
-            15% (3.1's runs: 6051-6916), WM_TIMER within 2, DOS's clock
-            within 10 hundredths
+  tod       over 6 CMOS seconds, which follow the host's clock, so that
+            the emulated time in them shrinks with the host's load (3.1:
+            108-110 BIOS ticks): w16's clocks against its own timeGetTime
+            (3.1's hold the same in all 49 runs kept, idle and loaded):
+            BIOS ticks x 54.925 and GetTickCount within 60 ms of it,
+            callbacks of the 1 ms event (set up to a second before the
+            measure starts) from 97% of it to 103% of it + 1000, WM_TIMER
+            of 100 ms within 2 of it / 109.85 (two BIOS ticks each: 3.1's
+            55-56 in 6 s), DOS's clock within 10 hundredths of BIOS
+            ticks x 5.4925
   child     the 8254 within 8 counts, calls within 6
 Anything else marked "~" is shown and not checked.
 
@@ -47,8 +60,11 @@ Anything else marked "~" is shown and not checked.
 and calls back from it, w16's runs on VTD's virtual 8254 and calls back
 through MMSYSTEM as in Standard mode (docs/notes/timer-handover.md). The
 callback's flags, stack and caller (masked), and the timings (oneshot,
-periodic, nest, stime, rate, context, tod, child) are then shown, not
-checked; every other line and measurement is checked as in Standard mode.
+periodic, nest, stime, rate, context, tod, child, period steps, and how
+many of the event section's 1, 2 and 10 ms one-shot events came before
+they were killed: 3.1's 1, w16's 2 under load) are then shown, not
+checked; every other line and measurement is checked as in Standard
+mode.
 
 usage: tcmp.py [-3] MS.log W16.log
 Exit status 0 when everything checked agrees.
@@ -110,7 +126,20 @@ def period_of(delay):
 
 
 ENH = False
-ENH_SHOWN = re.compile(r'(oneshot|periodic|nest|stime|context|tod|child|rate)')
+ENH_SHOWN = re.compile(r'(oneshot|periodic|nest|stime|context|tod|child|rate|period steps)')
+MA, MB = {}, {}
+
+
+def todok(n):
+    """BIOS ticks, timeGetTime, GetTickCount, callbacks, WM_TIMER of one
+    run, against its own timeGetTime"""
+    ticks, t, g, cb, wmt = n[:5]
+    return (abs(ticks * 54.925 - t) <= 60 and abs(g - t) <= 60
+            and t * 0.97 <= cb <= (t + 1000) * 1.03 and abs(wmt - t / 109.85) <= 2)
+
+
+def dosok(d, ticks):
+    return abs(d - ticks * 5.4925) <= 10
 
 
 def check(key, ms, w):
@@ -123,7 +152,7 @@ def check(key, ms, w):
         return False, 'not in the reference'
     mn, wn = nums(ms), nums(w)
     if key.startswith('stime timeGetTime - GetTickCount'):
-        return within(mn[0], wn[0], 100), 'within 100 ms'
+        return -1000 <= wn[0] <= 55, '-1000 to 55 ms'
     if key == 'rate':
         # ticks N timeGetTime N GetTickCount N
         return (within(mn[0], wn[0], 1) and within(mn[1], wn[1], 60)
@@ -132,7 +161,7 @@ def check(key, ms, w):
         # min a max b changes c in d
         return wn[0] == 1 and wn[1] == 1, 'steps of 1 ms'
     if re.match(r'(period .*|trace .*|child) pit', key) or key.endswith(' pit'):
-        tol = 8 if key.startswith('child') else 64
+        tol = 8 if key.startswith('child') else max(64, mn[0] // 200)
         if mn[0] >= 65400 and wn[0] >= 65400:
             return True, 'both 65536'
         return within(mn[0], wn[0], tol), 'within %d counts' % tol
@@ -178,12 +207,12 @@ def check(key, ms, w):
     if key.startswith('nest the waiting one-shot event'):
         return ms == w, 'exact'
     if key.startswith('tod 6 CMOS seconds'):
-        # BIOS ticks, timeGetTime, GetTickCount, callbacks, WM_TIMER
-        ok = (within(mn[0], wn[0], 2) and within(mn[1], wn[1], 60) and within(mn[2], wn[2], 60)
-              and abs(wn[3] - mn[3]) <= mn[3] * 15 // 100 and within(mn[4], wn[4], 2))
-        return ok, 'ticks 2, clocks 60 ms, callbacks 15%, WM_TIMER 2'
+        return todok(wn), 'w16\'s clocks against its timeGetTime'
     if key.startswith('tod DOS clock'):
-        return within(mn[0], wn[0], 10), 'within 10'
+        t = [v for k, v in MB.items() if k.startswith('tod 6 CMOS seconds')]
+        if not t:
+            return False, 'no tod line'
+        return dosok(wn[0], nums(t[0])[0]), 'within 10 of BIOS ticks x 5.4925'
     if key == 'child calls':
         return within(mn[0], wn[0], 6), 'within 6'
     return None, 'shown'
@@ -195,6 +224,10 @@ def main():
     if args and args[0] == '-3':
         ENH = True
         args = args[1:]
+        # the event section's one-shot events of 1, 2 and 10 ms: how many
+        # came before they were killed (3.1's VTDAPI: 1; w16's on VTD's
+        # virtual 8254: 1, 2 under load)
+        MASKS.append((re.compile(r'^slot 1 calls: \d+$'), 'slot 1 calls: (n)'))
         MASKS.append((re.compile(r'^  flags [0-9A-F]{4} \(IF (\d) DF (\d)\).* task (\w+) depth (\d+)$'),
                       r'  flags (IF \1 DF \2) task \3 depth \4'))
         # a set from a callback: its structure is on the callback's stack
@@ -208,6 +241,8 @@ def main():
     b = open(args[1], errors='replace').read().splitlines()
     ea, ma = split(a)
     eb, mb = split(b)
+    MA.update(ma)
+    MB.update(mb)
     fails = 0
     if ea != eb:
         import difflib
