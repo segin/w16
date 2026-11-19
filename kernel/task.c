@@ -1119,9 +1119,10 @@ void KAPI OldYield(void)                                      /* KERNEL.117 */
     if (!t || in_sched)
         return;
     TW(t, TDB_EVENTS)++;
+    sched_why = "OldYield";             /* (for [w16] schedlog: before the
+                                           switch it names; audit, low) */
     reschedule();
     TW(t, TDB_EVENTS)--;
-    sched_why = "OldYield";
 }
 
 /* GetDOSEnvironment: the environment (every task shares KERNEL's). */

@@ -57,6 +57,9 @@ int kstrnicmp_p(const char FAR *a, const u8 FAR *pstr)
 void kputs(const char FAR *s)
 {
     regs16 r;
+    if (!*s)
+        return;                         /* (0 bytes would truncate a
+                                           redirected file: audit, low) */
     kernel_psp(1);
     r.ax = 0x4000;
     r.bx = 1;
