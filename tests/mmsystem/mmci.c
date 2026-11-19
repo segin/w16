@@ -32,7 +32,9 @@
  *                     and text) is logged and closed
  *   t WHAT V          MCT.DRV's MctSet(WHAT, V); T TEXT: MctStr(TEXT)
  *   w MS              messages for MS milliseconds (decimal)
- *   y DEV ...         yield procedures (mmci.c's yieldtests)
+ *   y DEV ...         yield procedures (mmci.c's yieldtests: g s n r c, q the
+ *                     procedure with messages queued, Y whether it and
+ *                     mmTaskYield let another task run)
  *   d DEV             mciGetCreatorTask, mciGetDriverData,
  *                     mciSetDriverData from the application
  *   l HMOD NAME TYPE  mciLoadCommandResource(the module HMOD names, NAME,
@@ -47,6 +49,7 @@
 #include <windows.h>
 #include <mmsystem.h>
 #include <toolhelp.h>
+#include "mmc.h"
 
 extern void lg(const char *fmt, ...);
 extern void put(const char FAR *s, int n);
@@ -521,6 +524,66 @@ static void yieldtests(const char *a)
             lg("y calling it: %u", g(dev, data));
         else
             lg("y no procedure");
+        break;
+    }
+    case 'q': {         /* the same with a window message and a task
+                           message queued: what is left after it */
+        MSG m;
+        flush();
+        PostMessage(dev_hwnd, WM_USER + 0x77, 1, 2);
+        PostAppMessage(GetCurrentTask(), WM_USER + 0x78, 3, 4);
+        g = mciGetYieldProc(dev, &data);
+        if (g)
+            lg("y calling it with two messages queued: %u", g(dev, data));
+        else
+            lg("y no procedure");
+        while (PeekMessage(&m, 0, 0, 0, PM_REMOVE))
+            lg("y left: %s message %04X", (LPSTR)(m.hwnd ? "window" : "task"), m.message);
+        break;
+    }
+    case 'Y': {         /* does it let other tasks run, with and without a
+                           message queued? (a task of MMC's counts its
+                           turns) */
+        typedef UINT (FAR PASCAL *TCREATE)(FARPROC, WORD FAR *, DWORD);
+        TCREATE tc = (TCREATE)GetProcAddress(GetModuleHandle("MMSYSTEM"), MAKEINTRESOURCE(900));
+        FARPROC fn = GetProcAddress(GetModuleHandle("MMC"), "MMCTASK");
+        struct mmcstate FAR *st = ((MMCSTATEPROC)GetProcAddress(GetModuleHandle("MMC"), "MMCSTATE"))();
+        typedef void (FAR PASCAL *TYIELD)(void);
+        TYIELD ty = (TYIELD)GetProcAddress(GetModuleHandle("MMSYSTEM"), MAKEINTRESOURCE(905));
+        WORD h = 0;
+        DWORD c0;
+        int k, q;
+        MSG m;
+        flush();
+        st->taskstop = 0;
+        st->taskdone = 0;
+        st->taskcount = 0;
+        g = mciGetYieldProc(dev, &data);
+        if (!g || tc(fn, &h, 0x5949434EL)) {
+            lg("y no procedure or no task");
+            break;
+        }
+        for (k = 0; k < 20 && !st->taskcount; k++)
+            Yield();
+        for (q = 0; q < 4; q++) {
+            if (q & 1)
+                PostMessage(dev_hwnd, WM_USER + 0x77, 1, 2);
+            c0 = st->taskcount;
+            for (k = 0; k < 20; k++)
+                if (q < 2)
+                    g(dev, data);
+                else
+                    ty();
+            lg("y 20 calls of %s, %s: the other task ran %s",
+               (LPSTR)(q < 2 ? "the yield procedure" : "mmTaskYield"),
+               (LPSTR)(q & 1 ? "a window message queued" : "nothing queued"),
+               (LPSTR)(st->taskcount > c0 ? "meanwhile" : "not at all"));
+            while (PeekMessage(&m, 0, 0, 0, PM_REMOVE))
+                ;
+        }
+        st->taskstop = 1;
+        for (k = 0; k < 50 && !st->taskdone; k++)
+            Yield();
         break;
     }
     }

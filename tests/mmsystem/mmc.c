@@ -75,6 +75,24 @@ void __cdecl __far mmc_task(WORD __far *frame)
     char buf[200];
     int i, n;
     WORD me;
+    if (frame[15] == 0x5949 && frame[14] == 0x434E) {
+        /* dwInst 5949434Eh: count its turns (Yield) until told to stop */
+        while (!state.taskstop) {
+            state.taskcount++;
+            Yield();
+        }
+        state.taskdone = 1;
+        return;
+    }
+    if (frame[15] == 0x5167 && frame[14] == 0x4E41) {
+        /* dwInst 51674E41h: nothing else first, only mmTaskBlock (a
+           signal the probe sent before the task ran must be waiting) */
+        state.taskblock = 1;
+        state.taskmsg = MM_TASKBLOCK(MM_GETCURRENTTASK());
+        state.taskblock = 0;
+        state.taskdone = 1;
+        return;
+    }
     mlg("  task: dwInst %04X%04X regs ax %04X bx %04X cx %04X dx %04X si %04X di %04X bp0 %04X flags %04X",
         frame[15], frame[14], frame[9], frame[6], frame[8], frame[7], frame[3], frame[2],
         frame[11], frame[10]);

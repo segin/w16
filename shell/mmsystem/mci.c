@@ -189,7 +189,9 @@ static int sameword(LPCSTR a, LPCSTR b)
    sets its key): UNVERIFIED beyond what MMP saw (data VK_CANCEL, called
    directly it answers 0): the key, pressed while the break window (if one
    was given) is active, answers -1; otherwise 0 after letting the other
-   tasks run */
+   tasks run, also with a message waiting (3.1's does, MMP's yield test:
+   PeekMessage alone returns at once then, and MCIWAVE's "play ... wait"
+   spun for ever when a message came in during it) */
 UINT MMAPI mm_mciyield(UINT dev, DWORD data)
 {
     struct mcidev *d = getdev(dev);
@@ -198,7 +200,8 @@ UINT MMAPI mm_mciyield(UINT dev, DWORD data)
         (GetAsyncKeyState(LOWORD(data)) & 0x8000) &&
         (!d->breakwnd || GetActiveWindow() == d->breakwnd))
         return (UINT)-1;
-    PeekMessage(&m, 0, 0, 0, PM_NOREMOVE);
+    if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE))
+        Yield();
     return 0;
 }
 

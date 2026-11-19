@@ -381,6 +381,29 @@ static void sec_task(void)
         while (st->taskblock && GetTickCount() - w < 3000)
             Yield();
     }
+    /* a signal sent at once, before the new task's function has run
+       (MCIWAVE signals its task right after mmTaskCreate): it must wait
+       in the task's queue for its first mmTaskBlock */
+    st->taskdone = 0;
+    st->taskmsg = 0;
+    h = 0;
+    r = MM_TASKCREATE(taskfn, &h, 0x51674E41L);
+    b = MM_TASKSIGNAL(h);
+    lg("mmTaskCreate = %04X, then at once mmTaskSignal = %s", r, (LPSTR)(b ? "nonzero" : "0"));
+    w = GetTickCount();
+    while (!st->taskdone && GetTickCount() - w < 3000)
+        Yield();
+    if (st->taskdone)
+        lg("the task's mmTaskBlock returned %04X", st->taskmsg);
+    else {
+        lg("the task's mmTaskBlock did not return in 3 s");
+        MM_TASKSIGNAL(h);
+        w = GetTickCount();
+        while (!st->taskdone && GetTickCount() - w < 3000)
+            Yield();
+    }
+    for (k = 0; k < 10; k++)
+        Yield();
     pump();
 }
 

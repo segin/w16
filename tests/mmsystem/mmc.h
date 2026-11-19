@@ -20,6 +20,9 @@ struct mmcstate {
     WORD taskdone;              /* the mmTaskCreate task has finished */
     WORD taskblock;             /* it is in mmTaskBlock */
     WORD parent;                /* the probe's task */
+    WORD taskmsg;               /* what its mmTaskBlock returned */
+    WORD taskstop;              /* the counting task: stop */
+    DWORD taskcount;            /* the counting task: its turns */
 };
 typedef struct mmcstate FAR *(FAR PASCAL *MMCSTATEPROC)(void);
 #endif

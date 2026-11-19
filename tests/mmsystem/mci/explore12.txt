@@ -1,0 +1,9 @@
+# exploration 12: MMSYSTEM's default yield procedure and mmTaskYield with
+# messages waiting: what is left queued, and whether another task runs
+# meanwhile (3.1's: it does; w16's did not, and MCIWAVE's "play ... wait"
+# then spun for ever when a message came in during it)
+s open mct alias m1
+y 1 g
+y 1 q
+y 1 Y
+s close m1

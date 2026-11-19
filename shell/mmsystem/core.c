@@ -164,8 +164,12 @@ UINT MMAPI MMTASKBLOCK(HTASK h)
     }
 }
 
+/* lets the other tasks run, also with a message waiting (3.1's does: MMP's
+   yield test; PeekMessage alone returns at once then, and MCIWAVE's task
+   could spin for ever) */
 void MMAPI MMTASKYIELD(void)
 {
     MSG m;
-    PeekMessage(&m, 0, 0, 0, PM_NOREMOVE);
+    if (PeekMessage(&m, 0, 0, 0, PM_NOREMOVE))
+        Yield();
 }
