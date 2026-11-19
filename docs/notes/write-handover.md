@@ -1,5 +1,14 @@
 # WRITE.EXE handover (branch worktree-agent-a31abeccd3aa6d661, continued in worktree-agent-aea9fceec5754718c)
 
+## Session 3 (worktree-agent-a4378be064263f18f, run dir w16-write2) progress
+
+- The ruler (step 7): done, `shell/write/ruler.c`; scenarios WR24 (menus, dialogs), WR25 (mouse: buttons, tabs, indent drags), WR26 (click positions, cm, Off/On) against 3.1; ARCHITECTURE.md 15.6 "The ruler". Art is w16's own (`tools/mkwriteruler.py`, resources 102/202 in the original's cell layout); scenarios link Microsoft's bitmaps into a scratch copy (`tests/wrmsres.sh`, `tools/ne2bmp.py`; test-only combination) so the pixels compare the drawing code. WR27 (probe/WR27.txt) found the digits' font (MS Sans Serif 8) and that ruler tabs end the last paragraph.
+- Also from the ruler work: tab-aware centering/right alignment (only the text after the last tab moves), the caret leaves out 1 1/2/double spacing rows, Page Layout's cm conversion and its always-stored page number, ruler buttons end the last paragraph.
+- Move/Size Picture (step 10): implemented in `view.c` (WR28: keyboard and mouse against 3.1); arrows step over pictures; pasting a picture saves Undo ("Undo Editing"); Paste Special enabled for pictures (no dialog yet). See the WR28 results below for what still differs.
+- Printing (step 9) harness: WR29 prints to the Generic / Text Only driver (TTY.DRV and UNIDRV.DLL expanded from the reference Setup disks by the scenario's `; expand:` lines) on a file port C:\PRN.TXT and compares the bytes (`; get:`); new directives `; expand:`, `; ini:`, `; get:` in tests/wrobs.sh and tests/writescenarios.sh.
+- SNAP has `cliplink <file.bmp> <class>|<doc>|<item>` (ObjectLink/OwnerLink after a picture) for the Links work (step 11); not used yet.
+- Boot test: w16write gets one part per feature scenario (`WRSCEN_BOOT` in tests/boottest.sh: wr24 wr25 wr26 ...).
+
 ## Session 2 (agent-aea9fceec5754718c) progress, newest last
 
 - Coordinator: taskman@tree 21-dosesc fails on master before Write too (not Write's); cplclick@co-tree and trails@timed are known master issues. Steps 1-2 below are therefore done/void.

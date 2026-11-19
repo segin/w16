@@ -81,6 +81,8 @@
  *                            from blinking between screenshots)
  *     clipbmp <file.bmp>     put a .BMP on the clipboard (CF_DIB, CF_BITMAP)
  *     clipmf                 put a small metafile picture on the clipboard
+ *     cliplink <file.bmp> <class>|<doc>|<item>   clipbmp, then ObjectLink
+ *                            and OwnerLink naming that link (Paste Link)
  *     class <name>           Windows 2.x: the window class "cmd" and "close"
  *                            go to (default Progman)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
@@ -738,6 +740,48 @@ static int clip_bmp(const char *file)
     SetClipboardData(CF_DIB, h);
     if (bm)
         SetClipboardData(CF_BITMAP, bm);
+    CloseClipboard();
+    return 1;
+}
+
+/* cliplink <file.bmp> <class>|<document>|<item>: the picture as clipbmp
+   puts it, after ObjectLink and OwnerLink naming that link (the OLE 1
+   clipboard formats, Programmer's Reference vol. 1 ch. on OLE: three
+   NUL-ended strings and a second NUL), as a server that offers a link
+   does (Write's Paste Link and Links probes) */
+static int clip_link(const char *arg)
+{
+    char file[128], spec[200];
+    int i, k, n = 0;
+    UINT fmts[2];
+    HGLOBAL h[2];
+    for (i = 0; arg[i] && arg[i] != ' ' && i < (int)sizeof file - 1; i++)
+        file[i] = arg[i];
+    file[i] = 0;
+    while (arg[i] == ' ')
+        i++;
+    for (; arg[i] && n < (int)sizeof spec - 2; i++)
+        spec[n++] = arg[i] == '|' ? 0 : arg[i];
+    spec[n++] = 0;
+    spec[n++] = 0;
+    if (!clip_bmp(file))
+        return 0;
+    fmts[0] = RegisterClipboardFormat("ObjectLink");
+    fmts[1] = RegisterClipboardFormat("OwnerLink");
+    for (i = 0; i < 2; i++) {
+        BYTE FAR *p;
+        h[i] = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n);
+        if (!h[i])
+            return 0;
+        p = (BYTE FAR *)GlobalLock(h[i]);
+        for (k = 0; k < n; k++)
+            p[k] = spec[k];
+        GlobalUnlock(h[i]);
+    }
+    if (!OpenClipboard(NULL))
+        return 0;
+    SetClipboardData(fmts[0], h[0]);
+    SetClipboardData(fmts[1], h[1]);
     CloseClipboard();
     return 1;
 }
@@ -1584,6 +1628,10 @@ static void run_line(char *l)
 #ifndef SNAP_WIN2
     } else if (same(l, "clipbmp")) {
         if (!clip_bmp(arg))
+            out(" -> failed");
+        pump(200);
+    } else if (same(l, "cliplink")) {
+        if (!clip_link(arg))
             out(" -> failed");
         pump(200);
     } else if (same(l, "clipmf")) {

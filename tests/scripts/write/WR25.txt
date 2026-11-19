@@ -1,0 +1,73 @@
+; WR25: the ruler by mouse (Ruler On first): the Centered and 1 1/2
+; space buttons (A1), the decimal tab button and a click in the marks'
+; row at 2" (A2), the left tab button and a click at 4" (A3); the first
+; line indent dragged from 0 to 1/2" (D1 with the button held, D2 after),
+; the left indent from 0 to 1" (D3 held, D4), the right indent from 6"
+; to 5" (D5 held, D6), the 4" tab dragged down off the ruler (D7 held,
+; D8), the 2" tab dragged to 3" (D9); saved as C:\WR25.WRI
+run WRITE.EXE
+wait 3000
+menu d
+char r
+wait 1000
+type one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen
+key 0D
+type second paragraph
+key 26
+wait 500
+mclick 386 50
+wait 500
+mclick 248 50
+wait 500
+snap C:\A1.BMP
+mclick 144 50
+wait 300
+mclick 219 74
+wait 500
+snap C:\A2.BMP
+mclick 110 50
+wait 300
+mclick 411 74
+wait 500
+snap C:\A3.BMP
+mdown 28 74
+mmove 75 74
+wait 500
+snap C:\D1.BMP
+mup 75 74
+wait 500
+snap C:\D2.BMP
+mdown 30 77
+mmove 123 77
+wait 500
+snap C:\D3.BMP
+mup 123 77
+wait 500
+snap C:\D4.BMP
+mdown 603 74
+mmove 507 74
+wait 500
+snap C:\D5.BMP
+mup 507 74
+wait 500
+snap C:\D6.BMP
+mdown 411 74
+mmove 411 140
+wait 500
+snap C:\D7.BMP
+mup 411 140
+wait 500
+snap C:\D8.BMP
+mdown 219 74
+mmove 315 74
+mup 315 74
+wait 500
+snap C:\D9.BMP
+menu f
+char a
+wait 1500
+type C:\WR25.WRI
+key 0D
+wait 2000
+close
+wait 1000

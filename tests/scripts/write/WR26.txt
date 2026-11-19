@@ -1,0 +1,54 @@
+; WR26: where ruler clicks land: left tabs clicked at 100, 205 and 262
+; pixels right of 0 in the marks' row and one at 150 on the scale (S1),
+; the left indent dragged to 53 (S2), the first line to 31 (S3); Page
+; Layout in cm (S4); Ruler Off and On again (S5); saved as C:\WR26.WRI
+run WRITE.EXE
+wait 3000
+menu d
+char r
+wait 1000
+type abc
+mclick 127 74
+wait 300
+mclick 177 63
+wait 300
+mclick 232 76
+wait 300
+mclick 289 71
+wait 500
+snap C:\S1.BMP
+mdown 30 77
+mmove 80 77
+mup 80 77
+wait 500
+snap C:\S2.BMP
+mdown 81 74
+mmove 58 74
+mup 58 74
+wait 500
+snap C:\S3.BMP
+menu d
+char p
+wait 800
+alt c
+key 0D
+wait 800
+snap C:\S4.BMP
+menu d
+char r
+wait 500
+snap C:\S5.BMP
+dump
+menu d
+char r
+wait 500
+snap C:\S6.BMP
+dump
+menu f
+char a
+wait 1500
+type C:\WR26.WRI
+key 0D
+wait 2000
+close
+wait 1000

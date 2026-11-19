@@ -1,0 +1,68 @@
+; WR27: does a tab set on the ruler end the last paragraph? "abc", a tab
+; clicked at 1", saved as C:\WR27A.WRI. Then digits in candidate fonts
+; for the ruler's numbers (F1): Small Fonts 6 and 7, MS Sans Serif 8,
+; Arial 7 (Character > Fonts, the face typed in)
+run WRITE.EXE
+wait 3000
+menu d
+char r
+wait 1000
+type abc
+mclick 123 74
+wait 500
+menu f
+char a
+wait 1500
+type C:\WR27A.WRI
+key 0D
+wait 2000
+key 0D
+menu c
+char f
+wait 1500
+type Small Fonts
+key 09
+key 09
+type 6
+key 0D
+wait 800
+type 0123456789
+key 0D
+menu c
+char f
+wait 1500
+type Small Fonts
+key 09
+key 09
+type 7
+key 0D
+wait 800
+type 0123456789
+key 0D
+menu c
+char f
+wait 1500
+type MS Sans Serif
+key 09
+key 09
+type 8
+key 0D
+wait 800
+type 0123456789
+key 0D
+menu c
+char f
+wait 1500
+type Arial
+key 09
+key 09
+type 7
+key 0D
+wait 800
+type 0123456789
+wait 500
+snap C:\F1.BMP
+close
+wait 1000
+key 4E
+wait 1000

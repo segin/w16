@@ -1202,7 +1202,7 @@ $(DOS)/TASKMAN.EXE: $(SHELL_TM) $(B)/shell/taskman/taskman.res shell/taskman/tas
 
 # ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.6), Windows 3.1
 # only ----
-WR_C     := main doc wrifile view cmds pict ole print hdrftr util
+WR_C     := main doc wrifile view cmds pict ole print hdrftr util ruler
 SHELL_WR := $(B)/shell/start.o $(B)/shell/write/i4.o $(WR_C:%=$(B)/shell/write/%.o)
 shell: $(DOS)/WRITE.EXE
 $(B)/shell/write/%.o: shell/write/%.c shell/write/write.h
@@ -1214,7 +1214,14 @@ $(B)/shell/write/i4.o: shell/write/i4.asm
 $(B)/shell/write/write.ico: tools/mkwriteicon.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 tools/mkwriteicon.py $@
-$(B)/shell/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico
+$(B)/shell/write/rbuttons.bmp: tools/mkwriteruler.py
+	@mkdir -p $(@D)
+	python3 tools/mkwriteruler.py buttons $@
+$(B)/shell/write/rmarks.bmp: tools/mkwriteruler.py
+	@mkdir -p $(@D)
+	python3 tools/mkwriteruler.py marks $@
+$(B)/shell/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico \
+    $(B)/shell/write/rbuttons.bmp $(B)/shell/write/rmarks.bmp
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/write -i=$(B)/shell/write -fo=$@ $<
 $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk tools/nemark.py
 	@mkdir -p $(@D)
