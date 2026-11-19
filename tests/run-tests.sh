@@ -142,6 +142,8 @@ probes() {
     # TK15 and TK16 (tasks) start their helpers from their own directory
     cp "$dos/TK15.EXE" "$dos/TK15A.EXE" "$stage/"
     cp "$dos/TK16.EXE" "$dos/TK16A.EXE" "$dos/TK16B.EXE" "$dos/TK16C.EXE" "$dos/TK16S.EXE" "$dos/TK16I.EXE" "$stage/"
+    # TK61 (freed selectors) starts TK61A and loads TKDLL.DLL
+    cp "$dos/TK61.EXE" "$dos/TK61A.EXE" "$stage/"
     for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
         cp "$dos/$f" "$stage/WINDOWS/"
     done
@@ -153,6 +155,7 @@ probes() {
     run TK15 0
     run TK16 0
     run TK60 0
+    run TK61 0
 
     # TK14 (profiles and files), laid out like tests/tk14ref.sh: TK14.EXE in
     # C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS
