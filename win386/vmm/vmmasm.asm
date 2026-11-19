@@ -84,6 +84,12 @@ trap_common:
         push esp
         call _trap
         add esp, 4
+        mov eax, [esp]                  ; GS and FS: a selector freed
+        call fixsel                     ; while in them becomes 0 (WIN386
+        mov [esp], eax                  ; does the same: TK61 "deadfs",
+        mov eax, [esp+4]                ; tests/apps/tk61.c); popad
+        call fixsel                     ; restores EAX and EDX
+        mov [esp+4], eax
         pop gs
         pop fs
         pop es
@@ -91,6 +97,25 @@ trap_common:
         popad
         add esp, 8
         iretd
+
+; fixsel: EAX = a selector for FS or GS -> EAX, or 0 if the processor
+; would not load it (not present, a system descriptor, execute-only code,
+; DPL below 3 for RPL 3). EDX changed.
+fixsel:
+        test ax, 0FFFCh
+        jz .ok
+        lar edx, eax
+        jnz .no
+        test dh, 80h
+        jz .no
+        test dh, 10h
+        jz .no
+        test dh, 08h
+        jz .ok
+        test dh, 02h
+        jnz .ok
+.no:    xor eax, eax
+.ok:    ret
 
 ; void resume(struct cregs *r): run the client - V86 mode or ring 3 - from
 ; the top of the ring-0 stack. Does not return.
@@ -120,8 +145,12 @@ _resume:
         push dword [esi+R_EIP]
         push dword [esi+R_DS]
         push dword [esi+R_ES]
-        push dword [esi+R_FS]
-        push dword [esi+R_GS]
+        mov eax, [esi+R_FS]
+        call fixsel
+        push eax
+        mov eax, [esi+R_GS]
+        call fixsel
+        push eax
 .load:  mov edi, [esi+R_EDI]
         mov ebp, [esi+R_EBP]
         mov ebx, [esi+R_EBX]

@@ -13,17 +13,15 @@
 %%n:    sub sp, 4
 %%d:
 %endmacro
+; POP_FSGS: FS and GS back through fsgs_restore (a freed selector in them
+; does not end Windows; flags and every other register are kept)
 %macro POP_FSGS 0
         cmp byte [cs:is386], 0
         je %%n
-        cpu 386
-        pop gs
-        pop fs
-        cpu 286
-        jmp %%d
+        call fsgs_restore
 %%n:    add sp, 4
-%%d:
 %endmacro
+
 
 ; ---------------------------------------------------------------------------
 ; IDT vectors 00h-1Fh: excstub_tab (32 x "call exc_entry", ring 0)
@@ -337,6 +335,68 @@ gate_exit:
 
 ; ring3sp: ES:SI = the ring-3 stack at the gate call
 ring3sp:     les si, [bp+F_SP3]
+        ret
+
+; fsgs_restore (386; near call, the saved GS and FS above the return
+; address): FS and GS get their saved values back. A saved selector the
+; processor would not load (a freed one: Windows 3.1's KERNEL leaves them
+; in FS and GS, docs/notes/quicktime-handover.md) is left in the register
+; if the register still holds it (an INT 31h call: Microsoft's DOSX keeps
+; FS there, TK61 "deadfs: INT 31h"), else 0 (after a trip to real mode:
+; Microsoft's DOSX ends Windows there, "Fault in MS-DOS Extender" at every
+; timer tick and INT 21h with a freed selector in FS, TK61 "deadfs: ticks"
+; and "INT 21h"; WIN386 loads 0, as here).
+fsgs_restore:
+        cpu 386
+        push bp
+        mov bp, sp
+        pushf
+        push ax
+        push dx
+        mov ax, [bp+4]          ; the saved GS
+        mov dx, gs
+        call fsgs_pick
+        jc .g
+        mov gs, ax
+.g:     mov ax, [bp+6]          ; the saved FS
+        mov dx, fs
+        call fsgs_pick
+        jc .f
+        mov fs, ax
+.f:     pop dx
+        pop ax
+        popf
+        pop bp
+        ret
+        cpu 286
+
+; fsgs_pick: AX = a saved selector, DX = the register's value now -> CF
+; clear: load AX (the selector, or 0 for one that cannot be loaded); CF
+; set: leave the register as it is
+fsgs_pick:
+        test ax, 0FFFCh
+        jz .load                ; a null selector loads
+        push bx
+        lar bx, ax
+        jnz .bad
+        test bh, 80h            ; present
+        jz .bad
+        test bh, 10h            ; code or data
+        jz .bad
+        test bh, 08h
+        jz .ok                  ; data
+        test bh, 02h            ; readable code
+        jz .bad
+.ok:    pop bx
+.load:  clc
+        ret
+.bad:   pop bx
+        cmp ax, dx
+        je .keep
+        xor ax, ax
+        clc
+        ret
+.keep:  stc
         ret
 
 ; set_cf / clr_cf: the client's carry flag in the interrupt frame

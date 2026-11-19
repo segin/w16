@@ -239,6 +239,10 @@ ldt_free:
         mov ax, [ldt_head]
         mov [es:di], ax
         mov byte [es:di+5], 0   ; the base stays (DX2 pm49_1001_after)
+        mov byte [es:di+6], 0   ; limit bits 16-19 and G, D, AVL cleared
+                                ; (TK61 "huge tile 0 desc[6]": a freed
+                                ; tile of limit 2FFFFh under w16's
+                                ; KRNL286 on Microsoft's DOSX)
         mov [ldt_head], di
         clc
         jmp .ret
