@@ -134,6 +134,10 @@ typedef u32 aid;                        /* an arena: its offset in the BM */
 #define CHUNK_GROW      0x100000UL
 #define DOS_GROW        0x1000UL
 #define ONE_MB          0x100000UL
+#define MAX_BLOCK       0xFF0000UL      /* FFh tiles: the arena's selector
+                                           count is a byte (and tiles()
+                                           wraps past FFFF0000h; KERNEL
+                                           audit, medium 1) */
 
 #define DB_DISC         0x01
 #define DB_NOTIFY       0x02
@@ -496,6 +500,7 @@ typedef struct chunk {
 } chunk;
 static u16 chunk_sel;
 static u16 chunk_cap;
+static u8 chunk_growing;                /* chunk_add is growing chunk_sel */
 
 static aid new_arena(u32 addr, u32 size, u16 owner, u8 count)
 {
@@ -655,10 +660,19 @@ static aid chunk_add(u32 lin, u32 size, u16 kind, u32 handle)
         u16 i;
         for (i = 0; i < chunk_cap && c[i].size; i++)
             ;
-        if (i == chunk_cap &&
-            GlobalReAlloc(chunk_sel & ~1u, (chunk_cap + 16) * sizeof(chunk), GMEM_MOVEABLE)) {
-            chunk_cap += 16;
-            c = MK_FP(chunk_sel, 0);
+        /* growing the records can grow the heap, which comes back here:
+           that chunk goes unrecorded (never given back) rather than
+           growing them again under the outer GlobalReAlloc (which then
+           worked on a block the inner one had moved; KERNEL audit, C3) */
+        if (i == chunk_cap && !chunk_growing) {
+            u16 ok;
+            chunk_growing = 1;
+            ok = GlobalReAlloc(chunk_sel & ~1u, (chunk_cap + 16) * sizeof(chunk), GMEM_MOVEABLE);
+            chunk_growing = 0;
+            if (ok) {
+                chunk_cap += 16;
+                c = MK_FP(chunk_sel, 0);
+            }
         }
         if (i < chunk_cap) {
             c[i].lin = base;
@@ -761,6 +775,10 @@ static int grow(u32 bytes, int dos)
     u32 need = bytes + 0x40, size, lin, h;
     regs16 r;
     if (dos) {
+        /* DPMI 0100h takes a word of paragraphs: no more than that
+           (there is not that much below 1 MB anyway; KERNEL audit, H2) */
+        if (need > 0xFFFF0UL)
+            return 0;
         size = need > DOS_GROW ? need : DOS_GROW;
         r.ax = 0x0100;
         r.bx = (u16)((size + 15) >> 4);
@@ -1138,7 +1156,7 @@ static u16 galloc_where(u16 flags, u32 size, u16 owner, u16 *sel_out, int where,
         return (u16)a;
     }
     bytes = bytes_for(size);
-    if (bytes < size || (u32)tiles(bytes) > 0xFFUL)
+    if (bytes < size || bytes > MAX_BLOCK)
         return 0;
     a = alloc_space(bytes, where, flags);
     if (!a)
@@ -1298,9 +1316,15 @@ void gfree_owner(u16 owner)
     while (a != hp->last) {
         n = AR(a)->next;
         if (AR(a)->handle && AR(a)->owner == owner) {
-            n = AR(a)->prev;            /* still there after the merge, */
+            /* go on from the arena before a that is not free: a free
+               one merges with a, and may go with a's chunk (KERNEL
+               audit, C1); that one stays, unless it is the chunk's
+               first arena */
+            n = AR(a)->prev;
+            if (is_free(n))
+                n = AR(n)->prev;
             if (AR(n)->owner == OWN_NOTTHERE || n == hp->first)
-                n = 0;                  /* unless its chunk goes */
+                n = 0;
             free_block(a);
             a = AR(n ? n : hp->first)->next;
             continue;
@@ -1498,7 +1522,10 @@ static const char *global_check(u32 *bad)
     pf = hp->first;
     for (f = AR(hp->first)->lnext; f != hp->last; f = AR(f)->lnext) {
         *bad = f;
-        if (!f || !is_free(f) || AR(f)->lprev != pf || AR(f)->addr <= AR(pf)->addr)
+        /* (the first sentinel has size 0, so a free arena right after
+           it has its address: KERNEL audit, medium 4) */
+        if (!f || !is_free(f) || AR(f)->lprev != pf ||
+            (pf == hp->first ? AR(f)->addr < AR(pf)->addr : AR(f)->addr <= AR(pf)->addr))
             return "global: bad free list";
         pf = f;
     }
@@ -1659,7 +1686,7 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
     }
     if (!size)
         return h;
-    if (bytes < size)
+    if (bytes < size || bytes > MAX_BLOCK)
         return 0;
     need = tiles(bytes);
     a = alloc_space(bytes, WHERE_ANY, flags);
@@ -1772,15 +1799,18 @@ static int make_room_after(aid a, u32 bytes)
     return is_free(AR(a)->next) && AR(a)->size + AR(AR(a)->next)->size >= bytes;
 }
 
-/* the free arena right after a gives `extra` bytes to a */
-static void take_next(aid a, u32 extra)
+/* the free arena right after a gives `extra` bytes to a; 0 if no arena
+   slot was left for the rest of it (GlobalReAlloc then fails instead of
+   returning the block at its old size; KERNEL audit, H4) */
+static int take_next(aid a, u32 extra)
 {
     aid part = carve(AR(a)->next, extra, 0);
     if (!part)
-        return;
+        return 0;
     AR(a)->size += AR(part)->size;
     unlink(part);
     slot_put(part);
+    return 1;
 }
 
 u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
@@ -1812,7 +1842,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
         return discard(a) ? h : 0;
     }
     want = bytes_for(size);
-    if (want < size)
+    if (want < size || want > MAX_BLOCK)
         return 0;
     old = AR(a)->size;
     n = tiles(old);
@@ -1830,9 +1860,11 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     } else if (want > old) {
         aid nx = AR(a)->next;
         if (is_free(nx) && old + AR(nx)->size >= want) {
-            take_next(a, want - old);
+            if (!take_next(a, want - old))
+                return 0;
         } else if (make_room_after(a, want)) {
-            take_next(a, want - old);
+            if (!take_next(a, want - old))
+                return 0;
         } else if (!is_fixed(s) || (flags & GMEM_MOVEABLE)) {
             aid f;
             u8 hold;

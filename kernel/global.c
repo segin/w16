@@ -409,31 +409,33 @@ static void release(u16 a)
 
 /* Take `tot` paragraphs (arena included) of free arena f, at its start
    (or its end if `high`). Returns the arena of the taken part, out of the
-   free list; the rest stays free. */
+   free list; the rest stays free. 0 when there is no selector left for
+   the rest's arena (f stays as it was): the whole of f instead had the
+   callers' blocks larger than their selectors (KERNEL audit, C4), as
+   KRNL386's carve already did. */
 static u16 carve(u16 f, u16 tot, int high)
 {
     u16 t = TOTAL(f), r;
     if (t - tot >= 2) {
         if (!high) {
             r = sel_new(lin_of(f) + ((u32)tot << 4), 0xF);
-            if (r) {
-                mark_free(r);
-                AR(r)->size = t - tot - 1;
-                link_after(f, r);
-                free_replace(f, r);
-                AR(f)->size = tot - 1;
-                return f;
-            }
-        } else {
-            r = sel_new(lin_of(f) + ((u32)(t - tot) << 4), 0xF);
-            if (r) {
-                mark_free(r);
-                AR(r)->size = tot - 1;
-                AR(f)->size = t - tot - 1;
-                link_after(f, r);
-                return r;
-            }
+            if (!r)
+                return 0;
+            mark_free(r);
+            AR(r)->size = t - tot - 1;
+            link_after(f, r);
+            free_replace(f, r);
+            AR(f)->size = tot - 1;
+            return f;
         }
+        r = sel_new(lin_of(f) + ((u32)(t - tot) << 4), 0xF);
+        if (!r)
+            return 0;
+        mark_free(r);
+        AR(r)->size = tot - 1;
+        AR(f)->size = t - tot - 1;
+        link_after(f, r);
+        return r;
     }
     free_unlink(f);
     return f;
@@ -475,6 +477,12 @@ static u16 chunk_add(u32 lin, u32 size, u16 kind, u32 handle)
     len = (lin + size - base) & ~31UL;
     if (lin + size < base || len < 0x60)
         return 0;
+    /* one free arena holds at most FFFEh paragraphs (a word, even): the
+       chunk for the largest block (paras_for: FFFEh, so 100040h bytes
+       rounded up to a page) is longer, and its size would have wrapped
+       (KERNEL audit, C2); the rest of the memory goes unused */
+    if (len > 0x40 + 0xFFFE0UL)
+        len = 0x40 + 0xFFFE0UL;
     h = sel_new(base, 0xF);
     f = sel_new(base + 0x20, 0xF);
     t = sel_new(base + len - 0x20, 0xF);
@@ -651,6 +659,10 @@ static int grow(u16 tot, int dos)
     regs16 r;
 
     if (dos) {
+        /* DPMI 0100h takes a word of paragraphs: no more than that
+           (there is not that much below 1 MB anyway; KERNEL audit, H2) */
+        if (need > 0xFFFF0UL)
+            return 0;
         size = need > DOS_GROW ? need : DOS_GROW;
         r.ax = 0x0100;
         r.bx = (u16)((size + 15) >> 4);
@@ -871,7 +883,10 @@ again:
         }
         f = find_free(TOTAL(a), lin_of(a) >= ONE_MB ? WHERE_EXT : WHERE_DOS, 0);
         if (f && lin_of(f) < lin_of(a)) {
-            transplant(a, carve(f, TOTAL(a), 0));
+            f = carve(f, TOTAL(a), 0);
+            if (!f)
+                break;
+            transplant(a, f);
             moved = 1;
             if (--guard)
                 goto again;     /* a's neighbours may be gone */
@@ -1011,7 +1026,10 @@ static u16 alloc_discarded(u16 flags, u16 owner)
 /* Paragraphs (arena included) of a block of n bytes, 0 if too big. */
 static u16 paras_for(u32 n)
 {
-    u32 d = (n + 15) >> 4;
+    u32 d;
+    if (n > 0xFFFF0UL)
+        return 0;               /* (n + 15 wrapped past FFFFFFF0h: audit H1) */
+    d = (n + 15) >> 4;
     if (d > 0xFFFFUL)
         return 0;
     return (u16)((d + 2) & ~1UL);   /* 0 for FFFFh: d + 2 = 10001h */
@@ -1232,9 +1250,15 @@ void gfree_owner(u16 owner)
     while (a != hp->last) {
         n = AR(a)->next;
         if (AR(a)->handle && AR(a)->owner == owner) {
-            n = AR(a)->prev;            /* still there after the merge, */
+            /* go on from the arena before a that is not free: a free
+               one merges with a, and may go with a's chunk (KERNEL
+               audit, C1); that one stays, unless it is the chunk's
+               first arena */
+            n = AR(a)->prev;
+            if (is_free(n))
+                n = AR(n)->prev;
             if (AR(n)->owner == OWN_NOTTHERE || n == hp->first)
-                n = 0;                  /* unless its chunk goes */
+                n = 0;
             free_block(a);
             a = AR(n ? n : hp->first)->next;
             continue;
@@ -1267,7 +1291,7 @@ void global_init(void)
     /* the Burgermaster: the first block, fixed, owned by FFFDh */
     f = AR(hp->first)->lnext;
     a = carve(f, tot, 0);
-    bm = sel_new(lin_of(a) + 0x10, ((u32)AR(a)->size << 4) - 1);
+    bm = a ? sel_new(lin_of(a) + 0x10, ((u32)AR(a)->size << 4) - 1) : 0;
     if (!bm) {
         kputs("w16: no memory for the global heap\r\n");
         kexit_to_dos(0xFF);
@@ -1625,7 +1649,10 @@ static int make_room_after(u16 a, u16 tot)
     }
     if (f == hp->last)
         return 0;
-    transplant(nx, carve(f, t, 0));
+    f = carve(f, t, 0);
+    if (!f)
+        return 0;
+    transplant(nx, f);
     return is_free(AR(a)->next) && TOTAL(a) + TOTAL(AR(a)->next) >= tot;
 }
 
@@ -1690,12 +1717,16 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
         if (is_free(nx) && cur + TOTAL(nx) >= tot) {
             /* grow in place into the free block above */
             u16 part = carve(nx, tot - cur, 0);
+            if (!part)
+                return 0;
             AR(a)->size += TOTAL(part);
             unlink(part);
             dpmi_free_desc(part);
         } else if (make_room_after(a, tot)) {
             u16 part, nx2 = AR(a)->next;
             part = carve(nx2, tot - cur, 0);
+            if (!part)
+                return 0;
             AR(a)->size += TOTAL(part);
             unlink(part);
             dpmi_free_desc(part);
@@ -1911,11 +1942,16 @@ void FAR * KAPI GlobalWire(u16 h)                             /* KERNEL.111 */
     if (find(h, &a) != FB_BLOCK)
         return NULL;
     if (!(AR(a)->handle & 1)) {
-        f = find_free(TOTAL(a), lin_of(a) >= ONE_MB ? WHERE_EXT : WHERE_DOS, 0);
+        /* a block already fixed stays where it is (global386.c: movable;
+           KERNEL audit, medium 8) */
+        f = AR(a)->count ? 0 :
+            find_free(TOTAL(a), lin_of(a) >= ONE_MB ? WHERE_EXT : WHERE_DOS, 0);
         if (f && lin_of(f) < lin_of(a)) {
             f = carve(f, TOTAL(a), 0);
-            transplant(a, f);
-            a = f;
+            if (f) {
+                transplant(a, f);
+                a = f;
+            }
         }
         if (AR(a)->count < 0xFF)
             AR(a)->count++;
