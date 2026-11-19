@@ -1,0 +1,19 @@
+; the MS-DOS Prompt icon (DOSPRMPT.PIF) in 386 Enhanced mode, full
+; screen: VER, then EXIT back to Windows
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-full
+type ver
+key Return
+sleep 3
+shot 02-ver
+type exit
+key Return
+sleep 10
+shot 03-back

@@ -1,0 +1,5 @@
+# VXS.386: the probe VxD (tests/vxd/vxs.asm)
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXS_DDB.1

@@ -34,6 +34,7 @@ extern void __cdecl xms_call(struct xregs *r);
 extern int __cdecl pm_go(struct w386_info *info);
 extern int __cdecl pm_exit(int code);
 extern unsigned __cdecl bp_table_off(void);
+extern unsigned __cdecl vm_stub_off(void);
 extern unsigned __cdecl rm_tramp_off(void);
 extern void __far *xms_entry;
 #pragma aux xms_entry "_*"
@@ -670,6 +671,15 @@ int main(int argc, char **argv)
     r.x.ax = 0x5D06;                    /* the swappable data area: current PSP */
     intdosx(&r, &r, &sr);
     info.sda_lin = r.x.cflag ? 0 : ((unsigned long)sr.ds << 4) + r.x.si;
+    /* its size (MS-DOS 4.00: CX the part swapped while in DOS, DX the
+     * part always swapped; a DOS VM gets a copy of its own) */
+    info.sda_size = r.x.cflag ? 0 : (r.x.cx > r.x.dx ? r.x.cx : r.x.dx);
+    /* a DOS VM's memory starts after this program's block (its MCB is the
+     * paragraph before the PSP; the size at MCB+3), up to the BIOS's
+     * memory size (40:13h, KB) */
+    info.free_mcb = _psp + *(unsigned __far *)MK_FP(_psp - 1, 3);
+    info.mem_top = *(unsigned __far *)MK_FP(0x40, 0x13) * 64;
+    info.vmstub_off = vm_stub_off();
     segread(&sr);
     /* the transfer buffer: paragraph aligned, in our data segment */
     info.xbuf_seg = sr.ds + (((unsigned)xbuf + 15) >> 4);

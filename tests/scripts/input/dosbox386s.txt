@@ -1,0 +1,37 @@
+; the MS-DOS Prompt full screen, then the switching keys: Alt+Tab (to
+; Windows), Alt+Tab (back), Alt+Esc (to Windows), Alt+Tab (back),
+; Ctrl+Esc (the Task List), Escape, then the box again and EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-full
+key alt+Tab
+sleep 6
+shot 02-alttab
+key alt+Tab
+sleep 6
+shot 03-back
+key alt+Escape
+sleep 6
+shot 04-altesc
+key alt+Tab
+sleep 6
+shot 05-back
+key ctrl+Escape
+sleep 6
+shot 06-ctrlesc
+key Escape
+sleep 4
+shot 07-esc
+key alt+Tab
+sleep 6
+shot 08-box
+type exit
+key Return
+sleep 10
+shot 09-end
