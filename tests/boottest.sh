@@ -286,7 +286,7 @@
 #              KRNL286: the same screens, the boxes as 3.1's
 #   runassoc   starting names of every kind (programs, documents with and
 #              without an association, missing files, directories), parts
-#              probe, pm, pmk286, pmk386, tree: SH14 (FindExecutable,
+#              probe, pm, pmk286, pmk386, tree, dir: SH14 (FindExecutable,
 #              ShellExecute, WinExec, LoadModule) with w16's SHELL on both
 #              of w16's kernels against 3.1's results; Program Manager's
 #              File > Run of each kind (tests/scripts/input/runassoc.txt)
@@ -294,7 +294,9 @@
 #              both of w16's against all of Microsoft's: every screen 0
 #              pixels (group icons, carets left out), no document run as a
 #              DOS program; the install tree alone under both kernels
-#              (runassoctree.txt)
+#              (runassoctree.txt); dir: File > Run's directory for the
+#              program (SH5's log, tests/scripts/input/rundir.txt) with
+#              w16's PROGMAN and SHELL as with Microsoft's
 #   runpe      File > Run of a 32-bit program (a PE file whose MS-DOS stub
 #              leaves C:\RANCOM.TXT; tests/scripts/input/runpe.txt), parts
 #              k286, k386: w16's PROGMAN and SHELL on w16's kernels with
@@ -319,7 +321,8 @@
 #              w16 PROGMAN against Microsoft's; the group icons left out
 #   mdimax     a maximised MDI child's controls in the frame's menu bar:
 #              probe US18 as the shell on 3.1 and on w16's USER (its OBS
-#              lines identical), then Program Manager's Main group
+#              lines identical), and US28 (where CW_USEDEFAULT children go
+#              as children come and go), then Program Manager's Main group
 #              maximised, its system menu from the bar (Alt+-), File and
 #              Left, the restore button clicked, Accessories maximised,
 #              the Window menu, Ctrl+F4 (tests/scripts/input/mdimax.txt):
@@ -2276,6 +2279,24 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 n=${n%% *}
                 [ "$n" = 0 ] || { r="KRNL286 against KRNL386: $s2: $n pixels differ"; break; }
             done ;;
+        dir)
+            # File > Run's directory: SH5's C:\SH5.TXT (tail and current
+            # directory of each start) with w16's PROGMAN and SHELL on
+            # Microsoft's KERNEL, as with Microsoft's
+            s=$root/tests/scripts/input/rundir.txt
+            set -- -f "$root/build/dos/SH5.EXE=TMP/SH5.EXE" -f "$root/build/dos/SH5.EXE=TMP/SUB/SH5.EXE" \
+                -f "$root/build/dos/SH5.EXE=WINDOWS/SH5X.EXE"
+            d=$out/runassoc-dir
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$d-ref" -r "$@" > "$d-ref.txt" 2>&1 &
+            "$root/tests/inputrun.sh" -s -b 40 -t 200 "$s" "$d-w16" -r "$@" \
+                -f "$shell=WINDOWS/SYSTEM/SHELL.DLL" -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" \
+                > "$d-w16.txt" 2>&1
+            wait
+            if [ "$(grep -c CWD "$d-ref/work/c/SH5.TXT" 2>/dev/null)" != 5 ]; then
+                r="dir: the reference did not start SH5 five times ($d-ref)"
+            elif ! cmp -s "$d-ref/work/c/SH5.TXT" "$d-w16/work/c/SH5.TXT"; then
+                r="dir: SH5's tails and directories differ from 3.1's ($d-ref/work/c/SH5.TXT, $d-w16/work/c/SH5.TXT)"
+            fi ;;
         esac
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   runassoc: every kind of name as on 3.1"
@@ -2967,6 +2988,19 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         }
         us18a mdimax-us18aref -r
         us18a mdimax-us18a -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
+        # US28: where WM_MDICREATE puts CW_USEDEFAULT children as children
+        # come and go (tests/apps/us28.c)
+        us28() {
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 120 -s "$out/$_l.png" -o "$out/$_l" \
+                -f "$root/build/dos/US28.EXE=US28.EXE" -i 'boot:shell=C:\US28.EXE' "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        us28 mdimax-us28ref -r
+        us28 mdimax-us28 -r -f "$user=WINDOWS/SYSTEM/USER.EXE"
         scr=$root/tests/scripts/input/mdimax.txt
         refrun mdimax-ref mdimax "$root/tests/inputrun.sh" -s -b 40 -t 240 "$scr" "$out/mdimax-ref" -r
         "$root/tests/inputrun.sh" -e "$out/mdimax-ref/boot.png" -E "$out/mdimax-ref" -b 40 -t 240 "$scr" "$out/mdimax-us" -r \
@@ -2979,7 +3013,11 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             f=$out/mdimax-$k.log
             if [ ! -f "$f" ] || ! grep -q '^US18 end' "$f"; then r="$k: US18 did not finish ($f)"; break; fi
         done
-        for k in us18 us18a; do
+        for k in us28ref us28; do
+            f=$out/mdimax-$k.log
+            if [ ! -f "$f" ] || ! grep -q '^US28 done' "$f"; then r="$k: US28 did not finish ($f)"; break; fi
+        done
+        for k in us18 us18a us28; do
             [ "$r" = ok ] || break
             grep '^OBS [^~]' "$out/mdimax-${k}ref.log" > "$out/mdimax-${k}ref.obs"
             grep '^OBS [^~]' "$out/mdimax-$k.log" > "$out/mdimax-$k.obs"
@@ -3001,7 +3039,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
                 [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
             done
         done
-        if [ "$r" = ok ]; then echo "ok   mdimax: US18 as 3.1; maximised groups' controls in the bar, 0 pixels (w16 USER+GDI; and w16 PROGMAN)"
+        if [ "$r" = ok ]; then echo "ok   mdimax: US18 and US28 as 3.1; maximised groups' controls in the bar, 0 pixels (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL mdimax: $r ($out)"; fails=$((fails + 1)); fi ;;
     pmitems)
         # an item dragged within Program Manager's Main group, then the
@@ -4333,7 +4371,7 @@ caseparts() {
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
-    runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree" ;;
+    runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree $1@dir" ;;
     runpe) echo "$1@k286 $1@k386 $1@on286 $1@on386" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;

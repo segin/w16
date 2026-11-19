@@ -51,8 +51,11 @@
 #     report, no hangwatch report in OUT.TXT) to its last shot; Program
 #     Manager is back the same after File > Exit as after Alt+F4 (c5-exit
 #     and c7-closed equal, and not c4-paused, the player); Exit Windows
-#     ends Windows (WIN returns; w16's KERNEL: "back to DOS, code 0000"). The
-#     screens in between (c1-c8) are saved, not compared.
+#     ends Windows (WIN returns; w16's KERNEL: "back to DOS, code 0000");
+#     the movie's window opened again (c3-reopened, c6b-opened) is where
+#     3.1 puts it (what changed from c1-closed, c6-player: the same
+#     rectangle). The other screens (c2, c4, c5, c7, c8) are saved, not
+#     compared.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
 # the installer's boxes differ (docs/notes/quicktime-handover.md, "Left
@@ -220,5 +223,19 @@ if [ -f "$refdir/p15.png" ]; then
     [ -z "$newref" ] && [ ! -f "$refdir/c1-closed.png" ] || closed 3.1 "$refdir"
 fi
 [ ! -f "$w/p15.png" ] || closed w16 "$w"
+# where the movie's window comes back: what changed from the empty player
+# to the movie opened again in it (c1-closed, c3-reopened) and in a new
+# player (c6-player, c6b-opened), the same rectangle on both sides (on
+# w16 the reopened movie came back a step higher until 2026-11-18: MDI's
+# default place, user/mdi.c)
+if [ -f "$refdir/c6b-opened.png" ] && [ -f "$w/c6b-opened.png" ]; then
+    for pr in "c1-closed c3-reopened" "c6-player c6b-opened"; do
+        a=${pr% *} b=${pr#* }
+        ra=$(magick "$refdir/$a.png" "$refdir/$b.png" -compose difference -composite -threshold 0 -format '%@' info:)
+        wa=$(magick "$w/$a.png" "$w/$b.png" -compose difference -composite -threshold 0 -format '%@' info:)
+        echo "the movie's window in $b: $ra on 3.1, $wa on w16"
+        [ "$ra" = "$wa" ] || fail "the movie's window in $b is $wa on w16, $ra on 3.1"
+    done
+fi
 if [ $fails = 0 ]; then echo "ok   qtplay: QuickTime installs and plays its sample movie as on 3.1 ($out)"; fi
 exit $(( fails > 0 ))
