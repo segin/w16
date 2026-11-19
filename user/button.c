@@ -335,12 +335,15 @@ static void clicked(HWND h)
         set_state(h, (BYTE)((s & ~ST_CHECK) | (((s & ST_CHECK) + 1) % 3)));
     else if (t == BS_AUTORADIOBUTTON) {
         HWND p = GetParent(h), c = h;
-        /* uncheck the others of the group */
+        int guard = 0;
+        /* uncheck the others of the group (at most as many steps as the
+           parent has children: GetNextDlgGroupItem keeps 64, and with
+           more before h it never came back to h: USER audit, sweep) */
         do {
             c = GetNextDlgGroupItem(p, c, FALSE);
             if (c != h && btype(c) == BS_AUTORADIOBUTTON)
                 send_message(c, BM_SETCHECK, 0, 0);
-        } while (c && c != h);
+        } while (c && c != h && ++guard < 1024);
         set_state(h, (BYTE)((s & ~ST_CHECK) | 1));
     }
     redraw(h);

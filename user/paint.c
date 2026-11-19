@@ -401,9 +401,19 @@ void update_window(HWND h, BOOL children)
             EndPaint(h, &ps);
         }
     }
-    if (children && (w = valid_wnd(h)) != 0 && !(w->style & WS_MINIMIZE))
-        for (c = w->hwndChild; c; c = PW(c)->hwndNext)
+    /* the next sibling taken before each child paints, and the walk ended
+       if that one is gone or moved elsewhere: a WM_PAINT that destroyed
+       its window had the loop read the freed WND's link (USER audit,
+       sweep) */
+    if (children && (w = valid_wnd(h)) != 0 && !(w->style & WS_MINIMIZE)) {
+        HWND n;
+        for (c = w->hwndChild; c; c = n) {
+            n = PW(c)->hwndNext;
             update_window(c, TRUE);
+            if (n && (!valid_wnd(n) || PW(n)->hwndParent != h))
+                break;
+        }
+    }
 }
 
 void WINAPI UpdateWindow(HWND h)

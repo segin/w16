@@ -793,6 +793,8 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         case HTSYSMENU:
             if (!(w->style & WS_CHILD) && h != hwndActive)
                 activate_window(h, TRUE);
+            if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
+                break;
             if (w->style & WS_SYSMENU)
                 send_message(h, WM_SYSCOMMAND, SC_MOUSEMENU | HTSYSMENU, lp);
             break;
@@ -907,6 +909,10 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_QUERYOPEN:
         return 1;
     case WM_SYSCOMMAND:
+        /* WH_CBT first; nonzero: nothing (US30 cbt on 3.1: C8 with the
+           SC_ value, a refused SC_MAXIMIZE left the window as it was) */
+        if (cbt_hook(HCBT_SYSCOMMAND, wp, lp) || !(w = valid_wnd(h)))
+            return 0;
         sys_command(h, w, wp, lp);
         return 0;
     case WM_KEYDOWN:
