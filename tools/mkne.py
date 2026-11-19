@@ -23,6 +23,10 @@ resource's bytes; LEN, when given, is written as the resource's length
 in the table (in units of 1 << shift) instead of the data's own, to make
 a table that disagrees with the data.
 --stubonly writes just the MZ stub (an MS-DOS program, no NE header).
+--entries N gives it N exported constant entries (ordinals 1 to N, each
+value its ordinal), in bundles of 255: KERNEL keeps 5 bytes an entry
+and 6 a bundle, the file 3 and 2, so a table that fits the file can be
+too large for the module table (TK62, the KERNEL audit's C5).
 """
 import argparse
 import struct
@@ -47,7 +51,19 @@ def rkey(s):
         return s.upper()
 
 
-def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A):
+def entry_table(n):
+    """n constant entries (type FEh), ordinal i's value i"""
+    out, i = b'', 1
+    while i <= n:
+        k = min(255, n - i + 1)
+        out += bytes([k, 0xFE])
+        for j in range(i, i + k):
+            out += struct.pack('<BH', 1, j & 0xFFFF)
+        i += k
+    return out + b'\0\0'
+
+
+def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0):
     """res: [(type, name, data, length-override or None)]"""
     st = stub()
     lfa = len(st)
@@ -67,7 +83,7 @@ def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A):
                 names += bytes([len(key)]) + key.encode('latin-1')
     names += b'\0' if res else b''
     resnames = bytes([len(module)]) + module.encode('latin-1') + b'\0\0' + b'\0'
-    entry = b'\0\0'
+    entry = entry_table(entries) if entries else b'\0\0'
     nonres = bytes([len(desc)]) + desc.encode('latin-1') + b'\0\0' + b'\0'
     off_rt = 0x40
     off_resn = off_rt + rt_len + len(names)
@@ -110,6 +126,7 @@ def main():
     ap.add_argument('--flags', default='8300')
     ap.add_argument('--expver', default='3.10')
     ap.add_argument('--stubonly', action='store_true')
+    ap.add_argument('--entries', type=int, default=0)
     ap.add_argument('res', nargs='*')
     a = ap.parse_args()
     if a.stubonly:
@@ -122,7 +139,7 @@ def main():
         res.append((rkey(p[0]), rkey(p[1]), data, int(p[3]) if len(p) > 3 else None))
     mj, mn = (int(x) for x in a.expver.split('.'))
     open(a.out, 'wb').write(build(a.module, a.desc, res, a.shift, int(a.flags, 16),
-                                  (mj << 8) | mn))
+                                  (mj << 8) | mn, a.entries))
 
 
 if __name__ == '__main__':

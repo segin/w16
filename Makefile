@@ -38,14 +38,15 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
-            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE
+            TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE \
+            TK62A.EXE TKENT.DLL TKENT2.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -537,6 +538,26 @@ $(DOS)/TK61A.EXE: $(B)/tests/start.o $(B)/tests/tk61a.o $(B)/tests/tk17s.o $(B)/
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk61a.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk61a.o $(B)/tests/tk17s.o $(B)/tests/tk61s.o }
+# TK62.EXE: the KERNEL audit's regressions and observations; TK62A.EXE,
+# the task it starts; TKENT.DLL and TKENT2.DLL, entry tables of 13300 and
+# 12000 entries (tools/mkne.py)
+$(B)/tests/tk62.o: tests/apps/tk62ref.h tests/apps/tk62ref286.h tests/apps/tklog.h tests/apps/tk62.h
+$(B)/tests/tk62a.o: tests/apps/tk62.h
+$(DOS)/TK62.EXE: $(B)/tests/start.o $(B)/tests/tk62.o $(B)/tests/tk17s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk62.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk62.o $(B)/tests/tk17s.o }
+$(DOS)/TK62A.EXE: $(B)/tests/start.o $(B)/tests/tk62a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk62a.map file { $(B)/tests/start.o $(B)/tests/tk62a.o }
+$(DOS)/TKENT.DLL: tools/mkne.py
+	@mkdir -p $(@D)
+	python3 tools/mkne.py $@ --module TKENT --entries 13300
+$(DOS)/TKENT2.DLL: tools/mkne.py
+	@mkdir -p $(@D)
+	python3 tools/mkne.py $@ --module TKENT2 --entries 12000
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk
