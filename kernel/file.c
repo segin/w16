@@ -536,7 +536,10 @@ static void temp_dir(char *d, u16 max)
         d[n] = 0;
         if (n > 3 && d[n - 1] == '\\')
             d[--n] = 0;
-        if (dir_exists(d) || (n == 3 && d[1] == ':'))
+        /* a drive's root as "X:\" only, X a letter ("Z:X" was taken:
+           KERNEL audit, medium 38) */
+        if (dir_exists(d) || (n == 3 && d[1] == ':' && d[2] == '\\' &&
+                              upc(d[0]) >= 'A' && upc(d[0]) <= 'Z'))
             return;
     }
     GetWindowsDirectory(d, max);

@@ -1701,6 +1701,9 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     }
     h = AR(a)->handle;
     s = h | 1;
+    if (AR(a)->owner == OWN_BURGER)
+        return 0;                       /* not the Burgermaster (as
+                                           GlobalFree; audit, low) */
     if (flags & GMEM_MODIFY) {
         if ((flags & GMEM_DISCARDABLE) && !discardable(a))
             lru_add(a, 1);
@@ -1848,6 +1851,17 @@ u32 KAPI_ES GlobalHandle(u16 sel)                                /* KERNEL.21 */
     p = alias_find(sel, NULL);
     if (p)
         return ((u32)p->sel << 16) | p->sel;
+    /* KERNEL's own segments (the bootstrap's memory, outside the heap):
+       fixed blocks, the selector as handle. Observed on 3.1 (TK62
+       "codehandle"): GetCodeHandle of a KERNEL procedure gives its
+       segment's selector, and (TK50) that is GlobalHandle's AX for it;
+       w16 gave 0 (KERNEL audit, medium 33) */
+    if (sel && module_first) {
+        u16 i;
+        for (i = 0; i < module_first->seg_count; i++)
+            if (module_first->seg[i].sel && (module_first->seg[i].sel | 3) == (sel | 3))
+                return ((u32)module_first->seg[i].sel << 16) | module_first->seg[i].sel;
+    }
     return 0;
 }
 

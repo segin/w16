@@ -96,12 +96,12 @@ what is left (listed again at the end).
 | 30 | FALSE | "Reversed record layout": Microsoft's TOOLHELP on w16's KERNEL (toolhelp boot test, runs ms-tree286 and ms-tree386) reports `LOGPARAMERROR code=6001 addr=THP param=2222`, the same as on 3.1. So w16's {code, proc, param} is the order 3.1's TOOLHELP reads. The static record is fine: notifications are not reentrant. | None. |
 | 31 | HARDENING | `notify`: a ToolHelpHook procedure that unhooks itself had the RegisterPtrace one called too. | Fixed: both hooks read before either is called. |
 | 32 | HARDENING | GetCodeInfo matched an empty segment slot (selector 0) for selectors 0-7. | Fixed. |
-| 33 | REAL (open) | TK62 "codehandle": 3.1's GetCodeHandle of a KERNEL procedure gives its segment's handle; w16's gives 0. But TK50 shows 3.1's AX equals GlobalHandle(KERNEL's CS), which is 0 in w16 because KERNEL's segments are not blocks of its heap. | open: needs KERNEL's segments in the selector table (GlobalHandle). TK62 records it without checking. |
-| 34 | HARDENING | FatalExit: no guard against a FatalExitHook that calls FatalExit; DS = SS for the hook. | Not fixed. |
+| 33 | REAL | TK62 "codehandle" (all modes): 3.1's GetCodeHandle of a KERNEL procedure gives its segment's selector as handle, and it equals GlobalHandle's for that selector (also TK50). w16 gave 0, since KERNEL's segments are the bootstrap's memory outside the heap. | GlobalHandle answers for KERNEL's own segments as fixed blocks (handle = selector); GetCodeHandle follows. GlobalSize/GlobalFree still know nothing of them (FreeSelector of one now leaves it alone). TK62 checks it. |
+| 34 | HARDENING | FatalExit: no guard against a FatalExitHook that calls FatalExit; DS = SS for the hook. | Fixed the reentry (the hook is not called again from itself); DS kept. |
 | 35 | FALSE | `hmemcpy`'s `sl + n` cannot wrap: linear addresses and sizes are far below 4 GB. | None. |
 | 36 | REAL | TK62 "files": on 3.1 OpenFile("COM1:"), ("FOO:"), ("A:B:C") with OF_PARSE fail; w16 took ':' as a name character. A NULL name is HARDENING. | ':' is a bad name character. |
 | 37 | UNSURE | OpenFile reports DOS error 2 for any open failure. TK62's read-only file opened for writing on 3.1 too: DOSBox does not enforce the attribute, so nothing was learned. | open: probe a real error (sharing, no handles). |
-| 38 | HARDENING | `temp_dir` takes a 3-character TEMP without checking it (a bad environment). | Not fixed. |
+| 38 | HARDENING | `temp_dir` takes a 3-character TEMP without checking it (a bad environment). | Fixed: only "X:\" with X a letter is taken as a drive's root. |
 | 39 | UNSURE | GetDriveType returns 0 where IOCTL 4408h fails (RAM drives, SUBST). | open: not probed. |
 | 40 | 3.1-BEHAVIOUR | TK62 "profile": 3.1 strips the quotes of a default (`"dq"` gives dq) as of a file value. | Kept (TK62 checks it). |
 | 41 | 3.1-BEHAVIOUR | TK62 "profile": on 3.1 a value written with leading blanks reads back with them from the cache ("  two") and without them after a flush ("two"); a file value loses them ("lead"). | Kept (TK62 checks it). |
@@ -115,20 +115,20 @@ The audit's Low list is numbered here in its order (36 items).
 | # | Verdict | Evidence | Action |
 |---|---|---|---|
 | L1 | REAL | A tile limit past 1 MB must be page-granular; DPMI refused the byte limit and the tile was cut to 64K (both heaps on a 386 host). | Such limits rounded up to the page (heapcheck accepts them). |
-| L2 | HARDENING | GlobalReAlloc of the Burgermaster. | Not fixed. |
+| L2 | HARDENING | GlobalReAlloc of the Burgermaster. | Fixed: 0 (as GlobalFree leaves it). |
 | L3 | REAL | TK62 "discsel": on 3.1 (all modes) GlobalReAlloc of a discarded block named by its selector returns its even handle; w16's KRNL286 returned the odd one. | Even. |
 | L4 | REAL (minor) | LocalCompact(-1) discards at most 32 blocks a call (NDISC). | open. |
 | L5 | UNSURE | GetFreeSpace counts fixed discardable blocks. | open. |
 | L6 | UNSURE | LOCALNOTIFY's thunk does not keep ES. | open. |
 | L7 | HARDENING | `module_of` matched handles 1-3 to empty segment slots. | Fixed. |
 | L8 | HARDENING | LoadResource's usage count is a word. | Not fixed (atoms and events wrap the same way on 3.1). |
-| L9 | HARDENING | `tb_new` ignores `gset_code` failing (DPMI failure). | Not fixed. |
+| L9 | HARDENING | `tb_new` ignores `gset_code` failing (DPMI failure). | Fixed: the thunk block is given up. |
 | L10 | REAL (cosmetic) | Unimplemented-import thunks for names over 32 characters sharing a prefix share a thunk (only the reported name is wrong). | Not fixed. |
 | L11 | FALSE | `module_load_program` is never called with a task running and `last_libinit` set. | None. |
 | L12 | REAL (minor) | The bootstrap's relocation records (`rel_para`, a few KB of DOS memory) are never freed. | open. |
 | L13 | HARDENING | Bootstrap: a missing environment, NE length wrap, LOBYTE chains, entry bounds (KERNEL's own file). | Not fixed. |
-| L14 | HARDENING | Watchdog ([w16] debugging aid): `wd_limit` overflow, RTC interrupt left on, CMOS without `cli`. | Not fixed. |
-| L15 | HARDENING | DiagOutput(NULL), an unclamped /B command tail, `old21` set after the hook (no INT 21h can come in between). | Not fixed. |
+| L14 | HARDENING | Watchdog ([w16] debugging aid): `wd_limit` overflow, RTC interrupt left on, CMOS without `cli`. | The overflow fixed (at most 4095 s); the rest not. |
+| L15 | HARDENING | DiagOutput(NULL), an unclamped /B command tail, `old21` set after the hook (no INT 21h can come in between). | DiagOutput(NULL) ignored; the tail's length kept inside the PSP; `old21` not changed. |
 | L16 | HARDENING | Priority wrap at 7Fh (SetPriority's range keeps it far from there). | Not fixed. |
 | L17 | REAL (cosmetic) | OldYield set its schedlog reason after the switch it was for. | Fixed. |
 | L18 | HARDENING | `task_boot` with no task. | Not fixed. |
@@ -138,7 +138,7 @@ The audit's Low list is numbered here in its order (36 items).
 | L22 | HARDENING | PostEvent's fast path on an expand-down bogus handle. | Not fixed. |
 | L23 | FALSE | GetHeapSpaces: the bytes in use cannot exceed FFFFh less the information block's offset. | None. |
 | L24 | REAL | TK62 "catchmap" (all modes): 3.1's CATCHBUF holds CS in word 1, the caller's BP in 3, DS in 6, nothing in 7 and SS in 8 (IP, SP, SI, DI by elimination in 0, 2, 4, 5); w16 had SS in 3, BP in 4 and DS in 7. | 3.1's order (Catch and Throw). |
-| L25 | HARDENING | `th_loadsegs` for a segment with selector 0 (w16 loads every segment). | Not fixed. |
+| L25 | HARDENING | `th_loadsegs` for a segment with selector 0 (w16 loads every segment). | Fixed: no notification for one. |
 | L26 | HARDENING | FatalAppExit with no task (boot only). | Not fixed. |
 | L27 | UNSURE | DirectResAlloc ignores hInstance and flags. | open. |
 | L28 | REAL | TK62 "ansi": KERNEL.79/80 also map 8Ah/9Ah, 8Ch/9Ch, 9Fh/FFh on 3.1. | Added. |
@@ -157,8 +157,8 @@ The audit's Low list is numbered here in its order (36 items).
 |---|---|---|---|---|---|
 | Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
 | High (29) | 14: H1, H2, H4, H7, H9, H11, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 0 |
-| Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed but 33) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 43 fixed) | 2: 37, 39 |
-| Low (36) | 10: L1, L3, L4, L10, L12, L17, L24, L28, L32, L35 (L1, L3, L17, L24, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L7 fixed) | 6: L5, L6, L19, L27, L30, L31 |
+| Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 34, 38, 43 fixed) | 2: 37, 39 |
+| Low (36) | 10: L1, L3, L4, L10, L12, L17, L24, L28, L32, L35 (L1, L3, L17, L24, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L2, L7, L9, L14 part, L15 part, L25 fixed) | 6: L5, L6, L19, L27, L30, L31 |
 
 (H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's.)
 
@@ -172,6 +172,5 @@ The audit's Low list is numbered here in its order (36 items).
 
 ## Left (open)
 
-- Medium 33: GetCodeHandle/GlobalHandle of KERNEL's own segments. KERNEL's segments are the bootstrap's conventional memory, outside the heap; giving them arenas and selector-table entries (fixed, owner KERNEL) is a design change of its own, not started.
 - Medium 37, 39; Low L5, L6, L19, L27, L30, L31: not probed.
 - Low L4 (LocalCompact(-1) past 32 blocks), L12 (the bootstrap's relocation records), L32 (OF_PROMPT, OF_CANCEL, OF_SEARCH).

@@ -940,9 +940,14 @@ static u16 ss_now(void);
 void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 {
     regs16 r;
+    static u8 in_hook;                  /* (a hook that calls FatalExit is
+                                           not called again: audit, M34) */
     u32 hook = fatal_exit_hook();
-    if (hook)
+    if (hook && !in_hook) {
+        in_hook = 1;
         mod_call((u16)(hook >> 16), (u16)hook, ss_now(), 0, 0, 1, code);
+        in_hook = 0;
+    }
     kdbg("w16: FatalExit ");
     kdbghex(code);
     kdbg("\r\n");

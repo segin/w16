@@ -577,10 +577,10 @@ static void codehandle(void)
     obs("codehandle: proc found", p != NULL);
     obs_env("codehandle: proc sel", SELECTOROF(p));
     obs_env("codehandle: handle", (WORD)h);
-    /* (w16: 0, GlobalHandle's for KERNEL's code, which is no block of
-       its heap: the KERNEL audit's medium 33, open) */
-    obs_env("codehandle: kernel ok", h != 0);
-    obs_env("codehandle: kernel is sel", h && ((WORD)h | 1) == (SELECTOROF(p) | 1));
+    obs("codehandle: kernel ok", h != 0);
+    obs("codehandle: kernel is sel", h && ((WORD)h | 1) == (SELECTOROF(p) | 1));
+    obs("codehandle: GlobalHandle agrees",
+        (WORD)h == LOWORD(GlobalHandle(SELECTOROF(p))));
 }
 
 static void catchbuf(void)

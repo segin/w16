@@ -201,7 +201,11 @@ static u16 tb_new(void)
         GlobalFree(sel);
         return 0;
     }
-    gset_code(sel);
+    if (!gset_code(sel)) {              /* (no code selector: a thunk */
+        dpmi_free_desc(alias);          /* block that cannot run; audit, */
+        GlobalFree(sel);                /* low) */
+        return 0;
+    }
     t = MK_FP(alias, 0);
     t->next = 0;
     t->alias = alias;
