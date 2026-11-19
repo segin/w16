@@ -1,0 +1,25 @@
+; the MS-DOS Prompt (DOSPRMPT.PIF), EXIT; then File > Run COMMAND.COM
+; (no PIF: _DEFAULT.PIF), EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-prompt
+type exit
+key Return
+sleep 10
+key alt+f
+key r
+sleep 2
+type command.com
+key Return
+sleep 15
+shot 02-run
+type exit
+key Return
+sleep 10
+shot 03-back

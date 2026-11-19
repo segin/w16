@@ -25,7 +25,7 @@ typedef signed int     s32;
 #define SEL_LDT     0x30
 #define SEL_PMBP    0x3B    /* ring 3 code: PM breakpoints (HLT bytes) */
 #define SEL_FLAT3   0x43    /* ring 3 data, flat (the host's view, for clients) */
-#define GDT_ENTRIES 9
+#define GDT_ENTRIES 16          /* up to SHELL's flat selector 7Bh (index 15) */
 
 #define EFL_CF  0x0001
 #define EFL_ZF  0x0040
@@ -77,7 +77,21 @@ struct nest {
 #define NEST_HWINT  2       /* a hardware interrupt: restore regs unchanged */
 #define NEST_0300   3       /* DPMI 0300h-0302h */
 
-/* The virtual machine (only the System VM so far). */
+/* the start of a VM control block, whose address is the VM's handle (the
+ * DDK names CB_VM_Status, CB_High_Linear, CB_Client_Pointer, CB_VMID; the
+ * order as observed with VXP). Devices get areas after VM_CB_RESERVED
+ * (_Allocate_Device_CB_Area) */
+#pragma pack(1)
+struct vm_cb {
+    u32 status, high_linear, client_pointer, vmid;
+    struct vm *vm;          /* w16's own: the VMM's state of the VM */
+};
+#pragma pack()
+#define VM_CB_SIZE      8192
+#define VM_CB_RESERVED  0x100
+
+/* The virtual machines: the System VM (sysvm), which alone runs a DPMI
+ * client (KRNL386), and the DOS VMs (vm.c). */
 struct vm {
     struct cregs r;         /* the current state */
     int pm;                 /* a DPMI client exists */
@@ -92,10 +106,34 @@ struct vm {
     u32 pmvec_off[256];
     u32 excvec_sel[32];     /* exception handlers (0203h) */
     u32 excvec_off[32];
+    /* every VM (vm.c) */
+    struct vm *next;        /* the VM list, in creation order */
+    u32 id;                 /* the VM ID: 1 the System VM */
+    struct vm_cb *cb;       /* its control block: the handle */
+    struct client_regs *client;
+    u32 ptab_phys;          /* the page table of linear 0-4 MB (its first MB) */
+    u32 kstack_top;         /* its ring-0 stack (the System VM: kstack) */
+    u32 kjb[6];             /* its ring-0 context while another VM runs */
+    int started;            /* has run (kjb holds its context) */
+    u32 kesp0;              /* saved while not current: */
+    struct cregs *hw_r;
+    void *exec;
+    u16 refstk_seg, refstk_top;     /* the V86 stack of the VMM's nested calls */
+    u8 *inst;               /* its instance data while another VM runs */
+    int crit;               /* in a DOS critical section (INT 2Ah 80h/81h) */
+    int idle;               /* HLT, INT 2Fh 1680h: no time until an interrupt */
+    int suspended;          /* Suspend_VM, or not executable any more */
+    u32 slice;              /* ticks left in its time slice */
+    u32 prio_fg, prio_bg;   /* time-slice priorities (PIF, SYSTEM.INI) */
+    u32 exit_code;          /* its program's exit code (VM stub) */
+    int ended;              /* its program has ended */
+    struct vm *free_next;   /* destroyed, kept for the next VM */
 };
 
 extern struct w386_info *info;
 extern struct vm sysvm;
+extern struct vm *cur_vm;           /* the VM running (vm.c) */
+extern struct vm *vm_list;
 extern u32 bp_lin;              /* linear address of the V86 breakpoints */
 
 /* vmmasm.asm */
@@ -187,6 +225,66 @@ void vxd_link(struct tframe *f);
 u32 vm_handle(void);
 u32 vxd_pm_api(u32 id);
 void vxd_call_api(u32 proc, struct cregs *r);
+
+/* vm.c: the VMs, their memory, the scheduler */
+void vm_sys_init(void);             /* the System VM: control block, memory map */
+void vm_snapshot(void);             /* the instance data new VMs start with */
+struct vm *vm_create(void);         /* a DOS VM, not started */
+int vm_set_program(struct vm *v, const char *path, const u8 *tail, const char *dir);
+void vm_set_message(struct vm *v, const char *msg, u32 n);   /* for standard output first */
+void vm_destroy(struct vm *v);
+struct vm *vm_of(u32 handle);       /* NULL if not a VM */
+void vm_end_trap(struct cregs *r);  /* at the end of a trap: switch VMs? */
+void vm_idle(void);                 /* the current VM has nothing to do */
+void vm_wake(struct vm *v);         /* an interrupt for v */
+void vm_tick(void);                 /* a timer tick */
+void vm_set_focus(struct vm *v);    /* the execution focus */
+extern struct vm *vm_focus;
+int vm_service(u32 svc, struct svcregs *s);
+void vm_exited(struct cregs *r);    /* the VM stub's VMEXIT breakpoint */
+void vm_start(struct cregs *r);     /* a new VM's VMSTART breakpoint */
+u32 vm_lin(struct vm *v, u32 lin);  /* v's address lin (first MB) for the VMM */
+void vm_int2a(struct cregs *r);     /* DOS's critical sections */
+#define VMH(v) ((u32)(v)->cb)
+/* a DOS VM's first 8 KB of memory (the loader's VM stub, ldrasm.asm): its
+ * PSP, the parameters, a message, the VMM's reflection stack, the stub's
+ * stack */
+#define DOSVM_PARAMS        0x100
+#define DOSVM_MSGLEN        0x3FE
+#define DOSVM_MSG           0x400
+#define DOSVM_MSG_MAX       0x800
+#define DOSVM_REFSTK_TOP    0x1800
+#define DOSVM_REFSTK_SIZE   0xC00
+#define DOSVM_STACK_TOP     0x1FFE
+
+/* vxd.c: control messages */
+#define CREATE_VM           0x07
+#define VM_CRITICAL_INIT    0x08
+#define VM_INIT             0x09
+#define VM_TERMINATE        0x0A
+#define VM_NOT_EXECUTEABLE  0x0B
+#define DESTROY_VM          0x0C
+#define VM_SUSPEND          0x0D
+#define VM_RESUME           0x0E
+#define SET_DEVICE_FOCUS    0x0F
+u32 vxd_send(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);   /* carry: a device refused */
+void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);
+
+void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg);   /* run in v, soon */
+void io_vm_gone(struct vm *v);
+void dpmi_pm_int(int vec, struct cregs *r);
+void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
+
+/* shell.c, vdd.c: w16's SHELL and VDD (devices in the VMM module) */
+void shell_init(void);
+void shell_api(struct cregs *r);
+void shell_vm_ended(struct vm *v);
+int vdd_api(struct cregs *r);
+void vdd_int2f(struct cregs *r);
+void vdd_focus(struct vm *v);       /* the display goes to v */
+void vdd_vm_init(struct vm *v);
+void vdd_vm_destroy(struct vm *v);
+#define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
 
 /* io.c: I/O port trapping */
 void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */

@@ -78,6 +78,16 @@ struct vpicd_link {
     /* the VMM's: the System VM's handle and the PIC bases it had at start */
     vu32 sys_vm;
     vu32 rm_base1, rm_base2;
+    /* the VMM's: the VM running now; an interrupt request for VM vm (not
+     * the current one, or idle): give it time soon */
+    vu32 (*cur_vm)(void);
+    void (*wake)(vu32 vm);
 };
+
+/* the VM control block's fields the devices read (the DDK's CB_VM_Status,
+ * CB_High_Linear, CB_Client_Pointer, CB_VMID) */
+#define CB_HIGH_LINEAR(vm)  (*(vu32 *)((vm) + 4))
+#define CB_CLIENT(vm)       (*(vu32 *)((vm) + 8))
+#define CB_VMID(vm)         (*(vu32 *)((vm) + 12))
 
 #endif

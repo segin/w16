@@ -624,6 +624,10 @@ int int2f_pm(struct cregs *r)
         SETW(r->ebx, 1);
         SETLO(r->eax, 0);
         return 1;
+    case 0x4003:                        /* the display driver's critical sections: */
+    case 0x4004:                        /* noted by the VDD, passed on */
+        vdd_int2f(r);
+        return 0;
     case 0x1686:                        /* in protected mode */
         SETW(r->eax, 0);
         return 1;
@@ -958,6 +962,59 @@ static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cd
     p.cs = sysvm.pmvec_sel[vec];
     p.eip = sysvm.pmvec_off[vec];
     hstk_run(&p);
+}
+
+/* INT vec for the VMM's devices in the System VM (the VDD's INT 2Fh
+ * 4001h/4002h to the display driver): the client's protected-mode handler
+ * if it has one, on the host stack with the registers of r (interrupts
+ * on, as a software interrupt from code with interrupts on), else the
+ * V86 handler; the results back in r. UNVERIFIED: the stack and segment
+ * registers Windows 3.1 gives the handler. */
+void dpmi_pm_int(int vec, struct cregs *r)
+{
+    struct cregs p;
+    if (cur_vm != &sysvm || !sysvm.pm || pmvec_default(vec)) {
+        r->ss = 0; r->esp = 0;
+        v86_int(r, vec);
+        return;
+    }
+    memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(NULL);
+    p.ss = hstk_sel;
+    p.ds = p.es = sysvm.last_ds;
+    pm_push(&p, 0x0202);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eax = r->eax; p.ebx = r->ebx; p.ecx = r->ecx; p.edx = r->edx;
+    p.esi = r->esi; p.edi = r->edi; p.ebp = r->ebp;
+    p.eflags = 0x0202;
+    p.cs = sysvm.pmvec_sel[vec];
+    p.eip = sysvm.pmvec_off[vec];
+    hstk_run(&p);
+    r->eax = p.eax; r->ebx = p.ebx; r->ecx = p.ecx; r->edx = p.edx;
+    r->esi = p.esi; r->edi = p.edi;
+    r->eflags = (r->eflags & ~0x8D5u) | (p.eflags & 0x8D5u);
+}
+
+/* a far call (PASCAL: the callee pops the words) to sel:off in the System
+ * VM's protected mode, on the host stack, with n words of arguments
+ * (args[0] pushed first); the registers it returns with in r */
+void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r)
+{
+    struct cregs p;
+    int i;
+    memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(NULL);
+    p.ss = hstk_sel;
+    p.ds = p.es = sysvm.last_ds;
+    for (i = 0; i < n; i++) pm_push(&p, args[i]);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags = 0x0202;
+    p.cs = sel;
+    p.eip = off;
+    hstk_run(&p);
+    if (r) *r = p;
 }
 
 /* A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code

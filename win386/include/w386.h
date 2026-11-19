@@ -29,7 +29,9 @@ typedef unsigned long  w_u32;
 #define W386_BP_REFRET  2       /* end of a reflected interrupt/call from PM */
 #define W386_BP_PS2CB   3       /* the PS/2 pointing device handler (INT 15h C207h) of a PM client */
 #define W386_BP_IRQIRET 4       /* the IRET of a simulated hardware interrupt (VPICD's VID_IRET_Proc) */
-#define W386_BP_FIRSTFREE 5     /* real-mode callbacks and V86 API entries */
+#define W386_BP_VMEXIT  5       /* a DOS VM's program has ended (the VM stub, AX = code, CF = EXEC failed) */
+#define W386_BP_VMSTART 6       /* a new DOS VM's first instruction (its VM_Init) */
+#define W386_BP_FIRSTFREE 7     /* real-mode callbacks and V86 API entries */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */
@@ -74,6 +76,10 @@ struct w386_info {
     w_u32 vxd_list;     /* window offset of their DDBs' linear addresses */
     w_u32 tail_lin;     /* WIN386's command tail (PSP:80h), linear */
     w_u32 fatal_lin;    /* a W386_FATAL_SIZE buffer of the loader's: the VMM's fatal message */
+    w_u16 vmstub_off;   /* ldr_cs:vmstub_off: a new DOS VM's first code (EXECs its program) */
+    w_u16 sda_size;     /* bytes of DOS's swappable data area (INT 21h 5D06h) */
+    w_u16 free_mcb;     /* the first free memory arena after the loader's block (its MCB) */
+    w_u16 mem_top;      /* the segment above conventional memory (BIOS 40:13h) */
 };
 #pragma pack()
 

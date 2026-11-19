@@ -13,10 +13,10 @@
  * handling: a request into the System VM, and VPICD_Phys_EOI when the VM
  * ends it.
  *
- * The virtual PIC. The System VM (the only VM so far) has a PIC of its
- * own: an IMR, an IRR (the requests devices set with
- * VPICD_Set_Int_Request, level-triggered: a request stays until
- * VPICD_Clear_Int_Request) and an ISR, programmed and read through ports
+ * The virtual PICs. Every VM has a PIC of its own (in its control
+ * block: _Allocate_Device_CB_Area): an IMR, an IRR (the requests devices
+ * set with VPICD_Set_Int_Request for that VM, level-triggered: a request
+ * stays until VPICD_Clear_Int_Request) and an ISR, programmed and read through ports
  * 20h, 21h, A0h and A1h, which the VMM traps (Install_Mult_IO_Handlers)
  * and hands here: ICW1-ICW4 (the VM's vector bases), OCW1 (the mask:
  * VID_Mask_Change_Proc for a change), OCW2 (EOI, non-specific or
@@ -68,6 +68,8 @@ void __cdecl vmm_install_mult_io(struct vregs *r);
 void __cdecl vmm_simulate_io(struct vregs *r);
 void __cdecl vmm_set_global_time_out(struct vregs *r);
 void __cdecl vmm_cancel_time_out(struct vregs *r);
+vu32 __cdecl vmm_alloc_cb_area(vu32 size, vu32 flags);
+static vu32 next_vm(vu32 vm);
 extern vu8 vpicd_io_table[];
 extern char vpicd_tmo[];                /* ENTRY: the IRET time-out */
 #pragma aux vpicd_tmo "*"
@@ -82,7 +84,6 @@ struct virq {
     vu32 magic;
     struct vid d;
     vu32 irq;
-    int requested;          /* VPICD_Set_Int_Request for the System VM */
     int phys_mode;          /* 0 auto-masking, 1 physically masked, 2 unmasked */
 };
 #define VIRQ_MAGIC 0x51524956u      /* "VIRQ" */
@@ -93,22 +94,25 @@ static vu32 sys_vm;
 
 /* the hardware side */
 static vu32 phys_isr;                   /* physically in service: masked until Phys_EOI */
-static vu32 def_req;                    /* VPICD's own requests (nobody's IRQs) */
 static vu32 dos_masks;                  /* the 8259s' masks before Windows */
 static int vm_ready;                    /* Sys_VM_Init done: the VM's PIC set up */
 
-/* the System VM's virtual PIC */
-static struct vpic {
+/* a VM's virtual PIC (in its control block) */
+#define NIRET 32
+struct vpic {
     vu32 imr, isr;                      /* bit per IRQ, the slave's in 8-15 */
+    vu32 req;                           /* the devices' requests for this VM */
+    vu32 def_req;                       /* VPICD's own (nobody's IRQs; the System VM's) */
     vu32 base[2];                       /* ICW2: the vector bases */
     int icw_step[2], icw4[2], single[2];
     int read_isr[2];                    /* OCW3: reads give the ISR */
-} vp;
-
-/* IRETs being waited for (a device's VID_IRET_Proc), innermost last */
-#define NIRET 32
-static struct { vu32 irq, tmo; int timed_out; } irets[NIRET];
-static int n_irets;
+    /* IRETs being waited for (a device's VID_IRET_Proc), innermost last */
+    struct { vu32 irq, tmo; int timed_out; } irets[NIRET];
+    int n_irets;
+};
+static vu32 cb_off;                     /* our area in the control blocks */
+#define VP(vm) ((struct vpic *)((vm) + cb_off))
+#define CUR() (vpicd_link.cur_vm())
 
 static void hw_int(vu32 irq);
 static void resume(void);
@@ -156,11 +160,13 @@ static int phys_request(vu32 irq)
 }
 
 /* the 8259s' masks from the state: an IRQ is masked while physically in
- * service, when its device masked it, or (auto-masking) when the VM has;
- * the cascade (IRQ 2) is left open */
+ * service, when its device masked it, or (auto-masking) when the System
+ * VM has (UNVERIFIED: which VM's mask Windows 3.1 follows); the cascade
+ * (IRQ 2) is left open */
 static void phys_update(void)
 {
     vu32 m = 0, irq;
+    struct vpic *vp = VP(sys_vm);
     for (irq = 0; irq < NIRQ; irq++) {
         struct virq *v = owner[irq];
         int on;
@@ -168,7 +174,7 @@ static void phys_update(void)
         if (phys_isr & (1u << irq)) on = 1;
         else if (v && v->phys_mode == 1) on = 1;
         else if (v && v->phys_mode == 2) on = 0;
-        else on = ((vm_ready ? vp.imr : dos_masks) >> irq) & 1;
+        else on = ((vm_ready ? vp->imr : dos_masks) >> irq) & 1;
         if (on) m |= 1u << irq;
     }
     outb(0x21, m & 0xFF);
@@ -176,14 +182,14 @@ static void phys_update(void)
 }
 
 /* the VM's vector for an IRQ (its ICW2 bases; DPMI 0400h reports 08h/70h) */
-static vu32 irq_vector(vu32 irq)
+static vu32 irq_vector(struct vpic *vp, vu32 irq)
 {
-    return irq < 8 ? vp.base[0] + irq : vp.base[1] + irq - 8;
+    return irq < 8 ? vp->base[0] + irq : vp->base[1] + irq - 8;
 }
 
-static int requested(vu32 irq)
+static int requested(struct vpic *vp, vu32 irq)
 {
-    return owner[irq] ? owner[irq]->requested : (def_req >> irq) & 1;
+    return owner[irq] ? (vp->req >> irq) & 1 : (vp->def_req >> irq) & 1;
 }
 
 /* ---- status bits (Get_Status / Get_Complete_Status; observed: VXI) ---- */
@@ -196,25 +202,25 @@ static int requested(vu32 irq)
 #define ST_PHYS_REQ     0x40            /* UNVERIFIED value */
 #define ST_VIRT_DEV_REQ 0x80
 
-static int iret_pending(vu32 irq)
+static int iret_pending(struct vpic *vp, vu32 irq)
 {
     int i;
-    for (i = 0; i < n_irets; i++)
-        if (irets[i].irq == irq && !irets[i].timed_out) return 1;
+    for (i = 0; i < vp->n_irets; i++)
+        if (vp->irets[i].irq == irq && !vp->irets[i].timed_out) return 1;
     return 0;
 }
 
-static vu32 irq_status(vu32 irq, struct virq *caller)
+static vu32 irq_status(struct vpic *vp, vu32 irq, struct virq *caller)
 {
     vu32 s = 0;
-    if (iret_pending(irq)) s |= ST_IRET_PENDING;
-    if (vp.isr & (1u << irq)) s |= ST_IN_SERVICE;
+    if (iret_pending(vp, irq)) s |= ST_IRET_PENDING;
+    if (vp->isr & (1u << irq)) s |= ST_IN_SERVICE;
     if (phys_masked(irq)) s |= ST_PHYS_MASK;
     if (phys_isr & (1u << irq)) s |= ST_PHYS_IN_SERV;
-    if (vp.imr & (1u << irq)) s |= ST_VIRT_MASK;
-    if (requested(irq)) s |= ST_VIRT_REQ;
+    if (vp->imr & (1u << irq)) s |= ST_VIRT_MASK;
+    if (requested(vp, irq)) s |= ST_VIRT_REQ;
     if (phys_request(irq)) s |= ST_PHYS_REQ;
-    if (caller && caller->requested) s |= ST_VIRT_DEV_REQ;
+    if (caller && ((vp->req >> irq) & 1)) s |= ST_VIRT_DEV_REQ;
     return s;
 }
 
@@ -225,13 +231,13 @@ static struct virq *handle(vu32 h)
     return v;
 }
 
-static void call_vid(vu32 proc, struct virq *v, vu32 ecx, vu32 flags)
+static void call_vid(vu32 proc, struct virq *v, vu32 vm, vu32 ecx, vu32 flags)
 {
     struct vregs r;
     if (!proc) return;
     vregs_clear(&r);
     r.eax = (vu32)v;
-    r.ebx = sys_vm;
+    r.ebx = vm;
     r.ecx = ecx;
     r.eflags = flags;
     vxd_call_proc(proc, &r);
@@ -243,95 +249,111 @@ static void call_vid(vu32 proc, struct virq *v, vu32 ecx, vu32 flags)
 static const vu8 prio[15] = { 0, 1, 8, 9, 10, 11, 12, 13, 14, 15, 3, 4, 5, 6, 7 };
 
 /* the IRQ to simulate next, or -1 */
-static int next_irq(void)
+static int next_irq(struct vpic *vp)
 {
     vu32 i, irq;
     for (i = 0; i < 15; i++) {
         irq = prio[i];
-        if (irq == 8 && (vp.isr & 4)) return -1;    /* the cascade in service */
-        if (vp.isr & (1u << irq)) return -1;        /* equal or higher in service */
-        if (irq >= 8 && (vp.imr & 4)) continue;     /* the cascade masked */
-        if (requested(irq) && !(vp.imr & (1u << irq))) return (int)irq;
+        if (irq == 8 && (vp->isr & 4)) return -1;   /* the cascade in service */
+        if (vp->isr & (1u << irq)) return -1;       /* equal or higher in service */
+        if (irq >= 8 && (vp->imr & 4)) continue;    /* the cascade masked */
+        if (requested(vp, irq) && !(vp->imr & (1u << irq))) return (int)irq;
     }
     return -1;
 }
 
-/* simulate what can be; called with the VM where it was interrupted */
+/* simulate what can be into the current VM; called with the VM where it
+ * was interrupted */
 static void deliver_pending(void)
 {
     int irq;
-    while ((irq = next_irq()) >= 0) {
+    vu32 vm = CUR();
+    struct vpic *vp = VP(vm);
+    while ((irq = next_irq(vp)) >= 0) {
         struct virq *v = owner[irq];
         int want_iret = v && v->d.iret_proc;
         if (!vpicd_link.can_deliver()) return;          /* interrupts off */
-        vp.isr |= 1u << irq;
-        if (irq >= 8) vp.isr |= 4;
-        if (v) call_vid(v->d.virt_int_proc, v, 0, 0);
-        if (want_iret && n_irets < NIRET) {
+        vp->isr |= 1u << irq;
+        if (irq >= 8) vp->isr |= 4;
+        if (v) call_vid(v->d.virt_int_proc, v, vm, 0, 0);
+        if (want_iret && vp->n_irets < NIRET) {
             struct vregs r;
-            irets[n_irets].irq = irq;
-            irets[n_irets].timed_out = 0;
-            irets[n_irets].tmo = 0;
+            int n = vp->n_irets;
+            vp->irets[n].irq = irq;
+            vp->irets[n].timed_out = 0;
+            vp->irets[n].tmo = 0;
             if (v->d.iret_time_out) {
                 vregs_clear(&r);
                 r.eax = v->d.iret_time_out;
-                r.edx = (vu32)&irets[n_irets];
+                r.edx = (vu32)&vp->irets[n];
                 r.esi = (vu32)vpicd_tmo;
                 vmm_set_global_time_out(&r);
-                irets[n_irets].tmo = r.esi;
+                vp->irets[n].tmo = r.esi;
             }
-            n_irets++;
+            vp->n_irets++;
         } else
             want_iret = 0;
-        vpicd_link.deliver(irq_vector(irq), want_iret);
+        vpicd_link.deliver(irq_vector(vp, irq), want_iret);
     }
 }
 
-/* the VMM: the IRET of a simulated interrupt that asked for it */
+/* the VMM: the IRET of a simulated interrupt that asked for it (in the
+ * current VM) */
 static void iret_done(void)
 {
     struct vregs r;
-    vu32 irq;
+    vu32 irq, vm = CUR();
+    struct vpic *vp = VP(vm);
     int timed_out;
-    if (!n_irets) return;
-    n_irets--;
-    irq = irets[n_irets].irq;
-    timed_out = irets[n_irets].timed_out;
-    if (irets[n_irets].tmo) {
+    if (!vp->n_irets) return;
+    vp->n_irets--;
+    irq = vp->irets[vp->n_irets].irq;
+    timed_out = vp->irets[vp->n_irets].timed_out;
+    if (vp->irets[vp->n_irets].tmo) {
         vregs_clear(&r);
-        r.esi = irets[n_irets].tmo;
+        r.esi = vp->irets[vp->n_irets].tmo;
         vmm_cancel_time_out(&r);
     }
     if (!timed_out && owner[irq])
-        call_vid(owner[irq]->d.iret_proc, owner[irq], 0, 0);     /* carry clear */
+        call_vid(owner[irq]->d.iret_proc, owner[irq], vm, 0, 0);     /* carry clear */
 }
 
-/* the IRET time-out (VMM global time-out: EDX our entry) */
+/* the IRET time-out (VMM global time-out: EDX our entry, in whichever
+ * VM's PIC it is) */
 void __cdecl vpicd_time_out(struct vregs *r)
 {
     int i;
-    for (i = 0; i < n_irets; i++)
-        if ((vu32)&irets[i] == r->edx && !irets[i].timed_out) {
-            vu32 irq = irets[i].irq;
-            irets[i].timed_out = 1;
-            irets[i].tmo = 0;
-            if (owner[irq]) call_vid(owner[irq]->d.iret_proc, owner[irq], 0, VF_CF);
+    vu32 vm = (vu32)vpicd_link.sys_vm;
+    struct vpic *vp;
+    for (;;) {
+        vp = VP(vm);
+        if (r->edx >= (vu32)&vp->irets[0] && r->edx < (vu32)&vp->irets[NIRET]) break;
+        vm = next_vm(vm);
+        if (vm == vpicd_link.sys_vm) return;
+    }
+    for (i = 0; i < vp->n_irets; i++)
+        if ((vu32)&vp->irets[i] == r->edx && !vp->irets[i].timed_out) {
+            vu32 irq = vp->irets[i].irq;
+            vp->irets[i].timed_out = 1;
+            vp->irets[i].tmo = 0;
+            if (owner[irq]) call_vid(owner[irq]->d.iret_proc, owner[irq], vm, 0, VF_CF);
             return;
         }
 }
 
 /* the VM ended irq (an EOI on its virtual PIC) */
-static void virt_eoi(vu32 irq)
+static void virt_eoi(vu32 vm, vu32 irq)
 {
     struct virq *v = owner[irq];
-    vp.isr &= ~(1u << irq);
+    struct vpic *vp = VP(vm);
+    vp->isr &= ~(1u << irq);
     if (irq == 2) return;
     if (v) {
-        if (v->d.eoi_proc) call_vid(v->d.eoi_proc, v, 0, 0);
+        if (v->d.eoi_proc) call_vid(v->d.eoi_proc, v, vm, 0, 0);
         return;
     }
     /* VPICD's own: the request done, the IRQ open again */
-    def_req &= ~(1u << irq);
+    vp->def_req &= ~(1u << irq);
     phys_isr &= ~(1u << irq);
     phys_update();
 }
@@ -349,11 +371,14 @@ static void hw_int(vu32 irq)
     phys_eoi(irq);
     for (i = 0; i < n_hw_procs; i++) {      /* VPICD_Call_When_Hw_Int */
         vregs_clear(&r);
-        r.eax = irq; r.ebx = sys_vm;
+        r.eax = irq; r.ebx = CUR();
         vxd_call_proc(hw_procs[i], &r);
     }
-    if (v) call_vid(v->d.hw_int_proc, v, 0, 0);
-    else def_req |= 1u << irq;              /* to the System VM */
+    if (v) call_vid(v->d.hw_int_proc, v, CUR(), 0, 0);
+    else {                                  /* to the System VM */
+        VP(sys_vm)->def_req |= 1u << irq;
+        if (CUR() != sys_vm) vpicd_link.wake(sys_vm);
+    }
     deliver_pending();
 }
 
@@ -375,66 +400,69 @@ static vu32 lowest(vu32 bits)
     return 8;
 }
 
-static void pic_command(int c, vu32 v)
+static void pic_command(vu32 vm, int c, vu32 v)
 {
     vu32 shift = c ? 8 : 0, i;
+    struct vpic *vp = VP(vm);
     if (v & 0x10) {                         /* ICW1 */
-        vp.icw_step[c] = 1;
-        vp.icw4[c] = v & 1;
-        vp.single[c] = (v >> 1) & 1;
-        vp.imr &= ~(0xFFu << shift);
-        vp.isr &= ~(0xFFu << shift);
-        vp.read_isr[c] = 0;
+        vp->icw_step[c] = 1;
+        vp->icw4[c] = v & 1;
+        vp->single[c] = (v >> 1) & 1;
+        vp->imr &= ~(0xFFu << shift);
+        vp->isr &= ~(0xFFu << shift);
+        vp->read_isr[c] = 0;
         return;
     }
     if (v & 0x08) {                         /* OCW3 */
-        if (v & 2) vp.read_isr[c] = v & 1;
+        if (v & 2) vp->read_isr[c] = v & 1;
         return;
     }
     switch (v >> 5) {                       /* OCW2 */
     case 1: case 5:                         /* non-specific EOI (rotating too) */
-        i = lowest((vp.isr >> shift) & 0xFF);
-        if (i < 8) virt_eoi(i + shift);
+        i = lowest((vp->isr >> shift) & 0xFF);
+        if (i < 8) virt_eoi(vm, i + shift);
         break;
     case 3: case 7:                         /* specific EOI */
-        virt_eoi((v & 7) + shift);
+        virt_eoi(vm, (v & 7) + shift);
         break;
     }
 }
 
-static void pic_data(int c, vu32 v)
+static void pic_data(vu32 vm, int c, vu32 v)
 {
     vu32 shift = c ? 8 : 0, old, irq;
-    switch (vp.icw_step[c]) {
+    struct vpic *vp = VP(vm);
+    switch (vp->icw_step[c]) {
     case 1:                                 /* ICW2 */
-        vp.base[c] = v & 0xF8;
-        vp.icw_step[c] = vp.single[c] ? (vp.icw4[c] ? 3 : 0) : 2;
+        vp->base[c] = v & 0xF8;
+        vp->icw_step[c] = vp->single[c] ? (vp->icw4[c] ? 3 : 0) : 2;
         return;
     case 2:                                 /* ICW3 */
-        vp.icw_step[c] = vp.icw4[c] ? 3 : 0;
+        vp->icw_step[c] = vp->icw4[c] ? 3 : 0;
         return;
     case 3:                                 /* ICW4 */
-        vp.icw_step[c] = 0;
+        vp->icw_step[c] = 0;
         return;
     }
-    old = vp.imr;                           /* OCW1 */
-    vp.imr = (vp.imr & ~(0xFFu << shift)) | ((v & 0xFF) << shift);
-    phys_update();
+    old = vp->imr;                          /* OCW1 */
+    vp->imr = (vp->imr & ~(0xFFu << shift)) | ((v & 0xFF) << shift);
+    if (vm == sys_vm) phys_update();
     for (irq = shift; irq < shift + 8; irq++)
-        if (((old ^ vp.imr) >> irq) & 1 && owner[irq])
-            call_vid(owner[irq]->d.mask_change_proc, owner[irq], (vp.imr >> irq) & 1, 0);
+        if (((old ^ vp->imr) >> irq) & 1 && owner[irq])
+            call_vid(owner[irq]->d.mask_change_proc, owner[irq], vm, (vp->imr >> irq) & 1, 0);
 }
 
-static vu32 pic_read(int c, int data)
+static vu32 pic_read(vu32 vm, int c, int data)
 {
     vu32 shift = c ? 8 : 0, v;
-    if (data) return (vp.imr >> shift) & 0xFF;
-    if (vp.read_isr[c]) return (vp.isr >> shift) & 0xFF;
+    struct vpic *vp = VP(vm);
+    if (data) return (vp->imr >> shift) & 0xFF;
+    if (vp->read_isr[c]) return (vp->isr >> shift) & 0xFF;
     {   /* the IRR: requested, not in service; the master's bit 2 the slave's line */
         vu32 irq, irr = 0;
         for (irq = 0; irq < NIRQ; irq++)
-            if (requested(irq) && !(vp.isr & (1u << irq))) irr |= 1u << irq;
-        if ((irr >> 8) & ~(vp.imr >> 8) & 0xFF) irr |= 4;
+            if (requested(vp, irq) && !(vp->isr & (1u << irq))) irr |= 1u << irq;
+        if ((irr >> 8) & ~(vp->imr >> 8) & 0xFF) irr |= 4;
         v = (irr >> shift) & 0xFF;
     }
     return v;
@@ -448,10 +476,10 @@ void __cdecl vpicd_io(struct vregs *r)
         return;
     }
     if (r->ecx & IO_OUTPUT) {
-        if (data) pic_data(c, r->eax & 0xFF);
-        else pic_command(c, r->eax & 0xFF);
+        if (data) pic_data(r->ebx, c, r->eax & 0xFF);
+        else pic_command(r->ebx, c, r->eax & 0xFF);
     } else
-        r->eax = (r->eax & ~0xFFu) | pic_read(c, data);
+        r->eax = (r->eax & ~0xFFu) | pic_read(r->ebx, c, data);
 }
 
 /* ---- the services ---- */
@@ -475,22 +503,26 @@ void __cdecl vpicd_service(struct vregs *r)
         v->magic = VIRQ_MAGIC;
         v->d = *d;
         v->irq = irq;
-        v->requested = (def_req >> irq) & 1;
         v->phys_mode = 0;
-        def_req &= ~(1u << irq);
+        {   /* a request of VPICD's own becomes the device's */
+            struct vpic *vp = VP(sys_vm);
+            if ((vp->def_req >> irq) & 1) vp->req |= 1u << irq;
+            vp->def_req &= ~(1u << irq);
+        }
         owner[irq] = v;
         phys_update();
         r->eax = (vu32)v;
         return;
     }
     case 0x02:                              /* VPICD_Set_Int_Request: EAX handle, EBX VM */
-        if ((v = handle(r->eax)) == NULL) return;
-        v->requested = 1;
-        deliver_pending();                  /* now, if the VM can take it */
+        if ((v = handle(r->eax)) == NULL || !r->ebx) return;
+        VP(r->ebx)->req |= 1u << v->irq;
+        if (r->ebx == CUR()) deliver_pending();     /* now, if the VM can take it */
+        else vpicd_link.wake(r->ebx);
         return;
-    case 0x03:                              /* VPICD_Clear_Int_Request */
-        if ((v = handle(r->eax)) == NULL) return;
-        v->requested = 0;
+    case 0x03:                              /* VPICD_Clear_Int_Request: EAX handle, EBX VM */
+        if ((v = handle(r->eax)) == NULL || !r->ebx) return;
+        VP(r->ebx)->req &= ~(1u << v->irq);
         return;
     case 0x04:                              /* VPICD_Phys_EOI: EAX handle */
         if ((v = handle(r->eax)) == NULL) return;
@@ -500,7 +532,7 @@ void __cdecl vpicd_service(struct vregs *r)
     case 0x05:                              /* VPICD_Get_Complete_Status: EAX handle -> ECX */
     case 0x06:                              /* VPICD_Get_Status (UNVERIFIED: the same bits) */
         if ((v = handle(r->eax)) == NULL) { r->ecx = 0; return; }
-        r->ecx = irq_status(v->irq, v);
+        r->ecx = irq_status(VP(r->ebx ? r->ebx : CUR()), v->irq, v);
         return;
     case 0x07:                              /* VPICD_Test_Phys_Request: carry = the IRR bit */
         if ((v = handle(r->eax)) != NULL && phys_request(v->irq)) r->eflags |= VF_CF;
@@ -515,7 +547,7 @@ void __cdecl vpicd_service(struct vregs *r)
     case 0x0B:                              /* VPICD_Get_IRQ_Complete_Status: EAX IRQ */
         irq = r->eax;
         if (irq >= NIRQ) { r->eflags |= VF_CF; r->ecx = 0; return; }
-        r->ecx = irq_status(irq, NULL);
+        r->ecx = irq_status(VP(CUR()), irq, NULL);
         if (owner[irq] || irq == 2) r->eflags |= VF_CF;
         return;
     case 0x0C:                              /* VPICD_Convert_Handle_To_IRQ */
@@ -525,7 +557,7 @@ void __cdecl vpicd_service(struct vregs *r)
         return;
     case 0x0D:                              /* VPICD_Convert_IRQ_To_Int: EAX IRQ, EBX VM */
         if (r->eax >= NIRQ) { r->eflags |= VF_CF; return; }
-        r->eax = irq_vector(r->eax);
+        r->eax = irq_vector(VP(r->ebx ? r->ebx : CUR()), r->eax);
         return;
     case 0x0E:                              /* VPICD_Convert_Int_To_IRQ: EAX vector */
         /* Windows 3.1 refused 74h (IRQ 12's vector in the System VM) and
@@ -546,7 +578,7 @@ void __cdecl vpicd_service(struct vregs *r)
     case 0x12:                              /* VPICD_Auto_Mask_At_Inst_Swap */
     case 0x13:                              /* VPICD_Begin_Inst_Page_Swap */
     case 0x14:                              /* VPICD_End_Inst_Page_Swap */
-        return;                             /* one VM, no instance swapping: nothing to do */
+        return;                             /* no instance page swapping: nothing to do */
     }
     r->eflags |= VF_CF;
 }
@@ -555,6 +587,18 @@ void __cdecl vpicd_service(struct vregs *r)
 #define SYS_CRITICAL_INIT 0x00
 #define SYS_VM_INIT       0x03
 #define SYS_CRITICAL_EXIT 0x06
+#define CREATE_VM         0x07
+
+/* the next VM's handle (VMM Get_Next_VM_Handle) */
+void __cdecl vmm_get_next_vm(struct vregs *r);
+static vu32 next_vm(vu32 vm)
+{
+    struct vregs r;
+    vregs_clear(&r);
+    r.ebx = vm;
+    vmm_get_next_vm(&r);
+    return r.ebx;
+}
 
 void __cdecl vpicd_control(struct vregs *r)
 {
@@ -563,10 +607,11 @@ void __cdecl vpicd_control(struct vregs *r)
     switch (r->eax) {
     case SYS_CRITICAL_INIT:
         sys_vm = r->ebx;
+        cb_off = vmm_alloc_cb_area(sizeof(struct vpic), 0);
         /* the 8259s keep their masks until the System VM is set up */
         dos_masks = inb(0x21) | (inb(0xA1) << 8);
-        vp.base[0] = vpicd_link.rm_base1;
-        vp.base[1] = vpicd_link.rm_base2;
+        VP(sys_vm)->base[0] = vpicd_link.rm_base1;
+        VP(sys_vm)->base[1] = vpicd_link.rm_base2;
         pic_program(VPICD_BASE1, VPICD_BASE2);
         phys_update();
         vregs_clear(&s);
@@ -578,15 +623,22 @@ void __cdecl vpicd_control(struct vregs *r)
          * System VM's program reads them back). Under Windows 3.1 VXP saw
          * IRQ 5 physically masked but not virtually at Sys_Critical_Init
          * (status 4): the VM's masks come later (UNVERIFIED: when) */
-        vp.imr = dos_masks;
+        VP(sys_vm)->imr = dos_masks;
         vm_ready = 1;
         phys_update();
+        break;
+    case CREATE_VM:
+        /* a DOS VM's PIC as DOS left the real one: the real-mode bases,
+         * DOS's masks (UNVERIFIED: Windows 3.1's) */
+        VP(r->ebx)->base[0] = vpicd_link.rm_base1;
+        VP(r->ebx)->base[1] = vpicd_link.rm_base2;
+        VP(r->ebx)->imr = dos_masks;
         break;
     case SYS_CRITICAL_EXIT:
         /* the real-mode bases, and the System VM's masks (UNVERIFIED) */
         pic_program(vpicd_link.rm_base1, vpicd_link.rm_base2);
-        outb(0x21, vp.imr & 0xFF);
-        outb(0xA1, (vp.imr >> 8) & 0xFF);
+        outb(0x21, VP(sys_vm)->imr & 0xFF);
+        outb(0xA1, (VP(sys_vm)->imr >> 8) & 0xFF);
         break;
     }
 }

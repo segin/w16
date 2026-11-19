@@ -41,7 +41,12 @@ I_VXD_COUNT     equ 100
 I_VXD_LIST      equ 104
 I_TAIL_LIN      equ 108
 I_FATAL_LIN     equ 112
-I_SIZE          equ 116
+I_VMSTUB_OFF    equ 116
+I_SDA_SIZE      equ 118
+I_FREE_MCB      equ 120
+I_MEM_TOP       equ 122
+I_SIZE          equ 124
 
 BP_EXIT         equ 0
+BP_VMEXIT       equ 5
 BP_COUNT        equ 64
