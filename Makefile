@@ -46,7 +46,7 @@ DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK3
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE \
-            TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL
+            TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -562,6 +562,13 @@ $(DOS)/TKENT2.DLL: tools/mkne.py
 $(DOS)/TKBADNE.DLL: tools/mkne.py
 	@mkdir -p $(@D)
 	python3 tools/mkne.py $@ --module TKBADNE --entry-len 0xFFF0
+# TKBIGDG.DLL: a DGROUP with FFF8h bytes of file data (H7); TKDG.DLL: 100h
+$(DOS)/TKBIGDG.DLL: tools/mkne.py
+	@mkdir -p $(@D)
+	python3 tools/mkne.py $@ --module TKBIGDG --dgroup 0xFFF8
+$(DOS)/TKDG.DLL: tools/mkne.py
+	@mkdir -p $(@D)
+	python3 tools/mkne.py $@ --module TKDG --dgroup 0x100
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk

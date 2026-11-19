@@ -32,11 +32,11 @@ what is left (listed again at the end).
 |---|---|---|---|
 | H1 | REAL | KRNL286 `paras_for`: `n + 15` wraps for n >= FFFFFFF1h and gave a 2-paragraph block. | Sizes past FFFF0h fail first (results below that unchanged). TK62 "big" observes FFFFFFFFh and FFFFFFF1h on 3.1. |
 | H2 | REAL | `grow(dos=1)` (both): `r.bx = (u16)(size >> 4)` truncated, and `chunk_add` was given the untruncated size. Reachable with GlobalDOSAlloc(>= 1 MB). | DOS-memory growth past FFFFh paragraphs fails. Regression: TK62 "dosalloc" (GlobalDosAlloc of 100000h and 10FFF0h fail, as on 3.1 in all three runs). |
-| H3 | HARDENING | `discard` keeps a copy of the arena across the GlobalNotify callback; a callback that frees or moves memory breaks it. The SDK (NotifyProc): "should not call any routine that might move memory". | Not fixed. |
+| H3 | HARDENING | `discard` keeps a copy of the arena across the GlobalNotify callback; a callback that frees or moves memory breaks it. The SDK (NotifyProc): "should not call any routine that might move memory". | Fixed (cheap): after the procedure, a GMEM_NOTIFY block is discarded only if it is still the same unlocked discardable block, and the oldest-first scan stops when the procedure changed the LRU ring. |
 | H4 | REAL | KRNL386 `take_next` ignored `carve` failing (no arena slot); GlobalReAlloc returned success at the old size. | `take_next` returns 0 and GlobalReAlloc fails. |
 | H5 | FALSE | The shrink path frees the upper tiles and then asks for one descriptor (`sel_new`): with at least one just freed it cannot fail; with none freed, `n` is unchanged and nothing is inconsistent. | None. |
-| H6 | HARDENING | `new_handle`: a LocalHandleDelta of 3FFFh or more wrapped the table size and wrote the handles past a tiny arena. | Fixed (cheap): such a delta makes the handle allocation fail. |
-| H7 | HARDENING | `f_read_seg` read `flen` bytes into a DGROUP clamped to FFF0h (a file whose DGROUP data is over FFF0h bytes). | Fixed: such a segment fails the load. |
+| H6 | HARDENING | `new_handle`: a LocalHandleDelta of 3FFFh or more wrapped the table size and wrote the handles past a tiny arena. | Fixed (cheap): such a delta makes the handle allocation fail. Regression: TK62 "hdelta" (LocalHandleDelta(4000h), then moveable blocks; the heap works afterwards). Windows 3.1 ends there itself, both kernels, so it runs last. |
+| H7 | REAL | `f_read_seg` read `flen` bytes into a DGROUP clamped to FFF0h. TK62 "bigdg": 3.1 loads a DLL whose DGROUP holds FFF8h bytes of file data (both kernels), so this is no malformed file. | The DGROUP is never smaller than its file data; `f_read_seg` also refuses to read past its block. Regression: TK62 "bigdg" (TKBIGDG.DLL, `tools/mkne.py --dgroup 0xFFF8`, loads as on 3.1). |
 | H8 | HARDENING | `patch`/`redo_self_fixups`: relocation chains not bounded by the segment, and a cyclic chain looped for ever. | Fixed: offsets checked against the segment's limit, chains cut at 8000h links; LOBYTE no longer reads a word. |
 | H9 | REAL | `load_body`: `entry_off + entry_len` wrapped; table offsets not checked; `2 * modref_count` wrapped in `mdb_build`. | Offsets in order and below FFF0h, else LE_BADFORMAT (11); module reference size in 32 bits; alignment shift over 16 rejected. Regression: TK62 "badne" (TKBADNE.DLL, `tools/mkne.py --entry-len 0xFFF0`, fails to load, as on 3.1). |
 | H10 | HARDENING | `type_first` did not check the first type's count against the table's end; loops over its entries ran past it. | Fixed: `type_fits` for every type returned. |
@@ -156,7 +156,7 @@ The audit's Low list is numbered here in its order (36 items).
 | Severity | REAL | FALSE | 3.1-BEHAVIOUR | HARDENING | UNSURE |
 |---|---|---|---|---|---|
 | Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
-| High (29) | 12: H1, H2, H4, H9, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 10: H3, H6, H7, H8, H10, H12, H14, H15, H17, H18 (all but H3 fixed) | 1: H11 |
+| High (29) | 13: H1, H2, H4, H7, H9, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 1: H11 |
 | Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed but 33 and 25's scheduling) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 43 fixed) | 2: 37, 39 |
 | Low (36) | 8: L1, L4, L10, L12, L17, L28, L32, L35 (L1, L17, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L7 fixed) | 8: L3, L5, L6, L19, L24, L27, L30, L31 |
 

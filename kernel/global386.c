@@ -975,6 +975,9 @@ again:
 
 /* ---- discarding ---- */
 
+#define FB_BLOCK    1
+static int find(u16 h, aid *a);
+
 static u16 task_of_pdb(u16 pdb)
 {
     u16 t;
@@ -1021,6 +1024,15 @@ static int discard(aid a)
         return 0;
     if (!notify_ok(a))
         return 0;
+    /* the procedure may have freed, locked or moved it, against the SDK
+       (NotifyProc: "should not call any routine that might move memory";
+       KERNEL audit, H3): only the block it was asked about goes */
+    if (save.flags & GA_NOTIFY) {
+        aid x;
+        if (find(save.handle, &x) != FB_BLOCK || x != a || AR(a)->count ||
+            !discardable(a))
+            return 0;
+    }
     if (save.flags & GA_NOTIFY)
         db |= DB_NOTIFY;
     if (save.flags & GA_DGROUP)
@@ -1040,9 +1052,14 @@ static int discard_oldest(void)
     u16 n;
     if (!h)
         return 0;
-    for (a = AR(h)->lprev, n = hp->lrucount; n; n--, a = AR(a)->lprev)
+    for (a = AR(h)->lprev, n = hp->lrucount; n; n--, a = AR(a)->lprev) {
+        u16 cnt = hp->lrucount;
         if (discard(a))
             return 1;
+        if (hp->lrucount != cnt || hp->lruchain != h)
+            return 0;           /* the ring changed under a GlobalNotify
+                                   procedure: a is no guide (audit, H3) */
+    }
     return 0;
 }
 

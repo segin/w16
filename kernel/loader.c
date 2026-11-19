@@ -976,6 +976,12 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             size += (u32)h.heap_size + h.stack_size;
             if (size > 0xFFF0UL)
                 size = 0xFFF0UL;
+            /* but never less than its data in the file: observed on 3.1
+               (TK62 "bigdg", both kernels), a DLL whose DGROUP holds
+               FFF8h bytes of data loads; w16 read them past an FFF0h
+               segment (KERNEL audit, H7) */
+            if (size < flen)
+                size = flen;
         }
         /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
            segments are loaded moveable (even handles, hInstance = DS &

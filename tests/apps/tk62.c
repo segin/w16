@@ -16,6 +16,13 @@
  *    DPMI for the size's low 16 bits of paragraphs and used the rest).
  *  - "badne" (H9): TKBADNE.DLL, whose entry table length runs its tables
  *    past 64K, fails to load (w16 read past its copy of them).
+ *  - "hdelta" (H6): LocalHandleDelta(4000h), then moveable blocks until
+ *    a new handle table is needed: its size wrapped and the handles were
+ *    written past it. Windows 3.1 ends there itself (both kernels), so
+ *    it comes last.
+ *  - "bigdg" (H7): TKBIGDG.DLL, whose DGROUP holds FFF8h bytes of file
+ *    data, more than the FFF0h-byte segment w16 makes (it read past it);
+ *    TKDG.DLL, 100h bytes, loads.
  *  - "entries" (C5): TKENT.DLL (tools/mkne.py --entries 13300), whose
  *    entry table fits its file but not the module table (fails), and
  *    TKENT2.DLL (12000 entries, loads).
@@ -227,6 +234,50 @@ static void badne(void)
     h = GlobalAlloc(GMEM_MOVEABLE, 0x1000);
     check(h != 0, "badne: alloc after");
     GlobalFree(h);
+}
+
+#define NHD 80
+UINT WINAPI LocalHandleDelta(UINT);           /* KERNEL.310 */
+
+static void hdelta(void)
+{
+    UINT old, i, n = 0;
+    HLOCAL h[NHD];
+    step("hdelta");
+    old = LocalHandleDelta(0);
+    LocalHandleDelta(0x4000);
+    for (i = 0; i < NHD; i++)
+        if ((h[i] = LocalAlloc(LMEM_MOVEABLE, 2)) != 0)
+            n++;
+    LocalHandleDelta(old);
+    obs_env("hdelta: blocks", n);
+    for (i = 0; i < NHD; i++)
+        if (h[i])
+            LocalFree(h[i]);
+    for (i = 0; i < NHD; i++)
+        h[i] = LocalAlloc(LMEM_MOVEABLE, 2);
+    check(h[NHD - 1] != 0, "hdelta: allocs after");
+    for (i = 0; i < NHD; i++)
+        if (h[i])
+            LocalFree(h[i]);
+}
+
+static void bigdg(void)
+{
+    HINSTANCE h;
+    HGLOBAL g;
+    step("bigdg");
+    h = LoadLibrary("TKBIGDG.DLL");
+    obs("bigdg: FFF8 ok", (UINT)h > 32);
+    if ((UINT)h > 32)
+        FreeLibrary(h);
+    h = LoadLibrary("TKDG.DLL");
+    obs("bigdg: 100 ok", (UINT)h > 32);
+    if ((UINT)h > 32)
+        FreeLibrary(h);
+    g = GlobalAlloc(GMEM_MOVEABLE, 0x1000);
+    check(g != 0, "bigdg: alloc after");
+    GlobalFree(g);
 }
 
 /* ---- observations ---- */
@@ -519,6 +570,7 @@ int __cdecl tmain(void)
     ldt();
     dosalloc();
     badne();
+    bigdg();
     badptr();
     strptr();
     atoms();
@@ -531,7 +583,8 @@ int __cdecl tmain(void)
     files();
     winexec();
     profile();
-    entries();                  /* last: 3.1's KRNL286 ends here */
+    entries();                  /* 3.1's KRNL286 ends here */
+    hdelta();                   /* last: 3.1 ends here (both kernels) */
     out("TK62 done\r\n");
     return failures;
 }

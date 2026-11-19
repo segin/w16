@@ -29,6 +29,9 @@ and 6 a bundle, the file 3 and 2, so a table that fits the file can be
 too large for the module table (TK62, the KERNEL audit's C5).
 --entry-len N writes N as the entry table's length in the NE header
 instead of its own (a bad file: TK62, the audit's H9).
+--dgroup N gives it one data segment, its automatic data segment, of N
+bytes in the file (no heap, no stack): over FFF0h it cannot be loaded
+as one selector's DGROUP (TK62, the audit's H7).
 """
 import argparse
 import struct
@@ -66,7 +69,7 @@ def entry_table(n):
 
 
 def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
-          entry_len=None):
+          entry_len=None, dgroup=0):
     """res: [(type, name, data, length-override or None)]"""
     st = stub()
     lfa = len(st)
@@ -88,7 +91,7 @@ def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
     resnames = bytes([len(module)]) + module.encode('latin-1') + b'\0\0' + b'\0'
     entry = entry_table(entries) if entries else b'\0\0'
     nonres = bytes([len(desc)]) + desc.encode('latin-1') + b'\0\0' + b'\0'
-    off_rt = 0x40
+    off_rt = 0x40 + (8 if dgroup else 0)       # after the segment table
     off_resn = off_rt + rt_len + len(names)
     off_imp = off_resn + len(resnames)
     off_entry = off_imp
@@ -108,12 +111,18 @@ def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
             placed.append((pos, data, ln))
             pos += ln * unit
     rt = rt + b'\0\0' if res else b''
+    segtab = b''
+    if dgroup:
+        # one data segment (flags 0001h), its file data at pos
+        segtab = struct.pack('<HHHH', pos >> shift, dgroup & 0xFFFF, 0x0001,
+                             dgroup & 0xFFFF)
+        placed.append((pos, bytes([0x5A]) * dgroup, (dgroup + unit - 1) // unit))
     ne = struct.pack('<2sBBHHIHHHHIIHHHHHHHHIHHHBBHHHH',
                      b'NE', 5, 1, off_entry, len(entry) if entry_len is None else entry_len,
-                     0, flags, 0, 0, 0, 0, 0, 0, 0,
-                     len(nonres), off_rt, off_rt, off_resn, off_imp, off_imp,
+                     0, flags, 1 if dgroup else 0, 0, 0, 0, 0, 1 if dgroup else 0, 0,
+                     len(nonres), 0x40, off_rt, off_resn, off_imp, off_imp,
                      nonres_off, 0, shift, 0, 2, 0, 0, 0, 0, expver)
-    out = bytearray(st + ne + rt + names + resnames + entry + nonres)
+    out = bytearray(st + ne + segtab + rt + names + resnames + entry + nonres)
     struct.pack_into('<I', out, 0x3C, lfa)
     for p, data, ln in placed:
         out += b'\0' * (p - len(out))
@@ -132,6 +141,7 @@ def main():
     ap.add_argument('--stubonly', action='store_true')
     ap.add_argument('--entries', type=int, default=0)
     ap.add_argument('--entry-len', type=lambda v: int(v, 0), default=None)
+    ap.add_argument('--dgroup', type=lambda v: int(v, 0), default=0)
     ap.add_argument('res', nargs='*')
     a = ap.parse_args()
     if a.stubonly:
@@ -144,7 +154,7 @@ def main():
         res.append((rkey(p[0]), rkey(p[1]), data, int(p[3]) if len(p) > 3 else None))
     mj, mn = (int(x) for x in a.expver.split('.'))
     open(a.out, 'wb').write(build(a.module, a.desc, res, a.shift, int(a.flags, 16),
-                                  (mj << 8) | mn, a.entries, a.entry_len))
+                                  (mj << 8) | mn, a.entries, a.entry_len, a.dgroup))
 
 
 if __name__ == '__main__':
