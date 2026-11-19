@@ -125,6 +125,7 @@ probes() {
     run TK19 0
     run TK58 0
     run TK50 0
+    run GD6 0           # GDI's 32-bit arithmetic (gdi/i4.asm)
     run TK2 255 "w16: call to unimplemented KERNEL.27"
 
     # TK5 (DLL loading), TK11 (module tables) and TK60 (modules by name), laid out like the reference

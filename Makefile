@@ -1426,6 +1426,23 @@ $(DOS)/GD4.EXE: $(B)/tests/start.o $(B)/tests/gd4.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd4.map file { $(B)/tests/start.o $(B)/tests/gd4.o }
+# GD5.EXE: the GDI audit's probe (tests/apps/gd5.c; tests/gdiaudit.sh,
+# the boot-test case gdiaudit)
+gdprobes: $(DOS)/GD5.EXE
+dos: $(DOS)/GD5.EXE
+$(B)/tests/gd5.o: tests/apps/gd5ref.h tests/apps/tklog.h
+$(DOS)/GD5.EXE: $(B)/tests/start.o $(B)/tests/gd5.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd5.map file { $(B)/tests/start.o $(B)/tests/gd5.o }
+# GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
+# the library's; tests/apps/gd6.c); make test
+dos: $(DOS)/GD6.EXE
+$(B)/tests/gd6.o: tests/apps/gd6ref.h tests/apps/tklog.h
+$(DOS)/GD6.EXE: $(B)/tests/start.o $(B)/tests/gd6.o $(B)/gdi/i4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd6.map file { $(B)/tests/start.o $(B)/tests/gd6.o $(B)/gdi/i4.o }
 # ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
 # WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
 WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
