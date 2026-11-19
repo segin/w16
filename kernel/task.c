@@ -817,6 +817,8 @@ void __cdecl task_exit_c(u16 code)
     cur_task = 0;
     set_psp(psp_sel);
     cur_pdb = 0;
+    thhook_sync();                      /* (no freed TDB in THHOOK while
+                                           idle: KERNEL audit, H20) */
     dpmi_free_desc(pdb);
     if (x)
         GlobalFree(x->self);

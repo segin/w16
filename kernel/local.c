@@ -574,7 +574,9 @@ static u16 new_handle(const lheap *hp, u16 flags)
     u16 h = I(hp, LI_HFREE);
     if (!h) {
         u16 n = I(hp, LI_HDELTA), t, i;
-        u16 need = arena_need(2 + 4 * n + 2, 0);
+        /* (a delta of 3FFFh or more wrapped the table's size, and the
+           handles were written past it: KERNEL audit, H6) */
+        u16 need = n < 0x3FF0 ? arena_need(2 + 4 * n + 2, 0) : 0;
         if (!n || !need || !(t = arena_alloc(hp, need, 0, flags)))
             return 0;
         t += 4;
@@ -913,8 +915,8 @@ u16 KAPI LHandle(u16 ds, u16 p)                               /* KERNEL.11 */
     if (!heap_of(ds, &hp))
         return 0;
     if (p & 2) {
-        if ((p & 3) != 2 || p < 2)
-            return 0;
+        if ((p & 3) != 2 || p < 2 || p > sel_lim16(ds))
+            return 0;                   /* (past the segment: audit, medium 5) */
         h = W(ds, p - 2);
         return valid_handle(&hp, h) && W(ds, h + HE_ADDR) == p ? h : 0;
     }

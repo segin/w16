@@ -172,6 +172,14 @@ static int load(pcache *pc, const char *path)
     fh = dos_open(path, 0, &err);
     if (fh == HFILE_ERROR) {
         drop(pc);
+        /* only a file that is not there is made by a write: one that
+           could not be opened (no handle left, sharing, access) would
+           have been replaced by the written key alone (KERNEL audit,
+           H24) */
+        if (err != DOSE_NOFILE && err != DOSE_NOPATH) {
+            pc->path[0] = 0;
+            return -1;
+        }
         kmemcpy(pc->path, path, sizeof pc->path);
         return 0;
     }
@@ -181,9 +189,11 @@ static int load(pcache *pc, const char *path)
     }
     drop(pc);
     size = dos_seek(fh, 0, 2);
-    dos_seek(fh, 0, 0);
-    if (size == 0xFFFFFFFFUL)
-        size = 0;
+    if (size == 0xFFFFFFFFUL || dos_seek(fh, 0, 0) == 0xFFFFFFFFUL) {
+        dos_close(fh);                  /* (not an empty file: audit H24) */
+        pc->path[0] = 0;
+        return -1;
+    }
     if (size) {
         pc->hnd = galloc(GMEM_FIXED_, size, 0, &sel);
         if (!pc->hnd) {
@@ -677,7 +687,9 @@ u16 KAPI WritePrivateProfileString(const char FAR *sec, const char FAR *key,
 {
     char *path = api_path;
     if (!sec && !key && !val) {         /* observed: returns 0 */
-        drop(&priv_ini);
+        /* the named file's copy: WIN.INI's when it names WIN.INI (the
+           private one went, and WIN.INI's stayed: KERNEL audit, H25) */
+        drop(file && resolve(file, path) ? cache_for(path) : &priv_ini);
         return 0;
     }
     if (!file || !resolve(file, path))

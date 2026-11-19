@@ -42,21 +42,26 @@ static int has_table(module FAR *m)
     return RT_END(m) >= RT(m) + 4;
 }
 
+/* Type entry t's resource entries end inside the table (a broken
+   table's last type did not have to: KERNEL audit, H10). */
+static int type_fits(module FAR *m, u16 t)
+{
+    u16 room = RT_END(m) - t - sizeof(ne_rsrc_type);
+    return TYPE(m, t)->count <= room / sizeof(ne_rsrc_name);
+}
+
 /* The type entries: first, and the one after t (0 at the end). */
 static u16 type_first(module FAR *m)
 {
     u16 t = RT(m) + 2;
     return has_table(m) && t + sizeof(ne_rsrc_type) <= RT_END(m) &&
-           TYPE(m, t)->type_id ? t : 0;
+           TYPE(m, t)->type_id && type_fits(m, t) ? t : 0;
 }
 
 static u16 type_next(module FAR *m, u16 t)
 {
-    u16 room = RT_END(m) - t - sizeof(ne_rsrc_type), n;
-    if (TYPE(m, t)->count > room / sizeof(ne_rsrc_name))
-        return 0;                       /* a broken table */
-    n = t + sizeof(ne_rsrc_type) + TYPE(m, t)->count * sizeof(ne_rsrc_name);
-    if (RT_END(m) - n < sizeof(ne_rsrc_type) || !TYPE(m, n)->type_id)
+    u16 n = t + sizeof(ne_rsrc_type) + TYPE(m, t)->count * sizeof(ne_rsrc_name);
+    if (RT_END(m) - n < sizeof(ne_rsrc_type) || !TYPE(m, n)->type_id || !type_fits(m, n))
         return 0;
     return n;
 }
@@ -76,7 +81,8 @@ static u16 type_of(module FAR *m, u16 r)
 
 static u16 shift_of(module FAR *m)
 {
-    return *(u16 FAR *)MK_FP(m->ne_sel, RT(m));
+    u16 s = *(u16 FAR *)MK_FP(m->ne_sel, RT(m));
+    return s > 16 ? 16 : s;     /* (a bad file's: audit, medium 9) */
 }
 
 static u32 size_of(module FAR *m, u16 r)
@@ -151,8 +157,10 @@ static int find_handle(u16 h, module FAR **mp, u16 *rp)
     u16 t, k;
     h &= ~1u;
     for (m = module_first; m; m = m->next)
-        for (t = type_first(m); t; t = type_next(m, t))
+        for (t = m->rsrc_ready ? type_first(m) : 0; t; t = type_next(m, t))
             for (k = 0; k < TYPE(m, t)->count; k++) {
+                /* (not a module still loading: its handle words are
+                   the file's; KERNEL audit, medium 11) */
                 u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
                 if (NAME(m, r)->handle && (NAME(m, r)->handle & ~1u) == h) {
                     *mp = m;
@@ -505,6 +513,8 @@ u16 KAPI DefResourceHandler(u16 hmem, u16 hinst, u16 r)
     if (size_of(m, r) && !res_read(m, r, sel)) {
         if (fresh)
             GlobalFree(h);
+        else                            /* discarded again, not garbage */
+            GlobalReAlloc(h, 0, GMEM_MOVEABLE);     /* (audit, H14) */
         return 0;
     }
     return h;

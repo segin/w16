@@ -88,9 +88,9 @@ static u16 list_take(u16 n)
     for (e = free_head; e != 0xFFFF; prev = e, e = next_of(e)) {
         if (++steps > 8192 || !ldt_ok(e))
             return 0;
-        for (i = 1; i < n; i++)
-            if (!on_list(e + 8 * i))
-                break;
+        for (i = 1; i < n; i++)         /* (not wrapping past FFF8h: */
+            if ((u32)e + 8UL * i > 0xFFF8UL || !on_list(e + 8 * i))
+                break;                  /* KERNEL audit, H17) */
         if (i == n)
             break;
     }

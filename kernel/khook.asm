@@ -260,10 +260,12 @@ SWITCHSTACKTO:
         mov ds, ax
         mov bx, [sw_sp wrt DGROUP]
         mov bp, bx
-        cli
+        ; (no cli/sti: a move to SS holds interrupts off for the next
+        ; instruction, and the caller's interrupt flag stays as it was;
+        ; sti enabled them for a caller that had them off: KERNEL audit,
+        ; H15)
         mov ss, [sw_seg wrt DGROUP]
         mov sp, [sw_new wrt DGROUP]
-        sti
         push word [sw_cs wrt DGROUP]
         push word [sw_ip wrt DGROUP]
         mov si, [sw_si wrt DGROUP]
@@ -288,10 +290,8 @@ SWITCHSTACKBACK:
         pop word [sw_cs wrt DGROUP]
         mov bx, [ss:4]
         mov cx, [ss:2]
-        cli
-        mov ss, bx
+        mov ss, bx                      ; (as in SwitchStackTo)
         mov sp, cx
-        sti
         pop bp
         push word [sw_cs wrt DGROUP]
         push word [sw_ip wrt DGROUP]

@@ -124,8 +124,8 @@ static int f_read_seg(u16 fh, u32 pos, u16 sel, u32 flen, u32 cap, int iter)
     int ok = 1;
     if (!f_seek(fh, pos))
         return 0;
-    if (!iter)
-        return f_read_big(fh, sel, flen);
+    if (!iter)                  /* (not past the block: audit H7) */
+        return flen <= cap && f_read_big(fh, sel, flen);
     if (!galloc(GMEM_FIXED, flen, 0, &tmp))
         return 0;
     if (!f_read_big(fh, tmp, flen)) {
@@ -365,13 +365,19 @@ static const u8 FAR *modref_name(module FAR *m, u16 index)
 static void patch(u16 sel, const ne_reloc FAR *rr, u16 tsel, u16 toff)
 {
     u8 FAR *p = MK_FP(sel, 0);
-    u16 off = rr->offset;
+    u16 off = rr->offset, guard;
     u8 src = rr->src & NERS_MASK;
     int add = (rr->flags & NERF_ADDITIVE) != 0;
+    u32 lim = (u32)sel_lim16(sel) + 1;
 
-    for (;;) {
+    /* a chain only inside the segment, and not around for ever (a bad
+       file's: KERNEL audit, H8) */
+    for (guard = 0; guard < 0x8000; guard++) {
         u16 FAR *w = (u16 FAR *)(p + off);
-        u16 next = *w;
+        u16 next;
+        if ((u32)off + (src == NERS_LOBYTE ? 1 : src == NERS_FARPTR ? 4 : 2) > lim)
+            return;
+        next = src == NERS_LOBYTE ? NE_CHAIN_END : *w;
         switch (src) {
         case NERS_LOBYTE:
             p[off] = add ? (u8)(p[off] + toff) : (u8)toff;
@@ -745,8 +751,11 @@ static module FAR *load_fail(module FAR *m, const char FAR *path, const char *wh
 static int defer_add(u16 hmod)
 {
     u16 n = *(u16 FAR *)MK_FP(defer_sel, 0);
+    /* (a fixed block: it may move, keeping its selector, when it cannot
+       grow in place; without GMEM_MOVEABLE a program importing over 30
+       DLLs failed to load: KERNEL audit, H13) */
     if ((u32)(n + 2) * 2 > gsize_of_sel(defer_sel) &&
-        !GlobalReAlloc(defer_sel, (u32)(n + 2) * 2 + 64, 0))
+        !GlobalReAlloc(defer_sel, (u32)(n + 2) * 2 + 64, GMEM_MOVEABLE))
         return 0;
     *(u16 FAR *)MK_FP(defer_sel, 2 + 2 * n) = hmod;
     *(u16 FAR *)MK_FP(defer_sel, 0) = n + 1;
@@ -794,6 +803,13 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
 {
     u16 saved = defer_sel;
     module FAR *m;
+    /* a module that imports itself under another name loads its file
+       again and again: out of memory instead of out of stack (KERNEL
+       audit, H12; no working program nests imports this deep) */
+    if (load_depth >= 32) {
+        *err = LE_NOMEM;
+        return NULL;
+    }
     load_depth++;
     m = load_body(name, ext, program, err);
     load_depth--;
@@ -865,7 +881,7 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         (u32)h.seg_off + (u32)h.seg_count * sizeof(ne_segment) > h.rsrc_off ||
         h.resname_off < h.rsrc_off || h.modref_off < h.resname_off ||
         (u32)h.modref_off + 2UL * h.modref_count > h.impname_off ||
-        h.entry_off < h.impname_off) {
+        h.entry_off < h.impname_off || h.align_shift > 16) {
         f_close(fh);
         return NULL;
     }
@@ -1068,7 +1084,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count && defer_sel) {
         if (!defer_add(m->ne_sel)) {
             *err = LE_NOMEM;
-            destroy(m);
+            module_signal(m->ne_sel, 0x80);     /* (USER was told of */
+            destroy(m);                         /* it: audit, medium 10) */
             return NULL;
         }
     } else if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
@@ -1076,6 +1093,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
                       module_instance(m), 0, 0)) {
             *err = LE_FAILED;
             call_wep(m);
+            module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP, as
+                                                   sweep (audit, medium 10) */
             destroy(m);
             return NULL;
         }
@@ -1233,7 +1252,7 @@ static u16 start_task(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
    entry table into DGROUP (exported data). */
 static int redo_self_fixups(module FAR *m, u16 dg)
 {
-    u16 ad = NE_HDR(m)->auto_data, fh, err, raw, n, done = 0, k;
+    u16 ad = NE_HDR(m)->auto_data, fh, err, raw, n, done = 0, k, guard;
     u16 shift = NE_HDR(m)->align_shift ? NE_HDR(m)->align_shift : 9;
     const ne_segment FAR *s = MOD_SEG(m, ad - 1);
     u32 flen, data;
@@ -1264,7 +1283,7 @@ static int redo_self_fixups(module FAR *m, u16 dg)
             if ((rr->flags & NERF_TYPEMASK) != NERF_INTERNAL || (rr->t1 & 0xFF) != ad ||
                 (src != NERS_SEGMENT && src != NERS_FARPTR))
                 continue;
-            for (;;) {                  /* as patch(), the selector only */
+            for (guard = 0; guard < 0x8000; guard++) {  /* as patch(), the selector only */
                 if ((u32)off + (src == NERS_FARPTR ? 4 : 2) > gsize_of_sel(dg))
                     break;
                 next = *(u16 FAR *)MK_FP(raw, off);
