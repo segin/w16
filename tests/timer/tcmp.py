@@ -24,16 +24,21 @@ documented difference (docs/notes/timer-handover.md):
   oneshot   w16's event is called once, no sooner than its delay and no
             later than the delay plus the 8254's period then (its
             resolution, at most 55 ms) and 10 ms; 3.1's is shown, not
-            checked: in 3.1's runs the same event came 1 to 55 ms early or
-            late, or not at all (docs/notes/timer-handover.md)
-  periodic  calls within 3% of 1000/period (3.1's own, when it called the
-            event at all: 3.1's drop periodic events of 2-25 ms after a
-            1 ms one in this order, every run)
+            checked: in 3.1's runs the same event came up to 55 ms early
+            or late by its own clock, which steps 55 ms back and on again
+            (docs/notes/timer-handover.md)
+  periodic  calls within 3% of 3.1's own count (of 1000/period if 3.1's
+            gave 0: before TPR's waits stopped trusting 3.1's clock, they
+            ended at once there and its events looked dropped)
   context   SP, AX, BX, CX, DX exact; selectors masked
-  nest      calls during the wait within 3; another event's depth and
-            calls shown (3.1's never call it: w16's do, after the wait)
+  nest      calls during the wait within 5 (3.1's 58-60 in 24 runs,
+            w16's 60-61: what is checked is that the calls missed while
+            the callback waits are not made up, about 100, nor the event
+            lost, about 1); another event's depth while a callback waits
+            exact (1: not called inside it), its calls shown; the waiting
+            one-shot event's calls and kill exact (1 and 97)
   tod       BIOS ticks within 2, the clocks within 60 ms, callbacks within
-            15% (3.1's runs: 6171-6582), WM_TIMER within 2, DOS's clock
+            15% (3.1's runs: 6051-6916), WM_TIMER within 2, DOS's clock
             within 10 hundredths
   child     the 8254 within 8 counts, calls within 6
 Anything else marked "~" is shown and not checked.
@@ -59,8 +64,9 @@ MASKS = [
     (re.compile(r' d=\d+ '), ' d=(n) '),
     # a structure on MMSYSTEM's interrupt stack (set from a callback): its
     # selector, which depends on the size of the timer driver's segments;
-    # its contents are compared
-    (re.compile(r'(msg=0804 .* l1=)[0-9A-F]{4}(055E )'), r'\1(sel)\2'),
+    # its offset (near the top of the 600h-byte stack: 055Eh, 0558h since
+    # TPC's callback has more locals) and contents are compared
+    (re.compile(r'(msg=0804 .* l1=)[0-9A-F]{4}(05[0-9A-F]{2} )'), r'\1(sel)\2'),
     # the same for a structure on a second task's stack (the child): its
     # DGROUP's selector
     (re.compile(r'(msg=0804 .* l1=)[0-9A-F]{4}([0-9A-F]{4} l2=00000000 -> [0-9A-F]{8} if=\d d=\(n\) from=MMSYSTEM task=other)'), r'\1(sel)\2'),
@@ -152,7 +158,7 @@ def check(key, ms, w):
         return abs(wn[0] - want) <= max(2, want * 3 // 100), 'calls within 3%% of %d' % want
     if key.startswith('periodic 10 and 15'):
         # 900 ms of a 10 ms and a 15 ms event: 90 and 60 (3.1's own count
-        # when it called them; it dropped both in some runs)
+        # when it has one: see periodic)
         a = mn[0] if mn[0] else 90
         b = mn[1] if mn[1] else 60
         return within(a, wn[0], 3) and within(b, wn[1], 3), 'within 3 of %d, %d' % (a, b)
@@ -166,7 +172,11 @@ def check(key, ms, w):
     if key.startswith('context selectors') or key.startswith('stack before'):
         return None, 'selectors'
     if key == 'nest calls during the wait':
-        return within(mn[0], wn[0], 3), 'within 3'
+        return within(mn[0], wn[0], 5), 'within 5'
+    if key.startswith('nest another event while a callback waits'):
+        return ms == w, 'exact'
+    if key.startswith('nest the waiting one-shot event'):
+        return ms == w, 'exact'
     if key.startswith('tod 6 CMOS seconds'):
         # BIOS ticks, timeGetTime, GetTickCount, callbacks, WM_TIMER
         ok = (within(mn[0], wn[0], 2) and within(mn[1], wn[1], 60) and within(mn[2], wn[2], 60)

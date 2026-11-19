@@ -109,10 +109,19 @@ void __cdecl __far tpc_cb(WORD __far *f)
         if (sl->mode & CB_BEGIN)
             sl->res = timeBeginPeriod(sl->param);
         if (sl->mode & CB_SPIN) {
-            DWORD t0 = now;
+            /* the time spent counts timeGetTime's steps of 0 to 10 ms only:
+               in this loop a real step is 0 or 1 ms, and 3.1's clock steps
+               55 ms back and later 55 ms on again (ARCHITECTURE.md 21.2),
+               which as an unsigned difference ended the wait at once in
+               some runs */
+            DWORD p = now, t, el = 0;
             enable();
-            while (timeGetTime() - t0 < sl->param)
-                ;
+            while (el < sl->param) {
+                t = timeGetTime();
+                if (t - p <= 10)
+                    el += t - p;
+                p = t;
+            }
         }
     }
     st.depth--;

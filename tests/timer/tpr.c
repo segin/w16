@@ -134,20 +134,28 @@ static void tickedge(void)
         ;
 }
 
-/* wait until timeGetTime has advanced n ms, or 2 s more of BIOS ticks */
+/* wait until timeGetTime has advanced n ms, or 2 s more of BIOS ticks.
+   The time waited is the largest timeGetTime has read: 3.1's driver
+   (Standard mode) often reads 55 ms less than a moment before, for one
+   55 ms period, then 55 ms more (ARCHITECTURE.md 21.2); taken as an
+   unsigned difference from the start, that ended the wait at once, in
+   every run after some calls and in some runs after others. On 3.1 a
+   wait can thus last up to 55 ms longer; w16's clock never goes back. */
 static void waitms(DWORD n)
 {
-    DWORD t0 = timeGetTime(), b0 = *ticks;
-    while (timeGetTime() - t0 < n && *ticks - b0 < (WORD)n / 54 + 38) {
+    DWORD t0 = timeGetTime(), hi = t0, t, b0 = *ticks;
+    while (hi - t0 < n && *ticks - b0 < (WORD)n / 54 + 38) {
         pump();
         Yield();
+        t = timeGetTime();
+        if ((long)(t - hi) > 0)
+            hi = t;
     }
 }
 
-/* wait until slot s has been called n times, at most about 3 s: 3.1's
-   driver sometimes leaves a new event uncalled for a second or so
-   (docs/notes/timer-handover.md), and these sections are about what the
-   callback sees, not when it comes */
+/* wait until slot s has been called n times, at most about 3 s (BIOS
+   ticks): these sections are about what the callback sees, not when it
+   comes */
 static void waitfor(int s, WORD n)
 {
     DWORD b0 = *ticks;
