@@ -62,8 +62,10 @@ global %1
         mov dx, ax
         mov ax, [bp-8]
         lar ax, ax
-        jz %%esok
-        mov word [bp-8], 0
+        jnz %%esz
+        test ah, 80h                    ; present (KERNEL audit, medium 20)
+        jnz %%esok
+%%esz:  mov word [bp-8], 0
 %%esok: mov ax, dx
 %endif
         lea sp, [bp-8]

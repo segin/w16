@@ -135,7 +135,9 @@ void mod_set_path(module FAR *m, const char FAR *path)
     /* a full path stays as it is; a relative one gets the current drive
        and directory (INT 21h 19h, 47h). DOS's TRUENAME (60h), used
        before, returned garbage for some names under DOSX on DOSBox-X. */
-    if (!(path[0] && path[1] == ':' && path[2] == '\\')) {
+    /* ('/' as '\\', as DOS takes it: "C:/DIR/X.DLL" got the current
+       directory put in front; KERNEL audit, medium 15) */
+    if (!(path[0] && path[1] == ':' && (path[2] == '\\' || path[2] == '/'))) {
         u16 n = 0, j = 0;
         r.ax = 0x1900;
         r.ds = r.es = 0;
@@ -148,7 +150,7 @@ void mod_set_path(module FAR *m, const char FAR *path)
         }
         full[n++] = ':';
         full[n++] = '\\';
-        if (path[j] != '\\') {
+        if (path[j] != '\\' && path[j] != '/') {
             r.ax = 0x4700;
             r.dx = (full[0] | 0x20) - 'a' + 1;
             r.si = FP_OFF((char FAR *)(full + n));
@@ -173,7 +175,8 @@ void mod_set_path(module FAR *m, const char FAR *path)
        "C:\WINDOWS\SYSTEM\SYSTEM.DRV" for [boot] system.drv=system.drv
        (UNVERIFIED: characters beyond ASCII) */
     for (i = 0; i < sizeof m->path - 1 && path[i]; i++)
-        m->path[i] = path[i] >= 'a' && path[i] <= 'z' ? path[i] - 'a' + 'A' : path[i];
+        m->path[i] = path[i] >= 'a' && path[i] <= 'z' ? path[i] - 'a' + 'A' :
+                     path[i] == '/' ? '\\' : path[i];
     m->path[i] = 0;
 }
 

@@ -243,11 +243,15 @@ u16 KAPI FreeSelector(u16 sel)                                /* KERNEL.176 */
     u16 n = 1;
     if (!sel)
         return 0;
-    sel |= 1;
+    /* (our privilege level, not just bit 0: a selector with another RPL
+       missed its block and freed the descriptor under it; and a run of
+       at most an LDT's worth: a 4 GB limit wrapped to 0. KERNEL audit,
+       H18) */
+    sel = (sel & ~3u) | cpl;
     if ((u16)(GlobalHandle(sel) >> 16) == sel) {
         GlobalFree(sel);
     } else {
-        if (seg_rights(sel) & AR_PRESENT)
+        if ((seg_rights(sel) & AR_PRESENT) && (seg_limit(sel) >> 16) < 0x2000UL)
             n = (u16)(seg_limit(sel) >> 16) + 1;
         free_run(sel, n);
     }
@@ -335,6 +339,14 @@ u16 KAPI SelectorAccessRights(u16 sel, u16 op, u16 rights)    /* KERNEL.196 */
     if (op == 0)
         return (ar & 0xD000) | (ar & 0x1E);
     if (get_desc(sel, &d)) {           /* any other op sets (observed: 2) */
+#ifndef KRNL386
+        /* a fresh AllocSelector(0) (w16's: not present, the AVL bit
+           clear; a discarded block's has it set) becomes a usable
+           segment under KRNL286 (TK62 "rights": readable once given
+           data rights; KRNL386's stayed unusable: KERNEL audit, H16) */
+        if (!(d.b[5] & AR_PRESENT) && !(d.b[6] & 0x10) && (rights & AR_SEG))
+            d.b[5] |= AR_PRESENT;
+#endif
         d.b[5] = (d.b[5] & (AR_PRESENT | AR_DPL | AR_ACCESSED)) | (u8)(rights & 0x1E);
         d.b[6] = (d.b[6] & 0x2F) | (u8)((rights >> 8) & 0xD0);
         put_desc(sel, &d);

@@ -169,21 +169,27 @@ u16 KAPI SetWinDebugInfo(void FAR *info)
 /* ---- Reserved3/4 (KERNEL.79, 80): Windows 2.x's AnsiUpper and
    AnsiLower. Observed: with a zero selector the low word is a character,
    returned converted (DX = 0); otherwise the string is converted in place
-   and DX:AX is the pointer. Windows ANSI: E9h <-> C9h. UNVERIFIED: the
-   characters not tried (here: a-z, E0h-FEh but F7h). */
+   and DX:AX is the pointer. Windows ANSI: E9h <-> C9h. Observed for
+   80h-FFh (TK62 "ansi", 3.1 both modes): E0h-FEh but F7h <-> C0h-DEh but
+   D7h, and 9Ah <-> 8Ah, 9Ch <-> 8Ch, FFh <-> 9Fh (w16 lacked the last
+   three pairs: KERNEL audit, low). */
 
 static u8 up(u8 c)
 {
     if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7))
         return (u8)(c - 0x20);
-    return c;
+    if (c == 0x9A || c == 0x9C)
+        return (u8)(c - 0x10);
+    return c == 0xFF ? 0x9F : c;
 }
 
 static u8 down(u8 c)
 {
     if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7))
         return (u8)(c + 0x20);
-    return c;
+    if (c == 0x8A || c == 0x8C)
+        return (u8)(c + 0x10);
+    return c == 0x9F ? 0xFF : c;
 }
 
 static u32 ansi_case(u32 p, int upper)
@@ -239,8 +245,15 @@ u32 KAPI KGetCodeHandle(u32 proc)
     if (m) {                    /* KERNEL's segments are not in the heap */
         u16 i;
         for (i = 0; i < m->seg_count; i++)
-            if ((m->seg[i].sel | 3) == (hi | 3))
-                return ((u32)m->seg[i].sel << 16) | (u16)GlobalHandle(hi);
+            if ((m->seg[i].sel | 3) == (hi | 3)) {
+                /* KERNEL's own: its selector, 0 from GlobalHandle (3.1
+                   gave its segment's handle, TK62 "codehandle": KERNEL
+                   audit, medium 33) */
+                u16 h = (u16)GlobalHandle(hi);
+                if (!h)
+                    h = m->seg[i].hnd ? m->seg[i].hnd : m->seg[i].sel;
+                return ((u32)m->seg[i].sel << 16) | h;
+            }
     }
     gh = GlobalHandle(hi);
     if (!(u16)gh)

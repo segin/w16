@@ -204,6 +204,7 @@ int21_handler:
         mov ax, sp
         push ss
         push ax
+        cld                             ; (the process ends: as task_exit_al)
         call far _dos_exit_note         ; void __cdecl dos_exit_note(u16 far *)
         add sp, 4
         pop ax
@@ -264,8 +265,13 @@ _task_switch:
         pop bx
         pop ax                          ; ES: it may name a block freed
         verr ax                         ; since (an ended task's TDB)
-        jz .es
-        xor ax, ax
+        jnz .esz
+        push bx                         ; or discarded since: not present
+        lar bx, ax                      ; (VERR passes it; KERNEL audit,
+        test bh, 80h                    ; medium 20)
+        pop bx
+        jnz .es
+.esz:   xor ax, ax
 .es:
         mov es, ax
         pop cx
@@ -292,6 +298,9 @@ task_exit_al:
         ; first, on the task's own stack, the task's signal procedure
         ; (USER's, TDB 2Ah) hears that it ends (task.c, Pietrek: ExitCall)
         sti
+        cld                             ; (the C code below copies forwards;
+                                        ; a task may end with DF set: KERNEL
+                                        ; audit, medium 18)
         mov bx, DGROUP
         mov ds, bx
         push ax
@@ -442,6 +451,27 @@ LOCALAPI ADDATOM,      AADD,     2      ; KERNEL.70
 LOCALAPI DELETEATOM,   ADEL,     1      ; KERNEL.71
 LOCALAPI GETATOMNAME,  ANAME,    4      ; KERNEL.72
 LOCALAPI GETATOMHANDLE, AHANDLE, 1      ; KERNEL.73
+
+; LockSegment and UnlockSegment: -1 names the caller's DS (TK62, 3.1), so
+; the C function gets the caller's DS first, as LOCALAPI's do; unlike
+; them, ES is left as the C function sets it (0: observed, tk17.c).
+;   SEGLOCKAPI exported-name, c-function
+%macro SEGLOCKAPI 2
+extern %2
+global %1
+%1:
+        push bp
+        mov bp, sp
+        push ds
+        push ds
+        push word [bp + 6]
+        call far %2
+        pop ds
+        pop bp
+        retf 2
+%endmacro
+SEGLOCKAPI LOCKSEGMENT, LSEGLOCK    ; KERNEL.23
+SEGLOCKAPI UNLOCKSEGMENT, LSEGUNLOCK ; KERNEL.24
 ; for the Windows boot (local.c)
 LOCALAPI LOCALSHRINK,  LSHRINK,  2      ; KERNEL.121
 LOCALAPI LOCALCOUNTFREE, LCOUNTFREE, 0  ; KERNEL.161
@@ -785,6 +815,7 @@ fault_exit:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        cld                             ; (as task_exit_al)
         ; a fault while one is being handled (fault_regs holds the second
         ; one now): no recovery, reported as it is
         cmp byte [in_fault wrt DGROUP], 0
@@ -882,6 +913,7 @@ wd_fire:
         mov ax, DGROUP
         mov ds, ax
         mov es, ax
+        cld                             ; (as task_exit_al)
         mov ss, ax
         mov sp, exit_stack_top wrt DGROUP
         sti

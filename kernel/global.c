@@ -1194,6 +1194,10 @@ u16 galias_code(u16 sel, u16 owner)
             return 0;
         p = MK_FP(alias_sel, 0);
     }
+    /* the block again: making room for the records may have moved it
+       (KERNEL audit, medium 3) */
+    if (find(sel, &a) != FB_BLOCK)
+        return 0;
     c = dpmi_alloc_desc(1);
     if (!c)
         return 0;
@@ -1851,8 +1855,7 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
 /* Observed (tests/apps/tk17.c, KRNL286 and KRNL386): LockSegment and
    UnlockSegment count only for discardable blocks (GlobalFlags of a
    moveable block stays 0), as GlobalLock; both return the handle.
-   UNVERIFIED: LockSegment(-1) (the caller's DS: __loadds has replaced DS
-   by then). */
+   LockSegment(-1) is the caller's DS (TK62). */
 static u16 lockseg(u16 seg)
 {
     u16 a;
@@ -1863,9 +1866,12 @@ static u16 lockseg(u16 seg)
     return AR(a)->handle;
 }
 
-u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+/* (kentry.asm SEGLOCKAPI: the caller's DS first; -1 means that DS,
+   observed on 3.1, TK62 "lockseg": w16 took -1 as a selector, KERNEL
+   audit, medium 7) */
+u16 KAPI LSegLock(u16 ds, u16 seg)                       /* KERNEL.23 */
 {
-    u16 r = lockseg(seg);
+    u16 r = lockseg(seg == 0xFFFF ? ds : seg);
     api_es0();
     return r;
 }
@@ -1880,9 +1886,12 @@ static u16 unlockseg(u16 seg)
     return AR(a)->handle;
 }
 
-u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+/* (kentry.asm SEGLOCKAPI: the caller's DS first; -1 means that DS,
+   observed on 3.1, TK62 "lockseg": w16 took -1 as a selector, KERNEL
+   audit, medium 7) */
+u16 KAPI LSegUnlock(u16 ds, u16 seg)                       /* KERNEL.24 */
 {
-    u16 r = unlockseg(seg);
+    u16 r = unlockseg(seg == 0xFFFF ? ds : seg);
     api_es0();
     return r;
 }

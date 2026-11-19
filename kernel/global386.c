@@ -284,6 +284,7 @@ static void free_link(u32 a);
 static void link_after(u32 p, u32 a);
 static void unlink(u32 a);
 static void free_unlink(u32 a);
+static void page_lock(u32 a, u16 fn);
 
 /* ---- arena slots ---- */
 
@@ -881,6 +882,8 @@ static void transplant(aid a, aid f)
 {
     arena save;
     kmemcpy(&save, AR(a), sizeof save);
+    if (save.pglock)                    /* the lock goes with the block */
+        page_lock(a, 0x0601);           /* (KERNEL audit, medium 2) */
     move_data(a, AR(f)->addr, save.size);
     AR(f)->count = save.count;
     AR(f)->pglock = save.pglock;
@@ -893,6 +896,8 @@ static void transplant(aid a, aid f)
         lru_retarget(&save, a, f);
     *seltab(save.handle | 1) = f;
     AR(a)->lprev = AR(a)->lnext = 0;
+    if (save.pglock)
+        page_lock(f, 0x0600);
     release(a);
 }
 
@@ -1263,6 +1268,10 @@ u16 galias_code(u16 sel, u16 owner)
             return 0;
         p = MK_FP(alias_sel, 0);
     }
+    /* the block again: making room for the records may have moved it
+       (KERNEL audit, medium 3) */
+    if (find(sel, &a) != FB_BLOCK)
+        return 0;
     c = dpmi_alloc_desc(1);
     if (!c)
         return 0;
@@ -1281,6 +1290,8 @@ u16 galias_code(u16 sel, u16 owner)
 static void free_block(aid a)
 {
     u16 s = AR(a)->handle | 1, n = tiles(AR(a)->size), i;
+    if (AR(a)->pglock)                  /* (its pages stayed locked: */
+        page_lock(a, 0x0601);           /* KERNEL audit, medium 2) */
     if (discardable(a))
         lru_remove(a);
     *seltab(s) = 0;
@@ -2011,9 +2022,12 @@ static u16 lockseg(u16 seg)
     return AR(a)->handle;
 }
 
-u16 KAPI LockSegment(u16 seg)                                 /* KERNEL.23 */
+/* (kentry.asm SEGLOCKAPI: the caller's DS first; -1 means that DS,
+   observed on 3.1, TK62 "lockseg": w16 took -1 as a selector, KERNEL
+   audit, medium 7) */
+u16 KAPI LSegLock(u16 ds, u16 seg)                       /* KERNEL.23 */
 {
-    u16 r = lockseg(seg);
+    u16 r = lockseg(seg == 0xFFFF ? ds : seg);
     api_fs0(); api_es0();
     return r;
 }
@@ -2028,9 +2042,12 @@ static u16 unlockseg(u16 seg)
     return AR(a)->handle;
 }
 
-u16 KAPI UnlockSegment(u16 seg)                               /* KERNEL.24 */
+/* (kentry.asm SEGLOCKAPI: the caller's DS first; -1 means that DS,
+   observed on 3.1, TK62 "lockseg": w16 took -1 as a selector, KERNEL
+   audit, medium 7) */
+u16 KAPI LSegUnlock(u16 ds, u16 seg)                       /* KERNEL.24 */
 {
-    u16 r = unlockseg(seg);
+    u16 r = unlockseg(seg == 0xFFFF ? ds : seg);
     api_fs0(); api_es0();
     return r;
 }

@@ -357,6 +357,15 @@ static u8 rights(u16 sel)
     return sel ? (u8)(lar(sel) >> 8) : 0;
 }
 
+/* the highest offset IsBad*Ptr take for sel: its limit; for an
+   expand-down data segment FFFFh, every offset (observed on 3.1, TK62
+   "badptr": an expand-down copy of DS with limit FFFh was good at 10h,
+   2000h and FFF0h; w16 took the limit as the top: KERNEL audit, H22) */
+static u16 top_of(u16 sel, u8 ar)
+{
+    return (ar & 0x0C) == 0x04 ? 0xFFFF : sel_lim16(sel);
+}
+
 /* bytes [off, off + n) of sel readable (want 0) or writable (want 1) */
 static int range_ok(u16 sel, u32 off, u32 n, int write)
 {
@@ -371,7 +380,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
     }
     if (n == 0)
         return 1;
-    return off + n - 1 <= sel_lim16(sel);     /* UNVERIFIED: expand-down */
+    return off + n - 1 <= top_of(sel, ar);
 }
 
 /* how many bytes from p on can be read (write 0) or written (write 1)
@@ -382,17 +391,19 @@ u32 ptr_room(const void FAR *p, int write)
     u16 sel = FP_SEG(p), off = FP_OFF(p);
     if (!range_ok(sel, off, 1, write))
         return 0;
-    return (u32)sel_lim16(sel) - off + 1;
+    return (u32)top_of(sel, rights(sel)) - off + 1;
 }
 
+/* Observed (TK62 "badptr", 3.1 both modes): 0 bytes are good wherever
+   they are, NULL too (w16 said bad: KERNEL audit, H22) */
 u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n)
 {
-    return !range_ok(FP_SEG(p), FP_OFF(p), n, 0);
+    return n && !range_ok(FP_SEG(p), FP_OFF(p), n, 0);
 }
 
 u16 KAPI IsBadWritePtr(void FAR *p, u16 n)
 {
-    return !range_ok(FP_SEG(p), FP_OFF(p), n, 1);
+    return n && !range_ok(FP_SEG(p), FP_OFF(p), n, 1);
 }
 
 u16 KAPI IsBadCodePtr(void FAR *p)
@@ -401,19 +412,23 @@ u16 KAPI IsBadCodePtr(void FAR *p)
     return !((ar & 0x80) && (ar & 0x18) == 0x18 && FP_OFF(p) <= sel_lim16(FP_SEG(p)));
 }
 
+/* Observed (TK62 "strptr", 3.1 both modes and KRNL286): the NUL must be
+   in the first max bytes ("abc" is bad with 3, good with 4; max 0 is
+   always bad), but FFFFh sets no bound (64K without a NUL is good). w16
+   took a string that went on past max as good (KERNEL audit, H28). */
 u16 KAPI IsBadStringPtr(const char FAR *p, u16 max)
 {
     u16 sel = FP_SEG(p), off = FP_OFF(p), lim, i;
     if (!range_ok(sel, off, 1, 0))
         return 1;
-    lim = sel_lim16(sel);
+    lim = top_of(sel, rights(sel));
     for (i = 0; i < max; i++) {
         if ((u32)off + i > lim)
             return 1;
         if (!p[i])
             return 0;
     }
-    return 0;
+    return max != 0xFFFF;
 }
 
 static u16 huge_bad(void FAR *p, u32 n, int write)

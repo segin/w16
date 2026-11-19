@@ -306,6 +306,9 @@ u16 KAPI GIDATA(u16 ds, u16 h, u16 off, u16 n)
 {
     if (!h || !gsize_of_sel(h | 1))
         return 0;
+    /* inside both segments (it faulted in KERNEL: audit, medium 13) */
+    if (n && ((u32)off + n - 1 > sel_lim16(h | 1) || (u32)off + n - 1 > sel_lim16(ds)))
+        return 0;
     kmemcpy(MK_FP(ds, off), MK_FP(h | 1, off), n);
     return n;
 }

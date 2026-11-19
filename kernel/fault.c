@@ -110,7 +110,9 @@ found:
     t = GetProcAddress(m->ne_sel, "__GP");
     if (!t)
         return 0;
-    for (e = (const u16 FAR *)t; e[0] && lsl(FP_SEG(e)) >= FP_OFF(e) + 7; e += 4)
+    /* (each entry inside the segment before it is read: KERNEL audit,
+       medium 19) */
+    for (e = (const u16 FAR *)t; (u32)FP_OFF(e) + 7 <= lsl(FP_SEG(e)) && e[0]; e += 4)
         if ((e[0] | 7) == (cs | 7) && ip >= e[1] && ip < e[2])
             return e[3];
     return 0;
@@ -129,12 +131,15 @@ u16 KAPI HasGPHandler(u32 addr)
     return gp_find((u16)(addr >> 16), (u16)addr);
 }
 
+/* readable and present (VERR passes a not-present one, whose load
+   faults again: KERNEL audit, medium 20) */
 static u16 seg_ok(u16 sel);
 #pragma aux seg_ok = \
     "xor ax, ax" \
     "verr dx" \
     "jnz no" \
-    "inc ax" \
+    "lar ax, dx" \
+    "and ax, 8000h" \
     "no:" \
     parm [dx] value [ax] modify exact [ax];
 

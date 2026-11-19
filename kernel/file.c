@@ -177,10 +177,12 @@ static u16 cur_drive(void)
     return r.ax & 0xFF;                 /* 0 = A */
 }
 
-/* characters DOS does not take in a name (UNVERIFIED: the list) */
+/* characters DOS does not take in a name (UNVERIFIED: the list; ':'
+   observed on 3.1, TK62 "files": "COM1:", "FOO:" and "A:B:C" fail with
+   OF_PARSE: KERNEL audit, medium 36) */
 static int bad_char(char c)
 {
-    static const char bad[] = " \"+,;=[]|<>";
+    static const char bad[] = " \"+,;=[]|<>:";
     const char *b;
     if ((u8)c < 0x20)
         return 1;
@@ -204,6 +206,12 @@ int file_canon(const char FAR *name, char *out, u16 *err)
 
     *err = DOSE_NOFILE;
     if (p[0] && p[1] == ':') {
+        /* a letter only: observed on 3.1 (TK62 "files"), "1:" and "@:"
+           fail with 2; w16 took them as drives (KERNEL audit, H23) */
+        if (upc(p[0]) < 'A' || upc(p[0]) > 'Z') {
+            out[0] = 0;
+            return 0;
+        }
         drive = (u16)(upc(p[0]) - 'A');
         p += 2;
     } else
