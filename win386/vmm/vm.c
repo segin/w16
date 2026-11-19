@@ -447,7 +447,7 @@ void vm_end_trap(struct cregs *r)
     struct cregs *o;
     if (events) run_events(r);
     if (!resched) return;
-    if (cur_vm->crit > 0 && runnable(cur_vm) && !cur_vm->idle) return;
+    if ((cur_vm->crit > 0 || cur_vm->indos > 0) && runnable(cur_vm) && !cur_vm->idle) return;
     resched = 0;
     n = pick();
     if (n == cur_vm) {
@@ -489,6 +489,47 @@ void vm_int2a(struct cregs *r)
     case 0x81: if (cur_vm->crit) cur_vm->crit--; break;
     case 0x82: cur_vm->crit = 0; break;
     }
+}
+
+/* A VM inside a DOS call keeps the processor until the call returns or
+ * the VM idles (DOS waiting for a key calls INT 28h, the BIOS halts): no
+ * other VM enters DOS halfway through its call. MS-DOS keeps the state of
+ * a call in its swappable data area (instance data here) and marks what
+ * must not be interrupted with INT 2Ah 80h/81h; DOSBox's built-in DOS
+ * keeps it in the emulator (its transfer buffer for INT 21h 40h, its
+ * console's state), and a DOS VM's write to the screen came out with the
+ * bytes of a file Windows read meanwhile (rows of garbage at the top of
+ * the MS-DOS Prompt, about 1 run in 3). Windows 3.1 on the same DOS did not
+ * show it (UNVERIFIED how it avoids it: its time slices are longer; the
+ * DDK's critical section, Begin_Critical_Section, is the same idea). The
+ * calls that do not return are left out: EXEC (4Bh: the child runs inside
+ * it), terminate (00h, 31h, 4Ch) */
+int vm_dos_call(u32 ax)
+{
+    u32 ah = (ax >> 8) & 0xFF;
+    return ah != 0x00 && ah != 0x31 && ah != 0x4B && ah != 0x4C;
+}
+
+/* INT 21h from V86 code: on to DOS with a second frame above the
+ * caller's, whose IRET reaches the INT21RET breakpoint */
+void vm_int21(struct cregs *r)
+{
+    u16 fl = (u16)r->eflags;
+    if (!vm_dos_call(r->eax)) { v86_reflect(r, 0x21); return; }
+    v86_reflect(r, 0x21);
+    v86_push16(r, fl);
+    v86_push16(r, (u16)info->ldr_cs);
+    v86_push16(r, (u16)(info->bp_off + W386_BP_INT21RET));
+    cur_vm->indos++;
+}
+
+/* DOS has returned: the flags it returned, the caller's CS:IP */
+void vm_int21_ret(struct cregs *r)
+{
+    r->eip = v86_pop16(r);
+    r->cs = v86_pop16(r);
+    v86_pop16(r);
+    if (cur_vm->indos > 0) cur_vm->indos--;
 }
 
 /* the VM stub's VMEXIT breakpoint: the VM's program has ended (AX its

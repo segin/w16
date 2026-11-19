@@ -352,6 +352,12 @@ void shell_api(struct cregs *r)
             u8 *b = (u8 *)pm_lin(r->es, r->edi);
             next_off = *(u32 *)(b + 8);
             next_sel = *(u16 *)(b + 12);
+            if (dpmi_verbose) {
+                u32 i;
+                trace("SHELL: 9's block");
+                for (i = 0; i < 48; i += 4) trace(" %x", *(u32 *)(b + i));
+                trace("\n");
+            }
         }
         SETW(r->edx, SEL_FLAT7B);
         trace("SHELL: event procedure %x:%x\n", next_sel, next_off);

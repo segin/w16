@@ -54,6 +54,9 @@ struct vsave {
     u8 *shadow;                         /* the text at the last Clear_Mod */
     int shadow_ok;
     u16 last_cur;                       /* the cursor then (40:50h) */
+    u8 *seen;                           /* the text Get_Mod reported on */
+    int seen_ok;
+    u16 seen_cur;
     int pending;                        /* a 41Ah event not answered yet */
     u8 *font;                           /* plane 2 for Get_Mem (ring 3) */
     u8 *plane1;                         /* Get_Mem's plane 1: a buffer of its own (UNVERIFIED use) */
@@ -202,19 +205,22 @@ static void to_ram(struct vsave *d)
     if (!d->font) {
         d->font = kmalloc(8192);
         d->plane1 = kmalloc(8192);
-        d->zero = kmalloc(16);
+        d->zero = kmalloc(1024);
         if (!d->font || !d->zero) panic("no memory for a windowed DOS VM");
         make_user((u32)d->font, 8192);
         make_user((u32)d->plane1, 8192);
-        make_user((u32)d->zero, 16);
+        make_user((u32)d->zero, 1024);
+        memset(d->plane1, 0, 8192);
         /* Get_Mem's last pointer: the DDK calls VDD_Get_Mem's result "the flat
          * address and allocation bitmap" of the video memory: every page
          * there (UNVERIFIED bit layout; zeros made the grabber paint black) */
+        memset(d->zero, 0, 1024);
         d->zero[0] = d->zero[1] = d->zero[2] = d->zero[3] = 0xFFFFFFFFu;
     }
     if (d->valid) memcpy(d->font, d->g->planes[2], 8192);
     d->windowed = 1;
     d->shadow_ok = 0;
+    d->seen_ok = 0;
     d->pending = 0;
     map_video(d, 1);
 }
@@ -344,6 +350,7 @@ int vdd_api(struct cregs *r)
     struct vm *v = vm_of(r->ebx);
     struct vsave *d = v ? save_of(v, 0) : NULL;
     u8 *b = (u8 *)pm_lin(r->es, r->edi);
+    if (vm_trace) trace("(VDD %x)", AX(r));
     switch (AX(r)) {
     case 0x0001:                        /* Get_Mem: the planes' linear addresses */
         if (!d || !d->windowed) return 0;
@@ -352,7 +359,7 @@ int vdd_api(struct cregs *r)
             m[0] = (u32)text_of(d);
             m[1] = (u32)d->plane1;
             m[2] = (u32)d->font;
-            m[3] = (u32)d->zero;
+            m[3] = 0;
             m[4] = 0;
             m[5] = m[6] = 0x1000;
             m[7] = 0x2000;
@@ -373,8 +380,16 @@ int vdd_api(struct cregs *r)
             b[3] = *(u8 *)vm_lin(v, 0x484) ? *(u8 *)vm_lin(v, 0x484) + 1 : 25;
             *(u16 *)(b + 4) = cur & 0xFF;
             *(u16 *)(b + 6) = cur >> 8;
-            *(u16 *)(b + 8) = shape >> 8;
-            *(u16 *)(b + 10) = shape & 0xFF;
+            /* the cursor's first and last scan lines as the VGA has them
+             * (CRTC 0Ah, 0Bh: Windows 3.1 0Dh, 0Eh for the MS-DOS Prompt,
+             * whose BIOS data has the CGA-style 06h, 07h) */
+            if (d && d->valid) {
+                *(u16 *)(b + 8) = d->g->crtc[0x0A] & 0x1F;
+                *(u16 *)(b + 10) = d->g->crtc[0x0B] & 0x1F;
+            } else {
+                *(u16 *)(b + 8) = shape >> 8;
+                *(u16 *)(b + 10) = shape & 0xFF;
+            }
             for (i = 0; i < 16; i++)
                 b[12 + i] = d && d->valid ? d->g->attr[i] : (u8)(i < 8 ? (i == 6 ? 0x14 : i) : i + 0x30);
         }
@@ -382,15 +397,23 @@ int vdd_api(struct cregs *r)
         r->eflags &= ~EFL_CF;
         return 1;
     case 0x0003:                        /* Get_Mod: what changed since Clear_Mod */
+        /* Windows 3.1's answers in text modes (VXS.386, typing into a
+         * windowed MS-DOS Prompt): flags +0 (8 controller, 10h memory, 20h
+         * cursor), count +2 always 1, a dword 0 at +4; the changed cells in
+         * AL left, AH top, BL right, BH bottom, inclusive, the columns
+         * counted from 1 and the rows from 0 ("C:\WINDOWS>" written on row
+         * 0Eh: AX 0E01h, BX 0E0Bh); no change in memory: AX FFFFh, BX's low
+         * word 0; the first answer after the window opens: everything (38h,
+         * AX and BX FFFFh); ECX 5 with a memory change, else 4; EDX 0Ch */
         if (!d || !d->windowed) return 0;
         {
             u8 *t = text_of(d);
-            u16 flags = 0, cnt = 0;
+            u16 flags = 0;
             u32 i, l = 80, tp = 25, rt = 0, bt = 0;
+            SETW(r->eax, 0xFFFF);
+            SETW(r->ebx, 0);
             if (!d->shadow_ok) {
-                flags = 0x38;           /* controller, memory, cursor: everything (Windows 3.1) */
-                cnt = 1;
-                SETW(r->eax, 0xFFFF);
+                flags = 0x38;
                 SETW(r->ebx, 0xFFFF);
             } else {
                 for (i = 0; i < TEXT_BYTES; i += 2)
@@ -403,29 +426,34 @@ int vdd_api(struct cregs *r)
                     }
                 if (l <= rt) {
                     flags |= 0x10;
-                    cnt = 1;
-                    SETW(r->eax, (tp << 8) | l);
-                    SETW(r->ebx, (bt << 8) | rt);
+                    SETW(r->eax, (tp << 8) | (l + 1));
+                    SETW(r->ebx, (bt << 8) | (rt + 1));
                 }
+                if (cursor_of(d) != d->last_cur) flags |= 0x20;
             }
-            if (cursor_of(d) != d->last_cur) flags |= 0x20;
             *(u16 *)b = flags;
-            *(u16 *)(b + 2) = cnt;
-            /* the rectangle as words too (Windows 3.1: left, top, right, bottom) */
-            *(u16 *)(b + 4) = AX(r) & 0xFF;
-            *(u16 *)(b + 6) = AX(r) >> 8;
-            *(u16 *)(b + 8) = BX(r) & 0xFF;
-            *(u16 *)(b + 10) = BX(r) >> 8;
+            *(u16 *)(b + 2) = 1;
+            *(u32 *)(b + 4) = 0;
+            SETW(r->ecx, (flags & 0x10) ? 5 : 4);
+            /* what this answer covers: the VM runs on until Clear_Mod
+             * (Windows 3.1 held it: UNVERIFIED how long), and a change made
+             * meanwhile must come in the next answer, not be taken as seen */
+            if (!d->seen) d->seen = kmalloc(TEXT_BYTES);
+            if (d->seen) { memcpy(d->seen, t, TEXT_BYTES); d->seen_ok = 1; d->seen_cur = cursor_of(d); }
+            if (vm_trace) trace("(MOD %x %x %x cur %x)", flags, AX(r), BX(r), cursor_of(d));
         }
-        SETW(r->ecx, *(u16 *)(b + 2) ? 5 : 4);  /* Windows 3.1: 5 with a rectangle (UNVERIFIED meaning) */
-        SETW(r->edx, 0x000C);                   /* Windows 3.1: 0Ch (UNVERIFIED meaning) */
+        SETW(r->edx, 0x000C);
         r->eflags &= ~EFL_CF;
         return 1;
     case 0x0004:                        /* Clear_Mod */
         if (!d || !d->windowed) return 0;
         if (!d->shadow) d->shadow = kmalloc(TEXT_BYTES);
-        if (d->shadow) { memcpy(d->shadow, text_of(d), TEXT_BYTES); d->shadow_ok = 1; }
-        d->last_cur = cursor_of(d);
+        if (d->shadow) {
+            memcpy(d->shadow, d->seen_ok ? d->seen : text_of(d), TEXT_BYTES);
+            d->shadow_ok = 1;
+        }
+        d->last_cur = d->seen_ok ? d->seen_cur : cursor_of(d);
+        d->seen_ok = 0;
         d->pending = 0;
         r->eflags &= ~EFL_CF;
         return 1;
