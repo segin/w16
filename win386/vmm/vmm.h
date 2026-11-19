@@ -170,6 +170,7 @@ u32 lin_to_phys(u32 lin);
 void make_user(u32 lin, u32 size);
 void memset(void *d, int c, u32 n);
 void memcpy(void *d, const void *s, u32 n);
+int memcmp(const void *a, const void *b, u32 n);
 u32 v86_lin(u32 seg, u32 off);
 void v86_push16(struct cregs *r, u16 v);
 u16 v86_pop16(struct cregs *r);
@@ -269,6 +270,7 @@ void vm_int2a(struct cregs *r);     /* DOS's critical sections */
 #define SET_DEVICE_FOCUS    0x0F
 u32 vxd_send(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);   /* carry: a device refused */
 void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);
+int vxd_service_call(u32 dev, u32 svc, struct svcregs *s);
 
 void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg);   /* run in v, soon */
 void io_vm_gone(struct vm *v);
@@ -284,6 +286,9 @@ void vdd_int2f(struct cregs *r);
 void vdd_focus(struct vm *v);       /* the display goes to v */
 void vdd_vm_init(struct vm *v);
 void vdd_vm_destroy(struct vm *v);
+void vdd_window(struct vm *v, int on);   /* SHELL: windowed or full screen */
+void vdd_tick(void);
+void shell_display_changed(struct vm *v, int cursor);
 #define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
 
 /* io.c: I/O port trapping */

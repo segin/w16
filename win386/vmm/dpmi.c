@@ -267,6 +267,19 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     r->eax = v.eax; r->ebx = v.ebx; r->ecx = v.ecx; r->edx = v.edx;
     r->esi = v.esi; r->edi = v.edi; r->ebp = v.ebp;
     r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);    /* CF PF AF ZF SF OF */
+    /* DOS functions that return no pointer keep the caller's segment
+     * registers: MS-DOS 4.00 changes ES as a side effect in some (INT 21h
+     * 3Eh, close, came back with another ES; KRNL386 then faulted with ES
+     * 0 at 0117:A789 after closing BOOTLOG.TXT: the boot on the MS-DOS 4.00
+     * image, INPUTRUN_HDD). The ones that return a pointer in DS or ES
+     * (MS-DOS 4.00: 1Fh, 32h DS:BX the DPB, 34h ES:BX InDOS, 52h ES:BX the
+     * list of lists, 5D06h DS:SI the swappable data area, 63h DS:SI the
+     * lead-byte table) translate it as before */
+    if (vec == 0x21) {
+        u32 ah = (AX(&pm) >> 8) & 0xFF;
+        if (ah != 0x1F && ah != 0x32 && ah != 0x34 && ah != 0x52 && ah != 0x5D && ah != 0x63)
+            return 1;
+    }
     if ((int)(v.ds & 0xFFFF) != (ds < 0 ? 0 : ds)) {
         u32 sel = seg_to_sel(v.ds & 0xFFFF, 0xF2);
         if (sel) r->ds = sel;

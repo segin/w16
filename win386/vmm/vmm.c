@@ -104,6 +104,14 @@ void memcpy(void *d, const void *s, u32 n)
     while (n--) *p++ = *q++;
 }
 
+int memcmp(const void *a, const void *b, u32 n)
+{
+    const u8 *p = a, *q = b;
+    for (; n--; p++, q++)
+        if (*p != *q) return *p < *q ? -1 : 1;
+    return 0;
+}
+
 /* ---- trace on a serial port (COM1; DOSBox-X: serial1=file file:...) ---- */
 static void pic_init(u32 b1, u32 b2);
 static char *tbuf;                     /* fatal(): its message goes here */

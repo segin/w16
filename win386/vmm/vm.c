@@ -363,6 +363,7 @@ void vm_tick(void)
 {
     struct vm *v;
     for (v = vm_list; v; v = v->next) v->idle = 0;
+    vdd_tick();
     if (cur_vm->slice) cur_vm->slice--;
     if (!cur_vm->slice && vm_list->next) resched = 1;
 }
@@ -398,8 +399,9 @@ static struct vm *pick(void)
 /* ---- VM events: a device's procedure run in a given VM (the DDK's
  * Schedule_VM_Event, Call_Priority_VM_Event): at the end of one of its
  * traps, where it can run code in the VM (nested execution). In the
- * System VM only when its program is in protected mode with interrupts
- * on and no hardware interrupt's handler runs (where a callback into
+ * System VM only when its program has a protected mode, interrupts
+ * on and no hardware interrupt's handler runs (in V86 mode too: the
+ * callback runs on the host stack as an interrupt's handler would; where a callback into
  * Windows is safe; UNVERIFIED Windows 3.1's exact conditions) ---- */
 void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg)
 {
@@ -421,7 +423,7 @@ int dpmi_in_handler(void);
 static int events_ok(struct cregs *r)
 {
     if (cur_vm != &sysvm) return 1;
-    return sysvm.pm && !(r->eflags & EFL_VM) && (r->eflags & EFL_IF) && !dpmi_in_handler();
+    return sysvm.pm && (r->eflags & EFL_IF) && !dpmi_in_handler();
 }
 
 static void run_events(struct cregs *r)

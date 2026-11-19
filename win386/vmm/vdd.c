@@ -36,9 +36,29 @@ static struct vm *owner;                /* the VM the display belongs to */
 static struct vga *saved_sys;           /* Windows' screen while a DOS VM has it */
 static int sys_crit;                    /* INT 2Fh 4003h/4004h nesting (the display driver) */
 
-/* each DOS VM's saved screen: kept with the VM's slot (vm_create reuses
- * destroyed VMs) */
-struct vsave { struct vsave *next; struct vm *vm; struct vga *g; int valid; };
+/* each DOS VM's display state: its hardware state while another VM has
+ * the display (kept with the VM's slot: vm_create reuses destroyed VMs);
+ * while it is windowed, its video memory (A0000h-BFFFFh) is RAM of its
+ * own (the text at B8000h, as the CPU sees it in text mode: character,
+ * attribute), which the grabber reads through the VM's high linear
+ * address, and what changed since the grabber last looked (Get_Mod,
+ * Clear_Mod) */
+#define TEXT_BYTES 4000                 /* 80 x 25 x 2 */
+struct vsave {
+    struct vsave *next;
+    struct vm *vm;
+    struct vga *g;
+    int valid;
+    int windowed;
+    u32 vram[32];                       /* physical pages, A0000h-BFFFFh */
+    u8 *shadow;                         /* the text at the last Clear_Mod */
+    int shadow_ok;
+    u16 last_cur;                       /* the cursor then (40:50h) */
+    int pending;                        /* a 41Ah event not answered yet */
+    u8 *font;                           /* plane 2 for Get_Mem (ring 3) */
+    u8 *plane1;                         /* Get_Mem's plane 1: a buffer of its own (UNVERIFIED use) */
+    u32 *zero;
+};
 static struct vsave *saves;
 
 static struct vsave *save_of(struct vm *v, int make)
@@ -146,6 +166,86 @@ static void bios_mode(struct vm *v, void *arg)
     v86_int(&r, 0x10);
 }
 
+void page_free(u32 phys);
+
+/* the VM's page-table entries for A0000h-BFFFFh: its RAM or the VGA */
+static void map_video(struct vsave *d, int ram)
+{
+    u32 *pt = (u32 *)phys_to_lin(d->vm->ptab_phys), i;
+    for (i = 0; i < 32; i++)
+        pt[0xA0 + i] = ram ? (d->vram[i] | 7) : ((0xA0000 + i * 4096) | 7);
+    set_cr3(get_cr3());
+}
+
+/* windowed: the saved planes become the text in RAM (odd/even: the
+ * character at an even address is plane 0's byte there, the attribute
+ * plane 1's) */
+static void to_ram(struct vsave *d)
+{
+    u32 i, k;
+    u8 *b8;
+    if (d->windowed) return;
+    for (i = 0; i < 32; i++) {
+        d->vram[i] = page_alloc();
+        if (!d->vram[i]) panic("no memory for a windowed DOS VM");
+    }
+    b8 = (u8 *)phys_to_lin(d->vram[0x18]);
+    if (d->valid)
+        for (i = 0; i < 8; i++) {
+            u8 *pg = (u8 *)phys_to_lin(d->vram[0x18 + i]);
+            for (k = 0; k < 4096; k += 2) {
+                pg[k] = d->g->planes[0][i * 4096 + k];
+                pg[k + 1] = d->g->planes[1][i * 4096 + k];
+            }
+        }
+    (void)b8;
+    if (!d->font) {
+        d->font = kmalloc(8192);
+        d->plane1 = kmalloc(8192);
+        d->zero = kmalloc(16);
+        if (!d->font || !d->zero) panic("no memory for a windowed DOS VM");
+        make_user((u32)d->font, 8192);
+        make_user((u32)d->plane1, 8192);
+        make_user((u32)d->zero, 16);
+        /* Get_Mem's last pointer: the DDK calls VDD_Get_Mem's result "the flat
+         * address and allocation bitmap" of the video memory: every page
+         * there (UNVERIFIED bit layout; zeros made the grabber paint black) */
+        d->zero[0] = d->zero[1] = d->zero[2] = d->zero[3] = 0xFFFFFFFFu;
+    }
+    if (d->valid) memcpy(d->font, d->g->planes[2], 8192);
+    d->windowed = 1;
+    d->shadow_ok = 0;
+    d->pending = 0;
+    map_video(d, 1);
+}
+
+/* full screen again: the text back into the planes */
+static void from_ram(struct vsave *d)
+{
+    u32 i, k;
+    if (!d->windowed) return;
+    for (i = 0; i < 8; i++) {
+        u8 *pg = (u8 *)phys_to_lin(d->vram[0x18 + i]);
+        for (k = 0; k < 4096; k += 2) {
+            d->g->planes[0][i * 4096 + k] = pg[k];
+            d->g->planes[1][i * 4096 + k] = pg[k + 1];
+        }
+    }
+    map_video(d, 0);
+    for (i = 0; i < 32; i++) page_free(d->vram[i]);
+    d->windowed = 0;
+}
+
+/* SHELL: v windowed (its display is the grabber's) or full screen */
+void vdd_window(struct vm *v, int on)
+{
+    struct vsave *d = save_of(v, 1);
+    if (!d) return;
+    trace("VDD: VM %d %s\n", v->id, on ? "windowed" : "full screen");
+    if (on && v != owner) to_ram(d);
+    /* off: the text goes back when the VM gets the display (vdd_focus) */
+}
+
 /* the display goes to v */
 void vdd_focus(struct vm *v)
 {
@@ -167,8 +267,10 @@ void vdd_focus(struct vm *v)
     if (v == &sysvm) {
         if (saved_sys) vga_restore(saved_sys);
         vm_event(&sysvm, notify_sys, (void *)0x4002);
-    } else if ((s = save_of(v, 0)) != NULL && s->valid)
+    } else if ((s = save_of(v, 0)) != NULL && s->valid) {
+        from_ram(s);
         vga_restore(s->g);
+    }
     else if (v->started)
         vm_event(v, bios_mode, NULL);
     /* a VM not started yet sets its mode at its VM_Init (vdd_vm_init) */
@@ -183,8 +285,43 @@ void vdd_vm_init(struct vm *v)
 void vdd_vm_destroy(struct vm *v)
 {
     struct vsave *s = save_of(v, 0);
-    if (s) s->valid = 0;
+    if (s) {
+        if (s->windowed) {
+            u32 i;
+            for (i = 0; i < 32; i++) page_free(s->vram[i]);
+            s->windowed = 0;
+        }
+        s->valid = 0;
+    }
     if (owner == v) owner = &sysvm;
+}
+
+/* a windowed VM's text and cursor (its BIOS data: 40:50h) */
+static u8 *text_of(struct vsave *d)
+{
+    return (u8 *)(d->vm->cb->high_linear + 0xB8000);
+}
+
+static u16 cursor_of(struct vsave *d)
+{
+    return *(u16 *)vm_lin(d->vm, 0x450);
+}
+
+/* each timer tick: a windowed VM whose screen changed gets event 41Ah
+ * (once until the grabber looks: Get_Mod / Clear_Mod) */
+void vdd_tick(void)
+{
+    struct vsave *d;
+    for (d = saves; d; d = d->next) {
+        int mem, cur;
+        if (!d->windowed || d->pending || !d->vm->id || d->vm->ended) continue;
+        mem = !d->shadow_ok || memcmp(text_of(d), d->shadow, TEXT_BYTES);
+        cur = cursor_of(d) != d->last_cur;
+        if (mem || cur) {
+            d->pending = 1;
+            shell_display_changed(d->vm, cur && !mem);
+        }
+    }
 }
 
 /* INT 2Fh 4003h/4004h from the System VM (the display driver's critical
@@ -204,7 +341,99 @@ void vdd_int2f(struct cregs *r)
  * DOS VMs. */
 int vdd_api(struct cregs *r)
 {
+    struct vm *v = vm_of(r->ebx);
+    struct vsave *d = v ? save_of(v, 0) : NULL;
+    u8 *b = (u8 *)pm_lin(r->es, r->edi);
     switch (AX(r)) {
+    case 0x0001:                        /* Get_Mem: the planes' linear addresses */
+        if (!d || !d->windowed) return 0;
+        {
+            u32 *m = (u32 *)b;
+            m[0] = (u32)text_of(d);
+            m[1] = (u32)d->plane1;
+            m[2] = (u32)d->font;
+            m[3] = (u32)d->zero;
+            m[4] = 0;
+            m[5] = m[6] = 0x1000;
+            m[7] = 0x2000;
+            m[8] = 0;
+            m[9] = (u32)d->zero;
+        }
+        SETW(r->ecx, 0x28);
+        r->eflags &= ~EFL_CF;
+        return 1;
+    case 0x0002:                        /* Get_State */
+        if (!v) return 0;
+        {
+            u16 cur = *(u16 *)vm_lin(v, 0x450), shape = *(u16 *)vm_lin(v, 0x460);
+            u32 i;
+            memset(b, 0, 0x1C);
+            b[0] = *(u8 *)vm_lin(v, 0x449);
+            b[2] = 2;                   /* cursor tracking (Windows 3.1: 2) */
+            b[3] = *(u8 *)vm_lin(v, 0x484) ? *(u8 *)vm_lin(v, 0x484) + 1 : 25;
+            *(u16 *)(b + 4) = cur & 0xFF;
+            *(u16 *)(b + 6) = cur >> 8;
+            *(u16 *)(b + 8) = shape >> 8;
+            *(u16 *)(b + 10) = shape & 0xFF;
+            for (i = 0; i < 16; i++)
+                b[12 + i] = d && d->valid ? d->g->attr[i] : (u8)(i < 8 ? (i == 6 ? 0x14 : i) : i + 0x30);
+        }
+        SETW(r->ecx, 0x1C);
+        r->eflags &= ~EFL_CF;
+        return 1;
+    case 0x0003:                        /* Get_Mod: what changed since Clear_Mod */
+        if (!d || !d->windowed) return 0;
+        {
+            u8 *t = text_of(d);
+            u16 flags = 0, cnt = 0;
+            u32 i, l = 80, tp = 25, rt = 0, bt = 0;
+            if (!d->shadow_ok) {
+                flags = 0x38;           /* controller, memory, cursor: everything (Windows 3.1) */
+                cnt = 1;
+                SETW(r->eax, 0xFFFF);
+                SETW(r->ebx, 0xFFFF);
+            } else {
+                for (i = 0; i < TEXT_BYTES; i += 2)
+                    if (t[i] != d->shadow[i] || t[i + 1] != d->shadow[i + 1]) {
+                        u32 c = (i / 2) % 80, rw = (i / 2) / 80;
+                        if (c < l) l = c;
+                        if (c > rt) rt = c;
+                        if (rw < tp) tp = rw;
+                        if (rw > bt) bt = rw;
+                    }
+                if (l <= rt) {
+                    flags |= 0x10;
+                    cnt = 1;
+                    SETW(r->eax, (tp << 8) | l);
+                    SETW(r->ebx, (bt << 8) | rt);
+                }
+            }
+            if (cursor_of(d) != d->last_cur) flags |= 0x20;
+            *(u16 *)b = flags;
+            *(u16 *)(b + 2) = cnt;
+            /* the rectangle as words too (Windows 3.1: left, top, right, bottom) */
+            *(u16 *)(b + 4) = AX(r) & 0xFF;
+            *(u16 *)(b + 6) = AX(r) >> 8;
+            *(u16 *)(b + 8) = BX(r) & 0xFF;
+            *(u16 *)(b + 10) = BX(r) >> 8;
+        }
+        SETW(r->ecx, *(u16 *)(b + 2) ? 5 : 4);  /* Windows 3.1: 5 with a rectangle (UNVERIFIED meaning) */
+        SETW(r->edx, 0x000C);                   /* Windows 3.1: 0Ch (UNVERIFIED meaning) */
+        r->eflags &= ~EFL_CF;
+        return 1;
+    case 0x0004:                        /* Clear_Mod */
+        if (!d || !d->windowed) return 0;
+        if (!d->shadow) d->shadow = kmalloc(TEXT_BYTES);
+        if (d->shadow) { memcpy(d->shadow, text_of(d), TEXT_BYTES); d->shadow_ok = 1; }
+        d->last_cur = cursor_of(d);
+        d->pending = 0;
+        r->eflags &= ~EFL_CF;
+        return 1;
+    case 0x0005:                        /* Free_Mem */
+    case 0x0009:                        /* Unlock_App */
+        if (d) d->pending = 0;
+        r->eflags &= ~EFL_CF;
+        return 1;
     case 0x0000:
         SETW(r->eax, 0x030A);
         r->eflags &= ~EFL_CF;

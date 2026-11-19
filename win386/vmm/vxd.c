@@ -168,6 +168,15 @@ static u32 svc_slot(u32 dev, u32 svc)
     return *(u32 *)(d->svc_table + svc * 4);
 }
 
+/* a device's service from the VMM's C code; 0 if it is not there */
+int vxd_service_call(u32 dev, u32 svc, struct svcregs *s)
+{
+    u32 slot = svc_slot(dev, svc);
+    if (!slot) return 0;
+    vmm_call_proc(slot, s);
+    return 1;
+}
+
 static void vpicd_call(u32 svc, u32 eax, u32 ebx)
 {
     struct svcregs s;

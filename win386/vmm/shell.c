@@ -53,6 +53,7 @@
 #include "vmm.h"
 
 #define SHELL_WINDOWED  0x0001          /* function 6's bit 0 */
+extern int dpmi_verbose;
 
 /* SHELL's view of a DOS VM */
 struct shvm {
@@ -61,6 +62,7 @@ struct shvm {
     u32 block;                          /* WINOA386's block (function 3), linear */
     u32 flags;                          /* function 6 */
     u32 ended_posted;
+    int hk_pending;                     /* a hot key's event not acted on (function 5) */
     u32 hwnd;                           /* function 15h */
     u32 cb_sel, cb_off;                 /* function 9: its event procedure */
 };
@@ -79,6 +81,7 @@ static u32 ev_next;
 
 static int is_command(const char *p);
 static void put_banner(struct vm *v);
+static void post(struct vm *v, u32 msg, u32 wparam);
 
 static struct shvm *sh_of(struct vm *v)
 {
@@ -88,10 +91,60 @@ static struct shvm *sh_of(struct vm *v)
     return NULL;
 }
 
+/* SHELL's hot keys, active in the DOS VMs only (VKD_Local_Disable_Hot_Key
+ * for the System VM: Windows has these keys itself). A hot key in a DOS
+ * VM becomes event 414h for its WINOA386, wParam the key's number
+ * (Windows 3.1: 1 for Alt+Enter). VKD's shift bits are w16's (vkd.c):
+ * Shift 1, Ctrl 2, Alt 4; the mask in the high word */
+extern char shell_hk_entry[];
+#pragma aux shell_hk_entry "_*"
+struct hk { u8 scan; u32 shift; u32 code; };
+static const struct hk hks[] = {
+    { 0x1C, 0x00070004, 1 },            /* Alt+Enter */
+};
+
+static void define_hot_keys(void)
+{
+    struct svcregs s;
+    u32 i;
+    for (i = 0; i < sizeof(hks) / sizeof(hks[0]); i++) {
+        memset(&s, 0, sizeof(s));
+        s.eax = hks[i].scan | (0xFF << 8);      /* normal or extended */
+        s.ebx = hks[i].shift;
+        s.ecx = 1;                              /* on the press */
+        s.esi = (u32)shell_hk_entry;
+        s.edx = hks[i].code;
+        if (!vxd_service_call(0x000D, 0x01, &s) || (s.eflags & EFL_CF)) continue;
+        s.ebx = VMH(&sysvm);
+        vxd_service_call(0x000D, 0x04, &s);     /* VKD_Local_Disable_Hot_Key: EAX the key */
+    }
+}
+
+/* the hot key's callback (VKD: EAX the scan code, EDX our number), in
+ * whatever VM is running: for the VM with the keyboard */
+void __cdecl shell_hot_key(struct svcregs *r)
+{
+    struct vm *v = vm_focus;
+    r->eflags &= ~EFL_CF;
+    if (v == &sysvm || !sh_of(v)) return;
+    trace("SHELL: hot key %d in VM %d\n", r->edx, v->id);
+    if (sh_of(v)->hk_pending) return;   /* the key repeated */
+    sh_of(v)->hk_pending = 1;
+    post(v, 0x414, 0x00010000u | r->edx);
+}
+
 void shell_init(void)
 {
     evs = kmalloc(NEVENTS * sizeof(*evs));       /* more than a page: page aligned */
     if (evs) make_user((u32)evs, NEVENTS * sizeof(*evs));
+    define_hot_keys();
+}
+
+/* the VDD: a windowed VM's screen has changed (event 41Ah; the record's
+ * +12h: 20h when the cursor moved, as Windows 3.1's varied 0 and 20h) */
+void shell_display_changed(struct vm *v, int cursor)
+{
+    if (sh_of(v)) post(v, 0x41A, cursor ? 0x00200000u : 0);
 }
 
 /* SHELL's event: WINOA386's procedure in the System VM, (hwnd, msg,
@@ -287,6 +340,8 @@ void shell_api(struct cregs *r)
     struct vm *v;
     struct shvm *s;
     r->eflags &= ~EFL_CF;
+    if (fn != 0x0C && dpmi_verbose)
+        trace("SHELL: %x eax %x ebx %x ecx %x esi %x edi %x\n", fn, r->eax, r->ebx, r->ecx, r->esi, r->edi);
     switch (fn) {
     case 0x00:                          /* the version */
         SETW(r->eax, 0x030A);
@@ -306,12 +361,17 @@ void shell_api(struct cregs *r)
         return;
     case 0x05:                          /* the focus */
         if ((v = vm_of(r->ebx)) == NULL) { r->eflags |= EFL_CF; return; }
+        for (s = shvms; s; s = s->next) s->hk_pending = 0;
         set_focus(v, r->edi);
         r->eax = 0;
         return;
     case 0x06:                          /* the VM's flags: EAX bits, ECX mask */
-        if ((s = sh_of(vm_of(r->ebx))) != NULL)
+        if ((s = sh_of(vm_of(r->ebx))) != NULL) {
+            u32 old = s->flags;
             s->flags = (s->flags & ~CX(r)) | (AX(r) & CX(r));
+            if ((old ^ s->flags) & SHELL_WINDOWED)
+                vdd_window(s->vm, (s->flags & SHELL_WINDOWED) != 0);
+        }
         return;
     case 0x07:                          /* the block's status word */
         if ((s = sh_of(vm_of(r->ebx))) != NULL)
