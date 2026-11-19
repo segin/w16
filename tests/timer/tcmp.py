@@ -21,11 +21,11 @@ documented difference (docs/notes/timer-handover.md):
   steps     timeGetTime's smallest and largest step over 220 ms: 1 and 1
             on w16 (3.1's also 1 and 1, except when its clock went back:
             a "largest step" near 2^32, never asked of w16)
-  pit       channel 0's period: within 64 counts or 0.5%, whichever is
-            more (it is sampled, the largest count over 3 BIOS ticks:
-            3.1's runs spread by up to 33 on an idle host, up to 164 at
-            54-55 ms under load; one millisecond more or less
-            is 1193 counts, 1.8% at 55 ms)
+  pit       channel 0's period: within half a millisecond, 596 counts
+            (it is sampled, the largest count over 3 BIOS ticks: 3.1's
+            runs spread by up to 33 on an idle host, under load up to
+            164 at 54-55 ms and 76 at 10 ms; the periods are whole
+            milliseconds, any other one 1193 counts or more away)
   ids       exact
   oneshot   w16's event is called once, no sooner than its delay and no
             later than the delay plus the 8254's period then (its
@@ -53,7 +53,7 @@ documented difference (docs/notes/timer-handover.md):
             of 100 ms within 2 of it / 109.85 (two BIOS ticks each: 3.1's
             55-56 in 6 s), DOS's clock within 10 hundredths of BIOS
             ticks x 5.4925
-  child     the 8254 as pit (sampled: 3.1 gave 1179 against 1192 under
+  child     the 8254 as pit (3.1 gave 1179 against w16's 1192 under
             load), calls within 6
 Anything else marked "~" is shown and not checked.
 
@@ -160,7 +160,7 @@ def check(key, ms, w):
         # min a max b changes c in d
         return wn[0] == 1 and wn[1] == 1, 'steps of 1 ms'
     if re.match(r'(period .*|trace .*|child) pit', key) or key.endswith(' pit'):
-        tol = max(64, mn[0] // 200)
+        tol = 596
         if mn[0] >= 65400 and wn[0] >= 65400:
             return True, 'both 65536'
         return within(mn[0], wn[0], tol), 'within %d counts' % tol

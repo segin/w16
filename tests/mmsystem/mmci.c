@@ -674,7 +674,24 @@ void mci_section(void)
         mlname = (MLNAME)GetProcAddress(ml, "MLNAME");
         ((MLPROBE)GetProcAddress(ml, "MLPROBE"))(getss3(), GetCurrentTask());
         mlname((DWORD)(LPSTR)buf, "rbuf");
-        mldump("NUL");
+    }
+    {
+        /* 4 s first, the records and messages dropped: MMSYSTEM's start-up
+           sound (2.5 s, played at boot) ends in that time, where under
+           load it ended in the middle of a script (its WOM_DONE among a
+           later step's records, or a play refused with 320 while it
+           played) */
+        DWORD t0 = GetTickCount();
+        MSG m;
+        while (GetTickCount() - t0 < 4000) {
+            while (PeekMessage(&m, 0, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&m);
+                DispatchMessage(&m);
+            }
+            Yield();
+        }
+        if (mldump)
+            mldump("NUL");
     }
     f = _lopen("C:\\MCI.TXT", OF_READ);
     if (f == HFILE_ERROR) {
