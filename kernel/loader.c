@@ -857,6 +857,18 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         f_close(fh);
         return load_fail(NULL, path, "self-loading modules are not supported yet");
     }
+    /* the tables in their order, inside what is read below: a file whose
+       offsets wrap past 64K or run backwards had the table copies read
+       past the block (KERNEL audit, H9); it is a bad format instead
+       (UNVERIFIED: 3.1's code for such a file) */
+    if ((u32)h.entry_off + h.entry_len > 0xFFF0UL || h.seg_off < sizeof h ||
+        (u32)h.seg_off + (u32)h.seg_count * sizeof(ne_segment) > h.rsrc_off ||
+        h.resname_off < h.rsrc_off || h.modref_off < h.resname_off ||
+        (u32)h.modref_off + 2UL * h.modref_count > h.impname_off ||
+        h.entry_off < h.impname_off) {
+        f_close(fh);
+        return NULL;
+    }
     ne_len = h.entry_off + h.entry_len;
     *err = LE_NOMEM;
     m = mod_new(h.seg_count);

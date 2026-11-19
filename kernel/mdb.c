@@ -33,17 +33,28 @@
 
 #define LF_HEAD 8               /* load file info before the name */
 
-static u16 entry_size(const u8 FAR *p, const u8 FAR *end)
+/* The size of the in-memory entry table; FFFFFFFFh if the file's runs
+   past its end. In 32 bits: fixed entries grow from 3 bytes to 5, so a
+   file's table under 64K can need more than 64K here, which wrapped to a
+   block too small for entry_convert (KERNEL audit, C5); mdb_build then
+   fails the load. */
+static u32 entry_size(const u8 FAR *p, const u8 FAR *end)
 {
-    u16 n = 0;
+    u32 n = 0;
     while (p < end && p[0]) {
         u8 count = p[0], type = p[1];
+        u16 step;
+        if (end - p < 2)
+            return 0xFFFFFFFFUL;
         p += 2;
         if (type == NEB_UNUSED)
             continue;
         n += 6 + 5 * count;
-        p += (type == NEB_MOVABLE ? sizeof(ne_entry_movable)
-                                  : sizeof(ne_entry_fixed)) * count;
+        step = (type == NEB_MOVABLE ? sizeof(ne_entry_movable)
+                                    : sizeof(ne_entry_fixed)) * count;
+        if ((u16)(end - p) < step)
+            return 0xFFFFFFFFUL;
+        p += step;
     }
     return n;
 }
@@ -106,9 +117,9 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
     u16 nseg = fh->seg_count, plen = kstrlen(path);
     u16 rs_len = fh->resname_off - fh->rsrc_off;
     u16 rn_len = fh->modref_off - fh->resname_off;
-    u16 mr_len = 2 * fh->modref_count;
+    u32 mr_len = 2 * (u32)fh->modref_count;     /* (u16 wrapped: audit H9) */
     u16 im_len = fh->entry_off - fh->impname_off;
-    u16 en_len = entry_size(ft + fh->entry_off, ft + fh->entry_off + fh->entry_len);
+    u32 en_len = entry_size(ft + fh->entry_off, ft + fh->entry_off + fh->entry_len);
     u16 o_seg = sizeof(ne_header), o_rs, o_rn, o_mr, o_im, o_en, o_lf, i, sel;
     u32 total;
     u8 FAR *t;
@@ -119,14 +130,15 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
     total = (u32)o_seg + ((u32)nseg << 3) + ((u32)nseg << 1) /* MDB_SEGSIZE */ +
             rs_len + rn_len + mr_len +
             im_len + en_len + 1 + LF_HEAD - 1 + plen + 1;
-    if (total > 0xFFF0UL || !galloc(GMEM_FIXED, total, 0, &sel))
+    if (en_len > 0xFFF0UL || mr_len > 0xFFF0UL || total > 0xFFF0UL ||
+        !galloc(GMEM_FIXED, total, 0, &sel))
         return 0;
     o_rs = o_seg + MDB_SEGSIZE * nseg;
     o_rn = o_rs + rs_len;
     o_mr = o_rn + rn_len;
-    o_im = o_mr + mr_len;
+    o_im = o_mr + (u16)mr_len;
     o_en = o_im + im_len;
-    o_lf = o_en + en_len;
+    o_lf = o_en + (u16)en_len;
     /* observed on 3.1 (tests/apps/tk51.c, TOOLHELP's GlobalEntryHandle):
        a module table is its own owner; TOOLHELP then calls it GT_MODULE */
     FarSetOwner(sel, sel);
