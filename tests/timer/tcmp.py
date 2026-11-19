@@ -60,11 +60,9 @@ Anything else marked "~" is shown and not checked.
 and calls back from it, w16's runs on VTD's virtual 8254 and calls back
 through MMSYSTEM as in Standard mode (docs/notes/timer-handover.md). The
 callback's flags, stack and caller (masked), and the timings (oneshot,
-periodic, nest, stime, rate, context, tod, child, period steps, and how
-many of the event section's 1, 2 and 10 ms one-shot events came before
-they were killed: 3.1's 1, w16's 2 under load) are then shown, not
-checked; every other line and measurement is checked as in Standard
-mode.
+periodic, nest, stime, rate, context, tod, child, period steps) are
+then shown, not checked; every other line and measurement is checked as
+in Standard mode.
 
 usage: tcmp.py [-3] MS.log W16.log
 Exit status 0 when everything checked agrees.
@@ -224,10 +222,6 @@ def main():
     if args and args[0] == '-3':
         ENH = True
         args = args[1:]
-        # the event section's one-shot events of 1, 2 and 10 ms: how many
-        # came before they were killed (3.1's VTDAPI: 1; w16's on VTD's
-        # virtual 8254: 1, 2 under load)
-        MASKS.append((re.compile(r'^slot 1 calls: \d+$'), 'slot 1 calls: (n)'))
         MASKS.append((re.compile(r'^  flags [0-9A-F]{4} \(IF (\d) DF (\d)\).* task (\w+) depth (\d+)$'),
                       r'  flags (IF \1 DF \2) task \3 depth \4'))
         # a set from a callback: its structure is on the callback's stack

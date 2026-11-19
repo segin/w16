@@ -386,14 +386,15 @@ static void sec_event(void)
     lg("== event");
     slot(1, 0, 0);
     for (i = 0; i < sizeof d / sizeof d[0]; i++) {
+        /* killed at once, before anything is logged: whether an event of
+           1-10 ms came while the log was written was timing (w16's at the
+           first interrupt after its time, 3.1's a period later) */
         id = setev(d[i], 0, 1, TIME_ONESHOT);
+        r = id ? timeKillEvent(id) : 0;
         lg("timeSetEvent(%u, 0, oneshot) = %s", d[i], (LPSTR)(id ? "id" : "0"));
-        shim();
-        if (id) {
-            r = timeKillEvent(id);
+        if (id)
             lg("timeKillEvent = %u", r);
-            shim();
-        }
+        shim();
     }
     for (i = 0; i < sizeof res / sizeof res[0]; i++) {
         id = setev(5000, res[i], 1, TIME_PERIODIC);
