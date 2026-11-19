@@ -1,0 +1,5 @@
+/*
+ * sb16.rc - SB16.DRV's resources: the version resource written by
+ * tools/mkver.py (an installable sound driver).
+ */
+1 16 MOVEABLE PURE "sb16ver.bin"

@@ -2364,6 +2364,40 @@ install-tree: $(W16SYS)/TIMER.DRV
 $(W16SYS)/TIMER.DRV: $(DOS)/TIMER.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- SB16.DRV: w16's Sound Blaster 16 driver, module SB16 (drivers/sb16;
+# README.md there; ARCHITECTURE.md 24). Large model, SS != DS (it runs on
+# its callers' stacks and at interrupt time); not in the default
+# SYSTEM.INI (assets/README.TXT says how to enable it) ----
+SB16CFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=SB_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+SB16OBJS := $(B)/sb16/sb16a.o $(B)/sb16/sb16.o $(B)/sb16/wave.o $(B)/sb16/midi.o $(B)/sb16/aux.o \
+            $(B)/gdi/i4.o
+$(B)/sb16/%.o: drivers/sb16/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/sb16/%.o: drivers/sb16/%.c drivers/sb16/sb16.h
+	@mkdir -p $(@D)
+	$(WCC) $(SB16CFLAGS) -fo=$@ $<
+$(B)/sb16/sb16ver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 1.0.0.0 --type 3 --subtype 9 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Sound Blaster 16 driver" \
+	    FileVersion=1.0 InternalName=sb16.drv \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=sb16.drv ProductName=w16 ProductVersion=3.10
+$(B)/sb16/sb16.res: drivers/sb16/sb16.rc $(B)/sb16/sb16ver.bin
+	@mkdir -p $(@D)
+	cd $(B)/sb16 && $(WRC) -q -r -bt=windows -fo=sb16.res $(CURDIR)/drivers/sb16/sb16.rc
+$(DOS)/SB16.DRV: $(SB16OBJS) $(B)/sb16/sb16.res drivers/sb16/sb16.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/sb16/sb16.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/sb16/sb16.map option resource=$(B)/sb16/sb16.res file { $(SB16OBJS) }
+	python3 tools/nemark.py $@ 3.10 8309 08
+dos: $(DOS)/SB16.DRV
+install-tree: $(W16SYS)/SB16.DRV
+$(W16SYS)/SB16.DRV: $(DOS)/SB16.DRV
+	@mkdir -p $(@D)
+	cp $< $@
 # ---- SN1.EXE: the sound driver observed (tests/apps/sn1.c; run by
 # tests/soundprobe.sh with Windows 3.1's MMSOUND.DRV and with w16's)
 $(B)/tests/sn1.o: tests/apps/sn1ref.h tests/apps/tklog.h
@@ -2838,8 +2872,10 @@ $(DOS)/MMC.DLL: $(MMCOBJS) tests/apps/dll.lnk tests/mmsystem/mmc.lnk
 	    option map=$(B)/mmsystem/tests/mmc.map file { $(MMCOBJS) }
 # MMSYSLOG.DLL and the logging pass-through device drivers MDS*.DRV
 # (tests/mmsystem/mdl.c, mds.c): the variants differ in module name and
-# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux, C MCI)
-MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1 MDSC1 MDSC2 MDSC3 MDSC4
+# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux, C MCI,
+# X all: SB16.DRV)
+MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1 MDSC1 MDSC2 MDSC3 MDSC4 \
+           MDSX1 MDSX2 MDSX3
 mmprobes: $(DOS)/MMSYSLOG.DLL $(patsubst %,$(DOS)/%.DRV,$(MDSVARS))
 $(B)/mmsystem/tests/mdl.o: tests/mmsystem/mdl.c tests/mmsystem/mdl.h
 	@mkdir -p $(@D)
@@ -2854,7 +2890,8 @@ $(DOS)/MMSYSLOG.DLL: $(MDLOBJS) tests/apps/dll.lnk tests/mmsystem/mdl.lnk
 	    option map=$(B)/mmsystem/tests/mdl.map file { $(MDLOBJS) }
 MDSOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mds.o $(B)/mmsystem/tests/mdsent.o
 $(DOS)/MDS%.DRV: $(MDSOBJS) tests/apps/dll.lnk tests/mmsystem/mds.lnk tests/mmsystem/mdsw.lnk \
-	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk tests/mmsystem/mdsc.lnk
+	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk tests/mmsystem/mdsc.lnk \
+	    tests/mmsystem/mdsx.lnk
 	@mkdir -p $(@D)
 	v=$$(echo $* | cut -c1 | tr A-Z a-z); \
 	$(WLINK) @tests/mmsystem/mds$$v.lnk option modname=MDS$* name $@ libpath $(WATCOM)/lib286/win \
