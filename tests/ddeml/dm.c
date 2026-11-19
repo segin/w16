@@ -23,6 +23,7 @@
  * that string, created with DdeCreateStringHandle the first time it is
  * named; 0 is NULL; cN/lN/dN are the named handles):
  *   start X | startx X | quit X | wait MS | settle MS | raw on|off
+ *   iwatch on|off (the raw window logs every INITIATE it receives)
  *   run CMDLINE | wins | cls | inst N (select DDEML instance slot N)
  *   init [AFCMD-hex] | uninit | lasterr | reinit AFCMD-hex
  *   hsz STR [CP] | freehsz STR | keephsz STR | qstr STR [MAX] | cmp S1 S2
@@ -63,7 +64,7 @@ extern BOOL FAR PASCAL InitApp(HINSTANCE);
 static HINSTANCE inst;
 static HWND me, rawwnd, ctl;            /* ctl: A's window (in B..) */
 static char letter = 'A';
-static BOOL rawvals, done;
+static BOOL rawvals, done, iwatch;
 static DWORD settle = 100;
 
 /* ---- small helpers ---- */
@@ -625,6 +626,27 @@ HDDEDATA CALLBACK __export DdeCb3(UINT t, UINT f, HCONV c, HSZ h1, HSZ h2, HDDED
 
 /* ---- monitor ---- */
 
+/* a DDE message's lParam with its global memory handles named (h1..)
+   and its atoms and words as they are */
+static char *lpname(UINT msg, DWORD lp)
+{
+    static char b[48];
+    WORD lo = LOWORD(lp), hi = HIWORD(lp);
+    BOOL hlo = (msg == WM_DDE_DATA || msg == WM_DDE_ADVISE || msg == WM_DDE_POKE) && lo;
+    BOOL hhi = (msg == WM_DDE_EXECUTE || msg == WM_DDE_ACK) && hi && hi < 0xC000;
+    char l[24], h[24];
+    if (hlo)
+        lstrcpy(l, sname('h', lo));
+    else
+        wsprintf(l, "%04X", lo);
+    if (hhi)
+        lstrcpy(h, sname('h', hi));
+    else
+        wsprintf(h, "%04X", hi);
+    wsprintf(b, "%s:%s", (LPSTR)h, (LPSTR)l);
+    return b;
+}
+
 static void monitor(HDDEDATA hd, DWORD ev)
 {
     DWORD cb;
@@ -669,17 +691,29 @@ static void monitor(HDDEDATA hd, DWORD ev)
     case MF_SENDMSGS:
     case MF_POSTMSGS: {
         MONMSGSTRUCT FAR *m = (MONMSGSTRUCT FAR *)p;
-        P("%c mon %s cb=%u size=%lu to=%w msg=%x wp=%w lp=%lx", letter,
+        P("%c mon %s cb=%u size=%lu to=%w msg=%x wp=%w lp=%s", letter,
           (LPSTR)(ev == MF_SENDMSGS ? "SEND" : "POST"), m->cb, cb, m->hwndTo, m->wMsg,
-          (WORD)m->wParam, (DWORD)m->lParam);
+          (WORD)m->wParam, (LPSTR)lpname(m->wMsg, m->lParam));
         break;
     }
     case MF_CALLBACKS: {
         MONCBSTRUCT FAR *m = (MONCBSTRUCT FAR *)p;
-        P("%c mon CB cb=%u size=%lu type=%s fmt=%s conv=%s hsz1=%s hsz2=%s data=%s d1=%lx d2=%lx ret=%lx",
+        /* handles by name, as everywhere in the log: dwData1 of a
+           connect (a CONVCONTEXT address), a returned data handle */
+        char d1[40], ret[40];
+        lstrcpy(d1, d1name(m->wType, m->dwData1));
+        if (rawvals)
+            wsprintf(d1 + lstrlen(d1), "[%08lX]", m->dwData1);
+        /* data handles as the callback lines name them: a new name
+           each (libraries reuse their handles differently) */
+        if ((m->wType & XCLASS_DATA) && m->dwRet)
+            lstrcpy(ret, snew('d', m->dwRet));
+        else
+            wsprintf(ret, "%08lX", m->dwRet);
+        P("%c mon CB cb=%u size=%lu type=%s fmt=%s conv=%s hsz1=%s hsz2=%s data=%s d1=%s d2=%lx ret=%s",
           letter, m->cb, cb, (LPSTR)xtname(m->wType), (LPSTR)fmtname(m->wFmt),
           (LPSTR)sname('c', (DWORD)m->hConv), (LPSTR)hszname(m->hsz1), (LPSTR)hszname(m->hsz2),
-          (LPSTR)sname('d', (DWORD)m->hData), m->dwData1, m->dwData2, m->dwRet);
+          (LPSTR)snew('d', (DWORD)m->hData), (LPSTR)d1, m->dwData2, (LPSTR)ret);
         break;
     }
     case MF_CONV: {
@@ -773,6 +807,9 @@ LRESULT CALLBACK __export RawWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     HWND from = (HWND)wp;
     switch (msg) {
     case WM_DDE_INITIATE:
+        if (iwatch)                     /* which INITIATEs reach this window */
+            P("%c   raw window got INITIATE from %w app=%x topic=%x", letter, from, LOWORD(lp),
+              HIWORD(lp));
         if (serving && from != w && atommatch(LOWORD(lp), rapp) && atommatch(HIWORD(lp), rtopic)) {
             addpart(from);
             SendMessage(from, WM_DDE_ACK, (WPARAM)w,
@@ -1019,6 +1056,8 @@ static void step(char *l)
         pump(num(tok(&a, NULL)), NULL);
     } else if (eq(w, "settle")) {
         settle = num(tok(&a, NULL));
+    } else if (eq(w, "iwatch")) {
+        iwatch = eq(tok(&a, NULL), "on");
     } else if (eq(w, "raw")) {
         rawvals = eq(tok(&a, NULL), "on");
     } else if (eq(w, "run")) {
