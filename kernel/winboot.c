@@ -111,6 +111,8 @@ static void diag_init(void)
    to BOOTLOG.TXT as it is, also after the boot. */
 void KAPI DiagOutput(const char FAR *s)
 {
+    if (!s)                     /* (KERNEL audit, L15) */
+        return;
     diag_write(s);
 }
 
