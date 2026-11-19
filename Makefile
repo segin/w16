@@ -2398,6 +2398,16 @@ install-tree: $(W16SYS)/SB16.DRV
 $(W16SYS)/SB16.DRV: $(DOS)/SB16.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+# SBP.EXE, its playing probe (tests/sb16/sbp.c; tests/sb16/sbaudio.sh)
+dos: $(DOS)/SBP.EXE
+$(B)/sb16/tests/sbp.o: tests/sb16/sbp.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+SBPOBJS := $(B)/tests/start.o $(B)/sb16/tests/sbp.o $(B)/gdi/i4.o
+$(DOS)/SBP.EXE: $(SBPOBJS) tests/apps/app.lnk tests/sb16/sbp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/sb16/sbp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/sb16/tests/sbp.map file { $(SBPOBJS) }
 # ---- SN1.EXE: the sound driver observed (tests/apps/sn1.c; run by
 # tests/soundprobe.sh with Windows 3.1's MMSOUND.DRV and with w16's)
 $(B)/tests/sn1.o: tests/apps/sn1ref.h tests/apps/tklog.h
