@@ -71,6 +71,11 @@
 #              win386close.txt; a task's exit reaches V86 DOS), against
 #              Microsoft's WIN386.EXE: every shot 0 pixels (File Manager's
 #              file total, Notepad's caret left out)
+#   win386dos  w16's WIN386.EXE: the MS-DOS Prompt full screen, VER, EXIT
+#              (tests/scripts/input/dosbox386v.txt, DOSBox-X on its own DOS,
+#              WIN's output not redirected), against Microsoft's WIN386.EXE:
+#              every shot 0 pixels but the banner's "w16" rows and the
+#              blinking cursor
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
