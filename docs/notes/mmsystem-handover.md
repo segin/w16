@@ -183,8 +183,9 @@ passed when run again alone: a timing flake of w16's TIMER.DRV, not
 of layer 3, to look at).
 
 Not done (23.5): a joystick driver,
-QuickTime's sound (qtplay runs without a wave driver), w16's MMSOUND.DRV
-handing MessageBeep to sndPlaySound as 3.1's does, Creative's drivers.
+QuickTime's sound (qtplay runs without a wave driver), Creative's
+drivers. (w16's MMSOUND.DRV handing MessageBeep to sndPlaySound: done,
+below.)
 
 ## Layer 4 (MCI): done
 
@@ -387,5 +388,20 @@ when run again alone with quicktime.
 All four layers are done. Left (ARCHITECTURE.md 23.5): MMTASK's end
 (when 3.1's task really ends: record KERNEL's task switches around it, or
 TOOLHELP's NotifyRegister in MMC.DLL, to see what 3.1's MMTASK does after
-the function returns), a joystick driver, w16's MMSOUND.DRV handing
-MessageBeep to sndPlaySound, Creative's drivers.
+the function returns), a joystick driver, Creative's drivers.
+
+## MessageBeep through MMSYSTEM (MMSOUND.DRV, 2026-11-19)
+
+Run name `w16-beep`. 3.1's rules, w16's code and the probe are in
+`drivers/sound/README.md` ("The beep", "MMSYSTEM's timer"); the probe is
+SN1's parts M N I R L Y Z with KRNLOG.DLL (`tests/apps/krnlog.c`: the
+driver's imports of KERNEL renamed, so its GetModuleHandle and
+GetProcAddress calls and, through wrapped entries, its sndPlaySound,
+timeSetEvent and timeKillEvent calls are recorded), `tests/soundprobe.sh
+beep` (six configurations), boot-test case `soundbeep`. In short: DoBeep
+finds MMSYSTEM by GetModuleHandle (also OpenSound), fetches ordinals 2,
+602 and 603 once, sends sndPlaySound(name by bits 4-7 of the type,
+SND_ASYNC), speaker for FFFFh or a FALSE answer; and plays SOUND API
+notes on a 5 ms timeSetEvent once MMSYSTEM is known. Found on the way:
+after FreeLibrary of an MMSYSTEM a program loaded by LoadLibrary (not a
+boot driver), Microsoft's MMSYSTEM stays loaded and w16's unloads (23.5).
