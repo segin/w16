@@ -303,6 +303,20 @@ Observed on 3.1 (explore1-11; raw logs in build/mci, not kept):
   caption = the device token, text = the error, MB_ICONHAND, OK (button ID
   2), no owner; returns TRUE/FALSE.
 
+## QuickTime's player on the tree alone (2026-11-18)
+
+A user closed QuickTime's Movie Player on w16's install tree alone
+(w16's MMSYSTEM, MMTASK, TIMER.DRV and TOOLHELP, booted with
+`tests/dropin.sh -T build/w16`, so KRNL286) and Windows ended with
+"Standard Mode: Fault in MS-DOS Extender". Not this module's: with
+Microsoft's MMSYSTEM and MMTASK, its TIMER.DRV, all three, or its
+TOOLHELP put back the fault was the same; it was KERNEL's free of a
+selector still in FS (`docs/notes/quicktime-handover.md`, "Closing the
+player"; ARCHITECTURE.md 9.2). `tests/qtplay.sh` now closes the player
+in every run (mmsystem@qt among them), and `-T 286|386` runs it on the
+tree alone (boot-test parts quicktime@tree, quicktime@tree386). The
+tree's default SYSTEM.INI no longer says MMSYSTEM.DLL is not w16's.
+
 ## Next
 
 All four layers are done. Left (ARCHITECTURE.md 23.5): MMTASK's end

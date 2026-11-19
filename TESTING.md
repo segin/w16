@@ -130,11 +130,14 @@ MDSC*.DRV, both MMSYSTEMs compared; with `$W16_QTDIR/ref-installed/c`, a
 QuickTime-installed drive, also QuickTime's MCIQTW.DRV; one run alone:
 `tests/mmsystem/mcirun.sh OUT ms|w16 SCRIPT [plain|shim|qt]`; part
 `mci`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
-its sample movie played on w16's tree laid over 3.1, against stock 3.1;
+its sample movie played on w16's tree laid over 3.1, against stock 3.1,
+then the player closed, reopened and ended with File > Exit and Alt+F4
+and Windows ended (the close sequence); `-T 286` or `-T 386`: on w16's
+install tree alone as C:\W16 instead, under its KRNL286 or KRNL386;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case
-`quicktime`),
+`quicktime`, parts `over`, `tree` and `tree386`),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
 Windows 3.1, booting again past the cases that end the task; makes the

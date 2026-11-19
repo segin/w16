@@ -102,6 +102,110 @@ first. With all four fixed the movie plays under w16 as under 3.1: the
 same window in the same place, the same frames, the last one
 pixel-identical, the same length.
 
+## Closing the player (2026-11-18)
+
+Task: a user's report: on w16's install tree alone (`make install-tree`,
+booted as C:\W16 with `tests/dropin.sh -T build/w16`, nothing of
+Microsoft's; w16's MMSYSTEM, MMTASK, TIMER.DRV and TOOLHELP since
+ARCHITECTURE.md 23), QuickTime installed from QTINSTAL.EXE, the sample
+movie played in the Movie Player, closing the player ended Windows:
+"Standard Mode: Fault in MS-DOS Extender. EC=239C CS=0070 IP=0E58
+AX=0001 BX=239F ... DS=0000 ES=0000 SS=0068 SP=7266". Run names on
+installation-05: `w16-qtclose` (and `w16-qtclose-base` for master
+2f15a87 with the new test); the QuickTime-installed tree kept for quick
+runs in `/mnt/build/w16-qtclose-data/inst`.
+
+**Which kernel.** `tests/dropin.sh -T` deletes KRNL386.EXE unless `-3`
+is given, so DOSX ran the tree's KRNL286: the user's setup is KRNL286
+(Standard mode). The same register dump came back in the first headless
+run (SP=7266, SI=0B58, error code a selector, AX=0001 BX=it + 3).
+
+**The cause.** IP 0E58 in w16's DOSX is the POP FS of its call gate's
+exit (`nasm -l` listing; `dosx/ring0.inc` gate_exit), and AX=0001,
+BX=the selector, DS=ES=0 is KERNEL's INT 31h 0001h (free descriptor;
+KERNEL's `call()` zeroes DS and ES). A scratch DOSX recording the ring-3
+caller of a 0001h whose FS or GS held the selector: KERNEL:1 0759
+(`_dpmi31_host`). A scratch KERNEL ring of every `dpmi_free_desc` (the
+selector, FS, GS, the task, the return address), printed in KERNEL's
+fault report under Microsoft's DOSX (which faulted the same way, at
+005B:0B58, err = the selector, so KERNEL's report ran): the Movie
+Player's task (1707) ending, its blocks freed one after another by the
+task clean-up (`free_block` and `merge_next` in `kernel/global.c`, the
+KRNL286 heap) with FS = 217F all along, the player's last FS; then 217F
+itself, and the fault. QuickTime's code leaves one of its blocks in FS
+when the player ends.
+
+Bisection (tree alone, KRNL286, one Microsoft file put back): MMSYSTEM +
+MMTASK, TIMER.DRV, all three, TOOLHELP, DOSX: all fault; Microsoft's
+KRNL386 (`-K`): fine. The tree under w16's KRNL386 (`-3`), w16's DOSX or
+Microsoft's: fine (its GlobalFree and task clean-up free through
+`global386.c`, and the block was not in FS there). The overlay of the
+first part (w16's tree over 3.1, KRNL386): fine; the overlay under w16's
+KRNL286: faulted before the fix (as the tree), fine after.
+
+**3.1.** Its KERNEL never gives a freed selector back to the DPMI host:
+Free_Sel puts it on KERNEL's own free list (Pietrek ch. 2). A scratch DRP
+(`galloc` with a LAR of the freed selector added; Microsoft's KRNL286 and
+KRNL386): after GlobalFree the selector's LAR fails on both; KRNL286
+leaves it in FS and GS ("kept"), KRNL386 returns 0 (as before). So 3.1
+has the same dead selector in FS, but nothing reloads it on its way. On
+stock 3.1 with Microsoft's KRNL286 (KRNL386 removed, the reference
+install with QuickTime) the player does not even start: "PLAYER caused a
+General Protection Fault in module KRNL286.EXE at 0001:78A1", then
+QTNOTIFY (KRNL286 0001:37D9) and PROGMAN (GDI 0001:48D4), and Windows
+ends; QuickTime needs KRNL386 on 3.1. On stock 3.1 (KRNL386) the close
+sequence below lives through every step.
+
+**The fix** (`kernel/dpmi.c` dpmi_free_desc, every KERNEL free goes
+through it): on a 386, FS or GS holding the selector being freed is
+zeroed before INT 31h 0001h. The one difference from 3.1 it makes:
+KRNL286's GlobalFree of a block held in FS returns FS = 0, not the dead
+selector. w16's DOSX is left as Microsoft's is (it does not zero them in
+0001h either).
+
+**The close sequence now, on w16 as on 3.1 (KRNL386):** after the
+movie's end, File > Close (the movie window goes, the empty player
+stays), File > Open (the Open box, in the Windows directory, SAMPLE.MOV
+listed), SAMPLE.MOV opened again (the black first frame), Space twice
+(plays, pauses), File > Exit (Program Manager with the QuickTime group
+active, Movie Player selected), Return (the player again, empty), File >
+Open SAMPLE.MOV, Space, Alt+F4 (Program Manager, the same screen as after
+File > Exit), Alt+F4 and Return (Windows ends; w16 "back to DOS, code
+0000"). Tree alone under KRNL286 and KRNL386, the overlay under KRNL286
+and KRNL386: the same steps, the same windows.
+
+**Two more differences the sequence showed, both fixed.** With the
+crash gone, the close sequence's screens against 3.1's (w16's tree over
+3.1, and with only w16's MMSYSTEM, MMTASK and TIMER.DRV over 3.1: all of
+those 0 pixels off):
+- *The Open box's directory.* The player started by the installer's Play
+  Sample opened its Open box in C:\TMP on 3.1, in C:\WINDOWS (C:\W16) on
+  w16. SH5 (logs its directory) from Program Manager's File > Run, with
+  each of w16's PROGMAN, SHELL and KERNEL in turn: w16's PROGMAN alone
+  made the difference. 3.1's File > Run starts a program named by a full
+  path in that directory, a bare name in Program Manager's own; the
+  installer (C:\TMP\QTINSTAL.EXE) then passes C:\TMP on to the player.
+  Fix: `shell/progman/dialogs.c` pm_exec (ShellExecute's directory);
+  boot-test part `runassoc@dir`; ARCHITECTURE.md 13.4 (File > Run's
+  directory).
+- *The reopened movie's place.* File > Close then File > Open of the same
+  movie: 3.1 put its window one cascade step (20 pixels here) lower than
+  the first, w16 at the same place; a new player's first File > Open
+  agreed. `trace=` of PLAYER's and QTIM's USER calls (CreateWindow,
+  ShowWindow, MoveWindow, SetWindowPos, SendMessage) with Microsoft's
+  USER and w16's: the same calls; PLAYER's WM_MDICREATE asks for the
+  default place, and Microsoft's USER on w16's KERNEL gave 3.1's. Probe
+  US28 (`tests/apps/us28.c`): 3.1's MDI client counts every child it has
+  made (destroyed ones and ones placed by the program too) and puts the
+  i-th at i steps modulo the cascade's length; w16 used the number of
+  children there. Fix: `user/mdi.c` mdi_create; US28 in boot-test case
+  `mdimax`; ARCHITECTURE.md 10.3 (MDI).
+
+Seen, not followed (not the player's): in 3.1's Exit Windows box
+(Program Manager, after the player's second run) the QuickTime group
+window behind it is drawn empty (no title, no icons); w16's Program
+Manager shows it whole.
+
 ## Debugging aids added (docs/w16-settings.md)
 
 - `[w16] hangwatch=SECONDS`: the boot watchdog kept running after the
@@ -126,6 +230,19 @@ pixel-identical, the same length.
   hangwatch ended Windows); with the fixes it passes (the movie's area
   134x176 at the same place, its last frame 0 pixels off, about 12 s on
   both).
+- Since 2026-11-18 every `tests/qtplay.sh` run goes on after the movie's
+  end with the close sequence (`tests/scripts/input/qtplay.txt`; the
+  script's @WINDIR@ is each side's Windows directory) and checks on both
+  sides: no fault or hangwatch report, Program Manager back the same after
+  File > Exit and after Alt+F4, Windows ended by Exit Windows (WIN's
+  WINEXIT or w16's "back to DOS, code 0000"), and the movie's window
+  opened again at 3.1's place. `-T 286|386` runs the w16 side on the
+  install tree alone as C:\W16 (QuickTime installed into it the same
+  way). Boot test: `quicktime@over` (as before), `quicktime@tree`
+  (KRNL286: the user's setup), `quicktime@tree386`; the close sequence
+  also runs in `timer@qt`, `mmsystem@qt`, `toolhelp@qt`. On master
+  2f15a87 with the new test (run `w16-qtclose-base`): `quicktime@tree`
+  fails with "Standard Mode: Fault in MS-DOS Extender." on the w16 side.
 - `tests/drv/drun.sh` (boot-test case `drivers`): DRP's log on
   Microsoft's USER and on w16's, plain, with DRT.DLL a boot driver, and
   under KRNL386: identical.
