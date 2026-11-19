@@ -1021,11 +1021,18 @@ static void envcase(void)
     p[0] = 'P'; p[1] = 'A'; p[2] = 'T'; p[3] = 'H';
 }
 
+extern WORD __cdecl get_0040h(void);     /* start.asm: __0040H */
+
+static WORD bios_tick(void)
+{
+    return *(WORD FAR *)MAKELP(get_0040h(), 0x6C);
+}
+
 /* L31: GetTempFileName with drive 80h; a directory with the next name */
 static void tempname(void)
 {
     char a[160], b[160], c[160], d[160];
-    WORD na, nb, nc, r;
+    WORD na, nb, nc, r, i;
     step("tempname");
     a[0] = 0;
     r = GetTempFileName(0x80, "TKP", 0x1234, a);
@@ -1033,24 +1040,38 @@ static void tempname(void)
     obs("tempname: 80 [0]", (BYTE)a[0]);
     obs("tempname: 80 [1]", (BYTE)a[1]);
     obs("tempname: 80 is ~", a[0] == '~');
-    na = GetTempFileName(0, "TKQ", 0, a);
-    nb = GetTempFileName(0, "TKQ", 0, b);
-    obs("tempname: made", na && nb);
-    obs("tempname: 2nd is next", nb == na + 1);
-    obs_env("tempname: a", na);
-    obs_env("tempname: b", nb);
-    GetTempFileName(0, "TKQ", nb + 1, d);           /* (no file made) */
-    r = dos_path(0x3900, d);
-    obs_env("tempname: md", r);
-    nc = GetTempFileName(0, "TKQ", 0, c);
-    obs_env("tempname: c", nc);
-    obs("tempname: 3rd after dir",
-        nc == 0 ? 0 : nc == nb + 1 ? 1 : nc == nb + 2 ? 2 : 3);
-    dos_path(0x3A00, d);
-    dos_path(0x4100, a);
-    dos_path(0x4100, b);
-    if (nc)
-        dos_path(0x4100, c);
+    /* unique 0 takes its number from the clock (3.1 and w16 alike): the
+       three calls must see the same time, else the next one starts
+       elsewhere and misses the file or directory before it. A run with
+       a timer tick in it, or whose third number is unrelated to the
+       second (the clock moved), is done again (at most 8 times) */
+    for (i = 0; ; i++) {
+        WORD t0 = bios_tick(), cls, moved;
+        na = GetTempFileName(0, "TKQ", 0, a);
+        nb = GetTempFileName(0, "TKQ", 0, b);
+        GetTempFileName(0, "TKQ", nb + 1, d);       /* (no file made) */
+        r = dos_path(0x3900, d);
+        nc = GetTempFileName(0, "TKQ", 0, c);
+        cls = nc == 0 ? 0 : nc == nb + 1 ? 1 : nc == nb + 2 ? 2 : 3;
+        moved = bios_tick() != t0 || nb != na + 1 || cls == 3;
+        dos_path(0x3A00, d);
+        dos_path(0x4100, a);
+        dos_path(0x4100, b);
+        if (nc)
+            dos_path(0x4100, c);
+        if (moved && i < 7) {
+            obs_env("tempname: run again (clock)", i + 1);
+            continue;
+        }
+        obs("tempname: made", na && nb);
+        obs("tempname: 2nd is next", nb == na + 1);
+        obs_env("tempname: a", na);
+        obs_env("tempname: b", nb);
+        obs_env("tempname: md", r);
+        obs_env("tempname: c", nc);
+        obs("tempname: 3rd after dir", cls);
+        break;
+    }
 }
 
 /* L32: OF_SEARCH with a path that does not hold the file */
