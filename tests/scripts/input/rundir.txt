@@ -1,0 +1,47 @@
+; tests/boottest.sh case runassoc, part dir: Program Manager's File > Run
+; starts a program named by a full path in its directory, a bare name in
+; Program Manager's own (SH5.EXE logs its directory to C:\SH5.TXT; copies
+; in C:\TMP, C:\TMP\SUB and the Windows directory as SH5X.EXE). Found
+; with QuickTime: its installer, run as C:\TMP\QTINSTAL.EXE, starts the
+; Movie Player, whose Open box begins in C:\TMP on 3.1.
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type C:\TMP\SH5.EXE a b
+sleep 0.5
+key Return
+settle 20 3
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type SH5X.EXE c
+sleep 0.5
+key Return
+settle 20 3
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type C:\TMP\SUB\SH5.EXE d
+sleep 0.5
+key Return
+settle 20 3
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type SH5X e
+sleep 0.5
+key Return
+settle 20 3
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type c:\tmp\sub\sh5 f
+sleep 0.5
+key Return
+settle 20 3
+shot 01-end

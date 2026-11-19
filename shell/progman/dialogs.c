@@ -104,7 +104,7 @@ static void exec_error(HWND owner, BOOL run, int ids, const char FAR *arg)
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized,
              BOOL run)
 {
-    LPSTR line, params;
+    LPSTR line, params, rdir = NULL;
     UINT r;
     int show = minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL;
 
@@ -128,7 +128,33 @@ BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimize
         ;
     if (*params)
         *params++ = 0;
-    r = (UINT)ShellExecute(owner, NULL, line, *params ? params : NULL, NULL, show);
+    /* File > Run: a program named by a full path starts in its directory
+       (Windows 3.1, probe SH5 run from File > Run: "C:\TMP\SH5.EXE a b"
+       in C:\TMP, "c:\tmp\sub\sh5 f" in C:\TMP\SUB; a bare "SH5X.EXE"
+       found in the Windows directory in Program Manager's own directory,
+       C:\WINDOWS, before and after those, so that stays). QuickTime's
+       installer, run as C:\TMP\QTINSTAL.EXE, starts its Movie Player,
+       whose Open box then begins in C:\TMP (tests/qtplay.sh).
+       ShellExecute's directory is the started program's and is left
+       again (shelldll/exec.c). UNVERIFIED: a relative path with a
+       directory ("SUB\X.EXE"), and a document. */
+    if (run && !(dir && dir[0]) && (line[0] == '\\' || (line[0] && line[1] == ':'))) {
+        LPSTR p, slash = NULL;
+        for (p = line; *p; p++)
+            if (*p == '\\')
+                slash = p;
+        if (slash) {
+            UINT n = (UINT)(slash - line);
+            if (n == 0 || (n == 2 && line[1] == ':'))
+                n++;                    /* a root keeps its backslash */
+            rdir = s_dup(line);
+            if (rdir)
+                rdir[n] = 0;
+        }
+    }
+    r = (UINT)ShellExecute(owner, NULL, line, *params ? params : NULL, rdir, show);
+    if (rdir)
+        mem_free(rdir);
     if (r == 31) {
         /* no association (SE_ERR_NOASSOC): nothing starts. WinExec would
            hand the document to WINOLDAP and DOS would run it as a .COM
