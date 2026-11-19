@@ -22,6 +22,8 @@
  *   mci STRING          mciSendString(STRING) with the probe's window;
  *                       logs the answer and the returned string
  *   snd FILE            sndPlaySound(FILE, SND_SYNC); logs the answer
+ *   config              the driver of [drivers] wave= opened with OpenDriver,
+ *                       DRV_QUERYCONFIGURE and DRV_CONFIGURE sent (its dialog)
  * Sources: the Multimedia Programmer's Guide (the wave, MIDI, MMIO and
  * MCI functions, the RIFF WAVE layout); the probe only calls them.
  */
@@ -400,7 +402,15 @@ int __cdecl __far tmain(void)
             rec(ms, rate, bits, (WORD)num(&p, 0));
         } else if (is(cmd, "notes"))
             notes();
-        else if (is(cmd, "snd")) {
+        else if (is(cmd, "config")) {
+            HDRVR d = OpenDriver("wave", NULL, 0);
+            lg("config: OpenDriver(wave) = %s, DRV_QUERYCONFIGURE = %ld", (LPSTR)(d ? "h" : "0"),
+               d ? SendDriverMessage(d, DRV_QUERYCONFIGURE, 0, 0) : 0L);
+            if (d) {
+                lg("  DRV_CONFIGURE = %ld", SendDriverMessage(d, DRV_CONFIGURE, (LPARAM)(WORD)hwnd, 0));
+                lg("  CloseDriver = %ld", CloseDriver(d, 0, 0));
+            }
+        } else if (is(cmd, "snd")) {
             char *fn = word(&p);
             lg("snd %s = %u", (LPSTR)fn, sndPlaySound(fn, SND_SYNC));
         } else if (is(cmd, "mci")) {

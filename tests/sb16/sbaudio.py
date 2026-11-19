@@ -225,19 +225,30 @@ def dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 
-def align(cap, ref, start, search):
-    """the offset into cap (near start) where ref fits best"""
-    w = min(len(ref), 3000)
-    r = ref[:w]
-    best, bo = None, start
-    for step, lo, hi in ((8, start - search, start + search), (1, None, None)):
+def align(cap, ref, start, search, rate):
+    """the offset into cap where ref[0] lies: the piece's start less where
+    the reference itself starts to sound (the same rule as pieces()),
+    refined within SEARCH samples by the normalised correlation of 100 ms
+    around that start, 20 ms of the silence before it included: the
+    attack tells one period of a steady tone from the next (DING.WAV's),
+    and the silence before it a shifted fit (an unnormalised product over
+    the loudest stretch, or from sample 0 over CHIMES.WAV's quiet start,
+    picked the wrong one)"""
+    on = pieces([ref], rate)
+    o0 = on[0][0] if on else 0
+    guess = start - o0
+    p = max(0, o0 - rate // 50)
+    w = min(len(ref) - p, rate // 10)
+    r = ref[p:p + w]
+    best, bo = None, guess
+    for st, lo, hi in ((4, guess - search, guess + search), (1, None, None)):
         if lo is None:
-            lo, hi = bo - 8, bo + 8
-        for o in range(max(0, lo), hi + 1, step):
-            seg = cap[o:o + w]
+            lo, hi = bo - 4, bo + 4
+        for o in range(max(0, lo), hi + 1, st):
+            seg = cap[o + p:o + p + w]
             if len(seg) < w:
                 break
-            v = dot(seg, r)
+            v = corr(seg, r)[0]
             if best is None or v > best:
                 best, bo = v, o
     return bo
@@ -302,7 +313,7 @@ def cmp(cap, d, manifest='manifest.txt'):
                 src = [src[0], src[0]]
             n = int(len(src[0]) * rate / srate)
             ref = [resample(c, srate, rate, n) for c in src]
-            o = align(chans[0], ref[0], s, rate // 30)
+            o = align(chans[0], ref[0], s, rate // 30, rate)
             dur = len(src[0]) / srate * 1000
             got = (e - s) * 1000 / rate
             res = []

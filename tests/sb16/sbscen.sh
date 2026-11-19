@@ -17,7 +17,9 @@
 #          Microsoft's MMSYSTEM and w16's: every screen of w16's as
 #          Microsoft's, and as with Windows 3.1's own SNDBLST2.DRV under
 #          Microsoft's but Sound Recorder's Record button (enabled: the
-#          SB16 records DING.WAV's 22050 Hz, SNDBLST2 does not)
+#          SB16 records DING.WAV's 22050 Hz, SNDBLST2 does not); and
+#          SB16.DRV's configuration dialog opened through USER and
+#          cancelled (tests/scripts/input/sb16cfg.txt)
 #   usage: tests/sb16/sbscen.sh [-o OUTDIR] [dev] [audio] [prog]
 # Exit status 0 when every comparison agrees.
 set -eu
@@ -104,6 +106,22 @@ for p in $parts; do
                 [ "$n" = 0 ] || { [ "$r" = ok ] && r="$g $sn: $n pixels off SNDBLST2's ($d)"; }
             done
         done
+        # the configuration dialog (DRV_CONFIGURE through USER from
+        # SBP.EXE's "config"), cancelled: shown, and answered 0
+        d=$out/prog-config
+        rm -rf "$d"
+        mkdir -p "$d"
+        printf 'config\r\n' > "$d/SBP.TXT"
+        "$root/tests/inputrun.sh" -b 30 -t 150 "$root/tests/scripts/input/sb16cfg.txt" "$d/run" -r \
+            -f "$root/build/dos/SBP.EXE=SBP.EXE" -f "$d/SBP.TXT=SBP.TXT" \
+            -f "$root/build/dos/SB16.DRV=WINDOWS/SYSTEM/SB16.DRV" -i 'boot:shell=C:\SBP.EXE' \
+            -i 'drivers:wave=sb16.drv' -i 'sb16.drv:port=220' -i 'sb16.drv:int=5' \
+            > "$d/run.txt" 2>&1 || true
+        tr -d '\r' < "$d/run/work/c/SBP.LOG" > "$d/sbp.log" 2>/dev/null || : > "$d/sbp.log"
+        if ! grep -q 'DRV_QUERYCONFIGURE = 1' "$d/sbp.log" || ! grep -q '  DRV_CONFIGURE = 0' "$d/sbp.log" ||
+            [ ! -f "$d/run/01-config.png" ]; then
+            [ "$r" = ok ] && r="config: the dialog not shown and cancelled ($d)"
+        fi
         if [ "$r" = ok ]; then
             echo "ok   prog: Sound Recorder, Sound and Media Player over SB16.DRV as over SNDBLST2 (but Sound Recorder's Record button), w16's MMSYSTEM as Microsoft's"
         else
