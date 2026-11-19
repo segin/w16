@@ -2704,11 +2704,19 @@ the same in every run, which w16's does not copy:
   and 109 ms after 55 ms, 150 after 110, 200 after 165, 250 after 220),
   and some under shorter periods at the first interrupt (45 ms at period
   10, 30 at period 1);
-- after a 1 ms periodic event is killed, events set within the next
-  second or so are not called at all (periodic events of 2-25 ms: no call
-  in a second; one-shot events of 10-100 ms: none; a one-shot event and a
-  periodic one set together: neither in 150 ms). With TMS.DRV between
-  MMSYSTEM and the driver the timing shifts and this does not happen.
+- its clock goes back: timeGetTime often reads 55 ms less than a moment
+  before, for one 55 ms period, and then 55 ms more (MMP polling it for
+  3 s with no event or period: 0 to 7 such steps; TPR: a 55 ms step back
+  in 18 to 21 of its 41 waits, in every run after the periodic section's
+  first event, in some runs elsewhere). An unsigned difference from a
+  reading before the step comes out near 2^32. What that did to the
+  tests (2026-11-19): TPR's waits ended at once, which an earlier version
+  of this list took for events not called after a 1 ms periodic event
+  (with waits that take the largest reading, 3.1 calls them all in every
+  run); and SNDBLST2.DRV, which imports timeGetTime, gave up waiting for a
+  playing buffer in WODM_CLOSE in about 1 close in 10 (51-53 ms instead
+  of 369; 3 of 32 under Microsoft's MMSYSTEM, 4 of 32 under w16's), left the buffer undone and answered 3 (MMSYSERR_NOTENABLED) to
+  every open after that.
 
 **386 Enhanced mode.** The driver leaves the timing to VTDAPI.386 (its
 string 2 says so) and answers differently: timeGetDevCaps takes any size
@@ -2757,6 +2765,23 @@ Windows 2.1.2's sample movie on stock 3.1 with only w16's TIMER.DRV
 (`tests/qtplay.sh -t TIMER.DRV`) plays as on 3.1: the same window, the
 last frame 0 pixels off, 12 s on both; the case `quicktime` (the whole
 install tree over 3.1) now uses w16's TIMER.DRV too, and passes.
+
+Reliability (2026-11-19): TPR's waits measured time as an unsigned
+difference of timeGetTime readings, and 3.1's clock steps back (21.2), so
+its waits ended at once in every run in some places and in some runs in
+others; that made `mmsystem@timer` and `timer@s` fail now and then (a
+500 ms one-shot event killed before it came: 0 against w16's 97; TPC's
+40 ms callback ending at once: 98 calls against 60). The waits now take
+the largest reading and the callback counts only steps of 0-10 ms; in 16
+runs of 3.1's after that every checked measurement stayed within
+`tcmp.py`'s bounds of every other (periodic 1 ms: 998 calls in all 16,
+nest: 59 in all 16), and `tcmp.py` now also checks the nest section's depth and
+the waiting one-shot event exactly (44 measurements checked). Under load
+the numbers that follow the host's speed (the clocks' starting points,
+the sampled 8254 period, how much emulated time 6 CMOS seconds hold)
+moved on both sides alike; `tcmp.py` checks them as properties now (its
+header says how), and TPR's event section kills its short one-shot
+events before logging.
 
 ### 21.5 UNVERIFIED, and not done
 
@@ -3134,8 +3159,11 @@ MIDI, aux, joystick and sndPlaySound, 4 MCI, the Media Control Interface
   0, BP over a 0 at the stack's top), its queue holding 64 messages, and
   ends when fn returns. The command tail is empty. mmTaskSignal(h) is
   PostAppMessage(h, WM_USER, 0, 0); mmTaskBlock dispatches window
-  messages and returns the number of the first task message;
-  mmGetCurrentTask is GetCurrentTask.
+  messages and returns the number of the first task message (a signal
+  sent right after mmTaskCreate waits in the new task's queue for it);
+  mmTaskYield lets the other tasks run, also with a message waiting
+  (MMP's explore12: a second task counting its turns ran during 20
+  calls; the message stays queued); mmGetCurrentTask is GetCurrentTask.
 - **Argument sizes** of the undocumented exports: MMDRVINSTALL 8 bytes,
   JOYSETCALIBRATION 26 (the joystick ID and six pointers); MCIPARSECOMMAND
   faults with zeros (UNVERIFIED).
@@ -3203,8 +3231,12 @@ MIDI, aux, joystick and sndPlaySound, 4 MCI, the Media Control Interface
   WHDR_PREPARED itself (7 for a NULL lpData); UNPREPARE: queued 33, not
   prepared 0 without the driver, the driver's 8: WHDR_PREPARED cleared;
   WRITE/ADDBUFFER: queued 33, not prepared 34 (MIDI 64); WRITE clears
-  WHDR_DONE first, ADDBUFFER does not. Closing while buffers play is the
-  driver's business (SNDBLST2 closes, 0). The error texts (string n for
+  WHDR_DONE first, ADDBUFFER does not. Closing with a buffer queued is the
+  driver's business: SNDBLST2 waits for a playing one, sends it back done
+  and closes (0); paused, it answers 33 at once and the handle stays
+  usable (reset, unprepare, close). MMP now tests the paused case only:
+  the wait for a playing buffer runs on 3.1's clock, which steps back
+  (21.2), and failed in about 1 run in 10 under either MMSYSTEM. The error texts (string n for
   error n; MMSYSERR 0-11, WAVERR 32-35, MIDIERR 64-69, taken by calling
   3.1's functions): size 0 answers 0, NULL 9, another number "" and 9.
 - **sndPlaySound** (Programmer's Guide ch. 4; MMP section x): nothing
@@ -3325,7 +3357,13 @@ and QuickTime's MCIQTW behind MDSC; the scripts are
   the caller: 300; "close" of an unknown name: 263.
 - **Yield**: each device starts with MMSYSTEM's yield procedure and data
   VK_CANCEL; mciSetYieldProc refuses NULL; mciDriverYield calls the
-  procedure and answers what it answers. **Helpers**: creator task,
+  procedure and answers what it answers. The procedure leaves queued
+  messages where they are and lets the other tasks run even when one is
+  waiting (explore12). w16's did not until 2026-11-19 (PeekMessage with
+  PM_NOREMOVE alone returns at once then): MCIWAVE's "play ... wait"
+  waits for its MMTASK task by yielding, and with a message in the
+  application's queue it spun for ever (14 of 16 runs of explore7 under
+  load); mmTaskYield had the same fault. **Helpers**: creator task,
   driver data, 0 or FALSE for a bad ID.
 - **mciGetErrorString** reads MMSYSTEM's string table (the texts are
   3.1's: wave and MIDI 0-69, MCI 257-349, device types, modes, time

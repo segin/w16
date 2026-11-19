@@ -119,7 +119,11 @@ MMP's device sections over Windows 3.1's own Sound Blaster and MIDI
 Mapper drivers, expanded from the reference's Setup files, with the
 logging drivers MDS*.DRV between them and MMSYSTEM, both MMSYSTEMs
 compared; `-m` Microsoft's only; `mrun.sh`'s `MRUN_SND` and `MRUN_SHIM`
-for one run; part `dev` of the boot-test case `mmsystem`),
+for one run; part `dev` of the boot-test case `mmsystem`; the probes that
+compare against 3.1's timer must not trust timeGetTime as an unsigned
+difference: Microsoft's TIMER.DRV often steps 55 ms back for one 55 ms
+period, which made `dev` and `timer` fail now and then until
+2026-11-19, ARCHITECTURE.md 21.2 and 21.4),
 `tests/mmsystem/mprog.sh OUT ms|w16 soundrec|sound|midimap|mplayer [-e REFDIR]`
 (Sound Recorder, Control Panel's Sound and MIDI Mapper applets and Media
 Player with real keys over the same drivers; part `prog`),

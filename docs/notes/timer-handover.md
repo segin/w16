@@ -66,11 +66,14 @@ and trace, `TRUN_ARG=K tests/timer/trun.sh OUT ms plain`; ARCHITECTURE.md
   milliseconds and of 8254 counts, against the interrupt counts); the
   same delays give the same results 7 s later in the same run (TPR
   section k), so it is not the absolute time.
-- After a 1 ms periodic event is killed, events set in the next second
-  or so are not called (in plain runs, every run: periodic 2, 5, 10,
-  25 ms got 0 calls in 1 s; one-shot 10-100 ms none; the nest section's
-  two events neither in 150 ms). With TMS between, the timing shifts and
-  the events come.
+- Its clock goes back: timeGetTime often reads 55 ms less than a moment
+  before, for one 55 ms period, then 55 ms more (2026-11-19). This list
+  used to say that after a 1 ms periodic event was killed, events set in
+  the next second were not called: that was TPR's own waits, which took
+  the time as an unsigned difference from their start and so ended at
+  once after such a step. With waits that take the largest reading
+  (tpr.c waitms) and a callback that counts only steps of 0-10 ms (tpc.c
+  CB_SPIN), 3.1 calls every one of those events in every run.
 
 w16's driver keeps exact time across restarts and calls an event at the
 first interrupt after its time: one-shot events within their delay plus
@@ -98,10 +101,47 @@ checks, by the faults above: 14 measurements).
   TIMER.DRV) and `treealone` (the tree's SYSTEM.INI now names
   mmsystem.dll, which the tree lacks: boots as before) passed after it.
 - Microsoft's own runs are not stable against each other under these
-  rules: its dropped and early events fail 14 of the measurements in a
-  second run of its own. The probe therefore waits for a callback (up to
-  3 s) where the section is about what the callback sees, and tcmp.py
-  falls back to the nominal count where 3.1's dropped an event.
+  rules: its early events (and, before the waits were fixed, its
+  "dropped" ones) fail 14 of the measurements in a second run of its
+  own. The probe therefore waits for a callback (up to 3 s, by BIOS
+  ticks) where the section is about what the callback sees, and tcmp.py
+  falls back to the nominal count should 3.1's count be 0.
+- Flakes (2026-11-19, run name `w16-mmflake`): `mmsystem@timer` and
+  `timer@s` failed now and then on 3.1's side: a 500 ms one-shot event
+  killed before it came (TMS's kill record 0 against 97) and the nest
+  section's 40 ms callback ending at once (98 calls against 60). Both
+  were TPR's and TPC's waits ending at once when 3.1's clock stepped back
+  (above). Measured with instrumented copies (not committed): 16 runs of
+  Microsoft's, 41 waits each, 18-21 of them with a 55 ms step back. With
+  the waits fixed, the 16 runs gave the same values throughout but for
+  the shown timings and periodic counts within 1 (998/998, 498-499,
+  198-199, 98-99, 38-39, 18, 9); w16's in 4 runs: 998, 498, 199-200,
+  99, 39, 17, 9; nest 59 against 60-61; nest other calls 14 against 12
+  (shown); tod callbacks 6051-6916 against 6450-6699.
+- Under load (two boot-test runs side by side, load about 29 on 40
+  threads) more numbers moved with the host, on both sides: stime (3.1
+  -59 to -469 ms, w16 -65 to -394), the sampled 8254 period (3.1's own
+  spread 164 counts at 54-55 ms), tod (its 6 CMOS seconds follow the
+  host's clock: 108 BIOS ticks in one run, 110 in another). tcmp.py now
+  checks them as properties (its header: stime -1000..55 ms, pit within
+  half a millisecond, tod's clocks against the same run's timeGetTime). And
+  the event section's one-shot events of 1-10 ms came, on w16, while TPR
+  logged their timeSetEvent (w16's at the first interrupt after their
+  time, 3.1's a period later): TPR now kills them before it logs. In 386
+  Enhanced mode w16's clock (VTD's virtual 8254) took steps of 54 ms
+  under load: the period steps there are shown, as its other timings.
+  The child section asked whether the child's 20 ms event made more than
+  5 calls in 300 ms (w16's in 386 Enhanced mode under load made fewer),
+  and left the child's events running into the next sections (whether
+  its 2000 ms one-shot one had come decided which slots, so which IDs,
+  they got): it now asks whether the event is still called in a second
+  300 ms and kills both events at its end, their records dropped. TMS's
+  TmsDumpTo cleared records made at interrupt time during the dump (the
+  race MMSYSLOG had); it keeps them now. tcmp.py compares DRV_OPEN's
+  string in TMS's record only up to its end (past it: the caller's stack,
+  which differed once).
+- Reliability after these changes: `mmsystem` and `timer` 10 of 10 each,
+  two boot-test runs at a time (docs/notes/mmsystem-handover.md).
 
 ## Left over
 

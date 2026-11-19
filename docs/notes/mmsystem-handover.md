@@ -317,6 +317,71 @@ in every run (mmsystem@qt among them), and `-T 286|386` runs it on the
 tree alone (boot-test parts quicktime@tree, quicktime@tree386). The
 tree's default SYSTEM.INI no longer says MMSYSTEM.DLL is not w16's.
 
+## Flakes of the boot-test case (2026-11-19)
+
+Run names `w16-mmflake`, `w16-mmflake2` (two boot-test loops side by
+side, to load the host as other agents' runs do) and `w16-mmflake3`
+(scenario runs). Four causes: two from 3.1's TIMER.DRV, whose timeGetTime
+often steps 55 ms back for one 55 ms period (ARCHITECTURE.md 21.2; MMP
+polling it 3 s with no event: 0-7 such steps), one in MMSYSLOG (a test
+tool), and one real w16 bug:
+
+- `dev` (sb2w, sb2plain; about half the runs of the part): MMP closed a
+  wave device while its 200 ms buffer played. SNDBLST2's WODM_CLOSE then
+  waits for the buffer (369 ms in good runs); in about 1 close in 10 it
+  gave up after 51-53 ms, left the buffer queued (flags 0012h, MMP's 3 s
+  wait for WHDR_DONE timed out) and answered 3 to every open after that
+  (wave, MIDI), so sb2plain lost everything after section w. Seen under
+  Microsoft's MMSYSTEM as under w16's (32 closes each: 3 and 4). MMP now pauses the device, writes the buffer
+  and closes: SNDBLST2 answers 33 at once in every run, and MMP resets,
+  unprepares and closes as before.
+- `timer` (timer-plain, timer-shim): TPR's waits and TPC's spinning
+  callback (tests/timer) measured time as an unsigned difference, which
+  a step back made huge; and under load, checks of numbers that follow
+  the host's speed: see `docs/notes/timer-handover.md`.
+- `dev` (sb2m) and `mci` (e7), on either side: a WOM_DONE record missing
+  from one log. MMSYSLOG's MlDump cleared every record after writing the
+  ones it had seen, so a driver's callback recorded at interrupt time in
+  between was lost. It now keeps those for the next dump.
+- `mci` (e7), w16 only: **a w16 bug.** "play c:\windows\chimes.wav wait"
+  (auto-opened) never returned in 14 of 16 runs under load (0 of more
+  than 50 on 3.1). MCIWAVE waits for its MMTASK task by calling
+  mciDriverYield; w16's default yield procedure (and mmTaskYield) only
+  called PeekMessage(PM_NOREMOVE), which returns at once without letting
+  other tasks run when a message is waiting, so with any message in the
+  application's queue the application spun and the task never ran.
+  Found by elimination (the hang came at the same command each time;
+  bigger records showed the application's last call to be a yield) and
+  confirmed with a new probe, MCI script explore12 (`y 1 q`, `y 1 Y`):
+  3.1's procedure and mmTaskYield let a counting task run during 20
+  calls with a window message queued, and leave the message queued;
+  w16's let it run only with nothing queued. Both now call Yield when
+  PeekMessage finds a message (shell/mmsystem/mci.c mm_mciyield, core.c
+  MMTASKYIELD); explore7 then passed 16 of 16 under the same load, and
+  explore12 is identical. MMP's section k also signals a task right
+  after mmTaskCreate now (both: the task's first mmTaskBlock gets it).
+- `mci` (e5, e7), either side, under load: MMSYSTEM's start-up sound
+  (2.5 s, played at boot) still played when a script began, and its
+  WOM_DONE fell into a later step on one side. Section Q (mmci.c) now
+  pumps messages for 4 s and drops the records first. After that,
+  MCISEQ's mciDriverNotify answered 00F2 or 0108 on 3.1 from run to run
+  (w16: 0108 throughout): PostMessage's AX, the message's place in USER's
+  queue ring; mcmp.py now compares only whether it is 0.
+
+Reliability after these changes (2026-11-19): `tools/remote-test.sh -b
+mmsystem timer`, two such runs at a time (run names w16-mmflake and
+w16-mmflake2, host load about 20-30 on 40 threads): mmsystem 10 of 10,
+timer 10 of 10. Before them (master 4c5a53c, three runs of the case alone)
+`dev` failed in 2 and `timer` in 1; the runs in
+between, each with part of the changes, are in the commits' messages.
+Full boot test (no make test), this branch and master 4c5a53c side by
+side (so under load): both 118 ok; failures on both: taskman@tree,
+ddeml (conn), lzexpand (quirks), quicktime (the movie's area, all three
+parts); on master only: mmsystem@timer (tod), cplclick@co-tree, sound
+(sn1); on the branch only: timer@qt, toolhelp@qt (the same qtplay
+movie-area failure as quicktime's) and trails@timed, all three passing
+when run again alone with quicktime.
+
 ## Next
 
 All four layers are done. Left (ARCHITECTURE.md 23.5): MMTASK's end
