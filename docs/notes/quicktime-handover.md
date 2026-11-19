@@ -143,25 +143,50 @@ Microsoft's: fine (its GlobalFree and task clean-up free through
 first part (w16's tree over 3.1, KRNL386): fine; the overlay under w16's
 KRNL286: faulted before the fix (as the tree), fine after.
 
-**3.1.** Its KERNEL never gives a freed selector back to the DPMI host:
-Free_Sel puts it on KERNEL's own free list (Pietrek ch. 2). A scratch DRP
-(`galloc` with a LAR of the freed selector added; Microsoft's KRNL286 and
-KRNL386): after GlobalFree the selector's LAR fails on both; KRNL286
-leaves it in FS and GS ("kept"), KRNL386 returns 0 (as before). So 3.1
-has the same dead selector in FS, but nothing reloads it on its way. On
-stock 3.1 with Microsoft's KRNL286 (KRNL386 removed, the reference
-install with QuickTime) the player does not even start: "PLAYER caused a
-General Protection Fault in module KRNL286.EXE at 0001:78A1", then
-QTNOTIFY (KRNL286 0001:37D9) and PROGMAN (GDI 0001:48D4), and Windows
-ends; QuickTime needs KRNL386 on 3.1. On stock 3.1 (KRNL386) the close
+**3.1** (first look, corrected below). A scratch DRP (`galloc` with a
+LAR of the freed selector added; Microsoft's KRNL286 and KRNL386): after
+GlobalFree the selector's LAR fails on both; KRNL286 leaves it in FS and
+GS ("kept"), KRNL386 returns 0 (as before). On stock 3.1 with
+Microsoft's KRNL286 (KRNL386 removed, the reference install with
+QuickTime) the player does not even start: "PLAYER caused a General
+Protection Fault in module KRNL286.EXE at 0001:78A1", then QTNOTIFY
+(KRNL286 0001:37D9) and PROGMAN (GDI 0001:48D4), and Windows ends;
+QuickTime needs KRNL386 on 3.1. On stock 3.1 (KRNL386) the close
 sequence below lives through every step.
 
-**The fix** (`kernel/dpmi.c` dpmi_free_desc, every KERNEL free goes
-through it): on a 386, FS or GS holding the selector being freed is
-zeroed before INT 31h 0001h. The one difference from 3.1 it makes:
-KRNL286's GlobalFree of a block held in FS returns FS = 0, not the dead
-selector. w16's DOSX is left as Microsoft's is (it does not zero them in
-0001h either).
+**The first fix** (since replaced): `kernel/dpmi.c` dpmi_free_desc zeroed
+FS or GS holding the selector being freed, before INT 31h 0001h. That
+left FS = 0 after KRNL286's GlobalFree of a block held in FS, where 3.1
+leaves the dead selector.
+
+**What 3.1 really does with a freed selector** (task 2026-11-18, run
+names `w16-gfree`; probe TK61, `tests/apps/tk61.c`, in `make test`;
+ARCHITECTURE.md 9.2 "Freed selectors" has the full rules):
+- KRNL386 (both modes) keeps freed selectors on its own list (Pietrek's
+  Free_Sel), never gives them back to the host, and zeroes FS and GS in
+  GlobalFree and before a task's blocks go.
+- KRNL286 has no list of its own: it gives every freed selector back to
+  DOSX at once (INT 31h 0001h) and leaves FS and GS as they were.
+- Microsoft's DOSX faults reloading a freed selector left in FS at the
+  next timer tick or INT 21h ("Fault in MS-DOS Extender", 005B:0B58);
+  WIN386 loads 0. So 3.1's KRNL286 ends Windows the same way when a task
+  ends with one of its blocks in FS (TK61's helper task did), and only
+  KRNL386 lives through what the Movie Player does. The premise of the
+  first fix ("3.1 never hands it to the host, so nothing reloads it")
+  holds for KRNL386 only.
+
+**The fix now.** w16's KERNEL does what 3.1's does: KRNL386's free list
+(`kernel/dpmi.c`, through the LDT's selector from INT 2Fh 168Ah), FS and
+GS zeroed by KRNL386 where 3.1 zeroes them (`kentry.asm` AFTER_FREE,
+`kernel/task.c` task_exit_c), KRNL286 giving selectors back in 3.1's
+order and leaving FS alone; the first fix is gone. The Movie Player
+closes on the tree under KRNL286 because w16's DOS extenders no longer
+end Windows on a freed selector in FS or GS: w16's DOSX keeps it in the
+register across INT 31h (as Microsoft's DOSX) and loads 0 where it
+cannot reload it (as WIN386; Microsoft's DOSX faults there),
+`dosx/ring0.inc` fsgs_restore; w16's WIN386 loads 0
+(`win386/vmm/vmmasm.asm` fixsel). With Microsoft's DOSX, w16's KRNL286
+ends Windows there as 3.1's KRNL286 does.
 
 **The close sequence now, on w16 as on 3.1 (KRNL386):** after the
 movie's end, File > Close (the movie window goes, the empty player
