@@ -80,9 +80,12 @@ w16 repository's LICENSE):
                           (for a standard PC/AT; on a machine that
                           needs another system driver, such as
                           HPSYSTEM.DRV, use that instead)
-  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
-                          old SOUND functions (voice queues of notes)
-                          on the PC speaker
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep (the
+                          sound WIN.INI [sounds] names for it, through
+                          MMSYSTEM.DLL, when a wave driver is installed;
+                          else the PC speaker) and the old SOUND
+                          functions (voice queues of notes) on the PC
+                          speaker
   SYSTEM\TIMER.DRV        the multimedia timer driver: the
                           millisecond timer and timer events behind the
                           time* functions of MMSYSTEM.DLL (timeGetTime,

@@ -252,7 +252,7 @@ w16's drivers live under `drivers/`, one directory each with a README (what it i
 
 **`drivers/system/`: w16's `SYSTEM.DRV`** (Standard mode), in NASM (`make` builds `build/dos/SYSTEM.DRV`): module SYSTEM with Windows 3.1's eleven ordinals (InquireSystem 1, CreateSystemTimer 2, KillSystemTimer 3, EnableSystemTimers 4, DisableSystemTimers 5, GetSystemMsecCount 6, Get80x87SaveSize 7, Save80x87State 8, Restore80x87State 9, WEP 10, A20_Proc 20), each popping what 3.1's pops (4, 6, 2, 0, 0, 0, 0, 4, 4, 2, 2 bytes). Undocumented in the DDK; facts from the NE tables, Schulman ch. 9, Pietrek ch. 1 and black-box observation. Eight timers with 3.1's handles (18h-50h; COMM, USER's cursor timer, KERNEL's LRU sweep and USER's SetTimer timer take four at boot), each called every max(1, rate * 1000 / 54925) ticks; INT 8 chained to the BIOS first, then the msec count (+54.925 ms a tick, only while enabled), then the timers due with interrupts on, AX the handle, DS the driver's, no reentry (a tick during the procedures counts the msec and nothing else); the PIT is not reprogrammed. InquireSystem: 54925 for the timer resolution; drive types from the BIOS's floppy count (B: 1:0 on a one-floppy machine) and DOS IOCTL 4409h/4408h. `tests/sysprobe.sh`: SY1 (`tests/apps/sy1.c`: every export, registers, 30 timer rates, a timer procedure's context, reentrancy, the msec count against the BIOS ticks, Disable/Enable) and SYREC (`tests/apps/syrec.asm`, a recording SYSTEM in front of the driver under test: every call from boot to exit) identical with 3.1's driver and w16's. Boot-test cases `sysdrv`, `sysdrvall`, `sysdrvwoados`, `sysboot`, `sysclock`, `sysprobe`. Not verified: 386 Enhanced mode, machines without a coprocessor, remote and CD-ROM drives (`drivers/system/README.md`).
 
-**`drivers/sound/`: w16's `MMSOUND.DRV`** (Standard mode), the sound driver in NASM (`make` builds `build/dos/MMSOUND.DRV`; w16's SYSTEM.INI names it, `sound.drv=mmsound.drv`): module SOUND with Windows 3.1's 18 ordinals (OpenSound ... SetVoiceThreshold 1-16, DoBeep 17, WEP 18; 3.1's MMSOUND.DRV and SOUND.DRV are the same file), each popping the bytes 3.1's pops (0, 0, 4, 8, 10, 6, 4, 8, 0, 0, 2, 0, 2, 0, 0, 4, 2, 2). Observed black-box with SN1 (`tests/apps/sn1.c`) in DOSBox-X with the run's sound recorded (`tests/dropin.sh` DROPIN_CAPTURE: DOSBox-X's `DX-CAPTURE /A`; `tools/wavtones.py` reads the speaker's tones back, `tools/tonecmp.py` compares two recordings) and SNDREC (`tests/apps/sndrec.asm`, a recording SOUND in front of the driver). What 3.1's driver does: USER's MessageBeep calls DoBeep(type) (any type; MMSYSTEM is not involved), which sounds 749 Hz (divisor 1593) on the speaker for a CPU loop of about 64,000 instructions (6.7 ms at 10000 DOSBox cycles a ms); the SOUND API is a real one-voice queue (6 bytes a note, 192 by default) played on the speaker from its own IRQ 0 handler with the 8254's channel 0 at 200 Hz while playing (the old handler still gets 18.2 ticks a second), notes 1-84 (37 is C5) in equal temperament, lengths, tempos and the normal/legato/staccato modes timed to the 5 ms tick by rules measured over 78 combinations (`drivers/sound/README.md`); dots, volume, envelopes, noise and SyncAllVoices do nothing. w16's USER now calls DoBeep from MessageBeep too (`user/misc.c`). `tests/soundprobe.sh` (sn1, queue, rec, allw16) compares both drivers' logs (identical) and their recordings (tones within `tonecmp.py`'s limits); boot-test cases `sound`, `soundtime`, `soundrec`, `soundboot`, `treealone` (build/w16 alone, no file of Microsoft's). Not verified: 386 Enhanced mode; calls that never returned on 3.1's (WaitSoundState(S_THRESHOLD) with nothing playing, notes after SetVoiceQueueSize(0)) return on w16's.
+**`drivers/sound/`: w16's `MMSOUND.DRV`** (Standard mode), the sound driver in NASM (`make` builds `build/dos/MMSOUND.DRV`; w16's SYSTEM.INI names it, `sound.drv=mmsound.drv`): module SOUND with Windows 3.1's 18 ordinals (OpenSound ... SetVoiceThreshold 1-16, DoBeep 17, WEP 18; 3.1's MMSOUND.DRV and SOUND.DRV are the same file), each popping the bytes 3.1's pops (0, 0, 4, 8, 10, 6, 4, 8, 0, 0, 2, 0, 2, 0, 0, 4, 2, 2). Observed black-box with SN1 (`tests/apps/sn1.c`) in DOSBox-X with the run's sound recorded (`tests/dropin.sh` DROPIN_CAPTURE: DOSBox-X's `DX-CAPTURE /A`; `tools/wavtones.py` reads the speaker's tones back, `tools/tonecmp.py` compares two recordings) and SNDREC (`tests/apps/sndrec.asm`, a recording SOUND in front of the driver). What 3.1's driver does: USER's MessageBeep calls DoBeep(type) (any type, unless SPI_SETBEEP turned the beep off); DoBeep finds MMSYSTEM with GetModuleHandle (at each DoBeep and OpenSound until it is loaded; then sndPlaySound, timeSetEvent and timeKillEvent by ordinal, kept) and hands every type but FFFFh to sndPlaySound(name, SND_ASYNC) at once, the name by bits 4-7 of the type (1 SystemHand, 2 SystemQuestion, 3 SystemExclamation, 4 SystemAsterisk, else SystemDefault); FFFFh, no MMSYSTEM or a FALSE answer sound 749 Hz (divisor 1593) on the speaker for a CPU loop of about 64,000 instructions (6.7 ms at 10000 DOSBox cycles a ms); the SOUND API is a real one-voice queue (6 bytes a note, 192 by default) played on the speaker in 5 ms ticks, on a 5 ms periodic timeSetEvent once MMSYSTEM is found (else w16's from its own IRQ 0 handler with the 8254's channel 0 at 200 Hz, the old handler still getting 18.2 ticks a second), notes 1-84 (37 is C5) in equal temperament, lengths, tempos and the normal/legato/staccato modes timed to the 5 ms tick by rules measured over 78 combinations (`drivers/sound/README.md`); dots, volume, envelopes, noise and SyncAllVoices do nothing. w16's USER now calls DoBeep from MessageBeep too (`user/misc.c`). `tests/soundprobe.sh` (sn1, queue, rec, allw16, beep) compares both drivers' logs (identical) and their recordings (tones within `tonecmp.py`'s limits; `beep`: KRNLOG.DLL, `tests/apps/krnlog.c`, records every KERNEL and MMSYSTEM call the driver makes, in six configurations of MMSYSTEM and wave driver, sound compared by `tools/beepcmp.py`); boot-test cases `sound`, `soundtime`, `soundrec`, `soundbeep`, `soundboot`, `treealone` (build/w16 alone, no file of Microsoft's). Not verified: 386 Enhanced mode; calls that never returned on 3.1's (WaitSoundState(S_THRESHOLD) with nothing playing, notes after SetVoiceQueueSize(0)) return on w16's.
 
 **`drivers/timer/`: w16's `TIMER.DRV`**, MMSYSTEM's multimedia timer driver in NASM (`make` builds `build/dos/TIMER.DRV`; w16's SYSTEM.INI names it, `[drivers] timer=timer.drv`, with `[boot] drivers=mmsystem.dll`): module TIMER with 3.1's WEP 1 and DriverProc 2 and its six undocumented messages (kill 0800h, set 0804h, time 0808h, capabilities 080Ch, begin and end period 0810h, 0814h), found black-box with the logging driver TMS.DRV between Microsoft's MMSYSTEM and Microsoft's TIMER.DRV; 15 events (8 in 386 Enhanced mode) with 3.1's IDs, the 8254 at the shortest period asked for (1-55 ms), the BIOS tick, GetTickCount and SYSTEM.DRV's timers kept at their rate, callbacks through MMSYSTEM's StackEnter and DriverCallback as 3.1's. `tests/timer/tscen.sh` and the boot-test case `timer` compare the probe TPR's log and TMS's record with Microsoft's driver and with w16's, and play QuickTime's movie with w16's driver. 3.1's own timing faults are not copied; in 386 Enhanced mode the timing runs on VTD's virtual 8254, not VTDAPI.386 (§21).
 
@@ -3267,10 +3267,16 @@ MIDI, aux, joystick and sndPlaySound, 4 MCI, the Media Control Interface
   the last; SND_NOSTOP while one plays, SND_LOOP without SND_ASYNC and
   unknown flags: FALSE. SND_SYNC returns when it has played.
 - **MessageBeep** goes through MMSYSTEM on 3.1: USER's DoBeep in
-  MMSOUND.DRV hands it to sndPlaySound asynchronously (0 SystemDefault,
-  10h SystemHand, 20h SystemQuestion, 30h SystemExclamation, 40h
-  SystemAsterisk, 50h the default; FFFFh the speaker), each stopping the
-  sound before (MMP section b; w16's MMSOUND.DRV does not yet).
+  MMSOUND.DRV finds MMSYSTEM by GetModuleHandle (never loads it) and
+  hands every type but FFFFh to sndPlaySound(name, SND_ASYNC) at once,
+  the name by bits 4-7 of the type (1 SystemHand, 2 SystemQuestion, 3
+  SystemExclamation, 4 SystemAsterisk, anything else SystemDefault), each
+  stopping the sound before; FFFFh, no MMSYSTEM, or FALSE from
+  sndPlaySound (no wave device, no sound for the name nor for
+  SystemDefault): the speaker. Once found, the driver also plays the
+  SOUND API's notes on a 5 ms periodic timeSetEvent. MMP section b and
+  `tests/soundprobe.sh beep` (drivers/sound/README.md, "The beep"); w16's
+  MMSOUND.DRV does the same.
 - **Joystick** (no driver in the reference install): everything 6
   (MMSYSERR_NODRIVER), joyGetNumDevs 0, joySetCapture with a bad window
   165 first.
@@ -3464,6 +3470,11 @@ the commands and MCIQTW's records identical (QuickTime's own streaming of
 the sound through the wave driver follows the clock: left out). Full run
 (2026-11-18): make test passes, the boot test 122 ok with only the
 failures known before (ddeml conn, lzexpand quirks, soundtime).
+MessageBeep (boot-test case `soundbeep`, `tests/soundprobe.sh beep`):
+w16's MMSOUND.DRV against Microsoft's over Microsoft's MMSYSTEM and over
+w16's, each with SNDBLST2.DRV and without a wave driver: the driver's
+calls of MMSYSTEM (sndPlaySound's names and flags, timeSetEvent,
+timeKillEvent) and the wave sounds played identical.
 
 ### 23.5 UNVERIFIED, and not done
 
@@ -3495,8 +3506,10 @@ failures known before (ddeml conn, lzexpand quirks, soundtime).
   without a `[sounds]` entry; whether 3.1 plays SystemExit itself.
   Creative's SB16 drivers (SB16SND.DRV stops at "Incorrect MIDIPORT
   setting" in DOSBox-X), so only Windows 3.1's own drivers were observed;
-  QuickTime's sound (its probe runs without a wave driver); w16's
-  MMSOUND.DRV still beeps on the speaker where 3.1's calls sndPlaySound.
+  QuickTime's sound (its probe runs without a wave driver). After a
+  FreeLibrary of an MMSYSTEM a program loaded with LoadLibrary (not a
+  `[boot] drivers=` one), Microsoft's stays loaded and w16's goes
+  (SN1 part L; which counts are right, UNVERIFIED).
 - The interrupt stack's flags after a switch (AF differs between 3.1's
   runs), and which module owns the block (TIMER or MMSYSTEM in 3.1's
   runs); the mmTask function's BX and CX.

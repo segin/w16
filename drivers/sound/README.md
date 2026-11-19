@@ -2,7 +2,8 @@
 
 w16's own sound driver for Windows 3.1: the beep behind USER's
 MessageBeep and the Windows 1.x/2.x SOUND API (voice queues of notes,
-OpenSound ... StartSound), played on the PC speaker. Like every w16
+OpenSound ... StartSound), played on the PC speaker, the beep through
+MMSYSTEM's sndPlaySound when MMSYSTEM is loaded. Like every w16
 driver it is a genuine Windows 3.1 driver (ARCHITECTURE.md 6.7): the
 interface of Windows 3.1's `SYSTEM\MMSOUND.DRV` (and of its
 `SYSTEM\SOUND.DRV`, the same file byte for byte) and nothing
@@ -55,7 +56,7 @@ DX, ES in some).
 | 14 | `GetThresholdEvent()` | 0 | DX:AX = a word of the driver's data (offset 84h, 0); 0 when not open |
 | 15 | `GetThresholdStatus()` | 0 | bit 0: voice 1's count came down to its threshold; cleared by the call |
 | 16 | `SetVoiceThreshold(nVoice, nNotes)` | 4 | 0 |
-| 17 | `DoBeep(wType)` | 2 | the beep; AX as its loop leaves it (3.1's 0000, 0101, 0505), DX 500 |
+| 17 | `DoBeep(wType)` | 2 | the beep; AX 1 (sndPlaySound's answer) when a sound was handed to MMSYSTEM, else as the speaker loop leaves it (3.1's 0000, 0101, 0505), DX 500 |
 | 18 | `WEP(bSystemExit)` | 2 | 1 (resident name; DX kept) |
 
 One voice: the voice argument is not looked at (3.1's returned the same
@@ -66,15 +67,71 @@ device is not open.
 
 ## The beep
 
-USER's MessageBeep(type) calls DoBeep(type) (SNDREC's record: once per
-MessageBeep, every type, the device open or not); w16's USER does the
-same (`user/misc.c`), unless WIN.INI [windows] Beep is not "yes".
-DoBeep sets the 8254's channel 2 to divisor 1593 (749 Hz, mode 3), turns
-the speaker on (port 61h bits 0 and 1), waits in a loop and turns it
-off. The loop is about 64,000 instructions: the beep lasts 21.4 ms at
-DOSBox's 3000 cycles a millisecond, 6.7 ms at 10000 and about 2 ms at
-cycles=max (the recordings), so on a real machine its length follows the
-processor's speed. The type is not looked at.
+All observed on Windows 3.1's driver with SN1's parts M, N, I, R, L, Y
+and Z (`tests/soundprobe.sh beep`): the driver behind SNDREC, which
+records USER's calls of it, and with its imports of KERNEL renamed to
+KRNLOG (`tests/apps/krnlog.c`), which records every KERNEL function it
+calls and, by handing out its own entries for them, every call of the
+MMSYSTEM functions it gets from GetProcAddress, with the recording of
+the run's sound (speaker and Sound Blaster) to hear what plays.
+
+- **USER**: MessageBeep(type) calls DoBeep(type) (once per MessageBeep,
+  every type, the device open or not), unless the beep is off:
+  SystemParametersInfo(SPI_SETBEEP, FALSE) stops the calls; WIN.INI
+  [windows] Beep=no written while Windows runs does not (USER read it at
+  its start). w16's USER does the same (`user/misc.c`).
+- **Finding MMSYSTEM**: at every DoBeep (but type FFFFh's) and every
+  OpenSound until it is found, GetModuleHandle("MMSYSTEM"); never
+  LoadLibrary, nothing at the driver's load. Found, GetProcAddress by
+  ordinal: 2 (sndPlaySound), 602 (timeSetEvent), 603 (timeKillEvent),
+  then timeKillEvent of the timer event it has (none: 0; MMSYSTEM answers
+  97, or 6 when it was loaded by LoadLibrary and has no timer driver),
+  and the handles are kept for good: not looked up again, also when
+  MMSYSTEM goes away (a beep after that calls where sndPlaySound was:
+  SN1 part L does not beep then). MMSYSTEM loaded by a program's
+  LoadLibrary after the boot is found at the next beep.
+- **The type**: FFFFh beeps on the speaker, MMSYSTEM or not. Any other
+  type, once MMSYSTEM is found, goes to sndPlaySound(name, SND_ASYNC)
+  (flags exactly 0001h) at once, in DoBeep, with interrupts on or off
+  (SN1 part Z: no deferral), by bits 4-7 of the type alone: 1
+  "SystemHand" (MB_ICONHAND 10h, also 11h, 14h, 110h, 1010h, 8010h), 2
+  "SystemQuestion", 3 "SystemExclamation", 4 "SystemAsterisk", any other
+  "SystemDefault" (0, 1-0Fh, 50h-0F0h, 100h, 8000h, FFF0h, FFFEh).
+  MMSYSTEM looks the name up in WIN.INI [sounds] (ARCHITECTURE.md 23.2):
+  a missing, empty or unplayable entry plays SystemDefault's sound.
+- **The speaker**: when MMSYSTEM is not loaded or sndPlaySound answers
+  FALSE (no wave device; no sound for the name and none for
+  SystemDefault). DoBeep sets the 8254's channel 2 to divisor 1593 (749
+  Hz, mode 3), turns the speaker on (port 61h bits 0 and 1), waits in a
+  loop and turns it off. The loop is about 64,000 instructions: the beep
+  lasts 21.4 ms at DOSBox's 3000 cycles a millisecond, 6.7 ms at 10000
+  and about 2 ms at cycles=max (the recordings), so on a real machine its
+  length follows the processor's speed.
+- **Asynchrony**: MessageBeep returns at once (the sound plays after it);
+  a new beep stops the sound playing (MMSYSTEM's sndPlaySound: each new
+  sound stops the last, a looping one too); FFFFh's speaker beep plays
+  over a wave sound.
+
+w16's driver does all of this (`findmm`, `DOBEEP`).
+
+## MMSYSTEM's timer
+
+Once MMSYSTEM is found (by a beep or OpenSound), 3.1's driver plays the
+SOUND API's notes on MMSYSTEM's timer: StartSound calls
+timeSetEvent(5, 5, its callback, 0, TIME_PERIODIC) with interrupts off
+(MMSYSTEM's timer driver then runs the 8254's channel 0 at 5 ms: the
+"clock" below was its doing), the callback is one tick, the last tick
+kills the event (timeKillEvent from the callback, interrupts off), and
+StopSound and CloseSound kill it too (CloseSound with nothing playing:
+timeKillEvent(0)). Without MMSYSTEM it plays from IRQ 0 in 5 ms ticks
+too, but its channel 0 is then not at a steady 5966 (a count of CE4Ah
+seen while playing; how it times them, UNVERIFIED); w16's runs channel 0
+at 5966 then, as below. OpenSound allocates the queue with
+GlobalAlloc(0, 192) (fixed). Every entry of the SOUND API also asks
+KERNEL for the current task (GetCurrentTask; OpenSound, StartSound and
+each note once, CloseSound twice); what for was not observed and w16's
+does not (KRNLOG's records of it are not compared). WaitSoundState
+yields (Yield) while it waits.
 
 ## Playing
 
@@ -82,10 +139,12 @@ All measured on Windows 3.1's driver from DOSBox-X's recordings of SN1's
 parts H, T and U (onsets and lengths of every tone, to about 0.5 ms) and
 the port state SN1 reads while notes play (parts D, G, P):
 
-- **The clock**: StartSound turns the speaker on and sets channel 0 of
-  the 8254 to count 5966 (200 Hz: 5 ms ticks, mode 2; the handler that
-  was on IRQ 0 is still called 18.2 times a second, every 65536 counts);
-  after the last item, channel 0 goes back to 65536.
+- **The clock**: StartSound turns the speaker on; ticks are 5 ms, on
+  MMSYSTEM's timer event (above; these measurements were all made with
+  MMSYSTEM loaded) or, without MMSYSTEM, in w16's driver from IRQ 0 with
+  channel 0 of the 8254 at count 5966 (200 Hz, mode 2; the handler that
+  was on IRQ 0 is still called 18.2 times a second, every 65536 counts;
+  after the last item channel 0 goes back to 65536).
 - **Start**: for the first 2 ticks channel 2 sounds whatever it had
   (heard as a 10 ms burst of the last beep's or marker's tone); then
   the quiet the previous playing left over (below); then the first item.
@@ -160,6 +219,25 @@ the port state SN1 reads while notes play (parts D, G, P):
   driver under test (renamed SOUNT by `tools/nerename.py`): every call
   from the boot on with its caller, arguments, results and the bytes
   taken off; SN1 prints them at its end. Only values are recorded.
+- **KRNLOG** (`tests/apps/krnlog.c`, `krnlogs.asm`): a recording KERNEL
+  for a scratch copy of the driver under test whose imports of KERNEL
+  are renamed to KRNLOG (`tools/nerename.py --import KERNEL=KRNLOG`, on
+  the SOUNT copy): GlobalAlloc, GlobalFree, GlobalLock, Yield,
+  GetCurrentTask, GetModuleHandle (with the name), GetProcAddress (with
+  the name or ordinal) and __WINFLAGS (a label at offset 0415h of a
+  segment of its own: a DLL linked by wlink cannot export a constant;
+  SN1 checks the run's GetWinFlags against it). It hands the driver its
+  own entries for MMSYSTEM's sndPlaySound, timeSetEvent and
+  timeKillEvent and records their calls (the sound's name and flags) and
+  the timer callback's. SN1's parts M N I R L Y Z print its records and
+  SNDREC's after each step ("in": during the call, "after": in the 2.2 s
+  after it); `tools/beepcmp.py` cuts the recordings at SN1's markers and
+  compares the sound (speaker or wave: 10 ms RMS stretches) segment by
+  segment. `tests/soundprobe.sh beep` runs six configurations
+  (BEEP_CASES): Microsoft's MMSYSTEM with Windows 3.1's SNDBLST2.DRV
+  (from its Setup files) and without a wave driver, w16's MMSYSTEM the
+  same, no MMSYSTEM (not in `[boot] drivers=`; part L loads Microsoft's,
+  or w16's, with LoadLibrary).
 
 ## Verified
 
@@ -173,7 +251,14 @@ the port state SN1 reads while notes play (parts D, G, P):
   rec: SNDREC's records identical (USER's DoBeep(type) for every
   MessageBeep); allw16: the same records and beeps with every w16 part
   (WIN.COM, DOSX, KRNL286, USER, GDI) as with all of Microsoft's.
-- Boot-test cases `sound`, `soundtime`, `soundrec`, `soundboot` (0
+- `tests/soundprobe.sh beep` (2026-11-19): SN1's beep logs identical
+  with both drivers in all six configurations (384 lines with each
+  MMSYSTEM and SNDBLST2, 384 and 313 without a wave driver, 293 and 28
+  without MMSYSTEM: every KERNEL and MMSYSTEM call the driver makes,
+  USER's calls of it), the recordings the same segment by segment (up to
+  82 segments, 69 sounds: the wave sounds DING/CHORD/TADA, the speaker's
+  beeps).
+- Boot-test cases `sound`, `soundtime`, `soundrec`, `soundbeep`, `soundboot` (0
   pixels on Microsoft's stack and on w16's WIN.COM/DOSX/KRNL286) and
   `treealone` (build/w16 alone as C:\W16, no file of Microsoft's on the
   drive: boots to its Program Manager).
@@ -185,32 +270,41 @@ the port state SN1 reads while notes play (parts D, G, P):
 into a scratch copy of the reference install (the user's disk images,
 `.tools/sb16`; what it changes: the script's header) and
 `soundprobe.sh sb16` runs SN1's beeps there, DOSBox-X as an SB16.
-Results so far, on Microsoft's driver:
-
-- Creative's wave driver SB16SND.DRV stops Windows at "Installable
-  Drivers" in DOSBox-X, in Standard and in 386 Enhanced mode (its FM and
-  auxiliary drivers load); Windows 3.1's own SNDBLST2.DRV (expanded from
-  the reference's Setup files, [sndblst.drv] port=220, int=5) loads.
-- With SNDBLST2.DRV as the wave device (MMSYSTEM loaded, WIN.INI
-  [sounds] as Setup leaves it), Windows 3.1's DoBeep no longer beeps on
-  the speaker: DoBeep(0) (and MessageBeep(0)) gives only a 10 ms click
-  on the recording, types 10h-40h give nothing at all, and FFFFh gives a
-  20 ms speaker beep (6.7 ms without a wave device). So 3.1's driver
-  hands the beep to MMSYSTEM when there is a wave device (its imports of
-  GetModuleHandle and GetProcAddress fit that), and the sound itself did
-  not play in this emulation (a click, no DING.WAV). UNVERIFIED: which
-  call it makes and with which sound; w16's driver does not do this: it
-  always beeps on the speaker (`soundprobe.sh sb16` fails there).
+Creative's wave driver SB16SND.DRV stops Windows at "Installable
+Drivers" in DOSBox-X, in Standard and in 386 Enhanced mode (its FM and
+auxiliary drivers load), so the beep with a wave device was observed
+with Windows 3.1's own SNDBLST2.DRV instead (`soundprobe.sh beep`,
+above), where DING.WAV and CHORD.WAV play on the recording. (In the
+SB16 variant 3.1's DoBeep gave a 10 ms click for type 0 and nothing for
+10h-40h: the sound handed to MMSYSTEM, which did not play there.)
 
 ## Not verified / differences
 
-- The beep with a wave device (above).
+- 3.1's SOUND API without MMSYSTEM (`[boot] drivers=` without
+  mmsystem.dll): it plays in 5 ms ticks, but its channel 0 is not at a
+  steady 5966; w16's runs channel 0 at 5966 then, and the notes' timing
+  differs by tens of ms (SN1 part Y there: a note cut by StopSound
+  sounded 280 ms on 3.1's, 190 on w16's); not compared (the `beep`
+  probe's no-MMSYSTEM case runs parts M and L only).
+- What 3.1's driver uses GetCurrentTask for (every SOUND API entry asks;
+  a check that the caller is the task that opened it?); w16's does not
+  ask.
+- When MMSYSTEM was found but timeSetEvent fails (MMSYSTEM loaded by
+  LoadLibrary, no timer driver): w16's plays from IRQ 0 then; 3.1's not
+  observed.
+- After a play on MMSYSTEM's timer ended, StartSound came about 110 ms
+  later on 3.1's recording than on w16's although every call between took
+  the same time by GetTickCount and the BIOS ticks on both (SN1 part Y,
+  before its marker was added): 3.1's clock lost two ticks there. Not
+  explained.
 - The BIOS's ticks around StartSound: 3.1's driver gives the old IRQ 0
   handler one to three ticks more in the first ticks of playing than
   18.2 a second would (SN1 part W: 1 more before the first note, 3 more
   after a quiet of 101 ticks; the same over 15 s of notes); w16's keeps
   the 18.2 a second throughout. GetTickCount and the BIOS clock gain
-  about 0.05-0.15 s a StartSound on 3.1.
+  about 0.05-0.15 s a StartSound on 3.1. (Measured before w16's played
+  on MMSYSTEM's timer, as 3.1's does when MMSYSTEM is loaded: probably
+  the timer driver's doing; part W not run since.)
 - 386 Enhanced mode (VTD virtualises the 8254; not run).
 - Calls that never returned on Windows 3.1's driver, so not compared:
   WaitSoundState(S_THRESHOLD or S_ALLTHRESHOLD) with nothing playing

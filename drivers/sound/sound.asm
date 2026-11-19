@@ -26,22 +26,30 @@
 ;   15 GetThresholdStatus()                 bit 0: voice 1 reached its
 ;                                           threshold (cleared by the call)
 ;   16 SetVoiceThreshold(nVoice, nNotes)    0
-;   17 DoBeep(wType)                        a short 749 Hz beep (USER's
-;                                           MessageBeep passes its type;
-;                                           not looked at)
+;   17 DoBeep(wType)                        USER's MessageBeep(wType): the
+;                                           [sounds] sound for the type
+;                                           through MMSYSTEM's sndPlaySound,
+;                                           else a short 749 Hz beep
 ;   18 WEP(bSystemExit)                     1
 ; One voice; the voice argument is not looked at (3.1's driver returned
 ; the same for voices 0-5, 255, 256, -1).
 ;
+; MMSYSTEM: found by GetModuleHandle at the first DoBeep or OpenSound
+; that finds it loaded (findmm), then used for the beep (sndPlaySound) and
+; for the ticks of playing (a 5 ms periodic timeSetEvent), as 3.1's does.
+;
 ; Playing (measured on 3.1's): StartSound turns the speaker on (port 61h
-; bits 0-1) and makes channel 0 of the 8254 tick every 5966 counts
-; (200 Hz, 5 ms; mode 2) with this driver's IRQ 0 handler in front of
-; the one there before, which still gets 18.2 ticks a second. Two ticks
+; bits 0-1) and ticks every 5 ms: on MMSYSTEM's timer event when MMSYSTEM
+; was found (its timer driver then runs channel 0 of the 8254 at 5 ms),
+; else with channel 0 at 5966 counts (200 Hz; mode 2) and this driver's
+; IRQ 0 handler in front of the one there before, which still gets 18.2
+; ticks a second (3.1's without MMSYSTEM: also 5 ms ticks, its channel 0
+; not at a fixed 5966; how, UNVERIFIED). Two ticks
 ; later (and any quiet left over from before) the first queued item
 ; starts; each sounds as channel 2's divisor for its sound ticks and then
 ; as divisor 16 (above hearing) for its quiet ticks; a rest is divisor 16
-; throughout. When the queue is empty the speaker goes off and channel 0
-; back to 65536. A note's ticks come from its length at the tempo
+; throughout. When the queue is empty the speaker goes off and the event
+; is killed (or channel 0 goes back to 65536). A note's ticks come from its length at the tempo
 ; (quarter notes a minute) in half ticks (SetVoiceNote below). Dots,
 ; volume, envelopes and noise change nothing.
         bits 16
@@ -53,8 +61,9 @@ group DGROUP _DATA
 
 extern GLOBALALLOC                      ; KERNEL.15
 extern GLOBALFREE                       ; KERNEL.17
-extern GLOBALLOCK                       ; KERNEL.18
 extern YIELD                            ; KERNEL.29
+extern GETMODULEHANDLE                  ; KERNEL.47
+extern GETPROCADDRESS                   ; KERNEL.50
 
 ; error codes (Windows SDK, the Sound functions)
 S_SERDVNA equ -1                        ; device not available
@@ -77,6 +86,11 @@ E_DIV   equ 0                           ; sound ticks, quiet ticks after
 E_SOUND equ 2
 E_QUIET equ 4
 BEEPDIV equ 1593                        ; DoBeep's tone: 749 Hz
+SND_ASYNC equ 1                         ; sndPlaySound's flag (Multimedia
+                                        ; Programmer's Guide)
+TIME_PERIODIC equ 1                     ; timeSetEvent's
+MMTICK  equ 5                           ; the timer event's period and
+                                        ; resolution, ms
 
 segment _DATA
 opened  db 0
@@ -105,9 +119,24 @@ mode    dw 0
 pitch   dw 0
 thresh  dw 0                            ; voice 1's threshold
 tstatus dw 0                            ; GetThresholdStatus's bits
+mmfound db 0                            ; MMSYSTEM found (once found, kept)
+usemm   db 0                            ; playing on MMSYSTEM's timer event
+timerid dw 0                            ; the event (0: none)
+mmsnd   dd 0                            ; MMSYSTEM.2 sndPlaySound
+mmset   dd 0                            ; MMSYSTEM.602 timeSetEvent
+mmkill  dd 0                            ; MMSYSTEM.603 timeKillEvent
         times 84h - ($ - $$) db 0
 tevent  dw 0                            ; +84h GetThresholdEvent's word
                                         ; (3.1's: offset 84h of its data)
+mmname  db "MMSYSTEM", 0
+; the beep's sounds, WIN.INI [sounds] keys, by bits 4-7 of the type
+s_def   db "SystemDefault", 0
+s_hand  db "SystemHand", 0
+s_quest db "SystemQuestion", 0
+s_excl  db "SystemExclamation", 0
+s_ast   db "SystemAsterisk", 0
+beepsnd dw s_def, s_hand, s_quest, s_excl, s_ast, s_def, s_def, s_def
+        dw s_def, s_def, s_def, s_def, s_def, s_def, s_def, s_def
 %include "sndtab.inc"
 
 segment _TEXT
@@ -165,7 +194,8 @@ OPENSOUND:
         mov ax, S_SERDVNA
         cmp byte [opened], 0
         jne .r
-        mov ax, 192
+        call findmm                     ; (3.1's: before the queue's
+        mov ax, 192                     ; GlobalAlloc)
         call newqueue
         or ax, ax
         jnz .r
@@ -212,17 +242,15 @@ newqueue:
         mul cx
         mov [qend], ax
         push ax
-        push word 0                     ; GMEM_FIXED (interrupt-time data)
-        push word 0
-        push ax
+        push word 0                     ; GMEM_FIXED (interrupt-time data;
+        push word 0                     ; 3.1's: flags 0, as SN1 part Y's
+        push ax                         ; records show)
         call far GLOBALALLOC
         pop cx
         or ax, ax
         jz .nomem
-        mov [qhandle], ax
-        push ax
-        call far GLOBALLOCK
-        mov [qsel], dx
+        mov [qhandle], ax               ; a fixed block's handle is its
+        mov [qsel], ax                  ; selector
         jmp .empty
 .nomem: mov word [qcap], 0
         mov word [qend], 0
@@ -450,18 +478,40 @@ STARTSOUND:
         cmp word [qcount], 0
         je .r
         call unhook                     ; a pass-through hook left over
-        call hook
         cli
         mov word [burst], BURST
         mov ax, [leftover]
         mov [dleft], ax
         mov word [leftover], 0
         mov byte [phase], 0
-        mov byte [passthru], 0
         mov byte [playing], 1
         in al, 61h                      ; the speaker on (channel 2 keeps
         or al, 3                        ; what it had: 3.1's sounded it
         out 61h, al                     ; for the first two ticks)
+        ; MMSYSTEM found: the ticks come from its timer event, made with
+        ; interrupts off (3.1's: timeSetEvent(5, 5, its callback, 0,
+        ; TIME_PERIODIC), SN1 part Y; MMSYSTEM's timer driver runs the
+        ; 8254 at its 5 ms resolution then)
+        cmp word [mmset + 2], 0
+        je .irq0
+        push word MMTICK
+        push word MMTICK
+        push cs
+        push word mmtick
+        push word 0
+        push word 0
+        push word TIME_PERIODIC
+        call far [mmset]
+        or ax, ax
+        jz .irq0                        ; no event (no timer driver):
+        mov [timerid], ax               ; INT 8 (UNVERIFIED on 3.1's)
+        mov byte [usemm], 1
+        sti
+        jmp .r
+.irq0:  sti
+        call hook
+        cli
+        mov byte [passthru], 0
         mov al, 34h                     ; channel 0: 200 Hz, mode 2
         out 43h, al
         mov ax, TICKDIV
@@ -495,8 +545,12 @@ stopall:
         jne .lo
         mov ax, [dleft]
 .lo:    mov [leftover], ax
-.fin:   call finish
-        mov ax, QUIET                   ; channel 2 quiet (3.1's: no burst
+        call finish
+        jmp .q
+.fin:   call mmstop                     ; not playing: 3.1's still kills
+                                        ; its event (timeKillEvent(0) when
+                                        ; none, interrupts off; SN1 part Y)
+.q:     mov ax, QUIET                   ; channel 2 quiet (3.1's: no burst
         call ch2                        ; of the old tone at the next start)
         xor ax, ax
         mov [qcount], ax
@@ -507,22 +561,46 @@ stopall:
         call unhook
         ret
 
-; finish (interrupts off): the speaker off, channel 0 back to 65536 (mode
-; 3, as the BIOS has it), the hook passes ticks on
+; finish (interrupts off): the speaker off; on MMSYSTEM's timer the event
+; is killed (3.1's: from its callback at the last tick, or StopSound or
+; CloseSound), else channel 0 goes back to 65536 (mode 3, as the BIOS has
+; it) and the hook passes ticks on
 finish:
         cmp byte [playing], 0
         je .r
         mov byte [playing], 0
         mov byte [phase], 0
-        mov byte [passthru], 1
         in al, 61h
         and al, 0FCh
         out 61h, al
+        cmp byte [usemm], 0
+        jne mmstop
+        mov byte [passthru], 1
         mov al, 36h
         out 43h, al
         xor al, al
         out 40h, al
         out 40h, al
+.r:     ret
+
+; mmstop (interrupts off): timeKillEvent(the event, 0 when none), when
+; MMSYSTEM was found; no event after it
+mmstop:
+        cmp word [mmkill + 2], 0
+        je .r
+        push bx
+        push cx
+        push dx
+        push es
+        push word [timerid]
+        call far [mmkill]
+        pop es
+        pop dx
+        pop cx
+        pop bx
+        cli                             ; (whatever MMSYSTEM did)
+        mov word [timerid], 0
+        mov byte [usemm], 0
 .r:     ret
 
 ; hook: INT 8 (protected mode) to tick_int, the old one kept
@@ -649,12 +727,117 @@ SETVOICETHRESHOLD:
         or word [tstatus], 1
 .r:     epilog 4
 
-; ---- 17: DoBeep(wType): channel 2 at 1593 (749 Hz), the speaker on for
-; about 64000 instructions, then off (3.1's: 21.4 ms at 3000 DOSBox
-; cycles a ms, 6.7 at 10000: a loop, not a timer). wType is not looked
-; at; AX and DX are left as the loop leaves them (3.1's: DX 500).
+; findmm: MMSYSTEM, until it is found (3.1's, SN1 parts M, L, Y: at every
+; DoBeep but FFFFh's and every OpenSound until GetModuleHandle("MMSYSTEM")
+; finds it loaded, never LoadLibrary; then sndPlaySound, timeSetEvent and
+; timeKillEvent by ordinal (2, 602, 603), and timeKillEvent of the event
+; there is (none: 0); kept from then on). DS = DGROUP; AX, BX, CX, DX,
+; ES changed.
+findmm:
+        cmp byte [mmfound], 0
+        jne .r
+        push ds
+        push word mmname
+        call far GETMODULEHANDLE
+        or ax, ax
+        jz .r
+        mov bx, ax
+        mov cx, 2
+        call .proc
+        mov [mmsnd], ax
+        mov [mmsnd + 2], dx
+        mov cx, 602
+        call .proc
+        mov [mmset], ax
+        mov [mmset + 2], dx
+        mov cx, 603
+        call .proc
+        mov [mmkill], ax
+        mov [mmkill + 2], dx
+        mov byte [mmfound], 1
+        cmp word [mmkill + 2], 0
+        je .r
+        push word [timerid]
+        call far [mmkill]
+.r:     ret
+.proc:  push bx                         ; GetProcAddress(BX, ordinal CX)
+        push bx
+        push word 0
+        push cx
+        call far GETPROCADDRESS
+        pop bx
+        ret
+
+; mmtick: the timer event's callback (MMSYSTEM's timeSetEvent; a FAR
+; PASCAL (id, msg, dwUser, dw1, dw2), called with interrupts on): one
+; tick, with interrupts off
+mmtick:
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        push bx
+        push cx
+        push dx
+        push es
+        mov ax, DGROUP
+        mov ds, ax
+        pushf
+        cli
+        cmp byte [usemm], 0
+        je .n
+        call tick
+.n:     popf
+        pop es
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop ds
+        pop bp
+        retf 16
+
+; ---- 17: DoBeep(wType), USER's MessageBeep(wType) (3.1's, SN1 parts M,
+; N, I, R, Z): FFFFh beeps on the speaker; any other type, once MMSYSTEM
+; is found (findmm), is handed to sndPlaySound(name, SND_ASYNC) at once
+; (interrupts on or off), by bits 4-7 of the type: 1 SystemHand, 2
+; SystemQuestion, 3 SystemExclamation, 4 SystemAsterisk, any other
+; SystemDefault (MMSYSTEM looks the name up in WIN.INI [sounds]); the
+; speaker beeps when MMSYSTEM is not loaded or sndPlaySound answers FALSE
+; (no wave device, no sound for the name and none for SystemDefault).
+; AX = sndPlaySound's answer when it played (3.1's: 1).
 global DOBEEP
 DOBEEP:
+        push bp
+        mov bp, sp
+        push ds
+        mov ax, DGROUP
+        mov ds, ax
+        mov bx, [bp + 6]
+        cmp bx, 0FFFFh
+        je .spk
+        push bx
+        call findmm
+        pop bx
+        cmp word [mmsnd + 2], 0
+        je .spk
+        shr bx, 3
+        and bx, 1Eh
+        push ds
+        push word [beepsnd + bx]
+        push word SND_ASYNC
+        call far [mmsnd]
+        or ax, ax
+        jz .spk
+        pop ds
+        pop bp
+        retf 2
+.spk:   pop ds
+        pop bp
+        ; the speaker: channel 2 at 1593 (749 Hz), on for about 64000
+        ; instructions, then off (3.1's: 21.4 ms at 3000 DOSBox cycles a
+        ; ms, 6.7 at 10000: a loop, not a timer). AX and DX are left as
+        ; the loop leaves them (3.1's: DX 500).
         pushf
         cli
         mov al, 0B6h
