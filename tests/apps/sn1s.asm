@@ -95,3 +95,24 @@ _pit0_status:
         xor ah, ah
         popf
         retf
+
+; void __cdecl __far call_cli(FARPROC f, WORD arg): f(arg) (Pascal, one
+; word) called with interrupts off, as at interrupt time (part Z: DoBeep
+; from where the driver may not call MMSYSTEM)
+global _call_cli
+_call_cli:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        pushf
+        cli
+        push word [bp + 10]
+        call far [bp + 6]
+        popf
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf

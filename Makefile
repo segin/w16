@@ -2379,6 +2379,16 @@ $(DOS)/SNDREC.DRV: $(B)/tests/sndrec.o tests/apps/sndrec.lnk
 	$(WLINK) @tests/apps/sndrec.lnk name $@ option map=$(B)/tests/sndrec.map file { $(B)/tests/sndrec.o }
 	python3 tools/nemark.py $@ 3.10
 dos: $(DOS)/SNDREC.DRV
+# KRNLOG.DLL: a recording KERNEL for the sound driver under test, whose
+# imports of KERNEL are renamed to KRNLOG (tests/apps/krnlog.c;
+# tests/soundprobe.sh beep)
+$(DOS)/KRNLOG.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/krnlog.o $(B)/tests/krnlogs.o \
+                   tests/apps/dll.lnk tests/apps/krnlog.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/krnlog.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/krnlog.map file { $(B)/tests/dllstart.o $(B)/tests/dll/krnlog.o $(B)/tests/krnlogs.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KRNLOG.DLL
 # COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
 # renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
 $(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \

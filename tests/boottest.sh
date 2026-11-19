@@ -477,6 +477,14 @@
 #              SNDREC's record of every call to the driver, and the beeps
 #              on every w16 part (USER's MessageBeep to DoBeep) against
 #              all-Microsoft                      identical
+#   soundbeep  tests/soundprobe.sh beep: MessageBeep in full (SN1 parts M N I R
+#              L Y Z: every type, Beep off, [sounds] entries missing or
+#              empty, a sound playing, MMSYSTEM loaded late, notes on
+#              MMSYSTEM's timer, interrupts off) with w16's MMSOUND.DRV
+#              against Microsoft's, over Microsoft's MMSYSTEM and w16's, with
+#              Windows 3.1's SNDBLST2.DRV and without a wave driver, and
+#              with no MMSYSTEM: KRNLOG's and SNDREC's records identical, the
+#              recordings the same segment by segment (tools/beepcmp.py)
 #   soundboot  plain boots with w16's MMSOUND.DRV: on Microsoft's stack and
 #              on w16's WIN.COM, DOSX, KRNL286, each against the
 #              all-Microsoft boot                 must be 0
@@ -718,7 +726,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4105,7 +4113,7 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             echo "FAIL sysclock: $(grep -m1 -E '^  ' "$out/sysclock.txt" || echo 'see sysclock.txt') ($out/sysclock.txt)"
             fails=$((fails + 1))
         fi ;;
-    sound|soundtime|soundrec)
+    sound|soundtime|soundrec|soundbeep)
         # tests/soundprobe.sh (drivers/sound): w16's MMSOUND.DRV against
         # Microsoft's on Microsoft's stack (DOSBox-X, 10000 cycles a ms,
         # the sound recorded; not cached: both runs each time). sound: SN1's
@@ -4113,11 +4121,13 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         # within tools/tonecmp.py's limits); soundtime: SN1's timing parts
         # (T, U, V: every tempo, length and mode); soundrec: the queue's
         # capacity, SNDREC's record of every call (USER's DoBeep), and the
-        # beeps on every w16 part
+        # beeps on every w16 part; soundbeep: MessageBeep in full (KRNLOG's
+        # and SNDREC's records, the recordings) in six configurations
         case $c in
         sound) set -- sn1; sp=ABCDEFGHSP ;;
         soundtime) set -- sn1; sp=TUV ;;
         soundrec) set -- queue rec allw16; sp= ;;
+        soundbeep) set -- beep; sp= ;;
         esac
         if SOUNDPROBE_PARTS=$sp "$root/tests/soundprobe.sh" -o "$out/$c" "$@" > "$out/$c.txt" 2>&1; then
             echo "ok   $c: $(grep '^ok' "$out/$c.txt" | sed 's/^ok   //' | tr '\n' ';' | sed 's/;$//')"
