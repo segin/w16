@@ -42,17 +42,23 @@ BYTE __far *bm_scan(LPPBITMAP pb, int y)
                                 OFFSETOF(pb->bmBits) + (WORD)(line * scan));
 }
 
+static DWORD bits_copy(HBITMAP h, DWORD n, void __far *buf, int get);
+
 HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WORD flags)
 {
     HANDLE hb;
     LPBITMAPOBJ b;
     LPPBITMAP pb;
     WORD wb, scan;
-    DWORD total;
-    int y;
+    DWORD total, wbl;
     if (w <= 0 || h <= 0 || planes <= 0 || bpp <= 0)
         return 0;
-    wb = (WORD)((((DWORD)w * bpp + 15) >> 4) << 1);
+    /* one scan line of all planes must fit a segment (PBITMAP's layout:
+       bmScanSegment lines a segment) */
+    wbl = (((DWORD)w * bpp + 15) >> 4) << 1;
+    if (wbl * planes > 0xFFFFL)
+        return 0;
+    wb = (WORD)wbl;
     scan = wb * planes;
     total = (DWORD)scan * h;
     hb = obj_alloc(BITMAP_MAGIC, sizeof(BITMAPOBJ));
@@ -90,9 +96,8 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
     pb->bmFillBytes = (short)(65536L % scan);
     /* UNVERIFIED: 3.1 gave some bitmaps a memory DC's PBITMAP here */
     pb->bmlpPDevice = display ? display->lpPDevice : 0;
-    if (bits)
-        for (y = 0; y < h; y++)
-            mem_copy(bm_scan(pb, y), (const BYTE __far *)bits + (DWORD)y * scan, scan);
+    if (bits)                           /* as SetBitmapBits: across segments */
+        bits_copy(hb, total, (void __far *)bits, 0);
     return hb;
 fail:
     b = obj_get(hb, BITMAP_MAGIC);
