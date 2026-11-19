@@ -150,3 +150,28 @@ The audit's Low list is numbered here in its order (36 items).
 | L34 | HARDENING | AddAtom/FindAtom make the table before copying the name; the name must be in a locked or fixed block anyway. | Not fixed. |
 | L35 | REAL (minor) | `kputs("")` wrote 0 bytes (that truncates a redirected file at its position); `regs16` fields left unset; `dbg_path` 80 bytes. | The 0-byte write skipped; the rest not. |
 | L36 | FALSE | `heap_check*` prototypes outside the include guard: repeating a prototype is valid C. | None. |
+
+## Counts
+
+| Severity | REAL | FALSE | 3.1-BEHAVIOUR | HARDENING | UNSURE |
+|---|---|---|---|---|---|
+| Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
+| High (29) | 12: H1, H2, H4, H9, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 10: H3, H6, H7, H8, H10, H12, H14, H15, H17, H18 (all but H3 fixed) | 1: H11 |
+| Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed but 33 and 25's scheduling) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 43 fixed) | 2: 37, 39 |
+| Low (36) | 8: L1, L4, L10, L12, L17, L28, L32, L35 (L1, L17, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L7 fixed) | 8: L3, L5, L6, L19, L24, L27, L30, L31 |
+
+(H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's.)
+
+## Tests
+
+- `make test` (installation-05, HDPMI16 and DOSX, both kernels): pass, with TK62 checking its reference tables (`tests/apps/tk62ref.h`, `tk62ref286.h`, from `tests/tk62ref.sh`). Two of this work's first fixes failed older probes and were taken back: TK16 (the environment block outlives its task on 3.1: medium 28) and TK50 (GetCodeHandle's AX is GlobalHandle's: medium 33).
+- heapcheck boots (`tools/remote-test.sh -b -e DROPIN_INI=w16:heapcheck=1`, quicktime@over, quicktime@tree386, toolhelp@tree386, all KRNL386): no heapcheck report, Windows ended with code 0 each time (before, KRNL386 stopped at the first free arena after the first sentinel). The two QuickTime parts' screens differed from 3.1's because heapcheck makes everything slow, as documented; toolhelp@tree386 passed.
+- Full boot test at 77756b5: 121 ok, 4 failures, all known on master 9ed316c: ddeml (conn), lzexpand (quirks), taskman (tree, 21-dosesc), mmsystem (timer). QuickTime (all parts) and toolhelp passed.
+
+## Left (open)
+
+- H11: the order in which 3.1 frees an import closure (probe: a DLL loaded before its importer, both freed at once; does the importer's WEP run first?).
+- Medium 25: the scheduler does not honour LockCurrentTask.
+- Medium 33: GetCodeHandle/GlobalHandle of KERNEL's own segments (put them in the selector table).
+- Medium 37, 39; Low L3, L5, L6, L19, L24 (Catch's layout), L27, L30, L31: not probed.
+- Low L4 (LocalCompact(-1) past 32 blocks), L12 (the bootstrap's relocation records), L32 (OF_PROMPT, OF_CANCEL, OF_SEARCH).
