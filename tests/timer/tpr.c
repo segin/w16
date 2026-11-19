@@ -749,12 +749,20 @@ static void child(void)
     a = setev(20, 0, 15, TIME_PERIODIC);
     b = setev(2000, 0, 15, TIME_ONESHOT);
     lg("child: events %s %s", (LPSTR)(a ? "set" : "0"), (LPSTR)(b ? "set" : "0"));
+    {
+        /* the IDs, for the probe to kill the events once it has looked */
+        char v[8];
+        wsprintf(v, "%u", a);
+        WritePrivateProfileString("tpr", "a", v, "SYSTEM.INI");
+        wsprintf(v, "%u", b);
+        WritePrivateProfileString("tpr", "b", v, "SYSTEM.INI");
+    }
     WritePrivateProfileString("tpr", "child", "done", "SYSTEM.INI");
 }
 
 static void sec_child(void)
 {
-    WORD i, c;
+    WORD i, c, c2;
     lg("== child");
     GlobalAddAtom("TPRCHILD");
     lg("WinExec >= 32: %d", WinExec("C:\\TPR.EXE", SW_SHOWNORMAL) >= 32);
@@ -764,13 +772,26 @@ static void sec_child(void)
     }
     lg("child gone: %d", GetModuleUsage(GetModuleHandle("TPR")) <= 1);
     shim();
+    /* still called 300 ms after the child's end? (by count: under load
+       w16's in 386 Enhanced mode, on VTD's virtual 8254, made fewer than
+       the 15 calls of 300 ms) */
     c = st->slots[15].count;
     waitms(300);
-    lg("child's periodic event after its end: %s", (LPSTR)(st->slots[15].count > c + 5 ? "still called" :
-       st->slots[15].count == c ? "not called" : "a few calls"));
+    c2 = st->slots[15].count;
+    waitms(300);
+    lg("child's periodic event after its end: %s", (LPSTR)(st->slots[15].count > c2 ? "still called" :
+       c2 > c ? "a few calls" : "not called"));
     lg("~ child pit: %u", pitmax());
     waitms(2200);
     lg("~ child calls: %u", st->slots[15].count);
+    shim();
+    /* the child's events killed, unlogged: whether its one-shot one had
+       come by now (and so which slots the next sections' events get) was
+       timing in 386 Enhanced mode under load */
+    quiet(0x0800);
+    timeKillEvent(GetPrivateProfileInt("tpr", "a", 0, "SYSTEM.INI"));
+    timeKillEvent(GetPrivateProfileInt("tpr", "b", 0, "SYSTEM.INI"));
+    quiet(0x0808);
     shim();
 }
 

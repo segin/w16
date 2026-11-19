@@ -78,6 +78,11 @@ MASKS = [
     # (MMSYSLOG's records): DX is what the function's code left there
     (re.compile(r'^(  FWD MMSYSTEM\.7(?:05|07|10|11|13|17) .* -> )[0-9A-F]{4}([0-9A-F]{4} d=)'),
      r'\1(dx)\2'),
+    # mciDriverNotify's answer is PostMessage's AX, which 3.1's USER (on
+    # both sides) makes the message's place in the queue's ring: how many
+    # messages the probe's queue saw before is timing (00F2 and 0108 for
+    # the same step); compared: 0 or not
+    (re.compile(r'^(  FWD MMSYSTEM\.711 .* -> \(dx\))(?!0000)[0-9A-F]{4}'), r'\1(posted)'),
     # "open" parsed with a device's own entry (MCI_OPEN_DRIVER with device
     # ID 0 in the block): 3.1 hands each string 4 bytes into a copy of
     # it; past the end of a copy of up to four characters is what its
