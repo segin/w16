@@ -1,0 +1,10 @@
+# US29D.DLL (tests/apps/us29d.c), probe US29's DLL
+@tests/apps/dll.lnk
+option modname=US29D
+export US29D_HOOKA.1
+export US29D_HOOKB.2
+export US29D_SETA.3
+export US29D_SETB.4
+export US29D_COUNTS.5
+export US29D_RESET.6
+export US29D_UNHOOK.7

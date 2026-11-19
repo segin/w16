@@ -1842,6 +1842,34 @@ $(DOS)/US28.EXE: $(B)/tests/start.o $(B)/tests/us28.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us28.map file { $(B)/tests/start.o $(B)/tests/us28.o }
 dos: $(DOS)/US28.EXE
+# US29: the USER audit's probe (tests/apps/us29.c; docs/notes/user-audit-triage.md),
+# its helper task US29A (us29a.c) and DLL US29D (us29d.c)
+$(B)/tests/us29.o: tests/apps/us29ref.h tests/apps/tklog.h
+$(DOS)/US29.EXE: $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us29.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29.map file { $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+$(DOS)/US29A.EXE: $(B)/tests/start.o $(B)/tests/us29a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29a.map file { $(B)/tests/start.o $(B)/tests/us29a.o }
+$(DOS)/US29D.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o tests/apps/dll.lnk tests/apps/us29d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29d.map file { $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o }
+dos: $(DOS)/US29.EXE $(DOS)/US29A.EXE $(DOS)/US29D.DLL
+# US30: where 3.1 calls the hooks (tests/apps/us30.c; USER audit, item 8)
+$(B)/tests/us30.o: tests/apps/us30ref.h tests/apps/tklog.h
+$(B)/tests/us30.res: tests/apps/us30.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US30.EXE: $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us30.res tests/apps/app.lnk tests/apps/us30.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us30.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us30.map option resource=$(B)/tests/us30.res \
+	    file { $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US30.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

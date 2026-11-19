@@ -327,6 +327,12 @@
 #              Left, the restore button clicked, Accessories maximised,
 #              the Window menu, Ctrl+F4 (tests/scripts/input/mdimax.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
+#   uaudit     the USER audit (docs/notes/user-audit-triage.md): probes US29
+#              (with its helper task US29A and DLL US29D) and US30 (the
+#              hooks) as the shell on 3.1 and on w16's USER, their OBS lines
+#              identical; and US29's runs that 3.1 itself does not survive
+#              (US29DW, CR, SE, SD, SS, SC, HM.EXE) on w16's USER, each of
+#              which must reach its end
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -713,7 +719,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2958,6 +2964,41 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmkeys: arrow keys move Program Manager's selection from the start (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmkeys: $r ($out)"; fails=$((fails + 1)); fi ;;
+    uaudit)
+        # the USER audit's probes (tests/apps/us29.c, us30.c)
+        ua() {   # LABEL EXE-AS dropin.sh options...: a run, its log in LABEL.log
+            _l=$1 _x=$2; shift 2
+            "$root/tests/dropin.sh" -t 150 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US29A.EXE=US29A.EXE" -f "$root/build/dos/US29D.DLL=US29D.DLL" \
+                -i "boot:shell=C:\\$_x" "$@" > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        r=ok
+        for p in US29 US30; do
+            DROPIN_WSECS=40 ua uaudit-$p-ref $p.EXE -r -f "$root/build/dos/$p.EXE=$p.EXE"
+            DROPIN_WSECS=40 ua uaudit-$p-w16 $p.EXE -r -f "$root/build/dos/$p.EXE=$p.EXE" \
+                -f "$user=WINDOWS/SYSTEM/USER.EXE"
+            for k in ref w16; do
+                grep -q "^$p end" "$out/uaudit-$p-$k.log" ||
+                    { [ "$r" = ok ] && r="$p did not finish ($k: $out/uaudit-$p-$k.log)"; }
+            done
+            [ "$r" = ok ] || continue
+            grep '^OBS [^~]' "$out/uaudit-$p-ref.log" > "$out/uaudit-$p-ref.obs"
+            grep '^OBS [^~]' "$out/uaudit-$p-w16.log" > "$out/uaudit-$p-w16.obs"
+            cmp -s "$out/uaudit-$p-ref.obs" "$out/uaudit-$p-w16.obs" ||
+                r="$p: $(diff "$out/uaudit-$p-ref.obs" "$out/uaudit-$p-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/uaudit-$p-ref.obs, uaudit-$p-w16.obs)"
+        done
+        for m in DW CR SE SD SS SC HM; do
+            DROPIN_WSECS=25 ua uaudit-$m US29$m.EXE -r -f "$root/build/dos/US29.EXE=US29$m.EXE" \
+                -f "$user=WINDOWS/SYSTEM/USER.EXE"
+            grep -q '^US29 end' "$out/uaudit-$m.log" ||
+                { [ "$r" = ok ] && r="US29$m did not survive on w16 ($out/uaudit-$m.log)"; }
+        done
+        if [ "$r" = ok ]; then echo "ok   uaudit: US29 and US30 as 3.1; w16 survives what 3.1 does not"
+        else echo "FAIL uaudit: $r"; fails=$((fails + 1)); fi ;;
     mdimax)
         # a maximised MDI child's controls in the frame's menu bar (user/mdi.c):
         # probe US18 (tests/apps/us18.c) as the shell on Windows 3.1 and on
