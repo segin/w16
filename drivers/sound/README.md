@@ -120,7 +120,10 @@ Once MMSYSTEM is found (by a beep or OpenSound), 3.1's driver plays the
 SOUND API's notes on MMSYSTEM's timer: StartSound calls
 timeSetEvent(5, 5, its callback, 0, TIME_PERIODIC) with interrupts off
 (MMSYSTEM's timer driver then runs the 8254's channel 0 at 5 ms: the
-"clock" below was its doing), the callback is one tick, the last tick
+"clock" below was its doing; the speaker goes on after the call: the
+first start after the boot, when the timer driver first sets its
+resolution, has the same 10 ms burst as later ones on 3.1's, 18 ms on
+w16's with the speaker turned on before it), the callback is one tick, the last tick
 kills the event (timeKillEvent from the callback, interrupts off), and
 StopSound and CloseSound kill it too (CloseSound with nothing playing:
 timeKillEvent(0)). Without MMSYSTEM it plays from IRQ 0 in 5 ms ticks

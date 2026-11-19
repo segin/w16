@@ -485,13 +485,13 @@ STARTSOUND:
         mov word [leftover], 0
         mov byte [phase], 0
         mov byte [playing], 1
-        in al, 61h                      ; the speaker on (channel 2 keeps
-        or al, 3                        ; what it had: 3.1's sounded it
-        out 61h, al                     ; for the first two ticks)
         ; MMSYSTEM found: the ticks come from its timer event, made with
         ; interrupts off (3.1's: timeSetEvent(5, 5, its callback, 0,
         ; TIME_PERIODIC), SN1 part Y; MMSYSTEM's timer driver runs the
-        ; 8254 at its 5 ms resolution then)
+        ; 8254 at its 5 ms resolution then). The speaker goes on after
+        ; it (3.1's first start after the boot, when the timer driver
+        ; first sets its resolution, sounded the old tone for 10 ms, as
+        ; every later start; turned on before the call, 18 ms)
         cmp word [mmset + 2], 0
         je .irq0
         push word MMTICK
@@ -506,12 +506,15 @@ STARTSOUND:
         jz .irq0                        ; no event (no timer driver):
         mov [timerid], ax               ; INT 8 (UNVERIFIED on 3.1's)
         mov byte [usemm], 1
+        cli
+        call spkon
         sti
         jmp .r
 .irq0:  sti
         call hook
         cli
         mov byte [passthru], 0
+        call spkon
         mov al, 34h                     ; channel 0: 200 Hz, mode 2
         out 43h, al
         mov ax, TICKDIV
@@ -521,6 +524,14 @@ STARTSOUND:
         sti
 .r:     xor ax, ax
         epilog 0
+
+; spkon: the speaker on (channel 2 keeps what it had: 3.1's sounded it
+; for the first two ticks)
+spkon:
+        in al, 61h
+        or al, 3
+        out 61h, al
+        ret
 
 ; ---- 10: StopSound(): playing stops, the queue is emptied
 global STOPSOUND
