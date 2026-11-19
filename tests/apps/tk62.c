@@ -84,6 +84,24 @@ static WORD sel_of(HGLOBAL h)
 
 /* ---- regressions ---- */
 
+/* TK62A's command line: its path, then sh's DS and offset (and more) */
+static void helper_cmd(char *cmd, const char *more)
+{
+    WORD n, i;
+    n = GetModuleFileName((HINSTANCE)(entry_regs[E_DS] & ~1u), helper, sizeof helper - 12);
+    for (i = n; i && helper[i - 1] != '\\'; i--)
+        ;
+    lstrcpy(helper + i, "TK62A.EXE");
+    lstrcpy(cmd, helper);
+    n = lstrlen(cmd);
+    cmd[n++] = ' ';
+    hex4(cmd + n, cur_ds());
+    cmd[n + 4] = ' ';
+    hex4(cmd + n + 5, (WORD)(void NEAR *)&sh);
+    cmd[n + 9] = 0;
+    lstrcat(cmd, more);
+}
+
 static void chunk(void)
 {
     WORD n, i, t;
@@ -278,6 +296,137 @@ static void bigdg(void)
     g = GlobalAlloc(GMEM_MOVEABLE, 0x1000);
     check(g != 0, "bigdg: alloc after");
     GlobalFree(g);
+}
+
+/* H11: TKWA imports TKWB; the order their WEPs run in when both go */
+static char weplog[8];
+
+static void wep_order(const char *name)
+{
+    char nm[40];
+    lstrcpy(nm, name);
+    lstrcat(nm, " 1st");
+    obs(nm, (BYTE)weplog[0]);
+    lstrcpy(nm, name);
+    lstrcat(nm, " 2nd");
+    obs(nm, (BYTE)weplog[1]);
+}
+
+static void wep(void)
+{
+    HINSTANCE ha, hb;
+    void (FAR PASCAL *set)(char FAR *);
+    step("wep");
+    /* (3.1 in 386 Enhanced mode ended Windows in these LoadLibrary calls,
+       twice; not looked into: Standard mode and KRNL286 agree) */
+    if (GetWinFlags() & WF_ENHANCED)
+        return;
+    /* TKWB first, then TKWA (TKWB comes first in the module list): both
+       reach 0 with the last FreeLibrary */
+    weplog[0] = 0;
+    hb = LoadLibrary("TKWB.DLL");
+    ha = LoadLibrary("TKWA.DLL");
+    obs("wep: loaded", (UINT)ha > 32 && (UINT)hb > 32);
+    if ((UINT)ha <= 32 || (UINT)hb <= 32)
+        return;
+    set = (void (FAR PASCAL *)(char FAR *))GetProcAddress(ha, MAKEINTRESOURCE(1));
+    set(weplog);
+    FreeLibrary(hb);
+    obs("wep: B freed first, log", (BYTE)weplog[0]);
+    FreeLibrary(ha);
+    wep_order("wep: B loaded first,");
+    /* TKWA alone (it loads TKWB after itself) */
+    weplog[0] = 0;
+    ha = LoadLibrary("TKWA.DLL");
+    if ((UINT)ha <= 32)
+        return;
+    set = (void (FAR PASCAL *)(char FAR *))GetProcAddress(ha, MAKEINTRESOURCE(1));
+    set(weplog);
+    FreeLibrary(ha);
+    wep_order("wep: A alone,");
+}
+
+/* Medium 25: LockCurrentTask keeps other tasks from running? */
+static void lock(void)
+{
+    WORD i, t, c0, c1, c2;
+    char cmd[160];
+    WORD (FAR PASCAL *lct)(BOOL) = (WORD (FAR PASCAL *)(BOOL))kord(33);
+    WORD (FAR PASCAL *itl)(void) = (WORD (FAR PASCAL *)(void))kord(122);
+    step("lock");
+    sh.done = sh.stop = sh.count = 0;
+    helper_cmd(cmd, " L");
+    t = WinExec(cmd, SW_SHOWNORMAL);
+    obs("lock: WinExec ok", t > 32);
+    if (t <= 32)
+        return;
+    for (i = 0; i < 20; i++)
+        Yield();
+    c0 = sh.count;
+    obs("lock: ret", lct(TRUE) == (WORD)GetCurrentTask());
+    obs("lock: IsTaskLocked is us", itl() == (WORD)GetCurrentTask());
+    for (i = 0; i < 20; i++)
+        Yield();
+    c1 = sh.count;
+    lct(FALSE);
+    obs("lock: IsTaskLocked after unlock", itl());
+    for (i = 0; i < 20; i++)
+        Yield();
+    c2 = sh.count;
+    obs("lock: helper ran before", c0 != 0);
+    obs("lock: helper ran while locked", c1 != c0);
+    obs("lock: helper ran after", c2 != c1);
+    sh.stop = 1;
+    for (i = 0; i < 2000 && IsTask((HTASK)sh.task); i++)
+        Yield();
+    obs("lock: helper ended", !IsTask((HTASK)sh.task));
+}
+
+/* L24: what Catch writes where (DS = SS here; CS, SP, BP, SI, DI) */
+extern WORD __cdecl cur_cs(void);
+
+static void catchmap(void)
+{
+    int buf[12];
+    WORD i, ds = cur_ds(), cs = cur_cs(), sp = (WORD)(void NEAR *)buf;
+    static char nm[] = "catchmap: word N";
+    step("catchmap");
+    for (i = 0; i < 12; i++)
+        buf[i] = (int)0xCCCC;
+    if (Catch(buf) != 0)
+        return;
+    for (i = 0; i < 10; i++) {
+        WORD w = (WORD)buf[i], k;
+        if (w == 0xCCCC)
+            k = 0;              /* not written */
+        else if (w == ds)
+            k = 1;              /* DS or SS */
+        else if (w == cs)
+            k = 2;              /* CS */
+        else if (w > sp && w < sp + 0x100)
+            k = 3;              /* near our stack: SP or BP */
+        else
+            k = 4;
+        nm[15] = (char)('0' + i);
+        obs(nm, k);
+    }
+}
+
+/* L3: a discarded block reallocated by its selector: which handle */
+static void discsel(void)
+{
+    HGLOBAL h, r;
+    step("discsel");
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DISCARDABLE, 0x100);
+    if (!h)
+        return;
+    GlobalDiscard(h);
+    obs("discsel: discarded", (GlobalFlags(h) & GMEM_DISCARDED) != 0);
+    r = GlobalReAlloc((HGLOBAL)((WORD)h | 1), 0x100, GMEM_MOVEABLE);
+    obs("discsel: ok", r != 0);
+    obs("discsel: odd", (WORD)r & 1);
+    obs("discsel: same", r && ((WORD)r | 1) == ((WORD)h | 1));
+    GlobalFree(r ? r : h);
 }
 
 /* ---- observations ---- */
@@ -571,6 +720,10 @@ int __cdecl tmain(void)
     dosalloc();
     badne();
     bigdg();
+    wep();
+    lock();
+    catchmap();
+    discsel();
     badptr();
     strptr();
     atoms();

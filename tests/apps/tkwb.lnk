@@ -1,0 +1,6 @@
+# TKWB.DLL (tests/apps/tkwb.c)
+@tests/apps/dll.lnk
+option modname=TKWB
+export WB_SET.1
+export WEP.2 resident
+export WB_INFO.3

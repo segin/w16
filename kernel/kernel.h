@@ -300,6 +300,7 @@ u16  get_winflags(void);
 /* ---- toolhelp.c: THHOOK and the notification hooks ---- */
 void thhook_sync(void);
 void kmisc_task_end(u16 t);              /* kmisc.c */
+u16 kmisc_locked_task(void);             /* kmisc.c: LockCurrentTask's */
 void thhook_set_shell(u16 hmod);
 int  th_hooked(void);
 void th_outstr(const char FAR *s);

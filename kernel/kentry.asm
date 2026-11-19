@@ -1110,14 +1110,17 @@ CATCH:
         mov [es:bx], ax                 ; IP
         mov ax, [bp + 4]
         mov [es:bx + 2], ax             ; CS
+        ; 3.1's order (TK62 "catchmap", all modes: CS in word 1, the
+        ; caller's BP in 3, DS in 6, word 7 not written, SS in 8; w16 had
+        ; SS in 3 and DS in 7: KERNEL audit, low)
         lea ax, [bp + 10]
         mov [es:bx + 4], ax             ; SP after the return
-        mov [es:bx + 6], ss
         mov ax, [bp]
-        mov [es:bx + 8], ax             ; BP
-        mov [es:bx + 10], si
-        mov [es:bx + 12], di
-        mov [es:bx + 14], ds
+        mov [es:bx + 6], ax             ; BP
+        mov [es:bx + 8], si
+        mov [es:bx + 10], di
+        mov [es:bx + 12], ds
+        mov [es:bx + 16], ss
         pop bx
         pop es
         pop bp
@@ -1128,11 +1131,11 @@ THROW:
         mov ax, [ss:bx + 4]             ; n
         mov es, [ss:bx + 8]
         mov bx, [ss:bx + 6]             ; the buffer
-        mov si, [es:bx + 10]
-        mov di, [es:bx + 12]
-        mov ds, [es:bx + 14]
-        mov bp, [es:bx + 8]
-        mov ss, [es:bx + 6]
+        mov si, [es:bx + 8]
+        mov di, [es:bx + 10]
+        mov ds, [es:bx + 12]
+        mov bp, [es:bx + 6]
+        mov ss, [es:bx + 16]
         mov sp, [es:bx + 4]
         push word [es:bx + 2]
         push word [es:bx]

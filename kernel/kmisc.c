@@ -42,8 +42,9 @@ void KAPI ExitKernel(void)
 }
 
 /* LockCurrentTask (KERNEL.33): Schulman: lock (nonzero) or unlock the
-   current task; IsTaskLocked returns the locked task. w16's scheduler
-   does not honour it yet. */
+   current task; IsTaskLocked returns the locked task. Observed on 3.1
+   (TK62 "lock", all modes): it returns the task, and while it is locked
+   another task that only yields gets no turn (task.c reschedule). */
 u16 KAPI LockCurrentTask(u16 lock)
 {
     locked_task = lock ? cur_task : 0;
@@ -51,6 +52,11 @@ u16 KAPI LockCurrentTask(u16 lock)
 }
 
 u16 KAPI IsTaskLocked(void)                                   /* KERNEL.122 */
+{
+    return locked_task;
+}
+
+u16 kmisc_locked_task(void)
 {
     return locked_task;
 }

@@ -146,7 +146,7 @@ probes() {
     cp "$dos/TK61.EXE" "$dos/TK61A.EXE" "$stage/"
     # TK62 (the KERNEL audit) starts TK62A and loads TKENT.DLL, TKENT2.DLL
     cp "$dos/TK62.EXE" "$dos/TK62A.EXE" "$stage/"
-    cp "$dos/TKENT.DLL" "$dos/TKENT2.DLL" "$dos/TKBADNE.DLL" "$dos/TKBIGDG.DLL" "$dos/TKDG.DLL" "$stage/WINDOWS/"
+    cp "$dos/TKENT.DLL" "$dos/TKENT2.DLL" "$dos/TKBADNE.DLL" "$dos/TKBIGDG.DLL" "$dos/TKDG.DLL" "$dos/TKWA.DLL" "$dos/TKWB.DLL" "$stage/WINDOWS/"
     for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
         cp "$dos/$f" "$stage/WINDOWS/"
     done

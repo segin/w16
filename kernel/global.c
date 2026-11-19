@@ -1582,9 +1582,11 @@ static u16 realloc_discarded(u16 h, u32 size, u16 flags)
         for (i = 0; i < n; i++)
             dpmi_free_desc(s + i * sel_inc);
         s = ns;
-        h = (h & 1) ? ns : ns & ~1u;
+        h = ns & ~1u;
         n = need;
     }
+    h &= ~1u;           /* even, also named by its selector (3.1, TK62
+                           "discsel"; KERNEL audit, low) */
     bytes = (u32)AR(a)->size << 4;
     for (i = need; i < n; i++)
         dpmi_free_desc(s + i * sel_inc);

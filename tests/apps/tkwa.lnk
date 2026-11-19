@@ -1,0 +1,7 @@
+# TKWA.DLL (tests/apps/tkwa.c), importing TKWB.DLL
+@tests/apps/dll.lnk
+option modname=TKWA
+export WA_SET.1
+export WEP.2 resident
+import WB_SET TKWB.1
+export WA_INFO.3

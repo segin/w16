@@ -613,13 +613,44 @@ static void call_wep(module FAR *m);
    WEP called a second time (observed, tests/apps/tk5.c: TKID's WEP freeing
    TKDLB runs once on 3.1; w16 recursed). UNVERIFIED: a WEP that loads its
    own DLL again; it stays, as it is in use. */
+/* a DLL nobody uses any more, whose WEP has not run */
+static int unused_dll(module FAR *m)
+{
+    return m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m) && !m->ending;
+}
+
+/* m imports another unused DLL: that one goes first. Observed on 3.1
+   (TK62 "wep", Standard mode, KRNL286): TKWA imports TKWB; when both go
+   at once, TKWB's WEP runs before TKWA's, whichever was loaded first.
+   w16 went in the module list's order (KERNEL audit, H11). */
+static int imports_unused(module FAR *m)
+{
+    u16 i, n = NE_HDR(m)->modref_count;
+    module FAR *d;
+    for (i = 0; i < n; i++) {
+        d = module_of(MOD_MODREF(m, i));
+        if (d && d != m && unused_dll(d))
+            return 1;
+    }
+    return 0;
+}
+
 static void sweep(void)
 {
     module FAR *m;
+    int deep = 1;               /* 0: a cycle, take them in list order */
     if (load_depth)
         return;
     for (m = module_first; m; ) {
-        if (m != module_first && (m->flags & NEF_LIBRARY) && !MOD_USAGE(m) && !m->ending) {
+        if (unused_dll(m) && deep && imports_unused(m)) {
+            m = m->next;
+            if (!m) {           /* every one imports another: a cycle */
+                deep = 0;
+                m = module_first;
+            }
+            continue;
+        }
+        if (unused_dll(m)) {
             m->ending = 1;
             /* not for a DLL whose initialisation never ran (one a
                program imports, the program's load or start having failed
@@ -634,6 +665,7 @@ static void sweep(void)
             module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP */
             destroy(m);
             m = module_first;
+            deep = 1;
             continue;
         }
         m = m->next;

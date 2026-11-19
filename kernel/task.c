@@ -531,6 +531,11 @@ static void reschedule(void)
     u16 t;
     if (in_sched || (boot_tdb && cur_task == boot_tdb))
         return;                         /* nothing to switch to yet */
+    /* LockCurrentTask: the locked task keeps running while it has an
+       event (Yield gives it one); one that waits lets others run (TK62
+       "lock"; KERNEL audit, medium 25) */
+    if (cur_task && kmisc_locked_task() == cur_task && TW(cur_task, TDB_EVENTS))
+        return;
     in_sched = 1;
     if (cur_task) {
         t = TW(cur_task, TDB_YIELDTO);

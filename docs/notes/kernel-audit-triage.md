@@ -40,7 +40,7 @@ what is left (listed again at the end).
 | H8 | HARDENING | `patch`/`redo_self_fixups`: relocation chains not bounded by the segment, and a cyclic chain looped for ever. | Fixed: offsets checked against the segment's limit, chains cut at 8000h links; LOBYTE no longer reads a word. |
 | H9 | REAL | `load_body`: `entry_off + entry_len` wrapped; table offsets not checked; `2 * modref_count` wrapped in `mdb_build`. | Offsets in order and below FFF0h, else LE_BADFORMAT (11); module reference size in 32 bits; alignment shift over 16 rejected. Regression: TK62 "badne" (TKBADNE.DLL, `tools/mkne.py --entry-len 0xFFF0`, fails to load, as on 3.1). |
 | H10 | HARDENING | `type_first` did not check the first type's count against the table's end; loops over its entries ran past it. | Fixed: `type_fits` for every type returned. |
-| H11 | UNSURE | `sweep` frees DLLs at usage 0 in list order; a DLL loaded before its importer goes first, and the importer's WEP runs after it is gone. Pietrek does not say in which order 3.1's DecExeUsage/DelModule free an import closure. | open: probe WEP order (a WEP that calls into its import). |
+| H11 | REAL | `sweep` freed DLLs at usage 0 in module-list order. TK62 "wep" (TKWA.DLL imports TKWB.DLL, each WEP appends its letter to the probe's buffer): on 3.1 (Standard mode, KRNL286) TKWB's WEP runs before TKWA's whether TKWB or TKWA was loaded first. The audit's proposed fix (importers first) is the opposite of 3.1. (3.1 in 386 Enhanced mode ended Windows in these LoadLibrary calls; the section is skipped there.) | `sweep` frees an unused DLL only when it imports no other unused DLL (a cycle falls back to list order). |
 | H12 | HARDENING | Circular imports; a module importing itself under another name recursed until the stack ran out. | Recursion capped at 32 nested loads (LE_NOMEM). Circular LibMain order not changed. |
 | H13 | REAL | `defer_add` grew `defer_sel` (a fixed block) with GlobalReAlloc(.., 0): it could not move, so a program importing over 30 DLLs to initialise failed to load when the block could not grow in place. | GMEM_MOVEABLE (a fixed block keeps its selector when it moves). |
 | H14 | HARDENING | DefResourceHandler: a failed re-read of a discarded resource left it allocated with garbage. Needs a read error. | Fixed: discarded again. |
@@ -88,7 +88,7 @@ what is left (listed again at the end).
 | 22 | HARDENING | dosx.c's emulation (Microsoft's DOSX only): 0-paragraph requests, unchecked `dpmi_set_desc`. KERNEL never asks for those. | Not fixed. |
 | 23 | HARDENING | Selector 0 maps to LDT slot 0; AllocCStoDSAlias of a conforming code segment gives expand-down data; GDT selectors. None of these come from working programs. | Not fixed. |
 | 24 | HARDENING | `_seg_move` ignores DPMI 0007h failing (it cannot for the block's own selector) and relies on INT 31h keeping IF (DPMI hosts do). | Not fixed. |
-| 25 | REAL (part) | LockCurrentTask is not honoured by the scheduler (known: ARCHITECTURE.md 9.1, not yet). The locked task and FileCdr's task stayed set after that task ended. | The task's end clears them (`kmisc_task_end`). Honouring the lock: open (it changes scheduling). |
+| 25 | REAL | TK62 "lock" (all modes): on 3.1 LockCurrentTask(TRUE) returns the task and IsTaskLocked gives it; while it is locked, another task that only yields gets no turn; after unlocking it runs again. w16 ignored the lock, and kept the locked task and FileCdr's task after they ended. | `reschedule` keeps a locked task that has an event; a locked task that waits lets others run (UNVERIFIED on 3.1). The task's end clears both. |
 | 26 | HARDENING | `rmc` in task.c is shared by `idle` and `set_psp`; nothing calls `set_psp` at interrupt time. | Not fixed. |
 | 27 | FALSE | `kernel_psp` is never nested: `kputs` and `kdbg_file` call it 1/0 around plain DOS calls. | None. |
 | 28 | 3.1-BEHAVIOUR | The environment block copied for a task is KERNEL's and outlives it: TK16 (3.1) reads its GlobalSize after the task ended (10h/20h). Giving it to the task's PDB failed TK16. | Kept (the comment says why). |
@@ -116,7 +116,7 @@ The audit's Low list is numbered here in its order (36 items).
 |---|---|---|---|
 | L1 | REAL | A tile limit past 1 MB must be page-granular; DPMI refused the byte limit and the tile was cut to 64K (both heaps on a 386 host). | Such limits rounded up to the page (heapcheck accepts them). |
 | L2 | HARDENING | GlobalReAlloc of the Burgermaster. | Not fixed. |
-| L3 | UNSURE | KRNL286 `realloc_discarded` returns the odd handle when named by its selector. | open: not probed. |
+| L3 | REAL | TK62 "discsel": on 3.1 (all modes) GlobalReAlloc of a discarded block named by its selector returns its even handle; w16's KRNL286 returned the odd one. | Even. |
 | L4 | REAL (minor) | LocalCompact(-1) discards at most 32 blocks a call (NDISC). | open. |
 | L5 | UNSURE | GetFreeSpace counts fixed discardable blocks. | open. |
 | L6 | UNSURE | LOCALNOTIFY's thunk does not keep ES. | open. |
@@ -137,7 +137,7 @@ The audit's Low list is numbered here in its order (36 items).
 | L21 | HARDENING | `int_vec_switch` keeps a vector DPMI 0205h refused. | Not fixed. |
 | L22 | HARDENING | PostEvent's fast path on an expand-down bogus handle. | Not fixed. |
 | L23 | FALSE | GetHeapSpaces: the bytes in use cannot exceed FFFFh less the information block's offset. | None. |
-| L24 | UNSURE | Catch, TK62 "catch": 3.1 writes 8 words ending at the ninth (index 8), w16 8 words ending at the eighth. What each holds is not probed. | open. |
+| L24 | REAL | TK62 "catchmap" (all modes): 3.1's CATCHBUF holds CS in word 1, the caller's BP in 3, DS in 6, nothing in 7 and SS in 8 (IP, SP, SI, DI by elimination in 0, 2, 4, 5); w16 had SS in 3, BP in 4 and DS in 7. | 3.1's order (Catch and Throw). |
 | L25 | HARDENING | `th_loadsegs` for a segment with selector 0 (w16 loads every segment). | Not fixed. |
 | L26 | HARDENING | FatalAppExit with no task (boot only). | Not fixed. |
 | L27 | UNSURE | DirectResAlloc ignores hInstance and flags. | open. |
@@ -156,9 +156,9 @@ The audit's Low list is numbered here in its order (36 items).
 | Severity | REAL | FALSE | 3.1-BEHAVIOUR | HARDENING | UNSURE |
 |---|---|---|---|---|---|
 | Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
-| High (29) | 13: H1, H2, H4, H7, H9, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 1: H11 |
-| Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed but 33 and 25's scheduling) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 43 fixed) | 2: 37, 39 |
-| Low (36) | 8: L1, L4, L10, L12, L17, L28, L32, L35 (L1, L17, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L7 fixed) | 8: L3, L5, L6, L19, L24, L27, L30, L31 |
+| High (29) | 14: H1, H2, H4, H7, H9, H11, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 0 |
+| Medium (43) | 12: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36 (all fixed but 33) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 13, 19, 20, 31, 32, 43 fixed) | 2: 37, 39 |
+| Low (36) | 10: L1, L3, L4, L10, L12, L17, L24, L28, L32, L35 (L1, L3, L17, L24, L28, L35 fixed) | 3: L11, L23, L36 | 0 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L7 fixed) | 6: L5, L6, L19, L27, L30, L31 |
 
 (H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's.)
 
@@ -170,8 +170,6 @@ The audit's Low list is numbered here in its order (36 items).
 
 ## Left (open)
 
-- H11: the order in which 3.1 frees an import closure (probe: a DLL loaded before its importer, both freed at once; does the importer's WEP run first?).
-- Medium 25: the scheduler does not honour LockCurrentTask.
 - Medium 33: GetCodeHandle/GlobalHandle of KERNEL's own segments (put them in the selector table).
-- Medium 37, 39; Low L3, L5, L6, L19, L24 (Catch's layout), L27, L30, L31: not probed.
+- Medium 37, 39; Low L5, L6, L19, L27, L30, L31: not probed.
 - Low L4 (LocalCompact(-1) past 32 blocks), L12 (the bootstrap's relocation records), L32 (OF_PROMPT, OF_CANCEL, OF_SEARCH).
