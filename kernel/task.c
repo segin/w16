@@ -749,6 +749,7 @@ u16 task_boot(void)
     list_requeue(t);
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
+    thhook_sync();
     set_psp(cur_pdb);
     set_dta(t);
     int_vec_switch(t);
@@ -940,8 +941,8 @@ static u16 ss_now(void);
 void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 {
     regs16 r;
-    static u8 in_hook;                  /* (a hook that calls FatalExit is
-                                           not called again: audit, M34) */
+    static u8 in_hook;          /* a hook calling FatalExit is not called
+                                   again (KERNEL audit, medium 34) */
     u32 hook = fatal_exit_hook();
     if (hook && !in_hook) {
         in_hook = 1;
@@ -1204,6 +1205,8 @@ u16 task_boot_tdb(void)
     boot_tdb = t;
     cur_task = t;
     cur_pdb = psp_sel;
+    thhook_sync();          /* THHOOK's CurTDB is GetCurrentTask's (Schulman;
+                               KERNEL audit, L19) */
     return t;
 }
 
@@ -1218,6 +1221,7 @@ void task_boot_tdb_end(void)
     }
     boot_tdb = 0;
     GlobalFree(t);
+    thhook_sync();
 }
 
 /* ---- SetSigHandler (KERNEL.140; Schulman, Undocumented Windows ch. 5,

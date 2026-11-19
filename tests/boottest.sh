@@ -71,6 +71,11 @@
 #              win386close.txt; a task's exit reaches V86 DOS), against
 #              Microsoft's WIN386.EXE: every shot 0 pixels (File Manager's
 #              file total, Notepad's caret left out)
+#   win386dos  w16's WIN386.EXE: the MS-DOS Prompt full screen, VER, EXIT
+#              (tests/scripts/input/dosbox386v.txt, DOSBox-X on its own DOS,
+#              WIN's output not redirected), against Microsoft's WIN386.EXE:
+#              every shot 0 pixels but the banner's "w16" rows and the
+#              blinking cursor
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -713,7 +718,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1200,6 +1205,36 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386hung: a hung task's Ctrl+Alt+Del, Escape and Return as with Microsoft's WIN386"
         else echo "FAIL win386hung: $r ($out/win386hung-w16)"; fails=$((fails + 1)); fi ;;
+    win386dos)
+        # the MS-DOS Prompt under w16's WIN386 (its VMs, SHELL and VDD),
+        # full screen: the banner, VER, EXIT (tests/scripts/input/
+        # dosbox386v.txt), in DOSBox-X on its own DOS with WIN's output not
+        # redirected (a DOS box inherits it), against Microsoft's WIN386
+        scr=$root/tests/scripts/input/dosbox386v.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        set -- -r -p 386 -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        refrun win386dos-ref win386dos env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/win386dos-ref" "$@"
+        DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+            "$out/win386dos-w16" "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" \
+            > "$out/win386dos-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-full 02-ver 03-back; do
+            a=$out/win386dos-w16/$s.png b=$out/win386dos-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # the banner's rows 3 and 4 ("w16" for "Windows"); the cursor
+            # after the prompt (rows 11 and 14) blinks
+            m="rectangle 0,0 0,0"
+            [ $s = 01-full ] && m="rectangle 72,48 655,79 rectangle 99,176 107,191"
+            [ $s = 02-ver ] && m="rectangle 72,48 655,79 rectangle 99,224 107,239"
+            magick "$a" -fill black -draw "$m" "$out/win386dos-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386dos-b.png"
+            n=$(magick compare -metric AE "$out/win386dos-a.png" "$out/win386dos-b.png" "$out/win386dos-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386dos-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386dos: the MS-DOS Prompt full screen, VER, EXIT as with Microsoft's WIN386"
+        else echo "FAIL win386dos: $r ($out/win386dos-w16)"; fails=$((fails + 1)); fi ;;
     win386close)
         scr=$root/tests/scripts/input/win386close.txt
         k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE

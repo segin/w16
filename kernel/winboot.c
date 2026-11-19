@@ -111,8 +111,9 @@ static void diag_init(void)
    to BOOTLOG.TXT as it is, also after the boot. */
 void KAPI DiagOutput(const char FAR *s)
 {
-    if (s)                              /* (NULL: audit, low) */
-        diag_write(s);
+    if (!s)                     /* (KERNEL audit, L15) */
+        return;
+    diag_write(s);
 }
 
 /* the loader's hooks (loader.c) */
@@ -247,8 +248,8 @@ static u16 boot_load(const char *key, const char *def)
 static int take_switch_b(void)
 {
     u8 FAR *psp = MK_FP(psp_sel, 0);
-    u16 i, len = psp[0x80] < 0x7F ? psp[0x80] : 0x7F, found = 0;
-    for (i = 0; i + 1 < len; i++) {    /* (inside the PSP: audit, low) */
+    u16 i, len = psp[0x80] < 0x7F ? psp[0x80] : 0x7F, found = 0;  /* (inside the PSP: audit, L15) */
+    for (i = 0; i + 1 < len; i++) {
         u8 c = psp[0x81 + i], d = psp[0x82 + i];
         if ((c == '/' || c == '-') && (d == 'b' || d == 'B') &&
             (i == 0 || psp[0x80 + i] == ' ' || psp[0x80 + i] == '\t') &&

@@ -333,6 +333,22 @@ _vtd_eoi_entry:
         lea esp, [esp+4]
         ret
 
+; SHELL's hot-key callback (VKD_Define_Hot_Key) into C, as above
+global _shell_hk_entry
+extern _shell_hot_key
+_shell_hk_entry:
+        push dword 0
+        pushfd
+        pushad
+        cld
+        push esp
+        call _shell_hot_key
+        add esp, 4
+        popad
+        popfd
+        lea esp, [esp+4]
+        ret
+
 ; u32 vxd_control(proc, msg, ebx, esi, edx, edi, ebp): call a VxD's
 ; control procedure with EAX = msg and those registers; returns its carry
 global _vxd_control

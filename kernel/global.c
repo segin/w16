@@ -1837,6 +1837,8 @@ u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
 
 u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 {
+    if (kernel_seg(h))                  /* KERNEL's own (module.c) */
+        return (u32)sel_lim16(h | 1) + 1;
     return gsize_of_sel(h);
 }
 
@@ -1856,11 +1858,10 @@ u32 KAPI_ES GlobalHandle(u16 sel)                                /* KERNEL.21 */
        "codehandle"): GetCodeHandle of a KERNEL procedure gives its
        segment's selector, and (TK50) that is GlobalHandle's AX for it;
        w16 gave 0 (KERNEL audit, medium 33) */
-    if (sel && module_first) {
-        u16 i;
-        for (i = 0; i < module_first->seg_count; i++)
-            if (module_first->seg[i].sel && (module_first->seg[i].sel | 3) == (sel | 3))
-                return ((u32)module_first->seg[i].sel << 16) | module_first->seg[i].sel;
+    {
+        u16 k = kernel_seg(sel);
+        if (k)
+            return ((u32)module_first->seg[k - 1].sel << 16) | module_first->seg[k - 1].sel;
     }
     return 0;
 }
@@ -1869,6 +1870,8 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
 {
     u16 a, f;
     u8 db;
+    if ((f = kernel_seg(h)) != 0)       /* KERNEL's own (module.c) */
+        return kernel_seg_flags(f);
     switch (find(h, &a)) {
     case FB_BLOCK:
         f = (AR(a)->flags & GA_SHOWN) << 8;
@@ -2062,8 +2065,11 @@ u32 KAPI GetFreeSpace(u16 flags)                              /* KERNEL.169 */
     u16 a;
     u32 t = dpmi_largest();
     for (a = hp->first; ; a = AR(a)->next) {
+        /* observed (TK62 "freespace", KRNL286): a fixed discardable
+           block is not counted (it is never discarded); w16 counted it
+           (KERNEL audit, L5) */
         if (is_free(a) || (!flags && discardable(a) &&
-                           (AR(a)->count == 0 || (AR(a)->handle & 1))))
+                           AR(a)->count == 0 && !(AR(a)->handle & 1)))
             t += (u32)TOTAL(a) << 4;
         if (a == hp->last)
             break;
@@ -2116,6 +2122,8 @@ void KAPI FarSetOwner(u16 h, u16 owner)                       /* KERNEL.403 */
 
 u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
+    if (kernel_seg(h))                  /* KERNEL's own: its module */
+        return module_first->ne_sel;
     return gowner(h);
 }
 

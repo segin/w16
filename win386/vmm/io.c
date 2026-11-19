@@ -36,7 +36,10 @@
 #define IO_REVERSE  0x100               /* UNVERIFIED value */
 #define IO_SIZE     0x18
 
-struct ioh { u32 port, proc; int on; };
+/* a port's handler; trapping is on (global) unless a VM is on its list
+ * of local exceptions (Disable_Local_Trapping) */
+struct loc { struct loc *next; u32 vm; };
+struct ioh { u32 port, proc; int on; struct loc *off; };
 static struct ioh *iohs;
 static u32 n_iohs, max_iohs;
 
@@ -62,8 +65,19 @@ static int install(u32 port, u32 proc)
     iohs[n_iohs].port = port;
     iohs[n_iohs].proc = proc;
     iohs[n_iohs].on = 1;
+    iohs[n_iohs].off = NULL;
     n_iohs++;
     io_trap_bit(port, 1);
+    return 1;
+}
+
+/* is the port trapped in VM vm (a handle) */
+static int trapped(struct ioh *h, u32 vm)
+{
+    struct loc *l;
+    if (!h->on) return 0;
+    for (l = h->off; l; l = l->next)
+        if (l->vm == vm) return 0;
     return 1;
 }
 
@@ -72,7 +86,34 @@ static void set_trapping(u32 port, int on)
     struct ioh *h = find(port);
     if (!h) return;                     /* the DDK: only for an installed port */
     h->on = on;
-    io_trap_bit(port, on);
+    io_trap_bit(port, trapped(h, vm_handle()));
+}
+
+/* Enable/Disable_Local_Trapping: for VM vm only */
+static void set_local(u32 port, u32 vm, int on)
+{
+    struct ioh *h = find(port);
+    struct loc **pp, *l;
+    if (!h) return;
+    for (pp = &h->off; (l = *pp) != NULL; pp = &l->next)
+        if (l->vm == vm) break;
+    if (on && l) { *pp = l->next; kfree(l); }
+    if (!on && !l && (l = kmalloc(sizeof(*l))) != NULL) { l->vm = vm; l->next = h->off; h->off = l; }
+    if (vm == vm_handle()) io_trap_bit(port, trapped(h, vm));
+}
+
+/* another VM runs now: its ports */
+void io_vm_switch(struct vm *v)
+{
+    u32 i;
+    for (i = 0; i < n_iohs; i++) io_trap_bit(iohs[i].port, trapped(&iohs[i], VMH(v)));
+}
+
+/* a VM is gone: its exceptions too (control blocks are used again) */
+void io_vm_gone(struct vm *v)
+{
+    u32 i;
+    for (i = 0; i < n_iohs; i++) set_local(iohs[i].port, VMH(v), 1);
 }
 
 static u32 dispatch(u32 port, u32 type, u32 data, struct client_regs *c);
@@ -135,7 +176,7 @@ static u32 dispatch(u32 port, u32 type, u32 data, struct client_regs *c)
 {
     struct ioh *h = find(port);
     struct svcregs s;
-    if (!h || !h->on) return simulate(port, type, data, c);
+    if (!h || !trapped(h, vm_handle())) return simulate(port, type, data, c);
     memset(&s, 0, sizeof(s));
     s.eax = data;
     s.ebx = vm_handle();
@@ -246,12 +287,16 @@ int io_service(u32 svc, struct svcregs *s)
         if (!install(s->edx, s->esi)) s->eflags |= EFL_CF;
         return 1;
     case 0x97:                          /* Enable_Global_Trapping: EDX */
-    case 0x98:                          /* Enable_Local_Trapping: EBX, EDX (one VM) */
         set_trapping(s->edx, 1);
         return 1;
+    case 0x98:                          /* Enable_Local_Trapping: EBX the VM, EDX */
+        set_local(s->edx, s->ebx, 1);
+        return 1;
     case 0x99:                          /* Disable_Global_Trapping */
-    case 0x9A:                          /* Disable_Local_Trapping */
         set_trapping(s->edx, 0);
+        return 1;
+    case 0x9A:                          /* Disable_Local_Trapping */
+        set_local(s->edx, s->ebx, 0);
         return 1;
     }
     return 0;

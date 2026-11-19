@@ -143,6 +143,89 @@ _pm_exit:
         mov ax, [bp+4]
         jmp _bp_table + BP_EXIT
 
+; unsigned vm_stub_off(void): the offset of vm_stub in this segment
+global _vm_stub_off
+_vm_stub_off:
+        mov ax, vm_stub
+        ret
+
+; A DOS VM's first code (V86 mode; ARCHITECTURE.md 12.10). The VMM starts
+; a new VM here with DS = SS = P, the first paragraph of the VM's free
+; memory (P - 1 its free arena's MCB), SP inside P's first 8 KB, and the
+; parameters at P:100h: the program's path (ASCIIZ, 100h), the command
+; tail (180h), the drive (200h, 0 = A:) and directory (201h, ASCIIZ, empty:
+; none), DOS's EXEC parameter block (280h), two FCBs (300h, 310h), the
+; length of a message for standard output (3FEh) and the message (400h).
+; It takes those 8 KB from DOS (the first fit: P itself), makes them a PSP
+; of their own, the current one (the program's parent: its saved stack
+; and handles are this VM's, never the loader's, which the System VM
+; uses), then does what Windows 3.1's DOS VM did before it ran the program
+; (VXS.386's INT 21h hook, the WIN386 handover note): flush the keyboard
+; (0C06h), set the drive and directory, write the message (the MS-DOS
+; Prompt's box), parse the tail into the FCBs (2901h, twice), EXEC the
+; program, and report its exit code at the VMEXIT breakpoint (carry set:
+; the EXEC failed, AX DOS's error). Sources: MS-DOS 4.00 INT 21h 48h, 55h,
+; 50h, 0Ch, 0Eh, 3Bh, 40h, 29h, 4B00h, 4Dh.
+VS_BLOCK        equ 200h                ; paragraphs: PSP, parameters, stacks
+vm_stub:
+        mov ah, 48h
+        mov bx, VS_BLOCK
+        int 21h
+        jc .fail
+        mov dx, ds                      ; a PSP at P:0 (a copy of the current
+        mov si, dx                      ; one: handles, environment)
+        add si, VS_BLOCK
+        mov ah, 55h
+        int 21h
+        mov ax, ds                      ; the block is its own
+        dec ax
+        mov es, ax
+        mov ax, ds
+        mov [es:1], ax
+        mov bx, ds
+        mov ah, 50h
+        int 21h
+        mov ax, 0C06h                   ; the keyboard's buffer flushed
+        mov dl, 0FFh
+        int 21h
+        mov dl, [200h]
+        mov ah, 0Eh
+        int 21h
+        cmp byte [201h], 0
+        je .nodir
+        mov dx, 201h
+        mov ah, 3Bh
+        int 21h
+.nodir: mov cx, [3FEh]
+        jcxz .nomsg
+        mov dx, 400h
+        mov bx, 1
+        mov ah, 40h
+        int 21h
+.nomsg: push ds
+        pop es
+        mov si, 181h                    ; the tail's text into the FCBs
+        mov di, 300h
+        mov ax, 2901h
+        int 21h
+        mov di, 310h
+        mov ax, 2901h
+        int 21h
+        mov dx, 100h
+        mov bx, 280h
+        mov ax, 4B00h
+        int 21h
+        jc .fail
+        mov ax, ss
+        mov ds, ax
+        mov ah, 4Dh
+        int 21h
+        xor ah, ah
+        clc
+        jmp _bp_table + BP_VMEXIT
+.fail:  stc
+        jmp _bp_table + BP_VMEXIT
+
 ; The breakpoints (W386_BP_*): ARPL opcodes, invalid in V86 mode.
 _bp_table:
         times BP_COUNT db 63h

@@ -303,9 +303,7 @@ void wd_start(u16 seconds)
     if (!seconds)
         return;
     wd_ticks = 0;
-    if (seconds > 4095)                 /* (16 ticks a second in a word: */
-        seconds = 4095;                 /* audit, low) */
-    wd_limit = seconds * 16;
+    wd_limit = seconds < 4096 ? seconds * 16 : 0xFFFF;   /* (audit, L14) */
     r.ax = 0x0205;
     r.bx = 0x70;
     r.cx = FP_SEG(wd_int70);

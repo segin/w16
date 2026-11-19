@@ -159,7 +159,11 @@ probes() {
     run TK16 0
     run TK60 0
     run TK61 0
+    # TK62 "drivetype": F: is a DOSBox floppy mount (IOCTL 4408h fails)
+    DOSRUN_PRE="$DOSRUN_PRE
+MOUNT F $stage -t floppy"
     run TK62 0
+    DOSRUN_PRE='SET PATH=C:\TKPATH;Z:\'
 
     # TK14 (profiles and files), laid out like tests/tk14ref.sh: TK14.EXE in
     # C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS

@@ -48,36 +48,16 @@ static void api_default(struct cregs *r)
     r->eflags |= EFL_CF;
 }
 
-/* VDD. VX5 (Windows 3.1): AX=000Ch with VGA.DRV's registers (BX=9B0Ah
- * CX=3101h DX=0 SI=01F4h DI=0106h) returns AX = BX, the others as they
- * were, carry clear. UNVERIFIED what it does. */
+/* VDD (vdd.c): what it does not answer is traced and fails */
 static void api_vdd(struct cregs *r)
 {
-    if (AX(r) == 0x000C) {
-        SETW(r->eax, BX(r));
-        r->eflags &= ~EFL_CF;
-        return;
-    }
-    api_default(r);
+    if (!vdd_api(r)) api_default(r);
 }
 
-/* SHELL. Its PM API takes the function in DX, not AX (VX10, tests/apps/
- * vx10.c, Windows 3.1 on MS-DOS 4.00: WINOA386 calls it first with AX
- * still 1684h and DX 0, and gets AX 030Ah, BX 1000h, carry clear; then
- * DX 9 -> DX 007Bh, DX 3 (AX 1902h, BX 00F0h, CX 07CFh, SI 8, ES:DI a
- * block) -> AX C000h, the new VM's handle as WINOA386 then passes it in
- * BX; DX 5, DX 15h: the WIN386 handover note, step 6). Only function 0
- * so far; the others are traced and fail (UNVERIFIED how 3.1 fails). */
+/* SHELL (shell.c): its API takes the function in DX */
 static void api_shell(struct cregs *r)
 {
-    if (DX(r) == 0) {
-        SETW(r->eax, 0x030A);
-        SETW(r->ebx, 0x1000);
-        r->eflags &= ~EFL_CF;
-        trace("VxD API SHELL: get version (DX 0)\n");
-        return;
-    }
-    api_default(r);
+    shell_api(r);
 }
 
 /* INT 2Fh 1684h in protected mode: the entry for device BX, or 0:0 */
@@ -125,19 +105,12 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
     }
     if (n >= NAPIS) { r->eflags |= EFL_CF; return; }
     cur_api = n;
-    if (AX(r) == 0 && apis[n].id != 0x0017) {   /* get version (SHELL's: by DX) */
+    if (AX(r) == 0 && apis[n].id != 0x0017 && apis[n].id != 0x000A) {
+        /* get version (SHELL's by DX: shell.c; VDD's: vdd.c) */
         SETW(r->eax, apis[n].ver_ax);
         SETW(r->ebx, apis[n].ver_bx);
         if (apis[n].ver_cf) r->eflags |= EFL_CF; else r->eflags &= ~EFL_CF;
         trace("VxD API %s: get version\n", apis[n].name);
-        if (apis[n].id == 0x000A && (r->es & ~3u)) {
-            /* VDD: the display type's name, 8 bytes at ES:DI (VX10,
-             * Windows 3.1 with VDDVGA: "VIDEOVGA"; the grabber, VGA.3GR,
-             * compares it with its own and otherwise WINOA386 says "386
-             * System display type mismatch.") */
-            u8 *p = (u8 *)(sel_base(r->es) + DI(r));
-            memcpy(p, "VIDEOVGA", 8);
-        }
         return;
     }
     apis[n].fn(r);

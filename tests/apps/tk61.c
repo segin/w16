@@ -186,17 +186,39 @@ static WORD fixed_block(void)
     return SELECTOROF(GlobalLock(GlobalAlloc(GMEM_FIXED, 0x100)));
 }
 
-/* FS, GS and ES after fn(arg) with all three holding sel */
-static void regs_after(const char *p, void FAR *fn, WORD arg, WORD sel)
+static WORD bios_tick(void)
 {
-    WORD r[3];
+    return *(WORD FAR *)MAKELP(get_0040h(), 0x6C);
+}
+
+/* FS, GS and ES after fn(arg) with all three holding sel. A call that
+   frees sel (KRNL286 gives it back to the DOS extender at once) is
+   timing-dependent: a timer tick between the free and the read of FS
+   goes to real mode, and w16's DOSX loads 0 for the dead selector when
+   it comes back, where Microsoft's ends Windows ("deadfs"). With last
+   0, a run a tick fell into is not logged: returns 0 and the caller
+   runs it again with a new selector (once a make test run under load
+   failed "gfree fixed FS kept" under KRNL286 on DOSX this way). */
+static int regs_try(const char *p, void FAR *fn, WORD arg, WORD sel, int last)
+{
+    WORD r[3], t0 = bios_tick();
     call_regs(fn, arg, sel, r);
+    if (!last && bios_tick() != t0) {
+        obs_env(nm(p, "run again (timer tick)"), 1);
+        return 0;
+    }
     OBS(nm(p, "FS kept"), r[0] == sel);
     OBS(nm(p, "FS 0"), r[0] == 0);
     OBS(nm(p, "GS kept"), r[1] == sel);
     OBS(nm(p, "GS 0"), r[1] == 0);
     OBS(nm(p, "ES kept"), r[2] == sel);
     OBS(nm(p, "ES 0"), r[2] == 0);
+    return 1;
+}
+
+static void regs_after(const char *p, void FAR *fn, WORD arg, WORD sel)
+{
+    regs_try(p, fn, arg, sel, 1);
 }
 
 static FARPROC kp(const char *name)
@@ -222,16 +244,23 @@ static WORD back_at(WORD sel, WORD n)
 
 static void gfree(void)
 {
-    WORD s, h, a, b;
+    WORD s, h, a, b, i;
     STEP("gfree");
-    s = fixed_block();
-    regs_after("gfree fixed", (void FAR *)kp("GlobalFree"), (WORD)GlobalHandle(s), s);
+    for (i = 0; ; i++) {
+        s = fixed_block();
+        if (regs_try("gfree fixed", (void FAR *)kp("GlobalFree"),
+                     (WORD)GlobalHandle(s), s, i == 7))
+            break;
+    }
     freed("gfree fixed", s);
 
-    h = (WORD)GlobalAlloc(GMEM_MOVEABLE, 0x100);
-    s = SELECTOROF(GlobalLock((HGLOBAL)h));
-    GlobalUnlock((HGLOBAL)h);
-    regs_after("gfree moveable", (void FAR *)kp("GlobalFree"), h, s);
+    for (i = 0; ; i++) {
+        h = (WORD)GlobalAlloc(GMEM_MOVEABLE, 0x100);
+        s = SELECTOROF(GlobalLock((HGLOBAL)h));
+        GlobalUnlock((HGLOBAL)h);
+        if (regs_try("gfree moveable", (void FAR *)kp("GlobalFree"), h, s, i == 7))
+            break;
+    }
     freed("gfree moveable", s);
 
     /* two in a row: the second's link names the first */
@@ -307,14 +336,18 @@ static void reuse(void)
 
 static void selfree(void)
 {
-    WORD s, t, h;
+    WORD s, t, h, i;
     STEP("selfree");
     s = AllocSelector(0);               /* not loadable: FreeSelector alone */
     FreeSelector(s);
     freed("FreeSelector raw", s);
     h = (WORD)GlobalAlloc(GMEM_FIXED, 0x100);
-    t = AllocSelector(SELECTOROF(GlobalLock((HGLOBAL)h)));
-    regs_after("FreeSelector copy", (void FAR *)kp("FreeSelector"), t, t);
+    s = SELECTOROF(GlobalLock((HGLOBAL)h));
+    for (i = 0; ; i++) {
+        t = AllocSelector(s);
+        if (regs_try("FreeSelector copy", (void FAR *)kp("FreeSelector"), t, t, i == 7))
+            break;
+    }
     freed("FreeSelector copy", t);
     /* calls that free nothing, with FS, GS and ES holding a live block */
     s = SELECTOROF(GlobalLock((HGLOBAL)h));

@@ -113,13 +113,23 @@ static u32 task_thunk(u16 t, u16 ds, u32 fn)
             return ((u32)code << 16) | (slot - 6);
         }
     }
-    /* a new block, owned by the task (freed with it) */
-    if (!galloc(GMEM_FIXED, XBLK_SIZE, pdb, &nd))
+    /* a new block, owned by the task (freed with it); the alias that
+       links it first, so that a failure leaves no block outside the
+       chain (KERNEL audit, medium 12) */
+    d = 0;
+    if (prev && (d = data_alias(prev)) == 0)
         return 0;
+    if (!galloc(GMEM_FIXED, XBLK_SIZE, pdb, &nd)) {
+        if (d)
+            dpmi_free_desc(d);
+        return 0;
+    }
     blk_init(nd, 0);
     nc = galias_code(nd, pdb);
     if (!nc) {
         GlobalFree(nd);
+        if (d)
+            dpmi_free_desc(d);
         return 0;
     }
     slot = W(nd, 6);
@@ -127,11 +137,8 @@ static u32 task_thunk(u16 t, u16 ds, u32 fn)
     if (!prev) {
         W(t, TDB_THUNKS) = nc;
     } else {
-        d = data_alias(prev);
-        if (d) {
-            W(d, 0) = nc;
-            dpmi_free_desc(d);
-        }
+        W(d, 0) = nc;
+        dpmi_free_desc(d);
     }
     return ((u32)nc << 16) | (slot - 6);
 }
@@ -195,15 +202,12 @@ static u16 tb_new(void)
     if (!galloc(GMEM_FIXED, TB_SIZE, 0, &sel))
         return 0;
     alias = dpmi_alloc_desc(1);
-    if (!alias || !dpmi_set_desc(alias, dpmi_get_base(sel), TB_SIZE - 1, 0)) {
+    /* (gset_code checked: KERNEL audit, L9) */
+    if (!alias || !dpmi_set_desc(alias, dpmi_get_base(sel), TB_SIZE - 1, 0) ||
+        !gset_code(sel)) {
         if (alias)
             dpmi_free_desc(alias);
         GlobalFree(sel);
-        return 0;
-    }
-    if (!gset_code(sel)) {              /* (no code selector: a thunk */
-        dpmi_free_desc(alias);          /* block that cannot run; audit, */
-        GlobalFree(sel);                /* low) */
         return 0;
     }
     t = MK_FP(alias, 0);

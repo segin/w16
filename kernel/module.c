@@ -180,6 +180,28 @@ void mod_set_path(module FAR *m, const char FAR *path)
     m->path[i] = 0;
 }
 
+/* KERNEL's own segments are the bootstrap's memory, not blocks of the
+   heap; 3.1's are fixed blocks (TK62 "kseg", "codehandle"; TK50). The
+   global heap's APIs answer for them as such (KERNEL audit, medium 33):
+   which one sel is (its number + 1, 0 for none), and its GlobalFlags
+   (0900h for a discardable code segment, as 3.1 shows segments 2 and 3;
+   0 for the fixed ones). */
+u16 kernel_seg(u16 sel)
+{
+    u16 i;
+    if (!sel || !module_first)
+        return 0;
+    for (i = 0; i < module_first->seg_count; i++)
+        if (module_first->seg[i].sel && (module_first->seg[i].sel | 3) == (sel | 3))
+            return i + 1;
+    return 0;
+}
+
+u16 kernel_seg_flags(u16 k)
+{
+    return (MOD_SEG(module_first, k - 1)->flags & 0x1000) ? 0x0900 : 0;
+}
+
 void module_register_kernel(const bootinfo FAR *bi)
 {
     module FAR *m = mod_new(bi->seg_count);

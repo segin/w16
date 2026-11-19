@@ -5,9 +5,11 @@
  * it by then: VXP), reads each byte from the keyboard controller (port
  * 60h), keeps the global shift state and looks for hot keys: a hot key's
  * press and release go to the device that defined it
- * (VKD_Define_Hot_Key: REBOOT's Ctrl+Alt+Del) and not to the VM. Every
- * other byte goes into the System VM's keyboard queue (the keyboard
- * owner; one VM so far). The VM sees a controller of its own: VKD traps
+ * (VKD_Define_Hot_Key: REBOOT's Ctrl+Alt+Del; unless the hot key is
+ * disabled in the keyboard's VM, VKD_Local_Disable_Hot_Key) and not to
+ * the VM. Every other byte goes into the keyboard queue of the VM with
+ * the keyboard focus (Set_Device_Focus for VKD, or for every device: the
+ * keyboard owner). Each VM sees a controller of its own: VKD traps
  * ports 60h and 64h (Install_IO_Handler), presents the queue's bytes one
  * at a time in its virtual output buffer (status bit 0, and a request on
  * IRQ 1 while it is full), and passes commands (writes) and the pointing
@@ -43,6 +45,7 @@ extern char vkd_io60[], vkd_io64[];
 extern char vkd_eoi[];
 #pragma aux vkd_eoi "*"
 void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
+vu32 __cdecl vmm_alloc_cb_area(vu32 size, vu32 flags);
 extern char vkd_hw[];
 #pragma aux vkd_hw "*"
 
@@ -67,12 +70,14 @@ struct hotkey {
     vu8 scan, type, flags, down;
     vu32 shift;             /* high word mask, low word compare */
     vu32 proc, ref;
+    vu32 off[8];            /* a bit per VM ID: disabled there (Local_Disable) */
 };
 #define NHOT 32
 static struct hotkey hot[NHOT];
 
 static struct vid vkd_vid;
 static vu32 irq_handle, sys_vm;
+static vu32 kfocus;         /* the VM with the keyboard (Set_Device_Focus) */
 static vu32 shift;          /* SS_* */
 static int ext;             /* the last byte was E0h */
 
@@ -94,6 +99,12 @@ static void track_shift(vu32 code, int up)
 }
 
 /* a hot key for this byte? calls it; nonzero: the byte is the hot key's */
+static int hot_off(struct hotkey *h, vu32 vm)
+{
+    vu32 id = CB_VMID(vm);
+    return id < 256 && (h->off[id >> 5] >> (id & 31)) & 1;
+}
+
 static int hot_key(vu32 code, int up)
 {
     vu32 i;
@@ -101,6 +112,7 @@ static int hot_key(vu32 code, int up)
     for (i = 0; i < NHOT; i++) {
         struct hotkey *h = &hot[i];
         if (!h->used || h->scan != code) continue;
+        if (!up && hot_off(h, kfocus)) continue;
         if (h->type != 0xFF && h->type != (vu8)(ext ? 1 : 0)) continue;
         if (up) {
             if (!h->down) continue;
@@ -122,41 +134,47 @@ static int hot_key(vu32 code, int up)
     return 0;
 }
 
-/* ---- the System VM's keyboard: a queue, and the byte the VM's
- * controller holds (its output buffer) ---- */
+/* ---- each VM's keyboard (in its control block): a queue, and the byte
+ * the VM's controller holds (its output buffer) ---- */
 #define QSIZE 256
-static vu8 queue[QSIZE];
-static vu32 q_head, q_len;
-static vu32 cur;                /* the VM's port 60h */
-static int obf;                 /* the VM's output buffer full (status bit 0) */
+struct kq {
+    vu8 queue[QSIZE];
+    vu32 q_head, q_len;
+    vu32 cur;               /* the VM's port 60h */
+    int obf;                /* the VM's output buffer full (status bit 0) */
+};
+static vu32 cb_off;
+#define KQ(vm) ((struct kq *)((vm) + cb_off))
 
-static void request(int on)
+static void request(vu32 vm, int on)
 {
     struct vregs s;
     vregs_clear(&s);
     s.eax = irq_handle;
-    s.ebx = sys_vm;
+    s.ebx = vm;
     if (on) vpicd_set_int_request(&s);
     else vpicd_clear_int_request(&s);
 }
 
-static int q_put(vu32 b)
+static int q_put(vu32 vm, vu32 b)
 {
-    if (q_len == QSIZE) return 0;
-    queue[(q_head + q_len++) % QSIZE] = (vu8)b;
+    struct kq *k = KQ(vm);
+    if (k->q_len == QSIZE) return 0;
+    k->queue[(k->q_head + k->q_len++) % QSIZE] = (vu8)b;
     return 1;
 }
 
 /* the next byte into the VM's output buffer, with IRQ 1 requested (a
  * level: the request goes when the VM reads it) */
-static void present(void)
+static void present(vu32 vm)
 {
-    if (obf || !q_len) return;
-    cur = queue[q_head];
-    q_head = (q_head + 1) % QSIZE;
-    q_len--;
-    obf = 1;
-    request(1);
+    struct kq *k = KQ(vm);
+    if (k->obf || !k->q_len) return;
+    k->cur = k->queue[k->q_head];
+    k->q_head = (k->q_head + 1) % QSIZE;
+    k->q_len--;
+    k->obf = 1;
+    request(vm, 1);
 }
 
 /* a byte from the keyboard: a hot key's, or the VM's */
@@ -170,7 +188,7 @@ static void key_byte(vu32 b)
         track_shift(code, up);
         ext = 0;
     }
-    if (!mine) q_put(b);
+    if (!mine) q_put(kfocus, b);
 }
 
 /* VID_Hw_Int_Proc for IRQ 1: the byte is taken from the controller now
@@ -184,17 +202,16 @@ void __cdecl vkd_hw_int(struct vregs *r)
     vregs_clear(&s);
     s.eax = r->eax;
     vpicd_phys_eoi(&s);
-    present();
+    present(kfocus);
     r->eflags &= ~VF_CF;
 }
 
 /* VID_EOI_Proc for IRQ 1: the VM's handler is done; the next byte */
 void __cdecl vkd_eoi_proc(struct vregs *r)
 {
-    if (obf) {                              /* not read: no second interrupt for it */
-        request(0);
-    }
-    present();
+    if (KQ(r->ebx)->obf)                    /* not read: no second interrupt for it */
+        request(r->ebx, 0);
+    present(r->ebx);
     r->eflags &= ~VF_CF;
 }
 
@@ -203,17 +220,18 @@ void __cdecl vkd_eoi_proc(struct vregs *r)
 void __cdecl vkd_port60(struct vregs *r)
 {
     vu32 st;
+    struct kq *k = KQ(r->ebx);
     if (r->ecx & ~4u) { vmm_simulate_io(r); return; }
     if (r->ecx & 4) { outb(0x60, r->eax); return; }      /* a command's data: the keyboard's */
     st = inb(0x64);
-    if (!obf && (st & 0x21) == 0x21) {      /* the pointing device's byte */
+    if (!k->obf && (st & 0x21) == 0x21) {   /* the pointing device's byte */
         r->eax = (r->eax & ~0xFFu) | inb(0x60);
         return;
     }
-    r->eax = (r->eax & ~0xFFu) | cur;
-    if (obf) {
-        obf = 0;
-        request(0);
+    r->eax = (r->eax & ~0xFFu) | k->cur;
+    if (k->obf) {
+        k->obf = 0;
+        request(r->ebx, 0);
     }
 }
 
@@ -223,16 +241,17 @@ void __cdecl vkd_port60(struct vregs *r)
 void __cdecl vkd_port64(struct vregs *r)
 {
     vu32 st;
+    struct kq *k = KQ(r->ebx);
     if (r->ecx & ~4u) { vmm_simulate_io(r); return; }
     if (r->ecx & 4) { outb(0x64, r->eax); return; }
     st = inb(0x64);
-    if (!obf && !q_len && (st & 0x21) == 0x01) {
+    if (r->ebx == kfocus && !k->obf && !k->q_len && (st & 0x21) == 0x01) {
         key_byte(inb(0x60));
         st = inb(0x64);
     }
-    present();
+    present(r->ebx);
     st &= ~0x01u;
-    if (obf || (st & 0x20)) st |= 0x01;
+    if (k->obf || (st & 0x20)) st |= 0x01;
     r->eax = (r->eax & ~0xFFu) | st;
 }
 
@@ -259,20 +278,28 @@ void __cdecl vkd_service(struct vregs *r)
         h->proc = r->esi;
         h->ref = r->edx;
         h->down = 0;
+        for (i = 0; i < 8; i++) h->off[i] = 0;
         r->eax = (vu32)h;
         return;
     case 0x02:                              /* VKD_Remove_Hot_Key: EAX the handle */
         h = (struct hotkey *)r->eax;
         if (h >= hot && h < hot + NHOT) h->used = 0;
         return;
-    case 0x03: case 0x04:                   /* VKD_Local_Enable/Disable_Hot_Key: one VM */
+    case 0x03: case 0x04:                   /* VKD_Local_Enable/Disable_Hot_Key: EAX, EBX the VM */
+        h = (struct hotkey *)r->eax;
+        if (h >= hot && h < hot + NHOT && CB_VMID(r->ebx) < 256) {
+            vu32 id = CB_VMID(r->ebx);
+            if (r->arg == 0x04) h->off[id >> 5] |= 1u << (id & 31);
+            else h->off[id >> 5] &= ~(1u << (id & 31));
+        }
+        return;
     case 0x06:                              /* VKD_Cancel_Hot_Key_State */
     case 0x09:                              /* VKD_Define_Paste_Mode */
     case 0x0B:                              /* VKD_Cancel_Paste */
     case 0x0E:                              /* VKD_Flush_Msg_Key_Queue */
         return;
     case 0x08:                              /* VKD_Get_Kbd_Owner */
-        r->ebx = sys_vm;
+        r->ebx = kfocus;
         return;
     case 0x0C:                              /* VKD_Get_Msg_Key */
     case 0x0D:                              /* VKD_Peek_Msg_Key: no message mode yet */
@@ -283,23 +310,23 @@ void __cdecl vkd_service(struct vregs *r)
         h = (struct hotkey *)r->eax;
         if (h < hot || h >= hot + NHOT || !h->used) return;
         /* its press to the VM (and its release, when it comes) */
-        if (h->type == 1) q_put(0xE0);
-        q_put(h->scan);
+        if (h->type == 1) q_put(kfocus, 0xE0);
+        q_put(kfocus, h->scan);
         h->down = 0;
-        present();
+        present(kfocus);
         return;
     case 0x07:                              /* VKD_Force_Keys: ESI scan codes, ECX count */
         for (i = 0; i < r->ecx; i++) {
             vu8 b = ((vu8 *)r->esi)[i];
-            if (!q_put(b)) {
+            if (!q_put(kfocus, b)) {
                 r->ecx -= i;                /* the ones that did not fit */
                 r->eflags |= VF_CF;
-                present();
+                present(kfocus);
                 return;
             }
             if (b != 0xE0) track_shift(b & 0x7F, (b & 0x80) != 0);
         }
-        present();
+        present(kfocus);
         return;
     case 0x0A:                              /* VKD_Start_Paste: not yet (DOS boxes) */
         r->eflags |= VF_CF;
@@ -309,13 +336,23 @@ void __cdecl vkd_service(struct vregs *r)
 }
 
 #define SYS_CRITICAL_INIT 0x00
+#define SET_DEVICE_FOCUS  0x0F
+#define VKD_ID            0x000D
 
 void __cdecl vkd_control(struct vregs *r)
 {
     struct vregs s;
     r->eflags &= ~VF_CF;
+    if (r->eax == SET_DEVICE_FOCUS && (r->edx == 0 || r->edx == VKD_ID)) {
+        /* the keyboard to VM EBX: what is queued for the other stays
+         * there (UNVERIFIED) */
+        kfocus = r->ebx;
+        return;
+    }
     if (r->eax == SYS_CRITICAL_INIT) {
         sys_vm = r->ebx;
+        kfocus = sys_vm;
+        cb_off = vmm_alloc_cb_area(sizeof(struct kq), 0);
         vregs_clear(&s);
         vkd_vid.irq = 1;
         vkd_vid.hw_int_proc = (vu32)vkd_hw;
