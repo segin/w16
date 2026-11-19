@@ -116,29 +116,46 @@ static void fill(void FAR *p, BYTE v, WORD n)
 
 /* ---- bitmaps (C4, H9) ---- */
 
-static void sec_bitmaps(void)
+static void try_bitmaps(const int (*t)[4], int n, int first)
 {
-    static const int t[][4] = {
-        { 32767, 1, 4, 4 },             /* one line of all planes: 65536 bytes */
-        { 32767, 1, 1, 16 },            /* 65534 */
-        { 32767, 2, 2, 8 },             /* 65536 */
-        { 16384, 1, 1, 32 },            /* 65536 */
-        { 32767, 1, 3, 8 },             /* 98304 */
-        { 8000, 10, 1, 8 },             /* 8000 */
-        { 32760, 1, 1, 16 },            /* 65520 */
-        { 30000, 3, 1, 1 },             /* 3750 */
-    };
     int i;
-    for (i = 0; i < sizeof t / sizeof t[0]; i++) {
-        HBITMAP h = CreateBitmap(t[i][0], t[i][1], (BYTE)t[i][2], (BYTE)t[i][3], NULL);
+    for (i = 0; i < n; i++) {
+        HBITMAP h;
         BITMAP bm;
-        obsn("CreateBitmap ok", i, h != 0);
+        out("GD5 CreateBitmap ");
+        outhex(first + i);
+        out("\r\n");
+        h = CreateBitmap(t[i][0], t[i][1], (BYTE)t[i][2], (BYTE)t[i][3], NULL);
+        obsn("CreateBitmap ok", first + i, h != 0);
         if (h) {
             GetObject(h, sizeof bm, &bm);
-            obsn("CreateBitmap bmWidthBytes", i, bm.bmWidthBytes);
+            obsn("CreateBitmap bmWidthBytes", first + i, bm.bmWidthBytes);
             DeleteObject(h);
         }
     }
+}
+
+/* scan lines of 64K and more (C4): last, as 3.1 may not survive them */
+static void sec_bigbitmaps(void)
+{
+    static const int t[][4] = {
+        { 32767, 1, 1, 16 },            /* one line of all planes: 65534 bytes */
+        { 32767, 1, 4, 4 },             /* 65536 */
+        { 32767, 2, 2, 8 },             /* 65536 */
+        { 16384, 1, 1, 32 },            /* 65536 */
+        { 32767, 1, 3, 8 },             /* 98304 */
+    };
+    try_bitmaps(t, sizeof t / sizeof t[0], 0x10);
+}
+
+static void sec_bitmaps(void)
+{
+    static const int t[][4] = {
+        { 30000, 3, 1, 1 },             /* 3750 bytes a line */
+        { 8000, 10, 1, 8 },             /* 8000 */
+        { 32760, 1, 1, 16 },            /* 65520 */
+    };
+    try_bitmaps(t, sizeof t / sizeof t[0], 0);
     /* a bitmap over 64K made with its bits (8000 x 100, 1000 bytes a line:
        lines cross the 64K boundaries), read back */
     {
@@ -153,6 +170,7 @@ static void sec_bitmaps(void)
                 *(BYTE FAR *)MAKELP(SELECTOROF(p1) + HIWORD(k) * inc, LOWORD(k)) =
                     (BYTE)(k * 7 + (k >> 9));
             h = CreateBitmap(8000, 100, 1, 1, p1);
+            out("GD5 huge read back\r\n");
             obs("huge CreateBitmap ok", h != 0);
             if (h) {
                 got = GetBitmapBits(h, n, p2);
@@ -914,6 +932,8 @@ int __cdecl tmain(void)
     sec_fonts();
     out("GD5 late\r\n");
     sec_late();
+    out("GD5 bigbitmaps\r\n");
+    sec_bigbitmaps();
     ReleaseDC(NULL, hscr);
     out("GD5 done\r\n");
     return failures;
