@@ -32,8 +32,10 @@ All DOSBox work on installation-05, run name `w16-sb16`
 - [ ] FM (OPL3) device: not done (below).
 - [ ] 386 Enhanced mode: not done (no devices there; what it needs is in
   ARCHITECTURE.md 24.5).
-- [ ] DRV_CONFIGURE dialog: not done (DRV_QUERYCONFIGURE answers 0).
-- [ ] QuickTime's sound over SB16.DRV: not tried.
+- [x] DRV_CONFIGURE dialog (w16's own layout), shown and cancelled in
+  the prog part.
+- [x] QuickTime's sample movie's sound through MCIQTW over SB16.DRV
+  (sbaudio.sh sides qtms, qtw16, with `$W16_QTDIR`).
 
 ## How to run
 
@@ -79,7 +81,8 @@ All DOSBox work on installation-05, run name `w16-sb16`
   defaults; then remove the WF_ENHANCED check in sb16.c's enable().
 - MIDI input: needs a MIDI input source in the emulator, or a test on real
   hardware.
-- A configuration dialog for DRV_CONFIGURE/DRV_INSTALL (port, IRQ, DMA,
-  HDMA, MPU port), writing `[sb16.drv]`.
+- DRV_INSTALL could show the dialog too (it answers DRVCNF_RESTART and
+  writes nothing: Control Panel's Drivers applet writes `[drivers]`);
+  SNDBLST2's answers there were not observed.
 - The MIDI Mapper: a setup for "Sound Blaster 16 MIDI", so that Media
   Player plays .MID through it without "set port".

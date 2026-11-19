@@ -64,8 +64,11 @@ DriverCallback, StackEnter, StackLeave and timeGetTime.
 
 DriverProc: message 0 answers 0, DRV_LOAD 1, DRV_ENABLE 0 (SNDBLST2's
 answer; the card is found and taken there), DRV_OPEN, DRV_CLOSE,
-DRV_DISABLE, DRV_FREE 1, DRV_QUERYCONFIGURE 0 (no dialog), DRV_INSTALL
-DRVCNF_RESTART, DRV_REMOVE DRVCNF_OK, the rest DefDriverProc. DRVM_INIT
+DRV_DISABLE, DRV_FREE 1, DRV_QUERYCONFIGURE 1, DRV_CONFIGURE the
+configuration dialog (`sb16.rc`: port, IRQ, DMA, high DMA, MPU port,
+written to `[sb16.drv]`; DRVCNF_RESTART on OK, DRVCNF_CANCEL on Cancel),
+DRV_INSTALL DRVCNF_RESTART, DRV_REMOVE DRVCNF_OK, the rest DefDriverProc.
+In 386 Enhanced mode it offers no devices and leaves the card alone. DRVM_INIT
 answers 8 on every entry, as SNDBLST2's.
 
 Configuration: SYSTEM.INI `[sb16.drv]` port (hex), int, dma, hdma, mpuport
@@ -109,11 +112,15 @@ reset, a MIDI long message) on the caller's, as SNDBLST2's.
   TIME_MS kept, the driver's private header fields).
 - The sound: eight WAV files (8/16 bits, mono/stereo, 8000-44100 Hz, four
   headers each, one looped three times, one at a lower wave volume)
-  recorded in DOSBox-X correlate at 0.997 or better with the files, at
-  the right length and level; seven notes through the MPU-401 and a MIDI
-  file through MCISEQ come out at their pitch (`tests/sb16/sbaudio.sh`).
+  recorded in DOSBox-X correlate at 0.999 or better with the files, at
+  the right length and level; Windows' CHIMES.WAV (MCIWAVE) and DING.WAV
+  (sndPlaySound) at 0.994 or better; seven notes through the MPU-401 and
+  a MIDI file through MCISEQ come out at their pitch; QuickTime's sample
+  movie's sound track comes out (`tests/sb16/sbaudio.sh`).
 - Sound Recorder, Control Panel's Sound and Media Player over SB16.DRV:
-  every screen as over SNDBLST2 (`tests/sb16/sbscen.sh prog`).
+  every screen as over SNDBLST2 but Sound Recorder's Record button (the
+  SB16 records 22050 Hz); the configuration dialog shown and cancelled
+  (`tests/sb16/sbscen.sh prog`).
 
 ## Not done, not verified
 
@@ -131,4 +138,3 @@ reset, a MIDI long message) on the caller's, as SNDBLST2's.
 - Wave input records what DOSBox-X gives (silence); the data path is the
   output's in reverse but no real signal was recorded.
 - Full duplex: one direction at a time (the second open answers 4).
-- A configuration dialog (DRV_CONFIGURE).

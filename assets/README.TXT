@@ -186,8 +186,9 @@ and, when the card is not at its usual place, a section of its own
 
 A key that is missing comes from the BLASTER environment setting
 (A220 I5 D1 H5 P330), else from the card's own mixer (IRQ and DMA),
-else from the defaults above. Without a card the driver offers no
-devices and Windows starts as usual. The MIDI Mapper needs a setup that
+else from the defaults above (Control Panel's Drivers applet, Setup,
+shows and changes them). Without a card, and in 386 Enhanced mode, the
+driver offers no devices and Windows starts as usual. The MIDI Mapper needs a setup that
 sends to "Sound Blaster 16 MIDI" before programs that use it (Media
 Player's MIDI Sequencer) play through the card.
 

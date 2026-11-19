@@ -3671,15 +3671,24 @@ name `w16-sb16`:
   22050, 16-bit stereo 44100, 16-bit mono 8000, 8-bit mono 44100, 16-bit
   stereo 32000, and a 16-bit mono 22050 Hz header looped three times;
   the recording (DOSBox-X's mixer at 44100 Hz) correlates with the files
-  at 0.9976 to 0.9998 per channel (limits 0.995, 8-bit 0.99), left with
+  at 0.9993 to 0.9998 per channel (limits 0.995, 8-bit 0.99), left with
   left (left-right 0.01-0.03), each piece within 8 ms of the file's
   length (limit 15), the level within 0.1 dB of the first file's; the
   file played at wave volume C000h comes out 13.9 dB lower (the SB16
-  mixer's 2 dB steps: 14). Not sample-accurate: at 44100 Hz the residual
-  after the gain is 0.03 (16-bit) and 0.17 (8-bit) of full scale, which
-  is DOSBox-X's mixing, not the data (the correlation says the samples
-  are the file's). Windows' CHIMES.WAV through MCIWAVE and DING.WAV
-  through sndPlaySound likewise. SBP's log: every header back, the final
+  mixer's 2 dB steps: 14). Not sample-accurate: at 44100 Hz (no
+  resampling) the residual after the gain is 0.032 of full scale for the
+  8-bit and the 16-bit file alike, which is DOSBox-X's mixing, not the
+  data (the correlation says the samples are the file's). Windows'
+  CHIMES.WAV through MCIWAVE (auto-opened by "play ... wait") and
+  DING.WAV through sndPlaySound: 0.995 and 0.994 (8-bit, 22050 Hz; their
+  quiet ends count as silence, so their length is checked only from
+  below). The pieces are aligned by the attack of each file (normalised
+  correlation of its first 100 ms with 20 ms of silence before; aligning
+  by the loudest stretch put DING.WAV's steady tone one period off).
+  QuickTime for Windows' sample movie through MCIQTW (`$W16_QTDIR`): its
+  sound track comes out under both MMSYSTEMs (4.6 and 5.4 s of sound in
+  17 pieces: a phrase, beats a second apart, a closing phrase). SBP's
+  log: every header back, the final
   positions exact in bytes, samples and milliseconds, every recording
   header filled (DOSBox-X records silence). MIDI: SBP's seven notes and
   SCALE.MID's four through MCISEQ on port 0 come out at their pitch
@@ -3690,14 +3699,17 @@ name `w16-sb16`:
   w16's MMSYSTEM's screens identical to Microsoft's over SB16.DRV, and
   over SB16.DRV as over SNDBLST2 but Sound Recorder's Record button,
   enabled with the SB16 (DING.WAV is 22050 Hz, which SNDBLST2 cannot
-  record).
+  record). The configuration dialog (DRV_CONFIGURE sent through USER by
+  SBP's "config"; `tests/scripts/input/sb16cfg.txt`): shown with the
+  settings in use, Escape answers 0 (DRVCNF_CANCEL).
 - Found on the way: with a shell other than Program Manager, Microsoft's
   MMSYSTEM plays SystemExit (CHIMES.WAV) when Windows ends; w16's does
   not (23.5 had it as UNVERIFIED; not changed here).
 
 ### 24.5 UNVERIFIED, and not done
 
-- **386 Enhanced mode**: the driver offers no devices there. It would
+- **386 Enhanced mode**: the driver offers no devices there (GetWinFlags'
+  WF_ENHANCED: the card is not touched). It would
   need a VxD that gives the system VM the card's ports (or virtualises
   them per VM), its IRQ (VPICD: a virtualised IRQ, so that the handler
   runs in the system VM) and its DMA channels (VDMAD: the DMA buffer's
@@ -3714,7 +3726,11 @@ name `w16-sb16`:
   (one direction at a time); the order of more than two headers in a
   reset (SNDBLST2's with two: the one not begun first); SNDBLST2's use of
   lpNext, reserved and bit 31 (driver-private; SB16.DRV's differ).
-- DRV_CONFIGURE: no dialog (DRV_QUERYCONFIGURE answers 0).
-- The MIDI Mapper: its default setups name no SB16 port, so Media
-  Player's MIDI goes nowhere until a setup is made (MCISEQ's "set port 0"
-  plays through it: tested).
+- DRV_CONFIGURE: a dialog of w16's own (port, IRQ, DMA, high DMA, MPU
+  port, written to `[sb16.drv]`, DRVCNF_RESTART on OK); what SNDBLST2
+  answers to DRV_QUERYCONFIGURE and DRV_INSTALL was not observed (it has
+  a dialog of its own: it imports DialogBox).
+- The MIDI Mapper over SB16.DRV: not tried (with SNDBLST2 its default
+  setup answers 68, 23.2); Media Player's MIDI Sequencer plays through
+  the mapper, so CANYON.MID is only opened in `prog`; MCISEQ on port 0
+  ("set port 0") plays through the MPU-401 (`audio`).
