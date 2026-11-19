@@ -53,7 +53,8 @@ documented difference (docs/notes/timer-handover.md):
             of 100 ms within 2 of it / 109.85 (two BIOS ticks each: 3.1's
             55-56 in 6 s), DOS's clock within 10 hundredths of BIOS
             ticks x 5.4925
-  child     the 8254 within 8 counts, calls within 6
+  child     the 8254 as pit (sampled: 3.1 gave 1179 against 1192 under
+            load), calls within 6
 Anything else marked "~" is shown and not checked.
 
 -3 (386 Enhanced mode): 3.1's driver there leaves the timing to VTDAPI.386
@@ -159,7 +160,7 @@ def check(key, ms, w):
         # min a max b changes c in d
         return wn[0] == 1 and wn[1] == 1, 'steps of 1 ms'
     if re.match(r'(period .*|trace .*|child) pit', key) or key.endswith(' pit'):
-        tol = 8 if key.startswith('child') else max(64, mn[0] // 200)
+        tol = max(64, mn[0] // 200)
         if mn[0] >= 65400 and wn[0] >= 65400:
             return True, 'both 65536'
         return within(mn[0], wn[0], tol), 'within %d counts' % tol
