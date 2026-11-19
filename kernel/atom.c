@@ -106,6 +106,8 @@ static int int_name(const char FAR *s, u16 *v)
 static u16 lookup(u16 ds, u16 t, const char FAR *s, u16 len, u16 *slot, u16 *prev)
 {
     u16 e, i;
+    if (!W(ds, t))                      /* a table written over: no */
+        return *slot = *prev = 0;       /* division by 0 (audit, medium 43) */
     *slot = t + 2 + 2 * (hash((const u8 FAR *)s, len) % W(ds, t));
     *prev = 0;
     for (e = W(ds, *slot); e; *prev = e, e = W(ds, e + AE_NEXT)) {
@@ -187,6 +189,8 @@ u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
         W(ds, e + AE_COUNT)++;
         return ATOM_STRING | (e >> 2);
     }
+    if (!slot)
+        return 0;                       /* (no buckets: lookup) */
     /* the name may be in this heap: copy it before allocating */
     kmemcpy(name, s, len);
     e = LAlloc(ds, LMEM_FIXED, AE_NAME + len + 1);

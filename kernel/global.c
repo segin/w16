@@ -768,6 +768,11 @@ static int set_tiles(u16 s, u16 n, u32 lin, u32 size, int code)
     for (i = 0; i < n; i++) {
         u32 off = (u32)i << 16;
         u32 lim = size > off ? size - off - 1 : 0;
+        /* past 1 MB a limit counts pages (the low 12 bits set; DPMI
+           0008h refuses others, and the tile got only 64K: KERNEL
+           audit, low) */
+        if (lim > 0xFFFFFUL)
+            lim |= 0xFFF;
         /* a 286 host takes no limit past FFFFh and left the descriptor
            as it was: FFFFh then, all a 286 tile holds (KERNEL audit,
            low) */
@@ -1393,7 +1398,8 @@ static const char *global_check(u16 *bad)
                     want = bytes - ((u32)i << 16) - 1;
                     l = lsl(t);
                     if (!present(t) || lin_of(t) != lin_of(a) + 0x10 + ((u32)i << 16) ||
-                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF)))
+                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF) &&
+                         !(want > 0xFFFFFUL && l == (u16)(want | 0xFFF))))
                         return "global: a tile's base or limit is not the block's";
                 }
             }

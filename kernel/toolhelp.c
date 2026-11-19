@@ -135,10 +135,13 @@ void thhook_set_shell(u16 hmod)
    ToolHelpHook one, or for a task start (Schulman). */
 static void notify(u16 ax, u16 bx, u16 cx, u16 dx, u16 si, u16 di, u16 es)
 {
-    if (hook_th)
-        ptrace_call(hook_th, ax, bx, cx, dx, si, di, es);
-    if (hook_pt && (!hook_th || ax == 0x59))
-        ptrace_call(hook_pt, ax, bx, cx, dx, si, di, es);
+    /* (the hooks as they were before either is called: one that unhooks
+       itself had the other called as well; KERNEL audit, medium 31) */
+    u32 th = hook_th, pt = hook_pt;
+    if (th)
+        ptrace_call(th, ax, bx, cx, dx, si, di, es);
+    if (pt && (!th || ax == 0x59))
+        ptrace_call(pt, ax, bx, cx, dx, si, di, es);
 }
 
 int th_hooked(void)

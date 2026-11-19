@@ -282,7 +282,7 @@ module FAR *module_of(u16 h)
         if (same_sel(m->ne_sel, h))
             return m;
         for (s = 0; s < m->seg_count; s++)
-            if (same_sel(m->seg[s].sel, h))
+            if (m->seg[s].sel && same_sel(m->seg[s].sel, h))  /* (an empty slot is not 1-3: audit, low) */
                 return m;
     }
     return task_module_of_sel(h);       /* a later instance's DGROUP */

@@ -711,7 +711,9 @@ void task_set_env(u16 t, u16 env)
         lim = (u32)seg_limit(env) + 1;
     while ((u32)n + 1 < lim && n < 0x7FFF && (e[n] || e[n + 1]))
         n++;
-    if (!galloc(GMEM_FIXED, n + 2, 0, &sel))
+    /* the new task's: freed when it ends (KERNEL's own, it was kept for
+       ever: KERNEL audit, medium 28) */
+    if (!galloc(GMEM_FIXED, n + 2, TW(t, TDB_PDB), &sel))
         return;
     kmemcpy(MK_FP(sel, 0), e, n + 2 <= lim ? n + 2 : (u16)lim);
     *(u16 FAR *)MK_FP(TW(t, TDB_PDB), 0x2C) = sel;
@@ -819,6 +821,7 @@ void __cdecl task_exit_c(u16 code)
     cur_pdb = 0;
     thhook_sync();                      /* (no freed TDB in THHOOK while
                                            idle: KERNEL audit, H20) */
+    kmisc_task_end(t);
     dpmi_free_desc(pdb);
     if (x)
         GlobalFree(x->self);

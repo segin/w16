@@ -243,6 +243,8 @@ static int set_tiles(u16 s, u16 n, u32 lin, u32 size, int code)
     for (i = 0; i < n; i++) {
         u32 off = (u32)i << 16;
         u32 lim = size > off ? size - off - 1 : 0;
+        if (lim > 0xFFFFFUL)            /* in pages past 1 MB (global.c) */
+            lim |= 0xFFF;
         if (!dpmi_set_desc(s + i * sel_inc, lin + off, lim, code) &&
             (lim <= 0xFFFFUL || !dpmi_set_desc(s + i * sel_inc, lin + off, 0xFFFF, code)))
             return 0;
@@ -1522,7 +1524,8 @@ static const char *global_check(u32 *bad)
                     want = bytes - ((u32)i << 16) - 1;
                     l = lsl(t);
                     if (!present(t) || lin_of(t) != AR(a)->addr + ((u32)i << 16) ||
-                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF)))
+                        (l != (u16)want && !(want > 0xFFFFUL && l == 0xFFFF) &&
+                         !(want > 0xFFFFFUL && l == (u16)(want | 0xFFF))))
                         return "global: a tile's base or limit is not the block's";
                 }
             }

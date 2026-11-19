@@ -55,6 +55,18 @@ u16 KAPI IsTaskLocked(void)                                   /* KERNEL.122 */
     return locked_task;
 }
 
+/* task t has ended: neither the locked task nor FileCdr's any more (they
+   named the dead TDB: KERNEL audit, medium 25) */
+void kmisc_task_end(u16 t)
+{
+    if (locked_task == t)
+        locked_task = 0;
+    if (filecdr_task == t) {
+        filecdr_task = 0;
+        filecdr_proc = 0;
+    }
+}
+
 /* SetTaskSignalProc (KERNEL.38): USER's signal procedure of a task (TDB
    2Ah, Pietrek); returns the previous one. */
 u32 KAPI SetTaskSignalProc(u16 htask, u32 proc)
@@ -124,9 +136,9 @@ u16 KAPI GetCodeInfo(u32 proc, u16 FAR *info)
         i = lo - 1;
     } else {
         for (m = module_first; m; m = m->next) {
-            for (i = 0; i < m->seg_count; i++)
-                if ((m->seg[i].sel | 7) == (hi | 7))
-                    break;
+            for (i = 0; i < m->seg_count; i++)  /* (not a slot without a */
+                if (m->seg[i].sel && (m->seg[i].sel | 7) == (hi | 7))   /* segment: */
+                    break;                      /* audit, medium 32) */
             if (i < m->seg_count)
                 break;
         }
