@@ -788,11 +788,10 @@ static void sec_child(void)
     /* the child's events killed, unlogged: whether its one-shot one had
        come by now (and so which slots the next sections' events get) was
        timing in 386 Enhanced mode under load */
-    quiet(0x0800);
     timeKillEvent(GetPrivateProfileInt("tpr", "a", 0, "SYSTEM.INI"));
     timeKillEvent(GetPrivateProfileInt("tpr", "b", 0, "SYSTEM.INI"));
-    quiet(0x0808);
-    shim();
+    if (tmsdump)
+        tmsdump("NUL");
 }
 
 /* channel 0's status (read-back command): its mode in bits 1-3 */

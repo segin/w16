@@ -21,6 +21,11 @@
  */
 #include <windows.h>
 
+extern WORD tms_cli(void);
+#pragma aux tms_cli = "pushf" "pop ax" "cli" value [ax];
+extern void tms_sti(WORD fl);
+#pragma aux tms_sti = "push ax" "popf" parm [ax];
+
 typedef LRESULT (FAR PASCAL *DRVPROC)(DWORD, HDRVR, UINT, LPARAM, LPARAM);
 
 extern WORD __cdecl __far tms_peek(const void __far *src, void __far *dst, WORD n);
@@ -193,9 +198,18 @@ void FAR PASCAL __loadds TmsDumpTo(LPCSTR name)
         int n = wsprintf(line, "  TMS lost %u\r\n", lost);
         put(f, line, n);
     }
-    nrec = 0;
-    lost = 0;
-    nquiet = 0;
+    {
+        /* a record made at interrupt time after the loop's last look (a
+           callback's call) stays for the next dump: clearing them all
+           here could lose one */
+        WORD k, fl = tms_cli();
+        for (k = 0; i + k < nrec; k++)
+            recs[k] = recs[i + k];
+        nrec = k;
+        lost = 0;
+        nquiet = 0;
+        tms_sti(fl);
+    }
     _lclose(f);
 }
 

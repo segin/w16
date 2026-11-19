@@ -71,7 +71,20 @@ Exit status 0 when everything checked agrees.
 import re
 import sys
 
+def _cstr(m):
+    """DRV_OPEN's lParam1, the [drivers] line's rest as USER passes it: TMS
+    shows 16 bytes from there; past the string's end is whatever the
+    caller's stack held (it differed between two runs of the same
+    MMSYSTEM, an interrupt's leftovers): kept up to the terminator"""
+    h = m.group(2)
+    for i in range(0, len(h), 2):
+        if h[i:i + 2] == '00':
+            return m.group(1) + h[:i + 2] + '(..)]'
+    return m.group(0)
+
+
 MASKS = [
+    (re.compile(r'(msg=0003 .*\[l1 )([0-9A-F]{32})\]'), _cstr),
     (re.compile(r'(msg=0808 .*-> )[0-9A-F]{8}'), r'\1(time)'),
     (re.compile(r'(msg 0808 counted )\d+'), r'\1(n)'),
     # TMS's nesting depth: whether a timer interrupt came while the probe
