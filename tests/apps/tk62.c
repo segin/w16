@@ -12,6 +12,10 @@
  *  - "ldt" (C4): GlobalReAlloc growing a block in place with no selector
  *    left for the rest of the free space after it (KRNL286): it made the
  *    block the whole free space, over other selectors.
+ *  - "dosalloc" (H2): GlobalDosAlloc of 1 MB and more fails (w16 asked
+ *    DPMI for the size's low 16 bits of paragraphs and used the rest).
+ *  - "badne" (H9): TKBADNE.DLL, whose entry table length runs its tables
+ *    past 64K, fails to load (w16 read past its copy of them).
  *  - "entries" (C5): TKENT.DLL (tools/mkne.py --entries 13300), whose
  *    entry table fits its file but not the module table (fails), and
  *    TKENT2.DLL (12000 entries, loads).
@@ -192,6 +196,37 @@ static void entries(void)
         obs_env("entries: 1 proc lo", OFFSETOF(GetProcAddress(h, MAKEINTRESOURCE(1))));
         FreeLibrary(h);
     }
+}
+
+static void dosalloc(void)
+{
+    DWORD d;
+    step("dosalloc");
+    d = GlobalDosAlloc(0x100000UL);
+    check(d == 0, "dosalloc: 1 MB fails");
+    if (d)
+        GlobalDosFree(LOWORD(d));
+    d = GlobalDosAlloc(0x10FFF0UL);
+    check(d == 0, "dosalloc: 10FFF0h fails");
+    if (d)
+        GlobalDosFree(LOWORD(d));
+    d = GlobalDosAlloc(0x100);
+    check(d != 0, "dosalloc: 100h after");
+    if (d)
+        GlobalDosFree(LOWORD(d));
+}
+
+static void badne(void)
+{
+    HINSTANCE h;
+    step("badne");
+    h = LoadLibrary("TKBADNE.DLL");
+    check((UINT)h <= 32, "badne: fails");
+    if ((UINT)h > 32)
+        FreeLibrary(h);
+    h = GlobalAlloc(GMEM_MOVEABLE, 0x1000);
+    check(h != 0, "badne: alloc after");
+    GlobalFree(h);
 }
 
 /* ---- observations ---- */
@@ -482,6 +517,8 @@ int __cdecl tmain(void)
     chunk();
     big();
     ldt();
+    dosalloc();
+    badne();
     badptr();
     strptr();
     atoms();

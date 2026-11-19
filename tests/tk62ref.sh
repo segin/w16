@@ -13,7 +13,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 out=$1
 d=$root/build/dos
 mkdir -p "$out"
-REFRUN_FILES="$d/TK62A.EXE $d/TKENT.DLL=WINDOWS/TKENT.DLL $d/TKENT2.DLL=WINDOWS/TKENT2.DLL"
+REFRUN_FILES="$d/TK62A.EXE $d/TKENT.DLL=WINDOWS/TKENT.DLL $d/TKENT2.DLL=WINDOWS/TKENT2.DLL $d/TKBADNE.DLL=WINDOWS/TKBADNE.DLL"
 export REFRUN_FILES
 for mode in S 3; do
     "$root/tests/refrun.sh" "$d/TK62.EXE" /$mode > "$out/TK62-win31-$mode.log" 2>&1 || true

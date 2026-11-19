@@ -27,6 +27,8 @@ a table that disagrees with the data.
 value its ordinal), in bundles of 255: KERNEL keeps 5 bytes an entry
 and 6 a bundle, the file 3 and 2, so a table that fits the file can be
 too large for the module table (TK62, the KERNEL audit's C5).
+--entry-len N writes N as the entry table's length in the NE header
+instead of its own (a bad file: TK62, the audit's H9).
 """
 import argparse
 import struct
@@ -63,7 +65,8 @@ def entry_table(n):
     return out + b'\0\0'
 
 
-def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0):
+def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
+          entry_len=None):
     """res: [(type, name, data, length-override or None)]"""
     st = stub()
     lfa = len(st)
@@ -106,7 +109,8 @@ def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0):
             pos += ln * unit
     rt = rt + b'\0\0' if res else b''
     ne = struct.pack('<2sBBHHIHHHHIIHHHHHHHHIHHHBBHHHH',
-                     b'NE', 5, 1, off_entry, len(entry), 0, flags, 0, 0, 0, 0, 0, 0, 0,
+                     b'NE', 5, 1, off_entry, len(entry) if entry_len is None else entry_len,
+                     0, flags, 0, 0, 0, 0, 0, 0, 0,
                      len(nonres), off_rt, off_rt, off_resn, off_imp, off_imp,
                      nonres_off, 0, shift, 0, 2, 0, 0, 0, 0, expver)
     out = bytearray(st + ne + rt + names + resnames + entry + nonres)
@@ -127,6 +131,7 @@ def main():
     ap.add_argument('--expver', default='3.10')
     ap.add_argument('--stubonly', action='store_true')
     ap.add_argument('--entries', type=int, default=0)
+    ap.add_argument('--entry-len', type=lambda v: int(v, 0), default=None)
     ap.add_argument('res', nargs='*')
     a = ap.parse_args()
     if a.stubonly:
@@ -139,7 +144,7 @@ def main():
         res.append((rkey(p[0]), rkey(p[1]), data, int(p[3]) if len(p) > 3 else None))
     mj, mn = (int(x) for x in a.expver.split('.'))
     open(a.out, 'wb').write(build(a.module, a.desc, res, a.shift, int(a.flags, 16),
-                                  (mj << 8) | mn, a.entries))
+                                  (mj << 8) | mn, a.entries, a.entry_len))
 
 
 if __name__ == '__main__':
