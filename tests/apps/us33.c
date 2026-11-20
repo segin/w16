@@ -36,8 +36,15 @@
  *           box without the style; one given ANSI_VAR_FONT first
  *   dlgf    CreateDialogIndirect of child and popup templates of several
  *           frame styles, with and without DS_SETFONT: the window and
- *           client sizes (a top-level one with a font and WS_DLGFRAME
- *           logged as ~: user/dlg.c keeps it bigger for now)
+ *           client sizes
+ *   idf     the focus a dialog's WM_INITDIALOG leaves (TRUE, FALSE, a
+ *           control made then; with a dialog procedure, a class of its
+ *           own, both): whether it is sent, the focus as made and shown
+ *   cs      WS_CLIPSIBLINGS of children of every system class and of
+ *           this program's, made with it or given it, in parents with
+ *           and without WS_CLIPCHILDREN
+ *   pv      PtVisible, RectVisible, PtInRegion, RectInRegion as they
+ *           return (the high byte too)
  */
 #include <windows.h>
 
@@ -609,19 +616,19 @@ static void dc_probe(const char *name, HDC hdc, HWND kid)
     p.y = w.bottom - 20;
     q.x = (k.left + k.right) / 2;
     q.y = (k.top + k.bottom) / 2;
-    /* (PtVisible: a BOOL; 3.1's GDI gives 201h, w16's 1) */
+    /* (PtVisible as it is: 201h on 3.1, sec_pv) */
     c = GetPixel(hdc, p.x, p.y);
     wsprintf(nm, "gdc.%s.pixel", (LPSTR)name);
     {
         char t[64];
-        wsprintf(t, "%lx window %d visible %d", c, c == GetSysColor(COLOR_WINDOW), PtVisible(hdc, p.x, p.y) != 0);
+        wsprintf(t, "%lx window %d visible %x", c, c == GetSysColor(COLOR_WINDOW), (WORD)PtVisible(hdc, p.x, p.y));
         obs_str(nm, t);
     }
     c = GetPixel(hdc, q.x, q.y);
     wsprintf(nm, "gdc.%s.kidpixel", (LPSTR)name);
     {
         char t[64];
-        wsprintf(t, "%lx face %d visible %d", c, c == GetSysColor(COLOR_BTNFACE), PtVisible(hdc, q.x, q.y) != 0);
+        wsprintf(t, "%lx face %d visible %x", c, c == GetSysColor(COLOR_BTNFACE), (WORD)PtVisible(hdc, q.x, q.y));
         obs_str(nm, t);
     }
     /* a corner of the screen: the desktop */
@@ -629,7 +636,7 @@ static void dc_probe(const char *name, HDC hdc, HWND kid)
     wsprintf(nm, "gdc.%s.deskpixel", (LPSTR)name);
     {
         char t[64];
-        wsprintf(t, "%lx bg %d visible %d", c, c == GetSysColor(COLOR_BACKGROUND), PtVisible(hdc, 2, 470) != 0);
+        wsprintf(t, "%lx bg %d visible %x", c, c == GetSysColor(COLOR_BACKGROUND), (WORD)PtVisible(hdc, 2, 470));
         obs_str(nm, t);
     }
     /* painted through it: over the main window, its child, the desktop */
@@ -804,6 +811,7 @@ static void tab_all(HWND lb, const char *pre)
     }
 }
 
+LRESULT FAR PASCAL __export __loadds main_proc(HWND h, UINT m, WPARAM w, LPARAM l);
 BOOL FAR PASCAL __export __loadds plain_proc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
     (void)h, (void)w, (void)l;
@@ -871,6 +879,295 @@ static void tto_font(HDC hdc, const char *fn)
             obs_str(nm, t);
         }
     }
+}
+
+/* ---- the focus a dialog's WM_INITDIALOG leaves (Character Map) ---- */
+static int idv, idseen;
+
+static LRESULT idf_init(HWND h)
+{
+    HWND f = GetDlgItem(h, 12);
+    if (idv >= 4) {
+        f = CreateWindow("BUTTON", "C", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 5, 40, 40, 14, h, (HMENU)13, hi,
+                         NULL);
+    }
+    SetFocus(f);
+    return !(idv & 1);
+}
+
+BOOL FAR PASCAL __export __loadds idf_dlg(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+    (void)w, (void)l;
+    if (m == WM_INITDIALOG) {
+        idseen += 1;
+        return (BOOL)idf_init(h);
+    }
+    return FALSE;
+}
+
+LRESULT FAR PASCAL __export __loadds idf_cls(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+    if (m == WM_INITDIALOG && idv >= 8) {
+        idseen += 16;
+        return DefDlgProc(h, m, w, l);
+    }
+    if (m == WM_INITDIALOG) {
+        LRESULT r;
+        idseen += 16;
+        r = idf_init(h);
+        if (idv >= 6)
+            return DefDlgProc(h, m, w, l);
+        return r;
+    }
+    return DefDlgProc(h, m, w, l);
+}
+
+static void sec_idf(void)
+{
+    static BYTE t[160];
+    WNDCLASS wc;
+    char nm[24];
+    wc.style = 0;
+    wc.lpfnWndProc = (WNDPROC)idf_cls;
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = DLGWINDOWEXTRA;
+    wc.hInstance = hi;
+    wc.hIcon = 0;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = "US33D";
+    RegisterClass(&wc);
+    for (idv = 0; idv < 10; idv++) {
+        BOOL cls = (idv & 2) || idv >= 6, proc = !cls || idv >= 8;
+        BYTE *p = t;
+        HWND d, f;
+        int k;
+        *(DWORD *)p = WS_POPUP | WS_CAPTION; p += 4;
+        *p++ = 2;
+        *(int *)p = 20; p += 2; *(int *)p = 20; p += 2;
+        *(int *)p = 100; p += 2; *(int *)p = 60; p += 2;
+        *p++ = 0;                                       /* menu */
+        if (cls) {
+            lstrcpy((LPSTR)p, "US33D");
+            p += 6;
+        } else
+            *p++ = 0;
+        *p++ = 'D'; *p++ = 0;
+        for (k = 11; k <= 12; k++) {
+            *(int *)p = 5; p += 2; *(int *)p = 5 + (k - 11) * 16; p += 2;
+            *(int *)p = 40; p += 2; *(int *)p = 14; p += 2;
+            *(WORD *)p = k; p += 2;
+            *(DWORD *)p = WS_CHILD | WS_VISIBLE | WS_TABSTOP; p += 4;
+            *p++ = 0x80;
+            *p++ = 'B'; *p++ = 0;
+            *p++ = 0;
+        }
+        idseen = 0;
+        d = CreateDialogIndirect(hi, (LPCSTR)t, hMain, proc ? (DLGPROC)idf_dlg : NULL);
+        wsprintf(nm, "idf.%d.init", idv);
+        obs(nm, idseen);
+        f = GetFocus();
+        wsprintf(nm, "idf.%d.made", idv);
+        obs(nm, d && f && GetParent(f) == d ? GetWindowWord(f, GWW_ID) : f == d && d ? 1 : 0);
+        ShowWindow(d, SW_SHOWNORMAL);
+        UpdateWindow(d);
+        pump(150);
+        f = GetFocus();
+        wsprintf(nm, "idf.%d.shown", idv);
+        obs(nm, d && f && GetParent(f) == d ? GetWindowWord(f, GWW_ID) : f == d && d ? 1 : 0);
+        DestroyWindow(d);
+        pump(50);
+    }
+}
+
+/* ---- where a child gets WS_CLIPSIBLINGS (QuickTime's Help button) ---- */
+static void cs_log(const char *name, HWND h)
+{
+    char nm[32];
+    wsprintf(nm, "cs.%s", (LPSTR)name);
+    obs(nm, HIWORD(GetWindowLong(h, GWL_STYLE)));
+}
+
+static void sec_cs(void)
+{
+    static const char *ops[] = { "made", "top", "bottom", "bring", "setparent", "show", "move",
+                                 "swpshow", "defer", "enable", "focus", "after", "nozorder", 0 };
+    int k;
+    HWND other = CreateWindow("BUTTON", "Other", WS_CHILD | WS_VISIBLE, 5, 5, 60, 20, hMain,
+                              (HMENU)401, hi, NULL);
+    for (k = 0; ops[k]; k++) {
+        HWND h = CreateWindow("BUTTON", "Help", WS_CHILD | WS_VISIBLE | WS_TABSTOP | (k ? 0 : 0),
+                              20, 10, 60, 20, hMain, (HMENU)400, hi, NULL);
+        switch (k) {
+        case 1: SetWindowPos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE); break;
+        case 2: SetWindowPos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE); break;
+        case 3: BringWindowToTop(h); break;
+        case 4: SetParent(h, hMain); break;
+        case 5: ShowWindow(h, SW_HIDE); ShowWindow(h, SW_SHOW); break;
+        case 6: MoveWindow(h, 30, 12, 60, 20, TRUE); break;
+        case 7: SetWindowPos(h, 0, 30, 12, 60, 20, SWP_NOZORDER | SWP_SHOWWINDOW); break;
+        case 8: {
+            HDWP d = BeginDeferWindowPos(2);
+            d = DeferWindowPos(d, h, 0, 40, 12, 60, 20, SWP_NOZORDER);
+            EndDeferWindowPos(d);
+            break;
+        }
+        case 9: EnableWindow(h, FALSE); EnableWindow(h, TRUE); break;
+        case 10: SetFocus(h); break;
+        case 11: SetWindowPos(h, other, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE); break;
+        case 12: SetWindowPos(h, 0, 25, 12, 0, 0, SWP_NOSIZE | SWP_NOZORDER); break;
+        }
+        cs_log(ops[k], h);
+        cs_log(k == 1 ? "othertop" : "other", other);
+        DestroyWindow(h);
+    }
+    {
+        /* made with it, and from a dialog template item that has it */
+        HWND h = CreateWindow("BUTTON", "Help", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 20, 10, 60, 20,
+                              hMain, (HMENU)400, hi, NULL);
+        cs_log("madewith", h);
+        DestroyWindow(h);
+        h = CreateWindow("BUTTON", "Help", WS_CHILD | WS_CLIPSIBLINGS, 20, 10, 60, 20, hMain, (HMENU)400,
+                         hi, NULL);
+        cs_log("madehidden", h);
+        ShowWindow(h, SW_SHOW);
+        cs_log("madehiddenshown", h);
+        DestroyWindow(h);
+        h = CreateWindowEx(WS_EX_NOPARENTNOTIFY, "BUTTON", "Help", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
+                           20, 10, 60, 20, hMain, (HMENU)400, hi, NULL);
+        cs_log("madeex", h);
+        DestroyWindow(h);
+        h = CreateWindow("BUTTON", "Help", WS_CHILD | WS_VISIBLE, 20, 10, 60, 20, hMain, (HMENU)400, hi, NULL);
+        SetWindowLong(h, GWL_STYLE, GetWindowLong(h, GWL_STYLE) | WS_CLIPSIBLINGS);
+        cs_log("swl", h);
+        DestroyWindow(h);
+        h = CreateWindow("STATIC", "S", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 20, 10, 60, 20, hMain,
+                         (HMENU)400, hi, NULL);
+        cs_log("static", h);
+        DestroyWindow(h);
+        h = CreateWindow("US33M", "M", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 20, 10, 60, 20, hMain,
+                         (HMENU)400, hi, NULL);
+        cs_log("own", h);
+        DestroyWindow(h);
+        h = CreateWindow("US33M", "M", WS_POPUP | WS_CLIPSIBLINGS, 20, 10, 60, 20, hMain, 0, hi, NULL);
+        cs_log("popup", h);
+        DestroyWindow(h);
+    }
+    {
+        /* the other system classes, and a class of this program's with
+           CS_PARENTDC */
+        static const char *cls[] = { "EDIT", "LISTBOX", "SCROLLBAR", "COMBOBOX", "US33P", 0 };
+        WNDCLASS wc;
+        int i;
+        wc.style = CS_PARENTDC;
+        wc.lpfnWndProc = (WNDPROC)main_proc;
+        wc.cbClsExtra = wc.cbWndExtra = 0;
+        wc.hInstance = hi;
+        wc.hIcon = 0;
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        wc.lpszMenuName = NULL;
+        wc.lpszClassName = "US33P";
+        RegisterClass(&wc);
+        for (i = 0; cls[i]; i++) {
+            char nm[24];
+            HWND h = CreateWindow(cls[i], "", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 20, 10, 60, 20, hMain,
+                                  (HMENU)400, hi, NULL);
+            wsprintf(nm, "cls%d", i);
+            cs_log(nm, h);
+            DestroyWindow(h);
+        }
+    }
+    {
+        /* a dialog template's button with WS_CLIPSIBLINGS */
+        static BYTE t[80];
+        BYTE *p = t;
+        HWND d;
+        *(DWORD *)p = WS_POPUP | WS_CAPTION; p += 4;
+        *p++ = 1;
+        *(int *)p = 20; p += 2; *(int *)p = 20; p += 2;
+        *(int *)p = 100; p += 2; *(int *)p = 60; p += 2;
+        *p++ = 0; *p++ = 0; *p++ = 'D'; *p++ = 0;
+        *(int *)p = 5; p += 2; *(int *)p = 5; p += 2; *(int *)p = 40; p += 2; *(int *)p = 14; p += 2;
+        *(WORD *)p = 11; p += 2;
+        *(DWORD *)p = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS; p += 4;
+        *p++ = 0x80; *p++ = 'B'; *p++ = 0; *p++ = 0;
+        d = CreateDialogIndirect(hi, (LPCSTR)t, hMain, (DLGPROC)plain_proc);
+        cs_log("dlgitem", GetDlgItem(d, 11));
+        {
+            HWND b = CreateWindow("BUTTON", "H", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 5, 30, 40, 14, d,
+                                  (HMENU)12, hi, NULL);
+            cs_log("indlg", b);
+        }
+        DestroyWindow(d);
+    }
+    {
+        /* a child of a child, and in a parent with WS_CLIPCHILDREN */
+        HWND p = CreateWindow("US33M", "P", WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, 200, 100, hMain,
+                              (HMENU)402, hi, NULL);
+        HWND h = CreateWindow("BUTTON", "Help", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 20, 10, 60, 20, p,
+                              (HMENU)400, hi, NULL);
+        cs_log("inclip", h);
+        DestroyWindow(p);
+    }
+    DestroyWindow(other);
+}
+
+/* ---- what GDI's visibility tests return (the high byte too) ---- */
+static void pv_one(const char *name, HDC hdc)
+{
+    static const int pts[][2] = { { 5, 5 }, { 150, 100 }, { 2, 470 }, { 600, 20 }, { -5, -5 } };
+    char nm[32], t[96];
+    RECT r;
+    int i, n = 0;
+    for (i = 0; i < 5; i++) {
+        wsprintf(t + n, "%x ", (WORD)PtVisible(hdc, pts[i][0], pts[i][1]));
+        n = lstrlen(t);
+    }
+    SetRect(&r, 0, 0, 10, 10);
+    wsprintf(t + n, "r%x ", (WORD)RectVisible(hdc, &r));
+    n = lstrlen(t);
+    SetRect(&r, -20, -20, -10, -10);
+    wsprintf(t + n, "r%x", (WORD)RectVisible(hdc, &r));
+    wsprintf(nm, "pv.%s", (LPSTR)name);
+    obs_str(nm, t);
+}
+
+static void sec_pv(void)
+{
+    HWND desk = GetDesktopWindow();
+    HDC hdc;
+    HRGN a, b, c;
+    RECT r;
+    char t[96];
+    hdc = GetDC(NULL);
+    pv_one("null", hdc);
+    ReleaseDC(NULL, hdc);
+    hdc = GetDC(desk);
+    pv_one("desk", hdc);
+    ReleaseDC(desk, hdc);
+    hdc = GetDC(hMain);
+    pv_one("main", hdc);
+    /* a clip region: simple, then complex */
+    a = CreateRectRgn(0, 0, 100, 80);
+    SelectClipRgn(hdc, a);
+    pv_one("mainclip", hdc);
+    b = CreateRectRgn(0, 0, 100, 80);
+    c = CreateRectRgn(120, 90, 200, 140);
+    CombineRgn(b, b, c, RGN_OR);
+    SelectClipRgn(hdc, b);
+    pv_one("mainclip2", hdc);
+    ReleaseDC(hMain, hdc);
+    /* the regions themselves */
+    SetRect(&r, 10, 10, 20, 20);
+    wsprintf(t, "%x %x %x %x / %x %x %x", (WORD)PtInRegion(a, 5, 5), (WORD)PtInRegion(a, 150, 5),
+             (WORD)PtInRegion(b, 150, 100), (WORD)PtInRegion(b, 110, 85), (WORD)RectInRegion(a, &r),
+             (WORD)RectInRegion(b, &r), (WORD)EqualRgn(a, a));
+    obs_str("pv.rgn", t);
+    DeleteObject(a);
+    DeleteObject(b);
+    DeleteObject(c);
 }
 
 /* ---- DrawFocusRect's dots, by the DC's colours ---- */
@@ -985,11 +1282,7 @@ static void dlgf_one(DWORD style, const char *face)
         lstrcpy((LPSTR)p, face); p += lstrlen(face) + 1;
     }
     h = CreateDialogIndirect(hi, (LPCSTR)tpl, parent, (DLGPROC)plain_proc);
-    /* a top-level template with a font and WS_DLGFRAME: logged, not
-       compared (w16 keeps a bigger window there for now: user/dlg.c) */
-    wsprintf(nm, "%sdlgf.%lx.%s",
-             (LPSTR)(!(style & WS_CHILD) && (style & DS_SETFONT) && (style & WS_DLGFRAME) ? "~" : ""),
-             style, (LPSTR)((style & DS_SETFONT) ? face : "none"));
+    wsprintf(nm, "dlgf.%lx.%s", style, (LPSTR)((style & DS_SETFONT) ? face : "none"));
     if (!h) {
         obs(nm, 0);
         return;
@@ -1066,6 +1359,12 @@ int __cdecl tmain(void)
     sec_gdc();
     out("dlgf\r\n");
     sec_dlgf();
+    out("idf\r\n");
+    sec_idf();
+    out("cs\r\n");
+    sec_cs();
+    out("pv\r\n");
+    sec_pv();
     out("dfr\r\n");
     sec_dfr();
     out("tto\r\n");
