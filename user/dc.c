@@ -202,7 +202,10 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
         /* CS_PARENTDC: a cache DC clipped to the parent's client area, its
            origin the child's (US29 dc on 3.1: GetClipBox -10 -10 388 269
            for a child at 10,10 of a 398 x 279 client area) */
-        if ((c->style & CS_PARENTDC) && !window && (w->style & WS_CHILD) && w->hwndParent)
+        /* (not for USER's own controls, whose classes have it too: w16's
+           controls paint relying on their own clipping) */
+        if ((c->style & CS_PARENTDC) && c->hModule != hModUser && !window &&
+            (w->style & WS_CHILD) && w->hwndParent)
             DC_(dh)->flags |= DCE_PARENT;
         DC_(dh)->hwnd = h;
     }

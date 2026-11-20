@@ -41,9 +41,13 @@ static HHOOK hk;
 static int deny = -1;           /* the code the procedure refuses, -1 none */
 static char rec[700];
 
+static int frozen;              /* after a's DESTROYWND: nothing more */
+
 static void rec_add(const char *s)
 {
     int n = lstrlen(rec);
+    if (frozen)
+        return;
     if (n + lstrlen(s) + 2 >= sizeof rec)
         return;
     if (n)
@@ -125,6 +129,11 @@ LRESULT FAR PASCAL __export __loadds cbt_proc(int code, WPARAM w, LPARAM l)
         rec_add("!");
         return 1;
     }
+    /* the activation after a's DESTROYWND is not compared: 3.1 activates
+       the next window before a goes, w16 after (left:
+       docs/notes/user-audit-triage.md) */
+    if (code == HCBT_DESTROYWND && (HWND)w == ha)
+        frozen = 1;
     return CallNextHookEx(hk, code, w, l);
 }
 
@@ -138,6 +147,7 @@ static void sec_cbt(void)
         HWND r;
         RECT rc;
         rec[0] = 0;
+        frozen = 0;
         ha = hb = 0;
         hk = SetWindowsHookEx(WH_CBT, (HOOKPROC)cbt_proc, hi, GetCurrentTask());
         deny = k ? codes[k] : -1;

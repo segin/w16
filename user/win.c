@@ -57,7 +57,6 @@ void free_props(PWND w);
 void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
 void free_window_dcs(HWND h);
-HWND next_to_activate(HWND h);
 
 /* ---- where a window's WND is ----
    Normally (the layout 3.1's tools know, Schulman ch. 6) the WND and its
@@ -687,18 +686,10 @@ BOOL destroy_window(HWND h)
     }
     if (!(w = valid_wnd(h)))
         return TRUE;
-    /* the active window: the next one is activated while it is still
-       there (US30 cbt on 3.1: DESTROYWND for it and its owned windows,
-       then the next window's ACTIVATE naming it as the active one, and
-       SETFOCUS from it, before it is hidden; w16 activated afterwards,
-       the focus first taken away) */
-    if (h == hwndActive && !(w->style & WS_CHILD)) {
-        HWND t = next_to_activate(h);
-        if (t && t != h)
-            activate_window(t, FALSE);
-        if (!(w = valid_wnd(h)))
-            return TRUE;
-    }
+    /* (3.1 activates the next window before the window goes - US30 cbt:
+       its ACTIVATE names the dying window as the active one - where w16
+       does it afterwards; doing it here broke Task List's End Task and
+       tiling, boot test taskman: left, docs/notes/user-audit-triage.md) */
     wasvis = is_visible(w);
     rc = w->rcWindow;
     if (wasvis)

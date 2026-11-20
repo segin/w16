@@ -52,6 +52,14 @@ static WORD add_hook(int type, HOOKPROC proc, HINSTANCE hinst, HTASK task, BOOL 
     if (!hh)
         return 0;
     h = HK(hh);
+    /* WH_MSGFILTER is task-specific whatever the call says (3.1 SDK,
+       SetWindowsHook: "the only exception is WH_MSGFILTER, which is
+       task-specific"; WH_SYSMSGFILTER is the system-wide one). Kept
+       system-wide, Program Manager's F1 filter took Notepad's menu and
+       dialog messages once USER's loops called CallMsgFilter (boot tests
+       helpmenus, tabs, runfront and more) */
+    if (type == WH_MSGFILTER && !task)
+        task = GetCurrentTask();
     h->type = type;
     h->proc = proc;
     h->hinst = hinst;
@@ -237,15 +245,20 @@ BOOL WINAPI CallMsgFilter(MSG __far *m, int code)
 {
     if (GP_BAD(m))
         return FALSE;
-    if (call_hook(WH_SYSMSGFILTER, code, 0, (LPARAM)m))
+    /* the answer is a BOOL: AX alone (Program Manager's filter returns
+       0 in AX and whatever was in DX; taken as a DWORD, its "processed"
+       ate the keys of every menu and dialog: boot tests runfront, tabs,
+       helpmenus, ...) */
+    if (LOWORD(call_hook(WH_SYSMSGFILTER, code, 0, (LPARAM)m)))
         return TRUE;
-    return call_hook(WH_MSGFILTER, code, 0, (LPARAM)m) != 0;
+    return LOWORD(call_hook(WH_MSGFILTER, code, 0, (LPARAM)m)) != 0;
 }
 
-/* WH_CBT (US30 cbt): nonzero refuses what code announces */
+/* WH_CBT (US30 cbt): nonzero refuses what code announces (these
+   answers are BOOLs: AX alone, as CallMsgFilter's) */
 LRESULT cbt_hook(int code, WPARAM wp, LPARAM lp)
 {
-    return hook_set(WH_CBT) ? call_hook(WH_CBT, code, wp, lp) : 0;
+    return hook_set(WH_CBT) ? LOWORD(call_hook(WH_CBT, code, wp, lp)) : 0;
 }
 
 /* WH_KEYBOARD, WH_MOUSE (US30 kbd, mouse): HC_ACTION as the message is
@@ -253,7 +266,7 @@ LRESULT cbt_hook(int code, WPARAM wp, LPARAM lp)
    PM_NOREMOVE look */
 LRESULT kbd_hook(int code, WPARAM vk, LPARAM data)
 {
-    return hook_set(WH_KEYBOARD) ? call_hook(WH_KEYBOARD, code, vk, data) : 0;
+    return hook_set(WH_KEYBOARD) ? LOWORD(call_hook(WH_KEYBOARD, code, vk, data)) : 0;
 }
 
 LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit)
@@ -265,7 +278,7 @@ LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit)
     ms.hwnd = h;
     ms.wHitTestCode = hit;
     ms.dwExtraInfo = 0;
-    return call_hook(WH_MOUSE, code, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms);
+    return LOWORD(call_hook(WH_MOUSE, code, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms));
 }
 
 /* WH_SHELL notifications (3.1 SDK: HSHELL_*) */
