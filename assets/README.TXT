@@ -5,6 +5,12 @@ This directory is laid out like a Windows 3.1 directory (the one that
 holds WIN.COM) and contains only what w16 builds (MIT licence, see the
 w16 repository's LICENSE):
 
+Start w16 with  WIN /S  (Standard mode) for now. On a 386, plain WIN
+starts 386 Enhanced mode, as Windows 3.1's does; w16's 386 Enhanced mode
+is newer, and its DOS programs (the MS-DOS Prompt) still need
+WINOA386.MOD from your own Windows 3.1 (see below). Standard mode needs
+nothing of Microsoft's.
+
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
