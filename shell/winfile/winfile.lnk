@@ -8,3 +8,4 @@ option description 'w16 File Manager'
 library windows.lib
 library shell.lib
 library commdlg.lib
+import FILECDR KERNEL.130

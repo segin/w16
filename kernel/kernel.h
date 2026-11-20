@@ -300,6 +300,7 @@ u16  get_winflags(void);
 /* ---- toolhelp.c: THHOOK and the notification hooks ---- */
 void thhook_sync(void);
 void kmisc_task_end(u16 t);              /* kmisc.c */
+void kmisc_app_exit(u16 t);              /* kmisc.c: USER's AppExit's part */
 u16 kernel_seg(u16 sel);                 /* module.c: KERNEL's segment n + 1 */
 u16 kernel_seg_flags(u16 k);             /* module.c: its GlobalFlags */
 void gadopt_kernel(void);                /* global*.c: KERNEL's code into the heap */

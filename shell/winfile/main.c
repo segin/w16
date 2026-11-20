@@ -31,6 +31,126 @@ static HACCEL accel;
 
 BOOL ini_frame(RECT FAR *r, int *show);
 
+/* ---- the file system changing under us: KERNEL's FileCdr (KERNEL.130;
+   Schulman ch. 5: File Manager is its one user; tests/apps/tk64.c has
+   KERNEL's side). KERNEL calls cdr_proc, in whichever task made the
+   change, after each successful create, delete, rename, attribute change
+   or directory change, with the DOS function and a full path; cdr_proc
+   keeps them and posts one undocumented WM_FILESYSCHANGE (0034h,
+   Schulman ch. 7) for any number of them. Observed on 3.1 (obs WF15,
+   scenario WF14; the boot-test case w16winfile's other scenarios): a
+   file another program makes appears in a window showing its directory,
+   but a file that was there and is written again leaves the listing as
+   it was (its old size: WF01, where SNAP and WINFILE.INI change
+   C:\WINDOWS); with the Search Results window up a change on its drive
+   asks to update it, and a change made while that box is up asks again
+   after it. So each change is applied to the windows showing its
+   directory: a new name rereads them, as does a name that goes (delete,
+   rename) or a directory made or removed (the trees too). UNVERIFIED:
+   what 3.1 does on an attribute change (nothing here), a rename into a
+   window's directory, and whether it rereads or inserts. */
+#define WM_FILESYSCHANGE    0x0034
+#define CDR_MAX             8
+DWORD FAR PASCAL FileCdr(FARPROC proc);
+static FARPROC cdr_thunk;
+static BOOL cdr_posted, cdr_lost;
+static int cdr_n;
+static WORD cdr_code[CDR_MAX];
+static char cdr_path[CDR_MAX][PATHLEN];
+
+/* runs in the other task, on its stack: only plain stores and a post
+   (__loadds: -zWs callbacks take DS from SS, which is that task's here) */
+void FAR PASCAL _export __loadds cdr_proc(WORD code, LPSTR path)
+{
+    if (cdr_n < CDR_MAX) {
+        int i;
+        for (i = 0; i < PATHLEN - 1 && path[i]; i++)
+            cdr_path[cdr_n][i] = path[i];
+        cdr_path[cdr_n][i] = 0;
+        cdr_code[cdr_n++] = code;
+    } else {
+        cdr_lost = TRUE;                /* too many: reread everything */
+    }
+    if (!cdr_posted && g_frame) {
+        cdr_posted = TRUE;
+        PostMessage(g_frame, WM_FILESYSCHANGE, 0, 0);
+    }
+}
+
+/* is `name` in the window's list? */
+static BOOL listed(LPDIRWIN d, LPCSTR name)
+{
+    int n = (int)SendMessage(d->dirlb, LB_GETCOUNT, 0, 0), i;
+    for (i = 0; i < n; i++) {
+        LPDENTRY e = dir_item(d, i);
+        if (e && s_icmp(e->name, name) == 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void reread(LPDIRWIN d)
+{
+    HGLOBAL sel = dir_sel_save(d);
+    dir_read(d);
+    dir_sel_restore(d, sel);
+}
+
+/* one change: the windows showing its directory */
+static void file_changed(WORD code, LPSTR path)
+{
+    char dir[PATHLEN];
+    LPSTR name = path, p;
+    BYTE f = HIBYTE(code);
+    BOOL isdir = f == 0x39 || f == 0x3A;
+    HWND w;
+    for (p = path; *p; p++)
+        if (*p == '\\' || *p == '/')
+            name = p + 1;
+    s_cpy(dir, path, sizeof dir);
+    if (name - path < PATHLEN)
+        dir[name - path > 3 ? name - path - 1 : name - path] = 0;
+    for (w = GetWindow(g_mdi, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        LPDIRWIN d = dirwin_of(w);
+        if (!d)
+            continue;
+        if (isdir && d->panes != PANES_DIR && (d->path[0] | 0x20) == (path[0] | 0x20))
+            tree_refresh(d);
+        if (s_icmp(d->path, dir) != 0)
+            continue;
+        if (f == 0x41 || f == 0x56 || f == 0x3A) {
+            if (listed(d, name))
+                reread(d);
+        } else if (f != 0x43 && !listed(d, name)) {
+            reread(d);
+        }
+    }
+    search_changed(path[0]);
+}
+
+static void files_changed(void)
+{
+    WORD code[CDR_MAX];                 /* (not static: the question box */
+    char path[CDR_MAX][PATHLEN];        /* below brings the next ones in) */
+    int n = cdr_n, i;
+    BOOL lost = cdr_lost;
+    for (i = 0; i < n; i++) {
+        code[i] = cdr_code[i];
+        s_cpy(path[i], cdr_path[i], PATHLEN);
+    }
+    cdr_n = 0;
+    cdr_lost = FALSE;
+    cdr_posted = FALSE;
+    if (lost) {
+        refresh_all();
+        search_changed(path[0][0]);
+        return;
+    }
+    for (i = 0; i < n; i++)
+        file_changed(code[i], path[i]);
+    status_update();
+}
+
 LPSTR load_str(UINT ids)
 {
     static char buf[256];
@@ -486,7 +606,15 @@ LRESULT CALLBACK _export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             ini_save();
         DestroyWindow(w);
         return 0;
+    case WM_FILESYSCHANGE:
+        files_changed();
+        return 0;
     case WM_DESTROY:
+        if (cdr_thunk) {
+            FileCdr(NULL);
+            FreeProcInstance(cdr_thunk);
+            cdr_thunk = NULL;
+        }
         help(HELP_QUIT, 0);
         PostQuitMessage(0);
         return 0;
@@ -571,6 +699,11 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
                                NULL, NULL, inst, NULL);
     if (!g_frame)
         return 0;
+    cdr_thunk = MakeProcInstance((FARPROC)cdr_proc, inst);
+    if (!LOWORD(FileCdr(cdr_thunk))) {          /* another has it */
+        FreeProcInstance(cdr_thunk);
+        cdr_thunk = NULL;
+    }
     if (show == SW_SHOWNORMAL || show == SW_SHOW)
         show = fshow;
     ShowWindow(g_frame, show);

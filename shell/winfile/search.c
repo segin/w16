@@ -106,6 +106,47 @@ static void run_search(void)
     }
 }
 
+/* KERNEL's FileCdr reported a change on drive `drive` (main.c): with the
+   Search Results window up for that drive, 3.1 asks (obs WF15, a
+   question box titled "Search Results: ", Yes the default) and searches
+   again on Yes; a change while the box is up asks again after it (obs
+   WF15: SNAP's screenshot file, made while the box was up, brought a
+   second box, and the next a third). Not at once: what was posted before
+   comes first (scenario WF10: a close posted just after a change closes
+   File Manager on 3.1 with no box), so the question is posted to the
+   window (WM_SEARCHASK). UNVERIFIED: whether a change on another drive
+   asks too (here: no). */
+#define WM_SEARCHASK    (WM_USER + 0x40)
+static BOOL ask_posted, asking, ask_again;
+
+void search_changed(char drive)
+{
+    if (!search_win || (drive | 0x20) != (s_start[0] | 0x20))
+        return;
+    if (asking) {
+        ask_again = TRUE;
+        return;
+    }
+    if (!ask_posted) {
+        ask_posted = TRUE;
+        PostMessage(search_win, WM_SEARCHASK, 0, 0);
+    }
+}
+
+static void search_ask(void)
+{
+    char t[PATHLEN + 40];
+    ask_posted = FALSE;
+    asking = TRUE;
+    do {
+        ask_again = FALSE;
+        wsprintf(t, load_str(IDS_SEARCHTITLE), (LPSTR)"");
+        if (MessageBox(g_frame, load_str(IDS_SEARCHCHANGED), t, MB_YESNO | MB_ICONQUESTION) == IDYES)
+            run_search();
+    } while (ask_again && search_win);
+    asking = FALSE;
+}
+
 BOOL CALLBACK _export SearchDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     (void)lp;
@@ -236,6 +277,9 @@ static void open_selected(void)
 LRESULT CALLBACK _export SearchWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_SEARCHASK:
+        search_ask();
+        return 0;
     case WM_CREATE:
         search_win = w;
         search_lb = CreateWindow("ListBox", NULL,
@@ -286,6 +330,7 @@ LRESULT CALLBACK _export SearchWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_DESTROY:
         search_win = NULL;
+        ask_posted = FALSE;             /* (its question went with it) */
         search_lb = NULL;
         g_found = 0;
         status_update();

@@ -1,0 +1,33 @@
+; WF14: what File Manager does when another program changes the file
+; system (KERNEL's FileCdr, tests/apps/tk64.c): in C:\WFTEST, SNAP copies
+; NOTES.TXT to NEW1.TXT (its _lcreat: one FileCdr call); then Search for
+; *.TXT, and SNAP copies it to NEW2.TXT while the Search Results window
+; is up; Enter (Yes); obs WF15
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+key 09
+wait 500
+key 23
+key 26
+key 26
+wait 800
+snap C:\S01.BMP
+copyfile C:\WFTEST\NOTES.TXT C:\WFTEST\NEW1.TXT
+wait 3000
+snap C:\S02.BMP
+cmd 104
+wait 1000
+type *.TXT
+key 0D
+wait 4000
+snap C:\S03.BMP
+copyfile C:\WFTEST\NOTES.TXT C:\WFTEST\NEW2.TXT
+wait 3000
+snap C:\S04.BMP
+key 0D
+wait 3000
+snap C:\S05.BMP
+close
+wait 2500
