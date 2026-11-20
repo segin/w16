@@ -409,9 +409,24 @@ static int find(HWND h, PLB lb, int start, LPCSTR s, BOOL exact)
         if (exact) {
             if (!lstrcmpi(t, s))
                 return k;
-        } else {
+        } else if (len < sizeof buf) {
             lstr_cpyn(buf, t, len + 1);
             if (!lstrcmpi(buf, s))
+                return k;
+        } else {
+            /* a prefix longer than the buffer: copied into a block of its
+               own (into buf it ran over the stack: USER audit, sweep) */
+            HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, (DWORD)len + 1);
+            LPSTR p = g ? (LPSTR)GlobalLock(g) : 0;
+            BOOL same = FALSE;
+            if (p) {
+                lstr_cpyn(p, t, len + 1);
+                same = !lstrcmpi(p, s);
+                GlobalUnlock(g);
+            }
+            if (g)
+                GlobalFree(g);
+            if (same)
                 return k;
         }
     }

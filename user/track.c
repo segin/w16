@@ -111,6 +111,11 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
         return;
     if (w->style & WS_MAXIMIZE)
         return;
+    /* WH_CBT's HCBT_MOVESIZE with the window's rectangle (3.1 SDK; US30
+       on 3.1: none for MoveWindow); nonzero: no tracking */
+    r0 = w->rcWindow;
+    if (cbt_hook(HCBT_MOVESIZE, (WPARAM)h, (LPARAM)(RECT __far *)&r0) || !(w = valid_wnd(h)))
+        return;
     r0 = w->rcWindow;
     /* the frame as thick as the window's border less its black line
        (dragging Program Manager with BorderWidth=3: 3 pixels; UNVERIFIED
@@ -151,6 +156,9 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     while (!done) {
         POINT p;
         next_input(&m);
+        /* no WH_MSGFILTER here, though the 3.1 SDK lists MSGF_MOVE and
+           MSGF_SIZE: US30 filter on 3.1, the keyboard move and size loops
+           ended by an Escape called none */
         switch (m.message) {
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:

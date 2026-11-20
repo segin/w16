@@ -261,7 +261,14 @@ int lstr_cmpi(LPCSTR a, LPCSTR b)
 }
 
 /* ---- wsprintf (the 3.1 SDK's format: %[-][#][0][width][.precision]
-   [l]{d,i,u,x,X,c,s,%}; '+' and ' ' are not flags: US2 printed "+d") ---- */
+   [l]{d,i,u,x,X,c,s,%}; '+' and ' ' are not flags: US2 printed "+d").
+   A precision is the least number of digits for a number, zeros in front
+   (after the sign and 0x), and then the 0 flag pads with spaces; a %c
+   has none (US29 wsp on 3.1: %.2d of 5 "05", %.3d of -5 "-005", %05.3d
+   of 7 "  007", %#.4x of 1Fh "0x001f", %.0d of 0 "0", %.3c "x"; w16
+   ignored it for numbers: USER audit, item 12). Precisions past 64 are
+   taken as 64 (UNVERIFIED what 3.1 does with them). ---- */
+#define WSP_MAXPREC 64
 /* A bad output buffer: 0. A bad format or argument list: an empty
    string, 0. A %s argument that is bad: an empty string in its place
    (3.1, US27: KERNEL's lstrlen of it gives 0). */
@@ -276,7 +283,7 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
         return 0;
     }
     while (*fmt) {
-        char buf[16], *b;
+        char buf[WSP_MAXPREC + 16], *b;
         LPCSTR s;
         int left = 0, zero = 0, alt = 0, width = 0, prec = -1, lng = 0, len, neg;
         DWORD v;
@@ -297,7 +304,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
             prec = 0;
             fmt++;
             while (*fmt >= '0' && *fmt <= '9')
-                prec = prec * 10 + *fmt++ - '0';
+                if ((prec = prec * 10 + *fmt++ - '0') > WSP_MAXPREC)
+                    prec = WSP_MAXPREC;
         }
         if (*fmt == 'l' || *fmt == 'L') {
             lng = 1;
@@ -329,6 +337,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
                 *--b = (char)('0' + v % 10);
                 v /= 10;
             } while (v);
+            while (prec >= 0 && buf + sizeof buf - 1 - b < prec)
+                *--b = '0';
             s = b;
             break;
         case 'x':
@@ -344,6 +354,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
                 *--b = (*fmt == 'x' ? "0123456789abcdef" : "0123456789ABCDEF")[v & 15];
                 v >>= 4;
             } while (v);
+            while (prec >= 0 && buf + sizeof buf - 1 - b < prec)
+                *--b = '0';
             if (alt) {
                 *--b = *fmt;
                 *--b = '0';
@@ -359,9 +371,9 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
         case 's':
             s = *(LPCSTR __far *)ap;
             ap += 4;
-            if (!s)
-                s = "(null)";       /* UNVERIFIED: what 3.1 prints for NULL */
-            else if (GP_BAD(s))
+            /* NULL: 3.1 prints whatever it reads there (US29 wsp.null:
+               two bytes, 60h 10h): nothing here, as for a bad pointer */
+            if (!s || GP_BAD(s))
                 s = "";
             break;
         case 0:
@@ -374,6 +386,8 @@ int WINAPI wvsprintf(LPSTR out, LPCSTR fmt, const void __far *args)
         len = lstr_len(s);
         if (prec >= 0 && *(fmt - 1) == 's' && len > prec)
             len = prec;
+        if (prec >= 0 && *(fmt - 1) != 's' && *(fmt - 1) != 'c')
+            zero = 0;           /* a number's precision: spaces pad */
         if (!left) {
             if (zero && neg) {
                 *o++ = '-';

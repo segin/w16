@@ -161,7 +161,8 @@ typedef struct CLS {            /* layout: Schulman, Undocumented Windows ch. 6,
     WORD   next;                /* 00 hcNext: next class (near) */
     WORD   sig;                 /* 02 wSig: CLS_SIG */
     ATOM   atom;                /* 04 atomCls: the name, in USER's DGROUP atom table */
-    WORD   hdce;                /* 06 hDCE: 0 (w16 has no CS_CLASSDC DC) */
+    WORD   hdce;                /* 06 hDCE: a CS_CLASSDC class's DC (w16: its DCE
+                                   record's handle in the object heap), else 0 */
     WORD   cwnd;                /* 08 cClsWnds: windows of the class */
     WORD   style;               /* 0A the WNDCLASS as given, but: */
     WNDPROC lpfnWndProc;        /* 0C */
@@ -181,6 +182,14 @@ typedef CLS __near *PCLS;
 PCLS find_class(LPCSTR name, HINSTANCE hinst);
 LPCSTR class_menu_name(PCLS c); /* lpszMenuName as GetClassInfo gives it */
 void register_system_classes(void);
+void purge_classes(HMODULE m);  /* the module's classes go */
+void free_class_dc(PCLS c);     /* dc.c: CS_CLASSDC's DC */
+void hooks_queue_gone(HQUEUE hq, HTASK task);   /* hook.c */
+void hooks_module_gone(HMODULE m);
+BOOL hook_set(int type);       /* hook.c: a hook of the type is set */
+LRESULT cbt_hook(int code, WPARAM wp, LPARAM lp);
+LRESULT kbd_hook(int code, WPARAM vk, LPARAM data);
+LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit);
 
 /* ---- queues (msg.c) ---- */
 typedef struct QMSG {
@@ -189,14 +198,19 @@ typedef struct QMSG {
 } QMSG;
 
 typedef struct SMSG {           /* an inter-task SendMessage in flight */
-    WORD   next;                /* near, in USER's heap */
-    HQUEUE from;
+    WORD   next;                /* near, in USER's heap: the receiver's list */
+    HQUEUE from;                /* 0: the sender's task has ended */
     HWND   hwnd;
     UINT   msg;
     WPARAM wParam;
     LPARAM lParam;
     LONG   result;
-    WORD   done;
+    WORD   done;                /* replied: the sender may go on */
+    HQUEUE to;                  /* the receiving queue */
+    WORD   held;                /* the receiver is in the call and will
+                                   read the record again afterwards */
+    WORD   orphan;              /* the sender is gone: the receiver frees it */
+    WORD   all;                 /* every record in flight (msg.c, smsgs) */
 } SMSG;
 typedef SMSG __near *PSMSG;
 
@@ -226,6 +240,7 @@ QUEUE __far *q_of(HQUEUE hq);
 HQUEUE cur_hq(void);
 HQUEUE create_queue(HTASK task, WORD size);
 void destroy_queue(HQUEUE hq);
+void smsg_queue_gone(HQUEUE hq, HQUEUE nhq);
 void set_wakebit(HQUEUE hq, WORD bits);
 void inc_paint(HQUEUE hq);
 void dec_paint(HQUEUE hq);
@@ -239,6 +254,7 @@ extern HQUEUE hqBoot;           /* the queue of the boot task */
 void timer_init(void);
 void kill_queue_timers(HQUEUE hq);
 void kill_window_timers(HWND h);
+void move_queue_timers(HQUEUE old, HQUEUE hq);
 BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
 extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment */
 
@@ -274,6 +290,7 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
                    int x, int y, int cx, int cy, HWND parent, HMENU menu,
                    HINSTANCE hinst, void __far *param);
 BOOL destroy_window(HWND h);
+void destroy_abandoned(HWND h);   /* its task ended inside its destruction */
 void clip_window_destroyed(HWND h);     /* clip.c */
 void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
 void savebits_forget_all(void);

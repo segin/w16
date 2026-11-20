@@ -580,6 +580,9 @@ void track_scrollbar(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
             WaitMessage();
             continue;
         }
+        /* WH_MSGFILTER (3.1 SDK: MSGF_SCROLLBAR; UNVERIFIED on 3.1) */
+        if (CallMsgFilter(&m, MSGF_SCROLLBAR))
+            continue;
         if (m.message == WM_MOUSEMOVE && line) {
             BOOL now = PtInRect(&arect, m.pt);
             if (now != in) {

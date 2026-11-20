@@ -353,14 +353,26 @@ void open_boot_drivers(void)
 }
 
 /* each module's first instance, in the list's order */
+/* the drivers listed now, in order: a driver closing itself (or
+   another) from its DriverProc ended a walk of the live list early (USER
+   audit, sweep) */
+static WORD list_now(WORD *l)
+{
+    WORD k, n = 0;
+    for (k = drvhead; k && n < NDRV; k = drv[k - 1].next)
+        l[n++] = k;
+    return n;
+}
+
 static void to_firsts(UINT msg, LPARAM l1)
 {
-    WORD k;
+    WORD l[NDRV], i, n;
     if (!drv)
         return;
-    for (k = drvhead; k; k = drv[k - 1].next)
-        if (first_instance(k))
-            call(k, drv[k - 1].id, msg, l1, 0);
+    n = list_now(l);
+    for (i = 0; i < n; i++)
+        if (drv[l[i] - 1].used && first_instance(l[i]))
+            call(l[i], drv[l[i] - 1].id, msg, l1, 0);
 }
 
 /* a task ends (USER's signal procedure, in its context; killed: after a
@@ -373,11 +385,12 @@ void drivers_task_exit(BOOL killed)
 /* Windows ends (ExitWindows) */
 void drivers_exit_session(void)
 {
-    WORD k;
+    WORD l[NDRV], i, n;
     to_firsts(DRV_EXITSESSION, 0);
     if (!drv)
         return;
-    for (k = drvhead; k; k = drv[k - 1].next)
-        if (first_instance(k))
-            free_driver(k);
+    n = list_now(l);
+    for (i = 0; i < n; i++)
+        if (drv[l[i] - 1].used && first_instance(l[i]))
+            free_driver(l[i]);
 }
