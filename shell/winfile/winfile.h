@@ -28,6 +28,13 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDI_DIR             202         /* file list only, */
 #define IDI_TREEDIR         204         /* both (WF04: 3.1's IDs) */
 #define IDB_STRIP           100         /* the small pictures (tools/mkwfbmp.py) */
+#define IDC_SPLIT           303         /* the split cursor (w16's art) */
+#define IDC_DRAGFILE        300         /* dragging: a file, */
+#define IDC_DRAGFILES       301         /* several, */
+#define IDC_DRAGDIR         302         /* a directory; */
+#define IDC_COPYFILE        310         /* the same when copying */
+#define IDC_COPYFILES       311
+#define IDC_COPYDIR         312
 
 /* ---- menu commands: the original's IDs (WF1 dumpmenu) ---- */
 #define IDM_OPEN            101
@@ -122,6 +129,18 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_BYTES           26
 #define IDS_DELFILELABEL    27
 #define IDS_DELDIRLABEL     28
+#define IDS_DELETING        29
+#define IDS_COPYING         30
+#define IDS_MOVING          31
+#define IDS_NONE            32
+#define IDS_PROGFILTER      33
+#define IDS_SEARCHTITLE     34
+#define IDS_FOUND           35
+#define IDS_NOTFOUND        36
+#define IDS_SEARCHBOX       37
+#define IDS_MOUSECOPY       38
+#define IDS_MOUSEMOVE       39
+#define IDS_CONFMOUSE       40
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"
@@ -297,6 +316,24 @@ void  frame_newfont(void);
 /* fileops.c */
 void  file_command(LPDIRWIN d, WPARAM id);
 void  file_open(LPDIRWIN d);
+void  file_associate(LPDIRWIN d);
+
+/* search.c */
+extern int g_found;
+BOOL  search_register(void);
+BOOL  is_search(HWND w);
+void  file_search(LPDIRWIN d);
+HGLOBAL search_selected(void);
+
+/* dnd.c */
+void  dnd_subclass(HWND lb);
+LRESULT dnd_query(HWND w, LPARAM lp);
+LRESULT dnd_drop(HWND w, LPARAM lp);
+void  file_transfer(LPDIRWIN d, LPCSTR list, LPCSTR dest, int kind);
+HGLOBAL selected_text(LPDIRWIN d, BOOL tree);
+BOOL  next_name(LPCSTR FAR *p, LPSTR buf, int n);
+int   run_dialog(LPCSTR name, FARPROC proc);
+void  full_path(LPDIRWIN d, LPCSTR name, LPSTR out);
 void  refresh_all(void);
 BOOL  dos_match(LPCSTR name, LPCSTR pat);
 
@@ -314,6 +351,7 @@ HWND  treewin_create(LPCSTR path, LPCSTR spec, WORD view, WORD sort, WORD attrib
                      int split, const RECT FAR *rc, int showcmd, POINT FAR *icon);
 void  treewin_layout(LPDIRWIN d);
 void  treewin_set_panes(LPDIRWIN d, int panes);
+void  treewin_split(LPDIRWIN d);
 void  treewin_title(LPDIRWIN d);
 void  treewin_change_dir(LPDIRWIN d, LPCSTR path);
 void  treewin_set_drive(LPDIRWIN d, int drive);

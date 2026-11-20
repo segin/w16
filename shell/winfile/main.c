@@ -153,6 +153,11 @@ static void status_text(LPSTR left, LPSTR right)
     LPDIRWIN d = dirwin_of(w);
     char a[16], b[16];
     left[0] = right[0] = 0;
+    if (is_search((HWND)LOWORD(SendMessage(g_mdi, WM_MDIGETACTIVE, 0, 0)))) {
+        /* "n file(s) found", the second box empty (WF10) */
+        wsprintf(left, load_str(IDS_FOUND), g_found);
+        return;
+    }
     if (!d)
         return;
     if (d->stleft == ST_SELECTED) {
@@ -342,6 +347,13 @@ static LRESULT command(HWND w, WPARAM id, LPARAM lp)
         if (d)
             file_command(d, id);
         return 0;
+    case IDM_SEARCH:
+        file_search(d);
+        return 0;
+    case IDM_ASSOCIATE:
+        if (d)
+            file_associate(d);
+        return 0;
     case IDM_VOTHER:
         if (d)
             dlg_other(d);
@@ -530,7 +542,7 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     bm_load();
     drives_scan();
     if (!register_frame() || !treewin_register() || !drives_register() ||
-        !tree_register() || !dir_register())
+        !tree_register() || !dir_register() || !search_register())
         return 0;
     accel = LoadAccelerators(inst, MAKEINTRESOURCE(IDA_MAIN));
     filter = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)MakeProcInstance((FARPROC)MessageFilter, inst),

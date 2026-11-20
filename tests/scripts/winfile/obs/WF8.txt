@@ -1,0 +1,70 @@
+; WF8: in C:\WFTEST: Associate on NOTES.TXT (its list); Delete ALPHA
+; (Confirm Directory Delete, then the confirmations for what is inside,
+; Cancel); Search for *.TXT from C:\WFTEST with subdirectories (the
+; results window); Copy ALPHA (still selected) to C:\SYS (progress shots)
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+key 09
+wait 500
+key 23
+key 26
+key 26
+wait 800
+snap C:\H01.BMP
+cmd 103
+wait 1500
+snap C:\H02.BMP
+dump
+info
+key 1B
+wait 800
+key 24
+key 28
+key 26
+wait 800
+snap C:\H03.BMP
+cmd 108
+wait 1000
+snap C:\H04.BMP
+dump
+key 0D
+wait 2000
+snap C:\H05.BMP
+dump
+key 0D
+wait 2000
+snap C:\H06.BMP
+dump
+key 1B
+wait 2000
+snap C:\H07.BMP
+cmd 104
+wait 1000
+snap C:\H08.BMP
+type *.TXT
+key 0D
+wait 4000
+snap C:\H09.BMP
+dump
+info
+key 28
+wait 800
+snap C:\H10.BMP
+childcmd F060
+wait 1500
+snap C:\H11.BMP
+cmd 107
+wait 1000
+type C:\SYS
+key 0D
+wait 300
+snap C:\H12.BMP
+dump
+wait 600
+snap C:\H13.BMP
+wait 15000
+snap C:\H14.BMP
+close
+wait 2500

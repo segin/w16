@@ -1,0 +1,75 @@
+; WF11: drag and drop in C:\WFTEST: NOTES.TXT (second column, first line)
+; clicked, then dragged onto ALPHA (first column, second line): a shot
+; while over it, the confirmation (dumped), No; dragged with Ctrl held
+; (copy), Yes; dragged onto the tree's WINDOWS, onto the drive bar's z,
+; and onto the desktop outside (the no-drop cursor)
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+mclick 370 97
+wait 800
+snap C:\L01.BMP
+mdown 370 97
+mmove 340 105
+mmove 300 113
+wait 600
+snap C:\L02.BMP
+cursor
+mup 300 113
+wait 1500
+snap C:\L03.BMP
+dump
+key 1B
+wait 1000
+snap C:\L04.BMP
+kdown 11
+mdown 370 97
+mmove 340 105
+mmove 300 113
+wait 600
+snap C:\L05.BMP
+cursor
+mup 300 113
+kup 11
+wait 1500
+snap C:\L06.BMP
+dump
+key 0D
+wait 2000
+snap C:\L07.BMP
+mdown 370 97
+mmove 200 120
+mmove 60 129
+wait 600
+snap C:\L08.BMP
+cursor
+mup 60 129
+wait 1500
+snap C:\L09.BMP
+dump
+key 1B
+wait 1000
+mdown 370 97
+mmove 300 80
+mmove 115 76
+wait 600
+snap C:\L10.BMP
+cursor
+mup 115 76
+wait 1500
+snap C:\L11.BMP
+dump
+key 1B
+wait 1000
+mdown 370 97
+mmove 450 300
+mmove 580 400
+wait 600
+snap C:\L12.BMP
+cursor
+mup 580 400
+wait 1500
+snap C:\L13.BMP
+close
+wait 2500

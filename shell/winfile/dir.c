@@ -344,8 +344,10 @@ void dir_set_view(LPDIRWIN d)
                             d->dir, (HMENU)ID_DIRLIST, g_hinst, NULL);
     /* 3.1's list box grows a made window by its border all round: put it
        back where it belongs (seen with WF03's dump) */
-    if (d->dirlb)
+    if (d->dirlb) {
         MoveWindow(d->dirlb, 0, 0, r.right, r.bottom, FALSE);
+        dnd_subclass(d->dirlb);
+    }
     if (d->ready) {
         dir_read(d);
         dir_sel_restore(d, sel);

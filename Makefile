@@ -1239,7 +1239,7 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 
 # ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
 # 3.1 only ----
-WF_C     := main ini treewin drives tree dir dialogs fileops bitmap util
+WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd bitmap util
 SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
 shell: $(DOS)/WINFILE.EXE
 $(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h
@@ -1255,7 +1255,7 @@ $(B)/shell/winfile/wfstrip.bmp: tools/mkwfbmp.py
 	@mkdir -p $(@D)
 	python3 tools/mkwfbmp.py $@
 $(B)/shell/winfile/winfile.res: shell/winfile/winfile.rc shell/winfile/winfile.h \
-    $(B)/shell/winfile/winfile.ico $(B)/shell/winfile/wfstrip.bmp
+    $(B)/shell/winfile/winfile.ico $(B)/shell/winfile/wfstrip.bmp tools/mkwfileicon.py
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/winfile -i=$(B)/shell/winfile -fo=$@ $<
 $(DOS)/WINFILE.EXE: $(SHELL_WF) $(B)/shell/winfile/winfile.res shell/winfile/winfile.lnk tools/nemark.py
 	@mkdir -p $(@D)

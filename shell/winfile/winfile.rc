@@ -12,6 +12,13 @@ IDI_TREE    ICON tree.ico
 IDI_DIR     ICON dir.ico
 IDI_TREEDIR ICON treedir.ico
 IDB_STRIP   BITMAP wfstrip.bmp
+IDC_SPLIT   CURSOR split.cur
+IDC_DRAGFILE  CURSOR dragfile.cur
+IDC_DRAGFILES CURSOR dragfiles.cur
+IDC_DRAGDIR   CURSOR dragdir.cur
+IDC_COPYFILE  CURSOR copyfile.cur
+IDC_COPYFILES CURSOR copyfiles.cur
+IDC_COPYDIR   CURSOR copydir.cur
 
 IDM_MAIN MENU
 BEGIN
@@ -142,6 +149,18 @@ BEGIN
     IDS_BYTES,          "%s bytes"
     IDS_DELFILELABEL,   "Delete File:"
     IDS_DELDIRLABEL,    "Delete Directory:"
+    IDS_DELETING,       "Deleting..."
+    IDS_COPYING,        "Copying..."
+    IDS_MOVING,         "Moving..."
+    IDS_NONE,           "(None)"
+    IDS_PROGFILTER,     "Programs|*.exe;*.pif;*.com;*.bat|All Files (*.*)|*.*|"
+    IDS_SEARCHTITLE,    "Search Results: %s"
+    IDS_FOUND,          "%d file(s) found"
+    IDS_NOTFOUND,       "No matching files were found."
+    IDS_SEARCHBOX,      "Search Results"
+    IDS_MOUSECOPY,      "Are you sure you want to copy the selected files or directories to %s?"
+    IDS_MOUSEMOVE,      "Are you sure you want to move the selected files or directories to %s?"
+    IDS_CONFMOUSE,      "Confirm Mouse Operation"
 END
 
 /* ---- dialogs: layouts, IDs and texts observed on the running original
@@ -204,11 +223,11 @@ CAPTION "Font"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&Font:", 1088, "Static", 0x0000 | 0x00020000L, 6, 3, 40, 9
-    CONTROL "", 1136, "ComboBox", 0x0351 | 0x00010000L, 6, 13, 94, 54
+    CONTROL "", 1136, "ComboBox", 0x0351 | 0x00210000L, 6, 13, 94, 54
     CONTROL "Font St&yle:", 1089, "Static", 0x0000 | 0x00020000L, 108, 3, 44, 9
     CONTROL "", 1137, "ComboBox", 0x0201 | 0x00010000L, 108, 13, 64, 54
     CONTROL "&Size:", 1090, "Static", 0x0000 | 0x00020000L, 179, 3, 30, 9
-    CONTROL "", 1138, "ComboBox", 0x0311 | 0x00010000L, 179, 13, 32, 54
+    CONTROL "", 1138, "ComboBox", 0x0311 | 0x00210000L, 179, 13, 32, 54
     CONTROL "Effects", 1072, "Button", 0x0007 | 0x00020000L, 6, 72, 84, 61
     CONTROL "Stri&keout", 1040, "Button", 0x0003 | 0x00010000L, 10, 82, 49, 10
     CONTROL "&Underline", 1041, "Button", 0x0003 | 0x00000000L, 10, 94, 51, 10
@@ -319,7 +338,7 @@ BEGIN
     CONTROL "", 112, "Edit", 0x0400 | 0x00800000L | 0x00010000L, 80, 6, 35, 12
     CONTROL "&Associate With:", 99, "Static", 0x000C, 5, 22, 150, 10
     CONTROL "", 113, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 5, 32, 148, 12
-    CONTROL "", 111, "ListBox", 0x1003 | 0x00A10000L, 10, 44, 147, 41
+    CONTROL "", 111, "ListBox", 0x1003 | 0x00A10000L, 11, 44, 146, 40
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 165, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 165, 23, 40, 14
     CONTROL "&Browse...", 232, "Button", 0x0000 | 0x00010000L, 165, 43, 40, 14

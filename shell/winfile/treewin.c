@@ -216,6 +216,10 @@ LRESULT treewin_command(LPDIRWIN d, WPARAM id)
     case IDM_DIRONLY:
         treewin_set_panes(d, PANES_DIR);
         break;
+    case IDM_SPLIT:
+        SetFocus(d->hwnd);
+        treewin_split(d);
+        break;
     case IDM_BOTH:
         treewin_set_panes(d, PANES_BOTH);
         break;
@@ -251,6 +255,80 @@ LRESULT treewin_command(LPDIRWIN d, WPARAM id)
         break;
     }
     return 0;
+}
+
+/* ---- the split: dragged on its bar, or View > Split (obs WF9) ----
+   While it moves a 4-pixel inverted bar runs from under the drive bar to
+   the client's last row, from 2 left of the pointer; on release the
+   tree's edge goes where the pointer is (WF09: let go at client x 142,
+   the split is 142). View > Split shows the bar at the middle of the
+   window; the first arrow takes it to the split, and each moves it 2
+   pixels (WF9: five Lefts from 142, 132); Enter sets it, Escape leaves
+   it. */
+static BOOL split_keyed;                /* an arrow has been pressed */
+
+static int split_bar = -1;              /* where the bar is drawn, or -1 */
+
+static void split_draw(LPDIRWIN d, int x)
+{
+    RECT r;
+    HDC dc = GetDC(d->hwnd);
+    GetClientRect(d->hwnd, &r);
+    PatBlt(dc, x - 2, drives_height(), 4, r.bottom - drives_height(), DSTINVERT);
+    ReleaseDC(d->hwnd, dc);
+}
+
+static void split_move(LPDIRWIN d, int x)
+{
+    RECT r;
+    GetClientRect(d->hwnd, &r);
+    if (x < 0)
+        x = 0;
+    if (x > r.right)
+        x = r.right;
+    if (split_bar >= 0)
+        split_draw(d, split_bar);
+    split_bar = x;
+    split_draw(d, x);
+}
+
+static void split_end(LPDIRWIN d, BOOL set)
+{
+    int x = split_bar;
+    if (x >= 0)
+        split_draw(d, x);
+    split_bar = -1;
+    ReleaseCapture();
+    if (set && x >= 0) {
+        RECT r;
+        GetClientRect(d->hwnd, &r);
+        if (x < 0)
+            x = 0;
+        d->split = x;
+        if (d->panes != PANES_BOTH)
+            d->panes = PANES_BOTH;
+        treewin_layout(d);
+    }
+}
+
+static BOOL on_split(LPDIRWIN d, int x, int y)
+{
+    return d->panes == PANES_BOTH && y >= drives_height() && x >= d->split && x < d->split + 3;
+}
+
+void treewin_split(LPDIRWIN d)
+{
+    RECT r;
+    POINT p;
+    GetClientRect(d->hwnd, &r);
+    SetCapture(d->hwnd);
+    split_keyed = FALSE;
+    split_move(d, r.right / 2);
+    p.x = r.right / 2;
+    p.y = (drives_height() + r.bottom) / 2;
+    ClientToScreen(d->hwnd, &p);
+    SetCursorPos(p.x, p.y);
+    SetCursor(LoadCursor(g_hinst, MAKEINTRESOURCE(IDC_SPLIT)));
 }
 
 static HICON window_icon(LPDIRWIN d)
@@ -322,6 +400,60 @@ LRESULT CALLBACK _export TreeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (d && wp != SIZE_MINIMIZED)
             treewin_layout(d);
         break;
+    case WM_SETCURSOR:
+        if (d && (HWND)wp == w && LOWORD(lp) == HTCLIENT) {
+            POINT p;
+            GetCursorPos(&p);
+            ScreenToClient(w, &p);
+            if (split_bar >= 0 || on_split(d, p.x, p.y)) {
+                SetCursor(LoadCursor(g_hinst, MAKEINTRESOURCE(IDC_SPLIT)));
+                return TRUE;
+            }
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        if (d && on_split(d, (short)LOWORD(lp), (short)HIWORD(lp))) {
+            SetCapture(w);
+            split_move(d, (short)LOWORD(lp));
+            return 0;
+        }
+        if (d && split_bar >= 0) {
+            split_end(d, TRUE);
+            return 0;
+        }
+        break;
+    case WM_MOUSEMOVE:
+        if (d && split_bar >= 0) {
+            split_move(d, (short)LOWORD(lp));
+            return 0;
+        }
+        break;
+    case WM_LBUTTONUP:
+        if (d && split_bar >= 0 && GetCapture() == w) {
+            split_end(d, TRUE);
+            return 0;
+        }
+        break;
+    case WM_KEYDOWN:
+        if (d && split_bar >= 0) {
+            switch (wp) {
+            case VK_LEFT:
+            case VK_RIGHT: {
+                int x = split_keyed ? split_bar : d->split;
+                split_keyed = TRUE;
+                split_move(d, x + (wp == VK_LEFT ? -2 : 2));
+                break;
+            }
+            case VK_RETURN:
+                split_end(d, TRUE);
+                break;
+            case VK_ESCAPE:
+                split_end(d, FALSE);
+                break;
+            }
+            return 0;
+        }
+        break;
     case WM_PAINT:
         if (d && IsIconic(w)) {
             /* the icon shows the panes the window has (WF04 S06): the
@@ -336,6 +468,14 @@ LRESULT CALLBACK _export TreeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             paint(d);
             return 0;
         }
+        break;
+    case 0x022B:                        /* WM_QUERYDROPOBJECT: an icon takes */
+        if (d && IsIconic(w))
+            return dnd_query(w, lp);
+        break;
+    case 0x022A:                        /* WM_DROPOBJECT */
+        if (d && IsIconic(w))
+            return dnd_drop(w, lp);
         break;
     case WM_QUERYDRAGICON:
         if (d)

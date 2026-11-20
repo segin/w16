@@ -79,6 +79,10 @@ def main():
             continue                    # a control's own children
         cls, text, style, exs, cid = c.group(2), c.group(3), c.group(4), c.group(5), c.group(6)
         l0, t0, r0, b0 = map(int, c.group(7, 8, 9, 10))
+        if cls == 'ListBox' and int(style, 16) & 0x00800000:
+            # 3.1's list box grows by its border all round when it is
+            # made: the template's rectangle is a pixel smaller
+            l0, t0, r0, b0 = l0 + 1, t0 + 1, r0 - 1, b0 - 1
         x = units(l0 - wl - 5, 7, 4)
         y = units(t0 - wt - 24, 13, 8)
         w = units(r0 - l0, 7, 4)
