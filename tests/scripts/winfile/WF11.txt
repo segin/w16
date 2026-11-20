@@ -1,0 +1,33 @@
+; WF11: drag and drop in C:\WFTEST (obs WF11): NOTES.TXT clicked, dragged
+; onto ALPHA (a shot while over it: the framed line), released (Confirm
+; Mouse Operation), No; dragged onto the tree's WINDOWS, released, No
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+mclick 370 97
+wait 800
+snap C:\S01.BMP
+mdown 370 97
+mmove 340 105
+mmove 300 113
+wait 600
+snap C:\S02.BMP
+mup 300 113
+wait 1500
+snap C:\S03.BMP
+key 1B
+wait 1000
+snap C:\S04.BMP
+mdown 370 97
+mmove 200 120
+mmove 60 129
+wait 600
+snap C:\S05.BMP
+mup 60 129
+wait 1500
+snap C:\S06.BMP
+key 1B
+wait 1000
+close
+wait 2500

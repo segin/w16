@@ -192,6 +192,10 @@ LRESULT CALLBACK _export DrivesWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_KILLFOCUS:
         InvalidateRect(w, NULL, TRUE);
         break;
+    case 0x022B:                        /* WM_QUERYDROPOBJECT */
+        return wp ? 0 : dnd_query(w, lp);
+    case 0x022A:                        /* WM_DROPOBJECT */
+        return dnd_drop(w, lp);
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS | DLGC_WANTTAB;
     case WM_KEYDOWN:

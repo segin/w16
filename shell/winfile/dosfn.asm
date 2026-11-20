@@ -207,3 +207,115 @@ _dos_setftime:
         call far DOS3CALL
         pop bp
         retf
+
+; int bios_disk(WORD far *regs): INT 13h in real mode through DPMI
+; (INT 31h AX=0300h, "simulate real mode interrupt"). regs: AX, BX, CX,
+; DX, ES (real-mode values) in, AX and the carry (1 set) out in regs[0]
+; and the result. 0 ok, else the BIOS status (AH) or -1 when DPMI failed.
+global _bios_disk
+_bios_disk:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        sub sp, 50              ; the real-mode call structure
+        mov di, sp
+        push ss
+        pop es
+        ; clear it
+        push di
+        mov cx, 25
+        xor ax, ax
+        rep stosw
+        pop di
+        lds si, [bp + 6]
+        mov ax, [si]
+        mov [es:di + 1Ch], ax   ; EAX
+        mov ax, [si + 2]
+        mov [es:di + 10h], ax   ; EBX
+        mov ax, [si + 4]
+        mov [es:di + 18h], ax   ; ECX
+        mov ax, [si + 6]
+        mov [es:di + 14h], ax   ; EDX
+        mov ax, [si + 8]
+        mov [es:di + 22h], ax   ; ES
+        mov ax, 0300h
+        mov bx, 0013h
+        xor cx, cx
+        int 31h
+        jc .dpmi
+        mov ax, [es:di + 1Ch]
+        lds si, [bp + 6]
+        mov [si], ax
+        mov bx, [es:di + 20h]   ; flags
+        and bx, 1
+        mov [si + 10], bx
+        jz .ok
+        mov al, ah
+        xor ah, ah
+        or ax, ax
+        jnz .out
+        mov ax, -1
+        jmp .out
+.ok:    xor ax, ax
+        jmp .out
+.dpmi:  mov ax, -1
+.out:   add sp, 50
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
+; int dos_fcb(int fn, void far *xfcb): an FCB call (AH=fn, DS:DX the
+; extended FCB): AL as DOS returns it (0 ok, FFh failed)
+global _dos_fcb
+_dos_fcb:
+        push bp
+        mov bp, sp
+        push ds
+        mov ah, [bp + 6]
+        lds dx, [bp + 8]
+        call far DOS3CALL
+        pop ds
+        xor ah, ah
+        pop bp
+        retf
+
+; int dos_bootdrive(void): the drive DOS started from, 1 = A: (3305h)
+global _dos_bootdrive
+_dos_bootdrive:
+        mov ax, 3305h
+        call far DOS3CALL
+        mov al, dl
+        xor ah, ah
+        retf
+
+; int dos_devtype(int drive): drive 1 = A:; the device type of DOS's
+; Get Device Parameters (440Dh, 0860h), or -1 when DOS cannot say
+global _dos_devtype
+_dos_devtype:
+        push bp
+        mov bp, sp
+        push ds
+        sub sp, 40h
+        mov dx, sp
+        push ss
+        pop ds
+        mov bx, dx
+        mov byte [bx], 0        ; special functions: the default BPB
+        mov bl, [bp + 6]
+        mov ax, 440Dh
+        mov cx, 0860h
+        call far DOS3CALL
+        jc .bad
+        mov bx, dx
+        mov al, [bx + 1]
+        xor ah, ah
+        jmp .out
+.bad:   mov ax, -1
+.out:   add sp, 40h
+        pop ds
+        pop bp
+        retf

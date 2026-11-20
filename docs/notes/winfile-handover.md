@@ -54,30 +54,54 @@ this note is the working state.
 - Layer 1 (frame, drive bar, tree, list, split, status bar, menus, INI
   restore, New Window/Tile/Cascade/Arrange, F5, Ctrl+letter drives and
   the drive error box, About, Help): scenarios WF01-WF06 at 0 pixels or
-  nearly (see the baseline); WFH1-WFH4 identical requests.
+  nearly (see the baseline); WFH1-WFH8 identical requests.
 - Layer 2 (views): Name/All/Partial Details, the sorts, By File Type,
   Indicate Expandable Branches, the tree commands, Tree/Directory Only,
-  Confirmation, Font (COMMDLG with a hook and template, Lowercase box):
-  WF03, WF07. Not done: Split (the mouse/keyboard split mode, IDM 414),
-  dragging the split bar.
-- Layer 3 (file operations), begun: Open (directories, programs,
-  documents through ShellExecute, Minimize on Use), Move, Copy, Rename,
-  Delete (MessageBox confirmations: texts UNVERIFIED), Confirm File
-  Replace (the original's dialog, WF7), Properties, Run, Print
-  (ShellExecute "print"), Create Directory, Select Files: WF08. Not done:
-  the Copy/Move dialog showing progress while it works (3.1 keeps it
-  open, disabled, with "Copying:" and the name in IDs 104/201), Copy to
-  Clipboard, Associate, Search and its WFS_Search window, drag and drop,
-  the real texts of the delete confirmations (observe: WF7's script went
-  astray; write a cleaner one).
-- Layers 4 (Disk menu) and 5 (extensions, FMEXT): not started. The SDK
-  (Programmer's Reference vol. 1, "File Manager Extensions") documents
-  the messages and structures but not their numbers: those must be
-  observed with an extension DLL of our own loaded by the original
-  through WINFILE.INI [AddOns] (log the wMsg values; probe FM_* with
-  SendMessage from it).
-- Not yet in the install tree or the Main group (it cannot stand in for
-  3.1's until layer 3 is done).
+  Confirmation, Font (COMMDLG with a hook and template, Lowercase box),
+  the split dragged with the mouse (WF09) and View > Split (arrows 2
+  pixels a press from the split, Enter, Escape: obs WF9): WF03, WF07, WF09.
+- Layer 3 (file operations): Open, Move, Copy, Rename, Delete, Properties,
+  Run, Print, Associate (REG.DAT classes and WIN.INI [Extensions]),
+  Create Directory, Search and its WFS_Search window, Select Files, Copy
+  to Clipboard (registered "FileName" format: UNVERIFIED which formats
+  3.1 adds), drag and drop (DragObject; our panes, drive bar and icons
+  take drops with Confirm Mouse Operation; other programs get
+  WM_DROPFILES: Program Manager makes an item, WF12 identical to 3.1's),
+  the confirmations as 3.1's (Replace, File Delete, Directory Delete with
+  each file inside, Mouse): WF08, WF10, WF11, WF12. The operation's box
+  stays up disabled with "Deleting..." (observed) / "Copying...",
+  "Moving..." (UNVERIFIED: DOSBox copies too quickly to catch).
+  Not done: the "Search Results: The contents of this drive have changed"
+  box (3.1 watches the file system through KERNEL's FileCDR hook,
+  KERNELCHANGEFILESYSTEM is exported; w16's search window does not
+  refresh), file commands from the Search Results window.
+- Layer 4 (Disk menu): the boxes and every error path as 3.1's without a
+  floppy (WF13; obs WF13, WF14): Copy Disk, Label Disk, Format Disk (the
+  capacity list from DOS's device parameters, "Drive Capacity" when DOS
+  cannot say), Make System Disk (its progress box), Select Drive. The
+  floppy work itself (BIOS INT 13h through DPMI; w16's own boot sector;
+  IO.SYS, MSDOS.SYS and COMMAND.COM copied) is UNVERIFIED: no floppy in
+  DOSBox here. Network drives: the menu has no Connect/Disconnect items
+  without a network (3.1 the same: WF1); the WNet calls are not made.
+- Layer 5 (extensions, FMEXT): not started. The SDK (vol. 1 "File Manager
+  extensions", vol. 3 FMS_LOAD, FMS_GETFILESEL, FMS_GETDRIVEINFO and the
+  FM_*/FMEVENT_* entries) documents the protocol but not the numbers of
+  the messages, nor MENU_TEXT_LEN. Plan: a test extension DLL of our own
+  (tests/apps), listed in WINFILE.INI [AddOns], loaded by the original:
+  it logs every FMExtensionProc call (wMsg, lParam; the first is
+  FMEVENT_LOAD, which it answers with FMS_LOAD: dwSize, a short menu
+  name, a popup of two items; log wMenuDelta); SNAP opens its menu
+  (INITMENU), presses F5 (USER_REFRESH), changes the selection
+  (SELCHANGE), closes (UNLOAD); then from one of its menu commands it
+  sends WM_USER-range candidates to File Manager's frame with a large
+  buffer as lParam and logs the answers and the buffer, to find FM_*
+  (beware FM_RELOAD_EXTENSIONS). Then w16's WINFILE implements [AddOns]
+  loading (LoadLibrary, GetProcAddress "FMExtensionProc"), the menus
+  after Window... as 3.1 places them, the events and the messages, and a
+  boot-test part runs the same DLL under both File Managers.
+- Install: WINFILE.EXE is in the install tree (WINDOWS\WINFILE.EXE),
+  the Main group (after Control Panel, so the other items keep their
+  places) and assets/README.TXT.
 
 ## Observed behaviour worth knowing (all in the code's comments too)
 
@@ -105,18 +129,24 @@ this note is the working state.
 
 - WF05: the attributes column, cut by the list's edge, comes 2 rows lower
   and a pixel right of 3.1's (cause not found); the View menu with a
-  minimised window active (pane items grey: fixed after the baseline,
-  not yet re-run).
-- WF07 S08-S10: COMMDLG's Font box lists one size fewer (no 24 for MS Sans
-  Serif, so no scroll bar) than 3.1's File Manager asks for: some
-  ChooseFont flag or LOGFONT field differs; the list after the font
-  change follows from it.
-- WF08 S08-S12: after Create Directory and Delete, 3.1's tree and list
-  differ in detail (which line is selected, focus): observe again.
+  minimised window active now matches but for that.
+- WF07 S08-S10: the Font box (fixed: WS_VSCROLL on the combo boxes, which
+  3.1's ComboBox passes to its list and takes off its own style) is
+  closer; what is left is in the sample and after the font change.
+- WF10 S03: 26 pixels in the tree behind Confirm Directory Delete.
+- WF13: the Label Disk error box (2007: the box's size or line breaks),
+  Format Disk's capacity line, Make System Disk's box, Select Drive (the
+  focus: 3.1's list box has no WS_TABSTOP and is not focused).
+- Not compared: WF5 E06's one-line scroll; the Copy/Move progress text.
 
 ## Last full run
 
-Commit 4d44dbe on installation-05 (`tools/remote-test.sh -n
-w16-winfile`): make test pass; boot test 129 ok, 5 failures, all of the
-known list (taskman@tree, ddeml conn, lzexpand quirks, soundtime,
-trails@timed); w16winfile 8 of 8 parts.
+Commit fd6e140 (after master ba697bf was merged in) on installation-05
+(`tools/remote-test.sh -n w16-winfile`): make test pass; boot test 138
+ok, 4 failures, all of the known list (lzexpand quirks, toolhelp ref386,
+soundtime, trails@timed); w16winfile (13 parts, WF01-WF13) ok.
+
+## Where to resume
+
+Layer 5 (the plan above), then the known differences. Everything else
+of the brief is in place.

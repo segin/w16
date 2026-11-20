@@ -28,6 +28,13 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDI_DIR             202         /* file list only, */
 #define IDI_TREEDIR         204         /* both (WF04: 3.1's IDs) */
 #define IDB_STRIP           100         /* the small pictures (tools/mkwfbmp.py) */
+#define IDC_SPLIT           303         /* the split cursor (w16's art) */
+#define IDC_DRAGFILE        300         /* dragging: a file, */
+#define IDC_DRAGFILES       301         /* several, */
+#define IDC_DRAGDIR         302         /* a directory; */
+#define IDC_COPYFILE        310         /* the same when copying */
+#define IDC_COPYFILES       311
+#define IDC_COPYDIR         312
 
 /* ---- menu commands: the original's IDs (WF1 dumpmenu) ---- */
 #define IDM_OPEN            101
@@ -122,6 +129,42 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_BYTES           26
 #define IDS_DELFILELABEL    27
 #define IDS_DELDIRLABEL     28
+#define IDS_DELETING        29
+#define IDS_COPYING         30
+#define IDS_MOVING          31
+#define IDS_NONE            32
+#define IDS_PROGFILTER      33
+#define IDS_SEARCHTITLE     34
+#define IDS_FOUND           35
+#define IDS_NOTFOUND        36
+#define IDS_SEARCHBOX       37
+#define IDS_MOUSECOPY       38
+#define IDS_MOUSEMOVE       39
+#define IDS_CONFMOUSE       40
+#define IDS_COPYDISKCONF    41
+#define IDS_COPYDISKCONFT   42
+#define IDS_INSERTSRC       43
+#define IDS_INSERTDST       44
+#define IDS_COPYDISK        45
+#define IDS_COPYDISKERR     46
+#define IDS_COPYDISKERRT    47
+#define IDS_LABELERR        48
+#define IDS_LABELDISK       49
+#define IDS_FORMATCONF      50
+#define IDS_FORMATCONFT     51
+#define IDS_FORMATERR       52
+#define IDS_FORMATERRT      53
+#define IDS_SYSCONF         54
+#define IDS_SYSDISK         55
+#define IDS_SYSERR          56
+#define IDS_SYSERRT         57
+#define IDS_SYSWRITEERR     58
+#define IDS_DRIVEIN         59
+#define IDS_CAP1440         60
+#define IDS_CAP720          61
+#define IDS_CAP1200         62
+#define IDS_CAP360          63
+#define IDS_CAPUNKNOWN      64
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"
@@ -297,6 +340,31 @@ void  frame_newfont(void);
 /* fileops.c */
 void  file_command(LPDIRWIN d, WPARAM id);
 void  file_open(LPDIRWIN d);
+void  file_associate(LPDIRWIN d);
+
+/* search.c */
+extern int g_found;
+BOOL  search_register(void);
+BOOL  is_search(HWND w);
+void  file_search(LPDIRWIN d);
+HGLOBAL search_selected(void);
+
+/* disk.c */
+void  disk_copy(void);
+void  disk_label(void);
+void  disk_format(void);
+void  disk_sysdisk(void);
+void  disk_select(void);
+
+/* dnd.c */
+void  dnd_subclass(HWND lb);
+LRESULT dnd_query(HWND w, LPARAM lp);
+LRESULT dnd_drop(HWND w, LPARAM lp);
+void  file_transfer(LPDIRWIN d, LPCSTR list, LPCSTR dest, int kind);
+HGLOBAL selected_text(LPDIRWIN d, BOOL tree);
+BOOL  next_name(LPCSTR FAR *p, LPSTR buf, int n);
+int   run_dialog(LPCSTR name, FARPROC proc);
+void  full_path(LPDIRWIN d, LPCSTR name, LPSTR out);
 void  refresh_all(void);
 BOOL  dos_match(LPCSTR name, LPCSTR pat);
 
@@ -314,6 +382,7 @@ HWND  treewin_create(LPCSTR path, LPCSTR spec, WORD view, WORD sort, WORD attrib
                      int split, const RECT FAR *rc, int showcmd, POINT FAR *icon);
 void  treewin_layout(LPDIRWIN d);
 void  treewin_set_panes(LPDIRWIN d, int panes);
+void  treewin_split(LPDIRWIN d);
 void  treewin_title(LPDIRWIN d);
 void  treewin_change_dir(LPDIRWIN d, LPCSTR path);
 void  treewin_set_drive(LPDIRWIN d, int drive);

@@ -90,9 +90,136 @@ def treedir():
     return i
 
 
+# ---- cursors: monochrome 32 x 32, our own drawings ----
+# '#' black, '.' white, ' ' transparent; the hot spot is given
+
+SPLIT = [
+    "      .#.#.      ",
+    "      .#.#.      ",
+    "      .#.#.      ",
+    "   .  .#.#.  .   ",
+    "  .#  .#.#.  #.  ",
+    " .##...#.#...##. ",
+    ".###############.",
+    " .##...#.#...##. ",
+    "  .#  .#.#.  #.  ",
+    "   .  .#.#.  .   ",
+    "      .#.#.      ",
+    "      .#.#.      ",
+    "      .#.#.      ",
+]
+
+
+DRAG_FILE = [
+    "########    ",
+    "#......##   ",
+    "#......#.#  ",
+    "#......####",
+    "#.........#",
+    "#.#####...#",
+    "#.........#",
+    "#.######..#",
+    "#.........#",
+    "#.#####...#",
+    "#.........#",
+    "#.........#",
+    "###########",
+]
+
+DRAG_FILES = [
+    "   ########   ",
+    "   #......##  ",
+    "########..#.# ",
+    "#......##.####",
+    "#......#.#...#",
+    "#......####..#",
+    "#.........#..#",
+    "#.#####...#..#",
+    "#.........#..#",
+    "#.######..#..#",
+    "#.........#..#",
+    "#.#####...####",
+    "#.........#   ",
+    "###########   ",
+]
+
+DRAG_FOLDER = [
+    " #####         ",
+    "#.....#        ",
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############",
+]
+
+PLUS = [
+    "#######",
+    "#.....#",
+    "#..#..#",
+    "#.###.#",
+    "#..#..#",
+    "#.....#",
+    "#######",
+]
+
+
+def with_plus(rows):
+    """the copy form: a boxed + at the lower right"""
+    w = max(len(r) for r in rows)
+    out = [r.ljust(w + 4) for r in rows] + [' ' * (w + 4)] * 4
+    top = len(rows) - 3
+    for y, r in enumerate(PLUS):
+        line = list(out[top + y].ljust(w + 4))
+        for x, c in enumerate(r):
+            line[w - 3 + x] = c
+        out[top + y] = ''.join(line)
+    return out
+
+
+def cursor(rows, hotx, hoty, ox=0, oy=0):
+    import struct
+    px = [[' '] * 32 for _ in range(32)]
+    for y, r in enumerate(rows):
+        for x, c in enumerate(r):
+            if 0 <= y + oy < 32 and 0 <= x + ox < 32:
+                px[y + oy][x + ox] = c
+    xor, andm = b'', b''
+    for y in range(31, -1, -1):
+        a = b = 0
+        for x in range(32):
+            c = px[y][x]
+            a = (a << 1) | (1 if c == '.' else 0)          # white: XOR 1, AND 0
+            b = (b << 1) | (1 if c == ' ' else 0)          # transparent: AND 1
+        xor += struct.pack('>I', a)
+        andm += struct.pack('>I', b)
+    bih = struct.pack('<IiiHHIIiiII', 40, 32, 64, 1, 1, 0, len(xor) + len(andm), 0, 0, 2, 0)
+    pal = struct.pack('<BBBBBBBB', 0, 0, 0, 0, 255, 255, 255, 0)
+    img = bih + pal + xor + andm
+    head = struct.pack('<HHH', 0, 2, 1)
+    entry = struct.pack('<BBBBHHII', 32, 32, 2, 0, hotx, hoty, len(img), 6 + 16)
+    return head + entry + img
+
+
+def write_cursors(out):
+    with open(os.path.join(out, 'split.cur'), 'wb') as fh:
+        fh.write(cursor(SPLIT, 8 + 7, 6 + 9, 7, 9))
+    for name, rows in (('dragfile.cur', DRAG_FILE), ('dragfiles.cur', DRAG_FILES),
+                       ('dragdir.cur', DRAG_FOLDER)):
+        with open(os.path.join(out, name), 'wb') as fh:
+            fh.write(cursor(rows, 0, 0))
+        with open(os.path.join(out, name.replace('drag', 'copy')), 'wb') as fh:
+            fh.write(cursor(with_plus(rows), 0, 0))
+
+
 if __name__ == '__main__':
     out = sys.argv[1]
     for name, f in (('winfile.ico', cabinet), ('tree.ico', tree), ('dir.ico', dirlist),
                     ('treedir.ico', treedir)):
         with open(os.path.join(out, name), 'wb') as fh:
             fh.write(f().ico())
+    write_cursors(out)
+

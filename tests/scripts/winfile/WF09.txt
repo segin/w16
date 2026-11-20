@@ -1,0 +1,16 @@
+; WF09: the split dragged with the mouse from its bar (x 259) to x 150: a
+; shot while the button is held (the inverted bar), one after (obs WF9)
+run WINFILE.EXE
+wait 4000
+mmove 259 200
+wait 300
+mdown 259 200
+mmove 200 200
+mmove 150 200
+wait 500
+snap C:\S01.BMP
+mup 150 200
+wait 1000
+snap C:\S02.BMP
+close
+wait 2500

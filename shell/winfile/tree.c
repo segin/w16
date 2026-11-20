@@ -496,6 +496,7 @@ LRESULT CALLBACK _export TreeControlWndProc(HWND w, UINT msg, WPARAM wp, LPARAM 
                      LBS_NOTIFY | LBS_OWNERDRAWFIXED | LBS_NOINTEGRALHEIGHT |
                      LBS_WANTKEYBOARDINPUT | LBS_DISABLENOSCROLL,
                      0, 0, 0, 0, w, (HMENU)ID_TREELIST, g_hinst, NULL);
+        dnd_subclass(GetDlgItem(w, ID_TREELIST));
         return 0;
     case WM_SIZE:
         MoveWindow(GetDlgItem(w, ID_TREELIST), 0, 0, LOWORD(lp), HIWORD(lp), TRUE);

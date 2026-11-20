@@ -153,6 +153,11 @@ static void status_text(LPSTR left, LPSTR right)
     LPDIRWIN d = dirwin_of(w);
     char a[16], b[16];
     left[0] = right[0] = 0;
+    if (is_search((HWND)LOWORD(SendMessage(g_mdi, WM_MDIGETACTIVE, 0, 0)))) {
+        /* "n file(s) found", the second box empty (WF10) */
+        wsprintf(left, load_str(IDS_FOUND), g_found);
+        return;
+    }
     if (!d)
         return;
     if (d->stleft == ST_SELECTED) {
@@ -342,6 +347,28 @@ static LRESULT command(HWND w, WPARAM id, LPARAM lp)
         if (d)
             file_command(d, id);
         return 0;
+    case IDM_SEARCH:
+        file_search(d);
+        return 0;
+    case IDM_DISKCOPY:
+        disk_copy();
+        return 0;
+    case IDM_LABEL:
+        disk_label();
+        return 0;
+    case IDM_FORMAT:
+        disk_format();
+        return 0;
+    case IDM_SYSDISK:
+        disk_sysdisk();
+        return 0;
+    case IDM_DRIVESMORE:
+        disk_select();
+        return 0;
+    case IDM_ASSOCIATE:
+        if (d)
+            file_associate(d);
+        return 0;
     case IDM_VOTHER:
         if (d)
             dlg_other(d);
@@ -419,7 +446,7 @@ LRESULT CALLBACK _export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         cc.idFirstChild = IDM_CHILDSTART;
         g_frame = w;
         g_mdi = CreateWindow("MDIClient", NULL,
-                             WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_BORDER,
+                             WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_BORDER | WS_VSCROLL | WS_HSCROLL,
                              0, 0, 0, 0, w, (HMENU)1, g_hinst, (LPSTR)&cc);
         return g_mdi ? 0 : -1;
     }
@@ -530,7 +557,7 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     bm_load();
     drives_scan();
     if (!register_frame() || !treewin_register() || !drives_register() ||
-        !tree_register() || !dir_register())
+        !tree_register() || !dir_register() || !search_register())
         return 0;
     accel = LoadAccelerators(inst, MAKEINTRESOURCE(IDA_MAIN));
     filter = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)MakeProcInstance((FARPROC)MessageFilter, inst),

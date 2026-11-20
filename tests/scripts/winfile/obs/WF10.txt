@@ -1,0 +1,52 @@
+; WF10: Delete BETA (Down after Tab selects it): Confirm Directory Delete,
+; Yes, then the box for GAMMA.DOC inside it, Cancel. Then C:\ (Home in
+; the tree), Select Files BIG.DAT (a 3 MB file brought for this probe),
+; Copy to C:\WFTEST: the Copy box while it works
+; big: BIG.DAT 3000000
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+key 09
+wait 500
+key 28
+wait 800
+cmd 108
+wait 1000
+snap C:\K01.BMP
+key 0D
+wait 2000
+snap C:\K02.BMP
+dump
+key 0D
+wait 2000
+snap C:\K03.BMP
+dump
+key 1B
+wait 2000
+snap C:\K04.BMP
+ckey s 09
+wait 300
+key 24
+wait 1500
+cmd 116
+wait 800
+type BIG.DAT
+key 0D
+wait 500
+key 1B
+wait 800
+snap C:\K05.BMP
+cmd 107
+wait 1000
+type C:\WFTEST
+key 0D
+wait 150
+snap C:\K06.BMP
+dump
+wait 150
+snap C:\K07.BMP
+wait 6000
+snap C:\K08.BMP
+close
+wait 2500

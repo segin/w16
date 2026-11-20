@@ -2,6 +2,8 @@
 ; COPY.TXT, Copy onto it again (Confirm File Replace, Yes), Rename to
 ; YYY, Create Directory NEWDIR, Properties, Delete (its confirmation,
 ; Yes); the dialogs and the lists after each
+; the copy's time in Confirm File Replace (the clock) is left out:
+; mask: 85,218,100,230
 run WINFILE.EXE
 wait 4000
 key 26
