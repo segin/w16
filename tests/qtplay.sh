@@ -58,10 +58,12 @@
 #     rectangle). The other screens (c2, c4, c5, c7, c8) are saved, not
 #     compared;
 #   - the drag while playing (after c4-paused: Space, the movie's window
-#     dragged by its caption and dropped, the movie left to end; w16 hung
-#     there until 2026-11-19, user/track.c): the window lands where 3.1
-#     puts it (what changed from c4-paused to c4b-dropped: the same
-#     rectangle) and shows 3.1's last frame there, pixel for pixel.
+#     dragged by its caption, the button held while arrow keys move it
+#     (the same drop under any load), and dropped, the movie left to end;
+#     w16 hung there until 2026-11-19, user/track.c): the window lands
+#     where 3.1 puts it (what changed from c4-paused to c4b-dropped, the
+#     pointer's columns left out: the same rectangle) and shows 3.1's last
+#     frame there, pixel for pixel.
 #     c4a-dragging (the frame mid-drag) is saved, not compared.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
@@ -246,40 +248,34 @@ if [ -f "$refdir/c6b-opened.png" ] && [ -f "$w/c6b-opened.png" ]; then
 fi
 # the drag while the movie plays: where the movie's window landed (what
 # changed from c4-paused to c4b-dropped, its old place and its new one: the
-# same rectangle on both sides), and its last frame there (3.1's,
-# frame-ref.png, found in the lower right of that rectangle on 3.1, at the
-# same place on w16)
+# same rectangle on both sides), and the picture in it at the end (the
+# window is in that rectangle's lower right, as big as the reopened one,
+# c1-closed to c3-reopened; the picture is the window less 24 rows at the
+# top, its border and caption, 20 at the bottom, the controller and
+# border, and 5 columns each side: the same pixels on both sides)
 dragged() {
-    magick "$1/c4-paused.png" "$1/c4b-dropped.png" -compose difference -composite \
-        -threshold 0 -format '%@' info:
+    # x 312 on left out: the pointer (where it was in c4-paused, and where
+    # the script puts it after the drop); the window ends left of it
+    magick \( "$1/c4-paused.png" -fill black -draw "rectangle 312,0 639,479" \) \
+        \( "$1/c4b-dropped.png" -fill black -draw "rectangle 312,0 639,479" \) \
+        -compose difference -composite -threshold 0 -format '%@' info:
 }
 if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
     ra=$(dragged "$refdir") wa=$(dragged "$w")
     echo "the movie's window dragged while playing: $ra on 3.1, $wa on w16"
     if [ "$ra" != "$wa" ]; then
         fail "the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
-    elif [ -f "$out/frame-ref.png" ]; then
-        fw=$(magick identify -format '%w' "$out/frame-ref.png")
-        fh=$(magick identify -format '%h' "$out/frame-ref.png")
-        sz=${ra%%+*} xy=${ra#*+}
-        bw=${sz%x*} bh=${sz#*x} bx=${xy%+*} by=${xy#*+}
-        # the search area: the rectangle's lower right, 40 pixels more
-        # than the frame each way (the window's border, the controller)
-        sx=$((bx + bw - fw - 40)) sy=$((by + bh - fh - 40))
-        [ $sx -ge $bx ] || sx=$bx
-        [ $sy -ge $by ] || sy=$by
-        magick "$refdir/c4b-dropped.png" -crop "$((fw + 40))x$((fh + 40))+$sx+$sy" +repage "$out/drag-area-ref.png"
-        at=$(magick compare -metric AE -subimage-search "$out/drag-area-ref.png" "$out/frame-ref.png" null: 2>&1 |
-            sed -n 's/^0 (0) @ \([0-9]*\),\([0-9]*\).*/\1 \2/p' | head -n 1)
-        if [ -z "$at" ]; then
-            fail "the dragged movie's last frame not found on 3.1 ($refdir/c4b-dropped.png)"
-        else
-            fx=$((sx + ${at% *})) fy=$((sy + ${at#* }))
-            magick "$w/c4b-dropped.png" -crop "${fw}x$fh+$fx+$fy" +repage "$out/drag-frame-w16.png"
-            n=$(px "$out/frame-ref.png" "$out/drag-frame-w16.png" "$out/drag-frame-diff.png")
-            echo "the dragged movie's last frame at $fx,$fy: $n pixels differ from 3.1's"
-            [ "$n" = 0 ] || fail "the dragged movie's last frame: $n pixels differ from 3.1's ($out/drag-frame-diff.png)"
-        fi
+    else
+        ws=$(magick "$refdir/c1-closed.png" "$refdir/c3-reopened.png" -compose difference -composite \
+            -threshold 0 -format '%@' info:)
+        ws=${ws%%+*} sz=${ra%%+*} xy=${ra#*+}
+        ww=${ws%x*} wh=${ws#*x} bw=${sz%x*} bh=${sz#*x} bx=${xy%+*} by=${xy#*+}
+        crop="$((ww - 10))x$((wh - 44))+$((bx + bw - ww + 5))+$((by + bh - wh + 24))"
+        magick "$refdir/c4b-dropped.png" -crop "$crop" +repage "$out/drag-ref.png"
+        magick "$w/c4b-dropped.png" -crop "$crop" +repage "$out/drag-w16.png"
+        n=$(px "$out/drag-ref.png" "$out/drag-w16.png" "$out/drag-diff.png")
+        echo "the dragged movie's picture ($crop): $n pixels differ from 3.1's"
+        [ "$n" = 0 ] || fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"
     fi
 elif [ -f "$refdir/c4b-dropped.png" ]; then
     fail "the drag while the movie plays did not get to its drop on w16 ($w/input.log, $w/work/c/OUT.TXT)"
