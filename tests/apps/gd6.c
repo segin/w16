@@ -40,7 +40,7 @@ static const sdiv sd[] = {
 typedef struct { DWORD a, b, q, r; } udiv;
 static const udiv ud[] = {
     { 0xFFFFFFFFUL, 0x10001UL, 0xFFFFUL, 0UL },
-    { 0xFFFFFFFFUL, 0x12345UL, 0xE0E1UL, 0x6EFAUL },
+    { 0xFFFFFFFFUL, 0x12345UL, 0xE100UL, 0x5AFFUL },
     { 0x80000000UL, 0x7FFFFFFFUL, 1UL, 1UL },
     { 100001UL, 70000UL, 1UL, 30001UL },
     { 0x12345678UL, 0x10UL, 0x1234567UL, 8UL },
