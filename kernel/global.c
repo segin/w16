@@ -1347,6 +1347,12 @@ void gadopt_kernel(void)
     module FAR *k = module_first;
     u16 i, s, ns, a;
     u32 bytes;
+    /* not under KRNL286 yet: with it, QuickTime's player on w16's tree
+       (boot-test case quicktime, part tree) no longer closed as on 3.1,
+       twice; not looked into (docs/notes/kernel-audit-triage.md, medium
+       33). KRNL386 (global386.c) adopts them. */
+    if (k)
+        return;
     if (!k || !bm)
         return;
     for (i = 0; i < k->seg_count; i++) {
