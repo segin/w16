@@ -334,6 +334,8 @@ static void sec_regions(void)
     obs("RectVisible inverted", RectVisible(mdc, &rc));
     SetRect(&rc, 70, 70, 80, 80);
     obs("RectVisible outside", RectVisible(mdc, &rc));
+    SetRect(&rc, 5, 5, 20, 20);
+    obs("RectVisible inside", RectVisible(mdc, &rc));
     mono_end();
     DeleteObject(r);
     r = CreateRectRgn(0, -32768, 10, -32760);
@@ -385,6 +387,9 @@ static void sec_shapes(void)
     obs("PolyPolygon alternate", PolyPolygon(mdc, pp, cnt, 2));
     obs("PolyPolygon alternate: hole", GetPixel(mdc, 32, 32) != 0);
     obs("PolyPolygon alternate: ring", GetPixel(mdc, 10, 32) == 0);
+    obs("PolyPolygon alternate: (50,32)", GetPixel(mdc, 50, 32) == 0);
+    obs("PolyPolygon alternate: (50,10)", GetPixel(mdc, 50, 10) == 0);
+    obs("PolyPolygon alternate: (30,50)", GetPixel(mdc, 30, 50) == 0);
     PatBlt(mdc, 0, 0, 64, 64, WHITENESS);
     SetPolyFillMode(mdc, WINDING);
     PolyPolygon(mdc, pp, cnt, 2);
@@ -403,6 +408,32 @@ static void sec_shapes(void)
     obs("PolyPolygon of 1: drawn", GetPixel(mdc, 30, 4) == 0);
     SelectObject(mdc, GetStockObject(BLACK_BRUSH));
     SelectObject(mdc, GetStockObject(NULL_PEN));
+    /* closed polygons (first point repeated) */
+    {
+        static POINT pc[10] = { { 4, 4 }, { 60, 4 }, { 60, 60 }, { 4, 60 }, { 4, 4 },
+                                { 20, 20 }, { 44, 20 }, { 44, 44 }, { 20, 44 }, { 20, 20 } };
+        static int cc[2] = { 5, 5 };
+        static int sz[] = { 1000, 2000, 3000, 4000, 4500, 5000, 6000, 8000, 10000, 16000 };
+        int k;
+        PatBlt(mdc, 0, 0, 64, 64, WHITENESS);
+        SelectObject(mdc, GetStockObject(BLACK_BRUSH));
+        SelectObject(mdc, GetStockObject(NULL_PEN));
+        PolyPolygon(mdc, pc, cc, 2);
+        obs("PolyPolygon closed: hole", GetPixel(mdc, 32, 32) != 0);
+        obs("PolyPolygon closed: ring", GetPixel(mdc, 10, 32) == 0);
+        /* how big an ellipse 3.1 draws */
+        for (k = 0; k < sizeof sz / sizeof sz[0]; k++) {
+            int ok;
+            PatBlt(mdc, 0, 0, 64, 64, WHITENESS);
+            ok = Ellipse(mdc, 32 - sz[k] / 2, 32 - sz[k] / 2, 32 + sz[k] / 2, 32 + sz[k] / 2);
+            obsn("Ellipse size", sz[k], ok);
+            obsn("Ellipse size: centre", sz[k], GetPixel(mdc, 32, 32) == 0);
+            ok = Ellipse(mdc, 0, 32 - sz[k] / 2, 64, 32 + sz[k] / 2);
+            obsn("Ellipse height", sz[k], ok);
+            ok = Ellipse(mdc, 32 - sz[k] / 2, 0, 32 + sz[k] / 2, 64);
+            obsn("Ellipse width", sz[k], ok);
+        }
+    }
     /* an empty Rectangle (Medium 17) */
     PatBlt(mdc, 0, 0, 64, 64, WHITENESS);
     SelectObject(mdc, GetStockObject(BLACK_PEN));
@@ -682,6 +713,27 @@ static void sec_window(void)
     RegisterClass(&wc);
     w = CreateWindow("GD5", "", WS_POPUP | WS_VISIBLE, 100, 80, 300, 200, NULL, NULL, hinst, NULL);
     UpdateWindow(w);
+    /* SetDIBitsToDevice on a window DC: its return value (H17) */
+    {
+        static BYTE src[8 * 4] = { 0xF0, 0, 0, 0, 0xF0, 0, 0, 0, 0xF0, 0, 0, 0, 0xF0, 0, 0, 0,
+                                   0x0F, 0, 0, 0, 0x0F, 0, 0, 0, 0x0F, 0, 0, 0, 0x0F, 0, 0, 0 };
+        struct { BITMAPINFOHEADER h; RGBQUAD c[2]; } bi;
+        fill(&bi, 0, sizeof bi);
+        bi.h.biSize = sizeof bi.h;
+        bi.h.biWidth = 8;
+        bi.h.biHeight = 8;
+        bi.h.biPlanes = 1;
+        bi.h.biBitCount = 1;
+        bi.c[1].rgbRed = bi.c[1].rgbGreen = bi.c[1].rgbBlue = 255;
+        dc = GetDC(w);
+        obs("SetDIBitsToDevice window DC",
+            SetDIBitsToDevice(dc, 2, 2, 8, 8, 0, 0, 0, 8, src, (BITMAPINFO FAR *)&bi, DIB_RGB_COLORS));
+        obs("SetDIBitsToDevice window DC: (2,2)", GetPixel(dc, 2, 2) == 0);
+        obs("SetDIBitsToDevice window DC: (8,2)", GetPixel(dc, 8, 2) == 0);
+        obs("SetDIBitsToDevice window DC 4 lines",
+            SetDIBitsToDevice(dc, 2, 2, 8, 8, 0, 0, 0, 4, src, (BITMAPINFO FAR *)&bi, DIB_RGB_COLORS));
+        ReleaseDC(w, dc);
+    }
     /* a clip region reaching the coordinate limit (C6) */
     dc = GetDC(w);
     r = CreateRectRgn(0, 0, 32767, 32767);
@@ -738,6 +790,30 @@ static void sec_window(void)
     DestroyWindow(w);
 }
 
+/* Is the GDI w16's? Its module description (the first entry of the
+   non-resident name table) starts with "w16". Parts where Windows 3.1
+   itself ends (observed: their log stops there) run on w16's only. */
+static int gdi_is_w16(void)
+{
+    char path[128], d[4];
+    OFSTRUCT of;
+    BYTE hdr[0x40];
+    DWORD ne, nrt;
+    int f;
+    GetModuleFileName(GetModuleHandle("GDI"), path, sizeof path);
+    f = OpenFile(path, &of, OF_READ);
+    if (f < 0)
+        return 0;
+    _lread(f, hdr, 0x40);
+    ne = *(DWORD *)(hdr + 0x3C);
+    _llseek(f, ne + 0x2C, 0);
+    _lread(f, &nrt, 4);
+    _llseek(f, nrt + 1, 0);
+    _lread(f, d, 3);
+    _lclose(f);
+    return d[0] == 'w' && d[1] == '1' && d[2] == '6';
+}
+
 /* ---- GetDCState's handle (C7) ---- */
 
 static void sec_dcstate(void)
@@ -750,7 +826,11 @@ static void sec_dcstate(void)
     s = getdcstate(dc);
     obs("GetDCState", s != 0);
     obs("GetDCState IsGDIObject", IsGDIObject(s));
-    obs("DeleteDC of GetDCState's", DeleteDC(s));
+    if (!gdi_is_w16()) {                /* 3.1 ends in this DeleteDC */
+        DeleteDC(dc);
+        return;
+    }
+    obs_env("DeleteDC of GetDCState's (3.1: ends Windows)", DeleteDC(s));
     obs("the DC still works: PatBlt", PatBlt(dc, 0, 0, 1, 1, BLACKNESS));
     obs("the DC still works: GetClipBox", GetClipBox(dc, &rc));
     DeleteDC(dc);
