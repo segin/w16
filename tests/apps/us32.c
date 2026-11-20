@@ -590,21 +590,18 @@ static void measure(const char *step)
     fp.y = 0;
     ClientToScreen(lst, &fp);
     grab(&area, &lrect, &sum, &hl);
-    /* owner-drawn: 3.1 scrolls the bits (ScrollWindow) and draws the
-       items that come in, and the selection and focus changes with
-       ODA_SELECT and ODA_FOCUS; w16 draws every item shown again
-       (ODA_DRAWENTIRE): the records, and so the pixels (this owner's
-       focus rectangle is an XOR), are logged, not compared */
+    /* owner-drawn: the WM_DRAWITEMs since the last step (3.1 scrolls the
+       bits and draws the items that come in, and the selection and focus
+       changes with ODA_SELECT and ODA_FOCUS; until 2026-11-20 w16 drew
+       every item shown again, and so this owner's XOR focus rectangle
+       showed other pixels; probe US33 has the rest) */
     if (od) {
-        wsprintf(nm, "~d%d.%s.draw", dn, (LPSTR)step);
+        wsprintf(nm, "d%d.%s.draw", dn, (LPSTR)step);
         obs_str(nm, drawrec);
     }
     drawrec[0] = 0;
     wsprintf(nm, "d%d.%s.focusline", dn, (LPSTR)step);
-    if (od)
-        obs_env(nm, fl);
-    else
-        obs(nm, fl);
+    obs(nm, fl);
     wsprintf(nm, "d%d.%s", dn, (LPSTR)step);
     obsf(nm, "top %d sel %d out %d", (int)SendMessage(lst, LB_GETTOPINDEX, 0, 0),
          (int)SendMessage(lst, LB_GETCURSEL, 0, 0), hl, 0);
@@ -615,10 +612,7 @@ static void measure(const char *step)
         obsf(nm, "%d-%d at %d focus %d", lo, hi2, GetScrollPos(lst, SB_VERT), GetFocus() == lst);
     }
     wsprintf(nm, "d%d.%s.sum", dn, (LPSTR)step);
-    if (od)
-        obs_env(nm, sum);
-    else
-        obs(nm, sum);
+    obs(nm, sum);
     snap();
 }
 

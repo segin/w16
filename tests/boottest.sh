@@ -396,6 +396,17 @@
 #              w16's USER, their OBS lines identical (heights, clip boxes,
 #              the area around each list box pixel for pixel by checksum,
 #              no highlight outside the list box)
+#   lbdraw     how a list box draws and what a screen DC covers (ARCHITECTURE.md
+#              10.4): probe US33 as the shell on 3.1 and on w16's USER, their
+#              OBS lines identical: owner-drawn list boxes of every kind
+#              driven by keys, clicks, the scroll bar and messages, each
+#              WM_DRAWITEM (item, action, state, rectangle, order, inside
+#              WM_PAINT or not, the update rectangle) and a checksum of the
+#              list's pixels; GetDC(NULL) and the desktop's DCs (clip box,
+#              GetPixel, PatBlt over top-level windows); LB_SETTABSTOPS
+#              (where each tabbed item's words start); the frames of child
+#              dialogs (QuickTime's Control Panel's pages); and again on
+#              w16's USER and GDI, all but the checksums
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -456,7 +467,8 @@
 #              tests/wfscenarios.sh, both File Managers under SNAP (w16's
 #              with Microsoft's pictures, tests/wfmsres.sh), every screen
 #              within tests/scripts/winfile.baseline and the WINFILE.INI
-#              each leaves the same
+#              each leaves the same; wf14 loads the extension probe
+#              FMX.DLL into both and compares its log
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without
@@ -813,7 +825,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3416,6 +3428,43 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   lbclip: US32 as 3.1 (list box heights, a partly shown item scrolled; w16 USER, and USER+GDI)"
         else echo "FAIL lbclip: $r"; fails=$((fails + 1)); fi ;;
+    lbdraw)
+        # list box drawing, screen DCs, tab stops (tests/apps/us33.c)
+        lb33() {   # LABEL dropin.sh options...: US33's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 400 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US33.EXE=US33.EXE" -i 'boot:shell=C:\US33.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 lb33 lbdraw-ref &
+        DROPIN_WSECS=30 lb33 lbdraw-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        DROPIN_WSECS=30 lb33 lbdraw-gdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" &
+        wait
+        r=ok
+        for k in ref w16 gdi; do
+            grep -q '^US33 end' "$out/lbdraw-$k.log" ||
+                { [ "$r" = ok ] && r="US33 did not finish ($k: $out/lbdraw-$k.log)"; }
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/lbdraw-ref.log" > "$out/lbdraw-ref.obs"
+            grep '^OBS [^~]' "$out/lbdraw-w16.log" > "$out/lbdraw-w16.obs"
+            cmp -s "$out/lbdraw-ref.obs" "$out/lbdraw-w16.obs" ||
+                r="$(diff "$out/lbdraw-ref.obs" "$out/lbdraw-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/lbdraw-ref.obs, lbdraw-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then
+            # w16's GDI too: all but the checksums and the tab stops' ink,
+            # whose glyphs are w16's
+            grep -v '\.sum=\|^OBS tab\.[^ ]*\.[0-9]=' "$out/lbdraw-ref.obs" > "$out/lbdraw-ref.nosum"
+            grep '^OBS [^~]' "$out/lbdraw-gdi.log" | grep -v '\.sum=\|^OBS tab\.[^ ]*\.[0-9]=' > "$out/lbdraw-gdi.nosum"
+            cmp -s "$out/lbdraw-ref.nosum" "$out/lbdraw-gdi.nosum" ||
+                r="w16 USER+GDI: $(diff "$out/lbdraw-ref.nosum" "$out/lbdraw-gdi.nosum" | grep -c '^<') observation(s) differ from 3.1's ($out/lbdraw-ref.nosum, lbdraw-gdi.nosum)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   lbdraw: US33 as 3.1 (owner-drawn list boxes' WM_DRAWITEMs and pixels, screen DCs, tab stops, child dialogs; w16 USER, and USER+GDI)"
+        else echo "FAIL lbdraw: $r"; fails=$((fails + 1)); fi ;;
     uaudit)
         # the USER audit's probes (tests/apps/us29.c, us30.c)
         ua() {   # LABEL EXE-AS dropin.sh options...: a run, its log in LABEL.log

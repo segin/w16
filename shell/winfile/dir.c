@@ -507,6 +507,7 @@ LRESULT CALLBACK _export DirWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         case LBN_SELCHANGE:
             status_set(d, ST_SELECTED);
+            ext_selchange();
             break;
         case LBN_DBLCLK:
             SendMessage(g_frame, WM_COMMAND, IDM_OPEN, 0);

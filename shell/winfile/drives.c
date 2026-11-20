@@ -70,7 +70,7 @@ static void drive_rect(int i, RECT FAR *r)
 }
 
 /* the volume label of a drive, "" if none; FALSE if it cannot be read */
-static BOOL volume_label(int drive, LPSTR out, int n)
+BOOL volume_label(int drive, LPSTR out, int n)
 {
     FINDBUF f;
     char spec[8];

@@ -5,7 +5,8 @@
 # Manager and once with w16's (build/dos/WINFILE.EXE, over
 # C:\WINDOWS\WINFILE.EXE) on the reference Windows 3.1. Afterwards the
 # WINFILE.INI each left must be the same (WF_INICMP=0: not compared), the
-# files named on "; get:" lines byte-identical, and no screenshot may
+# files named on "; get:" lines byte-identical (and the extension probe's
+# log FMX.LOG, for scripts that load it: "; fmx:"), and no screenshot may
 # differ by more pixels than tests/scripts/winfile.baseline records
 # ("scenario/SHOT count"; above fails, below is reported).
 # WF_BASELINE=update rewrites the baseline from this run.
@@ -38,6 +39,12 @@ for n in $names; do
             result=FAIL; echo "  $n: WINFILE.INI differs"
             diff "$out/$n/orig/WINFILE.INI" "$out/$n/w16/WINFILE.INI" | head -10 | sed 's/^/    /' || :
         fi
+    fi
+    # the extension probe's log (scripts with "; fmx:", tests/wfobs.sh)
+    if [ -f "$out/$n/orig/FMX.LOG" ] &&
+        ! cmp -s "$out/$n/orig/FMX.LOG" "$out/$n/w16/FMX.LOG" 2>/dev/null; then
+        result=FAIL; echo "  $n: FMX.LOG differs"
+        diff "$out/$n/orig/FMX.LOG" "$out/$n/w16/FMX.LOG" | head -20 | sed 's/^/    /' || :
     fi
     for f in $(sed -n 's/^; get: *//p' "$script"); do
         b=$(basename "$f")

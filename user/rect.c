@@ -164,14 +164,20 @@ HBRUSH sys_brush(HBRUSH b)
     return b;
 }
 
-/* a bad RECT: 0, nothing drawn (3.1) */
+/* a bad RECT: 0, nothing drawn (3.1). The brush is a brush: a system
+   colour's number + 1, which a class's hbrBackground may be, is no brush
+   here, and nothing is drawn (US33 on 3.1: an owner that fills its
+   selected items with (HBRUSH)(COLOR_HIGHLIGHT + 1) leaves them as they
+   were, white on the list's background; w16 filled them with the
+   highlight) */
 int WINAPI FillRect(HDC hdc, const RECT __far *rp, HBRUSH b)
 {
     RECT a, *r = &a;
     HBRUSH old;
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return 0;
-    old = SelectObject(hdc, sys_brush(b));
+    if ((old = SelectObject(hdc, b)) == 0)
+        return 0;
     PatBlt(hdc, r->left, r->top, r->right - r->left, r->bottom - r->top, PATCOPY);
     SelectObject(hdc, old);
     return 1;
@@ -184,7 +190,8 @@ int WINAPI FrameRect(HDC hdc, const RECT __far *rp, HBRUSH b)
     int w, h;
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return 0;
-    old = SelectObject(hdc, sys_brush(b));
+    if ((old = SelectObject(hdc, b)) == 0)     /* (as FillRect) */
+        return 0;
     w = r->right - r->left, h = r->bottom - r->top;
     if (w > 0 && h > 0) {
         PatBlt(hdc, r->left, r->top, w, 1, PATCOPY);
@@ -217,6 +224,10 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return;
     w = r->right - r->left, h = r->bottom - r->top;
+    /* an empty rectangle: nothing (US33 on 3.1: the focus rectangle of an
+       empty list box of variable heights, 0 high) */
+    if (w <= 0 || h <= 0)
+        return;
     if (!dots) {
         static WORD bits[8] = { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55 };
         HBITMAP b = CreateBitmap(8, 8, 1, 1, bits);
@@ -224,12 +235,16 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
         DeleteObject(b);
         G_MAKEOBJECTPRIVATE(dots, TRUE);
     }
-    /* aligned to the screen whatever DC it was last used in (the brush
-       kept the origin of its first realization: US32's focus rectangles
-       came a pixel off 3.1's in one run and not in another) */
+    /* aligned to the DC, whatever DC it was last used in (the brush kept
+       the origin of its first realization: US32's focus rectangles came
+       a pixel off 3.1's in one run and not in another): on 3.1 the dots
+       in the background colour lie where x + y is odd in the DC's own
+       coordinates, wherever the DC is on the screen (US33 dfr: the same
+       rectangle in child windows an odd and an even number of pixels
+       across; w16 had them where x + y is even) */
     org = GetDCOrg(hdc);
     UnrealizeObject(dots);
-    oldorg = SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+    oldorg = SetBrushOrg(hdc, ((LOWORD(org) + HIWORD(org)) & 1) ^ 1, 0);
     old = SelectObject(hdc, dots);
     /* the corners left out (US4) */
     PatBlt(hdc, r->left + 1, r->top, w - 2, 1, PATINVERT);
@@ -439,6 +454,26 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
     return total;
 }
 
+/* the default tab: 8 of the font's average characters, the dialog base
+   unit's average of the 52 letters (US33 tto on 3.1: 56 for a bold MS
+   Sans Serif 8, whose tmAveCharWidth is 6 and "0" 8 wide; 64 for the
+   system font, 48 for ANSI_VAR_FONT). w16 took 8 widths of "0", 64 */
+static int default_tab(HDC hdc)
+{
+    static char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    return 8 * ((LOWORD(GetTextExtent(hdc, letters, 52)) / 26 + 1) / 2);
+}
+
+/* the next stop every tw from the origin, x past it; a negative tw
+   divides as an unsigned number (US33: one stop of -30 puts any text
+   after its tab at -30, the next tab at -60) */
+static int next_stop(int x, int tw)
+{
+    if (tw < 0)
+        return (int)((WORD)x / (WORD)tw + 1) * tw;
+    return (x / tw + 1) * tw;
+}
+
 /* a bad string or tab array: 0, nothing drawn (3.1) */
 LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
                           int __far *tabs, int origin)
@@ -447,7 +482,7 @@ LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
     if (GP_BAD(s) || GP_BAD(tabs))
         return 0;
     h = HIWORD(GetTextExtent(hdc, "A", 1));
-    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    deftab = default_tab(hdc);
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start) {
@@ -456,14 +491,14 @@ LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
             }
             if (i < n) {
                 int stop;
-                if (ntabs > 0 && tabs) {
+                if (ntabs > 1 && tabs) {
                     while (k < ntabs && origin + tabs[k] <= cx)
                         k++;
                     stop = k < ntabs ? origin + tabs[k] :
-                           origin + ((cx - origin) / deftab + 1) * deftab;
+                           origin + next_stop(cx - origin, deftab);
                 } else {
                     int tw = (ntabs == 1 && tabs) ? tabs[0] : deftab;
-                    stop = origin + ((cx - origin) / tw + 1) * tw;
+                    stop = origin + (tw ? next_stop(cx - origin, tw) : cx - origin);
                 }
                 cx = stop;
             }
@@ -480,7 +515,7 @@ DWORD WINAPI GetTabbedTextExtent(HDC hdc, LPCSTR s, int n, int ntabs, int __far 
     if (GP_BAD(s) || GP_BAD(tabs))
         return 0;
     h = HIWORD(GetTextExtent(hdc, "A", 1));
-    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    deftab = default_tab(hdc);
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start)
@@ -489,10 +524,10 @@ DWORD WINAPI GetTabbedTextExtent(HDC hdc, LPCSTR s, int n, int ntabs, int __far 
                 if (ntabs > 1 && tabs) {
                     while (k < ntabs && tabs[k] <= cx)
                         k++;
-                    cx = k < ntabs ? tabs[k] : (cx / deftab + 1) * deftab;
+                    cx = k < ntabs ? tabs[k] : next_stop(cx, deftab);
                 } else {
                     int tw = (ntabs == 1 && tabs) ? tabs[0] : deftab;
-                    cx = (cx / tw + 1) * tw;
+                    cx = tw ? next_stop(cx, tw) : cx;
                 }
             }
             start = i + 1;

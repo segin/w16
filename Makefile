@@ -827,6 +827,13 @@ $(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nem
 	    option map=$(B)/tests/tw2.map file { $(B)/tests/start.o $(B)/tests/tw2.o }
 	python3 tools/nemark.py $@ 2.0
 
+# FMX.DLL (module FMX0): the File Manager extension probe (tests/apps/fmx.c,
+# tests/wfext.sh); copies FMX1.DLL ... are renamed by tools/nerename.py
+dos: $(DOS)/FMX.DLL
+$(DOS)/FMX.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o tests/apps/dll.lnk tests/apps/fmx.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fmx.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/fmx.map file { $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o }
 # SNAP.EXE: its icon (tools/snapicon.py) and the interactive window
 $(B)/tests/snap.ico: tools/snapicon.py tools/mkicons.py
 	@mkdir -p $(@D)
@@ -1279,7 +1286,7 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 
 # ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
 # 3.1 only ----
-WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd disk bitmap util
+WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd disk ext bitmap util
 SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
 shell: $(DOS)/WINFILE.EXE
 $(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h
@@ -2028,6 +2035,19 @@ $(DOS)/US32.EXE: $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us32.map option resource=$(B)/tests/us32.res \
 	    file { $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US32.EXE
+# US33: how a list box draws (owner-drawn), GetDC(NULL), LB_SETTABSTOPS,
+# child dialogs' frames (tests/apps/us33.c)
+$(B)/tests/us33.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(B)/tests/us33.res: tests/apps/us33.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US33.EXE: $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us33.res tests/apps/app.lnk tests/apps/us33.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us33.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us33.map option resource=$(B)/tests/us33.res \
+	    file { $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US33.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

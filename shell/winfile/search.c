@@ -264,6 +264,37 @@ HGLOBAL search_selected(void)
     return h;
 }
 
+/* for FM_GETFILESEL (ext.c): the selected entries; the want-th (or the
+   last, if fewer) into name and, as FMS_GETFILESEL's first members, its
+   time, date, size and attributes; returns how many are selected */
+int search_sel(int want, LPSTR name, LPVOID fmsel)
+{
+    int n = search_lb ? (int)SendMessage(search_lb, LB_GETCOUNT, 0, 0) : 0, i, k = 0;
+    for (i = 0; i < n; i++) {
+        if (SendMessage(search_lb, LB_GETSEL, i, 0) <= 0)
+            continue;
+        if (name && k <= want) {
+            FINDBUF f;
+            LPBYTE p = fmsel;
+            SendMessage(search_lb, LB_GETTEXT, i, (LPARAM)name);
+            if (dos_findfirst(name, ATTR_DIR | ATTR_READONLY | ATTR_ARCHIVE | ATTR_HS, &f) == 0) {
+                *(WORD FAR *)p = f.time;
+                *(WORD FAR *)(p + 2) = f.date;
+                *(DWORD FAR *)(p + 4) = f.size;
+                p[8] = f.attr;
+            }
+        }
+        k++;
+    }
+    return k;
+}
+
+/* the directory the search started from */
+LPCSTR search_start(void)
+{
+    return s_start;
+}
+
 static void open_selected(void)
 {
     char t[PATHLEN];
@@ -305,6 +336,8 @@ LRESULT CALLBACK _export SearchWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == ID_DIRLIST) {
             if (HIWORD(lp) == LBN_DBLCLK)
                 open_selected();
+            else if (HIWORD(lp) == LBN_SELCHANGE)
+                ext_selchange();
             else if (HIWORD(lp) == LBN_SETFOCUS || HIWORD(lp) == LBN_KILLFOCUS)
                 InvalidateRect(search_lb, NULL, FALSE);
             return 0;

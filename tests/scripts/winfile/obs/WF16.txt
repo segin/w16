@@ -1,0 +1,47 @@
+; WF16: [AddOns] with a missing DLL first, then FMX1, FMX2 (refuses:
+; FMEVENT_LOAD returns 0), FMX3 (no menu), FMX4, FMX5, FMX6 (dwSize 0),
+; FMX7 (a 39-character name), FMX8: which are loaded, their deltas, the
+; menu bar; then FMX1's Reload (FM_RELOAD_EXTENSIONS posted), then FMX4's
+; Uninstall (its key removed, reload); exit
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:Gone=C:\NONE.DLL
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; wfini: AddOns:FMX Two=C:\FMX2.DLL
+; wfini: AddOns:FMX Three=C:\FMX3.DLL
+; wfini: AddOns:FMX Four=C:\FMX4.DLL
+; wfini: AddOns:FMX Five=C:\FMX5.DLL
+; wfini: AddOns:FMX Six=C:\FMX6.DLL
+; wfini: AddOns:FMX Seven=C:\FMX7.DLL
+; wfini: AddOns:FMX Eight=C:\FMX8.DLL
+; fmx: FMX1 FMX2 FMX3 FMX4 FMX5 FMX6 FMX7 FMX8
+; fmxini: FMX2:LoadRet=0
+; fmxini: FMX3:NoMenu=1
+; fmxini: FMX6:Size=0
+; fmxini: FMX7:Name=Seven 456789012345678901234567890123456789
+; get: FMX.LOG
+run WINFILE.EXE
+wait 5000
+append C:\FMX.LOG == started
+snap C:\Y01.BMP
+dumpmenu
+append C:\FMX.LOG == FMX1 Reload
+menu 1
+wait 300
+key 52
+wait 3000
+append C:\FMX.LOG == after reload
+snap C:\Y02.BMP
+dumpmenu
+append C:\FMX.LOG == FMX4 Uninstall
+menu 4
+wait 300
+key 55
+wait 3000
+append C:\FMX.LOG == after uninstall
+snap C:\Y03.BMP
+dumpmenu
+append C:\FMX.LOG == close
+close
+wait 3000
+append C:\FMX.LOG == end

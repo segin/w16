@@ -484,7 +484,7 @@ CAPTION "Select Drive"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&Drives:", 245, "Static", 0x000C, 5, 5, 41, 10
-    CONTROL "", 222, "ListBox", 0x0083 | 0x00810000L, 5, 16, 140, 56
+    CONTROL "", 222, "ListBox", 0x0083 | 0x00800000L, 5, 16, 140, 56
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 155, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 155, 23, 40, 14
     CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 155, 44, 40, 14

@@ -1027,7 +1027,13 @@ BOOL GDIAPI PtVisible(HDC hdc, int x, int y)                       /* GDI.103 */
     p[0] = x;
     p[1] = y;
     dc_lp_to_dp(dc, p, 1);
-    return PtInRegion(dc->hRao, p[0] + dc->dcOrg.x, p[1] + dc->dcOrg.y);
+    /* visible: 0201h, or 0101h with a clip region selected (US33 pv on
+       3.1: GetDC(NULL), the desktop's and a window's DC 0201h whatever
+       their visible regions, 0101h with a simple or a complex clip
+       region; 0 outside); w16 returned 1 */
+    if (!PtInRegion(dc->hRao, p[0] + dc->dcOrg.x, p[1] + dc->dcOrg.y))
+        return FALSE;
+    return dc->hClipRgn ? 0x0101 : 0x0201;
 }
 
 BOOL GDIAPI RectVisible(HDC hdc, const RECT __far *rc)             /* GDI.465 */
