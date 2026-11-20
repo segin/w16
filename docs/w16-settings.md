@@ -27,11 +27,13 @@ There are two kinds of key:
 | `ExtendedGdiHeap` | `0` | `0` | GDI | GDI objects kept outside GDI's DGROUP, so far more objects fit. Can break programs that read GDI's internal structures, so it is off by default. |
 | `PEError` | `1` | `0` | KERNEL | Starting a 32-bit program (a PE file, e.g. a Windows 95 program) when Win32s is not installed (no W32SYS.DLL where libraries are searched): WinExec returns 21 and starts nothing, and w16's Program Manager says "Cannot run *file*. This 32-bit program requires Win32s, which is not installed." `0`: as 3.1, the program's MS-DOS stub runs as a DOS program ("This program cannot be run in DOS mode."). LoadModule returns 21 either way, as on 3.1. |
 | `MouseTrailDecay` | `2` | — | VGA.DRV | With Mouse Trails on, how many timer ticks (55 ms each) a stopped pointer's trail takes to drop each image: `2` fades a full trail in about 0.6 s, as Windows 3.1 looks when used; `1` drops one image a tick, as 3.1's driver does when driven directly by a probe. |
+| `LargeMemory` | `1` | `0` | DOSX, WIN386 | How extended memory is taken from XMS. With an XMS 3.0 driver on a 386, w16's DOS extender (Standard mode) and WIN386 (386 Enhanced mode) take the largest free block with XMS 3.0's functions 88h and 89h, whose sizes are 32-bit, then any other blocks; DOSX makes blocks that follow one another one free block. Programs then see one free block as large as the memory (DPMI 0500h, GetFreeSpace, GlobalCompact, TOOLHELP's MemManInfo); some old programs mishandle free-memory values that large. `0`: only XMS 2.0's 08h and 09h, which stop at 65,535 KB a block, and in Standard mode each block apart, as Windows 3.1's DOSX: DPMI 0500h's largest block is then at most 64 MB, while all the memory is still used, as on 3.1 (ARCHITECTURE.md 9.6, "More than 64 MB"). With 64 MB or less there is no difference. On an 80286 the key has no effect. |
 | `DebugToAux` | `0` | `1` | KERNEL | Where OutputDebugString's text goes with no debugger. `1`: always to DOS handle 3 (AUX), as 3.1's retail KERNEL does (in DOSBox AUX is the console, so the text is painted over Windows' screen). `0`: to AUX only when it is not the console, and always to `debuglog`. |
 
 w16's test harness writes the stock values (`DesktopVersion=0`,
 `NotepadAccelerators=0`, `DebugToAux=1`, `PEError=0`) for every test that compares
-with Windows 3.1; another value is set per test with `tests/dropin.sh
+with Windows 3.1 (not `LargeMemory=0`: the tests' machines have 16 MB, where
+both values give the same; the boot-test case `bigmem` runs with more); another value is set per test with `tests/dropin.sh
 -i w16:KEY=VALUE` or the `DROPIN_INI` environment variable (TESTING.md).
 
 ## Debugging aids
@@ -62,6 +64,7 @@ DesktopVersion=0
 NotepadAccelerators=0
 DebugToAux=1
 PEError=0
+LargeMemory=0
 ; while debugging
 debuglog=C:\W16DBG.LOG
 watchdog=15

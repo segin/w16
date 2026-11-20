@@ -201,5 +201,13 @@ stamp on the desktop, Notepad's Ctrl+O/Ctrl+S keys and so on) can be
 switched back to Windows 3.1's behaviour there; the repository's
 docs/w16-settings.md lists every key.
 
+Memory: on a 386 or later w16 uses all the extended memory the XMS
+driver gives: in Standard mode all of it, in w16's 386 Enhanced mode up
+to 1 GB. With an XMS 3.0 driver it takes it in blocks of any size, so
+programs see one large free block (DPMI, GetFreeSpace); Windows 3.1
+takes blocks of at most 64 MB, and [w16] LargeMemory=0 in SYSTEM.INI
+does the same. Each block a program allocates is still at most 16 MB,
+as in Windows 3.1. On an 80286 Windows can use 16 MB at most.
+
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
