@@ -1239,7 +1239,7 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 
 # ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
 # 3.1 only ----
-WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd bitmap util
+WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd disk bitmap util
 SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
 shell: $(DOS)/WINFILE.EXE
 $(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h
@@ -1651,6 +1651,12 @@ all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# File Manager (shell/winfile/): WINDOWS\WINFILE.EXE, as in 3.1
+W16TREE += $(W16)/WINFILE.EXE
+install-tree: $(W16)/WINFILE.EXE
+$(W16)/WINFILE.EXE: $(DOS)/WINFILE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1
 W16TREE += $(W16)/WRITE.EXE
 install-tree: $(W16)/WRITE.EXE
@@ -1679,7 +1685,7 @@ $(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
 	@mkdir -p $(@D)
 	cp $< $@
 GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/CONTROL.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE \
-             $(DOS)/WRITE.EXE
+             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE
 groups: $(GRP_ICONS)
 	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
 grpcheck: $(GRP_ICONS)

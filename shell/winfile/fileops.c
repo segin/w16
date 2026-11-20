@@ -487,7 +487,22 @@ static void do_delete(LPDIRWIN d, LPCSTR list)
             dos_unlink(path);
         }
     }
-    refresh_all();
+    {
+        /* the line where the caret was (or the last) is selected after
+           (WF08 S12: YYY, the last, gone; PICTURE.BMP selected) */
+        int caret = (int)SendMessage(d->dirlb, LB_GETCARETINDEX, 0, 0), n;
+        DWORD bytes;
+        refresh_all();
+        n = (int)SendMessage(d->dirlb, LB_GETCOUNT, 0, 0);
+        if (n > 0 && dir_selected(d, &bytes) == 0) {
+            if (caret >= n)
+                caret = n - 1;
+            if (caret < 0)
+                caret = 0;
+            SendMessage(d->dirlb, LB_SETSEL, TRUE, MAKELPARAM(caret, 0));
+            SendMessage(d->dirlb, LB_SETCARETINDEX, caret, 0);
+        }
+    }
     tree_refresh(d);
 }
 
@@ -637,6 +652,9 @@ BOOL CALLBACK _export MakeDirDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 dos_mkdir(path);
                 refresh_all();
                 tree_refresh(d);
+                /* the tree shows the new directory: its parent opens
+                   (WF08 S08) */
+                tree_expand(d, (int)SendMessage(d->treelb, LB_GETCURSEL, 0, 0), 1);
             }
             return TRUE;
         }

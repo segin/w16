@@ -141,6 +141,30 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_MOUSECOPY       38
 #define IDS_MOUSEMOVE       39
 #define IDS_CONFMOUSE       40
+#define IDS_COPYDISKCONF    41
+#define IDS_COPYDISKCONFT   42
+#define IDS_INSERTSRC       43
+#define IDS_INSERTDST       44
+#define IDS_COPYDISK        45
+#define IDS_COPYDISKERR     46
+#define IDS_COPYDISKERRT    47
+#define IDS_LABELERR        48
+#define IDS_LABELDISK       49
+#define IDS_FORMATCONF      50
+#define IDS_FORMATCONFT     51
+#define IDS_FORMATERR       52
+#define IDS_FORMATERRT      53
+#define IDS_SYSCONF         54
+#define IDS_SYSDISK         55
+#define IDS_SYSERR          56
+#define IDS_SYSERRT         57
+#define IDS_SYSWRITEERR     58
+#define IDS_DRIVEIN         59
+#define IDS_CAP1440         60
+#define IDS_CAP720          61
+#define IDS_CAP1200         62
+#define IDS_CAP360          63
+#define IDS_CAPUNKNOWN      64
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"
@@ -324,6 +348,13 @@ BOOL  search_register(void);
 BOOL  is_search(HWND w);
 void  file_search(LPDIRWIN d);
 HGLOBAL search_selected(void);
+
+/* disk.c */
+void  disk_copy(void);
+void  disk_label(void);
+void  disk_format(void);
+void  disk_sysdisk(void);
+void  disk_select(void);
 
 /* dnd.c */
 void  dnd_subclass(HWND lb);

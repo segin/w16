@@ -13,6 +13,7 @@ w16 repository's LICENSE):
   CARDFILE.EXE            Cardfile (its help is CARDFILE.HLP)
   WRITE.EXE               Write (its help is WRITE.HLP)
   CONTROL.EXE             Control Panel
+  WINFILE.EXE             File Manager (its help is WINFILE.HLP)
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
@@ -124,7 +125,7 @@ w16 repository's LICENSE):
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
-                            Panel)
+                            Panel, File Manager)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)

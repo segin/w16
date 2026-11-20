@@ -386,7 +386,8 @@ static void draw_item(LPDIRWIN d, DRAWITEMSTRUCT FAR *di)
         SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
     }
     SetBkMode(dc, TRANSPARENT);
-    bm_draw(dc, x, r.top, e->pic, filled);
+    if (!e->sel)                        /* e->sel: being dragged (dnd.c) */
+        bm_draw(dc, x, r.top, e->pic, filled);
     s_cpy(t, e->pic == BM_PARENT ? ".." : e->name, sizeof t);
     if (g_lower)
         s_lower(t);
@@ -490,11 +491,20 @@ LRESULT CALLBACK _export DirWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         case LBN_SETFOCUS:
             d->lastpane = ID_DIRLIST;
             /* fall through */
-        case LBN_KILLFOCUS:
-            /* the selection is filled or framed with the focus */
-            InvalidateRect(d->dirlb, NULL, FALSE);
+        case LBN_KILLFOCUS: {
+            /* the selected lines are filled or framed with the focus:
+               only they are drawn again (a drop target's frame elsewhere
+               stays, obs WF11) */
+            int n = (int)SendMessage(d->dirlb, LB_GETCOUNT, 0, 0), i;
+            for (i = 0; i < n; i++)
+                if (SendMessage(d->dirlb, LB_GETSEL, i, 0) > 0) {
+                    RECT r;
+                    SendMessage(d->dirlb, LB_GETITEMRECT, i, (LPARAM)(RECT FAR *)&r);
+                    InvalidateRect(d->dirlb, &r, FALSE);
+                }
             status_update();
             break;
+        }
         case LBN_SELCHANGE:
             status_set(d, ST_SELECTED);
             break;

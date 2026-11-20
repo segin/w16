@@ -53,6 +53,31 @@ static int drag_kind;
 static int drag_drive;                  /* the source's drive */
 static LPDIRWIN drag_from;
 static int hit_item;                    /* target_of's line, -1 none */
+static HWND drag_lb;                    /* the file list dragged from */
+static BOOL drag_hidden;                /* its dragged lines without pictures */
+
+/* Over one of our windows the dragged lines lose their pictures, over
+   another program's they have them; after the drop they stay as they
+   were (obs WF11: NOTES.TXT blank during and after; WF12: CALC.HLP with
+   its picture over Program Manager) */
+static void hide_dragged(BOOL hide)
+{
+    int n, i;
+    if (!drag_lb || hide == drag_hidden)
+        return;
+    drag_hidden = hide;
+    n = (int)SendMessage(drag_lb, LB_GETCOUNT, 0, 0);
+    for (i = 0; i < n; i++)
+        if (SendMessage(drag_lb, LB_GETSEL, i, 0) > 0) {
+            LPDENTRY e = dir_item(drag_from, i);
+            RECT r;
+            if (e)
+                e->sel = (BYTE)hide;
+            SendMessage(drag_lb, LB_GETITEMRECT, i, (LPARAM)(RECT FAR *)&r);
+            InvalidateRect(drag_lb, &r, FALSE);
+        }
+    UpdateWindow(drag_lb);
+}
 
 /* ---- where a drop at (x, y) of window w would go: a full path, or
    FALSE when nowhere ---- */
@@ -299,6 +324,8 @@ static void start_drag(HWND lb)
     }
     GlobalUnlock(hl);
     GlobalFree(hl);
+    drag_lb = lb == d->dirlb ? lb : NULL;
+    drag_hidden = FALSE;
     drag_kind = kind;
     drag_drive = d->drive;
     drag_from = d;
@@ -356,7 +383,9 @@ LRESULT CALLBACK _export ListSubProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return ok;
     }
     case WM_DROPOBJECT:
-        frame_off();
+        /* 3.1 leaves the frame where it is (obs WF11) */
+        frame_lb = NULL;
+        frame_item = -1;
         return drop_here(h, (LPDRAGINFO)lp);
     case WM_DRAGLOOP:
         /* the source: the sink and the point for WM_DROPFILES, and the
@@ -368,6 +397,7 @@ LRESULT CALLBACK _export ListSubProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 drag_sink = di->hwndSink;
                 drag_pt = di->pt;
                 drag_ours = is_ours(drag_sink);
+                hide_dragged(drag_ours);
                 if (drag_ours && target_of(drag_sink, di->pt.x, di->pt.y, dest))
                     SetCursor(drag_cursor(copying((dest[0] | 0x20) - 'a')));
             } else if (!wp) {

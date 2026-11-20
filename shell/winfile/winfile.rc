@@ -161,6 +161,30 @@ BEGIN
     IDS_MOUSECOPY,      "Are you sure you want to copy the selected files or directories to %s?"
     IDS_MOUSEMOVE,      "Are you sure you want to move the selected files or directories to %s?"
     IDS_CONFMOUSE,      "Confirm Mouse Operation"
+    IDS_COPYDISKCONF, "This operation will erase ALL data from the destination disk. Are you sure you want to continue?"
+    IDS_COPYDISKCONFT, "Confirm Copy Disk"
+    IDS_INSERTSRC, "Insert source disk."
+    IDS_INSERTDST, "Insert destination disk."
+    IDS_COPYDISK, "Copy Disk"
+    IDS_COPYDISKERR, "Unable to copy disk."
+    IDS_COPYDISKERRT, "Copy Disk Error"
+    IDS_LABELERR, "Cannot label disk.\n\nMake sure the disk is not write-protected and not a network drive, and that the label is valid. Labels cannot contain the following characters: [space] * ? / \\ | . , ; : + = [ ] ( ) & ^ < > """
+    IDS_LABELDISK, "Label Disk"
+    IDS_FORMATCONF, "Formatting will erase ALL data from your disk. Are you sure that you want to format the disk in drive %c?"
+    IDS_FORMATCONFT, "Confirm Format Disk"
+    IDS_FORMATERR, "Cannot format disk.\n\nMake sure the disk is in the drive and not write-protected, damaged, or of wrong density rating."
+    IDS_FORMATERRT, "Format Disk Error"
+    IDS_SYSCONF, "Are you sure you want to copy system files onto the disk in drive %c?"
+    IDS_SYSDISK, "Make System Disk"
+    IDS_SYSERR, "The MS-DOS startup drive does not contain system files or is not available."
+    IDS_SYSERRT, "System Disk Error"
+    IDS_SYSWRITEERR, "Unable to copy the system files."
+    IDS_DRIVEIN, "Drive %c: "
+    IDS_CAP1440, "1.44 MB"
+    IDS_CAP720, "720 KB"
+    IDS_CAP1200, "1.2 MB"
+    IDS_CAP360, "360 KB"
+    IDS_CAPUNKNOWN, "Drive Capacity"
 END
 
 /* ---- dialogs: layouts, IDs and texts observed on the running original
@@ -420,4 +444,57 @@ BEGIN
     CONTROL "Yes to &All", 107, "Button", 0x0000 | 0x08010000L, 79, 42, 40, 14
     CONTROL "&No", 7, "Button", 0x0000 | 0x00010000L, 125, 42, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 171, 42, 40, 14
+END
+
+DLG_LABEL DIALOG 19, 20, 161, 63
+STYLE 0x94C800C0L
+CAPTION "Label Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Label:", 100, "Static", 0x000C, 5, 15, 30, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 5, 26, 100, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 115, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 115, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 115, 43, 40, 14
+END
+
+DLG_FORMAT DIALOG 10, 28, 183, 96
+STYLE 0x94C800C0L
+CAPTION "Format Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 140, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 140, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 140, 43, 40, 14
+    CONTROL "&Disk In:", -1, "Static", 0x000C, 5, 7, 49, 10
+    CONTROL "", 222, "ComboBox", 0x0203 | 0x00210000L, 55, 4, 65, 60
+    CONTROL "&Capacity:", 100, "Static", 0x000C, 5, 20, 49, 10
+    CONTROL "", 241, "ComboBox", 0x0203 | 0x00210000L, 55, 19, 65, 60
+    CONTROL "Options", 102, "Button", 0x0007 | 0x00020000L, 5, 39, 115, 53
+    CONTROL "&Label:", -1, "Static", 0x000C, 11, 51, 39, 10
+    CONTROL "", 201, "Edit", 0x0000 | 0x00800000L | 0x00010000L, 40, 49, 63, 12
+    CONTROL "&Make System Disk", 242, "Button", 0x0003 | 0x00010000L, 11, 62, 90, 12
+    CONTROL "&Quick Format", 244, "Button", 0x0003 | 0x00010000L, 11, 76, 90, 12
+END
+
+DLG_DRIVES DIALOG 10, 31, 201, 86
+STYLE 0x94C800C0L
+CAPTION "Select Drive"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Drives:", 245, "Static", 0x000C, 5, 5, 41, 10
+    CONTROL "", 222, "ListBox", 0x0083 | 0x00810000L, 5, 16, 140, 56
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 155, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 155, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 155, 44, 40, 14
+END
+
+DLG_SYSPROG DIALOG 33, 30, 174, 57
+STYLE 0x9CC800C0L
+CAPTION "Make System Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Now copying system files", 100, "Static", 0x0001, 0, 6, 174, 8
+    CONTROL "Press Cancel if you want to abort.", 100, "Static", 0x0001, 0, 14, 174, 8
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 66, 39, 44, 14
 END

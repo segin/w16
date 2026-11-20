@@ -1,0 +1,23 @@
+; WF12: a file dragged from File Manager into Program Manager's Main
+; group (Program Manager below, File Manager above, placed; obs WF12):
+; CALC.HLP clicked, dragged to an empty place of Main (a shot on the
+; way), dropped: Program Manager makes an item of it (WM_DROPFILES)
+run PROGMAN.EXE
+wait 4000
+place Progman 0 240 640 240
+wait 1000
+run WINFILE.EXE
+wait 4000
+place WFS_Frame 0 0 640 240
+wait 1500
+mclick 380 97
+wait 800
+snap C:\S01.BMP
+mdown 380 97
+mmove 360 300
+mmove 330 445
+wait 600
+snap C:\S02.BMP
+mup 330 445
+wait 2500
+snap C:\S03.BMP
