@@ -118,7 +118,9 @@ static void spans_row(SPANS *s, int y, int *xs, int n)
             continue;
         for (i = 0; i + 1 < n; i += 2) {
             int a = max(xs[i], c->left), b = min(xs[i + 1], c->right);
-            if (a >= b && !(xs[i] == xs[i + 1] && n == 2 && rao->n == 1))
+            /* a zero-width span is passed on only inside the clip
+               rectangle: outside it, clipping inverts it (a > b) */
+            if (a >= b && !(a == b && xs[i] == xs[i + 1] && n == 2 && rao->n == 1))
                 continue;
             if (s->npts >= 1 + 2 * 64 - 1)
                 break;
@@ -172,10 +174,67 @@ static int pen_width(LPDC dc)
     return w <= 1 ? 1 : w;
 }
 
+/* a buffer of n points in GDI's heaps; 0 when n is negative or more than
+   one block holds (the size was counted in a word and wrapped) */
+#define PTS_MAX 0x3FC0
+static XP pts_alloc(long n)
+{
+    if (n < 0 || n > PTS_MAX)
+        return 0;
+    return xalloc((WORD)n * sizeof(POINT));
+}
+
+/* an outline polyline built point by point, drawn in pieces of at most
+   PTS_MAX points (each piece starts at the last one's end, which the
+   driver leaves undrawn, so every pixel is drawn once) */
+typedef struct {
+    LPDC dc;
+    XP h;
+    WORD n, cap, started;
+    POINT first;
+} OUTLINE;
+
+static int ol_begin(OUTLINE *o, LPDC dc, long n)
+{
+    o->dc = dc;
+    o->n = 0;
+    o->started = 0;
+    o->cap = n > PTS_MAX ? PTS_MAX : n < 2 ? 2 : (WORD)n;
+    o->h = pts_alloc(o->cap);
+    return o->h != 0;
+}
+
+static void ol_add(OUTLINE *o, int x, int y)
+{
+    POINT __far *p = xptr(o->h);
+    if (o->n == o->cap) {
+        out_polyline(o->dc, p, o->n);
+        p = xptr(o->h);
+        p[0] = p[o->n - 1];
+        o->n = 1;
+    }
+    if (!o->started) {
+        o->started = 1;
+        o->first.x = x;
+        o->first.y = y;
+    }
+    p[o->n].x = x;
+    p[o->n].y = y;
+    o->n++;
+}
+
+/* closes the outline (back to its first point) and draws the rest */
+static void ol_end(OUTLINE *o)
+{
+    ol_add(o, o->first.x, o->first.y);
+    out_polyline(o->dc, (POINT __far *)xptr(o->h), o->n);
+    xfree(o->h);
+}
+
 /* points from logical to screen coordinates, in a local buffer */
 static XP to_screen(LPDC dc, const POINT __far *p, int n, int close)
 {
-    XP h = xalloc((n + 1) * sizeof(POINT));
+    XP h = pts_alloc((long)n + 1);
     POINT __far *q;
     int i;
     if (!h)
@@ -203,18 +262,24 @@ static int round_div(long num, long den)
 }
 
 /* fill a polygon (screen coordinates), rows top..bottom-1 */
-static void fill_polygon(SPANS *s, POINT __far *p, int n, int winding)
+/* polygons together (PolyPolygon: one fill of all their edges), each of
+   cnt[k] points; closed: with the edge from the last point to the first */
+static void fill_polys(SPANS *s, POINT __far *p, const int __far *cnt, int npoly, int winding,
+                       int closed)
 {
-    int ymin = p[0].y, ymax = p[0].y, y, i, j;
+    int ymin = p[0].y, ymax = p[0].y, y, i, j, k, base, n, total = 0;
     int xs[2 * 64], dirs[2 * 64];
-    for (i = 1; i < n; i++) {
+    for (k = 0; k < npoly; k++)
+        total += cnt[k];
+    for (i = 1; i < total; i++) {
         if (p[i].y < ymin) ymin = p[i].y;
         if (p[i].y > ymax) ymax = p[i].y;
     }
     for (y = ymin; y < ymax; y++) {
         int m = 0, out[2 * 64], no = 0;
-        for (i = 0; i < n && m < 2 * 64; i++) {
-            POINT a = p[i], b = p[(i + 1) % n];
+        for (k = 0, base = 0; k < npoly; base += cnt[k], k++)
+        for (n = cnt[k], i = 0; i < (closed ? n : n - 1) && m < 2 * 64; i++) {
+            POINT a = p[base + i], b = p[base + (i + 1) % n];
             int d = 1;
             if (a.y == b.y)
                 continue;
@@ -256,6 +321,11 @@ static void fill_polygon(SPANS *s, POINT __far *p, int n, int winding)
     }
 }
 
+static void fill_polygon(SPANS *s, POINT __far *p, int n, int winding)
+{
+    fill_polys(s, p, (const int __far *)&n, 1, winding, 1);
+}
+
 /* ---- ellipses: the inside and the outline ---- */
 
 /* The pixels of an ellipse in the box l, t, r, b (right and bottom
@@ -268,8 +338,8 @@ static void fill_polygon(SPANS *s, POINT __far *p, int n, int winding)
    seems to step through the quadrant incrementally. */
 static void ellipse_row(int l, int t, int r, int b, int y, int *x0, int *x1)
 {
-    long A = r - l, B = b - t;             /* 2a, 2b */
-    long Y = 2L * y - (t + b - 1);         /* 2 (y - cy) */
+    long A = (long)r - l, B = (long)b - t;  /* 2a, 2b */
+    long Y = 2L * y - ((long)t + b - 1);   /* 2 (y - cy) */
     long num, lim, lo, hi, mid;
     if (A <= 0 || B <= 0) {
         *x0 = l;
@@ -277,7 +347,7 @@ static void ellipse_row(int l, int t, int r, int b, int y, int *x0, int *x1)
         return;
     }
     /* (X / A)^2 + (Y / B)^2 <= 1.02, X = 2 (x - cx): X^2 <= A^2 (1.02 B^2 - Y^2) / B^2 */
-    num = (102L * B * B) / 100 - Y * Y;
+    num = B * B + B * B / 50 - Y * Y;     /* 1.02 B^2 (102 B^2 overflowed past B = 4588) */
     if (num < 0) {
         *x0 = 1;
         *x1 = 0;
@@ -320,52 +390,49 @@ static void ellipse_fill(SPANS *s, int l, int t, int r, int b)
    is made of such runs) */
 static void ellipse_outline(LPDC dc, int l, int t, int r, int b)
 {
-    int h = b - t, y, n = 0, half = t + (h - 1) / 2;
-    XP hp = xalloc((4 * h + 8) * sizeof(POINT));
-    POINT __far *p;
+    long h = (long)b - t;
+    int y, half = (int)(t + (h - 1) / 2);
+    OUTLINE o;
     int x0, x1, px0, px1, nx0, nx1;
-    if (!hp || h <= 0)
+    if (h <= 0 || !ol_begin(&o, dc, 4 * h + 8))
         return;
-    p = (POINT __far *)xptr(hp);
     ellipse_row(l, t, r, b, t, &x0, &x1);
-    p[n].x = x0; p[n].y = t; n++;
-    p[n].x = x1; p[n].y = t; n++;
+    ol_add(&o, x0, t);
+    ol_add(&o, x1, t);
     px1 = x1;
     for (y = t + 1; y < b - 1; y++) {              /* right side, down */
         ellipse_row(l, t, r, b, y, &x0, &x1);
         if (y <= half) {
             int from = px1 + 1 <= x1 ? px1 + 1 : x1;
-            p[n].x = from; p[n].y = y; n++;
-            if (x1 != from) { p[n].x = x1; p[n].y = y; n++; }
+            ol_add(&o, from, y);
+            if (x1 != from) ol_add(&o, x1, y);
         } else {
             ellipse_row(l, t, r, b, y + 1, &nx0, &nx1);
-            p[n].x = x1; p[n].y = y; n++;
-            if (nx1 + 1 < x1) { p[n].x = nx1 + 1; p[n].y = y; n++; }
+            ol_add(&o, x1, y);
+            if (nx1 + 1 < x1) ol_add(&o, nx1 + 1, y);
         }
         px1 = x1;
     }
     if (b - 1 > t) {
         ellipse_row(l, t, r, b, b - 1, &x0, &x1);
-        p[n].x = x1; p[n].y = b - 1; n++;
-        p[n].x = x0; p[n].y = b - 1; n++;
+        ol_add(&o, x1, b - 1);
+        ol_add(&o, x0, b - 1);
         px0 = x0;
         for (y = b - 2; y > t; y--) {              /* left side, up */
             ellipse_row(l, t, r, b, y, &x0, &x1);
             if (y > half) {
                 int from = px0 - 1 >= x0 ? px0 - 1 : x0;
-                p[n].x = from; p[n].y = y; n++;
-                if (x0 != from) { p[n].x = x0; p[n].y = y; n++; }
+                ol_add(&o, from, y);
+                if (x0 != from) ol_add(&o, x0, y);
             } else {
                 ellipse_row(l, t, r, b, y - 1, &nx0, &nx1);
-                p[n].x = x0; p[n].y = y; n++;
-                if (nx0 - 1 > x0) { p[n].x = nx0 - 1; p[n].y = y; n++; }
+                ol_add(&o, x0, y);
+                if (nx0 - 1 > x0) ol_add(&o, nx0 - 1, y);
             }
             px0 = x0;
         }
     }
-    p[n++] = p[0];
-    out_polyline(dc, (POINT __far *)p, n);
-    xfree(hp);
+    ol_end(&o);
 }
 
 /* ---- wide pens: UNVERIFIED geometry (3.1's not observed in detail) ----
@@ -465,16 +532,22 @@ BOOL GDIAPI Polyline(HDC hdc, const POINT __far *pts, int n)      /* GDI.37 */
 {
     LPDC dc = dc_out(hdc);
     XP h;
+    int i, k;
     if (!dc || n < 2)
         return FALSE;
     if (pen_null(dc))
         return TRUE;
-    h = to_screen(dc, pts, n, 0);
-    if (!h)
-        return FALSE;
-    dc = dc_get(hdc);
-    out_polyline(dc, (POINT __far *)xptr(h), n);
-    xfree(h);
+    /* in pieces of what one block holds, each from the last one's end
+       (GD5 on 3.1: 16383 points are drawn) */
+    for (i = 0; i < n - 1; i += k - 1) {
+        k = n - i > PTS_MAX - 1 ? PTS_MAX - 1 : n - i;   /* (to_screen takes one more) */
+        h = to_screen(dc, pts + i, k, 0);
+        if (!h)
+            return FALSE;
+        dc = dc_get(hdc);
+        out_polyline(dc, (POINT __far *)xptr(h), k);
+        xfree(h);
+    }
     return TRUE;
 }
 
@@ -487,7 +560,7 @@ static void wide_frame(LPDC dc, RECT *r, int w)
     spans_begin(&s, dc, 1);
     for (y = T; y < B; y++) {
         int xs[4];
-        if (y < T + w || y >= B - w) {
+        if (y < T + w || y >= B - w || R - L <= 2 * w) {    /* (the sides meet: one span) */
             xs[0] = L;
             xs[1] = R;
             spans_row(&s, y, xs, 2);
@@ -510,6 +583,8 @@ BOOL GDIAPI Rectangle(HDC hdc, int l, int t, int r, int b)        /* GDI.27 */
     if (!dc)
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
+    if (rc.left == rc.right || rc.top == rc.bottom)
+        return TRUE;                    /* GD5 on 3.1: nothing drawn */
     nopen = pen_null(dc);
     w = nopen ? 0 : pen_width(dc);
     if (!nopen && pen_of(dc)->lp.lopnStyle == 6 && w > 1) {   /* PS_INSIDEFRAME */
@@ -603,14 +678,40 @@ BOOL GDIAPI Polygon(HDC hdc, const POINT __far *pts, int n)       /* GDI.36 */
     return polygon(hdc, pts, n, 1);
 }
 
+/* GD5 on 3.1: the polygons are filled together (one fill of all their
+   edges, so a polygon inside another is a hole with ALTERNATE), and, as
+   the SDK says, not closed: neither the outlines nor the fill have an
+   edge back to a polygon's first point */
 BOOL GDIAPI PolyPolygon(HDC hdc, const POINT __far *pts, const int __far *counts, int n) /* GDI.450 */
 {
-    int i;
-    /* UNVERIFIED: 3.1 fills the polygons together (one fill rule) */
+    LPDC dc = dc_out(hdc);
+    long total = 0;
+    int i, base;
+    XP h;
+    if (!dc || n <= 0)
+        return FALSE;
     for (i = 0; i < n; i++) {
-        polygon(hdc, pts, counts[i], 1);
-        pts += counts[i];
+        if (counts[i] < 0)
+            return FALSE;
+        total += counts[i];
     }
+    if (total < 2 || total >= PTS_MAX)
+        return FALSE;
+    h = to_screen(dc, pts, (int)total, 0);
+    if (!h)
+        return FALSE;
+    dc = dc_get(hdc);
+    if (!brush_hollow(dc) && total > 2) {
+        SPANS s;
+        spans_begin(&s, dc, 0);
+        fill_polys(&s, (POINT __far *)xptr(h), counts, n, dc->polyFill == 2, 0);
+        spans_end(&s);
+    }
+    if (!pen_null(dc))
+        for (i = 0, base = 0; i < n; base += counts[i], i++)
+            if (counts[i] >= 2)
+                out_polyline(dc, (POINT __far *)xptr(h) + base, counts[i]);
+    xfree(h);
     return TRUE;
 }
 
@@ -625,6 +726,11 @@ BOOL GDIAPI Ellipse(HDC hdc, int l, int t, int r, int b)          /* GDI.24 */
     nopen = pen_null(dc);
     if (rc.left >= rc.right || rc.top >= rc.bottom)
         return TRUE;
+    /* GD5 on 3.1: an 8000 x 8000 ellipse is drawn, 10000 x 10000 fails,
+       10000 x 64 is drawn. UNVERIFIED: the limit; here the product of the
+       half axes up to 2^24 */
+    if ((((long)rc.right - rc.left) / 2) * (((long)rc.bottom - rc.top) / 2) > 0x1000000L)
+        return FALSE;
     if (!brush_hollow(dc)) {
         SPANS s;
         spans_begin(&s, dc, 0);
@@ -641,9 +747,7 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
 {
     LPDC dc = dc_out(hdc);
     RECT rc;
-    int nopen, y, w, h, n = 0;
-    XP hp;
-    POINT __far *p;
+    int nopen, y, w, h;
     SPANS s;
     if (!dc)
         return FALSE;
@@ -681,10 +785,9 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
         spans_end(&s);
     }
     if (!nopen) {
-        hp = xalloc((2 * (rc.bottom - rc.top) + 4) * sizeof(POINT));
-        if (!hp)
+        OUTLINE o;
+        if (!ol_begin(&o, dc, 2 * ((long)rc.bottom - rc.top) + 4))
             return FALSE;
-        p = (POINT __far *)xptr(hp);
         for (y = rc.top; y < rc.bottom; y++) {
             int ey, x0, x1;
             if (y < rc.top + h / 2)
@@ -694,9 +797,7 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
             else
                 ey = rc.top + h / 2;
             ellipse_row(rc.left, rc.top, rc.left + w, rc.top + h, ey, &x0, &x1);
-            p[n].x = rc.right - 1 - (rc.left + w - (x1 + 1));
-            p[n].y = y;
-            n++;
+            ol_add(&o, rc.right - 1 - (rc.left + w - (x1 + 1)), y);
         }
         for (y = rc.bottom - 1; y >= rc.top; y--) {
             int ey, x0, x1;
@@ -707,13 +808,9 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
             else
                 ey = rc.top + h / 2;
             ellipse_row(rc.left, rc.top, rc.left + w, rc.top + h, ey, &x0, &x1);
-            p[n].x = x0;
-            p[n].y = y;
-            n++;
+            ol_add(&o, x0, y);
         }
-        p[n++] = p[0];
-        out_polyline(dc, (POINT __far *)p, n);
-        xfree(hp);
+        ol_end(&o);
     }
     return TRUE;
 }
@@ -731,6 +828,8 @@ static long cross(int ax, int ay, int bx, int by)
 static int in_arc(int x, int y, int sx, int sy, int ex, int ey)
 {
     long a = cross(sx, sy, x, y), b = cross(x, y, ex, ey), se = cross(sx, sy, ex, ey);
+    if (!se && (long)sx * ex + (long)sy * ey > 0)
+        return 1;                /* the same radial: the whole ellipse (GD5 on 3.1) */
     if (se <= 0)                 /* the arc spans less than half a turn */
         return a <= 0 && b <= 0;
     return a <= 0 || b <= 0;
@@ -754,7 +853,7 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
     p3[0] += dc->dcOrg.x - cx; p3[1] += dc->dcOrg.y - cy;
     p4[0] += dc->dcOrg.x - cx; p4[1] += dc->dcOrg.y - cy;
     nopen = pen_null(dc);
-    hp = xalloc((2 * (rc.bottom - rc.top) + 8) * sizeof(POINT));
+    hp = pts_alloc(2 * ((long)rc.bottom - rc.top) + 8);  /* UNVERIFIED: 3.1 past 8000 rows */
     if (!hp)
         return FALSE;
     p = (POINT __far *)xptr(hp);
@@ -782,7 +881,7 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
         if (start < 0)
             start = 0;
         {
-            XP hq = xalloc((total + 4) * sizeof(POINT));
+            XP hq = pts_alloc((long)total + 4);
             POINT __far *q;
             if (!hq) {
                 xfree(hp);
@@ -871,9 +970,11 @@ HRGN GDIAPI CreatePolygonRgn(const POINT __far *pts, int n, int mode) /* GDI.63 
     int i, y, ymin, ymax;
     if (!h || n < 3)
         return h;
-    hp = xalloc(n * sizeof(POINT));
-    if (!hp)
-        return h;
+    hp = pts_alloc(n);
+    if (!hp) {                          /* GD5 on 3.1: 16383 points fail */
+        rgn_free(h);
+        return 0;
+    }
     p = (POINT __far *)xptr(hp);
     for (i = 0; i < n; i++)
         p[i] = pts[i];
