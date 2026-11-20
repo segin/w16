@@ -261,6 +261,17 @@
 #              recorded and checked against the WAV and MIDI material:
 #              tests/sb16/sbaudio.sh) and prog (Sound Recorder, Sound and
 #              Media Player over it: every screen as over SNDBLST2)
+#   bigmem     more than 64 MB of memory (DOSBox-X, memsize 128 and 256):
+#              TK63 as the shell reports DPMI 0500h, GetFreeSpace and the
+#              largest GlobalAlloc and takes blocks until none is left,
+#              writing every page. Parts s128, s256 (Standard mode, w16's
+#              DOSX, WSWAP and KRNL386), e128, e256 (386 Enhanced, w16's
+#              WIN386 and KRNL386): all but at most 16 MB of the machine's
+#              memory; s256ms (under Microsoft's WSWAP): all of it
+#              allocated; stock ([w16] LargeMemory=0, both modes at 128
+#              MB): all of it allocated, 0500h's largest at most 64 MB in
+#              Standard mode; ref (Windows 3.1's DOSX and WIN386 at 128
+#              MB): the same of 3.1 itself
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -754,7 +765,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos bigmem}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2687,6 +2698,85 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   sb16"
         else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
+    bigmem)
+        # more than 64 MB (ARCHITECTURE.md 9.6 "More than 64 MB", 12.3):
+        # TK63 as the shell in DOSBox-X with memsize 128 or 256 reports
+        # DPMI 0500h, GetFreeSpace, the largest GlobalAlloc, and takes
+        # blocks until none is left, writing every page of them. Parts:
+        # sMEM (Standard mode: w16's DOSX, WSWAP and KRNL386: one block
+        # over all of it), s256ms (the same under Microsoft's WSWAP, which
+        # keeps a block of up to 64 MB of its own that DOSX takes apart:
+        # all of it allocated, 0500h's largest the rest), eMEM (386
+        # Enhanced: w16's WIN386 and KRNL386), stock ([w16] LargeMemory=0
+        # at 128 MB under Microsoft's WSWAP: 0500h's largest at most 64 MB,
+        # all of it allocated, as 3.1; 386 Enhanced: all of it), ref
+        # (Windows 3.1's own DOSX and WIN386 at 128 MB with Microsoft's
+        # KRNL386: 0500h's largest at most 64 MB in Standard mode, all of
+        # it allocated in both)
+        r=ok
+        p=${part:-s128}
+        w386=$root/build/win386/WIN386.EXE
+        wsw=$root/build/dos/WSWAP.EXE
+        # bmrun NAME MEMSIZE [dropin.sh options]: TK63's log in NAME.log
+        bmrun() {
+            _bn=$1 _bmem=$2; shift 2
+            rm -rf "$out/$_bn"
+            DROPIN_MEMSIZE=$_bmem "$root/tests/dropin.sh" -p 386 -t 400 -o "$out/$_bn" \
+                -f "$root/build/dos/TK63.EXE=TK63.EXE" -i 'boot:shell=C:\TK63.EXE' "$@" \
+                > "$out/$_bn.out" 2>&1 || true
+            tr -d '\r' < "$out/$_bn/c/WINDOWS/TK.LOG" > "$out/$_bn.log" 2>/dev/null || : > "$out/$_bn.log"
+            rm -rf "$out/$_bn/c"
+        }
+        bmval() { sed -n "s/^OBS ~$2=//p" "$out/$1.log" | head -1; }
+        # bmcheck NAME [KEY MIN MAX]...: TK63 ended and wrote every page,
+        # and each KEY's value (KB) is more than MIN and at most MAX
+        bmcheck() {
+            [ "$r" = ok ] || return
+            grep -q '^TK63 end' "$out/$1.log" || { r="$1: TK63 did not end ($out/$1.out, $out/$1.log)"; return; }
+            grep -q '^PASS touched' "$out/$1.log" || { r="$1: a page did not keep what was written ($out/$1.log)"; return; }
+            _bn=$1; shift
+            while [ $# -ge 3 ]; do
+                _bv=$(bmval "$_bn" $1)
+                if [ -z "$_bv" ] || [ "$_bv" -le "$2" ] || [ "$_bv" -gt "$3" ]; then
+                    r="$_bn: $1 $_bv KB, not in $2..$3 ($out/$_bn.log)"; return
+                fi
+                shift 3
+            done
+        }
+        case $p in
+        s128|s256|e128|e256)
+            m=${p#?}
+            case $p in
+            s*) set -- -3 -x -f "$wsw=WINDOWS/SYSTEM/WSWAP.EXE" ;;
+            e*) set -- -3 -c 'WIN /3 /B' -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" ;;
+            esac
+            bmrun bigmem-$p "$m" "$@"
+            # all but what DOS, the BIOS and Windows itself keep (16 MB
+            # is generous), and no more than the machine has
+            lo=$((m * 1024 - 16384)) hi=$((m * 1024))
+            bmcheck bigmem-$p dpmi_largest $lo $hi freespace $lo $hi total $lo $hi ;;
+        s256ms)
+            bmrun bigmem-s256ms 256 -3 -x
+            bmcheck bigmem-s256ms dpmi_largest 65536 262144 total 245760 262144 ;;
+        stock)
+            bmrun bigmem-stocks 128 -3 -x -i w16:LargeMemory=0
+            bmcheck bigmem-stocks dpmi_largest 32768 65536 total 114688 131072
+            if [ "$r" = ok ]; then
+                bmrun bigmem-stocke 128 -3 -c 'WIN /3 /B' -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" -i w16:LargeMemory=0
+                bmcheck bigmem-stocke total 114688 131072
+            fi ;;
+        ref)
+            refrun bigmem-refs bigmem bmrun bigmem-refs 128 -3 -r
+            refrun bigmem-refe bigmem bmrun bigmem-refe 128 -3 -r -c 'WIN /3 /B'
+            for k in s e; do
+                echo "   bigmem ref $k: $(grep '^OBS' "$out/bigmem-ref$k.log" | tr '\n' ' ')"
+            done
+            bmcheck bigmem-refs dpmi_largest 32768 65536 total 114688 131072
+            bmcheck bigmem-refe total 114688 262144 ;;
+        esac
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   bigmem"
+        else echo "FAIL bigmem: $r ($out)"; fails=$((fails + 1)); fi ;;
     mmsystem)
         # w16's MMSYSTEM.DLL against Microsoft's (ARCHITECTURE.md 23)
         r=ok
@@ -4539,6 +4629,7 @@ caseparts() {
     quicktime) echo "$1@over $1@tree $1@tree386" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     sb16) echo "$1@dev $1@audio $1@prog" ;;
+    bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -4611,6 +4702,9 @@ partsummary() {
     sb16)
         if [ $pbad = 0 ]; then echo "ok   sb16: MMP's device sections over SB16.DRV alike under both MMSYSTEMs and as over SNDBLST2 but the SB16's extras; its sound as the material (8/16 bits, mono/stereo, 8000-44100 Hz, loops, volume, MIDI pitches); Sound Recorder, Sound and Media Player as over SNDBLST2"
         else echo "FAIL sb16: $pfirst ($out)"; fi ;;
+    bigmem)
+        if [ $pbad = 0 ]; then echo "ok   bigmem: 128 and 256 MB used and written in Standard and 386 Enhanced mode (w16's DOSX, WIN386, KRNL386, under w16's and Microsoft's WSWAP); LargeMemory=0 as Windows 3.1 itself: all of it, 0500h's largest block at most 64 MB in Standard mode"
+        else echo "FAIL bigmem: $pfirst ($out)"; fi ;;
     mmsystem)
         if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; the device drivers' messages as 3.1's; MCI as 3.1's (MCT.DRV, MCIWAVE, MCISEQ); Sound Recorder, Sound, MIDI Mapper and Media Player as on 3.1; QuickTime's movie as on 3.1"
         else echo "FAIL mmsystem: $pfirst ($out)"; fi ;;
