@@ -208,7 +208,9 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         di.rcItem = r;
         di.itemData = it->data;
         send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
-        if (lb->focus && i == lb->caret && valid_wnd(h)) {
+        /* the owner may have destroyed the list there: lb looked at only
+           while it is still the list's (USER audit, sweep) */
+        if (valid_wnd(h) && lb_of(h) == lb && lb->focus && i == lb->caret) {
             di.itemState |= ODS_FOCUS;
             di.itemAction = ODA_FOCUS;
             send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
@@ -251,8 +253,11 @@ static void paint(HWND h, PLB lb, HDC hdc)
     rows = visible_rows(h, lb) + 1;
     if (multicol(h))
         rows = (rows - 1 > 0 ? rows - 1 : 1) * (visible_cols(h, lb) + 1);
-    for (i = lb->top; i < lb->count && i < lb->top + rows; i++)
+    for (i = lb->top; i < lb->count && i < lb->top + rows; i++) {
         draw_item(h, lb, hdc, i);
+        if (!valid_wnd(h) || lb_of(h) != lb)
+            return;             /* destroyed by its owner's WM_DRAWITEM */
+    }
     if (old)
         SelectObject(hdc, old);
 }
@@ -275,6 +280,10 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
         lb->alloc = n;
     }
     text = hasstrings(h) ? uh_strdup_in(&uhObj, s) : 0;    /* before item(): it allocates */
+    /* no room for the string: no item (it was added with no text, and
+       LB_GETTEXT then copied from the heap's header: USER audit, sweep) */
+    if (hasstrings(h) && !text)
+        return LB_ERRSPACE;
     if (at < 0 || at > lb->count)
         at = lb->count;
     if (at < lb->count)
@@ -634,6 +643,8 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         } else
             set_cur(h, lb, i);
         notify(h, lb, LBN_SELCHANGE);
+        if (!valid_wnd(h) || lb_of(h) != lb)
+            return 0;           /* the owner destroyed it (USER audit, sweep) */
         if (msg == WM_LBUTTONDBLCLK)
             notify(h, lb, LBN_DBLCLK);
         /* extended style 2 (Schulman: WES_NOTIFYDRAG; Wine calls it
@@ -849,12 +860,18 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             *(DWORD __far *)lp = item(lb, wp)->data;
             return 4;
         }
+        if (!item(lb, wp)->text) {
+            *(LPSTR)lp = 0;
+            return 0;
+        }
         lstr_cpyn((LPSTR)lp, STR(item(lb, wp)->text), 0x7FFF);
         return lstr_len((LPCSTR)lp);
     case LB_GETTEXTLEN:
         if ((int)wp < 0 || (int)wp >= lb->count)
             return LB_ERR;
-        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 4;
+        if (!hasstrings(h))
+            return 4;
+        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 0;
     case LB_SETCURSEL:
         if ((int)wp >= lb->count)
             return LB_ERR;

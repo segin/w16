@@ -18,6 +18,12 @@
  *   filter  WH_MSGFILTER in a dialog box, a message box, a popup menu, the
  *           keyboard move and size loops (each ended by an Escape, sent by
  *           a timer or, for move and size, queued before)
+ *   show    ShowWindow SW_SHOW, SW_SHOWNORMAL, SW_RESTORE of a visible
+ *           normal inactive window; the icon title window across a
+ *           restore; the window made active when the active one is
+ *           destroyed with an icon above the next open window
+ *   skip    WH_CBT's CLICKSKIPPED and KEYSKIPPED for a key and a click, with
+ *           and without WH_KEYBOARD and WH_MOUSE refusing them
  *   jr      WH_JOURNALRECORD (system-wide) for a key
  * Tokens: a code with its hook's letter (C cbt, K keyboard, M mouse, F
  * msgfilter, J journal), then ':' and what was passed.
@@ -118,6 +124,10 @@ LRESULT FAR PASCAL __export __loadds cbt_proc(int code, WPARAM w, LPARAM l)
         break;
     case HCBT_MOVESIZE:
         wsprintf(t, "C%d:%c", code, wname((HWND)w));
+        break;
+    case HCBT_CLICKSKIPPED:
+    case HCBT_KEYSKIPPED:
+        wsprintf(t, "C%d:%x", code, w);
         break;
     default:
         wsprintf(t, "C%d:%c", code, wname((HWND)w));
@@ -440,6 +450,119 @@ static void sec_filter(void)
     ha = 0;
 }
 
+/* ---- show: activation by ShowWindow of a visible normal window; the
+   icon title window across a restore; the window activated after the
+   active one is destroyed ---- */
+static HWND title_of(HWND h, BOOL *vis)
+{
+    HWND t;
+    char c[8];
+    for (t = GetWindow(GetDesktopWindow(), GW_CHILD); t; t = GetWindow(t, GW_HWNDNEXT))
+        if (GetWindow(t, GW_OWNER) == h && GetClassName(t, c, sizeof c) && !lstrcmp(c, "#32772")) {
+            *vis = IsWindowVisible(t);
+            return t;
+        }
+    *vis = FALSE;
+    return 0;
+}
+
+static void sec_show(void)
+{
+    static const int cmds[] = { SW_SHOW, SW_SHOWNORMAL, SW_RESTORE, 0 };
+    char nm[24];
+    HWND t1, t2, x;
+    BOOL v;
+    int i;
+    ha = CreateWindow("US30A", "a", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 10, 10, 200, 150, 0, 0, hi, NULL);
+    for (i = 0; cmds[i]; i++) {
+        SetActiveWindow(hMain);
+        ShowWindow(ha, cmds[i]);
+        wsprintf(nm, "show.%d.active", cmds[i]);
+        obs(nm, GetActiveWindow() == ha);
+    }
+    ShowWindow(ha, SW_MINIMIZE);
+    t1 = title_of(ha, &v);
+    obs("show.title.min", t1 != 0 && v);
+    ShowWindow(ha, SW_RESTORE);
+    t2 = title_of(ha, &v);
+    obs("show.title.restored", t2 == 0 ? 0 : v ? 2 : 1);
+    ShowWindow(ha, SW_MINIMIZE);
+    t2 = title_of(ha, &v);
+    obs("show.title.again.same", t2 != 0 && t2 == t1);
+    ShowWindow(ha, SW_RESTORE);
+    /* the active window destroyed with an icon above the next open one */
+    x = CreateWindow("US30B", "x", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 30, 30, 100, 80, 0, 0, hi, NULL);
+    ShowWindow(x, SW_SHOWMINNOACTIVE);
+    SetWindowPos(hMain, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(x, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetActiveWindow(ha);
+    DestroyWindow(ha);
+    obs("show.destroy.next", GetActiveWindow() == hMain ? 1 : GetActiveWindow() == x ? 2 : 3);
+    DestroyWindow(x);
+    ha = 0;
+    SetActiveWindow(hMain);
+}
+
+/* ---- HCBT_CLICKSKIPPED, HCBT_KEYSKIPPED: a key and a click with WH_CBT
+   alone, then with WH_KEYBOARD and WH_MOUSE refusing them ---- */
+static HHOOK hkc;
+LRESULT FAR PASCAL __export __loadds cbt2_proc(int code, WPARAM w, LPARAM l)
+{
+    char t[16];
+    if (code == HCBT_CLICKSKIPPED || code == HCBT_KEYSKIPPED) {
+        wsprintf(t, "C%d:%x", code, w);
+        rec_add(t);
+    }
+    return CallNextHookEx(hkc, code, w, l);
+}
+
+LRESULT FAR PASCAL __export __loadds refuse_proc(int code, WPARAM w, LPARAM l)
+{
+    (void)w, (void)l;
+    return code == HC_ACTION ? 1 : 0;
+}
+
+static void skip_run(const char *name, BOOL refuse)
+{
+    MSG m;
+    char t[16];
+    HHOOK k = 0, mo = 0;
+    SetActiveWindow(hMain);
+    SetFocus(hMain);
+    drain();
+    pump(600);
+    rec[0] = 0;
+    frozen = 0;
+    hkc = SetWindowsHookEx(WH_CBT, (HOOKPROC)cbt2_proc, hi, GetCurrentTask());
+    if (refuse) {
+        k = SetWindowsHookEx(WH_KEYBOARD, (HOOKPROC)refuse_proc, hi, GetCurrentTask());
+        mo = SetWindowsHookEx(WH_MOUSE, (HOOKPROC)refuse_proc, hi, GetCurrentTask());
+    }
+    keys();
+    click();
+    rec_add("|peek");
+    PeekMessage(&m, 0, 0, 0, PM_NOREMOVE);
+    rec_add("|get");
+    while (PeekMessage(&m, 0, WM_KEYFIRST, WM_MOUSELAST, PM_REMOVE)) {
+        if (m.message == WM_MOUSEMOVE)
+            continue;
+        wsprintf(t, "=%x", m.message);
+        rec_add(t);
+    }
+    if (k)
+        UnhookWindowsHookEx(k);
+    if (mo)
+        UnhookWindowsHookEx(mo);
+    UnhookWindowsHookEx(hkc);
+    obs_str(name, rec);
+}
+
+static void sec_skip(void)
+{
+    skip_run("skip", FALSE);
+    skip_run("skip.refused", TRUE);
+}
+
 /* ---- WH_JOURNALRECORD ---- */
 LRESULT FAR PASCAL __export __loadds jr_proc(int code, WPARAM w, LPARAM l)
 {
@@ -507,6 +630,10 @@ int __cdecl tmain(void)
     sec_mouse();
     out("filter\r\n");
     sec_filter();
+    out("show\r\n");
+    sec_show();
+    out("skip\r\n");
+    sec_skip();
     out("jr\r\n");
     sec_jr();
     /* WH_DEBUG is not probed: 3.1 died at the first GetMessage with a

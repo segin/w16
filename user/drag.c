@@ -155,6 +155,9 @@ static HWND query(HWND scope, HWND from, WORD flags, DRAGINFO __far *info, POINT
             info->y = c.y;
             if (send_message(w, WM_QUERYDROPOBJECT, nc, (LPARAM)info) && valid_wnd(w))
                 return w;
+            /* WM_QUERYDROPOBJECT may have destroyed it (USER audit, sweep) */
+            if ((pw = valid_wnd(w)) == 0)
+                break;
         }
         if (!(pw->style & WS_CHILD))
             break;

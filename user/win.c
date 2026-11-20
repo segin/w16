@@ -704,13 +704,15 @@ BOOL destroy_window(HWND h)
         hwndFocus = 0;
     if (hwndActive && !valid_wnd(hwndActive)) {
         hwndActive = 0;
-        /* activate the next top-level window */
+        /* activate the next top-level window: not an icon's title (US30
+           show on 3.1: with an icon above the next open window, the icon
+           became active; w16 activated the icon's title window) */
         {
             HWND t;
             for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
                 PWND tw = PW(t);
                 if ((tw->style & WS_VISIBLE) && !(tw->style & WS_DISABLED) &&
-                    !(tw->exstyle & WS_EX_TOPMOST && 0)) {
+                    ((PCLS)tw->cls)->atom != 32772) {
                     activate_window(t, FALSE);
                     break;
                 }
