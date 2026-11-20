@@ -452,7 +452,8 @@
 #              tests/wfscenarios.sh, both File Managers under SNAP (w16's
 #              with Microsoft's pictures, tests/wfmsres.sh), every screen
 #              within tests/scripts/winfile.baseline and the WINFILE.INI
-#              each leaves the same
+#              each leaves the same; wf14 loads the extension probe
+#              FMX.DLL into both and compares its log
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without

@@ -87,7 +87,8 @@ Boot-test settings:
 
 Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
-Microsoft's; `tests/wfobs.sh` for observing the original),
+Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
+`; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
