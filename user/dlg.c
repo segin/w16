@@ -189,6 +189,15 @@ LRESULT WINAPI DefDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (LOWORD(wp) == WA_INACTIVE) {
             if (hwndFocus && IsChild(h, hwndFocus))
                 SetWindowWord(h, DW_FOCUS, (WORD)hwndFocus);
+        } else if (hwndFocusPending && IsChild(h, hwndFocusPending)) {
+            /* activated by a SetFocus to one of its controls: that one
+               gets it, not the first tab stop (3.1: Character Map sets
+               the focus to its character grid in WM_INITDIALOG and
+               answers FALSE; w16's dialog gave it to the font box first,
+               and Character Map drew its status line for that through a
+               DC of the screen before its window was up: a stray "F" at
+               12,175 on the desktop, boot-test case icons) */
+            SetWindowWord(h, DW_FOCUS, (WORD)hwndFocusPending);
         } else if (!HIWORD(lp))
             send_message(h, WM_SETFOCUS, 0, 0);
         return 0;
@@ -309,16 +318,12 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
            dialog frame's size around a border's frame, 8 pixels too wide
            and too high: QuickTime's Control Panel, whose pages are such
            child templates whose size it makes its own, came 8 pixels
-           bigger each way (tests/qtcpl.sh). w16 keeps the old size for a
-           top-level dialog for now: with Character Map's window where 3.1
-           makes it, a stray glyph that w16's USER draws at 12,175 (under
-           the window when it is 8 pixels wider) shows on the desktop left
-           of it (boot-test case icons; open, ARCHITECTURE.md 15.5; US33
-           logs the popup templates' sizes as ~). A thick frame counts its
+           bigger each way (tests/qtcpl.sh). Top-level dialogs as well: the
+           stray glyph Character Map left on the desktop with its window
+           there came from the focus (DefDlgProc, WM_ACTIVATE). A thick frame counts its
            width less the border (US33: 200 x 120 units' worth of client
            in a 206 x 126 window, the client 198 x 118) */
-        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME ||
-                    ((style & DS_SETFONT) && (style & WS_DLGFRAME) && !(style & WS_CHILD));
+        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME;
         int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] - sysmet[SM_CXBORDER] :
                  dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
@@ -444,7 +449,11 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
        (Calculator: CLASS "SciCalc", no dialog procedure) gets it in its
        class's procedure; DefDlgProc hands it on to the dialog procedure.
        It was called straight, NULL included: a GP fault in USER */
-    if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
+    /* none without a dialog procedure, whatever the class (US33 idf on
+       3.1: a dialog of its own class made with a NULL procedure gets no
+       WM_INITDIALOG, and the first tab stop has the focus once it is
+       shown; w16 sent it to the class's procedure) */
+    if (proc && send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
         /* TRUE: the focus goes to the first tab stop even where the
            procedure set it elsewhere meanwhile (3.1: Program Manager's
            Exit dialog sets it to Cancel and answers TRUE, and OK has
