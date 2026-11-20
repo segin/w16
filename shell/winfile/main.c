@@ -216,9 +216,16 @@ static void init_menu(HMENU m, int pos)
 {
     LPDIRWIN d = dirwin_of(active_dirwin());
     if (pos == MENU_VIEW && d) {
-        check(m, IDM_BOTH, d->panes == PANES_BOTH);
-        check(m, IDM_TREEONLY, d->panes == PANES_TREE);
-        check(m, IDM_DIRONLY, d->panes == PANES_DIR);
+        /* a minimised window: the pane items grey and unchecked (WF05) */
+        BOOL icon = IsIconic(d->hwnd);
+        UINT en = MF_BYCOMMAND | (icon ? MF_GRAYED : MF_ENABLED);
+        EnableMenuItem(m, IDM_BOTH, en);
+        EnableMenuItem(m, IDM_TREEONLY, en);
+        EnableMenuItem(m, IDM_DIRONLY, en);
+        EnableMenuItem(m, IDM_SPLIT, en);
+        check(m, IDM_BOTH, !icon && d->panes == PANES_BOTH);
+        check(m, IDM_TREEONLY, !icon && d->panes == PANES_TREE);
+        check(m, IDM_DIRONLY, !icon && d->panes == PANES_DIR);
         check(m, IDM_VNAME, (d->view & VIEW_DETAILMASK) == VIEW_NAMEONLY);
         check(m, IDM_VDETAILS, (d->view & VIEW_DETAILMASK) == VIEW_EVERYTHING);
         check(m, IDM_VOTHER, (d->view & VIEW_DETAILMASK) != VIEW_NAMEONLY &&

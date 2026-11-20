@@ -100,3 +100,23 @@ this note is the working state.
 - WINFILE.INI Window= is x,y,width,height; dirN= is left,top,right,bottom.
 - UNVERIFIED: WF5 E06 once showed the details view a line down where
   WF02 S05 (the same keys) did not.
+
+## Known differences left (tests/scripts/winfile.baseline)
+
+- WF05: the attributes column, cut by the list's edge, comes 2 rows lower
+  and a pixel right of 3.1's (cause not found); the View menu with a
+  minimised window active (pane items grey: fixed after the baseline,
+  not yet re-run).
+- WF07 S08-S10: COMMDLG's Font box lists one size fewer (no 24 for MS Sans
+  Serif, so no scroll bar) than 3.1's File Manager asks for: some
+  ChooseFont flag or LOGFONT field differs; the list after the font
+  change follows from it.
+- WF08 S08-S12: after Create Directory and Delete, 3.1's tree and list
+  differ in detail (which line is selected, focus): observe again.
+
+## Last full run
+
+Commit 4d44dbe on installation-05 (`tools/remote-test.sh -n
+w16-winfile`): make test pass; boot test 129 ok, 5 failures, all of the
+known list (taskman@tree, ddeml conn, lzexpand quirks, soundtime,
+trails@timed); w16winfile 8 of 8 parts.
