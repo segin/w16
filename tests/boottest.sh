@@ -41,6 +41,7 @@
 #   gdi        w16's GDI on Microsoft's KRNL286    must be 0
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
+#   gdiaudit   the GDI audit's probe GD5 with Microsoft's GDI and w16's: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
@@ -76,6 +77,9 @@
 #              WIN's output not redirected), against Microsoft's WIN386.EXE:
 #              every shot 0 pixels but the banner's "w16" rows and the
 #              blinking cursor
+#   win386w16dos  w16's install tree over Windows 3.1 with w16's WIN386.EXE
+#              (plain DOSBox, the user's set-up): the MS-DOS Prompt starts
+#              full screen as with Microsoft's (banner and cursor masked)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -250,6 +254,14 @@
 #              MIDI Mapper applet, Media Player opening and playing a
 #              .WAV and opening a .MID: every screen 0 pixels off,
 #              tests/mmsystem/mprog.sh)
+#   sb16       w16's SB16.DRV (ARCHITECTURE.md 24) in DOSBox-X as a Sound
+#              Blaster 16 (tests/sb16/sbscen.sh): parts dev (MMP's device
+#              sections over it: Microsoft's MMSYSTEM and w16's alike, and
+#              against Windows 3.1's SNDBLST2.DRV's but the expected
+#              differences, tests/sb16/sbcmp.py), audio (what it plays,
+#              recorded and checked against the WAV and MIDI material:
+#              tests/sb16/sbaudio.sh) and prog (Sound Recorder, Sound and
+#              Media Player over it: every screen as over SNDBLST2)
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -744,7 +756,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1125,6 +1137,24 @@ runcase() {
             check gdik gdik ref ;;
     usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
             check usergdi usergdi ref ;;
+    gdiaudit)
+        # the GDI audit's probe GD5 (tests/apps/gd5.c; docs/notes/
+        # gdi-audit-triage.md) as the shell of Windows 3.1 with Microsoft's
+        # GDI and with w16's: both logs must end with "GD5 done" and have no
+        # FAIL (GD5's table, gd5ref.h, holds 3.1's values)
+        r=ok
+        for k in ms w16; do
+            o=; [ $k = ms ] && o=-r
+            "$root/tests/gdiheap.sh" $o -p "$root/build/dos/GD5.EXE" > "$out/gdiaudit-$k.log" 2>&1 &
+        done
+        wait
+        for k in ms w16; do
+            f=$out/gdiaudit-$k.log
+            grep -q '^GD5 done' "$f" || { r="$k: GD5 did not finish ($f)"; break; }
+            if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then echo "ok   gdiaudit: GD5 with w16's GDI as with Microsoft's (the GDI audit's observations)"
+        else echo "FAIL gdiaudit: $r"; fails=$((fails + 1)); fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
@@ -1261,6 +1291,38 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386dos: the MS-DOS Prompt full screen, VER, EXIT as with Microsoft's WIN386"
         else echo "FAIL win386dos: $r ($out/win386dos-w16)"; fails=$((fails + 1)); fi ;;
+    win386w16dos)
+        # the MS-DOS Prompt with w16's install tree (build/w16, every
+        # program, driver and library but the INI files and groups) over
+        # Windows 3.1 and w16's WIN386.EXE, in plain DOSBox: the user's
+        # set-up (2026-11-19), where WINOA386 refused the box ("...because
+        # the x TSR is loaded": SHELL function 9's EBX/ECX). The full-screen
+        # box (tests/scripts/input/dosbox386v.txt, 01-full) against
+        # Microsoft's WIN386 and the rest; masked: the banner's "w16"
+        # rows and the blinking cursor
+        scr=$root/tests/scripts/input/dosbox386v.txt
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        refrun win386w16dos-ref win386w16dos env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/win386w16dos-ref" -r -c "WIN /3 /B" \
+            -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        set -- -c "WIN /3 /B" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE"
+        for f in $(cd "$root/build/w16" && find . -type f | sed 's|^\./||' | grep -v -i '\.ini$\|\.grp$\|\.txt$'); do
+            set -- "$@" -f "$root/build/w16/$f=WINDOWS/$f"
+        done
+        DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+            "$out/win386w16dos-w16" "$@" > "$out/win386w16dos-w16.txt" 2>&1 || true
+        a=$out/win386w16dos-w16/01-full.png b=$out/win386w16dos-ref/01-full.png
+        if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no 01-full screen"
+        else
+            m="rectangle 64,48 583,79 rectangle 88,336 95,351"
+            magick "$a" -fill black -draw "$m" "$out/win386w16dos-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386w16dos-b.png"
+            n=$(magick compare -metric AE "$out/win386w16dos-a.png" "$out/win386w16dos-b.png" "$out/win386w16dos-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            if [ "${n:-1}" = 0 ]; then r=ok; else r="01-full: $n pixels differ ($out/win386w16dos-diff.png)"; fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386w16dos: w16's tree and WIN386, the MS-DOS Prompt starts as with Microsoft's"
+        else echo "FAIL win386w16dos: $r ($out/win386w16dos-w16)"; fails=$((fails + 1)); fi ;;
     win386close)
         scr=$root/tests/scripts/input/win386close.txt
         k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
@@ -2639,6 +2701,15 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   timer"
         else echo "FAIL timer: $r ($out)"; fails=$((fails + 1)); fi ;;
+    sb16)
+        # w16's SB16.DRV under both MMSYSTEMs (ARCHITECTURE.md 24)
+        r=ok
+        d=$out/sb16-${part:-dev}
+        "$root/tests/sb16/sbscen.sh" -o "$d" "${part:-dev}" > "$d.txt" 2>&1 ||
+            r="${part:-dev}: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   sb16"
+        else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
     mmsystem)
         # w16's MMSYSTEM.DLL against Microsoft's (ARCHITECTURE.md 23)
         r=ok
@@ -4490,6 +4561,7 @@ caseparts() {
     timer) echo "$1@s $1@3 $1@qt" ;;
     quicktime) echo "$1@over $1@tree $1@tree386" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
+    sb16) echo "$1@dev $1@audio $1@prog" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -4559,6 +4631,9 @@ partsummary() {
     ver)
         if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
+    sb16)
+        if [ $pbad = 0 ]; then echo "ok   sb16: MMP's device sections over SB16.DRV alike under both MMSYSTEMs and as over SNDBLST2 but the SB16's extras; its sound as the material (8/16 bits, mono/stereo, 8000-44100 Hz, loops, volume, MIDI pitches); Sound Recorder, Sound and Media Player as over SNDBLST2"
+        else echo "FAIL sb16: $pfirst ($out)"; fi ;;
     mmsystem)
         if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; the device drivers' messages as 3.1's; MCI as 3.1's (MCT.DRV, MCIWAVE, MCISEQ); Sound Recorder, Sound, MIDI Mapper and Media Player as on 3.1; QuickTime's movie as on 3.1"
         else echo "FAIL mmsystem: $pfirst ($out)"; fi ;;

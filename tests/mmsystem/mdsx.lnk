@@ -1,0 +1,10 @@
+# MDSX*.DRV (tests/mmsystem/mds.c), a logging pass-through device driver
+# with every entry a device driver can have (w16's SB16.DRV: wave, MIDI
+# and aux); the Makefile adds the module name.
+@tests/mmsystem/mds.lnk
+export DRIVERPROC.1 resident
+export WODMESSAGE.2
+export WIDMESSAGE.3
+export MODMESSAGE.4
+export MIDMESSAGE.5
+export AUXMESSAGE.7

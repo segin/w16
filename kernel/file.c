@@ -578,7 +578,10 @@ static void temp_dir(char *d, u16 max)
         d[n] = 0;
         if (n > 3 && d[n - 1] == '\\')
             d[--n] = 0;
-        if (dir_exists(d) || (n == 3 && d[1] == ':'))
+        /* a drive's root as "X:\" only, X a letter ("Z:X" was taken:
+           KERNEL audit, medium 38) */
+        if (dir_exists(d) || (n == 3 && d[1] == ':' && d[2] == '\\' &&
+                              upc(d[0]) >= 'A' && upc(d[0]) <= 'Z'))
             return;
     }
     GetWindowsDirectory(d, max);
@@ -677,7 +680,8 @@ u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136
     if (drive >= 26)
         return 0;
     if (drive < 2) {
-        u16 eq = *(u16 FAR *)MK_FP(dpmi_seg_to_desc(0x40), 0x10);
+        u16 bios = dpmi_seg_to_desc(0x40);  /* (0 if DPMI refused: */
+        u16 eq = bios ? *(u16 FAR *)MK_FP(bios, 0x10) : 0;  /* audit, L20) */
         /* bits 6-7 = floppy drives - 1; bit 0 (any floppy) is clear in
            DOSBox, where 3.1 still gave A: as removable */
         u16 floppies = ((eq >> 6) & 3) + 1;

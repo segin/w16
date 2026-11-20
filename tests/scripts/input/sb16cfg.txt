@@ -1,0 +1,9 @@
+; SB16.DRV's configuration dialog (DRV_CONFIGURE; tests/sb16/sbscen.sh
+; prog): SBP.EXE as the shell sends it through USER (its "config"
+; command); the dialog as it opens with the settings in use, then Escape
+; (Cancel: the probe logs DRV_CONFIGURE = 0) and the probe's end.
+settle 30 2
+shot 01-config
+key Escape
+sleep 3
+shot 02-after

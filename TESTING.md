@@ -142,6 +142,15 @@ the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case
 `quicktime`, parts `over`, `tree` and `tree386`),
+`tests/sb16/sbscen.sh [dev] [audio] [prog]` (w16's SB16.DRV in DOSBox-X
+as a Sound Blaster 16: MMP's device sections over it under both
+MMSYSTEMs and against Windows 3.1's SNDBLST2.DRV, `tests/sb16/sbcmp.py`;
+`tests/sb16/sbaudio.sh`: the probe SBP.EXE plays WAV files of every
+format, MIDI notes and a MIDI file with the sound recorded, checked by
+`tests/sb16/sbaudio.py` against the material; the MIDI goes through
+DOSBox-X's own synthesiser, `mididevice=synth`, which needs a DOSBox-X
+built with FluidSynth, and a sine SoundFont from `tools/mksf2.py`; Sound
+Recorder, Sound and Media Player over it; the boot-test case `sb16`),
 `tests/mouseprobe.sh`, `tests/sysprobe.sh`, `tests/soundprobe.sh`, `tests/fonts.sh`,
 `tests/dosxtest.sh`, `tests/win386.sh`, `tests/us27run.sh` (probe US27 on
 Windows 3.1, booting again past the cases that end the task; makes the

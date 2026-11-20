@@ -367,10 +367,15 @@ static void list_insert(u16 t)
 /* Behind the other tasks of its priority. */
 static void list_requeue(u16 t)
 {
-    TB(t, TDB_PRIO)++;
+    /* (not past 7Fh, where the signed priority wrapped and the task
+       went to the front: audit, L16) */
+    int up = (signed char)TB(t, TDB_PRIO) < 0x7F;
+    if (up)
+        TB(t, TDB_PRIO)++;
     list_unlink(t);
     list_insert(t);
-    TB(t, TDB_PRIO)--;
+    if (up)
+        TB(t, TDB_PRIO)--;
 }
 
 /* ---- the scheduler ---- */
@@ -475,8 +480,8 @@ static void int_vec_switch(u16 t)
         r.cx = (u16)(v >> 16);
         r.dx = (u16)v;
         r.ds = r.es = 0;
-        dpmi31(&r);
-        int_vec_cur[i] = v;
+        if (!dpmi31(&r))                /* (only what DPMI took: audit, */
+            int_vec_cur[i] = v;         /* L21) */
     }
 }
 

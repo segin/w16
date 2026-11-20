@@ -567,10 +567,13 @@ WORD EXPORT UPDATESCREEN(LPEPS p, WORD wParam, DWORD lParam)
     if (p->mod.flags & (fDisp_VRAM | fDisp_Ctlr)) {
         rc = cl;
         if (is_text(p->state.mode)) {
-            if (!(p->mod.flags & fDisp_Ctlr) && (BYTE)p->mod.left != 0xFF && fw && fh) {
-                rc.left = p->mod.left * fw - p->ColOrg;
+            /* the VDD counts the columns from 1, the rows from 0 (Windows
+               3.1's VDD: a line written at columns 0-10 of row 0Eh came
+               as AX 0E01h, BX 0E0Bh) */
+            if (!(p->mod.flags & fDisp_Ctlr) && (BYTE)p->mod.left != 0xFF && p->mod.left && fw && fh) {
+                rc.left = (p->mod.left - 1) * fw - p->ColOrg;
                 rc.top = p->mod.top * fh - p->RowOrg;
-                rc.right = (p->mod.right + 1) * fw - p->ColOrg;
+                rc.right = p->mod.right * fw - p->ColOrg;
                 rc.bottom = (p->mod.bottom + 1) * fh - p->RowOrg;
                 IntersectRect(&rc, &rc, &cl);
             }

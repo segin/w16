@@ -142,6 +142,8 @@ struct kq {
     vu32 q_head, q_len;
     vu32 cur;               /* the VM's port 60h */
     int obf;                /* the VM's output buffer full (status bit 0) */
+    vu32 mods;              /* the shift keys the VM was given down (MOD_*) */
+    int ext;                /* the last byte it was given was E0h */
 };
 static vu32 cb_off;
 #define KQ(vm) ((struct kq *)((vm) + cb_off))
@@ -156,12 +158,55 @@ static void request(vu32 vm, int on)
     else vpicd_clear_int_request(&s);
 }
 
+/* the shift keys one by one (MOD_*: left and right Shift, Ctrl, Alt),
+ * from a byte and whether E0h came before it; 0 for other keys (E0h 2Ah
+ * and E0h 36h are the extended keys' fake shifts) */
+static vu32 mod_bit(vu32 code, int e0)
+{
+    switch (code) {
+    case 0x2A: return e0 ? 0 : 0x01;
+    case 0x36: return e0 ? 0 : 0x02;
+    case 0x1D: return e0 ? 0x08 : 0x04;
+    case 0x38: return e0 ? 0x20 : 0x10;
+    }
+    return 0;
+}
+static const vu8 mod_code[6] = { 0x2A, 0x36, 0x1D, 0x1D, 0x38, 0x38 };
+static vu32 phys_mods;      /* the shift keys down on the keyboard */
+
+static void present(vu32 vm);
+
 static int q_put(vu32 vm, vu32 b)
 {
     struct kq *k = KQ(vm);
+    vu32 m;
     if (k->q_len == QSIZE) return 0;
     k->queue[(k->q_head + k->q_len++) % QSIZE] = (vu8)b;
+    if (b == 0xE0) { k->ext = 1; return 1; }
+    m = mod_bit(b & 0x7F, k->ext);
+    k->ext = 0;
+    if (m) k->mods = (b & 0x80) ? (k->mods & ~m) : (k->mods | m);
     return 1;
+}
+
+/* a VM that gets the keyboard: the shift keys it was given down that are
+ * up now (released while another VM had the keyboard: Alt after
+ * Alt+Enter, Alt+Tab) are released in it too. The DDK describes VKD
+ * bringing a VM to the global shift state with simulated keystrokes
+ * (VKD_Reflect_Hot_Key); under Windows 3.1 a DOS box made a window with
+ * Alt+Enter takes letters as letters, not Alt+letters (observed:
+ * tests/scripts/input/dosbox386w.txt). UNVERIFIED: that Windows 3.1 does
+ * it here, and whether it also presses keys held down now */
+static void sync_mods(vu32 vm)
+{
+    struct kq *k = KQ(vm);
+    vu32 up = k->mods & ~phys_mods, i;
+    for (i = 0; i < 6; i++) {
+        if (!(up & (1u << i))) continue;
+        if (i == 3 || i == 5) q_put(vm, 0xE0);
+        q_put(vm, mod_code[i] | 0x80);
+    }
+    present(vm);
 }
 
 /* the next byte into the VM's output buffer, with IRQ 1 requested (a
@@ -184,6 +229,8 @@ static void key_byte(vu32 b)
     int up = (b & 0x80) != 0, mine = 0;
     if (b == 0xE0) ext = 1;
     else {
+        vu32 m = mod_bit(code, ext);
+        if (m) phys_mods = up ? (phys_mods & ~m) : (phys_mods | m);
         mine = hot_key(code, up);
         track_shift(code, up);
         ext = 0;
@@ -347,6 +394,7 @@ void __cdecl vkd_control(struct vregs *r)
         /* the keyboard to VM EBX: what is queued for the other stays
          * there (UNVERIFIED) */
         kfocus = r->ebx;
+        sync_mods(kfocus);
         return;
     }
     if (r->eax == SYS_CRITICAL_INIT) {

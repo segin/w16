@@ -1860,6 +1860,9 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     }
     h = AR(a)->handle;
     s = h | 1;
+    if (AR(a)->owner == OWN_BURGER)
+        return 0;                       /* not the Burgermaster (as
+                                           GlobalFree; audit, low) */
     if (flags & GMEM_MODIFY) {
         if ((flags & GMEM_DISCARDABLE) && !discardable(a))
             lru_add(a, 1);
@@ -1977,7 +1980,8 @@ static u32 gsize386(u16 h)
 
 u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 {
-    u32 r = gsize386(h);
+    u32 r = kernel_seg(h) ? (u32)sel_lim16(h | 1) + 1 : gsize386(h);  /* (KERNEL's
+                                                       own: module.c) */
     api_fs0();
     return r;
 }
@@ -1991,6 +1995,16 @@ u32 KAPI_ES GlobalHandle(u16 sel)                             /* KERNEL.21 */
     p = alias_find(sel, NULL);
     if (p)
         return ((u32)p->sel << 16) | p->sel;
+    /* KERNEL's own segments (the bootstrap's memory, outside the heap):
+       fixed blocks, the selector as handle. Observed on 3.1 (TK62
+       "codehandle"): GetCodeHandle of a KERNEL procedure gives its
+       segment's selector, and (TK50) that is GlobalHandle's AX for it;
+       w16 gave 0 (KERNEL audit, medium 33) */
+    {
+        u16 k = kernel_seg(sel);
+        if (k)
+            return ((u32)module_first->seg[k - 1].sel << 16) | module_first->seg[k - 1].sel;
+    }
     return 0;
 }
 
@@ -2001,6 +2015,8 @@ static u16 gflags386(u16 h)
     aid a;
     u16 f;
     u8 db;
+    if ((f = kernel_seg(h)) != 0)       /* KERNEL's own (module.c) */
+        return kernel_seg_flags(f);
     switch (find(h, &a)) {
     case FB_BLOCK:
         f = (AR(a)->flags & GA_SHOWN) << 8;
@@ -2226,6 +2242,8 @@ void KAPI FarSetOwner(u16 h, u16 owner)                       /* KERNEL.403 */
 
 u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
+    if (kernel_seg(h))                  /* KERNEL's own: its module */
+        return module_first->ne_sel;
     return gowner(h);
 }
 

@@ -246,10 +246,8 @@ u32 KAPI KGetCodeHandle(u32 proc)
         u16 i;
         for (i = 0; i < m->seg_count; i++)
             if ((m->seg[i].sel | 3) == (hi | 3))
-                /* AX = GlobalHandle's, as on 3.1 (TK50); there it is the
-                   segment's handle (TK62 "codehandle"), here 0: KERNEL's
-                   segments are not heap blocks (KERNEL audit, medium 33,
-                   open) */
+                /* AX = GlobalHandle's, as on 3.1 (TK50): the segment's
+                   selector (TK62 "codehandle"; global.c) */
                 return ((u32)m->seg[i].sel << 16) | (u16)GlobalHandle(hi);
     }
     gh = GlobalHandle(hi);

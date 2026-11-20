@@ -42,17 +42,23 @@ BYTE __far *bm_scan(LPPBITMAP pb, int y)
                                 OFFSETOF(pb->bmBits) + (WORD)(line * scan));
 }
 
+static DWORD bits_copy(HBITMAP h, DWORD n, void __far *buf, int get);
+
 HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WORD flags)
 {
     HANDLE hb;
     LPBITMAPOBJ b;
     LPPBITMAP pb;
     WORD wb, scan;
-    DWORD total;
-    int y;
+    DWORD total, wbl;
     if (w <= 0 || h <= 0 || planes <= 0 || bpp <= 0)
         return 0;
-    wb = (WORD)((((DWORD)w * bpp + 15) >> 4) << 1);
+    /* one scan line of all planes must fit a segment (PBITMAP's layout:
+       bmScanSegment lines a segment) */
+    wbl = (((DWORD)w * bpp + 15) >> 4) << 1;
+    if (wbl * planes > 0xFFFFL)
+        return 0;
+    wb = (WORD)wbl;
     scan = wb * planes;
     total = (DWORD)scan * h;
     hb = obj_alloc(BITMAP_MAGIC, sizeof(BITMAPOBJ));
@@ -90,9 +96,8 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
     pb->bmFillBytes = (short)(65536L % scan);
     /* UNVERIFIED: 3.1 gave some bitmaps a memory DC's PBITMAP here */
     pb->bmlpPDevice = display ? display->lpPDevice : 0;
-    if (bits)
-        for (y = 0; y < h; y++)
-            mem_copy(bm_scan(pb, y), (const BYTE __far *)bits + (DWORD)y * scan, scan);
+    if (bits)                           /* as SetBitmapBits: across segments */
+        bits_copy(hb, total, (void __far *)bits, 0);
     return hb;
 fail:
     b = obj_get(hb, BITMAP_MAGIC);
@@ -286,42 +291,82 @@ typedef struct {
 } BITMAPINFOHEADER;
 typedef struct { DWORD bcSize; short bcWidth, bcHeight; WORD bcPlanes, bcBitCount; } BITMAPCOREHEADER;
 
-/* a BITMAPINFO the driver can take: the caller's, or for a core header a
-   converted copy in buf (header and up to 256 RGBQUADs) */
-static void __far *dib_info(const void __far *bmi, WORD usage, BYTE __far *buf)
+typedef struct { BYTE peRed, peGreen, peBlue, peFlags; } PALENT;
+WORD GDIAPI GetPaletteEntries(HPALETTE, WORD, WORD, PALENT __far *);
+WORD GDIAPI GetNearestPaletteIndex(HPALETTE, COLORREF);
+
+/* the colour table's entries (1, 4 and 8 bits a pixel) */
+static int dib_ncolors(WORD bpp)
+{
+    return bpp <= 8 ? 1 << bpp : 0;
+}
+
+/* a BITMAPINFO the driver can take: the caller's, or a converted copy in
+   buf (header and up to 256 RGBQUADs) for a core header or DIB_PAL_COLORS
+   (the indices made the DC's palette's colours) */
+static void __far *dib_info(const void __far *bmi, WORD usage, BYTE __far *buf, HPALETTE hpal)
 {
     const BITMAPCOREHEADER __far *bc = bmi;
     BITMAPINFOHEADER __far *bi = (BITMAPINFOHEADER __far *)buf;
     const BYTE __far *src;
     BYTE __far *dst;
-    int n, i;
-    if (bc->bcSize != sizeof(BITMAPCOREHEADER))
+    int n, i, core = bc->bcSize == sizeof(BITMAPCOREHEADER);
+    if (!core && usage != 1)
         return (void __far *)bmi;
-    mem_set(buf, 0, sizeof(BITMAPINFOHEADER));
-    bi->biSize = sizeof(BITMAPINFOHEADER);
-    bi->biWidth = bc->bcWidth;
-    bi->biHeight = bc->bcHeight;
-    bi->biPlanes = 1;
-    bi->biBitCount = bc->bcBitCount;
-    n = bc->bcBitCount <= 8 ? 1 << bc->bcBitCount : 0;
-    src = (const BYTE __far *)bmi + sizeof(BITMAPCOREHEADER);
+    if (core) {
+        mem_set(buf, 0, sizeof(BITMAPINFOHEADER));
+        bi->biSize = sizeof(BITMAPINFOHEADER);
+        bi->biWidth = bc->bcWidth;
+        bi->biHeight = bc->bcHeight;
+        bi->biPlanes = 1;
+        bi->biBitCount = bc->bcBitCount;
+        src = (const BYTE __far *)bmi + sizeof(BITMAPCOREHEADER);
+    } else {
+        mem_copy(buf, bmi, sizeof(BITMAPINFOHEADER));
+        src = (const BYTE __far *)bmi + sizeof(BITMAPINFOHEADER);
+    }
+    n = dib_ncolors(bi->biBitCount);
     dst = buf + sizeof(BITMAPINFOHEADER);
     for (i = 0; i < n; i++) {
         if (usage == 1) {               /* DIB_PAL_COLORS: indices (WORDs) */
-            dst[0] = src[0];
-            dst[1] = src[1];
+            PALENT pe;
+            pe.peRed = pe.peGreen = pe.peBlue = 0;
+            GetPaletteEntries(hpal, *(const WORD __far *)src, 1, &pe);
+            dst[0] = pe.peBlue;
+            dst[1] = pe.peGreen;
+            dst[2] = pe.peRed;
             src += 2;
-            dst += 2;
         } else {
             dst[0] = src[0];
             dst[1] = src[1];
             dst[2] = src[2];
-            dst[3] = 0;
-            src += 3;
-            dst += 4;
+            src += core ? 3 : 4;
         }
+        dst[3] = 0;
+        dst += 4;
     }
     return buf;
+}
+
+/* GetDIBits: the colours the driver gave in the copy buf back into the
+   caller's table, as RGBTRIPLEs for a core header, as the DC palette's
+   nearest indices for DIB_PAL_COLORS (GD5 on 3.1) */
+static void dib_colors_back(void __far *bmi, WORD usage, const BYTE __far *buf, HPALETTE hpal)
+{
+    const BYTE __far *q = buf + sizeof(BITMAPINFOHEADER);
+    int core = ((BITMAPCOREHEADER __far *)bmi)->bcSize == sizeof(BITMAPCOREHEADER), n, i;
+    BYTE __far *d = (BYTE __far *)bmi + (core ? sizeof(BITMAPCOREHEADER) : sizeof(BITMAPINFOHEADER));
+    n = dib_ncolors(((const BITMAPINFOHEADER __far *)buf)->biBitCount);
+    for (i = 0; i < n; i++, q += 4)
+        if (usage == 1) {
+            *(WORD __far *)d = GetNearestPaletteIndex(hpal, RGB(q[2], q[1], q[0]));
+            d += 2;
+        } else {
+            d[0] = q[0];
+            d[1] = q[1];
+            d[2] = q[2];
+            d += 3;
+        }
 }
 
 static int dib_bits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
@@ -332,14 +377,19 @@ static int dib_bits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
     BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
     void __far *bi;
     DRVDEVBMBITS fn;
+    HPALETTE hpal;
+    int r;
     if (!dc || !pb || !bmi)
         return 0;
     fn = (DRVDEVBMBITS)dc->dev->fn[DRV_DEVICEBITMAPBITS];
     if (!fn)
         return 0;
-    bi = dib_info(bmi, usage, info);
-    /* UNVERIFIED: DIB_PAL_COLORS translation through the DC's palette */
-    return fn(pb, get, start, n, bits, bi, &dc->dm, 0);
+    hpal = dc->hPal;
+    bi = dib_info(bmi, usage, info, hpal);
+    r = fn(pb, get, start, n, bits, bi, &dc->dm, 0);
+    if (get && bi != bmi)
+        dib_colors_back(bmi, usage, info, hpal);
+    return r;
 }
 
 int GDIAPI SetDIBits(HDC hdc, HBITMAP hbm, WORD start, WORD n, const void __far *bits,
@@ -368,8 +418,24 @@ int GDIAPI GetDIBits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
         bi->biSizeImage = ((((DWORD)bi->biWidth * bpp + 31) >> 5) << 2) *
                           (bi->biHeight < 0 ? -bi->biHeight : bi->biHeight);
     }
-    if (!bits)
+    if (!bits) {
+        /* GD5 on 3.1: the colour table is filled in all the same (here
+           by getting one scan line into a scratch block) */
+        WORD bpp = bi->biSize == sizeof(BITMAPINFOHEADER) ? bi->biBitCount
+                                                         : ((BITMAPCOREHEADER __far *)bi)->bcBitCount;
+        long w = bi->biSize == sizeof(BITMAPINFOHEADER) ? bi->biWidth
+                                                       : ((BITMAPCOREHEADER __far *)bi)->bcWidth;
+        DWORD line = (((DWORD)w * bpp + 31) >> 5) << 2;
+        DWORD keep = bi->biSize == sizeof(BITMAPINFOHEADER) ? bi->biSizeImage : 0;
+        XP x;
+        if (dib_ncolors(bpp) && line && line <= 0xFF00L && (x = xalloc((WORD)line)) != 0) {
+            dib_bits(hdc, hbm, 0, 1, xptr(x), bmi, usage, 1);
+            xfree(x);
+            if (bi->biSize == sizeof(BITMAPINFOHEADER))
+                bi->biSizeImage = keep;
+        }
         return pb->bmHeight;
+    }
     return dib_bits(hdc, hbm, start, n, bits, bmi, usage, 1);
 }
 
@@ -416,7 +482,7 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
     fn = (DRVSETDIBTODEV)dc->dev->fn[DRV_SETDIBITSTODEVICE];
     if (!fn)
         return 0;
-    bi = dib_info(bmi, usage, info);
+    bi = dib_info(bmi, usage, info, dc->hPal);
     p[0] = x;
     p[1] = y;
     dc_lp_to_dp(dc, p, 1);
@@ -441,5 +507,7 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
         rao = rgn_ptr(dc->hRao);
     }
     dc_update_bounds(dc, d.left, d.top, d.right, d.bottom);
-    return n;
+    /* GD5 on 3.1: the scan lines on a window DC, FFFFh on a memory DC
+       (the pixels the same) */
+    return dc->flags & DCF_MEMORY ? -1 : n;
 }

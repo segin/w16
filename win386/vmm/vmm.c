@@ -395,6 +395,7 @@ struct execctx {
 };
 static struct execctx *cur_exec;
 int exec_trace;
+int vm_trace;                           /* [w16] vmmtrace=2: the DOS VMs' trace */
 
 void exec_v86(struct cregs *v)
 {
@@ -447,6 +448,13 @@ void v86_int(struct cregs *v, int vec)
     v86_push16(v, (u16)(info->bp_off + W386_BP_REFRET));
     v->eip = ivt[vec * 2];
     v->cs = ivt[vec * 2 + 1];
+    if (vec == 0x21 && vm_dos_call(v->eax)) {
+        struct vm *m = cur_vm;          /* the same VM when it returns */
+        m->indos++;
+        exec_v86(v);
+        if (m->indos > 0) m->indos--;
+        return;
+    }
     exec_v86(v);
 }
 
@@ -662,6 +670,7 @@ void vmm_switch(struct vm *n)
     o->kesp0 = kesp0;
     o->hw_r = hw_r;
     o->exec = cur_exec;
+    if (vm_trace) trace("{%d>%d}", o->id, n->id);
     if (k_setjmp(o->kjb)) return;       /* back in o: its globals are in place */
     vm_inst_out(o);
     cur_vm = n;
@@ -697,11 +706,14 @@ u32 vmm_pdir_entry(u32 i, u32 v)        /* set a page directory entry; the old o
 
 /* ---- the trap dispatcher ---- */
 
+
 static void software_int(struct cregs *r, int vec)
 {
+    if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->cs, r->eip);
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
         if (vec == 0x2A) vm_int2a(r);   /* DOS's critical sections: noted, then on to DOS's handler */
+        if (vec == 0x21) { vm_int21(r); return; }
         /* INT 1Ch, 23h, 24h go to a protected-mode handler (DPMI 0.9) */
         if ((vec == 0x1C || vec == 0x23 || vec == 0x24) && cur_vm == &sysvm && dpmi_v86_hook(r, vec, 0)) return;
         v86_reflect(r, vec);
@@ -717,6 +729,7 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     case W386_BP_PS2CB:  dpmi_ps2cb(r); break;
     case W386_BP_VMEXIT: vm_exited(r); break;
     case W386_BP_VMSTART: vm_start(r); break;
+    case W386_BP_INT21RET: vm_int21_ret(r); break;
     case W386_BP_IRQIRET:               /* the interrupted code's own frame */
         r->eip = v86_pop16(r);
         r->cs = v86_pop16(r);
@@ -915,7 +928,8 @@ void __cdecl vmm_main(struct w386_info *inf)
         outb(info->log_port + 1, 0);
         outb(info->log_port + 4, 0x03);  /* DTR, RTS: DOSBox's nullmodem sends then */
     }
-    { extern int dpmi_verbose; dpmi_verbose = exec_trace = info->trace; }
+    { extern int dpmi_verbose; dpmi_verbose = exec_trace = info->trace == 1; }
+    vm_trace = info->trace == 2;
     trace("w16 VMM: %d KB at %x, image %x+%x\n", info->xms_size >> 10, info->xms_phys,
           info->img_off, info->img_size);
     next_page = info->img_off + info->img_size;
