@@ -348,6 +348,26 @@ BOOL  search_register(void);
 BOOL  is_search(HWND w);
 void  file_search(LPDIRWIN d);
 HGLOBAL search_selected(void);
+int   search_sel(int want, LPSTR name, LPVOID fmsel);
+LPCSTR search_start(void);
+
+/* ext.c: the extension interface (FMEXT) */
+#define FM_GETFOCUS         (WM_USER + 0x200)
+#define FM_GETDRIVEINFO     (WM_USER + 0x201)
+#define FM_GETSELCOUNT      (WM_USER + 0x202)
+#define FM_GETSELCOUNTLFN   (WM_USER + 0x203)
+#define FM_GETFILESEL       (WM_USER + 0x204)
+#define FM_GETFILESELLFN    (WM_USER + 0x205)
+#define FM_REFRESH_WINDOWS  (WM_USER + 0x206)
+#define FM_RELOAD_EXTENSIONS (WM_USER + 0x207)
+void  ext_load(void);
+void  ext_unload(BOOL menus);
+void  ext_reload(void);
+void  ext_selchange(void);
+void  ext_refresh(void);
+void  ext_initmenu(HMENU m);
+BOOL  ext_command(WPARAM id);
+LRESULT ext_message(UINT msg, WPARAM wp, LPARAM lp);
 
 /* disk.c */
 void  disk_copy(void);
@@ -396,6 +416,7 @@ extern BYTE g_drivelist[26];
 extern BYTE g_drivepic[26];
 int   drive_index(int drive);
 void  drives_paint_label(LPDIRWIN d);
+BOOL  volume_label(int drive, LPSTR out, int n);
 
 /* tree.c */
 BOOL  tree_register(void);
