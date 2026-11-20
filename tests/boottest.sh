@@ -77,7 +77,7 @@
 #              every shot 0 pixels but the banner's "w16" rows and the
 #              blinking cursor
 #   win386dosw w16's WIN386: the MS-DOS Prompt to a window (Alt+Enter), VER,
-#              back (w16's VGA.3GR both sides), against Microsoft's WIN386
+#              back, against Microsoft's WIN386
 #   win386switch  w16's WIN386: Alt+Tab, Alt+Esc, Ctrl+Esc between the
 #              full-screen MS-DOS Prompt and Windows, against Microsoft's
 #   win386two  w16's WIN386: two MS-DOS Prompts, VER and EXIT in each
@@ -1272,9 +1272,7 @@ runcase() {
     win386dosw|win386switch|win386two|win386exitbox)
         # win386dosw: the MS-DOS Prompt full screen, Alt+Enter to a window,
         # VER typed there, Alt+Enter back, EXIT (tests/scripts/input/
-        # dosbox386w.txt), with w16's VGA.3GR on both sides (Microsoft's
-        # paints the window's text white under w16's WIN386: open, the
-        # WIN386 handover note). win386switch: full screen, Alt+Tab, Alt+Tab
+        # dosbox386w.txt), Microsoft's VGA.3GR. win386switch: full screen, Alt+Tab, Alt+Tab
         # back, Alt+Esc, Alt+Tab back, Ctrl+Esc (the Task List), Esc, Alt+Tab
         # (Windows starts a second box: Program Manager's MS-DOS Prompt
         # was selected, as under 3.1), EXIT (tests/scripts/input/
@@ -1285,7 +1283,7 @@ runcase() {
         # WIN386; masked: the banner's "w16" rows, the blinking cursor
         if [ $c = win386dosw ]; then
             scr=$root/tests/scripts/input/dosbox386w.txt shots="01-full 02-window 03-ver 04-full 05-back"
-            set -- -f "$root/build/dos/VGA.3GR=WINDOWS/SYSTEM/VGA.3GR"
+            set --
         elif [ $c = win386switch ]; then
             scr=$root/tests/scripts/input/dosbox386s.txt
             shots="01-full 02-alttab 03-back 04-altesc 05-back 06-ctrlesc 07-esc 08-box 09-end"

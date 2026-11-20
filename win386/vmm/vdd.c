@@ -60,7 +60,7 @@ struct vsave {
     int pending;                        /* a 41Ah event not answered yet */
     u8 *font;                           /* plane 2 for Get_Mem (ring 3) */
     u8 *plane1;                         /* Get_Mem's plane 1: a buffer of its own (UNVERIFIED use) */
-    u32 *zero;
+    u32 *zero;                          /* Get_Mem's colour table (dac_table) */
 };
 static struct vsave *saves;
 
@@ -180,6 +180,33 @@ static void map_video(struct vsave *d, int ram)
     set_cr3(get_cr3());
 }
 
+/* Get_Mem's last pointer: the VM's colours, a dword per DAC entry: its
+ * number, then red, green, blue (6 bits). Windows 3.1 (VXS.386, the
+ * windowed MS-DOS Prompt): 00 00 00 00, 01 00 00 2A, 02 00 2A 00 ...
+ * 07 2A 2A 2A, 08 00 00 15 ..., the VGA's text-mode DAC; Microsoft's
+ * grabber takes a cell's colour from the entry its palette register names
+ * (FFh bytes there painted every colour white, zeros black). The first 64
+ * entries are filled here (UNVERIFIED how many 3.1 keeps); from the VM's
+ * saved DAC, or the VGA's text-mode colours for a VM that never had the
+ * display */
+static void dac_table(struct vsave *d)
+{
+    u32 i;
+    u8 *t = (u8 *)d->zero;
+    for (i = 0; i < 64; i++) {
+        t[i * 4] = (u8)i;
+        if (d->valid) {
+            t[i * 4 + 1] = d->g->dac[i * 3] & 0x3F;
+            t[i * 4 + 2] = d->g->dac[i * 3 + 1] & 0x3F;
+            t[i * 4 + 3] = d->g->dac[i * 3 + 2] & 0x3F;
+        } else {                        /* the EGA colour i: rgbRGB */
+            t[i * 4 + 1] = (u8)(((i & 4) ? 0x2A : 0) + ((i & 0x20) ? 0x15 : 0));
+            t[i * 4 + 2] = (u8)(((i & 2) ? 0x2A : 0) + ((i & 0x10) ? 0x15 : 0));
+            t[i * 4 + 3] = (u8)(((i & 1) ? 0x2A : 0) + ((i & 0x08) ? 0x15 : 0));
+        }
+    }
+}
+
 /* windowed: the saved planes become the text in RAM (odd/even: the
  * character at an even address is plane 0's byte there, the attribute
  * plane 1's) */
@@ -211,12 +238,8 @@ static void to_ram(struct vsave *d)
         make_user((u32)d->plane1, 8192);
         make_user((u32)d->zero, 1024);
         memset(d->plane1, 0, 8192);
-        /* Get_Mem's last pointer: the DDK calls VDD_Get_Mem's result "the flat
-         * address and allocation bitmap" of the video memory: every page
-         * there (UNVERIFIED bit layout; zeros made the grabber paint black) */
-        memset(d->zero, 0, 1024);
-        d->zero[0] = d->zero[1] = d->zero[2] = d->zero[3] = 0xFFFFFFFFu;
     }
+    dac_table(d);
     if (d->valid) memcpy(d->font, d->g->planes[2], 8192);
     d->windowed = 1;
     d->shadow_ok = 0;
