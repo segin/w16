@@ -180,6 +180,11 @@ BEGIN
     IDS_NOMEMORY, "Not enough memory for Write to complete this operation.\n\nQuit one or more applications to increase available memory, and then try again."
     IDS_NOPATH, "Path does not exist.\n\nPlease verify that the correct path is given."
     IDS_OBJECTNONE, "&Object"
+    IDS_FMTBITMAP, "Bitmap"
+    IDS_FMTPICTURE, "Picture"
+    IDS_FMTDIB, "Device Independent Bitmap"
+    IDS_FMTTEXT, "Text"
+    IDS_FMTOBJECT, "Object"
     IDS_AUTOMATIC, "Automatic"
     IDS_MANUAL, "Manual"
     IDS_UNAVAILABLE, "Unavailable"
@@ -459,4 +464,20 @@ BEGIN
     CONTROL "OK", 1, "Button", 0x50010000L, 249, 6, 37, 14
     CONTROL "Cancel", 2, "Button", 0x50010000L, 249, 25, 37, 14
     CONTROL "&Activate", 273, "Button", 0x50010000L, 249, 44, 37, 14
+END
+
+/* Edit > Paste Special (the original's PASTESPECIAL: layout, IDs, text) */
+PASTESPECIAL DIALOG 87, 52, 171, 77
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Paste Special"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Paste", 281, "Button", 0x50010001L, 119, 9, 46, 14
+    CONTROL "Paste &Link", 282, "Button", 0x50010000L, 119, 32, 46, 14
+    CONTROL "Cancel", 2, "Button", 0x50010000L, 119, 55, 46, 14
+    CONTROL "Source:", 283, "Static", 0x50000000L, 5, 6, 27, 8
+    CONTROL "", 279, "Static", 0x50000000L, 35, 6, 77, 9
+    CONTROL "", 280, "Static", 0x50000000L, 12, 15, 95, 16
+    CONTROL "&Data Type:", -1, "Static", 0x50000000L, 4, 32, 50, 9
+    CONTROL "", 265, "Listbox", 0x50A10001L, 3, 43, 110, 36
 END

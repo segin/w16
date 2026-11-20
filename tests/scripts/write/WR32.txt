@@ -1,0 +1,31 @@
+; WR32: Edit > Paste Special: with a picture on the clipboard (S1, window
+; dump), Paste; with a picture offered as a link (SNAP cliplink, S2, window
+; dump), Paste Link; saved as C:\WR32.WRI
+; mkpic: PIC.DIB
+run WRITE.EXE
+wait 3000
+clipbmp C:\PIC.DIB
+menu e
+char e
+wait 1500
+snap C:\S1.BMP
+dump
+key 0D
+wait 2000
+cliplink C:\PIC.DIB PBrush|C:\WINDOWS\ARCADE.BMP|0 0 40 20
+menu e
+char e
+wait 1500
+snap C:\S2.BMP
+dump
+alt l
+wait 4000
+snap C:\S3.BMP
+menu f
+char a
+wait 1500
+type C:\WR32.WRI
+key 0D
+wait 2000
+close
+wait 1000

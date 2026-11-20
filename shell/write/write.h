@@ -135,6 +135,11 @@
 #define IDS_CANTPRINT       8226
 #define IDS_OBJECTNONE      32
 #define IDS_AUTOMATIC       34
+#define IDS_FMTBITMAP       107
+#define IDS_FMTPICTURE      108
+#define IDS_FMTDIB          109
+#define IDS_FMTTEXT         110
+#define IDS_FMTOBJECT       112
 #define IDS_MANUAL          35
 #define IDS_UNAVAILABLE     36
 #define IDS_NOSOURCE        8470
@@ -337,6 +342,7 @@ BOOL ole_paste(void);
 BOOL ole_can_pastelink(void);
 void ole_pastelink(void);
 void cmd_links(void);
+void cmd_pastespecial(void);
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */
@@ -356,6 +362,10 @@ void  view_select(DWORD first, DWORD lim, BOOL show);
 void  view_layout(void);
 void  view_update_pageinfo(void);
 void  view_scroll_to_caret(void);
+DWORD view_line_before(DWORD cp);       /* the line starts around cp's line */
+DWORD view_line_after(DWORD cp);
+DWORD view_line_end(DWORD cp);
+void  view_show_line(DWORD cp);          /* its text's end, no paragraph mark */
 LRESULT FAR PASCAL __export DocWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT FAR PASCAL __export PageInfoWndProc(HWND, UINT, WPARAM, LPARAM);
 void  view_key(WPARAM vk);

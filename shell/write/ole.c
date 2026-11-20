@@ -991,3 +991,147 @@ void cmd_links(void)
     hlinks = NULL;
     nlinks = 0;
 }
+
+/* ---- Edit > Paste Special (WR32) ----
+   The original's PASTESPECIAL box: with a link or an object on the
+   clipboard (OwnerLink or ObjectLink) "Source:" shows its class's name
+   (the registration database's, "Paintbrush Picture") and below it the
+   document's name and the item ("ARCADE.BMP 0 0 40 20"); without one
+   "Source:" is hidden and both are empty. "Data Type:" lists what can be
+   pasted, first selected: "<class name> Object", "Picture" (a metafile),
+   "Device Independent Bitmap", "Bitmap", "Text" (strings 112, 108, 109,
+   107, 110; WR32 S1, S2). Paste Link is enabled for a link. Paste pastes
+   the chosen type: an object embedded, a picture static. UNVERIFIED: Text
+   chosen (pasted as by Paste), Picture or Bitmap chosen beside a DIB (the
+   static object takes OLECLI's preferred picture). */
+#define PS_PASTE    281
+#define PS_LINK     282
+#define PS_SOURCE   283
+#define PS_CLASS    279
+#define PS_NAME     280
+#define PS_LIST     265
+
+static WORD psKind[6];                  /* per list line: 0 object, else a format */
+static int psN;
+
+static BOOL clip_names(char *cls, char *doc, char *item)
+{
+    UINT f = RegisterClipboardFormat("OwnerLink");
+    HANDLE h;
+    char FAR *p;
+    cls[0] = doc[0] = item[0] = 0;
+    if (!IsClipboardFormatAvailable(f))
+        f = RegisterClipboardFormat("ObjectLink");
+    if (!IsClipboardFormatAvailable(f) || !OpenClipboard(g_frame))
+        return FALSE;
+    h = GetClipboardData(f);
+    p = h ? GlobalLock(h) : NULL;
+    if (p) {
+        s_cpy(cls, p, 64);
+        p += s_len(p) + 1;
+        s_cpy(doc, p, PATH_MAX_DOS);
+        p += s_len(p) + 1;
+        s_cpy(item, p, 64);
+        GlobalUnlock(h);
+    }
+    CloseClipboard();
+    return cls[0] != 0;
+}
+
+BOOL CALLBACK __export PasteSpecialDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    char cls[65], doc[PATH_MAX_DOS], item[65], name[80], s[120], *b;
+    LONG cb = sizeof name;
+    int i;
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG:
+        psN = 0;
+        if (clip_names(cls, doc, item)) {
+            if (RegQueryValue(HKEY_CLASSES_ROOT, cls, name, &cb) != ERROR_SUCCESS || !name[0])
+                s_cpy(name, cls, sizeof name);
+            SetDlgItemText(d, PS_CLASS, name);
+            for (b = doc; *b; b++)
+                ;
+            while (b > doc && b[-1] != '\\' && b[-1] != ':')
+                b--;
+            s_cpy(s, b, sizeof s);
+            s_cat(s, " ", sizeof s);
+            s_cat(s, item, sizeof s);
+            SetDlgItemText(d, PS_NAME, s);
+            if (OleQueryCreateFromClip("StdFileEditing", olerender_draw, 0) == OLE_OK ||
+                ole_can_pastelink()) {
+                s_cpy(s, name, sizeof s);
+                s_cat(s, " ", sizeof s);
+                load_str(IDS_FMTOBJECT, s + s_len(s), (int)(sizeof s - s_len(s)));
+                SendDlgItemMessage(d, PS_LIST, LB_ADDSTRING, 0, (LPARAM)(LPSTR)s);
+                psKind[psN++] = 0;
+            }
+        } else {
+            ShowWindow(GetDlgItem(d, PS_SOURCE), SW_HIDE);
+        }
+        {
+            static const WORD fmt[4] = { CF_METAFILEPICT, CF_DIB, CF_BITMAP, CF_TEXT };
+            static const WORD ids[4] = { IDS_FMTPICTURE, IDS_FMTDIB, IDS_FMTBITMAP, IDS_FMTTEXT };
+            for (i = 0; i < 4; i++)
+                if (IsClipboardFormatAvailable(fmt[i])) {
+                    load_str(ids[i], s, sizeof s);
+                    SendDlgItemMessage(d, PS_LIST, LB_ADDSTRING, 0, (LPARAM)(LPSTR)s);
+                    psKind[psN++] = fmt[i];
+                }
+        }
+        SendDlgItemMessage(d, PS_LIST, LB_SETCURSEL, 0, 0);
+        EnableWindow(GetDlgItem(d, PS_LINK), ole_can_pastelink());
+        return TRUE;
+    case WM_COMMAND:
+        if (wp == PS_LIST && HIWORD(lp) == LBN_DBLCLK)
+            wp = PS_PASTE;
+        if (wp == PS_PASTE) {
+            i = (int)SendDlgItemMessage(d, PS_LIST, LB_GETCURSEL, 0, 0);
+            EndDialog(d, i >= 0 && i < psN ? 100 + i : IDCANCEL);
+            return TRUE;
+        }
+        if (wp == PS_LINK || wp == IDCANCEL) {
+            EndDialog(d, wp);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+void cmd_pastespecial(void)
+{
+    FARPROC fp = MakeProcInstance((FARPROC)PasteSpecialDlgProc, g_hinst);
+    int r = DialogBox(g_hinst, "PASTESPECIAL", g_frame, (DLGPROC)fp);
+    FreeProcInstance(fp);
+    if (r == PS_LINK) {
+        ole_pastelink();
+    } else if (r >= 100 && r - 100 < psN) {
+        WORD k = psKind[r - 100];
+        if (k == CF_TEXT || !k)
+            cmd_paste();                /* text, or the object as Paste embeds it */
+        else {
+            WOBJ *o;
+            char name[9];
+            OLESTATUS st;
+            view_caret_defer();
+            undo_save(IDS_EDITING);
+            o = new_obj_para(1, name);
+            if (!o || !OpenClipboard(g_frame))
+                return;
+            st = OleCreateFromClip("Static", &o->cl, lhdoc, name, &o->obj, olerender_draw, 0);
+            CloseClipboard();
+            if (st == OLE_WAIT_FOR_RELEASE)
+                wait_release(o->obj, st);
+            else if (st != OLE_OK)
+                o->obj = NULL;
+            o->failed = o->obj == NULL;
+            if (o->obj) {
+                o->dirty = TRUE;
+                store(o);
+            }
+            g_doc.dirty = TRUE;
+        }
+    }
+}

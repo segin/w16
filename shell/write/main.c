@@ -431,6 +431,9 @@ static LRESULT command(HWND w, WORD id)
     case IDM_PASTELINK:
         ole_pastelink();
         break;
+    case IDM_PASTESPECIAL:
+        cmd_pastespecial();
+        break;
     case IDM_LINKS:
         cmd_links();
         break;

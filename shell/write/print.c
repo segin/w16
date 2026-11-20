@@ -472,6 +472,151 @@ static void add_page(WORD pgn, DWORD cp)
     g_doc.npages++;
 }
 
+/* ---- Confirm Page Breaks (WR31) ----
+   With Repaginate's "Confirm Page Breaks" each break is shown before it is
+   kept: the window shows the first line of the coming page, selected, the
+   page mark beside it, and "Repaginating Document" (dialog 9) asks; Up and
+   Down move the break a line (not above the page's first line, not below
+   where it falls), Confirm keeps it: moved, it becomes a page break
+   character (12) of its own paragraph before that line (WR31: "line 52",
+   then character 12, then "line 53"); Cancel ends repagination there. A
+   page break already in the text (character 12) is selected and dialog 10
+   asks "Would you like to keep this existing page break?": Keep, Remove
+   (the character deleted), Cancel. Afterwards the page table holds the
+   pages as confirmed. UNVERIFIED: Down past a moved break, a page that
+   starts with a picture. */
+
+static DWORD cbProposed, cbFirst, cbCand;  /* the break, its page's start, the candidate */
+static int cbEntry;                         /* its page table entry */
+
+static void cb_show(void)
+{
+    struct { WORD pgn, pad; DWORD cp; } e;
+    hm_get(&g_doc.pgtb, (DWORD)cbEntry * 8, &e, 8);
+    e.cp = cbCand;
+    hm_put(&g_doc.pgtb, (DWORD)cbEntry * 8, &e, 8);
+    /* only the pages so far, so the page box and marks show them (WR31) */
+    g_doc.npages = (DWORD)cbEntry + 1;
+    view_show_line(cbCand);
+    view_select(cbCand, view_line_end(cbCand), FALSE);
+    InvalidateRect(g_docwnd, NULL, TRUE);
+    UpdateWindow(g_docwnd);
+}
+
+BOOL CALLBACK __export ConfirmBreakDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    if (msg == WM_INITDIALOG)
+        return TRUE;
+    if (msg == WM_COMMAND) {
+        if (wp == 5) {                  /* Up */
+            DWORD c = view_line_before(cbCand);
+            if (c > cbFirst && c < cbCand) {
+                cbCand = c;
+                cb_show();
+            }
+            return TRUE;
+        }
+        if (wp == 6) {                  /* Down */
+            DWORD c = view_line_after(cbCand);
+            if (c > cbCand && c <= cbProposed) {
+                cbCand = c;
+                cb_show();
+            }
+            return TRUE;
+        }
+        if (wp == IDOK || wp == IDCANCEL) {
+            EndDialog(d, wp);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+BOOL CALLBACK __export KeepBreakDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    if (msg == WM_INITDIALOG)
+        return TRUE;
+    if (msg == WM_COMMAND && (wp == IDOK || wp == IDCANCEL || wp == 4)) {
+        EndDialog(d, wp);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static int cb_dialog(WORD id, FARPROC proc)
+{
+    FARPROC fp = MakeProcInstance(proc, g_hinst);
+    int r = DialogBox(g_hinst, MAKEINTRESOURCE(id), g_frame, (DLGPROC)fp);
+    FreeProcInstance(fp);
+    return r;
+}
+
+static void repag_confirm(PDEV *p)
+{
+    DWORD done = 0, i;
+    for (;;) {
+        struct { WORD pgn, pad; DWORD cp; } e, prev;
+        int r;
+        g_doc.npages = 0;
+        aborted = FALSE;
+        paginate(p, FALSE, add_page);
+        for (i = 1; i < g_doc.npages; i++) {
+            hm_get(&g_doc.pgtb, i * 8, &e, 8);
+            if (e.cp > done)
+                break;
+        }
+        if (i >= g_doc.npages)
+            return;
+        hm_get(&g_doc.pgtb, (i - 1) * 8, &prev, 8);
+        view_changed(0);
+        if (e.cp > 0 && doc_ch(&g_doc, e.cp - 1) == 12) {
+            /* a page break in the text */
+            g_doc.npages = i;
+            view_show_line(e.cp - 1);
+            view_select(e.cp - 1, e.cp, FALSE);
+            view_update_pageinfo();
+            InvalidateRect(g_docwnd, NULL, TRUE);
+            UpdateWindow(g_docwnd);
+            r = cb_dialog(IDD_KEEPBREAK, (FARPROC)KeepBreakDlgProc);
+            if (r == IDCANCEL)
+                return;
+            if (r == 4) {
+                undo_save(IDS_EDITING);
+                doc_delete(&g_doc, e.cp - 1, 1);
+                g_doc.dirty = TRUE;
+                done = e.cp - 1;
+            } else {
+                done = e.cp;
+            }
+            continue;
+        }
+        cbProposed = cbCand = e.cp;
+        cbFirst = prev.cp;
+        cbEntry = (int)i;
+        cb_show();
+        r = cb_dialog(IDD_CONFIRMBREAK, (FARPROC)ConfirmBreakDlgProc);
+        if (r == IDCANCEL)
+            return;
+        if (cbCand != cbProposed) {
+            CHPX c;
+            DWORD rf, rl;
+            ATOM32 ra;
+            undo_save(IDS_EDITING);
+            run_at(&g_doc, cbCand, &rf, &rl, &ra);
+            chp_decode(&g_doc, ra, &c);
+            doc_insert(&g_doc, cbCand, "\f", 1, chp_atom(&g_doc, &c));
+            g_doc.dirty = TRUE;
+            done = cbCand + 1;
+        } else {
+            done = cbProposed;
+        }
+    }
+}
+
+static BOOL confirmBreaks;
+
 BOOL CALLBACK __export RepagDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 {
     (void)lp;
@@ -483,6 +628,7 @@ BOOL CALLBACK __export RepagDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
             return TRUE;
         }
         if (wp == IDOK || wp == IDCANCEL) {
+            confirmBreaks = IsDlgButtonChecked(d, 3);
             EndDialog(d, wp);
             return TRUE;
         }
@@ -508,7 +654,16 @@ void cmd_repaginate(void)
     pdev_init(&p, dc);
     g_doc.npages = 0;
     aborted = FALSE;
-    paginate(&p, FALSE, add_page);
+    if (confirmBreaks) {
+        /* afterwards the selection is as before (WR31 C5: the page break
+           kept is no longer selected); breaks added before it move it */
+        DWORD f = g_selFirst, l = g_selLim, mac = g_doc.cpMac;
+        repag_confirm(&p);
+        f += g_doc.cpMac - mac;
+        l += g_doc.cpMac - mac;
+        view_select(f, l, FALSE);
+    } else
+        paginate(&p, FALSE, add_page);
     if (screen)
         ReleaseDC(g_docwnd, dc);
     else

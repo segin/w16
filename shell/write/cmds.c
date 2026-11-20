@@ -993,7 +993,8 @@ void menu_update(HMENU m)
     }
     /* a picture on the clipboard (WR28 E1) */
     EnableMenuItem(m, IDM_PASTESPECIAL, IsClipboardFormatAvailable(CF_BITMAP) ||
-                   IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_METAFILEPICT)
+                   IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_METAFILEPICT) ||
+                   ole_can_pastelink()
                    ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_PASTELINK, ole_can_pastelink() ? MF_ENABLED : MF_GRAYED);   /* WR30 E1 */
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
