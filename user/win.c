@@ -659,6 +659,24 @@ void destroy_abandoned(HWND h)
     free_window(w);
 }
 
+/* the window activated when the active one h goes: the first visible,
+   enabled top-level window that is not h, one h owns, or an icon's title
+   (US30 show on 3.1: with an icon above the next open window, the icon
+   became active; w16 activated the icon's title window, and when it did
+   so before the destruction, as 3.1 does, Task List's End Task and
+   tiling went wrong: boot test taskman) */
+static HWND next_after_destroy(HWND h)
+{
+    HWND t;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
+        PWND tw = PW(t);
+        if (t != h && (!h || tw->hwndOwner != h) && (tw->style & WS_VISIBLE) &&
+            !(tw->style & WS_DISABLED) && ((PCLS)tw->cls)->atom != 32772)
+            return t;
+    }
+    return 0;
+}
+
 BOOL destroy_window(HWND h)
 {
     PWND w = valid_wnd(h), p;
@@ -703,8 +721,9 @@ BOOL destroy_window(HWND h)
         return TRUE;
     /* (3.1 activates the next window before the window goes - US30 cbt:
        its ACTIVATE names the dying window as the active one - where w16
-       does it afterwards; doing it here broke Task List's End Task and
-       tiling, boot test taskman: left, docs/notes/user-audit-triage.md) */
+       does it afterwards; done here, with the same choice of window, Task
+       List's End Task and tiling went wrong: boot test taskman. Left:
+       docs/notes/user-audit-triage.md) */
     wasvis = is_visible(w);
     rc = w->rcWindow;
     if (wasvis)
@@ -719,19 +738,10 @@ BOOL destroy_window(HWND h)
         hwndFocus = 0;
     if (hwndActive && !valid_wnd(hwndActive)) {
         hwndActive = 0;
-        /* activate the next top-level window: not an icon's title (US30
-           show on 3.1: with an icon above the next open window, the icon
-           became active; w16 activated the icon's title window) */
         {
-            HWND t;
-            for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
-                PWND tw = PW(t);
-                if ((tw->style & WS_VISIBLE) && !(tw->style & WS_DISABLED) &&
-                    ((PCLS)tw->cls)->atom != 32772) {
-                    activate_window(t, FALSE);
-                    break;
-                }
-            }
+            HWND t = next_after_destroy(0);
+            if (t)
+                activate_window(t, FALSE);
         }
     }
     (void)rc;

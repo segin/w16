@@ -61,15 +61,6 @@ static void rec_add(const char *s)
     lstrcpy(rec + n, s);
 }
 
-/* the icon title window (class #32772): w16 makes it again at each
-   minimise and destroys it at each restore, 3.1 keeps it until its window
-   goes; its CBT calls are left out of the record */
-static BOOL is_title(HWND h)
-{
-    char c[8];
-    return h && GetClassName(h, c, sizeof c) && !lstrcmp(c, "#32772");
-}
-
 static char wname(HWND h)
 {
     return h == 0 ? '0' : h == hMain ? 'm' : h == ha ? 'a' : h == hb ? 'b' : '?';
@@ -98,10 +89,6 @@ static void drain(void)
 LRESULT FAR PASCAL __export __loadds cbt_proc(int code, WPARAM w, LPARAM l)
 {
     char t[24];
-    if ((code == HCBT_DESTROYWND && is_title((HWND)w)) ||
-        (code == HCBT_CREATEWND && !HIWORD((DWORD)((LPCBT_CREATEWND)l)->lpcs->lpszClass) &&
-         LOWORD((DWORD)((LPCBT_CREATEWND)l)->lpcs->lpszClass) == 32772))
-        return CallNextHookEx(hk, code, w, l);
     switch (code) {
     case HCBT_CREATEWND:
         /* the window is not known yet: its class's first letter */
@@ -208,10 +195,7 @@ static void sec_cbt(void)
         SendMessage(ha, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
         wsprintf(nm, "cbt.deny%d.zoomed", codes[k]);
         obs(nm, IsZoomed(ha));
-        /* not of a normal window: 3.1 does not activate it then, w16
-           does (left: docs/notes/user-audit-triage.md) */
-        if (IsZoomed(ha))
-            ShowWindow(ha, SW_RESTORE);
+        ShowWindow(ha, SW_RESTORE);
         MoveWindow(ha, 20, 20, 210, 160, TRUE);
         GetWindowRect(ha, &rc);
         wsprintf(nm, "cbt.deny%d.moved", codes[k]);
@@ -223,17 +207,7 @@ static void sec_cbt(void)
         if (IsWindow(ha))
             DestroyWindow(ha);
         wsprintf(nm, "cbt.deny%d", codes[k]);
-        /* a refused SETFOCUS in an activation: 3.1 then names the
-           activated window as the old focus, w16 none (left:
-           docs/notes/user-audit-triage.md); not compared */
-        if (codes[k] == HCBT_SETFOCUS) {
-            out("OBS ~");
-            out(nm);
-            out("=\"");
-            out(rec);
-            out("\"\r\n");
-        } else
-            obs_str(nm, rec);
+        obs_str(nm, rec);
         deny = -1;
     }
 }
