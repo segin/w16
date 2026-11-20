@@ -58,6 +58,7 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         push ds
         pop es
         mov byte [did1605], 1
+        call ini_read
         call xms_init
         jnc .memok
         mov dx, msg_nomem
@@ -163,8 +164,22 @@ patch_segs:
 ; xms_init: take all the extended memory XMS will give (Microsoft's DOSX
 ; leaves XMS with no free memory: DX1 xms_08_free, pm_xms_08), lock it
 ; and enable A20. CF if there is no XMS or too little memory.
-; Source: XMS 3.0 functions 08h (query free), 09h (allocate), 0Ch (lock),
-; 05h (local enable A20).
+; Source: XMS 3.0 functions 00h (version), 08h (query free), 09h
+; (allocate), 88h (query any free), 89h (allocate any), 0Ch (lock), 0Dh
+; (unlock), 0Ah (free), 05h (local enable A20).
+; 08h and 09h count KB in 16 bits, so one block is 65535 KB at most. On a
+; 386 w16 takes blocks until XMS has none left (up to XB_MAX), as many
+; as the driver gives: with an XMS 3.0 driver it asks with 88h and 89h
+; first (32-bit KB counts in EAX and EDX: the largest free block whatever
+; its size), then with 08h and 09h, unless SYSTEM.INI says [w16]
+; LargeMemory=0 (stock 3.1: 08h and 09h only, so no block over 64 MB;
+; ARCHITECTURE.md 9.6, "More than 64 MB"). Both are needed: Microsoft's
+; WSWAP, which starts DOSX, keeps a block of its own (64 MB at most) that
+; it gives only through its 08h/09h, while 88h/89h go past it to the
+; driver (XM1 as DOSX.EXE under WSWAP, 80 MB: 08h FFFFh, 88h 3A40h KB).
+; The blocks are sorted by address: the LDT and the IDT go at the start
+; of the lowest, the client's arena runs over all of them (arena_init).
+; On an 80286 (24-bit addresses, 16 MB at most) one 08h/09h block.
 xms_init:
         mov ax, 4300h
         int 2Fh
@@ -176,37 +191,57 @@ xms_init:
         mov [xms+2], es
         push ds
         pop es
-        mov ah, 08h
-        xor bx, bx
+        mov byte [xb_n], 0
+        mov byte [xms3], 0
+        cmp byte [is386], 0
+        je .one
+        cmp byte [xms_stock], 0
+        jne .more
+        mov ah, 00h
         call far [xms]
-        ; at least the LDT (64 KB) and 128 KB for the client
-        cmp ax, 192
-        jb .fail
-        mov [emb_kb], ax
-        mov dx, ax
-        mov ah, 09h
+        cmp ax, 0300h           ; the version, BCD
+        jb .more
+        mov byte [xms3], 1
+.more:  call xb_take
+        jnc .more
+        jmp .have
+.one:   call xb_take
+.have:  cmp byte [xb_n], 0
+        je .fail
+        cmp byte [xb_n], 1
+        je .low
+        cpu 386
+        call xb_sort
+        cpu 286
+.low:   ; the lowest block holds the LDT, the IDT, the ring-3 host stack
+        ; (and the trace buffer): one too small for them is given back
+        mov ax, [xb_end]
+        mov dx, [xb_end+2]
+        sub ax, [xb_lin]
+        sbb dx, [xb_lin+2]
+        cmp dx, LOW_MIN >> 16
+        ja .lowok
+        jb .small
+        cmp ax, LOW_MIN & 0FFFFh
+        jae .lowok
+.small: cmp byte [xb_n], 1
+        je .freeall
+        call xb_drop0
+        jmp .low
+.lowok: mov ah, 05h
         call far [xms]
         cmp ax, 1
-        jne .fail
-        mov [xms_h], dx
-        mov ah, 0Ch
-        call far [xms]
-        cmp ax, 1
-        jne .freefail
-        mov [emb_lin], bx
-        mov [emb_lin+2], dx
-        mov ah, 05h
-        call far [xms]
-        cmp ax, 1
-        jne .unlockfail
+        jne .freeall
         mov byte [xms_ok], 1
-        ; the end of the block
-        mov ax, [emb_kb]
-        mov dx, ax
-        shl ax, 10
-        shr dx, 6
-        add ax, [emb_lin]
-        adc dx, [emb_lin+2]
+        mov ax, [xb_lin]
+        mov dx, [xb_lin+2]
+        mov [emb_lin], ax
+        mov [emb_lin+2], dx
+        mov bl, [xb_n]
+        xor bh, bh
+        shl bx, 2
+        mov ax, [xb_end+bx-4]
+        mov dx, [xb_end+bx-2]
         mov [emb_end], ax
         mov [emb_end+2], dx
         ; the LDT first, then the client's memory
@@ -232,17 +267,351 @@ xms_init:
         mov [pool_lin+2], dx
         clc
         ret
-.unlockfail:
-        mov dx, [xms_h]
-        mov ah, 0Dh
-        call far [xms]
-.freefail:
-        mov dx, [xms_h]
-        mov ah, 0Ah
-        call far [xms]
+.freeall:
+        call xms_release
 .fail:  push ds
         pop es
         stc
+        ret
+
+; xb_take (real mode): one more block from XMS, locked, into the table
+; (xb_h, xb_lin, xb_end). With [xms3] 88h/89h are tried first, then
+; 08h/09h. CF if XMS has no block of 64 KB or more left or the table is
+; full. AX, BX, CX, DX changed (on a 386 the high halves are left 0:
+; 88h puts sizes and an address there, and the client DOSX EXECs finds
+; them as with 08h/09h).
+xb_take:
+        cmp byte [xb_n], XB_MAX
+        jae .none
+        cmp byte [xms3], 0
+        je .x2
+        cpu 386
+        mov ah, 88h
+        xor bl, bl
+        call far [xms]
+        mov edx, eax            ; the largest free block, KB
+        xor eax, eax
+        or bl, bl
+        jnz .x3c                ; not implemented (80h), nothing free (A0h)
+        cmp edx, EMB_KB_MAX
+        jbe .x3k
+        mov edx, EMB_KB_MAX
+.x3k:   cmp edx, 64
+        jb .x3c
+        mov [xb_kb], edx
+        mov ah, 89h
+        call far [xms]
+.x3c:   movzx eax, ax
+        movzx edx, dx
+        xor ecx, ecx
+        xor ebx, ebx
+        cpu 286
+        cmp ax, 1
+        je .got
+.x2:    mov ah, 08h
+        xor bx, bx
+        call far [xms]
+        cmp ax, 64
+        jb .none
+        mov [xb_kb], ax
+        mov word [xb_kb+2], 0
+        mov dx, ax
+        mov ah, 09h
+        call far [xms]
+        cmp ax, 1
+        jne .none
+.got:   mov [xb_hcur], dx
+        mov ah, 0Ch
+        call far [xms]
+        cmp ax, 1
+        jne .unfree
+        push si
+        push di
+        mov cx, dx              ; the address, CX:BX
+        mov al, [xb_n]
+        xor ah, ah
+        mov si, ax
+        shl si, 1
+        mov di, si
+        shl di, 1
+        mov ax, [xb_hcur]
+        mov [xb_h+si], ax
+        mov [xb_lin+di], bx
+        mov [xb_lin+di+2], cx
+        ; the end: xb_kb * 1024 bytes after the start
+        mov ax, [xb_kb]
+        mov dx, ax
+        shl ax, 10
+        shr dx, 6
+        mov si, [xb_kb+2]
+        shl si, 10
+        or dx, si
+        add ax, bx
+        adc dx, cx
+        mov [xb_end+di], ax
+        mov [xb_end+di+2], dx
+        inc byte [xb_n]
+        pop di
+        pop si
+        clc
+        ret
+.unfree:
+        mov dx, [xb_hcur]
+        mov ah, 0Ah
+        call far [xms]
+.none:  stc
+        ret
+
+; xb_sort (386, real mode): the table in address order (insertion sort)
+        cpu 386
+xb_sort:
+        push si
+        push di
+        mov si, 1
+.o:     mov al, [xb_n]
+        xor ah, ah
+        cmp si, ax
+        jae .d
+        mov di, si
+.i:     or di, di
+        jz .n
+        mov bx, di
+        shl bx, 2
+        mov eax, [xb_lin+bx-4]
+        cmp eax, [xb_lin+bx]
+        jbe .n
+        xchg eax, [xb_lin+bx]
+        mov [xb_lin+bx-4], eax
+        mov eax, [xb_end+bx-4]
+        xchg eax, [xb_end+bx]
+        mov [xb_end+bx-4], eax
+        shr bx, 1
+        mov ax, [xb_h+bx-2]
+        xchg ax, [xb_h+bx]
+        mov [xb_h+bx-2], ax
+        dec di
+        jmp .i
+.n:     inc si
+        jmp .o
+.d:     xor eax, eax
+        pop di
+        pop si
+        ret
+        cpu 286
+
+; xb_drop0: give the lowest block back and take it out of the table
+xb_drop0:
+        mov dx, [xb_h]
+        mov ah, 0Dh
+        call far [xms]
+        mov dx, [xb_h]
+        mov ah, 0Ah
+        call far [xms]
+        dec byte [xb_n]
+        push si
+        push di
+        push cx
+        push ds
+        pop es
+        mov si, xb_h + 2
+        mov di, xb_h
+        mov cx, XB_MAX - 1
+        rep movsw
+        mov si, xb_lin + 4
+        mov di, xb_lin
+        mov cx, (XB_MAX - 1) * 2
+        rep movsw
+        mov si, xb_end + 4
+        mov di, xb_end
+        mov cx, (XB_MAX - 1) * 2
+        rep movsw
+        pop cx
+        pop di
+        pop si
+        ret
+
+; xms_release (real mode): unlock and free every block taken
+xms_release:
+.l:     cmp byte [xb_n], 0
+        je .d
+        dec byte [xb_n]
+        mov bl, [xb_n]
+        xor bh, bh
+        shl bx, 1
+        mov dx, [xb_h+bx]
+        push dx
+        mov ah, 0Dh
+        call far [xms]
+        pop dx
+        mov ah, 0Ah
+        call far [xms]
+        jmp .l
+.d:     ret
+
+; ---------------------------------------------------------------------------
+; ini_read: w16's own key [w16] LargeMemory= from SYSTEM.INI, looked for in
+; DOSX's directory and then in the one above it (WINDOWS\SYSTEM\DOSX.EXE,
+; WINDOWS\SYSTEM.INI), as w16's WIN386 finds it. A value starting with 0
+; sets [xms_stock] (XMS 08h/09h only, as 3.1); no file, section or key
+; leaves it clear. Uses the transfer buffer (kpath, the file's text, a
+; line). ES = DS after.
+INI_LINE        equ tbuf + 300h         ; a line, at most 0FFh characters
+INI_BUF         equ tbuf + 400h         ; the file, 0C00h bytes at a time
+INI_BUFSZ       equ 0C00h
+ini_read:
+        call own_path
+        push ds
+        pop es
+        mov [ini_name], bx
+        call ini_try
+        jnc .d
+        ; the directory above: back from the '\' before the name to the
+        ; '\' or ':' before that
+        mov di, [ini_name]
+        cmp di, kpath
+        je .d
+        dec di
+.up:    cmp di, kpath
+        je .d
+        dec di
+        cmp byte [di], '\'
+        je .p
+        cmp byte [di], ':'
+        jne .up
+.p:     inc di
+        mov [ini_name], di
+        call ini_try
+.d:     ret
+
+; ini_try: SYSTEM.INI at [ini_name] in kpath, scanned line by line. CF if
+; it cannot be opened.
+ini_try:
+        mov di, [ini_name]
+        mov si, s_sysini
+.cp:    lodsb
+        mov [di], al
+        inc di
+        or al, al
+        jnz .cp
+        mov dx, kpath
+        mov ax, 3D00h
+        int 21h
+        jc .r
+        mov [ini_h], ax
+        mov byte [ini_sec], 0
+        xor cx, cx              ; the line's length so far
+.rd:    push cx
+        mov bx, [ini_h]
+        mov dx, INI_BUF
+        mov cx, INI_BUFSZ
+        mov ah, 3Fh
+        int 21h
+        pop cx
+        jc .eof
+        or ax, ax
+        jz .eof
+        mov si, INI_BUF
+        mov dx, ax
+.ch:    lodsb
+        cmp al, 0Ah
+        je .eol
+        cmp al, 0Dh
+        je .nx
+        cmp cx, 0FFh
+        jae .nx
+        mov di, cx
+        mov [INI_LINE + di], al
+        inc cx
+.nx:    dec dx
+        jnz .ch
+        jmp .rd
+.eol:   call ini_line
+        xor cx, cx
+        jmp .nx
+.eof:   call ini_line           ; a last line without a line feed
+        mov bx, [ini_h]
+        mov ah, 3Eh
+        int 21h
+        clc
+.r:     ret
+
+; ini_line: INI_LINE, CX characters: a section header, or the key in [w16]
+ini_line:
+        push si
+        push dx
+        mov si, INI_LINE
+        mov bx, si
+        add bx, cx              ; the line's end
+        call ini_blank
+        cmp si, bx
+        jae .d
+        cmp byte [si], '['
+        jne .key
+        mov di, s_w16sec
+        call ini_match
+        mov al, 0
+        jnz .sec
+        inc ax
+.sec:   mov [ini_sec], al
+        jmp .d
+.key:   cmp byte [ini_sec], 0
+        je .d
+        mov di, s_largemem
+        call ini_match
+        jnz .d
+        call ini_blank
+        cmp si, bx
+        jae .d
+        cmp byte [si], '='
+        jne .d
+        inc si
+        call ini_blank
+        mov al, 0
+        cmp si, bx
+        jae .set
+        cmp byte [si], '0'
+        jne .set
+        inc ax
+.set:   mov [xms_stock], al
+.d:     pop dx
+        pop si
+        ret
+
+; ini_blank: SI past blanks and tabs (up to BX)
+ini_blank:
+.l:     cmp si, bx
+        jae .d
+        cmp byte [si], ' '
+        je .n
+        cmp byte [si], 9
+        jne .d
+.n:     inc si
+        jmp .l
+.d:     ret
+
+; ini_match: does the text at SI (up to BX) start with the lower-case,
+; NUL-ended pattern at DI, in any case? ZF if so, SI then past it.
+ini_match:
+        push si
+.l:     mov ah, [di]
+        or ah, ah
+        jz .yes
+        cmp si, bx
+        jae .no
+        lodsb
+        cmp al, 'A'
+        jb .c
+        cmp al, 'Z'
+        ja .c
+        add al, 20h
+.c:     inc di
+        cmp al, ah
+        je .l
+.no:    pop si
+        or sp, sp               ; ZF clear
+        ret
+.yes:   add sp, 2
+        cmp al, al              ; ZF set
         ret
 
 ; ---------------------------------------------------------------------------
@@ -512,6 +881,37 @@ int24_rm:
         iret
 
 ; ---------------------------------------------------------------------------
+; own_path: the path DOSX was started from (the program name after the
+; environment strings) into kpath; BX = just past its last '\' or ':'
+; (where a file name of its directory goes). ES changed.
+own_path:
+        mov es, [psp_seg]
+        mov es, [es:2Ch]
+        xor si, si
+.env:   cmp byte [es:si], 0
+        je .envd
+.env1:  inc si
+        cmp byte [es:si-1], 0
+        jne .env1
+        jmp .env
+.envd:  add si, 3               ; the double NUL's second byte, the count
+        mov di, kpath
+        mov bx, kpath
+.pc:    mov al, [es:si]
+        mov [di], al
+        inc si
+        inc di
+        or al, al
+        jz .pd
+        cmp al, '\'
+        je .ps
+        cmp al, ':'
+        jne .pc
+.ps:    mov bx, di
+        jmp .pc
+.pd:    ret
+
+; ---------------------------------------------------------------------------
 ; run_kernel: start KRNL386.EXE (on a 386 or later) or KRNL286.EXE from
 ; DOSX's own directory with INT 21h 4B00h, as Pietrek ch. 1 and TK18
 ; describe; returns AL = its exit code (INT 21h AH=4Dh).
@@ -558,33 +958,8 @@ run_kernel:
         jb .tc
 .tend:  mov byte [di], 0Dh
         mov [ktail], bl
-        ; the directory DOSX was started from: the program path after
-        ; the environment strings
-        mov es, [psp_seg]
-        mov es, [es:2Ch]
-        xor si, si
-.env:   cmp byte [es:si], 0
-        je .envd
-.env1:  inc si
-        cmp byte [es:si-1], 0
-        jne .env1
-        jmp .env
-.envd:  add si, 3               ; the double NUL's second byte, the count
-        mov di, kpath
-        mov bx, kpath           ; just past the last '\' or ':'
-.pc:    mov al, [es:si]
-        mov [di], al
-        inc si
-        inc di
-        or al, al
-        jz .pd
-        cmp al, '\'
-        je .ps
-        cmp al, ':'
-        jne .pc
-.ps:    mov bx, di
-        jmp .pc
-.pd:    push ds
+        call own_path
+        push ds
         pop es
         mov [kname], bx
         mov si, s_krnl386
@@ -656,12 +1031,7 @@ cleanup:
 
         mov ah, 06h
         call far [xms]
-        mov dx, [xms_h]
-        mov ah, 0Dh
-        call far [xms]
-        mov dx, [xms_h]
-        mov ah, 0Ah
-        call far [xms]
+        call xms_release
 .d:     ret
 
 ; client_rm_reset (real mode): the client's real-mode traces: the

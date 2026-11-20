@@ -55,6 +55,8 @@
 # DROPIN_CYCLES in the environment: DOSBox's cycles= (default max, as
 # fast as the host allows; "fixed N" runs N instructions per millisecond)
 # DROPIN_CPUTYPE: DOSBox's cputype= instead (e.g. 486_slow, pentium_slow)
+# DROPIN_MEMSIZE: DOSBox's memsize= in MB (default 16; more than 64 needs
+# DOSBox-X, -p: boot-test case bigmem)
 # DROPIN_CONF: more dosbox.conf lines (sections and settings), e.g. a
 # [serial] section (tests/commprobe.sh)
 # DROPIN_TREEDIR=NAME: with -T, the tree goes to C:\NAME instead of C:\W16
@@ -263,7 +265,7 @@ mkdir -p "$work/clock"
 cp "$root/build/dos/CLOCKSET.COM" "$work/clock/" || { echo "missing $root/build/dos/CLOCKSET.COM (make dos)" >&2; exit 2; }
 common="[dosbox]
 $xdos
-memsize=16
+memsize=${DROPIN_MEMSIZE:-16}
 ${DROPIN_MACHINE:+machine=$DROPIN_MACHINE}
 [cpu]
 core=normal
