@@ -245,7 +245,7 @@ static int combine(HRGN dst, HRGN ha, HRGN hb, LPRGN rb, int mode)
     a = rgn_ptr(ha);
     b = hb ? rgn_ptr(hb) : rb;
     out = xptr(xo);
-    y = -0x7FFF;
+    y = -0x7FFF - 1;                    /* from -32768: every band */
     for (;;) {
         int na_, nb_, ya, yb, y1;
         WORD ia, ib, na, nb, ea, eb, start, cnt, k;

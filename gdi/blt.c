@@ -60,6 +60,30 @@ static void dev_rect(LPDC dc, int x, int y, int w, int h, int *px, int *py, int 
     *ph = max(p[1], p[3]) - *py;
 }
 
+/* a logical rectangle's corner and signed extents in device units */
+static void dev_ext(LPDC dc, int x, int y, int w, int h, int *px, int *py, int *pw, int *ph)
+{
+    int p[4];
+    p[0] = x;
+    p[1] = y;
+    p[2] = x + w;
+    p[3] = y + h;
+    dc_lp_to_dp(dc, p, 2);
+    *px = p[0];
+    *py = p[1];
+    *pw = p[2] - p[0];
+    *ph = p[3] - p[1];
+}
+
+/* a corner and a signed extent made the lower corner and a positive one */
+static void dev_norm(int *p, int *e)
+{
+    if (*e < 0) {
+        *p += *e;
+        *e = -*e;
+    }
+}
+
 BOOL GDIAPI PatBlt(HDC hdc, int x, int y, int w, int h, DWORD rop) /* GDI.29 */
 {
     LPDC dc = dc_out(hdc);
@@ -154,17 +178,29 @@ BOOL GDIAPI StretchBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, in
     if (!sdc)
         return FALSE;
     dc = dc_get(hdc);
-    if (w == ws && h == hs)
-        return BitBlt(hdc, x, y, w, h, hsrc, xs, ys, rop);
-    dev_rect(dc, x, y, w, h, &dx, &dy, &dw, &dh);
-    dev_rect(sdc, xs, ys, ws, hs, &sx, &sy, &sw, &sh);
-    if ((w < 0) != (ws < 0))
-        dw = -dw;
-    if ((h < 0) != (hs < 0))
-        dh = -dh;
-    if (dw == sw && dh == sh)
-        return BitBlt(hdc, x, y, w, h, hsrc, xs, ys, rop);
-    return stretch_blt(dc, dx, dy, dw, dh, sdc, sx + sdc->dcOrg.x, sy + sdc->dcOrg.y, sw, sh, rop);
+    /* both rectangles in device units, each DC with its own mapping: a
+       mirror is where the device extents' signs differ (a negative
+       extent or an axis the mapping turns round) */
+    {
+        int fx, fy;
+        dev_ext(dc, x, y, w, h, &dx, &dy, &dw, &dh);
+        dev_ext(sdc, xs, ys, ws, hs, &sx, &sy, &sw, &sh);
+        fx = (dw < 0) != (sw < 0);
+        fy = (dh < 0) != (sh < 0);
+        dev_norm(&dx, &dw);
+        dev_norm(&dy, &dh);
+        dev_norm(&sx, &sw);
+        dev_norm(&sy, &sh);
+        if (!dw || !dh)
+            return TRUE;
+        sx += sdc->dcOrg.x;
+        sy += sdc->dcOrg.y;
+        if (!fx && !fy && dw == sw && dh == sh) {
+            blt_out(dc, dx + dc->dcOrg.x, dy + dc->dcOrg.y, dw, dh, sdc, sx, sy, rop);
+            return TRUE;
+        }
+        return stretch_blt(dc, dx, dy, fx ? -dw : dw, fy ? -dh : dh, sdc, sx, sy, sw, sh, rop);
+    }
 }
 
 /* USER's window frames (Schulman ch. 8: the driver's FastBorder) */

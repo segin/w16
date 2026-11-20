@@ -39,8 +39,10 @@ NPDEVICE dev_open(LPCSTR name)
     if (h < 32)
         return 0;
     d = (NPDEVICE)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(DEVICE));
-    if (!d)
+    if (!d) {
+        FreeLibrary(h);
         return 0;
+    }
     d->hDriver = h;
     for (i = 0; i < 15 && name[i]; i++)
         d->name[i] = name[i];
@@ -50,6 +52,7 @@ NPDEVICE dev_open(LPCSTR name)
     gdi_loghex("dev_open: Enable at offset", OFFSETOF(d->fn[DRV_ENABLE]));
     if (!d->fn[DRV_ENABLE]) {
         LocalFree((HLOCAL)d);
+        FreeLibrary(h);
         return 0;
     }
     r = ((DRVENABLE)d->fn[DRV_ENABLE])(&d->info, 1, 0, 0, 0);
@@ -75,6 +78,7 @@ fail:
     if (d->hPDevice)
         GlobalFree(d->hPDevice);
     LocalFree((HLOCAL)d);
+    FreeLibrary(h);
     return 0;
 }
 
