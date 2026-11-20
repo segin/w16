@@ -42,10 +42,11 @@
  *   with hwnd 0 and lParam 0, then FreeLibrary; on a reload the menus go
  *   and [AddOns] is read again.
  * - The queries: see ext_message.
- * - Not done: 3.1 notices every file made or changed (KERNEL's FileCdr
- *   callback; w16's KERNEL keeps the callback but never calls it): until
- *   it reads the drive again FM_GETDRIVEINFO then gives FFFFFFFFh free
- *   bytes, and Search Results asks to be updated (WF14, WF17 first runs).
+ * - Files made or changed (KERNEL's FileCdr, main.c): a change in a
+ *   directory no window shows makes FM_GETDRIVEINFO give FFFFFFFFh free
+ *   bytes until the drive is read again (F5, a directory read: WF21); an
+ *   automatic reread sends no event (WF21's log as 3.1's); Search Results
+ *   asks to be updated (WF20; WF14, WF17 first runs).
  */
 #include "winfile.h"
 
@@ -385,6 +386,11 @@ LRESULT ext_message(UINT msg, WPARAM wp, LPARAM lp)
         }
         if (dos_freespace(drive + 1, &fr, &tot) != 0)
             fr = tot = 0;
+        else if (g_free_unknown & (1UL << drive))
+            fr = 0xFFFFFFFFUL;          /* a change seen through FileCdr in
+                                           a directory no window shows,
+                                           until the drive is read again
+                                           (WF21; 3.1's cache) */
         g->dwTotalSpace = tot;
         g->dwFreeSpace = fr;
         s_cpy(g->szPath, path, sizeof g->szPath);

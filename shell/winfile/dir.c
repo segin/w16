@@ -171,6 +171,7 @@ void dir_read(LPDIRWIN d)
     FINDBUF f;
     int a = ATTR_DIR | ATTR_READONLY | ATTR_ARCHIVE | ((d->attribs & ATTR_HS) ? ATTR_HS : 0);
 
+    g_free_unknown &= ~(1UL << d->drive);  /* the drive read again (WF21) */
     SendMessage(d->dirlb, WM_SETREDRAW, FALSE, 0);
     SendMessage(d->dirlb, LB_RESETCONTENT, 0, 0);
     arena_free(&d->darena);

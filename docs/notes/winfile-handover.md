@@ -90,7 +90,10 @@ this note is the working state.
   keeps its old size in the list: WF01), the question is posted, not
   asked at once (WF10's close, posted just after a change, closes File
   Manager), and a change while the box is up asks again after it (SNAP's
-  own screenshot files do that: obs WF20 shows three boxes). UNVERIFIED: the
+  own screenshot files did that in obs WF20: three boxes). A reread
+  puts the status bar on the selection's line; a change in a directory
+  no window shows makes FM_GETDRIVEINFO say FFFFFFFFh free until the
+  drive is read again (scenario WF21, FMX's log as 3.1's). UNVERIFIED: the
   "0xFFFFFFFF free bytes until the drive is reread" the brief mentions
   (not visible in WF20: w16 reads the free space at every paint); whether
   3.1 asks for a change on another drive or for File Manager's own
@@ -176,6 +179,9 @@ this note is the working state.
   3.1's focus is is not known; and 3.1's list box is 2 pixels taller:
   USER's whole-item height, the user/ agent's area).
 - Not compared: WF5 E06's one-line scroll; the Copy/Move progress text.
+- WF21 S02: after F5 with the file list focused 3.1's status bar keeps
+  "Selected 0 file(s) (0 bytes)"; w16's F5 (treewin.c IDM_REFRESH) always
+  shows the drive's free space. UNVERIFIED which focus or pane decides.
 - WF20 S04, S05: behind the "contents have changed" box 3.1's Search
   Results list keeps its selection filled; w16's draws it framed (the
   list lost the focus).

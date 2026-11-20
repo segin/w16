@@ -320,6 +320,7 @@ extern int g_dyitem;                    /* a list item's height */
 extern BOOL g_statusbar, g_minonrun, g_lower, g_saveonexit;
 extern BOOL g_confdel, g_confsubdel, g_confreplace, g_confmouse, g_confdisk;
 extern int g_dystatus;
+extern DWORD g_free_unknown;            /* FileCdr: free bytes unknown */
 extern HBITMAP g_strip;
 
 /* main.c */

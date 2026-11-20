@@ -25,6 +25,8 @@ BOOL g_statusbar = TRUE, g_minonrun, g_lower = TRUE, g_saveonexit = TRUE;
 BOOL g_confdel = TRUE, g_confsubdel = TRUE, g_confreplace = TRUE, g_confmouse = TRUE,
      g_confdisk = TRUE;
 int g_dystatus = 22;
+DWORD g_free_unknown;                   /* bit n: drive 'A' + n changed out
+                                           of sight (main.c file_changed) */
 
 static char cls_frame[] = "WFS_Frame";
 static HACCEL accel;
@@ -94,6 +96,8 @@ static void reread(LPDIRWIN d)
     HGLOBAL sel = dir_sel_save(d);
     dir_read(d);
     dir_sel_restore(d, sel);
+    status_set(d, ST_SELECTED);         /* the selection's line after it (WF21:
+                                           "Selected 0 file(s) (0 bytes)") */
 }
 
 /* one change: the windows showing its directory */
@@ -102,7 +106,7 @@ static void file_changed(WORD code, LPSTR path)
     char dir[PATHLEN];
     LPSTR name = path, p;
     BYTE f = HIBYTE(code);
-    BOOL isdir = f == 0x39 || f == 0x3A;
+    BOOL isdir = f == 0x39 || f == 0x3A, shown = FALSE;
     HWND w;
     for (p = path; *p; p++)
         if (*p == '\\' || *p == '/')
@@ -118,6 +122,7 @@ static void file_changed(WORD code, LPSTR path)
             tree_refresh(d);
         if (s_icmp(d->path, dir) != 0)
             continue;
+        shown = TRUE;
         if (f == 0x41 || f == 0x56 || f == 0x3A) {
             if (listed(d, name))
                 reread(d);
@@ -125,6 +130,10 @@ static void file_changed(WORD code, LPSTR path)
             reread(d);
         }
     }
+    /* a change no window shows: the drive's free bytes are not known
+       until it is read again (FM_GETDRIVEINFO: FFFFFFFFh; WF21) */
+    if (!shown && ((path[0] | 0x20) >= 'a' && (path[0] | 0x20) <= 'z'))
+        g_free_unknown |= 1UL << ((path[0] | 0x20) - 'a');
     search_changed(path[0]);
 }
 
