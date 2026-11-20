@@ -231,6 +231,71 @@ Seen, not followed (not the player's): in 3.1's Exit Windows box
 window behind it is drawn empty (no title, no icons); w16's Program
 Manager shows it whole.
 
+## Dragging the movie (2026-11-19)
+
+Task: a user's report (a hand session on w16's install tree alone, master
+4c18391, Standard mode, plain DOSBox). The user installed QuickTime,
+played the sample movie and dragged the movie's MDI window by its caption
+while it played. The move frame "just dances in place" and the whole UI
+hangs. Run names on installation-05: `w16-qtdrag` (scratch:
+`/mnt/build/w16-runs/w16-qtdrag-data`, with the QuickTime-installed tree
+of `/mnt/build/w16-qtclose-data/inst` and the checkout's build over it).
+
+**Reproduced** under both of the tree's kernels, with the movie playing
+and also with it stopped. On the press the frame appears around the
+window and never moves, though the pointer does. `[w16] hangwatch=30`
+ended Windows with every timer sample in DISPLAY:2: the frame being
+drawn. Mouse moves need 1-pixel `glide` steps there, or Windows'
+acceleration takes the pointer elsewhere.
+
+**The cause.** A scratch USER logged the messages its tracking loop got:
+nothing but message C3D6h (a registered message), hwnd 0, a new lParam
+each time. `trace=USER.110,USER.116` showed QTIM:7 calling PostAppMessage
+(the player's task, C3D6h) again and again, between PeekMessage(0, C3D6h,
+C3D6h, PM_REMOVE | PM_NOYIELD) calls of its own. `trace=USER.291`:
+QTIM:7 sets a system-wide WH_GETMESSAGE hook, and QTIM:10 a
+WH_CALLWNDPROC hook. So every message the player's task reads makes QTIM
+take its message out and post it again, and the player's queue always
+holds a posted message. w16's loop (`user/track.c`) was a GetMessage of
+everything. GetMessage takes posted messages before input, so the mouse
+never got in. Each C3D6h was "dispatched" with the frame erased and drawn
+again around it, which made the dance, and the queue never ran dry, so
+the task never yielded. A second fault in the same loop hit every
+program: it never dispatched WM_PAINT, which then stayed in the queue,
+so GetMessage always returned at once and no other task ran during any
+drag (US31 below: the other task got no ticks).
+
+**3.1** (probe US31, `tests/apps/us31.c`, as the shell under real mouse
+input; ARCHITECTURE.md 10.3 "The move and size loop"): the drag's loop
+takes only mouse and keyboard messages. No WM_TIMER, WM_PAINT or posted
+message reaches the owner during the drag, the WH_GETMESSAGE hook sees
+only WM_MOUSEMOVE and the release, and other tasks keep running. With
+QTIM's pattern copied into a hook (US31's second drag), the drag works on
+3.1. The window gets messages 231h and 232h around the tracking. While
+the frame shows, nothing drawn to a window appears on 3.1. In the Movie
+Player the picture stays as it was at the press, the movie's time goes on,
+and after the drop it shows the frame due then.
+
+**The fix** (`user/track.c` next_input): the loop takes mouse messages,
+then keyboard messages (PeekMessage with PM_REMOVE | PM_NOYIELD for each),
+and otherwise waits for input or a sent message (WaitEvent with the wake
+mask QS_MOUSE | QS_KEY | QS_SENDMESSAGE, or OldYield while another task's
+input is pending). Nothing else is dispatched, so QTIM's hook runs once
+per mouse message, as on 3.1. 231h is sent after WM_GETMINMAXINFO, and
+232h at the end. The cause is in track.c, not in `msg.c` or `timer.c`.
+
+**After the fix** (both kernels): the frame follows the pointer, the
+window drops where 3.1 drops it, the picture holds still during the drag
+as on 3.1 (the player's task, which draws it, is in the drag), and the
+movie plays on to its last frame at the new place.
+
+**Left over** (ARCHITECTURE.md 10.3):
+- 3.1 shows no drawing at all during a drag; w16 lets other tasks draw.
+- w16's SetWindowPos sends WM_NCCALCSIZE for a move alone.
+- After Esc, 3.1 sends WM_WINDOWPOSCHANGING alone.
+
+The last two are in `user/pos.c`.
+
 ## Debugging aids added (docs/w16-settings.md)
 
 - `[w16] hangwatch=SECONDS`: the boot watchdog kept running after the

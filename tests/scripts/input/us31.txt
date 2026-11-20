@@ -1,0 +1,43 @@
+; US31 (tests/apps/us31.c) as the shell: its window (40,40, 240 x 160)
+; dragged by its caption three times, 80 right and 40 down each time, in
+; 1-pixel steps (no mouse acceleration); the second drag with the probe's
+; QuickTime-like WH_GETMESSAGE pump going, the third cancelled with Esc
+click 1
+sleep 1
+home
+glide 1,1 52,0.02
+glide 1,0 100,0.02
+sleep 1
+down 1
+sleep 0.5
+glide 1,1 40,0.02
+sleep 1
+shot 01-drag
+glide 1,0 40,0.02
+sleep 1
+shot 02-drag
+up 1
+sleep 2
+shot 03-dropped
+down 1
+sleep 0.5
+glide 1,1 40,0.02
+sleep 1
+shot 04-drag
+glide 1,0 40,0.02
+sleep 1
+shot 05-drag
+up 1
+sleep 2
+shot 06-dropped
+down 1
+sleep 0.5
+glide 1,1 40,0.02
+sleep 1
+shot 07-drag
+key Escape
+sleep 0.5
+up 1
+sleep 2
+shot 08-cancelled
+waitexit 30
