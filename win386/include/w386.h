@@ -20,6 +20,8 @@ typedef unsigned long  w_u32;
 
 #define W386_MAGIC      0x36383357UL    /* "W386" */
 #define W386_VMM_LIN    0x80000000UL    /* linear base of the VMM window */
+#define W386_WINDOW_MAX 0x40000000UL    /* its largest size: the VMs' high
+                                           linear windows start at C0000000h */
 
 /* Breakpoints: ARPL (63h) bytes in the loader's code segment. In V86 mode
  * ARPL is an invalid opcode, so executing one traps to the VMM, which tells

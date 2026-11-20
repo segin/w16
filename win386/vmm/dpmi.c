@@ -340,11 +340,23 @@ static struct memblk *blocks;
 static u32 next_lin = 0x00400000;      /* client linear memory starts at 4 MB */
 static u32 next_handle = 1;
 
+/* The most pages one block can have with f pages free: a page table (4 MB)
+   of its own may be needed for every 1024 pages of it, and one more where
+   it starts within a table (0500h's largest block, mem_alloc's check). */
+static u32 mem_largest_pages(u32 f)
+{
+    u32 t = f / 1025 + 2;
+    return f > t ? f - t : 0;
+}
+
 static struct memblk *mem_alloc(u32 size)
 {
     struct memblk *b;
-    u32 n = (size + 4095) / 4096, i, p;
-    if (!size || n > pages_free()) return NULL;
+    u32 n = size / 4096 + (size % 4096 != 0), i, p;
+    /* the pages and their page tables free, and the client's linear
+       space (from 4 MB up to the VMM's window) not used up */
+    if (!size || n > mem_largest_pages(pages_free())) return NULL;
+    if (n >= (W386_VMM_LIN - next_lin) / 4096) return NULL;
     b = kmalloc(sizeof(*b));
     if (!b) return NULL;
     b->lin = next_lin;
@@ -352,7 +364,17 @@ static struct memblk *mem_alloc(u32 size)
     b->handle = next_handle++;
     for (i = 0; i < n; i++) {
         p = page_alloc();
-        if (!p || !map_page(b->lin + i * 4096, p, 7)) return NULL;
+        if (!p || !map_page(b->lin + i * 4096, p, 7)) {
+            /* give back what it took (the page tables stay) */
+            if (p) page_free(p);
+            while (i--) {
+                p = lin_to_phys(b->lin + i * 4096);
+                map_page(b->lin + i * 4096, 0, 0);
+                if (p) page_free(p & ~0xFFFu);
+            }
+            kfree(b);
+            return NULL;
+        }
     }
     next_lin += b->size + 4096;         /* a guard page between blocks */
     b->next = blocks;
@@ -549,7 +571,7 @@ static void dpmi_call(struct cregs *r)
         u32 *p = (u32 *)(sel_base(r->es) + reg_ofs(r, r->edi));
         u32 f = pages_free();
         for (i = 0; i < 12; i++) p[i] = 0xFFFFFFFF;
-        p[0] = f * 4096;                /* largest free block */
+        p[0] = mem_largest_pages(f) * 4096;     /* largest free block (0501h gives it) */
         p[1] = f;                       /* maximum unlocked page allocation */
         p[2] = f;                       /* maximum locked page allocation */
         p[3] = f;                       /* linear address space, pages */

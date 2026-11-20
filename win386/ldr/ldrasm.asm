@@ -4,7 +4,8 @@
 ;
 ; Linked with the loader's C code (Open Watcom, small model, __cdecl).
 ; Sources: Intel 80386 Programmer's Reference Manual (protected-mode entry
-; with paging, the return to real mode, V86 mode), XMS 2.0 specification.
+; with paging, the return to real mode, V86 mode), XMS 2.0 and 3.0
+; specifications.
 
         bits 16
         cpu 386
@@ -15,7 +16,7 @@ group DGROUP _DATA
 
 segment _TEXT public class=CODE use16
 
-global _cpu_is_386, _cpu_msw, _xms_call, _pm_go, _pm_exit, _bp_table, _rm_tramp
+global _cpu_is_386, _cpu_msw, _xms_call, _xms_call32, _pm_go, _pm_exit, _bp_table, _rm_tramp
 
 ; int cpu_is_386(void): 1 on an 80386 or later. FLAGS bits 12-15 are always
 ; set on an 8086/8088 and always clear in real mode on an 80286.
@@ -82,6 +83,32 @@ _xms_call:
         pop bx
         pop di
         pop si
+        pop bp
+        ret
+
+; void xms_call32(struct xregs32 *r): EAX, EBX, ECX, EDX from *r, the call
+; through _xms_entry, the four back into *r. For XMS 3.0's functions that
+; count in 32 bits (88h, 89h, 8Eh: XMS 3.0 specification).
+_xms_call32:
+        push bp
+        mov bp, sp
+        push esi
+        push edi
+        push ebx
+        mov di, [bp+4]
+        mov eax, [di]
+        mov ebx, [di+4]
+        mov ecx, [di+8]
+        mov edx, [di+12]
+        call far [_xms_entry]
+        mov di, [bp+4]
+        mov [di], eax
+        mov [di+4], ebx
+        mov [di+8], ecx
+        mov [di+12], edx
+        pop ebx
+        pop edi
+        pop esi
         pop bp
         ret
 
