@@ -12,7 +12,8 @@
 # installer (C:\TMP\QTINSTAL.EXE) from Program Manager, answers its five
 # boxes, lets "Play Sample" start the Movie Player with SAMPLE.MOV, and
 # plays it with Space, a shot every 2 seconds; then closes and reopens the
-# movie, pauses it, ends the player with File > Exit, starts it again from
+# movie, pauses it, plays it on and drags its window meanwhile (w16 hung
+# there until 2026-11-19), ends the player with File > Exit, starts it again from
 # Program Manager, opens the movie, ends it with Alt+F4, and ends Windows
 # (the close sequence: closing the player ended Windows with "Standard
 # Mode: Fault in MS-DOS Extender" on w16's tree alone, 2026-11-18).
@@ -55,7 +56,15 @@
 #     the movie's window opened again (c3-reopened, c6b-opened) is where
 #     3.1 puts it (what changed from c1-closed, c6-player: the same
 #     rectangle). The other screens (c2, c4, c5, c7, c8) are saved, not
-#     compared.
+#     compared;
+#   - the drag while playing (after c4-paused: Space, the movie's window
+#     dragged by its caption, the button held while arrow keys move it
+#     (the same drop under any load), and dropped, the movie left to end;
+#     w16 hung there until 2026-11-19, user/track.c): the window lands
+#     where 3.1 puts it (what changed from c4-paused to c4b-dropped, the
+#     pointer's columns left out: the same rectangle) and shows 3.1's last
+#     frame there, pixel for pixel.
+#     c4a-dragging (the frame mid-drag) is saved, not compared.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
 # the installer's boxes differ (docs/notes/quicktime-handover.md, "Left
@@ -236,6 +245,46 @@ if [ -f "$refdir/c6b-opened.png" ] && [ -f "$w/c6b-opened.png" ]; then
         echo "the movie's window in $b: $ra on 3.1, $wa on w16"
         [ "$ra" = "$wa" ] || fail "the movie's window in $b is $wa on w16, $ra on 3.1"
     done
+fi
+# the drag while the movie plays: where the movie's window landed (what
+# changed from c4-paused to c4b-dropped, its old place and its new one: the
+# same rectangle on both sides), and the picture in it at the end (the
+# window is in that rectangle's lower right, as big as the reopened one,
+# c1-closed to c3-reopened; the picture is the window less 24 rows at the
+# top, its border and caption, 20 at the bottom, the controller and
+# border, and 5 columns each side: the same pixels on both sides)
+dragged() {
+    # the pointer left out: where it was in c4-paused (x 312 on; the window
+    # ends left of it) and the top left corner, where the script puts it
+    # after the drop (a relative move lands where the host's load decides)
+    magick \( "$1/c4-paused.png" -fill black -draw "rectangle 312,0 639,479" \
+            -draw "rectangle 0,0 23,31" \) \
+        \( "$1/c4b-dropped.png" -fill black -draw "rectangle 312,0 639,479" \
+            -draw "rectangle 0,0 23,31" \) \
+        -compose difference -composite -threshold 0 -format '%@' info:
+}
+if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
+    ra=$(dragged "$refdir") wa=$(dragged "$w")
+    echo "the movie's window dragged while playing: $ra on 3.1, $wa on w16"
+    if [ "$ra" != "$wa" ]; then
+        fail "the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
+    else
+        ws=$(magick "$refdir/c1-closed.png" "$refdir/c3-reopened.png" -compose difference -composite \
+            -threshold 0 -format '%@' info:)
+        ws=${ws%%+*} sz=${ra%%+*} xy=${ra#*+}
+        ww=${ws%x*} wh=${ws#*x} bw=${sz%x*} bh=${sz#*x} bx=${xy%+*} by=${xy#*+}
+        crop="$((ww - 10))x$((wh - 44))+$((bx + bw - ww + 5))+$((by + bh - wh + 24))"
+        magick "$refdir/c4b-dropped.png" -crop "$crop" +repage "$out/drag-ref.png"
+        magick "$w/c4b-dropped.png" -crop "$crop" +repage "$out/drag-w16.png"
+        n=$(px "$out/drag-ref.png" "$out/drag-w16.png" "$out/drag-diff.png")
+        echo "the dragged movie's picture ($crop): $n pixels differ from 3.1's"
+        [ "$n" = 0 ] || fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"
+    fi
+elif [ -f "$refdir/c4b-dropped.png" ]; then
+    fail "the drag while the movie plays did not get to its drop on w16 ($w/input.log, $w/work/c/OUT.TXT)"
+elif [ -n "$newref" ] && [ -f "$refdir/c4-paused.png" ]; then
+    # (a -R run made before the drag existed has none)
+    fail "the drag while the movie plays did not get to its drop on 3.1 ($refdir/input.log)"
 fi
 if [ $fails = 0 ]; then echo "ok   qtplay: QuickTime installs and plays its sample movie as on 3.1 ($out)"; fi
 exit $(( fails > 0 ))

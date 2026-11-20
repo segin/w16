@@ -1884,6 +1884,22 @@ $(DOS)/US28.EXE: $(B)/tests/start.o $(B)/tests/us28.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us28.map file { $(B)/tests/start.o $(B)/tests/us28.o }
 dos: $(DOS)/US28.EXE
+# US31: a window dragged by its caption while timers, posted messages and
+# a WH_GETMESSAGE hook that keeps posting (QuickTime's) go on (tests/apps/us31.c)
+$(B)/tests/us31.o: tests/apps/us31ref.h tests/apps/tklog.h
+$(DOS)/US31.EXE: $(B)/tests/start.o $(B)/tests/us31.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31.map file { $(B)/tests/start.o $(B)/tests/us31.o }
+dos: $(DOS)/US31.EXE
+$(B)/tests/us31b.o: tests/apps/us31.c tests/apps/us31ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -DUS31_OTHER -fo=$@ tests/apps/us31.c
+$(DOS)/US31B.EXE: $(B)/tests/start.o $(B)/tests/us31b.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31b.map file { $(B)/tests/start.o $(B)/tests/us31b.o }
+dos: $(DOS)/US31B.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

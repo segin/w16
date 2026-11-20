@@ -591,6 +591,15 @@
 #              border, a corner and the client area; w16's USER and GDI
 #              against all-Microsoft: every screen and US22's log of mouse
 #              messages and WM_SETCURSOR identical
+#   trackmove  a window dragged by its caption (DefWindowProc's SC_MOVE,
+#              user/track.c) while its task's timer, posted messages and a
+#              QuickTime-like WH_GETMESSAGE hook that keeps posting go on,
+#              and another task's timer ticks: probe US31 as the shell
+#              (tests/scripts/input/us31.txt); w16's USER and GDI against
+#              all-Microsoft: US31's OBS lines identical (what the window
+#              gets during the drag, where it lands, the other task
+#              running); the screens are not compared (3.1 shows no
+#              window's drawing during a drag, w16 does)
 #   control    Control Panel under real keys (WIN.INI run=CONTROL.EXE,
 #              tests/scripts/input/control.txt): w16's CONTROL.EXE with
 #              Microsoft's applets against Microsoft's, on all-Microsoft
@@ -755,7 +764,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3510,6 +3519,32 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   sbmenu: the menu's $(grep -c '^PASS' "$out/sbmenu-on.log") checks pass; ScrollBarMenu=0 as 3.1 (log and screen)"
         else echo "FAIL sbmenu: $r"; fails=$((fails + 1)); fi ;;
+    trackmove)
+        # a drag's message loop (user/track.c): probe US31 as the shell,
+        # dragged three times (tests/scripts/input/us31.txt); its OBS lines
+        # against 3.1's
+        scr=$root/tests/scripts/input/us31.txt
+        refrun trackmove-ref trackmove "$root/tests/inputrun.sh" -s -b 40 -t 200 "$scr" "$out/trackmove-ref" -r \
+            -f "$root/build/dos/US31.EXE=US31.EXE" -f "$root/build/dos/US31B.EXE=US31B.EXE" -i 'boot:shell=C:\US31.EXE'
+        "$root/tests/inputrun.sh" -s -b 40 -t 200 "$scr" "$out/trackmove-w16" -r \
+            -f "$root/build/dos/US31.EXE=US31.EXE" -f "$root/build/dos/US31B.EXE=US31B.EXE" -i 'boot:shell=C:\US31.EXE' \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" -i w16:hangwatch=30 \
+            > "$out/trackmove-w16.txt" 2>&1 || true
+        for k in ref w16; do
+            f=$out/trackmove-$k/work/c/WINDOWS/TK.LOG
+            if [ -f "$f" ]; then tr -d '\r' < "$f" > "$out/trackmove-$k.log"; else : > "$out/trackmove-$k.log"; fi
+            grep '^OBS [^~]' "$out/trackmove-$k.log" > "$out/trackmove-$k.obs" || true
+        done
+        if ! grep -q '^US31 done' "$out/trackmove-ref.log"; then
+            echo "FAIL trackmove: US31 did not finish on 3.1 ($out/trackmove-ref.log)"; fails=$((fails + 1))
+        elif ! grep -q '^US31 done' "$out/trackmove-w16.log"; then
+            echo "FAIL trackmove: US31 did not finish on w16 ($out/trackmove-w16.log, trackmove-w16/work/c/OUT.TXT)"; fails=$((fails + 1))
+        elif ! cmp -s "$out/trackmove-ref.obs" "$out/trackmove-w16.obs"; then
+            echo "FAIL trackmove: $(diff "$out/trackmove-ref.obs" "$out/trackmove-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/trackmove-ref.obs, trackmove-w16.obs)"
+            fails=$((fails + 1))
+        else
+            echo "ok   trackmove"
+        fi ;;
     capcursor)
         # the cursor after a capture ends (user/input.c ReleaseCapture,
         # user/defwnd.c WM_SETCURSOR): probe US22 as the shell, the mouse

@@ -135,8 +135,9 @@ QuickTime-installed drive, also QuickTime's MCIQTW.DRV; one run alone:
 `tests/mmsystem/mcirun.sh OUT ms|w16 SCRIPT [plain|shim|qt]`; part
 `mci`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1,
-then the player closed, reopened and ended with File > Exit and Alt+F4
-and Windows ended (the close sequence); `-T 286` or `-T 386`: on w16's
+then the player closed, reopened, its movie's window dragged while it
+plays, and ended with File > Exit and Alt+F4 and Windows ended (the close
+sequence); `-T 286` or `-T 386`: on w16's
 install tree alone as C:\W16 instead, under its KRNL286 or KRNL386;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;

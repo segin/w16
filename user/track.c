@@ -19,6 +19,42 @@
 extern HBRUSH hbrGray;
 extern HDC hdcScreen;
 void minmax(PWND w, MINMAXINFO __far *mm);
+BOOL journal_active(void);
+
+/* 3.1 sends these around the tracking (probe US31: 231h after
+   WM_GETMINMAXINFO, 232h after the window was placed, also when Esc left
+   it; wParam and lParam 0); Win32 later documented them as
+   WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE */
+#define WM_ENTERSIZEMOVE_ 0x0231
+#define WM_EXITSIZEMOVE_  0x0232
+
+/* The next mouse or keyboard message for the tracking. 3.1's loop takes
+   input only (US31: the owner's WM_TIMER, WM_PAINT and posted messages
+   wait until the drop, and a WH_GETMESSAGE hook sees only the mouse
+   messages) and lets other tasks run meanwhile (US31's other task got
+   its timer ticks all through the drag). A GetMessage of everything here
+   hung w16 under QuickTime's Movie Player: QTIM.DLL's WH_GETMESSAGE hook
+   posts its message to the player again each time it is called, so the
+   queue never ran dry and posted messages, read before input, kept the
+   mouse out; nor did the WM_PAINT left in the queue (never dispatched
+   here) ever let the loop wait (docs/notes/quicktime-handover.md). */
+static void next_input(MSG *m)
+{
+    for (;;) {
+        QUEUE __far *q;
+        if (PeekMessage(m, 0, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE | PM_NOYIELD) ||
+            PeekMessage(m, 0, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE | PM_NOYIELD))
+            return;
+        /* the mask first, then the look: an event in between still wakes
+           the task (set_wakebit) */
+        q = q_of(cur_hq());
+        q->wakemask = QS_MOUSE | QS_KEY | QS_SENDMESSAGE;
+        if (input_pending || (q->wakebits & QS_SENDMESSAGE) || journal_active())
+            K_OLDYIELD();       /* another task's input, or polled playback */
+        else
+            K_WAITEVENT(0);
+    }
+}
 
 static void xor_frame(const RECT *r, int t)
 {
@@ -86,6 +122,9 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
         return;
     mn = mm.ptMinTrackSize;
     mx = mm.ptMaxTrackSize;
+    send_message(h, WM_ENTERSIZEMOVE_, 0, 0);
+    if (!(w = valid_wnd(h)))
+        return;
     GetCursorPos(&porig);
     if (keyboard) {
         POINT c;
@@ -111,10 +150,7 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     drawn = TRUE;
     while (!done) {
         POINT p;
-        if (!GetMessage(&m, 0, 0, 0)) {
-            PostQuitMessage(m.wParam);
-            break;
-        }
+        next_input(&m);
         switch (m.message) {
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
@@ -175,24 +211,8 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
             }
             }
             break;
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-        case WM_CHAR:
-        case WM_SYSCHAR:
-        case WM_NCLBUTTONDOWN:
-            break;                      /* taken by the tracking */
         default:
-            /* other messages (timers, posted ones) go on; painting waits
-               until the frame is gone */
-            if (m.message != WM_PAINT) {
-                if (drawn)
-                    xor_frame(&shown, t);
-                DispatchMessage(&m);
-                xor_frame(&shown, t);
-            }
-            break;
+            break;                      /* other input: taken by the tracking */
         }
         if (!valid_wnd(h))
             return;
@@ -214,4 +234,8 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
                      SWP_NOZORDER | SWP_NOACTIVATE |
                      (hit == HTCAPTION ? SWP_NOSIZE : 0));
     }
+    /* (when Esc left the window where it was, 3.1 sent it a
+       WM_WINDOWPOSCHANGING alone before this, US31; w16 places nothing) */
+    if (valid_wnd(h))
+        send_message(h, WM_EXITSIZEMOVE_, 0, 0);
 }
