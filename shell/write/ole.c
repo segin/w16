@@ -978,7 +978,7 @@ void cmd_links(void)
         ((WOBJ **)LocalLock(hlinks))[nlinks++] = o;
         LocalUnlock(hlinks);
     }
-    unavail = (BOOL *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (nlinks + 1) * sizeof(BOOL));
+    unavail = (BOOL NEAR *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (nlinks + 1) * sizeof(BOOL));
     if (unavail) {
         undo_save(IDS_EDITING);
         fp = MakeProcInstance((FARPROC)LinksDlgProc, g_hinst);
