@@ -1469,14 +1469,9 @@ void view_char(WORD ch)
     typing = TRUE;
     view_char2(ch, s);
     typing = FALSE;
-    /* typed on the end mark's line (the document's last), the caret stays
-       off until it blinks (WR1, WR18); in a paragraph before
-       it, it shows (WR3: typing before the paragraph mark that Paragraph >
-       Normal added). UNVERIFIED beyond these */
-    if (g_selFirst == g_selLim && line_start(g_selFirst) != line_start(g_doc.cpMac)) {
-        caretDefer = FALSE;
-        caret_place();
-    }
+    /* after typing the caret stays off until it blinks, wherever it is
+       typed (WR1, WR18, WR24 R4; WR3's shot, taken at once after the
+       typing, had it: the original hides it a moment later) */
 }
 
 static void view_char2(WORD ch, char *s)
@@ -1601,13 +1596,19 @@ static void page_move(BOOL down)
 void view_key(WPARAM vk)
 {
     BOOL shift = GetKeyState(VK_SHIFT) < 0, ctrl = GetKeyState(VK_CONTROL) < 0;
-    DWORD cp, to;
+    DWORD cp, to, top0;
     LINE ln;
     if (g_selFirst == g_selLim)
         selAnchor = g_selFirst;
     cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
     to = cp;
-    caretDefer = menuShown = FALSE;
+    /* the arrows keep the caret's phase: off after typing it stays off
+       (WR24 R5: Up after typing), unless the window scrolls; the other
+       keys show it (WR18 S5: Ctrl+Home, Page Down, then Down) */
+    menuShown = FALSE;
+    if (vk != VK_LEFT && vk != VK_RIGHT && vk != VK_UP && vk != VK_DOWN)
+        caretDefer = FALSE;
+    top0 = cpTop;
     if (vk == VK_DELETE)
         undo_save(IDS_EDITING);
     else
@@ -1693,6 +1694,10 @@ void view_key(WPARAM vk)
     } else {
         selAnchor = to;
         view_select(to, to, TRUE);
+    }
+    if (cpTop != top0 && caretDefer) {
+        caretDefer = FALSE;
+        caret_place();
     }
 }
 
