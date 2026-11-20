@@ -250,6 +250,7 @@ typedef struct {
     /* page table */
     HMEM pgtb;                          /* {WORD pgn; DWORD cp} as 8 bytes */
     DWORD npages;
+    WORD pgtbMax;                       /* PGTB's second word: its room */
     ATOM32 chpNew;                      /* properties when there is no text */
     WORD ident;                         /* BE31 or BE32 */
     BOOL dirty;
@@ -366,6 +367,7 @@ BOOL  parse_measure(const char *s, long *tw, BOOL allowNeg);
 void  fmt_measure(char *s, long tw);
 void  cmd_print(void);
 void  cmd_printsetup(void);
+void  printer_font(char *face, BYTE *ffid);
 void  cmd_repaginate(void);
 void  undo_save(WORD kind);
 void  undo_end_typing(void);

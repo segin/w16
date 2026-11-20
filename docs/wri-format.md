@@ -204,8 +204,9 @@ page is undefined.
 
 ## Page table (PGTB)
 
-Written by Repaginate (and printing, UNVERIFIED): word count, word count
-(the same), then per page {word page number, dword cp of its first
+Written by Repaginate and by printing (WR29): word count, word room (the
+same in Microsoft's files; 10 for 2 pages that 3.1's Write paginated
+itself, WR29: room in tens, UNVERIFIED past 10), then per page {word page number, dword cp of its first
 character}. Spans pages when long. The rest is undefined.
 
 ## Font table (FFNTB)

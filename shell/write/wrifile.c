@@ -219,6 +219,7 @@ int doc_load(DOC *d, LPCSTR path, BOOL *isText)
                 hm_put(&d->pgtb, i * 8, &e, 8);
             }
             d->npages = n;
+            d->pgtbMax = rw(pg + 2);
         }
     }
     /* fonts */
@@ -454,10 +455,10 @@ int doc_save(DOC *d, LPCSTR path, int format)
     pnPgtb = pn;
     if (d->npages && !word) {
         DWORD i;
-        WORD n = (WORD)d->npages;
+        WORD n = (WORD)d->npages, m = d->pgtbMax < n ? n : d->pgtbMax;
         o = 0;
         put_bytes(&o, &n, 2);
-        put_bytes(&o, &n, 2);
+        put_bytes(&o, &m, 2);
         for (i = 0; i < d->npages; i++) {
             struct { WORD pgn, pad; DWORD cp; } e;
             hm_get(&d->pgtb, i * 8, &e, 8);

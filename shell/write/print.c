@@ -12,9 +12,11 @@
  * ENDDOC escapes (the original imports Escape, not StartDoc), the
  * "Now Printing" box (dialog 6) cancelling through an abort procedure.
  *
- * UNVERIFIED: the reference install has no printer driver, so how the
- * original's printed page looks (and its page breaks) could not be
- * observed; headers, footers and Confirm Page Breaks are the plan.
+ * Checked against 3.1 with the Generic / Text Only driver from the Setup
+ * disks on a file port (WR29: the bytes it writes are identical): pages,
+ * a page break, running heads with the page number, the first-page
+ * option, the page table printing fills. Other printers UNVERIFIED;
+ * Confirm Page Breaks is the plan.
  */
 #include "write.h"
 #include <commdlg.h>
@@ -27,6 +29,7 @@ typedef struct {
     HFONT font, oldFont;
     CHPX cur;
     BOOL haveFont;
+    WORD pgn;                           /* the page being drawn */
 } PDEV;
 
 static BOOL aborted;
@@ -121,6 +124,10 @@ static DWORD do_line(PDEV *p, DWORD cp, DWORD pf, DWORD pl, const PAPX *pap, int
         if (ch == '\t') {
             int t = tw(p, 720, FALSE);
             w = (x / t + 1) * t - x;
+        } else if (ch == 1) {
+            char n[8];
+            s_utoa(n, p->pgn);
+            w = LOWORD(GetTextExtent(p->dc, n, s_len(n)));
         } else {
             w = extent(p, c, 1);
         }
@@ -170,9 +177,23 @@ static DWORD do_line(PDEV *p, DWORD cp, DWORD pf, DWORD pl, const PAPX *pap, int
             GetTextMetrics(p->dc, &tm);
             while (c + n < e && c + n < rl && n < sizeof buf) {
                 BYTE ch = doc_ch(&g_doc, c + n);
-                if (ch == '\t')
+                if (ch == '\t' || ch == 1 || ch == 12)
                     break;
                 buf[n++] = ch;
+            }
+            if (!n && doc_ch(&g_doc, c) == 12) {
+                c++;                    /* a page break: no ink */
+                continue;
+            }
+            if (!n && doc_ch(&g_doc, c) == 1) {
+                /* a running head's page number (WR29: "Head-2") */
+                char num[8];
+                int up = MulDiv(chp.hpsPos, p->dpiY, 144);
+                s_utoa(num, p->pgn);
+                TextOut(p->dc, xx, base - tm.tmAscent - up, num, s_len(num));
+                xx += LOWORD(GetTextExtent(p->dc, num, s_len(num)));
+                c++;
+                continue;
             }
             if (n) {
                 int up = MulDiv(chp.hpsPos, p->dpiY, 144);
@@ -189,6 +210,73 @@ static DWORD do_line(PDEV *p, DWORD cp, DWORD pf, DWORD pl, const PAPX *pap, int
     return end;
 }
 
+/* The running heads on page pgn (WR29, Generic / Text Only): the header's
+   top yaHeader from the page's top, the footer's bottom yaFooter from its
+   bottom; their indents count from the page's edges; neither on the
+   first page unless its paragraph says so (rhc bit 3, SDK ch. 8); the
+   page number (character 1) printed as the number. */
+static void running_heads(PDEV *p, const SEPX *s, BOOL first)
+{
+    DWORD i;
+    int pass;
+    PDEV q = *p;
+    q.x0 = 0;
+    q.width = tw(p, s->xaMac, FALSE);
+    for (pass = 0; pass < 2; pass++) {
+        int y, h, total = 0, lineH = 0;
+        DWORD pf, pl, cp;
+        for (i = 0; i < g_doc.nparas; i++) {
+            ATOM32 a;
+            PAPX pap;
+            para_get(&g_doc, i, &pf, &pl, &a);
+            pap_decode(&g_doc, a, &pap);
+            if (!(pap.rhc & 6))
+                break;
+            if ((pap.rhc & 1) != pass || (first && !(pap.rhc & 8)))
+                continue;
+            for (cp = pf; cp < pl && cp < g_doc.cpMac;) {
+                DWORD next = do_line(&q, cp, pf, pl, &pap, 0, FALSE, &h);
+                total += h;
+                if (!lineH)
+                    lineH = h;
+                if (next <= cp)
+                    break;
+                cp = next;
+            }
+        }
+        /* (yaFooter counts from the page's top: 14760 for 0.75") */
+        y = pass ? tw(p, s->yaFooter, TRUE) - total : tw(p, s->yaHeader, TRUE);
+        /* a line lower than its distance says (WR29, Generic / Text
+           Only at 6 lines an inch: the header at 0.75" prints on line
+           5, the footer, bottom at 0.75" from the bottom, on line 61;
+           at the distance itself TTY puts them on lines 4 and 60, half a
+           line lower changes nothing; UNVERIFIED: the rule on other
+           printers) */
+        y += lineH;
+        for (i = 0; i < g_doc.nparas; i++) {
+            ATOM32 a;
+            PAPX pap;
+            para_get(&g_doc, i, &pf, &pl, &a);
+            pap_decode(&g_doc, a, &pap);
+            if (!(pap.rhc & 6))
+                break;
+            if ((pap.rhc & 1) != pass || (first && !(pap.rhc & 8)))
+                continue;
+            for (cp = pf; cp < pl && cp < g_doc.cpMac;) {
+                DWORD next = do_line(&q, cp, pf, pl, &pap, y, TRUE, &h);
+                y += h;
+                if (next <= cp)
+                    break;
+                cp = next;
+            }
+        }
+    }
+    p->font = q.font;
+    p->oldFont = q.oldFont;
+    p->cur = q.cur;
+    p->haveFont = q.haveFont;
+}
+
 /* Lay the document out in pages; page(n, cpFirst) is told each page's
    start; with draw, the pages are drawn too (and framed with NEWFRAME). */
 static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
@@ -203,8 +291,23 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
     p->x0 = tw(p, s.xaLeft, FALSE);
     p->y0 = tw(p, s.yaTop, TRUE);
     pgn = s.pgnFirst ? s.pgnFirst : 1;
-    if (page)
-        page(pgn, 0);
+    p->pgn = pgn;
+    if (page) {
+        /* page 1 starts with the body, after the running heads (WR29) */
+        DWORD body = 0, f, l;
+        ATOM32 a;
+        PAPX q;
+        for (i = 0; i < g_doc.nparas; i++) {
+            para_get(&g_doc, i, &f, &l, &a);
+            pap_decode(&g_doc, a, &q);
+            body = f;
+            if (!(q.rhc & 6))
+                break;
+        }
+        page(pgn, body);
+    }
+    if (draw)
+        running_heads(p, &s, TRUE);
     for (i = 0; i < g_doc.nparas && !aborted; i++) {
         DWORD pf, pl;
         ATOM32 a;
@@ -213,6 +316,8 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
         pap_decode(&g_doc, a, &pap);
         if (pf >= g_doc.cpMac && i + 1 == g_doc.nparas)
             break;
+        if (pap.rhc & 6)
+            continue;                   /* running heads: on every page */
         if (pap.fGraphics) {
             PICT pic;
             int h;
@@ -222,8 +327,11 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
                 if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                     return FALSE;
                 y = 0;
+                p->pgn = ++pgn;
                 if (page)
-                    page(++pgn, pf);
+                    page(pgn, pf);
+                if (draw)
+                    running_heads(p, &s, FALSE);
             }
             if (draw)
                 pict_draw(p->dc, &pic, p->x0 + tw(p, (long)pap.dxaLeft + pic.dxaOffset, FALSE),
@@ -238,8 +346,11 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
                 if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                     return FALSE;
                 y = 0;
+                p->pgn = ++pgn;
                 if (page)
-                    page(++pgn, cp);
+                    page(pgn, cp);
+                if (draw)
+                    running_heads(p, &s, FALSE);
             }
             if (draw)
                 do_line(p, cp, pf, pl, &pap, p->y0 + y, TRUE, &h);
@@ -255,8 +366,11 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
             if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                 return FALSE;
             y = 0;
+            p->pgn = ++pgn;
             if (page)
-                page(++pgn, pl);
+                page(pgn, pl);
+            if (draw)
+                running_heads(p, &s, FALSE);
         }
     }
     release_font(p);
@@ -285,6 +399,52 @@ static HDC printer_dc(void)
     return CreateDC(drv, dev, port, NULL);
 }
 
+/* A new document's font: Arial, as the printer realizes it. A printer
+   without it gives its own face (WR29: Generic / Text Only makes the
+   font table "Roman 10cpi", family 30h, and the screen shows it so);
+   with no printer, Arial (WR1). */
+void printer_font(char *face, BYTE *ffid)
+{
+    char dev[128], *drv, *port;
+    int i;
+    HDC ic;
+    s_cpy(face, "Arial", LF_FACESIZE);
+    *ffid = FF_SWISS;
+    GetProfileString("windows", "device", "", dev, sizeof dev);
+    for (i = 0, drv = port = NULL; dev[i]; i++)
+        if (dev[i] == ',') {
+            dev[i] = 0;
+            if (!drv)
+                drv = dev + i + 1;
+            else if (!port)
+                port = dev + i + 1;
+        }
+    if (!dev[0] || !drv || !port)
+        return;
+    ic = CreateIC(drv, dev, port, NULL);
+    if (ic) {
+        LOGFONT lf;
+        TEXTMETRIC tm;
+        HFONT f, o;
+        char got[LF_FACESIZE + 1];
+        m_set(&lf, 0, sizeof lf);
+        lf.lfHeight = -MulDiv(20, GetDeviceCaps(ic, LOGPIXELSY), 144);
+        lf.lfPitchAndFamily = FF_SWISS;
+        s_cpy(lf.lfFaceName, "Arial", LF_FACESIZE);
+        f = CreateFontIndirect(&lf);
+        o = SelectObject(ic, f);
+        GetTextFace(ic, sizeof got, got);
+        GetTextMetrics(ic, &tm);
+        SelectObject(ic, o);
+        DeleteObject(f);
+        DeleteDC(ic);
+        if (got[0] && s_icmp(got, "Arial")) {
+            s_cpy(face, got, LF_FACESIZE);
+            *ffid = (BYTE)(tm.tmPitchAndFamily & 0xF0);
+        }
+    }
+}
+
 static void pdev_init(PDEV *p, HDC dc)
 {
     m_set(p, 0, sizeof *p);
@@ -298,6 +458,10 @@ static void pdev_init(PDEV *p, HDC dc)
 static void add_page(WORD pgn, DWORD cp)
 {
     struct { WORD pgn, pad; DWORD cp; } e;
+    /* the table's room grows by tens when Write paginates (WR29: 2
+       pages, room 10; files it loads keep theirs; UNVERIFIED past 10) */
+    if (g_doc.npages + 1 > g_doc.pgtbMax)
+        g_doc.pgtbMax = (WORD)((g_doc.npages + 10) / 10 * 10);
     if ((g_doc.npages + 1) * 8 > g_doc.pgtb.size &&
         !hm_resize(&g_doc.pgtb, g_doc.pgtb.size * 2 + 64))
         return;
@@ -397,7 +561,10 @@ void cmd_print(void)
     m_set(&pd, 0, sizeof pd);
     pd.lStructSize = sizeof pd;
     pd.hwndOwner = g_frame;
-    pd.Flags = PD_RETURNDC | PD_NOSELECTION | PD_NOPAGENUMS;   /* UNVERIFIED flags */
+    /* Pages enabled, From 1 To 1 (WR29); Selection without one grayed */
+    pd.Flags = PD_RETURNDC | (g_selFirst == g_selLim ? PD_NOSELECTION : 0);
+    pd.nFromPage = pd.nToPage = pd.nMinPage = 1;
+    pd.nMaxPage = 32767;
     pd.nCopies = 1;
     if (!PrintDlg(&pd)) {
         if (CommDlgExtendedError())
@@ -420,7 +587,10 @@ void cmd_print(void)
     ok = Escape(pd.hDC, STARTDOC, s_len(title), title, NULL) > 0;
     if (ok) {
         pdev_init(&p, pd.hDC);
-        ok = paginate(&p, TRUE, NULL);
+        /* printing fills the page table too (WR29: PGTB {1, 14} {2, 18}) */
+        g_doc.npages = 0;
+        ok = paginate(&p, TRUE, add_page);
+        g_doc.dirty = TRUE;
         if (!aborted)
             Escape(pd.hDC, ENDDOC, 0, NULL, NULL);
     }
