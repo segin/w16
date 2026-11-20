@@ -16,9 +16,20 @@
 ; to_pm: real mode -> ring 0. IF = 0, DS = image. Near call; returns at
 ; ring 0 with DS = ES = SS = G_HD0, SP unchanged. AX changed.
 to_pm:
-        lgdt [gdtr]
+        ; with a 16-bit operand size LGDT and LIDT take 24 bits of the
+        ; base (Intel 80386 Programmer's Reference, LGDT/LIDT): the IDT
+        ; is in extended memory, which on a 386 may be above 16 MB (XMS
+        ; 89h gives blocks there), so a 386 loads all 32
+        cmp byte [is386], 0
+        je .t286
+        cpu 386
+        o32 lgdt [gdtr]
+        o32 lidt [idtr]
+        cpu 286
+        jmp .tset
+.t286:  lgdt [gdtr]
         lidt [idtr]
-        smsw ax
+.tset:  smsw ax
         or al, 1
         lmsw ax
         jmp G_HC0:.pm

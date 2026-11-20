@@ -21,8 +21,16 @@ hdr_map:
         pop cx
         ret
 
-; arena_init: one free block over the pool, then the sentinel
+; arena_init: one free block over the pool, then the sentinel. With more
+; than one XMS block (xms_init: on a 386, in address order), each block
+; is a free block (one after another with no gap: one free block) ending
+; in a used header whose size reaches the next
+; block's start (so a_next steps over the gap and nothing merges across
+; it), the last one ending in the sentinel; 0500h's largest block is then
+; the largest of them.
 arena_init:
+        cmp byte [xb_n], 1
+        ja arena_init_n
         push es
         mov ax, [emb_end]
         mov dx, [emb_end+2]
@@ -61,6 +69,68 @@ arena_init:
         mov word [es:A_MAGIC], MAGIC
         pop es
         ret
+
+        cpu 386
+arena_init_n:
+        push es
+        pushad
+        mov ax, G_FLAT
+        mov es, ax
+        xor esi, esi            ; the previous header, 0 at first
+        mov edi, [pool_lin]     ; this block's first header
+        xor bx, bx              ; this block's offset in xb_lin/xb_end
+.b:     mov ecx, [xb_end+bx]
+        ; blocks that follow one another are one free block (not with
+        ; [w16] LargeMemory=0: 3.1's DOSX shows each XMS block apart,
+        ; 0500h's largest at most 64 MB)
+        cmp byte [xms_stock], 0
+        jne .end
+        movzx ax, byte [xb_n]
+        shl ax, 2
+        sub ax, 4
+        cmp bx, ax
+        jae .end
+        cmp ecx, [xb_lin+bx+4]
+        jne .end
+        add bx, 4
+        jmp .b
+.end:   and ecx, 0FFFFFFF0h
+        sub ecx, A_HDR          ; its last header: a gap's or the sentinel
+        mov eax, ecx
+        sub eax, edi
+        sub eax, A_HDR
+        mov [es:edi+A_SIZE], eax
+        mov [es:edi+A_PREV], esi
+        mov word [es:edi+A_FLAGS], 0
+        mov word [es:edi+A_SEL], 0
+        mov word [es:edi+A_NSEL], 0
+        mov word [es:edi+A_MAGIC], MAGIC
+        mov [es:ecx+A_PREV], edi
+        mov word [es:ecx+A_FLAGS], 1
+        mov word [es:ecx+A_SEL], 0
+        mov word [es:ecx+A_NSEL], 0
+        mov word [es:ecx+A_MAGIC], MAGIC
+        mov dword [es:ecx+A_SIZE], 0
+        mov esi, ecx
+        add bx, 4
+        movzx ax, byte [xb_n]
+        shl ax, 2
+        cmp bx, ax
+        jae .last
+        ; the next block: the gap's used header reaches its start
+        mov edi, [xb_lin+bx]
+        add edi, 15
+        and edi, 0FFFFFFF0h
+        mov eax, edi
+        sub eax, ecx
+        sub eax, A_HDR
+        mov [es:ecx+A_SIZE], eax
+        jmp .b
+.last:  mov [pool_last], ecx
+        popad
+        pop es
+        ret
+        cpu 286
 
 ; a_next: DX:AX = header -> DX:AX = the next header (ES = mapped header)
 a_next: add ax, [es:A_SIZE]

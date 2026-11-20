@@ -144,6 +144,14 @@ H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
 TB_SIZE         equ 1000h   ; real-mode transfer buffer
 INIT_STACK      equ 200h
+EMB_KB_MAX      equ 300000h ; the most XMS 89h is asked for at once (3 GB): a
+                            ; block's size in bytes fits in 32 bits
+XB_MAX          equ 16      ; XMS blocks DOSX takes at most
+%ifdef TRACE
+LOW_MIN         equ 30000h + TRC_SIZE   ; the lowest block's least size: the LDT,
+%else                                   ; the IDT, the ring-3 host stack (and
+LOW_MIN         equ 30000h              ; the trace buffer), 128 KB for the client
+%endif
 CB_ENTRIES      equ 16      ; real-mode entry points for callbacks
 NHOOK           equ 19      ; hookable real-mode vectors (hook_vecs)
 CB_STATIC       equ 16      ; callback records in DOSX's own data
