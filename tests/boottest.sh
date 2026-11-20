@@ -395,7 +395,8 @@
 #              tests/writescenarios.sh, Microsoft's Write and w16's (with
 #              Microsoft's bitmaps, tests/wrmsres.sh) on all-Microsoft
 #              3.1, every saved file the same, every screen within
-#              tests/scripts/write.baseline
+#              tests/scripts/write.baseline; a part ending in o (wr30o)
+#              runs w16's Write with w16's OLECLI.DLL
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without
@@ -1930,10 +1931,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         for pk in ${part:-ms k286 k386 tree}; do
             case $pk in
             wr*)
-                # a writescenarios.sh scenario (WR24 ...)
+                # a writescenarios.sh scenario (WR24 ...); wrNNo: with w16's
+                # OLECLI.DLL in w16's run
                 rm -rf "$out/w16write-$pk"
-                WRSCEN_OUT=$out/w16write-$pk "$root/tests/writescenarios.sh" \
-                    "$(echo "$pk" | tr a-z A-Z)" > "$out/w16write-$pk.txt" 2>&1 || true
+                wf=
+                case $pk in *o) wf="$root/build/dos/OLECLI.DLL=WINDOWS/SYSTEM/OLECLI.DLL" ;; esac
+                WRSCEN_OUT=$out/w16write-$pk WRSCEN_W16FILES=$wf "$root/tests/writescenarios.sh" \
+                    "$(echo "${pk%o}" | tr a-z A-Z)" > "$out/w16write-$pk.txt" 2>&1 || true
                 grep -q '^== WR[0-9]*: ok' "$out/w16write-$pk.txt" ||
                     r="$pk: $(grep -m1 '^  WR' "$out/w16write-$pk.txt" || echo 'no result') ($out/w16write-$pk)" ;;
             tree)
@@ -4463,7 +4467,7 @@ done
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
 # Write's feature scenarios run as w16write parts (tests/writescenarios.sh)
-WRSCEN_BOOT=${WRSCEN_BOOT:-wr24 wr25 wr26 wr28 wr29 wr30}
+WRSCEN_BOOT=${WRSCEN_BOOT:-wr24 wr25 wr26 wr28 wr29 wr30 wr30o}
 caseparts() {
     case $1 in
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
