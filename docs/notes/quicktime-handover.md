@@ -333,6 +333,22 @@ The last two are in `user/pos.c`.
   also runs in `timer@qt`, `mmsystem@qt`, `toolhelp@qt`. On master
   2f15a87 with the new test (run `w16-qtclose-base`): `quicktime@tree`
   fails with "Standard Mode: Fault in MS-DOS Extender." on the w16 side.
+- Since 2026-11-19 the close sequence also drags the movie while it
+  plays. After c4-paused, Space plays it on, and the left button is
+  pressed on the movie's caption. With the button held, the arrow keys move
+  the window: 3.1 and w16 both move the pointer 9 pixels per key during a
+  drag. The window is then dropped and the movie plays to its end
+  (c4a-dragging, c4b-dropped).
+  - Arrow keys instead of a mouse glide: under a loaded host, DOSBox merged
+    the 1-pixel xdotool motions, and the drop moved 156 or 160 pixels
+    instead of 120.
+  - Checked on both sides: the window's old and new places (c4-paused to
+    c4b-dropped, the pointer's columns left out) are the same rectangle,
+    and the picture inside the dropped window is identical.
+  - On master the w16 side hangs there: hangwatch reports, and the shots
+    stop at c4a.
+  - Boot-test case `trackmove` runs probe US31 on 3.1 and on w16's USER and
+    GDI, and compares its OBS lines.
 - `tests/drv/drun.sh` (boot-test case `drivers`): DRP's log on
   Microsoft's USER and on w16's, plain, with DRT.DLL a boot driver, and
   under KRNL386: identical.

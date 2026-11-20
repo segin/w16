@@ -254,10 +254,13 @@ fi
 # top, its border and caption, 20 at the bottom, the controller and
 # border, and 5 columns each side: the same pixels on both sides)
 dragged() {
-    # x 312 on left out: the pointer (where it was in c4-paused, and where
-    # the script puts it after the drop); the window ends left of it
-    magick \( "$1/c4-paused.png" -fill black -draw "rectangle 312,0 639,479" \) \
-        \( "$1/c4b-dropped.png" -fill black -draw "rectangle 312,0 639,479" \) \
+    # the pointer left out: where it was in c4-paused (x 312 on; the window
+    # ends left of it) and the top left corner, where the script puts it
+    # after the drop (a relative move lands where the host's load decides)
+    magick \( "$1/c4-paused.png" -fill black -draw "rectangle 312,0 639,479" \
+            -draw "rectangle 0,0 23,31" \) \
+        \( "$1/c4b-dropped.png" -fill black -draw "rectangle 312,0 639,479" \
+            -draw "rectangle 0,0 23,31" \) \
         -compose difference -composite -threshold 0 -format '%@' info:
 }
 if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
