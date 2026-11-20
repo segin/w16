@@ -157,6 +157,13 @@ static void invert_frame(HWND lb, int i)
     if (SendMessage(lb, LB_GETITEMRECT, i, (LPARAM)(RECT FAR *)&r) == LB_ERR)
         return;
     dc = GetDC(lb);
+    {
+        /* a list box's DC is its parent's area (CS_PARENTDC, as on 3.1):
+           the frame kept inside the list */
+        RECT c;
+        GetClientRect(lb, &c);
+        IntersectClipRect(dc, 0, 0, c.right, c.bottom);
+    }
     PatBlt(dc, r.left, r.top, r.right - r.left, 1, DSTINVERT);
     PatBlt(dc, r.left, r.bottom - 1, r.right - r.left, 1, DSTINVERT);
     PatBlt(dc, r.left, r.top + 1, 1, r.bottom - r.top - 2, DSTINVERT);

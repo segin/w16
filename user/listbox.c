@@ -9,6 +9,28 @@
  * Items are drawn in the window's font one line apart, the text 2 pixels
  * from the left (UNVERIFIED: US4 to compare), selected items in the
  * Highlight colours, the caret item with a dotted focus rectangle.
+ *
+ * Probe US32 (tests/apps/us32.c; boot-test case lbclip) measured on 3.1:
+ * - the height (without LBS_NOINTEGRALHEIGHT or LBS_OWNERDRAWVARIABLE):
+ *   the window, H high, is made floor(H / item height) items + 2 high,
+ *   whatever its border (none, WS_BORDER, WS_DLGFRAME: the client area is
+ *   then smaller), 0 items too; when made (the item height then the
+ *   system font's, or WM_MEASUREITEM's) and whenever it is sized, from the
+ *   new height. WM_SETFONT changes the item height but not the window
+ *   (a dialog's list box is sized again after: dlg.c). Made, every list
+ *   box is a pixel bigger each side than asked, border or not;
+ * - the vertical scroll bar's range is always 0-100 (hidden too): the
+ *   position is top * 100 / max rounded, max the last top that shows the
+ *   last item whole; SB_THUMBPOSITION/THUMBTRACK n goes to
+ *   n * (max + 1) / 100 rounded; a page is the whole items shown less one;
+ *   LB_SETTOPINDEX stops at max;
+ * - a click on the item the bottom edge cuts selects it without
+ *   scrolling; LB_SETCURSEL and the keys scroll it into view;
+ * - a single-selection list box with nothing selected draws its focus
+ *   rectangle only in some cases (focus_shown);
+ * - LBS_OWNERDRAWVARIABLE: WM_MEASUREITEM for each item as it is added
+ *   (itemHeight the font's height), each item its own height; scrolling,
+ *   the range and the clicks by those heights.
  */
 #include "user.h"
 
@@ -18,6 +40,7 @@ typedef struct LBITEM {
     WORD  text;                 /* local string (0 for no-string owner-draw) */
     DWORD data;
     WORD  sel;
+    WORD  ht;                   /* LBS_OWNERDRAWVARIABLE: its height */
 } LBITEM;
 typedef LBITEM __far *PLBITEM;
 #define STR(t)  ((LPCSTR)UH_PTR(&uhObj, (t)))
@@ -35,9 +58,10 @@ typedef struct LB {
     int    colw;                /* LBS_MULTICOLUMN: a column's width */
     DWORD  bars;                /* WS_VSCROLL/WS_HSCROLL it was made with */
     int    hext;                /* LB_SETHORIZONTALEXTENT */
-    int    reqh;                /* the client height asked for (integral) */
-    int    winh;                /* the window's height then */
     BYTE   sizing;              /* integral() resizing it */
+    BYTE   caretshown;          /* the focus rectangle shown with nothing
+                                   selected (focus_shown) */
+    BYTE   painted;             /* WM_PAINT seen */
 } LB;
 typedef LB __near *PLB;
 
@@ -67,11 +91,61 @@ static BOOL hasstrings(HWND h)
     return !(s & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE)) || (s & LBS_HASSTRINGS);
 }
 
-static int visible_rows(HWND h, PLB lb)
+static int client_h(HWND h)
 {
     RECT r;
     GetClientRect(h, &r);
-    return lb->itemh ? (r.bottom - r.top) / lb->itemh : 1;
+    return r.bottom;
+}
+
+/* LBS_OWNERDRAWVARIABLE (not with LBS_MULTICOLUMN): each item its own
+   height */
+static BOOL varh(HWND h)
+{
+    return (lbstyle(h) & (LBS_OWNERDRAWVARIABLE | LBS_MULTICOLUMN)) == LBS_OWNERDRAWVARIABLE;
+}
+
+static int item_h(HWND h, PLB lb, int i)
+{
+    if (varh(h) && i >= 0 && i < lb->count)
+        return item(lb, i)->ht;
+    return lb->itemh;
+}
+
+/* the whole items shown from the top one */
+static int visible_rows(HWND h, PLB lb)
+{
+    int ch = client_h(h), y = 0, n = 0;
+    if (!varh(h))
+        return lb->itemh ? ch / lb->itemh : 1;
+    while (lb->top + n < lb->count && y + item(lb, lb->top + n)->ht <= ch)
+        y += item(lb, lb->top + n++)->ht;
+    return n;
+}
+
+/* the last top item: the one that shows the last item whole */
+static int max_top(HWND h, PLB lb)
+{
+    int t, y = 0, ch;
+    if (!varh(h)) {
+        t = lb->count - (lb->itemh ? client_h(h) / lb->itemh : 1);
+        return t > 0 ? t : 0;
+    }
+    ch = client_h(h);
+    for (t = lb->count; t > 0 && y + item(lb, t - 1)->ht <= ch; t--)
+        y += item(lb, t - 1)->ht;
+    if (t >= lb->count)
+        t = lb->count - 1;
+    return t > 0 ? t : 0;
+}
+
+/* v * u / d rounded to the nearest, as MulDiv */
+static int mul_div(int v, int u, int d)
+{
+    long p = (long)v * u;
+    if (!d)
+        return 0;
+    return (int)(p >= 0 ? (p + d / 2) / d : -((-p + d / 2) / d));
 }
 
 /* LBS_MULTICOLUMN (File Manager's file list): items run down a column,
@@ -118,11 +192,24 @@ static void item_rect(HWND h, PLB lb, int i, RECT *r)
     }
     r->left = 0;
     r->right = c.right;
+    if (varh(h)) {
+        int k, y = 0;
+        if (i >= lb->top)
+            for (k = lb->top; k < i; k++)
+                y += item_h(h, lb, k);
+        else
+            for (k = i; k < lb->top; k++)
+                y -= item_h(h, lb, k);
+        r->top = y;
+        r->bottom = y + item_h(h, lb, i);
+        return;
+    }
     r->top = (i - lb->top) * lb->itemh;
     r->bottom = r->top + lb->itemh;
 }
 
 void sb_show_disabled(HWND hwnd, int bar);
+void sb_range_quiet(HWND hwnd, int bar, int min, int max);
 
 static void notify(HWND h, PLB lb, WORD code)
 {
@@ -167,17 +254,37 @@ static void update_scroll(HWND h, PLB lb)
        when made, then never showed its horizontal bar) */
     if (!(lb->bars & WS_VSCROLL))
         return;
+    /* 0-100 whatever the count, hidden too (US32) */
     {
-        int rows = visible_rows(h, lb), max = lb->count - rows;
-        if (max < 0)
-            max = 0;
+        int max = max_top(h, lb);
         if (!max && (lbstyle(h) & LBS_DISABLENOSCROLL)) {
             sb_show_disabled(h, SB_VERT);
             return;
         }
-        SetScrollRange(h, SB_VERT, 0, max, FALSE);
-        SetScrollPos(h, SB_VERT, lb->top, TRUE);
+        if (!max) {
+            SetScrollRange(h, SB_VERT, 0, 0, FALSE);        /* hides it */
+            if (valid_wnd(h))
+                sb_range_quiet(h, SB_VERT, 0, 100);
+            return;
+        }
+        SetScrollRange(h, SB_VERT, 0, 100, FALSE);
+        SetScrollPos(h, SB_VERT, mul_div(lb->top < max ? lb->top : max, 100, max), TRUE);
     }
+}
+
+/* The focus rectangle of a single-selection box with nothing selected
+   (US32 on 3.1, dialogs of 12 items, the first a tab stop): none when the
+   dialog shows with the list box given its height (LBS_NOINTEGRALHEIGHT),
+   on the first item when the box was sized to whole items as it was
+   made; and it comes when the box, shown and painted, gets the focus
+   (SetFocus elsewhere and back), and stays when the selection is taken
+   away (LB_SETCURSEL -1). 3.1 gives the focus inside CreateDialog, before
+   anything is painted; w16 as the dialog is shown. UNVERIFIED: what 3.1
+   keeps that makes the two dialogs differ; this is the rule that gives
+   what was seen. */
+static BOOL focus_shown(HWND h, PLB lb)
+{
+    return multi(h) || lb->cur >= 0 || lb->caretshown;
 }
 
 static void draw_item(HWND h, PLB lb, HDC hdc, int i)
@@ -208,7 +315,7 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         di.rcItem = r;
         di.itemData = it->data;
         send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
-        if (lb->focus && i == lb->caret && valid_wnd(h)) {
+        if (lb->focus && i == lb->caret && focus_shown(h, lb) && valid_wnd(h)) {
             di.itemState |= ODS_FOCUS;
             di.itemAction = ODA_FOCUS;
             send_message(lb->owner, WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
@@ -225,17 +332,15 @@ static void draw_item(HWND h, PLB lb, HDC hdc, int i)
         else
             TextOut(hdc, r.left + 2, r.top, s, lstr_len(s));
     }
-    if (lb->focus && i == lb->caret) {
-        /* on a selected item the dots invert the highlight where the
-           pattern is white and leave it where it is black (3.1: the Task
-           List's selected item, white on blue, has a dotted yellow and
-           blue rectangle; drawn in the item's white text and the list's
-           white background it was a solid line: boot-test case taskman).
-           UNVERIFIED for an unselected focus item, left as it was */
-        if (it->sel) {
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkColor(hdc, RGB(0, 0, 0));
-        }
+    if (lb->focus && i == lb->caret && focus_shown(h, lb)) {
+        /* the dots invert the item where the pattern is white and leave
+           it where it is black (3.1: the Task List's selected item, white
+           on blue, has a dotted yellow and blue rectangle; drawn in the
+           item's white text and the list's white background it was a
+           solid line: boot-test case taskman); on an unselected item too
+           (US32: the dots on white in 3.1's phase only so) */
+        SetTextColor(hdc, RGB(255, 255, 255));
+        SetBkColor(hdc, RGB(0, 0, 0));
         DrawFocusRect(hdc, &r);
     }
 }
@@ -251,6 +356,12 @@ static void paint(HWND h, PLB lb, HDC hdc)
     rows = visible_rows(h, lb) + 1;
     if (multicol(h))
         rows = (rows - 1 > 0 ? rows - 1 : 1) * (visible_cols(h, lb) + 1);
+    else if (varh(h)) {
+        /* to the first item that starts below the bottom */
+        int y = 0, ch = r.bottom;
+        for (rows = 0; lb->top + rows < lb->count && y < ch; rows++)
+            y += item(lb, lb->top + rows)->ht;
+    }
     for (i = lb->top; i < lb->count && i < lb->top + rows; i++)
         draw_item(h, lb, hdc, i);
     if (old)
@@ -285,10 +396,26 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
     it->sel = 0;
     it->data = data;
     it->text = text;
+    it->ht = lb->itemh;
     if (!hasstrings(h))
         it->data = (DWORD)s;
     if (lb->cur >= at && lb->cur >= 0 && lb->count > 1)
         lb->cur++;
+    if (lbstyle(h) & LBS_OWNERDRAWVARIABLE) {
+        /* each item measured as it comes, the font's height offered (US32:
+           3.1 asks with 16, the system font's, in a dialog of MS Sans
+           Serif too) */
+        MEASUREITEMSTRUCT mi;
+        mi.CtlType = ODT_LISTBOX;
+        mi.CtlID = GetWindowWord(h, GWW_ID);
+        mi.itemID = at;
+        mi.itemWidth = 0;
+        mi.itemHeight = lb->itemh;
+        mi.itemData = (DWORD)s;
+        send_message(lb->owner, WM_MEASUREITEM, mi.CtlID, (LPARAM)(MEASUREITEMSTRUCT __far *)&mi);
+        if (valid_wnd(h) && lb_of(h) == lb && at < lb->count)
+            item(lb, at)->ht = mi.itemHeight;
+    }
     return at;
 }
 
@@ -336,7 +463,7 @@ static void make_visible(HWND h, PLB lb, int i)
     /* not while it has no height yet (File Manager's file list, filled
        while 0 high: its top went to the selected item, and ".." at the
        head of the list was never shown) */
-    if (rows < 1)
+    if (varh(h) ? client_h(h) <= 0 : rows < 1)
         return;
     if (multicol(h)) {
         int cols = visible_cols(h, lb);
@@ -349,6 +476,21 @@ static void make_visible(HWND h, PLB lb, int i)
         update_scroll(h, lb);
         return;
     }
+    if (varh(h)) {
+        RECT r;
+        int ch = client_h(h);
+        if (i < lb->top)
+            lb->top = i;
+        else {
+            item_rect(h, lb, i, &r);
+            while (lb->top < i && r.bottom > ch) {
+                r.bottom -= item_h(h, lb, lb->top);
+                lb->top++;
+            }
+        }
+        update_scroll(h, lb);
+        return;
+    }
     if (i < lb->top)
         lb->top = i;
     else if (i >= lb->top + rows)
@@ -358,7 +500,9 @@ static void make_visible(HWND h, PLB lb, int i)
     update_scroll(h, lb);
 }
 
-static void set_cur(HWND h, PLB lb, int i)
+/* scroll: brought into view (LB_SETCURSEL, the keys); a click selects the
+   item the bottom edge cuts without scrolling (US32) */
+static void set_cur_at(HWND h, PLB lb, int i, BOOL scroll)
 {
     int k;
     for (k = 0; k < lb->count; k++)
@@ -366,9 +510,15 @@ static void set_cur(HWND h, PLB lb, int i)
     lb->cur = i;
     if (i >= 0) {
         lb->caret = i;
-        make_visible(h, lb, i);
+        if (scroll)
+            make_visible(h, lb, i);
     }
     redraw(h);
+}
+
+static void set_cur(HWND h, PLB lb, int i)
+{
+    set_cur_at(h, lb, i, TRUE);
 }
 
 static int find(HWND h, PLB lb, int start, LPCSTR s, BOOL exact)
@@ -443,41 +593,55 @@ static int hit(HWND h, PLB lb, int x, int y)
         if (row >= rows || x < 0 || y < 0)
             return -1;
         i = lb->top + x / col_width(lb) * rows + row;
+    } else if (varh(h)) {
+        int y0 = 0;
+        if (y < 0)
+            return -1;
+        for (i = lb->top; i < lb->count; i++) {
+            y0 += item(lb, i)->ht;
+            if (y < y0)
+                break;
+        }
     } else
         i = lb->top + y / (lb->itemh ? lb->itemh : 1);
     return i < lb->count ? i : -1;
 }
 
-/* without LBS_NOINTEGRALHEIGHT the box shrinks to whole items (US4: a
-   simple combo box's list 50 pixels high, three items and its border,
-   where 57 were asked for) */
-/* The height is worked out from the one asked for, again when the font
-   changes: a dialog's list box is made with the system font's items and
-   gets the dialog's font after (3.1: Terminal's Default Serial Port, 65
-   pixels asked, 5 items of MS Sans Serif's 13; w16 shrank it to 4 of the
-   system font's 16 first and then to 4 of 13, with a scroll bar) */
+/* without LBS_NOINTEGRALHEIGHT (or LBS_OWNERDRAWVARIABLE) the window,
+   H high, becomes floor(H / item height) items + 2 high, whatever its
+   frame (US32; US4: a simple combo box's list 50 pixels high, three
+   items and its border, where 57 were asked for). From the window's height
+   now: a dialog's list box made with the system font's items and given
+   the dialog's font after is sized again from the first rounding (3.1:
+   QuickTime's Control Panel's Files list, 120 asked, 114 with items of
+   16, then 106 with items of 13; w16 kept the height asked, 9 items of
+   13 where 3.1 has 8, and the list ran over the static below it) */
 static void integral(HWND h, PLB lb)
 {
-    RECT r;
     PWND w = valid_wnd(h);
-    int want;
+    int H, want;
     if (!w || (lbstyle(h) & LBS_NOINTEGRALHEIGHT) || lb->itemh <= 0 ||
         (lbstyle(h) & LBS_OWNERDRAWVARIABLE))
         return;
-    GetClientRect(h, &r);
-    want = lb->reqh;
-    if (want > lb->itemh)
-        want -= want % lb->itemh;
-    if (want != r.bottom) {
+    H = w->rcWindow.bottom - w->rcWindow.top;
+    want = H / lb->itemh * lb->itemh + 2 * sysmet[SM_CYBORDER];
+    if (want != H) {
         lb->sizing = 1;
-        set_window_pos(h, 0, 0, 0, w->rcWindow.right - w->rcWindow.left,
-                       w->rcWindow.bottom - w->rcWindow.top + want - r.bottom,
+        lb->caretshown = 1;     /* (focus_shown) */
+        set_window_pos(h, 0, 0, 0, w->rcWindow.right - w->rcWindow.left, want,
                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        if (valid_wnd(h)) {
+        if (valid_wnd(h) && lb_of(h) == lb)
             lb->sizing = 0;
-            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
-        }
     }
+}
+
+/* the dialog manager, after giving a list box the dialog's font: its
+   height again from the window's (dlg.c) */
+void listbox_refit(HWND h)
+{
+    PLB lb = lb_of(h);
+    if (lb)
+        integral(h, lb);
 }
 
 LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -486,10 +650,10 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     if (!valid_wnd(h))
         return 0;
     lb = lb_of(h);
-    if (msg == WM_NCCREATE && (GetWindowLong(h, GWL_STYLE) & WS_BORDER)) {
-        /* the border goes outside the rectangle asked for: the items get
-           all of it (US4: a list box at 33,188 70x80 had its frame at
-           32,187 72x82; UNVERIFIED for other parents than a dialog) */
+    if (msg == WM_NCCREATE) {
+        /* a pixel more each side than asked for (US4: a list box at
+           33,188 70x80 had its frame at 32,187 72x82; US32: in any window,
+           with a border, WS_DLGFRAME or none) */
         PWND w = valid_wnd(h);
         InflateRect(&w->rcWindow, sysmet[SM_CXBORDER], sysmet[SM_CYBORDER]);
         return DefWindowProc(h, msg, wp, lp);
@@ -499,16 +663,11 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (!lb)
             return -1;
         SetWindowWord(h, 0, (WORD)lb);
+        PW(h)->flags |= WF_LISTBOX;
         lb->cur = -1;
         lb->itemh = cySysChar;
         lb->bars = lbstyle(h) & (WS_VSCROLL | WS_HSCROLL);
         lb->owner = GetParent(h);
-        {
-            RECT c;
-            GetClientRect(h, &c);
-            lb->reqh = c.bottom;
-            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
-        }
         if (lbstyle(h) & LBS_OWNERDRAWFIXED) {
             MEASUREITEMSTRUCT mi;
             mi.CtlType = ODT_LISTBOX;
@@ -537,6 +696,7 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(h, &ps);
+        lb->painted = 1;
         paint(h, lb, ps.hdc);
         EndPaint(h, &ps);
         return 0;
@@ -544,16 +704,17 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_SETFONT: {
-        HDC hdc = GetDC(h);
+        HDC hdc = ctl_dc(h);
         TEXTMETRIC tm;
         HFONT old = SelectObject(hdc, wp ? (HFONT)wp : GetStockObject(SYSTEM_FONT));
         GetTextMetrics(hdc, &tm);
         SelectObject(hdc, old);
         ReleaseDC(h, hdc);
         lb->font = (HFONT)wp;
+        /* the item height, not the window's (US32: 3.1 leaves it, until
+           it is next sized) */
         if (!(lbstyle(h) & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE))) {
             lb->itemh = tm.tmHeight;
-            integral(h, lb);
             update_scroll(h, lb);
         }
         if (LOWORD(lp))
@@ -564,6 +725,8 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return (LONG)(WORD)lb->font;
     case WM_SETFOCUS:
         lb->focus = 1;
+        if (lb->painted && IsWindowVisible(h))
+            lb->caretshown = 1;
         redraw(h);
         notify(h, lb, LBN_SETFOCUS);
         return 0;
@@ -577,15 +740,10 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
            the box was one row high is any item) */
         if (multicol(h) && visible_rows(h, lb) > 0)
             lb->top = lb->top / visible_rows(h, lb) * visible_rows(h, lb);
-        if (!lb->sizing && PW(h)->rcWindow.bottom - PW(h)->rcWindow.top != lb->winh) {
-            /* sized by its owner (not a scroll bar come or gone): that is
-               the height asked for now */
-            RECT c;
-            GetClientRect(h, &c);
-            lb->reqh = c.bottom;
-            lb->winh = PW(h)->rcWindow.bottom - PW(h)->rcWindow.top;
+        /* sized: whole items again, from the new height (a scroll bar
+           come or gone leaves the window's height, and so the items) */
+        if (!lb->sizing)
             integral(h, lb);
-        }
         update_scroll(h, lb);
         return 0;
     case WM_GETDLGCODE:
@@ -624,7 +782,6 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 lb->anchor = i;
             lb->caret = i;
             lb->cur = i;
-            make_visible(h, lb, i);
             redraw(h);
         } else if (multi(h)) {
             item(lb, i)->sel ^= 1;
@@ -632,7 +789,7 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             lb->anchor = i;
             redraw(h);
         } else
-            set_cur(h, lb, i);
+            set_cur_at(h, lb, i, FALSE);
         notify(h, lb, LBN_SELCHANGE);
         if (msg == WM_LBUTTONDBLCLK)
             notify(h, lb, LBN_DBLCLK);
@@ -673,7 +830,7 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             } else if (multi(h))
                 return 0;
             else
-                set_cur(h, lb, i);
+                set_cur_at(h, lb, i, FALSE);
             notify(h, lb, LBN_SELCHANGE);
         }
         return 0;
@@ -788,19 +945,23 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_VSCROLL: {
-        int rows = visible_rows(h, lb), t = lb->top;
+        /* a page is the whole items shown less one; the thumb's 0-100 is
+           n * (max + 1) / 100 rounded (US32) */
+        int rows = visible_rows(h, lb), t = lb->top, max = max_top(h, lb);
+        if (--rows < 1)
+            rows = 1;
         switch (wp) {
         case SB_LINEUP: t--; break;
         case SB_LINEDOWN: t++; break;
         case SB_PAGEUP: t -= rows; break;
         case SB_PAGEDOWN: t += rows; break;
         case SB_THUMBTRACK:
-        case SB_THUMBPOSITION: t = (int)LOWORD(lp); break;
+        case SB_THUMBPOSITION: t = mul_div((int)LOWORD(lp), max + 1, 100); break;
         case SB_TOP: t = 0; break;
         case SB_BOTTOM: t = lb->count; break;
         }
-        if (t > lb->count - rows)
-            t = lb->count - rows;
+        if (t > max)
+            t = max;
         if (t < 0)
             t = 0;
         if (t != lb->top) {
@@ -905,7 +1066,10 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return i;
     }
     case LB_SETTOPINDEX:
+        /* no further than the last top (US32) */
         lb->top = (int)wp;
+        if (!multicol(h) && lb->top > max_top(h, lb))
+            lb->top = max_top(h, lb);
         /* multi-column: the column holding it (UNVERIFIED) */
         if (multicol(h) && visible_rows(h, lb) > 0)
             lb->top = lb->top / visible_rows(h, lb) * visible_rows(h, lb);
@@ -929,10 +1093,19 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case LB_SETITEMHEIGHT:
-        lb->itemh = LOWORD(lp);
+        if (varh(h)) {
+            if ((int)wp < 0 || (int)wp >= lb->count)
+                return LB_ERR;
+            item(lb, wp)->ht = LOWORD(lp);
+        } else
+            lb->itemh = LOWORD(lp);
+        update_scroll(h, lb);
         redraw(h);
         return 0;
     case LB_GETITEMHEIGHT:
+        /* LBS_OWNERDRAWVARIABLE: that item's (US32) */
+        if (varh(h))
+            return (int)wp >= 0 && (int)wp < lb->count ? item(lb, wp)->ht : LB_ERR;
         return lb->itemh;
     case LB_SETCARETINDEX:
         lb->caret = (int)wp;

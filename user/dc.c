@@ -201,10 +201,15 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
         DC_(dh)->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
         /* CS_PARENTDC: a cache DC clipped to the parent's client area, its
            origin the child's (US29 dc on 3.1: GetClipBox -10 -10 388 269
-           for a child at 10,10 of a 398 x 279 client area) */
-        /* (not for USER's own controls, whose classes have it too: w16's
-           controls paint relying on their own clipping) */
-        if ((c->style & CS_PARENTDC) && c->hModule != hModUser && !window &&
+           for a child at 10,10 of a 398 x 279 client area). The system
+           controls' classes have it too, and 3.1's GetDC gives them the
+           parent's area as well (US32: a dialog's list box, -18 -16 245
+           114, the dialog's client area); USER's own drawing in them asks
+           for the control's area (DCX_OWNCLIENT: ctl_dc), as a
+           superclass of them, of the application's module, took the
+           parent's and drew outside itself. BeginPaint clips to the update
+           region, inside the window either way. */
+        if ((c->style & CS_PARENTDC) && !(flags & DCX_OWNCLIENT) && !window &&
             (w->style & WS_CHILD) && w->hwndParent)
             DC_(dh)->flags |= DCE_PARENT;
         DC_(dh)->hwnd = h;

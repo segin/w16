@@ -410,6 +410,12 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             continue;
         if (font)
             send_message(c, WM_SETFONT, (WPARAM)font, FALSE);
+        /* a list box (a superclass of one too) is sized again to whole
+           items of the dialog's font, from the height the system font's
+           gave it (US32 on 3.1: 73 asked, 64 of 16, then 65 of 13; 120
+           asked, 112, then 104: QuickTime's Control Panel) */
+        if (font && valid_wnd(c) && (PW(c)->flags & WF_LISTBOX))
+            listbox_refit(c);
         if ((is & 0x0F) == BS_DEFPUSHBUTTON && !lstr_cmpi(icls, "Button"))
             SetWindowWord(h, DW_DEFID, id);
         if (!focus && (is & WS_TABSTOP) && !(is & WS_DISABLED))

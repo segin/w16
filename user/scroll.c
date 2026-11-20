@@ -274,6 +274,22 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
         redraw_bar(hwnd, bar);
 }
 
+/* the range alone, the bar neither shown nor hidden (a list box's hidden
+   bar keeps 0-100: US32) */
+void sb_range_quiet(HWND hwnd, int bar, int min, int max)
+{
+    PWND w;
+    SBINFO *s = info(hwnd, bar, &w);
+    if (!s)
+        return;
+    s->min = min;
+    s->max = max;
+    if (s->pos < min)
+        s->pos = min;
+    if (s->pos > max)
+        s->pos = max;
+}
+
 /* a window's bar shown with nothing to scroll: no thumb, the arrows
    greyed (3.1: File Manager's tree, LBS_DISABLENOSCROLL, four items in
    room for more, shows its vertical bar so) */

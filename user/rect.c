@@ -213,6 +213,7 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
     HBRUSH old;
     RECT a, *r = &a;
     int w, h;
+    DWORD org, oldorg;
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return;
     w = r->right - r->left, h = r->bottom - r->top;
@@ -223,6 +224,12 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
         DeleteObject(b);
         G_MAKEOBJECTPRIVATE(dots, TRUE);
     }
+    /* aligned to the screen whatever DC it was last used in (the brush
+       kept the origin of its first realization: US32's focus rectangles
+       came a pixel off 3.1's in one run and not in another) */
+    org = GetDCOrg(hdc);
+    UnrealizeObject(dots);
+    oldorg = SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
     old = SelectObject(hdc, dots);
     /* the corners left out (US4) */
     PatBlt(hdc, r->left + 1, r->top, w - 2, 1, PATINVERT);
@@ -230,6 +237,7 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
     PatBlt(hdc, r->left, r->top + 1, 1, h - 2, PATINVERT);
     PatBlt(hdc, r->right - 1, r->top + 1, 1, h - 2, PATINVERT);
     SelectObject(hdc, old);
+    SetBrushOrg(hdc, LOWORD(oldorg), HIWORD(oldorg));   /* the caller's, back */
 }
 
 /* ---- DrawText ---- */

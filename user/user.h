@@ -145,6 +145,7 @@ typedef WND __far *PWND;
 #define WF_HASPOS       0x0200  /* SetWindowPlacement: restored rect known */
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
 #define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
+#define WF_LISTBOX      0x1000  /* a list box (ListBoxWndProc made it) */
 #define WF_TEXTHEAP     0x000F0000L     /* which string heap holds the text */
 #define TEXTHEAP(w)     ((WORD)((w)->flags >> 16) & 15)
 
@@ -275,6 +276,12 @@ void activate_window(HWND h, BOOL mouse);
 /* ---- painting, DCs (paint.c, dc.c) ---- */
 void dc_init(void);
 HDC  get_dc(HWND h, BOOL window, HRGN clip, WORD flags);
+/* USER's own drawing in a control: its client area's DC even for a
+   CS_PARENTDC class (GetDC gives such a window its parent's area, as 3.1
+   does for the system controls too: US32) */
+#define DCX_OWNCLIENT 4
+#define ctl_dc(h) get_dc((h), FALSE, 0, DCX_OWNCLIENT)
+void listbox_refit(HWND h);                 /* listbox.c */
 int  release_dc(HWND h, HDC hdc);
 HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren);
 void invalidate(HWND h, HRGN rgn, const RECT *rc, BOOL erase, BOOL children, BOOL nc);

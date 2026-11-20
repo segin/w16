@@ -228,7 +228,7 @@ static int line_count(PED e)
 
 static int line_height(HWND h, PED e)
 {
-    HDC hdc = GetDC(h);
+    HDC hdc = ctl_dc(h);
     TEXTMETRIC tm;
     HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     GetTextMetrics(hdc, &tm);
@@ -436,7 +436,7 @@ static void place_caret(HWND h, PED e)
     WORD st;
     if (!E(e)->focus)
         return;
-    hdc = GetDC(h);
+    hdc = ctl_dc(h);
     old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     lh = line_height(h, e);
     if (estyle(h) & ES_MULTILINE) {
@@ -469,7 +469,7 @@ static void scroll_to_caret(HWND h, PED e)
     if (E(e)->sel1 < E(e)->first)
         E(e)->first = E(e)->sel1;
     else {
-        HDC hdc = GetDC(h);
+        HDC hdc = ctl_dc(h);
         HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
         while (E(e)->first < E(e)->sel1 && text_x(hdc, e, E(e)->first, E(e)->sel1 - E(e)->first) > r.right - 2)
             E(e)->first++;
@@ -491,7 +491,7 @@ static void scroll_to_caret(HWND h, PED e)
    (here the font's average width). ---- */
 static int char_w(HWND h, PED e)
 {
-    HDC hdc = GetDC(h);
+    HDC hdc = ctl_dc(h);
     TEXTMETRIC tm;
     HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     GetTextMetrics(hdc, &tm);
@@ -502,7 +502,7 @@ static int char_w(HWND h, PED e)
 
 static int widest(HWND h, PED e)
 {
-    HDC hdc = GetDC(h);
+    HDC hdc = ctl_dc(h);
     HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     int w = 0;
     WORD st = 0;
@@ -644,7 +644,7 @@ static void replace_sel(HWND h, PED e, LPCSTR s)
 
 static WORD pos_from_x(HWND h, PED e, int x, int y)
 {
-    HDC hdc = GetDC(h);
+    HDC hdc = ctl_dc(h);
     HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
     WORD st, n, i;
     if (estyle(h) & ES_MULTILINE) {
