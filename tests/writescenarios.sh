@@ -11,12 +11,16 @@
 # the baseline from this run. Input documents a scenario opens are named
 # on its "; files:" line (paths relative to the reference WINDOWS dir).
 #   usage: tests/writescenarios.sh [scenario...]    (default: all)
-# Results go to build/ref/wrscen/<date-time>/.
+# Results go to build/ref/wrscen/<date-time>/ (WRSCEN_OUT=DIR: there).
+# w16's Write runs with Microsoft's bitmaps linked in (tests/wrmsres.sh, a
+# test-only combination, ARCHITECTURE.md 3), so that the ruler's buttons
+# and marks compare w16's drawing code, not its art.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out=$root/build/ref/wrscen/$(date +%Y%m%d-%H%M%S)
-mkdir -p "$out"
+out=${WRSCEN_OUT:-$root/build/ref/wrscen/$(date +%Y%m%d-%H%M%S)}
+mkdir -p "$out/msres"
+"$root/tests/wrmsres.sh" "$out/msres/WRITE.EXE"
 names=${*:-$(cd "$root/tests/scripts/write" && ls WR*.txt | sed 's/\.txt$//')}
 status=0
 base=$root/tests/scripts/write.baseline
@@ -35,6 +39,15 @@ for n in $names; do
     # the original Write and give FILE (which it saved) to both runs
     # (documents only the original can make yet, e.g. with pictures);
     # "; mkpic: FILE" makes the test picture (mkpic.py) for SNAP clipbmp
+    # "; expand: FILE DEST": a file of the reference Setup disks expanded
+    # into the scratch install (tools/szdd.py; e.g. a printer driver)
+    sed -n 's/^; expand: *//p' "$script" > "$out/$n.expand" 2>/dev/null || :
+    mkdir -p "$out/$n/in"
+    while read -r f to; do
+        python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/$f" "$out/$n/in/$(basename "$to")"
+        echo "$out/$n/in/$(basename "$to")=$to"
+    done < "$out/$n.expand" > "$out/$n.exfiles"
+    inputs="$inputs $(cat "$out/$n.exfiles")"
     for f in $(sed -n 's/^; mkpic: *//p' "$script"); do
         mkdir -p "$out/$n/in"
         python3 -I "$root/tests/scripts/write/mkpic.py" "$out/$n/in/$f"
@@ -52,9 +65,10 @@ for n in $names; do
         inputs="$inputs $out/$n/in/$pf"
     done
     "$root/tests/wrobs.sh" "$script" "$out/$n/orig" $inputs > /dev/null
-    WROBS_EXE=$root/build/dos/WRITE.EXE "$root/tests/wrobs.sh" "$script" "$out/$n/w16" $inputs > /dev/null
+    WROBS_EXE=$out/msres/WRITE.EXE "$root/tests/wrobs.sh" "$script" "$out/$n/w16" $inputs > /dev/null
     result=ok
-    for f in "$out/$n"/orig/*.WRI "$out/$n"/orig/*.TXT "$out/$n"/orig/*.DOC; do
+    for f in "$out/$n"/orig/*.WRI "$out/$n"/orig/*.TXT "$out/$n"/orig/*.DOC \
+             $(sed -n 's/^; get: *//p' "$script" | sed "s|^|$out/$n/orig/|"); do
         [ -f "$f" ] || continue
         b=$(basename "$f")
         [ "$b" = SNAP.TXT ] && continue         # the script itself

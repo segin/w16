@@ -389,7 +389,13 @@
 #              all-Microsoft 3.1, w16's on all-Microsoft (part ms), on w16's
 #              KRNL286 (k286) and KRNL386 (k386): every screen identical;
 #              w16's install tree alone under its KRNL386 against the same
-#              under its KRNL286 (tree; no TrueType there)
+#              under its KRNL286 (tree; no TrueType there); and one part
+#              per feature scenario of tests/scripts/write named on the
+#              WRSCEN_BOOT line below (e.g. w16write@wr24, the ruler):
+#              tests/writescenarios.sh, Microsoft's Write and w16's (with
+#              Microsoft's bitmaps, tests/wrmsres.sh) on all-Microsoft
+#              3.1, every saved file the same, every screen within
+#              tests/scripts/write.baseline
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without
@@ -1923,6 +1929,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         }
         for pk in ${part:-ms k286 k386 tree}; do
             case $pk in
+            wr*)
+                # a writescenarios.sh scenario (WR24 ...)
+                rm -rf "$out/w16write-$pk"
+                WRSCEN_OUT=$out/w16write-$pk "$root/tests/writescenarios.sh" \
+                    "$(echo "$pk" | tr a-z A-Z)" > "$out/w16write-$pk.txt" 2>&1 || true
+                grep -q '^== WR[0-9]*: ok' "$out/w16write-$pk.txt" ||
+                    r="$pk: $(grep -m1 '^  WR' "$out/w16write-$pk.txt" || echo 'no result') ($out/w16write-$pk)" ;;
             tree)
                 set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=WRITE.EXE' -i 'WIN.INI:windows:CursorBlinkRate=65535'
                 rm -rf "$out/w16write-t286" "$out/w16write-t386"
@@ -4449,6 +4462,8 @@ done
 # every w16 part), kbd and mouse (one part per script). A part records its result (partdone) and prints only
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
+# Write's feature scenarios run as w16write parts (tests/writescenarios.sh)
+WRSCEN_BOOT=${WRSCEN_BOOT:-wr24 wr25 wr26 wr28}
 caseparts() {
     case $1 in
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;
@@ -4476,7 +4491,7 @@ caseparts() {
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
-    w16write) echo "$1@ms $1@k286 $1@k386 $1@tree" ;;
+    w16write) echo "$1@ms $1@k286 $1@k386 $1@tree"; for v in $WRSCEN_BOOT; do printf '%s@%s ' "$1" "$v"; done ;;
     taskman) echo "$1@ms $1@k286 $1@us $1@usall $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;

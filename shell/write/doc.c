@@ -755,3 +755,15 @@ BOOL doc_append_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
     noSplit = FALSE;
     return ok;
 }
+
+/* overwrite n bytes at cp (a picture's header fields: Move and Size
+   Picture), the text's length and properties unchanged */
+void doc_put(DOC *d, DWORD cp, const void FAR *s, DWORD n)
+{
+    const BYTE FAR *b = (const BYTE FAR *)s;
+    DWORD i;
+    for (i = 0; i < n && cp + i < d->cpMac; i++) {
+        DWORD c = cp + i;
+        hm_put(&d->text, c < d->gap ? c : c + d->gapLen, b + (WORD)i, 1);
+    }
+}
