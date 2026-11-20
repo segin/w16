@@ -1,0 +1,6 @@
+# FMX0.DLL (tests/apps/fmx.c): the File Manager extension probe
+@tests/apps/dll.lnk
+option modname=FMX0
+export FMEXTENSIONPROC.1
+export WEP.2=WEP resident
+export FMXINFO.3

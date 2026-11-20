@@ -430,10 +430,17 @@ static LRESULT command(HWND w, WPARAM id, LPARAM lp)
         status_update();
         return 0;
     }
-    if (d && id == IDM_REFRESH) {
-        treewin_command(d, id);
+    if (id == IDM_REFRESH) {
+        if (d)
+            treewin_command(d, id);
+        /* then each extension (WF15) */
+        ext_refresh();
         return 0;
     }
+    /* an extension's item: File Manager's own commands first (F5 with a
+       fifth extension, delta 1000, is Refresh, not its item 3: WF14) */
+    if (ext_command(id))
+        return 0;
     return DefFrameProc(w, g_mdi, WM_COMMAND, id, lp);
 }
 
@@ -463,9 +470,11 @@ LRESULT CALLBACK _export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_INITMENUPOPUP:
-        if (!HIWORD(lp))
+        if (!HIWORD(lp)) {
             init_menu((HMENU)wp, LOWORD(lp) - (IsZoomed((HWND)LOWORD(
                 SendMessage(g_mdi, WM_MDIGETACTIVE, 0, 0))) ? 1 : 0));
+            ext_initmenu((HMENU)wp);
+        }
         break;
     case WM_MENUSELECT:
         /* the item under the menu's highlight, for F1 */
@@ -477,6 +486,15 @@ LRESULT CALLBACK _export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         return command(w, wp, lp);
+    case FM_GETFOCUS:
+    case FM_GETDRIVEINFO:
+    case FM_GETSELCOUNT:
+    case FM_GETSELCOUNTLFN:
+    case FM_GETFILESEL:
+    case FM_GETFILESELLFN:
+    case FM_REFRESH_WINDOWS:
+    case FM_RELOAD_EXTENSIONS:
+        return ext_message(msg, wp, lp);
     case WM_SYSCOLORCHANGE:
         bm_load();
         repaint_all();
@@ -571,6 +589,9 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
                                NULL, NULL, inst, NULL);
     if (!g_frame)
         return 0;
+    /* the extensions, before the frame shows or has a directory window
+       (WF15) */
+    ext_load();
     if (show == SW_SHOWNORMAL || show == SW_SHOW)
         show = fshow;
     ShowWindow(g_frame, show);
@@ -594,6 +615,8 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
         TranslateMessage(&m);
         DispatchMessage(&m);
     }
+    /* the frame is gone: FMEVENT_UNLOAD gets hwnd 0 (WF15) */
+    ext_unload(FALSE);
     if (filter)
         UnhookWindowsHookEx(filter);
     if (g_font)

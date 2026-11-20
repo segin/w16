@@ -31,8 +31,15 @@ this note is the working state.
   `C:\WINDOWS\WINFILE.EXE` so both list the same bytes). The test tree
   `tests/scripts/winfile/mktree.py` (C:\WFTEST, fixed dates) is laid over
   C:\ (`REFRUN_TREE`, added to `tests/refrun.sh`). Directives: `; ini:`,
-  `; wfini:` (WINFILE.INI keys), `; get:`.
-- `tests/scripts/winfile/obs/WF1..WF7.txt`: the observation scripts
+  `; wfini:` (WINFILE.INI keys), `; get:`, `; put: SRC=DEST`, and for
+  the extension probe `; fmx: FMX1 FMX2 ...` (copies of FMX.DLL, each its
+  own module) and `; fmxini: FMX1:Key=value` (how a copy answers: see
+  tests/apps/fmx.c). With `; fmx:` the script starts with SNAP's
+  `memlog C:\FMX.LOG`: FMX's log and the screens stay in memory until
+  the script ends, because 3.1's File Manager reacts to any file made on
+  the disk while it runs (see layer 5); `append C:\FMX.LOG text` puts
+  marks in the log.
+- `tests/scripts/winfile/obs/WF1..WF19.txt`: the observation scripts
   (`tests/scripts/winfile/obs/obs.sh WF5 ...`, results in
   `build/ref/wfobs/`; WF7's key sequence went astray after the first
   copy, its first screens and dumps are still good).
@@ -83,22 +90,35 @@ this note is the working state.
   IO.SYS, MSDOS.SYS and COMMAND.COM copied) is UNVERIFIED: no floppy in
   DOSBox here. Network drives: the menu has no Connect/Disconnect items
   without a network (3.1 the same: WF1); the WNet calls are not made.
-- Layer 5 (extensions, FMEXT): not started. The SDK (vol. 1 "File Manager
-  extensions", vol. 3 FMS_LOAD, FMS_GETFILESEL, FMS_GETDRIVEINFO and the
-  FM_*/FMEVENT_* entries) documents the protocol but not the numbers of
-  the messages, nor MENU_TEXT_LEN. Plan: a test extension DLL of our own
-  (tests/apps), listed in WINFILE.INI [AddOns], loaded by the original:
-  it logs every FMExtensionProc call (wMsg, lParam; the first is
-  FMEVENT_LOAD, which it answers with FMS_LOAD: dwSize, a short menu
-  name, a popup of two items; log wMenuDelta); SNAP opens its menu
-  (INITMENU), presses F5 (USER_REFRESH), changes the selection
-  (SELCHANGE), closes (UNLOAD); then from one of its menu commands it
-  sends WM_USER-range candidates to File Manager's frame with a large
-  buffer as lParam and logs the answers and the buffer, to find FM_*
-  (beware FM_RELOAD_EXTENSIONS). Then w16's WINFILE implements [AddOns]
-  loading (LoadLibrary, GetProcAddress "FMExtensionProc"), the menus
-  after Window... as 3.1 places them, the events and the messages, and a
-  boot-test part runs the same DLL under both File Managers.
+- Layer 5 (extensions, FMEXT, `ext.c`): done; scenario WF14 (the probe's
+  log byte-identical, screens at 0 pixels), obs WF15-WF19. The probe
+  FMX.DLL (`tests/apps/fmx.c`, w16's own) logs every FMExtensionProc
+  call; its menu runs every FM_* query, a scan of WM_USER+0x1F0..0x21F,
+  Refresh All/Active, Reload, Uninstall. What 3.1 does (ARCHITECTURE.md
+  15.7 and ext.c's header have it all):
+  - FMEVENT_LOAD 100, UNLOAD 101, INITMENU 102, USER_REFRESH 103,
+    SELCHANGE 104; no help strings, no toolbar (NT's). FM_GETFOCUS is
+    WM_USER+0x200, then GETDRIVEINFO, GETSELCOUNT, GETSELCOUNTLFN,
+    GETFILESEL, GETFILESELLFN, REFRESH_WINDOWS, RELOAD_EXTENSIONS (+0x207).
+    MENU_TEXT_LEN 40 (FMS_LOAD is 48 bytes).
+  - [AddOns] in file order, before the frame shows. Deltas 600, 700, ...
+    per extension loaded. Refused (answer 0, hMenu 0, dwSize != 48):
+    FreeLibrary, no UNLOAD, delta not used up. Missing DLL: silent. At most
+    5; no key read after the fifth. 3.1's KERNEL upper-cases the name
+    GetProcAddress asks for: an extension must export FMEXTENSIONPROC in
+    capitals (w16's KERNEL matches any case: more lenient, see below).
+  - Item IDs + delta (submenus too), item state dropped (grayed shows
+    enabled). Popups before Window. WM_COMMAND: File Manager's own IDs
+    first (ID 1003 = Refresh even with a fifth extension), then the
+    extensions, then DefFrameProc (ID 1006 goes to the fifth extension's
+    item 6, not to the first MDI window).
+  - UNLOAD with hwnd 0 at exit (after the frame is gone) and on reload,
+    FreeLibrary after each. Reload re-lays the menu bar (it wraps then).
+  - Not done (needs KERNEL): 3.1 gets KERNEL's FileCdr callback for every
+    file made or changed; then FM_GETDRIVEINFO says FFFFFFFFh free until
+    the drive is read again, and Search Results asks "The contents of this
+    drive have changed...". w16's KERNEL stores the FileCdr callback but
+    never calls it (kernel/kmisc.c), so w16's File Manager cannot notice.
 - Install: WINFILE.EXE is in the install tree (WINDOWS\WINFILE.EXE),
   the Main group (after Control Panel, so the other items keep their
   places) and assets/README.TXT.
@@ -135,18 +155,31 @@ this note is the working state.
   closer; what is left is in the sample and after the font change.
 - WF10 S03: 26 pixels in the tree behind Confirm Directory Delete.
 - WF13: the Label Disk error box (2007: the box's size or line breaks),
-  Format Disk's capacity line, Make System Disk's box, Select Drive (the
-  focus: 3.1's list box has no WS_TABSTOP and is not focused).
+  Format Disk's capacity line, Make System Disk's box, Select Drive
+  (S11, 524: the list box's WS_TABSTOP is gone, as in 3.1's dump, so the
+  focus goes to OK, which shows a focus frame where 3.1 shows none: where
+  3.1's focus is is not known; and 3.1's list box is 2 pixels taller:
+  USER's whole-item height, the user/ agent's area).
 - Not compared: WF5 E06's one-line scroll; the Copy/Move progress text.
+
+## Found outside File Manager (reported, not changed)
+
+- KERNEL GetProcAddress: 3.1 upper-cases the name asked for and compares
+  it with the export tables as they are, so a mixed-case export
+  ("FMExtensionProc" in FMX's first build) is never found, by any spelling
+  (obs WF15: both "FMExtensionProc" and "FMEXTENSIONPROC" gave 0); w16's
+  `find_in_table` (kernel/module.c) folds both sides and finds it.
+- KERNEL FileCdr (KERNEL.130): stored, never called (above).
 
 ## Last full run
 
-Commit fd6e140 (after master ba697bf was merged in) on installation-05
-(`tools/remote-test.sh -n w16-winfile`): make test pass; boot test 138
-ok, 4 failures, all of the known list (lzexpand quirks, toolhelp ref386,
-soundtime, trails@timed); w16winfile (13 parts, WF01-WF13) ok.
+Commit ecb291b (layer 5, on master 8463e1e) on installation-05
+(`tools/remote-test.sh -n w16-winfile5`): make test pass; boot test 141
+ok, 2 failures, both of the known flaky list (holdbtn, lzexpand quirks);
+w16winfile 14 of 14 parts (WF01-WF14) ok.
 
 ## Where to resume
 
-Layer 5 (the plan above), then the known differences. Everything else
-of the brief is in place.
+The known differences above; then FileCdr in KERNEL (with whoever owns
+it) and the Search Results refresh and free-space reset on top of it.
+Everything else of the brief is in place.

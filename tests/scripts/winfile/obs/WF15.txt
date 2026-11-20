@@ -1,0 +1,137 @@
+; WF15: the extension interface (layer 5), first look: two copies of the
+; probe FMX.DLL in [AddOns]; their menus, the events (open a menu, F5,
+; selection changes in the list, a directory change, Tab), the queries
+; from FMX's Query command with the focus in the list, in the tree and
+; in the drive bar, the scan of WM_USER messages, the extension's
+; commands, Window > Refresh, exit
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; wfini: AddOns:FMX Two=C:\FMX2.DLL
+; fmx: FMX1 FMX2
+; get: FMX.LOG
+run WINFILE.EXE
+wait 4000
+append C:\FMX.LOG == started
+snap C:\X01.BMP
+dumpmenu
+focus
+append C:\FMX.LOG == menu 1
+menu 1
+wait 800
+snap C:\X02.BMP
+key 28
+wait 500
+snap C:\X03.BMP
+key 1B
+key 1B
+wait 500
+append C:\FMX.LOG == menu 2 via Alt+F then Right x7
+menu f
+wait 500
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+key 27
+wait 500
+snap C:\X04.BMP
+key 1B
+key 1B
+wait 500
+append C:\FMX.LOG == F5
+key 74
+wait 1500
+append C:\FMX.LOG == Tab
+key 09
+wait 800
+focus
+append C:\FMX.LOG == Down
+key 28
+wait 800
+append C:\FMX.LOG == Shift+Down
+kdown 10
+key 28
+kup 10
+wait 800
+append C:\FMX.LOG == Query (list, 2 selected)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Home (..)
+key 24
+wait 800
+append C:\FMX.LOG == Query (list, ..)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == End
+key 23
+wait 800
+append C:\FMX.LOG == Shift+Home (all)
+kdown 10
+key 24
+kup 10
+wait 800
+append C:\FMX.LOG == Query (list, all)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Tab (drive bar?)
+key 09
+wait 800
+focus
+append C:\FMX.LOG == Query (after Tab)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Tab
+key 09
+wait 800
+focus
+append C:\FMX.LOG == Query (after Tab 2)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Down (tree: ALPHA)
+key 28
+wait 1500
+append C:\FMX.LOG == Query (tree)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Scan
+menu 1
+wait 300
+key 53
+wait 3000
+append C:\FMX.LOG == Refresh All
+menu 1
+wait 300
+key 41
+wait 300
+append C:\FMX.LOG == Inner (submenu)
+menu 2
+wait 300
+key 42
+wait 300
+key 49
+wait 1500
+append C:\FMX.LOG == Window > Refresh
+menu w
+wait 300
+key 52
+wait 1500
+snap C:\X05.BMP
+append C:\FMX.LOG == close
+close
+wait 3000
+append C:\FMX.LOG == end
