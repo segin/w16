@@ -1,0 +1,130 @@
+/*
+ * winfile.rc - w16 File Manager's resources. The menu's layout, text and
+ * IDs are 3.1's File Manager's as observed running (WF1 dumpmenu); the
+ * icons and the strip of pictures are w16's own (tools/mkwfileicon.py,
+ * tools/mkwfbmp.py).
+ */
+#include <windows.h>
+#include "winfile.h"
+
+IDI_WINFILE ICON winfile.ico
+IDI_TREE    ICON tree.ico
+IDI_DIR     ICON dir.ico
+IDI_TREEDIR ICON treedir.ico
+IDB_STRIP   BITMAP wfstrip.bmp
+
+IDM_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open\tEnter",            IDM_OPEN
+        MENUITEM "&Move...\tF7",            IDM_MOVE
+        MENUITEM "&Copy...\tF8",            IDM_COPY
+        MENUITEM "&Delete...\tDel",         IDM_DELETE
+        MENUITEM "Re&name...",              IDM_RENAME
+        MENUITEM "Proper&ties...\tAlt+Enter", IDM_ATTRIBS
+        MENUITEM SEPARATOR
+        MENUITEM "&Run...",                 IDM_RUN
+        MENUITEM "&Print...",               IDM_PRINT
+        MENUITEM "&Associate...",           IDM_ASSOCIATE
+        MENUITEM SEPARATOR
+        MENUITEM "Cr&eate Directory...",    IDM_MAKEDIR
+        MENUITEM "Searc&h...",              IDM_SEARCH
+        MENUITEM "&Select Files...",        IDM_SELECT
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                   IDM_EXIT
+    END
+    POPUP "&Disk"
+    BEGIN
+        MENUITEM "&Copy Disk...",           IDM_DISKCOPY
+        MENUITEM "&Label Disk...",          IDM_LABEL
+        MENUITEM SEPARATOR
+        MENUITEM "&Format Disk...",         IDM_FORMAT
+        MENUITEM "&Make System Disk...",    IDM_SYSDISK
+        MENUITEM SEPARATOR
+        MENUITEM "&Select Drive...",        IDM_DRIVESMORE
+    END
+    POPUP "&Tree"
+    BEGIN
+        MENUITEM "E&xpand One Level\t+",    IDM_EXPONE
+        MENUITEM "Expand &Branch\t*",       IDM_EXPSUB
+        MENUITEM "Expand &All\tCtrl+*",     IDM_EXPALL
+        MENUITEM "&Collapse Branch\t-",     IDM_COLLAPSE
+        MENUITEM SEPARATOR
+        MENUITEM "&Indicate Expandable Branches", IDM_EXPANDTREE
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "T&ree and Directory",     IDM_BOTH
+        MENUITEM "Tr&ee Only",              IDM_TREEONLY
+        MENUITEM "Directory &Only",         IDM_DIRONLY
+        MENUITEM SEPARATOR
+        MENUITEM "Sp&lit",                  IDM_SPLIT
+        MENUITEM SEPARATOR
+        MENUITEM "&Name",                   IDM_VNAME
+        MENUITEM "&All File Details",       IDM_VDETAILS, CHECKED
+        MENUITEM "&Partial Details...",     IDM_VOTHER
+        MENUITEM SEPARATOR
+        MENUITEM "&Sort by Name",           IDM_BYNAME
+        MENUITEM "Sort &by Type",           IDM_BYTYPE
+        MENUITEM "Sort by Si&ze",           IDM_BYSIZE
+        MENUITEM "Sort by &Date",           IDM_BYDATE
+        MENUITEM SEPARATOR
+        MENUITEM "By File &Type...",        IDM_VINCLUDE
+    END
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Confirmation...",        IDM_CONFIRM
+        MENUITEM "&Font...",                IDM_FONT
+        MENUITEM SEPARATOR
+        MENUITEM "&Status Bar",             IDM_STATUSBAR, CHECKED
+        MENUITEM "&Minimize on Use",        IDM_MINONRUN
+        MENUITEM "Save Settings on &Exit",  IDM_SAVESETTINGS, CHECKED
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",             IDM_NEWWINDOW
+        MENUITEM "&Cascade\tShift+F5",      IDM_CASCADE
+        MENUITEM "&Tile\tShift+F4",         IDM_TILE
+        MENUITEM "&Arrange Icons",          IDM_ARRANGE
+        MENUITEM "&Refresh\tF5",            IDM_REFRESH
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents",               IDM_HELPINDEX
+        MENUITEM "&Search for Help on...",  IDM_HELPSEARCH
+        MENUITEM "&How to Use Help",        IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About File Manager...",  IDM_ABOUT
+    END
+END
+
+IDA_MAIN ACCELERATORS
+BEGIN
+    VK_F7,       IDM_MOVE,     VIRTKEY
+    VK_F8,       IDM_COPY,     VIRTKEY
+    VK_DELETE,   IDM_DELETE,   VIRTKEY
+    VK_RETURN,   IDM_ATTRIBS,  VIRTKEY, ALT
+    VK_F5,       IDM_CASCADE,  VIRTKEY, SHIFT
+    VK_F4,       IDM_TILE,     VIRTKEY, SHIFT
+    VK_F5,       IDM_REFRESH,  VIRTKEY
+    VK_MULTIPLY, IDM_EXPALL,   VIRTKEY, CONTROL
+    VK_F1,       IDM_HELPINDEX, VIRTKEY
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPNAME,        "File Manager"
+    IDS_HELPFILE,       "WINFILE.HLP"
+    IDS_DRIVEFREE,      "%c: %sKB free,  %sKB total"
+    IDS_TOTAL,          "Total %d file(s) (%s bytes)"
+    IDS_SELECTED,       "Selected %d file(s) (%s bytes)"
+    IDS_DRIVELABEL,     "%c: [%s]"
+    IDS_DRIVENOLABEL,   "%c:"
+    IDS_NOTEXIST,       "Drive %c does not exist."
+    IDS_READING,        "Reading Directory ..."
+    IDS_NOFILES,        "No files found."
+    IDS_ABOUTOTHER,     ""
+    IDS_AM,             "AM"
+    IDS_PM,             "PM"
+END

@@ -1,0 +1,37 @@
+; WF02: focus and selection (WF5): Tab to the file list (its caret on the
+; first entry after ".."), to the drive bar, back to the tree; Down in
+; the list; All File Details and Name keep the selection; Up in the tree
+; to WFTEST (a new listing, nothing selected), Tab into it
+run WINFILE.EXE
+wait 4000
+key 09
+wait 600
+snap C:\S01.BMP
+key 09
+wait 600
+snap C:\S02.BMP
+key 09
+wait 600
+snap C:\S03.BMP
+key 09
+wait 400
+key 28
+wait 600
+snap C:\S04.BMP
+cmd 402
+wait 800
+snap C:\S05.BMP
+cmd 401
+wait 800
+snap C:\S06.BMP
+key 09
+key 09
+wait 400
+key 26
+wait 1200
+snap C:\S07.BMP
+key 09
+wait 600
+snap C:\S08.BMP
+close
+wait 2500
