@@ -282,6 +282,7 @@ void   run_get(DOC *d, DWORD i, DWORD *cpLim, ATOM32 *a);
 /* editing */
 BOOL   doc_insert(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp);
 BOOL   doc_delete(DOC *d, DWORD cp, DWORD n);
+void   doc_put(DOC *d, DWORD cp, const void FAR *s, DWORD n);   /* overwrite bytes */
 BOOL   doc_set_chp(DOC *d, DWORD cp, DWORD cpLim, ATOM32 (*fn)(DOC *, ATOM32, WORD), WORD arg);
 BOOL   doc_terminate_last(DOC *d, ATOM32 chp);
 BOOL   doc_insert_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp, ATOM32 pap);
@@ -351,6 +352,10 @@ LRESULT FAR PASCAL __export PageInfoWndProc(HWND, UINT, WPARAM, LPARAM);
 void  view_key(WPARAM vk);
 void  view_char(WORD ch);
 void  sel_props(CHPX *c);
+BOOL  view_pict_selected(void);
+BOOL  view_pict_mode(void);
+void  view_pict_start(int mode);
+BOOL  view_pict_scale(char *s);
 
 /* ---- commands (cmds.c), main (main.c) ---- */
 void  cmd_char(WORD id);
@@ -367,6 +372,21 @@ void  undo_end_typing(void);
 BOOL  undo_typing(void);
 void  undo_clear(void);
 void  cmd_para(WORD id);
+#define PA_ALL       1                  /* every paragraph, not the selected */
+#define PA_NORMAL    2                  /* Paragraph > Normal */
+#define PA_TERMINATE 4                  /* with PA_ALL: end the last paragraph */
+#define PA_KEEPB0    8                  /* PAP byte 0 as it was */
+void  cmd_para_how(WORD id, WORD how);
+void  pap_apply(void (*fn)(PAPX *, WORD), WORD arg, WORD how);
+/* the ruler (ruler.c) */
+extern HWND g_ruler;
+extern BOOL g_cm;
+BOOL  ruler_register(HINSTANCE);
+void  ruler_toggle(void);
+void  ruler_update(void);
+void  ruler_done(void);
+int   ruler_height(void);
+void  frame_layout(int cx, int cy);
 void  cmd_indents(void);
 void  cmd_tabs(void);
 void  cmd_pagelayout(void);

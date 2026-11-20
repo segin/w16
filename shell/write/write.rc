@@ -3,8 +3,8 @@
  *
  * Menus, accelerators, dialog layouts, control IDs and the plain UI
  * strings match Windows 3.1's Write as observed (its resource templates
- * read as data with tools/nerc.py, and SNAP.EXE screenshots). The icon is
- * our own (tools/mkwriteicon.py). Strings that name Microsoft products
+ * read as data with tools/nerc.py, and SNAP.EXE screenshots). The icon and
+ * the ruler's bitmaps are our own (tools/mkwriteicon.py, mkwriteruler.py). Strings that name Microsoft products
  * are our own wording.
  */
 #include <windows.h>
@@ -15,6 +15,11 @@
 #define WR_DLGSTYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 
 IDI_WRITE ICON "write.ico"
+
+/* the ruler's art, our own (tools/mkwriteruler.py), in the cell sizes of
+   the original's resources 102 and 202 (ARCHITECTURE.md 15.6) */
+102 BITMAP "rbuttons.bmp"
+202 BITMAP "rmarks.bmp"
 
 MW_MENU MENU
 BEGIN

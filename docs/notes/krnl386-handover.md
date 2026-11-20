@@ -219,6 +219,35 @@ the rerun or the final run: swapesc@k386 "09-win: the icon's title 38 60
 active 632 (3.1's: title 37 54 active 0)", the tree's KRNL386 with the
 MS-DOS Prompt icon after Alt+Esc: an intermittent difference to chase.
 
+## Exit Windows under w16's WIN386: a GP fault in USER (2026-11-19)
+
+User report: the install tree over Windows 3.1 in plain DOSBox, `WIN /3`
+under w16's WIN386, Exit Windows from Program Manager: "w16: exception
+000D at 0497:8204 (USER:3) err=0D40", after the drivers had put their
+vectors back. Not a WNet call (Program Manager imports none, and no
+network driver is installed). 8204 is the `retf 6` of an epilogue that
+Watcom shares between ExitWindows and the WNet stubs (`L$185`, the end of
+U_WNETABORTJOB in u_misc.o). What happened:
+- ExitKernel's INT 21h 4Ch (kexit_to_dos) was made with Program Manager's
+  PDB as DOS's current PSP. w16's WIN386 takes a 4Ch with a task's PDB
+  current for that task's end (dpmi.c task_exit): it ended the PDB and
+  returned, so kexit_to_dos returned ("back to DOS" was already printed).
+- ExitKernel was `void` (retf 0), but USER passes it one word (Pietrek
+  ch. 1: `ExitKernel(ExitCode)`), so ExitWindows' stack was 2 bytes off on
+  the way out. Its `pop si` got the code word, `pop ds` got SI (DS=0000),
+  `pop bp` got Program Manager's DS 07BFh (BP=07BEh), and the `retf 6`
+  took the return offset 0D40h as the code segment: the report exactly.
+Fix (kernel/util.c, kmisc.c, task.c): KERNEL's own PSP made current before
+its final 4Ch (kernel_psp(1)), as Microsoft's KRNL386 does (WIN386
+handover note: "with its own PSP current"); ExitKernel takes and pops its
+word (the code itself still unused: exit code 0, UNVERIFIED). Standard
+mode (w16's DOSX) and Microsoft's WIN386 were not affected: they ended
+w16's KRNL386 cleanly before the fix. Boot-test case `exittree` (parts
+e386, e386ms, std): the tree laid over 3.1 with 3.1's INI files as the
+user had it, Exit Windows, KERNEL's "back to DOS" with no fault report
+and the prompt in text mode. Before the fix e386 failed with the user's
+fault at the same address and error code.
+
 ## Test results (installation-05, tools/remote-test.sh, commit 93f8083)
 
 - `make test`: pass; 38 probes x 2 DPMI hosts x 2 kernels (KRNL286 and

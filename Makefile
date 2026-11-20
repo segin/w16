@@ -1202,7 +1202,7 @@ $(DOS)/TASKMAN.EXE: $(SHELL_TM) $(B)/shell/taskman/taskman.res shell/taskman/tas
 
 # ---- shell: WRITE.EXE (shell/write/; ARCHITECTURE.md 15.6), Windows 3.1
 # only ----
-WR_C     := main doc wrifile view cmds pict ole print hdrftr util
+WR_C     := main doc wrifile view cmds pict ole print hdrftr util ruler
 SHELL_WR := $(B)/shell/start.o $(B)/shell/write/i4.o $(WR_C:%=$(B)/shell/write/%.o)
 shell: $(DOS)/WRITE.EXE
 $(B)/shell/write/%.o: shell/write/%.c shell/write/write.h
@@ -1214,7 +1214,14 @@ $(B)/shell/write/i4.o: shell/write/i4.asm
 $(B)/shell/write/write.ico: tools/mkwriteicon.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 tools/mkwriteicon.py $@
-$(B)/shell/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico
+$(B)/shell/write/rbuttons.bmp: tools/mkwriteruler.py
+	@mkdir -p $(@D)
+	python3 tools/mkwriteruler.py buttons $@
+$(B)/shell/write/rmarks.bmp: tools/mkwriteruler.py
+	@mkdir -p $(@D)
+	python3 tools/mkwriteruler.py marks $@
+$(B)/shell/write/write.res: shell/write/write.rc shell/write/write.h $(B)/shell/write/write.ico \
+    $(B)/shell/write/rbuttons.bmp $(B)/shell/write/rmarks.bmp
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/write -i=$(B)/shell/write -fo=$@ $<
 $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk tools/nemark.py
 	@mkdir -p $(@D)
@@ -1233,7 +1240,8 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 test: dos fonts grpcheck
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
-	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV
+	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV \
+	    $(DOS)/SB16.DRV
 	RUNTESTS_DPMI="hdpmi dosx" RUNTESTS_KERNEL="$${RUNTESTS_KERNEL:-KRNL286 KRNL386}" tests/run-tests.sh
 
 # boot real Windows 3.1 on w16's parts and compare each screen with the
@@ -1426,6 +1434,23 @@ $(DOS)/GD4.EXE: $(B)/tests/start.o $(B)/tests/gd4.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd4.map file { $(B)/tests/start.o $(B)/tests/gd4.o }
+# GD5.EXE: the GDI audit's probe (tests/apps/gd5.c; tests/gdiaudit.sh,
+# the boot-test case gdiaudit)
+gdprobes: $(DOS)/GD5.EXE
+dos: $(DOS)/GD5.EXE
+$(B)/tests/gd5.o: tests/apps/gd5ref.h tests/apps/tklog.h
+$(DOS)/GD5.EXE: $(B)/tests/start.o $(B)/tests/gd5.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd5.map file { $(B)/tests/start.o $(B)/tests/gd5.o }
+# GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
+# the library's; tests/apps/gd6.c); make test
+dos: $(DOS)/GD6.EXE
+$(B)/tests/gd6.o: tests/apps/gd6ref.h tests/apps/tklog.h
+$(DOS)/GD6.EXE: $(B)/tests/start.o $(B)/tests/gd6.o $(B)/gdi/i4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd6.map file { $(B)/tests/start.o $(B)/tests/gd6.o $(B)/gdi/i4.o }
 # ---- WINOLDAP.MOD (Standard-mode DOS application support; ARCHITECTURE.md 9.7) ----
 # WO probes: WO2.EXE, a protected-mode interrupt spy (tests/worun.sh)
 WOPROBES := $(DOS)/WO1.MOD $(DOS)/WO2.EXE $(DOS)/WO3.COM
@@ -1859,6 +1884,50 @@ $(DOS)/US28.EXE: $(B)/tests/start.o $(B)/tests/us28.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us28.map file { $(B)/tests/start.o $(B)/tests/us28.o }
 dos: $(DOS)/US28.EXE
+# US31: a window dragged by its caption while timers, posted messages and
+# a WH_GETMESSAGE hook that keeps posting (QuickTime's) go on (tests/apps/us31.c)
+$(B)/tests/us31.o: tests/apps/us31ref.h tests/apps/tklog.h
+$(DOS)/US31.EXE: $(B)/tests/start.o $(B)/tests/us31.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31.map file { $(B)/tests/start.o $(B)/tests/us31.o }
+dos: $(DOS)/US31.EXE
+$(B)/tests/us31b.o: tests/apps/us31.c tests/apps/us31ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -DUS31_OTHER -fo=$@ tests/apps/us31.c
+$(DOS)/US31B.EXE: $(B)/tests/start.o $(B)/tests/us31b.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31b.map file { $(B)/tests/start.o $(B)/tests/us31b.o }
+dos: $(DOS)/US31B.EXE
+# US29: the USER audit's probe (tests/apps/us29.c; docs/notes/user-audit-triage.md),
+# its helper task US29A (us29a.c) and DLL US29D (us29d.c)
+$(B)/tests/us29.o: tests/apps/us29ref.h tests/apps/tklog.h
+$(DOS)/US29.EXE: $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us29.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29.map file { $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+$(DOS)/US29A.EXE: $(B)/tests/start.o $(B)/tests/us29a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29a.map file { $(B)/tests/start.o $(B)/tests/us29a.o }
+$(DOS)/US29D.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o tests/apps/dll.lnk tests/apps/us29d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29d.map file { $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o }
+dos: $(DOS)/US29.EXE $(DOS)/US29A.EXE $(DOS)/US29D.DLL
+# US30: where 3.1 calls the hooks (tests/apps/us30.c; USER audit, item 8)
+$(B)/tests/us30.o: tests/apps/us30ref.h tests/apps/tklog.h
+$(B)/tests/us30.res: tests/apps/us30.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US30.EXE: $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us30.res tests/apps/app.lnk tests/apps/us30.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us30.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us30.map option resource=$(B)/tests/us30.res \
+	    file { $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US30.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk
@@ -2364,6 +2433,50 @@ install-tree: $(W16SYS)/TIMER.DRV
 $(W16SYS)/TIMER.DRV: $(DOS)/TIMER.DRV
 	@mkdir -p $(@D)
 	cp $< $@
+# ---- SB16.DRV: w16's Sound Blaster 16 driver, module SB16 (drivers/sb16;
+# README.md there; ARCHITECTURE.md 24). Large model, SS != DS (it runs on
+# its callers' stacks and at interrupt time); not in the default
+# SYSTEM.INI (assets/README.TXT says how to enable it) ----
+SB16CFLAGS := -q -bt=windows -ml -zu -2 -s -zl -ox -wx -we -nt=SB_TEXT -i=$(WATCOM)/h -i=$(WATCOM)/h/win
+SB16OBJS := $(B)/sb16/sb16a.o $(B)/sb16/sb16.o $(B)/sb16/wave.o $(B)/sb16/midi.o $(B)/sb16/aux.o \
+            $(B)/gdi/i4.o
+$(B)/sb16/%.o: drivers/sb16/%.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/sb16/%.o: drivers/sb16/%.c drivers/sb16/sb16.h
+	@mkdir -p $(@D)
+	$(WCC) $(SB16CFLAGS) -fo=$@ $<
+$(B)/sb16/sb16ver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 1.0.0.0 --type 3 --subtype 9 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Sound Blaster 16 driver" \
+	    FileVersion=1.0 InternalName=sb16.drv \
+	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    OriginalFilename=sb16.drv ProductName=w16 ProductVersion=3.10
+$(B)/sb16/sb16.res: drivers/sb16/sb16.rc $(B)/sb16/sb16ver.bin
+	@mkdir -p $(@D)
+	cd $(B)/sb16 && $(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=sb16.res $(CURDIR)/drivers/sb16/sb16.rc
+$(DOS)/SB16.DRV: $(SB16OBJS) $(B)/sb16/sb16.res drivers/sb16/sb16.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @drivers/sb16/sb16.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/sb16/sb16.map option resource=$(B)/sb16/sb16.res file { $(SB16OBJS) }
+	python3 tools/nemark.py $@ 3.10 8309 08
+dos: $(DOS)/SB16.DRV
+install-tree: $(W16SYS)/SB16.DRV
+$(W16SYS)/SB16.DRV: $(DOS)/SB16.DRV
+	@mkdir -p $(@D)
+	cp $< $@
+# SBP.EXE, its playing probe (tests/sb16/sbp.c; tests/sb16/sbaudio.sh)
+dos: $(DOS)/SBP.EXE
+$(B)/sb16/tests/sbp.o: tests/sb16/sbp.c
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fo=$@ $<
+SBPOBJS := $(B)/tests/start.o $(B)/sb16/tests/sbp.o $(B)/gdi/i4.o
+$(DOS)/SBP.EXE: $(SBPOBJS) tests/apps/app.lnk tests/sb16/sbp.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/sb16/sbp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/sb16/tests/sbp.map file { $(SBPOBJS) }
 # ---- SN1.EXE: the sound driver observed (tests/apps/sn1.c; run by
 # tests/soundprobe.sh with Windows 3.1's MMSOUND.DRV and with w16's)
 $(B)/tests/sn1.o: tests/apps/sn1ref.h tests/apps/tklog.h
@@ -2379,6 +2492,16 @@ $(DOS)/SNDREC.DRV: $(B)/tests/sndrec.o tests/apps/sndrec.lnk
 	$(WLINK) @tests/apps/sndrec.lnk name $@ option map=$(B)/tests/sndrec.map file { $(B)/tests/sndrec.o }
 	python3 tools/nemark.py $@ 3.10
 dos: $(DOS)/SNDREC.DRV
+# KRNLOG.DLL: a recording KERNEL for the sound driver under test, whose
+# imports of KERNEL are renamed to KRNLOG (tests/apps/krnlog.c;
+# tests/soundprobe.sh beep)
+$(DOS)/KRNLOG.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/krnlog.o $(B)/tests/krnlogs.o \
+                   tests/apps/dll.lnk tests/apps/krnlog.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/krnlog.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/krnlog.map file { $(B)/tests/dllstart.o $(B)/tests/dll/krnlog.o $(B)/tests/krnlogs.o }
+	python3 tools/nemark.py $@ 3.10
+dos: $(DOS)/KRNLOG.DLL
 # COMMREC.DRV: a recording stand-in for COMM.DRV, in front of the real one
 # renamed MCOM (tests/apps/commrec.c; tests/commusr.sh)
 $(DOS)/COMMREC.DRV: $(B)/tests/dllstart.o $(B)/tests/dll/commrec.o \
@@ -2838,8 +2961,10 @@ $(DOS)/MMC.DLL: $(MMCOBJS) tests/apps/dll.lnk tests/mmsystem/mmc.lnk
 	    option map=$(B)/mmsystem/tests/mmc.map file { $(MMCOBJS) }
 # MMSYSLOG.DLL and the logging pass-through device drivers MDS*.DRV
 # (tests/mmsystem/mdl.c, mds.c): the variants differ in module name and
-# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux, C MCI)
-MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1 MDSC1 MDSC2 MDSC3 MDSC4
+# exports only (W wave with MIDI, F Creative's FM, M MIDI out, A aux, C MCI,
+# X all: SB16.DRV)
+MDSVARS := MDSW1 MDSW2 MDSW3 MDSW4 MDSF1 MDSM1 MDSM2 MDSM3 MDSA1 MDSC1 MDSC2 MDSC3 MDSC4 \
+           MDSX1 MDSX2 MDSX3
 mmprobes: $(DOS)/MMSYSLOG.DLL $(patsubst %,$(DOS)/%.DRV,$(MDSVARS))
 $(B)/mmsystem/tests/mdl.o: tests/mmsystem/mdl.c tests/mmsystem/mdl.h
 	@mkdir -p $(@D)
@@ -2854,7 +2979,8 @@ $(DOS)/MMSYSLOG.DLL: $(MDLOBJS) tests/apps/dll.lnk tests/mmsystem/mdl.lnk
 	    option map=$(B)/mmsystem/tests/mdl.map file { $(MDLOBJS) }
 MDSOBJS := $(B)/tests/dllstart.o $(B)/mmsystem/tests/mds.o $(B)/mmsystem/tests/mdsent.o
 $(DOS)/MDS%.DRV: $(MDSOBJS) tests/apps/dll.lnk tests/mmsystem/mds.lnk tests/mmsystem/mdsw.lnk \
-	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk tests/mmsystem/mdsc.lnk
+	    tests/mmsystem/mdsf.lnk tests/mmsystem/mdsm.lnk tests/mmsystem/mdsa.lnk tests/mmsystem/mdsc.lnk \
+	    tests/mmsystem/mdsx.lnk
 	@mkdir -p $(@D)
 	v=$$(echo $* | cut -c1 | tr A-Z a-z); \
 	$(WLINK) @tests/mmsystem/mds$$v.lnk option modname=MDS$* name $@ libpath $(WATCOM)/lib286/win \

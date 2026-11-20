@@ -23,6 +23,16 @@
  *   E  the beeps: DoBeep, MessageBeep with each type, separated by
  *      silences (the capture shows them)
  *   F  a melody at several tempos, then WEP
+ * and (tests/soundprobe.sh beep: the driver under test behind SNDREC, with
+ * its imports of KERNEL renamed to KRNLOG, tests/apps/krnlog.c, so that
+ * what it asks KERNEL and MMSYSTEM for is recorded)
+ *   M  MessageBeep with every type (and unknown ones), DoBeep, two at once
+ *   N  the beep turned off (SPI_SETBEEP; [windows] Beep=no written alone)
+ *   I  WIN.INI [sounds] entries missing, empty, naming a missing file
+ *   R  a sound already playing (sndPlaySound from the probe)
+ *   L  MMSYSTEM loaded by LoadLibrary after the boot, then freed
+ *   Y  the SOUND API's notes before and after a beep (MMSYSTEM's timer)
+ *   Z  DoBeep with interrupts off
  */
 #include <windows.h>
 
@@ -1252,6 +1262,484 @@ static void records(HMODULE hs)
     flush();
 }
 
+/* ---- the beep in full (parts M, N, I, R, L; tests/soundprobe.sh beep):
+   MessageBeep with every type and in every state, with the driver under
+   test behind SNDREC (USER's calls of it) and its imports of KERNEL
+   renamed to KRNLOG (tests/apps/krnlog.c: what the driver asks KERNEL
+   for, and the sounds it hands MMSYSTEM's sndPlaySound). After each step
+   the records made during the call ("in") and during the 2.2 s after it
+   ("after"); the capture has each step's sound after a marker. ---- */
+struct krec {
+    WORD fn, seq, a1, a2, a3, task;
+    DWORD r;
+    WORD flags, depth, rep;
+    char s[22];
+};
+struct khdr {
+    WORD n, max, size, seq, winflags, lost;
+    struct krec FAR *recs;
+    WORD yields, ticks;
+};
+static struct khdr FAR *kl;
+static WORD snrseen, lastid;
+static HMODULE hsnd;
+
+static const char *modname(WORD h, char *b)
+{
+    int k;
+    b[0] = 0;
+    if (!h)
+        return "0";
+    if (!GetModuleFileName((HMODULE)h, b, 40))
+        return "?";
+    for (k = lstrlen(b); k > 0 && b[k - 1] != '\\'; k--)
+        ;
+    return b + k;
+}
+
+/* the records since the last call, then cleared */
+static void beeprecs(const char *when)
+{
+    WORD i;
+    char a[44], b[44];
+    if (kl) {
+        for (i = 0; i < kl->n; i++) {
+            struct krec FAR *r = &kl->recs[i];
+            const char *task = r->task == (WORD)GetCurrentTask() ? "probe" : "other";
+            /* GetCurrentTask: 3.1's driver asks for the task in every entry of
+               the SOUND API (what for: not observed; w16's does not): "~" */
+            wsprintf(line, r->fn == 36 ? "OBS ~%s K " : "OBS %s K ", (LPSTR)when);
+            put(line);
+            switch (r->fn) {
+            case 15:
+                wsprintf(line, "GlobalAlloc(%04X, %04X%04X) = %s", r->a1, r->a2, r->a3,
+                         (LPSTR)(LOWORD(r->r) ? "h" : "0"));
+                break;
+            case 17:
+                wsprintf(line, "GlobalFree(h) = %04X", LOWORD(r->r));
+                break;
+            case 18:
+                wsprintf(line, "GlobalLock(h) = %s", (LPSTR)(r->r ? "p" : "0"));
+                break;
+            case 29:
+                wsprintf(line, "Yield()");
+                break;
+            case 36:
+                wsprintf(line, "GetCurrentTask() = %s",
+                         (LPSTR)(LOWORD(r->r) == (WORD)GetCurrentTask() ? "probe" : "other"));
+                break;
+            case 47:
+                if (r->a1)
+                    wsprintf(line, "GetModuleHandle(\"%s\") = %s", (LPSTR)r->s, (LPSTR)modname(LOWORD(r->r), b));
+                else
+                    wsprintf(line, "GetModuleHandle(%04X) = %s", r->a2, (LPSTR)modname(LOWORD(r->r), b));
+                break;
+            case 50:
+                if (r->a2)
+                    wsprintf(line, "GetProcAddress(%s, \"%s\") = %s", (LPSTR)modname(r->a1, a), (LPSTR)r->s,
+                             (LPSTR)(r->r ? "proc" : "0"));
+                else
+                    wsprintf(line, "GetProcAddress(%s, #%u) = %s", (LPSTR)modname(r->a1, a), r->a3,
+                             (LPSTR)(r->r ? "proc" : "0"));
+                break;
+            case 1002:
+                if (r->a3 & 4)
+                    wsprintf(line, "sndPlaySound(memory, %04X) = %u", r->a3, LOWORD(r->r));
+                else if (r->a1)
+                    wsprintf(line, "sndPlaySound(\"%s\", %04X) = %u", (LPSTR)r->s, r->a3, LOWORD(r->r));
+                else
+                    wsprintf(line, "sndPlaySound(%04X, %04X) = %u", r->a2, r->a3, LOWORD(r->r));
+                break;
+            case 1602:
+                wsprintf(line, "timeSetEvent(%u, %u, %s, ~user=%08lX, %04X) = %s", r->a1, r->a2,
+                         (LPSTR)(r->s[0] == 1 ? "the callback before" : r->s[0] == 2 ? "another callback"
+                                 : "a callback"), *(DWORD FAR *)(r->s + 2), r->a3,
+                         (LPSTR)(LOWORD(r->r) ? "id" : "0"));
+                if (LOWORD(r->r))
+                    lastid = LOWORD(r->r);
+                break;
+            case 1603:
+                wsprintf(line, "timeKillEvent(%s ~%04X) = %u", (LPSTR)(r->a1 == lastid ? "id" : r->a1 ? "other" : "0"),
+                         r->a1, LOWORD(r->r));
+                break;
+            case 1604:
+                wsprintf(line, "timer callback(%s ~%04X, %04X, ~user=%08lX)", (LPSTR)(r->a1 == lastid ? "id" : "other"),
+                         r->a1, r->a2, r->r);
+                break;
+            default:
+                wsprintf(line, "fn %u", r->fn);
+            }
+            put(line);
+            if (r->rep)
+                wsprintf(line, r->fn == 36 ? " task=%s IF=%u %s, and %u more\r\n"
+                         : " task=%s IF=%u %s, and more ~%u\r\n", (LPSTR)task, (r->flags >> 9) & 1,
+                         (LPSTR)(r->depth > 1 ? "nested" : "direct"), r->rep);
+            else
+                /* nested: made inside another recorded call (the timer
+                   callback; how deep follows where the tick fell) */
+                wsprintf(line, " task=%s IF=%u %s\r\n", (LPSTR)task, (r->flags >> 9) & 1,
+                         (LPSTR)(r->depth > 1 ? "nested" : "direct"));
+            put(line);
+        }
+        if (kl->lost) {
+            wsprintf(line, "OBS %s K %u records lost\r\n", (LPSTR)when, kl->lost);
+            put(line);
+        }
+        /* Yield (WaitSoundState's loop) and the timer callback (every 5
+           ms while notes play): only whether there were any */
+        if (kl->yields || kl->ticks) {
+            wsprintf(line, "OBS %s K Yield: %s ~%u, timer callbacks: %s ~%u\r\n", (LPSTR)when,
+                     (LPSTR)(kl->yields ? "some" : "none"), kl->yields, (LPSTR)(kl->ticks ? "some" : "none"),
+                     kl->ticks);
+            put(line);
+        }
+        kl->n = 0;
+        kl->lost = 0;
+        kl->yields = kl->ticks = 0;
+    }
+    if (hsnd) {
+        FARPROC plog = GetProcAddress(hsnd, MAKEINTRESOURCE(200));
+        BYTE FAR *h = plog ? (BYTE FAR *)((DWORD (FAR PASCAL *)(void))plog)() : 0;
+        if (h) {
+            WORD n = *(WORD FAR *)h, rs = *(WORD FAR *)(h + 4);
+            for (i = snrseen; i < n; i++) {
+                WORD FAR *r = (WORD FAR *)(h + 16 + i * rs);
+                WORD ord = r[0];
+                wsprintf(line, "OBS %s REC %s: %s(", (LPSTR)when, (LPSTR)modname(K_GETEXEPTR(r[7]), a),
+                         (LPSTR)(ord <= 18 ? snames[ord] : "?"));
+                put(line);
+                if (ord == 17)
+                    wsprintf(line, "%04X) %u bytes off ~AX=%04X ~DX=%04X\r\n", r[8], r[18], r[16], r[17]);
+                else
+                    wsprintf(line, ") %u bytes off\r\n", r[18]);
+                put(line);
+            }
+            snrseen = n;
+        }
+    }
+    flush();
+}
+
+/* one step: the call, its records, 2.2 s (a wave sound plays out), what
+   came in them */
+static void beepstep(const char *what, WORD type, int direct)
+{
+    DWORD t0;
+    char w[60];
+    marker(1);
+    wsprintf(w, "%s before", (LPSTR)what);
+    beeprecs(w);
+    t0 = GetTickCount();
+    if (direct)
+        callw(17, 1, type, 0, 0, 0, 0);
+    else
+        MessageBeep(type);
+    t0 = GetTickCount() - t0;
+    wsprintf(line, "OBS %s %s(%04X) ~took=%lu\r\n", (LPSTR)what, (LPSTR)(direct ? "DoBeep" : "MessageBeep"),
+             type, t0);
+    put(line);
+    wsprintf(w, "%s in", (LPSTR)what);
+    beeprecs(w);
+    pause(40);
+    wsprintf(w, "%s after", (LPSTR)what);
+    beeprecs(w);
+}
+
+#define SND_ASYNC 0x0001          /* the Multimedia Programmer's Guide */
+#define SND_LOOP  0x0008
+typedef BOOL (FAR PASCAL *SNDPROC)(LPCSTR, UINT);
+static SNDPROC mmsnd(void)
+{
+    HMODULE m = GetModuleHandle("MMSYSTEM");
+    return m ? (SNDPROC)GetProcAddress(m, "sndPlaySound") : 0;
+}
+
+static void beepstate(const char *p)
+{
+    HMODULE m = GetModuleHandle("MMSYSTEM");
+    FARPROC f = m ? GetProcAddress(m, "waveOutGetNumDevs") : 0;
+    BOOL b = 2;
+    SystemParametersInfo(SPI_GETBEEP, 0, &b, 0);
+    wsprintf(line, "OBS %s MMSYSTEM loaded: %u, wave devices: %u, SPI_GETBEEP %d\r\n", (LPSTR)p, m != 0,
+             f ? ((UINT (FAR PASCAL *)(void))f)() : 0, b);
+    put(line);
+    flush();
+}
+
+static void beepsetup(void)
+{
+    HMODULE k;
+    hsnd = GetModuleHandle("SOUND");
+    k = GetModuleHandle("KRNLOG");
+    kl = k ? ((struct khdr FAR * (FAR PASCAL *)(void))GetProcAddress(k, "KLRECS"))() : 0;
+    wsprintf(line, "OBS M KRNLOG: %u\r\n", kl != 0);
+    put(line);
+    if (kl && kl->winflags != (WORD)GetWinFlags()) {
+        wsprintf(line, "FAIL M KRNLOG's __WINFLAGS %04X, GetWinFlags %04X (tests/apps/krnlogs.asm)\r\n",
+                 kl->winflags, (WORD)GetWinFlags());
+        put(line);
+    }
+    beepstate("M");
+    /* what the driver did before the probe ran (its load, the boot) */
+    beeprecs("M boot");
+}
+
+static const WORD alltypes[] = { 0, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0xF0,
+    1, 2, 3, 4, 5, 6, 0x0F, 0x11, 0x14, 0x90, 0xA0, 0x100, 0x110, 0x210, 0x410, 0x810, 0x1010, 0x2010,
+    0x4010, 0x8010, 0x8000, 0xFFF0, 0xFFFE, 0xFFFF };
+
+static void partM(void)
+{
+    int i;
+    marker(4);
+    for (i = 0; i < sizeof alltypes / sizeof alltypes[0]; i++)
+        beepstep("M", alltypes[i], 0);
+    /* DoBeep itself, as USER calls it */
+    beepstep("M", 0, 1);
+    beepstep("M", 0x30, 1);
+    beepstep("M", 0xFFFF, 1);
+    /* two at once */
+    marker(2);
+    MessageBeep(0x10);
+    MessageBeep(0x40);
+    put("OBS M MessageBeep(0010) MessageBeep(0040)\r\n");
+    beeprecs("M two in");
+    pause(40);
+    beeprecs("M two after");
+    marker(2);
+    MessageBeep(0x10);
+    MessageBeep(0xFFFF);
+    put("OBS M MessageBeep(0010) MessageBeep(FFFF)\r\n");
+    beeprecs("M two in");
+    pause(40);
+    beeprecs("M two after");
+    marker(4);
+}
+
+/* N: the beep turned off: SPI_SETBEEP, and [windows] Beep= written alone */
+static void partN(void)
+{
+    static const WORD t[] = { 0, 0x10, 0xFFFF };
+    char was[8];
+    int i;
+    marker(4);
+    SystemParametersInfo(SPI_SETBEEP, FALSE, 0, 0);
+    beepstate("N SPI_SETBEEP off");
+    for (i = 0; i < 3; i++)
+        beepstep("N SPI off", t[i], 0);
+    beepstep("N SPI off", 0, 1);
+    SystemParametersInfo(SPI_SETBEEP, TRUE, 0, 0);
+    beepstate("N SPI_SETBEEP on");
+    GetProfileString("windows", "Beep", "", was, sizeof was);
+    WriteProfileString("windows", "Beep", "no");
+    beepstate("N Beep=no written");
+    for (i = 0; i < 3; i++)
+        beepstep("N Beep=no", t[i], 0);
+    WriteProfileString("windows", "Beep", was);
+    beepstate("N Beep restored");
+    beepstep("N restored", 0, 0);
+    marker(4);
+}
+
+/* I: [sounds] entries missing, empty, naming a missing file */
+static void partI(void)
+{
+    char hand[80], def[80];
+    marker(4);
+    GetProfileString("sounds", "SystemHand", "", hand, sizeof hand);
+    GetProfileString("sounds", "SystemDefault", "", def, sizeof def);
+    wsprintf(line, "OBS I SystemHand=%s SystemDefault=%s\r\n", (LPSTR)hand, (LPSTR)def);
+    put(line);
+    WriteProfileString("sounds", "SystemHand", NULL);
+    beepstep("I hand missing", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", "");
+    beepstep("I hand empty", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", "C:\\NOFILE.WAV, Missing");
+    beepstep("I hand nofile", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", "C:\\WINDOWS\\WIN.INI, Not a wave");
+    beepstep("I hand notwave", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", "tada.wav, Tada");
+    beepstep("I hand tada", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", NULL);
+    WriteProfileString("sounds", "SystemDefault", NULL);
+    beepstep("I both missing", 0x10, 0);
+    beepstep("I both missing", 0, 0);
+    WriteProfileString("sounds", "SystemDefault", "");
+    beepstep("I default empty", 0, 0);
+    WriteProfileString("sounds", "SystemDefault", "C:\\NOFILE.WAV, Missing");
+    beepstep("I default nofile", 0, 0);
+    beepstep("I default nofile", 0x10, 0);
+    WriteProfileString("sounds", "SystemHand", hand);
+    WriteProfileString("sounds", "SystemDefault", def);
+    beepstep("I restored", 0x10, 0);
+    marker(4);
+}
+
+/* R: a sound already playing (sndPlaySound from the probe, asynchronous) */
+static void partR(void)
+{
+    SNDPROC snd = mmsnd();
+    BOOL r;
+    marker(4);
+    wsprintf(line, "OBS R sndPlaySound: %u\r\n", snd != 0);
+    put(line);
+    if (!snd) {
+        flush();
+        return;
+    }
+    r = snd("SystemStart", SND_ASYNC);
+    wsprintf(line, "OBS R sndPlaySound(SystemStart, async) = %d\r\n", r);
+    put(line);
+    pause(5);
+    beepstep("R start playing", 0x30, 0);
+    r = snd("SystemStart", SND_ASYNC);
+    pause(5);
+    beepstep("R start playing", 0xFFFF, 0);
+    r = snd("SystemDefault", SND_ASYNC | SND_LOOP);
+    wsprintf(line, "OBS R sndPlaySound(SystemDefault, async loop) = %d\r\n", r);
+    put(line);
+    pause(10);
+    beepstep("R loop playing", 0, 0);
+    r = snd(NULL, 0);
+    wsprintf(line, "OBS R sndPlaySound(NULL) = %d\r\n", r);
+    put(line);
+    pause(10);
+    marker(4);
+}
+
+/* Y: the SOUND API's notes after a beep found MMSYSTEM (does the driver
+   then play them on MMSYSTEM's timer?) */
+static void ynotes(const char *what)
+{
+    DWORD t0;
+    WORD m;
+    int i;
+    char w[40];
+    marker(2);
+    callw(1, 0, 0, 0, 0, 0, 0);
+    callw(5, 5, 1, 120, 128, 0, 0);
+    for (i = 0; i < 4; i++)
+        callw(4, 4, 1, 37 + i, 8, 0, 0);
+    wsprintf(w, "Y %s queued", (LPSTR)what);
+    beeprecs(w);
+    t0 = GetTickCount();
+    callw(9, 0, 0, 0, 0, 0, 0);
+    m = pit0max(3);
+    wsprintf(line, "OBS Y %s channel 0 reload playing: %s ~%04X\r\n", (LPSTR)what,
+             (LPSTR)(m > 0xF000 ? "65536" : "less"), m);
+    put(line);
+    wsprintf(w, "Y %s started", (LPSTR)what);
+    beeprecs(w);
+    callw(11, 1, 0, 0, 0, 0, 0);
+    wsprintf(line, "OBS ~Y %s played after %lu ms\r\n", (LPSTR)what, GetTickCount() - t0);
+    put(line);
+    wsprintf(w, "Y %s played", (LPSTR)what);
+    beeprecs(w);
+    pause(5);
+    wsprintf(w, "Y %s after", (LPSTR)what);
+    beeprecs(w);
+    callw(2, 0, 0, 0, 0, 0, 0);
+    wsprintf(w, "Y %s closed", (LPSTR)what);
+    beeprecs(w);
+}
+
+static void partY(void)
+{
+    WORD m;
+    int i;
+    marker(4);
+    ynotes("before any beep");
+    beepstep("Y first", 0x10, 0);
+    ynotes("after a beep");
+    /* (a marker first: after the notes above, 3.1's start came about 110
+       ms later on the recording than w16's although every call took the
+       same time by GetTickCount and the BIOS ticks: its clock lost two
+       ticks there; drivers/sound/README.md) */
+    marker(2);
+    callw(1, 0, 0, 0, 0, 0, 0);
+    callw(5, 5, 1, 120, 128, 0, 0);
+    for (i = 0; i < 4; i++)
+        callw(4, 4, 1, 37 + i, 8, 0, 0);
+    beeprecs("Y queued");
+    callw(9, 0, 0, 0, 0, 0, 0);
+    m = pit0max(3);
+    wsprintf(line, "OBS Y channel 0 reload playing: %s ~%04X\r\n", (LPSTR)(m > 0xF000 ? "65536" : "less"), m);
+    put(line);
+    beeprecs("Y started");
+    callw(11, 1, 0, 0, 0, 0, 0);
+    beeprecs("Y played");
+    beepstep("Y while open", 0x10, 0);
+    beepstep("Y while open", 0xFFFF, 0);
+    /* stopped while playing: StopSound, then CloseSound */
+    for (i = 0; i < 4; i++)
+        callw(4, 4, 1, 37 + i, 8, 0, 0);
+    callw(9, 0, 0, 0, 0, 0, 0);
+    pause(4);
+    beeprecs("Y playing");
+    callw(10, 0, 0, 0, 0, 0, 0);
+    beeprecs("Y StopSound while playing");
+    pause(4);
+    beeprecs("Y after StopSound");
+    for (i = 0; i < 4; i++)
+        callw(4, 4, 1, 37 + i, 8, 0, 0);
+    callw(9, 0, 0, 0, 0, 0, 0);
+    pause(4);
+    beeprecs("Y playing");
+    callw(2, 0, 0, 0, 0, 0, 0);
+    beeprecs("Y CloseSound while playing");
+    pause(4);
+    beeprecs("Y after CloseSound");
+    marker(4);
+}
+
+/* Z: DoBeep with interrupts off (as from an interrupt handler) */
+extern void __cdecl __far call_cli(FARPROC f, WORD arg);
+static void partZ(void)
+{
+    static const WORD t[] = { 0, 0x10, 0xFFFF };
+    int i;
+    char w[40];
+    marker(4);
+    for (i = 0; i < 3; i++) {
+        marker(1);
+        call_cli(p[17], t[i]);
+        wsprintf(line, "OBS Z DoBeep(%04X) with interrupts off\r\n", t[i]);
+        put(line);
+        wsprintf(w, "Z %04X in", t[i]);
+        beeprecs(w);
+        pause(40);
+        wsprintf(w, "Z %04X after", t[i]);
+        beeprecs(w);
+    }
+    marker(4);
+}
+
+/* L: MMSYSTEM loaded by the probe after the boot (run where SYSTEM.INI's
+   [boot] drivers= does not name it), and freed again */
+static void partL(void)
+{
+    HINSTANCE h;
+    marker(4);
+    beepstate("L");
+    beepstep("L before", 0x10, 0);
+    h = LoadLibrary("MMSYSTEM.DLL");
+    wsprintf(line, "OBS L LoadLibrary(MMSYSTEM.DLL) = %s\r\n", (LPSTR)((UINT)h >= 32 ? "ok" : "failed"));
+    put(line);
+    beepstate("L loaded");
+    beepstep("L loaded", 0x10, 0);
+    beepstep("L loaded", 0, 0);
+    if ((UINT)h >= 32)
+        FreeLibrary(h);
+    beepstate("L freed");
+    /* Microsoft's MMSYSTEM stays loaded after this FreeLibrary; w16's goes
+       (UNVERIFIED which is right: ARCHITECTURE.md 23.5). Gone, a beep
+       would call the sndPlaySound both drivers kept (3.1's does not look
+       again once found): both fault, so the probe does not beep then */
+    if (GetModuleHandle("MMSYSTEM"))
+        beepstep("L freed", 0x10, 0);
+    marker(4);
+}
+
 /* ---- X: experiments ---- */
 static void partX(void)
 {
@@ -1438,6 +1926,22 @@ int __cdecl tmain(void)
         partQ();
     if (part('X'))
         partX();
+    if (part('M') || part('N') || part('I') || part('R') || part('L') || part('Y') || part('Z'))
+        beepsetup();
+    if (part('Z'))
+        partZ();
+    if (part('Y'))
+        partY();
+    if (part('M'))
+        partM();
+    if (part('N'))
+        partN();
+    if (part('I'))
+        partI();
+    if (part('R'))
+        partR();
+    if (part('L'))
+        partL();
     flush();
     records(hs);
     out("SN1 done\r\n");

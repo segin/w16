@@ -31,7 +31,8 @@ typedef unsigned long  w_u32;
 #define W386_BP_IRQIRET 4       /* the IRET of a simulated hardware interrupt (VPICD's VID_IRET_Proc) */
 #define W386_BP_VMEXIT  5       /* a DOS VM's program has ended (the VM stub, AX = code, CF = EXEC failed) */
 #define W386_BP_VMSTART 6       /* a new DOS VM's first instruction (its VM_Init) */
-#define W386_BP_FIRSTFREE 7     /* real-mode callbacks and V86 API entries */
+#define W386_BP_INT21RET 7      /* the return of a V86 INT 21h (the VM leaves DOS: vm.c) */
+#define W386_BP_FIRSTFREE 8     /* real-mode callbacks and V86 API entries */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */

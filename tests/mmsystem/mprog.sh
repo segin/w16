@@ -13,6 +13,9 @@
 #   usage: tests/mmsystem/mprog.sh OUTDIR ms|w16 PROG [-e REFDIR]
 # -e REFDIR: the Microsoft run's directory (the w16 run waits for the same
 # screens). OUTDIR gets the shots (0*.png).
+# MPROG_SND=sb16w: w16's SB16.DRV (build/dos) as the wave, MIDI and aux
+# driver instead of SNDBLST2 ([sb16.drv] port=220 int=5 dma=1 hdma=5
+# mpuport=330; tests/sb16/sbscen.sh prog).
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -35,10 +38,17 @@ mplayer) run=MPLAYER.EXE ;;
 esac
 python3 "$root/tests/scripts/iniset.py" "$tmp/WIN.INI" "windows:run=$run" \
     'windows:CursorBlinkRate=65535'
-set -- -r -f "$tmp/WIN.INI=WINDOWS/WIN.INI" \
-    -f "$tmp/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV" -f "$tmp/MSADLIB.DRV=WINDOWS/SYSTEM/MSADLIB.DRV" \
-    -i 'drivers:wave=sndblst2.drv' -i 'drivers:midi=sndblst2.drv' \
-    -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
+if [ "${MPROG_SND:-sb2}" = sb16w ]; then
+    set -- -r -f "$tmp/WIN.INI=WINDOWS/WIN.INI" -f "$root/build/dos/SB16.DRV=WINDOWS/SYSTEM/SB16.DRV" \
+        -i 'drivers:wave=sb16.drv' -i 'drivers:midi=sb16.drv' -i 'drivers:aux=sb16.drv' \
+        -i 'sb16.drv:port=220' -i 'sb16.drv:int=5' -i 'sb16.drv:dma=1' -i 'sb16.drv:hdma=5' \
+        -i 'sb16.drv:mpuport=330'
+else
+    set -- -r -f "$tmp/WIN.INI=WINDOWS/WIN.INI" \
+        -f "$tmp/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV" -f "$tmp/MSADLIB.DRV=WINDOWS/SYSTEM/MSADLIB.DRV" \
+        -i 'drivers:wave=sndblst2.drv' -i 'drivers:midi=sndblst2.drv' \
+        -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
+fi
 [ "$mm" = w16 ] && set -- "$@" -f "$root/build/dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
     -f "$root/build/dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
 export DROPIN_CONF='[sblaster]

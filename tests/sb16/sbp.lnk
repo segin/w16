@@ -1,0 +1,4 @@
+# wlink directives for SBP.EXE (tests/sb16/sbp.c), the SB16 driver's playing probe
+@tests/apps/app.lnk
+option stack=16k
+library mmsystem.lib

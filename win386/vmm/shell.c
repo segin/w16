@@ -8,7 +8,8 @@
  * (tests/vxd/vxs.asm, tests/vxsrun.sh; the WIN386 handover note, step 6):
  *   0   the version: AX 030Ah, EBX the System VM's handle;
  *   9   ES:DI a block whose 48-bit pointer at +8 (offset, then selector)
- *       is WINOA386's event procedure (1547h:0000h; +4 was 0Fh); EDX
+ *       is WINOA386's event procedure (1547h:0000h; +4 was 0Fh); EAX,
+ *       EBX, ECX back 0 (nonzero: a TSR's name, see shell_api), EDX
  *       back 007Bh: a flat data selector (base 0, 4 GB, ring 3), through
  *       which WINOA386 reads the event records below;
  *   3   create a VM: ES:DI a block (+08h, +0Eh, +14h three 48-bit
@@ -352,8 +353,23 @@ void shell_api(struct cregs *r)
             u8 *b = (u8 *)pm_lin(r->es, r->edi);
             next_off = *(u32 *)(b + 8);
             next_sel = *(u16 *)(b + 12);
+            if (dpmi_verbose) {
+                u32 i;
+                trace("SHELL: 9's block");
+                for (i = 0; i < 48; i += 4) trace(" %x", *(u32 *)(b + i));
+                trace("\n");
+            }
         }
         SETW(r->edx, SEL_FLAT7B);
+        /* EBX and ECX come back 0 whatever came in (Windows 3.1, VXS.386:
+         * in 78h and 1D20h, left over from w16's VGA.3GR, out 0 and 0).
+         * Left nonzero, WINOA386 refused every DOS program: "You cannot
+         * start a non-Windows application because the x TSR is loaded"
+         * (UNVERIFIED what the pair names when it is not 0: a TSR Windows
+         * found, by the message) */
+        r->eax = 0;
+        r->ebx = 0;
+        r->ecx = 0;
         trace("SHELL: event procedure %x:%x\n", next_sel, next_off);
         return;
     case 0x03:

@@ -33,7 +33,7 @@
 #        recording, the card's wave output too, the same (tools/wavenv.py)
 #        (not in the default list: it needs .tools/sb16)
 #   SOUNDPROBE_PARTS: sn1's parts (default ABCDEFGHSPTUV)
-#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec] [allw16] [sb16]
+#   usage: tests/soundprobe.sh [-o DIR] [-m] [sn1] [queue] [rec] [allw16] [sb16] [beep]
 #        (default: sn1 queue rec allw16)
 #     -m   Microsoft's driver only (to look at its logs)
 # Exit status 0 when every comparison made agrees.
@@ -194,6 +194,72 @@ for p in $probes; do
                 fails=$((fails + 1))
             fi
         fi ;;
+    beep)
+        # MessageBeep in full (SN1 parts M N I R L): the driver under test
+        # behind SNDREC (USER's calls of it; renamed SOUNT) with its imports
+        # of KERNEL renamed to KRNLOG (tests/apps/krnlog.c: what it asks
+        # KERNEL for, the sounds it hands sndPlaySound), in each
+        # configuration BEEP_CASES lists (NAME:MMSYSTEM:WAVE:PARTS; MMSYSTEM
+        # ms, w16, none (not in [boot] drivers=, the file Microsoft's) or
+        # nonew16 (the same with w16's file); WAVE sb2 (Windows 3.1's
+        # SNDBLST2.DRV from its Setup files, DOSBox-X a Sound Blaster) or
+        # none): the logs identical, and the recordings the same segment
+        # by segment between SN1's markers (tools/beepcmp.py)
+        sbconf='[sblaster]
+sbtype=sb16
+sbbase=220
+irq=5
+dma=1
+hdma=5'
+        bcases=${BEEP_CASES:-mssb2:ms:sb2:ZYMNIR msnone:ms:none:ZYMNIR w16sb2:w16:sb2:ZYMNIR w16none:w16:none:YMN nomm:none:none:ML nommw16:nonew16:none:L}
+        for c in $bcases; do
+            n=${c%%:*} r=${c#*:}
+            mm=${r%%:*} r=${r#*:}
+            wave=${r%%:*} bparts=${r#*:}
+            set --
+            case $mm in
+            w16|nonew16) set -- -f "$dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
+                    -f "$dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK" ;;
+            esac
+            case $mm in none|nonew16) set -- "$@" -i 'boot:drivers=' ;; esac
+            conf=
+            if [ "$wave" = sb2 ]; then
+                [ -f "$out/SNDBLST2.DRV" ] ||
+                    python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/SNDBLST2.DR_" "$out/SNDBLST2.DRV"
+                set -- "$@" -f "$out/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV" -i drivers:wave=sndblst2.drv \
+                    -i drivers:midi=sndblst2.drv -i sndblst.drv:port=220 -i sndblst.drv:int=5
+                conf=$sbconf
+            fi
+            for s in $sides; do
+                if [ $s = ms ]; then src=$ms; else src=$w16; fi
+                cp "$src" "$out/SOUNT-b$n-$s.DLL"
+                python3 "$root/tools/nerename.py" "$out/SOUNT-b$n-$s.DLL" --module SOUNT \
+                    --import KERNEL=KRNLOG > /dev/null
+                DROPIN_CONF=$conf norepl=1 run $s "beep-$n" "$bparts" "$@" \
+                    -f "$dos/SNDREC.DRV=WINDOWS/SYSTEM/MMSOUND.DRV" \
+                    -f "$out/SOUNT-b$n-$s.DLL=WINDOWS/SYSTEM/SOUNT.DLL" \
+                    -f "$dos/KRNLOG.DLL=WINDOWS/SYSTEM/KRNLOG.DLL" &
+            done
+        done
+        wait
+        for c in $bcases; do
+            n=beep-${c%%:*}
+            for s in $sides; do
+                if grep -aq '^FAIL' "$out/$n-$s.log"; then
+                    echo "FAIL $n $s: $(grep -a -m1 '^FAIL' "$out/$n-$s.log")"
+                    fails=$((fails + 1))
+                fi
+            done
+            [ -z "$msonly" ] || continue
+            cmpf "$n" "$out/$n-ms.log" "$out/$n-w16.log"
+            if python3 "$root/tools/beepcmp.py" "$out/$n-ms.cap"/*.wav "$out/$n-w16.cap"/*.wav > "$out/$n-sound.txt"; then
+                echo "ok   $n sound: $(tail -1 "$out/$n-sound.txt")"
+            else
+                echo "FAIL $n sound ($out/$n-sound.txt):"
+                head -20 "$out/$n-sound.txt"
+                fails=$((fails + 1))
+            fi
+        done ;;
     *) echo "unknown probe $p" >&2; exit 2 ;;
     esac
 done

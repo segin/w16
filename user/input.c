@@ -10,7 +10,13 @@
  */
 #include "user.h"
 
-#define NSYSQ 120               /* UNVERIFIED: the system queue's length */
+/* The system queue's length: 3.1's holds 120 events, and a key or
+   button going down needs two places free, so that the matching up
+   always fits (US29 sq: 100 presses and releases with nobody reading
+   left 59 downs and 61 ups, the last an up, for keys and the left button
+   alike). w16 dropped whatever came once full, ups too, leaving keys and
+   buttons held down (USER audit, item 17). */
+#define NSYSQ 120
 
 typedef struct SYSEV {
     WORD  msg;                  /* WM_KEYDOWN.. / WM_MOUSEMOVE.. */
@@ -58,6 +64,13 @@ static BOOL in_filter_ok(UINT m, UINT lo, UINT hi)
     return (!lo && !hi) || (m >= lo && m <= hi);
 }
 
+/* a key or a mouse button going down */
+static BOOL is_down(WORD msg)
+{
+    return msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_LBUTTONDOWN ||
+           msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
+}
+
 /* the MK_ key state now (interrupt time: keystate is far data) */
 static WORD mk_state(void)
 {
@@ -101,7 +114,7 @@ static void push_event(WORD msg, WORD wp, DWORD lp)
             return;
         }
     }
-    if (sq_count < NSYSQ) {
+    if (sq_count < (is_down(msg) ? NSYSQ - 2 : NSYSQ)) {
         SYSEV *e = &sysq[(sq_head + sq_count) % NSYSQ];
         e->msg = msg;
         e->wParam = wp;
@@ -205,6 +218,29 @@ void __far __pascal __loadds MOUSE_EVENT_C(WORD ax, WORD bx, WORD cx, WORD dx, W
    input is not shut out meanwhile. ---- */
 static BOOL jwaiting;
 static DWORD jdue;
+
+/* WH_JOURNALRECORD (system-wide): each event as it is taken from the
+   system queue (US30 jr on 3.1: HC_ACTION with WM_KEYDOWN, WM_KEYUP and
+   the virtual key in paramL's low byte, as the messages are removed). The
+   EVENTMSG as playback takes it (above); paramH a key's repeat count
+   (UNVERIFIED). */
+static void journal_record(const SYSEV *e)
+{
+    extern LRESULT call_hook(int type, int code, WPARAM wp, LPARAM lp);
+    EVENTMSG ev;
+    if (!hook_set(WH_JOURNALRECORD))
+        return;
+    ev.message = e->msg;
+    if (e->msg >= WM_MOUSEFIRST && e->msg <= WM_MOUSELAST) {
+        ev.paramL = LOWORD(e->lParam);
+        ev.paramH = HIWORD(e->lParam);
+    } else {
+        ev.paramL = (BYTE)e->wParam | ((WORD)(BYTE)HIWORD(e->lParam) << 8);
+        ev.paramH = LOWORD(e->lParam);
+    }
+    ev.time = e->time;
+    call_hook(WH_JOURNALRECORD, HC_ACTION, 0, (LPARAM)(EVENTMSG __far *)&ev);
+}
 
 BOOL journal_active(void)
 {
@@ -515,10 +551,19 @@ HWND WINAPI GetCapture(void)
     return hwndCapture;
 }
 
+static BOOL focus_hooked;       /* SetFocus has called WH_CBT already */
+
 void set_focus(HWND h)
 {
     HWND old = hwndFocus;
     if (h == old)
+        return;
+    /* WH_CBT (US30 cbt on 3.1: C9 new, old for every change, the
+       focus taken away by a minimise too); nonzero: no change */
+    if (!focus_hooked && cbt_hook(HCBT_SETFOCUS, (WPARAM)h, MAKELONG(old, 0)))
+        return;
+    focus_hooked = FALSE;
+    if (hwndFocus != old)
         return;
     /* GetFocus answers the new window already inside WM_KILLFOCUS (US12
        on 3.1: A's WM_KILLFOCUS saw B, and 0 for SetFocus(NULL)) */
@@ -540,10 +585,19 @@ HWND WINAPI SetFocus(HWND h)
         if (!w || (w->style & (WS_DISABLED | WS_MINIMIZE)) && 0)
             return 0;
         top = top_level(h);
+        /* WH_CBT before the activation it brings (US30 cbt on 3.1, the
+           window inactive: C9 b m, then C5 a, C9 a m from the activation,
+           and the focus then goes to b with no more calls) */
+        if (h != hwndFocus && cbt_hook(HCBT_SETFOCUS, (WPARAM)h, MAKELONG(old, 0)))
+            return 0;
+        if (!valid_wnd(h))
+            return 0;
         if (top != hwndActive)
             activate_window(top, FALSE);
+        focus_hooked = TRUE;
     }
     set_focus(h);
+    focus_hooked = FALSE;
     return old;
 }
 
@@ -565,6 +619,15 @@ void activate_window(HWND h, BOOL mouse)
         return;
     if (h && !w)
         return;
+    /* WH_CBT (US30 cbt on 3.1: C5 with fMouse and the active window);
+       nonzero: no activation */
+    if (h && hook_set(WH_CBT)) {
+        struct { BOOL fMouse; HWND hWndActive; } ca;
+        ca.fMouse = mouse;
+        ca.hWndActive = old;
+        if (cbt_hook(HCBT_ACTIVATE, (WPARAM)h, (LPARAM)(void __far *)&ca) || !(w = valid_wnd(h)))
+            return;
+    }
     if (old && valid_wnd(old)) {
         send_message(old, WM_NCACTIVATE, FALSE, 0);
         send_message(old, WM_ACTIVATE, WA_INACTIVE, MAKELONG(h, 0));
@@ -743,6 +806,8 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     m->wParam = e.wParam;   /* the keys then (push_event) */
                     m->lParam = MAKELONG(c.x, c.y);
                 }
+                /* UNVERIFIED for the mouse (US30 saw it for keys) */
+                mouse_hook(HC_NOREMOVE, m->message, pt, target, hit);
                 return TRUE;
             }
             /* consumed before anything is sent: a window procedure that
@@ -753,6 +818,7 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                 if (!took)
                     continue;
             }
+            journal_record(&e);
             if (w && !hwndCapture) {
                 hit = (int)send_message(target, WM_NCHITTEST, 0, e.lParam);
                 if (!valid_wnd(target))
@@ -797,6 +863,12 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     continue;
                 }
             }
+            /* WH_MOUSE: before the press activates anything (US30
+               mouse on 3.1: M0 201 before WM_LBUTTONDOWN, nonzero throws
+               the message away) */
+            if (mouse_hook(HC_ACTION, hit != HTCLIENT ? e.msg + WM_NCMOUSEMOVE - WM_MOUSEMOVE : e.msg,
+                           pt, target, hit) || !valid_wnd(target))
+                continue;
             if (e.msg == WM_LBUTTONDOWN || e.msg == WM_RBUTTONDOWN || e.msg == WM_MBUTTONDOWN) {
                 /* activation on a press (not on a release) */
                 /* WM_MOUSEACTIVATE whenever the window clicked is not the
@@ -867,6 +939,9 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                 m->lParam = e.lParam;
                 m->time = e.time;
                 m->pt = ptCursor;
+                /* WH_KEYBOARD at every look (US30 kbd on 3.1: K3 for each
+                   PM_NOREMOVE PeekMessage) */
+                kbd_hook(HC_NOREMOVE, e.wParam, e.lParam);
                 return TRUE;
             }
             {
@@ -875,6 +950,11 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                 if (!took)
                     continue;
             }
+            journal_record(&e);
+            /* WH_KEYBOARD as the key is taken; nonzero: thrown away (US30
+               kbd on 3.1) */
+            if (kbd_hook(HC_ACTION, e.wParam, e.lParam))
+                continue;
             {
                 BYTE vk = (BYTE)e.wParam;
                 if (e.lParam & 0x80000000L)

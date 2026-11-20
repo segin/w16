@@ -23,6 +23,21 @@
 #define ETO_OPAQUE 2
 #define ETO_CLIPPED 4
 
+/* device widths and heights in logical units (GD5 on 3.1: positive) */
+static int log_x(LPDC dc, int v)
+{
+    if (dc->mapMode != 1)
+        v = mul_div(v, dc->wndExt.x, dc->vpExt.x);
+    return v < 0 ? -v : v;
+}
+
+static int log_y(LPDC dc, int v)
+{
+    if (dc->mapMode != 1)
+        v = mul_div(v, dc->wndExt.y, dc->vpExt.y);
+    return v < 0 ? -v : v;
+}
+
 static DWORD drv_extent(LPDC dc, LPCSTR s, int n)
 {
     LPFONT f = dc_font(dc);
@@ -32,6 +47,19 @@ static DWORD drv_extent(LPDC dc, LPCSTR s, int n)
     font_xform(dc, f, &tx);
     return ((DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT])(dc->lpPDevice, 0, 0, 0, s, -n,
                                                         f->fi, &dc->dm, &tx, 0, 0, 0);
+}
+
+/* the device width ExtTextOut's text takes */
+static int text_width(LPDC dc, LPCSTR s, int n, const short __far *dx)
+{
+    int w = 0, i;
+    if (n <= 0)
+        return 0;
+    if (!dx)
+        return LOWORD(drv_extent(dc, s, n));
+    for (i = 0; i < n - 1; i++)
+        w += dc_scale_x(dc, dx[i]);
+    return w + LOWORD(drv_extent(dc, s + n - 1, 1));
 }
 
 DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
@@ -75,6 +103,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     short __far *ddx = 0;
     XP xdx = 0;
     TEXTXFORM tx;
+    int tw;
     if (!dc)
         return FALSE;
     if (!font_realize(dc))
@@ -94,12 +123,12 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     dc_lp_to_dp(dc, p, 1);
     x = p[0];
     y = p[1];
-    if ((dc->textAlign & TA_CENTER) && n) {
-        int w = LOWORD(drv_extent(dc, s, n));
+    tw = text_width(dc, s, n, dx);
+    if (dc->textAlign & TA_CENTER) {
         if ((dc->textAlign & TA_CENTER) == TA_CENTER)
-            x -= w / 2;
+            x -= tw / 2;
         else
-            x -= w;
+            x -= tw;
     }
     if ((dc->textAlign & TA_BASELINE) == TA_BASELINE)
         y -= fi->dfAscent;
@@ -140,8 +169,16 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     if (n) {
         DWORD e = drv_extent(dc, s, n);
         dc_update_bounds(dc, x, y, x + LOWORD(e), y + HIWORD(e));
-        if (dc->textAlign & TA_UPDATECP)
-            dc->cur.x += mul_div(LOWORD(e), dc->wndExt.x, dc->vpExt.x);
+        /* GD5 on 3.1: the position moves by the text's width (with dx,
+           the widths before the last character and its own), to the
+           left for TA_RIGHT, not at all for TA_CENTER */
+        if (dc->textAlign & TA_UPDATECP) {
+            int lw = mul_div(tw, dc->wndExt.x, dc->vpExt.x);
+            if ((dc->textAlign & TA_CENTER) == TA_RIGHT)
+                dc->cur.x -= lw;
+            else if (!(dc->textAlign & TA_CENTER))
+                dc->cur.x += lw;
+        }
     }
     if (opt & ETO_OPAQUE)
         dc_update_bounds(dc, orc.left, orc.top, orc.right, orc.bottom);
@@ -194,8 +231,16 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
     tm->tmDigitizedAspectX = fi->dfHorizRes;
     tm->tmDigitizedAspectY = fi->dfVertRes;
     if (dc->mapMode != 1) {
-        /* UNVERIFIED: metrics in logical units */
-        tm->tmHeight = dc_scale_y(dc, 0) + mul_div(tm->tmHeight, dc->wndExt.y, dc->vpExt.y);
+        /* GD5 on 3.1 (MM_LOMETRIC, anisotropic 2:1): heights and widths
+           in logical units, the descent what the ascent leaves */
+        tm->tmHeight = log_y(dc, tm->tmHeight);
+        tm->tmAscent = log_y(dc, tm->tmAscent);
+        tm->tmDescent = tm->tmHeight - tm->tmAscent;
+        tm->tmInternalLeading = log_y(dc, tm->tmInternalLeading);
+        tm->tmExternalLeading = log_y(dc, tm->tmExternalLeading);
+        tm->tmAveCharWidth = log_x(dc, tm->tmAveCharWidth);
+        tm->tmMaxCharWidth = log_x(dc, tm->tmMaxCharWidth);
+        tm->tmOverhang = log_x(dc, tm->tmOverhang);
     }
     return TRUE;
 }
@@ -223,9 +268,15 @@ BOOL GDIAPI GetCharWidth(HDC hdc, WORD first, WORD last, short __far *buf) /* GD
     dc = dc_get(hdc);
     font_xform(dc, dc_font(dc), &tx);
     fn = (DRVGETCHARWIDTH)dc->dev->fn[DRV_GETCHARWIDTH];
-    if (fn)
-        return fn(dc->lpPDevice, buf, first, last, dc_font(dc)->fi, &dc->dm, &tx) != 0;
-    return FALSE;
+    if (!fn || !fn(dc->lpPDevice, buf, first, last, dc_font(dc)->fi, &dc->dm, &tx))
+        return FALSE;
+    if (dc->mapMode != 1) {             /* logical units (GD5 on 3.1) */
+        WORD i;
+        dc = dc_get(hdc);
+        for (i = 0; i <= last - first; i++)
+            buf[i] = log_x(dc, buf[i]);
+    }
+    return TRUE;
 }
 
 DWORD GDIAPI SetMapperFlags(HDC hdc, DWORD f)                      /* GDI.349 */
@@ -235,6 +286,6 @@ DWORD GDIAPI SetMapperFlags(HDC hdc, DWORD f)                      /* GDI.349 */
     if (!dc)
         return 0;
     old = dc->mapperFlags;
-    dc->mapperFlags = (WORD)f;
+    dc->mapperFlags = f;                /* GD5: 3.1 keeps the whole DWORD */
     return old;
 }

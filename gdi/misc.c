@@ -32,7 +32,7 @@ static const PALETTEENTRY defpal[20] = {
    DGROUP with 16 entries and with 256) */
 static HPALETTE pal_new(WORD n, const PALETTEENTRY __far *pe)
 {
-    XP x = xalloc(n * sizeof(PALETTEENTRY));
+    XP x = n <= 0x3FC0 ? xalloc(n * sizeof(PALETTEENTRY)) : 0;   /* (the size in a word) */
     HANDLE h;
     LPPALOBJ p;
     if (!x)
@@ -93,7 +93,7 @@ WORD GDIAPI SetPaletteEntries(HPALETTE h, WORD start, WORD n, const PALETTEENTRY
 {
     LPPALOBJ p = obj_get(h, PAL_MAGIC);
     WORD i;
-    if (!p)
+    if (!p || h == stock[15])          /* GD5: 3.1 does not change DEFAULT_PALETTE */
         return 0;
     for (i = 0; i < n && start + i < p->nEntries; i++)
         pal_entries(p)[start + i] = pe[i];
@@ -215,6 +215,8 @@ BOOL GDIAPI IsValidMetaFile(HANDLE h)                              /* GDI.410 */
 
 BOOL GDIAPI DeleteMetaFile(HANDLE h)                               /* GDI.127 */
 {
+    if (!h)
+        return FALSE;                   /* GD5: 3.1's answer for 0 */
     return GlobalFree(h) == 0;
 }
 
@@ -233,9 +235,11 @@ BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD a, WORD b, void __far *p) /* GDI.307 
 
 WORD GDIAPI GetRasterizerCaps(void __far *p, int n)               /* GDI.313 */
 {
-    if (p && n >= 4) {
-        ((short __far *)p)[0] = 4;
-        ((short __far *)p)[1] = 0;      /* no TrueType rasterizer yet */
-    }
+    /* RASTERIZER_STATUS: nSize 6, wFlags, nLanguageID; GD5 on 3.1: nSize
+       is 6 and the language 0409h, n bytes of it are written. w16 has no
+       TrueType rasterizer: wFlags 0 (3.1's: TT_AVAILABLE | TT_ENABLED) */
+    static const short rs[3] = { 6, 0, 0x0409 };
+    if (p && n > 0)
+        mem_copy(p, rs, n < 6 ? n : 6);
     return TRUE;
 }

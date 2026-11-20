@@ -52,9 +52,11 @@ void byte_align(PWND w, BOOL made)
 }
 void free_place(HWND h);
 void minimize_new(HWND h);
+static void free_window(PWND w);
 void free_props(PWND w);
 void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
+void free_window_dcs(HWND h);
 
 /* ---- where a window's WND is ----
    Normally (the layout 3.1's tools know, Schulman ch. 6) the WND and its
@@ -176,6 +178,13 @@ PWND valid_wnd(HWND h)
     }
     w = PW(h);
     if (!w->cls || (w->flags & 0x8000))
+        return 0;
+    /* ... a class: a block of DGROUP's heap with the class signature (any
+       block of WND's size with a word at 1Ch passed before: USER audit,
+       item 9). A class with windows is never freed (UnregisterClass and
+       the module's end leave it), so a window's class is a live one. */
+    if ((w->cls & 1) || LocalHandle(w->cls) != (HLOCAL)w->cls ||
+        LocalSize((HLOCAL)w->cls) < sizeof(CLS) || ((PCLS)w->cls)->sig != CLS_SIG)
         return 0;
     return w;
 }
@@ -334,6 +343,9 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     }
     w->style = style;
     if (title && !ISATOM(title) && !set_text(w, title)) {
+        /* the class's menu too (USER audit, item 19) */
+        if (!(style & WS_CHILD) && !menu && w->hMenu)
+            DestroyMenu((HMENU)w->hMenu);
         c->cwnd--;
         free_wnd(h);
         return 0;
@@ -385,11 +397,46 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     else if (!hwndDesktop)
         hwndDesktop = h;
 
-    /* WM_GETMINMAXINFO for windows that can be sized (3.1 sends it for
-       overlapped and thick-frame windows) */
-    if (!(style & WS_CHILD) || (style & WS_THICKFRAME)) {
+    /* WH_CBT's HCBT_CREATEWND before any message (US30 cbt on 3.1: C3
+       first; also for the icon title window); nonzero: no window */
+    if (hwndDesktop && h != hwndDesktop) {
+        CREATESTRUCT ccs;
+        struct { CREATESTRUCT __far *lpcs; HWND hwndInsertAfter; } cw;
+        ccs.lpCreateParams = param;
+        ccs.hInstance = hinst;
+        ccs.hMenu = menu;
+        ccs.hwndParent = parent;
+        ccs.cy = cy;
+        ccs.cx = cx;
+        ccs.y = y;
+        ccs.x = x;
+        ccs.style = style;
+        ccs.lpszName = title;
+        ccs.lpszClass = clsname;
+        ccs.dwExStyle = exstyle;
+        cw.lpcs = &ccs;
+        cw.hwndInsertAfter = (style & WS_CHILD) ? (HWND)HWND_BOTTOM : (HWND)HWND_TOP;
+        if (cbt_hook(HCBT_CREATEWND, (WPARAM)h, (LPARAM)(void __far *)&cw)) {
+            if ((w = valid_wnd(h)) != 0) {
+                unlink_window(w);
+                free_window(w);
+            }
+            return 0;
+        }
+        if (!(w = valid_wnd(h)))
+            return 0;
+    }
+
+    /* WM_GETMINMAXINFO for overlapped and thick-frame windows (US29 nc
+       on 3.1: not for a popup without a thick frame, with a caption or a
+       maximise box or not; w16 sent it to every popup) */
+    if (!(style & (WS_CHILD | WS_POPUP)) || (style & WS_THICKFRAME)) {
         minmax(w, &mm);
         send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
+        /* every message from here on can destroy the window, or its
+           parent: looked up again after each (USER audit, item 10) */
+        if (!(w = valid_wnd(h)))
+            return 0;
         if (cx > mm.ptMaxTrackSize.x)
             cx = mm.ptMaxTrackSize.x;
         if (cy > mm.ptMaxTrackSize.y)
@@ -408,6 +455,7 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     cs.hwndParent = parent;
     cs.cy = cy;
     cs.cx = cx;
+    pw = parent ? valid_wnd(parent) : (PWND)0;
     cs.y = (style & WS_CHILD) && pw ? y - pw->rcClient.top : y;
     cs.x = (style & WS_CHILD) && pw ? x - pw->rcClient.left : x;
     cs.style = style;
@@ -416,16 +464,23 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     cs.dwExStyle = exstyle;
 
     r = send_message(h, WM_NCCREATE, 0, (LPARAM)(CREATESTRUCT __far *)&cs);
-    if (!valid_wnd(h))
+    if (!(w = valid_wnd(h)))
         return 0;
     if (!r) {
-        destroy_window(h);
+        /* never made: WM_NCDESTROY alone (US29 nc on 3.1: WM_NCCREATE,
+           WM_NCDESTROY; w16 sent WM_DESTROY too: USER audit, item 18) */
+        send_message(h, WM_NCDESTROY, 0, 0);
+        if ((w = valid_wnd(h)) != 0) {
+            purge_window_msgs(w->hq, h);
+            unlink_window(w);
+            free_window(w);
+        }
         return 0;
     }
     calc_client(w);
     byte_align(w, TRUE);
     r = send_message(h, WM_CREATE, 0, (LPARAM)(CREATESTRUCT __far *)&cs);
-    if (!valid_wnd(h))
+    if (!(w = valid_wnd(h)))
         return 0;
     if (r == -1) {
         destroy_window(h);
@@ -442,8 +497,11 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         send_message(h, WM_SIZE, SIZE_RESTORED,
                      MAKELONG(w->rcClient.right - w->rcClient.left,
                               w->rcClient.bottom - w->rcClient.top));
+        if (!(w = valid_wnd(h)))
+            return 0;
         {
             int mx = w->rcClient.left, my = w->rcClient.top;
+            pw = parent ? valid_wnd(parent) : (PWND)0;
             if ((style & WS_CHILD) && pw) {
                 mx -= pw->rcClient.left;
                 my -= pw->rcClient.top;
@@ -454,7 +512,9 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     /* WS_MINIMIZE: to its icon's place now (US24; user/pos.c) */
     if ((style & (WS_MINIMIZE | WS_CHILD)) == WS_MINIMIZE && valid_wnd(h))
         minimize_new(h);
-    if ((style & WS_CHILD) && !(exstyle & WS_EX_NOPARENTNOTIFY) && pw)
+    if (!(w = valid_wnd(h)))
+        return 0;
+    if ((style & WS_CHILD) && !(exstyle & WS_EX_NOPARENTNOTIFY) && valid_wnd(parent))
         send_message(parent, WM_PARENTNOTIFY, WM_CREATE, MAKELONG(h, w->hMenu));
     if (show && valid_wnd(h)) {
         if (style & WS_MINIMIZE)
@@ -506,6 +566,12 @@ static void free_window(PWND w)
         DestroyMenu((HMENU)w->hSysMenu);
     free_props(w);
     free_scroll(w);
+    /* its DCs: not released ones back to the cache, reset (US29 dc on
+       3.1: the next GetDC had none of the pen or mode left), its own
+       one freed. Never called before: a DC not released stayed out for
+       good, and a CS_OWNDC window's DC went to the next window given the
+       same handle (USER audit, item 14) */
+    free_window_dcs(h);
     ((PCLS)w->cls)->cwnd--;
     w->cls = 0;
     w->flags |= 0x8000;
@@ -549,6 +615,35 @@ static void destroy_tree(HWND h)
     free_window(w);
 }
 
+/* A window whose destruction will never finish: its task ended inside
+   it (a WM_DESTROY, say). Out of the tree and freed, with its children,
+   and without messages: the window procedures' task is gone. */
+void destroy_abandoned(HWND h)
+{
+    PWND w = valid_wnd(h);
+    HWND c;
+    if (!w)
+        return;
+    w->flags |= WF_DESTROYING;
+    while ((w = valid_wnd(h)) != 0 && (c = w->hwndChild) != 0) {
+        destroy_abandoned(c);
+        if (valid_wnd(c))
+            unlink_window(PW(c));
+    }
+    if ((w = valid_wnd(h)) == 0)
+        return;
+    if (h == hwndCapture)
+        hwndCapture = 0;
+    if (h == hwndFocus)
+        hwndFocus = 0;
+    if (h == hwndActive)
+        hwndActive = 0;
+    free_place(h);
+    purge_window_msgs(w->hq, h);
+    unlink_window(w);
+    free_window(w);
+}
+
 BOOL destroy_window(HWND h)
 {
     PWND w = valid_wnd(h), p;
@@ -559,17 +654,31 @@ BOOL destroy_window(HWND h)
         return FALSE;
     if (w->flags & WF_DESTROYING)
         return TRUE;
+    /* WH_CBT (US30 cbt on 3.1: C4 for the window and for its owned
+       windows, not for its children); nonzero: it stays */
+    if (cbt_hook(HCBT_DESTROYWND, (WPARAM)h, 0) || !(w = valid_wnd(h)))
+        return FALSE;
     p = PW(w->hwndParent);
     parent = w->hwndParent;
     if ((w->style & WS_CHILD) && !(w->exstyle & WS_EX_NOPARENTNOTIFY) && p)
         send_message(parent, WM_PARENTNOTIFY, WM_DESTROY, MAKELONG(h, w->hMenu));
     if (!(w = valid_wnd(h)))
         return TRUE;
-    /* owned windows go first */
+    /* being destroyed from here on: a DestroyWindow of it from inside
+       (an owned window's WM_DESTROY destroying its owner) returns at
+       once. 3.1 starts over then, and over again for ever: US29 dw, the
+       owned window got WM_DESTROY until the stack ran out. */
+    w->flags |= WF_DESTROYING;
+    /* owned windows go first, in z-order (US29 dw.owner on 3.1: W2 W82
+       O2 O82). The list is looked at again from the top after each, as
+       a WM_DESTROY can change it, but a window already being destroyed is
+       passed over: it stayed linked, and the loop came back to it for
+       ever (USER audit, item 4) */
     if (!(w->style & WS_CHILD)) {
         for (owned = PW(hwndDesktop)->hwndChild; owned; owned = n) {
-            n = PW(owned)->hwndNext;
-            if (PW(owned)->hwndOwner == h) {
+            PWND ow = PW(owned);
+            n = ow->hwndNext;
+            if (ow->hwndOwner == h && !(ow->flags & WF_DESTROYING)) {
                 destroy_window(owned);
                 n = PW(hwndDesktop)->hwndChild;
             }
@@ -577,6 +686,10 @@ BOOL destroy_window(HWND h)
     }
     if (!(w = valid_wnd(h)))
         return TRUE;
+    /* (3.1 activates the next window before the window goes - US30 cbt:
+       its ACTIVATE names the dying window as the active one - where w16
+       does it afterwards; doing it here broke Task List's End Task and
+       tiling, boot test taskman: left, docs/notes/user-audit-triage.md) */
     wasvis = is_visible(w);
     rc = w->rcWindow;
     if (wasvis)
@@ -643,6 +756,13 @@ HWND WINAPI SetParent(HWND h, HWND parent)
     if (!parent)
         parent = hwndDesktop;
     if (!valid_wnd(parent))
+        return 0;
+    /* not the desktop, and not under itself or its own descendant: 3.1
+       ends there (US29 sd: SetParent of the desktop; ss: of a window to
+       itself, which it does, GetParent then the window, and hangs; sc: to
+       its child, done too, a cycle) and w16 looped for ever (USER audit,
+       item 13); refused here */
+    if (h == hwndDesktop || parent == h || IsChild(h, parent))
         return 0;
     old = w->hwndParent;
     vis = (w->style & WS_VISIBLE) != 0;
@@ -894,62 +1014,115 @@ LONG WINAPI SetWindowLong(HWND h, int i, LONG v)
     return old;
 }
 
-/* ---- enumeration and search ---- */
-BOOL WINAPI EnumWindows(WNDENUMPROC f, LPARAM lp)
+/* ---- enumeration and search ----
+   The windows are listed first and the callback called for each one still
+   a window: one it destroys is passed over, one it moves comes once (US29
+   en on 3.1: E4 E3 E2 E1 with E3 destroyed and E1 brought to the top at
+   E4 gave 4 2 1; children depth first, 1 2 3 g 4 with 2 destroyed and 4
+   brought up at 1 gave 1 3 g 4). w16 walked the live list, so a callback
+   that reordered or destroyed windows could repeat or end the walk
+   (USER audit, item 11). The list is a global block (it can be long). */
+static void list_add(HWND __far *l, WORD *n, HWND h)
 {
-    HWND h, n;
-    for (h = PW(hwndDesktop)->hwndChild; h; h = n) {
-        n = PW(h)->hwndNext;
-        if (!((BOOL (__far __pascal *)(HWND, LPARAM))f)(h, lp))
-            return FALSE;
-        if (n && !valid_wnd(n))
-            break;
-    }
-    return TRUE;
+    if (l)
+        l[*n] = h;
+    (*n)++;
 }
 
-static BOOL enum_children(HWND parent, WNDENUMPROC f, LPARAM lp)
+static void list_children(HWND parent, HWND __far *l, WORD *n)
 {
-    HWND h, n;
-    PWND w = valid_wnd(parent);
-    if (!w)
-        return TRUE;
-    for (h = w->hwndChild; h; h = n) {
-        n = PW(h)->hwndNext;
-        if (!((BOOL (__far __pascal *)(HWND, LPARAM))f)(h, lp))
-            return FALSE;
-        if (!valid_wnd(h))
-            break;
-        if (!enum_children(h, f, lp))
-            return FALSE;
-        if (n && !valid_wnd(n))
-            break;
+    HWND h;
+    for (h = PW(parent)->hwndChild; h; h = PW(h)->hwndNext) {
+        list_add(l, n, h);
+        list_children(h, l, n);
     }
-    return TRUE;
+}
+
+/* top-level windows (of queue hq, if not 0), or every descendant of
+   parent: a locked block and the count; NULL if none or no memory */
+static HWND __far *list_windows(HWND parent, HQUEUE hq, WORD *n)
+{
+    HWND h, __far *l = 0;
+    HGLOBAL g;
+    int pass;
+    for (pass = 0; pass < 2; pass++) {
+        *n = 0;
+        if (parent)
+            list_children(parent, l, n);
+        else
+            for (h = PW(hwndDesktop)->hwndChild; h; h = PW(h)->hwndNext)
+                if (!hq || PW(h)->hq == hq)
+                    list_add(l, n, h);
+        if (pass || !*n)
+            break;
+        g = GlobalAlloc(GMEM_MOVEABLE, (DWORD)*n * sizeof(HWND));
+        if (!g) {
+            *n = 0;
+            return 0;
+        }
+        l = (HWND __far *)GlobalLock(g);
+    }
+    return *n ? l : 0;
+}
+
+static void list_free(HWND __far *l)
+{
+    HGLOBAL g;
+    if (!l)
+        return;
+    g = (HGLOBAL)LOWORD(GlobalHandle(SELECTOROF(l)));
+    GlobalUnlock(g);
+    GlobalFree(g);
+}
+
+static BOOL enum_list(HWND __far *l, WORD n, WNDENUMPROC f, LPARAM lp)
+{
+    WORD i;
+    BOOL r = TRUE;
+    for (i = 0; i < n; i++)
+        if (valid_wnd(l[i]) && !((BOOL (__far __pascal *)(HWND, LPARAM))f)(l[i], lp)) {
+            r = FALSE;
+            break;
+        }
+    list_free(l);
+    return r;
+}
+
+BOOL WINAPI EnumWindows(WNDENUMPROC f, LPARAM lp)
+{
+    WORD n;
+    HWND __far *l = list_windows(0, 0, &n);
+    return enum_list(l, n, f, lp);
 }
 
 BOOL WINAPI EnumChildWindows(HWND parent, WNDENUMPROC f, LPARAM lp)
 {
-    return enum_children(parent, f, lp);
+    WORD n;
+    HWND __far *l;
+    if (!valid_wnd(parent))
+        return TRUE;
+    l = list_windows(parent, 0, &n);
+    return enum_list(l, n, f, lp);
 }
 
 BOOL WINAPI EnumTaskWindows(HTASK t, WNDENUMPROC f, LPARAM lp)
 {
-    HWND h, n;
+    WORD n;
     HQUEUE hq = K_GETTASKQUEUE(t);
-    for (h = PW(hwndDesktop)->hwndChild; h; h = n) {
-        n = PW(h)->hwndNext;
-        if (PW(h)->hq == hq && !((BOOL (__far __pascal *)(HWND, LPARAM))f)(h, lp))
-            return FALSE;
-    }
-    return TRUE;
+    HWND __far *l = hq ? list_windows(0, hq, &n) : 0;
+    if (!l)
+        return TRUE;
+    return enum_list(l, n, f, lp);
 }
 
-/* a bad class name or title: 0 (3.1, US27) */
+/* A bad class name or title: 0 (3.1, US27). The windows' titles are
+   compared through an 80-byte buffer, so a title of 80 characters or more
+   is never found (US29 fw on 3.1: 79 found, 80, 100, 127, 150 not; w16's
+   buffer was 128 bytes) */
 HWND WINAPI FindWindow(LPCSTR cls, LPCSTR title)
 {
     HWND h;
-    char buf[128];
+    char buf[80];
     PCLS c;
     ATOM a = 0;
     if (GP_BAD(cls) || GP_BAD(title))

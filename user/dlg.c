@@ -516,6 +516,11 @@ static int modal_loop(HWND h, HWND owner)
             PostQuitMessage(m.wParam);
             break;
         }
+        /* WH_MSGFILTER: every message of the loop, DialogBox's and
+           MessageBox's (US30 filter on 3.1: MSGF_DIALOGBOX); nonzero: the
+           hook has dealt with it */
+        if (CallMsgFilter(&m, MSGF_DIALOGBOX))
+            continue;
         if (!IsDialogMessage(h, &m)) {
             TranslateMessage(&m);
             DispatchMessage(&m);

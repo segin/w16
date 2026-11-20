@@ -80,9 +80,12 @@ w16 repository's LICENSE):
                           (for a standard PC/AT; on a machine that
                           needs another system driver, such as
                           HPSYSTEM.DRV, use that instead)
-  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
-                          old SOUND functions (voice queues of notes)
-                          on the PC speaker
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep (the
+                          sound WIN.INI [sounds] names for it, through
+                          MMSYSTEM.DLL, when a wave driver is installed;
+                          else the PC speaker) and the old SOUND
+                          functions (voice queues of notes) on the PC
+                          speaker
   SYSTEM\TIMER.DRV        the multimedia timer driver: the
                           millisecond timer and timer events behind the
                           time* functions of MMSYSTEM.DLL (timeGetTime,
@@ -99,6 +102,13 @@ w16 repository's LICENSE):
                           Mapper, and QuickTime for Windows' MCI driver
                           work)
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
+  SYSTEM\SB16.DRV         a Sound Blaster 16 driver: wave output and
+                          input (8 and 16 bits, mono and stereo, 5000
+                          to 44100 Hz), MIDI out and in through the
+                          card's MPU-401 port, and the mixer's volumes
+                          (master, wave, MIDI, CD, line) as auxiliary
+                          devices; Standard mode only. Not enabled by
+                          default (see below)
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
                           Printers, International and Date/Time are not
@@ -157,6 +167,33 @@ directory).
 32-bit programs (PE files) run only with Microsoft's Win32s
 installed; without it Program Manager says so instead of starting
 them.
+
+To use SB16.DRV with a Sound Blaster 16 (or a compatible card, or an
+emulator's), add these lines to SYSTEM.INI's [drivers] section (with
+another number after "wave", "midi" or "aux" when those keys are taken
+by another card's driver):
+
+  wave=sb16.drv
+  midi=sb16.drv
+  aux=sb16.drv
+
+and, when the card is not at its usual place, a section of its own
+(port and mpuport in hexadecimal; the values shown are the defaults):
+
+  [sb16.drv]
+  port=220
+  int=5
+  dma=1
+  hdma=5
+  mpuport=330
+
+A key that is missing comes from the BLASTER environment setting
+(A220 I5 D1 H5 P330), else from the card's own mixer (IRQ and DMA),
+else from the defaults above (Control Panel's Drivers applet, Setup,
+shows and changes them). Without a card, and in 386 Enhanced mode, the
+driver offers no devices and Windows starts as usual. The MIDI Mapper needs a setup that
+sends to "Sound Blaster 16 MIDI" before programs that use it (Media
+Player's MIDI Sequencer) play through the card.
 
 w16's own settings are in the [w16] section of SYSTEM.INI. Each of its
 additions to Windows 3.1 (the scroll-bar shortcut menu, the version

@@ -1,0 +1,84 @@
+; WR28: Edit > Move Picture and Size Picture on a pasted 80 x 40
+; picture. Keyboard: selected with Shift+Left (real keys), the Edit menu
+; (E1), Move Picture (M1), five Right (M2), Enter (M3); Size Picture (Z1),
+; three Right and two Down (Z2: the page box shows the scale), Enter
+; (Z3); Move Picture and Escape (K1). Mouse: Move Picture, the mouse moved
+; 48 pixels right (N1), clicked (N2); Size Picture, moved left and up
+; (N3), clicked (N4). Saved as C:\WR28.WRI
+; mkpic: P80X40.DIB
+run WRITE.EXE
+wait 3000
+clipbmp C:\P80X40.DIB
+menu e
+char p
+wait 1500
+kdown 10
+kdown 25
+kup 25
+kup 10
+wait 500
+menu e
+wait 500
+snap C:\E1.BMP
+char m
+wait 500
+snap C:\M1.BMP
+key 27
+key 27
+key 27
+key 27
+key 27
+wait 500
+snap C:\M2.BMP
+key 0D
+wait 500
+snap C:\M3.BMP
+menu e
+char s
+wait 500
+snap C:\Z1.BMP
+key 27
+key 27
+key 27
+key 28
+key 28
+wait 500
+snap C:\Z2.BMP
+key 0D
+wait 500
+snap C:\Z3.BMP
+menu e
+char m
+wait 500
+key 27
+key 1B
+wait 500
+snap C:\K1.BMP
+menu e
+char m
+wait 500
+mmove 200 200
+mmove 248 200
+wait 500
+snap C:\N1.BMP
+mclick 248 200
+wait 500
+snap C:\N2.BMP
+menu e
+char s
+wait 500
+mmove 200 200
+mmove 150 180
+wait 500
+snap C:\N3.BMP
+mclick 150 180
+wait 500
+snap C:\N4.BMP
+menu f
+char a
+wait 1500
+type C:\WR28.WRI
+key 0D
+wait 2000
+close
+wait 1000

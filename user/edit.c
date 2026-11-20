@@ -612,6 +612,21 @@ static void replace_sel(HWND h, PED e, LPCSTR s)
         WORD keep = E(e)->len - (s1 - s0);
         n = keep < E(e)->limit ? E(e)->limit - keep : 0;
         notify(h, e, EN_MAXTEXT);
+        /* the parent's EN_MAXTEXT may have changed the text or the
+           selection, or destroyed the control: all worked out again (the
+           old offsets past a shorter text made the copy below run over
+           the heap: USER audit, sweep) */
+        if (!valid_wnd(h) || ed_of(h) != e)
+            return;
+        s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1;
+        s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
+        if (s1 > E(e)->len)
+            s1 = E(e)->len;
+        if (s0 > s1)
+            s0 = s1;
+        keep = E(e)->len - (s1 - s0);
+        if (n > (keep < E(e)->limit ? E(e)->limit - keep : 0))
+            n = keep < E(e)->limit ? E(e)->limit - keep : 0;
         if (!n && s0 == s1)
             return;
     }
@@ -1036,6 +1051,8 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             WORD b;
             /* one value: a stop every that many units (TabbedTextOut
                repeats a single stop) */
+            if (n > 0x7FF0 / sizeof(int))
+                return FALSE;   /* n * 2 would wrap (USER audit, sweep) */
             b = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, n * sizeof(int));
             if (!b)
                 return FALSE;

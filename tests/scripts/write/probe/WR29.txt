@@ -1,0 +1,54 @@
+; WR29: printing with a header and a footer, to the Generic / Text Only
+; printer (TTY.DRV from the Setup disks) on a file port, C:\PRN.TXT (the
+; bytes Write's pages make compared): a header "Head-" with Insert Page #,
+; printed on the first page too; a footer "Foot" not on the first page;
+; two pages ("one", Ctrl+Enter, "two"); File > Print, OK (P1: the Print
+; box); saved as C:\WR29.WRI. The Page Header box's buttons are
+; clicked (Insert Page #, Print on First Page, Return to Document)
+; expand: TTY.DR_ WINDOWS/SYSTEM/TTY.DRV
+; expand: UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+; ini: windows:device=Generic / Text Only,TTY,C:\PRN.TXT
+; ini: windows:Spooler=no
+; ini: devices:Generic / Text Only=TTY,C:\PRN.TXT
+; ini: PrinterPorts:Generic / Text Only=TTY,C:\PRN.TXT,15,45
+; ini: ports:C:\PRN.TXT=
+; get: PRN.TXT
+run WRITE.EXE
+wait 3000
+type one
+kdown 11
+kdown 0D
+kup 0D
+kup 11
+wait 300
+type two
+menu d
+char h
+wait 1500
+type Head-
+mclick 224 268
+wait 500
+mclick 334 240
+wait 300
+mclick 450 268
+wait 1500
+menu d
+char f
+wait 1500
+type Foot
+mclick 450 268
+wait 1500
+menu f
+char p
+wait 2000
+snap C:\P1.BMP
+key 0D
+wait 6000
+menu f
+char a
+wait 1500
+type C:\WR29.WRI
+key 0D
+wait 2000
+close
+wait 1000

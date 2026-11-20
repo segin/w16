@@ -252,9 +252,11 @@ w16's drivers live under `drivers/`, one directory each with a README (what it i
 
 **`drivers/system/`: w16's `SYSTEM.DRV`** (Standard mode), in NASM (`make` builds `build/dos/SYSTEM.DRV`): module SYSTEM with Windows 3.1's eleven ordinals (InquireSystem 1, CreateSystemTimer 2, KillSystemTimer 3, EnableSystemTimers 4, DisableSystemTimers 5, GetSystemMsecCount 6, Get80x87SaveSize 7, Save80x87State 8, Restore80x87State 9, WEP 10, A20_Proc 20), each popping what 3.1's pops (4, 6, 2, 0, 0, 0, 0, 4, 4, 2, 2 bytes). Undocumented in the DDK; facts from the NE tables, Schulman ch. 9, Pietrek ch. 1 and black-box observation. Eight timers with 3.1's handles (18h-50h; COMM, USER's cursor timer, KERNEL's LRU sweep and USER's SetTimer timer take four at boot), each called every max(1, rate * 1000 / 54925) ticks; INT 8 chained to the BIOS first, then the msec count (+54.925 ms a tick, only while enabled), then the timers due with interrupts on, AX the handle, DS the driver's, no reentry (a tick during the procedures counts the msec and nothing else); the PIT is not reprogrammed. InquireSystem: 54925 for the timer resolution; drive types from the BIOS's floppy count (B: 1:0 on a one-floppy machine) and DOS IOCTL 4409h/4408h. `tests/sysprobe.sh`: SY1 (`tests/apps/sy1.c`: every export, registers, 30 timer rates, a timer procedure's context, reentrancy, the msec count against the BIOS ticks, Disable/Enable) and SYREC (`tests/apps/syrec.asm`, a recording SYSTEM in front of the driver under test: every call from boot to exit) identical with 3.1's driver and w16's. Boot-test cases `sysdrv`, `sysdrvall`, `sysdrvwoados`, `sysboot`, `sysclock`, `sysprobe`. Not verified: 386 Enhanced mode, machines without a coprocessor, remote and CD-ROM drives (`drivers/system/README.md`).
 
-**`drivers/sound/`: w16's `MMSOUND.DRV`** (Standard mode), the sound driver in NASM (`make` builds `build/dos/MMSOUND.DRV`; w16's SYSTEM.INI names it, `sound.drv=mmsound.drv`): module SOUND with Windows 3.1's 18 ordinals (OpenSound ... SetVoiceThreshold 1-16, DoBeep 17, WEP 18; 3.1's MMSOUND.DRV and SOUND.DRV are the same file), each popping the bytes 3.1's pops (0, 0, 4, 8, 10, 6, 4, 8, 0, 0, 2, 0, 2, 0, 0, 4, 2, 2). Observed black-box with SN1 (`tests/apps/sn1.c`) in DOSBox-X with the run's sound recorded (`tests/dropin.sh` DROPIN_CAPTURE: DOSBox-X's `DX-CAPTURE /A`; `tools/wavtones.py` reads the speaker's tones back, `tools/tonecmp.py` compares two recordings) and SNDREC (`tests/apps/sndrec.asm`, a recording SOUND in front of the driver). What 3.1's driver does: USER's MessageBeep calls DoBeep(type) (any type; MMSYSTEM is not involved), which sounds 749 Hz (divisor 1593) on the speaker for a CPU loop of about 64,000 instructions (6.7 ms at 10000 DOSBox cycles a ms); the SOUND API is a real one-voice queue (6 bytes a note, 192 by default) played on the speaker from its own IRQ 0 handler with the 8254's channel 0 at 200 Hz while playing (the old handler still gets 18.2 ticks a second), notes 1-84 (37 is C5) in equal temperament, lengths, tempos and the normal/legato/staccato modes timed to the 5 ms tick by rules measured over 78 combinations (`drivers/sound/README.md`); dots, volume, envelopes, noise and SyncAllVoices do nothing. w16's USER now calls DoBeep from MessageBeep too (`user/misc.c`). `tests/soundprobe.sh` (sn1, queue, rec, allw16) compares both drivers' logs (identical) and their recordings (tones within `tonecmp.py`'s limits); boot-test cases `sound`, `soundtime`, `soundrec`, `soundboot`, `treealone` (build/w16 alone, no file of Microsoft's). Not verified: 386 Enhanced mode; calls that never returned on 3.1's (WaitSoundState(S_THRESHOLD) with nothing playing, notes after SetVoiceQueueSize(0)) return on w16's.
+**`drivers/sound/`: w16's `MMSOUND.DRV`** (Standard mode), the sound driver in NASM (`make` builds `build/dos/MMSOUND.DRV`; w16's SYSTEM.INI names it, `sound.drv=mmsound.drv`): module SOUND with Windows 3.1's 18 ordinals (OpenSound ... SetVoiceThreshold 1-16, DoBeep 17, WEP 18; 3.1's MMSOUND.DRV and SOUND.DRV are the same file), each popping the bytes 3.1's pops (0, 0, 4, 8, 10, 6, 4, 8, 0, 0, 2, 0, 2, 0, 0, 4, 2, 2). Observed black-box with SN1 (`tests/apps/sn1.c`) in DOSBox-X with the run's sound recorded (`tests/dropin.sh` DROPIN_CAPTURE: DOSBox-X's `DX-CAPTURE /A`; `tools/wavtones.py` reads the speaker's tones back, `tools/tonecmp.py` compares two recordings) and SNDREC (`tests/apps/sndrec.asm`, a recording SOUND in front of the driver). What 3.1's driver does: USER's MessageBeep calls DoBeep(type) (any type, unless SPI_SETBEEP turned the beep off); DoBeep finds MMSYSTEM with GetModuleHandle (at each DoBeep and OpenSound until it is loaded; then sndPlaySound, timeSetEvent and timeKillEvent by ordinal, kept) and hands every type but FFFFh to sndPlaySound(name, SND_ASYNC) at once, the name by bits 4-7 of the type (1 SystemHand, 2 SystemQuestion, 3 SystemExclamation, 4 SystemAsterisk, else SystemDefault); FFFFh, no MMSYSTEM or a FALSE answer sound 749 Hz (divisor 1593) on the speaker for a CPU loop of about 64,000 instructions (6.7 ms at 10000 DOSBox cycles a ms); the SOUND API is a real one-voice queue (6 bytes a note, 192 by default) played on the speaker in 5 ms ticks, on a 5 ms periodic timeSetEvent once MMSYSTEM is found (else w16's from its own IRQ 0 handler with the 8254's channel 0 at 200 Hz, the old handler still getting 18.2 ticks a second), notes 1-84 (37 is C5) in equal temperament, lengths, tempos and the normal/legato/staccato modes timed to the 5 ms tick by rules measured over 78 combinations (`drivers/sound/README.md`); dots, volume, envelopes, noise and SyncAllVoices do nothing. w16's USER now calls DoBeep from MessageBeep too (`user/misc.c`). `tests/soundprobe.sh` (sn1, queue, rec, allw16, beep) compares both drivers' logs (identical) and their recordings (tones within `tonecmp.py`'s limits; `beep`: KRNLOG.DLL, `tests/apps/krnlog.c`, records every KERNEL and MMSYSTEM call the driver makes, in six configurations of MMSYSTEM and wave driver, sound compared by `tools/beepcmp.py`); boot-test cases `sound`, `soundtime`, `soundrec`, `soundbeep`, `soundboot`, `treealone` (build/w16 alone, no file of Microsoft's). Not verified: 386 Enhanced mode; calls that never returned on 3.1's (WaitSoundState(S_THRESHOLD) with nothing playing, notes after SetVoiceQueueSize(0)) return on w16's.
 
 **`drivers/timer/`: w16's `TIMER.DRV`**, MMSYSTEM's multimedia timer driver in NASM (`make` builds `build/dos/TIMER.DRV`; w16's SYSTEM.INI names it, `[drivers] timer=timer.drv`, with `[boot] drivers=mmsystem.dll`): module TIMER with 3.1's WEP 1 and DriverProc 2 and its six undocumented messages (kill 0800h, set 0804h, time 0808h, capabilities 080Ch, begin and end period 0810h, 0814h), found black-box with the logging driver TMS.DRV between Microsoft's MMSYSTEM and Microsoft's TIMER.DRV; 15 events (8 in 386 Enhanced mode) with 3.1's IDs, the 8254 at the shortest period asked for (1-55 ms), the BIOS tick, GetTickCount and SYSTEM.DRV's timers kept at their rate, callbacks through MMSYSTEM's StackEnter and DriverCallback as 3.1's. `tests/timer/tscen.sh` and the boot-test case `timer` compare the probe TPR's log and TMS's record with Microsoft's driver and with w16's, and play QuickTime's movie with w16's driver. 3.1's own timing faults are not copied; in 386 Enhanced mode the timing runs on VTD's virtual 8254, not VTDAPI.386 (§21).
+
+**`drivers/sb16/`: w16's `SB16.DRV`**, a Sound Blaster 16 driver (C and NASM; `make` builds `build/dos/SB16.DRV`, installed as `SYSTEM\SB16.DRV` but not named in the default SYSTEM.INI: `assets/README.TXT` says how to enable it): an installable driver with DriverProc, wodMessage, widMessage, modMessage, midMessage and auxMessage for MMSYSTEM: wave output and input (8/16 bits, mono/stereo, 5000-44100 Hz, auto-initialised DMA in two halves), MIDI out and in through the MPU-401 in UART mode, five aux devices on the mixer. Its behaviour toward MMSYSTEM follows Windows 3.1's own SNDBLST2.DRV as observed with the logging drivers (answers, error codes, callback order and timing class). Standard mode only. §24.
 
 ### 6.8 Design Note: UI Fidelity
 
@@ -834,8 +836,9 @@ On a 386 Windows 3.1 runs KRNL386.EXE in Standard mode too (DOSX starts it when 
 - **Local heap**: the information block in KRNL386's layout (2Ah bytes, dword sentinels and discard total, "LH" at 28h: TK53 under KRNL386, TK3, TK13).
 - **Selectors** (`kernel/selector.c`, TK17/TK17A): GetSelectorLimit is LSL's 32-bit limit, PrestoChangoSelector returns dst | 1, LongPtrAdd takes adds up to FF0000h (w16: below 16 MB; UNVERIFIED between FF0000h and 7FFF0000h). THHOOK has hGDI, hUSER and the shell at 28h-2Ch (TK51).
 - **386 Enhanced mode** (`kernel/k386c.c`, TK57 `tests/apps/tk57.c`): INT 2Fh 1600h at start-up; GetWinFlags then has WF_ENHANCED for WF_STANDARD and WF_PAGING when the DPMI host reports a paging file (Microsoft's KRNL386 on w16's WIN386, which reports none and a 386 in DPMI 0400h, gave 0425h; on Microsoft's WIN386 0C29h); the first task's InitTask gives the Reboot device KERNEL's Ctrl+Alt+Del procedure and sanity byte (0201h; 0202h then returns a KERNEL code selector, as on 3.1), the byte is set again at every task switch and idle pass and by the procedure, which Microsoft's Reboot device runs as an interrupt when the byte stayed 0; the procedure then calls Reboot 0203h with the running task's module file name (the "not responding" screen) and ends the task when the answer is Return (§12.5; boot-test k386cad, k386hung); DOS programs start SYSTEM\WINOA386.MOD (its module name is WINOLDAP), which imports GRABBER: the module GRABBER is SYSTEM.INI's [boot] 386grabber (VGA.3GR), usage 2 while COMMAND.COM runs (TK57 `mod`; w16 loads it just before WINOA386.MOD, UNVERIFIED when 3.1 does).
+- **The end** (both builds; `kernel/util.c` kexit_to_dos, `kmisc.c` ExitKernel): KERNEL makes its own PSP DOS's current one before its final INT 21h 4Ch, as Microsoft's KRNL386 does (it ends Windows "with its own PSP current", §12, WIN386 handover note). A DPMI host tells the client's end from a task's by that PSP: w16's WIN386 took a 4Ch made with Program Manager's PDB current for the task's end and returned, and Exit Windows then faulted in USER (a user's report, 2026-11-19: `docs/notes/krnl386-handover.md`). ExitKernel takes the one word USER passes (Pietrek ch. 1, `ExitKernel(ExitCode)`) and pops it; the exit code DOS gets stays 0 (UNVERIFIED).
 
-**Tests.** `tests/dropin.sh -3` drops build/dos/KRNL386.EXE into the KRNL386.EXE slot (`-K FILE` another file, `-3 -r` keeps Microsoft's as the reference; with `-c 'WIN /3 /B'` 386 Enhanced mode). `make test` runs every probe under both kernels on HDPMI16 and on w16's DOSX (`RUNTESTS_KERNEL="KRNL286 KRNL386"`); the probes' tables are KRNL386's and tklog.h's k286() picks the KRNL286 ones only for a KRNL286 heap, so w16's KRNL386 is checked against KRNL386's values. Boot-test cases: `k386` (w16's KRNL386 under Microsoft's DOSX, USER, GDI against Microsoft's KRNL386), `k386all` (w16's WIN.COM, DOSX, KRNL386, USER, GDI against the same), `k386e` (386 Enhanced mode: w16's KRNL386 on w16's WIN386 and on Microsoft's, each against Microsoft's KRNL386 on the same WIN386), `k386cad` (Ctrl+Alt+Del under Microsoft's WIN386): all 0 pixels. The install tree has SYSTEM\KRNL386.EXE, and DOSX starts it on a 386, so users of the tree run KRNL386: `treek386` runs the tree alone under its KRNL386 against its KRNL286 (every item of the default groups; windows moved over the desktop stamp), and `treealone`, `w16groups` and `missingdll@tree` run it under KRNL386 too. A library that cannot be found gets KERNEL's "File Error" box ("Cannot find OLECLI.DLL", USER's SysErrorBox, unless SetErrorMode(8000h)), as on 3.1 (TK59, boot-test `missingdll`; docs/notes/krnl386-handover.md).
+**Tests.** `tests/dropin.sh -3` drops build/dos/KRNL386.EXE into the KRNL386.EXE slot (`-K FILE` another file, `-3 -r` keeps Microsoft's as the reference; with `-c 'WIN /3 /B'` 386 Enhanced mode). `make test` runs every probe under both kernels on HDPMI16 and on w16's DOSX (`RUNTESTS_KERNEL="KRNL286 KRNL386"`); the probes' tables are KRNL386's and tklog.h's k286() picks the KRNL286 ones only for a KRNL286 heap, so w16's KRNL386 is checked against KRNL386's values. Boot-test cases: `k386` (w16's KRNL386 under Microsoft's DOSX, USER, GDI against Microsoft's KRNL386), `k386all` (w16's WIN.COM, DOSX, KRNL386, USER, GDI against the same), `k386e` (386 Enhanced mode: w16's KRNL386 on w16's WIN386 and on Microsoft's, each against Microsoft's KRNL386 on the same WIN386), `k386cad` (Ctrl+Alt+Del under Microsoft's WIN386): all 0 pixels. `exittree`: Exit Windows from Program Manager on the install tree laid over 3.1 (3.1's INI files, plain DOSBox) under w16's WIN386, Microsoft's WIN386 and in Standard mode must end cleanly (KERNEL's "back to DOS", no fault report, the prompt in text mode). The install tree has SYSTEM\KRNL386.EXE, and DOSX starts it on a 386, so users of the tree run KRNL386: `treek386` runs the tree alone under its KRNL386 against its KRNL286 (every item of the default groups; windows moved over the desktop stamp), and `treealone`, `w16groups` and `missingdll@tree` run it under KRNL386 too. A library that cannot be found gets KERNEL's "File Error" box ("Cannot find OLECLI.DLL", USER's SysErrorBox, unless SetErrorMode(8000h)), as on 3.1 (TK59, boot-test `missingdll`; docs/notes/krnl386-handover.md).
 
 ### 9.11 The display grabbers: VGACOLOR.2GR
 
@@ -888,6 +891,7 @@ Observed (KRNL286; handles are those of that run):
 - **[w16] ScrollBarMenu** (SYSTEM.INI; read at USER's start-up; **default 1**; **0 is stock Windows 3.1**): a compatible enhancement beyond 3.1 (6.8), the scroll-bar shortcut menu Windows 2000 and later have. A right click on a window's own scroll bar (DefWindowProc's WM_NCRBUTTONUP with HTVSCROLL/HTHSCROLL) or on a SCROLLBAR control (its WM_RBUTTONUP) opens, at the pointer, on the button's release (later Windows shows it from WM_CONTEXTMENU, which DefWindowProc makes from the button-up messages: Win32 SDK), vertical: Scroll Here, separator, Top, Bottom, separator, Page Up, Page Down, separator, Scroll Up, Scroll Down; horizontal: Scroll Here, separator, Left Edge, Right Edge, separator, Page Left, Page Right, separator, Scroll Left, Scroll Right; no mnemonics. Sources: Raymond Chen, *The Old New Thing*, 2026-09-22 (Windows 2000 added it; the seven commands); the separators as transcribed in Nick Gammon's forum (gammon.com.au, thread 8417); the horizontal wording (Left Edge, Right Edge, Page Left, Page Right, Scroll Left, Scroll Right) from a Trapeze Group application's help page, which lists both bars' right-click menus (it does not say they are Windows' own, but they match the vertical one item for item); and a screenshot of the vertical menu from PsyMP3, the user's ISC-licensed program, which confirms order, wording and separators and shows no mnemonics. No Microsoft binary or resource was looked at. Each command sends the parent (a control) or the window (its own bars) WM_VSCROLL/WM_HSCROLL with 3.1's packing, wParam the code and lParam MAKELONG(position, hwndCtl) (hwndCtl 0 for a window's bars): Top/Left Edge SB_TOP, Bottom/Right Edge SB_BOTTOM, Page Up/Left SB_PAGEUP, Page Down/Right SB_PAGEDOWN, Scroll Up/Left SB_LINEUP, Scroll Down/Right SB_LINEDOWN, Scroll Here SB_THUMBTRACK and SB_THUMBPOSITION with the position whose thumb is centred on the click (UNVERIFIED which of the two later Windows sends; both, as a drag of the thumb there would, so programs acting on either move); each then SB_ENDSCROLL. **Top and Bottom fallback (w16's own):** on 3.1 SB_TOP and SB_BOTTOM come only from a scroll-bar control's Home and End keys, never from a window's own bars, so 3.x programs may ignore them: Microsoft's Write does (USER.LOG with `userlog=1`: its bar stayed at 7Eh through SB_TOP and SB_ENDSCROLL; it acts on scroll messages at SB_ENDSCROLL), so Top and Bottom did nothing there. The code is sent first, as later Windows does; then, if the bar's position has not changed and is not already at that end of its range (min for Top/Left Edge, max for Bottom/Right Edge), SB_THUMBTRACK and SB_THUMBPOSITION to that end follow, as Scroll Here sends, which every program handles; then SB_ENDSCROLL. A program that handles the code moves its bar and gets nothing more; one that moves it only later gets a thumb to the same end. Checked with real input on w16's USER (Microsoft's KRNL286 and the rest): Write (fallback taken; Top, Bottom and Scroll Here go where they say), Notepad (the edit control handles both; Bottom put the last line at the top, Notepad's bar staying at 0, so the fallback sends the same place again, harmlessly), File Manager's file list (Left/Right Edge, the list box handles them), Microsoft's Program Manager group window and Cardfile's list view (handled). US17 covers a window and a control parent that ignore them, one that handles them, and one at the end already. The investigation also found that w16's menu loop left Return's WM_CHAR in the queue after a menu closed (fixed: Notepad's Time/Date chosen by Enter now matches 3.1, and Write no longer scrolls back to its caret after Top chosen by keys). The menu is a menu-heap popup run by USER's own menu loop (`menu_track_quiet`, `user/menu.c`: the same drawing, keys, Esc and click-outside as every popup; the right button chooses too, as TrackPopupMenu's TPM_RIGHTBUTTON, which w16's TrackPopupMenu now also honours), but the window is sent none of the menu's messages (no WM_INITMENU, WM_INITMENUPOPUP, WM_MENUSELECT, WM_COMMAND), which a 3.1 program could take for its own: 3.1 has no WM_CONTEXTMENU, and the scroll messages are the only thing it sees. No menu for a disabled window or control (they get no mouse input) or a bar with nothing to scroll (an empty range, or shown disabled): later Windows' behaviour there is not documented, so the conservative choice. A program that handles WM_NCRBUTTONUP (or subclasses the control's WM_RBUTTONUP) without passing it on keeps full control. With `ScrollBarMenu=0` none of this code runs. Probe **US17** (`tests/apps/us17.c`; boot-test case `sbmenu`) right-clicks every bar with real mouse input and chooses every item by keys, by left and right clicks, Esc and a click outside, checking the items, the menu's place and the messages; with `ScrollBarMenu=0` its log (no message from any right click) and final screen are identical to Windows 3.1's run of the same probe. Boot-test case `input`, whose script right-clicks wherever the boot left the pointer, runs w16 with `ScrollBarMenu=0`. US17 also showed two scroll-bar differences from 3.1 that have nothing to do with the menu, not fixed yet (the probe steps around them): SetScrollPos(..., TRUE) on a control before its parent's first WM_PAINT paints it at once (InvalidateRect + UpdateWindow), and the parent's paint then covers it, where 3.1 shows it; and 3.1 draws a SCROLLBAR control with an empty range with its thumb at the top, w16 with none.
 - **An edit control's text** (`edit.c`; probes US20 and US21 on 3.1, boot-test case `edithandle`): a moveable local block, never left locked, in the local heap of the segment the window's hInstance names: the application's DS for a control it creates, so EM_GETHANDLE (multi-line controls only; a single-line one answers 0) gives a handle it can LocalLock, LocalReAlloc and hand back with EM_SETHANDLE, as Microsoft's Notepad does to read and write files. A dialog's edit controls without DS_LOCALEDIT share a 2000-byte segment USER makes (their hInstance; the dialog's is the application's), freed with the dialog; with DS_LOCALEDIT they use the application's. A control given a LocalInit'ed global block as hInstance keeps its text there (Pietrek: up to 64K); w16 gives one whose hInstance has no local heap a private segment. Sizes as 3.1's: len + 33 bytes when made or set (34 empty, 30038 for 30005 characters; WM_SETTEXT never shrinks it), typing grows it 32 bytes at a time; EM_SETHANDLE sizes the new block to its text when KERNEL can, leaves the old one to the application, clears the modified flag; DestroyWindow frees it. Characters are read from the block each time, up to the control's own length. The default limit is 30000 characters for typing and EM_REPLACESEL (what fits goes in), not for WM_SETTEXT; EM_LIMITTEXT 0 removes it (Notepad sets FFFFh). KERNEL's LocalReAlloc cannot grow a 31.5K block at the end of a 53K heap (it would need room for a copy; US20 part H, on 3.1 too), yet 3.1's control grows it there when text is typed; w16 then allocates a block too big for the free space, which grows the heap at its end, frees it and grows the text in place (UNVERIFIED how 3.1 does it: its segment grew by less; and where another block follows the text 3.1 did not grow it while w16 does, US20 part F, not compared). Not done: 3.1 also keeps the control's state (98 bytes) and its line starts (2 bytes a line) in that heap (US21), so the largest file Notepad opens differs from 3.1's (15.1); text changed behind the control's back keeps 3.1's line count, w16 counts again. With this Microsoft's Notepad opens, pages, edits and saves a 31500-byte file on w16's USER with every screen and the saved bytes as on 3.1; on the way Page Up/Down (a page, caret and view together), EN_VSCROLL/EN_HSCROLL for scrolls made by keys and typing, and line scanning that no longer starts from the text's top for every character (typing at the end of 31K took seconds a key).
 - **Buttons held down** (`defwnd.c` track_caption_button, `scroll.c`; probe US26, boot-test case `holdbtn`): the caption's minimize and maximize (restore) buttons are drawn pressed (OBM_REDUCED, OBM_ZOOMD, OBM_RESTORED) while the left button is held on them, raised when the pointer leaves, pressed again when it returns; the command (WM_SYSCOMMAND SC_MINIMIZE, SC_MAXIMIZE, SC_RESTORE) is sent on a release on the button and nothing on a release off it (w16 acted on the press). A press on a window's scroll bar sends WM_SYSCOMMAND SC_VSCROLL/SC_HSCROLL, which DefWindowProc tracks (3.1 sent it before any WM_VSCROLL). An arrow held: the code at the press, again 200 ms later (at the next 55 ms tick, 220 on 3.1), then at every tick; the arrow drawn pressed (OBM_DNARROWD ...) also through the program's SetScrollPos repaints, raised and the repeats stopped while the pointer is off it, both back when it returns. The shaft held: pages with the same timing while the pointer stays on the same side of the thumb (from 0, held at the place of position 70, 3.1 paged seven times and stopped). A timer of USER's (SetTimer on the window, id FFF7h, its WM_TIMERs taken by the loop) wakes the loop; w16 repeated after 400 then 50 ms, and only when other messages woke it. Thumb drags in Notepad: 3.1's Notepad scrolls its text with SB_THUMBTRACK but keeps its thumb until SB_THUMBPOSITION; w16's Notepad moved the thumb at every SB_THUMBTRACK (now as 3.1; `sbdrag` part npw).
+- **The move and size loop** (`track.c` next_input; probe US31, `tests/apps/us31.c`, boot-test case `trackmove`; QuickTime's Movie Player, `quicktime` part over, tree and tree386; `docs/notes/quicktime-handover.md`, "Dragging the movie"): while a window is dragged or sized, 3.1's loop takes only mouse and keyboard messages. The owner's WM_TIMER, WM_PAINT and posted messages wait until the drop; a WH_GETMESSAGE hook sees only the mouse messages (US31 on 3.1: `200x81 202`); other tasks run all through it (US31's other task: 107 of its 55 ms ticks in a 6.4 s drag, as many WM_PAINTs). The window gets WM_GETMINMAXINFO, then message 231h, then after the drop WM_WINDOWPOSCHANGING, WM_WINDOWPOSCHANGED, WM_MOVE, then 232h (wParam and lParam 0 both; Win32 later documented them as WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE, but 3.1 sends them). After Esc it gets 231h, a WM_WINDOWPOSCHANGING alone, then 232h. w16 waits for input (wake mask QS_MOUSE, QS_KEY and QS_SENDMESSAGE; sent messages are answered by its PeekMessages) and yields while another task's input is pending. Until 2026-11-19 the loop was a GetMessage of everything. It dispatched timers and posted messages with the frame erased and drawn again around each, and it left WM_PAINT in the queue, so GetMessage never waited and no other task ran (US31: `other=0`). Under QuickTime this hung Windows for good: QTIM.DLL's system-wide WH_GETMESSAGE hook takes its registered message out of the player's queue and posts it again (PeekMessage of that message with PM_REMOVE and PM_NOYIELD, then PostAppMessage to the player). That kept a posted message in the queue all the time, and posted messages, read before input, kept the mouse out. The frame was drawn and erased in place for ever. Differences left: on 3.1 no window's drawing shows during a drag, the dragging task's and other tasks' alike, GetDC and BeginPaint alike (US31's counters stay on screen as at the press, though they keep counting), and the windows show their new state after the drop; w16 draws them (`trackmove` compares US31's log, not its screens). w16's SetWindowPos also sends WM_NCCALCSIZE for a move alone (3.1 does not), and sends no WM_WINDOWPOSCHANGING when a drag is cancelled.
 - **Mouse moves merge in the system queue** (`input.c` push_event; probe US25, boot-test cases `mmerge` and `sbdrag` part fast): on 3.1 a mouse move made while the last event still queued is a move replaces it, so a busy program gets one WM_MOUSEMOVE at the latest point, not one per place the pointer passed (US25: eight moves fed through mouse_event while the probe read nothing, one a timer tick or all in one tick, came as one; a press or a release keeps the moves on either side). Each mouse event also keeps the buttons and keys as they were when it happened (MK_ flags in wParam: a press and release made while busy came as WM_LBUTTONDOWN with MK_LBUTTON and the moves between with it), where w16 gave every message the state at the time it was read, and gave a captured window's client messages wParam 0. w16 queued every move: a drag loop that draws at each move (the scroll-bar thumb's outline, with a program slow on SB_THUMBTRACK, or all of w16 under DOSBox) fell seconds behind the pointer, working through every place it had passed (a user's report). The merging is in the system queue, so every reader benefits: the scroll-bar and window move/size loops, Program Manager's and File Manager's drags, MDI. UNVERIFIED: whether 3.1 merges a move into one meant for another window. Note for real-input tests: under DOSBox with cycles=max the guest's clock ran about four times the host's while a probe was busy (US25's message times), so host sleeps between moves are long in guest time.
 - **The cursor after a capture** (`input.c`, `defwnd.c`; probe US22, boot-test case `capcursor`): ReleaseCapture makes a mouse move where the pointer is, so the window under it gets WM_SETCURSOR and WM_MOUSEMOVE or WM_NCMOUSEMOVE at once, after the call returns (3.1: released over a sizing border, the sizing arrow came up without the pointer moving); DefWindowProc's WM_SETCURSOR shows the sizing arrows over the borders and corners (IDC_SIZEWE, SIZENS, SIZENWSE, SIZENESW; w16 showed the arrow everywhere).
 - **Dragging a scroll bar's thumb** (`scroll.c`, track_scrollbar; measured on 3.1 with real mouse input, probe US19 (`tests/apps/us19.c`) as the shell and Microsoft's Notepad, screenshots taken mid-drag; boot-test case `sbdrag`): the thumb's place is shown by its outline, a rectangle of the thumb's size one pixel wide, corners included, inverted through USER's 50% gray pattern aligned to the screen (on VGA the pixels where x + y is odd: the black lines go white at every other pixel, the Scrollbar gray dark gray), drawn over whatever is there. At the press it is drawn on the thumb; it then follows the pointer pixel for pixel, keeping its offset, stopped at the ends of the travel; the real thumb stays unless the program moves it (US19's bars that call SetScrollPos on SB_THUMBTRACK: the outline is then on the moved thumb; Notepad scrolls its text on SB_THUMBTRACK but moves the bar only on SB_THUMBPOSITION, so its thumb stays at the top). With the pointer outside the bar's rectangle widened by 4 pixels left and right and 1 up and down (measured a pixel at a time on a window's vertical bar and a horizontal control, both 17 thick; UNVERIFIED on other displays), the outline goes back to the starting place; back inside it follows again. Messages: the press sends SB_THUMBTRACK with the bar's position; each move that changes the position sends SB_THUMBTRACK (none when it does not change); the position is the outline's offset in the travel scaled to the range and rounded to the nearest (travel 150, range 100: 1 pixel 1, 3 pixels 2, 4 pixels 3); outside the room it is the starting place's position on that scale, which can differ from the bar's (a 120-high control at 50 sent 51); the release erases the outline and sends SB_THUMBPOSITION with the last position sent, then SB_ENDSCROLL. The task's windows repaint during the drag (US19 only invalidates on SB_THUMBTRACK and the tracked number was drawn mid-drag), so the loop dispatches WM_PAINT. A repaint of the bar itself (SetScrollPos from SB_THUMBTRACK) draws the outline again after the bar, with the same clipping. w16 before drew nothing, sent no SB_THUMBTRACK at the press, one on every mouse move, no snapping back, and no paints until the release. Seen on the way and done since: the cursor after a capture, and EM_GETHANDLE (the next two items above); sbdrag still types its text. Fixed on the way, as the Notepad part showed against 3.1: no WM_SETCURSOR while the mouse is captured (3.1 SDK; the capturing frame's I-beam had replaced the arrow mid-drag); in the edit control, Ctrl+Home and Ctrl+End go to the text's start and end, a multi-line control draws whole lines only, SB_THUMBTRACK/SB_THUMBPOSITION positions map to the nearest line (pos × (lines - 1) / 100 rounded), and the scroll code EM_GETTHUMB answers the first line × 100 / (lines - 1) rounded (Notepad's thumb after the release: 45 lines, first line 32, thumb at 73).
@@ -1477,7 +1481,7 @@ w16's TASKMAN.EXE replaces Windows 3.1's Task List (`make shell` builds `build/d
 
 **Tests.** TM3 and TM4 on w16's USER (`DROPIN_FIXED=1 tests/userboot.sh -n -t 60 -s build/dos/TM3.EXE`) give TK.LOGs identical to 3.1's (`tests/refrun.sh build/dos/TM3.EXE`). The boot-test case `taskman` plays `tests/scripts/input/taskman.txt` (Clock and Calculator, Notepad over them; Ctrl+Esc, a double-click on an item (Calculator), Down, Escape, a double-click on the desktop's corner, Calculator minimised and Switch To its icon, Cascade, Tile, End Task on Clock, Tile with Shift, minimise, Arrange Icons, Program Manager, a full-screen MS-DOS Prompt and Ctrl+Esc there) against Microsoft's TASKMAN on all-Microsoft 3.1, every screen to the pixel but Clock's ticking parts: w16's TASKMAN on all-Microsoft 3.1 (part ms) and on w16's KRNL286 (k286), w16's USER with Microsoft's TASKMAN (us; Microsoft's GDI: w16's draws Clock's digits in another face) and with w16's (usall), and w16's install tree alone under its KRNL386 against its KRNL286 (tree).
 
-### 15.6 Write (`shell/write/`, WRITE.EXE; probes WR1-WR14)
+### 15.6 Write (`shell/write/`, WRITE.EXE; probes WR1-WR29)
 
 `shell/write/` is a clean-room Write for Windows 3.1, `build/dos/WRITE.EXE` (marked 3.10), installed as `WINDOWS\WRITE.EXE` by `make install-tree`. Everything it does comes from black-box observation of the original on the reference install (probes WR1-WR11): scripted input with SNAP (`tests/wrobs.sh`), the saved files decoded with `tools/wri.py`, the original's resource templates read as data (`tools/nerc.py`), its imports read from the NE tables (`tools/neimports.py`). The file format is written down on its own in `docs/wri-format.md`, checked against the Windows 3.1 SDK's description (Programmer's Reference vol. 4, ch. 8 "Write File Format", facts only; where Write's own files differ from it, the document says so). Write is in the install tree's Accessories group (first, as 3.1 Setup lists it).
 
@@ -1500,15 +1504,19 @@ w16's TASKMAN.EXE replaces Windows 3.1's Task List (`make shell` builds `build/d
 **OLE** (for the OLECLI work, ARCHITECTURE.md 16): the original imports OLECLI 2-4, 6, 9-16, 18-22, 24-29, 32, 34-45, 47, 56 (OleDelete, OleSaveToStream, OleLoadFromStream, OleClone, OleQueryLinkFromClip, OleQueryCreateFromClip, OleCreateLinkFromClip, OleCreateFromClip, OleCopyToClipboard, OleQueryType, OleSetHostNames, OleSetTargetDevice, OleQueryBounds, OleDraw, OleQueryOpen, OleActivate, OleUpdate, OleGetLinkUpdateOptions, OleSetLinkUpdateOptions, OleEnumFormats, OleClose, OleGetData, OleSetData, OleObjectConvert, OleCreate, OleQueryReleaseStatus, OleQueryReleaseError, OleQueryReleaseMethod, OleCreateFromFile, OleCreateLinkFromFile, OleRelease, OleRegisterClientDoc, OleRevokeClientDoc, OleRenameClientDoc, OleRevertClientDoc, OleSavedClientDoc, OleEnumObjects, OleQuerySize). A pasted picture is stored as an OLE object even without a server (WR7): a picture paragraph (PAP byte 16 bit 10h, byte 0 3Dh) whose 40-byte header has mm E4h, the shown size in twips, the stream's size at 16 and a per-session object number at 24, followed by OLECLI's stream for a static object (version 0501h, format 3, class "DIB" or "METAFILEPICT", HIMETRIC size, data); the file's identifier becomes BE32h. w16's Write draws such objects itself; creating and activating objects through OLECLI is the next stage, and must work with w16's OLECLI.
 
 
+**The ruler** (`ruler.c`, WR24-WR27): Document > Ruler On makes the child window `MSWRITE_RULER` (first in the frame's window list, 39 pixels tall, the text window's width; the text window then starts 36 pixels down, under the ruler's last 3 rows) and Ruler Off destroys it; the menu item reads "&Ruler On"/"&Ruler Off" (strings 5, 6). In ruler pixels, x 19 is indent 0: rows 1-15 hold nine 22 x 15 buttons at x 91, 125 (left and decimal tab: the kind a click sets), 195, 229, 263 (single, 1 1/2, double), 333, 367, 401, 435 (left, centered, right, justified), the current ones down; rows 17-25 the scale, eighths of an inch with ticks 9, 7, 5 and 3 rows tall and each inch's number in MS Sans Serif 8 (`ANSI_VAR_FONT`) a pixel right of its tick, or with Page Layout in cm half centimetres of 19 pixels (ticks 9 and 5 rows); lines at rows 26 and 38 from x 19 to the edge; rows 27-37 the marks of the caret's paragraph, 12 x 11 cells whose column 6 is the position, their ink inverting the ruler (a first-line indent on the left indent shows white). Buttons apply to the selected paragraphs and, unlike the menu, end the document's last paragraph first (WR25 A1); tabs belong to every paragraph (the last gets its paragraph mark, PAP byte 0 kept: WR27); a mark is dragged with its cell inverted and the text laid out on release; a click in the marks' row elsewhere sets a tab; a tab dragged off the ruler is gone at once; positions go to the nearest 1/16 inch (WR26). Where the first-line and left indents meet, a press takes the first-line one; moving the left indent keeps the first line in place (WR25: dxaLeft 1440, dxaLeft1 -720). The art is w16's own (`tools/mkwriteruler.py`) in the cell layout of the original's resources 102 (18 buttons, up then down) and 202 (first-line, left, right indent, left tab, decimal tab); `tests/wrmsres.sh` builds, for tests only, a copy with the reference's bitmaps so that the scenarios compare the drawing code (ARCHITECTURE.md 3, test-only combinations). Also found with the ruler: with a tab in a centered or right-aligned line only what follows the last tab is placed, between its tab stop and the right indent (WR24 R3); the caret leaves out the rows 1 1/2 and double spacing add (WR24 R3); Page Layout's cm button shows the margins in cm at once ("3.17 cm", the original's string 28687), and cm figures go up to the next twip (WR26: 3.17 cm 1798); Page Layout's OK always stores the first page number. Not done: the ruler in the Header/Footer views, horizontal scrolling, cm snapping (1/8 cm assumed).
+
+**Move Picture and Size Picture** (WR22, WR28; `view.c`): enabled when a picture is selected alone; arrows step over a picture as one unit, so Shift+Left after a pasted picture selects it. In either mode the picture is drawn plain (not inverted) in a black frame a row taller than it, and a gray outline (XOR colour 8) of the same size follows the keys or the mouse; Enter or a click sets it, Escape leaves it. Move: 8 pixels a Left/Right, or centred on the mouse's x; the offset is the outline's place (dxaOffset 1845 for 123 pixels). Size: the first arrow takes the right or bottom edge and later ones move it (8 pixels across, 6 down: UNVERIFIED steps); with the mouse the edges on its side of the centre follow it; the page box shows "1.2X/1.1Y"; mx and my are the outline's width and height (with its extra row) in thousandths of the picture's at scale 1000 (146 / 80 = 1825, 134 / 41 = 3268). Pasting a picture can be undone ("Undo Editing"), and Paste Special is enabled for a picture on the clipboard (its dialog is not done).
+
 **Undo** keeps one copy of the whole document, taken before a change (typing: before a run of typing); Undo swaps it in, so a second Undo redoes. Edit > Undo reads "&Undo Typing", "Editing" or "Formatting" (the original's strings; which commands are which beyond typing UNVERIFIED).
 
 **Headers and footers** (WR12, WR13): Document > Header/Footer shows only that running head (title HEADER/FOOTER, the end mark after it) with the modeless Page Header/Page Footer box; the head is edited as a copy of the document holding only it, and Return to Document puts it back before the body as 3.1 stores it (rhc 6/7, the margins as its indents, the page number as character 1 with fSpecial, shown "(page)"). Running heads are not shown in the document itself.
 
-**OLE through OLECLI** (`ole.c`, WR6, WR10): the document is registered as `WINWRITE` with its name; each object is loaded from its paragraph's stream (OleLoadFromStream, "Static" for static objects) when first drawn and drawn with OleDraw (an embedded Paintbrush picture has no picture of its own in the stream); a double click opens it (OleActivate); OLE_CHANGED and OLE_SAVED store the stream again (OleSaveToStream); Insert Object lists the registration database's classes with a StdFileEditing server and creates the object (OleCreate) with the host names set (Paintbrush titles itself "Paintbrush Picture in (Untitled)", as with 3.1's Write). WR10's saved file equals the original's but for the object number (the clock). The shown size in twips comes from OleQueryBounds' HIMETRIC by way of whole screen pixels, as the MM_HIMETRIC and MM_TWIPS mapping modes convert (HORZSIZE/HORZRES, VERTSIZE/VERTRES: on VGA 16931 x 11693 HIMETRIC is 521 x 360 pixels, 9600 x 6633 twips; confirmed with five DIB sizes in WR16 and the metafile of WR15; `docs/wri-format.md`). Not done: Links, Paste Link, Paste Special, the Object verb menu, Move/Size Picture, pasting pictures (3.1 stores a pasted bitmap or metafile as a static object, WR7).
+**OLE through OLECLI** (`ole.c`, WR6, WR10): the document is registered as `WINWRITE` with its name; each object is loaded from its paragraph's stream (OleLoadFromStream, "Static" for static objects) when first drawn and drawn with OleDraw (an embedded Paintbrush picture has no picture of its own in the stream); a double click opens it (OleActivate); OLE_CHANGED and OLE_SAVED store the stream again (OleSaveToStream); Insert Object lists the registration database's classes with a StdFileEditing server and creates the object (OleCreate) with the host names set (Paintbrush titles itself "Paintbrush Picture in (Untitled)", as with 3.1's Write). WR10's saved file equals the original's but for the object number (the clock). The shown size in twips comes from OleQueryBounds' HIMETRIC by way of whole screen pixels, as the MM_HIMETRIC and MM_TWIPS mapping modes convert (HORZSIZE/HORZRES, VERTSIZE/VERTRES: on VGA 16931 x 11693 HIMETRIC is 521 x 360 pixels, 9600 x 6633 twips; confirmed with five DIB sizes in WR16 and the metafile of WR15; `docs/wri-format.md`). Not done: Links, Paste Link, Paste Special, the Object verb menu.
 
 **Printing** (`print.c`): Print (COMMDLG PrintDlg, the STARTDOC/NEWFRAME/ENDDOC escapes, the original's Now Printing box with an abort procedure), Print Setup, Repaginate (the page table; the printer's metrics when one is set up, else the screen's). Pages are Page Layout's text area, lines broken with the device's fonts. All UNVERIFIED against 3.1, whose reference install has no printer driver (File > Print is grayed there, WR7); headers and footers are not printed yet, and Confirm Page Breaks is not done.
 
-**Tests**: `tests/writescenarios.sh` (scenarios `tests/scripts/write/WR*.txt`, results in `build/ref/wrscen/<date-time>/`, pixel baseline `tests/scripts/write.baseline`), `tests/writehelp.sh` (WinHelp requests against `tests/apps/thelp.c`). Boot-test case **w16write**: w16's Write under real keys against Microsoft's on all-Microsoft 3.1, on w16's KRNL286 and KRNL386, and the install tree alone under both kernels. Not yet done (plan): the ruler, Confirm Page Breaks, printing of headers and footers, Move/Size Picture (probe WR22 records the original: Move Picture moves a gray outline 8 pixels per arrow key, Enter puts the picture there), Links/Paste Link/Paste Special, Word for DOS output with page layout or pictures, the 3.0 Write save format.
+**Tests**: `tests/writescenarios.sh` (scenarios `tests/scripts/write/WR*.txt`, results in `build/ref/wrscen/<date-time>/`, pixel baseline `tests/scripts/write.baseline`), `tests/writehelp.sh` (WinHelp requests against `tests/apps/thelp.c`). Boot-test case **w16write**: w16's Write under real keys against Microsoft's on all-Microsoft 3.1, on w16's KRNL286 and KRNL386, and the install tree alone under both kernels. Feature scenarios run as boot-test parts too: `w16write@wr24` ... (the list `WRSCEN_BOOT` in `tests/boottest.sh`), each `tests/writescenarios.sh` on one scenario. Scenario directives (`tests/wrobs.sh`, `tests/writescenarios.sh`): `; files:`, `; prep:`, `; mkpic:`, `; expand: FILE DEST` (a Setup-disk file expanded into the scratch install), `; ini: section:key=value`, `; get: FILE` (fetched and compared byte for byte). Not yet done (plan): Confirm Page Breaks, printing of headers and footers, Links/Paste Link/Paste Special, Word for DOS output with page layout or pictures, the 3.0 Write save format.
 
 ## 16. OLE
 
@@ -1925,7 +1933,15 @@ imports only KERNEL, USER, GDI and KEYBOARD. Nothing in the 3.1 or WfW
   string, conversations, lists, instances and data handles as c1, l1, i1,
   d1 in order of first sight (a data handle a call makes always gets a
   new name), transaction IDs by their counter (x0001). `raw on` shows the
-  values (the x*.dm explorations).
+  values (the x*.dm explorations). A monitor's events are logged the same
+  way: the data handles in a callback event get new names, the global
+  handles in a message's lParam are named h1, h2 by first sight (their
+  reuse is compared), atoms and words are shown. `iwatch on` makes a
+  copy's raw window log every INITIATE it gets.
+- `tests/ddeml/xrun.sh OUTDIR "COMBOS" NAME...` runs scripts (the x*.dm
+  explorations too) in the given combinations and prints each log's
+  differences from ms-ms: for matching a behaviour before a scenario
+  covers it.
 - The OpenWatcom `ddeml.h` declares DdeAccessData with a near result; the
   probe imports ordinal 17 as DdeAccessDataF with the SDK's far one (and
   w16's DDEML exports its own function under that ordinal).
@@ -1940,8 +1956,10 @@ imports only KERNEL, USER, GDI and KEYBOARD. Nothing in the 3.1 or WfW
 
 Instances and windows:
 - `DdeInitialize` makes a top-level DMGClass window (style 04C00000, 6
-  extra bytes) and then a DMGFrame (84000000, 4 bytes; a monitor gets
-  none). idInst is MAKELONG(an address in the library, a counter); one
+  extra bytes) and then a DMGFrame (84000000, 4 bytes); a monitor gets a
+  DMGMonitorClass window instead (04C00000, 4 bytes: LOWORD(id), 0),
+  and only when it asks for events (MF_ flags; `flags.dm`'s monitor
+  without them has none: the windows made after it show it). idInst is MAKELONG(an address in the library, a counter); one
   counter, from 2, numbers instances and every conversation and holding
   window. HCONV is MAKELONG(the conversation's window, its number). A
   client conversation is a DMGClientClass child of DMGClass; a server
@@ -1952,14 +1970,23 @@ Instances and windows:
   with 0 the library's (DLL_NOT_INITIALIZED at first), with any other
   invalid id INVALIDPARAMETER.
 - `DdeUninitialize`: UNREGISTER for its names to every other instance,
-  TERMINATE to every conversation in the order they were made, waits for
-  the partners' answers, frees the strings it still holds; a second call
-  fails with INVALIDPARAMETER.
+  TERMINATE to every conversation, in the order of the instance's
+  windows (the DMGClass's children in z-order; a holding window's
+  children, server conversations or a list's, where it comes; a
+  conversation with itself gets one from each side), then lets the other
+  tasks run first, and takes its own messages one at a time, letting
+  the others run again after each TERMINATE one of its client windows
+  takes (`xun1.dm`-`xun4.dm`); frees the strings it still holds; a
+  second call fails with INVALIDPARAMETER.
 
 Strings: a string handle is the string's global atom (HIWORD 0), shared
 by all instances and tasks, case-insensitive; each create adds a
 reference, Keep adds one and returns the atom, Free removes one, and
-DdeUninitialize removes those an instance still holds. Code page 0,
+DdeUninitialize removes those an instance still holds: an instance
+keeps one entry per create and keep, appended; a free takes out the
+string's first entry and moves the last into its place, and
+DdeUninitialize frees the first entry until none is left (the order a
+monitor sees MH_CLEANUP in, `xstr.dm`). Code page 0,
 CP_WINANSI or GetKBCodePage() (437 here) only, else INVALIDPARAMETER.
 "" gives 0 without an error. With idInst 0 the atom is made all the same
 (error DLL_NOT_INITIALIZED); with a dead id, 0 and INVALIDPARAMETER.
@@ -1977,7 +2004,11 @@ reallocates (the gap zeroed), same handle. afCmd other than 0 and
 HDATA_APPOWNED: INVALIDPARAMETER. Freeing a handle twice crashes 3.1.
 
 Connecting:
-- DdeConnect sends INITIATE (SendMessage -1) with the two atoms. A server
+- DdeConnect, DdeConnectList and DdeReconnect send INITIATE with the
+  two atoms to every top-level window in turn (EnumWindows, z-order, the
+  exported InitEnum; `xconn.dm`: raw windows below the first server
+  never see a DdeConnect's), not as a broadcast. A DdeConnect stops at
+  the first window whose answer gave it its conversation. A server
   instance answers when its filter allows (FILTERINITS: always on at
   first; DdeNameService(0, DNS_FILTEROFF) lets every service in; with
   the filter on, a NULL service needs a registered name). XTYP_CONNECT
@@ -1985,22 +2016,57 @@ Connecting:
   client is a DDEML window of the same library, else 0, dwData2 same
   instance); NULL service or topic: XTYP_WILDCONNECT, whose HSZPAIR list
   makes one conversation each. The server sends ACK, then
-  XTYP_CONNECT_CONFIRM. A second ACK to one DdeConnect: the client sends
-  TERMINATE at once (SendMessage), so the server gets XTYP_DISCONNECT and
-  then CONNECT_CONFIRM with conversation 0; a server of the same library
-  does not answer a DdeConnect that already has its server.
-- DdeConnectList: every ACK becomes a conversation (new client windows);
-  given an old list, new conversations duplicating its ones (service and
-  topic) are terminated, the old ones move to the new list and the old
-  handle dies.
+  XTYP_CONNECT_CONFIRM, whose conversation is what the server window's
+  handle reads after the ACK: MAKELONG(window, the window's third word)
+  if the handle is a window, else 0 (a window the client has made since
+  can have taken the handle: below). A second ACK to one DdeConnect (a
+  WILDCONNECT with several pairs): the client sends TERMINATE at once
+  (SendMessage), so the server gets XTYP_DISCONNECT and then
+  CONNECT_CONFIRM with conversation 0. A conversation with the client's
+  own instance has ST_ISSELF (status 0115).
+- DdeConnectList (`xconn.dm`, `xconn2.dm`, raw values): a list is a
+  DMGHoldingClass window, child of the client's DMGClass (words: LOWORD
+  of the instance, 0, its number, 0), made before the INITIATE's client
+  window, which is its child; HCONVLIST = MAKELONG(window, number). The
+  first answer goes to that window. A further answer from a server
+  window of the same library gets a new client window (child of the
+  list, numbered then; its CONVCONTEXT all zero, its service asked for
+  the first one's). A further answer from any other server (another
+  library, raw DDE): the client sends it TERMINATE at once, makes a new
+  client window and sends an INITIATE for exactly that service and topic
+  from it to the same top-level window (not to the others); the server,
+  still inside its first ACK, answers that one. The old server window is
+  gone by then and the new client window usually gets its handle, so
+  that server's CONNECT_CONFIRM names a conversation made of the new
+  client window and its number; the server's answering TERMINATE then
+  reaches the old client window under the new window's handle. The
+  enumeration then goes on from the first client window.
+  DdeQueryNextServer and DdeDisconnectList go through the list window's
+  children in z-order: children are added below the others, so the
+  order is the order the windows were made. Given an old list: the new
+  conversations that duplicate a live one of the old list (service and
+  topic) get TERMINATE (in the new list's order), then the old list's
+  windows move into the new list one by one (SetParent puts each on
+  top: their order turns round, above the new ones), and the old window
+  is destroyed (its handle is dead). Nobody answering: 0, no error, and
+  the list window stays behind (until the instance goes).
+  DdeDisconnectList terminates the conversations and leaves the window,
+  its fourth word set to 2000; a call that finds the window empty
+  destroys it (both return 1).
 - REGISTER/UNREGISTER (DdeNameService, DdeUninitialize) reach every
   instance in the z-order of their DMGClass windows, newest first,
   inside the call; DdeNameService(0, FILTERON/OFF) returns 0;
   CLIENTONLY instances get DLL_USAGE.
 - DdeDisconnect posts TERMINATE and returns; the partner's TERMINATE
-  destroys the window later. A partner's TERMINATE gives
-  XTYP_DISCONNECT, then the answer, from the destroyed window. The handle
-  is dead afterwards (DdeReconnect: NO_CONV_ESTABLISHED).
+  destroys the window later. A partner's TERMINATE is answered first,
+  then XTYP_DISCONNECT is called; the window goes. The handle is dead
+  afterwards (DdeReconnect: NO_CONV_ESTABLISHED). While the partner's
+  queue is full (8 messages), the TERMINATE waits: the library yields
+  and posts again (`xun4.dm`: a client ending eleven conversations with
+  one server; the server's ninth answer waits until the client has
+  taken one). A server window that gets the answer to its own TERMINATE
+  also leaves one message of its own (no DDE message) in its task's
+  queue (`xun2.dm`: it takes one place among the 8).
 
 Transactions:
 - REQUEST: DATA flags 3000 back; a sync request returns a data handle the
@@ -2037,6 +2103,51 @@ Transactions:
   from freed memory on 3.1 (the probe's DS shows through); a new client
   conversation reports fmt CF_TEXT, type XTYP_CONNECT, status 0015
   (0011 with a raw server), a server one 0001 with no partner.
+- DDE blocks (data handles, the ADVISE options) are fixed global blocks:
+  their handles are selectors (ending 7 or F); a block freed by the
+  receiver is the next one a call allocates (`xmon.dm` as xmon+x).
+
+Monitors (`monitor.dm`, `xmon.dm`, `xmon2.dm`, `xstr.dm`):
+- An event's data handle is a block without the DDE header; DdeAccessData
+  gives the event's size rounded up to 32 (3.1 makes no global block per
+  event: the handles point into one block of the monitor instance).
+  MONHSZSTRUCT's cb is 18 plus the string's length.
+- Strings: besides MH_CREATE (1), MH_KEEP (2), MH_DELETE (3) and
+  MH_CLEANUP (4), 3.1 reports its own atom traffic: 5 for the atom a new
+  string handle gets (before 1), 6 for one more reference, 7 for one
+  less (after 3 and after each 4). References it reports: a registered
+  name (6 at DdeNameService, 7 at unregistering, after the callbacks);
+  around each REGISTER/UNREGISTER callback, in the receiving instance's
+  task (6 before, 7 after); a server conversation holds its service
+  twice and its topic (6 6 6 when it is made, after the server's
+  MONCONVSTRUCT) and adds the ACK's two (6 6); a client conversation
+  adds its service asked for when the ACK comes (6, after its
+  MONCONVSTRUCT) and keeps the ACK's; both let their three go when they
+  end (7 7 7: the client when the answer to its TERMINATE comes, the
+  server after XTYP_DISCONNECT); a REQUEST's item (6, the client, before
+  posting); a link's item (6 at the server after XTYP_ADVSTART, then
+  the link event; at the client when the ACK comes, then the link
+  event; at UNADVISE the server reports the link's end, then 7, then
+  calls XTYP_ADVSTOP; the client 7, then the event); an advise DATA's
+  item (6, the server, before posting). POKE, ADVISE, UNADVISE and the
+  answers' atoms are not reported.
+- MONCONVSTRUCT and MONLINKSTRUCT name both conversations: the partner
+  as MAKELONG(its window, the window's third word) in a connect block
+  (a raw partner: whatever that word holds), in a link block the
+  partner conversation if it is of the same library, else MAKELONG(its
+  window, 0). The server reports its connect before the ACK, the client
+  when the ACK comes.
+- Sent messages: the hook reports every DDE message sent, except an
+  INITIATE to a DMGClass window of its own library, or to any DMGClass
+  window from a client of its own library: those are reported after the
+  window handled them (by that window, or by the client), and not at
+  all when the INITIATE made the conversation of a DdeConnect (it ends
+  there); a list's are reported after its answers.
+- Callbacks: every callback of every instance of the library is
+  reported, the monitors' own (REGISTER) too, XTYP_MONITOR not.
+  dwData1 of a connect is the client's CONVCONTEXT address.
+- Errors: NO_CONV_ESTABLISHED is reported; NOTPROCESSED from a NACK is
+  not.
 
 ### 18.3 w16's DDEML.DLL
 
@@ -2052,14 +2163,22 @@ KERNEL, USER and KEYBOARD only. Every record (instance, name, string
 reference, data handle, conversation, transaction, link, held message,
 list) is a linked list node in DDEML's local heap: the one bound is that
 64K segment. The windows, handle layouts, counters and orders of 18.2
-are reproduced; data blocks are allocated zeroed (3.1's hold stale
-memory past the data; the comparison stops at the first NUL).
+are reproduced: lists are their windows (the order of a list is its
+window's children's), DdeUninitialize walks the instance's windows, a
+full queue makes a TERMINATE wait, and the one message 3.1 leaves in
+the queue when a server window takes the answer to its own TERMINATE is
+a message w16 posts to the instance window that does nothing
+(WM_DMG_NOP). Data blocks are fixed, as 3.1's, and allocated zeroed
+(3.1's hold stale memory past the data; the comparison stops at the
+first NUL). A monitor instance has one global block for its events,
+made at DdeInitialize.
 
 ### 18.4 Tests and results
 
 - `tests/ddemlscen.sh [-c COMBOS] [-n] [NAME...]` runs every script of
-  `tests/ddeml/scripts` (strings, data, conn, xact, advise, flags,
-  monitor, uninit, transact (the client transactions), raw: DDEML against raw DDE both ways, progman: a
+  `tests/ddeml/scripts` but the x*.dm explorations (strings, data, conn,
+  flags, advise, monitor, uninit, transact (the client transactions),
+  raw: DDEML against raw DDE both ways, progman: a
   DDEML client driving 3.1's Program Manager with CreateGroup, AddItem,
   ShowGroup, DeleteItem, Groups and group requests, ExitProgman) as NAME
   (one library) and NAME+x (the other copies on the other library), with
@@ -2068,7 +2187,7 @@ memory past the data; the comparison stops at the first NUL).
   `tests/ddeml/dmnorm.py`: data blocks up to their first NUL (3.1 does
   not clear them; the tail is whatever the memory held). Atom values and
   the frame window in instance-specific names are compared as they are
-  (18.6).
+  (18.6). The monitor's event handles are named, not shown (18.1).
 - Boot-test case **ddeml**: parts tree286 and tree386 (`tests/ddeml/
   ddtree.sh`: the install tree alone under w16's KRNL286 / KRNL386, DM.EXE
   as the shell, a DDEML server and client and a DDEML client driving
@@ -2083,28 +2202,30 @@ memory past the data; the comparison stops at the first NUL).
   data, transact, advise, flags, uninit, raw (each also +x, in every
   combination), progman, tree286 and tree386 equal Microsoft's, with no
   masking beyond the data tails (atom values and instance names
-  included, 18.6). Not equal yet:
-  - **conn**: DdeConnectList with several servers. With a local server,
-    3.1 orders the list and pairs the extra client windows with the
-    servers in an order w16 does not reproduce yet; with a server of
-    another library, 3.1's client TERMINATEs each extra answer at once
-    and INITIATEs that server again from a new client window (and posts
-    a TERMINATE between its own client windows); w16 keeps the answer.
-  - **monitor**: the event stream. 3.1's DDEML reports its own string
-    traffic (two MF_HSZ_INFO events per DdeCreateStringHandle, more for
-    every message it posts), which w16 does not mirror; w16 sends one
-    event per documented occasion.
+  included, 18.6). Not equal yet then: conn (lists with several
+  servers) and monitor (the event stream).
+- Results (installation-05, 2026-11-19, task 3): conn and monitor equal
+  too, in every combination (the INITIATE enumeration, lists as
+  windows, another library's answers asked again, DdeUninitialize's
+  order and queue places, and the monitor events of 18.2): full boot
+  test (dffe779 on master 429e079): ddeml ok in every part, 123 cases
+  ok; failing: lzexpand (quirks, known), trails@timed (known flake),
+  toolhelp@ref3 (Microsoft's own run, no w16 file and no DDEML in it:
+  its group e did not finish; alone again: ref386 the same way).
+  Masking: only the data blocks' tails.
 
 ### 18.5 UNVERIFIED, and not done
 
 - The termination dialog (TERMDIALOG) is in the resources but never
   shown: w16's DdeUninitialize waits up to 10 seconds for answers.
-- Monitors: the blocks follow the SDK structures; only the sequence was
-  compared (above).
+  `xun5.dm` (an instance with conversations to itself and to a second
+  instance of the same task) never returned from 3.1's DdeUninitialize:
+  probably where the dialog comes; not looked at further.
+- Monitors: dwTime and the blocks' words the probe does not print are
+  not compared.
 - HDDEDATA, HCONVLIST, the low words of idInst and transaction IDs and
   the conversation windows' extra words are w16's own values (addresses
   inside the library); the probe logs them by name only.
-- The sixth window class's name (18.6) is w16's guess.
 - Not probed: DdeReconnect inside XTYP_DISCONNECT, CF_BITMAP/
   CF_METAFILEPICT data (3.1 imports GDI's CopyMetaFile and BitBlt, so it
   probably copies such data for HDATA_APPOWNED handles; w16 copies the
@@ -2122,11 +2243,11 @@ listed before and after each call, window handles shown):
 - Its classes are registered at that first DdeInitialize, not when the
   library loads (with another library's instance made first, 3.1's
   handles show none of them yet in USER's heap), before the atoms.
-- Six classes: the five its windows show (DMGFrame, DMGClass,
-  DMGClientClass, DMGServerClass, DMGHoldingClass) and one more, which
-  no window of the probes ever used: every class moves later handles by
-  0x44 bytes, and only six put w16's DMGFrame and DMGClass at 3.1's
-  handles. w16 registers its monitors' class there.
+- Six classes: DMGFrame, DMGClass, DMGClientClass, DMGServerClass,
+  DMGHoldingClass and DMGMonitorClass (the last only a monitor
+  instance's window shows, `xmon.dm`): every class moves later handles
+  by 0x44 bytes, and six put w16's DMGFrame and DMGClass at 3.1's
+  handles.
 With these, instance-specific names ("Svc:(143c)") and string handle
 values are compared unmasked.
 
@@ -3267,10 +3388,16 @@ MIDI, aux, joystick and sndPlaySound, 4 MCI, the Media Control Interface
   the last; SND_NOSTOP while one plays, SND_LOOP without SND_ASYNC and
   unknown flags: FALSE. SND_SYNC returns when it has played.
 - **MessageBeep** goes through MMSYSTEM on 3.1: USER's DoBeep in
-  MMSOUND.DRV hands it to sndPlaySound asynchronously (0 SystemDefault,
-  10h SystemHand, 20h SystemQuestion, 30h SystemExclamation, 40h
-  SystemAsterisk, 50h the default; FFFFh the speaker), each stopping the
-  sound before (MMP section b; w16's MMSOUND.DRV does not yet).
+  MMSOUND.DRV finds MMSYSTEM by GetModuleHandle (never loads it) and
+  hands every type but FFFFh to sndPlaySound(name, SND_ASYNC) at once,
+  the name by bits 4-7 of the type (1 SystemHand, 2 SystemQuestion, 3
+  SystemExclamation, 4 SystemAsterisk, anything else SystemDefault), each
+  stopping the sound before; FFFFh, no MMSYSTEM, or FALSE from
+  sndPlaySound (no wave device, no sound for the name nor for
+  SystemDefault): the speaker. Once found, the driver also plays the
+  SOUND API's notes on a 5 ms periodic timeSetEvent. MMP section b and
+  `tests/soundprobe.sh beep` (drivers/sound/README.md, "The beep"); w16's
+  MMSOUND.DRV does the same.
 - **Joystick** (no driver in the reference install): everything 6
   (MMSYSERR_NODRIVER), joyGetNumDevs 0, joySetCapture with a bad window
   165 first.
@@ -3464,6 +3591,11 @@ the commands and MCIQTW's records identical (QuickTime's own streaming of
 the sound through the wave driver follows the clock: left out). Full run
 (2026-11-18): make test passes, the boot test 122 ok with only the
 failures known before (ddeml conn, lzexpand quirks, soundtime).
+MessageBeep (boot-test case `soundbeep`, `tests/soundprobe.sh beep`):
+w16's MMSOUND.DRV against Microsoft's over Microsoft's MMSYSTEM and over
+w16's, each with SNDBLST2.DRV and without a wave driver: the driver's
+calls of MMSYSTEM (sndPlaySound's names and flags, timeSetEvent,
+timeKillEvent) and the wave sounds played identical.
 
 ### 23.5 UNVERIFIED, and not done
 
@@ -3495,8 +3627,10 @@ failures known before (ddeml conn, lzexpand quirks, soundtime).
   without a `[sounds]` entry; whether 3.1 plays SystemExit itself.
   Creative's SB16 drivers (SB16SND.DRV stops at "Incorrect MIDIPORT
   setting" in DOSBox-X), so only Windows 3.1's own drivers were observed;
-  QuickTime's sound (its probe runs without a wave driver); w16's
-  MMSOUND.DRV still beeps on the speaker where 3.1's calls sndPlaySound.
+  QuickTime's sound (its probe runs without a wave driver). After a
+  FreeLibrary of an MMSYSTEM a program loaded with LoadLibrary (not a
+  `[boot] drivers=` one), Microsoft's stays loaded and w16's goes
+  (SN1 part L; which counts are right, UNVERIFIED).
 - The interrupt stack's flags after a switch (AF differs between 3.1's
   runs), and which module owns the block (TIMER or MMSYSTEM in 3.1's
   runs); the mmTask function's BX and CX.
@@ -3508,3 +3642,238 @@ failures known before (ddeml conn, lzexpand quirks, soundtime).
 - 386 Enhanced mode and KRNL286 were not run for layers 1-2 (the timer
   probe ran in Standard mode).
 
+## 24. SB16.DRV
+
+SB16.DRV is w16's own driver for a Sound Blaster 16 (module SB16,
+description `wave,midi,aux:w16 Sound Blaster 16`): an installable driver
+(10.7) that MMSYSTEM opens from its `[drivers]` keys (23.2) and that serves
+wave output and input, MIDI output and input through the card's MPU-401
+port, and five auxiliary devices on the card's mixer. Windows 3.1 ships no
+SB16 driver; its own SNDBLST2.DRV (Sound Blaster 1.5, wave and MIDI,
+8-bit mono) is the reference for the driver's behaviour toward MMSYSTEM,
+and the SDK for what the SB16 does beyond it. Creative's own SB16 Windows
+drivers stop in DOSBox-X at "Incorrect MIDIPORT setting in the SYSTEM.INI
+file" (23.2) and were not used. The card's interface is Creative's *Sound
+Blaster Series Hardware Programming Guide*, taken as a statement of
+hardware facts. `drivers/sb16/README.md` has the files and the sources;
+`docs/notes/sb16-handover.md` the state of the work. It is not in the
+default SYSTEM.INI (a machine without the card boots as before):
+`assets/README.TXT` says how to enable it.
+
+### 24.1 Observation tools
+
+- MMP's device sections (23.1, `tests/mmsystem/mmdev.c`) over SB16.DRV:
+  `tests/mmsystem/mrun.sh` sound `sb16w` (wave=, midi=, aux= sb16.drv,
+  `[sb16.drv]` port=220 int=5 dma=1 hdma=5 mpuport=330, DOSBox-X with
+  `sbtype=sb16`); MDSX1-3.DRV, a logging-driver variant with all six
+  entries (`tests/mmsystem/mdsx.lnk`), sit between MMSYSTEM and it, and a
+  scratch copy of it with its imports of MMSYSTEM renamed to MMSYSLOG has
+  its DriverCallback calls recorded too.
+- The same sections over SNDBLST2.DRV under Microsoft's MMSYSTEM
+  (`mdscen.sh -m`, sound `sb2`) are the reference;
+  `tests/sb16/sbcmp.py` compares the two logs with the driver-private
+  fields masked and the expected differences listed (24.4).
+- **SBP.EXE** (`tests/sb16/sbp.c`), run as the shell, plays a script:
+  WAV files through wave output in several headers, a looped header, the
+  wave volume, recording, MIDI notes, MCI strings, sndPlaySound; it logs
+  what came back (done counts, positions, recorded sizes).
+  `tests/sb16/sbaudio.sh` runs it in DOSBox-X with the sound recorded
+  (DX-CAPTURE /A) and DOSBox-X's own synthesiser on the MPU-401 with a
+  SoundFont of plain sine waves (`tools/mksf2.py`, w16's own), and
+  `tests/sb16/sbaudio.py` checks the recording against the material it
+  generates.
+- `tests/mmsystem/mprog.sh` with `MPROG_SND=sb16w`: Sound Recorder,
+  Control Panel's Sound and Media Player over SB16.DRV.
+- `tests/sb16/sbscen.sh` (parts dev, audio, prog) is the boot-test case
+  `sb16`.
+
+### 24.2 What SNDBLST2.DRV does toward MMSYSTEM (observed)
+
+MMP's sections n, w, i, m, j, a, x over SNDBLST2 with the logging drivers
+(raw logs: `tests/sb16/sbscen.sh dev`'s `sb2/` directory):
+
+- DriverProc through USER: message 0 answers 0, DRV_LOAD 1, DRV_ENABLE 0,
+  DRV_OPEN 1 (lParam1 USER's empty string). DRVM_INIT answers 8
+  (MMSYSERR_NOTSUPPORTED) on each entry; GETNUMDEVS 1; an unknown message
+  8, also through waveOutMessage etc.
+- Capabilities: the bytes asked for, no more (size 1 writes one byte).
+  Microsoft's IDs (MID 1, wave out 6, wave in 7, MIDI out 3, MIDI in 4),
+  version 1.01, every name "Creative Labs Sound Blaster 1.5"; wave
+  output formats 1M08 and 2M08, input 1M08 only, one channel, no volume;
+  MIDI out a MIDI port (technology 1), channel mask FFFFh.
+- Wave open: a NULL or unsupported format 32 (WAVERR_BADFORMAT; a block
+  alignment of 0 too), with WAVE_FORMAT_QUERY too; a second open 4
+  (MMSYSERR_ALLOCATED); the instance written through the dwUser pointer
+  is a near offset into its data (0000010Ch); WOM_OPEN (and WOM_CLOSE in
+  the close) is called inside the open, on the caller's stack.
+  DriverCallback's flags are the client's callback type with DCB_NOSWITCH
+  (000Bh for a function, 0009h a window, 000Ah a task); CALLBACK_NULL: no
+  call.
+- PREPARE and UNPREPARE answer 8 (MMSYSTEM prepares). WRITE sets
+  WHDR_INQUEUE (clears DONE), queues and returns; the driver uses lpNext,
+  reserved and bit 31 of dwFlags while a header is queued. WOM_DONE comes
+  at interrupt time on MMSYSTEM's interrupt stack, in queue order, with
+  INQUEUE cleared and DONE set. RESET returns everything inside the call
+  (the headers not yet begun first), the position back to 0. PAUSE,
+  RESTART, BREAKLOOP 0 (also when idle or not paused). Loops: one header
+  with BEGINLOOP|ENDLOOP comes back with both flags kept.
+- GETPOS: size below 8 answers 1 (nothing written), NULL 0, TIME_BYTES
+  kept, every other type (TIME_MS too) answered in samples.
+- Close: with a header queued while paused 33 (WAVERR_STILLPLAYING) at
+  once; with one playing it waits for it (23.2).
+- Wave volume, pitch, rate: 8.
+- Wave input: ADDBUFFER clears dwBytesRecorded and DONE, sets INQUEUE;
+  START with no header 0; WIM_DATA per full header at interrupt time;
+  STOP leaves the queue; RESET returns all (inside the call); the
+  position counts the bytes the headers took; close with a header queued
+  33.
+- MIDI out: the open writes no instance; MOM_OPEN/MOM_CLOSE inside the
+  calls; DATA 0; LONGDATA sends, sets DONE (never INQUEUE) and calls
+  MOM_DONE before it returns; RESET 0; volume, patch caching 8. MIDI in:
+  ADDBUFFER sets INQUEUE; STOP leaves the buffer; RESET returns it
+  (MIM_LONGDATA, dwParam2 the milliseconds since START); a close with
+  one queued 65 (MIDIERR_STILLPLAYING).
+
+### 24.3 w16's SB16.DRV
+
+`drivers/sb16/` (README there): `sb16a.asm` (entry, interrupt handler,
+vector and PIC, huge copy), `sb16.c` (DriverProc, configuration, DSP,
+mixer, DMA, the interrupt-time work), `wave.c`, `midi.c`, `aux.c`. Large
+model with SS != DS, everything in one fixed code and one fixed data
+segment (`tools/irqcheck.py --fixed`, in `make test`).
+
+- **Configuration** at DRV_ENABLE: `[sb16.drv]` port (hex), int, dma,
+  hdma, mpuport (hex); else the BLASTER setting (A I D H P); else the
+  SB16 mixer's registers 80h (IRQ) and 81h (DMA); else 220h, 5, 1, 5,
+  330h. DSP reset (base+6, AAh), version (E1h): 4.00 or later gives the
+  wave and aux devices; the MPU-401 reset (FFh twice) and put in UART
+  mode (3Fh) gives the MIDI devices. In 386 Enhanced mode nothing is
+  touched and no device offered (24.5).
+- **Wave**: one 8 KB DMA buffer of conventional memory (GlobalDOSAlloc;
+  physical = linear in Standard mode; within one 64 KB page), auto-
+  initialised, two halves of about 1/16 s; DSP 4.xx's B6h/C6h (output)
+  and BEh/CEh (input) with the rate by 41h/42h and the mode byte
+  (signed 16-bit, stereo). The interrupt handler acknowledges the DSP
+  (mixer 82h, base+0Eh/0Fh), sends the end of interrupt, and with
+  interrupts on and never reentered, on MMSYSTEM's interrupt stack
+  (StackEnter), fills the half just played from the queue (the headers'
+  data may be huge), returns the headers the card has played past, and
+  stops the card (DSP reset) after a half of silence with nothing left.
+  Loops go back to the loop's first header; BREAKLOOP ends the loop at
+  the end of the pass. Pause/continue: D0h/D5h, D4h/D6h. Positions add
+  the DMA controller's count within the half under way, in bytes,
+  samples or milliseconds (TIME_MS kept: SNDBLST2 answers samples).
+  Everything else as 24.2: the answers, the error codes, the callback
+  order and where each is made, the instance (a near offset), a close
+  with headers queued (33 when paused or stopped, else after they have
+  played, at most their length and a second). One direction at a time
+  (the other's open: 4).
+- **MIDI**: short messages with running status kept for channel
+  messages, a DWORD without a status byte continuing the last one;
+  RESET sends a note off for every note on and All Notes Off (controller
+  123) on every channel. Input bytes are taken by the interrupt handler
+  (the MPU-401 shares the card's IRQ on a real SB16) and turned into
+  MIM_DATA (real-time bytes alone, at once) and MIM_LONGDATA (system
+  exclusive into the queued buffers), time-stamped with timeGetTime.
+- **Aux**: master, wave, MIDI, CD, line in: mixer pairs 30h-39h, 5 bits
+  of each 16-bit volume; the levels the mixer had at start are the first
+  answers; waveOutSetVolume is the wave pair.
+
+### 24.4 Tests and results
+
+Boot-test case `sb16` (`tests/sb16/sbscen.sh`), on installation-05, run
+name `w16-sb16`:
+
+- `dev`: MMP's sections n, w, i, m j a, x, b and all of them without the
+  logging drivers over SB16.DRV: Microsoft's MMSYSTEM and w16's give
+  identical logs (`mcmp.py`; 178, 404, 214, 224, 277, 118 and 448
+  lines). Against SNDBLST2 under Microsoft's MMSYSTEM (`sbcmp.py`):
+  nothing differs but the expected differences, which are the SB16's
+  extras: its capabilities, the formats it takes (16-bit, stereo, 22050
+  and 44100 Hz; the opens and closes that follow), wave volume (0 and the
+  value where SNDBLST2 answers 8; NULL 11), TIME_MS kept, the aux
+  devices (and the boot's open of the aux key). Every other message,
+  answer, error code, header flag and callback (its message, its
+  parameters, whether it comes inside the call or at interrupt time) is
+  the same, including the reset order and the closes with headers
+  queued.
+- `audio` (`tests/sb16/sbaudio.sh`, both MMSYSTEMs): eight WAV files of
+  w16's (a rising sweep left, a falling one right) played in four
+  headers each: 8-bit mono 11025 Hz, 8-bit stereo 22050, 16-bit mono
+  22050, 16-bit stereo 44100, 16-bit mono 8000, 8-bit mono 44100, 16-bit
+  stereo 32000, and a 16-bit mono 22050 Hz header looped three times;
+  the recording (DOSBox-X's mixer at 44100 Hz) correlates with the files
+  at 0.9993 to 0.9998 per channel (limits 0.995, 8-bit 0.99), left with
+  left (left-right 0.01-0.03), each piece within 8 ms of the file's
+  length (limit 15), the level within 0.1 dB of the first file's; the
+  file played at wave volume C000h comes out 13.9 dB lower (the SB16
+  mixer's 2 dB steps: 14). Not sample-accurate: at 44100 Hz (no
+  resampling) the residual after the gain is 0.032 of full scale for the
+  8-bit and the 16-bit file alike, which is DOSBox-X's mixing, not the
+  data (the correlation says the samples are the file's). Windows'
+  CHIMES.WAV through MCIWAVE (auto-opened by "play ... wait") and
+  DING.WAV through sndPlaySound: 0.995 and 0.994 (8-bit, 22050 Hz; their
+  quiet ends count as silence, so their length is checked only from
+  below). The pieces are aligned by the attack of each file (normalised
+  correlation of its first 100 ms with 20 ms of silence before; aligning
+  by the loudest stretch put DING.WAV's steady tone one period off).
+  QuickTime for Windows' sample movie through MCIQTW (`$W16_QTDIR`): its
+  sound track comes out under both MMSYSTEMs (4.6 and 5.4 s of sound in
+  17 pieces: a phrase, beats a second apart, a closing phrase). SBP's
+  log: every header back, the final
+  positions exact in bytes, samples and milliseconds, every recording
+  header filled (DOSBox-X records silence). MIDI: SBP's seven notes and
+  SCALE.MID's four through MCISEQ on port 0 come out at their pitch
+  (within 0.1 Hz); MCISEQ's first note is 50-100 ms short on both
+  MMSYSTEMs (its timing).
+- `prog`: Sound Recorder playing DING.WAV, Control Panel's Sound applet
+  testing a sound, Media Player playing CHIMES.WAV and opening CANYON.MID:
+  w16's MMSYSTEM's screens identical to Microsoft's over SB16.DRV, and
+  over SB16.DRV as over SNDBLST2 but Sound Recorder's Record button,
+  enabled with the SB16 (DING.WAV is 22050 Hz, which SNDBLST2 cannot
+  record). The configuration dialog (DRV_CONFIGURE sent through USER by
+  SBP's "config"; `tests/scripts/input/sb16cfg.txt`): shown with the
+  settings in use, Escape answers 0 (DRVCNF_CANCEL).
+- Reliability (2026-11-19): the case `sb16` passed 10 of 10 runs on
+  installation-05 (two loops of five side by side, with QuickTime's
+  sides). Full run at 4091877 (make test and the whole boot test,
+  `W16_QTDIR` set): make test passes; boot test 120 ok, 7 failures:
+  ddeml (conn) and lzexpand (quirks), known on master; holdbtn,
+  quicktime (tree) and taskman (tree), known to fail now and then (the
+  first two passed when run again, taskman@tree fails on master 429e079
+  too); sysdrvall (kbtype, 28 and 2 pixels) and trails (timed, cpl)
+  under load, both passing when run beside master's checkout, where
+  trails@timed failed instead. None of these loads SB16.DRV (it is in no
+  default SYSTEM.INI).
+- Found on the way: with a shell other than Program Manager, Microsoft's
+  MMSYSTEM plays SystemExit (CHIMES.WAV) when Windows ends; w16's does
+  not (23.5 had it as UNVERIFIED; not changed here).
+
+### 24.5 UNVERIFIED, and not done
+
+- **386 Enhanced mode**: the driver offers no devices there (GetWinFlags'
+  WF_ENHANCED: the card is not touched). It would
+  need a VxD that gives the system VM the card's ports (or virtualises
+  them per VM), its IRQ (VPICD: a virtualised IRQ, so that the handler
+  runs in the system VM) and its DMA channels (VDMAD: the DMA buffer's
+  physical address, or the transfers translated), and the DMA buffer and
+  the handler's code and data page-locked.
+- **FM**: no OPL3 synthesiser device (it needs a MIDI-to-OPL voice
+  allocator and a patch set of w16's own: not done); the MIDI aux device
+  only sets the FM's volume.
+- MIDI input with real data (DOSBox has no MIDI input source): the
+  buffer handling is verified, the parsing (running status, system
+  exclusive, real time) is not. DOSBox raises the MPU-401's interrupt on
+  IRQ 9, which the driver does not hook; a real SB16 shares the card's.
+- Wave input of a real signal (DOSBox-X records silence); full duplex
+  (one direction at a time); the order of more than two headers in a
+  reset (SNDBLST2's with two: the one not begun first); SNDBLST2's use of
+  lpNext, reserved and bit 31 (driver-private; SB16.DRV's differ).
+- DRV_CONFIGURE: a dialog of w16's own (port, IRQ, DMA, high DMA, MPU
+  port, written to `[sb16.drv]`, DRVCNF_RESTART on OK); what SNDBLST2
+  answers to DRV_QUERYCONFIGURE and DRV_INSTALL was not observed (it has
+  a dialog of its own: it imports DialogBox).
+- The MIDI Mapper over SB16.DRV: not tried (with SNDBLST2 its default
+  setup answers 68, 23.2); Media Player's MIDI Sequencer plays through
+  the mapper, so CANYON.MID is only opened in `prog`; MCISEQ on port 0
+  ("set port 0") plays through the MPU-401 (`audio`).

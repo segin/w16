@@ -65,7 +65,9 @@ __I4D:
         neg bx
         sbb cx, 0
         xor bp, 1
-.b:     call udiv
+.b:     push bp                         ; udiv's long path uses BP
+        call udiv
+        pop bp
         test bp, 1
         jz .c
         neg dx
