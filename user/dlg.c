@@ -301,18 +301,28 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
            border, as for any window (adjust_rect, defwnd.c): Calculator's
            template, 00CA0000h at 310,65 for 240 x 158 units, comes up on
            3.1 at 154,110, 261 x 269 (probe TM1, ARCHITECTURE.md 15.5);
-           with a dialog frame w16 had it at 150,106, 265 x 276. Probe TM4
-           shows 3.1 doing the same with DS_SETFONT (Character Map's
-           template: 16,34, 611 x 213), but w16 keeps the old rule there
-           for now: with the window where 3.1 makes it, Character Map on
-           w16's USER leaves a stray glyph on the desktop left of its
-           window (boot-test case icons; open, ARCHITECTURE.md 15.5) */
+           with a dialog frame w16 had it at 150,106, 265 x 276. The same
+           with DS_SETFONT (TM4: Character Map's template, 16,34, 611 x
+           213; US33 dlgf: child and popup templates with and without a
+           font, 175 x 98 of client in 177 x 119 for a caption). Until
+           2026-11-20 w16 gave a DS_SETFONT template with a caption a
+           dialog frame's size around a border's frame, 8 pixels too wide
+           and too high: QuickTime's Control Panel, whose pages are such
+           child templates whose size it makes its own, came 8 pixels
+           bigger each way (tests/qtcpl.sh). w16 keeps the old size for a
+           top-level dialog for now: with Character Map's window where 3.1
+           makes it, a stray glyph that w16's USER draws at 12,175 (under
+           the window when it is 8 pixels wider) shows on the desktop left
+           of it (boot-test case icons; open, ARCHITECTURE.md 15.5; US33
+           logs the popup templates' sizes as ~). A thick frame counts its
+           width less the border (US33: 200 x 120 units' worth of client
+           in a 206 x 126 window, the client 198 x 118) */
         BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME ||
-                    ((style & DS_SETFONT) && (style & WS_DLGFRAME));
-        int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
+                    ((style & DS_SETFONT) && (style & WS_DLGFRAME) && !(style & WS_CHILD));
+        int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] - sysmet[SM_CXBORDER] :
                  dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
-        int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] :
+        int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] - sysmet[SM_CYBORDER] :
                  dlgf ? sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CYBORDER] : 0;
         int top = fy;
@@ -346,6 +356,13 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)
+        OffsetRect(&r, -r.left, 0);
+    /* a child dialog starts inside its parent's client area too (US33
+       dlgf: a captioned child template at 6,4 units, whose caption would
+       start at -12, comes at 0) */
+    if ((style & WS_CHILD) && r.top < 0)
+        OffsetRect(&r, 0, -r.top);
+    if ((style & WS_CHILD) && r.left < 0)
         OffsetRect(&r, -r.left, 0);
     if (menu)
         hmenu = LoadMenu(hinst, menu);

@@ -28,7 +28,12 @@ void byte_align(PWND w, BOOL made)
         cs &= ~CS_BYTEALIGNWINDOW;
     /* not an icon (3.1: Notepad's, CS_BYTEALIGNCLIENT, minimised at 21
        like the rest; w16 had it at 24) */
-    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & (WS_CHILD | WS_MINIMIZE)))
+    /* a child only by CS_BYTEALIGNWINDOW, as it is made (US33 dlgf: child
+       dialogs, their left edges on screen at multiples of 8: 11 and 12
+       pixels into a client area at x 304 made 8 and 16) */
+    if (w->style & WS_CHILD)
+        cs &= CS_BYTEALIGNWINDOW;
+    if (!(cs & (CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW)) || (w->style & WS_MINIMIZE))
         return;
     /* CS_BYTEALIGNWINDOW: the window's left edge (dialogs, #32770: US4's
        message boxes are at 136, 168, 120 where centring gives 137, 169,
