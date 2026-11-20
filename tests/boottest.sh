@@ -4533,12 +4533,17 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         expect=
         boot treealone -T "$root/build/w16"
         boot treealone386 -T "$root/build/w16" -3
+        # and 386 Enhanced mode: the tree's own WIN386.EXE with the
+        # built-in devices its SYSTEM.INI [386Enh] names
+        boot treealone3e -T "$root/build/w16" -3 -c "WIN /3 /B"
         if ! booted treealone || ! grep -q '^shell: loaded' "$out/treealone.txt"; then
             echo "FAIL treealone: the boot did not complete under KRNL286 ($out/treealone.txt)"; fails=$((fails + 1))
         elif ! booted treealone386 || ! grep -q '^shell: loaded' "$out/treealone386.txt"; then
             echo "FAIL treealone: the boot did not complete under KRNL386 ($out/treealone386.txt)"; fails=$((fails + 1))
+        elif ! booted treealone3e || ! grep -q '^shell: loaded' "$out/treealone3e.txt"; then
+            echo "FAIL treealone: the boot did not complete in 386 Enhanced mode ($out/treealone3e.txt)"; fails=$((fails + 1))
         else
-            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell under KRNL286 and KRNL386"
+            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell under KRNL286, KRNL386 and in 386 Enhanced mode (w16's WIN386)"
         fi ;;
     sysprobe)
         # tests/sysprobe.sh: SY1 (every export, timers, the msec count,

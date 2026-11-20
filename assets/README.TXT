@@ -36,6 +36,11 @@ w16 repository's LICENSE):
                           clipboard (PrintScreen)
   SYSTEM\VGA.3GR         the display grabber for 386 Enhanced mode
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
+  SYSTEM\WIN386.EXE       386 Enhanced mode (WIN /3): the virtual machine
+                          manager and its built-in virtual devices; it
+                          runs Windows and DOS programs in virtual
+                          machines (DOS programs full screen or in a
+                          window, Alt+Enter between them)
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
@@ -210,4 +215,9 @@ does the same. Each block a program allocates is still at most 16 MB,
 as in Windows 3.1. On an 80286 Windows can use 16 MB at most.
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
-(WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
+(WIN /3, or WIN on a 386 with enough memory) uses w16's WIN386.EXE; the
+devices it loads are named in SYSTEM.INI's [386Enh] section. To run DOS
+programs in 386 Enhanced mode, copy WINOA386.MOD from your Windows 3.1
+SYSTEM directory into SYSTEM (w16 has no WINOA386.MOD of its own yet);
+Windows programs do not need it. Standard mode (WIN /S) needs nothing
+of Microsoft's.

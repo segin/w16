@@ -1706,6 +1706,13 @@ install-tree: $(W16SYS)/VGA.3GR
 $(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
 	@mkdir -p $(@D)
 	cp $< $@
+# 386 Enhanced mode (win386/; ARCHITECTURE.md 12): WIN /3. Its built-in
+# devices load from SYSTEM.INI's [386Enh] *names (assets/SYSTEM.INI);
+# DOS programs there still need the user's WINOA386.MOD (assets/README.TXT)
+install-tree: $(W16SYS)/WIN386.EXE
+$(W16SYS)/WIN386.EXE: $(W386)/WIN386.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 
 # ---- USER (user/; ARCHITECTURE.md 10) and its probes ----
 # US1: USTRACE.DLL, the call recorder behind the forwarding modules that
