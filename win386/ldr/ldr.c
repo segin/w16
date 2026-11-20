@@ -687,10 +687,13 @@ int main(int argc, char **argv)
     info.pic1_base = 0x08;
     info.pic2_base = 0x70;
     info.log_port = 0x3F8;              /* the VMM's trace goes to COM1 */
-    {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace */
+    {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace;
+         * vmmtrace=2 the DOS VMs' trace (their interrupts, VM switches,
+         * the VDD's API) */
         char __far *q;
         for (q = ini; q && *q; q++)
-            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=1", 10)) info.trace = 1;
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && (q[9] == '1' || q[9] == '2'))
+                info.trace = q[9] - '0';
     }
     r.h.ah = 0x48; r.x.bx = 0xFFFF;
     intdos(&r, &r);

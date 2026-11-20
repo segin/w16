@@ -121,6 +121,7 @@ struct vm {
     u16 refstk_seg, refstk_top;     /* the V86 stack of the VMM's nested calls */
     u8 *inst;               /* its instance data while another VM runs */
     int crit;               /* in a DOS critical section (INT 2Ah 80h/81h) */
+    int indos;              /* inside an INT 21h call (vm_dos_call) */
     int idle;               /* HLT, INT 2Fh 1680h: no time until an interrupt */
     int suspended;          /* Suspend_VM, or not executable any more */
     u32 slice;              /* ticks left in its time slice */
@@ -246,6 +247,10 @@ void vm_exited(struct cregs *r);    /* the VM stub's VMEXIT breakpoint */
 void vm_start(struct cregs *r);     /* a new VM's VMSTART breakpoint */
 u32 vm_lin(struct vm *v, u32 lin);  /* v's address lin (first MB) for the VMM */
 void vm_int2a(struct cregs *r);     /* DOS's critical sections */
+extern int vm_trace;                /* [w16] vmmtrace=2 */
+int vm_dos_call(u32 ax);            /* an INT 21h that returns: the VM is in DOS until it does */
+void vm_int21(struct cregs *r);     /* V86 INT 21h: through the INT21RET breakpoint */
+void vm_int21_ret(struct cregs *r);
 #define VMH(v) ((u32)(v)->cb)
 /* a DOS VM's first 8 KB of memory (the loader's VM stub, ldrasm.asm): its
  * PSP, the parameters, a message, the VMM's reflection stack, the stub's
