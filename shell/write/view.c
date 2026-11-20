@@ -15,6 +15,8 @@
 #define YP0         4
 #define CARET_W     2
 #define TIMER_CARET 1
+#define TIMER_TYPED 2                   /* the caret goes off a moment after typing */
+#define TYPED_MS    450                 /* UNVERIFIED: more than 200, less than 700 (WR23, WR24, WR25 with SNAP's pacing) */
 
 HWND g_docwnd;
 DWORD g_selFirst, g_selLim;
@@ -1469,9 +1471,14 @@ void view_char(WORD ch)
     typing = TRUE;
     view_char2(ch, s);
     typing = FALSE;
-    /* after typing the caret stays off until it blinks, wherever it is
-       typed (WR1, WR18, WR24 R4; WR3's shot, taken at once after the
-       typing, had it: the original hides it a moment later) */
+    /* after typing the caret goes off a moment later, until it blinks,
+       wherever it was typed: a menu or a key at once after the typing
+       finds it on (WR23 T1, WR25 A1; WR3's old shot), half a second later
+       off (WR24 R4, R5; WR1, WR18) */
+    caretDefer = FALSE;
+    caret_place();
+    if (GetFocus() == g_docwnd)
+        SetTimer(g_docwnd, TIMER_TYPED, TYPED_MS, NULL);
 }
 
 static void view_char2(WORD ch, char *s)
@@ -1606,6 +1613,7 @@ void view_key(WPARAM vk)
        (WR24 R5: Up after typing), unless the window scrolls; the other
        keys show it (WR18 S5: Ctrl+Home, Page Down, then Down) */
     menuShown = FALSE;
+    KillTimer(g_docwnd, TIMER_TYPED);   /* a key at once after typing: on (WR25 A1) */
     if (vk != VK_LEFT && vk != VK_RIGHT && vk != VK_UP && vk != VK_DOWN)
         caretDefer = FALSE;
     top0 = cpTop;
@@ -1773,6 +1781,14 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         caretShown = FALSE;
         return 0;
     case WM_TIMER:
+        if (wp == TIMER_TYPED) {
+            KillTimer(w, TIMER_TYPED);
+            if (!menuShown && !caretDefer) {
+                caret_hide();
+                caretDefer = TRUE;
+            }
+            return 0;
+        }
         caretDefer = FALSE;
         if (caretShown)
             caret_draw();
