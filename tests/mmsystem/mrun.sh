@@ -22,6 +22,12 @@
 #         the MIDI IDs
 #   multi  for the numbering: wave=, wave2= and wave10= (all SNDBLST2),
 #         midi= (SNDBLST2), aux= (MIDIMAP.DRV: no auxMessage)
+#   sb16w  w16's own SB16.DRV (drivers/sb16, build/dos) for wave, MIDI and
+#         aux (wave= midi= aux= sb16.drv, [sb16.drv] port=220 int=5 dma=1
+#         hdma=5 mpuport=330), in DOSBox-X as a Sound Blaster 16
+#         (sbtype=sb16); MRUN_MIDIDEV: DOSBox-X's [midi] mididevice
+#         (default none), MRUN_MIDICONF: more [midi] lines (fluidsynth's
+#         soundfont: tests/sb16/sbrun.sh)
 #   sb16  Creative's Sound Blaster 16 drivers as tests/sb16setup.sh
 #         installs them (MRUN_SB16=DIR: its output, default build/sb16;
 #         SB16SND.DRV wave, SB16FM.DRV MIDI, SB16AUX.DRV aux), in DOSBox-X
@@ -113,6 +119,20 @@ multi)
     drv wave10 sndblst2.drv MDSW4
     set -- "$@" -i 'sndblst.drv:port=220' -i 'sndblst.drv:int=5'
     export DROPIN_CONF="$sbconf" ;;
+sb16w)
+    cp "$dos/SB16.DRV" "$out/drv/SB16.DRV"
+    drv wave sb16.drv MDSX1
+    drv midi sb16.drv MDSX2
+    drv aux sb16.drv MDSX3
+    set -- "$@" -i 'sb16.drv:port=220' -i 'sb16.drv:int=5' -i 'sb16.drv:dma=1' \
+        -i 'sb16.drv:hdma=5' -i 'sb16.drv:mpuport=330'
+    export DROPIN_CONF="$sbconf
+[midi]
+mpu401=intelligent
+mpubase=330
+mididevice=${MRUN_MIDIDEV:-none}${MRUN_MIDICONF:+
+$MRUN_MIDICONF}"
+    set -- "$@" -p 386 ;;
 sb16)
     sb=${MRUN_SB16:-$root/build/sb16}
     [ -d "$sb/c" ] || { echo "no Sound Blaster 16 variant in $sb (tests/sb16setup.sh)" >&2; exit 2; }
@@ -131,7 +151,7 @@ sb16)
     export DROPIN_REF=$sb/c
     export DROPIN_CONF="$(cat "$sb/dosbox.conf")"
     set -- "$@" -p 386 ;;
-*) echo "MRUN_SND: none, sb2, multi or sb16" >&2; exit 2 ;;
+*) echo "MRUN_SND: none, sb2, multi, sb16w or sb16" >&2; exit 2 ;;
 esac
 if [ -n "${MRUN_SHIM:-}" ]; then
     cp "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/MIDIMAP.DRV" "$out/drv/"
@@ -176,7 +196,7 @@ if [ -n "${MRUN_INI:-}" ]; then
 $MRUN_INI
 EOF
 fi
-[ -n "${MRUN_X:-}" ] && [ "$snd" != sb16 ] && set -- "$@" -p 386
+[ -n "${MRUN_X:-}" ] && [ "$snd" != sb16 ] && [ "$snd" != sb16w ] && set -- "$@" -p 386
 set -- "$@" -c "${MRUN_PRE:+$MRUN_PRE
 }WIN $mode"
 if [ -n "${MRUN_SHOT:-}" ]; then

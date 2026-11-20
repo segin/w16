@@ -256,6 +256,8 @@ w16's drivers live under `drivers/`, one directory each with a README (what it i
 
 **`drivers/timer/`: w16's `TIMER.DRV`**, MMSYSTEM's multimedia timer driver in NASM (`make` builds `build/dos/TIMER.DRV`; w16's SYSTEM.INI names it, `[drivers] timer=timer.drv`, with `[boot] drivers=mmsystem.dll`): module TIMER with 3.1's WEP 1 and DriverProc 2 and its six undocumented messages (kill 0800h, set 0804h, time 0808h, capabilities 080Ch, begin and end period 0810h, 0814h), found black-box with the logging driver TMS.DRV between Microsoft's MMSYSTEM and Microsoft's TIMER.DRV; 15 events (8 in 386 Enhanced mode) with 3.1's IDs, the 8254 at the shortest period asked for (1-55 ms), the BIOS tick, GetTickCount and SYSTEM.DRV's timers kept at their rate, callbacks through MMSYSTEM's StackEnter and DriverCallback as 3.1's. `tests/timer/tscen.sh` and the boot-test case `timer` compare the probe TPR's log and TMS's record with Microsoft's driver and with w16's, and play QuickTime's movie with w16's driver. 3.1's own timing faults are not copied; in 386 Enhanced mode the timing runs on VTD's virtual 8254, not VTDAPI.386 (§21).
 
+**`drivers/sb16/`: w16's `SB16.DRV`**, a Sound Blaster 16 driver (C and NASM; `make` builds `build/dos/SB16.DRV`, installed as `SYSTEM\SB16.DRV` but not named in the default SYSTEM.INI: `assets/README.TXT` says how to enable it): an installable driver with DriverProc, wodMessage, widMessage, modMessage, midMessage and auxMessage for MMSYSTEM: wave output and input (8/16 bits, mono/stereo, 5000-44100 Hz, auto-initialised DMA in two halves), MIDI out and in through the MPU-401 in UART mode, five aux devices on the mixer. Its behaviour toward MMSYSTEM follows Windows 3.1's own SNDBLST2.DRV as observed with the logging drivers (answers, error codes, callback order and timing class). Standard mode only. §24.
+
 ### 6.8 Design Note: UI Fidelity
 
 Like ReactOS, w16 user interfaces match the original Windows 3.1 UIs 1:1 wherever possible.
@@ -3526,3 +3528,238 @@ timeKillEvent) and the wave sounds played identical.
 - 386 Enhanced mode and KRNL286 were not run for layers 1-2 (the timer
   probe ran in Standard mode).
 
+## 24. SB16.DRV
+
+SB16.DRV is w16's own driver for a Sound Blaster 16 (module SB16,
+description `wave,midi,aux:w16 Sound Blaster 16`): an installable driver
+(10.7) that MMSYSTEM opens from its `[drivers]` keys (23.2) and that serves
+wave output and input, MIDI output and input through the card's MPU-401
+port, and five auxiliary devices on the card's mixer. Windows 3.1 ships no
+SB16 driver; its own SNDBLST2.DRV (Sound Blaster 1.5, wave and MIDI,
+8-bit mono) is the reference for the driver's behaviour toward MMSYSTEM,
+and the SDK for what the SB16 does beyond it. Creative's own SB16 Windows
+drivers stop in DOSBox-X at "Incorrect MIDIPORT setting in the SYSTEM.INI
+file" (23.2) and were not used. The card's interface is Creative's *Sound
+Blaster Series Hardware Programming Guide*, taken as a statement of
+hardware facts. `drivers/sb16/README.md` has the files and the sources;
+`docs/notes/sb16-handover.md` the state of the work. It is not in the
+default SYSTEM.INI (a machine without the card boots as before):
+`assets/README.TXT` says how to enable it.
+
+### 24.1 Observation tools
+
+- MMP's device sections (23.1, `tests/mmsystem/mmdev.c`) over SB16.DRV:
+  `tests/mmsystem/mrun.sh` sound `sb16w` (wave=, midi=, aux= sb16.drv,
+  `[sb16.drv]` port=220 int=5 dma=1 hdma=5 mpuport=330, DOSBox-X with
+  `sbtype=sb16`); MDSX1-3.DRV, a logging-driver variant with all six
+  entries (`tests/mmsystem/mdsx.lnk`), sit between MMSYSTEM and it, and a
+  scratch copy of it with its imports of MMSYSTEM renamed to MMSYSLOG has
+  its DriverCallback calls recorded too.
+- The same sections over SNDBLST2.DRV under Microsoft's MMSYSTEM
+  (`mdscen.sh -m`, sound `sb2`) are the reference;
+  `tests/sb16/sbcmp.py` compares the two logs with the driver-private
+  fields masked and the expected differences listed (24.4).
+- **SBP.EXE** (`tests/sb16/sbp.c`), run as the shell, plays a script:
+  WAV files through wave output in several headers, a looped header, the
+  wave volume, recording, MIDI notes, MCI strings, sndPlaySound; it logs
+  what came back (done counts, positions, recorded sizes).
+  `tests/sb16/sbaudio.sh` runs it in DOSBox-X with the sound recorded
+  (DX-CAPTURE /A) and DOSBox-X's own synthesiser on the MPU-401 with a
+  SoundFont of plain sine waves (`tools/mksf2.py`, w16's own), and
+  `tests/sb16/sbaudio.py` checks the recording against the material it
+  generates.
+- `tests/mmsystem/mprog.sh` with `MPROG_SND=sb16w`: Sound Recorder,
+  Control Panel's Sound and Media Player over SB16.DRV.
+- `tests/sb16/sbscen.sh` (parts dev, audio, prog) is the boot-test case
+  `sb16`.
+
+### 24.2 What SNDBLST2.DRV does toward MMSYSTEM (observed)
+
+MMP's sections n, w, i, m, j, a, x over SNDBLST2 with the logging drivers
+(raw logs: `tests/sb16/sbscen.sh dev`'s `sb2/` directory):
+
+- DriverProc through USER: message 0 answers 0, DRV_LOAD 1, DRV_ENABLE 0,
+  DRV_OPEN 1 (lParam1 USER's empty string). DRVM_INIT answers 8
+  (MMSYSERR_NOTSUPPORTED) on each entry; GETNUMDEVS 1; an unknown message
+  8, also through waveOutMessage etc.
+- Capabilities: the bytes asked for, no more (size 1 writes one byte).
+  Microsoft's IDs (MID 1, wave out 6, wave in 7, MIDI out 3, MIDI in 4),
+  version 1.01, every name "Creative Labs Sound Blaster 1.5"; wave
+  output formats 1M08 and 2M08, input 1M08 only, one channel, no volume;
+  MIDI out a MIDI port (technology 1), channel mask FFFFh.
+- Wave open: a NULL or unsupported format 32 (WAVERR_BADFORMAT; a block
+  alignment of 0 too), with WAVE_FORMAT_QUERY too; a second open 4
+  (MMSYSERR_ALLOCATED); the instance written through the dwUser pointer
+  is a near offset into its data (0000010Ch); WOM_OPEN (and WOM_CLOSE in
+  the close) is called inside the open, on the caller's stack.
+  DriverCallback's flags are the client's callback type with DCB_NOSWITCH
+  (000Bh for a function, 0009h a window, 000Ah a task); CALLBACK_NULL: no
+  call.
+- PREPARE and UNPREPARE answer 8 (MMSYSTEM prepares). WRITE sets
+  WHDR_INQUEUE (clears DONE), queues and returns; the driver uses lpNext,
+  reserved and bit 31 of dwFlags while a header is queued. WOM_DONE comes
+  at interrupt time on MMSYSTEM's interrupt stack, in queue order, with
+  INQUEUE cleared and DONE set. RESET returns everything inside the call
+  (the headers not yet begun first), the position back to 0. PAUSE,
+  RESTART, BREAKLOOP 0 (also when idle or not paused). Loops: one header
+  with BEGINLOOP|ENDLOOP comes back with both flags kept.
+- GETPOS: size below 8 answers 1 (nothing written), NULL 0, TIME_BYTES
+  kept, every other type (TIME_MS too) answered in samples.
+- Close: with a header queued while paused 33 (WAVERR_STILLPLAYING) at
+  once; with one playing it waits for it (23.2).
+- Wave volume, pitch, rate: 8.
+- Wave input: ADDBUFFER clears dwBytesRecorded and DONE, sets INQUEUE;
+  START with no header 0; WIM_DATA per full header at interrupt time;
+  STOP leaves the queue; RESET returns all (inside the call); the
+  position counts the bytes the headers took; close with a header queued
+  33.
+- MIDI out: the open writes no instance; MOM_OPEN/MOM_CLOSE inside the
+  calls; DATA 0; LONGDATA sends, sets DONE (never INQUEUE) and calls
+  MOM_DONE before it returns; RESET 0; volume, patch caching 8. MIDI in:
+  ADDBUFFER sets INQUEUE; STOP leaves the buffer; RESET returns it
+  (MIM_LONGDATA, dwParam2 the milliseconds since START); a close with
+  one queued 65 (MIDIERR_STILLPLAYING).
+
+### 24.3 w16's SB16.DRV
+
+`drivers/sb16/` (README there): `sb16a.asm` (entry, interrupt handler,
+vector and PIC, huge copy), `sb16.c` (DriverProc, configuration, DSP,
+mixer, DMA, the interrupt-time work), `wave.c`, `midi.c`, `aux.c`. Large
+model with SS != DS, everything in one fixed code and one fixed data
+segment (`tools/irqcheck.py --fixed`, in `make test`).
+
+- **Configuration** at DRV_ENABLE: `[sb16.drv]` port (hex), int, dma,
+  hdma, mpuport (hex); else the BLASTER setting (A I D H P); else the
+  SB16 mixer's registers 80h (IRQ) and 81h (DMA); else 220h, 5, 1, 5,
+  330h. DSP reset (base+6, AAh), version (E1h): 4.00 or later gives the
+  wave and aux devices; the MPU-401 reset (FFh twice) and put in UART
+  mode (3Fh) gives the MIDI devices. In 386 Enhanced mode nothing is
+  touched and no device offered (24.5).
+- **Wave**: one 8 KB DMA buffer of conventional memory (GlobalDOSAlloc;
+  physical = linear in Standard mode; within one 64 KB page), auto-
+  initialised, two halves of about 1/16 s; DSP 4.xx's B6h/C6h (output)
+  and BEh/CEh (input) with the rate by 41h/42h and the mode byte
+  (signed 16-bit, stereo). The interrupt handler acknowledges the DSP
+  (mixer 82h, base+0Eh/0Fh), sends the end of interrupt, and with
+  interrupts on and never reentered, on MMSYSTEM's interrupt stack
+  (StackEnter), fills the half just played from the queue (the headers'
+  data may be huge), returns the headers the card has played past, and
+  stops the card (DSP reset) after a half of silence with nothing left.
+  Loops go back to the loop's first header; BREAKLOOP ends the loop at
+  the end of the pass. Pause/continue: D0h/D5h, D4h/D6h. Positions add
+  the DMA controller's count within the half under way, in bytes,
+  samples or milliseconds (TIME_MS kept: SNDBLST2 answers samples).
+  Everything else as 24.2: the answers, the error codes, the callback
+  order and where each is made, the instance (a near offset), a close
+  with headers queued (33 when paused or stopped, else after they have
+  played, at most their length and a second). One direction at a time
+  (the other's open: 4).
+- **MIDI**: short messages with running status kept for channel
+  messages, a DWORD without a status byte continuing the last one;
+  RESET sends a note off for every note on and All Notes Off (controller
+  123) on every channel. Input bytes are taken by the interrupt handler
+  (the MPU-401 shares the card's IRQ on a real SB16) and turned into
+  MIM_DATA (real-time bytes alone, at once) and MIM_LONGDATA (system
+  exclusive into the queued buffers), time-stamped with timeGetTime.
+- **Aux**: master, wave, MIDI, CD, line in: mixer pairs 30h-39h, 5 bits
+  of each 16-bit volume; the levels the mixer had at start are the first
+  answers; waveOutSetVolume is the wave pair.
+
+### 24.4 Tests and results
+
+Boot-test case `sb16` (`tests/sb16/sbscen.sh`), on installation-05, run
+name `w16-sb16`:
+
+- `dev`: MMP's sections n, w, i, m j a, x, b and all of them without the
+  logging drivers over SB16.DRV: Microsoft's MMSYSTEM and w16's give
+  identical logs (`mcmp.py`; 178, 404, 214, 224, 277, 118 and 448
+  lines). Against SNDBLST2 under Microsoft's MMSYSTEM (`sbcmp.py`):
+  nothing differs but the expected differences, which are the SB16's
+  extras: its capabilities, the formats it takes (16-bit, stereo, 22050
+  and 44100 Hz; the opens and closes that follow), wave volume (0 and the
+  value where SNDBLST2 answers 8; NULL 11), TIME_MS kept, the aux
+  devices (and the boot's open of the aux key). Every other message,
+  answer, error code, header flag and callback (its message, its
+  parameters, whether it comes inside the call or at interrupt time) is
+  the same, including the reset order and the closes with headers
+  queued.
+- `audio` (`tests/sb16/sbaudio.sh`, both MMSYSTEMs): eight WAV files of
+  w16's (a rising sweep left, a falling one right) played in four
+  headers each: 8-bit mono 11025 Hz, 8-bit stereo 22050, 16-bit mono
+  22050, 16-bit stereo 44100, 16-bit mono 8000, 8-bit mono 44100, 16-bit
+  stereo 32000, and a 16-bit mono 22050 Hz header looped three times;
+  the recording (DOSBox-X's mixer at 44100 Hz) correlates with the files
+  at 0.9993 to 0.9998 per channel (limits 0.995, 8-bit 0.99), left with
+  left (left-right 0.01-0.03), each piece within 8 ms of the file's
+  length (limit 15), the level within 0.1 dB of the first file's; the
+  file played at wave volume C000h comes out 13.9 dB lower (the SB16
+  mixer's 2 dB steps: 14). Not sample-accurate: at 44100 Hz (no
+  resampling) the residual after the gain is 0.032 of full scale for the
+  8-bit and the 16-bit file alike, which is DOSBox-X's mixing, not the
+  data (the correlation says the samples are the file's). Windows'
+  CHIMES.WAV through MCIWAVE (auto-opened by "play ... wait") and
+  DING.WAV through sndPlaySound: 0.995 and 0.994 (8-bit, 22050 Hz; their
+  quiet ends count as silence, so their length is checked only from
+  below). The pieces are aligned by the attack of each file (normalised
+  correlation of its first 100 ms with 20 ms of silence before; aligning
+  by the loudest stretch put DING.WAV's steady tone one period off).
+  QuickTime for Windows' sample movie through MCIQTW (`$W16_QTDIR`): its
+  sound track comes out under both MMSYSTEMs (4.6 and 5.4 s of sound in
+  17 pieces: a phrase, beats a second apart, a closing phrase). SBP's
+  log: every header back, the final
+  positions exact in bytes, samples and milliseconds, every recording
+  header filled (DOSBox-X records silence). MIDI: SBP's seven notes and
+  SCALE.MID's four through MCISEQ on port 0 come out at their pitch
+  (within 0.1 Hz); MCISEQ's first note is 50-100 ms short on both
+  MMSYSTEMs (its timing).
+- `prog`: Sound Recorder playing DING.WAV, Control Panel's Sound applet
+  testing a sound, Media Player playing CHIMES.WAV and opening CANYON.MID:
+  w16's MMSYSTEM's screens identical to Microsoft's over SB16.DRV, and
+  over SB16.DRV as over SNDBLST2 but Sound Recorder's Record button,
+  enabled with the SB16 (DING.WAV is 22050 Hz, which SNDBLST2 cannot
+  record). The configuration dialog (DRV_CONFIGURE sent through USER by
+  SBP's "config"; `tests/scripts/input/sb16cfg.txt`): shown with the
+  settings in use, Escape answers 0 (DRVCNF_CANCEL).
+- Reliability (2026-11-19): the case `sb16` passed 10 of 10 runs on
+  installation-05 (two loops of five side by side, with QuickTime's
+  sides). Full run at 4091877 (make test and the whole boot test,
+  `W16_QTDIR` set): make test passes; boot test 120 ok, 7 failures:
+  ddeml (conn) and lzexpand (quirks), known on master; holdbtn,
+  quicktime (tree) and taskman (tree), known to fail now and then (the
+  first two passed when run again, taskman@tree fails on master 429e079
+  too); sysdrvall (kbtype, 28 and 2 pixels) and trails (timed, cpl)
+  under load, both passing when run beside master's checkout, where
+  trails@timed failed instead. None of these loads SB16.DRV (it is in no
+  default SYSTEM.INI).
+- Found on the way: with a shell other than Program Manager, Microsoft's
+  MMSYSTEM plays SystemExit (CHIMES.WAV) when Windows ends; w16's does
+  not (23.5 had it as UNVERIFIED; not changed here).
+
+### 24.5 UNVERIFIED, and not done
+
+- **386 Enhanced mode**: the driver offers no devices there (GetWinFlags'
+  WF_ENHANCED: the card is not touched). It would
+  need a VxD that gives the system VM the card's ports (or virtualises
+  them per VM), its IRQ (VPICD: a virtualised IRQ, so that the handler
+  runs in the system VM) and its DMA channels (VDMAD: the DMA buffer's
+  physical address, or the transfers translated), and the DMA buffer and
+  the handler's code and data page-locked.
+- **FM**: no OPL3 synthesiser device (it needs a MIDI-to-OPL voice
+  allocator and a patch set of w16's own: not done); the MIDI aux device
+  only sets the FM's volume.
+- MIDI input with real data (DOSBox has no MIDI input source): the
+  buffer handling is verified, the parsing (running status, system
+  exclusive, real time) is not. DOSBox raises the MPU-401's interrupt on
+  IRQ 9, which the driver does not hook; a real SB16 shares the card's.
+- Wave input of a real signal (DOSBox-X records silence); full duplex
+  (one direction at a time); the order of more than two headers in a
+  reset (SNDBLST2's with two: the one not begun first); SNDBLST2's use of
+  lpNext, reserved and bit 31 (driver-private; SB16.DRV's differ).
+- DRV_CONFIGURE: a dialog of w16's own (port, IRQ, DMA, high DMA, MPU
+  port, written to `[sb16.drv]`, DRVCNF_RESTART on OK); what SNDBLST2
+  answers to DRV_QUERYCONFIGURE and DRV_INSTALL was not observed (it has
+  a dialog of its own: it imports DialogBox).
+- The MIDI Mapper over SB16.DRV: not tried (with SNDBLST2 its default
+  setup answers 68, 23.2); Media Player's MIDI Sequencer plays through
+  the mapper, so CANYON.MID is only opened in `prog`; MCISEQ on port 0
+  ("set port 0") plays through the MPU-401 (`audio`).

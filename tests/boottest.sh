@@ -253,6 +253,14 @@
 #              MIDI Mapper applet, Media Player opening and playing a
 #              .WAV and opening a .MID: every screen 0 pixels off,
 #              tests/mmsystem/mprog.sh)
+#   sb16       w16's SB16.DRV (ARCHITECTURE.md 24) in DOSBox-X as a Sound
+#              Blaster 16 (tests/sb16/sbscen.sh): parts dev (MMP's device
+#              sections over it: Microsoft's MMSYSTEM and w16's alike, and
+#              against Windows 3.1's SNDBLST2.DRV's but the expected
+#              differences, tests/sb16/sbcmp.py), audio (what it plays,
+#              recorded and checked against the WAV and MIDI material:
+#              tests/sb16/sbaudio.sh) and prog (Sound Recorder, Sound and
+#              Media Player over it: every screen as over SNDBLST2)
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -746,7 +754,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2670,6 +2678,15 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   timer"
         else echo "FAIL timer: $r ($out)"; fails=$((fails + 1)); fi ;;
+    sb16)
+        # w16's SB16.DRV under both MMSYSTEMs (ARCHITECTURE.md 24)
+        r=ok
+        d=$out/sb16-${part:-dev}
+        "$root/tests/sb16/sbscen.sh" -o "$d" "${part:-dev}" > "$d.txt" 2>&1 ||
+            r="${part:-dev}: $(grep -m1 'FAIL' "$d.txt" || echo 'no result') ($d)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   sb16"
+        else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
     mmsystem)
         # w16's MMSYSTEM.DLL against Microsoft's (ARCHITECTURE.md 23)
         r=ok
@@ -4521,6 +4538,7 @@ caseparts() {
     timer) echo "$1@s $1@3 $1@qt" ;;
     quicktime) echo "$1@over $1@tree $1@tree386" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
+    sb16) echo "$1@dev $1@audio $1@prog" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -4590,6 +4608,9 @@ partsummary() {
     ver)
         if [ $pbad = 0 ]; then echo "ok   ver: VER.DLL's probe log as with Microsoft's (Standard, 386 Enhanced, DOSBox-X, the tree under both kernels as 3.1, with Microsoft's VER.DLL and with w16's), w16's modules' versions, Control Panel's Fonts applet"
         else echo "FAIL ver: $pfirst ($out)"; fi ;;
+    sb16)
+        if [ $pbad = 0 ]; then echo "ok   sb16: MMP's device sections over SB16.DRV alike under both MMSYSTEMs and as over SNDBLST2 but the SB16's extras; its sound as the material (8/16 bits, mono/stereo, 8000-44100 Hz, loops, volume, MIDI pitches); Sound Recorder, Sound and Media Player as over SNDBLST2"
+        else echo "FAIL sb16: $pfirst ($out)"; fi ;;
     mmsystem)
         if [ $pbad = 0 ]; then echo "ok   mmsystem: MMP's log and TPR's (with TMS's record of every timer message) with w16's MMSYSTEM as with Microsoft's; the device drivers' messages as 3.1's; MCI as 3.1's (MCT.DRV, MCIWAVE, MCISEQ); Sound Recorder, Sound, MIDI Mapper and Media Player as on 3.1; QuickTime's movie as on 3.1"
         else echo "FAIL mmsystem: $pfirst ($out)"; fi ;;
