@@ -1,0 +1,37 @@
+; two MS-DOS Prompts: the first full screen, Alt+Tab to Windows, the
+; second started from Program Manager (its icon still selected), VER in
+; it, EXIT; Alt+Tab to the first (its icon), VER, EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-first
+key alt+Tab
+sleep 6
+shot 02-windows
+key Return
+sleep 15
+shot 03-second
+type ver
+key Return
+sleep 4
+shot 04-ver2
+type exit
+key Return
+sleep 10
+shot 05-back
+key alt+Tab
+sleep 8
+shot 06-first
+type ver
+key Return
+sleep 4
+shot 07-ver1
+type exit
+key Return
+sleep 10
+shot 08-end

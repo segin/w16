@@ -1,0 +1,501 @@
+/*
+ * winfile.rc - w16 File Manager's resources. The menu's layout, text and
+ * IDs are 3.1's File Manager's as observed running (WF1 dumpmenu); the
+ * icons and the strip of pictures are w16's own (tools/mkwfileicon.py,
+ * tools/mkwfbmp.py).
+ */
+#include <windows.h>
+#include "winfile.h"
+
+IDI_WINFILE ICON winfile.ico
+IDI_TREE    ICON tree.ico
+IDI_DIR     ICON dir.ico
+IDI_TREEDIR ICON treedir.ico
+IDB_STRIP   BITMAP wfstrip.bmp
+IDC_SPLIT   CURSOR split.cur
+IDC_DRAGFILE  CURSOR dragfile.cur
+IDC_DRAGFILES CURSOR dragfiles.cur
+IDC_DRAGDIR   CURSOR dragdir.cur
+IDC_COPYFILE  CURSOR copyfile.cur
+IDC_COPYFILES CURSOR copyfiles.cur
+IDC_COPYDIR   CURSOR copydir.cur
+
+IDM_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open\tEnter",            IDM_OPEN
+        MENUITEM "&Move...\tF7",            IDM_MOVE
+        MENUITEM "&Copy...\tF8",            IDM_COPY
+        MENUITEM "&Delete...\tDel",         IDM_DELETE
+        MENUITEM "Re&name...",              IDM_RENAME
+        MENUITEM "Proper&ties...\tAlt+Enter", IDM_ATTRIBS
+        MENUITEM SEPARATOR
+        MENUITEM "&Run...",                 IDM_RUN
+        MENUITEM "&Print...",               IDM_PRINT
+        MENUITEM "&Associate...",           IDM_ASSOCIATE
+        MENUITEM SEPARATOR
+        MENUITEM "Cr&eate Directory...",    IDM_MAKEDIR
+        MENUITEM "Searc&h...",              IDM_SEARCH
+        MENUITEM "&Select Files...",        IDM_SELECT
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                   IDM_EXIT
+    END
+    POPUP "&Disk"
+    BEGIN
+        MENUITEM "&Copy Disk...",           IDM_DISKCOPY
+        MENUITEM "&Label Disk...",          IDM_LABEL
+        MENUITEM SEPARATOR
+        MENUITEM "&Format Disk...",         IDM_FORMAT
+        MENUITEM "&Make System Disk...",    IDM_SYSDISK
+        MENUITEM SEPARATOR
+        MENUITEM "&Select Drive...",        IDM_DRIVESMORE
+    END
+    POPUP "&Tree"
+    BEGIN
+        MENUITEM "E&xpand One Level\t+",    IDM_EXPONE
+        MENUITEM "Expand &Branch\t*",       IDM_EXPSUB
+        MENUITEM "Expand &All\tCtrl+*",     IDM_EXPALL
+        MENUITEM "&Collapse Branch\t-",     IDM_COLLAPSE
+        MENUITEM SEPARATOR
+        MENUITEM "&Indicate Expandable Branches", IDM_EXPANDTREE
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "T&ree and Directory",     IDM_BOTH
+        MENUITEM "Tr&ee Only",              IDM_TREEONLY
+        MENUITEM "Directory &Only",         IDM_DIRONLY
+        MENUITEM SEPARATOR
+        MENUITEM "Sp&lit",                  IDM_SPLIT
+        MENUITEM SEPARATOR
+        MENUITEM "&Name",                   IDM_VNAME
+        MENUITEM "&All File Details",       IDM_VDETAILS, CHECKED
+        MENUITEM "&Partial Details...",     IDM_VOTHER
+        MENUITEM SEPARATOR
+        MENUITEM "&Sort by Name",           IDM_BYNAME
+        MENUITEM "Sort &by Type",           IDM_BYTYPE
+        MENUITEM "Sort by Si&ze",           IDM_BYSIZE
+        MENUITEM "Sort by &Date",           IDM_BYDATE
+        MENUITEM SEPARATOR
+        MENUITEM "By File &Type...",        IDM_VINCLUDE
+    END
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Confirmation...",        IDM_CONFIRM
+        MENUITEM "&Font...",                IDM_FONT
+        MENUITEM SEPARATOR
+        MENUITEM "&Status Bar",             IDM_STATUSBAR, CHECKED
+        MENUITEM "&Minimize on Use",        IDM_MINONRUN
+        MENUITEM "Save Settings on &Exit",  IDM_SAVESETTINGS, CHECKED
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",             IDM_NEWWINDOW
+        MENUITEM "&Cascade\tShift+F5",      IDM_CASCADE
+        MENUITEM "&Tile\tShift+F4",         IDM_TILE
+        MENUITEM "&Arrange Icons",          IDM_ARRANGE
+        MENUITEM "&Refresh\tF5",            IDM_REFRESH
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents",               IDM_HELPINDEX
+        MENUITEM "&Search for Help on...",  IDM_HELPSEARCH
+        MENUITEM "&How to Use Help",        IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About File Manager...",  IDM_ABOUT
+    END
+END
+
+IDA_MAIN ACCELERATORS
+BEGIN
+    VK_F7,       IDM_MOVE,     VIRTKEY
+    VK_F8,       IDM_COPY,     VIRTKEY
+    VK_DELETE,   IDM_DELETE,   VIRTKEY
+    VK_RETURN,   IDM_ATTRIBS,  VIRTKEY, ALT
+    VK_F5,       IDM_CASCADE,  VIRTKEY, SHIFT
+    VK_F4,       IDM_TILE,     VIRTKEY, SHIFT
+    VK_F5,       IDM_REFRESH,  VIRTKEY
+    VK_MULTIPLY, IDM_EXPALL,   VIRTKEY, CONTROL
+    VK_F1,       IDM_HELPINDEX, VIRTKEY
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPNAME,        "File Manager"
+    IDS_HELPFILE,       "WINFILE.HLP"
+    IDS_DRIVEFREE,      "%c: %sKB free,  %sKB total"
+    IDS_TOTAL,          "Total %d file(s) (%s bytes)"
+    IDS_SELECTED,       "Selected %d file(s) (%s bytes)"
+    IDS_DRIVELABEL,     "%c: [%s]"
+    IDS_DRIVENOLABEL,   "%c:"
+    IDS_NOTEXIST,       "Drive %c does not exist."
+    IDS_READING,        "Reading Directory ..."
+    IDS_NOFILES,        "No files found."
+    IDS_ABOUTOTHER,     ""
+    IDS_AM,             "AM"
+    IDS_PM,             "PM"
+    IDS_SELDRIVE,       "Error Selecting Drive"
+    IDS_CURDIR,         "Current Directory: %s"
+    IDS_REPLACE,        "Replace %s?"
+    IDS_CONFREPLACE,    "Confirm File Replace"
+    IDS_DELDIR,         "Delete directory %s?"
+    IDS_CONFDELDIR,     "Confirm Directory Delete"
+    IDS_DELFILE,        "Delete %s?"
+    IDS_CONFDEL,        "Confirm File Delete"
+    IDS_MOVE,           "Move"
+    IDS_COPY,           "Copy"
+    IDS_RENAME,         "Rename"
+    IDS_PROPERTIES,     "Properties for %s"
+    IDS_BYTES,          "%s bytes"
+    IDS_DELFILELABEL,   "Delete File:"
+    IDS_DELDIRLABEL,    "Delete Directory:"
+    IDS_DELETING,       "Deleting..."
+    IDS_COPYING,        "Copying..."
+    IDS_MOVING,         "Moving..."
+    IDS_NONE,           "(None)"
+    IDS_PROGFILTER,     "Programs|*.exe;*.pif;*.com;*.bat|All Files (*.*)|*.*|"
+    IDS_SEARCHTITLE,    "Search Results: %s"
+    IDS_FOUND,          "%d file(s) found"
+    IDS_NOTFOUND,       "No matching files were found."
+    IDS_SEARCHBOX,      "Search Results"
+    IDS_SEARCHCHANGED,  "The contents of this drive have changed. Do you want to update the Search Results window?"
+    IDS_MOUSECOPY,      "Are you sure you want to copy the selected files or directories to %s?"
+    IDS_MOUSEMOVE,      "Are you sure you want to move the selected files or directories to %s?"
+    IDS_CONFMOUSE,      "Confirm Mouse Operation"
+    IDS_COPYDISKCONF, "This operation will erase ALL data from the destination disk. Are you sure you want to continue?"
+    IDS_COPYDISKCONFT, "Confirm Copy Disk"
+    IDS_INSERTSRC, "Insert source disk."
+    IDS_INSERTDST, "Insert destination disk."
+    IDS_COPYDISK, "Copy Disk"
+    IDS_COPYDISKERR, "Unable to copy disk."
+    IDS_COPYDISKERRT, "Copy Disk Error"
+    IDS_LABELERR, "Cannot label disk.\n\nMake sure the disk is not write-protected and not a network drive, and that the label is valid. Labels cannot contain the following characters: [space] * ? / \\ | . , ; : + = [ ] ( ) & ^ < > """
+    IDS_LABELDISK, "Label Disk"
+    IDS_FORMATCONF, "Formatting will erase ALL data from your disk. Are you sure that you want to format the disk in drive %c?"
+    IDS_FORMATCONFT, "Confirm Format Disk"
+    IDS_FORMATERR, "Cannot format disk.\n\nMake sure the disk is in the drive and not write-protected, damaged, or of wrong density rating."
+    IDS_FORMATERRT, "Format Disk Error"
+    IDS_SYSCONF, "Are you sure you want to copy system files onto the disk in drive %c?"
+    IDS_SYSDISK, "Make System Disk"
+    IDS_SYSERR, "The MS-DOS startup drive does not contain system files or is not available."
+    IDS_SYSERRT, "System Disk Error"
+    IDS_SYSWRITEERR, "Unable to copy the system files."
+    IDS_DRIVEIN, "Drive %c: "
+    IDS_CAP1440, "1.44 MB"
+    IDS_CAP720, "720 KB"
+    IDS_CAP1200, "1.2 MB"
+    IDS_CAP360, "360 KB"
+    IDS_CAPUNKNOWN, "Drive Capacity"
+END
+
+/* ---- dialogs: layouts, IDs and texts observed on the running original
+   (edit controls have WS_BORDER: 3.1's edit takes the style bit off and
+   draws the border itself, so a dump does not show it; read-only ones have
+   none, obs WF3 B05)
+   (SNAP dump, tools/snapdlg.py; obs WF2) ---- */
+DLG_OTHER DIALOG 19, 20, 163, 65
+STYLE 0x94C800C0L
+CAPTION "Partial Details"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Details", 100, "Button", 0x0007, 4, 4, 111, 55
+    CONTROL "&Size", 203, "Button", 0x0003 | 0x00010000L, 11, 15, 100, 9
+    CONTROL "Last &Modification Date", 204, "Button", 0x0003 | 0x00010000L, 11, 25, 100, 9
+    CONTROL "Last Modification &Time", 205, "Button", 0x0003 | 0x00010000L, 11, 35, 100, 9
+    CONTROL "&File Attributes", 206, "Button", 0x0003 | 0x00010000L, 11, 45, 100, 9
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 120, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 120, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 120, 43, 40, 14
+END
+
+DLG_INCLUDE DIALOG 19, 20, 157, 102
+STYLE 0x94C800C0L
+CAPTION "By File Type"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Name:", 100, "Static", 0x000C, 5, 8, 23, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 34, 6, 65, 12
+    CONTROL "File Type", 100, "Button", 0x0007, 5, 20, 94, 62
+    CONTROL "&Directories", 101, "Button", 0x0003 | 0x00010000L, 10, 31, 60, 12
+    CONTROL "&Programs", 210, "Button", 0x0003 | 0x00010000L, 10, 43, 60, 12
+    CONTROL "Docu&ments", 211, "Button", 0x0003 | 0x00010000L, 10, 55, 60, 12
+    CONTROL "&Other Files", 212, "Button", 0x0003 | 0x00010000L, 10, 67, 60, 12
+    CONTROL "Show Hidden/&System Files", 250, "Button", 0x0003 | 0x00010000L, 5, 85, 100, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 110, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 110, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 110, 43, 40, 14
+END
+
+DLG_CONFIRM DIALOG 19, 20, 164, 80
+STYLE 0x94C800C0L
+CAPTION "Confirmation"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Confirm On", 100, "Button", 0x0007 | 0x00010000L, 5, 3, 108, 73
+    CONTROL "File &Delete", 219, "Button", 0x0003 | 0x00010000L, 10, 15, 80, 12
+    CONTROL "D&irectory Delete", 220, "Button", 0x0003 | 0x00010000L, 10, 27, 80, 12
+    CONTROL "File &Replace", 221, "Button", 0x0003 | 0x00010000L, 10, 39, 80, 12
+    CONTROL "&Mouse Action", 249, "Button", 0x0003 | 0x00010000L, 10, 51, 80, 12
+    CONTROL "Dis&k Commands", 251, "Button", 0x0003 | 0x00010000L, 10, 63, 80, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 118, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 118, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 118, 44, 40, 14
+END
+
+DLG_FONT DIALOG 14, 54, 264, 127
+STYLE 0x94C800C0L
+CAPTION "Font"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Font:", 1088, "Static", 0x0000 | 0x00020000L, 6, 3, 40, 9
+    CONTROL "", 1136, "ComboBox", 0x0351 | 0x00210000L, 6, 13, 94, 54
+    CONTROL "Font St&yle:", 1089, "Static", 0x0000 | 0x00020000L, 108, 3, 44, 9
+    CONTROL "", 1137, "ComboBox", 0x0201 | 0x00010000L, 108, 13, 64, 54
+    CONTROL "&Size:", 1090, "Static", 0x0000 | 0x00020000L, 179, 3, 30, 9
+    CONTROL "", 1138, "ComboBox", 0x0311 | 0x00210000L, 179, 13, 32, 54
+    CONTROL "Effects", 1072, "Button", 0x0007 | 0x00020000L, 6, 72, 84, 61
+    CONTROL "Stri&keout", 1040, "Button", 0x0003 | 0x00010000L, 10, 82, 49, 10
+    CONTROL "&Underline", 1041, "Button", 0x0003 | 0x00000000L, 10, 94, 51, 10
+    CONTROL "&Lowercase", 1042, "Button", 0x0003 | 0x00010000L, 10, 82, 49, 10
+    CONTROL "&Color:", 1091, "Static", 0x0000 | 0x00020000L, 10, 106, 30, 9
+    CONTROL "", 1139, "ComboBox", 0x0253 | 0x00000000L, 10, 116, 75, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00030000L, 218, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00030000L, 218, 23, 40, 14
+    CONTROL "&Apply", 1026, "Button", 0x0000 | 0x00030000L, 218, 40, 40, 14
+    CONTROL "&Help", 1038, "Button", 0x0000 | 0x00030000L, 218, 54, 40, 14
+    CONTROL "Sample", 1073, "Button", 0x0007 | 0x00020000L, 98, 72, 160, 49
+    CONTROL "", 1093, "Static", 0x0081, 98, 124, 160, 20
+    CONTROL "AaBbYyZz", 1092, "Static", 0x0081 | 0x00020000L, 104, 81, 149, 37
+END
+
+
+DLG_MOVE DIALOG 46, 59, 231, 64
+STYLE 0x94C800C0L
+CAPTION "Move"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008B, 3, 6, 182, 10
+    CONTROL "&To:", 100, "Static", 0x000C, 3, 33, 20, 10
+    CONTROL "", 103, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 37, 32, 138, 12
+    CONTROL "", 257, "Button", 0x0004 | 0x00010000L, 26, 33, 10, 10
+    CONTROL "&Copy to Clipboard", 256, "Button", 0x0004, 26, 47, 72, 12
+    CONTROL "", 104, "Static", 0x008B, 3, 49, 40, 10
+    CONTROL "", 201, "Static", 0x008B, 45, 49, 138, 10
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 185, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 185, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 185, 44, 40, 14
+    CONTROL "&From:", 100, "Static", 0x000C, 3, 19, 20, 10
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 37, 18, 138, 12
+END
+
+DLG_DELETE DIALOG 19, 20, 246, 64
+STYLE 0x94C800C0L
+CAPTION "Delete"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 5, 193, 10
+    CONTROL "De&lete:", 100, "Static", 0x000C, 3, 20, 35, 10
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 40, 19, 155, 12
+    CONTROL "", 104, "Static", 0x008B, 3, 35, 35, 10
+    CONTROL "", 201, "Static", 0x008B, 40, 35, 155, 10
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 200, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 200, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 200, 43, 40, 14
+END
+
+DLG_ATTRIBS DIALOG 33, 44, 231, 100
+STYLE 0x94C800C0L
+CAPTION "Properties"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00030000L, 175, 6, 50, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 175, 23, 50, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 175, 43, 50, 14
+    CONTROL "&File Name:", 100, "Static", 0x000C, 5, 5, 50, 10
+    CONTROL "", 201, "Edit", 0x0880 | 0x00010000L, 55, 4, 118, 10
+    CONTROL "Size:", 100, "Static", 0x000C, 5, 16, 40, 10
+    CONTROL "61,656 bytes", 203, "Static", 0x000C, 55, 16, 90, 10
+    CONTROL "Last Change:", 100, "Static", 0x000C, 5, 27, 57, 10
+    CONTROL "11/20/<6  2:40:42AM", 204, "Static", 0x000C, 55, 27, 97, 10
+    CONTROL "&Path:", 100, "Static", 0x000C, 5, 38, 46, 10
+    CONTROL "", 101, "Edit", 0x0880 | 0x00010000L, 55, 38, 118, 10
+    CONTROL "Attributes", 100, "Button", 0x0007, 4, 52, 120, 42
+    CONTROL "&Read Only", 215, "Button", 0x0003 | 0x00030000L, 9, 64, 52, 12
+    CONTROL "H&idden", 216, "Button", 0x0003, 71, 64, 49, 12
+    CONTROL "&Archive", 217, "Button", 0x0003, 9, 76, 52, 12
+    CONTROL "&System", 218, "Button", 0x0003, 71, 76, 49, 12
+END
+
+DLG_RUN DIALOG 14, 12, 210, 63
+STYLE 0x94C800C0L
+CAPTION "Run"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008B, 3, 6, 162, 10
+    CONTROL "&Command Line:", 100, "Static", 0x000C | 0x00020000L, 3, 18, 60, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 3, 29, 134, 12
+    CONTROL "Run &Minimized", 214, "Button", 0x0003 | 0x00010000L, 3, 45, 71, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 165, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 165, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 165, 43, 40, 14
+END
+
+DLG_PRINT DIALOG 19, 20, 240, 63
+STYLE 0x94C800C0L
+CAPTION "Print"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 6, 193, 10
+    CONTROL "&Print:", 100, "Static", 0x000C, 3, 20, 23, 10
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 27, 18, 160, 12
+    CONTROL "", 104, "Static", 0x008C, 3, 36, 190, 10
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 197, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 197, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 197, 43, 40, 14
+END
+
+DLG_ASSOCIATE DIALOG 33, 39, 211, 96
+STYLE 0x94C800C0L
+CAPTION "Associate"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Files with Extension:", 99, "Static", 0x000C, 5, 8, 74, 10
+    CONTROL "", 112, "Edit", 0x0400 | 0x00800000L | 0x00010000L, 80, 6, 35, 12
+    CONTROL "&Associate With:", 99, "Static", 0x000C, 5, 22, 150, 10
+    CONTROL "", 113, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 5, 32, 148, 12
+    CONTROL "", 111, "ListBox", 0x1003 | 0x00A10000L, 11, 44, 146, 40
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 165, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 165, 23, 40, 14
+    CONTROL "&Browse...", 232, "Button", 0x0000 | 0x00010000L, 165, 43, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 165, 60, 40, 14
+END
+
+DLG_MAKEDIR DIALOG 19, 20, 200, 63
+STYLE 0x94C800C0L
+CAPTION "Create Directory"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 6, 154, 10
+    CONTROL "&Name:", 100, "Static", 0x000C, 3, 23, 20, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 30, 22, 90, 12
+    CONTROL "", 104, "Static", 0x008C, 3, 46, 150, 10
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 157, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 157, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 157, 43, 40, 14
+END
+
+DLG_SEARCH DIALOG 19, 20, 263, 63
+STYLE 0x94C800C0L
+CAPTION "Search"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Search For:", 100, "Static", 0x000C, 5, 6, 45, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 52, 5, 160, 12
+    CONTROL "Start &From:", 100, "Static", 0x000C, 5, 21, 45, 12
+    CONTROL "", 101, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 52, 20, 160, 12
+    CONTROL "S&earch All Subdirectories", 232, "Button", 0x0003 | 0x00010000L, 52, 34, 100, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 217, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 217, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 217, 43, 40, 14
+END
+
+DLG_SELECT DIALOG 14, 12, 116, 83
+STYLE 0x94C800C0L
+CAPTION "Select Files"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&File(s):", -1, "Static", 0x000C, 5, 16, 60, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 5, 29, 60, 12
+    CONTROL "&Select", 1, "Button", 0x0001 | 0x00010000L, 70, 6, 40, 14
+    CONTROL "&Deselect", 6, "Button", 0x0000 | 0x00010000L, 70, 23, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 70, 40, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 70, 63, 40, 14
+END
+
+
+DLG_REPLACE DIALOG 9, 20, 245, 95
+STYLE 0x94C800C0L
+CAPTION "Confirm File Replace"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "#200", 100, "Static", 0x0003, 3, 12, 18, 20
+    CONTROL "", 104, "Static", 0x008C, 25, 3, 203, 10
+    CONTROL "Replace File:", 100, "Static", 0x000C, 25, 12, 49, 10
+    CONTROL "C:\WFTEST\COPY.TXT", 103, "Static", 0x008C, 75, 12, 165, 10
+    CONTROL "", 105, "Static", 0x000C, 75, 22, 170, 10
+    CONTROL "With File:", 100, "Static", 0x000C, 25, 34, 49, 10
+    CONTROL "C:\WFTEST\ZZZ?", 102, "Static", 0x008C, 75, 34, 165, 10
+    CONTROL "", 106, "Static", 0x000C, 75, 44, 170, 10
+    CONTROL "&Yes", 6, "Button", 0x0001 | 0x00010000L, 33, 73, 40, 14
+    CONTROL "Yes to &All", 107, "Button", 0x0000 | 0x08010000L, 79, 73, 40, 14
+    CONTROL "&No", 7, "Button", 0x0000 | 0x00010000L, 125, 73, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 171, 73, 40, 14
+END
+
+DLG_DELCONF DIALOG 9, 20, 245, 60
+STYLE 0x94C800C0L
+CAPTION "Confirm File Delete"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "#200", 100, "Static", 0x0003, 3, 12, 18, 20
+    CONTROL "", 104, "Static", 0x000C, 25, 3, 203, 10
+    CONTROL "", 103, "Static", 0x000C, 25, 18, 44, 10
+    CONTROL "", 102, "Static", 0x008C, 70, 18, 170, 10
+    CONTROL "&Yes", 6, "Button", 0x0001 | 0x00010000L, 33, 42, 40, 14
+    CONTROL "Yes to &All", 107, "Button", 0x0000 | 0x08010000L, 79, 42, 40, 14
+    CONTROL "&No", 7, "Button", 0x0000 | 0x00010000L, 125, 42, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 171, 42, 40, 14
+END
+
+DLG_LABEL DIALOG 19, 20, 161, 63
+STYLE 0x94C800C0L
+CAPTION "Label Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Label:", 100, "Static", 0x000C, 5, 15, 30, 10
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 5, 26, 100, 12
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 115, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 115, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 115, 43, 40, 14
+END
+
+DLG_FORMAT DIALOG 10, 28, 183, 96
+STYLE 0x94C800C0L
+CAPTION "Format Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 140, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 140, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 140, 43, 40, 14
+    CONTROL "&Disk In:", -1, "Static", 0x000C, 5, 7, 49, 10
+    CONTROL "", 222, "ComboBox", 0x0203 | 0x00210000L, 55, 4, 65, 60
+    CONTROL "&Capacity:", 100, "Static", 0x000C, 5, 20, 49, 10
+    CONTROL "", 241, "ComboBox", 0x0203 | 0x00210000L, 55, 19, 65, 60
+    CONTROL "Options", 102, "Button", 0x0007 | 0x00020000L, 5, 39, 115, 53
+    CONTROL "&Label:", -1, "Static", 0x000C, 11, 51, 39, 10
+    CONTROL "", 201, "Edit", 0x0000 | 0x00800000L | 0x00010000L, 40, 49, 63, 12
+    CONTROL "&Make System Disk", 242, "Button", 0x0003 | 0x00010000L, 11, 62, 90, 12
+    CONTROL "&Quick Format", 244, "Button", 0x0003 | 0x00010000L, 11, 76, 90, 12
+END
+
+DLG_DRIVES DIALOG 10, 31, 201, 86
+STYLE 0x94C800C0L
+CAPTION "Select Drive"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Drives:", 245, "Static", 0x000C, 5, 5, 41, 10
+    CONTROL "", 222, "ListBox", 0x0083 | 0x00800000L, 5, 16, 140, 56
+    CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 155, 6, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 155, 23, 40, 14
+    CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 155, 44, 40, 14
+END
+
+DLG_SYSPROG DIALOG 33, 30, 174, 57
+STYLE 0x9CC800C0L
+CAPTION "Make System Disk"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Now copying system files", 100, "Static", 0x0001, 0, 6, 174, 8
+    CONTROL "Press Cancel if you want to abort.", 100, "Static", 0x0001, 0, 14, 174, 8
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 66, 39, 44, 14
+END

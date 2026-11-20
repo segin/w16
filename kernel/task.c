@@ -1304,6 +1304,8 @@ void __cdecl task_signal_exit(u16 ax)
             ExitKernel(0);
         }
     }
+    if (TW(t, TDB_QUEUE))               /* a program USER knows (InitApp) */
+        kmisc_app_exit(t);
     p = *(u32 FAR *)MK_FP(t, 0x2A);
     if (!p)
         return;

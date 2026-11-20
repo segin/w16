@@ -15,7 +15,7 @@
  * Messages are Windows 3.1's, byte for byte, where they were observed;
  * the others are marked UNVERIFIED.
  *
- * Sources: XMS 2.0; IBM's LX format description (LE layout); Windows 3.1
+ * Sources: XMS 2.0 and 3.0; IBM's LX format description (LE layout); Windows 3.1
  * DDK, INT 2Fh 1605h/1606h; black-box observation (tests/vxobs.sh).
  */
 #include <dos.h>
@@ -31,6 +31,8 @@ extern int __cdecl cpu_is_386(void);
 extern unsigned __cdecl cpu_msw(void);
 struct xregs { unsigned ax, bx, dx, si; };
 extern void __cdecl xms_call(struct xregs *r);
+struct xregs32 { unsigned long eax, ebx, ecx, edx; };
+extern void __cdecl xms_call32(struct xregs32 *r);
 extern int __cdecl pm_go(struct w386_info *info);
 extern int __cdecl pm_exit(int code);
 extern unsigned __cdecl bp_table_off(void);
@@ -45,6 +47,8 @@ static unsigned char pmbp[320];
 static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
+static unsigned xms_more[16];       /* blocks that continue it (main) */
+static unsigned xms_nmore;
 static unsigned v86cb_off, v86cb_seg;   /* Enable/Disable V86 mode callback (1605h) */
 static char fatalmsg[W386_FATAL_SIZE];  /* the VMM's message when it ends Windows early */
 
@@ -109,6 +113,19 @@ static int xms_move_to(unsigned long dst, void __far *src, unsigned long len)
     return r.ax == 1;
 }
 
+/* unlock and free every block taken */
+static void xms_free_all(void)
+{
+    struct xregs x;
+    while (xms_nmore) {
+        unsigned h = xms_more[--xms_nmore];
+        x.ax = 0x0D00; x.dx = h; xms_call(&x);
+        x.ax = 0x0A00; x.dx = h; xms_call(&x);
+    }
+    x.ax = 0x0D00; x.dx = xms_handle; xms_call(&x);
+    x.ax = 0x0A00; x.dx = xms_handle; xms_call(&x);
+}
+
 /* ---- SYSTEM.INI ---- */
 static char __far *ini;
 static unsigned inilen;
@@ -127,6 +144,33 @@ static int load_ini(const char *path)
     ini[inilen] = 0;
     close(h);
     return 1;
+}
+
+/* Is [w16] key= in SYSTEM.INI, with a value that starts with 0? (w16's
+ * stock-behaviour switches: docs/w16-settings.md) */
+static int ini_w16_zero(const char *key)
+{
+    char __far *q = ini;
+    unsigned n = strlen(key);
+    int inw16 = 0, zero = 0;
+
+    while (q && *q) {
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == '[')
+            inw16 = !_fmemicmp(q, "[w16]", 5);
+        else if (inw16 && !_fmemicmp(q, key, n)) {
+            q += n;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '=') {
+                q++;
+                while (*q == ' ' || *q == '\t') q++;
+                zero = *q == '0';
+            }
+        }
+        while (*q && *q != '\n') q++;
+        if (*q) q++;
+    }
+    return zero;
 }
 
 /* ---- the VMM image ---- */
@@ -539,7 +583,7 @@ int main(int argc, char **argv)
     struct SREGS sr;
     struct xregs x;
     char *p;
-    int code;
+    int code, use3;
     unsigned long kb, phys;
 
     (void)argc;
@@ -614,24 +658,92 @@ int main(int argc, char **argv)
          * VxDs from TSRs, no instance data): see ARCHITECTURE.md 12 */
     }
 
-    /* all the extended memory */
-    x.ax = 0x0800; x.bx = 0;
+    /* all the extended memory: the largest free block. XMS 08h and 09h
+     * count KB in 16 bits (65535 KB at most); with an XMS 3.0 driver w16
+     * asks with 88h and 89h (32-bit counts) instead, unless SYSTEM.INI
+     * says [w16] LargeMemory=0 (stock 3.1: ARCHITECTURE.md 12.3). At most
+     * W386_WINDOW_MAX of it: the VMM's window ends below the VMs' high
+     * linear windows. */
+    xms_handle = 0;
+    x.ax = 0x0000;
     xms_call(&x);
-    kb = x.ax;
-    info.mem_kb = x.dx;
-    if (kb < 1024) {
-        broadcast_1606();
-        /* UNVERIFIED: Windows 3.1's own message for too little memory */
-        fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n");
+    use3 = x.ax >= 0x0300 && !ini_w16_zero("LargeMemory");
+    if (use3) {
+        struct xregs32 y;
+        y.eax = 0x8800UL; y.ebx = 0; y.ecx = 0; y.edx = 0;
+        xms_call32(&y);
+        kb = y.eax;
+        if (!(y.ebx & 0xFF) && kb >= 1024) {
+            info.mem_kb = y.edx;
+            if (kb > W386_WINDOW_MAX / 1024) kb = W386_WINDOW_MAX / 1024;
+            y.eax = 0x8900UL; y.edx = kb;
+            xms_call32(&y);
+            if ((y.eax & 0xFFFF) == 1) xms_handle = (unsigned)y.edx;
+        }
     }
-    x.ax = 0x0900; x.dx = (unsigned)kb;
-    xms_call(&x);
-    if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
-    xms_handle = x.dx;
+    if (!xms_handle) {
+        x.ax = 0x0800; x.bx = 0;
+        xms_call(&x);
+        kb = x.ax;
+        info.mem_kb = x.dx;
+        if (kb < 1024) {
+            broadcast_1606();
+            /* UNVERIFIED: Windows 3.1's own message for too little memory */
+            fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n");
+        }
+        x.ax = 0x0900; x.dx = (unsigned)kb;
+        xms_call(&x);
+        if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
+        xms_handle = x.dx;
+    }
     x.ax = 0x0C00; x.dx = xms_handle;
     xms_call(&x);
     if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
     phys = ((unsigned long)x.dx << 16) | x.bx;
+    /* more blocks while XMS gives them (08h/09h stop at 64 MB a block;
+     * Windows 3.1's WIN386 used all of 128 MB: ARCHITECTURE.md 12.3).
+     * The window is one physical run, so only a block that starts where
+     * the last one ends (or in the same page) is kept. */
+    while (xms_nmore < sizeof(xms_more) / sizeof(xms_more[0]) && kb < W386_WINDOW_MAX / 1024) {
+        unsigned long k2 = 0, p2;
+        unsigned h = 0;
+        if (use3) {
+            struct xregs32 y;
+            y.eax = 0x8800UL; y.ebx = 0; y.ecx = 0; y.edx = 0;
+            xms_call32(&y);
+            if (!(y.ebx & 0xFF) && y.eax >= 64) {
+                k2 = y.eax;
+                if (k2 > W386_WINDOW_MAX / 1024 - kb) k2 = W386_WINDOW_MAX / 1024 - kb;
+                y.eax = 0x8900UL; y.edx = k2;
+                xms_call32(&y);
+                if ((y.eax & 0xFFFF) == 1) h = (unsigned)y.edx;
+            }
+        }
+        if (!h) {
+            x.ax = 0x0800; x.bx = 0;
+            xms_call(&x);
+            k2 = x.ax;
+            if (k2 > W386_WINDOW_MAX / 1024 - kb) k2 = W386_WINDOW_MAX / 1024 - kb;
+            if (k2 < 64) break;
+            x.ax = 0x0900; x.dx = (unsigned)k2;
+            xms_call(&x);
+            if (x.ax != 1) break;
+            h = x.dx;
+        }
+        x.ax = 0x0C00; x.dx = h;
+        xms_call(&x);
+        p2 = ((unsigned long)x.dx << 16) | x.bx;
+        /* (a driver may give whole pages: 65535 KB from 08h/09h ends
+         * 1 KB before the next block, which no one else can have) */
+        if (x.ax != 1 || p2 < phys + kb * 1024UL || p2 - (phys + kb * 1024UL) >= PAGE) {
+            if (x.ax == 1) { x.ax = 0x0D00; x.dx = h; xms_call(&x); }
+            x.ax = 0x0A00; x.dx = h; xms_call(&x);
+            break;
+        }
+        xms_more[xms_nmore++] = h;
+        kb = (p2 - phys) / 1024 + k2;
+    }
+    if (kb > W386_WINDOW_MAX / 1024) kb = W386_WINDOW_MAX / 1024;
     x.ax = 0x0300;                      /* global A20 on */
     xms_call(&x);
 
@@ -647,8 +759,7 @@ int main(int argc, char **argv)
         info.img_size = img_next - info.img_off;
     }
     if (!info.img_size || !build_page_tables()) {
-        x.ax = 0x0D00; x.dx = xms_handle; xms_call(&x);
-        x.ax = 0x0A00; x.dx = xms_handle; xms_call(&x);
+        xms_free_all();
         broadcast_1606();
         fail("Cannot find or load required file WIN386.EXE.\r\n");      /* UNVERIFIED */
     }
@@ -704,8 +815,7 @@ int main(int argc, char **argv)
     if (pm_go(&info) == (int)W386_FATAL) {
         /* the VMM ended Windows before the System VM ran: its message */
         x.ax = 0x0400; xms_call(&x);
-        x.ax = 0x0D00; x.dx = xms_handle; xms_call(&x);
-        x.ax = 0x0A00; x.dx = xms_handle; xms_call(&x);
+        xms_free_all();
         out(fatalmsg);
         broadcast_1606();
         return 0xFF;                    /* UNVERIFIED exit code */
@@ -715,8 +825,7 @@ int main(int argc, char **argv)
     code = pm_exit(code);
     /* ---- real mode again ---- */
     x.ax = 0x0400; xms_call(&x);        /* global A20 off */
-    x.ax = 0x0D00; x.dx = xms_handle; xms_call(&x);
-    x.ax = 0x0A00; x.dx = xms_handle; xms_call(&x);
+    xms_free_all();
     broadcast_1606();
     return code;
 }

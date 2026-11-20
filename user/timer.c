@@ -244,6 +244,26 @@ void kill_queue_timers(HQUEUE hq)
             free_timer(t);
 }
 
+/* SetMessageQueue: the timers go with the windows to the new queue (not
+   ready there: the new queue has no count of them) */
+void move_queue_timers(HQUEUE old, HQUEUE hq)
+{
+    CHUNK __far *c;
+    PTIMER t;
+    int i;
+    WORD f = irq_off();
+    FOR_TIMERS(c, i, t)
+        if (t->used && t->hq == old) {
+            t->hq = hq;
+            if (t->ready) {
+                t->ready = 0;
+                t->left = TICK;
+            }
+        }
+    q_of(old)->ntimer = 0;
+    irq_restore(f);
+}
+
 void kill_window_timers(HWND h)
 {
     CHUNK __far *c;
@@ -294,7 +314,22 @@ BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL re
         }
         return TRUE;
     }
-    q->ntimer = 0;
-    q->wakebits &= ~QS_TIMER;
+    /* none that matches the filter. The count is the number of ready
+       timers still: the others stay ready and come when asked for (US29
+       tf: on 3.1 a timer passed over by a filtered PeekMessage comes
+       later). Zeroing it, as w16 did, left them ready with no count, and
+       the tick passes over ready timers: they never came again (USER
+       audit, item 3). QS_TIMER goes off all the same, so that a filtered
+       GetMessage waits instead of spinning; the next tick to ready a
+       timer sets it again. */
+    {
+        WORD f = irq_off(), n = 0;
+        FOR_TIMERS(c, i, t)
+            if (t->used && t->hq == hq && t->ready)
+                n++;
+        q->ntimer = n;
+        q->wakebits &= ~QS_TIMER;
+        irq_restore(f);
+    }
     return FALSE;
 }

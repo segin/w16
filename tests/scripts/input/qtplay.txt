@@ -8,7 +8,8 @@
 ; File > Close (the movie), File > Open the Windows directory's SAMPLE.MOV
 ; (the Open box starts in the installer's C:\TMP; tests/qtplay.sh puts the
 ; Windows directory, C:\WINDOWS or C:\W16, for @WINDIR@), Space twice
-; (play, pause), File > Exit; Program Manager's File > Run starts the
+; (play, pause), Space and a drag of the movie's window while it plays,
+; File > Exit; Program Manager's File > Run starts the
 ; Movie Player again, File > Open the movie, Space, Alt+F4; Alt+F4 and
 ; Return end Windows. Until 2026-11-18
 ; closing the player ended Windows on w16's tree alone ("Standard Mode:
@@ -87,6 +88,36 @@ sleep 3
 key space
 settle 30 3
 shot c4-paused
+; the drag while it plays: Space plays on, the left button pressed on the
+; movie's caption (about 72,79: the click first gives DOSBox the mouse, on
+; the empty MDI client; 1-pixel steps there, as mouse acceleration and a
+; loaded host's merged motions would move it further), the window then
+; moved 13 x 9 right and 7 x 9 down with the arrow keys while the button
+; is held (both 3.1 and w16 move the pointer by 9 per key in the drag:
+; the same drop whatever the host's load), dropped, the pointer moved off
+; it (to the top left corner), and the movie left to play to its end.
+; Until 2026-11-19 w16 hung
+; there for good: the move frame stayed in place, redrawn over and over
+; (user/track.c, docs/notes/quicktime-handover.md)
+key space
+sleep 1
+click 1
+sleep 0.5
+home
+glide 1,1 72,0.02
+glide 0,1 7,0.02
+sleep 0.5
+down 1
+sleep 0.5
+key Right Right Right Right Right Right Right Right Right Right Right Right Right
+key Down Down Down Down Down Down Down
+sleep 1
+shot c4a-dragging
+up 1
+sleep 0.5
+home
+settle 40 3
+shot c4b-dropped
 key alt+f
 sleep 0.5
 key x

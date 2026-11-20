@@ -27,6 +27,10 @@ typedef DCE __far *PDCE;
 #define DCE_OWN     2           /* a CS_OWNDC window's */
 #define DCE_INUSE   4
 #define DCE_CLIPCHILDREN 8
+#define DCE_CLASS   0x10        /* with DCE_OWN: a CS_CLASSDC class's (its
+                                   hwnd: the window that had it last) */
+#define DCE_PARENT  0x20        /* a CS_PARENTDC window's: the parent's
+                                   visible region */
 
 static WORD dces;
 /* the driver name GDI gets; a buffer of its own (UNVERIFIED: GDI appears to
@@ -133,9 +137,19 @@ static void setup_dc(PDCE d, PWND w)
     BOOL window = (d->flags & DCE_WINDOW) != 0;
     BOOL clipch = (w->style & WS_CLIPCHILDREN) != 0;
     HRGN r;
+    /* the desktop's window DC (GetDC(NULL), GetWindowDC of the desktop or
+       of NULL, GetDCEx(desktop, DCX_WINDOW)) is the whole screen, the
+       top-level windows too: a simple region, and GetPixel reads what
+       they show (US33 gdc on 3.1; GetDC of the desktop window itself
+       leaves them out, and so does the desktop's own painting) */
+    if (window && w == PW(hwndDesktop))
+        clipch = FALSE;
     if (d->flags & DCE_CLIPCHILDREN)
         clipch = TRUE;
-    r = visible_rgn(w, !window, clipch);
+    if ((d->flags & DCE_PARENT) && w->hwndParent)
+        r = visible_rgn(PW(w->hwndParent), TRUE, FALSE);
+    else
+        r = visible_rgn(w, !window, clipch);
     if (d->clip)
         CombineRgn(r, r, d->clip, RGN_AND);
     G_SELECTVISRGN(d->hdc, r);
@@ -154,10 +168,29 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
     PCLS c;
     if (!w)
         return 0;
-    if (!h)
+    if (!h) {
         h = hwndDesktop;
+        window = TRUE;          /* the screen (setup_dc) */
+    }
     c = (PCLS)w->cls;
-    if ((c->style & CS_OWNDC) && !window) {
+    if ((c->style & CS_CLASSDC) && !(c->style & CS_OWNDC) && !window) {
+        /* CS_CLASSDC: one DC for all the class's windows, set up for the
+           one asking, its state kept between them (US29 dc on 3.1: two
+           windows' GetDCs give the same DC, a mode set for one is there for
+           the other, its origin the asking window's; not the cache's, and
+           GetWindowDC gives a cache DC). w16 gave cache DCs (USER audit,
+           item 14). */
+        dh = c->hdce;
+        if (!dh) {
+            dh = new_dce();
+            if (!dh)
+                return 0;
+            c = (PCLS)w->cls;
+            c->hdce = dh;
+            DC_(dh)->flags = DCE_OWN | DCE_CLASS;
+        }
+        DC_(dh)->hwnd = h;
+    } else if ((c->style & CS_OWNDC) && !window) {
         for (dh = dces; dh; dh = DC_(dh)->next)
             if ((DC_(dh)->flags & DCE_OWN) && DC_(dh)->hwnd == h)
                 break;
@@ -175,6 +208,19 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
         if (!dh && !(dh = new_dce()))
             return 0;
         DC_(dh)->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
+        /* CS_PARENTDC: a cache DC clipped to the parent's client area, its
+           origin the child's (US29 dc on 3.1: GetClipBox -10 -10 388 269
+           for a child at 10,10 of a 398 x 279 client area). The system
+           controls' classes have it too, and 3.1's GetDC gives them the
+           parent's area as well (US32: a dialog's list box, -18 -16 245
+           114, the dialog's client area); USER's own drawing in them asks
+           for the control's area (DCX_OWNCLIENT: ctl_dc), as a
+           superclass of them, of the application's module, took the
+           parent's and drew outside itself. BeginPaint clips to the update
+           region, inside the window either way. */
+        if ((c->style & CS_PARENTDC) && !(flags & DCX_OWNCLIENT) && !window &&
+            (w->style & WS_CHILD) && w->hwndParent)
+            DC_(dh)->flags |= DCE_PARENT;
         DC_(dh)->hwnd = h;
     }
     d = DC_(dh);        /* (nothing below allocates in the object heap) */
@@ -221,13 +267,35 @@ void free_window_dcs(HWND h)
     WORD dh;
     for (dh = dces; dh; dh = d->next)
         if ((d = DC_(dh))->hwnd == h) {
-            if (d->flags & DCE_OWN) {
-                d->flags = 0;
-                G_SETDCSTATE(d->hdc, hdcState);
+            /* a class's DC stays the class's, with its state */
+            if (d->flags & DCE_CLASS) {
+                d->hwnd = 0;
+                continue;
             }
+            /* a CS_OWNDC window's DC joins the cache; one out of the
+               cache comes back as release_dc gives it back: reset */
+            if (d->clip) {
+                DeleteObject(d->clip);
+                d->clip = 0;
+            }
+            G_SETDCSTATE(d->hdc, hdcState);
             d->hwnd = 0;
-            d->flags &= ~DCE_INUSE;
+            d->flags = 0;
         }
+}
+
+/* a CS_CLASSDC class goes: its DC joins the cache */
+void free_class_dc(PCLS c)
+{
+    PDCE d = DC_(c->hdce);
+    if (d->clip) {
+        DeleteObject(d->clip);
+        d->clip = 0;
+    }
+    G_SETDCSTATE(d->hdc, hdcState);
+    d->hwnd = 0;
+    d->flags = 0;
+    c->hdce = 0;
 }
 
 /* windows moved: DCs out for them see the new place */
@@ -257,7 +325,9 @@ int WINAPI ReleaseDC(HWND h, HDC hdc)
 
 HDC WINAPI U_GETDCEX(HWND h, HRGN clip, DWORD flags)
 {
-    return get_dc(h, (flags & 1) != 0, (flags & 0x80) ? clip : 0, (flags & 2) ? 1 : 0);
+    /* DCX_WINDOW 1, DCX_CLIPCHILDREN 8, DCX_INTERSECTRGN 80h (3.1 SDK;
+       w16 took DCX_CACHE, 2, for DCX_CLIPCHILDREN: US33 gdc) */
+    return get_dc(h, (flags & 1) != 0, (flags & 0x80) ? clip : 0, (flags & 8) ? 1 : 0);
 }
 
 /* the 3.1 SDK's LockWindowUpdate: drawing to the window is suppressed;

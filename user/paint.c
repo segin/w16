@@ -362,7 +362,9 @@ HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
         SetRectRgn(upd, 0, 0, 0, 0);
     erase = (w->flags & WF_ERASEBKGND) != 0;
     validate_all(w);
-    ps->hdc = get_dc(h, FALSE, upd, 0);
+    /* USER's own controls paint in their own area, as they did before
+       GetDC gave them their parent's (CS_PARENTDC, dc.c) */
+    ps->hdc = get_dc(h, FALSE, upd, ((PCLS)w->cls)->hModule == hModUser ? DCX_OWNCLIENT : 0);
     GetRgnBox(upd, &ps->rcPaint);
     OffsetRect(&ps->rcPaint, -w->rcClient.left, -w->rcClient.top);
     DeleteObject(upd);
@@ -401,9 +403,19 @@ void update_window(HWND h, BOOL children)
             EndPaint(h, &ps);
         }
     }
-    if (children && (w = valid_wnd(h)) != 0 && !(w->style & WS_MINIMIZE))
-        for (c = w->hwndChild; c; c = PW(c)->hwndNext)
+    /* the next sibling taken before each child paints, and the walk ended
+       if that one is gone or moved elsewhere: a WM_PAINT that destroyed
+       its window had the loop read the freed WND's link (USER audit,
+       sweep) */
+    if (children && (w = valid_wnd(h)) != 0 && !(w->style & WS_MINIMIZE)) {
+        HWND n;
+        for (c = w->hwndChild; c; c = n) {
+            n = PW(c)->hwndNext;
             update_window(c, TRUE);
+            if (n && (!valid_wnd(n) || PW(n)->hwndParent != h))
+                break;
+        }
+    }
 }
 
 void WINAPI UpdateWindow(HWND h)

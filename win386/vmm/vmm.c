@@ -635,6 +635,7 @@ int vmm_can_deliver(void)
 int vmm_deliver(u32 vec, int iret)
 {
     struct cregs *r = hw_r;
+    if (vm_trace && cur_vm != &sysvm) trace("(I%x%s)", vec, r && (r->eflags & EFL_IF) ? "" : "-");
     if (!r || !(r->eflags & EFL_IF)) return 0;
     if (r->eflags & EFL_VM) {
         if (cur_vm == &sysvm && dpmi_v86_hook(r, vec, 1)) {
@@ -857,6 +858,7 @@ void __cdecl trap(struct tframe *f)
     if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
         u32 irq = vec - IRQ_BASE;
         irq_count[irq]++;
+        if (vm_trace && irq == 1) trace("(K%d)", cur_vm->id);
         if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
         vpicd->hw_int(irq);
     } else if (vec == 13) {

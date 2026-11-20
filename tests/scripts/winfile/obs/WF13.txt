@@ -1,0 +1,46 @@
+; WF13: the Disk menu's boxes: Copy Disk (its confirmation, then Yes:
+; what follows without a disk in A:), Label Disk, Format Disk, Make
+; System Disk, Select Drive; each shot and dumped
+run WINFILE.EXE
+wait 4000
+cmd 201
+wait 1000
+snap C:\N01.BMP
+dump
+alt y
+wait 2500
+snap C:\N02.BMP
+dump
+key 0D
+wait 2000
+snap C:\N03.BMP
+dump
+key 1B
+wait 1500
+cmd 202
+wait 1000
+snap C:\N04.BMP
+dump
+key 1B
+wait 1000
+cmd 203
+wait 1000
+snap C:\N05.BMP
+dump
+key 1B
+wait 1000
+cmd 204
+wait 1000
+snap C:\N06.BMP
+dump
+key 1B
+wait 1000
+cmd 251
+wait 1000
+snap C:\N07.BMP
+dump
+key 1B
+wait 1000
+snap C:\N08.BMP
+close
+wait 2500

@@ -86,6 +86,9 @@ Boot-test settings:
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
 Other test scripts, each documented at its top: `tests/npscenarios.sh`,
+`tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
+Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
+`; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
@@ -135,8 +138,9 @@ QuickTime-installed drive, also QuickTime's MCIQTW.DRV; one run alone:
 `tests/mmsystem/mcirun.sh OUT ms|w16 SCRIPT [plain|shim|qt]`; part
 `mci`), `tests/qtplay.sh` (QuickTime for Windows 2.1.2 installed and
 its sample movie played on w16's tree laid over 3.1, against stock 3.1,
-then the player closed, reopened and ended with File > Exit and Alt+F4
-and Windows ended (the close sequence); `-T 286` or `-T 386`: on w16's
+then the player closed, reopened, its movie's window dragged while it
+plays, and ended with File > Exit and Alt+F4 and Windows ended (the close
+sequence); `-T 286` or `-T 386`: on w16's
 install tree alone as C:\W16 instead, under its KRNL286 or KRNL386;
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;

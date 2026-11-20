@@ -5,7 +5,7 @@
 ;
 ; Contents:
 ;   kernel_entry     NE entry point, called by the bootstrap
-;   int21_handler    protected-mode INT 21h hook (task termination)
+;   int21_handler    protected-mode INT 21h hook (task termination, FileCdr)
 ;   int3d_handler    protected-mode INT 3Dh: FWAIT (floating-point fixups)
 ;   _task_switch     switch stacks between tasks (the scheduler, task.c)
 ;   task_tramp       first code a new task runs (from its first switch)
@@ -39,6 +39,8 @@ extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
 extern _int_vec_cur             ; task.c: the vectors installed (TDB 32h)
 extern _dos_exit_note           ; fault.c
 extern _task_signal_exit        ; task.c
+extern _filecdr_proc            ; kmisc.c: FileCdr's callback (0: none)
+extern _filecdr_notify          ; kmisc.c
 
 segment _DATA
 global _old21
@@ -106,9 +108,12 @@ int21_handler:
         pop word [_i21_ring + bx + 6 wrt DGROUP]        ; IP
         push word [bp + 8]
         pop word [_i21_ring + bx + 8 wrt DGROUP]        ; CS
+        cmp word [_filecdr_proc + 2 wrt DGROUP], 0      ; FileCdr's callback?
         pop bp
         pop bx
         pop ds
+        jne cdr_check
+cdr_none:
         cmp ah, 4Ch
         je .exit
         cmp ah, 1Ah
@@ -225,6 +230,91 @@ int21_handler:
         pop ds
         pop bp
         retf                            ; to the old handler; IRET frame intact
+
+; With a FileCdr callback installed (kmisc.c): the calls that change the
+; file system (observed on 3.1, TK64: 39h, 3Ah, 3Ch, 41h, 4301h, 56h, 5Ah,
+; 5Bh, 6Ch) go to DOS from here, and when DOS succeeds filecdr_notify
+; calls the callback with the caller's AX and the path (DS:DX; DS:SI for
+; 6Ch), in the caller's task and on its stack. The caller gets DOS's
+; registers and arithmetic flags. Everything else goes on as before.
+cdr_check:
+        cmp ah, 3Ch
+        je .do
+        cmp ah, 41h
+        je .do
+        cmp ax, 4301h
+        je .do
+        cmp ah, 39h
+        je .do
+        cmp ah, 3Ah
+        je .do
+        cmp ah, 56h
+        je .do
+        cmp ah, 5Ah
+        je .do
+        cmp ah, 5Bh
+        je .do
+        cmp ah, 6Ch
+        jne cdr_none
+.do:
+        push bp
+        mov bp, sp                      ; [bp+2] IP, [bp+4] CS, [bp+6] FLAGS
+        push ax                         ; [bp-2] the code
+        push ds                         ; [bp-4] the path
+        push dx                         ; [bp-6]
+        cmp ah, 6Ch
+        jne .dos
+        mov [bp-6], si
+.dos:
+        ; INT 21h to the previous handler: an IRET frame back to .back
+        push word [bp+6]
+        push cs
+        push .back
+        sub sp, 4                       ; room for the far jump target
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [_old21 wrt DGROUP]
+        mov [bp+2], ax
+        mov ax, [_old21+2 wrt DGROUP]
+        mov [bp+4], ax
+        pop ax
+        pop ds
+        pop bp
+        retf
+.back:
+        jc .ret                         ; failed: nothing changed
+        pushf
+        pusha
+        push ds
+        push es
+        mov ax, DGROUP
+        mov ds, ax
+        push word [bp-4]
+        push word [bp-6]
+        push word [bp-2]
+        cld
+        call far _filecdr_notify        ; void __cdecl filecdr_notify(u16, char far *)
+        add sp, 6
+        pop es
+        pop ds
+        popa
+        popf
+.ret:
+        ; DOS's arithmetic flags (OF SF ZF AF PF CF) into the caller's
+        push ax
+        pushf
+        pop ax
+        and ax, 08D5h
+        and word [bp+6], 0F72Ah
+        or [bp+6], ax
+        pop ax
+        mov sp, bp
+        pop bp
+        iret
 
 ; ---------------------------------------------------------------------------
 ; void __cdecl task_switch(u16 far *save, u16 ss, u16 sp)

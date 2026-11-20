@@ -1,0 +1,12 @@
+; WF12: Program Manager below, File Manager above (placed), for dragging
+; a file into a group: the windows' places
+run PROGMAN.EXE
+wait 4000
+place Progman 0 240 640 240
+wait 1000
+run WINFILE.EXE
+wait 4000
+place WFS_Frame 0 0 640 240
+wait 1500
+snap C:\M01.BMP
+dump

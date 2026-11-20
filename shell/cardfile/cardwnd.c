@@ -270,6 +270,11 @@ LRESULT CALLBACK __export EditWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (g_pic.kind != PIC_NONE) {
             /* the caret goes over the picture, as in the original */
             HDC dc = GetDC(w);
+            RECT cr;
+            /* the edit control's DC is its parent's area (CS_PARENTDC, as
+               on 3.1): the picture kept inside the card */
+            GetClientRect(w, &cr);
+            IntersectClipRect(dc, 0, 0, cr.right, cr.bottom);
             HideCaret(w);
             pic_draw(dc, 0, 0);
             ShowCaret(w);

@@ -436,6 +436,16 @@ void __cdecl vkd_api(struct vregs *r)
     if ((c->eax & 0xFFFF) == 0) {
         c->eax = (c->eax & 0xFFFF0000u) | 0x0200;
         c->eflags &= ~VF_CF;
+    } else if ((c->eax & 0xFFFF) == 1 && c->ebx) {
+        /* 1: a key into VM EBX, CH the scan code, CL the count (WINOA386
+         * passes on the keys its window gets for a DOS VM that does not
+         * have the keyboard, e.g. Tab's or Esc's release after a switch;
+         * Windows 3.1: AX back 1, carry clear) */
+        vu32 n = c->ecx & 0xFF, b = (c->ecx >> 8) & 0xFF;
+        if (!n) n = 1;
+        while (n--) q_put(c->ebx, b);
+        present(c->ebx);
+        c->eflags &= ~VF_CF;
     } else
         c->eflags |= VF_CF;
 }

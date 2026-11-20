@@ -49,7 +49,11 @@ static void show_list(HWND h, PCB c, BOOL show)
     if (show) {
         GetWindowRect(h, &r);
         notify(h, CBN_DROPDOWN);
-        /* its top line on the box's bottom line (US4) */
+        /* its top line on the box's bottom line (US4); a CBS_DROPDOWN's 8
+           in from the left, as a simple one's (US32: 112 wide under a box
+           of 120; a CBS_DROPDOWNLIST's is as wide as the box) */
+        if (kind(h) == CBS_DROPDOWN)
+            r.left += 8;
         set_window_pos(c->list, HWND_TOP, r.left, r.top + EH(c) - 1,
                        r.right - r.left, c->droph, SWP_SHOWWINDOW | SWP_NOACTIVATE);
         SetCapture(h);
@@ -61,18 +65,46 @@ static void show_list(HWND h, PCB c, BOOL show)
     InvalidateRect(h, NULL, FALSE);
 }
 
+/* item i's text in a block of its own, NULL if no memory; "" for no
+   item. An item can be 7FFFh characters long: copied into a 256-byte
+   stack buffer, as it was, a long one ran over the stack (USER audit,
+   item 7; US29 cb: 300 characters). item_free gives it back. */
+static LPSTR item_text(PCB c, int i)
+{
+    LONG n = i < 0 ? 0 : send_message(c->list, LB_GETTEXTLEN, i, 0);
+    HGLOBAL g;
+    LPSTR p;
+    if (n < 4)
+        n = 4;                  /* an owner-drawn item's data: 4 bytes */
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n + 1);
+    if (!g)
+        return NULL;
+    p = (LPSTR)GlobalLock(g);
+    if (i >= 0)
+        send_message(c->list, LB_GETTEXT, i, (LPARAM)p);
+    p[n] = 0;
+    return p;
+}
+
+static void item_free(LPSTR p)
+{
+    HGLOBAL g;
+    if (!p)
+        return;
+    g = (HGLOBAL)LOWORD(GlobalHandle(SELECTOROF(p)));
+    GlobalUnlock(g);
+    GlobalFree(g);
+}
+
 static void sel_to_edit(HWND h, PCB c)
 {
     int i = (int)send_message(c->list, LB_GETCURSEL, 0, 0);
-    char buf[256];
-    if (i < 0)
-        buf[0] = 0;
-    else
-        send_message(c->list, LB_GETTEXT, i, (LPARAM)(LPSTR)buf);
+    LPSTR t = item_text(c, i);
     if (c->edit) {
-        SetWindowText(c->edit, buf);
+        SetWindowText(c->edit, t ? t : "");
         send_message(c->edit, EM_SETSEL, 0, MAKELONG(0, -1));
     }
+    item_free(t);
     InvalidateRect(h, NULL, FALSE);
 }
 
@@ -142,16 +174,15 @@ static void paint(HWND h, PCB c, HDC hdc)
             send_message(GetParent(h), WM_DRAWITEM, di.CtlID, (LPARAM)(DRAWITEMSTRUCT __far *)&di);
         } else if (kind(h) == CBS_DROPDOWNLIST) {
             int i = (int)send_message(c->list, LB_GETCURSEL, 0, 0);
-            char buf[256];
+            LPSTR buf = item_text(c, i);
             RECT t;
             SetRect(&t, 1, 1, c->button.left - 1, c->itemh + 3);
-            buf[0] = 0;
-            if (i >= 0)
-                send_message(c->list, LB_GETTEXT, i, (LPARAM)(LPSTR)buf);
             FillRect(hdc, &t, sysbrush[c->focus ? COLOR_HIGHLIGHT : COLOR_WINDOW]);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, syscolor[c->focus ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
-            TextOut(hdc, 3, (EH(c) - c->itemh) / 2 - 1, buf, lstr_len(buf));  /* US4 */
+            if (buf)
+                TextOut(hdc, 3, (EH(c) - c->itemh) / 2 - 1, buf, lstr_len(buf));  /* US4 */
+            item_free(buf);
             if (c->focus)
                 DrawFocusRect(hdc, &t);
         }
@@ -196,9 +227,10 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             calc_client(w);
         }
         c->itemh = cySysChar;
-        c->droph = cs->cy - (EH(c));
-        if (c->droph < c->itemh * 2)
-            c->droph = c->itemh * 4 + 2;
+        /* the list from the box's bottom line to the height asked for,
+           then whole items (listbox.c; US32: 30, 60, 100, 157 asked gave
+           lists 2, 34, 66, 130 high, items of 16; no least height) */
+        c->droph = cs->cy - EH(c) + 1;
         if (kind(h) != CBS_DROPDOWNLIST)
             c->edit = create_window(0, "Edit", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER |
                                     ((s & CBS_AUTOHSCROLL) ? ES_AUTOHSCROLL : 0),
@@ -283,8 +315,14 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             if (PtInRect(&lr, pt)) {
                 ScreenToClient(c->list, &pt);
                 send_message(c->list, WM_LBUTTONDOWN, wp, MAKELONG(pt.x, pt.y));
+                /* the parent may have destroyed the combo box on the
+                   list's notification (USER audit, sweep) */
+                if (!valid_wnd(h) || cb_of(h) != c)
+                    return 0;
                 sel_to_edit(h, c);
                 notify(h, CBN_SELCHANGE);
+                if (!valid_wnd(h) || cb_of(h) != c)
+                    return 0;
             }
             show_list(h, c, FALSE);
             notify(h, CBN_CLOSEUP);
@@ -331,14 +369,22 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             return send_message(c->edit, msg, wp, lp);
         if (msg == WM_GETTEXT || msg == WM_GETTEXTLENGTH) {
             int i = (int)send_message(c->list, LB_GETCURSEL, 0, 0);
-            char buf[256];
-            buf[0] = 0;
-            if (i >= 0)
-                send_message(c->list, LB_GETTEXT, i, (LPARAM)(LPSTR)buf);
+            LPSTR buf;
+            LONG n;
+            /* a CBS_DROPDOWNLIST's (US29 cb on 3.1): WM_GETTEXTLENGTH is
+               -1 whatever is selected; WM_GETTEXT copies what fits and
+               returns the text's length, or the buffer's size when it
+               was cut (20 for 19 characters of 300) */
             if (msg == WM_GETTEXTLENGTH)
-                return lstr_len(buf);
+                return -1;
+            if ((int)wp <= 0 || GP_BAD((LPSTR)lp))
+                return 0;
+            if ((buf = item_text(c, i)) == NULL)
+                return 0;
             lstr_cpyn((LPSTR)lp, buf, wp);
-            return lstr_len((LPSTR)lp);
+            n = lstr_len(buf);
+            item_free(buf);
+            return n < (LONG)(int)wp ? n : (LONG)(int)wp;
         }
         return 0;
     /* ---- CB_ messages: most are the list's ---- */

@@ -1,0 +1,20 @@
+; WF01: the first start (no WINFILE.INI): the frame, a directory window
+; on C:\WINDOWS, the status bar; the View menu's checks; the status bar
+; off and on; File Manager closed (the WINFILE.INI it leaves)
+run WINFILE.EXE
+wait 5000
+snap C:\S01.BMP
+dump
+menu v
+wait 800
+snap C:\S02.BMP
+key 1B
+key 1B
+wait 300
+cmd 503
+wait 1000
+snap C:\S03.BMP
+cmd 503
+wait 1000
+close
+wait 2500

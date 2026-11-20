@@ -1,0 +1,54 @@
+; WF07: the view and option dialogs on C:\WFTEST: Partial Details (Size
+; off), By File Type (Directories and Other Files off, then *.TXT),
+; Confirmation (File Delete off), Font (10 points, Lowercase off); the
+; WINFILE.INI they leave
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+cmd 403
+wait 1000
+snap C:\S01.BMP
+clickid cb
+wait 300
+key 0D
+wait 1000
+snap C:\S02.BMP
+cmd 409
+wait 1000
+snap C:\S03.BMP
+clickid 65
+clickid d4
+wait 300
+key 0D
+wait 1500
+snap C:\S04.BMP
+cmd 409
+wait 1000
+type *.TXT
+clickid 65
+clickid d4
+wait 300
+snap C:\S05.BMP
+key 0D
+wait 1500
+snap C:\S06.BMP
+cmd 501
+wait 1000
+snap C:\S07.BMP
+clickid db
+wait 300
+key 0D
+wait 800
+cmd 510
+wait 1500
+snap C:\S08.BMP
+cbsel 472 1
+clickid 412
+wait 800
+snap C:\S09.BMP
+key 0D
+wait 1500
+snap C:\S10.BMP
+close
+wait 2500

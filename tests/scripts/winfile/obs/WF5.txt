@@ -1,0 +1,55 @@
+; WF5: focus and selection. Start (tree focused); Tab to the file list,
+; Tab to the drive bar, Tab back to the tree; Down in the file list;
+; All File Details and back to Name with the list focused; Down in the
+; tree with the list's selection; Indicate Expandable Branches and Save
+; Settings on Exit toggled, then closed (which INI keys); a frame resized
+; (the status bar's boxes)
+run WINFILE.EXE
+wait 4000
+snap C:\E01.BMP
+focus
+key 09
+wait 600
+snap C:\E02.BMP
+focus
+key 09
+wait 600
+snap C:\E03.BMP
+focus
+key 09
+wait 600
+snap C:\E04.BMP
+focus
+key 09
+wait 400
+key 28
+wait 600
+snap C:\E05.BMP
+cmd 402
+wait 800
+snap C:\E06.BMP
+cmd 401
+wait 800
+snap C:\E07.BMP
+key 09
+key 09
+wait 400
+focus
+key 26
+wait 1200
+snap C:\E08.BMP
+key 09
+wait 600
+snap C:\E09.BMP
+movewin 20 10 500 400
+wait 1000
+snap C:\E10.BMP
+movewin 0 0 400 300
+wait 1000
+snap C:\E11.BMP
+cmd 505
+wait 300
+cmd 511
+wait 300
+close
+wait 2500

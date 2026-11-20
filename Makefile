@@ -38,15 +38,18 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63
+# TK65's import DLLs (TK65IMP below)
+TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE \
-            TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL
+            TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL \
+            TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I)
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -69,7 +72,7 @@ dos: $(DOS)/KRNL286.EXE $(DOS)/KRNL386.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) $(DOS)/PENWIN.DLL $(DOS)/MS1.COM \
-     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/XM1.COM $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -578,6 +581,43 @@ $(DOS)/TKWB.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tkwb.o tests/apps/dll.lnk 
 $(DOS)/TKDG.DLL: tools/mkne.py
 	@mkdir -p $(@D)
 	python3 tools/mkne.py $@ --module TKDG --dgroup 0x100
+# TK64.EXE: KERNEL's FileCdr (tests/apps/tk64.c); TK64A.EXE, the task it
+# starts. Its callback runs on other tasks' stacks: SS != DS (-zu).
+$(B)/tests/tk64.o: tests/apps/tk64.c tests/apps/tk64ref.h tests/apps/tklog.h tests/apps/tk64.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -zu -fo=$@ $<
+$(B)/tests/tk64a.o: tests/apps/tk64.h
+$(DOS)/TK64.EXE: $(B)/tests/start.o $(B)/tests/tk64.o $(B)/tests/tk64s.o tests/apps/app.lnk tests/apps/tk64.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk64.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk64.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk64.o $(B)/tests/tk64s.o }
+# TK64M, TK64O, TK64P: the same program, one case each (its file name)
+$(DOS)/TK64M.EXE $(DOS)/TK64O.EXE $(DOS)/TK64P.EXE: $(DOS)/TK64.EXE
+	cp $< $@
+$(DOS)/TK64A.EXE: $(B)/tests/start.o $(B)/tests/tk64a.o tests/apps/app.lnk tests/apps/tk64.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk64.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk64a.map file { $(B)/tests/start.o $(B)/tests/tk64a.o }
+# TK65.EXE: GetProcAddress and imports by name (tests/apps/tk65.c);
+# TK65D.DLL, exports in every case; TK65I1-9.DLL, each importing one of
+# them by the name at the same place in TK65IMP (and in tk65.c's imp[])
+TK65IMP := MixedRes MIXEDRES upperres MixedNr mixednr uppernr UPPERRES lowerres \#4
+$(B)/tests/tk65.o: tests/apps/tk65ref.h tests/apps/tklog.h
+$(DOS)/TK65.EXE: $(B)/tests/start.o $(B)/tests/tk65.o tests/apps/app.lnk tests/apps/tk65.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk65.map file { $(B)/tests/start.o $(B)/tests/tk65.o }
+$(DOS)/TK65D.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tk65d.o tests/apps/dll.lnk tests/apps/tk65d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk65d.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tk65d.o }
+$(TK65I:%=$(DOS)/%): $(DOS)/TK65I%.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tk65i.o tests/apps/dll.lnk tests/apps/tk65i.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65i.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option modname=TK65I$* \
+	    import TKIMP TK65D.\'$(word $*,$(TK65IMP))\' \
+	    option map=$(B)/tests/tk65i$*.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tk65i.o }
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk
@@ -787,6 +827,13 @@ $(DOS)/TW2.EXE: $(B)/tests/start.o $(B)/tests/tw2.o tests/apps/app.lnk tools/nem
 	    option map=$(B)/tests/tw2.map file { $(B)/tests/start.o $(B)/tests/tw2.o }
 	python3 tools/nemark.py $@ 2.0
 
+# FMX.DLL (module FMX0): the File Manager extension probe (tests/apps/fmx.c,
+# tests/wfext.sh); copies FMX1.DLL ... are renamed by tools/nerename.py
+dos: $(DOS)/FMX.DLL
+$(DOS)/FMX.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o tests/apps/dll.lnk tests/apps/fmx.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fmx.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/fmx.map file { $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o }
 # SNAP.EXE: its icon (tools/snapicon.py) and the interactive window
 $(B)/tests/snap.ico: tools/snapicon.py tools/mkicons.py
 	@mkdir -p $(@D)
@@ -853,6 +900,11 @@ $(DOS)/DXD.COM: tests/dos/dxd.asm tests/dos/dxlib.inc
 $(DOS)/DX%.COM: tests/dos/dx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -I tests/dos/ -o $@ $<
+
+# XM1.COM: what the XMS driver reports (08h, 88h, 89h; boot-test bigmem notes)
+$(DOS)/XM1.COM: tests/dos/xm1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 
 # TK18.COM: the DOSX -> KRNL286 contract probe (runs as SYSTEM\KRNL286.EXE)
 $(DOS)/TK18.COM: tests/dos/tk18.asm
@@ -1000,6 +1052,8 @@ $(DOS)/VXS.386: tests/vxd/vxs.asm tests/vxd/vxs.lnk
 	$(NASM) -f obj -o $(B)/tests/vxs.o tests/vxd/vxs.asm
 	$(NASM) -f obj -DSVCHOOK -o $(B)/tests/vxsh.o tests/vxd/vxs.asm
 	$(WLINK) @tests/vxd/vxs.lnk name $(DOS)/VXSH.386 file $(B)/tests/vxsh.o
+	$(NASM) -f obj -DALLVM -o $(B)/tests/vxss.o tests/vxd/vxs.asm
+	$(WLINK) @tests/vxd/vxs.lnk name $(DOS)/VXSS.386 file $(B)/tests/vxss.o
 	$(WLINK) @tests/vxd/vxs.lnk name $@ file $(B)/tests/vxs.o
 $(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
@@ -1228,6 +1282,33 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 	$(WLINK) @shell/write/write.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/shell/write/write.map \
 	    option resource=$(B)/shell/write/write.res file { $(SHELL_WR) }
+	python3 tools/nemark.py $@ 3.10
+
+# ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
+# 3.1 only ----
+WF_C     := main ini treewin drives tree dir dialogs fileops assoc search dnd disk ext bitmap util
+SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
+shell: $(DOS)/WINFILE.EXE
+$(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/winfile/dosfn.o: shell/winfile/dosfn.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/winfile/winfile.ico: tools/mkwfileicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkwfileicon.py $(@D)
+$(B)/shell/winfile/wfstrip.bmp: tools/mkwfbmp.py
+	@mkdir -p $(@D)
+	python3 tools/mkwfbmp.py $@
+$(B)/shell/winfile/winfile.res: shell/winfile/winfile.rc shell/winfile/winfile.h \
+    $(B)/shell/winfile/winfile.ico $(B)/shell/winfile/wfstrip.bmp tools/mkwfileicon.py
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/winfile -i=$(B)/shell/winfile -fo=$@ $<
+$(DOS)/WINFILE.EXE: $(SHELL_WF) $(B)/shell/winfile/winfile.res shell/winfile/winfile.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/winfile/winfile.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/winfile/winfile.map \
+	    option resource=$(B)/shell/winfile/winfile.res file { $(SHELL_WF) }
 	python3 tools/nemark.py $@ 3.10
 # WRMET.EXE: probe WR9, the font metrics Write's layout depends on
 dos: $(DOS)/WRMET.EXE
@@ -1617,6 +1698,12 @@ all: install-tree
 $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# File Manager (shell/winfile/): WINDOWS\WINFILE.EXE, as in 3.1
+W16TREE += $(W16)/WINFILE.EXE
+install-tree: $(W16)/WINFILE.EXE
+$(W16)/WINFILE.EXE: $(DOS)/WINFILE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1
 W16TREE += $(W16)/WRITE.EXE
 install-tree: $(W16)/WRITE.EXE
@@ -1645,7 +1732,7 @@ $(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
 	@mkdir -p $(@D)
 	cp $< $@
 GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/CONTROL.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE \
-             $(DOS)/WRITE.EXE
+             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE
 groups: $(GRP_ICONS)
 	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
 grpcheck: $(GRP_ICONS)
@@ -1670,6 +1757,13 @@ $(W16SYS)/VGACOLOR.2GR: $(DOS)/VGACOLOR.2GR
 	cp $< $@
 install-tree: $(W16SYS)/VGA.3GR
 $(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
+	@mkdir -p $(@D)
+	cp $< $@
+# 386 Enhanced mode (win386/; ARCHITECTURE.md 12): WIN /3. Its built-in
+# devices load from SYSTEM.INI's [386Enh] *names (assets/SYSTEM.INI);
+# DOS programs there still need the user's WINOA386.MOD (assets/README.TXT)
+install-tree: $(W16SYS)/WIN386.EXE
+$(W16SYS)/WIN386.EXE: $(W386)/WIN386.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 
@@ -1884,6 +1978,83 @@ $(DOS)/US28.EXE: $(B)/tests/start.o $(B)/tests/us28.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us28.map file { $(B)/tests/start.o $(B)/tests/us28.o }
 dos: $(DOS)/US28.EXE
+# US31: a window dragged by its caption while timers, posted messages and
+# a WH_GETMESSAGE hook that keeps posting (QuickTime's) go on (tests/apps/us31.c)
+$(B)/tests/us31.o: tests/apps/us31ref.h tests/apps/tklog.h
+$(DOS)/US31.EXE: $(B)/tests/start.o $(B)/tests/us31.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31.map file { $(B)/tests/start.o $(B)/tests/us31.o }
+dos: $(DOS)/US31.EXE
+$(B)/tests/us31b.o: tests/apps/us31.c tests/apps/us31ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -DUS31_OTHER -fo=$@ tests/apps/us31.c
+$(DOS)/US31B.EXE: $(B)/tests/start.o $(B)/tests/us31b.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us31b.map file { $(B)/tests/start.o $(B)/tests/us31b.o }
+dos: $(DOS)/US31B.EXE
+# US29: the USER audit's probe (tests/apps/us29.c; docs/notes/user-audit-triage.md),
+# its helper task US29A (us29a.c) and DLL US29D (us29d.c)
+$(B)/tests/us29.o: tests/apps/us29ref.h tests/apps/tklog.h
+$(DOS)/US29.EXE: $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us29.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29.map file { $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+$(DOS)/US29A.EXE: $(B)/tests/start.o $(B)/tests/us29a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29a.map file { $(B)/tests/start.o $(B)/tests/us29a.o }
+$(DOS)/US29D.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o tests/apps/dll.lnk tests/apps/us29d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us29d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us29d.map file { $(B)/tests/dllstart.o $(B)/tests/dll/us29d.o }
+dos: $(DOS)/US29.EXE $(DOS)/US29A.EXE $(DOS)/US29D.DLL
+# US30: where 3.1 calls the hooks (tests/apps/us30.c; USER audit, item 8)
+$(B)/tests/us30.o: tests/apps/us30ref.h tests/apps/tklog.h
+$(B)/tests/us30.res: tests/apps/us30.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US30.EXE: $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us30.res tests/apps/app.lnk tests/apps/us30.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us30.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us30.map option resource=$(B)/tests/us30.res \
+	    file { $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US30.EXE
+# US32: a list box's height and where it draws a partly shown item
+# (tests/apps/us32.c; QuickTime's Control Panel)
+$(B)/tests/us32.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(B)/tests/us32.res: tests/apps/us32.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US32.EXE: $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us32.res tests/apps/app.lnk tests/apps/us32.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us32.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us32.map option resource=$(B)/tests/us32.res \
+	    file { $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US32.EXE
+# US33: how a list box draws (owner-drawn), GetDC(NULL), LB_SETTABSTOPS,
+# child dialogs' frames (tests/apps/us33.c)
+$(B)/tests/us33.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(B)/tests/us33.res: tests/apps/us33.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US33.EXE: $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us33.res tests/apps/app.lnk tests/apps/us33.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us33.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us33.map option resource=$(B)/tests/us33.res \
+	    file { $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US33.EXE
+# US32S: a window spy for US32's question (tests/apps/us32s.c)
+$(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us32s.map file { $(B)/tests/start.o $(B)/tests/us32s.o }
+dos: $(DOS)/US32S.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk

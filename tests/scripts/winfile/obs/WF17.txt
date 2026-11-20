@@ -1,0 +1,105 @@
+; WF17: one extension (FMX1): two files selected in the list and FMX's
+; Query (FM_GETFILESEL past the count); Search for *.TXT from
+; C:\WFTEST\ALPHA and the queries in Search Results (keys, SELCHANGE),
+; F5 there; the tree at C:\ (the root) and its drive info; the
+; directory window minimised; the File Manager window maximised and
+; FMX1's menu. (WF17's first try: FMX wrote its log on C:, which brought up
+; Search Results' "The contents of this drive have changed" box.)
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; fmx: FMX1
+run WINFILE.EXE
+wait 5000
+append C:\FMX.LOG == started
+key 09
+wait 300
+key 23
+wait 500
+kdown 10
+key 26
+kup 10
+wait 800
+append C:\FMX.LOG == Query (list, 2 selected)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Search *.TXT in C:\WFTEST\ALPHA
+cmd 104
+wait 1000
+type *.TXT
+key 09
+wait 200
+type C:\WFTEST\ALPHA
+key 0D
+wait 4000
+snap C:\Z01.BMP
+focus
+append C:\FMX.LOG == Query (search)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Down
+key 28
+wait 800
+append C:\FMX.LOG == Shift+Down
+kdown 10
+key 28
+kup 10
+wait 800
+append C:\FMX.LOG == Query (search, 2)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == F5 in search
+key 74
+wait 2000
+snap C:\Z02.BMP
+append C:\FMX.LOG == click in search
+mclick 100 120
+wait 1000
+append C:\FMX.LOG == close search
+childcmd F060
+wait 1500
+snap C:\Z03.BMP
+append C:\FMX.LOG == Query (dir window again)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == tree: Home (C:\), Query
+key 09
+wait 300
+key 09
+wait 300
+focus
+key 24
+wait 1500
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == minimise the window, Query
+childcmd F020
+wait 1500
+menu 1
+wait 300
+key 51
+wait 1500
+snap C:\Z04.BMP
+append C:\FMX.LOG == maximise the frame, FMX1 menu
+syscmd F030
+wait 1500
+menu 1
+wait 800
+snap C:\Z05.BMP
+key 1B
+key 1B
+wait 500
+append C:\FMX.LOG == close
+close
+wait 3000
+append C:\FMX.LOG == end

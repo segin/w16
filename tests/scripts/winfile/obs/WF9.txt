@@ -1,0 +1,44 @@
+; WF9: the split. Its bar dragged with the mouse from x 259 to 150 (a
+; shot while held), released; View > Split, Left arrow 5 times (a shot),
+; Enter; View > Split, Right arrow 3 times, Escape; the cursor over the
+; bar; what the INI keeps
+run WINFILE.EXE
+wait 4000
+mmove 259 200
+wait 300
+cursor
+mdown 259 200
+mmove 200 200
+mmove 150 200
+wait 500
+snap C:\J01.BMP
+cursor
+mup 150 200
+wait 1000
+snap C:\J02.BMP
+cmd 414
+wait 800
+snap C:\J03.BMP
+cursor
+key 25
+key 25
+key 25
+key 25
+key 25
+wait 500
+snap C:\J04.BMP
+key 0D
+wait 1000
+snap C:\J05.BMP
+cmd 414
+wait 800
+key 27
+key 27
+key 27
+wait 500
+snap C:\J06.BMP
+key 1B
+wait 1000
+snap C:\J07.BMP
+close
+wait 2500

@@ -206,11 +206,20 @@ BOOL WINAPI IsMenu(HMENU h)
    shell, renames File > Exit Windows... (id 6Ch) to E&xit with
    ModifyMenu by command, and w16's search found the File popup itself,
    handle 6Ch, first - the bar read "Exit" */
+static int find_cmd_in(HMENU h, UINT what, BOOL popups, HMENU *owner, int depth);
+
 static int find_cmd(HMENU h, UINT what, BOOL popups, HMENU *owner)
+{
+    return find_cmd_in(h, what, popups, owner, 0);
+}
+
+/* popups at most 16 deep: a menu inside itself recursed until the stack
+   ran out (USER audit, sweep; DestroyMenu already stops there) */
+static int find_cmd_in(HMENU h, UINT what, BOOL popups, HMENU *owner, int depth)
 {
     LPMENU m = valid_menu(h);
     UINT i;
-    if (!m)
+    if (!m || depth > 16)
         return -1;
     for (i = 0; i < m->count; i++) {
         LPMITEM it = item_at(m, i);
@@ -220,7 +229,7 @@ static int find_cmd(HMENU h, UINT what, BOOL popups, HMENU *owner)
                 *owner = h;
                 return i;
             }
-            r = find_cmd((HMENU)it->id, what, popups, owner);
+            r = find_cmd_in((HMENU)it->id, what, popups, owner, depth + 1);
             if (r >= 0)
                 return r;
             m = valid_menu(h);
@@ -1496,6 +1505,10 @@ static void run_menu(MLOOP *l)
             PostQuitMessage(msg.wParam);
             break;
         }
+        /* WH_MSGFILTER (US30 filter on 3.1: MSGF_MENU in TrackPopupMenu's
+           loop); nonzero: the hook has dealt with it */
+        if (CallMsgFilter(&msg, MSGF_MENU))
+            continue;
         /* TPM_RIGHTBUTTON (3.1 SDK: the menu tracks the right button):
            right presses and releases act as left ones */
         if (l->rbutton)

@@ -166,8 +166,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
            place from the image, and the box stayed on screen) */
         if (wasvis)
             restored = savebits_restore(h, &oldwin);
-        if (h == hwndFocus || IsChild(h, hwndFocus))
+        if (h == hwndFocus || IsChild(h, hwndFocus)) {
             set_focus(0);
+            /* WM_KILLFOCUS can destroy it (USER audit, sweep) */
+            if (!(w = valid_wnd(h)))
+                return TRUE;
+        }
         /* the active window hidden by SetWindowPos stays the active one
            (ShowWindow(SW_HIDE) moves the activation, see there) */
     }
@@ -263,8 +267,11 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!(w = valid_wnd(h)))
             return FALSE;
     }
-    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD))
+    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_NOACTIVATE) && !(w->style & WS_CHILD)) {
         activate_window(h, FALSE);
+        if (!(w = valid_wnd(h)))
+            return TRUE;
+    }
     /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
        DefMDIChildProc turns into the MDI child's activation (3.1, File
        Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
@@ -436,6 +443,20 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     if (!w)
         return FALSE;
     wasvis = (w->style & WS_VISIBLE) != 0;
+    /* WH_CBT's HCBT_MINMAX, the show command in lParam, when the window is
+       to be minimised, maximised or restored from either (US30 cbt on
+       3.1: 6, 3, 9; not for a show that changes neither); nonzero: nothing */
+    {
+        BOOL st = (cmd == SW_SHOWMINIMIZED || cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE) ?
+                  !(w->style & WS_MINIMIZE) :
+                  cmd == SW_SHOWMAXIMIZED ? !(w->style & WS_MAXIMIZE) :
+                  (cmd == SW_SHOWNORMAL || cmd == SW_RESTORE) ?
+                  (w->style & (WS_MINIMIZE | WS_MAXIMIZE)) != 0 : FALSE;
+        if (st && cbt_hook(HCBT_MINMAX, (WPARAM)h, cmd))
+            return wasvis;
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+    }
     switch (cmd) {
     case SW_HIDE:
         if (!wasvis)
@@ -523,6 +544,10 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             if (cmd == SW_MINIMIZE && h == hwndActive && (w = valid_wnd(h)) != 0 &&
                 !(w->style & WS_CHILD)) {
                 HWND t;
+                /* the focus goes first (US30 cbt on 3.1: SETFOCUS 0, then
+                   the next window's ACTIVATE and SETFOCUS) */
+                if (hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
+                    set_focus(0);
                 set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 t = next_to_activate(h);
                 if (t)
@@ -609,6 +634,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 send_message(h, WM_SIZE, SIZE_MAXIMIZED,
                              MAKELONG(w->rcClient.right - w->rcClient.left,
                                       w->rcClient.bottom - w->rcClient.top));
+            /* and active (3.1 SDK: SW_SHOWMAXIMIZED activates; US30 cbt on
+               3.1: SC_MAXIMIZE of an inactive window, MINMAX then its
+               ACTIVATE) */
+            if ((w = valid_wnd(h)) != 0 && !(w->style & WS_CHILD) && h != hwndActive)
+                activate_window(h, FALSE);
         } else if (!wasvis) {
             send_message(h, WM_SHOWWINDOW, TRUE, 0);
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW);
@@ -820,10 +850,16 @@ BOOL WINAPI OpenIcon(HWND h)
 
 void WINAPI ShowOwnedPopups(HWND h, BOOL show)
 {
-    HWND t;
-    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext)
+    HWND t, n;
+    /* the next one taken first; a ShowWindow that destroyed or moved
+       windows ends the walk (USER audit, sweep) */
+    for (t = PW(hwndDesktop)->hwndChild; t; t = n) {
+        n = PW(t)->hwndNext;
         if (PW(t)->hwndOwner == h)
             ShowWindow(t, show ? SW_SHOWNA : SW_HIDE);
+        if (n && (!valid_wnd(n) || PW(n)->hwndParent != hwndDesktop))
+            break;
+    }
 }
 
 /* ---- BeginDeferWindowPos, DeferWindowPos, EndDeferWindowPos (3.1 SDK):

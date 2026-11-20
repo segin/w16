@@ -264,7 +264,8 @@ static int take_switch_b(void)
 /* USER's FinalUserInit (USER.400, Pietrek) */
 static void final_user_init(void)
 {
-    u32 p = GetProcAddress(GetModuleHandle("USER"), "#400");
+    u16 u = GetModuleHandle("USER");
+    u32 p = u ? GetProcAddress(u, "#400") : 0;  /* (0 is the task's own) */
     if (p)
         ((void (__far __pascal *)(void))p)();
 }

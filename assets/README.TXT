@@ -5,6 +5,12 @@ This directory is laid out like a Windows 3.1 directory (the one that
 holds WIN.COM) and contains only what w16 builds (MIT licence, see the
 w16 repository's LICENSE):
 
+Start w16 with  WIN /S  (Standard mode) for now. On a 386, plain WIN
+starts 386 Enhanced mode, as Windows 3.1's does; w16's 386 Enhanced mode
+is newer, and its DOS programs (the MS-DOS Prompt) still need
+WINOA386.MOD from your own Windows 3.1 (see below). Standard mode needs
+nothing of Microsoft's.
+
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
@@ -13,6 +19,7 @@ w16 repository's LICENSE):
   CARDFILE.EXE            Cardfile (its help is CARDFILE.HLP)
   WRITE.EXE               Write (its help is WRITE.HLP)
   CONTROL.EXE             Control Panel
+  WINFILE.EXE             File Manager (its help is WINFILE.HLP)
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
@@ -36,6 +43,11 @@ w16 repository's LICENSE):
                           clipboard (PrintScreen)
   SYSTEM\VGA.3GR         the display grabber for 386 Enhanced mode
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
+  SYSTEM\WIN386.EXE       386 Enhanced mode (WIN /3): the virtual machine
+                          manager and its built-in virtual devices; it
+                          runs Windows and DOS programs in virtual
+                          machines (DOS programs full screen or in a
+                          window, Alt+Enter between them)
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
@@ -124,7 +136,7 @@ w16 repository's LICENSE):
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
-                            Panel)
+                            Panel, File Manager)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)
@@ -201,5 +213,18 @@ stamp on the desktop, Notepad's Ctrl+O/Ctrl+S keys and so on) can be
 switched back to Windows 3.1's behaviour there; the repository's
 docs/w16-settings.md lists every key.
 
+Memory: on a 386 or later w16 uses all the extended memory the XMS
+driver gives: in Standard mode all of it, in w16's 386 Enhanced mode up
+to 1 GB. With an XMS 3.0 driver it takes it in blocks of any size, so
+programs see one large free block (DPMI, GetFreeSpace); Windows 3.1
+takes blocks of at most 64 MB, and [w16] LargeMemory=0 in SYSTEM.INI
+does the same. Each block a program allocates is still at most 16 MB,
+as in Windows 3.1. On an 80286 Windows can use 16 MB at most.
+
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
-(WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
+(WIN /3, or WIN on a 386 with enough memory) uses w16's WIN386.EXE; the
+devices it loads are named in SYSTEM.INI's [386Enh] section. To run DOS
+programs in 386 Enhanced mode, copy WINOA386.MOD from your Windows 3.1
+SYSTEM directory into SYSTEM (w16 has no WINOA386.MOD of its own yet);
+Windows programs do not need it. Standard mode (WIN /S) needs nothing
+of Microsoft's.

@@ -7,7 +7,8 @@
 # install tree's README.TXT, opened by its association (WIN.INI
 # [Extensions] txt=notepad.exe), with Notepad's icon, as Setup's Read Me
 # names README.WRI and Write's icon; Control Panel (CONTROL.EXE, its own
-# icon), after them so that the items before keep their places. Commands
+# icon) and File Manager (WINFILE.EXE, its own icon), after them so that
+# the items before keep their places. Commands
 # and icon files are bare names, found in the w16 directory (or on the
 # PATH), as Setup writes them.
 file MAIN.GRP
@@ -18,3 +19,4 @@ min  -1 -1
 item MS-DOS Prompt | COMMAND.COM | PROGMAN.EXE 9
 item Read Me | README.TXT | NOTEPAD.EXE
 item Control Panel | CONTROL.EXE | CONTROL.EXE
+item File Manager | WINFILE.EXE | WINFILE.EXE

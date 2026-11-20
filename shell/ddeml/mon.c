@@ -5,15 +5,39 @@
  * the system-wide hooks (DdeSendHookProc, DdePostHookProc) that see DDE
  * messages for MF_SENDMSGS and MF_POSTMSGS.
  *
- * UNVERIFIED: 3.1's monitor blocks could not be read back by the probe
- * (DdeAccessData gave the same bytes for every event), so their contents
- * and the exact set of events are the documentation's
- * (ARCHITECTURE.md, chapter "DDEML").
+ * The events and their order are 3.1's as its monitors see them
+ * (tests/ddeml/scripts/monitor.dm, xmon.dm, xmon2.dm, xstr.dm;
+ * ARCHITECTURE.md, chapter "DDEML"): the blocks are data handles
+ * without a DDE header (their size: GlobalSize); string events include
+ * the library's own atom references (MH_ADDATOM, MH_INCATOM,
+ * MH_DECATOM); conversation and link blocks name both sides.
  */
 #include "ddeml.h"
 
 static HHOOK hk_send, hk_post;
 static BOOL inmon;
+
+/* the events go out in one block per monitor instance, made with the
+   instance: 3.1 makes no global block per event (its event handles
+   point into one block made at DdeInitialize), so the handles other
+   blocks get stay as they would be (monitor.dm as monitor+x). The
+   size a monitor sees is the event's rounded up to 32 bytes, as 3.1's */
+#define MONBLK 320                      /* the largest event: a string's */
+
+void mon_init(INST NEAR *in)
+{
+    in->monblk = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, MONBLK);
+}
+
+static HGLOBAL mon_block(INST NEAR *in, const void FAR *p, WORD n)
+{
+    void FAR *q;
+    if (!in->monblk || n > MONBLK || (q = GlobalLock(in->monblk)) == NULL)
+        return NULL;
+    bcopy(q, p, n);
+    GlobalUnlock(in->monblk);
+    return in->monblk;
+}
 
 static DWORD wanted(void)
 {
@@ -37,10 +61,12 @@ static void deliver(DWORD ev, const void FAR *p, WORD n)
         DATA NEAR *d;
         if (!(in->flags & IF_MONITOR) || !(in->afCmd & ev) || !in->dmg)
             continue;
-        h = data_block(in, p, n, TRUE, 0);
+        h = mon_block(in, p, n);
         if (!h)
             continue;
-        d = data_new(in, h, DF_USED, 0, 0);
+        d = data_new(in, h, DF_USED | DF_NOHEADER, 0, 0);
+        if (d)
+            d->size = ((DWORD)n + 31) & ~31L;
         hd = data_handle(d);
         {
             DWORD a[2];
@@ -50,7 +76,7 @@ static void deliver(DWORD ev, const void FAR *p, WORD n)
         }
         d = data_find(hd);
         if (d)
-            data_free(d, TRUE);
+            data_free(d, FALSE);        /* the block stays */
     }
     inmon = FALSE;
 }
@@ -70,13 +96,15 @@ void mon_hsz(INST NEAR *in, HSZ h, WORD action)
     if (!(wanted() & MF_HSZ_INFO))
         return;
     bzero(&b, sizeof b);
-    b.m.cb = sizeof(MONHSZSTRUCT);
     b.m.fsAction = action;
     b.m.dwTime = GetCurrentTime();
     b.m.hsz = h;
     b.m.hTask = GetCurrentTask();
     GlobalGetAtomName(LOWORD(h), b.m.str, 256);
-    deliver(MF_HSZ_INFO, &b, sizeof b.m + lstrlen(b.m.str));
+    /* 3.1's cb: the structure with its word padding (18) and the
+       string's length */
+    b.m.cb = 18 + lstrlen(b.m.str);
+    deliver(MF_HSZ_INFO, &b, b.m.cb);
 }
 
 void mon_msg(BOOL post, HWND to, UINT msg, WPARAM wp, LPARAM lp)
@@ -97,7 +125,8 @@ void mon_cb(INST NEAR *in, UINT type, UINT fmt, HCONV c, HSZ h1, HSZ h2, HDDEDAT
             DWORD d1, DWORD d2, DWORD ret)
 {
     MONCBSTRUCT m;
-    if (type == XTYP_MONITOR || (in && (in->flags & IF_MONITOR)) || !(wanted() & MF_CALLBACKS))
+    (void)in;
+    if (type == XTYP_MONITOR || !(wanted() & MF_CALLBACKS))
         return;
     bzero(&m, sizeof m);
     m.cb = sizeof m;
@@ -125,12 +154,15 @@ void mon_conv(CONV NEAR *c, BOOL connect)
     m.fConnect = connect;
     m.dwTime = GetCurrentTime();
     m.hTask = GetCurrentTask();
-    m.hszSvc = (HSZ)MAKELONG(c->svcpartner ? c->svcpartner : c->svcreq, 0);
+    m.hszSvc = (HSZ)MAKELONG(c->svcpartner ? c->svcpartner : c->svcreq ? c->svcreq : c->svcask, 0);
     m.hszTopic = (HSZ)MAKELONG(c->topic, 0);
-    if (c->status & ST_CLIENT)
+    if (c->status & ST_CLIENT) {
         m.hConvClient = conv_handle(c);
-    else
+        m.hConvServer = partner_handle(c, FALSE);
+    } else {
         m.hConvServer = conv_handle(c);
+        m.hConvClient = partner_handle(c, FALSE);
+    }
     deliver(MF_CONV, &m, sizeof m);
 }
 
@@ -145,15 +177,18 @@ void mon_link(CONV NEAR *c, LINK NEAR *l, BOOL est)
     m.hTask = GetCurrentTask();
     m.fEstablished = est;
     m.fNoData = (l->opts & 0x4000) != 0;
-    m.hszSvc = (HSZ)MAKELONG(c->svcreq, 0);
+    m.hszSvc = (HSZ)MAKELONG(c->svcpartner ? c->svcpartner : c->svcreq, 0);
     m.hszTopic = (HSZ)MAKELONG(c->topic, 0);
     m.hszItem = (HSZ)MAKELONG(l->item, 0);
     m.wFmt = l->fmt;
     m.fServer = !(c->status & ST_CLIENT);
-    if (m.fServer)
+    if (m.fServer) {
         m.hConvServer = conv_handle(c);
-    else
+        m.hConvClient = partner_handle(c, TRUE);
+    } else {
         m.hConvClient = conv_handle(c);
+        m.hConvServer = partner_handle(c, TRUE);
+    }
     deliver(MF_LINKS, &m, sizeof m);
 }
 
@@ -177,7 +212,14 @@ LRESULT FAR PASCAL __loadds DdeSendHookProc(int code, WPARAM wp, LPARAM lp)
 {
     if (code >= 0 && lp) {
         CWP FAR *c = (CWP FAR *)lp;
-        if (c->message >= WM_DDE_FIRST && c->message <= WM_DDE_LAST)
+        /* an INITIATE to an instance window is told after it was
+           handled, by that window (this library's) or by the client
+           (this library's client, another library's window): 3.1
+           (tests/ddeml/scripts/xmon2.dm) */
+        if (c->message == WM_DDE_INITIATE && is_dmgclass(c->hwnd) &&
+            (local_window(c->hwnd, CLS_DMG) || local_window((HWND)c->wParam, CLS_CLIENT)))
+            ;
+        else if (c->message >= WM_DDE_FIRST && c->message <= WM_DDE_LAST)
             mon_msg(FALSE, c->hwnd, c->message, c->wParam, c->lParam);
     }
     return CallNextHookEx(hk_send, code, wp, lp);

@@ -40,6 +40,8 @@ static WORD hdr(DATA NEAR *d)
 static DWORD dsize(DATA NEAR *d)
 {
     DWORD n = d->h ? GlobalSize(d->h) : 0;
+    if (d->size)
+        return d->size;
     return n >= hdr(d) ? n - hdr(d) : 0;
 }
 
@@ -77,10 +79,11 @@ void data_freeall(INST NEAR *in)
         data_free(in->datas, !(in->datas->flags & DF_TEMP));
 }
 
-/* a new DDE block: header (flags 0, format) unless an EXECUTE block */
+/* a new DDE block: header (flags 0, format) unless an EXECUTE block;
+   fixed, as 3.1's (its blocks' handles are selectors: xmon.dm as xmon+x) */
 HGLOBAL data_block(INST NEAR *in, const void FAR *p, DWORD cb, BOOL header, WORD fmt)
 {
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, cb + (header ? 4 : 0));
+    HGLOBAL h = GlobalAlloc(GMEM_FIXED | GMEM_DDESHARE | GMEM_ZEROINIT, cb + (header ? 4 : 0));
     BYTE FAR *b;
     (void)in;
     if (!h)
@@ -106,7 +109,7 @@ HGLOBAL data_take(DATA NEAR *d, WORD flags)
     WORD df = d->flags;
     if (df & DF_APPOWNED) {
         DWORD n = GlobalSize(d->h);
-        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n);
+        h = GlobalAlloc(GMEM_FIXED | GMEM_DDESHARE, n);
         if (h) {
             hcopy(GlobalLock(h), GlobalLock(d->h), n);
             GlobalUnlock(d->h);

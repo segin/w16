@@ -1,0 +1,4 @@
+# US29.EXE (tests/apps/us29.c): the USER audit's probe; keybd_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289
+import U_MOUSE_EVENT USER.299
