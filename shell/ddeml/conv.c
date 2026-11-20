@@ -6,10 +6,16 @@
  * queries (ARCHITECTURE.md, chapter "DDEML").
  *
  * A conversation is a child window of the instance's DMGClass (client,
- * class DMGClientClass) or of its DMGHoldingClass (server,
+ * class DMGClientClass), of a conversation list's DMGHoldingClass window
+ * (a client in a list) or of the instance's own DMGHoldingClass (server,
  * DMGServerClass); HCONV is MAKELONG(window, sequence number), as 3.1's.
  * Every message on the wire is plain DDE, so a DDEML application talks
  * to raw-DDE applications (Program Manager) and to other DDEML builds.
+ *
+ * A client's INITIATE goes to every top-level window in turn
+ * (EnumWindows, InitEnum), as 3.1's does (tests/ddeml/scripts/xconn.dm:
+ * raw windows past the first server never see a DdeConnect's): a
+ * DdeConnect stops at the first window that answers.
  */
 #include "ddeml.h"
 
@@ -27,10 +33,22 @@ BOOL local_window(HWND h, LPCSTR cls)
     return !lstrcmpi(b, cls);
 }
 
+/* an instance window of any DDEML library */
+BOOL is_dmgclass(HWND h)
+{
+    char b[32];
+    if (!h || !IsWindow(h))
+        return FALSE;
+    GetClassName(h, b, sizeof b);
+    return !lstrcmpi(b, CLS_DMG);
+}
+
 static CONV NEAR *conv_of_window(HWND h)
 {
     INST NEAR *in;
     CONV NEAR *c;
+    if (!h)
+        return NULL;
     for (in = ddeml_insts; in; in = in->next)
         for (c = in->convs; c; c = c->next)
             if (c->hwnd == h)
@@ -47,6 +65,30 @@ CONV NEAR *conv_find(HCONV h)
 HCONV conv_handle(CONV NEAR *c)
 {
     return (HCONV)MAKELONG(c->hwnd, c->seq);
+}
+
+/* the partner's handle as 3.1's monitor blocks give it: its window
+   and the window's third word (a DDEML window's number; whatever the
+   word holds for another window); in a link block a partner that is
+   not a window of this library has number 0 (xmon.dm as xmon+x) */
+HCONV partner_handle(CONV NEAR *c, BOOL inlink)
+{
+    HWND p = c->partner;
+    if (!p)
+        return 0;
+    if (inlink) {
+        CONV NEAR *o = (local_window(p, CLS_CLIENT) || local_window(p, CLS_SERVER))
+                           ? conv_of_window(p) : (CONV NEAR *)0;
+        return o ? conv_handle(o) : (HCONV)MAKELONG(p, 0);
+    }
+    return (HCONV)MAKELONG(p, IsWindow(p) ? GetWindowWord(p, 4) : 0);
+}
+
+/* a client window of this library initiating for a list */
+BOOL conv_listing(HWND client)
+{
+    CONV NEAR *c = local_window(client, CLS_CLIENT) ? conv_of_window(client) : (CONV NEAR *)0;
+    return c && c->mode == CM_LIST;
 }
 
 HWND newwin(INST NEAR *in, LPCSTR cls, HWND parent, DWORD style, WORD seq)
@@ -98,6 +140,7 @@ void conv_free(CONV NEAR *c)
     while (c->links) {
         LINK NEAR *l = c->links;
         c->links = l->next;
+        hsz_dec(l->item);
         nfree(l);
     }
     while (c->queue) {
@@ -105,23 +148,15 @@ void conv_free(CONV NEAR *c)
         c->queue = q->next;
         nfree(q);
     }
-    if (c->svcpartner)
-        GlobalDeleteAtom(c->svcpartner);
-    if (c->topic)
-        GlobalDeleteAtom(c->topic);
-    if (c->svcreq)
-        GlobalDeleteAtom(c->svcreq);
+    /* the names it holds, as 3.1 lets them go (MH_DECATOM: service,
+       service, topic) */
+    hsz_dec(c->svcref);
+    hsz_dec(c->svcpartner);
+    hsz_dec(c->svcreq);
+    hsz_dec(c->topic);
     if (c->hwnd && IsWindow(c->hwnd))
         DestroyWindow(c->hwnd);
     nfree(c);
-}
-
-static ATOM addref(ATOM a)
-{
-    char b[256];
-    if (!a || !GlobalGetAtomName(a, b, sizeof b))
-        return 0;
-    return GlobalAddAtom(b);
 }
 
 static HSZ hsz(ATOM a)
@@ -159,47 +194,62 @@ static void server_accept(INST NEAR *in, HWND client, ATOM app, ATOM topic, BOOL
                           CONVCONTEXT FAR *pcc)
 {
     CONV NEAR *c = conv_new(in, FALSE, holding(in));
+    HWND sw;
     HCONV hc;
+    ATOM a1, a2;
     if (!c)
         return;
     c->partner = client;
-    c->svcreq = addref(app);
-    c->topic = addref(topic);
     if (pcc)
         bcopy(&c->cc, pcc, sizeof(CONVCONTEXT));
     c->status = ST_CONNECTED;
     c->convst = XST_CONNECTED;
-    hc = conv_handle(c);
-    SendMessage(client, WM_DDE_ACK, (WPARAM)c->hwnd, MAKELPARAM(addref(app), addref(topic)));
+    /* as 3.1: the monitors hear of it first, then it takes its names
+       (service twice, topic) and the two for the ACK */
+    c->svcreq = app;
+    c->topic = topic;
+    mon_conv(c, TRUE);
+    c->svcref = hsz_inc(app);
+    hsz_inc(app);
+    hsz_inc(topic);
+    a1 = hsz_inc(app);
+    a2 = hsz_inc(topic);
+    sw = c->hwnd;
+    SendMessage(client, WM_DDE_ACK, (WPARAM)sw, MAKELPARAM(a1, a2));
     /* the client may have terminated it already (a second answer to
-       a DdeConnect): the confirmation then names no conversation */
+       a DdeConnect; another library's list asking again): 3.1 names
+       whatever window has the handle now, by its third word, or no
+       conversation when there is none (xconn.dm as xconn+x) */
+    hc = IsWindow(sw) ? (HCONV)MAKELONG(sw, GetWindowWord(sw, 4)) : 0;
     c = conv_find(hc);
-    if (c)
-        mon_conv(c, TRUE);
-    callback(in, XTYP_CONNECT_CONFIRM, 0, c, hsz(topic), hsz(app), 0, 0, same);
+    callback_hc(in, XTYP_CONNECT_CONFIRM, 0, c, hc, hsz(topic), hsz(app), 0, 0, same);
 }
 
-void conv_initiate(INST NEAR *in, HWND dmg, ATOM app, ATOM topic, HWND from)
+/* an INITIATE to an instance: TRUE if it made a conversation */
+BOOL conv_initiate(INST NEAR *in, HWND dmg, ATOM app, ATOM topic, HWND from)
 {
     CONV NEAR *cc = local_window(from, CLS_CLIENT) ? conv_of_window(from) : (CONV NEAR *)0;
     BOOL same = cc && cc->inst == in;
     CONVCONTEXT FAR *pcc = cc ? &cc->cc : NULL;
+    BOOL made = FALSE;
     (void)dmg;
     if (in->flags & (IF_CLIENTONLY | IF_MONITOR | IF_DYING))
-        return;
+        return FALSE;
     if (in->afCmd & CBF_FAIL_CONNECTIONS)
-        return;
+        return FALSE;
     if (same && (in->afCmd & CBF_FAIL_SELFCONNECTIONS))
-        return;
+        return FALSE;
     if (cc && cc->mode == CM_SINGLE && cc->partner)
-        return;                         /* that DdeConnect has its server */
+        return FALSE;                   /* that DdeConnect has its server */
     if (in->flags & IF_FILTER) {
         if (app ? !registered(in, app) : !in->names)
-            return;
+            return FALSE;
     }
     if (app && topic) {
-        if (callback(in, XTYP_CONNECT, 0, NULL, hsz(topic), hsz(app), 0, (DWORD)pcc, same))
+        if (callback(in, XTYP_CONNECT, 0, NULL, hsz(topic), hsz(app), 0, (DWORD)pcc, same)) {
             server_accept(in, from, app, topic, same, pcc);
+            made = TRUE;
+        }
     } else {
         HDDEDATA r = callback(in, XTYP_WILDCONNECT, 0, NULL, hsz(topic), hsz(app), 0, (DWORD)pcc,
                               same);
@@ -215,12 +265,14 @@ void conv_initiate(INST NEAR *in, HWND dmg, ATOM app, ATOM topic, HWND from)
                     if (cc && cc->mode == CM_SINGLE && !IsWindow(from))
                         break;
                     server_accept(in, from, LOWORD(p[i].hszSvc), LOWORD(p[i].hszTopic), same, pcc);
+                    made = TRUE;
                 }
                 GlobalUnlock(d->h);
             }
             data_free(d, TRUE);
         }
     }
+    return made;
 }
 
 /* ---- connecting: the client side ---- */
@@ -231,28 +283,121 @@ static void client_connected(CONV NEAR *c, HWND server, ATOM app, ATOM topic)
     c->svcpartner = app;
     c->topic = topic;
     c->status |= ST_CONNECTED;
-    if (local_window(server, CLS_SERVER))
+    if (local_window(server, CLS_SERVER)) {
+        CONV NEAR *s = conv_of_window(server);
         c->status |= ST_ISLOCAL;
+        if (s && s->inst == c->inst) {  /* status 0115 on 3.1 (conn.dm) */
+            c->status |= ST_ISSELF;
+            s->status |= ST_ISSELF;
+        }
+    }
     c->convst = XST_CONNECTED;
     c->ltype = XTYP_CONNECT;
     c->lfmt = CF_TEXT;
     mon_conv(c, TRUE);
+    c->svcreq = hsz_inc(c->svcask);
 }
 
-static CONV NEAR *client_start(INST NEAR *in, HSZ svc, HSZ topic, CONVCONTEXT FAR *pcc, WORD mode)
+typedef struct {
+    HCONV hc;
+    ATOM app, topic;
+} IENUM;
+
+/* EnumWindows: the INITIATE to one top-level window. A monitor hears of
+   one to another library's instance window after it (the hook leaves
+   such sends of this library's clients out), unless the DdeConnect ends
+   there (tests/ddeml/scripts/xmon2.dm) */
+BOOL FAR PASCAL __loadds InitEnum(HWND w, LPARAM lp)
 {
-    CONV NEAR *c = conv_new(in, TRUE, in->dmg);
+    IENUM FAR *e = (IENUM FAR *)lp;
+    CONV NEAR *c = conv_find(e->hc);
+    BOOL other;
+    if (!c)
+        return FALSE;
+    c->enumwin = w;
+    other = is_dmgclass(w) && !local_window(w, CLS_DMG);
+    SendMessage(w, WM_DDE_INITIATE, (WPARAM)c->hwnd, MAKELPARAM(e->app, e->topic));
+    c = conv_find(e->hc);
+    if (!c || (c->mode == CM_SINGLE && c->partner))
+        return FALSE;
+    if (other)
+        mon_msg(FALSE, w, WM_DDE_INITIATE, (WPARAM)c->hwnd, MAKELPARAM(e->app, e->topic));
+    return TRUE;
+}
+
+static CONV NEAR *client_start(INST NEAR *in, HSZ svc, HSZ topic, CONVCONTEXT FAR *pcc, WORD mode,
+                               HWND parent)
+{
+    CONV NEAR *c = conv_new(in, TRUE, parent);
+    IENUM e;
     if (!c)
         return NULL;
     c->mode = mode;
-    c->svcreq = addref(LOWORD(svc));
+    c->svcask = LOWORD(svc);
     if (pcc)
         bcopy(&c->cc, pcc, sizeof(CONVCONTEXT));
     c->convst = XST_INIT1;
     c->initiating = TRUE;
-    SendMessage((HWND)-1, WM_DDE_INITIATE, (WPARAM)c->hwnd, MAKELPARAM(LOWORD(svc), LOWORD(topic)));
-    c->initiating = FALSE;
+    e.hc = conv_handle(c);
+    e.app = LOWORD(svc);
+    e.topic = LOWORD(topic);
+    EnumWindows((WNDENUMPROC)InitEnum, (LPARAM)(IENUM FAR *)&e);
+    c = conv_find(e.hc);
+    if (c)
+        c->initiating = FALSE;
     return c;
+}
+
+/* a further answer to a list's INITIATE. A server window of this
+   library: a new client window for it. Any other server: 3.1 hangs up
+   at once and asks that same top-level window again, for that service
+   and topic, from a new client window (xconn.dm as xconn+x) */
+static void list_answer(CONV NEAR *c, HWND srv, ATOM app, ATOM topic)
+{
+    INST NEAR *in = c->inst;
+    HWND parent = GetParent(c->hwnd);
+    CONV NEAR *n;
+    if (local_window(srv, CLS_SERVER)) {
+        CONV NEAR *s = conv_of_window(srv);
+        n = conv_new(in, TRUE, parent);
+        if (!n)
+            return;
+        n->mode = CM_LIST;
+        n->svcask = c->svcask;
+        bzero(&n->cc, sizeof n->cc);    /* 3.1: all zero (xconn2.dm) */
+        client_connected(n, srv, app, topic);
+        if (s)
+            s->partner = n->hwnd;
+        return;
+    }
+    {
+        HCONV hc = conv_handle(c), nh;
+        HWND top = c->enumwin;
+        CONVCONTEXT cc;
+        bcopy(&cc, &c->cc, sizeof cc);
+        SendMessage(srv, WM_DDE_TERMINATE, (WPARAM)c->hwnd, 0);
+        if (conv_find(hc)) {
+            n = conv_new(in, TRUE, parent);
+            if (n) {
+                n->mode = CM_LIST;
+                n->svcask = app;
+                bcopy(&n->cc, &cc, sizeof cc);
+                n->convst = XST_INIT1;
+                n->initiating = TRUE;
+                n->enumwin = top;
+                nh = conv_handle(n);
+                SendMessage(top, WM_DDE_INITIATE, (WPARAM)n->hwnd, MAKELPARAM(app, topic));
+                n = conv_find(nh);
+                if (n) {
+                    n->initiating = FALSE;
+                    if (!n->partner)
+                        conv_free(n);
+                }
+            }
+        }
+        GlobalDeleteAtom(app);
+        GlobalDeleteAtom(topic);
+    }
 }
 
 static INST NEAR *inst_arg(DWORD id)
@@ -269,7 +414,7 @@ HCONV DMLAPI DdeConnect(DWORD id, HSZ svc, HSZ topic, CONVCONTEXT FAR *pcc)
     CONV NEAR *c;
     if (!in)
         return 0;
-    c = client_start(in, svc, topic, pcc, CM_SINGLE);
+    c = client_start(in, svc, topic, pcc, CM_SINGLE, in->dmg);
     if (!c || !c->partner) {
         if (c)
             conv_free(c);
@@ -279,15 +424,33 @@ HCONV DMLAPI DdeConnect(DWORD id, HSZ svc, HSZ topic, CONVCONTEXT FAR *pcc)
     return conv_handle(c);
 }
 
-/* the conversation lists: a hidden window each */
+/* ---- conversation lists ---- */
+
+static HCONVLIST list_handle(CLIST NEAR *l)
+{
+    return (HCONVLIST)MAKELONG(l->hwnd, l->seq);
+}
+
 static CLIST NEAR *list_find(HCONVLIST h)
 {
     INST NEAR *in;
     CLIST NEAR *l;
+    if (!h)
+        return NULL;
     for (in = ddeml_insts; in; in = in->next)
         for (l = in->lists; l; l = l->next)
-            if (LOWORD(h) == (WORD)l && HIWORD(h) == SELECTOROF((void FAR *)&ddeml_insts))
+            if ((WORD)l->hwnd == LOWORD(h) && l->seq == HIWORD(h))
                 return l;
+    return NULL;
+}
+
+static CLIST NEAR *list_of(CONV NEAR *c)
+{
+    CLIST NEAR *l;
+    HWND p = c->hwnd ? GetParent(c->hwnd) : NULL;
+    for (l = c->inst->lists; l; l = l->next)
+        if (l->hwnd == p)
+            return l;
     return NULL;
 }
 
@@ -304,11 +467,33 @@ static void list_drop(CLIST NEAR *l)
     nfree(l);
 }
 
+/* does the list have a live conversation with this one's service and
+   topic */
+static BOOL list_has(CLIST NEAR *l, CONV NEAR *c)
+{
+    HWND h;
+    for (h = GetWindow(l->hwnd, GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+        CONV NEAR *o = conv_of_window(h);
+        if (o && !o->dead && o->svcpartner == c->svcpartner && o->topic == c->topic)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* A list is a DMGHoldingClass child of the client's DMGClass (words:
+   instance, 0, number, 0); its conversations are its children, in the
+   order USER keeps them (made later, further down). With an old list,
+   the new conversations that duplicate one of its conversations are
+   terminated, then the old list's windows move into the new one (each
+   to the top: their order turns round) and the old window goes. With
+   no conversation at all: 0 and no error, and the window stays (3.1,
+   tests/ddeml/scripts/xconn2.dm). */
 HCONVLIST DMLAPI DdeConnectList(DWORD id, HSZ svc, HSZ topic, HCONVLIST old, CONVCONTEXT FAR *pcc)
 {
     INST NEAR *in = inst_arg(id);
     CLIST NEAR *l, NEAR *ol = old ? list_find(old) : (CLIST NEAR *)0;
-    CONV NEAR *c, NEAR *n;
+    CONV NEAR *c;
+    HWND h, nx;
     if (!in)
         return 0;
     if (old && !ol) {
@@ -321,55 +506,65 @@ HCONVLIST DMLAPI DdeConnectList(DWORD id, HSZ svc, HSZ topic, HCONVLIST old, CON
         return 0;
     }
     l->inst = in;
-    holding(in);
-    l->hwnd = NULL;                     /* a list has no window */
+    l->seq = ddeml_seq++;
+    l->hwnd = newwin(in, CLS_HOLD, in->dmg, WS_CHILD, l->seq);
+    if (!l->hwnd) {
+        nfree(l);
+        seterr(in, DMLERR_SYS_ERROR);
+        return 0;
+    }
+    SetWindowWord(l->hwnd, 0, (WORD)in);
+    SetWindowWord(l->hwnd, 2, 0);
+    SetWindowWord(l->hwnd, 4, l->seq);
+    SetWindowWord(l->hwnd, 6, 0);
     l->next = in->lists;
     in->lists = l;
-    c = client_start(in, svc, topic, pcc, CM_LIST);
-    if (c && !c->partner) {
+    c = client_start(in, svc, topic, pcc, CM_LIST, l->hwnd);
+    if (c && !c->partner)
         conv_free(c);
-        c = NULL;
-    }
-    /* the conversations this INITIATE made join the list; those that
-       an old list already has (same service and topic) are dropped */
-    for (c = in->convs; c; c = n) {
-        n = c->next;
-        if (c->mode != CM_LIST || c->list || !(c->status & ST_CLIENT))
+    for (h = GetWindow(l->hwnd, GW_CHILD); h; h = nx) {
+        nx = GetWindow(h, GW_HWNDNEXT);
+        c = conv_of_window(h);
+        if (!c)
             continue;
-        if (ol) {
-            CONV NEAR *o;
-            for (o = in->convs; o; o = o->next)
-                if (o->list == ol && !o->dead && o->svcpartner == c->svcpartner && o->topic == c->topic)
-                    break;
-            if (o) {
-                c->list = l;
-                conv_terminate(c, FALSE);
-                continue;
-            }
-        }
-        c->list = l;
         c->status |= ST_INLIST;
+        if (ol && list_has(ol, c))
+            conv_terminate(c, FALSE);
     }
     if (ol) {
-        for (c = in->convs; c; c = c->next)
-            if (c->list == ol)
-                c->list = l;
+        for (h = GetWindow(ol->hwnd, GW_CHILD); h; h = nx) {
+            nx = GetWindow(h, GW_HWNDNEXT);
+            SetParent(h, l->hwnd);
+        }
         list_drop(ol);
     }
-    return (HCONVLIST)MAKELONG((WORD)l, SELECTOROF((void FAR *)&ddeml_insts));
+    if (!GetWindow(l->hwnd, GW_CHILD)) {
+        /* nobody answered: the window is left behind (it goes with
+           the instance) */
+        CLIST NEAR * NEAR *pp;
+        for (pp = &in->lists; *pp; pp = &(*pp)->next)
+            if (*pp == l) {
+                *pp = l->next;
+                break;
+            }
+        nfree(l);
+        return 0;
+    }
+    return list_handle(l);
 }
 
 HCONV DMLAPI DdeQueryNextServer(HCONVLIST hl, HCONV prev)
 {
     CLIST NEAR *l = list_find(hl);
-    CONV NEAR *c;
+    HWND h;
     BOOL after = prev == 0;
     if (!l) {
         seterr(inst_of_task(), DMLERR_INVALIDPARAMETER);
         return 0;
     }
-    for (c = l->inst->convs; c; c = c->next) {
-        if (c->list != l || c->dead || !(c->status & ST_INLIST))
+    for (h = GetWindow(l->hwnd, GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+        CONV NEAR *c = conv_of_window(h);
+        if (!c || c->dead)
             continue;
         if (after)
             return conv_handle(c);
@@ -379,19 +574,71 @@ HCONV DMLAPI DdeQueryNextServer(HCONVLIST hl, HCONV prev)
     return 0;
 }
 
+/* every conversation of the list is terminated (in its windows' order);
+   the window stays, its fourth word 2000, until a call finds it empty
+   (xconn2.dm) */
 BOOL DMLAPI DdeDisconnectList(HCONVLIST hl)
 {
     CLIST NEAR *l = list_find(hl);
-    CONV NEAR *c;
+    HWND h, nx;
     if (!l) {
         seterr(inst_of_task(), DMLERR_INVALIDPARAMETER);
         return FALSE;
     }
-    for (c = l->inst->convs; c; c = c->next)
-        if (c->list == l && !c->dead)
+    if (!GetWindow(l->hwnd, GW_CHILD)) {
+        list_drop(l);
+        return TRUE;
+    }
+    for (h = GetWindow(l->hwnd, GW_CHILD); h; h = nx) {
+        CONV NEAR *c = conv_of_window(h);
+        nx = GetWindow(h, GW_HWNDNEXT);
+        if (c && !c->dead)
             conv_terminate(c, FALSE);
-    list_drop(l);
+    }
+    l->ended = TRUE;
+    SetWindowWord(l->hwnd, 6, 0x2000);
     return TRUE;
+}
+
+/* the answer to a partner's TERMINATE, posted before XTYP_DISCONNECT;
+   while the partner's queue is full (8 messages) 3.1 yields and tries
+   again (tests/ddeml/scripts/xun4.dm: the ninth answer waits until the
+   client has taken one) */
+static void post_term(HWND to, HWND from)
+{
+    DWORD end = GetCurrentTime() + 5000;
+    while (to && IsWindow(to) && !PostMessage(to, WM_DDE_TERMINATE, (WPARAM)from, 0)) {
+        if ((long)(GetCurrentTime() - end) >= 0)
+            break;
+        Yield();
+    }
+}
+
+/* DdeUninitialize: every conversation of the instance, in the order of
+   its windows (the DMGClass's children, a holding window's children
+   where it comes: xun2.dm, xun3.dm) */
+static void term_children(HWND parent)
+{
+    HWND h, nx;
+    for (h = GetWindow(parent, GW_CHILD); h; h = nx) {
+        CONV NEAR *c = conv_of_window(h);
+        nx = GetWindow(h, GW_HWNDNEXT);
+        if (c) {
+            if (!c->dead)
+                conv_terminate(c, FALSE);
+        } else
+            term_children(h);
+    }
+}
+
+void conv_terminate_all(INST NEAR *in)
+{
+    CONV NEAR *c;
+    if (in->dmg && IsWindow(in->dmg))
+        term_children(in->dmg);
+    for (c = in->convs; c; c = c->next)
+        if (!c->dead)
+            conv_terminate(c, FALSE);
 }
 
 /* TERMINATE: posted, the conversation dead; its window goes when the
@@ -405,9 +652,10 @@ void conv_terminate(CONV NEAR *c, BOOL wait)
     c->status &= ~ST_CONNECTED;
     c->status |= ST_TERMINATED;
     c->convst = XST_NULL;
-    if (c->partner && IsWindow(c->partner))
-        PostMessage(c->partner, WM_DDE_TERMINATE, (WPARAM)c->hwnd, 0);
     mon_conv(c, FALSE);
+    /* a full queue: 3.1 waits for room here too (xun4.dm: eleven
+       conversations with one server all end) */
+    post_term(c->partner, c->hwnd);
 }
 
 BOOL DMLAPI DdeDisconnect(HCONV hc)
@@ -431,7 +679,7 @@ HCONV DMLAPI DdeReconnect(HCONV hc)
         return 0;
     }
     n = client_start(c->inst, hsz(c->svcreq ? c->svcreq : c->svcpartner), hsz(c->topic), &c->cc,
-                     CM_SINGLE);
+                     CM_SINGLE, c->inst->dmg);
     if (!n || !n->partner) {
         if (n)
             conv_free(n);
@@ -489,23 +737,25 @@ static XACT NEAR *xact_find(DWORD id, CONV NEAR **pc)
     return NULL;
 }
 
-static void link_set(CONV NEAR *c, ATOM item, WORD fmt, WORD opts)
+/* a link: a new one holds its item (MH_INCATOM) */
+static LINK NEAR *link_set(CONV NEAR *c, ATOM item, WORD fmt, WORD opts)
 {
     LINK NEAR *l;
     for (l = c->links; l; l = l->next)
         if (l->item == item && l->fmt == fmt) {
             l->opts = opts;
-            return;
+            return NULL;
         }
     l = (LINK NEAR *)nalloc(sizeof(LINK));
     if (!l)
-        return;
-    l->item = item;
+        return NULL;
+    l->item = hsz_inc(item);
     l->fmt = fmt;
     l->opts = opts;
     l->next = c->links;
     c->links = l;
     c->status |= ST_ADVISE;
+    return l;
 }
 
 static BOOL link_drop(CONV NEAR *c, ATOM item, WORD fmt)
@@ -515,8 +765,16 @@ static BOOL link_drop(CONV NEAR *c, ATOM item, WORD fmt)
     while (*pp) {
         LINK NEAR *l = *pp;
         if (l->item == item && (!fmt || l->fmt == fmt)) {
+            /* 3.1: the server tells the monitors, then lets the item
+               go; the client the other way round (xmon.dm) */
             *pp = l->next;
-            mon_link(c, l, FALSE);
+            if (c->status & ST_CLIENT) {
+                hsz_dec(l->item);
+                mon_link(c, l, FALSE);
+            } else {
+                mon_link(c, l, FALSE);
+                hsz_dec(l->item);
+            }
             nfree(l);
             any = TRUE;
             if (fmt)
@@ -616,9 +874,13 @@ static void client_ack(CONV NEAR *c, WORD status, WORD hi)
     }
     x->sent = NULL;
     if (status & DDE_FACK) {
-        if (t == XTYP_ADVSTART)
-            link_set(c, x->item, x->fmt,
-                     0x2000 | ((x->type & XTYPF_NODATA) ? 0x4000 : 0) | ((x->type & XTYPF_ACKREQ) ? 0x8000 : 0));
+        if (t == XTYP_ADVSTART) {
+            LINK NEAR *l = link_set(c, x->item, x->fmt,
+                                    0x2000 | ((x->type & XTYPF_NODATA) ? 0x4000 : 0) |
+                                    ((x->type & XTYPF_ACKREQ) ? 0x8000 : 0));
+            if (l)
+                mon_link(c, l, TRUE);
+        }
         else if (t == XTYP_ADVSTOP)
             link_drop(c, x->item, x->fmt);
     }
@@ -664,7 +926,8 @@ static BOOL client_data(CONV NEAR *c, WPARAM wp, LPARAM lp)
     if (flags & 0x1000) {               /* fResponse: a REQUEST's answer */
         XACT NEAR *x = xact_match(c, WM_DDE_DATA, item, h, fmt);
         if (flags & 0x8000)
-            PostMessage(c->partner, WM_DDE_ACK, (WPARAM)c->hwnd, MAKELPARAM(DDE_FACK, addref(item)));
+            PostMessage(c->partner, WM_DDE_ACK, (WPARAM)c->hwnd,
+                        MAKELPARAM(DDE_FACK, hsz_inc_quiet(item)));
         GlobalDeleteAtom(item);
         if (!x) {
             if (flags & 0x2000)
@@ -721,30 +984,18 @@ static void client_term(CONV NEAR *c)
     HWND partner = c->partner;
     HWND me = c->hwnd;
     if (!c->dead) {
-        /* the server ended it */
+        /* the server ended it: DISCONNECT, the conversation goes (its
+           names: MH_DECATOM), then the answer */
         c->dead = TRUE;
         c->status &= ~ST_CONNECTED;
         c->status |= ST_TERMINATED;
         mon_conv(c, FALSE);
-        callback(c->inst, XTYP_DISCONNECT, 0, c, 0, 0, 0, 0, 0);
+        post_term(partner, me);
         c = conv_of_window(me);
-        if (c) {
-            DestroyWindow(c->hwnd);
-            c->hwnd = NULL;
-        }
-        if (partner && IsWindow(partner))
-            PostMessage(partner, WM_DDE_TERMINATE, (WPARAM)me, 0);
-        if (c && !(c->status & ST_INLIST))
-            conv_free(c);
-        else if (c)
-            c->partner = NULL;
-        return;
-    }
-    if (c->status & ST_INLIST) {
-        DestroyWindow(c->hwnd);
-        c->hwnd = NULL;
-        c->partner = NULL;
-        if (!c->list)
+        if (c)
+            callback(c->inst, XTYP_DISCONNECT, 0, c, 0, 0, 0, 0, 0);
+        c = conv_of_window(me);
+        if (c)
             conv_free(c);
         return;
     }
@@ -758,23 +1009,15 @@ LRESULT FAR PASCAL __loadds ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp
         return DefWindowProc(w, msg, wp, lp);
     switch (msg) {
     case WM_DDE_ACK:
-        if (InSendMessage() && c->initiating) {
+        /* an answer to its INITIATE (sent; directly when the server
+           is in this task) */
+        if (c->initiating) {
             if (!c->partner) {
                 client_connected(c, (HWND)wp, LOWORD(lp), HIWORD(lp));
                 return 0;
             }
             if (c->mode == CM_LIST) {
-                CONV NEAR *n = conv_new(c->inst, TRUE, c->inst->dmg);
-                if (n) {
-                    CONV NEAR *s = local_window((HWND)wp, CLS_SERVER) ? conv_of_window((HWND)wp)
-                                 : (CONV NEAR *)0;
-                    n->mode = CM_LIST;
-                    n->svcreq = addref(c->svcreq);
-                    bcopy(&n->cc, &c->cc, sizeof(CONVCONTEXT));
-                    client_connected(n, (HWND)wp, LOWORD(lp), HIWORD(lp));
-                    if (s)
-                        s->partner = n->hwnd;
-                }
+                list_answer(c, (HWND)wp, LOWORD(lp), HIWORD(lp));
                 return 0;
             }
             /* a second server for one DdeConnect */
@@ -915,16 +1158,18 @@ HDDEDATA DMLAPI DdeClientTransaction(LPVOID pData, DWORD cb, HCONV hc, HSZ item,
         return 0;
     switch (t) {
     case XTYP_REQUEST:
+        /* 3.1 reports this one reference to monitors (MH_INCATOM), not
+           those of POKE, ADVISE and UNADVISE (xmon.dm) */
         msg = WM_DDE_REQUEST;
-        lp = MAKELPARAM(fmt, addref(a));
+        lp = MAKELPARAM(fmt, hsz_inc(a));
         break;
     case XTYP_ADVSTOP:
         msg = WM_DDE_UNADVISE;
-        lp = MAKELPARAM(fmt, addref(a));
+        lp = MAKELPARAM(fmt, hsz_inc_quiet(a));
         break;
     case XTYP_ADVSTART: {
         WORD FAR *o;
-        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, 4);
+        h = GlobalAlloc(GMEM_FIXED | GMEM_DDESHARE, 4);
         if (!h) {
             seterr(in, DMLERR_MEMORY_ERROR);
             return 0;
@@ -934,7 +1179,7 @@ HDDEDATA DMLAPI DdeClientTransaction(LPVOID pData, DWORD cb, HCONV hc, HSZ item,
         o[1] = fmt;
         GlobalUnlock(h);
         msg = WM_DDE_ADVISE;
-        lp = MAKELPARAM(h, addref(a));
+        lp = MAKELPARAM(h, hsz_inc_quiet(a));
         break;
     }
     default: {
@@ -960,7 +1205,7 @@ HDDEDATA DMLAPI DdeClientTransaction(LPVOID pData, DWORD cb, HCONV hc, HSZ item,
         }
         if (t == XTYP_POKE) {
             msg = WM_DDE_POKE;
-            lp = MAKELPARAM(h, addref(a));
+            lp = MAKELPARAM(h, hsz_inc_quiet(a));
         } else {
             msg = WM_DDE_EXECUTE;
             lp = MAKELPARAM(0, h);
@@ -1035,7 +1280,9 @@ HDDEDATA DMLAPI DdeClientTransaction(LPVOID pData, DWORD cb, HCONV hc, HSZ item,
             x->state = XS_WAIT;
         } else
             xact_drop(c, x);
-        if (err)
+        if (err == DMLERR_NOTPROCESSED || err == DMLERR_BUSY)
+            seterr_quiet(in, err);      /* 3.1: no MF_ERRORS event (monitor.dm) */
+        else if (err)
             seterr(in, err);
         if (pres && !(err && x->abandoned) && !(t == XTYP_REQUEST && ok))
             *(WORD FAR *)pres = status;
@@ -1169,11 +1416,9 @@ static BOOL server_msg(CONV NEAR *c, UINT msg, WPARAM wp, LPARAM lp)
         if (!(c = conv_find(hc)))
             return TRUE;
         if (r) {
-            LINK NEAR *l;
-            link_set(c, item, fmt, opts);
-            for (l = c->links; l; l = l->next)
-                if (l->item == item && l->fmt == fmt)
-                    mon_link(c, l, TRUE);
+            LINK NEAR *l = link_set(c, item, fmt, opts);
+            if (l)
+                mon_link(c, l, TRUE);
             if (h)
                 GlobalFree(h);
             server_reply(c, WM_DDE_ACK, MAKELPARAM(DDE_FACK, item));
@@ -1195,12 +1440,31 @@ static BOOL server_msg(CONV NEAR *c, UINT msg, WPARAM wp, LPARAM lp)
             server_reply(c, WM_DDE_ACK, MAKELPARAM(0, item));
             return TRUE;
         }
-        r = callback(in, XTYP_ADVSTOP, l->fmt, c, hsz(c->topic), hsz(item), 0, 0, (DWORD)hsz(item));
-        if (r == CBR_BLOCK)
-            return FALSE;
+        {
+            /* 3.1 drops the link (the monitors see it go) before
+               XTYP_ADVSTOP (xmon.dm) */
+            WORD lfmt = l->fmt, lopts = l->opts;
+            link_drop(c, item, fmt);
+            r = callback(in, XTYP_ADVSTOP, lfmt, c, hsz(c->topic), hsz(item), 0, 0,
+                         (DWORD)hsz(item));
+            if (r == CBR_BLOCK) {
+                /* held: the link is back for when it runs again */
+                if ((c = conv_find(hc)) != NULL) {
+                    LINK NEAR *k = (LINK NEAR *)nalloc(sizeof(LINK));
+                    if (k) {
+                        k->item = hsz_inc_quiet(item);
+                        k->fmt = lfmt;
+                        k->opts = lopts;
+                        k->next = c->links;
+                        c->links = k;
+                        c->status |= ST_ADVISE;
+                    }
+                }
+                return FALSE;
+            }
+        }
         if (!(c = conv_find(hc)))
             return TRUE;
-        link_drop(c, item, fmt);
         server_reply(c, WM_DDE_ACK, MAKELPARAM(DDE_FACK, item));
         return TRUE;
     }
@@ -1223,7 +1487,7 @@ static void advise_send(CONV NEAR *c, LINK NEAR *l, WORD count)
     }
     if (l->opts & 0x8000)
         l->pending = TRUE;
-    server_reply(c, WM_DDE_DATA, MAKELPARAM(h, addref(l->item)));
+    server_reply(c, WM_DDE_DATA, MAKELPARAM(h, hsz_inc(l->item)));
 }
 
 BOOL DMLAPI DdePostAdvise(DWORD id, HSZ topic, HSZ item)
@@ -1313,17 +1577,23 @@ static void server_term(CONV NEAR *c)
         c->status &= ~ST_CONNECTED;
         c->status |= ST_TERMINATED;
         mon_conv(c, FALSE);
-        callback(c->inst, XTYP_DISCONNECT, 0, c, 0, 0, 0, 0, 0);
+        post_term(partner, me);
         c = conv_of_window(me);
-        if (c) {
-            DestroyWindow(c->hwnd);
-            c->hwnd = NULL;
-        }
-        if (partner && IsWindow(partner))
-            PostMessage(partner, WM_DDE_TERMINATE, (WPARAM)me, 0);
+        if (c)
+            callback(c->inst, XTYP_DISCONNECT, 0, c, 0, 0, 0, 0, 0);
+        c = conv_of_window(me);
+        if (c)
+            conv_free(c);
+        return;
     }
-    if (c)
-        conv_free(c);
+    /* the answer to its own TERMINATE: 3.1 queues a message of its own
+       here (not a DDE message: no spy sees it), one place in the task's
+       queue of 8 (tests/ddeml/scripts/xun2.dm, conn.dm's DdeUninitialize
+       with conversations to itself); w16 posts a message that does
+       nothing */
+    if (c->inst->dmg && IsWindow(c->inst->dmg))
+        PostMessage(c->inst->dmg, WM_DMG_NOP, 0, 0);
+    conv_free(c);
 }
 
 /* process what was held for a conversation */
@@ -1503,7 +1773,10 @@ UINT DMLAPI DdeQueryConvInfo(HCONV hc, DWORD xid, CONVINFO FAR *pci)
                    : XST_UNADVSENT;
     }
     ci.wLastError = c->lasterr;
-    ci.hConvList = c->list ? (HCONVLIST)MAKELONG((WORD)c->list, SELECTOROF((void FAR *)&ddeml_insts)) : 0;
+    {
+        CLIST NEAR *l = list_of(c);
+        ci.hConvList = l ? list_handle(l) : 0;
+    }
     bcopy(&ci.ConvCtxt, &c->cc, sizeof(CONVCONTEXT));
     n = (UINT)(pci->cb < sizeof ci ? pci->cb : sizeof ci);
     bcopy(pci, &ci, n);

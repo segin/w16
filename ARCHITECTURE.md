@@ -1932,7 +1932,15 @@ imports only KERNEL, USER, GDI and KEYBOARD. Nothing in the 3.1 or WfW
   string, conversations, lists, instances and data handles as c1, l1, i1,
   d1 in order of first sight (a data handle a call makes always gets a
   new name), transaction IDs by their counter (x0001). `raw on` shows the
-  values (the x*.dm explorations).
+  values (the x*.dm explorations). A monitor's events are logged the same
+  way: the data handles in a callback event get new names, the global
+  handles in a message's lParam are named h1, h2 by first sight (their
+  reuse is compared), atoms and words are shown. `iwatch on` makes a
+  copy's raw window log every INITIATE it gets.
+- `tests/ddeml/xrun.sh OUTDIR "COMBOS" NAME...` runs scripts (the x*.dm
+  explorations too) in the given combinations and prints each log's
+  differences from ms-ms: for matching a behaviour before a scenario
+  covers it.
 - The OpenWatcom `ddeml.h` declares DdeAccessData with a near result; the
   probe imports ordinal 17 as DdeAccessDataF with the SDK's far one (and
   w16's DDEML exports its own function under that ordinal).
@@ -1947,8 +1955,10 @@ imports only KERNEL, USER, GDI and KEYBOARD. Nothing in the 3.1 or WfW
 
 Instances and windows:
 - `DdeInitialize` makes a top-level DMGClass window (style 04C00000, 6
-  extra bytes) and then a DMGFrame (84000000, 4 bytes; a monitor gets
-  none). idInst is MAKELONG(an address in the library, a counter); one
+  extra bytes) and then a DMGFrame (84000000, 4 bytes); a monitor gets a
+  DMGMonitorClass window instead (04C00000, 4 bytes: LOWORD(id), 0),
+  and only when it asks for events (MF_ flags; `flags.dm`'s monitor
+  without them has none: the windows made after it show it). idInst is MAKELONG(an address in the library, a counter); one
   counter, from 2, numbers instances and every conversation and holding
   window. HCONV is MAKELONG(the conversation's window, its number). A
   client conversation is a DMGClientClass child of DMGClass; a server
@@ -1959,14 +1969,23 @@ Instances and windows:
   with 0 the library's (DLL_NOT_INITIALIZED at first), with any other
   invalid id INVALIDPARAMETER.
 - `DdeUninitialize`: UNREGISTER for its names to every other instance,
-  TERMINATE to every conversation in the order they were made, waits for
-  the partners' answers, frees the strings it still holds; a second call
-  fails with INVALIDPARAMETER.
+  TERMINATE to every conversation, in the order of the instance's
+  windows (the DMGClass's children in z-order; a holding window's
+  children, server conversations or a list's, where it comes; a
+  conversation with itself gets one from each side), then lets the other
+  tasks run first, and takes its own messages one at a time, letting
+  the others run again after each TERMINATE one of its client windows
+  takes (`xun1.dm`-`xun4.dm`); frees the strings it still holds; a
+  second call fails with INVALIDPARAMETER.
 
 Strings: a string handle is the string's global atom (HIWORD 0), shared
 by all instances and tasks, case-insensitive; each create adds a
 reference, Keep adds one and returns the atom, Free removes one, and
-DdeUninitialize removes those an instance still holds. Code page 0,
+DdeUninitialize removes those an instance still holds: an instance
+keeps one entry per create and keep, appended; a free takes out the
+string's first entry and moves the last into its place, and
+DdeUninitialize frees the first entry until none is left (the order a
+monitor sees MH_CLEANUP in, `xstr.dm`). Code page 0,
 CP_WINANSI or GetKBCodePage() (437 here) only, else INVALIDPARAMETER.
 "" gives 0 without an error. With idInst 0 the atom is made all the same
 (error DLL_NOT_INITIALIZED); with a dead id, 0 and INVALIDPARAMETER.
@@ -1984,7 +2003,11 @@ reallocates (the gap zeroed), same handle. afCmd other than 0 and
 HDATA_APPOWNED: INVALIDPARAMETER. Freeing a handle twice crashes 3.1.
 
 Connecting:
-- DdeConnect sends INITIATE (SendMessage -1) with the two atoms. A server
+- DdeConnect, DdeConnectList and DdeReconnect send INITIATE with the
+  two atoms to every top-level window in turn (EnumWindows, z-order, the
+  exported InitEnum; `xconn.dm`: raw windows below the first server
+  never see a DdeConnect's), not as a broadcast. A DdeConnect stops at
+  the first window whose answer gave it its conversation. A server
   instance answers when its filter allows (FILTERINITS: always on at
   first; DdeNameService(0, DNS_FILTEROFF) lets every service in; with
   the filter on, a NULL service needs a registered name). XTYP_CONNECT
@@ -1992,22 +2015,57 @@ Connecting:
   client is a DDEML window of the same library, else 0, dwData2 same
   instance); NULL service or topic: XTYP_WILDCONNECT, whose HSZPAIR list
   makes one conversation each. The server sends ACK, then
-  XTYP_CONNECT_CONFIRM. A second ACK to one DdeConnect: the client sends
-  TERMINATE at once (SendMessage), so the server gets XTYP_DISCONNECT and
-  then CONNECT_CONFIRM with conversation 0; a server of the same library
-  does not answer a DdeConnect that already has its server.
-- DdeConnectList: every ACK becomes a conversation (new client windows);
-  given an old list, new conversations duplicating its ones (service and
-  topic) are terminated, the old ones move to the new list and the old
-  handle dies.
+  XTYP_CONNECT_CONFIRM, whose conversation is what the server window's
+  handle reads after the ACK: MAKELONG(window, the window's third word)
+  if the handle is a window, else 0 (a window the client has made since
+  can have taken the handle: below). A second ACK to one DdeConnect (a
+  WILDCONNECT with several pairs): the client sends TERMINATE at once
+  (SendMessage), so the server gets XTYP_DISCONNECT and then
+  CONNECT_CONFIRM with conversation 0. A conversation with the client's
+  own instance has ST_ISSELF (status 0115).
+- DdeConnectList (`xconn.dm`, `xconn2.dm`, raw values): a list is a
+  DMGHoldingClass window, child of the client's DMGClass (words: LOWORD
+  of the instance, 0, its number, 0), made before the INITIATE's client
+  window, which is its child; HCONVLIST = MAKELONG(window, number). The
+  first answer goes to that window. A further answer from a server
+  window of the same library gets a new client window (child of the
+  list, numbered then; its CONVCONTEXT all zero, its service asked for
+  the first one's). A further answer from any other server (another
+  library, raw DDE): the client sends it TERMINATE at once, makes a new
+  client window and sends an INITIATE for exactly that service and topic
+  from it to the same top-level window (not to the others); the server,
+  still inside its first ACK, answers that one. The old server window is
+  gone by then and the new client window usually gets its handle, so
+  that server's CONNECT_CONFIRM names a conversation made of the new
+  client window and its number; the server's answering TERMINATE then
+  reaches the old client window under the new window's handle. The
+  enumeration then goes on from the first client window.
+  DdeQueryNextServer and DdeDisconnectList go through the list window's
+  children in z-order: children are added below the others, so the
+  order is the order the windows were made. Given an old list: the new
+  conversations that duplicate a live one of the old list (service and
+  topic) get TERMINATE (in the new list's order), then the old list's
+  windows move into the new list one by one (SetParent puts each on
+  top: their order turns round, above the new ones), and the old window
+  is destroyed (its handle is dead). Nobody answering: 0, no error, and
+  the list window stays behind (until the instance goes).
+  DdeDisconnectList terminates the conversations and leaves the window,
+  its fourth word set to 2000; a call that finds the window empty
+  destroys it (both return 1).
 - REGISTER/UNREGISTER (DdeNameService, DdeUninitialize) reach every
   instance in the z-order of their DMGClass windows, newest first,
   inside the call; DdeNameService(0, FILTERON/OFF) returns 0;
   CLIENTONLY instances get DLL_USAGE.
 - DdeDisconnect posts TERMINATE and returns; the partner's TERMINATE
-  destroys the window later. A partner's TERMINATE gives
-  XTYP_DISCONNECT, then the answer, from the destroyed window. The handle
-  is dead afterwards (DdeReconnect: NO_CONV_ESTABLISHED).
+  destroys the window later. A partner's TERMINATE is answered first,
+  then XTYP_DISCONNECT is called; the window goes. The handle is dead
+  afterwards (DdeReconnect: NO_CONV_ESTABLISHED). While the partner's
+  queue is full (8 messages), the TERMINATE waits: the library yields
+  and posts again (`xun4.dm`: a client ending eleven conversations with
+  one server; the server's ninth answer waits until the client has
+  taken one). A server window that gets the answer to its own TERMINATE
+  also leaves one message of its own (no DDE message) in its task's
+  queue (`xun2.dm`: it takes one place among the 8).
 
 Transactions:
 - REQUEST: DATA flags 3000 back; a sync request returns a data handle the
@@ -2044,6 +2102,51 @@ Transactions:
   from freed memory on 3.1 (the probe's DS shows through); a new client
   conversation reports fmt CF_TEXT, type XTYP_CONNECT, status 0015
   (0011 with a raw server), a server one 0001 with no partner.
+- DDE blocks (data handles, the ADVISE options) are fixed global blocks:
+  their handles are selectors (ending 7 or F); a block freed by the
+  receiver is the next one a call allocates (`xmon.dm` as xmon+x).
+
+Monitors (`monitor.dm`, `xmon.dm`, `xmon2.dm`, `xstr.dm`):
+- An event's data handle is a block without the DDE header; DdeAccessData
+  gives the event's size rounded up to 32 (3.1 makes no global block per
+  event: the handles point into one block of the monitor instance).
+  MONHSZSTRUCT's cb is 18 plus the string's length.
+- Strings: besides MH_CREATE (1), MH_KEEP (2), MH_DELETE (3) and
+  MH_CLEANUP (4), 3.1 reports its own atom traffic: 5 for the atom a new
+  string handle gets (before 1), 6 for one more reference, 7 for one
+  less (after 3 and after each 4). References it reports: a registered
+  name (6 at DdeNameService, 7 at unregistering, after the callbacks);
+  around each REGISTER/UNREGISTER callback, in the receiving instance's
+  task (6 before, 7 after); a server conversation holds its service
+  twice and its topic (6 6 6 when it is made, after the server's
+  MONCONVSTRUCT) and adds the ACK's two (6 6); a client conversation
+  adds its service asked for when the ACK comes (6, after its
+  MONCONVSTRUCT) and keeps the ACK's; both let their three go when they
+  end (7 7 7: the client when the answer to its TERMINATE comes, the
+  server after XTYP_DISCONNECT); a REQUEST's item (6, the client, before
+  posting); a link's item (6 at the server after XTYP_ADVSTART, then
+  the link event; at the client when the ACK comes, then the link
+  event; at UNADVISE the server reports the link's end, then 7, then
+  calls XTYP_ADVSTOP; the client 7, then the event); an advise DATA's
+  item (6, the server, before posting). POKE, ADVISE, UNADVISE and the
+  answers' atoms are not reported.
+- MONCONVSTRUCT and MONLINKSTRUCT name both conversations: the partner
+  as MAKELONG(its window, the window's third word) in a connect block
+  (a raw partner: whatever that word holds), in a link block the
+  partner conversation if it is of the same library, else MAKELONG(its
+  window, 0). The server reports its connect before the ACK, the client
+  when the ACK comes.
+- Sent messages: the hook reports every DDE message sent, except an
+  INITIATE to a DMGClass window of its own library, or to any DMGClass
+  window from a client of its own library: those are reported after the
+  window handled them (by that window, or by the client), and not at
+  all when the INITIATE made the conversation of a DdeConnect (it ends
+  there); a list's are reported after its answers.
+- Callbacks: every callback of every instance of the library is
+  reported, the monitors' own (REGISTER) too, XTYP_MONITOR not.
+  dwData1 of a connect is the client's CONVCONTEXT address.
+- Errors: NO_CONV_ESTABLISHED is reported; NOTPROCESSED from a NACK is
+  not.
 
 ### 18.3 w16's DDEML.DLL
 
@@ -2059,14 +2162,22 @@ KERNEL, USER and KEYBOARD only. Every record (instance, name, string
 reference, data handle, conversation, transaction, link, held message,
 list) is a linked list node in DDEML's local heap: the one bound is that
 64K segment. The windows, handle layouts, counters and orders of 18.2
-are reproduced; data blocks are allocated zeroed (3.1's hold stale
-memory past the data; the comparison stops at the first NUL).
+are reproduced: lists are their windows (the order of a list is its
+window's children's), DdeUninitialize walks the instance's windows, a
+full queue makes a TERMINATE wait, and the one message 3.1 leaves in
+the queue when a server window takes the answer to its own TERMINATE is
+a message w16 posts to the instance window that does nothing
+(WM_DMG_NOP). Data blocks are fixed, as 3.1's, and allocated zeroed
+(3.1's hold stale memory past the data; the comparison stops at the
+first NUL). A monitor instance has one global block for its events,
+made at DdeInitialize.
 
 ### 18.4 Tests and results
 
 - `tests/ddemlscen.sh [-c COMBOS] [-n] [NAME...]` runs every script of
-  `tests/ddeml/scripts` (strings, data, conn, xact, advise, flags,
-  monitor, uninit, transact (the client transactions), raw: DDEML against raw DDE both ways, progman: a
+  `tests/ddeml/scripts` but the x*.dm explorations (strings, data, conn,
+  flags, advise, monitor, uninit, transact (the client transactions),
+  raw: DDEML against raw DDE both ways, progman: a
   DDEML client driving 3.1's Program Manager with CreateGroup, AddItem,
   ShowGroup, DeleteItem, Groups and group requests, ExitProgman) as NAME
   (one library) and NAME+x (the other copies on the other library), with
@@ -2075,7 +2186,7 @@ memory past the data; the comparison stops at the first NUL).
   `tests/ddeml/dmnorm.py`: data blocks up to their first NUL (3.1 does
   not clear them; the tail is whatever the memory held). Atom values and
   the frame window in instance-specific names are compared as they are
-  (18.6).
+  (18.6). The monitor's event handles are named, not shown (18.1).
 - Boot-test case **ddeml**: parts tree286 and tree386 (`tests/ddeml/
   ddtree.sh`: the install tree alone under w16's KRNL286 / KRNL386, DM.EXE
   as the shell, a DDEML server and client and a DDEML client driving
@@ -2090,28 +2201,30 @@ memory past the data; the comparison stops at the first NUL).
   data, transact, advise, flags, uninit, raw (each also +x, in every
   combination), progman, tree286 and tree386 equal Microsoft's, with no
   masking beyond the data tails (atom values and instance names
-  included, 18.6). Not equal yet:
-  - **conn**: DdeConnectList with several servers. With a local server,
-    3.1 orders the list and pairs the extra client windows with the
-    servers in an order w16 does not reproduce yet; with a server of
-    another library, 3.1's client TERMINATEs each extra answer at once
-    and INITIATEs that server again from a new client window (and posts
-    a TERMINATE between its own client windows); w16 keeps the answer.
-  - **monitor**: the event stream. 3.1's DDEML reports its own string
-    traffic (two MF_HSZ_INFO events per DdeCreateStringHandle, more for
-    every message it posts), which w16 does not mirror; w16 sends one
-    event per documented occasion.
+  included, 18.6). Not equal yet then: conn (lists with several
+  servers) and monitor (the event stream).
+- Results (installation-05, 2026-11-19, task 3): conn and monitor equal
+  too, in every combination (the INITIATE enumeration, lists as
+  windows, another library's answers asked again, DdeUninitialize's
+  order and queue places, and the monitor events of 18.2): full boot
+  test (dffe779 on master 429e079): ddeml ok in every part, 123 cases
+  ok; failing: lzexpand (quirks, known), trails@timed (known flake),
+  toolhelp@ref3 (Microsoft's own run, no w16 file and no DDEML in it:
+  its group e did not finish; alone again: ref386 the same way).
+  Masking: only the data blocks' tails.
 
 ### 18.5 UNVERIFIED, and not done
 
 - The termination dialog (TERMDIALOG) is in the resources but never
   shown: w16's DdeUninitialize waits up to 10 seconds for answers.
-- Monitors: the blocks follow the SDK structures; only the sequence was
-  compared (above).
+  `xun5.dm` (an instance with conversations to itself and to a second
+  instance of the same task) never returned from 3.1's DdeUninitialize:
+  probably where the dialog comes; not looked at further.
+- Monitors: dwTime and the blocks' words the probe does not print are
+  not compared.
 - HDDEDATA, HCONVLIST, the low words of idInst and transaction IDs and
   the conversation windows' extra words are w16's own values (addresses
   inside the library); the probe logs them by name only.
-- The sixth window class's name (18.6) is w16's guess.
 - Not probed: DdeReconnect inside XTYP_DISCONNECT, CF_BITMAP/
   CF_METAFILEPICT data (3.1 imports GDI's CopyMetaFile and BitBlt, so it
   probably copies such data for HDATA_APPOWNED handles; w16 copies the
@@ -2129,11 +2242,11 @@ listed before and after each call, window handles shown):
 - Its classes are registered at that first DdeInitialize, not when the
   library loads (with another library's instance made first, 3.1's
   handles show none of them yet in USER's heap), before the atoms.
-- Six classes: the five its windows show (DMGFrame, DMGClass,
-  DMGClientClass, DMGServerClass, DMGHoldingClass) and one more, which
-  no window of the probes ever used: every class moves later handles by
-  0x44 bytes, and only six put w16's DMGFrame and DMGClass at 3.1's
-  handles. w16 registers its monitors' class there.
+- Six classes: DMGFrame, DMGClass, DMGClientClass, DMGServerClass,
+  DMGHoldingClass and DMGMonitorClass (the last only a monitor
+  instance's window shows, `xmon.dm`): every class moves later handles
+  by 0x44 bytes, and six put w16's DMGFrame and DMGClass at 3.1's
+  handles.
 With these, instance-specific names ("Svc:(143c)") and string handle
 values are compared unmasked.
 

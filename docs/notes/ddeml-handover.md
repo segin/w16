@@ -150,3 +150,42 @@ no subagents; commit in pieces ("Co-Authored-By: Claude Opus 5.5
   XST_*SENT; WM_TIMER on server windows (a server's own sync xact).
   xact.dm renamed transact.dm (the x prefix had kept it out of every run).
 - Boot case ddeml now: all parts ok except conn, conn+x, monitor, monitor+x.
+
+### Task 3 (2026-11-19): conn and monitor equal (branch from master 429e079)
+Run name on installation-05: `-n w16-ddeml2`. Explorations (raw values,
+not compared): xconn, xconn2 (lists), xmon, xmon2 (monitor events, which
+INITIATE sends a monitor reports), xstr (MH_CLEANUP order), xun1-xun5
+(DdeUninitialize order, queue places). `tests/ddeml/xrun.sh OUT "COMBOS"
+NAME...` runs scripts in combinations and diffs each against ms-ms.
+Found (all in ARCHITECTURE.md 18.2; code in conv.c / mon.c / hsz.c):
+- INITIATE goes to each top-level window (EnumWindows/InitEnum), not a
+  broadcast; DdeConnect stops at the window that answered.
+- A list is a DMGHoldingClass child of DMGClass (words id,0,seq,0); its
+  conversations are its children; order = z-order (creation); old list:
+  dup terminations, then SetParent of the old windows (order reversed,
+  on top). No answer: returns 0, no error, window left. DdeDisconnectList
+  leaves the window (word 6 = 2000), destroys it when called on an empty
+  one.
+- Extra answer in a list from a non-local server: TERMINATE (sent) and a
+  new client window INITIATEs that service/topic to the same top window;
+  CONNECT_CONFIRM's hconv = MAKELONG(hwnd, GetWindowWord(hwnd, 4)) read
+  after the ACK (the new client window reuses the server's handle).
+- Self conversations: ST_ISSELF (0115).
+- DdeUninitialize: TERMINATE in window order (holding children inline),
+  yield first, take own messages one at a time (yield after each one a
+  client window gets); TERMINATE answers are posted before
+  XTYP_DISCONNECT and retried (Yield) while the target queue (8) is full;
+  a server window taking the answer to its own TERMINATE leaves one
+  invisible message in the queue (w16: WM_DMG_NOP to DMGClass).
+- Monitor: DMGMonitorClass window (the sixth class); event blocks without
+  header, size rounded to 32, one block per monitor; HSZ cb = 18+len;
+  internal atom actions 5/6/7 (where: 18.2); CONV/LINK name both sides;
+  INITIATE sends to DMGClass windows reported after handling (rules in
+  18.2); monitors' own callbacks reported; NOTPROCESSED not reported;
+  per-instance string entries (append, swap-remove, cleanup from 0).
+- DDE blocks are GMEM_FIXED on 3.1 (selector handles).
+- Probe: monitor lines name handles (lParam handles h1.. by first sight,
+  CB data handles new names, dwData1 "cc"); `iwatch on`.
+Not done: termination dialog (xun5 hung 3.1's DdeUninitialize: an
+instance with conversations to itself and to another instance of the
+same task), bitmap/metafile data, 386 Enhanced mode, WfW 3.11.
