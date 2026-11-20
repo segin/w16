@@ -1,0 +1,58 @@
+; WR30: a link (Paste Link) and Edit > Links: the clipboard holds a
+; picture with ObjectLink and OwnerLink naming Paintbrush's
+; C:\WINDOWS\ARCADE.BMP (SNAP cliplink, as Paintbrush offers a link); the
+; Edit menu (E1); Paste Link (L1); saved as C:\WR30A.WRI; the Links
+; dialog (K1, window dump); Manual (K2); OK (clicked: Enter is Edit, the
+; default button); saved (C:\WR30B.WRI); Links,
+; Cancel Link (K3), OK (L2); saved (C:\WR30C.WRI). (Update Now against
+; this link fails in 3.1: "The source document cannot be found.", the
+; link then "Unavailable"; not scripted.)
+; mkpic: PIC.DIB
+; get: WR30B.WRI
+; get: WR30C.WRI
+run WRITE.EXE
+wait 3000
+cliplink C:\PIC.DIB PBrush|C:\WINDOWS\ARCADE.BMP|0 0 40 20
+menu e
+wait 800
+snap C:\E1.BMP
+char l
+wait 5000
+snap C:\L1.BMP
+menu f
+char a
+wait 1500
+type C:\WR30A.WRI
+key 0D
+wait 2000
+menu e
+char k
+wait 1500
+snap C:\K1.BMP
+dump
+alt m
+wait 800
+snap C:\K2.BMP
+clickid 1
+wait 1500
+copyfile C:\WR30A.WRI C:\WR30A0.WRI
+menu f
+char s
+wait 2000
+copyfile C:\WR30A.WRI C:\WR30B.WRI
+menu e
+char k
+wait 1500
+alt n
+wait 1500
+snap C:\K3.BMP
+clickid 1
+wait 1500
+snap C:\L2.BMP
+menu f
+char s
+wait 2000
+copyfile C:\WR30A.WRI C:\WR30C.WRI
+copyfile C:\WR30A0.WRI C:\WR30A.WRI
+close
+wait 1000

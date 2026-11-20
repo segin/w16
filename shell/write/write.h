@@ -134,6 +134,11 @@
 #define IDS_CANTSAVE        16390
 #define IDS_CANTPRINT       8226
 #define IDS_OBJECTNONE      32
+#define IDS_AUTOMATIC       34
+#define IDS_MANUAL          35
+#define IDS_UNAVAILABLE     36
+#define IDS_NOSOURCE        8470
+#define IDS_UPDATELINKS     8473
 #define IDS_UNDOKEY         28692
 #define IDS_PAGE1           28672
 #define IDS_WRITE           28676
@@ -329,6 +334,9 @@ BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r);
 void ole_activate(DWORD pf, DWORD pl, const RECT *r);
 void cmd_insertobj(void);
 BOOL ole_paste(void);
+BOOL ole_can_pastelink(void);
+void ole_pastelink(void);
+void cmd_links(void);
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */

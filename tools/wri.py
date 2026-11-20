@@ -115,6 +115,11 @@ class Doc:
                     r.append((fc + 34, fc + 36))
                     r.append((fc + 24, fc + 28))
                     r += self.static_stale(fc + 40, fcl)
+                    # a linked or embedded object's presentation (format
+                    # 5, after the names and native data) likewise
+                    k = self.data.find(b'\x01\x05\x00\x00\x05\x00\x00\x00', fc + 48, fcl)
+                    if k >= 0:
+                        r += self.static_stale(k, fcl)
                 fc = fcl
         return r
 
@@ -126,7 +131,7 @@ class Doc:
         the 16-bit METAFILEPICT, whose hMF (word 6) is a stale handle."""
         b = self.data
         try:
-            if dw(b, o + 4) != 3:
+            if dw(b, o + 4) not in (3, 5):
                 return []
             n = dw(b, o + 8)
             d = o + 12 + n + 12

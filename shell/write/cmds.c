@@ -995,7 +995,7 @@ void menu_update(HMENU m)
     EnableMenuItem(m, IDM_PASTESPECIAL, IsClipboardFormatAvailable(CF_BITMAP) ||
                    IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_METAFILEPICT)
                    ? MF_ENABLED : MF_GRAYED);
-    EnableMenuItem(m, IDM_PASTELINK, MF_GRAYED);
+    EnableMenuItem(m, IDM_PASTELINK, ole_can_pastelink() ? MF_ENABLED : MF_GRAYED);   /* WR30 E1 */
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
     {
         /* with no object selected the item reads "&Object", grayed (WR7;

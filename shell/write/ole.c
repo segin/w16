@@ -22,6 +22,7 @@
 #include "write.h"
 #include <ole.h>
 #include <shellapi.h>
+#include <commdlg.h>
 
 #define PICHDR 40
 
@@ -610,4 +611,383 @@ BOOL ole_paste(void)
         store(o);
     }
     return TRUE;
+}
+
+/* ---- links: Paste Link and Edit > Links (WR30) ---- */
+
+/* Paste Link: enabled when the clipboard offers a link (ObjectLink: WR30
+   E1); the object a linked one (header type 3, stream format 1) */
+BOOL ole_can_pastelink(void)
+{
+    return lhdoc && OleQueryLinkFromClip("StdFileEditing", olerender_draw, 0) == OLE_OK;
+}
+
+void ole_pastelink(void)
+{
+    WOBJ *o;
+    char name[9];
+    OLESTATUS st;
+    if (!ole_can_pastelink())
+        return;
+    /* the caret off until it blinks, as after Paste (WR30 L1) */
+    view_caret_defer();
+    undo_save(IDS_EDITING);
+    o = new_obj_para(3, name);
+    if (!o || !OpenClipboard(g_frame))
+        return;
+    st = OleCreateLinkFromClip("StdFileEditing", &o->cl, lhdoc, name, &o->obj, olerender_draw, 0);
+    CloseClipboard();
+    if (st == OLE_WAIT_FOR_RELEASE)
+        wait_release(o->obj, st);
+    else if (st != OLE_OK)
+        o->obj = NULL;
+    o->failed = o->obj == NULL;
+    if (o->obj) {
+        o->dirty = TRUE;
+        store(o);
+    }
+    g_doc.dirty = TRUE;
+}
+
+/* The Links box (the original's DTPROP): one line per linked object,
+   "class name<tab>document<tab>item<tab>update", the class's name from
+   the registration database ("Paintbrush Picture"), the document without
+   its path, the update "Automatic", "Manual" or "Unavailable" (strings
+   34-36; WR30 K1). Automatic and Manual set the selected links' update
+   option; Update Now updates them (a failure: string 8470, the link
+   "Unavailable"); Cancel Link turns them into static pictures; Change
+   Link names another document (COMMDLG Open); Activate and Edit open
+   them. UNVERIFIED: whether Cancel undoes what the box did (here every
+   button acts at once). */
+#define LK_LIST     265
+#define LK_AUTO     258
+#define LK_MANUAL   259
+#define LK_UPDATE   1031
+#define LK_CANCEL   1032
+#define LK_CHANGE   262
+#define LK_ACTIVATE 273
+#define LK_EDIT     1030
+
+static HLOCAL hlinks;                   /* WOBJ * of each line */
+static int nlinks;
+static BOOL *unavail;                   /* per line: an update failed */
+
+static WOBJ *link_obj(int i)
+{
+    WOBJ *o = ((WOBJ **)LocalLock(hlinks))[i];
+    LocalUnlock(hlinks);
+    return o;
+}
+
+static UINT cf_objectlink(void)
+{
+    return RegisterClipboardFormat("ObjectLink");
+}
+
+/* the object's class, document and item (ObjectLink) */
+static BOOL link_names(WOBJ *o, char *cls, char *doc, char *item)
+{
+    HANDLE h = NULL;
+    char FAR *p;
+    cls[0] = doc[0] = item[0] = 0;
+    if (!o->obj || OleGetData(o->obj, cf_objectlink(), &h) != OLE_OK || !h)
+        return FALSE;
+    p = GlobalLock(h);
+    if (!p)
+        return FALSE;
+    s_cpy(cls, p, 64);
+    p += s_len(p) + 1;
+    s_cpy(doc, p, PATH_MAX_DOS);
+    p += s_len(p) + 1;
+    s_cpy(item, p, 64);
+    GlobalUnlock(h);
+    return TRUE;
+}
+
+static void link_line(HWND d, int i, BOOL replace)
+{
+    WOBJ *o = link_obj(i);
+    char cls[65], doc[PATH_MAX_DOS], item[65], name[80], line[300], *b;
+    LONG cb = sizeof name;
+    OLEOPT_UPDATE opt = oleupdate_always;
+    link_names(o, cls, doc, item);
+    if (RegQueryValue(HKEY_CLASSES_ROOT, cls, name, &cb) != ERROR_SUCCESS || !name[0])
+        s_cpy(name, cls, sizeof name);
+    for (b = doc; *b; b++)
+        ;
+    while (b > doc && b[-1] != '\\' && b[-1] != ':')
+        b--;
+    s_cpy(line, name, sizeof line);
+    s_cat(line, "\t", sizeof line);
+    s_cat(line, b, sizeof line);
+    s_cat(line, "\t", sizeof line);
+    s_cat(line, item, sizeof line);
+    s_cat(line, "\t", sizeof line);
+    if (o->obj)
+        OleGetLinkUpdateOptions(o->obj, &opt);
+    load_str(unavail[i] ? IDS_UNAVAILABLE : opt == oleupdate_always ? IDS_AUTOMATIC : IDS_MANUAL,
+             line + s_len(line), (int)(sizeof line - s_len(line)));
+    if (replace) {
+        BOOL sel = (BOOL)SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0);
+        SendDlgItemMessage(d, LK_LIST, LB_DELETESTRING, i, 0);
+        SendDlgItemMessage(d, LK_LIST, LB_INSERTSTRING, i, (LPARAM)(LPSTR)line);
+        SendDlgItemMessage(d, LK_LIST, LB_SETSEL, sel, MAKELPARAM(i, 0));
+    } else {
+        SendDlgItemMessage(d, LK_LIST, LB_ADDSTRING, 0, (LPARAM)(LPSTR)line);
+    }
+}
+
+/* the radio buttons show the first selected link's option; with no
+   link selected they and the buttons for links are grayed (WR30 K3) */
+static void link_radios(HWND d)
+{
+    static const int ids[] = { LK_AUTO, LK_MANUAL, LK_UPDATE, LK_CANCEL, LK_CHANGE,
+                               LK_ACTIVATE, LK_EDIT };
+    int i, any = 0;
+    for (i = 0; i < nlinks; i++)
+        if (SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0))
+            any = 1;
+    for (i = 0; i < (int)(sizeof ids / sizeof ids[0]); i++)
+        EnableWindow(GetDlgItem(d, ids[i]), any);
+    for (i = 0; i < nlinks; i++)
+        if (SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0)) {
+            WOBJ *o = link_obj(i);
+            OLEOPT_UPDATE opt = oleupdate_always;
+            if (o->obj)
+                OleGetLinkUpdateOptions(o->obj, &opt);
+            CheckRadioButton(d, LK_AUTO, LK_MANUAL, opt == oleupdate_always ? LK_AUTO : LK_MANUAL);
+            return;
+        }
+    CheckRadioButton(d, LK_AUTO, LK_MANUAL, 0);
+}
+
+static ATOM32 chp_plain(DOC *d, ATOM32 a, WORD unused)
+{
+    CHPX c;
+    (void)a;
+    (void)unused;
+    chp_default(&c);
+    return chp_atom(d, &c);
+}
+
+/* a linked object made a static one (Cancel Link); its characters lose
+   their properties (WR30C: the run's FOD FFFFh) */
+static void link_cancel(WOBJ *o)
+{
+    LPOLEOBJECT st = NULL;
+    char name[9];
+    OLESTATUS r;
+    DWORD pf, pl;
+    if (!o->obj)
+        return;
+    obj_name(name, o->num);
+    r = OleObjectConvert(o->obj, "Static", &o->cl, lhdoc, name, &st);
+    if (r == OLE_WAIT_FOR_RELEASE)
+        wait_release(st, r);
+    else if (r != OLE_OK)
+        return;
+    if (!st)
+        return;
+    wait_release(o->obj, OleDelete(o->obj));
+    o->obj = st;
+    if (find_para(o->num, &pf, &pl)) {
+        WORD one = 1;
+        doc_put(&g_doc, pf + 6, &one, 2);
+    }
+    o->dirty = TRUE;
+    store(o);
+    if (find_para(o->num, &pf, &pl))
+        doc_set_chp(&g_doc, pf, pl, chp_plain, 0);
+}
+
+static void link_each(HWND d, WORD id)
+{
+    int i;
+    for (i = 0; i < nlinks; i++) {
+        WOBJ *o;
+        OLESTATUS r;
+        if (!SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0))
+            continue;
+        o = link_obj(i);
+        if (!o->obj)
+            continue;
+        switch (id) {
+        case LK_AUTO:
+        case LK_MANUAL:
+            r = OleSetLinkUpdateOptions(o->obj, id == LK_AUTO ? oleupdate_always : oleupdate_oncall);
+            wait_release(o->obj, r);
+            o->dirty = TRUE;
+            store(o);
+            break;
+        case LK_UPDATE:
+            r = OleUpdate(o->obj);
+            wait_release(o->obj, r);
+            if (r != OLE_OK && r != OLE_WAIT_FOR_RELEASE) {
+                msgbox(d, IDS_NOSOURCE, NULL, MB_OK | MB_ICONEXCLAMATION);
+                unavail[i] = TRUE;
+            } else {
+                unavail[i] = FALSE;
+                o->dirty = TRUE;
+                store(o);
+            }
+            break;
+        default:                        /* Activate, Edit */
+            wait_release(o->obj, OleActivate(o->obj, OLEVERB_PRIMARY, TRUE, TRUE, g_docwnd, NULL));
+            break;
+        }
+        if (id != LK_ACTIVATE && id != LK_EDIT)
+            link_line(d, i, TRUE);
+    }
+    g_doc.dirty = TRUE;
+}
+
+static void link_change(HWND d)
+{
+    OPENFILENAME ofn;
+    char path[PATH_MAX_DOS];
+    int i;
+    path[0] = 0;
+    m_set(&ofn, 0, sizeof ofn);
+    ofn.lStructSize = sizeof ofn;
+    ofn.hwndOwner = d;
+    ofn.lpstrFilter = "All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = sizeof path;
+    ofn.Flags = OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
+    if (!GetOpenFileName(&ofn))
+        return;
+    for (i = 0; i < nlinks; i++) {
+        WOBJ *o;
+        char cls[65], doc[PATH_MAX_DOS], item[65];
+        HGLOBAL h;
+        char FAR *p;
+        int n;
+        if (!SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0))
+            continue;
+        o = link_obj(i);
+        if (!link_names(o, cls, doc, item))
+            continue;
+        n = s_len(cls) + s_len(path) + s_len(item) + 4;
+        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n);
+        if (!h)
+            continue;
+        p = GlobalLock(h);
+        s_cpy(p, cls, n);
+        s_cpy(p + s_len(cls) + 1, path, n);
+        s_cpy(p + s_len(cls) + s_len(path) + 2, item, n);
+        GlobalUnlock(h);
+        wait_release(o->obj, OleSetData(o->obj, cf_objectlink(), h));
+        wait_release(o->obj, OleUpdate(o->obj));
+        o->dirty = TRUE;
+        store(o);
+        link_line(d, i, TRUE);
+    }
+    g_doc.dirty = TRUE;
+}
+
+BOOL CALLBACK __export LinksDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    int i;
+    switch (msg) {
+    case WM_INITDIALOG:
+        for (i = 0; i < nlinks; i++)
+            link_line(d, i, FALSE);
+        /* every link selected (WR30 K1: the one there highlighted) */
+        if (nlinks)
+            SendDlgItemMessage(d, LK_LIST, LB_SELITEMRANGE, TRUE, MAKELPARAM(0, nlinks - 1));
+        link_radios(d);
+        return TRUE;
+    case WM_COMMAND:
+        switch (wp) {
+        case LK_LIST:
+            if (HIWORD(lp) == LBN_SELCHANGE)
+                link_radios(d);
+            return TRUE;
+        case LK_AUTO:
+        case LK_MANUAL:
+            CheckRadioButton(d, LK_AUTO, LK_MANUAL, wp);
+            link_each(d, wp);
+            return TRUE;
+        case LK_UPDATE:
+        case LK_ACTIVATE:
+        case LK_EDIT:
+            link_each(d, wp);
+            return TRUE;
+        case LK_CANCEL:
+            for (i = nlinks - 1; i >= 0; i--)
+                if (SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0)) {
+                    WOBJ **t = (WOBJ **)LocalLock(hlinks);
+                    WOBJ *o = t[i];
+                    int k;
+                    for (k = i; k + 1 < nlinks; k++) {
+                        t[k] = t[k + 1];
+                        unavail[k] = unavail[k + 1];
+                    }
+                    LocalUnlock(hlinks);
+                    nlinks--;
+                    SendDlgItemMessage(d, LK_LIST, LB_DELETESTRING, i, 0);
+                    link_cancel(o);
+                }
+            g_doc.dirty = TRUE;
+            link_radios(d);
+            return TRUE;
+        case LK_CHANGE:
+            link_change(d);
+            return TRUE;
+        case IDOK:
+        case IDCANCEL:
+            EndDialog(d, wp);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+void cmd_links(void)
+{
+    DWORD i, pf, pl;
+    ATOM32 a;
+    PAPX p;
+    FARPROC fp;
+    if (!lhdoc)
+        return;
+    nlinks = 0;
+    hlinks = LocalAlloc(LMEM_MOVEABLE, sizeof(WOBJ *));
+    if (!hlinks)
+        return;
+    for (i = 0; i < g_doc.nparas; i++) {
+        WORD type = 0, mm = 0;
+        WOBJ *o;
+        HLOCAL h;
+        para_get(&g_doc, i, &pf, &pl, &a);
+        pap_decode(&g_doc, a, &p);
+        if (!p.fGraphics || pl < pf + PICHDR || pl > g_doc.cpMac)
+            continue;
+        doc_get(&g_doc, pf, (char FAR *)&mm, 2);
+        doc_get(&g_doc, pf + 6, (char FAR *)&type, 2);
+        if (mm != 0xE4 || type != 3)
+            continue;
+        o = load(pf, pl);
+        if (!o)
+            continue;
+        h = LocalReAlloc(hlinks, (nlinks + 1) * sizeof(WOBJ *), LMEM_MOVEABLE);
+        if (!h)
+            break;
+        hlinks = h;
+        ((WOBJ **)LocalLock(hlinks))[nlinks++] = o;
+        LocalUnlock(hlinks);
+    }
+    unavail = (BOOL *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (nlinks + 1) * sizeof(BOOL));
+    if (unavail) {
+        undo_save(IDS_EDITING);
+        fp = MakeProcInstance((FARPROC)LinksDlgProc, g_hinst);
+        DialogBox(g_hinst, "DTPROP", g_frame, (DLGPROC)fp);
+        FreeProcInstance(fp);
+        LocalFree((HLOCAL)unavail);
+        unavail = NULL;
+    }
+    LocalFree(hlinks);
+    hlinks = NULL;
+    nlinks = 0;
 }
