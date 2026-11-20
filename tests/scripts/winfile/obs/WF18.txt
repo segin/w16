@@ -22,17 +22,17 @@
 ; put: build/dos/TKWB.DLL=TKWB.DLL
 run WINFILE.EXE
 wait 5000
-append D:\FMX.LOG == started
+append C:\FMX.LOG == started
 snap C:\Q01.BMP
 dumpmenu
 dump
-append D:\FMX.LOG == close
+append C:\FMX.LOG == close
 close
 wait 3000
-append D:\FMX.LOG == again
+append C:\FMX.LOG == again
 run WINFILE.EXE
 wait 5000
 snap C:\Q02.BMP
 close
 wait 3000
-append D:\FMX.LOG == end
+append C:\FMX.LOG == end

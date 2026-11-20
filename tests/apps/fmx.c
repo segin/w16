@@ -6,7 +6,11 @@
  * Listed in WINFILE.INI [AddOns], it logs every FMExtensionProc call to
  * C:\FMX.LOG (one line each, the module name first, so that copies made
  * with tools/nerename.py, FMX1 ... FMX9, share the log; C:\FMX.INI [FMX]
- * Log= names another file). SNAP's "append FILE text" puts the script's
+ * Log= names another file). With SNAP's memory log (its "memlog"
+ * command: the desktop window's property FMXLOG) the lines go there
+ * instead, and SNAP writes the file at the end: 3.1's File Manager
+ * notices every file written while a Search Results window is open and
+ * asks to update it (WF17). SNAP's "append FILE text" puts the script's
  * own marks between them. Handles are
  * never printed (they differ between runs); what they are is: "ours" for
  * the menu it gave, the class for a window.
@@ -113,8 +117,24 @@ static void begin(void)
 static void flush(void)
 {
     HFILE h;
+    HGLOBAL m = (HGLOBAL)GetProp(GetDesktopWindow(), "FMXLOG");
     line[len++] = '\r';
     line[len++] = '\n';
+    if (m) {
+        /* SNAP's memory log (its "memlog" command) */
+        DWORD FAR *p = (DWORD FAR *)GlobalLock(m);
+        if (p && p[0] + len <= p[1]) {
+            char FAR *d = (char FAR *)p + (WORD)p[0];
+            int i;
+            for (i = 0; i < len; i++)
+                d[i] = line[i];
+            p[0] += len;
+        }
+        if (p)
+            GlobalUnlock(m);
+        len = 0;
+        return;
+    }
     h = _lopen(logname, OF_WRITE);
     if (h == HFILE_ERROR)
         h = _lcreat(logname, 0);

@@ -15,8 +15,9 @@
 #                                  (tests/apps/fmx.c) as C:\NAME.DLL, each
 #                                  with its own module name NAME (4 letters)
 #   ; fmxini: section:key=value    a key of C:\FMX.INI (how FMX answers);
-#                                  FMX logs to D:\FMX.LOG (an empty D:,
-#                                  brought back with the rest)
+#                                  FMX logs into SNAP's memory log (a
+#                                  "memlog C:\FMX.LOG" line goes first),
+#                                  C:\FMX.LOG brought back
 #   ; put: SRC=DEST                a file of the checkout as C:\DEST
 # Afterwards <outdir> holds the screenshots (*.BMP), SNAP's log (log.txt),
 # WIN.INI and WINFILE.INI as the session left them, and the files asked for.
@@ -59,13 +60,15 @@ for x in $(sed -n 's/^; fmx: *//p' "$script"); do
     python3 -I "$root/tools/nerename.py" "$out/$x.DLL" --module "$x" > /dev/null
     files="$files $out/$x.DLL=$x.DLL"
 done
-ddrive=
+fmxget=
 if grep -q '^; fmx:' "$script"; then
-    # FMX logs to D:\FMX.LOG (an empty D: drive): writing on C: would make
-    # File Manager's Search Results window ask to be updated (WF17)
-    ddrive=$(mktemp -d)
+    # FMX logs into SNAP's memory log, written to C:\FMX.LOG at the end:
+    # a file written meanwhile makes 3.1's Search Results window ask to be
+    # updated (obs WF17)
+    fmxget=FMX.LOG
+    { printf 'memlog C:\\FMX.LOG\r\n'; cat "$out/SNAP.TXT"; } > "$out/SNAP.TXT.new"
+    mv "$out/SNAP.TXT.new" "$out/SNAP.TXT"
     printf '\r\n' > "$out/FMX.INI.in"
-    python3 -I "$root/tests/scripts/iniset.py" "$out/FMX.INI.in" 'FMX:Log=D:\FMX.LOG'
     sed -n 's/^; fmxini: *//p' "$script" | while IFS= read -r s; do
         python3 -I "$root/tests/scripts/iniset.py" "$out/FMX.INI.in" "$s"
     done
@@ -75,10 +78,10 @@ fi
 for p in $(sed -n 's/^; put: *//p' "$script"); do
     files="$files $root/${p%%=*}=${p#*=}"
 done
-tree=$(mktemp -d); trap 'rm -rf "$tree" ${ddrive:+"$ddrive"}' EXIT
+tree=$(mktemp -d); trap 'rm -rf "$tree"' EXIT
 python3 -I "$root/tests/scripts/winfile/mktree.py" "$tree"
-get="WINDOWS/WIN.INI WINDOWS/WINFILE.INI ${ddrive:+D:/FMX.LOG} ${WFOBS_GET:-} $(sed -n 's/^; get: *//p' "$script" | tr '\n' ' ')"
+get="WINDOWS/WIN.INI WINDOWS/WINFILE.INI $fmxget ${WFOBS_GET:-} $(sed -n 's/^; get: *//p' "$script" | tr '\n' ' ')"
 REFRUN_FILES="$files $*" REFRUN_TREE=$tree REFRUN_OUT=$out REFRUN_GET="$get" \
-    REFRUN_DDRIVE=$ddrive REFRUN_TIMEOUT=${WFOBS_TIMEOUT:-180} \
+    REFRUN_TIMEOUT=${WFOBS_TIMEOUT:-180} \
     "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" "${WFOBS_MODE:-/S}" > "$out/log.txt" || true
 grep -v '^WIN ' "$out/log.txt" | head -${WFOBS_LINES:-40}
