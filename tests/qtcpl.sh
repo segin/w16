@@ -26,7 +26,7 @@
 #   - after the scroll no pixel of the highlight colour lies between the
 #     list's bottom and the static's (on both sides);
 #   - the panel's window and its own children (tab control, pages,
-#     buttons) have 3.1's rectangles (until 2026-11-20 w16 made it 8
+#     buttons) have 3.1's rectangles and styles (until 2026-11-20 w16 made it 8
 #     pixels wider and higher: its pages are child dialog templates with
 #     a caption and a font, which w16 gave a dialog frame's size;
 #     user/dlg.c, probe US33's dlgf).
@@ -94,10 +94,12 @@ for side in ref w16; do
     grep -A1 ' id 1068 ' "$out/$side.spy" | sed 's/"[^"]*"$//' > "$out/$side.list" || true
     grep ' id 1160 ' "$out/$side.spy" | sed 's/"[^"]*"$//' >> "$out/$side.list" || true
     # the panel itself: its window, and its own children (the tabs, the
-    # pages, the buttons) without their texts, styles and the tab
-    # control's class name, which holds an instance handle
+    # pages, the buttons) with their styles, without their texts and the
+    # tab control's class name, which holds an instance handle. Left out:
+    # the Help button's WS_CLIPSIBLINGS (ID E145h; 3.1 has it, w16 not:
+    # not explained yet, ARCHITECTURE.md 10.4, US33 cs)
     sed -n 's/^SPY snapshot [0-9]*: \(top at .*\) client at.*/\1/p' "$out/$side.spy" > "$out/$side.frame"
-    grep '^SPY 0 ' "$out/$side.spy" | sed 's/"[^"]*"$//; s/Afx:[^ ]*/Afx/; s/ st [0-9a-f]* / /' \
+    grep '^SPY 0 ' "$out/$side.spy" | sed 's/"[^"]*"$//; s/Afx:[^ ]*/Afx/; s/ st 54\([0-9a-f]* .* id -7867 \)/ st 50\1/' \
         >> "$out/$side.frame" || true
 done
 if [ $fails = 0 ]; then

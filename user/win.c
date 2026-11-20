@@ -62,6 +62,7 @@ void free_props(PWND w);
 void free_scroll(PWND w);
 void purge_window_msgs(HQUEUE hq, HWND h);
 void free_window_dcs(HWND h);
+extern LRESULT WINAPI __loadds ComboBoxWndProc(HWND, UINT, WPARAM, LPARAM);
 
 /* ---- where a window's WND is ----
    Normally (the layout 3.1's tools know, Schulman ch. 6) the WND and its
@@ -331,6 +332,15 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
     if (!(style & WS_CHILD) && !(style & WS_POPUP))
         style |= WS_CAPTION | WS_CLIPSIBLINGS;  /* overlapped (3.1 SDK) */
     if (style & WS_CHILD) {
+        /* a CS_PARENTDC class's child (the system controls, or a class of
+           the program's) drops WS_CLIPSIBLINGS unless its parent clips
+           its children; the combo box keeps it (US33 cs on 3.1: BUTTON,
+           STATIC, EDIT, LISTBOX, SCROLLBAR made with it read back without,
+           COMBOBOX and a class without CS_PARENTDC with it, any of them
+           in a WS_CLIPCHILDREN parent with it; SetWindowLong keeps it) */
+        if ((c->style & CS_PARENTDC) && pw && !(pw->style & WS_CLIPCHILDREN) &&
+            c->lpfnWndProc != (WNDPROC)ComboBoxWndProc)
+            style &= ~WS_CLIPSIBLINGS;
         w->hwndParent = parent;
         w->hMenu = (WORD)menu;
     } else {
