@@ -65,7 +65,10 @@ for n in $names; do
         inputs="$inputs $out/$n/in/$pf"
     done
     "$root/tests/wrobs.sh" "$script" "$out/$n/orig" $inputs > /dev/null
-    WROBS_EXE=$out/msres/WRITE.EXE "$root/tests/wrobs.sh" "$script" "$out/$n/w16" $inputs > /dev/null
+    # WRSCEN_W16FILES="host=WINDOWS/... ...": more of w16's files for w16's
+    # run only (e.g. its OLECLI.DLL)
+    WROBS_EXE=$out/msres/WRITE.EXE "$root/tests/wrobs.sh" "$script" "$out/$n/w16" $inputs \
+        ${WRSCEN_W16FILES:-} > /dev/null
     result=ok
     for f in "$out/$n"/orig/*.WRI "$out/$n"/orig/*.TXT "$out/$n"/orig/*.DOC \
              $(sed -n 's/^; get: *//p' "$script" | sed "s|^|$out/$n/orig/|"); do

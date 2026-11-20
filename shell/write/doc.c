@@ -401,8 +401,11 @@ void doc_init(DOC *d)
 void doc_new(DOC *d)
 {
     CHPX c;
+    char face[LF_FACESIZE + 1];
+    BYTE ffid;
     doc_init(d);
-    font_code(d, "Arial", FF_SWISS);
+    printer_font(face, &ffid);          /* Arial, or the printer's (WR29) */
+    font_code(d, face, ffid);
     chp_default(&c);
     c.hps = 20;
     d->chpNew = chp_atom(d, &c);

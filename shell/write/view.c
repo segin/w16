@@ -15,6 +15,8 @@
 #define YP0         4
 #define CARET_W     2
 #define TIMER_CARET 1
+#define TIMER_TYPED 2                   /* the caret goes off a moment after typing */
+#define TYPED_MS    450                 /* UNVERIFIED: more than 200, less than 700 (WR23, WR24, WR25 with SNAP's pacing) */
 
 HWND g_docwnd;
 DWORD g_selFirst, g_selLim;
@@ -422,6 +424,64 @@ static DWORD line_start(DWORD cp)
 
 /* the length of the paragraph mark that ends at lim: CR LF, or a page
    break (character 12) */
+static DWORD mark_len(DWORD lim);
+static BOOL visible(DWORD cp);
+static int caret_mid(int h);
+static void redraw(void);
+static void layout_band(DWORD cp, int yp, LINE *ln);
+static BOOL line_prev(DWORD cp, int yp, DWORD *pcp, int *pyp);
+
+/* for Confirm Page Breaks (print.c): the line before and after the one
+   that starts at cp, and where its text ends */
+DWORD view_line_before(DWORD cp)
+{
+    return line_before(line_start(cp));
+}
+
+DWORD view_line_after(DWORD cp)
+{
+    LINE ln;
+    layout_line(line_start(cp), &ln);
+    return ln.endMark ? cp : ln.cpLim;
+}
+
+/* Confirm Page Breaks shows the line at cp: above the window it comes
+   with 128 pixels of lines above it, below with the caret's middle rule
+   (WR31: line 55 under line 47, the break after line 70 under line 61;
+   UNVERIFIED: the rule for lines above) */
+void view_show_line(DWORD cp)
+{
+    RECT r;
+    int h = 0, yp = 0, ypp;
+    DWORD s, p;
+    LINE ln;
+    if (visible(cp))
+        return;
+    GetClientRect(g_docwnd, &r);
+    s = line_start(cp);
+    while (h < (cp < cpTop ? caret_mid(r.bottom) - 32 : caret_mid(r.bottom)) &&
+           line_prev(s, yp, &p, &ypp)) {
+        layout_band(p, ypp, &ln);
+        h += ln.height;
+        s = p;
+        yp = ypp;
+    }
+    cpTop = s;
+    ypTop = yp;
+    redraw();
+}
+
+DWORD view_line_end(DWORD cp)
+{
+    LINE ln;
+    DWORD e;
+    layout_line(line_start(cp), &ln);
+    e = ln.cpLim > g_doc.cpMac ? g_doc.cpMac : ln.cpLim;
+    if (ln.paraEnd && !ln.endMark && e > ln.cpFirst)
+        e -= mark_len(e);
+    return e;
+}
+
 static DWORD mark_len(DWORD lim)
 {
     return lim > 0 && doc_ch(&g_doc, lim - 1) == 12 ? 1 : 2;
@@ -1025,6 +1085,10 @@ static void paint_sel(HDC dc)
             else
                 x2 = x_of(&l[i], b);
             SetRect(&r, x1 - xpScroll, y, x2 - xpScroll, y + l[i].height);
+            /* a selected page break: its whole line, from a pixel left of
+               the text to the window's edge (WR31 C3) */
+            if (l[i].pageBreak)
+                SetRect(&r, XP0 - 1 - xpScroll, y, cr.right, y + l[i].height);
             InvertRect(dc, &r);
         }
         y += l[i].height;
@@ -1407,14 +1471,14 @@ void view_char(WORD ch)
     typing = TRUE;
     view_char2(ch, s);
     typing = FALSE;
-    /* typed on the end mark's line (the document's last), the caret stays
-       off until it blinks (WR1, WR18); in a paragraph before
-       it, it shows (WR3: typing before the paragraph mark that Paragraph >
-       Normal added). UNVERIFIED beyond these */
-    if (g_selFirst == g_selLim && line_start(g_selFirst) != line_start(g_doc.cpMac)) {
-        caretDefer = FALSE;
-        caret_place();
-    }
+    /* after typing the caret goes off a moment later, until it blinks,
+       wherever it was typed: a menu or a key at once after the typing
+       finds it on (WR23 T1, WR25 A1; WR3's old shot), half a second later
+       off (WR24 R4, R5; WR1, WR18) */
+    caretDefer = FALSE;
+    caret_place();
+    if (GetFocus() == g_docwnd)
+        SetTimer(g_docwnd, TIMER_TYPED, TYPED_MS, NULL);
 }
 
 static void view_char2(WORD ch, char *s)
@@ -1539,13 +1603,20 @@ static void page_move(BOOL down)
 void view_key(WPARAM vk)
 {
     BOOL shift = GetKeyState(VK_SHIFT) < 0, ctrl = GetKeyState(VK_CONTROL) < 0;
-    DWORD cp, to;
+    DWORD cp, to, top0;
     LINE ln;
     if (g_selFirst == g_selLim)
         selAnchor = g_selFirst;
     cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
     to = cp;
-    caretDefer = menuShown = FALSE;
+    /* the arrows keep the caret's phase: off after typing it stays off
+       (WR24 R5: Up after typing), unless the window scrolls; the other
+       keys show it (WR18 S5: Ctrl+Home, Page Down, then Down) */
+    menuShown = FALSE;
+    KillTimer(g_docwnd, TIMER_TYPED);   /* a key at once after typing: on (WR25 A1) */
+    if (vk != VK_LEFT && vk != VK_RIGHT && vk != VK_UP && vk != VK_DOWN)
+        caretDefer = FALSE;
+    top0 = cpTop;
     if (vk == VK_DELETE)
         undo_save(IDS_EDITING);
     else
@@ -1632,6 +1703,10 @@ void view_key(WPARAM vk)
         selAnchor = to;
         view_select(to, to, TRUE);
     }
+    if (cpTop != top0 && caretDefer) {
+        caretDefer = FALSE;
+        caret_place();
+    }
 }
 
 /* ---- the window ---- */
@@ -1706,6 +1781,14 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         caretShown = FALSE;
         return 0;
     case WM_TIMER:
+        if (wp == TIMER_TYPED) {
+            KillTimer(w, TIMER_TYPED);
+            if (!menuShown && !caretDefer) {
+                caret_hide();
+                caretDefer = TRUE;
+            }
+            return 0;
+        }
         caretDefer = FALSE;
         if (caretShown)
             caret_draw();

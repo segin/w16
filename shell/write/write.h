@@ -134,6 +134,16 @@
 #define IDS_CANTSAVE        16390
 #define IDS_CANTPRINT       8226
 #define IDS_OBJECTNONE      32
+#define IDS_AUTOMATIC       34
+#define IDS_FMTBITMAP       107
+#define IDS_FMTPICTURE      108
+#define IDS_FMTDIB          109
+#define IDS_FMTTEXT         110
+#define IDS_FMTOBJECT       112
+#define IDS_MANUAL          35
+#define IDS_UNAVAILABLE     36
+#define IDS_NOSOURCE        8470
+#define IDS_UPDATELINKS     8473
 #define IDS_UNDOKEY         28692
 #define IDS_PAGE1           28672
 #define IDS_WRITE           28676
@@ -250,6 +260,7 @@ typedef struct {
     /* page table */
     HMEM pgtb;                          /* {WORD pgn; DWORD cp} as 8 bytes */
     DWORD npages;
+    WORD pgtbMax;                       /* PGTB's second word: its room */
     ATOM32 chpNew;                      /* properties when there is no text */
     WORD ident;                         /* BE31 or BE32 */
     BOOL dirty;
@@ -328,6 +339,10 @@ BOOL ole_draw(HDC dc, DWORD pf, DWORD pl, const RECT *r);
 void ole_activate(DWORD pf, DWORD pl, const RECT *r);
 void cmd_insertobj(void);
 BOOL ole_paste(void);
+BOOL ole_can_pastelink(void);
+void ole_pastelink(void);
+void cmd_links(void);
+void cmd_pastespecial(void);
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */
@@ -347,6 +362,10 @@ void  view_select(DWORD first, DWORD lim, BOOL show);
 void  view_layout(void);
 void  view_update_pageinfo(void);
 void  view_scroll_to_caret(void);
+DWORD view_line_before(DWORD cp);       /* the line starts around cp's line */
+DWORD view_line_after(DWORD cp);
+DWORD view_line_end(DWORD cp);
+void  view_show_line(DWORD cp);          /* its text's end, no paragraph mark */
 LRESULT FAR PASCAL __export DocWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT FAR PASCAL __export PageInfoWndProc(HWND, UINT, WPARAM, LPARAM);
 void  view_key(WPARAM vk);
@@ -366,6 +385,7 @@ BOOL  parse_measure(const char *s, long *tw, BOOL allowNeg);
 void  fmt_measure(char *s, long tw);
 void  cmd_print(void);
 void  cmd_printsetup(void);
+void  printer_font(char *face, BYTE *ffid);
 void  cmd_repaginate(void);
 void  undo_save(WORD kind);
 void  undo_end_typing(void);

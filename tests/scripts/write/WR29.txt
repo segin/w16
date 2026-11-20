@@ -1,18 +1,19 @@
 ; WR29: printing with a header and a footer, to the Generic / Text Only
-; printer (TTY.DRV from the Setup disks) on a file port, C:\PRN.TXT (the
-; bytes Write's pages make compared): a header "Head-" with Insert Page #,
+; printer (TTY.DRV from the Setup disks) on a file port, C:\WROUT.PRN (a
+; name PRN.* would be the DOS printer device; the bytes Write sends are
+; compared): a header "Head-" with Insert Page #,
 ; printed on the first page too; a footer "Foot" not on the first page;
 ; two pages ("one", Ctrl+Enter, "two"); File > Print, OK (P1: the Print
 ; box); saved as C:\WR29.WRI. The Page Header box's buttons are
 ; clicked (Insert Page #, Print on First Page, Return to Document)
 ; expand: TTY.DR_ WINDOWS/SYSTEM/TTY.DRV
 ; expand: UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
-; ini: windows:device=Generic / Text Only,TTY,C:\PRN.TXT
+; ini: windows:device=Generic / Text Only,TTY,C:\WROUT.PRN
 ; ini: windows:Spooler=no
-; ini: devices:Generic / Text Only=TTY,C:\PRN.TXT
-; ini: PrinterPorts:Generic / Text Only=TTY,C:\PRN.TXT,15,45
-; ini: ports:C:\PRN.TXT=
-; get: PRN.TXT
+; ini: devices:Generic / Text Only=TTY,C:\WROUT.PRN
+; ini: PrinterPorts:Generic / Text Only=TTY,C:\WROUT.PRN,15,45
+; ini: ports:C:\WROUT.PRN=
+; get: WROUT.PRN
 run WRITE.EXE
 wait 3000
 type one
@@ -28,7 +29,7 @@ wait 1500
 type Head-
 mclick 224 268
 wait 500
-mclick 334 240
+mclick 384 240
 wait 300
 mclick 450 268
 wait 1500

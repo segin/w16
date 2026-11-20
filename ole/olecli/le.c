@@ -241,6 +241,38 @@ OLESTATUS OLEAPI OleCreateLinkFromFile(LPCSTR protocol, LPOLECLIENT c, LPCSTR cl
     return make_link(d, c, cls, file, item, name, out, r, f, OLE_CREATELINKFROMFILE);
 }
 
+/* A link pasted with a picture on the clipboard: the picture is its
+   presentation, and a server is not started for it; one that has the
+   document open is connected to (as link_loaded). Observed with 3.1's
+   OLECLI through Write's Paste Link (WR30): a link to Paintbrush's
+   ARCADE.BMP pasted with another picture on the clipboard shows and saves
+   that picture, though updating it then fails. */
+LPOBJ link_new(LPDOC d, LPOLECLIENT c, LPCSTR cls, LPCSTR file, LPCSTR item,
+               LPCSTR name, OLEOPT_RENDER r, OLECLIPFORMAT f)
+{
+    LPOBJ o = obj_new(c, d, name);
+    if (!o)
+        return NULL;
+    o->type = OT_LINK;
+    o->hclass = gstr_new(cls);
+    set_render(o, r, f);
+    o->htopic = gstr_new(file);
+    o->hitem = gstr_new(item);
+    return o;
+}
+
+OLESTATUS link_connect_running(LPOBJ o)
+{
+    OLESTATUS s;
+    dde_start(o, OLE_LNKPASTE);
+    dde_add(o, ST_CONNECT_RUNNING, 0, NULL, 0);
+    add_link_advises(o);
+    add_requests(o, IT_LINK);
+    dde_add(o, ST_MAYBE_TERMINATE, 0, NULL, 0);
+    s = dde_run(o);
+    return s == OLE_WAIT_FOR_RELEASE ? s : OLE_OK;
+}
+
 /* OLECLI.11 (from clip.c's parse of ObjectLink) */
 OLESTATUS link_from_clip(LPDOC d, LPOLECLIENT c, LPCSTR cls, LPCSTR file, LPCSTR item,
                          LPCSTR name, LPOLEOBJECT FAR *out, OLEOPT_RENDER r,

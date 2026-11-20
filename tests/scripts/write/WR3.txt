@@ -58,6 +58,7 @@ key 0D
 menu p
 char n
 type normal
+wait 1000
 snap C:\S1.BMP
 menu f
 char a

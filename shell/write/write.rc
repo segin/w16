@@ -180,6 +180,16 @@ BEGIN
     IDS_NOMEMORY, "Not enough memory for Write to complete this operation.\n\nQuit one or more applications to increase available memory, and then try again."
     IDS_NOPATH, "Path does not exist.\n\nPlease verify that the correct path is given."
     IDS_OBJECTNONE, "&Object"
+    IDS_FMTBITMAP, "Bitmap"
+    IDS_FMTPICTURE, "Picture"
+    IDS_FMTDIB, "Device Independent Bitmap"
+    IDS_FMTTEXT, "Text"
+    IDS_FMTOBJECT, "Object"
+    IDS_AUTOMATIC, "Automatic"
+    IDS_MANUAL, "Manual"
+    IDS_UNAVAILABLE, "Unavailable"
+    IDS_NOSOURCE, "The source document cannot be found.\n\nMake sure that the object still exists in the source document, the link has not been corrupted or the source document has not been deleted, moved, or renamed."
+    IDS_UPDATELINKS, "This document contains links to other documents.\n\nDo you want to update links now?"
     IDS_UNDOKEY, "  \tCtrl+Z"
     IDS_CANTPRINT, "Cannot print.\n\nBe sure that your printer is connected properly, and use the Printers option in Control Panel to verify that the printer is configured properly."
     IDS_CANTSAVE, "Cannot save file.\n\nMake sure that the file or disk is not damaged."
@@ -434,4 +444,40 @@ BEGIN
     CONTROL "OK", 1, "Button", 0x50010001L, 139, 6, 35, 14
     CONTROL "Cancel", 2, "Button", 0x50010000L, 139, 28, 35, 14
     CONTROL "&Object Type:", -1, "Static", 0x50000000L, 7, 3, 50, 9
+END
+
+/* Edit > Links (the original's DTPROP: layout, IDs and text) */
+DTPROP DIALOG 12, 34, 291, 97
+STYLE WR_DLGSTYLE | WS_VISIBLE
+CAPTION "Links"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Edit", 1030, "Button", 0x50030001L, 249, 63, 37, 14
+    CONTROL "&Links:", -1, "Static", 0x50000000L, 6, 4, 30, 9
+    CONTROL "", 265, "Listbox", 0x50A10889L, 5, 15, 234, 40
+    CONTROL "Update:", -1, "Static", 0x50000000L, 8, 60, 30, 9
+    CONTROL "Au&tomatic", 258, "Button", 0x50030004L, 39, 58, 46, 14
+    CONTROL "&Manual", 259, "Button", 0x50010004L, 89, 58, 42, 14
+    CONTROL "&Update Now", 1031, "Button", 0x50010000L, 26, 75, 58, 14
+    CONTROL "Ca&ncel Link", 1032, "Button", 0x50010000L, 91, 75, 58, 14
+    CONTROL "C&hange Link...", 262, "Button", 0x50010000L, 156, 75, 58, 14
+    CONTROL "OK", 1, "Button", 0x50010000L, 249, 6, 37, 14
+    CONTROL "Cancel", 2, "Button", 0x50010000L, 249, 25, 37, 14
+    CONTROL "&Activate", 273, "Button", 0x50010000L, 249, 44, 37, 14
+END
+
+/* Edit > Paste Special (the original's PASTESPECIAL: layout, IDs, text) */
+PASTESPECIAL DIALOG 87, 52, 171, 77
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Paste Special"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Paste", 281, "Button", 0x50010001L, 119, 9, 46, 14
+    CONTROL "Paste &Link", 282, "Button", 0x50010000L, 119, 32, 46, 14
+    CONTROL "Cancel", 2, "Button", 0x50010000L, 119, 55, 46, 14
+    CONTROL "Source:", 283, "Static", 0x50000000L, 5, 6, 27, 8
+    CONTROL "", 279, "Static", 0x50000000L, 35, 6, 77, 9
+    CONTROL "", 280, "Static", 0x50000000L, 12, 15, 95, 16
+    CONTROL "&Data Type:", -1, "Static", 0x50000000L, 4, 32, 50, 9
+    CONTROL "", 265, "Listbox", 0x50A10001L, 3, 43, 110, 36
 END

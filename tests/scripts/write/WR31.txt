@@ -1,0 +1,182 @@
+; WR31: Repaginate with Confirm Page Breaks: 70 numbered lines and a
+; manual page break (Ctrl+Enter) after them; File > Repaginate,
+; Confirm Page Breaks checked, OK: the first break proposed (C1), Up
+; twice (C2), Confirm (C3); the manual break's question (C4), Keep;
+; saved as C:\WR31.WRI
+run WRITE.EXE
+wait 3000
+type line 1
+key 0D
+type line 2
+key 0D
+type line 3
+key 0D
+type line 4
+key 0D
+type line 5
+key 0D
+type line 6
+key 0D
+type line 7
+key 0D
+type line 8
+key 0D
+type line 9
+key 0D
+type line 10
+key 0D
+type line 11
+key 0D
+type line 12
+key 0D
+type line 13
+key 0D
+type line 14
+key 0D
+type line 15
+key 0D
+type line 16
+key 0D
+type line 17
+key 0D
+type line 18
+key 0D
+type line 19
+key 0D
+type line 20
+key 0D
+type line 21
+key 0D
+type line 22
+key 0D
+type line 23
+key 0D
+type line 24
+key 0D
+type line 25
+key 0D
+type line 26
+key 0D
+type line 27
+key 0D
+type line 28
+key 0D
+type line 29
+key 0D
+type line 30
+key 0D
+type line 31
+key 0D
+type line 32
+key 0D
+type line 33
+key 0D
+type line 34
+key 0D
+type line 35
+key 0D
+type line 36
+key 0D
+type line 37
+key 0D
+type line 38
+key 0D
+type line 39
+key 0D
+type line 40
+key 0D
+type line 41
+key 0D
+type line 42
+key 0D
+type line 43
+key 0D
+type line 44
+key 0D
+type line 45
+key 0D
+type line 46
+key 0D
+type line 47
+key 0D
+type line 48
+key 0D
+type line 49
+key 0D
+type line 50
+key 0D
+type line 51
+key 0D
+type line 52
+key 0D
+type line 53
+key 0D
+type line 54
+key 0D
+type line 55
+key 0D
+type line 56
+key 0D
+type line 57
+key 0D
+type line 58
+key 0D
+type line 59
+key 0D
+type line 60
+key 0D
+type line 61
+key 0D
+type line 62
+key 0D
+type line 63
+key 0D
+type line 64
+key 0D
+type line 65
+key 0D
+type line 66
+key 0D
+type line 67
+key 0D
+type line 68
+key 0D
+type line 69
+key 0D
+type line 70
+key 0D
+kdown 11
+kdown 0D
+kup 0D
+kup 11
+wait 300
+type after the break
+wait 500
+menu f
+char e
+wait 1000
+alt b
+key 0D
+wait 2000
+snap C:\C1.BMP
+alt u
+wait 500
+alt u
+wait 800
+snap C:\C2.BMP
+alt c
+wait 2000
+snap C:\C3.BMP
+wait 1000
+snap C:\C4.BMP
+alt k
+wait 2000
+snap C:\C5.BMP
+menu f
+char a
+wait 1500
+type C:\WR31.WRI
+key 0D
+wait 2000
+close
+wait 1000
