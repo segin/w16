@@ -173,10 +173,10 @@ this note is the working state.
 
 ## Last full run
 
-Commit fd6e140 (after master ba697bf was merged in) on installation-05
-(`tools/remote-test.sh -n w16-winfile`): make test pass; boot test 138
-ok, 4 failures, all of the known list (lzexpand quirks, toolhelp ref386,
-soundtime, trails@timed); w16winfile (13 parts, WF01-WF13) ok.
+Commit ecb291b (layer 5, on master 8463e1e) on installation-05
+(`tools/remote-test.sh -n w16-winfile5`): make test pass; boot test 141
+ok, 2 failures, both of the known flaky list (holdbtn, lzexpand quirks);
+w16winfile 14 of 14 parts (WF01-WF14) ok.
 
 ## Where to resume
 
