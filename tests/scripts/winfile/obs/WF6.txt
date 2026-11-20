@@ -1,0 +1,81 @@
+; WF6: the panes and the focus. Five starts: Directory Only and back from
+; the tree's focus; Tree Only and back from the list's; Tree Only and
+; back from the tree's; Refresh; Indicate Expandable, Directory Only and
+; back (the Tree menu's check)
+run WINFILE.EXE
+wait 4000
+cmd 412
+wait 1000
+snap C:\F01.BMP
+focus
+cmd 413
+wait 1000
+snap C:\F02.BMP
+focus
+close
+wait 2500
+run WINFILE.EXE
+wait 4000
+key 09
+wait 500
+cmd 411
+wait 1000
+snap C:\F03.BMP
+focus
+cmd 413
+wait 1000
+snap C:\F04.BMP
+focus
+close
+wait 2500
+run WINFILE.EXE
+wait 4000
+cmd 411
+wait 1000
+snap C:\F05.BMP
+focus
+cmd 413
+wait 1000
+snap C:\F06.BMP
+focus
+key 09
+wait 500
+snap C:\F07.BMP
+focus
+close
+wait 2500
+run WINFILE.EXE
+wait 4000
+cmd 1003
+wait 1500
+snap C:\F08.BMP
+focus
+close
+wait 2500
+run WINFILE.EXE
+wait 4000
+cmd 505
+wait 1000
+cmd 412
+wait 1000
+cmd 413
+wait 1000
+menu t
+wait 800
+snap C:\F09.BMP
+key 1B
+key 1B
+wait 300
+cmd 505
+wait 1000
+cmd 411
+wait 1000
+cmd 413
+wait 1000
+menu t
+wait 800
+snap C:\F10.BMP
+key 1B
+key 1B
+close
+wait 2500

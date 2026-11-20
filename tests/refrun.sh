@@ -38,6 +38,11 @@ for f in ${REFRUN_FILES:-}; do
     *)   cp "$f" "$work/c/$(basename "$f" | tr a-z A-Z)" ;;
     esac
 done
+# REFRUN_TREE = a host directory whose contents are copied over C:\ with
+# their dates kept (cp -a), e.g. a test tree with fixed file times
+if [ -n "${REFRUN_TREE:-}" ]; then
+    cp -a "$REFRUN_TREE"/. "$work/c/"
+fi
 # w16's USER (when REFRUN_FILES brings it) as stock 3.1: no desktop version
 # stamp ([w16] DesktopVersion, user/deskver.c), and w16's Notepad (when
 # it brings that, tests/npscenarios.sh) with 3.1's menus and accelerators

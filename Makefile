@@ -1236,6 +1236,33 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 	    option map=$(B)/shell/write/write.map \
 	    option resource=$(B)/shell/write/write.res file { $(SHELL_WR) }
 	python3 tools/nemark.py $@ 3.10
+
+# ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
+# 3.1 only ----
+WF_C     := main ini treewin drives tree dir dialogs fileops bitmap util
+SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
+shell: $(DOS)/WINFILE.EXE
+$(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/winfile/dosfn.o: shell/winfile/dosfn.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/winfile/winfile.ico: tools/mkwfileicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkwfileicon.py $(@D)
+$(B)/shell/winfile/wfstrip.bmp: tools/mkwfbmp.py
+	@mkdir -p $(@D)
+	python3 tools/mkwfbmp.py $@
+$(B)/shell/winfile/winfile.res: shell/winfile/winfile.rc shell/winfile/winfile.h \
+    $(B)/shell/winfile/winfile.ico $(B)/shell/winfile/wfstrip.bmp
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/winfile -i=$(B)/shell/winfile -fo=$@ $<
+$(DOS)/WINFILE.EXE: $(SHELL_WF) $(B)/shell/winfile/winfile.res shell/winfile/winfile.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/winfile/winfile.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/winfile/winfile.map \
+	    option resource=$(B)/shell/winfile/winfile.res file { $(SHELL_WF) }
+	python3 tools/nemark.py $@ 3.10
 # WRMET.EXE: probe WR9, the font metrics Write's layout depends on
 dos: $(DOS)/WRMET.EXE
 $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk

@@ -86,6 +86,8 @@ Boot-test settings:
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
 Other test scripts, each documented at its top: `tests/npscenarios.sh`,
+`tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
+Microsoft's; `tests/wfobs.sh` for observing the original),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
