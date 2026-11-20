@@ -83,6 +83,7 @@ static u32 ev_next;
 static int is_command(const char *p);
 static void put_banner(struct vm *v);
 static void post(struct vm *v, u32 msg, u32 wparam);
+static void focus3(struct vm *v, u32 edi, int all);
 
 static struct shvm *sh_of(struct vm *v)
 {
@@ -100,9 +101,18 @@ static struct shvm *sh_of(struct vm *v)
 extern char shell_hk_entry[];
 #pragma aux shell_hk_entry "_*"
 struct hk { u8 scan; u32 shift; u32 code; };
+#define HK_ALTENTER 1
+#define HK_ALTTAB   2
+#define HK_ALTESC   3
+#define HK_CTRLESC  4
 static const struct hk hks[] = {
-    { 0x1C, 0x00070004, 1 },            /* Alt+Enter */
+    { 0x1C, 0x00070004, HK_ALTENTER },
+    { 0x0F, 0x00070004, HK_ALTTAB },
+    { 0x01, 0x00070004, HK_ALTESC },
+    { 0x01, 0x00070002, HK_CTRLESC },
 };
+static u32 switch_key;                  /* the switching key being acted on (function 10h) */
+static u32 switch_wnd;                  /* function 10h's first ECX */
 
 static void define_hot_keys(void)
 {
@@ -131,7 +141,58 @@ void __cdecl shell_hot_key(struct svcregs *r)
     trace("SHELL: hot key %d in VM %d\n", r->edx, v->id);
     if (sh_of(v)->hk_pending) return;   /* the key repeated */
     sh_of(v)->hk_pending = 1;
-    post(v, 0x414, 0x00010000u | r->edx);
+    if (r->edx == HK_ALTENTER) {
+        post(v, 0x414, 0x00010000u | r->edx);
+        return;
+    }
+    /* a switching key in a DOS VM (Windows 3.1, VXSH: Alt+Tab, then Alt+Esc
+     * in the full-screen MS-DOS Prompt): Alt+Tab begins message mode for
+     * the VM (control message 10h, ECX 1), both give the System VM the
+     * execution focus, suspend the VM (VM_Suspend, EDX 0 after Alt+Tab, 1
+     * after Alt+Esc) and post event 41Eh, wParam 0, for its WINOA386, which
+     * then asks function 10h which key it was. Ctrl+Esc: 3.1 posted no
+     * event that VXSH saw (WINOA386 gave the System VM the focus itself,
+     * function 5): UNVERIFIED, here the same event as Alt+Esc */
+    if (r->edx == HK_CTRLESC) {
+        /* Ctrl+Esc (Windows 3.1: the Task List over Windows, no event
+         * VXSH saw; WINOA386 then gave the System VM the focus with
+         * function 5, EAX 1): the System VM gets the devices' focus and
+         * the keys, Ctrl down and the Esc press (VKD_Force_Keys,
+         * VKD_Reflect_Hot_Key), so USER opens its Task List and WINOA386
+         * is deactivated. UNVERIFIED how Windows 3.1 does it */
+        static const u8 ctrl_down = 0x1D;
+        struct svcregs k;
+        struct shvm *s = sh_of(v);
+        u32 hk = r->ebx;
+        focus3(&sysvm, 0, 1);
+        vm_set_focus(&sysvm);
+        if (!(s->flags & SHELL_WINDOWED) && !v->suspended) {
+            v->suspended = 1;
+            vxd_send(VM_SUSPEND, v, 1, 0, 0);
+        }
+        memset(&k, 0, sizeof(k));
+        k.esi = (u32)&ctrl_down;
+        k.ecx = 1;
+        vxd_service_call(0x000D, 0x07, &k);     /* VKD_Force_Keys */
+        memset(&k, 0, sizeof(k));
+        k.eax = hk;
+        k.ebx = VMH(&sysvm);
+        k.ecx = 2;                              /* Ctrl (w16's SS_CTRL) */
+        vxd_service_call(0x000D, 0x05, &k);     /* VKD_Reflect_Hot_Key */
+        s->hk_pending = 0;
+        return;
+    }
+    switch_key = r->edx;
+    if (r->edx == HK_ALTTAB) vxd_send(BEGIN_MESSAGE_MODE, v, 0, 0, 0);
+    vm_set_focus(&sysvm);
+    {
+        struct shvm *s = sh_of(v);
+        if (!(s->flags & SHELL_WINDOWED) && !v->suspended) {
+            v->suspended = 1;
+            vxd_send(VM_SUSPEND, v, r->edx == HK_ALTTAB ? 0 : 1, 0, 0);
+        }
+    }
+    post(v, 0x41E, 0);
 }
 
 void shell_init(void)
@@ -401,7 +462,44 @@ void shell_api(struct cregs *r)
         trace("SHELL: VM %d's window %x\n", s ? s->vm->id : 0, SI(r));
         return;
     case 0x0C:                          /* an event record back */
-        r->eax = 0;
+        /* EAX 1 (after a switching key, Windows 3.1): the devices' focus
+         * and the execution focus to the System VM, EAX 1 back */
+        if (AX(r) == 1) {
+            focus3(&sysvm, 0, 1);
+            vm_set_focus(&sysvm);
+            r->eax = 1;
+        } else
+            r->eax = 0;
+        return;
+    case 0x10:                          /* after event 41Eh: which key */
+        /* Windows 3.1 (VXSH): EBX FFFFFFFFh first: Alt+Tab EAX 1, EDX 0
+         * (WINOA386 calls again with EBX the VM: the devices' focus to the
+         * System VM, message mode ended (control 11h), EAX 0, EDX 1);
+         * Alt+Esc EAX 0, EDX 0, the devices' focus to the System VM.
+         * Ctrl+Esc: UNVERIFIED, as Alt+Esc */
+        if (r->ebx == 0xFFFFFFFFu) switch_wnd = CX(r);
+        if (r->ebx == 0xFFFFFFFFu && switch_key == HK_ALTTAB) {
+            r->eax = 1;
+            SETW(r->edx, 0);
+            return;
+        }
+        focus3(&sysvm, r->edi, 1);
+        if (r->ebx != 0xFFFFFFFFu && (v = vm_of(r->ebx)) != NULL) {
+            /* back: EBX FFFFFFFFh, ECX the window the first call named
+             * (Windows 3.1: 1168h both times; WINOA386 then activates
+             * it with function 0Ch) */
+            vxd_send(END_MESSAGE_MODE, v, 0, 0, 0);
+            r->eax = 0;
+            r->ebx = 0xFFFFFFFFu;
+            SETW(r->ecx, switch_wnd);
+            SETW(r->edx, 1);
+        } else {
+            r->eax = 0;
+            SETW(r->edx, 0);
+        }
+        switch_key = 0;
+        return;
+    case 0x14:                          /* (seen after a switch: nothing back) */
         return;
     case 0x16:
         SETW(r->edx, 0);
