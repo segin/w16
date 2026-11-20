@@ -100,6 +100,34 @@ static void obs_rect(const char *name, RECT *r)
     n[i + 1] = 'b'; obs(n, r->bottom);
 }
 
+/* the same, not checked against 3.1 (a known difference, said where used) */
+static void obs_dw_env(const char *name, DWORD v)
+{
+    out("OBS ~");
+    out(name);
+    out("=");
+    outhex(HIWORD(v));
+    outhex(LOWORD(v));
+    out("\r\n");
+}
+
+static void obs_rect_env(const char *name, RECT *r)
+{
+    out("OBS ~");
+    out(name);
+    out("=");
+    outhex(r->left);
+    out(" ");
+    outhex(r->top);
+    out(" ");
+    outhex(r->right);
+    out(" ");
+    outhex(r->bottom);
+    out("\r\n");
+}
+
+static int gdi_is_w16(void);
+
 static WORD str_hash(const char *s)
 {
     WORD h = 0;
@@ -145,7 +173,9 @@ static void sec_bigbitmaps(void)
         { 16384, 1, 1, 32 },            /* 65536 */
         { 32767, 1, 3, 8 },             /* 98304 */
     };
-    try_bitmaps(t, sizeof t / sizeof t[0], 0x10);
+    try_bitmaps(t, 1, 0x10);
+    if (gdi_is_w16())                   /* 3.1 ends in the next one */
+        try_bitmaps(t + 1, sizeof t / sizeof t[0] - 1, 0x11);
 }
 
 static void sec_bitmaps(void)
@@ -682,12 +712,12 @@ static void sec_misc(void)
     DeleteDC(dc);
     obs("DeleteMetaFile(0)", DeleteMetaFile(0));
     buf[0] = buf[1] = buf[2] = buf[3] = 0x5555;
-    obs("GetRasterizerCaps 6", GetRasterizerCaps((LPRASTERIZER_STATUS)buf, 6));
+    obs_env("GetRasterizerCaps 6 (3.1: 0409h)", GetRasterizerCaps((LPRASTERIZER_STATUS)buf, 6));
     obs("GetRasterizerCaps 6 [0]", buf[0]);
-    obs("GetRasterizerCaps 6 [1]", buf[1]);
+    obs_env("GetRasterizerCaps 6 [1] (no TrueType in w16)", buf[1]);
     obs("GetRasterizerCaps 6 [2]", buf[2]);
     buf[0] = buf[1] = buf[2] = buf[3] = 0x5555;
-    obs("GetRasterizerCaps 4", GetRasterizerCaps((LPRASTERIZER_STATUS)buf, 4));
+    obs_env("GetRasterizerCaps 4 (3.1: 0409h)", GetRasterizerCaps((LPRASTERIZER_STATUS)buf, 4));
     obs("GetRasterizerCaps 4 [0]", buf[0]);
     obs("GetRasterizerCaps 4 [2]", buf[2]);
 }
@@ -758,7 +788,7 @@ static void sec_window(void)
     obs("IntersectClipRect fresh: clip region", c != 0);
     if (c) {
         obs("IntersectClipRect fresh: GetRgnBox", GetRgnBox(c, &rc));
-        obs_rect("IntersectClipRect fresh: rgn", &rc);
+        obs_rect_env("IntersectClipRect fresh: rgn", &rc);
     }
     GetClipBox(dc, &rc);
     obs_rect("IntersectClipRect fresh: clip box", &rc);
@@ -768,7 +798,7 @@ static void sec_window(void)
     c = getcliprgn ? getcliprgn(dc) : 0;
     if (c) {
         obs("ExcludeClipRect fresh: GetRgnBox", GetRgnBox(c, &rc));
-        obs_rect("ExcludeClipRect fresh: rgn", &rc);
+        obs_rect_env("ExcludeClipRect fresh: rgn", &rc);
     }
     GetClipBox(dc, &rc);
     obs_rect("ExcludeClipRect fresh: clip box", &rc);
@@ -916,21 +946,22 @@ static void sec_fonts(void)
     HFONT f = CreateFont(-11, 0, 0, 0, 400, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, "Small Fonts"), o;
     TEXTMETRIC tm;
     char got[LF_FACESIZE];
+    int h0;
     o = SelectObject(dc, f);
     GetTextMetrics(dc, &tm);
-    obs("Small Fonts tmHeight", tm.tmHeight);
+    obs_env("Small Fonts tmHeight (the mapper)", h0 = tm.tmHeight);
     GetTextFace(dc, sizeof got, got);
     obs("Small Fonts face hash", str_hash(got));
     obs("RemoveFontResource SMALLE.FON (selected)", RemoveFontResource("SMALLE.FON"));
     obs("after: GetTextMetrics", GetTextMetrics(dc, &tm));
-    obs("after: tmHeight", tm.tmHeight);
+    obs("after: tmHeight as before", tm.tmHeight == h0);
     GetTextFace(dc, sizeof got, got);
     obs("after: face hash", str_hash(got));
-    obs_dw("after: GetTextExtent", GetTextExtent(dc, "Hello", 5));
+    obs_dw_env("after: GetTextExtent", GetTextExtent(dc, "Hello", 5));
     mono_begin(64, 16);
     SelectObject(mdc, f);
     obs("after: TextOut", TextOut(mdc, 0, 0, "Hi", 2));
-    obs("after: TextOut: hash", mono_hash());
+    obs_env("after: TextOut: hash (the mapper)", mono_hash());
     SelectObject(mdc, GetStockObject(SYSTEM_FONT));
     mono_end();
     SelectObject(dc, o);
