@@ -153,12 +153,15 @@ hooks:
 %endif
         ret
 
-; ---- INT 21h in V86 mode in a VM other than the System VM: AX, and for
+; ---- INT 21h in V86 mode in a VM other than the System VM (VXSS.386,
+; built with ALLVM: in every VM): AX, and for
 ; AH=40h (write) the text at DS:DX (CX bytes, at most 1000), for AH=4Bh
 ; (EXEC) and 3Bh (directory) the string at DS:DX; passed on (carry) ----
 int21_hook:
+%ifndef ALLVM
         cmp ebx, [sysvm_h]
         je .pass
+%endif
         pushad
         mov esi, msg_i21
         call puts
@@ -286,6 +289,34 @@ api_common:
         mov esi, msg_esdi
         mov ax, 3800h
         call dump
+        ; the VDD's Get_Mem (AX 1): 64 bytes at the last pointer of its
+        ; answer (+24h), what the grabber reads there
+        cmp dword [esp + 36], 1
+        jne .ng
+        cmp word [ebp + 1Ch], 1
+        jne .ng
+        mov ax, 3800h
+        int 20h
+        dd 0001001Ch                    ; Map_Flat
+        cmp eax, -1
+        je .ng
+        mov edi, eax
+        mov ebx, 24h
+        mov esi, msg_ptr
+        call puts
+        mov esi, [edi + ebx]
+        mov eax, esi
+        call puthex
+        mov al, ':'
+        call putc
+        mov ecx, 64
+.gb:    mov al, ' '
+        call putc
+        lodsb
+        call puthex2
+        loop .gb
+        call crlf
+.ng:
         ; SHELL's function 3 (DX): the three pointers of its block, which
         ; SHELL has made linear (+8, +0Eh, +14h)
         cmp dword [esp + 36], 0

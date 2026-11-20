@@ -273,6 +273,8 @@ void vm_int21_ret(struct cregs *r);
 #define VM_SUSPEND          0x0D
 #define VM_RESUME           0x0E
 #define SET_DEVICE_FOCUS    0x0F
+#define BEGIN_MESSAGE_MODE  0x10
+#define END_MESSAGE_MODE    0x11
 u32 vxd_send(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);   /* carry: a device refused */
 void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);
 int vxd_service_call(u32 dev, u32 svc, struct svcregs *s);

@@ -353,10 +353,19 @@ void vm_idle(void)
     resched = 1;
 }
 
+/* an interrupt or event for v: it may run again. The VM running now keeps
+ * the rest of its time slice unless it idles: a timer tick wakes every VM,
+ * and switching at once took a busy DOS VM off inside its timer
+ * interrupt's handler every tick; back, it always had the next tick's
+ * interrupt pending, which kept its keyboard's (IRQ 1, lower priority)
+ * waiting: in plain DOSBox, whose BIOS waits for a key in a loop without
+ * HLT, keys typed in a full-screen MS-DOS Prompt came seconds late or not
+ * at all */
 void vm_wake(struct vm *v)
 {
     v->idle = 0;
-    if (v != cur_vm && runnable(v)) resched = 1;
+    if (v != cur_vm && runnable(v) && (cur_vm->idle || !cur_vm->slice || !runnable(cur_vm)))
+        resched = 1;
 }
 
 void vm_tick(void)

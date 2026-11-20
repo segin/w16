@@ -77,9 +77,15 @@
 #              WIN's output not redirected), against Microsoft's WIN386.EXE:
 #              every shot 0 pixels but the banner's "w16" rows and the
 #              blinking cursor
+#   win386dosw w16's WIN386: the MS-DOS Prompt to a window (Alt+Enter), VER,
+#              back, against Microsoft's WIN386
+#   win386switch  w16's WIN386: Alt+Tab, Alt+Esc, Ctrl+Esc between the
+#              full-screen MS-DOS Prompt and Windows, against Microsoft's
+#   win386two  w16's WIN386: two MS-DOS Prompts, VER and EXIT in each
+#   win386exitbox  w16's WIN386: Exit Windows with a box open (refused), EXIT
 #   win386w16dos  w16's install tree over Windows 3.1 with w16's WIN386.EXE
-#              (plain DOSBox, the user's set-up): the MS-DOS Prompt starts
-#              full screen as with Microsoft's (banner and cursor masked)
+#              (plain DOSBox, the user's set-up): the MS-DOS Prompt, VER and
+#              EXIT typed, as with Microsoft's (banner and cursor masked)
 #   winoldap   w16's WINOLDAP.MOD on Microsoft's KRNL286: WIN.INI run= starts
 #              a PIF (COMMAND.COM /C ECHO HI), the DOS program runs full
 #              screen and Windows comes back; against Microsoft's WINOLDAP
@@ -770,7 +776,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1305,16 +1311,70 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386dos: the MS-DOS Prompt full screen, VER, EXIT as with Microsoft's WIN386"
         else echo "FAIL win386dos: $r ($out/win386dos-w16)"; fails=$((fails + 1)); fi ;;
+    win386dosw|win386switch|win386two|win386exitbox)
+        # win386dosw: the MS-DOS Prompt full screen, Alt+Enter to a window,
+        # VER typed there, Alt+Enter back, EXIT (tests/scripts/input/
+        # dosbox386w.txt), Microsoft's VGA.3GR. win386switch: full screen, Alt+Tab, Alt+Tab
+        # back, Alt+Esc, Alt+Tab back, Ctrl+Esc (the Task List), Esc, Alt+Tab
+        # (Windows starts a second box: Program Manager's MS-DOS Prompt
+        # was selected, as under 3.1), EXIT (tests/scripts/input/
+        # dosbox386s.txt). win386two: two MS-DOS Prompts, VER and EXIT in
+        # each (dosbox386t.txt). win386exitbox: Exit Windows with a box
+        # open: WINOA386's "Application still active" box, then EXIT
+        # (dosbox386x.txt). DOSBox-X on its own DOS, against Microsoft's
+        # WIN386; masked: the banner's "w16" rows, the blinking cursor
+        if [ $c = win386dosw ]; then
+            scr=$root/tests/scripts/input/dosbox386w.txt shots="01-full 02-window 03-ver 04-full 05-back"
+            set --
+        elif [ $c = win386switch ]; then
+            scr=$root/tests/scripts/input/dosbox386s.txt
+            shots="01-full 02-alttab 03-back 04-altesc 05-back 06-ctrlesc 07-esc 08-box 09-end"
+            set --
+        elif [ $c = win386two ]; then
+            scr=$root/tests/scripts/input/dosbox386t.txt
+            shots="01-first 02-windows 03-second 04-ver2 05-back 06-first 07-ver1 08-end"
+            set --
+        else
+            scr=$root/tests/scripts/input/dosbox386x.txt
+            shots="01-full 02-windows 03-exitbox 04-refused 05-after 06-box 07-end"
+            set --
+        fi
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        set -- -r -p 386 -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" "$@"
+        refrun $c-ref $c env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/$c-ref" "$@"
+        DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+            "$out/$c-w16" "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" \
+            > "$out/$c-w16.txt" 2>&1 || true
+        r=ok
+        for s in $shots; do
+            a=$out/$c-w16/$s.png b=$out/$c-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            case $(magick identify -format '%wx%h' "$b") in
+            720x400) m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;  # full screen: the cursor's column
+            *) m="rectangle 66,40 590,114 rectangle 96,140 104,215" ;;     # Windows: the window's banner, its caret
+            esac
+            magick "$a" -fill black -draw "$m" "$out/$c-a.png"
+            magick "$b" -fill black -draw "$m" "$out/$c-b.png"
+            n=$(magick compare -metric AE "$out/$c-a.png" "$out/$c-b.png" "$out/$c-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/$c-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
+        else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
     win386w16dos)
         # the MS-DOS Prompt with w16's install tree (build/w16, every
         # program, driver and library but the INI files and groups) over
         # Windows 3.1 and w16's WIN386.EXE, in plain DOSBox: the user's
         # set-up (2026-11-19), where WINOA386 refused the box ("...because
-        # the x TSR is loaded": SHELL function 9's EBX/ECX). The full-screen
-        # box (tests/scripts/input/dosbox386v.txt, 01-full) against
-        # Microsoft's WIN386 and the rest; masked: the banner's "w16"
-        # rows and the blinking cursor
-        scr=$root/tests/scripts/input/dosbox386v.txt
+        # the x TSR is loaded": SHELL function 9's EBX/ECX) and then keys
+        # typed in it came seconds late or never (VPICD: IRQ 1 waiting
+        # behind IRQ 0). VER and EXIT typed slowly (tests/scripts/input/
+        # dosbox386p.txt): 01-full and 02-ver against Microsoft's WIN386
+        # and the rest (masked: the banner's "w16" rows and the blinking
+        # cursor); 03-back must be Windows again (640x480, not the text
+        # screen's 640x400)
+        scr=$root/tests/scripts/input/dosbox386p.txt
         k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
         refrun win386w16dos-ref win386w16dos env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
             "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/win386w16dos-ref" -r -c "WIN /3 /B" \
@@ -1325,17 +1385,22 @@ runcase() {
         done
         DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
             "$out/win386w16dos-w16" "$@" > "$out/win386w16dos-w16.txt" 2>&1 || true
-        a=$out/win386w16dos-w16/01-full.png b=$out/win386w16dos-ref/01-full.png
-        if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no 01-full screen"
-        else
-            m="rectangle 64,48 583,79 rectangle 88,336 95,351"
+        r=ok
+        for s in 01-full 02-ver; do
+            a=$out/win386w16dos-w16/$s.png b=$out/win386w16dos-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            m="rectangle 64,48 583,79 rectangle 88,336 95,351 rectangle 88,384 95,399"
             magick "$a" -fill black -draw "$m" "$out/win386w16dos-a.png"
             magick "$b" -fill black -draw "$m" "$out/win386w16dos-b.png"
-            n=$(magick compare -metric AE "$out/win386w16dos-a.png" "$out/win386w16dos-b.png" "$out/win386w16dos-diff.png" 2>&1 >/dev/null || true)
+            n=$(magick compare -metric AE "$out/win386w16dos-a.png" "$out/win386w16dos-b.png" "$out/win386w16dos-$s-diff.png" 2>&1 >/dev/null || true)
             n=${n%%[. ]*}
-            if [ "${n:-1}" = 0 ]; then r=ok; else r="01-full: $n pixels differ ($out/win386w16dos-diff.png)"; fi
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386w16dos-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then
+            g=$(magick identify -format '%wx%h' "$out/win386w16dos-w16/03-back.png" 2>/dev/null || true)
+            [ "$g" = 640x480 ] || r="03-back: not Windows ($g)"
         fi
-        if [ "$r" = ok ]; then echo "ok   win386w16dos: w16's tree and WIN386, the MS-DOS Prompt starts as with Microsoft's"
+        if [ "$r" = ok ]; then echo "ok   win386w16dos: w16's tree and WIN386, the MS-DOS Prompt: VER and EXIT as with Microsoft's"
         else echo "FAIL win386w16dos: $r ($out/win386w16dos-w16)"; fails=$((fails + 1)); fi ;;
     win386close)
         scr=$root/tests/scripts/input/win386close.txt

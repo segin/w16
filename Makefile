@@ -1000,6 +1000,8 @@ $(DOS)/VXS.386: tests/vxd/vxs.asm tests/vxd/vxs.lnk
 	$(NASM) -f obj -o $(B)/tests/vxs.o tests/vxd/vxs.asm
 	$(NASM) -f obj -DSVCHOOK -o $(B)/tests/vxsh.o tests/vxd/vxs.asm
 	$(WLINK) @tests/vxd/vxs.lnk name $(DOS)/VXSH.386 file $(B)/tests/vxsh.o
+	$(NASM) -f obj -DALLVM -o $(B)/tests/vxss.o tests/vxd/vxs.asm
+	$(WLINK) @tests/vxd/vxs.lnk name $(DOS)/VXSS.386 file $(B)/tests/vxss.o
 	$(WLINK) @tests/vxd/vxs.lnk name $@ file $(B)/tests/vxs.o
 $(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)

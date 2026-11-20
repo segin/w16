@@ -273,6 +273,20 @@ static void deliver_pending(void)
         struct virq *v = owner[irq];
         int want_iret = v && v->d.iret_proc;
         if (!vpicd_link.can_deliver()) return;          /* interrupts off */
+        /* another request waits behind this one: the handler's IRET is
+         * where it can go (a handler ends the interrupt with interrupts
+         * off and IRETs them on, which nothing else traps in V86 mode;
+         * without this a DOS VM in a busy loop got IRQ 1 only when a
+         * hardware interrupt next came while it ran, and with IRQ 0
+         * always first that was seldom: keys typed in plain DOSBox's
+         * full-screen MS-DOS Prompt seconds late or never) */
+        if (!want_iret) {
+            vu32 i, o;
+            for (i = 0; i < 15 && !want_iret; i++) {
+                o = prio[i];
+                if (o != (vu32)irq && o != 2 && requested(vp, o) && !(vp->imr & (1u << o))) want_iret = 1;
+            }
+        }
         vp->isr |= 1u << irq;
         if (irq >= 8) vp->isr |= 4;
         if (v) call_vid(v->d.virt_int_proc, v, vm, 0, 0);
@@ -282,7 +296,7 @@ static void deliver_pending(void)
             vp->irets[n].irq = irq;
             vp->irets[n].timed_out = 0;
             vp->irets[n].tmo = 0;
-            if (v->d.iret_time_out) {
+            if (v && v->d.iret_proc && v->d.iret_time_out) {
                 vregs_clear(&r);
                 r.eax = v->d.iret_time_out;
                 r.edx = (vu32)&vp->irets[n];

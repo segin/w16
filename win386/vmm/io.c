@@ -259,6 +259,8 @@ int io_trap(struct cregs *r, u8 *op)
         else if (size == IO_WORD) c->eax = (c->eax & ~0xFFFFu) | (data & 0xFFFF);
         else c->eax = data;
     }
+    if (vm_trace && cur_vm != &sysvm && (port == 0x60 || port == 0x64 || port == 0x20 || port == 0x21))
+        trace("<%x%c%x>", port, (type & IO_OUTPUT) ? '=' : ':', (type & IO_OUTPUT) ? r->eax & 0xFF : c->eax & 0xFF);
     vxd_client_back(r, c);
     return 1;
 }
