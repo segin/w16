@@ -3702,6 +3702,17 @@ name `w16-sb16`:
   record). The configuration dialog (DRV_CONFIGURE sent through USER by
   SBP's "config"; `tests/scripts/input/sb16cfg.txt`): shown with the
   settings in use, Escape answers 0 (DRVCNF_CANCEL).
+- Reliability (2026-11-19): the case `sb16` passed 10 of 10 runs on
+  installation-05 (two loops of five side by side, with QuickTime's
+  sides). Full run at 4091877 (make test and the whole boot test,
+  `W16_QTDIR` set): make test passes; boot test 120 ok, 7 failures:
+  ddeml (conn) and lzexpand (quirks), known on master; holdbtn,
+  quicktime (tree) and taskman (tree), known to fail now and then (the
+  first two passed when run again, taskman@tree fails on master 429e079
+  too); sysdrvall (kbtype, 28 and 2 pixels) and trails (timed, cpl)
+  under load, both passing when run beside master's checkout, where
+  trails@timed failed instead. None of these loads SB16.DRV (it is in no
+  default SYSTEM.INI).
 - Found on the way: with a shell other than Program Manager, Microsoft's
   MMSYSTEM plays SystemExit (CHIMES.WAV) when Windows ends; w16's does
   not (23.5 had it as UNVERIFIED; not changed here).

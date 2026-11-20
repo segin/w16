@@ -49,6 +49,16 @@ All DOSBox work on installation-05, run name `w16-sb16`
   `build/X/SIDE.cap/*.wav`, the analysis `SIDE.cmp`, SBP's log `SIDE.log`.
 - Everything: `tools/remote-test.sh -n w16-sb16 -b sb16`.
 
+## Results (2026-11-19)
+
+Boot-test case `sb16`: 10 of 10 on installation-05 (two loops of five
+side by side, QuickTime's sides included). Full run at 4091877: make test
+passes; boot test 120 ok, 7 failures, none loading SB16.DRV: ddeml and
+lzexpand (known on master), holdbtn, quicktime@tree, taskman@tree (known
+flakes; taskman@tree fails on master 429e079 too), sysdrvall@kbtype and
+trails (load: both pass when run beside master's checkout, where trails
+failed instead). ARCHITECTURE.md 24.4 has the numbers.
+
 ## Findings worth knowing
 
 - DOSBox-X's `mididevice=fluidsynth` needs a host audio driver and fails
