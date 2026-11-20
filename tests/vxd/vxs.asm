@@ -153,12 +153,15 @@ hooks:
 %endif
         ret
 
-; ---- INT 21h in V86 mode in a VM other than the System VM: AX, and for
+; ---- INT 21h in V86 mode in a VM other than the System VM (VXSS.386,
+; built with ALLVM: in every VM): AX, and for
 ; AH=40h (write) the text at DS:DX (CX bytes, at most 1000), for AH=4Bh
 ; (EXEC) and 3Bh (directory) the string at DS:DX; passed on (carry) ----
 int21_hook:
+%ifndef ALLVM
         cmp ebx, [sysvm_h]
         je .pass
+%endif
         pushad
         mov esi, msg_i21
         call puts
