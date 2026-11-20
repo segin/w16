@@ -239,7 +239,13 @@
 #              again, Alt+F4, Exit Windows) lived through on both sides.
 #              Until 2026-11-17 w16 hung for good there, until 2026-11-18
 #              closing the player on the tree alone ended Windows (docs/
-#              notes/quicktime-handover.md)
+#              notes/quicktime-handover.md). Part cpl (tests/qtcpl.sh):
+#              its Control Panel's Files tab on 3.1 and on the tree alone
+#              (KRNL286), its last whole row clicked and the list scrolled:
+#              the list and the static under it where 3.1 has them (the
+#              window spy US32S), no highlight under the list (until
+#              2026-11-20 w16's list was a row taller and the scroll drew
+#              over the static)
 #   mmsystem   w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
@@ -378,6 +384,14 @@
 #              identical; and US29's runs that 3.1 itself does not survive
 #              (US29DW, CR, SE, SD, SS, SC, HM.EXE) on w16's USER, each of
 #              which must reach its end
+#   lbclip     a list box's height (LBS_NOINTEGRALHEIGHT or not, owner-drawn,
+#              superclassed, a combo box's list) and its item partly shown
+#              at the bottom edge, selected and scrolled every way
+#              (user/listbox.c; QuickTime's Control Panel drew it whole over
+#              the static below): probe US32 as the shell on 3.1 and on
+#              w16's USER, their OBS lines identical (heights, clip boxes,
+#              the area around each list box pixel for pixel by checksum,
+#              no highlight outside the list box)
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
@@ -795,7 +809,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2946,8 +2960,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         tree) qto="-T 286" ;;
         tree386) qto="-T 386" ;;
         esac
-        # shellcheck disable=SC2086
-        "$root/tests/qtplay.sh" $qto -o "$d" > "$d.txt" 2>&1 || true
+        if [ "${part:-}" = cpl ]; then
+            # its Control Panel's Files list (tests/qtcpl.sh)
+            "$root/tests/qtcpl.sh" -o "$d" > "$d.txt" 2>&1 || true
+        else
+            # shellcheck disable=SC2086
+            "$root/tests/qtplay.sh" $qto -o "$d" > "$d.txt" 2>&1 || true
+        fi
         if grep -q '^ok\|^skip' "$d.txt"; then r=ok
         else r="${part:-over}: $(grep -m1 FAIL "$d.txt" || echo 'no result') ($d.txt)"; fi
         if [ -n "$part" ]; then partdone "$r"
@@ -3322,6 +3341,42 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmkeys: arrow keys move Program Manager's selection from the start (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmkeys: $r ($out)"; fails=$((fails + 1)); fi ;;
+    lbclip)
+        # a list box's height and its partly shown item (tests/apps/us32.c)
+        lb32() {   # LABEL dropin.sh options...: US32's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 300 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US32.EXE=US32.EXE" -i 'boot:shell=C:\US32.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 lb32 lbclip-ref
+        DROPIN_WSECS=30 lb32 lbclip-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE"
+        DROPIN_WSECS=30 lb32 lbclip-gdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+        r=ok
+        for k in ref w16 gdi; do
+            grep -q '^US32 end' "$out/lbclip-$k.log" ||
+                { [ "$r" = ok ] && r="US32 did not finish ($k: $out/lbclip-$k.log)"; }
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/lbclip-ref.log" > "$out/lbclip-ref.obs"
+            grep '^OBS [^~]' "$out/lbclip-w16.log" > "$out/lbclip-w16.obs"
+            cmp -s "$out/lbclip-ref.obs" "$out/lbclip-w16.obs" ||
+                r="$(diff "$out/lbclip-ref.obs" "$out/lbclip-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/lbclip-ref.obs, lbclip-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then
+            # w16's GDI too (the user's setup): all but the checksums, whose
+            # glyphs are w16's
+            grep -v '\.sum=' "$out/lbclip-ref.obs" > "$out/lbclip-ref.nosum"
+            grep '^OBS [^~]' "$out/lbclip-gdi.log" | grep -v '\.sum=' > "$out/lbclip-gdi.nosum"
+            cmp -s "$out/lbclip-ref.nosum" "$out/lbclip-gdi.nosum" ||
+                r="w16 USER+GDI: $(diff "$out/lbclip-ref.nosum" "$out/lbclip-gdi.nosum" | grep -c '^<') observation(s) differ from 3.1's ($out/lbclip-ref.nosum, lbclip-gdi.nosum)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   lbclip: US32 as 3.1 (list box heights, a partly shown item scrolled; w16 USER, and USER+GDI)"
+        else echo "FAIL lbclip: $r"; fails=$((fails + 1)); fi ;;
     uaudit)
         # the USER audit's probes (tests/apps/us29.c, us30.c)
         ua() {   # LABEL EXE-AS dropin.sh options...: a run, its log in LABEL.log
@@ -4814,7 +4869,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
-    quicktime) echo "$1@over $1@tree $1@tree386" ;;
+    quicktime) echo "$1@over $1@tree $1@tree386 $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     sb16) echo "$1@dev $1@audio $1@prog" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
