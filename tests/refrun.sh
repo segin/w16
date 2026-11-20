@@ -9,7 +9,8 @@
 # Prints the program's TK.LOG followed by WINEXIT.
 # Environment: REFRUN_FILES = extra host files copied to C:\ (upper-cased
 # names); REFRUN_OUT = directory that receives every C:\*.BMP afterwards;
-# REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP) also copied there;
+# REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP; D:/PATH: under D:\)
+# also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
 # REFRUN_DDRIVE = a host directory whose copy is mounted as D: as well
 # REFRUN_GDLOG=1: log every GDI call to C:\GD.LOG (see below).
@@ -116,7 +117,10 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 ${REFRUN_TIMEOUT:-120}
 if [ -n "${REFRUN_OUT:-}" ]; then
     mkdir -p "$REFRUN_OUT"
     for f in "$work"/c/*.BMP; do [ -f "$f" ] && cp "$f" "$REFRUN_OUT/"; done
-    for f in ${REFRUN_GET:-}; do [ -f "$work/c/$f" ] && cp "$work/c/$f" "$REFRUN_OUT/"; done
+    for f in ${REFRUN_GET:-}; do
+        case $f in D:/*) g=$work/d/${f#D:/} ;; *) g=$work/c/$f ;; esac
+        [ -f "$g" ] && cp "$g" "$REFRUN_OUT/"
+    done
 fi
 [ -f "$work/c/OUT.TXT" ] || { echo "no output (DOSBox failed or timed out)" >&2; exit 3; }
 for log in "$work/c/WINDOWS/TK.LOG" "$work/c/TK.LOG"; do   # cwd varies

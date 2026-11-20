@@ -31,6 +31,8 @@
  *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
  *     cursor                 log the current cursor: arrow, no, or other
  *     copyfile <from> <to>   copy a file (to catch it mid-session)
+ *     append <file> <text>   add the line <text> to <file> (made if need
+ *                            be): marks in a probe's own log (FMX.DLL)
  *     exitwin                ExitWindows; logs it if an application refused
  *     blank <l> <t> <r> <b>  paint a screen rectangle black, to keep
  *                            changing content (free memory) out of the
@@ -698,6 +700,31 @@ static void copy_file(char *arg)
     }
     if (a != HFILE_ERROR)
         _lclose(a);
+}
+
+/* append <file> <text>: the text as a line at the end of the file */
+static void append_line(char *arg)
+{
+    char *t = arg;
+    HFILE f;
+    int n = 0;
+    while (*t && *t != ' ')
+        t++;
+    if (*t)
+        *t++ = 0;
+    f = _lopen(arg, OF_WRITE);
+    if (f == HFILE_ERROR)
+        f = _lcreat(arg, 0);
+    if (f == HFILE_ERROR) {
+        out(" -> failed");
+        return;
+    }
+    _llseek(f, 0, 2);
+    while (t[n])
+        n++;
+    _lwrite(f, t, n);
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
 }
 
 #ifndef SNAP_WIN2
@@ -1448,6 +1475,8 @@ static void run_line(char *l)
             out(" -> refused");
     } else if (same(l, "copyfile")) {
         copy_file(arg);
+    } else if (same(l, "append")) {
+        append_line(arg);
     } else if (same(l, "cursor")) {
         HCURSOR c = GetCursor();
         POINT pt;

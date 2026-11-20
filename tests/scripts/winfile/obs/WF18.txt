@@ -1,0 +1,38 @@
+; WF18: how FMEVENT_LOAD's answer is checked: FMX1 dwSize 47, FMX2 49,
+; FMX3 1000, FMX4 returns 2, FMX5 a 39-character name without '&',
+; then a DLL without FMExtensionProc (w16's test DLL TKWB.DLL), then
+; Notepad (a program, not a DLL), then FMX6 (fine); the menu bar; File
+; Manager closed and started again (the menus as at first)
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; wfini: AddOns:FMX Two=C:\FMX2.DLL
+; wfini: AddOns:FMX Three=C:\FMX3.DLL
+; wfini: AddOns:FMX Four=C:\FMX4.DLL
+; wfini: AddOns:FMX Five=C:\FMX5.DLL
+; wfini: AddOns:No Proc=C:\TKWB.DLL
+; wfini: AddOns:Program=C:\WINDOWS\NOTEPAD.EXE
+; wfini: AddOns:FMX Six=FMX6.DLL
+; fmx: FMX1 FMX2 FMX3 FMX4 FMX5 FMX6
+; fmxini: FMX1:Size=47
+; fmxini: FMX2:Size=49
+; fmxini: FMX3:Size=1000
+; fmxini: FMX4:LoadRet=2
+; fmxini: FMX5:Name=Five 56789012345678901234567890123456789
+; put: build/dos/TKWB.DLL=TKWB.DLL
+run WINFILE.EXE
+wait 5000
+append D:\FMX.LOG == started
+snap C:\Q01.BMP
+dumpmenu
+dump
+append D:\FMX.LOG == close
+close
+wait 3000
+append D:\FMX.LOG == again
+run WINFILE.EXE
+wait 5000
+snap C:\Q02.BMP
+close
+wait 3000
+append D:\FMX.LOG == end
