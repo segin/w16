@@ -48,8 +48,8 @@ HBRUSH sys_brush(HBRUSH b);
 
 void button_click(HWND h);
 
-/* ---- base units of a dialog font ---- */
-static void font_units(HFONT f, int *cx, int *cy)
+/* ---- base units of a dialog font (also LB_SETTABSTOPS's: listbox.c) ---- */
+void font_base(HFONT f, int *cx, int *cy)
 {
     static char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     TEXTMETRIC tm;
@@ -290,7 +290,7 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             font = CreateFontIndirect(&lf);
         }
     }
-    font_units(font, &ux, &uy);
+    font_base(font, &ux, &uy);
     SetRect(&r, du(x, ux, 4), du(y, uy, 8), 0, 0);
     r.right = r.left + du(cx, ux, 4);
     r.bottom = r.top + du(cy, uy, 8);

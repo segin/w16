@@ -454,6 +454,26 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
     return total;
 }
 
+/* the default tab: 8 of the font's average characters, the dialog base
+   unit's average of the 52 letters (US33 tto on 3.1: 56 for a bold MS
+   Sans Serif 8, whose tmAveCharWidth is 6 and "0" 8 wide; 64 for the
+   system font, 48 for ANSI_VAR_FONT). w16 took 8 widths of "0", 64 */
+static int default_tab(HDC hdc)
+{
+    static char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    return 8 * ((LOWORD(GetTextExtent(hdc, letters, 52)) / 26 + 1) / 2);
+}
+
+/* the next stop every tw from the origin, x past it; a negative tw
+   divides as an unsigned number (US33: one stop of -30 puts any text
+   after its tab at -30, the next tab at -60) */
+static int next_stop(int x, int tw)
+{
+    if (tw < 0)
+        return (int)((WORD)x / (WORD)tw + 1) * tw;
+    return (x / tw + 1) * tw;
+}
+
 /* a bad string or tab array: 0, nothing drawn (3.1) */
 LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
                           int __far *tabs, int origin)
@@ -462,7 +482,7 @@ LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
     if (GP_BAD(s) || GP_BAD(tabs))
         return 0;
     h = HIWORD(GetTextExtent(hdc, "A", 1));
-    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    deftab = default_tab(hdc);
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start) {
@@ -471,14 +491,14 @@ LONG WINAPI TabbedTextOut(HDC hdc, int x, int y, LPCSTR s, int n, int ntabs,
             }
             if (i < n) {
                 int stop;
-                if (ntabs > 0 && tabs) {
+                if (ntabs > 1 && tabs) {
                     while (k < ntabs && origin + tabs[k] <= cx)
                         k++;
                     stop = k < ntabs ? origin + tabs[k] :
-                           origin + ((cx - origin) / deftab + 1) * deftab;
+                           origin + next_stop(cx - origin, deftab);
                 } else {
                     int tw = (ntabs == 1 && tabs) ? tabs[0] : deftab;
-                    stop = origin + ((cx - origin) / tw + 1) * tw;
+                    stop = origin + (tw ? next_stop(cx - origin, tw) : cx - origin);
                 }
                 cx = stop;
             }
@@ -495,7 +515,7 @@ DWORD WINAPI GetTabbedTextExtent(HDC hdc, LPCSTR s, int n, int ntabs, int __far 
     if (GP_BAD(s) || GP_BAD(tabs))
         return 0;
     h = HIWORD(GetTextExtent(hdc, "A", 1));
-    deftab = 8 * LOWORD(GetTextExtent(hdc, "0", 1));
+    deftab = default_tab(hdc);
     for (i = 0; i <= n; i++) {
         if (i == n || s[i] == '\t') {
             if (i > start)
@@ -504,10 +524,10 @@ DWORD WINAPI GetTabbedTextExtent(HDC hdc, LPCSTR s, int n, int ntabs, int __far 
                 if (ntabs > 1 && tabs) {
                     while (k < ntabs && tabs[k] <= cx)
                         k++;
-                    cx = k < ntabs ? tabs[k] : (cx / deftab + 1) * deftab;
+                    cx = k < ntabs ? tabs[k] : next_stop(cx, deftab);
                 } else {
                     int tw = (ntabs == 1 && tabs) ? tabs[0] : deftab;
-                    cx = (cx / tw + 1) * tw;
+                    cx = tw ? next_stop(cx, tw) : cx;
                 }
             }
             start = i + 1;

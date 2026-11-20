@@ -67,6 +67,9 @@ typedef struct LB {
     BYTE   latesize;            /* sized again by the dialog manager: 1 a
                                    WM_SIZE to post after the first paint,
                                    2 posted (late_size) */
+    WORD   tabs;                /* LB_SETTABSTOPS: object-heap block of
+                                   ntabs stops in pixels (0: the default) */
+    int    ntabs;
 } LB;
 typedef LB __near *PLB;
 
@@ -340,8 +343,12 @@ static void plain_item(HWND h, PLB lb, HDC hdc, int i, RECT *r)
     SetTextColor(hdc, syscolor[it->sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT]);
     if (it->text) {
         LPCSTR s = STR(it->text);
+        /* LBS_USETABSTOPS: the stops counted from the item's left edge, the
+           text 2 pixels in (US33 tab: a stop of 20 units in the system
+           font, 40 pixels, puts the next word at 40) */
         if (lbstyle(h) & LBS_USETABSTOPS)
-            TabbedTextOut(hdc, r->left + 2, r->top, s, lstr_len(s), 0, NULL, r->left + 2);
+            TabbedTextOut(hdc, r->left + 2, r->top, s, lstr_len(s), lb->ntabs,
+                          lb->tabs ? (int __far *)UH_PTR(&uhObj, lb->tabs) : NULL, r->left);
         else
             TextOut(hdc, r->left + 2, r->top, s, lstr_len(s));
     }
@@ -1147,6 +1154,7 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return DefWindowProc(h, msg, wp, lp);
     switch (msg) {
     case WM_DESTROY:
+        uh_free(&uhObj, lb->tabs);
         while (lb->count)
             del_item(lb, lb->count - 1);
         uh_free(&uhObj, lb->items);
@@ -1677,8 +1685,35 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         lb->hext = (int)wp;
         update_scroll(h, lb);
         return 0;
-    case LB_SETTABSTOPS:
-        return 1;
+    case LB_SETTABSTOPS: {
+        /* LBS_USETABSTOPS only (US33: 0 without); none: the default,
+           TabbedTextOut's 8 average characters, the same as the SDK's 32
+           dialog units; one: a stop every that many; the stops are dialog
+           units of the box's font as it is now, rounded (US33 tab: 13 units
+           of MS Sans Serif, base 7, 23 pixels; of ANSI_VAR_FONT, base 6,
+           20; a font given after leaves them) */
+        int n = (int)wp, i, bx, by;
+        int __far *t;
+        if (!(lbstyle(h) & LBS_USETABSTOPS))
+            return FALSE;
+        uh_free(&uhObj, lb->tabs);
+        lb->tabs = 0;
+        lb->ntabs = 0;
+        if (n > 0 && lp) {
+            if (n > 0x7FF0 / sizeof(int))
+                return FALSE;
+            lb->tabs = uh_alloc(&uhObj, LMEM_FIXED | LMEM_ZEROINIT, n * sizeof(int));
+            if (!lb->tabs)
+                return FALSE;
+            font_base(lb->font, &bx, &by);
+            t = (int __far *)UH_PTR(&uhObj, lb->tabs);
+            for (i = 0; i < n; i++)
+                t[i] = mul_div(((int __far *)lp)[i], bx, 4);
+            lb->ntabs = n;
+        }
+        redraw(h);
+        return TRUE;
+    }
     case LB_DIR: {
         extern LRESULT lb_dir(HWND lb, UINT attr, LPCSTR spec);   /* dirlist.c */
         return lb_dir(h, (UINT)wp, (LPCSTR)lp);
