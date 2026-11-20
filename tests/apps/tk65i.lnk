@@ -1,0 +1,4 @@
+# TK65In.DLL (tests/apps/tk65i.c): the Makefile adds the module name and
+# the import of TKIMP by name from TK65D
+@tests/apps/dll.lnk
+export GETIMP.1

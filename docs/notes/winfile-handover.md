@@ -109,7 +109,9 @@ this note is the working state.
   sends WM_USER-range candidates to File Manager's frame with a large
   buffer as lParam and logs the answers and the buffer, to find FM_*
   (beware FM_RELOAD_EXTENSIONS). Then w16's WINFILE implements [AddOns]
-  loading (LoadLibrary, GetProcAddress "FMExtensionProc"), the menus
+  loading (LoadLibrary, GetProcAddress "FMExtensionProc": KERNEL upper-cases
+  the name and finds only an export spelled FMEXTENSIONPROC, as 3.1, TK65;
+  the test extension must export it in capitals), the menus
   after Window... as 3.1 places them, the events and the messages, and a
   boot-test part runs the same DLL under both File Managers.
 - Install: WINFILE.EXE is in the install tree (WINDOWS\WINFILE.EXE),

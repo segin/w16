@@ -38,16 +38,18 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63
+# TK65's import DLLs (TK65IMP below)
+TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE \
             TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL \
-            TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE
+            TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I)
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -597,6 +599,25 @@ $(DOS)/TK64A.EXE: $(B)/tests/start.o $(B)/tests/tk64a.o tests/apps/app.lnk tests
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk64.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk64a.map file { $(B)/tests/start.o $(B)/tests/tk64a.o }
+# TK65.EXE: GetProcAddress and imports by name (tests/apps/tk65.c);
+# TK65D.DLL, exports in every case; TK65I1-9.DLL, each importing one of
+# them by the name at the same place in TK65IMP (and in tk65.c's imp[])
+TK65IMP := MixedRes MIXEDRES upperres MixedNr mixednr uppernr UPPERRES lowerres \#4
+$(B)/tests/tk65.o: tests/apps/tk65ref.h tests/apps/tklog.h
+$(DOS)/TK65.EXE: $(B)/tests/start.o $(B)/tests/tk65.o tests/apps/app.lnk tests/apps/tk65.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk65.map file { $(B)/tests/start.o $(B)/tests/tk65.o }
+$(DOS)/TK65D.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tk65d.o tests/apps/dll.lnk tests/apps/tk65d.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65d.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk65d.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tk65d.o }
+$(TK65I:%=$(DOS)/%): $(DOS)/TK65I%.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tk65i.o tests/apps/dll.lnk tests/apps/tk65i.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk65i.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option modname=TK65I$* \
+	    import TKIMP TK65D.\'$(word $*,$(TK65IMP))\' \
+	    option map=$(B)/tests/tk65i$*.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tk65i.o }
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk

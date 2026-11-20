@@ -128,8 +128,8 @@ probes() {
     run GD6 0           # GDI's 32-bit arithmetic (gdi/i4.asm)
     run TK2 255 "w16: call to unimplemented KERNEL.27"
 
-    # TK5 (DLL loading), TK11 (module tables), TK60 (modules by name) and TK64
-    # (FileCdr), laid out like the reference
+    # TK5 (DLL loading), TK11 (module tables), TK60 (modules by name), TK64
+    # (FileCdr) and TK65 (GetProcAddress by name), laid out like the reference
     # runs (tests/tk5ref.sh): the DLLs in the Windows directory C:\WINDOWS,
     # TK5.EXE, TK11.EXE and TKID.TPL in C:\, C:\TKPATH on the PATH. KERNEL is
     # started as WIN.COM would, with windir=C:\WINDOWS in its environment
@@ -149,8 +149,11 @@ probes() {
     # TK62 (the KERNEL audit) starts TK62A and loads TKENT.DLL, TKENT2.DLL
     cp "$dos/TK62.EXE" "$dos/TK62A.EXE" "$stage/"
     cp "$dos/TKENT.DLL" "$dos/TKENT2.DLL" "$dos/TKBADNE.DLL" "$dos/TKBIGDG.DLL" "$dos/TKDG.DLL" "$dos/TKWA.DLL" "$dos/TKWB.DLL" "$stage/WINDOWS/"
-    # TK64 (FileCdr; TK64O and TK64P, copies, one case each) starts TK64A
-    cp "$dos/TK64.EXE" "$dos/TK64O.EXE" "$dos/TK64P.EXE" "$dos/TK64A.EXE" "$stage/"
+    # TK64 (FileCdr; TK64O and TK64P, copies, one case each) starts TK64A;
+    # TK65 (GetProcAddress by name) loads
+    # TK65D.DLL and TK65I1-9.DLL
+    cp "$dos/TK64.EXE" "$dos/TK64O.EXE" "$dos/TK64P.EXE" "$dos/TK64A.EXE" "$dos/TK65.EXE" "$stage/"
+    cp "$dos/TK65D.DLL" "$dos"/TK65I?.DLL "$stage/WINDOWS/"
     for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
         cp "$dos/$f" "$stage/WINDOWS/"
     done
@@ -171,6 +174,7 @@ MOUNT F $stage -t floppy"
     run TK64 0
     run TK64O 0
     run TK64P 0
+    run TK65 0
 
     # TK14 (profiles and files), laid out like tests/tk14ref.sh: TK14.EXE in
     # C:\, KERNEL in the system directory C:\WINDOWS\SYSTEM, windir=C:\WINDOWS

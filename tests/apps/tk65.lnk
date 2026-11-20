@@ -1,0 +1,4 @@
+# TK65.EXE (tests/apps/tk65.c): an export of its own (GetProcAddress with
+# hInstance 0)
+@tests/apps/app.lnk
+export TK65OWN.1
