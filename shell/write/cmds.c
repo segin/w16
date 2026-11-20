@@ -222,11 +222,12 @@ static void sel_paras(DWORD *first, DWORD *last)
 
 /* the paragraphs [pi, pl] get fn applied; the last paragraph with text
    gets its mark first */
-static void apply_pap(void (*fn)(PAPX *, WORD), WORD arg, BOOL all, BOOL normal)
+void pap_apply(void (*fn)(PAPX *, WORD), WORD arg, WORD how)
 {
     DWORD pi, pl, i, f, l;
     ATOM32 a;
     PAPX p;
+    BOOL all = (how & PA_ALL) != 0, normal = (how & PA_NORMAL) != 0;
     undo_save(IDS_FORMATTING);
     if (all) {
         pi = 0;
@@ -236,10 +237,15 @@ static void apply_pap(void (*fn)(PAPX *, WORD), WORD arg, BOOL all, BOOL normal)
     }
     /* not for Tabs, which go to every paragraph and the end one too
        without a new mark (WR4) */
-    if (pl == g_doc.nparas - 1 && !all) {
+    /* (the ruler's tabs do end it when it has text: WR27) */
+    /* (and the ruler's buttons on any paragraph: WR25 A1) */
+    if ((pl == g_doc.nparas - 1 && !all) ||
+        ((how & PA_TERMINATE) && g_doc.cpMac && doc_ch(&g_doc, g_doc.cpMac - 1) != '\n')) {
         CHPX c;
         sel_props(&c);
         doc_terminate_last(&g_doc, chp_atom(&g_doc, &c));
+        if (all || pl + 2 == g_doc.nparas)
+            pl = g_doc.nparas - 1 - !all;
     }
     for (i = pi; i <= pl; i++) {
         para_get(&g_doc, i, &f, &l, &a);
@@ -254,7 +260,8 @@ static void apply_pap(void (*fn)(PAPX *, WORD), WORD arg, BOOL all, BOOL normal)
             m_cpy(q.tab, p.tab, sizeof q.tab);
             para_set(&g_doc, i, pap_atom(&g_doc, &q));
         } else {
-            p.b0 = 0x3C;                /* formatted (WR5) */
+            if (!(how & PA_KEEPB0))
+                p.b0 = 0x3C;            /* formatted (WR5) */
             para_set(&g_doc, i, pap_atom(&g_doc, &p));
         }
     }
@@ -282,7 +289,12 @@ static void pap_cmd(PAPX *p, WORD id)
 
 void cmd_para(WORD id)
 {
-    apply_pap(pap_cmd, id, FALSE, id == IDM_NORMAL);
+    cmd_para_how(id, 0);
+}
+
+void cmd_para_how(WORD id, WORD how)
+{
+    pap_apply(pap_cmd, id, how | (id == IDM_NORMAL ? PA_NORMAL : 0));
 }
 
 /* ---- measurements: "1.5", "1.5"", "3.8 cm", "12 pt", "6 p10",
@@ -324,7 +336,9 @@ BOOL parse_measure(const char *s, long *tw, BOOL allowNeg)
         unit = 240;
     else if (*s)
         return FALSE;
-    *tw = whole * unit + (frac * unit + div / 2) / div;
+    /* centimetres go up to the next twip (WR26: 3.17 cm 1798, 2.54 cm
+       1441); others to the nearest (UNVERIFIED) */
+    *tw = whole * unit + (frac * unit + (unit == 567 ? div - 1 : div / 2)) / div;
     if (neg) {
         if (!allowNeg)
             return FALSE;
@@ -340,7 +354,9 @@ void fmt_measure(char *s, long tw)
     BOOL neg = tw < 0;
     if (neg)
         tw = -tw;
-    h = (tw * 100 + 720) / 1440;        /* hundredths of an inch */
+    /* hundredths of an inch, or with Page Layout in cm of a centimetre
+       (WR26; the " cm" is the original's string 28687) */
+    h = g_cm ? (tw * 100 + 283) / 567 : (tw * 100 + 720) / 1440;
     s[0] = 0;
     if (neg)
         s_cat(s, "-", 16);
@@ -349,8 +365,9 @@ void fmt_measure(char *s, long tw)
     s_cat(s, ".", 16);
     d[0] = (char)('0' + (h % 100) / 10);
     d[1] = (char)('0' + h % 10);
-    d[2] = '"';
-    d[3] = 0;
+    d[2] = 0;
+    s_cat(s, d, 16);
+    load_str(g_cm ? IDS_CM : IDS_INCH, d, sizeof d);
     s_cat(s, d, 16);
 }
 
@@ -428,7 +445,7 @@ BOOL CALLBACK __export IndentsDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 void cmd_indents(void)
 {
     if (run_dialog(IDD_INDENTS, IndentsDlgProc) == IDOK)
-        apply_pap(pap_indents, 0, FALSE, FALSE);
+        pap_apply(pap_indents, 0, 0);
 }
 
 /* ---- Tabs: twelve positions, each with a Decimal box; the document's
@@ -507,7 +524,7 @@ BOOL CALLBACK __export TabsDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 void cmd_tabs(void)
 {
     if (run_dialog(IDD_TABS, TabsDlgProc) == IDOK)
-        apply_pap(pap_tabs, 0, TRUE, FALSE);
+        pap_apply(pap_tabs, 0, PA_ALL);
 }
 
 /* ---- Page Layout ---- */
@@ -526,13 +543,29 @@ BOOL CALLBACK __export LayoutDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
         set_measure(d, 5, (long)newsep.xaMac - newsep.xaLeft - newsep.dxaText);
         set_measure(d, 6, newsep.yaTop);
         set_measure(d, 7, (long)newsep.yaMac - newsep.yaTop - newsep.dyaText);
-        CheckRadioButton(d, 8, 9, 8);
+        CheckRadioButton(d, 8, 9, g_cm ? 9 : 8);
         SendDlgItemMessage(d, 3, EM_SETSEL, 0, MAKELPARAM(0, -1));
         return TRUE;
     }
     if (msg == WM_COMMAND) {
         if (wp == 8 || wp == 9) {
+            /* the margins are shown again in the unit chosen (WR26: the
+               values saved are those of the cm figures) */
+            int i;
+            long tw;
             CheckRadioButton(d, 8, 9, wp);
+            if ((wp == 9) != g_cm) {
+                for (i = 4; i <= 7; i++) {
+                    char s[32];
+                    GetDlgItemText(d, i, s, sizeof s);
+                    if (!parse_measure(s, &tw, FALSE))
+                        continue;
+                    g_cm = wp == 9;
+                    set_measure(d, i, tw);
+                    g_cm = wp != 9;
+                }
+                g_cm = wp == 9;
+            }
             return TRUE;
         }
         if (wp == IDOK) {
@@ -550,9 +583,8 @@ BOOL CALLBACK __export LayoutDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 msgbox(d, IDS_MARGINSBIG, NULL, MB_OK | MB_ICONEXCLAMATION);
                 return TRUE;
             }
-            /* UNVERIFIED: an unchanged 1 is kept as FFFFh */
-            if (pg != newsep.pgnFirst)
-                newsep.pgnRaw = pg;
+            /* the number is stored even when it stays 1 (WR26) */
+            newsep.pgnRaw = pg;
             newsep.pgnFirst = pg;
             newsep.xaLeft = (WORD)l;
             newsep.dxaText = (WORD)(newsep.xaMac - l - r);
@@ -571,7 +603,11 @@ BOOL CALLBACK __export LayoutDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 
 void cmd_pagelayout(void)
 {
-    if (run_dialog(IDD_PAGELAYOUT, LayoutDlgProc) == IDOK) {
+    BOOL cm = g_cm;
+    if (run_dialog(IDD_PAGELAYOUT, LayoutDlgProc) != IDOK) {
+        g_cm = cm;                      /* the unit too is cancelled (UNVERIFIED) */
+    } else {
+        ruler_update();                 /* its scale (WR26) */
         undo_save(IDS_FORMATTING);
         sep_encode(&g_doc, &newsep);
         g_doc.dirty = TRUE;
@@ -869,6 +905,10 @@ void cmd_paste(void)
        window scrolled (pictures: WR16, WR17; text UNVERIFIED) */
     view_caret_defer();
     undo_end_typing();                  /* WR17: the thumb's count */
+    /* a pasted picture can be undone: "Undo Editing" (WR28 E1) */
+    if (IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_BITMAP) ||
+        IsClipboardFormatAvailable(CF_METAFILEPICT))
+        undo_save(IDS_EDITING);
     if (ole_paste())
         return;
     if (!OpenClipboard(g_frame))
@@ -951,8 +991,12 @@ void menu_update(HMENU m)
         }
         EnableMenuItem(m, IDM_UNDO, undoKind ? MF_ENABLED : MF_GRAYED);
     }
-    EnableMenuItem(m, IDM_PASTESPECIAL, MF_GRAYED);
-    EnableMenuItem(m, IDM_PASTELINK, MF_GRAYED);
+    /* a picture on the clipboard (WR28 E1) */
+    EnableMenuItem(m, IDM_PASTESPECIAL, IsClipboardFormatAvailable(CF_BITMAP) ||
+                   IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(CF_METAFILEPICT) ||
+                   ole_can_pastelink()
+                   ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_PASTELINK, ole_can_pastelink() ? MF_ENABLED : MF_GRAYED);   /* WR30 E1 */
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
     {
         /* with no object selected the item reads "&Object", grayed (WR7;
@@ -972,7 +1016,14 @@ void menu_update(HMENU m)
         EnableMenuItem(m, IDM_GOTO, g_doc.cpMac ? MF_ENABLED : MF_GRAYED);
         EnableMenuItem(m, IDM_PRINT, dev[0] ? MF_ENABLED : MF_GRAYED);
     }
-    EnableMenuItem(m, IDM_MOVEPICT, MF_GRAYED);
-    EnableMenuItem(m, IDM_SIZEPICT, MF_GRAYED);
+    {
+        /* "&Ruler On" / "&Ruler Off" (the original's strings 5 and 6, WR24) */
+        char s[32];
+        load_str(g_ruler ? IDS_RULEROFF : IDS_RULERON, s, sizeof s);
+        ModifyMenu(m, IDM_RULER, MF_BYCOMMAND | MF_STRING, IDM_RULER, s);
+    }
+    /* a picture selected alone (WR28 E1) */
+    EnableMenuItem(m, IDM_MOVEPICT, view_pict_selected() ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_SIZEPICT, view_pict_selected() ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_FINDAGAIN, findWhat[0] ? MF_ENABLED : MF_GRAYED);
 }

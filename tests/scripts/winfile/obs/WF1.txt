@@ -1,0 +1,46 @@
+; WF1: File Manager's first start with no WINFILE.INI: the windows, the
+; menus, then each menu dropped down; closed (WINFILE.INI it leaves)
+run WINFILE.EXE
+wait 5000
+snap C:\S1.BMP
+dump
+info
+dumpmenu
+menu f
+wait 800
+snap C:\M1.BMP
+key 1B
+key 1B
+menu d
+wait 800
+snap C:\M2.BMP
+key 1B
+key 1B
+menu t
+wait 800
+snap C:\M3.BMP
+key 1B
+key 1B
+menu v
+wait 800
+snap C:\M4.BMP
+key 1B
+key 1B
+menu o
+wait 800
+snap C:\M5.BMP
+key 1B
+key 1B
+menu w
+wait 800
+snap C:\M6.BMP
+key 1B
+key 1B
+menu h
+wait 800
+snap C:\M7.BMP
+key 1B
+key 1B
+wait 500
+close
+wait 2000

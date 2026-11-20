@@ -576,6 +576,8 @@ void set_focus(HWND h)
         send_message(h, WM_SETFOCUS, old, 0);
 }
 
+HWND hwndFocusPending;
+
 HWND WINAPI SetFocus(HWND h)
 {
     HWND old = hwndFocus, top;
@@ -592,8 +594,16 @@ HWND WINAPI SetFocus(HWND h)
             return 0;
         if (!valid_wnd(h))
             return 0;
-        if (top != hwndActive)
+        if (top != hwndActive) {
+            /* the window the focus is going to, while its top-level
+               window is activated for it: a dialog keeps it rather than
+               giving its first tab stop the focus (DefDlgProc's
+               WM_ACTIVATE; US33 idf, Character Map's grid) */
+            HWND pend = hwndFocusPending;
+            hwndFocusPending = h;
             activate_window(top, FALSE);
+            hwndFocusPending = pend;
+        }
         focus_hooked = TRUE;
     }
     set_focus(h);

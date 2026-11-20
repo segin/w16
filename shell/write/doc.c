@@ -401,8 +401,11 @@ void doc_init(DOC *d)
 void doc_new(DOC *d)
 {
     CHPX c;
+    char face[LF_FACESIZE + 1];
+    BYTE ffid;
     doc_init(d);
-    font_code(d, "Arial", FF_SWISS);
+    printer_font(face, &ffid);          /* Arial, or the printer's (WR29) */
+    font_code(d, face, ffid);
     chp_default(&c);
     c.hps = 20;
     d->chpNew = chp_atom(d, &c);
@@ -754,4 +757,16 @@ BOOL doc_append_para(DOC *d, DWORD cp, const char FAR *s, DWORD n, ATOM32 chp)
     forcePara = 0;
     noSplit = FALSE;
     return ok;
+}
+
+/* overwrite n bytes at cp (a picture's header fields: Move and Size
+   Picture), the text's length and properties unchanged */
+void doc_put(DOC *d, DWORD cp, const void FAR *s, DWORD n)
+{
+    const BYTE FAR *b = (const BYTE FAR *)s;
+    DWORD i;
+    for (i = 0; i < n && cp + i < d->cpMac; i++) {
+        DWORD c = cp + i;
+        hm_put(&d->text, c < d->gap ? c : c + d->gapLen, b + (WORD)i, 1);
+    }
 }

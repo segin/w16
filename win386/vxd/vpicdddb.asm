@@ -35,6 +35,8 @@ VPICD_DDB:
         VXDCALL _vmm_simulate_io, 1, 94h
         VXDCALL _vmm_set_global_time_out, 1, 3Ch
         VXDCALL _vmm_cancel_time_out, 1, 3Eh
+        VXDCALL _vmm_get_next_vm, 1, 3Bh
+        VXDCALLC _vmm_alloc_cb_area, 1, 0A7h, 2
 
 ; the PIC ports for Install_Mult_IO_Handlers (the DDK's VxD_IO table: a
 ; word count, then a word port and a dword procedure each)

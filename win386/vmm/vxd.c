@@ -33,12 +33,6 @@ struct ddb {
     u32 svc_table, svc_count;
 };
 
-/* the start of a VM control block (the DDK names its fields; the order
- * as observed) */
-struct vm_cb {
-    u32 status, high_linear, client_pointer, vmid;
-};
-
 #pragma pack()
 
 extern struct ddb VMM_DDB;
@@ -61,14 +55,14 @@ extern u8 svc_common[];
 static struct ddb **devs;           /* in init order */
 static struct ddb *find_dev(u32 id);
 static u32 ndevs;
-static struct vm_cb *sys_cb;
-static struct client_regs *sys_client;
+#define sys_cb (sysvm.cb)
+#define sys_client (sysvm.client)
 static u8 *sys_acb;                 /* the application control block (Begin_PM_App) */
 static u32 *vmm_slots;              /* the VMM's service table: stub addresses */
 
 u32 vm_handle(void)
 {
-    return (u32)sys_cb;
+    return VMH(cur_vm);
 }
 
 /* a stub per service: PUSH id; JMP svc_common */
@@ -96,6 +90,30 @@ static void client_fill(struct client_regs *c, struct cregs *r)
     c->eip = r->eip; c->cs = (u16)r->cs; c->eflags = r->eflags; c->esp = r->esp;
     c->ss = (u16)r->ss; c->es = (u16)r->es; c->ds = (u16)r->ds;
     c->fs = (u16)r->fs; c->gs = (u16)r->gs;
+}
+
+/* a control message about VM v to every device, in init order (EBX v's
+ * handle, EBP its client registers); nonzero if one refused (carry) */
+u32 vxd_send(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi)
+{
+    u32 i, cf = 0;
+    for (i = 0; i < ndevs; i++) {
+        if (!devs[i] || !devs[i]->control) continue;
+        if (vxd_control(devs[i]->control, msg, VMH(v), esi, edx, edi, (u32)v->client)) cf = 1;
+    }
+    if (msg == SET_DEVICE_FOCUS && (edx == 0 || edx == 0x000A)) vdd_focus(v);
+    return cf;
+}
+
+/* the same in the reverse of the init order (UNVERIFIED which messages
+ * Windows 3.1 sends so) */
+void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi)
+{
+    u32 i;
+    for (i = ndevs; i-- > 0; ) {
+        if (!devs[i] || !devs[i]->control) continue;
+        vxd_control(devs[i]->control, msg, VMH(v), esi, edx, edi, (u32)v->client);
+    }
 }
 
 /* send msg to every device, in init order (rev: the reverse); a device
@@ -150,6 +168,15 @@ static u32 svc_slot(u32 dev, u32 svc)
     return *(u32 *)(d->svc_table + svc * 4);
 }
 
+/* a device's service from the VMM's C code; 0 if it is not there */
+int vxd_service_call(u32 dev, u32 svc, struct svcregs *s)
+{
+    u32 slot = svc_slot(dev, svc);
+    if (!slot) return 0;
+    vmm_call_proc(slot, s);
+    return 1;
+}
+
 static void vpicd_call(u32 svc, u32 eax, u32 ebx)
 {
     struct svcregs s;
@@ -196,10 +223,10 @@ static void tmo_tick(void)
         *pp = t->next;                      /* done: unlinked before it runs */
         t->magic = 0;
         memset(&s, 0, sizeof(s));
-        s.ebx = (u32)sys_cb;
+        s.ebx = VMH(cur_vm);
         s.ecx = sys_ms - t->due;
         s.edx = t->ref;
-        s.ebp = (u32)sys_client;
+        s.ebp = (u32)cur_vm->client;
         vmm_call_proc(t->proc, &s);
         kfree(t);
         pp = &tmos;                         /* the callback may have changed the list */
@@ -237,16 +264,22 @@ static int tmo_service(u32 svc, struct svcregs *s)
 /* VID_Hw_Int_Proc for IRQ 0 (vmmasm.asm calls it with the registers) */
 void __cdecl vtd_hw(struct svcregs *r)
 {
+    struct vm *v;
     vpicd_call(0x04, vtd_irq, 0);             /* VPICD_Phys_EOI */
-    vpicd_call(0x02, vtd_irq, (u32)sys_cb);   /* VPICD_Set_Int_Request */
+    /* every VM gets the tick (a request each: one pending at most; a VM
+     * that does not run meanwhile misses ticks. UNVERIFIED: Windows 3.1's
+     * VTD catches a VM's clock up) */
+    for (v = vm_list; v; v = v->next)
+        if (!v->ended) vpicd_call(0x02, vtd_irq, VMH(v));  /* VPICD_Set_Int_Request */
     tmo_tick();
+    vm_tick();
     r->eflags &= ~EFL_CF;
 }
 
 /* VID_EOI_Proc for IRQ 0: the VM has ended the tick */
 void __cdecl vtd_eoi(struct svcregs *r)
 {
-    vpicd_call(0x03, vtd_irq, (u32)sys_cb);   /* VPICD_Clear_Int_Request */
+    vpicd_call(0x03, vtd_irq, r->ebx);        /* VPICD_Clear_Int_Request: EBX the VM */
     r->eflags &= ~EFL_CF;
 }
 
@@ -283,6 +316,18 @@ static void vtd_service(u32 svc, struct svcregs *s)
     panic("VTD service %x is not implemented yet (called from %x)", svc, *(u32 *)(s + 1));
 }
 
+/* VPICD's view of the VMs (w16vxd.h) */
+static vu32 link_cur_vm(void)
+{
+    return VMH(cur_vm);
+}
+
+static void link_wake(vu32 h)
+{
+    struct vm *v = vm_of(h);
+    if (v) vm_wake(v);
+}
+
 /* the devices: the VMM's own DDB and the loader's list, by init order
  * (equal orders: as loaded; UNVERIFIED tie-break), then the init messages */
 void vxd_init(void)
@@ -291,16 +336,9 @@ void vxd_init(void)
     u32 *list = (u32 *)(W386_VMM_LIN + info->vxd_list);
 
     devs = kmalloc(n * sizeof(*devs));
-    sys_cb = kmalloc(4096);
-    sys_client = kmalloc(sizeof(*sys_client));
     sys_acb = kmalloc(256);
-    if (!devs || !sys_cb || !sys_client || !sys_acb) panic("no memory for the devices");
-    /* the System VM's control block: its V86 memory is at linear 0 here
-     * (Windows 3.1 maps it high, at 84000000h) */
-    sys_cb->status = 0;
-    sys_cb->high_linear = 0;
-    sys_cb->client_pointer = (u32)sys_client;
-    sys_cb->vmid = 1;
+    if (!devs || !sys_acb) panic("no memory for the devices");
+    /* the System VM's control block: vm.c (vm_sys_init) */
     vmm_slots = make_slots(1, VMM_SERVICES);
     devs[ndevs++] = &VMM_DDB;
     /* w16's own devices (C, in this module), each with its service table */
@@ -331,6 +369,8 @@ void vxd_init(void)
               "Your w16 configuration is invalid. Run the w16 Setup program\n"
               "again to correct this problem.\n");
     vpicd->deliver = vmm_deliver;
+    vpicd->cur_vm = link_cur_vm;
+    vpicd->wake = link_wake;
     vpicd->can_deliver = vmm_can_deliver;
     vpicd->sys_vm = (u32)sys_cb;
     vpicd->rm_base1 = info->pic1_base;
@@ -340,6 +380,7 @@ void vxd_init(void)
     broadcast(DEVICE_INIT, info->tail_lin, 0, 0, 0);
     broadcast(INIT_COMPLETE, info->tail_lin, 0, 0, 0);
     broadcast(SYS_VM_INIT, info->tail_lin, 0, 0, 0);
+    shell_init();
 }
 
 /* KRNL386 entered protected mode (dpmi_switch) / ended (terminate_client) */
@@ -400,9 +441,10 @@ u32 vxd_pm_api(u32 id)
  * client in r */
 void vxd_call_api(u32 proc, struct cregs *r)
 {
-    client_fill(sys_client, r);
-    vxd_control(proc, r->eax, (u32)sys_cb, r->esi, r->edx, r->edi, (u32)sys_client);
-    client_store(r, sys_client);
+    struct client_regs *c = cur_vm->client;
+    client_fill(c, r);
+    vxd_control(proc, r->eax, VMH(cur_vm), r->esi, r->edx, r->edi, (u32)c);
+    client_store(r, c);
 }
 
 /* ---- dynamic links ---- */
@@ -571,7 +613,7 @@ static int nest_level;
 static int nest_service(u32 svc, struct svcregs *s)
 {
     struct cregs v;
-    struct client_regs *c = sys_client;
+    struct client_regs *c = cur_vm->client;
     switch (svc) {
     case 0x82:                          /* Begin_Nest_V86_Exec */
     case 0x83:                          /* Begin_Nest_Exec */
@@ -610,33 +652,29 @@ void __cdecl svc_dispatch(struct svcregs *s)
     u32 dev = s->id >> 16, svc = s->id & 0xFFFF;
 
     s->eflags &= ~EFL_CF;
+    if (dev == 1 && vm_service(svc, s)) return;
     if (dev == 1) switch (svc) {
     case 0x0000:                        /* Get_VMM_Version: 3.10, debug revision 0 */
         s->eax = (s->eax & 0xFFFF0000u) | 0x030A;
         s->ecx = 0;
         return;
-    case 0x0001:                        /* Get_Cur_VM_Handle (one VM) */
-    case 0x0003:                        /* Get_Sys_VM_Handle */
-        s->ebx = (u32)sys_cb;
-        return;
-    case 0x0002:                        /* Test_Cur_VM_Handle */
-    case 0x0004:                        /* Test_Sys_VM_Handle */
-        ZF_SET(s, s->ebx == (u32)sys_cb);
-        return;
     case 0x001C: {                      /* Map_Flat: AH, AL offsets in Client_Reg_Struc (AL FFh: offset 0) */
-        u8 *c = (u8 *)sys_client;
+        u8 *c = (u8 *)cur_vm->client;
         u32 seg = *(u16 *)(c + ((s->eax >> 8) & 0xFF));
         u32 off = (s->eax & 0xFF) == 0xFF ? 0 : *(u32 *)(c + (s->eax & 0xFF));
-        if (sys_client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
+        if (cur_vm->client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
         else s->eax = sel_base(seg) + (sysvm.client32 ? off : (off & 0xFFFF));
+        return;
+    }
+    case 0x0093: {                      /* System_Control: EAX the message, EBX the VM */
+        struct vm *v = vm_of(s->ebx);
+        if (!v) v = cur_vm;
+        if (vxd_send(s->eax, v, s->edx, s->esi, s->edi)) s->eflags |= EFL_CF;
         return;
     }
     case 0x004C:                        /* Build_Int_Stack_Frame: CX:EDX the routine */
         if (!vmm_build_int(s->ecx & 0xFFFF, s->edx)) s->eflags |= EFL_CF;
         trace("VMM: Build_Int_Stack_Frame %x:%x%s\n", s->ecx & 0xFFFF, s->edx, (s->eflags & EFL_CF) ? " (not in PM)" : "");
-        return;
-    case 0x0005:                        /* Validate_VM_Handle: carry clear if valid */
-        if (s->ebx != (u32)sys_cb) s->eflags |= EFL_CF;
         return;
     }
     if (dev == 1 && list_service(svc, s)) return;

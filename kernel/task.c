@@ -367,10 +367,15 @@ static void list_insert(u16 t)
 /* Behind the other tasks of its priority. */
 static void list_requeue(u16 t)
 {
-    TB(t, TDB_PRIO)++;
+    /* (not past 7Fh, where the signed priority wrapped and the task
+       went to the front: audit, L16) */
+    int up = (signed char)TB(t, TDB_PRIO) < 0x7F;
+    if (up)
+        TB(t, TDB_PRIO)++;
     list_unlink(t);
     list_insert(t);
-    TB(t, TDB_PRIO)--;
+    if (up)
+        TB(t, TDB_PRIO)--;
 }
 
 /* ---- the scheduler ---- */
@@ -475,8 +480,8 @@ static void int_vec_switch(u16 t)
         r.cx = (u16)(v >> 16);
         r.dx = (u16)v;
         r.ds = r.es = 0;
-        dpmi31(&r);
-        int_vec_cur[i] = v;
+        if (!dpmi31(&r))                /* (only what DPMI took: audit, */
+            int_vec_cur[i] = v;         /* L21) */
     }
 }
 
@@ -531,6 +536,11 @@ static void reschedule(void)
     u16 t;
     if (in_sched || (boot_tdb && cur_task == boot_tdb))
         return;                         /* nothing to switch to yet */
+    /* LockCurrentTask: the locked task keeps running while it has an
+       event (Yield gives it one); one that waits lets others run (TK62
+       "lock"; KERNEL audit, medium 25) */
+    if (cur_task && kmisc_locked_task() == cur_task && TW(cur_task, TDB_EVENTS))
+        return;
     in_sched = 1;
     if (cur_task) {
         t = TW(cur_task, TDB_YIELDTO);
@@ -744,6 +754,7 @@ u16 task_boot(void)
     list_requeue(t);
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
+    thhook_sync();
     set_psp(cur_pdb);
     set_dta(t);
     int_vec_switch(t);
@@ -935,9 +946,14 @@ static u16 ss_now(void);
 void KAPI FatalExit(u16 code)                                 /* KERNEL.1 */
 {
     regs16 r;
+    static u8 in_hook;          /* a hook calling FatalExit is not called
+                                   again (KERNEL audit, medium 34) */
     u32 hook = fatal_exit_hook();
-    if (hook)
+    if (hook && !in_hook) {
+        in_hook = 1;
         mod_call((u16)(hook >> 16), (u16)hook, ss_now(), 0, 0, 1, code);
+        in_hook = 0;
+    }
     kdbg("w16: FatalExit ");
     kdbghex(code);
     kdbg("\r\n");
@@ -1194,6 +1210,8 @@ u16 task_boot_tdb(void)
     boot_tdb = t;
     cur_task = t;
     cur_pdb = psp_sel;
+    thhook_sync();          /* THHOOK's CurTDB is GetCurrentTask's (Schulman;
+                               KERNEL audit, L19) */
     return t;
 }
 
@@ -1208,6 +1226,7 @@ void task_boot_tdb_end(void)
     }
     boot_tdb = 0;
     GlobalFree(t);
+    thhook_sync();
 }
 
 /* ---- SetSigHandler (KERNEL.140; Schulman, Undocumented Windows ch. 5,
@@ -1258,7 +1277,7 @@ u16 KAPI SetSigHandler(u32 proc, u32 FAR *old, u16 FAR *oldtype, u16 type, u16 o
    of the exit call), hInstance = the task's, hQueue = its queue.
    UNVERIFIED: the order relative to a DLL's initialisation and WEP. */
 extern u16 __cdecl sig_call(u32 proc, u16 h, u16 code, u16 di, u16 ds, u16 q);
-void KAPI ExitKernel(void);              /* kmisc.c */
+void KAPI ExitKernel(u16 code);         /* kmisc.c */
 
 void __cdecl task_signal_exit(u16 ax)
 {
@@ -1282,9 +1301,11 @@ void __cdecl task_signal_exit(u16 ax)
         if (u && module_entry(u, 7, &sel, &off, &is_const) && !is_const) {
             typedef u16 (__far __pascal *ewproc)(u32 rc, u16 reserved);
             ((ewproc)(((u32)sel << 16) | off))(0, 0);
-            ExitKernel();
+            ExitKernel(0);
         }
     }
+    if (TW(t, TDB_QUEUE))               /* a program USER knows (InitApp) */
+        kmisc_app_exit(t);
     p = *(u32 FAR *)MK_FP(t, 0x2A);
     if (!p)
         return;

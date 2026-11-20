@@ -1,0 +1,60 @@
+; WF21: File Manager, an extension and changes another program makes
+; (KERNEL's FileCdr; scenario WF20): FMX1 (tests/apps/fmx.c) logs every
+; event, and its Query (every FM_* query, FM_GETDRIVEINFO's free bytes
+; among them) runs before and after SNAP copies NOTES.TXT to NEW1.TXT (a
+; new name in the directory shown), copies it again (a name that is
+; there), after F5, and after a copy into C:\WFTEST\BETA (a directory not
+; shown). The log (C:\FMX.LOG, kept in SNAP's memory) compared byte for
+; byte: which events an automatic reread sends, and when the free bytes
+; are FFFFFFFFh.
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; fmx: FMX1
+run WINFILE.EXE
+wait 5000
+append C:\FMX.LOG == started
+key 09
+wait 500
+append C:\FMX.LOG == Query (before)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == copy to NEW1.TXT
+copyfile C:\WFTEST\NOTES.TXT C:\WFTEST\NEW1.TXT
+wait 3000
+snap C:\S01.BMP
+append C:\FMX.LOG == Query (after a new name)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == copy to NEW1.TXT again
+copyfile C:\WFTEST\NOTES.TXT C:\WFTEST\NEW1.TXT
+wait 3000
+append C:\FMX.LOG == Query (after a name that was there)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == F5
+key 74
+wait 2000
+append C:\FMX.LOG == Query (after F5)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == copy into BETA
+copyfile C:\WFTEST\NOTES.TXT C:\WFTEST\BETA\NEW3.TXT
+wait 3000
+append C:\FMX.LOG == Query (after a change elsewhere)
+menu 1
+wait 300
+key 51
+wait 1500
+snap C:\S02.BMP
+append C:\FMX.LOG == close
+close
+wait 2500

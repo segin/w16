@@ -1,0 +1,18 @@
+; WFH1: the Help menu's commands and F1 in the main window (tests/wfhelp.sh)
+run WINFILE.EXE
+wait 4000
+mark 1
+cmd 1101
+wait 2000
+mark 2
+cmd 30
+wait 2000
+mark 3
+cmd 1102
+wait 2000
+mark 4
+key 70
+wait 2000
+mark 99
+close
+wait 2000

@@ -485,7 +485,7 @@ typedef struct DC {
     DWORD mapperFlags;                  /* 8E */
     POINT brushOrg;                     /* 92 */
     HTASK owner;                        /* 96 wFontAspectX (w16) */
-    WORD w98, w9A;                      /* 98 wFontAspectY, hFontWeights */
+    short fontHt, fontWd;               /* 98 wFontAspectY, hFontWeights (w16: the realized font's device lfHeight, lfWidth) */
     WORD saveLevel;                     /* 9C wDCSaveLevel */
     WORD w9E;                           /* 9E wcDCLocks */
     HRGN hVisRgn;                       /* A0 screen coordinates (USER's) */
@@ -598,8 +598,9 @@ typedef struct FONTENT {
     char face[LF_FACESIZE];
     short height, avgWidth, weight;
     BYTE italic, underline, strikeout, charset, pitch;
-    BYTE fromFile;                      /* added by AddFontResource */
-    char file[13];
+    BYTE unload;                        /* removed: FreeLibrary(hMod) when it goes */
+    BYTE adds;                          /* AddFontResource calls not yet undone */
+    char file[13];                      /* the file name, without its path */
     short points;
     short type, il;
 } FONTENT;
@@ -607,6 +608,7 @@ typedef FONTENT __far *LPFONT;
 void font_init(void);
 LPFONT font_realize(LPDC dc);
 LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
+void font_reap(void);                   /* removed fonts no DC uses any more go */
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
 extern XP fonts;
 

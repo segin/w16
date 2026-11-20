@@ -47,12 +47,16 @@ void set_title(void)
 
 /* ---- layout of the children ---- */
 
-static void place_children(int cx, int cy)
+void frame_layout(int cx, int cy)
 {
     int sb = GetSystemMetrics(SM_CXVSCROLL), sh = GetSystemMetrics(SM_CYHSCROLL);
+    int rh = ruler_height();
     /* observed at 624 x 362: doc 0,0 608x346; page box 0,346 120x17;
-       horizontal bar 120,346 489x17; vertical bar 608,-1 17x348 */
-    MoveWindow(g_docwnd, 0, 0, cx - sb + 1, cy - sh + 1, TRUE);
+       horizontal bar 120,346 489x17; vertical bar 608,-1 17x348; with
+       the ruler (WR24): ruler 0,0 608x39, doc 0,36 608x310 */
+    if (g_ruler)
+        MoveWindow(g_ruler, 0, 0, cx - sb + 1, rh + 3, TRUE);
+    MoveWindow(g_docwnd, 0, rh, cx - sb + 1, cy - sh + 1 - rh, TRUE);
     MoveWindow(g_pageinfo, 0, cy - sh + 1, 120, sh, TRUE);
     MoveWindow(g_hscroll, 120, cy - sh + 1, cx - 120 - sb + 2, sh, TRUE);
     MoveWindow(g_vscroll, cx - sb + 1, -1, sb, cy - sh + 3, TRUE);
@@ -378,6 +382,9 @@ static LRESULT command(HWND w, WORD id)
     case IDM_PAGELAYOUT:
         cmd_pagelayout();
         break;
+    case IDM_RULER:
+        ruler_toggle();
+        break;
     case IDM_HEADER:
     case IDM_FOOTER:
         cmd_header(id == IDM_FOOTER);
@@ -421,6 +428,19 @@ static LRESULT command(HWND w, WORD id)
     case IDM_REPAGINATE:
         cmd_repaginate();
         break;
+    case IDM_PASTELINK:
+        ole_pastelink();
+        break;
+    case IDM_PASTESPECIAL:
+        cmd_pastespecial();
+        break;
+    case IDM_LINKS:
+        cmd_links();
+        break;
+    case IDM_MOVEPICT:
+    case IDM_SIZEPICT:
+        view_pict_start(id);
+        break;
     case IDM_INSERTOBJ:
         undo_save(IDS_EDITING);
         cmd_insertobj();
@@ -453,7 +473,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         DragAcceptFiles(g_docwnd, TRUE);
         return 0;
     case WM_SIZE:
-        place_children(LOWORD(lp), HIWORD(lp));
+        frame_layout(LOWORD(lp), HIWORD(lp));
         return 0;
     case WM_ERASEBKGND: {
         /* the corner between the scroll bars shows the scroll bar colour
@@ -506,6 +526,7 @@ LRESULT FAR PASCAL __export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_DESTROY:
         ole_done();
+        ruler_done();
         help(HELP_QUIT, 0);             /* with WRITE.HLP named (WR11) */
         PostQuitMessage(0);
         return 0;
@@ -533,7 +554,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);      /* the class's (WR14: 6) */
         wc.lpszMenuName = "MW_MENU";
         wc.lpszClassName = s_frame;
-        if (!RegisterClass(&wc) || !view_register(hi))
+        if (!RegisterClass(&wc) || !view_register(hi) || !ruler_register(hi))
             return 0;
     }
     g_backup = GetProfileInt(s_ini, "Backup", 0) != 0;

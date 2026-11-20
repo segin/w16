@@ -34,6 +34,28 @@ svc_ %+ i:
 %endrep
 %endmacro
 
+; VXDCALLC name, device, service, n: vu32 name(vu32 a1, ...) in C (n
+; arguments), a dynamic link to a service with the C calling convention
+; (the DDK's _Name services: the arguments on the stack, the result in EAX)
+%macro VXDCALLC 4
+global %1
+%1:     push ebx
+        push esi
+        push edi
+        push ebp
+%rep %4
+        push dword [esp + 20 + 4 * (%4 - 1)]
+%endrep
+        int 20h
+        dd ((%2) << 16) | (%3)
+        add esp, 4 * %4
+        pop ebp
+        pop edi
+        pop esi
+        pop ebx
+        ret
+%endmacro
+
 ; VXDCALL name, device, service: void name(struct vregs *) in C, a
 ; dynamic link (INT 20h) to that service with the block's registers
 %macro VXDCALL 3

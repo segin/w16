@@ -27,13 +27,13 @@
 #define CLS_CLIENT  "DMGClientClass"    /* 6 bytes: conv (near, DS), seq */
 #define CLS_SERVER  "DMGServerClass"    /* 6 bytes: same */
 #define CLS_HOLD    "DMGHoldingClass"   /* 8 bytes: 0, 0, seq, 0 */
-#define CLS_LIST    "DMGConvListClass"  /* the conversation lists */
-#define CLS_MON     "DMGMonitorClass"   /* a monitor instance's window */
+#define CLS_MON     "DMGMonitorClass"   /* 4 bytes: a monitor's second window */
 
 /* private messages between DDEML's own windows */
 #define WM_DMG_CALLBACK  (WM_USER + 0x60)  /* DMGClass: lParam -> CBARGS */
 #define WM_DMG_MONITOR   (WM_USER + 0x61)  /* monitor window: lParam -> event */
 #define WM_DMG_RUN       (WM_USER + 0x62)  /* client: run the held advise data */
+#define WM_DMG_NOP       (WM_USER + 0x63)  /* DMGClass: nothing (a queue place) */
 
 typedef struct tagINST INST;
 typedef struct tagCONV CONV;
@@ -42,7 +42,6 @@ typedef struct tagLINK LINK;
 typedef struct tagQMSG QMSG;
 typedef struct tagDATA DATA;
 typedef struct tagNAME NAME;
-typedef struct tagSREF SREF;
 typedef struct tagCLIST CLIST;
 
 struct tagNAME {                        /* a registered service name */
@@ -50,11 +49,6 @@ struct tagNAME {                        /* a registered service name */
     ATOM atom;
 };
 
-struct tagSREF {                        /* atoms an instance holds */
-    SREF NEAR *next;
-    ATOM atom;
-    WORD count;
-};
 
 /* DATA.flags */
 #define DF_APPOWNED  0x0001             /* HDATA_APPOWNED */
@@ -70,6 +64,7 @@ struct tagDATA {
     WORD flags;
     ATOM item;
     WORD fmt;
+    DWORD size;                         /* if not 0: the size it shows */
 };
 
 struct tagLINK {                        /* an advise loop */
@@ -123,6 +118,8 @@ struct tagCONV {
     WORD convst;                        /* XST_* */
     WORD mode;
     ATOM svcpartner, svcreq, topic;
+    ATOM svcref;                        /* server: the service, held once more */
+    ATOM svcask;                        /* client: the service asked for (svcreq once connected) */
     CONVCONTEXT cc;
     DWORD user;
     CLIST NEAR *list;
@@ -137,12 +134,18 @@ struct tagCONV {
     BOOL incb;                          /* a callback of this conv is running */
     BOOL initiating;                    /* its INITIATE is being sent */
     BOOL runposted;                     /* WM_DMG_RUN is on its way */
+    HWND enumwin;                       /* the window its INITIATE went to last */
 };
 
+/* a conversation list is a DMGHoldingClass window (child of the
+   client's DMGClass) whose children are the conversations, in their
+   z-order; HCONVLIST = MAKELONG(window, number) */
 struct tagCLIST {
     CLIST NEAR *next;
     INST NEAR *inst;
     HWND hwnd;
+    WORD seq;
+    BOOL ended;                         /* DdeDisconnectList ran (word 6: 2000) */
 };
 
 /* INST.flags */
@@ -159,9 +162,11 @@ struct tagINST {
     DWORD afCmd;
     WORD flags;
     WORD lasterr;
-    HWND frame, dmg, hold;
+    HWND frame, dmg, hold, mon;
+    HGLOBAL monblk;                     /* a monitor's event block */
     NAME NEAR *names;
-    SREF NEAR *strs;
+    ATOM NEAR *strs;                    /* one entry per create/keep */
+    WORD nstrs, maxstrs;
     DATA NEAR *datas;
     CONV NEAR *convs;
     CLIST NEAR *lists;
@@ -183,6 +188,9 @@ DWORD inst_id(INST NEAR *in);
 void seterr(INST NEAR *in, WORD e);
 HDDEDATA callback(INST NEAR *in, UINT type, UINT fmt, CONV NEAR *c, HSZ h1, HSZ h2,
                   HDDEDATA d, DWORD d1, DWORD d2);
+HDDEDATA callback_hc(INST NEAR *in, UINT type, UINT fmt, CONV NEAR *c, HCONV hc, HSZ h1, HSZ h2,
+                     HDDEDATA d, DWORD d1, DWORD d2);
+void seterr_quiet(INST NEAR *in, WORD e);
 BOOL filtered(INST NEAR *in, UINT type);
 LRESULT FAR PASCAL DmgWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT FAR PASCAL SubframeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
@@ -196,8 +204,10 @@ extern WORD __cdecl ddeml_ahincr;
 void modal(BOOL *until);
 
 /* hsz.c */
-void str_ref(INST NEAR *in, ATOM a, int delta);
 void str_freeall(INST NEAR *in);
+ATOM hsz_inc(ATOM a);
+ATOM hsz_inc_quiet(ATOM a);
+void hsz_dec(ATOM a);
 HSZ inst_hsz(INST NEAR *in, ATOM a);
 
 /* data.c */
@@ -216,7 +226,8 @@ HCONV conv_handle(CONV NEAR *c);
 HWND newwin(INST NEAR *in, LPCSTR cls, HWND parent, DWORD style, WORD seq);
 void conv_free(CONV NEAR *c);
 void conv_terminate(CONV NEAR *c, BOOL wait);
-void conv_initiate(INST NEAR *in, HWND client, ATOM app, ATOM topic, HWND from);
+void conv_terminate_all(INST NEAR *in);
+BOOL conv_initiate(INST NEAR *in, HWND client, ATOM app, ATOM topic, HWND from);
 BOOL local_window(HWND h, LPCSTR cls);
 LRESULT FAR PASCAL ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT FAR PASCAL ServerWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
@@ -225,14 +236,24 @@ void conv_unblock(CONV NEAR *c, UINT cmd);
 BOOL conv_waiting(CONV NEAR *c);
 
 /* mon.c */
+/* MONHSZSTRUCT.fsAction values 3.1 uses for its own atom traffic
+   (seen with tests/ddeml/scripts/xmon.dm): an atom added for a string,
+   one more reference, one reference less */
+#define MH_ADDATOM  5
+#define MH_INCATOM  6
+#define MH_DECATOM  7
 void mon_hsz(INST NEAR *in, HSZ h, WORD action);
 void mon_msg(BOOL post, HWND to, UINT msg, WPARAM wp, LPARAM lp);
 void mon_cb(INST NEAR *in, UINT type, UINT fmt, HCONV c, HSZ h1, HSZ h2, HDDEDATA d,
             DWORD d1, DWORD d2, DWORD ret);
 void mon_conv(CONV NEAR *c, BOOL connect);
 void mon_link(CONV NEAR *c, LINK NEAR *l, BOOL est);
+HCONV partner_handle(CONV NEAR *c, BOOL inlink);
+BOOL is_dmgclass(HWND h);
+BOOL conv_listing(HWND client);
 void mon_err(INST NEAR *in, WORD e);
 void mon_update(void);
+void mon_init(INST NEAR *in);
 LRESULT FAR PASCAL MonitorWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT FAR PASCAL DdeSendHookProc(int code, WPARAM wp, LPARAM lp);
 LRESULT FAR PASCAL DdePostHookProc(int code, WPARAM wp, LPARAM lp);

@@ -451,19 +451,28 @@ static void discard_block(const lheap *hp, u16 h)
 
 /* discard the unlocked discardable blocks the notify procedure lets go
    (LN_DISCARD, asked once for each); returns whether any was.
-   UNVERIFIED: whether Windows stops once the request would fit. */
+   UNVERIFIED: whether Windows stops once the request would fit.
+   Observed (TK62 "lcompact"): LocalCompact(-1) discards all 48 of 48
+   blocks; w16 took 32 at most (KERNEL audit, L4): the candidates are
+   taken NDISC at a time, each batch below the last one's lowest arena
+   (discarding frees arenas above it only, and the arena where the scan
+   stopped keeps its address when a freed one merges with it). */
 #define NDISC 32
 static int discard_all(const lheap *hp)
 {
-    u16 first = I(hp, LI_FIRST), a, h, cand[NDISC], n = 0, i;
+    u16 first = I(hp, LI_FIRST), a, h, cand[NDISC], n, i, low = 0xFFFF;
     int any = 0;
+again:
+    n = 0;
     /* the candidates first (discarding merges arenas), at most NDISC */
     for (a = a_prev(hp, I(hp, LI_LAST)); a != first && n < NDISC; a = a_prev(hp, a)) {
-        if (a_flags(hp, a) != (LA_BUSY | LA_MOVEABLE))
+        if (a >= low || a_flags(hp, a) != (LA_BUSY | LA_MOVEABLE))
             continue;
         h = W(hp->seg, a + LA_HANDLE);
-        if ((h_flags(hp, h) & HF_DISCARDABLE) && !h_lock(hp, h))
+        if ((h_flags(hp, h) & HF_DISCARDABLE) && !h_lock(hp, h)) {
             cand[n++] = h;
+            low = a;
+        }
     }
     for (i = 0; i < n; i++) {
         h = cand[i];
@@ -477,6 +486,8 @@ static int discard_all(const lheap *hp)
             any = 1;
         }
     }
+    if (n == NDISC)
+        goto again;
     return any;
 }
 

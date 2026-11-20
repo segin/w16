@@ -15,6 +15,8 @@
 #define YP0         4
 #define CARET_W     2
 #define TIMER_CARET 1
+#define TIMER_TYPED 2                   /* the caret goes off a moment after typing */
+#define TYPED_MS    450                 /* UNVERIFIED: more than 200, less than 700 (WR23, WR24, WR25 with SNAP's pacing) */
 
 HWND g_docwnd;
 DWORD g_selFirst, g_selLim;
@@ -155,6 +157,9 @@ typedef struct {
     BOOL picture;                       /* a picture paragraph */
     int yp, picH;                       /* a picture's band: its first row, the picture's height */
     BOOL pageBreak;                     /* a page break (character 12) alone */
+    DWORD tabCp;                        /* after the line's last tab, 0: none */
+    int tabShift;                       /* what comes after it moves by this */
+    int space;                          /* 1 1/2, double spacing: rows above the text */
 } LINE;
 
 /* Tall pictures are laid out in bands, lines of BAND pixels (the last one
@@ -198,9 +203,10 @@ static void layout_line(DWORD cp, LINE *ln)
     int asc = 0, desc = 0, ht = 0;
     CHPX chp;
     FONTC *f = NULL;
-    DWORD runLim = 0, runFirst;
+    DWORD runLim = 0, runFirst, tabCp = 0;
     ATOM32 ra;
     BOOL haveBrk = FALSE;
+    int xTab = 0;
     pi = para_at(&g_doc, cp, &pf, &pl, &pa);
     pap_decode(&g_doc, pa, &pap);
     ln->cpFirst = cp;
@@ -208,6 +214,9 @@ static void layout_line(DWORD cp, LINE *ln)
     ln->picture = FALSE;
     ln->yp = ln->picH = 0;
     ln->pageBreak = FALSE;
+    ln->tabCp = 0;
+    ln->tabShift = 0;
+    ln->space = 0;
     if ((pap.rhc & 6) && !hf_mode()) {
         /* a header or footer paragraph (SDK ch. 8, 8.3.1: rhc bits 1-2;
            they come before the body, 8.3.2): not shown in the document
@@ -302,6 +311,10 @@ static void layout_line(DWORD cp, LINE *ln)
             break;
         }
         x += w;
+        if (ch == '\t') {
+            tabCp = c + 1;
+            xTab = x;
+        }
         if (ch == ' ') {
             spaces++;
             brk = c + 1;
@@ -347,10 +360,18 @@ static void layout_line(DWORD cp, LINE *ln)
         ht = 0;
     ln->ascent = asc + ht;
     ln->height = asc + desc + ht;
+    ln->space = ht;
     ln->width = x - xStart;
     ln->nspaces = 0;
     ln->extra = 0;
-    switch (pap.jc) {
+    if (tabCp && tabCp <= c && (pap.jc == 1 || pap.jc == 2)) {
+        /* with a tab in the line only what follows the last one is
+           centered or set right, between its tab stop and the right
+           indent; what comes before stays at the left (WR24 R3) */
+        int w = x - xTab, sh = pap.jc == 1 ? (xMax - xTab - w) / 2 : xMax - xTab - w;
+        ln->tabCp = tabCp;
+        ln->tabShift = sh > 0 ? sh : 0;
+    } else switch (pap.jc) {
     case 1:
         xStart += (xMax - xStart - ln->width) / 2;
         break;
@@ -403,6 +424,64 @@ static DWORD line_start(DWORD cp)
 
 /* the length of the paragraph mark that ends at lim: CR LF, or a page
    break (character 12) */
+static DWORD mark_len(DWORD lim);
+static BOOL visible(DWORD cp);
+static int caret_mid(int h);
+static void redraw(void);
+static void layout_band(DWORD cp, int yp, LINE *ln);
+static BOOL line_prev(DWORD cp, int yp, DWORD *pcp, int *pyp);
+
+/* for Confirm Page Breaks (print.c): the line before and after the one
+   that starts at cp, and where its text ends */
+DWORD view_line_before(DWORD cp)
+{
+    return line_before(line_start(cp));
+}
+
+DWORD view_line_after(DWORD cp)
+{
+    LINE ln;
+    layout_line(line_start(cp), &ln);
+    return ln.endMark ? cp : ln.cpLim;
+}
+
+/* Confirm Page Breaks shows the line at cp: above the window it comes
+   with 128 pixels of lines above it, below with the caret's middle rule
+   (WR31: line 55 under line 47, the break after line 70 under line 61;
+   UNVERIFIED: the rule for lines above) */
+void view_show_line(DWORD cp)
+{
+    RECT r;
+    int h = 0, yp = 0, ypp;
+    DWORD s, p;
+    LINE ln;
+    if (visible(cp))
+        return;
+    GetClientRect(g_docwnd, &r);
+    s = line_start(cp);
+    while (h < (cp < cpTop ? caret_mid(r.bottom) - 32 : caret_mid(r.bottom)) &&
+           line_prev(s, yp, &p, &ypp)) {
+        layout_band(p, ypp, &ln);
+        h += ln.height;
+        s = p;
+        yp = ypp;
+    }
+    cpTop = s;
+    ypTop = yp;
+    redraw();
+}
+
+DWORD view_line_end(DWORD cp)
+{
+    LINE ln;
+    DWORD e;
+    layout_line(line_start(cp), &ln);
+    e = ln.cpLim > g_doc.cpMac ? g_doc.cpMac : ln.cpLim;
+    if (ln.paraEnd && !ln.endMark && e > ln.cpFirst)
+        e -= mark_len(e);
+    return e;
+}
+
 static DWORD mark_len(DWORD lim)
 {
     return lim > 0 && doc_ch(&g_doc, lim - 1) == 12 ? 1 : 2;
@@ -512,7 +591,7 @@ static int x_of(const LINE *ln, DWORD cp)
         if (ch == '\r' || ch == '\n')
             break;
         if (ch == '\t')
-            x = tab_stop(&pap, x, XP0);
+            x = tab_stop(&pap, x, XP0) + (c + 1 == ln->tabCp ? ln->tabShift : 0);
         else
             x += ch == 1 ? page_w(f) : f ? f->width[ch] : 8;
         if (ch == ' ' && ln->nspaces) {
@@ -549,6 +628,7 @@ static void caret_place(void)
 {
     LINE *l;
     int i, y = YP0;
+    ruler_update();
     caret_hide();
     caretShown = FALSE;
     if (g_selFirst != g_selLim || GetFocus() != g_docwnd)
@@ -559,8 +639,9 @@ static void caret_place(void)
             (g_selFirst < l[i].cpLim || l[i].endMark ||
              (g_selFirst == l[i].cpLim && i + 1 == nlines && !l[i].paraEnd))) {
             caretX = x_of(&l[i], g_selFirst) - CARET_W + 1;   /* WR1 */
-            caretY = y;
-            caretH = l[i].height;
+            /* the caret leaves out the spacing's rows (WR24 R3) */
+            caretY = y + l[i].space;
+            caretH = l[i].height - l[i].space;
             /* before a page break 3.1 shows no caret (WR21: after Up onto
                it and after typing there; UNVERIFIED: where it is) */
             caretShown = !l[i].pageBreak;
@@ -586,6 +667,246 @@ static void caret_defer(void)
 void view_caret_defer(void)
 {
     caret_defer();
+}
+
+/* ---- Move Picture and Size Picture (WR22, WR28) ----
+   Edit > Move Picture / Size Picture on a selected picture: the picture
+   shows as it is, not inverted, in a black frame one row taller than
+   it; a gray outline the same size (its pixels XOR colour 8) follows
+   the keys or the mouse; Enter or a click sets it, Escape leaves it.
+   Move: the outline goes 8 pixels a Left or Right, or is centred on the
+   mouse's x; the picture's offset becomes the outline's place (WR28 N2,
+   N4: 123 pixels, dxaOffset 1845). Size: the first arrow key takes the
+   right (Right, Left) or bottom (Down, Up) edge, the next ones move it,
+   8 pixels a step across and 6 down (WR28 Z2: 3 Right and 2 Down, 80 x
+   41 to 96 x 47; UNVERIFIED: the steps); with the mouse the edges on the
+   mouse's side of the outline's centre follow it (N3); the page box
+   shows the scale, "1.2X/1.1Y" (tenths, cut). mx and my are the
+   outline's width and height (the height with its extra row) in
+   thousandths of the picture's at scale 1000 (N4: 146 / 80 = 1825,
+   134 / 41 = 3268). */
+static int pmMode;                      /* 0, IDM_MOVEPICT, IDM_SIZEPICT */
+static RECT pmOrig, pmCur;              /* frame and outline, window pixels */
+static int pmGrabX, pmGrabY;            /* Size: the edge taken (1), 0 none */
+static int pmW0, pmH0;                  /* the outline's size at scale 1000 */
+static POINT pmMouse;                   /* the pointer when the mode began */
+static BOOL pmEatChar;                  /* Enter's or Escape's WM_CHAR follows */
+
+static void pm_edges(HDC dc, const RECT *r, DWORD rop)
+{
+    int w = r->right - r->left, h = r->bottom - r->top;
+    PatBlt(dc, r->left, r->top, w, 1, rop);
+    if (h > 1)
+        PatBlt(dc, r->left, r->bottom - 1, w, 1, rop);
+    if (h > 2) {
+        PatBlt(dc, r->left, r->top + 1, 1, h - 2, rop);
+        if (w > 1)
+            PatBlt(dc, r->right - 1, r->top + 1, 1, h - 2, rop);
+    }
+}
+
+static void pm_outline(HDC dc)
+{
+    HBRUSH b = CreateSolidBrush(RGB(128, 128, 128));
+    HBRUSH o = SelectObject(dc, b);
+    pm_edges(dc, &pmCur, PATINVERT);
+    SelectObject(dc, o);
+    DeleteObject(b);
+}
+
+BOOL view_pict_mode(void)
+{
+    return pmMode != 0;
+}
+
+static void redraw(void);
+
+static void pm_redraw(void)
+{
+    InvalidateRect(g_docwnd, NULL, TRUE);
+    UpdateWindow(g_docwnd);
+    view_update_pageinfo();
+}
+
+/* the selected picture paragraph, FALSE if the selection is not one */
+static BOOL sel_picture(DWORD *pf, DWORD *pl)
+{
+    DWORD f, l;
+    ATOM32 a;
+    PAPX p;
+    para_at(&g_doc, g_selFirst, &f, &l, &a);
+    pap_decode(&g_doc, a, &p);
+    if (!p.fGraphics || g_selFirst != f || g_selLim != l)
+        return FALSE;
+    *pf = f;
+    *pl = l;
+    return TRUE;
+}
+
+BOOL view_pict_selected(void)
+{
+    DWORD f, l;
+    return sel_picture(&f, &l);
+}
+
+static void pm_end(BOOL apply);
+
+void view_pict_start(int mode)
+{
+    DWORD f, l;
+    LINE *ln;
+    int i, y = YP0;
+    PICT pic;
+    if (!sel_picture(&f, &l))
+        return;
+    view_scroll_to_caret();
+    ln = lines();
+    for (i = 0; i < nlines; i++) {
+        if (ln[i].picture && ln[i].cpFirst == f)
+            break;
+        y += ln[i].height;
+    }
+    if (i == nlines) {
+        LocalUnlock(hlines);
+        return;
+    }
+    pict_read(f, l, &pic);
+    /* heights in whole pixels, cut (WR28: 608 twips are 40 rows, the
+       outline 41) */
+    SetRect(&pmOrig, ln[i].xLeft - xpScroll, y - ln[i].yp, ln[i].xLeft - xpScroll + ln[i].width,
+            y - ln[i].yp + (int)((long)pic.dyaSize * pic.my / 1000 * dpiY / 1440) + 1);
+    LocalUnlock(hlines);
+    pmW0 = tw2px(pic.dxaSize);
+    pmH0 = (int)((long)pic.dyaSize * dpiY / 1440) + 1;
+    pmCur = pmOrig;
+    pmGrabX = pmGrabY = 0;
+    pmMode = mode;
+    caret_hide();
+    GetCursorPos(&pmMouse);
+    ScreenToClient(g_docwnd, &pmMouse);
+    SetCapture(g_docwnd);
+    pm_redraw();
+}
+
+static void pm_key(WPARAM vk)
+{
+    int d = vk == VK_LEFT || vk == VK_UP ? -1 : 1;
+    switch (vk) {
+    case VK_RETURN:
+        pmEatChar = TRUE;
+        pm_end(TRUE);
+        return;
+    case VK_ESCAPE:
+        pmEatChar = TRUE;
+        pm_end(FALSE);
+        return;
+    case VK_LEFT:
+    case VK_RIGHT:
+        if (pmMode == IDM_MOVEPICT)
+            OffsetRect(&pmCur, 8 * d, 0);
+        else if (!pmGrabX)
+            pmGrabX = 1;                /* the first one takes the edge */
+        else if (pmCur.right + 8 * d > pmCur.left + 1)
+            pmCur.right += 8 * d;
+        break;
+    case VK_UP:
+    case VK_DOWN:
+        if (pmMode == IDM_MOVEPICT)
+            return;
+        if (!pmGrabY)
+            pmGrabY = 1;
+        else if (pmCur.bottom + 6 * d > pmCur.top + 2)
+            pmCur.bottom += 6 * d;
+        break;
+    default:
+        return;
+    }
+    pm_redraw();
+}
+
+static void pm_mouse(int x, int y)
+{
+    /* the pointer counts once it moves (WR28 M1: where it was is no
+       place for the outline) */
+    if (x == pmMouse.x && y == pmMouse.y)
+        return;
+    pmMouse.x = -32767;
+    if (pmMode == IDM_MOVEPICT) {
+        OffsetRect(&pmCur, x - (pmCur.right - pmCur.left) / 2 - pmCur.left, 0);
+    } else {
+        if (!pmGrabX)
+            pmGrabX = x < (pmCur.left + pmCur.right) / 2 ? -1 : 1;
+        if (!pmGrabY)
+            pmGrabY = y < (pmCur.top + pmCur.bottom) / 2 ? -1 : 1;
+        if (pmGrabX < 0 && x < pmCur.right - 1)
+            pmCur.left = x;
+        else if (pmGrabX > 0 && x > pmCur.left + 1)
+            pmCur.right = x;
+        if (pmGrabY > 0 && y > pmCur.top + 2)
+            pmCur.bottom = y;
+    }
+    pm_redraw();
+}
+
+/* the scale shown in the page box while sizing: "1.2X/1.1Y" */
+BOOL view_pict_scale(char *s)
+{
+    long mx, my;
+    char n[8];
+    if (pmMode != IDM_SIZEPICT || !pmW0 || !pmH0)
+        return FALSE;
+    mx = (long)(pmCur.right - pmCur.left) * 10 / pmW0;
+    my = (long)(pmCur.bottom - pmCur.top) * 10 / pmH0;
+    s_utoa(s, mx / 10);
+    s_cat(s, ".", 16);
+    s_utoa(n, mx % 10);
+    s_cat(s, n, 16);
+    s_cat(s, "X/", 16);
+    s_utoa(n, my / 10);
+    s_cat(s, n, 16);
+    s_cat(s, ".", 16);
+    s_utoa(n, my % 10);
+    s_cat(s, n, 16);
+    s_cat(s, "Y", 16);
+    return TRUE;
+}
+
+static void pm_end(BOOL apply)
+{
+    DWORD f, l;
+    int mode = pmMode;
+    pmMode = 0;
+    ReleaseCapture();
+    if (apply && sel_picture(&f, &l) && !EqualRect(&pmCur, &pmOrig)) {
+        WORD v[2];
+        undo_save(IDS_EDITING);
+        /* sizing from the left moves the picture too (WR28 N4) */
+        if (mode == IDM_MOVEPICT || pmCur.left != pmOrig.left) {
+            DWORD pf, pl;
+            ATOM32 a;
+            PAPX p;
+            int px;
+            para_at(&g_doc, f, &pf, &pl, &a);
+            pap_decode(&g_doc, a, &p);
+            px = pmCur.left + xpScroll - (XP0 - 1) - tw2px(p.dxaLeft);
+            if (px < 0)
+                px = 0;
+            v[0] = (WORD)MulDiv(px, 1440, dpiX);
+            doc_put(&g_doc, f + 8, v, 2);
+        }
+        if (mode == IDM_SIZEPICT) {
+            v[0] = (WORD)((long)(pmCur.right - pmCur.left) * 1000 / pmW0);
+            v[1] = (WORD)((long)(pmCur.bottom - pmCur.top) * 1000 / pmH0);
+            doc_put(&g_doc, f + 36, v, 4);
+        }
+        g_doc.dirty = TRUE;
+        view_changed(f);
+        view_select(f, l, FALSE);
+    } else {
+        redraw();
+        InvalidateRect(g_docwnd, NULL, FALSE);
+    }
+    view_update_pageinfo();
 }
 
 /* ---- painting ---- */
@@ -716,7 +1037,7 @@ static void paint_line(HDC dc, const LINE *ln, int y)
         {
             BYTE ch = doc_ch(&g_doc, c);
             if (ch == '\t') {
-                x = tab_stop(&pap, x + xpScroll, XP0) - xpScroll;
+                x = tab_stop(&pap, x + xpScroll, XP0) - xpScroll + (c + 1 == ln->tabCp ? ln->tabShift : 0);
             } else if (ch == 1) {
                 /* the page number: "(page)" on screen (SDK ch. 8) */
                 TextOut(dc, x, y + ln->ascent - f->tmAscent - up, "(page)", 6);
@@ -764,6 +1085,10 @@ static void paint_sel(HDC dc)
             else
                 x2 = x_of(&l[i], b);
             SetRect(&r, x1 - xpScroll, y, x2 - xpScroll, y + l[i].height);
+            /* a selected page break: its whole line, from a pixel left of
+               the text to the window's edge (WR31 C3) */
+            if (l[i].pageBreak)
+                SetRect(&r, XP0 - 1 - xpScroll, y, cr.right, y + l[i].height);
             InvertRect(dc, &r);
         }
         y += l[i].height;
@@ -790,7 +1115,12 @@ static void paint(HWND w)
         y += t.height;
     }
     LocalUnlock(hlines);
-    paint_sel(dc);
+    if (pmMode) {
+        pm_edges(dc, &pmOrig, BLACKNESS);
+        pm_outline(dc);
+    } else {
+        paint_sel(dc);
+    }
     SelectObject(dc, GetStockObject(SYSTEM_FONT));
     EndPaint(w, &ps);
     if (caretShown)
@@ -872,11 +1202,13 @@ LRESULT FAR PASCAL __export PageInfoWndProc(HWND w, UINT msg, WPARAM wp, LPARAM 
         }
         SetTextColor(dc, RGB(255, 255, 255));
         SetBkColor(dc, GetSysColor(COLOR_WINDOWFRAME));
-        load_str(IDS_PAGE1, s, sizeof s);           /* "Page 1" */
-        if (s_len(s) > 1)
-            s[s_len(s) - 1] = 0;                    /* "Page " */
-        s_utoa(num, page_of(cpTop));
-        s_cat(s, num, sizeof s);
+        if (!view_pict_scale(s)) {
+            load_str(IDS_PAGE1, s, sizeof s);       /* "Page 1" */
+            if (s_len(s) > 1)
+                s[s_len(s) - 1] = 0;                /* "Page " */
+            s_utoa(num, page_of(cpTop));
+            s_cat(s, num, sizeof s);
+        }
         TextOut(dc, 6, -1, s, s_len(s));            /* calibrated, WR1 */
         EndPaint(w, &ps);
         return 0;
@@ -1139,14 +1471,14 @@ void view_char(WORD ch)
     typing = TRUE;
     view_char2(ch, s);
     typing = FALSE;
-    /* typed on the end mark's line (the document's last), the caret stays
-       off until it blinks (WR1, WR18); in a paragraph before
-       it, it shows (WR3: typing before the paragraph mark that Paragraph >
-       Normal added). UNVERIFIED beyond these */
-    if (g_selFirst == g_selLim && line_start(g_selFirst) != line_start(g_doc.cpMac)) {
-        caretDefer = FALSE;
-        caret_place();
-    }
+    /* after typing the caret goes off a moment later, until it blinks,
+       wherever it was typed: a menu or a key at once after the typing
+       finds it on (WR23 T1, WR25 A1; WR3's old shot), half a second later
+       off (WR24 R4, R5; WR1, WR18) */
+    caretDefer = FALSE;
+    caret_place();
+    if (GetFocus() == g_docwnd)
+        SetTimer(g_docwnd, TIMER_TYPED, TYPED_MS, NULL);
 }
 
 static void view_char2(WORD ch, char *s)
@@ -1183,10 +1515,26 @@ static void view_char2(WORD ch, char *s)
     replace_sel(s, 1);
 }
 
+/* the picture paragraph holding cp, if any: arrows step over a picture
+   as one unit (WR22, WR28: Shift+Left after a pasted picture selects it) */
+static BOOL in_picture(DWORD cp, DWORD *pf, DWORD *pl)
+{
+    ATOM32 a;
+    PAPX p;
+    if (cp >= g_doc.cpMac)
+        return FALSE;
+    para_at(&g_doc, cp, pf, pl, &a);
+    pap_decode(&g_doc, a, &p);
+    return p.fGraphics;
+}
+
 static DWORD next_cp(DWORD cp)
 {
+    DWORD pf, pl;
     if (cp >= g_doc.cpMac)
         return g_doc.cpMac;
+    if (in_picture(cp, &pf, &pl))
+        return pl;
     if (doc_ch(&g_doc, cp) == '\r' && cp + 1 < g_doc.cpMac && doc_ch(&g_doc, cp + 1) == '\n')
         return cp + 2;
     return cp + 1;
@@ -1194,8 +1542,11 @@ static DWORD next_cp(DWORD cp)
 
 static DWORD prev_cp(DWORD cp)
 {
+    DWORD pf, pl;
     if (cp == 0)
         return 0;
+    if (in_picture(cp - 1, &pf, &pl))
+        return pf;
     if (cp >= 2 && doc_ch(&g_doc, cp - 1) == '\n' && doc_ch(&g_doc, cp - 2) == '\r')
         return cp - 2;
     return cp - 1;
@@ -1252,10 +1603,20 @@ static void page_move(BOOL down)
 void view_key(WPARAM vk)
 {
     BOOL shift = GetKeyState(VK_SHIFT) < 0, ctrl = GetKeyState(VK_CONTROL) < 0;
-    DWORD cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
-    DWORD to = cp;
+    DWORD cp, to, top0;
     LINE ln;
-    caretDefer = menuShown = FALSE;
+    if (g_selFirst == g_selLim)
+        selAnchor = g_selFirst;
+    cp = g_selFirst == selAnchor ? g_selLim : g_selFirst;
+    to = cp;
+    /* the arrows keep the caret's phase: off after typing it stays off
+       (WR24 R5: Up after typing), unless the window scrolls; the other
+       keys show it (WR18 S5: Ctrl+Home, Page Down, then Down) */
+    menuShown = FALSE;
+    KillTimer(g_docwnd, TIMER_TYPED);   /* a key at once after typing: on (WR25 A1) */
+    if (vk != VK_LEFT && vk != VK_RIGHT && vk != VK_UP && vk != VK_DOWN)
+        caretDefer = FALSE;
+    top0 = cpTop;
     if (vk == VK_DELETE)
         undo_save(IDS_EDITING);
     else
@@ -1342,6 +1703,10 @@ void view_key(WPARAM vk)
         selAnchor = to;
         view_select(to, to, TRUE);
     }
+    if (cpTop != top0 && caretDefer) {
+        caretDefer = FALSE;
+        caret_place();
+    }
 }
 
 /* ---- the window ---- */
@@ -1409,20 +1774,36 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         caret_place();
         return 0;
     case WM_KILLFOCUS:
+        if (pmMode)
+            pm_end(FALSE);
         KillTimer(w, TIMER_CARET);
         caret_hide();
         caretShown = FALSE;
         return 0;
     case WM_TIMER:
+        if (wp == TIMER_TYPED) {
+            KillTimer(w, TIMER_TYPED);
+            if (!menuShown && !caretDefer) {
+                caret_hide();
+                caretDefer = TRUE;
+            }
+            return 0;
+        }
         caretDefer = FALSE;
         if (caretShown)
             caret_draw();
         return 0;
     case WM_KEYDOWN:
-        view_key(wp);
+        if (pmMode)
+            pm_key(wp);
+        else
+            view_key(wp);
         return 0;
     case WM_CHAR:
-        view_char(wp);
+        if (pmEatChar)
+            pmEatChar = FALSE;
+        else if (!pmMode)
+            view_char(wp);
         return 0;
     case WM_LBUTTONDBLCLK: {
         /* on an object: open it in its server */
@@ -1443,7 +1824,14 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_LBUTTONDOWN: {
-        DWORD cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
+        DWORD cp;
+        if (pmMode) {                   /* a click sets the picture */
+            pmMouse.x = -32767;
+            pm_mouse((int)LOWORD(lp), (int)HIWORD(lp));
+            pm_end(TRUE);
+            return 0;
+        }
+        cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
         SetFocus(w);
         undo_end_typing();
         if (wp & MK_SHIFT) {
@@ -1457,6 +1845,10 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_MOUSEMOVE:
+        if (pmMode) {
+            pm_mouse((int)LOWORD(lp), (int)HIWORD(lp));
+            return 0;
+        }
         if (dragging) {
             DWORD cp = cp_from_point((int)LOWORD(lp) + xpScroll, (int)HIWORD(lp));
             view_select(cp < selAnchor ? cp : selAnchor, cp < selAnchor ? selAnchor : cp, FALSE);

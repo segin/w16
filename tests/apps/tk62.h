@@ -8,4 +8,6 @@ typedef struct tk62sh {
     WORD big;           /* its 1 MB block was allocated */
     WORD hit;           /* its second block lies right after its first */
     WORD task;          /* its hTask */
+    WORD count;         /* "L": its turns so far */
+    WORD stop;          /* "L": set by TK62 to end it */
 } tk62sh;

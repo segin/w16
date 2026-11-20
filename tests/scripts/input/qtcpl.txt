@@ -1,0 +1,76 @@
+; tests/qtcpl.sh: QuickTime for Windows 2.1.2 installed as in qtplay.txt
+; (Return through its five boxes; Play Sample starts the Movie Player,
+; closed with Alt+F4), then Control Panel from Program Manager's File >
+; Run, its QuickTime icon chosen by keys (@PICK@: End on w16's Control
+; Panel, End Left on 3.1's, where Sound comes last) and opened; More
+; (Alt+E) shows the tabs, a click on Files (148,45: the pointer sent home
+; first, 1-pixel steps) shows the "QuickTime Files" list; a click on its
+; last whole row (y 172), then on its scroll bar's down arrow (453,172).
+; Until 2026-11-20 w16's list was a row taller than 3.1's, ran under the
+; static below it, and the scroll drew its last row over the static
+; (user/listbox.c, probe US32).
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type C:\TMP\QTINSTAL.EXE
+sleep 0.5
+key Return
+settle 90 3
+shot 01-license
+key Return
+settle 90 3
+shot 02-begin
+key Return
+settle 180 4
+shot 03-check
+key Return
+settle 180 4
+shot 04-complete
+key Return
+settle 240 5
+shot 05-success
+key Return
+settle 120 5
+shot 06-player
+key alt+F4
+settle 60 3
+shot c1-noplayer
+key alt+f
+sleep 0.5
+key r
+sleep 1
+type CONTROL.EXE
+sleep 0.5
+key Return
+settle 60 3
+shot c2-control
+key @PICK@
+settle 20 2
+shot c3-sel
+key Return
+settle 60 3
+shot c4-applet
+key alt+e
+settle 20 2
+shot c5-more
+click 1
+sleep 0.5
+home
+glide 1,1 45,0.02
+glide 1,0 103,0.02
+sleep 0.5
+click 1
+settle 30 3
+shot c6-files
+glide 0,1 127,0.02
+sleep 0.5
+click 1
+settle 20 3
+shot c7-lastrow
+glide 1,0 305,0.02
+sleep 0.5
+click 1
+settle 20 3
+shot c8-arrow
+sleep 3

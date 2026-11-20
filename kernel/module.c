@@ -180,6 +180,28 @@ void mod_set_path(module FAR *m, const char FAR *path)
     m->path[i] = 0;
 }
 
+/* KERNEL's own segments are the bootstrap's memory, not blocks of the
+   heap; 3.1's are fixed blocks (TK62 "kseg", "codehandle"; TK50). The
+   global heap's APIs answer for them as such (KERNEL audit, medium 33):
+   which one sel is (its number + 1, 0 for none), and its GlobalFlags
+   (0900h for a discardable code segment, as 3.1 shows segments 2 and 3;
+   0 for the fixed ones). */
+u16 kernel_seg(u16 sel)
+{
+    u16 i;
+    if (!sel || !module_first)
+        return 0;
+    for (i = 0; i < module_first->seg_count; i++)
+        if (module_first->seg[i].sel && (module_first->seg[i].sel | 3) == (sel | 3))
+            return i + 1;
+    return 0;
+}
+
+u16 kernel_seg_flags(u16 k)
+{
+    return (MOD_SEG(module_first, k - 1)->flags & 0x1000) ? 0x0900 : 0;
+}
+
 void module_register_kernel(const bootinfo FAR *bi)
 {
     module FAR *m = mod_new(bi->seg_count);
@@ -336,8 +358,8 @@ int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
 }
 
 /* Look a length-prefixed name up in a name table (resident or
-   non-resident); the first entry (module name or description) is not an
-   export. */
+   non-resident), byte for byte; the first entry (module name or
+   description) is not an export. */
 static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
 {
     int first = 1;
@@ -345,13 +367,8 @@ static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
     while (p[0]) {
         u8 n = p[0], i;
         if (!first && n == pname[0]) {
-            for (i = 0; i < n; i++) {
-                char a = (char)p[1 + i], b = (char)pname[1 + i];
-                if (a >= 'a' && a <= 'z') a -= 32;
-                if (b >= 'a' && b <= 'z') b -= 32;
-                if (a != b)
-                    break;
-            }
+            for (i = 0; i < n && p[1 + i] == pname[1 + i]; i++)
+                ;
             if (i == n) {
                 *ordinal = *(const u16 FAR *)(p + 1 + n);
                 return 1;
@@ -363,13 +380,49 @@ static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
     return 0;
 }
 
-/* An exported name, in the resident and then the non-resident name table
-   (observed: GetProcAddress and imports by name find both). */
+/* The ordinal a name stands for, as GetProcAddress, imports by name and
+   the search for WEP find it. Observed on Windows 3.1 (tests/apps/tk65.c,
+   both kernels, both modes):
+   - "#" and decimal digits is that ordinal, in 16 bits ("#65537" is 1;
+     "#00000000000000000002" is 2); any other character after the "#"
+     ("#1x", "# 1", "#+1") or none gives 0. Imports by name too ("#4"
+     imports ordinal 4).
+   - any other name is upper-cased (a-z, and E0h-FEh but F7h: E4h finds
+     an export C4h...; 9Ah and FFh stay, unlike Reserved3's case) and then
+     compared byte for byte with the resident and then the non-resident
+     names: an export whose name is in mixed or lower case is found by no
+     spelling, by GetProcAddress or as an import. (Pietrek, Windows
+     Internals ch. 8, FindOrdinal: "uppercases each character of the input
+     parameter string"; the linker upper-cases the tables.) Before, w16
+     ignored case on both sides and found mixed-case exports. */
+static u8 fo_name[256];         /* (not on the caller's stack) */
+
 int mod_find_name(module FAR *m, const u8 FAR *pname, u16 *ordinal)
 {
-    if (find_in_table(MK_FP(m->ne_sel, NE_HDR(m)->resname_off), pname, ordinal))
+    u8 n = pname[0], i;
+
+    if (n && pname[1] == '#') {
+        u16 v = 0;
+        if (n == 1)
+            return 0;
+        for (i = 2; i <= n; i++) {
+            if (pname[i] < '0' || pname[i] > '9')
+                return 0;
+            v = v * 10 + (u16)(pname[i] - '0');
+        }
+        *ordinal = v;
+        return v != 0;
+    }
+    fo_name[0] = n;
+    for (i = 1; i <= n && i; i++) {
+        u8 c = pname[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7))
+            c -= 0x20;
+        fo_name[i] = c;
+    }
+    if (find_in_table(MK_FP(m->ne_sel, NE_HDR(m)->resname_off), fo_name, ordinal))
         return 1;
-    return m->nonres_sel && find_in_table(MK_FP(m->nonres_sel, 0), pname, ordinal);
+    return m->nonres_sel && find_in_table(MK_FP(m->nonres_sel, 0), fo_name, ordinal);
 }
 
 /* The module name a file name stands for: the part after the last path
@@ -440,32 +493,29 @@ u16 KAPI_ES GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
     return i;
 }
 
-/* Observed: names match regardless of case (also "#n" for ordinal n);
-   bit 15 of an ordinal is ignored; ordinal 0, gaps and unknown names give
-   0; a constant export comes back as FFFF:value; names in the
-   non-resident table are found too; a program's own exports are not
-   (TK5.EXE: 0 by name and by ordinal, through hModule or hInstance).
-   UNVERIFIED: whether that is decided by the library flag (as here) or by
-   the module having a task; hModule 0. */
+/* Observed: the name is upper-cased and then must match an export's name
+   exactly, or is "#n" for ordinal n (mod_find_name, TK65); bit 15 of an
+   ordinal is ignored; ordinal 0, gaps and unknown names give 0; a
+   constant export comes back as FFFF:value; names in the non-resident
+   table are found too; a program's own exports are not (TK5.EXE: 0 by
+   name and by ordinal, through hModule or hInstance), but with hInstance
+   0 they are: 0 is the current task's module (TK65, as Pietrek's
+   pseudocode has it). UNVERIFIED: whether the program check is decided
+   by the library flag (as here) or by the module having a task. */
 u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
 {
     module FAR *m = module_of(h);
     u16 ord = 0, sel, off;
     int is_const;
 
-    if (!m || !name || !(m->flags & NEF_LIBRARY))
+    if (!h)                     /* observed (TK65): the current task's own */
+        m = task_module();      /* exports (Pietrek, ch. 8) */
+    else if (m && !(m->flags & NEF_LIBRARY))
+        return 0;
+    if (!m)
         return 0;
     if (!FP_SEG(name)) {
-        ord = FP_OFF(name) & 0x7FFF;
-    } else if (name[0] == '#') {
-        const char FAR *p = name + 1;
-        if (!*p)
-            return 0;
-        for (; *p; p++) {
-            if (*p < '0' || *p > '9')
-                return 0;
-            ord = ord * 10 + (u16)(*p - '0');
-        }
+        ord = FP_OFF(name);     /* (NULL: ordinal 0) */
     } else {
         static u8 pname[256];   /* length-prefixed: at most 255 characters;
                                    not on the caller's stack (KERNEL
@@ -480,6 +530,7 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
         if (!mod_find_name(m, (const u8 FAR *)pname, &ord))
             return 0;
     }
+    ord &= 0x7FFF;              /* observed: also "#32769" is 1 */
     if (!ord || !module_entry(m, ord, &sel, &off, &is_const))
         return 0;
     if (is_const)

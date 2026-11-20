@@ -1,0 +1,169 @@
+; WF14: the extension interface (layer 5) with w16's probe extension
+; FMX.DLL (tests/apps/fmx.c) under both File Managers, its log
+; (C:\FMX.LOG, kept in SNAP's memory log, as the screens are: a file
+; made on C: during the run changes what 3.1 does) compared byte for
+; byte: [AddOns] with a missing DLL, FMX1, FMX2 (refuses FMEVENT_LOAD),
+; FMX3 ... FMX6, FMX7 (one too many); the menu bar; FMX1's menu
+; (INITMENU, the delta, its check mark); F5 (USER_REFRESH); selection changes by keys and by mouse (SELCHANGE);
+; FMX1's Query (every FM_* query) with the focus in the list, the drive
+; bar and the tree; a submenu's command; Refresh All, Refresh Active;
+; Search Results (its queries, SELCHANGE, F5); FMX6's item 3 (ID 1003,
+; which is also Window > Refresh: File Manager's command wins) and the
+; Window menu's first window (ID 1006, also FMX6's item 6: the
+; extension's wins); Reload (FM_RELOAD_EXTENSIONS posted); FMX3's
+; Uninstall (its [AddOns] key removed, a reload); exit (UNLOAD,
+; FreeLibrary). obs WF15-WF19.
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:Gone=C:\NONE.DLL
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; wfini: AddOns:FMX Two=C:\FMX2.DLL
+; wfini: AddOns:FMX Three=C:\FMX3.DLL
+; wfini: AddOns:FMX Four=C:\FMX4.DLL
+; wfini: AddOns:FMX Five=C:\FMX5.DLL
+; wfini: AddOns:FMX Six=C:\FMX6.DLL
+; wfini: AddOns:FMX Seven=C:\FMX7.DLL
+; fmx: FMX1 FMX2 FMX3 FMX4 FMX5 FMX6 FMX7
+; fmxini: FMX2:LoadRet=0
+; fmxini: FMX3:Quiet=1
+; fmxini: FMX4:Quiet=1
+; fmxini: FMX5:Quiet=1
+; fmxini: FMX6:Quiet=1
+; fmxini: FMX7:Quiet=1
+run WINFILE.EXE
+wait 5000
+append C:\FMX.LOG == started
+snap C:\S01.BMP
+append C:\FMX.LOG == FMX1 menu
+menu 1
+wait 800
+key 28
+wait 300
+snap C:\S02.BMP
+key 1B
+key 1B
+wait 500
+append C:\FMX.LOG == F5
+key 74
+wait 1500
+append C:\FMX.LOG == Tab, Down, Shift+Down
+key 09
+wait 500
+key 28
+wait 500
+kdown 10
+key 28
+kup 10
+wait 800
+append C:\FMX.LOG == Query (list)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == click NOTES.TXT, Ctrl+click LETTER.WRI
+mclick 245 306
+wait 800
+kdown 11
+mclick 245 290
+kup 11
+wait 800
+snap C:\S03.BMP
+append C:\FMX.LOG == Query (list, mouse)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Tab (drive bar), Query
+key 09
+wait 500
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Tab (tree), Down (ALPHA), Query
+key 09
+wait 500
+key 28
+wait 1500
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == FMX3 Sub > Inner
+menu 3
+wait 300
+key 42
+wait 300
+snap C:\S04.BMP
+key 49
+wait 1000
+append C:\FMX.LOG == FMX1 Refresh All, Refresh Active
+menu 1
+wait 300
+key 41
+wait 1500
+menu 1
+wait 300
+key 43
+wait 1500
+snap C:\S05.BMP
+append C:\FMX.LOG == Search *.TXT from C:\WFTEST
+cmd 104
+wait 1000
+type *.TXT
+key 09
+wait 200
+type C:\WFTEST
+key 0D
+wait 4000
+snap C:\S06.BMP
+append C:\FMX.LOG == Query (search)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == Down, Shift+Down, Query
+key 28
+wait 500
+kdown 10
+key 28
+kup 10
+wait 800
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == F5 in search
+key 74
+wait 2000
+append C:\FMX.LOG == close search
+childcmd F060
+wait 1500
+append C:\FMX.LOG == FMX6 item 3 (ID 1003: Window > Refresh's)
+menu 6
+wait 300
+key 43
+wait 2000
+append C:\FMX.LOG == Window 1 (ID 1006: FMX6's item 6)
+menu w
+wait 300
+key 31
+wait 2000
+append C:\FMX.LOG == FMX1 Reload
+menu 1
+wait 300
+key 52
+wait 3000
+snap C:\S07.BMP
+dumpmenu
+info
+append C:\FMX.LOG == FMX3 Uninstall
+menu 3
+wait 300
+key 55
+wait 3000
+snap C:\S08.BMP
+append C:\FMX.LOG == close
+close
+wait 3000
+append C:\FMX.LOG == end

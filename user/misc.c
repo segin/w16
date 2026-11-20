@@ -186,7 +186,7 @@ static void caret_draw(void)
     HDC hdc;
     if (!hwndCaret || !valid_wnd(hwndCaret))
         return;
-    hdc = get_dc(hwndCaret, FALSE, 0, 0);
+    hdc = get_dc(hwndCaret, FALSE, 0, DCX_OWNCLIENT);
     caret_blt(hdc);
     release_dc(hwndCaret, hdc);
     caret_on ^= 1;
@@ -252,7 +252,7 @@ void caret_invert_in(const RECT *rc)
     int sv;
     if (!hwndCaret || !(w = valid_wnd(hwndCaret)))
         return;
-    hdc = get_dc(hwndCaret, FALSE, 0, 0);
+    hdc = get_dc(hwndCaret, FALSE, 0, DCX_OWNCLIENT);
     sv = SaveDC(hdc);
     IntersectClipRect(hdc, rc->left - w->rcClient.left, rc->top - w->rcClient.top,
                       rc->right - w->rcClient.left, rc->bottom - w->rcClient.top);

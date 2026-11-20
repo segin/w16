@@ -49,7 +49,11 @@ static void show_list(HWND h, PCB c, BOOL show)
     if (show) {
         GetWindowRect(h, &r);
         notify(h, CBN_DROPDOWN);
-        /* its top line on the box's bottom line (US4) */
+        /* its top line on the box's bottom line (US4); a CBS_DROPDOWN's 8
+           in from the left, as a simple one's (US32: 112 wide under a box
+           of 120; a CBS_DROPDOWNLIST's is as wide as the box) */
+        if (kind(h) == CBS_DROPDOWN)
+            r.left += 8;
         set_window_pos(c->list, HWND_TOP, r.left, r.top + EH(c) - 1,
                        r.right - r.left, c->droph, SWP_SHOWWINDOW | SWP_NOACTIVATE);
         SetCapture(h);
@@ -223,9 +227,10 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             calc_client(w);
         }
         c->itemh = cySysChar;
-        c->droph = cs->cy - (EH(c));
-        if (c->droph < c->itemh * 2)
-            c->droph = c->itemh * 4 + 2;
+        /* the list from the box's bottom line to the height asked for,
+           then whole items (listbox.c; US32: 30, 60, 100, 157 asked gave
+           lists 2, 34, 66, 130 high, items of 16; no least height) */
+        c->droph = cs->cy - EH(c) + 1;
         if (kind(h) != CBS_DROPDOWNLIST)
             c->edit = create_window(0, "Edit", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER |
                                     ((s & CBS_AUTOHSCROLL) ? ES_AUTOHSCROLL : 0),

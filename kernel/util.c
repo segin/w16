@@ -205,6 +205,15 @@ void kexit_to_dos(u8 code)
         r.dx = (u16)old21;
         dpmi31(&r);
     }
+    /* KERNEL's own PSP current for its 4Ch, not the running task's PDB
+       (Windows 3.1's KRNL386 ends Windows with its own PSP current,
+       observed: win386/vmm/dpmi.c, is_exit). A DPMI host tells the
+       client's end from a task's by that PSP: w16's WIN386 took the 4Ch
+       of ExitWindows, made in Program Manager's task with its PDB
+       current, for that task's end, ended the PDB and returned; KERNEL
+       went back into its caller and Program Manager faulted in USER
+       (boot-test case exittree) */
+    kernel_psp(1);
     r.ax = 0x4C00 | code;
     r.ds = r.es = 0;
     dos21(&r);

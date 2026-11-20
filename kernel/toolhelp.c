@@ -164,8 +164,9 @@ void th_loadsegs(module FAR *m)
     /* ES:DI the module name in the module table's resident-name table
        (observed: ES is the hModule; the entry's ordinal, 0, ends it) */
     for (i = 0; i < m->seg_count; i++)
-        notify(0x50, i, m->seg[i].sel, 0, MOD_SEG(m, i)->flags,
-               NE_HDR(m)->resname_off + 1, m->ne_sel);
+        if (m->seg[i].sel)              /* (none for a segment without a */
+            notify(0x50, i, m->seg[i].sel, 0, MOD_SEG(m, i)->flags,  /* selector: */
+                   NE_HDR(m)->resname_off + 1, m->ne_sel);         /* audit, low) */
 }
 
 /* a DLL's initialisation is next: cs:ip its entry point (0:0 for none) */

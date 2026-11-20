@@ -161,7 +161,10 @@ void dc_brush_changed(HBRUSH h)
 
 void dc_set_device_colors(LPDC dc)
 {
-    dc->dm.bkColor = dev_colorinfo(dc, dc->dm.LbkColor);
+    DWORD pc = dev_colorinfo(dc, dc->dm.LbkColor);
+    if (pc != dc->dm.bkColor)
+        dc->hPBrushOf = 0;              /* realized again with the background colour */
+    dc->dm.bkColor = pc;
     dc->dm.TextColor = dev_colorinfo(dc, dc->dm.LTextColor);
 }
 
@@ -247,11 +250,14 @@ HDC GDIAPI CreateCompatibleDC(HDC hdc)                             /* GDI.52 */
     NPDEVICE d = src ? src->dev : display;
     HDC h;
     LPDC dc;
+    if (hdc && !src)
+        return 0;                       /* GD5: 3.1 fails for a handle that is no DC */
     if (!d)
-        d = dev_open("DISPLAY");
+        d = dev_open("DISPLAY");        /* (counts its reference) */
+    else
+        d->refs++;
     if (!d)
         return 0;
-    d->refs++;
     h = dc_new(d, bm_pbitmap(stock_bitmap), DCF_MEMORY);
     dc = dc_get(h);
     if (dc)
@@ -270,9 +276,19 @@ BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
     HRGN vis;
     if (!dc)
         return FALSE;
+    if (dc->flags & DCF_STATE) {
+        /* GetDCState's copy: no device reference, regions or realized
+           objects of its own (state_new), only its clip region */
+        if (dc->hClipRgn)
+            rgn_free(dc->hClipRgn);
+        obj_free(hdc);
+        return TRUE;
+    }
     if (dc->hook)
         ((WORD (__far __pascal *)(HDC, WORD, DWORD, DWORD))dc->hook)(hdc, DCHC_DELETEDC, dc->hookData, 0);
     dc = dc_get(hdc);
+    if (!dc)
+        return FALSE;
     while (dc->xSaved) {                /* the SaveDC stack */
         XP x = dc->xSaved;
         dc->xSaved = ((SAVEDDC __far *)xptr(x))->dc.xSaved;
@@ -301,6 +317,7 @@ BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
     dev_close(dc->dev);
     dc_unlink(hdc);
     obj_free(hdc);
+    font_reap();                        /* a removed font this DC kept */
     return TRUE;
 }
 
@@ -326,6 +343,9 @@ static LPDC dc_validate(HDC hdc)
 
 LPRGN dc_rao(LPDC dc)
 {
+    static RGNDATA none;                /* a GetDCState copy's: empty */
+    if (dc->flags & DCF_STATE)
+        return (LPRGN)&none;
     if (!dc->raoValid) {
         HRGN vis = dc->hVisRgn;
         if (dc->hClipRgn) {
@@ -358,6 +378,8 @@ LPRGN dc_rao(LPDC dc)
 LPDC dc_out(HDC hdc)
 {
     LPDC dc = dc_validate(hdc);
+    if (dc && (dc->flags & DCF_STATE))  /* GetDCState's copy: no output */
+        return 0;
     if (dc)
         dc_rao(dc);
     return dc;
@@ -577,11 +599,15 @@ COLORREF GDIAPI SetBkColor(HDC hdc, COLORREF c)                    /* GDI.1 */
 {
     LPDC dc = dc_get(hdc);
     COLORREF old;
+    DWORD pc;
     if (!dc)
         return 0x80000000L;
     old = dc->dm.LbkColor;
     dc->dm.LbkColor = c;
-    dc->dm.bkColor = dev_colorinfo(dc, c);
+    pc = dev_colorinfo(dc, c);
+    if (pc != dc->dm.bkColor)           /* a hatched brush's background: the new colour (GD5 on 3.1) */
+        dc->hPBrushOf = 0;
+    dc->dm.bkColor = pc;
     return old;
 }
 
@@ -766,6 +792,28 @@ DWORD GDIAPI OffsetViewportOrg(HDC hdc, int dx, int dy)            /* GDI.17 */
     return old;
 }
 
+/* GD5 on 3.1: an extent scaled to 0 fails (0, the extents kept); a zero
+   divisor gives 7FFFh (UNVERIFIED: its sign for a negative product) */
+static int scale_one(int e, int n, int d)
+{
+    long v = (long)e * n;
+    if (!d)
+        return v < 0 ? -0x7FFF : 0x7FFF;
+    v /= d;
+    return v > 0x7FFF ? 0x7FFF : v < -0x7FFF ? -0x7FFF : (int)v;
+}
+
+static int scale_ext(LPDC dc, POINT __far *ext, int xn, int xd, int yn, int yd)
+{
+    int x = scale_one(ext->x, xn, xd), y = scale_one(ext->y, yn, yd);
+    if (!x || !y)
+        return 0;
+    ext->x = x;
+    ext->y = y;
+    iso_fix(dc);
+    return 1;
+}
+
 DWORD GDIAPI ScaleWindowExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.16 */
 {
     LPDC dc = dc_get(hdc);
@@ -773,12 +821,9 @@ DWORD GDIAPI ScaleWindowExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.16 *
     if (!dc)
         return 0;
     old = MAKELONG(dc->wndExt.x, dc->wndExt.y);
-    if (dc->mapMode < 7 || !xd || !yd)
+    if (dc->mapMode < 7)
         return old;
-    dc->wndExt.x = (int)((long)dc->wndExt.x * xn / xd);
-    dc->wndExt.y = (int)((long)dc->wndExt.y * yn / yd);
-    iso_fix(dc);
-    return old;
+    return scale_ext(dc, &dc->wndExt, xn, xd, yn, yd) ? old : 0;
 }
 
 DWORD GDIAPI ScaleViewportExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.18 */
@@ -788,12 +833,9 @@ DWORD GDIAPI ScaleViewportExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.18
     if (!dc)
         return 0;
     old = MAKELONG(dc->vpExt.x, dc->vpExt.y);
-    if (dc->mapMode < 7 || !xd || !yd)
+    if (dc->mapMode < 7)
         return old;
-    dc->vpExt.x = (int)((long)dc->vpExt.x * xn / xd);
-    dc->vpExt.y = (int)((long)dc->vpExt.y * yn / yd);
-    iso_fix(dc);
-    return old;
+    return scale_ext(dc, &dc->vpExt, xn, xd, yn, yd) ? old : 0;
 }
 
 DWORD GDIAPI MoveTo(HDC hdc, int x, int y)                         /* GDI.20 */
@@ -862,6 +904,7 @@ HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
         rgn_set_rect(dc->hVisRgn, 0, 0, pb->bmWidth, pb->bmHeight);
         dc_rao_invalidate(dc);
         dc_set_device_colors(dc);
+        dc->hPPenOf = 0;                /* the pen realized again for this bitmap */
         return old;
     }
     }
@@ -878,7 +921,7 @@ HFONT GDIAPI GetCurLogFont(HDC hdc)                                /* GDI.411 */
 
 int GDIAPI SelectClipRgn(HDC hdc, HRGN h)                          /* GDI.44 */
 {
-    LPDC dc = dc_get(hdc);
+    LPDC dc = dc_validate(hdc);         /* (the result is the new composite region's) */
     if (!dc)
         return ERROR;
     if (!h) {
@@ -904,8 +947,12 @@ static int clip_rect_op(LPDC dc, int l, int t, int r, int b, int mode)
     dc_lp_to_dp(dc, p, 2);
     if (!dc->hClipRgn) {
         LPRGN vis;
-        /* no clip region yet: start from the whole device surface */
-        HRGN c = rgn_new(0, 0, dc->dev->info.dpHorzRes, dc->dev->info.dpVertRes);
+        /* no clip region yet: start from the whole device surface, the
+           screen where it is (GD5: 3.1's starts as the screen in screen
+           coordinates, so a window off the screen's left keeps its right
+           part; w16 keeps the clip region in the DC's device coordinates) */
+        HRGN c = rgn_new(-dc->dcOrg.x, -dc->dcOrg.y, dc->dev->info.dpHorzRes - dc->dcOrg.x,
+                         dc->dev->info.dpVertRes - dc->dcOrg.y);
         if (!c)
             return ERROR;
         dc->hClipRgn = c;
@@ -920,19 +967,19 @@ static int clip_rect_op(LPDC dc, int l, int t, int r, int b, int mode)
 
 int GDIAPI IntersectClipRect(HDC hdc, int l, int t, int r, int b)  /* GDI.22 */
 {
-    LPDC dc = dc_get(hdc);
+    LPDC dc = dc_validate(hdc);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_AND) : ERROR;
 }
 
 int GDIAPI ExcludeClipRect(HDC hdc, int l, int t, int r, int b)    /* GDI.21 */
 {
-    LPDC dc = dc_get(hdc);
+    LPDC dc = dc_validate(hdc);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_DIFF) : ERROR;
 }
 
 int GDIAPI OffsetClipRgn(HDC hdc, int dx, int dy)                  /* GDI.32 */
 {
-    LPDC dc = dc_get(hdc);
+    LPDC dc = dc_validate(hdc);
     if (!dc)
         return ERROR;
     if (dc->hClipRgn) {
@@ -980,7 +1027,13 @@ BOOL GDIAPI PtVisible(HDC hdc, int x, int y)                       /* GDI.103 */
     p[0] = x;
     p[1] = y;
     dc_lp_to_dp(dc, p, 1);
-    return PtInRegion(dc->hRao, p[0] + dc->dcOrg.x, p[1] + dc->dcOrg.y);
+    /* visible: 0201h, or 0101h with a clip region selected (US33 pv on
+       3.1: GetDC(NULL), the desktop's and a window's DC 0201h whatever
+       their visible regions, 0101h with a simple or a complex clip
+       region; 0 outside); w16 returned 1 */
+    if (!PtInRegion(dc->hRao, p[0] + dc->dcOrg.x, p[1] + dc->dcOrg.y))
+        return FALSE;
+    return dc->hClipRgn ? 0x0101 : 0x0201;
 }
 
 BOOL GDIAPI RectVisible(HDC hdc, const RECT __far *rc)             /* GDI.465 */
@@ -1001,7 +1054,8 @@ BOOL GDIAPI RectVisible(HDC hdc, const RECT __far *rc)             /* GDI.465 */
 
 BOOL GDIAPI RectVisibleOld(HDC hdc, const RECT __far *rc)          /* GDI.104 */
 {
-    return RectVisible(hdc, rc);
+    /* GD5 on 3.1: 0101h for a visible rectangle, as RectInRegionOld */
+    return RectVisible(hdc, rc) ? 0x0101 : 0;
 }
 
 /* ---- the visible region (USER) ---- */
@@ -1065,7 +1119,7 @@ HRGN GDIAPI SaveVisRgn(HDC hdc)                                    /* GDI.129 */
 {
     LPDC dc = dc_get(hdc);
     HRGN copy;
-    if (!dc)
+    if (!dc || !dc->hVisRgn)
         return 0;
     copy = rgn_new(0, 0, 0, 0);
     if (!copy)
@@ -1082,7 +1136,7 @@ int GDIAPI RestoreVisRgn(HDC hdc)                                  /* GDI.130 */
     LPDC dc = dc_get(hdc);
     HRGN top;
     int r;
-    if (!dc)
+    if (!dc || !dc->hVisRgn)
         return ERROR;
     top = ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext;
     if (!top)

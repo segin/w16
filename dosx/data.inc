@@ -17,6 +17,9 @@ fx_names        db 'EC=', 1, ' CS=', 1, ' IP=', 1, ' AX=', 1, ' BX=', 1, ' CX=',
                 db ' ES=', 1, ' SS=', 1, ' SP=', 1, 13, 10, 0
 s_krnl386       db 'KRNL386.EXE', 0
 s_krnl286       db 'KRNL286.EXE', 0
+s_sysini        db 'SYSTEM.INI', 0
+s_w16sec        db '[w16]', 0
+s_largemem      db 'largememory', 0
 
 optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10, op_int15
                 dw op_int13, op_int2526, op_int33
@@ -29,14 +32,24 @@ imglin          dd 0
 cpu_type        db 0
 is386           db 0
 xms_ok          db 0
+xms_stock       db 0            ; [w16] LargeMemory=0: XMS 08h/09h only
+ini_sec         db 0            ; ini_read: in [w16]
+ini_h           dw 0
+ini_name        dw 0
 exit_code       db 0
 client_active   db 0
 x_kind          db 0
 a_move          db 0
 wp_used         db 0
 xms             dd 0
-xms_h           dw 0
-emb_kb          dw 0
+xms3            db 0            ; XMS 3.0's 88h/89h are used
+xb_n            db 0            ; XMS blocks taken (xms_init)
+xb_hcur         dw 0
+xb_kb           dd 0
+                align 2
+xb_h            times XB_MAX dw 0       ; their handles, in address order
+xb_lin          times XB_MAX dd 0       ; their linear addresses
+xb_end          times XB_MAX dd 0       ; and ends
 emb_lin         dd 0
 emb_end         dd 0
 ldt_lin         dd 0

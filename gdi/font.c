@@ -70,6 +70,16 @@ static HRSRC find_fontdir(HINSTANCE h)
     return r;
 }
 
+/* a path's file name (after its last '\\', '/' or ':') */
+static LPCSTR base_name(LPCSTR file)
+{
+    LPCSTR b = file;
+    for (; *file; file++)
+        if (*file == '\\' || *file == '/' || *file == ':')
+            b = file + 1;
+    return b;
+}
+
 /* read the FONTDIR of a module: one entry per font */
 static int font_add_module(HINSTANCE h, LPCSTR file)
 {
@@ -82,8 +92,11 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         return 0;
     g = LoadResource(h, r);
     p = g ? LockResource(g) : 0;
-    if (!p)
+    if (!p) {
+        if (g)
+            FreeResource(g);
         return 0;
+    }
     n = *(WORD __far *)p;
     p += 2;
     for (i = 0; i < n; i++) {
@@ -95,6 +108,7 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         if (!xf)
             break;
         f->hMod = h;
+        f->adds = 1;
         f->resId = *(WORD __far *)p;
         f->points = *(short __far *)(e + 68);
         f->height = *(short __far *)(e + 88);
@@ -115,7 +129,7 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         for (k = 0; k < LF_FACESIZE - 1 && face[k]; k++)
             f->face[k] = face[k];
         for (k = 0; file && k < 12 && file[k]; k++)
-            f->file[k] = file[k];
+            f->file[k] = file[k];           /* (file: base_name's) */
         f->next = fonts;
         fonts = xf;
         added++;
@@ -127,6 +141,7 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
             p++;
         p++;
     }
+    GlobalUnlock(g);
     FreeResource(g);
     return added;
 }
@@ -135,7 +150,7 @@ static void font_load_boot(LPCSTR file)
 {
     HINSTANCE h = LoadLibrary(file);
     if (h >= 32)
-        font_add_module(h, file);
+        font_add_module(h, base_name(file));
 }
 
 void font_init(void)
@@ -148,47 +163,141 @@ void font_init(void)
     font_load_boot("OEMFONTS.FON");
 }
 
+/* the entries of a file (by name) or a module (file's selector 0) in the
+   table; with add, each counts one more AddFontResource */
+static int font_count(LPCSTR file, int add)
+{
+    LPCSTR name = SELECTOROF(file) ? base_name(file) : 0;
+    XP x;
+    int n = 0;
+    for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+        LPFONT f = xptr(x);
+        if (name ? !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
+            n++;
+            if (add && f->adds < 0xFF)
+                f->adds++;
+        }
+    }
+    return n;
+}
+
 int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
 {
     HINSTANCE h;
+    int n;
     if (!file)
         return 0;
+    /* GD5 on 3.1: a file added again is not loaded again; it stays until
+       removed as many times */
+    n = font_count(file, 1);
+    if (n)
+        return n;
     if (!SELECTOROF(file)) {            /* a module handle */
         return font_add_module((HINSTANCE)OFFSETOF(file), 0);
     }
     h = LoadLibrary(file);
     if (h < 32)
         return 0;
-    return font_add_module(h, file);
+    n = font_add_module(h, base_name(file));
+    if (!n)
+        FreeLibrary(h);                 /* no fonts in it */
+    return n;
+}
+
+/* fonts RemoveFontResource took out of the table while a DC still had
+   them realized: they go when no DC uses them (SDK: the resource stays
+   loaded while it is in use) */
+static XP fonts_gone;
+
+static int font_in_use(XP x)
+{
+    HDC l;
+    LPDC dc;
+    for (l = dc_first(); l && (dc = dc_get(l)) != 0; l = dc->hLink)
+        if (dc->xFont == x)
+            return 1;
+    return 0;
+}
+
+/* the font's resources, its entry, and its module when it was the
+   removed module's last font */
+static void font_free(XP xf)
+{
+    LPFONT f = xptr(xf), g;
+    HINSTANCE h = f->hMod;
+    int unload = f->unload;
+    XP x;
+    if (f->hRes) {
+        GlobalUnlock(f->hRes);
+        FreeResource(f->hRes);
+    }
+    if (f->hMem) {
+        GlobalUnlock(f->hMem);
+        GlobalFree(f->hMem);
+    }
+    xfree(xf);
+    if (!unload)
+        return;
+    for (x = fonts_gone; x; x = g->next) {
+        g = xptr(x);
+        if (g->hMod == h)
+            return;                     /* the module's last font frees it */
+    }
+    FreeLibrary(h);
+}
+
+void font_reap(void)
+{
+    XP __far *pp = &fonts_gone;
+    while (*pp) {
+        XP xf = *pp;
+        LPFONT f = xptr(xf);
+        if (!font_in_use(xf)) {
+            *pp = f->next;
+            font_free(xf);
+            pp = &fonts_gone;           /* (font_free may have changed the list's heap) */
+            continue;
+        }
+        pp = &f->next;
+    }
 }
 
 BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
 {
     XP __far *pp = &fonts;
-    HINSTANCE h = 0;
+    XP gone = 0;
+    LPCSTR name = file && SELECTOROF(file) ? base_name(file) : 0;
     int found = 0;
+    /* the file's entries out of the table, onto a list of their own,
+       when this undoes the last AddFontResource */
     while (*pp) {
         XP xf = *pp;
         LPFONT f = xptr(xf);
-        if (file && SELECTOROF(file) ? !str_icmp(f->file, file) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
+        if (name ? !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
+            if (f->adds > 1) {
+                f->adds--;
+                found = 1;
+                pp = &f->next;
+                continue;
+            }
             *pp = f->next;
-            h = f->hMod;
-            if (f->hRes) {
-                GlobalUnlock(f->hRes);
-                FreeResource(f->hRes);
-            }
-            if (f->hMem) {
-                GlobalUnlock(f->hMem);
-                GlobalFree(f->hMem);
-            }
-            xfree(xf);
+            f->next = gone;
+            f->unload = name != 0;
+            gone = xf;
             found = 1;
             continue;
         }
         pp = &f->next;
     }
-    if (h && SELECTOROF(file))
-        FreeLibrary(h);
+    /* each goes now, or with the last DC that has it realized */
+    while (gone) {
+        XP xf = gone;
+        LPFONT f = xptr(xf);
+        gone = f->next;
+        f->next = fonts_gone;
+        fonts_gone = xf;
+    }
+    font_reap();
     return found;
 }
 
@@ -293,10 +402,24 @@ static LPFONTINFO font_info(LPFONT f)
         if (*(DWORD __far *)(p + 2) && *(DWORD __far *)(p + 2) < size)
             size = *(DWORD __far *)(p + 2);
         newSize = size + delta;
-        f->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, newSize);
-        q = f->hMem ? GlobalLock(f->hMem) : 0;
-        if (!q)
+        /* a malformed file (characters, bits or the new size out of
+           range) is not converted: no font */
+        if (fi->dfLastChar < fi->dfFirstChar || oldBits > size || oldBits < 0x76 + 4L * n ||
+            newSize > 0xFFF0L)
+            q = 0;
+        else {
+            f->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, newSize);
+            q = f->hMem ? GlobalLock(f->hMem) : 0;
+        }
+        if (!q) {
+            if (f->hMem)
+                GlobalFree(f->hMem);
+            f->hMem = 0;
+            GlobalUnlock(f->hRes);
+            FreeResource(f->hRes);
+            f->hRes = 0;
             return 0;
+        }
         mem_copy(q, p, 0x76);
         *(WORD __far *)q = 0x300;
         *(DWORD __far *)(q + 2) = newSize;
@@ -334,14 +457,29 @@ LPFONT font_realize(LPDC dc)
     XP x;
     LPFONT f;
     LOGFONT lf;
-    int i;
+    int i, dh, dw;
     if (!fo)
         return 0;
-    if (dc->xFont && dc->hFontOf == dc->hFont && dc->lpPDevOfFont == dc->lpPDevice)
+    /* the height and width in device units (GD5 on 3.1: in MM_LOMETRIC
+       and anisotropic modes the font is chosen by its size on the
+       device; a negative height stays a character height) */
+    dh = fo->lf.lfHeight;
+    dw = fo->lf.lfWidth;
+    if (dc->mapMode != 1) {
+        int v = dc_scale_y(dc, dh);
+        v = v < 0 ? -v : v;
+        dh = dh < 0 ? -v : v;
+        v = dc_scale_x(dc, dw);
+        dw = v < 0 ? -v : v;
+    }
+    if (dc->xFont && dc->hFontOf == dc->hFont && dc->lpPDevOfFont == dc->lpPDevice &&
+        dc->fontHt == dh && dc->fontWd == dw)
         return xptr(dc->xFont);
     /* the object's block ends after the face name */
     mem_set(&lf, 0, sizeof lf);
     mem_copy(&lf, &fo->lf, LF_FIXEDPART);
+    lf.lfHeight = dh;
+    lf.lfWidth = dw;
     for (i = 0; i < LF_FACESIZE - 1 && fo->lf.lfFaceName[i]; i++)
         lf.lfFaceName[i] = fo->lf.lfFaceName[i];
     /* the driver first: device fonts (none on VGA: RealizeObject gives 0) */
@@ -360,6 +498,12 @@ LPFONT font_realize(LPDC dc)
     dc->xFont = x;
     dc->hFontOf = dc->hFont;
     dc->lpPDevOfFont = dc->lpPDevice;
+    dc->fontHt = dh;
+    dc->fontWd = dw;
+    if (fonts_gone) {                   /* perhaps the last DC of a removed font */
+        font_reap();
+        f = xptr(x);
+    }
     return f;
 }
 

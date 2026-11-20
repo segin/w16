@@ -313,7 +313,7 @@ static void paint_button(HWND h, HDC hdc)
 static void redraw(HWND h)
 {
     if (IsWindowVisible(h)) {
-        HDC hdc = GetDC(h);
+        HDC hdc = ctl_dc(h);
         paint_button(h, hdc);
         ReleaseDC(h, hdc);
     }

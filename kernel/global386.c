@@ -1423,6 +1423,49 @@ nomem:
     kexit_to_dos(0xFF);
 }
 
+/* KERNEL's code segments become fixed blocks of the heap, owned by its
+   module, their selectors their handles: on 3.1 every KERNEL segment is
+   a block (TK62 "kseg": GlobalHandle(CS) = CS, FarGetOwner = KERNEL,
+   GlobalFlags 0900h for the discardable ones; TOOLHELP lists them). The
+   bootstrap put them in DOS memory of their own; each is copied into a
+   new block and its selector moved there in one step (seg_move, as a
+   block is moved), so nothing that holds the selector notices. Its DOS
+   memory is left as it was. KERNEL's DGROUP stays outside (seg_move
+   runs on a stack in it); module.c's kernel_seg answers for it (KERNEL
+   audit, medium 33). After module_register_kernel. */
+void gadopt_kernel(void)
+{
+    module FAR *k = module_first;
+    u16 i, s, ns;
+    u32 bytes;
+    aid a;
+    if (!k || !bm)
+        return;
+    for (i = 0; i < k->seg_count; i++) {
+        s = k->seg[i].sel;
+        if (!s || !(lar(s) & 0x0800) || find(s, &a) != FB_NONE)
+            continue;
+        bytes = (u32)sel_lim16(s) + 1;
+        if (!galloc(GMEM_FIXED, bytes, k->ne_sel, &ns))
+            continue;
+        a = *seltab(ns);
+        tmp_at(tmp_b, AR(a)->addr, bytes - 1);
+        seg_move(s, tmp_b, (u16)((bytes + 1) >> 1), AR(a)->addr);
+        *seltab(ns) = 0;
+        set_fixed(ns, 0);
+        dpmi_free_desc(ns);
+        AR(a)->handle = s;              /* fixed: the selector */
+        AR(a)->selcount = 1;
+        set_fixed(s, 1);
+        *seltab(s) = a;
+        set_tiles(s, 1, AR(a)->addr, AR(a)->size, 1);
+        if (MOD_SEG(k, i)->flags & 0x1000) {    /* discardable: 0900h */
+            AR(a)->flags |= GA_DISCCODE;        /* (fixed: never */
+            lru_add(a, 0);                      /* discarded) */
+        }
+    }
+}
+
 /* ---- helpers for the rest of KERNEL ---- */
 
 u16 gowner(u16 h)
@@ -1860,6 +1903,9 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     }
     h = AR(a)->handle;
     s = h | 1;
+    if (AR(a)->owner == OWN_BURGER)
+        return 0;                       /* not the Burgermaster (as
+                                           GlobalFree; audit, low) */
     if (flags & GMEM_MODIFY) {
         if ((flags & GMEM_DISCARDABLE) && !discardable(a))
             lru_add(a, 1);
@@ -1977,7 +2023,9 @@ static u32 gsize386(u16 h)
 
 u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 {
-    u32 r = gsize386(h);
+    aid a;
+    u32 r = kernel_seg(h) && find(h, &a) == FB_NONE ?   /* (KERNEL's own, */
+            (u32)sel_lim16(h | 1) + 1 : gsize386(h);  /* not a block) */
     api_fs0();
     return r;
 }
@@ -1991,6 +2039,16 @@ u32 KAPI_ES GlobalHandle(u16 sel)                             /* KERNEL.21 */
     p = alias_find(sel, NULL);
     if (p)
         return ((u32)p->sel << 16) | p->sel;
+    /* KERNEL's own segments (the bootstrap's memory, outside the heap):
+       fixed blocks, the selector as handle. Observed on 3.1 (TK62
+       "codehandle"): GetCodeHandle of a KERNEL procedure gives its
+       segment's selector, and (TK50) that is GlobalHandle's AX for it;
+       w16 gave 0 (KERNEL audit, medium 33) */
+    {
+        u16 k = kernel_seg(sel);
+        if (k)
+            return ((u32)module_first->seg[k - 1].sel << 16) | module_first->seg[k - 1].sel;
+    }
     return 0;
 }
 
@@ -2001,6 +2059,8 @@ static u16 gflags386(u16 h)
     aid a;
     u16 f;
     u8 db;
+    if ((f = kernel_seg(h)) != 0 && find(h, &a) == FB_NONE)
+        return kernel_seg_flags(f);     /* KERNEL's own, not a block */
     switch (find(h, &a)) {
     case FB_BLOCK:
         f = (AR(a)->flags & GA_SHOWN) << 8;
@@ -2226,7 +2286,10 @@ void KAPI FarSetOwner(u16 h, u16 owner)                       /* KERNEL.403 */
 
 u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
-    return gowner(h);
+    u16 o = gowner(h);
+    if (!o && kernel_seg(h))            /* KERNEL's own, not a block */
+        return module_first->ne_sel;
+    return o;
 }
 
 #endif /* KRNL386 */

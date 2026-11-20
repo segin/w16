@@ -1,0 +1,20 @@
+# TK65D.DLL (tests/apps/tk65d.c): names in upper, mixed and lower case,
+# resident and not; 8 and 9 have an A with umlaut (C4h) / a with umlaut
+# (E4h) in Windows' character set: does GetProcAddress upper-case them?
+# 10-12: 8Ah, 9Fh, D7h (S with caron, Y with diaeresis, the multiplication
+# sign): KERNEL's own upper case (Reserved3, TK62 "ansi") maps 9Ah, FFh to
+# the first two, and leaves F7h alone
+@tests/apps/dll.lnk
+option modname=TK65D
+export UPPERRES.1=F1 resident
+export MixedRes.2=F2 resident
+export lowerres.3=F3 resident
+export UPPERNR.4=F4
+export MixedNr.5=F5
+export lowernr.6=F6
+export WEP.7 resident
+export ÄUML.8=F8 resident
+export äUML.9=F9
+export ŠX.10=F10 resident
+export ŸY.11=F11 resident
+export ×Z.12=F12 resident

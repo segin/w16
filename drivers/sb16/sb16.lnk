@@ -1,0 +1,29 @@
+# wlink directives for w16's SB16.DRV (drivers/sb16/). Objects, resources
+# and the output name come from the Makefile. The entries MMSYSTEM looks
+# for by name (DriverProc, wodMessage, widMessage, modMessage, midMessage,
+# auxMessage) and WEP; DriverProc to midMessage have the ordinals Windows
+# 3.1's SNDBLST2.DRV gives them (its NE tables). Code and data fixed: the
+# interrupt handler, the entries MMSYSTEM calls at interrupt time and
+# everything they touch.
+format windows dll
+option modname=SB16
+option description 'wave,midi,aux:w16 Sound Blaster 16'
+option start=libentry
+option quiet
+option map
+option heapsize=1024
+option alignment=16
+segment type code fixed preload
+segment type data fixed preload
+library windows.lib
+export DRIVERPROC.1=SB_DRIVERPROC resident
+export WODMESSAGE.2 resident
+export WIDMESSAGE.3 resident
+export MODMESSAGE.4 resident
+export MIDMESSAGE.5 resident
+export AUXMESSAGE.6 resident
+export WEP.7 resident
+import DRIVERCALLBACK MMSYSTEM.31
+import STACKENTER MMSYSTEM.32
+import STACKLEAVE MMSYSTEM.33
+import TIMEGETTIME MMSYSTEM.607

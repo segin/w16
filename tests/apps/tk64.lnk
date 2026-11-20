@@ -1,0 +1,4 @@
+# TK64.EXE (tests/apps/tk64.c) and TK64A.EXE (tk64a.c): FileCdr
+@tests/apps/app.lnk
+import FILECDR KERNEL.130
+import NOHOOKDOSCALL KERNEL.101

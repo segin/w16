@@ -94,6 +94,7 @@ void __cdecl kmain(bootinfo FAR *pbi)
     global_init();
     thunk_init();
     module_register_kernel(&bi);
+    gadopt_kernel();                    /* its code segments: heap blocks */
     old21 = hook_int(0x21, int21_handler);
     hook_int(0x3D, int3d_handler);      /* floating-point fixups (FWAIT) */
 

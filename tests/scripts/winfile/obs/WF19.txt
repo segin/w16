@@ -1,0 +1,92 @@
+; WF19: five extensions (FMX1 ... FMX5, deltas 600 ... 1000) and the IDs
+; they share with File Manager: FMX1's Query at once (the new window's
+; selection), F5 (USER_REFRESH: FMX1 queries in it), FMX5's item 3
+; (ID 1003 = Window > Refresh), Window's "1 C:\WFTEST\*.*" (ID 1006 =
+; FMX5's item 6), FMX5's Sub > Inner (1006); Search Results: queries, F5.
+; Screens are kept in memory till the end (SNAP's memlog): no file is
+; made on C: meanwhile (obs WF17: a new file empties the free space
+; File Manager knows, FFFFFFFFh, and brings up Search Results' box)
+; wfini: Settings:Window=0,0,640,480, , ,1
+; wfini: Settings:dir1=0,0,600,380,-1,-1,1,0,201,1905,200,C:\WFTEST\*.*
+; wfini: AddOns:FMX One=C:\FMX1.DLL
+; wfini: AddOns:FMX Two=C:\FMX2.DLL
+; wfini: AddOns:FMX Three=C:\FMX3.DLL
+; wfini: AddOns:FMX Four=C:\FMX4.DLL
+; wfini: AddOns:FMX Five=C:\FMX5.DLL
+; fmx: FMX1 FMX2 FMX3 FMX4 FMX5
+; fmxini: FMX2:Quiet=1
+; fmxini: FMX3:Quiet=1
+; fmxini: FMX4:Quiet=1
+; fmxini: FMX5:Quiet=1
+run WINFILE.EXE
+wait 5000
+snap C:\R01.BMP
+append C:\FMX.LOG == Query at start (tree focused)
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == F5
+key 74
+wait 2000
+snap C:\R02.BMP
+append C:\FMX.LOG == Query after F5
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == FMX5 item 3 (1003)
+menu 5
+wait 300
+key 43
+wait 2000
+append C:\FMX.LOG == Window 1 (1006)
+menu w
+wait 300
+key 31
+wait 2000
+append C:\FMX.LOG == FMX5 Sub Inner (1006)
+menu 5
+wait 300
+key 42
+wait 300
+key 49
+wait 2000
+append C:\FMX.LOG == Tab, mouse click NOTES.TXT, Query
+key 09
+wait 500
+mclick 245 306
+wait 1000
+menu 1
+wait 300
+key 51
+wait 1500
+snap C:\R03.BMP
+append C:\FMX.LOG == Search *.TXT, Query, Down, Query
+cmd 104
+wait 1000
+type *.TXT
+key 09
+wait 200
+type C:\WFTEST\ALPHA
+key 0D
+wait 4000
+snap C:\R04.BMP
+menu 1
+wait 300
+key 51
+wait 1500
+key 28
+wait 800
+menu 1
+wait 300
+key 51
+wait 1500
+append C:\FMX.LOG == F5 in search
+key 74
+wait 2000
+snap C:\R05.BMP
+append C:\FMX.LOG == close
+close
+wait 3000
+append C:\FMX.LOG == end

@@ -1,0 +1,20 @@
+# KRNLOG.DLL (tests/apps/krnlog.c, krnlogs.asm): a recording KERNEL for
+# the sound driver under test, whose imports of KERNEL are renamed to
+# KRNLOG in a scratch copy (tools/nerename.py; tests/soundprobe.sh beep).
+# The ordinals are KERNEL's; code and data fixed (the driver's handlers).
+@tests/apps/dll.lnk
+option modname=KRNLOG
+option description 'KRNLOG: a recording KERNEL for the sound driver (w16 probe)'
+segment type code fixed preload
+segment type data fixed preload
+segment KLWF fixed preload
+export GLOBALALLOC.15=KL_GLOBALALLOC
+export GLOBALFREE.17=KL_GLOBALFREE
+export GLOBALLOCK.18=KL_GLOBALLOCK
+export YIELD.29=KL_YIELD
+export GETCURRENTTASK.36=KL_GETCURRENTTASK
+export GETMODULEHANDLE.47=KL_GETMODULEHANDLE
+export GETPROCADDRESS.50=KL_GETPROCADDRESS
+export __WINFLAGS.178=__WINFLAGS
+export KLRECS.1000
+export WEP.1001 resident

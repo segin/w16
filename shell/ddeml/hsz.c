@@ -5,48 +5,94 @@
  * 3.1: two instances, or two tasks, get the same handle for the same
  * string in any case. An instance-specific service name is the base
  * name's atom with the instance's DMGFrame window in the high word; its
- * string is "name:(hwnd)" (lower-case hex). Each instance counts the
- * references it holds, and DdeUninitialize deletes those left.
+ * string is "name:(hwnd)" (lower-case hex).
+ *
+ * Each instance keeps one entry per DdeCreateStringHandle and
+ * DdeKeepStringHandle, appended; DdeFreeStringHandle takes the first
+ * entry of the string out and moves the last into its place, and
+ * DdeUninitialize frees the first entry until none is left: the order
+ * 3.1's monitors see MH_CLEANUP in (tests/ddeml/scripts/xstr.dm).
+ *
+ * The library's own references (a conversation's names, a link's item,
+ * an item sent in some messages) are reported to monitors as 3.1 does:
+ * MH_INCATOM / MH_DECATOM (6 and 7), and an atom made for a new string
+ * handle as MH_ADDATOM (5) before MH_CREATE.
  */
 #include "ddeml.h"
 
-void str_ref(INST NEAR *in, ATOM a, int delta)
+static void hsz_event(ATOM a, WORD action)
 {
-    SREF NEAR *s, NEAR * NEAR *pp;
+    if (a)
+        mon_hsz(NULL, (HSZ)MAKELONG(a, 0), action);
+}
+
+/* one more reference to an atom, without telling the monitors (the
+   atoms 3.1 adds for POKE, ADVISE and UNADVISE) */
+ATOM hsz_inc_quiet(ATOM a)
+{
+    char b[256];
+    if (!a || !GlobalGetAtomName(a, b, sizeof b))
+        return 0;
+    return GlobalAddAtom(b);
+}
+
+ATOM hsz_inc(ATOM a)
+{
+    ATOM r = hsz_inc_quiet(a);
+    hsz_event(r, MH_INCATOM);
+    return r;
+}
+
+void hsz_dec(ATOM a)
+{
+    if (!a)
+        return;
+    hsz_event(a, MH_DECATOM);
+    GlobalDeleteAtom(a);
+}
+
+static void str_add(INST NEAR *in, ATOM a)
+{
     if (!in || !a)
         return;
-    for (pp = &in->strs; (s = *pp) != NULL; pp = &s->next)
-        if (s->atom == a)
-            break;
-    if (delta > 0) {
-        if (!s) {
-            s = (SREF NEAR *)nalloc(sizeof(SREF));
-            if (!s)
-                return;
-            s->atom = a;
-            s->next = in->strs;
-            in->strs = s;
+    if (in->nstrs == in->maxstrs) {
+        WORD n = in->maxstrs ? in->maxstrs * 2 : 8;
+        ATOM NEAR *p = (ATOM NEAR *)nalloc(n * sizeof(ATOM));
+        if (!p)
+            return;
+        if (in->strs) {
+            bcopy(p, in->strs, in->nstrs * sizeof(ATOM));
+            nfree(in->strs);
         }
-        s->count++;
-    } else if (s && s->count) {
-        if (--s->count == 0) {
-            *pp = s->next;
-            nfree(s);
-        }
+        in->strs = p;
+        in->maxstrs = n;
     }
+    in->strs[in->nstrs++] = a;
+}
+
+static void str_take(INST NEAR *in, ATOM a)
+{
+    WORD i;
+    if (!in)
+        return;
+    for (i = 0; i < in->nstrs; i++)
+        if (in->strs[i] == a) {
+            in->strs[i] = in->strs[--in->nstrs];
+            return;
+        }
 }
 
 void str_freeall(INST NEAR *in)
 {
-    while (in->strs) {
-        SREF NEAR *s = in->strs;
-        in->strs = s->next;
-        while (s->count--) {
-            mon_hsz(in, (HSZ)MAKELONG(s->atom, 0), MH_CLEANUP);
-            GlobalDeleteAtom(s->atom);
-        }
-        nfree(s);
+    while (in->nstrs) {
+        ATOM a = in->strs[0];
+        hsz_event(a, MH_CLEANUP);
+        hsz_dec(a);
+        in->strs[0] = in->strs[--in->nstrs];
     }
+    nfree(in->strs);
+    in->strs = NULL;
+    in->maxstrs = 0;
 }
 
 HSZ inst_hsz(INST NEAR *in, ATOM a)
@@ -84,8 +130,9 @@ HSZ DMLAPI DdeCreateStringHandle(DWORD id, LPSTR s, int cp)
         seterr(in, DMLERR_SYS_ERROR);
         return 0;
     }
-    str_ref(in, a, 1);
-    mon_hsz(in, (HSZ)MAKELONG(a, 0), MH_CREATE);
+    hsz_event(a, MH_ADDATOM);
+    str_add(in, a);
+    hsz_event(a, MH_CREATE);
     return (HSZ)MAKELONG(a, 0);
 }
 
@@ -96,9 +143,9 @@ BOOL DMLAPI DdeFreeStringHandle(DWORD id, HSZ h)
         return FALSE;
     if (!LOWORD(h))
         return TRUE;
-    str_ref(in, LOWORD(h), -1);
-    mon_hsz(in, h, MH_DELETE);
-    GlobalDeleteAtom(LOWORD(h));
+    str_take(in, LOWORD(h));
+    hsz_event(LOWORD(h), MH_DELETE);
+    hsz_dec(LOWORD(h));
     return TRUE;
 }
 
@@ -115,9 +162,9 @@ BOOL DMLAPI DdeKeepStringHandle(DWORD id, HSZ h)
         seterr(in, DMLERR_INVALIDPARAMETER);
         return FALSE;
     }
-    a = GlobalAddAtom(b);
-    str_ref(in, a, 1);
-    mon_hsz(in, h, MH_KEEP);
+    hsz_event(LOWORD(h), MH_KEEP);
+    a = hsz_inc(LOWORD(h));
+    str_add(in, a);
     return (BOOL)a;                     /* 3.1 returns the atom */
 }
 

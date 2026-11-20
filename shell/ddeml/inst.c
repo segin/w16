@@ -100,12 +100,17 @@ INST NEAR *inst_of_task(void)
     return NULL;
 }
 
-void seterr(INST NEAR *in, WORD e)
+void seterr_quiet(INST NEAR *in, WORD e)
 {
     if (in)
         in->lasterr = e;
     else
         ddeml_lasterr = e;
+}
+
+void seterr(INST NEAR *in, WORD e)
+{
+    seterr_quiet(in, e);
     if (e)
         mon_err(in, e);
 }
@@ -126,8 +131,15 @@ BOOL filtered(INST NEAR *in, UINT type)
 HDDEDATA callback(INST NEAR *in, UINT type, UINT fmt, CONV NEAR *c, HSZ h1, HSZ h2,
                   HDDEDATA d, DWORD d1, DWORD d2)
 {
+    return callback_hc(in, type, fmt, c, c ? conv_handle(c) : 0, h1, h2, d, d1, d2);
+}
+
+/* the callback with the conversation handle given (XTYP_CONNECT_CONFIRM
+   names what the server window's handle reads after its ACK) */
+HDDEDATA callback_hc(INST NEAR *in, UINT type, UINT fmt, CONV NEAR *c, HCONV hc, HSZ h1, HSZ h2,
+                     HDDEDATA d, DWORD d1, DWORD d2)
+{
     HDDEDATA r;
-    HCONV hc = c ? conv_handle(c) : 0;
     if (!in || !in->cb || filtered(in, type))
         return 0;
     if (c)
@@ -187,8 +199,13 @@ LRESULT FAR PASCAL __loadds DmgWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_DMG_CALLBACK:
         if (in) {
+            /* REGISTER / UNREGISTER: the name is held (MH_INCATOM)
+               around the callback, in the receiving task, as 3.1 */
             CBARGS FAR *a = (CBARGS FAR *)lp;
-            return (LRESULT)callback(in, a->type, a->fmt, NULL, a->h1, a->h2, 0, a->d1, a->d2);
+            ATOM n = hsz_inc(LOWORD(a->h1));
+            LRESULT r = (LRESULT)callback(in, a->type, a->fmt, NULL, a->h1, a->h2, 0, a->d1, a->d2);
+            hsz_dec(n);
+            return r;
         }
         return 0;
     case WM_DMG_MONITOR:
@@ -197,10 +214,18 @@ LRESULT FAR PASCAL __loadds DmgWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return (LRESULT)callback(in, XTYP_MONITOR, 0, NULL, 0, 0, (HDDEDATA)a[1], 0, a[0]);
         }
         return 0;
-    case WM_DDE_INITIATE:
+    case WM_DDE_INITIATE: {
+        /* a monitor sees an INITIATE to this window after it was
+           handled (the hook leaves it out), unless it made a
+           conversation for anything but a list of this library
+           (tests/ddeml/scripts/xmon2.dm) */
+        BOOL made = FALSE;
         if (in && !(in->flags & IF_DYING))
-            conv_initiate(in, w, LOWORD(lp), HIWORD(lp), (HWND)wp);
+            made = conv_initiate(in, w, LOWORD(lp), HIWORD(lp), (HWND)wp);
+        if (!made || conv_listing((HWND)wp))
+            mon_msg(FALSE, w, WM_DDE_INITIATE, wp, lp);
         return 0;
+    }
     }
     return DefWindowProc(w, msg, wp, lp);
 }
@@ -274,6 +299,18 @@ UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res
             SetWindowWord(in->frame, 0, (WORD)in);
             SetWindowWord(in->frame, 2, 0);
         }
+    } else if (afCmd & MF_MASK) {
+        /* a monitor's second window: DMGMonitorClass, overlapped, 4
+           bytes (tests/ddeml/scripts/xmon.dm); a monitor asking for no
+           event has none (flags.dm: the windows made later get 3.1's
+           handles only so) */
+        in->mon = CreateWindow(CLS_MON, "", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
+                               ddeml_inst, NULL);
+        mon_init(in);
+        if (in->mon) {
+            SetWindowWord(in->mon, 0, (WORD)in);
+            SetWindowWord(in->mon, 2, 0);
+        }
     }
     *pid = inst_id(in);
     mon_update();
@@ -294,38 +331,36 @@ BOOL DMLAPI DdeUninitialize(DWORD id)
     while ((n = in->names) != NULL) {
         broadcast_reg(in, XTYP_UNREGISTER, n->atom, FALSE);
         in->names = n->next;
-        str_ref(in, n->atom, -1);
+        hsz_dec(n->atom);
         nfree(n);
-    }
-    while (in->lists) {
-        CLIST NEAR *l = in->lists;
-        in->lists = l->next;
-        if (IsWindow(l->hwnd))
-            DestroyWindow(l->hwnd);
-        nfree(l);
     }
     {
         CONV NEAR *c;
-        for (c = in->convs; c; c = c->next)
-            if (!c->dead)
-                conv_terminate(c, FALSE);
+        conv_terminate_all(in);
         /* wait for the partners' answers: until every partner window
-           has gone (a partner's TERMINATE may still be queued then) */
+           has gone (a partner's TERMINATE may still be queued then).
+           As 3.1 (tests/ddeml/scripts/xun*.dm): the others go first,
+           and the task lets them run again after each TERMINATE one of
+           its client windows takes */
         {
             DWORD end = GetCurrentTime() + 10000;
             MSG m;
+            Yield();
             for (;;) {
                 BOOL all = TRUE;
-                while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
-                    TranslateMessage(&m);
-                    DispatchMessage(&m);
-                }
                 for (c = in->convs; c; c = c->next)
                     if (c->partner && IsWindow(c->partner) && c->hwnd && IsWindow(c->hwnd))
                         all = FALSE;
                 if (all || (long)(GetCurrentTime() - end) >= 0)
                     break;
-                Yield();
+                if (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
+                    BOOL cl = m.message == WM_DDE_TERMINATE && local_window(m.hwnd, CLS_CLIENT);
+                    TranslateMessage(&m);
+                    DispatchMessage(&m);
+                    if (cl)
+                        Yield();
+                } else
+                    Yield();
             }
             while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&m);
@@ -335,12 +370,23 @@ BOOL DMLAPI DdeUninitialize(DWORD id)
         while (in->convs)
             conv_free(in->convs);
     }
+    while (in->lists) {
+        CLIST NEAR *l = in->lists;
+        in->lists = l->next;
+        if (IsWindow(l->hwnd))
+            DestroyWindow(l->hwnd);
+        nfree(l);
+    }
     data_freeall(in);
     str_freeall(in);
     if (in->hold && IsWindow(in->hold))
         DestroyWindow(in->hold);
     if (in->frame && IsWindow(in->frame))
         DestroyWindow(in->frame);
+    if (in->mon && IsWindow(in->mon))
+        DestroyWindow(in->mon);
+    if (in->monblk)
+        GlobalFree(in->monblk);
     if (in->dmg && IsWindow(in->dmg))
         DestroyWindow(in->dmg);
     for (pp = (INST NEAR * NEAR *)&ddeml_insts; *pp; pp = &(*pp)->next)
@@ -392,8 +438,7 @@ HDDEDATA DMLAPI DdeNameService(DWORD id, HSZ hsz1, HSZ hsz2, UINT cmd)
             seterr(in, DMLERR_MEMORY_ERROR);
             return 0;
         }
-        n->atom = a;
-        str_ref(in, a, 1);
+        n->atom = hsz_inc(a);
         n->next = in->names;
         in->names = n;
         broadcast_reg(in, XTYP_REGISTER, a, TRUE);
@@ -406,7 +451,7 @@ HDDEDATA DMLAPI DdeNameService(DWORD id, HSZ hsz1, HSZ hsz2, UINT cmd)
             if (!a || n->atom == a) {
                 *pp = n->next;
                 broadcast_reg(in, XTYP_UNREGISTER, n->atom, TRUE);
-                str_ref(in, n->atom, -1);
+                hsz_dec(n->atom);
                 nfree(n);
                 if (a)
                     break;
@@ -418,8 +463,7 @@ HDDEDATA DMLAPI DdeNameService(DWORD id, HSZ hsz1, HSZ hsz2, UINT cmd)
     return 0;
 }
 
-/* the termination dialog (TERMDIALOG) and the window enumeration
-   procedure 3.1 exports; w16's DdeUninitialize waits without the
+/* the termination dialog (TERMDIALOG); w16's DdeUninitialize waits without the
    dialog (UNVERIFIED when 3.1 shows it) */
 BOOL FAR PASCAL __loadds TermDlgProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -433,12 +477,6 @@ BOOL FAR PASCAL __loadds TermDlgProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     return FALSE;
 }
 
-BOOL FAR PASCAL __loadds InitEnum(HWND w, LPARAM lp)
-{
-    (void)w;
-    (void)lp;
-    return TRUE;
-}
 
 static void reg(LPCSTR name, WNDPROC proc, int extra)
 {
@@ -454,7 +492,8 @@ static void reg(LPCSTR name, WNDPROC proc, int extra)
 /* the library's entry (entry.asm): its window classes. 3.1's windows
    show five; the handles its later windows get (tests/ddeml/scripts/
    xatoms.dm) put exactly one class more in USER's heap (each moves them
-   0x44 bytes): w16's sixth is its monitors' class (its name UNVERIFIED) */
+   0x44 bytes): the sixth is the monitors' class, DMGMonitorClass (a
+   monitor instance's second window shows it) */
 static void register_classes(void)
 {
     reg(CLS_FRAME, SubframeWndProc, 4);
@@ -462,7 +501,7 @@ static void register_classes(void)
     reg(CLS_CLIENT, ClientWndProc, 6);
     reg(CLS_SERVER, ServerWndProc, 6);
     reg(CLS_HOLD, SubframeWndProc, 8);
-    reg(CLS_MON, MonitorWndProc, 2);
+    reg(CLS_MON, MonitorWndProc, 4);
 }
 
 /* the library's entry (entry.asm). The classes are registered at the

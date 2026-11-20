@@ -24,6 +24,10 @@ typedef struct thunkinfo {
     char mod[MODNAME_MAX + 1];
     u16  ordinal;               /* 0 when imported by name */
     char name[NAME_MAX + 1];
+    u8   len;                   /* the whole name's length, and */
+    u16  sum;                   /* a sum over all of it: names over
+                                   NAME_MAX sharing their start no longer
+                                   share a thunk (KERNEL audit, L10) */
     u32  real;                  /* a trace thunk's target, else 0 */
 } thunkinfo;
 
@@ -102,6 +106,8 @@ static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
     tblock FAR *b;
     thunkinfo FAR *t;
     void (__far *target)(void) = real ? trace_entry : unimpl_entry;
+    u8 len = 0;
+    u16 sum = 0;
 
     name[0] = 0;
     if (pname) {
@@ -109,12 +115,18 @@ static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
         for (i = 0; i < n; i++)
             name[i] = (char)pname[1 + i];
         name[n] = 0;
+        len = pname[0];
+        for (i = 0; i < len; i++) {
+            u8 c = pname[1 + i];
+            sum = (u16)((sum << 1 | sum >> 15) + (c >= 'a' && c <= 'z' ? c - 32 : c));
+        }
     }
     for (i = 0; i < count; i++) {
         b = block_of(i, 0);
         t = &b->info[i % TB_COUNT];
         if (t->ordinal == ordinal && kstricmp(t->mod, mod) == 0 &&
-            kstricmp(t->name, name) == 0 && t->real == real)
+            kstricmp(t->name, name) == 0 && t->len == len && t->sum == sum &&
+            t->real == real)
             goto found;
     }
     if (count == 0xFFFF)
@@ -130,6 +142,8 @@ static int make(const char FAR *mod, u16 ordinal, const u8 FAR *pname,
     t->mod[n] = 0;
     t->ordinal = ordinal;
     kmemcpy(t->name, name, sizeof name);
+    t->len = len;
+    t->sum = sum;
     t->real = real;
     code = &b->code[(i % TB_COUNT) * THUNK_SIZE];
     code[0] = real ? 0x68 : 0xB8;       /* push imm16 / mov ax, imm16 */

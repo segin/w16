@@ -1,0 +1,52 @@
+; WF03: C:\WFTEST (fixed dates, tests/scripts/winfile/mktree.py): All
+; File Details, the four sorts, Name; Indicate Expandable Branches; Expand
+; One Level, Expand Branch, Collapse Branch, Expand All; Tree Only,
+; Directory Only, Tree and Directory (the split goes to the middle)
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+cmd 402
+wait 800
+snap C:\S01.BMP
+cmd 405
+wait 800
+snap C:\S02.BMP
+cmd 406
+wait 800
+snap C:\S03.BMP
+cmd 407
+wait 800
+snap C:\S04.BMP
+cmd 404
+wait 800
+cmd 401
+wait 800
+snap C:\S05.BMP
+dump
+cmd 505
+wait 1500
+snap C:\S06.BMP
+cmd 301
+wait 1500
+snap C:\S07.BMP
+cmd 302
+wait 1500
+snap C:\S08.BMP
+cmd 304
+wait 1500
+snap C:\S09.BMP
+cmd 303
+wait 2000
+snap C:\S10.BMP
+cmd 411
+wait 1000
+snap C:\S11.BMP
+cmd 412
+wait 1000
+snap C:\S12.BMP
+cmd 413
+wait 1000
+snap C:\S13.BMP
+close
+wait 2500

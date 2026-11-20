@@ -35,6 +35,16 @@
  * KERNEL's AnsiUpper/Lower (79/80) for 80h-FFh, OpenFile's drive
  * letters and error codes, WinExec of an empty line, profile strings
  * with quotes, leading blanks and an empty key.
+ * Second round (the audit's UNSURE items): OpenFile's nErrCode with no
+ * handle left and with a directory of the name ("openerr", medium 37),
+ * GetDriveType of a drive where IOCTL 4408h fails ("drivetype", F: a
+ * DOSBox floppy mount, medium 39), LocalCompact(-1) over 48 blocks
+ * ("lcompact", L4), GetFreeSpace and a fixed discardable block
+ * ("freespace", L5), DirectResAlloc's owner and flags ("directres",
+ * L27), the PATH variable's name in lower case ("envcase", L30),
+ * GetTempFileName with drive 80h and a directory in the way
+ * ("tempname", L31), OF_SEARCH ("ofsearch", L32), and KERNEL's own
+ * segments as heap blocks ("kseg", medium 33: w16's are not yet).
  *
  * Runs in make test beside TK61 (tests/run-tests.sh); the reference run:
  * tests/tk62ref.sh.
@@ -83,6 +93,24 @@ static WORD sel_of(HGLOBAL h)
 }
 
 /* ---- regressions ---- */
+
+/* TK62A's command line: its path, then sh's DS and offset (and more) */
+static void helper_cmd(char *cmd, const char *more)
+{
+    WORD n, i;
+    n = GetModuleFileName((HINSTANCE)(entry_regs[E_DS] & ~1u), helper, sizeof helper - 12);
+    for (i = n; i && helper[i - 1] != '\\'; i--)
+        ;
+    lstrcpy(helper + i, "TK62A.EXE");
+    lstrcpy(cmd, helper);
+    n = lstrlen(cmd);
+    cmd[n++] = ' ';
+    hex4(cmd + n, cur_ds());
+    cmd[n + 4] = ' ';
+    hex4(cmd + n + 5, (WORD)(void NEAR *)&sh);
+    cmd[n + 9] = 0;
+    lstrcat(cmd, more);
+}
 
 static void chunk(void)
 {
@@ -280,6 +308,137 @@ static void bigdg(void)
     GlobalFree(g);
 }
 
+/* H11: TKWA imports TKWB; the order their WEPs run in when both go */
+static char weplog[8];
+
+static void wep_order(const char *name)
+{
+    char nm[40];
+    lstrcpy(nm, name);
+    lstrcat(nm, " 1st");
+    obs(nm, (BYTE)weplog[0]);
+    lstrcpy(nm, name);
+    lstrcat(nm, " 2nd");
+    obs(nm, (BYTE)weplog[1]);
+}
+
+static void wep(void)
+{
+    HINSTANCE ha, hb;
+    void (FAR PASCAL *set)(char FAR *);
+    step("wep");
+    /* (3.1 in 386 Enhanced mode ended Windows in these LoadLibrary calls,
+       twice; not looked into: Standard mode and KRNL286 agree) */
+    if (GetWinFlags() & WF_ENHANCED)
+        return;
+    /* TKWB first, then TKWA (TKWB comes first in the module list): both
+       reach 0 with the last FreeLibrary */
+    weplog[0] = 0;
+    hb = LoadLibrary("TKWB.DLL");
+    ha = LoadLibrary("TKWA.DLL");
+    obs("wep: loaded", (UINT)ha > 32 && (UINT)hb > 32);
+    if ((UINT)ha <= 32 || (UINT)hb <= 32)
+        return;
+    set = (void (FAR PASCAL *)(char FAR *))GetProcAddress(ha, MAKEINTRESOURCE(1));
+    set(weplog);
+    FreeLibrary(hb);
+    obs("wep: B freed first, log", (BYTE)weplog[0]);
+    FreeLibrary(ha);
+    wep_order("wep: B loaded first,");
+    /* TKWA alone (it loads TKWB after itself) */
+    weplog[0] = 0;
+    ha = LoadLibrary("TKWA.DLL");
+    if ((UINT)ha <= 32)
+        return;
+    set = (void (FAR PASCAL *)(char FAR *))GetProcAddress(ha, MAKEINTRESOURCE(1));
+    set(weplog);
+    FreeLibrary(ha);
+    wep_order("wep: A alone,");
+}
+
+/* Medium 25: LockCurrentTask keeps other tasks from running? */
+static void lock(void)
+{
+    WORD i, t, c0, c1, c2;
+    char cmd[160];
+    WORD (FAR PASCAL *lct)(BOOL) = (WORD (FAR PASCAL *)(BOOL))kord(33);
+    WORD (FAR PASCAL *itl)(void) = (WORD (FAR PASCAL *)(void))kord(122);
+    step("lock");
+    sh.done = sh.stop = sh.count = 0;
+    helper_cmd(cmd, " L");
+    t = WinExec(cmd, SW_SHOWNORMAL);
+    obs("lock: WinExec ok", t > 32);
+    if (t <= 32)
+        return;
+    for (i = 0; i < 20; i++)
+        Yield();
+    c0 = sh.count;
+    obs("lock: ret", lct(TRUE) == (WORD)GetCurrentTask());
+    obs("lock: IsTaskLocked is us", itl() == (WORD)GetCurrentTask());
+    for (i = 0; i < 20; i++)
+        Yield();
+    c1 = sh.count;
+    lct(FALSE);
+    obs("lock: IsTaskLocked after unlock", itl());
+    for (i = 0; i < 20; i++)
+        Yield();
+    c2 = sh.count;
+    obs("lock: helper ran before", c0 != 0);
+    obs("lock: helper ran while locked", c1 != c0);
+    obs("lock: helper ran after", c2 != c1);
+    sh.stop = 1;
+    for (i = 0; i < 2000 && IsTask((HTASK)sh.task); i++)
+        Yield();
+    obs("lock: helper ended", !IsTask((HTASK)sh.task));
+}
+
+/* L24: what Catch writes where (DS = SS here; CS, SP, BP, SI, DI) */
+extern WORD __cdecl cur_cs(void);
+
+static void catchmap(void)
+{
+    int buf[12];
+    WORD i, ds = cur_ds(), cs = cur_cs(), sp = (WORD)(void NEAR *)buf;
+    static char nm[] = "catchmap: word N";
+    step("catchmap");
+    for (i = 0; i < 12; i++)
+        buf[i] = (int)0xCCCC;
+    if (Catch(buf) != 0)
+        return;
+    for (i = 0; i < 10; i++) {
+        WORD w = (WORD)buf[i], k;
+        if (w == 0xCCCC)
+            k = 0;              /* not written */
+        else if (w == ds)
+            k = 1;              /* DS or SS */
+        else if (w == cs)
+            k = 2;              /* CS */
+        else if (w > sp && w < sp + 0x100)
+            k = 3;              /* near our stack: SP or BP */
+        else
+            k = 4;
+        nm[15] = (char)('0' + i);
+        obs(nm, k);
+    }
+}
+
+/* L3: a discarded block reallocated by its selector: which handle */
+static void discsel(void)
+{
+    HGLOBAL h, r;
+    step("discsel");
+    h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DISCARDABLE, 0x100);
+    if (!h)
+        return;
+    GlobalDiscard(h);
+    obs("discsel: discarded", (GlobalFlags(h) & GMEM_DISCARDED) != 0);
+    r = GlobalReAlloc((HGLOBAL)((WORD)h | 1), 0x100, GMEM_MOVEABLE);
+    obs("discsel: ok", r != 0);
+    obs("discsel: odd", (WORD)r & 1);
+    obs("discsel: same", r && ((WORD)r | 1) == ((WORD)h | 1));
+    GlobalFree(r ? r : h);
+}
+
 /* ---- observations ---- */
 
 static void badptr(void)
@@ -428,10 +587,10 @@ static void codehandle(void)
     obs("codehandle: proc found", p != NULL);
     obs_env("codehandle: proc sel", SELECTOROF(p));
     obs_env("codehandle: handle", (WORD)h);
-    /* (w16: 0, GlobalHandle's for KERNEL's code, which is no block of
-       its heap: the KERNEL audit's medium 33, open) */
-    obs_env("codehandle: kernel ok", h != 0);
-    obs_env("codehandle: kernel is sel", h && ((WORD)h | 1) == (SELECTOROF(p) | 1));
+    obs("codehandle: kernel ok", h != 0);
+    obs("codehandle: kernel is sel", h && ((WORD)h | 1) == (SELECTOROF(p) | 1));
+    obs("codehandle: GlobalHandle agrees",
+        (WORD)h == LOWORD(GlobalHandle(SELECTOROF(p))));
 }
 
 static void catchbuf(void)
@@ -562,6 +721,437 @@ static void profile(void)
     obs("profile: reread lead [0]", (BYTE)buf[0]);
 }
 
+/* ---- the audit's UNSURE items (second round) ---- */
+
+/* INT 21h with DS:DX = a string in our DGROUP: AH=39h MD, 3Ah RD, 41h
+   DEL; 0 or the DOS error */
+static WORD dos_dx(WORD ax, WORD dx);
+#pragma aux dos_dx = "int 21h" "jc short l1" "xor ax, ax" "l1:" \
+    parm [ax] [dx] value [ax] modify [bx cx dx si di es];
+static char dpath[160];
+/* AH=47h: the current directory of the current drive to DS:SI */
+static WORD dos_cwd(WORD si);
+#pragma aux dos_cwd = "mov ah, 47h" "xor dl, dl" "int 21h" "jc short l2" \
+    "xor ax, ax" "l2:" parm [si] value [ax] modify [bx cx dx di es];
+
+static WORD dos_path(WORD ax, const char FAR *p)
+{
+    lstrcpy(dpath, p);
+    if (SELECTOROF((char FAR *)dpath) != cur_ds())
+        return 0xFFFF;
+    return dos_dx(ax, (WORD)(void NEAR *)dpath);
+}
+
+/* lstrcmpi without USER (make test has none): 0 when equal */
+static int cmp_ci(const char FAR *a, const char FAR *b)
+{
+    for (;; a++, b++) {
+        char x = *a, y = *b;
+        if (x >= 'a' && x <= 'z')
+            x -= 32;
+        if (y >= 'a' && y <= 'z')
+            y -= 32;
+        if (x != y)
+            return 1;
+        if (!x)
+            return 0;
+    }
+}
+
+/* is p the Windows directory's file `name`? */
+static int in_windir(const char FAR *p, const char *name)
+{
+    char w[160];
+    WORD n = GetWindowsDirectory(w, sizeof w);
+    if (n && w[n - 1] != '\\')
+        w[n++] = '\\';
+    w[n] = 0;
+    lstrcat(w, name);
+    return cmp_ci(w, p) == 0;
+}
+
+/* Medium 37: OpenFile's nErrCode for real DOS errors, with a path and
+   searched for */
+#define NFH 300
+static void openerr(void)
+{
+    OFSTRUCT of;
+    HFILE f, fh[NFH];
+    WORD n = 0, i;
+    static char cwd[80];
+    step("openerr");
+    f = _lcreat("C:\\TK62OE.TMP", 0);
+    if (f == HFILE_ERROR)
+        return;
+    _lclose(f);
+    /* the current directory C:\ (not the Windows directory), so that
+       where the search stopped shows */
+    cwd[0] = '\\';
+    if (SELECTOROF((char FAR *)cwd) != cur_ds() || dos_cwd((WORD)(void NEAR *)cwd + 1))
+        return;
+    dos_path(0x3B00, "C:\\");
+    /* every handle in use */
+    while (n < NFH && (fh[n] = _lopen("C:\\TK62OE.TMP", OF_READ)) != HFILE_ERROR)
+        n++;
+    obs_env("openerr: handles", n);
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("C:\\TK62OE.TMP", &of, OF_READ);
+    obs("openerr: full path ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("openerr: full path err", of.nErrCode);
+    if (f != HFILE_ERROR)
+        _lclose(f);
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("TKDG.DLL", &of, OF_READ);       /* in the Windows directory */
+    obs("openerr: full search ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("openerr: full search err", of.nErrCode);
+    obs("openerr: full search path is windir", in_windir(of.szPathName, "TKDG.DLL"));
+    obs("openerr: full search path is C:", cmp_ci(of.szPathName, "C:\\TKDG.DLL") == 0);
+    if (f != HFILE_ERROR)
+        _lclose(f);
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("TK62NONE.TXT", &of, OF_READ);
+    obs("openerr: full none ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("openerr: full none err", of.nErrCode);
+    if (f != HFILE_ERROR)
+        _lclose(f);
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("TK62NONE.TXT", &of, OF_EXIST);
+    obs("openerr: full none exist err", of.nErrCode);
+    for (i = 0; i < n; i++)
+        _lclose(fh[i]);
+    /* a directory where the file is looked for */
+    {
+        char w[160];
+        WORD k = GetWindowsDirectory(w, sizeof w);
+        if (k && w[k - 1] != '\\')
+            w[k++] = '\\';
+        w[k] = 0;
+        lstrcat(w, "TK62DIR.TMP");
+        obs_env("openerr: md", dos_path(0x3900, w));
+        of.nErrCode = 0xEEEE;
+        f = OpenFile(w, &of, OF_READWRITE);
+        obs("openerr: dir path ret", f == HFILE_ERROR ? 0xFFFF : 0);
+        obs("openerr: dir path err", of.nErrCode);
+        if (f != HFILE_ERROR)
+            _lclose(f);
+        of.nErrCode = 0xEEEE;
+        f = OpenFile("TK62DIR.TMP", &of, OF_READWRITE);
+        obs("openerr: dir search ret", f == HFILE_ERROR ? 0xFFFF : 0);
+        obs("openerr: dir search err", of.nErrCode);
+        obs("openerr: dir search path is windir", in_windir(of.szPathName, "TK62DIR.TMP"));
+        obs("openerr: dir search path is C:", cmp_ci(of.szPathName, "C:\\TK62DIR.TMP") == 0);
+        if (f != HFILE_ERROR)
+            _lclose(f);
+        /* and a file of that name in the system directory, searched
+           after the Windows directory: does the search go on? */
+        {
+            char sd[160];
+            WORD m = GetSystemDirectory(sd, sizeof sd);
+            if (m && sd[m - 1] != '\\')
+                sd[m++] = '\\';
+            sd[m] = 0;
+            lstrcat(sd, "TK62DIR.TMP");
+            f = _lcreat(sd, 0);
+            if (f != HFILE_ERROR) {
+                _lclose(f);
+                of.nErrCode = 0xEEEE;
+                f = OpenFile("TK62DIR.TMP", &of, OF_READWRITE);
+                obs("openerr: dir+file search ret", f == HFILE_ERROR ? 0xFFFF : 0);
+                obs("openerr: dir+file search err", of.nErrCode);
+                obs("openerr: dir+file search path is sysdir", cmp_ci(of.szPathName, sd) == 0);
+                if (f != HFILE_ERROR)
+                    _lclose(f);
+                dos_path(0x4100, sd);
+            }
+        }
+        dos_path(0x3A00, w);
+    }
+    /* a sharing violation (if DOS has SHARE) */
+    f = OpenFile("C:\\TK62OE.TMP", &of, OF_READ | OF_SHARE_EXCLUSIVE);
+    if (f != HFILE_ERROR) {
+        HFILE g;
+        of.nErrCode = 0xEEEE;
+        g = OpenFile("C:\\TK62OE.TMP", &of, OF_READ | OF_SHARE_EXCLUSIVE);
+        obs_env("openerr: share ret", g == HFILE_ERROR ? 0xFFFF : 0);
+        obs_env("openerr: share err", of.nErrCode);
+        if (g != HFILE_ERROR)
+            _lclose(g);
+        _lclose(f);
+    }
+    OpenFile("C:\\TK62OE.TMP", &of, OF_DELETE);
+    dos_path(0x3B00, cwd);
+}
+
+/* Medium 39: GetDriveType where IOCTL 4408h fails (F: is a DOSBox
+   "floppy" mount: 4409h answers, 4408h fails) */
+static void drivetype(void)
+{
+    HMODULE hs = GetModuleHandle("SYSTEM");
+    DWORD (FAR PASCAL *inq)(WORD, WORD) = hs ?
+        (DWORD (FAR PASCAL *)(WORD, WORD))GetProcAddress(hs, MAKEINTRESOURCE(1)) : NULL;
+    step("drivetype");
+    obs("drivetype: C", GetDriveType(2));
+    obs("drivetype: F", GetDriveType(5));
+    obs("drivetype: Y", GetDriveType(24));
+    obs("drivetype: Z", GetDriveType(25));
+    obs("drivetype: 26", GetDriveType(26));
+    obs_env("drivetype: 0101", GetDriveType(0x101));
+    if (inq) {
+        DWORD r = inq(1, 5);
+        obs_env("drivetype: inquire F lo", LOWORD(r));
+        obs_env("drivetype: inquire F hi", HIWORD(r));
+    }
+}
+
+/* L4: LocalCompact(-1) and more than 32 discardable blocks */
+#define NLB 48
+static void lcompact(void)
+{
+    HLOCAL h[NLB];
+    WORD i, n = 0, d = 0;
+    step("lcompact");
+    for (i = 0; i < NLB; i++)
+        if ((h[i] = LocalAlloc(LMEM_MOVEABLE | LMEM_DISCARDABLE, 8)) != 0)
+            n++;
+    obs("lcompact: allocated", n);
+    LocalCompact((UINT)-1);
+    for (i = 0; i < NLB; i++)
+        if (h[i] && (LocalFlags(h[i]) & LMEM_DISCARDED))
+            d++;
+    obs("lcompact: discarded", d);
+    for (i = 0; i < NLB; i++)
+        if (h[i])
+            LocalFree(h[i]);
+}
+
+/* L5: does GetFreeSpace count a fixed discardable block as free? */
+static WORD fs_class(DWORD before, DWORD after)
+{
+    DWORD d = before > after ? before - after : 0;
+    if (d < 0x8000UL)
+        return 0;                       /* counted as free */
+    if (d >= 0x18000UL && d < 0x28000UL)
+        return 1;                       /* counted as used */
+    return 2;
+}
+
+static void freespace(void)
+{
+    static const WORD fl[3] = { GMEM_FIXED, GMEM_FIXED | GMEM_DISCARDABLE,
+                                GMEM_MOVEABLE | GMEM_DISCARDABLE };
+    static char nm[] = "freespace: N class", fn[] = "freespace: N flags";
+    WORD i;
+    step("freespace");
+    /* (3.1 in 386 Enhanced mode ended Windows here) */
+    if (GetWinFlags() & WF_ENHANCED)
+        return;
+    for (i = 0; i < 3; i++) {
+        DWORD f0, f1;
+        HGLOBAL h;
+        GetFreeSpace(0);
+        f0 = GetFreeSpace(0);
+        h = GlobalAlloc(fl[i], 0x20000UL);
+        if (!h)
+            continue;
+        f1 = GetFreeSpace(0);
+        nm[11] = fn[11] = (char)('0' + i);
+        obs(nm, fs_class(f0, f1));
+        obs(fn, GlobalFlags(h));
+        if (i == 1) {
+            HGLOBAL r = GlobalDiscard(h);
+            obs("freespace: fixed discard ret", r != 0);
+            obs("freespace: fixed discard flags", GlobalFlags(h));
+        }
+        GlobalFree(h);
+    }
+}
+
+/* L27: DirectResAlloc (KERNEL.168): owner, flags */
+static void directres(void)
+{
+    HGLOBAL (FAR PASCAL *dra)(HINSTANCE, WORD, WORD) =
+        (HGLOBAL (FAR PASCAL *)(HINSTANCE, WORD, WORD))kord(168);
+    WORD (FAR PASCAL *owner)(WORD) = (WORD (FAR PASCAL *)(WORD))kord(404);
+    HINSTANCE hi = (HINSTANCE)(entry_regs[E_DS] & ~1u);
+    WORD hmod = (WORD)GetModuleHandle("TK62");
+    static const WORD fl[4] = { 0, 0x10, 0x1010, 0x1000 };
+    static char nm[] = "directres: N ok", fn[] = "directres: N flags",
+        on[] = "directres: N owner", pn[] = "directres: N odd",
+        sn[] = "directres: N size";
+    WORD i;
+    step("directres");
+    for (i = 0; i < 4; i++) {
+        HGLOBAL h = dra(hi, fl[i], 0x100);
+        WORD o;
+        nm[11] = fn[11] = on[11] = pn[11] = sn[11] = (char)('0' + i);
+        obs(nm, h != 0);
+        if (!h)
+            continue;
+        o = owner(sel_of(h));
+        obs(on, o == hmod ? 1 : o == (WORD)GetCurrentPDB() ? 2 :
+                o == (WORD)GetCurrentTask() ? 3 : 0);
+        obs(fn, GlobalFlags(h));
+        obs(pn, (WORD)h & 1);
+        obs(sn, GlobalSize(h) >= 0x100 && GlobalSize(h) < 0x200);
+        GlobalFree(h);
+    }
+}
+
+/* L30: OpenFile's search of the PATH: is the variable's name compared
+   without case? (MOUNT.COM is on Z:, which is on the PATH) */
+static void envcase(void)
+{
+    char FAR *e = GetDOSEnvironment(), FAR *p;
+    OFSTRUCT of;
+    step("envcase");
+    obs("envcase: found", OpenFile("MOUNT.COM", &of, OF_EXIST) != HFILE_ERROR);
+    for (p = e; *p; ) {
+        if (p[0] == 'P' && p[1] == 'A' && p[2] == 'T' && p[3] == 'H' && p[4] == '=')
+            break;
+        while (*p)
+            p++;
+        p++;
+    }
+    if (!*p)
+        return;
+    p[0] = 'p'; p[1] = 'a'; p[2] = 't'; p[3] = 'h';
+    obs("envcase: lower found", OpenFile("MOUNT.COM", &of, OF_EXIST) != HFILE_ERROR);
+    p[0] = 'X'; p[1] = 'A'; p[2] = 'T'; p[3] = 'H';
+    obs("envcase: XATH found", OpenFile("MOUNT.COM", &of, OF_EXIST) != HFILE_ERROR);
+    p[0] = 'P'; p[1] = 'A'; p[2] = 'T'; p[3] = 'H';
+}
+
+extern WORD __cdecl get_0040h(void);     /* start.asm: __0040H */
+
+static WORD bios_tick(void)
+{
+    return *(WORD FAR *)MAKELP(get_0040h(), 0x6C);
+}
+
+/* L31: GetTempFileName with drive 80h; a directory with the next name */
+static void tempname(void)
+{
+    char a[160], b[160], c[160], d[160];
+    WORD na, nb, nc, r, i;
+    step("tempname");
+    a[0] = 0;
+    r = GetTempFileName(0x80, "TKP", 0x1234, a);
+    obs("tempname: 80 ret", r);
+    obs("tempname: 80 [0]", (BYTE)a[0]);
+    obs("tempname: 80 [1]", (BYTE)a[1]);
+    obs("tempname: 80 is ~", a[0] == '~');
+    /* unique 0 takes its number from the clock (3.1 and w16 alike): the
+       three calls must see the same time, else the next one starts
+       elsewhere and misses the file or directory before it. A run with
+       a timer tick in it, or whose third number is unrelated to the
+       second (the clock moved), is done again (at most 8 times) */
+    for (i = 0; ; i++) {
+        WORD t0 = bios_tick(), cls, moved;
+        na = GetTempFileName(0, "TKQ", 0, a);
+        nb = GetTempFileName(0, "TKQ", 0, b);
+        GetTempFileName(0, "TKQ", nb + 1, d);       /* (no file made) */
+        r = dos_path(0x3900, d);
+        nc = GetTempFileName(0, "TKQ", 0, c);
+        cls = nc == 0 ? 0 : nc == nb + 1 ? 1 : nc == nb + 2 ? 2 : 3;
+        moved = bios_tick() != t0 || nb != na + 1 || cls == 3;
+        dos_path(0x3A00, d);
+        dos_path(0x4100, a);
+        dos_path(0x4100, b);
+        if (nc)
+            dos_path(0x4100, c);
+        if (moved && i < 7) {
+            obs_env("tempname: run again (clock)", i + 1);
+            continue;
+        }
+        obs("tempname: made", na && nb);
+        obs("tempname: 2nd is next", nb == na + 1);
+        obs_env("tempname: a", na);
+        obs_env("tempname: b", nb);
+        obs_env("tempname: md", r);
+        obs_env("tempname: c", nc);
+        obs("tempname: 3rd after dir", cls);
+        break;
+    }
+}
+
+/* L32: OF_SEARCH with a path that does not hold the file */
+static void ofsearch(void)
+{
+    OFSTRUCT of;
+    HFILE f;
+    step("ofsearch");
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("C:\\TK62NO\\TKDG.DLL", &of, OF_EXIST);
+    obs("ofsearch: plain ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("ofsearch: plain err", of.nErrCode);
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("C:\\TK62NO\\TKDG.DLL", &of, OF_EXIST | OF_SEARCH);
+    obs("ofsearch: search ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("ofsearch: search err", of.nErrCode);
+    obs("ofsearch: search path is windir", in_windir(of.szPathName, "TKDG.DLL"));
+    of.nErrCode = 0xEEEE;
+    f = OpenFile("TK62NONE.TXT", &of, OF_EXIST | OF_SEARCH);
+    obs("ofsearch: none ret", f == HFILE_ERROR ? 0xFFFF : 0);
+    obs("ofsearch: none err", of.nErrCode);
+}
+
+/* Medium 33: KERNEL's own segments as blocks of the global heap */
+static void kseg(void)
+{
+    HMODULE hk = GetModuleHandle("KERNEL");
+    WORD (FAR PASCAL *owner)(WORD) = (WORD (FAR PASCAL *)(WORD))kord(404);
+    WORD cs = SELECTOROF(GetProcAddress(hk, "GlobalAlloc"));
+    WORD ds = SELECTOROF(GetProcAddress(hk, "THHOOK"));
+    WORD ne = (WORD)hk, nseg, st, i;
+    static char sn[] = "kseg: segment NN h";
+    DWORD gh;
+    step("kseg");
+    gh = GlobalHandle(cs);
+    obs_env("kseg: cs", cs);
+    obs_env("kseg: cs handle", LOWORD(gh));
+    obs_env("kseg: cs handle ok", LOWORD(gh) != 0);
+    obs_env("kseg: cs handle sel", HIWORD(gh) == cs);
+    obs_env("kseg: cs handle is cs", LOWORD(gh) == cs);
+    obs_env("kseg: cs handle is cs-1", LOWORD(gh) == cs - 1);
+    obs_env("kseg: cs flags", GlobalFlags((HGLOBAL)LOWORD(gh)));
+    obs_env("kseg: cs size fits", LOWORD(gh) &&
+        GlobalSize((HGLOBAL)LOWORD(gh)) >= GetSelectorLimit(cs) + 1UL);
+    obs_env("kseg: cs owner is KERNEL", owner(cs) == (WORD)hk);
+    obs_env("kseg: GetCodeHandle is handle", (WORD)GetCodeHandle(
+        GetProcAddress(hk, "GlobalAlloc")) == LOWORD(gh));
+    gh = GlobalHandle(ds);
+    obs_env("kseg: ds", ds);
+    obs_env("kseg: ds handle", LOWORD(gh));
+    obs_env("kseg: ds handle ok", LOWORD(gh) != 0);
+    obs_env("kseg: ds handle sel", HIWORD(gh) == ds);
+    obs_env("kseg: ds handle is ds", LOWORD(gh) == ds);
+    obs_env("kseg: ds handle is ds-1", LOWORD(gh) == ds - 1);
+    obs_env("kseg: ds flags", GlobalFlags((HGLOBAL)LOWORD(gh)));
+    obs_env("kseg: ds owner is KERNEL", owner(ds) == (WORD)hk);
+    obs_env("kseg: module table owner is KERNEL", owner(ne) == (WORD)hk);
+    gh = GlobalHandle(ne);
+    obs_env("kseg: module table handle is ne", LOWORD(gh) == ne);
+    nseg = *(WORD FAR *)MAKELP(ne, 0x1C);
+    st = *(WORD FAR *)MAKELP(ne, 0x22);
+    obs_env("kseg: segments", nseg);
+    for (i = 0; i < nseg && i < 20; i++) {
+        WORD FAR *e = (WORD FAR *)MAKELP(ne, st + 10 * i);
+        sn[14] = (char)('0' + (i + 1) / 10);
+        sn[15] = (char)('0' + (i + 1) % 10);
+        sn[17] = 'h';
+        obs_env(sn, e[4]);
+        if (e[4]) {
+            sn[17] = 'f';
+            obs_env(sn, GlobalFlags((HGLOBAL)e[4]));
+            sn[17] = 'g';
+            obs_env(sn, LOWORD(GlobalHandle(e[4] | 1)));
+        }
+        out("  flags ");
+        outhex(e[2]);
+        out("\r\n");
+    }
+}
+
 int __cdecl tmain(void)
 {
     out("TK62 start\r\n");
@@ -571,6 +1161,10 @@ int __cdecl tmain(void)
     dosalloc();
     badne();
     bigdg();
+    wep();
+    lock();
+    catchmap();
+    discsel();
     badptr();
     strptr();
     atoms();
@@ -583,6 +1177,15 @@ int __cdecl tmain(void)
     files();
     winexec();
     profile();
+    openerr();
+    drivetype();
+    lcompact();
+    freespace();
+    directres();
+    envcase();
+    tempname();
+    ofsearch();
+    kseg();
     entries();                  /* 3.1's KRNL286 ends here */
     hdelta();                   /* last: 3.1 ends here (both kernels) */
     out("TK62 done\r\n");

@@ -150,6 +150,9 @@ void pres_save_body(void FAR *out, LPOBJ ob, BOOL with_class);
 void pres_make_static(LPOBJ o);
 HGLOBAL link_data(LPOBJ o);
 HGLOBAL poke_block(WORD cf, HANDLE h);
+LPOBJ link_new(LPDOC d, LPOLECLIENT c, LPCSTR cls, LPCSTR file, LPCSTR item,
+               LPCSTR name, OLEOPT_RENDER r, OLECLIPFORMAT f);
+OLESTATUS link_connect_running(LPOBJ o);
 OLESTATUS link_from_clip(LPDOC d, LPOLECLIENT c, LPCSTR cls, LPCSTR file, LPCSTR item,
                          LPCSTR name, LPOLEOBJECT FAR *out, OLEOPT_RENDER r,
                          OLECLIPFORMAT f);

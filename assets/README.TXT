@@ -5,6 +5,12 @@ This directory is laid out like a Windows 3.1 directory (the one that
 holds WIN.COM) and contains only what w16 builds (MIT licence, see the
 w16 repository's LICENSE):
 
+Start w16 with  WIN /S  (Standard mode) for now. On a 386, plain WIN
+starts 386 Enhanced mode, as Windows 3.1's does; w16's 386 Enhanced mode
+is newer, and its DOS programs (the MS-DOS Prompt) still need
+WINOA386.MOD from your own Windows 3.1 (see below). Standard mode needs
+nothing of Microsoft's.
+
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
   NOTEPAD.EXE             Notepad
@@ -13,6 +19,7 @@ w16 repository's LICENSE):
   CARDFILE.EXE            Cardfile (its help is CARDFILE.HLP)
   WRITE.EXE               Write (its help is WRITE.HLP)
   CONTROL.EXE             Control Panel
+  WINFILE.EXE             File Manager (its help is WINFILE.HLP)
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
@@ -36,6 +43,11 @@ w16 repository's LICENSE):
                           clipboard (PrintScreen)
   SYSTEM\VGA.3GR         the display grabber for 386 Enhanced mode
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
+  SYSTEM\WIN386.EXE       386 Enhanced mode (WIN /3): the virtual machine
+                          manager and its built-in virtual devices; it
+                          runs Windows and DOS programs in virtual
+                          machines (DOS programs full screen or in a
+                          window, Alt+Enter between them)
   SYSTEM\WIN87EM.DLL      floating-point emulation
   SYSTEM\SHELL.DLL        the shell library (drag and drop, ShellExecute,
                           the registration database REG.DAT, icons,
@@ -80,9 +92,12 @@ w16 repository's LICENSE):
                           (for a standard PC/AT; on a machine that
                           needs another system driver, such as
                           HPSYSTEM.DRV, use that instead)
-  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep and the
-                          old SOUND functions (voice queues of notes)
-                          on the PC speaker
+  SYSTEM\MMSOUND.DRV      the sound driver: MessageBeep's beep (the
+                          sound WIN.INI [sounds] names for it, through
+                          MMSYSTEM.DLL, when a wave driver is installed;
+                          else the PC speaker) and the old SOUND
+                          functions (voice queues of notes) on the PC
+                          speaker
   SYSTEM\TIMER.DRV        the multimedia timer driver: the
                           millisecond timer and timer events behind the
                           time* functions of MMSYSTEM.DLL (timeGetTime,
@@ -99,6 +114,13 @@ w16 repository's LICENSE):
                           Mapper, and QuickTime for Windows' MCI driver
                           work)
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
+  SYSTEM\SB16.DRV         a Sound Blaster 16 driver: wave output and
+                          input (8 and 16 bits, mono and stereo, 5000
+                          to 44100 Hz), MIDI out and in through the
+                          card's MPU-401 port, and the mixer's volumes
+                          (master, wave, MIDI, CD, line) as auxiliary
+                          devices; Standard mode only. Not enabled by
+                          default (see below)
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
                           Printers, International and Date/Time are not
@@ -114,7 +136,7 @@ w16 repository's LICENSE):
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
-                            Panel)
+                            Panel, File Manager)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)
@@ -158,11 +180,51 @@ directory).
 installed; without it Program Manager says so instead of starting
 them.
 
+To use SB16.DRV with a Sound Blaster 16 (or a compatible card, or an
+emulator's), add these lines to SYSTEM.INI's [drivers] section (with
+another number after "wave", "midi" or "aux" when those keys are taken
+by another card's driver):
+
+  wave=sb16.drv
+  midi=sb16.drv
+  aux=sb16.drv
+
+and, when the card is not at its usual place, a section of its own
+(port and mpuport in hexadecimal; the values shown are the defaults):
+
+  [sb16.drv]
+  port=220
+  int=5
+  dma=1
+  hdma=5
+  mpuport=330
+
+A key that is missing comes from the BLASTER environment setting
+(A220 I5 D1 H5 P330), else from the card's own mixer (IRQ and DMA),
+else from the defaults above (Control Panel's Drivers applet, Setup,
+shows and changes them). Without a card, and in 386 Enhanced mode, the
+driver offers no devices and Windows starts as usual. The MIDI Mapper needs a setup that
+sends to "Sound Blaster 16 MIDI" before programs that use it (Media
+Player's MIDI Sequencer) play through the card.
+
 w16's own settings are in the [w16] section of SYSTEM.INI. Each of its
 additions to Windows 3.1 (the scroll-bar shortcut menu, the version
 stamp on the desktop, Notepad's Ctrl+O/Ctrl+S keys and so on) can be
 switched back to Windows 3.1's behaviour there; the repository's
 docs/w16-settings.md lists every key.
 
+Memory: on a 386 or later w16 uses all the extended memory the XMS
+driver gives: in Standard mode all of it, in w16's 386 Enhanced mode up
+to 1 GB. With an XMS 3.0 driver it takes it in blocks of any size, so
+programs see one large free block (DPMI, GetFreeSpace); Windows 3.1
+takes blocks of at most 64 MB, and [w16] LargeMemory=0 in SYSTEM.INI
+does the same. Each block a program allocates is still at most 16 MB,
+as in Windows 3.1. On an 80286 Windows can use 16 MB at most.
+
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
-(WIN /3) needs Microsoft's WIN386.EXE and is not w16's yet.
+(WIN /3, or WIN on a 386 with enough memory) uses w16's WIN386.EXE; the
+devices it loads are named in SYSTEM.INI's [386Enh] section. To run DOS
+programs in 386 Enhanced mode, copy WINOA386.MOD from your Windows 3.1
+SYSTEM directory into SYSTEM (w16 has no WINOA386.MOD of its own yet);
+Windows programs do not need it. Standard mode (WIN /S) needs nothing
+of Microsoft's.

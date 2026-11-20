@@ -362,7 +362,9 @@ HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
         SetRectRgn(upd, 0, 0, 0, 0);
     erase = (w->flags & WF_ERASEBKGND) != 0;
     validate_all(w);
-    ps->hdc = get_dc(h, FALSE, upd, 0);
+    /* USER's own controls paint in their own area, as they did before
+       GetDC gave them their parent's (CS_PARENTDC, dc.c) */
+    ps->hdc = get_dc(h, FALSE, upd, ((PCLS)w->cls)->hModule == hModUser ? DCX_OWNCLIENT : 0);
     GetRgnBox(upd, &ps->rcPaint);
     OffsetRect(&ps->rcPaint, -w->rcClient.left, -w->rcClient.top);
     DeleteObject(upd);

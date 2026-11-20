@@ -121,8 +121,26 @@ static void take_picture(LPOBJ o, OLEOPT_RENDER r, OLECLIPFORMAT f)
     if (!cf || cf == cf_native)
         return;
     h = GetClipboardData(cf);
-    if (h)
-        pres_set(o, cf, pres_copy(cf, h));
+    if (!h)
+        return;
+    h = pres_copy(cf, h);
+    if (h && cf == CF_DIB) {
+        /* a DIB without a resolution gets the screen's (3.1's OLECLI:
+           3780 pixels a metre on VGA in Write's pasted pictures and
+           links, WR16, WR30, from SNAP's DIBs with 0; UNVERIFIED: how it
+           comes by it) */
+        BITMAPINFOHEADER FAR *b = (BITMAPINFOHEADER FAR *)GlobalLock(h);
+        if (b) {
+            HDC dc = GetDC(NULL);
+            if (!b->biXPelsPerMeter)
+                b->biXPelsPerMeter = MulDiv(GetDeviceCaps(dc, LOGPIXELSX), 10000, 254);
+            if (!b->biYPelsPerMeter)
+                b->biYPelsPerMeter = MulDiv(GetDeviceCaps(dc, LOGPIXELSY), 10000, 254);
+            ReleaseDC(NULL, dc);
+            GlobalUnlock(h);
+        }
+    }
+    pres_set(o, cf, h);
 }
 
 /* OLECLI.12 */
@@ -191,5 +209,14 @@ OLESTATUS OLEAPI OleCreateLinkFromClip(LPCSTR protocol, LPOLECLIENT c, LHCLIENTD
         return OLE_ERROR_PROTOCOL;
     if (!parse_link(GetClipboardData(cf_objectlink), cls, file, item, sizeof file))
         return OLE_ERROR_CLIPBOARD;
+    if (r == olerender_draw && has_picture()) {
+        /* the clipboard's picture is the presentation (le.c link_new) */
+        LPOBJ o = link_new(d, c, cls, file, item, name, r, f);
+        if (!o)
+            return OLE_ERROR_MEMORY;
+        take_picture(o, r, f);
+        *out = (LPOLEOBJECT)o;
+        return link_connect_running(o);
+    }
     return link_from_clip(d, c, cls, file, item, name, out, r, f);
 }

@@ -267,6 +267,19 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     r->eax = v.eax; r->ebx = v.ebx; r->ecx = v.ecx; r->edx = v.edx;
     r->esi = v.esi; r->edi = v.edi; r->ebp = v.ebp;
     r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);    /* CF PF AF ZF SF OF */
+    /* DOS functions that return no pointer keep the caller's segment
+     * registers: MS-DOS 4.00 changes ES as a side effect in some (INT 21h
+     * 3Eh, close, came back with another ES; KRNL386 then faulted with ES
+     * 0 at 0117:A789 after closing BOOTLOG.TXT: the boot on the MS-DOS 4.00
+     * image, INPUTRUN_HDD). The ones that return a pointer in DS or ES
+     * (MS-DOS 4.00: 1Fh, 32h DS:BX the DPB, 34h ES:BX InDOS, 52h ES:BX the
+     * list of lists, 5D06h DS:SI the swappable data area, 63h DS:SI the
+     * lead-byte table) translate it as before */
+    if (vec == 0x21) {
+        u32 ah = (AX(&pm) >> 8) & 0xFF;
+        if (ah != 0x1F && ah != 0x32 && ah != 0x34 && ah != 0x52 && ah != 0x5D && ah != 0x63)
+            return 1;
+    }
     if ((int)(v.ds & 0xFFFF) != (ds < 0 ? 0 : ds)) {
         u32 sel = seg_to_sel(v.ds & 0xFFFF, 0xF2);
         if (sel) r->ds = sel;
@@ -327,11 +340,23 @@ static struct memblk *blocks;
 static u32 next_lin = 0x00400000;      /* client linear memory starts at 4 MB */
 static u32 next_handle = 1;
 
+/* The most pages one block can have with f pages free: a page table (4 MB)
+   of its own may be needed for every 1024 pages of it, and one more where
+   it starts within a table (0500h's largest block, mem_alloc's check). */
+static u32 mem_largest_pages(u32 f)
+{
+    u32 t = f / 1025 + 2;
+    return f > t ? f - t : 0;
+}
+
 static struct memblk *mem_alloc(u32 size)
 {
     struct memblk *b;
-    u32 n = (size + 4095) / 4096, i, p;
-    if (!size || n > pages_free()) return NULL;
+    u32 n = size / 4096 + (size % 4096 != 0), i, p;
+    /* the pages and their page tables free, and the client's linear
+       space (from 4 MB up to the VMM's window) not used up */
+    if (!size || n > mem_largest_pages(pages_free())) return NULL;
+    if (n >= (W386_VMM_LIN - next_lin) / 4096) return NULL;
     b = kmalloc(sizeof(*b));
     if (!b) return NULL;
     b->lin = next_lin;
@@ -339,7 +364,17 @@ static struct memblk *mem_alloc(u32 size)
     b->handle = next_handle++;
     for (i = 0; i < n; i++) {
         p = page_alloc();
-        if (!p || !map_page(b->lin + i * 4096, p, 7)) return NULL;
+        if (!p || !map_page(b->lin + i * 4096, p, 7)) {
+            /* give back what it took (the page tables stay) */
+            if (p) page_free(p);
+            while (i--) {
+                p = lin_to_phys(b->lin + i * 4096);
+                map_page(b->lin + i * 4096, 0, 0);
+                if (p) page_free(p & ~0xFFFu);
+            }
+            kfree(b);
+            return NULL;
+        }
     }
     next_lin += b->size + 4096;         /* a guard page between blocks */
     b->next = blocks;
@@ -536,7 +571,7 @@ static void dpmi_call(struct cregs *r)
         u32 *p = (u32 *)(sel_base(r->es) + reg_ofs(r, r->edi));
         u32 f = pages_free();
         for (i = 0; i < 12; i++) p[i] = 0xFFFFFFFF;
-        p[0] = f * 4096;                /* largest free block */
+        p[0] = mem_largest_pages(f) * 4096;     /* largest free block (0501h gives it) */
         p[1] = f;                       /* maximum unlocked page allocation */
         p[2] = f;                       /* maximum locked page allocation */
         p[3] = f;                       /* linear address space, pages */
@@ -624,6 +659,10 @@ int int2f_pm(struct cregs *r)
         SETW(r->ebx, 1);
         SETLO(r->eax, 0);
         return 1;
+    case 0x4003:                        /* the display driver's critical sections: */
+    case 0x4004:                        /* noted by the VDD, passed on */
+        vdd_int2f(r);
+        return 0;
     case 0x1686:                        /* in protected mode */
         SETW(r->eax, 0);
         return 1;
@@ -958,6 +997,59 @@ static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cd
     p.cs = sysvm.pmvec_sel[vec];
     p.eip = sysvm.pmvec_off[vec];
     hstk_run(&p);
+}
+
+/* INT vec for the VMM's devices in the System VM (the VDD's INT 2Fh
+ * 4001h/4002h to the display driver): the client's protected-mode handler
+ * if it has one, on the host stack with the registers of r (interrupts
+ * on, as a software interrupt from code with interrupts on), else the
+ * V86 handler; the results back in r. UNVERIFIED: the stack and segment
+ * registers Windows 3.1 gives the handler. */
+void dpmi_pm_int(int vec, struct cregs *r)
+{
+    struct cregs p;
+    if (cur_vm != &sysvm || !sysvm.pm || pmvec_default(vec)) {
+        r->ss = 0; r->esp = 0;
+        v86_int(r, vec);
+        return;
+    }
+    memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(NULL);
+    p.ss = hstk_sel;
+    p.ds = p.es = sysvm.last_ds;
+    pm_push(&p, 0x0202);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eax = r->eax; p.ebx = r->ebx; p.ecx = r->ecx; p.edx = r->edx;
+    p.esi = r->esi; p.edi = r->edi; p.ebp = r->ebp;
+    p.eflags = 0x0202;
+    p.cs = sysvm.pmvec_sel[vec];
+    p.eip = sysvm.pmvec_off[vec];
+    hstk_run(&p);
+    r->eax = p.eax; r->ebx = p.ebx; r->ecx = p.ecx; r->edx = p.edx;
+    r->esi = p.esi; r->edi = p.edi;
+    r->eflags = (r->eflags & ~0x8D5u) | (p.eflags & 0x8D5u);
+}
+
+/* a far call (PASCAL: the callee pops the words) to sel:off in the System
+ * VM's protected mode, on the host stack, with n words of arguments
+ * (args[0] pushed first); the registers it returns with in r */
+void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r)
+{
+    struct cregs p;
+    int i;
+    memset(&p, 0, sizeof(p));
+    p.esp = hstk_base(NULL);
+    p.ss = hstk_sel;
+    p.ds = p.es = sysvm.last_ds;
+    for (i = 0; i < n; i++) pm_push(&p, args[i]);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags = 0x0202;
+    p.cs = sel;
+    p.eip = off;
+    hstk_run(&p);
+    if (r) *r = p;
 }
 
 /* A hardware interrupt (and INT 1Ch/23h/24h) that comes while V86 code

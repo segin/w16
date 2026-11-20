@@ -137,6 +137,13 @@ static void setup_dc(PDCE d, PWND w)
     BOOL window = (d->flags & DCE_WINDOW) != 0;
     BOOL clipch = (w->style & WS_CLIPCHILDREN) != 0;
     HRGN r;
+    /* the desktop's window DC (GetDC(NULL), GetWindowDC of the desktop or
+       of NULL, GetDCEx(desktop, DCX_WINDOW)) is the whole screen, the
+       top-level windows too: a simple region, and GetPixel reads what
+       they show (US33 gdc on 3.1; GetDC of the desktop window itself
+       leaves them out, and so does the desktop's own painting) */
+    if (window && w == PW(hwndDesktop))
+        clipch = FALSE;
     if (d->flags & DCE_CLIPCHILDREN)
         clipch = TRUE;
     if ((d->flags & DCE_PARENT) && w->hwndParent)
@@ -161,8 +168,10 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
     PCLS c;
     if (!w)
         return 0;
-    if (!h)
+    if (!h) {
         h = hwndDesktop;
+        window = TRUE;          /* the screen (setup_dc) */
+    }
     c = (PCLS)w->cls;
     if ((c->style & CS_CLASSDC) && !(c->style & CS_OWNDC) && !window) {
         /* CS_CLASSDC: one DC for all the class's windows, set up for the
@@ -201,10 +210,15 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
         DC_(dh)->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
         /* CS_PARENTDC: a cache DC clipped to the parent's client area, its
            origin the child's (US29 dc on 3.1: GetClipBox -10 -10 388 269
-           for a child at 10,10 of a 398 x 279 client area) */
-        /* (not for USER's own controls, whose classes have it too: w16's
-           controls paint relying on their own clipping) */
-        if ((c->style & CS_PARENTDC) && c->hModule != hModUser && !window &&
+           for a child at 10,10 of a 398 x 279 client area). The system
+           controls' classes have it too, and 3.1's GetDC gives them the
+           parent's area as well (US32: a dialog's list box, -18 -16 245
+           114, the dialog's client area); USER's own drawing in them asks
+           for the control's area (DCX_OWNCLIENT: ctl_dc), as a
+           superclass of them, of the application's module, took the
+           parent's and drew outside itself. BeginPaint clips to the update
+           region, inside the window either way. */
+        if ((c->style & CS_PARENTDC) && !(flags & DCX_OWNCLIENT) && !window &&
             (w->style & WS_CHILD) && w->hwndParent)
             DC_(dh)->flags |= DCE_PARENT;
         DC_(dh)->hwnd = h;
@@ -311,7 +325,9 @@ int WINAPI ReleaseDC(HWND h, HDC hdc)
 
 HDC WINAPI U_GETDCEX(HWND h, HRGN clip, DWORD flags)
 {
-    return get_dc(h, (flags & 1) != 0, (flags & 0x80) ? clip : 0, (flags & 2) ? 1 : 0);
+    /* DCX_WINDOW 1, DCX_CLIPCHILDREN 8, DCX_INTERSECTRGN 80h (3.1 SDK;
+       w16 took DCX_CACHE, 2, for DCX_CLIPCHILDREN: US33 gdc) */
+    return get_dc(h, (flags & 1) != 0, (flags & 0x80) ? clip : 0, (flags & 8) ? 1 : 0);
 }
 
 /* the 3.1 SDK's LockWindowUpdate: drawing to the window is suppressed;

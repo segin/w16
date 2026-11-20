@@ -9,6 +9,8 @@
  * that large); shrunk to 100h bytes, it leaves the rest of the piece
  * free, and the next block of almost 1 MB goes there, right after it.
  * The first is then freed. No log of its own: tk62.h.
+ * With "L" after the address it only counts its turns (Yield after each)
+ * until TK62 sets stop: TK62 "lock" (LockCurrentTask).
  */
 #include <windows.h>
 #include "tk62.h"
@@ -46,6 +48,16 @@ int __cdecl tmain(void)
     off = hex(&cmd);
     sh = (tk62sh FAR *)MAKELP(ds, off);
     sh->task = (WORD)GetCurrentTask();
+    while (*cmd == ' ')
+        cmd++;
+    if (*cmd == 'L') {
+        while (!sh->stop) {
+            sh->count++;
+            Yield();
+        }
+        sh->done = 1;
+        return 0;
+    }
     h1 = GlobalAlloc(GMEM_FIXED, 0xFFF00UL);
     sh->big = h1 != 0;
     if (h1 && GlobalReAlloc(h1, 0x100, 0)) {

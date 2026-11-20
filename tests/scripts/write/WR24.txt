@@ -1,0 +1,66 @@
+; WR24: the ruler (Document > Ruler On), observed: a new document's
+; ruler (R1, window dump), the Document menu with it on (R2), text with
+; indents, tab stops, 1 1/2 spacing and centered set through the menus
+; and dialogs (R3), a second paragraph without them (R4: the caret in it)
+run WRITE.EXE
+wait 3000
+menu d
+char r
+wait 1000
+snap C:\R1.BMP
+dump
+info
+menu d
+wait 800
+snap C:\R2.BMP
+key 1B
+key 1B
+wait 300
+type first paragraph	with a tab
+menu p
+char i
+wait 800
+type 1
+key 09
+type -0.5
+key 09
+type 0.25
+key 0D
+wait 800
+menu d
+char t
+wait 800
+type 1.5
+key 09
+key 09
+type 3
+key 09
+char
+key 0D
+wait 800
+menu p
+char 1
+wait 300
+menu p
+char c
+wait 800
+snap C:\R3.BMP
+key 0D
+wait 300
+menu p
+char n
+wait 800
+type second
+wait 500
+snap C:\R4.BMP
+key 26
+wait 500
+snap C:\R5.BMP
+menu f
+char a
+wait 1500
+type C:\WR24.WRI
+key 0D
+wait 2000
+close
+wait 1000

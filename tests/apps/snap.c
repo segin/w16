@@ -31,6 +31,17 @@
  *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
  *     cursor                 log the current cursor: arrow, no, or other
  *     copyfile <from> <to>   copy a file (to catch it mid-session)
+ *     append <file> <text>   add the line <text> to <file> (made if need
+ *                            be): marks in a probe's own log (FMX.DLL);
+ *                            the memory log instead if <file> is its file
+ *     memlog <file>          keep a log in memory for probes (FMX.DLL
+ *                            finds it as the desktop window's property
+ *                            "FMXLOG": a shareable block, a DWORD of bytes
+ *                            used, a DWORD of room, the text; at most
+ *                            65000 bytes), written to <file> when the
+ *                            script ends; snap keeps its screens in memory
+ *                            till then too: no file is made meanwhile
+ *                            (3.1's File Manager notices every one)
  *     exitwin                ExitWindows; logs it if an application refused
  *     blank <l> <t> <r> <b>  paint a screen rectangle black, to keep
  *                            changing content (free memory) out of the
@@ -81,6 +92,8 @@
  *                            from blinking between screenshots)
  *     clipbmp <file.bmp>     put a .BMP on the clipboard (CF_DIB, CF_BITMAP)
  *     clipmf                 put a small metafile picture on the clipboard
+ *     cliplink <file.bmp> <class>|<doc>|<item>   clipbmp, then ObjectLink
+ *                            and OwnerLink naming that link (Paste Link)
  *     class <name>           Windows 2.x: the window class "cmd" and "close"
  *                            go to (default Progman)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
@@ -302,15 +315,32 @@ typedef struct {
 } BMI16;
 
 
-static int snap(const char *file)
+/* the screen as a bitmap of the display's format */
+static HBITMAP grab(void)
+{
+    int cx = GetSystemMetrics(SM_CXSCREEN);
+    int cy = GetSystemMetrics(SM_CYSCREEN);
+    HDC scr = GetDC(NULL);
+    HDC mem = CreateCompatibleDC(scr);
+    HBITMAP bm = mem ? CreateCompatibleBitmap(scr, cx, cy) : NULL;
+    if (bm) {
+        HBITMAP old = SelectObject(mem, bm);
+        BitBlt(mem, 0, 0, cx, cy, scr, 0, 0, SRCCOPY);
+        SelectObject(mem, old);
+    }
+    if (mem)
+        DeleteDC(mem);
+    ReleaseDC(NULL, scr);
+    return bm;
+}
+
+/* a grabbed screen to a 4-bit .BMP file; frees the bitmap */
+static int write_bmp(HBITMAP bm, const char *file)
 {
     int cx = GetSystemMetrics(SM_CXSCREEN);
     int cy = GetSystemMetrics(SM_CYSCREEN);
     WORD stride = (WORD)(((cx * 4 + 31) / 32) * 4);
     HDC scr = GetDC(NULL);
-    HDC mem = CreateCompatibleDC(scr);
-    HBITMAP bm = CreateCompatibleBitmap(scr, cx, cy);
-    HBITMAP old;
     HGLOBAL hbuf = GlobalAlloc(GMEM_MOVEABLE, (WORD)(stride * BAND));
     BYTE FAR *buf = hbuf ? (BYTE FAR *)GlobalLock(hbuf) : NULL;
     static BMI16 bmi;
@@ -318,11 +348,8 @@ static int snap(const char *file)
     HFILE f;
     int y, ok = 0;
 
-    if (!mem || !bm || !buf)
+    if (!bm || !buf)
         goto done;
-    old = SelectObject(mem, bm);
-    BitBlt(mem, 0, 0, cx, cy, scr, 0, 0, SRCCOPY);
-    SelectObject(mem, old);
 
     bmi.h.biSize = sizeof bmi.h;
     bmi.h.biWidth = cx;
@@ -361,10 +388,61 @@ done:
         GlobalFree(hbuf);
     if (bm)
         DeleteObject(bm);
-    if (mem)
-        DeleteDC(mem);
     ReleaseDC(NULL, scr);
     return ok;
+}
+
+/* With the memory log on (memlog), screens are kept as bitmaps and
+   written when the script ends: a file made meanwhile is a change of the
+   file system that 3.1's File Manager reacts to (obs WF17, WF14). */
+typedef struct {
+    char file[80];
+    HBITMAP bm;
+} DEFERRED;
+static HGLOBAL deferred;
+static int ndeferred;
+static BOOL memlog_on(void);
+
+static int snap(const char *file)
+{
+    HBITMAP bm = grab();
+    if (bm && memlog_on()) {
+        HGLOBAL h = deferred ? GlobalReAlloc(deferred, (WORD)((ndeferred + 1) * sizeof(DEFERRED)), GMEM_MOVEABLE)
+                             : GlobalAlloc(GMEM_MOVEABLE, sizeof(DEFERRED));
+        if (h) {
+            DEFERRED FAR *d = (DEFERRED FAR *)GlobalLock(h) + ndeferred;
+            int i;
+            for (i = 0; file[i] && i < (int)sizeof d->file - 1; i++)
+                d->file[i] = file[i];
+            d->file[i] = 0;
+            d->bm = bm;
+            GlobalUnlock(h);
+            deferred = h;
+            ndeferred++;
+            return 1;
+        }
+    }
+    return write_bmp(bm, file);
+}
+
+static void snap_flush(void)
+{
+    int i;
+    DEFERRED FAR *d;
+    if (!deferred)
+        return;
+    d = (DEFERRED FAR *)GlobalLock(deferred);
+    for (i = 0; i < ndeferred; i++) {
+        char f[80];
+        int k;
+        for (k = 0; k < (int)sizeof f; k++)
+            f[k] = d[i].file[k];
+        write_bmp(d[i].bm, f);
+    }
+    GlobalUnlock(deferred);
+    GlobalFree(deferred);
+    deferred = NULL;
+    ndeferred = 0;
 }
 
 #endif
@@ -698,6 +776,107 @@ static void copy_file(char *arg)
         _lclose(a);
 }
 
+/* memlog <file>: the memory log (see the commands above) */
+#define MEMLOG_SIZE 65000U
+static HGLOBAL memlog;
+static char memlog_file[80];
+static char memlog_prop[] = "FMXLOG";
+
+static void memlog_start(const char *file)
+{
+    int i;
+    if (memlog)
+        return;
+    memlog = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, MEMLOG_SIZE);
+    if (!memlog) {
+        out(" -> failed");
+        return;
+    }
+    {
+        DWORD FAR *p = (DWORD FAR *)GlobalLock(memlog);
+        p[0] = 8;
+        p[1] = MEMLOG_SIZE;
+        GlobalUnlock(memlog);
+    }
+    for (i = 0; file[i] && i < (int)sizeof memlog_file - 1; i++)
+        memlog_file[i] = file[i];
+    memlog_file[i] = 0;
+    SetProp(GetDesktopWindow(), memlog_prop, (HANDLE)memlog);
+}
+
+static void memlog_add(const char *t, int n)
+{
+    DWORD FAR *p = (DWORD FAR *)GlobalLock(memlog);
+    if (p[0] + n <= p[1]) {
+        char FAR *d = (char FAR *)p + (WORD)p[0];
+        int i;
+        for (i = 0; i < n; i++)
+            d[i] = t[i];
+        p[0] += n;
+    }
+    GlobalUnlock(memlog);
+}
+
+#ifndef SNAP_WIN2
+static BOOL memlog_on(void)
+{
+    return memlog != NULL;
+}
+#endif
+
+static void memlog_end(void)
+{
+    DWORD FAR *p;
+    HFILE f;
+#ifndef SNAP_WIN2
+    snap_flush();
+#endif
+    if (!memlog)
+        return;
+    RemoveProp(GetDesktopWindow(), memlog_prop);
+    p = (DWORD FAR *)GlobalLock(memlog);
+    f = _lcreat(memlog_file, 0);
+    if (f != HFILE_ERROR) {
+        _lwrite(f, (char FAR *)p + 8, (WORD)p[0] - 8);
+        _lclose(f);
+    }
+    GlobalUnlock(memlog);
+    GlobalFree(memlog);
+    memlog = NULL;
+}
+
+/* append <file> <text>: the text as a line at the end of the file */
+static void append_line(char *arg)
+{
+    char *t = arg;
+    HFILE f;
+    int n = 0;
+    while (*t && *t != ' ')
+        t++;
+    if (*t)
+        *t++ = 0;
+    if (memlog && !lstrcmpi(arg, memlog_file)) {
+        while (t[n])
+            n++;
+        memlog_add(t, n);
+        memlog_add("\r\n", 2);
+        return;
+    }
+    f = _lopen(arg, OF_WRITE);
+    if (f == HFILE_ERROR)
+        f = _lcreat(arg, 0);
+    if (f == HFILE_ERROR) {
+        out(" -> failed");
+        return;
+    }
+    _llseek(f, 0, 2);
+    while (t[n])
+        n++;
+    _lwrite(f, t, n);
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
+}
+
 #ifndef SNAP_WIN2
 /* ---- clipboard sources for pasting pictures (Write's probes) ---- */
 
@@ -738,6 +917,48 @@ static int clip_bmp(const char *file)
     SetClipboardData(CF_DIB, h);
     if (bm)
         SetClipboardData(CF_BITMAP, bm);
+    CloseClipboard();
+    return 1;
+}
+
+/* cliplink <file.bmp> <class>|<document>|<item>: the picture as clipbmp
+   puts it, after ObjectLink and OwnerLink naming that link (the OLE 1
+   clipboard formats, Programmer's Reference vol. 1 ch. on OLE: three
+   NUL-ended strings and a second NUL), as a server that offers a link
+   does (Write's Paste Link and Links probes) */
+static int clip_link(const char *arg)
+{
+    char file[128], spec[200];
+    int i, k, n = 0;
+    UINT fmts[2];
+    HGLOBAL h[2];
+    for (i = 0; arg[i] && arg[i] != ' ' && i < (int)sizeof file - 1; i++)
+        file[i] = arg[i];
+    file[i] = 0;
+    while (arg[i] == ' ')
+        i++;
+    for (; arg[i] && n < (int)sizeof spec - 2; i++)
+        spec[n++] = arg[i] == '|' ? 0 : arg[i];
+    spec[n++] = 0;
+    spec[n++] = 0;
+    if (!clip_bmp(file))
+        return 0;
+    fmts[0] = RegisterClipboardFormat("ObjectLink");
+    fmts[1] = RegisterClipboardFormat("OwnerLink");
+    for (i = 0; i < 2; i++) {
+        BYTE FAR *p;
+        h[i] = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n);
+        if (!h[i])
+            return 0;
+        p = (BYTE FAR *)GlobalLock(h[i]);
+        for (k = 0; k < n; k++)
+            p[k] = spec[k];
+        GlobalUnlock(h[i]);
+    }
+    if (!OpenClipboard(NULL))
+        return 0;
+    SetClipboardData(fmts[0], h[0]);
+    SetClipboardData(fmts[1], h[1]);
     CloseClipboard();
     return 1;
 }
@@ -1404,6 +1625,10 @@ static void run_line(char *l)
             out(" -> refused");
     } else if (same(l, "copyfile")) {
         copy_file(arg);
+    } else if (same(l, "append")) {
+        append_line(arg);
+    } else if (same(l, "memlog")) {
+        memlog_start(arg);
     } else if (same(l, "cursor")) {
         HCURSOR c = GetCursor();
         POINT pt;
@@ -1584,6 +1809,10 @@ static void run_line(char *l)
 #ifndef SNAP_WIN2
     } else if (same(l, "clipbmp")) {
         if (!clip_bmp(arg))
+            out(" -> failed");
+        pump(200);
+    } else if (same(l, "cliplink")) {
+        if (!clip_link(arg))
             out(" -> failed");
         pump(200);
     } else if (same(l, "clipmf")) {
@@ -2447,6 +2676,7 @@ int __cdecl tmain(void)
         return 1;
 #endif
     }
+    memlog_end();
     out("SNAP done\r\n");
 #ifdef SNAP_WIN2
     ExitWindows(0, 0);                  /* not the shell on 2.x: end it */

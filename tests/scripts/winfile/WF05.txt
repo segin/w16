@@ -1,0 +1,26 @@
+; WF05: opening on a saved WINFILE.INI: the frame's place, three windows
+; (WFTEST\ALPHA in Name view; C:\WINDOWS\SYSTEM with all details sorted by
+; size, Directory Only by its split; WFTEST minimised at a given place),
+; the font without lower case, the status bar off; then closed (what it
+; writes back)
+; wfini: Settings:Window=10,20,620,470, , ,1
+; wfini: Settings:StatusBar=0
+; wfini: Settings:LowerCase=0
+; wfini: Settings:dir1=0,0,400,250,-1,-1,1,0,201,1905,200,C:\WFTEST\ALPHA\*.*
+; wfini: Settings:dir2=30,40,560,330,-1,-1,1,30,203,1905,180,C:\WINDOWS\SYSTEM\*.*
+; wfini: Settings:dir3=60,60,460,300,21,339,2,0,201,1905,250,C:\WFTEST\*.*
+run WINFILE.EXE
+wait 5000
+snap C:\S01.BMP
+dump
+menu v
+wait 800
+snap C:\S02.BMP
+key 1B
+key 1B
+wait 300
+cmd 503
+wait 1000
+snap C:\S03.BMP
+close
+wait 2500

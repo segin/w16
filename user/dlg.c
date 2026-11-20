@@ -48,8 +48,8 @@ HBRUSH sys_brush(HBRUSH b);
 
 void button_click(HWND h);
 
-/* ---- base units of a dialog font ---- */
-static void font_units(HFONT f, int *cx, int *cy)
+/* ---- base units of a dialog font (also LB_SETTABSTOPS's: listbox.c) ---- */
+void font_base(HFONT f, int *cx, int *cy)
 {
     static char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     TEXTMETRIC tm;
@@ -189,6 +189,15 @@ LRESULT WINAPI DefDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (LOWORD(wp) == WA_INACTIVE) {
             if (hwndFocus && IsChild(h, hwndFocus))
                 SetWindowWord(h, DW_FOCUS, (WORD)hwndFocus);
+        } else if (hwndFocusPending && IsChild(h, hwndFocusPending)) {
+            /* activated by a SetFocus to one of its controls: that one
+               gets it, not the first tab stop (3.1: Character Map sets
+               the focus to its character grid in WM_INITDIALOG and
+               answers FALSE; w16's dialog gave it to the font box first,
+               and Character Map drew its status line for that through a
+               DC of the screen before its window was up: a stray "F" at
+               12,175 on the desktop, boot-test case icons) */
+            SetWindowWord(h, DW_FOCUS, (WORD)hwndFocusPending);
         } else if (!HIWORD(lp))
             send_message(h, WM_SETFOCUS, 0, 0);
         return 0;
@@ -290,7 +299,7 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             font = CreateFontIndirect(&lf);
         }
     }
-    font_units(font, &ux, &uy);
+    font_base(font, &ux, &uy);
     SetRect(&r, du(x, ux, 4), du(y, uy, 8), 0, 0);
     r.right = r.left + du(cx, ux, 4);
     r.bottom = r.top + du(cy, uy, 8);
@@ -301,18 +310,24 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
            border, as for any window (adjust_rect, defwnd.c): Calculator's
            template, 00CA0000h at 310,65 for 240 x 158 units, comes up on
            3.1 at 154,110, 261 x 269 (probe TM1, ARCHITECTURE.md 15.5);
-           with a dialog frame w16 had it at 150,106, 265 x 276. Probe TM4
-           shows 3.1 doing the same with DS_SETFONT (Character Map's
-           template: 16,34, 611 x 213), but w16 keeps the old rule there
-           for now: with the window where 3.1 makes it, Character Map on
-           w16's USER leaves a stray glyph on the desktop left of its
-           window (boot-test case icons; open, ARCHITECTURE.md 15.5) */
-        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME ||
-                    ((style & DS_SETFONT) && (style & WS_DLGFRAME));
-        int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] :
+           with a dialog frame w16 had it at 150,106, 265 x 276. The same
+           with DS_SETFONT (TM4: Character Map's template, 16,34, 611 x
+           213; US33 dlgf: child and popup templates with and without a
+           font, 175 x 98 of client in 177 x 119 for a caption). Until
+           2026-11-20 w16 gave a DS_SETFONT template with a caption a
+           dialog frame's size around a border's frame, 8 pixels too wide
+           and too high: QuickTime's Control Panel, whose pages are such
+           child templates whose size it makes its own, came 8 pixels
+           bigger each way (tests/qtcpl.sh). Top-level dialogs as well: the
+           stray glyph Character Map left on the desktop with its window
+           there came from the focus (DefDlgProc, WM_ACTIVATE). A thick frame counts its
+           width less the border (US33: 200 x 120 units' worth of client
+           in a 206 x 126 window, the client 198 x 118) */
+        BOOL dlgf = (style & DS_MODALFRAME) || (style & WS_CAPTION) == WS_DLGFRAME;
+        int fx = (style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] - sysmet[SM_CXBORDER] :
                  dlgf ? sysmet[SM_CXDLGFRAME] + sysmet[SM_CXBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CXBORDER] : 0;
-        int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] :
+        int fy = (style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] - sysmet[SM_CYBORDER] :
                  dlgf ? sysmet[SM_CYDLGFRAME] + sysmet[SM_CYBORDER] :
                  (style & WS_BORDER) ? sysmet[SM_CYBORDER] : 0;
         int top = fy;
@@ -346,6 +361,13 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)
+        OffsetRect(&r, -r.left, 0);
+    /* a child dialog starts inside its parent's client area too (US33
+       dlgf: a captioned child template at 6,4 units, whose caption would
+       start at -12, comes at 0) */
+    if ((style & WS_CHILD) && r.top < 0)
+        OffsetRect(&r, 0, -r.top);
+    if ((style & WS_CHILD) && r.left < 0)
         OffsetRect(&r, -r.left, 0);
     if (menu)
         hmenu = LoadMenu(hinst, menu);
@@ -410,6 +432,12 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
             continue;
         if (font)
             send_message(c, WM_SETFONT, (WPARAM)font, FALSE);
+        /* a list box (a superclass of one too) is sized again to whole
+           items of the dialog's font, from the height the system font's
+           gave it (US32 on 3.1: 73 asked, 64 of 16, then 65 of 13; 120
+           asked, 112, then 104: QuickTime's Control Panel) */
+        if (font && valid_wnd(c) && (PW(c)->flags & WF_LISTBOX))
+            listbox_refit(c);
         if ((is & 0x0F) == BS_DEFPUSHBUTTON && !lstr_cmpi(icls, "Button"))
             SetWindowWord(h, DW_DEFID, id);
         if (!focus && (is & WS_TABSTOP) && !(is & WS_DISABLED))
@@ -421,7 +449,11 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
        (Calculator: CLASS "SciCalc", no dialog procedure) gets it in its
        class's procedure; DefDlgProc hands it on to the dialog procedure.
        It was called straight, NULL included: a GP fault in USER */
-    if (send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
+    /* none without a dialog procedure, whatever the class (US33 idf on
+       3.1: a dialog of its own class made with a NULL procedure gets no
+       WM_INITDIALOG, and the first tab stop has the focus once it is
+       shown; w16 sent it to the class's procedure) */
+    if (proc && send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
         /* TRUE: the focus goes to the first tab stop even where the
            procedure set it elsewhere meanwhile (3.1: Program Manager's
            Exit dialog sets it to Cancel and answers TRUE, and OK has
