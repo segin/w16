@@ -123,18 +123,18 @@ The audit's Low list is numbered here in its order (36 items).
 | L7 | HARDENING | `module_of` matched handles 1-3 to empty segment slots. | Fixed. |
 | L8 | HARDENING | LoadResource's usage count is a word. | Not fixed (atoms and events wrap the same way on 3.1). |
 | L9 | HARDENING | `tb_new` ignores `gset_code` failing (DPMI failure). | Fixed (cheap): a failure frees the block. |
-| L10 | REAL (cosmetic) | Unimplemented-import thunks for names over 32 characters sharing a prefix share a thunk (only the reported name is wrong). | Not fixed. |
+| L10 | REAL (cosmetic) | Unimplemented-import thunks for names over 32 characters sharing a prefix share a thunk (only the reported name is wrong). | Fixed: a thunk also records the whole name's length and a sum over it; the report still shows the first 32 characters. |
 | L11 | FALSE | `module_load_program` is never called with a task running and `last_libinit` set. | None. |
 | L12 | REAL (minor) | The bootstrap's relocation records (`rel_para`, a few KB of DOS memory) were never freed. | Freed after the relocations (INT 21h AH=49h through DPMI 0300h, `kernel/boot/boot.c`). make test boots KERNEL on both DPMI hosts; boot test at the end. |
 | L13 | HARDENING | Bootstrap: a missing environment, NE length wrap, LOBYTE chains, entry bounds (KERNEL's own file). | Not fixed. |
 | L14 | HARDENING | Watchdog ([w16] debugging aid): `wd_limit` overflow, RTC interrupt left on, CMOS without `cli`. | Part fixed: the limit no longer wraps (clamped); the rest not. |
 | L15 | HARDENING | DiagOutput(NULL), an unclamped /B command tail, `old21` set after the hook (no INT 21h can come in between). | DiagOutput(NULL) does nothing (fixed); the /B command tail's length kept inside the PSP (fixed); `old21` not changed. |
-| L16 | HARDENING | Priority wrap at 7Fh (SetPriority's range keeps it far from there). | Not fixed. |
+| L16 | HARDENING | Priority wrap at 7Fh (SetPriority's range keeps it far from there). | Fixed (cheap): no step past 7Fh. |
 | L17 | REAL (cosmetic) | OldYield set its schedlog reason after the switch it was for. | Fixed. |
 | L18 | HARDENING | `task_boot` with no task. | Not fixed. |
 | L19 | REAL (minor) | Schulman: GetCurrentTask reads CURTDB from THHOOK, so on 3.1 the two cannot differ. w16's THHOOK lagged: CurTDB 0 while the boot TDB was current, possibly the freed boot TDB after it went, and 0 for the first task until its first switch-in. | `thhook_sync` in `task_boot_tdb`, `task_boot_tdb_end` and `task_boot`. Not observable by a probe that runs as a task. |
-| L20 | HARDENING | `dpmi_seg_to_desc(40h)` unchecked. | Not fixed. |
-| L21 | HARDENING | `int_vec_switch` keeps a vector DPMI 0205h refused. | Not fixed. |
+| L20 | HARDENING | `dpmi_seg_to_desc(40h)` unchecked (GetDriveType's BIOS read). | Fixed (cheap): no read when DPMI refuses. |
+| L21 | HARDENING | `int_vec_switch` keeps a vector DPMI 0205h refused. | Fixed (cheap): only a vector DPMI took is kept. |
 | L22 | HARDENING | PostEvent's fast path on an expand-down bogus handle. | Not fixed. |
 | L23 | FALSE | GetHeapSpaces: the bytes in use cannot exceed FFFFh less the information block's offset. | None. |
 | L24 | REAL | TK62 "catchmap" (all modes): 3.1's CATCHBUF holds CS in word 1, the caller's BP in 3, DS in 6, nothing in 7 and SS in 8 (IP, SP, SI, DI by elimination in 0, 2, 4, 5); w16 had SS in 3, BP in 4 and DS in 7. | 3.1's order (Catch and Throw). |
@@ -158,7 +158,7 @@ The audit's Low list is numbered here in its order (36 items).
 | Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
 | High (29) | 14: H1, H2, H4, H7, H9, H11, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 0 |
 | Medium (43) | 14: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36, 37, 39 (all fixed) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 12, 13, 19, 20, 31, 32, 34, 38, 43 fixed) | 0 |
-| Low (36) | 14: L1, L3, L4, L5, L10, L12, L17, L19, L24, L27, L28, L31, L32, L35 (all fixed but L10, and L32's OF_PROMPT/OF_CANCEL) | 3: L11, L23, L36 | 2: L6, L30 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L2, L7, L9, L25 fixed; L14, L15 in part) | 0 |
+| Low (36) | 14: L1, L3, L4, L5, L10, L12, L17, L19, L24, L27, L28, L31, L32, L35 (all fixed but L32's OF_PROMPT/OF_CANCEL) | 3: L11, L23, L36 | 2: L6, L30 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L2, L7, L9, L16, L20, L21, L25 fixed; L14, L15 in part) | 0 |
 
 (H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's. L5 likewise: REAL for KRNL286, 3.1-BEHAVIOUR for KRNL386. L31 is counted as REAL for its drive 80h part.)
 
@@ -230,7 +230,6 @@ DPMI hosts and under WIN386.
 
 - Medium 33: the rest (TOOLHELP walks and GlobalEntryHandle, GlobalFree/GlobalReAlloc of KERNEL segments) needs the heap-block design above.
 - L32: OF_PROMPT and OF_CANCEL (3.1's box not observed yet).
-- L10 (unimplemented-import thunks for names over 32 characters) is cosmetic and not fixed.
 - Noticed, not looked into: under w16 (master 3befab5 too) TK62 "entries" fails to load TKENT2.DLL (12000 entries) with "out of memory"; the C5 action above says it loads. 3.1 fails it as well, and the observation is unchecked (OBS ~).
 - GetDriveType(0101h): 3 on 3.1, 0 on w16 (an argument past Z:; unchecked).
 - GlobalHandle of KERNEL's module table: not its selector on 3.1, its selector on w16 (TK62 "kseg", unchecked).
