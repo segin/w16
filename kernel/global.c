@@ -1332,6 +1332,45 @@ void global_init(void)
     *seltab(bm) = a;
 }
 
+/* KERNEL's code segments become fixed blocks of the heap, owned by its
+   module, their selectors their handles: on 3.1 every KERNEL segment is
+   a block (TK62 "kseg": GlobalHandle(CS) = CS, FarGetOwner = KERNEL,
+   GlobalFlags 0900h for the discardable ones; TOOLHELP lists them). The
+   bootstrap put them in DOS memory of their own; each is copied into a
+   new block and its selector moved there in one step (seg_move, as a
+   block is moved), so nothing that holds the selector notices. Its DOS
+   memory is left as it was. KERNEL's DGROUP stays outside (seg_move
+   runs on a stack in it); module.c's kernel_seg answers for it (KERNEL
+   audit, medium 33). After module_register_kernel. */
+void gadopt_kernel(void)
+{
+    module FAR *k = module_first;
+    u16 i, s, ns, a;
+    u32 bytes;
+    if (!k || !bm)
+        return;
+    for (i = 0; i < k->seg_count; i++) {
+        s = k->seg[i].sel;
+        if (!s || !is_code(s) || find(s, &a) != FB_NONE)
+            continue;
+        bytes = (u32)sel_lim16(s) + 1;
+        if (!galloc(GMEM_FIXED, bytes, k->ne_sel, &ns))
+            continue;
+        a = *seltab(ns);
+        tmp_at(tmp_b, lin_of(a) + 0x10, bytes - 1);
+        seg_move(s, tmp_b, (u16)((bytes + 1) >> 1), lin_of(a) + 0x10);
+        *seltab(ns) = 0;
+        dpmi_free_desc(ns);
+        AR(a)->handle = s;              /* fixed: the selector */
+        *seltab(s) = a;
+        set_tiles(s, 1, lin_of(a) + 0x10, (u32)AR(a)->size << 4, 1);
+        if (MOD_SEG(k, i)->flags & 0x1000) {    /* discardable: 0900h */
+            AR(a)->flags |= GA_DISCCODE;        /* (fixed: never */
+            lru_add(a, 0);                      /* discarded) */
+        }
+    }
+}
+
 /* ---- helpers for the rest of KERNEL ---- */
 
 u16 gowner(u16 h)
@@ -1837,7 +1876,9 @@ u16 KAPI GlobalUnlock(u16 h)                                  /* KERNEL.19 */
 
 u32 KAPI GlobalSize(u16 h)                                    /* KERNEL.20 */
 {
-    if (kernel_seg(h))                  /* KERNEL's own (module.c) */
+    u16 a;
+    if (kernel_seg(h) && find(h, &a) == FB_NONE)   /* KERNEL's own, not a
+                                                       block (module.c) */
         return (u32)sel_lim16(h | 1) + 1;
     return gsize_of_sel(h);
 }
@@ -1870,8 +1911,8 @@ u16 KAPI GlobalFlags(u16 h)                                   /* KERNEL.22 */
 {
     u16 a, f;
     u8 db;
-    if ((f = kernel_seg(h)) != 0)       /* KERNEL's own (module.c) */
-        return kernel_seg_flags(f);
+    if ((f = kernel_seg(h)) != 0 && find(h, &a) == FB_NONE)
+        return kernel_seg_flags(f);     /* KERNEL's own, not a block */
     switch (find(h, &a)) {
     case FB_BLOCK:
         f = (AR(a)->flags & GA_SHOWN) << 8;
@@ -2122,9 +2163,10 @@ void KAPI FarSetOwner(u16 h, u16 owner)                       /* KERNEL.403 */
 
 u16 KAPI FarGetOwner(u16 h)                                   /* KERNEL.404 */
 {
-    if (kernel_seg(h))                  /* KERNEL's own: its module */
+    u16 o = gowner(h);
+    if (!o && kernel_seg(h))            /* KERNEL's own, not a block */
         return module_first->ne_sel;
-    return gowner(h);
+    return o;
 }
 
 #endif /* !KRNL386 */
