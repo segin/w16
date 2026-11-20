@@ -2199,7 +2199,12 @@ made at DdeInitialize.
 - Results (installation-05, 2026-11-19, task 3): conn and monitor equal
   too, in every combination (the INITIATE enumeration, lists as
   windows, another library's answers asked again, DdeUninitialize's
-  order and queue places, and the monitor events of 18.2). RESULTS_TBD
+  order and queue places, and the monitor events of 18.2): full boot
+  test (dffe779 on master 429e079): ddeml ok in every part, 123 cases
+  ok; failing: lzexpand (quirks, known), trails@timed (known flake),
+  toolhelp@ref3 (Microsoft's own run, no w16 file and no DDEML in it:
+  its group e did not finish; alone again: ref386 the same way).
+  Masking: only the data blocks' tails.
 
 ### 18.5 UNVERIFIED, and not done
 
