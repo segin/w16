@@ -1,0 +1,4 @@
+# US33.EXE (tests/apps/us33.c): the list box drawing probe; keybd_event, mouse_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289
+import U_MOUSE_EVENT USER.299

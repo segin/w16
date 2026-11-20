@@ -164,14 +164,20 @@ HBRUSH sys_brush(HBRUSH b)
     return b;
 }
 
-/* a bad RECT: 0, nothing drawn (3.1) */
+/* a bad RECT: 0, nothing drawn (3.1). The brush is a brush: a system
+   colour's number + 1, which a class's hbrBackground may be, is no brush
+   here, and nothing is drawn (US33 on 3.1: an owner that fills its
+   selected items with (HBRUSH)(COLOR_HIGHLIGHT + 1) leaves them as they
+   were, white on the list's background; w16 filled them with the
+   highlight) */
 int WINAPI FillRect(HDC hdc, const RECT __far *rp, HBRUSH b)
 {
     RECT a, *r = &a;
     HBRUSH old;
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return 0;
-    old = SelectObject(hdc, sys_brush(b));
+    if ((old = SelectObject(hdc, b)) == 0)
+        return 0;
     PatBlt(hdc, r->left, r->top, r->right - r->left, r->bottom - r->top, PATCOPY);
     SelectObject(hdc, old);
     return 1;
@@ -184,7 +190,8 @@ int WINAPI FrameRect(HDC hdc, const RECT __far *rp, HBRUSH b)
     int w, h;
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return 0;
-    old = SelectObject(hdc, sys_brush(b));
+    if ((old = SelectObject(hdc, b)) == 0)     /* (as FillRect) */
+        return 0;
     w = r->right - r->left, h = r->bottom - r->top;
     if (w > 0 && h > 0) {
         PatBlt(hdc, r->left, r->top, w, 1, PATCOPY);
@@ -217,6 +224,10 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
     if (gp_copy(&a, rp, RSIZE) != RSIZE)
         return;
     w = r->right - r->left, h = r->bottom - r->top;
+    /* an empty rectangle: nothing (US33 on 3.1: the focus rectangle of an
+       empty list box of variable heights, 0 high) */
+    if (w <= 0 || h <= 0)
+        return;
     if (!dots) {
         static WORD bits[8] = { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55 };
         HBITMAP b = CreateBitmap(8, 8, 1, 1, bits);
@@ -224,12 +235,16 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
         DeleteObject(b);
         G_MAKEOBJECTPRIVATE(dots, TRUE);
     }
-    /* aligned to the screen whatever DC it was last used in (the brush
-       kept the origin of its first realization: US32's focus rectangles
-       came a pixel off 3.1's in one run and not in another) */
+    /* aligned to the DC, whatever DC it was last used in (the brush kept
+       the origin of its first realization: US32's focus rectangles came
+       a pixel off 3.1's in one run and not in another): on 3.1 the dots
+       in the background colour lie where x + y is odd in the DC's own
+       coordinates, wherever the DC is on the screen (US33 dfr: the same
+       rectangle in child windows an odd and an even number of pixels
+       across; w16 had them where x + y is even) */
     org = GetDCOrg(hdc);
     UnrealizeObject(dots);
-    oldorg = SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+    oldorg = SetBrushOrg(hdc, ((LOWORD(org) + HIWORD(org)) & 1) ^ 1, 0);
     old = SelectObject(hdc, dots);
     /* the corners left out (US4) */
     PatBlt(hdc, r->left + 1, r->top, w - 2, 1, PATINVERT);

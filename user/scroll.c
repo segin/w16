@@ -276,7 +276,7 @@ void WINAPI SetScrollRange(HWND hwnd, int bar, int min, int max, BOOL redraw)
 
 /* the range alone, the bar neither shown nor hidden (a list box's hidden
    bar keeps 0-100: US32) */
-void sb_range_quiet(HWND hwnd, int bar, int min, int max)
+void sb_range_quiet(HWND hwnd, int bar, int min, int max, int pos)
 {
     PWND w;
     SBINFO *s = info(hwnd, bar, &w);
@@ -284,6 +284,7 @@ void sb_range_quiet(HWND hwnd, int bar, int min, int max)
         return;
     s->min = min;
     s->max = max;
+    s->pos = pos;
     if (s->pos < min)
         s->pos = min;
     if (s->pos > max)

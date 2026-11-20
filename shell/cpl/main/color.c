@@ -1184,7 +1184,12 @@ BOOL FAR PASCAL __loadds ColorProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
            the item; with it, the whole item, and the focus rectangle one
            pixel outside it (over the combo box's own frame) */
         r = d->rcItem;
-        FillRect(d->hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
+        {
+            /* (a brush: FillRect takes no colour number + 1 on 3.1) */
+            HBRUSH wb = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+            FillRect(d->hDC, &r, wb);
+            DeleteObject(wb);
+        }
         if (!(d->itemState & ODS_FOCUS))
             InflateRect(&r, -1, -1);
         SetBkColor(d->hDC, GetSysColor(hi ? COLOR_HIGHLIGHT : COLOR_WINDOW));
