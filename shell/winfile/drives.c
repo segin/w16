@@ -17,7 +17,6 @@ BYTE g_drivelist[26];                   /* drive numbers, 0 = A: */
 BYTE g_drivepic[26];                    /* BM_DRV* of each */
 
 static char cls_drives[] = "WFS_Drives";
-static int focus_index;                 /* the bar's keyboard position */
 
 static int g_dxdrive = 44;
 
@@ -107,12 +106,24 @@ static void paint(HWND w)
         bm_draw_drive(dc, x, 4, g_drivepic[i]);
         letter[0] = (char)('a' + g_drivelist[i]);
         letter[1] = 0;
-        if (!g_lower)
+        /* the case the font had when the window was made (WF05: upper
+           case from the start; WF07: still lower after Font) */
+        if (d && !d->lowerdrives)
             s_upper(letter);
         TextOut(dc, x + CX_DRIVEBM + 2, 4, letter, 1);
+        if (d && GetFocus() == w && i == d->drivefocus && g_drivelist[i] != d->drive) {
+            /* the bar's keyboard place on another drive: a dotted
+               rectangle round its cell (WF06 S06) */
+            drive_rect(i, &r);
+            InflateRect(&r, 1, 1);
+            SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+            SetBkColor(dc, GetSysColor(COLOR_WINDOW));
+            DrawFocusRect(dc, &r);
+            SetTextColor(dc, GetSysColor(COLOR_BTNTEXT));
+        }
         if (d && g_drivelist[i] == d->drive) {
             drive_rect(i, &r);
-            if (GetFocus() == w) {
+            if (GetFocus() == w && i == d->drivefocus) {
                 /* focused: the whole cell filled, the focus rectangle on
                    its edge, the letter in the highlight text colour (WF5
                    E03) */
@@ -166,11 +177,16 @@ LRESULT CALLBACK _export DrivesWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN:
         i = hit(w, LOWORD(lp));
         if (i >= 0 && (d = dirwin_of(GetParent(w))) != NULL) {
-            focus_index = i;
+            d->drivefocus = i;
             treewin_set_drive(d, g_drivelist[i]);
         }
         return 0;
     case WM_SETFOCUS:
+        d = dirwin_of(GetParent(w));
+        if (d)
+            d->drivefocus = drive_index(d->drive);
+        InvalidateRect(w, NULL, TRUE);
+        break;
     case WM_KILLFOCUS:
         InvalidateRect(w, NULL, TRUE);
         break;
@@ -191,12 +207,18 @@ LRESULT CALLBACK _export DrivesWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             SetFocus(next);
             return 0;
         }
+        /* the arrows move the keyboard place; Enter or Space takes its
+           drive (WF06 S06, S07) */
+        i = d->drivefocus;
         if (wp == VK_LEFT && i > 0)
-            treewin_set_drive(d, g_drivelist[i - 1]);
+            d->drivefocus = i - 1;
         else if (wp == VK_RIGHT && i + 1 < g_ndrives)
-            treewin_set_drive(d, g_drivelist[i + 1]);
+            d->drivefocus = i + 1;
+        else if ((wp == VK_RETURN || wp == VK_SPACE) && i >= 0 && i < g_ndrives)
+            treewin_set_drive(d, g_drivelist[i]);
         else
             break;
+        InvalidateRect(w, NULL, TRUE);
         return 0;
     }
     return DefWindowProc(w, msg, wp, lp);

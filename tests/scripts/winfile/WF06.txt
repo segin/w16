@@ -1,0 +1,38 @@
+; WF06: drives: Ctrl+Z, Ctrl+C, Ctrl+A (no disk in A: in DOSBox: the
+; message box), Return, Ctrl+D (no such drive), the drive bar's arrows;
+; About File Manager (SHELL's ShellAbout)
+run WINFILE.EXE
+wait 4000
+ckey c 5A
+wait 2000
+snap C:\S01.BMP
+ckey c 43
+wait 2000
+snap C:\S02.BMP
+ckey c 41
+wait 3000
+snap C:\S03.BMP
+dump
+key 0D
+wait 2000
+snap C:\S04.BMP
+ckey c 44
+wait 2000
+snap C:\S05.BMP
+key 09
+key 09
+wait 500
+key 27
+wait 2000
+snap C:\S06.BMP
+key 25
+wait 2000
+snap C:\S07.BMP
+cmd 1103
+wait 1500
+snap C:\S08.BMP
+dump
+key 0D
+wait 800
+close
+wait 2500

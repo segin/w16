@@ -82,6 +82,7 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDM_HELPHELP        1102
 #define IDM_ABOUT           1103
 #define IDM_HELPSEARCH      30
+#define IDM_HELPCONTEXT     29999       /* ours: F1 on a menu item (lp: its ID) */
 
 /* the menu bar's popups, left to right */
 #define MENU_FILE           0
@@ -106,6 +107,19 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_ABOUTOTHER      11          /* ShellAbout's second line */
 #define IDS_AM              12
 #define IDS_PM              13
+#define IDS_SELDRIVE        14          /* "Error Selecting Drive" */
+#define IDS_CURDIR          15
+#define IDS_REPLACE         16
+#define IDS_CONFREPLACE     17
+#define IDS_DELDIR          18
+#define IDS_CONFDELDIR      19
+#define IDS_DELFILE         20
+#define IDS_CONFDEL         21
+#define IDS_MOVE            22
+#define IDS_COPY            23
+#define IDS_RENAME          24
+#define IDS_PROPERTIES      25
+#define IDS_BYTES           26
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"
@@ -243,6 +257,8 @@ typedef struct tagDIRWIN {
     DWORD bytes;
     int  colw;                          /* the list's column width */
     int  number;                        /* ":n" in the title, 0 none */
+    BOOL lowerdrives;                   /* the drive letters' case */
+    int  drivefocus;                    /* the drive bar's keyboard place */
     int  stleft;                        /* what the status bar's left box
                                            says: ST_* */
     BOOL ready;
@@ -267,6 +283,19 @@ void  status_invalidate(void);
 HWND  active_dirwin(void);
 LPDIRWIN dirwin_of(HWND w);
 void  frame_layout(void);
+
+/* dialogs.c */
+void  dlg_other(LPDIRWIN d);
+void  dlg_include(LPDIRWIN d);
+void  dlg_confirm(void);
+void  dlg_font(void);
+void  frame_newfont(void);
+
+/* fileops.c */
+void  file_command(LPDIRWIN d, WPARAM id);
+void  file_open(LPDIRWIN d);
+void  refresh_all(void);
+BOOL  dos_match(LPCSTR name, LPCSTR pat);
 
 /* ini.c */
 void  ini_load(void);
@@ -359,5 +388,18 @@ extern int __cdecl dos_getcwd(int drive, char FAR *buf);
 extern int __cdecl dos_getdrive(void);
 extern int __cdecl dos_drivetype(int drive);
 extern int __cdecl dos_freespace(int drive, DWORD FAR *freeb, DWORD FAR *totalb);
+extern int __cdecl dos_mkdir(const char FAR *path);
+extern int __cdecl dos_rmdir(const char FAR *path);
+extern int __cdecl dos_unlink(const char FAR *path);
+extern int __cdecl dos_rename(const char FAR *from, const char FAR *to);
+extern int __cdecl dos_getattr(const char FAR *path);
+extern int __cdecl dos_setattr(const char FAR *path, int attr);
+extern int __cdecl dos_open(const char FAR *path, int mode);
+extern int __cdecl dos_create(const char FAR *path, int attr);
+extern int __cdecl dos_read(int h, void FAR *buf, unsigned n);
+extern int __cdecl dos_write(int h, const void FAR *buf, unsigned n);
+extern void __cdecl dos_close(int h);
+extern DWORD __cdecl dos_getftime(int h);
+extern void __cdecl dos_setftime(int h, DWORD datetime);
 
 #endif

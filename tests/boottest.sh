@@ -407,6 +407,13 @@
 #              Microsoft's bitmaps, tests/wrmsres.sh) on all-Microsoft
 #              3.1, every saved file the same, every screen within
 #              tests/scripts/write.baseline
+#   w16winfile w16's File Manager (WINFILE.EXE) against Microsoft's on
+#              all-Microsoft 3.1: one part per scenario of
+#              tests/scripts/winfile (w16winfile@wf01 ...):
+#              tests/wfscenarios.sh, both File Managers under SNAP (w16's
+#              with Microsoft's pictures, tests/wfmsres.sh), every screen
+#              within tests/scripts/winfile.baseline and the WINFILE.INI
+#              each leaves the same
 #   cardfile   Cardfile under real keys (WIN.INI run=, tests/scripts/input/
 #              cardfile.txt: typing, Index, Add, Ctrl+Shift+letter, PgUp,
 #              List view, Find, Autodial, the Edit menu, Exit without
@@ -754,7 +761,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386w16dos}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1953,6 +1960,18 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    w16winfile)
+        r=ok
+        for pk in ${part:-$(cd "$root/tests/scripts/winfile" && ls WF*.txt | sed 's/\.txt$//' | tr A-Z a-z)}; do
+            rm -rf "$out/w16winfile-$pk"
+            WFSCEN_OUT=$out/w16winfile-$pk "$root/tests/wfscenarios.sh" \
+                "$(echo "$pk" | tr a-z A-Z)" > "$out/w16winfile-$pk.txt" 2>&1 || true
+            grep -q '^== WF[0-9]*: ok' "$out/w16winfile-$pk.txt" ||
+                { r="$pk: $(grep -m1 '^  WF' "$out/w16winfile-$pk.txt" || echo 'no result') ($out/w16winfile-$pk)"; break; }
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   w16winfile: every scenario within its baseline"
+        else echo "FAIL w16winfile: $r ($out)"; fails=$((fails + 1)); fi ;;
     w16write)
         s=$root/tests/scripts/input/w16write.txt
         r=ok
@@ -4545,6 +4564,7 @@ caseparts() {
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     w16write) echo "$1@ms $1@k286 $1@k386 $1@tree"; for v in $WRSCEN_BOOT; do printf '%s@%s ' "$1" "$v"; done ;;
+    w16winfile) for v in $(cd "$root/tests/scripts/winfile" && ls WF*.txt | sed 's/\.txt$//' | tr A-Z a-z); do printf '%s@%s ' "$1" "$v"; done ;;
     taskman) echo "$1@ms $1@k286 $1@us $1@usall $1@tree" ;;
     cplclick) for v in kb ms dk co; do printf "%s@%s-ms %s@%s-tree " "$1" $v "$1" $v; done ;;
     cplclickus) for v in kb ms dk co; do printf "%s@%s-us " "$1" $v; done ;;

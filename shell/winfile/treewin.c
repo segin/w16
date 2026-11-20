@@ -174,9 +174,18 @@ void treewin_set_drive(LPDIRWIN d, int drive)
     cwd[0] = (char)('A' + drive);
     cwd[1] = ':';
     cwd[2] = '\\';
-    if (dos_getcwd(drive + 1, cwd + 3) != 0)
-        cwd[3] = 0;
+    if (dos_getcwd(drive + 1, cwd + 3) != 0) {
+        /* a drive DOS cannot read (A: without a disk in DOSBox): "Error
+           Selecting Drive", "Drive A does not exist." (WF06) */
+        char text[64], title[40];
+        LoadString(g_hinst, IDS_SELDRIVE, title, sizeof title);
+        LoadString(g_hinst, IDS_NOTEXIST, cwd, sizeof cwd);
+        wsprintf(text, cwd, 'A' + drive);
+        MessageBox(g_frame, text, title, MB_OK | MB_ICONSTOP);
+        return;
+    }
     d->drive = drive;
+    d->drivefocus = drive_index(drive);
     s_cpy(d->path, cwd, sizeof d->path);
     InvalidateRect(d->drives, NULL, TRUE);
     tree_read(d);
@@ -294,6 +303,7 @@ LRESULT CALLBACK _export TreeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         d->attribs = p->attribs;
         d->split = p->split;
         d->panes = PANES_BOTH;
+        d->lowerdrives = g_lower;
         d->drives = CreateWindow("WFS_Drives", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0,
                                  w, (HMENU)ID_DRIVES, g_hinst, NULL);
         d->tree = CreateWindow("DirTree", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0,
@@ -383,22 +393,19 @@ HWND treewin_create(LPCSTR path, LPCSTR spec, WORD view, WORD sort, WORD attribs
     } else {
         mc.x = mc.y = mc.cx = mc.cy = CW_USEDEFAULT;
     }
-    mc.style = showcmd == SW_SHOWMAXIMIZED ? WS_MAXIMIZE : 0;
+    mc.style = showcmd == SW_SHOWMAXIMIZED ? WS_MAXIMIZE :
+               showcmd == SW_SHOWMINIMIZED ? WS_MINIMIZE : 0;
     mc.lParam = (LPARAM)(CREATEPARAMS FAR *)&p;
     w = (HWND)SendMessage(g_mdi, WM_MDICREATE, 0, (LPARAM)(LPMDICREATESTRUCT)&mc);
-    if (w && showcmd == SW_SHOWMINIMIZED) {
-        if (icon && icon->x != -1) {
-            WINDOWPLACEMENT wp;
-            wp.length = sizeof wp;
-            GetWindowPlacement(w, &wp);
-            wp.flags = WPF_SETMINPOSITION;
-            wp.showCmd = SW_SHOWMINNOACTIVE;
-            wp.ptMinPosition = *icon;
-            SetWindowPlacement(w, &wp);
-        } else {
-            ShowWindow(w, SW_SHOWMINNOACTIVE);
-        }
+    if (w && showcmd == SW_SHOWMINIMIZED && icon && icon->x != -1) {
+        /* the icon where it was */
+        RECT r;
+        GetWindowRect(w, &r);
+        SetWindowPos(w, NULL, icon->x, icon->y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
+    /* windows keep the order they are made in, icons too (WF05) */
+    if (w)
+        SetWindowPos(w, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
     if (w && dirwin_of(w))
         treewin_title(dirwin_of(w));
     return w;

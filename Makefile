@@ -1232,7 +1232,7 @@ $(DOS)/WRITE.EXE: $(SHELL_WR) $(B)/shell/write/write.res shell/write/write.lnk t
 
 # ---- shell: WINFILE.EXE (shell/winfile/; ARCHITECTURE.md 15.7), Windows
 # 3.1 only ----
-WF_C     := main ini treewin drives tree dir bitmap util
+WF_C     := main ini treewin drives tree dir dialogs fileops bitmap util
 SHELL_WF := $(B)/shell/start.o $(B)/shell/winfile/dosfn.o $(WF_C:%=$(B)/shell/winfile/%.o)
 shell: $(DOS)/WINFILE.EXE
 $(B)/shell/winfile/%.o: shell/winfile/%.c shell/winfile/winfile.h

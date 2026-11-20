@@ -236,11 +236,49 @@ static void init_menu(HMENU m, int pos)
     }
 }
 
-/* ---- Help ---- */
+/* ---- Help ----
+   What 3.1's File Manager asks WINHELP for (tests/wfhelp.sh, WFH1-8):
+   Contents and F1 in the window HELP_INDEX, Search for Help on
+   HELP_PARTIALKEY "", How to Use Help HELP_HELPONHELP, HELP_QUIT at the
+   end; F1 on a menu item HELP_CONTEXT 5000 + the item's command ID (File >
+   Open 5101, Help > Search for Help on 5030). */
 
 static void help(UINT cmd, DWORD data)
 {
     WinHelp(g_frame, load_str(IDS_HELPFILE), cmd, data);
+}
+
+static HHOOK filter;
+static UINT menu_item;                  /* the last item WM_MENUSELECT named */
+
+LRESULT CALLBACK _export MessageFilter(int code, WPARAM wp, LPARAM lp)
+{
+    MSG FAR *m = (MSG FAR *)lp;
+    if (code == MSGF_MENU && m->message == WM_KEYDOWN && m->wParam == VK_F1) {
+        if (menu_item && menu_item != 0xFFFF)
+            PostMessage(g_frame, WM_COMMAND, IDM_HELPCONTEXT, (LPARAM)menu_item);
+        return 1;
+    }
+    return CallNextHookEx(filter, code, wp, lp);
+}
+
+static void repaint_all(void);
+
+/* a new list font (Options > Font): the lines, columns, bars again */
+void frame_newfont(void)
+{
+    HWND w;
+    make_font();
+    for (w = GetWindow(g_mdi, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        LPDIRWIN d = dirwin_of(w);
+        if (!d)
+            continue;
+        SendMessage(d->treelb, LB_SETITEMHEIGHT, 0, MAKELPARAM(g_dyitem, 0));
+        SendMessage(d->dirlb, LB_SETITEMHEIGHT, 0, MAKELPARAM(g_dyitem, 0));
+        dir_columns(d);
+        treewin_layout(d);
+    }
+    repaint_all();
 }
 
 static void repaint_all(void)
@@ -284,6 +322,33 @@ static LRESULT command(HWND w, WPARAM id, LPARAM lp)
             tree_read(d);
         }
         return 0;
+    case IDM_OPEN:
+    case IDM_MOVE:
+    case IDM_COPY:
+    case IDM_DELETE:
+    case IDM_RENAME:
+    case IDM_ATTRIBS:
+    case IDM_RUN:
+    case IDM_PRINT:
+    case IDM_MAKEDIR:
+    case IDM_SELECT:
+        if (d)
+            file_command(d, id);
+        return 0;
+    case IDM_VOTHER:
+        if (d)
+            dlg_other(d);
+        return 0;
+    case IDM_VINCLUDE:
+        if (d)
+            dlg_include(d);
+        return 0;
+    case IDM_CONFIRM:
+        dlg_confirm();
+        return 0;
+    case IDM_FONT:
+        dlg_font();
+        return 0;
     case IDM_CASCADE:
         SendMessage(g_mdi, WM_MDICASCADE, 0, 0);
         return 0;
@@ -318,8 +383,12 @@ static LRESULT command(HWND w, WPARAM id, LPARAM lp)
         help(HELP_HELPONHELP, 0);
         return 0;
     case IDM_ABOUT:
-        ShellAbout(w, load_str(IDS_APPNAME), load_str(IDS_ABOUTOTHER),
-                   LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_WINFILE)));
+    {
+        /* SHELL's box: "About File Manager", SHELL's own picture (WF06) */
+        char app[40];
+        LoadString(g_hinst, IDS_APPNAME, app, sizeof app);
+        ShellAbout(w, app, load_str(IDS_ABOUTOTHER), NULL);
+    }
         return 0;
     }
     if (d && id >= IDM_EXPONE && id <= IDM_SPLIT) {
@@ -364,7 +433,15 @@ LRESULT CALLBACK _export FrameWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             init_menu((HMENU)wp, LOWORD(lp) - (IsZoomed((HWND)LOWORD(
                 SendMessage(g_mdi, WM_MDIGETACTIVE, 0, 0))) ? 1 : 0));
         break;
+    case WM_MENUSELECT:
+        /* the item under the menu's highlight, for F1 */
+        menu_item = (LOWORD(lp) & (MF_POPUP | MF_SEPARATOR)) ? 0 : wp;
+        break;
     case WM_COMMAND:
+        if (wp == IDM_HELPCONTEXT) {
+            help(HELP_CONTEXT, 5000L + (WORD)lp);
+            return 0;
+        }
         return command(w, wp, lp);
     case WM_SYSCOLORCHANGE:
         bm_load();
@@ -449,6 +526,8 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
         !tree_register() || !dir_register())
         return 0;
     accel = LoadAccelerators(inst, MAKEINTRESOURCE(IDA_MAIN));
+    filter = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)MakeProcInstance((FARPROC)MessageFilter, inst),
+                              inst, GetCurrentTask());
     /* first start: the whole screen, not maximised (WF1) */
     if (!ini_frame(&r, &fshow))
         SetRect(&r, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
@@ -464,9 +543,12 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     UpdateWindow(g_frame);
     ini_restore_windows(show);
     {
-        HWND aw = (HWND)LOWORD(SendMessage(g_mdi, WM_MDIGETACTIVE, 0, 0));
-        if (aw)
+        /* the last made (the top) is the active one, even an icon (WF05) */
+        HWND aw = GetWindow(g_mdi, GW_CHILD);
+        if (aw) {
+            SendMessage(g_mdi, WM_MDIACTIVATE, (WPARAM)aw, 0);
             SetFocus(aw);
+        }
     }
     while (GetMessage(&m, NULL, 0, 0)) {
         if (TranslateMDISysAccel(g_mdi, &m))
@@ -478,6 +560,8 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
         TranslateMessage(&m);
         DispatchMessage(&m);
     }
+    if (filter)
+        UnhookWindowsHookEx(filter);
     if (g_font)
         DeleteObject(g_font);
     if (status_font)

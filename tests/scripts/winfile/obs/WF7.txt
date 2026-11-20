@@ -1,0 +1,116 @@
+; WF7: file operations in C:\WFTEST: Copy NOTES.TXT to COPY.TXT, Copy
+; again onto it (Confirm File Replace), Move COPY.TXT to ALPHA, Rename
+; ZZZ, Properties (Read Only), Create Directory NEWDIR, Delete NEWDIR
+; (Confirm Directory Delete) and BIG.LOG (Confirm File Delete), Select
+; Files *.TXT, Search *.TXT, Associate's list, Run
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+key 09
+wait 500
+key 24
+key 23
+wait 500
+info
+snap C:\G00.BMP
+cmd 107
+wait 1000
+type C:\WFTEST\COPY.TXT
+wait 300
+snap C:\G01.BMP
+key 0D
+wait 2500
+snap C:\G02.BMP
+cmd 107
+wait 1000
+type C:\WFTEST\COPY.TXT
+key 0D
+wait 2500
+snap C:\G03.BMP
+dump
+key 0D
+wait 2500
+snap C:\G04.BMP
+dump
+key 0D
+wait 2000
+snap C:\G05.BMP
+cmd 116
+wait 1000
+type COPY.TXT
+key 0D
+wait 800
+key 1B
+wait 800
+snap C:\G06.BMP
+cmd 106
+wait 1000
+type ALPHA
+key 0D
+wait 2500
+snap C:\G07.BMP
+dump
+key 0D
+wait 2500
+snap C:\G08.BMP
+cmd 116
+wait 1000
+type ZZZ
+key 0D
+wait 500
+key 1B
+wait 800
+cmd 109
+wait 1000
+type YYY
+key 0D
+wait 2000
+snap C:\G09.BMP
+cmd 110
+wait 1000
+snap C:\G10.BMP
+dump
+clickid d7
+key 0D
+wait 1500
+snap C:\G11.BMP
+cmd 111
+wait 1000
+type NEWDIR
+key 0D
+wait 2000
+snap C:\G12.BMP
+cmd 116
+wait 1000
+type BIG.LOG
+key 0D
+wait 500
+key 1B
+wait 800
+cmd 108
+wait 1000
+snap C:\G13.BMP
+key 0D
+wait 2000
+snap C:\G14.BMP
+dump
+key 0D
+wait 2500
+snap C:\G15.BMP
+cmd 104
+wait 1000
+type *.TXT
+clickid e8
+key 0D
+wait 3000
+snap C:\G16.BMP
+dump
+cmd 103
+wait 1500
+snap C:\G17.BMP
+dump
+key 1B
+wait 800
+close
+wait 2500

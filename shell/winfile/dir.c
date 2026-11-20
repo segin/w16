@@ -184,9 +184,10 @@ void dir_read(LPDIRWIN d)
         up.date = up.time = 0;
         add(d, &up, BM_PARENT);
     }
-    /* directories (every one, whatever the pattern) */
+    /* directories: the pattern applies to them too (WF07: none listed
+       with *.TXT) */
     s_cpy(spec, d->path, sizeof spec);
-    path_add(spec, "*.*", sizeof spec);
+    path_add(spec, d->spec, sizeof spec);
     if (dos_findfirst(spec, a, &f) == 0) {
         do {
             if ((f.attr & ATTR_DIR) && f.name[0] != '.' && wanted(d, &f)) {
@@ -214,8 +215,12 @@ void dir_read(LPDIRWIN d)
     {
         int n = (int)SendMessage(d->dirlb, LB_GETCOUNT, 0, 0);
         int first = (n > 1 && s_len(d->path) > 3) ? 1 : 0;
-        if (n > 0)
+        if (n > 0) {
             SendMessage(d->dirlb, LB_SETCARETINDEX, first, 0);
+            /* details start at that line (WF03 S01, WF05) */
+            if ((d->view & VIEW_DETAILMASK) != VIEW_NAMEONLY)
+                SendMessage(d->dirlb, LB_SETTOPINDEX, first, 0);
+        }
     }
     SendMessage(d->dirlb, WM_SETREDRAW, TRUE, 0);
     InvalidateRect(d->dirlb, NULL, TRUE);
@@ -310,6 +315,8 @@ void dir_sel_restore(LPDIRWIN d, HGLOBAL h)
             if (p[0] && !lstrcmp(p, e->name))
                 SendMessage(d->dirlb, LB_SETCARETINDEX, i, 0);
         }
+        if (details)
+            SendMessage(d->dirlb, LB_SETTOPINDEX, 0, 0);
     }
     GlobalUnlock(h);
     GlobalFree(h);
