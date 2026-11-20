@@ -1975,6 +1975,26 @@ $(DOS)/US30.EXE: $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us30.map option resource=$(B)/tests/us30.res \
 	    file { $(B)/tests/start.o $(B)/tests/us30.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US30.EXE
+# US32: a list box's height and where it draws a partly shown item
+# (tests/apps/us32.c; QuickTime's Control Panel)
+$(B)/tests/us32.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(B)/tests/us32.res: tests/apps/us32.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US32.EXE: $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us32.res tests/apps/app.lnk tests/apps/us32.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us32.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us32.map option resource=$(B)/tests/us32.res \
+	    file { $(B)/tests/start.o $(B)/tests/us32.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US32.EXE
+# US32S: a window spy for US32's question (tests/apps/us32s.c)
+$(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
+$(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us32s.map file { $(B)/tests/start.o $(B)/tests/us32s.o }
+dos: $(DOS)/US32S.EXE
 # US24: a window created with WS_MINIMIZE, as WINOLDAP's icon (tests/apps/us24.c)
 $(B)/tests/us24.o: tests/apps/us20ref.h tests/apps/tklog.h
 $(DOS)/US24.EXE: $(B)/tests/start.o $(B)/tests/us24.o tests/apps/app.lnk
