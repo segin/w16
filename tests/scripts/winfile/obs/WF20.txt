@@ -1,4 +1,4 @@
-; WF15: what File Manager does when another program changes the file
+; WF20: what File Manager does when another program changes the file
 ; system (KERNEL's FileCdr, tests/apps/tk64.c): in C:\WFTEST, SNAP copies
 ; NOTES.TXT to NEW1.TXT (its _lcreat: one FileCdr call); then Search for
 ; *.TXT, and SNAP copies it to NEW2.TXT while the Search Results window

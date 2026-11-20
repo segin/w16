@@ -77,15 +77,15 @@ this note is the working state.
   applies each to the windows showing its directory (trees too after
   39h/3Ah) and, with the Search Results window up for
   that drive, asks "The contents of this drive have changed. Do you want
-  to update the Search Results window?" (Yes searches again): obs WF15,
-  scenario WF14 (SNAP's copyfile as the other program). As on 3.1, only
+  to update the Search Results window?" (Yes searches again): obs WF20,
+  scenario WF20 (SNAP's copyfile as the other program). As on 3.1, only
   a new name (or one that goes) rereads a window (a file written again
   keeps its old size in the list: WF01), the question is posted, not
   asked at once (WF10's close, posted just after a change, closes File
   Manager), and a change while the box is up asks again after it (SNAP's
-  own screenshot files do that: obs WF15 shows three boxes). UNVERIFIED: the
+  own screenshot files do that: obs WF20 shows three boxes). UNVERIFIED: the
   "0xFFFFFFFF free bytes until the drive is reread" the brief mentions
-  (not visible in WF15: w16 reads the free space at every paint); whether
+  (not visible in WF20: w16 reads the free space at every paint); whether
   3.1 asks for a change on another drive or for File Manager's own
   operations. Not done: file commands from the Search Results window.
 - Layer 4 (Disk menu): the boxes and every error path as 3.1's without a
@@ -153,7 +153,7 @@ this note is the working state.
   Format Disk's capacity line, Make System Disk's box, Select Drive (the
   focus: 3.1's list box has no WS_TABSTOP and is not focused).
 - Not compared: WF5 E06's one-line scroll; the Copy/Move progress text.
-- WF14 S04, S05: behind the "contents have changed" box 3.1's Search
+- WF20 S04, S05: behind the "contents have changed" box 3.1's Search
   Results list keeps its selection filled; w16's draws it framed (the
   list lost the focus).
 
@@ -163,7 +163,7 @@ FileCdr's rules as observed (ARCHITECTURE.md 9.7, tests/apps/tk64.c):
 one callback system-wide, owned by the installing task; called after a
 successful 39h, 3Ah, 3Ch, 41h, 4301h, 56h, 5Ah, 5Bh, 6Ch with the caller's
 AX and "D:\cwd\name as given"; USER's AppExit removes it when File Manager
-ends. Microsoft's WINFILE.EXE on w16's KRNL386 gives obs WF15's screens
+ends. Microsoft's WINFILE.EXE on w16's KRNL386 gives obs WF20's screens
 pixel for pixel.
 
 ## Last full run

@@ -1,8 +1,8 @@
-; WF14: what File Manager does when another program changes the file
+; WF20: what File Manager does when another program changes the file
 ; system (KERNEL's FileCdr, tests/apps/tk64.c): in C:\WFTEST, SNAP copies
 ; NOTES.TXT to NEW1.TXT (its _lcreat: one FileCdr call); then Search for
 ; *.TXT, and SNAP copies it to NEW2.TXT while the Search Results window
-; is up; Enter (Yes); obs WF15
+; is up; Enter (Yes); obs WF20
 run WINFILE.EXE
 wait 4000
 key 26

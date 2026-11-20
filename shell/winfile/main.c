@@ -37,8 +37,8 @@ BOOL ini_frame(RECT FAR *r, int *show);
    change, after each successful create, delete, rename, attribute change
    or directory change, with the DOS function and a full path; cdr_proc
    keeps them and posts one undocumented WM_FILESYSCHANGE (0034h,
-   Schulman ch. 7) for any number of them. Observed on 3.1 (obs WF15,
-   scenario WF14; the boot-test case w16winfile's other scenarios): a
+   Schulman ch. 7) for any number of them. Observed on 3.1 (obs WF20,
+   scenario WF20; the boot-test case w16winfile's other scenarios): a
    file another program makes appears in a window showing its directory,
    but a file that was there and is written again leaves the listing as
    it was (its old size: WF01, where SNAP and WINFILE.INI change

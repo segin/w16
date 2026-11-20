@@ -107,10 +107,10 @@ static void run_search(void)
 }
 
 /* KERNEL's FileCdr reported a change on drive `drive` (main.c): with the
-   Search Results window up for that drive, 3.1 asks (obs WF15, a
+   Search Results window up for that drive, 3.1 asks (obs WF20, a
    question box titled "Search Results: ", Yes the default) and searches
    again on Yes; a change while the box is up asks again after it (obs
-   WF15: SNAP's screenshot file, made while the box was up, brought a
+   WF20: SNAP's screenshot file, made while the box was up, brought a
    second box, and the next a third). Not at once: what was posted before
    comes first (scenario WF10: a close posted just after a change closes
    File Manager on 3.1 with no box), so the question is posted to the
