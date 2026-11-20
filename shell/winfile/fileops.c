@@ -116,6 +116,118 @@ static BOOL copy_file(LPCSTR from, LPCSTR to)
     return ok;
 }
 
+/* ---- Confirm File Replace (obs WF7): the file there and the one coming,
+   each with "n bytes date time"; Yes, Yes to All (enabled when more
+   than one file goes), No, Cancel ---- */
+
+static LPCSTR rep_to, rep_from;
+static BOOL rep_many, rep_all;
+
+static void file_line(HWND h, int id, LPCSTR path)
+{
+    FINDBUF f;
+    char t[64], dt[16], tm[16], num[12];
+    if (dos_findfirst(path, ATTR_HS | ATTR_READONLY | ATTR_ARCHIVE, &f) != 0)
+        return;
+    fmt_date(dt, f.date);
+    fmt_time(tm, f.time);
+    wsprintf(t, "%s bytes %s %s", (LPSTR)s_utoa(num, f.size), (LPSTR)dt, (LPSTR)tm);
+    SetDlgItemText(h, id, t);
+}
+
+BOOL CALLBACK _export ReplaceDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG: {
+        char t[PATHLEN + 2];
+        SendDlgItemMessage(h, 100, STM_SETICON, (WPARAM)LoadIcon(NULL, IDI_EXCLAMATION), 0);
+        SetDlgItemText(h, 103, rep_to);
+        file_line(h, 105, rep_to);
+        s_cpy(t, rep_from, sizeof t);
+        s_cat(t, "?", sizeof t);
+        SetDlgItemText(h, 102, t);
+        file_line(h, 106, rep_from);
+        EnableWindow(GetDlgItem(h, 107), rep_many);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        if (wp == IDYES || wp == IDNO || wp == IDCANCEL || wp == 107) {
+            EndDialog(h, wp);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+/* IDYES, IDNO or IDCANCEL */
+static int confirm_replace(LPCSTR to, LPCSTR from)
+{
+    FARPROC p;
+    int r;
+    if (rep_all || !g_confreplace)
+        return IDYES;
+    rep_to = to;
+    rep_from = from;
+    p = MakeProcInstance((FARPROC)ReplaceDlgProc, g_hinst);
+    r = DialogBox(g_hinst, "DLG_REPLACE", GetActiveWindow(), (DLGPROC)p);
+    FreeProcInstance(p);
+    if (r == 107) {
+        rep_all = TRUE;
+        r = IDYES;
+    }
+    return r;
+}
+
+/* Confirm File Delete (WF08) and Confirm Directory Delete (the same box,
+   its texts UNVERIFIED): "Delete File:", the path with "?" */
+static LPCSTR del_path;
+static BOOL del_dir;
+
+BOOL CALLBACK _export DelConfDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG: {
+        char t[PATHLEN + 2];
+        SendDlgItemMessage(h, 100, STM_SETICON, (WPARAM)LoadIcon(NULL, IDI_EXCLAMATION), 0);
+        SetWindowText(h, load_str(del_dir ? IDS_CONFDELDIR : IDS_CONFDEL));
+        SetDlgItemText(h, 103, load_str(del_dir ? IDS_DELDIRLABEL : IDS_DELFILELABEL));
+        s_cpy(t, del_path, sizeof t);
+        s_cat(t, "?", sizeof t);
+        SetDlgItemText(h, 102, t);
+        EnableWindow(GetDlgItem(h, 107), rep_many);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        if (wp == IDYES || wp == IDNO || wp == IDCANCEL || wp == 107) {
+            EndDialog(h, wp);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+static int confirm_delete(LPCSTR path, BOOL dir)
+{
+    FARPROC p;
+    int r;
+    if (rep_all || !(dir ? g_confsubdel : g_confdel))
+        return IDYES;
+    del_path = path;
+    del_dir = dir;
+    p = MakeProcInstance((FARPROC)DelConfDlgProc, g_hinst);
+    r = DialogBox(g_hinst, "DLG_DELCONF", GetActiveWindow(), (DLGPROC)p);
+    FreeProcInstance(p);
+    if (r == 107) {
+        rep_all = TRUE;
+        r = IDYES;
+    }
+    return r;
+}
+
 static BOOL is_dir(LPCSTR path)
 {
     int a = dos_getattr(path);
@@ -132,13 +244,11 @@ static BOOL copy_one(LPCSTR from, LPCSTR to, BOOL move)
     if (!lstrcmpi(from, to))
         return FALSE;
     if (dos_getattr(to) >= 0) {
-        if (g_confreplace) {
-            char t[PATHLEN + 80];
-            wsprintf(t, load_str(IDS_REPLACE), (LPSTR)to);
-            if (MessageBox(g_frame, t, load_str(IDS_CONFREPLACE),
-                           MB_YESNO | MB_ICONQUESTION) != IDYES)
-                return TRUE;
-        }
+        int r = confirm_replace(to, from);
+        if (r == IDCANCEL)
+            return FALSE;
+        if (r != IDYES)
+            return TRUE;
         dos_setattr(to, 0);
         dos_unlink(to);
     }
@@ -265,6 +375,9 @@ static void do_copy(LPDIRWIN d, LPCSTR fromlist, LPCSTR dest, int kind)
     HCURSOR oc = SetCursor(LoadCursor(NULL, IDC_WAIT));
     full_path(d, dest, target);
     todir = is_dir(target);
+    rep_all = FALSE;
+    rep_many = s_len(fromlist) > 0 && fromlist[0] && (next_name(&p, name, sizeof name), next_name(&p, name, sizeof name));
+    p = fromlist;
     while (next_name(&p, name, sizeof name)) {
         full_path(d, name, src);
         if (todir && kind != IDM_RENAME) {
@@ -276,51 +389,57 @@ static void do_copy(LPDIRWIN d, LPCSTR fromlist, LPCSTR dest, int kind)
         } else {
             s_cpy(dst, target, sizeof dst);
         }
-        if (kind == IDM_RENAME)
-            dos_rename(src, dst);
-        else
+        if (kind == IDM_RENAME) {
+            if (dos_rename(src, dst) == 0) {
+                /* the new name takes the old one's place in the selection */
+                int n = (int)SendMessage(d->dirlb, LB_GETCOUNT, 0, 0), i;
+                for (i = 0; i < n; i++) {
+                    LPDENTRY e = dir_item(d, i);
+                    int k = s_len(dst);
+                    while (k > 0 && dst[k - 1] != '\\')
+                        k--;
+                    if (e && !lstrcmpi(e->name, src + s_len(d->path) + (s_len(d->path) > 3)))
+                        s_cpy(e->name, dst + k, sizeof e->name);
+                }
+            }
+        } else
             copy_one(src, dst, kind == IDM_MOVE);
     }
     SetCursor(oc);
     refresh_all();
     if (kind != IDM_COPY)
-        tree_read(d);
+        tree_refresh(d);
 }
 
 static void do_delete(LPDIRWIN d, LPCSTR list)
 {
-    char name[PATHLEN], path[PATHLEN], t[PATHLEN + 80];
+    char name[PATHLEN], path[PATHLEN];
     LPCSTR p = list;
-    BOOL all = FALSE;
+    int count = 0;
+    while (next_name(&p, name, sizeof name))
+        count++;
+    rep_all = FALSE;
+    rep_many = count > 1;
+    p = list;
     while (next_name(&p, name, sizeof name)) {
+        BOOL dir;
+        int r;
         full_path(d, name, path);
-        if (is_dir(path)) {
-            if (g_confsubdel && !all) {
-                int r;
-                wsprintf(t, load_str(IDS_DELDIR), (LPSTR)path);
-                r = MessageBox(g_frame, t, load_str(IDS_CONFDELDIR), MB_YESNOCANCEL | MB_ICONQUESTION);
-                if (r == IDCANCEL)
-                    break;
-                if (r != IDYES)
-                    continue;
-            }
+        dir = is_dir(path);
+        r = confirm_delete(path, dir);
+        if (r == IDCANCEL)
+            break;
+        if (r != IDYES)
+            continue;
+        if (dir) {
             delete_tree(path);
         } else {
-            if (g_confdel && !all) {
-                int r;
-                wsprintf(t, load_str(IDS_DELFILE), (LPSTR)path);
-                r = MessageBox(g_frame, t, load_str(IDS_CONFDEL), MB_YESNOCANCEL | MB_ICONQUESTION);
-                if (r == IDCANCEL)
-                    break;
-                if (r != IDYES)
-                    continue;
-            }
             dos_setattr(path, 0);
             dos_unlink(path);
         }
     }
     refresh_all();
-    tree_read(d);
+    tree_refresh(d);
 }
 
 /* ---- the dialogs ---- */
@@ -360,7 +479,20 @@ BOOL CALLBACK _export SuperDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             to[0] = 0;
             if (op_kind != IDM_DELETE && op_kind != IDM_PRINT)
                 GetDlgItemText(h, IDD_TO, to, sizeof to);
-            EndDialog(h, 1);
+            /* the box stays up, disabled, while the work is done (WF08:
+               the confirmations come over it); the radio buttons give
+               way to the progress lines */
+            EnableWindow(GetDlgItem(h, IDD_FROM), FALSE);
+            if (GetDlgItem(h, IDD_TO))
+                EnableWindow(GetDlgItem(h, IDD_TO), FALSE);
+            EnableWindow(GetDlgItem(h, IDOK), FALSE);
+            if (op_kind == IDM_COPY) {
+                ShowWindow(GetDlgItem(h, IDD_TOCHECK), SW_HIDE);
+                ShowWindow(GetDlgItem(h, IDD_CLIPBOARD), SW_HIDE);
+                ShowWindow(GetDlgItem(h, IDD_STATUS1), SW_SHOWNA);
+                ShowWindow(GetDlgItem(h, 201), SW_SHOWNA);
+            }
+            EnableWindow(h, FALSE);
             switch (op_kind) {
             case IDM_MOVE:
             case IDM_COPY:
@@ -383,6 +515,8 @@ BOOL CALLBACK _export SuperDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             }
             GlobalUnlock(hf);
             GlobalFree(hf);
+            EnableWindow(h, TRUE);
+            EndDialog(h, 1);
             return TRUE;
         }
         case IDCANCEL:
@@ -414,7 +548,7 @@ BOOL CALLBACK _export MakeDirDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                 full_path(d, name, path);
                 dos_mkdir(path);
                 refresh_all();
-                tree_read(d);
+                tree_refresh(d);
             }
             return TRUE;
         }
@@ -613,7 +747,7 @@ void file_open(LPDIRWIN d)
     int i = (int)SendMessage(d->dirlb, LB_GETCARETINDEX, 0, 0);
     LPDENTRY e = dir_item(d, i);
     char path[PATHLEN];
-    if (GetFocus() == d->treelb) {
+    if (d->lastpane == ID_TREELIST) {
         int t = (int)SendMessage(d->treelb, LB_GETCURSEL, 0, 0);
         tree_expand(d, t, 1);
         return;
@@ -639,7 +773,9 @@ void file_open(LPDIRWIN d)
 
 void file_command(LPDIRWIN d, WPARAM id)
 {
-    BOOL tree = GetFocus() == d->treelb;
+    /* the pane used last, which keeps its meaning while a dialog has
+       had the focus (WF08) */
+    BOOL tree = d->lastpane == ID_TREELIST;
     op_dir = d;
     op_kind = (int)id;
     op_from = selected_text(d, tree);

@@ -183,8 +183,10 @@ LRESULT CALLBACK _export DrivesWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_SETFOCUS:
         d = dirwin_of(GetParent(w));
-        if (d)
+        if (d) {
             d->drivefocus = drive_index(d->drive);
+            d->lastpane = ID_DRIVES;
+        }
         InvalidateRect(w, NULL, TRUE);
         break;
     case WM_KILLFOCUS:

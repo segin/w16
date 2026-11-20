@@ -420,6 +420,8 @@ static void draw_item(LPDIRWIN d, DRAWITEMSTRUCT FAR *di)
         if (d->view & VIEW_FLAGS) {
             x += DX_FLAGS;
             fmt_attr(t, e->attr);
+            if (g_lower)
+                s_lower(t);
             TextOut(dc, x, ty, t, s_len(t));
         }
     }
@@ -484,6 +486,8 @@ LRESULT CALLBACK _export DirWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             break;
         switch (HIWORD(lp)) {
         case LBN_SETFOCUS:
+            d->lastpane = ID_DIRLIST;
+            /* fall through */
         case LBN_KILLFOCUS:
             /* the selection is filled or framed with the focus */
             InvalidateRect(d->dirlb, NULL, FALSE);

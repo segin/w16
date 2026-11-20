@@ -1,0 +1,60 @@
+; WF08: file operations in C:\WFTEST on ZZZ (End in the list): Copy to
+; COPY.TXT, Copy onto it again (Confirm File Replace, Yes), Rename to
+; YYY, Create Directory NEWDIR, Properties, Delete (its confirmation,
+; Yes); the dialogs and the lists after each
+run WINFILE.EXE
+wait 4000
+key 26
+wait 1500
+key 09
+wait 500
+key 23
+wait 800
+cmd 107
+wait 1000
+snap C:\S01.BMP
+type COPY.TXT
+key 0D
+wait 2500
+snap C:\S02.BMP
+cmd 107
+wait 1000
+type COPY.TXT
+key 0D
+wait 2500
+snap C:\S03.BMP
+dump
+key 0D
+wait 2500
+snap C:\S04.BMP
+cmd 109
+wait 1000
+snap C:\S05.BMP
+type YYY
+key 0D
+wait 2500
+snap C:\S06.BMP
+cmd 111
+wait 1000
+snap C:\S07.BMP
+type NEWDIR
+key 0D
+wait 2500
+snap C:\S08.BMP
+cmd 110
+wait 1000
+snap C:\S09.BMP
+key 1B
+wait 800
+cmd 108
+wait 1000
+snap C:\S10.BMP
+key 0D
+wait 2000
+snap C:\S11.BMP
+dump
+key 0D
+wait 2500
+snap C:\S12.BMP
+close
+wait 2500

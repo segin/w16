@@ -140,9 +140,14 @@ BEGIN
     IDS_RENAME,         "Rename"
     IDS_PROPERTIES,     "Properties for %s"
     IDS_BYTES,          "%s bytes"
+    IDS_DELFILELABEL,   "Delete File:"
+    IDS_DELDIRLABEL,    "Delete Directory:"
 END
 
 /* ---- dialogs: layouts, IDs and texts observed on the running original
+   (edit controls have WS_BORDER: 3.1's edit takes the style bit off and
+   draws the border itself, so a dump does not show it; read-only ones have
+   none, obs WF3 B05)
    (SNAP dump, tools/snapdlg.py; obs WF2) ---- */
 DLG_OTHER DIALOG 19, 20, 163, 65
 STYLE 0x94C800C0L
@@ -165,7 +170,7 @@ CAPTION "By File Type"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&Name:", 100, "Static", 0x000C, 5, 8, 23, 10
-    CONTROL "", 201, "Edit", 0x0480 | 0x00010000L, 34, 6, 65, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 34, 6, 65, 12
     CONTROL "File Type", 100, "Button", 0x0007, 5, 20, 94, 62
     CONTROL "&Directories", 101, "Button", 0x0003 | 0x00010000L, 10, 31, 60, 12
     CONTROL "&Programs", 210, "Button", 0x0003 | 0x00010000L, 10, 43, 60, 12
@@ -213,7 +218,7 @@ BEGIN
     CONTROL "OK", 1, "Button", 0x0001 | 0x00030000L, 218, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00030000L, 218, 23, 40, 14
     CONTROL "&Apply", 1026, "Button", 0x0000 | 0x00030000L, 218, 40, 40, 14
-    CONTROL "&Help", 1038, "Button", 0x0000 | 0x00030000L, 218, 57, 40, 14
+    CONTROL "&Help", 1038, "Button", 0x0000 | 0x00030000L, 218, 54, 40, 14
     CONTROL "Sample", 1073, "Button", 0x0007 | 0x00020000L, 98, 72, 160, 49
     CONTROL "", 1093, "Static", 0x0081, 98, 124, 160, 20
     CONTROL "AaBbYyZz", 1092, "Static", 0x0081 | 0x00020000L, 104, 81, 149, 37
@@ -227,7 +232,7 @@ FONT 8, "Helv"
 BEGIN
     CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008B, 3, 6, 182, 10
     CONTROL "&To:", 100, "Static", 0x000C, 3, 33, 20, 10
-    CONTROL "", 103, "Edit", 0x0480 | 0x00010000L, 37, 32, 138, 12
+    CONTROL "", 103, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 37, 32, 138, 12
     CONTROL "", 257, "Button", 0x0004 | 0x00010000L, 26, 33, 10, 10
     CONTROL "&Copy to Clipboard", 256, "Button", 0x0004, 26, 47, 72, 12
     CONTROL "", 104, "Static", 0x008B, 3, 49, 40, 10
@@ -236,7 +241,7 @@ BEGIN
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 185, 23, 40, 14
     CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 185, 44, 40, 14
     CONTROL "&From:", 100, "Static", 0x000C, 3, 19, 20, 10
-    CONTROL "", 102, "Edit", 0x0480 | 0x00010000L, 37, 18, 138, 12
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 37, 18, 138, 12
 END
 
 DLG_DELETE DIALOG 19, 20, 246, 64
@@ -246,7 +251,7 @@ FONT 8, "Helv"
 BEGIN
     CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 5, 193, 10
     CONTROL "De&lete:", 100, "Static", 0x000C, 3, 20, 35, 10
-    CONTROL "", 102, "Edit", 0x0480 | 0x00010000L, 40, 19, 155, 12
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 40, 19, 155, 12
     CONTROL "", 104, "Static", 0x008B, 3, 35, 35, 10
     CONTROL "", 201, "Static", 0x008B, 40, 35, 155, 10
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 200, 6, 40, 14
@@ -284,7 +289,7 @@ FONT 8, "Helv"
 BEGIN
     CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008B, 3, 6, 162, 10
     CONTROL "&Command Line:", 100, "Static", 0x000C | 0x00020000L, 3, 18, 60, 10
-    CONTROL "", 201, "Edit", 0x0480 | 0x00010000L, 3, 29, 134, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 3, 29, 134, 12
     CONTROL "Run &Minimized", 214, "Button", 0x0003 | 0x00010000L, 3, 45, 71, 12
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 165, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 165, 23, 40, 14
@@ -298,7 +303,7 @@ FONT 8, "Helv"
 BEGIN
     CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 6, 193, 10
     CONTROL "&Print:", 100, "Static", 0x000C, 3, 20, 23, 10
-    CONTROL "", 102, "Edit", 0x0480 | 0x00010000L, 27, 18, 160, 12
+    CONTROL "", 102, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 27, 18, 160, 12
     CONTROL "", 104, "Static", 0x008C, 3, 36, 190, 10
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 197, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 197, 23, 40, 14
@@ -311,9 +316,9 @@ CAPTION "Associate"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&Files with Extension:", 99, "Static", 0x000C, 5, 8, 74, 10
-    CONTROL "", 112, "Edit", 0x0400 | 0x00010000L, 80, 6, 35, 12
+    CONTROL "", 112, "Edit", 0x0400 | 0x00800000L | 0x00010000L, 80, 6, 35, 12
     CONTROL "&Associate With:", 99, "Static", 0x000C, 5, 22, 150, 10
-    CONTROL "", 113, "Edit", 0x0080 | 0x00010000L, 5, 32, 148, 12
+    CONTROL "", 113, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 5, 32, 148, 12
     CONTROL "", 111, "ListBox", 0x1003 | 0x00A10000L, 10, 44, 147, 41
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 165, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 165, 23, 40, 14
@@ -328,7 +333,7 @@ FONT 8, "Helv"
 BEGIN
     CONTROL "Current Directory: C:\WINDOWS\SYSTEM", 101, "Static", 0x008C, 3, 6, 154, 10
     CONTROL "&Name:", 100, "Static", 0x000C, 3, 23, 20, 10
-    CONTROL "", 201, "Edit", 0x0480 | 0x00010000L, 30, 22, 90, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 30, 22, 90, 12
     CONTROL "", 104, "Static", 0x008C, 3, 46, 150, 10
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 157, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 157, 23, 40, 14
@@ -341,9 +346,9 @@ CAPTION "Search"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&Search For:", 100, "Static", 0x000C, 5, 6, 45, 12
-    CONTROL "", 201, "Edit", 0x0480 | 0x00010000L, 52, 5, 160, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 52, 5, 160, 12
     CONTROL "Start &From:", 100, "Static", 0x000C, 5, 21, 45, 12
-    CONTROL "", 101, "Edit", 0x0480 | 0x00010000L, 52, 20, 160, 12
+    CONTROL "", 101, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 52, 20, 160, 12
     CONTROL "S&earch All Subdirectories", 232, "Button", 0x0003 | 0x00010000L, 52, 34, 100, 12
     CONTROL "OK", 1, "Button", 0x0001 | 0x00010000L, 217, 6, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 217, 23, 40, 14
@@ -356,10 +361,44 @@ CAPTION "Select Files"
 FONT 8, "Helv"
 BEGIN
     CONTROL "&File(s):", -1, "Static", 0x000C, 5, 16, 60, 10
-    CONTROL "", 201, "Edit", 0x0480 | 0x00010000L, 5, 29, 60, 12
+    CONTROL "", 201, "Edit", 0x0480 | 0x00800000L | 0x00010000L, 5, 29, 60, 12
     CONTROL "&Select", 1, "Button", 0x0001 | 0x00010000L, 70, 6, 40, 14
     CONTROL "&Deselect", 6, "Button", 0x0000 | 0x00010000L, 70, 23, 40, 14
     CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 70, 40, 40, 14
     CONTROL "&Help", 254, "Button", 0x0000 | 0x00010000L, 70, 63, 40, 14
 END
 
+
+DLG_REPLACE DIALOG 9, 20, 245, 95
+STYLE 0x94C800C0L
+CAPTION "Confirm File Replace"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "#200", 100, "Static", 0x0003, 3, 12, 18, 20
+    CONTROL "", 104, "Static", 0x008C, 25, 3, 203, 10
+    CONTROL "Replace File:", 100, "Static", 0x000C, 25, 12, 49, 10
+    CONTROL "C:\WFTEST\COPY.TXT", 103, "Static", 0x008C, 75, 12, 165, 10
+    CONTROL "", 105, "Static", 0x000C, 75, 22, 170, 10
+    CONTROL "With File:", 100, "Static", 0x000C, 25, 34, 49, 10
+    CONTROL "C:\WFTEST\ZZZ?", 102, "Static", 0x008C, 75, 34, 165, 10
+    CONTROL "", 106, "Static", 0x000C, 75, 44, 170, 10
+    CONTROL "&Yes", 6, "Button", 0x0001 | 0x00010000L, 33, 73, 40, 14
+    CONTROL "Yes to &All", 107, "Button", 0x0000 | 0x08010000L, 79, 73, 40, 14
+    CONTROL "&No", 7, "Button", 0x0000 | 0x00010000L, 125, 73, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 171, 73, 40, 14
+END
+
+DLG_DELCONF DIALOG 9, 20, 245, 60
+STYLE 0x94C800C0L
+CAPTION "Confirm File Delete"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "#200", 100, "Static", 0x0003, 3, 12, 18, 20
+    CONTROL "", 104, "Static", 0x000C, 25, 3, 203, 10
+    CONTROL "", 103, "Static", 0x000C, 25, 18, 44, 10
+    CONTROL "", 102, "Static", 0x008C, 70, 18, 170, 10
+    CONTROL "&Yes", 6, "Button", 0x0001 | 0x00010000L, 33, 42, 40, 14
+    CONTROL "Yes to &All", 107, "Button", 0x0000 | 0x08010000L, 79, 42, 40, 14
+    CONTROL "&No", 7, "Button", 0x0000 | 0x00010000L, 125, 42, 40, 14
+    CONTROL "Cancel", 2, "Button", 0x0000 | 0x00010000L, 171, 42, 40, 14
+END

@@ -205,6 +205,7 @@ UINT CALLBACK _export FontHookProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     (void)lp;
     if (msg == WM_INITDIALOG) {
         check(h, IDD_LOWER, g_lower);
+        ShowWindow(GetDlgItem(h, 1092), SW_HIDE);  /* hidden on 3.1 (obs WF2) */
         return TRUE;
     }
     if (msg == WM_COMMAND && wp == IDOK)
@@ -252,7 +253,7 @@ void dlg_font(void)
     cf.hwndOwner = g_frame;
     cf.lpLogFont = &lf;
     cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_SHOWHELP | CF_ENABLEHOOK |
-               CF_ENABLETEMPLATE;
+               CF_ENABLETEMPLATE | CF_ANSIONLY;  /* no OEM fonts listed (obs WF2) */
     cf.lpfnHook = (UINT (CALLBACK *)(HWND, UINT, WPARAM, LPARAM))hook;
     cf.lpTemplateName = "DLG_FONT";
     cf.hInstance = g_hinst;

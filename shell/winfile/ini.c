@@ -2,7 +2,8 @@
  * ini.c - w16 File Manager: WINFILE.INI.
  *
  * [Settings] as 3.1's File Manager writes it (WF1, WF2, WF4):
- *   Window=left,top,right,bottom, , ,show      the frame (normal place)
+ *   Window=left,top,width,height, , ,show      the frame (normal place;
+ *       the size, not the corner: WF05)
  *   dirN=left,top,right,bottom,iconx,icony,show,view,sort,attribs,split,path
  *       a directory window, in MDI client coordinates; the icon's place
  *       -1,-1 when it has none; view, sort and attribs as in winfile.h;
@@ -106,7 +107,7 @@ BOOL ini_frame(RECT FAR *r, int *show)
     p = next_int(p, &dummy, 0);
     p = next_int(p, &dummy, 0);
     p = next_int(p, show, SW_SHOWNORMAL);
-    SetRect(r, x, y, cx, cy);
+    SetRect(r, x, y, x + cx, y + cy);
     return TRUE;
 }
 
@@ -182,7 +183,8 @@ void ini_save(void)
     wp.length = sizeof wp;
     GetWindowPlacement(g_frame, &wp);
     wsprintf(t, "%d,%d,%d,%d, , ,%d", wp.rcNormalPosition.left, wp.rcNormalPosition.top,
-             wp.rcNormalPosition.right, wp.rcNormalPosition.bottom, wp.showCmd);
+             wp.rcNormalPosition.right - wp.rcNormalPosition.left,
+             wp.rcNormalPosition.bottom - wp.rcNormalPosition.top, wp.showCmd);
     ini_write_str("Window", t);
     for (w = GetWindow(g_mdi, GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
         if (dirwin_of(w) && !GetWindow(w, GW_OWNER))

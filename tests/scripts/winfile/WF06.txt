@@ -1,6 +1,7 @@
 ; WF06: drives: Ctrl+Z, Ctrl+C, Ctrl+A (no disk in A: in DOSBox: the
 ; message box), Return, Ctrl+D (no such drive), the drive bar's arrows;
 ; About File Manager (SHELL's ShellAbout)
+; mask: 255,288,290,297
 run WINFILE.EXE
 wait 4000
 ckey c 5A

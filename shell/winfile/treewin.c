@@ -304,6 +304,7 @@ LRESULT CALLBACK _export TreeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         d->split = p->split;
         d->panes = PANES_BOTH;
         d->lowerdrives = g_lower;
+        d->lastpane = ID_TREELIST;
         d->drives = CreateWindow("WFS_Drives", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0,
                                  w, (HMENU)ID_DRIVES, g_hinst, NULL);
         d->tree = CreateWindow("DirTree", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0,
@@ -341,8 +342,12 @@ LRESULT CALLBACK _export TreeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return (LRESULT)(WORD)window_icon(d);
         break;
     case WM_SETFOCUS:
+        /* back to the pane that had it (after a dialog: WF08) */
         if (d) {
-            if (d->panes == PANES_DIR)
+            if (d->lastpane == ID_DRIVES)
+                SetFocus(d->drives);
+            else if (d->panes == PANES_DIR ||
+                     (d->lastpane == ID_DIRLIST && d->panes != PANES_TREE))
                 SetFocus(d->dirlb);
             else
                 SetFocus(d->treelb);

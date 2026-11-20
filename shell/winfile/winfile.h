@@ -120,6 +120,8 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_RENAME          24
 #define IDS_PROPERTIES      25
 #define IDS_BYTES           26
+#define IDS_DELFILELABEL    27
+#define IDS_DELDIRLABEL     28
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"
@@ -259,6 +261,7 @@ typedef struct tagDIRWIN {
     int  number;                        /* ":n" in the title, 0 none */
     BOOL lowerdrives;                   /* the drive letters' case */
     int  drivefocus;                    /* the drive bar's keyboard place */
+    int  lastpane;                      /* ID_TREELIST or ID_DIRLIST: had the focus last */
     int  stleft;                        /* what the status bar's left box
                                            says: ST_* */
     BOOL ready;
@@ -329,6 +332,7 @@ void  drives_paint_label(LPDIRWIN d);
 BOOL  tree_register(void);
 void  tree_read(LPDIRWIN d);
 void  tree_clone(LPDIRWIN d, LPDIRWIN src);
+void  tree_refresh(LPDIRWIN d);
 void  tree_select_path(LPDIRWIN d, LPCSTR path);
 void  tree_expand(LPDIRWIN d, int item, int how);
 void  tree_collapse(LPDIRWIN d, int item);

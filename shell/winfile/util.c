@@ -159,13 +159,13 @@ void fmt_time(LPSTR out, WORD time)
 void fmt_attr(LPSTR out, BYTE attr)
 {
     if (attr & ATTR_READONLY)
-        *out++ = 'r';
+        *out++ = 'R';
     if (attr & ATTR_HIDDEN)
-        *out++ = 'h';
+        *out++ = 'H';
     if (attr & ATTR_SYSTEM)
-        *out++ = 's';
+        *out++ = 'S';
     if (attr & ATTR_ARCHIVE)
-        *out++ = 'a';
+        *out++ = 'A';
     *out = 0;
 }
 

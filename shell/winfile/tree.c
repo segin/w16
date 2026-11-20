@@ -190,6 +190,59 @@ void tree_read(LPDIRWIN d)
     InvalidateRect(d->treelb, NULL, TRUE);
 }
 
+/* the tree read again after the disk changed, what was expanded expanded
+   again and the same directory selected (3.1 keeps the tree's look after
+   a file command: WF08) */
+void tree_refresh(LPDIRWIN d)
+{
+    int n = (int)SendMessage(d->treelb, LB_GETCOUNT, 0, 0), i, k = 0, top;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, (DWORD)(n + 1) * PATHLEN);
+    LPSTR p;
+    char sel[PATHLEN];
+    if (!h) {
+        tree_read(d);
+        return;
+    }
+    p = (LPSTR)GlobalLock(h);
+    top = (int)SendMessage(d->treelb, LB_GETTOPINDEX, 0, 0);
+    for (i = 0; i < n; i++) {
+        LPTNODE t = item(d, i);
+        if (t && (t->flags & TF_EXPANDED) && item(d, i + 1) && item(d, i + 1)->level > t->level)
+            tree_path_of(t, p + (DWORD)PATHLEN * k++, d->drive);
+    }
+    s_cpy(sel, d->path, sizeof sel);
+    SendMessage(d->treelb, WM_SETREDRAW, FALSE, 0);
+    SendMessage(d->treelb, LB_RESETCONTENT, 0, 0);
+    arena_free(&d->tarena);
+    {
+        LPTNODE root = (LPTNODE)arena_alloc(&d->tarena, sizeof(TNODE));
+        if (root) {
+            root->parent = NULL;
+            root->level = 0;
+            root->flags = TF_LASTCHILD;
+            root->name[0] = (char)('A' + d->drive);
+            root->name[1] = ':';
+            root->name[2] = '\\';
+            root->name[3] = 0;
+            SendMessage(d->treelb, LB_ADDSTRING, 0, (LPARAM)root);
+        }
+    }
+    for (i = 0; i < k; i++) {
+        LPSTR q = p + (DWORD)PATHLEN * i;
+        int c;
+        tree_select_path(d, q);
+        c = (int)SendMessage(d->treelb, LB_GETCURSEL, 0, 0);
+        if (item(d, c) && !(item(d, c)->flags & TF_EXPANDED))
+            read_children(d, c, item(d, c));
+    }
+    tree_select_path(d, sel);
+    SendMessage(d->treelb, LB_SETTOPINDEX, top, 0);
+    SendMessage(d->treelb, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(d->treelb, NULL, TRUE);
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
+
 /* a copy of another window's tree as it stands, what is expanded and the
    selection (Window > New Window: WF04 S03) */
 void tree_clone(LPDIRWIN d, LPDIRWIN src)
@@ -475,6 +528,8 @@ LRESULT CALLBACK _export TreeControlWndProc(HWND w, UINT msg, WPARAM wp, LPARAM 
                 tree_expand(d, i, 1);
             break;
         case LBN_SETFOCUS:
+            d->lastpane = ID_TREELIST;
+            /* fall through */
         case LBN_KILLFOCUS:
             InvalidateRect(d->treelb, NULL, FALSE);
             status_update();
