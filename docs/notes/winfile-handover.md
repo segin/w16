@@ -129,18 +129,24 @@ this note is the working state.
 
 - WF05: the attributes column, cut by the list's edge, comes 2 rows lower
   and a pixel right of 3.1's (cause not found); the View menu with a
-  minimised window active (pane items grey: fixed after the baseline,
-  not yet re-run).
-- WF07 S08-S10: COMMDLG's Font box lists one size fewer (no 24 for MS Sans
-  Serif, so no scroll bar) than 3.1's File Manager asks for: some
-  ChooseFont flag or LOGFONT field differs; the list after the font
-  change follows from it.
-- WF08 S08-S12: after Create Directory and Delete, 3.1's tree and list
-  differ in detail (which line is selected, focus): observe again.
+  minimised window active now matches but for that.
+- WF07 S08-S10: the Font box (fixed: WS_VSCROLL on the combo boxes, which
+  3.1's ComboBox passes to its list and takes off its own style) is
+  closer; what is left is in the sample and after the font change.
+- WF10 S03: 26 pixels in the tree behind Confirm Directory Delete.
+- WF13: the Label Disk error box (2007: the box's size or line breaks),
+  Format Disk's capacity line, Make System Disk's box, Select Drive (the
+  focus: 3.1's list box has no WS_TABSTOP and is not focused).
+- Not compared: WF5 E06's one-line scroll; the Copy/Move progress text.
 
 ## Last full run
 
-Commit 4d44dbe on installation-05 (`tools/remote-test.sh -n
-w16-winfile`): make test pass; boot test 129 ok, 5 failures, all of the
-known list (taskman@tree, ddeml conn, lzexpand quirks, soundtime,
-trails@timed); w16winfile 8 of 8 parts.
+Commit fd6e140 (after master ba697bf was merged in) on installation-05
+(`tools/remote-test.sh -n w16-winfile`): make test pass; boot test 138
+ok, 4 failures, all of the known list (lzexpand quirks, toolhelp ref386,
+soundtime, trails@timed); w16winfile (13 parts, WF01-WF13) ok.
+
+## Where to resume
+
+Layer 5 (the plan above), then the known differences. Everything else
+of the brief is in place.
