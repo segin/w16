@@ -11,7 +11,7 @@
 
 face Terminal
 version 2
-copyright "w16 Terminal font. Copyright (c) 2026 the w16 contributors"
+copyright "w16 Terminal font. Public domain (CC0 1.0)"
 points 12
 vertres 96
 horizres 96

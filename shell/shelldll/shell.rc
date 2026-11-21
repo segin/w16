@@ -22,7 +22,7 @@ BEGIN
     CONTROL "", IDC_ABICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 10, 3, 18, 20
     CONTROL "w16 %s", IDC_LINE1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 5, 127, 10   /* BRANDING */
     CONTROL "", IDC_VERSION, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 15, 100, 10
-    CONTROL "Copyright \251 the w16 contributors", -1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 25, 145, 10   /* BRANDING */
+    CONTROL "Public domain (CC0 1.0)", -1, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 25, 145, 10   /* BRANDING */
     CONTROL "", IDC_OTHER, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 35, 145, 20
     CONTROL "This product is licensed to:", 0x270F, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 55, 145, 10
     CONTROL "User Name goes here", IDC_USER, "Static", SS_NOPREFIX | WS_CHILD | WS_VISIBLE, 45, 65, 145, 10

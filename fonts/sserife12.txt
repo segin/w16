@@ -11,7 +11,7 @@
 
 face MS Sans Serif
 version 2
-copyright "w16 MS Sans Serif font. Copyright (c) 2026 w16 contributors"
+copyright "w16 MS Sans Serif font. Public domain (CC0 1.0)"
 points 12
 vertres 96
 horizres 96

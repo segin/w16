@@ -21,7 +21,7 @@ from mkver import node  # noqa: E402
 
 STRINGS = [('CompanyName', 'w16 project'), ('FileDescription', 'VER.DLL test file'),
            ('FileVersion', '3.10'), ('InternalName', 'VTEST'),
-           ('LegalCopyright', 'MIT licence'), ('OriginalFilename', 'VTEST.DLL'),
+           ('LegalCopyright', 'Public domain'), ('OriginalFilename', 'VTEST.DLL'),
            ('ProductName', 'w16'), ('ProductVersion', '3.10')]
 
 
