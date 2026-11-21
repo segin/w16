@@ -1,3 +1,4 @@
+; RG17 (after probe RE17): the basic view: Add File
 ; Type with Open and Print commands and DDE; Modify of it; Copy; Delete
 run REGEDIT.EXE
 wait 3000

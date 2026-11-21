@@ -1,4 +1,5 @@
-; (with and without a value), Copy Key and Delete Key: the calls it makes
+; RG16 (after probe RE16): /V's Save Changes after a value change, Add Key
+; (with and without a value), Copy Key and Delete Key: REG.DAT afterwards
 run REGEDIT.EXE /V
 wait 3000
 key 28

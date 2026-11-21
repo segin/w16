@@ -1,4 +1,4 @@
-; RG19 (after probe RE19): Merge Registration File in /V: the calls of the
+; RG19 (after probe RE19): Merge Registration File in /V: the tree and
 ; merge (t1.reg: new keys, a value on a key that exists) and of the Exit,
 ; answered Yes; the tree after the merge
 ; put: tests/scripts/regedit/t1.reg=T1.REG
