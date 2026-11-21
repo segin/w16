@@ -1,5 +1,5 @@
 /*
- * tk62.c - the KERNEL audit (docs/notes/kernel-audit-triage.md): its
+ * tk62.c - the KERNEL audit (its triage file, docs/notes/kernel-audit-triage.md, is in git history): its
  * critical findings as regressions, and the behaviour its other findings
  * would change, observed on Windows 3.1 before w16 changes it.
  *

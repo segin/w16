@@ -15,7 +15,7 @@ and the segment lengths differ (KRNL386 seg 1 C571h, seg 2 2AB8h, DGROUP
 13D2h). So KRNL386 shares kernel/kernel.lnk. (Since the KERNEL audit's
 third round both of w16's kernels have 3.1's four segments: _TEXT,
 BOOT_TEXT, HEAP_TEXT (global.c or global386.c), DGROUP; segments 2 and
-3 discardable as on 3.1: docs/notes/kernel-audit-triage.md, medium 33.)
+3 discardable as on 3.1: the KERNEL audit's medium 33, in git history.)
 
 ## Build
 

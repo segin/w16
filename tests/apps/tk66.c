@@ -1,5 +1,5 @@
 /*
- * tk66.c - the KERNEL audit, third round (docs/notes/kernel-audit-triage.md):
+ * tk66.c - the KERNEL audit, third round (its triage file, docs/notes/kernel-audit-triage.md, is in git history):
  * what Windows 3.1 does where w16's remaining fixes would change what a
  * program sees, observed before w16 changes it.
  *
