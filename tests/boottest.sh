@@ -1785,10 +1785,10 @@ runcase() {
                     -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
                 clkcmp "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386" "$pk" 1 W16 ;;
             *)
-                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-WIN.INI"
-                python3 "$root/tests/scripts/iniset.py" "$out/cplclick-WIN.INI" 'windows:run=CONTROL.EXE' \
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-$ap-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/cplclick-$ap-WIN.INI" 'windows:run=CONTROL.EXE' \
                     'windows:MouseSpeed=0'
-                set -- -f "$out/cplclick-WIN.INI=WINDOWS/WIN.INI"
+                set -- -f "$out/cplclick-$ap-WIN.INI=WINDOWS/WIN.INI"
                 w16cp="-f $root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE -f $root/build/dos/MAIN.CPL=WINDOWS/SYSTEM/MAIN.CPL"
                 if [ "$st" = us ]; then
                     # shellcheck disable=SC2086
