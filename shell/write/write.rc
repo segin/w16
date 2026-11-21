@@ -192,6 +192,8 @@ BEGIN
     IDS_UPDATELINKS, "This document contains links to other documents.\n\nDo you want to update links now?"
     IDS_UNDOKEY, "  \tCtrl+Z"
     IDS_CANTPRINT, "Cannot print.\n\nBe sure that your printer is connected properly, and use the Printers option in Control Panel to verify that the printer is configured properly."
+    IDS_SAVE30, "If you save this document in the Write 3.0 format, the linked or embedded objects will be deleted from the saved file.\n\nDo you want to save this document in Write 3.0 format?"
+    IDS_NOPICTURES, "If you save this document in this format no pictures, including linked or embedded objects, will be saved.\n\nDo you want to save?"
     IDS_CANTSAVE, "Cannot save file.\n\nMake sure that the file or disk is not damaged."
     IDS_PAGE1, "Page 1"
     IDS_WRITE, "Write"

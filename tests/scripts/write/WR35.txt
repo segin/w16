@@ -1,0 +1,56 @@
+; WR35: a document with bold text, a centred paragraph and a picture
+; pasted in a centred paragraph, saved as C:\WR35.WRI; Save As's type
+; list then has "3.0 Write (*.WRI)" second (window dump); saved as Text
+; (entry 4: C:\W30.WRI, a text file; V1: no pictures will be saved, Yes),
+; then as 3.0 Write (entry 1: C:\WD.DOC; V2: objects will be deleted, Yes)
+; mkpic: PIC.DIB
+run WRITE.EXE
+wait 3000
+type plain
+menu c
+char b
+type bold
+key 0D
+menu p
+char c
+type centred
+key 0D
+clipbmp C:\PIC.DIB
+menu e
+char p
+wait 1500
+menu f
+char a
+wait 1500
+type C:\WR35.WRI
+key 0D
+wait 2500
+menu f
+char a
+wait 1500
+dump
+cbsel 470 4
+wait 300
+type C:\W30.WRI
+key 0D
+wait 2500
+snap C:\V1.BMP
+dump
+key 0D
+wait 2500
+menu f
+char a
+wait 1500
+cbsel 470 1
+wait 300
+type C:\WD.DOC
+key 0D
+wait 2500
+snap C:\V2.BMP
+dump
+key 0D
+wait 2500
+close
+wait 1000
+key 4E
+wait 1000

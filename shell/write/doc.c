@@ -770,3 +770,35 @@ void doc_put(DOC *d, DWORD cp, const void FAR *s, DWORD n)
         hm_put(&d->text, c < d->gap ? c : c + d->gapLen, b + (WORD)i, 1);
     }
 }
+
+/* ---- pictures left out (Save As 3.0 Write, Text, Word for DOS: WR35) ---- */
+
+BOOL doc_has_pictures(DOC *d)
+{
+    DWORD i, f, l;
+    ATOM32 a;
+    PAPX p;
+    for (i = 0; i < d->nparas; i++) {
+        para_get(d, i, &f, &l, &a);
+        pap_decode(d, a, &p);
+        if (p.fGraphics && l <= d->cpMac)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* every picture paragraph is left out (WR35: a picture between two
+   paragraphs saved as 3.0 Write or as text leaves just them) */
+void doc_strip_pictures(DOC *d)
+{
+    DWORD i, f, l;
+    ATOM32 a;
+    PAPX p;
+    for (i = d->nparas; i-- > 0;) {
+        para_get(d, i, &f, &l, &a);
+        pap_decode(d, a, &p);
+        if (p.fGraphics && l <= d->cpMac)
+            doc_delete(d, f, l - f);
+    }
+    d->ident = 0xBE31;
+}

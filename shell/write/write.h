@@ -132,6 +132,8 @@
 #define IDS_NOMEMORY        8219
 #define IDS_NOPATH          8220
 #define IDS_CANTSAVE        16390
+#define IDS_SAVE30          8233
+#define IDS_NOPICTURES      8234
 #define IDS_CANTPRINT       8226
 #define IDS_OBJECTNONE      32
 #define IDS_AUTOMATIC       34
@@ -272,6 +274,8 @@ void   doc_init(DOC *d);
 void   doc_new(DOC *d);
 void   doc_free(DOC *d);
 BOOL   doc_copy(DOC *d, const DOC *s);
+BOOL   doc_has_pictures(DOC *d);
+void   doc_strip_pictures(DOC *d);
 BYTE   doc_ch(DOC *d, DWORD cp);
 DWORD  doc_get(DOC *d, DWORD cp, char FAR *buf, DWORD n);
 ATOM32 atom_intern(DOC *d, const BYTE FAR *b, WORD len);
@@ -308,6 +312,7 @@ int    doc_save(DOC *d, LPCSTR path, int format);
 #define FMT_WORD    1
 #define FMT_TEXT    2
 #define FMT_WORDTXT 3                   /* Word for DOS/Txt Only: text (WR23) */
+#define FMT_WRI30   4                   /* 3.0 Write: without objects (WR35) */
 #define LOAD_OK         0
 #define LOAD_NOFILE     1
 #define LOAD_NOTWRI     2               /* text or Word file: ask to convert */
