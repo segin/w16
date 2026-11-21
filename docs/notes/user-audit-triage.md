@@ -146,6 +146,12 @@ working program cannot see (the user's rulings).
   The fourth, `toolhelp`, failed in its all-Microsoft `ref286` part (see
   the rerun note in the report). `uaudit` passes: US29 and US30 identical
   to 3.1, and every run 3.1 does not survive finishes on w16.
+- After the leftovers, merged with master 2fe5dbd (dd2d4f0): `make test`
+  pass; boot test 142 ok, 3 failures: `lzexpand` quirks (known),
+  `trails` timed and `soundtime` sn1 (a tone 9.3 ms late against 7 ms),
+  both failing the same way with master's USER sources in the same tree
+  (rerun), so not from this work. `uaudit` passes with US30's new
+  sections.
 - On the way: the first full run on d79f4ea had 17 new failures (the
   DWORD filter answer, then the activation before a destroy), found by
   bisecting on `runfront` and `taskman` and fixed in 573d08a.
@@ -160,3 +166,6 @@ working program cannot see (the user's rulings).
 | d79f4ea | item 8 (hook calls) and the sweep's fixes |
 | 310a151 | US30: what 3.1 does not survive left out |
 | 573d08a | hook answers as BOOLs, WH_MSGFILTER task-specific, no activation before a destroy, CS_PARENTDC for applications' classes |
+| 6182259 | this document |
+| eaafb08, dd2d4f0 | the leftovers worked (icon titles, re-show activation, next window after a destroy, focus after a refused SETFOCUS, CLICKSKIPPED/KEYSKIPPED, low sweep fixes); US30 sections show and skip |
+| 2bdb369 | merge of master 2fe5dbd (`listbox.c` conflict: master's drawing kept, the sweep's list-box fixes put back on it) |
