@@ -963,11 +963,18 @@ refkey() {
         env | grep -E '^(DROPIN|INPUTRUN)_' | sort
         echo "secs $secs"
         k=$2; shift 2
+        _rp=
         for a in "$@"; do
             printf 'arg %s\n' "$a" | sed "s|$out|@OUT@|g; s|$root|@ROOT@|g"
             for f in "$a" "${a%%=*}"; do
                 if [ -f "$f" ]; then printf 'file '; sha256sum < "$f"; break; fi
             done
+            # -T DIR: the tree laid down (e.g. build/w16): every file in
+            # it, so a changed group file or driver makes a new reference
+            if [ "$_rp" = -T ] && [ -d "$a" ]; then
+                (cd "$a" && find . -type f | LC_ALL=C sort | xargs -d '\n' sha256sum) | sha256sum | sed 's/^/tree /'
+            fi
+            _rp=$a
         done
         # w16 files dropin.sh takes without naming them
         case " $* " in *" -w "*) printf 'WIN.COM '; sha256sum < "$root/build/dos/WIN.COM" ;; esac
