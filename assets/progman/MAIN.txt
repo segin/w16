@@ -8,7 +8,11 @@
 # [Extensions] txt=notepad.exe), with Notepad's icon, as Setup's Read Me
 # names README.WRI and Write's icon; Control Panel (CONTROL.EXE, its own
 # icon) and File Manager (WINFILE.EXE, its own icon), after them so that
-# the items before keep their places. Commands
+# the items before keep their places. Two deliberate deviations from
+# 3.1 (ARCHITECTURE.md 15.8, README.TXT): the prompt is titled "DOS
+# Prompt" (3.1: "MS-DOS Prompt"), and the Registration Info Editor
+# (REGEDIT.EXE, its own icon), which 3.1's Setup leaves out of every
+# group, is the fifth item, "Registry Editor". Commands
 # and icon files are bare names, found in the w16 directory (or on the
 # PATH), as Setup writes them.
 file MAIN.GRP
@@ -16,7 +20,8 @@ name Main
 show 1
 rect 0 0 416 202
 min  -1 -1
-item MS-DOS Prompt | COMMAND.COM | PROGMAN.EXE 9
+item DOS Prompt | COMMAND.COM | PROGMAN.EXE 9
 item Read Me | README.TXT | NOTEPAD.EXE
 item Control Panel | CONTROL.EXE | CONTROL.EXE
 item File Manager | WINFILE.EXE | WINFILE.EXE
+item Registry Editor | REGEDIT.EXE | REGEDIT.EXE

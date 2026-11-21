@@ -1,0 +1,56 @@
+; RE11: /V's unsaved changes: a value typed, then Restore To Last Save
+; (OK); typed again and Exit answered No; then what a new REGEDIT (both
+; views) sees; Delete and Insert keys in /V
+; get: COPY1.DAT
+; get: COPY2.DAT
+; get: COPY3.DAT
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 09
+type First
+key 09
+wait 300
+snap C:\F1.BMP
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+cmd 1537
+wait 1500
+key 0D
+wait 1500
+snap C:\F2.BMP
+dump
+copyfile C:\WINDOWS\REG.DAT C:\COPY2.DAT
+key 28
+key 09
+type Second
+key 09
+wait 300
+close
+wait 1500
+snap C:\F3.BMP
+clickid 7
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY3.DAT
+run REGEDIT.EXE /V
+wait 3000
+key 28
+wait 300
+snap C:\F4.BMP
+dump
+key 2E
+wait 1500
+snap C:\F5.BMP
+dump
+key 1B
+wait 800
+key 2D
+wait 1500
+snap C:\F6.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+dump
+clickid 7
+wait 1500

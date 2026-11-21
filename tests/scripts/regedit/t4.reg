@@ -1,0 +1,10 @@
+regedit
+HKEY_CLASSES_ROOT\w16a=b
+HKEY_CLASSES_ROOT\w16c =nospace
+HKEY_CLASSES_ROOT\w16d= x
+   HKEY_CLASSES_ROOT\w16e = lead
+hkey_classes_root\w16f = lower
+HKEY_CLASSES_ROOT\w16g	= tab
+; comment
+HKEY_CLASSES_ROOT\w16h\ = trail
+HKEY_CLASSES_ROOT\w16i = last

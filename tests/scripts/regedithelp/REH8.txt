@@ -1,0 +1,19 @@
+; REH8: the advanced view: the Help button of Save Registration File's box; F1 in Add Key (tests/rehelp.sh)
+run REGEDIT.EXE /V
+wait 3000
+mark 1
+cmd 1538
+wait 2500
+clickid 40E
+wait 1500
+key 1B
+wait 1500
+mark 2
+cmd 1056
+wait 1500
+key 70
+wait 1500
+key 1B
+wait 1500
+close
+wait 2000

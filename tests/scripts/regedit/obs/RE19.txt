@@ -1,0 +1,27 @@
+; RE19 (REGOBS_TRACE=1): Merge Registration File in /V: the calls of the
+; merge (t1.reg: new keys, a value on a key that exists) and of the Exit,
+; answered Yes; the tree after the merge
+; put: tests/scripts/regedit/t1.reg=T1.REG
+; get: XHELL.LOG
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 28
+append C:\XHELL.LOG ---- merge
+cmd 1040
+wait 2500
+type C:\T1.REG
+key 0D
+wait 2500
+snap C:\J1.BMP
+dump
+key 0D
+wait 1500
+snap C:\J2.BMP
+dump
+append C:\XHELL.LOG ---- Exit, Yes
+close
+wait 1500
+key 0D
+wait 1500
+append C:\XHELL.LOG ---- ended

@@ -119,6 +119,7 @@ Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
 `tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
 in `WIN /3`, `en*w` with w16's WIN386 as well),
+`tests/rescenarios.sh` and `tests/rehelp.sh` (w16's Registration Info Editor against Microsoft's: screens, REG.DAT, WIN.INI and saved .REG files; its New Style scenarios NS* against w16's approved screens in `tests/scripts/regedit/ns-ref/`, `RE_NSREF=update` to approve; `tests/regobs.sh` for observing the original, `REGOBS_TRACE=1` logging its SHELL calls through XHELL.DLL),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,
 INI files, the running saver, USER starting it; `tests/sstree.sh`: on

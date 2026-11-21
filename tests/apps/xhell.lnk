@@ -1,0 +1,17 @@
+# XHELL.DLL (tests/apps/xhell.c): logs a program's registration calls (RE15)
+@tests/apps/dll.lnk
+option modname=XHELL
+library shell.lib
+export XREGOPENKEY.1
+export XREGCREATEKEY.2
+export XREGCLOSEKEY.3
+export XREGDELETEKEY.4
+export XREGSETVALUE.5
+export XREGQUERYVALUE.6
+export XREGENUMKEY.7
+export WEP.8=WEP resident
+export XDRAGACCEPTFILES.9
+export XDRAGQUERYFILE.11
+export XDRAGFINISH.12
+export XSHELLABOUT.22
+import SHELLABOUT SHELL.22

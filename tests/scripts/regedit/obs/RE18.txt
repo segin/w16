@@ -1,0 +1,25 @@
+; RE18 (REGOBS_TRACE=1): the calls of a merge (REGEDIT /s t1.reg) and of
+; Save Registration File (/V, a subtree)
+; put: tests/scripts/regedit/t1.reg=T1.REG
+; get: XHELL.LOG
+; get: OUT3.REG
+append C:\XHELL.LOG ---- merge
+run REGEDIT.EXE /s C:\T1.REG
+wait 3000
+append C:\XHELL.LOG ---- /V
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 28
+key 28
+key 28
+key 28
+append C:\XHELL.LOG ---- save file
+cmd 1538
+wait 2500
+type C:\OUT3.REG
+key 0D
+wait 2500
+append C:\XHELL.LOG ---- Exit
+close
+wait 1500

@@ -1,0 +1,74 @@
+; RG10 (after probe RE10): .REG parsing edge cases (t4: no spaces round "=", a lower-case
+; header and root, leading blanks, a tab, a comment, a trailing "\", no
+; final line end; t5: a key with a blank; t6: LF line ends, the root's
+; own value), each merged silently; then WIN.INI's [RegEdit] size at the
+; start, a resized window, Find Key's matching (a part, another case)
+; ini: RegEdit:width=400
+; ini: RegEdit:height=300
+; put: tests/scripts/regedit/t4.reg=T4.REG
+; put: tests/scripts/regedit/t5.reg=T5.REG
+; put: tests/scripts/regedit/t6.reg=T6.REG
+run REGEDIT.EXE C:\T4.REG
+wait 3000
+snap C:\E1.BMP
+dump
+key 0D
+wait 1500
+run REGEDIT.EXE C:\T5.REG
+wait 3000
+snap C:\E2.BMP
+dump
+key 0D
+wait 1500
+run REGEDIT.EXE C:\T6.REG
+wait 3000
+snap C:\E3.BMP
+dump
+key 0D
+wait 1500
+run REGEDIT.EXE
+wait 3000
+snap C:\E4.BMP
+dump
+movewin 10 20 360 260
+wait 1000
+snap C:\E5.BMP
+dump
+close
+wait 1500
+run REGEDIT.EXE /V
+wait 3000
+snap C:\E6.BMP
+dump
+movewin 0 0 500 400
+wait 1000
+snap C:\E7.BMP
+cmd 1552
+wait 1500
+type COMM
+key 0D
+wait 1500
+snap C:\E8.BMP
+cmd 1552
+wait 1500
+type Media
+key 0D
+wait 1500
+snap C:\E9.BMP
+key 2E
+wait 1500
+snap C:\EA.BMP
+dump
+key 1B
+wait 800
+key 2D
+wait 1500
+snap C:\EB.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+dump
+clickid 7
+wait 1500

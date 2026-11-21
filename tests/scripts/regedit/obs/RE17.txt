@@ -1,0 +1,55 @@
+; RE17 (REGOBS_TRACE=1): the basic view's calls: the list read; Add File
+; Type with Open and Print commands and DDE; Modify of it; Copy; Delete
+; get: XHELL.LOG
+run REGEDIT.EXE
+wait 3000
+append C:\XHELL.LOG ---- Add
+cmd 1056
+wait 1500
+clickid 510
+type w16t
+clickid 530
+type W16 T
+clickid 531
+type notepad.exe %1
+clickid 532
+type [open]
+clickid 533
+type [run]
+clickid 534
+type NOTEPAD
+clickid 535
+type sys
+clickid 521
+wait 300
+clickid 531
+type notepad.exe /p %1
+clickid 512
+wait 300
+clickid 1
+wait 1500
+append C:\XHELL.LOG ---- Modify
+cmd 1058
+wait 1500
+clickid 520
+clickid 512
+wait 300
+clickid 530
+type X
+clickid 1
+wait 1500
+append C:\XHELL.LOG ---- Copy
+cmd 1057
+wait 1500
+clickid 510
+type w16u
+clickid 1
+wait 1500
+append C:\XHELL.LOG ---- Delete
+cmd 1059
+wait 1500
+clickid 6
+wait 1500
+append C:\XHELL.LOG ---- Exit
+close
+wait 1500

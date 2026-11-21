@@ -48,6 +48,15 @@ static int db_bad, dirty;
 static int made;                        /* walk() made a key */
 
 static void compact(void);
+static int load_pending;           /* REG.DAT not read yet (reg_init) */
+
+/* the database's blocks belong to SHELL, not to the task whose call made
+   them: REG.DAT is read at the first call (pending_load), and a block
+   owned by that program would be freed when it ends */
+static HGLOBAL db_alloc(DWORD size)
+{
+    return GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_DDESHARE, size ? size : 1);
+}
 LONG SHAPI RegSetValue(HKEY k, LPCSTR sub, DWORD type, LPCSTR data, DWORD cb);
 static void delete_tree(WORD k);
 
@@ -155,13 +164,13 @@ static int set_entries(WORD n)
     HGLOBAL h;
     if (h_ent) {
         GlobalUnlock(h_ent);
-        h = GlobalReAlloc(h_ent, size, GMEM_MOVEABLE | GMEM_ZEROINIT);
+        h = GlobalReAlloc(h_ent, size, GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_DDESHARE);
         if (!h) {
             GlobalLock(h_ent);
             return 0;
         }
     } else {
-        h = sh_alloc(size);
+        h = db_alloc(size);
         if (!h)
             return 0;
     }
@@ -230,9 +239,9 @@ static int text_room(WORD more)
         need = 0xFFFFL;
     if (h_text) {
         GlobalUnlock(h_text);
-        h = GlobalReAlloc(h_text, need, GMEM_MOVEABLE);
+        h = GlobalReAlloc(h_text, need, GMEM_MOVEABLE | GMEM_DDESHARE);
     } else {
-        h = sh_alloc(need);
+        h = db_alloc(need);
     }
     if (!h) {
         if (h_text)
@@ -259,8 +268,8 @@ static void mark_dead(WORD from, WORD n)
     WORD need = (WORD)((text_cap + 7) / 8);
     if (dead_cap < need) {
         HGLOBAL h = h_dead ? (GlobalUnlock(h_dead),
-                              GlobalReAlloc(h_dead, need, GMEM_MOVEABLE | GMEM_ZEROINIT))
-                           : sh_alloc(need);
+                              GlobalReAlloc(h_dead, need, GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_DDESHARE))
+                           : db_alloc(need);
         if (!h) {
             if (h_dead)
                 dead = (BYTE __far *)GlobalLock(h_dead);
@@ -453,7 +462,7 @@ static void import_embedding(void)
             GlobalUnlock(h);
             GlobalFree(h);
         }
-        h = sh_alloc(size);
+        h = db_alloc(size);
         keys = (char __far *)sh_lock(h);
         if (!keys)
             return;
@@ -734,6 +743,29 @@ void reg_init(void)
         flush();
         return;
     }
+    /* an existing REG.DAT is read at the first registration call, not
+       when SHELL loads (RE13: with Program Manager keeping SHELL loaded, a
+       REG.DAT copied over the file before the first call was the one
+       REGEDIT showed; one copied over it later was not read) */
+    _lclose(f);
+    load_pending = 1;
+}
+
+/* the deferred read of REG.DAT (reg_init) */
+static void pending_load(void)
+{
+    HFILE f;
+    OFSTRUCT of;
+    if (!load_pending)
+        return;
+    load_pending = 0;
+    f = OpenFile(path, &of, OF_READ);
+    if (f == HFILE_ERROR) {
+        /* UNVERIFIED: REG.DAT gone since SHELL loaded: as a missing one */
+        empty_db();
+        flush();
+        return;
+    }
     if (!load(f)) {
         /* UNVERIFIED: what Windows 3.1 does with a damaged REG.DAT; w16
            answers ERROR_BADDB and leaves the file alone */
@@ -748,6 +780,7 @@ LONG SHAPI RegOpenKey(HKEY k, LPCSTR sub, HKEY __far *res)
 {
     WORD n;
     LONG r;
+    pending_load();
     if (!res)
         return ERROR_INVALID_PARAMETER;
     r = walk(k, sub, 0, &n);
@@ -762,6 +795,7 @@ LONG SHAPI RegCreateKey(HKEY k, LPCSTR sub, HKEY __far *res)
 {
     WORD n;
     LONG r;
+    pending_load();
     if (!res)
         return ERROR_INVALID_PARAMETER;
     made = 0;
@@ -780,6 +814,7 @@ LONG SHAPI RegCreateKey(HKEY k, LPCSTR sub, HKEY __far *res)
    than opening gives ERROR_INVALID_PARAMETER (SH1) */
 LONG SHAPI RegCloseKey(HKEY k)
 {
+    pending_load();
     (void)k;
     if (!open_count)
         return ERROR_INVALID_PARAMETER;
@@ -793,6 +828,7 @@ LONG SHAPI RegDeleteKey(HKEY k, LPCSTR sub)
     WORD n, parent, p;
     LONG r;
     const char __far *last;
+    pending_load();
     if (!sub || !*sub)
         return ERROR_BADKEY;
     r = walk(k, sub, 0, &n);
@@ -835,6 +871,7 @@ LONG SHAPI RegSetValue(HKEY k, LPCSTR sub, DWORD type, LPCSTR data, DWORD cb)
 {
     WORD n, t = 0, old;
     LONG r;
+    pending_load();
     (void)cb;
     if (type != REG_SZ)
         return ERROR_INVALID_PARAMETER;
@@ -866,7 +903,9 @@ LONG SHAPI RegSetValue(HKEY k, LPCSTR sub, DWORD type, LPCSTR data, DWORD cb)
 LONG reg_query(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 {
     WORD n, v;
-    LONG r = walk(k, sub, 0, &n);
+    LONG r;
+    pending_load();                     /* ShellExecute's way in, too */
+    r = walk(k, sub, 0, &n);
     if (r)
         return r;
     v = E(n)->d;
@@ -890,13 +929,16 @@ LONG reg_query(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 
 LONG SHAPI RegQueryValue(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 {
+    pending_load();
     return reg_query(k, sub, buf, cb);
 }
 
 LONG SHAPI RegEnumKey(HKEY k, DWORD index, LPSTR buf, DWORD cb)
 {
     WORD n, c;
-    LONG r = key_node(k, 0, &n);
+    LONG r;
+    pending_load();
+    r = key_node(k, 0, &n);
     if (db_bad)
         return ERROR_BADDB;
     if (r)

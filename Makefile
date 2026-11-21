@@ -888,6 +888,13 @@ $(DOS)/FMX.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o tests/apps/dll.lnk te
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/fmx.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/fmx.map file { $(B)/tests/dllstart.o $(B)/tests/dll/fmx.o }
+# XHELL.DLL: logs a program's SHELL registration calls (tests/apps/xhell.c,
+# probe RE15; the program's SHELL imports renamed by tools/nerename.py)
+dos: $(DOS)/XHELL.DLL
+$(DOS)/XHELL.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/xhell.o tests/apps/dll.lnk tests/apps/xhell.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/xhell.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/xhell.map file { $(B)/tests/dllstart.o $(B)/tests/dll/xhell.o }
 # SNAP.EXE: its icon (tools/snapicon.py) and the interactive window
 $(B)/tests/snap.ico: tools/snapicon.py tools/mkicons.py
 	@mkdir -p $(@D)
@@ -1394,6 +1401,25 @@ $(DOS)/WINFILE.EXE: $(SHELL_WF) $(B)/shell/winfile/winfile.res shell/winfile/win
 	    option map=$(B)/shell/winfile/winfile.map \
 	    option resource=$(B)/shell/winfile/winfile.res file { $(SHELL_WF) }
 	python3 tools/nemark.py $@ 3.10
+# ---- shell: REGEDIT.EXE, the Registration Info Editor (shell/regedit/;
+# ARCHITECTURE.md 15.8), Windows 3.1 only ----
+RE_C     := main basic advanced reg regfile newstyle
+SHELL_RE := $(B)/shell/start.o $(RE_C:%=$(B)/shell/regedit/%.o)
+shell: $(DOS)/REGEDIT.EXE
+$(B)/shell/regedit/%.o: shell/regedit/%.c shell/regedit/regedit.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/regedit/regedit.ico: tools/mkregicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkregicon.py $@
+$(B)/shell/regedit/regedit.res: shell/regedit/regedit.rc shell/regedit/regedit.h $(B)/shell/regedit/regedit.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/regedit -i=$(B)/shell/regedit -fo=$@ $<
+$(DOS)/REGEDIT.EXE: $(SHELL_RE) $(B)/shell/regedit/regedit.res shell/regedit/regedit.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/regedit/regedit.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/regedit/regedit.map \
+	    option resource=$(B)/shell/regedit/regedit.res file { $(SHELL_RE) }
+	python3 tools/nemark.py $@ 3.10
 # WRMET.EXE: probe WR9, the font metrics Write's layout depends on
 dos: $(DOS)/WRMET.EXE
 $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
@@ -1825,6 +1851,12 @@ install-tree: $(SAVERS:%=$(W16)/%.SCR)
 $(SAVERS:%=$(W16)/%.SCR): $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# the Registration Info Editor (shell/regedit/): WINDOWS\REGEDIT.EXE, as in 3.1
+W16TREE += $(W16)/REGEDIT.EXE
+install-tree: $(W16)/REGEDIT.EXE
+$(W16)/REGEDIT.EXE: $(DOS)/REGEDIT.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1
 W16TREE += $(W16)/WRITE.EXE
 install-tree: $(W16)/WRITE.EXE
@@ -1853,7 +1885,7 @@ $(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
 	@mkdir -p $(@D)
 	cp $< $@
 GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/CONTROL.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE \
-             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE
+             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE $(DOS)/REGEDIT.EXE
 groups: $(GRP_ICONS)
 	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
 grpcheck: $(GRP_ICONS)

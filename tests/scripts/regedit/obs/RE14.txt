@@ -1,0 +1,56 @@
+; RE14: how /V drops changes. (1) A value typed for WordDocument, Restore
+; To Last Save, then Save Changes: REG.DAT (COPY1) against the original.
+; (2) With Program Manager keeping SHELL loaded, a value typed, Exit
+; answered No: does a new REGEDIT /V still see it (SHELL's memory), and
+; what does REG.DAT hold after a basic REGEDIT adds a type (COPY2)?
+; get: COPY1.DAT
+; get: COPY2.DAT
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 09
+type First
+key 09
+wait 300
+cmd 1537
+wait 1500
+key 0D
+wait 1500
+cmd 1536
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+close
+wait 1500
+run PROGMAN.EXE
+wait 4000
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 09
+type Second
+key 09
+wait 300
+close
+wait 1500
+clickid 7
+wait 1500
+run REGEDIT.EXE /V
+wait 3000
+key 28
+wait 300
+snap C:\H1.BMP
+close
+wait 1500
+run REGEDIT.EXE
+wait 3000
+cmd 1056
+wait 1500
+clickid 510
+type w16z
+clickid 530
+type Zed
+clickid 1
+wait 1500
+close
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY2.DAT

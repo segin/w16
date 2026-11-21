@@ -478,7 +478,8 @@ static void outint(int v)
 
 static void dump_tree(HWND w, int depth)
 {
-    char cls[64], text[64];
+    char cls[64];
+    static char text[512];          /* static: dump_tree recurses (only after its last use) */
     RECT r;
     int i;
     HWND c;

@@ -22,6 +22,12 @@ is newer. Neither mode needs anything of Microsoft's.
                           it in Control Panel's Desktop (Screen Saver,
                           Name), where Setup... sets its warp speed,
                           the number of stars and a password
+  REGEDIT.EXE             the Registration Info Editor: file types and
+                          the registration database (REGEDIT /V shows
+                          all of it; its help is REGEDIT.HLP and
+                          REGEDITV.HLP); [w16] RegeditNewStyle=1 in
+                          SYSTEM.INI gives it a Windows 95-like Registry
+                          Editor view (View > New Style switches)
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
@@ -140,11 +146,17 @@ is newer. Neither mode needs anything of Microsoft's.
                           is built in; Evergreen, Ocean, Plum, Brick,
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
-  MAIN.GRP                  Main (MS-DOS Prompt, Read Me, Control
-                            Panel, File Manager)
+  MAIN.GRP                  Main (DOS Prompt, Read Me, Control
+                            Panel, File Manager, Registry Editor)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)
+
+Main differs from Windows 3.1's on purpose: its prompt is called "DOS
+Prompt" (3.1: "MS-DOS Prompt"), and it has the Registry Editor
+(REGEDIT.EXE), which 3.1 puts in no group. For 3.1's Main, select the
+Registry Editor item and press Del, and rename the prompt with File >
+Properties; Program Manager keeps the change in MAIN.GRP.
 
 This directory is meant to be C:\W16: PROGMAN.INI names the group files
 as C:\W16\MAIN.GRP and so on. Installed elsewhere, change the [Groups]

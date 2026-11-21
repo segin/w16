@@ -1,0 +1,62 @@
+; NS02: New Style editing: New > Key under MPlayer, renamed in place;
+; Edit String on its value; Find; Delete with its confirmation; Export;
+; View > New Style to 3.1's view and back (the key stays selected); the
+; status bar off. REG.DAT and the exported file are kept (w16's own view:
+; compared with w16's approved screens)
+; sysini: w16:RegeditNewStyle=1
+; get: NS.REG
+run REGEDIT.EXE
+wait 3000
+movewin 0 0 600 400
+wait 800
+key 28
+key 28
+wait 300
+cmd 2010
+wait 1000
+snap C:\P1.BMP
+type w16key
+key 0D
+wait 1000
+snap C:\P2.BMP
+key 09
+key 0D
+wait 1000
+snap C:\P3.BMP
+type hello
+key 0D
+wait 1000
+snap C:\P4.BMP
+key 09
+cmd 2014
+wait 1000
+type command
+snap C:\P5.BMP
+key 0D
+wait 1500
+snap C:\P6.BMP
+key 2E
+wait 1000
+snap C:\P7.BMP
+key 0D
+wait 1000
+snap C:\P8.BMP
+cmd 2002
+wait 2000
+type C:\NS.REG
+key 0D
+wait 1500
+snap C:\P9.BMP
+key 0D
+wait 800
+cmd 2000
+wait 1500
+snap C:\PA.BMP
+cmd 2000
+wait 1500
+snap C:\PB.BMP
+cmd 2020
+wait 800
+snap C:\PC.BMP
+close
+wait 1000

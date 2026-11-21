@@ -1,0 +1,26 @@
+; REH6: the advanced view: the Help buttons of Copy Key, Delete Key and Find Key (tests/rehelp.sh)
+run REGEDIT.EXE /V
+wait 3000
+mark 1
+cmd 1057
+wait 1500
+clickid 401
+wait 1500
+key 1B
+wait 1500
+mark 2
+cmd 1059
+wait 1500
+clickid 401
+wait 1500
+key 1B
+wait 1500
+mark 3
+cmd 1552
+wait 1500
+clickid 401
+wait 1500
+key 1B
+wait 1500
+close
+wait 2000

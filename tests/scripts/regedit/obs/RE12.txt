@@ -1,0 +1,41 @@
+; RE12: does SHELL read REG.DAT again while it stays loaded? An
+; alternative REG.DAT is made in the session (t2.reg merged by a REGEDIT
+; that then ends, the original put back); a basic REGEDIT keeps SHELL
+; loaded (it holds no key) while the alternative file is copied over
+; REG.DAT; then a second REGEDIT /V shows what SHELL gives it. Then the
+; same with the /V instance holding its key while the file changes.
+; Run with REGOBS_SHELL for w16's SHELL.
+; put: tests/scripts/regedit/t2.reg=T2.REG
+; get: COPY1.DAT
+copyfile C:\WINDOWS\REG.DAT C:\ORIG.DAT
+run REGEDIT.EXE /s C:\T2.REG
+wait 3000
+copyfile C:\WINDOWS\REG.DAT C:\ALT.DAT
+copyfile C:\ORIG.DAT C:\WINDOWS\REG.DAT
+run REGEDIT.EXE
+wait 3000
+snap C:\G1.BMP
+copyfile C:\ALT.DAT C:\WINDOWS\REG.DAT
+run REGEDIT.EXE /V
+wait 3000
+snap C:\G2.BMP
+dump
+copyfile C:\ORIG.DAT C:\WINDOWS\REG.DAT
+cmd 1537
+wait 1500
+key 0D
+wait 1500
+snap C:\G3.BMP
+dump
+close
+wait 1500
+run REGEDIT.EXE /V
+wait 3000
+snap C:\G4.BMP
+dump
+close
+wait 1500
+dump
+close
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
