@@ -248,8 +248,10 @@
 #              the list and the static under it where 3.1 has them (the
 #              window spy US32S), no highlight under the list (until
 #              2026-11-20 w16's list was a row taller and the scroll drew
-#              over the static)
-#   mmsystem   w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
+#              over the static). The tree's SB16.DRV gives QuickTime a
+#              sound device in parts tree, tree386 and cpl; their stock
+#              3.1 runs get Windows 3.1's SNDBLST2.DRV to match
+#   mmsystem  w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
 #              driver, DriverCallback, interrupt stack, tasks; mcmp.py),

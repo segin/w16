@@ -296,6 +296,88 @@ movie plays on to its last frame at the new place.
 
 The last two are in `user/pos.c`.
 
+## The case with SB16.DRV the default (2026-11-20)
+
+Task: after master f265d2a put SB16.DRV in the tree's SYSTEM.INI,
+`quicktime` failed in all four parts, twice, at load average about 32:
+"w16 did not get to the Movie Player", hangwatch ending Windows with
+every sample in QTINSTAL and LZEXPAND. Run names on installation-05:
+`w16-qtsb16` (measurements), `w16-qtsb16-v1`, `w16-qtsb16-drag`
+(the old drag loop), `w16-qtsb16-p` (the pass record), `w16-qtsb16-f`
+(the final run). Host load came from busy shell loops beside the runs
+(`sh -c 'while :; do :; done'` under `timeout`, killed by PID).
+
+**Three causes, one of them SB16.DRV's:**
+
+- **hangwatch=30 was too tight, with or without SB16.DRV.** The
+  installer unpacks its files ("Installing Files") without yielding:
+  no task switch, no idle pass, so no hangwatch progress. KERNEL now
+  prints the longest stretch without progress as Windows ends
+  (`exitmsg`). Measured: 15-21 s on an idle host, 25.6-28.1 s at
+  load average 28-45, 36-40 s at 47, 43-46 s at 55-57; the same with
+  SB16.DRV (tree, 27.1 s) and without it (tree with its `[drivers]`
+  wave/midi/aux removed, 28.1 s; over, 27.1 s). The part `over` never
+  loads SB16.DRV (3.1's SYSTEM.INI: `[drivers]` has only timer and
+  midimapper), yet failed the same way. And the same failure is on
+  record before SB16.DRV was the default: `w16-qtdrag`
+  boottest-025837 (2026-11-20 03:52), all three parts, the tree's
+  `[drivers]` timer alone. DOSBox runs cycles=max, so a loaded host
+  gives fewer instructions per emulated second, and the RTC-timed
+  hangwatch sees the same unpacking take longer.
+- **SB16.DRV changed what QuickTime shows**, a correct difference that
+  the test compared against a 3.1 without a sound device. On the tree
+  (SB16.DRV, DOSBox's SB16) the Movie Player's speaker button is live,
+  and its raised top edge is in the last row of the dragged movie's
+  picture (3 pixels: the tree parts failed this once hangwatch no
+  longer stopped them first). QuickTime's Control Panel gets Audio
+  and MIDI tabs before Files, so qtcpl's click on Files opened Audio
+  (part cpl failed in every run since f265d2a).
+- **At load average 49 the installer's progress bar held still** for
+  more than the script's 5 s settle while it wrote SAMPLE.MOV; Return
+  then hit Cancel ("Exit without installing?").
+
+SB16.DRV itself costs nothing measurable here: no DSP probing or
+interrupt load shows in the stretch, which is the same without it.
+
+**The fix, in the tests:**
+
+- `tests/qtplay.sh`, `tests/qtcpl.sh`: hangwatch 120
+  (`$QTPLAY_HANGWATCH`), over 2.5 times the longest stretch seen (46 s
+  at load average 57); qtplay prints it ("hangwatch 120 s; longest
+  stretch without progress ...").
+- With the tree alone and SB16.DRV in its SYSTEM.INI, the stock 3.1 run
+  gets Windows 3.1's SNDBLST2.DRV (from `.tools/ref/win31/src`,
+  `tools/szdd.py`, port 220h, IRQ 7: DOSBox 0.74's card), so both sides
+  have a sound device: speaker buttons, the tabs and the movie's sound
+  alike. qtcpl's script clicks Files where it then is (`@TABX@`,
+  `@ARROWX@`).
+- `qtplay.txt`, `qtcpl.txt`: after Complete Install, wait for the
+  progress bar's first frame (186,262 red), then for it to go, then the
+  settle as before.
+
+**Results:**
+
+- Before (126d98f, hangwatch 30 left in): over, tree and tree386 at
+  load 28-45 had stretches of 27-28 s, a hair under the limit; idle,
+  tree and tree386 failed on the speaker button (3 pixels) and cpl on
+  the Audio tab.
+- The pass record (`w16-qtsb16-p`, hangwatch 90, five full `quicktime`
+  runs in a row, 4 parts each): 20 of 20 parts ok; runs 1-2 at load
+  average 5-10 (stretches 17.5-21.1 s), runs 3-5 beside 30 busy loops
+  at load 47-57 (36.1-45.7 s: every one of them over the old 30). The
+  limit then went to 120 for more room; the final run with it
+  (`w16-qtsb16-f`): 4 of 4 ok, make test passes.
+- Still catches the drag hang: with user/track.c's loop put back as it
+  was before 75fa907 (GetMessage of everything, other messages
+  dispatched), parts over and tree both fail at hangwatch 90 and at
+  120: "the movie's window dragged while playing" (the window never
+  moved) and hangwatch's report in the close sequence, its samples in
+  DISPLAY:2 (the frame drawn again and again), as on 2026-11-19. The
+  frame's redrawing keeps the screen changing, so the script's settles
+  run to their limits and hangwatch ends Windows before the script
+  ends. (The longest stretch printed then is the longest one before
+  the hang: the fatal one never made progress.)
+
 ## Debugging aids added (docs/w16-settings.md)
 
 - `[w16] hangwatch=SECONDS`: the boot watchdog kept running after the
