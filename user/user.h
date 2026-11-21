@@ -34,6 +34,7 @@ extern HQUEUE __far __pascal K_GETTASKQUEUE(HTASK);                  /* 35 */
 extern FARPROC __far __pascal K_SETTASKSIGNALPROC(HTASK, FARPROC);   /* 38 */
 extern HMODULE __far __pascal K_GETEXEPTR(HANDLE);                   /* 133 */
 extern WORD   __far __pascal K_DIRECTEDYIELD(HTASK);                 /* 150 */
+extern BOOL   __far __pascal K_ISWINOLDAPTASK(HTASK);                /* 158 */
 extern WORD   __far __pascal K_GETTASKDS(void);                      /* 155 */
 extern DWORD  __far __pascal K_GETHEAPSPACES(WORD);                  /* 138 */
 extern UINT   __far __pascal K_LOCALCOUNTFREE(void);                 /* 161 */
@@ -257,6 +258,9 @@ void kill_queue_timers(HQUEUE hq);
 void kill_window_timers(HWND h);
 void move_queue_timers(HQUEUE old, HQUEUE hq);
 BOOL timer_message(QUEUE __far *q, HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
+extern DWORD __far time_last_input;    /* input.c: the screen saver's idle time */
+void screensave_init(void);             /* misc.c: at the first InitApp once up */
+void screensave_run(void);              /* misc.c: SC_SCREENSAVE's saver */
 extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment */
 
 /* ---- input (input.c) ---- */

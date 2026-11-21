@@ -1292,6 +1292,36 @@ $(DOS)/CLOCK.EXE: $(SHELL_CK) $(B)/shell/clock/clock.res shell/clock/clock.lnk t
 	    option resource=$(B)/shell/clock/clock.res file { $(SHELL_CK) }
 	python3 tools/nemark.py $@ 3.10
 
+# ---- shell: screen savers (shell/scrnsave; ARCHITECTURE.md 15.8): the
+# library (scrnsave.c, pwenc.c, scrnsave.dlg) linked into each saver ----
+SCRNSAVE_O := $(B)/shell/start.o $(B)/shell/write/i4.o $(B)/shell/scrnsave/scrnsave.o $(B)/shell/scrnsave/pwenc.o
+SCRNSAVE_H := shell/scrnsave/scrnsave.h
+SAVERS     := SSSTARS
+shell: $(SAVERS:%=$(DOS)/%.SCR)
+$(B)/shell/scrnsave/%.o: shell/scrnsave/%.c $(SCRNSAVE_H) $(wildcard shell/scrnsave/ss*.h)
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/scrnsave/ssstars.ico: tools/starsicon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/starsicon.py $@
+$(B)/shell/scrnsave/%.res: shell/scrnsave/%.rc shell/scrnsave/scrnsave.dlg $(SCRNSAVE_H) \
+                           shell/scrnsave/%.h $(B)/shell/scrnsave/%.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/scrnsave -i=$(B)/shell/scrnsave -fo=$@ $<
+$(DOS)/SSSTARS.SCR: $(SCRNSAVE_O) $(B)/shell/scrnsave/ssstars.o $(B)/shell/scrnsave/ssstars.res \
+                    shell/scrnsave/ssstars.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/scrnsave/ssstars.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/scrnsave/ssstars.map \
+	    option resource=$(B)/shell/scrnsave/ssstars.res \
+	    file { $(SCRNSAVE_O) $(B)/shell/scrnsave/ssstars.o }
+	python3 tools/nemark.py $@ 3.10
+
+# the password encoding on the host against 3.1's observed passwords
+# (tests/scripts/ss/pwtest.py, make test)
+$(B)/host/pwtest: tests/scripts/ss/pwtest.c shell/scrnsave/pwenc.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -o $@ tests/scripts/ss/pwtest.c shell/scrnsave/pwenc.c
+
 # ---- shell: TASKMAN.EXE, the Task List (shell/taskman; ARCHITECTURE.md 15.5) ----
 SHELL_TM := $(B)/shell/start.o $(B)/shell/taskman/taskman.o
 shell: $(DOS)/TASKMAN.EXE
@@ -1372,7 +1402,8 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 	    option map=$(B)/tests/wrmet.map file { $(B)/tests/start.o $(B)/tests/wrmet.o }
 
 
-test: dos fonts grpcheck
+test: dos fonts grpcheck $(B)/host/pwtest
+	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV \
@@ -1765,6 +1796,13 @@ $(W16)/WIN.COM $(W16)/PROGMAN.EXE $(W16)/CLOCK.EXE: $(W16)/%: $(DOS)/%
 W16TREE += $(W16)/WINFILE.EXE
 install-tree: $(W16)/WINFILE.EXE
 $(W16)/WINFILE.EXE: $(DOS)/WINFILE.EXE
+	@mkdir -p $(@D)
+	cp $< $@
+# the screen savers (shell/scrnsave/): WINDOWS\*.SCR, as in 3.1 (Control
+# Panel's Desktop lists the Windows directory's)
+W16TREE += $(SAVERS:%=$(W16)/%.SCR)
+install-tree: $(SAVERS:%=$(W16)/%.SCR)
+$(SAVERS:%=$(W16)/%.SCR): $(W16)/%: $(DOS)/%
 	@mkdir -p $(@D)
 	cp $< $@
 # Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1

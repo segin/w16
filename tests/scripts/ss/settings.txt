@@ -1,0 +1,50 @@
+;! get W1.INI
+;! get W2.INI
+; Setup: Warp Speed (End; Home, two Page Downs, Right), Starfield
+; Density (out of range disables OK and the spin control; a click on its
+; down arrow); OK each time
+blinktime 65535
+run C:\WINDOWS\SSSTARS.SCR /c
+wait 3000
+alt w
+key 23
+wait 300
+snap A1.BMP
+key 0D
+wait 1500
+copyfile C:\WINDOWS\CONTROL.INI C:\W1.INI
+run C:\WINDOWS\SSSTARS.SCR /c
+wait 3000
+alt w
+key 24
+key 22
+key 22
+key 27
+wait 300
+key 0D
+wait 1500
+copyfile C:\WINDOWS\CONTROL.INI C:\W2.INI
+run C:\WINDOWS\SSSTARS.SCR /c
+wait 3000
+alt d
+type 500
+wait 300
+snap A2.BMP
+dump
+key 08
+key 08
+key 08
+type 9
+wait 300
+snap A3.BMP
+dump
+key 08
+type 150
+wait 300
+mclick 237 129
+wait 300
+snap A4.BMP
+focus
+key 0D
+wait 1500
+dump

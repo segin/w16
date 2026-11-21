@@ -34,6 +34,9 @@ typedef struct SYSEV {
 static SYSEV __far sysq[NSYSQ];
 static volatile WORD __far sq_head, __far sq_count;
 WORD __far input_pending;
+/* when the last key or mouse event came (ms; 0: none since the screen
+   saver was last started): the screen saver's idle check (misc.c) */
+DWORD __far time_last_input;
 BYTE __far keystate[256];       /* the driver's async state (KEYBOARD.Enable) */
 static BYTE __far qkeystate[256];     /* GetKeyState's: as of the last message */
 POINT __far ptCursor;
@@ -108,6 +111,7 @@ static void push_event(WORD msg, WORD wp, DWORD lp)
             l->wParam = wp;
             l->lParam = lp;
             l->time = tickcount;
+            time_last_input = tickcount ? tickcount : 1;
             irq_restore(f);
             if (hqInput)
                 set_wakebit(hqInput, QS_MOUSE);
@@ -122,6 +126,7 @@ static void push_event(WORD msg, WORD wp, DWORD lp)
         e->time = tickcount;
         sq_count++;
         input_pending = 1;
+        time_last_input = tickcount ? tickcount : 1;
     }
     irq_restore(f);
     if (hqInput)

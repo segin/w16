@@ -1,0 +1,8 @@
+; Setup (/c): the dialog as it opens; Cancel writes nothing
+run C:\WINDOWS\SSSTARS.SCR /c
+wait 3000
+snap S1.BMP
+dump
+key 1B
+wait 1500
+dump

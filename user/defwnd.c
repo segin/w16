@@ -717,6 +717,9 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     case SC_TASKLIST:
         start_taskman(0, 0);
         break;
+    case SC_SCREENSAVE:                 /* SYSTEM.INI's saver (3.1 SDK) */
+        screensave_run();
+        break;
     }
     (void)w, (void)lp;
 }

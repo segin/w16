@@ -763,7 +763,9 @@ int WINAPI U_INITAPP(HINSTANCE hinst)
     }
     q_of(hq)->hinst = hinst;
     q_of(hq)->expwinver = K_GETEXPWINVER(K_GETEXEPTR(hinst));
-    if (booted)
+    if (booted) {
         open_boot_drivers();            /* the first InitApp's (driver.c) */
+        screensave_init();              /* its idle timer (misc.c) */
+    }
     return 1;
 }

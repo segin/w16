@@ -1,0 +1,40 @@
+/*
+ * ssstars.rc - SSSTARS.SCR's resources. The Setup dialog's layout (dialog
+ * units, control IDs, styles, text) is Windows 3.1's as its window dump
+ * and screenshots show it (tests/scripts/ss; format facts, ARCHITECTURE.md
+ * 3); the icon is our own (tools/starsicon.py).
+ */
+#include <windows.h>
+#include "scrnsave.h"
+#include "ssstars.h"
+
+ID_APP ICON "ssstars.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_DESCRIPTION, "Starfield Simulation"
+    idsAppName,      "Screen Saver.Stars"
+END
+
+DLG_SCRNSAVECONFIGURE DIALOG 8, 16, 202, 113
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Starfield Simulation Setup"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON "OK", IDOK, 158, 8, 40, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 158, 26, 40, 14
+    PUSHBUTTON "&Help", IDC_HELP, 158, 44, 40, 14
+    GROUPBOX "&Warp Speed", -1, 4, 4, 150, 36
+    LTEXT "Slow", -1, 8, 16, 32, 14
+    RTEXT "Fast", -1, 114, 16, 32, 14
+    SCROLLBAR IDC_WARP, 8, 24, 138, 12, WS_TABSTOP | WS_GROUP
+    GROUPBOX "Starfield &Density", -1, 4, 43, 150, 30
+    LTEXT "Number of stars (10-200)", -1, 8, 57, 92, 14
+    EDITTEXT IDC_DENSITY, 106, 54, 18, 12
+    CONTROL "", IDC_DENSITYA, "cpArrow", WS_BORDER | WS_TABSTOP, 124, 54, 8, 12
+    GROUPBOX "Password Options", -1, 4, 76, 150, 30
+    CONTROL "&Password Protected", IDC_PROTECTED, "Button", BS_CHECKBOX | WS_TABSTOP | WS_GROUP, 8, 88, 80, 14
+    PUSHBUTTON "&Set Password...", IDC_SETPASSWORD, 90, 88, 58, 14, WS_DISABLED | WS_GROUP
+END
+
+#include "scrnsave.dlg"

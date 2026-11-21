@@ -1,0 +1,34 @@
+;! w16 CONTROL.EXE WINDOWS/CONTROL.EXE
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! dumpskip CtlPanelClass|id=03BF|text="Desktop"
+; Control Panel's Desktop: Starfield Simulation chosen from the Name list
+; (listed by its description); Setup... shows its Setup dialog; Test runs
+; it until a key; OK writes SYSTEM.INI [boot] SCRNSAVE.EXE and WIN.INI
+; ScreenSaveActive
+run CONTROL.EXE DESKTOP
+wait 4000
+alt a
+wait 300
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 500
+snap D1.BMP
+alt u
+wait 3000
+snap D2.BMP
+dump
+key 1B
+wait 1500
+alt e
+wait 3000
+snap R1.BMP
+kdown 41
+kup 41
+wait 1500
+snap D3.BMP
+key 0D
+wait 2000
+dump

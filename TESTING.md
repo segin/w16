@@ -120,6 +120,9 @@ CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
 `tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
 in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
+`tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,
+INI files, the running saver, USER starting it; `tests/sstree.sh`: on
+w16's install tree alone; the boot-test case `scrnsave`),
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),

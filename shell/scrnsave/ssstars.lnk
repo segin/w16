@@ -1,0 +1,9 @@
+# wlink directives for SSSTARS.SCR (objects and output come from the Makefile);
+# the description is what Control Panel lists the saver by (3.1 SDK 14.2.3)
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=4k
+option description 'SCRNSAVE : Starfield Simulation'
+library windows.lib
