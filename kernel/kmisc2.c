@@ -322,6 +322,18 @@ void KAPI FatalAppExit(u16 action, const char FAR *msg)
         if (box)
             box(msg ? msg : "", "Application Error", 0, 0x8008, 0);
     }
+    if (!cur_task) {
+        /* no task to end (a driver's or DLL's initialisation during the
+           boot): Windows ends with the message on the text screen, as
+           other reports that end it, not by a DOS exit of KERNEL's own
+           process past its clean-up (KERNEL audit, L26) */
+        text_mode();
+        kputs("w16: FatalAppExit: ");
+        if (msg)
+            kputs(msg);
+        kputs("\r\n");
+        kexit_to_dos(0xFF);
+    }
     r.ax = 0x4CFF;              /* ends the task through our INT 21h hook */
     r.ds = r.es = 0;
     r.bx = r.cx = r.dx = r.si = r.di = 0;
@@ -345,17 +357,37 @@ void KAPI UndefDynlink(void)
    no extension added), for LoadLibrary("C:\\NODIR\\NOSUCH.DLL") (3, path
    not found) "Cannot find NOSUCH.DLL" (the base name). Not for a program
    that is itself missing (WinExec, LoadModule), nor with
-   SetErrorMode(SEM_NOOPENFILEERRORBOX, 8000h). The box is USER's
+   SetErrorMode(SEM_NOOPENFILEERRORBOX, 8000h). It is OpenFile's
+   OF_PROMPT box (cannot_find_box, below): Pietrek (LMLoadExeFile), the
+   loader opens a DLL with OF_PROMPT | OF_CANCEL, without OF_PROMPT under
+   SEM_NOOPENFILEERRORBOX. The box is USER's
    SysErrorBox("Cannot find NAME", "File Error", 0, 8000h | 8, 0): one
    Close button, as FatalAppExit's (the same layout, pixel for pixel).
    UNVERIFIED: during the boot (w16: no box); upper-casing beyond a-z. */
 void file_error_box(const char FAR *name, const char *ext)
 {
+    if (!(error_mode() & 0x8000))
+        cannot_find_box(name, ext);
+}
+
+/* OpenFile's OF_PROMPT box, observed on 3.1 (TK59 steps 10-13, boot-test
+   case missingdll@tk59: screenshots and return codes): for a file that
+   is not found (DOS error 2, and 3 for a directory that is not there),
+   with OF_PROMPT, with or without OF_CANCEL, the same "File Error" box
+   as above with the name given (its base name, "Cannot find
+   NOSUCH.TXT" for C:\NODIR\NOSUCH.TXT), one Close button (Escape does
+   not close it); also under SetErrorMode(8000h); OpenFile then fails as
+   without it (HFILE_ERROR, nErrCode 2 or 3). OF_CANCEL changes nothing
+   there (the SDK: it adds a Cancel button). w16 ignored OF_PROMPT
+   (KERNEL audit, L32). UNVERIFIED: other errors (sharing, no handle
+   left); OF_CREATE. */
+void cannot_find_box(const char FAR *name, const char *ext)
+{
     char t[16 + DOS_PATHMAX];
     const char FAR *base;
     u16 n, i;
     module FAR *u;
-    if (!winboot_done || (error_mode() & 0x8000) || !cur_task)
+    if (!winboot_done || !cur_task)
         return;
     u = module_find("USER");
     if (!u)

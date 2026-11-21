@@ -207,14 +207,18 @@ static u16 task_of(u16 t)
 
 /* ---- DOS: real-mode calls through DPMI 0300h ---- */
 
-static struct {
+/* (each call's own record, on its stack: one shared record would be
+   overwritten by a call made while another is in DOS; KERNEL audit,
+   medium 26) */
+typedef struct rmcall {
     u32 edi, esi, ebp, res, ebx, edx, ecx, eax;
     u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
-} rmc;
+} rmcall;
 
 static u16 rm_int(u8 n, u16 ax, u16 bx, u16 dx, u16 si)
 {
     regs16 r;
+    rmcall rmc;
     kmemset(&rmc, 0, sizeof rmc);
     rmc.eax = ax;
     rmc.ebx = bx;
@@ -234,6 +238,7 @@ static u16 rm_int(u8 n, u16 ax, u16 bx, u16 dx, u16 si)
 static void rm_int_es(u8 n, u16 ax, u16 es)
 {
     regs16 r;
+    rmcall rmc;
     kmemset(&rmc, 0, sizeof rmc);
     rmc.eax = ax;
     rmc.es = es;
@@ -583,6 +588,16 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     if (!h->auto_data || h->auto_data > m->seg_count ||
         !h->cs || h->cs > m->seg_count || !h->ss || h->ss > m->seg_count)
         return 0;
+    /* the start-up frame (below) must fit below SP inside DGROUP: a
+       malformed file's SP under 26 or past DGROUP's end wrote it outside
+       (KERNEL audit, medium 29). (The stack is DGROUP whatever the
+       file's SS says, as it was.) */
+    dsize = (m->dg_min ? m->dg_min : 0x10000UL) + h->stack_size;
+    if (dsize > 0xFFF0UL)               /* DGROUP's end (loader.c) */
+        dsize = 0xFFF0UL;
+    sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
+    if (sp < 26 || (u32)sp > (u32)sel_lim16(dg_sel) + 1)
+        return 0;
     t = galloc_dos(TDB_SIZE, 0, &seg);
     if (!t)
         return 0;
@@ -660,10 +675,6 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        size, DX = 0, SI = hPrevInstance, DI = hInstance, BP = 0, ES = PDB,
        DS = SS = DGROUP, SP = the end of the stack (static data, then the
        stack, then the local heap) */
-    dsize = (m->dg_min ? m->dg_min : 0x10000UL) + h->stack_size;
-    if (dsize > 0xFFF0UL)               /* DGROUP's end (loader.c) */
-        dsize = 0xFFF0UL;
-    sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
     {
         /* kentry.asm's frame, Windows 3.1's: DX BX ES CX AX DI SI DS BP,
            then the address the task goes on at */
@@ -749,8 +760,10 @@ u16 task_boot(void)
     in_sched = 1;
     for (t = task_head; t && !TW(t, TDB_EVENTS); t = TW(t, TDB_NEXT))
         ;
-    if (!t)
+    if (!t) {
+        in_sched = 0;           /* (left set: KERNEL audit, L18) */
         return 0xFF;
+    }
     list_requeue(t);
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
@@ -1032,6 +1045,11 @@ static u16 lsl_tdb(u16 s);
 #pragma aux lsl_tdb = "lsl ax, ax" "jz l5" "xor ax, ax" "l5:" "cmp ax, 0FFh" "mov ax, 0" "jb l4" "inc ax" "l4:" parm [ax] value [ax];
 static int tdb_writable(u16 s);
 #pragma aux tdb_writable = "verw ax" "mov ax, 0" "jnz l6" "inc ax" "l6:" parm [ax] value [ax];
+/* not an expand-down segment, whose limit counts from the other end: a
+   bogus handle that was one faulted on the read at FAh (KERNEL audit,
+   L22) */
+static int not_down(u16 s);
+#pragma aux not_down = ".286p" "lar ax, ax" "jnz l7" "and ah, 04h" "jnz l7" "mov ax, 1" "jmp l8" "l7:" "xor ax, ax" "l8:" parm [ax] value [ax];
 
 /* A TDB is taken as it is when it looks like one (writable, "TD" at
    FAh): PostEvent is called at interrupt time (USER's input), when the
@@ -1043,7 +1061,8 @@ u16 KAPI PostEvent(u16 htask)                                 /* KERNEL.31 */
     u16 t;
     if (!htask)
         t = cur_task;
-    else if (tdb_writable(htask) && lsl_tdb(htask) && TW(htask, TDB_SIG) == TDB_MAGIC)
+    else if (tdb_writable(htask) && not_down(htask) && lsl_tdb(htask) &&
+             TW(htask, TDB_SIG) == TDB_MAGIC)
         t = htask;
     else
         t = task_of(htask);

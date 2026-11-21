@@ -115,8 +115,9 @@ woados scenario with it):
   about the module's heap: TK3 "shrink" records LocalShrink(0, 0) = 3FEh,
   LocalHeapSize 3F4h, DGROUP 6A20h on 3.1, not checked).
 - ExitWindows when the last task ends (Pietrek).
-- INT 24h handler, SetErrorMode, OF_PROMPT/OF_CANCEL: need a design (a
-  critical-error handler under DPMI; USER's dialogs).
+- INT 24h handler, SetErrorMode: need a design (a critical-error handler
+  under DPMI). OF_PROMPT/OF_CANCEL: done (KERNEL audit L32: KERNEL's
+  "Cannot find" box, as 3.1's).
 - The environment copy LoadModule makes is never freed (owner 0); on 3.1
   the copy was still there right after the child ended (TK16 "env: block
   size"), so a PDB owner was not right: needs a probe that looks later.

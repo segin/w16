@@ -208,10 +208,23 @@ static u16 copy_selector(u16 sel, int code)
         return 0;
     lim = seg_limit(sel);
     n = code < 0 ? (u16)(lim >> 16) + 1 : 1;
+#ifdef KRNL386
+    /* observed (TK66 "sels"): KRNL386 keeps the other type bits, so a
+       conforming code segment's data alias is expand-down (F6h), its code
+       alias conforming (FEh) */
     if (code > 0)
         d.b[5] |= AR_CODE;
     else if (code == 0)
         d.b[5] = (d.b[5] & ~AR_CODE) | AR_RW;
+#else
+    /* observed (TK66 "sels"): KRNL286 gives a plain type, readable or
+       writeable, accessed: a conforming code segment's aliases are F3h
+       and FBh (KERNEL audit, medium 23; w16 kept the conforming bit) */
+    if (code > 0)
+        d.b[5] = (d.b[5] & 0xF0) | AR_CODE | AR_RW | AR_ACCESSED;
+    else if (code == 0)
+        d.b[5] = (d.b[5] & 0xF0) | AR_RW | AR_ACCESSED;
+#endif
     s = dpmi_alloc_desc(n);
     if (!s)
         return 0;

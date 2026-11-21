@@ -24,6 +24,9 @@
 #define LE_BADEXE       11      /* LoadModule of a program that is not a
                                    Windows module: a document, a .COM, a
                                    .BAT, a DOS .EXE (SH14) */
+#define LE_BIGENTRY     10      /* an entry table of 32K or more (TK66
+                                   "entries"; the SDK's 10 is "incorrect
+                                   Windows version") */
 #define LE_WIN32        21      /* LoadModule of a 32-bit program (a PE
                                    file) without Win32s (SH14); the SDK:
                                    "requires 32-bit extensions" */
@@ -347,9 +350,15 @@ static void pstr_to_c(const u8 FAR *p, char *out, u16 max)
     out[n] = 0;
 }
 
+/* (an offset past the module table, in a malformed file, gives an empty
+   name: KERNEL audit, medium 16) */
 static const u8 FAR *imported_name(module FAR *m, u16 offset)
 {
-    return MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
+    static const u8 none[1] = { 0 };
+    const u8 FAR *p = MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
+    if ((u32)NE_HDR(m)->impname_off + offset > 0xFFFFu || !pstr_fits(p))
+        return none;
+    return p;
 }
 
 /* The name of imported module `index` (1-based), from the file's tables:
@@ -915,6 +924,18 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         (u32)h.modref_off + 2UL * h.modref_count > h.impname_off ||
         h.entry_off < h.impname_off || h.align_shift > 16) {
         f_close(fh);
+        return NULL;
+    }
+    /* observed on 3.1 (TK66 "entries", KRNL386 in Standard and 386
+       Enhanced mode): LoadLibrary of TKENT2.DLL, whose entry table is
+       8D02h bytes (12000 entries), gives 10, no box; KRNL286 ended
+       Windows there. w16 gave 8 (KERNEL audit, C5). UNVERIFIED: where
+       the limit lies between 5DC2h (TKEA.DLL, 8000 entries: 3.1 ended
+       Windows in all three runs; w16 loads it) and 8D02h; w16 takes
+       8000h */
+    if (h.entry_len >= 0x8000u) {
+        f_close(fh);
+        *err = LE_BIGENTRY;
         return NULL;
     }
     ne_len = h.entry_off + h.entry_len;

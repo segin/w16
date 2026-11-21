@@ -180,12 +180,13 @@ void mod_set_path(module FAR *m, const char FAR *path)
     m->path[i] = 0;
 }
 
-/* KERNEL's own segments are the bootstrap's memory, not blocks of the
-   heap; 3.1's are fixed blocks (TK62 "kseg", "codehandle"; TK50). The
-   global heap's APIs answer for them as such (KERNEL audit, medium 33):
-   which one sel is (its number + 1, 0 for none), and its GlobalFlags
-   (0900h for a discardable code segment, as 3.1 shows segments 2 and 3;
-   0 for the fixed ones). */
+/* KERNEL's own segments: 3.1's are fixed blocks of the heap (TK62
+   "kseg", "codehandle"; TK50), and so are w16's once gadopt_kernel
+   (global*.c) has moved them there; for one it could not move (no
+   memory, DPMI refused), the global heap's APIs answer as for a block
+   (KERNEL audit, medium 33). Which one sel is (its number + 1, 0 for
+   none), and its GlobalFlags (0900h for a discardable code segment, as
+   3.1 shows segments 2 and 3; 0 for the fixed ones). */
 u16 kernel_seg(u16 sel)
 {
     u16 i;
@@ -224,7 +225,12 @@ void module_register_kernel(const bootinfo FAR *bi)
         ne_segment FAR *s = MOD_SEG(m, i);
         m->seg[i].sel = m->seg[i].hnd = bi->seg_sel[i];
         MOD_SEGHND(m, i) = bi->seg_sel[i];
-        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED | NESEG_MOVABLE;
+        /* as 3.1's (TK62 "kseg": C146h for the fixed code segment,
+           D156h for the discardable ones, C067h for DGROUP): the file's
+           flags but the privilege bits, code not "pure", DGROUP without
+           relocations, allocated, loaded, and C000h */
+        s->flags = (s->flags & ~(NESEG_DPL | ((s->flags & NESEG_DATA) ? NESEG_RELOCS : NESEG_PURE))) |
+                   NESEG_ALLOCED | NESEG_LOADED | 0xC000;
     }
     MOD_USAGE(m) = 1;
     mod_set_name(m);
@@ -357,15 +363,28 @@ int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
     return 0;                           /* not in any bundle: not exported */
 }
 
+/* Does the counted string at p (its length byte and its characters) lie
+   inside its segment? A malformed file's name table or import name
+   offset can run past it (KERNEL audit, medium 16). */
+int pstr_fits(const u8 FAR *p)
+{
+    u32 lim = (u32)sel_lim16(FP_SEG(p));
+    return FP_OFF(p) <= lim && (u32)FP_OFF(p) + p[0] <= lim;
+}
+
 /* Look a length-prefixed name up in a name table (resident or
    non-resident), byte for byte; the first entry (module name or
-   description) is not an export. */
+   description) is not an export. The table ends at its zero byte, or at
+   its segment's end (a malformed file: KERNEL audit, medium 16). */
 static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
 {
     int first = 1;
+    u32 lim = (u32)sel_lim16(FP_SEG(p));
 
-    while (p[0]) {
+    while ((u32)FP_OFF(p) <= lim && p[0]) {
         u8 n = p[0], i;
+        if ((u32)FP_OFF(p) + n + 2 > lim)       /* name and ordinal */
+            return 0;
         if (!first && n == pname[0]) {
             for (i = 0; i < n && p[1 + i] == pname[1 + i]; i++)
                 ;

@@ -12,8 +12,10 @@ KRNL286 was disassembled.
 `tools/neinfo.py` on both files (NE format facts): the same 237 entries,
 names, ordinals, segment numbers, fixed/moveable and flags; only offsets
 and the segment lengths differ (KRNL386 seg 1 C571h, seg 2 2AB8h, DGROUP
-13D2h). So KRNL386 shares kernel/kernel.lnk. w16's KRNL386 has one code
-segment more (HEAP_TEXT: global386.c), which nothing can see.
+13D2h). So KRNL386 shares kernel/kernel.lnk. (Since the KERNEL audit's
+third round both of w16's kernels have 3.1's four segments: _TEXT,
+BOOT_TEXT, HEAP_TEXT (global.c or global386.c), DGROUP; segments 2 and
+3 discardable as on 3.1: docs/notes/kernel-audit-triage.md, medium 33.)
 
 ## Build
 

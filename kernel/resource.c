@@ -128,6 +128,8 @@ static int id_match(module FAR *m, u16 tid, const char FAR *s)
         if (tid & NE_RSRC_INTID)
             return 0;
         p = MK_FP(m->ne_sel, RT(m) + tid);
+        if ((u32)RT(m) + tid > 0xFFFFu || !pstr_fits(p))  /* (a malformed */
+            return 0;                   /* file: KERNEL audit, medium 16) */
         for (i = 0; i < p[0]; i++) {
             u8 c = (u8)s[i];
             if (c >= 'a' && c <= 'z')
@@ -358,6 +360,18 @@ u16 KAPI LoadResource(u16 hinst, u16 r)                        /* KERNEL.61 */
     if (!m || !r || (t = type_of(m, r)) == 0)
         return 0;
     n = NAME(m, r);
+    /* observed on 3.1 (TK66 "lres", all three runs): a resource whose
+       usage is back at 0 and whose block is discarded is read in again
+       (GlobalSize > 0, GlobalFlags 0100h), not only marked used; w16
+       left it discarded (found while checking the KERNEL audit's L8) */
+    if (n->handle && !n->usage && (GlobalFlags(n->handle) & GMEM_DISCARDED)) {
+        h = call_handler(m, t, n->handle, hinst, r);
+        n = NAME(m, r);
+        if (h) {
+            n->handle = h;
+            n->flags |= RNF_LOADED;
+        }
+    }
     if (n->handle) {
         n->usage++;
         if (!(GlobalFlags(n->handle) & GMEM_DISCARDED))

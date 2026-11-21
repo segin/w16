@@ -44,7 +44,9 @@ static u32 entry_size(const u8 FAR *p, const u8 FAR *end)
     while (p < end && p[0]) {
         u8 count = p[0], type = p[1];
         u16 step;
-        if (end - p < 2)
+        /* (an unsigned difference: a table of 32K or more was taken for
+           one that runs past its end; KERNEL audit, C5) */
+        if ((u16)(end - p) < 2)
             return 0xFFFFFFFFUL;
         p += 2;
         if (type == NEB_UNUSED)
@@ -130,8 +132,13 @@ u16 mdb_build(const u8 FAR *ft, const char FAR *path, u16 date, u16 time,
     total = (u32)o_seg + ((u32)nseg << 3) + ((u32)nseg << 1) /* MDB_SEGSIZE */ +
             rs_len + rn_len + mr_len +
             im_len + en_len + 1 + LF_HEAD - 1 + plen + 1;
+    /* a moveable block, its selector the hModule: observed on 3.1 (TK66
+       "kmod", KERNEL's and a program's): GlobalHandle(hModule) gives
+       hModule - 1 (even) and hModule, as for any moveable block; w16's
+       were fixed blocks (KERNEL audit, medium 33). KERNEL keeps only the
+       selector, which stays when the block moves. */
     if (en_len > 0xFFF0UL || mr_len > 0xFFF0UL || total > 0xFFF0UL ||
-        !galloc(GMEM_FIXED, total, 0, &sel))
+        !galloc(GMEM_MOVEABLE, total, 0, &sel))
         return 0;
     o_rs = o_seg + MDB_SEGSIZE * nseg;
     o_rn = o_rs + rs_len;

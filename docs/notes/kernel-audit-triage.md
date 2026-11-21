@@ -13,8 +13,11 @@ is wrong), **3.1-BEHAVIOUR** (3.1 does the same: kept), **HARDENING**
 against either; fixed only when cheap and invisible to working
 programs), **UNSURE** (needs a probe not run yet).
 
-Status: every finding has a verdict (no UNSURE left). "open" in the Action column marks
-what is left (listed again at the end).
+Status: every finding has a verdict (no UNSURE left), and every one is
+fixed, matched to 3.1 or kept as 3.1's behaviour; the third round (probe
+TK66, `tests/tk66ref.sh`; TK59 steps 10-13) closed the last open items
+and hardening. What still differs from 3.1, each in an absurd call or
+needing what w16 does not have, is listed at the end.
 
 ## Critical
 
@@ -24,7 +27,7 @@ what is left (listed again at the end).
 | C2 | REAL | KRNL286 `chunk_add` for the largest block (`paras_for` FFFEh paragraphs): the piece is 101000h bytes, and `(u16)((len - 40h) >> 4) - 1` wrapped to FBh. | The piece's free arena is cut at FFFEh paragraphs (the rest of the DPMI block unused). Regression: TK62 "big" (GlobalAlloc(FFFD0h), both ends written). |
 | C3 | REAL | KRNL386 `chunk_add` grew `chunk_sel` with GlobalReAlloc, which can grow the heap and re-enter `chunk_add` with the same full table: the inner call moved the block the outer GlobalReAlloc held (fixed blocks are not held by the count), and both added 16 to `chunk_cap`. | No growing of the records from inside a growth (`chunk_growing`); that inner piece goes unrecorded (never given back, as before the records existed). Not reproducible in a probe without exhausting DOS memory in a particular way; by reading. |
 | C4 | REAL | KRNL286 `carve` returned the whole free arena when `sel_new` failed (no selector for the rest); GlobalReAlloc in place, `grow_tiles`, `make_room_after`, `compact`, `GlobalWire` then had blocks larger than their selector runs and `set_tiles`/`free_block` touched other selectors. | `carve` returns 0 then (as KRNL386's already did), f untouched; every caller handles 0. Regression: TK62 "ldt" (LDT exhausted, GlobalReAlloc in place; the size must not become the free space). |
-| C5 | REAL | `entry_size` summed in a word: a file with over ~13,100 fixed/constant entries (5 bytes in memory, 3 on file) wrapped it and `entry_convert` wrote past the module table. | 32-bit sum; a bundle running past the table's end fails; `mdb_build` fails past FFF0h (LoadLibrary returns 8). Regression: TK62 "entries" with TKENT.DLL (13300 entries, fails) and TKENT2.DLL (12000, loads), made by `tools/mkne.py --entries`. |
+| C5 | REAL | `entry_size` summed in a word: a file with over ~13,100 fixed/constant entries (5 bytes in memory, 3 on file) wrapped it and `entry_convert` wrote past the module table. | 32-bit sum; a bundle running past the table's end fails; `mdb_build` fails past FFF0h (LoadLibrary returns 8). Regression: TK62 "entries" with TKENT.DLL (13300 entries, fails) and TKENT2.DLL (12000, loads), made by `tools/mkne.py --entries`. Correction (third round, TK66 "entries"): TKENT2.DLL did not load on w16 either: `entry_size` took a difference over 32K as negative and the load failed with 8 ("out of memory"). On 3.1 (KRNL386, both modes) LoadLibrary(TKENT2.DLL) gives 10 and no box; KRNL286 ends Windows there. w16 now gives 10 for an entry table of 8000h bytes or more (`loader.c`; UNVERIFIED where 3.1's limit lies between 5DC2h, TKEA.DLL with 8000 entries, which ended 3.1 in all three runs and which w16 loads, and 8D02h) and `entry_size` compares unsigned. Regression: TK66 "entries" (12000 and 13300 entries: 10), TK66E (TKEA to TKEE.DLL, 8000 to 11500 entries: those under 32K load on w16). (a5f978b, 2e1412a) |
 
 ## High
 
@@ -69,7 +72,7 @@ what is left (listed again at the end).
 | 3 | REAL | `galias_code` (both): the block's arena was found before growing the alias records, which can compact and move it. | The block is found again afterwards. |
 | 4 | REAL | KRNL386 `global_check`: the first free arena, right after the first sentinel (size 0), shares its address, and `addr <= prev addr` failed. This is the "bad free list" false alarm that made `[w16] heapcheck=1` unusable under KRNL386. | Equal addresses allowed after the first sentinel. Checked with heapcheck boots (Tests). |
 | 5 | HARDENING | LocalHandle(p) read the word before p without checking p against DS's limit. | Fixed (cheap). |
-| 6 | HARDENING | LocalInit with start 0-4, or (0, 0) on a 64K segment, overlaps the instance words; 3.1 is no safer. | Not fixed. |
+| 6 | REAL | TK66 "linit" on 3.1 (all three runs): LocalInit(seg, 1, 4 or 8, 3FFh) puts the first sentinel at 0Ch (the information block at 1Ch, word 6), clear of the words before it; w16 put it at the start and the heap pointer at 6 went over it. LocalInit(seg, 0, 0) on a 64K block: 3.1's first arena wraps round to FFFCh (word 6 = 10h), its heap works. | The first sentinel at 0Ch at least (`local.c`). Regression: TK66 "linit" (word 6 = 1Ch; LocalAlloc, LocalCompact, LocalFree work). (0, 0): w16's heap at 0Ch too, not 3.1's wrapped one (noted, UNVERIFIED). (2e1412a) |
 | 7 | REAL | TK62 "lockseg": on 3.1 LockSegment(-1)/UnlockSegment(-1) return the caller's DS handle; w16's `__loadds` had lost DS, so -1 was looked up as a selector (0). | `kentry.asm` SEGLOCKAPI passes the caller's DS (ES still 0 on return). |
 | 8 | REAL | KRNL286 GlobalWire moved a block that was already fixed (lock count > 0); KRNL386 checks `movable`. | A fixed block stays where it is. |
 | 9 | HARDENING | Alignment shifts over 16 (loader, resources). | Fixed: the load fails / the shift is clamped. |
@@ -77,36 +80,36 @@ what is left (listed again at the end).
 | 11 | REAL | `find_handle` scanned modules still loading, whose handle words are the file's. | Skipped until `rsrc_ready`. |
 | 12 | HARDENING | `task_thunk`: a failed `data_alias` (no selector) orphans the new thunk block. | Fixed (cheap): the alias that links the new block is taken first; a failure frees what was made. |
 | 13 | HARDENING | GetInstanceData copied without checking either segment's limit. | Fixed: 0 when outside. |
-| 14 | HARDENING | `trace_note` reads 6 words above the return address ([w16] trace, a debugging aid only). | Not fixed. |
+| 14 | HARDENING | `trace_note` reads 6 words above the return address ([w16] trace, a debugging aid only). | Fixed: only the words inside SS's limit (a5f978b). |
 | 15 | REAL | Module paths with '/' ("C:/DIR/X.DLL") got the current directory put in front. | '/' taken as '\' and stored as '\'. |
-| 16 | HARDENING | Name tables' ends not checked (malformed files). | Not fixed. |
+| 16 | HARDENING | Name tables' ends not checked (malformed files). | Fixed: `find_in_table` stops at the module table's end; an import name or a resource type name that does not fit is empty (`pstr_fits`). Regression: TK66N with TKBADNM.DLL (`tools/mkne.py --type-name-off 0xFFF0`): on 3.1 (all three runs) it loads and FindResource by the type's name gives 0, as on w16 (the name was read past the table's limit). (a5f978b) |
 | 17 | 3.1-BEHAVIOUR / HARDENING | TK62 "winexec": WinExec("") and WinExec("   ") return 2 on 3.1, as on w16 (".EXE" not found). WinExec(NULL) faults on both. | Kept. |
 | 18 | REAL | A task ending (or faulting, the watchdog, a DOS exit) with DF set ran KERNEL's C code (forward copies) backwards. | `cld` at those entries. |
 | 19 | HARDENING | `gp_find` read a "__GP" entry before checking it was inside the segment. | Fixed: bounds first. |
 | 20 | HARDENING | VERR/LAR pass a not-present selector; reloading it into ES (task switch, INT call return) or DS/ES (fault recovery) faults again. | Fixed: the present bit is checked too. |
 | 21 | FALSE | "Freeing a locked DS fails": GlobalFree frees locked blocks too (observed, returns 0); it fails only for the Burgermaster. | None. |
-| 22 | HARDENING | dosx.c's emulation (Microsoft's DOSX only): 0-paragraph requests, unchecked `dpmi_set_desc`. KERNEL never asks for those. | Not fixed. |
-| 23 | HARDENING | Selector 0 maps to LDT slot 0; AllocCStoDSAlias of a conforming code segment gives expand-down data; GDT selectors. None of these come from working programs. | Not fixed. |
-| 24 | HARDENING | `_seg_move` ignores DPMI 0007h failing (it cannot for the block's own selector) and relies on INT 31h keeping IF (DPMI hosts do). | Not fixed. |
+| 22 | HARDENING | dosx.c's emulation (Microsoft's DOSX only): 0-paragraph requests, unchecked `dpmi_set_desc`. KERNEL never asks for those. | Fixed: 0 paragraphs refused (8, the largest block); a refused descriptor frees the run and the DOS block; a free frees at least one descriptor. Not reachable by a probe (Microsoft's DOSX only, and KERNEL never asks for 0); the boot tests run it. (a5f978b) |
+| 23 | REAL (KRNL286 part) / 3.1-BEHAVIOUR | TK66S on 3.1 (all three runs). Selector 0: GetSelectorBase/Limit 0, AllocDStoCSAlias(0), AllocCStoDSAlias(0), FreeSelector(0), PrestoChangoSelector(0, s), SetSelectorLimit(0), SetSelectorBase(0) all 0, as on w16; 3.1 then reads 12340h back from selector 0 (it wrote LDT slot 0), w16 not (the DPMI host refuses slot 0). SelectorAccessRights of 0 and of the GDT selector 10h: KRNL386 gives LDT slot values (6, 12h: environment), KRNL286 0, w16 0. A conforming code segment (DPMI 0009h, FEh): KRNL386's AllocCStoDSAlias gives F6h (expand-down data) and AllocDStoCSAlias FEh, as w16; KRNL286's F3h and FBh. | KRNL286 build: the aliases get a plain type, readable or writeable, accessed (`selector.c`). Selector 0's readback and the rights of 0 and GDT selectors kept (writing the host's LDT slot 0, and its contents, are nothing to copy). Regression: TK66S. (2e1412a) |
+| 24 | HARDENING | `_seg_move` ignores DPMI 0007h failing (it cannot for the block's own selector) and relies on INT 31h keeping IF (DPMI hosts do). | Fixed: `seg_move` returns 0 when 0007h fails; a heap move then ends Windows with a report rather than leave the arena and the selector apart, KERNEL's adoption leaves that segment where it was; IF cleared again after INT 31h. Not reachable (no host refuses it). (f411cb1) |
 | 25 | REAL | TK62 "lock" (all modes): on 3.1 LockCurrentTask(TRUE) returns the task and IsTaskLocked gives it; while it is locked, another task that only yields gets no turn; after unlocking it runs again. w16 ignored the lock, and kept the locked task and FileCdr's task after they ended. | `reschedule` keeps a locked task that has an event; a locked task that waits lets others run (UNVERIFIED on 3.1). The task's end clears the lock. FileCdr's callback stays, as on 3.1 (TK64, 2026-11-20: only USER's AppExit removes it, and one whose code is gone goes at the next change). |
-| 26 | HARDENING | `rmc` in task.c is shared by `idle` and `set_psp`; nothing calls `set_psp` at interrupt time. | Not fixed. |
+| 26 | HARDENING | `rmc` in task.c is shared by `idle` and `set_psp`; nothing calls `set_psp` at interrupt time. | Fixed: each call's record on its stack (a5f978b). |
 | 27 | FALSE | `kernel_psp` is never nested: `kputs` and `kdbg_file` call it 1/0 around plain DOS calls. | None. |
 | 28 | 3.1-BEHAVIOUR | The environment block copied for a task is KERNEL's and outlives it: TK16 (3.1) reads its GlobalSize after the task ended (10h/20h). Giving it to the task's PDB failed TK16. | Kept (the comment says why). |
-| 29 | HARDENING | task_create/inittask with a malformed NE (SP < 26, SS not DGROUP); `libinit` kept on an error path. | Not fixed. |
+| 29 | HARDENING | task_create/inittask with a malformed NE (SP < 26, SS not DGROUP); `libinit` kept on an error path. | Fixed: an SP that puts the start-up frame outside DGROUP fails the start (LoadModule 8). The stack stays DGROUP whatever SS says (as before). `libinit`: LoadModule frees it when the start fails; the boot's shell failing ends Windows. Not reachable with `tools/mkne.py` (libraries only). (a5f978b) |
 | 30 | FALSE | "Reversed record layout": Microsoft's TOOLHELP on w16's KERNEL (toolhelp boot test, runs ms-tree286 and ms-tree386) reports `LOGPARAMERROR code=6001 addr=THP param=2222`, the same as on 3.1. So w16's {code, proc, param} is the order 3.1's TOOLHELP reads. The static record is fine: notifications are not reentrant. | None. |
 | 31 | HARDENING | `notify`: a ToolHelpHook procedure that unhooks itself had the RegisterPtrace one called too. | Fixed: both hooks read before either is called. |
 | 32 | HARDENING | GetCodeInfo matched an empty segment slot (selector 0) for selectors 0-7. | Fixed. |
-| 33 | REAL | TK62 "codehandle" and "kseg" on 3.1 (all three runs): KERNEL's code and data segments are fixed blocks of the global heap: GlobalHandle(CS) = CS (odd: fixed), GlobalFlags 0, GlobalSize covers the limit, FarGetOwner = KERNEL's module, GetCodeHandle = that handle; segments 2 and 3 (discardable code) show GlobalFlags 0900h. w16's segments are DOS memory the bootstrap allocated, outside the heap, so GlobalHandle gave 0. | KRNL386: KERNEL's code segments become fixed blocks of the heap at start-up (`gadopt_kernel`: each copied into a block owned by KERNEL's module and its selector moved there with `seg_move`, the selector the handle; their DOS memory left as it was), so TOOLHELP lists them and GlobalEntryHandle finds them. KERNEL's DGROUP stays outside (seg_move runs on a stack in it), and under KRNL286 nothing is adopted yet: with adoption there, QuickTime's player on the tree (boot-test quicktime@tree) failed its close sequence twice (not looked into). For what is not a block, the heap's APIs answer as 3.1 (`module.c` `kernel_seg`): GlobalHandle = the selector (fixed), GetCodeHandle follows (TK50 and TK62 "codehandle" checked against 3.1), GlobalFlags 0 (0900h for a discardable code segment), GlobalSize = the selector's limit + 1, FarGetOwner = KERNEL's module. Still different from 3.1 (would need the heap-block design below): TOOLHELP's GlobalEntryHandle/GlobalEntryModule (FALSE: no arena), GlobalFirst/GlobalNext walks (no KERNEL blocks; the `toolhelp` boot case masks that), GlobalHandle of KERNEL's module table (3.1: not the table's selector; not followed up), GlobalFree/GlobalReAlloc of them (do nothing; 3.1 not probed). TK62 "kseg" still records them unchecked. |
+| 33 | REAL | TK62 "codehandle" and "kseg" on 3.1 (all three runs): KERNEL's code and data segments are fixed blocks of the global heap: GlobalHandle(CS) = CS (odd: fixed), GlobalFlags 0, GlobalSize covers the limit, FarGetOwner = KERNEL's module, GetCodeHandle = that handle; KERNEL has four segments, segments 2 and 3 (discardable code) show GlobalFlags 0900h, DGROUP is the fourth; the module table's segment flags C146h, D156h, D156h, C067h. w16's segments were DOS memory the bootstrap allocated, outside the heap, so GlobalHandle gave 0. Third round (TK66, all three runs): GlobalHandle(hModule) is hModule - 1 and hModule (a moveable block; KERNEL's and a program's); GlobalCompact(-1) discards segment 3 (4900h, not present; it is loaded again when called), segment 2 stays; GlobalFree of segment 2 returns 0 and frees it (Windows ends at the next call into it); GlobalReAlloc of KERNEL's segments: the same size gives the handle, GMEM_MODIFY the handle, a discard (size 0, GMEM_MOVEABLE) the handle for segments 2 and 3 (discarded) and 0 for 1 and 4, a size that needs a move fails, growth in place succeeds where there is room (KRNL286 ended Windows after segment 1's). | Every KERNEL segment becomes a fixed block of the heap at start-up, under both kernels (`gadopt_kernel`: copied into a block owned by KERNEL's module, its selector moved there with `seg_move`, the selector the handle), DGROUP too (`seg_move` copies it on its own stack inside it with interrupts off; the caller's SS and DS are reloaded from the moved selector). KERNEL has 3.1's four segments: _TEXT fixed, BOOT_TEXT and HEAP_TEXT moveable and discardable (KRNL286's global.c in HEAP_TEXT too: _TEXT had outgrown 64K; `option packcode=0`), DGROUP; the constant exports' placeholders moved from a fifth segment into BOOT_TEXT. Segments 2 and 3 show 0900h and are never discarded (fixed blocks; w16 cannot load KERNEL's code again). The module table's segment flags as 3.1's. Module tables are moveable blocks. GlobalFree of a KERNEL segment: 0, kept (3.1 frees it and dies). GlobalReAlloc of one: a discard answers the handle for 2 and 3 and 0 for the others without discarding; no move, no more selectors, no shrinking (UNVERIFIED on 3.1); growth in place as any block. KRNL286's adoption had been switched off for QuickTime's close sequence on the tree (boot-test quicktime@tree): rerun at the adoption commit (56cf788) it failed both times, and at the commit that switched it off (a9e8cf3, the same tree) passed all three: there, after the player's File > Exit, the keys that follow (Alt+F, R: File > Run in Program Manager) opened nothing, and the Return then started the item selected in QuickTime's group, Reinstall QuickTime (the shot c7-closed showed QuickTime's installer). Program Manager looked active (c5-exit) but did not get the keys: a timing-sensitive loss of the keyboard after a task ends in that tree's USER, which the adoption's different timing exposed. That branch lacked master's USER changes of the same day (75fa907, the move/size loop that waits for input and lets other tasks run; the USER audit's task-end changes); on master with adoption the case passed every run (three of quicktime@tree alone, two with tree386, and the full boot test), so the cause is gone there; which master commit removed it was not bisected. Regression: TK62 "kseg" (recorded), TK66 "kmod", "kseg2", TK66R, TK66F; toolhelp, quicktime and the boot tests on both DPMI hosts and WIN386. Still different: after GlobalCompact(-1) or a discard 3.1 shows segment 3 (2) discarded, w16 not (needs demand loading of KERNEL's segments: TK66 notes it); after GMEM_MODIFY KRNL386 shows segment 1 as 0900h, w16 0100h (noted). (f411cb1) |
 | 34 | HARDENING | FatalExit: no guard against a FatalExitHook that calls FatalExit; DS = SS for the hook. | Fixed (cheap): the hook is not called again while it runs (DS = SS kept). |
 | 35 | FALSE | `hmemcpy`'s `sl + n` cannot wrap: linear addresses and sizes are far below 4 GB. | None. |
 | 36 | REAL | TK62 "files": on 3.1 OpenFile("COM1:"), ("FOO:"), ("A:B:C") with OF_PARSE fail; w16 took ':' as a name character. A NULL name is HARDENING. | ':' is a bad name character. |
 | 37 | REAL | TK62 "openerr" on 3.1 (all three runs), the current directory C:\: with no DOS handle left, nErrCode 4 with a path, searched for (szPathName C:\NAME), and for a file that is nowhere; a directory of the name: 5 with a path and searched for; the search ends at the first directory where DOS fails with neither 2 nor 3, even when a later directory (the system directory) holds the file; a failed search reports the name in the current directory. w16's search reported 2 for every failure. | `search_open` stops at such an error and OpenFile reports it (`file.c`). Regression: TK62 "openerr". |
 | 38 | HARDENING | `temp_dir` takes a 3-character TEMP without checking it (a bad environment). | Fixed: only "X:\" with X a letter is taken as a drive's root. |
-| 39 | REAL | TK62 "drivetype" on 3.1, F: a DOSBox floppy mount (IOCTL 4409h answers, 4408h fails): GetDriveType 3 (fixed), as SYSTEM.DRV's InquireSystem(1, 5) (Schulman: GetDriveType wraps it; w16's SYSTEM.DRV already said 3); w16's KERNEL said 0. GetDriveType(0101h) gives 3 on 3.1 (w16 0: an absurd argument, logged, not matched). | A failing 4408h means fixed. Regression: TK62 "drivetype" (`tests/tk62ref.sh` and `tests/run-tests.sh` mount F: as a floppy drive). |
+| 39 | REAL | TK62 "drivetype" on 3.1, F: a DOSBox floppy mount (IOCTL 4409h answers, 4408h fails): GetDriveType 3 (fixed), as SYSTEM.DRV's InquireSystem(1, 5) (Schulman: GetDriveType wraps it; w16's SYSTEM.DRV already said 3); w16's KERNEL said 0. GetDriveType(0101h) gives 3 on 3.1 (w16 0: an absurd argument, logged, not matched). | A failing 4408h means fixed. Regression: TK62 "drivetype" (`tests/tk62ref.sh` and `tests/run-tests.sh` mount F: as a floppy drive). Third round (TK66 "drivetype", all three runs): the drive is the low byte (0105h, 0119h, FF02h as F:, Z:, C:; 011Ah, 01FFh, FFFFh 0), A: and B: from the BIOS only for 0 and 1: 0100h, 0101h and 0200h give 3, as a drive whose 4408h fails. w16 now the same (`file.c`; for 0100h/0101h it asks 4408h only, UNVERIFIED how 3.1 takes them). Regression: TK66 "drivetype". (2e1412a) |
 | 40 | 3.1-BEHAVIOUR | TK62 "profile": 3.1 strips the quotes of a default (`"dq"` gives dq) as of a file value. | Kept (TK62 checks it). |
 | 41 | 3.1-BEHAVIOUR | TK62 "profile": on 3.1 a value written with leading blanks reads back with them from the cache ("  two") and without them after a flush ("two"); a file value loses them ("lead"). | Kept (TK62 checks it). |
 | 42 | 3.1-BEHAVIOUR | TK62 "profile": a line "=v" gives an empty key in 3.1's key list (`\0k2\0\0`, 4). Negative sizes are HARDENING. | Kept (TK62 checks it). |
-| 43 | HARDENING | Atoms: a table whose bucket count was overwritten with 0 divided by 0; KLstrcmp with NULL. | The division fixed (lookup and AddAtom fail); KLstrcmp not. |
+| 43 | HARDENING / REAL (KLstrcmp) | Atoms: a table whose bucket count was overwritten with 0 divided by 0. KLstrcmp (KERNEL.87, TK66L on 3.1, all three runs): NULL is the empty string (NULL < "a", "a" > NULL, NULL = NULL), and A-Z and C0h-DEh but D7h compare in lower case ("a" = "A", "_" < "a", "B" > "a", C9h = E9h, 8Ah < 9Ah, D7h < F7h); w16 compared the bytes and faulted on NULL. | The division fixed (lookup and AddAtom fail); KLstrcmp as 3.1 (`kmisc.c`). Regression: TK66L. (2e1412a) |
 
 ## Low
 
@@ -121,34 +124,34 @@ The audit's Low list is numbered here in its order (36 items).
 | L5 | REAL (KRNL286) / 3.1-BEHAVIOUR (KRNL386) | TK62 "freespace": 3.1's KRNL286 does not count a fixed discardable block in GetFreeSpace(0) and GlobalDiscard leaves it; 3.1's KRNL386 (Standard mode) counts it and GlobalDiscard discards it (flags 4100h), as w16's KRNL386 already did. (386 Enhanced mode: 3.1 ended Windows in this step; not observed, skipped there.) | KRNL286: such blocks no longer counted (`global.c`). Regression: TK62 "freespace" (`tk62ref286.h` for KRNL286). |
 | L6 | 3.1-BEHAVIOUR | TK50 "LocalNotify kept" = 9Ch on 3.1 (SI, DI, BP, DS kept; ES not): 3.1's LocalNotify does not keep ES either. | Kept. |
 | L7 | HARDENING | `module_of` matched handles 1-3 to empty segment slots. | Fixed. |
-| L8 | HARDENING | LoadResource's usage count is a word. | Not fixed (atoms and events wrap the same way on 3.1). |
+| L8 | 3.1-BEHAVIOUR | TK66 "lres" on 3.1 (all three runs): 65536 LoadResource calls and one FreeResource free the resource (GlobalFlags 0 after): its usage count is a word that wraps, as w16's. Found on the way: a resource whose usage is back at 0 and whose block is discarded is read in again by LoadResource on 3.1 (GlobalSize > 0, flags 0100h); w16 left it discarded. | Kept (the wrap). LoadResource reads such a resource in again (`resource.c`). Regression: TK66 "lres". (2e1412a) |
 | L9 | HARDENING | `tb_new` ignores `gset_code` failing (DPMI failure). | Fixed (cheap): a failure frees the block. |
 | L10 | REAL (cosmetic) | Unimplemented-import thunks for names over 32 characters sharing a prefix share a thunk (only the reported name is wrong). | Fixed: a thunk also records the whole name's length and a sum over it; the report still shows the first 32 characters. |
 | L11 | FALSE | `module_load_program` is never called with a task running and `last_libinit` set. | None. |
 | L12 | REAL (minor) | The bootstrap's relocation records (`rel_para`, a few KB of DOS memory) were never freed. | Freed after the relocations (INT 21h AH=49h through DPMI 0300h, `kernel/boot/boot.c`). make test boots KERNEL on both DPMI hosts; boot test at the end. |
-| L13 | HARDENING | Bootstrap: a missing environment, NE length wrap, LOBYTE chains, entry bounds (KERNEL's own file). | Not fixed. |
-| L14 | HARDENING | Watchdog ([w16] debugging aid): `wd_limit` overflow, RTC interrupt left on, CMOS without `cli`. | Part fixed: the limit no longer wraps (clamped); the rest not. |
+| L13 | HARDENING | Bootstrap: a missing environment, NE length wrap, LOBYTE chains, entry bounds (KERNEL's own file). | Fixed: no environment, or none ending in 32K, stops with a message; the tables' sum and order checked; relocation chains bounded by the segment and 8000h links, no word read for a byte fixup; entry bundles inside the table (`kernel/boot/boot.c`). (a5f978b) |
+| L14 | HARDENING | Watchdog ([w16] debugging aid): `wd_limit` overflow, RTC interrupt left on, CMOS without `cli`. | Fixed: the limit clamped (before); the RTC's registers A and B and INT 70h saved at the start and put back when it stops and when Windows ends (`kexit_to_dos`); CMOS read-modify-writes with interrupts off (`fault.c`). (a5f978b) |
 | L15 | HARDENING | DiagOutput(NULL), an unclamped /B command tail, `old21` set after the hook (no INT 21h can come in between). | DiagOutput(NULL) does nothing (fixed); the /B command tail's length kept inside the PSP (fixed); `old21` not changed. |
 | L16 | HARDENING | Priority wrap at 7Fh (SetPriority's range keeps it far from there). | Fixed (cheap): no step past 7Fh. |
 | L17 | REAL (cosmetic) | OldYield set its schedlog reason after the switch it was for. | Fixed. |
-| L18 | HARDENING | `task_boot` with no task. | Not fixed. |
+| L18 | HARDENING | `task_boot` with no task. | Fixed: `in_sched` cleared (a5f978b). |
 | L19 | REAL (minor) | Schulman: GetCurrentTask reads CURTDB from THHOOK, so on 3.1 the two cannot differ. w16's THHOOK lagged: CurTDB 0 while the boot TDB was current, possibly the freed boot TDB after it went, and 0 for the first task until its first switch-in. | `thhook_sync` in `task_boot_tdb`, `task_boot_tdb_end` and `task_boot`. Not observable by a probe that runs as a task. |
 | L20 | HARDENING | `dpmi_seg_to_desc(40h)` unchecked (GetDriveType's BIOS read). | Fixed (cheap): no read when DPMI refuses. |
 | L21 | HARDENING | `int_vec_switch` keeps a vector DPMI 0205h refused. | Fixed (cheap): only a vector DPMI took is kept. |
-| L22 | HARDENING | PostEvent's fast path on an expand-down bogus handle. | Not fixed. |
+| L22 | HARDENING | PostEvent's fast path on an expand-down bogus handle. | Fixed: the fast path skips expand-down segments (LAR) (a5f978b). |
 | L23 | FALSE | GetHeapSpaces: the bytes in use cannot exceed FFFFh less the information block's offset. | None. |
 | L24 | REAL | TK62 "catchmap" (all modes): 3.1's CATCHBUF holds CS in word 1, the caller's BP in 3, DS in 6, nothing in 7 and SS in 8 (IP, SP, SI, DI by elimination in 0, 2, 4, 5); w16 had SS in 3, BP in 4 and DS in 7. | 3.1's order (Catch and Throw). |
 | L25 | HARDENING | `th_loadsegs` for a segment with selector 0 (w16 loads every segment). | Fixed: no notification for one. |
-| L26 | HARDENING | FatalAppExit with no task (boot only). | Not fixed. |
+| L26 | HARDENING | FatalAppExit with no task (boot only). | Fixed: Windows ends with the message on the text screen (`text_mode`, `kexit_to_dos`) instead of a DOS exit of KERNEL's process (a5f978b). |
 | L27 | REAL | TK62 "directres" on 3.1: DirectResAlloc(hInstance, flags, 100h) gives a moveable block (even handle) owned by the module (FarGetOwner = hModule; Schulman: through GetExePtr) for flags 0, 10h, 1010h and 1000h, discardable (GlobalFlags 0100h) with 1000h. w16 gave the task a plain moveable block. | Owned by hInstance's module, discardable with 1000h (`kmisc.c`); an hInstance of no module: the caller's block as before (UNVERIFIED). Regression: TK62 "directres". |
 | L28 | REAL | TK62 "ansi": KERNEL.79/80 also map 8Ah/9Ah, 8Ch/9Ch, 9Fh/FFh on 3.1. | Added. |
-| L29 | HARDENING | `join_canon` truncates past 143 bytes (paths past OFSTRUCT's 128). | Not fixed. |
+| L29 | HARDENING | `join_canon` truncates past 143 bytes (paths past OFSTRUCT's 128). | Fixed: a directory and name that do not fit are not found (2). Invisible: the directory is at most 127 bytes, so only a name of more than 12 characters (no 8.3 name, which `file_canon` refuses anyway) can overflow; cut short it could have named another file. (a5f978b) |
 | L30 | 3.1-BEHAVIOUR | TK62 "envcase" on 3.1: with the task's PATH= renamed path= in place, OpenFile no longer finds MOUNT.COM on Z: (nor with XATH=, so 3.1 reads the environment on every call): the name is compared with its case, as `file_env` does. | Kept (TK62 checks it). |
 | L31 | REAL (part) / 3.1-BEHAVIOUR (part) | TK62 "tempname" on 3.1: GetTempFileName(80h, "TKP", 1234h) gives "C:~TKP1234.TMP" (80h alone is the current drive; w16 gave "~TKP1234.TMP"). Two calls in a row give consecutive numbers; a third, with a directory of the next number's name, fails with 0 on 3.1, as on w16. | Drive 80h alone: the current drive (`file.c`). The directory case kept. Regression: TK62 "tempname" (unique 0 takes its number from the clock: a run the clock moved in is done again, after a make test run failed "3rd after dir" once; 3.1 rechecked: 0 in all three runs). |
-| L32 | REAL (part fixed) | OF_SEARCH (the same bit as OF_VERIFY, 400h): TK62 "ofsearch" on 3.1 finds "C:\TK62NO\TKDG.DLL" (no such directory) in the Windows directory; without it, error 3. OF_PROMPT and OF_CANCEL: the box is not observed (Pietrek: the loader opens DLLs with OF_PROMPT \| OF_CANCEL; w16 draws KERNEL's "Cannot find" box in the loader itself, `file_error_box`). `_hread`/`_hwrite` with negative sizes: HARDENING. | OF_SEARCH: a file not at its path is searched for by its name (`file.c`). Regression: TK62 "ofsearch". OF_PROMPT/OF_CANCEL: open (needs 3.1's box observed, e.g. as steps of TK59, boot-test case missingdll). |
-| L33 | HARDENING | `write_string` with section or key names holding ']' or '='. | Not fixed. |
-| L34 | HARDENING | AddAtom/FindAtom make the table before copying the name; the name must be in a locked or fixed block anyway. | Not fixed. |
-| L35 | REAL (minor) | `kputs("")` wrote 0 bytes (that truncates a redirected file at its position); `regs16` fields left unset; `dbg_path` 80 bytes. | The 0-byte write skipped; the rest not. |
+| L32 | REAL | OF_SEARCH (the same bit as OF_VERIFY, 400h): TK62 "ofsearch" on 3.1 finds "C:\TK62NO\TKDG.DLL" (no such directory) in the Windows directory; without it, error 3. OF_PROMPT, TK59 steps 10-13 on 3.1 (screenshots, boot-test case missingdll@tk59): for a file not found (2, and 3 for a directory that is not there), with OF_PROMPT with or without OF_CANCEL, the loader's "File Error" box "Cannot find NOSUCH.TXT" (the base name) with one Close button (Escape does not close it), also under SetErrorMode(8000h); OpenFile then returns HFILE_ERROR with nErrCode 2 or 3, as without it. OF_CANCEL changes nothing there. That box is the loader's (Pietrek: LMLoadExeFile opens a DLL with OF_PROMPT \| OF_CANCEL, without OF_PROMPT under SEM_NOOPENFILEERRORBOX). `_hread`/`_hwrite` with negative sizes: HARDENING. | OF_SEARCH: a file not at its path is searched for by its name (`file.c`). Regression: TK62 "ofsearch". OF_PROMPT: OpenFile puts up that box (`cannot_find_box`, `kmisc2.c`) and the loader's `file_error_box` is it under the error mode's check (no USER change: the box is USER's SysErrorBox as before). Regression: TK59 steps 10-13 (every shot and return code against 3.1). (2e1412a) Noticed: w16's USER closes that box on Escape (its SysErrorBox is a dialog whose Close button is IDCANCEL); 3.1's does not: USER's, not changed here. |
+| L33 | 3.1-BEHAVIOUR | TK66 "profile" on 3.1 (all three runs): WritePrivateProfileString writes section and key names as given ("[s]x]", "k=y=v", "[s=x]", "k]y=v", "[[s]", "[k=v"); reading back, "s]x" and the key "[k" are not found (the default), "s=x"/"k]y" and "[s"/"k" are; the same from the cache as from the file. w16 the same. | Kept (TK66 checks it). |
+| L34 | HARDENING | AddAtom/FindAtom make the table before copying the name; the name must be in a locked or fixed block anyway. | Fixed: the name (a valid one) is copied first (`atom.c`) (a5f978b). |
+| L35 | REAL (minor) | `kputs("")` wrote 0 bytes (that truncates a redirected file at its position); `regs16` fields left unset; `dbg_path` 80 bytes. | The 0-byte write skipped (before); util.c's DOS calls with every register set; the debug log's path 128 bytes, and one too long for it not cut short into another file's name (a5f978b). |
 | L36 | FALSE | `heap_check*` prototypes outside the include guard: repeating a prototype is valid C. | None. |
 
 ## Counts
@@ -157,10 +160,10 @@ The audit's Low list is numbered here in its order (36 items).
 |---|---|---|---|---|---|
 | Critical (5) | 5 (all fixed) | 0 | 0 | 0 | 0 |
 | High (29) | 14: H1, H2, H4, H7, H9, H11, H13, H16, H22, H23, H24, H25, H28, H29 (all fixed) | 1: H5 | 5: H19, H20, H21, H26, H27 | 9: H3, H6, H8, H10, H12, H14, H15, H17, H18 (all fixed) | 0 |
-| Medium (43) | 14: 2, 3, 4, 7, 8, 10, 11, 15, 18, 25, 33, 36, 37, 39 (all fixed) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 20: 1, 5, 6, 9, 12, 13, 14, 16, 19, 20, 22, 23, 24, 26, 29, 31, 32, 34, 38, 43 (1, 5, 9, 12, 13, 19, 20, 31, 32, 34, 38, 43 fixed) | 0 |
-| Low (36) | 14: L1, L3, L4, L5, L10, L12, L17, L19, L24, L27, L28, L31, L32, L35 (all fixed but L32's OF_PROMPT/OF_CANCEL) | 3: L11, L23, L36 | 2: L6, L30 | 17: L2, L7, L8, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L33, L34 (L2, L7, L9, L16, L20, L21, L25 fixed; L14, L15 in part) | 0 |
+| Medium (43) | 17: 2, 3, 4, 6, 7, 8, 10, 11, 15, 18, 23, 25, 33, 36, 37, 39, 43 (all fixed) | 4: 21, 27, 30, 35 | 5: 17, 28, 40, 41, 42 | 17: 1, 5, 9, 12, 13, 14, 16, 19, 20, 22, 24, 26, 29, 31, 32, 34, 38 (all fixed) | 0 |
+| Low (36) | 14: L1, L3, L4, L5, L10, L12, L17, L19, L24, L27, L28, L31, L32, L35 (all fixed) | 3: L11, L23, L36 | 4: L6, L8, L30, L33 | 15: L2, L7, L9, L13, L14, L15, L16, L18, L20, L21, L22, L25, L26, L29, L34 (all fixed; L15's `old21` kept: no INT 21h can come in between) | 0 |
 
-(H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's. L5 likewise: REAL for KRNL286, 3.1-BEHAVIOUR for KRNL386. L31 is counted as REAL for its drive 80h part.)
+(H16 is counted as REAL: 3.1's KRNL286 makes the selector usable, which w16's did not; 3.1's KRNL386 does not, as w16's. L5 likewise: REAL for KRNL286, 3.1-BEHAVIOUR for KRNL386. Medium 23 likewise (KRNL286's aliases). L31 is counted as REAL for its drive 80h part. Medium 6 and 43 (KLstrcmp) were HARDENING until TK66 showed 3.1 doing otherwise. L8 and L33 were HARDENING until TK66 showed 3.1 doing the same.)
 
 ## Tests
 
@@ -176,63 +179,43 @@ The audit's Low list is numbered here in its order (36 items).
 - After L10, L16, L20, L21 (ad9465f): make test pass; full boot test 122 ok, 4 failures: taskman (tree), ddeml (conn), lzexpand (quirks), all known, and toolhelp (ref286: "group e did not finish" in the run of Microsoft's TOOLHELP on 3.1, no w16 KERNEL in it), which passed when run again.
 - After KRNL386 adopting KERNEL's code segments (medium 33): make test pass; full boot test 121 ok, 5 failures: taskman (tree), ddeml (conn), lzexpand (quirks), trails (timed; passed again), and quicktime (tree, KRNL286: the close sequence), which failed again alone; with adoption limited to KRNL386, make test pass and quicktime (every part) and toolhelp (every part) pass.
 
-## Medium 33: the heap-block design (not done)
+- Third round (probe TK66, TK59 steps 10-13; 8147716, f411cb1, 2e1412a, a5f978b): `tests/tk66ref.sh` on 3.1 (KRNL386 Standard and 386 Enhanced, KRNL286) for the tables `tests/apps/tk66ref.h` and `tk66ref286.h`; TK59's new steps observed with screenshots before w16 changed. make test pass (both kernels, both DOS extenders; TK66 and its copies against the tables). Full boot test at a5f978b: 142 ok, 3 failures, all on the known-flaky list: lzexpand (quirks), soundtime (sn1: one tone's onset 9.3 ms off, the same in four runs in that run directory, which the case does not even run w16's KERNEL in; a fresh tree of a5f978b passed it twice, as master did), trails (timednl: one run-down of 439 ms against 440-660 ms; passed when run again); quicktime (every part, KRNL286 adoption on), toolhelp (every part, KERNEL's blocks in the walks) and missingdll (tk59 with the OF_PROMPT steps against 3.1) passed. QuickTime's close sequence on the tree with KRNL286's adoption: see medium 33.
 
-What was done instead (above, row 33) answers GlobalHandle, GetCodeHandle,
-GlobalFlags, GlobalSize and FarGetOwner for KERNEL's segments without
-making them heap blocks. The design below would add what that cannot:
-KERNEL's blocks in TOOLHELP's walks and GlobalEntryHandle, selector-table
-entries and arenas, GlobalFree/GlobalReAlloc behaving as for any fixed
-block. It stays open.
+## Medium 33: KERNEL's segments as heap blocks (done)
 
-What 3.1 shows (TK62 "kseg", all three runs): every KERNEL segment is a
-block of the global heap. The code segment (1) and DGROUP (4) are fixed
-(handle = selector, GlobalFlags 0); the discardable code segments (2, 3)
-have GlobalFlags 0900h (discardable, GA_DISCCODE) and their handle is
-their selector too; FarGetOwner is KERNEL's module; GlobalSize covers
-the segment; the module table's segment entries hold the selectors.
-GetCodeHandle of a KERNEL procedure is that handle (TK50: its AX is
-GlobalHandle's).
-
-What w16 has: the bootstrap (`kernel/boot/boot.c`) gives each segment
-its own DOS block (INT 21h AH=48h); the paragraph in front of each is
-DOS's MCB, so there is no room for an arena, and the blocks are not in
-the heap's address-ordered arena list. GlobalHandle finds nothing (0).
-
-How it could be done cleanly:
-
-1. Bootstrap: one DOS block for all of KERNEL's segments, laid out as a
-   heap chunk: the chunk's head (0x20 bytes, `chunkinfo` at +10h), then
-   for each segment an arena paragraph (rounded to the heap's 0x20-byte
-   granule) followed by the segment, then the closing arena. The
-   segments' real-mode paragraphs (`bootinfo.seg_para`) follow from
-   that layout; nothing else in the bootstrap changes.
-2. KERNEL, before its first allocation (`heap_init`): add that block as
-   a chunk of a new kind (`chunk_add` with the bootstrap's memory, not
-   freed to DOS or DPMI) and turn each segment's place into a block:
-   arena fixed, owner KERNEL's module, handle = the bootstrap's
-   selector (`bootinfo.seg_sel`), the selector-table entry pointing at
-   the arena; the discardable code segments flagged as 3.1 shows them
-   (GlobalFlags 0900h) but never discarded (w16 has no demand loading).
-   KRNL386 (`global386.c`) keeps its arenas in a table of its own: the
-   same, through its arena slots.
-3. The module table's segment entries already hold the selectors;
-   `KGetCodeHandle`'s special case for KERNEL goes.
-
-What it touches and must be checked: TOOLHELP's GlobalFirst/GlobalNext
-(the boot-test case `toolhelp` compares w16's walks with 3.1's byte for
-byte under masks: KERNEL's blocks would now appear, as on 3.1, and the
-masks may need to change), `heapcheck` (a chunk that is never given
-back), compaction (fixed blocks: nothing moves them), GlobalFree or
-GlobalReAlloc of a KERNEL segment (3.1: not probed), TK50 and TK62
-"codehandle"/"kseg" (then checked against 3.1), and the boot on both
-DPMI hosts and under WIN386.
+The design this section described (one DOS block laid out as a heap
+chunk by the bootstrap) was not needed: `gadopt_kernel` copies each of
+KERNEL's segments into a fixed block of the heap at start-up and moves
+its selector there with `seg_move`, as the heap moves any block, so
+the bootstrap and the selectors are unchanged and the DOS memory the
+bootstrap took is left as it was. TOOLHELP's walks and
+GlobalEntryHandle then find KERNEL's blocks as on 3.1 (the boot-test
+case `toolhelp` compares them under its masks). module.c's
+`kernel_seg` still answers the heap's APIs for a segment that could
+not be moved (no memory, DPMI refused the base). What w16 cannot do is
+discard segments 2 and 3 and load them again on a call, as 3.1 does
+under GlobalCompact(-1): it marks them discardable (0900h) and keeps
+them.
 
 ## Left (open)
 
-- Medium 33: KRNL286's adoption (QuickTime's close sequence on the tree failed with it), KERNEL's DGROUP (needs a move off its own stack), segments 2 and 3 flagged discardable (w16's KERNEL does not mark them so in its NE: 3.1 shows 0900h), GlobalFree/GlobalReAlloc of KERNEL's segments (3.1 not probed).
-- L32: OF_PROMPT and OF_CANCEL (3.1's box not observed yet).
-- Noticed, not looked into: under w16 (master 3befab5 too) TK62 "entries" fails to load TKENT2.DLL (12000 entries) with "out of memory"; the C5 action above says it loads. 3.1 fails it as well, and the observation is unchecked (OBS ~).
-- GetDriveType(0101h): 3 on 3.1, 0 on w16 (an argument past Z:; unchecked).
-- GlobalHandle of KERNEL's module table: not its selector on 3.1, its selector on w16 (TK62 "kseg", unchecked).
-- Open HARDENING items not fixed: those marked "Not fixed" above (each needs malformed files, absurd arguments or a failing DPMI host).
+Every finding has its verdict and every one that can be fixed or matched
+is. What is left are differences that cannot be closed without what w16
+does not have, or that only show in absurd calls, each noted in its row:
+
+- Medium 33: 3.1 discards KERNEL's segment 3 under GlobalCompact(-1)
+  (and 2 or 3 on GlobalReAlloc(h, 0, GMEM_MOVEABLE)) and loads it again
+  when called; w16 keeps them (no demand loading of KERNEL's own code).
+  After GMEM_MODIFY | GMEM_DISCARDABLE of segment 1, KRNL386 shows 0900h,
+  w16 0100h.
+- Medium 6: LocalInit(seg, 0, 0) on a 64K block: 3.1's first arena wraps
+  round to FFFCh; w16's is at 0Ch.
+- Medium 23: SetSelectorBase(0) writes the host's LDT slot 0 on 3.1 (w16:
+  refused by the host); SelectorAccessRights of selector 0 and of GDT
+  selectors gives the host's LDT slot values on KRNL386 (w16: 0).
+- Medium 39: GetDriveType(0100h/0101h/0200h) matches 3.1 in DOSBox (3),
+  how 3.1 takes A: and B: there is UNVERIFIED.
+- C5: where 3.1's entry-table limit lies between 5DC2h and 8D02h
+  (UNVERIFIED; w16: 8000h).
+- L32 (USER's, not KERNEL's): w16's SysErrorBox closes on Escape, 3.1's
+  does not.

@@ -217,8 +217,11 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     r->dx = dx;
     r->si = frame[-9];                  /* trace_entry's saved SI and DI */
     r->di = frame[-10];
+    /* only the words the stack segment holds (a call near the top of
+       its stack faulted here: KERNEL audit, medium 14) */
     for (i = 0; i < 6; i++)
-        r->arg[i] = frame[2 + i];
+        r->arg[i] = (u32)FP_OFF(frame) + 2 * (2 + i) + 1 <= sel_lim16(FP_SEG(frame)) ?
+                    frame[2 + i] : 0;
     return b ? b->info[idx % TB_COUNT].real : 0;
 }
 

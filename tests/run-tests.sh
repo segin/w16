@@ -154,6 +154,10 @@ probes() {
     # TK65D.DLL and TK65I1-9.DLL
     cp "$dos/TK64.EXE" "$dos/TK64O.EXE" "$dos/TK64P.EXE" "$dos/TK64A.EXE" "$dos/TK65.EXE" "$stage/"
     cp "$dos/TK65D.DLL" "$dos"/TK65I?.DLL "$stage/WINDOWS/"
+    # TK66 (the KERNEL audit, third round; TK66L, S, R, F, I, N, E: copies,
+    # one case each) loads TKENT2.DLL, TKBADNM.DLL, TKEA-TKEE.DLL
+    cp "$dos"/TK66*.EXE "$stage/"
+    cp "$dos/TKBADNM.DLL" "$dos"/TKE?.DLL "$stage/WINDOWS/"   # (and TKENT.DLL, TKENT2.DLL above)
     for f in TKDLL.DLL TKDLB.DLL TKBAD.DLL TKNODEP.DLL TKNOD.DLL TKUSEX.DLL TKEXEM.EXE; do
         cp "$dos/$f" "$stage/WINDOWS/"
     done
@@ -170,6 +174,8 @@ probes() {
     DOSRUN_PRE="$DOSRUN_PRE
 MOUNT F $stage -t floppy"
     run TK62 0
+    run TK66 0
+    for c in L S R F I N E; do run TK66$c 0; done
     DOSRUN_PRE='SET PATH=C:\TKPATH;Z:\'
     run TK64 0
     run TK64O 0

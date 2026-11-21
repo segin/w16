@@ -634,6 +634,14 @@ static u16 local_init(u16 seg, u16 start, u16 end)
     first = (start + 3) & ~3;
     if (end >= segsize || end < SENTINEL_SIZE || first < start)
         return 0;
+    /* observed on 3.1 (TK66 "linit", both kernels): with start 1, 4 or 8
+       the first sentinel is at 0Ch, clear of the words before it (the
+       heap pointer at 6); w16 put it at the start, and the heap pointer
+       went over it (KERNEL audit, medium 6). UNVERIFIED: LocalInit(seg,
+       0, 0) on a 64K segment (3.1's first arena wraps round to FFFCh;
+       w16's is at 0Ch too) */
+    if (first < 0x0C)
+        first = 0x0C;
     last = (end - SENTINEL_SIZE) & ~3;
     ia = first + MIN_ARENA;
     fr = ia + 4 + ((LI_SIZE + 3) & ~3);

@@ -58,15 +58,18 @@ static u16 tiles(u32 paras)
 }
 
 /* descriptors for paras paragraphs at real-mode segment seg: one per
-   64 KB, each covering what is left of the block (at most 64 KB) */
-static void set_tiles(u16 sel, u16 seg, u32 paras)
+   64 KB, each covering what is left of the block (at most 64 KB); 0 if
+   the host refused one (KERNEL audit, medium 22) */
+static int set_tiles(u16 sel, u16 seg, u32 paras)
 {
     u16 i, n = tiles(paras);
     for (i = 0; i < n; i++) {
         u32 left = (paras - ((u32)i << 12)) << 4;
-        dpmi_set_desc(sel + i * sel_inc, ((u32)seg << 4) + ((u32)i << 16),
-                      (left > 0x10000UL ? 0x10000UL : left) - 1, 0);
+        if (!dpmi_set_desc(sel + i * sel_inc, ((u32)seg << 4) + ((u32)i << 16),
+                           (left > 0x10000UL ? 0x10000UL : left) - 1, 0))
+            return 0;
     }
+    return 1;
 }
 
 /* the size of DOS block seg, from its arena header */
@@ -79,15 +82,27 @@ static u16 block_paras(u16 seg)
 
 static int dos_alloc(regs16 FAR *r)
 {
-    u16 seg, max, sel, n = tiles(r->bx ? r->bx : 1);
+    u16 seg, max, sel = 0, n = tiles(r->bx), i;
+    /* (0 paragraphs: refused, as no descriptor could describe the block;
+       KERNEL never asks for it: KERNEL audit, medium 22) */
+    if (!r->bx) {
+        if (rm21(0x4800, 0xFFFF, 0, &seg, &max))
+            r->bx = max;
+        else
+            r->bx = 0;
+        r->ax = 8;
+        return 1;
+    }
     if (rm21(0x4800, r->bx, 0, &seg, &max)) {
         r->ax = seg;
         r->bx = max;
         return 1;
     }
     sel = dpmi_alloc_desc(n);
-    if (!sel) {
+    if (!sel || !set_tiles(sel, seg, r->bx)) {
         u16 e;
+        for (i = 0; sel && i < n; i++)
+            dpmi_free_desc(sel + i * sel_inc);
         rm21(0x4900, 0, seg, &max, &max);
         /* as DOS's own failure: BX = the largest block there is (it was
            0; KERNEL audit, low) */
@@ -97,7 +112,6 @@ static int dos_alloc(regs16 FAR *r)
         r->bx = max;
         return 1;
     }
-    set_tiles(sel, seg, r->bx);
     r->ax = seg;
     r->dx = sel;
     return 0;
@@ -107,6 +121,8 @@ static int dos_free(regs16 FAR *r)
 {
     u16 sel = r->dx, seg = (u16)(dpmi_get_base(sel) >> 4);
     u16 i, n = tiles(block_paras(seg)), ax, bx;
+    if (!n)                     /* (its arena unreadable: the first one at */
+        n = 1;                  /* least; KERNEL audit, medium 22) */
     if (rm21(0x4900, 0, seg, &ax, &bx)) {
         r->ax = ax;
         return 1;
@@ -124,12 +140,16 @@ static int dos_resize(regs16 FAR *r)
         r->bx = 0;
         return 1;
     }
-    if (rm21(0x4A00, r->bx, seg, &ax, &bx)) {
-        r->ax = ax;
-        r->bx = bx;
+    if (!r->bx || rm21(0x4A00, r->bx, seg, &ax, &bx)) {
+        r->ax = r->bx ? ax : 8;     /* (0: as 0100h; KERNEL audit, */
+        r->bx = r->bx ? bx : 0;     /* medium 22) */
         return 1;
     }
-    set_tiles(sel, seg, r->bx);
+    if (!set_tiles(sel, seg, r->bx)) {
+        r->ax = 8;
+        r->bx = 0;
+        return 1;
+    }
     return 0;
 }
 

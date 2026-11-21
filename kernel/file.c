@@ -16,7 +16,9 @@
 #define OF_DELETE       0x0200
 #define OF_VERIFY       0x0400
 #define OF_SEARCH       0x0400          /* (the same bit) */
+#define OF_CANCEL       0x0800
 #define OF_CREATE       0x1000
+#define OF_PROMPT       0x2000
 #define OF_EXIST        0x4000
 #define OF_REOPEN       0x8000
 #define TF_FORCEDRIVE   0x80
@@ -300,6 +302,15 @@ static u16 join_canon(const char FAR *dir, const char FAR *name, char *out, u16 
     while (*name && n < sizeof jc_tmp - 1)
         tmp[n++] = *name++;
     tmp[n] = 0;
+    /* (a directory and name that do not fit are not found: cut short,
+       the name could have been another file's. Only a name of more than
+       12 characters, which no 8.3 name is, can make it overflow: KERNEL
+       audit, L29) */
+    if (*dir || *name) {
+        *err = DOSE_NOFILE;
+        out[0] = 0;
+        return 0;
+    }
     return file_canon(tmp, out, err);
 }
 
@@ -460,6 +471,11 @@ u16 KAPI OpenFile(const char FAR *name, ofstruct FAR *of, u16 flags)  /* KERNEL.
             kmemcpy(path, found, sizeof of_path);
     }
     if (fh == HFILE_ERROR) {
+        /* OF_PROMPT: KERNEL's "Cannot find" box (kmisc2.c; KERNEL audit,
+           L32), then the failure as without it */
+        if ((flags & OF_PROMPT) && !(flags & OF_CREATE) &&
+            (err == DOSE_NOFILE || err == 3))
+            cannot_find_box(name, NULL);
         /* observed: cBytes and fFixedDisk are left alone */
         of->nErrCode = err;
         str_to(of->szPathName, path);
@@ -677,7 +693,15 @@ u16 KAPI GetTempFileName(u8 drive, const char FAR *prefix, u16 unique,
 u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136 */
 {
     regs16 r;
-    if (drive >= 26)
+    /* observed on 3.1 (TK66 "drivetype", all three runs): the drive is
+       the low byte (0105h and 0119h as F: and Z:, 011Ah and 01FFh 0,
+       0103h 0 as D:, which DOSBox does not have), but A: and B: are
+       looked up in the BIOS only for 0 and 1: 0100h, 0101h and 0200h
+       give 3, as a drive whose 4408h fails. w16 gave 0 past 25 (KERNEL
+       audit, medium 39). UNVERIFIED how 3.1 takes A: and B: then: w16
+       asks 4408h only (DOSBox has no A: or B:, so 4409h fails for them,
+       as it does for D:) */
+    if ((u8)drive >= 26)
         return 0;
     if (drive < 2) {
         u16 bios = dpmi_seg_to_desc(0x40);  /* (0 if DPMI refused: */
@@ -687,18 +711,20 @@ u16 KAPI_ES GetDriveType(u16 drive)                                /* KERNEL.136
         u16 floppies = ((eq >> 6) & 3) + 1;
         return drive < floppies ? DRIVE_REMOVABLE : 0;
     }
-    rinit(&r, 0x4409);
-    r.bx = drive + 1;
-    if (!dos_call(&r))
-        return 0;
-    if (r.dx & 0x1000)
-        return DRIVE_REMOTE;
+    if ((u8)drive >= 2) {
+        rinit(&r, 0x4409);
+        r.bx = (u8)drive + 1;
+        if (!dos_call(&r))
+            return 0;
+        if (r.dx & 0x1000)
+            return DRIVE_REMOTE;
+    }
     /* observed (TK62 "drivetype"): a drive where 4408h fails (a DOSBox
        floppy mount as F:) is fixed, as SYSTEM.DRV's InquireSystem says
        (Schulman: GetDriveType wraps it); w16 said 0 (KERNEL audit,
        medium 39) */
     rinit(&r, 0x4408);
-    r.bx = drive + 1;
+    r.bx = (u8)drive + 1;
     if (!dos_call(&r))
         return DRIVE_FIXED;
     return r.ax == 0 ? DRIVE_REMOVABLE : DRIVE_FIXED;

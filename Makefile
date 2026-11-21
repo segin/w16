@@ -38,7 +38,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65 TK66
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
@@ -49,7 +49,9 @@ TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK6
 TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TKUSEX.DLL TKEXEM.EXE TK15A.EXE TK16A.EXE TK16B.EXE TK16C.EXE TK16S.EXE TK16I.EXE TK61A.EXE \
             TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL \
-            TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I)
+            TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I) \
+            TK66L.EXE TK66S.EXE TK66R.EXE TK66F.EXE TK66I.EXE TK66N.EXE TK66E.EXE TKBADNM.DLL \
+            TKEA.DLL TKEB.DLL TKEC.DLL TKED.DLL TKEE.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
 SHELL_PM := $(B)/shell/start.o $(B)/shell/progman/main.o \
@@ -107,6 +109,12 @@ KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2 profile
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
+# the global heap (global.c) in a code segment of its own, HEAP_TEXT, as
+# KRNL386's (below): _TEXT had outgrown 64K, and KERNEL then has 3.1's
+# four segments (code, two more code segments, DGROUP: TK62 "kseg")
+$(B)/kernel/global.o: kernel/global.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -nt=HEAP_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
@@ -599,6 +607,30 @@ $(DOS)/TK64A.EXE: $(B)/tests/start.o $(B)/tests/tk64a.o tests/apps/app.lnk tests
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk64.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk64a.map file { $(B)/tests/start.o $(B)/tests/tk64a.o }
+# TK66.EXE: the KERNEL audit, third round (tests/apps/tk66.c), with its
+# resource (tk66.rc); TK66L, S, R, F, I, N and E: the same program, one
+# case each (its file name)
+$(B)/tests/tk66.o: tests/apps/tk66ref.h tests/apps/tk66ref286.h tests/apps/tklog.h
+$(B)/tests/tk66.res: tests/apps/tk66.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/TK66.EXE: $(B)/tests/start.o $(B)/tests/tk66.o $(B)/tests/tk17s.o $(B)/tests/tk66.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk66.map option resource=$(B)/tests/tk66.res \
+	    file { $(B)/tests/start.o $(B)/tests/tk66.o $(B)/tests/tk17s.o }
+$(DOS)/TK66L.EXE $(DOS)/TK66S.EXE $(DOS)/TK66R.EXE $(DOS)/TK66F.EXE $(DOS)/TK66I.EXE $(DOS)/TK66N.EXE $(DOS)/TK66E.EXE: $(DOS)/TK66.EXE
+	cp $< $@
+# TKEA-TKEE.DLL: 8000, 10000, 10800, 11000 and 11500 entries (TK66E)
+TKE_N := A:8000 B:10000 C:10800 D:11000 E:11500
+$(foreach e,$(TKE_N),$(eval $$(DOS)/TKE$(word 1,$(subst :, ,$(e))).DLL: tools/mkne.py ; @mkdir -p $$(@D) && python3 tools/mkne.py $$@ --module TKE$(word 1,$(subst :, ,$(e))) --entries $(word 2,$(subst :, ,$(e)))))
+# TKBADNM.DLL: a named resource type whose name lies past the module
+# table (medium 16)
+$(DOS)/TKBADNM.DLL: tools/mkne.py
+	@mkdir -p $(@D) $(B)/tests
+	printf 'x' > $(B)/tests/tkbadnm.bin
+	python3 tools/mkne.py $@ --module TKBADNM --type-name-off 0xFFF0 NAMEDT:1:$(B)/tests/tkbadnm.bin
+
 # TK65.EXE: GetProcAddress and imports by name (tests/apps/tk65.c);
 # TK65D.DLL, exports in every case; TK65I1-9.DLL, each importing one of
 # them by the name at the same place in TK65IMP (and in tk65.c's imp[])

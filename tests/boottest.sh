@@ -2362,8 +2362,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # and w16's KRNL286, USER, GDI, SHELL and PROGMAN (the group
         # icons' pictures left out); tk59, TK59 as the shell
         # (tests/apps/tk59.c: LoadLibrary, WinExec, LoadModule with the
-        # error mode 0 and 8000h) under both of w16's kernels against
-        # Microsoft's KRNL386: every box (shots) and every return code
+        # error mode 0 and 8000h, OpenFile with OF_PROMPT) under both of
+        # w16's kernels against Microsoft's KRNL386: every box (shots)
+        # and every return code
         # (TK.LOG) the same; tree, w16's install tree alone (no OLECLI.DLL
         # there) under its KRNL386 and its KRNL286 (missingdlltree.txt):
         # the same screens under both, and both boxes as 3.1's (the boxes'
