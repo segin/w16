@@ -236,7 +236,10 @@ static BOOL get_env(const char *name, char *out, int max)
    (80x25, 40x25, 80x43/50, 40x43/50) and the first in DefFont (GR3) ---- */
 static void load_fonts(void)
 {
-    char list[4 * 17 + 8];
+    /* Microsoft's VGA.3GR writes more than the 4 x 17 bytes w16's does
+       (a smaller buffer here lost WinMain's return address): room to
+       spare, UNVERIFIED how much it writes */
+    char list[512];
     int i;
     GetFontList((LPSTR)list);
     for (i = 0; i < 4; i++) {
@@ -246,7 +249,9 @@ static void load_fonts(void)
         /* a file that is not there is left out quietly (w16's tree has
            none of them: then the OEM font, 8x12 like EGA80WOA's cells;
            Windows 3.1's WINOA386 stops with KERNEL's "Cannot find" box) */
-        if (!exists(e, NULL) || AddFontResource(e) <= 0)
+        if (!exists(e, NULL))
+            continue;
+        if (AddFontResource(e) <= 0)
             continue;
         f = CreateFont(h, w, 0, 0, FW_NORMAL, 0, 0, 0, OEM_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FIXED_PITCH | FF_MODERN, "Terminal");
@@ -391,22 +396,74 @@ static void program_ended(LPARAM rec)
 
 /* a switching key took the user out of the full-screen VM (event 41Eh):
    SHELL tells which (10h), and Windows gets the focus */
+/* the next window in Windows' switching order after w (top-level,
+   visible, titled, not owned), wrapping round; NULL if none */
+static HWND next_window(HWND w)
+{
+    HWND d = GetDesktopWindow(), c, first = GetWindow(d, GW_CHILD);
+    int pass;
+    c = w ? GetWindow(w, GW_HWNDNEXT) : first;
+    for (pass = 0; pass < 2; pass++) {
+        for (; c; c = GetWindow(c, GW_HWNDNEXT))
+            if (IsWindowVisible(c) && !GetWindow(c, GW_OWNER) &&
+                !(GetWindowLong(c, GWL_STYLE) & WS_CHILD) && GetWindowTextLength(c))
+                return c;
+        c = first;
+    }
+    return NULL;
+}
+
+/* a switching key took the user out of the full-screen VM (event 41Eh).
+   Windows 3.1 (VXS.386, Alt+Tab and Alt+Esc from the MS-DOS Prompt):
+   WINOA386 offers SHELL the windows in switching order, each with its
+   title (function 10h: EBX FFFFFFFFh for a Windows window, else the
+   window's VM; ECX the window; DS:SI a block whose title at +1Ch ES:DI
+   points to, its dwords 0Fh 9 0Fh 0 0Fh 0Fh 0 as 3.1's). SHELL shows the
+   title full screen while Alt is held: EAX 1 back for "the next one"
+   (Tab again), EAX 0 with ECX (and EBX) the window chosen. Alt+Esc: the
+   first answer is EAX 0. Then function 0Ch with EAX 1 (the System VM
+   gets the focus) and the chosen window is activated. */
+#pragma pack(1)
+static struct { DWORD d[7]; char title[80]; } swblk = { { 0x0F, 9, 0x0F, 0, 0x0F, 0x0F, 0 } };
+#pragma pack()
+
 static void switched(LPARAM rec)
 {
-    VREGS *r = shell_call(0x10, 0, 0xFFFFFFFFL, (DWORD)(WORD)hwnd, 0, rec);
-    if (LOWORD(r->eax) == 1)
-        shell_call(0x10, 0, vm, (DWORD)(WORD)hwnd, 0, rec);
+    HWND c = hwnd, chosen = NULL;
+    VREGS *r;
+    DWORD t0 = GetTickCount();
+    /* EAX 1 comes back at once while Alt is held (Microsoft's SHELL, VXS:
+       3.1's WINOA386 asked again about 170 ms later): the next window is
+       offered after a pause in which other tasks run. UNVERIFIED how 3.1
+       tells "Tab again" from "still held"; at most 30 s */
+    while (GetTickCount() - t0 < 30000L) {
+        c = next_window(c);
+        if (!c)
+            break;
+        GetWindowText(c, swblk.title, sizeof swblk.title);
+        r = shell_call(0x10, 0, c == hwnd ? vm : (GetClassWord(c, GCW_HMODULE) == GetClassWord(hwnd, GCW_HMODULE) ?
+                       GetWindowLong(c, 0) : 0xFFFFFFFFL),
+                       (DWORD)(WORD)c, (DWORD)(WORD)&swblk, (DWORD)(WORD)swblk.title);
+        if (LOWORD(r->eax) != 1) {
+            chosen = (HWND)LOWORD(r->ecx);
+            break;
+        }
+        {
+            DWORD t = GetTickCount();
+            MSG m;
+            while (GetTickCount() - t < 150)
+                PeekMessage(&m, NULL, 0, 0, PM_NOREMOVE);
+        }
+    }
     shell_call(0x0C, 1, 0, 0, 0, rec);
-    shell_call(0x14, 0, 0, 0, 0, 0);
-    /* the icon stays; the next window in Windows' order is activated */
-    {
-        HWND w;
-        for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
-            if (w != hwnd && IsWindowVisible(w) && IsWindowEnabled(w) &&
-                !(GetWindowLong(w, GWL_STYLE) & WS_CHILD) && GetWindowTextLength(w))
-                break;
-        if (w)
-            SetActiveWindow(w);
+    if (!chosen || !IsWindow(chosen))
+        chosen = next_window(hwnd);
+    if (chosen == hwnd)
+        focus(vm, (DWORD)(WORD)&cblk);  /* back to the box itself */
+    else if (chosen) {
+        if (IsIconic(chosen) && GetClassWord(chosen, GCW_HMODULE) != GetClassWord(hwnd, GCW_HMODULE))
+            ShowWindow(chosen, SW_RESTORE);
+        SetActiveWindow(chosen);
     }
 }
 
@@ -636,7 +693,8 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     if (!hprev) {
         wc.style = 0;
         wc.lpfnWndProc = WndProc;
-        wc.cbClsExtra = wc.cbWndExtra = 0;
+        wc.cbClsExtra = 0;
+        wc.cbWndExtra = 4;          /* the VM's handle (switching) */
         wc.hInstance = hi;
         wc.hIcon = LoadIcon(hi, MAKEINTRESOURCE(1));
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
@@ -712,6 +770,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
         return 0;
     }
     vm = r->eax;
+    SetWindowLong(hwnd, 0, vm);
     eps.ThisVMHand = vm;
     eps.VM1_Hnd = vm;
     running = TRUE;

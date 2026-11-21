@@ -1844,9 +1844,12 @@ $(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
 	cp $< $@
 # 386 Enhanced mode (win386/; ARCHITECTURE.md 12): WIN /3. Its built-in
 # devices load from SYSTEM.INI's [386Enh] *names (assets/SYSTEM.INI);
-# DOS programs there still need the user's WINOA386.MOD (assets/README.TXT)
-install-tree: $(W16SYS)/WIN386.EXE
+# DOS programs there run through WINOA386.MOD (winoa386/)
+install-tree: $(W16SYS)/WIN386.EXE $(W16SYS)/WINOA386.MOD
 $(W16SYS)/WIN386.EXE: $(W386)/WIN386.EXE
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16SYS)/WINOA386.MOD: $(DOS)/WINOA386.MOD
 	@mkdir -p $(@D)
 	cp $< $@
 

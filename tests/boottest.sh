@@ -91,6 +91,11 @@
 #              MS-DOS Prompt full screen, Alt+Enter to a window and back,
 #              EXIT (tests/scripts/input/dosbox386tree.txt), against the
 #              same tree under Microsoft's WIN386.EXE (DOSBox-X)
+#   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
+#              switching (dosbox386s.txt) and Exit Windows with a box
+#              open (dosbox386x.txt), against Microsoft's WINOA386 and
+#              WIN386 (the icon, the banner and the "still active" box's
+#              branded text masked)
 #   win386w16dos  w16's install tree over Windows 3.1 with w16's WIN386.EXE
 #              (plain DOSBox, the user's set-up): the MS-DOS Prompt, VER and
 #              EXIT typed, as with Microsoft's (banner and cursor masked)
@@ -838,7 +843,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1444,6 +1449,44 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    win386woa)
+        # w16's WINOA386.MOD (and WIN386) on Windows 3.1 against Microsoft's
+        # (the same references as win386switch and win386exitbox)
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        r=ok
+        for c in win386switch win386exitbox; do
+            if [ $c = win386switch ]; then
+                scr=$root/tests/scripts/input/dosbox386s.txt
+                shots="01-full 02-alttab 03-back 04-altesc 05-back 06-ctrlesc 07-esc 08-box 09-end"
+            else
+                scr=$root/tests/scripts/input/dosbox386x.txt
+                shots="01-full 02-windows 03-exitbox 04-refused 05-after 06-box 07-end"
+            fi
+            set -- -r -p 386 -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE"
+            refrun $c-ref $c env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+                "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/$c-ref" "$@"
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+                "$out/win386woa-$c" "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" \
+                -f "$root/build/dos/WINOA386.MOD=WINDOWS/SYSTEM/WINOA386.MOD" > "$out/win386woa-$c.txt" 2>&1 || true
+            for s in $shots; do
+                a=$out/win386woa-$c/$s.png b=$out/$c-ref/$s.png
+                if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="$c: no $s screen"; break; fi
+                case $(magick identify -format '%wx%h' "$b") in
+                720x400) m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;
+                # the icon (w16's artwork), the "still active" box (its
+                # width follows the branded text)
+                *) m="rectangle 66,40 590,114 rectangle 96,140 104,215 rectangle 0,400 90,479 rectangle 130,160 520,320" ;;
+                esac
+                magick "$a" -fill black -draw "$m" "$out/win386woa-a.png"
+                magick "$b" -fill black -draw "$m" "$out/win386woa-b.png"
+                n=$(magick compare -metric AE "$out/win386woa-a.png" "$out/win386woa-b.png" "$out/win386woa-$c-$s-diff.png" 2>&1 >/dev/null || true)
+                n=${n%%[. ]*}
+                [ "${n:-1}" = 0 ] || { r="$c $s: $n pixels differ ($out/win386woa-$c-$s-diff.png)"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   win386woa: w16's WINOA386 switching and Exit Windows with a box open, as Microsoft's"
+        else echo "FAIL win386woa: $r"; fails=$((fails + 1)); fi ;;
     win386tree)
         # the user's report (2026-11-20): with w16's tree, WIN386, VGA.DRV
         # and VGA.3GR, Microsoft's WINOA386.MOD added, a DOS box did not go
@@ -4756,6 +4799,22 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             boot sndallw16 -w -x -f "$root/build/dos/MMSOUND.DRV=WINDOWS/SYSTEM/MMSOUND.DRV"; check sndallw16 sndallw16 ref
             expect= ;;
     treealone)
+        # the tree's DOS box in 386 Enhanced mode, nothing of Microsoft's
+        # (its WIN386.EXE, WINOA386.MOD, VGA.3GR; no DOS-box fonts: the
+        # OEM font): the Main group's MS-DOS Prompt full screen, Alt+Enter
+        # to a window and back, EXIT (tests/scripts/input/dosbox386tree.txt,
+        # DOSBox-X): text screen, Windows with the window, text screen,
+        # Windows again
+        treedos() {
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 \
+                "$root/tests/scripts/input/dosbox386tree.txt" "$out/treealone3e-dos" -p 386 -T "$root/build/w16" -3 \
+                -c "WIN /3 /B" > "$out/treealone3e-dos.txt" 2>&1 || true
+            for _s in 01-full:720x400 02-window:640x480 03-full:720x400 04-back:640x480; do
+                _g=$(magick identify -format '%wx%h' "$out/treealone3e-dos/${_s%%:*}.png" 2>/dev/null || echo none)
+                [ "$_g" = "${_s#*:}" ] || { echo "${_s%%:*} is $_g, not ${_s#*:}"; return; }
+            done
+            echo ok
+        }
         # build/w16 alone as C:\W16 (dropin.sh -T with nothing added): no
         # file of Microsoft's on the drive. Windows (no DOS program: the
         # grabber VGACOLOR.2GR is not needed) must boot to Program Manager
@@ -4773,8 +4832,10 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
             echo "FAIL treealone: the boot did not complete under KRNL386 ($out/treealone386.txt)"; fails=$((fails + 1))
         elif ! booted treealone3e || ! grep -q '^shell: loaded' "$out/treealone3e.txt"; then
             echo "FAIL treealone: the boot did not complete in 386 Enhanced mode ($out/treealone3e.txt)"; fails=$((fails + 1))
+        elif r=$(treedos) && [ "$r" != ok ]; then
+            echo "FAIL treealone: 386 Enhanced mode's DOS box: $r ($out/treealone3e-dos)"; fails=$((fails + 1))
         else
-            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell under KRNL286, KRNL386 and in 386 Enhanced mode (w16's WIN386)"
+            echo "ok   treealone: build/w16 alone, no file of Microsoft's: boots to its shell under KRNL286, KRNL386 and in 386 Enhanced mode (w16's WIN386), where its DOS box goes full screen, to a window and back"
         fi ;;
     sysprobe)
         # tests/sysprobe.sh: SY1 (every export, timers, the msec count,
