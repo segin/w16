@@ -20,6 +20,10 @@ nothing of Microsoft's.
   WRITE.EXE               Write (its help is WRITE.HLP)
   CONTROL.EXE             Control Panel
   WINFILE.EXE             File Manager (its help is WINFILE.HLP)
+  SSSTARS.SCR             the Starfield Simulation screen saver: choose
+                          it in Control Panel's Desktop (Screen Saver,
+                          Name), where Setup... sets its warp speed,
+                          the number of stars and a password
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
