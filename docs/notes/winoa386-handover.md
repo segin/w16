@@ -86,3 +86,11 @@ See the end of this file (kept current).
    8x12, 16x12, 8x8, 16x8: fonts/, tools/fontc.py), so that windows match
    3.1's glyph sizes without the user's files.
 6. `[NonWindowsApp]` settings; Alt+PrintScreen (GrabEvent/GrabComplete).
+
+### Test results (2026-11-21, 1292383, installation-05 under load ~40)
+
+make test: pass. Full boot test: 142 ok, 6 failures: holdbtn, lzexpand
+(quirks), trails (timed), cplclick (co-tree), toolhelp (tree386; alone
+again: ref386, Microsoft's side, did not finish) - all on the known-flaky
+list - and w16write (tree 03-character), which passed alone. New cases
+win386tree, win386woa and treealone (with its DOS box) pass.
