@@ -672,6 +672,10 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
         lb->alloc = n;
     }
     text = hasstrings(h) ? uh_strdup_in(&uhObj, s) : 0;    /* before item(): it allocates */
+    /* no room for the string: no item (it was added with no text, and
+       LB_GETTEXT then copied from the heap's header: USER audit, sweep) */
+    if (hasstrings(h) && !text)
+        return LB_ERRSPACE;
     if (at < 0 || at > lb->count)
         at = lb->count;
     if (at < lb->count)
@@ -1265,6 +1269,8 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (!valid_wnd(h) || lb_of(h) != lb)
             return 0;
         notify(h, lb, LBN_SELCHANGE);
+        if (!valid_wnd(h) || lb_of(h) != lb)
+            return 0;           /* the owner destroyed it (USER audit, sweep) */
         if (msg == WM_LBUTTONDBLCLK)
             notify(h, lb, LBN_DBLCLK);
         /* extended style 2 (Schulman: WES_NOTIFYDRAG; Wine calls it
@@ -1545,12 +1551,18 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             *(DWORD __far *)lp = item(lb, wp)->data;
             return 4;
         }
+        if (!item(lb, wp)->text) {
+            *(LPSTR)lp = 0;
+            return 0;
+        }
         lstr_cpyn((LPSTR)lp, STR(item(lb, wp)->text), 0x7FFF);
         return lstr_len((LPCSTR)lp);
     case LB_GETTEXTLEN:
         if ((int)wp < 0 || (int)wp >= lb->count)
             return LB_ERR;
-        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 4;
+        if (!hasstrings(h))
+            return 4;
+        return item(lb, wp)->text ? lstr_len(STR(item(lb, wp)->text)) : 0;
     case LB_SETCURSEL:
         if ((int)wp >= lb->count)
             return LB_ERR;

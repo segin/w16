@@ -355,6 +355,8 @@ static void icon_place(PWND w, POINT *pt)
 }
 
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
+static void hide_icon_title(PLACE *pl);
+static void show_icon_title(PLACE *pl, HWND h);
 HWND make_icon_title(HWND h);
 void move_icon_title(HWND t, HWND h);
 HWND next_to_activate(HWND h);
@@ -507,6 +509,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 icon_place(w, &pt);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
+                return wasvis;
             sized = w->rcWindow;
             set_window_pos(h, 0, pt.x, pt.y, sysmet[SM_CXICON] + 4, sysmet[SM_CYICON] + 4,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
@@ -520,8 +524,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                     send_message(h, WM_SIZE, SIZE_MINIMIZED,
                                  MAKELONG(w->rcClient.right - w->rcClient.left,
                                           w->rcClient.bottom - w->rcClient.top));
-                if (pl && !pl->title && (w = valid_wnd(h)) != 0)
-                    pl->title = make_icon_title(h);
+                if (pl && (w = valid_wnd(h)) != 0)
+                    show_icon_title(pl, h);
             }
             /* a child minimised without activation gives the focus it
                holds to its parent (3.1: Program Manager makes its groups
@@ -560,8 +564,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             /* an icon made by CreateWindow (WS_MINIMIZE) shown: its title
                too (3.1: WINOLDAP's icon, "COMMAND" under it) */
             if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && (w->style & WS_VISIBLE) &&
-                (pl = place_of(h, FALSE)) != 0 && !pl->title)
-                pl->title = make_icon_title(h);
+                (pl = place_of(h, FALSE)) != 0)
+                show_icon_title(pl, h);
         }
         return wasvis;
     case SW_SHOWMAXIMIZED:
@@ -612,10 +616,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             if (w->style & WS_MINIMIZE) {
                 if (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h)))
                     return wasvis;
-                if (pl && pl->title) {
-                    destroy_window(pl->title);
-                    pl->title = 0;
-                }
+                if (pl && pl->title)
+                    hide_icon_title(pl);
                 if (!(w = valid_wnd(h)))
                     return wasvis;
             }
@@ -623,6 +625,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             w->style |= WS_MAXIMIZE;
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
+                return wasvis;
             sized = w->rcWindow;
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
                            mm.ptMaxSize.x, mm.ptMaxSize.y,
@@ -667,13 +671,13 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 }
             }
             r = pl ? pl->normal : w->rcWindow;
-            if (pl && pl->title) {
-                destroy_window(pl->title);
-                pl->title = 0;
-            }
+            if (pl && pl->title)
+                hide_icon_title(pl);
             w->style &= ~(WS_MINIMIZE | WS_MAXIMIZE);
             if (!wasvis)
                 send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
+                return wasvis;
             sized = w->rcWindow;
             set_window_pos(h, 0, r.left, r.top, r.right - r.left, r.bottom - r.top,
                            SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
@@ -700,8 +704,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
         /* fall through */
     default:            /* SW_SHOW, SW_SHOWNA, SW_SHOWNOACTIVATE */
         if (wasvis) {
+            /* an icon is activated; an open window shown again is not
+               (US30 show on 3.1: SW_SHOW, SW_SHOWNORMAL and SW_RESTORE of
+               a visible normal window left another one active) */
             if (cmd == SW_SHOWNORMAL || cmd == SW_SHOW || cmd == SW_RESTORE)
-                if (!(w->style & WS_CHILD) && h != hwndActive)
+                if (!(w->style & WS_CHILD) && (w->style & WS_MINIMIZE) && h != hwndActive)
                     activate_window(h, FALSE);
             return TRUE;
         }
@@ -791,6 +798,32 @@ HWND next_to_activate(HWND h)
             icon = t;
     }
     return icon;
+}
+
+/* The icon title window lives as long as its window (US30 show on 3.1:
+   after a restore it is still there, hidden, and the next minimise shows
+   the same window again). w16 destroyed it at each restore and made a new
+   one at each minimise, which WH_CBT and EnumWindows saw. */
+static void hide_icon_title(PLACE *pl)
+{
+    if (valid_wnd(pl->title))
+        set_window_pos(pl->title, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_HIDEWINDOW);
+    else
+        pl->title = 0;
+}
+
+static void show_icon_title(PLACE *pl, HWND h)
+{
+    if (pl->title && !valid_wnd(pl->title))
+        pl->title = 0;
+    if (!pl->title) {
+        pl->title = make_icon_title(h);
+        return;
+    }
+    move_icon_title(pl->title, h);
+    set_window_pos(pl->title, h, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
+                   SWP_NOACTIVATE);
 }
 
 /* a window going away: its placement record and icon title */

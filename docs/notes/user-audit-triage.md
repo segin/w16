@@ -118,28 +118,25 @@ above except two differences left (logged as `~`, see "Left").
 | interrupt-time data (`tools/irqcheck.py`) | FALSE | Nothing new: the build's irqcheck passes; the new `is_down` in `input.c` reads no data. | None. |
 | other fixed buffers (`button.c`, `defwnd.c`, `menu.c` item text, `mdi.c` frame title, `dlg.c` GetNextDlgGroupItem's 64, `edit.c` password runs, `deskver.c`, `dirlist.c`, `driver.c`) | FALSE | Each copy is bounded by the buffer's size. | None. |
 
-## Left
+## Left, worked (2026-11-20)
 
-- **Icon title windows**: w16 destroys a window's icon title when the
-  window is restored and makes a new one at the next minimise; 3.1 keeps
-  one until the window goes. Visible to WH_CBT (CREATEWND/DESTROYWND for
-  it) and to EnumWindows; US30 leaves those calls out of its record.
-- **SW_RESTORE/SW_SHOWNORMAL of a visible normal inactive window**: 3.1
-  does not activate it (US30 cbt, the refused-MINMAX run), w16 does (an
-  old, pixel-tested behaviour of `pos.c`); US30 no longer asks.
-- **The activation after DestroyWindow of the active window**: 3.1
-  activates the next window before the window goes (its HCBT_ACTIVATE
-  names the dying window as the active one, then SETFOCUS from it); w16
-  activates afterwards, the focus taken away first. Doing it 3.1's way
-  broke Task List's End Task and tiling (boot test taskman), so it is
-  left; US30 stops its record at the window's HCBT_DESTROYWND.
-- **A refused HCBT_SETFOCUS during an activation**: 3.1 then names the
-  activated window as the old focus in the next SETFOCUS, w16 none (US30
-  `cbt.deny9`, logged as `~`).
-- The low sweep findings marked "not fixed".
-- WH_HARDWARE, WH_DEBUG, HCBT_CLICKSKIPPED/KEYSKIPPED/QS: not called.
-- `[w16]` keys: none added. Every change either matches 3.1 or only
-  changes what a working program cannot see (the user's rulings).
+The items this section listed after the first round, worked with US30's
+new sections `show` and `skip` (3.1's values quoted):
+
+| Item | Verdict | Evidence | Fix |
+|---|---|---|---|
+| Icon title window's lifetime | REAL | US30 show: after a restore 3.1's title window is still there, hidden, and the next minimise shows the same window. w16 destroyed it at each restore and made a new one at each minimise (seen by WH_CBT and EnumWindows). | `pos.c` `hide_icon_title`/`show_icon_title`: hidden at restore and maximise, shown and moved at minimise; it goes with its window (`free_place`). US30 compares its CBT calls again. |
+| SW_SHOW/SW_SHOWNORMAL/SW_RESTORE of a visible normal inactive window | REAL | US30 show: none of the three activates it on 3.1; w16 activated it (since USER's first commit, with no recorded reason). | Only an icon is activated by them. US30 calls SW_RESTORE unconditionally again. |
+| The window activated after DestroyWindow of the active one | REAL (choice) / left (timing) | US30 show: with an icon above the next open window, 3.1 activates the icon; w16 activated the icon's title window. 3.1 also activates before the window goes; doing that, even with 3.1's choice, still broke the boot test taskman (Task List's End Task, then Shift+Tile). | The choice passes over icon titles (`next_after_destroy`). The timing is left: w16 activates after the destruction; US30 stops its CBT record at the window's HCBT_DESTROYWND. |
+| A refused HCBT_SETFOCUS in an activation | REAL | US30 cbt.deny9 on 3.1: the activated window has the focus afterwards (the next SETFOCUS names it as the old focus); w16 took the focus away. | `activate_window`: an open window whose focus is elsewhere after WM_ACTIVATE takes it itself, past WH_CBT; an icon keeps none. Compared again. |
+| HCBT_CLICKSKIPPED, HCBT_KEYSKIPPED | REAL | US30 skip on 3.1: none for a key and a click taken normally; with WH_KEYBOARD and WH_MOUSE refusing them, C7 41 for the press and the release, C6 201 and C6 202. | Called when WH_KEYBOARD or WH_MOUSE throws the message away (`kbd_hook`, `mouse_hook`). |
+| HCBT_QS, WH_HARDWARE | 3.1-BEHAVIOUR (nothing to call) | WM_QUEUESYNC comes only from a CBT application's own journal playback, and w16 has no non-mouse, non-keyboard hardware events. | None. |
+| WH_DEBUG | 3.1-BEHAVIOUR | 3.1 died at the first PeekMessage with a task-local one set (US30, first round). | Not called. |
+| The low sweep findings | REAL (low) | Each needs an owner to destroy a control inside its own notification, or no memory. | `listbox.c`: the record looked up again after LBN_SELCHANGE (and master's paint loop does after WM_DRAWITEM); an item whose string does not fit is not added (LB_ERRSPACE), LB_GETTEXT/LB_GETTEXTLEN of one with no text give ""/0. `pos.c`: the window looked up again after the three WM_SHOWWINDOWs. `drag.c`: after WM_QUERYDROPOBJECT. |
+
+Still left: the activation's timing at DestroyWindow (above). `[w16]`
+keys: none added; every change either matches 3.1 or only changes what a
+working program cannot see (the user's rulings).
 
 ## Tests
 
@@ -149,6 +146,12 @@ above except two differences left (logged as `~`, see "Left").
   The fourth, `toolhelp`, failed in its all-Microsoft `ref286` part (see
   the rerun note in the report). `uaudit` passes: US29 and US30 identical
   to 3.1, and every run 3.1 does not survive finishes on w16.
+- After the leftovers, merged with master 2fe5dbd (dd2d4f0): `make test`
+  pass; boot test 142 ok, 3 failures: `lzexpand` quirks (known),
+  `trails` timed and `soundtime` sn1 (a tone 9.3 ms late against 7 ms),
+  both failing the same way with master's USER sources in the same tree
+  (rerun), so not from this work. `uaudit` passes with US30's new
+  sections.
 - On the way: the first full run on d79f4ea had 17 new failures (the
   DWORD filter answer, then the activation before a destroy), found by
   bisecting on `runfront` and `taskman` and fixed in 573d08a.
@@ -163,3 +166,6 @@ above except two differences left (logged as `~`, see "Left").
 | d79f4ea | item 8 (hook calls) and the sweep's fixes |
 | 310a151 | US30: what 3.1 does not survive left out |
 | 573d08a | hook answers as BOOLs, WH_MSGFILTER task-specific, no activation before a destroy, CS_PARENTDC for applications' classes |
+| 6182259 | this document |
+| eaafb08, dd2d4f0 | the leftovers worked (icon titles, re-show activation, next window after a destroy, focus after a refused SETFOCUS, CLICKSKIPPED/KEYSKIPPED, low sweep fixes); US30 sections show and skip |
+| 2bdb369 | merge of master 2fe5dbd (`listbox.c` conflict: master's drawing kept, the sweep's list-box fixes put back on it) |

@@ -266,7 +266,13 @@ LRESULT cbt_hook(int code, WPARAM wp, LPARAM lp)
    PM_NOREMOVE look */
 LRESULT kbd_hook(int code, WPARAM vk, LPARAM data)
 {
-    return hook_set(WH_KEYBOARD) ? LOWORD(call_hook(WH_KEYBOARD, code, vk, data)) : 0;
+    LRESULT r = hook_set(WH_KEYBOARD) ? LOWORD(call_hook(WH_KEYBOARD, code, vk, data)) : 0;
+    /* a key thrown away: WH_CBT's HCBT_KEYSKIPPED with it (US30 skip on
+       3.1: C7 with the virtual key for the press and the release a
+       refusing WH_KEYBOARD threw away; none for keys taken normally) */
+    if (r && code == HC_ACTION)
+        cbt_hook(HCBT_KEYSKIPPED, vk, data);
+    return r;
 }
 
 LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit)
@@ -278,7 +284,13 @@ LRESULT mouse_hook(int code, UINT msg, POINT pt, HWND h, int hit)
     ms.hwnd = h;
     ms.wHitTestCode = hit;
     ms.dwExtraInfo = 0;
-    return LOWORD(call_hook(WH_MOUSE, code, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms));
+    if (!LOWORD(call_hook(WH_MOUSE, code, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms)))
+        return 0;
+    /* a mouse message thrown away: HCBT_CLICKSKIPPED with it (US30 skip
+       on 3.1: C6 201, C6 202; lParam the MOUSEHOOKSTRUCT, 3.1 SDK) */
+    if (code == HC_ACTION)
+        cbt_hook(HCBT_CLICKSKIPPED, msg, (LPARAM)(MOUSEHOOKSTRUCT __far *)&ms);
+    return 1;
 }
 
 /* WH_SHELL notifications (3.1 SDK: HSHELL_*) */

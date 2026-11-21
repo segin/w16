@@ -667,8 +667,16 @@ void activate_window(HWND h, BOOL mouse)
        minimised), and the keys go to the icon as WM_SYSKEYDOWN. It used
        to stay in the window before: with Program Manager minimised and
        Notepad's icon active, Alt+Esc went to Program Manager */
-    if (hwndFocus && hwndActive == h && hwndFocus != h && !IsChild(h, hwndFocus))
-        set_focus(0);
+    if (hwndFocus && hwndActive == h && hwndFocus != h && !IsChild(h, hwndFocus) &&
+        (w = valid_wnd(h)) != 0) {
+        /* an open window takes it itself, past WH_CBT (US30 cbt on 3.1,
+           its SETFOCUS refused in the activation: the next SETFOCUS names
+           the activated window as the old focus) */
+        if (!(w->style & WS_MINIMIZE))
+            focus_hooked = TRUE;
+        set_focus((w->style & WS_MINIMIZE) ? 0 : h);
+        focus_hooked = FALSE;
+    }
     (void)mouse;
 }
 
