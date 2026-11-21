@@ -180,7 +180,11 @@ static void make_filter(BOOL save)
     static const WORD save_ids[] = { IDS_FLTWRI, IDS_EXTWRI, IDS_FLTDOC, IDS_EXTDOC,
                                      IDS_FLTDOCTXT, IDS_EXTDOC, IDS_FLTTXT, IDS_EXTTXT,
                                      IDS_FLTALL, 0, 0 };
-    const WORD *ids = save ? save_ids : open_ids;
+    /* with objects "3.0 Write (*.WRI)" comes second (WR35; WR23 without) */
+    static const WORD save30_ids[] = { IDS_FLTWRI, IDS_EXTWRI, IDS_FLTWRI30, IDS_EXTWRI,
+                                       IDS_FLTDOC, IDS_EXTDOC, IDS_FLTDOCTXT, IDS_EXTDOC,
+                                       IDS_FLTTXT, IDS_EXTTXT, IDS_FLTALL, 0, 0 };
+    const WORD *ids = save ? (g_doc.ident == 0xBE32 ? save30_ids : save_ids) : open_ids;
     char *p = filter, s[64];
     int i;
     for (i = 0; ids[i] || ids[i + 1] || i % 2; i++) {
@@ -221,6 +225,8 @@ BOOL CALLBACK __export SaveHook(HWND d, UINT msg, WPARAM wp, LPARAM lp)
     return FALSE;
 }
 
+static int *typeMap;                    /* the type list's formats */
+
 static BOOL file_dialog(BOOL save, char *path)
 {
     OPENFILENAME ofn;
@@ -237,8 +243,16 @@ static BOOL file_dialog(BOOL save, char *path)
     ofn.lpstrFilter = filter;
     /* the format the document came in: a converted text file is saved
        as text unless another type is chosen (WR8) */
-    ofn.nFilterIndex = saveFormat == FMT_TEXT ? 4 : saveFormat == FMT_WORD ? 2 :
-                       saveFormat == FMT_WORDTXT ? 3 : 1;
+    {
+        static const int fmts[2][5] = { { FMT_WRI, FMT_WORD, FMT_WORDTXT, FMT_TEXT, -1 },
+                                         { FMT_WRI, FMT_WRI30, FMT_WORD, FMT_WORDTXT, FMT_TEXT } };
+        int k, *f = (int *)fmts[save && g_doc.ident == 0xBE32];
+        ofn.nFilterIndex = 1;
+        for (k = 0; k < 5; k++)
+            if (f[k] == saveFormat)
+                ofn.nFilterIndex = k + 1;
+        typeMap = f;
+    }
     ofn.lpstrFile = path;
     ofn.nMaxFile = PATH_MAX_DOS;
     ofn.lpstrTitle = title;
@@ -250,8 +264,8 @@ static BOOL file_dialog(BOOL save, char *path)
         ok = GetSaveFileName(&ofn);
         FreeProcInstance(hook);
         if (ok) {
-            saveFormat = ofn.nFilterIndex == 4 ? FMT_TEXT : ofn.nFilterIndex == 3 ? FMT_WORDTXT :
-                         ofn.nFilterIndex == 2 ? FMT_WORD : FMT_WRI;
+            saveFormat = ofn.nFilterIndex >= 1 && ofn.nFilterIndex <= 5 &&
+                         typeMap[ofn.nFilterIndex - 1] >= 0 ? typeMap[ofn.nFilterIndex - 1] : FMT_WRI;
             WriteProfileString(s_ini, "Backup", g_backup ? "1" : "0");
         }
     } else {
@@ -297,6 +311,27 @@ static BOOL save_to(LPCSTR path)
             }
         }
     }
+    /* pictures and objects: 3.0 Write leaves out objects, the other
+       formats pictures, each after asking (strings 8233, 8234; WR35) */
+    if (fmt != FMT_WRI && doc_has_pictures(&g_doc)) {
+        DOC c;
+        BOOL ok;
+        if (msgbox(g_frame, fmt == FMT_WRI30 ? IDS_SAVE30 : IDS_NOPICTURES, NULL,
+                   MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
+            return FALSE;
+        if (!doc_copy(&c, &g_doc)) {
+            msgbox(g_frame, IDS_NOMEMORY, NULL, MB_OK | MB_ICONEXCLAMATION);
+            return FALSE;
+        }
+        doc_strip_pictures(&c);
+        ok = doc_save(&c, path, fmt == FMT_WRI30 ? FMT_WRI : fmt);
+        doc_free(&c);
+        if (!ok)
+            msgbox(g_frame, IDS_CANTSAVE, path, MB_OK | MB_ICONEXCLAMATION);
+        return ok;
+    }
+    if (fmt == FMT_WRI30)
+        fmt = FMT_WRI;
     if (!doc_save(&g_doc, path, fmt)) {
         msgbox(g_frame, IDS_CANTSAVE, path, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
@@ -323,6 +358,8 @@ static void help(UINT cmd, DWORD data)
 static LRESULT command(HWND w, WORD id)
 {
     char path[PATH_MAX_DOS];
+    if (ole_verb(id))                   /* the Edit menu's object verbs */
+        return 0;
     /* files are handled with the document, not a running head being
        edited: back to the document first (UNVERIFIED: the original's
        way) */
@@ -338,8 +375,12 @@ static LRESULT command(HWND w, WORD id)
         if (!ask_save())
             break;
         path[0] = 0;
-        if (file_dialog(FALSE, path) && !open_path(path))
-            new_doc();
+        if (file_dialog(FALSE, path)) {
+            if (!open_path(path))
+                new_doc();
+            else
+                ole_opened(SW_SHOWNORMAL);
+        }
         break;
     case IDM_SAVE:
         if (!g_path[0])
@@ -575,6 +616,9 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
     } else {
         new_doc();
     }
+    /* a document's links are asked about before the window shows (WR33) */
+    if (path[0])
+        ole_opened(show);
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
     view_caret_now();

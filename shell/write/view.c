@@ -34,6 +34,8 @@ static int caretX, caretY, caretH;
 static int dpiX = 96, dpiY = 96;
 static int xpScroll;                    /* horizontal scroll, pixels */
 static BOOL dragging;
+static int goalX;                       /* Up and Down's column */
+static BOOL goalValid;
 
 /* ---- fonts: a growable cache keyed by the decoded CHP ---- */
 typedef struct {
@@ -88,6 +90,30 @@ static FONTC *font_for(const CHPX *c)
     ffn = font_get(&g_doc, c->ftc);
     lf.lfPitchAndFamily = ffn->ffid;
     s_cpy(lf.lfFaceName, ffn->name, LF_FACESIZE);
+    /* with a printer set up the screen shows the font the printer has:
+       its face and its size (WR29: Generic / Text Only's 10-point request
+       is its 12-point "Roman 10cpi", which the screen shows as a 12-point
+       fixed-pitch modern face; UNVERIFIED: the rule beyond it) */
+    {
+        HDC ic = printer_ic();
+        if (ic) {
+            LOGFONT pl = lf;
+            TEXTMETRIC ptm;
+            HFONT pf, po;
+            int pdpi = GetDeviceCaps(ic, LOGPIXELSY);
+            pl.lfHeight = -MulDiv(c->hps, pdpi, 144);
+            pf = CreateFontIndirect(&pl);
+            po = SelectObject(ic, pf);
+            GetTextMetrics(ic, &ptm);
+            GetTextFace(ic, LF_FACESIZE, lf.lfFaceName);
+            SelectObject(ic, po);
+            DeleteObject(pf);
+            DeleteDC(ic);
+            lf.lfHeight = -MulDiv(ptm.tmHeight - ptm.tmInternalLeading, dpiY, pdpi);
+            lf.lfPitchAndFamily = (BYTE)((ptm.tmPitchAndFamily & 0xF0) |
+                                         (ptm.tmPitchAndFamily & TMPF_FIXED_PITCH ? VARIABLE_PITCH : FIXED_PITCH));
+        }
+    }
     f->h = CreateFontIndirect(&lf);
     dc = GetDC(g_docwnd);
     SelectObject(dc, f->h);
@@ -1096,6 +1122,8 @@ static void paint_sel(HDC dc)
     LocalUnlock(hlines);
 }
 
+BOOL g_holdPaint;                       /* links updating on opening: blank (WR33 O2) */
+
 static void paint(HWND w)
 {
     PAINTSTRUCT ps;
@@ -1103,6 +1131,10 @@ static void paint(HWND w)
     LINE *l;
     int i, y = YP0;
     caretOn = FALSE;
+    if (g_holdPaint) {
+        EndPaint(w, &ps);
+        return;
+    }
     SetBkMode(dc, TRANSPARENT);
     l = lines();
     for (i = 0; i < nlines; i++) {
@@ -1467,6 +1499,7 @@ static void view_char2(WORD ch, char *s);
 void view_char(WORD ch)
 {
     char s[2];
+    goalValid = FALSE;
     caret_defer();
     typing = TRUE;
     view_char2(ch, s);
@@ -1621,6 +1654,8 @@ void view_key(WPARAM vk)
         undo_save(IDS_EDITING);
     else
         undo_end_typing();
+    if (vk != VK_UP && vk != VK_DOWN && vk != VK_SHIFT && vk != VK_CONTROL)
+        goalValid = FALSE;
     switch (vk) {
     case VK_LEFT:
         if (!shift && g_selFirst != g_selLim)
@@ -1639,7 +1674,11 @@ void view_key(WPARAM vk)
         DWORD s = line_start(cp);
         int x;
         layout_line(s, &ln);
-        x = x_of(&ln, cp);
+        /* Up and Down keep the column they started from, across
+           paragraph formats that move the line (WR37: Down from the
+           start of a line just centred goes to the next line's start) */
+        x = goalValid ? goalX : x_of(&ln, cp);
+        goalX = x;
         if (vk == VK_UP) {
             if (s == 0)
                 return;
@@ -1694,6 +1733,8 @@ void view_key(WPARAM vk)
     default:
         return;
     }
+    if (vk == VK_UP || vk == VK_DOWN)
+        goalValid = TRUE;
     if (shift) {
         if (to < selAnchor)
             view_select(to, selAnchor, TRUE);
@@ -1831,6 +1872,7 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             pm_end(TRUE);
             return 0;
         }
+        goalValid = FALSE;
         cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
         SetFocus(w);
         undo_end_typing();

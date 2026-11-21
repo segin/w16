@@ -1,0 +1,41 @@
+; WR38: the ruler in the Header view (H1) and a tab clicked there (H2);
+; back in the document, Page Layout in cm, tabs clicked on the cm ruler at
+; 50, 101 and 157 pixels (C1); saved as C:\WR38.WRI
+run WRITE.EXE
+wait 3000
+type body
+menu d
+char r
+wait 800
+menu d
+char h
+wait 1500
+type head
+wait 500
+snap C:\H1.BMP
+mclick 127 74
+wait 500
+snap C:\H2.BMP
+mclick 450 268
+wait 1500
+menu d
+char p
+wait 800
+alt c
+key 0D
+wait 800
+mclick 77 74
+wait 300
+mclick 128 74
+wait 300
+mclick 184 74
+wait 500
+snap C:\C1.BMP
+menu f
+char a
+wait 1500
+type C:\WR38.WRI
+key 0D
+wait 2000
+close
+wait 1000

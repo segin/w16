@@ -398,10 +398,9 @@ int doc_save(DOC *d, LPCSTR path, int format)
     WORD pnChar, pnPara, pnFntb, pnSep, pnSetb, pnPgtb, pnFfntb;
     WORD o;
     char buf[PAGE];
-    /* Word for DOS (WR23): the same text and FKP pages, then no section,
-       page or font table (pnSep to pnFfntb all point past the FKPs) and
-       pnMac 0. UNVERIFIED: a document with Page Layout set, or after
-       Repaginate, and documents with pictures */
+    /* Word for DOS (WR23, WR36): the same text and FKP pages, the
+       section and its table when the document has one, no page or font
+       table, and pnMac 0 */
     BOOL word = format == FMT_WORD;
     wf = OpenFile(path, &of, OF_CREATE | OF_WRITE);
     if (wf == HFILE_ERROR)
@@ -435,12 +434,13 @@ int doc_save(DOC *d, LPCSTR path, int format)
     pnPara = pn;
     write_fkps(d, &d->paras, d->nparas, FALSE);
     pnFntb = pnSep = pn;                /* Write has no footnotes */
-    if (d->hasSep && !word) {
+    /* Word for DOS keeps the section and its table (WR36) */
+    if (d->hasSep) {
         m_cpy(page, d->sep, d->sep[0] + 1 > PAGE ? PAGE : d->sep[0] + 1);
         put_page();
     }
     pnSetb = pn;
-    if (d->hasSep && !word) {
+    if (d->hasSep) {
         WORD *w = (WORD *)page;
         w[0] = 2;                       /* cSed, cSedMax */
         w[1] = 2;
@@ -505,13 +505,19 @@ int doc_save(DOC *d, LPCSTR path, int format)
     *(WORD *)(page + 24) = pnSetb;
     *(WORD *)(page + 26) = pnPgtb;
     *(WORD *)(page + 28) = pnFfntb;
+    /* pnMac: 0 for Word for DOS (WR23, WR36) */
     *(WORD *)(page + 96) = word ? 0 : pn;
     (void)pnChar;
     _llseek(wf, 0, 0);
     if (_lwrite(wf, (LPCSTR)page, PAGE) != PAGE)
         werr = TRUE;
     _lclose(wf);
-    if (!werr)
+    if (!werr) {
         d->dirty = FALSE;
+        /* the section table's file number is 2 once the document has a
+           file, as when it was loaded (WR36: the save after the first) */
+        if (d->hasSep)
+            d->sedFn = 2;
+    }
     return !werr;
 }

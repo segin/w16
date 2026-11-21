@@ -30,7 +30,11 @@ typedef struct {
     CHPX cur;
     BOOL haveFont;
     WORD pgn;                           /* the page being drawn */
+    WORD from, to;                      /* Print's page range */
 } PDEV;
+
+/* drawing this page: Print's range (UNVERIFIED against 3.1: WR34) */
+#define DRAWN (draw && p->pgn >= p->from && p->pgn <= p->to)
 
 static BOOL aborted;
 static HWND printDlg;
@@ -306,7 +310,7 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
         }
         page(pgn, body);
     }
-    if (draw)
+    if (DRAWN)
         running_heads(p, &s, TRUE);
     for (i = 0; i < g_doc.nparas && !aborted; i++) {
         DWORD pf, pl;
@@ -324,16 +328,16 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
             pict_read(pf, pl, &pic);
             h = tw(p, MulDiv(pic.dyaSize, pic.my, 1000), TRUE);
             if (y + h > p->height && y > 0) {
-                if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
+                if (DRAWN && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                     return FALSE;
                 y = 0;
                 p->pgn = ++pgn;
                 if (page)
                     page(pgn, pf);
-                if (draw)
+                if (DRAWN)
                     running_heads(p, &s, FALSE);
             }
-            if (draw)
+            if (DRAWN)
                 pict_draw(p->dc, &pic, p->x0 + tw(p, (long)pap.dxaLeft + pic.dxaOffset, FALSE),
                           p->y0 + y, tw(p, MulDiv(pic.dxaSize, pic.mx, 1000), FALSE), h);
             y += h;
@@ -343,16 +347,16 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
             int h;
             DWORD next = do_line(p, cp, pf, pl, &pap, p->y0 + y, FALSE, &h);
             if (y + h > p->height && y > 0) {
-                if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
+                if (DRAWN && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                     return FALSE;
                 y = 0;
                 p->pgn = ++pgn;
                 if (page)
                     page(pgn, cp);
-                if (draw)
+                if (DRAWN)
                     running_heads(p, &s, FALSE);
             }
-            if (draw)
+            if (DRAWN)
                 do_line(p, cp, pf, pl, &pap, p->y0 + y, TRUE, &h);
             y += h;
             if (next <= cp)
@@ -363,18 +367,18 @@ static BOOL paginate(PDEV *p, BOOL draw, void (*page)(WORD, DWORD))
            starts a page (UNVERIFIED against 3.1, which has no printer
            in the reference install) */
         if (pl > pf && pl <= g_doc.cpMac && doc_ch(&g_doc, pl - 1) == 12 && pl < g_doc.cpMac) {
-            if (draw && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
+            if (DRAWN && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
                 return FALSE;
             y = 0;
             p->pgn = ++pgn;
             if (page)
                 page(pgn, pl);
-            if (draw)
+            if (DRAWN)
                 running_heads(p, &s, FALSE);
         }
     }
     release_font(p);
-    if (draw && !aborted && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
+    if (DRAWN && !aborted && Escape(p->dc, NEWFRAME, 0, NULL, NULL) < 0)
         return FALSE;
     return TRUE;
 }
@@ -397,6 +401,25 @@ static HDC printer_dc(void)
     if (!dev[0] || !drv || !port)
         return NULL;
     return CreateDC(drv, dev, port, NULL);
+}
+
+/* an information context for the printer set up in WIN.INI, or NULL */
+HDC printer_ic(void)
+{
+    char dev[128], *drv, *port;
+    int i;
+    GetProfileString("windows", "device", "", dev, sizeof dev);
+    for (i = 0, drv = port = NULL; dev[i]; i++)
+        if (dev[i] == ',') {
+            dev[i] = 0;
+            if (!drv)
+                drv = dev + i + 1;
+            else if (!port)
+                port = dev + i + 1;
+        }
+    if (!dev[0] || !drv || !port)
+        return NULL;
+    return CreateIC(drv, dev, port, NULL);
 }
 
 /* A new document's font: Arial, as the printer realizes it. A printer
@@ -451,6 +474,8 @@ static void pdev_init(PDEV *p, HDC dc)
     p->dc = dc;
     p->dpiX = GetDeviceCaps(dc, LOGPIXELSX);
     p->dpiY = GetDeviceCaps(dc, LOGPIXELSY);
+    p->from = 1;
+    p->to = 0xFFFF;
 }
 
 /* ---- Repaginate ---- */
@@ -742,10 +767,19 @@ void cmd_print(void)
     ok = Escape(pd.hDC, STARTDOC, s_len(title), title, NULL) > 0;
     if (ok) {
         pdev_init(&p, pd.hDC);
-        /* printing fills the page table too (WR29: PGTB {1, 14} {2, 18}) */
-        g_doc.npages = 0;
-        ok = paginate(&p, TRUE, add_page);
-        g_doc.dirty = TRUE;
+        if (pd.Flags & PD_PAGENUMS) {
+            p.from = pd.nFromPage;
+            p.to = pd.nToPage;
+        }
+        /* printing every page fills the page table too (WR29: PGTB {1, 14}
+           {2, 18}); a page range leaves it as it was (WR34) */
+        if (pd.Flags & PD_PAGENUMS) {
+            ok = paginate(&p, TRUE, NULL);
+        } else {
+            g_doc.npages = 0;
+            ok = paginate(&p, TRUE, add_page);
+            g_doc.dirty = TRUE;
+        }
         if (!aborted)
             Escape(pd.hDC, ENDDOC, 0, NULL, NULL);
     }

@@ -192,6 +192,8 @@ BEGIN
     IDS_UPDATELINKS, "This document contains links to other documents.\n\nDo you want to update links now?"
     IDS_UNDOKEY, "  \tCtrl+Z"
     IDS_CANTPRINT, "Cannot print.\n\nBe sure that your printer is connected properly, and use the Printers option in Control Panel to verify that the printer is configured properly."
+    IDS_SAVE30, "If you save this document in the Write 3.0 format, the linked or embedded objects will be deleted from the saved file.\n\nDo you want to save this document in Write 3.0 format?"
+    IDS_NOPICTURES, "If you save this document in this format no pictures, including linked or embedded objects, will be saved.\n\nDo you want to save?"
     IDS_CANTSAVE, "Cannot save file.\n\nMake sure that the file or disk is not damaged."
     IDS_PAGE1, "Page 1"
     IDS_WRITE, "Write"
@@ -480,4 +482,26 @@ BEGIN
     CONTROL "", 280, "Static", 0x50000000L, 12, 15, 95, 16
     CONTROL "&Data Type:", -1, "Static", 0x50000000L, 4, 32, 50, 9
     CONTROL "", 265, "Listbox", 0x50A10001L, 3, 43, 110, 36
+END
+
+/* the original's DTINVALIDLINK and DTINVALIDLINKS (no FONT: the System
+   font), after links could not be updated (WR33) */
+DTINVALIDLINK DIALOG 99, 50, 151, 49
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Write"
+BEGIN
+    CONTROL "Linked document is unavailable.", -1, "Static", 0x50000001L, 28, 10, 119, 15
+    CONTROL "&Links...", 262, "Button", 0x50010001L, 90, 28, 45, 14
+    CONTROL "OK", 1, "Button", 0x50010000L, 35, 28, 45, 14
+    CONTROL 32515, -1, "Static", 0x50000003L, 7, 11, 16, 21
+END
+
+DTINVALIDLINKS DIALOG 75, 49, 180, 55
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Write"
+BEGIN
+    CONTROL "Some linked documents were unavailable and could not be updated.", -1, "Static", 0x50000001L, 30, 7, 144, 21
+    CONTROL "&Links...", 262, "Button", 0x50010001L, 110, 31, 45, 14
+    CONTROL "OK", 1, "Button", 0x50010000L, 54, 31, 45, 14
+    CONTROL 32515, -1, "Static", 0x50000003L, 10, 13, 16, 21
 END

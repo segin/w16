@@ -80,9 +80,15 @@ static RSTATE shown;
 static BOOL drag;
 static int dragKind, dragTab, dragPos;
 static BOOL dragGone;
+static int pressX, pressY;              /* where the button went down */
 
 static int px(long tw)
 {
+    /* on the cm scale a centimetre is its 38 pixels (two of 19), so the
+       marks sit on it (WR38: the right indent at 8644 twips 579 pixels in,
+       not 576) */
+    if (g_cm)
+        return RL_X0 + MulDiv((int)tw, 2 * MulDiv(96, 50, 254), 567);
     return RL_X0 + (int)((tw * 96 + (tw >= 0 ? 720 : -720)) / 1440);
 }
 
@@ -97,6 +103,12 @@ static void state_now(RSTATE *s)
     para_at(&g_doc, g_selFirst, &f, &l, &a);
     pap_decode(&g_doc, a, &p);
     sep_decode(&g_doc, &sep);
+    /* a running head's indents count from the page's edges: the ruler
+       shows them from the margins, as its text is laid out (WR38) */
+    if (p.rhc & 6) {
+        p.dxaLeft -= sep.xaLeft;
+        p.dxaRight -= (int)sep.xaMac - (int)sep.xaLeft - (int)sep.dxaText;
+    }
     s->left = p.dxaLeft;
     s->first = p.dxaLeft + p.dxaLeft1;
     s->right = (int)sep.dxaText - p.dxaRight;
@@ -229,30 +241,40 @@ void ruler_update(void)
 
 static int snap(int x)
 {
-    long tw = (long)(x - RL_X0) * 1440 / 96, u = g_cm ? 567 / 8 : 90;
-    /* to the nearest 1/16 inch (WR26); in cm UNVERIFIED (1/8 cm) */
+    long tw = g_cm ? (long)(x - RL_X0) * 567 / (2 * MulDiv(96, 50, 254))
+                   : (long)(x - RL_X0) * 1440 / 96;
     if (tw < 0)
         tw = 0;
-    return (int)((tw + u / 2) / u * u);
+    /* to the nearest 1/16 inch (WR26), or 1/8 cm, the twips cut (WR38:
+       50 and 157 pixels give 779 and 2338) */
+    if (g_cm)
+        return (int)((tw * 8 + 283) / 567 * 567 / 8);
+    return (int)((tw + 45) / 90 * 90);
 }
 
 static RSTATE target;                   /* the values to set */
 
 static void pap_ruler(PAPX *p, WORD what)
 {
-    int i;
+    int i, ml = 0, mr = 0;
+    if (p->rhc & 6) {                   /* running heads: from the page's edges */
+        SEPX sep;
+        sep_decode(&g_doc, &sep);
+        ml = sep.xaLeft;
+        mr = (int)sep.xaMac - (int)sep.xaLeft - (int)sep.dxaText;
+    }
     switch (what) {
     case MK_LEFT:
-        p->dxaLeft1 = p->dxaLeft + p->dxaLeft1 - target.left;
-        p->dxaLeft = target.left;
+        p->dxaLeft1 = p->dxaLeft - ml + p->dxaLeft1 - target.left;
+        p->dxaLeft = target.left + ml;
         break;
     case MK_FIRST:
-        p->dxaLeft1 = target.first - p->dxaLeft;
+        p->dxaLeft1 = target.first - (p->dxaLeft - ml);
         break;
     case MK_RIGHT: {
         SEPX sep;
         sep_decode(&g_doc, &sep);
-        p->dxaRight = (int)sep.dxaText - target.right;
+        p->dxaRight = (int)sep.dxaText - target.right + mr;
         break;
     }
     default:
@@ -296,7 +318,27 @@ static void tabs_set(int i, int pos, BOOL remove)
         target.tab[k].dxa = t[k].dxa;
         target.tab[k].jc = t[k].jc;
     }
-    pap_apply(pap_ruler, MK_TAB, PA_ALL | PA_TERMINATE | PA_KEEPB0);
+    /* in the Header or Footer view the tabs go to the head and, back in
+       the document, to all of it (WR38: a tab set in the Header view is
+       in the body's paragraphs too); the head's text is not ended */
+    if (hf_mode()) {
+        PAPX t;
+        pap_default(&t);
+        t.ntabs = target.ntabs;
+        for (k = 0; k < target.ntabs; k++) {
+            t.tab[k].dxa = target.tab[k].dxa;
+            t.tab[k].jc = target.tab[k].jc;
+        }
+        hf_tabs(&t);
+        pap_apply(pap_ruler, MK_TAB, PA_ALL | PA_KEEPB0);
+    } else {
+        /* the document's one paragraph gets its mark (WR27); with more
+           paragraphs the last is left as it is (WR38; UNVERIFIED rule) */
+        DWORD f, l;
+        ATOM32 a;
+        BOOL one = g_doc.nparas <= 1 || (para_get(&g_doc, 0, &f, &l, &a), l >= g_doc.cpMac);
+        pap_apply(pap_ruler, MK_TAB, PA_ALL | PA_KEEPB0 | (one ? PA_TERMINATE : 0));
+    }
 }
 
 static void drop(void)
@@ -377,6 +419,8 @@ static void press(HWND w, int x, int y)
     }
     drag = TRUE;
     dragGone = FALSE;
+    pressX = x;
+    pressY = y;
     SetCapture(w);
     InvalidateRect(w, NULL, FALSE);
     UpdateWindow(w);
@@ -385,8 +429,14 @@ static void press(HWND w, int x, int y)
 static void move(HWND w, int x, int y)
 {
     RECT r;
-    int pos = snap(x);
+    int pos;
     BOOL gone;
+    /* a mark pressed and let go where it was stays where it was (WR38:
+       a tab at 1530 clicked on the cm ruler) */
+    if (x == pressX && y == pressY)
+        return;
+    pressX = -32767;
+    pos = snap(x);
     GetClientRect(w, &r);
     /* a tab pulled off the ruler is gone (WR25 D7: 98 pixels below) */
     gone = dragKind >= MK_TAB && (y < 0 || y >= r.bottom);

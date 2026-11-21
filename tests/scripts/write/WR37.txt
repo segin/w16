@@ -1,0 +1,41 @@
+; WR37: centred and right-aligned lines mixing regular and bold text,
+; regular first and bold first (S1), where 3.1 places them (the known
+; 2-pixel difference of w16write's first version)
+run WRITE.EXE
+wait 3000
+type plain words then
+key 75
+type bold words
+key 75
+key 0D
+key 75
+type bold words then
+key 75
+type plain words
+key 0D
+type plain then
+key 75
+type bold
+key 75
+key 0D
+key 26
+key 26
+key 26
+menu p
+char c
+key 28
+menu p
+char c
+key 28
+menu p
+char r
+wait 1000
+snap C:\S1.BMP
+menu f
+char a
+wait 1500
+type C:\WR37.WRI
+key 0D
+wait 2000
+close
+wait 1000
