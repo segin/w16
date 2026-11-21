@@ -1,0 +1,20 @@
+/* winoa386.rc - w16 WINOA386.MOD resources. Texts as Windows 3.1's
+   WINOA386 shows them on screen ("w16" for "Windows", ARCHITECTURE.md 3
+   and 6.8); the icon is w16's own (Program Manager's stock DOS-prompt
+   icon, as w16's WINOLDAP.MOD). */
+#include <windows.h>
+#include "winoa386.h"
+
+1 ICON "stock09.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_QUITFIRST   "Application still active.\n\nQuit the application before quitting w16."
+    IDS_STILLACTIVE "Application still active.\n\nQuit the application before quitting w16."
+    IDS_NOFILE      "Cannot find the specified file.\n\nMake sure that the path and filename are correct."
+    IDS_NODIR       "Start-up directory not found.\n\nCheck the application's program information file (PIF) to ensure the directory is correctly specified."
+    IDS_NOSHELL     "Cannot run the application."
+    IDS_NOMEM       "Insufficient memory to run the application.\n\nQuit one or more w16 applications to increase available memory, and try again."
+    IDS_NOGRABBER   "Cannot run the application."
+    IDS_NOWINDOW    "Cannot run the application."
+END
