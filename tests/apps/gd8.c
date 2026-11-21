@@ -1,5 +1,5 @@
 /*
- * gd8.c - the GDI audit's last open items (docs/notes/gdi-audit-triage.md,
+ * gd8.c - the GDI audit's last open items (its triage file docs/notes/gdi-audit-triage.md, in git history,
  * "Left open"): what Windows 3.1's GDI does
  * - with the clip region's coordinates: GetClipRgn (GDI.173) after
  *   IntersectClipRect, SelectClipRgn, OffsetClipRgn, and after SetDCOrg

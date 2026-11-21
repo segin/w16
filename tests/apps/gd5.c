@@ -1,5 +1,5 @@
 /*
- * gd5.c - the GDI audit's probe (docs/notes/gdi-audit-triage.md): what
+ * gd5.c - the GDI audit's probe (its triage file, docs/notes/gdi-audit-triage.md, is in git history): what
  * Windows 3.1's GDI does where w16's was found wrong or doubtful, and the
  * regressions of the fixes. Most of it draws into memory bitmaps and reads
  * the result back (GetPixel, GetBitmapBits), so it compares pixels without
