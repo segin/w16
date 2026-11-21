@@ -1,0 +1,14 @@
+; tests/ddeml/dmshot.sh xterm: Retry after 10 s, then Close the next dialog after 10 s
+waitpixel 600 450 c3c7cb 150
+waitpixel 200 44 0000aa 120
+shot r0
+sleep 10
+key Return
+waitnotpixel 200 44 0000aa 20
+shot r1
+waitpixel 200 44 0000aa 150
+shot r2
+sleep 10
+key Tab Tab Return
+sleep 3
+shot r3

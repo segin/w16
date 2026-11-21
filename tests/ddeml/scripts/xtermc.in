@@ -1,0 +1,8 @@
+; tests/ddeml/dmshot.sh xterm3: Continue; the partner never answers again
+waitpixel 600 450 c3c7cb 150
+waitpixel 200 44 0000aa 120
+key Tab Return
+sleep 2
+shot k1
+sleep 90
+shot k2

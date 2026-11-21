@@ -24,6 +24,10 @@
  * named; 0 is NULL; cN/lN/dN are the named handles):
  *   start X | startx X | quit X | wait MS | settle MS | raw on|off
  *   iwatch on|off (the raw window logs every INITIATE it receives)
+ *   exitwin (ExitWindows) | ticker (log gaps between 100 ms ticks)
+ *   rnoterm N (the raw window answers none of the next N TERMINATEs)
+ *   watch NAME ID... (each DDEML dialog that comes: logged, saved as
+ *        C:\NAMEn.BMP, answered with the next ID; none left: left open)
  *   run CMDLINE | wins | cls | inst N (select DDEML instance slot N)
  *   init [AFCMD-hex] | uninit | lasterr | reinit AFCMD-hex
  *   hsz STR [CP] | freehsz STR | keephsz STR | qstr STR [MAX] | cmp S1 S2
@@ -65,6 +69,12 @@ static HINSTANCE inst;
 static HWND me, rawwnd, ctl;            /* ctl: A's window (in B..) */
 static char letter = 'A';
 static BOOL rawvals, done, iwatch;
+static WORD rnoterm;                    /* TERMINATEs the raw window leaves unanswered */
+static DWORD wstart;                    /* "watch": when it began */
+static int wpress[8], nwpress, iwpress;
+static char wname[8];
+static HWND wlast;
+static DWORD tlast;                     /* "ticker": the last tick */
 static DWORD settle = 100;
 
 /* ---- small helpers ---- */
@@ -870,6 +880,11 @@ LRESULT CALLBACK __export RawWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             PostMessage(from, WM_DDE_ACK, (WPARAM)w, MAKELPARAM(ackstatus(), HIWORD(lp)));
         return 0;
     case WM_DDE_TERMINATE:
+        if (rnoterm) {                  /* "rnoterm N": the next N get no answer */
+            rnoterm--;
+            P("%c   raw window got TERMINATE, no answer", letter);
+            return 0;
+        }
         if (IsWindow(from))
             PostMessage(from, WM_DDE_TERMINATE, (WPARAM)w, 0);
         delpart(from);
@@ -1056,6 +1071,31 @@ static void step(char *l)
         pump(num(tok(&a, NULL)), NULL);
     } else if (eq(w, "settle")) {
         settle = num(tok(&a, NULL));
+    } else if (eq(w, "exitwin")) {
+        /* end the session: every top-level window gets
+           WM_QUERYENDSESSION and WM_ENDSESSION, DDEML's too */
+        BOOL r = ExitWindows(0, 0);
+        P("%c ExitWindows -> %d", letter, r);
+    } else if (eq(w, "ticker")) {
+        /* a timer every 100 ms; a gap of more than a second between two
+           ticks is logged with GetTickCount at both ends (a system-modal
+           box stops every other task: when it came and went) */
+        tlast = GetTickCount();
+        SetTimer(me, 78, 100, NULL);
+    } else if (eq(w, "rnoterm")) {
+        rnoterm = (WORD)num(tok(&a, NULL));
+    } else if (eq(w, "watch")) {
+        /* watch NAME ID...: look for a DDEML dialog every 100 ms; each
+           one that comes is logged (after how long, its windows),
+           saved as C:\NAMEn.BMP and answered with the next ID */
+        char *x;
+        lstrcpyn(wname, tok(&a, NULL), sizeof wname);
+        nwpress = iwpress = 0;
+        while (*(x = tok(&a, NULL)) != 0 && nwpress < 8)
+            wpress[nwpress++] = (int)num(x);
+        wstart = GetTickCount();
+        wlast = NULL;
+        SetTimer(me, 77, 100, NULL);
     } else if (eq(w, "iwatch")) {
         iwatch = eq(tok(&a, NULL), "on");
     } else if (eq(w, "raw")) {
@@ -1096,8 +1136,14 @@ static void step(char *l)
         r = DdeInitialize(&ID, (PFNCALLBACK)cb[ci], af, 0);
         P("%c DdeInitialize(%lx) -> %s id=%s", letter, af, (LPSTR)errname(r), (LPSTR)sname('i', ID));
     } else if (eq(w, "uninit")) {
-        BOOL r = DdeUninitialize(ID);
+        DWORD t0 = GetTickCount();
+        BOOL r;
+        if (rawvals)
+            P("%c   uninit at %lu", letter, t0);
+        r = DdeUninitialize(ID);
         P("%c DdeUninitialize(%s) -> %d", letter, (LPSTR)sname('i', ID), r);
+        if (rawvals)
+            P("%c   took %lu ms", letter, GetTickCount() - t0);
     } else if (eq(w, "lasterr")) {
         char *x = tok(&a, NULL);
         DWORD id = *x ? svalue('i', x) : ID;
@@ -1427,6 +1473,140 @@ static void step(char *l)
         pump(settle, NULL);
 }
 
+/* ---- the termination dialog ("watch") ---- */
+
+#define BAND 64
+
+typedef struct {
+    BITMAPINFOHEADER h;
+    RGBQUAD pal[16];
+} BMI16;
+
+/* the screen as a 4-bit BMP (C:\NAME.BMP), fetched with the log */
+static void snapbmp(const char *file)
+{
+    int cx = GetSystemMetrics(SM_CXSCREEN), cy = GetSystemMetrics(SM_CYSCREEN), y;
+    WORD stride = (WORD)(((cx * 4 + 31) / 32) * 4);
+    HDC scr = GetDC(NULL), mem = CreateCompatibleDC(scr);
+    HBITMAP bm = CreateCompatibleBitmap(scr, cx, cy), old;
+    HGLOBAL hbuf = GlobalAlloc(GMEM_MOVEABLE, (WORD)(stride * BAND));
+    BYTE FAR *buf = hbuf ? (BYTE FAR *)GlobalLock(hbuf) : NULL;
+    static BMI16 bmi;
+    BITMAPFILEHEADER fh;
+    HFILE f;
+    if (mem && bm && buf) {
+        old = SelectObject(mem, bm);
+        BitBlt(mem, 0, 0, cx, cy, scr, 0, 0, SRCCOPY);
+        SelectObject(mem, old);
+        bmi.h.biSize = sizeof bmi.h;
+        bmi.h.biWidth = cx;
+        bmi.h.biHeight = cy;
+        bmi.h.biPlanes = 1;
+        bmi.h.biBitCount = 4;
+        bmi.h.biCompression = BI_RGB;
+        bmi.h.biSizeImage = 0;
+        for (y = 0; y < cy; y++)
+            bmi.h.biSizeImage += stride;
+        f = _lcreat(file, 0);
+        if (f != HFILE_ERROR) {
+            fh.bfType = 0x4D42;
+            fh.bfOffBits = sizeof fh + sizeof bmi;
+            fh.bfSize = fh.bfOffBits + bmi.h.biSizeImage;
+            fh.bfReserved1 = fh.bfReserved2 = 0;
+            _llseek(f, fh.bfOffBits, 0);
+            for (y = 0; y < cy; y += BAND) {
+                int n = cy - y < BAND ? cy - y : BAND;
+                GetDIBits(scr, bm, y, n, buf, (BITMAPINFO FAR *)&bmi, DIB_RGB_COLORS);
+                _lwrite(f, buf, stride * n);
+            }
+            _llseek(f, 0, 0);
+            _lwrite(f, (LPCSTR)&fh, sizeof fh);
+            _lwrite(f, (LPCSTR)&bmi, sizeof bmi);
+            _lclose(f);
+        }
+    }
+    if (buf)
+        GlobalUnlock(hbuf);
+    if (hbuf)
+        GlobalFree(hbuf);
+    if (bm)
+        DeleteObject(bm);
+    if (mem)
+        DeleteDC(mem);
+    ReleaseDC(NULL, scr);
+}
+
+static void wrect(HWND h, int depth)
+{
+    RECT r;
+    char t[128], c[32];
+    HWND k;
+    GetWindowRect(h, &r);
+    t[0] = c[0] = 0;
+    GetWindowText(h, t, sizeof t);
+    GetClassName(h, c, sizeof c);
+    P("%c   DLG %d class=%q id=%d style=%lx rect=%d,%d,%d,%d text=%q", letter, depth, (LPSTR)c,
+      GetWindowWord(h, GWW_ID), GetWindowLong(h, GWL_STYLE), r.left, r.top, r.right, r.bottom,
+      (LPSTR)t);
+    for (k = GetWindow(h, GW_CHILD); k; k = GetWindow(k, GW_HWNDNEXT))
+        wrect(k, depth + 1);
+}
+
+static void watchtick(void)
+{
+    HWND h;
+    /* any dialog box (its module may not name itself DDEML: the
+       library's instance handle is its data segment) */
+    for (h = GetWindow(GetDesktopWindow(), GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+        char c[16];
+        GetClassName(h, c, sizeof c);
+        if (IsWindowVisible(h) && !lstrcmp(c, "#32770") && h != wlast)
+            break;
+    }
+    if (!h) {
+        /* none yet: at 20 s and at 90 s, every visible top-level window
+           and the screen (C:\NAMEw1.BMP, ...w2) */
+        static int shown;
+        DWORD ms = GetTickCount() - wstart;
+        if ((shown == 0 && ms >= 20000L) || (shown == 1 && ms >= 90000L)) {
+            char f[24];
+            shown++;
+            P("%c no dialog after %d s; visible top-level windows:", letter, shown == 1 ? 20 : 90);
+            for (h = GetWindow(GetDesktopWindow(), GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT))
+                if (IsWindowVisible(h))
+                    wrect(h, 0);
+            wsprintf(f, "C:\\%sw%d.BMP", (LPSTR)wname, shown);
+            snapbmp(f);
+        }
+        return;
+    }
+    {
+        DWORD ms = GetTickCount() - wstart, secs = 0, r;
+        char f[24];
+        HWND fw = GetFocus(), aw = GetActiveWindow(), sm = GetSysModalWindow();
+        wlast = h;
+        if (rawvals)
+            P("%c   dialog seen at %lu", letter, GetTickCount());
+        for (r = ms + 500; r >= 1000; r -= 1000)    /* no C runtime: no 32-bit divide */
+            secs++;
+        /* seconds, rounded: DOSBox's timing varies a little */
+        P("%c dialog %d after %lu s owner=%w sysmodal=%d focus-id=%d active=%d", letter, iwpress + 1,
+          secs, GetWindow(h, GW_OWNER), sm == h, fw ? GetWindowWord(fw, GWW_ID) : -1,
+          aw == h);
+        if (rawvals)
+            P("%c   after %lu ms", letter, ms);
+        wrect(h, 0);
+        wsprintf(f, "C:\\%s%d.BMP", (LPSTR)wname, iwpress + 1);
+        snapbmp(f);
+        if (iwpress < nwpress) {
+            int id = wpress[iwpress++];
+            P("%c   pressing %d", letter, id);
+            PostMessage(h, WM_COMMAND, id, MAKELPARAM(GetDlgItem(h, id), BN_CLICKED));
+        } else
+            KillTimer(me, 77);          /* left as it is */
+    }
+}
+
 LRESULT CALLBACK __export ProbeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
@@ -1442,6 +1622,16 @@ LRESULT CALLBACK __export ProbeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_DMDONE:
         done = TRUE;
+        return 0;
+    case WM_TIMER:
+        if (wp == 77)
+            watchtick();
+        if (wp == 78) {
+            DWORD t = GetTickCount();
+            if (t - tlast > 1000)
+                P("%c gap %lu to %lu (%lu ms)", letter, tlast, t, t - tlast);
+            tlast = t;
+        }
         return 0;
     case WM_CLOSE:
         DestroyWindow(w);

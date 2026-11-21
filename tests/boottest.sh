@@ -210,7 +210,10 @@
 #              with Microsoft's DDEML.DLL; and one part per DDEML scenario
 #              (tests/ddemlscen.sh NAME, NAME+x): on the reference install,
 #              w16's DDEML against Microsoft's in every client/server
-#              combination, the logs equal
+#              combination, the logs equal; part term: the termination
+#              dialog (tests/ddeml/dmshot.sh on a virtual X display, Retry
+#              then Close; tests/ddeml/termcmp.py: when it comes, the
+#              return, its picture but for the rebranded words)
 #   lzexpand   w16's LZEXPAND.DLL (ARCHITECTURE.md, LZEXPAND): the probe
 #              LZP.EXE (tests/lzexpand/lzp.c, every function on files made
 #              at test time) as the shell with Microsoft's LZEXPAND and
@@ -2775,6 +2778,19 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             if [ "$r" = ok ] && ! diff "$d-ms/os.cmp" "$d-w16/os.cmp" > "$d.diff"; then
                 r="$part: the log differs from Microsoft's DDEML's ($d.diff)"
             fi ;;
+        term)
+            # the termination dialog: DdeUninitialize with a partner that
+            # never answers, Retry, then Close (tests/ddeml/dmshot.sh on a
+            # virtual X display; tests/ddeml/termcmp.py: when the dialogs
+            # come, the return, the dialog's picture)
+            d=$out/ddeml-term
+            for l in ms w16; do
+                rm -rf "$d-$l"
+                "$root/tests/ddeml/dmshot.sh" xterm "$root/tests/ddeml/scripts/xtermr.in" \
+                    "$d-$l" "$l" 240 > "$d-$l.txt" 2>&1 || true
+            done
+            python3 "$root/tests/ddeml/termcmp.py" "$d-ms" "$d-w16" > "$d.txt" 2>&1 ||
+                r="term: $(grep -m1 'DIFFERENT\|differs\|expected' "$d.txt" || echo 'no result') ($d.txt)" ;;
         *)
             "$root/tests/ddemlscen.sh" -o "$out/ddeml-$part" "$part" > "$out/ddeml-$part.txt" 2>&1 || true
             grep -q '^== .*: ok' "$out/ddeml-$part.txt" && ! grep -q '^== .*FAIL\|no log' "$out/ddeml-$part.txt" ||
@@ -4953,7 +4969,7 @@ caseparts() {
     runpe) echo "$1@k286 $1@k386 $1@on286 $1@on386" ;;
     olecli) printf '%s@tree %s@cardw16 ' "$1" "$1"; for v in $(cd "$root/tests/ole/obs" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
-    ddeml) printf '%s@tree286 %s@tree386 ' "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
+    ddeml) printf '%s@tree286 %s@tree386 %s@term ' "$1" "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
@@ -5060,7 +5076,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   olesvr: a Paintbrush picture embedded in the tree with w16's OLECLI and OLESVR as with Microsoft's OLESVR; $((pt - 1)) OLESVR scenarios as with Microsoft's OLESVR"
         else echo "FAIL olesvr: $pfirst ($out)"; fi ;;
     ddeml)
-        if [ $pbad = 0 ]; then echo "ok   ddeml: DDEML in the tree under both kernels as with Microsoft's DDEML; $((pt - 2)) DDEML scenarios as with Microsoft's DDEML in every client/server combination"
+        if [ $pbad = 0 ]; then echo "ok   ddeml: DDEML in the tree under both kernels as with Microsoft's DDEML, the termination dialog as Microsoft's; $((pt - 3)) DDEML scenarios as with Microsoft's DDEML in every client/server combination"
         else echo "FAIL ddeml: $pfirst ($out)"; fi ;;
     missingdll)
         if [ $pbad = 0 ]; then echo "ok   missingdll: a missing DLL as on 3.1: Program Manager (w16's KRNL286, KRNL386, every w16 part), TK59's boxes and return codes (both kernels), the tree under both kernels"

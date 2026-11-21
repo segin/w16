@@ -1,0 +1,7 @@
+; tests/ddeml/dmshot.sh xterm: the dialog as soon as it is up, then Close
+waitpixel 600 450 c3c7cb 150
+waitpixel 200 44 0000aa 120
+shot d1
+key Tab Tab Return
+sleep 3
+shot d2
