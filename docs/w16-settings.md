@@ -51,7 +51,7 @@ both values give the same; the boot-test case `bigmem` runs with more); another 
 | `heapcheck=1` | `0` | KERNEL | Checks the global heap and the caller's local heap at every allocation, free, lock and task switch; at the first inconsistency it reports what is wrong and where, and ends Windows. Slow. |
 | `idle1689=1` | `0` | KERNEL | A test option: makes the 386 Enhanced mode idle call (INT 2Fh AX=1689h) on every pass of KERNEL's idle loop, as a stress accelerator. 3.1's KRNL286 never makes it. |
 | `userlog=1` | `0` | USER | Writes USER's diagnostics to `C:\USER.LOG`. |
-| `gdilog=1` | `0` | GDI | Writes GDI's diagnostics to `C:\W16GDI.LOG`: unimplemented ordinals, the display driver's Enable, the font table and font mapping. |
+| `gdilog=1` | `0` | GDI | Writes GDI's diagnostics to `C:\W16GDI.LOG`: unimplemented ordinals, the display driver's Enable, the font table and font mapping, and each SetDIBits, GetDIBits, SetDIBitsToDevice and StretchDIBits call's DIB format (size, bit count, compression, colours used, image size, colour use) and result. |
 | `vmmtrace=1` | `0` | WIN386 | The 386 Enhanced mode VMM's detailed trace, written to COM1. |
 
 ## Example

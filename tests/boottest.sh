@@ -42,6 +42,8 @@
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
 #   gdiaudit   the GDI audit's probe GD5 with Microsoft's GDI and w16's: no FAIL
+#   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
+#              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
@@ -830,7 +832,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1229,6 +1231,26 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   gdiaudit: GD5 with w16's GDI as with Microsoft's (the GDI audit's observations)"
         else echo "FAIL gdiaudit: $r"; fails=$((fails + 1)); fi ;;
+    gdidib)
+        # GD7 (tests/apps/gd7.c: DIBs drawn as programs draw them, read
+        # back pixel by pixel; QuickTime's installer banner, an RLE4 DIB,
+        # was black on w16) as the shell of Windows 3.1: Microsoft's GDI
+        # and VGA.DRV (the table's own run), w16's GDI, w16's VGA.DRV and
+        # both; every log must end with "GD7 done" and have no FAIL
+        r=ok
+        for k in ms gdi vga both; do
+            case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
+                both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD7.EXE" > "$out/gdidib-$k.log" 2>&1 &
+        done
+        wait
+        for k in ms gdi vga both; do
+            f=$out/gdidib-$k.log
+            grep -q '^GD7 done' "$f" || { r="$k: GD7 did not finish ($f)"; break; }
+            if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then echo "ok   gdidib: GD7's DIBs with w16's GDI and VGA.DRV as with Microsoft's"
+        else echo "FAIL gdidib: $r"; fails=$((fails + 1)); fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"

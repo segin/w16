@@ -463,9 +463,20 @@ them w16 bugs or w16 art, none in the way of installing or playing:
 - the dialogs' background is white where 3.1's is gray (the installer
   colours its dialogs; probably WM_CTLCOLOR's brush from a dialog
   procedure), and the licence text is not word-wrapped (a multiline edit
-  control without ES_AUTOHSCROLL);
-- the banner bitmap behind the boxes is black;
-- the default push button has no bold frame in the licence box;
+  control without ES_AUTOHSCROLL). 2026-11-20 (w16's tree alone, master
+  2fe5dbd): the background is gray now, as 3.1's; the licence text is
+  still not wrapped (w16's multi-line edit control has no word wrap,
+  user/edit.c "Not done") and looks drawn in the System font where 3.1 draws
+  it in MS Sans Serif (not looked into);
+- the banner bitmap behind the boxes is black. Fixed 2026-11-20: it is an
+  RLE4 DIB (487 x 74, DIB_RGB_COLORS, no palette) given to CreateDIBitmap
+  and BitBlt'ed from a memory DC; w16's VGA.DRV refused RLE in
+  DeviceBitmapBits, so the new bitmap stayed black. The driver decodes
+  RLE now (drivers/vga/dib.c, probe GD7, ARCHITECTURE.md 11.4); the banner
+  is 3.1's pixel for pixel (tests/qtplay.sh checks it in 02-begin);
+- the default push button has no bold frame in the licence box. 2026-11-20:
+  it has one now; the push buttons' text (23-pixel buttons) is drawn one
+  pixel lower than 3.1's (user/button.c, not changed here);
 - in the movie controller under the last frame, 37 pixels differ (stray
   dots by the slider's thumb; the frame itself is identical);
 - the caption buttons and the pointer are w16's VGA.DRV art

@@ -295,6 +295,28 @@ typedef struct { BYTE peRed, peGreen, peBlue, peFlags; } PALENT;
 WORD GDIAPI GetPaletteEntries(HPALETTE, WORD, WORD, PALENT __far *);
 WORD GDIAPI GetNearestPaletteIndex(HPALETTE, COLORREF);
 
+/* [w16] gdilog: a DIB call's format (a debugging aid) */
+static void dib_log(const char __far *call, const void __far *bmi, WORD usage, WORD r)
+{
+    const BITMAPINFOHEADER __far *bi = bmi;
+    gdi_log(call);
+    if (((const BITMAPCOREHEADER __far *)bmi)->bcSize == sizeof(BITMAPCOREHEADER)) {
+        const BITMAPCOREHEADER __far *bc = bmi;
+        gdi_loghex(" core width", bc->bcWidth);
+        gdi_loghex(" height", bc->bcHeight);
+        gdi_loghex(" bits", bc->bcBitCount);
+    } else {
+        gdi_loghex(" width", (WORD)bi->biWidth);
+        gdi_loghex(" height", (WORD)bi->biHeight);
+        gdi_loghex(" bits", bi->biBitCount);
+        gdi_loghex(" compression", (WORD)bi->biCompression);
+        gdi_loghex(" colours used", (WORD)bi->biClrUsed);
+        gdi_loghex(" image size", (WORD)bi->biSizeImage);
+    }
+    gdi_loghex(" usage", usage);
+    gdi_loghex(" returned", r);
+}
+
 /* the colour table's entries (1, 4 and 8 bits a pixel) */
 static int dib_ncolors(WORD bpp)
 {
@@ -387,6 +409,7 @@ static int dib_bits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
     hpal = dc->hPal;
     bi = dib_info(bmi, usage, info, hpal);
     r = fn(pb, get, start, n, bits, bi, &dc->dm, 0);
+    dib_log(get ? "GetDIBits" : "SetDIBits", bmi, usage, r);
     if (get && bi != bmi)
         dib_colors_back(bmi, usage, info, hpal);
     return r;
@@ -464,7 +487,10 @@ HBITMAP GDIAPI CreateDIBitmap(HDC hdc, const void __far *bmih, DWORD init,
 /* SetDIBitsToDevice: the driver's DIBScreenBlt (ordinal 21) draws scan
    lines iScan .. iScan + cScans - 1 of the DIB placed with its top left at
    X, Y; the destination rectangle is the clip rectangle, cut by the
-   composite region (as 3.1 passed them, GD1 with WinMine). */
+   composite region (as 3.1 passed them, GD1 with WinMine). On a memory DC
+   3.1 draws nothing and returns FFFFh (GD5, GD7: monochrome and colour
+   bitmaps, every DIB format); on a window DC it returns what the driver
+   returned (the scan lines; 1 for an RLE DIB, GD7). */
 int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int ys,
                              WORD start, WORD n, void __far *bits, void __far *bmi,
                              WORD usage)                           /* GDI.443 */
@@ -474,11 +500,13 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
     void __far *bi;
     DRVSETDIBTODEV fn;
     LPRGN rao;
-    int p[2], X, Y;
+    int p[2], X, Y, r = n;
     RECT d;
     WORD k;
     if (!dc || !bmi || !bits)
         return 0;
+    if (dc->flags & DCF_MEMORY)
+        return -1;
     fn = (DRVSETDIBTODEV)dc->dev->fn[DRV_SETDIBITSTODEVICE];
     if (!fn)
         return 0;
@@ -503,11 +531,51 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
         if (c.bottom > d.bottom) c.bottom = d.bottom;
         if (c.left >= c.right || c.top >= c.bottom)
             continue;
-        fn(dc->lpPDevice, X, Y, start, n, &c, &dc->dm, bits, bi, 0);
+        r = fn(dc->lpPDevice, X, Y, start, n, &c, &dc->dm, bits, bi, 0);
         rao = rgn_ptr(dc->hRao);
     }
     dc_update_bounds(dc, d.left, d.top, d.right, d.bottom);
-    /* GD5 on 3.1: the scan lines on a window DC, FFFFh on a memory DC
-       (the pixels the same) */
-    return dc->flags & DCF_MEMORY ? -1 : n;
+    dib_log("SetDIBitsToDevice", bmi, usage, r);
+    return r;
+}
+
+/* StretchDIBits: VGA.DRV has no StretchDIBits (GDIINFO's dpRaster lacks
+   RC_STRETCHDIB), so GDI makes the DIB a bitmap in the DC's format
+   (SetDIBits) and StretchBlts the source rectangle from it. As on 3.1
+   (GD7): YSrc counts from the DIB's bottom line; an RLE DIB's skipped
+   pixels are what the new bitmap held (3.1: whatever was in its memory;
+   w16: black); returns the source height. */
+int GDIAPI StretchDIBits(HDC hdc, int xd, int yd, int wd, int hd, int xs, int ys, int ws, int hs,
+                         const void __far *bits, void __far *bmi, WORD usage,
+                         DWORD rop)                                /* GDI.439 */
+{
+    const BITMAPCOREHEADER __far *bc = bmi;
+    int w, h;
+    HBITMAP hb, old;
+    HDC mdc;
+    if (!dc_out(hdc) || !bmi || !bits)
+        return 0;
+    if (bc->bcSize == sizeof(BITMAPCOREHEADER)) {
+        w = bc->bcWidth;
+        h = bc->bcHeight;
+    } else {
+        w = (int)((const BITMAPINFOHEADER __far *)bmi)->biWidth;
+        h = (int)((const BITMAPINFOHEADER __far *)bmi)->biHeight;
+    }
+    hb = CreateCompatibleBitmap(hdc, w, h);
+    if (!hb)
+        return 0;
+    SetDIBits(hdc, hb, 0, h, bits, bmi, usage);
+    mdc = CreateCompatibleDC(hdc);
+    if (!mdc) {
+        DeleteObject(hb);
+        return 0;
+    }
+    old = SelectObject(mdc, hb);
+    StretchBlt(hdc, xd, yd, wd, hd, mdc, xs, h - ys - hs, ws, hs, rop);
+    SelectObject(mdc, old);
+    DeleteDC(mdc);
+    DeleteObject(hb);
+    dib_log("StretchDIBits", bmi, usage, hs);
+    return hs;
 }

@@ -82,6 +82,10 @@
 #     pointer's columns left out: the same rectangle) and shows 3.1's last
 #     frame there, pixel for pixel.
 #     c4a-dragging (the frame mid-drag) is saved, not compared.
+#   - the installer's banner (the Apple logo and "Apple Computer QuickTime
+#     for Windows 2.1.2" across the top, an RLE4 DIB through
+#     CreateDIBitmap and BitBlt; black on w16 until 2026-11-20,
+#     drivers/vga/dib.c) is 3.1's, pixel for pixel, in 02-begin.
 # The installer's own boxes (01-05) and the rest of the screen are saved
 # but not compared: w16's VGA.DRV art (caption buttons, the pointer) and
 # the installer's boxes differ (docs/notes/quicktime-handover.md, "Left
@@ -317,6 +321,17 @@ elif [ -f "$refdir/c4b-dropped.png" ]; then
 elif [ -n "$newref" ] && [ -f "$refdir/c4-paused.png" ]; then
     # (a -R run made before the drag existed has none)
     fail "the drag while the movie plays did not get to its drop on 3.1 ($refdir/input.log)"
+fi
+# the installer's banner (488 x 75 at 76,20 with its frame; the boxes
+# open below it): 3.1's pixels
+if [ -f "$refdir/02-begin.png" ] && [ -f "$w/02-begin.png" ]; then
+    magick "$refdir/02-begin.png" -crop 500x84+70+16 +repage "$out/banner-ref.png"
+    magick "$w/02-begin.png" -crop 500x84+70+16 +repage "$out/banner-w16.png"
+    n=$(px "$out/banner-ref.png" "$out/banner-w16.png" "$out/banner-diff.png")
+    echo "the installer's banner: $n pixels differ from 3.1's"
+    [ "$n" = 0 ] || fail "the installer's banner: $n pixels differ from 3.1's ($out/banner-diff.png)"
+elif [ -f "$refdir/02-begin.png" ]; then
+    fail "w16 did not get to the installer's Begin Install box ($w/input.log)"
 fi
 if [ $fails = 0 ]; then echo "ok   qtplay: QuickTime installs and plays its sample movie as on 3.1 ($out)"; fi
 exit $(( fails > 0 ))

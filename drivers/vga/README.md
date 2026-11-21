@@ -20,8 +20,9 @@ dithering of solid brushes on colour and monochrome bitmaps, the bitmap
 formats, Inquire, the VGA palette) is the same as with Microsoft's (VG1,
 VG3), and so are lines of every style (VG5), text with every attribute
 (VG6), all 256 raster operations, monochrome/colour conversions, DIBs
-and hatches (VG7), EnumObj, the escapes and flood fills (VG8). See
-"Stages" below.
+and hatches (VG7), EnumObj, the escapes and flood fills (VG8), DIBs in
+every format with every colour use, RLE both ways and over 64K (GD7).
+See "Stages" below.
 
 ## Layout
 
@@ -42,7 +43,9 @@ and hatches (VG7), EnumObj, the escapes and flood fills (VG8). See
   fills.
 - `output.c` - Output (polylines with styles, scan lines), Pixel, ScanLR.
 - `text.c` - ExtTextOut, StrBlt, GetCharWidth for raster fonts.
-- `dib.c` - DeviceBitmapBits (SetDIBits/GetDIBits), SetDIBitsToDevice.
+- `dib.c` - DeviceBitmapBits (SetDIBits/GetDIBits), SetDIBitsToDevice;
+  RLE4/RLE8 decoded and (GetDIBits) encoded, as 3.1's driver does (the
+  file's head comment; GD7).
 - `cursor.c` - the software cursor and its exclusion, Inquire,
   SaveScreenBitmap.
 - `vga.lnk` - the module: name DISPLAY, Microsoft's ordinals and names,
@@ -308,6 +311,11 @@ program in Standard mode) reads WIN.INI again (w16: only the first).
   both ways, hatches; VG8 (`tests/apps/vg8.c`): EnumObjects, the escapes
   QUERYESCSUPPORT reports, GETCOLORTABLE, EnumFonts, flood fills. Their
   logs are compared whole: identical (VG5 but for the turns noted).
+- GD7 (`tests/apps/gd7.c`, `tests/gdiheap.sh -r -v build/dos/VGA.DRV -p
+  build/dos/GD7.EXE`): DIBs of 1, 4, 8, 24 bits and RLE4/RLE8, RGB and
+  palette colours, through SetDIBits, CreateDIBitmap, SetDIBitsToDevice,
+  StretchDIBits and GetDIBits (RLE), checked against 3.1's values
+  (`gd7ref.h`); boot-test case `gdidib` (with Microsoft's GDI and w16's).
 - Boot-test cases (`tests/boottest.sh`): `vga` (twelve input scripts with
   w16's driver and Microsoft's resources against Microsoft's driver, every
   screen 0 pixels), `vgaboot` (plain boots: 0 pixels; with w16's own
@@ -343,7 +351,7 @@ program in Standard mode) reads WIN.INI again (w16: only the first).
 2. **Done**: pixel-exact boot screens and scenarios: the boot-test cases
    above; lines and their styles (VG5) and text (VG6) as 3.1's.
 3. The full ROP set and every Output style checked by probes, styled
-   lines as 3.1 draws them, DIBs (RLE, over 64K), screen switching
+   lines as 3.1 draws them, DIBs (RLE, over 64K: done, GD7), screen switching
    (woados, winprompt), cursors, escapes, EnumObj's order.
 4. All of w16 on w16's VGA.DRV.
 5. Performance.
@@ -351,8 +359,10 @@ program in Standard mode) reads WIN.INI again (w16: only the first).
 ## Not verified yet (UNVERIFIED)
 
 - Styled polylines turning from slanted y segments to x ones (above).
-- DIBs in RLE (DeviceBitmapBits and SetDIBitsToDevice refuse them) or over
-  64K; SetDIBitsToDevice beyond WinMine's use.
+- RLE streams whose runs go past the DIB's width (clipped here; 3.1 left
+  two pixels of an absolute run out in one such stream, not followed up),
+  the RLE encoder's choices beyond GD7's lines (dib.c), and GetDIBits in
+  RLE of lines wider than 512 pixels (cut here).
 - The dithering of all 2^24 colours (VG4, tests/vgacolor.sh: written, to
   run on the build host; VG1's 4913 colours and 2553 more are identical).
 - That nothing but the driver reads OEMBIN 2 and STRINGS 1000/1010 (w16's

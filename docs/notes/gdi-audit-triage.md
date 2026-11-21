@@ -120,6 +120,15 @@ what is left (listed again at the end).
 - The font mapper: CreateFont(-11, ..., "Small Fonts") gives a font of
   tmHeight 12 on 3.1, 11 on w16 (the mapper's weights are UNVERIFIED, not
   part of this audit; GD5 records it unchecked).
+- DIBs (2026-11-20, QuickTime's installer banner, probe GD7 and the
+  boot-test case `gdidib`): StretchDIBits (GDI.439) was a stub returning
+  0, so Write's and OLE's pictures were never drawn; it is SetDIBits into
+  a bitmap and StretchBlt now. H17's "kept" for SetDIBitsToDevice on a
+  memory DC held only with Microsoft's VGA.DRV, which draws nothing there
+  as 3.1's GDI never does; with w16's driver w16 drew: GDI now draws
+  nothing and returns FFFFh. On a window DC it returns the driver's value
+  (the lines drawn inside the clip rectangle). RLE and DIBs over 64K are
+  the driver's (drivers/vga/README.md).
 - `ole/olecli/i4.asm` and `shell/write/i4.asm` have C1's bug (copies of
   GDI's file); not changed here (other areas).
 
