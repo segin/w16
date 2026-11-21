@@ -1,0 +1,20 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Fonts, TrueType: Enable TrueType Fonts off (Show Only disabled), OK:
+; [TrueType] TTEnable=0 TTOnly=0 and the restart prompt; Don't Restart Now
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+alt t
+wait 3000
+snap T0.BMP
+key 20
+wait 1000
+snap T1.BMP
+key 0D
+wait 3000
+snap T2.BMP
+key 1B
+wait 2000
+snap T3.BMP
+key 1B
+wait 2000

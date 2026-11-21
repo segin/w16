@@ -1,0 +1,16 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Fonts, TrueType: Show Only TrueType Fonts on, OK: TTEnable=1 TTOnly=1, no
+; restart prompt
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+alt t
+wait 2000
+alt s
+wait 500
+snap T0.BMP
+key 0D
+wait 3000
+snap T1.BMP
+key 1B
+wait 2000

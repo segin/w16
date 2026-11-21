@@ -115,6 +115,10 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
+`tests/cplscenarios.sh` (w16's Control Panel and applets against Microsoft's:
+CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
+`tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
+in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),

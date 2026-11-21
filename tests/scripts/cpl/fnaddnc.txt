@@ -1,0 +1,21 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ref WINDOWS/SYSTEM/EGA40WOA.FON NEWFONTS/EGA40WOA.FON
+; Fonts, Add without copying: [fonts] Terminal=C:\NEWFONTS\EGA40WOA.FON
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+alt a
+wait 4000
+dblitem 0
+wait 3000
+dblitem 1
+wait 5000
+alt c
+wait 500
+alt s
+wait 1000
+key 0D
+wait 5000
+snap A0.BMP
+key 1B
+wait 3000

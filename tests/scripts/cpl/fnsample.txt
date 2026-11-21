@@ -1,0 +1,25 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Fonts: the dialog, then the sample of a TrueType font (Arial Bold), of a
+; raster font file of three sizes (Courier) and of six (MS Sans Serif)
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+snap F0.BMP
+key 28
+wait 1500
+snap F1.BMP
+key 28
+key 28
+key 28
+wait 1500
+snap F2.BMP
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 1500
+snap F3.BMP
+key 1B
+wait 2000

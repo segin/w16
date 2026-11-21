@@ -14,7 +14,10 @@
 #   ;! cp1                  CP1.CPL into WINDOWS\SYSTEM (both runs)
 #   ;! file NAME DEST       tests/scripts/cpl/NAME to C:\DEST (both runs)
 #   ;! build FILE DEST      build/dos/FILE to C:\DEST (both runs)
-#   ;! w16 FILE DEST        build/dos/FILE to C:\DEST in the w16 run
+#   ;! ref FILE DEST        the reference install's C:\FILE to C:\DEST (both
+#                           runs; e.g. a font file to add from another directory)
+#   ;! w16 FILE DEST        build/dos/FILE (a path with a slash: build/FILE,
+#                           e.g. win386/WIN386.EXE) to C:\DEST in the w16 run
 #   ;! ini FILE SEC:KEY=VAL set a key in the reference's C:\FILE (both runs;
 #                           tests/scripts/iniset.py)
 #   ;! mode /3              WIN.COM switch (default /S)
@@ -51,7 +54,11 @@ for n in $names; do
         cp1)  common="$common $root/build/dos/CP1.CPL=WINDOWS/SYSTEM/CP1.CPL" ;;
         file) common="$common $dir/$b=$c" ;;
         build) common="$common $root/build/dos/$b=$c" ;;
-        w16)  w16="$w16 $root/build/dos/$b=$c" ;;
+        ref)  common="$common $ref/$b=$c" ;;
+        w16)  case $b in                # a path: under build/ (win386/WIN386.EXE)
+              */*) w16="$w16 $root/build/$b=$c" ;;
+              *)   w16="$w16 $root/build/dos/$b=$c" ;;
+              esac ;;
         mode) mode=$b ;;
         ini)
             p=$pre/$(echo "$b" | tr / _)

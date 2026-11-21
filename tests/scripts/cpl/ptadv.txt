@@ -1,0 +1,31 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Ports, COM1, Advanced: base Default, IRQ 5, OK: SYSTEM.INI [386Enh]
+; COM1Irq=5 and the restart prompt; Settings OK: [ports] COM1: rewritten
+blinktime 65535
+run CONTROL.EXE PORTS
+wait 5000
+alt s
+wait 3000
+alt a
+wait 3000
+snap A0.BMP
+kdown 28
+kup 28
+wait 300
+alt i
+wait 300
+kdown 26
+kup 26
+wait 300
+snap A1.BMP
+key 0D
+wait 3000
+snap A2.BMP
+key 0D
+wait 3000
+snap A3.BMP
+key 0D
+wait 3000
+snap A4.BMP
+key 1B
+wait 2000
