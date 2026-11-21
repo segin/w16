@@ -1,5 +1,5 @@
-; woa386s.asm - w16's WINOA386.MOD: the register-level calls (MIT licence,
-; LICENSE): the VxDs' protected-mode API entries (INT 2Fh AX=1684h, BX the
+; woa386s.asm - w16's WINOA386.MOD: the register-level calls (public domain,
+; CC0 1.0, LICENSE): the VxDs' protected-mode API entries (INT 2Fh AX=1684h, BX the
 ; device: SHELL 0017h, VKD 000Dh, VMD 000Ch; the DDK's Virtual Device
 ; Adaptation Guide), a call into one with 32-bit registers, and SHELL's
 ; event procedure (winoa386.c, "SHELL's protocol").

@@ -27,7 +27,7 @@
 ; the start of the image saved with Windows. At a resume R reads the image
 ; back over T and jumps into it.
 ;
-; Copyright (c) 2026 The w16 contributors, MIT License (LICENSE).
+; Public domain (CC0 1.0, LICENSE).
 
         bits 16
         cpu 286

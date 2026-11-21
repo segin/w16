@@ -4,8 +4,8 @@
 ; 9.5 has what it is built from: black-box observation of Windows 3.1's
 ; WIN.COM with the WC1-WC9 probes, tests/wincom.sh). It began as LOSE.COM,
 ; the Suite16 loader (lose.asm, Copyright (c) 2024 Suite16 Contributors,
-; Kirn Gill II; MIT License, win/LICENSE.lose); w16's changes are
-; Copyright (c) 2026 The w16 contributors, MIT License (LICENSE).
+; Kirn Gill II; MIT License, win/LICENSE.lose); w16's changes are in
+; the public domain (CC0 1.0, LICENSE).
 ; From LOSE.COM: the DOS version check, the memory shrink, saving the
 ; INT 23h/2Fh vectors, the /R /S /2 /3 /? switches blanked in the command
 ; tail for KERNEL, the INT 2Fh check for a running Windows, the paths of

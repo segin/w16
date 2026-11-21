@@ -1,4 +1,4 @@
-/* winoa386.h - w16's WINOA386.MOD (MIT licence, LICENSE): resource
+/* winoa386.h - w16's WINOA386.MOD (public domain, CC0 1.0, LICENSE): resource
    identifiers. The message numbers are w16's own; the texts are Windows
    3.1's as seen on its screens (ARCHITECTURE.md 6.8), "w16" for
    "Windows". */

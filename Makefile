@@ -1136,7 +1136,7 @@ FNT     := $(B)/fonts
 FONTC   := python3 tools/fontc.py
 FONTINFO = --info CompanyName=w16 --info FileVersion=3.10 --info ProductVersion=3.10 \
            --info _version=3.10.0.103 \
-           --info "LegalCopyright=Copyright (c) 2026 the w16 contributors, MIT licence" \
+           --info "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
            --info ProductName=w16
 FONS    := $(FNT)/VGASYS.FON $(FNT)/VGAFIX.FON $(FNT)/VGAOEM.FON $(FNT)/SSERIFE.FON
 SSERIFE_SRC := $(foreach p,8 10 12 14 18 24,fonts/sserife$(p).txt)
@@ -1257,7 +1257,7 @@ $(B)/shell/calc/calcver.bin: tools/mkver.py
 	python3 tools/mkver.py $@ --file 3.10.0.103 --type 1 \
 	    "CompanyName=the w16 contributors" "FileDescription=w16 Calculator" \
 	    FileVersion=3.10 InternalName=Calc \
-	    "LegalCopyright=Copyright (c) 2026 the w16 contributors (MIT licence)" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=CALC.EXE ProductName=w16 ProductVersion=3.10
 $(B)/shell/calc/calc.res: shell/calc/calc.rc shell/calc/calc.h $(B)/shell/res/calc.ico \
     $(B)/shell/calc/calcver.bin
@@ -2468,7 +2468,7 @@ $(B)/ole/olecliver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Object Linking and Embedding Client Library" \
 	    FileVersion=1.10.000 InternalName=OLECLI \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=OLECLI.DLL ProductName=w16 ProductVersion=3.10
 $(B)/ole/olecli.res: ole/olecli/olecli.rc $(B)/ole/olecliver.bin
 	@mkdir -p $(@D)
@@ -2746,7 +2746,7 @@ $(B)/timer/timerver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Multimedia timer driver" \
 	    FileVersion=3.10 InternalName=timer.drv \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=timer.drv ProductName=w16 ProductVersion=3.10
 $(B)/timer/timer.res: drivers/timer/timer.rc $(B)/timer/timerver.bin
 	@mkdir -p $(@D)
@@ -2780,7 +2780,7 @@ $(B)/sb16/sb16ver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Sound Blaster 16 driver" \
 	    FileVersion=1.0 InternalName=sb16.drv \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=sb16.drv ProductName=w16 ProductVersion=3.10
 $(B)/sb16/sb16.res: drivers/sb16/sb16.rc $(B)/sb16/sb16ver.bin
 	@mkdir -p $(@D)
@@ -3012,7 +3012,7 @@ $(B)/ddeml/ddemlver.bin: tools/mkver.py
 	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
 	    "CompanyName=w16 project" "FileDescription=DDE Management Library" \
 	    FileVersion=3.10 InternalName=DDEML \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=DDEML.DLL ProductName=w16 ProductVersion=3.10
 $(B)/ddeml/ddeml.res: shell/ddeml/ddeml.rc $(B)/ddeml/ddemlver.bin
 	@mkdir -p $(@D)
@@ -3057,7 +3057,7 @@ $(B)/lzexpand/lzver.bin: tools/mkver.py
 	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
 	    "CompanyName=w16 project" "FileDescription=File expansion library" \
 	    FileVersion=3.10 InternalName=LZEXPAND \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=LZEXPAND.DLL ProductName=w16 ProductVersion=3.10
 $(B)/lzexpand/lzexpand.res: shell/lzexpand/lzexpand.rc $(B)/lzexpand/lzver.bin
 	@mkdir -p $(@D)
@@ -3090,7 +3090,7 @@ $(B)/ver/verver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Version checking and file installation library" \
 	    FileVersion=3.10 InternalName=VER \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=VER.DLL ProductName=w16 ProductVersion=3.10
 $(B)/ver/ver.res: shell/ver/ver.rc $(B)/ver/verver.bin
 	@mkdir -p $(@D)
@@ -3123,7 +3123,7 @@ $(B)/toolhelp/thver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Windows Debug/Tool helper library" \
 	    FileVersion=3.10 InternalName=TOOLHELP \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=TOOLHELP.DLL ProductName=w16 ProductVersion=3.10
 $(B)/toolhelp/toolhelp.res: shell/toolhelp/toolhelp.rc $(B)/toolhelp/thver.bin
 	@mkdir -p $(@D)
@@ -3158,7 +3158,7 @@ $(B)/mmsystem/mmver.bin: tools/mkver.py
 	    "CompanyName=w16 project" \
 	    "FileDescription=Multimedia system library" \
 	    FileVersion=3.1 InternalName=mmsystem.dll \
-	    "LegalCopyright=MIT licence, see the w16 repository" \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
 	    OriginalFilename=mmsystem.dll ProductName=w16 ProductVersion=3.1
 $(B)/mmsystem/mcitab.rc: tools/mkmcitab.py
 	@mkdir -p $(@D)

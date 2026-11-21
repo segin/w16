@@ -2,8 +2,8 @@ w16 - a Windows directory with w16's programs
 =============================================
 
 This directory is laid out like a Windows 3.1 directory (the one that
-holds WIN.COM) and contains only what w16 builds (MIT licence, see the
-w16 repository's LICENSE):
+holds WIN.COM) and contains only what w16 builds (public domain under CC0 1.0, see
+the w16 repository's LICENSE):
 
 Start w16 with  WIN /S  (Standard mode) for now. On a 386, plain WIN
 starts 386 Enhanced mode, as Windows 3.1's does; w16's 386 Enhanced mode

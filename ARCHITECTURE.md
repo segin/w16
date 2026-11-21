@@ -21,7 +21,7 @@ This document records the project's goals, toolchain, source and clean-room poli
 
 ## 3. Source and Clean-Room Policy
 
-w16 is licensed under the MIT licence (`LICENSE`). Everything in the repository must be compatible with that, which is why copyleft code below is reference only.
+w16 is dedicated to the public domain under CC0 1.0 (`LICENSE`): the copyright status of machine-generated code varies between countries, so w16 waives any rights worldwide instead. Third-party code it includes keeps its own permissive licence and notice (the exceptions `LICENSE` lists); nothing may be included that would stop the rest being public domain, which is why copyleft code below is reference only.
 
 Every piece of knowledge in w16 must have a recorded source. When a fact, structure layout, ordinal or behaviour comes from a document, cite it in the code or spec (e.g. `/* Source: MT-DOS Memory Management spec, 1984-10-30, MIT */`).
 
@@ -41,9 +41,9 @@ Every piece of knowledge in w16 must have a recorded source. When a fact, struct
 | Third-party permissive code (MIT, BSD, zlib), e.g. the user's LOSE.COM (MIT) | **Allowed** | May be included. Keep its copyright notice and licence text. |
 | Wine before its March 2002 move to the LGPL (X11 licence), and the ReWind fork that continued that tree | **Allowed (X11, MIT-equivalent)** | Study, adapt or include. Keep Wine's copyright notice and licence text with anything derived. Most useful for export ordinal tables (`.spec` files) and 16-bit structure layouts. Some early Wine knowledge may have come from disassembly by others; like the books above, such facts are acceptable, but w16 contributors still never disassemble Windows themselves. |
 | TransGaming WineX/Cedega additions (Aladdin Free Public License) | **Reference only** | Not open source; never copy. Take X11-era Wine code from Wine or ReWind instead. |
-| Third-party copyleft code (GPL, LGPL), e.g. VBADOS/VBMOUSE.DRV (GPL-2.0), Wine's 16-bit DLLs (LGPL) | **Reference only** | Read for facts and approach; never copy or adapt code, which would stop w16 being MIT. |
+| Third-party copyleft code (GPL, LGPL), e.g. VBADOS/VBMOUSE.DRV (GPL-2.0), Wine's 16-bit DLLs (LGPL) | **Reference only** | Read for facts and approach; never copy or adapt code, which would stop w16 being public domain. |
 | Test-only tools (DOSBox, HDPMI16, the user-supplied reference Windows copies) | **Not shipped** | Used to build and test only; kept out of the repository (`.tools/`). |
-| Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not licensed by MIT. Use only to describe compatibility, never as the product's name. |
+| Trademarks ("Microsoft", "Windows", "MS-DOS") | — | Not covered by any licence. Use only to describe compatibility, never as the product's name. |
 
 **References.** The documentation w16 relies on, under the "facts only" rules above (no sample code, headers or macro bodies; a fact taken from them is confirmed by a probe wherever it can be). Cite them by author, title and chapter or page:
 

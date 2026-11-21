@@ -1,5 +1,5 @@
 ; sserife24.txt - "MS Sans Serif" 24pt, w16's sans serif for VGA (96 dpi).
-; Original design for w16 (MIT licence). Built into SSERIFE.FON by
+; Original design for w16 (public domain, CC0 1.0). Built into SSERIFE.FON by
 ; tools/fontc.py (ARCHITECTURE.md 6.9).
 ;
 ; Metrics are Windows 3.1's, observed black-box (tests/apps/fn1.c) and from

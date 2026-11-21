@@ -118,7 +118,7 @@ def version():
             ('FileDescription', 'w16 VGA display driver'),
             ('FileVersion', '3.10'),
             ('InternalName', 'DISPLAY'),
-            ('LegalCopyright', 'Copyright (c) 2026 the w16 contributors (MIT licence)'),
+            ('LegalCopyright', 'Public domain (CC0 1.0), see the w16 repository'),
             ('OriginalFilename', 'VGA.DRV'),
             ('ProductName', 'w16'),
             ('ProductVersion', '3.10')]

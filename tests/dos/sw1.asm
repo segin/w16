@@ -23,7 +23,7 @@
 ; entry of its own before it (up to NSLOT per vector; the slot is part of
 ; each record), so it sees the calls WIN.COM, WSWAP and DSWAP answer
 ; themselves. "SW1 N" installs without that.
-; Copyright (c) 2026 The w16 contributors, MIT License (LICENSE).
+; Public domain (CC0 1.0, LICENSE).
 
         bits 16
         cpu 286

@@ -1,6 +1,6 @@
 /*
  * winoldap.c - w16's WINOLDAP.MOD: running DOS programs from Standard-mode
- * Windows (ARCHITECTURE.md 9.8). MIT licence (LICENSE).
+ * Windows (ARCHITECTURE.md 9.8). Public domain (CC0 1.0, LICENSE).
  *
  * Everything here was observed black-box on Windows 3.1 (tests/worun.sh,
  * the WO probes; Microsoft's WINOLDAP.MOD, WSWAP.EXE and DSWAP.EXE were

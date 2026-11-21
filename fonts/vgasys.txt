@@ -1,5 +1,5 @@
 ; vgasys.txt - "System", w16's proportional system font for VGA (96 dpi).
-; Original design for w16 (MIT licence): a bold bitmap sans with two-pixel
+; Original design for w16 (public domain, CC0 1.0): a bold bitmap sans with two-pixel
 ; stems and one-pixel horizontals. Built into VGASYS.FON by tools/fontc.py.
 ;
 ; Metrics are Windows 3.1's, observed black-box (tests/apps/fn1.c) and from

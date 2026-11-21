@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mkcdart - w16 COMMDLG's pictures (w16 originals, MIT).
+"""mkcdart - w16 COMMDLG's pictures (w16 originals, public domain, CC0 1.0).
 
 Writes into OUTDIR:
   drives.bmp     bitmap 576: eight 16x16 cells for the file dialogs: open

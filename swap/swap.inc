@@ -1,8 +1,7 @@
 ; swap.inc - what w16's WSWAP.EXE and DSWAP.EXE share: WIN.COM's switcher
 ; block, the swap files, copying to and from extended memory, the MCB
 ; chain. Black-box facts from Windows 3.1 (ARCHITECTURE.md 9.9; the SW1
-; probe, tests/dos/sw1.asm). Copyright (c) 2026 The w16 contributors, MIT
-; License (LICENSE).
+; probe, tests/dos/sw1.asm). Public domain (CC0 1.0, LICENSE).
 
 ; ---- WIN.COM's switcher block (INT 2Fh AX=4A05h SI=5), offsets ----
 B_CPU       equ 001h        ; 02h 80286, 04h 80386 or later

@@ -1,5 +1,5 @@
 ; vgaoem.txt - "Terminal", w16's OEM (code page 437) font for VGA (96 dpi).
-; Original design for w16 (MIT licence). Built into VGAOEM.FON by
+; Original design for w16 (public domain, CC0 1.0). Built into VGAOEM.FON by
 ; tools/fontc.py (ARCHITECTURE.md 6.9).
 ;
 ; Metrics are Windows 3.1's, observed black-box (tests/apps/fn1.c) and from
