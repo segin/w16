@@ -194,11 +194,24 @@ _vm_stub_off:
 ; the EXEC failed, AX DOS's error). Sources: MS-DOS 4.00 INT 21h 48h, 55h,
 ; 50h, 0Ch, 0Eh, 3Bh, 40h, 29h, 4B00h, 4Dh.
 VS_BLOCK        equ 200h                ; paragraphs: PSP, parameters, stacks
+; DOS saves the caller's SS:SP in the current PSP (2Eh) at every INT 21h
+; call but 50h, 51h, 62h and 64h (DOSBox's built-in DOS as MS-DOS), and
+; the current PSP is still the loader's, which this VM shares with the
+; System VM: its saved stack, where DOS returns to when Windows' KERNEL
+; ends, would be this VM's (the user's report, 2026-11-21: after a DOS
+; box, Exit Windows printed KERNEL's "back to DOS" and hung in plain
+; DOSBox). So it is kept and put back once this VM has its own PSP.
 vm_stub:
+        mov ah, 51h                     ; the current PSP (the loader's)
+        int 21h
+        mov es, bx
+        push bx
+        push word [es:2Eh]
+        push word [es:30h]
         mov ah, 48h
         mov bx, VS_BLOCK
         int 21h
-        jc .fail
+        jc .fail0
         mov dx, ds                      ; a PSP at P:0 (a copy of the current
         mov si, dx                      ; one: handles, environment)
         add si, VS_BLOCK
@@ -212,6 +225,12 @@ vm_stub:
         mov bx, ds
         mov ah, 50h
         int 21h
+        pop ax                          ; the loader's saved stack back
+        pop dx
+        pop bx
+        mov es, bx
+        mov [es:2Eh], dx
+        mov [es:30h], ax
         mov ax, 0C06h                   ; the keyboard's buffer flushed
         mov dl, 0FFh
         int 21h
@@ -252,6 +271,13 @@ vm_stub:
         jmp _bp_table + BP_VMEXIT
 .fail:  stc
         jmp _bp_table + BP_VMEXIT
+.fail0: pop ax
+        pop dx
+        pop bx
+        mov es, bx
+        mov [es:2Eh], dx
+        mov [es:30h], ax
+        jmp .fail
 
 ; The breakpoints (W386_BP_*): ARPL opcodes, invalid in V86 mode.
 _bp_table:
