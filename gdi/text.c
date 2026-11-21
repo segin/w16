@@ -38,15 +38,23 @@ static int log_y(LPDC dc, int v)
     return v < 0 ? -v : v;
 }
 
+/* the driver's extent of the text; the justification error term
+   (DRAWMODE BreakErr) as it was before (GD8, GD1's log on 3.1: only
+   output moves it on; GetTextExtent and the extents TextOut takes
+   leave it) */
 static DWORD drv_extent(LPDC dc, LPCSTR s, int n)
 {
     LPFONT f = dc_font(dc);
     TEXTXFORM tx;
+    short err = dc->dm.BreakErr;
+    DWORD r;
     if (!f)
         return 0;
     font_xform(dc, f, &tx);
-    return ((DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT])(dc->lpPDevice, 0, 0, 0, s, -n,
-                                                        f->fi, &dc->dm, &tx, 0, 0, 0);
+    r = ((DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT])(dc->lpPDevice, 0, 0, 0, s, -n,
+                                                     f->fi, &dc->dm, &tx, 0, 0, 0);
+    dc->dm.BreakErr = err;
+    return r;
 }
 
 /* the device width ExtTextOut's text takes */
@@ -67,7 +75,7 @@ DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
     LPDC dc = dc_get(hdc);
     DWORD e;
     int w, h;
-    if (!dc || n <= 0)
+    if (!dc || n <= 0 || !s)
         return 0;
     font_realize(dc);
     e = drv_extent(dc, s, n);
@@ -84,7 +92,10 @@ DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
 
 BOOL GDIAPI GetTextExtentPoint(HDC hdc, LPCSTR s, int n, POINT __far *sz) /* GDI.471 */
 {
-    DWORD e = GetTextExtent(hdc, s, n);
+    DWORD e;
+    if (!sz)
+        return FALSE;
+    e = GetTextExtent(hdc, s, n);
     sz->x = LOWORD(e);
     sz->y = HIWORD(e);
     return TRUE;
@@ -112,7 +123,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     fi = dc_font(dc)->fi;
     font_xform(dc, dc_font(dc), &tx);
     fn = (DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT];
-    if (n < 0)
+    if (n < 0 || !s)
         n = 0;
     if (dc->textAlign & TA_UPDATECP) {
         x = dc->cur.x;
@@ -166,6 +177,21 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
         fn(dc->lpPDevice, x, y, &clip, s, n, fi, &dc->dm, &tx,
            ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
     }
+    if (n && !dx && dc->dm.BreakCount > 0) {
+        /* GD8 (GD1's log) on 3.1: the next output goes on with the
+           justification's error term where this text left it, one
+           BreakRem off per break character, BreakCount back on when it
+           reaches 0 or less (the driver keeps its own term); with dx
+           widths, which take no justification, left (UNVERIFIED) */
+        BYTE brk = (BYTE)(fi->dfBreakChar + fi->dfFirstChar);
+        int i;
+        for (i = 0; i < n; i++)
+            if ((BYTE)s[i] == brk) {
+                dc->dm.BreakErr -= dc->dm.BreakRem;
+                if (dc->dm.BreakErr <= 0)
+                    dc->dm.BreakErr += dc->dm.BreakCount;
+            }
+    }
     if (n) {
         DWORD e = drv_extent(dc, s, n);
         dc_update_bounds(dc, x, y, x + LOWORD(e), y + HIWORD(e));
@@ -199,7 +225,7 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
     LPFONTINFO fi;
     LPFONTOBJ fo;
     TEXTXFORM tx;
-    if (!dc || !font_realize(dc))
+    if (!dc || !tm || !font_realize(dc))
         return FALSE;
     dc = dc_get(hdc);
     fi = dc_font(dc)->fi;
@@ -249,7 +275,7 @@ int GDIAPI GetTextFace(HDC hdc, int n, LPSTR buf)                  /* GDI.92 */
 {
     LPDC dc = dc_get(hdc);
     int i;
-    if (!dc || !font_realize(dc) || n <= 0)
+    if (!dc || !buf || !font_realize(dc) || n <= 0)
         return 0;
     dc = dc_get(hdc);
     for (i = 0; i < n - 1 && dc_font(dc)->face[i]; i++)
@@ -263,7 +289,7 @@ BOOL GDIAPI GetCharWidth(HDC hdc, WORD first, WORD last, short __far *buf) /* GD
     LPDC dc = dc_get(hdc);
     DRVGETCHARWIDTH fn;
     TEXTXFORM tx;
-    if (!dc || !font_realize(dc) || last < first)
+    if (!dc || !buf || !font_realize(dc) || last < first)
         return FALSE;
     dc = dc_get(hdc);
     font_xform(dc, dc_font(dc), &tx);

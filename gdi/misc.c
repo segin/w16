@@ -93,7 +93,7 @@ WORD GDIAPI SetPaletteEntries(HPALETTE h, WORD start, WORD n, const PALETTEENTRY
 {
     LPPALOBJ p = obj_get(h, PAL_MAGIC);
     WORD i;
-    if (!p || h == stock[15])          /* GD5: 3.1 does not change DEFAULT_PALETTE */
+    if (!p || h == stock[15] || !pe)   /* GD5: 3.1 does not change DEFAULT_PALETTE */
         return 0;
     for (i = 0; i < n && start + i < p->nEntries; i++)
         pal_entries(p)[start + i] = pe[i];
@@ -186,11 +186,13 @@ int GDIAPI MulDiv(int a, int b, int c)                             /* GDI.128 */
     return (int)q;
 }
 
+/* GD8 (GD1's log) on 3.1: on a memory DC no Control call; QUERYESCSUPPORT
+   and GETCOLORTABLE return 0 there (UNVERIFIED for the other escapes) */
 int GDIAPI Escape(HDC hdc, int fn, int n, LPCSTR in, void __far *out) /* GDI.38 */
 {
     LPDC dc = dc_get(hdc);
     (void)n;
-    if (!dc || !dc->dev->fn[DRV_CONTROL])
+    if (!dc || !dc->dev->fn[DRV_CONTROL] || (dc->flags & DCF_MEMORY))
         return 0;
     return ((DRVCONTROL)dc->dev->fn[DRV_CONTROL])(dc->lpPDevice, fn, (LPVOID)in, out);
 }

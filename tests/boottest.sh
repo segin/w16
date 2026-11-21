@@ -41,7 +41,7 @@
 #   gdi        w16's GDI on Microsoft's KRNL286    must be 0
 #   gdik       w16's GDI on w16's KRNL286          must be 0
 #   usergdi    w16's USER and GDI on w16's KRNL286 must be 0
-#   gdiaudit   the GDI audit's probe GD5 with Microsoft's GDI and w16's: no FAIL
+#   gdiaudit   the GDI audit's probes GD5 and GD8 with Microsoft's GDI and w16's: no FAIL
 #   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
 #              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
@@ -1247,22 +1247,27 @@ runcase() {
     usergdi) ref; boot usergdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
             check usergdi usergdi ref ;;
     gdiaudit)
-        # the GDI audit's probe GD5 (tests/apps/gd5.c; docs/notes/
-        # gdi-audit-triage.md) as the shell of Windows 3.1 with Microsoft's
-        # GDI and with w16's: both logs must end with "GD5 done" and have no
-        # FAIL (GD5's table, gd5ref.h, holds 3.1's values)
+        # the GDI audit's probes GD5 and GD8 (tests/apps/gd5.c, gd8.c;
+        # ARCHITECTURE.md 11.4) as the shell of Windows 3.1 with
+        # Microsoft's GDI and with w16's: every log must end with "GDn done"
+        # and have no FAIL (their tables, gd5ref.h and gd8ref.h, hold 3.1's
+        # values)
         r=ok
-        for k in ms w16; do
-            o=; [ $k = ms ] && o=-r
-            "$root/tests/gdiheap.sh" $o -p "$root/build/dos/GD5.EXE" > "$out/gdiaudit-$k.log" 2>&1 &
+        for p in GD5 GD8; do
+            for k in ms w16; do
+                o=; [ $k = ms ] && o=-r
+                "$root/tests/gdiheap.sh" $o -p "$root/build/dos/$p.EXE" > "$out/gdiaudit-$p-$k.log" 2>&1 &
+            done
         done
         wait
-        for k in ms w16; do
-            f=$out/gdiaudit-$k.log
-            grep -q '^GD5 done' "$f" || { r="$k: GD5 did not finish ($f)"; break; }
-            if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+        for p in GD5 GD8; do
+            for k in ms w16; do
+                f=$out/gdiaudit-$p-$k.log
+                grep -q "^$p done" "$f" || { r="$k: $p did not finish ($f)"; break 2; }
+                if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break 2; fi
+            done
         done
-        if [ "$r" = ok ]; then echo "ok   gdiaudit: GD5 with w16's GDI as with Microsoft's (the GDI audit's observations)"
+        if [ "$r" = ok ]; then echo "ok   gdiaudit: GD5 and GD8 with w16's GDI as with Microsoft's (the GDI audit's observations)"
         else echo "FAIL gdiaudit: $r"; fails=$((fails + 1)); fi ;;
     gdidib)
         # GD7 (tests/apps/gd7.c: DIBs drawn as programs draw them, read

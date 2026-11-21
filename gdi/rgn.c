@@ -376,7 +376,7 @@ HRGN GDIAPI CreateRectRgn(int l, int t, int r, int b)              /* GDI.64 */
 
 HRGN GDIAPI CreateRectRgnIndirect(const RECT __far *rc)            /* GDI.65 */
 {
-    return rgn_new(rc->left, rc->top, rc->right, rc->bottom);
+    return rc ? rgn_new(rc->left, rc->top, rc->right, rc->bottom) : 0;
 }
 
 HRGN GDIAPI SetRectRgn(HRGN h, int l, int t, int r, int b)         /* GDI.172 */
@@ -406,7 +406,7 @@ int GDIAPI OffsetRgn(HRGN h, int dx, int dy)                        /* GDI.101 *
 int GDIAPI GetRgnBox(HRGN h, RECT __far *rc)                        /* GDI.134 */
 {
     LPRGN r = rgn_ptr(h);
-    if (!r)
+    if (!r || !rc)
         return ERROR;
     *rc = r->box;
     return rgn_complexity(r);
@@ -427,7 +427,7 @@ BOOL GDIAPI PtInRegion(HRGN h, int x, int y)                        /* GDI.161 *
 static BOOL rect_in(LPRGN r, const RECT __far *rc)
 {
     WORD i;
-    if (!r)
+    if (!r || !rc)
         return FALSE;
     for (i = 0; i < r->n; i++)
         if (rc->left < r->r[i].right && rc->right > r->r[i].left &&

@@ -21,10 +21,16 @@ NPDEVICE dev_open(LPCSTR name)
     NPDEVICE d;
     HINSTANCE h;
     char file[32];
+    char key[16];
     int i, n;
     DWORD r;
+    /* the table keeps 15 characters of the name: a longer one is looked
+       up by as many (it was loaded again at every CreateDC) */
+    for (i = 0; i < 15 && name[i]; i++)
+        key[i] = name[i];
+    key[i] = 0;
     for (d = devices; d; d = d->next)
-        if (!str_icmp(d->name, name)) {
+        if (!str_icmp(d->name, key)) {
             d->refs++;
             return d;
         }
@@ -91,7 +97,8 @@ void dev_close(NPDEVICE d)
         d->refs = 1;
         return;
     }
-    ((DRVDISABLE)d->fn[DRV_DISABLE])(d->lpPDevice);
+    if (d->fn[DRV_DISABLE])
+        ((DRVDISABLE)d->fn[DRV_DISABLE])(d->lpPDevice);
     for (pp = &devices; *pp; pp = &(*pp)->next)
         if (*pp == d) {
             *pp = d->next;
@@ -107,6 +114,7 @@ void dev_close(NPDEVICE d)
 DWORD dev_colorinfo(LPDC dc, COLORREF c)
 {
     DWORD pc = 0;
-    ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);
+    if (dc->dev->fn[DRV_COLORINFO])
+        ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);
     return pc;
 }

@@ -216,8 +216,11 @@ static int is_stock(HANDLE h)
 
 HPEN GDIAPI CreatePenIndirect(const LOGPEN __far *lp)              /* GDI.62 */
 {
-    HANDLE h = obj_alloc(PEN_MAGIC, sizeof(PENOBJ));
+    HANDLE h;
     LPPENOBJ p;
+    if (!lp)                            /* a NULL structure: no object */
+        return 0;
+    h = obj_alloc(PEN_MAGIC, sizeof(PENOBJ));
     if (!h)
         return 0;
     p = obj_get(h, PEN_MAGIC);
@@ -247,6 +250,8 @@ HBRUSH GDIAPI CreateBrushIndirect(const LOGBRUSH __far *lb)        /* GDI.50 */
     HANDLE h;
     HGLOBAL pat = 0;
     LPBRUSHOBJ b;
+    if (!lb)
+        return 0;
     if (lb->lbStyle == 3) {
         pat = bm_pattern_copy(lb->lbHatch);
         if (!pat)
@@ -298,6 +303,8 @@ HFONT GDIAPI CreateFontIndirect(const LOGFONT __far *lf)           /* GDI.57 */
     HANDLE h;
     LPFONTOBJ f;
     int i, n = 0;
+    if (!lf)
+        return 0;
     while (n < LF_FACESIZE - 1 && lf->lfFaceName[n])
         n++;
     h = obj_alloc(FONT_MAGIC, sizeof(OBJHDR) + LF_FIXEDPART + max(n + 1, FONT_MINFACE));
@@ -372,6 +379,8 @@ static void driver_stock_fonts(void)
             p += 18;
             for (k = 0; *p && k < LF_FACESIZE - 1; k++)
                 lf.lfFaceName[k] = *p++;
+            while (*p)                  /* a longer name: the rest skipped */
+                p++;
             p++;
         }
         stock[10 + i] = stock_font(&lf);

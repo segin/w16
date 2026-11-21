@@ -1644,6 +1644,15 @@ $(DOS)/GD7.EXE: $(B)/tests/start.o $(B)/tests/gd7.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd7.map file { $(B)/tests/start.o $(B)/tests/gd7.o }
+# GD8.EXE: the GDI audit's last open items (tests/apps/gd8.c; the boot-test
+# case gdiaudit; under GD1/GD2 with tests/gdiboot.sh -l -L)
+gdprobes: $(DOS)/GD8.EXE
+dos: $(DOS)/GD8.EXE
+$(B)/tests/gd8.o: tests/apps/gd8ref.h tests/apps/tklog.h
+$(DOS)/GD8.EXE: $(B)/tests/start.o $(B)/tests/gd8.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd8.map file { $(B)/tests/start.o $(B)/tests/gd8.o }
 # GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
 # the library's; tests/apps/gd6.c); make test
 dos: $(DOS)/GD6.EXE

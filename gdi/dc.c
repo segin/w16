@@ -224,6 +224,7 @@ static HDC dc_new(NPDEVICE dev, LPVOID lpPDevice, WORD flags)
 HDC GDIAPI CreateDC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __far *init) /* GDI.53 */
 {
     NPDEVICE d;
+    HDC h;
     (void)device;
     (void)output;
     (void)init;
@@ -232,7 +233,10 @@ HDC GDIAPI CreateDC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __fa
     d = dev_open(driver);
     if (!d)
         return 0;
-    return dc_new(d, d->lpPDevice, DCF_DISPLAY);
+    h = dc_new(d, d->lpPDevice, DCF_DISPLAY);
+    if (!h)
+        dev_close(d);                   /* no DC: the device's count back */
+    return h;
 }
 
 HDC GDIAPI CreateIC(LPCSTR driver, LPCSTR device, LPCSTR output, const void __far *init) /* GDI.153 */
@@ -350,7 +354,6 @@ LPRGN dc_rao(LPDC dc)
         HRGN vis = dc->hVisRgn;
         if (dc->hClipRgn) {
             rgn_copy(dc->hRao, dc->hClipRgn);
-            rgn_offset(dc->hRao, dc->dcOrg.x, dc->dcOrg.y);
             rgn_combine(dc->hRao, dc->hRao, vis, RGN_AND);
         } else
             rgn_copy(dc->hRao, vis);
@@ -494,7 +497,6 @@ ATTR(PolyFillMode, 84, polyFill, int)
 ATTR(StretchBltMode, 88, stretchMode, int)
 ATTR(MapMode, 81, mapMode, int)
 ATTR(TextAlign, 345, textAlign, WORD)
-ATTR(TextCharacterExtra, 89, charExtra, int)
 ATTR(BkColor, 75, dm.LbkColor, COLORREF)
 ATTR(TextColor, 90, dm.LTextColor, COLORREF)
 
@@ -553,16 +555,37 @@ int GDIAPI SetStretchBltMode(HDC hdc, int m)                       /* GDI.7 */
     return old;
 }
 
+/* the character extra in the logical units of the mapping now: GD8 on
+   3.1 keeps only the device value (set as 6 in MM_TEXT, 3 at 2:1; set as
+   6 at 2:1, 12 back in MM_TEXT; the drawing as set). UNVERIFIED: the
+   rounding */
+static int extra_logical(LPDC dc)
+{
+    int v = dc->dm.CharExtra;
+    if (dc->mapMode != 1) {
+        v = mul_div(v, dc->wndExt.x, dc->vpExt.x);
+        if ((dc->wndExt.x < 0) != (dc->vpExt.x < 0))
+            v = -v;
+    }
+    return v;
+}
+
 int GDIAPI SetTextCharacterExtra(HDC hdc, int x)                   /* GDI.8 */
 {
     LPDC dc = dc_get(hdc);
     int old;
     if (!dc)
         return 0x8000;
-    old = dc->charExtra;
+    old = extra_logical(dc);
     dc->charExtra = x;
     dc->dm.CharExtra = dc_scale_x(dc, x);
     return old;
+}
+
+int GDIAPI GetTextCharacterExtra(HDC hdc)                          /* GDI.89 */
+{
+    LPDC dc = dc_get(hdc);
+    return dc ? extra_logical(dc) : 0;
 }
 
 WORD GDIAPI SetTextAlign(HDC hdc, WORD a)                          /* GDI.346 */
@@ -591,7 +614,8 @@ int GDIAPI SetTextJustification(HDC hdc, int extra, int count)     /* GDI.10 */
         dc->dm.BreakExtra = 0;
         dc->dm.BreakRem = 0;
     }
-    dc->dm.BreakErr = count / 2 + 1;    /* UNVERIFIED: initial error term */
+    /* GD8 (GD1's log) on 3.1: count / 2 + 1 for counts 1 to 5, 0 for 0 */
+    dc->dm.BreakErr = count > 0 ? count / 2 + 1 : 0;
     return 1;
 }
 
@@ -660,17 +684,22 @@ DWORD GDIAPI GetBrushOrg(HDC hdc)                                  /* GDI.149 */
     return dc ? MAKELONG(dc->brushOrg.x, dc->brushOrg.y) : 0;
 }
 
-/* SetDCOrg (USER): the screen position of device point (0, 0). GD2: 3.1
-   returned 0 every time */
+/* SetDCOrg (USER): the screen position of device point (0, 0). GD8 on
+   3.1: returns the old origin; the clip region (kept in screen
+   coordinates) moves with the origin */
 DWORD GDIAPI SetDCOrg(HDC hdc, int x, int y)                       /* GDI.117 */
 {
     LPDC dc = dc_get(hdc);
+    DWORD old;
     if (!dc)
         return 0;
+    old = MAKELONG(dc->dcOrg.x, dc->dcOrg.y);
+    if (dc->hClipRgn && (x != dc->dcOrg.x || y != dc->dcOrg.y))
+        rgn_offset(dc->hClipRgn, x - dc->dcOrg.x, y - dc->dcOrg.y);
     dc->dcOrg.x = x;
     dc->dcOrg.y = y;
     dc_rao_invalidate(dc);
-    return 0;
+    return old;
 }
 
 DWORD GDIAPI GetDCOrg(HDC hdc)                                     /* GDI.79 */
@@ -934,7 +963,11 @@ int GDIAPI SelectClipRgn(HDC hdc, HRGN h)                          /* GDI.44 */
             return ERROR;
         if (!dc->hClipRgn)
             dc->hClipRgn = rgn_new(0, 0, 0, 0);
+        dc = dc_get(hdc);
+        if (!dc->hClipRgn)
+            return ERROR;
         rgn_copy(dc->hClipRgn, h);
+        rgn_offset(dc->hClipRgn, dc->dcOrg.x, dc->dcOrg.y);
     }
     dc_rao_invalidate(dc);
     return rgn_complexity(dc_rao(dc));
@@ -945,14 +978,16 @@ static int clip_rect_op(LPDC dc, int l, int t, int r, int b, int mode)
     int p[4];
     p[0] = l; p[1] = t; p[2] = r; p[3] = b;
     dc_lp_to_dp(dc, p, 2);
+    p[0] += dc->dcOrg.x;
+    p[2] += dc->dcOrg.x;
+    p[1] += dc->dcOrg.y;
+    p[3] += dc->dcOrg.y;
     if (!dc->hClipRgn) {
         LPRGN vis;
         /* no clip region yet: start from the whole device surface, the
-           screen where it is (GD5: 3.1's starts as the screen in screen
-           coordinates, so a window off the screen's left keeps its right
-           part; w16 keeps the clip region in the DC's device coordinates) */
-        HRGN c = rgn_new(-dc->dcOrg.x, -dc->dcOrg.y, dc->dev->info.dpHorzRes - dc->dcOrg.x,
-                         dc->dev->info.dpVertRes - dc->dcOrg.y);
+           screen (GD5: 3.1's starts as the screen in screen coordinates,
+           so a window off the screen's left keeps its right part) */
+        HRGN c = rgn_new(0, 0, dc->dev->info.dpHorzRes, dc->dev->info.dpVertRes);
         if (!c)
             return ERROR;
         dc->hClipRgn = c;
@@ -995,7 +1030,7 @@ int GDIAPI GetClipBox(HDC hdc, RECT __far *rc)                     /* GDI.77 */
     LPDC dc = dc_out(hdc);
     LPRGN r;
     int p[4];
-    if (!dc)
+    if (!dc || !rc)
         return ERROR;
     r = dc_rao(dc);
     p[0] = r->box.left - dc->dcOrg.x;
@@ -1012,9 +1047,12 @@ int GDIAPI GetClipBox(HDC hdc, RECT __far *rc)                     /* GDI.77 */
     return rgn_complexity(r);
 }
 
+/* the DC's own clip region, in screen coordinates; USER's DC hook first
+   (GD8 on 3.1: a CS_OWNDC window moved gets its origin, and the clip
+   region with it, from the hook GetClipRgn calls) */
 HRGN GDIAPI GetClipRgn(HDC hdc)                                    /* GDI.173 */
 {
-    LPDC dc = dc_get(hdc);
+    LPDC dc = dc_validate(hdc);
     return dc ? dc->hClipRgn : 0;
 }
 
@@ -1041,7 +1079,7 @@ BOOL GDIAPI RectVisible(HDC hdc, const RECT __far *rc)             /* GDI.465 */
     LPDC dc = dc_out(hdc);
     int p[4];
     RECT r;
-    if (!dc)
+    if (!dc || !rc)
         return FALSE;
     p[0] = rc->left; p[1] = rc->top; p[2] = rc->right; p[3] = rc->bottom;
     dc_lp_to_dp(dc, p, 2);
@@ -1165,7 +1203,8 @@ DWORD GDIAPI GetDCHook(HDC hdc, FARPROC __far *proc)               /* GDI.191 */
     LPDC dc = dc_get(hdc);
     if (!dc)
         return 0;
-    *proc = dc->hook;
+    if (proc)
+        *proc = dc->hook;
     return dc->hookData;
 }
 
@@ -1197,6 +1236,8 @@ WORD GDIAPI GetBoundsRect(HDC hdc, RECT __far *rc, WORD flags)     /* GDI.194 */
         return 0;
     if (dc->bounds.left >= dc->bounds.right || dc->bounds.top >= dc->bounds.bottom)
         r = 1;
+    else if (!rc)
+        r = 3;
     else {
         r = 3;
         *rc = dc->bounds;
@@ -1271,8 +1312,9 @@ static void state_copy(LPDC dst, LPDC src, int bitmap)
 }
 
 /* the DC's clip region becomes the rectangles x (taken; 0: no clip
-   region) */
-static void clip_take(HDC hdc, XP x)
+   region), saved when the DC's origin was ox, oy: moved with the origin
+   since (GD8: 3.1's RestoreDC after SetDCOrg) */
+static void clip_take(HDC hdc, XP x, int ox, int oy)
 {
     LPDC dc = dc_get(hdc);
     if (!x) {
@@ -1286,9 +1328,12 @@ static void clip_take(HDC hdc, XP x)
             dc = dc_get(hdc);
             dc->hClipRgn = c;
         }
-        if (dc->hClipRgn)
+        if (dc->hClipRgn) {
             rgn_set_data(dc->hClipRgn, x);
-        else
+            dc = dc_get(hdc);
+            if (ox != dc->dcOrg.x || oy != dc->dcOrg.y)
+                rgn_offset(dc->hClipRgn, dc->dcOrg.x - ox, dc->dcOrg.y - oy);
+        } else
             xfree(x);
     }
     dc_rao_invalidate(dc_get(hdc));
@@ -1318,6 +1363,7 @@ static HANDLE state_new(HDC hdc)
     s->dev = src->dev;
     s->lpPDevice = src->lpPDevice;
     state_copy(s, src, 1);
+    s->dcOrg = src->dcOrg;              /* the clip region's origin */
     s->hClipRgn = clip;
     return h;
 }
@@ -1350,7 +1396,7 @@ void GDIAPI SetDCState(HDC hdc, HANDLE hs)                         /* GDI.180 */
     dc = dc_get(hdc);
     s = dc_get(hs);
     state_copy(dc, s, 0);
-    clip_take(hdc, clip);
+    clip_take(hdc, clip, s->dcOrg.x, s->dcOrg.y);
     state_refresh(hdc);
 }
 
@@ -1385,6 +1431,7 @@ int GDIAPI SaveDC(HDC hdc)                                         /* GDI.30 */
     dc = dc_get(hdc);
     sv = xptr(x);
     state_copy(&sv->dc, dc, 1);
+    sv->dc.dcOrg = dc->dcOrg;           /* the clip region's origin */
     sv->xClip = clip;
     sv->dc.xSaved = dc->xSaved;
     dc->xSaved = x;
@@ -1417,7 +1464,7 @@ BOOL GDIAPI RestoreDC(HDC hdc, int level)                          /* GDI.39 */
             state_copy(dc, &sv->dc, 0);
             clip = sv->xClip;
             sv->xClip = 0;
-            clip_take(hdc, clip);
+            clip_take(hdc, clip, sv->dc.dcOrg.x, sv->dc.dcOrg.y);
         }
         saved_free(x);
         dc = dc_get(hdc);

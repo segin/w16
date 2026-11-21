@@ -959,7 +959,7 @@ HRGN GDIAPI CreateEllipticRgn(int l, int t, int r, int b)        /* GDI.54 */
 
 HRGN GDIAPI CreateEllipticRgnIndirect(const RECT __far *rc)       /* GDI.55 */
 {
-    return CreateEllipticRgn(rc->left, rc->top, rc->right, rc->bottom);
+    return rc ? CreateEllipticRgn(rc->left, rc->top, rc->right, rc->bottom) : 0;
 }
 
 HRGN GDIAPI CreatePolygonRgn(const POINT __far *pts, int n, int mode) /* GDI.63 */

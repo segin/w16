@@ -451,7 +451,7 @@ typedef struct DC {
     OBJHDR hdr;                         /* 00 hNext: the SaveDC stack's top is xSaved */
     WORD flags;                         /* 0A byFlags, byFlags2 (w16: DCF_*) */
     HANDLE hMetaFile;                   /* 0C */
-    HRGN hClipRgn;                      /* 0E hrgnClip (device coordinates) */
+    HRGN hClipRgn;                      /* 0E hrgnClip (screen coordinates, as 3.1: GD8) */
     HDC hLink;                          /* 10 hPDevice (w16: next DC in GDI's list) */
     HPEN hPen;                          /* 12 hLPen */
     HBRUSH hBrush;                      /* 14 hLBrush */

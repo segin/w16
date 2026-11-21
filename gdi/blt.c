@@ -206,7 +206,7 @@ BOOL GDIAPI StretchBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, in
 /* USER's window frames (Schulman ch. 8: the driver's FastBorder) */
 BOOL GDIAPI FastWindowFrame(HDC hdc, const RECT __far *rc, int xw, int yw, DWORD rop) /* GDI.400 */
 {
-    LPDC dc = dc_out(hdc);
+    LPDC dc = rc ? dc_out(hdc) : 0;
     DRVFASTBORDER fn;
     LPRGN rao;
     RECT r;

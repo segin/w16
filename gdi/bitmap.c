@@ -94,7 +94,8 @@ HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WOR
     pb->bmWidthPlanes = (DWORD)wb * h;
     pb->bmScanSegment = (short)(65536L / scan);
     pb->bmFillBytes = (short)(65536L % scan);
-    /* UNVERIFIED: 3.1 gave some bitmaps a memory DC's PBITMAP here */
+    /* GD8 (GD1's log) on 3.1: the display's PDEVICE, for CreateBitmap's
+       bitmaps as for CreateCompatibleBitmap's (on a memory DC too) */
     pb->bmlpPDevice = display ? display->lpPDevice : 0;
     if (bits)                           /* as SetBitmapBits: across segments */
         bits_copy(hb, total, (void __far *)bits, 0);
@@ -170,7 +171,7 @@ HBITMAP GDIAPI CreateBitmap(int w, int h, BYTE planes, BYTE bpp, const void __fa
 
 HBITMAP GDIAPI CreateBitmapIndirect(const BITMAP __far *bm)        /* GDI.49 */
 {
-    return bm_create(bm->bmWidth, bm->bmHeight, bm->bmPlanes, bm->bmBitsPixel, bm->bmBits, 0);
+    return bm ? bm_create(bm->bmWidth, bm->bmHeight, bm->bmPlanes, bm->bmBitsPixel, bm->bmBits, 0) : 0;
 }
 
 /* USER's: the same as CreateBitmap (Schulman: owned by USER) */
@@ -194,8 +195,8 @@ HBITMAP GDIAPI CreateCompatibleBitmap(HDC hdc, int w, int h)       /* GDI.51 */
     } else
         hb = bm_create(w, h, dc->dev->info.dpPlanes, dc->dev->info.dpBitsPixel, 0, 0);
     pb = bm_pbitmap(hb);
-    if (pb)
-        pb->bmlpPDevice = dc_get(hdc)->lpPDevice;
+    if (pb)                             /* the device's PDEVICE (GD8), never a PBITMAP */
+        pb->bmlpPDevice = dc_get(hdc)->dev->lpPDevice;
     return hb;
 }
 
@@ -253,12 +254,12 @@ static DWORD bits_copy(HBITMAP h, DWORD n, void __far *buf, int get)
 
 LONG GDIAPI GetBitmapBits(HBITMAP h, LONG n, void __far *buf)      /* GDI.74 */
 {
-    return n > 0 ? bits_copy(h, n, buf, 1) : 0;
+    return n > 0 && buf ? bits_copy(h, n, buf, 1) : 0;
 }
 
 LONG GDIAPI SetBitmapBits(HBITMAP h, DWORD n, const void __far *buf) /* GDI.106 */
 {
-    return bits_copy(h, n, (void __far *)buf, 0);
+    return buf ? bits_copy(h, n, (void __far *)buf, 0) : 0;
 }
 
 DWORD GDIAPI SetBitmapDimension(HBITMAP h, int x, int y)           /* GDI.163 */
@@ -370,6 +371,18 @@ static void __far *dib_info(const void __far *bmi, WORD usage, BYTE __far *buf, 
     return buf;
 }
 
+/* the block dib_info converts into, from GDI's heaps (not 1064 bytes of
+   the caller's stack); *x 0 when the caller's BITMAPINFO goes as it is.
+   FALSE: no room */
+static BOOL dib_buf(const void __far *bmi, WORD usage, XP *x)
+{
+    *x = 0;
+    if (((const BITMAPCOREHEADER __far *)bmi)->bcSize != sizeof(BITMAPCOREHEADER) && usage != 1)
+        return TRUE;
+    *x = xalloc(sizeof(BITMAPINFOHEADER) + 256 * 4);
+    return *x != 0;
+}
+
 /* GetDIBits: the colours the driver gave in the copy buf back into the
    caller's table, as RGBTRIPLEs for a core header, as the DC palette's
    nearest indices for DIB_PAL_COLORS (GD5 on 3.1) */
@@ -396,22 +409,25 @@ static int dib_bits(HDC hdc, HBITMAP hbm, WORD start, WORD n, void __far *bits,
 {
     LPDC dc = dc_get(hdc);
     LPPBITMAP pb = bm_pbitmap(hbm);
-    BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
     void __far *bi;
     DRVDEVBMBITS fn;
     HPALETTE hpal;
+    XP xi;
     int r;
     if (!dc || !pb || !bmi)
         return 0;
     fn = (DRVDEVBMBITS)dc->dev->fn[DRV_DEVICEBITMAPBITS];
-    if (!fn)
+    if (!fn || !dib_buf(bmi, usage, &xi))
         return 0;
+    dc = dc_get(hdc);
+    pb = bm_pbitmap(hbm);
     hpal = dc->hPal;
-    bi = dib_info(bmi, usage, info, hpal);
+    bi = dib_info(bmi, usage, xi ? xptr(xi) : 0, hpal);
     r = fn(pb, get, start, n, bits, bi, &dc->dm, 0);
     dib_log(get ? "GetDIBits" : "SetDIBits", bmi, usage, r);
     if (get && bi != bmi)
-        dib_colors_back(bmi, usage, info, hpal);
+        dib_colors_back(bmi, usage, xptr(xi), hpal);
+    xfree(xi);
     return r;
 }
 
@@ -496,21 +512,22 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
                              WORD usage)                           /* GDI.443 */
 {
     LPDC dc = dc_out(hdc);
-    BYTE info[sizeof(BITMAPINFOHEADER) + 256 * 4];
     void __far *bi;
     DRVSETDIBTODEV fn;
     LPRGN rao;
     int p[2], X, Y, r = n;
     RECT d;
     WORD k;
+    XP xi;
     if (!dc || !bmi || !bits)
         return 0;
     if (dc->flags & DCF_MEMORY)
         return -1;
     fn = (DRVSETDIBTODEV)dc->dev->fn[DRV_SETDIBITSTODEVICE];
-    if (!fn)
+    if (!fn || !dib_buf(bmi, usage, &xi))
         return 0;
-    bi = dib_info(bmi, usage, info, dc->hPal);
+    dc = dc_get(hdc);
+    bi = dib_info(bmi, usage, xi ? xptr(xi) : 0, dc->hPal);
     p[0] = x;
     p[1] = y;
     dc_lp_to_dp(dc, p, 1);
@@ -523,6 +540,8 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
        digits: Y = -158 for a 23-line band of a 276-line DIB at y 95) */
     Y = d.top + ys + cy - (int)((BITMAPINFOHEADER __far *)bi)->biHeight;
     rao = dc_rao(dc);
+    if (xi)                             /* (the heap may have moved) */
+        bi = xptr(xi);
     for (k = 0; k < rao->n; k++) {
         RECT c = rao->r[k];
         if (c.left < d.left) c.left = d.left;
@@ -536,6 +555,7 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
     }
     dc_update_bounds(dc, d.left, d.top, d.right, d.bottom);
     dib_log("SetDIBitsToDevice", bmi, usage, r);
+    xfree(xi);
     return r;
 }
 
