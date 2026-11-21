@@ -242,8 +242,13 @@ static void paint_group(HWND h, HDC hdc)
 {
     RECT r, t;
     char text[256];
-    int fh = cySysChar;
+    int fh;
     HBRUSH bg;
+    TEXTMETRIC tm;
+    /* the line half the font's height down (US34 on 3.1: 6 in MS Sans
+       Serif 8, 8 in the system font) */
+    GetTextMetrics(hdc, &tm);
+    fh = tm.tmHeight;
     GetClientRect(h, &r);
     bg = ctl_brush(h, hdc, CTLCOLOR_BTN);
     {

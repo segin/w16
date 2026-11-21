@@ -282,6 +282,8 @@ HDC  get_dc(HWND h, BOOL window, HRGN clip, WORD flags);
 #define DCX_OWNCLIENT 4
 #define ctl_dc(h) get_dc((h), FALSE, 0, DCX_OWNCLIENT)
 void listbox_refit(HWND h);                 /* listbox.c */
+BOOL is_combo(HWND h);                      /* combo.c */
+void edit_show_sel(HWND h);                 /* edit.c */
 extern HWND hwndFocusPending;                 /* input.c: SetFocus's window while it activates */
 void font_base(HFONT f, int *cx, int *cy);        /* dlg.c: a font's dialog base units */
 int  release_dc(HWND h, HDC hdc);

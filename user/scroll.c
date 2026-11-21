@@ -47,7 +47,21 @@ static void fillc(HDC hdc, int x, int y, int cx, int cy, int c)
 static void blt(HDC hdc, int x, int y, int cx, int cy, HBITMAP b)
 {
     HBITMAP old = SelectObject(hdcMem, b);
-    BitBlt(hdc, x, y, cx, cy, hdcMem, 0, 0, SRCCOPY);
+    BITMAP bm;
+    GetObject(b, sizeof bm, &bm);
+    /* a bar too short for two whole arrows and a 2-pixel shaft has them
+       (len - 2) / 2 long (US34 on 3.1: 16 in 34 and 35, 15 in 32, 12 in
+       26), the bitmap squeezed (StretchBlt gives 3.1's pixels for 15 and
+       12; for 16 it drops the frame's row, where 3.1 drops the second
+       shadow's: the frame drawn again). UNVERIFIED how 3.1 squeezes it */
+    if ((cx < bm.bmWidth && cy == bm.bmHeight) || (cy < bm.bmHeight && cx == bm.bmWidth)) {
+        StretchBlt(hdc, x, y, cx, cy, hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+        if (cy < bm.bmHeight)
+            fillc(hdc, x, y + cy - 1, cx, 1, COLOR_WINDOWFRAME);
+        else
+            fillc(hdc, x + cx - 1, y, 1, cy, COLOR_WINDOWFRAME);
+    } else
+        BitBlt(hdc, x, y, cx, cy, hdcMem, 0, 0, SRCCOPY);
     SelectObject(hdcMem, old);
 }
 
@@ -88,8 +102,8 @@ void draw_scrollbar(HDC hdc, RECT *rc, BOOL vert, SBINFO *s)
     int g = s->disabled && bmArrow[8] ? 8 : 0;      /* greyed arrows */
     load_arrows();
     g = s->disabled && bmArrow[8] ? 8 : 0;
-    if (len < 2 * arrow)
-        arrow = len / 2;
+    if (len < 2 * arrow + 2)
+        arrow = len > 2 ? (len - 2) / 2 : 0;
     /* a bar thicker than the arrows: they keep their size at the near
        side, black beside them to the far edge; the shaft and the thumb
        take the whole thickness (US4: 18-pixel scroll-bar controls) */
@@ -444,8 +458,8 @@ static void arrow(HDC hdc, const RECT *rc, BOOL vert, int part, BOOL pressed)
     int a = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
     int ath = thick, k;
     load_arrows();
-    if (len < 2 * a)
-        a = len / 2;
+    if (len < 2 * a + 2)
+        a = len > 2 ? (len - 2) / 2 : 0;
     if (vert && thick > sysmet[SM_CXVSCROLL])
         ath = sysmet[SM_CXVSCROLL];
     else if (!vert && thick > sysmet[SM_CYHSCROLL])
@@ -745,8 +759,8 @@ void scrollbar_menu(HWND hwnd, HWND notify, int bar, RECT *rc, POINT pt)
     /* the position whose thumb is centred on the click */
     len = vert ? rc->bottom - rc->top : rc->right - rc->left;
     arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
-    if (len < 2 * arrow)
-        arrow = len / 2;
+    if (len < 2 * arrow + 2)
+        arrow = len > 2 ? (len - 2) / 2 : 0;
     at = (vert ? pt.y - rc->top : pt.x - rc->left) - (arrow - 1) - arrow / 2;
     travel = len - 3 * arrow + 2;
     v = travel > 0 && at > 0 ? min + ((long)at * (max - min) * 2 + travel) / (2L * travel) : min;
@@ -808,8 +822,8 @@ static BOOL sb_thumb_rect(HWND h, PWND w, SBINFO *s, RECT *t)
     GetClientRect(h, &r);
     len = vert ? r.bottom : r.right;
     arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
-    if (len < 2 * arrow)
-        arrow = len / 2;
+    if (len < 2 * arrow + 2)
+        arrow = len > 2 ? (len - 2) / 2 : 0;
     if (s->max <= s->min || len <= 3 * arrow - 2 || (w->style & SBS_SIZEBOX))
         return FALSE;
     p = thumb_pos(len, arrow, s);
