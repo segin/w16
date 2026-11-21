@@ -352,12 +352,13 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
        On the right SM_CXDLGFRAME short of the edge: Calculator's, 240 x
        158 units at 310,65, 482 wide, comes up on 3.1 at 154,110, and
        dialogs (#32770, byte-aligned) of that template at 152; 490 wide
-       at 144 (probes TM1, TM4: ARCHITECTURE.md 15.5). UNVERIFIED whether
-       the bottom keeps such a margin too */
+       at 144 (probes TM1, TM4: ARCHITECTURE.md 15.5). The bottom keeps
+       SM_CYDLGFRAME too (probe US34's d2 and d3, 300 pixels of client
+       below a 300x150 owner at 300,150: 3.1's frame ends at 475 of 480) */
     if (!(style & WS_CHILD) && r.right > sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME])
         OffsetRect(&r, sysmet[SM_CXSCREEN] - sysmet[SM_CXDLGFRAME] - r.right, 0);
-    if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN])
-        OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - r.bottom);
+    if (!(style & WS_CHILD) && r.bottom > sysmet[SM_CYSCREEN] - sysmet[SM_CYDLGFRAME])
+        OffsetRect(&r, 0, sysmet[SM_CYSCREEN] - sysmet[SM_CYDLGFRAME] - r.bottom);
     if (!(style & WS_CHILD) && r.top < 0)
         OffsetRect(&r, 0, -r.top);
     if (!(style & WS_CHILD) && r.left < 0)

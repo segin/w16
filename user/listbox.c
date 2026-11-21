@@ -275,6 +275,10 @@ static void update_scroll(HWND h, PLB lb)
     /* 0-100 whatever the count, hidden too (US32) */
     {
         int max = max_top(h, lb);
+        /* none when no whole item shows (US34 on 3.1: a combo box's list
+           2 high, five items, has no bar; 8 high, items of 6, has one) */
+        if (!varh(h) && lb->itemh > 0 && client_h(h) < lb->itemh)
+            max = 0;
         if (!max && (lbstyle(h) & LBS_DISABLENOSCROLL)) {
             sb_show_disabled(h, SB_VERT);
             return;
@@ -1139,6 +1143,10 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         lb->itemh = cySysChar;
         lb->bars = lbstyle(h) & (WS_VSCROLL | WS_HSCROLL);
         lb->owner = GetParent(h);
+        /* a combo box's popup list: the box, from the start (its
+           WM_MEASUREITEM goes to the box's owner as the box's: US34) */
+        if (is_combo(((CREATESTRUCT __far *)lp)->hwndParent))
+            lb->owner = ((CREATESTRUCT __far *)lp)->hwndParent;
         if (lbstyle(h) & LBS_OWNERDRAWFIXED) {
             MEASUREITEMSTRUCT mi;
             mi.CtlType = ODT_LISTBOX;

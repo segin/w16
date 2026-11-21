@@ -1,0 +1,4 @@
+# US34.EXE (tests/apps/us34.c): the combo box layout probe; mouse_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289
+import U_MOUSE_EVENT USER.299

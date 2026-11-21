@@ -55,6 +55,8 @@ typedef struct ED {
     WORD   modified;
     char   password;
     HWND   parent;
+    BYTE   framed;              /* draws its own frame (see fmt_rect) */
+    BYTE   forcesel;            /* shows its selection unfocused (edit_show_sel) */
 } ED;
 typedef WORD PED;               /* the state block's handle (object heap) */
 #define E(e)    ((ED __far *)UH_PTR(&uhObj, (e)))
@@ -239,19 +241,63 @@ static int line_height(HWND h, PED e)
     return tm.tmHeight;
 }
 
-/* where the text starts inside a single-line edit: half the room the
-   font leaves, both across and down (US4: 3 pixels in a 24-pixel high
-   control with the system font; UNVERIFIED across as a rule) */
-static int inset(HWND h, PED e)
+/* A single-line edit with WS_BORDER, and a combo box's edit (which has no
+   WS_BORDER), draw their frame themselves, in the client area, which is
+   the whole window (probe US34 on 3.1: GetClientRect 42 x 20 for a field
+   42 x 20; a combo box's edit painted alone keeps its frame). The text's
+   rectangle (EM_GETRECT) is then fixed by the font, not by the height:
+   q = min(f, s) / 4 in from the top (f the font's height, s the system
+   font's) and as far from left and right (half the average width for a
+   fixed-pitch font: 4 for SYSTEM_FIXED_FONT, where q is 3), f high but
+   no lower than q from the bottom (3 3 39 16 in MS Sans Serif 8 and
+   42 x 20, 23 high too; 3 3 39 13 when 16 high; 4 4 44 20 in the system
+   font, 48 x 24 or 28) */
+static void fmt_rect(HWND h, PED e, RECT *r)
+{
+    HDC hdc = ctl_dc(h);
+    TEXTMETRIC tm;
+    HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
+    int qv, qh;
+    GetTextMetrics(hdc, &tm);
+    SelectObject(hdc, old);
+    ReleaseDC(h, hdc);
+    GetClientRect(h, r);
+    qv = (tm.tmHeight < cySysChar ? tm.tmHeight : cySysChar) / 4;
+    qh = (tm.tmPitchAndFamily & TMPF_FIXED_PITCH) ? qv : tm.tmAveCharWidth / 2;
+    r->left = qh;
+    r->right -= qh;
+    r->bottom = qv + tm.tmHeight < r->bottom - qv ? qv + tm.tmHeight : r->bottom - qv;
+    r->top = qv;
+}
+
+/* a single-line field's caret width (US34 on 3.1: 1 in MS Sans Serif 8,
+   2 in the system font and in MS Sans Serif 10; f + 1 high in a framed
+   field): min(f, s) / 8, at least 1. UNVERIFIED beyond those three */
+static int caret_w(HWND h, PED e)
+{
+    int f = line_height(h, e), w = (f < cySysChar ? f : cySysChar) / 8;
+    return w > 0 ? w : 1;
+}
+
+/* where the text starts inside a single-line edit (y: down, else
+   across): a framed one's (fmt_rect); another's half the room the font
+   leaves, both across and down */
+static int inset_xy(HWND h, PED e, BOOL y)
 {
     RECT r;
     int d;
     if (GetWindowLong(h, GWL_STYLE) & ES_MULTILINE)
         return 0;               /* Notepad's text at its edit's left edge (3.1) */
+    if (E(e)->framed) {
+        fmt_rect(h, e, &r);
+        return y ? r.top : r.left;
+    }
     GetClientRect(h, &r);
     d = (r.bottom - r.top - line_height(h, e)) / 2;
     return d > 0 ? d : 0;
 }
+#define inset(h, e) inset_xy((h), (e), FALSE)
+#define inset_y(h, e) inset_xy((h), (e), TRUE)
 
 /* A multi-line control expands tabs (3.1 SDK, EM_SETTABSTOPS: stops
    in dialog units, every 32 by default, i.e. 8 average characters of the
@@ -327,14 +373,23 @@ static int text_x(HDC hdc, PED e, WORD start, WORD n)
         return 0;
     if (E(e)->multi && !E(e)->password)
         return tabbed_x(hdc, e, start + n) - tabbed_x(hdc, e, start);
-    if (E(e)->password) {
-        char buf[64];
-        WORD i;
-        for (i = 0; i < n && i < sizeof buf; i++)
-            buf[i] = E(e)->password;
-        return LOWORD(GetTextExtent(hdc, buf, n < sizeof buf ? n : sizeof buf));
+    /* how far the text advances: its extent less the font's overhang (a
+       synthesized bold's; US34 on 3.1, "(None)" in MS Sans Serif 8: the
+       caret 38 after it, its highlight 39 wide; w16 had 39 and 40) */
+    {
+        TEXTMETRIC tm;
+        int x;
+        GetTextMetrics(hdc, &tm);
+        if (E(e)->password) {
+            char buf[64];
+            WORD i;
+            for (i = 0; i < n && i < sizeof buf; i++)
+                buf[i] = E(e)->password;
+            x = LOWORD(GetTextExtent(hdc, buf, n < sizeof buf ? n : sizeof buf));
+        } else
+            x = LOWORD(GetTextExtent(hdc, text(e) + start, n));
+        return x - tm.tmOverhang;
     }
-    return LOWORD(GetTextExtent(hdc, text(e) + start, n));
 }
 
 static void draw_run(HDC hdc, HWND h, PED e, int x, int y, WORD start, WORD n, BOOL sel, int origin)
@@ -361,10 +416,19 @@ static void paint(HWND h, PED e, HDC hdc)
     HBRUSH b = (HBRUSH)(WORD)send_message(E(e)->parent, WM_CTLCOLOR, (WPARAM)hdc,
                                           MAKELONG(h, CTLCOLOR_EDIT));
     WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
-    BOOL showsel = E(e)->focus || (estyle(h) & ES_NOHIDESEL);
+    BOOL showsel = E(e)->focus || E(e)->forcesel || (estyle(h) & ES_NOHIDESEL);
     int lh = line_height(h, e);
     GetClientRect(h, &r);
     FillRect(hdc, &r, b ? b : sysbrush[COLOR_WINDOW]);
+    if (E(e)->framed) {
+        /* its frame, and the text inside its rectangle down to q from
+           the bottom (US34 on 3.1: a 16-high field's MS Sans Serif text
+           cut at 13, the selection's highlight at 17 in a 20-high one) */
+        RECT f;
+        FrameRect(hdc, &r, sysbrush[COLOR_WINDOWFRAME]);
+        fmt_rect(h, e, &f);
+        IntersectClipRect(hdc, f.left, f.top, f.right, r.bottom - f.top);
+    }
     /* a disabled edit control's text is drawn as usual (US4) */
     SetTextColor(hdc, syscolor[COLOR_WINDOWTEXT]);
     {
@@ -374,7 +438,7 @@ static void paint(HWND h, PED e, HDC hdc)
             WORD st = !(estyle(h) & ES_MULTILINE) ? E(e)->first :
                       line == E(e)->topline ? line_start(e, line) : next;
             WORD n = (estyle(h) & ES_MULTILINE) ? line_len(e, st) : E(e)->len - E(e)->first;
-            int y = (estyle(h) & ES_MULTILINE) ? (line - E(e)->topline) * lh : inset(h, e);
+            int y = (estyle(h) & ES_MULTILINE) ? (line - E(e)->topline) * lh : inset_y(h, e);
             int x = inset(h, e) - ((estyle(h) & ES_MULTILINE) ? E(e)->xoff : 0);
             WORD a = st, z = st + n;
             if (estyle(h) & ES_MULTILINE) {
@@ -395,12 +459,18 @@ static void paint(HWND h, PED e, HDC hdc)
                 int xp = x + text_x(hdc, e, a, p - a), xq = xp + text_x(hdc, e, p, q - p);
                 draw_run(hdc, h, e, x, y, a, p - a, FALSE, x);
                 draw_run(hdc, h, e, xq, y, q, z - q, FALSE, x);
-                /* the selection: its background a pixel wider than the
-                   text (US4: "notepad" selected in MS Sans Serif, 47
-                   pixels for text 46) */
+                /* the selection: its background the text's extent, the
+                   overhang of a synthesized bold font included (US4:
+                   "notepad" selected in MS Sans Serif 8, 47 pixels for
+                   text advancing 46; US34: 39 for "(None)" advancing 38,
+                   but 38 for system-font text advancing 38), a row more
+                   than the font's height in a framed field (US34: 14
+                   rows of MS Sans Serif 8, as far as the clip lets) */
                 {
                     RECT b;
-                    SetRect(&b, xp, y, xq + 1, y + lh);
+                    TEXTMETRIC tm;
+                    GetTextMetrics(hdc, &tm);
+                    SetRect(&b, xp, y, xq + tm.tmOverhang, y + lh + (E(e)->framed ? 1 : 0));
                     FillRect(hdc, &b, sysbrush[COLOR_HIGHLIGHT]);
                     SetBkMode(hdc, TRANSPARENT);
                     SetTextColor(hdc, syscolor[COLOR_HIGHLIGHTTEXT]);
@@ -432,7 +502,7 @@ static void place_caret(HWND h, PED e)
 {
     HDC hdc;
     HFONT old;
-    int x, y = inset(h, e), lh;
+    int x, y = inset_y(h, e), lh;
     WORD st;
     if (!E(e)->focus)
         return;
@@ -458,6 +528,8 @@ static void scroll_to_caret(HWND h, PED e)
 {
     RECT r;
     GetClientRect(h, &r);
+    if (E(e)->framed)
+        r.right -= 2;           /* as when the frame was outside the client */
     if (estyle(h) & ES_MULTILINE) {
         int line = line_of(e, E(e)->sel1), lh = line_height(h, e), rows = r.bottom / (lh ? lh : 1);
         if (line < E(e)->topline)
@@ -468,7 +540,10 @@ static void scroll_to_caret(HWND h, PED e)
     }
     if (E(e)->sel1 < E(e)->first)
         E(e)->first = E(e)->sel1;
-    else {
+    else if (estyle(h) & ES_AUTOHSCROLL) {
+        /* only then (US34 on 3.1: a combo box's edit without
+           CBS_AUTOHSCROLL, its text wider than the field and selected
+           whole, shows it from the start, cut at the right) */
         HDC hdc = ctl_dc(h);
         HFONT old = SelectObject(hdc, E(e)->font ? E(e)->font : GetStockObject(SYSTEM_FONT));
         while (E(e)->first < E(e)->sel1 && text_x(hdc, e, E(e)->first, E(e)->sel1 - E(e)->first) > r.right - 2)
@@ -666,6 +741,19 @@ static WORD pos_from_x(HWND h, PED e, int x, int y)
     return st + i;
 }
 
+/* a combo box's edit, its list dropped: the selection shows, focus or
+   not, until the edit next loses the focus (US34 on 3.1: a drop-down box
+   in a window, the focus elsewhere, dropped and closed with
+   CB_SHOWDROPDOWN: its text highlighted) */
+void edit_show_sel(HWND h)
+{
+    PED e = valid_wnd(h) ? ed_of(h) : 0;
+    if (!e || E(e)->forcesel)
+        return;
+    E(e)->forcesel = 1;
+    InvalidateRect(h, NULL, TRUE);
+}
+
 LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     PED e;
@@ -701,6 +789,10 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         E(e)->parent = GetParent(h);
         if (estyle(h) & ES_PASSWORD)
             E(e)->password = '*';
+        /* single-line, no scroll bars, WS_BORDER or a combo box's: its
+           own frame (fmt_rect) */
+        E(e)->framed = !(estyle(h) & (ES_MULTILINE | WS_VSCROLL | WS_HSCROLL)) &&
+                       ((estyle(h) & WS_BORDER) || is_combo(E(e)->parent));
         SetWindowWord(h, 0, (WORD)e);
         {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
@@ -763,7 +855,8 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         /* two pixels wide in Notepad's multi-line control, one in the
            Run dialog's single-line one (3.1; UNVERIFIED which of style
            and font decides) */
-        CreateCaret(h, 0, E(e)->multi ? 2 : 1, line_height(h, e));
+        CreateCaret(h, 0, E(e)->multi ? 2 : caret_w(h, e),
+                    line_height(h, e) + (E(e)->framed ? 1 : 0));
         place_caret(h, e);
         ShowCaret(h);
         InvalidateRect(h, NULL, TRUE);
@@ -771,6 +864,7 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_KILLFOCUS:
         E(e)->focus = 0;
+        E(e)->forcesel = 0;
         DestroyCaret();
         InvalidateRect(h, NULL, TRUE);
         notify(h, e, EN_KILLFOCUS);
@@ -1072,8 +1166,22 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
            mouse_event input */
         return 0;
     case EM_GETRECT:
-        GetClientRect(h, (RECT __far *)lp);
+        if (E(e)->framed) {
+            RECT r;
+            fmt_rect(h, e, &r);
+            *(RECT __far *)lp = r;
+        } else
+            GetClientRect(h, (RECT __far *)lp);
         return 0;
+    case WM_NCCALCSIZE:
+        /* a framed edit's frame is in its client area (US34) */
+        if (E(e)->framed)
+            return 0;
+        break;
+    case WM_NCPAINT:
+        if (E(e)->framed)
+            return 0;
+        break;
     case WM_CUT:
     case WM_CLEAR:
         replace_sel(h, e, "");
