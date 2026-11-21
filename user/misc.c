@@ -829,11 +829,29 @@ WORD WINAPI U_WNETDISABLE(void)                                 /* 522 */
    Schulman; not called, it ends Windows). ---- */
 
 /* USER.275: no arguments; 1 (US11). UNVERIFIED that it is more than the
-   whole screen painted again */
+   whole screen painted again. The display driver calls it from its INT 2Fh
+   4002h handler in 386 Enhanced mode (the DDK's Display Driver Adaptation
+   Guide), which the VDD runs at any point of the System VM's code, USER's
+   own included: so it only notes the repaint and wakes a task; the next
+   GetMessage, PeekMessage or WaitMessage of any task invalidates the
+   screen (repaint_check) */
+volatile BYTE __far repaint_due;
+
 BOOL WINAPI U_REPAINTSCREEN(void)
 {
-    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    HQUEUE hq = hqInput ? hqInput : hqFirst;
+    repaint_due = 1;
+    if (hq && q_of(hq)->task)
+        K_POSTEVENT(q_of(hq)->task);
     return TRUE;
+}
+
+void repaint_check(void)
+{
+    if (!repaint_due)
+        return;
+    repaint_due = 0;
+    RedrawWindow(hwndDesktop, NULL, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 /* USER.323 GetMessage2(lpMsg, hwnd, min, max, wRemove, bWait): the back

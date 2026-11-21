@@ -551,6 +551,7 @@ static BOOL posted_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MS
 }
 
 void idle_cursor_check(HQUEUE hq);
+void repaint_check(void);
 void journal_poll(void);
 BOOL journal_active(void);
 
@@ -562,6 +563,7 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     if (!hq)
         return FALSE;
     for (;;) {
+        repaint_check();
         q = q_of(hq);
         q->changebits = 0;
         receive_sent(hq);
@@ -655,6 +657,7 @@ void WINAPI WaitMessage(void)
         /* the wake mask first, then the look: a bit set in between still
            posts the event WaitEvent takes (set_wakebit) */
         q_of(hq)->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
+        repaint_check();
         receive_sent(hq);
         q = q_of(hq);
         /* a timer by its wake bit: one a filtered GetMessage passed over

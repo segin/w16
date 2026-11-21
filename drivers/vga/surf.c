@@ -25,6 +25,10 @@ int surf_get(SURF *s, LPVOID dev)
     if (!dev)
         return 0;
     if (b->bmType != 0) {
+        /* the screen is not Windows' (Disable; a full-screen DOS VM in
+           386 Enhanced mode, vga.c scr_switch): nothing to draw on */
+        if (!enabled)
+            return 0;
         s->planes = 4;
         s->screen = 1;
         s->width = 640;

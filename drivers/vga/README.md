@@ -356,6 +356,23 @@ program in Standard mode) reads WIN.INI again (w16: only the first).
 4. All of w16 on w16's VGA.DRV.
 5. Performance.
 
+## 386 Enhanced mode: full-screen DOS boxes
+
+As the DDK's Display Driver Adaptation Guide ("Display hardware") asks:
+Enable hooks INT 2Fh (INT 21h 35h/25h) when `__WINFLAGS` has
+WF_ENHANCED and calls 4000h (Enable VM-Assisted Save/Restore: the driver
+keeps SaveScreenBitmap's bits in video memory beyond the screen), Disable
+calls 4007h and gives the vector back. 4001h (Notify Background Switch):
+the cursor off, saved bits discarded, and nothing drawn on the screen
+until 4002h (surf_get gives no screen surface; the cursor stays off).
+4002h (Notify Foreground Switch): the registers as the drawing code wants
+them, the cursor back, and USER's RepaintScreen (USER.275, by
+GetProcAddress), postponed while UserRepaintDisable(1) holds. 4006h:
+the registers reset. Without this Windows went on drawing over a
+full-screen DOS box under w16's WIN386, and under Microsoft's WIN386 the
+desktop where a DOS window had been was never repainted (boot-test case
+`win386tree`).
+
 ## Not verified yet (UNVERIFIED)
 
 - Styled polylines turning from slanted y segments to x ones (above).
@@ -367,4 +384,7 @@ program in Standard mode) reads WIN.INI again (w16: only the first).
   run on the build host; VG1's 4913 colours and 2553 more are identical).
 - That nothing but the driver reads OEMBIN 2 and STRINGS 1000/1010 (w16's
   hold a note).
-- 386 Enhanced mode (INT 2Fh 4000h-4007h, the grabber).
+- 386 Enhanced mode beyond full-screen switches: 4003h/4004h critical
+  sections around the hardware (Microsoft's driver makes dozens; w16's
+  makes none: the VDD's switches come from SHELL calls, never while the
+  driver draws); 4005h is not acted on (nothing kept).

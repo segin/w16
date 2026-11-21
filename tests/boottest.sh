@@ -85,6 +85,12 @@
 #              full-screen MS-DOS Prompt and Windows, against Microsoft's
 #   win386two  w16's WIN386: two MS-DOS Prompts, VER and EXIT in each
 #   win386exitbox  w16's WIN386: Exit Windows with a box open (refused), EXIT
+#   win386tree  the install tree alone (C:\W16) in 386 Enhanced mode, its own
+#              WIN386.EXE, VGA.DRV, VGA.3GR, with Microsoft's WINOA386.MOD
+#              and DOS-box fonts added (the user's set-up, 2026-11-20): the
+#              MS-DOS Prompt full screen, Alt+Enter to a window and back,
+#              EXIT (tests/scripts/input/dosbox386tree.txt), against the
+#              same tree under Microsoft's WIN386.EXE (DOSBox-X)
 #   win386w16dos  w16's install tree over Windows 3.1 with w16's WIN386.EXE
 #              (plain DOSBox, the user's set-up): the MS-DOS Prompt, VER and
 #              EXIT typed, as with Microsoft's (banner and cursor masked)
@@ -832,7 +838,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1438,6 +1444,47 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    win386tree)
+        # the user's report (2026-11-20): with w16's tree, WIN386, VGA.DRV
+        # and VGA.3GR, Microsoft's WINOA386.MOD added, a DOS box did not go
+        # full screen (from a window it became an icon, the display stayed
+        # Windows': SHELL function 6, win386/vmm/shell.c), and Windows went
+        # on drawing over a full-screen box (VGA.DRV ignored INT 2Fh
+        # 4001h/4002h: drivers/vga/vga.c scr_switch). 01-full and 03-full
+        # must be text screens (720x400) equal to Microsoft's WIN386's but
+        # for the banner and the cursor, 02-window and 04-back Windows
+        # screens equal to them (04-back: repainted, no trace of the box)
+        scr=$root/tests/scripts/input/dosbox386tree.txt
+        set -- -p 386 -T "$root/build/w16" -3 -c "WIN /3 /B"
+        for f in WINOA386.MOD EGA80WOA.FON EGA40WOA.FON CGA80WOA.FON CGA40WOA.FON; do
+            set -- "$@" -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/$f=W16/SYSTEM/$f"
+        done
+        refrun win386tree-ref win386tree env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" "$out/win386tree-ref" "$@" \
+            -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WIN386.EXE=W16/SYSTEM/WIN386.EXE"
+        DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+            "$out/win386tree-w16" "$@" > "$out/win386tree-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-full 02-window 03-full 04-back; do
+            a=$out/win386tree-w16/$s.png b=$out/win386tree-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            g=$(magick identify -format '%wx%h' "$a")
+            # masked: the banner's "w16"/"Windows" rows; the text screens'
+            # prompt row (the cursor's blink), the window's caret
+            case $s in
+            0?-full) [ "$g" = 720x400 ] || { r="$s: not a text screen ($g)"; break; }
+                     m="rectangle 72,48 655,79 rectangle 0,176 719,191" ;;
+            *) [ "$g" = 640x480 ] || { r="$s: not Windows ($g)"; break; }
+               m="rectangle 66,40 590,114 rectangle 56,150 80,175" ;;
+            esac
+            magick "$a" -fill black -draw "$m" "$out/win386tree-a.png"
+            magick "$b" -fill black -draw "$m" "$out/win386tree-b.png"
+            n=$(magick compare -metric AE "$out/win386tree-a.png" "$out/win386tree-b.png" "$out/win386tree-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ ($out/win386tree-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386tree: the tree's DOS box full screen, windowed, full screen, EXIT: as under Microsoft's WIN386"
+        else echo "FAIL win386tree: $r ($out/win386tree-w16)"; fails=$((fails + 1)); fi ;;
     win386w16dos)
         # the MS-DOS Prompt with w16's install tree (build/w16, every
         # program, driver and library but the INI files and groups) over

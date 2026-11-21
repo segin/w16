@@ -235,6 +235,100 @@ _irq_restore:
         pop bp
         retf
 
+; ---- 386 Enhanced mode: the INT 2Fh hook (vga.c scr_switch; the DDK's
+; Display Driver Adaptation Guide: hooked with INT 21h 35h/25h when GDI
+; calls Enable, given back at Disable). The driver keeps bitmaps in the
+; video memory beyond the screen (SaveScreenBitmap), so it calls Enable
+; VM-Assisted Save/Restore (4000h) after hooking and 4007h before letting
+; go, as the DDK asks of such drivers: the VDD then leaves the video
+; memory to the driver, which repaints after a switch back. 4001h, 4002h
+; and 4006h (Restore Video Register State) go to scr_switch, then every
+; call goes on to the handler that was there before.
+extern _scr_switch
+segment _DATA
+old2f   dd 0
+hooked  db 0
+segment ENTRY_TEXT
+
+int2f_hook:
+        cmp ax, 4001h
+        je .ours
+        cmp ax, 4002h
+        je .ours
+        cmp ax, 4006h
+        jne .chain
+.ours:
+        push ds
+        push es
+        pusha
+        mov bx, DGROUP
+        mov ds, bx
+        push ax
+        call far _scr_switch
+        add sp, 2
+        popa
+        pop es
+        pop ds
+.chain:
+        sub sp, 4                       ; the old handler's address goes here
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [old2f wrt DGROUP]
+        mov [bp + 2], ax
+        mov ax, [old2f + 2 wrt DGROUP]
+        mov [bp + 4], ax
+        pop ax
+        pop ds
+        pop bp
+        retf                            ; to the old handler, the IRET frame as it came
+
+; void __cdecl far hook2f(void), unhook2f(void)
+global _hook2f, _unhook2f
+_hook2f:
+        cmp byte [hooked wrt DGROUP], 0
+        jne .done
+        push es
+        push bx
+        push dx
+        mov ax, 352Fh
+        int 21h
+        mov [old2f wrt DGROUP], bx
+        mov [old2f + 2 wrt DGROUP], es
+        push ds
+        mov ax, cs
+        mov ds, ax
+        mov dx, int2f_hook
+        mov ax, 252Fh
+        int 21h
+        pop ds
+        mov byte [hooked wrt DGROUP], 1
+        mov ax, 4000h                   ; Enable VM-Assisted Save/Restore
+        int 2Fh
+        pop dx
+        pop bx
+        pop es
+.done:
+        retf
+_unhook2f:
+        cmp byte [hooked wrt DGROUP], 0
+        je .done
+        mov ax, 4007h                   ; Disable VM-Assisted Save/Restore
+        int 2Fh
+        push dx
+        push ds
+        lds dx, [old2f wrt DGROUP]
+        mov ax, 252Fh
+        int 21h
+        pop ds
+        pop dx
+        mov byte [hooked wrt DGROUP], 0
+.done:
+        retf
+
 ; the exports whose interface is not documented and that nothing was seen
 ; to call (VGREC): DO_POLYLINES (90), DO_SCANLINES (91), and the two
 ; ordinal-only entries 501 and 502. They do nothing and return 0.

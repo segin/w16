@@ -41,6 +41,7 @@ typedef int (__far __pascal *FARPROC)();
 #define HIWORD(l) ((WORD)((DWORD)(l) >> 16))
 #define SELECTOROF(p) ((WORD)((DWORD)(p) >> 16))
 #define OFFSETOF(p) ((WORD)(DWORD)(p))
+#define WF_ENHANCED 0x0020
 #define MK_FP(s, o) ((void __far *)(((DWORD)(WORD)(s) << 16) | (WORD)(o)))
 #define GetRValue(c) ((BYTE)(c))
 #define GetGValue(c) ((BYTE)((WORD)(c) >> 8))
@@ -311,6 +312,13 @@ void cursor_decay(int ticks);
 int __far __pascal GetProfileInt(LPCSTR app, LPCSTR key, int def);
 int __far __pascal GetPrivateProfileInt(LPCSTR app, LPCSTR key, int def, LPCSTR file);
 BOOL __far __pascal WriteProfileString(LPCSTR app, LPCSTR key, LPCSTR value);
+WORD __far __pascal GetModuleHandle(LPCSTR name);
+FARPROC __far __pascal GetProcAddress(WORD hModule, LPCSTR name);
+
+/* 386 Enhanced mode's screen switches (vga.c, entry.asm) */
+void __cdecl __far scr_switch(WORD ax);
+void __cdecl __far hook2f(void);
+void __cdecl __far unhook2f(void);
 
 /* save screen (misc.c) */
 void save_discard(void);

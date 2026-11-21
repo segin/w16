@@ -150,7 +150,7 @@ static void notify_sys(struct vm *v, void *arg)
     (void)v;
     memset(&r, 0, sizeof(r));
     r.eax = (u32)arg;
-    trace("VDD: INT 2Fh %x in the System VM\n", (u32)arg);
+    trace("VDD: INT 2Fh %x in the System VM (%x:%x)\n", (u32)arg, sysvm.pmvec_sel[0x2F], sysvm.pmvec_off[0x2F]);
     dpmi_pm_int(0x2F, &r);
 }
 

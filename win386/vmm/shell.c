@@ -62,6 +62,7 @@ struct shvm {
     struct vm *vm;
     u32 block;                          /* WINOA386's block (function 3), linear */
     u32 flags;                          /* function 6 */
+    u32 flags2;                         /* function 6 with CX FFFFh */
     u32 ended_posted;
     int hk_pending;                     /* a hot key's event not acted on (function 5) */
     u32 hwnd;                           /* function 15h */
@@ -309,6 +310,7 @@ static void create(struct cregs *r)
     s->vm = v;
     s->block = (u32)b;
     s->flags = 0;
+    s->flags2 = 0;
     s->ended_posted = 0;
     s->hwnd = 0;
     s->cb_sel = next_sel;
@@ -434,6 +436,13 @@ void shell_api(struct cregs *r)
         trace("SHELL: event procedure %x:%x\n", next_sel, next_off);
         return;
     case 0x03:
+        if (dpmi_verbose) {
+            u8 *b = (u8 *)pm_lin(r->es, r->edi);
+            u32 i;
+            trace("SHELL: 3's block");
+            for (i = 0; i < 0x50; i += 4) trace(" %x", *(u32 *)(b + i));
+            trace("\n");
+        }
         create(r);
         return;
     case 0x05:                          /* the focus */
@@ -442,10 +451,25 @@ void shell_api(struct cregs *r)
         set_focus(v, r->edi);
         r->eax = 0;
         return;
-    case 0x06:                          /* the VM's flags: EAX bits, ECX mask */
+    case 0x06:                          /* the VM's flags */
+        /* WINOA386 calls it twice at each change, the second time with
+         * CX FFFFh. Observed (VXS.386 under Windows 3.1 and w16's trace,
+         * Microsoft's WINOA386): to a window (AX 1, CX 07B7h), (AX 1, CX
+         * FFFFh); back to full screen with DOSPRMPT.PIF (AX 0, CX 1), (AX
+         * 10h, CX FFFFh), and for COMMAND.COM without a PIF (AX 0, CX 0),
+         * (AX 1, CX FFFFh), which Windows 3.1's SHELL also took for full
+         * screen. So the first call's AX is the flags (bit 0 windowed);
+         * the CX FFFFh call is something else, kept aside (UNVERIFIED:
+         * what CX and that second word mean; ECX's high word is left
+         * over). w16 read (AX & CX) as the bits to set: COMMAND.COM's
+         * window never went back to full screen (it became an icon) */
         if ((s = sh_of(vm_of(r->ebx))) != NULL) {
             u32 old = s->flags;
-            s->flags = (s->flags & ~CX(r)) | (AX(r) & CX(r));
+            if (CX(r) == 0xFFFF) {
+                s->flags2 = AX(r);
+                return;
+            }
+            s->flags = AX(r);
             if ((old ^ s->flags) & SHELL_WINDOWED)
                 vdd_window(s->vm, (s->flags & SHELL_WINDOWED) != 0);
         }

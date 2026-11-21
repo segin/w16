@@ -45,6 +45,8 @@ GDIINFO gdiinfo = {
 
 BYTE enabled;
 BYTE repaint_off;
+static BYTE background;                 /* 386 Enhanced mode: a DOS VM has the screen */
+static BYTE repaint_due;                /* RepaintScreen postponed (UserRepaintDisable) */
 static BYTE first_enable = 1;
 static void trail_boot(void);          /* mouse trails: below */
 static BYTE bios_rows;                  /* 0040:0084 when Windows started */
@@ -127,7 +129,10 @@ WORD EXPORT Enable(LPVOID lpDevice, WORD style, LPCSTR type, LPCSTR file, LPVOID
     }
     hw_enable();
     enabled = 1;
+    background = 0;
     cursor_init();
+    if (winflags & WF_ENHANCED)
+        hook2f();
     return 1;
 }
 
@@ -145,9 +150,11 @@ static void hw_disable(void)
 WORD EXPORT Disable(LPVOID lpDevice)
 {
     (void)lpDevice;
+    unhook2f();
     cursor_off();
     save_discard();
     enabled = 0;
+    background = 0;
     hw_disable();
     return 1;
 }
@@ -382,10 +389,65 @@ WORD EXPORT CreateBitmap(void)
     return 0;
 }
 
+/* ---- 386 Enhanced mode's screen switches (the DDK's Display Driver
+   Adaptation Guide, "Display hardware": the driver hooks INT 2Fh when GDI
+   calls Enable; Notify Background Switch (4001h) comes before a
+   full-screen DOS VM takes the screen, Notify Foreground Switch (4002h)
+   when Windows has it back, and the driver then has USER repaint the
+   whole screen with RepaintScreen (USER.275), unless USER has postponed
+   that with UserRepaintDisable). While in the background nothing is drawn
+   on the screen (surf_get gives no screen surface, the cursor is off):
+   the DOS VM's screen is on the VGA, and Windows' is drawn again from
+   nothing (the driver called 4000h: entry.asm). ---- */
+static void repaint(void)
+{
+    static FARPROC rs;
+    repaint_due = 0;
+    if (!rs) {
+        WORD h = GetModuleHandle("USER");
+        if (h)
+            rs = GetProcAddress(h, (LPCSTR)MK_FP(0, 275));
+    }
+    if (rs)
+        rs();
+}
+
+/* the INT 2Fh hook (entry.asm), AX the function; DS ours, any stack */
+void __cdecl __far scr_switch(WORD ax)
+{
+    if (ax == 0x4001) {
+        if (!enabled)
+            return;
+        cursor_off();
+        save_discard();
+        enabled = 0;
+        background = 1;
+    } else if (ax == 0x4002) {
+        /* also without a 4001h before it (the DDK: after errors) */
+        if (!enabled && !background)
+            return;
+        background = 0;
+        enabled = 1;
+        scr_reset();
+        cursor_init();
+        if (repaint_off)
+            repaint_due = 1;
+        else
+            repaint();
+    } else if (ax == 0x4006 && enabled) {
+        /* the VDD used the registers (4005h, nothing kept: every
+           drawing operation sets what it needs): as the drawing code
+           expects them */
+        scr_reset();
+    }
+}
+
 /* UserRepaintDisable(BOOL): USER's (GetProcAddress ordinal 500; VGREC:
    one word popped, called with 1 then 0 around ...). Recorded only. */
 WORD EXPORT UserRepaintDisable(WORD disable)
 {
     repaint_off = (BYTE)disable;
+    if (!disable && repaint_due)
+        repaint();
     return 0;
 }
