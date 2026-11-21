@@ -48,8 +48,22 @@
 #  - session 2: WIN /3 C:\W32T.EXE, the test program tests/win32s/w32t.c
 #    (built here with OpenWatcom's wcc386 and wlink, as a PE for
 #    Win32): it writes C:\W32T.LOG and shows a message box, which a key
-#    closes; the log must say it ran. W32T.EXE and its log are removed
-#    from OUTDIR/c afterwards, so the drive holds only Setup's work.
+#    closes; the log must say it ran. Afterwards OUTDIR/c goes back to
+#    what Setup left (install.log says what the test session changed).
+#
+# What Setup installs (install.log has the full lists), on both: in
+# WINDOWS\SYSTEM W32SYS.DLL, WIN32S16.DLL, WINMM16.DLL, WIN32S.INI
+# ([Win32s] Setup=1, Version=1.30.172.0; [OLE] Version=2.3.130.168;
+# [Nls] AnsiCP=1252; [Freecell]), WINHLP32.EXE/.HLP/.CNT, WINDOWS.HLP
+# and OLE 2 (COMPOBJ, STORAGE, OLE2*.DLL, TYPELIB, STDOLE.TLB, OLE2.REG,
+# merged into REG.DAT); in WINDOWS\SYSTEM\WIN32S 64 files (W32S.386,
+# W32SKRNL.DLL, W32SCOMB.DLL, WIN32S.EXE, the Win32 DLLs and NLS
+# tables); C:\WIN32APP\FREECELL (FREECELL.EXE, CARDS.DLL, FREECELL.HLP)
+# and WINDOWS\WIN32APP.GRP with its PROGMAN.INI GroupN= and Order= entry;
+# in SYSTEM.INI [boot] drivers=mmsystem.dll winmm16.dll and [386Enh]
+# device=C:\WINDOWS\SYSTEM\WIN32S\W32S.386 (the old one as SYSTEM.OLD).
+# On 3.1 only, a new OLECLI.DLL (3.1's kept as OLECLI.W31). WIN.INI is
+# not changed.
 #
 # Steps (WIN32SSETUP_STEPS; blank and ';' lines ignored):
 #   session N CMD   start DOSBox-X session N, whose autoexec runs CMD
@@ -96,11 +110,10 @@ if [ "${1:-}" = --run ]; then
             { sed '/^@CMD@$/,$d' "$out/dosbox.conf"; printf '%s\nexit\n' "$*"; } > "$out/session$n.conf"
             k=0
             # (DOSBox-X now and then ends at once with "Can't init SDL":
-            # started again, as tests/dropin.sh does, at most twice; its
-            # standard input is not the steps file, which it would read)
+            # started again, as tests/dropin.sh does, at most twice)
             while :; do
                 SDL_AUDIODRIVER=dummy timeout 1800 dosbox-x -nogui -fastlaunch \
-                    -conf "$out/session$n.conf" < /dev/null > "$out/emu$n.log" 2>&1 &
+                    -conf "$out/session$n.conf" > "$out/emu$n.log" 2>&1 &
                 p=$!
                 sleep 5
                 if ! kill -0 "$p" 2>/dev/null && grep -q "Can't init SDL" "$out/emu$n.log" && [ $k -lt 2 ]; then
@@ -113,11 +126,11 @@ if [ "${1:-}" = --run ]; then
         key)
             w=$(win)
             xdotool windowactivate --sync "$w" 2>/dev/null || xdotool windowfocus "$w" 2>/dev/null || true
-            xdotool key --window "$w" --delay 150 "$@" ;;
+            xdotool key --window "$w" --delay 150 "$@" || log "  (xdotool failed: the window gone?)" ;;
         type)
             w=$(win)
             xdotool windowactivate --sync "$w" 2>/dev/null || xdotool windowfocus "$w" 2>/dev/null || true
-            xdotool type --window "$w" --delay 150 "$*" ;;
+            xdotool type --window "$w" --delay 150 "$*" || log "  (xdotool failed)" ;;
         settle)
             t0=$(date +%s) last= since=$t0
             while [ $(($(date +%s) - t0)) -lt "$1" ]; do
@@ -256,7 +269,8 @@ key Return
 settle 120 8
 shot 8-freecell
 key Return
-settle 120 8
+; (the path box has a blinking caret: no settle)
+sleep 15
 shot 9-freecellpath
 key Return
 sleep 5
@@ -277,7 +291,6 @@ settle 30 3
 shot 13-exit
 key Return
 waitexit 120
-shot 14-after
 EOF
 fi
 "$root/tests/xvfb.sh" "$0" --run "$out" "$steps" > "$out/run.out" 2>&1 || true
@@ -340,13 +353,15 @@ EOF
 } >> "$out/install.log"
 ok=0
 grep -q '^W32T box=1' "$c/W32T.LOG" 2>/dev/null && ok=1
-rm -f "$c/W32T.EXE" "$c/W32T.LOG" "$c/WINDOWS/WIN386.SWP" "$out/fd.img"
-# (what the test session itself left, if anything: kept, and said)
-diff -rq "$out/setup" "$c" > "$out/session2.diff" 2>&1 || true
+# the drive goes back to what Setup left: the test session's own changes
+# (Program Manager, started minimized there, saves that in PROGMAN.INI)
+# are said and dropped
+rm -f "$c/WINDOWS/WIN386.SWP"
 {
-    echo "== left by the test session (kept)"
-    sed "s|$out/||g" "$out/session2.diff"
+    echo "== changed by the test session (dropped: the drive is Setup's)"
+    diff -rq "$out/setup" "$c" 2>&1 | sed "s|$out/||g"
 } >> "$out/install.log"
-rm -rf "$out/before" "$out/setup" "$out/session2.diff"
+rm -rf "$c" "$out/before" "$out/fd.img"
+mv "$out/setup" "$c"
 [ $ok = 1 ] || { echo "win32ssetup: the 32-bit test program did not run ($out/install.log, $out/shot-2*.png)" >&2; exit 1; }
 echo "win32ssetup: $out/c ($out/install.log)"

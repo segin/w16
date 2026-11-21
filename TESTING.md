@@ -68,7 +68,8 @@ your own, and `.tools/` is git-ignored so they are never committed.
   program (`tests/win32s/w32t.c`, built with OpenWatcom's `wcc386`) and
   fails unless it ran. `OUTDIR/install.log` lists what Setup installed and
   changed and the test program's output; `OUTDIR/shot-*.png` show each
-  step. The script's header says what Setup asks and what it installs.
+  step (the project's copies keep them beside `cdrive`, in `setup/`).
+  The script's header says what Setup asks and what it installs.
 - Optional: `.tools/docs/` (reference books as text, used by the
   documentation, not by tests).
 
