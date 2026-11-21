@@ -390,6 +390,7 @@ void  cmd_char(WORD id);
 void  cmd_undo(void);
 int   hf_mode(void);
 HWND  hf_dialog(void);
+void  hf_tabs(const PAPX *t);          /* tabs set in the head's view, for the body */
 BOOL  parse_measure(const char *s, long *tw, BOOL allowNeg);
 void  fmt_measure(char *s, long tw);
 void  cmd_print(void);

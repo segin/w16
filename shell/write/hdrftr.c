@@ -26,6 +26,14 @@ static int mode;                        /* 0, 1 header, 2 footer */
 static DWORD headFirst, headLim;        /* its paragraphs in the document */
 static BOOL headExisted;
 static HWND hfDlg;
+static PAPX hfTabs;                     /* tabs the ruler set in the view */
+static BOOL hfTabsSet;
+
+void hf_tabs(const PAPX *t)
+{
+    hfTabs = *t;
+    hfTabsSet = TRUE;
+}
 
 int hf_mode(void)
 {
@@ -170,6 +178,23 @@ static void hf_return(HWND d)
             gi = para_at(&g_doc, at + pf, &gf, &gl, &pa);
             para_set(&g_doc, gi, ga);
         }
+    }
+    /* tabs set on the ruler in the view belong to the whole document
+       (WR38) */
+    if (hfTabsSet) {
+        for (i = 0; i < g_doc.nparas; i++) {
+            DWORD pf, pl;
+            ATOM32 pa;
+            PAPX p;
+            para_get(&g_doc, i, &pf, &pl, &pa);
+            if (pf > g_doc.cpMac)
+                break;
+            pap_decode(&g_doc, pa, &p);
+            p.ntabs = hfTabs.ntabs;
+            m_cpy(p.tab, hfTabs.tab, sizeof p.tab);
+            para_set(&g_doc, i, pap_atom(&g_doc, &p));
+        }
+        hfTabsSet = FALSE;
     }
     /* the distance into the section */
     sep_decode(&g_doc, &s);
