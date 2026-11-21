@@ -1,0 +1,58 @@
+; WR34: printing a page range: three pages ("one", "two", "three",
+; Ctrl+Enter between) with a header "Head-" and the page number, on the
+; first page too, to Generic / Text Only on C:\WROUT.PRN (as WR29);
+; File > Print, Pages (Alt+G) From 2 To 3 (P1), OK; saved as C:\WR34.WRI
+; expand: TTY.DR_ WINDOWS/SYSTEM/TTY.DRV
+; expand: UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+; ini: windows:device=Generic / Text Only,TTY,C:\WROUT.PRN
+; ini: windows:Spooler=no
+; ini: devices:Generic / Text Only=TTY,C:\WROUT.PRN
+; ini: PrinterPorts:Generic / Text Only=TTY,C:\WROUT.PRN,15,45
+; ini: ports:C:\WROUT.PRN=
+; get: WROUT.PRN
+run WRITE.EXE
+wait 3000
+type one
+kdown 11
+kdown 0D
+kup 0D
+kup 11
+wait 300
+type two
+kdown 11
+kdown 0D
+kup 0D
+kup 11
+wait 300
+type three
+menu d
+char h
+wait 1500
+type Head-
+mclick 224 268
+wait 500
+mclick 384 240
+wait 300
+mclick 450 268
+wait 1500
+menu f
+char p
+wait 2000
+alt g
+wait 300
+key 09
+type 2
+key 09
+type 3
+wait 300
+snap C:\P1.BMP
+key 0D
+wait 6000
+menu f
+char a
+wait 1500
+type C:\WR34.WRI
+key 0D
+wait 2000
+close
+wait 1000
