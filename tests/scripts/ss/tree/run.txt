@@ -1,0 +1,38 @@
+; w16's install tree alone (tests/sstree.sh): USER starts the saver after
+; the time-out (WIN.INI set by sstree.sh: 15 s) and on SC_SCREENSAVE; a
+; key ends it; Control Panel's Desktop lists it, Test runs it, OK keeps
+; it chosen
+run NOTEPAD.EXE
+wait 3000
+kdown 10
+kup 10
+wait 12000
+dump
+wait 15000
+dump
+snap R1.BMP
+kdown 10
+kup 10
+wait 1500
+dump
+syscmd F140
+wait 2500
+dump
+kdown 10
+kup 10
+wait 1500
+dump
+run CONTROL.EXE DESKTOP
+wait 4000
+dump
+alt e
+wait 3000
+dump
+snap R2.BMP
+kdown 41
+kup 41
+wait 1500
+dump
+key 0D
+wait 2000
+dump

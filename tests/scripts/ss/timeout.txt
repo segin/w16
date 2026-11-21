@@ -1,0 +1,28 @@
+;! w16 USER.EXE WINDOWS/SYSTEM/USER.EXE
+;! ini WINDOWS/WIN.INI windows:ScreenSaveActive=1
+;! ini WINDOWS/WIN.INI windows:ScreenSaveTimeOut=15
+;! ini WINDOWS/SYSTEM.INI boot:SCRNSAVE.EXE=C:\WINDOWS\SSSTARS.SCR
+;! timeout 150
+; USER starts the saver: 15 s after the last key with Notepad active (the
+; idle check runs every 10 s, so 15-25 s); a key ends it; WM_SYSCOMMAND
+; SC_SCREENSAVE to the active window starts it at once
+run NOTEPAD.EXE
+wait 3000
+kdown 10
+kup 10
+wait 12000
+dump
+wait 15000
+dump
+snap R1.BMP
+kdown 10
+kup 10
+wait 1500
+dump
+syscmd F140
+wait 2500
+dump
+kdown 10
+kup 10
+wait 1500
+dump

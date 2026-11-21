@@ -1,0 +1,21 @@
+; The saver (/s): its window, frames, a key ends it; again, the mouse
+; moving ends it; a second /s while one runs does nothing
+run C:\WINDOWS\SSSTARS.SCR /s
+wait 1000
+dump
+wait 1500
+snap R1.BMP
+wait 1500
+snap R2.BMP
+run C:\WINDOWS\SSSTARS.SCR /s
+wait 1500
+dump
+kdown 41
+kup 41
+wait 1500
+dump
+run C:\WINDOWS\SSSTARS.SCR /s
+wait 3000
+mmove 330 250
+wait 1500
+dump

@@ -432,6 +432,14 @@
 #              per tests/scripts/dde/*.txt): TDDE's answers, the command
 #              blocks the ACKs return, the group files and PROGMAN.INI with
 #              w16's PROGMAN as with Microsoft's, on the reference install
+#   scrnsave   the screen savers (tests/ssscenarios.sh, a part per
+#              tests/scripts/ss/*.txt): w16's SSSTARS.SCR on the reference
+#              install against Microsoft's: the Setup and password dialogs,
+#              Control Panel's Desktop with it (w16's MAIN.CPL), the running
+#              saver (stars), USER starting it (w16's USER: time-out,
+#              SC_SCREENSAVE); the INI files identical; tree286, tree386:
+#              w16's install tree alone (tests/sstree.sh): USER starts the
+#              saver after the time-out and on SC_SCREENSAVE, Desktop's Test
 #   zipsetup   a third-party installer's raw DDE with Program Manager: the
 #              7-Zip 26.05 Windows 3.0/3.1x setup (copied in at test time
 #              from $W16_7ZSETUP, default ~/Downloads/7zsetw16.exe; skipped
@@ -830,7 +838,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3698,6 +3706,20 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         grep -q "^== $part: ok" "$out/ddescen-$part.txt" ||
             r="$part: $(grep -v '^==' "$out/ddescen-$part.txt" | head -3 | tr '\n' ' ') ($out/ddescen-$part)"
         partdone "$r" ;;
+    scrnsave)
+        # the screen savers (tests/ssscenarios.sh): one scenario a part;
+        # tree286, tree386: w16's install tree alone (tests/sstree.sh)
+        r=ok
+        case $part in
+        tree*)
+            "$root/tests/sstree.sh" "$out/scrnsave-$part" "${part#tree}" > "$out/scrnsave-$part.txt" 2>&1 ||
+                r="$part: $(grep -m1 'sstree:' "$out/scrnsave-$part.txt" || echo 'no result') ($out/scrnsave-$part)" ;;
+        *)
+            SS_OUT=$out/scrnsave "$root/tests/ssscenarios.sh" "$part" > "$out/scrnsave-$part.txt" 2>&1 || true
+            grep -q "^== $part: ok" "$out/scrnsave-$part.txt" ||
+                r="$part: $(grep -v '^==' "$out/scrnsave-$part.txt" | head -3 | tr '\n' ' ') ($out/scrnsave/$part)" ;;
+        esac
+        partdone "$r" ;;
     zipsetup)
         # A third-party installer that talks raw DDE to Program Manager:
         # 7-Zip 26.05's Windows 3.0/3.1x setup (the user's file, copied in
@@ -4985,6 +5007,7 @@ caseparts() {
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
+    scrnsave) for v in $(cd "$root/tests/scripts/ss" && ls *.txt | sed 's/\.txt$//') tree286 tree386; do printf '%s@%s ' "$1" "$v"; done ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
     w16write) echo "$1@ms $1@k286 $1@k386 $1@tree"; for v in $WRSCEN_BOOT; do printf '%s@%s ' "$1" "$v"; done ;;
     w16winfile) for v in $(cd "$root/tests/scripts/winfile" && ls WF*.txt | sed 's/\.txt$//' | tr A-Z a-z); do printf '%s@%s ' "$1" "$v"; done ;;

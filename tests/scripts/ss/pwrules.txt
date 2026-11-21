@@ -1,0 +1,59 @@
+; Change Password: New and Retype differing; a wrong old password; an
+; empty new one clears the password
+blinktime 65535
+run C:\WINDOWS\SSSTARS.SCR /c
+wait 3000
+clickid 68
+wait 300
+clickid 69
+wait 1200
+type abc
+key 09
+type abd
+wait 300
+snap C1.BMP
+clickid 1
+wait 1500
+snap C2.BMP
+dump
+key 0D
+wait 1500
+dump
+focus
+key 1B
+wait 1000
+clickid 69
+wait 1200
+type abc
+key 09
+type abc
+key 0D
+wait 1000
+clickid 69
+wait 1200
+snap C3.BMP
+type xyz
+key 09
+type def
+key 09
+type def
+clickid 1
+wait 1500
+snap C4.BMP
+dump
+key 0D
+wait 1500
+focus
+key 1B
+wait 1000
+clickid 69
+wait 1200
+type abc
+key 09
+key 09
+clickid 1
+wait 1500
+dump
+key 0D
+wait 1500
+dump
