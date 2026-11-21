@@ -1,0 +1,18 @@
+; REH2: the basic view: F1 in the main window; F1 and the Help button in Modify File Type (tests/rehelp.sh)
+run REGEDIT.EXE
+wait 3000
+mark 1
+key 70
+wait 1500
+mark 2
+cmd 1058
+wait 1500
+key 70
+wait 1500
+mark 3
+clickid 401
+wait 1500
+key 1B
+wait 1500
+close
+wait 2000

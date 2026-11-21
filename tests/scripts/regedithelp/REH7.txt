@@ -1,0 +1,31 @@
+; REH7: the advanced view's Help menu and F1 on the Search menu's items (tests/rehelp.sh)
+run REGEDIT.EXE /V
+wait 3000
+mark 1
+cmd 1792
+wait 1500
+mark 2
+cmd 1793
+wait 1500
+mark 3
+cmd 1794
+wait 1500
+mark 4
+menu s
+wait 300
+key 70
+wait 1500
+key 1B
+key 1B
+wait 1500
+mark 5
+menu f
+wait 300
+key 28
+key 70
+wait 1500
+key 1B
+key 1B
+wait 1500
+close
+wait 2000

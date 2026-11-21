@@ -1,0 +1,103 @@
+; RG05 (after probe RE5): basic view: Add File Type with Uses DDE and Print, then a new type
+; added; the same identifier again; an empty one; Copy and Delete of the
+; new type; Modify's Browse
+; get: COPY1.DAT
+run REGEDIT.EXE
+wait 3000
+cmd 1056
+wait 1500
+clickid 512
+wait 500
+snap C:\A1.BMP
+dump
+clickid 521
+wait 500
+snap C:\A2.BMP
+dump
+clickid 520
+clickid 512
+wait 300
+clickid 510
+type w16test
+key 09
+type W16 Test File
+clickid 531
+type notepad.exe %1
+wait 300
+snap C:\A3.BMP
+clickid 1
+wait 1500
+snap C:\A4.BMP
+dump
+focus
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+cmd 1056
+wait 1500
+clickid 510
+type W16TEST
+clickid 530
+type Again
+clickid 531
+type x.exe
+clickid 1
+wait 1500
+snap C:\A5.BMP
+dump
+key 0D
+wait 800
+snap C:\A6.BMP
+key 1B
+wait 800
+cmd 1056
+wait 1500
+clickid 1
+wait 1500
+snap C:\A7.BMP
+dump
+key 0D
+wait 800
+snap C:\A8.BMP
+dump
+key 1B
+wait 800
+cmd 1057
+wait 1500
+clickid 510
+type w16copy
+clickid 1
+wait 1500
+snap C:\A9.BMP
+dump
+cmd 1059
+wait 1500
+snap C:\AA.BMP
+dump
+clickid 6
+wait 1500
+snap C:\AB.BMP
+dump
+key 24
+wait 300
+key 28
+key 28
+key 28
+key 28
+key 28
+cmd 1058
+wait 1500
+clickid 513
+wait 2500
+snap C:\AC.BMP
+dump
+key 1B
+wait 800
+clickid 512
+wait 500
+snap C:\AD.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+snap C:\AE.BMP
+dump

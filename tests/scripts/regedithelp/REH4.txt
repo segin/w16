@@ -1,0 +1,33 @@
+; REH4: the basic view: F1 on items of the File and Edit menus (tests/rehelp.sh)
+run REGEDIT.EXE
+wait 3000
+mark 1
+menu f
+wait 300
+key 70
+wait 1500
+key 1B
+key 1B
+wait 1500
+mark 2
+menu e
+wait 300
+key 28
+key 70
+wait 1500
+key 1B
+key 1B
+wait 1500
+mark 3
+menu e
+wait 300
+key 28
+key 28
+key 28
+key 70
+wait 1500
+key 1B
+key 1B
+wait 1500
+close
+wait 2000

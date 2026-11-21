@@ -1,0 +1,26 @@
+; REH3: the basic view: the Help buttons of Add File Type and Copy File Type, and of Merge's Open box (tests/rehelp.sh)
+run REGEDIT.EXE
+wait 3000
+mark 1
+cmd 1056
+wait 1500
+clickid 401
+wait 1500
+key 1B
+wait 1500
+mark 2
+cmd 1057
+wait 1500
+clickid 401
+wait 1500
+key 1B
+wait 1500
+mark 3
+cmd 1040
+wait 2500
+clickid 40E
+wait 1500
+key 1B
+wait 1500
+close
+wait 2000

@@ -54,7 +54,7 @@ key 08
 key 08
 key 08
 key 08
-type PBrush\shell\print
+type \PBrush\shell\print
 key 0D
 wait 1500
 snap C:\I1.BMP

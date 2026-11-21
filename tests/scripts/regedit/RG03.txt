@@ -1,0 +1,57 @@
+; RG03 (after probe RE3): the basic view's dialogs, each opened on "Paintbrush Picture" and
+; cancelled: Modify File Type, Add File Type, Copy File Type, Delete File
+; Type, Merge Registration File, About
+; mask: 55,80,90,115
+; mask: 200,270,340,297
+run REGEDIT.EXE
+wait 3000
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 500
+snap C:\S0.BMP
+cmd 1058
+wait 1500
+snap C:\S1.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1056
+wait 1500
+snap C:\S2.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1057
+wait 1500
+snap C:\S3.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1059
+wait 1500
+snap C:\S4.BMP
+dump
+focus
+clickid 7
+wait 800
+cmd 1040
+wait 2500
+snap C:\S5.BMP
+dump
+key 1B
+wait 800
+cmd 1795
+wait 1500
+snap C:\S6.BMP
+dump
+key 1B
+wait 800
+snap C:\S7.BMP
+close
+wait 1000

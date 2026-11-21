@@ -1,0 +1,114 @@
+; RG09 (after probe RE9): basic view: what Modify writes for DDE and Print (on Paintbrush
+; Picture: DDE message, not-running message, application, topic for open;
+; then the Print action's own command); an identifier without a file
+; type; a file type without an identifier; a command missing; Copy File
+; Type of Sound; the About box
+; get: COPY1.DAT
+; mask: 55,80,90,115
+; mask: 200,270,340,297
+run REGEDIT.EXE
+wait 3000
+key 28
+key 28
+key 28
+key 28
+key 28
+cmd 1058
+wait 1500
+clickid 512
+wait 300
+clickid 532
+type [open("%1")]
+clickid 533
+type [run("%1")]
+clickid 534
+type PBRUSH
+clickid 535
+type system
+wait 300
+snap C:\D1.BMP
+clickid 521
+wait 500
+snap C:\D2.BMP
+dump
+clickid 531
+key 23
+type  extra
+clickid 520
+wait 500
+snap C:\D3.BMP
+dump
+clickid 1
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+cmd 1058
+wait 1500
+snap C:\D4.BMP
+dump
+clickid 521
+wait 500
+snap C:\D5.BMP
+dump
+key 1B
+wait 800
+cmd 1056
+wait 1500
+clickid 510
+type w16x
+clickid 1
+wait 1500
+snap C:\D6.BMP
+dump
+key 0D
+wait 800
+clickid 510
+key 23
+key 08
+key 08
+key 08
+key 08
+clickid 530
+type Only Type
+clickid 1
+wait 1500
+snap C:\D7.BMP
+dump
+key 0D
+wait 800
+clickid 510
+type w16y
+clickid 1
+wait 1500
+snap C:\D8.BMP
+dump
+key 0D
+wait 800
+key 1B
+wait 800
+key 24
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+cmd 1057
+wait 1500
+snap C:\D9.BMP
+dump
+clickid 510
+type w16snd
+clickid 1
+wait 1500
+snap C:\DA.BMP
+dump
+cmd 1795
+wait 1500
+snap C:\DB.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500

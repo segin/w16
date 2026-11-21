@@ -1,0 +1,12 @@
+# wlink directives for REGEDIT.EXE (objects and output come from the Makefile)
+format windows
+option quiet
+option start=start
+option stack=10k
+option heapsize=8k
+option description 'w16 Registration Info Editor'
+library windows.lib
+library shell.lib
+library commdlg.lib
+import _HREAD KERNEL.349
+import _HWRITE KERNEL.350

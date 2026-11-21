@@ -1,0 +1,14 @@
+; REH1: the basic view's Help menu: Contents, Search for Help On, How to Use Help (tests/rehelp.sh)
+run REGEDIT.EXE
+wait 3000
+mark 1
+cmd 1792
+wait 1500
+mark 2
+cmd 1793
+wait 1500
+mark 3
+cmd 1794
+wait 1500
+close
+wait 2000

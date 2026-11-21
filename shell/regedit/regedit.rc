@@ -1,0 +1,354 @@
+/*
+ * regedit.rc - w16 Registration Info Editor's resources (ARCHITECTURE.md
+ * 15.8). The menus, dialogs and texts reproduce Windows 3.1's REGEDIT as
+ * observed running (SNAP dumps, probes RE1-RE11; templates by
+ * tools/snapdlg.py from the dumps), never read from its file. The icon is
+ * w16's own (tools/mkregicon.py). New Style's resources (200 and up) are
+ * w16's own design.
+ */
+#include <windows.h>
+#include "regedit.h"
+
+IDI_REGEDIT ICON "regedit.ico"
+
+MENU_BASIC MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Merge Registration File...", IDM_MERGE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Add File Type...", IDM_ADD
+        MENUITEM "&Copy File Type...", IDM_COPY
+        MENUITEM "&Modify File Type...", IDM_MODIFY
+        MENUITEM "&Delete File Type", IDM_DELETE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents", IDM_HELPCONTENTS
+        MENUITEM "&Search for Help On...", IDM_HELPSEARCH
+        MENUITEM "&How to Use Help", IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Registration Editor...", IDM_ABOUT
+    END
+END
+
+MENU_ADVANCED MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Save Changes", IDM_SAVECHANGES
+        MENUITEM "&Restore To Last Save", IDM_RESTORE
+        MENUITEM SEPARATOR
+        MENUITEM "&Merge Registration File...", IDM_MERGE
+        MENUITEM "Save Registration &File...", IDM_SAVEFILE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Add Key...", IDM_ADD
+        MENUITEM "&Copy Key...", IDM_COPY
+        MENUITEM "&Delete Key...", IDM_DELETE
+    END
+    POPUP "&Search"
+    BEGIN
+        MENUITEM "&Find Key...", IDM_FIND
+        MENUITEM "Find &Next", IDM_FINDNEXT
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents", IDM_HELPCONTENTS
+        MENUITEM "&Search for Help On...", IDM_HELPSEARCH
+        MENUITEM "&How to Use Help", IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Registration Editor...", IDM_ABOUT
+    END
+END
+
+/* the views: child dialogs filling the frame (RE1, RE2: 280 x 156 and
+   280 x 208 pixels); the lists are placed at run time (basic.c,
+   advanced.c) */
+DLG_BASIC DIALOG 0, 0, 160, 96
+STYLE WS_CHILD | WS_VISIBLE
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Registered File Types:", -1, "Static", 0x0000 | 0x00020000L, 4, 4, 80, 10
+    CONTROL "", IDC_TYPES, "ListBox", 0x1003 | 0x00800000L | 0x00200000L | 0x00010000L, 0, 14, 160, 82
+END
+
+DLG_ADVANCED DIALOG 0, 0, 160, 128
+STYLE WS_CHILD | WS_VISIBLE
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_TREE, "ListBox", 0x0051 | 0x00800000L | 0x00200000L | 0x00010000L, 0, 25, 160, 100
+    CONTROL "Full Path:", -1, "Static", 0x0000 | 0x00020000L, 4, 2, 48, 8
+    CONTROL "", IDC_PATH, "Static", 0x0000 | 0x00020000L, 54, 2, 100, 8
+    CONTROL "Value:", -1, "Static", 0x0000 | 0x00020000L, 4, 14, 48, 8
+    CONTROL "", IDC_VALUE, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 54, 12, 100, 12
+END
+
+/* Modify File Type, Add File Type and Copy File Type (RE3; Modify's
+   Identifier is a static, made so at run time) */
+DLG_FILETYPE DIALOG 14, 16, 212, 172
+STYLE 0x14C800C0L
+CAPTION "Add File Type"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Identifier:", -1, "Static", 0x0000 | 0x00020000L, 4, 4, 40, 10
+    CONTROL "", IDC_IDENT, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 48, 2, 92, 12
+    CONTROL "&File Type:", -1, "Static", 0x0000 | 0x00020000L, 4, 20, 40, 10
+    CONTROL "", IDC_FILETYPE, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 48, 18, 92, 12
+    CONTROL "Action", -1, "Button", 0x0007, 4, 30, 136, 24
+    CONTROL "&Open", IDC_OPEN, "Button", 0x0004 | 0x00010000L, 20, 42, 52, 10
+    CONTROL "&Print", IDC_PRINT, "Button", 0x0004, 76, 42, 52, 10
+    CONTROL "&Command:", -1, "Static", 0x0000 | 0x00020000L, 4, 60, 40, 10
+    CONTROL "", IDC_COMMAND, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 48, 58, 92, 12
+    CONTROL "&Uses DDE", IDC_USESDDE, "Button", 0x0002 | 0x00010000L, 4, 76, 68, 10
+    CONTROL "DDE", IDC_DDEGROUP, "Button", 0x0007, 4, 96, 204, 72
+    CONTROL "&DDE Message:", -1, "Static", 0x0000 | 0x00020000L, 8, 108, 108, 10
+    CONTROL "", IDC_DDEMSG, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 8, 118, 108, 12
+    CONTROL "(optional)\nDDE Application &Not Running:", -1, "Static", 0x0000 | 0x08020000L, 8, 134, 108, 18
+    CONTROL "", IDC_DDENOTRUN, "Edit", 0x0080 | 0x00800000L | 0x08010000L, 8, 152, 108, 12
+    CONTROL "&Application:", -1, "Static", 0x0000 | 0x00020000L, 132, 108, 56, 10
+    CONTROL "", IDC_DDEAPP, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 132, 118, 56, 12
+    CONTROL "&Topic:", -1, "Static", 0x0000 | 0x00020000L, 132, 142, 56, 10
+    CONTROL "", IDC_DDETOPIC, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 132, 152, 56, 12
+    CONTROL "OK", IDOK, "Button", 0x0001 | 0x00010000L, 160, 6, 48, 12
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 160, 20, 48, 12
+    CONTROL "&Browse...", IDC_BROWSE, "Button", 0x0000 | 0x00010000L, 160, 38, 48, 12
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 160, 52, 48, 12
+END
+
+/* Modify File Type: the Identifier a static (RE3) */
+DLG_MODIFY DIALOG 14, 16, 212, 172
+STYLE 0x14C800C0L
+CAPTION "Modify File Type"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Identifier:", -1, "Static", 0x0000 | 0x00020000L, 4, 4, 40, 10
+    CONTROL "", IDC_IDENT, "Static", 0x0000 | 0x00020000L, 48, 4, 92, 10
+    CONTROL "&File Type:", -1, "Static", 0x0000 | 0x00020000L, 4, 20, 40, 10
+    CONTROL "", IDC_FILETYPE, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 48, 18, 92, 12
+    CONTROL "Action", -1, "Button", 0x0007, 4, 30, 136, 24
+    CONTROL "&Open", IDC_OPEN, "Button", 0x0004 | 0x00010000L, 20, 42, 52, 10
+    CONTROL "&Print", IDC_PRINT, "Button", 0x0004, 76, 42, 52, 10
+    CONTROL "&Command:", -1, "Static", 0x0000 | 0x00020000L, 4, 60, 40, 10
+    CONTROL "", IDC_COMMAND, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 48, 58, 92, 12
+    CONTROL "&Uses DDE", IDC_USESDDE, "Button", 0x0002 | 0x00010000L, 4, 76, 68, 10
+    CONTROL "DDE", IDC_DDEGROUP, "Button", 0x0007, 4, 96, 204, 72
+    CONTROL "&DDE Message:", -1, "Static", 0x0000 | 0x00020000L, 8, 108, 108, 10
+    CONTROL "", IDC_DDEMSG, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 8, 118, 108, 12
+    CONTROL "(optional)\nDDE Application &Not Running:", -1, "Static", 0x0000 | 0x08020000L, 8, 134, 108, 18
+    CONTROL "", IDC_DDENOTRUN, "Edit", 0x0080 | 0x00800000L | 0x08010000L, 8, 152, 108, 12
+    CONTROL "&Application:", -1, "Static", 0x0000 | 0x00020000L, 132, 108, 56, 10
+    CONTROL "", IDC_DDEAPP, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 132, 118, 56, 12
+    CONTROL "&Topic:", -1, "Static", 0x0000 | 0x00020000L, 132, 142, 56, 10
+    CONTROL "", IDC_DDETOPIC, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 132, 152, 56, 12
+    CONTROL "OK", IDOK, "Button", 0x0001 | 0x00010000L, 160, 6, 48, 12
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 160, 20, 48, 12
+    CONTROL "&Browse...", IDC_BROWSE, "Button", 0x0000 | 0x00010000L, 160, 38, 48, 12
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 160, 52, 48, 12
+END
+
+/* the advanced view's dialogs (RE4) */
+DLG_ADDKEY DIALOG 28, 59, 218, 68
+STYLE 0x94C800C0L
+CAPTION "Add Key"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Path:", -1, "Static", 0x0000 | 0x00020000L, 8, 9, 18, 11
+    CONTROL "", IDC_KEYPATH, "Static", 0x0000 | 0x00020000L, 38, 9, 128, 11
+    CONTROL "&Key:", -1, "Static", 0x0000 | 0x00020000L, 8, 30, 26, 11
+    CONTROL "", IDC_KEY, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 38, 27, 128, 14
+    CONTROL "&Value:", -1, "Static", 0x0000 | 0x00020000L, 8, 48, 26, 11
+    CONTROL "", IDC_KEYVALUE, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 38, 46, 128, 14
+    CONTROL "OK", IDOK, "Button", 0x0001 | 0x00010000L, 177, 4, 38, 17
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 177, 23, 38, 17
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 177, 46, 38, 17
+END
+
+DLG_COPYKEY DIALOG 28, 59, 217, 65
+STYLE 0x94C800C0L
+CAPTION "Copy Key"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&To:", -1, "Static", 0x0000 | 0x00020000L, 8, 35, 26, 11
+    CONTROL "", IDC_KEYVALUE, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 38, 35, 128, 14
+    CONTROL "OK", IDOK, "Button", 0x0001 | 0x00010000L, 177, 4, 38, 17
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 177, 23, 38, 17
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 177, 46, 38, 17
+    CONTROL "&From:", -1, "Static", 0x0000 | 0x00020000L, 8, 19, 26, 11
+    CONTROL "", IDC_KEY, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 38, 14, 128, 14
+END
+
+DLG_DELKEY DIALOG 28, 59, 218, 67
+STYLE 0x94C800C0L
+CAPTION "Delete Key"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Key:", -1, "Static", 0x0000 | 0x00020000L, 8, 38, 26, 11
+    CONTROL "", IDC_KEY, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 38, 36, 128, 14
+    CONTROL "Deleting a Key removes all subkeys and their values.", -1, "Static", 0x0000 | 0x00020000L, 8, 9, 156, 22
+    CONTROL "OK", IDOK, "Button", 0x0001 | 0x00010000L, 177, 4, 38, 17
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 177, 23, 38, 17
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 177, 46, 38, 17
+END
+
+DLG_FINDKEY DIALOG 28, 59, 209, 67
+STYLE 0x94C800C0L
+CAPTION "Find Key"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Fi&nd What:", -1, "Static", 0x0000 | 0x00020000L, 8, 20, 37, 11
+    CONTROL "", IDC_KEY, "Edit", 0x0080 | 0x00800000L | 0x00010000L, 52, 15, 105, 14
+    CONTROL "&Find Next", IDOK, "Button", 0x0001 | 0x00010000L, 166, 3, 41, 17
+    CONTROL "Cancel", IDCANCEL, "Button", 0x0000 | 0x00010000L, 166, 23, 41, 17
+    CONTROL "&Help", IDC_HELP, "Button", 0x0000 | 0x00010000L, 166, 46, 41, 17
+END
+
+/* the Delete key deletes in the advanced view (RE11) */
+ACC_ADVANCED ACCELERATORS
+BEGIN
+    VK_DELETE, IDM_DELETE, VIRTKEY
+END
+
+STRINGTABLE
+BEGIN
+    IDS_TITLE,       "Registration Info Editor"
+    IDS_CLASS,       "Registration Editor"
+    IDS_DELCONFIRM,  "Are you sure you want to delete ""%s"" File Type?"
+    IDS_IDEXISTS,    "The identifier %s already exists.\nType a unique name in the Identifier box."
+    IDS_NOFILETYPE,  "There is no File Type specified.\n\nType a description of the file type in the File Type box."
+    /* sic: 3.1's text ends "backslashes (." (RE9) */
+    IDS_NOIDENT,     "The specified identifier is not valid.\n\nSpecify a valid identifier. The identifier must be unique and can contain up to 63 characters. It cannot contain any spaces, extended or control characters, or backslashes (."
+    IDS_MERGED,      "Information in %s has been successfully registered in the registration database."
+    IDS_NOTREG,      "This is not a registration file.\nSelect a registration file (.REG), and then try again."
+    IDS_CANTOPEN,    "Cannot open file: %s.\nMake sure the specified path and filename are correct."
+    IDS_LOSECHANGES, "Are you sure you want to lose all changes?"
+    IDS_SAVEASK,     "Changes have been made to the registration database. Do you want to save them?"
+    IDS_NOKEY,       "The key '%s' does not exist."
+    IDS_COPY,        "Copy File Type"
+    IDS_MERGETITLE,  "Merge Registration File"
+    IDS_SAVETITLE,   "Save Registration File"
+    IDS_REGFILTER,   "Registration Files (*.reg)|*.reg|"
+    IDS_BROWSETITLE, "Browse"
+    IDS_PROGFILTER,  "Programs|*.com;*.exe;*.bat;*.pif|"
+    IDS_HELPFILE,    "regedit.hlp"
+    IDS_HELPFILEV,   "regeditv.hlp"
+    IDS_ABOUT,       "Registration Editor"
+    IDS_ABOUTOTHER,  "An editor for registration information for applications."
+    /* New Style (w16's own) */
+    IDS_NS_TITLE,    "Registry Editor"
+    IDS_NS_COMPUTER, "My Computer"
+    IDS_NS_ROOT,     "HKEY_CLASSES_ROOT"
+    IDS_NS_DEFAULT,  "(Default)"
+    IDS_NS_NOTSET,   "(value not set)"
+    IDS_NS_NAME,     "Name"
+    IDS_NS_DATA,     "Data"
+    IDS_NS_DELKEY,   "Are you sure you want to delete this key and all of its subkeys?"
+    IDS_NS_DELVAL,   "Are you sure you want to delete this value?"
+    IDS_NS_DELKEYT,  "Confirm Key Delete"
+    IDS_NS_DELVALT,  "Confirm Value Delete"
+    IDS_NS_NEWKEY,   "New Key #%d"
+    IDS_NS_RENEXISTS, "Registry Editor cannot rename %s. The specified key name already exists. Type another name and try again."
+    IDS_NS_RENEMPTY, "Registry Editor cannot rename %s. The specified key name is empty. Type another name and try again."
+    IDS_NS_RENBAD,   "Registry Editor cannot rename %s. A key name can contain up to 63 characters and cannot contain spaces, backslashes, extended or control characters."
+    IDS_NS_FINDDONE, "Finished searching the registry."
+    IDS_NS_IMPORTED, "Information in %s has been successfully entered into the registry."
+    IDS_NS_EXPORTED, "The registry has been exported to %s."
+    IDS_NS_IMPTITLE, "Import Registry File"
+    IDS_NS_EXPTITLE, "Export Registry File"
+    IDS_NS_ABOUT,    "Registry Editor"
+    IDS_NS_MENUITEM, "&New Style"
+END
+
+/* ---- New Style ---- */
+MENU_NEWSTYLE MENU
+BEGIN
+    POPUP "&Registry"
+    BEGIN
+        MENUITEM "&Import Registry File...", IDM_NS_IMPORT
+        MENUITEM "&Export Registry File...", IDM_NS_EXPORT
+        MENUITEM SEPARATOR
+        MENUITEM "&Connect Network Registry...", IDM_NS_CONNECT, GRAYED
+        MENUITEM "&Disconnect Network Registry...", IDM_NS_DISCONN, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P", IDM_NS_PRINT, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Modify", IDM_NS_MODIFY
+        MENUITEM SEPARATOR
+        POPUP "&New"
+        BEGIN
+            MENUITEM "&Key", IDM_NS_NEWKEY
+            MENUITEM SEPARATOR
+            MENUITEM "&String Value", IDM_NS_NEWSTR
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "&Delete\tDel", IDM_NS_DELETE
+        MENUITEM "&Rename", IDM_NS_RENAME
+        MENUITEM SEPARATOR
+        MENUITEM "&Find...\tCtrl+F", IDM_NS_FIND
+        MENUITEM "Find Ne&xt\tF3", IDM_NS_FINDNEXT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Status Bar", IDM_NS_STATUS, CHECKED
+        MENUITEM SEPARATOR
+        MENUITEM "Sp&lit", IDM_NS_SPLIT
+        MENUITEM SEPARATOR
+        MENUITEM "&Refresh\tF5", IDM_NS_REFRESH
+        MENUITEM SEPARATOR
+        MENUITEM "&New Style", IDM_NEWSTYLE, CHECKED
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Help Topics", IDM_NS_HELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Registry Editor", IDM_NS_ABOUT
+    END
+END
+
+ACC_NEWSTYLE ACCELERATORS
+BEGIN
+    VK_DELETE, IDM_NS_DELETE, VIRTKEY
+    VK_F2, IDM_NS_RENAME, VIRTKEY
+    VK_F3, IDM_NS_FINDNEXT, VIRTKEY
+    VK_F5, IDM_NS_REFRESH, VIRTKEY
+    "^F", IDM_NS_FIND
+END
+
+DLG_EDITSTRING DIALOG 30, 40, 220, 74
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Edit String"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "Value &name:", -1, 6, 6, 100, 8
+    EDITTEXT IDC_NS_NAME, 6, 16, 208, 12, ES_AUTOHSCROLL | ES_READONLY | WS_TABSTOP
+    LTEXT "&Value data:", -1, 6, 32, 100, 8
+    EDITTEXT IDC_NS_DATA, 6, 42, 208, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "OK", IDOK, 112, 58, 50, 13, WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 164, 58, 50, 13, WS_TABSTOP
+END
+
+DLG_NSFIND DIALOG 30, 40, 228, 66
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Find"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "Fi&nd what:", -1, 6, 8, 40, 8
+    EDITTEXT IDC_NS_DATA, 48, 6, 120, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    GROUPBOX "Look at", -1, 6, 22, 104, 38
+    CHECKBOX "&Keys", IDC_NS_LOOKKEYS, 12, 32, 90, 10, BS_AUTOCHECKBOX | WS_TABSTOP
+    CHECKBOX "&Data", IDC_NS_LOOKDATA, 12, 44, 90, 10, BS_AUTOCHECKBOX | WS_TABSTOP
+    CHECKBOX "Match &whole string only", IDC_NS_WHOLE, 114, 26, 104, 10, BS_AUTOCHECKBOX | WS_TABSTOP
+    DEFPUSHBUTTON "&Find Next", IDOK, 174, 5, 50, 13, WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 174, 21, 50, 13, WS_TABSTOP
+END

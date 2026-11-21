@@ -1,0 +1,72 @@
+; RG04 (after probe RE4): the advanced view's dialogs, each opened on MPlayer\shell and
+; cancelled: Add Key, Copy Key, Delete Key, Find Key, Save Registration
+; File, Merge; then Restore To Last Save and Save Changes
+run REGEDIT.EXE /V
+wait 3000
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 500
+snap C:\S0.BMP
+dump
+cmd 1056
+wait 1500
+snap C:\S1.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1057
+wait 1500
+snap C:\S2.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1059
+wait 1500
+snap C:\S3.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1552
+wait 1500
+snap C:\S4.BMP
+dump
+focus
+key 1B
+wait 800
+cmd 1538
+wait 2500
+snap C:\S5.BMP
+dump
+key 1B
+wait 800
+cmd 1040
+wait 2500
+snap C:\S6.BMP
+key 1B
+wait 800
+cmd 1537
+wait 1500
+snap C:\S7.BMP
+dump
+key 1B
+wait 800
+cmd 1536
+wait 1500
+snap C:\S8.BMP
+dump
+key 1B
+wait 800
+snap C:\S9.BMP
+close
+wait 1500
+snap C:\SA.BMP
+dump
+key 1B
+wait 1000
