@@ -116,12 +116,12 @@ LRESULT FAR PASCAL __export ScreenSaverProc(HWND w, UINT msg, WPARAM wp, LPARAM 
             frame(w);
         return 0;
     case WM_ERASEBKGND: {
+        /* the update region only (the DC is clipped to it): the stars
+           elsewhere stay on the screen, and each frame still erases
+           where it drew last */
         RECT r;
-        int i;
         GetClientRect(w, &r);
         FillRect((HDC)wp, &r, GetStockObject(BLACK_BRUSH));
-        for (i = 0; i < nstars; i++)
-            stars[i].size = 0;
         return 1;
     }
     case WM_DESTROY:
