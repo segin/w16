@@ -128,6 +128,8 @@ static int id_match(module FAR *m, u16 tid, const char FAR *s)
         if (tid & NE_RSRC_INTID)
             return 0;
         p = MK_FP(m->ne_sel, RT(m) + tid);
+        if ((u32)RT(m) + tid > 0xFFFFu || !pstr_fits(p))  /* (a malformed */
+            return 0;                   /* file: KERNEL audit, medium 16) */
         for (i = 0; i < p[0]; i++) {
             u8 c = (u8)s[i];
             if (c >= 'a' && c <= 'z')

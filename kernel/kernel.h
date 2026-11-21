@@ -248,6 +248,7 @@ void     mod_unlink(module FAR *m);
 void     mod_set_name(module FAR *m);
 void     mod_set_path(module FAR *m, const char FAR *path);
 int      mod_find_name(module FAR *m, const u8 FAR *pname, u16 *ordinal);
+int      pstr_fits(const u8 FAR *p);   /* module.c: a counted string inside its segment */
 int      mod_base_name(const char FAR *name, char *base);
 
 /* ---- loader.c ---- */

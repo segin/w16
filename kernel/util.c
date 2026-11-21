@@ -58,7 +58,8 @@ void kputs(const char FAR *s)
 {
     regs16 r;
     if (!*s)
-        return;                         /* (0 bytes would truncate a
+        return;
+    kmemset(&r, 0, sizeof r);           /* (SI, DI ...: KERNEL audit, L35) */                         /* (0 bytes would truncate a
                                            redirected file: audit, low) */
     kernel_psp(1);
     r.ax = 0x4000;
@@ -82,7 +83,7 @@ void kputs(const char FAR *s)
    test, the boot before USER); else nowhere. Reports that end Windows
    (faults, the watchdog, "Error loading") switch to text mode and still
    use kputs. */
-static char dbg_path[80];
+static char dbg_path[DOS_PATHMAX];     /* (was 80: KERNEL audit, L35) */
 u16 win_screen;                 /* USER loaded, Windows' screen up */
 
 void kdbg_init(const char FAR *path)
@@ -90,7 +91,8 @@ void kdbg_init(const char FAR *path)
     u16 i;
     for (i = 0; path[i] && i < sizeof dbg_path - 1; i++)
         dbg_path[i] = path[i];
-    dbg_path[i] = 0;
+    /* a name too long for it is not cut short into another file's */
+    dbg_path[path[i] ? 0 : i] = 0;
 }
 
 /* to the [w16] debuglog file only (nothing without it) */
@@ -100,6 +102,7 @@ void kdbg_file(const char FAR *s)
     u16 h;
     if (!dbg_path[0])
         return;
+    kmemset(&r, 0, sizeof r);           /* (KERNEL audit, L35) */
     kernel_psp(1);
     r.ax = 0x3D01;                      /* open for writing */
     r.dx = FP_OFF((char FAR *)dbg_path);
@@ -197,7 +200,8 @@ void kexit_to_dos(u8 code)
         kputs("\r\n");
         trace_print();
     }
-    r.ds = r.es = 0;
+    wd_stop();                  /* the RTC as it was (KERNEL audit, L14) */
+    kmemset(&r, 0, sizeof r);           /* (KERNEL audit, L35) */
     if (old21) {
         r.ax = 0x0205;
         r.bx = 0x21;

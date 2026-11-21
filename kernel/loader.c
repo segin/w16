@@ -350,9 +350,15 @@ static void pstr_to_c(const u8 FAR *p, char *out, u16 max)
     out[n] = 0;
 }
 
+/* (an offset past the module table, in a malformed file, gives an empty
+   name: KERNEL audit, medium 16) */
 static const u8 FAR *imported_name(module FAR *m, u16 offset)
 {
-    return MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
+    static const u8 none[1] = { 0 };
+    const u8 FAR *p = MK_FP(m->ne_sel, NE_HDR(m)->impname_off + offset);
+    if ((u32)NE_HDR(m)->impname_off + offset > 0xFFFFu || !pstr_fits(p))
+        return none;
+    return p;
 }
 
 /* The name of imported module `index` (1-based), from the file's tables:

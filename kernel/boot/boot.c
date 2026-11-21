@@ -152,8 +152,12 @@ static void find_own_path(void)
     const char __far *e = MK_FP(env, 0);
     u16 i = 0, n = 0;
 
+    /* (no environment, or one with no end in 32K: KERNEL audit, L13) */
+    if (!env)
+        fail("no environment");
     while (e[i] || e[i + 1])
-        i++;
+        if (++i >= 0x8000)
+            fail("no end to the environment");
     i += 2;                             /* past the double NUL */
     if (*(const u16 __far *)(e + i) < 1)
         fail("no program path in environment (DOS 3+ required)");
@@ -171,9 +175,14 @@ static int entry_lookup(const u8 __far *ne, u16 ordinal, u16 *segno, u16 *off)
     const u8 __far *end = p + h.entry_len;
     u16 ord = 1;
 
-    while (p < end && p[0]) {
+    /* (each bundle and its entries inside the table: KERNEL audit, L13) */
+    while (p + 2 <= end && p[0]) {
         u8 count = p[0], type = p[1];
         p += 2;
+        if (type != NEB_UNUSED &&
+            (u32)(u16)(p - ne) + (u16)((type == NEB_MOVABLE ? sizeof(ne_entry_movable)
+                                    : sizeof(ne_entry_fixed)) * count) > (u32)(u16)(end - ne))
+            return 0;
         if (type == NEB_UNUSED) {
             ord += count;
             continue;
@@ -235,16 +244,22 @@ static void set_desc(u16 sel, u32 base, u32 limit, int code)
 
 /* ---- Relocations ---- */
 
-static void patch(u16 sel, const ne_reloc __far *rr, u16 tsel, u16 toff)
+static void patch(u16 sel, const ne_reloc __far *rr, u16 tsel, u16 toff, u32 size)
 {
     u8 __far *p = MK_FP(sel, 0);
-    u16 off = rr->offset;
+    u16 off = rr->offset, guard;
     u8 src = rr->src & NERS_MASK;
     int add = (rr->flags & NERF_ADDITIVE) != 0;
 
-    for (;;) {
+    /* a chain inside the segment, not round for ever, and no word read
+       for a byte fixup (as the loader's: KERNEL audit, H8 and L13) */
+    for (guard = 0;; guard++) {
         u16 __far *w = (u16 __far *)(p + off);
-        u16 next = *w;
+        u16 next;
+        if (guard >= 0x8000 ||
+            (u32)off + (src == NERS_LOBYTE ? 1 : src == NERS_FARPTR ? 4 : 2) > size)
+            fail("bad relocation chain in KERNEL");
+        next = src == NERS_LOBYTE ? NE_CHAIN_END : *w;
         switch (src) {
         case NERS_LOBYTE:
             p[off] = add ? (u8)(p[off] + toff) : (u8)toff;
@@ -288,7 +303,7 @@ static void relocate(u16 i)
                 fail("bad movable entry reference in KERNEL");
             if (segno < 1 || segno > bi.seg_count)
                 fail("bad segment reference in KERNEL");
-            patch(scratch_sel, rr, bi.seg_sel[segno - 1], toff);
+            patch(scratch_sel, rr, bi.seg_sel[segno - 1], toff, bi.seg_size[i]);
             break;
         case NERF_OSFIXUP:
             break;                      /* KERNEL uses no floating point */
@@ -330,6 +345,12 @@ void __cdecl boot_main(void)
     if (h.cs == 0 || h.cs > h.seg_count)
         fail("bad KERNEL entry point");
 
+    /* the tables in order inside 64K (KERNEL audit, L13: the sum
+       wrapped) */
+    if (h.entry_off < sizeof h || (u32)h.entry_off + h.entry_len > 0xFFFFUL ||
+        h.seg_off < sizeof h ||
+        (u32)h.seg_off + (u16)(8 * h.seg_count) > (u32)h.entry_off + h.entry_len)
+        fail("bad KERNEL tables");
     bi.ne_len = h.entry_off + h.entry_len;
     nepara = dos_alloc(bi.ne_len);
     dos_seek(ne_base);

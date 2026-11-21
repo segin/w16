@@ -363,15 +363,28 @@ int module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const)
     return 0;                           /* not in any bundle: not exported */
 }
 
+/* Does the counted string at p (its length byte and its characters) lie
+   inside its segment? A malformed file's name table or import name
+   offset can run past it (KERNEL audit, medium 16). */
+int pstr_fits(const u8 FAR *p)
+{
+    u32 lim = (u32)sel_lim16(FP_SEG(p));
+    return FP_OFF(p) <= lim && (u32)FP_OFF(p) + p[0] <= lim;
+}
+
 /* Look a length-prefixed name up in a name table (resident or
    non-resident), byte for byte; the first entry (module name or
-   description) is not an export. */
+   description) is not an export. The table ends at its zero byte, or at
+   its segment's end (a malformed file: KERNEL audit, medium 16). */
 static int find_in_table(const u8 FAR *p, const u8 FAR *pname, u16 *ordinal)
 {
     int first = 1;
+    u32 lim = (u32)sel_lim16(FP_SEG(p));
 
-    while (p[0]) {
+    while ((u32)FP_OFF(p) <= lim && p[0]) {
         u8 n = p[0], i;
+        if ((u32)FP_OFF(p) + n + 2 > lim)       /* name and ordinal */
+            return 0;
         if (!first && n == pname[0]) {
             for (i = 0; i < n && p[1 + i] == pname[1 + i]; i++)
                 ;

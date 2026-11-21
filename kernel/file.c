@@ -302,6 +302,15 @@ static u16 join_canon(const char FAR *dir, const char FAR *name, char *out, u16 
     while (*name && n < sizeof jc_tmp - 1)
         tmp[n++] = *name++;
     tmp[n] = 0;
+    /* (a directory and name that do not fit are not found: cut short,
+       the name could have been another file's. Only a name of more than
+       12 characters, which no 8.3 name is, can make it overflow: KERNEL
+       audit, L29) */
+    if (*dir || *name) {
+        *err = DOSE_NOFILE;
+        out[0] = 0;
+        return 0;
+    }
     return file_canon(tmp, out, err);
 }
 

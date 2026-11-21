@@ -162,9 +162,31 @@ u16 KAPI AINIT(u16 ds, u16 n)                                   /* KERNEL.68 */
     return t ? t : make_table(ds, n);
 }
 
+/* The name copied before anything is allocated in the heap it may be
+   in: making the table (FindAtom and AddAtom make it when there is none)
+   could move an unlocked block holding it (KERNEL audit, L34). Up to one
+   character past the longest name, so that a longer one still fails.
+   Not on the caller's stack (KERNEL audit #16). */
+static char atom_name[ATOM_MAXLEN + 2];
+
+static const char FAR *name_copy(const char FAR *s)
+{
+    u32 i, rd;
+    if (!FP_SEG(s))
+        return s;                       /* MAKEINTATOM */
+    rd = ptr_room(s, 0);                /* (a bad pointer: s itself, which */
+    for (i = 0; i < rd && i < ATOM_MAXLEN + 1 && s[(u16)i]; i++)
+        atom_name[(u16)i] = s[(u16)i];
+    if (i >= rd)                        /* atom_direct turns down) */
+        return s;
+    atom_name[(u16)i] = 0;
+    return (const char FAR *)atom_name;
+}
+
 u16 KAPI AFIND(u16 ds, const char FAR *s)                       /* KERNEL.69 */
 {
     u16 atom, len, t, slot, prev, e;
+    s = name_copy(s);
     t = table_of(ds);                   /* observed: FindAtom makes it too */
     if (atom_direct(s, &atom, &len))
         return atom;
@@ -176,9 +198,9 @@ u16 KAPI AFIND(u16 ds, const char FAR *s)                       /* KERNEL.69 */
 
 u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
 {
-    static char name[ATOM_MAXLEN + 1];     /* not on the caller's stack
-                                                  (KERNEL audit #16) */
+    const char *name = atom_name;
     u16 atom, len, t, slot, prev, e, i;
+    s = name_copy(s);
     t = table_of(ds);
     if (atom_direct(s, &atom, &len))
         return atom;
@@ -191,8 +213,7 @@ u16 KAPI AADD(u16 ds, const char FAR *s)                        /* KERNEL.70 */
     }
     if (!slot)
         return 0;                       /* (no buckets: lookup) */
-    /* the name may be in this heap: copy it before allocating */
-    kmemcpy(name, s, len);
+    /* (the name is in atom_name already: name_copy) */
     e = LAlloc(ds, LMEM_FIXED, AE_NAME + len + 1);
     if (!e)
         return 0;

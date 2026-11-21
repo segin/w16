@@ -322,6 +322,18 @@ void KAPI FatalAppExit(u16 action, const char FAR *msg)
         if (box)
             box(msg ? msg : "", "Application Error", 0, 0x8008, 0);
     }
+    if (!cur_task) {
+        /* no task to end (a driver's or DLL's initialisation during the
+           boot): Windows ends with the message on the text screen, as
+           other reports that end it, not by a DOS exit of KERNEL's own
+           process past its clean-up (KERNEL audit, L26) */
+        text_mode();
+        kputs("w16: FatalAppExit: ");
+        if (msg)
+            kputs(msg);
+        kputs("\r\n");
+        kexit_to_dos(0xFF);
+    }
     r.ax = 0x4CFF;              /* ends the task through our INT 21h hook */
     r.ds = r.es = 0;
     r.bx = r.cx = r.dx = r.si = r.di = 0;

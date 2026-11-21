@@ -297,29 +297,73 @@ static u8 inb(u16 port);
 static void outb(u16 port, u8 v);
 #pragma aux outb = "out dx, al" parm [dx] [al];
 
+/* (the RTC's registers A and B and the protected-mode INT 70h vector
+   as they were before the watchdog: wd_stop puts them back, so the RTC
+   does not go on interrupting 16 times a second after it; each CMOS
+   read-modify-write with interrupts off, as the RTC's index register is
+   shared: KERNEL audit, L14) */
+static u8 wd_on, wd_rtc_a, wd_rtc_b;
+static u16 wd_old_cs, wd_old_ip;
+
+static u16 irq_off(void);
+#pragma aux irq_off = "pushf" "cli" "pop ax" value [ax];
+static void irq_restore(u16 f);
+#pragma aux irq_restore = "push ax" "popf" parm [ax];
+
+static u8 cmos_get(u8 reg)
+{
+    u16 f = irq_off();
+    u8 v;
+    outb(0x70, reg);
+    v = inb(0x71);
+    irq_restore(f);
+    return v;
+}
+
+static void cmos_set(u8 reg, u8 v)
+{
+    u16 f = irq_off();
+    outb(0x70, reg);
+    outb(0x71, v);
+    irq_restore(f);
+}
+
 void wd_start(u16 seconds)
 {
     regs16 r;
+    u16 f;
     if (!seconds)
         return;
     wd_ticks = 0;
     wd_limit = seconds < 4096 ? seconds * 16 : 0xFFFF;   /* (audit, L14) */
+    if (wd_on)
+        return;
+    r.ax = 0x0204;
+    r.bx = 0x70;
+    r.ds = r.es = 0;
+    if (dpmi31(&r))
+        return;
+    wd_old_cs = r.cx;
+    wd_old_ip = r.dx;
     r.ax = 0x0205;
     r.bx = 0x70;
     r.cx = FP_SEG(wd_int70);
     r.dx = FP_OFF(wd_int70);
     r.ds = r.es = 0;
-    dpmi31(&r);
+    if (dpmi31(&r))
+        return;
+    wd_on = 1;
     /* RTC: 16 periodic interrupts a second (rate 12), enabled; IRQ 8 and
        the cascade unmasked */
-    outb(0x70, 0x0A);
-    outb(0x71, (u8)((inb(0x71) & 0xF0) | 0x0C));
-    outb(0x70, 0x0B);
-    outb(0x71, (u8)(inb(0x71) | 0x40));
-    outb(0x70, 0x0C);
-    inb(0x71);
+    wd_rtc_a = cmos_get(0x0A);
+    wd_rtc_b = cmos_get(0x0B);
+    cmos_set(0x0A, (u8)((wd_rtc_a & 0xF0) | 0x0C));
+    cmos_set(0x0B, (u8)(wd_rtc_b | 0x40));
+    cmos_get(0x0C);
+    f = irq_off();
     outb(0xA1, (u8)(inb(0xA1) & ~0x01));
     outb(0x21, (u8)(inb(0x21) & ~0x04));
+    irq_restore(f);
 }
 
 void wd_progress(void)
@@ -329,7 +373,20 @@ void wd_progress(void)
 
 void wd_stop(void)
 {
+    regs16 r;
     wd_limit = 0;
+    if (!wd_on)
+        return;
+    wd_on = 0;
+    cmos_set(0x0B, (u8)((cmos_get(0x0B) & ~0x40) | (wd_rtc_b & 0x40)));
+    cmos_set(0x0A, (u8)((cmos_get(0x0A) & 0xF0) | (wd_rtc_a & 0x0F)));
+    cmos_get(0x0C);
+    r.ax = 0x0205;
+    r.bx = 0x70;
+    r.cx = wd_old_cs;
+    r.dx = wd_old_ip;
+    r.ds = r.es = 0;
+    dpmi31(&r);
 }
 
 void __cdecl wd_report(void)
