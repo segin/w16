@@ -30,9 +30,14 @@ typedef struct fpm_regs {
 
 /* win87em.asm */
 extern u16 __cdecl user_cw, fn12, em_acc;
-extern u32 __cdecl handler;
 extern void __cdecl __far call_handler(u16 code, u16 app_ds);
 #pragma aux call_handler modify [ax bx cx dx es]
+
+/* the exception handler of __fpMath 3, one per task (emu.c; win87em.asm
+   calls them too) */
+u32 __cdecl __far handler_get(void);
+void __cdecl __far handler_set(u32 h);
+void __cdecl __far handler_drop(void);
 
 void __cdecl __far emu_reset(void);
 void __cdecl __far emu_entry(emu_frame FAR *f);

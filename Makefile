@@ -38,7 +38,8 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65 TK66
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65 TK66 \
+           TK67P1 TK67P2 TK67P3 TK67P4 TK67P5 TK67P6 TK67P7 TK67P8 TK67P9 TK67P10 TK67P11 TK67P12 TK67P13
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8
@@ -51,6 +52,7 @@ TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL \
             TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I) \
             TK66L.EXE TK66S.EXE TK66R.EXE TK66F.EXE TK66I.EXE TK66N.EXE TK66E.EXE TKBADNM.DLL \
+            TK67H.EXE \
             TKEA.DLL TKEB.DLL TKEC.DLL TKED.DLL TKEE.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
@@ -721,6 +723,26 @@ $(DOS)/TK8T%.EXE: $(B)/tests/start.o $(B)/tests/tk8t%.o $(B)/tests/tk6fp.o $(B)/
 	$(WLINK) @tests/apps/tk8.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk8t$*.map \
 	    file { $(B)/tests/start.o $(B)/tests/tk8t$*.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
+# TK67P1-13: the WIN87EM audit probe, in parts (tests/apps/tk67.c, TK67_P);
+# TK67H.EXE, the task TK67P4, 10 and 11 start
+$(B)/tests/tk67p%.o: tests/apps/tk67.c tests/apps/tk67.h tests/apps/tk67ref.h tests/apps/tklog.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -dTK67_P=$* -fo=$@ $<
+$(DOS)/TK67P%.EXE: $(B)/tests/start.o $(B)/tests/tk67p%.o $(B)/tests/tk6fp.o $(B)/tests/tk67s.o \
+                   $(B)/tests/fixrqq.o tests/apps/app.lnk tests/apps/tk67.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk67.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk67p$*.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk67p$*.o $(B)/tests/tk6fp.o $(B)/tests/tk67s.o $(B)/tests/fixrqq.o }
+$(B)/tests/tk67h.o: tests/apps/tk67h.c tests/apps/tk67.h
+	@mkdir -p $(@D)
+	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<
+$(DOS)/TK67H.EXE: $(B)/tests/start.o $(B)/tests/tk67h.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o \
+                  tests/apps/app.lnk tests/apps/tk67h.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk67h.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk67h.map \
+	    file { $(B)/tests/start.o $(B)/tests/tk67h.o $(B)/tests/tk6fp.o $(B)/tests/fixrqq.o }
 $(B)/tests/tk6n.o: tests/apps/tk6n.c tests/apps/tk6nref.h tests/apps/tklog.h
 	@mkdir -p $(@D)
 	$(WCC) $(TCFLAGS) -fpi -fo=$@ $<

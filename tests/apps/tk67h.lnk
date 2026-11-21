@@ -1,0 +1,3 @@
+# TK67H.EXE (tests/apps/tk67h.c): TK67P4's helper task
+@tests/apps/app.lnk
+import FPMATH WIN87EM.1
