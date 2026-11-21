@@ -34,6 +34,8 @@ static int caretX, caretY, caretH;
 static int dpiX = 96, dpiY = 96;
 static int xpScroll;                    /* horizontal scroll, pixels */
 static BOOL dragging;
+static int goalX;                       /* Up and Down's column */
+static BOOL goalValid;
 
 /* ---- fonts: a growable cache keyed by the decoded CHP ---- */
 typedef struct {
@@ -1473,6 +1475,7 @@ static void view_char2(WORD ch, char *s);
 void view_char(WORD ch)
 {
     char s[2];
+    goalValid = FALSE;
     caret_defer();
     typing = TRUE;
     view_char2(ch, s);
@@ -1627,6 +1630,8 @@ void view_key(WPARAM vk)
         undo_save(IDS_EDITING);
     else
         undo_end_typing();
+    if (vk != VK_UP && vk != VK_DOWN && vk != VK_SHIFT && vk != VK_CONTROL)
+        goalValid = FALSE;
     switch (vk) {
     case VK_LEFT:
         if (!shift && g_selFirst != g_selLim)
@@ -1645,7 +1650,11 @@ void view_key(WPARAM vk)
         DWORD s = line_start(cp);
         int x;
         layout_line(s, &ln);
-        x = x_of(&ln, cp);
+        /* Up and Down keep the column they started from, across
+           paragraph formats that move the line (WR37: Down from the
+           start of a line just centred goes to the next line's start) */
+        x = goalValid ? goalX : x_of(&ln, cp);
+        goalX = x;
         if (vk == VK_UP) {
             if (s == 0)
                 return;
@@ -1700,6 +1709,8 @@ void view_key(WPARAM vk)
     default:
         return;
     }
+    if (vk == VK_UP || vk == VK_DOWN)
+        goalValid = TRUE;
     if (shift) {
         if (to < selAnchor)
             view_select(to, selAnchor, TRUE);
@@ -1837,6 +1848,7 @@ LRESULT FAR PASCAL __export DocWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             pm_end(TRUE);
             return 0;
         }
+        goalValid = FALSE;
         cp = cp_from_point(LOWORD(lp) + xpScroll, HIWORD(lp));
         SetFocus(w);
         undo_end_typing();
