@@ -168,9 +168,9 @@ sequence); `-T 286` or `-T 386`: on w16's
 install tree alone as C:\W16 instead, under its KRNL286 or KRNL386,
 where the tree's SB16.DRV gives QuickTime a sound device and the stock
 3.1 run gets Windows 3.1's SNDBLST2.DRV to match; w16 runs with
-`[w16] hangwatch=90` (`$QTPLAY_HANGWATCH`), and prints KERNEL's longest
-stretch without progress (the installer's unpacking: about 16 s idle,
-28 s under load);
+`[w16] hangwatch=120` (`$QTPLAY_HANGWATCH`), and prints KERNEL's longest
+stretch without progress (the installer's unpacking: 15-21 s idle,
+43-46 s at load average 55);
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case

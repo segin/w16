@@ -45,13 +45,14 @@
 #                    its KRNL386
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # Checks (exit 1 if one fails):
-#   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=90,
+#   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=120,
 #     or $QTPLAY_HANGWATCH: a hang ends Windows with a report in
 #     OUTDIR/w16/work/c/OUT.TXT). The installer unpacks its files without
 #     yielding: KERNEL's longest stretch without progress there (printed
-#     at the end, "longest stretch") is about 16 s on an idle
-#     installation-05 and 28 s at load average 30-45 (DOSBox's cycles=max
-#     runs fewer instructions per emulated second under load). The limit
+#     at the end, "longest stretch") is 15-21 s on an idle
+#     installation-05, 25-28 s at load average 30-45 and 43-46 s at 55-57
+#     (DOSBox's cycles=max runs fewer instructions per emulated second
+#     under load). The limit
 #     was 30 until 2026-11-20 and ended busy installs under load; the
 #     hangs it is for never end (the movie, 2026-11-17; the drag,
 #     2026-11-19);
@@ -165,7 +166,7 @@ if [ -z "$refdir" ]; then
 fi
 wscript=$out/qtplay-WINDOWS.txt
 [ -z "$treek" ] || wscript=$out/qtplay-W16.txt
-hw=${QTPLAY_HANGWATCH:-90}
+hw=${QTPLAY_HANGWATCH:-120}
 # shellcheck disable=SC2086
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$wscript" "$out/w16" \
     -i w16:hangwatch=$hw $w16opts > "$out/w16.txt" 2>&1 || true

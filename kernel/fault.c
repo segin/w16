@@ -397,7 +397,10 @@ void wd_summary(void)
     kputdec(wd_max / 16);
     kputs(".");
     kputdec((u16)((wd_max % 16) * 10 / 16));
-    kputs(" s, last in");
+    /* (a sample taken in real mode, in DOS or the BIOS, is a paragraph,
+       not a selector: no module) */
+    kputs(" s; half a second before its end CS=");
+    kputhex(wd_max_cs);
     where(wd_max_cs);
     kputs("\r\n");
 }

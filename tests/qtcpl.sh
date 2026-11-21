@@ -86,7 +86,7 @@ fi
 # (hangwatch: as tests/qtplay.sh's, the installer's unpacking)
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtcpl-w16.txt" "$out/w16" \
     -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" -T "$tree" -f "$spy=US32S.EXE" \
-    -i 'WIN.INI:windows:load=C:\US32S.EXE' -i w16:hangwatch=${QTPLAY_HANGWATCH:-90} > "$out/w16.txt" 2>&1 || true
+    -i 'WIN.INI:windows:load=C:\US32S.EXE' -i w16:hangwatch=${QTPLAY_HANGWATCH:-120} > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
 
