@@ -56,11 +56,54 @@ int msgbox(HWND owner, UINT idfmt, LPCSTR arg, UINT flags)
     return MessageBox(owner, text, cap, flags);
 }
 
+/* WinHelp as 3.1's REGEDIT calls it (tests/rehelp.sh, REH1-REH8): the
+   basic view's regedit.hlp, the advanced view's regeditv.hlp; every
+   request but HELP_QUIT is followed by HELP_SETCONTENTS with the view's
+   contents topic (2801h, 2881h) */
 void help(UINT cmd, DWORD data)
 {
     char file[32];
-    rstr(start_mode == MODE_ADVANCED ? IDS_HELPFILEV : IDS_HELPFILE, file, sizeof file);
+    BOOL v = g_mode == MODE_ADVANCED;
+    rstr(v ? IDS_HELPFILEV : IDS_HELPFILE, file, sizeof file);
     WinHelp(g_frame, file, cmd, data);
+    if (cmd != HELP_QUIT)
+        WinHelp(g_frame, file, HELP_SETCONTENTS, v ? HELPID_CONTENTSV : HELPID_CONTENTS);
+}
+
+void help_context(DWORD id)
+{
+    help(HELP_CONTEXT, id);
+}
+
+/* F1: in a menu the item's topic, in a dialog its Help button, in the
+   main window the contents (REH2, REH4, REH5), through a message filter */
+static HHOOK filter;
+static UINT menu_item;
+static FARPROC filter_inst;
+UINT g_filedlg_help;            /* the topic of the COMMDLG box up */
+UINT g_help_msg;                /* COMMDLG's "commdlg_help" */
+
+LRESULT FAR PASCAL _export MessageFilter(int code, WPARAM wp, LPARAM lp)
+{
+    MSG FAR *m = (MSG FAR *)lp;
+    if (code >= 0 && m->message == WM_KEYDOWN && m->wParam == VK_F1) {
+        if (code == MSGF_MENU) {
+            if (menu_item)
+                help_context((g_mode == MODE_ADVANCED ? HELPID_MENUV : HELPID_MENU) + menu_item);
+            return 1;
+        }
+        if (code == MSGF_DIALOGBOX) {
+            HWND top = GetActiveWindow();   /* the box up, whichever window the key came to (REH8) */
+            if (top == g_frame)
+                help_context(g_mode == MODE_ADVANCED ? HELPID_CONTENTSV : HELPID_CONTENTS);
+            else if (GetDlgItem(top, IDC_HELP))
+                PostMessage(top, WM_COMMAND, IDC_HELP, MAKELONG(GetDlgItem(top, IDC_HELP), BN_CLICKED));
+            else if (g_filedlg_help)
+                help_context(g_filedlg_help);
+            return 1;
+        }
+    }
+    return CallNextHookEx(filter, code, wp, lp);
 }
 
 void about(void)
@@ -231,11 +274,19 @@ static BOOL query_exit(void)
 
 LRESULT FAR PASCAL _export FrameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
+    if (g_help_msg && msg == g_help_msg) {
+        help_context(g_filedlg_help);   /* a COMMDLG box's Help (REH3) */
+        return 0;
+    }
     switch (msg) {
     case WM_SIZE:
         if (wp != SIZE_MINIMIZED)
             layout_view();
         return 0;
+    case WM_MENUSELECT:
+        /* the item F1 asks about (not a popup, not a separator) */
+        menu_item = (LOWORD(lp) & (MF_POPUP | MF_SEPARATOR)) || LOWORD(lp) == 0xFFFF ? 0 : wp;
+        break;
     case WM_SETFOCUS:
         if (g_view && g_mode != MODE_NEWSTYLE)
             SetFocus(g_view);
@@ -248,7 +299,7 @@ LRESULT FAR PASCAL _export FrameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             PostMessage(w, WM_CLOSE, 0, 0);
             return 0;
         case IDM_HELPCONTENTS:
-            help(HELP_INDEX, 0);
+            help_context(g_mode == MODE_ADVANCED ? HELPID_CONTENTSV : HELPID_CONTENTS);
             return 0;
         case IDM_HELPSEARCH:
             help(HELP_PARTIALKEY, (DWORD)(LPSTR)"");
@@ -317,6 +368,7 @@ LRESULT FAR PASCAL _export FrameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DESTROY:
         DragAcceptFiles(w, FALSE);
         help(HELP_QUIT, 0);
+        UnhookWindowsHookEx(filter);
         PostQuitMessage(0);
         return 0;
     }
@@ -425,6 +477,9 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     }
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
+    g_help_msg = RegisterWindowMessage("commdlg_help");   /* COMMDLG's HELPMSGSTRING */
+    filter_inst = MakeProcInstance((FARPROC)MessageFilter, inst);
+    filter = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)filter_inst, inst, GetCurrentTask());
     accel_ns = LoadAccelerators(inst, MAKEINTRESOURCE(ACC_NEWSTYLE));
     accel_adv = LoadAccelerators(inst, MAKEINTRESOURCE(ACC_ADVANCED));
     while (GetMessage(&m, NULL, 0, 0)) {

@@ -465,7 +465,7 @@ BOOL FAR PASCAL _export KeyDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
             EndDialog(d, IDCANCEL);
             return TRUE;
         case IDC_HELP:
-            help(HELP_CONTEXT, 0);
+            help_context(dlg_id == DLG_ADDKEY ? HELPID_ADDKEY : dlg_id == DLG_COPYKEY ? HELPID_COPYKEY : dlg_id == DLG_DELKEY ? HELPID_DELKEY : HELPID_FINDKEY);
             return TRUE;
         }
         break;
@@ -586,11 +586,13 @@ void adv_command(HWND v, UINT id)
         break;
     case IDM_SAVEFILE:
         lstrcpy(f, "*.reg");
+        g_filedlg_help = HELPID_SAVEFILE;
         if (file_dialog(g_frame, TRUE, IDS_SAVETITLE, IDS_REGFILTER, "reg", f, sizeof f))
             save_reg_file(v, f);
         break;
     case IDM_MERGE:
         lstrcpy(f, "*.reg");
+        g_filedlg_help = HELPID_MERGE;
         if (!file_dialog(g_frame, FALSE, IDS_MERGETITLE, IDS_REGFILTER, "reg", f, sizeof f))
             return;
         merge_view = v;

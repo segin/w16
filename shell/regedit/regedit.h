@@ -56,6 +56,22 @@
 #define IDC_KEY          0x631
 #define IDC_KEYVALUE     0x632
 
+/* WinHelp topics (tests/rehelp.sh, REH1-REH8) */
+#define HELPID_CONTENTS  0x2801  /* the basic view's contents, F1 in it */
+#define HELPID_CONTENTSV 0x2881  /* the advanced view's */
+#define HELPID_MENU      0x2001  /* plus a menu item's ID: F1 on it (basic) */
+#define HELPID_MENUV     0x2081  /* ... in the advanced view */
+#define HELPID_MODIFY    0x4000
+#define HELPID_ADD       0x4001
+#define HELPID_COPY      0x4002
+#define HELPID_MERGE     0x3000  /* Merge's Open box */
+#define HELPID_ADDKEY    0x3FFF
+#define HELPID_COPYKEY   0x3FFE
+#define HELPID_DELKEY    0x3FFD
+#define HELPID_FINDKEY   0x3FFC
+#define HELPID_SAVEFILE  0x3002  /* Save Registration File's box */
+#define HELPID_BROWSE    0x3001  /* UNVERIFIED: Browse's box (between the two) */
+
 /* dialog templates */
 #define DLG_BASIC        100
 #define DLG_ADVANCED     101
@@ -185,6 +201,8 @@ int  rstr(UINT id, LPSTR buf, int cb);
 int  msgbox(HWND owner, UINT idfmt, LPCSTR arg, UINT flags);
 void set_mode(int mode);
 void help(UINT cmd, DWORD data);
+void help_context(DWORD id);
+extern UINT g_filedlg_help, g_help_msg;
 void about(void);
 void layout_view(void);
 void add_view_menu(HMENU m);

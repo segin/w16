@@ -321,6 +321,10 @@ static void write_type(LPCSTR id, BOOL is_new)
 
 BOOL FAR PASCAL _export TypeDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 {
+    if (g_help_msg && msg == g_help_msg) {
+        help_context(g_filedlg_help);   /* Browse's Help */
+        return TRUE;
+    }
     switch (msg) {
     case WM_INITDIALOG: {
         char t[64];
@@ -360,12 +364,13 @@ BOOL FAR PASCAL _export TypeDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_BROWSE: {
             static char f[PATHMAX];
             lstrcpy(f, "*.com;*.exe;*.bat;*.pif");
+            g_filedlg_help = HELPID_BROWSE;
             if (file_dialog(d, FALSE, IDS_BROWSETITLE, IDS_PROGFILTER, NULL, f, sizeof f))
                 SetDlgItemText(d, IDC_COMMAND, f);
             return TRUE;
         }
         case IDC_HELP:
-            help(HELP_CONTEXT, dlg_kind == IDM_MODIFY ? 0 : 0);
+            help_context(dlg_kind == IDM_MODIFY ? HELPID_MODIFY : dlg_kind == IDM_ADD ? HELPID_ADD : HELPID_COPY);
             return TRUE;
         case IDOK: {
             static char id[PATHMAX];
@@ -450,6 +455,7 @@ void basic_command(HWND v, UINT id)
     }
     case IDM_MERGE:
         lstrcpy(f, "*.reg");
+        g_filedlg_help = HELPID_MERGE;
         if (file_dialog(g_frame, FALSE, IDS_MERGETITLE, IDS_REGFILTER, "reg", f, sizeof f)) {
             switch (merge_file(f, NULL)) {
             case MERGE_OK:
