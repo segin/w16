@@ -2102,6 +2102,19 @@ $(DOS)/US33.EXE: $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us33.map option resource=$(B)/tests/us33.res \
 	    file { $(B)/tests/start.o $(B)/tests/us33.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US33.EXE
+# US34: a combo box's layout in every style and font (tests/apps/us34.c;
+# Control Panel's Desktop dialog)
+$(B)/tests/us34.o: tests/apps/us34ref.h tests/apps/tklog.h
+$(B)/tests/us34.res: tests/apps/us34.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US34.EXE: $(B)/tests/start.o $(B)/tests/us34.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 $(B)/tests/us34.res tests/apps/app.lnk tests/apps/us34.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us34.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us34.map option resource=$(B)/tests/us34.res \
+	    file { $(B)/tests/start.o $(B)/tests/us34.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US34.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

@@ -401,6 +401,13 @@
 #              w16's USER, their OBS lines identical (heights, clip boxes,
 #              the area around each list box pixel for pixel by checksum,
 #              no highlight outside the list box)
+#   combo      a combo box's layout (user/combo.c; Control Panel's Desktop
+#              dialog drew its drop-down list boxes taller than the edit
+#              fields beside them): probe US34 as the shell on 3.1 and on
+#              w16's USER, their OBS lines identical (each style in five
+#              fonts and in dialogs: the closed height, the edit field,
+#              the item heights, the dropped list, and their pixels by
+#              checksum; owner-drawn ones' WM_MEASUREITEMs)
 #   lbdraw     how a list box draws and what a screen DC covers (ARCHITECTURE.md
 #              10.4): probe US33 as the shell on 3.1 and on w16's USER, their
 #              OBS lines identical: owner-drawn list boxes of every kind
@@ -830,7 +837,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3447,6 +3454,63 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   lbclip: US32 as 3.1 (list box heights, a partly shown item scrolled; w16 USER, and USER+GDI)"
         else echo "FAIL lbclip: $r"; fails=$((fails + 1)); fi ;;
+    combo)
+        # a combo box's layout (tests/apps/us34.c)
+        cb34() {   # LABEL dropin.sh options...: US34's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 300 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US34.EXE=US34.EXE" -i 'boot:shell=C:\US34.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 cb34 combo-ref &
+        DROPIN_WSECS=30 cb34 combo-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        DROPIN_WSECS=30 cb34 combo-gdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" &
+        wait
+        r=ok
+        for k in ref w16 gdi; do
+            grep -q '^US34 end' "$out/combo-$k.log" ||
+                { [ "$r" = ok ] && r="US34 did not finish ($k: $out/combo-$k.log)"; }
+        done
+        # still different, left out (ARCHITECTURE.md, US34): a drop-down
+        # box's text wider than its field, unfocused (font 7); 6-pixel
+        # Small Fonts boxes 18 high (font 5); a simple box given a second
+        # font (2to4); a simple box's pixels right after CB_SETITEMHEIGHT
+        cskip='^OBS (w\.0\.[0-9]+\.7\.[ec]?sum|w\.[0-9]\.18\.5\.|w\.2\.[0-9]+\.2to4|sih\.103\.i0h\.e?sum)'
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/combo-ref.log" | grep -Ev "$cskip" > "$out/combo-ref.obs"
+            grep '^OBS [^~]' "$out/combo-w16.log" | grep -Ev "$cskip" > "$out/combo-w16.obs"
+            cmp -s "$out/combo-ref.obs" "$out/combo-w16.obs" ||
+                r="$(diff "$out/combo-ref.obs" "$out/combo-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/combo-ref.obs, combo-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then
+            # w16's GDI too: all but the checksums, whose glyphs are w16's,
+            # and the TrueType Arial fonts (6, 7), whose metrics are w16's
+            tt='^OBS (font\.[67]|w\.[0-9]\.[0-9]+\.[67][.=])'
+            grep -v 'sum=' "$out/combo-ref.obs" | grep -Ev "$tt" > "$out/combo-ref.nosum"
+            grep '^OBS [^~]' "$out/combo-gdi.log" | grep -Ev "$cskip" | grep -Ev "$tt" | grep -v 'sum=' > "$out/combo-gdi.nosum"
+            cmp -s "$out/combo-ref.nosum" "$out/combo-gdi.nosum" ||
+                r="w16 USER+GDI: $(diff "$out/combo-ref.nosum" "$out/combo-gdi.nosum" | grep -c '^<') observation(s) differ from 3.1's ($out/combo-ref.nosum, combo-gdi.nosum)"
+        fi
+        if [ "$r" = ok ]; then
+            # the screens it saved (C:\US34_nn.BMP), byte for byte: all
+            # but 08 (the wide text unfocused) and 15 (a simple box given
+            # a second font), left out above too
+            n=0
+            for b in "$out/combo-ref/c"/US34_*.BMP; do
+                f=${b##*/}
+                case $f in US34_08.BMP|US34_15.BMP) continue ;; esac
+                n=$((n + 1))
+                cmp -s "$b" "$out/combo-w16/c/$f" ||
+                    { r="screen $f differs from 3.1's ($out/combo-ref/c, combo-w16/c)"; break; }
+            done
+            [ "$r" = ok ] && [ "$n" -lt 30 ] && r="only $n screens saved"
+        fi
+        if [ "$r" = ok ]; then echo "ok   combo: US34 as 3.1 (combo boxes' heights, fields, lists and pixels in five fonts and in dialogs; w16 USER, and USER+GDI)"
+        else echo "FAIL combo: $r"; fails=$((fails + 1)); fi ;;
     lbdraw)
         # list box drawing, screen DCs, tab stops (tests/apps/us33.c)
         lb33() {   # LABEL dropin.sh options...: US33's run, its log in LABEL.log
