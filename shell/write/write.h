@@ -396,6 +396,7 @@ void  fmt_measure(char *s, long tw);
 void  cmd_print(void);
 void  cmd_printsetup(void);
 void  printer_font(char *face, BYTE *ffid);
+HDC   printer_ic(void);
 void  cmd_repaginate(void);
 void  undo_save(WORD kind);
 void  undo_end_typing(void);

@@ -403,6 +403,25 @@ static HDC printer_dc(void)
     return CreateDC(drv, dev, port, NULL);
 }
 
+/* an information context for the printer set up in WIN.INI, or NULL */
+HDC printer_ic(void)
+{
+    char dev[128], *drv, *port;
+    int i;
+    GetProfileString("windows", "device", "", dev, sizeof dev);
+    for (i = 0, drv = port = NULL; dev[i]; i++)
+        if (dev[i] == ',') {
+            dev[i] = 0;
+            if (!drv)
+                drv = dev + i + 1;
+            else if (!port)
+                port = dev + i + 1;
+        }
+    if (!dev[0] || !drv || !port)
+        return NULL;
+    return CreateIC(drv, dev, port, NULL);
+}
+
 /* A new document's font: Arial, as the printer realizes it. A printer
    without it gives its own face (WR29: Generic / Text Only makes the
    font table "Roman 10cpi", family 30h, and the screen shows it so);
