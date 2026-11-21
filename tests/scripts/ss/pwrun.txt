@@ -1,7 +1,7 @@
 ;! ini WINDOWS/CONTROL.INI ScreenSaver:Password=kiC
 ;! ini WINDOWS/CONTROL.INI Screen Saver.Stars:PWProtected=1
 ;! crop W1 308x185+166+148
-;! crop W2 334x186+166+148
+;! crop W2 315x157+184+174
 ; Password protected (the password "abc", as 3.1 stores it): a key shows
 ; the password dialog; a wrong password, "Incorrect password", back to
 ; the saver; a key again, Cancel, back to the saver; the right one ends it
