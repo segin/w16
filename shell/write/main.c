@@ -323,6 +323,8 @@ static void help(UINT cmd, DWORD data)
 static LRESULT command(HWND w, WORD id)
 {
     char path[PATH_MAX_DOS];
+    if (ole_verb(id))                   /* the Edit menu's object verbs */
+        return 0;
     /* files are handled with the document, not a running head being
        edited: back to the document first (UNVERIFIED: the original's
        way) */
@@ -338,8 +340,12 @@ static LRESULT command(HWND w, WORD id)
         if (!ask_save())
             break;
         path[0] = 0;
-        if (file_dialog(FALSE, path) && !open_path(path))
-            new_doc();
+        if (file_dialog(FALSE, path)) {
+            if (!open_path(path))
+                new_doc();
+            else
+                ole_opened(SW_SHOWNORMAL);
+        }
         break;
     case IDM_SAVE:
         if (!g_path[0])
@@ -575,6 +581,9 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE prev, LPSTR cmd, int show)
     } else {
         new_doc();
     }
+    /* a document's links are asked about before the window shows (WR33) */
+    if (path[0])
+        ole_opened(show);
     ShowWindow(g_frame, show);
     UpdateWindow(g_frame);
     view_caret_now();

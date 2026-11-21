@@ -1,6 +1,6 @@
 ; WR33: opening a document with a link (WR30A.WRI, made by WR30 with the
 ; original): the question about updating links (O1), Yes; the link cannot
-; be updated (O2); OK; the linked picture selected (Shift+Right from the
+; be updated (O2: DTINVALIDLINK, Links... its default button); OK; the linked picture selected (Shift+Right from the
 ; start) and the Edit menu with its object item (O3), the item's submenu
 ; (O4)
 ; prep: WR30 WR30A.WRI
@@ -12,7 +12,7 @@ key 0D
 wait 6000
 snap C:\O2.BMP
 dump
-key 0D
+clickid 1
 wait 1500
 kdown 10
 kdown 27

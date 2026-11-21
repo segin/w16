@@ -998,14 +998,9 @@ void menu_update(HMENU m)
                    ? MF_ENABLED : MF_GRAYED);
     EnableMenuItem(m, IDM_PASTELINK, ole_can_pastelink() ? MF_ENABLED : MF_GRAYED);   /* WR30 E1 */
     EnableMenuItem(m, IDM_LINKS, MF_ENABLED);   /* enabled with no links too (WR12) */
-    {
-        /* with no object selected the item reads "&Object", grayed (WR7;
-           the original's string 32) */
-        char s[32];
-        load_str(IDS_OBJECTNONE, s, sizeof s);
-        ModifyMenu(m, IDM_OBJECT, MF_BYCOMMAND | MF_STRING | MF_GRAYED, IDM_OBJECT, s);
-    }
-    EnableMenuItem(m, IDM_OBJECT, MF_GRAYED);
+    /* the object item: "&Object" grayed with no object selected (WR7;
+       the original's string 32), else the object's verb (ole.c) */
+    ole_menu(m);
     {
         /* an empty document: nothing to find or go to; Print needs a
            printer (WR7: all grayed in a new document, none set up) */

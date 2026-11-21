@@ -343,6 +343,10 @@ BOOL ole_can_pastelink(void);
 void ole_pastelink(void);
 void cmd_links(void);
 void cmd_pastespecial(void);
+void ole_menu(HMENU m);
+BOOL ole_verb(WORD id);
+void ole_opened(int show);   /* asks to update links (WR33) */
+extern BOOL g_holdPaint;       /* view.c: text not drawn meanwhile */
 void pict_draw(HDC dc, const PICT *p, int x, int y, int w, int h);
 
 /* ---- the view (view.c) ---- */

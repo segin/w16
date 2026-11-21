@@ -32,6 +32,8 @@ typedef struct {
     LPOLEOBJECT obj;
     BOOL failed;                        /* could not load: drawn by pict.c */
     BOOL dirty;                         /* new data to store */
+    BOOL unavail;                       /* an update failed: "Unavailable" */
+    OLESTATUS relErr;                   /* OleQueryReleaseError at OLE_RELEASE */
 } WOBJ;
 
 typedef struct {
@@ -277,6 +279,11 @@ int CALLBACK __export ClientCallBack(LPOLECLIENT c, OLE_NOTIFICATION n, LPOLEOBJ
         break;
     case OLE_CLOSED:
         PostMessage(g_frame, WM_USER + 1, 1, (LPARAM)o->num);
+        break;
+    case OLE_RELEASE:
+        /* the outcome of an asynchronous call, read while it is told
+           (3.1's OLECLI: afterwards it reads OLE_OK, WR33) */
+        o->relErr = OleQueryReleaseError(obj);
         break;
     case OLE_QUERY_PAINT:
     case OLE_QUERY_RETRY:
@@ -725,7 +732,7 @@ static void link_line(HWND d, int i, BOOL replace)
     s_cat(line, "\t", sizeof line);
     if (o->obj)
         OleGetLinkUpdateOptions(o->obj, &opt);
-    load_str(unavail[i] ? IDS_UNAVAILABLE : opt == oleupdate_always ? IDS_AUTOMATIC : IDS_MANUAL,
+    load_str(o->unavail ? IDS_UNAVAILABLE : opt == oleupdate_always ? IDS_AUTOMATIC : IDS_MANUAL,
              line + s_len(line), (int)(sizeof line - s_len(line)));
     if (replace) {
         BOOL sel = (BOOL)SendDlgItemMessage(d, LK_LIST, LB_GETSEL, i, 0);
@@ -820,13 +827,17 @@ static void link_each(HWND d, WORD id)
             store(o);
             break;
         case LK_UPDATE:
+            o->relErr = OLE_OK;
             r = OleUpdate(o->obj);
-            wait_release(o->obj, r);
-            if (r != OLE_OK && r != OLE_WAIT_FOR_RELEASE) {
+            if (r == OLE_WAIT_FOR_RELEASE) {
+                wait_release(o->obj, r);
+                r = o->relErr;
+            }
+            if (r != OLE_OK) {
                 msgbox(d, IDS_NOSOURCE, NULL, MB_OK | MB_ICONEXCLAMATION);
-                unavail[i] = TRUE;
+                o->unavail = TRUE;
             } else {
-                unavail[i] = FALSE;
+                o->unavail = FALSE;
                 o->dirty = TRUE;
                 store(o);
             }
@@ -921,7 +932,6 @@ BOOL CALLBACK __export LinksDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                     int k;
                     for (k = i; k + 1 < nlinks; k++) {
                         t[k] = t[k + 1];
-                        unavail[k] = unavail[k + 1];
                     }
                     LocalUnlock(hlinks);
                     nlinks--;
@@ -1134,4 +1144,234 @@ void cmd_pastespecial(void)
             g_doc.dirty = TRUE;
         }
     }
+}
+
+/* ---- links when a document is opened (WR33) ----
+   A document with automatic links asks "This document contains links to
+   other documents. Do you want to update links now?" (string 8473, Yes
+   and No, the exclamation icon); Yes updates them, and when some cannot
+   be updated DTINVALIDLINK ("Linked document is unavailable.", one link)
+   or DTINVALIDLINKS (several) offers OK or Links..., which opens the
+   Links box with them "Unavailable". UNVERIFIED: whether manual links
+   count, and which box several links with one failure give. */
+BOOL CALLBACK __export InvalidLinkDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    if (msg == WM_INITDIALOG)
+        return TRUE;
+    if (msg == WM_COMMAND && (wp == IDOK || wp == IDCANCEL || wp == 262)) {
+        EndDialog(d, wp);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* the linked object of paragraph i, loaded; NULL if it is none */
+static WOBJ *para_link(DWORD i)
+{
+    DWORD pf, pl;
+    ATOM32 a;
+    PAPX p;
+    WORD type = 0, mm = 0;
+    para_get(&g_doc, i, &pf, &pl, &a);
+    pap_decode(&g_doc, a, &p);
+    if (!p.fGraphics || pl < pf + PICHDR || pl > g_doc.cpMac)
+        return NULL;
+    doc_get(&g_doc, pf, (char FAR *)&mm, 2);
+    doc_get(&g_doc, pf + 6, (char FAR *)&type, 2);
+    if (mm != 0xE4 || type != 3)
+        return NULL;
+    return load(pf, pl);
+}
+
+void ole_opened(int show)
+{
+    DWORD i;
+    int n = 0, bad = 0, r;
+    WOBJ *o;
+    if (!lhdoc)
+        return;
+    for (i = 0; i < g_doc.nparas; i++) {
+        OLEOPT_UPDATE opt = oleupdate_oncall;
+        o = para_link(i);
+        if (o && o->obj)
+            OleGetLinkUpdateOptions(o->obj, &opt);
+        if (o && opt == oleupdate_always)
+            n++;
+    }
+    if (!n || msgbox(g_frame, IDS_UPDATELINKS, NULL, MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
+        return;
+    /* the window shows, its text not drawn while the links update and
+       while a box says some could not be (WR33 O2) */
+    g_holdPaint = TRUE;
+    if (!IsWindowVisible(g_frame))
+        ShowWindow(g_frame, show);
+    for (i = 0; i < g_doc.nparas; i++) {
+        OLESTATUS st;
+        o = para_link(i);
+        if (!o)
+            continue;
+        if (!o->obj) {
+            o->unavail = TRUE;
+            bad++;
+            continue;
+        }
+        o->relErr = OLE_OK;
+        st = OleUpdate(o->obj);
+        if (st == OLE_WAIT_FOR_RELEASE) {
+            wait_release(o->obj, st);
+            st = o->relErr;
+        }
+        if (st != OLE_OK) {
+            o->unavail = TRUE;
+            bad++;
+        }
+    }
+    if (!bad) {
+        g_holdPaint = FALSE;
+        InvalidateRect(g_docwnd, NULL, TRUE);
+        return;
+    }
+    {
+        FARPROC fp = MakeProcInstance((FARPROC)InvalidLinkDlgProc, g_hinst);
+        r = DialogBox(g_hinst, n > 1 ? "DTINVALIDLINKS" : "DTINVALIDLINK", g_frame, (DLGPROC)fp);
+        FreeProcInstance(fp);
+    }
+    g_holdPaint = FALSE;
+    InvalidateRect(g_docwnd, NULL, TRUE);
+    if (r == 262)
+        cmd_links();
+}
+
+/* ---- the Edit menu's object item (WR33 O3) ----
+   With a linked or embedded object selected the item names its verb and
+   class: "Edit Paintbrush Picture &Object" (the verb and the class's name
+   from the registration database), command 5122 for the first verb;
+   choosing it does the verb. With several verbs the item is a popup
+   "<class name> &Object" of the verbs (UNVERIFIED: its look and IDs, as
+   5122 on). A static picture: "&Object", grayed (WR7). */
+#define OBJ_VERB0   (IDM_OBJECT + 2)
+#define OBJ_VERBS   16
+
+/* the selected object's class name and its verbs; FALSE: none selected
+   that has verbs */
+static BOOL sel_verbs(char *name, char verbs[][40], int *n, DWORD *ppf, DWORD *ppl)
+{
+    DWORD pf, pl;
+    ATOM32 a;
+    PAPX p;
+    WORD type = 0, mm = 0;
+    WOBJ *o;
+    char cls[65], key[120];
+    LONG cb;
+    HANDLE h = NULL;
+    char FAR *q;
+    *n = 0;
+    if (!lhdoc)
+        return FALSE;
+    para_at(&g_doc, g_selFirst, &pf, &pl, &a);
+    pap_decode(&g_doc, a, &p);
+    if (!p.fGraphics || g_selFirst != pf || g_selLim != pl || pl < pf + PICHDR)
+        return FALSE;
+    doc_get(&g_doc, pf, (char FAR *)&mm, 2);
+    doc_get(&g_doc, pf + 6, (char FAR *)&type, 2);
+    if (mm != 0xE4 || (type != 2 && type != 3))
+        return FALSE;
+    o = load(pf, pl);
+    if (!o || !o->obj)
+        return FALSE;
+    if (OleGetData(o->obj, RegisterClipboardFormat(type == 3 ? "ObjectLink" : "OwnerLink"), &h) != OLE_OK ||
+        !h || !(q = GlobalLock(h)))
+        return FALSE;
+    s_cpy(cls, q, sizeof cls);
+    GlobalUnlock(h);
+    cb = 80;
+    if (RegQueryValue(HKEY_CLASSES_ROOT, cls, name, &cb) != ERROR_SUCCESS || !name[0])
+        s_cpy(name, cls, 80);
+    for (*n = 0; *n < OBJ_VERBS; (*n)++) {
+        char num[8];
+        s_cpy(key, cls, sizeof key);
+        s_cat(key, "\\protocol\\StdFileEditing\\verb\\", sizeof key);
+        s_utoa(num, *n);
+        s_cat(key, num, sizeof key);
+        cb = 40;
+        if (RegQueryValue(HKEY_CLASSES_ROOT, key, verbs[*n], &cb) != ERROR_SUCCESS || !verbs[*n][0])
+            break;
+    }
+    if (ppf)
+        *ppf = pf;
+    if (ppl)
+        *ppl = pl;
+    return *n > 0;
+}
+
+/* the Edit menu (its item 9 is the object item) */
+void ole_menu(HMENU m)
+{
+    char name[80], verbs[OBJ_VERBS][40], s[160], obj[32];
+    int n, i;
+    UINT id = GetMenuItemID(m, 9);
+    HMENU sub;
+    if (GetMenuItemID(m, 8) != IDM_LINKS)
+        return;
+    if (id == (UINT)-1 && (sub = GetSubMenu(m, 9)) != NULL)
+        DestroyMenu(sub);
+    if (!sel_verbs(name, verbs, &n, NULL, NULL)) {
+        load_str(IDS_OBJECTNONE, s, sizeof s);
+        ModifyMenu(m, 9, MF_BYPOSITION | MF_STRING | MF_GRAYED, IDM_OBJECT, s);
+        return;
+    }
+    load_str(IDS_OBJECTNONE, obj, sizeof obj);  /* "&Object" */
+    if (n == 1) {
+        s_cpy(s, verbs[0], sizeof s);
+        s_cat(s, " ", sizeof s);
+        s_cat(s, name, sizeof s);
+        s_cat(s, " ", sizeof s);
+        s_cat(s, obj, sizeof s);
+        ModifyMenu(m, 9, MF_BYPOSITION | MF_STRING, OBJ_VERB0, s);
+        return;
+    }
+    sub = CreatePopupMenu();
+    for (i = 0; i < n; i++)
+        AppendMenu(sub, MF_STRING, OBJ_VERB0 + i, verbs[i]);
+    s_cpy(s, name, sizeof s);
+    s_cat(s, " ", sizeof s);
+    s_cat(s, obj, sizeof s);
+    ModifyMenu(m, 9, MF_BYPOSITION | MF_POPUP, (UINT)sub, s);
+}
+
+/* a verb chosen from the menu: id OBJ_VERB0 + verb; FALSE if not one */
+BOOL ole_verb(WORD id)
+{
+    char name[80], verbs[OBJ_VERBS][40];
+    int n;
+    DWORD pf, pl;
+    WOBJ *o;
+    if (id < OBJ_VERB0 || id >= OBJ_VERB0 + OBJ_VERBS)
+        return FALSE;
+    if (!sel_verbs(name, verbs, &n, &pf, &pl) || id - OBJ_VERB0 >= n)
+        return TRUE;
+    o = load(pf, pl);
+    if (o && o->obj) {
+        OLESTATUS st;
+        o->relErr = OLE_OK;
+        st = OleActivate(o->obj, id - OBJ_VERB0, TRUE, TRUE, g_docwnd, NULL);
+        if (st == OLE_WAIT_FOR_RELEASE) {
+            wait_release(o->obj, st);
+            st = o->relErr;
+        }
+        /* a link whose document cannot be opened (WR33 O4) */
+        if (st != OLE_OK && st != OLE_WAIT_FOR_RELEASE) {
+            FARPROC fp = MakeProcInstance((FARPROC)InvalidLinkDlgProc, g_hinst);
+            int r;
+            o->unavail = TRUE;
+            r = DialogBox(g_hinst, "DTINVALIDLINK", g_frame, (DLGPROC)fp);
+            FreeProcInstance(fp);
+            if (r == 262)
+                cmd_links();
+            return TRUE;
+        }
+        host_names(o->obj);
+    }
+    return TRUE;
 }

@@ -4936,7 +4936,7 @@ done
 # its own details; when the last part of a case is printed, the case's
 # own ok or FAIL line follows (partsummary) and counts once.
 # Write's feature scenarios run as w16write parts (tests/writescenarios.sh)
-WRSCEN_BOOT=${WRSCEN_BOOT:-wr24 wr25 wr26 wr28 wr29 wr30 wr30o wr31 wr32}
+WRSCEN_BOOT=${WRSCEN_BOOT:-wr24 wr25 wr26 wr28 wr29 wr30 wr30o wr31 wr32 wr33}
 caseparts() {
     case $1 in
     allw16nolock) seq -f "$1@%g" 1 "${NOLOCK_RUNS:-6}" ;;

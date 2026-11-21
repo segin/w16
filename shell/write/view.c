@@ -1096,6 +1096,8 @@ static void paint_sel(HDC dc)
     LocalUnlock(hlines);
 }
 
+BOOL g_holdPaint;                       /* links updating on opening: blank (WR33 O2) */
+
 static void paint(HWND w)
 {
     PAINTSTRUCT ps;
@@ -1103,6 +1105,10 @@ static void paint(HWND w)
     LINE *l;
     int i, y = YP0;
     caretOn = FALSE;
+    if (g_holdPaint) {
+        EndPaint(w, &ps);
+        return;
+    }
     SetBkMode(dc, TRANSPARENT);
     l = lines();
     for (i = 0; i < nlines; i++) {
