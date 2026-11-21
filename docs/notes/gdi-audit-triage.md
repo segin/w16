@@ -11,8 +11,12 @@ of Windows 3.1 with Microsoft's GDI and with w16's
 `tests/apps/gd5ref.h` is `tools/obsref.py` of 3.1's log. Most of GD5 draws
 into memory bitmaps and reads the pixels back, so it compares pixels
 without screenshots; a few parts use a window of its own. GD6
-(`tests/apps/gd6.c`, make test) checks GDI's 32-bit arithmetic. The
-audit's line numbers were close but not exact.
+(`tests/apps/gd6.c`, make test) checks GDI's 32-bit arithmetic. GD8
+(`tests/apps/gd8.c`, table `gd8ref.h`; also in `gdiaudit`) closed the
+last items: the clip region's coordinates, justification, the character
+extra, and, read in GD1's log (`tests/gdiboot.sh -l -L` with GD8 as the
+shell), bmlpPDevice and Escape on a memory DC. The audit's line numbers
+were close but not exact.
 
 Verdicts: **REAL** (confirmed; fixed unless noted), **FALSE** (the claim
 is wrong, or GD5 shows w16 already as 3.1), **3.1-BEHAVIOUR** (3.1 does
@@ -22,8 +26,8 @@ arguments; fixed only when cheap and invisible to working programs),
 w16 may survive (the user's ruling); GD5 runs such steps on w16's GDI
 only (`gdi_is_w16`, the module description).
 
-Status: every finding has a verdict; "open" in the Action column marks
-what is left (listed again at the end).
+Status: every finding has a verdict and is closed (2026-11-21); the
+end lists what was kept on purpose.
 
 ## Critical
 
@@ -46,41 +50,41 @@ what is left (listed again at the end).
 | H3 | 3.1-BEHAVIOUR | GD5 on 3.1: DeleteObject of a selected palette returns 1 and the palette is gone; SelectPalette back returns its handle. w16 the same. | Kept. | - |
 | H4 | HARDENING | DeleteDC used the DC after USER's hook without checking it; Save/RestoreVisRgn on a DC with no visible region. | Fixed (checks). | 8f6ebd4 |
 | H5 | REAL (by reading) | A memory DC's pen stayed realized for the previous bitmap's format (`dc_ppen` keyed on the handle only). | Realized again after a bitmap is selected. GD5 "colour" (white and red pens selected before a colour bitmap) as on 3.1. | 8f6ebd4 |
-| H6 | REAL | GD5 on 3.1: with no clip region, ExcludeClipRect starts from the screen (in screen coordinates); w16 started from the device's size at the DC's origin, so a window off the screen's left lost its right part. | Starts from the screen's rectangle in the DC's device coordinates. GD5 "off-left window". (3.1 also keeps the clip region in screen coordinates, which GetClipRgn shows: open, see the end.) | 8f6ebd4 |
+| H6 | REAL | GD5 on 3.1: with no clip region, ExcludeClipRect starts from the screen (in screen coordinates); w16 started from the device's size at the DC's origin, so a window off the screen's left lost its right part. | Starts from the screen's rectangle (in screen coordinates since 1879a3f, as 3.1 keeps the clip region: "Beyond the audit"). GD5 "off-left window". | 8f6ebd4, 1879a3f |
 | H7 | 3.1-BEHAVIOUR | GD5: MM_ISOTROPIC extents on 3.1 equal w16's in every case tried, including 640/640 (no 639) and the 0 viewport extent of 32000:1 against 1:32000. | Kept. | - |
 | H8 | REAL | GD5 on 3.1: ScaleWindowExt/ScaleViewportExt to 0 return 0 and keep the extents; a zero divisor gives 7FFFh (and returns the old extents). w16 set 0 (mapping then divided by 0). | As 3.1 (`scale_ext`; the sign of 7FFFh for a negative product UNVERIFIED). | 8f6ebd4 |
 | H9 | REAL | CreateBitmap's initial bits: `bits + y * scan` wrapped within one segment past 64K. | Copied as SetBitmapBits copies (`bits_copy`). GD5 "huge" (8000 x 100 mono, read back equal, as 3.1). | 3f297e3 |
-| H10 | UNSURE | CreateCompatibleBitmap on a memory DC sets `bmlpPDevice` to the selected bitmap's PBITMAP; the code notes 3.1 seemed to do so (GD1, UNVERIFIED). VGA.DRV does not follow it in any case GD5 tries. | open: needs a GD1 log of 3.1's CreateCompatibleBitmap on a memory DC. | - |
+| H10 | REAL | GD8 under GD1 on 3.1: every bitmap's `bmlpPDevice` is the display's PDEVICE (0C37:0000 in the log), for CreateBitmap's and for CreateCompatibleBitmap's on the screen DC and on memory DCs with a colour or a monochrome bitmap selected. w16 gave a memory DC's compatible bitmap the selected bitmap's PBITMAP (dangling once that bitmap is deleted). | The DC's device's PDEVICE, as 3.1. GD8's "driver" section (read in GD1's log). | 1879a3f |
 | H11 | FALSE | GD5: BitBlt past and before a memory bitmap source gives the same pixels on w16 as on 3.1. | None. | - |
 | H12 | HARDENING | 2.x font conversion: no checks of the character range, bits offset or new size; resource kept on failure. | Fixed: such a font is not converted (no font); its blocks freed. | f9f3b72 |
 | H13 | REAL | Fonts were matched by the first 12 characters of the string given (a path never matched); a second AddFontResource loaded the file again and one RemoveFontResource removed both. GD5 on 3.1: added again, a file stays until removed twice. | Matched by file name without its path; a file already in the table is counted, not loaded again. GD5 "fonts". | f9f3b72 |
 | H14 | REAL | GD5 on 3.1: in MM_LOMETRIC and 2:1 anisotropic modes the font is chosen by its device size. | `font_realize` scales lfHeight/lfWidth to device units (cache keyed on them too, `fontHt`/`fontWd` in DC fields w16 did not use). | f9f3b72 |
 | H15 | REAL | GD5 on 3.1: GetTextMetrics gives logical units, positive (descent = height - ascent); w16 gave a negative height and device units. | As 3.1. | f9f3b72 |
 | H16 | REAL | StretchBlt compared logical sizes and BitBlt'ed with the destination's logical size in the source DC. | Each rectangle mapped by its own DC; a mirror where the device extents' signs differ. GD5 "StretchBlt x2 source" as 3.1. | 8f6ebd4 |
-| H17 | REAL | GD5 on 3.1: GetDIBits without bits fills the colour table; with a core header the colours come back as RGBTRIPLEs; DIB_PAL_COLORS gives palette indices (0, 13h); SetDIBitsToDevice returns the scan lines on a window DC and FFFFh on a memory DC (the pixels the same). | All as 3.1 (colour copy, `dib_colors_back`; DIB_PAL_COLORS translated through the DC's palette both ways). The PBITMAP given to DIBScreenBlt on a memory DC gives 3.1's pixels: kept. | 05bac81 |
+| H17 | REAL | GD5 on 3.1: GetDIBits without bits fills the colour table; with a core header the colours come back as RGBTRIPLEs; DIB_PAL_COLORS gives palette indices (0, 13h); SetDIBitsToDevice returns the scan lines on a window DC and FFFFh on a memory DC. GD7 (2026-11-20, every DIB format, DIB_RGB_COLORS and DIB_PAL_COLORS with the default palette and one of the program's own, realized or not, core headers, through SetDIBits, CreateDIBitmap, SetDIBitsToDevice, StretchDIBits, GetDIBits): 3.1 draws nothing on a memory DC (the "pixels the same" earlier held only with Microsoft's VGA.DRV, which draws nothing there either); on a window DC it returns the driver's value, the lines drawn inside the clip rectangle. | All as 3.1 (colour copy, `dib_colors_back`; DIB_PAL_COLORS through the DC's palette both ways; nothing drawn on a memory DC; the driver's return value). GD5 and GD7 (boot-test cases `gdiaudit`, `gdidib`) have no FAIL with w16's GDI, w16's VGA.DRV or both. | 05bac81, dc4acf7 |
 
 ## Medium
 
 | # | Verdict | Evidence | Action | Commit |
 |---|---|---|---|---|
-| 1 | HARDENING | NULL structure pointers to Create*Indirect, SetPaletteEntries: a program error. | Not fixed. | - |
-| 2 | HARDENING | `dev_open` kept the driver's library on failure; `dev_close` trusts Disable; 15-character name. | The library freed on failure; the rest not. | 05bac81 |
-| 3 | UNSURE | Escape on a memory DC passes the PBITMAP to Control. | open: needs 3.1's argument observed (GD1). | - |
+| 1 | HARDENING | NULL structure pointers to Create*Indirect, SetPaletteEntries: a program error. | Fixed: no object, 0. | 1879a3f |
+| 2 | HARDENING | `dev_open` kept the driver's library on failure; `dev_close` trusts Disable; 15-character name. | The library freed on failure; Disable (and ColorInfo) called only when exported; a longer name looked up by its first 15 characters (it was loaded again at every CreateDC). | 05bac81, 1879a3f |
+| 3 | REAL | GD8 under GD1 on 3.1: Escape on a memory DC makes no Control call; QUERYESCSUPPORT and GETCOLORTABLE return 0 there (on the screen DC Control gets the display's PDEVICE). w16 passed the PBITMAP to Control. | Escape on a memory DC returns 0 without calling the driver (UNVERIFIED for escapes other than the two observed). GD8. | 1879a3f |
 | 4 | REAL | GD5 on 3.1: SetPaletteEntries on DEFAULT_PALETTE returns 0 and changes nothing. | As 3.1. | 05bac81 |
 | 5 | 3.1-BEHAVIOUR (part REAL) | GD5 on 3.1: RectVisible (GDI.104) and RectInRegionOld say an empty or inverted rectangle inside is visible, as w16. But 3.1's GDI.104 returns 0101h, w16's 1. | Kept; RectVisibleOld returns 0101h. | 8f6ebd4 |
-| 6 | REAL (part) | GD5 on 3.1: CreateCompatibleDC of a handle that is no DC returns 0 (w16 made a display DC). The display's count was raised twice when CreateCompatibleDC opened it. The initial visible region is clipped to the bitmap anyway (FALSE part). | Fails; counted once. CreateDC's device on OOM: not fixed (HARDENING). | 8f6ebd4 |
+| 6 | REAL (part) | GD5 on 3.1: CreateCompatibleDC of a handle that is no DC returns 0 (w16 made a display DC). The display's count was raised twice when CreateCompatibleDC opened it. The initial visible region is clipped to the bitmap anyway (FALSE part). | Fails; counted once; CreateDC gives its device back when no DC can be made (HARDENING). | 8f6ebd4, 1879a3f |
 | 7 | FALSE | GDI's heaps are moveable segments whose selectors stay while they grow (gdi.h's heap comment); fixed blocks do not move inside them, so far pointers stay good across allocations. | None. | - |
 | 8 | HARDENING | `combine` started its sweep at -32767: a band at -32768 was lost. (GD5: a region at -32768 behaves the same on both, its box from the rectangle.) | Fixed: from -32768. | 8f6ebd4 |
-| 9 | HARDENING | `x - wndOrg.x` overflows in 16 bits for coordinates 32K apart. | Not fixed. | - |
+| 9 | HARDENING | `x - wndOrg.x` overflows in 16 bits for coordinates 32K apart. | Not fixed, on purpose: 3.1 computes in 16 bits too (C6: a clip region to 32767 on a window at 100,80 wraps on 3.1), so 32-bit arithmetic here would change what such programs see. | - |
 | 10 | REAL (part) / 3.1-BEHAVIOUR (part) | GD5 on 3.1: a hatched brush's background follows SetBkColor after selection; w16 kept the colour of its realization. Brush origin: the SDK requires UnrealizeObject before the brush is selected again. | Brushes realized again when the physical background colour changes (SetBkColor, RestoreDC/SetDCState's refresh); origin kept. | 8f6ebd4 |
-| 11 | REAL (part) | SelectClipRgn, IntersectClipRect, ExcludeClipRect, OffsetClipRgn returned the composite region before USER's DC hook updated the visible region. OOM in region code ignored: HARDENING. | The hook is called first (`dc_validate`); OOM not fixed. | 8f6ebd4 |
+| 11 | REAL (part) | SelectClipRgn, IntersectClipRect, ExcludeClipRect, OffsetClipRgn returned the composite region before USER's DC hook updated the visible region. OOM in region code ignored: HARDENING. | The hook is called first (`dc_validate`); SelectClipRgn fails (ERROR) when its region cannot be made. Not fixed: OOM inside region arithmetic (dc_rao, SaveVisRgn, SetDCState) keeps the old region: a failure path through every caller for a heap that grows (ExtendedGdiHeap) is not cheap, and nothing a working program does reaches it. | 8f6ebd4, 1879a3f |
 | 12 | HARDENING | `wide_frame` gave overlapping spans when the sides meet. | Fixed: one span. | 068e873 |
 | 13 | REAL | `ellipse_row`: `102 * B * B` overflowed past 4588 rows; `r - l` in 16 bits. | 32-bit arithmetic (1.02 B^2 as B^2 + B^2 / 50, the same integers). GD5 "big Ellipse" filled. | 068e873 |
-| 14 | REAL (part) | GD5 on 3.1: ExtTextOut with TA_UPDATECP and dx moves the position by the dx widths before the last character plus its own width, left for TA_RIGHT. BreakErr through `drv_extent`: UNSURE (not observed). Uninitialised `orc`: FALSE (the options are cleared without a rectangle). | Position as 3.1 (`text_width`); BreakErr open. | f9f3b72 |
+| 14 | REAL | GD5 on 3.1: ExtTextOut with TA_UPDATECP and dx moves the position by the dx widths before the last character plus its own width, left for TA_RIGHT. GD8 under GD1 on 3.1: SetTextJustification's BreakErr starts at count / 2 + 1 (counts 1-5; 0 for 0); GetTextExtent and the extents TextOut takes leave it; each output moves it on (BreakRem off per break character, BreakCount on at 0 or less); the driver's own update does not come back. w16's extents moved it and its output did not, so a second TextOut of a justified line (and centred text) placed the extra pixel elsewhere. Uninitialised `orc`: FALSE (the options are cleared without a rectangle). | Position as 3.1 (`text_width`); the error term as 3.1 (`drv_extent` keeps it, ExtTextOut moves it on without dx widths: UNVERIFIED with them). GD8 "text": every glyph position as 3.1. | f9f3b72, 1879a3f |
 | 15 | REAL | GD5 on 3.1: GetCharWidth in logical units. | As 3.1. | f9f3b72 |
 | 16 | HARDENING | Leaks: FONTDIR lock and resource on failure, a font-less file's library, `ellipse_outline`'s block when h <= 0. | Fixed. | f9f3b72, 068e873 |
 | 17 | REAL | GD5 on 3.1: PolyPolygon fills the polygons together and does not close them (fill nor outline); Arc/Pie/Chord with the same radial draw the whole ellipse; Rectangle with no width or height draws nothing. Negative counts: HARDENING. | All as 3.1; negative counts fail. | 068e873 |
-| 18 | HARDENING | NULL pointers to Get/SetBitmapBits, CreateBitmapIndirect, FastWindowFrame, text calls: program errors. | Not fixed. | - |
+| 18 | HARDENING | NULL pointers to Get/SetBitmapBits, CreateBitmapIndirect, FastWindowFrame, text calls: program errors. | Fixed: they fail (0/FALSE) instead of faulting: the bitmap calls, FastWindowFrame, CreateEllipticRgnIndirect, GetTextExtent(Point), ExtTextOut's string, GetTextMetrics, GetTextFace, GetCharWidth. FillRgn/FrameRgn already checked their region; the FONTDIR bounds are H12's. | 1879a3f |
 
 ## Low
 
@@ -90,13 +94,13 @@ what is left (listed again at the end).
 | L2 | REAL (part) | GD5 on 3.1: GetRasterizerCaps writes nSize 6, flags 3, language 0409h, at most n bytes; returns 0409h. | nSize and language as 3.1; flags 0 (w16 has no TrueType rasterizer: by design); returns 1 (nonzero as 3.1). | 05bac81 |
 | L3 | FALSE | GetObject of a bitmap: every bitmap object has its PBITMAP block (`bm_create` fails otherwise). | None. | - |
 | L4 | FALSE | DeleteObject of metafile objects: w16 makes none. | None. | - |
-| L5 | HARDENING | `gdi_libentry` ignores LOCALINIT failing. | Not fixed. | - |
-| L6 | HARDENING | `driver_stock_fonts` with face names of 32 or more characters (the display driver's own resource). | Not fixed. | - |
+| L5 | HARDENING | `gdi_libentry` ignores LOCALINIT failing. | Fixed: GDI's load fails. | 1879a3f |
+| L6 | HARDENING | `driver_stock_fonts` with face names of 32 or more characters (the display driver's own resource). | Fixed: the rest of a longer name skipped. | 1879a3f |
 | L7 | FALSE | ExtendedGdiHeap's table index wraps only past 65535 objects; their stubs in DGROUP run out long before. | None. | - |
-| L8 | UNSURE | `dm.CharExtra` is scaled when set, not when the mapping changes. | open. | - |
-| L9 | HARDENING | Get/SetBoundsRect with a NULL rectangle (USER's calls pass one). | Not fixed. | - |
-| L10 | HARDENING | NULL checks in region and DC calls. | Not fixed. | - |
-| L11 | HARDENING | 1064-byte colour tables on the caller's stack (dib_bits, SetDIBitsToDevice). | Not fixed. | - |
+| L8 | REAL | GD8 on 3.1: the character extra is kept as a device value only: set as 6 in MM_TEXT, GetTextCharacterExtra gives 3 at a 2:1 mapping; set as 6 at 2:1, it gives 12 back in MM_TEXT; SetTextCharacterExtra returns the old value in the mapping's units; the drawing is as set (w16's already). w16 gave back the logical value as set. | Get/SetTextCharacterExtra convert the device value with the mapping now (UNVERIFIED: the rounding). GD8. | 1879a3f |
+| L9 | HARDENING | Get/SetBoundsRect with a NULL rectangle (USER's calls pass one). | Fixed: GetBoundsRect does not write through NULL (SetBoundsRect already allowed it). | 1879a3f |
+| L10 | HARDENING | NULL checks in region and DC calls. | Fixed: CreateRectRgnIndirect, GetRgnBox, RectInRegion(Old), GetClipBox, RectVisible(Old), GetDCHook. | 1879a3f |
+| L11 | HARDENING | 1064-byte colour tables on the caller's stack (dib_bits, SetDIBitsToDevice). | Fixed: the converted copy comes from GDI's heaps, and only when a core header or DIB_PAL_COLORS needs one. | 1879a3f |
 | L12 | REAL | GD5 on 3.1: SetMapperFlags keeps the whole DWORD. | As 3.1. | f9f3b72 |
 
 ## Counts
@@ -104,19 +108,30 @@ what is left (listed again at the end).
 | Severity | REAL | FALSE | 3.1-BEHAVIOUR | HARDENING | UNSURE |
 |---|---|---|---|---|---|
 | Critical (7) | 6: C1, C2, C3, C4, C5, C7 (all fixed) | 0 | 1: C6 | 0 | 0 |
-| High (17) | 9: H5, H6, H8, H9, H13, H14, H15, H16, H17 (all fixed) | 2: H1, H11 | 2: H3, H7 | 3: H2, H4, H12 (all fixed) | 1: H10 |
-| Medium (18) | 9: 4, 5, 6, 10, 11, 13, 14, 15, 17 (fixed; 5, 6, 10, 11 and 14 in part, see their rows) | 1: 7 | 0 (5 and 10 are in part) | 7: 1, 2, 8, 9, 12, 16, 18 (2 in part, 8, 12, 16 fixed) | 1: 3 |
-| Low (12) | 3: L1, L2, L12 (fixed; L2 in part) | 3: L3, L4, L7 | 0 | 5: L5, L6, L9, L10, L11 | 1: L8 |
+| High (17) | 10: H5, H6, H8, H9, H10, H13, H14, H15, H16, H17 (all fixed) | 2: H1, H11 | 2: H3, H7 | 3: H2, H4, H12 (all fixed) | 0 |
+| Medium (18) | 10: 3, 4, 5, 6, 10, 11, 13, 14, 15, 17 (fixed; 5, 6, 10 and 11 in part, see their rows) | 1: 7 | 0 (5 and 10 are in part) | 7: 1, 2, 8, 9, 12, 16, 18 (all fixed but 9, kept on purpose, and 11's OOM part) | 0 |
+| Low (12) | 4: L1, L2, L8, L12 (fixed; L2 in part) | 3: L3, L4, L7 | 0 | 5: L5, L6, L9, L10, L11 (all fixed) | 0 |
 
 ## Beyond the audit (found on the way)
 
 - GetClipRgn (GDI.173): 3.1 keeps a DC's clip region in screen
   coordinates (GD5: IntersectClipRect(10, 10, 20, 20) on a window at
-  (100, 80) gives a region at (110, 90)); w16 keeps it in the DC's device
-  coordinates, so the region GetClipRgn returns is offset by the DC's
-  origin. Drawing is the same. open (GD5 records it unchecked): moving
-  the storage to screen coordinates touches SetDCOrg, SaveDC and USER's
-  DC cache, and needs SetDCOrg with a clip region observed on 3.1 first.
+  (100, 80) gives a region at (110, 90)). GD8 on 3.1: SetDCOrg moves the
+  clip region with the origin and returns the old origin (w16 returned
+  0); after RestoreDC (and SetDCState) a saved clip region is where it
+  would be relative to the origin now; SelectClipRgn's region and
+  OffsetClipRgn as expected; GetClipRgn calls USER's DC hook first (a
+  CS_OWNDC window that moved gets its new origin, and the clip region
+  with it, from the hook). Fixed (1879a3f): w16 keeps the clip region in
+  screen coordinates as 3.1, every case of GD8 as 3.1.
+- PtVisible's value (GD8, not an audit finding): 3.1 returns 0201h or
+  0101h on window and screen DCs, 0101h or 0001h on a CS_OWNDC window's
+  DC and on CreateDC's, 0001h on a memory DC, the high byte lower by one
+  with a clip region selected; whether visible is the same as w16's in
+  every case but one: on a fresh memory DC (its 1 x 1 stock bitmap)
+  PtVisible(0, 0) is 0 on 3.1, nonzero on w16. Not followed up (GD8
+  records the values unchecked): the high byte has no meaning a program
+  can rely on, and the fresh memory DC needs its visible region observed.
 - The font mapper: CreateFont(-11, ..., "Small Fonts") gives a font of
   tmHeight 12 on 3.1, 11 on w16 (the mapper's weights are UNVERIFIED, not
   part of this audit; GD5 records it unchecked).
@@ -134,11 +149,13 @@ what is left (listed again at the end).
 
 ## Tests
 
-- GD5 on Windows 3.1 (Standard mode) with Microsoft's GDI and with w16's
-  (boot-test case `gdiaudit`): both complete; w16's log has no FAIL
-  against 3.1's table. The unchecked differences (`OBS ~`) are the ones
-  listed above: GetClipRgn's coordinates, the font mapper's Small Fonts
-  size, GetRasterizerCaps' TrueType flags and return value.
+- GD5 and GD8 on Windows 3.1 (Standard mode) with Microsoft's GDI and
+  with w16's (boot-test case `gdiaudit`): all complete; w16's logs have
+  no FAIL against 3.1's tables. The unchecked differences (`OBS ~`): the
+  font mapper's Small Fonts size, GetRasterizerCaps' TrueType flags and
+  return value, a reused pen handle (GD5), PtVisible's high byte (GD8).
+  GD8 was also run under GD1/GD2 (`tests/gdiboot.sh -l -L`, its shell)
+  on both, for the driver's side (H10, Medium 3, 14).
 - Full boot test at e21d6b5 (installation-05, 13 jobs): 125 ok, 2
   failures, both known on master 429e079: ddeml (conn), lzexpand
   (quirks). gdi, gdik, usergdi, vga*, tree, write, cardfile, control and
@@ -149,8 +166,7 @@ what is left (listed again at the end).
 
 ## Left open
 
-- H10 (bmlpPDevice for a memory DC's compatible bitmap), Medium 3 (Escape's
-  device pointer on a memory DC), Medium 14's BreakErr, L8 (CharExtra and
-  mapping changes): each needs 3.1 observed (GD1 logs or a GD5 section).
-- GetClipRgn's coordinates (above).
-- The HARDENING items marked "Not fixed".
+Nothing of the audit. Kept on purpose, with the reason in their rows:
+Medium 9 (3.1's 16-bit arithmetic) and Medium 11's OOM part. Outside the
+audit: the font mapper's weights, PtVisible's high byte and a fresh
+memory DC's PtVisible (above), the `i4.asm` copies in OLECLI and Write.
