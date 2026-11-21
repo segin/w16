@@ -119,8 +119,8 @@ nothing of Microsoft's.
                           to 44100 Hz), MIDI out and in through the
                           card's MPU-401 port, and the mixer's volumes
                           (master, wave, MIDI, CD, line) as auxiliary
-                          devices; Standard mode only. Not enabled by
-                          default (see below)
+                          devices; Standard mode only. Enabled in
+                          SYSTEM.INI [drivers] (see below)
   SYSTEM\MAIN.CPL         Control Panel's applets: Color, Desktop,
                           Keyboard and Mouse work; Fonts, Ports,
                           Printers, International and Date/Time are not
@@ -180,10 +180,10 @@ directory).
 installed; without it Program Manager says so instead of starting
 them.
 
-To use SB16.DRV with a Sound Blaster 16 (or a compatible card, or an
-emulator's), add these lines to SYSTEM.INI's [drivers] section (with
-another number after "wave", "midi" or "aux" when those keys are taken
-by another card's driver):
+SB16.DRV is enabled by these lines in SYSTEM.INI's [drivers] section, for
+a Sound Blaster 16 (or a compatible card, or an emulator's); to use
+another card's driver instead, change them (or number another driver's
+keys "wave1", "midi1", "aux1" to keep both):
 
   wave=sb16.drv
   midi=sb16.drv
