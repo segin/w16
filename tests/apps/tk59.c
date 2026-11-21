@@ -2,7 +2,9 @@
  * tk59.c - KERNEL when a module or a module it imports cannot be found:
  * LoadLibrary, WinExec and LoadModule return codes, and whether KERNEL
  * puts up its "File Error" box (screenshots), with and without
- * SetErrorMode(SEM_NOOPENFILEERRORBOX).
+ * SetErrorMode(SEM_NOOPENFILEERRORBOX); and OpenFile with OF_PROMPT, with
+ * and without OF_CANCEL, for a file that is not there (steps 10-13: the
+ * same box; the KERNEL audit's L32).
  *
  * Run as the shell, on a C: drive whose WINDOWS\SYSTEM has no OLECLI.DLL
  * (CARDFILE.EXE imports OLECLI), with real keys and screenshots
@@ -35,6 +37,7 @@ int __cdecl tmain(void)
         GetProcAddress(GetModuleHandle("USER"), MAKEINTRESOURCE(5));
     struct { WORD env; LPSTR cmd; LPVOID show; DWORD res; } lp;
     WORD showw[2] = { 2, SW_SHOWNORMAL };
+    OFSTRUCT of;
     UINT r;
     out("TK59 start\r\n");
     we(0);
@@ -89,7 +92,36 @@ int __cdecl tmain(void)
     r = (UINT)LoadLibrary("CARDFILE.EXE");
     obs("LoadLibrary.cardfile", r < 32 ? r : 0x20);
 
-    step(10, "done");
+    /* OpenFile's own box (KERNEL audit, L32): OF_PROMPT, with and
+       without OF_CANCEL, for a file that is not there */
+    step(10, "OpenFile NOSUCH.TXT, OF_PROMPT | OF_CANCEL");
+    SetErrorMode(0);
+    of.nErrCode = 0xEEEE;
+    r = (UINT)OpenFile("NOSUCH.TXT", &of, OF_READ | OF_PROMPT | OF_CANCEL);
+    obs("OpenFile.prompt.cancel", r);
+    obs("OpenFile.prompt.cancel.err", of.nErrCode);
+
+    step(11, "OpenFile NOSUCH.TXT, OF_PROMPT");
+    of.nErrCode = 0xEEEE;
+    r = (UINT)OpenFile("NOSUCH.TXT", &of, OF_READ | OF_PROMPT);
+    obs("OpenFile.prompt", r);
+    obs("OpenFile.prompt.err", of.nErrCode);
+
+    step(12, "OpenFile NOSUCH.TXT, OF_PROMPT | OF_CANCEL, error mode 8000h");
+    SetErrorMode(0x8000);
+    of.nErrCode = 0xEEEE;
+    r = (UINT)OpenFile("NOSUCH.TXT", &of, OF_READ | OF_PROMPT | OF_CANCEL);
+    obs("OpenFile.prompt.cancel.8000", r);
+    obs("OpenFile.prompt.cancel.8000.err", of.nErrCode);
+    SetErrorMode(0);
+
+    step(13, "OpenFile C:\\NODIR\\NOSUCH.TXT, OF_PROMPT | OF_CANCEL");
+    of.nErrCode = 0xEEEE;
+    r = (UINT)OpenFile("C:\\NODIR\\NOSUCH.TXT", &of, OF_READ | OF_PROMPT | OF_CANCEL);
+    obs("OpenFile.prompt.nodir", r);
+    obs("OpenFile.prompt.nodir.err", of.nErrCode);
+
+    step(14, "done");
     out("TK59 done\r\n");
     return 0;
 }

@@ -1,6 +1,7 @@
 ; tests/apps/tk59.c as the shell (boot-test missingdll@tk59) on a drive without
-; OLECLI.DLL: each Return closes one box (ten step boxes, five File Error
-; boxes on 3.1); the shots show which boxes there were
+; OLECLI.DLL: each Return closes one box (fourteen step boxes, five File
+; Error boxes for the loader and four for OpenFile's OF_PROMPT on 3.1);
+; the shots show which boxes there were
 settle 15 2
 shot 01
 key Return
@@ -45,5 +46,29 @@ shot 14
 key Return
 settle 15 2
 shot 15
+key Return
+settle 15 2
+shot 16
+key Return
+settle 15 2
+shot 17
+key Return
+settle 15 2
+shot 18
+key Return
+settle 15 2
+shot 19
+key Return
+settle 15 2
+shot 20
+key Return
+settle 15 2
+shot 21
+key Return
+settle 15 2
+shot 22
+key Return
+settle 15 2
+shot 23
 key Return
 waitexit 30

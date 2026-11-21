@@ -89,6 +89,7 @@ void diag_load_end(const char FAR *name, u16 rc);
 /* ---- kmisc.c / kmisc2.c ---- */
 u16  error_mode(void);
 void file_error_box(const char FAR *name, const char *ext);
+void cannot_find_box(const char FAR *name, const char *ext);  /* kmisc2.c: OF_PROMPT's box */
 
 /* ---- fault.c ---- */
 void fault_init(void);

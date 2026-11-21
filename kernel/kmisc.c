@@ -133,15 +133,30 @@ char FAR * KAPI KAnsiPrev(char FAR *start, char FAR *p)
     return p > start ? p - 1 : start;
 }
 
-/* Reserved5 (KERNEL.87) = lstrcmp (Wine's name). UNVERIFIED: plain byte
-   order here; USER's lstrcmp sorts by the language driver. */
+/* Reserved5 (KERNEL.87) = lstrcmp (Wine's name). Observed on 3.1 (TK66
+   "klstrcmp", all three runs): the bytes compared after A-Z and C0h-DEh
+   but D7h are made lower case ("a" = "A", "_" < "a", "B" > "a", C9h =
+   E9h, 8Ah < 9Ah, D7h < F7h); NULL is the empty string (NULL < "a",
+   "a" > NULL, NULL = NULL). w16 compared the bytes as they were and
+   faulted on NULL (KERNEL audit, medium 43). */
+static u8 kl_lower(u8 c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7) ?
+           (u8)(c + 0x20) : c;
+}
+
 int KAPI KLstrcmp(const char FAR *a, const char FAR *b)
 {
-    while (*a && *a == *b) {
+    static const char none[1] = { 0 };
+    if (!a)
+        a = none;
+    if (!b)
+        b = none;
+    while (*a && kl_lower((u8)*a) == kl_lower((u8)*b)) {
         a++;
         b++;
     }
-    return (int)(u8)*a - (int)(u8)*b;
+    return (int)kl_lower((u8)*a) - (int)kl_lower((u8)*b);
 }
 
 /* GetCodeInfo (KERNEL.104, SDK): lpProc is a procedure address or

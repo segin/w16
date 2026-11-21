@@ -44,7 +44,9 @@ static u32 entry_size(const u8 FAR *p, const u8 FAR *end)
     while (p < end && p[0]) {
         u8 count = p[0], type = p[1];
         u16 step;
-        if (end - p < 2)
+        /* (an unsigned difference: a table of 32K or more was taken for
+           one that runs past its end; KERNEL audit, C5) */
+        if ((u16)(end - p) < 2)
             return 0xFFFFFFFFUL;
         p += 2;
         if (type == NEB_UNUSED)
