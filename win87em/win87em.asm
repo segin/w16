@@ -31,6 +31,9 @@ extern _emu_fpmath                      ; void __cdecl far emu_fpmath(u16 fn, fp
 extern _emu_save                        ; void __cdecl far emu_save(void far *)
 extern _emu_restore                     ; void __cdecl far emu_restore(void far *)
 extern _emu_reset                       ; void __cdecl far emu_reset(void)
+extern _handler_get                     ; u32 __cdecl far handler_get(void)
+extern _handler_set                     ; void __cdecl far handler_set(u32)
+extern _handler_drop                    ; void __cdecl far handler_drop(void)
 
 WF_80x87        equ 0400h
 SAVE_SIZE       equ 01CDh               ; observed (__WIN87EMINFO word 1)
@@ -41,12 +44,12 @@ CW_HWMASK       equ 0FF3Ch              ; function 4: IM and DM are unmasked
                                         ; (bits 6, 7 reserved)
 
 segment _DATA
-global _have87, _user_cw, _handler, _fn12, _em_acc
+global _have87, _user_cw, _fn12, _em_acc
 _have87         dw 0
 _user_cw        dw CW_INIT              ; the control word function 4 got
-_handler        dd 0                    ; function 3: exception handler
 _fn12           dw 0                    ; function 12: AX kept (meaning unknown)
 _em_acc         dw 0                    ; emulator: exceptions since fn 9/0
+hcall           dd 0                    ; the handler call_handler calls
 old_vec         times 2 * (3Eh - 34h + 1) dw 0
 hooked          dw 0
 old_irq13       dd 0
@@ -182,6 +185,7 @@ irq13_handler:
         pusha
         push ds
         push es
+        cld                             ; (IRET puts the flags back)
         mov bp, sp
         mov ax, DGROUP
         mov ds, ax
@@ -245,6 +249,8 @@ emu_common:
         pusha
         push ds
         push es
+        cld                             ; the C code copies forwards (an
+                                        ; INT keeps DF; IRET puts it back)
         mov ax, DGROUP
         mov ds, ax
         mov ax, sp
@@ -278,7 +284,7 @@ __FPMATH:
         jmp [cs:fpm_table + bx]
 
 fpm_table:
-        dw fpm_init, fpm_init1, fpm_init1, fpm_handler, fpm_setcw
+        dw fpm_init, fpm_init1, fpm_init2, fpm_handler, fpm_setcw
         dw fpm_getcw, fpm_round, fpm_pop32, fpm_status, fpm_clear
         dw fpm_depth, fpm_have87, fpm_12
 
@@ -319,6 +325,18 @@ fpm_init1:
         call init87
         xor ax, ax
         jmp fpm_ret_cf1
+; 2 also ends the task's use: its handler is forgotten (the handler is
+; the task's own, emu.c)
+fpm_init2:
+        call init87
+        push bx
+        pushf
+        cld
+        call far _handler_drop
+        popf
+        pop bx
+        xor ax, ax
+        jmp fpm_ret_cf1
 
 init87:
         fninit
@@ -328,10 +346,19 @@ init87:
         mov word [_em_acc wrt DGROUP], 0
         ret
 
-; 3: DX:AX = exception handler. AX = 253Eh afterwards (observed).
+; 3: DX:AX = the calling task's exception handler (one per task: emu.c).
+; AX = 253Eh afterwards (observed). The caller's DF is kept (observed of
+; __fpMath, TK67P5).
 fpm_handler:
-        mov [_handler wrt DGROUP], ax
-        mov [_handler + 2 wrt DGROUP], dx
+        push bx
+        pushf
+        cld
+        push dx
+        push ax
+        call far _handler_set
+        add sp, 4
+        popf
+        pop bx
         mov ax, 253Eh
         jmp fpm_ret_cf0
 
@@ -431,7 +458,8 @@ fpm_12:
 ; flags} in and out.
 fpm_emu:
         push bx
-        pushf
+        pushf                           ; (POPF puts the caller's DF back)
+        cld
         push dx
         push ax
         mov ax, sp
@@ -473,6 +501,7 @@ WIN87EM_2:
 .emu:
         call far _emu_reset
         mov word [_em_acc wrt DGROUP], 0
+        mov word [_user_cw wrt DGROUP], CW_INIT ; as init87 and function 0
 .ret:
         xor ax, ax
         xor cx, cx
@@ -527,6 +556,8 @@ __WIN87EMSAVE:
         push bp
         mov bp, sp
         push ds
+        pushf                           ; the caller's DF is kept
+        cld
         mov ax, 0FFFFh
         cmp word [bp + 6], SAVE_SIZE
         jb .ret
@@ -548,6 +579,7 @@ __WIN87EMSAVE:
         add sp, 4
         xor ax, ax
 .ret:
+        popf
         pop ds
         pop bp
         retf 6
@@ -557,6 +589,8 @@ __WIN87EMRESTORE:
         push bp
         mov bp, sp
         push ds
+        pushf
+        cld
         mov ax, 0FFFFh
         cmp word [bp + 6], SAVE_SIZE
         jb .ret
@@ -577,29 +611,34 @@ __WIN87EMRESTORE:
         add sp, 4
         xor ax, ax
 .ret:
+        popf
         pop ds
         pop bp
         retf 6
 
 ; ---- calling the program's exception handler (emulator) ----
-; void call_handler(u16 code, u16 app_ds): far call the handler set by
-; function 3 with AX = 0600h | code (code: 81h invalid, 83h zero divide,
-; ... as observed: 0683h for 1/0, 0688h for the square root of -1),
-; DS = WIN87EM's DGROUP, and the program's DS pushed (OpenWatcom's handler
-; takes its DS from there). UNVERIFIED: the meaning of AH = 6.
+; void call_handler(u16 code, u16 app_ds): far call the handler the
+; current task set with function 3 (emu.c, handler_get) with AX = 0600h |
+; code (code: 81h invalid, 83h zero divide, ... as observed: 0683h for
+; 1/0, 0688h for the square root of -1), DS = WIN87EM's DGROUP, and
+; app_ds pushed: the program's DS for an instruction (OpenWatcom's handler
+; takes its DS from there), WIN87EM's own for __fpMath 6 and 7 (observed,
+; TK67). UNVERIFIED: the meaning of AH = 6. DS = DGROUP, DF clear.
 global _call_handler
 _call_handler:
         push bp
         mov bp, sp
         push si
         push di
-        mov ax, [_handler wrt DGROUP]
-        or ax, [_handler + 2 wrt DGROUP]
+        call far _handler_get
+        mov [hcall wrt DGROUP], ax
+        mov [hcall + 2 wrt DGROUP], dx
+        or ax, dx
         jz .none
         push word [bp + 8]
         mov ax, [bp + 6]
         or ax, 0600h
-        call far [_handler wrt DGROUP]
+        call far [hcall wrt DGROUP]
         add sp, 2
         mov ax, DGROUP
         mov ds, ax

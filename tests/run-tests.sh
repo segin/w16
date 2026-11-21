@@ -213,6 +213,10 @@ SET TEMP=C:\TKTMP'
     for f in TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10; do
         cp "$dos/$f.EXE" "$stage/"
     done
+    # TK67P1-12 (the WIN87EM audit probe) and TK67H, the task P4, P10, P11
+    # start
+    cp "$dos"/TK67P?.EXE "$dos"/TK67P1?.EXE "$dos/TK67H.EXE" "$stage/"
+    rm -f "$stage/TK67P13.EXE"      # (86Box only: tests/86box-n4.sh)
     unset DOSRUN_PRE
     DOSRUN_X=1
     export DOSRUN_X DOSRUN_FPU
@@ -221,6 +225,9 @@ SET TEMP=C:\TKTMP'
         note "== (DOSBox-X, fpu=$DOSRUN_FPU)"
         for t in TK6 TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10; do
             run $t 0
+        done
+        for t in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            run TK67P$t 0
         done
     done
     # TK6N only with a coprocessor: without one its floating-point code has no

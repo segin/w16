@@ -21,13 +21,13 @@
  * FLD/FST/FSTP/FXCH/FFREE/FINCSTP/FDECSTP, the constants, FADD/FSUB
  * /FSUBR/FMUL/FDIV/FDIVR in all forms, FCOM/FCOMP/FCOMPP/FICOM/FUCOM*,
  * FTST, FXAM, FCHS, FABS, FSQRT, FRNDINT, FSCALE, FPREM, F2XM1, FYL2X,
- * FYL2XP1, FPTAN, FPATAN, FCLEX/FLDCW/FSTCW/FSTSW/FLDENV/FSTENV/FSAVE/
- * FRSTOR (16-bit format), FNOP and the 8087/287 no-ops (FENI, FDISI,
- * FSETPM).
+ * FYL2XP1, FPTAN, FPATAN, FCLEX/FLDCW/FSTCW/FSTSW, FNOP and the 8087/287
+ * no-ops (FENI, FDISI, FSETPM).
  * Not emulated, as observed of the 3.1 emulator (see unemulated(): the
  * handler gets 87h): FINIT (programs initialise through __fpMath), FBLD,
- * FBSTP, FXTRACT; likewise the 387's FPREM1, FSIN, FCOS, FSINCOS
- * (UNVERIFIED for those). INT 3Eh is ignored (UNVERIFIED: its use).
+ * FBSTP, FXTRACT (TK8), FSTENV, FLDENV, FSAVE, FRSTOR (TK67); likewise
+ * the 387's FPREM1, FSIN, FCOS, FSINCOS (UNVERIFIED for those). INT 3Eh
+ * is ignored (UNVERIFIED: its use).
  * Checked against the 3.1 emulator with tests/apps/tk6.c, tk7.c, tk8.c
  * (ARCHITECTURE.md 9.2). Where its results come from its own
  * approximations (some square roots one unit in the last place off, the
@@ -42,6 +42,8 @@ u32 umul16(u16 a, u16 b);
 #pragma aux umul16 = "mul dx" parm [ax] [dx] value [dx ax] modify exact [ax dx]
 u16 get_ss(void);
 #pragma aux get_ss = "mov ax, ss" value [ax]
+u16 get_ds(void);
+#pragma aux get_ds = "mov ax, ds" value [ax]
 
 /* ---- the emulated coprocessor ---- */
 
@@ -511,17 +513,28 @@ static int need_store(void)
 
 u16 __far __pascal GLOBALALLOC(u16 flags, u32 size);    /* KERNEL.15 */
 u16 __far __pascal GLOBALFREE(u16 h);                   /* KERNEL.17 */
+u16 __far __pascal GETCURRENTTASK(void);                /* KERNEL.36 */
+u16 __far __pascal GETCURRENTPDB(void);                 /* KERNEL.37 */
+u16 __far __pascal ISTASK(u16 task);                    /* KERNEL.320 */
+
+/* GMEM_SHARE | GMEM_ZEROINIT: WIN87EM's own blocks (a block without
+   GMEM_SHARE belongs to the task that happened to allocate it and goes
+   when that task ends, while the emulator's state is one for every task:
+   TK67, the audit's N1) */
+#define GMEM_OURS   0x2040
 
 static u16 spill_sel, spill_cap, spill_n;   /* selector, capacity, used */
 
-/* room for one more spilled register; 0 if out of memory */
-static int spill_room(void)
+/* room for n spilled registers; 0 if out of memory */
+static int spill_fit(u16 n)
 {
-    if (spill_n == spill_cap) {
-        u16 ncap = spill_cap ? spill_cap * 2 : 8, sel, i;
+    if (n > spill_cap) {
+        u16 ncap = spill_cap ? spill_cap : 8, sel, i;
+        while (ncap < n)
+            ncap *= 2;
         if (ncap > 0xFFF0u / sizeof(ext))
             return 0;                   /* one segment's worth */
-        sel = GLOBALALLOC(0x0040, umul16(ncap, sizeof(ext)));    /* GMEM_ZEROINIT */
+        sel = GLOBALALLOC(GMEM_OURS, umul16(ncap, sizeof(ext)));
         if (!sel)
             return 0;
         for (i = 0; i < spill_n; i++)
@@ -532,6 +545,94 @@ static int spill_room(void)
         spill_cap = ncap;
     }
     return 1;
+}
+
+static int spill_room(void)
+{
+    return spill_fit(spill_n + 1);
+}
+
+/* ---- the exception handler, one per task ----
+   Observed (TK67P4, P10, P11, 3.1 emulator): the emulator's registers
+   and control word are one for every task (a second task saw the first
+   one's, and its __fpMath 0 and 2 reset them for both), but the handler
+   of __fpMath 3 is the calling task's: an exception reached the task's
+   own handler while another task with its own handler ran, and after
+   that task ended, with __fpMath 2 or without. Kept here as {task, its
+   PDB, handler} in a block of WIN87EM's that grows as needed; an entry
+   whose task is gone, or whose task handle now belongs to a task with
+   another PDB (a new task under a reused handle), is free. */
+typedef struct hentry {
+    u16 task, pdb;
+    u32 handler;
+} hentry;
+
+static u16 htab_sel, htab_cap;
+
+static hentry FAR *htab(void)
+{
+    return (hentry FAR *)MK_FP(htab_sel, 0);
+}
+
+/* the current task's entry, or NULL; with `make`, one made for it (NULL
+   only if out of memory) */
+static hentry FAR *hfind(int make)
+{
+    u16 task = GETCURRENTTASK(), pdb = GETCURRENTPDB(), i, freei = 0xFFFF;
+    hentry FAR *t = htab();
+    for (i = 0; i < htab_cap; i++) {
+        if (t[i].task == task && t[i].pdb == pdb)
+            return &t[i];
+        if (freei == 0xFFFF &&
+            (!t[i].task || t[i].task == task || !ISTASK(t[i].task)))
+            freei = i;
+    }
+    if (!make)
+        return NULL;
+    if (freei == 0xFFFF) {
+        u16 ncap = htab_cap ? htab_cap * 2 : 8, sel;
+        if (ncap > 0xFFF0u / sizeof(hentry))
+            return NULL;
+        sel = GLOBALALLOC(GMEM_OURS, umul16(ncap, sizeof(hentry)));
+        if (!sel)
+            return NULL;
+        for (i = 0; i < htab_cap; i++)
+            ((hentry FAR *)MK_FP(sel, 0))[i] = t[i];
+        if (htab_sel)
+            GLOBALFREE(htab_sel);
+        freei = htab_cap;
+        htab_sel = sel;
+        htab_cap = ncap;
+        t = htab();
+    }
+    t[freei].task = task;
+    t[freei].pdb = pdb;
+    t[freei].handler = 0;
+    return &t[freei];
+}
+
+/* the current task's handler (0: none) */
+u32 __cdecl __far handler_get(void)
+{
+    hentry FAR *e = hfind(0);
+    return e ? e->handler : 0;
+}
+
+/* __fpMath 3 */
+void __cdecl __far handler_set(u32 h)
+{
+    hentry FAR *e = hfind(h != 0);
+    if (e)
+        e->handler = h;
+}
+
+/* __fpMath 2 (what a C run-time calls as its task ends): the task's
+   entry is free */
+void __cdecl __far handler_drop(void)
+{
+    hentry FAR *e = hfind(0);
+    if (e)
+        e->task = 0;
 }
 
 static u16 depth_now(void)
@@ -585,15 +686,15 @@ static void set_st(u16 i, const ext *x)
 /* ---- NaN handling for two-operand operations ---- */
 
 /* If either operand is a NaN, the result is the (quieted) NaN with the
-   larger significand (Intel's rule); an SNaN raises IE. Returns 1 if a
-   NaN result was made. */
-static int nan_result(const ext *a, const ext *b, ext *r)
+   larger significand (Intel's rule), its sign kept; an SNaN raises IE.
+   Returns 1 if a NaN result was made. */
+static int nan_result_k(const ext *a, const ext *b, ext *r, int any)
 {
     const ext *p;
     int an = is_nan(a), bn = b && is_nan(b);
     if (!an && !bn)
         return 0;
-    if ((an && is_snan(a)) || (bn && is_snan(b)))
+    if (any || (an && is_snan(a)) || (bn && is_snan(b)))
         raise(SW_IE, FPE_INVALID);
     if (an && bn) {
         u16 i = 4;
@@ -612,6 +713,18 @@ static int nan_result(const ext *a, const ext *b, ext *r)
     return 1;
 }
 
+static int nan_result(const ext *a, const ext *b, ext *r)
+{
+    return nan_result_k(a, b, r, 0);
+}
+
+/* The same for add, subtract, multiply and divide: the 3.1 emulator
+   raises IE for a quiet NaN operand too (TK67; a coprocessor does not) */
+static int nan_arith(const ext *a, const ext *b, ext *r)
+{
+    return nan_result_k(a, b, r, 1);
+}
+
 static void invalid_result(ext *r, u16 code)
 {
     raise(SW_IE, code);
@@ -625,10 +738,11 @@ static void add_sub(const ext *a, const ext *b0, ext *r, int subtract)
     ext b = *b0;
     unp ua, ub;
     s32 d;
+    /* a NaN keeps its sign, the subtrahend's too (TK67) */
+    if (nan_arith(a, b0, r))
+        return;
     if (subtract)
         b.se ^= 0x8000;
-    if (nan_result(a, &b, r))
-        return;
     if (is_inf(a) || is_inf(&b)) {
         if (is_inf(a) && is_inf(&b) && ((a->se ^ b.se) & 0x8000)) {
             invalid_result(r, FPE_INVALID);
@@ -695,7 +809,7 @@ static void mul(const ext *a, const ext *b, ext *r)
 {
     unp ua, ub, p;
     u16 i, j;
-    if (nan_result(a, b, r))
+    if (nan_arith(a, b, r))
         return;
     if (is_inf(a) || is_inf(b)) {
         if (is_zero(a) || is_zero(b)) {
@@ -725,7 +839,7 @@ static void divide(const ext *a, const ext *b, ext *r)
 {
     unp ua, ub, q;
     u16 rem[5], d[5], i;
-    if (nan_result(a, b, r))
+    if (nan_arith(a, b, r))
         return;
     if (is_inf(a)) {
         if (is_inf(b))
@@ -805,8 +919,14 @@ static void square_root(const ext *a, ext *r)
     unp u, res;
     u16 x[10], root[10], i, s;
     s32 ex;
-    if (nan_result(a, NULL, r))
+    if (is_nan(a)) {
+        /* observed (3.1 emulator, TK67): IE, reported as for a negative
+           number (88h) masked or not; the NaN is the result */
+        raise(SW_IE, FPE_SQRTNEG);
+        *r = *a;
+        r->m[3] |= 0x4000;
         return;
+    }
     if (is_zero(a)) {
         *r = *a;
         return;
@@ -849,7 +969,9 @@ static void round_int(const ext *a, ext *r)
 {
     unp u;
     if (is_nan(a)) {
-        nan_result(a, NULL, r);
+        /* observed (3.1 emulator, TK67): FRNDINT and __fpMath 6 raise
+           nothing for a NaN, signaling or not, and leave it as it is */
+        *r = *a;
         return;
     }
     if (is_zero(a)) {
@@ -1199,25 +1321,13 @@ static void FAR *mem(const insn *in)
 /* ---- environment ---- */
 
 /* The status word as the program sees it: TOP always reads 0 (observed:
-   the Windows 3.1 emulator does not report it). */
+   the Windows 3.1 emulator does not report it). FSTENV, FLDENV, FSAVE
+   and FRSTOR are not emulated (TK67: each calls the handler with 87h and
+   changes nothing, the image unwritten), so the register stack's layout
+   is never seen. */
 static u16 sw_out(void)
 {
     return sw & ~SW_TOP;
-}
-
-static void store_env(u16 FAR *p)          /* 14 bytes, 16-bit format */
-{
-    p[0] = cw;
-    p[1] = sw_out();
-    p[2] = tw;
-    p[3] = p[4] = p[5] = p[6] = 0;     /* instruction/operand pointers */
-}
-
-static void load_env(const u16 FAR *p)
-{
-    cw = p[0];
-    sw = p[1];
-    tw = p[2];
 }
 
 void __cdecl __far emu_reset(void)
@@ -1235,13 +1345,6 @@ void __cdecl __far emu_reset(void)
     }
 }
 
-static void finit(void)
-{
-    cw = 0x037F;
-    sw = 0;
-    tw = 0xFFFF;
-}
-
 /* ---- constants (Intel's values, round to nearest) ---- */
 
 static const ext k_one = { { 0, 0, 0, 0x8000 }, 0x3FFF };
@@ -1251,6 +1354,8 @@ static const ext k_pi  = { { 0xC235, 0x2168, 0xDAA2, 0xC90F }, 0x4000 };
 static const ext k_lg2 = { { 0xF799, 0xFBCF, 0x9A84, 0x9A20 }, 0x3FFD };
 static const ext k_ln2 = { { 0x79AC, 0xD1CF, 0x17F7, 0xB172 }, 0x3FFE };
 static const ext k_zero = { { 0, 0, 0, 0 }, 0 };
+/* what the 3.1 emulator's FYL2X takes log2(0) to be (TK67) */
+static const ext k_l2zero = { { 0x6B27, 0x7E83, 0x00CD, 0x800D }, 0xC00D };
 
 /* ---- the instructions ---- */
 
@@ -1379,11 +1484,20 @@ static ext e_int(s16 n)
     return r;
 }
 
-/* x * 2^k (exact within the range) */
+/* x * 2^k (exact within the range; a denormal is normalised first, so
+   that its exponent field moves too) */
 static ext e_scale(ext x, s16 k)
 {
-    if (!is_zero(&x))
+    unp u;
+    if (is_zero(&x) || is_inf(&x) || is_nan(&x))
+        return x;
+    if ((x.se & EXP_MAX) && (x.m[3] & 0x8000)) {
         x.se = (x.se & 0x8000) | (u16)((x.se & EXP_MAX) + k);
+        return x;
+    }
+    unpack(&x, &u);
+    u.exp += k;
+    pack_range(&u, &x, 64, 1 - EXP_BIAS, EXP_BIAS);
     return x;
 }
 
@@ -1427,7 +1541,8 @@ static ext e_ln(ext x)
     k = (s16)u.exp;
     m = x;
     m.se = EXP_BIAS;                    /* m in [1, 2) */
-    if (!(x.se & EXP_MAX)) {            /* denormal: take the normalised form */
+    if (!(x.se & EXP_MAX) || !(x.m[3] & 0x8000)) {
+        /* denormal or unnormal: take the normalised form */
         m.m[0] = u.w[4];
         m.m[1] = u.w[5];
         m.m[2] = u.w[6];
@@ -1736,12 +1851,30 @@ static void d9_misc(u16 n)
         if (is_nan(&x) || is_nan(&y)) {
             nan_result(&x, &y, &r);
         } else if (n == 1 && is_zero(&x)) {
-            raise(SW_ZE, FPE_ZERODIVIDE);       /* UNVERIFIED */
-            set_inf(&r, (y.se ^ 0x8000) & 0x8000);
+            /* observed (3.1 emulator, TK67): log2 of +-0 is a finite
+               value K (about -16390), the result y * K with PE only (+0
+               for y = +-0): no ZE, no IE, no handler call unmasked */
+            if (is_zero(&y)) {
+                set_zero(&r, 0);
+                raise(SW_PE, FPE_INEXACT);
+            } else {
+                quiet_begin(&q);
+                r = e_mul(y, k_l2zero);
+                quiet_end(&q);
+                trans_result(r, 0, &r);
+            }
         } else if ((n == 1 && is_neg(&x)) || is_inf(&x) || is_inf(&y)) {
             invalid_result(&r, FPE_INVALID);    /* UNVERIFIED */
         } else if (n != 1 && is_zero(&x)) {
             set_zero(&r, (x.se ^ y.se) & 0x8000);
+        } else if (n != 1 && (x.se & EXP_MAX) <= 1) {
+            /* observed (3.1 emulator, TK67): FYL2XP1 of a denormal gives
+               0 with UE and PE, of the smallest normals 0 with PE */
+            set_zero(&r, (x.se ^ y.se) & 0x8000);
+            if (x.se & EXP_MAX)
+                raise(SW_PE, FPE_INEXACT);
+            else
+                raise(SW_UE | SW_PE, FPE_UNDERFLOW);
         } else {
             quiet_begin(&q);
             if (n == 1 && is_pow2(&x)) {        /* exact: y * exponent */
@@ -1805,19 +1938,21 @@ static void d9_misc(u16 n)
         y = *st(1);
         if (is_nan(&x) || is_nan(&y)) {
             nan_result(&x, &y, &r);
-        } else if (is_zero(&y) && !is_neg(&x)) {
-            r = y;
+        } else if (is_zero(&x)) {
+            /* the special operands as the 3.1 emulator has them (TK67;
+               the 387 gives the angles): X = +-0 invalid with ZE too */
+            raise(SW_ZE, FPE_INVALID);
+            invalid_result(&r, FPE_INVALID);
+        } else if (is_inf(&y)) {
+            invalid_result(&r, FPE_INVALID);    /* Y = +-inf: invalid */
+        } else if (is_zero(&y) || is_inf(&x)) {
+            set_zero(&r, 0);                    /* +0, no flags */
         } else {
             u16 ys = y.se & 0x8000, xs = x.se & 0x8000;
             x.se &= 0x7FFF;
             y.se &= 0x7FFF;
             quiet_begin(&q);
-            if (is_zero(&x) || is_inf(&y))
-                z = e_scale(k_pi, -1);
-            else if (is_inf(&x))
-                z = k_zero;
-            else
-                z = e_atan(e_div(y, x));
+            z = e_atan(e_div(y, x));
             /* the quadrants as the 387 does them; the 3.1 emulator, like
                the 8087, needs 0 <= Y < X and gave other values otherwise
                (observed) */
@@ -1874,9 +2009,11 @@ static void exec(insn *in)
                 if (in->reg == 3)
                     pop();
                 return;
-            case 4: load_env(pw); return;
+            case 4:                     /* FLDENV: not emulated (TK67) */
+            case 6:                     /* FSTENV */
+                fpu_unemulated();
+                return;
             case 5: cw = pw[0]; return;
-            case 6: store_env(pw); cw |= 0x3F; return;
             case 7: pw[0] = cw; return;
             }
             break;
@@ -1890,11 +2027,12 @@ static void exec(insn *in)
             case 3:
                 if (!need_store())
                     return;
+                /* the integer (or the integer indefinite) is stored and
+                   popped whatever the masks: TK67 (invalid unmasked:
+                   stored, popped, then the handler with 81h) */
                 to_int(st(0), 32, w);
-                if (!(sw & SW_IE) || masked(SW_IE)) {
-                    pw[0] = w[0];
-                    pw[1] = w[1];
-                }
+                pw[0] = w[0];
+                pw[1] = w[1];
                 if (in->reg == 3)
                     pop();
                 return;
@@ -1921,21 +2059,10 @@ static void exec(insn *in)
                 if (in->reg == 3)
                     pop();
                 return;
-            case 4: {                   /* FRSTOR */
-                u16 i;
-                load_env(pw);
-                for (i = 0; i < 8; i++)
-                    reg[(top() + i) & 7] = ((ext FAR *)(pw + 7))[i];
+            case 4:                     /* FRSTOR: not emulated (TK67) */
+            case 6:                     /* FSAVE */
+                fpu_unemulated();
                 return;
-            }
-            case 6: {                   /* FSAVE */
-                u16 i;
-                store_env(pw);
-                for (i = 0; i < 8; i++)
-                    ((ext FAR *)(pw + 7))[i] = reg[(top() + i) & 7];
-                finit();
-                return;
-            }
             case 7: pw[0] = sw_out(); return;
             }
             break;
@@ -1946,9 +2073,8 @@ static void exec(insn *in)
             case 3:
                 if (!need_store())
                     return;
-                to_int(st(0), 16, w);
-                if (!(sw & SW_IE) || masked(SW_IE))
-                    pw[0] = w[0];
+                to_int(st(0), 16, w);           /* as FIST m32 */
+                pw[0] = w[0];
                 if (in->reg == 3)
                     pop();
                 return;
@@ -1960,13 +2086,11 @@ static void exec(insn *in)
             case 7:
                 if (!need_store())
                     return;
-                to_int(st(0), 64, w);
-                if (!(sw & SW_IE) || masked(SW_IE)) {
-                    pw[0] = w[0];
-                    pw[1] = w[1];
-                    pw[2] = w[2];
-                    pw[3] = w[3];
-                }
+                to_int(st(0), 64, w);           /* as FIST m32 */
+                pw[0] = w[0];
+                pw[1] = w[1];
+                pw[2] = w[2];
+                pw[3] = w[3];
                 pop();
                 return;
             case 4:                     /* FBLD */
@@ -2179,20 +2303,37 @@ void __cdecl __far emu_entry(emu_frame FAR *f)
 
 /* ---- __fpMath without a coprocessor (observed on Windows 3.1) ---- */
 
+/* An exception in __fpMath 6 or 7 (observed, TK67P2, P6-P8): the
+   handler is called as for an instruction but with WIN87EM's DS both in
+   DS and in the word after the return address, where an instruction's
+   exception has the program's DS. (The 3.1 program ended after its
+   handler returned there; w16's __fpMath returns.) */
+static void fpm_report(void)
+{
+    if (fault_code) {
+        u16 code = fault_code;
+        fault_code = 0;
+        call_handler(code, get_ds());
+    }
+}
+
 void __cdecl __far emu_fpmath(u16 fn, fpm_regs FAR *rg)
 {
     u16 w[4];
     ext r;
     rg->flags &= ~1u;                   /* CF = 0 for every function */
+    fault_code = 0;
     switch (fn) {
     case 0: case 1: case 2:             /* initialise */
         emu_reset();
         em_acc = 0;
         user_cw = CW_INIT;
         rg->ax = 0;
+        if (fn == 2)
+            handler_drop();             /* the task is ending */
         break;
     case 3:
-        handler = ((u32)rg->dx << 16) | rg->ax;
+        handler_set(((u32)rg->dx << 16) | rg->ax);
         rg->ax = 0x253E;
         break;
     case 4:                             /* set CW: all of AX */
@@ -2202,34 +2343,42 @@ void __cdecl __far emu_fpmath(u16 fn, fpm_regs FAR *rg)
     case 5:
         rg->ax = cw;
         break;
-    case 6:                             /* round ST with RC from AX */
-        if (!st_empty(0)) {
-            u16 save = cw;
-            cw = (cw & ~0x0C00) | (rg->ax & 0x0C00);
-            round_int(st(0), &r);
-            set_st(0, &r);
-            cw = save;
-        }
-        rg->ax = 1;
-        break;
-    case 7: {                           /* pop ST into DX:AX */
+    case 6: {                           /* round ST with RC from AX */
+        /* AX (observed, TK6, TK67P12): 1, 0 for a zero, and for a NaN
+           or an infinity the control word used (with that rounding
+           control) & FF00h; UNVERIFIED for a value rounded to zero */
         u16 save = cw;
         cw = (cw & ~0x0C00) | (rg->ax & 0x0C00);
-        w[0] = 0;
-        w[1] = 0x8000;
-        if (!st_empty(0))
-            to_int(st(0), 32, w);
-        else
-            underflow();
+        rg->ax = 1;
+        if (!st_empty(0)) {
+            const ext *a = st(0);
+            if (is_zero(a))
+                rg->ax = 0;
+            else if ((a->se & EXP_MAX) == EXP_MAX)
+                rg->ax = cw & 0xFF00;
+            round_int(a, &r);
+            set_st(0, &r);
+        }
         cw = save;
-        pop();
+        /* an unmasked exception (precision) reaches the handler (86h) */
+        fpm_report();
+        break;
+    }
+    case 7: {                           /* pop ST into DX:AX */
+        /* observed (TK67P9): an empty stack gives 0:0, no handler call
+           and nothing popped */
+        u16 save = cw;
+        w[0] = w[1] = 0;
+        if (!st_empty(0)) {
+            cw = (cw & ~0x0C00) | (rg->ax & 0x0C00);
+            to_int(st(0), 32, w);
+            cw = save;
+            pop();
+        }
         rg->ax = w[0];
         rg->dx = w[1];
-        if (fault_code) {
-            u16 code = fault_code;
-            fault_code = 0;
-            call_handler(code, 0);
-        }
+        /* out of range or a NaN with invalid unmasked: 81h (TK67) */
+        fpm_report();
         break;
     }
     case 8:
@@ -2261,7 +2410,11 @@ void __cdecl __far emu_fpmath(u16 fn, fpm_regs FAR *rg)
    coprocessor gets), 256 function 12's word. The rest held selectors,
    addresses and values of unknown meaning; w16 keeps its own state from
    offset 304 (the reference's area was zero from 304 to the end) and
-   zeroes everything else. */
+   zeroes everything else. The emulator's registers below ST(7) are kept
+   too (TK67: twelve values saved, popped, others pushed and popped,
+   restored: the twelve came back): w16 keeps the nearest SPILL_KEEP of
+   them, in words 106-255 and 260-299 (unknown words of 3.1's, w16's
+   layout), their number at 300. */
 
 typedef struct saved {
     u16 cw, sw, tw;
@@ -2272,6 +2425,14 @@ typedef struct saved {
 
 #define SAVE_SIZE   0x01CD      /* observed (__WIN87EMINFO) */
 #define SAVE_OWN    304
+#define SPILL_KEEP  19
+#define SPILL_N     300
+
+/* the place of kept spilled register j */
+static ext FAR *spill_slot(u8 FAR *b, u16 j)
+{
+    return (ext FAR *)(b + (j < 15 ? 106 + 10 * j : 260 + 10 * (j - 15)));
+}
 
 extern u16 __cdecl have87;
 
@@ -2279,11 +2440,12 @@ void __cdecl __far emu_save(void FAR *buf)
 {
     u8 FAR *b = (u8 FAR *)buf;
     saved FAR *s = (saved FAR *)(b + SAVE_OWN);
-    u16 i;
+    u32 h = handler_get();
+    u16 i, k;
     for (i = 94; i < SAVE_SIZE; i++)    /* the whole area is written */
         b[i] = 0;
     if (!have87)
-        *(u32 FAR *)(b + 94) = handler;
+        *(u32 FAR *)(b + 94) = h;
     *(u16 FAR *)(b + 98) = have87;
     *(u16 FAR *)(b + 100) = user_cw;
     *(u16 FAR *)(b + 104) = user_cw & 0xFF3C;
@@ -2296,13 +2458,18 @@ void __cdecl __far emu_save(void FAR *buf)
     s->user_cw = user_cw;
     s->fn12 = fn12;
     s->em_acc = em_acc;
-    s->handler = handler;
+    s->handler = h;
+    k = spill_n < SPILL_KEEP ? spill_n : SPILL_KEEP;
+    for (i = 0; i < k; i++)
+        *spill_slot(b, i) = ((ext FAR *)MK_FP(spill_sel, 0))[spill_n - k + i];
+    *(u16 FAR *)(b + SPILL_N) = k;
 }
 
 void __cdecl __far emu_restore(void FAR *buf)
 {
-    const saved FAR *s = (const saved FAR *)((const u8 FAR *)buf + SAVE_OWN);
-    u16 i;
+    u8 FAR *b = (u8 FAR *)buf;
+    const saved FAR *s = (const saved FAR *)(b + SAVE_OWN);
+    u16 i, k = *(u16 FAR *)(b + SPILL_N);
     cw = s->cw;
     sw = s->sw;
     tw = s->tw;
@@ -2311,5 +2478,12 @@ void __cdecl __far emu_restore(void FAR *buf)
     user_cw = s->user_cw;
     fn12 = s->fn12;
     em_acc = s->em_acc;
-    handler = s->handler;
+    handler_set(s->handler);
+    /* the spilled registers as saved (none if they do not fit) */
+    spill_n = 0;
+    if (k <= SPILL_KEEP && spill_fit(k)) {
+        for (i = 0; i < k; i++)
+            ((ext FAR *)MK_FP(spill_sel, 0))[i] = *spill_slot(b, i);
+        spill_n = k;
+    }
 }
