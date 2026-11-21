@@ -94,3 +94,29 @@ make test: pass. Full boot test: 142 ok, 6 failures: holdbtn, lzexpand
 again: ref386, Microsoft's side, did not finish) - all on the known-flaky
 list - and w16write (tree 03-character), which passed alone. New cases
 win386tree, win386woa and treealone (with its DOS box) pass.
+
+### The user's two bugs on master 47fcb7d (2026-11-21)
+
+The user's set-up: the tree alone, plain DOSBox 0.74, `WIN /3` (no /B).
+- **Exit Windows hung after a DOS box** ("w16: back to DOS, code 0000",
+  then nothing; DOSBox still showing WIN386). DOS saves the caller's SS:SP
+  in the current PSP (2Eh) at every INT 21h call but 50h/51h/62h/64h
+  (DOSBox's built-in DOS as MS-DOS). A new DOS VM starts with the current
+  PSP of Windows' start, the loader's, which it shares with the System VM,
+  so its stub's first calls (48h, 55h) wrote the VM's stack there; when
+  KERNEL ended, DOS "returned" to the loader on that stack (traced: the
+  loader's saved stack 1563:1FE0, the stub's segment). The stub now keeps
+  the loader PSP's saved stack and puts it back once it has its own PSP
+  (win386/ldr/ldrasm.asm vm_stub).
+- **A full-screen box stayed in 640x480 graphics.** WIN.COM's start-up
+  logo (shown for `WIN /3`, not for `WIN /3 /B`, which every earlier test
+  used) leaves the BIOS's mode 12h, and a new VM's BIOS data are those of
+  Windows' start, so the VDD set the VM's mode 12h (DOSBox's shell then
+  writes its text into the graphics screen). A graphics mode there now
+  means mode 3 (win386/vmm/vdd.c bios_mode).
+- Harness note: tests/inputrun.sh -s waits for BOOTLOG.TXT, which only /B
+  writes; a run without /B used up its boot wait and DOSBox was ended by
+  the run's time limit, which looked like DOSBox quitting at a box's EXIT.
+  The new case waits for Program Manager's caption instead.
+- Boot-test case `win386plain` (plain DOSBox, tree alone, `WIN /3`: the
+  box a text screen, EXIT, Exit Windows back to the prompt).

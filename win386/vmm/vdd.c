@@ -154,14 +154,22 @@ static void notify_sys(struct vm *v, void *arg)
     dpmi_pm_int(0x2F, &r);
 }
 
-/* INT 10h AX=0003h in a DOS VM that gets the display for the first time:
- * its BIOS sets the mode its data area names (UNVERIFIED: what Windows
- * 3.1's VDD does for a new VM) */
+/* INT 10h in a DOS VM that gets the display for the first time: its BIOS
+ * sets the text mode its data area names. The data area is as it was when
+ * Windows started (vm_snapshot), and WIN.COM's start-up logo (WIN /3 with
+ * nothing but switches) had put the VGA in mode 12h then: a graphics mode
+ * there means mode 3 (the user's report, 2026-11-21: plain DOSBox, the
+ * tree's DOS Prompt stayed in 640x480 graphics, DOSBox's shell writing its
+ * text there through the BIOS). Windows 3.1's MS-DOS Prompt starts in 80x25
+ * text after its logo too. UNVERIFIED: what Windows 3.1's VDD does for a
+ * VM started in mode 7 or with 43/50 rows */
 static void bios_mode(struct vm *v, void *arg)
 {
     struct cregs r;
     u8 mode = *(u8 *)0x449;
     (void)arg;
+    if (mode > 3 && mode != 7)
+        mode = 3;
     memset(&r, 0, sizeof(r));
     r.eax = mode;
     r.eflags = EFL_IF;

@@ -91,6 +91,10 @@
 #              MS-DOS Prompt full screen, Alt+Enter to a window and back,
 #              EXIT (tests/scripts/input/dosbox386tree.txt), against the
 #              same tree under Microsoft's WIN386.EXE (DOSBox-X)
+#   win386plain  the user's way: the install tree alone in plain DOSBox
+#              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
+#              Prompt full screen must be a text screen, EXIT, then Exit
+#              Windows must bring the DOS prompt back (dosbox386plain.txt)
 #   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
 #              switching (dosbox386s.txt) and Exit Windows with a box
 #              open (dosbox386x.txt), against Microsoft's WINOA386 and
@@ -858,7 +862,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1471,6 +1475,29 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    win386plain)
+        # the user's report (2026-11-21): after a DOS box, Exit Windows
+        # printed KERNEL's "back to DOS" and hung (the DOS VM's first DOS
+        # calls saved its stack in the loader's PSP, where DOS returned to
+        # when KERNEL ended: win386/ldr/ldrasm.asm vm_stub), and the box
+        # stayed in WIN.COM's logo's 640x480 graphics mode (the VM's BIOS
+        # data as Windows started: win386/vmm/vdd.c bios_mode). No /B: the
+        # logo is shown then, and no BOOTLOG.TXT (the boot is waited for by
+        # the script)
+        rm -rf "$out/win386plain"
+        DROPIN_NOREDIR=1 DROPIN_CPUTYPE=386 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 5 -t 420 \
+            "$root/tests/scripts/input/dosbox386plain.txt" "$out/win386plain" -T "$root/build/w16" -3 -c "WIN /3" \
+            > "$out/win386plain.txt" 2>&1 || true
+        r=ok
+        for s in 01-full:640x400 02-back:640x480 03-dos:640x400; do
+            g=$(magick identify -format '%wx%h' "$out/win386plain/${s%%:*}.png" 2>/dev/null || echo none)
+            [ "$g" = "${s#*:}" ] || { r="${s%%:*} is $g, not ${s#*:}"; break; }
+        done
+        if [ "$r" = ok ] && ! grep -q '^Windows ended' "$out/win386plain/input.log"; then
+            r="WIN did not return to the DOS prompt ($(grep -E '^(Windows|DOSBox)' "$out/win386plain/input.log" | tail -1))"
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386plain: plain DOSBox, WIN /3: the DOS box in text mode, EXIT, Exit Windows back to the DOS prompt"
+        else echo "FAIL win386plain: $r ($out/win386plain)"; fails=$((fails + 1)); fi ;;
     win386woa)
         # w16's WINOA386.MOD (and WIN386) on Windows 3.1 against Microsoft's
         # (the same references as win386switch and win386exitbox)
