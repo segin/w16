@@ -115,6 +115,7 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
+`tests/rescenarios.sh` and `tests/rehelp.sh` (w16's Registration Info Editor against Microsoft's: screens, REG.DAT, WIN.INI and saved .REG files; its New Style scenarios NS* against w16's approved screens in `tests/scripts/regedit/ns-ref/`, `RE_NSREF=update` to approve; `tests/regobs.sh` for observing the original, `REGOBS_TRACE=1` logging its SHELL calls through XHELL.DLL),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),

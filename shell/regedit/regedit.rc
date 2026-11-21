@@ -253,7 +253,7 @@ BEGIN
     IDS_NS_DELVAL,   "Are you sure you want to delete this value?"
     IDS_NS_DELKEYT,  "Confirm Key Delete"
     IDS_NS_DELVALT,  "Confirm Value Delete"
-    IDS_NS_NEWKEY,   "New Key #%d"
+    IDS_NS_NEWKEY,   "NewKey%d"
     IDS_NS_RENEXISTS, "Registry Editor cannot rename %s. The specified key name already exists. Type another name and try again."
     IDS_NS_RENEMPTY, "Registry Editor cannot rename %s. The specified key name is empty. Type another name and try again."
     IDS_NS_RENBAD,   "Registry Editor cannot rename %s. A key name can contain up to 63 characters and cannot contain spaces, backslashes, extended or control characters."

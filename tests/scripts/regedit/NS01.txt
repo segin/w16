@@ -1,0 +1,52 @@
+; NS01: New Style ([w16] RegeditNewStyle=1): the window as it starts; a
+; key opened with Right and its subkeys; a key with a value selected; Tab
+; to the values; the menus dropped (w16's own view: compared with w16's
+; approved screens, tests/scripts/regedit/ns-ref/)
+; sysini: w16:RegeditNewStyle=1
+run REGEDIT.EXE
+wait 3000
+movewin 0 0 600 400
+wait 800
+snap C:\N1.BMP
+key 28
+key 28
+key 27
+wait 500
+key 28
+key 27
+wait 500
+key 28
+wait 500
+snap C:\N2.BMP
+key 09
+wait 500
+snap C:\N3.BMP
+key 09
+menu r
+wait 600
+snap C:\N4.BMP
+key 1B
+key 1B
+menu e
+wait 600
+key 28
+key 28
+key 27
+wait 600
+snap C:\N5.BMP
+key 1B
+key 1B
+key 1B
+menu v
+wait 600
+snap C:\N6.BMP
+key 1B
+key 1B
+menu h
+wait 600
+snap C:\N7.BMP
+key 1B
+key 1B
+dumpmenu
+close
+wait 1000

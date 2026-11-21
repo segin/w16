@@ -1256,8 +1256,8 @@ HWND ns_create(HWND frame)
     (void)paths_buf;
     cxc = r.right;
     cyc = r.bottom;
+    place_panes();                      /* sized first: the selection scrolls in a full list */
     rebuild();
-    place_panes();
     SetFocus(tv);
     return ns;
 }
