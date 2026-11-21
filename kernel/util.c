@@ -198,6 +198,7 @@ void kexit_to_dos(u8 code)
         kputs("w16: back to DOS, code ");
         kputhex(code);
         kputs("\r\n");
+        wd_summary();                   /* [w16] hangwatch's margin */
         trace_print();
     }
     wd_stop();                  /* the RTC as it was (KERNEL audit, L14) */

@@ -328,6 +328,13 @@ static void cmos_set(u8 reg, u8 v)
     irq_restore(f);
 }
 
+/* the longest stretch without progress since wd_start, in RTC ticks
+   (16 a second), and the code segment a timer sample half a second
+   before its end was in: printed when Windows ends ([w16] exitmsg), so that a
+   test can see how close a busy program came to its hangwatch limit */
+static u16 wd_max, wd_max_cs;
+static u8 wd_measure;
+
 void wd_start(u16 seconds)
 {
     regs16 r;
@@ -335,6 +342,8 @@ void wd_start(u16 seconds)
     if (!seconds)
         return;
     wd_ticks = 0;
+    wd_max = 0;
+    wd_measure = 1;
     wd_limit = seconds < 4096 ? seconds * 16 : 0xFFFF;   /* (audit, L14) */
     if (wd_on)
         return;
@@ -368,13 +377,36 @@ void wd_start(u16 seconds)
 
 void wd_progress(void)
 {
+    u16 t = wd_ticks;
+    if (t > wd_max) {
+        wd_max = t;
+        /* half a second before the end: inside the stretch, not in the
+           KERNEL code that ends it */
+        wd_max_cs = wd_samples[((wd_pos - 32) & 255) / 2 + 1];
+    }
     wd_ticks = 0;
+}
+
+/* [w16] exitmsg with a watchdog on: the longest stretch without progress
+   (for hangwatch: without a task switch or a pass of the idle loop) */
+void wd_summary(void)
+{
+    if (!wd_measure || !wd_on)
+        return;
+    kputs("w16: longest stretch without progress ");
+    kputdec(wd_max / 16);
+    kputs(".");
+    kputdec((u16)((wd_max % 16) * 10 / 16));
+    kputs(" s, last in");
+    where(wd_max_cs);
+    kputs("\r\n");
 }
 
 void wd_stop(void)
 {
     regs16 r;
     wd_limit = 0;
+    wd_measure = 0;
     if (!wd_on)
         return;
     wd_on = 0;

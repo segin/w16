@@ -97,6 +97,7 @@ void text_mode(void);
 void wd_start(u16 seconds);
 void wd_progress(void);
 void wd_stop(void);
+void wd_summary(void);
 
 /* ---- dosx.c ---- */
 void dosx_init(void);
