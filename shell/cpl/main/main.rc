@@ -39,6 +39,17 @@ BEGIN
     607, "Changes the date and time of your computer's clock"
     608, "Changes the look of your desktop"
     IDS_NOTYET,         "This applet is not part of w16 yet."
+    IDS_CLOSE,          "Close"
+    IDS_RS_TRUETYPE,    "Your TrueType setting has changed.\n\nYou will need to quit and restart w16 so that the new setting(s) can take effect."
+    IDS_RS_COM,         "Your COM Port settings have changed.\n\nYou will need to quit and restart w16 so that the new setting(s) can take effect."
+    IDS_FN_NONE,        "No fonts are selected."
+    IDS_FN_SCREEN,      "This is a screen or plotter font."
+    IDS_FN_TRUETYPE,    "This is a scalable TrueType font that can be displayed on the screen and printed on your printer."
+    IDS_FN_MANY,        "w16 cannot display samples of more than one font at a time."
+    IDS_FN_SIZE,        "The size of the font on the disk is:  %ld KB."
+    IDS_FN_REMOVEQ,     "Are you sure you want to remove the %s font?"
+    IDS_FN_INSTALLED,   "The %s font is already installed.\n\nTo install a new version, first remove the old version."
+    IDS_FN_NOTFOUND,    "No fonts found."
     IDS_ELEMENT + 0, "Desktop"
     IDS_ELEMENT + 1, "Application Workspace"
     IDS_ELEMENT + 2, "Window Background"
@@ -258,4 +269,138 @@ BEGIN
     CONTROL "OK", IDOK, "button", 0x50030001, 158, 3, 40, 14
     CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 158, 20, 40, 14
     CONTROL "&Help", IDC_HELP, "button", 0x50030000, 158, 40, 40, 14
+END
+
+/* Fonts, Ports and their dialogs: positions, sizes, IDs and styles measured
+   on Windows 3.1 from its window dumps (SNAP "dump"/"info": pixels / base
+   units 7 x 13 of 8-point Helv; a list box shows one pixel bigger all
+   round, an edit control without WS_BORDER in its style); the dialogs'
+   own resource IDs are w16's. ARCHITECTURE.md 14.3. */
+DLG_FONTS DIALOG 8, 14, 246, 188
+STYLE 0x80C800C0
+CAPTION "Fonts"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Installed &Fonts:", -1, "static", 0x50020000, 4, 2, 74, 9
+    CONTROL "", IDC_FN_LIST, "listbox", 0x50A11803, 4, 12, 181, 48
+    CONTROL "&Sample", -1, "static", 0x50020000, 4, 71, 66, 9
+    CONTROL "", IDC_FN_SAMPLE, "listbox", 0x50A11021, 4, 82, 181, 56
+    CONTROL "Cancel", IDOK, "button", 0x50030001, 190, 6, 50, 14
+    CONTROL "&Remove", IDC_FN_REMOVE, "button", 0x58030000, 190, 26, 50, 14
+    CONTROL "&Add...", IDC_FN_ADD, "button", 0x50030000, 190, 43, 50, 14
+    CONTROL "&TrueType...", IDC_FN_TRUETYPE, "button", 0x50030000, 190, 60, 50, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 190, 77, 50, 14
+    CONTROL "", IDC_FN_TEXT, "static", 0x50020001, 5, 142, 179, 26
+    CONTROL "", IDC_FN_SIZE, "static", 0x50020000, 5, 172, 150, 10
+END
+DLG_TRUETYPE DIALOG 8, 10, 250, 65
+STYLE 0x80C800C0
+CAPTION "TrueType"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "TrueType Options", -1, "button", 0x50000007, 4, 6, 196, 50
+    CONTROL "&Enable TrueType Fonts", IDC_TT_ENABLE, "button", 0x50030003, 10, 20, 120, 12
+    CONTROL "&Show Only TrueType Fonts in Applications", IDC_TT_ONLY, "button", 0x50010003, 10, 35, 170, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 205, 6, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 205, 24, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 205, 44, 40, 14
+END
+DLG_RESTART DIALOG 8, 10, 225, 65
+STYLE 0x80C800C0
+CAPTION "System Setting Change"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_RS_TEXT, "static", 0x50020000, 35, 6, 160, 40
+    CONTROL "&Don't Restart Now", IDCANCEL, "button", 0x50030001, 30, 45, 80, 14
+    CONTROL "&Restart Now", IDOK, "button", 0x50030000, 115, 45, 80, 14
+    CONTROL "", IDC_RS_ICON, "static", 0x50000003, 8, 14, 18, 20
+END
+DLG_REMOVEFONT DIALOG 8, 28, 245, 65
+STYLE 0x80C800C0
+CAPTION "Remove Font"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_RF_ICON, "static", 0x50000003, 8, 8, 18, 20
+    CONTROL "", IDC_RF_TEXT, "static", 0x50020000, 35, 8, 190, 20
+    CONTROL "&Yes", IDYES, "button", 0x50030001, 33, 47, 40, 14
+    CONTROL "Yes to &All", IDC_RF_YESALL, "button", 0x50010000, 79, 47, 40, 14
+    CONTROL "&No", IDNO, "button", 0x50010000, 125, 47, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50010000, 171, 47, 40, 14
+    CONTROL "&Delete Font File From Disk", IDC_RF_DELETE, "button", 0x50030003, 65, 29, 115, 12
+END
+/* COMMDLG's open dialog with Control Panel's own controls; edt1, lst1,
+   cmb1, stc2 and chx1 are kept out of sight as on 3.1 */
+DLG_ADDFONTS DIALOG 36, 24, 264, 178
+STYLE 0x80C800C0
+CAPTION "Add Fonts"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "List of &Fonts:", 0x442, "static", 0x50000000, 6, 6, 76, 10
+    CONTROL "", IDC_AF_LIST, "listbox", 0x58A11803, 6, 16, 191, 66
+    CONTROL "", 0x460, "listbox", 0x50800001, -100, -100, 10, 8
+    CONTROL "&Directories:", -1, "static", 0x50000000, 6, 87, 92, 9
+    CONTROL "", IDC_AF_DIR, "static", 0x50000000, 6, 97, 92, 9
+    CONTROL "", IDC_AF_DIRS, "listbox", 0x50A11153, 6, 109, 92, 64
+    CONTROL "Dri&ves:", -1, "static", 0x50000000, 105, 98, 92, 9
+    CONTROL "", IDC_AF_DRIVES, "combobox", 0x50210353, 105, 108, 92, 68
+    CONTROL "OK", IDOK, "button", 0x50030001, 208, 6, 50, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 208, 24, 50, 14
+    CONTROL "&Select All", IDC_AF_SELALL, "button", 0x58030000, 208, 46, 50, 14
+    CONTROL "&Help", 0x40E, "button", 0x50030000, 208, 64, 50, 14
+    CONTROL "&Copy Fonts to Windows Directory", IDC_AF_COPY, "button", 0x50030003, 105, 161, 130, 12
+    CONTROL "", IDC_AF_STATUS, "static", 0x5002008B, 105, 87, 92, 9
+    CONTROL "", 0x480, "edit", 0x50800090, 508, 97, 51, 12
+    CONTROL "", 0x410, "button", 0x48000003, 526, 137, 16, 12
+    CONTROL "", 0x441, "static", 0x50020000, 522, 132, 17, 9
+    CONTROL "", 0x470, "combobox", 0x50200243, 517, 111, 37, 40
+END
+DLG_PORTS DIALOG 18, 20, 150, 80
+STYLE 0x80C800C0
+CAPTION "Ports"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Cancel", IDOK, "button", 0x50030001, 95, 4, 45, 14
+    CONTROL "&Settings...", IDC_PT_SETTINGS, "button", 0x50030000, 95, 27, 45, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 95, 44, 45, 14
+    CONTROL "COM&1:", 0x342, "static", 0x50020001, 5, 30, 32, 8
+    CONTROL "", IDC_PT_COM1, "button", 0x5001000B, 5, 4, 32, 25
+    CONTROL "COM&2:", 0x343, "static", 0x50020001, 50, 30, 32, 8
+    CONTROL "", IDC_PT_COM1 + 1, "button", 0x5001000B, 50, 4, 32, 25
+    CONTROL "COM&3:", 0x344, "static", 0x50020001, 5, 67, 32, 8
+    CONTROL "", IDC_PT_COM1 + 2, "button", 0x5001000B, 5, 42, 32, 25
+    CONTROL "COM&4:", 0x345, "static", 0x50020001, 50, 67, 32, 8
+    CONTROL "", IDC_PT_COM1 + 3, "button", 0x5001000B, 50, 42, 32, 25
+END
+DLG_PORTSET DIALOG 8, 10, 192, 83
+STYLE 0x80C800C0
+CAPTION "Settings for COM%d:"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Baud Rate:", -1, "static", 0x50020000, 6, 7, 46, 9
+    CONTROL "", IDC_PT_BAUD, "combobox", 0x50230202, 55, 5, 44, 54
+    CONTROL "&Data Bits:", -1, "static", 0x50020000, 6, 22, 51, 8
+    CONTROL "", IDC_PT_DATA, "combobox", 0x50230203, 55, 20, 44, 54
+    CONTROL "&Parity:", -1, "static", 0x50020000, 6, 37, 39, 8
+    CONTROL "", IDC_PT_PARITY, "combobox", 0x50230203, 55, 35, 44, 54
+    CONTROL "&Stop Bits:", -1, "static", 0x50020000, 6, 53, 54, 8
+    CONTROL "", IDC_PT_STOP, "combobox", 0x50230203, 55, 50, 44, 54
+    CONTROL "&Flow Control:", -1, "static", 0x50020000, 6, 67, 54, 8
+    CONTROL "", IDC_PT_FLOW, "combobox", 0x50230203, 55, 65, 65, 54
+    CONTROL "OK", IDOK, "button", 0x50030001, 135, 6, 50, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 135, 23, 50, 14
+    CONTROL "&Advanced...", IDC_PT_ADVANCED, "button", 0x50030000, 135, 43, 50, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 135, 60, 50, 14
+END
+DLG_PORTADV DIALOG 8, 10, 205, 61
+STYLE 0x80C800C0
+CAPTION "Advanced Settings for COM%d:"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Base I/O Port Address:", -1, "static", 0x50020000, 6, 6, 79, 8
+    CONTROL "", IDC_PT_BASE, "combobox", 0x50230202, 86, 4, 60, 54
+    CONTROL "&Interrupt Request Line (IRQ):", -1, "static", 0x50020000, 6, 24, 115, 8
+    CONTROL "", IDC_PT_IRQ, "combobox", 0x50230203, 86, 34, 60, 54
+    CONTROL "OK", IDOK, "button", 0x50030001, 156, 3, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 156, 21, 40, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 156, 41, 40, 14
 END

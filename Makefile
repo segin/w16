@@ -2255,9 +2255,14 @@ $(DOS)/CONTROL.EXE: $(B)/shell/start.o $(B)/shell/control/control.o \
 MAINCPL_O := $(B)/shell/cpl/libentry.o $(B)/shell/cpl/main/main.o \
              $(B)/shell/cpl/main/keyboard.o $(B)/shell/cpl/main/mouse.o \
              $(B)/shell/cpl/main/color.o $(B)/shell/cpl/main/desktop.o \
-             $(B)/gdi/i4.o
+             $(B)/shell/cpl/main/fonts.o $(B)/shell/cpl/main/ports.o \
+             $(B)/shell/cpl/arrow.o $(B)/shell/cpl/cplutil.o $(B)/gdi/i4.o
 dos: $(DOS)/MAIN.CPL
-$(B)/shell/cpl/main/%.o: shell/cpl/main/%.c shell/cpl/main/maincpl.h shell/cpl/cpl.h
+$(B)/shell/cpl/%.o: shell/cpl/%.c shell/cpl/arrow.h shell/cpl/cplutil.h
+	@mkdir -p $(@D)
+	$(WCC) $(CPCFLAGS) -fo=$@ $<
+$(B)/shell/cpl/main/%.o: shell/cpl/main/%.c shell/cpl/main/maincpl.h shell/cpl/cpl.h \
+                         shell/cpl/arrow.h shell/cpl/cplutil.h
 	@mkdir -p $(@D)
 	$(WCC) $(CPCFLAGS) -fo=$@ $<
 $(B)/shell/cpl/main/main.res: shell/cpl/main/main.rc shell/cpl/main/maincpl.h $(CPICONS)

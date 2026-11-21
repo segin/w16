@@ -11,7 +11,6 @@
 #include "maincpl.h"
 
 HINSTANCE g_hinst;
-char cls_arrow[] = "cpArrow";
 
 static const int name_ids[AP_COUNT] = {
     IDS_NAME_COLOR, IDS_NAME_FONTS, IDS_NAME_PORTS, IDS_NAME_MOUSE, IDS_NAME_DESKTOP,
@@ -59,6 +58,12 @@ static void run(HWND parent, int applet)
     case AP_KEYBOARD:
         keyboard_applet(parent);
         break;
+    case AP_FONTS:
+        fonts_applet(parent);
+        break;
+    case AP_PORTS:
+        ports_applet(parent);
+        break;
     default:
         not_yet(parent, applet);
         break;
@@ -84,94 +89,23 @@ LONG FAR PASCAL __loadds CPlApplet(HWND hwnd, UINT msg, LPARAM l1, LPARAM l2)
         return 0;
     }
     case CPL_DBLCLK:
-        run(hwnd, (int)l1);
+        if (l1 >= 0 && l1 < AP_COUNT)
+            run(hwnd, (int)l1);
         return 0;
     }
     return 0;
 }
 
-/* ---- cpArrow ----
-   Observed (pixels, dumps): the controls have WS_BORDER (USER draws the
-   black box) and are one pixel wider than their template says (13 pixels
-   for 7 dialog units, in the Desktop and Custom Color dialogs: UNVERIFIED
-   whether the rule is "odd width"); inside, COLOR_BTNFACE split by a black
-   line 9/20 of the window's height down; an up arrow whose base is 2 rows
-   above the line and a down arrow from 3 rows below it, each 6 rows of 1,
-   3, 3, 5, 5, 7 pixels, centred. */
-static void arrow_paint(HWND w, HDC dc)
-{
-    RECT r, t;
-    HBRUSH face, black;
-    int mid, cx, k;
-    GetClientRect(w, &r);
-    face = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-    black = GetStockObject(BLACK_BRUSH);
-    FillRect(dc, &r, face);
-    mid = r.top + 9 * (r.bottom - r.top) / 20;
-    SetRect(&t, r.left, mid, r.right, mid + 1);
-    FillRect(dc, &t, black);
-    cx = (r.right - r.left) / 2;
-    for (k = 0; k < 6; k++) {
-        int half = (k + 1) / 2;
-        SetRect(&t, cx - half, mid - 7 + k, cx + half + 1, mid - 6 + k);
-        FillRect(dc, &t, black);
-        SetRect(&t, cx - half, mid + 8 - k, cx + half + 1, mid + 9 - k);
-        FillRect(dc, &t, black);
-    }
-    DeleteObject(face);
-}
-
-LRESULT FAR PASCAL __loadds ArrowProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_CREATE: {
-        RECT r;
-        GetWindowRect(w, &r);
-        if (!((r.right - r.left) & 1))
-            SetWindowPos(w, NULL, 0, 0, r.right - r.left + 1, r.bottom - r.top,
-                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        break;
-    }
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        BeginPaint(w, &ps);
-        arrow_paint(w, ps.hdc);
-        EndPaint(w, &ps);
-        return 0;
-    }
-    case WM_LBUTTONDOWN:
-    case WM_LBUTTONDBLCLK: {
-        RECT r;
-        GetClientRect(w, &r);
-        SendMessage(GetParent(w), WM_VSCROLL,
-                    (int)HIWORD(lp) < r.bottom * 9 / 20 ? SB_LINEUP : SB_LINEDOWN,
-                    MAKELONG(0, w));
-        return 0;
-    }
-    }
-    return DefWindowProc(w, msg, wp, lp);
-}
-
 int __cdecl __far cpl_libmain(HINSTANCE h)
 {
-    WNDCLASS wc;
     g_hinst = h;
-    wc.style = CS_GLOBALCLASS | CS_DBLCLKS;
-    wc.lpfnWndProc = ArrowProc;
-    wc.cbClsExtra = wc.cbWndExtra = 0;
-    wc.hInstance = h;
-    wc.hIcon = NULL;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = NULL;
-    wc.lpszMenuName = NULL;
-    wc.lpszClassName = cls_arrow;
-    RegisterClass(&wc);
+    arrow_register(h);
     return 1;
 }
 
 int FAR PASCAL __loadds WEP(int exit)
 {
     (void)exit;
-    UnregisterClass(cls_arrow, g_hinst);
+    arrow_unregister(g_hinst);
     return 1;
 }
