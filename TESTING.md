@@ -46,6 +46,30 @@ your own, and `.tools/` is git-ignored so they are never committed.
   `(Disk_2).img`); `tests/sb16setup.sh` installs them into a scratch copy
   of the reference install (its header says what Creative's installer
   changes).
+- Optional, for work on 32-bit (Win32s) programs: `.tools/ref/win31s/cdrive/`
+  and `.tools/ref/wfw311s/cdrive/`, the Windows 3.1 and WfW 3.11
+  references with Microsoft Win32s 1.30c installed by its own Setup
+  (`tests/dropin.sh` with `DROPIN_REF=$PWD/.tools/ref/win31s/cdrive` boots
+  w16's parts on it). Win32s runs in 386 Enhanced mode only (`WIN /3`). To
+  make them, put the Win32s disk images (`disk1.img`, `disk2.img`,
+  `disk3.img`, 1.44 MB) anywhere below `.tools/win32s/src/` and run, in a
+  directory of your choice,
+
+  ```sh
+  tests/win32ssetup.sh /tmp/w32s-31 win31    # from .tools/ref/win31/cdrive
+  tests/win32ssetup.sh /tmp/w32s-wfw wfw311  # from .tools/ref/wfw311a/cdrive
+  mkdir -p .tools/ref/win31s .tools/ref/wfw311s
+  cp -a /tmp/w32s-31/c .tools/ref/win31s/cdrive
+  cp -a /tmp/w32s-wfw/c .tools/ref/wfw311s/cdrive
+  ```
+
+  It runs Setup in DOSBox-X on a virtual display (about 10 minutes),
+  swapping the disk images when Setup asks, then runs a 32-bit test
+  program (`tests/win32s/w32t.c`, built with OpenWatcom's `wcc386`) and
+  fails unless it ran. `OUTDIR/install.log` lists what Setup installed and
+  changed and the test program's output; `OUTDIR/shot-*.png` show each
+  step (the project's copies keep them beside `cdrive`, in `setup/`).
+  The script's header says what Setup asks and what it installs.
 - Optional: `.tools/docs/` (reference books as text, used by the
   documentation, not by tests).
 
