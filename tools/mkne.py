@@ -32,6 +32,9 @@ instead of its own (a bad file: TK62, the audit's H9).
 --dgroup N gives it one data segment, its automatic data segment, of N
 bytes in the file (no heap, no stack): over FFF0h it cannot be loaded
 as one selector's DGROUP (TK62, the audit's H7).
+--type-name-off N writes N as every named resource type's name offset
+in the resource table instead of its own (a bad file whose name runs
+past the module table: TK66, the audit's medium 16).
 """
 import argparse
 import struct
@@ -69,7 +72,7 @@ def entry_table(n):
 
 
 def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
-          entry_len=None, dgroup=0):
+          entry_len=None, dgroup=0, type_name_off=None):
     """res: [(type, name, data, length-override or None)]"""
     st = stub()
     lfa = len(st)
@@ -102,6 +105,8 @@ def build(module, desc, res, shift=4, flags=0x8300, expver=0x030A, entries=0,
     placed = []
     for t, items in types:
         tid = name_off[t] if isinstance(t, str) else (0x8000 | t)
+        if isinstance(t, str) and type_name_off is not None:
+            tid = type_name_off
         rt += struct.pack('<HHI', tid, len(items), 0)
         for name, data, ovr in items:
             ln = (len(data) + unit - 1) // unit
@@ -142,6 +147,7 @@ def main():
     ap.add_argument('--entries', type=int, default=0)
     ap.add_argument('--entry-len', type=lambda v: int(v, 0), default=None)
     ap.add_argument('--dgroup', type=lambda v: int(v, 0), default=0)
+    ap.add_argument('--type-name-off', type=lambda v: int(v, 0), default=None)
     ap.add_argument('res', nargs='*')
     a = ap.parse_args()
     if a.stubonly:
@@ -154,7 +160,8 @@ def main():
         res.append((rkey(p[0]), rkey(p[1]), data, int(p[3]) if len(p) > 3 else None))
     mj, mn = (int(x) for x in a.expver.split('.'))
     open(a.out, 'wb').write(build(a.module, a.desc, res, a.shift, int(a.flags, 16),
-                                  (mj << 8) | mn, a.entries, a.entry_len, a.dgroup))
+                                  (mj << 8) | mn, a.entries, a.entry_len, a.dgroup,
+                                  a.type_name_off))
 
 
 if __name__ == '__main__':

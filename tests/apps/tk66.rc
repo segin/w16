@@ -1,0 +1,3 @@
+/* tk66.rc - TK66.EXE's resource (tests/apps/tk66.c "lres": its usage
+   count) */
+1 RCDATA LOADONCALL MOVEABLE DISCARDABLE { "TK66 resource\0" }
