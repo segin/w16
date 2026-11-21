@@ -197,11 +197,12 @@ def sound(i):
 
 
 def enh386(i):
-    """386 Enhanced: a processor chip with its pins"""
+    """386 Enhanced: a processor chip with its pins, marked 32 (a 32-bit
+    processor; 3.1's own icon, as seen on screen, is a chip marked 386)"""
     i.rect(7, 7, 24, 24, GRAY)
     i.frame(7, 7, 24, 24, BLACK)
     i.rect(10, 10, 21, 21, SILVER)
-    i.text(11, 13, '16', NAVY)
+    i.text(11, 13, '32', NAVY)
     for k in range(9, 24, 3):
         for (x, y) in ((k, 4), (k, 25), (4, k), (25, k)):
             i.rect(x, y, x + 1, y + 2 if y in (4, 25) else y + 1, YELLOW)
