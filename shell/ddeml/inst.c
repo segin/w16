@@ -239,6 +239,17 @@ LRESULT FAR PASCAL __loadds SubframeWndProc(HWND w, UINT msg, WPARAM wp, LPARAM 
 
 static void register_classes(void);
 
+/* DdeUninitialize waits this long for its partners' TERMINATEs before
+   the termination dialog, and this long again after Retry (3.1: 3 s and
+   30 s, tests/ddeml/scripts/xterm.dm with xtermr.in); TERMDIALOG's
+   buttons: Close 3, Retry 4, Continue 5 */
+#define TERM_WAIT    3000L
+#define TERM_RETRY   30000L
+#define TD_CLOSE     3
+#define TD_RETRY     4
+#define TD_CONTINUE  5
+BOOL FAR PASCAL TermDlgProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
+
 UINT DMLAPI DdeInitialize(DWORD FAR *pid, PFNCALLBACK cb, DWORD afCmd, DWORD res)
 {
     INST NEAR *in;
@@ -343,7 +354,8 @@ BOOL DMLAPI DdeUninitialize(DWORD id)
            and the task lets them run again after each TERMINATE one of
            its client windows takes */
         {
-            DWORD end = GetCurrentTime() + 10000;
+            DWORD end = GetCurrentTime() + TERM_WAIT;
+            BOOL forever = FALSE;
             MSG m;
             Yield();
             for (;;) {
@@ -351,8 +363,24 @@ BOOL DMLAPI DdeUninitialize(DWORD id)
                 for (c = in->convs; c; c = c->next)
                     if (c->partner && IsWindow(c->partner) && c->hwnd && IsWindow(c->hwnd))
                         all = FALSE;
-                if (all || (long)(GetCurrentTime() - end) >= 0)
+                if (all)
                     break;
+                if (!forever && (long)(GetCurrentTime() - end) >= 0) {
+                    /* the termination dialog (Programmer's Reference
+                       Vol. 2, DdeUninitialize; tests/ddeml/scripts/
+                       xterm.dm): Retry waits another period, Continue
+                       for ever, Close gives up; no TERMINATE is sent
+                       again. The dialog is system-modal: every other
+                       task stops while it is up */
+                    int r = DialogBox(ddeml_inst, "TERMDIALOG", NULL, (DLGPROC)TermDlgProc);
+                    if (r == TD_RETRY)
+                        end = GetCurrentTime() + TERM_RETRY;
+                    else if (r == TD_CONTINUE)
+                        forever = TRUE;
+                    else
+                        break;
+                    continue;
+                }
                 if (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
                     BOOL cl = m.message == WM_DDE_TERMINATE && local_window(m.hwnd, CLS_CLIENT);
                     TranslateMessage(&m);
@@ -463,14 +491,13 @@ HDDEDATA DMLAPI DdeNameService(DWORD id, HSZ hsz1, HSZ hsz2, UINT cmd)
     return 0;
 }
 
-/* the termination dialog (TERMDIALOG); w16's DdeUninitialize waits without the
-   dialog (UNVERIFIED when 3.1 shows it) */
+/* the termination dialog's procedure: a button ends it with its ID */
 BOOL FAR PASCAL __loadds TermDlgProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
     (void)lp;
     if (msg == WM_INITDIALOG)
         return TRUE;
-    if (msg == WM_COMMAND && (wp == 3 || wp == 4 || wp == 5)) {
+    if (msg == WM_COMMAND && (wp == TD_CLOSE || wp == TD_RETRY || wp == TD_CONTINUE)) {
         EndDialog(w, wp);
         return TRUE;
     }
