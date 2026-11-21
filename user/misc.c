@@ -376,6 +376,82 @@ int WINAPI GetKeyboardType(int which)
     return which == 0 ? 4 : which == 1 ? 0 : which == 2 ? 12 : 0;
 }
 
+/* ---- the screen saver (3.1 SDK, Programmer's Reference vol. 1 ch. 14
+   and WM_SYSCOMMAND; Pietrek, Windows Internals ch. 2 and 6, as facts):
+   USER reads WIN.INI [windows] ScreenSaveActive and ScreenSaveTimeOut
+   (seconds) at its start-up; SPI_SET* change them. A system timer every
+   10 seconds checks the time since the last key or mouse event: past the
+   time-out, with no button held, no system-modal window and an active
+   window that is not a DOS program's in 386 Enhanced mode, the active
+   window is posted WM_SYSCOMMAND SC_SCREENSAVE and the idle time starts
+   again from the next input. DefWindowProc runs SYSTEM.INI [boot]
+   SCRNSAVE.EXE with /s for it. Observed on 3.1 (tests/scripts/ss): a
+   15-second time-out started the saver 15-17.5 s after the last key;
+   SC_SCREENSAVE posted to Notepad started it. ---- */
+static int ss_loaded, ss_active;
+static UINT ss_timeout;
+#define SS_PERIOD 10000         /* Pietrek: "every 10 seconds" */
+
+static void ss_load(void)
+{
+    if (ss_loaded)
+        return;
+    ss_loaded = 1;
+    ss_active = GetProfileInt("windows", "ScreenSaveActive", 0) != 0;
+    ss_timeout = GetProfileInt("windows", "ScreenSaveTimeOut", 120);
+}
+
+static void write_int(LPCSTR key, UINT v)
+{
+    char b[8];
+    wsprintf(b, "%u", v);
+    WriteProfileString("windows", key, b);
+}
+
+void __far __pascal __loadds ss_timer_proc(HWND h, UINT msg, UINT id, DWORD time)
+{
+    HWND act = hwndActive;
+    (void)h, (void)msg, (void)id, (void)time;
+    if ((keystate[VK_LBUTTON] | keystate[VK_RBUTTON] | keystate[VK_MBUTTON]) & 0x80)
+        return;
+    ss_load();
+    if (!ss_active || !ss_timeout || !time_last_input || GetSysModalWindow())
+        return;
+    if (GetTickCount() - time_last_input <= (DWORD)ss_timeout * 1000)
+        return;
+    if (!act || !valid_wnd(act))
+        return;
+    if ((GetWinFlags() & WF_ENHANCED) && K_ISWINOLDAPTASK(GetWindowTask(act)))
+        return;
+    PostMessage(act, WM_SYSCOMMAND, SC_SCREENSAVE, 0);
+    time_last_input = 0;
+}
+
+/* the first task's InitApp once Windows is up (the shell's): the timer
+   is that task's, as on 3.1 (Pietrek ch. 3: InitApp's SetSystemTimer) */
+void screensave_init(void)
+{
+    UINT WINAPI U_BEAR11(HWND, UINT, UINT, TIMERPROC);
+    static BOOL done;
+    if (done)
+        return;
+    done = TRUE;
+    ss_load();
+    U_BEAR11(0, 0, SS_PERIOD, (TIMERPROC)ss_timer_proc);
+}
+
+/* SC_SCREENSAVE: the saver SYSTEM.INI names, full screen */
+void screensave_run(void)
+{
+    char path[160];
+    int n;
+    n = GetPrivateProfileString("boot", "SCRNSAVE.EXE", "", path, sizeof path - 3, "SYSTEM.INI");
+    if (!n || !lstrcmpi(path, "(None)"))
+        return;
+    lstrcpy(path + n, " /s");
+    WinExec(path, SW_SHOWNORMAL);
+}
+
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
     WORD __far *w;
@@ -412,8 +488,20 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
         return TRUE;
     case SPI_GETBORDER: *w = sysmet[SM_CXFRAME] - 1; return TRUE;
     case SPI_GETKEYBOARDSPEED: *w = GetProfileInt("windows", "KeyboardSpeed", 31); return TRUE;
-    case SPI_GETSCREENSAVETIMEOUT: *w = GetProfileInt("windows", "ScreenSaveTimeOut", 120); return TRUE;
-    case SPI_GETSCREENSAVEACTIVE: *w = GetProfileInt("windows", "ScreenSaveActive", 0); return TRUE;
+    case SPI_GETSCREENSAVETIMEOUT: ss_load(); *w = ss_timeout; return TRUE;
+    case SPI_GETSCREENSAVEACTIVE: ss_load(); *w = ss_active; return TRUE;
+    case SPI_SETSCREENSAVETIMEOUT:      /* seconds (3.1 SDK) */
+        ss_load();
+        ss_timeout = ui;
+        if (ini & SPIF_UPDATEINIFILE)
+            write_int("ScreenSaveTimeOut", ui);
+        return TRUE;
+    case SPI_SETSCREENSAVEACTIVE:
+        ss_load();
+        ss_active = ui != 0;
+        if (ini & SPIF_UPDATEINIFILE)
+            write_int("ScreenSaveActive", ss_active);
+        return TRUE;
     case SPI_GETGRIDGRANULARITY: *w = GetProfileInt("desktop", "GridGranularity", 0); return TRUE;
     case SPI_GETKEYBOARDDELAY: *w = GetProfileInt("windows", "KeyboardDelay", 2); return TRUE;
     case SPI_ICONHORIZONTALSPACING: *w = sysmet[SM_CXICONSPACING]; return TRUE;
