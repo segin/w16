@@ -11,6 +11,7 @@
 
 #include <windows.h>
 #include "cpl.h"
+#include "arrow.h"
 
 /* applets, in the original's order in Control Panel */
 #define AP_COLOR 0
@@ -70,6 +71,18 @@
 #define IDS_DK_BORDER       214
 #define IDS_DK_SPACING      218
 #define IDS_DK_DELAY        220
+/* w16's own numbering */
+#define IDS_CLOSE           4001
+#define IDS_RS_TRUETYPE     4002
+#define IDS_RS_COM          4003
+#define IDS_FN_NONE         4010
+#define IDS_FN_SCREEN       4011
+#define IDS_FN_TRUETYPE     4012
+#define IDS_FN_MANY         4013
+#define IDS_FN_SIZE         4014
+#define IDS_FN_REMOVEQ      4015
+#define IDS_FN_INSTALLED    4016
+#define IDS_FN_NOTFOUND     4017
 
 /* dialogs (the original's resource IDs) */
 #define DLG_KEYBOARD        5
@@ -79,6 +92,15 @@
 #define DLG_CUSTOMCOLOR     26
 #define DLG_SAVESCHEME      27
 #define DLG_COLOR           100
+/* w16's own numbering (3.1's are not visible) */
+#define DLG_FONTS           40
+#define DLG_TRUETYPE        41
+#define DLG_REMOVEFONT      42
+#define DLG_ADDFONTS        43
+#define DLG_RESTART         44
+#define DLG_PORTS           45
+#define DLG_PORTSET         46
+#define DLG_PORTADV         47
 
 
 /* common control IDs */
@@ -146,6 +168,43 @@
 #define IDC_EP_REMOVE       111
 #define IDC_EP_SAMPLE       115
 
+/* Fonts (IDs as 3.1's dialogs report them) */
+#define IDC_FN_LIST         0x190
+#define IDC_FN_TEXT         0x191
+#define IDC_FN_SAMPLE       0x192
+#define IDC_FN_ADD          0x193
+#define IDC_FN_REMOVE       0x194
+#define IDC_FN_SIZE         0x198
+#define IDC_FN_TRUETYPE     0x199
+#define IDC_TT_ENABLE       0x199
+#define IDC_TT_ONLY         0x1A4
+#define IDC_RF_ICON         (-1)
+#define IDC_RF_TEXT         0x1A2
+#define IDC_RF_DELETE       0x1A3
+#define IDC_RF_YESALL       0x7A
+#define IDC_RS_TEXT         0x64
+#define IDC_RS_ICON         (-1)
+/* Add Fonts: COMMDLG's IDs (stc1, lst2, cmb2 ...) and the template's own */
+#define IDC_AF_DIR          0x440
+#define IDC_AF_DIRS         0x461
+#define IDC_AF_DRIVES       0x471
+#define IDC_AF_LIST         0x500
+#define IDC_AF_SELALL       0x40F
+#define IDC_AF_COPY         0x411
+#define IDC_AF_STATUS       0x502
+
+/* Ports */
+#define IDC_PT_SETTINGS     0x33C
+#define IDC_PT_COM1         0x33E
+#define IDC_PT_BAUD         0x320
+#define IDC_PT_DATA         0x321
+#define IDC_PT_PARITY       0x322
+#define IDC_PT_STOP         0x323
+#define IDC_PT_FLOW         0x324
+#define IDC_PT_ADVANCED     0x325
+#define IDC_PT_BASE         0x326
+#define IDC_PT_IRQ          0x327
+
 /* Mouse */
 #define IDC_MS_SWAP         500
 #define IDC_MS_L            503
@@ -158,10 +217,6 @@
 #define IDC_MS_DBLCLK       531
 #define IDC_MS_TRACK        532
 
-/* the spin control class of the original ("cpArrow"): a narrow box with
-   an up and a down arrow, which sends its parent WM_VSCROLL SB_LINEUP or
-   SB_LINEDOWN with its window handle */
-extern char cls_arrow[];
 
 extern HINSTANCE g_hinst;
 
@@ -174,5 +229,10 @@ void keyboard_applet(HWND parent);
 void mouse_applet(HWND parent);
 void color_applet(HWND parent);
 void desktop_applet(HWND parent);
+void fonts_applet(HWND parent);
+void ports_applet(HWND parent);
+
+/* ports.c: "System Setting Change", Restart Now / Don't Restart Now */
+void cpl_restart_prompt(HWND parent, int text);
 
 #endif

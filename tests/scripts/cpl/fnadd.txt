@@ -1,0 +1,23 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ref WINDOWS/SYSTEM/EGA40WOA.FON NEWFONTS/EGA40WOA.FON
+; Fonts, Add: C:\NEWFONTS (EGA40WOA.FON, "Terminal"), Select All, OK with
+; Copy Fonts to Windows Directory: the file goes to SYSTEM as EGA40WO0.FON
+; (EGA40WOA.FON is there) and WIN.INI [fonts] Terminal=EGA40WO0.FON
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+alt a
+wait 4000
+dblitem 0
+wait 3000
+dblitem 1
+wait 5000
+snap A0.BMP
+alt s
+wait 1000
+snap A1.BMP
+key 0D
+wait 5000
+snap A2.BMP
+key 1B
+wait 3000

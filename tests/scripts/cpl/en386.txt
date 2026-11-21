@@ -1,0 +1,33 @@
+;! mode /3
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! w16 CPWIN386.CPL WINDOWS/SYSTEM/CPWIN386.CPL
+; 386 Enhanced (WIN /3, 3.1's WIN386): the panel's icons, the dialog; Com1
+; Never Warn, foreground 200, background 25, exclusive, minimum timeslice
+; 30, OK: SYSTEM.INI [386Enh] MinTimeslice=30 WinTimeslice=200,25
+; WinExclusive=1 Com1AutoAssign=-1 Com2AutoAssign=2
+blinktime 65535
+run CONTROL.EXE
+wait 5000
+snap C0.BMP
+close
+wait 2000
+run CONTROL.EXE 386 Enhanced
+wait 5000
+snap E0.BMP
+clickid 386
+wait 500
+alt f
+wait 300
+type 200
+alt b
+wait 300
+type 25
+alt e
+wait 300
+alt m
+wait 300
+type 30
+wait 300
+snap E1.BMP
+key 0D
+wait 4000

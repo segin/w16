@@ -83,6 +83,12 @@ struct w386_info {
     w_u16 sda_size;     /* bytes of DOS's swappable data area (INT 21h 5D06h) */
     w_u16 free_mcb;     /* the first free memory arena after the loader's block (its MCB) */
     w_u16 mem_top;      /* the segment above conventional memory (BIOS 40:13h) */
+    /* SYSTEM.INI [386Enh] scheduling (Control Panel's 386 Enhanced):
+       WinTimeslice=fg,bg (100,50), MinTimeslice in ms (20), WinExclusive
+       (0) */
+    w_u16 win_fg, win_bg;
+    w_u16 min_slice;
+    w_u16 win_exclusive;
 };
 #pragma pack()
 

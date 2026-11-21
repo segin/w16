@@ -6,5 +6,7 @@ option heapsize=2k
 option modname=MAINCPL
 option description 'w16 Control Panel applets'
 library windows.lib
+library commdlg.lib
+library shell.lib
 export CPLAPPLET.1
 export WEP resident

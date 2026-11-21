@@ -1,0 +1,31 @@
+;! mode /3
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! w16 CPWIN386.CPL WINDOWS/SYSTEM/CPWIN386.CPL
+;! w16 win386/WIN386.EXE WINDOWS/SYSTEM/WIN386.EXE
+; (the w16 run with w16's WIN386 as well)
+; 386 Enhanced, Virtual Memory: the dialog, Change>>, type None, OK, Yes:
+; [386Enh] Paging=0, PagingFile and MaxPagingFileSize removed, the restart
+; dialog; Continue; 386 Enhanced OK
+blinktime 65535
+run CONTROL.EXE 386 Enhanced
+wait 5000
+alt v
+wait 4000
+snap V0.BMP
+alt c
+wait 4000
+snap V1.BMP
+cbsel 25D 2
+wait 2000
+snap V2.BMP
+key 0D
+wait 4000
+snap V3.BMP
+key 0D
+wait 6000
+snap V4.BMP
+alt c
+wait 3000
+snap V5.BMP
+key 0D
+wait 3000

@@ -1,0 +1,27 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Fonts, Remove: Modern (Plotter) with Delete Font File From Disk, Yes:
+; the key goes from [fonts]; Cancel reads Close
+blinktime 65535
+run CONTROL.EXE FONTS
+wait 5000
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+key 28
+wait 1500
+snap R0.BMP
+alt r
+wait 2000
+alt d
+wait 500
+snap R1.BMP
+key 0D
+wait 3000
+snap R2.BMP
+key 1B
+wait 2000

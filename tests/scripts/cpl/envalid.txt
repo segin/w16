@@ -1,0 +1,25 @@
+;! mode /3
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! w16 CPWIN386.CPL WINDOWS/SYSTEM/CPWIN386.CPL
+; 386 Enhanced: a minimum timeslice of 0 and a foreground of 0 refused
+blinktime 65535
+run CONTROL.EXE 386 Enhanced
+wait 5000
+alt m
+type 0
+key 0D
+wait 3000
+snap E0.BMP
+key 0D
+wait 2000
+alt m
+type 20
+alt f
+type 0
+key 0D
+wait 3000
+snap E1.BMP
+key 0D
+wait 2000
+key 1B
+wait 2000

@@ -1,0 +1,114 @@
+/* cpwin386.rc - w16 CPWIN386.CPL resources. Dialog layouts, control IDs
+   and styles measured on Windows 3.1 from its window dumps (SNAP "dump"/
+   "info", base units 7 x 13 of 8-point Helv; a list box shows one pixel
+   bigger all round, an edit control without WS_BORDER in its style); the
+   dialogs' own resource IDs and the strings' numbers are w16's. Labels
+   are the original's plain UI text, user-facing "Windows" reading "w16"
+   (ARCHITECTURE.md 3, branding); the icon is w16's (tools/cplicons.py). */
+#include <windows.h>
+#include "cpwin386.h"
+
+IDI_ENH386 ICON "enh386.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_NAME,           "386 Enhanced"
+    IDS_INFO,           "Optimizes w16 for 386 enhanced mode."
+    IDS_TITLE,          "Control Panel - 386 Enhanced"
+    IDS_BAD_MIN,        "Invalid minimum timeslice value;\n\nit must be a value between 1 and 10000."
+    IDS_BAD_FG,         "Invalid foreground value."
+    IDS_BAD_BG,         "Invalid background value."
+    IDS_VM_CONFIRM,     "Are you sure you want to make changes to virtual-memory settings?"
+    IDS_VM_TITLE,       "Virtual Memory"
+    IDS_VM_TEMP,        "Temporary (using MS-DOS)"
+    IDS_VM_PERM,        "Permanent (using MS-DOS)"
+    IDS_VM_NONE,        "None"
+    IDS_VM_PERMANENT,   "Permanent"
+    IDS_VM_TEMPORARY,   "Temporary"
+    IDS_VM_NONE2,       "None"
+    IDS_VM_RECMAX,      "Recommended Maximum Size:"
+    IDS_VM_NEWSIZE,     "New &Size:"
+    IDS_VM_KB,          "KB"
+    IDS_VM_MAXSIZE,     "Maximum Size:"
+    IDS_VM_RECSIZE,     "Recommended Size:"
+END
+
+DLG_ENH386 DIALOG 4, 0, 232, 140
+STYLE 0x80C800C0
+CAPTION "386 Enhanced"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "&Device Contention", -1, "button", 0x50000007, 4, 4, 156, 60
+    CONTROL "", IDC_EN_PORTS, "listbox", 0x50A11001, 6, 18, 50, 40
+    CONTROL "&Always Warn", IDC_EN_ALWAYS, "button", 0x50020004, 66, 18, 62, 12
+    CONTROL "&Never Warn", IDC_EN_NEVER, "button", 0x50000004, 66, 32, 62, 12
+    CONTROL "&Idle (in sec.)", IDC_EN_IDLE, "button", 0x50010004, 66, 46, 62, 12
+    CONTROL "", IDC_EN_IDLESEC, "edit", 0x50830000, 132, 46, 18, 12
+    CONTROL "", IDC_EN_IDLESEC + 1, "cpArrow", 0x50820000, 150, 46, 7, 12
+    CONTROL "Scheduling", -1, "button", 0x50000007, 4, 66, 156, 54
+    CONTROL "Windows in &Foreground:", -1, "static", 0x50020000, 6, 80, 116, 9
+    CONTROL "", IDC_EN_FG, "edit", 0x50830000, 124, 78, 26, 12
+    CONTROL "", IDC_EN_FG + 1, "cpArrow", 0x50820000, 150, 78, 7, 12
+    CONTROL "Windows in &Background:", -1, "static", 0x50020000, 6, 94, 116, 9
+    CONTROL "", IDC_EN_BG, "edit", 0x50830000, 124, 92, 26, 12
+    CONTROL "", IDC_EN_BG + 1, "cpArrow", 0x50820000, 150, 92, 7, 12
+    CONTROL "&Exclusive in Foreground", IDC_EN_EXCL, "button", 0x50030002, 6, 106, 120, 12
+    CONTROL "&Minimum Timeslice (in msec):", -1, "static", 0x50020000, 6, 126, 116, 9
+    CONTROL "", IDC_EN_MIN, "edit", 0x50830000, 124, 124, 26, 12
+    CONTROL "", IDC_EN_MIN + 1, "cpArrow", 0x50820000, 150, 124, 7, 12
+    CONTROL "OK", IDOK, "button", 0x50030001, 164, 14, 66, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 164, 30, 66, 14
+    CONTROL "&Virtual Memory...", IDC_EN_VMEM, "button", 0x50030000, 164, 50, 66, 14
+    CONTROL "&Help", IDC_HELP, "button", 0x50030000, 164, 66, 66, 14
+END
+
+DLG_VMEM DIALOG 63, 44, 236, 171
+STYLE 0x80C800C0
+CAPTION "Virtual Memory"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "Current Settings", 0x6B, "button", 0x50000007, 3, 6, 181, 43
+    CONTROL "Drive:", 0x65, "static", 0x50020000, 9, 18, 20, 8
+    CONTROL "Size:", 0x66, "static", 0x50020000, 9, 27, 20, 8
+    CONTROL "Type:", 0x67, "static", 0x50020000, 9, 36, 20, 8
+    CONTROL "", IDC_VM_CURDRIVE, "static", 0x50020000, 41, 18, 134, 8
+    CONTROL "", IDC_VM_CURSIZE, "static", 0x50020000, 41, 27, 134, 8
+    CONTROL "", IDC_VM_CURTYPE, "static", 0x50020000, 41, 36, 134, 8
+    CONTROL "New Settings", IDC_VM_NEWGROUP, "button", 0x50000007, 3, 72, 181, 94
+    CONTROL "&Drive:", 0x72, "static", 0x50020000, 9, 92, 20, 8
+    CONTROL "", IDC_VM_DRIVE, "combobox", 0x58210313, 41, 90, 134, 60
+    CONTROL "&Type:", 0x73, "static", 0x50020000, 9, 106, 20, 8
+    CONTROL "", IDC_VM_TYPE, "combobox", 0x58210303, 41, 104, 134, 40
+    CONTROL "Space Available:", 0x74, "static", 0x50020000, 9, 120, 108, 8
+    CONTROL "", IDC_VM_AVAIL, "static", 0x50020002, 120, 120, 40, 8
+    CONTROL "KB", 0x76, "static", 0x50020000, 164, 120, 17, 8
+    CONTROL "", IDC_VM_L2, "static", 0x50020000, 9, 129, 108, 8
+    CONTROL "", IDC_VM_V2, "static", 0x50020002, 120, 129, 40, 8
+    CONTROL "KB", IDC_VM_K2, "static", 0x50020000, 164, 129, 17, 8
+    CONTROL "", IDC_VM_L3, "static", 0x50020000, 9, 138, 108, 8
+    CONTROL "", IDC_VM_V3, "static", 0x50020002, 120, 138, 40, 8
+    CONTROL "KB", IDC_VM_K3, "static", 0x50020000, 164, 138, 18, 8
+    CONTROL "&Size:", IDC_VM_SIZELBL, "static", 0x50020000, 9, 151, 106, 8
+    CONTROL "", IDC_VM_SIZE, "edit", 0x58810006, 118, 149, 44, 13
+    CONTROL "KB", 0x267, "static", 0x50020000, 164, 151, 17, 8
+    CONTROL "&Use 32-Bit Disk Access", IDC_VM_32BIT, "button", 0x58010002, 9, 170, 200, 14
+    CONTROL "OK", IDOK, "button", 0x50010001, 193, 4, 40, 14
+    CONTROL "Cancel", IDCANCEL, "button", 0x50010000, 193, 20, 40, 14
+    CONTROL "&Change>>", IDC_VM_CHANGE, "button", 0x50010000, 193, 36, 40, 14
+    CONTROL "&Help", IDC_VM_HELP, "button", 0x50010000, 193, 52, 40, 14
+END
+
+DLG_VMRESTART DIALOG 76, 34, 224, 83
+STYLE 0x80C800C0
+CAPTION "Virtual Memory"
+FONT 8, "Helv"
+BEGIN
+    CONTROL "", IDC_VR_ICON, "static", 0x50000003, 11, 7, 18, 20
+    CONTROL "You need to quit and restart w16 so that the", 0x65, "static", 0x50020000, 44, 4, 170, 8
+    CONTROL "changes you made will take effect. Do not press", 0x66, "static", 0x50020000, 44, 13, 170, 8
+    CONTROL "CTRL+ALT+DEL to restart w16--this will", 0x67, "static", 0x50020000, 44, 22, 170, 8
+    CONTROL "result in loss of information.", 0x68, "static", 0x50020000, 44, 31, 170, 8
+    CONTROL "Restart w16 now?", 0x6C, "static", 0x50020000, 76, 49, 110, 8
+    CONTROL "&Restart w16", IDC_VR_RESTART, "button", 0x50010001, 30, 65, 71, 14
+    CONTROL "&Continue", IDC_VR_CONTINUE, "button", 0x50010000, 121, 65, 71, 14
+END

@@ -1,0 +1,37 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Ports: COM2's settings: 57600 typed, data bits 4, parity Space, stop bits
+; 2, flow control None, OK: WIN.INI [ports] COM2:=57600,s,4,2
+blinktime 65535
+run CONTROL.EXE PORTS
+wait 5000
+snap P0.BMP
+alt 2
+wait 300
+alt s
+wait 3000
+snap S0.BMP
+alt p
+kdown 23
+kup 23
+wait 300
+alt f
+kdown 23
+kup 23
+wait 300
+alt d
+kdown 24
+kup 24
+wait 300
+alt s
+kdown 23
+kup 23
+wait 300
+alt b
+type 57600
+wait 300
+snap S1.BMP
+key 0D
+wait 3000
+snap S2.BMP
+key 1B
+wait 2000

@@ -173,6 +173,71 @@ static int ini_w16_zero(const char *key)
     return zero;
 }
 
+/* The value of [386Enh] key= in SYSTEM.INI (the last one), or NULL; the
+ * text runs to the end of its line */
+static char __far *ini_386(const char *key)
+{
+    char __far *q = ini, __far *v = NULL;
+    unsigned n = strlen(key);
+    int in386 = 0;
+
+    while (q && *q) {
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == '[')
+            in386 = !_fmemicmp(q, "[386Enh]", 8);
+        else if (in386 && !_fmemicmp(q, key, n)) {
+            char __far *e = q + n;
+            while (*e == ' ' || *e == '\t') e++;
+            if (*e == '=') {
+                e++;
+                while (*e == ' ' || *e == '\t') e++;
+                v = e;
+            }
+        }
+        while (*q && *q != '\n') q++;
+        if (*q) q++;
+    }
+    return v;
+}
+
+/* a decimal number at *pq (advanced past it); def if none, or outside
+ * lo..hi (the range Control Panel's 386 Enhanced applet takes: 1-10000) */
+static unsigned ini_num(char __far **pq, unsigned def, unsigned lo, unsigned hi)
+{
+    char __far *q = *pq;
+    unsigned long v = 0;
+    int any = 0;
+    if (!q) return def;
+    while (*q == ' ' || *q == '\t') q++;
+    while (*q >= '0' && *q <= '9') {
+        v = v * 10 + (*q++ - '0');
+        if (v > 65535UL) v = 65535UL;
+        any = 1;
+    }
+    *pq = q;
+    return any && v >= lo && v <= hi ? (unsigned)v : def;
+}
+
+/* SYSTEM.INI [386Enh] WinTimeslice, MinTimeslice and WinExclusive for the
+ * scheduler (vm.c); the defaults are Windows 3.1's (Control Panel shows
+ * 100, 50, 20 and off when the keys are absent) */
+static void read_sched(struct w386_info *in)
+{
+    char __far *q = ini_386("WinTimeslice");
+    in->win_fg = ini_num(&q, 100, 1, 10000);
+    if (q) {
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == ',') { q++; in->win_bg = ini_num(&q, 50, 1, 10000); }
+        else in->win_bg = 50;
+    } else
+        in->win_bg = 50;
+    q = ini_386("MinTimeslice");
+    in->min_slice = ini_num(&q, 20, 1, 10000);
+    q = ini_386("WinExclusive");
+    in->win_exclusive = q && (*q == '1' || *q == 'y' || *q == 'Y' || *q == 't' || *q == 'T' ||
+                              ((*q == 'o' || *q == 'O') && (q[1] == 'n' || q[1] == 'N')));
+}
+
 /* ---- the VMM image ---- */
 #define PAGE 4096UL
 
@@ -806,6 +871,7 @@ int main(int argc, char **argv)
             if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && (q[9] == '1' || q[9] == '2'))
                 info.trace = q[9] - '0';
     }
+    read_sched(&info);
     r.h.ah = 0x48; r.x.bx = 0xFFFF;
     intdos(&r, &r);
     info.conv_free = r.x.bx;

@@ -28,8 +28,10 @@
  *
  * The scheduler. A VM runs until its time slice is over (timer ticks: its
  * priority / 50, the foreground priority for the VM with the execution
- * focus, at least one tick; UNVERIFIED how Windows 3.1 turns WinTimeSlice
- * and the PIF's priorities into time), it idles (HLT, INT 2Fh 1680h,
+ * focus, scaled by SYSTEM.INI [386Enh] MinTimeslice / 20 ms, at least one
+ * tick; the System VM's priorities are WinTimeslice's; UNVERIFIED how
+ * Windows 3.1 turns WinTimeSlice, MinTimeslice and the PIF's priorities
+ * into time: w16's defaults keep the slices it had), it idles (HLT, INT 2Fh 1680h,
  * Release_Time_Slice) or another VM gets an interrupt while it idles. A
  * VM inside one of DOS's critical sections (INT 2Ah 80h/81h, which DOS
  * makes around its shared tables) is not taken off then. Every tick wakes
@@ -134,8 +136,10 @@ void vm_sys_init(void)
     sysvm.refsp = info->refstk_top;
     /* SYSTEM.INI [386Enh] WinTimeSlice's default (UNVERIFIED that w16
      * should read it; the DDK's priorities are 1-10000) */
-    sysvm.prio_fg = 100;
-    sysvm.prio_bg = 50;
+    /* SYSTEM.INI [386Enh] WinTimeslice (the loader reads it; 100,50 when
+     * absent, as Windows 3.1's Control Panel shows) */
+    sysvm.prio_fg = info->win_fg ? info->win_fg : 100;
+    sysvm.prio_bg = info->win_bg ? info->win_bg : 50;
     sysvm.slice = 2;
 }
 
@@ -343,7 +347,9 @@ static int runnable(struct vm *v)
 static u32 slice_of(struct vm *v)
 {
     u32 p = v == vm_focus ? v->prio_fg : v->prio_bg;
-    p /= 50;
+    u32 ms = info->min_slice ? info->min_slice : 20;
+    /* priority / 50 ticks at MinTimeslice 20 ms, in proportion to it */
+    p = p * ms / (50 * 20);
     return p ? p : 1;
 }
 
@@ -395,6 +401,9 @@ static struct vm *pick(void)
         if (runnable(v) || v == &sysvm) return v;
         v = cur_vm;
     }
+    /* SYSTEM.INI [386Enh] WinExclusive: while Windows has the focus no
+     * other VM runs (Control Panel's "Exclusive in Foreground") */
+    if (info->win_exclusive && vm_focus == &sysvm && runnable(&sysvm)) return &sysvm;
     do {
         v = v->next ? v->next : vm_list;
         if (runnable(v) && !v->idle) return v;
