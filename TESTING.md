@@ -18,6 +18,8 @@ here depends on that host.
 | `dosbox` | most tests |
 | `dosbox-x` (AUR) | WIN.COM, WINOLDAP, 286 and 386 Enhanced tests |
 | `xorg-server-xvfb`, `xdotool`, `imagemagick` | headless screens, real keyboard and mouse input, pixel diffs |
+| `mtools` | hard disk images (MS-DOS 4.00 boots, `tests/86box.sh`) |
+| `86box`, `86box-roms` (AUR; optional) | the hardware-coprocessor test (`tests/86box-n4.sh`, section 3) |
 
 On Arch: `yay -S openwatcom-v2 nasm python python-pillow noto-fonts dosbox dosbox-x xorg-server-xvfb xdotool imagemagick`.
 
@@ -184,6 +186,27 @@ Recorder, Sound and Media Player over it; the boot-test case `sb16`),
 Windows 3.1, booting again past the cases that end the task; makes the
 logs `tools/us27ref.py` and `tools/obsref.py` turn into
 `tests/apps/us27ref.h`).
+
+**A hardware coprocessor (optional): 86Box.** DOSBox's and DOSBox-X's
+coprocessors raise no exceptions (no IRQ 13), so what WIN87EM does with
+an unmasked exception on a real coprocessor shows only on an emulator
+that wires the 387 as an AT does. `tests/86box.sh PROGRAM.EXE [FILE...]`
+runs a probe under the reference Windows 3.1 on 86Box: a 386DX with a 387
+(the AMI BIOS of "asus386", its CMOS written by `tools/atcmos.py` so it
+boots without stopping in setup), MS-DOS 4.00 from `.tools/msdos` with
+HIMEM.SYS, the probe started from WIN.INI's `run=`, all headless on its
+own Xvfb display; its TK.LOG is read back from the disk image with
+mtools and printed. `B86_WIN87EM=build/dos/WIN87EM.DLL` puts w16's
+WIN87EM in place of Microsoft's, `B86_MODE=/3` runs 386 Enhanced mode,
+`B86_SHOT=DIR` saves a screenshot every 10 seconds (the rest at the top
+of the script). `tests/86box-n4.sh` runs TK67P13 (`__fpMath 7`, FISTP and
+a zero divide with exceptions unmasked) with both WIN87EMs in both modes
+and compares the logs (about two minutes). Needs 86Box and its ROMs
+(Arch: the AUR packages `86box` and `86box-roms`), Xvfb, mtools. Not part
+of `make test`. 86Box's 387 is not exact either: an out-of-range FISTP
+with invalid unmasked stores the integer indefinite, sets no flag and
+does not pop (Intel: nothing stored, the exception raised); a zero divide
+does raise IRQ 13 (ARCHITECTURE.md 9.2).
 
 Run the boot test from a copy if you will edit the scripts while it runs:
 `cp tests/boottest.sh build/boottest-snapshot.sh && sh build/boottest-snapshot.sh`.
