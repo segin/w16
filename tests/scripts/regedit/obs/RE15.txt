@@ -1,0 +1,38 @@
+; RE15 (REGOBS_TRACE=1: the registration calls logged by XHELL.DLL): /V
+; started, a value typed, Restore To Last Save; typed again, Save Changes;
+; typed again, Exit answered No; each step marked in the log
+; get: XHELL.LOG
+run REGEDIT.EXE /V
+wait 3000
+append C:\XHELL.LOG ---- started
+key 28
+key 09
+type A
+key 09
+wait 300
+append C:\XHELL.LOG ---- typed A; Restore
+cmd 1537
+wait 1500
+key 0D
+wait 1500
+append C:\XHELL.LOG ---- restored; typing B
+key 28
+key 09
+type B
+key 09
+wait 300
+append C:\XHELL.LOG ---- Save Changes
+cmd 1536
+wait 1500
+append C:\XHELL.LOG ---- saved; typing C
+key 28
+key 09
+type C
+key 09
+wait 300
+append C:\XHELL.LOG ---- Exit, No
+close
+wait 1500
+clickid 7
+wait 1500
+append C:\XHELL.LOG ---- ended

@@ -1,0 +1,25 @@
+; RE13: does SHELL read REG.DAT again while it stays loaded? Program
+; Manager (it imports SHELL) keeps SHELL loaded; an alternative REG.DAT
+; (t2.reg merged by a REGEDIT that then ends) is copied over REG.DAT;
+; REGEDIT's list shows what SHELL gives it; then the original file is put
+; back and a new REGEDIT looks again. Run with REGOBS_SHELL for w16's.
+; put: tests/scripts/regedit/t2.reg=T2.REG
+copyfile C:\WINDOWS\REG.DAT C:\ORIG.DAT
+run REGEDIT.EXE /s C:\T2.REG
+wait 3000
+copyfile C:\WINDOWS\REG.DAT C:\ALT.DAT
+copyfile C:\ORIG.DAT C:\WINDOWS\REG.DAT
+run PROGMAN.EXE
+wait 4000
+copyfile C:\ALT.DAT C:\WINDOWS\REG.DAT
+run REGEDIT.EXE
+wait 3000
+dump
+close
+wait 1500
+copyfile C:\ORIG.DAT C:\WINDOWS\REG.DAT
+run REGEDIT.EXE
+wait 3000
+dump
+close
+wait 1500

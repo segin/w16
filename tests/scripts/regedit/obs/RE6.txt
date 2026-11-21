@@ -1,0 +1,83 @@
+; RE6: .REG files: REGEDIT file.reg, /S file.reg, a file without the
+; header, a missing file, a key outside HKEY_CLASSES_ROOT; then Merge from
+; the menu; Save Registration File from /V with the root and with a key
+; selected
+; put: tests/scripts/regedit/t1.reg=T1.REG
+; put: tests/scripts/regedit/t2.reg=T2.REG
+; put: tests/scripts/regedit/t3.reg=T3.REG
+; put: tests/scripts/regedit/bad.reg=BAD.REG
+; get: OUT1.REG
+; get: OUT2.REG
+; get: COPY1.DAT
+run REGEDIT.EXE C:\T1.REG
+wait 3000
+snap C:\B1.BMP
+dump
+key 0D
+wait 1500
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+run REGEDIT.EXE /s C:\T2.REG
+wait 3000
+snap C:\B2.BMP
+dump
+run REGEDIT.EXE C:\BAD.REG
+wait 3000
+snap C:\B3.BMP
+dump
+key 0D
+wait 1500
+run REGEDIT.EXE C:\MISSING.REG
+wait 3000
+snap C:\B4.BMP
+dump
+key 0D
+wait 1500
+run REGEDIT.EXE C:\T3.REG
+wait 3000
+snap C:\B5.BMP
+dump
+key 0D
+wait 1500
+snap C:\B6.BMP
+dump
+run REGEDIT.EXE /V
+wait 3000
+snap C:\B7.BMP
+cmd 1538
+wait 2500
+type C:\OUT1.REG
+key 0D
+wait 2500
+snap C:\B8.BMP
+dump
+key 0D
+wait 1500
+key 28
+key 28
+cmd 1538
+wait 2500
+type C:\OUT2.REG
+key 0D
+wait 2500
+snap C:\B9.BMP
+dump
+key 0D
+wait 1500
+cmd 1040
+wait 2500
+snap C:\BA.BMP
+dump
+type C:\T2.REG
+key 0D
+wait 2500
+snap C:\BB.BMP
+dump
+key 0D
+wait 1500
+snap C:\BC.BMP
+close
+wait 1500
+snap C:\BD.BMP
+dump
+key 0D
+wait 1500

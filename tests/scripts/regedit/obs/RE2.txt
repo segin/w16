@@ -1,0 +1,35 @@
+; RE2: REGEDIT /V: the advanced view as it starts: windows, menus
+run REGEDIT.EXE /V
+wait 3000
+snap C:\S1.BMP
+dump
+info
+dumpmenu
+focus
+menu f
+wait 600
+snap C:\M1.BMP
+key 1B
+key 1B
+menu e
+wait 600
+snap C:\M2.BMP
+key 1B
+key 1B
+menu v
+wait 600
+snap C:\M3.BMP
+key 1B
+key 1B
+menu s
+wait 600
+snap C:\M4.BMP
+key 1B
+key 1B
+menu h
+wait 600
+snap C:\M5.BMP
+key 1B
+key 1B
+close
+wait 1000

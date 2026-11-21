@@ -1,0 +1,8 @@
+REGEDIT
+HKEY_CLASSES_ROOT\w16one = W16 One
+HKEY_CLASSES_ROOT\w16one\shell\open\command = notepad.exe %1
+HKEY_CLASSES_ROOT\.w1 = w16one
+
+HKEY_CLASSES_ROOT\w16one\nothing
+HKEY_CLASSES_ROOT\w16one\spaces   =   two  words  
+HKEY_CLASSES_ROOT\w16one\eq = a = b

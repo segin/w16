@@ -1,0 +1,83 @@
+; RE7: /V editing: a value typed for WordDocument; Add Key under
+; MPlayer\shell; Copy Key; Delete Key; Find Key, Find Next, not found;
+; Exit with changes
+; get: COPY1.DAT
+; get: COPY2.DAT
+run REGEDIT.EXE /V
+wait 3000
+key 28
+wait 300
+key 09
+wait 300
+focus
+type Word Doc
+wait 300
+snap C:\C1.BMP
+key 09
+wait 300
+focus
+snap C:\C2.BMP
+key 28
+wait 300
+key 26
+wait 300
+snap C:\C3.BMP
+dump
+copyfile C:\WINDOWS\REG.DAT C:\COPY1.DAT
+key 28
+key 28
+key 28
+key 28
+key 28
+cmd 1056
+wait 1500
+type edit
+key 09
+type ed %1
+key 0D
+wait 1500
+snap C:\C4.BMP
+dump
+cmd 1057
+wait 1500
+type \MPlayer\shell2
+key 0D
+wait 1500
+snap C:\C5.BMP
+dump
+cmd 1059
+wait 1500
+key 0D
+wait 1500
+snap C:\C6.BMP
+dump
+key 24
+cmd 1552
+wait 1500
+type command
+key 0D
+wait 1500
+snap C:\C7.BMP
+dump
+cmd 1553
+wait 1500
+snap C:\C8.BMP
+cmd 1552
+wait 1500
+type zzz
+key 0D
+wait 1500
+snap C:\C9.BMP
+dump
+key 0D
+wait 1000
+key 1B
+wait 1000
+copyfile C:\WINDOWS\REG.DAT C:\COPY2.DAT
+close
+wait 1500
+snap C:\CA.BMP
+dump
+key 0D
+wait 1500
+snap C:\CB.BMP

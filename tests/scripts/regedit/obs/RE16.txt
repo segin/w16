@@ -1,0 +1,68 @@
+; RE16 (REGOBS_TRACE=1): /V's Save Changes after a value change, Add Key
+; (with and without a value), Copy Key and Delete Key: the calls it makes
+; get: XHELL.LOG
+run REGEDIT.EXE /V
+wait 3000
+append C:\XHELL.LOG ---- started
+key 28
+key 09
+type Word Doc
+key 09
+key 28
+key 28
+key 28
+key 28
+key 28
+append C:\XHELL.LOG ---- Add Key edit = ed %1
+cmd 1056
+wait 1500
+type edit
+key 09
+type ed %1
+key 0D
+wait 1500
+append C:\XHELL.LOG ---- Add Key empty
+cmd 1056
+wait 1500
+type empty
+key 0D
+wait 1500
+append C:\XHELL.LOG ---- Copy Key MPlayer to MPlayer2
+key 24
+key 28
+key 28
+key 28
+key 28
+key 28
+cmd 1057
+wait 1500
+type \MPlayer2
+key 0D
+wait 1500
+append C:\XHELL.LOG ---- Delete Key PBrush\shell\print
+key 24
+cmd 1059
+wait 1500
+key 23
+key 08
+key 08
+key 08
+key 08
+key 08
+key 08
+key 08
+key 08
+key 08
+key 08
+type PBrush\shell\print
+key 0D
+wait 1500
+snap C:\I1.BMP
+dump
+append C:\XHELL.LOG ---- Save Changes
+cmd 1536
+wait 2000
+snap C:\I2.BMP
+append C:\XHELL.LOG ---- saved
+close
+wait 1500
