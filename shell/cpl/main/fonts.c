@@ -15,7 +15,8 @@
  *   rounded up, a TrueType font's .FOT and .TTF each counted (Arial Bold:
  *   2 + 65 = 67).
  * - The sample (an owner-drawn list): "AaBbCcXxYyZz 123" once per size of
- *   a raster font file, once at 24 points for a TrueType or vector font.
+ *   a raster font file, once at 24 points for a TrueType font, once at its
+ *   nominal size for a vector font.
  * - The default button (IDOK) reads "Cancel"; "Close" once a font was
  *   added or removed (from the Remove button on) or a TrueType option
  *   clicked.
@@ -72,7 +73,7 @@ static HWND fonts_dlg;
 #define FD_FIXED  113           /* then the device and face names */
 
 typedef struct {
-    int height, weight;
+    int height, weight, avgwidth;
     BYTE italic, charset, pitch, vector;
     char face[LF_FACESIZE];
 } FACEINFO;
@@ -164,6 +165,7 @@ static BOOL fontdir_entry(BYTE FAR *p, UINT len, int k, FACEINFO *fi)
         s++;
         if (!k) {
             fi->height = rd16(e + FD_HEIGHT);
+            fi->avgwidth = rd16(e + 91);
             fi->weight = rd16(e + FD_WEIGHT);
             fi->italic = e[FD_ITALIC];
             fi->charset = e[FD_CHARSET];
@@ -342,13 +344,18 @@ static void sample_add(HWND dlg, FACEINFO *fi, BOOL scalable)
     HGLOBAL g;
     HFONT f, FAR *a;
     HDC dc;
-    int h = fi->height;
-    if (scalable) {
+    int h = fi->height, w = 0;
+    if (fi->vector) {
+        /* a vector font at its directory's nominal size (UNVERIFIED: fitted
+           to 3.1's Modern sample) */
+        w = fi->avgwidth;
+    } else if (scalable) {
         dc = GetDC(dlg);
         h = -MulDiv(24, GetDeviceCaps(dc, LOGPIXELSY), 72);
         ReleaseDC(dlg, dc);
     }
-    f = CreateFont(h, 0, 0, 0, fi->weight, fi->italic, 0, 0, fi->charset, OUT_DEFAULT_PRECIS,
+    f = CreateFont(h, w, 0, 0, fi->weight, fi->italic, 0, 0, fi->charset,
+                   fi->vector ? OUT_STROKE_PRECIS : OUT_DEFAULT_PRECIS,
                    CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, fi->pitch, fi->face);
     if (!f)
         return;
@@ -389,6 +396,8 @@ static void sample_of(HWND dlg, const char *path)
         return;
     for (k = 0; fontdir_entry((BYTE FAR *)GlobalLock(g), len, k, &fi); k++) {
         GlobalUnlock(g);
+        if (tt)
+            fi.vector = 0;      /* a .FOT's entry: drawn at 24 points */
         sample_add(dlg, &fi, tt || fi.vector);
         if (tt || fi.vector)
             break;
@@ -489,6 +498,8 @@ static void remove_fonts(HWND dlg)
     int i, all = 0, removed = 0, last = -1;
     char value[160], path[160], ttf[160];
     set_close();
+    /* observed: the sample is empty while the Remove Font dialogs are up */
+    sample_clear(dlg);
     rm_delete = FALSE;
     for (i = 0; i < (int)SendMessage(list, LB_GETCOUNT, 0, 0); i++) {
         int r;
