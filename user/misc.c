@@ -417,7 +417,12 @@ void __far __pascal __loadds ss_timer_proc(HWND h, UINT msg, UINT id, DWORD time
     ss_load();
     if (!ss_active || !ss_timeout || !time_last_input || GetSysModalWindow())
         return;
-    if (GetTickCount() - time_last_input <= (DWORD)ss_timeout * 1000)
+    /* on the clock time_last_input comes from, USER's tick count:
+       GetTickCount (SYSTEM.DRV's) ran some 30-70 ms behind it, so a key
+       in the last moment before the check came out "in the future", the
+       unsigned difference huge, and the saver started again right after
+       the key that had ended it (boot-test scrnsave@tree*) */
+    if (tickcount - time_last_input <= (DWORD)ss_timeout * 1000)
         return;
     if (!act || !valid_wnd(act))
         return;
