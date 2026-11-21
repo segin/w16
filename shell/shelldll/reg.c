@@ -903,7 +903,9 @@ LONG SHAPI RegSetValue(HKEY k, LPCSTR sub, DWORD type, LPCSTR data, DWORD cb)
 LONG reg_query(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 {
     WORD n, v;
-    LONG r = walk(k, sub, 0, &n);
+    LONG r;
+    pending_load();                     /* ShellExecute's way in, too */
+    r = walk(k, sub, 0, &n);
     if (r)
         return r;
     v = E(n)->d;
