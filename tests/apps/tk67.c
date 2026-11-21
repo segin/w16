@@ -171,6 +171,45 @@ static void lh_hex(WORD v)
         lh_line[lh_len++] = "0123456789ABCDEF"[(v_ >> (12 - 4 * d_)) & 15];
 }
 
+/* "OBS 87.hnoteP.what=VVVV" (P the part), checked against the reference
+   as obs() does, without anything on the stack */
+static void lh_obs(const char *what, WORD v)
+{
+    static char name[24];
+    static WORD n, i;
+    static const char *p;
+    n = 0;
+    for (p = have87 ? "87.hnote" : "em.hnote"; *p; p++)
+        name[n++] = *p;
+#if TK67_P >= 10
+    name[n++] = (char)('0' + TK67_P / 10);
+#endif
+    name[n++] = (char)('0' + TK67_P % 10);
+    name[n++] = '.';
+    for (p = what; *p; p++)
+        name[n++] = *p;
+    name[n] = 0;
+    lh_len = 0;
+    lh_put("OBS ");
+    lh_put(name);
+    lh_put("=");
+    lh_hex(v);
+    lh_put("\r\n");
+    for (i = 0; ref[i].name; i++)
+        if (same(ref[i].name, name)) {
+            if (v != ref[i].value) {
+                lh_put("FAIL ");
+                lh_put(name);
+                lh_put(" (Windows 3.1: ");
+                lh_hex(ref[i].value);
+                lh_put(")\r\n");
+                failures++;
+            }
+            break;
+        }
+    log_write(lh_line, lh_len);
+}
+
 void __cdecl __far lh_note(void)
 {
     static WORD i;
@@ -192,6 +231,11 @@ void __cdecl __far lh_note(void)
     }
     lh_put("\r\n");
     log_write(lh_line, lh_len);
+    /* and, checked (the 3.1 programs ended after this handler returned,
+       before the probe's own observations): AL and what the word after
+       the return address is */
+    lh_obs("al", lh_ax & 0xFF);
+    lh_obs("ds", what_sel(lh_ds));
 }
 
 static const double vals[] = { 1.0, 2.0, 3.0 };
