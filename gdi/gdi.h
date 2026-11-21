@@ -619,6 +619,7 @@ HGDIOBJ GDIAPI SelectObject(HDC, HGDIOBJ);
 int GDIAPI SelectClipRgn(HDC, HRGN);
 BOOL GDIAPI PatBlt(HDC, int, int, int, int, DWORD);
 BOOL GDIAPI BitBlt(HDC, int, int, int, int, HDC, int, int, DWORD);
+BOOL GDIAPI StretchBlt(HDC, int, int, int, int, HDC, int, int, int, int, DWORD);
 int GDIAPI SetDIBits(HDC, HBITMAP, WORD, WORD, const void __far *, void __far *, WORD);
 HBITMAP GDIAPI CreateCompatibleBitmap(HDC, int, int);
 BOOL GDIAPI DeleteObject(HGDIOBJ);
