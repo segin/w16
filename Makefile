@@ -109,6 +109,12 @@ KBOOT_C := winboot dosx kmisc selector fault toolhelp kmisc2 profile
 $(KBOOT_C:%=$(B)/kernel/%.o): $(B)/kernel/%.o: kernel/%.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
 	@mkdir -p $(@D)
 	$(WCC) $(KCFLAGS) -nt=BOOT_TEXT -fo=$@ $<
+# the global heap (global.c) in a code segment of its own, HEAP_TEXT, as
+# KRNL386's (below): _TEXT had outgrown 64K, and KERNEL then has 3.1's
+# four segments (code, two more code segments, DGROUP: TK62 "kseg")
+$(B)/kernel/global.o: kernel/global.c kernel/*.h include/w16/*.h $(B)/kernel/kapi.h
+	@mkdir -p $(@D)
+	$(WCC) $(KCFLAGS) -nt=HEAP_TEXT -fo=$@ $<
 $(DOS)/KRNL286.EXE: $(KOBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \

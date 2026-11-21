@@ -12,7 +12,15 @@ option description 'w16 KERNEL'
 option start=kernel_entry
 option quiet
 option map
+# 3.1's KERNEL has four segments (TK62 "kseg"): fixed code, two
+# discardable code segments (GlobalFlags 0900h), DGROUP. w16's: _TEXT,
+# HEAP_TEXT and BOOT_TEXT (not packed into one), DGROUP. The bootstrap
+# loads them all and KERNEL never discards its own (KERNEL audit, medium
+# 33).
+option packcode=0
 segment type code fixed preload
+segment 'HEAP_TEXT' moveable discardable preload
+segment 'BOOT_TEXT' moveable discardable preload
 segment type data fixed preload
 
 export FATALEXIT.1 resident

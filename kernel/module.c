@@ -180,12 +180,13 @@ void mod_set_path(module FAR *m, const char FAR *path)
     m->path[i] = 0;
 }
 
-/* KERNEL's own segments are the bootstrap's memory, not blocks of the
-   heap; 3.1's are fixed blocks (TK62 "kseg", "codehandle"; TK50). The
-   global heap's APIs answer for them as such (KERNEL audit, medium 33):
-   which one sel is (its number + 1, 0 for none), and its GlobalFlags
-   (0900h for a discardable code segment, as 3.1 shows segments 2 and 3;
-   0 for the fixed ones). */
+/* KERNEL's own segments: 3.1's are fixed blocks of the heap (TK62
+   "kseg", "codehandle"; TK50), and so are w16's once gadopt_kernel
+   (global*.c) has moved them there; for one it could not move (no
+   memory, DPMI refused), the global heap's APIs answer as for a block
+   (KERNEL audit, medium 33). Which one sel is (its number + 1, 0 for
+   none), and its GlobalFlags (0900h for a discardable code segment, as
+   3.1 shows segments 2 and 3; 0 for the fixed ones). */
 u16 kernel_seg(u16 sel)
 {
     u16 i;
@@ -224,7 +225,12 @@ void module_register_kernel(const bootinfo FAR *bi)
         ne_segment FAR *s = MOD_SEG(m, i);
         m->seg[i].sel = m->seg[i].hnd = bi->seg_sel[i];
         MOD_SEGHND(m, i) = bi->seg_sel[i];
-        s->flags = (s->flags & ~NESEG_DPL) | NESEG_ALLOCED | NESEG_LOADED | NESEG_MOVABLE;
+        /* as 3.1's (TK62 "kseg": C146h for the fixed code segment,
+           D156h for the discardable ones, C067h for DGROUP): the file's
+           flags but the privilege bits, code not "pure", DGROUP without
+           relocations, allocated, loaded, and C000h */
+        s->flags = (s->flags & ~(NESEG_DPL | ((s->flags & NESEG_DATA) ? NESEG_RELOCS : NESEG_PURE))) |
+                   NESEG_ALLOCED | NESEG_LOADED | 0xC000;
     }
     MOD_USAGE(m) = 1;
     mod_set_name(m);

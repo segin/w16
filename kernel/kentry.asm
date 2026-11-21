@@ -15,7 +15,7 @@
 ;   LOCAL*           Local heap APIs: pass the caller's DS to local.c
 ;   _dos21, _dpmi31  generic interrupt helpers for C
 ;   _seg_move        move a segment's contents and base, even if it is SS
-;   KCONST segment   placeholders for KERNEL's constant exports
+;   __AHINCR ...     placeholders for KERNEL's constant exports
 
         bits 16
         cpu 286
@@ -718,6 +718,10 @@ _seg_move:
         pop cx
         mov ax, 0007h
         int 31h
+        cli                             ; (a host that set IF: KERNEL
+                                        ; audit, medium 24)
+        sbb ax, ax                      ; AX = 1 moved, 0 refused
+        inc ax
         pop di
         pop si
         mov ss, di                      ; sel, now at its new base, or SS
@@ -799,10 +803,11 @@ INTCALL _dpmi31_host, 31h, far, pm ; dosx.c: dpmi31 wraps it
 
 ; ---------------------------------------------------------------------------
 ; Constant exports. wlink cannot export absolute symbols, so these labels
-; live in their own segment, which keeps them in their own entry-table
-; bundles. KERNEL resolves these ordinals to their runtime values (see
-; kconst_lookup in module.c); the offsets here are placeholders.
-segment KCONST public align=16 class=KCONST use16
+; are placeholders in BOOT_TEXT. KERNEL resolves these ordinals to their
+; runtime values before it looks at its entry table (see kconst_lookup in
+; module.c). (They had a segment of their own, KCONST, KERNEL's fifth:
+; 3.1's KERNEL has four, its DGROUP the fourth; TK62 "kseg".)
+segment BOOT_TEXT public align=1 class=CODE use16
 global __AHSHIFT, __AHINCR, __ROMBIOS, __A000H, __WINFLAGS, __D000H
 global __B000H, __B800H, __0000H, __E000H, __0040H, __F000H, __C000H
 __AHSHIFT:      db 0

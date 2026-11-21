@@ -788,6 +788,18 @@ static int is_code(u16 s)
     return (lar(s) & 0x0800) != 0;
 }
 
+/* DPMI refused the moved block's new base (it cannot for a selector
+   KERNEL holds: KERNEL audit, medium 24): the block's arena would no
+   longer describe its selector, so Windows ends here with a report
+   rather than go on with the heap wrong */
+static void move_refused(u16 s)
+{
+    kputs("w16: DPMI refused to move segment ");
+    kputhex(s);
+    kputs("\r\n");
+    kexit_to_dos(0xFE);
+}
+
 /* Move block a's data (`bytes` of it) to the arena slot at linear `to`
    (the data at to + 10h), where nothing else is: its selectors follow. */
 static void move_data(u16 a, u32 to, u32 bytes)
@@ -798,7 +810,8 @@ static void move_data(u16 a, u32 to, u32 bytes)
        it and switch its base in one step. The block moves down or to a
        place apart, so the rest is still in place afterwards. */
     tmp_at(tmp_b, to + 0x10, head ? head - 1 : 0);
-    seg_move(s, tmp_b, (u16)((head + 1) >> 1), to + 0x10);
+    if (!seg_move(s, tmp_b, (u16)((head + 1) >> 1), to + 0x10))
+        move_refused(s);
     if (bytes > head) {
         lin_copy(to + 0x10 + head, from + head, bytes - head);
         set_tiles(s, tiles(bytes), to + 0x10, bytes, is_code(s));
@@ -1332,44 +1345,44 @@ void global_init(void)
     *seltab(bm) = a;
 }
 
-/* KERNEL's code segments become fixed blocks of the heap, owned by its
+/* KERNEL's segments become fixed blocks of the heap, owned by its
    module, their selectors their handles: on 3.1 every KERNEL segment is
    a block (TK62 "kseg": GlobalHandle(CS) = CS, FarGetOwner = KERNEL,
    GlobalFlags 0900h for the discardable ones; TOOLHELP lists them). The
    bootstrap put them in DOS memory of their own; each is copied into a
    new block and its selector moved there in one step (seg_move, as a
    block is moved), so nothing that holds the selector notices. Its DOS
-   memory is left as it was. KERNEL's DGROUP stays outside (seg_move
-   runs on a stack in it); module.c's kernel_seg answers for it (KERNEL
-   audit, medium 33). After module_register_kernel. */
+   memory is left as it was. DGROUP too: seg_move copies it on its own
+   stack in DGROUP with interrupts off, and the caller's SS and DS are
+   reloaded from the moved selector afterwards (KERNEL audit, medium
+   33). After module_register_kernel. */
 void gadopt_kernel(void)
 {
     module FAR *k = module_first;
     u16 i, s, ns, a;
     u32 bytes;
-    /* not under KRNL286 yet: with it, QuickTime's player on w16's tree
-       (boot-test case quicktime, part tree) no longer closed as on 3.1,
-       twice; not looked into (docs/notes/kernel-audit-triage.md, medium
-       33). KRNL386 (global386.c) adopts them. */
-    if (k)
-        return;
+    int code;
     if (!k || !bm)
         return;
     for (i = 0; i < k->seg_count; i++) {
         s = k->seg[i].sel;
-        if (!s || !is_code(s) || find(s, &a) != FB_NONE)
+        if (!s || find(s, &a) != FB_NONE)
             continue;
         bytes = (u32)sel_lim16(s) + 1;
+        code = is_code(s);
         if (!galloc(GMEM_FIXED, bytes, k->ne_sel, &ns))
             continue;
         a = *seltab(ns);
         tmp_at(tmp_b, lin_of(a) + 0x10, bytes - 1);
-        seg_move(s, tmp_b, (u16)((bytes + 1) >> 1), lin_of(a) + 0x10);
+        if (!seg_move(s, tmp_b, (u16)((bytes + 1) >> 1), lin_of(a) + 0x10)) {
+            GlobalFree(ns);             /* (left where it was) */
+            continue;
+        }
         *seltab(ns) = 0;
         dpmi_free_desc(ns);
         AR(a)->handle = s;              /* fixed: the selector */
         *seltab(s) = a;
-        set_tiles(s, 1, lin_of(a) + 0x10, (u32)AR(a)->size << 4, 1);
+        set_tiles(s, 1, lin_of(a) + 0x10, (u32)AR(a)->size << 4, code);
         if (MOD_SEG(k, i)->flags & 0x1000) {    /* discardable: 0900h */
             AR(a)->flags |= GA_DISCCODE;        /* (fixed: never */
             lru_add(a, 0);                      /* discarded) */
@@ -1734,6 +1747,7 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
 {
     u16 a, tot, cur, s, n;
     u32 old, bytes;
+    int kseg;
 
     heap_check("GlobalReAlloc", api_caller);
     switch (find(h, &a)) {
@@ -1749,6 +1763,22 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     if (AR(a)->owner == OWN_BURGER)
         return 0;                       /* not the Burgermaster (as
                                            GlobalFree; audit, low) */
+    /* KERNEL's own segments (KERNEL audit, medium 33). Observed on 3.1
+       (TK66 "krealloc", all three runs): a discardable one (2 and 3, the
+       file's flag; not one made so by GMEM_MODIFY) is discarded (h; it
+       is loaded again when called), the others not (0); a size
+       that needs a move or more selectors fails (0); growing in place
+       succeeds where there is room. w16 cannot load KERNEL's code again,
+       and its selectors are followed by KERNEL's next segment's: the
+       discard is answered (h) and not done, growth only in place inside
+       the one selector, no shrinking (UNVERIFIED on 3.1: it would cut
+       KERNEL's code short) */
+    kseg = kernel_seg(h) != 0;
+    if (kseg && !(flags & GMEM_MODIFY)) {
+        if (size == 0)
+            return (flags & GMEM_MOVEABLE) && kernel_seg_flags(kernel_seg(h)) ? h : 0;
+        flags &= ~GMEM_MOVEABLE;
+    }
     if (flags & GMEM_MODIFY) {
         if ((flags & GMEM_DISCARDABLE) && !discardable(a))
             lru_add(a, 1);
@@ -1767,6 +1797,8 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
         return 0;
     cur = TOTAL(a);
     n = tiles(((u32)cur - 1) << 4);
+    if (kseg && (tot < cur || tiles(((u32)tot - 1) << 4) > n))
+        return 0;
     if (tiles(((u32)tot - 1) << 4) > n)
         return grow_tiles(a, h, tot, flags);
     old = (u32)AR(a)->size << 4;
@@ -1844,6 +1876,11 @@ u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
     case FB_BLOCK:
         if (AR(a)->owner == OWN_BURGER)
             return h;
+        /* KERNEL's own segments: observed on 3.1 (TK66 "kfree"), 0 and
+           the segment freed; Windows ended at the next call into it. w16
+           returns 0 and keeps it (KERNEL audit, medium 33) */
+        if (kernel_seg(AR(a)->handle))
+            return 0;
         free_block(a);
         return 0;
     case FB_DISC:

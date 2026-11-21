@@ -64,7 +64,7 @@ extern int  __cdecl dpmi31(regs16 FAR *r);      /* returns carry */
 extern void __cdecl task_switch(u16 FAR *save, u16 ss, u16 sp);
 extern void __far task_tramp(void);
 #pragma aux task_tramp "*"
-extern void __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);
+extern int __cdecl seg_move(u16 sel, u16 tmp, u16 nwords, u32 newbase);  /* 0: DPMI refused the base */
 extern void __cdecl kcopyw(u16 dsel, u16 ssel, u16 nwords);    /* :0 to :0 */
 extern void __cdecl kzerow(u16 sel, u16 nwords);               /* sel:0 */
 extern u16  __cdecl notify_call(u32 proc, u16 h);   /* DS = ES = SS */
