@@ -609,6 +609,28 @@ void cmd_pagelayout(void)
     } else {
         ruler_update();                 /* its scale (WR26) */
         undo_save(IDS_FORMATTING);
+        {
+            /* the running heads' indents follow the margins (WR36: the
+               left margin 1.25" to 1", the header's indent 1800 to 1440) */
+            SEPX old;
+            DWORD k, f, l;
+            ATOM32 a;
+            PAPX q;
+            int dl, dr;
+            sep_decode(&g_doc, &old);
+            dl = (int)newsep.xaLeft - (int)old.xaLeft;
+            dr = ((int)newsep.xaMac - (int)newsep.xaLeft - (int)newsep.dxaText) -
+                 ((int)old.xaMac - (int)old.xaLeft - (int)old.dxaText);
+            for (k = 0; k < g_doc.nparas && (dl || dr); k++) {
+                para_get(&g_doc, k, &f, &l, &a);
+                pap_decode(&g_doc, a, &q);
+                if (!(q.rhc & 6))
+                    continue;
+                q.dxaLeft += dl;
+                q.dxaRight += dr;
+                para_set(&g_doc, k, pap_atom(&g_doc, &q));
+            }
+        }
         sep_encode(&g_doc, &newsep);
         g_doc.dirty = TRUE;
         /* the document laid out again: the caret off until it blinks

@@ -1,0 +1,45 @@
+; WR36: Word for DOS output of a document with Page Layout set (start at
+; page 3, left margin 1") and repaginated, a header with the page number:
+; saved as C:\WR36.WRI and as Word for DOS (type entry 1, C:\W36.DOC)
+run WRITE.EXE
+wait 3000
+type first page text
+menu d
+char h
+wait 1500
+type Head-
+mclick 224 268
+wait 500
+mclick 450 268
+wait 1500
+menu d
+char p
+wait 800
+type 3
+key 09
+type 1
+key 0D
+wait 800
+menu f
+char e
+wait 800
+key 0D
+wait 1500
+menu f
+char a
+wait 1500
+type C:\WR36.WRI
+key 0D
+wait 2000
+menu f
+char a
+wait 1500
+cbsel 470 1
+wait 300
+type C:\W36.DOC
+key 0D
+wait 2500
+close
+wait 1000
+key 4E
+wait 1000
