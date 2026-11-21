@@ -1667,6 +1667,26 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 	    option resource=$(B)/winoldap/winoldap.res file { $(WOA_OBJS) }
 	python3 tools/nemark.py $@ 3.10
 
+# ---- WINOA386.MOD: w16's 386 Enhanced-mode DOS application support
+# (winoa386/, ARCHITECTURE.md 12.11): module WINOLDAP, imports GRABBER ----
+WOA3_OBJS := $(B)/shell/start.o $(B)/winoa386/winoa386.o $(B)/winoa386/woa386s.o
+dos: $(DOS)/WINOA386.MOD
+$(B)/winoa386/winoa386.o: winoa386/winoa386.c winoa386/winoa386.h drivers/grabber/vga3gr/grab.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/winoa386/woa386s.o: winoa386/woa386s.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/winoa386/winoa386.res: winoa386/winoa386.rc winoa386/winoa386.h $(ICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=winoa386 -i=$(B)/shell/res -fo=$@ $<
+$(DOS)/WINOA386.MOD: $(WOA3_OBJS) $(B)/winoa386/winoa386.res winoa386/winoa386.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @winoa386/winoa386.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/winoa386/winoa386.map \
+	    option resource=$(B)/winoa386/winoa386.res file { $(WOA3_OBJS) }
+	python3 tools/nemark.py $@ 3.10
+
 # ---- WSWAP.EXE and DSWAP.EXE: the Standard-mode task switcher (swap/,
 # ARCHITECTURE.md 9.9). .COM-format programs (DOS loads any file without an
 # MZ header as one) under the names WIN.COM looks for; DSWAPD.EXE logs to
@@ -1862,9 +1882,12 @@ $(W16SYS)/VGA.3GR: $(DOS)/VGA.3GR
 	cp $< $@
 # 386 Enhanced mode (win386/; ARCHITECTURE.md 12): WIN /3. Its built-in
 # devices load from SYSTEM.INI's [386Enh] *names (assets/SYSTEM.INI);
-# DOS programs there still need the user's WINOA386.MOD (assets/README.TXT)
-install-tree: $(W16SYS)/WIN386.EXE
+# DOS programs there run through WINOA386.MOD (winoa386/)
+install-tree: $(W16SYS)/WIN386.EXE $(W16SYS)/WINOA386.MOD
 $(W16SYS)/WIN386.EXE: $(W386)/WIN386.EXE
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16SYS)/WINOA386.MOD: $(DOS)/WINOA386.MOD
 	@mkdir -p $(@D)
 	cp $< $@
 

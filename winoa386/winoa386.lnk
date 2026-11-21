@@ -1,0 +1,27 @@
+# wlink directives for WINOA386.MOD, w16's 386 Enhanced-mode DOS
+# application support (winoa386/; objects and output from the Makefile).
+# Module name WINOLDAP, as KERNEL loads it (TK57); the grabber's entries
+# by ordinal (module GRABBER, SYSTEM.INI [boot] 386grabber=).
+format windows
+option quiet
+option start=start
+option stack=8192
+option heapsize=1024
+option modname=WINOLDAP
+option description 'w16 Non-Windows application component for 386 enhanced mode'
+library windows.lib
+segment WOAFIX_TEXT fixed
+export WNDPROC.1
+import PAINTSCREEN GRABBER.1
+import SCREENFREE GRABBER.2
+import GETFONTLIST GRABBER.10
+import SETPAINTFNT GRABBER.11
+import UPDATESCREEN GRABBER.12
+import CURSORON GRABBER.13
+import CURSORPOSIT GRABBER.14
+import CURSOROFF GRABBER.15
+import CHECKGRBVERSION GRABBER.16
+import GETDISPLAYUPD GRABBER.18
+import GRBGETTEXTCOLOR GRABBER.21
+import GRBUNLOCKAPP GRABBER.22
+import TRANSLATEWINTOFSCREEN GRABBER.23

@@ -501,7 +501,7 @@ void shell_api(struct cregs *r)
          * System VM, message mode ended (control 11h), EAX 0, EDX 1);
          * Alt+Esc EAX 0, EDX 0, the devices' focus to the System VM.
          * Ctrl+Esc: UNVERIFIED, as Alt+Esc */
-        if (r->ebx == 0xFFFFFFFFu) switch_wnd = CX(r);
+        if (r->ebx == 0xFFFFFFFFu && !switch_wnd) switch_wnd = CX(r);   /* the first offered */
         if (r->ebx == 0xFFFFFFFFu && switch_key == HK_ALTTAB) {
             r->eax = 1;
             SETW(r->edx, 0);
@@ -522,6 +522,7 @@ void shell_api(struct cregs *r)
             SETW(r->edx, 0);
         }
         switch_key = 0;
+        switch_wnd = 0;
         return;
     case 0x14:                          /* (seen after a switch: nothing back) */
         return;

@@ -7,9 +7,7 @@ w16 repository's LICENSE):
 
 Start w16 with  WIN /S  (Standard mode) for now. On a 386, plain WIN
 starts 386 Enhanced mode, as Windows 3.1's does; w16's 386 Enhanced mode
-is newer, and its DOS programs (the MS-DOS Prompt) still need
-WINOA386.MOD from your own Windows 3.1 (see below). Standard mode needs
-nothing of Microsoft's.
+is newer. Neither mode needs anything of Microsoft's.
 
   WIN.COM                 the loader
   PROGMAN.EXE             Program Manager
@@ -46,6 +44,9 @@ nothing of Microsoft's.
                           from and back to, and copies its text to the
                           clipboard (PrintScreen)
   SYSTEM\VGA.3GR         the display grabber for 386 Enhanced mode
+  SYSTEM\WINOA386.MOD    runs DOS programs in 386 Enhanced mode, each
+                          in a virtual machine of its own, full screen
+                          or in a window (Alt+Enter between them)
   SYSTEM\DOSX.EXE         the Standard-mode DOS extender
   SYSTEM\WIN386.EXE       386 Enhanced mode (WIN /3): the virtual machine
                           manager and its built-in virtual devices; it
@@ -227,8 +228,8 @@ as in Windows 3.1. On an 80286 Windows can use 16 MB at most.
 
 HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 (WIN /3, or WIN on a 386 with enough memory) uses w16's WIN386.EXE; the
-devices it loads are named in SYSTEM.INI's [386Enh] section. To run DOS
-programs in 386 Enhanced mode, copy WINOA386.MOD from your Windows 3.1
-SYSTEM directory into SYSTEM (w16 has no WINOA386.MOD of its own yet);
-Windows programs do not need it. Standard mode (WIN /S) needs nothing
-of Microsoft's.
+devices it loads are named in SYSTEM.INI's [386Enh] section, and its
+DOS programs run through SYSTEM\WINOA386.MOD. A window of a DOS program
+uses the fonts EGA80WOA.FON, EGA40WOA.FON, CGA80WOA.FON and CGA40WOA.FON
+when they are in SYSTEM (w16 has none of its own yet: you may copy them
+from your Windows 3.1), else the OEM font.
