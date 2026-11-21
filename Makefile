@@ -2274,6 +2274,24 @@ $(DOS)/MAIN.CPL: $(MAINCPL_O) $(B)/shell/cpl/main/main.res shell/cpl/main/main.l
 	$(WLINK) @shell/cpl/main/main.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/shell/cpl/main/main.map \
 	    option resource=$(B)/shell/cpl/main/main.res file { $(MAINCPL_O) }
+# CPWIN386.CPL (shell/cpl/win386): the 386 Enhanced applet, a file of its
+# own as on 3.1 (only offered in 386 Enhanced mode)
+CPWIN386_O := $(B)/shell/cpl/libentry.o $(B)/shell/cpl/win386/cpwin386.o \
+              $(B)/shell/cpl/arrow.o $(B)/shell/cpl/cplutil.o $(B)/gdi/i4.o
+dos: $(DOS)/CPWIN386.CPL
+$(B)/shell/cpl/win386/%.o: shell/cpl/win386/%.c shell/cpl/win386/cpwin386.h shell/cpl/cpl.h \
+                           shell/cpl/arrow.h shell/cpl/cplutil.h
+	@mkdir -p $(@D)
+	$(WCC) $(CPCFLAGS) -fo=$@ $<
+$(B)/shell/cpl/win386/cpwin386.res: shell/cpl/win386/cpwin386.rc shell/cpl/win386/cpwin386.h $(CPICONS)
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/cpl/win386 -i=shell/cpl \
+	    -i=$(B)/shell/cpl/res -fo=$@ $<
+$(DOS)/CPWIN386.CPL: $(CPWIN386_O) $(B)/shell/cpl/win386/cpwin386.res shell/cpl/win386/cpwin386.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @shell/cpl/win386/cpwin386.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/cpl/win386/cpwin386.map \
+	    option resource=$(B)/shell/cpl/win386/cpwin386.res file { $(CPWIN386_O) }
 
 # ---- OLE (ARCHITECTURE.md 16): OLECLI.DLL (ole/olecli/) and its probes ----
 # OC1.EXE: scripted OLE client probe; OCSPY.DLL: its log and DDE spy
@@ -2817,11 +2835,14 @@ vxprobes: $(DOS)/VX10.EXE
 
 # Control Panel in the install tree: CONTROL.EXE in the Windows directory,
 # MAIN.CPL in SYSTEM, as on 3.1
-install-tree: $(W16)/CONTROL.EXE $(W16SYS)/MAIN.CPL
+install-tree: $(W16)/CONTROL.EXE $(W16SYS)/MAIN.CPL $(W16SYS)/CPWIN386.CPL
 $(W16)/CONTROL.EXE: $(DOS)/CONTROL.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 $(W16SYS)/MAIN.CPL: $(DOS)/MAIN.CPL
+	@mkdir -p $(@D)
+	cp $< $@
+$(W16SYS)/CPWIN386.CPL: $(DOS)/CPWIN386.CPL
 	@mkdir -p $(@D)
 	cp $< $@
 
