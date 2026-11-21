@@ -186,6 +186,18 @@ Found (all in ARCHITECTURE.md 18.2; code in conv.c / mon.c / hsz.c):
 - DDE blocks are GMEM_FIXED on 3.1 (selector handles).
 - Probe: monitor lines name handles (lParam handles h1.. by first sight,
   CB data handles new names, dwData1 "cc"); `iwatch on`.
-Not done: termination dialog (xun5 hung 3.1's DdeUninitialize: an
-instance with conversations to itself and to another instance of the
-same task), bitmap/metafile data, 386 Enhanced mode, WfW 3.11.
+Not done: bitmap/metafile data, 386 Enhanced mode, WfW 3.11.
+
+### Task 4 (2026-11-20): the termination dialog
+3.1 shows TERMDIALOG (system-modal) when a partner has not answered
+DdeUninitialize's TERMINATE after 3 s; Retry waits 30 s more, Continue
+for ever, Close gives up (returns 1, conversations freed); no TERMINATE
+resent; ExitWindows never brings it. Probe: `rnoterm N` (raw window
+leaves N TERMINATEs unanswered), `ticker` (gaps between 100 ms ticks:
+when a system-modal box stopped the task), `watch`, `exitwin`;
+tests/ddeml/dmshot.sh runs a script on Xvfb with tests/inputrun.sh input
+(shots, keys); scripts xterm.dm (+ xterm.in Close, xtermr.in Retry then
+Close), xterm3.dm + xtermc.in (Continue). w16 (inst.c) waits 3000 ms,
+then DialogBox(TERMDIALOG); Retry 30000 ms. Boot-case part ddeml@term
+(termcmp.py): times within 300 ms, return 1, picture equal but for the
+rebranded words.

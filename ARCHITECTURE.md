@@ -2011,6 +2011,20 @@ Instances and windows:
   the others run again after each TERMINATE one of its client windows
   takes (`xun1.dm`-`xun4.dm`); frees the strings it still holds; a
   second call fails with INVALIDPARAMETER.
+- The termination dialog (`xterm.dm` with `tests/ddeml/dmshot.sh`,
+  screenshots and keys on a virtual X display; Programmer's Reference
+  Vol. 2, DdeUninitialize): when a partner has not answered every
+  TERMINATE 3 s after DdeUninitialize began, the resource TERMDIALOG comes
+  up ("Windows DDE", system-modal: every other task stops while it is
+  up; Retry is the default button: Return chooses it). Retry: 30 s more, then
+  the dialog again; Continue: waits for ever (no dialog again); Close:
+  gives up, the conversations are freed and DdeUninitialize returns 1.
+  No TERMINATE is sent again (the partner sees one). Times measured on
+  the emulated clock by a task that ticks every 100 ms: the dialog 2966
+  ms after the call, the next one 29934 ms after Retry. ExitWindows does
+  not bring it (DDEML's windows do nothing at WM_ENDSESSION: a client
+  whose partner never answers lets the session end; its partner gets no
+  TERMINATE).
 
 Strings: a string handle is the string's global atom (HIWORD 0), shared
 by all instances and tasks, case-insensitive; each create adds a
@@ -2204,7 +2218,8 @@ a message w16 posts to the instance window that does nothing
 (WM_DMG_NOP). Data blocks are fixed, as 3.1's, and allocated zeroed
 (3.1's hold stale memory past the data; the comparison stops at the
 first NUL). A monitor instance has one global block for its events,
-made at DdeInitialize.
+made at DdeInitialize. DdeUninitialize shows TERMDIALOG (3.1's layout,
+w16's wording) after 3 s and after each 30 s Retry, as 3.1.
 
 ### 18.4 Tests and results
 
@@ -2237,6 +2252,11 @@ made at DdeInitialize.
   masking beyond the data tails (atom values and instance names
   included, 18.6). Not equal yet then: conn (lists with several
   servers) and monitor (the event stream).
+- Part **term** of the boot case: the termination dialog, Retry then
+  Close, with Microsoft's DDEML and with w16's (`tests/ddeml/dmshot.sh`,
+  `tests/ddeml/termcmp.py`): both dialogs at the same times (within 300
+  ms of emulated time), DdeUninitialize returning 1, the dialog's picture
+  equal but for the three rebranded words ("w16" for "Windows").
 - Results (installation-05, 2026-11-19, task 3): conn and monitor equal
   too, in every combination (the INITIATE enumeration, lists as
   windows, another library's answers asked again, DdeUninitialize's
@@ -2249,11 +2269,11 @@ made at DdeInitialize.
 
 ### 18.5 UNVERIFIED, and not done
 
-- The termination dialog (TERMDIALOG) is in the resources but never
-  shown: w16's DdeUninitialize waits up to 10 seconds for answers.
-  `xun5.dm` (an instance with conversations to itself and to a second
-  instance of the same task) never returned from 3.1's DdeUninitialize:
-  probably where the dialog comes; not looked at further.
+- `xun5.dm` (an instance with conversations to itself and to a second
+  instance of the same task) never returned from 3.1's DdeUninitialize
+  in a run with nobody to press a button: probably the termination
+  dialog (no screenshot was taken), a conversation of the other
+  instance left unanswered; not looked into further.
 - Monitors: dwTime and the blocks' words the probe does not print are
   not compared.
 - HDDEDATA, HCONVLIST, the low words of idInst and transaction IDs and
