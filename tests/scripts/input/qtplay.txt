@@ -33,6 +33,12 @@ key Return
 settle 180 4
 shot 04-complete
 key Return
+; the installer unpacks its files into "Installing Files", whose progress
+; bar (a film strip) can hold still for more than 5 s while it writes
+; SAMPLE.MOV on a loaded host (load average 49: Return then hit Cancel):
+; the bar's first frame red, then gone, before the settle
+waitpixel 186 262 ff0000 60
+waitnotpixel 186 262 ff0000 600
 settle 240 5
 shot 05-success
 key Return

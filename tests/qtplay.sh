@@ -19,7 +19,15 @@
 # Mode: Fault in MS-DOS Extender" on w16's tree alone, 2026-11-18).
 # With -T the w16 side is instead w16's install tree alone (build/w16 as
 # C:\W16, nothing of Microsoft's: tests/dropin.sh -T, the user's setup),
-# QuickTime installed into it the same way.
+# QuickTime installed into it the same way. The tree's SYSTEM.INI loads
+# w16's SB16.DRV, and DOSBox has a Sound Blaster 16, so QuickTime finds a
+# sound device there (its controller's speaker button live, the movie's
+# sound played); the stock 3.1 run then gets one too: Windows 3.1's own
+# SNDBLST2.DRV, expanded from its Setup files (.tools/ref/win31/src) at
+# test time, in its SYSTEM.INI (DOSBox's card: port 220h, IRQ 7). Without
+# it the speaker button differs: live on w16, gray on 3.1, and its top
+# edge in the dragged movie's picture (SB16.DRV became the tree's default
+# on 2026-11-20).
 #
 # QuickTime is Apple's: its installer is never committed. It is copied in
 # at test time from $W16_QTDIR (default ~/Downloads/qtw16), which must
@@ -37,8 +45,16 @@
 #                    its KRNL386
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # Checks (exit 1 if one fails):
-#   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=30:
-#     a hang ends Windows with a report in OUTDIR/w16/work/c/OUT.TXT);
+#   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=90,
+#     or $QTPLAY_HANGWATCH: a hang ends Windows with a report in
+#     OUTDIR/w16/work/c/OUT.TXT). The installer unpacks its files without
+#     yielding: KERNEL's longest stretch without progress there (printed
+#     at the end, "longest stretch") is about 16 s on an idle
+#     installation-05 and 28 s at load average 30-45 (DOSBox's cycles=max
+#     runs fewer instructions per emulated second under load). The limit
+#     was 30 until 2026-11-20 and ended busy installs under load; the
+#     hangs it is for never end (the movie, 2026-11-17; the drag,
+#     2026-11-19);
 #   - the movie plays: some shot after Space differs from the one before
 #     it (06-player);
 #   - the movie's last frame (held: the last shot) is 3.1's, pixel for
@@ -131,19 +147,34 @@ if [ -n "$treek" ]; then
 fi
 w16opts="$*"
 
+# the stock 3.1 run: with the tree alone, a sound device as the tree has
+# (its SYSTEM.INI loads SB16.DRV): Windows 3.1's SNDBLST2.DRV on DOSBox's
+# Sound Blaster (port 220h, IRQ 7)
+refsnd=
+if [ -n "$treek" ] && grep -qi '^wave=sb16.drv' "$tree/SYSTEM.INI"; then
+    python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/SNDBLST2.DR_" "$out/SNDBLST2.DRV"
+    refsnd="-f $out/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV -i drivers:wave=sndblst2.drv
+        -i drivers:midi=sndblst2.drv -i sndblst.drv:port=220 -i sndblst.drv:int=7"
+fi
 newref=
 if [ -z "$refdir" ]; then
     refdir=$out/ref newref=1
+    # shellcheck disable=SC2086
     "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtplay-WINDOWS.txt" "$refdir" -r -3 \
-        -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" > "$out/ref.txt" 2>&1 &
+        -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" $refsnd > "$out/ref.txt" 2>&1 &
 fi
-# shellcheck disable=SC2086
 wscript=$out/qtplay-WINDOWS.txt
 [ -z "$treek" ] || wscript=$out/qtplay-W16.txt
+hw=${QTPLAY_HANGWATCH:-90}
+# shellcheck disable=SC2086
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$wscript" "$out/w16" \
-    -i w16:hangwatch=30 $w16opts > "$out/w16.txt" 2>&1 || true
+    -i w16:hangwatch=$hw $w16opts > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
+# how close w16 came to the hangwatch limit (KERNEL prints it as Windows
+# ends: [w16] exitmsg)
+ls=$(grep -a -m1 'longest stretch' "$out/w16/work/c/OUT.TXT" 2>/dev/null | tr -d '\r' || true)
+echo "hangwatch $hw s${ls:+; ${ls#w16: }}"
 
 fails=0
 fail() { echo "FAIL qtplay: $*"; fails=$((fails + 1)); }

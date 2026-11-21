@@ -3,9 +3,11 @@
 ; closed with Alt+F4), then Control Panel from Program Manager's File >
 ; Run, its QuickTime icon chosen by keys (@PICK@: End on w16's Control
 ; Panel, End Left on 3.1's, where Sound comes last) and opened; More
-; (Alt+E) shows the tabs, a click on Files (148,45: the pointer sent home
-; first, 1-pixel steps) shows the "QuickTime Files" list; a click on its
-; last whole row (y 172), then on its scroll bar's down arrow (453,172).
+; (Alt+E) shows the tabs, a click on Files (@TABX@ pixels right of 45,45:
+; the pointer sent home first, 1-pixel steps; 103 to 148 without a sound
+; device, 209 to 254 with one, where Audio and MIDI come before Files)
+; shows the "QuickTime Files" list; a click on its last whole row (y 172),
+; then on its scroll bar's down arrow (453,172: @ARROWX@ pixels on).
 ; Until 2026-11-20 w16's list was a row taller than 3.1's, ran under the
 ; static below it, and the scroll drew its last row over the static
 ; (user/listbox.c, probe US32).
@@ -28,6 +30,12 @@ key Return
 settle 180 4
 shot 04-complete
 key Return
+; the installer unpacks its files into "Installing Files", whose progress
+; bar (a film strip) can hold still for more than 5 s while it writes
+; SAMPLE.MOV on a loaded host (load average 49: Return then hit Cancel):
+; the bar's first frame red, then gone, before the settle
+waitpixel 186 262 ff0000 60
+waitnotpixel 186 262 ff0000 600
 settle 240 5
 shot 05-success
 key Return
@@ -58,7 +66,7 @@ click 1
 sleep 0.5
 home
 glide 1,1 45,0.02
-glide 1,0 103,0.02
+glide 1,0 @TABX@,0.02
 sleep 0.5
 click 1
 settle 30 3
@@ -68,7 +76,7 @@ sleep 0.5
 click 1
 settle 20 3
 shot c7-lastrow
-glide 1,0 305,0.02
+glide 1,0 @ARROWX@,0.02
 sleep 0.5
 click 1
 settle 20 3

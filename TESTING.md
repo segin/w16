@@ -165,7 +165,12 @@ its sample movie played on w16's tree laid over 3.1, against stock 3.1,
 then the player closed, reopened, its movie's window dragged while it
 plays, and ended with File > Exit and Alt+F4 and Windows ended (the close
 sequence); `-T 286` or `-T 386`: on w16's
-install tree alone as C:\W16 instead, under its KRNL286 or KRNL386;
+install tree alone as C:\W16 instead, under its KRNL286 or KRNL386,
+where the tree's SB16.DRV gives QuickTime a sound device and the stock
+3.1 run gets Windows 3.1's SNDBLST2.DRV to match; w16 runs with
+`[w16] hangwatch=90` (`$QTPLAY_HANGWATCH`), and prints KERNEL's longest
+stretch without progress (the installer's unpacking: about 16 s idle,
+28 s under load);
 the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case

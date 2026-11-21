@@ -6,6 +6,11 @@
 # user's setup), QuickTime installed into each by its own installer. The
 # window spy US32S (tests/apps/us32s.c, loaded by WIN.INI load=) logs the
 # panel's windows to TK.LOG whenever they change.
+# The tree's SYSTEM.INI loads SB16.DRV (DOSBox has a Sound Blaster 16), so
+# the panel has Audio and MIDI tabs there; the stock 3.1 run then gets
+# Windows 3.1's SNDBLST2.DRV, and both click Files where it then is
+# (SB16.DRV became the tree's default on 2026-11-20; until the test
+# followed, its click at the old place opened Audio on w16).
 # Until 2026-11-20 w16 made that list one row taller than 3.1 (whole items
 # from the height asked for, not from the height the system font's items
 # had made it: user/listbox.c, probe US32), it ran under the static below
@@ -56,18 +61,32 @@ tree=$root/build/w16
 spy=$root/build/dos/US32S.EXE
 [ -f "$spy" ] || { echo "no $spy (make dos)" >&2; exit 2; }
 script=$root/tests/scripts/input/qtcpl.txt
-sed 's/@PICK@/End Left/' "$script" > "$out/qtcpl-ms.txt"
-sed 's/@PICK@/End/' "$script" > "$out/qtcpl-w16.txt"
+# a sound device: the tree's SYSTEM.INI loads SB16.DRV (DOSBox has a Sound
+# Blaster 16), and the stock 3.1 run then gets Windows 3.1's SNDBLST2.DRV
+# (from its Setup files, .tools/ref/win31/src; port 220h, IRQ 7), as in
+# tests/qtplay.sh -T. With one, the panel has Audio and MIDI tabs before
+# Files, which moves Files right (the script's @TABX@, @ARROWX@)
+refsnd= tabx=103 arrowx=305
+if grep -qi '^wave=sb16.drv' "$tree/SYSTEM.INI"; then
+    python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/SNDBLST2.DR_" "$out/SNDBLST2.DRV"
+    refsnd="-f $out/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV -i drivers:wave=sndblst2.drv
+        -i drivers:midi=sndblst2.drv -i sndblst.drv:port=220 -i sndblst.drv:int=7"
+    tabx=209 arrowx=199
+fi
+sed "s/@PICK@/End Left/; s/@TABX@/$tabx/; s/@ARROWX@/$arrowx/" "$script" > "$out/qtcpl-ms.txt"
+sed "s/@PICK@/End/; s/@TABX@/$tabx/; s/@ARROWX@/$arrowx/" "$script" > "$out/qtcpl-w16.txt"
 
 if [ -z "$refdir" ]; then
     refdir=$out/ref
+    # shellcheck disable=SC2086
     "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtcpl-ms.txt" "$refdir" -r -3 \
         -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" -f "$spy=US32S.EXE" \
-        -i 'WIN.INI:windows:load=C:\US32S.EXE' > "$out/ref.txt" 2>&1 &
+        -i 'WIN.INI:windows:load=C:\US32S.EXE' $refsnd > "$out/ref.txt" 2>&1 &
 fi
+# (hangwatch: as tests/qtplay.sh's, the installer's unpacking)
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtcpl-w16.txt" "$out/w16" \
     -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" -T "$tree" -f "$spy=US32S.EXE" \
-    -i 'WIN.INI:windows:load=C:\US32S.EXE' -i w16:hangwatch=30 > "$out/w16.txt" 2>&1 || true
+    -i 'WIN.INI:windows:load=C:\US32S.EXE' -i w16:hangwatch=${QTPLAY_HANGWATCH:-90} > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
 
