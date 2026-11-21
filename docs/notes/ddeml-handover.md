@@ -201,3 +201,6 @@ Close), xterm3.dm + xtermc.in (Continue). w16 (inst.c) waits 3000 ms,
 then DialogBox(TERMDIALOG); Retry 30000 ms. Boot-case part ddeml@term
 (termcmp.py): times within 300 ms, return 1, picture equal but for the
 rebranded words.
+Full boot test (97389e8 on master 2fe5dbd, installation-05): ddeml ok in
+every part (term included); failing only known ones: lzexpand@quirks,
+trails@timed, taskman@tree, cplclick@co-tree, soundtime.
