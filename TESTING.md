@@ -116,6 +116,9 @@ Other test scripts, each documented at its top: `tests/npscenarios.sh`,
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
+`tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,
+INI files, the running saver, USER starting it; `tests/sstree.sh`: on
+w16's install tree alone; the boot-test case `scrnsave`),
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
