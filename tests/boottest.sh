@@ -48,8 +48,10 @@
 #   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
 #              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
 #   gdifont    GD10 (raster font simulations: italic, underline, strike-out,
-#              emboldening; metrics and pixels) with Microsoft's GDI and
-#              VGA.DRV, w16's GDI, w16's VGA.DRV and both: no FAIL
+#              emboldening, integer scaling; metrics and pixels) and GD11
+#              (the font mapper: every mapping and metric as in 3.1's log,
+#              tests/gdi/gd11ref.txt) with Microsoft's GDI and VGA.DRV,
+#              w16's GDI, w16's VGA.DRV and both: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
@@ -1331,20 +1333,29 @@ runcase() {
         # drawn into memory bitmaps and read back; ARCHITECTURE.md 11.9)
         # as the shell of Windows 3.1: Microsoft's GDI and VGA.DRV (the
         # table's own run), w16's GDI, w16's VGA.DRV and both; every log
-        # must end with "GD10 done" and have no FAIL
+        # must end with "GD10 done" and have no FAIL. And GD11
+        # (tests/apps/gd11.c: the font mapper and integer scaling,
+        # ARCHITECTURE.md 11.10): every mapping and metric as 3.1's own
+        # run gave them (tests/gdi/gd11ref.txt; tools/gd11.py leaves out
+        # the TrueType and vector results w16 cannot give yet)
         r=ok
         for k in ms gdi vga both; do
             case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
                 both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
             "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD10.EXE" > "$out/gdifont-$k.log" 2>&1 &
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD11.EXE" > "$out/gdifont-map-$k.log" 2>&1 &
         done
         wait
         for k in ms gdi vga both; do
             f=$out/gdifont-$k.log
             grep -q '^GD10 done' "$f" || { r="$k: GD10 did not finish ($f)"; break; }
             if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+            f=$out/gdifont-map-$k.log
+            grep -q '^GD11 done' "$f" || { r="$k: GD11 did not finish ($f)"; break; }
+            python3 "$root/tools/gd11.py" cmp "$root/tests/gdi/gd11ref.txt" "$f" > "$f.cmp" ||
+                { r="$k: GD11 differs from 3.1 ($f.cmp)"; break; }
         done
-        if [ "$r" = ok ]; then echo "ok   gdifont: GD10's italic, underline, strike-out and bold with w16's GDI and VGA.DRV as with Microsoft's"
+        if [ "$r" = ok ]; then echo "ok   gdifont: GD10 (simulations, integer scaling) and GD11 (font mapping) with w16's GDI and VGA.DRV as with Microsoft's"
         else echo "FAIL gdifont: $r"; fails=$((fails + 1)); fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;

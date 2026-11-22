@@ -507,6 +507,11 @@ static void pdev(const char *label, void far *p)
 static void fontinfo(void far *p)
 {
     dump("font", p, 0x41);
+    /* a 3.x font (dfFlags at 34h set): the first entries of the character
+       table at 52h (width, 32-bit offset), as GDI built them; never the
+       bits (ARCHITECTURE.md 11.10) */
+    if (p && readable(p, 0x36) && *(u16 far *)((u8 far *)p + 0x34))
+        dump("ctab", (u8 far *)p + 0x52, 6 * 8);
 }
 
 static void drawmode(void far *p)

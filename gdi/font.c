@@ -17,10 +17,12 @@
  * display driver's RealizeObject is asked first and returns 0 (no device
  * fonts) on VGA.
  *
- * The mapper: UNVERIFIED. 3.1's penalty weights are not observed yet; the
- * one here takes an exact face (after WIN.INI [FontSubstitutes]) and the
- * nearest height, which is what the boot needs (System, MS Sans Serif 8).
- * w16 ships no fonts: whatever .FON files the installation has are used.
+ * The mapper (font_map) is 3.1's as probe GD11 found it: every raster
+ * font is a candidate at the integer scale its size gives, and a font
+ * that has to be scaled is realized as a scaled copy of its own
+ * (font_scale), which is what the driver gets (ARCHITECTURE.md 11.10).
+ * TrueType and vector fonts are not mapped to yet. w16 ships no fonts:
+ * whatever .FON files the installation has are used.
  */
 #include "gdi.h"
 
@@ -130,9 +132,19 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
             f->face[k] = face[k];
         for (k = 0; file && k < 12 && file[k]; k++)
             f->file[k] = file[k];           /* (file: base_name's) */
-        f->next = fonts;
-        fonts = xf;
+        f->sx = f->sy = 1;
+        /* at the table's end: the mapper takes the first of equal
+           candidates, in the order the fonts were added (GD11's test
+           fonts on 3.1, ARCHITECTURE.md 11.10) */
+        {
+            XP __far *pp = &fonts;
+            while (*pp)
+                pp = &((LPFONT)xptr(*pp))->next;
+            f = xptr(xf);
+            *pp = xf;
+        }
         added++;
+        f = xptr(xf);
         gdi_log("font: ");
         gdi_log(f->face);
         gdi_loghex(" height", f->height);
@@ -153,13 +165,29 @@ static void font_load_boot(LPCSTR file)
         font_add_module(h, base_name(file));
 }
 
+/* the face of the fixed system font (SYSTEM.INI [boot] fixedfon.fon):
+   "System" asked with FIXED_PITCH is mapped as that face (GD11 on 3.1:
+   Fixedsys, also where Courier's size is nearer) */
+static char fixed_face[LF_FACESIZE];
+
 void font_init(void)
 {
     char buf[80];
+    XP x;
     font_load_boot("FONTS.FON");
     GetPrivateProfileString("boot", "fixedfon.fon", "", buf, sizeof buf, "SYSTEM.INI");
-    if (buf[0])
+    if (buf[0]) {
+        for (x = fonts; x && ((LPFONT)xptr(x))->next; x = ((LPFONT)xptr(x))->next)
+            ;
         font_load_boot(buf);
+        x = x ? ((LPFONT)xptr(x))->next : fonts;
+        if (x) {
+            LPFONT f = xptr(x);
+            int i;
+            for (i = 0; i < LF_FACESIZE - 1 && f->face[i]; i++)
+                fixed_face[i] = f->face[i];
+        }
+    }
     font_load_boot("OEMFONTS.FON");
 }
 
@@ -195,7 +223,13 @@ int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
     if (!SELECTOROF(file)) {            /* a module handle */
         return font_add_module((HINSTANCE)OFFSETOF(file), 0);
     }
-    h = LoadLibrary(file);
+    /* GD11 on 3.1: a file that is not there gives 0, without KERNEL's
+       "Cannot find" box */
+    {
+        WORD em = SetErrorMode(0x8000);     /* SEM_NOOPENFILEERRORBOX */
+        h = LoadLibrary(file);
+        SetErrorMode(em);
+    }
     if (h < 32)
         return 0;
     n = font_add_module(h, base_name(file));
@@ -209,7 +243,12 @@ int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
    loaded while it is in use) */
 static XP fonts_gone;
 
-static int font_in_use(XP x)
+/* the integer-scaled copies DCs have realized (ARCHITECTURE.md 11.10):
+   entries of their own, each with its scaled image, kept while a DC
+   uses them */
+static XP scaled;
+
+static int dc_has(XP x)
 {
     HDC l;
     LPDC dc;
@@ -217,6 +256,39 @@ static int font_in_use(XP x)
         if (dc->xFont == x)
             return 1;
     return 0;
+}
+
+/* a real font is in use while a DC has it or a scaled copy of it */
+static int font_in_use(XP x)
+{
+    XP s;
+    if (dc_has(x))
+        return 1;
+    for (s = scaled; s; s = ((LPFONT)xptr(s))->next)
+        if (((LPFONT)xptr(s))->base == x)
+            return 1;
+    return 0;
+}
+
+/* scaled copies no DC uses any more go */
+static void scaled_reap(void)
+{
+    XP __far *pp = &scaled;
+    while (*pp) {
+        XP xs = *pp;
+        LPFONT s = xptr(xs);
+        if (!dc_has(xs)) {
+            *pp = s->next;
+            if (s->hMem) {
+                GlobalUnlock(s->hMem);
+                GlobalFree(s->hMem);
+            }
+            xfree(xs);
+            pp = &scaled;               /* (xfree may have moved the heap) */
+            continue;
+        }
+        pp = &s->next;
+    }
 }
 
 /* the font's resources, its entry, and its module when it was the
@@ -249,6 +321,7 @@ static void font_free(XP xf)
 void font_reap(void)
 {
     XP __far *pp = &fonts_gone;
+    scaled_reap();
     while (*pp) {
         XP xf = *pp;
         LPFONT f = xptr(xf);
@@ -315,53 +388,134 @@ static void substitute(LPCSTR face, char *out)
         GetProfileString("FontSubstitutes", name, name, out, LF_FACESIZE);
 }
 
-static long penalty(LPFONT f, const LOGFONT __far *lf, const char *face)
+/* The mapper's rules for raster fonts, as GD11 found them on 3.1
+   (ARCHITECTURE.md 11.10; black-box, 3.1's own fonts and test fonts of
+   our own): every font of the table is one candidate, at the integer
+   scale its own size gives; the lowest penalty wins, the first in the
+   table on a tie.
+
+   The height factor y: the requested height over the font's (cell
+   heights for a positive lfHeight, character heights for a negative
+   one), rounded up from a quarter below the next whole number
+   (want / ref + 1/4, down), 1 to 8. A font smaller than asked whose
+   factor would be more than its own height less 3 is no candidate. The
+   width factor x: lfWidth over dfAvgWidth to the nearest whole number,
+   1 to 5, a half up except from 1 to 2; with lfWidth 0, y (5 at most).
+
+   Penalties: the scaled height smaller than asked 150 a pixel (and 1
+   more for an unscaled font), bigger 600 and 150 a pixel; with lfWidth,
+   50 a pixel of the scaled average width's difference; scaling across
+   60 + 15 x, down 11 + 20 y (y 2 to 5), 600, 1100, 1600 (y 6, 7, 8); x
+   and y unequal 410 * the larger / the smaller - 10. Character set 65000
+   (not for DEFAULT_CHARSET), face 10000, family 9000, a fixed pitch
+   asked of a variable font 15000, a variable one of a fixed font 350.
+   The scaling terms are a fit (every request on 3.1's fonts, all but 1
+   of 12525 on test fonts: ARCHITECTURE.md 11.10). UNVERIFIED (not probed
+   yet): the weight (3 a hundred) and italic (4) penalties. */
+static int xfor(int w, int aw)
 {
-    long p = 0;
-    int want, have, d;
-    if (f->type & 1)                     /* vector fonts: not yet */
-        p += 20000;
+    int x, bx = 1;
+    long bp = -1;
+    for (x = 1; x <= 5; x++) {
+        long d = (long)aw * x - w, p;
+        if (d < 0)
+            d = -d;
+        p = 2 * d + (x > 1);
+        if (bp < 0 || p <= bp) {
+            bp = p;
+            bx = x;
+        }
+    }
+    return bx;
+}
+
+static long penalty(LPFONT f, const LOGFONT __far *lf, const char *face, int h, int *px, int *py)
+{
+    long p = 0, d;
+    int ref, want, k, x, w = lf->lfWidth < 0 ? -lf->lfWidth : lf->lfWidth;
+    *px = *py = 1;
     if (f->type & 4 || !f->height)       /* TrueType (.FOT): not rendered yet */
         return 0x7FFFFFFFL;
+    if (f->type & 1)                     /* vector fonts: not drawn yet */
+        p += 20000;
     if (lf->lfCharSet != f->charset && !(lf->lfCharSet == 1))
         p += 65000L;
     if (face[0] && str_icmp(face, f->face))
         p += 10000;
-    if (!face[0] && (lf->lfPitchAndFamily & 0xF0) && (lf->lfPitchAndFamily & 0xF0) != (f->pitch & 0xF0))
+    if ((lf->lfPitchAndFamily & 0xF0) && (lf->lfPitchAndFamily & 0xF0) != (f->pitch & 0xF0))
         p += 9000;
     if ((lf->lfPitchAndFamily & 3) == 1 && (f->pitch & 1))
         p += 15000;                      /* fixed asked, variable font */
-    if (lf->lfHeight < 0) {
-        want = -lf->lfHeight;
-        have = f->height - f->il;
+    if ((lf->lfPitchAndFamily & 3) == 2 && !(f->pitch & 1))
+        p += 350;                        /* variable asked, fixed font */
+    if (h > 0) {
+        want = h;
+        ref = f->height;
     } else {
-        want = lf->lfHeight ? lf->lfHeight : 12;
-        have = f->height;
+        want = -h;
+        ref = f->height - f->il;
     }
-    d = have - want;
-    p += d > 0 ? 600L * d : 150L * -d;
-    if (lf->lfWidth) {
-        d = f->avgWidth - lf->lfWidth;
+    if (ref < 1)
+        ref = 1;
+    k = 1;
+    if (!(f->type & 1)) {
+        k = (int)((4L * want + ref) / (4L * ref));
+        if (k < 1)
+            k = 1;
+        if (k > 8)
+            k = 8;
+        if (want > ref && k > ref - 3)
+            return 0x7FFFFFFFL;          /* no candidate */
+    }
+    d = (long)ref * k - want;
+    if (d < 0)
+        p += 150L * -d + (k == 1);
+    else if (d > 0)
+        p += 600 + 150L * d;
+    if (w)
+        x = (f->type & 1) ? 1 : xfor(w, f->avgWidth);
+    else
+        x = k < 5 ? k : 5;
+    if (w) {
+        d = (long)f->avgWidth * x - w;
         p += 50L * (d < 0 ? -d : d);
     }
+    if (x > 1)
+        p += 60 + 15 * x;
+    if (k > 1)
+        p += k <= 5 ? 11 + 20 * k : k == 6 ? 600 : k == 7 ? 1100 : 1600;
+    if (x != k)
+        p += (x > k ? 410L * x / k : 410L * k / x) - 10;
     d = (lf->lfWeight ? lf->lfWeight : 400) - f->weight;
     p += 3L * (d < 0 ? -d : d) / 100;
     if (!!lf->lfItalic != !!f->italic)
         p += 4;
+    *px = x;
+    *py = k;
     return p;
 }
 
-static XP font_map(const LOGFONT __far *lf)
+/* the best font for lf (device units), with its factors */
+static XP font_map(const LOGFONT __far *lf, int h0, int *psx, int *psy)
 {
     char face[LF_FACESIZE];
     XP x, best = 0;
     long bp = 0x7FFFFFFFL;
+    int h = lf->lfHeight ? lf->lfHeight : h0, sx, sy;
     substitute(lf->lfFaceName, face);
+    if ((lf->lfPitchAndFamily & 3) == 1 && fixed_face[0] && !str_icmp(face, "System")) {
+        int i;
+        for (i = 0; i < LF_FACESIZE; i++)
+            face[i] = fixed_face[i];
+    }
+    *psx = *psy = 1;
     for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
-        long p = penalty(xptr(x), lf, face);
+        long p = penalty(xptr(x), lf, face, h, &sx, &sy);
         if (p < bp) {
             bp = p;
             best = x;
+            *psx = sx;
+            *psy = sy;
         }
     }
     return best;
@@ -375,6 +529,8 @@ static XP font_map(const LOGFONT __far *lf)
    character table of 3.x entries (width, 32-bit offset) at 94h, the bits
    right after it (dfBitsOffset 5DAh for 225 + 1 characters) and the face
    name moved by as much (dfFace 171Ah). */
+static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf);
+
 static LPFONTINFO font_info(LPFONT f)
 {
     HRSRC r;
@@ -382,6 +538,11 @@ static LPFONTINFO font_info(LPFONT f)
     LPFONTINFO fi;
     if (f->fi)
         return f->fi;
+    if (f->base) {                      /* a scaled copy */
+        LPFONTINFO bf = font_info(xptr(f->base));
+        f->fi = bf ? font_scale(f, bf) : 0;
+        return f->fi;
+    }
     r = FindResource(f->hMod, MAKEINTRESOURCE(f->resId), MAKEINTRESOURCE(RT_FONT));
     if (!r)
         return 0;
@@ -446,6 +607,129 @@ static LPFONTINFO font_info(LPFONT f)
     return fi;
 }
 
+extern WORD __cdecl gdi_ahincr;         /* entry.asm: KERNEL's __AHINCR */
+
+/* a byte of a block over 64K (selectors __AHINCR apart) */
+static BYTE __far *huge_at(BYTE __far *base, DWORD off)
+{
+    off += OFFSETOF(base);
+    return (BYTE __far *)MAKELP(SELECTOROF(base) + (WORD)(off >> 16) * gdi_ahincr, (WORD)off);
+}
+
+/* The scaled copy of a font as 3.1's GDI hands it to the driver (GD12,
+   GD1's log, ARCHITECTURE.md 11.10): a 3.x font of its own; dfPoints,
+   dfVertRes, dfAscent, the leadings and dfPixHeight times y, dfHorizRes,
+   dfPixWidth, the widths and dfWidthBytes times x, dfDevice 0; the
+   character table at 94h, the face name right after it, the bits after
+   the name (at an even offset); each character's bitmap as many columns
+   as the unscaled one's times x (8 pixels each, top first), every pixel
+   an x by y block. Unscaled fields (dfFlags and on) are the font's. */
+static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
+{
+    BYTE __far *src = (BYTE __far *)bf - 0x42, __far *q;
+    WORD n = bf->dfLastChar - bf->dfFirstChar + 2, i, sx = s->sx, sy = s->sy;
+    WORD bh = bf->dfPixHeight, h = bh * sy, flen, r, c, dy, j;
+    const char __far *face = (const char __far *)src + (WORD)bf->dfFace;
+    DWORD off, size, bits;
+    LPFONTINFO fi;
+    BYTE row[64];
+    for (flen = 0; face[flen]; flen++)
+        ;
+    bits = (0x94 + (DWORD)n * 6 + flen + 2) & ~1UL;
+    size = bits;
+    for (i = 0; i < n; i++) {
+        WORD w = *(WORD __far *)(src + 0x94 + i * 6);
+        size += (DWORD)((w + 7) >> 3) * sx * h;
+    }
+    s->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, size);
+    q = s->hMem ? GlobalLock(s->hMem) : 0;
+    if (!q) {
+        if (s->hMem)
+            GlobalFree(s->hMem);
+        s->hMem = 0;
+        return 0;
+    }
+    mem_copy(q, src, 0x94);
+    *(WORD __far *)q = 0x300;
+    *(DWORD __far *)(q + 2) = size;
+    fi = (LPFONTINFO)(q + 0x42);
+    fi->dfPoints *= sy;
+    fi->dfVertRes *= sy;
+    fi->dfHorizRes *= sx;
+    fi->dfAscent *= sy;
+    fi->dfInternalLeading *= sy;
+    fi->dfExternalLeading *= sy;
+    fi->dfPixWidth *= sx;
+    fi->dfPixHeight = h;
+    fi->dfAvgWidth *= sx;
+    fi->dfMaxWidth *= sx;
+    fi->dfWidthBytes *= sx;
+    fi->dfDevice = 0;
+    fi->dfFace = 0x94 + (DWORD)n * 6;
+    mem_copy(q + (WORD)fi->dfFace, face, flen + 1);
+    fi->dfBitsOffset = bits;
+    off = bits;
+    for (i = 0; i < n; i++) {
+        BYTE __far *e = src + 0x94 + i * 6;
+        WORD w = *(WORD __far *)e, cols = (w + 7) >> 3, ncols = cols * sx;
+        DWORD goff = *(DWORD __far *)(e + 2);
+        *(WORD __far *)(q + 0x94 + i * 6) = w * sx;
+        *(DWORD __far *)(q + 0x94 + i * 6 + 2) = off;
+        if (ncols > sizeof row)
+            ncols = sizeof row;         /* (a glyph over 512 pixels wide) */
+        for (r = 0; r < bh; r++) {
+            /* the source row's pixels, each x times */
+            for (c = 0; c < ncols; c++)
+                row[c] = 0;
+            for (j = 0; j < w; j++) {
+                BYTE b = *huge_at(src, goff + (DWORD)(j >> 3) * bh + r);
+                if (b & (0x80 >> (j & 7))) {
+                    WORD p = j * sx, e2 = p + sx;
+                    for (; p < e2 && (p >> 3) < ncols; p++)
+                        row[p >> 3] |= (BYTE)(0x80 >> (p & 7));
+                }
+            }
+            for (c = 0; c < ncols; c++) {
+                if (!row[c])
+                    continue;
+                for (dy = 0; dy < sy; dy++)
+                    *huge_at(q, off + (DWORD)c * h + r * sy + dy) = row[c];
+            }
+        }
+        off += (DWORD)cols * sx * h;
+    }
+    fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)bits);
+    return fi;
+}
+
+/* the entry of base font xb scaled sx by sy: one a DC has already, or a
+   new one */
+static XP font_scaled(XP xb, int sx, int sy)
+{
+    XP xs;
+    LPFONT s, b;
+    for (xs = scaled; xs; xs = s->next) {
+        s = xptr(xs);
+        if (s->base == xb && s->sx == sx && s->sy == sy)
+            return xs;
+    }
+    xs = xalloc(sizeof(FONTENT));
+    if (!xs)
+        return 0;
+    s = xptr(xs);
+    b = xptr(xb);
+    mem_copy(s, b, sizeof(FONTENT));
+    s->hRes = 0;
+    s->hMem = 0;
+    s->fi = 0;
+    s->base = xb;
+    s->sx = (BYTE)sx;
+    s->sy = (BYTE)sy;
+    s->next = scaled;
+    scaled = xs;
+    return xs;
+}
+
 LPFONT dc_font(LPDC dc)
 {
     return dc->xFont ? (LPFONT)xptr(dc->xFont) : (LPFONT)0;
@@ -457,7 +741,7 @@ LPFONT font_realize(LPDC dc)
     XP x;
     LPFONT f;
     LOGFONT lf;
-    int i, dh, dw;
+    int i, dh, dw, sx, sy;
     if (!fo)
         return 0;
     /* the height and width in device units (GD5 on 3.1: in MM_LOMETRIC
@@ -484,27 +768,37 @@ LPFONT font_realize(LPDC dc)
         lf.lfFaceName[i] = fo->lf.lfFaceName[i];
     /* the driver first: device fonts (none on VGA: RealizeObject gives 0) */
     ((DRVREALIZE)dc->dev->fn[DRV_REALIZEOBJECT])(dc->lpPDevice, OBJ_FONT, &lf, 0, 0);
-    x = font_map(&lf);
+    /* lfHeight 0: a 12-point character height (GD11 on 3.1: 16 pixels
+       on VGA, MS Sans Serif's 20-pixel font) */
+    x = font_map(&lf, -mul_div(12, dc->dev->info.dpLogPixelsY, 72), &sx, &sy);
     if (!x)
         return 0;
+    if (sx > 1 || sy > 1) {
+        x = font_scaled(x, sx, sy);
+        if (!x)
+            return 0;
+    }
     f = xptr(x);
     gdi_log("font_realize: ");
     gdi_log(lf.lfFaceName);
     gdi_loghex(" -> height", f->height);
+    gdi_loghex(" x", sx);
+    gdi_loghex(" y", sy);
     gdi_log(f->face);
     gdi_log("\r\n");
-    if (!font_info(f))
+    if (!font_info(f)) {
+        if (f->base)
+            scaled_reap();
         return 0;
+    }
     dc->xFont = x;
     dc->hFontOf = dc->hFont;
     dc->lpPDevOfFont = dc->lpPDevice;
     dc->fontHt = dh;
     dc->fontWd = dw;
-    if (fonts_gone) {                   /* perhaps the last DC of a removed font */
-        font_reap();
-        f = xptr(x);
-    }
-    return f;
+    /* perhaps the last DC of a removed font or of a scaled copy */
+    font_reap();
+    return xptr(x);
 }
 
 /* the TEXTXFORM the driver gets for the DC's realized font f */
@@ -518,11 +812,13 @@ void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx)
     tx->txfWeight = fi->dfWeight;
     /* bold by the driver (dpText TC_EA_DOUBLE: doubling the weight):
        3.1's dialogs show MS Sans Serif 8 bold, which SSERIFE.FON lacks.
-       UNVERIFIED: the threshold, and the TEXTXFORM 3.1 passes (weight,
-       accelerator bit, overhang 1) */
-    if (fo && fo->lf.lfWeight >= 600 && fi->dfWeight < 600 &&
+       GD11 on 3.1: from a weight 200 above the font's (600 for a 400
+       font, 900 for System's 700), the weight then the font's + 300
+       (700, 1000), scaled or not. UNVERIFIED: the TEXTXFORM's weight
+       (tmWeight shows it) */
+    if (fo && fo->lf.lfWeight >= fi->dfWeight + 200 &&
         (dc->dev->info.dpText & 0x0200)) {
-        tx->txfWeight = 700;
+        tx->txfWeight = fi->dfWeight + 300;
         tx->txfAccelerator |= 0x0200;
         tx->txfOverhang = 1;
     }

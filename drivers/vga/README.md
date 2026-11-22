@@ -167,7 +167,9 @@ the driver's extent. With the caller's widths the text's box (its
 background, the cut of its glyphs, the extent) is the widths of all
 characters but the last plus the last one's own width. Drawing returns 0
 (3.1's driver does); measuring (count < 0) returns the extent in AX and
-the height in DX.
+the height in DX. The fonts GDI scales by whole multiples (ARCHITECTURE.md
+11.10) are 3.x fonts that can be over 64K: the character table's offsets
+are taken as 32-bit, the segments __AHINCR apart.
 
 ### Mouse trails (Control MOUSETRAILS, MoveCursor, CheckCursor)
 

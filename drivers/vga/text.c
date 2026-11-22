@@ -60,6 +60,14 @@ static BYTE __far *char_entry(FONTCTX *c, BYTE ch)
     return (BYTE __far *)MK_FP(SELECTOROF(c->f), c->base + 0x94 + i * 6);
 }
 
+/* a byte of the font at offset o from its segment's start: GDI's
+   integer-scaled copies can be over 64K (selectors __AHINCR apart; the
+   3.x character table's offsets are 32-bit) */
+static BYTE __far *glyph_byte(FONTCTX *c, DWORD o)
+{
+    return (BYTE __far *)MK_FP(SELECTOROF(c->f) + (WORD)(o >> 16) * ahincr, (WORD)o);
+}
+
 static WORD char_width(FONTCTX *c, BYTE ch)
 {
     return *(WORD __far *)char_entry(c, ch);
@@ -101,7 +109,7 @@ static void build_row(FONTCTX *c, LPCSTR s, int n, int x, int r, int bx0, int nb
 {
     int i, k, cols, px, rel, idx, sh, w;
     BYTE __far *e;
-    BYTE __far *g;
+    DWORD g;
     BYTE gb;
     for (i = 0; i < nbuf; i++)
         tbuf[i] = 0;
@@ -109,10 +117,10 @@ static void build_row(FONTCTX *c, LPCSTR s, int n, int x, int r, int bx0, int nb
     for (i = 0; i < n; i++) {
         e = char_entry(c, (BYTE)s[i]);
         w = *(WORD __far *)e;
-        g = (BYTE __far *)MK_FP(SELECTOROF(c->f), c->base + *(WORD __far *)(e + 2));
+        g = c->base + *(DWORD __far *)(e + 2);
         cols = (w + 7) >> 3;
         for (k = 0; k < cols; k++) {
-            gb = g[k * c->height + r];
+            gb = *glyph_byte(c, g + (DWORD)k * c->height + r);
             if (k == cols - 1 && (w & 7))
                 gb &= (BYTE)(0xFF << (8 - (w & 7)));
             if (!gb)

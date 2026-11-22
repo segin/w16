@@ -11,7 +11,7 @@
  * height in DX and the width in AX; a zero count returns 0 without a
  * driver call. GetTextMetrics is computed from the font: tmDefaultChar
  * and tmBreakChar are the .FNT values plus dfFirstChar (System font: 80h
- * and 20h), tmDigitizedAspect = dfHorizRes/dfVertRes (GD2).
+ * and 20h), tmDigitizedAspectX = dfVertRes, Y = dfHorizRes (GD11).
  */
 #include "gdi.h"
 
@@ -391,8 +391,11 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
         tm->tmAveCharWidth++;
         tm->tmMaxCharWidth++;
     }
-    tm->tmDigitizedAspectX = fi->dfHorizRes;
-    tm->tmDigitizedAspectY = fi->dfVertRes;
+    /* GD11 on 3.1: X is dfVertRes and Y dfHorizRes (ROMAN.FON's 2 and 3
+       give 2 and 3; a font scaled 2 across, dfHorizRes 192, gives 96 and
+       192) */
+    tm->tmDigitizedAspectX = fi->dfVertRes;
+    tm->tmDigitizedAspectY = fi->dfHorizRes;
     if (dc->mapMode != 1) {
         /* GD5 on 3.1 (MM_LOMETRIC, anisotropic 2:1): heights and widths
            in logical units, the descent what the ascent leaves */

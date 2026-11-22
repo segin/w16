@@ -1703,6 +1703,21 @@ $(DOS)/GD10.EXE: $(B)/tests/start.o $(B)/tests/gd10.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd10.map file { $(B)/tests/start.o $(B)/tests/gd10.o }
+# GD11.EXE: the font mapper and raster font integer scaling
+# (tests/apps/gd11.c, tests/gdi/gd11ref.txt; the boot-test case gdifont)
+gdprobes: $(DOS)/GD11.EXE
+dos: $(DOS)/GD11.EXE
+$(DOS)/GD11.EXE: $(B)/tests/start.o $(B)/tests/gd11.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd11.map file { $(B)/tests/start.o $(B)/tests/gd11.o }
+# GD12.EXE: integer-scaled fonts drawn for GD1's log (tests/apps/gd12.c;
+# tests/gdiboot.sh -l with it as the shell)
+gdprobes: $(DOS)/GD12.EXE
+$(DOS)/GD12.EXE: $(B)/tests/start.o $(B)/tests/gd12.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd12.map file { $(B)/tests/start.o $(B)/tests/gd12.o }
 # GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
 # the library's; tests/apps/gd6.c); make test
 dos: $(DOS)/GD6.EXE

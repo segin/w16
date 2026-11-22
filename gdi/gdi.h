@@ -604,12 +604,16 @@ typedef struct FONTENT {
     char file[13];                      /* the file name, without its path */
     short points;
     short type, il;
+    /* an integer-scaled copy (ARCHITECTURE.md 11.10): base is the real
+       font's entry, sx and sy the factors (1 for a real font) */
+    XP base;
+    BYTE sx, sy;
 } FONTENT;
 typedef FONTENT __far *LPFONT;
 void font_init(void);
 LPFONT font_realize(LPDC dc);
 LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
-void font_reap(void);                   /* removed fonts no DC uses any more go */
+void font_reap(void);                   /* removed fonts and scaled copies no DC uses any more go */
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
 int font_italic_overhang(LPFONTINFO fi, const TEXTXFORM __far *tx);
 extern XP fonts;

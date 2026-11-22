@@ -102,10 +102,15 @@ static WORD pixels(HDC dc, HBITMAP bm, HBITMAP old, int h)
 static const char text[] = "Switch To AWgjy|";
 
 /* kind: 0 checked; 1 checked, with a blue text colour, R2_XORPEN and
-   TA_UPDATECP in place of TA_RIGHT (the current position logged); 2 not
-   checked (integer scaling, which w16 does not do yet: ARCHITECTURE.md
-   11.6) */
+   TA_UPDATECP in place of TA_RIGHT (the current position logged); 2
+   integer scaling (ARCHITECTURE.md 11.10): the pixels, extents, widths
+   and the metrics that differ from the unscaled font's checked, the rest
+   logged (GD11 checks every metric; the table must fit the data
+   segment) */
 static int kind;
+
+/* lfWidth of the next case */
+static int width;
 
 static void ob(const char *name, WORD v)
 {
@@ -113,6 +118,12 @@ static void ob(const char *name, WORD v)
         obs_env(name, v);
     else
         obs(name, v);
+}
+
+/* in the table for kind 2 too */
+static void ob2(const char *name, WORD v)
+{
+    obs(name, v);
 }
 
 /* the face's short name in the observations' names (the reference table
@@ -146,11 +157,14 @@ static void one(const char *face, int ht, BYTE cs, int wt, int it, int ul, int s
              (LPSTR)(it ? "i" : ""), (LPSTR)(ul ? "u" : ""), (LPSTR)(so ? "s" : ""));
     if (wt <= 400 && !it && !ul && !so)
         lstrcat(name, "r");
+    if (width)
+        wsprintf(name + lstrlen(name), " w%d", width);
     if (kind == 1)
         lstrcat(name, " xor");
     for (i = 0; i < (int)sizeof lf; i++)
         ((char *)&lf)[i] = 0;
     lf.lfHeight = ht;
+    lf.lfWidth = width;
     lf.lfWeight = wt;
     lf.lfItalic = (BYTE)it;
     lf.lfUnderline = (BYTE)ul;
@@ -164,30 +178,30 @@ static void one(const char *face, int ht, BYTE cs, int wt, int it, int ul, int s
     out(name);
     out("\r\n");
     GetTextMetrics(dc, &tm);
-    ob(nm(name, "tmH"), tm.tmHeight);
+    ob2(nm(name, "tmH"), tm.tmHeight);
     ob(nm(name, "tmA"), tm.tmAscent);
     ob(nm(name, "tmD"), tm.tmDescent);
     ob(nm(name, "tmIL"), tm.tmInternalLeading);
     ob(nm(name, "tmEL"), tm.tmExternalLeading);
-    ob(nm(name, "tmAve"), tm.tmAveCharWidth);
+    ob2(nm(name, "tmAve"), tm.tmAveCharWidth);
     ob(nm(name, "tmMax"), tm.tmMaxCharWidth);
-    ob(nm(name, "tmW"), tm.tmWeight);
+    ob2(nm(name, "tmW"), tm.tmWeight);
     ob(nm(name, "tmI"), tm.tmItalic);
     ob(nm(name, "tmU"), tm.tmUnderlined);
     ob(nm(name, "tmS"), tm.tmStruckOut);
-    ob(nm(name, "tmOvh"), tm.tmOverhang);
+    ob2(nm(name, "tmOvh"), tm.tmOverhang);
     ob(nm(name, "tmPF"), tm.tmPitchAndFamily);
     ob(nm(name, "tmCS"), tm.tmCharSet);
-    ob(nm(name, "tmAsp"), tm.tmDigitizedAspectX);
+    ob2(nm(name, "tmAsp"), tm.tmDigitizedAspectX);
     e = GetTextExtent(dc, text, sizeof text - 1);
-    ob(nm(name, "ext"), LOWORD(e));
+    ob2(nm(name, "ext"), LOWORD(e));
     ob(nm(name, "exth"), HIWORD(e));
     e = GetTextExtent(dc, "W", 1);
     ob(nm(name, "extW"), LOWORD(e));
     GetCharWidth(dc, 'W', 'W', cw);
-    ob(nm(name, "cwW"), cw[0]);
+    ob2(nm(name, "cwW"), cw[0]);
     GetCharWidth(dc, 'i', 'i', cw);
-    ob(nm(name, "cwi"), cw[0]);
+    ob2(nm(name, "cwi"), cw[0]);
     GetTextFace(dc, sizeof b, b);
     out("OBS ");
     out(nm(name, "face=\""));
@@ -244,9 +258,49 @@ static void one(const char *face, int ht, BYTE cs, int wt, int it, int ul, int s
     }
     SetTextAlign(dc, TA_LEFT);
     if (y + lh <= h)
-        ob(nm(name, "hash"), pixels(dc, bm, obm, h));
+        ob2(nm(name, "hash"), pixels(dc, bm, obm, h));
     else
         obs_env(nm(name, "hash (cut)"), pixels(dc, bm, obm, h));
+    SelectObject(dc, obm);
+    DeleteObject(bm);
+    SelectObject(dc, of);
+    DeleteDC(dc);
+    DeleteObject(f);
+}
+
+/* a copy over 64K (System 8 down and 5 across: some 200K; Terminal 8 by
+   5, 122K, italic): two characters drawn and hashed */
+static void big(const char *face, int ht, BYTE cs, int it)
+{
+    char name[40];
+    LOGFONT lf;
+    HFONT f, of;
+    HDC dc = CreateCompatibleDC(hscr);
+    HBITMAP bm = CreateCompatibleBitmap(hscr, W, 140), obm;
+    HBRUSH gray = CreateSolidBrush(RGB(128, 128, 128));
+    RECT r;
+    int i;
+    wsprintf(name, "%s %d big", (LPSTR)short_face(face), ht);
+    out("CASE ");
+    out(name);
+    out("\r\n");
+    for (i = 0; i < (int)sizeof lf; i++)
+        ((char *)&lf)[i] = 0;
+    lf.lfHeight = ht;
+    lf.lfItalic = (BYTE)it;
+    lf.lfCharSet = cs;
+    lstrcpy(lf.lfFaceName, face);
+    f = CreateFontIndirect(&lf);
+    of = SelectObject(dc, f);
+    obm = SelectObject(dc, bm);
+    r.left = r.top = 0;
+    r.right = W;
+    r.bottom = 140;
+    FillRect(dc, &r, gray);
+    DeleteObject(gray);
+    SetBkColor(dc, RGB(255, 255, 255));
+    TextOut(dc, 2, 2, "Wg", 2);
+    obs(nm(name, "hash"), pixels(dc, bm, obm, 140));
     SelectObject(dc, obm);
     DeleteObject(bm);
     SelectObject(dc, of);
@@ -274,11 +328,13 @@ static const struct { const char *face; int h; } sizes[] = {
     { "System", 0 }
 };
 
-/* sizes the files do not have (integer scaling) */
-static const struct { const char *face; int h; BYTE cs; } scaled[] = {
-    { "System", 32, 0 }, { "MS Sans Serif", -44, 0 }, { "Courier", -26, 0 },
-    { "Terminal", 24, OEM_CHARSET }, { "MS Sans Serif", 48, 0 }, { "Courier", 39, 0 },
-    { "MS Serif", -27, 0 }, { "Small Fonts", -11, 0 }
+/* sizes the files do not have (integer scaling), by height and width */
+static const struct { const char *face; int h, w; BYTE cs; } scaled[] = {
+    { "System", 32, 0, 0 }, { "MS Sans Serif", -44, 0, 0 }, { "Courier", -26, 0, 0 },
+    { "Terminal", 24, 0, OEM_CHARSET }, { "MS Sans Serif", 48, 0, 0 }, { "Courier", 39, 0, 0 },
+    { "MS Serif", -27, 0, 0 }, { "Small Fonts", -11, 0, 0 }, { "System", 16, 14, 0 },
+    { "MS Sans Serif", -26, 20, 0 }, { "Terminal", 48, 4, OEM_CHARSET },
+    { "Small Fonts", 40, 0, 0 }
 };
 
 int __cdecl tmain(void)
@@ -307,10 +363,16 @@ int __cdecl tmain(void)
     out("GD10 scaled\r\n");
     kind = 2;
     for (k = 0; k < (int)(sizeof scaled / sizeof scaled[0]); k++) {
+        width = scaled[k].w;
         one(scaled[k].face, scaled[k].h, scaled[k].cs, 400, 0, 0, 0);
         one(scaled[k].face, scaled[k].h, scaled[k].cs, 400, 1, 1, 1);
         one(scaled[k].face, scaled[k].h, scaled[k].cs, 700, 0, 0, 0);
     }
+    width = 0;
+    out("GD10 big\r\n");
+    kind = 0;
+    big("System", 128, 0, 0);
+    big("Terminal", 96, OEM_CHARSET, 1);
     GlobalFree(hbits);
     ReleaseDC(NULL, hscr);
     out("GD10 done\r\n");
