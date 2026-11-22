@@ -331,18 +331,37 @@ full boot test at the end (f83ac16): 151 ok, 7 failed: holdbtn, lzexpand
 quirks, trails timed, w16write tree, taskman tree (known flaky), control
 tree and scrnsave desktop, which both passed when run again.
 
+## Third round
+
+- **H30, the System VM**: closed. Windows 3.1's KRNL386 makes no Reboot
+  API call during Ctrl+Alt+Del when nothing hangs, and calls 0203h (ES:DI
+  the module's name, BX 7Dh) for a task that does not respond, twice for
+  two presses; 0201h only at its start, 0202h from VX8; no 0204h at all
+  (VXS.386 now also hooks Reboot's PM API; tests/scripts/input/
+  win386cad.txt and vx8hung.txt under 3.1). So REBOOT now zeroes the
+  sanity byte and waits up to 2 s, checking each tick, for KERNEL to set
+  it again (screen A); only then does it run KERNEL's procedure (screen B
+  through 0203h, or C). The E0h of Ctrl+Alt+grey Del is withheld from the
+  System VM too (VX11 K). win386cad: 8 of 8 runs screen A; win386cad,
+  win386hung, win386doscad, win386input, win386switch, win386audit,
+  win386dosprobe ok (e129a19). 0204h stays unanswered (carry): 3.1's
+  KRNL386 was not seen to call it.
+
 ## Left open
 
-- **H30 in the System VM**: there an extended hot key's E0h still goes
-  to the VM. Holding it back (as 3.1, VX11 K) made w16's REBOOT show
-  screen C ("busy or unstable") in 1 of 3 `win386cad` runs where 3.1 and
-  w16 otherwise show screen A: w16 asks KERNEL's Ctrl+Alt+Del procedure
-  (Build_Int_Stack_Frame) when the VM idles, and without that byte's
-  interrupt the procedure ran at another point and did not set the
-  sanity byte. Closing it needs to know how Windows 3.1's REBOOT and
-  KERNEL decide that a task responds (Reboot API 0204h, which KERNEL
-  calls and w16 refuses, is part of it) — not found black-box yet.
-- **w16's WIN386 on the MS-DOS 4.00 image** (`INPUTRUN_HDD=1`, as
-  `tests/vxsrun.sh` uses): KRNL386 faults at 0117:A789 (and master's,
-  before this audit, at 011F:0B8C until the host stack overflows). Not an
-  audit finding; it keeps M8's fix from being run under w16.
+- **w16's WIN386 on the MS-DOS 4.00 image** (`INPUTRUN_HDD=1`): KRNL386
+  still faults at 0117:A789 (ES 0) right after closing BOOTLOG.TXT, and
+  the boot ends; master before this audit failed there too (in another
+  place). Found so far: the System VM's DOS calls (function, BX, CX; VXSS
+  logs BX, CX, DX now) are the same as under Windows 3.1's WIN386 on the
+  same image up to the fault; the close's AL comes from MS-DOS 4.00's
+  own close (its source, HANDLE.ASM `$Close`), not from the host. KRNL386
+  calls its BOOTLOG write (INT 21h 4000h from 0117:1D2F) with ES 0 right
+  after a lseek (4202h) it made with ES 00A7h; on DOSBox's own DOS it never
+  calls with ES 0. Nothing in w16's return path zeroed ES then (traced).
+  Delivering #NP for a not-present DS/ES instead of zeroing it did not
+  change the fault (tried, reverted). Next: trace every trap from
+  protected mode between those two calls (interrupts come inside DOS calls
+  on MS-DOS 4.00, not on DOSBox's DOS) and compare KRNL386's stack there.
+  Because of this, M8's fix has been run under 3.1 only, and there is no
+  boot-test case for WIN /3 on MS-DOS 4.00 with w16's WIN386.

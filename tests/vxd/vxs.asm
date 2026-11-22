@@ -4,7 +4,7 @@
 ; w16's), it writes to COM1 (DOSBox-X serial1=file):
 ;   - every control message (EAX, EBX, ECX, EDX, ESI, EDI);
 ;   - every call of the protected-mode APIs of SHELL (0017h), VDD (000Ah),
-;     VKD (000Dh) and VMD (000Ch), hooked with Hook_Device_PM_API (VMM
+;     VKD (000Dh), VMD (000Ch) and Reboot (0009h), hooked with Hook_Device_PM_API (VMM
 ;     0092h): the client's registers before and after, and 96 bytes at
 ;     the client's ES:DI (before and after) and DS:SI (before); for
 ;     SHELL's function 3 (create a VM) also at the three pointers of its
@@ -32,7 +32,7 @@
 COM1    equ 3F8h
 NSVC    equ 10                          ; hooked services
 SVCALL  equ 4                           ; logged from every caller; the rest from SHELL only
-NAPI    equ 4                           ; hooked APIs
+NAPI    equ 5                           ; hooked APIs
 SVCMAX  equ 600
 
 segment _TEXT public align=16 class=CODE use32 flat
@@ -171,6 +171,21 @@ int21_hook:
         call puts
         mov eax, ebx
         call puthex
+%ifdef ALLVM
+        ; (VXSS: BX, CX, DX too)
+        mov esi, msg_ebx2
+        call puts
+        mov eax, [ebp + 10h]            ; Client_EBX
+        call puthex
+        mov esi, msg_ecx2
+        call puts
+        mov eax, [ebp + 18h]            ; Client_ECX
+        call puthex
+        mov esi, msg_edx
+        call puts
+        mov eax, [ebp + 14h]            ; Client_EDX
+        call puthex
+%endif
         mov al, [ebp + 1Dh]             ; AH
         cmp al, 40h
         je .str
@@ -237,6 +252,7 @@ APISTUB 0
 APISTUB 1
 APISTUB 2
 APISTUB 3
+APISTUB 4
 
 api_common:
         pushad
@@ -641,9 +657,9 @@ puthex2:
         pop eax
         ret
 
-api_ids   dd 0017h, 000Ah, 000Dh, 000Ch
-api_stubs dd api_stub0, api_stub1, api_stub2, api_stub3
-api_prev  dd 0, 0, 0, 0
+api_ids   dd 0017h, 000Ah, 000Dh, 000Ch, 0009h
+api_stubs dd api_stub0, api_stub1, api_stub2, api_stub3, api_stub4
+api_prev  dd 0, 0, 0, 0, 0
 api_target dd 0
 svc_ids   dd 00010093h, 00010031h, 0001002Bh, 0001002Ch
           dd 00010048h, 0001004Dh, 00010083h, 00010085h, 00010086h, 00010049h
@@ -697,6 +713,8 @@ msg_from  db ' from=', 0
 msg_ret   db ' ret', 0
 msg_ccs   db ' client=', 0
 msg_i21   db 'VXS int21 ax=', 0
+msg_ebx2  db ' bx=', 0
+msg_ecx2  db ' cx=', 0
 sysvm_h   dd 0
 msg_evt   db 'VXS   event', 0
 msg_cip   db 'VXS   resume at ', 0

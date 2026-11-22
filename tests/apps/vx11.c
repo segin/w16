@@ -487,6 +487,23 @@ static void sec_io(void)
     obs("io.61.data", n != 0);
     GlobalUnlock(h);
     GlobalFree(h);
+    /* AX after INT 21h 3Eh (close) and the registers it keeps */
+    {
+        static char name[] = "C:\\WINDOWS\\WIN.INI";
+        clr(); r[0] = 0x3D00; r[3] = OFFSETOF((void FAR *)name);
+        vx_int21(r);
+        if (!CF) {
+            WORD hnd = r[0];
+            clr(); r[0] = 0x3E00 | 0x77; r[1] = hnd; r[2] = 0x1234; r[3] = 0x5678; r[4] = 0x9ABC; r[5] = 0xDEF0;
+            r[6] = SELECTOROF((void FAR *)name);
+            vx_int21(r);
+            out("OBS ~io.close.ax="); outhex(r[0]); out("\r\n");
+            obs("io.close.cf", CF);
+            obs("io.close.cx", r[2]); obs("io.close.dx", r[3]);
+            obs("io.close.si", r[4]); obs("io.close.di", r[5]);
+            obs("io.close.es", r[6] == SELECTOROF((void FAR *)name));
+        }
+    }
 }
 
 /* ---- the runs that might end Windows ---- */
