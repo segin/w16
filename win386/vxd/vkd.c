@@ -249,13 +249,9 @@ static void key_byte(vu32 b)
         /* held until the next byte is known not to be a hot key's: an
          * extended hot key's E0h is the hot key's (Windows 3.1: neither a
          * DOS VM, VX12 K, nor the System VM, VX11 K, gets the E0h of
-         * Ctrl+Alt+grey Del). In the System VM it still goes at once:
-         * there w16's REBOOT asks KERNEL's Ctrl+Alt+Del procedure whether
-         * the task responds, and without that byte's interrupt the
-         * procedure's answer came out "busy" in 1 of 3 runs (win386cad) */
+         * Ctrl+Alt+grey Del) */
         if (ext == 1) q_put(kfocus, 0xE0);
         ext = 1;
-        if (kfocus == sys_vm) { q_put(kfocus, 0xE0); ext = 2; }
         return;
     }
     if (b == 0xE1) e1_left = 2;             /* Pause: E1h 1Dh 45h, E1h 9Dh C5h */
