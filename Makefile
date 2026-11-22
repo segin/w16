@@ -1010,9 +1010,10 @@ $(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/wc9.map file { $(B)/tests/start.o $(B)/tests/wc9.o }
 
-# FN1.EXE: the font metrics probe; FN2.EXE: a window showing every
+# FN1.EXE: the font metrics probe; FN3.EXE: its companion for the rest of
+# the VGA set and the DOS-box fonts; FN2.EXE: a window showing every
 # character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9)
-FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE
+FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE $(DOS)/FN3.EXE
 fnprobes: $(FNPROBES)
 dos: $(FNPROBES)
 $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/apps/fn.lnk
