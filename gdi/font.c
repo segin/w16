@@ -754,6 +754,11 @@ LPFONT font_realize(LPDC dc)
        too). UNVERIFIED for the stock fonts other than SYSTEM_FONT */
     for (i = 10; i < 20 && stock[i] != dc->hFont; i++)
         ;
+    /* ... and its LOGFONT's width is not asked for (FN1 on 3.1:
+       ANSI_VAR_FONT, Helv 12 x 9, is MS Sans Serif's 13-pixel font,
+       average width 5, not one scaled to 9) */
+    if (i < 20)
+        dw = 0;
     if (dc->mapMode != 1 && i == 20) {
         int v = dc_scale_y(dc, dh);
         v = v < 0 ? -v : v;
