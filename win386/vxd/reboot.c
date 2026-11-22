@@ -62,7 +62,7 @@ static vu16 kern_sel, kern_off, sane_sel, sane_off;    /* 0201h */
 static vu8 *sane;                       /* the sanity byte (Map_Flat of 0201h's DS:SI) */
 /* the sanity check (reboot_cad); 0: screen A at once on Ctrl+Alt+Del */
 #define SANITY_CHECK 1
-static int cad_state;                   /* 2: KERNEL's procedure due at an idle, 4: due now, 3: a screen up */
+static int cad_state, polls;                   /* 2: KERNEL's procedure due at an idle, 4: due now, 3: a screen up */
 static int del_down;                    /* Del held (the hot key's press and release callbacks) */
 static vu32 tmo_handle;
 static vu32 sys_vm, client;
@@ -495,20 +495,34 @@ void __cdecl reboot_cad(struct vregs *r)
         }
     }
     if (!sane || !SANITY_CHECK) { screen_a(); return; }
+    /* The sanity byte zeroed; KERNEL sets it again at its next task switch
+     * or idle pass. Set within the wait: nothing hangs, screen A. Not set:
+     * KERNEL's procedure is run as an interrupt of the VM (Build_Int_
+     * Stack_Frame), which for a task that does not respond calls 0203h
+     * (screen B); no answer at all: screen C. Windows 3.1 runs KERNEL's
+     * procedure only then: with nothing hung KRNL386 makes no Reboot API
+     * call during Ctrl+Alt+Del, with VX8 hung it calls 0203h (VXS.386
+     * hooking Reboot's PM API: tests/scripts/input/win386cad.txt,
+     * vx8hung.txt). w16 ran the procedure at once before, and the result
+     * depended on where the VM was (UNVERIFIED: 3.1's wait; 2 s here) */
     *sane = 0;
-    /* KERNEL's procedure as an interrupt of the VM (Windows 3.1's Reboot
-     * device calls Build_Int_Stack_Frame: docs/win386-services.md), made
-     * by the VMM when the VM next idles; it sets the byte again. If the VM
-     * has not idled after 750 ms the procedure runs where the VM is, and
-     * for a task that does not respond calls 0203h (screen B). Waiting
-     * for KERNEL to set the byte by itself (at a task switch or idle
-     * pass) left it 0 after 750 ms in a third of the runs under load */
-    cad_state = 2;
-    time_out(750);
-    zero(&s, sizeof(s));
-    s.ecx = kern_sel;
-    s.edx = kern_off;
-    vmm_build_int_stack_frame(&s);
+    cad_state = 1;
+    polls = 0;
+    time_out(55);
+}
+
+/* KERNEL's procedure, where the VM is now (a second call with the same
+ * address makes the VMM build the frame at once) */
+static void run_kernel_proc(void)
+{
+    struct vregs s;
+    int i;
+    for (i = 0; i < 2; i++) {
+        zero(&s, sizeof(s));
+        s.ecx = kern_sel;
+        s.edx = kern_off;
+        vmm_build_int_stack_frame(&s);
+    }
 }
 
 /* the time-out (Set_Global_Time_Out) */
@@ -516,15 +530,10 @@ void __cdecl reboot_time_out(struct vregs *r)
 {
     (void)r;
     tmo_handle = 0;
-    if (cad_state == 2 && *sane) { screen_a(); return; }
-    if (cad_state == 2) {
-        /* the VM has not idled: KERNEL's procedure now, where it is (the
-         * VMM makes the frame at once on a second call) */
-        struct vregs s;
-        zero(&s, sizeof(s));
-        s.ecx = kern_sel;
-        s.edx = kern_off;
-        vmm_build_int_stack_frame(&s);
+    if (cad_state == 1) {
+        if (*sane) { screen_a(); return; }
+        if (++polls < 36) { time_out(55); return; }
+        run_kernel_proc();
         cad_state = 4;
         time_out(750);
         return;

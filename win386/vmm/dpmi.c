@@ -312,7 +312,7 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     struct cregs v, pm = *r;
     int ds, es;
 
-    if (dpmi_verbose && !hw) trace("[R%x:%x]", vec, AX(r));
+    if (dpmi_verbose && !hw) trace("[R%x:%x %x %x %x]", vec, AX(r), BX(r), CX(r), DX(r));
     if (!hw && vec == 0x15 && AX(r) == 0xC207) return ps2_set_handler(r);
     v = pm;
     v.ss = 0; v.esp = 0;
