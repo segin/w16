@@ -2226,6 +2226,15 @@ $(DOS)/US34.EXE: $(B)/tests/start.o $(B)/tests/us34.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us34.map option resource=$(B)/tests/us34.res \
 	    file { $(B)/tests/start.o $(B)/tests/us34.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US34.EXE
+# US35: a multi-line edit control's word wrap and undo (tests/apps/us35.c)
+$(B)/tests/us35.o: tests/apps/us35ref.h tests/apps/tklog.h
+$(DOS)/US35.EXE: $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/tests/mevent.o \
+                 tests/apps/app.lnk tests/apps/us35.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us35.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us35.map \
+	    file { $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
+dos: $(DOS)/US35.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk
