@@ -268,6 +268,7 @@ void vm_int21_ret(struct cregs *r);
  * PSP, the parameters, a message, the VMM's reflection stack, the stub's
  * stack */
 #define DOSVM_PARAMS        0x100
+#define DOSVM_BLOCK         0x200       /* paragraphs the stub takes (ldrasm.asm VS_BLOCK) */
 #define DOSVM_MSGLEN        0x3FE
 #define DOSVM_MSG           0x400
 #define DOSVM_MSG_MAX       0x800

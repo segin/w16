@@ -327,7 +327,7 @@ int vm_set_program(struct vm *v, const char *path, const u8 *tail, const char *d
  * PSP:2 under Microsoft's WIN386): the top of memory is the VM's free
  * memory's start plus that many KB (64 KB: 1C00h, 100 KB: 2500h, from
  * 0C00h), at most 640 KB's top; FFFFh (-1) all of it; 0 gave 4 KB. Here
- * the free arena after the stub's 4 KB is cut there: an MCB of the
+ * the free arena after the stub's 8 KB is cut there: an MCB of the
  * system's (owner 8) at the limit holds the rest, so the arena's chain
  * stays as DOS made it. UNVERIFIED: 1-3 KB, and what KB Required does
  * (a VM that cannot get it: 3.1's message). */
@@ -341,7 +341,10 @@ int vm_set_memory(struct vm *v, u32 kb)
     size = *(u16 *)vm_lin(v, mcb + 3);
     start = (u32)info->free_mcb + 1;
     end = start + size;                 /* the paragraph after the free arena */
-    lim = start + 0x100 + kb * 64;      /* the stub's 4 KB, then the program's */
+    /* the stub's block (its MCB is the free one's), then the program's:
+     * the program sees as much as under 3.1 (tests/pifread.sh -W edmema:
+     * top - PSP FB4h for 64 KB, as 3.1's 1C00h - 0C4Ch) */
+    lim = start + DOSVM_BLOCK + kb * 64;
     if (lim + 1 >= end) return 0;
     memset(m, 0, sizeof(m));
     m[0] = *(u8 *)vm_lin(v, mcb);       /* the new MCB ends the chain if the old did */

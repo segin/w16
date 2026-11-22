@@ -136,8 +136,11 @@ static VREGS *shell_call(WORD fn, DWORD eax, DWORD ebx, DWORD ecx, DWORD esi, DW
     return &sr;
 }
 
+static DWORD focused;                   /* the VM function 5 gave the focus to last */
+
 static void focus(DWORD v, DWORD edi)
 {
+    focused = v;
     shell_call(5, 0, v, 0, (DWORD)(WORD)hwnd, edi);
 }
 
@@ -482,6 +485,7 @@ static void program_ended(LPARAM rec)
         window_size();
         scroll_ranges();
         InvalidateRect(hwnd, NULL, TRUE);
+        focus(sysvm, 0);                /* (3.1: function 5 last) */
         return;
     }
     shell_call(4, 1, vm, 0, 0xB0, 0);
@@ -656,12 +660,16 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_ACTIVATE:
         if (running && !ended) {
-            if (wp != WA_INACTIVE && !HIWORD(lp) && windowed)
-                focus(vm, 0);           /* the keyboard to the windowed VM */
+            /* (only when another VM has it: 3.1's windowed start gives
+               the VM the focus once, tests/pifread.sh edwin) */
+            if (wp != WA_INACTIVE && !HIWORD(lp) && windowed) {
+                if (focused != vm)
+                    focus(vm, 0);       /* the keyboard to the windowed VM */
+            }
             else if (wp != WA_INACTIVE && HIWORD(lp) && !windowed && GetFocus() == h) {
                 /* the icon activated by Alt+Tab or Alt+Esc: full screen */
                 PostMessage(h, WM_START, 1, 0);
-            } else if (wp == WA_INACTIVE && windowed)
+            } else if (wp == WA_INACTIVE && windowed && focused != sysvm)
                 focus(sysvm, 0);
         }
         break;

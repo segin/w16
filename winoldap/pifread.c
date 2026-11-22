@@ -132,6 +132,11 @@ BOOL pif_read(const char *path, PIFDATA *p, int mode)
     for (i = 0; i < sizeof(*p); i++)
         q[i] = 0;
     d386_defaults(p->d386);
+    /* what a read past the end leaves (3.1's WINOA386 started a 100h-byte
+       PIF full screen and not exclusive: 16Fh as the PIF Editor writes
+       it, E0h; UNVERIFIED beyond that) */
+    p->w_ed = 0x0007;
+    p->w_16f = 0x20E0;
     pf = OpenFile(path, &of, OF_READ);
     if (pf == HFILE_ERROR)
         return FALSE;

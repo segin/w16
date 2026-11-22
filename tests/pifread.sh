@@ -24,7 +24,8 @@
 #              equal, the screens within 40 pixels (Windows' screens with
 #              the icons' corner masked: w16's icon is its own); PASS or
 #              FAIL per fixture, the exit code the failures
-#     -W       with -w or -c: w16's WIN386.EXE too on w16's side
+#     -W       with -w or -c: w16's WIN386.EXE too on w16's side (no
+#              SHELL record there: VXS.386 does not run on it)
 #     -j JOBS  runs at once (default 4)
 # FIXTURE: names from mkpifs.py's LIST (default all). Needs `make dos
 # woprobes vxprobes`. DOSBox-X runs: on the remote host only (TESTING.md).
@@ -54,13 +55,20 @@ names=$*
 printf 'wait\r\n' > "$out/WCWAIT.TXT"
 printf 'C:\\WC1.COM batargs %%1\r\n' > "$out/WC1.BAT"
 printf '[wo2]\r\nhooks=fdt\r\n' > "$out/WO2.INI"
-printf 'sleep 32\nshot boot\nsleep 5\nshot start\nkey Return\nsleep 20\nshot after\n' > "$out/script.txt"
+# (Return only for the Parameters dialog: elsewhere it opened Program
+# Manager's selected item, File Manager, whose directory changes then
+# reached a windowed DOS program's: DOSBox's DOS keeps one current
+# directory for all VMs)
+printf 'sleep 32\nshot boot\nsleep 5\nshot start\nsleep 20\nshot after\n' > "$out/script.txt"
+printf 'sleep 32\nshot boot\nsleep 5\nshot start\nkey Return\nsleep 20\nshot after\n' > "$out/scriptq.txt"
 
 one() {
     n=$1 who=$2
     d=$out/$n-$who-$mode
     rm -rf "$d"
-    set -- -o "$d" -l -t 200 -x "$out/script.txt" \
+    sc=$out/script.txt
+    case $n in *q386) sc=$out/scriptq.txt ;; esac
+    set -- -o "$d" -l -t 200 -x "$sc" \
         -f "$root/build/dos/WC1.COM=WC1.COM" -f "$root/build/dos/WC1.COM=WC1.EXE" \
         -f "$out/WC1.BAT=WC1.BAT" -f "$out/WCWAIT.TXT=WCWAIT.TXT"
     if [ "$n" = nopif ]; then
@@ -69,7 +77,13 @@ one() {
         set -- "$@" -f "$fx/$(echo "$n" | tr a-z A-Z).PIF=PROBE.PIF" -n 'windows:run=C:\PROBE.PIF'
     fi
     if [ "$mode" = 386 ]; then
-        set -- "$@" -w 'WIN /3' -f "$root/build/dos/VXS.386=WINDOWS/SYSTEM/VXS.386" \
+        set -- "$@" -w 'WIN /3'
+        # (w16's WIN386 after WIN.COM's logo: /B, so that the display is
+        # Windows' again; UNVERIFIED why it stays on the logo without)
+        [ $who = ms ] || [ -z "$w386" ] || set -- "$@" -w 'WIN /3 /B'
+        # (VXS.386 needs Hook_Device_PM_API, which w16's VMM does not
+        # have: with -W, w16's side has no SHELL record)
+        [ $who = w16 ] && [ -n "$w386" ] || set -- "$@" -f "$root/build/dos/VXS.386=WINDOWS/SYSTEM/VXS.386" \
             -i '386Enh:+device=vxs.386'
         [ $who = ms ] || set -- "$@" -f "$root/build/dos/WINOA386.MOD=WINDOWS/SYSTEM/WINOA386.MOD"
         [ $who = ms ] || [ -z "$w386" ] || set -- "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE"
@@ -125,7 +139,7 @@ for n in $names; do
     fi
     a=$out/$n-ms-$mode b=$out/$n-w16-$mode bad=
     for f in wc reads blocks shell; do
-        [ -f "$a/$f" ] || [ -f "$b/$f" ] || continue
+        [ -f "$a/$f" ] && [ -f "$b/$f" ] || continue
         diff -u "$a/$f" "$b/$f" > "$b/$f.diff" 2>&1 || bad="$bad $f"
     done
     for f in "$a"/*.png; do
