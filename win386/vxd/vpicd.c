@@ -89,7 +89,13 @@ struct virq {
 #define VIRQ_MAGIC 0x51524956u      /* "VIRQ" */
 static struct virq virqs[NIRQ];
 static struct virq *owner[NIRQ];
-static vu32 hw_procs[8], n_hw_procs;   /* VPICD_Call_When_Hw_Int */
+/* VPICD_Call_When_Hw_Int: the newest callback first; each chains to the
+ * one the service handed it in ESI (the DDK: JMP [Next_Callback], EBX
+ * kept), the oldest to vpicd_hw_end. Windows 3.1 (VXP.386, tests/vxd/
+ * vxp.asm): both of two callbacks called, the second's next the first */
+extern char vpicd_hw_end[];
+static vu32 hw_head;
+static vu32 def_owner[16];              /* VPICD_Force_Default_Owner (0: the System VM) */
 static vu32 sys_vm;
 
 /* the hardware side */
@@ -104,7 +110,7 @@ struct vpic {
     vu32 req;                           /* the devices' requests for this VM */
     vu32 def_req;                       /* VPICD's own (nobody's IRQs; the System VM's) */
     vu32 base[2];                       /* ICW2: the vector bases */
-    int icw_step[2], icw4[2], single[2];
+    int icw_step[2], icw4[2], single[2], aeoi[2];
     int read_isr[2];                    /* OCW3: reads give the ISR */
     /* IRETs being waited for (a device's VID_IRET_Proc), innermost last */
     struct { vu32 irq, tmo; int timed_out; } irets[NIRET];
@@ -116,6 +122,8 @@ static vu32 cb_off;                     /* our area in the control blocks */
 
 static void hw_int(vu32 irq);
 static void resume(void);
+static void virt_eoi(vu32 vm, vu32 irq);
+static vu32 next_vm(vu32 vm);
 static void iret_done(void);
 struct vpicd_link vpicd_link = { VPICD_LINK_MAGIC, hw_int, resume, iret_done };
 
@@ -307,7 +315,24 @@ static void deliver_pending(void)
             vp->n_irets++;
         } else
             want_iret = 0;
-        vpicd_link.deliver(irq_vector(vp, irq), want_iret);
+        if (!vpicd_link.deliver(irq_vector(vp, irq), want_iret)) {
+            /* not taken after all (the VM's interrupt flag went off in
+             * the device's Virt_Int procedure): as if not started */
+            vp->isr &= ~(1u << irq);
+            if (irq >= 8 && !(vp->isr & 0xFF00)) vp->isr &= ~4u;
+            if (want_iret) {
+                vp->n_irets--;
+                if (vp->irets[vp->n_irets].tmo) {
+                    struct vregs c;
+                    vregs_clear(&c);
+                    c.esi = vp->irets[vp->n_irets].tmo;
+                    vmm_cancel_time_out(&c);
+                }
+            }
+            return;
+        }
+        /* ICW4's automatic EOI: in service no longer once delivered */
+        if (vp->aeoi[irq >= 8]) virt_eoi(vm, irq);
     }
 }
 
@@ -360,13 +385,17 @@ static void virt_eoi(vu32 vm, vu32 irq)
 {
     struct virq *v = owner[irq];
     struct vpic *vp = VP(vm);
+    int was = (vp->isr >> irq) & 1;
     vp->isr &= ~(1u << irq);
     if (irq == 2) return;
     if (v) {
         if (v->d.eoi_proc) call_vid(v->d.eoi_proc, v, vm, 0, 0);
         return;
     }
-    /* VPICD's own: the request done, the IRQ open again */
+    /* VPICD's own: the request done, the IRQ open again (a specific EOI
+     * for one not in service ends nothing, as on an 8259: the physical
+     * IRQ would otherwise be opened while its interrupt still waits) */
+    if (!was) return;
     vp->def_req &= ~(1u << irq);
     phys_isr &= ~(1u << irq);
     phys_update();
@@ -379,19 +408,34 @@ static void hw_int(vu32 irq)
     struct vregs r;
     vu32 i;
 
+    /* a spurious interrupt (IRQ 7 or 15 with its in-service bit clear:
+     * the request went before the 8259 answered) is nobody's; the slave's
+     * still came through the master's IRQ 2, which is ended (Intel 8259A) */
+    if (irq == 7 || irq == 15) {
+        vu32 port = irq == 7 ? 0x20 : 0xA0, isr;
+        outb(port, 0x0B);                   /* OCW3: read the ISR */
+        isr = inb(port);
+        outb(port, 0x0A);                   /* back to the IRR (phys_request) */
+        if (!(isr & 0x80)) {
+            if (irq == 15) outb(0x20, 0x62);
+            return;
+        }
+    }
     /* ended on the 8259 now, masked until VPICD_Phys_EOI */
     phys_isr |= 1u << irq;
     phys_update();
     phys_eoi(irq);
-    for (i = 0; i < n_hw_procs; i++) {      /* VPICD_Call_When_Hw_Int */
+    (void)i;
+    if (hw_head && hw_head != (vu32)vpicd_hw_end) {     /* VPICD_Call_When_Hw_Int */
         vregs_clear(&r);
         r.eax = irq; r.ebx = CUR();
-        vxd_call_proc(hw_procs[i], &r);
+        vxd_call_proc(hw_head, &r);
     }
     if (v) call_vid(v->d.hw_int_proc, v, CUR(), 0, 0);
-    else {                                  /* to the System VM */
-        VP(sys_vm)->def_req |= 1u << irq;
-        if (CUR() != sys_vm) vpicd_link.wake(sys_vm);
+    else {                                  /* to the System VM, or its default owner */
+        vu32 to = def_owner[irq] ? def_owner[irq] : sys_vm;
+        VP(to)->def_req |= 1u << irq;
+        if (CUR() != to) vpicd_link.wake(to);
     }
     deliver_pending();
 }
@@ -419,12 +463,22 @@ static void pic_command(vu32 vm, int c, vu32 v)
     vu32 shift = c ? 8 : 0, i;
     struct vpic *vp = VP(vm);
     if (v & 0x10) {                         /* ICW1 */
+        vu32 gone = vp->isr & (0xFFu << shift);
         vp->icw_step[c] = 1;
         vp->icw4[c] = v & 1;
         vp->single[c] = (v >> 1) & 1;
+        vp->aeoi[c] = 0;
         vp->imr &= ~(0xFFu << shift);
         vp->isr &= ~(0xFFu << shift);
         vp->read_isr[c] = 0;
+        /* VPICD's own IRQs that were in service are ended (else their
+         * physical masks stayed on for good) */
+        for (i = shift; i < shift + 8; i++)
+            if (((gone >> i) & 1) && !owner[i] && i != 2) {
+                vp->def_req &= ~(1u << i);
+                phys_isr &= ~(1u << i);
+            }
+        if (vm == sys_vm) phys_update();
         return;
     }
     if (v & 0x08) {                         /* OCW3 */
@@ -456,6 +510,7 @@ static void pic_data(vu32 vm, int c, vu32 v)
         return;
     case 3:                                 /* ICW4 */
         vp->icw_step[c] = 0;
+        vp->aeoi[c] = (v >> 1) & 1;         /* automatic EOI */
         return;
     }
     old = vp->imr;                          /* OCW1 */
@@ -522,6 +577,9 @@ void __cdecl vpicd_service(struct vregs *r)
             struct vpic *vp = VP(sys_vm);
             if ((vp->def_req >> irq) & 1) vp->req |= 1u << irq;
             vp->def_req &= ~(1u << irq);
+            /* (the device never saw this one come: it will not end it
+             * with VPICD_Phys_EOI, and the IRQ stayed masked) */
+            phys_isr &= ~(1u << irq);
         }
         owner[irq] = v;
         phys_update();
@@ -544,9 +602,11 @@ void __cdecl vpicd_service(struct vregs *r)
         phys_update();
         return;
     case 0x05:                              /* VPICD_Get_Complete_Status: EAX handle -> ECX */
-    case 0x06:                              /* VPICD_Get_Status (UNVERIFIED: the same bits) */
+    case 0x06:                              /* VPICD_Get_Status */
         if ((v = handle(r->eax)) == NULL) { r->ecx = 0; return; }
         r->ecx = irq_status(VP(r->ebx ? r->ebx : CUR()), v->irq, v);
+        /* Get_Status: the DDK names only IRET pending and in service */
+        if (r->arg == 0x06) r->ecx &= ST_IRET_PENDING | ST_IN_SERVICE;
         return;
     case 0x07:                              /* VPICD_Test_Phys_Request: carry = the IRR bit */
         if ((v = handle(r->eax)) != NULL && phys_request(v->irq)) r->eflags |= VF_CF;
@@ -566,8 +626,7 @@ void __cdecl vpicd_service(struct vregs *r)
         return;
     case 0x0C:                              /* VPICD_Convert_Handle_To_IRQ */
         if ((v = handle(r->eax)) == NULL) { r->eflags |= VF_CF; return; }
-        r->esi = v->irq;                    /* UNVERIFIED register */
-        r->eax = v->irq;
+        r->esi = v->irq;                    /* the DDK: ESI the IRQ, EAX kept ("Uses ESI, Flags") */
         return;
     case 0x0D:                              /* VPICD_Convert_IRQ_To_Int: EAX IRQ, EBX VM */
         if (r->eax >= NIRQ) { r->eflags |= VF_CF; return; }
@@ -583,12 +642,35 @@ void __cdecl vpicd_service(struct vregs *r)
         }
         r->eflags |= VF_CF;
         return;
-    case 0x0F:                              /* VPICD_Call_When_Hw_Int: ESI the procedure */
-        if (n_hw_procs == sizeof(hw_procs) / sizeof(hw_procs[0])) { r->eflags |= VF_CF; return; }
-        hw_procs[n_hw_procs++] = r->esi;
+    case 0x0F: {                            /* VPICD_Call_When_Hw_Int: ESI the procedure */
+        vu32 next = hw_head ? hw_head : (vu32)vpicd_hw_end;
+        hw_head = r->esi;
+        r->esi = next;                      /* the callback's Next_Callback */
         return;
-    case 0x10:                              /* VPICD_Force_Default_Owner */
-    case 0x11:                              /* VPICD_Force_Default_Behavior */
+    }
+    case 0x10:                              /* VPICD_Force_Default_Owner: EAX IRQ, EBX VM (0: any) */
+        /* the DDK: carry for an IRQ number that is not valid or one that
+         * is virtualised. A VM of 0 ("global") goes to the System VM here
+         * (UNVERIFIED: which VM 3.1 gives it to) */
+        if (r->eax >= NIRQ || r->eax == 2 || owner[r->eax]) { r->eflags |= VF_CF; return; }
+        def_owner[r->eax] = r->ebx;
+        return;
+    case 0x11:                              /* VPICD_Force_Default_Behavior: EAX handle */
+        /* the IRQ is VPICD's own again; the handle is no longer valid */
+        if ((v = handle(r->eax)) == NULL) return;
+        {
+            vu32 vm = sys_vm;
+            do {
+                struct vpic *vp = VP(vm);
+                if ((vp->req >> v->irq) & 1) vp->def_req |= 1u << v->irq;
+                vp->req &= ~(1u << v->irq);
+                vm = next_vm(vm);
+            } while (vm && vm != sys_vm);
+        }
+        owner[v->irq] = NULL;
+        v->magic = 0;
+        phys_update();
+        return;
     case 0x12:                              /* VPICD_Auto_Mask_At_Inst_Swap */
     case 0x13:                              /* VPICD_Begin_Inst_Page_Swap */
     case 0x14:                              /* VPICD_End_Inst_Page_Swap */
@@ -602,6 +684,7 @@ void __cdecl vpicd_service(struct vregs *r)
 #define SYS_VM_INIT       0x03
 #define SYS_CRITICAL_EXIT 0x06
 #define CREATE_VM         0x07
+#define DESTROY_VM        0x0C
 
 /* the next VM's handle (VMM Get_Next_VM_Handle) */
 void __cdecl vmm_get_next_vm(struct vregs *r);
@@ -648,6 +731,24 @@ void __cdecl vpicd_control(struct vregs *r)
         VP(r->ebx)->base[1] = vpicd_link.rm_base2;
         VP(r->ebx)->imr = dos_masks;
         break;
+    case DESTROY_VM: {
+        /* the VM's IRET time-outs go (its control block is used again by
+         * the next VM: a time-out left behind would end another VM's
+         * interrupt); a default owner it was is the System VM again */
+        struct vpic *vp = VP(r->ebx);
+        int i;
+        for (i = 0; i < vp->n_irets; i++)
+            if (vp->irets[i].tmo) {
+                vregs_clear(&s);
+                s.esi = vp->irets[i].tmo;
+                vmm_cancel_time_out(&s);
+                vp->irets[i].tmo = 0;
+            }
+        vp->n_irets = 0;
+        for (i = 0; i < NIRQ; i++)
+            if (def_owner[i] == r->ebx) def_owner[i] = 0;
+        break;
+    }
     case SYS_CRITICAL_EXIT:
         /* the real-mode bases, and the System VM's masks (UNVERIFIED) */
         pic_program(vpicd_link.rm_base1, vpicd_link.rm_base2);

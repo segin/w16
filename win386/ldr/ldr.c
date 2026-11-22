@@ -49,6 +49,12 @@ static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
 static unsigned xms_more[16];       /* blocks that continue it (main) */
 static unsigned xms_nmore;
+/* where each block is, as offsets from the first block's start (the
+ * physical address XMS gave for it, which need not be page aligned: XMS
+ * promises 1 KB): the window starts at the first page boundary in it
+ * (info.xms_phys), xms_skew bytes in */
+static unsigned long xms_blk_off[17], xms_blk_len[17];
+static unsigned long xms_skew;
 static unsigned v86cb_off, v86cb_seg;   /* Enable/Disable V86 mode callback (1605h) */
 static char fatalmsg[W386_FATAL_SIZE];  /* the VMM's message when it ends Windows early */
 
@@ -91,6 +97,8 @@ static int readat(int h, unsigned long off, void __far *buf, unsigned len)
 }
 
 /* ---- XMS ---- */
+/* Copy len bytes from src to window offset dst: through the block (the
+ * first, or one of xms_more) that holds each part of it */
 static int xms_move_to(unsigned long dst, void __far *src, unsigned long len)
 {
     static struct {
@@ -101,16 +109,32 @@ static int xms_move_to(unsigned long dst, void __far *src, unsigned long len)
         unsigned long doff;
     } mv;
     struct xregs r;
+    unsigned long off = dst + xms_skew, n;
+    unsigned char __far *s = src;
+    unsigned b;
 
-    mv.len = (len + 1) & ~1UL;
-    mv.sh = 0;
-    mv.so = ((unsigned long)FP_SEG(src) << 16) | FP_OFF(src);
-    mv.dh = xms_handle;
-    mv.doff = dst;
-    r.ax = 0x0B00;
-    r.si = (unsigned)&mv;
-    xms_call(&r);
-    return r.ax == 1;
+    len = (len + 1) & ~1UL;
+    while (len) {
+        for (b = 0; b <= xms_nmore; b++)
+            if (off >= xms_blk_off[b] && off - xms_blk_off[b] < xms_blk_len[b]) break;
+        if (b > xms_nmore) return 0;
+        n = xms_blk_off[b] + xms_blk_len[b] - off;
+        if (n > len) n = len;
+        mv.len = (n + 1) & ~1UL;
+        mv.sh = 0;
+        mv.so = ((unsigned long)FP_SEG(s) << 16) | FP_OFF(s);
+        mv.dh = b ? xms_more[b - 1] : xms_handle;
+        mv.doff = off - xms_blk_off[b];
+        r.ax = 0x0B00;
+        r.si = (unsigned)&mv;
+        xms_call(&r);
+        if (r.ax != 1) return 0;
+        if (n >= len) break;
+        len -= n;
+        off += n;
+        s = (unsigned char __far *)MK_FP(FP_SEG(s), FP_OFF(s) + (unsigned)n);
+    }
+    return 1;
 }
 
 /* unlock and free every block taken */
@@ -137,6 +161,7 @@ static int load_ini(const char *path)
 
     if (h < 0) return 0;
     len = lseek(h, 0, SEEK_END);
+    if (len < 0) { close(h); return 0; }
     if (len > 60000L) len = 60000L;     /* DOS-sized buffer; UNVERIFIED limit */
     inilen = (unsigned)len;
     ini = _fmalloc(inilen + 1);
@@ -298,6 +323,10 @@ static int load_le(int h, unsigned long leoff, unsigned long lesize,
     frt = ld32(ldr + 0x6C);
     datapages = ld32(ldr + 0x80);
     if (pagesize != PAGE || !nobj || nobj > 8) goto bad;
+    /* the tables inside what was read (a damaged file is refused) */
+    if (objtab > lesize || nobj * sizeof(struct le_obj) > lesize - objtab
+        || objmap > lesize || fpt > lesize || frt > lesize || et > lesize
+        || (npages + 1) * 4 > lesize - fpt) goto bad;
     obj = (struct le_obj __far *)(ldr + objtab);
     /* place the objects one after another, page aligned */
     total = 0;
@@ -329,9 +358,11 @@ static int load_le(int h, unsigned long leoff, unsigned long lesize,
             _fmemset(page, 0, (unsigned)PAGE);
             if (k < obj[o].pmcnt) {
                 unsigned char __far *pm = ldr + objmap + (obj[o].pmidx - 1 + k) * 4;
+                if ((obj[o].pmidx - 1 + k) * 4 + 4 > lesize - objmap) goto bad;
                 pg = ((unsigned long)pm[0] << 16) | ((unsigned long)pm[1] << 8) | pm[2];
+                if (pg > npages) goto bad;
                 if (pg && pm[3] == 0) {
-                    unsigned len = (unsigned)(pg == npages ? lastpage : PAGE);
+                    unsigned len = (unsigned)(pg == npages && lastpage < PAGE ? lastpage : PAGE);
                     if (!readat(h, datapages + (pg - 1) * PAGE, page, len)) goto bad;
                 }
             }
@@ -340,6 +371,7 @@ static int load_le(int h, unsigned long leoff, unsigned long lesize,
                 start = ld32(ldr + fpt + (pg - 1) * 4);
                 end = ld32(ldr + fpt + pg * 4);
                 j = frt + start;
+                if (start > end || end > lesize - frt) goto bad;
                 while (j < frt + end) {
                     /* a record: source type, flags, the source offset
                      * (with a source list: a count, the offsets after the
@@ -347,6 +379,8 @@ static int load_le(int h, unsigned long leoff, unsigned long lesize,
                     unsigned char src = ldr[j], flg = ldr[j + 1];
                     unsigned long tobj, toff, tgt, cnt, c;
                     long so;
+                    /* (j < lesize: a record's fixed part, 11 bytes at
+                     * most, stays inside the 16 bytes read past it) */
                     if ((flg & 3) != 0) goto bad;                     /* imports: none in a VxD */
                     if (src & 0x20) { cnt = ldr[j + 2]; j += 3; } else { cnt = 1; j += 2; }
                     so = (src & 0x20) ? 0 : (int)ld16(ldr + j);
@@ -355,6 +389,7 @@ static int load_le(int h, unsigned long leoff, unsigned long lesize,
                     if (flg & 0x10) { toff = ld32(ldr + j); j += 4; } else { toff = ld16(ldr + j); j += 2; }
                     if (!tobj || tobj > nobj) goto bad;
                     tgt = W386_VMM_LIN + objoff[tobj - 1] + toff;
+                    if ((src & 0x20) && j + cnt * 2 > lesize) goto bad;
                     for (c = 0; c < cnt; c++) {
                         if (src & 0x20) { so = (int)ld16(ldr + j); j += 2; }
                         switch (src & 0x0F) {
@@ -660,7 +695,10 @@ int main(int argc, char **argv)
         /* UNVERIFIED wording; GEMMIS/the 1605h V86 callback is handled below,
          * a V86 monitor without it is not */
     }
-    /* where we are: SYSTEM.INI and KRNL386.EXE are found from here */
+    /* where we are: SYSTEM.INI and KRNL386.EXE are found from here (a
+     * DOS path is shorter than the buffers less the names added) */
+    if (strlen(argv[0]) >= sizeof(ownpath) - 16)
+        fail("Cannot find or load required file WIN386.EXE.\r\n");      /* UNVERIFIED */
     strcpy(ownpath, argv[0]);
     strcpy(sysdir, ownpath);
     p = strrchr(sysdir, '\\');
@@ -765,6 +803,8 @@ int main(int argc, char **argv)
     xms_call(&x);
     if (x.ax != 1) { broadcast_1606(); fail("Not enough extended memory to run w16 in 386 enhanced mode.\r\n"); }
     phys = ((unsigned long)x.dx << 16) | x.bx;
+    xms_blk_off[0] = 0;
+    xms_blk_len[0] = kb * 1024UL;
     /* more blocks while XMS gives them (08h/09h stop at 64 MB a block;
      * Windows 3.1's WIN386 used all of 128 MB: ARCHITECTURE.md 12.3).
      * The window is one physical run, so only a block that starts where
@@ -806,19 +846,29 @@ int main(int argc, char **argv)
             break;
         }
         xms_more[xms_nmore++] = h;
+        xms_blk_off[xms_nmore] = p2 - phys;
+        xms_blk_len[xms_nmore] = k2 * 1024UL;
         kb = (p2 - phys) / 1024 + k2;
     }
     if (kb > W386_WINDOW_MAX / 1024) kb = W386_WINDOW_MAX / 1024;
     x.ax = 0x0300;                      /* global A20 on */
     xms_call(&x);
+    if (x.ax != 1) {
+        /* paging with A20 off would fold the window onto low memory */
+        xms_free_all();
+        broadcast_1606();
+        fail("Cannot run w16 in 386 enhanced mode with the currently installed\r\n"
+             "extended memory driver.\r\n");                          /* UNVERIFIED */
+    }
 
     info.magic = W386_MAGIC;
     info.xms_phys = (phys + PAGE - 1) & ~(PAGE - 1);
     info.xms_size = (kb * 1024UL - (info.xms_phys - phys)) & ~(PAGE - 1);
+    xms_skew = info.xms_phys - phys;
     info.pt_count = (info.xms_size + 0x3FFFFFUL) >> 22;
     info.img_off = (2 + info.pt_count) * PAGE;
     if (!page) page = _fmalloc((unsigned)PAGE);
-    if (load_vmm()) {
+    if (page && load_vmm()) {
         load_devices();
         if (!put_vxd_list()) info.vxd_count = 0;
         info.img_size = img_next - info.img_off;

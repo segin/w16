@@ -29,6 +29,10 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 - Nested interrupts on the V86 reflection stack overwrote the interrupted V86 code's stack (hang while fonts loaded, ~1 in 7 under load): traps from V86 code on that stack lower its start (vmm.c trap()); stack 8 KB with an overflow check. 40/40 boots after.
 - VMM heartbeat in the trace every 20 s of ticks: V86/PM position, stack, registers (code bytes removed 2026-11-14: clean room, ARCHITECTURE.md 3; also from the client-exception panic and the V86 #GP panic), IRQ counts, PIC masks. Use it on any hang.
 
+## The outside audit (2026-11-21)
+
+docs/notes/win386-audit-triage.md: every finding with its verdict, the 3.1 facts probe VX11 and VXP.386 found (DPMI 0009h/000Ch/0800h checks, memory reuse, INT 21h 48h from PM, IF in real-mode handlers, the VPICD_Call_When_Hw_Int chain, DDB_Next), the fixes, and what is left open. Boot-test case `win386audit`.
+
 ## Observed, not acted on
 
 - PM API entry offsets (003Bh:0360h + 2n) are handed out in the order devices are first asked for, not device order. w16 uses device order.

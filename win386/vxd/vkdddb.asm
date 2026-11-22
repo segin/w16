@@ -40,3 +40,4 @@ VKD_DDB:
         VXDCALL _vmm_install_io_handler, 1, 96h
         VXDCALL _vmm_simulate_io, 1, 94h
         VXDCALLC _vmm_alloc_cb_area, 1, 0A7h, 2
+        VXDCALL _vmm_validate_vm, 1, 05h

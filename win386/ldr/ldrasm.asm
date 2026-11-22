@@ -271,12 +271,14 @@ vm_stub:
         jmp _bp_table + BP_VMEXIT
 .fail:  stc
         jmp _bp_table + BP_VMEXIT
-.fail0: pop ax
+.fail0: mov cx, ax                      ; DOS's error code, kept for the VMM
+        pop ax
         pop dx
         pop bx
         mov es, bx
         mov [es:2Eh], dx
         mov [es:30h], ax
+        mov ax, cx
         jmp .fail
 
 ; The breakpoints (W386_BP_*): ARPL opcodes, invalid in V86 mode.
