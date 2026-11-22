@@ -98,6 +98,16 @@
 #              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
 #              Prompt full screen must be a text screen, EXIT, then Exit
 #              Windows must bring the DOS prompt back (dosbox386plain.txt)
+#   win386audit  the WIN386 audit's probes (docs/notes/win386-audit-triage.md):
+#              VX11 (tests/apps/vx11.c) as the shell in 386 Enhanced mode
+#              under Windows 3.1's WIN386 and under w16's, the OBS lines
+#              identical (runs main, E, L, M); runs P and S, which 3.1 does
+#              not survive, must finish under w16; VXP.386's two
+#              VPICD_Call_When_Hw_Int callbacks both called and chained as
+#              under 3.1, its DDB_Next set (DOSBox-X, COM1)
+#   win386doscad  Ctrl+Alt+Del with the MS-DOS Prompt full screen, Escape,
+#              VER, EXIT (dosbox386cad.txt) against Microsoft's WIN386, the
+#              screen itself left out
 #   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
 #              switching (dosbox386s.txt) and Exit Windows with a box
 #              open (dosbox386x.txt), against Microsoft's WINOA386 and
@@ -873,7 +883,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1458,7 +1468,7 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386dos: the MS-DOS Prompt full screen, VER, EXIT as with Microsoft's WIN386"
         else echo "FAIL win386dos: $r ($out/win386dos-w16)"; fails=$((fails + 1)); fi ;;
-    win386dosw|win386switch|win386two|win386exitbox)
+    win386dosw|win386switch|win386two|win386exitbox|win386doscad)
         # win386dosw: the MS-DOS Prompt full screen, Alt+Enter to a window,
         # VER typed there, Alt+Enter back, EXIT (tests/scripts/input/
         # dosbox386w.txt), Microsoft's VGA.3GR. win386switch: full screen, Alt+Tab, Alt+Tab
@@ -1476,6 +1486,15 @@ runcase() {
         elif [ $c = win386switch ]; then
             scr=$root/tests/scripts/input/dosbox386s.txt
             shots="01-full 02-alttab 03-back 04-altesc 05-back 06-ctrlesc 07-esc 08-box 09-end"
+            set --
+        elif [ $c = win386doscad ]; then
+            # Ctrl+Alt+Del with the box full screen (the WIN386 audit's
+            # C10), then Escape, VER, EXIT: the box must go on as under
+            # 3.1. The screen itself (02-cad) is not compared: Windows 3.1
+            # shows its screen for a DOS application there (Left open in
+            # docs/notes/win386-audit-triage.md)
+            scr=$root/tests/scripts/input/dosbox386cad.txt
+            shots="01-full 03-back 04-ver 05-end"
             set --
         elif [ $c = win386two ]; then
             scr=$root/tests/scripts/input/dosbox386t.txt
@@ -1532,6 +1551,40 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386plain: plain DOSBox, WIN /3: the DOS box in text mode, EXIT, Exit Windows back to the DOS prompt"
         else echo "FAIL win386plain: $r ($out/win386plain)"; fails=$((fails + 1)); fi ;;
+    win386audit)
+        w386=$root/build/win386/WIN386.EXE
+        mkdir -p "$out/w386a"
+        r=ok
+        for m in "" E L M P S; do
+            cp "$root/build/dos/VX11.EXE" "$out/w386a/VX11$m.EXE"
+            REFRUN_FILES="$w386=WINDOWS/SYSTEM/WIN386.EXE" "$root/tests/refrun.sh" "$out/w386a/VX11$m.EXE" /3 \
+                > "$out/win386audit-w16$m.txt" 2>&1 || true
+            tr -d '\r' < "$out/win386audit-w16$m.txt" > "$out/win386audit-w16$m.log"
+            grep -q '^VX11 done' "$out/win386audit-w16$m.log" ||
+                [ "$r" != ok ] || r="VX11$m did not finish under w16's WIN386 ($out/win386audit-w16$m.log)"
+            case $m in P|S) continue ;; esac            # Windows 3.1 ends in these
+            refrun win386audit-ref$m win386audit "$root/tests/refrun.sh" "$out/w386a/VX11$m.EXE" /3
+            tr -d '\r' < "$out/win386audit-ref$m.txt" | grep '^OBS [^~]' > "$out/win386audit-ref$m.obs" || true
+            grep '^OBS [^~]' "$out/win386audit-w16$m.log" > "$out/win386audit-w16$m.obs" || true
+            [ -s "$out/win386audit-ref$m.obs" ] || [ "$r" != ok ] || r="no reference observations for VX11$m"
+            cmp -s "$out/win386audit-ref$m.obs" "$out/win386audit-w16$m.obs" || [ "$r" != ok ] ||
+                r="VX11$m: $(diff "$out/win386audit-ref$m.obs" "$out/win386audit-w16$m.obs" | grep -c '^[<>]') observation line(s) differ from 3.1's ($out/win386audit-ref$m.obs, win386audit-w16$m.obs)"
+        done
+        # VXP.386 through a session under w16's WIN386 (tests/vxpprobe.sh's
+        # run): Windows 3.1 gave 1 1 1 1 and DDB_Next set
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        rm -rf "$out/win386audit-vxp" "$out/win386audit-vxp.com1"
+        DROPIN_MACHINE=svga_s3 DROPIN_CONF="[serial]
+serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.sh" -s -b 200 -t 200 \
+            "$root/tests/scripts/input/exitwin.txt" "$out/win386audit-vxp" -r -p 386 -c "WIN /3 /B" \
+            -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VXP.386=WINDOWS/SYSTEM/VXP.386" \
+            -i "386Enh:+device=vxp.386" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386audit-vxp.txt" 2>&1 || true
+        if [ "$r" = ok ] && ! tr -d '\r' < "$out/win386audit-vxp.com1" 2>/dev/null |
+            grep -q 'Call_When_Hw_Int.*: 00000001 00000001 00000001 00000001 DDB_Next set: 00000001'; then
+            r="VXP.386's VPICD_Call_When_Hw_Int line is not 3.1's ($out/win386audit-vxp.com1)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386audit: VX11 as under Windows 3.1's WIN386, its P and S runs survived; VXP's callback chain as 3.1's"
+        else echo "FAIL win386audit: $r"; fails=$((fails + 1)); fi ;;
     win386woa)
         # w16's WINOA386.MOD (and WIN386) on Windows 3.1 against Microsoft's
         # (the same references as win386switch and win386exitbox)

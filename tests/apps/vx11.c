@@ -13,6 +13,7 @@
  *   ar    DPMI 0009h with data, code, a call gate, an LDT descriptor and
  *         DPL 0 (the access byte read back with 000Bh, carry, AX);
  *   sd    000Ch with a call gate, DPL 0 data and DPL 0 code;
+ *   lim   0008h with limits past 1 MB (low 12 bits clear, set);
  *   map   0800h below 1 MB, at 1 MB, a device address twice, size 0, a
  *         range that wraps;
  *   mem   0501h/0502h 300 times (does the linear address come back?),
@@ -137,6 +138,21 @@ static void sd(WORD sel, const char *name, BYTE acc, WORD target)
     obs2("sd.lar.", name, vx_lar(sel));
 }
 
+/* 0008h: a limit past 1 MB whose low 12 bits are not all set */
+static void lim(WORD sel, const char *name, DWORD l)
+{
+    DWORD got;
+    plain(sel);
+    clr();
+    r[1] = sel; r[2] = HIWORD(l); r[3] = LOWORD(l);
+    call31(0x0008);
+    obs2("lim.cf.", name, CF);
+    if (CF) obs2("lim.ax.", name, r[0]);
+    got = vx_lsl(sel);
+    obs2("lim.hi.", name, HIWORD(got));
+    obs2("lim.lo.", name, LOWORD(got));
+}
+
 static void sec_ar(void)
 {
     WORD s = newsel();
@@ -157,6 +173,9 @@ static void sec_ar(void)
     sd(s, "data0", 0x92, 0);
     sd(s, "code0", 0x9A, 0);
     sd(s, "data3", 0xF2, 0);
+    lim(s, "1m", 0x00100000UL);
+    lim(s, "1mfff", 0x00100FFFUL);
+    lim(s, "ffff", 0x0000FFFFUL);
     plain(s);
     freesel(s);
 }
@@ -458,8 +477,9 @@ static void run_e(void)
     s = r[3];
     clr(); r[3] = s; r[6] = s;
     call31(0x0101);
-    obs("e.101.cf", CF);
-    obs("e.101.es", r[6] == 0 ? 0 : r[6] == s ? 1 : 2);
+    /* (under Windows 3.1 0100h fails: KRNL386 has every paragraph) */
+    obs("~e.101.cf", CF);
+    obs("~e.101.es", r[6] == 0 ? 0 : r[6] == s ? 1 : 2);
     out("e.101 survived\r\n");
 }
 

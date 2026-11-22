@@ -272,7 +272,12 @@ case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
 see the case in `tests/boottest.sh`). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
-service results it saw (ARCHITECTURE.md 12.7).
+service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
+are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
+`tests/refrun.sh VX11.EXE /3`, under w16's WIN386 with
+`REFRUN_FILES=build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE`); the
+boot-test case `win386audit` compares it with Windows 3.1's
+(docs/notes/win386-audit-triage.md).
 
 ## 5. Running on a remote host
 
