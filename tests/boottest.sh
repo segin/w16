@@ -110,6 +110,14 @@
 #              not survive, must finish under w16; VXP.386's two
 #              VPICD_Call_When_Hw_Int callbacks both called and chained as
 #              under 3.1, its DDB_Next set (DOSBox-X, COM1)
+#   vsd        the Virtual Sound Device (win386/vxd/vsd.c): tests/vsdprobe.sh
+#              fg under w16's WIN386 and Microsoft's (DOSBox-X, the sound
+#              recorded): the probe VxD VXV.386's VSD_Get_Version and
+#              VSD_Bell results, SPK.COM's tones in a full-screen box, a
+#              bell cutting one, the box silent while Alt+Tab has stopped
+#              it (tools/vsdcmp.py); then Reboot's "not responding" screen
+#              (vsdhung.txt): keys it has no use for each beep a bell of
+#              Windows 3.1's tone and length
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -899,7 +907,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1580,6 +1588,23 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    vsd)
+        # the Virtual Sound Device: tests/vsdprobe.sh fg (VXV.386's bells
+        # and ports, SPK.COM's tones in a full-screen box, Alt+Tab
+        # stopping it) and hung (Reboot's screen B: a bell for each key it
+        # has no use for), under w16's WIN386 against Microsoft's
+        set -- -k "$root/build/dos/VXV.386" -k "$root/build/dos/SPK.COM" -k "$root/build/dos/VX8.EXE" \
+            -k "$root/tests/scripts/input/vsdfg.txt" -k "$root/tests/scripts/input/vsdhung.txt"
+        refrun vsd-ref vsd "$root/tests/vsdprobe.sh" -o "$out/vsd-ref" "$@" ms fg
+        refrun vsdh-ref vsd "$root/tests/vsdprobe.sh" -o "$out/vsdh-ref" "$@" ms hung
+        "$root/tests/vsdprobe.sh" -o "$out/vsd-w16" "$@" w16 fg > "$out/vsd-w16.txt" 2>&1 || true
+        "$root/tests/vsdprobe.sh" -o "$out/vsdh-w16" "$@" w16 hung > "$out/vsdh-w16.txt" 2>&1 || true
+        r=$(python3 "$root/tools/vsdcmp.py" "$out/vsd-ref" "$out/vsd-w16" 2>&1) || r="FAIL $r"
+        h=$(python3 "$root/tools/vsdcmp.py" -b "$out/vsdh-ref" "$out/vsdh-w16" 2>&1) || r="FAIL $r; $h"
+        case $r in
+        FAIL*) echo "FAIL vsd: ${r#FAIL } ($out/vsd-w16, $out/vsdh-w16)"; fails=$((fails + 1)) ;;
+        *) echo "ok   vsd: $r; $h" ;;
+        esac ;;
     win386dosprobe)
         # VX12 (tests/dos/vx12.asm) in the MS-DOS Prompt under w16's WIN386
         # against Microsoft's (DOSBox-X's own DOS): the V86 API entries

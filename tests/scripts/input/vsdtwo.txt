@@ -1,0 +1,35 @@
+; the Virtual Sound Device (tests/vsdprobe.sh): two MS-DOS Prompts from a
+; PIF with background execution. The first plays 1000 Hz for 30 s after
+; 1 s, Alt+Tab to Windows at once (it plays behind), the second started
+; (its icon still selected) plays 2000 Hz for 3 s in front, EXIT; Alt+Tab
+; to the first, which ends its tone, EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-first
+type spk 18 546 1000
+key Return
+key alt+Tab
+sleep 6
+shot 02-windows
+key Return
+sleep 12
+shot 03-second
+type spk 0 54 2000
+key Return
+sleep 6
+type exit
+key Return
+sleep 6
+key alt+Tab
+sleep 25
+shot 04-first
+type exit
+key Return
+sleep 8
+shot 05-end

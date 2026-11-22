@@ -72,6 +72,8 @@ VXP_DDB:
         dw 0                    ; DDB_Flags
 %ifdef BADLINK
         db 'VXQ     '           ; DDB_Name
+%elifdef VSDPROBE
+        db 'VXV     '           ; DDB_Name
 %elifdef IOPROBE
         db 'VXI     '           ; DDB_Name
 %else
@@ -146,6 +148,15 @@ vxp_control:
         ret
 .notfirst:
         call crlf
+%ifdef VSDPROBE
+        cmp edi, 2
+        jne .nvb
+        call vsdbells
+.nvb:   cmp edi, 3                      ; Sys_VM_Init: one bell alone
+        jne .nvb3
+        CALLLOG msg_bell, 000B0001h, 0, 0, 0
+.nvb3:
+%endif
         cmp edi, 2                      ; Init_Complete: interrupts on in ring 0
         jne .nic
         call stitest
@@ -200,6 +211,27 @@ services:
         mov eax, ebx
         call puthex
         call crlf
+%endif
+%ifdef VSDPROBE
+        CALLLOG msg_vsdv, 000B0000h, 0, 0, 0     ; VSD_Get_Version
+        mov esi, msg_vsdi
+        call puts
+        mov ebx, vsd_ports
+.vi:    movzx edx, word [ebx]
+        test edx, edx
+        jz .vid
+        mov esi, vsd_io
+        int 20h
+        dd 00010096h                    ; VMM, Install_IO_Handler
+        pushfd
+        pop eax
+        and eax, 1
+        call puthex
+        mov al, ' '
+        call putc
+        add ebx, 2
+        jmp .vi
+.vid:   call crlf
 %endif
 %ifdef BADLINK
         ; VXQ.386: a dynamic link to a device that is not loaded: VPD
@@ -495,8 +527,155 @@ msg_iocx db ' client_ecx=', 0
 msg_ioebx db ' ebx=', 0
 %endif
 
+%ifdef VSDPROBE
+; Init_Complete: two bells 300 ms apart and port 61h around them
+vsdbells:
+        mov esi, msg_61b
+        call puts
+        call p61
+        CALLLOG msg_bell, 000B0001h, 11111111h, 22222222h, 33333333h
+        mov esi, msg_61a
+        call puts
+        call p61
+        mov esi, msg_st2
+        call puts
+        mov al, 0D8h                    ; read-back: channel 2's status
+        out 43h, al
+        in al, 42h
+        movzx eax, al
+        call puthex
+        call crlf
+        call wait300
+        mov esi, msg_61w
+        call puts
+        call p61
+        CALLLOG msg_bell, 000B0001h, 0, 0, 0
+        call wait300
+        mov esi, msg_61x
+        call puts
+        call p61
+        call wait300
+        call wait300
+        mov esi, msg_61y
+        call puts
+        call p61
+        ret
+; port 61h, a line
+p61:    in al, 61h
+        movzx eax, al
+        call puthex
+        jmp crlf
+; about 300 ms with interrupts on (20000 toggles of 61h's refresh bit)
+wait300:
+        pushfd
+        sti
+        mov ecx, 20000
+        in al, 61h
+        and al, 10h
+        mov ah, al
+.t:     in al, 61h
+        and al, 10h
+        cmp al, ah
+        je .t
+        mov ah, al
+        loop .t
+        popfd
+        ret
+; the I/O handler: EBX VM, ECX type, EDX port, EBP client registers, EAX data
+vsd_io:
+        cmp edx, 0E0h                   ; port 0E0h: VSD_Bell (SPK B)
+        jne .p
+        pushad
+        CALLLOG msg_vbell, 000B0001h, 0, 0, 0
+        mov esi, msg_61a
+        call puts
+        call p61
+        popad
+        mov al, 0FFh
+        ret
+.p:     pushad
+        mov esi, vsd_cnt
+        cmp edx, 40h
+        je .c
+        add esi, 4
+        cmp edx, 42h
+        je .c
+        add esi, 4
+        cmp edx, 43h
+        je .c
+        add esi, 4
+.c:     inc dword [esi]
+        inc dword [vsd_logged]
+        cmp dword [vsd_logged], 400
+        ja .nl
+        mov esi, msg_vio
+        call puts
+        mov eax, edx
+        call puthex
+        mov esi, msg_vtyp
+        call puts
+        mov eax, ecx
+        call puthex
+        mov esi, msg_iodat
+        call puts
+        mov eax, [esp + 28]
+        call puthex
+        mov esi, msg_ioebx
+        call puts
+        mov eax, ebx
+        call puthex
+        mov esi, msg_iocs
+        call puts
+        movzx eax, word [ebp + 28h]     ; Client_CS
+        call puthex
+        mov al, ':'
+        call putc
+        mov eax, [ebp + 24h]            ; Client_EIP
+        call puthex
+        call crlf
+.nl:    popad
+        int 20h
+        dd 00018094h                    ; VMMjmp Simulate_IO
+vsd_ports dw 40h, 42h, 43h, 61h, 0E0h, 0
+vsd_cnt  dd 0, 0, 0, 0
+vsd_logged dd 0
+msg_vsdv db 'VXP VSD_Get_Version eax=', 0
+msg_vsdi db 'VXP Install_IO_Handler cf 40h 42h 43h 61h 0E0h: ', 0
+msg_bell db 'VXP VSD_Bell eax=', 0
+msg_vbell db 'VXP VSD_Bell (a VM at port 0E0h) eax=', 0
+msg_61b  db 'VXP 61h before bell: ', 0
+msg_61a  db 'VXP 61h after bell: ', 0
+msg_st2  db 'VXP channel 2 status after bell: ', 0
+msg_61w  db 'VXP 61h 300 ms on: ', 0
+msg_61x  db 'VXP 61h 300 ms after the second bell: ', 0
+msg_61y  db 'VXP 61h 900 ms after the second bell: ', 0
+msg_vio  db 'VXP vio port=', 0
+msg_vtyp db ' type=', 0
+msg_iodat db ' data=', 0
+msg_iocs db ' at=', 0
+msg_ioebx db ' vm=', 0
+msg_vcnt db 'VXP io counts 40h 42h 43h 61h: ', 0
+msg_61e  db 'VXP 61h at System_Exit: ', 0
+%endif
+
 ; at System_Exit: who owns the keyboard and the mouse after the session
 late:   call sysvm
+%ifdef VSDPROBE
+        mov esi, msg_vcnt
+        call puts
+        mov ebx, vsd_cnt
+        mov ecx, 4
+.vc:    mov eax, [ebx]
+        call puthex
+        mov al, ' '
+        call putc
+        add ebx, 4
+        loop .vc
+        call crlf
+        mov esi, msg_61e
+        call puts
+        call p61
+%endif
         CALLLOG msg_vkdo, 000D0008h, 0, 0, 0
         CALLLOG msg_vmdo, 000C0002h, 0, 0, 0
         CALLLOG msg_pcb1, 0003000Bh, 1, 0, 0
