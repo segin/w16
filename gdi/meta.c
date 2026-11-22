@@ -216,6 +216,8 @@ int GDIAPI GetDIBits(HDC, HBITMAP, WORD, WORD, void __far *, void __far *, WORD)
 int GDIAPI SetDIBits(HDC, HBITMAP, WORD, WORD, const void __far *, void __far *, WORD);
 
 static HDC mf_list;                     /* the open metafile DCs */
+static void palref_add(HPALETTE pal, HDC dc);
+static void palref_remove(HPALETTE pal, HDC dc);
 static HMODULE gdi_module;
 
 static void gdi_owns(HGLOBAL h)
@@ -734,7 +736,8 @@ HPALETTE mf_select_palette(HDC h, HPALETTE pal)
     d = mf_get(h);
     old = d->hPal;
     d->hPal = pal;
-    (void)old;
+    palref_remove(old, h);              /* (the list: see below) */
+    palref_add(pal, h);
     return 1;                           /* GD9: not the previous palette */
 }
 
@@ -771,21 +774,80 @@ void mf_deleted(HANDLE obj)
     }
 }
 
-/* SetPaletteEntries, AnimatePalette, ResizePalette on a palette that is
-   selected in open metafile DCs: their records there (the caller gives
-   the record's words) */
+/* ---- a palette's metafile list (Schulman ch. 8: the object header's
+   wMetaList). What GD9 saw on 3.1: each SelectPalette into a metafile DC
+   adds the DC to the palette's list, and selecting another palette there
+   takes one entry of the DC off the previous palette's list; closing the
+   metafile takes nothing off. AnimatePalette and ResizePalette write
+   their record once for every entry, into the DC the entry names: an
+   entry left by a closed metafile names whatever metafile DC has that
+   handle now (in GD9, the next metafile, which got the same handle: one
+   change came out as many records as the palette had had selections).
+   w16 keeps the list here (pairs of palette and DC; wMetaList is
+   ExtendedGdiHeap's) and writes into an entry's DC when it is an open
+   metafile DC. ---- */
+
+typedef struct { HPALETTE pal; HDC dc; } PALREF;
+static HGLOBAL palrefs;                 /* PALREF[] */
+static WORD npalrefs;
+
+static void palref_add(HPALETTE pal, HDC dc)
+{
+    PALREF __far *r;
+    if (!palrefs || GlobalSize(palrefs) < (DWORD)(npalrefs + 1) * sizeof(PALREF)) {
+        DWORD sz = (DWORD)(npalrefs + 16) * sizeof(PALREF);
+        HGLOBAL g = palrefs ? GlobalReAlloc(palrefs, sz, GMEM_MOVEABLE)
+                            : GlobalAlloc(GMEM_MOVEABLE, sz);
+        if (!g)
+            return;
+        if (!palrefs)
+            gdi_owns(g);
+        palrefs = g;
+    }
+    r = GlobalLock(palrefs);
+    r[npalrefs].pal = pal;
+    r[npalrefs].dc = dc;
+    npalrefs++;
+    GlobalUnlock(palrefs);
+}
+
+/* one entry (pal, dc) off the list; dc 0: every entry of pal (deleted) */
+static void palref_remove(HPALETTE pal, HDC dc)
+{
+    PALREF __far *r;
+    WORD i, k;
+    if (!palrefs)
+        return;
+    r = GlobalLock(palrefs);
+    for (i = 0, k = 0; i < npalrefs; i++) {
+        if (r[i].pal == pal && (!dc || r[i].dc == dc)) {
+            if (dc)
+                dc = 0xFFFF;            /* (one only: the rest are kept) */
+            continue;
+        }
+        r[k++] = r[i];
+    }
+    npalrefs = k;
+    GlobalUnlock(palrefs);
+}
+
+void mf_palette_gone(HPALETTE pal)
+{
+    palref_remove(pal, 0);
+}
+
+/* AnimatePalette, ResizePalette: the record (its words given) for every
+   entry of the palette's list whose DC is an open metafile DC */
 void mf_palette_changed(HPALETTE pal, WORD fn, WORD n, const WORD __far *w)
 {
-    HDC h;
-    for (h = mf_list; h; ) {
-        LPMFDC d = mf_get(h);
-        HDC next;
-        if (!d)
-            break;
-        next = d->hNextMf;
-        if (d->hPal == pal && slot_of(h, pal) >= 0)
-            mf_words(h, fn, n, w);
-        h = next;
+    WORD i;
+    for (i = 0; i < npalrefs; i++) {
+        PALREF __far *r = GlobalLock(palrefs);
+        HPALETTE p = r[i].pal;
+        HDC dc = r[i].dc;
+        GlobalUnlock(palrefs);
+        if (p == pal && mf_dc(dc))
+            mf_words(dc, fn, n, w);
     }
 }
 
