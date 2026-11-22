@@ -1,7 +1,11 @@
+; 3.1's DDE limits for w16's Program Manager ([w16] ProgmanUnlimited=0;
+; set by the script, not the harness: another SYSTEM.INI line moves the
+; memory layout other tests compare)
+ini SYSTEM.INI|w16|ProgmanUnlimited|0
 run PROGMAN.EXE
 connect
 ; many items (the Program Manager audit): 3.1 adds no 51st; w16 adds
-; any number unless [w16] ProgmanUnlimited=0, as the tests run
+; any number unless [w16] ProgmanUnlimited=0, set here
 ;get WINDOWS/MANYITEM.GRP
 exec [CreateGroup(Many Items)]
 exec [AddItem(NOTEPAD.EXE,Item 001 xxxxxxxxxxxxxxxxxxxx)]
