@@ -120,6 +120,12 @@ CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
 `tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
 in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/rescenarios.sh` and `tests/rehelp.sh` (w16's Registration Info Editor against Microsoft's: screens, REG.DAT, WIN.INI and saved .REG files; its New Style scenarios NS* against w16's approved screens in `tests/scripts/regedit/ns-ref/`, `RE_NSREF=update` to approve; `tests/regobs.sh` for observing the original, `REGOBS_TRACE=1` logging its SHELL calls through XHELL.DLL),
+`tests/whscenarios.sh` (w16's Windows Help against Microsoft's over the
+reference install's own .HLP files: screens within
+`tests/scripts/winhelp.baseline`, WIN.INI and WINHELP.BMK byte for byte,
+`WH_BASELINE=update` to rewrite; `tests/whobs.sh` for observing the
+original; `make build/hlpdump` builds the .HLP reader for the host,
+`tests/winhelp/hlpdump.c`),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,
 INI files, the running saver, USER starting it; `tests/sstree.sh`: on

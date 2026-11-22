@@ -1,0 +1,25 @@
+; WS02: WINHELP.HLP: contents (bullet pictures), a jump, Page Down, Glossary (a secondary window) and a popup in it
+run WINHELP.EXE WINHELP.HLP
+wait 3000
+snap C:\S1.BMP
+click 270 251
+wait 1500
+snap C:\S2.BMP
+key 22
+wait 800
+snap C:\S3.BMP
+key 22
+wait 800
+snap C:\S4.BMP
+click 481 54
+wait 2000
+snap C:\S5.BMP
+click 112 165
+wait 1500
+snap C:\S6.BMP
+key 1B
+wait 800
+close
+wait 1000
+close
+wait 1500

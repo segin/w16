@@ -1,0 +1,35 @@
+; WS05: applications asking for help through WinHelp: Registration Info Editor (Contents; F1 in Modify File Type, a [MAP] number; Search for Help On, the Search dialog), File Manager (Contents)
+run REGEDIT.EXE
+wait 3000
+cmd 1792
+wait 2500
+snap C:\S1.BMP
+close
+wait 1500
+cmd 1058
+wait 1500
+key 70
+wait 2500
+snap C:\S2.BMP
+close
+wait 1500
+key 1B
+wait 1000
+cmd 1793
+wait 2500
+snap C:\S3.BMP
+key 1B
+wait 1000
+close
+wait 1500
+close
+wait 1500
+run WINFILE.EXE
+wait 4000
+cmd 1101
+wait 2500
+snap C:\S4.BMP
+close
+wait 1500
+close
+wait 2000

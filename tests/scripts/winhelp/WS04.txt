@@ -1,0 +1,21 @@
+; WS04: a missing file and a file that is not help (the main window behind: w16's own logo and name, masked)
+; mask: 200,172,440,195
+; mask: 160,172,486,195
+; mask: 217,4,634,24
+; mask: 217,44,634,171
+; mask: 217,311,634,474
+; mask: 439,172,634,310
+run WINHELP.EXE NOSUCH.HLP
+wait 2500
+snap C:\S1.BMP
+key 0D
+wait 1500
+close
+wait 1500
+run WINHELP.EXE C:\WINDOWS\NOTEPAD.EXE
+wait 2500
+snap C:\S2.BMP
+key 0D
+wait 1500
+close
+wait 1500

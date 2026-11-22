@@ -1,0 +1,37 @@
+; WH1: WINHELP.EXE with no file, then with NOTEPAD.HLP: windows, menus, each menu down
+run WINHELP.EXE
+wait 3000
+snap C:\S1.BMP
+dump
+info
+dumpmenu
+close
+wait 1500
+run WINHELP.EXE NOTEPAD.HLP
+wait 3000
+snap C:\S2.BMP
+dump
+info
+dumpmenu
+menu f
+wait 600
+snap C:\M1.BMP
+key 1B
+key 1B
+menu e
+wait 600
+snap C:\M2.BMP
+key 1B
+key 1B
+menu b
+wait 600
+snap C:\M3.BMP
+key 1B
+key 1B
+menu h
+wait 600
+snap C:\M4.BMP
+key 1B
+key 1B
+close
+wait 1500

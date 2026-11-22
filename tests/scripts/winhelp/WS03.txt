@@ -1,0 +1,14 @@
+; WS03: CONTROL.HLP and PROGMAN.HLP: contents, Page Down
+run WINHELP.EXE CONTROL.HLP
+wait 3000
+snap C:\S1.BMP
+close
+wait 1500
+run WINHELP.EXE PROGMAN.HLP
+wait 3000
+snap C:\S2.BMP
+key 22
+wait 800
+snap C:\S3.BMP
+close
+wait 1500

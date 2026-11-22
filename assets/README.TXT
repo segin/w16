@@ -28,6 +28,11 @@ is newer. Neither mode needs anything of Microsoft's.
                           REGEDITV.HLP); [w16] RegeditNewStyle=1 in
                           SYSTEM.INI gives it a Windows 95-like Registry
                           Editor view (View > New Style switches)
+  WINHELP.EXE             Help: shows Windows 3.x .HLP files, and the
+                          topics programs ask for (their Help menus and
+                          F1). The help files themselves are not part of
+                          w16: copy them from your own Windows 3.1, or
+                          use those that come with your programs
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
