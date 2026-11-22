@@ -119,13 +119,10 @@ static DWORD errbits(WORD e)
     return 0;
 }
 
-static BOOL exists(LPCSTR path)
-{
-    OFSTRUCT of;
-    char p[PATHMAX];
-    copyn(p, path, PATHMAX);
-    return OpenFile(p, &of, OF_EXIST) != HFILE_ERROR;
-}
+/* a name taken in its directory (MS-DOS's attributes; observed: a
+   directory counts, and OpenFile's search does not apply, an empty
+   destination directory being the current one) */
+#define exists(p) (!dos_attr(p))
 
 /* ---- reading a file (through LZEXPAND: a compressed file is read as
    it expands, observed) ---- */
@@ -161,7 +158,8 @@ static HFILE vopen(LPCSTR name)
    integer types and names are found (observed: a named type or name, or
    a "#n" string, never is); the file must start with "MZ" and its new
    header with "NE" (observed); a file whose resource table is where its
-   resident names start has none (SDK Vol. 4) */
+   resident names start has none (SDK Vol. 4); an alignment shift over
+   12 finds nothing (observed: 12 does, 13 and more do not) */
 static BOOL find_res(HFILE h, LPCSTR type, LPCSTR id, DWORD *off, DWORD *len)
 {
     BYTE hdr[64];
@@ -178,7 +176,7 @@ static BOOL find_res(HFILE h, LPCSTR type, LPCSTR id, DWORD *off, DWORD *len)
     if (*(WORD *)(hdr + 0x24) == *(WORD *)(hdr + 0x26))
         return FALSE;
     p = ne + *(WORD *)(hdr + 0x24);
-    if (!rd(h, p, &shift, 2))
+    if (!rd(h, p, &shift, 2) || shift > 12)
         return FALSE;
     p += 2;
     for (guard = 0; guard < 1000; guard++) {
@@ -207,7 +205,8 @@ static BOOL find_res(HFILE h, LPCSTR type, LPCSTR id, DWORD *off, DWORD *len)
 }
 
 /* GetFileResourceSize (VER.2): the length in the resource table, the
-   resource's file offset to *lpdwFileOffset; 0 if not found */
+   resource's file offset to *lpdwFileOffset (observed: with NULL there
+   the length is returned all the same); 0 if not found */
 DWORD VAPI GetFileResourceSize(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszResID,
                                DWORD FAR *lpdwFileOffset)
 {
@@ -220,7 +219,8 @@ DWORD VAPI GetFileResourceSize(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR l
     LZClose(h);
     if (!ok)
         return 0;
-    *lpdwFileOffset = off;
+    if (lpdwFileOffset)
+        *lpdwFileOffset = off;
     return len;
 }
 
@@ -251,7 +251,8 @@ BOOL VAPI GetFileResource(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszRe
    not more than the resource table's length, and the dword at offset 20
    is the fixed part's signature (observed: nothing else is checked, not
    the key, not wValueLength); the handle is the resource's offset, set
-   once the resource is found even if 0 is returned */
+   once the resource is found even if 0 is returned (with NULL there the
+   size is returned all the same: observed) */
 DWORD VAPI GetFileVersionInfoSize(LPCSTR lpszFileName, DWORD FAR *lpdwHandle)
 {
     HFILE h = vopen(lpszFileName);
@@ -261,7 +262,8 @@ DWORD VAPI GetFileVersionInfoSize(LPCSTR lpszFileName, DWORD FAR *lpdwHandle)
     if (h < 0)
         return 0;
     if (find_res(h, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID), &off, &len)) {
-        *lpdwHandle = off;
+        if (lpdwHandle)
+            *lpdwHandle = off;
         if (rd(h, off, b, sizeof b) && *(WORD *)b && *(WORD *)b <= len &&
             *(DWORD *)(b + VS_SIGOFF) == VS_SIG)
             r = *(WORD *)b;
@@ -285,15 +287,30 @@ BOOL VAPI GetFileVersionInfo(LPCSTR lpszFileName, DWORD handle, DWORD cbBuf, voi
    the block's start (observed: the same offsets at any address). The key
    is read no further than lim, the end of the node's parent (for the
    root, of the root itself: observed, a root length of 5 or 8 puts its
-   value at 8) */
-static DWORD valoff(const BYTE FAR *b, DWORD node, DWORD lim)
+   value at 8), nor past the block's segment (avail bytes from b) */
+static DWORD valoff(const BYTE FAR *b, DWORD node, DWORD lim, DWORD avail)
 {
     DWORD k = node + 4;
-    while (k < lim && b[k])
+    while (k < lim && k < avail && b[k])
         k++;
     if (k < lim)
         k++;
     return (k + 3) & ~3L;
+}
+
+/* a child's key against a name, regardless of case. The key is read no
+   further than one byte before its parent's end, lim (observed: a key
+   that runs to its parent's end without a NUL matches the key without
+   its last character), nor past the segment. A key longer than any
+   name cannot match: the copy stops there. */
+static BOOL keyis(const BYTE FAR *b, DWORD k, DWORD lim, DWORD avail, LPCSTR name)
+{
+    char key[258];
+    int n = 0;
+    while (k + 1 < lim && k < avail && b[k] && n < (int)sizeof key - 1)
+        key[n++] = b[k++];
+    key[n] = 0;
+    return !lstrcmpi(key, name);
 }
 
 /* VerQueryValue (VER.11): the path's names, separated by backslashes
@@ -302,23 +319,34 @@ static DWORD valoff(const BYTE FAR *b, DWORD node, DWORD lim)
    only if it ends within its parent (observed: a block whose lengths are
    too long loses its later children). A node of 4 bytes or less ends the
    search (observed for the root: a length of 0 or 4 finds nothing, 5
-   finds the root). The value is the node's: after its key, wValueLength
-   bytes. Nothing is written when the path is not found. */
+   finds the root; 8000h and more, read as negative, nothing: FFF8h
+   finds nothing, 1000h does). The value is the node's: after its key,
+   wValueLength bytes, however long (observed: FFFFh is returned as it
+   is). Nothing is written when the path is not found. Nothing is read
+   past the block's segment: where 3.1 would fault, the path is not
+   found. */
 BOOL VAPI VerQueryValue(const void FAR *lpvBlock, LPCSTR lpszSubBlock, void FAR * FAR *lplpBuffer,
                         UINT FAR *lpcb)
 {
     const BYTE FAR *b = lpvBlock;
     LPCSTR s = lpszSubBlock;
-    DWORD node = 0, lim = W(0), end, c;
+    DWORD node = 0, lim, end, c, avail;
     char name[256];
     int n;
-    if (W(0) <= 4)
+    avail = GetSelectorLimit(SELECTOROF(b));
+    if (avail < OFFSETOF(b))
         return FALSE;
+    avail = avail - OFFSETOF(b) + 1;
+    if (avail > 0x10000L - OFFSETOF(b))
+        avail = 0x10000L - OFFSETOF(b);         /* offsets wrap at 64K */
+    if (avail < 4 || (int)W(0) <= 4)
+        return FALSE;
+    lim = W(0);
     for (;;) {
         while (*s == '\\')
             s++;
         if (!*s) {
-            *lplpBuffer = (void FAR *)(b + valoff(b, node, lim));
+            *lplpBuffer = (void FAR *)(b + valoff(b, node, lim, avail));
             *lpcb = W(node + 2);
             return TRUE;
         }
@@ -327,11 +355,11 @@ BOOL VAPI VerQueryValue(const void FAR *lpvBlock, LPCSTR lpszSubBlock, void FAR 
                 name[n++] = *s;
         name[n] = 0;
         end = node + W(node);
-        c = (valoff(b, node, lim) + W(node + 2) + 3) & ~3L;
+        c = (valoff(b, node, lim, avail) + W(node + 2) + 3) & ~3L;
         for (;;) {
-            if (c + 4 > end || W(c) <= 4 || c + W(c) > end)
+            if (c + 4 > end || c + 4 > avail || W(c) <= 4 || c + W(c) > end)
                 return FALSE;
-            if (!lstrcmpi((LPCSTR)(b + c + 4), name))
+            if (keyis(b, c + 4, end, avail, name))
                 break;
             c = (c + W(c) + 3) & ~3L;
         }
@@ -434,13 +462,17 @@ static BOOL try_dir(LPCSTR dir, LPCSTR name, LPSTR full)
 
 /* UNVERIFIED: how 3.1 knows it runs as a shared copy (SDK: shared files
    then go to the Windows directory); here, when the system directory is
-   not inside the Windows directory, as a network setup leaves them */
+   not inside the Windows directory, as a network setup leaves them (a
+   Windows directory at a drive's root holds every directory there) */
 static BOOL shared_windows(LPCSTR win, LPCSTR sys)
 {
     int n = lstrlen(win);
-    char s[PATHMAX];
+    char s[PATHMAX], w[PATHMAX];
+    if (n && win[n - 1] == '\\')
+        n--;                            /* a drive's root (C:\) */
+    copyn(w, win, n + 1);
     copyn(s, sys, n + 1);
-    return lstrcmpi(s, win) || sys[n] != '\\';
+    return lstrcmpi(s, w) || sys[n] != '\\';
 }
 
 /* VerFindFile (VER.8). The current copy is looked for in the
@@ -504,14 +536,24 @@ UINT VAPI VerFindFile(UINT flags, LPCSTR lpszFilename, LPCSTR lpszWinDir, LPCSTR
 
 /* ---- VerInstallFile ---- */
 
-/* a file's version block, in a global block (0 if it has none) */
-static HGLOBAL getver(LPCSTR path)
+/* a file's version block, in a global block (0 if it has none). Only a
+   file GetFileVersionInfoSize gives a size for has one, but what is read
+   is the resource table's length (observed: a root of 20 bytes in a
+   resource of 384 is compared by its fixed part after those 20; with a
+   table length of 20 the fixed part is zeros). The block is zeroed and
+   64 bytes longer, so that a fixed part after a short root is read from
+   it; *size gets its size. */
+#define VERSLACK 64
+static HGLOBAL getver(LPCSTR path, DWORD *size)
 {
-    DWORD h, n = GetFileVersionInfoSize(path, &h);
+    DWORD h, off, n = GetFileVersionInfoSize(path, &h);
     HGLOBAL g;
     if (!n)
         return 0;
-    g = GlobalAlloc(GMEM_MOVEABLE, n);
+    n = GetFileResourceSize(path, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID), &off);
+    if (n > 0xFFF0L - VERSLACK)
+        n = 0xFFF0L - VERSLACK;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n + VERSLACK);
     if (!g)
         return 0;
     if (!GetFileVersionInfo(path, h, n, GlobalLock(g))) {
@@ -520,33 +562,67 @@ static HGLOBAL getver(LPCSTR path)
         return 0;
     }
     GlobalUnlock(g);
+    *size = n + VERSLACK;
     return g;
+}
+
+/* a Translation value: its entries inside the block (*real of them) and
+   how many it claims (returned) */
+static UINT trans(const void FAR *blk, DWORD size, const DWORD FAR * FAR *t, UINT *real)
+{
+    UINT len, n;
+    DWORD at;
+    if (!VerQueryValue(blk, "\\VarFileInfo\\Translation", (void FAR * FAR *)t, &len))
+        return 0xFFFF;
+    n = len / 4;
+    at = OFFSETOF(*t) - OFFSETOF(blk);
+    *real = at >= size ? 0 : (UINT)((size - at) / 4);
+    if (*real > n)
+        *real = n;
+    return n;
+}
+
+/* the old Translation's entry (lang, cp) in the new one: code page 0 in
+   the old one matches any (observed); entries past the block read as
+   zeros (observed: a Translation of FFFFh or 100h bytes in the
+   destination gives VIF_DIFFLANG, in the source nothing) */
+static BOOL hastrans(const DWORD FAR *tn, UINT nreal, UINT n, WORD lang, WORD cp)
+{
+    UINT j;
+    for (j = 0; j < nreal; j++)
+        if (LOWORD(tn[j]) == lang && (!cp || HIWORD(tn[j]) == cp))
+            return TRUE;
+    return n > nreal && !lang && !cp;
 }
 
 /* the new file against the one it replaces (observed): nothing if that
    has no version; the new one older (file version only) or without a
    version: VIF_SRCOLD; another file type or subtype (not OS):
    VIF_DIFFTYPE; a language and code page of the old one's Translation
-   missing from the new one's (both having one): VIF_DIFFLANG (any code
-   page, but code page 0 in the old file's matches any; VIF_DIFFCODEPG
-   was never seen); VIF_MISMATCH with any of them */
+   missing from the new one's (both having one, of any length: one of 2
+   bytes has no entries): VIF_DIFFLANG (any code page, but code page 0 in
+   the old file's matches any; VIF_DIFFCODEPG was never seen);
+   VIF_MISMATCH with any of them */
 static DWORD compare(LPCSTR newf, LPCSTR oldf)
 {
-    HGLOBAL go = getver(oldf), gn;
+    DWORD so, sn;
+    HGLOBAL go = getver(oldf, &so), gn;
     const void FAR *bo, *bn;
     FIXEDINFO FAR *fo, FAR *fn;
-    DWORD FAR *to, FAR *tn;
-    UINT lo, ln, i, j;
+    const DWORD FAR *to, FAR *tn;
+    UINT lo, ln, ro, rn, i;
     DWORD r = 0;
     if (!go)
         return 0;
-    gn = getver(newf);
+    gn = getver(newf, &sn);
     if (!gn) {
         GlobalFree(go);
         return VIF_SRCOLD | VIF_MISMATCH;
     }
     bo = GlobalLock(go);
     bn = GlobalLock(gn);
+    /* the fixed part lies inside the block: its offset is at most the
+       root's length + 3, and the block is VERSLACK longer than that */
     if (VerQueryValue(bo, "\\", (void FAR * FAR *)&fo, &lo) &&
         VerQueryValue(bn, "\\", (void FAR * FAR *)&fn, &ln)) {
         if (fn->dwFileVersionMS < fo->dwFileVersionMS ||
@@ -556,18 +632,14 @@ static DWORD compare(LPCSTR newf, LPCSTR oldf)
         if (fn->dwFileType != fo->dwFileType || fn->dwFileSubtype != fo->dwFileSubtype)
             r |= VIF_DIFFTYPE;
     }
-    if (VerQueryValue(bo, "\\VarFileInfo\\Translation", (void FAR * FAR *)&to, &lo) &&
-        VerQueryValue(bn, "\\VarFileInfo\\Translation", (void FAR * FAR *)&tn, &ln) &&
-        lo >= 4 && ln >= 4) {
-        for (i = 0; i < lo / 4; i++) {
-            /* code page 0 in the old file's entry matches any (observed) */
-            for (j = 0; j < ln / 4; j++)
-                if (LOWORD(tn[j]) == LOWORD(to[i]) &&
-                    (!HIWORD(to[i]) || HIWORD(tn[j]) == HIWORD(to[i])))
-                    break;
-            if (j == ln / 4)
+    lo = trans(bo, so, &to, &ro);
+    ln = trans(bn, sn, &tn, &rn);
+    if (lo != 0xFFFF && ln != 0xFFFF) {
+        for (i = 0; i < ro; i++)
+            if (!hastrans(tn, rn, ln, LOWORD(to[i]), HIWORD(to[i])))
                 r |= VIF_DIFFLANG;
-        }
+        if (lo > ro && !hastrans(tn, rn, ln, 0, 0))
+            r |= VIF_DIFFLANG;
     }
     GlobalUnlock(go);
     GlobalUnlock(gn);
@@ -595,23 +667,27 @@ static BOOL samefile(LPCSTR a, LPCSTR b)
 }
 
 /* VerInstallFile (VER.9), as observed:
-   - forced, with a name in lpszTmpFile that is there in the destination
-     directory: that file is installed (the second call; the source is not
-     read, nothing compared);
+   - forced, with a name in lpszTmpFile (not NULL) that is there in the
+     destination directory (a directory too; never searched for): that
+     is installed (the second call; the source is not read, nothing
+     compared);
    - else the source (lpszSrcDir and lpszSrcFilename, through LZOpenFile)
      is expanded into "temp.NNN" in the destination directory, NNN the
-     first unused of 000, 001, ... in hexadecimal (cannot open the source,
-     or it does not expand: VIF_CANNOTREADSRC; cannot create the
-     temporary file: VIF_CANNOTCREATE) and, unless forced, compared with
-     the destination file;
+     first unused name (a directory uses it too) of 000, 001, ... FFF in
+     hexadecimal (cannot open the source, or it does not expand:
+     VIF_CANNOTREADSRC; all 4096 taken, or the temporary file cannot be
+     created: VIF_CANNOTCREATE) and, unless forced, compared with the
+     destination file;
    - the destination file in use: VIF_FILEINUSE alone, the temporary file
      made here deleted;
    - differences: the bits with VIF_TEMPFILE and the temporary name (its
      length to *lpwTmpFileLen); a buffer too small: VIF_BUFFTOOSMALL
-     instead of VIF_TEMPFILE, the length needed, the file deleted;
+     instead of VIF_TEMPFILE, the length needed, the file deleted (a
+     NULL length is room enough, a NULL buffer gets nothing);
    - else the destination is deleted (failing: VIF_CANNOTDELETE and the
      error's bit, the temporary file deleted) and the temporary file
-     renamed to it; then, unless VIFF_DONTDELETEOLD, the copy in
+     renamed to it (failing: VIF_CANNOTRENAME, the temporary file
+     deleted, also the caller's in the second call); then, unless VIFF_DONTDELETEOLD, the copy in
      lpszCurDir if that is another file (not in use and deleted, else
      VIF_CANNOTDELETECUR). Nothing is written to lpszTmpFile then. */
 DWORD VAPI VerInstallFile(UINT flags, LPCSTR lpszSrcFilename, LPCSTR lpszDestFilename,
@@ -624,7 +700,7 @@ DWORD VAPI VerInstallFile(UINT flags, LPCSTR lpszSrcFilename, LPCSTR lpszDestFil
     WORD e, k;
     join(dpath, lpszDestDir, lpszDestFilename);
     tpath[0] = 0;
-    if ((flags & VIFF_FORCEINSTALL) && lpszTmpFile[0]) {
+    if ((flags & VIFF_FORCEINSTALL) && lpszTmpFile && lpszTmpFile[0]) {
         join(tpath, lpszDestDir, lpszTmpFile);
         if (!exists(tpath))
             tpath[0] = 0;
@@ -642,6 +718,10 @@ DWORD VAPI VerInstallFile(UINT flags, LPCSTR lpszSrcFilename, LPCSTR lpszDestFil
             join(tpath, lpszDestDir, tname);
             if (!exists(tpath))
                 break;
+        }
+        if (k == 0x1000) {
+            LZClose(hs);
+            return VIF_CANNOTCREATE;
         }
         ht = OpenFile(tpath, &of, OF_CREATE | OF_WRITE);
         if (ht == HFILE_ERROR) {
@@ -678,13 +758,15 @@ DWORD VAPI VerInstallFile(UINT flags, LPCSTR lpszSrcFilename, LPCSTR lpszDestFil
     }
     if (r) {
         UINT need = lstrlen(tname) + 1;
-        if (*lpwTmpFileLen < need) {
+        if (lpwTmpFileLen && *lpwTmpFileLen < need) {
             *lpwTmpFileLen = need;
             dos_delete(tpath);
             return r | VIF_BUFFTOOSMALL;
         }
-        lstrcpy(lpszTmpFile, tname);
-        *lpwTmpFileLen = need;
+        if (lpszTmpFile)
+            lstrcpy(lpszTmpFile, tname);
+        if (lpwTmpFileLen)
+            *lpwTmpFileLen = need;
         return r | VIF_TEMPFILE;
     }
     /* a destination that is there (a directory too, observed) and cannot
@@ -695,8 +777,12 @@ DWORD VAPI VerInstallFile(UINT flags, LPCSTR lpszSrcFilename, LPCSTR lpszDestFil
         return VIF_CANNOTDELETE | (e == 32 ? VIF_SHARINGVIOLATION : VIF_ACCESSVIOLATION);
     }
     e = dos_rename(tpath, dpath);
-    if (e)
-        return VIF_CANNOTRENAME | errbits(e);   /* UNVERIFIED: not provoked */
+    if (e) {
+        /* observed with a destination name in a directory that is not
+           there; the error bits UNVERIFIED */
+        dos_delete(tpath);
+        return VIF_CANNOTRENAME | errbits(e);
+    }
     if (lpszCurDir && lpszCurDir[0] && !(flags & VIFF_DONTDELETEOLD)) {
         join(spath, lpszCurDir, lpszDestFilename);
         if (!samefile(spath, dpath) && !dos_attr(spath) &&
