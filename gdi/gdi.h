@@ -608,10 +608,12 @@ typedef struct FONTENT {
        font's entry, sx and sy the factors (1 for a real font) */
     XP base;
     BYTE sx, sy;
+    BYTE bits;                          /* a scaled copy's bits are made */
 } FONTENT;
 typedef FONTENT __far *LPFONT;
 void font_init(void);
 LPFONT font_realize(LPDC dc);
+void font_bits(LPFONT f);               /* before drawing: a scaled copy's bits */
 LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
 void font_reap(void);                   /* removed fonts and scaled copies no DC uses any more go */
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);

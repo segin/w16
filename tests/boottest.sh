@@ -1360,7 +1360,8 @@ runcase() {
             case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
                 both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
             "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD10.EXE" > "$out/gdifont-$k.log" 2>&1 &
-            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD11.EXE" > "$out/gdifont-map-$k.log" 2>&1 &
+            # (GD11's 5138 requests take over 10 minutes on a loaded host)
+            REFRUN_TIMEOUT=1500 "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD11.EXE" > "$out/gdifont-map-$k.log" 2>&1 &
         done
         wait
         for k in ms gdi vga both; do

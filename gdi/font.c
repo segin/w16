@@ -243,10 +243,13 @@ int GDIAPI AddFontResource(LPCSTR file)                            /* GDI.119 */
    loaded while it is in use) */
 static XP fonts_gone;
 
-/* the integer-scaled copies DCs have realized (ARCHITECTURE.md 11.10):
-   entries of their own, each with its scaled image, kept while a DC
-   uses them */
+/* the integer-scaled copies (ARCHITECTURE.md 11.10): entries of their
+   own, each with its scaled image, most recently used first; the ones
+   no DC has are kept, up to SCALED_KEEP of them, so that a program that
+   makes, uses and deletes the same font over and over (Clock, every
+   second) does not have it built again each time */
 static XP scaled;
+#define SCALED_KEEP 4
 
 static int dc_has(XP x)
 {
@@ -265,19 +268,21 @@ static int font_in_use(XP x)
     if (dc_has(x))
         return 1;
     for (s = scaled; s; s = ((LPFONT)xptr(s))->next)
-        if (((LPFONT)xptr(s))->base == x)
+        if (((LPFONT)xptr(s))->base == x && dc_has(s))
             return 1;
     return 0;
 }
 
-/* scaled copies no DC uses any more go */
-static void scaled_reap(void)
+/* scaled copies no DC has go, but for the keep most recently used (of
+   base font xb only, when xb is set: it is going) */
+static void scaled_drop(int keep, XP xb)
 {
     XP __far *pp = &scaled;
+    int unused = 0;
     while (*pp) {
         XP xs = *pp;
         LPFONT s = xptr(xs);
-        if (!dc_has(xs)) {
+        if ((!xb || s->base == xb) && !dc_has(xs) && ++unused > keep) {
             *pp = s->next;
             if (s->hMem) {
                 GlobalUnlock(s->hMem);
@@ -285,20 +290,30 @@ static void scaled_reap(void)
             }
             xfree(xs);
             pp = &scaled;               /* (xfree may have moved the heap) */
+            unused = 0;
             continue;
         }
         pp = &s->next;
     }
 }
 
+static void scaled_reap(void)
+{
+    scaled_drop(SCALED_KEEP, 0);
+}
+
 /* the font's resources, its entry, and its module when it was the
    removed module's last font */
 static void font_free(XP xf)
 {
-    LPFONT f = xptr(xf), g;
-    HINSTANCE h = f->hMod;
-    int unload = f->unload;
+    LPFONT f, g;
+    HINSTANCE h;
+    int unload;
     XP x;
+    scaled_drop(0, xf);                 /* (none a DC has: font_in_use) */
+    f = xptr(xf);
+    h = f->hMod;
+    unload = f->unload;
     if (f->hRes) {
         GlobalUnlock(f->hRes);
         FreeResource(f->hRes);
@@ -628,11 +643,10 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
 {
     BYTE __far *src = (BYTE __far *)bf - 0x42, __far *q;
     WORD n = bf->dfLastChar - bf->dfFirstChar + 2, i, sx = s->sx, sy = s->sy;
-    WORD bh = bf->dfPixHeight, h = bh * sy, flen, r, c, dy, j;
+    WORD bh = bf->dfPixHeight, h = bh * sy, flen;
     const char __far *face = (const char __far *)src + (WORD)bf->dfFace;
     DWORD off, size, bits;
     LPFONTINFO fi;
-    BYTE row[64];
     for (flen = 0; face[flen]; flen++)
         ;
     bits = (0x94 + (DWORD)n * 6 + flen + 2) & ~1UL;
@@ -641,7 +655,10 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
         WORD w = *(WORD __far *)(src + 0x94 + i * 6);
         size += (DWORD)((w + 7) >> 3) * sx * h;
     }
-    s->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, size);
+    /* the header and the table now; the bits (the block grown to its
+       whole size) only when the font is drawn (font_bits): measuring a
+       font 1000 pixels high (Clock does) needs no block of 800K */
+    s->hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_SHARE, bits);
     q = s->hMem ? GlobalLock(s->hMem) : 0;
     if (!q) {
         if (s->hMem)
@@ -670,19 +687,70 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
     fi->dfBitsOffset = bits;
     off = bits;
     for (i = 0; i < n; i++) {
-        BYTE __far *e = src + 0x94 + i * 6;
-        WORD w = *(WORD __far *)e, cols = (w + 7) >> 3, ncols = cols * sx;
-        DWORD goff = *(DWORD __far *)(e + 2);
+        WORD w = *(WORD __far *)(src + 0x94 + i * 6);
         *(WORD __far *)(q + 0x94 + i * 6) = w * sx;
         *(DWORD __far *)(q + 0x94 + i * 6 + 2) = off;
+        off += (DWORD)((w + 7) >> 3) * sx * h;
+    }
+    fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)bits);
+    s->bits = 0;
+    return fi;
+}
+
+/* the bits of a font before it is drawn: a scaled copy's are made the
+   first time (its block grows, so its FONTINFO may move: callers take
+   f->fi again) */
+void font_bits(LPFONT s)
+{
+    LPFONTINFO bf, fi;
+    BYTE __far *src, __far *q;
+    WORD n, i, sx, sy, bh, h, r, c, dy, j;
+    DWORD size;
+    BYTE row[64];
+    HGLOBAL hn;
+    if (!s || !s->base || s->bits || !s->fi)
+        return;
+    bf = font_info(xptr(s->base));
+    if (!bf)
+        return;
+    src = (BYTE __far *)bf - 0x42;
+    size = *(DWORD __far *)((BYTE __far *)s->fi - 0x42 + 2);
+    GlobalUnlock(s->hMem);
+    hn = GlobalReAlloc(s->hMem, size, GMEM_MOVEABLE | GMEM_ZEROINIT);
+    if (hn)
+        s->hMem = hn;
+    q = GlobalLock(s->hMem);
+    fi = (LPFONTINFO)(q + 0x42);
+    s->fi = fi;
+    fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)fi->dfBitsOffset);
+    if (!hn)
+        return;                         /* no room: drawn blank */
+    s->bits = 1;
+    n = bf->dfLastChar - bf->dfFirstChar + 2;
+    sx = s->sx;
+    sy = s->sy;
+    bh = bf->dfPixHeight;
+    h = bh * sy;
+    for (i = 0; i < n; i++) {
+        BYTE __far *e = src + 0x94 + i * 6;
+        WORD w = *(WORD __far *)e, ncols = ((w + 7) >> 3) * sx;
+        DWORD goff = *(DWORD __far *)(e + 2);
+        DWORD off = *(DWORD __far *)(q + 0x94 + i * 6 + 2);
         if (ncols > sizeof row)
             ncols = sizeof row;         /* (a glyph over 512 pixels wide) */
         for (r = 0; r < bh; r++) {
+            BYTE b = 0;
             /* the source row's pixels, each x times */
             for (c = 0; c < ncols; c++)
                 row[c] = 0;
             for (j = 0; j < w; j++) {
-                BYTE b = *huge_at(src, goff + (DWORD)(j >> 3) * bh + r);
+                if (!(j & 7)) {
+                    b = *huge_at(src, goff + (DWORD)(j >> 3) * bh + r);
+                    if (!b) {
+                        j += 7;         /* (the loop's j++ makes it 8) */
+                        continue;
+                    }
+                }
                 if (b & (0x80 >> (j & 7))) {
                     WORD p = j * sx, e2 = p + sx;
                     for (; p < e2 && (p >> 3) < ncols; p++)
@@ -696,10 +764,7 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
                     *huge_at(q, off + (DWORD)c * h + r * sy + dy) = row[c];
             }
         }
-        off += (DWORD)cols * sx * h;
     }
-    fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)bits);
-    return fi;
 }
 
 /* the entry of base font xb scaled sx by sy: one a DC has already, or a
@@ -708,10 +773,15 @@ static XP font_scaled(XP xb, int sx, int sy)
 {
     XP xs;
     LPFONT s, b;
-    for (xs = scaled; xs; xs = s->next) {
+    XP __far *pp;
+    for (pp = &scaled; (xs = *pp) != 0; pp = &s->next) {
         s = xptr(xs);
-        if (s->base == xb && s->sx == sx && s->sy == sy)
+        if (s->base == xb && s->sx == sx && s->sy == sy) {
+            *pp = s->next;              /* the most recently used first */
+            s->next = scaled;
+            scaled = xs;
             return xs;
+        }
     }
     xs = xalloc(sizeof(FONTENT));
     if (!xs)
