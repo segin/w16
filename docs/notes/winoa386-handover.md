@@ -79,9 +79,12 @@ See the end of this file (kept current).
    windowed box (3.1 opens the menu: a SHELL hot key?).
 3. "Inactive" in the title when suspended; Settings' Display Usage,
    Tasking Options (Exclusive, Background), Priority, Terminate.
-4. The PIF's 386 section (memory, display, exclusive/background,
-   priorities) into SHELL 3's block and registers: vary PIFs on 3.1 and
-   record function 3 with VXS.
+4. (Done 2026-11-22, "The PIF" below.) The PIF's 386 section into SHELL
+   3's block and registers. Left of it: w16's WIN386 acting on Background
+   (a full-screen VM without the focus needs its video memory in RAM, as
+   a windowed one has), KB Required, EMS/XMS, the video settings, the
+   reserved keys and the shortcut key; the 386 Parameters dialog's pixels
+   (template measured from 3.1's screen, not yet compared).
 5. (Done 2026-11-21, ARCHITECTURE.md 6.9.2.) DOS-box fonts of w16's own:
    EGA80WOA/EGA40WOA/CGA80WOA/CGA40WOA.FON (Terminal 8x12, 16x12, 8x8,
    16x8) and DOSAPP.FON (the Fonts dialog's other sizes) are in the tree

@@ -234,8 +234,8 @@ static BOOL exists(const char *name, char *full)
 
 /* a directory there (INT 21h 4300h; a drive's root always) */
 static WORD dos_attr(const char FAR *p);
-#pragma aux dos_attr = "push ds" "mov ds, dx" "mov ax, 4300h" "int 21h" "mov ax, cx" "jnc ok" \
-    "xor ax, ax" "ok:" "pop ds" parm [dx ax] value [ax] modify [cx];
+#pragma aux dos_attr = "push ds" "mov ds, cx" "mov ax, 4300h" "int 21h" "mov ax, cx" "jnc ok" \
+    "xor ax, ax" "ok:" "pop ds" parm [cx dx] value [ax] modify [cx dx];
 
 static BOOL dir_exists(const char *d)
 {
@@ -906,8 +906,26 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     eps.ThisVMHand = vm;
     eps.VM1_Hnd = vm;
     running = TRUE;
-    focus(vm, MAKELONG(1, ds_));
-    shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+    if (cblk.flags[0] & 0x04) {
+        /* windowed from the start (the PIF's Display Usage; 3.1: SHELL 5
+           to the System VM (EDI 0), 5 to the VM (EDI 1), 15h, then the
+           window shows the VM's screen: tests/pifread.sh edwin) */
+        focus(sysvm, 0);
+        focus(vm, 1);
+        shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+        windowed = TRUE;
+        eps.EPStatusFlags |= 0x00010000L;
+        eps.EPStatusFlags &= ~EPS_STATEVALID;
+        paint_font();
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        window_size();
+        scroll_ranges();
+        CursorOn(&eps);
+        InvalidateRect(hwnd, NULL, TRUE);
+    } else {
+        focus(vm, MAKELONG(1, ds_));
+        shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+    }
 
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);

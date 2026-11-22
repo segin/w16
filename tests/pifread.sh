@@ -107,6 +107,8 @@ summarize() {
 running=0
 for n in $names; do
     for who in $whos; do
+        # PIFREAD_KEEP=1: Microsoft's runs already in OUT are kept
+        if [ $who = ms ] && [ -n "${PIFREAD_KEEP:-}" ] && [ -f "$out/$n-ms-$mode/wc" ]; then continue; fi
         one "$n" $who &
         running=$((running + 1))
         if [ $running -ge "$jobs" ]; then wait; running=0; fi

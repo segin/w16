@@ -330,8 +330,8 @@ static void debug_block(void)
            the keyboard directly (63h 04h, 80h, 40h; the 286 section's
            4000h, 8000h; 16Fh 10h); 02h graphics (63h 02h); 04h close
            window on exit (63h 10h); 08h DSWAP's MS-DOS Prompt banner
-           (COMMAND.COM without parameters, not COMMAND /C ...: WO2,
-           boot-test)
+           (COMMAND.COM but for COMMAND /C ...: WO2, boot-test; with the
+           parameters "stdargs" 3.1 showed it too, edcmd)
      +29h  the reserved keys: 01h Alt+Tab, 02h Alt+Esc, 04h Ctrl+Esc (the
            286 flags 01h, 02h, 10h); 08h no save screen (20h); 10h no
            screen exchange (63h 08h, or Alt+PrtSc or PrtSc reserved: 04h,
@@ -340,6 +340,15 @@ static void debug_block(void)
    170h, the 286 flags' 40h. UNVERIFIED: the XMS KB limit and required
    (WO2 recorded no block at the switch with them set; DSWAP's program
    got less memory) */
+/* a tail that runs a command: "/C" (case aside) in it */
+static BOOL has_slash_c(const char *t)
+{
+    for (; *t; t++)
+        if (t[0] == '/' && (t[1] | 0x20) == 'c')
+            return TRUE;
+    return FALSE;
+}
+
 static void rec_pif(BYTE FAR *r)
 {
     WORD kb = pif.minmem, f = pif.flags286;
@@ -353,7 +362,7 @@ static void rec_pif(BYTE FAR *r)
         fl |= 0x02;
     if ((pif.flags & PIFF_CLOSE) || !pif.opened)
         fl |= 0x04;
-    if (!lstrcmpi(base_name(program), "COMMAND.COM") && !tail[0])
+    if (!lstrcmpi(base_name(program), "COMMAND.COM") && !has_slash_c(tail))
         fl |= 0x08;
     if (f & 0x01) k |= 0x01;
     if (f & 0x02) k |= 0x02;
@@ -630,8 +639,10 @@ static BOOL setup(LPSTR cmd)
         if (!lstrcmpi(pif.program, "COMMAND.COM") && get_env("COMSPEC", program, sizeof program))
             ;
         else if (!exists(pif.program, program)) {
+            /* (3.1: string 44, "Make sure the path ...", titled with the
+               program as the PIF names it; tests/pifread.sh edprogbad) */
             lstrcpyn(title, pif.program, sizeof title);
-            message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
+            message(IDS_NOPIFFILE, MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
     } else if (!exists(path, program)) {
