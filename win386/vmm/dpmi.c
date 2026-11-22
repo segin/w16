@@ -31,6 +31,8 @@ void page_free(u32 phys);
  * starting size and step. */
 static u32 ldt_top = 0x1000;
 static u32 ldt_alias;               /* the vendor API's LDT selector */
+static int exc_last;                /* the exception last given to a client's handler */
+static void exc_default(struct cregs *r, int vec, u32 err);
 
 static u8 *ldt_desc(u32 sel)
 {
@@ -49,11 +51,54 @@ static int sel_valid(u32 sel)
     return (sel & 4) && i < 8192 && !desc_free(i);
 }
 
+/* A selector's base; for one with no descriptor (an LDT index past the
+ * LDT, a GDT index past the GDT) the VMM's own window, which no client
+ * check lets through (lin_user_ok) */
 u32 sel_base(u32 sel)
 {
-    if (sel & 4) return desc_base(ldt_desc(sel));
+    if (sel & 4) return (sel & 0xFFFF) < ldt_limit + 1 ? desc_base(ldt_desc(sel)) : W386_VMM_LIN;
     if ((sel & ~3u) == (SEL_PMBP & ~3u)) return pmbp_lin;
+    if ((sel & 0xFFFF) >> 3 >= GDT_ENTRIES) return W386_VMM_LIN;
     return desc_base(gdt + (sel & ~7u));
+}
+
+/* the D bit of a code segment, the B bit of a stack (bit 6 of byte 6) */
+int seg_32(u32 sel)
+{
+    u8 *d;
+    if (sel & 4) {
+        if ((sel & 0xFFFF) >= ldt_limit + 1) return 0;
+        d = ldt_desc(sel);
+    } else {
+        if ((sel & 0xFFFF) >> 3 >= GDT_ENTRIES) return 0;
+        d = gdt + (sel & ~7u);
+    }
+    return (d[6] & 0x40) != 0;
+}
+
+/* The client's sel:off for len bytes as a linear address the VMM may use,
+ * or NULL: the selector has a present data or code descriptor of DPL 3,
+ * and ring 3 could reach every byte (lin_user_ok). The segment's limit is
+ * not checked: Windows 3.1's host does not (VX11 run L: 000Bh wrote its 8
+ * bytes past ES's limit). The offset is 16 bits for a 16-bit client. */
+u8 *cl_ptr(u32 sel, u32 off, u32 len, int write)
+{
+    u8 *d;
+    u32 lin;
+    sel &= 0xFFFF;
+    if (!(sel & ~3u)) return NULL;
+    if (sel & 4) {
+        if (sel >= ldt_limit + 1) return NULL;
+        d = ldt_desc(sel);
+    } else if ((sel & ~3u) == (SEL_PMBP & ~3u)) {
+        return NULL;
+    } else {
+        if (sel >> 3 >= GDT_ENTRIES) return NULL;
+        d = gdt + (sel & ~7u);
+    }
+    if ((d[5] & 0x90) != 0x90 || ((d[5] >> 5) & 3) != 3) return NULL;
+    lin = desc_base(d) + (sysvm.client32 ? off : (off & 0xFFFF));
+    return lin_user_ok(lin, len, write) ? (u8 *)lin : NULL;
 }
 
 static void ldt_grow(void)
@@ -89,19 +134,32 @@ static void ldt_free(u32 sel)
 }
 
 /* A selector for a real-mode segment (0002h): one per segment, kept. */
-struct segsel { struct segsel *next; u32 seg, sel; };
+struct segsel { struct segsel *next; u32 seg, sel, acc; };
 static struct segsel *segsels;
 
 u32 seg_to_sel(u32 seg, u32 access)
 {
     struct segsel *s;
     u32 sel;
+    /* one kept is used only while its descriptor is still the one made
+     * here: KRNL386 frees and reuses LDT entries by writing the LDT */
     for (s = segsels; s; s = s->next)
-        if (s->seg == seg && (ldt_desc(s->sel)[5] & 0xFE) == (access & 0xFE)) return s->sel;
+        if (s->seg == seg && (ldt_desc(s->sel)[5] & 0xFE) == (access & 0xFE)
+            && desc_base(ldt_desc(s->sel)) == seg << 4 && *(u16 *)ldt_desc(s->sel) == 0xFFFF
+            && !(ldt_desc(s->sel)[6] & 0x8F))
+            return s->sel;
+    for (s = segsels; s && (s->seg != seg || s->acc != (access & 0xFE)); s = s->next)
+        ;
     sel = ldt_alloc(1);
     if (!sel) return 0;
     set_desc(ldt_desc(sel), seg << 4, 0xFFFF, access, 0);
+    if (s) {                            /* the segment's entry, renewed */
+        s->sel = sel;
+        return sel;
+    }
     s = kmalloc(sizeof(*s));
+    if (!s) return sel;
+    s->acc = access & 0xFE;
     s->seg = seg;
     s->sel = sel;
     s->next = segsels;
@@ -122,9 +180,17 @@ int sel_to_seg(u32 sel)
 }
 
 /* ---- the client's stack ---- */
+/* The stack's offsets are 32 bits when SS is a big segment (its B bit:
+ * a 16-bit client's 32-bit stack, as the processor itself uses ESP
+ * there); the words are the client's size */
+static int stack_big(struct cregs *r)
+{
+    return sysvm.client32 || seg_32(r->ss);
+}
+
 static u32 stack_lin(struct cregs *r)
 {
-    return sel_base(r->ss) + (sysvm.client32 ? r->esp : (r->esp & 0xFFFF));
+    return sel_base(r->ss) + (stack_big(r) ? r->esp : (r->esp & 0xFFFF));
 }
 
 static void pm_push(struct cregs *r, u32 v)
@@ -133,7 +199,7 @@ static void pm_push(struct cregs *r, u32 v)
         r->esp -= 4;
         *(u32 *)stack_lin(r) = v;
     } else {
-        SETW(r->esp, r->esp - 2);
+        if (stack_big(r)) r->esp -= 2; else SETW(r->esp, r->esp - 2);
         *(u16 *)stack_lin(r) = (u16)v;
     }
 }
@@ -146,7 +212,7 @@ static u32 pm_pop(struct cregs *r)
         r->esp += 4;
     } else {
         v = *(u16 *)stack_lin(r);
-        SETW(r->esp, r->esp + 2);
+        if (stack_big(r)) r->esp += 2; else SETW(r->esp, r->esp + 2);
     }
     return v;
 }
@@ -167,6 +233,8 @@ void dpmi_init(void)
         sysvm.pmvec_off[i] = i;
     }
 }
+
+static u16 env_seg;                     /* PSP:2Ch before the switch made it a selector */
 
 /* The mode switch: a far call from V86 mode to the 1687h entry. AX bit 0:
  * a 32-bit client; ES: host data (none asked). */
@@ -200,6 +268,7 @@ void dpmi_switch(struct cregs *r)
     pspp = (u8 *)(psp << 4);
     env = *(u16 *)(pspp + 0x2C);
     if (psp && env) {
+        env_seg = (u16)env;
         esel = ldt_alloc(1);
         set_desc(ldt_desc(esel), env << 4, 0xFFFF, 0xF2, 0);
         *(u16 *)(pspp + 0x2C) = (u16)esel;
@@ -252,8 +321,12 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
         trace("DPMI: INT %x AX=%x: DS %x not in conventional memory\n", vec, AX(r), pm.ds);
     if (dpmi_verbose && es < 0 && (pm.es & 4))
         trace("DPMI: INT %x AX=%x: ES %x not in conventional memory\n", vec, AX(r), pm.es);
-    v.ds = ds < 0 ? 0 : ds;
-    v.es = es < 0 ? 0 : es;
+    /* a selector V86 code cannot see becomes the transfer buffer's
+     * segment, not 0: a call that writes through it (INT 21h 29h's FCB
+     * at ES:DI, a BIOS state save) then writes there, not over the
+     * interrupt vectors */
+    v.ds = ds < 0 ? info->xbuf_seg : ds;
+    v.es = es < 0 ? info->xbuf_seg : es;
     v.eflags = pm.eflags;
     v86_int(&v, vec);
     if (dpmi_verbose && vec == 0x21 && ds >= 0) {
@@ -280,11 +353,11 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
         if (ah != 0x1F && ah != 0x32 && ah != 0x34 && ah != 0x52 && ah != 0x5D && ah != 0x63)
             return 1;
     }
-    if ((int)(v.ds & 0xFFFF) != (ds < 0 ? 0 : ds)) {
+    if ((int)(v.ds & 0xFFFF) != (ds < 0 ? (int)info->xbuf_seg : ds)) {
         u32 sel = seg_to_sel(v.ds & 0xFFFF, 0xF2);
         if (sel) r->ds = sel;
     }
-    if ((int)(v.es & 0xFFFF) != (es < 0 ? 0 : es)) {
+    if ((int)(v.es & 0xFFFF) != (es < 0 ? (int)info->xbuf_seg : es)) {
         u32 sel = seg_to_sel(v.es & 0xFFFF, 0xF2);
         if (sel) r->es = sel;
     }
@@ -301,12 +374,21 @@ struct rmregs {             /* DPMI real-mode register structure */
 /* DPMI 0300h-0302h: run real-mode code with the client's register structure */
 static void dpmi_simulate(struct cregs *r, int fn)
 {
-    u32 lin = sel_base(r->es) + (sysvm.client32 ? r->edi : DI(r));
-    struct rmregs *s = (struct rmregs *)lin;
+    struct rmregs *s = (struct rmregs *)cl_ptr(r->es, r->edi, sizeof(struct rmregs), 1);
     struct cregs v, pm = *r;
     u32 ncopy = CX(r) * 2, i;
     u8 *src;
 
+    /* a structure the client cannot reach, or more words than the stack
+     * they go to can take: the call fails (Windows 3.1 ends in both: VX11
+     * runs P and S) */
+    if (!s) { set_cf(r, 1); return; }
+    src = (u8 *)stack_lin(r);
+    if (ncopy && !lin_user_ok((u32)src, ncopy, 0)) { set_cf(r, 1); return; }
+    if (!s->ss && !s->sp) {
+        u32 low = (u32)cur_vm->refstk_top - W386_REFSTK_SIZE + 256;
+        if ((u32)cur_vm->refsp < low || ncopy + 256 > (u32)cur_vm->refsp - low) { set_cf(r, 1); return; }
+    }
     memset(&v, 0, sizeof(v));
     v.edi = s->edi; v.esi = s->esi; v.ebp = s->ebp; v.ebx = s->ebx;
     v.edx = s->edx; v.ecx = s->ecx; v.eax = s->eax;
@@ -315,7 +397,6 @@ static void dpmi_simulate(struct cregs *r, int fn)
     else { v.ss = info->refstk_seg; v.esp = sysvm.refsp; }
     v.eflags = s->flags;
     /* parameters copied from the client's stack */
-    src = (u8 *)(stack_lin(r));
     for (i = ncopy; i > 0; i -= 2)
         v86_push16(&v, *(u16 *)(src + i - 2));
     if (dpmi_verbose) trace("[31:%x %x:%x]", fn, fn == 0x300 ? BX(r) & 0xFF : s->cs, s->ip);
@@ -334,10 +415,127 @@ static void dpmi_simulate(struct cregs *r, int fn)
     set_cf(r, 0);
 }
 
+/* ---- the client's linear address space: 4 MB up to the VMM's window,
+ * in free ranges (first fit, merged when given back), so that what a
+ * client frees is used again: Windows 3.1 gave a 64 KB block freed and
+ * allocated again 300 times the same address each time (VX11 "mem") ---- */
+struct lrange { struct lrange *next; u32 lin, size; };
+static struct lrange *lfree;
+static int lfree_init;
+
+static void lin_setup(void)
+{
+    if (lfree_init) return;
+    lfree_init = 1;
+    lfree = kmalloc(sizeof(*lfree));
+    if (!lfree) return;
+    lfree->next = NULL;
+    lfree->lin = 0x00400000;            /* client linear memory starts at 4 MB */
+    lfree->size = W386_VMM_LIN - 0x00400000;
+}
+
+static u32 lin_alloc(u32 size)
+{
+    struct lrange **pp, *f;
+    u32 lin;
+    lin_setup();
+    for (pp = &lfree; (f = *pp) != NULL; pp = &f->next)
+        if (f->size >= size) {
+            lin = f->lin;
+            f->lin += size;
+            f->size -= size;
+            if (!f->size) { *pp = f->next; kfree(f); }
+            return lin;
+        }
+    return 0;
+}
+
+/* the range lin, size taken if it is all free (a block growing in place) */
+static int lin_take(u32 lin, u32 size)
+{
+    struct lrange **pp, *f, *n;
+    lin_setup();
+    for (pp = &lfree; (f = *pp) != NULL; pp = &f->next)
+        if (lin >= f->lin && lin - f->lin < f->size) {
+            if (size > f->size - (lin - f->lin)) return 0;
+            if (lin + size < f->lin + f->size) {
+                n = kmalloc(sizeof(*n));
+                if (!n) return 0;
+                n->lin = lin + size;
+                n->size = f->lin + f->size - (lin + size);
+                n->next = f->next;
+                f->next = n;
+            }
+            f->size = lin - f->lin;
+            if (!f->size) { *pp = f->next; kfree(f); }
+            return 1;
+        }
+    return 0;
+}
+
+static void lin_free(u32 lin, u32 size)
+{
+    struct lrange **pp, *f, *n;
+    if (!size) return;
+    for (pp = &lfree; (f = *pp) != NULL && f->lin + f->size < lin; pp = &f->next)
+        ;
+    if (f && f->lin + f->size == lin) {             /* after f */
+        f->size += size;
+        if (f->next && f->lin + f->size == f->next->lin) {
+            n = f->next;
+            f->size += n->size;
+            f->next = n->next;
+            kfree(n);
+        }
+        return;
+    }
+    if (f && lin + size == f->lin) {                /* before f */
+        f->lin = lin;
+        f->size += size;
+        return;
+    }
+    n = kmalloc(sizeof(*n));
+    if (!n) return;                                 /* lost to the space: no harm */
+    n->lin = lin;
+    n->size = size;
+    n->next = f;
+    *pp = n;
+}
+
+/* pages lin .. lin+size-1 unmapped and their memory freed; a page table
+ * left empty goes too */
+static void pages_release(u32 lin, u32 size)
+{
+    u32 a, p, t, i, *pt;
+    for (a = lin; a < lin + size; a += 4096) {
+        p = lin_to_phys(a);
+        if (!p) continue;
+        map_page(a, 0, 0);
+        page_free(p & ~0xFFFu);
+    }
+    for (t = lin >> 22; size && t <= (lin + size - 1) >> 22; t++) {
+        if (t == 0 || t >= (W386_VMM_LIN >> 22)) continue;
+        if (!(vmm_pdir_entry_get(t) & 1)) continue;
+        pt = (u32 *)phys_to_lin(vmm_pdir_entry_get(t) & ~0xFFFu);
+        for (i = 0; i < 1024 && !pt[i]; i++)
+            ;
+        if (i == 1024) {
+            p = vmm_pdir_entry_get(t) & ~0xFFFu;
+            vmm_pdir_entry(t, 0);
+            page_free(p);
+        }
+    }
+}
+
+/* physical memory mapped with 0800h (kept: DPMI 0.9 has no call to free
+ * a mapping); the same range asked for again gets the same address, as
+ * under Windows 3.1 (VX11 "map": dev, dev2) */
+struct physmap { struct physmap *next; u32 phys, size, lin; };
+static struct physmap *physmaps;
+
 /* ---- memory blocks (0501h) ---- */
 struct memblk { struct memblk *next; u32 lin, size, handle; };
 static struct memblk *blocks;
-static u32 next_lin = 0x00400000;      /* client linear memory starts at 4 MB */
 static u32 next_handle = 1;
 
 /* The most pages one block can have with f pages free: a page table (4 MB)
@@ -349,34 +547,39 @@ static u32 mem_largest_pages(u32 f)
     return f > t ? f - t : 0;
 }
 
+/* pages for lin .. lin+n pages; all or none */
+static int pages_map(u32 lin, u32 n)
+{
+    u32 i, p;
+    for (i = 0; i < n; i++) {
+        p = page_alloc();
+        if (!p || !map_page(lin + i * 4096, p, 7)) {
+            if (p) page_free(p);
+            pages_release(lin, i * 4096);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static struct memblk *mem_alloc(u32 size)
 {
     struct memblk *b;
-    u32 n = size / 4096 + (size % 4096 != 0), i, p;
-    /* the pages and their page tables free, and the client's linear
-       space (from 4 MB up to the VMM's window) not used up */
+    u32 n = size / 4096 + (size % 4096 != 0);
+    /* the pages and their page tables free, and room in the client's
+       linear space (a guard page after each block) */
     if (!size || n > mem_largest_pages(pages_free())) return NULL;
-    if (n >= (W386_VMM_LIN - next_lin) / 4096) return NULL;
     b = kmalloc(sizeof(*b));
     if (!b) return NULL;
-    b->lin = next_lin;
+    b->lin = lin_alloc(n * 4096 + 4096);
+    if (!b->lin) { kfree(b); return NULL; }
     b->size = n * 4096;
     b->handle = next_handle++;
-    for (i = 0; i < n; i++) {
-        p = page_alloc();
-        if (!p || !map_page(b->lin + i * 4096, p, 7)) {
-            /* give back what it took (the page tables stay) */
-            if (p) page_free(p);
-            while (i--) {
-                p = lin_to_phys(b->lin + i * 4096);
-                map_page(b->lin + i * 4096, 0, 0);
-                if (p) page_free(p & ~0xFFFu);
-            }
-            kfree(b);
-            return NULL;
-        }
+    if (!pages_map(b->lin, n)) {
+        lin_free(b->lin, n * 4096 + 4096);
+        kfree(b);
+        return NULL;
     }
-    next_lin += b->size + 4096;         /* a guard page between blocks */
     b->next = blocks;
     blocks = b;
     return b;
@@ -385,19 +588,49 @@ static struct memblk *mem_alloc(u32 size)
 static int mem_free(u32 handle)
 {
     struct memblk **pp, *b;
-    u32 i, p;
     for (pp = &blocks; (b = *pp) != NULL; pp = &b->next)
         if (b->handle == handle) {
-            for (i = 0; i < b->size; i += 4096) {
-                p = lin_to_phys(b->lin + i);
-                map_page(b->lin + i, 0, 0);
-                if (p) page_free(p & ~0xFFFu);
-            }
+            pages_release(b->lin, b->size);
+            lin_free(b->lin, b->size + 4096);
             *pp = b->next;
             kfree(b);
             return 1;
         }
     return 0;
+}
+
+/* 0503h: smaller in place; larger in place when the addresses after it
+ * are free, else moved (contents copied); the handle stays (Windows 3.1
+ * kept both the address and the handle: VX11 "mem") */
+static int mem_resize(struct memblk *o, u32 size)
+{
+    u32 n = size / 4096 + (size % 4096 != 0), m = o->size / 4096;
+    struct memblk *b;
+    if (!size) return 0;
+    if (n <= m) {
+        pages_release(o->lin + n * 4096, (m - n) * 4096);
+        lin_free(o->lin + (n + 1) * 4096, (m - n) * 4096);
+        o->size = n * 4096;
+        return 1;
+    }
+    if (n - m <= mem_largest_pages(pages_free())
+        && lin_take(o->lin + (m + 1) * 4096, (n - m) * 4096)) {
+        if (pages_map(o->lin + m * 4096, n - m)) {
+            o->size = n * 4096;
+            return 1;
+        }
+        lin_free(o->lin + (m + 1) * 4096, (n - m) * 4096);
+    }
+    b = mem_alloc(size);
+    if (!b) return 0;
+    memcpy((void *)b->lin, (void *)o->lin, o->size);
+    pages_release(o->lin, o->size);
+    lin_free(o->lin, o->size + 4096);
+    o->lin = b->lin;
+    o->size = b->size;
+    blocks = b->next;                   /* b is first: mem_alloc put it there */
+    kfree(b);
+    return 1;
 }
 
 static struct memblk *mem_find(u32 handle)
@@ -408,10 +641,123 @@ static struct memblk *mem_find(u32 handle)
     return NULL;
 }
 
+/* ---- INT 21h 48h, 49h, 4Ah from protected mode: memory of the host's,
+ * not DOS's (Windows 3.1, VX11 "d48": AH=48h from a program gives a
+ * selector, though no DOS memory was left; the block's first selector
+ * spans all of it, then one per further 64 KB, each FFFFh; FFFFh
+ * paragraphs fail with AX 8 and BX FFFEh; 4Ah keeps the selector and
+ * grows only within its selectors, at most (count * 1000h) - 1
+ * paragraphs, else AX 8 and BX that; 49h frees the block and its
+ * selectors). UNVERIFIED: the last selector's limit of a block that ends
+ * inside it (FFFFh here too only when it is full), BX=0 (one paragraph
+ * here) ---- */
+struct dosblk { struct dosblk *next; u32 sel, tiles, handle; };
+static struct dosblk *dosblks;
+
+static u32 dosblk_largest(void)
+{
+    u32 n = mem_largest_pages(pages_free());
+    return n >= 0x1000 ? 0xFFFE : n * 0x100;
+}
+
+static void dosblk_descs(struct dosblk *k, u32 lin, u32 bytes)
+{
+    u32 i;
+    for (i = 0; i < k->tiles; i++) {
+        u32 left = bytes > i * 0x10000 ? bytes - i * 0x10000 : 0;
+        u32 lim = i ? (left > 0x10000 ? 0xFFFF : (left ? left - 1 : 0)) : bytes - 1;
+        set_desc(ldt_desc(k->sel + i * 8), lin + i * 0x10000, lim, 0xF2, 0);
+    }
+}
+
+static struct dosblk *dosblk_of(u32 sel)
+{
+    struct dosblk *k;
+    for (k = dosblks; k; k = k->next)
+        if ((k->sel & ~3u) == (sel & 0xFFFC)) return k;
+    return NULL;
+}
+
+/* 1: done; 0: not one of these (a DOS block's selector: dosx.c goes on) */
+int dpmi_dosmem(struct cregs *r)
+{
+    u32 ah = (AX(r) >> 8) & 0xFF, paras, bytes;
+    struct dosblk *k, **pp;
+    struct memblk *b;
+
+    if (ah == 0x48) {
+        paras = BX(r) ? BX(r) : 1;
+        bytes = paras * 16;
+        k = paras <= 0xFFFE ? kmalloc(sizeof(*k)) : NULL;
+        if (k) {
+            k->tiles = (bytes + 0xFFFF) >> 16;
+            k->sel = ldt_alloc(k->tiles);
+            b = k->sel ? mem_alloc(bytes) : NULL;
+            if (b) {
+                k->handle = b->handle;
+                dosblk_descs(k, b->lin, bytes);
+                k->next = dosblks;
+                dosblks = k;
+                SETW(r->eax, k->sel);
+                set_cf(r, 0);
+                return 1;
+            }
+            if (k->sel) { u32 i; for (i = 0; i < k->tiles; i++) ldt_free(k->sel + i * 8); }
+            kfree(k);
+        }
+        set_cf(r, 1);
+        SETW(r->eax, 8);
+        SETW(r->ebx, dosblk_largest());
+        return 1;
+    }
+    if ((k = dosblk_of(r->es)) == NULL) return 0;
+    if (ah == 0x49) {
+        u32 i;
+        mem_free(k->handle);
+        for (i = 0; i < k->tiles; i++) { ldt_free(k->sel + i * 8); sel_gone(r, k->sel + i * 8); }
+        for (pp = &dosblks; *pp != k; pp = &(*pp)->next)
+            ;
+        *pp = k->next;
+        kfree(k);
+        set_cf(r, 0);
+        return 1;
+    }
+    /* 4Ah */
+    paras = BX(r) ? BX(r) : 1;
+    if (paras > k->tiles * 0x1000 - 1) {
+        set_cf(r, 1);
+        SETW(r->eax, 8);
+        SETW(r->ebx, k->tiles * 0x1000 - 1);
+        return 1;
+    }
+    b = mem_find(k->handle);
+    if (!b || !mem_resize(b, paras * 16)) {
+        set_cf(r, 1);
+        SETW(r->eax, 8);
+        SETW(r->ebx, b ? b->size / 16 : 0);
+        return 1;
+    }
+    dosblk_descs(k, b->lin, paras * 16);
+    set_cf(r, 0);
+    return 1;
+}
+
 /* ---- INT 31h ---- */
 static u32 reg_ofs(struct cregs *r, u32 e)
 {
     return sysvm.client32 ? e : (e & 0xFFFF);
+}
+
+/* A selector freed: segment registers of the client's that hold it are
+ * zeroed (Windows 3.1, VX11 run E: ES 0 after 0001h freed it), so the
+ * return to the client cannot load a descriptor that is gone */
+void sel_gone(struct cregs *r, u32 sel)
+{
+    sel &= 0xFFF8;
+    if ((r->ds & 0xFFF8) == sel) r->ds = 0;
+    if ((r->es & 0xFFF8) == sel) r->es = 0;
+    if ((r->fs & 0xFFF8) == sel) r->fs = 0;
+    if ((r->gs & 0xFFF8) == sel) r->gs = 0;
 }
 
 /* 0100h-0102h: DOS memory through INT 21h 48h/49h/4Ah in V86 mode; the
@@ -430,22 +776,35 @@ static void dos_alloc(struct cregs *r, u32 fn)
         *r = pm;
         if (v.eflags & EFL_CF) { set_cf(r, 1); SETW(r->eax, v.eax); SETW(r->ebx, v.ebx); return; }
         sel = ldt_alloc(1);
-        if (!sel) { set_cf(r, 1); SETW(r->eax, 8); return; }
+        if (!sel) {
+            /* no selector: the block goes back to DOS */
+            struct cregs f;
+            memset(&f, 0, sizeof(f));
+            f.eax = 0x4900;
+            f.es = v.eax & 0xFFFF;
+            v86_int(&f, 0x21);
+            *r = pm;
+            set_cf(r, 1);
+            SETW(r->eax, 8);
+            return;
+        }
         set_desc(ldt_desc(sel), (v.eax & 0xFFFF) << 4, BX(r) ? BX(r) * 16 - 1 : 0, 0xF2, 0);
         SETW(r->eax, v.eax);
         SETW(r->edx, sel);
         return;
     }
-    seg = sel_to_seg(DX(r));
-    if (seg < 0) { set_cf(r, 1); SETW(r->eax, 9); return; }
+    /* a selector that is not one (0 too): carry, AX as it was (Windows
+     * 3.1, VX11 "dos": 0101h with DX=0) */
+    seg = DX(r) ? sel_to_seg(DX(r)) : -1;
+    if (seg < 0) { set_cf(r, 1); return; }
     v.es = seg;
     if (fn == 0x0101) v.eax = 0x4900;
     else { v.eax = 0x4A00; v.ebx = BX(r); }
     v86_int(&v, 0x21);
     *r = pm;
     if (v.eflags & EFL_CF) { set_cf(r, 1); SETW(r->eax, v.eax); SETW(r->ebx, v.ebx); return; }
-    if (fn == 0x0101) ldt_free(DX(r));
-    else set_desc(ldt_desc(DX(r)), seg << 4, BX(r) * 16 - 1, 0xF2, 0);
+    if (fn == 0x0101) { ldt_free(DX(r)); sel_gone(r, DX(r)); }
+    else set_desc(ldt_desc(DX(r)), seg << 4, BX(r) ? BX(r) * 16 - 1 : 0, 0xF2, 0);
 }
 
 static void dpmi_call(struct cregs *r)
@@ -465,6 +824,7 @@ static void dpmi_call(struct cregs *r)
     case 0x0001:                        /* free a descriptor */
         if (!sel_valid(BX(r))) { set_cf(r, 1); break; }
         ldt_free(BX(r));
+        sel_gone(r, BX(r));
         break;
     case 0x0002:                        /* segment to descriptor */
         sel = seg_to_sel(BX(r), 0xF2);
@@ -496,9 +856,12 @@ static void dpmi_call(struct cregs *r)
         set_desc(d, desc_base(d), v, d[5], (d[6] >> 4) & 0x4);
         break;
     case 0x0009:                        /* set access rights */
-        if (!sel_valid(BX(r))) { set_cf(r, 1); break; }
+        /* Windows 3.1 (VX11 "ar"): a system descriptor (a call gate, an
+         * LDT, a TSS) or DPL 0, 1 or 2 fails with carry, AX as it was,
+         * the descriptor unchanged; not present is taken */
+        if (!sel_valid(BX(r)) || !(CL(r) & 0x10) || ((CL(r) >> 5) & 3) != 3) { set_cf(r, 1); break; }
         d = ldt_desc(BX(r));
-        d[5] = (u8)(CL(r) | 0x60);      /* DPL 3 */
+        d[5] = (u8)CL(r);
         d[6] = (u8)((d[6] & 0x0F) | (CH(r) & 0xD0));
         break;
     case 0x000A:                        /* create a data alias */
@@ -510,13 +873,15 @@ static void dpmi_call(struct cregs *r)
         SETW(r->eax, sel);
         break;
     case 0x000B:                        /* get descriptor */
-        if (!sel_valid(BX(r))) { set_cf(r, 1); break; }
-        memcpy((void *)(sel_base(r->es) + reg_ofs(r, r->edi)), ldt_desc(BX(r)), 8);
+        if (!sel_valid(BX(r)) || (d = cl_ptr(r->es, r->edi, 8, 1)) == NULL) { set_cf(r, 1); break; }
+        memcpy(d, ldt_desc(BX(r)), 8);
         break;
     case 0x000C:                        /* set descriptor */
-        if (!sel_valid(BX(r))) { set_cf(r, 1); break; }
-        memcpy(ldt_desc(BX(r)), (void *)(sel_base(r->es) + reg_ofs(r, r->edi)), 8);
-        ldt_desc(BX(r))[5] |= 0x60;
+        /* the same checks as 0009h (Windows 3.1, VX11 "sd": a call gate,
+         * DPL 0 data or code: carry) */
+        if (!sel_valid(BX(r)) || (d = cl_ptr(r->es, r->edi, 8, 0)) == NULL
+            || !(d[5] & 0x10) || ((d[5] >> 5) & 3) != 3) { set_cf(r, 1); break; }
+        memcpy(ldt_desc(BX(r)), d, 8);
         break;
     case 0x0100: case 0x0101: case 0x0102:
         dos_alloc(r, fn);
@@ -536,8 +901,10 @@ static void dpmi_call(struct cregs *r)
             SETW(r->ecx, sysvm.excvec_sel[i]);
             r->edx = sysvm.client32 ? sysvm.excvec_off[i] : ((r->edx & 0xFFFF0000u) | (u16)sysvm.excvec_off[i]);
         } else {
+            /* the host's default (dpmi_pmbp: PMBP_EXCDEF), which a
+             * client's handler may also chain to with a far jump */
             SETW(r->ecx, SEL_PMBP);
-            SETW(r->edx, PMBP_EXCRET);  /* the host's default: terminate */
+            SETW(r->edx, PMBP_EXCDEF);
         }
         break;
     case 0x0203:                        /* set exception handler */
@@ -568,8 +935,9 @@ static void dpmi_call(struct cregs *r)
         SETW(r->edx, 0x0870);
         break;
     case 0x0500: {                      /* free memory information */
-        u32 *p = (u32 *)(sel_base(r->es) + reg_ofs(r, r->edi));
+        u32 *p = (u32 *)cl_ptr(r->es, r->edi, 48, 1);
         u32 f = pages_free();
+        if (!p) { set_cf(r, 1); break; }
         for (i = 0; i < 12; i++) p[i] = 0xFFFFFFFF;
         p[0] = mem_largest_pages(f) * 4096;     /* largest free block (0501h gives it) */
         p[1] = f;                       /* maximum unlocked page allocation */
@@ -583,6 +951,8 @@ static void dpmi_call(struct cregs *r)
         break;
     }
     case 0x0501:                        /* allocate a memory block */
+        /* size 0: carry, AX as it was (Windows 3.1, VX11 "mem") */
+        if (!BX(r) && !CX(r)) { set_cf(r, 1); break; }
         b = mem_alloc((BX(r) << 16) | CX(r));
         if (!b) { set_cf(r, 1); SETW(r->eax, 0x8013); break; }
         SETW(r->ebx, b->lin >> 16); SETW(r->ecx, b->lin);
@@ -591,16 +961,13 @@ static void dpmi_call(struct cregs *r)
     case 0x0502:                        /* free a memory block */
         if (!mem_free((SI(r) << 16) | DI(r))) set_cf(r, 1);
         break;
-    case 0x0503: {                      /* resize: a new block, contents copied */
+    case 0x0503: {                      /* resize (mem_resize) */
         struct memblk *o = mem_find((SI(r) << 16) | DI(r));
         u32 size = (BX(r) << 16) | CX(r);
-        if (!o) { set_cf(r, 1); break; }
-        b = mem_alloc(size);
-        if (!b) { set_cf(r, 1); SETW(r->eax, 0x8013); break; }
-        memcpy((void *)b->lin, (void *)o->lin, o->size < b->size ? o->size : b->size);
-        mem_free(o->handle);
-        SETW(r->ebx, b->lin >> 16); SETW(r->ecx, b->lin);
-        SETW(r->esi, b->handle >> 16); SETW(r->edi, b->handle);
+        if (!o || !size) { set_cf(r, 1); break; }
+        if (!mem_resize(o, size)) { set_cf(r, 1); SETW(r->eax, 0x8013); break; }
+        SETW(r->ebx, o->lin >> 16); SETW(r->ecx, o->lin);
+        SETW(r->esi, o->handle >> 16); SETW(r->edi, o->handle);
         break;
     }
     case 0x0600: case 0x0601: case 0x0602: case 0x0603:
@@ -610,12 +977,39 @@ static void dpmi_call(struct cregs *r)
         SETW(r->ebx, 0); SETW(r->ecx, 4096);
         break;
     case 0x0800: {                      /* map physical memory */
-        u32 phys = (BX(r) << 16) | CX(r), size = (SI(r) << 16) | DI(r), lin, off;
-        if (phys < 0x100000) { SETW(r->ebx, phys >> 16); SETW(r->ecx, phys); break; }
-        lin = next_lin;
-        for (off = 0; off < size + (phys & 0xFFF); off += 4096)
-            if (!map_page(lin + off, (phys & ~0xFFFu) + off, 7)) { set_cf(r, 1); return; }
-        next_lin += ((size + (phys & 0xFFF) + 4095) & ~0xFFFu) + 4096;
+        /* Windows 3.1 (VX11 "map"): below 1 MB, and a range that wraps
+         * past 4 GB, fail with carry, AX as it was; at or above 1 MB any
+         * address is mapped (its own memory too); the same range again
+         * gets the same address; size 0 is taken */
+        u32 phys = (BX(r) << 16) | CX(r), size = (SI(r) << 16) | DI(r), lin, off, span;
+        struct physmap *m;
+        if (phys < 0x100000 || size > 0xFFFFFFFFu - phys) { set_cf(r, 1); break; }
+        for (m = physmaps; m; m = m->next)
+            if (phys >= m->phys && phys - m->phys <= m->size && size <= m->size - (phys - m->phys)) break;
+        if (m) {
+            lin = m->lin + (phys - m->phys);
+            SETW(r->ebx, lin >> 16); SETW(r->ecx, lin);
+            break;
+        }
+        span = (phys & 0xFFF) + size;
+        span = span > 0xFFFFF000u ? 0 : (span + 4095) & ~0xFFFu;
+        m = kmalloc(sizeof(*m));
+        lin = m && (span || !size) ? lin_alloc(span + 4096) : 0;
+        if (!lin) { kfree(m); set_cf(r, 1); break; }
+        for (off = 0; off < span; off += 4096)
+            if (!map_page(lin + off, (phys & ~0xFFFu) + off, 7)) break;
+        if (off < span) {
+            while (off) { off -= 4096; map_page(lin + off, 0, 0); }
+            lin_free(lin, span + 4096);
+            kfree(m);
+            set_cf(r, 1);
+            break;
+        }
+        m->phys = phys & ~0xFFFu;
+        m->size = span;
+        m->lin = lin;
+        m->next = physmaps;
+        physmaps = m;
         lin += phys & 0xFFF;
         SETW(r->ebx, lin >> 16); SETW(r->ecx, lin);
         break;
@@ -669,13 +1063,13 @@ int int2f_pm(struct cregs *r)
     case 0x1684: {                      /* PM API entry (vxdapi.c) */
         u32 sel, off;
         vxdapi_get(r, &sel, &off);
-        SETW(r->edi, off);
+        if (sysvm.client32) r->edi = off; else SETW(r->edi, off);
         r->es = sel;
         return 1;
     }
     case 0x168A: {                      /* vendor entry: "MS-DOS" only */
-        const char *p = (const char *)(sel_base(r->ds) + reg_ofs(r, r->esi));
-        if (p[0] == 'M' && p[1] == 'S' && p[2] == '-' && p[3] == 'D' && p[4] == 'O'
+        const char *p = (const char *)cl_ptr(r->ds, r->esi, 7, 0);
+        if (p && p[0] == 'M' && p[1] == 'S' && p[2] == '-' && p[3] == 'D' && p[4] == 'O'
             && p[5] == 'S' && p[6] == 0) {
             SETLO(r->eax, 0);
             r->es = SEL_PMBP;
@@ -776,6 +1170,9 @@ static void terminate_client(struct cregs *r)
     p.eax = 0x5000;
     p.ebx = sysvm.psp_seg;
     v86_int(&p, 0x21);
+    /* DOS gets its environment segment back (the switch had put a
+     * selector there, DPMI 0.9) */
+    if (sysvm.psp_seg && env_seg) *(u16 *)(((u32)sysvm.psp_seg << 4) + 0x2C) = env_seg;
     vxd_pm_app(0, r);
     sysvm.pm = 0;
     v.eax = r->eax;
@@ -850,7 +1247,21 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         pm_v86_reflect(r, index, (index >= 8 && index < 16) || (index >= 0x70 && index < 0x78));
         return;
     }
-    if (index >= PMBP_API && index < PMBP_COUNT) {
+    if (index == PMBP_EXCDEF) {
+        /* the default exception handler (0202h's answer) chained to by a
+         * client's handler: the DPMI frame is on the stack as the client's
+         * handler got it (our return address first); the exception is
+         * handled as if the client had no handler */
+        u32 err, ip, cs, fl, sp, ss;
+        pm_pop(r); pm_pop(r);           /* the return address to PMBP_EXCRET */
+        err = pm_pop(r);
+        ip = pm_pop(r); cs = pm_pop(r); fl = pm_pop(r); sp = pm_pop(r); ss = pm_pop(r);
+        r->eip = ip; r->cs = cs; r->eflags = (fl & 0xFFFF & ~EFL_IOPL) | (r->eflags & 0xFFFF0000u);
+        r->esp = sp; r->ss = ss;
+        exc_default(r, exc_last, err);
+        return;
+    }
+    if (index >= PMBP_API && index < PMBP_API_END) {
         u32 ip = pm_pop(r), cs = pm_pop(r);
         vxdapi_call(r, index, ip, cs);
         return;
@@ -1175,8 +1586,15 @@ void dpmi_exception(struct cregs *r, int vec, u32 err)
         r->eip = sysvm.excvec_off[vec];
         r->eflags &= ~(EFL_IF | EFL_TF);
         hstk_low = r->esp & hstk_mask();
+        exc_last = vec;
         return;
     }
+    exc_default(r, vec, err);
+}
+
+/* an exception no client handler takes */
+static void exc_default(struct cregs *r, int vec, u32 err)
+{
     if (vec == 1 && pmvec_default(1)) {
         /* a single step nobody's handler takes: TF off, the client goes
          * on. Seen right after KERNEL's Ctrl+Alt+Del procedure returned

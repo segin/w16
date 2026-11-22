@@ -143,8 +143,16 @@ _resume:
         push dword [esi+R_EFL]
         push dword [esi+R_CS]
         push dword [esi+R_EIP]
-        push dword [esi+R_DS]
-        push dword [esi+R_ES]
+        ; DS and ES as FS and GS: a selector freed or rewritten while the
+        ; client had it loaded (a DPMI free, KRNL386 writing its LDT) is
+        ; zeroed here, as the processor would on a return to ring 3, not
+        ; left to fault in ring 0
+        mov eax, [esi+R_DS]
+        call fixsel
+        push eax
+        mov eax, [esi+R_ES]
+        call fixsel
+        push eax
         mov eax, [esi+R_FS]
         call fixsel
         push eax
@@ -281,6 +289,7 @@ _vmm_call_proc:
         mov esi, [ebp+4]
         mov edi, [ebp+0]
         push dword [ebp+32]
+        and dword [esp], ~600h          ; the VMM's own IF (0) and DF (0)
         popfd
         mov ebp, [ebp+8]
         call [esp]
@@ -295,6 +304,7 @@ _vmm_call_proc:
         pop dword [ebp+8]
         pushfd
         pop dword [ebp+32]
+        cld                             ; whatever the callee left
         pop ebp
         pop edi
         pop esi

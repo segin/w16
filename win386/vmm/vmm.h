@@ -168,6 +168,9 @@ u32 pages_free(void);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
 u32 lin_to_phys(u32 lin);
+int lin_user_ok(u32 lin, u32 len, int write);   /* ring 3 could reach it all */
+u32 vmm_pdir_entry(u32 i, u32 v);   /* set a page directory entry; the old one */
+u32 vmm_pdir_entry_get(u32 i);
 void make_user(u32 lin, u32 size);
 void memset(void *d, int c, u32 n);
 void memcpy(void *d, const void *s, u32 n);
@@ -311,6 +314,10 @@ void dpmi_int(struct cregs *r, int vec, int hw);   /* INT n / IRQ in protected m
 void dpmi_pmbp(struct cregs *r, u32 index);        /* a PM breakpoint (HLT) */
 void dpmi_exception(struct cregs *r, int vec, u32 err);
 u32 sel_base(u32 sel);
+int seg_32(u32 sel);                /* a code segment's D bit, a stack's B bit */
+u8 *cl_ptr(u32 sel, u32 off, u32 len, int write);   /* the client's sel:off, or NULL */
+void sel_gone(struct cregs *r, u32 sel);            /* freed: out of r's segment registers */
+int dpmi_dosmem(struct cregs *r);   /* INT 21h 48h, 49h, 4Ah from protected mode */
 int pm_v86_reflect(struct cregs *r, int vec, int hw);
 int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
@@ -324,7 +331,9 @@ void dpmi_note_pm(struct cregs *r);                /* every trap from PM */     
 #define PMBP_EXCRET     256     /* return from a client's exception handler */
 #define PMBP_VENDOR     257     /* the "MS-DOS" vendor entry (INT 2Fh 168Ah) */
 #define PMBP_IRQRET     258     /* end of a hardware interrupt run in PM for V86 */
-#define PMBP_API        259     /* 259..: a VxD's PM API entry (1684h), by device */
+#define PMBP_API        259     /* 259..318: a VxD's PM API entry (1684h), by device */
+#define PMBP_API_END    319
+#define PMBP_EXCDEF     319     /* the default exception handler 0202h hands out */
 #define PMBP_COUNT      320
 
 #endif
