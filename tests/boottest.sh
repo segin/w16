@@ -428,6 +428,14 @@
 #              fonts and in dialogs: the closed height, the edit field,
 #              the item heights, the dropped list, and their pixels by
 #              checksum; owner-drawn ones' WM_MEASUREITEMs)
+#   editwrap   a multi-line edit control's word wrap and undo
+#              (user/edit.c): probe US35 as the shell on 3.1, on w16's USER
+#              and on w16's USER and GDI, their OBS lines identical (line
+#              breaks in three fonts and widths, EM_FMTLINES, the caret
+#              over wrapped lines, scrolling, resizing, the word-break
+#              procedure's calls, ES_CENTER/ES_RIGHT, EM_SETRECT, undo
+#              sequences, the clipboard keys; the last run without the
+#              pixel checksums)
 #   lbdraw     how a list box draws and what a screen DC covers (ARCHITECTURE.md
 #              10.4): probe US33 as the shell on 3.1 and on w16's USER, their
 #              OBS lines identical: owner-drawn list boxes of every kind
@@ -865,7 +873,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3691,6 +3699,51 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   combo: US34 as 3.1 (combo boxes' heights, fields, lists and pixels in five fonts and in dialogs; w16 USER, and USER+GDI)"
         else echo "FAIL combo: $r"; fails=$((fails + 1)); fi ;;
+    editwrap)
+        # a multi-line edit control's word wrap and undo (tests/apps/us35.c)
+        ew35() {   # LABEL dropin.sh options...: US35's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 400 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US35.EXE=US35.EXE" -i 'boot:shell=C:\US35.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 ew35 editwrap-ref &
+        DROPIN_WSECS=30 ew35 editwrap-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        DROPIN_WSECS=30 ew35 editwrap-gdi -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" &
+        wait
+        r=ok
+        for k in ref w16 gdi; do
+            grep -q '^US35 end' "$out/editwrap-$k.log" ||
+                { [ "$r" = ok ] && r="US35 did not finish ($k: $out/editwrap-$k.log)"; }
+        done
+        # still different, left out (ARCHITECTURE.md, US35): text with a
+        # lone CR or LF (text 4); how far ES_AUTOHSCROLL scrolls right
+        # (autoh, autohw); WM_HSCROLL's page and thumb in a control with a
+        # horizontal bar (scrollh 3-5); Page Down with the caret above the
+        # view (scroll 15, 16); EM_SETWORDBREAKPROC's answer (3.1's not 0,
+        # what it is unknown)
+        ewskip='^OBS (w\.[0-9]\.[0-9]+\.4\.|autohw?\.|scrollh\.[345]=|scroll\.1[56]=|wb[a-z]*\.[12]=Y )'
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/editwrap-ref.log" | grep -Ev "$ewskip" > "$out/editwrap-ref.obs"
+            grep '^OBS [^~]' "$out/editwrap-w16.log" | grep -Ev "$ewskip" > "$out/editwrap-w16.obs"
+            cmp -s "$out/editwrap-ref.obs" "$out/editwrap-w16.obs" ||
+                r="$(diff "$out/editwrap-ref.obs" "$out/editwrap-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/editwrap-ref.obs, editwrap-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then
+            # w16's GDI too: all but the checksums (".sum=", the scripts'
+            # Q steps), whose glyphs are w16's
+            ewsum='\.sum=|^OBS [a-z0-9]+\.[0-9]+=Q '
+            grep -Ev "$ewsum" "$out/editwrap-ref.obs" > "$out/editwrap-ref.nosum"
+            grep '^OBS [^~]' "$out/editwrap-gdi.log" | grep -Ev "$ewskip" | grep -Ev "$ewsum" > "$out/editwrap-gdi.nosum"
+            cmp -s "$out/editwrap-ref.nosum" "$out/editwrap-gdi.nosum" ||
+                r="w16 USER+GDI: $(diff "$out/editwrap-ref.nosum" "$out/editwrap-gdi.nosum" | grep -c '^<') observation(s) differ from 3.1's ($out/editwrap-ref.nosum, editwrap-gdi.nosum)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   editwrap: US35 as 3.1 (word wrap, EM_FMTLINES, the caret, scrolling, the word-break procedure, undo; w16 USER, and USER+GDI)"
+        else echo "FAIL editwrap: $r"; fails=$((fails + 1)); fi ;;
     lbdraw)
         # list box drawing, screen DCs, tab stops (tests/apps/us33.c)
         lb33() {   # LABEL dropin.sh options...: US33's run, its log in LABEL.log

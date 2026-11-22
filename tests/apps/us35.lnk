@@ -1,0 +1,4 @@
+# US35.EXE (tests/apps/us35.c): the edit control's word wrap and undo; keybd_event and mouse_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289
+import U_MOUSE_EVENT USER.299
