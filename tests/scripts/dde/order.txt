@@ -1,0 +1,16 @@
+; PROGMAN.INI with Order= naming only some of the groups, then none at
+; all (the Program Manager audit: which groups are loaded?)
+ini PROGMAN.INI|Settings|Order| 3 1
+run PROGMAN.EXE
+connect
+request Groups
+windows
+exec [ExitProgman(0)]
+wait 2000
+ini PROGMAN.INI|Settings|Order
+run PROGMAN.EXE
+connect
+request Groups
+windows
+exec [ExitProgman(1)]
+wait 2000

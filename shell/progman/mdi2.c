@@ -20,7 +20,9 @@
 #define CW_MENU         2               /* the Window menu */
 #define CW_FIRSTID      4               /* idFirstChild */
 #define CW_LISTED       6               /* children listed in the menu */
-#define CW_EXTRA        8
+#define CW_CX           8               /* the client area's last size */
+#define CW_CY           10
+#define CW_EXTRA        12
 
 static char cls_client[] = MDI_CLIENT_CLASS;
 
@@ -160,9 +162,14 @@ static void cascade(HWND client)
     for (c = GetWindow(client, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT))
         last = c;
     for (c = last; c; c = GetWindow(c, GW_HWNDPREV)) {
+        int at;
         if (IsIconic(c))
             continue;
-        MoveWindow(c, i * step, i * step, r.right - (r.right / 4), r.bottom - (r.bottom / 4), TRUE);
+        if (IsZoomed(c))                /* as 3.x MDI: restored first */
+            ShowWindow(c, SW_RESTORE);
+        /* back to the corner once a quarter of the area is used up */
+        at = step > 0 && r.bottom / 4 > step ? (i % (r.bottom / 4 / step + 1)) * step : 0;
+        MoveWindow(c, at, at, r.right - (r.right / 4), r.bottom - (r.bottom / 4), TRUE);
         i++;
     }
 }
@@ -184,6 +191,8 @@ static void tile(HWND client)
     for (c = GetWindow(client, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
         if (IsIconic(c))
             continue;
+        if (IsZoomed(c))
+            ShowWindow(c, SW_RESTORE);
         MoveWindow(c, (i % cols) * r.right / cols, (i / cols) * r.bottom / rows,
                    r.right / cols, r.bottom / rows, TRUE);
         i++;
@@ -195,12 +204,17 @@ static void arrange_icons(HWND client)
 {
     RECT r;
     HWND c;
-    int x = 0, cx = GetSystemMetrics(SM_CXICON) * 2, cy = GetSystemMetrics(SM_CYICON) * 2;
+    int x = 0, y, cx = GetSystemMetrics(SM_CXICON) * 2, cy = GetSystemMetrics(SM_CYICON) * 2;
     GetClientRect(client, &r);
+    y = r.bottom - cy;
     for (c = GetWindow(client, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
         if (!IsIconic(c))
             continue;
-        SetWindowPos(c, NULL, x + cx / 4, r.bottom - cy + 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        if (x > 0 && x + cx > r.right) {    /* the row is full: one above */
+            x = 0;
+            y -= cy;
+        }
+        SetWindowPos(c, NULL, x + cx / 4, y + 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
         x += cx;
     }
 }
@@ -254,6 +268,30 @@ LRESULT CALLBACK __export MdiClientWndProc(HWND client, UINT msg, WPARAM wp, LPA
         if (active_of(client))
             SetFocus(active_of(client));
         return 0;
+    case WM_SIZE: {
+        /* a maximised child keeps filling the area: it grows or shrinks
+           with it (its edges stay where maximising put them) */
+        int ocx = GetWindowWord(client, CW_CX), ocy = GetWindowWord(client, CW_CY);
+        HWND c;
+        if (ocx || ocy)
+            for (c = GetWindow(client, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT))
+                if (IsZoomed(c)) {
+                    RECT r;
+                    POINT a, b;
+                    GetWindowRect(c, &r);
+                    a.x = r.left;
+                    a.y = r.top;
+                    b.x = r.right;
+                    b.y = r.bottom;
+                    ScreenToClient(client, &a);
+                    ScreenToClient(client, &b);
+                    MoveWindow(c, a.x, a.y, b.x - a.x + (int)LOWORD(lp) - ocx,
+                               b.y - a.y + (int)HIWORD(lp) - ocy, TRUE);
+                }
+        SetWindowWord(client, CW_CX, LOWORD(lp));
+        SetWindowWord(client, CW_CY, HIWORD(lp));
+        break;
+    }
     }
     return DefWindowProc(client, msg, wp, lp);
 }
@@ -322,6 +360,10 @@ LRESULT FAR pm_DefMDIChildProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SIZE:
         if (wp == SIZE_MINIMIZED)
             arrange_icons(client);
+        break;
+    case WM_DESTROY:                    /* however it goes: not active */
+        if (active_of(client) == w)
+            SetWindowWord(client, CW_ACTIVE, 0);
         break;
     }
     return DefWindowProc(w, msg, wp, lp);

@@ -22,6 +22,26 @@ static HGLOBAL handle_of(LPSTR p)
     return (HGLOBAL)LOWORD(GlobalHandle(SELECTOROF(p)));
 }
 
+#ifdef W16_WIN2
+LPSTR mem_realloc(LPSTR p, DWORD n)
+{
+    /* Windows 2.x runs in real mode: while the block is unlocked for
+       GlobalReAlloc, a compaction may move it, so a failed call would
+       leave the caller's pointer stale. Copy into a new block instead
+       (every block of ours stays locked). */
+    DWORD have, k;
+    LPSTR q;
+    if (!p)
+        return mem_alloc(n);
+    have = GlobalSize(handle_of(p));
+    if ((q = mem_alloc(n)) == NULL)
+        return NULL;
+    for (k = 0; k < have && k < n; k++)
+        q[(WORD)k] = p[(WORD)k];
+    mem_free(p);
+    return q;
+}
+#else
 LPSTR mem_realloc(LPSTR p, DWORD n)
 {
     HGLOBAL h, nh;
@@ -36,6 +56,7 @@ LPSTR mem_realloc(LPSTR p, DWORD n)
     }
     return (LPSTR)GlobalLock(nh);
 }
+#endif
 
 void mem_free(LPSTR p)
 {
@@ -58,11 +79,16 @@ LPSTR s_dup(const char FAR *s)
 /* Append s to the growable string *buf (which may start out NULL). */
 BOOL s_append(LPSTR FAR *buf, const char FAR *s)
 {
-    int have = *buf ? s_len(*buf) : 0, add = s_len(s);
-    LPSTR n = mem_realloc(*buf, (DWORD)have + add + 1);
+    /* lengths as WORDs: a string can pass 32K (a DDE group listing) */
+    WORD have = *buf ? (WORD)s_len(*buf) : 0, add = (WORD)s_len(s), k;
+    LPSTR n;
+    if ((DWORD)have + add + 1 > 0xFFF0UL)
+        return FALSE;                   /* one segment holds it */
+    n = mem_realloc(*buf, (DWORD)have + add + 1);
     if (!n)
         return FALSE;
-    s_cpy(n + have, s, add + 1);
+    for (k = 0; k <= add; k++)
+        n[have + k] = s[k];
     *buf = n;
     return TRUE;
 }
@@ -82,10 +108,33 @@ LPSTR profile_get(const char FAR *sec, const char FAR *key, const char FAR *file
             mem_free(p);
             return NULL;
         }
-        if (got < (int)size - 2 || size >= 0x8000u)
+        if (got < (int)size - 2 || size >= 0x7FFF)
             return p;
         mem_free(p);
-        size *= 2;
+        /* (GetPrivateProfileString's size is an int: at most 7FFFh) */
+        size = size >= 0x4000 ? 0x7FFF : size * 2;
+    }
+}
+
+/* The keys of a private-profile section, each followed by a NUL, the
+   list by another; NULL if there are none. */
+LPSTR profile_keys(const char FAR *sec, const char FAR *file)
+{
+    WORD size = 256;
+    for (;;) {
+        LPSTR p = mem_alloc(size);
+        int got;
+        if (!p)
+            return NULL;
+        got = GetPrivateProfileString(sec, NULL, "", p, size, file);
+        if (got == 0) {
+            mem_free(p);
+            return NULL;
+        }
+        if (got < (int)size - 2 || size >= 0x7FFF)
+            return p;
+        mem_free(p);
+        size = size >= 0x4000 ? 0x7FFF : size * 2;
     }
 }
 
@@ -101,6 +150,8 @@ int s_len(const char FAR *s)
 void s_cpy(char FAR *d, const char FAR *s, int max)
 {
     int i;
+    if (max <= 0)
+        return;                         /* no room even for the NUL */
     for (i = 0; i < max - 1 && s[i]; i++)
         d[i] = s[i];
     d[i] = 0;
@@ -174,6 +225,7 @@ int ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags)
     char fmt[200], title[40];
     LPSTR text;
     int i, j = 0, r;
+    fmt[0] = title[0] = 0;              /* (if LoadString fails) */
     LoadString(g_hinst, ids, fmt, sizeof fmt);
     LoadString(g_hinst, title_ids, title, sizeof title);
     text = mem_alloc(s_len(fmt) + (arg ? s_len(arg) : 0) + 1);
@@ -193,6 +245,47 @@ int ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags)
     r = MessageBox(owner, text, title, flags);
     mem_free(text);
     return r;
+}
+
+#ifndef W16_WIN2
+extern int FAR PASCAL SysErrorBox(LPCSTR text, LPCSTR caption, WORD left, WORD middle,
+                                  WORD right);
+#endif
+
+/* USER's system error box (USER.320; Schulman, Undocumented Windows,
+   ch. 6): string `ids` with "%s" replaced by arg, the title inside it,
+   buttons Yes (the default) on the left and No on the right. TRUE for
+   Yes. Windows 2.x: a system-modal MessageBox with Yes and No. */
+BOOL ask_yes_no_system(int title_ids, int ids, const char FAR *arg)
+{
+    char fmt[200], title[40];
+    LPSTR text;
+    int i, j = 0;
+    BOOL yes;
+    fmt[0] = title[0] = 0;
+    LoadString(g_hinst, ids, fmt, sizeof fmt);
+    LoadString(g_hinst, title_ids, title, sizeof title);
+    text = mem_alloc(s_len(fmt) + (arg ? s_len(arg) : 0) + 1);
+    if (!text)
+        return TRUE;
+    for (i = 0; fmt[i]; i++) {
+        if (fmt[i] == '%' && fmt[i + 1] == 's' && arg) {
+            int k;
+            for (k = 0; arg[k]; k++)
+                text[j++] = arg[k];
+            i++;
+        } else {
+            text[j++] = fmt[i];
+        }
+    }
+    text[j] = 0;
+#ifdef W16_WIN2
+    yes = MessageBox(NULL, text, title, MB_YESNO | MB_ICONEXCLAMATION | MB_SYSTEMMODAL) == IDYES;
+#else
+    yes = SysErrorBox(text, title, 3 | 0x8000, 0, 4) == 1;  /* SEB_YES default, SEB_NO */
+#endif
+    mem_free(text);
+    return yes;
 }
 
 void message(HWND owner, int ids, const char FAR *arg)

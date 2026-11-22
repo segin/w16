@@ -35,8 +35,12 @@
  * Observed: on exit the original rewrites only groups that changed; one
  * merely looked at is left byte for byte as it was.
  *
- * Item order, as observed: rgiItems is the z-order, top first; the
- * initially selected item is the top one. Selecting an item (mouse or
+ * Item order, as observed: an item keeps its slot in rgiItems while the
+ * group is written as it changes (a new one takes the next free slot, or
+ * a replaced one's); the z-order, top first, is kept apart (new items go
+ * on top) and becomes the slot order when the group is saved on exit
+ * (tests/scripts/dde/many.txt, arrange.txt: 3.1 wrote newest first
+ * then). The initially selected item is the top one. Selecting an item (mouse or
  * arrow keys) raises it to the top. Typing a letter first sends the
  * current item to the bottom, then raises the first item, from the top,
  * whose name starts with that letter. Deleting closes the gap and leaves
@@ -88,7 +92,8 @@ typedef struct group {
     RECT rc;
     POINT pmin;
     BYTE hdr18[8];                      /* header bytes 18h..1Fh */
-    item FAR * FAR *z;                  /* rgiItems: z-order, top first */
+    item FAR * FAR *z;                  /* z-order, top first */
+    item FAR * FAR *s;                  /* slot order: rgiItems as written */
     WORD nz, cap;                       /* used slots, cItems */
     item FAR *dfirst;                   /* data order */
     LPSTR gtags;                        /* other group-level tags */
@@ -99,7 +104,8 @@ typedef struct group {
     BOOL have_replaced;                 /* DDE ReplaceItem: next position */
     int replaced_x, replaced_y;
     WORD replaced_z;
-    LPSTR path;                         /* the .GRP file */
+    LPSTR path;                         /* the .GRP file, as PROGMAN.INI names it */
+    LPSTR full;                         /* its full name (NULL: path is) */
 } group;
 
 static group FAR *first;
@@ -170,6 +176,45 @@ static int zindex(group FAR *g, item FAR *t)
     return -1;
 }
 
+static int sindex(group FAR *g, item FAR *t)
+{
+    WORD i;
+    for (i = 0; i < g->nz; i++)
+        if (g->s[i] == t)
+            return i;
+    return -1;
+}
+
+/* Put t at z-index zat and slot sat (room made by grow_slots). */
+static void place(group FAR *g, item FAR *t, WORD zat, WORD sat)
+{
+    WORD k;
+    if (zat > g->nz)
+        zat = g->nz;
+    if (sat > g->nz)
+        sat = g->nz;
+    for (k = g->nz; k > zat; k--)
+        g->z[k] = g->z[k - 1];
+    g->z[zat] = t;
+    for (k = g->nz; k > sat; k--)
+        g->s[k] = g->s[k - 1];
+    g->s[sat] = t;
+    g->nz++;
+}
+
+/* Take t out of both orders (each closes its gap). */
+static void unplace(group FAR *g, item FAR *t)
+{
+    int i = zindex(g, t), j = sindex(g, t);
+    if (i < 0 || j < 0)
+        return;
+    for (; i + 1 < (int)g->nz; i++)
+        g->z[i] = g->z[i + 1];
+    for (; j + 1 < (int)g->nz; j++)
+        g->s[j] = g->s[j + 1];
+    g->nz--;
+}
+
 /* ---- items ---- */
 
 static void free_item(item FAR *t)
@@ -206,7 +251,11 @@ static void make_icon(item FAR *t)
     BYTE FAR *h = (BYTE FAR *)t->icon;
     t->hicon = def_icon;
     t->own_icon = FALSE;
-    if (h && t->cbhdr >= 12) {
+    /* CreateIcon reads as many bits as the header's size asks for: the
+       cached blocks must hold them (a damaged file's might not) */
+    if (h && t->cbhdr >= 12 && rd16(h, 4) && rd16(h, 6) &&
+        t->cband >= (DWORD)((rd16(h, 4) + 15UL) / 16) * 2 * rd16(h, 6) &&
+        t->cbxor >= ((rd16(h, 4) * (DWORD)h[11] + 15) / 16) * 2 * rd16(h, 6) * h[10]) {
         dc = GetDC(NULL);
         if (h[10] == GetDeviceCaps(dc, PLANES) && h[11] == GetDeviceCaps(dc, BITSPIXEL)) {
             HICON i = CreateIcon(g_hinst, rd16(h, 4), rd16(h, 6), h[10], h[11],
@@ -264,6 +313,10 @@ static BOOL grow_slots(group FAR *g)
     if (!z)
         return FALSE;
     g->z = z;
+    z = (item FAR * FAR *)mem_realloc((LPSTR)g->s, (DWORD)(g->cap + 1) * sizeof(item FAR *));
+    if (!z)
+        return FALSE;
+    g->s = z;
     g->cap++;
     return TRUE;
 }
@@ -280,6 +333,12 @@ static void raise_item(group FAR *g, int i)
     for (; i > 0; i--)
         g->z[i] = g->z[i - 1];
     g->z[0] = t;
+    /* the slot order too (observed, boot-test case pmitems: Read Me
+       selected and dragged, the group written with it first) */
+    for (i = sindex(g, t); i > 0; i--)
+        g->s[i] = g->s[i - 1];
+    if (i == 0)
+        g->s[0] = t;
 }
 
 /* Move the item at z-index i to the bottom (observed on letter keys). */
@@ -291,6 +350,11 @@ static void lower_item(group FAR *g, int i)
     for (; i + 1 < (int)g->nz; i++)
         g->z[i] = g->z[i + 1];
     g->z[g->nz - 1] = t;
+    if ((i = sindex(g, t)) >= 0) {      /* the slot order too */
+        for (; i + 1 < (int)g->nz; i++)
+            g->s[i] = g->s[i + 1];
+        g->s[g->nz - 1] = t;
+    }
 }
 
 /* ---- parsing ---- */
@@ -300,20 +364,66 @@ static LPSTR dup_at(const BYTE FAR *p, WORD off)
     return s_dup((const char FAR *)p + off);
 }
 
+/* Would Windows 3.1 take this file? Observed with tools/mkbadgrp.py's
+   files (tests/scripts/dde/grp*.txt): it says "invalid or damaged" for a
+   wrong signature or checksum, cbGroup past the file or inside the
+   header, a group name without its NUL in the file, an item record or
+   its title or command past cbGroup, cached icon bits smaller than their
+   header's size asks for, a tag running past the file, and tags without
+   their closing FFFFh record (one shorter than its own 6 bytes hangs
+   3.1; w16 calls it damaged too). It takes a group name past cbGroup
+   (read from the tags) and icon blocks that overlap. */
+static BOOL valid_file(const BYTE FAR *p, WORD fsize)
+{
+    WORD size, n, slot, at;
+    if (fsize < HDR_SIZE || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C' ||
+        checksum(p, fsize) != 0)
+        return FALSE;
+    size = rd16(p, 6);
+    n = rd16(p, 0x20);
+    if (size < HDR_SIZE || size > fsize || HDR_SIZE + 2UL * n > size ||
+        !str_ok(p, fsize, rd16(p, 0x16)))
+        return FALSE;
+    for (slot = 0; slot < n; slot++) {
+        WORD it = rd16(p, HDR_SIZE + 2 * slot), cx, cy;
+        if (!it)
+            continue;
+        if (it > size - ITEM_SIZE || !str_ok(p, size, rd16(p, it + 18)) ||
+            !str_ok(p, size, rd16(p, it + 20)))
+            return FALSE;
+        if (rd16(p, it + 6) >= 12 && (DWORD)rd16(p, it + 12) + 12 <= size) {
+            const BYTE FAR *h = p + rd16(p, it + 12);
+            cx = rd16(h, 4);
+            cy = rd16(h, 6);
+            if (rd16(p, it + 8) < ((cx + 15UL) / 16) * 2 * cy ||
+                rd16(p, it + 10) < ((cx * (DWORD)h[11] + 15) / 16) * 2 * cy * h[10])
+                return FALSE;
+        }
+    }
+    for (at = size; at < fsize; ) {     /* the tags, to their end record */
+        WORD cb;
+        if (fsize - at < 6)
+            return FALSE;
+        if (rd16(p, at) == 0xFFFF)
+            return TRUE;
+        cb = rd16(p, at + 4);
+        if (cb < 6 || cb > fsize - at)
+            return FALSE;
+        at += cb;
+    }
+    return at == size;                  /* no tags at all */
+}
+
 static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
 {
     WORD size, n, i, slot;
     item FAR * FAR *byslot;
     BOOL ok = FALSE;
 
-    if (fsize < HDR_SIZE || p[0] != 'P' || p[1] != 'M' || p[2] != 'C' || p[3] != 'C')
+    if (!valid_file(p, fsize))
         return FALSE;
     size = rd16(p, 6);
-    if (size < HDR_SIZE || size > fsize)
-        return FALSE;
     n = rd16(p, 0x20);
-    if (HDR_SIZE + 2UL * n > size || !str_ok(p, size, rd16(p, 0x16)))
-        return FALSE;
     g->name = dup_at(p, rd16(p, 0x16));
     g->show = rd16(p, 8);
     g->rc.left = (int)rd16(p, 0x0A);
@@ -325,15 +435,17 @@ static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
     copy(g->hdr18, p + 0x18, 8);
     g->cap = n;
     g->z = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
+    g->s = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
     byslot = (item FAR * FAR *)mem_alloc((DWORD)(n ? n : 1) * sizeof(item FAR *));
-    if (!g->name || !g->z || !byslot)
+    if (!g->name || !g->z || !g->s || !byslot)
         goto out;
 
     for (slot = 0; slot < n; slot++) {
         WORD it = rd16(p, HDR_SIZE + 2 * slot);
         item FAR *t;
         WORD ph, pa, px;
-        if (!it || it + ITEM_SIZE > size)
+        /* (size - ITEM_SIZE: it + ITEM_SIZE would wrap past 64K) */
+        if (!it || it > size - ITEM_SIZE)
             continue;                   /* empty slot */
         if (!str_ok(p, size, rd16(p, it + 18)) || !str_ok(p, size, rd16(p, it + 20)))
             continue;
@@ -352,8 +464,11 @@ static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
         ph = rd16(p, it + 12);
         pa = rd16(p, it + 14);
         px = rd16(p, it + 16);
+        /* the three blocks inside the group data, and together no larger
+           than it (overlapping blocks of a damaged file could add up to
+           more than a segment) */
         if ((DWORD)ph + t->cbhdr <= size && (DWORD)pa + t->cband <= size &&
-            (DWORD)px + t->cbxor <= size &&
+            (DWORD)px + t->cbxor <= size && (DWORD)t->cbhdr + t->cband + t->cbxor <= size &&
             (t->icon = mem_alloc((DWORD)t->cbhdr + t->cband + t->cbxor)) != NULL) {
             copy(t->icon, p + ph, t->cbhdr);
             copy(t->icon + t->cbhdr, p + pa, t->cband);
@@ -366,22 +481,19 @@ static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
             goto out;
         }
         byslot[slot] = t;
+        g->s[g->nz] = t;
         g->z[g->nz++] = t;
-        t->tags = (LPSTR)(DWORD)it;     /* sort key for the data order */
+        {   /* data order: by record offset (lorder holds it meanwhile);
+               in the list at once, so a failure later frees it */
+            item FAR * FAR *pp = &g->dfirst;
+            t->lorder = it;
+            while (*pp && (*pp)->lorder <= it)
+                pp = &(*pp)->dnext;
+            t->dnext = *pp;
+            *pp = t;
+        }
     }
 
-    /* data order: by record offset */
-    for (i = 0; i < g->nz; i++) {
-        item FAR *best = NULL;
-        WORD k;
-        for (k = 0; k < g->nz; k++) {
-            item FAR *t = g->z[k];
-            if (t->tags && (!best || (DWORD)t->tags < (DWORD)best->tags))
-                best = t;
-        }
-        best->tags = NULL;
-        data_append(g, best);
-    }
     /* listed (DDE request) in rgiItems order, after those added since */
     for (i = 0; i < g->nz; i++)
         g->z[i]->lorder = 0x8000 + i;
@@ -394,7 +506,8 @@ static BOOL parse(group FAR *g, const BYTE FAR *p, WORD fsize)
             WORD id = rd16(p, at), it = rd16(p, at + 2), cb = rd16(p, at + 4);
             LPSTR FAR *dst;
             WORD FAR *dcb;
-            if (id == 0xFFFF || cb < 6 || at + cb > fsize)
+            /* (fsize - at: at + cb would wrap past 64K) */
+            if (id == 0xFFFF || cb < 6 || cb > fsize - at)
                 break;
             if (id == 0x8000) {         /* PMCC: written afresh */
                 at += cb;
@@ -430,7 +543,7 @@ out:
 
 /* Build the .GRP file for g in a new global block; *size receives its
    length. NULL if it would not fit the format (64K) or memory. */
-static LPSTR serialize(group FAR *g, WORD *size)
+static LPSTR serialize(group FAR *g, WORD *size, BOOL full)
 {
     DWORD total, cb;
     item FAR *t;
@@ -439,16 +552,17 @@ static LPSTR serialize(group FAR *g, WORD *size)
     BYTE FAR *p;
     WORD at, i;
 
-    total = HDR_SIZE + 2UL * g->cap + s_len(g->name) + 1;
+    /* every term widened: 16-bit sums of a large group would wrap */
+    total = HDR_SIZE + 2UL * g->cap + (WORD)s_len(g->name) + 1;
     for (t = g->dfirst; t; t = t->dnext) {
-        total += ITEM_SIZE + s_len(t->name) + 1 + s_len(t->cmd) + 1 + s_len(t->iconpath) + 1 +
-                 t->cbhdr + t->cband + t->cbxor;
+        total += ITEM_SIZE + 3UL + (WORD)s_len(t->name) + (DWORD)(WORD)s_len(t->cmd) +
+                 (WORD)s_len(t->iconpath) + t->cbhdr + (DWORD)t->cband + t->cbxor;
         if (t->cbtags)
             anytags = TRUE;
     }
     cb = total;
     if (anytags) {
-        total += 10 + 6 + g->cbgtags;
+        total += 10UL + 6 + g->cbgtags;
         for (t = g->dfirst; t; t = t->dnext)
             total += t->cbtags;
     }
@@ -501,7 +615,7 @@ static LPSTR serialize(group FAR *g, WORD *size)
         wr16(p, rec + 16, at + t->cbhdr + t->cband);
         copy(p + at, t->icon, t->cbhdr + t->cband + t->cbxor);
         at += t->cbhdr + t->cband + t->cbxor;
-        i = zindex(g, t);
+        i = full ? zindex(g, t) : sindex(g, t);
         wr16(p, HDR_SIZE + 2 * i, rec);
     }
 
@@ -517,7 +631,7 @@ static LPSTR serialize(group FAR *g, WORD *size)
         for (t = g->dfirst; t; t = t->dnext) {
             item FAR *u = t;
             WORD k;
-            i = zindex(g, u);
+            i = full ? zindex(g, u) : sindex(g, u);
             copy(p + at, u->tags, u->cbtags);
             for (k = 0; k < u->cbtags; k += rd16(p, at + k + 4)) {
                 wr16(p, at + k + 2, i);
@@ -538,22 +652,48 @@ static LPSTR serialize(group FAR *g, WORD *size)
     return buf;
 }
 
-static BOOL write_group(group FAR *g)
+/* Write g's file; full: in the z-order, which becomes the slot order
+   (saving on exit), else in the slot order. */
+static BOOL write_file(group FAR *g, BOOL full)
 {
     WORD size;
-    LPSTR buf = serialize(g, &size);
+    LPSTR buf = serialize(g, &size, full);
     OFSTRUCT of;
     HFILE f;
     BOOL ok = FALSE;
     if (!buf)
         return FALSE;
+    /* The file is rewritten in place: on a disk that cannot hold the new
+       one, writing would leave it cut short, the group lost. So not
+       without room for it (the clusters it needs beyond its own). */
+    if (g->path[0] && g->path[1] == ':') {
+        unsigned cl = 0;
+        long freec = dos_freeclusters((g->path[0] | 0x20) - 'a' + 1, &cl), old = 0;
+        f = OpenFile(g->path, &of, OF_READ);
+        if (f != HFILE_ERROR) {
+            old = _llseek(f, 0, 2);
+            _lclose(f);
+        }
+        if (freec >= 0 && cl && old >= 0 &&
+            ((DWORD)size + cl - 1) / cl > ((DWORD)old + cl - 1) / cl + (DWORD)freec) {
+            mem_free(buf);
+            return FALSE;
+        }
+    }
     f = OpenFile(g->path, &of, OF_CREATE | OF_WRITE);
     if (f != HFILE_ERROR) {
         ok = _lwrite(f, buf, size) == size;
         _lclose(f);
     }
     mem_free(buf);
+    if (ok && full)
+        copy(g->s, g->z, g->nz * sizeof(item FAR *));
     return ok;
+}
+
+static BOOL write_group(group FAR *g)
+{
+    return write_file(g, FALSE);
 }
 
 /* ---- loading, creating, freeing ---- */
@@ -587,22 +727,32 @@ static void free_group(group FAR *g)
         t = n;
     }
     mem_free((LPSTR)g->z);
+    mem_free((LPSTR)g->s);
     mem_free(g->name);
     mem_free(g->gtags);
     mem_free(g->path);
+    mem_free(g->full);
     mem_free((LPSTR)g);
 }
 
-static BOOL read_file(group FAR *g)
+/* Read and parse g's file: 0 done, 1 not there (or unreadable), 2
+   invalid or damaged. g->full gets the file's full name (observed: 3.1
+   shows Group4=STARTUP.GRP as it is in Group Properties, and saves it
+   as C:\WINDOWS\STARTUP.GRP, tests/scripts/pm/audrelgrp.txt). */
+static int read_file(group FAR *g)
 {
     OFSTRUCT of;
     HFILE f = OpenFile(g->path, &of, OF_READ);
     long len;
-    LPSTR buf;
+    LPSTR buf, full;
     BOOL ok = FALSE;
 
     if (f == HFILE_ERROR)
-        return FALSE;
+        return 1;
+    if ((full = s_dup(of.szPathName)) != NULL) {
+        mem_free(g->full);
+        g->full = full;
+    }
     len = _llseek(f, 0, 2);
     _llseek(f, 0, 0);
     if (len > 0 && len <= 0xFFF0L && (buf = mem_alloc(len)) != NULL) {
@@ -611,7 +761,7 @@ static BOOL read_file(group FAR *g)
         mem_free(buf);
     }
     _lclose(f);
-    return ok;
+    return ok ? 0 : 2;
 }
 
 /* Create the MDI child for g (whose model is complete) and link it in. */
@@ -654,18 +804,47 @@ static void initial_select(group FAR *g)
 }
 
 /* Create the window for a group file. ininum is N of GroupN=. */
-HWND group_load(const char FAR *grpfile, int ininum)
+/* Read a group file into a model (no window yet): NULL if it cannot be
+   used. ininum is N of GroupN=. Observed on 3.1 (tools/mkbadgrp.py's
+   files, ARCHITECTURE.md 9.6): a damaged file gets a system-modal
+   "Group File Error" box, "Program-group file '<full name>' is invalid
+   or damaged. Recreate the group." (OK), and is left out; GroupN= and
+   Order= stay as they were. */
+LPVOID group_read(const char FAR *grpfile, int ininum)
 {
     group FAR *g = new_group(grpfile);
 
     if (!g)
         return NULL;
     g->ininum = ininum;
-    if (!read_file(g)) {
-        free_group(g);
-        return NULL;
+    switch (read_file(g)) {
+    case 0:
+        initial_select(g);
+        return (LPVOID)g;
+    case 2:
+        ask(g_frame, IDS_GROUPERROR, IDS_GROUPDAMAGED, g->path,
+            MB_OK | MB_ICONEXCLAMATION | MB_SYSTEMMODAL);
+        break;
+    default:
+        /* observed: a file that is not there gets USER's system error
+           box (no caption: "Group File Error" inside it), "Cannot open
+           program-group file '<name>'. Do you want Program Manager to try
+           to load it in the future?", Yes (the default) and No; No drops
+           GroupN= */
+        if (!ask_yes_no_system(IDS_GROUPERROR, IDS_GROUPMISSING, g->path))
+            ini_remove_group(ininum, NULL);
+        break;
     }
-    initial_select(g);
+    free_group(g);
+    return NULL;
+}
+
+/* The window for a model group_read made. */
+HWND group_open(LPVOID model)
+{
+    group FAR *g = (group FAR *)model;
+    if (!g)
+        return NULL;
     if (!open_window(g, TRUE)) {
         free_group(g);
         return NULL;
@@ -690,6 +869,11 @@ HWND group_load(const char FAR *grpfile, int ininum)
     SetWindowPos(g->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     group_rescroll(g->hwnd);
     return g->hwnd;
+}
+
+HWND group_load(const char FAR *grpfile, int ininum)
+{
+    return group_open(group_read(grpfile, ininum));
 }
 
 /* Take the current window state into g's model; TRUE if it differs
@@ -737,13 +921,15 @@ HWND group_create(const char FAR *name, const char FAR *path, int ininum)
     /* and one empty item slot (observed: cItems 1 in a new group's file,
        tests/scripts/dde/names.txt), which its first item takes */
     g->z = (item FAR * FAR *)mem_alloc(sizeof(item FAR *));
+    g->s = (item FAR * FAR *)mem_alloc(sizeof(item FAR *));
     g->cap = 1;
-    if (!g->name || !g->z || !open_window(g, FALSE)) {
+    if (!g->name || !g->z || !g->s || !open_window(g, FALSE)) {
         free_group(g);
         return NULL;
     }
     if (!write_group(g)) {
-        DestroyWindow(g->hwnd);         /* frees g */
+        /* through MDI, which keeps its list and Window menu (frees g) */
+        SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g->hwnd, 0);
         return NULL;
     }
     return g->hwnd;
@@ -754,9 +940,20 @@ HWND group_create(const char FAR *name, const char FAR *path, int ininum)
 void group_save_all(void)
 {
     group FAR *g;
-    for (g = first; g; g = g->next)
-        if ((capture_state(g) || g->dirty) && write_group(g))
+    for (g = first; g; g = g->next) {
+        if ((capture_state(g) || g->dirty) && write_file(g, TRUE))
             g->dirty = FALSE;
+    }
+}
+
+/* GroupN= as each group's full name (on saving, before Order=: a later
+   write of another key would lose Order='s leading blank, KERNEL's
+   profile cache; observed, tests/scripts/pm/audrelgrp.txt) */
+void group_save_paths(void)
+{
+    group FAR *g;
+    for (g = first; g; g = g->next)
+        ini_save_group(g->ininum, g->full ? g->full : g->path);
 }
 
 void group_destroy_all(void)
@@ -766,6 +963,15 @@ void group_destroy_all(void)
         first = g->next;
         free_group(g);
     }
+    /* GDI objects outlive the program that made them (Windows 3.x) */
+    if (title_font)
+        DeleteObject(title_font);
+    title_font = NULL;
+#ifdef W16_WIN2
+    if (def_icon)
+        DestroyIcon(def_icon);          /* ours; a system icon is left */
+    def_icon = NULL;
+#endif
 }
 
 int group_ininum(HWND hwnd)
@@ -784,6 +990,21 @@ LPCSTR group_path(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     return g ? g->path : NULL;
+}
+
+WORD group_count(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    return g ? g->nz : 0;
+}
+
+/* An item slot made, the item then refused (3.1's 51st DDE AddItem:
+   observed, the group saved on exit with cItems 51, many.txt) */
+void group_slot_only(HWND hwnd)
+{
+    group FAR *g = grp_of(hwnd);
+    if (g && grow_slots(g))
+        g->dirty = TRUE;
 }
 
 LPCSTR group_selected_name(HWND hwnd)
@@ -1155,8 +1376,11 @@ void group_arrange(HWND hwnd)
         i++;
     }
     for (i = 0; i < n; i++) {
-        v[i]->x = X_FIRST + (i % cols) * CX_SPACING;
-        v[i]->y = (i / cols) * CY_SPACING;
+        int x = X_FIRST + (i % cols) * CX_SPACING, y = (i / cols) * CY_SPACING;
+        if (v[i]->x != x || v[i]->y != y)
+            g->dirty = TRUE;            /* new positions: saved with the group */
+        v[i]->x = x;
+        v[i]->y = y;
     }
     mem_free((LPSTR)v);
     InvalidateRect(hwnd, NULL, TRUE);
@@ -1325,7 +1549,13 @@ static void set_icon(item FAR *t, const char FAR *path, WORD index)
     t->cbhdr = t->cband = t->cbxor = 0;
     t->iconpath = s_dup(path);
     t->iicon = index;
-    fetch_bits(t, path, index);
+    if (!fetch_bits(t, path, index)) {
+        /* observed (DDE AddItem, args.txt): an icon that cannot be read
+           (no such file, an index past its icons, -1) keeps the path as
+           given, with index 6 and that icon of Program Manager's own */
+        t->iicon = 6;
+        fetch_bits(t, "PROGMAN.EXE", 6);
+    }
     if (!t->iconpath)
         t->iconpath = s_dup("");
     make_icon(t);
@@ -1349,8 +1579,16 @@ static void choose_icon(item FAR *t, const char FAR *cmd)
         }
         mem_free(file);
     }
-    if (!t->iconpath || !fetch_bits(t, t->iconpath, 0)) {
-        /* our own default item icon (PROGMAN.EXE, third icon) */
+    if (!t->iconpath) {
+        /* observed (DDE AddItem of a program that is not there, 3.1,
+           tests/scripts/dde/longname.txt): no icon file, index 6, that
+           icon of Program Manager's own */
+        t->iconpath = s_dup("");
+        t->iicon = 6;
+        fetch_bits(t, "PROGMAN.EXE", 6);
+    } else if (!fetch_bits(t, t->iconpath, 0)) {
+        /* a file without icons: our own default item icon (PROGMAN.EXE,
+           third icon; UNVERIFIED what 3.1 does for a DOS program) */
         mem_free(t->iconpath);
         t->iconpath = s_dup("PROGMAN.EXE");
         t->iicon = 2;
@@ -1414,6 +1652,20 @@ static const BYTE FAR *find_tag(item FAR *t, WORD id, WORD *n)
     return NULL;
 }
 
+/* A tag's text as a new string: up to its NUL, or its end if a damaged
+   file left that out. */
+static LPSTR tag_dup(const BYTE FAR *data, WORD n)
+{
+    WORD k = 0;
+    LPSTR s;
+    while (k < n && data[k])
+        k++;
+    s = mem_alloc(k + 1UL);
+    if (s)
+        copy(s, data, k);
+    return s;
+}
+
 /* Remove the tags w16 manages (path, hotkey, minimized), keeping others. */
 static void drop_own_tags(item FAR *t)
 {
@@ -1437,7 +1689,7 @@ static void drop_own_tags(item FAR *t)
 static BOOL set_fields(item FAR *t, const char FAR *desc, const char FAR *cmd,
                        const char FAR *dir, WORD hotkey, BOOL minimized)
 {
-    LPSTR stored = NULL, path = NULL;
+    LPSTR stored = NULL, path = NULL, name;
     int n, d;
 
     cmd = skip_blanks(cmd);
@@ -1446,8 +1698,10 @@ static BOOL set_fields(item FAR *t, const char FAR *desc, const char FAR *cmd,
     d = dir_part(cmd, n);
     if (dir[0]) {
         stored = s_dup(dir);
-        if (stored && stored[s_len(stored) - 1] != '\\')
-            s_append(&stored, "\\");
+        if (stored && stored[s_len(stored) - 1] != '\\' && !s_append(&stored, "\\")) {
+            mem_free(stored);
+            stored = NULL;
+        }
         if (stored && !s_append(&stored, cmd + d)) {
             mem_free(stored);
             stored = NULL;
@@ -1461,31 +1715,33 @@ static BOOL set_fields(item FAR *t, const char FAR *desc, const char FAR *cmd,
     } else {
         stored = s_dup(cmd);
     }
-    if (!stored) {
+    if (desc && desc[0]) {
+        name = s_dup(desc);
+    } else {
+        /* UNVERIFIED: an empty description becomes the program's name */
+        int k;
+        name = mem_alloc(n - d + 1);
+        if (name) {
+            s_cpy(name, cmd + d, n - d + 1);
+            for (k = 0; name[k]; k++)
+                if (name[k] == '.')
+                    name[k] = 0;
+        }
+    }
+    if (!stored || !name) {             /* out of memory: t as it was */
+        mem_free(stored);
+        mem_free(name);
         mem_free(path);
         return FALSE;
     }
     mem_free(t->cmd);
     t->cmd = stored;
-
     mem_free(t->name);
-    if (desc && desc[0]) {
-        t->name = s_dup(desc);
-    } else {
-        /* UNVERIFIED: an empty description becomes the program's name */
-        int k;
-        t->name = mem_alloc(n - d + 1);
-        if (t->name) {
-            s_cpy(t->name, cmd + d, n - d + 1);
-            for (k = 0; t->name[k]; k++)
-                if (t->name[k] == '.')
-                    t->name[k] = 0;
-        }
-    }
+    t->name = name;
 
     /* observed order: hotkey, minimized, path */
     drop_own_tags(t);
-    if (!t->name || (hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) ||
+    if ((hotkey && !add_tag(t, TAG_HOTKEY, &hotkey, 2)) ||
         (minimized && !add_tag(t, TAG_MINIMIZE, NULL, 0)) ||
         (path && !add_tag(t, TAG_PATH, path, s_len(path) + 1))) {
         mem_free(path);
@@ -1512,9 +1768,11 @@ BOOL group_get_props(HWND hwnd, itemprops FAR *ip)
     d = dir_part(t->cmd, n);
     path = find_tag(t, TAG_PATH, &np);
     ip->desc = s_dup(t->name);
-    ip->cmd = path ? s_dup((const char FAR *)path) : s_dup("");
-    if (ip->cmd)
-        s_append(&ip->cmd, t->cmd + d);
+    ip->cmd = path ? tag_dup(path, np) : s_dup("");
+    if (ip->cmd && !s_append(&ip->cmd, t->cmd + d)) {
+        mem_free(ip->cmd);
+        ip->cmd = NULL;
+    }
     /* the directory without its last backslash, except a root ("C:\") */
     ip->dir = mem_alloc(d + 1);
     if (ip->dir) {
@@ -1594,29 +1852,23 @@ BOOL group_add_item(HWND hwnd, const itemprops FAR *ip)
     } else {
         free_cell(hwnd, g, &t->x, &t->y);
     }
-    {
-        /* where it goes in the z-order: on top for File > New (UNVERIFIED
-           beyond an empty group); for DDE AddItem at the bottom, or in the
-           place of the item ReplaceItem removed (observed) */
-        WORD k, at = 0;
-        if (ip->dde)
-            at = g->have_replaced && g->replaced_z <= g->nz ? g->replaced_z : g->nz;
-        for (k = g->nz; k > at; k--)
-            g->z[k] = g->z[k - 1];
-        g->z[at] = t;
-        g->nz++;
-    }
+    /* on top of the z-order (observed for DDE AddItem: its saved order,
+       many.txt); File > New: in the first slot too (audcwd.txt); DDE: in
+       the next free slot, or the slot of the item ReplaceItem removed
+       (observed, tests/scripts/dde/keep.txt) */
+    place(g, t, 0, !ip->dde ? 0 : g->have_replaced ? g->replaced_z : g->nz);
     g->have_replaced = FALSE;
     data_append(g, t);
+    if (g_autoarrange)                  /* arranged before it is written */
+        group_arrange(hwnd);
     if (!write_group(g)) {
         remove_item(hwnd, g, t);
         free_item(t);
         return FALSE;
     }
+    g->dirty = FALSE;
     invalidate_item(hwnd, g->sel);
     g->sel = t;
-    if (g_autoarrange)
-        group_arrange(hwnd);
     invalidate_item(hwnd, t);
     group_rescroll(hwnd);
     return TRUE;
@@ -1701,13 +1953,10 @@ static item FAR *clone_item(item FAR *t)
    new top item is selected (observed after Move and Delete). */
 static void remove_item(HWND hwnd, group FAR *g, item FAR *t)
 {
-    int i = zindex(g, t);
-    if (i < 0)
+    if (zindex(g, t) < 0)
         return;
     invalidate_item(hwnd, t);
-    for (; i + 1 < (int)g->nz; i++)
-        g->z[i] = g->z[i + 1];
-    g->nz--;
+    unplace(g, t);
     data_remove(g, t);
     if (g->sel == t)
         g->sel = g->nz ? g->z[0] : NULL;
@@ -1722,7 +1971,6 @@ static BOOL transfer(HWND from, HWND to, BOOL copy_only, const POINT *at)
 {
     group FAR *src = grp_of(from), FAR *dst = grp_of(to);
     item FAR *t, FAR *u;
-    WORD k;
     if (!src || !dst || !src->sel || !grow_slots(dst))
         return FALSE;
     t = src->sel;
@@ -1734,20 +1982,18 @@ static BOOL transfer(HWND from, HWND to, BOOL copy_only, const POINT *at)
         u->y = at->y;
     } else
         free_cell(to, dst, &u->x, &u->y);
-    for (k = dst->nz; k > 0; k--)
-        dst->z[k] = dst->z[k - 1];
-    dst->z[0] = u;
-    dst->nz++;
+    place(dst, u, 0, 0);               /* on top, in the first slot */
     data_append(dst, u);
+    if (g_autoarrange)                  /* arranged before it is written */
+        group_arrange(to);
     if (!write_group(dst)) {
         remove_item(to, dst, u);
         free_item(u);
         return FALSE;
     }
+    dst->dirty = FALSE;
     invalidate_item(to, dst->sel);
     dst->sel = u;
-    if (g_autoarrange)
-        group_arrange(to);
     invalidate_item(to, u);
     group_rescroll(to);
     if (copy_only)
@@ -1779,6 +2025,7 @@ BOOL group_transfer_selected(HWND from, HWND to, BOOL copy_only)
 extern DWORD FAR PASCAL DragObject(HWND, HWND, WORD, WORD, WORD, HCURSOR);
 
 static RECT drag_rc;            /* the square of the last press */
+static HWND drag_wnd;           /* the group it was in */
 static POINT drag_from;         /* the press, in the group's client area */
 static HWND drag_src;           /* the group a drag of ours comes from */
 static BOOL drag_copy;
@@ -1796,7 +2043,7 @@ static void drag_press(HWND hwnd, int x, int y)
     drag_from.y = y;
     SetRect(&drag_rc, x, y, x, y);
     InflateRect(&drag_rc, GetSystemMetrics(SM_CXDOUBLECLK) / 2, GetSystemMetrics(SM_CYDOUBLECLK) / 2);
-    (void)hwnd;
+    drag_wnd = hwnd;
 }
 
 static void drag_move(HWND hwnd, group FAR *g, int x, int y)
@@ -1804,7 +2051,7 @@ static void drag_move(HWND hwnd, group FAR *g, int x, int y)
     POINT p;
     p.x = x;
     p.y = y;
-    if (IsRectEmpty(&drag_rc) || PtInRect(&drag_rc, p) || !g->sel)
+    if (hwnd != drag_wnd || IsRectEmpty(&drag_rc) || PtInRect(&drag_rc, p) || !g->sel)
         return;
     SetRectEmpty(&drag_rc);
     drag_copy = GetKeyState(VK_CONTROL) < 0;
@@ -1813,7 +2060,10 @@ static void drag_move(HWND hwnd, group FAR *g, int x, int y)
     UpdateWindow(hwnd);
     DragObject(g_client, hwnd, 1, 0, 0, g->sel->hicon);
     drag_src = NULL;
-    if (g->sel)
+    /* DragObject's loop dispatches messages: a DDE DeleteGroup may have
+       freed the group meanwhile */
+    g = grp_of(hwnd);
+    if (g && g->sel)
         invalidate_item(hwnd, g->sel);
 }
 
@@ -1839,9 +2089,10 @@ static LRESULT drag_drop(HWND hwnd, group FAR *g, LPARAM lp)
             invalidate_item(hwnd, t);
             t->x = at.x;
             t->y = at.y;
-            write_group(g);
             if (g_autoarrange)
                 group_arrange(hwnd);
+            if (write_group(g))
+                g->dirty = FALSE;
             invalidate_item(hwnd, t);
             group_rescroll(hwnd);
         }
@@ -1858,18 +2109,34 @@ void group_run_all(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
     item FAR *t, FAR *keep;
+    WORD i, k;
     if (!g)
         return;
     keep = g->sel;
-    for (t = g->dfirst; t; t = t->dnext) {
+    for (i = 0;; i++) {
         itemprops ip;
+        BOOL got;
+        /* the i-th item in data order, found afresh each time: a program
+           started, or an error box, lets other messages in (a DDE
+           DeleteItem or DeleteGroup can free items or the group) */
+        if ((g = grp_of(hwnd)) == NULL)
+            return;
+        for (t = g->dfirst, k = 0; t && k < i; t = t->dnext)
+            k++;
+        if (!t)
+            break;
         g->sel = t;                     /* group_get_props reads the selection */
-        if (group_get_props(hwnd, &ip)) {
+        got = group_get_props(hwnd, &ip);
+        g->sel = keep;
+        if (got) {
             pm_exec(g_frame, ip.cmd, ip.dir, ip.minimized, FALSE);
             itemprops_free(&ip);
         }
+        if ((g = grp_of(hwnd)) != NULL && zindex(g, keep) < 0)
+            keep = g->sel;              /* the selected item went */
     }
-    g->sel = keep;
+    if (g)
+        g->sel = keep;
 }
 
 /* ---- for the DDE interface ---- */
@@ -1920,22 +2187,50 @@ static WORD dde_show(HWND hwnd)
     return active ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
 }
 
+/* A growing text: room doubled as needed (a group of 300 items lists
+   some 40K; growing by each piece took seconds, past a client's wait) */
+typedef struct {
+    LPSTR p;
+    WORD len, room;
+} text;
+
+static BOOL put(text *b, const char FAR *s)
+{
+    WORD n = (WORD)s_len(s), k;
+    if ((DWORD)b->len + n + 1 > b->room) {
+        DWORD room = b->room ? b->room : 256;
+        LPSTR q;
+        while (room < (DWORD)b->len + n + 1)
+            room *= 2;
+        if (room > 0xFFF0UL)
+            room = 0xFFF0UL;
+        if ((DWORD)b->len + n + 1 > room || (q = mem_realloc(b->p, room)) == NULL)
+            return FALSE;
+        b->p = q;
+        b->room = (WORD)room;
+    }
+    for (k = 0; k <= n; k++)
+        b->p[b->len + k] = s[k];
+    b->len += n;
+    return TRUE;
+}
+
 LPSTR group_dde_text(HWND hwnd)
 {
     group FAR *g = grp_of(hwnd);
-    LPSTR s;
+    text b;
     char num[8];
     WORD i, last = 0;
     BOOL ok;
     if (!g)
         return NULL;
-    s = s_dup("\"");
-    ok = s && s_append(&s, g->name) && s_append(&s, "\",") && s_append(&s, g->path) &&
-         s_append(&s, ",");
+    b.p = NULL;
+    b.len = b.room = 0;
+    ok = put(&b, "\"") && put(&b, g->name) && put(&b, "\",") && put(&b, g->path) && put(&b, ",");
     s_utoa(num, g->nz);
-    ok = ok && s_append(&s, num) && s_append(&s, ",");
+    ok = ok && put(&b, num) && put(&b, ",");
     s_utoa(num, dde_show(hwnd));
-    ok = ok && s_append(&s, num) && s_append(&s, "\r\n");
+    ok = ok && put(&b, num) && put(&b, "\r\n");
     for (i = 0; ok && i < g->nz; i++) {
         item FAR *keep = g->sel;
         itemprops ip;
@@ -1955,24 +2250,24 @@ LPSTR group_dde_text(HWND hwnd)
             break;
         }
         g->sel = keep;
-        ok = s_append(&s, "\"") && s_append(&s, ip.desc) && s_append(&s, "\",\"") &&
-             s_append(&s, ip.cmd) && s_append(&s, "\",") && s_append(&s, ip.dir) &&
-             s_append(&s, ",") && s_append(&s, t->iconpath) && s_append(&s, ",");
+        ok = put(&b, "\"") && put(&b, ip.desc) && put(&b, "\",\"") && put(&b, ip.cmd) &&
+             put(&b, "\",") && put(&b, ip.dir) && put(&b, ",") && put(&b, t->iconpath) &&
+             put(&b, ",");
         s_itoa(num, t->x);
-        ok = ok && s_append(&s, num) && s_append(&s, ",");
+        ok = ok && put(&b, num) && put(&b, ",");
         s_itoa(num, t->y);
-        ok = ok && s_append(&s, num) && s_append(&s, ",");
+        ok = ok && put(&b, num) && put(&b, ",");
         s_utoa(num, t->iicon);
-        ok = ok && s_append(&s, num) && s_append(&s, ",");
-        s_utoa(num, ip.hotkey);
-        ok = ok && s_append(&s, num) && s_append(&s, ip.minimized ? ",1\r\n" : ",0\r\n");
+        ok = ok && put(&b, num) && put(&b, ",");
+        s_itoa(num, (int)ip.hotkey);    /* observed: signed (99999: -31073) */
+        ok = ok && put(&b, num) && put(&b, ip.minimized ? ",1\r\n" : ",0\r\n");
         itemprops_free(&ip);
     }
     if (!ok) {
-        mem_free(s);
+        mem_free(b.p);
         return NULL;
     }
-    return s;
+    return b.p;
 }
 
 static item FAR *item_named(group FAR *g, const char FAR *name)
@@ -2005,7 +2300,7 @@ BOOL group_replace_named(HWND hwnd, const char FAR *name)
     g->have_replaced = TRUE;
     g->replaced_x = t->x;
     g->replaced_y = t->y;
-    g->replaced_z = zindex(g, t);
+    g->replaced_z = sindex(g, t);       /* its slot */
     remove_item(hwnd, g, t);
     free_item(t);
     return write_group(g);
@@ -2017,24 +2312,36 @@ BOOL group_replace_named(HWND hwnd, const char FAR *name)
 BOOL group_set_file(HWND hwnd, const char FAR *path)
 {
     group FAR *g = grp_of(hwnd);
-    LPSTR old, n;
+    LPSTR old, oldfull, n;
     OFSTRUCT of;
     if (!g)
         return FALSE;
-    if (!s_icmp(g->path, path))
+    if (!s_icmp(g->path, path) || (g->full && !s_icmp(g->full, path)))
         return TRUE;
+    {   /* the same file under another spelling: writing it and then
+           deleting the "old" one would lose the group */
+        OFSTRUCT a;
+        if (OpenFile(g->full ? g->full : g->path, &of, OF_PARSE) != HFILE_ERROR &&
+            OpenFile(path, &a, OF_PARSE) != HFILE_ERROR &&
+            !s_icmp(of.szPathName, a.szPathName))
+            return TRUE;
+    }
     n = s_dup(path);
     if (!n)
         return FALSE;
     old = g->path;
+    oldfull = g->full;
     g->path = n;
+    g->full = NULL;
     if (!write_group(g)) {
         g->path = old;
+        g->full = oldfull;
         mem_free(n);
         return FALSE;
     }
-    OpenFile(old, &of, OF_DELETE);
+    OpenFile(oldfull ? oldfull : old, &of, OF_DELETE);  /* (no search) */
     mem_free(old);
+    mem_free(oldfull);
     ini_set_group(g->ininum, g->path);
     return TRUE;
 }
@@ -2165,7 +2472,7 @@ static BOOL drop_file(HWND hwnd, group FAR *g, LPSTR file, BOOL at_point, int x,
 {
     item FAR *t;
     LPSTR desc, dir;
-    int n = s_len(file), d = dir_part(file, n), e, k;
+    int n = s_len(file), d = dir_part(file, n), e;
     char found[144];                    /* FindExecutable's: DOS paths */
 
     BOOL noassoc = FALSE;
@@ -2176,6 +2483,9 @@ static BOOL drop_file(HWND hwnd, group FAR *g, LPSTR file, BOOL at_point, int x,
                 MB_OKCANCEL | MB_ICONEXCLAMATION | MB_DEFBUTTON2) != IDOK)
             return FALSE;
         noassoc = TRUE;
+        /* the box let other messages in: the group may have gone */
+        if ((g = grp_of(hwnd)) == NULL)
+            return FALSE;
     }
     if (!grow_slots(g))
         return FALSE;
@@ -2222,36 +2532,13 @@ static BOOL drop_file(HWND hwnd, group FAR *g, LPSTR file, BOOL at_point, int x,
     } else {
         free_cell(hwnd, g, &t->x, &t->y);
     }
-    for (k = g->nz; k > 0; k--)         /* on top of the z-order */
-        g->z[k] = g->z[k - 1];
-    g->z[0] = t;
-    g->nz++;
+    place(g, t, 0, g->nz);              /* on top, in the next slot */
     data_append(g, t);
     invalidate_item(hwnd, g->sel);
     g->sel = t;
     invalidate_item(hwnd, t);
     g->dirty = TRUE;
     return TRUE;
-}
-
-/* Write g with the k newest items (z[0..k-1], newest first) in the last
-   slots, oldest first, as the original does after a drop. */
-static void write_dropped(group FAR *g, WORD k)
-{
-    item FAR * FAR *keep = (item FAR * FAR *)mem_alloc((DWORD)g->nz * sizeof(item FAR *));
-    WORD i;
-    if (!keep)
-        return;
-    for (i = 0; i < g->nz; i++)
-        keep[i] = g->z[i];
-    for (i = 0; i + k < g->nz; i++)
-        g->z[i] = keep[k + i];
-    for (i = 0; i < k; i++)
-        g->z[g->nz - k + i] = keep[k - 1 - i];
-    write_group(g);
-    for (i = 0; i < g->nz; i++)
-        g->z[i] = keep[i];
-    mem_free((LPSTR)keep);
 }
 
 static void drop_files(HWND hwnd, HDROP h)
@@ -2261,7 +2548,7 @@ static void drop_files(HWND hwnd, HDROP h)
     WORD before = g ? g->nz : 0;
     POINT pt;
     BOOL in_client = DragQueryPoint(h, &pt);
-    for (i = 0; g && i < n; i++) {
+    for (i = 0; (g = grp_of(hwnd)) != NULL && i < n; i++) {
         UINT len = DragQueryFile(h, i, NULL, 0);
         LPSTR file = mem_alloc(len + 1);
         if (!file)
@@ -2274,10 +2561,11 @@ static void drop_files(HWND hwnd, HDROP h)
         mem_free(file);
     }
     DragFinish(h);
+    g = grp_of(hwnd);
     if (g && g_autoarrange)
         group_arrange(hwnd);
     if (g && g->nz > before)
-        write_dropped(g, g->nz - before);
+        write_group(g);                 /* the new ones in the last slots */
     if (g)
         group_rescroll(hwnd);
 }

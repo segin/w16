@@ -1,0 +1,16 @@
+; Auto Arrange on: items added with and without a position, the group
+; maximised, then ExitProgman(1) (the Program Manager audit: are the
+; arranged positions written to the group file?)
+;get WINDOWS/ARR.GRP
+ini PROGMAN.INI|Settings|AutoArrange|1
+run PROGMAN.EXE
+connect
+exec [CreateGroup(Arr)]
+exec [AddItem(NOTEPAD.EXE,A,,,300,100)]
+exec [AddItem(CLOCK.EXE,B)]
+exec [AddItem(CALC.EXE,C,,,5,5)]
+request Arr
+exec [ShowGroup(Arr,3)]
+request Arr
+exec [ExitProgman(1)]
+wait 2000

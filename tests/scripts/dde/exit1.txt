@@ -1,0 +1,9 @@
+; ExitProgman(1) with Save Settings on Exit off (the Program Manager
+; audit): are the groups and settings saved?
+ini PROGMAN.INI|Settings|SaveSettings|0
+run PROGMAN.EXE
+connect
+exec [ShowGroup(Accessories,1)]
+exec [ExitProgman(1)]
+wait 2000
+windows

@@ -48,9 +48,10 @@ fi
 # stamp ([w16] DesktopVersion, user/deskver.c), and w16's Notepad (when
 # it brings that, tests/npscenarios.sh) with 3.1's menus and accelerators
 # ([w16] NotepadAccelerators), and w16's KERNEL (when it brings that)
-# running a 32-bit program's MS-DOS stub as 3.1 does ([w16] PEError), as
+# running a 32-bit program's MS-DOS stub as 3.1 does ([w16] PEError), and
+# w16's Program Manager with 3.1's DDE limits ([w16] ProgmanUnlimited), as
 # tests/dropin.sh does
-printf '\r\n[w16]\r\nDesktopVersion=0\r\nNotepadAccelerators=0\r\nPEError=0\r\n' >> "$work/c/WINDOWS/SYSTEM.INI"
+printf '\r\n[w16]\r\nDesktopVersion=0\r\nNotepadAccelerators=0\r\nPEError=0\r\nProgmanUnlimited=0\r\n' >> "$work/c/WINDOWS/SYSTEM.INI"
 if [ -n "${REFRUN_GDLOG:-}" ]; then
     # REFRUN_GDLOG=1: record every GDI call in C:\GD.LOG (GD2, `make
     # gdprobes`, in front of the GDI renamed GDJ, as tests/gdiboot.sh -L;

@@ -151,6 +151,32 @@ _dos_getdrive:
         xor ah, ah
         retf
 
+; long dos_freeclusters(int drive, unsigned far *cluster): drive 1 = A:;
+; the free clusters (AH=36h), *cluster their size in bytes; -1 if the
+; drive is not there
+global _dos_freeclusters
+_dos_freeclusters:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        mov dl, [bp + 6]
+        mov ah, 36h
+        call far DOS3CALL
+        cmp ax, 0FFFFh
+        je .bad
+        mul cx                  ; bytes per cluster (fits a word: up to 32K)
+        lds si, [bp + 8]
+        mov [si], ax
+        mov ax, bx
+        xor dx, dx
+        jmp .done
+.bad:   mov dx, ax              ; -1
+.done:  pop si
+        pop ds
+        pop bp
+        retf
+
 ; int dos_drivetype(int drive): drive 1 = A:; -1 no such drive, 0
 ; removable, 1 fixed, 2 remote (IOCTL 4408h/4409h: no media is touched)
 global _dos_drivetype

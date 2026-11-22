@@ -40,9 +40,11 @@ typedef struct {
 static WORD rw(const BYTE FAR *p) { return p[0] | (p[1] << 8); }
 static DWORD rd(const BYTE FAR *p) { return rw(p) | ((DWORD)rw(p + 2) << 16); }
 
+/* (HFILE_ERROR, -1, is no offset and no count: an offset of FFFFFFFFh
+   or a count of FFFFh is refused rather than mistaken for success) */
 static BOOL get(int fd, DWORD off, void FAR *buf, WORD n)
 {
-    if (_llseek(fd, off, 0) != (LONG)off)
+    if (off == 0xFFFFFFFFUL || n == 0xFFFF || _llseek(fd, off, 0) != (LONG)off)
         return FALSE;
     return _lread(fd, buf, n) == n;
 }
@@ -161,6 +163,8 @@ static int ne_find(int fd, DWORD ne, int index, image FAR *im)
     if (!get(fd, ne, h, sizeof h) || rw(h + 0x24) >= rw(h + 0x26))
         return 0;                       /* no resource table */
     size = rw(h + 0x26) - rw(h + 0x24);
+    if (size < 2)
+        return 0;
     if (!(tab = mem_alloc(size)))
         return 0;
     if (!get(fd, ne + rw(h + 0x24), tab, size)) {
@@ -169,13 +173,19 @@ static int ne_find(int fd, DWORD ne, int index, image FAR *im)
     }
     shift = rw((BYTE FAR *)tab);
     end = (BYTE FAR *)tab + size;
+    if (shift > 16) {                   /* offsets past 4 GB: damaged */
+        mem_free(tab);
+        return 0;
+    }
 
     /* First pass: count the group icons (Windows 3.x) and plain icons. */
     for (p = (BYTE FAR *)tab + 2; p + 8 <= end && (t = rw(p)) != 0; p += 8 + n * 12) {
         n = rw(p + 2);
-        if (t == (0x8000 | GROUP_ICON))
+        if ((DWORD)n * 12 > (WORD)(end - p) - 8)
+            break;                      /* the type's entries past the table */
+        if (t == (0x8000 | GROUP_ICON) && groups + (long)n <= 0x7FFF)
             groups += n;
-        else if (t == (0x8000 | ICON))
+        else if (t == (0x8000 | ICON) && icons + (long)n <= 0x7FFF)
             icons += n;
     }
     old = groups == 0;                  /* only Windows 2.x icons */
@@ -187,6 +197,8 @@ static int ne_find(int fd, DWORD ne, int index, image FAR *im)
     /* Second pass: the index-th group (or 2.x icon) in table order. */
     for (p = (BYTE FAR *)tab + 2; p + 8 <= end && (t = rw(p)) != 0; p += 8 + n * 12) {
         n = rw(p + 2);
+        if ((DWORD)n * 12 > (WORD)(end - p) - 8)
+            break;                      /* the type's entries past the table */
         if (t != (0x8000 | (old ? ICON : GROUP_ICON)))
             continue;
         if (index < n) {
@@ -216,6 +228,8 @@ static int ne_find(int fd, DWORD ne, int index, image FAR *im)
     found = -1;
     for (p = (BYTE FAR *)tab + 2; p + 8 <= end && (t = rw(p)) != 0; p += 8 + n * 12) {
         n = rw(p + 2);
+        if ((DWORD)n * 12 > (WORD)(end - p) - 8)
+            break;                      /* the type's entries past the table */
         if (t != (0x8000 | ICON))
             continue;
         for (k = 0; k < n; k++) {
@@ -291,8 +305,10 @@ static BOOL pe_data(pe FAR *x, DWORD to, DWORD FAR *off, DWORD FAR *len)
 {
     DWORD name;
     BYTE d[8];
+    int depth = 0;
     while (to & 0x80000000UL)            /* down to the first language */
-        if (!pe_count(x, to & 0x7FFFFFFFUL) || !pe_entry(x, to & 0x7FFFFFFFUL, 0, &name, &to))
+        if (++depth > 8 ||               /* (the tree has 3 levels: a loop) */
+            !pe_count(x, to & 0x7FFFFFFFUL) || !pe_entry(x, to & 0x7FFFFFFFUL, 0, &name, &to))
             return FALSE;
     if (!get(x->fd, x->base + to, d, 8))
         return FALSE;
@@ -408,7 +424,8 @@ static BOOL load_mono2x(int fd, const image FAR *im, picture FAR *pic)
     w = rw(h + 6);
     ht = rw(h + 8);
     rowb = rw(h + 10);
-    if (!w || !ht || rowb < (w + 7) / 8 || 14 + 2UL * rowb * ht > im->len)
+    if (!w || !ht || w > 0x4000 || ht > 0x4000 || rowb < (w + 7UL) / 8 ||
+        14 + 2UL * rowb * ht > im->len)
         return FALSE;
     andr = mem_alloc(rowb);
     xorr = mem_alloc(rowb);
@@ -462,9 +479,9 @@ static BOOL load_dib(int fd, const image FAR *im, picture FAR *pic)
     w = rd(bi + 4);
     ht = rd(bi + 8) / 2;
     bits = rw(bi + 14);
-    if (!w || !ht || w > 0x4000 || ht > 0x4000 ||
+    if (!w || !ht || w > 0x3FFF || ht > 0x3FFF || rd(bi) > im->len ||
         (bits != 1 && bits != 4 && bits != 8 && bits != 16 && bits != 24 && bits != 32))
-        return FALSE;
+        return FALSE;                   /* (a row of 64K would not fit a WORD) */
     ncol = rd(bi + 32);
     if (!ncol && bits <= 8)
         ncol = 1UL << bits;

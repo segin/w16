@@ -1,0 +1,17 @@
+run PROGMAN.EXE
+connect
+; Reload: of no group, of one, of a minimised one, with an empty
+; argument list and without one (the Program Manager audit). Not asked
+; afterwards: "Groups" (3.1 leaves reloaded groups out of it; w16 does
+; not, ARCHITECTURE.md 9.6)
+exec [Reload(Nope)]
+exec [Reload(Main)]
+windows
+request Main
+exec [Reload(Accessories)]
+windows
+request Accessories
+exec [ShowGroup(Main,1)]
+exec [Reload()]
+request Main
+request Games

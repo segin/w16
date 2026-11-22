@@ -1,0 +1,52 @@
+run PROGMAN.EXE
+connect
+; odd arguments to AddItem, ShowGroup, DeleteItem, ReplaceItem,
+; DeleteGroup and CreateGroup (the Program Manager audit)
+exec [CreateGroup(Args)]
+exec [AddItem()]
+exec [AddItem(,No Command)]
+exec [AddItem(NOTEPAD.EXE,"  Spaces  ")]
+exec [AddItem(NOTEPAD.EXE,  Blanks  ,NOTEPAD.EXE , 1 )]
+exec [AddItem(NOTEPAD.EXE,OnlyX,,,40)]
+exec [AddItem(NOTEPAD.EXE,OnlyY,,,,40)]
+exec [AddItem(NOTEPAD.EXE,EmptyXY,,,,)]
+exec [AddItem(NOTEPAD.EXE,BadIcon,NOTEPAD.EXE,99)]
+exec [AddItem(NOTEPAD.EXE,NoIconFile,C:\NOFILE.EXE,0)]
+exec [AddItem(NOTEPAD.EXE,NegPos,,,-30,-40)]
+exec [AddItem(NOTEPAD.EXE,HotKey,,,,,,1572)]
+exec [AddItem(NOTEPAD.EXE,HotKeyBig,,,,,,99999)]
+exec [AddItem(NOTEPAD.EXE,Min,,,,,C:\WINDOWS\SYSTEM,,1)]
+exec [AddItem(NOTEPAD.EXE,Min2,,,,,,,2)]
+exec [AddItem(NOTEPAD.EXE,Nine,,,,,,,0)]
+exec [AddItem(NOTEPAD.EXE,Ten,,,,,,,0,)]
+exec [AddItem(NOTEPAD.EXE,Extra,,,,,,,,extra,args)]
+exec [AddItem(NOTEPAD.EXE,TenX,,,,,,,0,x)]
+exec [AddItem(NOTEPAD.EXE,Num,abc,xyz)]
+request Args
+exec [ShowGroup(Args)]
+request Args
+exec [ShowGroup(Args,2)]
+request Args
+exec [ShowGroup(Args,3)]
+request Args
+exec [ShowGroup(Args,9)]
+request Args
+exec [ShowGroup(Args,abc)]
+request Args
+exec [ShowGroup(Args,1,5)]
+request Args
+exec [ShowGroup(Args,1)]
+request Args
+exec [DeleteItem(Nope)]
+exec [DeleteItem()]
+exec [ReplaceItem(Nope)]
+exec [ReplaceItem()]
+exec [DeleteItem("  Spaces  ")]
+exec [DeleteItem(Spaces)]
+exec [DeleteItem(Blanks,Extra)]
+request Args
+exec [DeleteGroup(Nope)]
+exec [DeleteGroup()]
+exec [CreateGroup(Args)]
+exec [CreateGroup()]
+request Groups

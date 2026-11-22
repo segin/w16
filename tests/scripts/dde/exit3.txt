@@ -1,0 +1,9 @@
+run PROGMAN.EXE
+connect
+; ExitProgman(0) followed by a command that fails (the Program Manager
+; audit): the ACK, and whether Program Manager ends
+exec [ShowGroup(Accessories,1)]
+exec [ExitProgman(0)][ShowGroup(Nope,1)]
+wait 2000
+windows
+request Groups

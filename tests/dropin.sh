@@ -124,11 +124,15 @@ w16:debuglog=C:\W16DBG.LOG'
 # hands it to WINOLDAP, which runs its MS-DOS stub, as stock 3.1; w16's
 # default gives 21 and Program Manager a box (kernel/loader.c; boot-test
 # case runpe)
+# [w16] ProgmanUnlimited=0: w16's Program Manager with 3.1's DDE limits
+# (group names cut after 30 characters, item titles after 40, no 51st
+# item in a group; shell/progman/dde.c), as stock 3.1
 inis="$inis
 w16:DesktopVersion=0
 w16:DebugToAux=1
 w16:NotepadAccelerators=0
-w16:PEError=0"
+w16:PEError=0
+w16:ProgmanUnlimited=0"
 [ -z "${DROPIN_INI:-}" ] || inis="$inis
 $DROPIN_INI"
 while getopts k:3K:c:t:f:i:s:e:W:no:rxX:wp:T: opt; do

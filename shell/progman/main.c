@@ -17,12 +17,16 @@ BOOL g_autoarrange, g_minonrun, g_savesettings = TRUE;
 BOOL g_isshell;                         /* SYSTEM.INI shell= is us */
 BOOL g_norun, g_noclose, g_nosave, g_nofilemenu;   /* [Restrictions] */
 UINT g_editlevel;
+BOOL g_stock_limits;                    /* 3.1's DDE length and item limits */
 char g_ini[] = "PROGMAN.INI";
 
 static char cls_frame[] = "Progman";
 static char s_settings[] = "Settings";
 static char s_groups[] = "Groups";
 static HMENU window_menu;
+static HMENU file_menu;                 /* by handle: a maximised group's
+                                           control menu comes first in the
+                                           bar and shifts the positions */
 
 /* Wine delivers commands from a maximized group's control menu (in the
    menu bar) to the frame as WM_SYSCOMMAND, where Windows 3.1 has them
@@ -57,26 +61,82 @@ static void group_key(char *key, int n)     /* "GroupN": N fits an int */
     s_utoa(key + 5, n);
 }
 
-static void load_groups(void)
+/* The groups read so far, their windows still to come. */
+typedef struct {
+    WORD FAR *tried;                    /* GroupN numbers tried */
+    LPVOID FAR *model;                  /* the groups read, in order */
+    WORD ntried, nmodel;
+} loading;
+
+/* Read GroupN= once (n > 0). */
+static void load_group_n(int n, loading *l)
+{
+    char key[12];
+    LPSTR path;
+    WORD k;
+    WORD FAR *grown;
+    LPVOID FAR *more;
+    if (n <= 0)
+        return;
+    for (k = 0; k < l->ntried; k++)
+        if (l->tried[k] == (WORD)n)
+            return;
+    grown = (WORD FAR *)mem_realloc((LPSTR)l->tried, (l->ntried + 1UL) * sizeof(WORD));
+    if (!grown)
+        return;
+    l->tried = grown;
+    grown[l->ntried++] = n;
+    more = (LPVOID FAR *)mem_realloc((LPSTR)l->model, (l->nmodel + 1UL) * sizeof(LPVOID));
+    if (!more)
+        return;
+    l->model = more;
+    group_key(key, n);
+    if ((path = profile_get(s_groups, key, g_ini)) != NULL) {
+        if ((more[l->nmodel] = group_read(path, n)) != NULL)
+            l->nmodel++;
+        mem_free(path);
+    }
+}
+
+/* Order lists GroupN numbers bottom to top; create them in that order
+   so the last one ends up active. Then every other GroupN= of [Groups],
+   in the file's order (observed, tests/scripts/dde/order.txt: with
+   Order=" 3 1" Windows 3.1 loaded Group3, Group1, then Group2 and
+   Group4, each on top of the last; without Order= all four in turn).
+   Every file is read before any window is made (observed: 3.1's box for
+   a damaged file comes up over an empty Program Manager, the groups
+   before it in Order= not shown yet). */
+void load_groups(void)
 {
     LPSTR order = profile_get(s_settings, "Order", g_ini);
+    LPSTR keys = profile_keys(s_groups, g_ini);
     const char FAR *p = order;
-    char key[12];
+    loading l;
+    WORD k;
     int n;
 
-    /* Order lists GroupN numbers bottom to top; create them in that order
-       so the last one ends up active. */
-    if (!order)
-        return;
-    while ((n = s_atoi(&p)) > 0) {
-        LPSTR path;
-        group_key(key, n);
-        if ((path = profile_get(s_groups, key, g_ini)) != NULL) {
-            group_load(path, n);
-            mem_free(path);
+    l.tried = NULL;
+    l.model = NULL;
+    l.ntried = l.nmodel = 0;
+    if (order)
+        while ((n = s_atoi(&p)) > 0)
+            load_group_n(n, &l);
+    for (p = keys; p && *p; p += s_len(p) + 1) {
+        const char FAR *d = p + 5;
+        if (s_len(p) > 5 && (p[0] | 0x20) == 'g' && (p[1] | 0x20) == 'r' &&
+            (p[2] | 0x20) == 'o' && (p[3] | 0x20) == 'u' && (p[4] | 0x20) == 'p' &&
+            *d >= '0' && *d <= '9') {
+            n = s_atoi(&d);
+            if (!*d)                    /* "Group12", nothing after */
+                load_group_n(n, &l);
         }
     }
+    for (k = 0; k < l.nmodel; k++)
+        group_open(l.model[k]);
     mem_free(order);
+    mem_free(keys);
+    mem_free((LPSTR)l.tried);
+    mem_free((LPSTR)l.model);
 }
 
 /* Order=: the groups' GroupN numbers in z-order, bottom first. Observed:
@@ -128,6 +188,19 @@ int ini_add_group(const char FAR *path)
     }
     WritePrivateProfileString(s_groups, key, path, g_ini);
     return n;
+}
+
+/* On saving: GroupN= as the file's full name, if it is not that yet
+   (observed: 3.1 wrote Group1=MAIN.GRP back as C:\WINDOWS\MAIN.GRP) */
+void ini_save_group(int n, const char FAR *path)
+{
+    char key[12];
+    LPSTR have;
+    group_key(key, n);
+    have = profile_get(s_groups, key, g_ini);
+    if (!have || s_icmp(have, path))
+        WritePrivateProfileString(s_groups, key, path, g_ini);
+    mem_free(have);
 }
 
 void ini_set_group(int n, const char FAR *path)
@@ -227,8 +300,18 @@ static void save_settings(BOOL now)
     s_itoa(buf + s_len(buf), r->bottom);
     s_cat(buf, IsZoomed(g_frame) ? " 3" : " 1", sizeof buf);   /* UNVERIFIED: 3 */
     WritePrivateProfileString(s_settings, "Window", buf, g_ini);
+    group_save_paths();
     write_order(TRUE);
     group_save_all();
+}
+
+/* DDE ExitProgman (not as the shell): save, then end. Observed:
+   ExitProgman(1) saves even with Save Settings on Exit off;
+   ExitProgman(0) saves as an ordinary exit would. */
+void pm_exit(BOOL save)
+{
+    save_settings(save);
+    DestroyWindow(g_frame);
 }
 
 static void check(int id, BOOL on)
@@ -299,7 +382,9 @@ static void file_menu_state(HMENU m)
                                  IDM_RUN, IDM_EXIT };
     int i;
     for (i = 0; i < 7; i++)
-        EnableMenuItem(m, ids[i], MF_BYCOMMAND | (file_grayed(ids[i]) ? MF_GRAYED : MF_ENABLED));
+        /* observed: grayed and disabled (state 3, tests/scripts/pm/audmaxmenu.txt) */
+        EnableMenuItem(m, ids[i], MF_BYCOMMAND |
+                       (file_grayed(ids[i]) ? MF_GRAYED | MF_DISABLED : MF_ENABLED));
 }
 
 /* May this command run under [Restrictions]? (Accelerators reach us
@@ -450,6 +535,7 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         SetMenu(hwnd, pm_load_menu(g_hinst, MAKEINTRESOURCE(IDM_MAIN)));
 #endif
         window_menu = GetSubMenu(GetMenu(hwnd), MENU_WINDOW);
+        file_menu = GetSubMenu(GetMenu(hwnd), MENU_FILE);
         cc.hWindowMenu = window_menu;
         cc.idFirstChild = IDM_FIRSTCHILD;
         /* observed: with group icons below its visible area the MDI
@@ -482,7 +568,7 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             if (g_noclose && (HMENU)wp == GetSystemMenu(hwnd, FALSE))
                 EnableMenuItem((HMENU)wp, SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);
         } else if (!g_nofilemenu) {
-            file_menu_state(GetSubMenu(GetMenu(hwnd), MENU_FILE));
+            file_menu_state(file_menu);
         }
         return r;
     }
@@ -607,6 +693,10 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     g_minonrun = ini_bool("MinOnRun", FALSE);
     g_savesettings = ini_bool("SaveSettings", TRUE);
     read_restrictions();
+    /* w16's extension (ARCHITECTURE.md 6.8): none of 3.1's DDE limits
+       (group names of 30 characters, titles of 40, 50 items a group);
+       0 is stock 3.1 */
+    g_stock_limits = !GetPrivateProfileInt("w16", "ProgmanUnlimited", 1, "SYSTEM.INI");
     if (g_nosave)                       /* observed: shown unchecked */
         g_savesettings = FALSE;
     if (GetPrivateProfileString(s_settings, "Window", "", buf, sizeof buf, g_ini)) {
@@ -623,8 +713,10 @@ int PASCAL WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int show)
     LoadString(hinst, IDS_APPNAME, name, sizeof name);
     if (!CreateWindow(cls_frame, name,
                       WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-                      x, y, cx, cy, NULL, NULL, hinst, NULL))
+                      x, y, cx, cy, NULL, NULL, hinst, NULL)) {
+        help_done();                    /* its message hook */
         return 1;
+    }
 
     /* "Exit Windows..." when we are the shell, otherwise "Exit" */
     file = GetSubMenu(GetMenu(g_frame), MENU_FILE);
