@@ -1,0 +1,11 @@
+run PROGMAN.EXE
+connect
+; ExitProgman(0) with Save Settings on Exit on, and a command after it
+; in the same block (the Program Manager audit): the ACK, what is saved,
+; whether the later command runs
+;get WINDOWS/AFTER.GRP
+exec [ShowGroup(Accessories,1)]
+exec [ExitProgman(0)][CreateGroup(After)]
+wait 2000
+windows
+exists C:\WINDOWS\AFTER.GRP

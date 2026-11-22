@@ -150,6 +150,9 @@ BOOL iconlist_register(void);            /* 2.x: pmiconlist, pmicon */
 #define IDS_NOASSOCRUN      28  /* starting a document without one */
 #define IDS_EXECDENIED      29  /* error 5 */
 #define IDS_EXECWIN32       30  /* error 21: a 32-bit program, no Win32s */
+#define IDS_GROUPERROR      31  /* the caption of the one below */
+#define IDS_GROUPDAMAGED    32  /* a group file 3.1 would not read */
+#define IDS_GROUPMISSING    33  /* a group file that is not there */
 
 /* ---- shared state ---- */
 extern HINSTANCE g_hinst;
@@ -158,6 +161,7 @@ extern BOOL g_autoarrange, g_minonrun, g_savesettings, g_isshell;
 extern char g_ini[];                    /* "PROGMAN.INI" */
 extern BOOL g_norun, g_noclose, g_nosave, g_nofilemenu;    /* [Restrictions] */
 extern UINT g_editlevel;
+extern BOOL g_stock_limits;             /* [w16] ProgmanUnlimited=0 */
 
 /* ---- group.c ----
  * Zero-One-Infinity: no fixed limits on groups, items, or string lengths;
@@ -197,6 +201,10 @@ void group_show(HWND hwnd, int show);
 BOOL group_delete_selected(HWND hwnd);
 LPCSTR group_name(HWND hwnd);
 LPCSTR group_path(HWND hwnd);
+WORD group_count(HWND hwnd);                    /* its items */
+LPVOID group_read(const char FAR *grpfile, int ininum);   /* no window yet */
+HWND group_open(LPVOID model);
+void group_slot_only(HWND hwnd);
 LPCSTR group_selected_name(HWND hwnd);
 void group_save_all(void);
 void group_destroy_all(void);
@@ -208,6 +216,10 @@ LRESULT CALLBACK __export GroupWndProc(HWND, UINT, WPARAM, LPARAM);
 
 /* ---- main.c: PROGMAN.INI [Groups] and Order= ---- */
 int  ini_add_group(const char FAR *path);       /* returns N of GroupN= */
+void ini_save_group(int n, const char FAR *path);
+void group_save_paths(void);
+void load_groups(void);                         /* [Groups], Order= first */
+void pm_exit(BOOL save);                        /* DDE ExitProgman */
 void ini_remove_group(int n, LPSTR order);
 LPSTR order_string(BOOL leading);               /* Order= value, z-order */
 void ini_set_group(int n, const char FAR *path);
@@ -279,6 +291,8 @@ void  mem_free(LPSTR p);
 LPSTR s_dup(const char FAR *s);
 BOOL  s_append(LPSTR FAR *buf, const char FAR *s);  /* grows *buf */
 LPSTR profile_get(const char FAR *sec, const char FAR *key, const char FAR *file);
+LPSTR profile_keys(const char FAR *sec, const char FAR *file);
+BOOL ask_yes_no_system(int title_ids, int ids, const char FAR *arg);
 int  s_len(const char FAR *s);
 void s_cpy(char FAR *d, const char FAR *s, int max);
 void s_cat(char FAR *d, const char FAR *s, int max);
@@ -291,5 +305,6 @@ int  ask(HWND owner, int title_ids, int ids, const char FAR *arg, UINT flags);
 
 extern int __cdecl dos_chdir(const char FAR *path);
 extern void __cdecl dos_setdrive(int drive);    /* 0 = A: */
+extern long __cdecl dos_freeclusters(int drive, unsigned FAR *cluster);   /* 1 = A: */
 
 #endif

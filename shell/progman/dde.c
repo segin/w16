@@ -76,6 +76,21 @@ static int arg_int(const args *a, int n)
     return s_atoi(&p);
 }
 
+/* Windows 3.1's lengths (observed, tests/scripts/dde/longname.txt): a
+   group name is cut after 30 characters, an item title after 40, a NUL
+   written into the block there. w16 has no such limits ([w16]
+   ProgmanUnlimited=1, the default; 0 is stock 3.1). */
+static WORD arg_limit(const char FAR *cmd, int argi)
+{
+    if (!g_stock_limits)
+        return 0;
+    if (argi == 0 && !s_icmp(cmd, "CreateGroup"))
+        return 30;
+    if (argi == 1 && !s_icmp(cmd, "AddItem"))
+        return 40;
+    return 0;
+}
+
 /* Parse one "Name(args)" at *ps (after '['); fills name and a, and
    notes where each argument ends (offsets from base, add_end). */
 static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name, args *a)
@@ -100,11 +115,22 @@ static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name
         s++;
     if (*s == '(') {
         s++;
+        while (*s == ' ')
+            s++;
+        /* "()": no arguments at all (observed: [AddItem()] and
+           [CreateGroup()] fail with the block untouched, [Reload()]
+           reloads every group, tests/scripts/dde/args.txt, reload.txt) */
+        if (*s == ')') {
+            s++;
+            goto closed;
+        }
         for (;;) {                      /* one argument per round */
             LPSTR one = s_dup("");
             char c[2];
-            BOOL quoted = FALSE;
-            const char FAR *end;
+            BOOL quoted = FALSE, any = FALSE;
+            const char FAR *end, FAR *cut = NULL;
+            WORD keep = 0, len = 0;     /* up to the last quoted or non-blank */
+            WORD limit = arg_limit(*name, a->argc);
             while (*s == ' ')
                 s++;
             end = s;
@@ -112,14 +138,29 @@ static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name
             while (*s && one) {
                 if (*s == '"') {
                     quoted = !quoted;
+                    any = TRUE;
                     s++;
                     continue;
                 }
                 if (!quoted && (*s == ',' || *s == ')'))
                     break;
-                if (quoted || *s != ' ')
+                if (limit && len == limit) {
+                    /* past 3.1's length: cut there (a NUL in the block,
+                       besides the one at the argument's end) */
+                    if (!cut)
+                        cut = s;
+                    if (quoted || *s != ' ')
+                        end = s + 1;
+                    s++;
+                    continue;
+                }
+                if (quoted || *s != ' ') {
                     end = s + 1;
+                    keep = len + 1;
+                }
+                any = TRUE;
                 c[0] = *s++;
+                len++;
                 if (!s_append(&one, c)) {
                     mem_free(one);
                     one = NULL;
@@ -127,13 +168,22 @@ static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name
             }
             if (!one)
                 return FALSE;
+            /* an empty last argument is none (observed: [AddItem(N,T,,,,)]
+               fails as five arguments, like [AddItem(N,T,,,40)], and its
+               ')' stays; [AddItem(N,T,,,,,,,0,)] works as nine) */
+            if (!any && *s == ')' && a->argc) {
+                mem_free(one);
+                s++;
+                break;
+            }
+            if (cut)
+                add_end((WORD)(cut - base));
             if (*end)
                 add_end((WORD)(end - base));
-            {                           /* trailing blanks */
-                int k = s_len(one);
-                while (k > 0 && one[k - 1] == ' ')
-                    one[--k] = 0;
-            }
+            /* trailing blanks go, but not those inside quotes (observed:
+               CreateGroup("  Spaced  ") makes a group of that very name,
+               tests/scripts/dde/spaced.txt) */
+            one[keep] = 0;
             {                           /* append "one\0" to the list */
                 int have = 0, k;
                 LPSTR nb;
@@ -158,6 +208,7 @@ static BOOL parse_command(const char FAR *base, const char FAR **ps, LPSTR *name
             break;
         }
     }
+closed:
     while (*s == ' ')
         s++;
     if (*s != ']')
@@ -174,52 +225,82 @@ static HWND current_group(void)
     return (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0);
 }
 
-/* Run one command; FALSE if it failed. */
+/* ExitProgman's request, carried out once the whole block has run:
+   0 none, 1 close as the user would, 2 save first (observed: 3.1 ran
+   "[ExitProgman(0)][CreateGroup(After)]" through, made the group, sent no
+   ACK and ended; tests/scripts/dde/exit0.txt) */
+static int exit_req;
+
+/* Reread group g's file (Reload). */
+static void reload_one(HWND g)
+{
+    LPSTR path = s_dup(group_path(g));
+    int n = group_ininum(g);
+    SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g, 0);
+    if (path) {
+        /* observed: the reloaded group is the active one (reload.txt) */
+        if ((g = group_load(path, n)) != NULL)
+            SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)g, 0);
+        mem_free(path);
+    }
+}
+
+/* Run one command; FALSE if it failed. The argument counts are 3.1's
+   (observed, tests/scripts/dde/args.txt): ShowGroup takes exactly two,
+   DeleteItem and ReplaceItem one, CreateGroup and DeleteGroup at least
+   one, AddItem one to nine but not five (a position needs x and y). */
 static BOOL run_command(HWND frame, const char FAR *name, const args *a)
 {
     HWND g;
     if (!s_icmp(name, "CreateGroup")) {
-        /* UNVERIFIED: an existing group of that name is just activated */
+        /* SDK: an existing group of that name is just activated */
+        if (a->argc < 1)
+            return FALSE;
         g = group_find(arg(a, 0));
         if (!g)
             g = create_group_named(arg(a, 0), arg(a, 1));
+        /* observed: a group file that cannot be written (no such
+           directory) makes no group, and the command still succeeds
+           (tests/scripts/dde/badpath.txt) */
         if (!g)
-            return FALSE;
+            return TRUE;
         group_show(g, SW_SHOWNORMAL);
         SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)g, 0);
         return TRUE;
     }
     if (!s_icmp(name, "ShowGroup")) {
-        g = group_find(arg(a, 0));
-        if (!g)
+        if (a->argc != 2 || (g = group_find(arg(a, 0))) == NULL)
             return FALSE;
-        group_show(g, a->argc > 1 ? arg_int(a, 1) : SW_SHOWNORMAL);
+        group_show(g, arg_int(a, 1));
         return TRUE;
     }
     if (!s_icmp(name, "DeleteGroup")) {
-        g = group_find(arg(a, 0));
-        if (!g)
+        if (a->argc < 1 || (g = group_find(arg(a, 0))) == NULL)
             return FALSE;
         delete_group(g);
         return TRUE;
     }
     if (!s_icmp(name, "Reload")) {
-        /* reread a group's file (UNVERIFIED: no name means every group) */
-        HWND next;
-        for (g = GetWindow(g_client, GW_CHILD); g; g = next) {
-            next = GetWindow(g, GW_HWNDNEXT);
-            if (group_name(g) && (!a->argc || !s_icmp(group_name(g), arg(a, 0)))) {
-                LPSTR path = s_dup(group_path(g));
-                int n = group_ininum(g);
-                SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g, 0);
-                if (path) {
-                    group_load(path, n);
-                    mem_free(path);
-                }
-                if (a->argc)
-                    break;
-            }
+        /* SDK: a group's file read again; without a name every group
+           unloaded and [Groups] read again. Observed: [Reload()] and
+           [Reload] are that, Reload(no such group) fails (reload.txt).
+           Not matched: 3.1 then leaves the reloaded groups out of its
+           "Groups" answer (ARCHITECTURE.md 9.6) */
+        if (a->argc) {
+            if ((g = group_find(arg(a, 0))) == NULL)
+                return FALSE;
+            reload_one(g);
+            return TRUE;
         }
+        for (;;) {                      /* each pass starts afresh: no stale */
+            for (g = GetWindow(g_client, GW_CHILD); g && !group_name(g);
+                 g = GetWindow(g, GW_HWNDNEXT))
+                ;                       /* (icon titles are children too) */
+            if (!g)
+                break;
+            SendMessage(g_client, WM_MDIDESTROY, (WPARAM)g, 0);
+        }
+        load_groups();
         return TRUE;
     }
     if (!s_icmp(name, "AddItem")) {
@@ -227,14 +308,21 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
         itemprops ip;
         BOOL ok;
         g = current_group();
-        if (!g || !arg(a, 0)[0])
+        if (!g || a->argc < 1 || a->argc == 5 || a->argc > 9 || !arg(a, 0)[0])
             return FALSE;
+        /* observed: the 51st item fails (longname.txt, many.txt); w16 has
+           no such limit unless [w16] ProgmanUnlimited=0 */
+        if (g_stock_limits && group_count(g) >= 50) {
+            group_slot_only(g);
+            return FALSE;
+        }
         ip.cmd = s_dup(arg(a, 0));
         ip.desc = s_dup(arg(a, 1));
         ip.dir = s_dup(arg(a, 6));
         ip.iconpath = a->argc > 2 && arg(a, 2)[0] ? s_dup(arg(a, 2)) : NULL;
         ip.iconindex = arg_int(a, 3);
-        ip.has_pos = a->argc > 5 && arg(a, 4)[0] && arg(a, 5)[0];
+        /* observed: x and y given, even empty (0), place the item */
+        ip.has_pos = a->argc >= 6;
         ip.x = arg_int(a, 4);
         ip.y = arg_int(a, 5);
         ip.hotkey = (WORD)arg_int(a, 7);
@@ -247,22 +335,24 @@ static BOOL run_command(HWND frame, const char FAR *name, const args *a)
     }
     if (!s_icmp(name, "DeleteItem")) {
         g = current_group();
-        return g && group_delete_named(g, arg(a, 0));
+        return g && a->argc == 1 && group_delete_named(g, arg(a, 0));
     }
     if (!s_icmp(name, "ReplaceItem")) {
         g = current_group();
-        return g && group_replace_named(g, arg(a, 0));
+        return g && a->argc == 1 && group_replace_named(g, arg(a, 0));
     }
     if (!s_icmp(name, "ExitProgman")) {
         /* ignored when Program Manager is the shell (SDK), and under
            [Restrictions] NoClose (observed: Program Manager stayed; the
-           other restrictions do not apply to DDE) */
-        if (!g_isshell && !g_noclose) {
-            if (arg_int(a, 0))
-                SendMessage(frame, WM_CLOSE, 0, 0);
-            else
-                DestroyWindow(frame);
-        }
+           other restrictions do not apply to DDE). Observed: with
+           ExitProgman(1) the groups and settings are saved even with
+           Save Settings on Exit off, with ExitProgman(0) as on any exit
+           (exit1.txt, exit0.txt); [ExitProgman()] failed (exit2.txt) */
+        if (a->argc != 1)
+            return FALSE;
+        if (!g_isshell && !g_noclose)
+            exit_req = arg_int(a, 0) ? 2 : 1;
+        (void)frame;
         return TRUE;
     }
     return FALSE;                       /* observed: unknown -> negative ack */
@@ -344,6 +434,7 @@ static void answer_request(HWND frame, HWND client, WORD fmt, ATOM item)
     WORD n;
     HWND g;
 
+    name[0] = 0;                        /* (an atom that is no atom) */
     GlobalGetAtomName(item, name, sizeof name);
     if (fmt == CF_TEXT) {
         if (!s_icmp(name, "Groups") || !s_icmp(name, "Progman"))
@@ -363,14 +454,19 @@ static void answer_request(HWND frame, HWND client, WORD fmt, ATOM item)
         if (h)
             GlobalFree(h);
         mem_free(text);
-        PostMessage(client, WM_DDE_ACK, (WPARAM)frame, MAKELPARAM(0, item));
+        if (!PostMessage(client, WM_DDE_ACK, (WPARAM)frame, MAKELPARAM(0, item)))
+            GlobalDeleteAtom(item);
         return;
     }
     p[0] = 0x00;                        /* fResponse | fRelease, no fAckReq */
     p[1] = 0x30;
     p[2] = (BYTE)CF_TEXT;
     p[3] = 0;
-    s_cpy((char FAR *)p + 4, text, n + 1);
+    {                                   /* (n may pass 32K: no int lengths) */
+        WORD k;
+        for (k = 0; k <= n; k++)
+            p[4 + k] = text[k];
+    }
     GlobalUnlock(h);
     mem_free(text);
     if (!PostMessage(client, WM_DDE_DATA, (WPARAM)frame, MAKELPARAM(h, item))) {
@@ -387,10 +483,11 @@ LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_DDE_INITIATE:
         app[0] = topic[0] = 0;
-        if (LOWORD(lp))
-            GlobalGetAtomName(LOWORD(lp), app, sizeof app);
-        if (HIWORD(lp))
-            GlobalGetAtomName(HIWORD(lp), topic, sizeof topic);
+        /* (an atom that is no atom names nothing: not a wildcard) */
+        if (LOWORD(lp) && !GlobalGetAtomName(LOWORD(lp), app, sizeof app))
+            return 0;
+        if (HIWORD(lp) && !GlobalGetAtomName(HIWORD(lp), topic, sizeof topic))
+            return 0;
         if ((!app[0] || !s_icmp(app, "PROGMAN")) && (!topic[0] || !s_icmp(topic, "PROGMAN")))
             SendMessage((HWND)wp, WM_DDE_ACK, (WPARAM)frame,
                         MAKELPARAM(GlobalAddAtom("PROGMAN"), GlobalAddAtom("PROGMAN")));
@@ -407,7 +504,13 @@ LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp)
         if (copy) {
             WORD n = s_len(copy), k;
             char FAR *p;
-            nends = 0;
+            /* a command can let messages in (a message box): another
+               EXECUTE then gets the ends of its own */
+            WORD FAR *o_ends = ends;
+            WORD o_nends = nends, o_capends = capends;
+            BOOL o_noting = noting;
+            ends = NULL;
+            nends = capends = 0;
             ok = execute(frame, copy);
             mem_free(copy);
             if (nends && (p = (char FAR *)GlobalLock(h)) != NULL) {
@@ -416,6 +519,19 @@ LRESULT dde_message(HWND frame, UINT msg, WPARAM wp, LPARAM lp)
                         p[ends[k]] = 0;
                 GlobalUnlock(h);
             }
+            mem_free((LPSTR)ends);
+            ends = o_ends;
+            nends = o_nends;
+            capends = o_capends;
+            noting = o_noting;
+        }
+        if (exit_req) {
+            /* observed: no ACK at all, Program Manager just ends, also
+               when a later command failed (exit3.txt) */
+            int how = exit_req;
+            exit_req = 0;
+            pm_exit(how == 2);
+            return 0;
         }
         PostMessage((HWND)wp, WM_DDE_ACK, (WPARAM)frame, MAKELPARAM(ok ? 0x8000 : 0, h));
         return 0;

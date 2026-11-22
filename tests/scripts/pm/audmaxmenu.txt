@@ -1,0 +1,40 @@
+; the File menu's state with a group maximised (the Program Manager
+; audit): the empty StartUp group maximised, then Main
+run PROGMAN.EXE
+wait 3000
+menu w
+wait 300
+dump
+key 1B
+wait 300
+key 1B
+wait 300
+menu w
+char 3
+wait 700
+childcmd F030
+wait 700
+menu f
+wait 500
+dumpmenu
+snap C:\X1.BMP
+key 1B
+wait 300
+key 1B
+wait 300
+menu w
+char 4
+wait 700
+menu f
+wait 500
+dumpmenu
+snap C:\X2.BMP
+key 1B
+wait 300
+key 1B
+wait 300
+childcmd F120
+wait 500
+menu f
+char x
+wait 1500

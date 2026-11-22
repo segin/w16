@@ -15,6 +15,7 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
+ref=$root/.tools/ref/win31/cdrive
 out=$root/build/ref/scenarios
 files="WINDOWS/PROGMAN.INI WINDOWS/MAIN.GRP WINDOWS/ACCESSOR.GRP WINDOWS/GAMES.GRP WINDOWS/STARTUP.GRP WINDOWS/TESTGROU.GRP WINDOWS/STUP2.GRP"
 names=${*:-$(cd "$root/tests/scripts/pm" && ls *.txt | sed 's/\.txt$//')}
@@ -34,8 +35,25 @@ for n in $names; do
             extra=$root/build/dos/PROGMAN.EXE
         fi
         pre=$(sed -n 's/^;pre //p' "$root/tests/scripts/pm/$n.txt")
-        REFRUN_PRE="$pre" REFRUN_FILES="$d/SNAP.TXT $extra" REFRUN_OUT=$d REFRUN_GET="$files" \
-            "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt"
+        # ";ini SECTION|KEY[|VALUE]": PROGMAN.INI changed first (no value:
+        # the key removed); ";grp NAME": tools/mkbadgrp.py's NAME.GRP in
+        # C:\WINDOWS
+        if grep -q '^;ini ' "$root/tests/scripts/pm/$n.txt"; then
+            sed -n 's/^;ini //p' "$root/tests/scripts/pm/$n.txt" |
+                python3 "$root/tools/iniedit.py" "$ref/WINDOWS/PROGMAN.INI" "$d/PROGMAN.INI"
+            extra="$extra $d/PROGMAN.INI=WINDOWS/PROGMAN.INI"
+        fi
+        for g in $(sed -n 's/^;grp //p' "$root/tests/scripts/pm/$n.txt"); do
+            python3 "$root/tools/mkbadgrp.py" "$d/grp"
+            extra="$extra $d/grp/$g.GRP=WINDOWS/$g.GRP"
+        done
+        REFRUN_PRE="$pre" REFRUN_FILES="$d/SNAP.TXT $extra" REFRUN_OUT=$d \
+            REFRUN_GET="$files TK.LOG WINDOWS/TK.LOG" "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S \
+            > "$d/log.txt" || true
+        # Windows did not end (a box left up, a hang): the log so far
+        if [ ! -s "$d/log.txt" ] && [ -f "$d/TK.LOG" ]; then
+            { tr -d '\r' < "$d/TK.LOG"; echo "(Windows did not end)"; } > "$d/log.txt"
+        fi
     done
     result=ok
     for f in $files; do

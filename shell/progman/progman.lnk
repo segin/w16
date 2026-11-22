@@ -9,3 +9,4 @@ library windows.lib
 library shell.lib
 library commdlg.lib
 import DRAGOBJECT USER.464
+import SYSERRORBOX USER.320

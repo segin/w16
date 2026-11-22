@@ -1,0 +1,18 @@
+run PROGMAN.EXE
+connect
+; long group names, item titles and commands (the Program Manager
+; audit; 3.1 cuts names after 30 characters and titles after 40: w16
+; too with [w16] ProgmanUnlimited=0, as the tests run)
+exec [CreateGroup(AbcdefghijAbcdefghijAbcdefghi)]
+exec [CreateGroup(AbcdefghijAbcdefghijAbcdefghij)]
+exec [CreateGroup(AbcdefghijAbcdefghijAbcdefghijA)]
+exec [CreateGroup(AbcdefghijAbcdefghijAbcdefghijAbcdefghij)]
+request Groups
+exec [AddItem(NOTEPAD.EXE,T39xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)]
+exec [AddItem(NOTEPAD.EXE,T40xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)]
+exec [AddItem(NOTEPAD.EXE,T41xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)]
+exec [AddItem(NOTEPAD.EXE,T60xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)]
+exec [AddItem(NOTEPAD.EXE,T120xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)]
+exec [AddItem(C:\WINDOWS\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\NOTEPAD.EXE,C60)]
+exec [AddItem(C:\WINDOWS\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\D\NOTEPAD.EXE,C64)]
+request AbcdefghijAbcdefghijAbcdefghij

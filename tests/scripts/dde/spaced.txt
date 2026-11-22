@@ -1,0 +1,13 @@
+run PROGMAN.EXE
+connect
+; a quoted group name with blanks at both ends (the Program Manager
+; audit): kept as it is, found only so
+;get WINDOWS/SPACED.GRP
+exec [CreateGroup("  Spaced  ")]
+request Groups
+request   Spaced
+exec [ShowGroup(Spaced,1)]
+exec [ShowGroup("  Spaced  ",1)]
+exec [DeleteGroup(Spaced)]
+exec [DeleteGroup("  Spaced  ")]
+request Groups

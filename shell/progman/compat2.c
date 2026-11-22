@@ -56,10 +56,10 @@ static LPSTR profile_path(LPCSTR file)
             return s_dup(file);
     pm_GetWindowsDirectory(dir, sizeof dir);
     p = s_dup(dir);
-    if (p && p[s_len(p) - 1] != '\\')
-        s_append(&p, "\\");
-    if (p)
-        s_append(&p, file);
+    if (p && ((p[s_len(p) - 1] != '\\' && !s_append(&p, "\\")) || !s_append(&p, file))) {
+        mem_free(p);
+        p = NULL;
+    }
     return p;
 }
 
@@ -74,7 +74,11 @@ static LPSTR read_all(LPCSTR path, WORD *len)
         return NULL;
     n = _llseek(f, 0, 2);
     _llseek(f, 0, 0);
-    if (n < 0 || n > 0xFFF0L || (buf = mem_alloc(n + 1)) == NULL) {
+    /* offsets below are ints: a larger file is not read, and not
+       rewritten (*len FFFFh tells the writer) */
+    if (n < 0 || n > 0x7FF0L || (buf = mem_alloc(n + 1)) == NULL) {
+        if (n > 0x7FF0L)
+            *len = 0xFFFF;
         _lclose(f);
         return NULL;
     }
@@ -158,6 +162,38 @@ int FAR pm_GetPrivateProfileString(LPCSTR sec, LPCSTR key, LPCSTR def, LPSTR buf
         return 0;
     text = path ? read_all(path, &len) : NULL;
     mem_free(path);
+    if (text && !key) {                 /* the section's keys, NUL after each */
+        int i = 0, slen = s_len(sec);
+        BOOL in = FALSE;
+        while (i < (int)len) {
+            int b = i, e, k, eq;
+            while (i < (int)len && text[i] != '\n')
+                i++;
+            e = i;
+            if (i < (int)len)
+                i++;
+            for (k = b; k < e && (text[k] == ' ' || text[k] == '\t'); k++)
+                ;
+            if (k < e && text[k] == '[') {
+                in = e - k - 1 > slen && text[k + 1 + slen] == ']' && same_n(text + k + 1, sec, slen);
+                continue;
+            }
+            for (eq = k; in && eq < e && text[eq] != '='; eq++)
+                ;
+            if (in && eq < e) {
+                if (n + 2 >= size)
+                    break;              /* full (the caller asks again) */
+                while (eq > k && (text[eq - 1] == ' ' || text[eq - 1] == '\t'))
+                    eq--;
+                for (; k < eq && n < size - 2; k++)
+                    buf[n++] = text[k];
+                buf[n++] = 0;
+            }
+        }
+        buf[n] = 0;
+        mem_free(text);
+        return n;
+    }
     if (text && key) {
         find(text, len, sec, key, &s);
         if (s.val >= 0) {
@@ -194,6 +230,8 @@ BOOL FAR pm_WritePrivateProfileString(LPCSTR sec, LPCSTR key, LPCSTR value, LPCS
     if (!path || !key)
         goto done;
     text = read_all(path, &len);
+    if (!text && len == 0xFFFF)
+        goto done;                      /* too large to rewrite safely */
     if (!text) {
         text = s_dup("");
         len = 0;
@@ -218,6 +256,10 @@ BOOL FAR pm_WritePrivateProfileString(LPCSTR sec, LPCSTR key, LPCSTR value, LPCS
             ok = s_append(&out, text);
             text[cut] = keep;
         }
+        /* a section at the end of a file without a final line break: the
+           new key on a line of its own */
+        if (ok && value && s.line < 0 && s.have_sec && cut > 0 && text[cut - 1] != '\n')
+            ok = s_append(&out, "\r\n");
         if (ok && !s.have_sec && value) {
             if (len && text[len - 1] != '\n')
                 ok = s_append(&out, "\r\n");
@@ -360,10 +402,10 @@ HINSTANCE FAR pm_ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPC
         cmd = s_dup(file);
     } else {
         cmd = s_dup(prog);
-        if (cmd)
-            s_append(&cmd, " ");
-        if (cmd)
-            s_append(&cmd, file);
+        if (cmd && (!s_append(&cmd, " ") || !s_append(&cmd, file))) {
+            mem_free(cmd);
+            cmd = NULL;
+        }
     }
     {
         const char FAR *e = file + s_len(file);
@@ -375,9 +417,9 @@ HINSTANCE FAR pm_ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPC
             cmd = s_dup(file);
         }
     }
-    if (cmd && params && params[0]) {
-        s_append(&cmd, " ");
-        s_append(&cmd, params);
+    if (cmd && params && params[0] && (!s_append(&cmd, " ") || !s_append(&cmd, params))) {
+        mem_free(cmd);
+        cmd = NULL;
     }
     r = cmd ? pm_WinExec(cmd, show) : 0;
     mem_free(cmd);

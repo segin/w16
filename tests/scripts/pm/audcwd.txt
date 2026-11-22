@@ -1,0 +1,39 @@
+;pre md C:\TMP
+;pre echo hello> C:\TMP\X.TXT
+; Program Manager's current directory after starting an item with a
+; working directory (the Program Manager audit): Notepad started by File >
+; Run with a bare name that is only in that directory
+run PROGMAN.EXE
+wait 3000
+menu f
+char n
+wait 500
+key 0D
+wait 700
+type CwdTest
+key 09
+type NOTEPAD.EXE
+key 09
+type C:\TMP
+key 0D
+wait 1500
+key 0D
+wait 2500
+dump
+close
+wait 1500
+menu f
+char r
+wait 700
+type NOTEPAD.EXE X.TXT
+key 0D
+wait 2500
+snap C:\C1.BMP
+dump
+key 0D
+wait 1000
+close
+wait 1500
+menu f
+char x
+wait 1500

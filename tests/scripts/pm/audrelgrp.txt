@@ -1,0 +1,22 @@
+;ini Groups|Group4|STARTUP.GRP
+; Program Group Properties of a group whose PROGMAN.INI entry is a bare
+; file name, OK without changes (the Program Manager audit): the group
+; file must stay
+run PROGMAN.EXE
+wait 3000
+menu -
+wait 300
+char c
+wait 800
+menu f
+char p
+wait 700
+snap C:\R1.BMP
+dump
+key 0D
+wait 1000
+snap C:\R2.BMP
+dump
+menu f
+char x
+wait 1500

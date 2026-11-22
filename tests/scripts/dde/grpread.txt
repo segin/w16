@@ -1,0 +1,18 @@
+; group files Windows 3.1 reads although they are unusual
+; (tools/mkbadgrp.py, the Program Manager audit): its own tags; a group
+; name past cbGroup, read from the tags; icon blocks that overlap and
+; add up to more than 64K; 300 items of long commands, no cached icons
+ini PROGMAN.INI|Groups|Group5|C:\WINDOWS\GOOD.GRP
+ini PROGMAN.INI|Groups|Group6|C:\WINDOWS\NAMEOFF.GRP
+ini PROGMAN.INI|Groups|Group7|C:\WINDOWS\ICONWRAP.GRP
+ini PROGMAN.INI|Groups|Group8|C:\WINDOWS\MANY.GRP
+ini PROGMAN.INI|Settings|Order| 2 3 4 1 5 6 7 8
+run PROGMAN.EXE
+windows
+connect
+request Groups
+request Good
+request Icon Wrap
+request Many
+exec [ExitProgman(1)]
+wait 2000

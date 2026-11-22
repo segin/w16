@@ -312,6 +312,10 @@ static void combo_drop(HWND w)
     SendMessage(lb, LB_SETCURSEL, c->cur, 0);
     if (!drop_thunk)
         drop_thunk = MakeProcInstance((FARPROC)DropProc, g_hinst);
+    if (!drop_thunk) {
+        DestroyWindow(lb);
+        return;
+    }
     drop_old = (FARPROC)GetWindowLong(lb, GWL_WNDPROC);
     SetWindowLong(lb, GWL_WNDPROC, (LONG)drop_thunk);
     drop_owner = w;
@@ -377,12 +381,13 @@ LRESULT CALLBACK __export ComboProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (!grown)
             return CB_ERRSPACE;
         c->str = grown;
-        c->str[c->n] = s_dup((LPCSTR)lp);
+        if ((c->str[c->n] = s_dup((LPCSTR)lp)) == NULL)
+            return CB_ERRSPACE;
         return c->n++;
     case CB_GETCOUNT:
         return c->n;
     case CB_SETCURSEL:
-        c->cur = (int)wp < c->n ? (int)wp : -1;
+        c->cur = (int)wp >= 0 && (int)wp < c->n ? (int)wp : -1;
         InvalidateRect(w, NULL, TRUE);
         return c->cur;
     case CB_GETCURSEL:
@@ -560,11 +565,13 @@ LRESULT CALLBACK __export DirListProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (!grown)
             return LB_ERRSPACE;
         l->it = grown;
-        l->it[l->n].name = s_dup((LPCSTR)lp);
+        if ((l->it[l->n].name = s_dup((LPCSTR)lp)) == NULL)
+            return LB_ERRSPACE;
         l->it[l->n].level = LOBYTE(wp);
         l->it[l->n].open = HIBYTE(wp) != 0;
-        dl_scroll(w, l);
-        return l->n++;
+        l->n++;
+        dl_scroll(w, l);                /* with the new item counted */
+        return l->n - 1;
     case PMDL_GETTEXT:
         return (int)wp >= 0 && (int)wp < l->n ? (LRESULT)l->it[wp].name : 0;
     case LB_GETCOUNT:
@@ -792,7 +799,12 @@ static void fill_drives(HWND dlg)
             text[j] = 0;
             lower(text);
         }
-        b_drives[SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)text)] = t;
+        {
+            int at = (int)SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)text);
+            if (at < 0 || at >= 26)
+                break;                  /* out of memory */
+            b_drives[at] = t;
+        }
         if (d == cur)
             SendMessage(cb, CB_SETCURSEL, b_ndrives, 0);
         b_ndrives++;
@@ -836,11 +848,18 @@ static BOOL take_name(HWND dlg)
                 slash = p;
         if (slash) {                    /* a directory part: go there */
             char c = slash[1];
-            if (slash[0] == ':')
+            if (name[1] == ':')         /* "c:*.exe", "c:\\dir\\*.exe" */
                 dos_setdrive((name[0] | 0x20) - 'a');
-            slash[1] = 0;
-            if (slash[0] == '\\' && slash > name)
+            if (slash[0] == '\\') {
+                /* the directory without its last backslash, but a root
+                   ("\\", "c:\\") keeps it */
+                BOOL root = slash == name || (slash == name + 2 && name[1] == ':');
+                char keep = root ? slash[1] : slash[0];
+                char FAR *cut = root ? slash + 1 : slash;
+                *cut = 0;
                 dos_chdir(name);
+                *cut = keep;
+            }
             slash[1] = c;
             SetDlgItemText(dlg, IDC_B_NAME, slash + 1);
             fill_dirs(dlg);
@@ -919,9 +938,11 @@ BOOL CALLBACK __export BrowseDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                         if (!dl_of(dl)->it[k].open)
                             continue;
                     }
-                    if (k > 1)
-                        s_append(&path, "\\");
-                    s_append(&path, nm);
+                    /* (the root, "c:\\", already ends in one) */
+                    if (path && path[s_len(path) - 1] != '\\' && !s_append(&path, "\\"))
+                        break;
+                    if (!s_append(&path, nm))
+                        break;
                 }
                 if (path) {
                     dos_chdir(path);

@@ -145,6 +145,9 @@ BEGIN
     IDS_NOASSOCRUN,     "No application is associated with the specified file. Create an association by using File Manager."
     IDS_EXECDENIED,     "Access to the specified device, path, or file is denied."
     IDS_EXECWIN32,      "Cannot run %s. This 32-bit program requires Win32s, which is not installed."
+    IDS_GROUPERROR,     "Group File Error"
+    IDS_GROUPDAMAGED,   "Program-group file '%s' is invalid or damaged. Recreate the group."
+    IDS_GROUPMISSING,   "Cannot open program-group file '%s'.\nDo you want Program Manager to try to load it in the future?"
 END
 
 /* New Program Object (observed: 162 x 63 units; IDs 99/116/117/1/2/126) */

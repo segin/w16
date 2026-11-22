@@ -1,0 +1,23 @@
+; Change Icon from New Program Item with a command typed after blanks
+; (the Program Manager audit): which file the Change Icon box shows
+run PROGMAN.EXE
+wait 3000
+menu f
+char n
+wait 500
+key 0D
+wait 700
+type Sp
+key 09
+type   NOTEPAD.EXE
+alt i
+wait 1500
+snap C:\I1.BMP
+dump
+key 1B
+wait 500
+key 1B
+wait 500
+menu f
+char x
+wait 1500

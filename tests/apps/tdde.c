@@ -11,6 +11,17 @@
  *     exec <command string>        WM_DDE_EXECUTE
  *     request <item>               WM_DDE_REQUEST, CF_TEXT
  *     wait <ms>
+ *     windows                  log the visible top-level windows (class,
+ *                              text) other than TDDE's, every child of a
+ *                              dialog (message boxes) and Program
+ *                              Manager's groups (its MDI children)
+ *     press <id>               WM_COMMAND id (decimal) to the first
+ *                              visible dialog (a message box's IDOK 1,
+ *                              IDCANCEL 2, IDYES 6, IDNO 7), then a wait
+ *     ini <file>|<sec>|<key>[|<value>]   WritePrivateProfileString;
+ *                              without a value the key is deleted (before
+ *                              "run PROGMAN.EXE": its PROGMAN.INI)
+ *     exists <file>            log whether the file is there (OpenFile)
  * Run as the shell (tests/refrun.sh) after starting Program Manager:
  * the first script line can be "run PROGMAN.EXE".
  */
@@ -26,7 +37,7 @@ static HWND me, server;
 static int acks;
 static BOOL got_ack, got_data, got_term;
 static WORD exec_len;                   /* the command block's string length */
-static char script[4096];
+static char script[16384];
 
 static void out(const char FAR *s)
 {
@@ -183,6 +194,73 @@ LRESULT CALLBACK __export ClientWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(w, msg, wp, lp);
 }
 
+/* Log one window: class and text (another task's too: WM_GETTEXT). */
+static void out_window(HWND w, const char *indent)
+{
+    char cls[64], text[300];
+    GetClassName(w, cls, sizeof cls);
+    text[0] = 0;
+    SendMessage(w, WM_GETTEXT, sizeof text, (LPARAM)(LPSTR)text);
+    out(indent);
+    out("class=\"");
+    out(cls);
+    out("\" text=\"");
+    out_escaped(text, sizeof text);
+    out("\"");
+    if (indent[2]) {
+        out(" id=");
+        outhex(GetWindowWord(w, GWW_ID));
+    }
+    if (lstrcmp(cls, "PMGroup") && lstrcmp(cls, "Progman")) {
+        RECT r;                         /* a dialog and its controls */
+        GetWindowRect(w, &r);
+        out(" rect=");
+        outhex(r.left);
+        out(",");
+        outhex(r.top);
+        out(",");
+        outhex(r.right);
+        out(",");
+        outhex(r.bottom);
+        out(" style=");
+        outhex(HIWORD(GetWindowLong(w, GWL_STYLE)));
+        outhex(LOWORD(GetWindowLong(w, GWL_STYLE)));
+    }
+    out("\r\n");
+}
+
+static void windows(void)
+{
+    HWND w, c;
+    char cls[64];
+    out("WINDOWS\r\n");
+    for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == me || !IsWindowVisible(w))
+            continue;
+        out_window(w, "  ");
+        GetClassName(w, cls, sizeof cls);
+        if (!lstrcmp(cls, "#32770"))
+            for (c = GetWindow(w, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT))
+                out_window(c, "    ");
+        if (!lstrcmp(cls, "Progman")) {     /* its MDI client's groups */
+            HWND mdi = GetWindow(w, GW_CHILD);
+            for (c = mdi ? GetWindow(mdi, GW_CHILD) : NULL; c; c = GetWindow(c, GW_HWNDNEXT)) {
+                GetClassName(c, cls, sizeof cls);
+                if (!lstrcmp(cls, "PMGroup"))
+                    out_window(c, "    ");
+            }
+        }
+    }
+}
+
+static WORD number(const char *s)
+{
+    WORD v = 0;
+    while (*s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    return v;
+}
+
 static void step(char *l)
 {
     char *arg = l;
@@ -198,6 +276,39 @@ static void step(char *l)
         while (*arg >= '0' && *arg <= '9')
             ms = ms * 10 + (*arg++ - '0');
         pump(ms, NULL);
+    } else if (!lstrcmp(l, "windows")) {
+        windows();
+    } else if (!lstrcmp(l, "press")) {
+        HWND w;
+        char cls[64];
+        for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT)) {
+            GetClassName(w, cls, sizeof cls);
+            if (IsWindowVisible(w) && !lstrcmp(cls, "#32770"))
+                break;
+        }
+        out("press ");
+        out(arg);
+        out(w ? "\r\n" : " (no dialog)\r\n");
+        if (w)
+            PostMessage(w, WM_COMMAND, number(arg), MAKELPARAM(GetDlgItem(w, number(arg)), 0));
+        pump(1500, NULL);
+    } else if (!lstrcmp(l, "ini")) {
+        char *f[4];
+        int k = 0;
+        f[0] = arg;
+        f[1] = f[2] = f[3] = NULL;
+        for (; *arg && k < 3; arg++)
+            if (*arg == '|') {
+                *arg = 0;
+                f[++k] = arg + 1;
+            }
+        if (f[2])
+            WritePrivateProfileString(f[1], f[2], f[3], f[0]);
+    } else if (!lstrcmp(l, "exists")) {
+        OFSTRUCT of;
+        out("exists ");
+        out(arg);
+        out(OpenFile(arg, &of, OF_EXIST) != HFILE_ERROR ? " yes\r\n" : " no\r\n");
     } else if (!lstrcmp(l, "connect")) {
         ATOM app = GlobalAddAtom("PROGMAN"), topic = GlobalAddAtom("PROGMAN");
         server = NULL;

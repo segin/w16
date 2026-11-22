@@ -1,0 +1,10 @@
+; ExitProgman without an argument, Save Settings on Exit off, and a
+; failing command after it (the Program Manager audit)
+ini PROGMAN.INI|Settings|SaveSettings|0
+run PROGMAN.EXE
+connect
+exec [ShowGroup(Accessories,1)]
+exec [ExitProgman()][ShowGroup(Nope,1)]
+wait 2000
+windows
+request Groups

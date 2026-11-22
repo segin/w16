@@ -101,22 +101,62 @@ static void exec_error(HWND owner, BOOL run, int ids, const char FAR *arg)
     }
 }
 
+static BOOL exec_here(HWND owner, const char FAR *cmd, BOOL minimized, BOOL run);
+
+extern int __cdecl dos_getcwd(int drive, char FAR *buf);
+extern int __cdecl dos_getdrive(void);
+
+/* A drive's current directory as "X:\dir" in buf (DOS bounds it: 64
+   bytes, OFSTRUCT's 128 hold it); FALSE if it cannot be read. */
+static BOOL drive_cwd(int drive, char *buf)
+{
+    buf[0] = (char)('A' + drive);
+    buf[1] = ':';
+    buf[2] = '\\';
+    return dos_getcwd(drive + 1, buf + 3) == 0;
+}
+
+/* Start a program, in directory dir if one is given. Program Manager's
+   own directory is put back afterwards (observed, tests/scripts/pm/
+   audcwd.txt: after an item with working directory C:\TMP ran, 3.1's
+   File > Run of X.TXT, which is only in C:\TMP, did not find it). */
 BOOL pm_exec(HWND owner, const char FAR *cmd, const char FAR *dir, BOOL minimized,
              BOOL run)
+{
+    char here[144], there[144];         /* DOS paths (OFSTRUCT's bound) */
+    int drive = dos_getdrive(), to = -1;
+    BOOL saved, saved2 = FALSE, ok;
+
+    if (!dir || !dir[0])
+        return exec_here(owner, cmd, minimized, run);
+    saved = drive_cwd(drive, here);
+    if (dir[1] == ':') {
+        char d = dir[0];
+        if (d >= 'a' && d <= 'z')
+            d -= 'a' - 'A';
+        if (d >= 'A' && d <= 'Z') {     /* a drive letter, else none */
+            to = d - 'A';
+            if (to != drive)
+                saved2 = drive_cwd(to, there);
+            dos_setdrive(to);
+        }
+    }
+    dos_chdir(dir);                     /* (as 3.1: started anyway if it fails) */
+    ok = exec_here(owner, cmd, minimized, run);
+    if (saved2)
+        dos_chdir(there);
+    dos_setdrive(drive);
+    if (saved)
+        dos_chdir(here);
+    return ok;
+}
+
+static BOOL exec_here(HWND owner, const char FAR *cmd, BOOL minimized, BOOL run)
 {
     LPSTR line, params, rdir = NULL;
     UINT r;
     int show = minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL;
-
-    if (dir && dir[0]) {
-        if (dir[1] == ':') {
-            char d = dir[0];
-            if (d >= 'a' && d <= 'z')
-                d -= 'a' - 'A';
-            dos_setdrive(d - 'A');
-        }
-        dos_chdir(dir);
-    }
+    const char FAR *dir = NULL;         /* (the run-from-path rule below) */
     while (*cmd == ' ')
         cmd++;
     line = s_dup(cmd);
@@ -401,6 +441,20 @@ static BOOL is_blank(const char FAR *s)
    to MAIN.GRP, COLLIDE0.GRP next to COLLIDET.GRP); UNVERIFIED after 9.
    UNVERIFIED: a name with no letter or digit ("---") and letters above
    7Fh ("Q\xE9Z"): 3.1 acknowledged CreateGroup but made no group. */
+/* dir, a backslash unless it ends in one, name, ext: a new string, or
+   NULL when out of memory */
+static LPSTR join_path(const char FAR *dir, const char FAR *name, const char FAR *ext)
+{
+    LPSTR p = s_dup(dir);
+    int n = p ? s_len(p) : 0;
+    if (p && ((n && p[n - 1] != '\\' && !s_append(&p, "\\")) || !s_append(&p, name) ||
+              !s_append(&p, ext))) {
+        mem_free(p);
+        p = NULL;
+    }
+    return p;
+}
+
 static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
 {
     char windir[144];                   /* DOS path bound (OFSTRUCT) */
@@ -425,16 +479,14 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
             }
         }
         if (!dirpart) {
-            path = s_dup(windir);
-            if (path && path[s_len(path) - 1] != '\\')
-                s_append(&path, "\\");
-            if (path)
-                s_append(&path, typed);
+            path = join_path(windir, typed, ext ? "" : ".GRP");
         } else {
             path = s_dup(typed);
+            if (path && !ext && !s_append(&path, ".GRP")) {
+                mem_free(path);
+                path = NULL;
+            }
         }
-        if (path && !ext)
-            s_append(&path, ".GRP");
         return path;
     }
     for (; *desc && n < 8; desc++) {
@@ -457,13 +509,7 @@ static LPSTR group_file_name(const char FAR *desc, const char FAR *typed)
             d = s_len(digits);
             s_cpy(name + (n + d > 8 ? 8 - d : n), digits, sizeof name - 8 + d);
         }
-        path = s_dup(windir);
-        if (!path)
-            return NULL;
-        if (path[s_len(path) - 1] != '\\')
-            s_append(&path, "\\");
-        s_append(&path, name);
-        s_append(&path, ".GRP");
+        path = join_path(windir, name, ".GRP");
         if (!path || OpenFile(path, &of, OF_EXIST) == HFILE_ERROR || tries == 0xFFFFu)
             return path;
     }
@@ -557,8 +603,10 @@ BOOL CALLBACK __export GroupPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
             if (props_group) {
                 file = dlg_text(dlg, IDC_GROUPFILE);
                 path = file && desc ? group_file_name(desc, file) : NULL;
-                if (!desc || !path || !group_rename(props_group, desc) ||
-                    !group_set_file(props_group, path))
+                /* the file first: if it cannot be written, nothing has
+                   changed */
+                if (!desc || !path || !group_set_file(props_group, path) ||
+                    !group_rename(props_group, desc))
                     message(dlg, IDS_CANTWRITE, path ? path : group_path(props_group));
                 else
                     EndDialog(dlg, IDOK);
@@ -605,8 +653,11 @@ static void free_icon_list(HWND dlg)
 {
     HWND lb = GetDlgItem(dlg, IDC_ICONLIST);
     int n = (int)SendMessage(lb, LB_GETCOUNT, 0, 0), i;
-    for (i = 0; i < n; i++)
-        DestroyIcon((HICON)LOWORD(SendMessage(lb, LB_GETITEMDATA, i, 0)));
+    for (i = 0; i < n; i++) {
+        HICON h = (HICON)LOWORD(SendMessage(lb, LB_GETITEMDATA, i, 0));
+        if (h)                          /* (an icon that could not be read) */
+            DestroyIcon(h);
+    }
     SendMessage(lb, LB_RESETCONTENT, 0, 0);
 }
 
@@ -620,7 +671,8 @@ static int load_icon_list(HWND dlg, const char FAR *name)
     n = path ? icon_count(path) : 0;
     for (i = 0; i < n; i++) {
         HICON h = icon_extract(path, i);
-        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(DWORD)(WORD)h);
+        if ((int)SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(DWORD)(WORD)h) < 0 && h)
+            DestroyIcon(h);             /* not listed: nothing else frees it */
     }
     InvalidateRect(lb, NULL, TRUE);
     mem_free(path);
@@ -1050,12 +1102,16 @@ BOOL CALLBACK __export ItemPropsDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp
                 ci_index = pi_iconindex;
                 mem_free(cmd);
             } else {                    /* the command's program */
-                int n = 0;
-                while (cmd && cmd[n] && cmd[n] != ' ')
+                /* after any blanks (3.1: "  NOTEPAD.EXE" shows
+                   C:\WINDOWS\NOTEPAD.EXE, the audit's probe audchgicon) */
+                int n = 0, b = 0;
+                while (cmd && cmd[b] == ' ')
+                    b++;
+                while (cmd && cmd[b + n] && cmd[b + n] != ' ')
                     n++;
                 if (cmd)
-                    cmd[n] = 0;
-                ci_path = cmd ? icon_file(cmd) : NULL;
+                    cmd[b + n] = 0;
+                ci_path = cmd ? icon_file(cmd + b) : NULL;
                 mem_free(cmd);
                 if (ci_path)            /* shown as a full path, capitals */
                     AnsiUpper(ci_path);

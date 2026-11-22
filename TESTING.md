@@ -137,7 +137,10 @@ file at hand; `tests/whtree.sh OUTDIR [286|386]`:
 on w16's install tree alone, with three of the reference install's help
 files as input; `tests/whobs.sh` for observing the original; `make build/hlpdump` builds the .HLP reader for the host,
 `tests/winhelp/hlpdump.c`),
-`tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
+`tests/pmscenarios.sh` (`;ini SECTION|KEY|VALUE` and `;grp NAME` lines set
+up PROGMAN.INI and `tools/mkbadgrp.py`'s group files),
+`tests/ddescenario.sh` (Program Manager's DDE interface, TDDE scripts in
+`tests/scripts/dde/`; the boot-test case `ddescen`), `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,
 INI files, the running saver, USER starting it; `tests/sstree.sh`: on
 w16's install tree alone; the boot-test case `scrnsave`),

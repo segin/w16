@@ -1,0 +1,15 @@
+run PROGMAN.EXE
+connect
+; CreateGroup with a group file that cannot be written (no such
+; directory), then commands after it (the Program Manager audit)
+;get WINDOWS/AFTER.GRP
+exec [CreateGroup(Bad Path,C:\NODIR\BAD.GRP)]
+windows
+press 1
+windows
+request Groups
+exec [AddItem(CLOCK.EXE,Where)]
+exec [CreateGroup(After)]
+request Groups
+request After
+windows
