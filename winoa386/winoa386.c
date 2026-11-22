@@ -246,9 +246,10 @@ static void load_fonts(void)
         char *e = list + i * 17;
         int h = *(int *)(e + 13), w = *(int *)(e + 15);  /* words */
         HFONT f;
-        /* a file that is not there is left out quietly (w16's tree has
-           none of them: then the OEM font, 8x12 like EGA80WOA's cells;
-           Windows 3.1's WINOA386 stops with KERNEL's "Cannot find" box) */
+        /* a file that is not there is left out quietly (then the OEM
+           font, 8x12 like EGA80WOA's cells; w16's tree has all four,
+           fonts/ega80woa.txt etc.; Windows 3.1's WINOA386 stops with KERNEL's
+           "Cannot find" box) */
         if (!exists(e, NULL))
             continue;
         if (AddFontResource(e) <= 0)

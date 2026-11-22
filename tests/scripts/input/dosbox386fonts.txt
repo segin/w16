@@ -1,0 +1,50 @@
+; the MS-DOS Prompt in 386 Enhanced mode in a window, then its system
+; menu's Fonts... dialog (the DOS-box fonts: DOSAPP.FON and the grabber's
+; *WOA.FON), another size chosen, the window in that font, EXIT
+; (tests/fonts.sh -w)
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+key alt+Return
+sleep 6
+type dir /w
+key Return
+sleep 3
+shot 01-window
+key alt+space
+sleep 2
+shot 02-menu
+key f
+sleep 4
+shot 03-fonts
+key Up
+sleep 2
+shot 04-smaller
+key Up
+sleep 2
+shot 05-smaller2
+key Return
+sleep 4
+shot 06-window-smaller
+key alt+space
+sleep 2
+key f
+sleep 4
+key Down
+key Down
+key Down
+key Down
+sleep 2
+shot 07-larger
+key Return
+sleep 4
+shot 08-window-larger
+type exit
+key Return
+sleep 10
+shot 09-back

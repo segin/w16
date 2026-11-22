@@ -1,0 +1,1252 @@
+FN3 font probe
+FACE Courier
+ENUM type=1 face="Courier" lh=13 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=13 a=11 d=2 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Courier" lh=16 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=16 a=13 d=3 il=0 el=0 aw=9 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Courier" lh=20 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=20 a=16 d=4 il=0 el=0 aw=12 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+FONT Courier 13x8
+ face="Courier" h=13 a=11 d=2 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w16=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w32=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w48=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w64=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w80=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w96=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w112=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w128=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w144=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w160=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w176=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w192=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w208=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w224=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w240=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=416,13
+ ext "The quick brown fox jumps over the lazy dog."=352,13
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=344,13
+ ext " "=8,13
+FONT Courier 16x9
+ face="Courier" h=16 a=13 d=3 il=0 el=0 aw=9 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w16=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w32=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w48=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w64=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w80=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w96=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w112=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w128=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w144=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w160=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w176=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w192=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w208=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w224=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ w240=9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=468,16
+ ext "The quick brown fox jumps over the lazy dog."=396,16
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=387,16
+ ext " "=9,16
+FONT Courier 20x12
+ face="Courier" h=20 a=16 d=4 il=0 el=0 aw=12 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w16=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w32=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w48=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w64=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w80=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w96=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w112=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w128=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w144=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w160=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w176=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w192=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w208=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w224=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w240=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=624,20
+ ext "The quick brown fox jumps over the lazy dog."=528,20
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=516,20
+ ext " "=12,20
+MAP "Courier" h=-40 w=0 wt=0 cs=1 pf=0 -> "Courier" H=40 A=32 AW=24 MW=24 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-36 w=0 wt=0 cs=1 pf=0 -> "Courier" H=32 A=26 AW=18 MW=18 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-32 w=0 wt=0 cs=1 pf=0 -> "Courier" H=32 A=26 AW=18 MW=18 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-28 w=0 wt=0 cs=1 pf=0 -> "Courier" H=26 A=22 AW=16 MW=16 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-24 w=0 wt=0 cs=1 pf=0 -> "Courier" H=20 A=16 AW=12 MW=12 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-20 w=0 wt=0 cs=1 pf=0 -> "Courier" H=20 A=16 AW=12 MW=12 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-19 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-18 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-17 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-16 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-15 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-14 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-13 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-12 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-11 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-10 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-9 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-8 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-7 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-6 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-5 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-4 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-3 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-2 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-1 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=0 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=1 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=2 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=3 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=4 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=5 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=6 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=7 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=8 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=9 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=10 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=11 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=12 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=13 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=14 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=15 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=16 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=17 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=18 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=19 w=0 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=20 w=0 wt=0 cs=1 pf=0 -> "Courier" H=20 A=16 AW=12 MW=12 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=24 w=0 wt=0 cs=1 pf=0 -> "Courier" H=20 A=16 AW=12 MW=12 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=28 w=0 wt=0 cs=1 pf=0 -> "Courier" H=26 A=22 AW=16 MW=16 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=32 w=0 wt=0 cs=1 pf=0 -> "Courier" H=32 A=26 AW=18 MW=18 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=36 w=0 wt=0 cs=1 pf=0 -> "Courier" H=32 A=26 AW=18 MW=18 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=40 w=0 wt=0 cs=1 pf=0 -> "Courier" H=40 A=32 AW=24 MW=24 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=0 w=0 wt=700 cs=1 pf=0 -> "Courier" H=16 A=13 AW=10 MW=10 WT=700 IT=0 CS=0 PF=48 OH=1
+MAP "Courier" h=0 w=0 wt=0 cs=0 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=0 w=0 wt=0 cs=255 pf=0 -> "Roman" H=18 A=14 AW=7 MW=12 WT=400 IT=0 CS=255 PF=19 OH=0
+MAP "Courier" h=0 w=0 wt=0 cs=2 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Courier" h=0 w=0 wt=0 cs=2 pf=82 -> "Wingdings" H=17 A=14 AW=14 MW=22 WT=400 IT=0 CS=2 PF=7 OH=0
+MAP "Courier" h=0 w=0 wt=0 cs=0 pf=1 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=-11 w=0 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=13 w=8 wt=0 cs=1 pf=0 -> "Courier" H=13 A=11 AW=8 MW=8 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Courier" h=16 w=4 wt=0 cs=1 pf=0 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+FACE MS Serif
+ENUM type=1 face="MS Serif" lh=13 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=13 a=11 d=2 il=2 el=0 aw=5 mw=11 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=16 lw=6 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=16 a=13 d=3 il=3 el=0 aw=6 mw=14 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=19 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=19 a=15 d=4 il=3 el=0 aw=8 mw=18 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=21 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=21 a=16 d=5 il=3 el=0 aw=9 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=27 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=27 a=21 d=6 il=3 el=0 aw=12 mw=23 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=35 lw=16 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=35 a=27 d=8 il=3 el=0 aw=16 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=10 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="MS Serif" lh=11 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+FONT MS Serif 13x5
+ face="MS Serif" h=13 a=11 d=2 il=2 el=0 aw=5 mw=11 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w16=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w32=2,3,4,6,5,10,8,2,3,3,5,6,2,3,2,3
+ w48=5,5,5,5,5,5,5,5,5,5,2,2,6,6,6,5
+ w64=9,8,7,7,8,7,6,8,8,4,5,8,6,10,8,8
+ w80=6,8,7,6,6,8,8,10,8,8,6,3,3,3,5,5
+ w96=3,5,5,5,5,5,3,5,5,2,2,5,2,8,5,5
+ w112=5,5,4,4,3,5,5,8,5,5,5,4,2,4,6,4
+ w128=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w144=4,2,2,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w160=2,3,5,5,5,5,2,5,3,8,3,5,6,3,8,5
+ w176=3,6,3,3,3,6,5,2,3,3,3,5,8,8,8,5
+ w192=8,8,8,8,8,8,9,7,7,7,7,7,4,4,4,4
+ w208=8,8,8,8,8,8,8,6,8,8,8,8,8,8,6,5
+ w224=5,5,5,5,5,5,8,5,5,5,5,5,2,2,2,2
+ w240=5,5,5,5,5,5,5,6,5,5,5,5,5,5,5,5
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=310,13
+ ext "The quick brown fox jumps over the lazy dog."=184,13
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=191,13
+ ext " "=2,13
+FONT MS Serif 16x6
+ face="MS Serif" h=16 a=13 d=3 il=3 el=0 aw=6 mw=14 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w16=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w32=3,3,5,7,6,12,10,3,4,4,7,7,3,4,3,4
+ w48=6,6,6,6,6,6,6,6,6,6,3,3,7,7,7,6
+ w64=12,9,9,9,10,8,7,10,10,5,6,9,8,11,10,10
+ w80=8,10,9,7,9,10,9,13,10,9,8,4,4,4,7,6
+ w96=4,6,7,6,7,7,4,7,7,3,3,7,3,9,7,7
+ w112=7,7,5,5,3,7,7,9,7,7,7,5,3,5,8,4
+ w128=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w144=4,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w160=3,3,6,6,6,6,3,6,5,11,4,7,7,4,11,6
+ w176=4,7,3,3,4,8,6,3,4,3,4,7,9,9,9,6
+ w192=9,9,9,9,9,9,12,9,8,8,8,8,5,5,5,5
+ w208=10,10,10,10,10,10,10,7,10,10,10,10,10,9,8,7
+ w224=6,6,6,6,6,6,9,6,7,7,7,7,3,3,3,3
+ w240=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=394,16
+ ext "The quick brown fox jumps over the lazy dog."=251,16
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=240,16
+ ext " "=3,16
+FONT MS Serif 19x8
+ face="MS Serif" h=19 a=15 d=4 il=3 el=0 aw=8 mw=18 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w16=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w32=4,4,6,8,8,13,12,4,5,5,7,9,4,5,4,5
+ w48=8,8,8,8,8,8,8,8,8,8,4,4,9,9,9,7
+ w64=15,11,11,11,12,10,9,12,12,5,6,11,10,15,12,12
+ w80=9,12,10,9,9,12,11,15,11,11,10,5,5,5,7,8
+ w96=5,7,8,7,8,8,5,8,8,4,4,8,4,12,8,8
+ w112=8,8,5,6,4,8,8,12,8,8,7,7,3,7,9,5
+ w128=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w144=5,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w160=4,4,8,8,8,8,4,8,5,13,4,8,9,5,13,8
+ w176=5,9,4,4,5,10,7,4,5,4,5,8,11,11,11,7
+ w192=11,11,11,11,11,11,14,11,10,10,10,10,5,5,5,5
+ w208=12,12,12,12,12,12,12,9,12,12,12,12,12,11,9,8
+ w224=7,7,7,7,7,7,11,7,8,8,8,8,4,4,4,4
+ w240=8,8,8,8,8,8,8,9,8,8,8,8,8,8,8,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=467,19
+ ext "The quick brown fox jumps over the lazy dog."=295,19
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=301,19
+ ext " "=4,19
+FONT MS Serif 21x9
+ face="MS Serif" h=21 a=16 d=5 il=3 el=0 aw=9 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w16=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w32=4,4,8,9,9,15,14,4,6,6,9,10,4,6,4,5
+ w48=9,9,9,9,9,9,9,9,9,9,5,5,10,10,10,8
+ w64=17,12,13,13,14,12,11,14,14,6,7,13,12,16,14,14
+ w80=11,14,12,10,12,14,12,17,12,12,12,6,5,6,9,9
+ w96=6,9,10,9,10,9,5,10,9,5,5,9,5,13,9,10
+ w112=10,10,6,7,5,9,10,14,9,10,8,8,4,8,9,7
+ w128=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w144=7,4,4,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w160=4,4,9,9,9,9,4,9,6,14,5,9,10,6,14,9
+ w176=5,10,5,5,6,9,8,4,6,5,5,9,13,13,13,8
+ w192=12,12,12,12,12,12,17,13,12,12,12,12,6,6,6,6
+ w208=14,14,14,14,14,14,14,10,14,14,14,14,14,12,11,10
+ w224=9,9,9,9,9,9,13,9,9,9,9,9,5,5,5,5
+ w240=10,9,10,10,10,10,10,10,10,9,9,9,9,10,10,10
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=548,21
+ ext "The quick brown fox jumps over the lazy dog."=345,21
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=342,21
+ ext " "=4,21
+FONT MS Serif 27x12
+ face="MS Serif" h=27 a=21 d=6 il=3 el=0 aw=12 mw=23 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w16=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w32=6,7,10,12,12,20,19,6,8,8,8,14,6,8,6,7
+ w48=12,12,12,12,12,12,12,12,12,12,7,7,14,14,14,11
+ w64=23,17,16,16,17,15,13,17,17,8,9,17,15,21,17,17
+ w80=13,17,16,13,14,17,17,22,17,18,15,8,7,8,11,12
+ w96=8,11,12,11,12,11,7,12,12,6,6,12,6,18,12,12
+ w112=12,12,8,10,7,12,11,17,12,11,11,10,6,10,12,8
+ w128=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w144=8,6,6,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w160=6,7,12,12,12,12,6,12,8,18,8,12,14,8,18,12
+ w176=8,14,6,6,8,12,11,6,8,6,8,12,16,16,16,11
+ w192=17,17,17,17,17,17,22,16,15,15,15,15,8,8,8,8
+ w208=17,17,17,17,17,17,17,14,17,17,17,17,17,18,13,12
+ w224=11,11,11,11,11,11,17,11,11,11,11,11,6,6,6,7
+ w240=12,12,12,12,12,12,12,14,12,12,12,12,12,11,12,11
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=694,27
+ ext "The quick brown fox jumps over the lazy dog."=441,27
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=459,27
+ ext " "=6,27
+FONT MS Serif 35x16
+ face="MS Serif" h=35 a=27 d=8 il=3 el=0 aw=16 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11
+ w16=11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11
+ w32=8,9,12,16,16,28,25,9,11,11,16,18,8,10,8,8
+ w48=16,16,16,16,16,16,16,16,16,16,8,8,18,18,18,14
+ w64=29,22,21,21,23,20,18,23,23,11,13,22,20,28,23,23
+ w80=18,23,21,18,19,23,22,33,23,22,21,11,8,11,16,16
+ w96=11,14,17,14,17,14,10,16,16,8,9,16,8,24,16,17
+ w112=17,17,11,13,8,16,17,25,16,17,14,13,9,13,16,11
+ w128=11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11
+ w144=11,8,8,11,11,11,11,11,11,11,11,11,11,11,11,11
+ w160=8,9,16,16,16,17,9,16,11,24,9,16,18,10,24,16
+ w176=11,18,8,8,11,16,15,8,11,8,9,16,22,22,22,14
+ w192=22,22,22,22,22,22,29,21,20,20,20,20,11,11,11,11
+ w208=23,23,23,23,23,23,23,18,23,23,23,23,23,23,18,16
+ w224=14,14,14,14,14,14,21,14,14,14,14,14,8,8,8,8
+ w240=17,16,17,17,17,17,17,18,16,16,16,16,16,17,17,17
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=941,35
+ ext "The quick brown fox jumps over the lazy dog."=600,35
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=610,35
+ ext " "=8,35
+FONT MS Serif 10x4
+ face="MS Serif" h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w16=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w32=2,2,4,6,4,5,5,2,3,3,3,4,2,3,2,3
+ w48=5,3,5,5,5,4,5,4,5,5,2,2,4,4,4,5
+ w64=8,7,6,6,6,5,5,6,5,3,4,6,4,8,6,6
+ w80=4,6,5,5,4,6,7,7,7,7,4,3,3,3,4,5
+ w96=3,4,5,4,5,4,3,5,4,2,2,4,2,6,4,5
+ w112=5,5,3,4,3,4,4,6,4,4,4,3,2,3,4,2
+ w128=2,2,2,5,4,6,5,5,4,8,5,4,7,2,2,2
+ w144=2,2,2,4,4,3,4,8,4,7,4,4,7,2,2,7
+ w160=2,2,4,5,4,4,2,4,3,6,3,5,5,2,6,4
+ w176=2,4,2,2,2,5,4,2,3,2,3,5,6,6,6,4
+ w192=7,7,7,7,7,7,8,5,5,5,5,5,2,3,3,3
+ w208=6,6,6,6,6,6,6,4,6,6,6,6,6,7,5,5
+ w224=4,4,4,4,4,4,6,4,4,4,4,4,2,3,3,3
+ w240=5,4,5,5,5,5,5,4,5,4,4,4,4,4,4,4
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=250,10
+ ext "The quick brown fox jumps over the lazy dog."=161,10
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=161,10
+ ext " "=2,10
+FONT MS Serif 11x5
+ face="MS Serif" h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w16=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w32=2,2,4,6,6,7,6,2,3,3,3,4,2,3,2,3
+ w48=5,3,5,5,5,5,5,5,5,5,2,2,5,5,5,5
+ w64=9,8,7,6,7,6,6,7,7,4,5,7,5,9,7,7
+ w80=6,7,6,5,5,6,7,7,7,7,5,3,3,3,4,5
+ w96=3,5,5,5,5,5,3,5,5,2,2,5,2,8,5,5
+ w112=5,5,3,4,3,5,5,6,5,5,4,3,2,3,5,2
+ w128=2,2,2,5,4,6,6,6,4,8,5,5,8,2,2,2
+ w144=2,3,3,5,5,3,5,8,5,8,4,5,8,2,2,7
+ w160=2,2,5,5,5,4,2,5,4,7,3,5,5,2,7,5
+ w176=2,4,3,3,3,5,4,2,3,2,3,5,6,6,6,5
+ w192=8,8,8,8,8,8,9,6,6,6,6,6,4,4,4,4
+ w208=6,7,7,7,7,7,6,5,7,6,6,6,6,6,7,6
+ w224=5,5,5,5,5,5,8,5,5,5,5,5,2,3,3,3
+ w240=5,5,5,5,5,5,5,4,6,5,5,5,5,5,5,5
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=283,11
+ ext "The quick brown fox jumps over the lazy dog."=178,11
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=173,11
+ ext " "=2,11
+MAP "MS Serif" h=-40 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=50 A=40 AW=20 MW=40 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-36 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=42 A=32 AW=18 MW=34 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-32 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=35 A=27 AW=16 MW=33 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-28 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=33 A=27 AW=15 MW=27 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-24 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=27 A=21 AW=12 MW=23 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-20 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=21 A=16 AW=9 MW=17 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-19 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=21 A=16 AW=9 MW=17 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-18 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=21 A=16 AW=9 MW=17 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-17 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=19 A=15 AW=8 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-16 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=19 A=15 AW=8 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-15 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-14 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-13 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-12 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-11 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-10 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-9 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-8 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-7 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-6 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-5 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-4 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-3 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-2 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=-1 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=0 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=19 A=15 AW=8 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=1 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=2 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=3 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=4 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=5 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=6 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=7 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=8 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=9 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=10 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=11 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=12 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=13 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=14 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=15 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=16 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=17 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=18 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=19 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=19 A=15 AW=8 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=20 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=24 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=22 A=18 AW=10 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=28 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=27 A=21 AW=12 MW=23 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=32 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=32 A=26 AW=12 MW=28 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=36 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=35 A=27 AW=16 MW=33 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=40 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=40 A=32 AW=16 MW=32 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=0 w=0 wt=700 cs=1 pf=0 -> "MS Serif" H=19 A=15 AW=9 MW=19 WT=700 IT=0 CS=0 PF=17 OH=1
+MAP "MS Serif" h=0 w=0 wt=0 cs=0 pf=0 -> "MS Serif" H=19 A=15 AW=8 MW=18 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=0 w=0 wt=0 cs=255 pf=0 -> "Roman" H=18 A=14 AW=7 MW=12 WT=400 IT=0 CS=255 PF=19 OH=0
+MAP "MS Serif" h=0 w=0 wt=0 cs=2 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "MS Serif" h=0 w=0 wt=0 cs=2 pf=82 -> "Wingdings" H=17 A=14 AW=14 MW=22 WT=400 IT=0 CS=2 PF=7 OH=0
+MAP "MS Serif" h=0 w=0 wt=0 cs=0 pf=1 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "MS Serif" h=-11 w=0 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=5 MW=11 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=13 w=8 wt=0 cs=1 pf=0 -> "MS Serif" H=13 A=11 AW=10 MW=22 WT=400 IT=0 CS=0 PF=17 OH=0
+MAP "MS Serif" h=16 w=4 wt=0 cs=1 pf=0 -> "MS Serif" H=16 A=13 AW=6 MW=14 WT=400 IT=0 CS=0 PF=17 OH=0
+FACE Small Fonts
+ENUM type=1 face="Small Fonts" lh=3 lw=1 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=3 a=2 d=1 il=0 el=0 aw=1 mw=2 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Small Fonts" lh=5 lw=3 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=5 a=4 d=1 il=1 el=0 aw=3 mw=4 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Small Fonts" lh=6 lw=3 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=6 a=5 d=1 il=1 el=0 aw=3 mw=13 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Small Fonts" lh=8 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=8 a=7 d=1 il=1 el=0 aw=4 mw=7 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Small Fonts" lh=10 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+ENUM type=1 face="Small Fonts" lh=11 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+FONT Small Fonts 3x1
+ face="Small Fonts" h=3 a=2 d=1 il=0 el=0 aw=1 mw=2 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=0,0,0,1,2,2,2,0,0,0,0,1,0,0,0,0
+ w48=1,2,2,2,2,2,2,2,2,2,0,0,1,2,2,2
+ w64=2,2,2,2,2,2,2,2,2,0,0,2,2,2,2,2
+ w80=2,2,2,2,2,2,2,2,2,2,2,0,0,0,2,1
+ w96=0,2,2,2,2,2,0,2,2,0,0,2,0,1,2,2
+ w112=2,2,0,0,0,2,2,2,0,0,0,0,0,0,2,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,0,1,2,2,2,0,1,0,1,0,1,2,0,1,2
+ w176=0,1,0,0,0,1,2,0,0,0,0,1,2,2,2,2
+ w192=2,2,2,2,2,2,2,2,2,2,2,2,0,0,0,0
+ w208=1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w224=2,2,2,2,2,2,2,2,2,2,2,2,0,0,0,0
+ w240=1,2,2,2,2,2,2,2,2,1,1,1,1,0,1,0
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=79,3
+ ext "The quick brown fox jumps over the lazy dog."=47,3
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=41,3
+ ext " "=0,3
+FONT Small Fonts 5x3
+ face="Small Fonts" h=5 a=4 d=1 il=1 el=0 aw=3 mw=4 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+ w16=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+ w32=1,2,2,3,3,4,3,0,2,2,2,2,2,2,2,3
+ w48=3,2,3,3,3,3,3,3,3,3,2,2,2,2,2,3
+ w64=4,3,3,3,3,3,2,3,3,2,2,3,2,4,3,3
+ w80=3,3,3,3,3,3,3,4,3,3,3,2,3,2,2,2
+ w96=2,2,2,2,2,2,2,2,2,0,0,2,0,3,3,2
+ w112=2,2,2,2,2,2,2,3,2,2,2,2,2,2,2,1
+ w128=1,1,2,2,2,2,2,2,2,4,3,2,4,1,1,1
+ w144=1,2,2,3,3,2,2,4,2,4,2,2,4,1,1,3
+ w160=1,2,3,3,2,3,2,3,2,3,2,3,3,2,3,3
+ w176=2,2,2,2,2,3,3,2,2,2,2,3,4,4,4,3
+ w192=3,3,3,3,3,3,4,3,3,3,3,3,2,2,2,2
+ w208=4,3,4,4,4,4,4,3,4,4,4,4,4,3,3,3
+ w224=3,3,3,3,3,3,4,3,3,3,3,3,0,0,0,0
+ w240=3,3,3,3,3,3,3,3,3,3,3,3,3,1,3,2
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=125,5
+ ext "The quick brown fox jumps over the lazy dog."=78,5
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=102,5
+ ext " "=1,5
+FONT Small Fonts 6x3
+ face="Small Fonts" h=6 a=5 d=1 il=1 el=0 aw=3 mw=13 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+ w16=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+ w32=1,2,3,3,4,4,3,1,2,2,2,2,2,2,2,3
+ w48=3,3,3,3,3,3,3,3,3,3,2,2,3,3,3,3
+ w64=5,4,4,4,4,4,3,4,4,2,3,4,3,5,4,4
+ w80=4,4,4,3,4,4,4,5,4,4,3,2,2,2,3,3
+ w96=2,3,3,3,3,3,3,3,3,2,2,3,2,4,3,3
+ w112=3,3,3,3,2,3,3,4,3,3,3,2,1,1,3,1
+ w128=1,1,2,3,3,4,3,3,3,5,3,3,5,1,1,1
+ w144=1,2,2,3,3,3,3,5,3,5,3,3,5,1,1,4
+ w160=1,2,3,3,3,3,0,3,2,4,2,3,3,2,4,3
+ w176=2,2,2,2,1,3,3,2,2,2,2,3,4,4,4,3
+ w192=4,4,4,4,4,4,5,4,4,4,4,4,2,2,2,2
+ w208=4,4,4,4,4,4,4,3,4,4,4,4,4,4,3,3
+ w224=3,3,3,3,3,3,5,3,3,3,3,3,0,1,2,1
+ w240=3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=175,6
+ ext "The quick brown fox jumps over the lazy dog."=114,6
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=110,6
+ ext " "=1,6
+FONT Small Fonts 8x4
+ face="Small Fonts" h=8 a=7 d=1 il=1 el=0 aw=4 mw=7 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w16=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w32=1,2,3,5,4,5,5,2,3,3,3,4,2,3,2,3
+ w48=4,3,4,4,4,4,4,4,4,4,2,2,3,3,3,3
+ w64=7,5,5,5,5,4,4,5,5,2,4,5,4,6,5,5
+ w80=5,5,5,5,4,5,4,6,4,4,4,3,3,3,4,4
+ w96=3,4,4,4,4,4,3,4,4,2,2,4,2,6,4,4
+ w112=4,4,3,3,3,4,4,5,4,4,4,3,2,3,4,2
+ w128=2,2,2,4,3,5,4,4,4,6,5,3,6,2,2,2
+ w144=2,2,2,3,3,3,4,6,4,6,3,3,6,2,2,4
+ w160=1,2,4,4,4,4,2,4,3,5,2,3,4,2,5,4
+ w176=2,3,2,2,2,4,3,2,2,2,2,3,5,5,5,3
+ w192=4,4,4,4,4,4,6,5,4,4,4,4,2,3,3,3
+ w208=4,5,5,5,5,5,5,4,5,5,5,5,5,4,4,4
+ w224=4,4,4,4,4,4,6,4,4,4,4,4,2,3,3,3
+ w240=3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=217,8
+ ext "The quick brown fox jumps over the lazy dog."=142,8
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=144,8
+ ext " "=1,8
+FONT Small Fonts 10x4
+ face="Small Fonts" h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w16=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w32=2,2,4,6,4,5,5,2,3,3,3,4,2,3,2,3
+ w48=5,3,5,5,5,4,5,4,5,5,2,2,4,4,4,5
+ w64=8,6,6,6,6,5,5,6,5,2,4,5,4,8,6,6
+ w80=5,6,6,5,5,6,6,8,6,6,5,3,3,3,4,5
+ w96=3,4,5,4,5,4,3,5,4,2,2,4,2,6,4,5
+ w112=5,5,3,4,3,4,4,6,4,4,4,3,2,3,4,2
+ w128=2,2,2,5,4,6,4,4,4,8,5,4,8,2,2,2
+ w144=2,2,2,4,4,3,4,8,4,8,4,4,7,2,2,6
+ w160=2,2,4,5,4,4,2,4,3,6,3,5,5,2,6,4
+ w176=2,4,2,2,2,5,4,2,3,2,3,5,6,6,6,4
+ w192=6,6,6,6,6,6,8,5,5,5,5,5,2,3,3,3
+ w208=6,6,6,6,6,6,6,4,6,6,6,6,6,6,5,5
+ w224=4,4,4,4,4,4,6,4,4,4,4,4,2,3,3,3
+ w240=5,4,5,5,5,5,5,4,5,4,4,4,4,4,4,4
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=249,10
+ ext "The quick brown fox jumps over the lazy dog."=162,10
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=161,10
+ ext " "=2,10
+FONT Small Fonts 11x5
+ face="Small Fonts" h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w16=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+ w32=2,2,4,6,6,7,6,2,3,3,3,4,2,3,2,3
+ w48=5,3,5,5,5,5,5,5,5,5,2,2,5,5,5,5
+ w64=9,7,7,7,7,6,6,7,7,2,5,6,5,9,7,7
+ w80=7,7,7,6,6,6,6,8,6,6,6,3,3,3,4,5
+ w96=3,5,5,5,5,5,3,5,5,2,2,5,2,8,5,6
+ w112=5,5,3,5,3,5,5,6,4,4,4,3,2,3,5,2
+ w128=2,2,2,5,4,6,6,6,4,8,6,5,9,2,2,2
+ w144=2,3,3,5,5,3,5,8,5,9,5,5,8,2,2,6
+ w160=2,2,5,5,5,4,2,5,4,7,3,5,5,2,7,5
+ w176=2,4,3,3,3,5,4,2,3,2,3,5,6,6,6,5
+ w192=7,7,7,7,7,7,9,6,5,5,5,5,3,3,3,3
+ w208=6,6,7,7,7,7,7,5,7,6,6,6,6,6,6,6
+ w224=5,5,5,5,5,5,8,5,5,5,5,5,2,3,3,3
+ w240=5,5,6,6,6,6,6,4,6,5,5,5,5,4,5,4
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=283,11
+ ext "The quick brown fox jumps over the lazy dog."=182,11
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=173,11
+ ext " "=2,11
+MAP "Small Fonts" h=-40 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=50 A=40 AW=20 MW=40 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-36 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=44 A=36 AW=20 MW=36 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-32 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=40 A=32 AW=16 MW=32 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-28 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=32 A=28 AW=16 MW=28 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-24 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=30 A=24 AW=12 MW=24 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-20 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=22 A=18 AW=10 MW=18 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-19 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=22 A=18 AW=10 MW=18 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-18 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=22 A=18 AW=10 MW=18 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-17 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-16 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-15 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=16 A=14 AW=8 MW=14 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-14 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=16 A=14 AW=8 MW=14 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-13 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-12 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-11 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-10 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-9 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-8 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-7 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=8 A=7 AW=4 MW=7 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-6 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=6 A=5 AW=3 MW=13 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-5 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=6 A=5 AW=3 MW=13 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-4 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=5 A=4 AW=3 MW=4 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-3 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-2 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=-1 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=0 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=1 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=2 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=3 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=3 A=2 AW=1 MW=2 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=4 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=5 A=4 AW=3 MW=4 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=5 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=5 A=4 AW=3 MW=4 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=6 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=6 A=5 AW=3 MW=13 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=7 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=6 A=5 AW=3 MW=13 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=8 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=8 A=7 AW=4 MW=7 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=9 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=8 A=7 AW=4 MW=7 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=10 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=10 A=8 AW=4 MW=8 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=11 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=12 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=13 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=14 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=15 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=16 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=16 A=14 AW=8 MW=14 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=17 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=16 A=14 AW=8 MW=14 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=18 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=18 A=15 AW=9 MW=39 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=19 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=18 A=15 AW=9 MW=39 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=20 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=24 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=24 A=21 AW=12 MW=21 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=28 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=24 A=21 AW=12 MW=21 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=32 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=32 A=28 AW=16 MW=28 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=36 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=33 A=27 AW=15 MW=27 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=40 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=40 A=32 AW=16 MW=32 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=0 w=0 wt=700 cs=1 pf=0 -> "Small Fonts" H=20 A=16 AW=9 MW=17 WT=700 IT=0 CS=0 PF=33 OH=1
+MAP "Small Fonts" h=0 w=0 wt=0 cs=0 pf=0 -> "Small Fonts" H=20 A=16 AW=8 MW=16 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=0 w=0 wt=0 cs=255 pf=0 -> "Roman" H=18 A=14 AW=7 MW=12 WT=400 IT=0 CS=255 PF=19 OH=0
+MAP "Small Fonts" h=0 w=0 wt=0 cs=2 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Small Fonts" h=0 w=0 wt=0 cs=2 pf=82 -> "Wingdings" H=17 A=14 AW=14 MW=22 WT=400 IT=0 CS=2 PF=7 OH=0
+MAP "Small Fonts" h=0 w=0 wt=0 cs=0 pf=1 -> "Courier" H=16 A=13 AW=9 MW=9 WT=400 IT=0 CS=0 PF=48 OH=0
+MAP "Small Fonts" h=-11 w=0 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=6 MW=26 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=13 w=8 wt=0 cs=1 pf=0 -> "Small Fonts" H=12 A=10 AW=9 MW=39 WT=400 IT=0 CS=0 PF=33 OH=0
+MAP "Small Fonts" h=16 w=4 wt=0 cs=1 pf=0 -> "Small Fonts" H=11 A=9 AW=5 MW=9 WT=400 IT=0 CS=0 PF=33 OH=0
+FACE Symbol
+ENUM type=1 face="Symbol" lh=13 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=13 a=11 d=2 il=2 el=0 aw=5 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=1 face="Symbol" lh=16 lw=6 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=16 a=13 d=3 il=3 el=0 aw=6 mw=15 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=1 face="Symbol" lh=19 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=19 a=15 d=4 il=3 el=0 aw=8 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=1 face="Symbol" lh=21 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=21 a=16 d=5 il=3 el=0 aw=9 mw=19 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=1 face="Symbol" lh=27 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=27 a=21 d=6 il=3 el=0 aw=12 mw=25 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=1 face="Symbol" lh=35 lw=15 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=35 a=27 d=8 il=3 el=0 aw=15 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ENUM type=4 face="Symbol" lh=39 lw=19 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=3 cp=2 q=1 lpf=18
+  h=39 a=32 d=7 il=7 el=0 aw=19 mw=36 wt=400 it=0 ul=0 so=0 fc=30 lc=255 dc=31 bc=32 pf=23 cs=2 oh=0 ax=96 ay=96
+FONT Symbol 13x5
+ face="Symbol" h=13 a=11 d=2 il=2 el=0 aw=5 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=2,3,8,6,7,10,8,5,3,3,5,6,2,6,2,3
+ w48=5,5,5,5,5,5,5,5,5,5,2,2,6,6,6,5
+ w64=6,8,7,8,8,7,8,6,8,4,6,8,8,10,8,8
+ w80=8,8,6,6,6,8,5,8,7,8,6,3,9,3,7,5
+ w96=5,6,6,6,5,5,6,6,5,3,6,5,6,6,5,5
+ w112=6,5,5,6,5,5,9,7,5,6,5,4,2,4,6,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,6,2,6,3,7,5,8,8,8,8,11,10,6,10,6
+ w176=4,6,4,6,6,7,5,5,6,6,6,6,11,6,11,7
+ w192=9,8,9,7,8,8,9,8,8,8,8,8,8,8,8,8
+ w208=8,8,8,8,9,9,6,2,7,6,6,11,10,6,10,6
+ w224=5,4,8,8,8,8,4,4,4,4,4,4,5,5,5,5
+ w240=0,4,3,7,7,7,4,4,4,4,4,4,5,5,5,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=333,13
+ ext "The quick brown fox jumps over the lazy dog."=209,13
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=210,13
+ ext " "=2,13
+FONT Symbol 16x6
+ face="Symbol" h=16 a=13 d=3 il=3 el=0 aw=6 mw=15 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=3,3,9,7,7,12,10,6,4,4,6,7,3,7,3,4
+ w48=6,6,6,6,6,6,6,6,6,6,3,3,7,7,7,6
+ w64=7,9,9,10,9,8,11,8,10,5,8,9,9,11,10,10
+ w80=10,10,8,8,9,9,6,10,9,11,8,4,11,4,9,6
+ w96=6,8,7,7,6,6,8,7,7,4,8,6,7,7,6,6
+ w112=8,6,6,7,6,6,10,9,6,8,6,5,3,5,7,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,8,3,7,4,9,6,10,10,10,10,14,13,7,13,7
+ w176=5,7,5,7,7,9,7,6,7,7,7,7,13,7,13,9
+ w192=9,9,10,9,10,10,10,10,10,10,10,10,10,10,10,10
+ w208=10,9,10,10,13,11,7,3,9,7,7,14,13,7,13,7
+ w224=7,4,10,10,11,10,5,5,5,5,5,5,6,6,6,6
+ w240=0,4,3,10,10,10,5,5,5,5,5,5,6,6,6,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=412,16
+ ext "The quick brown fox jumps over the lazy dog."=263,16
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=255,16
+ ext " "=3,16
+FONT Symbol 19x8
+ face="Symbol" h=19 a=15 d=4 il=3 el=0 aw=8 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=4,4,11,8,9,13,12,7,5,5,8,9,4,9,4,5
+ w48=8,8,8,8,8,8,8,8,8,8,4,4,9,9,9,7
+ w64=9,11,11,11,11,10,13,9,12,5,10,11,11,15,12,12
+ w80=12,12,9,10,9,11,7,12,10,13,10,5,13,5,11,8
+ w96=8,10,9,9,7,7,9,8,8,5,10,7,9,9,7,7
+ w112=10,7,8,8,7,7,11,10,8,10,8,7,3,7,9,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,9,4,9,5,11,8,13,13,13,13,17,16,9,16,9
+ w176=6,9,6,9,9,11,7,8,9,9,9,9,14,9,16,12
+ w192=12,12,12,10,13,13,13,13,13,12,12,12,12,12,12,12
+ w208=12,11,13,13,14,13,9,4,12,9,9,17,16,9,16,9
+ w224=7,5,13,13,14,12,6,6,6,6,6,6,8,8,8,8
+ w240=0,5,5,12,12,12,6,6,6,6,6,6,8,8,8,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=494,19
+ ext "The quick brown fox jumps over the lazy dog."=318,19
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=324,19
+ ext " "=4,19
+FONT Symbol 21x9
+ face="Symbol" h=21 a=16 d=5 il=3 el=0 aw=9 mw=19 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=4,4,13,9,10,15,14,8,6,6,9,10,4,10,4,5
+ w48=9,9,9,9,9,9,9,9,9,9,5,5,10,10,10,8
+ w64=11,12,13,12,11,12,14,11,14,6,11,13,12,16,14,14
+ w80=14,14,11,11,12,12,8,13,12,14,12,6,17,6,12,9
+ w96=9,11,10,10,8,8,10,9,10,6,11,10,10,10,8,8
+ w112=10,8,9,9,8,9,12,11,9,11,9,8,3,8,10,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,11,4,10,5,13,11,15,15,15,15,19,18,11,18,11
+ w176=7,10,7,10,10,13,8,8,10,10,17,10,15,11,18,13
+ w192=13,13,14,11,14,14,14,14,14,14,14,14,14,14,14,14
+ w208=14,12,15,15,16,15,10,4,13,11,11,19,18,11,18,11
+ w224=9,6,15,15,16,13,7,7,7,7,7,7,9,9,9,9
+ w240=0,6,6,12,12,12,7,7,7,7,7,7,9,9,9,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=562,21
+ ext "The quick brown fox jumps over the lazy dog."=360,21
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=368,21
+ ext " "=4,21
+FONT Symbol 27x12
+ face="Symbol" h=27 a=21 d=6 il=3 el=0 aw=12 mw=25 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=6,7,17,12,12,20,19,10,8,8,12,14,6,14,6,7
+ w48=12,12,12,12,12,12,12,12,12,12,7,7,14,14,14,11
+ w64=14,17,16,17,15,15,18,14,17,8,15,17,17,21,17,17
+ w80=18,17,13,14,14,18,10,17,15,18,15,8,20,8,16,12
+ w96=12,15,13,13,11,10,12,11,12,7,15,13,13,13,11,11
+ w112=14,11,12,12,10,12,17,16,11,15,11,11,5,11,14,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,14,6,14,7,18,12,18,18,18,18,25,24,15,24,15
+ w176=9,14,9,14,14,18,11,11,14,14,14,14,21,15,24,15
+ w192=16,17,19,15,19,19,19,18,18,17,17,17,17,17,17,17
+ w208=18,16,20,20,21,19,14,6,17,14,14,25,24,15,24,15
+ w224=12,8,20,20,21,18,9,9,9,9,9,9,11,11,11,11
+ w240=0,8,8,16,16,16,9,9,9,9,9,9,11,11,11,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=731,27
+ ext "The quick brown fox jumps over the lazy dog."=478,27
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=496,27
+ ext " "=6,27
+FONT Symbol 35x15
+ face="Symbol" h=35 a=27 d=8 il=3 el=0 aw=15 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w16=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w32=8,9,22,16,17,28,25,14,11,11,16,18,8,18,8,8
+ w48=16,16,16,16,16,16,16,16,16,16,8,8,18,18,18,14
+ w64=17,22,21,23,20,20,23,19,23,11,20,22,22,28,23,23
+ w80=24,23,18,18,19,22,14,24,19,25,21,11,27,11,21,16
+ w96=16,19,17,17,15,14,17,14,18,10,18,16,17,18,14,15
+ w112=18,15,15,15,14,15,22,21,15,20,15,13,7,13,17,0
+ w128=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w144=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ w160=0,19,7,18,8,23,17,24,24,24,24,33,32,20,32,20
+ w176=12,18,13,18,18,22,15,14,18,18,18,17,29,20,32,21
+ w192=22,21,25,22,25,25,25,24,24,23,23,23,23,23,23,23
+ w208=24,22,26,26,28,26,17,8,22,19,19,33,32,20,32,20
+ w224=15,10,26,26,25,22,12,12,12,12,12,12,15,15,15,15
+ w240=0,10,8,21,21,21,12,12,12,12,12,12,15,15,15,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=971,35
+ ext "The quick brown fox jumps over the lazy dog."=636,35
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=650,35
+ ext " "=8,35
+FONT Symbol 39x19
+ face="Symbol" h=39 a=32 d=7 il=7 el=0 aw=19 mw=36 wt=400 it=0 ul=0 so=0 fc=30 lc=255 dc=31 bc=32 pf=23 cs=2 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19
+ w16=19,19,19,19,19,19,19,19,19,19,19,19,19,19,8,19
+ w32=8,10,23,16,18,26,25,14,11,11,16,18,9,18,8,10
+ w48=16,16,16,16,16,16,16,16,16,16,9,9,18,18,18,13
+ w64=17,23,22,24,20,20,25,19,24,11,20,24,22,29,24,23
+ w80=26,23,18,19,19,23,14,26,21,25,19,11,28,9,21,16
+ w96=15,19,18,17,16,14,16,13,19,11,19,18,18,19,17,18
+ w112=17,17,17,19,14,19,25,22,15,23,16,17,7,17,17,19
+ w128=19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19
+ w144=19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19
+ w160=19,20,8,18,6,23,16,26,25,25,23,33,32,19,32,19
+ w176=13,18,13,18,18,23,16,14,18,17,18,17,32,19,32,21
+ w192=26,23,26,32,24,25,27,24,24,23,22,23,23,23,23,23
+ w208=24,23,25,25,28,26,17,8,23,19,19,33,31,19,31,19
+ w224=15,11,25,25,27,22,12,12,12,12,12,12,16,16,16,16
+ w240=19,11,9,22,22,22,12,12,12,12,12,12,16,16,16,19
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=1019,39
+ ext "The quick brown fox jumps over the lazy dog."=684,39
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=661,39
+ ext " "=8,39
+MAP "Symbol" h=-40 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=49 A=40 AW=23 MW=45 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-36 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=44 A=36 AW=21 MW=40 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-32 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=35 A=27 AW=15 MW=33 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-28 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=35 A=28 AW=16 MW=31 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-24 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=27 A=21 AW=12 MW=25 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-20 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=24 A=20 AW=12 MW=22 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-19 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=23 A=19 AW=11 MW=21 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-18 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=21 A=16 AW=9 MW=19 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-17 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=21 A=17 AW=10 MW=19 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-16 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-15 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=19 A=15 AW=9 MW=17 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-14 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=17 A=14 AW=8 MW=16 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-13 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=16 A=13 AW=6 MW=15 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-12 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=15 A=12 AW=7 MW=13 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-11 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=13 A=11 AW=5 MW=12 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-10 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=12 A=10 AW=6 MW=11 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-9 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=12 A=9 AW=5 MW=10 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-8 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=11 A=8 AW=5 MW=9 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-7 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=9 A=7 AW=4 MW=8 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-6 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=7 A=6 AW=3 MW=7 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-5 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=6 A=5 AW=3 MW=6 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-4 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=5 A=4 AW=2 MW=4 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-3 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=4 A=3 AW=2 MW=3 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-2 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=2 A=2 AW=1 MW=2 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=-1 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=2 A=2 AW=1 MW=2 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=0 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=1 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=2 A=2 AW=1 MW=2 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=2 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=2 A=2 AW=1 MW=2 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=3 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=2 A=2 AW=1 MW=2 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=4 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=4 A=3 AW=2 MW=3 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=5 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=5 A=4 AW=2 MW=4 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=6 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=6 A=5 AW=3 MW=6 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=7 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=7 A=6 AW=3 MW=7 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=8 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=7 A=6 AW=3 MW=7 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=9 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=9 A=7 AW=4 MW=8 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=10 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=9 A=7 AW=4 MW=8 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=11 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=11 A=8 AW=5 MW=9 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=12 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=12 A=9 AW=5 MW=10 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=13 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=13 A=11 AW=5 MW=12 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=14 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=13 A=11 AW=6 MW=12 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=15 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=15 A=12 AW=7 MW=13 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=16 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=16 A=13 AW=6 MW=15 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=17 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=17 A=14 AW=8 MW=16 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=18 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=17 A=14 AW=8 MW=16 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=19 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=20 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=20 A=16 AW=9 MW=18 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=24 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=24 A=20 AW=12 MW=22 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=28 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=28 A=23 AW=13 MW=26 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=32 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=32 A=26 AW=15 MW=29 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=36 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=36 A=30 AW=17 MW=32 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=40 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=40 A=33 AW=19 MW=37 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=0 w=0 wt=700 cs=1 pf=0 -> "Symbol" H=19 A=15 AW=9 MW=18 WT=700 IT=0 CS=2 PF=17 OH=1
+MAP "Symbol" h=0 w=0 wt=0 cs=0 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=0 w=0 wt=0 cs=255 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=0 w=0 wt=0 cs=2 pf=0 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=0 w=0 wt=0 cs=2 pf=82 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=0 w=0 wt=0 cs=0 pf=1 -> "Symbol" H=19 A=15 AW=8 MW=17 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=-11 w=0 wt=0 cs=1 pf=0 -> "Symbol" H=13 A=11 AW=5 MW=12 WT=400 IT=0 CS=2 PF=17 OH=0
+MAP "Symbol" h=13 w=8 wt=0 cs=1 pf=0 -> "Symbol" H=13 A=11 AW=8 MW=16 WT=400 IT=0 CS=2 PF=23 OH=0
+MAP "Symbol" h=16 w=4 wt=0 cs=1 pf=0 -> "Symbol" H=16 A=13 AW=4 MW=7 WT=400 IT=0 CS=2 PF=23 OH=0
+BASE fonts=49
+GONE COURE.FON removed=1
+OUT type=1 face="Courier" lh=13 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=13 a=11 d=2 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Courier" lh=16 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=16 a=13 d=3 il=0 el=0 aw=9 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Courier" lh=20 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=49
+  h=20 a=16 d=4 il=0 el=0 aw=12 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=48 cs=0 oh=0 ax=96 ay=96
+ added=3
+GONE SERIFE.FON removed=1
+OUT type=1 face="MS Serif" lh=13 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=13 a=11 d=2 il=2 el=0 aw=5 mw=11 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=16 lw=6 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=16 a=13 d=3 il=3 el=0 aw=6 mw=14 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=19 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=19 a=15 d=4 il=3 el=0 aw=8 mw=18 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=21 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=21 a=16 d=5 il=3 el=0 aw=9 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=27 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=27 a=21 d=6 il=3 el=0 aw=12 mw=23 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=35 lw=16 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=35 a=27 d=8 il=3 el=0 aw=16 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ added=6
+GONE SMALLE.FON removed=1
+OUT type=1 face="Small Fonts" lh=3 lw=1 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=3 a=2 d=1 il=0 el=0 aw=1 mw=2 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Small Fonts" lh=5 lw=3 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=5 a=4 d=1 il=1 el=0 aw=3 mw=4 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Small Fonts" lh=6 lw=3 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=6 a=5 d=1 il=1 el=0 aw=3 mw=13 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Small Fonts" lh=8 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=8 a=7 d=1 il=1 el=0 aw=4 mw=7 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Small Fonts" lh=10 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="Small Fonts" lh=11 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=34
+  h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=33 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=10 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=10 a=8 d=2 il=2 el=0 aw=4 mw=8 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+OUT type=1 face="MS Serif" lh=11 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=0 op=1 cp=2 q=1 lpf=18
+  h=11 a=9 d=2 il=2 el=0 aw=5 mw=9 wt=400 it=0 ul=0 so=0 fc=32 lc=255 dc=128 bc=32 pf=17 cs=0 oh=0 ax=96 ay=96
+ added=8
+GONE SYMBOLE.FON removed=1
+OUT type=1 face="Symbol" lh=13 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=13 a=11 d=2 il=2 el=0 aw=5 mw=12 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+OUT type=1 face="Symbol" lh=16 lw=6 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=16 a=13 d=3 il=3 el=0 aw=6 mw=15 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+OUT type=1 face="Symbol" lh=19 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=19 a=15 d=4 il=3 el=0 aw=8 mw=17 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+OUT type=1 face="Symbol" lh=21 lw=9 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=21 a=16 d=5 il=3 el=0 aw=9 mw=19 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+OUT type=1 face="Symbol" lh=27 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=27 a=21 d=6 il=3 el=0 aw=12 mw=25 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+OUT type=1 face="Symbol" lh=35 lw=15 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=2 op=1 cp=2 q=1 lpf=18
+  h=35 a=27 d=8 il=3 el=0 aw=15 mw=33 wt=400 it=0 ul=0 so=0 fc=32 lc=254 dc=128 bc=32 pf=17 cs=2 oh=0 ax=96 ay=96
+ added=6
+FILE DOSAPP.FON added=6
+NEW type=1 face="Terminal" lh=6 lw=4 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=6 a=5 d=1 il=0 el=0 aw=4 mw=4 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 6x4
+ face="Terminal" h=6 a=5 d=1 il=0 el=0 aw=4 mw=4 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w16=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w32=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w48=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w64=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w80=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w96=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w112=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w128=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w144=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w160=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w176=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w192=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w208=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w224=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ w240=4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=208,6
+ ext "The quick brown fox jumps over the lazy dog."=176,6
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=172,6
+ ext " "=4,6
+NEW type=1 face="Terminal" lh=12 lw=5 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=12 a=10 d=2 il=0 el=0 aw=5 mw=5 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 12x5
+ face="Terminal" h=12 a=10 d=2 il=0 el=0 aw=5 mw=5 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w16=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w32=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w48=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w64=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w80=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w96=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w112=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w128=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w144=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w160=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w176=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w192=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w208=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w224=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ w240=5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=260,12
+ ext "The quick brown fox jumps over the lazy dog."=220,12
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=215,12
+ ext " "=5,12
+NEW type=1 face="Terminal" lh=8 lw=6 esc=0 or=0 lwt=700 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=8 a=7 d=1 il=0 el=0 aw=6 mw=6 wt=700 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 8x6
+ face="Terminal" h=8 a=7 d=1 il=0 el=0 aw=6 mw=6 wt=700 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w16=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w32=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w48=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w64=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w80=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w96=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w112=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w128=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w144=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w160=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w176=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w192=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w208=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w224=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ w240=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=312,8
+ ext "The quick brown fox jumps over the lazy dog."=264,8
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=258,8
+ ext " "=6,8
+NEW type=1 face="Terminal" lh=12 lw=7 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=12 a=9 d=3 il=0 el=0 aw=7 mw=7 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 12x7
+ face="Terminal" h=12 a=9 d=3 il=0 el=0 aw=7 mw=7 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w16=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w32=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w48=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w64=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w80=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w96=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w112=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w128=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w144=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w160=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w176=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w192=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w208=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w224=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ w240=7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=364,12
+ ext "The quick brown fox jumps over the lazy dog."=308,12
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=301,12
+ ext " "=7,12
+NEW type=1 face="Terminal" lh=18 lw=10 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=18 a=16 d=2 il=0 el=0 aw=10 mw=10 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 18x10
+ face="Terminal" h=18 a=16 d=2 il=0 el=0 aw=10 mw=10 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=31 bc=31 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w16=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w32=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w48=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w64=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w80=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w96=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w112=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w128=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w144=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w160=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w176=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w192=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w208=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w224=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ w240=10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=520,18
+ ext "The quick brown fox jumps over the lazy dog."=440,18
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=430,18
+ ext " "=10,18
+NEW type=1 face="Terminal" lh=16 lw=12 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=16 a=14 d=2 il=0 el=0 aw=12 mw=12 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96
+FONT Terminal 16x12
+ face="Terminal" h=16 a=14 d=2 il=0 el=0 aw=12 mw=12 wt=400 it=0 ul=0 so=0 fc=0 lc=255 dc=96 bc=0 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w16=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w32=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w48=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w64=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w80=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w96=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w112=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w128=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w144=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w160=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w176=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w192=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w208=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w224=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ w240=12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=624,16
+ ext "The quick brown fox jumps over the lazy dog."=528,16
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=516,16
+ ext " "=12,16
+TERMINAL h=12 aw=8 lh=12 lw=8
+TERMINAL h=6 aw=4 lh=6 lw=4
+TERMINAL h=12 aw=5 lh=12 lw=5
+TERMINAL h=8 aw=6 lh=8 lw=6
+TERMINAL h=12 aw=7 lh=12 lw=7
+TERMINAL h=18 aw=10 lh=18 lw=10
+TERMINAL h=16 aw=12 lh=16 lw=12
+ removed=1
+FILE EGA80WOA.FON added=1
+NEW type=1 face="Terminal" lh=12 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=12 a=10 d=2 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=72 ay=96
+FONT Terminal 12x8
+ face="Terminal" h=12 a=10 d=2 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=96 ay=96 arx=0 ary=0
+ w0=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w16=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w32=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w48=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w64=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w80=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w96=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w112=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w128=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w144=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w160=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w176=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w192=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w208=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w224=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w240=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=416,12
+ ext "The quick brown fox jumps over the lazy dog."=352,12
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=344,12
+ ext " "=8,12
+TERMINAL h=12 aw=8 lh=12 lw=8
+TERMINAL h=12 aw=8 lh=12 lw=8
+ removed=1
+FILE EGA40WOA.FON added=1
+NEW type=1 face="Terminal" lh=12 lw=16 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=12 a=10 d=2 il=0 el=0 aw=16 mw=16 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=72 ay=192
+FONT Terminal 12x16
+ face="Terminal" h=12 a=10 d=2 il=0 el=0 aw=16 mw=16 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=72 ay=192 arx=0 ary=0
+ w0=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w16=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w32=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w48=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w64=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w80=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w96=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w112=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w128=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w144=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w160=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w176=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w192=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w208=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w224=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w240=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=832,12
+ ext "The quick brown fox jumps over the lazy dog."=704,12
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=688,12
+ ext " "=16,12
+TERMINAL h=12 aw=8 lh=12 lw=8
+TERMINAL h=12 aw=16 lh=12 lw=16
+ removed=1
+FILE CGA80WOA.FON added=1
+NEW type=1 face="Terminal" lh=8 lw=8 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=8 a=7 d=1 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=48 ay=80
+FONT Terminal 8x8
+ face="Terminal" h=8 a=7 d=1 il=0 el=0 aw=8 mw=8 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=48 ay=80 arx=0 ary=0
+ w0=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w16=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w32=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w48=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w64=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w80=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w96=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w112=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w128=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w144=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w160=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w176=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w192=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w208=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w224=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ w240=8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=416,8
+ ext "The quick brown fox jumps over the lazy dog."=352,8
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=344,8
+ ext " "=8,8
+TERMINAL h=12 aw=8 lh=12 lw=8
+TERMINAL h=8 aw=8 lh=8 lw=8
+ removed=1
+FILE CGA40WOA.FON added=1
+NEW type=1 face="Terminal" lh=8 lw=16 esc=0 or=0 lwt=400 lit=0 lul=0 lso=0 lcs=255 op=1 cp=2 q=1 lpf=49
+  h=8 a=7 d=1 il=0 el=0 aw=16 mw=16 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=48 ay=160
+FONT Terminal 8x16
+ face="Terminal" h=8 a=7 d=1 il=0 el=0 aw=16 mw=16 wt=400 it=0 ul=0 so=0 fc=1 lc=254 dc=32 bc=32 pf=48 cs=255 oh=0 ax=48 ay=160 arx=0 ary=0
+ w0=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w16=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w32=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w48=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w64=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w80=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w96=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w112=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w128=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w144=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w160=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w176=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w192=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w208=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w224=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ w240=16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
+ ext "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"=832,8
+ ext "The quick brown fox jumps over the lazy dog."=704,8
+ ext "0123456789 !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"=688,8
+ ext " "=16,8
+TERMINAL h=12 aw=8 lh=12 lw=8
+TERMINAL h=8 aw=16 lh=8 lw=16
+ removed=1
+DOSMAP
+MAP "Terminal" h=12 w=8 wt=400 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=12 w=8 wt=0 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=12 w=16 wt=400 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=12 w=16 wt=0 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=8 w=8 wt=400 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=8 w=8 wt=0 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=8 w=16 wt=400 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=8 w=16 wt=0 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=6 w=4 wt=400 cs=255 pf=49 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=6 w=4 wt=0 cs=255 pf=49 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=8 w=6 wt=400 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "" h=8 w=6 wt=0 cs=255 pf=49 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=12 w=5 wt=400 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=5 MW=5 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=12 w=5 wt=0 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=5 MW=5 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=12 w=7 wt=400 cs=255 pf=49 -> "Terminal" H=12 A=9 AW=7 MW=7 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=12 w=7 wt=0 cs=255 pf=49 -> "Terminal" H=12 A=9 AW=7 MW=7 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=12 w=10 wt=400 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=12 w=10 wt=0 cs=255 pf=49 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=16 w=12 wt=400 cs=255 pf=49 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=16 w=12 wt=0 cs=255 pf=49 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=18 w=10 wt=400 cs=255 pf=49 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=18 w=10 wt=0 cs=255 pf=49 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=16 w=8 wt=400 cs=255 pf=49 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "" h=16 w=8 wt=0 cs=255 pf=49 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=1 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=2 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=3 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=4 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=5 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=6 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=7 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=6 A=5 AW=4 MW=4 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=8 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=9 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=10 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=11 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=8 A=7 AW=6 MW=6 WT=700 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=12 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=13 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=14 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=15 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=12 A=10 AW=8 MW=8 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=16 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=17 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=16 A=14 AW=12 MW=12 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=18 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=19 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=20 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=21 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=22 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=23 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=18 A=16 AW=10 MW=10 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=24 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=25 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=26 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=27 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=28 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=29 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MAP "Terminal" h=30 w=0 wt=0 cs=255 pf=0 -> "Terminal" H=24 A=20 AW=16 MW=16 WT=400 IT=0 CS=255 PF=48 OH=0
+MODULE VGASYS.FON name=FONTS fontdir=128 version=480
+ font id=31 size=5456
+MODULE VGAFIX.FON name=FIXFONTS fontdir=128 version=496
+ font id=31 size=4416
+MODULE VGAOEM.FON name=OEMFONTS fontdir=128 version=496
+ font id=30 size=4208
+MODULE SSERIFE.FON name=SSERIFE fontdir=784 version=496
+ font id=84 size=4048
+ font id=85 size=5520
+ font id=86 size=8096
+ font id=87 size=9936
+ font id=88 size=12816
+ font id=89 size=22432
+MODULE COURE.FON name=COURE fontdir=384 version=480
+ font id=90 size=3952
+ font id=91 size=8224
+ font id=92 size=10016
+MODULE SERIFE.FON name=SERIFE fontdir=752 version=480
+ font id=78 size=4032
+ font id=79 size=5440
+ font id=80 size=6656
+ font id=81 size=8704
+ font id=82 size=12160
+ font id=83 size=19312
+MODULE SMALLE.FON name=SMALLE fontdir=1024 version=512
+ font id=1 size=1536
+ font id=2 size=2560
+ font id=3 size=2560
+ font id=4 size=3072
+ font id=5 size=3584
+ font id=6 size=3584
+ font id=7 size=3584
+ font id=8 size=3584
+MODULE SYMBOLE.FON name=SYMBOLE fontdir=752 version=480
+ font id=1 size=3712
+ font id=2 size=5168
+ font id=3 size=6752
+ font id=4 size=8144
+ font id=5 size=12256
+ font id=6 size=18672
+MODULE DOSAPP.FON name=DOSAPP fontdir=752 version=512
+ font id=1 size=3072
+ font id=2 size=4240
+ font id=3 size=3216
+ font id=4 size=4240
+ font id=5 size=10400
+ font id=6 size=9728
+MODULE EGA80WOA.FON name=EGA80WOA fontdir=128 version=528
+ font id=131 size=4208
+MODULE EGA40WOA.FON name=EGA40WOA fontdir=128 version=528
+ font id=130 size=7264
+MODULE CGA80WOA.FON name=CGA80WOA fontdir=128 version=528
+ font id=101 size=3200
+MODULE CGA40WOA.FON name=CGA40WOA fontdir=128 version=528
+ font id=100 size=5232
+FN3 done
