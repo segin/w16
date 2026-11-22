@@ -1,0 +1,155 @@
+; PE12: 386 Enhanced: Allow Close When Active, and the Application Shortcut Key
+; control (keys with their scan codes), each saved (H01..H07.PIF)
+; mode: /3
+; get: H00.PIF
+; get: H01.PIF
+; get: H02.PIF
+; get: H03.PIF
+; get: H04.PIF
+; get: H05.PIF
+; get: H06.PIF
+; get: H07.PIF
+run PIFEDIT.EXE
+wait 4000
+alt p
+type A.EXE
+cmd 13
+wait 1200
+type C:\H00.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+click 291 346
+wait 1000
+snap C:\A1.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\A2.BMP
+dump
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H01.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 11
+kdown 12
+kdown 50 19
+kup 50 19
+kup 12
+kup 11
+wait 300
+snap C:\H1.BMP
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H02.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 11
+kdown 70 3B
+kup 70 3B
+kup 11
+wait 300
+snap C:\H2.BMP
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H03.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 08 0E
+kup 08 0E
+wait 300
+snap C:\H3.BMP
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H04.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 12
+kdown 41 1E
+kup 41 1E
+kup 12
+wait 300
+snap C:\H4.BMP
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H05.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 10
+kdown 11
+kdown 4B 25
+kup 4B 25
+kup 11
+kup 10
+wait 300
+snap C:\H5.BMP
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H06.PIF
+key 0D
+wait 1500
+alt a
+wait 1200
+alt a
+wait 300
+kdown 51 10
+kup 51 10
+wait 300
+snap C:\H6.BMP
+focus
+kdown 0D 1C
+kup 0D 1C
+wait 800
+snap C:\H7.BMP
+dump
+focus
+cmd 1
+wait 1000
+cmd 13
+wait 1200
+type C:\H07.PIF
+key 0D
+wait 1500
+close
+wait 1500

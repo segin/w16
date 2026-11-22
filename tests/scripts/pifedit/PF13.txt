@@ -1,0 +1,37 @@
+; PF13: a PIF for the WINOA386 test: C:\WC1.COM, "Probe Program", start-up
+; directory C:\WINDOWS\SYSTEM, parameters "stdargs" in Standard mode and
+; "enhargs" in 386 Enhanced mode (PROBE3.PIF compared)
+; get: PROBE3.PIF
+run PIFEDIT.EXE
+wait 3000
+alt p
+wait 200
+type C:\WC1.COM
+wait 200
+alt t
+wait 200
+type Probe Program
+wait 200
+alt o
+wait 200
+type stdargs
+wait 200
+alt s
+wait 200
+type C:\WINDOWS\SYSTEM
+wait 200
+cmd 18
+wait 1000
+key 0D
+wait 1200
+alt o
+wait 200
+type enhargs
+wait 200
+cmd 13
+wait 1200
+type C:\PROBE3.PIF
+key 0D
+wait 1500
+close
+wait 1500

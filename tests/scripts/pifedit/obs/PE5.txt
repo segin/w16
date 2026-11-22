@@ -1,0 +1,127 @@
+; PE5: Standard mode: the tab order and the status line for each control
+run PIFEDIT.EXE
+wait 3000
+focus
+snap C:\T00.BMP
+key 09
+wait 300
+focus
+snap C:\T01.BMP
+key 09
+wait 300
+focus
+snap C:\T02.BMP
+key 09
+wait 300
+focus
+snap C:\T03.BMP
+key 09
+wait 300
+focus
+snap C:\T04.BMP
+key 09
+wait 300
+focus
+snap C:\T05.BMP
+key 09
+wait 300
+focus
+snap C:\T06.BMP
+key 09
+wait 300
+focus
+snap C:\T07.BMP
+key 09
+wait 300
+focus
+snap C:\T08.BMP
+key 09
+wait 300
+focus
+snap C:\T09.BMP
+key 09
+wait 300
+focus
+snap C:\T10.BMP
+key 09
+wait 300
+focus
+snap C:\T11.BMP
+key 09
+wait 300
+focus
+snap C:\T12.BMP
+key 09
+wait 300
+focus
+snap C:\T13.BMP
+key 09
+wait 300
+focus
+snap C:\T14.BMP
+key 09
+wait 300
+focus
+snap C:\T15.BMP
+key 09
+wait 300
+focus
+snap C:\T16.BMP
+key 09
+wait 300
+focus
+snap C:\T17.BMP
+key 09
+wait 300
+focus
+snap C:\T18.BMP
+key 09
+wait 300
+focus
+snap C:\T19.BMP
+key 09
+wait 300
+focus
+snap C:\T20.BMP
+key 09
+wait 300
+focus
+snap C:\T21.BMP
+key 09
+wait 300
+focus
+snap C:\T22.BMP
+key 09
+wait 300
+focus
+snap C:\T23.BMP
+key 09
+wait 300
+focus
+snap C:\T24.BMP
+key 09
+wait 300
+focus
+snap C:\T25.BMP
+key 09
+wait 300
+focus
+snap C:\T26.BMP
+key 09
+wait 300
+focus
+snap C:\T27.BMP
+key 09
+wait 300
+focus
+snap C:\T28.BMP
+key 09
+wait 300
+focus
+snap C:\T29.BMP
+key 09
+wait 300
+focus
+snap C:\T30.BMP
+close
+wait 1000

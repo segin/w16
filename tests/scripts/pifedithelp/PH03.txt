@@ -1,0 +1,8 @@
+; PH03: Help > Standard Options (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+mark 1
+cmd 34
+wait 1500
+close
+wait 2000

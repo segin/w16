@@ -1,0 +1,24 @@
+; PE2: the PIF Editor as it starts in 386 Enhanced mode, and its Advanced dialog
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+snap C:\S1.BMP
+dump
+info
+dumpmenu
+focus
+menu m
+wait 600
+snap C:\M2.BMP
+key 1B
+key 1B
+alt a
+wait 1500
+snap C:\A1.BMP
+dump
+info
+focus
+key 1B
+wait 600
+close
+wait 1000

@@ -1,0 +1,42 @@
+; PE21: which controls Open fills: a Standard-mode PIF with every flag set and
+; Close Window on Exit clear opened after New; Enter in the window; then saved
+; mode: /S
+; var: SV.PIF build/pifobs/PE7/S21.PIF
+; var: DP.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF
+; get: Z1.PIF
+; get: Z2.PIF
+; get: Z3.PIF
+run PIFEDIT.EXE
+wait 3000
+cmd 10
+wait 1500
+type C:\SV.PIF
+key 0D
+wait 1500
+snap C:\K1.BMP
+cmd 13
+wait 1500
+type C:\Z1.PIF
+key 0D
+wait 1500
+cmd 10
+wait 1500
+type C:\DP.PIF
+key 0D
+wait 1500
+snap C:\K2.BMP
+cmd 13
+wait 1500
+type C:\Z2.PIF
+key 0D
+wait 1500
+key 0D
+wait 800
+snap C:\K3.BMP
+cmd 13
+wait 1500
+type C:\Z3.PIF
+key 0D
+wait 1500
+close
+wait 1500

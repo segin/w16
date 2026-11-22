@@ -1,0 +1,154 @@
+; PE15: 386 Enhanced: the Advanced dialog's priorities out of range; the raw
+; texts of the message boxes (TK.LOG kept with its CRs)
+; mode: /3
+; get: WINDOWS/TK.LOG
+run PIFEDIT.EXE
+wait 4000
+alt a
+wait 1200
+type 0
+wait 200
+key 0D
+wait 400
+snap C:\P1a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P1b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+type 10001
+wait 200
+key 0D
+wait 400
+snap C:\P2a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P2b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+type 10000
+wait 200
+key 0D
+wait 400
+snap C:\P3a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P3b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+alt f
+type 0
+wait 200
+key 0D
+wait 400
+snap C:\P4a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P4b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+alt f
+type x
+wait 200
+key 0D
+wait 400
+snap C:\P5a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P5b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+type 1
+wait 200
+key 0D
+wait 400
+snap C:\P6a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P6b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt a
+wait 1200
+type -1
+wait 200
+key 0D
+wait 400
+snap C:\P7a.BMP
+dump
+focus
+cmd 2
+wait 600
+snap C:\P7b.BMP
+dump
+focus
+cmd 2
+wait 600
+alt k
+type 99999
+cmd 11
+wait 1200
+dump
+cmd 2
+wait 600
+alt p
+type A.TXT
+cmd 11
+wait 1200
+dump
+cmd 2
+wait 600
+cmd 2
+wait 600
+alt p
+type Q
+alt a
+wait 1200
+alt a
+kdown 51 10
+kup 51 10
+key 0D
+wait 1000
+dump
+cmd 2
+wait 600
+cmd 2
+wait 600
+close
+wait 1000
+alt n
+wait 1000

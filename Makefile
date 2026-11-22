@@ -1466,6 +1466,25 @@ $(DOS)/REGEDIT.EXE: $(SHELL_RE) $(B)/shell/regedit/regedit.res shell/regedit/reg
 	    option map=$(B)/shell/regedit/regedit.map \
 	    option resource=$(B)/shell/regedit/regedit.res file { $(SHELL_RE) }
 	python3 tools/nemark.py $@ 3.10
+# ---- shell: PIFEDIT.EXE, the PIF Editor (shell/pifedit/; ARCHITECTURE.md
+# 15.11) ----
+PE_C     := main dlg pif hotkey
+SHELL_PE := $(B)/shell/start.o $(PE_C:%=$(B)/shell/pifedit/%.o)
+shell: $(DOS)/PIFEDIT.EXE
+$(B)/shell/pifedit/%.o: shell/pifedit/%.c shell/pifedit/pifedit.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/pifedit/pifedit.ico: tools/mkpificon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkpificon.py $@
+$(B)/shell/pifedit/pifedit.res: shell/pifedit/pifedit.rc shell/pifedit/pifedit.h $(B)/shell/pifedit/pifedit.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/pifedit -i=$(B)/shell/pifedit -fo=$@ $<
+$(DOS)/PIFEDIT.EXE: $(SHELL_PE) $(B)/shell/pifedit/pifedit.res shell/pifedit/pifedit.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/pifedit/pifedit.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/pifedit/pifedit.map \
+	    option resource=$(B)/shell/pifedit/pifedit.res file { $(SHELL_PE) }
+	python3 tools/nemark.py $@ 3.10
 # ---- shell: WINHELP.EXE, Windows Help (shell/winhelp/; ARCHITECTURE.md
 # 15.10) ----
 WH_C     := main view api search macro pict marks hfs hlpio hlp para
@@ -1962,6 +1981,12 @@ install-tree: $(W16)/REGEDIT.EXE
 $(W16)/REGEDIT.EXE: $(DOS)/REGEDIT.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+# the PIF Editor (shell/pifedit/): WINDOWS\PIFEDIT.EXE, as in 3.1
+W16TREE += $(W16)/PIFEDIT.EXE
+install-tree: $(W16)/PIFEDIT.EXE
+$(W16)/PIFEDIT.EXE: $(DOS)/PIFEDIT.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Windows Help (shell/winhelp/): WINDOWS\WINHELP.EXE, as in 3.1 (USER's
 # WinHelp starts it from the Windows directory)
 W16TREE += $(W16)/WINHELP.EXE
@@ -1997,7 +2022,7 @@ $(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
 	@mkdir -p $(@D)
 	cp $< $@
 GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/CONTROL.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE \
-             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE $(DOS)/REGEDIT.EXE
+             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE $(DOS)/REGEDIT.EXE $(DOS)/PIFEDIT.EXE
 groups: $(GRP_ICONS)
 	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
 grpcheck: $(GRP_ICONS)

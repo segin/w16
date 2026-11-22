@@ -1,0 +1,246 @@
+; PE6: 386 Enhanced mode: the tab order and status line, main window and Advanced
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+focus
+snap C:\T00.BMP
+key 09
+wait 300
+focus
+snap C:\T01.BMP
+key 09
+wait 300
+focus
+snap C:\T02.BMP
+key 09
+wait 300
+focus
+snap C:\T03.BMP
+key 09
+wait 300
+focus
+snap C:\T04.BMP
+key 09
+wait 300
+focus
+snap C:\T05.BMP
+key 09
+wait 300
+focus
+snap C:\T06.BMP
+key 09
+wait 300
+focus
+snap C:\T07.BMP
+key 09
+wait 300
+focus
+snap C:\T08.BMP
+key 09
+wait 300
+focus
+snap C:\T09.BMP
+key 09
+wait 300
+focus
+snap C:\T10.BMP
+key 09
+wait 300
+focus
+snap C:\T11.BMP
+key 09
+wait 300
+focus
+snap C:\T12.BMP
+key 09
+wait 300
+focus
+snap C:\T13.BMP
+key 09
+wait 300
+focus
+snap C:\T14.BMP
+key 09
+wait 300
+focus
+snap C:\T15.BMP
+key 09
+wait 300
+focus
+snap C:\T16.BMP
+key 09
+wait 300
+focus
+snap C:\T17.BMP
+key 09
+wait 300
+focus
+snap C:\T18.BMP
+key 09
+wait 300
+focus
+snap C:\T19.BMP
+key 09
+wait 300
+focus
+snap C:\T20.BMP
+key 09
+wait 300
+focus
+snap C:\T21.BMP
+key 09
+wait 300
+focus
+snap C:\T22.BMP
+key 09
+wait 300
+focus
+snap C:\T23.BMP
+key 09
+wait 300
+focus
+snap C:\T24.BMP
+key 09
+wait 300
+focus
+snap C:\T25.BMP
+key 09
+wait 300
+focus
+snap C:\T26.BMP
+alt a
+wait 1500
+focus
+snap C:\A00.BMP
+key 09
+wait 300
+focus
+snap C:\A01.BMP
+key 09
+wait 300
+focus
+snap C:\A02.BMP
+key 09
+wait 300
+focus
+snap C:\A03.BMP
+key 09
+wait 300
+focus
+snap C:\A04.BMP
+key 09
+wait 300
+focus
+snap C:\A05.BMP
+key 09
+wait 300
+focus
+snap C:\A06.BMP
+key 09
+wait 300
+focus
+snap C:\A07.BMP
+key 09
+wait 300
+focus
+snap C:\A08.BMP
+key 09
+wait 300
+focus
+snap C:\A09.BMP
+key 09
+wait 300
+focus
+snap C:\A10.BMP
+key 09
+wait 300
+focus
+snap C:\A11.BMP
+key 09
+wait 300
+focus
+snap C:\A12.BMP
+key 09
+wait 300
+focus
+snap C:\A13.BMP
+key 09
+wait 300
+focus
+snap C:\A14.BMP
+key 09
+wait 300
+focus
+snap C:\A15.BMP
+key 09
+wait 300
+focus
+snap C:\A16.BMP
+key 09
+wait 300
+focus
+snap C:\A17.BMP
+key 09
+wait 300
+focus
+snap C:\A18.BMP
+key 09
+wait 300
+focus
+snap C:\A19.BMP
+key 09
+wait 300
+focus
+snap C:\A20.BMP
+key 09
+wait 300
+focus
+snap C:\A21.BMP
+key 09
+wait 300
+focus
+snap C:\A22.BMP
+key 09
+wait 300
+focus
+snap C:\A23.BMP
+key 09
+wait 300
+focus
+snap C:\A24.BMP
+key 09
+wait 300
+focus
+snap C:\A25.BMP
+key 09
+wait 300
+focus
+snap C:\A26.BMP
+key 09
+wait 300
+focus
+snap C:\A27.BMP
+key 09
+wait 300
+focus
+snap C:\A28.BMP
+key 09
+wait 300
+focus
+snap C:\A29.BMP
+key 09
+wait 300
+focus
+snap C:\A30.BMP
+key 09
+wait 300
+focus
+snap C:\A31.BMP
+key 09
+wait 300
+focus
+snap C:\A32.BMP
+key 1B
+wait 800
+close
+wait 1000

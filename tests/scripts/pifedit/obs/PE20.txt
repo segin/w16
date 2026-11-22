@@ -1,0 +1,59 @@
+; PE20: when Open asks about unsaved changes; whether a mode switch is a change;
+; Open cancelled
+run PIFEDIT.EXE
+wait 3000
+alt t
+type X
+cmd 10
+wait 1500
+snap C:\P1.BMP
+dump
+focus
+type C:\WINDOWS\DOSPRMPT.PIF
+key 0D
+wait 1500
+snap C:\P2.BMP
+dump
+focus
+alt n
+wait 1500
+dump
+alt t
+type Y
+cmd 10
+wait 1500
+key 1B
+wait 1000
+snap C:\P3.BMP
+dump
+cmd 12
+wait 1200
+snap C:\P4.BMP
+dump
+alt n
+wait 1000
+cmd 18
+wait 1000
+key 0D
+wait 1500
+cmd 12
+wait 1200
+snap C:\P5.BMP
+dump
+key 1B
+wait 800
+alt a
+wait 1500
+cmd 1
+wait 1000
+cmd 12
+wait 1200
+snap C:\P6.BMP
+dump
+key 1B
+wait 800
+close
+wait 1500
+dump
+alt n
+wait 1000

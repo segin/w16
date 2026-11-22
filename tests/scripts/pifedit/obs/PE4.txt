@@ -1,0 +1,74 @@
+; PE4: saving: Save of an untitled PIF, Save with no program, the save prompts of New and Exit
+; get: PE4A.PIF
+; get: PE4B.PIF
+run PIFEDIT.EXE
+wait 3000
+cmd 11
+wait 1500
+snap C:\V01.BMP
+dump
+key 1B
+wait 800
+cmd 11
+wait 1500
+type C:\PE4A.PIF
+key 0D
+wait 1500
+snap C:\V02.BMP
+dump
+focus
+key 0D
+wait 800
+snap C:\V03.BMP
+dump
+key 1B
+wait 800
+alt p
+type TEST.EXE
+cmd 11
+wait 1500
+snap C:\V04.BMP
+type C:\PE4B.PIF
+key 0D
+wait 1500
+snap C:\V05.BMP
+dump
+alt t
+type Hello
+cmd 12
+wait 1500
+snap C:\V06.BMP
+dump
+focus
+key 1B
+wait 800
+snap C:\V07.BMP
+cmd 15
+wait 1500
+snap C:\V08.BMP
+dump
+key 1B
+wait 800
+cmd 11
+wait 1500
+snap C:\V09.BMP
+dump
+cmd 12
+wait 1500
+snap C:\V10.BMP
+dump
+cmd 14
+wait 1500
+snap C:\V11.BMP
+dump
+key 0D
+wait 800
+alt t
+type More
+cmd 15
+wait 1500
+snap C:\V12.BMP
+dump
+alt n
+wait 1500
+dump

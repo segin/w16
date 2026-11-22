@@ -28,6 +28,10 @@ is newer. Neither mode needs anything of Microsoft's.
                           REGEDITV.HLP); [w16] RegeditNewStyle=1 in
                           SYSTEM.INI gives it a Windows 95-like Registry
                           Editor view (View > New Style switches)
+  PIFEDIT.EXE             the PIF Editor: program information files
+                          (.PIF) for DOS programs, their Standard and
+                          386 Enhanced mode settings (its help is
+                          PIFEDIT.HLP)
   WINHELP.EXE             Help: shows Windows 3.x .HLP files, and the
                           topics programs ask for (their Help menus and
                           F1). The help files themselves are not part of
@@ -159,7 +163,8 @@ is newer. Neither mode needs anything of Microsoft's.
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (DOS Prompt, Read Me, Control
-                            Panel, File Manager, Registry Editor)
+                            Panel, File Manager, Registry Editor, PIF
+                            Editor)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)

@@ -1,0 +1,29 @@
+; PH11: F1 on controls 13-16 of the Standard-mode window, clicked (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+click 269 292
+wait 400
+mark 13
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 355 272
+wait 400
+mark 14
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 37 311
+wait 400
+mark 15
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 240 311
+wait 400
+mark 16
+kdown 70 3B
+kup 70 3B
+wait 1500
+close
+wait 2000

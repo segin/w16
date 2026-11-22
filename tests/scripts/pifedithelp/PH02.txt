@@ -1,0 +1,8 @@
+; PH02: Help > Search for Help on (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+mark 1
+cmd 37
+wait 1500
+close
+wait 2000

@@ -1,0 +1,237 @@
+; PE7: Standard mode: one setting at a time, saved after each (S00..S24.PIF)
+run PIFEDIT.EXE
+wait 3000
+alt p
+wait 200
+type A.EXE
+wait 200
+cmd 13
+wait 1200
+type C:\S00.PIF
+key 0D
+wait 1500
+; get: S00.PIF
+alt t
+wait 200
+type T
+wait 200
+cmd 13
+wait 1200
+type C:\S01.PIF
+key 0D
+wait 1500
+; get: S01.PIF
+alt o
+wait 200
+type P
+wait 200
+cmd 13
+wait 1200
+type C:\S02.PIF
+key 0D
+wait 1500
+; get: S02.PIF
+alt s
+wait 200
+type D
+wait 200
+cmd 13
+wait 1200
+type C:\S03.PIF
+key 0D
+wait 1500
+; get: S03.PIF
+click 250 201
+wait 300
+cmd 13
+wait 1200
+type C:\S04.PIF
+key 0D
+wait 1500
+; get: S04.PIF
+alt r
+wait 200
+type 200
+wait 200
+cmd 13
+wait 1200
+type C:\S05.PIF
+key 0D
+wait 1500
+; get: S05.PIF
+alt q
+wait 200
+type 10
+wait 200
+cmd 13
+wait 1200
+type C:\S06.PIF
+key 0D
+wait 1500
+; get: S06.PIF
+alt i
+wait 200
+type 20
+wait 200
+cmd 13
+wait 1200
+type C:\S07.PIF
+key 0D
+wait 1500
+; get: S07.PIF
+click 184 272
+wait 300
+cmd 13
+wait 1200
+type C:\S08.PIF
+key 0D
+wait 1500
+; get: S08.PIF
+click 184 292
+wait 300
+cmd 13
+wait 1200
+type C:\S09.PIF
+key 0D
+wait 1500
+; get: S09.PIF
+click 269 272
+wait 300
+cmd 13
+wait 1200
+type C:\S10.PIF
+key 0D
+wait 1500
+; get: S10.PIF
+click 269 292
+wait 300
+cmd 13
+wait 1200
+type C:\S11.PIF
+key 0D
+wait 1500
+; get: S11.PIF
+click 355 272
+wait 300
+cmd 13
+wait 1200
+type C:\S12.PIF
+key 0D
+wait 1500
+; get: S12.PIF
+click 37 311
+wait 300
+cmd 13
+wait 1200
+type C:\S13.PIF
+key 0D
+wait 1500
+; get: S13.PIF
+click 240 311
+wait 300
+cmd 13
+wait 1200
+type C:\S14.PIF
+key 0D
+wait 1500
+; get: S14.PIF
+click 37 331
+wait 300
+cmd 13
+wait 1200
+type C:\S15.PIF
+key 0D
+wait 1500
+; get: S15.PIF
+click 240 331
+wait 300
+cmd 13
+wait 1200
+type C:\S16.PIF
+key 0D
+wait 1500
+; get: S16.PIF
+click 184 352
+wait 300
+cmd 13
+wait 1200
+type C:\S17.PIF
+key 0D
+wait 1500
+; get: S17.PIF
+click 184 371
+wait 300
+cmd 13
+wait 1200
+type C:\S18.PIF
+key 0D
+wait 1500
+; get: S18.PIF
+click 269 352
+wait 300
+cmd 13
+wait 1200
+type C:\S19.PIF
+key 0D
+wait 1500
+; get: S19.PIF
+click 269 371
+wait 300
+cmd 13
+wait 1200
+type C:\S20.PIF
+key 0D
+wait 1500
+; get: S20.PIF
+click 355 352
+wait 300
+cmd 13
+wait 1200
+type C:\S21.PIF
+key 0D
+wait 1500
+; get: S21.PIF
+alt o
+wait 200
+type PARAMETERS LONGER
+wait 200
+cmd 13
+wait 1200
+type C:\S22.PIF
+key 0D
+wait 1500
+; get: S22.PIF
+alt p
+wait 200
+type C:\DOS\B.COM
+wait 200
+cmd 13
+wait 1200
+type C:\S23.PIF
+key 0D
+wait 1500
+; get: S23.PIF
+click 184 201
+wait 300
+cmd 13
+wait 1200
+type C:\S24.PIF
+key 0D
+wait 1500
+; get: S24.PIF
+snap C:\X1.BMP
+cmd 13
+wait 1200
+type C:\S00.PIF
+key 0D
+wait 1500
+snap C:\X2.BMP
+dump
+focus
+alt n
+wait 800
+key 1B
+wait 800
+close
+wait 1500
+dump
