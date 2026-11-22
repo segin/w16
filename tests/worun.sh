@@ -21,6 +21,9 @@
 #     -e EMU     dosbox-x (default) or dosbox
 #     -l         DOSBox-X INT 21h and file logs (DIR/dosbox.log)
 #     -t SECS    hard time limit (default 300)
+# WORUN_CONF in the environment: more dosbox.conf lines (sections and
+# settings), e.g. "[serial]" and "serial1=file file:PATH" for a VxD probe's
+# COM1 log (tests/pifread.sh)
 # The script, one command per line ('#' comments):
 #     sleep S          wait S seconds (decimals allowed)
 #     key K...         xdotool key names: alt+Tab ctrl+Escape Return ...
@@ -83,6 +86,7 @@ if [ -n "$script" ]; then cp "$script" "$out/script.txt"; else printf 'sleep 40\
     printf '[cpu]\ncore=normal\ncputype=386\ncycles=max\n'
     printf '[mixer]\nnosound=true\n[speaker]\npcspeaker=false\n'
     if [ -n "$logs" ]; then printf '[log]\nlogfile=%s/dosbox.log\nint21=debug\nfileio=debug\nexec=debug\nfiles=debug\n' "$out"; fi
+    if [ -n "${WORUN_CONF:-}" ]; then printf '%s\n' "$WORUN_CONF"; fi
     printf '[autoexec]\nmount c "%s/c"\nc:\n' "$out"
     printf '%s\n' "$pre" | tr ';' '\n'
     printf 'cd \\WINDOWS\n%s\necho WINEXIT > C:\\OUT.TXT\nexit\n' "$wcmd"

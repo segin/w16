@@ -7,11 +7,22 @@
 
 1 ICON "stock09.ico"
 
+/* the Parameters dialog: measured on 3.1's screen (tests/pifread.sh
+   edq386: the window at 64,56, 371 x 107 pixels; the edit box and the OK
+   button where Standard mode's are across, higher up) */
+IDD_PARAMS DIALOG 37, 28, 206, 39
+STYLE DS_SYSMODAL | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+BEGIN
+    CONTROL "Parameters", 20, "STATIC", SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP, 8, 6, 40, 8
+    CONTROL "", IDC_PARAMS, "EDIT", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP, 48, 5, 154, 10
+    CONTROL "OK", IDOK, "BUTTON", BS_DEFPUSHBUTTON | WS_CHILD | WS_VISIBLE | WS_TABSTOP, 87, 20, 32, 11
+END
+
 STRINGTABLE
 BEGIN
     IDS_QUITFIRST   "Application still active.\n\nQuit the application before quitting w16."
     IDS_STILLACTIVE "Application still active.\n\nQuit the application before quitting w16."
-    IDS_NOFILE      "Cannot find the specified file.\n\nMake sure that the path and filename are correct."
+    IDS_NOFILE      "Cannot find file.\n\nCheck to ensure the path and filename are correct."
     IDS_NODIR       "Start-up directory not found.\n\nCheck the application's program information file (PIF) to ensure the directory is correctly specified."
     IDS_NOSHELL     "Cannot run the application."
     IDS_NOMEM       "Insufficient memory to run the application.\n\nQuit one or more w16 applications to increase available memory, and try again."

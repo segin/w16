@@ -11,3 +11,5 @@
 #define IDS_STILLACTIVE     7
 #define IDS_NOWINDOW        8
 #define IDS_GPFAULT         9   /* SHELL event 41Bh, wParam 4: a fault ended the VM */
+#define IDD_PARAMS          1   /* "?" as the PIF's parameters */
+#define IDC_PARAMS          10

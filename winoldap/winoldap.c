@@ -17,6 +17,7 @@
  */
 #include <windows.h>
 #include "winoldap.h"
+#include "pifread.h"
 
 /* KERNEL / USER exports not in OpenWatcom's windows.h */
 extern void FAR PASCAL DisableOEMLayer(void);   /* USER.4 */
@@ -53,7 +54,7 @@ extern void __cdecl dos_setdrive(int drive);
 #define REC_SIZE    0x32
 #define NREC        16          /* records 0-15; 15 is Windows itself */
 #define R_WINDOWS   15
-#define R_1F        0x1F        /* 80h for a DOS program's record */
+#define R_1F        0x1F        /* a DOS program's KB Required (word) */
 #define R_21        0x21        /* FFFFFFFFh for a Windows application's */
 #define R_FLAGS     0x28        /* 0Ch new DOS program, 04h swapped out, 06h Windows application, 46h Windows */
 #define R_KIND      0x29        /* 80h free, 00h DOS program, 28h Windows application, 68h Windows */
@@ -114,52 +115,9 @@ static void disk_message(char drive, WORD kb)
     MessageBox(hwnd, sbuf, title, MB_OK | MB_ICONEXCLAMATION);
 }
 
-/* ---- the PIF (published format; the fields Windows 3.1 reads) ---- */
-static struct {
-    WORD maxmem, minmem;        /* 20h, 22h: KB */
-    char program[64];           /* 24h */
-    BYTE flags1;                /* 63h */
-    char directory[64];         /* 65h */
-    char params[64];            /* A5h */
-    WORD w_ed;                  /* EDh */
-    WORD flags2;                /* 16Fh */
-    char title[31];             /* 02h, 30 bytes */
-    BYTE ext[22], ext286[22];   /* 171h: "MICROSOFT PIFEX", 187h: "WINDOWS 286 3.0" */
-    WORD xmsmax, xmsmin;        /* 19Dh */
-    WORD flags286;              /* 1A1h */
-} pif;
-
-static void readat(HFILE f, LONG off, void FAR *buf, int n)
-{
-    _llseek(f, off, 0);
-    _lread(f, buf, n);
-}
-
-static BOOL load_pif(const char *path)
-{
-    OFSTRUCT of;
-    HFILE f = OpenFile(path, &of, OF_READ);
-    if (f == HFILE_ERROR)
-        return FALSE;
-    /* the order Windows 3.1's WINOLDAP reads them in (WO2) */
-    _llseek(f, 0, 2);
-    readat(f, 0x171, pif.ext, 0x16);
-    readat(f, 0x187, pif.ext286, 0x16);
-    readat(f, 0x19D, &pif.xmsmax, 4);
-    readat(f, 0x1A1, &pif.flags286, 2);
-    readat(f, 0x63, &pif.flags1, 1);
-    readat(f, 0x20, &pif.maxmem, 4);
-    readat(f, 0x24, pif.program, 0x3F);
-    readat(f, 0x65, pif.directory, 0x40);
-    readat(f, 0xA5, pif.params, 0x40);
-    readat(f, 0xED, &pif.w_ed, 2);
-    readat(f, 0x16F, &pif.flags2, 2);
-    readat(f, 0x02, pif.title, 0x1E);
-    _lclose(f);
-    pif.program[63] = pif.directory[63] = pif.params[63] = 0;
-    pif.title[30] = 0;
-    return TRUE;
-}
+/* ---- the PIF (winoldap/pifread.c: as Windows 3.1's WINOLDAP reads it) ---- */
+static PIFDATA pif;
+static char param_buf[64];         /* the Parameters dialog's */
 
 static int has_ext(const char *p, const char *ext)
 {
@@ -364,6 +322,49 @@ static void debug_block(void)
     _lclose(f);
 }
 
+/* the PIF's settings in a DOS program's record, as Windows 3.1's WINOLDAP
+   writes them (tests/pifread.sh: WO2's snapshots, one setting changed at
+   a time; what WSWAP and DSWAP do with them is theirs):
+     +1Fh  KB Required (22h), at least 128 (also for -1)
+     +28h  01h prevent program switch, or the program uses COM1-COM4 or
+           the keyboard directly (63h 04h, 80h, 40h; the 286 section's
+           4000h, 8000h; 16Fh 10h); 02h graphics (63h 02h); 04h close
+           window on exit (63h 10h); 08h DSWAP's MS-DOS Prompt banner
+           (COMMAND.COM without parameters, not COMMAND /C ...: WO2,
+           boot-test)
+     +29h  the reserved keys: 01h Alt+Tab, 02h Alt+Esc, 04h Ctrl+Esc (the
+           286 flags 01h, 02h, 10h); 08h no save screen (20h); 10h no
+           screen exchange (63h 08h, or Alt+PrtSc or PrtSc reserved: 04h,
+           08h)
+   Not acted on (no change seen): 63h 01h and 20h, EDh, 16Fh but 10h,
+   170h, the 286 flags' 40h. UNVERIFIED: the XMS KB limit and required
+   (WO2 recorded no block at the switch with them set; DSWAP's program
+   got less memory) */
+static void rec_pif(BYTE FAR *r)
+{
+    WORD kb = pif.minmem, f = pif.flags286;
+    BYTE fl = 0, k = 0;
+    if (!pif.opened || kb == 0xFFFF || kb < 128)
+        kb = 128;
+    *(WORD FAR *)(r + R_1F) = kb;
+    if ((pif.flags & (PIFF_NOSWITCH | PIFF_COM1 | PIFF_COM2)) || (f & 0xC000) || (pif.w_16f & 0x10))
+        fl |= 0x01;
+    if (pif.flags & PIFF_GRAPHICS)
+        fl |= 0x02;
+    if ((pif.flags & PIFF_CLOSE) || !pif.opened)
+        fl |= 0x04;
+    if (!lstrcmpi(base_name(program), "COMMAND.COM") && !tail[0])
+        fl |= 0x08;
+    if (f & 0x01) k |= 0x01;
+    if (f & 0x02) k |= 0x02;
+    if (f & 0x10) k |= 0x04;
+    if (f & 0x20) k |= 0x08;
+    if ((f & 0x0C) || (pif.flags & PIFF_NOSCREEN))
+        k |= 0x10;
+    r[R_FLAGS] = fl;
+    r[R_KIND] = k;
+}
+
 /* ---- the switch ---- */
 static void do_switch(void)
 {
@@ -393,12 +394,7 @@ static void do_switch(void)
         r = recp(rec);
         set_name(r, title);
         *(WORD FAR *)(r + R_HWND) = (WORD)hwnd;
-        r[R_1F] = 0x80;
-        /* 08h: DSWAP shows its MS-DOS Prompt banner (set for
-           COMMAND.COM without parameters, not for other programs nor for
-           COMMAND /C ...: WO2, boot-test) */
-        r[R_FLAGS] = (lstrcmpi(base_name(program), "COMMAND.COM") || tail[0]) ? 0x04 : 0x0C;
-        r[R_KIND] = 0x00;
+        rec_pif(r);
         r[R_NEXT] = recp(R_WINDOWS)[R_NEXT];
         recp(R_WINDOWS)[R_NEXT] = (BYTE)rec;
         blk[B_COUNT]++;
@@ -540,8 +536,6 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(h, msg, wp, lp);
 }
 
-static char param_buf[64];
-
 BOOL FAR PASCAL DialogProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     (void)lp;
@@ -621,56 +615,63 @@ static BOOL setup(LPSTR cmd)
                 lstrcpy(pifpath, "_DEFAULT.PIF");
         }
     }
-    load_pif(pifpath);          /* (none: the fields stay empty) */
+    pif_read(pifpath, &pif, PIF_286);   /* (none: the fields stay empty) */
 
+    /* the title: the PIF's, else the PIF's (or the program's) name in
+       capitals (3.1: a blank title in C:\PROBE.PIF gave "PROBE") */
     lstrcpy(title, pif.title);
-    trim(title);
+    if (!title[0]) {
+        stem(path, title, sizeof title);
+        AnsiUpper(title);
+    }
 
     if (has_ext(path, ".PIF")) {
         /* the program the PIF names; COMMAND.COM is COMSPEC's */
-        trim(pif.program);
         if (!lstrcmpi(pif.program, "COMMAND.COM") && get_env("COMSPEC", program, sizeof program))
             ;
         else if (!exists(pif.program, program)) {
-            if (!title[0])
-                stem(pif.program, title, sizeof title);
+            lstrcpyn(title, pif.program, sizeof title);
             message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
-        lstrcpy(tail, args[0] ? args : pif.params);
-    } else {
-        if (!exists(path, program)) {
-            stem(path, title, sizeof title);
-            message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
-            return FALSE;
-        }
-        lstrcpy(tail, args[0] ? args : pif.params);
+    } else if (!exists(path, program)) {
+        stem(path, title, sizeof title);
+        message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
+        return FALSE;
     }
+    /* the parameters: arguments given to WinExec as they are (WO2: "hello
+       world"), else the PIF's after a blank, as DOS command tails have,
+       their own blanks kept (tests/pifread.sh: "  sa  sb  " gave "   sa
+       sb  ", 64 characters without a NUL all 64); "?" shows the
+       Parameters dialog first */
     from_pif = !args[0];
-    if (!title[0]) {
-        stem(has_ext(path, ".PIF") ? pif.program : path, title, sizeof title);
-        AnsiUpper(title);
-    }
-    trim(tail);
-    if (tail[0] == '?' && tail[1] == 0) {
+    lstrcpy(tail, from_pif ? pif.params : args);
+    if (!from_pif)
+        trim(tail);
+    if (from_pif && tail[0] == '?' && tail[1] == 0) {
         tail[0] = 0;
         if (DialogBox(hinst, MAKEINTRESOURCE(IDD_PARAMS), NULL, (DLGPROC)MakeProcInstance((FARPROC)DialogProc, hinst)) <= 0)
             return FALSE;
         lstrcpy(tail, param_buf);
     }
-    /* parameters from the PIF (or its "?" dialog) get a leading blank, as
-       DOS command tails have; arguments given to WinExec are passed as
-       they are (WO2: " a b" and "hello world") */
-    if (from_pif && tail[0] && tail[0] != ' ') {
+    if (from_pif && tail[0]) {
         char t2[130];
         t2[0] = ' ';
         lstrcpyn(t2 + 1, tail, sizeof t2 - 1);
         lstrcpy(tail, t2);
     }
+    /* a batch file named by a PIF runs through COMMAND.COM: " /c FILE"
+       and a blank before the parameters (3.1: Z:\COMMAND.COM, " /c
+       C:\WC1.BAT  stdargs") */
+    if (has_ext(path, ".PIF") && has_ext(program, ".BAT") && get_env("COMSPEC", name, sizeof name)) {
+        char t2[140];
+        wsprintf(t2, " /c %s %s", (LPSTR)program, (LPSTR)tail);
+        lstrcpyn(tail, t2, sizeof tail);
+        lstrcpy(program, name);
+    }
     /* the PIF's start-up directory becomes the current one (WC1 under
        Windows 3.1 found itself in it); the switch block has no field for
        it */
-    trim(pif.directory);
     if (pif.directory[0]) {
         if (pif.directory[1] == ':')
             dos_setdrive((pif.directory[0] | 0x20) - 'a');
