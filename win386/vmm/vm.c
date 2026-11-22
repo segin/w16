@@ -343,8 +343,9 @@ int vm_set_memory(struct vm *v, u32 kb)
     end = start + size;                 /* the paragraph after the free arena */
     /* the stub's block (its MCB is the free one's), then the program's:
      * the program sees as much as under 3.1 (tests/pifread.sh -W edmema:
-     * top - PSP FB4h for 64 KB, as 3.1's 1C00h - 0C4Ch) */
-    lim = start + DOSVM_BLOCK + kb * 64;
+     * top - PSP FB4h for 64 KB, as 3.1's 1C00h - 0C4Ch; the stub's
+     * block ends a paragraph before DOSVM_BLOCK) */
+    lim = start + DOSVM_BLOCK - 1 + kb * 64;
     if (lim + 1 >= end) return 0;
     memset(m, 0, sizeof(m));
     m[0] = *(u8 *)vm_lin(v, mcb);       /* the new MCB ends the chain if the old did */
