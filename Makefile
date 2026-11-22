@@ -1694,6 +1694,15 @@ $(DOS)/GD9.EXE: $(B)/tests/start.o $(B)/tests/gd9.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd9.map file { $(B)/tests/start.o $(B)/tests/gd9.o }
+# GD10.EXE: raster font simulations, italic, underline, strike-out,
+# emboldening and integer scaling (tests/apps/gd10.c; the boot-test case gdifont)
+gdprobes: $(DOS)/GD10.EXE
+dos: $(DOS)/GD10.EXE
+$(B)/tests/gd10.o: tests/apps/gd10ref.h tests/apps/tklog.h
+$(DOS)/GD10.EXE: $(B)/tests/start.o $(B)/tests/gd10.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd10.map file { $(B)/tests/start.o $(B)/tests/gd10.o }
 # GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
 # the library's; tests/apps/gd6.c); make test
 dos: $(DOS)/GD6.EXE
