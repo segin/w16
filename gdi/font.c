@@ -526,5 +526,29 @@ void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx)
         tx->txfAccelerator |= 0x0200;
         tx->txfOverhang = 1;
     }
-    /* UNVERIFIED: simulated underline, strike-out, italic */
+    /* GD10 (GD1's log) on 3.1: italic, underline and strike-out the font
+       lacks are asked with 400h, 800h and 1000h in txfAccelerator (VGA's
+       dpText has none of them, so GDI draws them itself: text.c);
+       txfItalic is 1, txfUnderline and txfStrikeOut FFh, and the italic
+       overhang, (dfPixHeight - 1) / 2, is added to the emboldening's */
+    if (fo && fo->lf.lfItalic && !fi->dfItalic) {
+        tx->txfItalic = 1;
+        tx->txfAccelerator |= 0x0400;
+        tx->txfOverhang += (fi->dfPixHeight - 1) / 2;
+    }
+    if (fo && fo->lf.lfUnderline && !fi->dfUnderline) {
+        tx->txfUnderline = (char)0xFF;
+        tx->txfAccelerator |= 0x0800;
+    }
+    if (fo && fo->lf.lfStrikeOut && !fi->dfStrikeOut) {
+        tx->txfStrikeOut = (char)0xFF;
+        tx->txfAccelerator |= 0x1000;
+    }
+}
+
+/* the italic overhang GDI adds to extents and character widths (0: not
+   simulated) */
+int font_italic_overhang(LPFONTINFO fi, const TEXTXFORM __far *tx)
+{
+    return (tx->txfAccelerator & 0x0400) ? (fi->dfPixHeight - 1) / 2 : 0;
 }

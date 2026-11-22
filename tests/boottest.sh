@@ -47,6 +47,9 @@
 #              w16's: no FAIL
 #   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
 #              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
+#   gdifont    GD10 (raster font simulations: italic, underline, strike-out,
+#              emboldening; metrics and pixels) with Microsoft's GDI and
+#              VGA.DRV, w16's GDI, w16's VGA.DRV and both: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
@@ -873,7 +876,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1322,6 +1325,27 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   gdidib: GD7's DIBs with w16's GDI and VGA.DRV as with Microsoft's"
         else echo "FAIL gdidib: $r"; fails=$((fails + 1)); fi ;;
+    gdifont)
+        # GD10 (tests/apps/gd10.c: text with italic, underline, strike-out
+        # and emboldening a raster font lacks, in several faces and sizes,
+        # drawn into memory bitmaps and read back; ARCHITECTURE.md 11.9)
+        # as the shell of Windows 3.1: Microsoft's GDI and VGA.DRV (the
+        # table's own run), w16's GDI, w16's VGA.DRV and both; every log
+        # must end with "GD10 done" and have no FAIL
+        r=ok
+        for k in ms gdi vga both; do
+            case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
+                both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD10.EXE" > "$out/gdifont-$k.log" 2>&1 &
+        done
+        wait
+        for k in ms gdi vga both; do
+            f=$out/gdifont-$k.log
+            grep -q '^GD10 done' "$f" || { r="$k: GD10 did not finish ($f)"; break; }
+            if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then echo "ok   gdifont: GD10's italic, underline, strike-out and bold with w16's GDI and VGA.DRV as with Microsoft's"
+        else echo "FAIL gdifont: $r"; fails=$((fails + 1)); fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"

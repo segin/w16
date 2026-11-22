@@ -611,6 +611,7 @@ LPFONT font_realize(LPDC dc);
 LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
 void font_reap(void);                   /* removed fonts no DC uses any more go */
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
+int font_italic_overhang(LPFONTINFO fi, const TEXTXFORM __far *tx);
 extern XP fonts;
 
 /* API functions used inside GDI too */
