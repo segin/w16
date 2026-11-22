@@ -48,6 +48,7 @@ static PGEH gentryhandle;
 static HINSTANCE hinst;
 static HDC hscr;
 static HGLOBAL hmine;                   /* a block of the probe's own, for its owner */
+static WORD stack_sel;                  /* the probe's stack (SS) */
 
 #define PW 64                           /* the bitmaps metafiles are played into */
 #define PH 48
@@ -189,6 +190,13 @@ static void show_bits(const char *name, BYTE FAR *p, DWORD n)
             DWORD sz = MAKELONG(w[(WORD)a], w[(WORD)a + 1]);
             if (sz < 3)
                 break;
+            /* 3.1's AnimatePalette record holds the probe's pointer to
+               the entries: its selector depends on the run */
+            if (w[(WORD)a + 2] == META_ANIMATEPALETTE && sz >= 7 &&
+                w[(WORD)a + 6] == stack_sel) {
+                obs_env(nm(name, "AnimatePalette selector"), w[(WORD)a + 6]);
+                w[(WORD)a + 6] = 0x5555;
+            }
             if (w[(WORD)a + 2] == META_CREATEREGION && sz >= 7) {
                 obs_env(nm(name, "region count"), w[(WORD)a + 5]);
                 w[(WORD)a + 5] = w[(WORD)a + 6] = 0;
@@ -692,12 +700,12 @@ static void sec_objects(void)
     }
     /* palettes */
     {
-        struct { WORD v, n; PALETTEENTRY e[4]; } lp;
-        HPALETTE pal;
+        struct { WORD v, n; PALETTEENTRY e[8]; } lp;
+        HPALETTE pal, pal2;
         PALETTEENTRY ne[2];
         lp.v = 0x300;
-        lp.n = 4;
-        for (i = 0; i < 4; i++) {
+        lp.n = 8;
+        for (i = 0; i < 8; i++) {
             lp.e[i].peRed = (BYTE)(i * 10);
             lp.e[i].peGreen = (BYTE)(i * 20);
             lp.e[i].peBlue = (BYTE)(i * 30);
@@ -708,16 +716,19 @@ static void sec_objects(void)
         pal = CreatePalette((LOGPALETTE FAR *)&lp);
         rb("SelectPalette"); rr((WORD)SelectPalette(rec, pal, FALSE) != 0); re();
         rb("RealizePalette"); rr(RealizePalette(rec)); re();
-        /* 3.1 writes a change once for every metafile DC the palette was
-           ever selected in (handles reused), AnimatePalette's record
-           holds its arguments, not the entries: see the dumps */
-        unchecked = 1;
+        /* 3.1 writes a change once for every entry of the palette's
+           metafile list (a SelectPalette into a metafile DC adds one,
+           selecting another palette there takes one off, closing takes
+           none: the entries left name the next metafile DC, which gets
+           the same handle), AnimatePalette's record holds its arguments,
+           not the entries. (ResizePalette only shrinks here: the new
+           entries of a grown palette are whatever 3.1's memory held.) */
         rb("palette changes");
         SelectPalette(rec, pal, FALSE);
         RealizePalette(rec);
         obs("palette changes SetPaletteEntries", SetPaletteEntries(pal, 1, 2, ne));
         AnimatePalette(pal, 2, 1, ne + 1);
-        obs("palette changes ResizePalette", ResizePalette(pal, 6));
+        obs("palette changes ResizePalette", ResizePalette(pal, 7));
         SelectPalette(rec, GetStockObject(DEFAULT_PALETTE), FALSE);
         obs("palette changes SetPaletteEntries after", SetPaletteEntries(pal, 0, 1, ne));
         re();
@@ -736,17 +747,43 @@ static void sec_objects(void)
         re();
         rb("palette ResizePalette");
         SelectPalette(rec, pal, FALSE);
-        obs("palette ResizePalette only", ResizePalette(pal, 3));
+        obs("palette ResizePalette only", ResizePalette(pal, 6));
         re();
         rb("palette ResizePalette two");
         SelectPalette(rec, pal, FALSE);
         SelectPalette(rec, GetStockObject(DEFAULT_PALETTE), FALSE);
         ResizePalette(pal, 5);
         re();
-        unchecked = 0;
         rb("palette unselected changes");
         obs("palette unselected SetPaletteEntries", SetPaletteEntries(pal, 0, 1, ne));
+        AnimatePalette(pal, 2, 1, ne + 1);
         re();
+        /* a new palette: selected twice in one metafile; then in two
+           metafiles open at once */
+        lp.n = 4;
+        pal2 = CreatePalette((LOGPALETTE FAR *)&lp);
+        rb("palette selected twice");
+        SelectPalette(rec, pal2, FALSE);
+        SelectPalette(rec, pal2, FALSE);
+        AnimatePalette(pal2, 2, 1, ne + 1);
+        re();
+        DeleteObject(pal2);
+        pal2 = CreatePalette((LOGPALETTE FAR *)&lp);
+        {
+            HDC m2;
+            HMETAFILE h2;
+            rb("palette two at once");
+            m2 = CreateMetaFile(NULL);
+            SelectPalette(rec, pal2, FALSE);
+            SelectPalette(m2, pal2, FALSE);
+            AnimatePalette(pal2, 2, 1, ne + 1);
+            obs("palette two at once ResizePalette", ResizePalette(pal2, 3));
+            h2 = CloseMetaFile(m2);
+            show_mf("palette two at once second", h2);
+            DeleteMetaFile(h2);
+            re();
+        }
+        DeleteObject(pal2);
         DeleteObject(pal);
     }
     DeleteObject(p1);
@@ -1679,6 +1716,7 @@ int __cdecl tmain(void)
     if (th > HINSTANCE_ERROR)
         gentryhandle = (PGEH)GetProcAddress(th, "GlobalEntryHandle");
     hmine = GlobalAlloc(GMEM_MOVEABLE, 16);
+    stack_sel = SELECTOROF((void FAR *)&hinst);
     hscr = GetDC(NULL);
     make_dib();
     out("GD9 dc\r\n");

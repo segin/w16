@@ -55,6 +55,8 @@ void pal_free(HPALETTE h)
     LPPALOBJ p = obj_get(h, PAL_MAGIC);
     if (!p)
         return;
+    mf_palette_gone(h);
+    p = obj_get(h, PAL_MAGIC);
     xfree(p->xEntries);
     obj_free(h);
 }
@@ -100,18 +102,29 @@ WORD GDIAPI SetPaletteEntries(HPALETTE h, WORD start, WORD n, const PALETTEENTRY
     return i;
 }
 
-/* the palette's entries change in metafiles where it is selected: the
-   record (start, count, entries) */
+/* AnimatePalette's record in the metafiles the palette is listed in
+   (meta.c). GD9 on 3.1: the start and the count, then not the entries
+   but as many words of AnimatePalette's own arguments as the entries
+   would take, as they lie on the stack (Pascal order): the entries'
+   offset and selector, the count, the start, the palette (and past that
+   what follows on 3.1's stack; zeros here) */
 static void pal_record(HPALETTE h, WORD fn, WORD start, WORD n, const PALETTEENTRY __far *pe)
 {
-    XP x = xalloc((2 + 2 * n) * 2);
+    XP x = n < 0x3FF0 ? xalloc((2 + 2 * n) * 2) : 0;
     WORD __far *w;
+    WORD frame[5], i;
     if (!x)
         return;
+    frame[0] = OFFSETOF(pe);
+    frame[1] = SELECTOROF(pe);
+    frame[2] = n;
+    frame[3] = start;
+    frame[4] = h;
     w = xptr(x);
     w[0] = start;
     w[1] = n;
-    mem_copy(w + 2, pe, n * 4);
+    for (i = 0; i < 2 * n; i++)
+        w[2 + i] = i < 5 ? frame[i] : 0;
     mf_palette_changed(h, fn, 2 + 2 * n, w);
     xfree(x);
 }
