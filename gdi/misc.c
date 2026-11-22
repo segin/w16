@@ -100,11 +100,64 @@ WORD GDIAPI SetPaletteEntries(HPALETTE h, WORD start, WORD n, const PALETTEENTRY
     return i;
 }
 
+/* the palette's entries change in metafiles where it is selected: the
+   record (start, count, entries) */
+static void pal_record(HPALETTE h, WORD fn, WORD start, WORD n, const PALETTEENTRY __far *pe)
+{
+    XP x = xalloc((2 + 2 * n) * 2);
+    WORD __far *w;
+    if (!x)
+        return;
+    w = xptr(x);
+    w[0] = start;
+    w[1] = n;
+    mem_copy(w + 2, pe, n * 4);
+    mf_palette_changed(h, fn, 2 + 2 * n, w);
+    xfree(x);
+}
+
+/* VGA has no palette: the entries of a PC_RESERVED entry change, nothing
+   is drawn again (UNVERIFIED on a palette device) */
+void GDIAPI AnimatePalette(HPALETTE h, WORD start, WORD n, const PALETTEENTRY __far *pe) /* GDI.367 */
+{
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
+    WORD i;
+    if (!p || !pe)
+        return;
+    pal_record(h, MR_ANIMATEPALETTE, start, n, pe);
+    p = obj_get(h, PAL_MAGIC);
+    for (i = 0; i < n && start + i < p->nEntries; i++)
+        if (pal_entries(p)[start + i].peFlags & 1)      /* PC_RESERVED */
+            pal_entries(p)[start + i] = pe[i];
+}
+
+BOOL GDIAPI ResizePalette(HPALETTE h, WORD n)                      /* GDI.368 */
+{
+    LPPALOBJ p = obj_get(h, PAL_MAGIC);
+    XP x;
+    WORD old;
+    if (!p || h == stock[15] || !n || n > 0x3FC0)
+        return FALSE;
+    x = xalloc(n * sizeof(PALETTEENTRY));
+    if (!x)
+        return FALSE;
+    p = obj_get(h, PAL_MAGIC);
+    old = p->nEntries;
+    mem_copy(xptr(x), pal_entries(p), (old < n ? old : n) * sizeof(PALETTEENTRY));
+    xfree(p->xEntries);
+    p->xEntries = x;
+    p->nEntries = n;
+    mf_palette_changed(h, MR_RESIZEPALETTE, 1, &n);
+    return TRUE;
+}
+
 HPALETTE GDIAPI GDISelectPalette(HDC hdc, HPALETTE h, BOOL bk)     /* GDI.361 */
 {
     LPDC dc = dc_get(hdc);
     HPALETTE old;
     (void)bk;
+    if (mf_dc(hdc))
+        return obj_get(h, PAL_MAGIC) ? mf_select_palette(hdc, h) : 0;
     if (!dc || !obj_get(h, PAL_MAGIC))
         return 0;
     old = dc->hPal;
@@ -117,7 +170,8 @@ HPALETTE GDIAPI GDISelectPalette(HDC hdc, HPALETTE h, BOOL bk)     /* GDI.361 */
    took a nonzero DX as a palette change (GD2, Calculator's menu) */
 DWORD GDIAPI GDIRealizePalette(HDC hdc)                            /* GDI.362 */
 {
-    (void)hdc;
+    if (mf_dc(hdc))                     /* GD9: 1 through USER's RealizePalette */
+        return mf_rec0(hdc, MR_REALIZEPALETTE);
     return 0;
 }
 
@@ -191,6 +245,8 @@ int GDIAPI MulDiv(int a, int b, int c)                             /* GDI.128 */
 int GDIAPI Escape(HDC hdc, int fn, int n, LPCSTR in, void __far *out) /* GDI.38 */
 {
     LPDC dc = dc_get(hdc);
+    if (mf_dc(hdc))                     /* GD9: any escape, recorded, 1 */
+        return mf_escape(hdc, fn, n, in);
     (void)n;
     if (!dc || !dc->dev->fn[DRV_CONTROL] || (dc->flags & DCF_MEMORY))
         return 0;
@@ -209,25 +265,6 @@ WORD GDIAPI ShrinkGdiHeap(void)                                    /* GDI.354 */
     return LocalCompact(0xFFFF);
 }
 
-BOOL GDIAPI IsValidMetaFile(HANDLE h)                              /* GDI.410 */
-{
-    (void)h;
-    return FALSE;
-}
-
-BOOL GDIAPI DeleteMetaFile(HANDLE h)                               /* GDI.127 */
-{
-    if (!h)
-        return FALSE;                   /* GD5: 3.1's answer for 0 */
-    return GlobalFree(h) == 0;
-}
-
-int GDIAPI FixupBogusPublisherMetafile(HANDLE h, DWORD d)          /* GDI.464 */
-{
-    (void)h;
-    (void)d;
-    return 0;
-}
 
 BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD a, WORD b, void __far *p) /* GDI.307 */
 {

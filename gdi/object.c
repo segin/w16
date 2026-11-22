@@ -298,6 +298,71 @@ HBRUSH GDIAPI CreatePatternBrush(HBITMAP hbm)                      /* GDI.60 */
     return CreateBrushIndirect(&lb);
 }
 
+/* BS_DIBPATTERN (SDK: the DIB is copied, the program may free its own):
+   the brush keeps a copy of the whole block (GD9: a metafile records the
+   block's GlobalSize) in lbHatch, DIB_RGB_COLORS or DIB_PAL_COLORS in
+   lbColor, and draws as the pattern brush of the DIB made a bitmap */
+HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage)       /* GDI.445 */
+{
+    DWORD n = hdib ? GlobalSize(hdib) : 0;
+    HGLOBAL copy;
+    BYTE __far *s;
+    HBITMAP hb = 0;
+    HBRUSH br = 0;
+    HDC t;
+    long w, ht;
+    WORD bpp, hd, nc;
+    if (n < 16 || n > 0xFFF0L)
+        return 0;
+    copy = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, n);
+    if (!copy)
+        return 0;
+    s = GlobalLock(copy);
+    mem_copy(s, GlobalLock(hdib), (WORD)n);
+    GlobalUnlock(hdib);
+    if (*(DWORD __far *)s == 12) {
+        w = ((short __far *)s)[2];
+        ht = ((short __far *)s)[3];
+        bpp = ((WORD __far *)s)[5];
+        hd = 12;
+    } else {
+        w = ((long __far *)s)[1];
+        ht = ((long __far *)s)[2];
+        bpp = ((WORD __far *)s)[7];
+        hd = (WORD)*(DWORD __far *)s;
+    }
+    nc = bpp <= 8 ? 1 << bpp : 0;
+    if (hd != 12 && ((DWORD __far *)s)[8])
+        nc = (WORD)((DWORD __far *)s)[8];
+    hd += nc * (usage == 1 ? 2 : hd == 12 ? 3 : 4);
+    if (ht < 0)
+        ht = -ht;
+    t = CreateCompatibleDC(0);
+    if (t && w > 0 && ht > 0 && hd < n) {
+        hb = bpp == 1 ? bm_create((int)w, (int)ht, 1, 1, 0, 0) : bm_screen((int)w, (int)ht);
+        if (hb)
+            SetDIBits(t, hb, 0, (WORD)ht, s + hd, s, usage);
+    }
+    if (t)
+        DeleteDC(t);
+    GlobalUnlock(copy);
+    if (hb) {
+        br = CreatePatternBrush(hb);
+        DeleteObject(hb);
+    }
+    if (!br) {
+        GlobalFree(copy);
+        return 0;
+    }
+    {
+        LPBRUSHOBJ b = obj_get(br, BRUSH_MAGIC);
+        b->lb.lbStyle = 5;
+        b->lb.lbColor = usage;
+        b->lb.lbHatch = copy;
+    }
+    return br;
+}
+
 HFONT GDIAPI CreateFontIndirect(const LOGFONT __far *lf)           /* GDI.57 */
 {
     HANDLE h;
@@ -313,6 +378,10 @@ HFONT GDIAPI CreateFontIndirect(const LOGFONT __far *lf)           /* GDI.57 */
     f = obj_get(h, FONT_MAGIC);
     mem_copy(&f->lf, lf, LF_FIXEDPART);
     for (i = 0; i < n; i++)
+        f->lf.lfFaceName[i] = lf->lfFaceName[i];
+    /* GD9: 3.1 keeps the program's byte after the face's terminating zero
+       (a metafile's font record shows it); GetObject still gives zeros */
+    for (i = n + 1; i < FONT_MINFACE; i++)      /* (within the block) */
         f->lf.lfFaceName[i] = lf->lfFaceName[i];
     return h;
 }
@@ -409,6 +478,7 @@ void stock_init(void)
     lp.lopnColor = 0;
     stock[7] = CreatePenIndirect(&lp);                   /* BLACK_PEN */
     lp.lopnStyle = 5;
+    lp.lopnColor = RGB(255, 255, 255);  /* GD9: 3.1's records it so */
     stock[8] = CreatePenIndirect(&lp);                   /* NULL_PEN */
     driver_stock_fonts();                                /* 10, 11, 12 */
     /* UNVERIFIED: the LOGFONTs of SYSTEM_FONT (GD1 saw these values given
@@ -530,10 +600,13 @@ BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
         return FALSE;
     if (is_stock(h))
         return TRUE;
+    if ((m & MAGIC_MASK) < DC_MAGIC)
+        mf_deleted(h);                  /* the metafiles recording it */
     switch (m & MAGIC_MASK) {
     case DC_MAGIC:
     case DISDC_MAGIC:
     case METADC_MAGIC:
+    case METAFILEDC_MAGIC:
         return FALSE;
     case BITMAP_MAGIC:
         if (((LPBITMAPOBJ)obj_get(h, BITMAP_MAGIC))->hdcSel)
@@ -552,6 +625,8 @@ BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
             return FALSE;
         dc_brush_changed(h);
         pat = ((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->hPatBits;
+        if (((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->lb.lbStyle == 5)
+            GlobalFree(((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->lb.lbHatch);
         if (pat) {
             GlobalUnlock(pat);
             GlobalFree(pat);

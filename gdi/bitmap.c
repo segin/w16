@@ -200,6 +200,17 @@ HBITMAP GDIAPI CreateCompatibleBitmap(HDC hdc, int w, int h)       /* GDI.51 */
     return hb;
 }
 
+/* a bitmap in the display's format (as CreateCompatibleBitmap makes one
+   for a display DC) */
+HBITMAP bm_screen(int w, int h)
+{
+    HBITMAP hb = bm_create(w, h, display->info.dpPlanes, display->info.dpBitsPixel, 0, 0);
+    LPPBITMAP pb = bm_pbitmap(hb);
+    if (pb)
+        pb->bmlpPDevice = display->lpPDevice;
+    return hb;
+}
+
 HBITMAP GDIAPI CreateDiscardableBitmap(HDC hdc, int w, int h)      /* GDI.156 */
 {
     HBITMAP hb = CreateCompatibleBitmap(hdc, w, h);
@@ -519,6 +530,8 @@ int GDIAPI SetDIBitsToDevice(HDC hdc, int x, int y, int cx, int cy, int xs, int 
     RECT d;
     WORD k;
     XP xi;
+    if (mf_dc(hdc))
+        return mf_dibtodev(hdc, x, y, cx, cy, xs, ys, start, n, bits, bmi, usage);
     if (!dc || !bmi || !bits)
         return 0;
     if (dc->flags & DCF_MEMORY)
@@ -573,6 +586,8 @@ int GDIAPI StretchDIBits(HDC hdc, int xd, int yd, int wd, int hd, int xs, int ys
     int w, h;
     HBITMAP hb, old;
     HDC mdc;
+    if (mf_dc(hdc))
+        return mf_stretchdib(hdc, xd, yd, wd, hd, xs, ys, ws, hs, bits, bmi, usage, rop);
     if (!dc_out(hdc) || !bmi || !bits)
         return 0;
     if (bc->bcSize == sizeof(BITMAPCOREHEADER)) {

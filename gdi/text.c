@@ -115,6 +115,8 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     XP xdx = 0;
     TEXTXFORM tx;
     int tw;
+    if (mf_dc(hdc))
+        return mf_exttext(hdc, x, y, opt, rc, s, n, dx);
     if (!dc)
         return FALSE;
     if (!font_realize(dc))
@@ -214,6 +216,8 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
 
 BOOL GDIAPI TextOut(HDC hdc, int x, int y, LPCSTR s, int n)        /* GDI.33 */
 {
+    if (mf_dc(hdc))
+        return mf_text(hdc, x, y, s, n);
     if (n <= 0)
         return TRUE;
     return ExtTextOut(hdc, x, y, 0, 0, s, n, 0);
@@ -309,6 +313,8 @@ DWORD GDIAPI SetMapperFlags(HDC hdc, DWORD f)                      /* GDI.349 */
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_SETMAPPERFLAGS, LOWORD(f), HIWORD(f));
     if (!dc)
         return 0;
     old = dc->mapperFlags;

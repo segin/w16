@@ -511,6 +511,8 @@ BOOL GDIAPI LineTo(HDC hdc, int x, int y)                         /* GDI.19 */
 {
     LPDC dc = dc_out(hdc);
     POINT p[2];
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_LINETO, y, x);
     if (!dc)
         return FALSE;
     p[0] = dc->cur;
@@ -533,6 +535,8 @@ BOOL GDIAPI Polyline(HDC hdc, const POINT __far *pts, int n)      /* GDI.37 */
     LPDC dc = dc_out(hdc);
     XP h;
     int i, k;
+    if (mf_dc(hdc))
+        return mf_poly(hdc, MR_POLYLINE, pts, n);
     if (!dc || n < 2)
         return FALSE;
     if (pen_null(dc))
@@ -580,6 +584,8 @@ BOOL GDIAPI Rectangle(HDC hdc, int l, int t, int r, int b)        /* GDI.27 */
     LPDC dc = dc_out(hdc);
     RECT rc;
     int nopen, w;
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_RECTANGLE, b, r, t, l);
     if (!dc)
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
@@ -675,6 +681,8 @@ static BOOL polygon(HDC hdc, const POINT __far *pts, int n, int close_outline)
 
 BOOL GDIAPI Polygon(HDC hdc, const POINT __far *pts, int n)       /* GDI.36 */
 {
+    if (mf_dc(hdc))
+        return mf_poly(hdc, MR_POLYGON, pts, n);
     return polygon(hdc, pts, n, 1);
 }
 
@@ -688,6 +696,8 @@ BOOL GDIAPI PolyPolygon(HDC hdc, const POINT __far *pts, const int __far *counts
     long total = 0;
     int i, base;
     XP h;
+    if (mf_dc(hdc))
+        return mf_polypoly(hdc, pts, counts, n);
     if (!dc || n <= 0)
         return FALSE;
     for (i = 0; i < n; i++) {
@@ -720,6 +730,8 @@ BOOL GDIAPI Ellipse(HDC hdc, int l, int t, int r, int b)          /* GDI.24 */
     LPDC dc = dc_out(hdc);
     RECT rc;
     int nopen;
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_ELLIPSE, b, r, t, l);
     if (!dc)
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
@@ -749,6 +761,8 @@ BOOL GDIAPI RoundRect(HDC hdc, int l, int t, int r, int b, int ew, int eh) /* GD
     RECT rc;
     int nopen, y, w, h;
     SPANS s;
+    if (mf_dc(hdc))
+        return mf_rec6(hdc, MR_ROUNDRECT, eh, ew, b, r, t, l);
     if (!dc)
         return FALSE;
     dev_box(dc, l, t, r, b, &rc);
@@ -914,18 +928,50 @@ static BOOL arcs(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, in
     return TRUE;
 }
 
+/* Arc, Pie, Chord on a metafile DC: the eight words reversed */
+static BOOL mf_arc(HDC hdc, WORD fn, int l, int t, int r, int b, int x3, int y3, int x4, int y4)
+{
+    WORD w[8];
+    w[0] = y4; w[1] = x4; w[2] = y3; w[3] = x3; w[4] = b; w[5] = r; w[6] = t; w[7] = l;
+    return mf_recw(hdc, fn, 8, w);
+}
+
+/* FloodFill and ExtFloodFill (GD9): on a metafile DC both are
+   META_EXTFLOODFILL (FloodFill with FLOODFILLBORDER, 0) and answer 0.
+   UNVERIFIED and not done: the fill on a real DC (the driver's ScanLR) */
+BOOL GDIAPI ExtFloodFill(HDC hdc, int x, int y, COLORREF c, WORD type) /* GDI.372 */
+{
+    if (mf_dc(hdc)) {
+        WORD w[5];
+        w[0] = type; w[1] = LOWORD(c); w[2] = HIWORD(c); w[3] = y; w[4] = x;
+        mf_recw(hdc, MR_EXTFLOODFILL, 5, w);
+    }
+    return FALSE;
+}
+
+BOOL GDIAPI FloodFill(HDC hdc, int x, int y, COLORREF c)          /* GDI.25 */
+{
+    return ExtFloodFill(hdc, x, y, c, 0);
+}
+
 BOOL GDIAPI Arc(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, int y4) /* GDI.23 */
 {
+    if (mf_dc(hdc))
+        return mf_arc(hdc, MR_ARC, l, t, r, b, x3, y3, x4, y4);
     return arcs(hdc, l, t, r, b, x3, y3, x4, y4, 0);
 }
 
 BOOL GDIAPI Pie(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, int y4) /* GDI.26 */
 {
+    if (mf_dc(hdc))
+        return mf_arc(hdc, MR_PIE, l, t, r, b, x3, y3, x4, y4);
     return arcs(hdc, l, t, r, b, x3, y3, x4, y4, 1);
 }
 
 BOOL GDIAPI Chord(HDC hdc, int l, int t, int r, int b, int x3, int y3, int x4, int y4) /* GDI.348 */
 {
+    if (mf_dc(hdc))
+        return mf_arc(hdc, MR_CHORD, l, t, r, b, x3, y3, x4, y4);
     return arcs(hdc, l, t, r, b, x3, y3, x4, y4, 2);
 }
 

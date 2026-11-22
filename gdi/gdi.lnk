@@ -12,3 +12,4 @@ option heapsize=10000
 segment type code fixed preload
 segment type data moveable preload
 library windows.lib
+import FARSETOWNER KERNEL.403

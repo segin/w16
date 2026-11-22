@@ -88,6 +88,8 @@ BOOL GDIAPI PatBlt(HDC hdc, int x, int y, int w, int h, DWORD rop) /* GDI.29 */
 {
     LPDC dc = dc_out(hdc);
     int dx, dy, dw, dh;
+    if (mf_dc(hdc))
+        return mf_rec6(hdc, MR_PATBLT, LOWORD(rop), HIWORD(rop), h, w, y, x);
     if (!dc)
         return FALSE;
     dev_rect(dc, x, y, w, h, &dx, &dy, &dw, &dh);
@@ -103,6 +105,8 @@ BOOL GDIAPI BitBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, int ys
 {
     LPDC dc = dc_out(hdc), sdc = 0;
     int dx, dy, dw, dh, sx = 0, sy = 0, sw, sh;
+    if (mf_dc(hdc))
+        return mf_blt(hdc, x, y, w, h, hsrc, xs, ys, 0, 0, rop, 0);
     if (!dc)
         return FALSE;
     if (NEEDS_SRC(rop)) {
@@ -170,6 +174,8 @@ BOOL GDIAPI StretchBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, in
 {
     LPDC dc = dc_out(hdc), sdc;
     int dx, dy, dw, dh, sx, sy, sw, sh;
+    if (mf_dc(hdc))
+        return mf_blt(hdc, x, y, w, h, hsrc, xs, ys, ws, hs, rop, 1);
     if (!dc)
         return FALSE;
     if (!NEEDS_SRC(rop))
@@ -239,6 +245,8 @@ COLORREF GDIAPI SetPixel(HDC hdc, int x, int y, COLORREF c)        /* GDI.31 */
     LPDC dc = dc_out(hdc);
     int p[2];
     DWORD pc, rgb;
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_SETPIXEL, LOWORD(c), HIWORD(c), y, x);
     if (!dc)
         return (COLORREF)-1L;
     p[0] = x;
@@ -259,6 +267,8 @@ COLORREF GDIAPI GetPixel(HDC hdc, int x, int y)                    /* GDI.83 */
     LPDC dc = dc_out(hdc);
     int p[2];
     DWORD pc;
+    if (mf_dc(hdc))                     /* GD9 */
+        return 0;
     if (!dc)
         return (COLORREF)-1L;
     p[0] = x;
@@ -299,18 +309,34 @@ static BOOL rgn_blt(HDC hdc, HRGN hrgn, HBRUSH hbr, DWORD rop)
     return TRUE;
 }
 
+/* GD9: a region call on a metafile DC records the region (and brush)
+   in its object table, then the call with their slots */
+static BOOL mf_rgn(HDC hdc, WORD fn, HRGN hrgn, HBRUSH hbr)
+{
+    int r = mf_slot(hdc, hrgn), b = hbr ? mf_slot(hdc, hbr) : 0;
+    if (r < 0 || b < 0)
+        return FALSE;
+    return hbr ? mf_rec2(hdc, fn, r, b) : mf_rec1(hdc, fn, r);
+}
+
 BOOL GDIAPI FillRgn(HDC hdc, HRGN hrgn, HBRUSH hbr)                /* GDI.40 */
 {
+    if (mf_dc(hdc))
+        return mf_rgn(hdc, MR_FILLREGION, hrgn, hbr);
     return rgn_blt(hdc, hrgn, hbr, 0x00F00021L);
 }
 
 BOOL GDIAPI PaintRgn(HDC hdc, HRGN hrgn)                           /* GDI.43 */
 {
+    if (mf_dc(hdc))
+        return mf_rgn(hdc, MR_PAINTREGION, hrgn, 0);
     return rgn_blt(hdc, hrgn, 0, 0x00F00021L);
 }
 
 BOOL GDIAPI InvertRgn(HDC hdc, HRGN hrgn)                          /* GDI.42 */
 {
+    if (mf_dc(hdc))
+        return mf_rgn(hdc, MR_INVERTREGION, hrgn, 0);
     return rgn_blt(hdc, hrgn, 0, 0x00550009L);
 }
 
@@ -319,6 +345,8 @@ BOOL GDIAPI FrameRgn(HDC hdc, HRGN hrgn, HBRUSH hbr, int w, int h) /* GDI.41 */
 {
     HRGN a, b, frame;
     BOOL r;
+    if (mf_dc(hdc))                     /* GD9: 3.1 records nothing, 0 */
+        return FALSE;
     if (!rgn_ptr(hrgn))
         return FALSE;
     a = rgn_new(0, 0, 0, 0);

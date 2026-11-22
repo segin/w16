@@ -577,6 +577,7 @@ void rgn_free(HRGN h);
 /* bitmap.c */
 HBITMAP bm_create(int w, int h, int planes, int bpp, const void __far *bits, WORD flags);
 LPPBITMAP bm_pbitmap(HBITMAP h);
+HBITMAP bm_screen(int w, int h);
 HGLOBAL bm_pattern_copy(HBITMAP h);
 BYTE __far *bm_scan(LPPBITMAP pb, int y);
 void bm_free(HBITMAP h);
@@ -626,6 +627,78 @@ BOOL GDIAPI DeleteObject(HGDIOBJ);
 HDC GDIAPI CreateCompatibleDC(HDC);
 BOOL GDIAPI DeleteDC(HDC);
 HGDIOBJ GDIAPI GetStockObject(int);
+
+/* meta.c: recording on a metafile DC (ARCHITECTURE.md 11.8) */
+int mf_dc(HDC h);
+BOOL mf_rec0(HDC h, WORD fn);
+BOOL mf_rec1(HDC h, WORD fn, WORD a);
+BOOL mf_rec2(HDC h, WORD fn, WORD a, WORD b);
+BOOL mf_rec4(HDC h, WORD fn, WORD a, WORD b, WORD c, WORD d);
+BOOL mf_rec6(HDC h, WORD fn, WORD a, WORD b, WORD c, WORD d, WORD e, WORD f);
+BOOL mf_recw(HDC h, WORD fn, WORD n, const WORD __far *w);
+HGDIOBJ mf_select(HDC h, HGDIOBJ obj);
+HPALETTE mf_select_palette(HDC h, HPALETTE pal);
+int mf_slot(HDC h, HANDLE obj);
+void mf_deleted(HANDLE obj);
+void mf_palette_changed(HPALETTE pal, WORD fn, WORD n, const WORD __far *w);
+BOOL mf_text(HDC h, int x, int y, LPCSTR s, int n);
+BOOL mf_exttext(HDC h, int x, int y, WORD opt, const RECT __far *rc, LPCSTR s, int n,
+                const short __far *dx);
+BOOL mf_poly(HDC h, WORD fn, const POINT __far *pts, int n);
+BOOL mf_polypoly(HDC h, const POINT __far *pts, const int __far *counts, int n);
+int mf_escape(HDC h, int fn, int n, LPCSTR in);
+BOOL mf_blt(HDC h, int x, int y, int w, int hh, HDC hsrc, int xs, int ys, int ws, int hs,
+            DWORD rop, int stretch);
+BOOL mf_dibtodev(HDC h, int x, int y, int cx, int cy, int xs, int ys, WORD start, WORD n,
+                 const void __far *bits, const void __far *bmi, WORD usage);
+BOOL mf_stretchdib(HDC h, int xd, int yd, int wd, int hd, int xs, int ys, int ws, int hs,
+                   const void __far *bits, const void __far *bmi, WORD usage, DWORD rop);
+/* the record numbers (SDK vol. 4 ch. 3) the recording calls use */
+#define MR_SETBKCOLOR 0x0201
+#define MR_SETBKMODE 0x0102
+#define MR_SETMAPMODE 0x0103
+#define MR_SETROP2 0x0104
+#define MR_SETRELABS 0x0105
+#define MR_SETPOLYFILLMODE 0x0106
+#define MR_SETSTRETCHBLTMODE 0x0107
+#define MR_SETTEXTCHAREXTRA 0x0108
+#define MR_SETTEXTCOLOR 0x0209
+#define MR_SETTEXTJUSTIFICATION 0x020A
+#define MR_SETWINDOWORG 0x020B
+#define MR_SETWINDOWEXT 0x020C
+#define MR_SETVIEWPORTORG 0x020D
+#define MR_SETVIEWPORTEXT 0x020E
+#define MR_OFFSETWINDOWORG 0x020F
+#define MR_SCALEWINDOWEXT 0x0410
+#define MR_OFFSETVIEWPORTORG 0x0211
+#define MR_SCALEVIEWPORTEXT 0x0412
+#define MR_LINETO 0x0213
+#define MR_MOVETO 0x0214
+#define MR_EXCLUDECLIPRECT 0x0415
+#define MR_INTERSECTCLIPRECT 0x0416
+#define MR_ARC 0x0817
+#define MR_ELLIPSE 0x0418
+#define MR_PIE 0x081A
+#define MR_RECTANGLE 0x041B
+#define MR_ROUNDRECT 0x061C
+#define MR_PATBLT 0x061D
+#define MR_SAVEDC 0x001E
+#define MR_SETPIXEL 0x041F
+#define MR_OFFSETCLIPRGN 0x0220
+#define MR_POLYGON 0x0324
+#define MR_POLYLINE 0x0325
+#define MR_RESTOREDC 0x0127
+#define MR_FILLREGION 0x0228
+#define MR_INVERTREGION 0x012A
+#define MR_PAINTREGION 0x012B
+#define MR_SETTEXTALIGN 0x012E
+#define MR_CHORD 0x0830
+#define MR_SETMAPPERFLAGS 0x0231
+#define MR_REALIZEPALETTE 0x0035
+#define MR_ANIMATEPALETTE 0x0436
+#define MR_SETPALENTRIES 0x0037
+#define MR_RESIZEPALETTE 0x0139
+#define MR_EXTFLOODFILL 0x0548
 
 /* util */
 void gdi_log(const char __far *s);

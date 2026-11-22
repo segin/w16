@@ -1592,7 +1592,8 @@ $(DOS)/GD2.EXE: $(B)/gdi/gdlog.o $(B)/gdi/gd2stubs.o $(B)/gdi/gd2log.o $(B)/gdi/
 GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
 GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
-           $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o
+           $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o \
+           $(B)/gdi/meta.o
 gdi: $(DOS)/GDI.EXE
 dos: $(DOS)/GDI.EXE
 $(B)/gdi/exports.lnk $(B)/gdi/stubs.asm &: tools/mkgdiexp.py tools/mkgdlog.py \
@@ -1653,6 +1654,15 @@ $(DOS)/GD8.EXE: $(B)/tests/start.o $(B)/tests/gd8.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd8.map file { $(B)/tests/start.o $(B)/tests/gd8.o }
+# GD9.EXE: metafiles (tests/apps/gd9.c; tests/gdiheap.sh -p, the boot-test
+# case gdimeta)
+gdprobes: $(DOS)/GD9.EXE
+dos: $(DOS)/GD9.EXE
+$(B)/tests/gd9.o: tests/apps/gd9ref.h tests/apps/tklog.h
+$(DOS)/GD9.EXE: $(B)/tests/start.o $(B)/tests/gd9.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd9.map file { $(B)/tests/start.o $(B)/tests/gd9.o }
 # GD6.EXE: GDI's 32-bit arithmetic helpers (gdi/i4.asm linked in place of
 # the library's; tests/apps/gd6.c); make test
 dos: $(DOS)/GD6.EXE

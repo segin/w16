@@ -134,7 +134,8 @@ LPVOID dc_pbrush(LPDC dc)
         lb.lbColor = b->lb.lbColor;
         lb.lbHatch = b->lb.lbHatch;
         lb.lbBkColor = dc->dm.bkColor;
-        if (lb.lbStyle == 3) {
+        if (lb.lbStyle == 3 || lb.lbStyle == 5) {   /* (a DIB pattern: as its bitmap's) */
+            lb.lbStyle = 3;
             lb.lbColor = (DWORD)(LPVOID)GlobalLock(b->hPatBits);
             GlobalUnlock(b->hPatBits);
             lb.lbHatch = b->hPatBits;
@@ -504,6 +505,8 @@ int GDIAPI SetBkMode(HDC hdc, int m)                               /* GDI.2 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETBKMODE, m);
     if (!dc || m < 1 || m > 2)
         return 0;
     old = dc->dm.bkMode;
@@ -515,6 +518,8 @@ int GDIAPI SetROP2(HDC hdc, int r)                                 /* GDI.4 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETROP2, r);
     if (!dc || r < 1 || r > 16)
         return 0;
     old = dc->dm.Rop2;
@@ -526,6 +531,8 @@ int GDIAPI SetRelAbs(HDC hdc, int m)                               /* GDI.5 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETRELABS, m);
     if (!dc)
         return 0;
     old = dc->relAbs;
@@ -537,6 +544,8 @@ int GDIAPI SetPolyFillMode(HDC hdc, int m)                         /* GDI.6 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETPOLYFILLMODE, m);
     if (!dc || m < 1 || m > 2)
         return 0;
     old = dc->polyFill;
@@ -548,6 +557,8 @@ int GDIAPI SetStretchBltMode(HDC hdc, int m)                       /* GDI.7 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETSTRETCHBLTMODE, m);
     if (!dc || m < 1 || m > 3)
         return 0;
     old = dc->stretchMode;
@@ -574,6 +585,8 @@ int GDIAPI SetTextCharacterExtra(HDC hdc, int x)                   /* GDI.8 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETTEXTCHAREXTRA, x);
     if (!dc)
         return 0x8000;
     old = extra_logical(dc);
@@ -592,6 +605,8 @@ WORD GDIAPI SetTextAlign(HDC hdc, WORD a)                          /* GDI.346 */
 {
     LPDC dc = dc_get(hdc);
     WORD old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETTEXTALIGN, a);
     if (!dc)
         return 0;
     old = dc->textAlign;
@@ -602,6 +617,8 @@ WORD GDIAPI SetTextAlign(HDC hdc, WORD a)                          /* GDI.346 */
 int GDIAPI SetTextJustification(HDC hdc, int extra, int count)     /* GDI.10 */
 {
     LPDC dc = dc_get(hdc);
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_SETTEXTJUSTIFICATION, count, extra);
     if (!dc)
         return 0;
     extra = dc_scale_x(dc, extra);
@@ -624,6 +641,8 @@ COLORREF GDIAPI SetBkColor(HDC hdc, COLORREF c)                    /* GDI.1 */
     LPDC dc = dc_get(hdc);
     COLORREF old;
     DWORD pc;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_SETBKCOLOR, LOWORD(c), HIWORD(c));
     if (!dc)
         return 0x80000000L;
     old = dc->dm.LbkColor;
@@ -639,6 +658,8 @@ COLORREF GDIAPI SetTextColor(HDC hdc, COLORREF c)                  /* GDI.9 */
 {
     LPDC dc = dc_get(hdc);
     COLORREF old;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_SETTEXTCOLOR, LOWORD(c), HIWORD(c));
     if (!dc)
         return 0x80000000L;
     old = dc->dm.LTextColor;
@@ -651,6 +672,8 @@ COLORREF GDIAPI GetNearestColor(HDC hdc, COLORREF c)               /* GDI.154 */
 {
     LPDC dc = dc_get(hdc);
     DWORD pc;
+    if (mf_dc(hdc))                     /* GD9 */
+        return 0;
     if (!dc)
         return 0x80000000L;
     return ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);
@@ -659,6 +682,8 @@ COLORREF GDIAPI GetNearestColor(HDC hdc, COLORREF c)               /* GDI.154 */
 int GDIAPI GetDeviceCaps(HDC hdc, int i)                           /* GDI.80 */
 {
     LPDC dc = dc_get(hdc);
+    if (mf_dc(hdc))                     /* GD9: DT_METAFILE, every other index 0 */
+        return i == 2 ? 5 : 0;
     if (!dc || i < 0 || i > 0x6C || (i & 1))
         return 0;
     return *(short NEAR *)((BYTE NEAR *)&dc->dev->info + i);
@@ -737,6 +762,8 @@ int GDIAPI SetMapMode(HDC hdc, int m)                              /* GDI.3 */
 {
     LPDC dc = dc_get(hdc);
     int old;
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_SETMAPMODE, m);
     if (!dc || m < 1 || m > 8)
         return 0;
     old = dc->mapMode;
@@ -760,11 +787,13 @@ static void iso_fix(LPDC dc)
         dc->vpExt.x = (int)((long)dc->wndExt.x * (sy < 0 ? -sy : sy) * (sx < 0 ? -1 : 1) / 1000);
 }
 
-#define ORGEXT(fn, ord, field, fix)                                      \
+#define ORGEXT(fn, ord, field, fix, rec)                                 \
     DWORD GDIAPI fn(HDC hdc, int x, int y)                               \
     {                                                                    \
         LPDC dc = dc_get(hdc);                                           \
         DWORD old;                                                       \
+        if (mf_dc(hdc))                                                  \
+            return mf_rec2(hdc, rec, y, x);                              \
         if (!dc)                                                         \
             return 0;                                                    \
         old = MAKELONG(dc->field.x, dc->field.y);                        \
@@ -779,10 +808,10 @@ static void iso_fix(LPDC dc)
         return old;                                                      \
     }
 
-ORGEXT(SetWindowOrg, 11, wndOrg, 0)
-ORGEXT(SetWindowExt, 12, wndExt, 1)
-ORGEXT(SetViewportOrg, 13, vpOrg, 0)
-ORGEXT(SetViewportExt, 14, vpExt, 1)
+ORGEXT(SetWindowOrg, 11, wndOrg, 0, MR_SETWINDOWORG)
+ORGEXT(SetWindowExt, 12, wndExt, 1, MR_SETWINDOWEXT)
+ORGEXT(SetViewportOrg, 13, vpOrg, 0, MR_SETVIEWPORTORG)
+ORGEXT(SetViewportExt, 14, vpExt, 1, MR_SETVIEWPORTEXT)
 
 #define GETPT(fn, ord, field)                                            \
     DWORD GDIAPI fn(HDC hdc)                                             \
@@ -801,6 +830,8 @@ DWORD GDIAPI OffsetWindowOrg(HDC hdc, int dx, int dy)              /* GDI.15 */
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_OFFSETWINDOWORG, dy, dx);
     if (!dc)
         return 0;
     old = MAKELONG(dc->wndOrg.x, dc->wndOrg.y);
@@ -813,6 +844,8 @@ DWORD GDIAPI OffsetViewportOrg(HDC hdc, int dx, int dy)            /* GDI.17 */
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_OFFSETVIEWPORTORG, dy, dx);
     if (!dc)
         return 0;
     old = MAKELONG(dc->vpOrg.x, dc->vpOrg.y);
@@ -847,6 +880,8 @@ DWORD GDIAPI ScaleWindowExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.16 *
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_SCALEWINDOWEXT, yd, yn, xd, xn);
     if (!dc)
         return 0;
     old = MAKELONG(dc->wndExt.x, dc->wndExt.y);
@@ -859,6 +894,8 @@ DWORD GDIAPI ScaleViewportExt(HDC hdc, int xn, int xd, int yn, int yd) /* GDI.18
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_SCALEVIEWPORTEXT, yd, yn, xd, xn);
     if (!dc)
         return 0;
     old = MAKELONG(dc->vpExt.x, dc->vpExt.y);
@@ -871,6 +908,8 @@ DWORD GDIAPI MoveTo(HDC hdc, int x, int y)                         /* GDI.20 */
 {
     LPDC dc = dc_get(hdc);
     DWORD old;
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_MOVETO, y, x);
     if (!dc)
         return 0;
     old = MAKELONG(dc->cur.x, dc->cur.y);
@@ -886,6 +925,8 @@ HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
     LPDC dc = dc_get(hdc);
     WORD m = obj_magic(h);
     HANDLE old;
+    if (mf_dc(hdc))
+        return mf_select(hdc, h);
     if (!dc || !m)
         return 0;
     switch (m & MAGIC_MASK) {
@@ -950,7 +991,10 @@ HFONT GDIAPI GetCurLogFont(HDC hdc)                                /* GDI.411 */
 
 int GDIAPI SelectClipRgn(HDC hdc, HRGN h)                          /* GDI.44 */
 {
-    LPDC dc = dc_validate(hdc);         /* (the result is the new composite region's) */
+    LPDC dc;
+    if (mf_dc(hdc))                     /* GD9: NULL is not recorded (0) */
+        return h ? mf_select(hdc, h) != 0 : 0;
+    dc = dc_validate(hdc);              /* (the result is the new composite region's) */
     if (!dc)
         return ERROR;
     if (!h) {
@@ -1003,18 +1047,24 @@ static int clip_rect_op(LPDC dc, int l, int t, int r, int b, int mode)
 int GDIAPI IntersectClipRect(HDC hdc, int l, int t, int r, int b)  /* GDI.22 */
 {
     LPDC dc = dc_validate(hdc);
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_INTERSECTCLIPRECT, b, r, t, l);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_AND) : ERROR;
 }
 
 int GDIAPI ExcludeClipRect(HDC hdc, int l, int t, int r, int b)    /* GDI.21 */
 {
     LPDC dc = dc_validate(hdc);
+    if (mf_dc(hdc))
+        return mf_rec4(hdc, MR_EXCLUDECLIPRECT, b, r, t, l);
     return dc ? clip_rect_op(dc, l, t, r, b, RGN_DIFF) : ERROR;
 }
 
 int GDIAPI OffsetClipRgn(HDC hdc, int dx, int dy)                  /* GDI.32 */
 {
     LPDC dc = dc_validate(hdc);
+    if (mf_dc(hdc))
+        return mf_rec2(hdc, MR_OFFSETCLIPRGN, dy, dx);
     if (!dc)
         return ERROR;
     if (dc->hClipRgn) {
@@ -1416,6 +1466,8 @@ int GDIAPI SaveDC(HDC hdc)                                         /* GDI.30 */
     LPDC dc = dc_get(hdc);
     SAVEDDC __far *sv;
     XP x, clip = 0;
+    if (mf_dc(hdc))
+        return mf_rec0(hdc, MR_SAVEDC);   /* GD9: 1 */
     if (!dc)
         return 0;
     if (dc->hClipRgn) {
@@ -1441,6 +1493,8 @@ int GDIAPI SaveDC(HDC hdc)                                         /* GDI.30 */
 BOOL GDIAPI RestoreDC(HDC hdc, int level)                          /* GDI.39 */
 {
     LPDC dc = dc_get(hdc);
+    if (mf_dc(hdc))
+        return mf_rec1(hdc, MR_RESTOREDC, level);
     if (!dc)
         return FALSE;
     if (level < 0)
