@@ -1,0 +1,14 @@
+; WS07: w16's own test file W16TEST.HLP (tests/winhelp/w16test.rtf, built by OpenWatcom's whc): fonts, alignment, indents, tabs, a box, a non-scrolling region, bitmaps, a left picture, SHG hot spots, a multi-resolution bitmap, a metafile
+; hlp: w16test
+run WINHELP.EXE W16TEST.HLP
+wait 3000
+snap C:\S1.BMP
+dump
+key 22
+wait 800
+snap C:\S2.BMP
+key 22
+wait 800
+snap C:\S3.BMP
+close
+wait 1500

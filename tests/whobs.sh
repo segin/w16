@@ -10,6 +10,8 @@
 #   ; ini: section:key=value       a WIN.INI key
 #   ; get: PATH                    a file under C:\ to bring back
 #   ; put: SRC=DEST                a file of the checkout as C:\DEST
+#   ; hlp: NAME                    tests/winhelp/NAME.hpj built by whc
+#   ; owhlp: NAME.hlp              OpenWatcom's $WATCOM/binw/NAME.hlp
 # Afterwards <outdir> holds the screenshots (*.png), SNAP's log (log.txt),
 # WIN.INI and WINHELP.BMK as the session left them, and the files asked for.
 set -eu
@@ -33,6 +35,20 @@ done
 files="$files $out/WIN.INI.in=WINDOWS/WIN.INI"
 for p in $(sed -n 's/^; put: *//p' "$script"); do
     files="$files $root/${p%%=*}=${p#*=}"
+done
+# "; hlp: NAME": w16's own test help file tests/winhelp/NAME.hpj, built by
+# OpenWatcom's whc (tests/winhelp/mkhlp.sh) as C:\WINDOWS\NAME.HLP;
+# "; owhlp: NAME.hlp": one of OpenWatcom's own help files ($WATCOM/binw).
+# Either missing: exit 3 (skipped).
+for n in $(sed -n 's/^; hlp: *//p' "$script"); do
+    u=$(echo "$n" | tr a-z A-Z)
+    "$root/tests/winhelp/mkhlp.sh" "$n" "$out/$u.HLP" || exit 3
+    files="$files $out/$u.HLP=WINDOWS/$u.HLP"
+done
+for n in $(sed -n 's/^; owhlp: *//p' "$script"); do
+    f=${WATCOM:-/opt/watcom}/binw/$n
+    [ -f "$f" ] || { echo "whobs: no $f" >&2; exit 3; }
+    files="$files $f=WINDOWS/$(echo "$n" | tr a-z A-Z)"
 done
 get="WINDOWS/WIN.INI WINDOWS/WINHELP.BMK ${WHOBS_GET:-} $(sed -n 's/^; get: *//p' "$script" | tr '\n' ' ')"
 REFRUN_FILES="$files $*" REFRUN_OUT=$out REFRUN_GET="$get" \

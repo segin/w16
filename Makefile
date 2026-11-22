@@ -1458,8 +1458,9 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 	    option map=$(B)/tests/wrmet.map file { $(B)/tests/start.o $(B)/tests/wrmet.o }
 
 
-test: dos fonts grpcheck $(B)/host/pwtest
+test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
+	WATCOM=$(WATCOM) tests/winhelp/hlpcheck.sh $(B)/hlpdump
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
 	python3 tools/irqcheck.py --fixed $(DOS)/SYSTEM.DRV $(DOS)/KEYBOARD.DRV $(DOS)/MOUSE.DRV $(DOS)/COMM.DRV $(DOS)/VGA.DRV $(DOS)/MMSOUND.DRV \

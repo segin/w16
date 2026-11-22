@@ -170,6 +170,14 @@ static void hotspots(VIEW *v, VPICT FAR *pp, LPCB q, DWORD n)
             g->y = (short)hlp_rw(h + 5);
             g->cx = (short)hlp_rw(h + 7);
             g->cy = (short)hlp_rw(h + 9);
+            if (pp->mfx && pp->mfy) {
+                /* a metafile's hot spots are in its own units (WS07:
+                   0-2540 across a 5080-unit picture is its left half) */
+                g->x = (short)((long)g->x * pp->cx / pp->mfx);
+                g->cx = (short)((long)g->cx * pp->cx / pp->mfx);
+                g->y = (short)((long)g->y * pp->cy / pp->mfy);
+                g->cy = (short)((long)g->cy * pp->cy / pp->mfy);
+            }
             g->hot = hot;
             pp->nhot++;
         }

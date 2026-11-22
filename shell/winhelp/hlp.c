@@ -510,7 +510,16 @@ BOOL hlp_kwfind(HLP FAR *h, const char FAR *kw, BOOL partial, WORD FAR *count, D
  * Blocks of blksize bytes, each a 12-byte header (last link of the
  * previous block, first link in this one, last topic header) and data,
  * LZ77-compressed in 3.1 files (to at most 16K). A TOPICPOS is
- * 12 + block * dsize + offset in the block's decompressed data. */
+ * 12 + block * dsize + offset in the block's decompressed data.
+ * Microsoft's compilers stop a block's data at 16K and carry a link that
+ * does not fit on into the next block; OpenWatcom's whc instead lets the
+ * block decompress past 16K with the whole link, the next block starting
+ * with the next link (its cmix.hlp and fmix.hlp: blocks of up to 19703
+ * bytes). Reading on past a block's end into the next serves both. */
+
+/* the most a 4K block can decompress to: every flag bit a 3-byte copy
+   of 18 bytes */
+#define MAXBLOCK(raw) ((DWORD)(raw) / 17 * 144 + 144)
 
 static LPB topic_block(HLP FAR *h, LONG block, WORD FAR *len)
 {
@@ -531,7 +540,7 @@ static LPB topic_block(HLP FAR *h, LONG block, WORD FAR *len)
     c = &h->cache[h->cachenext];
     h->cachenext = (h->cachenext + 1) % HLP_CACHE;
     if (!c->buf) {
-        c->buf = (LPB)hio_alloc(h->dsize);
+        c->buf = (LPB)hio_alloc(h->lz ? MAXBLOCK(h->blksize) : h->dsize);
         if (!c->buf)
             return NULL;
     }
@@ -539,7 +548,7 @@ static LPB topic_block(HLP FAR *h, LONG block, WORD FAR *len)
     if (h->lz) {
         if (!hlp_fread(h, h->f_topic, at + 12, h->raw, (WORD)n))
             return NULL;
-        c->len = (WORD)hlp_lz77(h->raw, n, c->buf, h->dsize);
+        c->len = (WORD)hlp_lz77(h->raw, n, c->buf, MAXBLOCK(h->blksize));
     } else {
         if (!hlp_fread(h, h->f_topic, at + 12, c->buf, (WORD)n))
             return NULL;
@@ -550,15 +559,30 @@ static LPB topic_block(HLP FAR *h, LONG block, WORD FAR *len)
     return c->buf;
 }
 
+/* a position's block and offset; HLP_OVERFLOW marks one past 16K in the
+   block before (whc's), as hlp_nextlink finds them */
+LONG hlp_posblock(HLP FAR *h, DWORD pos, WORD FAR *off)
+{
+    DWORD p = pos & ~HLP_OVERFLOW;
+    LONG b = (LONG)((p - 12) / h->dsize);
+    WORD o = (WORD)((p - 12) % h->dsize);
+    if (pos & HLP_OVERFLOW) {
+        b--;
+        o += (WORD)h->dsize;
+    }
+    if (off)
+        *off = o;
+    return b;
+}
+
 BOOL hlp_tread(HLP FAR *h, DWORD pos, void FAR *buf, WORD n)
 {
     LONG block;
     WORD o, len;
     LPB d = (LPB)buf;
-    if (pos < 12)
+    if ((pos & ~HLP_OVERFLOW) < 12)
         return FALSE;
-    block = (LONG)((pos - 12) / h->dsize);
-    o = (WORD)((pos - 12) % h->dsize);
+    block = hlp_posblock(h, pos, &o);
     while (n) {
         LPB b = topic_block(h, block, &len);
         WORD k;
@@ -597,16 +621,28 @@ BOOL hlp_link(HLP FAR *h, DWORD pos, HLPLINK FAR *l)
 }
 
 /* the next link's position; 0 at the end */
+/* The next link. whc writes the position of a link that starts past
+   16K in an overflowing block as if it were in the next block (block * 16K
+   + offset): when the next link continues this one's bytes there and
+   this block's data reaches that far, it is the overflow. */
 DWORD hlp_nextlink(HLP FAR *h, DWORD pos, HLPLINK FAR *l)
 {
     DWORD n;
+    WORD off, noff, len;
+    LONG b, nb;
     if (h->minor <= 16)
-        n = pos + l->next;      /* 3.0: a distance */
+        n = (pos & ~HLP_OVERFLOW) + l->next;    /* 3.0: a distance */
     else
         n = l->next;
-    if (n == 0 || n == 0xFFFFFFFFUL || n <= pos)
+    if (n == 0 || n == 0xFFFFFFFFUL || n <= (pos & ~HLP_OVERFLOW) || n < 12)
         return 0;
-    (void)h;
+    if (!h->lz)
+        return n;
+    b = hlp_posblock(h, pos, &off);
+    nb = hlp_posblock(h, n, &noff);
+    if (nb == b + 1 && (DWORD)off + (DWORD)l->blocksize == h->dsize + noff &&
+        topic_block(h, b, &len) && (DWORD)len > h->dsize + noff)
+        return n | HLP_OVERFLOW;
     return n;
 }
 
@@ -710,6 +746,14 @@ BOOL hlp_topichdr(HLP FAR *h, int topic, HLPTHDR FAR *t, char FAR *title, WORD n
         t->scroll = hlp_rl(d.d1 + 20);
         t->nexttopic = hlp_rl(d.d1 + 24);
     }
+    {
+        /* the header's positions as hlp_nextlink resolves them (whc) */
+        DWORD rn = hlp_nextlink(h, pos, &l);
+        if (rn && t->scroll == (rn & ~HLP_OVERFLOW))
+            t->scroll = rn;
+        if (rn && t->nonscroll == (rn & ~HLP_OVERFLOW))
+            t->nonscroll = rn;
+    }
     if (title) {
         DWORD i = 0;
         while (i < d.n2 && d.d2[i] && i + 1 < ntitle) {
@@ -766,7 +810,7 @@ static BOOL index_topics(HLP FAR *h)
     if (!t)
         return FALSE;
     while (pos && hlp_link(h, pos, &l)) {
-        LONG b = (LONG)((pos - 12) / h->dsize);
+        LONG b = hlp_posblock(h, pos, NULL);
         if (b != block) {
             block = b;
             count = 0;

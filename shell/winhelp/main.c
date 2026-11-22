@@ -300,7 +300,7 @@ BOOL show_topic(int topic, BOOL record)
     view_layout(&g_vtopic, g_hlp, t.scroll, t.nexttopic ? t.nexttopic : 0, (short)r.right);
     view_setscroll(&g_vtopic);
     GetClientRect(g_topic, &r);
-    if (r.right != g_vtopic.width) {
+    if (r.right != g_vtopic.reqwidth) {
         /* the scroll bar came or went */
         view_layout(&g_vtopic, g_hlp, t.scroll, t.nexttopic ? t.nexttopic : 0, (short)r.right);
         view_setscroll(&g_vtopic);
@@ -414,7 +414,7 @@ static BOOL show_secondary(HLP FAR *h, int topic, LPCSTR name)
     view_layout(&g_vsecond, h, t.scroll, t.nexttopic ? t.nexttopic : 0, (short)r.right);
     view_setscroll(&g_vsecond);
     GetClientRect(g_secondtopic, &r);
-    if (r.right != g_vsecond.width) {
+    if (r.right != g_vsecond.reqwidth) {
         view_layout(&g_vsecond, h, t.scroll, t.nexttopic ? t.nexttopic : 0, (short)r.right);
         view_setscroll(&g_vsecond);
     }
@@ -506,11 +506,30 @@ static int button_find(LPCSTR name)
     return -1;
 }
 
+/* buttons in rows: as many as fit the window's width, the rest on the
+   next row (WS09: OpenWatcom's files' seventh button, Up, alone on a
+   second row in a 417-pixel window) */
+static int button_cols(void)
+{
+    RECT r;
+    int n;
+    GetClientRect(g_frame, &r);
+    n = r.right / BTN_W;
+    return n < 1 ? 1 : n;
+}
+
+static int button_rows(void)
+{
+    int c = button_cols();
+    return nbuttons ? (nbuttons + c - 1) / c : 1;
+}
+
 static void place_buttons(void)
 {
-    int i;
+    int i, c = button_cols();
     for (i = 0; i < nbuttons; i++)
-        MoveWindow(buttons[i].hwnd, i * BTN_W, 0, BTN_W, BTN_H, TRUE);
+        MoveWindow(buttons[i].hwnd, (i % c) * BTN_W, (i / c) * BTN_H, BTN_W, BTN_H, TRUE);
+    layout_frame();
 }
 
 static void new_button(WORD id, LPCSTR name, LPCSTR text, LPCSTR macro)
@@ -652,7 +671,7 @@ LRESULT CALLBACK __export IconProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 void layout_frame(void)
 {
     RECT r;
-    int ih = g_hlp ? BTN_H : 0, nh = 0;
+    int ih = g_hlp ? BTN_H * button_rows() : 0, nh = 0;
     if (!g_frame || !g_icon)
         return;
     GetClientRect(g_frame, &r);
@@ -944,7 +963,7 @@ LRESULT CALLBACK __export FrameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_SIZE:
         if (wp != SIZE_MINIMIZED)
-            layout_frame();
+            place_buttons();
         return 0;
     case WM_SETFOCUS:
         if (g_topic)

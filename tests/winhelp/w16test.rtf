@@ -1,0 +1,41 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0\fswiss Helv;}{\f1\froman Tms Rmn;}{\f2\fmodern Courier;}}
+#{\footnote contents}
+${\footnote w16 Test Contents}
+K{\footnote test;contents}
++{\footnote seq:01}
+\keepn\sb120\sa120\f0\fs28\b w16 Help Test\b0\par
+\pard\sa60\f0\fs20 This help file is w16's own (tests/winhelp/w16test.rtf, built by OpenWatcom's whc). Text in Helv 10, {\b bold}, {\i italic}, {\ul underlined}, {\strike struck out}, {\scaps Small Capitals}, {\f1 Tms Rmn}, {\f2 Courier} and {\fs28 larger}.\par
+\pard\li360\ri360\sa60\f0\fs20 A paragraph indented a quarter inch on both sides, long enough to wrap onto a second line in a window of the usual width.\par
+\pard\qc\sa60\f0\fs20 A centred line.\par
+\pard\qr\sa60\f0\fs20 A line to the right.\par
+\pard\li720\fi-360\tx720\sa60\f0\fs20 1.\tab A hanging indent with a tab stop at half an inch.\par
+\pard\tx1440\tqr\tx4320\sa60\f0\fs20 Left\tab middle\tab right-aligned\par
+\pard\box\sa60\f0\fs20 A boxed paragraph.\par
+\pard\sa60\f0\fs20 A jump: {\uldb Second Topic}{\v second}; a popup: {\ul a term}{\v term}; a jump into a secondary window: {\uldb Second in a window}{\v second>win2}; a macro hot spot: {\uldb Macros}{\v macros}.\par
+\pard\sa60\f0\fs20 Pictures: \{bmc dot.bmp\} in the text, \{bmc bars.bmp\} sixteen colours.\par
+\pard\sa60\f0\fs20 \{bml dot.bmp\}A picture on the left: text flows beside it on its right for as long as the picture is tall, then under it.\par
+\pard\sa60\f0\fs20 Hot spots (blue: jump, green: popup, red: macro): \{bmc map.shg\}\par
+\pard\sa60\f0\fs20 Two resolutions: \{bmc res.mrb\} and a metafile picture: \{bmc meta.shg\}\par
+\page
+#{\footnote second}
+${\footnote Second Topic}
+K{\footnote second}
++{\footnote seq:02}
+!{\footnote CreateButton("btn_mark", "&Marks", "JumpId(`', `macros')")}
+\pard\sb120\sa120\f0\fs28\b Second Topic\b0\par
+\pard\sa60\f0\fs20 The second topic of the browse sequence; it adds a Marks button. Back to the {\uldb contents}{\v contents}.\par
+\page
+#{\footnote term}
+\pard\sa60\f0\fs20{\b A term:} its definition, shown in a popup window.\par
+\page
+#{\footnote macros}
+${\footnote Macros}
+K{\footnote macros}
++{\footnote seq:03}
+\pard\sb120\sa120\f0\fs28\b Macros\b0\par
+\pard\sa60\f0\fs20 {\uldb JumpContext 2}{\v !JumpContext(`', 2)}, {\uldb PopupContext 3}{\v !PopupContext(`', 3)}, {\uldb JumpKeyword}{\v !JumpKeyword(`', `second')}.\par
+\pard\sa60\f0\fs20 {\uldb SaveMark}{\v !SaveMark(`here')}, {\uldb IfThenElse}{\v !IfThenElse(IsMark(`here'), `JumpId(`', `second')', `JumpId(`', `term')')}, {\uldb DeleteMark}{\v !DeleteMark(`here')}.\par
+\pard\sa60\f0\fs20 {\uldb DisableButton}{\v !DisableButton(`btn_search')}, {\uldb EnableButton}{\v !EnableButton(`btn_search')}, {\uldb a menu}{\v !InsertMenu(`mnu_test', `&Test', 4); AppendItem(`mnu_test', `itm_one', `&Contents', `Contents()')}.\par
+\pard\sa60\f0\fs20 {\uldb Next}{\v !Next()}, {\uldb Prev}{\v !Prev()}, {\uldb History}{\v !History()}, {\uldb CloseWindow}{\v !CloseWindow(`win2')}.\par
+}

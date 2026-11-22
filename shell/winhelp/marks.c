@@ -167,7 +167,7 @@ static DWORD topic_key(void)
     pos = g_hlp->topics[g_cur].pos;
     if (!hlp_link(g_hlp, pos, &l))
         return 0;
-    return hlp_nextlink(g_hlp, pos, &l);
+    return hlp_nextlink(g_hlp, pos, &l) & ~HLP_OVERFLOW;   /* the file's form */
 }
 
 /* the topic a key belongs to: the last whose header is before it */
@@ -175,7 +175,7 @@ static int topic_of_key(DWORD key)
 {
     int i, r = -1;
     for (i = 0; i < (int)g_hlp->ntopics; i++)
-        if (g_hlp->topics[i].pos < key)
+        if ((g_hlp->topics[i].pos & ~HLP_OVERFLOW) < key)
             r = i;
     return r;
 }

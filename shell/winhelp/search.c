@@ -70,13 +70,15 @@ static void show_topics(HWND d)
     SetDlgItemText(d, IDC_SEARCHEDIT, kw);
     kw_topics(kw, FALSE);
     SendMessage(tl, LB_RESETCONTENT, 0, 0);
+    /* sorted by title (WS09: the list box is LBS_SORT) */
     for (k = 0; k < ntopics; k++) {
         char t[128];
-        int ti = hlp_topic_at(sh, topics[k]);
+        int ti = hlp_topic_at(sh, topics[k]), at;
         t[0] = 0;
         hlp_title(sh, ti, t, sizeof t);
-        SendMessage(tl, LB_INSERTSTRING, (WPARAM)-1, (LPARAM)(LPSTR)t);
-        SendMessage(tl, LB_SETITEMDATA, k, k);
+        at = (int)SendMessage(tl, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+        if (at >= 0)
+            SendMessage(tl, LB_SETITEMDATA, at, k);
     }
     SendMessage(tl, LB_SETCURSEL, 0, 0);
     EnableWindow(tl, ntopics > 0);
@@ -200,6 +202,8 @@ BOOL CALLBACK __export SearchProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
             /* fall through */
         case IDC_GOTO: {
             int i = (int)SendDlgItemMessage(d, IDC_TOPICS, LB_GETCURSEL, 0, 0);
+            if (i >= 0)
+                i = (int)SendDlgItemMessage(d, IDC_TOPICS, LB_GETITEMDATA, i, 0);
             if (i >= 0 && i < ntopics)
                 EndDialog(d, i);
             return TRUE;

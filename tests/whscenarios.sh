@@ -27,6 +27,12 @@ newbase=$(mktemp); trap 'rm -f "$newbase"' EXIT
 for n in $names; do
     script=$sdir/$n.txt
     result=ok
+    if grep -q '^; \(hlp\|owhlp\):' "$script" &&
+       { ! "$root/tests/winhelp/mkhlp.sh" w16test /dev/null 2>/dev/null ||
+         [ ! -d "${WATCOM:-/opt/watcom}/binw" ]; }; then
+        echo "== $n: skipped (no OpenWatcom: whc and its help files)"
+        continue
+    fi
     "$root/tests/whobs.sh" "$script" "$out/$n/orig" > /dev/null &
     WHOBS_EXE=$root/build/dos/WINHELP.EXE "$root/tests/whobs.sh" "$script" "$out/$n/w16" > /dev/null &
     wait

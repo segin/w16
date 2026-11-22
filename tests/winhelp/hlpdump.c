@@ -136,6 +136,12 @@ static void dump_link(HLP *h, DWORD pos, HLPLINK *l)
     }
     if (it.d1 != it.e1) {
         out("\n  !! %ld bytes of LinkData1 left\n", (long)(it.e1 - it.d1));
+        if (getenv("HLPDUMP_HEX")) {
+            DWORD i;
+            for (i = 0; i < d.n1; i++)
+                out("%02X%s", d.d1[i], (i & 31) == 31 ? "\n" : " ");
+            out("\n");
+        }
         bad = 1;
     }
     out("\n");

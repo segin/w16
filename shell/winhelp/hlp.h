@@ -150,6 +150,8 @@ BOOL hlp_kwfind(HLP FAR *h, const char FAR *kw, BOOL partial, WORD FAR *count, D
 
 /* reading |TOPIC */
 BOOL hlp_tread(HLP FAR *h, DWORD pos, void FAR *buf, WORD n);
+#define HLP_OVERFLOW 0x80000000UL
+LONG hlp_posblock(HLP FAR *h, DWORD pos, WORD FAR *off);
 typedef struct {
     LONG blocksize, datalen2;
     DWORD prev, next;

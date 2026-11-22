@@ -73,7 +73,9 @@ static WORD font_slot(VIEW *v, HDC dc, WORD f)
     if (v->hlp && f < v->hlp->nfont) {
         static const BYTE fam[] = { FF_DONTCARE, FF_MODERN, FF_ROMAN, FF_SWISS, FF_SCRIPT, FF_DECORATIVE };
         d = &v->hlp->fonts[f];
-        lf.lfHeight = -px(d->halfpts);
+        /* small capitals: the font 4/5 the size (WS07: 10 points
+           shown as 8) */
+        lf.lfHeight = -px(d->attr & 0x20 ? d->halfpts * 4 / 5 : d->halfpts);
         lf.lfWeight = d->attr & 1 ? FW_BOLD : FW_NORMAL;
         lf.lfItalic = (d->attr & 2) != 0;
         lf.lfUnderline = (d->attr & 0x14) != 0;
@@ -94,6 +96,7 @@ static WORD font_slot(VIEW *v, HDC dc, WORD f)
     SelectObject(dc, old);
     v->fascent[i] = (BYTE)tm.tmAscent;
     v->fheight[i] = (BYTE)tm.tmHeight;
+    v->fover[i] = (BYTE)tm.tmOverhang;
     return i;
 }
 
@@ -200,6 +203,12 @@ typedef struct {
     short hot;          /* current hot spot, -1 none */
     BOOL hotvisible;
     BOOL marked;        /* the annotation mark is placed */
+    short floatl, floatlbottom;     /* a left picture: text indent, until y */
+    short floatr, floatrbottom;     /* a right picture */
+    BOOL inbox;         /* a boxed paragraph's text (6 pixels in) */
+    short boxtop;       /* where its box starts */
+    short wordw;        /* the unbroken run of atoms just added */
+    short minw;         /* the width the widest unbroken run needs */
 } LAY;
 
 /* per-font width tables, made on demand (keyed on the font handle, so
@@ -244,7 +253,12 @@ static int char_width(LAY *l, WORD slot, BYTE c)
 
 static short line_left(LAY *l)
 {
-    return (short)(MARGIN + px(l->para.left) + (l->firstline ? px(l->para.first) : 0));
+    short x = (short)(MARGIN + px(l->para.left) + (l->firstline ? px(l->para.first) : 0));
+    if (l->inbox)
+        x += 6;
+    if (l->floatl && l->y < l->floatlbottom)
+        x += l->floatl;
+    return x;
 }
 
 /* the right edge: the window's less the right indent, no margin (WH2:
@@ -252,7 +266,20 @@ static short line_left(LAY *l)
    of a 417-pixel window with an 18 hp indent) */
 static short line_right(LAY *l)
 {
-    return (short)(l->width - px(l->para.right));
+    short x = (short)(l->width - px(l->para.right));
+    if (l->inbox)
+        x -= 6;
+    if (l->floatr && l->y < l->floatrbottom)
+        x -= l->floatr;
+    return x;
+}
+
+/* the gap a run of synthesized italic or bold leaves before the next
+   run: its font's overhang, which 3.1 counts once per run (WS07: "italic
+   ," with a space before the comma) */
+static short atom_end(LATOM *p)
+{
+    return p->x + p->cx;
 }
 
 static short tab_stop(LAY *l, short x)
@@ -378,7 +405,10 @@ static void add_atom(LAY *l, LATOM *a)
     for (;;) {
         left = line_left(l);
         right = line_right(l);
-        x = nline ? line[nline - 1].x + line[nline - 1].cx : 0;
+        x = nline ? atom_end(&line[nline - 1]) : 0;
+        if (nline && line[nline - 1].kind == A_CHAR && a->kind != A_TAB &&
+            line[nline - 1].font != a->font)
+            x += l->v->fover[line[nline - 1].font];
         if (a->kind == A_TAB) {
             a->cx = tab_stop(l, left + x) - (left + x);
             if (a->cx < 0)
@@ -388,6 +418,12 @@ static void add_atom(LAY *l, LATOM *a)
         /* a word fits when it and the space after it do (WS02: "...there
            may be one " fits 405 pixels, "...the Help window, just "
            does not) */
+        if (nline == 0 && left + x + a->cx > right && !(l->para.bits & PB_NOWRAP)) {
+            /* alone and still too wide: the topic needs a wider window */
+            short need = left + x + a->cx + (l->width - right);
+            if (need > l->minw)
+                l->minw = need;
+        }
         if (left + x + a->cx <= right || nline == 0 || (l->para.bits & PB_NOWRAP)) {
             if (nline < LMAX)
                 line[nline++] = *a;
@@ -406,8 +442,14 @@ static void add_atom(LAY *l, LATOM *a)
                     line[nline++] = *a;
                 return;
             }
-            if (b < 0)
-                b = nline - 1;  /* no space: break before this atom */
+            if (b < 0) {
+                /* no space: break before this atom, and note how wide
+                   the unbroken run wanted the line (WS09) */
+                short need = left + x + a->cx + (l->width - right);
+                if (need > l->minw)
+                    l->minw = need;
+                b = nline - 1;
+            }
             emit_line(l, b + 1, FALSE);
             l->firstline = FALSE;
             /* carry the rest */
@@ -417,7 +459,10 @@ static void add_atom(LAY *l, LATOM *a)
             nline = 0;
             for (i = 0; i < k; i++) {
                 LATOM t = line[i];
-                short tx = nline ? line[nline - 1].x + line[nline - 1].cx : 0;
+                short tx = nline ? atom_end(&line[nline - 1]) : 0;
+                if (nline && line[nline - 1].kind == A_CHAR && t.kind != A_TAB &&
+                    line[nline - 1].font != t.font)
+                    tx += l->v->fover[line[nline - 1].font];
                 if (t.kind == A_TAB) {
                     t.cx = tab_stop(l, line_left(l) + tx) - (line_left(l) + tx);
                     if (t.cx < 0)
@@ -442,17 +487,35 @@ static void para_start(LAY *l)
     if (l->newpara) {
         l->y += (short)px(l->para.above);
         l->newpara = FALSE;
+        /* a box (\box): 2 pixels, its line, 2 pixels, then the text 6
+           pixels in from the indents (WS07) */
+        if (l->para.border & 1) {
+            l->boxtop = l->y + 2;
+            l->y += 5;
+            l->inbox = TRUE;
+        }
     }
 }
 
 static void para_end(LAY *l)
 {
     VIEW *v = l->v;
-    /* borders: w16 draws the bottom and top ones as lines across the
-       paragraph's indents (box: all four) */
+    if (l->inbox) {
+        /* 3 pixels under the text, the box's bottom line; the box spans
+           the indents less 2 pixels each side */
+        DITEM FAR *d = item_add(v);
+        l->y += 4;
+        if (d) {
+            d->kind = DI_BOX;
+            d->x = (short)(MARGIN + px(l->para.left) + 2);
+            d->y = l->boxtop;
+            d->cx = (short)(l->width - px(l->para.right) - 2 - d->x + 1);
+            d->cy = l->y - l->boxtop;
+        }
+        l->inbox = FALSE;
+    }
     l->y += (short)px(l->para.below);
     l->newpara = TRUE;
-    (void)v;
 }
 
 static short hot_add(VIEW *v, BYTE code, DWORD hash, LPCSTR file, LPCSTR window, LPCSTR macro, WORD mlen)
@@ -580,7 +643,7 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
             if (!started) {
                 para_start(l);
                 ptop = l->y;
-                if (l->para.border & 3)
+                if ((l->para.border & 3) == 2)
                     border_line(l, l->y, l->para.border & 0x20 ? 2 : 1);
                 started = TRUE;
             }
@@ -610,7 +673,7 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
                 ptop = l->y;
             }
             flush_line(l, TRUE);
-            if (l->para.border & 9)
+            if ((l->para.border & 9) == 8)
                 border_line(l, l->y, l->para.border & 0x20 ? 2 : 1);
             para_end(l);
             started = FALSE;
@@ -644,15 +707,43 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
                 VPICT FAR *p = &v->picts[v->npicts];
                 m_set(p, 0, sizeof *p);
                 if (pict_load(h, it.data, it.dlen, FALSE, p, v)) {
-                    a.kind = A_PICT;
-                    a.pict = v->npicts++;
-                    a.cx = p->cx;
-                    add_atom(l, &a);
+                    if (it.align == 0) {
+                        a.kind = A_PICT;
+                        a.pict = v->npicts++;
+                        a.cx = p->cx;
+                        add_atom(l, &a);
+                    } else {
+                        /* \bml, \bmr: at the margin, from this line's top;
+                           the text beside it 10 pixels off until it ends
+                           (WS07) */
+                        DITEM FAR *d = item_add(v);
+                        if (d) {
+                            d->kind = DI_PICT;
+                            d->font = v->npicts;
+                            d->cx = p->cx;
+                            d->cy = p->cy;
+                            d->y = l->y;
+                            d->hot = a.hot;
+                            if (it.align == 1) {
+                                d->x = (short)(MARGIN + px(l->para.left));
+                                l->floatl = p->cx + 10;
+                                l->floatlbottom = l->y + p->cy;
+                            } else {
+                                d->x = (short)(l->width - px(l->para.right) - p->cx);
+                                l->floatr = p->cx + 10;
+                                l->floatrbottom = l->y + p->cy;
+                            }
+                        }
+                        v->npicts++;
+                    }
                 }
             }
             break;
         case PI_JUMP:
-            l->hot = hot_add(v, it.code, it.off, it.file, it.window, NULL, 0);
+            /* a window by its number (type 1): its [WINDOWS] name */
+            l->hot = hot_add(v, it.code, it.off, it.file,
+                             it.window ? it.window : it.wnum < h->nwin ? (LPCSTR)h->win[it.wnum].name : NULL,
+                             NULL, 0);
             l->hotvisible = TRUE;
             break;
         case PI_MACRO:
@@ -715,7 +806,7 @@ void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HD
     l.font = font_slot(v, l.dc, 0);
     nline = 0;
     char_widths_flush();
-    for (pos = first; pos && pos != end && hlp_link(h, pos, &lk); pos = hlp_nextlink(h, pos, &lk)) {
+    for (pos = first; pos && (pos & ~HLP_OVERFLOW) != (end & ~HLP_OVERFLOW) && hlp_link(h, pos, &lk); pos = hlp_nextlink(h, pos, &lk)) {
         if (lk.type == 2 && pos != first)
             break;
         if (lk.type == 0x20 || lk.type == 0x23 || lk.type == 1)
@@ -724,10 +815,24 @@ void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HD
             break;
     }
     v->height = l.y;
+    if (l.floatlbottom > v->height)
+        v->height = l.floatlbottom;
+    if (l.floatrbottom > v->height)
+        v->height = l.floatrbottom;
+    v->minwidth = l.minw;
     if (dev)
         lpy = oldlpy;
     else
         ReleaseDC(v->hwnd, l.dc);
+    /* a word wider than the window: laid out as wide as it needs, the
+       window scrolls sideways (WS09, OpenWatcom's cmix.hlp) */
+    if (!dev && !v->popup && !v->nsr && l.minw > width && l.minw < 4000) {
+        v->reqwidth = width;
+        view_layout_dc(v, h, first, end, l.minw, NULL);
+        v->reqwidth = width;
+        return;
+    }
+    v->reqwidth = width;
 }
 
 void view_free(VIEW *v)
@@ -771,8 +876,9 @@ void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
             continue;
         if (d->hot >= 0 && (WORD)d->hot < v->nhots) {
             code = v->hots[d->hot].code;
-            /* "without font change" hot spots: E6, E7, EB, EF, CC */
-            vis = !(code == 0xE6 || code == 0xE7 || code == 0xEB || code == 0xEF || code == 0xCC);
+            /* "without font change" hot spots: E6, E7, EE, EF, CC (EB, a jump
+               into another file or window, is green: WS07) */
+            vis = !(code == 0xE6 || code == 0xE7 || code == 0xEE || code == 0xEF || code == 0xCC);
         }
         switch (d->kind) {
         case DI_TEXT: {
@@ -797,11 +903,38 @@ void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
             break;
         }
         case DI_PICT:
-            if (d->font < v->npicts)
-                pict_draw(dc, &v->picts[d->font], x, y);
+            if (d->font < v->npicts) {
+                VPICT FAR *p = &v->picts[d->font];
+                WORD k;
+                pict_draw(dc, p, x, y);
+                /* a picture's visible hot spots framed: jumps and macros
+                   solid, popups dotted (WS07) */
+                for (k = 0; k < p->nhot; k++) {
+                    SHGHOT FAR *g = &v->shg[p->hotfirst + k];
+                    BYTE hc = g->hot >= 0 && (WORD)g->hot < v->nhots ? v->hots[g->hot].code : 0;
+                    HPEN pen, op;
+                    HBRUSH ob;
+                    if (hc != 0xC8 && hc != 0xE2 && hc != 0xE3 && hc != 0xEA && hc != 0xEB)
+                        continue;
+                    pen = CreatePen(hc == 0xE2 || hc == 0xEA ? PS_DOT : PS_SOLID, 1, RGB(0, 0, 0));
+                    op = SelectObject(dc, pen);
+                    ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
+                    SetBkMode(dc, TRANSPARENT);
+                    Rectangle(dc, x + g->x, y + g->y, x + g->x + g->cx, y + g->y + g->cy);
+                    SelectObject(dc, ob);
+                    SelectObject(dc, op);
+                    DeleteObject(pen);
+                }
+            }
             break;
         case DI_LINE:
             PatBlt(dc, x, y, d->cx, d->cy, BLACKNESS);
+            break;
+        case DI_BOX:
+            PatBlt(dc, x, y, d->cx, 1, BLACKNESS);
+            PatBlt(dc, x, y + d->cy - 1, d->cx, 1, BLACKNESS);
+            PatBlt(dc, x, y, 1, d->cy, BLACKNESS);
+            PatBlt(dc, x + d->cx - 1, y, 1, d->cy, BLACKNESS);
             break;
         }
         if (d->hot >= 0 && d->hot == v->focus) {
@@ -883,9 +1016,21 @@ static short client_h(VIEW *v)
 
 void view_setscroll(VIEW *v)
 {
-    short ch = client_h(v), max = v->height - ch;
+    short ch = client_h(v), max = v->height - ch, hmax = v->width - v->reqwidth;
     if (v->nsr || v->popup)
         return;
+    /* sideways when laid out wider than the window */
+    if (hmax <= 0) {
+        v->hscroll = 0;
+        SetScrollRange(v->hwnd, SB_HORZ, 0, 0, TRUE);
+    } else {
+        if (v->hscroll > hmax)
+            v->hscroll = hmax;
+        SetScrollRange(v->hwnd, SB_HORZ, 0, hmax, FALSE);
+        SetScrollPos(v->hwnd, SB_HORZ, v->hscroll, TRUE);
+    }
+    ch = client_h(v);
+    max = v->height - ch;
     if (max <= 0) {
         v->scroll = 0;
         SetScrollRange(v->hwnd, SB_VERT, 0, 0, TRUE);
@@ -897,6 +1042,23 @@ void view_setscroll(VIEW *v)
         SetScrollRange(v->hwnd, SB_VERT, 0, max, FALSE);
         SetScrollPos(v->hwnd, SB_VERT, v->scroll, TRUE);
     }
+}
+
+static void hscroll_to(VIEW *v, short pos)
+{
+    short max = v->width - v->reqwidth;
+    if (max < 0)
+        max = 0;
+    if (pos > max)
+        pos = max;
+    if (pos < 0)
+        pos = 0;
+    if (pos == v->hscroll)
+        return;
+    ScrollWindow(v->hwnd, v->hscroll - pos, 0, NULL, NULL);
+    v->hscroll = pos;
+    SetScrollPos(v->hwnd, SB_HORZ, pos, TRUE);
+    UpdateWindow(v->hwnd);
 }
 
 static void scroll_to(VIEW *v, short pos)
@@ -925,7 +1087,7 @@ static void view_size(VIEW *v)
     GetClientRect(v->hwnd, &r);
     if (!v->hlp || v->popup)
         return;
-    if (r.right != v->width)
+    if (r.right != v->reqwidth)
         view_layout(v, v->hlp, v->first, v->end, (short)r.right);
     view_setscroll(v);
 }
@@ -975,7 +1137,7 @@ void view_activate(VIEW *v, short hot, POINT pt)
             hlp_strcpyn(window, gt + 1, sizeof window);
         }
         hlp_strcpyn(file, str, sizeof file);
-        if (h->code == 0xEA || h->code == 0xEB) {
+        if (h->code == 0xEA || h->code == 0xEE) {
             jump_hash(v->hlp, file[0] ? file : NULL, h->hash, NULL, TRUE, pt);
         } else {
             popup_close();
@@ -1007,7 +1169,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         PAINTSTRUCT ps;
         BeginPaint(w, &ps);
         if (v)
-            view_paint(v, ps.hdc, &ps.rcPaint, 0, (short)-v->scroll);
+            view_paint(v, ps.hdc, &ps.rcPaint, (short)-v->hscroll, (short)-v->scroll);
         EndPaint(w, &ps);
         return 0;
     }
@@ -1031,6 +1193,18 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+    case WM_HSCROLL:
+        if (!v)
+            break;
+        switch (wp) {
+        case SB_LINEUP: hscroll_to(v, v->hscroll - 16); break;
+        case SB_LINEDOWN: hscroll_to(v, v->hscroll + 16); break;
+        case SB_PAGEUP: hscroll_to(v, v->hscroll - v->reqwidth); break;
+        case SB_PAGEDOWN: hscroll_to(v, v->hscroll + v->reqwidth); break;
+        case SB_THUMBTRACK:
+        case SB_THUMBPOSITION: hscroll_to(v, (short)LOWORD(lp)); break;
+        }
+        return 0;
     case WM_KEYDOWN:
         if (!v)
             break;
@@ -1079,7 +1253,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             POINT pt;
             GetCursorPos(&pt);
             ScreenToClient(w, &pt);
-            if (view_hit(v, (short)pt.x, (short)(pt.y + v->scroll)) >= 0) {
+            if (view_hit(v, (short)(pt.x + v->hscroll), (short)(pt.y + v->scroll)) >= 0) {
                 SetCursor(g_hand);
                 return TRUE;
             }
@@ -1087,7 +1261,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_LBUTTONDOWN:
         if (v && !v->popup) {
-            short hot = view_hit(v, (short)LOWORD(lp), (short)(HIWORD(lp) + v->scroll));
+            short hot = view_hit(v, (short)(LOWORD(lp) + v->hscroll), (short)(HIWORD(lp) + v->scroll));
             if (hot >= 0) {
                 POINT pt;
                 pt.x = (short)LOWORD(lp);

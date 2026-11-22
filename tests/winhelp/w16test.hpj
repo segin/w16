@@ -1,0 +1,17 @@
+; w16test.hpj - w16 WINHELP's own test help file (tests/winhelp/w16test.rtf;
+;   built at test time by OpenWatcom's whc, tests/winhelp/mkw16test.sh)
+[OPTIONS]
+TITLE=w16 Help Test
+COMPRESS=true
+CONTENTS=contents
+[FILES]
+w16test.rtf
+[WINDOWS]
+win2 = "Second Window", (100,100,400,300), 0, (255,255,192), (192,192,192)
+[CONFIG]
+BrowseButtons()
+[MAP]
+contents 1
+second 2
+term 3
+macros 4

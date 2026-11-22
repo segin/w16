@@ -96,6 +96,7 @@
 #define DI_ANNOT    3       /* the annotation mark (a picture) */
 #define DI_EOL      4       /* the end of a line (Copy's text) */
 #define DI_EOP      5       /* the end of a paragraph record */
+#define DI_BOX      6       /* a \box frame: x, y, cx, cy */
 #define HOT_ANNOTATION 0x01 /* the annotation mark's hot spot */
 
 typedef struct {
@@ -161,6 +162,10 @@ typedef struct VIEW {
     HFONT fonts[VIEW_MAXFONT];
     BYTE fascent[VIEW_MAXFONT];
     BYTE fheight[VIEW_MAXFONT];
+    BYTE fover[VIEW_MAXFONT];       /* tmOverhang */
+    short reqwidth;         /* the width asked for (the window's) */
+    short minwidth;         /* the widest unbroken run's need */
+    short hscroll;          /* horizontal scroll position */
     short focus;            /* the hot spot Tab selected, -1 none */
     BOOL annotated;         /* draw the annotation mark first */
 } VIEW;
