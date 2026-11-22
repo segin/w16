@@ -33,7 +33,7 @@ make -j"$(nproc)"          # everything below
 
 | Output | What |
 |---|---|
-| `build/dos/` | every w16 module and program: `WIN.COM`, `DOSX.EXE`, `KRNL286.EXE`, `KRNL386.EXE`, `USER.EXE`, `GDI.EXE`, `SHELL.DLL`, `WINOLDAP.MOD`, `WINOA386.MOD`, `WIN87EM.DLL`, `VGA.DRV`, `MOUSE.DRV`, `PROGMAN.EXE`, `WINFILE.EXE`, `NOTEPAD.EXE`, `WRITE.EXE`, `REGEDIT.EXE`, `WINHELP.EXE`, `SNAP.EXE`, …, plus the test probes |
+| `build/dos/` | every w16 module and program: `WIN.COM`, `DOSX.EXE`, `KRNL286.EXE`, `KRNL386.EXE`, `USER.EXE`, `GDI.EXE`, `SHELL.DLL`, `WINOLDAP.MOD`, `WINOA386.MOD`, `WIN87EM.DLL`, `VGA.DRV`, `MOUSE.DRV`, `PROGMAN.EXE`, `WINFILE.EXE`, `NOTEPAD.EXE`, `WRITE.EXE`, `REGEDIT.EXE`, `PIFEDIT.EXE`, `WINHELP.EXE`, `SNAP.EXE`, …, plus the test probes |
 | `build/fonts/` | w16's fonts: `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `SSERIFE.FON` |
 | `build/w16/` | the **install tree**: a Windows 3.1-style directory holding only w16's files, each where Windows keeps its own (see below) |
 | `build/win386/` | `WIN386.EXE` and its separate VxDs (`make win386` builds only these) |
@@ -98,7 +98,7 @@ assemble a complete all-w16 drive for DOSBox with `tests/dropin.sh`.
 | `winoldap/` | `WINOLDAP.MOD` (DOS programs in Standard mode) |
 | `winoa386/` | `WINOA386.MOD` (DOS programs in 386 Enhanced mode) |
 | `drivers/` | device drivers: `system/`, `keyboard/`, `mouse/`, `comm/`, `sound/`, `timer/` (`TIMER.DRV`), `vga/` (`VGA.DRV`), `grabber/` (`VGACOLOR.2GR`, `vga3gr/` `VGA.3GR`), `sb16/` (`SB16.DRV`) |
-| `shell/` | the system DLLs and the applets, one directory each: `shelldll/` (`SHELL.DLL`), `commdlg/`, `ddeml/`, `lzexpand/`, `mmsystem/`, `toolhelp/`, `ver/`; `progman/`, `winfile/`, `taskman/`, `control/` and `cpl/` (`MAIN.CPL`, `CPWIN386.CPL`), `notepad/`, `write/`, `cardfile/`, `calc/`, `clock/`, `regedit/`, `winhelp/` (`WINHELP.EXE`), `scrnsave/` (the screen saver library and `SSSTARS.SCR`) |
+| `shell/` | the system DLLs and the applets, one directory each: `shelldll/` (`SHELL.DLL`), `commdlg/`, `ddeml/`, `lzexpand/`, `mmsystem/`, `toolhelp/`, `ver/`; `progman/`, `winfile/`, `taskman/`, `control/` and `cpl/` (`MAIN.CPL`, `CPWIN386.CPL`), `notepad/`, `write/`, `cardfile/`, `calc/`, `clock/`, `regedit/`, `pifedit/` (`PIFEDIT.EXE`), `winhelp/` (`WINHELP.EXE`), `scrnsave/` (the screen saver library and `SSSTARS.SCR`) |
 | `ole/` | `OLECLI.DLL` and `OLESVR.DLL` |
 | `fonts/` | w16's raster fonts, as text the build turns into `.FON` files |
 | `assets/` | the install tree's own files: `SYSTEM.INI`, `WIN.INI`, `CONTROL.INI`, `README.TXT`, Program Manager's groups (`progman/`), the boot screen (`boot/`) |

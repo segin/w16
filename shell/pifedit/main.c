@@ -2,7 +2,7 @@
  * main.c - w16 PIF Editor (PIFEDIT.EXE), a clean-room clone of Windows
  * 3.1's (ARCHITECTURE.md 15.11). Every fact comes from black-box
  * observation of 3.1's PIF Editor on the reference install (SNAP probes
- * PE1-PE18 and the WinHelp probes PH1-PH2, tests/scripts/pifedit/obs/ and
+ * PE1-PE21 and the WinHelp probes PH01-PH19, tests/scripts/pifedit/obs/ and
  * tests/scripts/pifedithelp/, run with tests/pifobs.sh and
  * tests/pifhelp.sh), its help file read as user documentation, and the
  * published PIF descriptions (pif.c); the program's code and resources
@@ -240,7 +240,7 @@ static void set_title(void)
     SetWindowText(g_frame, t);
 }
 
-/* ---- help (probes PH01-PH24, tests/pifhelp.sh) ----
+/* ---- help (probes PH01-PH19, tests/pifhelp.sh) ----
    Every request but Search and How to Use Help is followed by
    HELP_SETCONTENTS with the contents topic of where it came from: 50h
    the Standard-mode window, 51h the 386 Enhanced one, 52h Advanced. */

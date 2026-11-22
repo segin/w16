@@ -1,7 +1,7 @@
 /*
  * pifedit.rc - w16 PIF Editor's resources (ARCHITECTURE.md 15.11). The
  * menu, dialogs and texts reproduce Windows 3.1's PIF Editor as observed
- * running (SNAP dumps and screenshots, probes PE1-PE18; dialog templates
+ * running (SNAP dumps and screenshots, probes PE1-PE21; dialog templates
  * computed from the dumped control rectangles), never read from its file;
  * "w16" where 3.1 says "Windows" for the running system (ARCHITECTURE.md
  * 3). The icon is w16's own (tools/mkpificon.py).

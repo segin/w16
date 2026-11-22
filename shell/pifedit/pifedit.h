@@ -2,7 +2,7 @@
  * pifedit.h - w16 PIF Editor (PIFEDIT.EXE), a clean-room clone of Windows
  * 3.1's (ARCHITECTURE.md 15.11). Every ID, text and layout below was
  * observed on the reference install's running PIF Editor (SNAP probes
- * PE1-PE18, tests/scripts/pifedit/obs/, run with tests/pifobs.sh); the
+ * PE1-PE21, tests/scripts/pifedit/obs/, run with tests/pifobs.sh); the
  * .PIF layout comes from the files it saved (pif.c's header).
  */
 #ifndef PIFEDIT_H
