@@ -430,10 +430,119 @@ static u32 slice_of(struct vm *v)
     return p ? p : 1;
 }
 
+/* Time-slice scheduling (the DDK's Time-Slice Scheduler Services; what
+ * Windows 3.1 does observed with VXT.386, tests/vxd/vxt.asm, and VX13,
+ * tests/vmpollrun.sh: ARCHITECTURE.md 12.12). A VM is scheduled when it
+ * can run and has the execution focus or runs in the background (the
+ * PIF's Background; the System VM always): Windows 3.1's
+ * Get_Time_Slice_Info counted the System VM and Background DOS VMs, and
+ * a DOS VM without Background got no time while Windows had the focus */
+static int scheduled(struct vm *v)
+{
+    if (!runnable(v)) return 0;
+    return v == vm_focus || v == &sysvm || v->background || v->closing || v->ended;
+}
+
+/* CB_VM_Status (the DDK's names; the values as Windows 3.1's control
+ * blocks showed them to VXT.386: the System VM 7062h, F062h while it
+ * idles, a Background DOS VM 4002h; Suspended and Not_Executeable
+ * UNVERIFIED) */
+#define VMSTAT_EXCLUSIVE    0x0001
+#define VMSTAT_BACKGROUND   0x0002
+#define VMSTAT_SUSPENDED    0x0008
+#define VMSTAT_NOT_EXEC     0x0010
+#define VMSTAT_PM_EXEC      0x0020
+#define VMSTAT_PM_APP       0x0040
+#define VMSTAT_HIGH_PRI_BACK 0x0200
+#define VMSTAT_TS_SCHED     0x4000
+#define VMSTAT_IDLE         0x8000
+#define VMSTAT_SETTABLE     (VMSTAT_EXCLUSIVE | VMSTAT_BACKGROUND | VMSTAT_HIGH_PRI_BACK)
+
+static void status_of(struct vm *v)
+{
+    u32 st = v->cb->status & ~(VMSTAT_EXCLUSIVE | VMSTAT_BACKGROUND | VMSTAT_SUSPENDED
+                               | VMSTAT_NOT_EXEC | VMSTAT_PM_EXEC | VMSTAT_PM_APP
+                               | VMSTAT_TS_SCHED | VMSTAT_IDLE);
+    if (v->exclusive) st |= VMSTAT_EXCLUSIVE;
+    if (v->background || v == &sysvm) st |= VMSTAT_BACKGROUND;
+    if (v->suspended || v->susp_count) st |= VMSTAT_SUSPENDED;
+    if (v->ended) st |= VMSTAT_NOT_EXEC;
+    if (v == &sysvm && sysvm.pm) {
+        st |= VMSTAT_PM_APP;
+        if (v == cur_vm ? !(cur_vm->r.eflags & EFL_VM) : !(v->r.eflags & EFL_VM)) st |= VMSTAT_PM_EXEC;
+    }
+    if (scheduled(v)) st |= VMSTAT_TS_SCHED;
+    if (v->idle) st |= VMSTAT_IDLE;
+    v->cb->status = st;
+}
+
+static void status_all(void)
+{
+    struct vm *v;
+    for (v = vm_list; v; v = v->next) status_of(v);
+}
+
+/* ---- callbacks: Call_When_Task_Switched, Call_When_Idle,
+ * Call_When_Not_Critical ---- */
+struct vmcb { struct vmcb *next; u32 proc, ref; };
+static struct vmcb *ts_cbs, *idle_cbs, *notcrit_cbs;
+
+static void add_cb(struct vmcb **list, u32 proc, u32 ref, int at_end)
+{
+    struct vmcb *c = kmalloc(sizeof(*c)), **pp = list;
+    if (!c) return;
+    c->proc = proc;
+    c->ref = ref;
+    c->next = NULL;
+    if (at_end) while (*pp) pp = &(*pp)->next;
+    else c->next = *pp;
+    *pp = c;
+}
+
+/* the System VM idles: when every other scheduled VM idles too, the idle
+ * callbacks in the order installed until one clears carry (the DDK) */
+static void system_idle(void)
+{
+    struct vm *v;
+    struct vmcb *c;
+    struct svcregs s;
+    for (v = vm_list; v; v = v->next)
+        if (v != &sysvm && scheduled(v) && !v->idle) return;
+    for (c = idle_cbs; c; c = c->next) {
+        memset(&s, 0, sizeof(s));
+        s.ebx = VMH(&sysvm);
+        s.ebp = (u32)sysvm.client;
+        s.eflags = EFL_CF;
+        vmm_call_proc(c->proc, &s);
+        if (!(s.eflags & EFL_CF)) break;
+    }
+}
+
+/* the current VM has nothing to do: HLT (an interrupt ends it: the next
+ * timer tick at the latest), KERNEL's idle call (INT 2Fh 1689h) */
 void vm_idle(void)
 {
-    cur_vm->idle = 1;
+    struct vm *v = cur_vm;
+    v->idle = 1;
+    v->idle_until = vmm_system_time();
     resched = 1;
+    if (v == &sysvm) system_idle();
+}
+
+/* the current VM releases its time slice (INT 2Fh 1680h,
+ * Release_Time_Slice, VMPOLL's detection): it gets no more time until an
+ * interrupt of its own or Wake_Up_VM wakes it. Windows 3.1 (VXT.386): a
+ * Background DOS VM released so ran again only every ~7 s (IDLE_WAKE),
+ * the timer's ticks did not wake it. The VM with the focus, the System VM
+ * and a high-priority background VM: the next tick wakes them (the DDK:
+ * the VM with the focus loses nothing; UNVERIFIED: its "-500 ms" for a
+ * background VM, which 3.1's ~7 s does not show) */
+void vm_release(void)
+{
+    struct vm *v = cur_vm;
+    vm_idle();
+    if (v != vm_focus && v != &sysvm && !(v->cb->status & VMSTAT_HIGH_PRI_BACK))
+        v->idle_until += IDLE_WAKE;
 }
 
 /* an interrupt or event for v: it may run again. The VM running now keeps
@@ -443,19 +552,31 @@ void vm_idle(void)
  * interrupt pending, which kept its keyboard's (IRQ 1, lower priority)
  * waiting: in plain DOSBox, whose BIOS waits for a key in a loop without
  * HLT, keys typed in a full-screen MS-DOS Prompt came seconds late or not
- * at all */
+ * at all. The timer's own requests (vm_tick_wakes) wake an idle VM only
+ * once its release penalty is over */
+static int tick_waking;
+
 void vm_wake(struct vm *v)
 {
+    if (tick_waking && v->idle && (s32)(vmm_system_time() - v->idle_until) < 0) return;
     v->idle = 0;
     if (v != cur_vm && runnable(v) && (cur_vm->idle || !cur_vm->slice || !runnable(cur_vm)))
         resched = 1;
 }
 
+void vm_tick_wakes(int on)
+{
+    tick_waking = on;
+}
+
 void vm_tick(void)
 {
     struct vm *v;
-    for (v = vm_list; v; v = v->next) v->idle = 0;
+    u32 now = vmm_system_time();
+    for (v = vm_list; v; v = v->next)
+        if (v->idle && (s32)(now - v->idle_until) >= 0) v->idle = 0;
     vdd_tick();
+    status_all();
     if (cur_vm->slice) cur_vm->slice--;
     if (!cur_vm->slice && vm_list->next) resched = 1;
 }
@@ -466,18 +587,25 @@ void vm_set_focus(struct vm *v)
     resched = 1;
 }
 
-/* the next VM to run: after the current one in the list, the first that
- * can run and is not idle; else the current one if it can run; else the
- * System VM */
+/* the next VM to run: a boosted VM (Adjust_Exec_Priority: the highest
+ * execution priority above the current VM's, the DDK); else, after the
+ * current one in the list, the first scheduled VM that is not idle; else
+ * the current one if it can run; else the System VM */
 static struct vm *pick(void)
 {
-    struct vm *v = cur_vm;
+    struct vm *v = cur_vm, *b = NULL;
     if (boost) {
         v = boost;
         boost = NULL;
         if (runnable(v) || v == &sysvm) return v;
         v = cur_vm;
     }
+    for (v = vm_list; v; v = v->next)
+        if (v != cur_vm && runnable(v) && v->exec_prio > cur_vm->exec_prio
+            && (!b || v->exec_prio > b->exec_prio)) b = v;
+    if (b) return b;
+    if (cur_vm->exec_prio > 0 && runnable(cur_vm) && !cur_vm->idle) return cur_vm;
+    v = cur_vm;
     /* SYSTEM.INI [386Enh] WinExclusive: while Windows has the focus no
      * other VM runs (Control Panel's "Exclusive in Foreground") */
     if (info->win_exclusive && vm_focus == &sysvm && runnable(&sysvm)) return &sysvm;
@@ -486,11 +614,11 @@ static struct vm *pick(void)
     if (vm_focus != &sysvm && vm_focus->exclusive && runnable(vm_focus)) return vm_focus;
     do {
         v = v->next ? v->next : vm_list;
-        if (runnable(v) && !v->idle) return v;
+        if (scheduled(v) && !v->idle) return v;
     } while (v != cur_vm);
     if (runnable(cur_vm)) return cur_vm;
     for (v = vm_list; v; v = v->next)
-        if (runnable(v)) return v;
+        if (scheduled(v)) return v;
     return &sysvm;
 }
 
@@ -599,6 +727,25 @@ static void run_events(struct cregs *r)
     }
 }
 
+/* the switch's bookkeeping: execution times, the Call_When_Task_Switched
+ * callbacks (EAX the old VM, EBX the new, the DDK) */
+static void task_switch(struct vm *o, struct vm *n)
+{
+    struct vmcb *c;
+    struct svcregs s;
+    u32 now = vmm_system_time();
+    o->exec_ms += now - o->run_since;
+    n->run_since = now;
+    status_of(o);
+    status_of(n);
+    for (c = ts_cbs; c; c = c->next) {
+        memset(&s, 0, sizeof(s));
+        s.eax = VMH(o);
+        s.ebx = VMH(n);
+        vmm_call_proc(c->proc, &s);
+    }
+}
+
 void vm_end_trap(struct cregs *r)
 {
     struct vm *n;
@@ -616,6 +763,7 @@ void vm_end_trap(struct cregs *r)
     }
     n->slice = slice_of(n);
     cur_vm->r = *r;
+    task_switch(cur_vm, n);
     vmm_switch(n);
     /* back in this VM: what VPICD has for it now, and its events */
     o = vmm_trap_state(r);
@@ -634,6 +782,7 @@ void vm_start(struct cregs *r)
     o = vmm_trap_state(r);
     vxd_send(VM_CRITICAL_INIT, cur_vm, 0, 0, 0);
     vxd_send(VM_INIT, cur_vm, 0, 0, 0);
+    shell_vm_init(cur_vm);
     vdd_vm_init(cur_vm);
     vmm_trap_state(o);
     r->cs = info->ldr_cs;
@@ -710,6 +859,77 @@ void vm_exited(struct cregs *r)
     resched = 1;
 }
 
+/* ---- the critical section (Begin_Critical_Section and the rest, the
+ * DDK): one owner, a claim count; the owner gets a priority boost while
+ * it holds it (CRIT_BOOST, w16's value: above any device boost w16's
+ * devices give), and another VM that claims it waits for the owner ---- */
+#define CRIT_BOOST 0x100000
+static struct vm *crit_owner;
+static u32 crit_count;
+
+static void crit_claim(u32 n)
+{
+    /* the owner runs until it releases (the claiming VM is taken up
+     * here again when it is switched to) */
+    while (crit_owner && crit_owner != cur_vm && runnable(crit_owner)) {
+        struct vm *o = crit_owner;
+        task_switch(cur_vm, o);
+        vmm_switch(o);
+    }
+    if (!crit_owner || !runnable(crit_owner)) {
+        if (crit_owner && crit_owner != cur_vm) crit_owner->exec_prio -= CRIT_BOOST;
+        if (crit_owner != cur_vm) cur_vm->exec_prio += CRIT_BOOST;
+        crit_owner = cur_vm;
+        crit_count = 0;
+    }
+    crit_count += n;
+}
+
+static void crit_release(u32 n)
+{
+    struct vmcb *c;
+    struct svcregs s;
+    if (crit_owner != cur_vm || !n) return;
+    if (n < crit_count) { crit_count -= n; return; }
+    crit_count = 0;
+    crit_owner = NULL;
+    cur_vm->exec_prio -= CRIT_BOOST;
+    resched = 1;
+    /* the most recent Call_When_Not_Critical callback, removed as called */
+    if ((c = notcrit_cbs) != NULL) {
+        notcrit_cbs = c->next;
+        memset(&s, 0, sizeof(s));
+        s.ebx = VMH(cur_vm);
+        s.edx = c->ref;
+        s.ebp = (u32)cur_vm->client;
+        vmm_call_proc(c->proc, &s);
+        kfree(c);
+    }
+}
+
+/* INT 2Fh AX=1681h/1682h from a VM: Begin/End Critical Section (the DDK:
+ * no other VM runs until it ends it, but for hardware interrupts) */
+void vm_crit(int begin)
+{
+    if (begin) crit_claim(1);
+    else crit_release(1);
+}
+
+/* Get_Time_Slice_Priority's share: the VM's priority (the foreground one
+ * with the focus) of the sum of the scheduled VMs' (Windows 3.1, VXT.386:
+ * the System VM with the focus 50, each of two Background DOS VMs 25, at
+ * 100/50 each) */
+static u32 cpu_percent(struct vm *v)
+{
+    struct vm *w;
+    u32 sum = 0;
+    if (!scheduled(v)) return 0;
+    if (vm_focus->exclusive && vm_focus != &sysvm) return v == vm_focus ? 100 : 0;
+    for (w = vm_list; w; w = w->next)
+        if (scheduled(w)) sum += w == vm_focus ? w->prio_fg : w->prio_bg;
+    return sum ? (v == vm_focus ? v->prio_fg : v->prio_bg) * 100 / sum : 0;
+}
+
 /* ---- the VMM's VM services (the DDK's descriptions) ---- */
 int vm_service(u32 svc, struct svcregs *s)
 {
@@ -759,10 +979,102 @@ int vm_service(u32 svc, struct svcregs *s)
         vm_set_focus(v);
         return 1;
     case 0x0038:                        /* Release_Time_Slice */
-        vm_idle();
+        vm_release();
         return 1;
     case 0x0039:                        /* Wake_Up_VM */
         if ((v = vm_of(s->ebx)) != NULL) vm_wake(v);
+        return 1;
+    case 0x001E:                        /* Adjust_Exec_Priority: EAX the boost, EBX the VM */
+        if ((v = vm_of(s->ebx)) == NULL) return 1;
+        v->exec_prio += (s32)s->eax;
+        if (((s32)s->eax < 0 && v == cur_vm) || ((s32)s->eax > 0 && v != cur_vm && v->exec_prio > cur_vm->exec_prio))
+            resched = 1;
+        return 1;
+    case 0x001F:                        /* Begin_Critical_Section: ECX flags */
+        crit_claim(1);
+        return 1;
+    case 0x0022:                        /* Claim_Critical_Section: EAX claims, ECX flags */
+        if (s->eax) crit_claim(s->eax);
+        return 1;
+    case 0x0020:                        /* End_Critical_Section */
+        crit_release(1);
+        return 1;
+    case 0x0023:                        /* Release_Critical_Section: ECX claims */
+        if (s->ecx) crit_release(s->ecx);
+        return 1;
+    case 0x0021:                        /* End_Crit_And_Suspend: carry if it could not suspend */
+        crit_release(crit_owner == cur_vm ? crit_count : 0);
+        if (cur_vm == &sysvm) { s->eflags |= EFL_CF; return 1; }
+        if (!cur_vm->susp_count++ && !cur_vm->suspended) vxd_send(VM_SUSPEND, cur_vm, 0, 0, 0);
+        resched = 1;
+        return 1;
+    case 0x0024:                        /* Call_When_Not_Critical: ESI, EDX ref */
+        add_cb(&notcrit_cbs, s->esi, s->edx, 0);
+        return 1;
+    case 0x0029:                        /* Get_Crit_Section_Status */
+    case 0x00F1:                        /* Get_Crit_Status_No_Block */
+        s->ecx = crit_owner ? crit_count : 0;
+        s->ebx = VMH(crit_owner ? crit_owner : cur_vm);
+        if (cur_vm->exec_prio >= CRIT_BOOST) s->eflags |= EFL_CF;
+        return 1;
+    case 0x002A:                        /* Call_When_Task_Switched: ESI */
+        add_cb(&ts_cbs, s->esi, 0, 1);
+        return 1;
+    case 0x0032:                        /* Get_Time_Slice_Priority: EBX the VM */
+        if ((v = vm_of(s->ebx)) == NULL) { s->eflags |= EFL_CF; return 1; }
+        status_all();
+        s->eax = v->cb->status & VMSTAT_SETTABLE;
+        s->ecx = v->prio_fg & 0xFFFF;
+        s->edx = v->prio_bg & 0xFFFF;
+        s->esi = cpu_percent(v);
+        return 1;
+    case 0x0033:                        /* Set_Time_Slice_Priority: EAX flags, EBX, ECX, EDX */
+        if ((v = vm_of(s->ebx)) == NULL || !s->ecx || !s->edx || s->ecx > 10000 || s->edx > 10000) {
+            s->eflags |= EFL_CF;
+            return 1;
+        }
+        v->prio_fg = s->ecx;
+        v->prio_bg = s->edx;
+        v->exclusive = (s->eax & VMSTAT_EXCLUSIVE) != 0;
+        if (v != &sysvm) v->background = (s->eax & VMSTAT_BACKGROUND) != 0;
+        v->cb->status = (v->cb->status & ~VMSTAT_HIGH_PRI_BACK) | (s->eax & VMSTAT_HIGH_PRI_BACK);
+        status_of(v);
+        resched = 1;
+        return 1;
+    case 0x0034:                        /* Get_Time_Slice_Granularity: EAX ms */
+        s->eax = info->min_slice ? info->min_slice : 20;
+        return 1;
+    case 0x0035:                        /* Set_Time_Slice_Granularity: EAX ms */
+        if (s->eax) info->min_slice = (u16)(s->eax > 10000 ? 10000 : s->eax);
+        return 1;
+    case 0x0036: {                      /* Get_Time_Slice_Info: EAX scheduled, EBX current, ECX idle */
+        u32 n = 0, i = 0;
+        for (v = vm_list; v; v = v->next)
+            if (scheduled(v)) { n++; if (v->idle) i++; }
+        s->eax = n;
+        s->ebx = VMH(cur_vm);
+        s->ecx = i;
+        return 1;
+    }
+    case 0x0037:                        /* Adjust_Execution_Time: EAX ms (signed), EBX */
+        /* (a slice of ticks here: the milliseconds in whole ticks, at
+         * least the tick it is in) */
+        if ((v = vm_of(s->ebx)) == NULL || !scheduled(v)) return 1;
+        if ((s32)s->eax > 0) v->slice += (s->eax + 54) / 55;
+        else if (v->slice > (u32)(-(s32)s->eax) / 55 + 1) v->slice -= (u32)(-(s32)s->eax) / 55;
+        else v->slice = 1;
+        return 1;
+    case 0x003A:                        /* Call_When_Idle: ESI */
+        add_cb(&idle_cbs, s->esi, 0, 1);
+        return 1;
+    case 0x003F:                        /* Get_System_Time */
+        s->eax = vmm_system_time();
+        return 1;
+    case 0x0040:                        /* Get_VM_Exec_Time: the current VM's */
+        s->eax = cur_vm->exec_ms + (vmm_system_time() - cur_vm->run_since);
+        return 1;
+    case 0x00CF:                        /* Get_Last_Updated_System_Time */
+        s->eax = vmm_last_time();
         return 1;
     case 0x003B:                        /* Get_Next_VM_Handle: the list is circular */
         v = vm_of(s->ebx);

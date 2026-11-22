@@ -92,6 +92,7 @@ struct w386_info {
     w_u16 min_slice;
     w_u16 win_exclusive;
     w_u16 vmclose_off;  /* ldr_cs:vmclose_off: ends a DOS VM's program (INT 21h 4CFFh) */
+    w_u16 hlt_stock;    /* SYSTEM.INI [w16] V86HltYield=0: a V86 HLT keeps the slice (stock 3.1) */
 };
 #pragma pack()
 

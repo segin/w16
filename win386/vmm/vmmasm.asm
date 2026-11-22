@@ -58,18 +58,94 @@ _vmm_entry:
 ; pushes none), the vector, then the common path
 %macro STUB 1
 stub_%1:
+%if %1 == 13
+        jmp gp_fast
+%else
 %if (%1 == 8) || (%1 >= 10 && %1 <= 14) || (%1 == 17)
 %else
         push dword 0
 %endif
         push dword %1
         jmp trap_common
+%endif
 %endmacro
 %assign i 0
 %rep 256
         STUB i
 %assign i i+1
 %endrep
+
+; #GP: a protected-mode client's CLI, or STI with interrupts on already
+; (it runs at IOPL 0: ARCHITECTURE.md 12.3), done here without the trap's
+; C path: the commonest trap of all while Windows passes messages (VX13:
+; some 30,000 a second). Only an LDT code segment and the plain one-byte
+; instruction; the processor has just fetched it, so its page is there.
+; Everything else (STI that enables interrupts: VPICD may have one to
+; deliver) goes on to trap() as before. The client's DS is still loaded:
+; memory through SS (the flat ring-0 stack segment).
+extern _ldt, _sti_ok
+gp_fast:
+        cmp dword [ss:esp], 0           ; the error code
+        jne .slow
+        test dword [ss:esp + 12], 20000h        ; EFLAGS.VM
+        jnz .slow
+        test byte [ss:esp + 8], 4       ; CS in the LDT
+        jz .slow
+        push eax
+        push ebx
+        push ecx
+        movzx eax, word [ss:esp + 20]   ; CS
+        and eax, 0FFF8h
+        add eax, [ss:_ldt]
+        mov ebx, [ss:eax + 2]           ; the base: bits 0-23
+        and ebx, 0FFFFFFh
+        movzx ecx, byte [ss:eax + 7]    ; bits 24-31
+        shl ecx, 24
+        or ebx, ecx
+        mov ecx, [ss:esp + 16]          ; EIP
+        test byte [ss:eax + 6], 40h     ; a 32-bit segment?
+        jnz .big
+        movzx ecx, cx
+.big:   mov al, [ss:ebx + ecx]
+        cmp al, 0FAh
+        je .cli
+        cmp al, 0FBh
+        jne .slow3
+        test dword [ss:esp + 24], 200h  ; STI with IF set already: nothing to do
+        jnz .next
+        push edx                        ; STI that enables: here too when
+        push ds                         ; nothing waits for the VM (sti_ok)
+        push es
+        mov ax, SEL_DATA
+        mov ds, ax
+        mov es, ax
+        call _sti_ok
+        pop es
+        pop ds
+        pop edx
+        test eax, eax
+        jz .slow3
+        or dword [ss:esp + 24], 200h
+        jmp .next
+.cli:   and dword [ss:esp + 24], ~200h
+.next:  movzx eax, word [ss:esp + 20]   ; EIP + 1 (16 bits in a 16-bit segment)
+        and eax, 0FFF8h
+        add eax, [ss:_ldt]
+        test byte [ss:eax + 6], 40h
+        jnz .inc32
+        inc word [ss:esp + 16]
+        jmp .done
+.inc32: inc dword [ss:esp + 16]
+.done:  pop ecx
+        pop ebx
+        pop eax
+        add esp, 4                      ; the error code
+        iretd
+.slow3: pop ecx
+        pop ebx
+        pop eax
+.slow:  push dword 13
+        jmp trap_common
 
 trap_common:
         pushad

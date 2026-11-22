@@ -464,7 +464,7 @@ static int load_vmm(void)
  * it does with a name given twice (w16 loads it once). */
 static const char *const builtin[] = {
     "vnetbios", "dosnet", "ebios", "vddvga", "vtd",
-    "vdmad", "vsd", "v86mmgr", "pageswap", "dosmgr", "vmpoll",
+    "vdmad", "vsd", "v86mmgr", "pageswap", "dosmgr",
     "wshell", "blockdev", "pagefile", "vfd", "parity", "biosxlat", "vcd",
     "vmcpd", "combuff", "cdpscsi", "int13", "wdctrl", "qemmfix", 0
 };
@@ -924,6 +924,9 @@ int main(int argc, char **argv)
                 info.trace = q[9] - '0';
     }
     read_sched(&info);
+    /* [w16] V86HltYield=0: a HLT in V86 mode keeps the VM's time slice,
+     * as Windows 3.1's WIN386 (ARCHITECTURE.md 12.12) */
+    info.hlt_stock = ini_w16_zero("V86HltYield");
     r.h.ah = 0x48; r.x.bx = 0xFFFF;
     intdos(&r, &r);
     info.conv_free = r.x.bx;

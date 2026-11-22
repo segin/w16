@@ -322,7 +322,9 @@ static vu32 wait_key(int kind, int *cad)
 static vu32 screen(int kind, const char *name)
 {
     static struct client_regs saved;
+    static vu8 vbios[0x1E];
     struct vregs s;
+    vu32 i;
     vu8 mode;
     vu32 key;
     int cad = 0;
@@ -339,6 +341,12 @@ static vu32 screen(int kind, const char *name)
     zero(&s, sizeof(s));
     vmm_begin_nest_v86_exec(&s);
     mode = *(vu8 *)0x449;                   /* the BIOS's video mode */
+    /* the rest of the BIOS's video data (40:49h-66h: columns, page size,
+     * the cursor of each page, its shape...): the mode set going back
+     * zeroes the cursor, and a full-screen MS-DOS Prompt then wrote its
+     * next line at the top (win386doscad's dosbox386cad.txt, once the DOS
+     * VM was the current one at Ctrl+Alt+Del) */
+    for (i = 0; i < sizeof(vbios); i++) vbios[i] = *(vu8 *)(0x449 + i);
     vga_save();
     bios_video(0x0003, 0, 0);
     show_screen(kind, name);
@@ -354,6 +362,7 @@ static vu32 screen(int kind, const char *name)
     }
     bios_video(mode, 0, 0);
     vga_restore();
+    for (i = 0; i < sizeof(vbios); i++) *(vu8 *)(0x449 + i) = vbios[i];
     /* the VM saw Ctrl and Alt go down (VKD passed them on before Del, the
      * hot key): their releases read here go to it now (VKD_Force_Keys),
      * or its keyboard driver would keep them down (tests/scripts/input/

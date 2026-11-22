@@ -440,6 +440,12 @@ static void hw_int(vu32 irq)
     deliver_pending();
 }
 
+/* a request the current VM would take with its interrupts on */
+static int has_pending(void)
+{
+    return next_irq(VP(CUR())) >= 0;
+}
+
 /* the VMM is about to resume the VM */
 static void resume(void)
 {
@@ -705,6 +711,7 @@ void __cdecl vpicd_control(struct vregs *r)
     case SYS_CRITICAL_INIT:
         sys_vm = r->ebx;
         cb_off = vmm_alloc_cb_area(sizeof(struct vpic), 0);
+        vpicd_link.pending = has_pending;
         /* the 8259s keep their masks until the System VM is set up */
         dos_masks = inb(0x21) | (inb(0xA1) << 8);
         VP(sys_vm)->base[0] = vpicd_link.rm_base1;

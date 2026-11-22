@@ -61,8 +61,11 @@ struct vsave {
     u8 *font;                           /* plane 2 for Get_Mem (ring 3) */
     u8 *plane1;                         /* Get_Mem's plane 1: a buffer of its own (UNVERIFIED use) */
     u32 *zero;                          /* Get_Mem's colour table (dac_table) */
+    u32 mod_sum, mod_time;              /* VDD_Get_ModTime: the text's sum, when it changed */
+    int mod_ok;
 };
 static struct vsave *saves;
+static u32 mod_check(struct vsave *d);
 
 static struct vsave *save_of(struct vm *v, int make)
 {
@@ -486,6 +489,7 @@ void vdd_tick(void)
 {
     struct vsave *d;
     if (pend && pend_ticks && !--pend_ticks) vm_event(&sysvm, pend_run, NULL);
+    for (d = saves; d; d = d->next) if (d->vm->id && !d->vm->ended) mod_check(d);
     for (d = saves; d; d = d->next) {
         int mem, cur;
         if (!d->windowed || d->pending || !d->vm->id || d->vm->ended) continue;
@@ -495,6 +499,50 @@ void vdd_tick(void)
             d->pending = shell_display_changed(d->vm, cur && !mem);
         }
     }
+}
+
+/* ---- the VDD's services for other devices (device 000Ah; the DDK's
+ * order: VDD_Get_Version 0, ... VDD_Get_ModTime 5, ...; Windows 3.1's
+ * VMPOLL calls service 5 and no other: docs/win386-services.md) ---- */
+
+/* VDD_Get_ModTime (the DDK: the system time at the VM's last video
+ * modification; VMPOLL tells an idle VM by it): the VM's text page and
+ * cursor are summed when asked, and each timer tick for the VMs the VDD
+ * keeps, and the time noted when the sum changes. UNVERIFIED: what
+ * Windows 3.1's VDD counts as a modification (graphics modes here: the
+ * same bytes at B8000h) */
+static u32 mod_check(struct vsave *d)
+{
+    u32 n = text_bytes(d, NULL, NULL), i, h = cursor_of(d);
+    u32 *p = (u32 *)text_of(d);
+    for (i = 0; i < n / 4; i++) h = ((h << 5) | (h >> 27)) ^ p[i];
+    if (!d->mod_ok || h != d->mod_sum) {
+        /* a VM idle (released) whose screen changed runs again: Windows
+         * 3.1 woke VX14 V within 5 ms of its release (VMPOLL) */
+        if (d->mod_ok && d->vm->idle && d->vm != cur_vm) vm_wake(d->vm);
+        d->mod_sum = h;
+        d->mod_time = d->mod_ok ? vmm_system_time() : 0;
+        d->mod_ok = 1;
+    }
+    return d->mod_time;
+}
+
+int vdd_service(u32 svc, struct svcregs *s)
+{
+    static const char name[8] = { 'V', 'I', 'D', 'E', 'O', 'V', 'G', 'A' };
+    struct vm *v;
+    struct vsave *d;
+    switch (svc) {
+    case 0x00:                          /* VDD_Get_Version: AX, ESI the 8-byte name */
+        s->eax = (s->eax & 0xFFFF0000u) | 0x0200;   /* the DDB's 2.00 */
+        s->esi = (u32)name;
+        return 1;
+    case 0x05:                          /* VDD_Get_ModTime: EBX the VM -> EAX */
+        if ((v = vm_of(s->ebx)) == NULL || !v->id || (d = save_of(v, 1)) == NULL) { s->eax = 0; return 1; }
+        s->eax = mod_check(d);
+        return 1;
+    }
+    return 0;
 }
 
 /* INT 2Fh 4003h/4004h from the System VM (the display driver's critical

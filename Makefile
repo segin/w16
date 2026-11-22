@@ -1072,12 +1072,15 @@ $(W386)/VKD.386: $(W386VKD) win386/vxd/vkd.lnk
 W386REBOOT := $(W386)/vxd/rebootdd.o $(W386)/vxd/reboot.o $(W386)/vxd/vxdrt.o
 $(W386)/REBOOT.386: $(W386REBOOT) win386/vxd/reboot.lnk
 	$(WLINK) @win386/vxd/reboot.lnk name $@ option map=$(W386)/reboot.map file { $(W386REBOOT) }
-W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 tools/mkw3.py
+W386VMPOLL := $(W386)/vxd/vmpollddb.o $(W386)/vxd/vmpoll.o $(W386)/vxd/vxdrt.o
+$(W386)/VMPOLL.386: $(W386VMPOLL) win386/vxd/vmpoll.lnk
+	$(WLINK) @win386/vxd/vmpoll.lnk name $@ option map=$(W386)/vmpoll.map file { $(W386VMPOLL) }
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VMPOLL=$(W386)/VMPOLL.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VMPOLL.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1101,6 +1104,12 @@ $(DOS)/VX11.EXE: $(B)/tests/start.o $(B)/tests/vx11.o $(B)/tests/vx11s.o tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx11.map file { $(B)/tests/start.o $(B)/tests/vx11.o $(B)/tests/vx11s.o }
+# VX13.EXE: Windows' share beside DOS boxes (tests/apps/vx13.c; VX14.COM
+# runs in the boxes; tests/vmpollrun.sh)
+$(DOS)/VX13.EXE: $(B)/tests/start.o $(B)/tests/vx13.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx13.map file { $(B)/tests/start.o $(B)/tests/vx13.o }
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
@@ -1114,6 +1123,11 @@ $(DOS)/VXQ.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DBADLINK -o $(B)/tests/vxq.o tests/vxd/vxp.asm
 	$(WLINK) @tests/vxd/vxp.lnk name $@ file $(B)/tests/vxq.o
+# VXT.386: the scheduling probe VxD (tests/vxd/vxt.asm)
+$(DOS)/VXT.386: tests/vxd/vxt.asm tests/vxd/vxt.lnk
+	@mkdir -p $(@D) $(B)/tests
+	$(NASM) -f obj -o $(B)/tests/vxt.o tests/vxd/vxt.asm
+	$(WLINK) @tests/vxd/vxt.lnk name $@ file $(B)/tests/vxt.o
 # VXS.386: the DOS-box probe VxD (tests/vxd/vxs.asm)
 $(DOS)/VXS.386: tests/vxd/vxs.asm tests/vxd/vxs.lnk
 	@mkdir -p $(@D) $(B)/tests

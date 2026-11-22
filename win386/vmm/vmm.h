@@ -134,6 +134,10 @@ struct vm {
     u32 prio_fg, prio_bg;   /* time-slice priorities (PIF, SYSTEM.INI) */
     int exclusive;          /* PIF: no other VM runs while it has the focus full screen */
     int background;         /* PIF: it runs on full screen without the focus */
+    u32 exec_ms;            /* Get_VM_Exec_Time: the time it has run */
+    u32 run_since;          /* when it last started running (vmm_system_time) */
+    s32 exec_prio;          /* Adjust_Exec_Priority's boosts */
+    u32 idle_until;         /* idle (released): ticks do not wake it before this */
     u32 exit_code;          /* its program's exit code (VM stub) */
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
@@ -252,6 +256,12 @@ void vm_end_trap(struct cregs *r);  /* at the end of a trap: switch VMs? */
 void vm_idle(void);                 /* the current VM has nothing to do */
 void vm_wake(struct vm *v);         /* an interrupt for v */
 void vm_tick(void);                 /* a timer tick */
+void vm_tick_wakes(int on);
+void vm_crit(int begin);            /* INT 2Fh 1681h/1682h */         /* VTD's requests: wakes that respect a release's penalty */
+void vm_release(void);              /* Release_Time_Slice, INT 2Fh 1680h */
+#define IDLE_WAKE 7000              /* ms: a released Background VM runs again (Windows 3.1: ~7 s) */
+u32 vmm_system_time(void);          /* vxd.c: Get_System_Time, ms */
+u32 vmm_last_time(void);            /* Get_Last_Updated_System_Time */
 void vm_set_focus(struct vm *v);    /* the execution focus */
 extern struct vm *vm_focus;
 int vm_service(u32 svc, struct svcregs *s);
@@ -302,6 +312,7 @@ void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
 void shell_init(void);
 void shell_api(struct cregs *r);
 void shell_vm_ended(struct vm *v);
+void shell_vm_init(struct vm *v);   /* VM_Init done: VMPOLL from the PIF */
 void shell_vm_crashed(struct vm *v);
 struct reboot_link *reboot_link_of(u32 ref);
 void vm_crashed(struct cregs *r);
@@ -311,6 +322,7 @@ u32 vxdapi_v86_get(u32 id);                 /* a V86 API entry's breakpoint, or 
 void vxdapi_v86_call(struct cregs *r, u32 idx);
 u32 vxd_v86_api(u32 id);                    /* a loaded device's V86 API procedure */    /* Hook_V86_Int_Chain's procedures */
 int vdd_api(struct cregs *r);
+int vdd_service(u32 svc, struct svcregs *s);   /* the VDD's services (device 000Ah) */
 void vdd_int2f(struct cregs *r);
 void vdd_focus(struct vm *v);       /* the display goes to v */
 void vdd_vm_init(struct vm *v);

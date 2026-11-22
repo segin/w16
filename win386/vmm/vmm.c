@@ -534,14 +534,16 @@ static int int2f_v86(struct cregs *r)
         SETW(r->eax, 0x0A03);
         return 1;
     case 0x1680:                        /* release time slice: AL=0 */
-        vm_idle();
+        vm_release();
         SETLO(r->eax, 0);
         return 1;
-    case 0x1689:                        /* kernel idle (observed: AL=0) */
-        SETLO(r->eax, 0);
+    case 0x1689:                        /* kernel idle (observed: AL=0): the */
+        SETLO(r->eax, 0);               /* System VM releases its time slice */
+        if (cur_vm == &sysvm) vm_idle();
         return 1;
-    case 0x1681:                        /* begin/end critical section */
+    case 0x1681:                        /* begin/end critical section (the DDK) */
     case 0x1682:
+        vm_crit(AX(r) == 0x1681);
         return 1;
     case 0x1683:                        /* the current VM's ID (the System VM: 1) */
         SETW(r->ebx, cur_vm->id);
@@ -750,8 +752,20 @@ u32 vmm_pdir_entry(u32 i, u32 v)        /* set a page directory entry; the old o
 /* ---- the trap dispatcher ---- */
 
 
+/* traps since the last heartbeat, by kind (the heartbeat lists them):
+ * 0-255 software interrupts by vector (V86 "v", PM "p" below), and */
+#define TK_CLISTI   512                 /* PM CLI/STI (IOPL 0) */
+#define TK_HLT      513                 /* HLT outside the breakpoints */
+#define TK_PMBP     514                 /* PM breakpoints (HLT at SEL_PMBP) */
+#define TK_IO       515                 /* trapped ports */
+#define TK_V86BP    516                 /* V86 breakpoints (ARPL) */
+#define TK_EXC      517                 /* other exceptions */
+#define TK_N        518
+static u32 tk_count[TK_N];
+
 static void software_int(struct cregs *r, int vec)
 {
+    tk_count[(vec & 0xFF) + ((r->eflags & EFL_VM) ? 0 : 256)]++;
     if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->cs, r->eip);
     if ((r->eflags & EFL_VM) && vxd_v86_int_hooks(r, vec)) return;  /* a device serviced it */
     if (r->eflags & EFL_VM) {
@@ -836,6 +850,31 @@ static u8 *code_ptr(struct cregs *r)
     return lin_user_ok(lin, 15, 0) ? (u8 *)lin : NULL;
 }
 
+/* vmmasm.asm's #GP fast path: may an STI that enables the client's
+ * interrupts go on without the trap's work (nothing for VPICD to deliver
+ * to the VM, no Build_Int_Stack_Frame frame waiting)? */
+int __cdecl sti_ok(void)
+{
+    return vpicd && vpicd->pending && !vpicd->pending() && !bint_sel;
+}
+
+static int cli_sti_fast(struct tframe *f)
+{
+    u32 cs = f->cs & 0xFFFF, lin, big = seg_32(cs);
+    u8 op;
+    lin = sel_base(cs) + (big ? f->eip : (f->eip & 0xFFFF));
+    if (!lin_user_ok(lin, 1, 0)) return 0;
+    op = *(u8 *)lin;
+    if (op == 0xFA) f->eflags &= ~EFL_IF;
+    else if (op == 0xFB) {
+        if (!(f->eflags & EFL_IF) && (!vpicd || !vpicd->pending || vpicd->pending() || bint_sel)) return 0;
+        f->eflags |= EFL_IF;
+    } else return 0;
+    f->eip = big ? f->eip + 1 : ((f->eip & 0xFFFF0000u) | (u16)(f->eip + 1));
+    tk_count[TK_CLISTI]++;
+    return 1;
+}
+
 /* A heartbeat in the trace every 20 s of timer ticks (BIOS rate): where the
  * System VM is, how deep the nested calls go and how many of each
  * hardware interrupt came, so that a hang shows where it is. */
@@ -849,7 +888,14 @@ static void heartbeat(struct cregs *r)
           ++hb_n, cur_vm->id, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
           exec_depth(), sysvm.last_cs, sysvm.last_ip);
     for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
-    trace(", PIC masks %x %x, trapped I/O %d", inb(0x21), inb(0xA1), io_traps);
+    trace(", PIC masks %x %x, trapped I/O %d, traps", inb(0x21), inb(0xA1), io_traps);
+    for (i = 0; i < TK_N; i++)
+        if (tk_count[i]) {
+            if (i < 512) trace(" %c%x:%d", i < 256 ? 'v' : 'p', i & 0xFF, tk_count[i]);
+            else trace(" %s:%d", i == TK_CLISTI ? "clisti" : i == TK_HLT ? "hlt" : i == TK_PMBP ? "pmbp"
+                       : i == TK_IO ? "io" : i == TK_V86BP ? "v86bp" : "exc", tk_count[i]);
+            tk_count[i] = 0;
+        }
     if (r->eflags & EFL_VM) {
         /* registers and stack words only: never code bytes (ARCHITECTURE.md 3) */
         u16 *sp = (u16 *)v86_lin(r->ss, r->esp);
@@ -887,6 +933,17 @@ void __cdecl trap(struct tframe *f)
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
+    /* CLI and STI from a protected-mode client (IOPL 0, 12.3), the
+     * commonest trap of all (some 9,000 a second while Windows passes
+     * messages): done here, without the rest of a trap's work, when
+     * nothing can follow from it: CLI always; STI when interrupts were on
+     * already or VPICD has nothing the VM would take and no frame waits
+     * (Build_Int_Stack_Frame). A VM switch the scheduler wants then waits
+     * for the next trap (the next tick at the latest). Before, each one
+     * cost the whole trap path, and Windows passed a tenth of the messages
+     * a second it passes under Windows 3.1's WIN386 (VX13, ARCHITECTURE.md
+     * 12.12) */
+    if (vec == 13 && !f->err && (f->cs & 3) == 3 && !(f->eflags & EFL_VM) && cli_sti_fast(f)) return;
     r->edi = f->edi; r->esi = f->esi; r->ebp = f->ebp; r->ebx = f->ebx;
     r->edx = f->edx; r->ecx = f->ecx; r->eax = f->eax;
     r->eip = f->eip; r->eflags = f->eflags; r->esp = f->esp;
@@ -940,29 +997,38 @@ void __cdecl trap(struct tframe *f)
         } else {
             op = code_ptr(r);
             if (op[0] == 0xF4) {
-                if (!(r->eflags & EFL_VM) && r->cs == SEL_PMBP)
+                if (!(r->eflags & EFL_VM) && r->cs == SEL_PMBP) {
+                    tk_count[TK_PMBP]++;
                     dpmi_pmbp(r, r->eip);
-                else {
+                } else {
+                    tk_count[TK_HLT]++;
                     r->eip++;           /* HLT: carry on (idle) */
                     if (!(r->eflags & EFL_VM)) vmm_idle_hlt(r);
-                    vm_idle();          /* another VM may run meanwhile */
+                    /* another VM may run meanwhile. Windows 3.1 does not
+                     * give up a VM's slice at a HLT in V86 mode: DOSBox-X's
+                     * shell, which halts between its keyboard polls, got
+                     * its full share there (VX13, ARCHITECTURE.md 12.12);
+                     * w16 does, but with [w16] V86HltYield=0 */
+                    if (!(r->eflags & EFL_VM) || !info->hlt_stock) vm_idle();
                 }
             } else if (!f->err && io_trap(r, op))
-                ;                       /* a trapped port */
+                tk_count[TK_IO]++;      /* a trapped port */
             else if ((r->eflags & EFL_VM) && cur_vm != &sysvm)
                 vm_crashed(r);          /* a DOS VM's: that VM ends (vm.c) */
             else if (r->eflags & EFL_VM)
                 panic("V86 #GP at %x:%x err %x", r->cs, r->eip, f->err);
             else if (!f->err && pm_cli_sti(r, op))
-                ;
+                tk_count[TK_CLISTI]++;
             else
-                dpmi_exception(r, 13, f->err);
+                { tk_count[TK_EXC]++; dpmi_exception(r, 13, f->err); }
         }
     } else if (vec == 6 && (r->eflags & EFL_VM)) {
         u32 lin = v86_lin(r->cs, r->eip);
         op = (u8 *)lin;
-        if (op[0] == 0x63 && lin >= bp_lin && lin < bp_lin + info->bp_count)
+        if (op[0] == 0x63 && lin >= bp_lin && lin < bp_lin + info->bp_count) {
+            tk_count[TK_V86BP]++;
             v86_breakpoint(r, lin - bp_lin);
+        }
         else
             v86_reflect(r, 6);
     } else if (vec < 32) {
@@ -972,7 +1038,7 @@ void __cdecl trap(struct tframe *f)
             else
             v86_reflect(r, vec);
         } else
-            dpmi_exception(r, vec, f->err);
+            { tk_count[TK_EXC]++; dpmi_exception(r, vec, f->err); }
     } else
         software_int(r, vec);           /* through a DPL 3 gate */
     if (!(r->eflags & EFL_VM)) {

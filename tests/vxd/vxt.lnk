@@ -1,0 +1,5 @@
+# VXT.386: the scheduling probe VxD (tests/vxd/vxt.asm)
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXT_DDB.1

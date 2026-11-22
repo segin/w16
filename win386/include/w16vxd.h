@@ -82,6 +82,9 @@ struct vpicd_link {
      * the current one, or idle): give it time soon */
     vu32 (*cur_vm)(void);
     void (*wake)(vu32 vm);
+    /* VPICD's (set at Sys_Critical_Init): has the current VM a request it
+     * would take once its interrupts are on (the VMM's CLI/STI fast path) */
+    int (*pending)(void);
 };
 
 /* The VMM and w16's REBOOT: the DDB's reference data points at a struct

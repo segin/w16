@@ -138,8 +138,15 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 1
+#define NBUILTIN 2
 static void vtd_init(void);
+/* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
+ * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
+ * services); its control messages come from vxd_send (vdd_focus) */
+static struct ddb vdd_ddb = {
+    0, 0x030A, 0x000A, 2, 0, 0, { 'V', 'D', 'D', ' ', ' ', ' ', ' ', ' ' },
+    0x28000000, 0, 0, 0, 0, 0, 0, 0, 14
+};
 static struct ddb vtd_ddb = {
     0, 0x030A, 0x0005, 3, 10, 0, { 'V', 'T', 'D', ' ', ' ', ' ', ' ', ' ' },
     0x14000000, 0, 0, 0, 0, 0, 0, 0, 8
@@ -237,6 +244,29 @@ static void tmo_tick(void)
     }
 }
 
+/* Get_Last_Updated_System_Time: as of the last tick */
+u32 vmm_last_time(void)
+{
+    return sys_ms;
+}
+
+/* Get_System_Time (the DDK: to the millisecond): the last tick's time
+ * plus what the timer's counter 0 has counted down since (1193182 Hz,
+ * 65536 a tick); never less than a time given before */
+u32 vmm_system_time(void)
+{
+    static u32 last;
+    u32 c, t;
+    /* (the VMM runs with interrupts off) */
+    outb(0x43, 0x00);                   /* latch counter 0 */
+    c = inb(0x40);
+    c |= inb(0x40) << 8;
+    t = sys_ms + ((c ? 65536u - c : 0) * 55u >> 16);
+    if ((s32)(t - last) < 0) t = last;
+    last = t;
+    return t;
+}
+
 static int tmo_service(u32 svc, struct svcregs *s)
 {
     struct tmo *t, **pp;
@@ -274,8 +304,10 @@ void __cdecl vtd_hw(struct svcregs *r)
     /* every VM gets the tick (a request each: one pending at most; a VM
      * that does not run meanwhile misses ticks. UNVERIFIED: Windows 3.1's
      * VTD catches a VM's clock up) */
+    vm_tick_wakes(1);                   /* an idle VM's release penalty holds */
     for (v = vm_list; v; v = v->next)
         if (!v->ended) vpicd_call(0x02, vtd_irq, VMH(v));  /* VPICD_Set_Int_Request */
+    vm_tick_wakes(0);
     tmo_tick();
     vm_tick();
     r->eflags &= ~EFL_CF;
@@ -297,6 +329,20 @@ static void vtd_service(u32 svc, struct svcregs *s)
         s->ebx = VTD_FASTEST;
         s->ecx = VTD_SLOWEST;
         return;
+    case 0x0001:                        /* VTD_Update_System_Clock: kept at each tick */
+    case 0x0005:                        /* VTD_Disable_Trapping, VTD_Enable_Trapping: */
+    case 0x0006:                        /* the timer's ports are not trapped */
+        return;
+    case 0x0007: {                      /* VTD_Get_Real_Time: EDX:EAX in the timer's */
+        u32 c, lo;                      /* 1.19 MHz clocks (the DDK: 0.8 us) since the start */
+        outb(0x43, 0x00);
+        c = inb(0x40);
+        c |= inb(0x40) << 8;
+        lo = (tmo_ticks << 16) + (c ? 65536u - c : 0);
+        s->eax = lo;
+        s->edx = tmo_ticks >> 16;
+        return;
+    }
     case 0x0002:                        /* VTD_Get_Interrupt_Period */
         s->eax = VTD_SLOWEST;
         return;
@@ -349,6 +395,8 @@ void vxd_init(void)
     /* w16's own devices (C, in this module), each with its service table */
     vtd_ddb.svc_table = (u32)make_slots(5, vtd_ddb.svc_count);
     devs[ndevs++] = &vtd_ddb;
+    vdd_ddb.svc_table = (u32)make_slots(0x0A, vdd_ddb.svc_count);
+    devs[ndevs++] = &vdd_ddb;
     for (i = 0; i < info->vxd_count; i++) {
         struct ddb *d = (struct ddb *)list[i];
         devs[ndevs++] = d;
@@ -757,6 +805,22 @@ void __cdecl svc_dispatch(struct svcregs *s)
         if (vxd_send(s->eax, v, s->edx, s->esi, s->edi)) s->eflags |= EFL_CF;
         return;
     }
+    case 0x0090: {                      /* Hook_Device_Service: EAX the service, ESI the hook */
+        /* the DDK: the hook replaces the service in its table, ESI back
+         * the procedure it replaced (the hook chains to it); carry for a
+         * service that is not there. The calls already linked go through
+         * the table's slot, so they reach the hook too */
+        u32 hdev = s->eax >> 16, hsvc = s->eax & 0xFFFF, *slot = NULL, old;
+        struct ddb *d;
+        if (hdev == 1 && hsvc < VMM_SERVICES) slot = &vmm_slots[hsvc];
+        else if (hdev != 1 && (d = find_dev(hdev)) != NULL && hsvc < d->svc_count && d->svc_table)
+            slot = (u32 *)(d->svc_table + hsvc * 4);
+        if (!slot || !*slot || !s->esi) { s->eflags |= EFL_CF; return; }
+        old = *slot;
+        *slot = s->esi;
+        s->esi = old;
+        return;
+    }
     case 0x004C:                        /* Build_Int_Stack_Frame: CX:EDX the routine */
         if (!vmm_build_int(s->ecx & 0xFFFF, s->edx)) s->eflags |= EFL_CF;
         trace("VMM: Build_Int_Stack_Frame %x:%x%s\n", s->ecx & 0xFFFF, s->edx, (s->eflags & EFL_CF) ? " (not in PM)" : "");
@@ -768,6 +832,14 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
+    if (dev == 0x0A) {
+        /* (the rest of the VDD's services: carry, traced, UNVERIFIED) */
+        if (!vdd_service(svc, s)) {
+            trace("VMM: VDD service %x is not implemented (called from %x)\n", svc, *(u32 *)(s + 1));
+            s->eflags |= EFL_CF;
+        }
+        return;
+    }
     panic("VxD service %x of device %x is not implemented yet (called from %x)",
           svc, dev, *(u32 *)(s + 1));
 }

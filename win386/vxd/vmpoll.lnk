@@ -1,0 +1,5 @@
+# VMPOLL.386: w16's VMPOLL module (win386/vxd), an LE VxD, device 0018h
+format windows vxd
+option quiet
+option nodefaultlibs
+export VMPOLL_DDB.1

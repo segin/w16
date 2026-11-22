@@ -61,6 +61,7 @@ struct shvm {
     struct shvm *next;
     struct vm *vm;
     u32 block;                          /* WINOA386's block (function 3), linear */
+    int idle_detect;                    /* the PIF's Detect Idle Time (+01h bit 10h) */
     u32 flags;                          /* function 6 */
     u32 flags2;                         /* function 6 with CX FFFFh */
     u32 ended_posted;
@@ -368,6 +369,7 @@ static void create(struct cregs *r)
      * and not acted on: +01h-+03h (idle time, HMA, locked memory, fast
      * paste, the reserved keys; +03h 40h close on exit is WINOA386's),
      * +04h the video settings, +1Ch KB Required, +22h-+28h EMS and XMS */
+    s->idle_detect = (b[1] & 0x10) != 0;
     s->pif_excl = (b[0] & 1) != 0;
     v->background = (b[0] & 2) != 0;
     sh_mode(s);
@@ -542,6 +544,13 @@ void shell_api(struct cregs *r)
         for (s = shvms; s && s->hwnd; s = s->next)
             ;
         if (s) s->hwnd = SI(r);
+        /* a windowed VM started as an icon (WinExec with SW_SHOWMINNOACTIVE)
+         * gets no function 5: it runs now, without the focus (Windows 3.1,
+         * VXT.386: Create_VM, VM_Resume, VM_Critical_Init, VM_Init with
+         * nothing between; its Background then decides whether it gets
+         * time). A full-screen one waits for the focus (its video memory is
+         * the VGA's) */
+        if (s && !s->vm->started && (s->flags & SHELL_WINDOWED)) resume_vm(s->vm);
         r->eax = 0;
         trace("SHELL: VM %d's window %x\n", s ? s->vm->id : 0, SI(r));
         return;
@@ -659,6 +668,23 @@ struct reboot_link *reboot_link_of(u32 ref)
 
 /* the VM's program has ended (vm.c, in that VM): Windows 3.1's sequence,
  * then the event for WINOA386 */
+/* VM_Init for a new VM, after the devices had it: VMPOLL's idle
+ * detection from the PIF (Windows 3.1's SHELL, VXT.386: VMPoll_Get_Version,
+ * then VMPoll_Enable_Disable with AL 1 for Detect Idle Time on, 0 off, EBX
+ * the VM, while it handles VM_Init) */
+void shell_vm_init(struct vm *v)
+{
+    struct shvm *sh = sh_of(v);
+    struct svcregs s;
+    if (!sh) return;
+    memset(&s, 0, sizeof(s));
+    if (!vxd_service_call(0x0018, 0x00, &s)) return;
+    memset(&s, 0, sizeof(s));
+    s.eax = 0x0300 | (sh->idle_detect ? 1 : 0);
+    s.ebx = VMH(v);
+    vxd_service_call(0x0018, 0x01, &s);
+}
+
 void shell_vm_ended(struct vm *v)
 {
     struct shvm *s = sh_of(v);

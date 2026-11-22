@@ -1059,9 +1059,14 @@ int int2f_pm(struct cregs *r)
     case 0x1600:
         SETW(r->eax, 0x0A03);
         return 1;
-    case 0x1680:
-    case 0x1689:
-        SETLO(r->eax, 0);
+    case 0x1680:                        /* release time slice: AL=0 */
+    case 0x1689:                        /* KERNEL's idle loop (Pietrek ch. 6): */
+        SETLO(r->eax, 0);               /* the System VM's time goes to the others */
+        if (AX(r) == 0x1680) vm_release(); else vm_idle();
+        return 1;
+    case 0x1681:                        /* begin/end critical section */
+    case 0x1682:
+        vm_crit(AX(r) == 0x1681);
         return 1;
     case 0x1683:
         SETW(r->ebx, 1);

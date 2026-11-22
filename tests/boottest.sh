@@ -119,6 +119,10 @@
 #   win386dosprobe  VX12 in the MS-DOS Prompt (V86 API entries, 80x50 and
 #              40x25 windows) against Microsoft's WIN386; A20 off through
 #              the 8042 and port 92h must not end w16 (it ends 3.1)
+#   win386idle w16's WIN386: Windows' speed beside 4 DOS boxes polling the
+#              keyboard (VMPOLL finds them idle: at least 90 per cent) and
+#              beside a busy one (it gets its share), measured by VX13
+#              (tests/vmpollrun.sh), Microsoft's WIN386 alongside
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -899,7 +903,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1659,6 +1663,47 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386doscad: a DOS program's fault and Ctrl+Alt+Del (Escape, Return) as with Microsoft's WIN386"
         else echo "FAIL win386doscad: $r"; fails=$((fails + 1)); fi ;;
+    win386idle)
+        # VMPOLL (ARCHITECTURE.md 12.12; the user's report 2026-11-22: DOS
+        # boxes made Windows janky, more so as more were open): VX13
+        # (tests/apps/vx13.c, tests/vmpollrun.sh) measures Windows' busy
+        # loop with 0 and 4 windowed Background boxes that poll the
+        # keyboard (VX14 P), then 0 and 1 box busy counting (VX14 B), in
+        # DOSBox-X at a fixed 30,000 cycles. Windows 3.1's VMPOLL found the
+        # polling boxes idle (Windows kept 96 per cent of its speed) and
+        # gave the busy box its share (Windows at 67 per cent). w16's must
+        # keep at least 90 per cent with the polling boxes and give the
+        # busy box at least 20 per cent (its VX14.LOG has counts)
+        r=ok
+        for k in p b; do
+            c=0,4; [ $k = b ] && c=0,1
+            refrun win386idle-ref$k win386idle env VMPOLL_DOSBOX=x VMPOLL_COUNTS=$c \
+                sh "$root/tests/vmpollrun.sh" "$out/win386idle-ref$k" $k ms \
+                "$root/build/dos/VX13.EXE" "$root/build/dos/VX14.COM" &
+            rm -rf "$out/win386idle-w16$k"
+            VMPOLL_DOSBOX=x VMPOLL_COUNTS=$c sh "$root/tests/vmpollrun.sh" "$out/win386idle-w16$k" $k w16 \
+                > "$out/win386idle-w16$k.txt" 2>&1 &
+        done
+        wait
+        # loop counts per number of boxes: "0 L0" "N LN"
+        for k in p b; do
+            for w in ref w16; do
+                f=$out/win386idle-$w$k/VX13.LOG
+                l0=$(sed -n 's/^VX13 boxes=0 loop=\([0-9]*\).*/\1/p' "$f" 2>/dev/null)
+                ln=$(sed -n 's/^VX13 boxes=[1-9][0-9]* loop=\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -1)
+                if [ -z "$l0" ] || [ -z "$ln" ] || [ "$l0" = 0 ]; then r="$w $k: no measurement ($f)"; break 2; fi
+                eval "pct_$w$k=$((ln * 100 / l0))"
+            done
+        done
+        if [ "$r" = ok ]; then
+            [ "$pct_w16p" -ge 90 ] || r="Windows at $pct_w16p% beside 4 polling boxes (Windows 3.1: $pct_refp%)"
+        fi
+        if [ "$r" = ok ]; then
+            [ "$pct_w16b" -le 80 ] || r="the busy box got too little: Windows at $pct_w16b% (Windows 3.1: $pct_refb%)"
+            grep -q 'VX14 B n=' "$out/win386idle-w16b/VX14.LOG" 2>/dev/null || r="the busy box never counted ($out/win386idle-w16b)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386idle: Windows at $pct_w16p% beside 4 polling boxes (3.1: $pct_refp%), $pct_w16b% beside a busy one (3.1: $pct_refb%)"
+        else echo "FAIL win386idle: $r"; fails=$((fails + 1)); fi ;;
     win386pifwin)
         # the user's report (2026-11-22): a PIF made with the PIF Editor
         # ("Command Prompt", windowed) opened a window whose client area
