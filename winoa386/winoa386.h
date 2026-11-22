@@ -10,3 +10,4 @@
 #define IDS_NOGRABBER       6
 #define IDS_STILLACTIVE     7
 #define IDS_NOWINDOW        8
+#define IDS_GPFAULT         9   /* SHELL event 41Bh, wParam 4: a fault ended the VM */

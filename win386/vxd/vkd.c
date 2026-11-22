@@ -42,7 +42,8 @@ void __cdecl vmm_simulate_io(struct vregs *r);
 extern char vkd_io60[], vkd_io64[];
 #pragma aux vkd_io60 "*"
 #pragma aux vkd_io64 "*"
-extern char vkd_eoi[];
+extern char vkd_eoi[], vkd_io92[];
+#pragma aux vkd_io92 "*"
 #pragma aux vkd_eoi "*"
 void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
 vu32 __cdecl vmm_alloc_cb_area(vu32 size, vu32 flags);
@@ -245,12 +246,16 @@ static void key_byte(vu32 b)
     vu32 code = b & 0x7F;
     int up = (b & 0x80) != 0, mine = 0;
     if (b == 0xE0) {
-        /* to the VM at once, even when the byte after it is a hot key's
-         * (UNVERIFIED what Windows 3.1's VKD does with an extended hot
-         * key's E0h; holding it back changed when KERNEL's Ctrl+Alt+Del
-         * procedure ran, and its verdict: the win386cad case) */
-        q_put(kfocus, 0xE0);
+        /* held until the next byte is known not to be a hot key's: an
+         * extended hot key's E0h is the hot key's (Windows 3.1: neither a
+         * DOS VM, VX12 K, nor the System VM, VX11 K, gets the E0h of
+         * Ctrl+Alt+grey Del). In the System VM it still goes at once:
+         * there w16's REBOOT asks KERNEL's Ctrl+Alt+Del procedure whether
+         * the task responds, and without that byte's interrupt the
+         * procedure's answer came out "busy" in 1 of 3 runs (win386cad) */
+        if (ext == 1) q_put(kfocus, 0xE0);
         ext = 1;
+        if (kfocus == sys_vm) { q_put(kfocus, 0xE0); ext = 2; }
         return;
     }
     if (b == 0xE1) e1_left = 2;             /* Pause: E1h 1Dh 45h, E1h 9Dh C5h */
@@ -258,7 +263,10 @@ static void key_byte(vu32 b)
         if (!e1_left) mine = hot_key(code, up);    /* with the shift state before this byte */
         track_mods(b, ext);
     }
-    if (!mine) q_put(kfocus, b);
+    if (!mine) {
+        if (ext == 1) q_put(kfocus, 0xE0);  /* the one held back */
+        q_put(kfocus, b);
+    }
     ext = 0;
 }
 
@@ -346,8 +354,27 @@ void __cdecl vkd_port64(struct vregs *r)
     }
     present(r->ebx);
     st &= ~0x01u;
-    if (k->obf || (st & 0x20)) st |= 0x01;
+    /* the VM's own output buffer first: while it holds a keyboard byte
+     * the status says so (OBF, AUXB clear), as an 8042 shows the byte in
+     * its buffer; a mouse byte in the real controller shows (OBF and
+     * AUXB) once the VM has read it. Before, AUXB came from the real
+     * controller even then, and a BIOS IRQ 12 handler took the keyboard
+     * byte for the mouse's (UNVERIFIED against Windows 3.1: the two never
+     * met in a probe) */
+    if (k->obf) st = (st & ~0x20u) | 0x01;
+    else if (st & 0x20) st |= 0x01;
     r->eax = (r->eax & ~0xFFu) | st;
+}
+
+/* port 92h (the system control port: bit 1 A20, bit 0 a fast reset):
+ * A20 stays on, as for the 8042's output port (a DOS box switching it off
+ * there ended Windows 3.1 too, VX12 B: w16 goes on instead); the rest
+ * goes to the port as written */
+void __cdecl vkd_port92(struct vregs *r)
+{
+    if (r->ecx & ~4u) { vmm_simulate_io(r); return; }
+    if (r->ecx & 4) outb(0x92, (r->eax & 0xFF) | 0x02);
+    else r->eax = (r->eax & ~0xFFu) | inb(0x92);
 }
 
 void __cdecl vkd_service(struct vregs *r)
@@ -495,6 +522,10 @@ void __cdecl vkd_control(struct vregs *r)
         vregs_clear(&s);
         s.esi = (vu32)vkd_io64;
         s.edx = 0x64;
+        vmm_install_io_handler(&s);
+        vregs_clear(&s);
+        s.esi = (vu32)vkd_io92;
+        s.edx = 0x92;
         vmm_install_io_handler(&s);
     }
 }

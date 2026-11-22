@@ -42,6 +42,10 @@ void __cdecl vmm_save_client_state(struct vregs *r);
 void __cdecl vmm_restore_client_state(struct vregs *r);
 void __cdecl vmm_get_sys_vm(struct vregs *r);
 void __cdecl vmm_get_cur_vm(struct vregs *r);
+void __cdecl vmm_get_exec_focus(struct vregs *r);
+
+/* the VMM's half (w16vxd.h): a DOS VM's title, closing it */
+struct reboot_link reboot_link = { REBOOT_LINK_MAGIC, 0, 0 };
 extern char rb_cad[];
 #pragma aux rb_cad "*"
 
@@ -205,6 +209,23 @@ static const struct line lines_c[] = {
 #define SCREEN_A 0
 #define SCREEN_B 1
 #define SCREEN_C 2
+#define SCREEN_D 3
+/* D: a DOS program in front (Windows 3.1, tests/scripts/input/
+ * vx12gc.txt): its window's title on row 6; Esc back to it, Enter closes
+ * it (the VM ends, Windows comes back) */
+static const struct line lines_d[] = {
+    { 8, 5, "You can use CTRL+ALT+DEL to quit an application that has stopped" },
+    { 9, 5, "responding to the system. When possible, you should quit the" },
+    { 10, 5, "application by using the method recommended in the documentation" },
+    { 11, 5, "provided with the application." },
+    { 13, 5, "*  Press ESC to cancel and return to the non-Windows application." },
+    { 14, 5, "*  Press ENTER to close this application that is not responding." },
+    { 15, 8, "You will lose any unsaved information in this application." },
+    { 16, 5, "*  Press CTRL+ALT+DEL again to restart your computer. You will" },
+    { 17, 8, "lose any unsaved information in all applications." },
+    { 19, 21, "Press ENTER for OK or ESC to Cancel: OK" },
+    { 0, 0, 0 }
+};
 
 static void put(vu32 row, vu32 col, const char *s, vu8 attr)
 {
@@ -228,10 +249,12 @@ static void title(vu32 row, const char *name)
 static void show_screen(int kind, const char *name)
 {
     vu16 *v = (vu16 *)(vga_mem() + 0x18000);
-    const struct line *l = kind == SCREEN_A ? lines_a : kind == SCREEN_B ? lines_b : lines_c;
+    const struct line *l = kind == SCREEN_A ? lines_a : kind == SCREEN_B ? lines_b
+                         : kind == SCREEN_D ? lines_d : lines_c;
     vu32 i;
     for (i = 0; i < 80 * 25; i++) v[i] = 0x1F20;
     if (kind == SCREEN_A) title(6, "w16");             /* Windows 3.1: " Windows " */
+    else if (kind == SCREEN_D) title(6, name);
     else title(8, kind == SCREEN_B ? name : "WARNING!");
     for (; l->s; l++) put(l->row, l->col, l->s, 0x1F);
 }
@@ -290,7 +313,7 @@ static vu32 wait_key(int kind, int *cad)
         if (code == 0x1D || code == 0x38 || code == 0x2A || code == 0x36) continue;
         *cad = (code == 0x53 && held[0x1D] && held[0x38]);
         if (*cad) return code;
-        if (kind == SCREEN_B && code != 0x01 && code != 0x1C) continue;
+        if ((kind == SCREEN_B || kind == SCREEN_D) && code != 0x01 && code != 0x1C) continue;
         return code;
     }
 }
@@ -320,7 +343,8 @@ static vu32 screen(int kind, const char *name)
     bios_video(0x0003, 0, 0);
     show_screen(kind, name);
     /* the cursor: after the prompt (A, C), on its "OK" (B) */
-    bios_video(0x0200, 0, kind == SCREEN_A ? (19 << 8) | 53 : kind == SCREEN_B ? (18 << 8) | 58 : (18 << 8) | 53);
+    bios_video(0x0200, 0, kind == SCREEN_A ? (19 << 8) | 53 : kind == SCREEN_B ? (18 << 8) | 58
+                          : kind == SCREEN_D ? (19 << 8) | 58 : (18 << 8) | 53);
     key = wait_key(kind, &cad);
     del_down = held[0x53];
     if (cad) {
@@ -336,6 +360,21 @@ static vu32 screen(int kind, const char *name)
      * win386cad.txt: Enter afterwards opens File Manager as under Windows
      * 3.1). UNVERIFIED how Windows 3.1 gives them back */
     if (n_orphans) {
+        /* Ctrl's release first, then Alt's, then the rest (Windows 3.1:
+         * 9Dh B8h whichever was let go first; VX11 K and VX12 K) */
+        static vu8 sorted[16];
+        vu32 pass, i, n = 0;
+        for (pass = 0; pass < 3; pass++)
+            for (i = 0; i < n_orphans; i++) {
+                vu32 e0 = orphans[i] == 0xE0, b = e0 ? orphans[i + 1] : orphans[i];
+                vu32 k = (b & 0x7F) == 0x1D ? 0 : (b & 0x7F) == 0x38 ? 1 : 2;
+                if (k == pass) {
+                    if (e0) sorted[n++] = 0xE0;
+                    sorted[n++] = (vu8)b;
+                }
+                if (e0) i++;
+            }
+        for (i = 0; i < n; i++) orphans[i] = sorted[i];
         zero(&s, sizeof(s));
         s.esi = (vu32)orphans;
         s.ecx = n_orphans;
@@ -399,6 +438,21 @@ void __cdecl reboot_cad(struct vregs *r)
     if ((r->eax >> 8) & 0xFF) { del_down = 0; return; }    /* the release */
     del_down = 1;
     if (cad_state) return;
+    {   /* a DOS program in front: its own screen at once (Windows 3.1) */
+        struct vregs f;
+        static char t[32];
+        zero(&f, sizeof(f));
+        vmm_get_exec_focus(&f);
+        if (f.ebx && f.ebx != sys_vm) {
+            vu32 vm = f.ebx;
+            if (!reboot_link.title || !reboot_link.title(vm, t, sizeof t)) {
+                t[0] = 0;
+            }
+            if (screen_once(SCREEN_D, t[0] ? t : "Non-Windows application") == 0x1C && reboot_link.close)
+                reboot_link.close(vm);
+            return;
+        }
+    }
     if (!sane || !SANITY_CHECK) { screen_a(); return; }
     *sane = 0;
     /* KERNEL's procedure as an interrupt of the VM (Windows 3.1's Reboot

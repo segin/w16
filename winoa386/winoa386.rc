@@ -17,4 +17,5 @@ BEGIN
     IDS_NOMEM       "Insufficient memory to run the application.\n\nQuit one or more w16 applications to increase available memory, and try again."
     IDS_NOGRABBER   "Cannot run the application."
     IDS_NOWINDOW    "Cannot run the application."
+    IDS_GPFAULT     "This application has violated system integrity due to an invalid general protection fault and will be terminated.\n\nQuit all applications, quit w16, and then restart your computer."
 END
