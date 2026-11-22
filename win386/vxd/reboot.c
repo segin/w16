@@ -41,6 +41,7 @@ void __cdecl vmm_end_nest_exec(struct vregs *r);
 void __cdecl vmm_save_client_state(struct vregs *r);
 void __cdecl vmm_restore_client_state(struct vregs *r);
 void __cdecl vmm_get_sys_vm(struct vregs *r);
+void __cdecl vmm_get_cur_vm(struct vregs *r);
 extern char rb_cad[];
 #pragma aux rb_cad "*"
 
@@ -70,30 +71,44 @@ static vu8 seq[5], gc[9], crtc[25], attr[21], misc, dac[768];
  * drew every bitmap from memory without its colours (icons, File
  * Manager's: black and white) until it set them again */
 static vu8 seq_i, gc_i, crtc_i, attr_i, dac_mask, dac_w;
+static vu32 crt;                        /* the CRTC: 3D4h, or 3B4h in a monochrome setting (Misc bit 0 clear) */
 static vu8 planes[4][65536];
+
+/* the VGA's memory whichever VM runs: through the System VM's high
+ * linear window (a windowed DOS VM's own A0000h-BFFFFh is RAM) */
+static vu8 *vga_mem(void)
+{
+    return (vu8 *)(CB_HIGH_LINEAR(sys_vm) + 0xA0000);
+}
 
 static void vga_save(void)
 {
     vu32 i, p;
     seq_i = inb(0x3C4);
     gc_i = inb(0x3CE);
-    crtc_i = inb(0x3D4);
-    inb(0x3DA);
+    crt = (inb(0x3CC) & 1) ? 0x3D4 : 0x3B4;
+    crtc_i = inb(crt);
+    inb(crt + 6);
     attr_i = inb(0x3C0);                    /* with its palette-access bit */
     dac_mask = inb(0x3C6);
     dac_w = inb(0x3C8);
     misc = inb(0x3CC);
     for (i = 0; i < 5; i++) { outb(0x3C4, i); seq[i] = inb(0x3C5); }
     for (i = 0; i < 9; i++) { outb(0x3CE, i); gc[i] = inb(0x3CF); }
-    for (i = 0; i < 25; i++) { outb(0x3D4, i); crtc[i] = inb(0x3D5); }
-    for (i = 0; i < 21; i++) { inb(0x3DA); outb(0x3C0, i | 0x20); attr[i] = inb(0x3C1); }
-    inb(0x3DA);
+    for (i = 0; i < 25; i++) { outb(crt, i); crtc[i] = inb(crt + 1); }
+    for (i = 0; i < 21; i++) { inb(crt + 6); outb(0x3C0, i | 0x20); attr[i] = inb(0x3C1); }
+    inb(crt + 6);
     outb(0x3C7, 0);
     for (i = 0; i < 768; i++) dac[i] = inb(0x3C9);
+    /* the planes as they are: odd/even and chain 4 off, A0000h 64 KB
+     * (a text mode maps B8000h 32 KB with odd/even, mode 13h chains the
+     * planes: read as they were, the font and text were lost) */
+    outb(0x3C4, 4); outb(0x3C5, 0x06);
     outb(0x3CE, 5); outb(0x3CF, 0);         /* read mode 0 */
+    outb(0x3CE, 6); outb(0x3CF, 0x05);
     for (p = 0; p < 4; p++) {
         outb(0x3CE, 4); outb(0x3CF, p);     /* read map p */
-        copy(planes[p], (void *)0xA0000, 65536);
+        copy(planes[p], (void *)vga_mem(), 65536);
     }
 }
 
@@ -109,17 +124,17 @@ static void vga_restore(void)
     outb(0x3CE, 6); outb(0x3CF, 0x05);      /* A0000h, 64 KB, graphics */
     for (p = 0; p < 4; p++) {
         outb(0x3C4, 2); outb(0x3C5, 1u << p);
-        copy((void *)0xA0000, planes[p], 65536);
+        copy((void *)vga_mem(), planes[p], 65536);
     }
     /* the registers as they were */
     outb(0x3C2, misc);
     outb(0x3C4, 0); outb(0x3C5, 1);         /* synchronous reset */
     for (i = 1; i < 5; i++) { outb(0x3C4, i); outb(0x3C5, seq[i]); }
     outb(0x3C4, 0); outb(0x3C5, seq[0] | 3);
-    outb(0x3D4, 0x11); outb(0x3D5, crtc[0x11] & 0x7F);  /* unprotect 0-7 */
-    for (i = 0; i < 25; i++) { outb(0x3D4, i); outb(0x3D5, crtc[i]); }
+    outb(crt, 0x11); outb(crt + 1, crtc[0x11] & 0x7F);  /* unprotect 0-7 */
+    for (i = 0; i < 25; i++) { outb(crt, i); outb(crt + 1, crtc[i]); }
     for (i = 0; i < 9; i++) { outb(0x3CE, i); outb(0x3CF, gc[i]); }
-    inb(0x3DA);
+    inb(crt + 6);
     for (i = 0; i < 21; i++) { outb(0x3C0, i); outb(0x3C0, attr[i]); }
     outb(0x3C0, 0x20);                      /* the screen on again */
     outb(0x3C8, 0);
@@ -127,9 +142,9 @@ static void vga_restore(void)
     /* the indexes as the driver left them */
     outb(0x3C6, dac_mask);
     outb(0x3C8, dac_w);
-    inb(0x3DA);
+    inb(crt + 6);
     outb(0x3C0, attr_i | 0x20);
-    outb(0x3D4, crtc_i);
+    outb(crt, crtc_i);
     outb(0x3CE, gc_i);
     outb(0x3C4, seq_i);
 }
@@ -193,7 +208,7 @@ static const struct line lines_c[] = {
 
 static void put(vu32 row, vu32 col, const char *s, vu8 attr)
 {
-    vu16 *v = (vu16 *)0xB8000 + row * 80 + col;
+    vu16 *v = (vu16 *)(vga_mem() + 0x18000) + row * 80 + col;
     while (*s) *v++ = (vu16)((attr << 8) | (vu8)*s++);
 }
 
@@ -212,7 +227,7 @@ static void title(vu32 row, const char *name)
 
 static void show_screen(int kind, const char *name)
 {
-    vu16 *v = (vu16 *)0xB8000;
+    vu16 *v = (vu16 *)(vga_mem() + 0x18000);
     const struct line *l = kind == SCREEN_A ? lines_a : kind == SCREEN_B ? lines_b : lines_c;
     vu32 i;
     for (i = 0; i < 80 * 25; i++) v[i] = 0x1F20;
@@ -240,6 +255,7 @@ static vu32 n_orphans;
 static vu32 wait_key(int kind, int *cad)
 {
     vu32 b, code, st, i;
+    int e0;
     for (i = 0; i < 128; i++) held[i] = seen[i] = 0;
     /* Ctrl and Alt count as held (their repeats and releases are only
      * tracked either way); Del as the hot key last saw it: a screen shown
@@ -248,19 +264,27 @@ static vu32 wait_key(int kind, int *cad)
     held[0x1D] = held[0x38] = 1;
     held[0x53] = (vu8)del_down;
     n_orphans = 0;
+    e0 = 0;
     for (;;) {
         while (!((st = inb(0x64)) & 1))
             ;
         b = inb(0x60);
         if (st & 0x20) continue;            /* the mouse's */
-        if (b == 0xE0 || b == 0xE1) continue;
+        if (b == 0xE0) { e0 = 1; continue; }
+        if (b == 0xE1) continue;
         code = b & 0x7F;
         if (b & 0x80) {
-            if (!seen[code] && code != 0x53 && n_orphans < sizeof(orphans))
-                orphans[n_orphans++] = (vu8)b;  /* pressed before: the VM's */
+            /* pressed before: the VM's (an extended key's with its E0h:
+             * the right Ctrl's release is not the left's) */
+            if (!seen[code] && code != 0x53 && n_orphans + 2 <= sizeof(orphans)) {
+                if (e0) orphans[n_orphans++] = 0xE0;
+                orphans[n_orphans++] = (vu8)b;
+            }
+            e0 = 0;
             held[code] = 0;
             continue;
         }
+        e0 = 0;
         if (held[code]) continue;           /* a repeat */
         held[code] = seen[code] = 1;
         if (code == 0x1D || code == 0x38 || code == 0x2A || code == 0x36) continue;
@@ -283,9 +307,12 @@ static vu32 screen(int kind, const char *name)
     zero(&s, sizeof(s));
     s.edi = (vu32)&saved;
     vmm_save_client_state(&s);
+    /* the BIOS calls run in the current VM (Exec_Int), with its client
+     * registers: when a DOS VM was current, the System VM's were written
+     * and the current VM's used */
     zero(&s, sizeof(s));
-    vmm_get_sys_vm(&s);
-    client = *(vu32 *)(s.ebx + 8);          /* CB_Client_Pointer */
+    vmm_get_cur_vm(&s);
+    client = CB_CLIENT(s.ebx);
     zero(&s, sizeof(s));
     vmm_begin_nest_v86_exec(&s);
     mode = *(vu8 *)0x449;                   /* the BIOS's video mode */
