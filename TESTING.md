@@ -123,8 +123,9 @@ in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/whscenarios.sh` (w16's Windows Help against Microsoft's over the
 reference install's own .HLP files: screens within
 `tests/scripts/winhelp.baseline`, WIN.INI and WINHELP.BMK byte for byte,
-`WH_BASELINE=update` to rewrite; `tests/whobs.sh` for observing the
-original; `make build/hlpdump` builds the .HLP reader for the host,
+`WH_BASELINE=update` to rewrite; `tests/whtree.sh OUTDIR [286|386]`:
+on w16's install tree alone, with three of the reference install's help
+files as input; `tests/whobs.sh` for observing the original; `make build/hlpdump` builds the .HLP reader for the host,
 `tests/winhelp/hlpdump.c`),
 `tests/pmscenarios.sh`, `tests/calcscenarios.sh`, `tests/clockscenarios.sh`,
 `tests/ssscenarios.sh` (w16's SSSTARS.SCR against Microsoft's: dialogs,

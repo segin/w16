@@ -1,0 +1,37 @@
+; tests/whtree.sh: Windows Help on w16's tree alone
+run WINHELP.EXE NOTEPAD.HLP
+wait 4000
+snap C:\T1.BMP
+dump
+click 297 325
+wait 2000
+snap C:\T2.BMP
+dump
+click 362 54
+wait 2000
+click 257 135
+wait 2500
+snap C:\T3.BMP
+dump
+click 400 420
+wait 1000
+click 303 54
+wait 2000
+type find
+wait 800
+snap C:\T4.BMP
+dump
+key 1B
+wait 1000
+close
+wait 2000
+run REGEDIT.EXE
+wait 4000
+cmd 1792
+wait 3000
+snap C:\T5.BMP
+dump
+close
+wait 1500
+close
+wait 2000
