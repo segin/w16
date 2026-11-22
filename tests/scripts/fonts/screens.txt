@@ -1,4 +1,6 @@
-; tests/fonts.sh: screens drawn in the System and MS Sans Serif fonts,
+; tests/fonts.sh: screens drawn in the System and MS Sans Serif fonts (and
+; Courier, MS Serif, Small Fonts and Symbol in the Fonts dialog's sample
+; and Character Map),
 ; taken with Windows 3.1's fonts and with w16's (a SNAP.EXE script)
 run PROGMAN.EXE
 wait 3000
@@ -47,4 +49,30 @@ key 27
 key 0D
 wait 2000
 snap C:\CPFONTS.BMP
+dump
+focus
+char c
+wait 1000
+snap C:\CPCOUR.BMP
+dump
+char m
+char m
+wait 1000
+snap C:\CPSERIF.BMP
+dump
+char s
+wait 1000
+snap C:\CPSMALL.BMP
+dump
+char s
+wait 1000
+snap C:\CPSYMBOL.BMP
+dump
+key 1B
+wait 500
+close
+wait 1000
+run CHARMAP.EXE
+wait 2500
+snap C:\CHARMAP.BMP
 dump

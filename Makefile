@@ -1170,6 +1170,45 @@ $(FNT)/SSERIFE.FON: $(SSERIFE_SRC) tools/fontc.py
 	    84=fonts/sserife8.txt 85=fonts/sserife10.txt 86=fonts/sserife12.txt \
 	    87=fonts/sserife14.txt 88=fonts/sserife18.txt 89=fonts/sserife24.txt
 
+# The rest of the VGA set (ARCHITECTURE.md 6.9.2): sources drawn by
+# tools/fontgen.py (fonts/skeleton.txt, fonts/tiny.txt) and committed.
+# Module names, resource IDs and resource sizes (SizeofResource) are what
+# probe FN3 observes on 3.1: SMALLE.FON aligns its resources to 512 bytes,
+# two DOSAPP.FON fonts are padded to 3.1's resource lengths. [fonts] keys
+# are the descriptions of the WIN.INI ones.
+FONS2   := $(FNT)/COURE.FON $(FNT)/SERIFE.FON $(FNT)/SMALLE.FON $(FNT)/SYMBOLE.FON \
+           $(FNT)/DOSAPP.FON $(FNT)/EGA80WOA.FON $(FNT)/EGA40WOA.FON \
+           $(FNT)/CGA80WOA.FON $(FNT)/CGA40WOA.FON
+FONS    += $(FONS2)
+fonts: $(FONS2)
+comma := ,
+# fon-rule FILE, description, file description, extra options, ID=SOURCE...
+define fon-rule
+$(FNT)/$(1).FON: $(foreach s,$(5),$(word 2,$(subst =, ,$(s)))) tools/fontc.py
+	@mkdir -p $$(@D)
+	$$(FONTC) fon $$@ --module $(1) --desc "FONTRES 100,96,96 : $(2)" $$(FONTINFO) \
+	    --info "FileDescription=$(3)" --info InternalName=$(1) \
+	    --info OriginalFilename=$(1).FON $(4) $(5)
+endef
+$(eval $(call fon-rule,COURE,Courier 10$(comma)12$(comma)15 (VGA res),Courier font (VGA res),,\
+    90=fonts/coure10.txt 91=fonts/coure12.txt 92=fonts/coure15.txt))
+$(eval $(call fon-rule,SERIFE,MS Serif 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),MS Serif font (VGA res),,\
+    78=fonts/serife8.txt 79=fonts/serife10.txt 80=fonts/serife12.txt \
+    81=fonts/serife14.txt 82=fonts/serife18.txt 83=fonts/serife24.txt))
+$(eval $(call fon-rule,SMALLE,Small Fonts (VGA res),Small Fonts (VGA res),--shift 9,\
+    1=fonts/smalle2.txt 2=fonts/smalle3.txt 3=fonts/smalle4.txt 4=fonts/smalle5.txt \
+    5=fonts/smalle6.txt 6=fonts/smalle7.txt 7=fonts/serife6.txt 8=fonts/serife7.txt))
+$(eval $(call fon-rule,SYMBOLE,Symbol 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),Symbol font (VGA res),,\
+    1=fonts/symbole8.txt 2=fonts/symbole10.txt 3=fonts/symbole12.txt \
+    4=fonts/symbole14.txt 5=fonts/symbole18.txt 6=fonts/symbole24.txt))
+$(eval $(call fon-rule,DOSAPP,Terminal for DOS windows (w16),DOS window fonts (VGA res),--pad 1=3072 --pad 6=9728,\
+    1=fonts/dosapp4x6.txt 2=fonts/dosapp5x12.txt 3=fonts/dosapp6x8.txt \
+    4=fonts/dosapp7x12.txt 5=fonts/dosapp10x18.txt 6=fonts/dosapp12x16.txt))
+$(eval $(call fon-rule,EGA80WOA,Terminal 80 columns (w16),DOS window font 8x12,,131=fonts/ega80woa.txt))
+$(eval $(call fon-rule,EGA40WOA,Terminal 40 columns (w16),DOS window font 16x12,,130=fonts/ega40woa.txt))
+$(eval $(call fon-rule,CGA80WOA,Terminal 80 columns (w16),DOS window font 8x8,,101=fonts/cga80woa.txt))
+$(eval $(call fon-rule,CGA40WOA,Terminal 40 columns (w16),DOS window font 16x8,,100=fonts/cga40woa.txt))
+
 # ---- shell: PROGMAN.EXE, in two builds from one source tree ----
 #   $(DOS)/PROGMAN.EXE    Windows 3.x build (marked 3.0, uses MDI etc.)
 #   $(WIN2)/PROGMAN.EXE   Windows 2.x build (W16_WIN2: 8086 code, fixed

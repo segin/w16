@@ -34,7 +34,7 @@ make -j"$(nproc)"          # everything below
 | Output | What |
 |---|---|
 | `build/dos/` | every w16 module and program: `WIN.COM`, `DOSX.EXE`, `KRNL286.EXE`, `KRNL386.EXE`, `USER.EXE`, `GDI.EXE`, `SHELL.DLL`, `WINOLDAP.MOD`, `WINOA386.MOD`, `WIN87EM.DLL`, `VGA.DRV`, `MOUSE.DRV`, `PROGMAN.EXE`, `WINFILE.EXE`, `NOTEPAD.EXE`, `WRITE.EXE`, `REGEDIT.EXE`, `WINHELP.EXE`, `SNAP.EXE`, …, plus the test probes |
-| `build/fonts/` | w16's fonts: `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `SSERIFE.FON` |
+| `build/fonts/` | w16's fonts: `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `SSERIFE.FON`, `COURE.FON`, `SERIFE.FON`, `SMALLE.FON`, `SYMBOLE.FON`, `DOSAPP.FON`, `EGA80WOA.FON`, `EGA40WOA.FON`, `CGA80WOA.FON`, `CGA40WOA.FON` (sources in `fonts/`; the second set's are written by `tools/fontgen.py`) |
 | `build/w16/` | the **install tree**: a Windows 3.1-style directory holding only w16's files, each where Windows keeps its own (see below) |
 | `build/win386/` | `WIN386.EXE` and its separate VxDs (`make win386` builds only these) |
 

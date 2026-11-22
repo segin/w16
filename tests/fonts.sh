@@ -1,14 +1,19 @@
 #!/bin/sh
 # Check w16's fonts (build/fonts/*.FON, `make fonts`) as drop-in replacements
 # for Windows 3.1's (ARCHITECTURE.md 6.9). In scratch copies of the
-# reference install (tests/refrun.sh) Microsoft's VGASYS.FON, VGAFIX.FON,
-# VGAOEM.FON and SSERIFE.FON are replaced by ours, Windows is started
-# headless and:
-#   1. the font probe FN1 (tests/apps/fn1.c) runs in Standard mode and in
-#      386 Enhanced mode; its log (every observable metric: TEXTMETRIC,
-#      GetCharWidth 0-255, text extents, enumeration, CreateFont mapping,
-#      dialog base units) must equal tests/fonts/fn1ref.txt, recorded from
-#      Windows 3.1 with its own fonts;
+# reference install (tests/refrun.sh) Microsoft's raster fonts (VGASYS,
+# VGAFIX, VGAOEM, SSERIFE, COURE, SERIFE, SMALLE, SYMBOLE, DOSAPP and the
+# grabber's EGA80WOA, EGA40WOA, CGA80WOA, CGA40WOA .FON) are replaced by
+# ours, Windows is started headless and:
+#   1. the font probes FN1 (tests/apps/fn1.c) and FN3 (tests/apps/fn3.c)
+#      run in Standard mode and in 386 Enhanced mode; their logs (every
+#      observable metric: TEXTMETRIC, GetCharWidth 0-255, text extents,
+#      enumeration, CreateFont mapping, dialog base units; FN3: every size
+#      of Courier, MS Serif, Small Fonts and Symbol, what each DOS-box file
+#      adds, the files' module names, resource IDs and sizes) must equal
+#      tests/fonts/fn1ref.txt and fn3ref.txt, recorded from Windows 3.1
+#      with its own fonts (FN3's version-resource sizes are not compared:
+#      the version resource is w16's own);
 #   2. with -s DIR: SNAP.EXE takes screenshots (tests/scripts/fonts/
 #      screens.txt: Program Manager, a menu, File Run, Properties, Notepad,
 #      About, Control Panel, its Fonts dialog) with Microsoft's fonts and with
@@ -18,7 +23,8 @@
 #      our fonts (pages 1-3). Everything goes to DIR as PNG files.
 #
 #   usage: tests/fonts.sh [-r] [-q] [-s DIR]
-#     -r  re-record tests/fonts/fn1ref.txt from Windows 3.1's own fonts
+#     -r  re-record tests/fonts/fn1ref.txt and fn3ref.txt from Windows
+#         3.1's own fonts
 #         (both modes must agree)
 #     -q  Standard mode only
 #     -s DIR  also take and compare the screenshots
@@ -29,6 +35,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 dos=$root/build/dos
 fonts=$root/build/fonts
 ref=$root/tests/fonts/fn1ref.txt
+ref3=$root/tests/fonts/fn3ref.txt
 record= quick= shots=
 while getopts rqs: opt; do
     case $opt in
@@ -38,11 +45,12 @@ while getopts rqs: opt; do
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
-for f in FN1.EXE FN2.EXE SNAP.EXE; do
+for f in FN1.EXE FN2.EXE FN3.EXE SNAP.EXE; do
     [ -f "$dos/$f" ] || { echo "missing $dos/$f (make dos)" >&2; exit 2; }
 done
 ours=
-for f in VGASYS VGAFIX VGAOEM SSERIFE; do
+for f in VGASYS VGAFIX VGAOEM SSERIFE COURE SERIFE SMALLE SYMBOLE DOSAPP \
+         EGA80WOA EGA40WOA CGA80WOA CGA40WOA; do
     [ -f "$fonts/$f.FON" ] && ours="$ours $fonts/$f.FON=WINDOWS/SYSTEM/$f.FON"
 done
 [ -n "$ours" ] || { echo "no fonts in $fonts (make fonts)" >&2; exit 2; }
@@ -55,6 +63,8 @@ status=0
 # raster fonts' elfFullName is not filled in by EnumFontFamilies (FN1 no
 # longer prints it); the log ends at "FN1 done"
 clean() { sed -n '/^FN1 font probe/,/^FN1 done/p' "$1"; }
+clean3() { sed -n '/^FN3 font probe/,/^FN3 done/p' "$1" | tr -d '\r'; }
+nover() { sed 's/ version=[0-9]*//' "$1"; }
 
 if [ -n "$record" ]; then
     for m in $modes; do
@@ -70,6 +80,18 @@ if [ -n "$record" ]; then
     mkdir -p "$(dirname "$ref")"
     cp "$tmp/s.txt" "$ref"
     echo "recorded $ref ($(wc -l < "$ref") lines)"
+    for m in $modes; do
+        REFRUN_TIMEOUT=600 "$root/tests/refrun.sh" "$dos/FN3.EXE" $m > "$tmp/r3${m#/}.txt" 2>&1 || true
+    done
+    clean3 "$tmp/r3S.txt" > "$tmp/s3.txt"
+    grep -q '^FN3 done' "$tmp/s3.txt" || { echo "FN3 did not finish on Windows 3.1" >&2; exit 2; }
+    if [ -z "$quick" ]; then
+        clean3 "$tmp/r33.txt" > "$tmp/e3.txt"
+        cmp -s "$tmp/s3.txt" "$tmp/e3.txt" || {
+            echo "FN3: Standard and 386 Enhanced mode differ:"; diff "$tmp/s3.txt" "$tmp/e3.txt" | head -20; exit 2; }
+    fi
+    cp "$tmp/s3.txt" "$ref3"
+    echo "recorded $ref3 ($(wc -l < "$ref3") lines)"
 fi
 
 for m in $modes; do
@@ -81,6 +103,16 @@ for m in $modes; do
     else
         echo "FAIL metrics $m:"
         diff "$ref" "$tmp/o.txt" | head -40
+        status=$((status + 1))
+    fi
+    REFRUN_TIMEOUT=600 REFRUN_FILES="$ours" "$root/tests/refrun.sh" "$dos/FN3.EXE" $m \
+        > "$tmp/ours3.txt" 2>&1 || true
+    clean3 "$tmp/ours3.txt" | nover /dev/stdin > "$tmp/o3.txt"
+    if nover "$ref3" | cmp -s - "$tmp/o3.txt"; then
+        echo "PASS metrics FN3 $m ($(grep -c '^FONT' "$ref3") fonts, $(grep -c '^MAP' "$ref3") mappings, $(grep -c '^MODULE' "$ref3") files)"
+    else
+        echo "FAIL metrics FN3 $m:"
+        nover "$ref3" | diff - "$tmp/o3.txt" | head -40
         status=$((status + 1))
     fi
 done
@@ -122,8 +154,8 @@ if [ -n "$shots" ]; then
         fi
     done
     # every character of our fonts, as Windows draws them (only when all
-    # four are ours: Microsoft's glyphs are not shown)
-    [ "$(echo $ours | wc -w)" = 4 ] || { echo "screenshots in $shots"; exit $status; }
+    # the files are ours: Microsoft's glyphs are not shown)
+    [ "$(echo $ours | wc -w)" = 13 ] || { echo "screenshots in $shots"; exit $status; }
     for p in 1 2 3; do
         printf 'run C:\\FN2.EXE %s\r\nwait 3000\r\nsnap C:\\FN2P%s.BMP\r\n' $p $p > "$tmp/SNAP.TXT"
         mkdir -p "$tmp/fn2"

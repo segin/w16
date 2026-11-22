@@ -82,9 +82,12 @@ See the end of this file (kept current).
 4. The PIF's 386 section (memory, display, exclusive/background,
    priorities) into SHELL 3's block and registers: vary PIFs on 3.1 and
    record function 3 with VXS.
-5. DOS-box fonts of w16's own (EGA80WOA.FON etc., Terminal-like OEM cells
-   8x12, 16x12, 8x8, 16x8: fonts/, tools/fontc.py), so that windows match
-   3.1's glyph sizes without the user's files.
+5. (Done 2026-11-21, ARCHITECTURE.md 6.9.2.) DOS-box fonts of w16's own:
+   EGA80WOA/EGA40WOA/CGA80WOA/CGA40WOA.FON (Terminal 8x12, 16x12, 8x8,
+   16x8) and DOSAPP.FON (the Fonts dialog's other sizes) are in the tree
+   with SYSTEM.INI's [386Enh] keys; Microsoft's WINOA386 runs with them.
+   w16's WINOA386 has no Fonts dialog yet (item 2), so it uses only the
+   grabber's four.
 6. `[NonWindowsApp]` settings; Alt+PrintScreen (GrabEvent/GrabComplete).
 
 ### Test results (2026-11-21, 1292383, installation-05 under load ~40)
