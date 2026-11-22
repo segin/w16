@@ -375,6 +375,7 @@ static void create(struct cregs *r)
     sh_mode(s);
     vm_set_program(v, prog, tail, dir);
     vm_set_memory(v, *(u16 *)(b + 0x1A));
+    v86mm_vm_create(v, b);              /* its XMS and EMS: the PIF's limits */
     if (is_command(prog)) put_banner(v);
     if (vxd_send(CREATE_VM, v, 0, (u32)b, r->edi)) {
         struct shvm **pp;

@@ -1029,7 +1029,7 @@ W386     := $(B)/win386
 W386INC  := win386/include
 W386LDR  := $(W386)/ldr.o $(W386)/ldrasm.o
 W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o $(W386)/vxdapi.o $(W386)/vxd.o $(W386)/io.o \
-            $(W386)/vm.o $(W386)/shell.o $(W386)/vdd.o
+            $(W386)/vm.o $(W386)/shell.o $(W386)/vdd.o $(W386)/v86mmgr.o
 W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h $(W386INC)/w16vxd.h
 .PHONY: win386
 win386: $(W386)/WIN386.EXE
@@ -1083,7 +1083,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h

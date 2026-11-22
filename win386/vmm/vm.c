@@ -386,6 +386,7 @@ void vm_destroy(struct vm *v)
     vmm_pdir_entry(HIGH_PDE(v->id), 0);
     page_free(v->ptab_phys);
     io_vm_gone(v);
+    v86mm_vm_destroy(v);
     {   /* its events */
         struct vmev **ep, *e;
         for (ep = &events; (e = *ep) != NULL; )

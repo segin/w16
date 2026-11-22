@@ -264,6 +264,48 @@ static void read_sched(struct w386_info *in)
                               ((*q == 'o' || *q == 'O') && (q[1] == 'n' || q[1] == 'N')));
 }
 
+/* SYSTEM.INI [386Enh] EMMPageFrame=, EMMSize=, NoEMMDriver= for the DOS
+ * VMs' EMS (V86MMGR, ARCHITECTURE.md 12.13). Windows 3.1 in DOSBox gave
+ * its boxes EMS with the frame where the expanded memory manager loaded
+ * before it had its own (E000h, DOSBox's), none when there was no such
+ * manager and no EMMPageFrame (it found no free 64 KB of upper memory
+ * there), and none with NoEMMDriver=on. w16: EMMPageFrame's segment if
+ * given (hex), else the loaded manager's (INT 67h AH=41h, when the name
+ * EMMXXXX0 is at its vector's segment:000Ah), else none */
+static int ini_on(char __far *q)
+{
+    return q && (*q == '1' || *q == 'y' || *q == 'Y' || *q == 't' || *q == 'T' ||
+                 ((*q == 'o' || *q == 'O') && (q[1] == 'n' || q[1] == 'N')));
+}
+
+static void ems_setup(struct w386_info *in)
+{
+    char __far *q;
+    unsigned char __far *v;
+    union REGS r;
+    struct SREGS sr;
+    unsigned long f = 0;
+    in->ems_frame = 0;
+    q = ini_386("EMMSize");
+    in->ems_size = q ? ini_num(&q, 0, 0, 65535) : 0;
+    if (ini_on(ini_386("NoEMMDriver"))) return;
+    if ((q = ini_386("EMMPageFrame")) != NULL) {
+        while ((*q >= '0' && *q <= '9') || ((*q | 0x20) >= 'a' && (*q | 0x20) <= 'f'))
+            f = f * 16 + (*q <= '9' ? *q - '0' : (*q | 0x20) - 'a' + 10), q++;
+        if (f >= 0xA000 && f <= 0xF000 && !(f & 0x3FF)) in->ems_frame = (unsigned)f;
+        return;
+    }
+    r.x.ax = 0x3567;
+    segread(&sr);
+    intdosx(&r, &r, &sr);
+    v = (unsigned char __far *)MK_FP(sr.es, 0x0A);
+    if (sr.es && !_fmemcmp(v, "EMMXXXX0", 8)) {
+        r.h.ah = 0x41;
+        int86(0x67, &r, &r);
+        if (!r.h.ah && r.x.bx >= 0xA000 && !(r.x.bx & 0x3FF)) in->ems_frame = r.x.bx;
+    }
+}
+
 /* ---- the VMM image ---- */
 #define PAGE 4096UL
 
@@ -768,6 +810,19 @@ int main(int argc, char **argv)
      * says [w16] LargeMemory=0 (stock 3.1: ARCHITECTURE.md 12.3). At most
      * W386_WINDOW_MAX of it: the VMM's window ends below the VMs' high
      * linear windows. */
+    /* the HMA: in use by someone when Windows starts? (Windows 3.1's DOS
+     * boxes then found it in use: XMS 01h gave 91h; ARCHITECTURE.md 12.13) */
+    x.ax = 0x0100; x.bx = 0; x.dx = 0xFFFF;
+    xms_call(&x);
+    if (x.ax == 1) { x.ax = 0x0200; xms_call(&x); info.hma_used = 0; }
+    else info.hma_used = (x.bx & 0xFF) == 0x91;
+    ems_setup(&info);
+    /* A20 on when Windows starts (XMS 07h): Windows 3.1's boxes then said
+     * it was on at every query (DOSBox-X); off, they followed their own
+     * calls (plain DOSBox) */
+    x.ax = 0x0700; x.bx = 0;
+    xms_call(&x);
+    info.dos_high = x.ax == 1;
     xms_handle = 0;
     x.ax = 0x0000;
     xms_call(&x);

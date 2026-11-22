@@ -253,6 +253,11 @@ static void flush_tlb(void)
     set_cr3(get_cr3());
 }
 
+void vmm_flush_tlb(void)
+{
+    flush_tlb();
+}
+
 /* Map one page; flags: 1 present, 2 writable, 4 user. */
 int map_page(u32 lin, u32 phys, u32 flags)
 {
@@ -770,6 +775,8 @@ static void software_int(struct cregs *r, int vec)
     if ((r->eflags & EFL_VM) && vxd_v86_int_hooks(r, vec)) return;  /* a device serviced it */
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
+        if (vec == 0x2F && v86mm_int2f(r)) return;     /* a DOS VM's XMS driver */
+        if (vec == 0x67 && cur_vm != &sysvm && v86mm_ems(r)) return;   /* its EMS */
         if (vec == 0x2A) vm_int2a(r);   /* DOS's critical sections: noted, then on to DOS's handler */
         if (vec == 0x21) { vm_int21(r); return; }
         /* INT 1Ch, 23h, 24h go to a protected-mode handler (DPMI 0.9) */
@@ -788,6 +795,18 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     case W386_BP_VMEXIT: vm_exited(r); break;
     case W386_BP_VMSTART: vm_start(r); break;
     case W386_BP_INT21RET: vm_int21_ret(r); break;
+    case W386_BP_NOEMS:                 /* INT 67h without EMS: back, unchanged */
+        r->eip = v86_pop16(r);
+        r->cs = v86_pop16(r);
+        r->eflags = (r->eflags & ~0xFFFFu) | v86_pop16(r) | EFL_IOPL;
+        break;
+    case W386_BP_XMS: {                 /* a DOS VM's XMS call (far call) */
+        u32 ip = v86_pop16(r), cs = v86_pop16(r);
+        r->eip = ip;
+        r->cs = cs;
+        v86mm_xms(r);
+        break;
+    }
     case W386_BP_IRQIRET:               /* the interrupted code's own frame */
         r->eip = v86_pop16(r);
         r->cs = v86_pop16(r);

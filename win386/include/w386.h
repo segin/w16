@@ -37,6 +37,8 @@ typedef unsigned long  w_u32;
 #define W386_BP_FIRSTFREE 8     /* real-mode callbacks and V86 API entries */
 #define W386_BP_V86API  8       /* 8..: the VxDs' V86 API entries (INT 2Fh 1684h in V86 mode) */
 #define W386_NV86API    16
+#define W386_BP_XMS     24      /* the DOS VMs' XMS driver entry (INT 2Fh 4310h: v86mmgr.c) */
+#define W386_BP_NOEMS   25      /* a DOS VM's INT 67h when it has no EMS: an IRET (v86mmgr.c) */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */
@@ -93,6 +95,13 @@ struct w386_info {
     w_u16 win_exclusive;
     w_u16 vmclose_off;  /* ldr_cs:vmclose_off: ends a DOS VM's program (INT 21h 4CFFh) */
     w_u16 hlt_stock;    /* SYSTEM.INI [w16] V86HltYield=0: a V86 HLT keeps the slice (stock 3.1) */
+    /* V86MMGR (v86mmgr.c): the DOS VMs' EMS page frame (a segment; 0: no
+       EMS in the VMs), [386Enh] EMMSize in KB (0: none given), and the
+       HMA's owner when Windows started (1: in use) */
+    w_u16 ems_frame;
+    w_u16 hma_used;
+    w_u16 dos_high;     /* A20 on when Windows started (XMS 07h): the VMs' A20 stays on */
+    w_u32 ems_size;
 };
 #pragma pack()
 

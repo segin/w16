@@ -138,6 +138,7 @@ struct vm {
     u32 run_since;          /* when it last started running (vmm_system_time) */
     s32 exec_prio;          /* Adjust_Exec_Priority's boosts */
     u32 idle_until;         /* idle (released): ticks do not wake it before this */
+    struct mmvm *mm;        /* V86MMGR's: its XMS, EMS, A20 (DOS VMs) */
     u32 exit_code;          /* its program's exit code (VM stub) */
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
@@ -177,6 +178,7 @@ void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
 u32 pages_free(void);
+void page_free(u32 phys);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
 u32 lin_to_phys(u32 lin);
@@ -323,6 +325,14 @@ void vxdapi_v86_call(struct cregs *r, u32 idx);
 u32 vxd_v86_api(u32 id);                    /* a loaded device's V86 API procedure */    /* Hook_V86_Int_Chain's procedures */
 int vdd_api(struct cregs *r);
 int vdd_service(u32 svc, struct svcregs *s);   /* the VDD's services (device 000Ah) */
+/* v86mmgr.c: the DOS VMs' XMS and EMS (device 0006h) */
+void v86mm_vm_create(struct vm *v, const u8 *block);
+void v86mm_vm_destroy(struct vm *v);
+void v86mm_xms(struct cregs *r);            /* the XMS entry's breakpoint */
+int v86mm_ems(struct cregs *r);             /* INT 67h */
+int v86mm_int2f(struct cregs *r);           /* INT 2Fh 4300h/4310h */
+int v86mm_service(u32 svc, struct svcregs *s);
+void vmm_flush_tlb(void);
 void vdd_int2f(struct cregs *r);
 void vdd_focus(struct vm *v);       /* the display goes to v */
 void vdd_vm_init(struct vm *v);

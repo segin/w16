@@ -131,6 +131,8 @@
 #              keyboard (VMPOLL finds them idle: at least 90 per cent) and
 #              beside a busy one (it gets its share), measured by VX13
 #              (tests/vmpollrun.sh), Microsoft's WIN386 alongside
+#   win386xms  w16's WIN386: VX15's XMS and EMS calls in a DOS box (3 PIFs)
+#              give the same log as under Microsoft's WIN386
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -911,7 +913,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle vsd bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle win386xms vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1729,6 +1731,35 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386idle: Windows at $pct_w16p% beside 4 polling boxes (3.1: $pct_refp%), $pct_w16b% beside a busy one (3.1: $pct_refb%)"
         else echo "FAIL win386idle: $r"; fails=$((fails + 1)); fi ;;
+    win386xms)
+        # V86MMGR (ARCHITECTURE.md 12.13): VX15 (tests/dos/vx15.asm,
+        # tests/v86mmrun.sh) in a DOS box calls the XMS driver and INT 67h
+        # (versions, free memory, blocks, moves, locks, the HMA, A20, EMS
+        # pages, mapping through the frame, save/restore, names, the
+        # mappable pages, errors) with the default PIF, with limits and
+        # required amounts (and Uses High Memory Area off), and with no XMS
+        # or EMS: its log must equal the one under Microsoft's WIN386
+        # (plain DOSBox, whose own EMS gives the frame E000h)
+        r=ok
+        for k in def lim zero; do
+            case $k in
+            def) p= ;;
+            lim) p="emslim=256 emsreq=128 xmslim=512 xmsreq=256 hma=0" ;;
+            zero) p="xmslim=0 emslim=0" ;;
+            esac
+            refrun win386xms-ref$k win386xms env "V86MM_PIF=$p" \
+                sh "$root/tests/v86mmrun.sh" "$out/win386xms-ref$k" ms "$root/build/dos/VX15.COM" &
+            V86MM_PIF=$p sh "$root/tests/v86mmrun.sh" "$out/win386xms-w16$k" w16 > "$out/win386xms-w16$k.txt" 2>&1 &
+        done
+        wait
+        for k in def lim zero; do
+            a=$out/win386xms-ref$k/VX15.LOG b=$out/win386xms-w16$k/VX15.LOG
+            if ! grep -q '^VX15 end' "$a" 2>/dev/null; then r="$k: no reference log ($a)"; break; fi
+            if ! grep -q '^VX15 end' "$b" 2>/dev/null; then r="$k: VX15 did not finish under w16 ($b)"; break; fi
+            cmp -s "$a" "$b" || { r="$k: the logs differ (diff $a $b)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386xms: XMS and EMS in a DOS box as under Microsoft's WIN386 (3 PIFs)"
+        else echo "FAIL win386xms: $r"; fails=$((fails + 1)); fi ;;
     win386pifwin)
         # the user's report (2026-11-22): a PIF made with the PIF Editor
         # ("Command Prompt", windowed) opened a window whose client area

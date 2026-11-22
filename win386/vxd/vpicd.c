@@ -443,7 +443,9 @@ static void hw_int(vu32 irq)
 /* a request the current VM would take with its interrupts on */
 static int has_pending(void)
 {
-    return next_irq(VP(CUR())) >= 0;
+    struct vpic *vp = VP(CUR());
+    if (!((vp->req | vp->def_req) & ~vp->imr)) return 0;   /* nothing asked: at once */
+    return next_irq(vp) >= 0;
 }
 
 /* the VMM is about to resume the VM */

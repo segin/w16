@@ -92,11 +92,57 @@ vxt_control:
         mov eax, [eax + 0Ch]
         call puthex
         call crlf
+        cmp edi, 9                      ; VM_Init: V86MMGR's view of the VM
+        jne .r
+        mov ebx, [esp + 16]
+        call mmvm
 .r:     popad
         clc
         ret
 
 setup:
+        ; V86MMGR (0006h): Get_Version, Get_Mapping_Info, the System VM's
+        ; Get_Xlat_Buff_State and Get_EMS_XMS_Limits
+        mov esi, msg_mmv
+        call puts
+        xor eax, eax
+        int 20h
+        dd 00060000h                    ; V86MMGR_Get_Version
+        pushfd
+        call puthex
+        mov esi, msg_cf
+        call puts
+        pop eax
+        and eax, 1
+        call puthex
+        call crlf
+        mov esi, msg_mmm
+        call puts
+        xor ecx, ecx
+        int 20h
+        dd 00060005h                    ; V86MMGR_Get_Mapping_Info
+        mov eax, ecx
+        call puthex
+        call crlf
+        mov esi, msg_mmx
+        call puts
+        mov ebx, [sysvm_h]
+        int 20h
+        dd 0006000Ah                    ; V86MMGR_Get_Xlat_Buff_State
+        push edx
+        push ecx
+        call puthex
+        mov al, ' '
+        call putc
+        pop eax
+        call puthex
+        mov al, ' '
+        call putc
+        pop eax
+        call puthex
+        call crlf
+        mov ebx, [sysvm_h]
+        call mmvm
         mov esi, msg_ver
         call puts
         xor eax, eax
@@ -493,6 +539,53 @@ report:
         popad
         ret
 
+; V86MMGR_Get_EMS_XMS_Limits for EBX's VM (EAX EDX ESI EDI ECX), then
+; V86MMGR_GetPgStatus for its pages A0h-10Fh, where nonzero
+mmvm:   pushad
+        mov esi, msg_mml
+        call puts
+        mov eax, [ebx + 0Ch]
+        call puthex
+        int 20h
+        dd 00060003h                    ; V86MMGR_Get_EMS_XMS_Limits
+        push ecx
+        push edi
+        push esi
+        push edx
+        call puthex
+        mov ecx, 4
+.l:     mov al, ' '
+        call putc
+        pop eax
+        call puthex
+        loop .l
+        call crlf
+        mov ebx, [esp + 16]
+        mov ecx, 0A0h
+.p:     push ecx
+        push ebx
+        int 20h
+        dd 00060010h                    ; V86MMGR_GetPgStatus
+        pop ebx
+        pop ecx
+        test eax, eax
+        jz .n
+        push eax
+        mov esi, msg_mmp
+        call puts
+        mov eax, ecx
+        call puthex
+        mov al, '='
+        call putc
+        pop eax
+        call puthex
+        call crlf
+.n:     inc ecx
+        cmp ecx, 110h
+        jbe .p
+        popad
+        ret
+
 putc:   push edx
         push eax
         mov dx, COM1 + 5
@@ -559,6 +652,11 @@ svc_stubs:
 svc_prev  times NSVC + NPOLL dd 0
 svc_count times NSVC * NVM dd 0
 msg_ctl   db 'VXT ctl ', 0
+msg_mmv   db 'VXT V86MMGR_Get_Version eax=', 0
+msg_mmm   db 'VXT V86MMGR_Get_Mapping_Info ecx=', 0
+msg_mmx   db 'VXT V86MMGR_Get_Xlat_Buff_State sys eax ecx edx=', 0
+msg_mml   db 'VXT V86MMGR limits vm=', 0
+msg_mmp   db 'VXT V86MMGR page ', 0
 msg_rts1  db 'VXT rts vm=', 0
 msg_wk1   db 'VXT wake vm=', 0
 msg_t     db ' t=', 0

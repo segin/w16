@@ -138,11 +138,17 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 2
+#define NBUILTIN 3
 static void vtd_init(void);
 /* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
  * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
  * services); its control messages come from vxd_send (vdd_focus) */
+/* w16's V86MMGR (v86mmgr.c): Windows 3.1's "V86MMGR", 0006h, 1.00, init
+ * order A0000000h, 21 services */
+static struct ddb v86mm_ddb = {
+    0, 0x030A, 0x0006, 1, 0, 0, { 'V', '8', '6', 'M', 'M', 'G', 'R', ' ' },
+    0xA0000000, 0, 0, 0, 0, 0, 0, 0, 21
+};
 static struct ddb vdd_ddb = {
     0, 0x030A, 0x000A, 2, 0, 0, { 'V', 'D', 'D', ' ', ' ', ' ', ' ', ' ' },
     0x28000000, 0, 0, 0, 0, 0, 0, 0, 14
@@ -397,6 +403,8 @@ void vxd_init(void)
     devs[ndevs++] = &vtd_ddb;
     vdd_ddb.svc_table = (u32)make_slots(0x0A, vdd_ddb.svc_count);
     devs[ndevs++] = &vdd_ddb;
+    v86mm_ddb.svc_table = (u32)make_slots(0x06, v86mm_ddb.svc_count);
+    devs[ndevs++] = &v86mm_ddb;
     for (i = 0; i < info->vxd_count; i++) {
         struct ddb *d = (struct ddb *)list[i];
         devs[ndevs++] = d;
@@ -832,6 +840,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
+    if (dev == 0x06) { v86mm_service(svc, s); return; }
     if (dev == 0x0A) {
         /* (the rest of the VDD's services: carry, traced, UNVERIFIED) */
         if (!vdd_service(svc, s)) {
