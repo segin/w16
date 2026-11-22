@@ -634,15 +634,23 @@ static void relayout(HWND h, PED e)
     WORD s = 0, n = 0;
     int W;
     BOOL wrap, more;
-    if (!E(e)->multi || !ltab_room(e, 1))
+    if (!E(e)->multi)
         return;
     wrap = wrapping(h);
     W = E(e)->fmt.right - E(e)->fmt.left;
     meas_begin(h, e, &m);
+    /* the table is made only for a second line (an empty control has
+       none: US20 part F, where its 128 bytes changed what LocalReAlloc
+       could do with the block EM_SETHANDLE gave) */
     for (;;) {
-        if (!ltab_room(e, n + 1))
-            break;              /* no room: the rest stays on the last line */
-        ltab(e)[n++] = s;
+        if (n) {
+            if (!ltab_room(e, n + 1))
+                break;          /* no room: the rest stays on the last line */
+            if (n == 1)
+                ltab(e)[0] = 0;
+            ltab(e)[n] = s;
+        }
+        n++;
         s = scan_line(e, &m, s, wrap, W, &more);
         if (!more)
             break;
@@ -2072,6 +2080,14 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             WORD n;
             E(e)->text = wp;
             n = lstr_len(text(e));
+            /* the line table made again after the new block is sized (it
+               would otherwise take the room the block may move into:
+               US20 part F, 31502 bytes on 3.1) */
+            if (E(e)->lines) {
+                lh_free(E(e)->sel, E(e)->lines);
+                E(e)->lines = 0;
+                E(e)->nlines = 0;
+            }
             /* the block sized to the text, if KERNEL can (3.1: 20
                bytes holding 8 characters became 42, 3000 holding 2900
                2934; a 31502-byte one at the end of a full heap stayed) */

@@ -467,7 +467,12 @@ them w16 bugs or w16 art, none in the way of installing or playing:
   2fe5dbd): the background is gray now, as 3.1's; the licence text is
   still not wrapped (w16's multi-line edit control has no word wrap,
   user/edit.c "Not done") and looks drawn in the System font where 3.1 draws
-  it in MS Sans Serif (not looked into);
+  it in MS Sans Serif (not looked into). 2026-11-21 (probe US35, master
+  after 6e37561): the text wraps line for line as 3.1's in both setups
+  (tree386 and over), every line starting where 3.1's does: it is MS Sans
+  Serif, as the dialog gives it (the unwrapped lines, cut at the right,
+  made it look like another font). What still differs there is the glyphs
+  of w16's own SSERIFE.FON, which both setups use;
 - the banner bitmap behind the boxes is black. Fixed 2026-11-20: it is an
   RLE4 DIB (487 x 74, DIB_RGB_COLORS, no palette) given to CreateDIBitmap
   and BitBlt'ed from a memory DC; w16's VGA.DRV refused RLE in
