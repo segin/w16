@@ -119,6 +119,10 @@
 #   win386dosprobe  VX12 in the MS-DOS Prompt (V86 API entries, 80x50 and
 #              40x25 windows) against Microsoft's WIN386; A20 off through
 #              the 8042 and port 92h must not end w16 (it ends 3.1)
+#   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
+#              its program windowed (made at run time with tools/mkpif.py),
+#              then VER typed: the window shows the text (not black), as
+#              with Microsoft's WINOA386 on the same tree
 #   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
 #              switching (dosbox386s.txt) and Exit Windows with a box
 #              open (dosbox386x.txt), against Microsoft's WINOA386 and
@@ -1655,6 +1659,42 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386doscad: a DOS program's fault and Ctrl+Alt+Del (Escape, Return) as with Microsoft's WIN386"
         else echo "FAIL win386doscad: $r"; fails=$((fails + 1)); fi ;;
+    win386pifwin)
+        # the user's report (2026-11-22): a PIF made with the PIF Editor
+        # ("Command Prompt", windowed) opened a window whose client area
+        # stayed black, with Microsoft's WINOA386 too: DOSBox's BIOS keeps
+        # the video mode in the emulator, and a VM started windowed never
+        # set one (win386/vmm/vdd.c vdd_vm_init); then w16's WINOA386
+        # painted the VM's changes only within the last WM_PAINT's
+        # rectangle (winoa386.c update). The PIF: the reference install's
+        # MS-DOS Prompt PIF with another title and windowed, made here
+        pif=$out/win386pifwin-CMD.PIF
+        python3 "$root/tools/mkpif.py" "$root/.tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF" "$pif" \
+            "title=Command Prompt" program=COMMAND.COM windowed=1
+        scr=$root/tests/scripts/input/dosbox386pifwin.txt
+        set -- -b 5 -t 400 "$scr"
+        refrun win386pifwin-ref win386pifwin env DROPIN_NOREDIR=1 DROPIN_CPUTYPE=386 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" "$@" "$out/win386pifwin-ref" -T "$root/build/w16" -3 -c "WIN /3" \
+            -f "$pif=W16/CMD.PIF" -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WINOA386.MOD=W16/SYSTEM/WINOA386.MOD"
+        rm -rf "$out/win386pifwin-w16"
+        DROPIN_NOREDIR=1 DROPIN_CPUTYPE=386 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" "$@" \
+            "$out/win386pifwin-w16" -T "$root/build/w16" -3 -c "WIN /3" -f "$pif=W16/CMD.PIF" \
+            > "$out/win386pifwin-w16.txt" 2>&1 || true
+        r=ok
+        for s in 01-window 02-ver; do
+            a=$out/win386pifwin-w16/$s.png b=$out/win386pifwin-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            # text in the client area (white on DOSBox's blue box, the
+            # prompt): not a black window
+            c=$(magick "$a" -crop 600x200+10+30 -format '%c' histogram:info:- | grep -i '#FFFFFF' | awk '{print $1}' | tr -d :)
+            [ "${c:-0}" -ge 1000 ] || { r="$s: no text in the window (${c:-0} white pixels)"; break; }
+            n=$(magick compare -metric AE "$a" "$b" "$out/win386pifwin-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            # the caret's blink (up to 2 x 8 x 3 pixels)
+            [ "${n:-1}" -le 60 ] || { r="$s: $n pixels differ from Microsoft's WINOA386 ($out/win386pifwin-$s-diff.png)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386pifwin: a windowed PIF's window shows the DOS screen and VER, as Microsoft's WINOA386"
+        else echo "FAIL win386pifwin: $r ($out/win386pifwin-w16)"; fails=$((fails + 1)); fi ;;
     win386plain)
         # the user's report (2026-11-21): after a DOS box, Exit Windows
         # printed KERNEL's "back to DOS" and hung (the DOS VM's first DOS

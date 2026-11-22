@@ -150,3 +150,29 @@ already in OUT. Results and the differences left: ARCHITECTURE.md 12.11
   `WIN /3` stayed on WIN.COM's logo (Windows ran behind it: the VM ran and
   ended); with /B it shows Windows. Not looked into.
 - VXS.386 needs Hook_Device_PM_API (VMM 0092h), which w16's VMM lacks.
+
+### The black windowed DOS box (the user's report, 2026-11-22, master 4b31fb4)
+
+The user's CMD.PIF (made with w16's PIF Editor: title "Command Prompt",
+COMMAND.COM, Display Usage windowed) opened a window whose client area
+stayed black in plain DOSBox; typing reached the VM. "Command Prompt" is
+the PIF's own title. Two causes:
+- DOSBox's BIOS keeps the video mode in the emulator (its INT 10h writes
+  by the mode it last set), not in the VM's BIOS data. A VM started
+  windowed never set a mode (the VDD only wrote its data area): Windows'
+  mode 12h stayed DOSBox's, and the VM's text went into graphics memory
+  the grabber never reads. Microsoft's WINOA386 showed the same black
+  window. The VDD now runs the VM's BIOS mode set at its VM_Init when it
+  starts windowed, saving the real VGA's state (Windows') before and
+  restoring it after, with no other VM running meanwhile
+  (win386/vmm/vdd.c vdd_vm_init). The Alt+Enter path had worked because
+  the VM's full-screen start had set DOSBox's mode to text.
+- w16's WINOA386 left the EXTPAINTSTRUC's rcPaint at the last WM_PAINT's
+  rectangle, and the grabber's UpdateScreen paints the VM's changes only
+  within rcPaint: typed characters outside it never appeared (also the
+  "only 'v' of VER" seen earlier). update() now sets rcPaint to the whole
+  client area.
+- Boot-test case `win386pifwin` (plain DOSBox, tree alone, WIN /3, a
+  windowed PIF made with tools/mkpif.py from the reference's DOSPRMPT.PIF,
+  File > Run it, VER): the window must show text and equal Microsoft's
+  WINOA386's (caret allowed); DOSBox-X was checked by hand (equal too).

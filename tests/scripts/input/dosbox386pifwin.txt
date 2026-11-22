@@ -1,0 +1,18 @@
+; a PIF that starts its program in a window (the user's CMD.PIF, 2026-11-22:
+; boot-test case win386pifwin): plain DOSBox, the tree alone, WIN /3 (no
+; BOOTLOG: the boot is waited for by Program Manager's caption); File > Run
+; CMD.PIF, then VER typed in the window
+waitcount 0000aa 0 0 0 0 500 200
+sleep 6
+key alt+f
+sleep 1
+key r
+sleep 2
+type cmd.pif
+key Return
+sleep 15
+shot 01-window
+type ver
+key Return
+sleep 6
+shot 02-ver

@@ -427,6 +427,10 @@ static void update(LPARAM rec)
     if (LOWORD(f) & (fDisp_Ctlr | fDisp_VRAM)) {
         dc = GetDC(hwnd);
         eps.ps.hdc = dc;
+        /* the whole client area: the grabber paints what changed within
+           rcPaint, which the last WM_PAINT had left at its own rectangle
+           (typed characters outside it were never painted) */
+        GetClientRect(hwnd, &eps.ps.rcPaint);
         paint_font();
         UpdateScreen(&eps, 0, rec);
         ReleaseDC(hwnd, dc);

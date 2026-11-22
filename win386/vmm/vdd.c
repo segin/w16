@@ -414,7 +414,27 @@ static void vdd_focus_now(struct vm *v)
 /* VM_Init of a DOS VM (in that VM) */
 void vdd_vm_init(struct vm *v)
 {
+    struct vsave *d;
     if (v == owner) bios_mode(v, NULL);
+    else if ((d = save_of(v, 0)) != NULL && d->windowed) {
+        /* windowed from the start: its BIOS sets its text mode all the
+         * same (the user's report, 2026-11-22: a PIF that starts windowed
+         * gave a black window in plain DOSBox, with Microsoft's WINOA386
+         * too). DOSBox's BIOS keeps the video mode in the emulator, not in
+         * the VM's data area: Windows' mode 12h was still its mode, and the
+         * VM's text went into graphics memory the grabber never reads. The
+         * mode set writes the VM's own video memory (its RAM now) but the
+         * real VGA's registers: Windows' VGA state is saved before and put
+         * back after, and no other VM runs meanwhile */
+        struct vga *g = kmalloc(sizeof(struct vga));
+        if (!g) return;
+        vga_save(g);
+        v->crit++;
+        bios_mode(v, NULL);
+        v->crit--;
+        vga_restore(g);
+        kfree(g);
+    }
 }
 
 void vdd_vm_destroy(struct vm *v)
