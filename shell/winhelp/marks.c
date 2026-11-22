@@ -757,7 +757,8 @@ void print_topic(void)
     HDC dc;
     DOCINFO di;
     VIEW v;
-    int w, h, mx, my, top, i;
+    int w, h, mx, my, i;
+    long top;
     char title[80];
     if (!g_hlp || g_cur < 0)
         return;
@@ -787,9 +788,9 @@ void print_topic(void)
         top = 0;
         while (top < v.height) {
             RECT clip;
-            int bottom = top + h - 2 * my, next = v.height;
+            long bottom = top + h - 2 * my, next = v.height;
             for (i = 0; i < (int)v.nitems; i++) {
-                DITEM FAR *d = &v.items[i];
+                DITEM FAR *d = VITEM(&v, i);
                 if (d->y < bottom && d->y + d->cy > bottom && d->y > top && d->y < next)
                     next = d->y;
             }
@@ -797,8 +798,8 @@ void print_topic(void)
                 next = bottom;
             StartPage(dc);
             SaveDC(dc);
-            IntersectClipRect(dc, mx, my, w - mx, my + (next - top));
-            SetRect(&clip, 0, top, w, next);
+            IntersectClipRect(dc, mx, my, w - mx, my + (int)(next - top));
+            SetRect(&clip, 0, my, w, my + (int)(next - top));
             view_paint(&v, dc, &clip, (short)mx, (short)(my - top));
             RestoreDC(dc, -1);
             EndPage(dc);

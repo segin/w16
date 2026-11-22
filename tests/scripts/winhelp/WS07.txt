@@ -1,14 +1,35 @@
-; WS07: w16's own test file W16TEST.HLP (tests/winhelp/w16test.rtf, built by OpenWatcom's whc): fonts, alignment, indents, tabs, a box, a non-scrolling region, bitmaps, a left picture, SHG hot spots, a multi-resolution bitmap, a metafile
+; WS07: w16's own test file W16TEST.HLP (tests/winhelp/w16test.rtf, built by OpenWatcom's whc): fonts, alignment, indents, tabs, a box, a non-scrolling region, bitmaps, a left picture, SHG hot spots, a multi-resolution bitmap, a metafile; a secondary window, an SHG jump and popup, Back, the browse button
 ; hlp: w16test
+; mask: 210,178,436,195
 run WINHELP.EXE W16TEST.HLP
 wait 3000
 snap C:\S1.BMP
-dump
-key 22
-wait 800
+click 335 352
+wait 2000
 snap C:\S2.BMP
+dump
+close
+wait 1500
 key 22
 wait 800
 snap C:\S3.BMP
+click 525 147
+wait 1500
+snap C:\S4.BMP
+click 362 54
+wait 1500
+key 22
+wait 800
+click 546 147
+wait 1500
+snap C:\S5.BMP
+click 400 420
+wait 1000
+click 540 54
+wait 1500
+snap C:\S6.BMP
+click 540 54
+wait 1500
+snap C:\S7.BMP
 close
 wait 1500

@@ -18,12 +18,17 @@ out=$1 k=${2:-286}
 ref=$root/.tools/ref/win31/cdrive/WINDOWS
 rm -rf "$out"; mkdir -p "$out"
 # WHTREE_SCRIPT=NAME runs tests/scripts/winhelp/tree/NAME.txt instead
-# (screens only, no checks): nofile.txt, the no-file screen resized
+# (screens only, no checks): nofile.txt, the no-file screen resized;
+# w16test.txt, W16TEST.HLP on w16's GDI (metafile, SHG, MRB, boxes)
 sed -e 's/\r*$/\r/' "$root/tests/scripts/winhelp/tree/${WHTREE_SCRIPT:-run}.txt" > "$out/SNAP.TXT"
 set -- -f "$root/build/dos/SNAP.EXE=SNAP.EXE" -f "$out/SNAP.TXT=SNAP.TXT"
 for h in NOTEPAD GLOSSARY REGEDIT; do
     set -- "$@" -f "$ref/$h.HLP=WINDOWS/$h.HLP"
 done
+# w16's own test help file, when OpenWatcom's whc can build it
+if "$root/tests/winhelp/mkhlp.sh" w16test "$out/W16TEST.HLP" 2>/dev/null; then
+    set -- "$@" -f "$out/W16TEST.HLP=WINDOWS/W16TEST.HLP"
+fi
 [ "$k" = 386 ] && set -- "$@" -3
 DROPIN_TREEDIR=WINDOWS "$root/tests/dropin.sh" -T "$root/build/w16" -t 200 -o "$out/work" \
     -i 'boot:shell=C:\SNAP.EXE' -i 'WIN.INI:windows:CursorBlinkRate=65000' \

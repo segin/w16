@@ -348,11 +348,11 @@ static BOOL run_one(CALL *c)
     if (is(c, "JumpId", "JI")) {
         if (c->n >= 2) {
             split_file(c->arg[0], &win);
-            return jump_context(g_hlp, c->arg[0][0] ? c->arg[0] : NULL, c->arg[1], win, FALSE);
+            return jump_context(g_hlp, c->arg[0][0] ? (LPCSTR)c->arg[0] : (LPCSTR)NULL, c->arg[1], win, FALSE);
         }
     } else if (is(c, "PopupId", "PI")) {
         if (c->n >= 2)
-            return jump_context(g_hlp, c->arg[0][0] ? c->arg[0] : NULL, c->arg[1], NULL, TRUE);
+            return jump_context(g_hlp, c->arg[0][0] ? (LPCSTR)c->arg[0] : (LPCSTR)NULL, c->arg[1], NULL, TRUE);
     } else if (is(c, "JumpContext", "JC") || is(c, "PopupContext", "PC")) {
         if (c->n >= 2) {
             BOOL pop = is(c, "PopupContext", "PC");

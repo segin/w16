@@ -1,0 +1,54 @@
+; WS08: W16TEST.HLP's Macros topic: macro hot spots running JumpContext, PopupContext, SaveMark, IfThenElse with IsMark, DeleteMark, DisableButton, EnableButton, InsertMenu and AppendItem, Prev; the second topic's CreateButton run again: "Unable to add button."
+; hlp: w16test
+; mask: 210,178,436,195
+run WINHELP.EXE W16TEST.HLP
+wait 3000
+click 527 352
+wait 1500
+snap C:\S1.BMP
+click 240 113
+wait 1500
+snap C:\S2.BMP
+click 362 54
+wait 1500
+click 350 113
+wait 1500
+snap C:\S3.BMP
+click 400 420
+wait 1000
+click 240 133
+wait 800
+click 310 133
+wait 1500
+snap C:\S4.BMP
+key 0D
+wait 800
+click 362 54
+wait 1500
+click 380 133
+wait 800
+click 310 133
+wait 1500
+snap C:\S5.BMP
+click 362 54
+wait 1500
+click 250 153
+wait 800
+snap C:\S6.BMP
+click 340 153
+wait 800
+click 412 153
+wait 1000
+snap C:\S7.BMP
+dumpmenu
+menu t
+wait 800
+snap C:\S8.BMP
+key 1B
+key 1B
+wait 500
+click 265 173
+wait 1500
+snap C:\S9.BMP
+close
+wait 1500

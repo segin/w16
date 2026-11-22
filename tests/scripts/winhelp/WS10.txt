@@ -1,0 +1,30 @@
+; WS10: scrolling a long topic (NOTEPAD.HLP File Menu Commands): Page Down to the end, the arrow keys, Page Up
+run WINHELP.EXE NOTEPAD.HLP
+wait 3000
+click 297 325
+wait 1500
+key 22
+wait 800
+snap C:\S1.BMP
+key 22
+wait 800
+snap C:\S2.BMP
+key 22
+wait 800
+snap C:\S3.BMP
+key 22
+wait 800
+snap C:\S4.BMP
+key 26
+wait 500
+key 26
+wait 500
+snap C:\S5.BMP
+key 21
+wait 800
+snap C:\S6.BMP
+key 28
+wait 500
+snap C:\S7.BMP
+close
+wait 1500

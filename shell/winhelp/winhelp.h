@@ -55,6 +55,7 @@
 #define IDS_NOPRINTER   14
 #define IDS_COPYTITLE   15
 #define IDS_ABOUTAPP    16      /* "Help" for ShellAbout */
+#define IDS_NOBUTTON    17
 
 /* dialogs */
 #define DLG_SEARCH      100
@@ -98,21 +99,28 @@
 #define DI_BOX      6       /* a \box frame: x, y, cx, cy */
 #define HOT_ANNOTATION 0x01 /* the annotation mark's hot spot */
 
+/* 32 bytes, so that none straddles a 64K boundary of the list (a
+   topic can be tens of thousands of pixels tall and have thousands of
+   lines: OpenWatcom's cmix.hlp's contents, 3858 lines) */
 typedef struct {
-    short x, y, cx, cy;
+    long y;
+    short x, cx, cy;
     BYTE kind;
     BYTE ascent;            /* text: the font's ascent (baseline y + ascent) */
     WORD font;              /* text: font index; pict: picture slot */
-    WORD text;              /* text: offset in the text pool */
+    DWORD text;             /* text: offset in the text pool */
     WORD len;
     short hot;              /* hot spot index, -1 none */
+    BYTE pad[10];
 } DITEM;
 
-typedef struct {
-    BYTE code;              /* the command: E2h-EFh jumps, C8h/CCh macros */
+typedef struct {           /* 16 bytes, as DITEM */
     DWORD hash;             /* jumps: the context's hash (or offset) */
-    WORD str;               /* external file ">window" or macro, in the pool; 0xFFFF none */
+    DWORD str;              /* external file ">window" or macro, in the pool; NOSTR none */
+    BYTE code;              /* the command: E2h-EFh jumps, C8h/CCh macros */
+    BYTE pad[7];
 } HOTSPOT;
+#define NOSTR 0xFFFFFFFFUL
 
 /* a picture laid out in a view */
 typedef struct {
@@ -139,17 +147,17 @@ typedef struct VIEW {
     /* what is laid out: the links from first up to (not including) end */
     DWORD first, end;
     short width;            /* the width it was laid out for */
-    short height;           /* its height */
+    long height;            /* its height */
     short widest;           /* the widest line (popups: the window's width) */
-    short scroll;           /* vertical scroll position (pixels) */
+    long scroll;            /* vertical scroll position (pixels) */
     COLORREF bg;
     /* the display list */
     HGLOBAL hitems, hpool, hhot, hpict, hshg;
-    DITEM FAR *items;
-    WORD nitems, maxitems;
-    char FAR *pool;
-    WORD npool, maxpool;
-    HOTSPOT FAR *hots;
+    BYTE FAR *items;        /* blocks grown as needed, over 64K: reached */
+    WORD nitems, maxitems;  /* through VITEM, VHOT, pool_str (view.c) */
+    BYTE FAR *pool;
+    DWORD npool, maxpool;
+    BYTE FAR *hots;
     WORD nhots, maxhots;
     VPICT FAR *picts;
     WORD npicts, maxpicts;
@@ -179,7 +187,7 @@ typedef struct VIEW {
 typedef struct {
     char file[PATHMAX];
     DWORD off;              /* the topic's TOPICOFFSET */
-    short scroll;
+    long scroll;
     char title[64];
 } PLACE;
 
@@ -204,7 +212,7 @@ int rstr(UINT id, LPSTR buf, int cb);
 int msgbox(HWND owner, UINT id, LPCSTR arg, UINT flags);
 void errorbox(UINT id, LPCSTR arg);
 BOOL open_file(LPCSTR name, BOOL quiet);
-BOOL show_offset(DWORD off, BOOL record, short scroll);
+BOOL show_offset(DWORD off, BOOL record, long scroll);
 BOOL show_topic(int topic, BOOL record);
 BOOL jump_hash(HLP FAR *from, LPCSTR file, DWORD hash, LPCSTR window, BOOL popup, POINT pt);
 BOOL jump_context(HLP FAR *from, LPCSTR file, LPCSTR ctx, LPCSTR window, BOOL popup);
@@ -233,8 +241,8 @@ void view_clear(VIEW *v);
 void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width);
 void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HDC dev);
 void view_free(VIEW *v);
-void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy);
-short view_hit(VIEW *v, short x, short y);
+void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, long dy);
+short view_hit(VIEW *v, short x, long y);
 void view_activate(VIEW *v, short hot, POINT pt);
 LPSTR view_text(VIEW *v, DWORD FAR *len);
 void view_setscroll(VIEW *v);
@@ -280,6 +288,12 @@ void print_setup(void);
 
 /* SHELL.22 (SDK: ShellAbout); not declared in OpenWatcom's shellapi.h */
 int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
+
+/* the views' lists, which may pass 64K: element i (KERNEL's __AHINCR) */
+WORD ahincr(void);                      /* shell/write/i4.asm */
+#define HPTR(base, off) ((void FAR *)MAKELP(SELECTOROF(base) + HIWORD(off) * ahincr(), LOWORD(off)))
+#define VITEM(v, i) ((DITEM FAR *)HPTR((v)->items, (DWORD)(i) * sizeof(DITEM)))
+#define VHOT(v, i) ((HOTSPOT FAR *)HPTR((v)->hots, (DWORD)(i) * sizeof(HOTSPOT)))
 
 /* small helpers */
 void m_set(void FAR *d, int c, WORD n);

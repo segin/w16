@@ -63,6 +63,7 @@ BEGIN
     IDS_BADMACRO,   "Error executing macro."
     IDS_NOPRINTER,  "Unable to setup printer."
     IDS_COPYTITLE,  "Copy"
+    IDS_NOBUTTON,   "Unable to add button."
 END
 
 /* Search (WH2: client 389 x 302 at 28, 28 in the main window's client) */

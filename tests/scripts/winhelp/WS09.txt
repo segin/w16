@@ -1,4 +1,4 @@
-; WS09: OpenWatcom's help files (made by its whc): cmix.hlp (the one with macro hot spots into another file), clib.hlp (2.6 MB) contents and Search
+; WS09: OpenWatcom's help files (made by its whc): cmix.hlp (macro hot spots into another file, buttons in two rows, words wider than the window), clib.hlp (2.6 MB: its contents 1.5 s after starting, Search typed, Show Topics, Go To)
 ; owhlp: cmix.hlp
 ; owhlp: clib.hlp
 ; owhlp: cguide.hlp
@@ -9,7 +9,7 @@ dump
 close
 wait 1500
 run WINHELP.EXE CLIB.HLP
-wait 6000
+wait 1500
 snap C:\S2.BMP
 click 303 54
 wait 4000

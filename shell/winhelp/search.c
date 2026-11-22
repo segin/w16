@@ -20,6 +20,7 @@ static HLP FAR *sh;             /* the file being searched */
 static DWORD fkw, fkd;          /* the keyword table: |KWBTREE, |KWDATA */
 static DWORD topics[64];
 static int ntopics;
+static BOOL settext;    /* the edit set from the list: leave the list */
 
 static BOOL fill_kw(void FAR *c, const char FAR *kw, WORD count, DWORD dataoff)
 {
@@ -67,7 +68,9 @@ static void show_topics(HWND d)
     if (i < 0)
         return;
     SendMessage(lb, LB_GETTEXT, i, (LPARAM)(LPSTR)kw);
+    settext = TRUE;
     SetDlgItemText(d, IDC_SEARCHEDIT, kw);
+    settext = FALSE;
     kw_topics(kw, FALSE);
     SendMessage(tl, LB_RESETCONTENT, 0, 0);
     /* sorted by title (WS09: the list box is LBS_SORT) */
@@ -100,6 +103,7 @@ static void edit_changed(HWND d)
     HWND lb = GetDlgItem(d, IDC_KEYWORDS);
     int i;
     int n, k;
+    BOOL match;
     GetDlgItemText(d, IDC_SEARCHEDIT, t, sizeof t);
     if (!t[0])
         return;
@@ -107,6 +111,7 @@ static void edit_changed(HWND d)
        last one before it (WH2: "find" selects "files, including time and
        date", the item above shown at the top) */
     i = (int)SendMessage(lb, LB_FINDSTRING, (WPARAM)-1, (LPARAM)(LPSTR)t);
+    match = i >= 0;
     if (i < 0) {
         char kw[80];
         n = (int)SendMessage(lb, LB_GETCOUNT, 0, 0);
@@ -119,7 +124,9 @@ static void edit_changed(HWND d)
     }
     if (i >= 0) {
         SendMessage(lb, LB_SETCURSEL, i, 0);
-        SendMessage(lb, LB_SETTOPINDEX, i > 0 ? i - 1 : 0, 0);
+        /* a keyword that starts so at the top, else the one above
+           the one chosen (WS01, WS09) */
+        SendMessage(lb, LB_SETTOPINDEX, match ? i : i > 0 ? i - 1 : 0, 0);
     }
     EnableWindow(GetDlgItem(d, IDC_SHOW), i >= 0);
     if (i >= 0) {
@@ -178,7 +185,7 @@ BOOL CALLBACK __export SearchProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 show_topics(d);
             return TRUE;
         case IDC_SEARCHEDIT:
-            if (HIWORD(lp) == EN_CHANGE)
+            if (HIWORD(lp) == EN_CHANGE && !settext)
                 edit_changed(d);
             return TRUE;
         case IDC_KEYWORDS:
@@ -187,7 +194,9 @@ BOOL CALLBACK __export SearchProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
                 int i = (int)SendDlgItemMessage(d, IDC_KEYWORDS, LB_GETCURSEL, 0, 0);
                 if (i >= 0) {
                     SendDlgItemMessage(d, IDC_KEYWORDS, LB_GETTEXT, i, (LPARAM)(LPSTR)kw);
+                    settext = TRUE;
                     SetDlgItemText(d, IDC_SEARCHEDIT, kw);
+                    settext = FALSE;
                 }
             } else if (HIWORD(lp) == LBN_DBLCLK) {
                 show_topics(d);

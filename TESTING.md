@@ -123,7 +123,11 @@ in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/whscenarios.sh` (w16's Windows Help against Microsoft's over the
 reference install's own .HLP files: screens within
 `tests/scripts/winhelp.baseline`, WIN.INI and WINHELP.BMK byte for byte,
-`WH_BASELINE=update` to rewrite; `tests/whtree.sh OUTDIR [286|386]`:
+`WH_BASELINE=update` to rewrite; scenarios with `; hlp: w16test` build
+w16's own test help file with OpenWatcom's `whc` and those with `; owhlp:`
+use OpenWatcom's own help files, both skipped without OpenWatcom;
+`make test` runs `tests/winhelp/hlpcheck.sh`, the reader over every help
+file at hand; `tests/whtree.sh OUTDIR [286|386]`:
 on w16's install tree alone, with three of the reference install's help
 files as input; `tests/whobs.sh` for observing the original; `make build/hlpdump` builds the .HLP reader for the host,
 `tests/winhelp/hlpdump.c`),

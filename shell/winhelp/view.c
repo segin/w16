@@ -33,6 +33,9 @@
 #define MAXSHG      128
 #define LMAX        400     /* atoms on one line */
 
+static BYTE FAR *grow(HGLOBAL *h, DWORD size);
+static int sb_pos(VIEW *v, long pos, long max);
+
 /* ---- fonts ---- */
 
 static int lpy;             /* the layout's device's LOGPIXELSY */
@@ -123,14 +126,14 @@ void view_init(VIEW *v, HWND hwnd, BOOL nsr, BOOL popup)
     v->focus = -1;
     v->bg = GetSysColor(COLOR_WINDOW);
     if (!v->items) {
-        v->items = (DITEM FAR *)hio_alloc((DWORD)MAXITEMS * sizeof(DITEM));
-        v->pool = (char FAR *)hio_alloc(MAXPOOL);
-        v->hots = (HOTSPOT FAR *)hio_alloc((DWORD)MAXHOTS * sizeof(HOTSPOT));
+        v->items = grow(&v->hitems, 512L * sizeof(DITEM));
+        v->pool = grow(&v->hpool, 8192L);
+        v->hots = grow(&v->hhot, 256L * sizeof(HOTSPOT));
         v->picts = (VPICT FAR *)hio_alloc((DWORD)MAXPICTS * sizeof(VPICT));
         v->shg = (SHGHOT FAR *)hio_alloc((DWORD)MAXSHG * sizeof(SHGHOT));
-        v->maxitems = MAXITEMS;
-        v->maxpool = MAXPOOL;
-        v->maxhots = MAXHOTS;
+        v->maxitems = v->items ? 512 : 0;
+        v->maxpool = v->pool ? 8192L : 0;
+        v->maxhots = v->hots ? 256 : 0;
         v->maxpicts = MAXPICTS;
         v->maxshg = MAXSHG;
     }
@@ -146,26 +149,71 @@ void view_clear(VIEW *v)
     v->focus = -1;
 }
 
-static WORD pool_add(VIEW *v, const char FAR *s, WORD n)
+/* a list's block, made or made bigger (its contents kept); the new
+   address, NULL when there is no memory (then the old block stays) */
+static BYTE FAR *grow(HGLOBAL *h, DWORD size)
 {
-    WORD at = v->npool;
-    if (!v->pool || (DWORD)v->npool + n + 1 > v->maxpool)
-        return 0xFFFF;
-    m_cpy(v->pool + at, s, n);
-    v->pool[at + n] = 0;
-    v->npool += n + 1;
+    HGLOBAL n;
+    if (!*h) {
+        n = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size);
+    } else {
+        GlobalUnlock(*h);
+        n = GlobalReAlloc(*h, size, GMEM_MOVEABLE | GMEM_ZEROINIT);
+        if (!n) {
+            GlobalLock(*h);
+            return NULL;
+        }
+    }
+    if (!n)
+        return NULL;
+    *h = n;
+    return (BYTE FAR *)GlobalLock(n);
+}
+
+static DWORD pool_add(VIEW *v, const char FAR *s, WORD n)
+{
+    DWORD at = v->npool;
+    /* no string straddles a 64K boundary: each is used with far pointers */
+    if ((at & 0xFFFFUL) + n + 1 > 0x10000UL)
+        at = (at | 0xFFFFUL) + 1;
+    if (!v->pool || at + n + 1 > v->maxpool) {
+        DWORD size = v->maxpool * 2;
+        BYTE FAR *p;
+        while (size < at + n + 1)
+            size *= 2;
+        if (size > 0x100000UL || !(p = grow(&v->hpool, size)))
+            return NOSTR;
+        v->pool = p;
+        v->maxpool = size;
+    }
+    m_cpy(HPTR(v->pool, at), s, n);
+    *(char FAR *)HPTR(v->pool, at + n) = 0;
+    v->npool = at + n + 1;
     return at;
 }
 
 static DITEM FAR *item_add(VIEW *v)
 {
     DITEM FAR *d;
-    if (!v->items || v->nitems >= v->maxitems)
+    if (!v->items)
         return NULL;
-    d = &v->items[v->nitems++];
+    if (v->nitems >= v->maxitems) {
+        BYTE FAR *p;
+        if (v->maxitems >= 32768U ||
+            !(p = grow(&v->hitems, (DWORD)v->maxitems * 2 * sizeof(DITEM))))
+            return NULL;
+        v->items = p;
+        v->maxitems *= 2;
+    }
+    d = VITEM(v, v->nitems++);
     m_set(d, 0, sizeof *d);
     d->hot = -1;
     return d;
+}
+
+static char FAR *pool_str(VIEW *v, DWORD at)
+{
+    return (char FAR *)HPTR(v->pool, at);
 }
 
 /* ---- layout ----
@@ -195,7 +243,7 @@ typedef struct {
     VIEW *v;
     HDC dc;
     short width;
-    short y;
+    long y;
     HLPPARA para;
     BOOL firstline;     /* the next line is a paragraph's first */
     BOOL newpara;       /* spacing above is due */
@@ -203,10 +251,10 @@ typedef struct {
     short hot;          /* current hot spot, -1 none */
     BOOL hotvisible;
     BOOL marked;        /* the annotation mark is placed */
-    short floatl, floatlbottom;     /* a left picture: text indent, until y */
-    short floatr, floatrbottom;     /* a right picture */
+    short floatl, floatr;           /* a left/right picture: text indent */
+    long floatlbottom, floatrbottom;    /* until y */
     BOOL inbox;         /* a boxed paragraph's text (6 pixels in) */
-    short boxtop;       /* where its box starts */
+    long boxtop;        /* where its box starts */
     short wordw;        /* the unbroken run of atoms just added */
     short minw;         /* the width the widest unbroken run needs */
 } LAY;
@@ -255,8 +303,11 @@ static short line_left(LAY *l)
 {
     short x = (short)(MARGIN + px(l->para.left) + (l->firstline ? px(l->para.first) : 0));
     if (l->inbox)
-        x += 6;
-    if (l->floatl && l->y < l->floatlbottom)
+        x += 5;
+    /* beside a left picture while a line starts within its height or
+       just under it (WS07: the second line of a 16-pixel picture's
+       paragraph is still indented) */
+    if (l->floatl && l->y <= l->floatlbottom)
         x += l->floatl;
     return x;
 }
@@ -269,7 +320,7 @@ static short line_right(LAY *l)
     short x = (short)(l->width - px(l->para.right));
     if (l->inbox)
         x -= 6;
-    if (l->floatr && l->y < l->floatrbottom)
+    if (l->floatr && l->y <= l->floatrbottom)
         x -= l->floatr;
     return x;
 }
@@ -282,15 +333,18 @@ static short atom_end(LATOM *p)
     return p->x + p->cx;
 }
 
-static short tab_stop(LAY *l, short x)
+static short tab_stop(LAY *l, short x, BYTE *type)
 {
     /* x and the result are from the window's left edge */
     WORD i;
     short t, base = MARGIN;
+    *type = 0;
     for (i = 0; i < l->para.ntabs; i++) {
         t = base + px(l->para.tab[i]);
-        if (t > x)
+        if (t > x) {
+            *type = l->para.tabtype[i];
             return t;
+        }
     }
     /* default stops every half inch (36 pt) */
     t = base + px(72);
@@ -306,6 +360,23 @@ static void emit_line(LAY *l, int n, BOOL lastline)
     short left = line_left(l), right = line_right(l);
     short asc = 0, desc = 0, h, w = 0, shift = 0;
     int i, j;
+    /* right and centre tabs (1, 2): the text up to the next tab ends at,
+       or is centred on, the stop (WS07) */
+    for (i = 0; i < n; i++) {
+        if (line[i].kind == A_TAB && line[i].pict && i + 1 < n) {
+            short stop = line[i].x + line[i].cx, segw, start, delta;
+            for (j = i + 1; j < n && line[j].kind != A_TAB; j++)
+                ;
+            segw = line[j - 1].x + line[j - 1].cx - line[i + 1].x;
+            start = line[i].pict == 1 ? stop - segw : stop - segw / 2;
+            if (start < line[i].x)
+                start = line[i].x;
+            delta = start - line[i + 1].x;
+            line[i].cx += delta;
+            for (j = i + 1; j < n; j++)
+                line[j].x += delta;
+        }
+    }
     /* the line's extent without trailing spaces */
     for (i = n - 1; i >= 0 && line[i].kind == A_CHAR && line[i].c == ' '; i--)
         ;
@@ -379,19 +450,23 @@ static void emit_line(LAY *l, int n, BOOL lastline)
                 d->text = pool_add(v, buf, (WORD)(j - i));
                 d->len = (WORD)(j - i);
                 d->hot = line[i].hot;
-                if (d->text == 0xFFFF)
+                if (d->text == NOSTR)
                     v->nitems--;
             }
         }
         i = j;
     }
-    if (left + shift + w > v->widest)
-        v->widest = left + shift + w;
+    /* the widest line, its trailing space counted (popups' width) */
+    if (n && left + shift + line[n - 1].x + line[n - 1].cx > v->widest)
+        v->widest = left + shift + line[n - 1].x + line[n - 1].cx;
     {
         DITEM FAR *e = item_add(v);
         if (e) {
+            /* the line's top, height and where it ends */
             e->kind = DI_EOL;
             e->y = l->y;
+            e->cy = h;
+            e->cx = left + shift + w + (l->width - right);
         }
     }
     l->y += h;
@@ -410,7 +485,9 @@ static void add_atom(LAY *l, LATOM *a)
             line[nline - 1].font != a->font)
             x += l->v->fover[line[nline - 1].font];
         if (a->kind == A_TAB) {
-            a->cx = tab_stop(l, left + x) - (left + x);
+            BYTE ty;
+            a->cx = tab_stop(l, left + x, &ty) - (left + x);
+            a->pict = ty;
             if (a->cx < 0)
                 a->cx = 0;
         }
@@ -443,12 +520,15 @@ static void add_atom(LAY *l, LATOM *a)
                 return;
             }
             if (b < 0) {
-                /* no space: break before this atom, and note how wide
-                   the unbroken run wanted the line (WS09) */
+                /* no space to break at: the unbroken run stays whole and
+                   runs past the edge; the topic is then laid out as wide
+                   as the widest such run needs (WS09) */
                 short need = left + x + a->cx + (l->width - right);
                 if (need > l->minw)
                     l->minw = need;
-                b = nline - 1;
+                if (nline < LMAX)
+                    line[nline++] = *a;
+                return;
             }
             emit_line(l, b + 1, FALSE);
             l->firstline = FALSE;
@@ -464,7 +544,9 @@ static void add_atom(LAY *l, LATOM *a)
                     line[nline - 1].font != t.font)
                     tx += l->v->fover[line[nline - 1].font];
                 if (t.kind == A_TAB) {
-                    t.cx = tab_stop(l, line_left(l) + tx) - (line_left(l) + tx);
+                    BYTE ty;
+                    t.cx = tab_stop(l, line_left(l) + tx, &ty) - (line_left(l) + tx);
+                    t.pict = ty;
                     if (t.cx < 0)
                         t.cx = 0;
                 }
@@ -487,10 +569,10 @@ static void para_start(LAY *l)
     if (l->newpara) {
         l->y += (short)px(l->para.above);
         l->newpara = FALSE;
-        /* a box (\box): 2 pixels, its line, 2 pixels, then the text 6
-           pixels in from the indents (WS07) */
+        /* a box (\box): a pixel, its line, 3 pixels, then the text 5
+           pixels in from the indent (WS07) */
         if (l->para.border & 1) {
-            l->boxtop = l->y + 2;
+            l->boxtop = l->y + 1;
             l->y += 5;
             l->inbox = TRUE;
         }
@@ -501,17 +583,17 @@ static void para_end(LAY *l)
 {
     VIEW *v = l->v;
     if (l->inbox) {
-        /* 3 pixels under the text, the box's bottom line; the box spans
-           the indents less 2 pixels each side */
+        /* 2 pixels under the text, the box's bottom line, 2 more; the
+           box from a pixel inside the left indent to 2 inside the right */
         DITEM FAR *d = item_add(v);
-        l->y += 4;
         if (d) {
             d->kind = DI_BOX;
-            d->x = (short)(MARGIN + px(l->para.left) + 2);
+            d->x = (short)(MARGIN + px(l->para.left) + 1);
             d->y = l->boxtop;
             d->cx = (short)(l->width - px(l->para.right) - 2 - d->x + 1);
-            d->cy = l->y - l->boxtop;
+            d->cy = (short)(l->y + 3 - l->boxtop);
         }
+        l->y += 5;
         l->inbox = FALSE;
     }
     l->y += (short)px(l->para.below);
@@ -521,12 +603,19 @@ static void para_end(LAY *l)
 static short hot_add(VIEW *v, BYTE code, DWORD hash, LPCSTR file, LPCSTR window, LPCSTR macro, WORD mlen)
 {
     HOTSPOT FAR *h;
-    if (!v->hots || v->nhots >= v->maxhots)
+    if (!v->hots || v->nhots >= 32000)
         return -1;
-    h = &v->hots[v->nhots];
+    if (v->nhots >= v->maxhots) {
+        BYTE FAR *p = grow(&v->hhot, (DWORD)v->maxhots * 2 * sizeof(HOTSPOT));
+        if (!p)
+            return -1;
+        v->hots = p;
+        v->maxhots *= 2;
+    }
+    h = VHOT(v, v->nhots);
     h->code = code;
     h->hash = hash;
-    h->str = 0xFFFF;
+    h->str = NOSTR;
     if (macro) {
         h->str = pool_add(v, macro, mlen);
     } else if (file || window) {
@@ -555,7 +644,7 @@ short view_addhot(VIEW *v, BYTE code, DWORD hash, LPCSTR str)
         HOTSPOT FAR *h;
         short i = hot_add(v, code, hash, NULL, NULL, NULL, 0);
         if (i >= 0) {
-            h = &v->hots[i];
+            h = VHOT(v, i);
             h->str = pool_add(v, str, hlp_strlen(str));
         }
         return i;
@@ -563,7 +652,7 @@ short view_addhot(VIEW *v, BYTE code, DWORD hash, LPCSTR str)
     return hot_add(v, code, hash, NULL, NULL, NULL, 0);
 }
 
-static void border_line(LAY *l, short y, short thick)
+static void border_line(LAY *l, long y, short thick)
 {
     DITEM FAR *d = item_add(l->v);
     if (!d)
@@ -771,6 +860,8 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
     hio_free(d.mem);
 }
 
+static BOOL widening;   /* laying out again wider: once */
+
 void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width)
 {
     view_layout_dc(v, h, first, end, width, NULL);
@@ -826,9 +917,11 @@ void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HD
         ReleaseDC(v->hwnd, l.dc);
     /* a word wider than the window: laid out as wide as it needs, the
        window scrolls sideways (WS09, OpenWatcom's cmix.hlp) */
-    if (!dev && !v->popup && !v->nsr && l.minw > width && l.minw < 4000) {
+    if (!dev && !v->popup && !v->nsr && l.minw > width && l.minw < 4000 && !widening) {
         v->reqwidth = width;
+        widening = TRUE;
         view_layout_dc(v, h, first, end, l.minw, NULL);
+        widening = FALSE;
         v->reqwidth = width;
         return;
     }
@@ -862,20 +955,22 @@ static void dotted(HDC dc, short x0, short x1, short y, COLORREF c)
             SetPixel(dc, x, y, c);
 }
 
-void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
+void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, long dy)
 {
     WORD i;
     HFONT old = NULL;
     SetBkMode(dc, TRANSPARENT);
     for (i = 0; i < v->nitems; i++) {
-        DITEM FAR *d = &v->items[i];
-        short x = d->x + dx, y = d->y + dy;
+        DITEM FAR *d = VITEM(v, i);
+        long yy = d->y + dy;
+        short x = d->x + dx, y;
         BYTE code = 0;
         BOOL vis = FALSE;
-        if (y >= clip->bottom || y + d->cy < clip->top)
+        if (yy >= clip->bottom || yy + d->cy < clip->top)
             continue;
+        y = (short)yy;
         if (d->hot >= 0 && (WORD)d->hot < v->nhots) {
-            code = v->hots[d->hot].code;
+            code = VHOT(v, d->hot)->code;
             /* "without font change" hot spots: E6, E7, EE, EF, CC (EB, a jump
                into another file or window, is green: WS07) */
             vis = !(code == 0xE6 || code == 0xE7 || code == 0xEE || code == 0xEF || code == 0xCC);
@@ -887,7 +982,7 @@ void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
             if (!old)
                 old = o;
             SetTextColor(dc, vis ? GREEN : font_color(v, d->font));
-            TextOut(dc, x, y, v->pool + d->text, d->len);
+            TextOut(dc, x, y, pool_str(v, d->text), d->len);
             if (vis) {
                 short uy = y + d->ascent + 1;
                 if (code == 0xE2 || code == 0xEA || code == 0xE0) {
@@ -911,7 +1006,7 @@ void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
                    solid, popups dotted (WS07) */
                 for (k = 0; k < p->nhot; k++) {
                     SHGHOT FAR *g = &v->shg[p->hotfirst + k];
-                    BYTE hc = g->hot >= 0 && (WORD)g->hot < v->nhots ? v->hots[g->hot].code : 0;
+                    BYTE hc = g->hot >= 0 && (WORD)g->hot < v->nhots ? VHOT(v, g->hot)->code : 0;
                     HPEN pen, op;
                     HBRUSH ob;
                     if (hc != 0xC8 && hc != 0xE2 && hc != 0xE3 && hc != 0xEA && hc != 0xEB)
@@ -947,11 +1042,15 @@ void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy)
         SelectObject(dc, old);
 }
 
-short view_hit(VIEW *v, short x, short y)
+long g_hitbottom;       /* the bottom of what view_hit last hit */
+short g_hitcx;          /* and its middle; -1 a picture's hot spot */
+BOOL g_hitkind;         /* a macro hot spot in the text */
+
+short view_hit(VIEW *v, short x, long y)
 {
     WORD i;
     for (i = 0; i < v->nitems; i++) {
-        DITEM FAR *d = &v->items[i];
+        DITEM FAR *d = VITEM(v, i);
         if (x < d->x || x >= d->x + d->cx || y < d->y || y >= d->y + d->cy)
             continue;
         if (d->kind == DI_PICT && d->font < v->npicts) {
@@ -959,13 +1058,21 @@ short view_hit(VIEW *v, short x, short y)
             WORD k;
             for (k = 0; k < p->nhot; k++) {
                 SHGHOT FAR *g = &v->shg[p->hotfirst + k];
-                short rx = x - d->x, ry = y - d->y;
-                if (rx >= g->x && rx < g->x + g->cx && ry >= g->y && ry < g->y + g->cy)
+                short rx = x - d->x, ry = (short)(y - d->y);
+                if (rx >= g->x && rx < g->x + g->cx && ry >= g->y && ry < g->y + g->cy) {
+                    g_hitbottom = d->y + g->y + g->cy;
+                    g_hitcx = -1;
                     return g->hot;
+                }
             }
         }
-        if (d->hot >= 0)
+        if (d->hot >= 0) {
+            g_hitbottom = d->y + d->cy;
+            g_hitcx = d->x + d->cx / 2;
+            g_hitkind = (WORD)d->hot < v->nhots &&
+                (VHOT(v, d->hot)->code == 0xC8 || VHOT(v, d->hot)->code == 0xCC);
             return d->hot;
+        }
     }
     return -1;
 }
@@ -979,25 +1086,24 @@ LPSTR view_text(VIEW *v, DWORD FAR *len)
        line (a tab) as a tab */
     WORD i;
     DWORD n = 0;
-    LPSTR s = (LPSTR)hio_alloc((DWORD)v->npool + (DWORD)v->nitems * 3 + 4);
-    BOOL linestart = TRUE;
+    LPSTR s = (LPSTR)hio_alloc(0xFF00UL);
+    short lastend = -1;     /* the end of the line's last text, -1: none yet */
     if (!s)
         return NULL;
-    for (i = 0; i < v->nitems; i++) {
-        DITEM FAR *d = &v->items[i];
+    for (i = 0; i < v->nitems && n < 0xFE00UL - 300; i++) {
+        DITEM FAR *d = VITEM(v, i);
         if (d->kind == DI_EOL || d->kind == DI_EOP) {
             s[n++] = '\r';
             s[n++] = '\n';
-            linestart = TRUE;
+            lastend = -1;
             continue;
         }
-        if (d->kind != DI_TEXT)
+        if (d->kind != DI_TEXT || !d->len)
             continue;
-        if (!linestart && i && v->items[i - 1].kind == DI_TEXT &&
-            d->x > v->items[i - 1].x + v->items[i - 1].cx + 2)
+        if (lastend >= 0 && d->x > lastend + 2)
             s[n++] = '\t';
-        linestart = FALSE;
-        m_cpy(s + n, v->pool + d->text, d->len);
+        lastend = d->x + d->cx;
+        m_cpy(s + n, pool_str(v, d->text), d->len);
         n += d->len;
     }
     s[n] = 0;
@@ -1014,9 +1120,59 @@ static short client_h(VIEW *v)
     return (short)r.bottom;
 }
 
+/* how far a topic scrolls: until its end is half way up the window
+   (WS10: NOTEPAD.HLP's File Menu Commands scrolls to 552 pixels of 757
+   in a 409-pixel window; Page Down moves the window's height less 15,
+   an arrow 15) */
+static long scroll_max(VIEW *v)
+{
+    short ch = client_h(v);
+    if (v->height <= ch)
+        return 0;
+    return v->height - (ch + 1) / 2;
+}
+
+static BOOL scrollbusy, sizepending;
+static void setscroll(VIEW *v);
+
 void view_setscroll(VIEW *v)
 {
-    short ch = client_h(v), max = v->height - ch, hmax = v->width - v->reqwidth;
+    int n;
+    if (v->nsr || v->popup || scrollbusy)
+        return;
+    for (n = 0; n < 4; n++) {
+        RECT r;
+        scrollbusy = TRUE;
+        sizepending = FALSE;
+        setscroll(v);
+        scrollbusy = FALSE;
+        if (!sizepending)
+            break;
+        GetClientRect(v->hwnd, &r);
+        if (r.right != v->reqwidth)
+            view_layout(v, v->hlp, v->first, v->end, (short)r.right);
+    }
+}
+
+static void setscroll(VIEW *v)
+{
+    short ch = client_h(v), hmax = v->width - v->reqwidth;
+    long max;
+    /* the horizontal scroll bar only while a line in view is wider than
+       the window (WS09: OpenWatcom's clib.hlp's contents, whose wide
+       lines are further down, shows none at first; cmix.hlp's does) */
+    if (hmax > 0) {
+        WORD i;
+        short need = 0;
+        for (i = 0; i < v->nitems; i++) {
+            DITEM FAR *d = VITEM(v, i);
+            if (d->kind == DI_EOL && d->y + d->cy > v->scroll && d->y < v->scroll + ch &&
+                d->cx > need)
+                need = d->cx;
+        }
+        if (need <= v->reqwidth)
+            hmax = 0;
+    }
     if (v->nsr || v->popup)
         return;
     /* sideways when laid out wider than the window */
@@ -1030,8 +1186,8 @@ void view_setscroll(VIEW *v)
         SetScrollPos(v->hwnd, SB_HORZ, v->hscroll, TRUE);
     }
     ch = client_h(v);
-    max = v->height - ch;
-    if (max <= 0) {
+    max = scroll_max(v);
+    if (v->height <= ch) {
         v->scroll = 0;
         SetScrollRange(v->hwnd, SB_VERT, 0, 0, TRUE);
     } else {
@@ -1039,8 +1195,9 @@ void view_setscroll(VIEW *v)
             v->scroll = max;
         if (v->scroll < 0)
             v->scroll = 0;
-        SetScrollRange(v->hwnd, SB_VERT, 0, max, FALSE);
-        SetScrollPos(v->hwnd, SB_VERT, v->scroll, TRUE);
+        /* scroll bars count to 32767: taller topics are scaled */
+        SetScrollRange(v->hwnd, SB_VERT, 0, (int)(max > 32767 ? 32767 : max), FALSE);
+        SetScrollPos(v->hwnd, SB_VERT, sb_pos(v, v->scroll, max), TRUE);
     }
 }
 
@@ -1061,9 +1218,17 @@ static void hscroll_to(VIEW *v, short pos)
     UpdateWindow(v->hwnd);
 }
 
-static void scroll_to(VIEW *v, short pos)
+static int sb_pos(VIEW *v, long pos, long max)
 {
-    short ch = client_h(v), max = v->height - ch;
+    (void)v;
+    if (max <= 32767)
+        return (int)pos;
+    return (int)(pos * 32767 / max);
+}
+
+static void scroll_to(VIEW *v, long pos)
+{
+    long max = scroll_max(v);
     if (max < 0)
         max = 0;
     if (pos > max)
@@ -1072,9 +1237,14 @@ static void scroll_to(VIEW *v, short pos)
         pos = 0;
     if (pos == v->scroll)
         return;
-    ScrollWindow(v->hwnd, 0, v->scroll - pos, NULL, NULL);
+    if (v->scroll - pos > 30000 || pos - v->scroll > 30000)
+        InvalidateRect(v->hwnd, NULL, TRUE);
+    else
+        ScrollWindow(v->hwnd, 0, (int)(v->scroll - pos), NULL, NULL);
     v->scroll = pos;
-    SetScrollPos(v->hwnd, SB_VERT, pos, TRUE);
+    if (v->width > v->reqwidth)
+        view_setscroll(v);      /* the horizontal bar may come or go */
+    SetScrollPos(v->hwnd, SB_VERT, sb_pos(v, pos, max), TRUE);
     UpdateWindow(v->hwnd);
 }
 
@@ -1084,9 +1254,15 @@ static void scroll_to(VIEW *v, short pos)
 static void view_size(VIEW *v)
 {
     RECT r;
-    GetClientRect(v->hwnd, &r);
     if (!v->hlp || v->popup)
         return;
+    if (scrollbusy) {
+        /* a scroll bar came or went while they were being set: once they
+           are, the size is looked at again */
+        sizepending = TRUE;
+        return;
+    }
+    GetClientRect(v->hwnd, &r);
     if (r.right != v->reqwidth)
         view_layout(v, v->hlp, v->first, v->end, (short)r.right);
     view_setscroll(v);
@@ -1095,6 +1271,8 @@ static void view_size(VIEW *v)
 /* ---- hot spots ---- */
 
 HWND g_popsrc;      /* the window whose hot spot opened a popup */
+POINT g_hotpt;      /* the hot spot a popup belongs to: its middle, its
+                       bottom (screen); x -1: none (the point given) */
 
 void view_activate(VIEW *v, short hot, POINT pt)
 {
@@ -1104,12 +1282,12 @@ void view_activate(VIEW *v, short hot, POINT pt)
     LPSTR gt;
     if (hot < 0 || (WORD)hot >= v->nhots)
         return;
-    h = &v->hots[hot];
+    h = VHOT(v, hot);
     if (!v->popup)
         g_popsrc = v->hwnd;
     str[0] = 0;
-    if (h->str != 0xFFFF)
-        hlp_strcpyn(str, v->pool + h->str, sizeof str);
+    if (h->str != NOSTR)
+        hlp_strcpyn(str, pool_str(v, h->str), sizeof str);
     switch (h->code) {
     case HOT_ANNOTATION:
         annotate();
@@ -1138,13 +1316,14 @@ void view_activate(VIEW *v, short hot, POINT pt)
         }
         hlp_strcpyn(file, str, sizeof file);
         if (h->code == 0xEA || h->code == 0xEE) {
-            jump_hash(v->hlp, file[0] ? file : NULL, h->hash, NULL, TRUE, pt);
+            jump_hash(v->hlp, file[0] ? (LPCSTR)file : (LPCSTR)NULL, h->hash, NULL, TRUE, pt);
         } else {
             popup_close();
-            jump_hash(v->hlp, file[0] ? file : NULL, h->hash, window[0] ? window : NULL, FALSE, pt);
+            jump_hash(v->hlp, file[0] ? (LPCSTR)file : (LPCSTR)NULL, h->hash, window[0] ? (LPCSTR)window : (LPCSTR)NULL, FALSE, pt);
         }
         break;
     }
+    g_hotpt.x = -1;
 }
 
 /* ---- the windows ---- */
@@ -1169,7 +1348,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         PAINTSTRUCT ps;
         BeginPaint(w, &ps);
         if (v)
-            view_paint(v, ps.hdc, &ps.rcPaint, (short)-v->hscroll, (short)-v->scroll);
+            view_paint(v, ps.hdc, &ps.rcPaint, (short)-v->hscroll, -v->scroll);
         EndPaint(w, &ps);
         return 0;
     }
@@ -1178,7 +1357,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             view_size(v);
         return 0;
     case WM_VSCROLL: {
-        short ch = client_h(v), lineh = 16;
+        short ch = client_h(v), lineh = 15;
         if (!v)
             break;
         switch (wp) {
@@ -1187,7 +1366,11 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         case SB_PAGEUP: scroll_to(v, v->scroll - ch + lineh); break;
         case SB_PAGEDOWN: scroll_to(v, v->scroll + ch - lineh); break;
         case SB_THUMBTRACK:
-        case SB_THUMBPOSITION: scroll_to(v, (short)LOWORD(lp)); break;
+        case SB_THUMBPOSITION: {
+            long max = scroll_max(v), p = (long)(WORD)LOWORD(lp);
+            scroll_to(v, max > 32767 ? p * max / 32767 : p);
+            break;
+        }
         case SB_TOP: scroll_to(v, 0); break;
         case SB_BOTTOM: scroll_to(v, v->height); break;
         }
@@ -1237,9 +1420,9 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
                 WORD i;
                 pt.x = pt.y = 0;
                 for (i = 0; i < v->nitems; i++)
-                    if (v->items[i].hot == v->focus) {
-                        pt.x = v->items[i].x + v->items[i].cx / 2;
-                        pt.y = v->items[i].y + v->items[i].cy - v->scroll;
+                    if (VITEM(v, i)->hot == v->focus) {
+                        pt.x = VITEM(v, i)->x + VITEM(v, i)->cx / 2;
+                        pt.y = (short)(VITEM(v, i)->y + VITEM(v, i)->cy - v->scroll - 8);
                         break;
                     }
                 ClientToScreen(w, &pt);
@@ -1253,7 +1436,7 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             POINT pt;
             GetCursorPos(&pt);
             ScreenToClient(w, &pt);
-            if (view_hit(v, (short)(pt.x + v->hscroll), (short)(pt.y + v->scroll)) >= 0) {
+            if (view_hit(v, (short)(pt.x + v->hscroll), pt.y + v->scroll) >= 0) {
                 SetCursor(g_hand);
                 return TRUE;
             }
@@ -1261,12 +1444,27 @@ LRESULT view_proc(VIEW *v, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_LBUTTONDOWN:
         if (v && !v->popup) {
-            short hot = view_hit(v, (short)(LOWORD(lp) + v->hscroll), (short)(HIWORD(lp) + v->scroll));
+            short hot = view_hit(v, (short)(LOWORD(lp) + v->hscroll), (long)(short)HIWORD(lp) + v->scroll);
             if (hot >= 0) {
+                /* where a popup comes (3.1, WS01, WS02, WS07, WS08): from a
+                   jump or popup in the text, centred on the click, 10
+                   pixels below it; from a picture's hot spot, right
+                   under its rectangle; from a macro hot spot in the text
+                   (PopupId, PopupContext), centred on the hot spot's run,
+                   right under its line */
                 POINT pt;
+                g_hitkind = FALSE;
+                hot = view_hit(v, (short)(LOWORD(lp) + v->hscroll), (long)(short)HIWORD(lp) + v->scroll);
                 pt.x = (short)LOWORD(lp);
                 pt.y = (short)HIWORD(lp);
+                if (g_hitcx == -1) {
+                    pt.y = (short)(g_hitbottom - v->scroll - 10);
+                } else if (g_hitkind) {
+                    pt.x = g_hitcx - v->hscroll;
+                    pt.y = (short)(g_hitbottom - v->scroll - 10);
+                }
                 ClientToScreen(w, &pt);
+                g_hotpt = pt;
                 view_activate(v, hot, pt);
             }
             return 0;
@@ -1334,10 +1532,18 @@ void popup_show(HLP FAR *h, int topic, POINT pt)
     view_layout(&g_vnote, h, first, 0, w);
     /* the box: the text, 8 pixels' margin on the right and one more,
        one pixel above it and five below, a 2-pixel frame (WH2) */
-    cw = g_vnote.widest + MARGIN + 1 + 2 * 2;
+    /* (WS01, WS07: NOTEPAD.HLP's "...linefeeds " line 393 pixels long
+       in a 402-pixel box, W16TEST.HLP's "...popup window." 288 in 298) */
+    cw = g_vnote.widest + 10;
     ch = g_vnote.height + 1 + 5 + 2 * 2;
     if (cw > w)
         cw = w;
+    /* centred under the hot spot it came from (WS01, WS08: the text's
+       run, a macro's hot spot alike), else under the point given */
+    if (g_hotpt.x != -1 && g_hotpt.y != -1) {
+        pt = g_hotpt;
+        g_hotpt.x = -1;
+    }
     x = (short)pt.x - (cw + SHADOW) / 2;
     y = (short)pt.y + 10;
     /* kept 2 pixels in from the screen's edges (WS02) */

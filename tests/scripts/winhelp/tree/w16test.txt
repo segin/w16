@@ -1,0 +1,9 @@
+; tests/whtree.sh with WHTREE_SCRIPT=w16test: W16TEST.HLP on w16's own USER and GDI (its metafile through gdi/meta.c)
+run WINHELP.EXE W16TEST.HLP
+wait 3000
+snap C:\T1.BMP
+key 22
+wait 1000
+snap C:\T2.BMP
+close
+wait 1500

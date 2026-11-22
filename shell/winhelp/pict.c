@@ -20,8 +20,9 @@
  * says Help does (Vol. 4, ch. 15, \bmc), its window extent the
  * picture's width and height, its viewport the picture's size in pixels
  * (those numbers taken as 0.01 mm: UNVERIFIED, no reference help file
- * has a metafile). w16's GDI is getting metafiles separately; until it
- * has them they draw nothing (its export stubs answer 0).
+ * has a metafile of its own; W16TEST.HLP's, an SHG holding a metafile,
+ * shows 3.1 sizing them so: WS07). They draw on 3.1's GDI and on w16's
+ * (gdi/meta.c).
  */
 #include "winhelp.h"
 
@@ -162,7 +163,7 @@ static void hotspots(VIEW *v, VPICT FAR *pp, LPCB q, DWORD n)
                 }
                 f[j] = 0;
             }
-            hot = view_addhot(v, code, (DWORD)hlp_hash(c), f[0] ? f : NULL);
+            hot = view_addhot(v, code, (DWORD)hlp_hash(c), f[0] ? (LPCSTR)f : (LPCSTR)NULL);
         }
         if (v->nshg < v->maxshg) {
             SHGHOT FAR *g = &v->shg[v->nshg++];

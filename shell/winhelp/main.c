@@ -319,7 +319,7 @@ BOOL show_topic(int topic, BOOL record)
     return TRUE;
 }
 
-BOOL show_offset(DWORD off, BOOL record, short scroll)
+BOOL show_offset(DWORD off, BOOL record, long scroll)
 {
     int t = g_hlp ? hlp_topic_at(g_hlp, off) : -1;
     if (t < 0) {
@@ -562,8 +562,10 @@ void browse_buttons(void)
     if (browse)
         return;
     browse = TRUE;
-    new_button(IDB_PREV, "btn_previous", "<<", NULL);
-    new_button(IDB_NEXT, "btn_next", ">>", NULL);
+    /* "&<<" and "&>>": their mnemonics underline the first character
+       (WS07) */
+    new_button(IDB_PREV, "btn_previous", "&<<", NULL);
+    new_button(IDB_NEXT, "btn_next", "&>>", NULL);
     update_buttons();
 }
 
@@ -571,8 +573,9 @@ void add_button(LPCSTR id, LPCSTR text, LPCSTR macro)
 {
     int i = button_find(id);
     if (i >= 0) {
-        SetWindowText(buttons[i].hwnd, text);
-        hlp_strcpyn(buttons[i].macro, macro, sizeof buttons[i].macro);
+        /* a button of that name is there: 3.1 says so (WS07, a topic's
+           CreateButton run again) */
+        errorbox(IDS_NOBUTTON, NULL);
         return;
     }
     new_button(IDB_USER + nbuttons, id, text, macro);
@@ -1284,6 +1287,10 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
             if (!ok)
                 go_contents();
         }
+    }
+    {
+        extern POINT g_hotpt;
+        g_hotpt.x = -1;
     }
     while (GetMessage(&m, NULL, 0, 0)) {
         if (g_history && IsDialogMessage(g_history, &m))
