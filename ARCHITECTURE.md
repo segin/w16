@@ -1183,7 +1183,7 @@ FN1 (6.9) compares w16's font *files* under Microsoft's GDI; it says nothing abo
 
 UNVERIFIED (not probed, kept from before): the weight (3 a hundred) and italic (4) penalties, and how family and pitch weigh without a face; the form of the scaling terms (above). TrueType and vector fonts are not mapped to (vector fonts only last, at 20000 more); where 3.1 picks one, w16 picks a raster font.
 
-**Results.** With w16's GDI, Microsoft's or w16's VGA.DRV, GD11 gives 3.1's every mapping and metric (3982 requests compared), and GD10's scaled cases 3.1's pixels; the boot-test case `gdifont` runs both with each mix of GDIs and drivers. Also found and fixed on the way: AddFontResource of a file that is not there returns 0 without KERNEL's "Cannot find" box (w16 showed it).
+**Results.** With w16's GDI, Microsoft's or w16's VGA.DRV, GD11 gives 3.1's every mapping and metric (3982 requests compared), also with w16's own .FON files (6.9) in place of Microsoft's, under either GDI; GD10's scaled cases give 3.1's pixels; the boot-test case `gdifont` runs both with each mix of GDIs and drivers. Also found and fixed on the way: AddFontResource of a file that is not there returns 0 without KERNEL's "Cannot find" box (w16 showed it).
 
 ## 12. WIN386.EXE: 386 Enhanced mode
 
