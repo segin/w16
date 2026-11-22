@@ -176,6 +176,21 @@ _vm_stub_off:
         mov ax, vm_stub
         ret
 
+; unsigned vm_close_off(void): the offset of vm_close, where the VMM sends
+; a DOS VM it closes (SHELL, Ctrl+Alt+Del's Enter): its program ends with
+; INT 21h 4CFFh, as under Windows 3.1 (VXSH.386: AX=4CFFh in the VM); the
+; VMM sends it here again while a parent program is left
+global _vm_close_off
+_vm_close_off:
+        mov ax, vm_close
+        ret
+vm_close:
+        mov ax, 4CFFh
+        int 21h
+        mov ax, 0FFh                    ; still here (a DOS whose shell does not
+        clc                             ; end with 4Ch: DOSBox's own): the VM
+        jmp _bp_table + BP_VMEXIT       ; ends all the same (Windows 3.1's did)
+
 ; A DOS VM's first code (V86 mode; ARCHITECTURE.md 12.10). The VMM starts
 ; a new VM here with DS = SS = P, the first paragraph of the VM's free
 ; memory (P - 1 its free arena's MCB), SP inside P's first 8 KB, and the

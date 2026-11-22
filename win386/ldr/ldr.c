@@ -37,6 +37,7 @@ extern int __cdecl pm_go(struct w386_info *info);
 extern int __cdecl pm_exit(int code);
 extern unsigned __cdecl bp_table_off(void);
 extern unsigned __cdecl vm_stub_off(void);
+extern unsigned __cdecl vm_close_off(void);
 extern unsigned __cdecl rm_tramp_off(void);
 extern void __far *xms_entry;
 #pragma aux xms_entry "_*"
@@ -906,6 +907,7 @@ int main(int argc, char **argv)
     info.free_mcb = _psp + *(unsigned __far *)MK_FP(_psp - 1, 3);
     info.mem_top = *(unsigned __far *)MK_FP(0x40, 0x13) * 64;
     info.vmstub_off = vm_stub_off();
+    info.vmclose_off = vm_close_off();
     segread(&sr);
     /* the transfer buffer: paragraph aligned, in our data segment */
     info.xbuf_seg = sr.ds + (((unsigned)xbuf + 15) >> 4);

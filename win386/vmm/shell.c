@@ -65,10 +65,12 @@ struct shvm {
     u32 flags2;                         /* function 6 with CX FFFFh */
     u32 ended_posted;
     int hk_pending;                     /* a hot key's event not acted on (function 5) */
+    char title[32];                     /* function 3's block +2Eh: the window's title */
     u32 hwnd;                           /* function 15h */
     u32 cb_sel, cb_off;                 /* function 9: its event procedure */
 };
 static struct shvm *shvms;
+static int last_fault;                  /* the last event posted was a fault's (41Bh) */
 static u32 next_sel, next_off;          /* function 9's procedure, for the next VM */
 
 /* event records WINOA386 reads through the flat selector (ring 3: their
@@ -205,9 +207,14 @@ void shell_init(void)
 
 /* the VDD: a windowed VM's screen has changed (event 41Ah; the record's
  * +12h: 20h when the cursor moved, as Windows 3.1's varied 0 and 20h) */
-void shell_display_changed(struct vm *v, int cursor)
+int shell_display_changed(struct vm *v, int cursor)
 {
-    if (sh_of(v)) post(v, 0x41A, cursor ? 0x00200000u : 0);
+    /* (not before WINOA386 has its window for the VM, function 15h, and
+     * the VM runs: a VM windowed from its start changed nothing yet) */
+    struct shvm *s = sh_of(v);
+    if (!s || !s->hwnd || !v->started) return 0;
+    post(v, 0x41A, cursor ? 0x00200000u : 0);
+    return 1;
 }
 
 /* SHELL's event: WINOA386's procedure in the System VM, (hwnd, msg,
@@ -243,6 +250,7 @@ static void post_now(struct vm *sys, void *arg)
 static void post(struct vm *v, u32 msg, u32 wparam)
 {
     struct postarg *a = kmalloc(sizeof(*a));
+    last_fault = msg == 0x41B;
     if (!a) return;
     a->msg = msg;
     a->wparam = wparam;
@@ -322,12 +330,23 @@ static void create(struct cregs *r)
     }
     s->vm = v;
     s->block = (u32)b;
-    s->flags = 0;
+    /* a VM that starts in a window: the block's first byte, bit 2
+     * (Windows 3.1, VXS.386: 04h for a PIF that starts windowed, 00h for
+     * DOSPRMPT.PIF; the same 4 as function 7's status word); its video
+     * memory is RAM from the start (vdd.c) */
+    s->flags = (b[0] & 4) ? SHELL_WINDOWED : 0;
+    if (s->flags & SHELL_WINDOWED) vdd_window(v, 1);
     s->flags2 = 0;
     s->ended_posted = 0;
     s->hwnd = 0;
     s->cb_sel = next_sel;
     s->cb_off = next_off;
+    /* the title (Windows 3.1's block: "MS-DOS Prompt" at +2Eh, VXS.386) */
+    {
+        u32 i;
+        for (i = 0; i < sizeof(s->title) - 1 && b[0x2E + i]; i++) s->title[i] = b[0x2E + i];
+        s->title[i] = 0;
+    }
     s->next = shvms;
     shvms = s;
     v->prio_fg = *(u16 *)(b + 0x1E) ? *(u16 *)(b + 0x1E) : 100;
@@ -546,6 +565,14 @@ void shell_api(struct cregs *r)
     case 0x14:                          /* (seen after a switch: nothing back) */
         return;
     case 0x16:
+        /* after the fault event (41Bh) Windows 3.1 answered EAX 00010004h,
+         * ECX 0083h (VXSH.386, VX12 G: WINOA386 calls it with the event's
+         * record and then names the fault, "due to an invalid general
+         * protection fault"); UNVERIFIED what the values mean */
+        if (last_fault) {
+            r->eax = 0x00010004u;
+            SETW(r->ecx, 0x0083);
+        }
         SETW(r->edx, 0);
         return;
     case 0x04:                          /* destroy the VM */
@@ -556,6 +583,56 @@ void shell_api(struct cregs *r)
     }
     trace("SHELL: function %x (ax=%x bx=%x cx=%x si=%x di=%x) not implemented\n",
           fn, AX(r), r->ebx, CX(r), SI(r), DI(r));
+}
+
+/* A fault ended the VM (vm.c): Windows 3.1's sequence (vm_crashed), the
+ * event 41Bh with wParam 4 */
+void shell_vm_crashed(struct vm *v)
+{
+    struct shvm *s = sh_of(v);
+    suspend_vm(v);
+    vxd_send(VM_NOT_EXECUTEABLE, v, 1, 0, 0);
+    if (vm_focus == v) {
+        focus3(&sysvm, 0, 1);
+        vm_set_focus(&sysvm);
+    }
+    if (s && !s->ended_posted) {
+        s->ended_posted = 1;
+        post(v, 0x41B, 4);
+    }
+}
+
+/* REBOOT's link (w16vxd.h): the title, and closing the VM */
+static int link_title(vu32 h, char *buf, int n)
+{
+    struct shvm *s = sh_of(vm_of(h));
+    int i;
+    if (!s || !s->title[0] || n < 1) return 0;
+    for (i = 0; i < n - 1 && s->title[i]; i++) buf[i] = s->title[i];
+    buf[i] = 0;
+    return 1;
+}
+
+/* Windows 3.1 (VXSH.386, Ctrl+Alt+Del's Enter with the MS-DOS Prompt in
+ * front): SHELL's event 415h, Close_VM_Notify (19h) to the devices, then
+ * the VM's program ends (vm_close) and the VM with it: VM_Not_Executeable,
+ * the focus to the System VM, event 418h (shell_vm_ended) */
+static void link_close(vu32 h)
+{
+    struct vm *v = vm_of(h);
+    if (!v || v == &sysvm || v->ended) return;
+    post(v, 0x415, 0);
+    vxd_send(CLOSE_VM_NOTIFY, v, 0, 0, 0);
+    vm_close(v);
+}
+
+struct reboot_link *reboot_link_of(u32 ref)
+{
+    struct reboot_link *l = (struct reboot_link *)ref;
+    if (!l || l->magic != REBOOT_LINK_MAGIC) return 0;
+    l->title = link_title;
+    l->close = link_close;
+    return l;
 }
 
 /* the VM's program has ended (vm.c, in that VM): Windows 3.1's sequence,

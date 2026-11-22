@@ -452,6 +452,66 @@ static struct vm *pick(void)
     return &sysvm;
 }
 
+/* ---- ending a DOS VM ---- */
+
+/* A fault in a DOS VM's V86 code (a #GP): that VM ends, Windows goes on.
+ * Windows 3.1 (VX12 G, VXSH.386): Suspend_VM, VM_Suspend, VM_Not_
+ * Executeable with EDX 1, the devices' focus and the execution focus to
+ * the System VM, SHELL's event 41Bh with wParam 4 to WINOA386, which
+ * shows "This application has violated system integrity due to an invalid
+ * general protection fault and will be terminated." and destroys the VM
+ * (SHELL 4) */
+void vm_crashed(struct cregs *r)
+{
+    struct vm *v = cur_vm;
+    trace("VMM: VM %d: a fault at %x:%x: the VM ends\n", v->id, r->cs, r->eip);
+    v->ended = 1;
+    shell_vm_crashed(v);
+    resched = 1;
+}
+
+/* Closing a DOS VM (Ctrl+Alt+Del's Enter): its programs end with INT 21h
+ * 4CFFh, each in turn, until the VM stub's (Windows 3.1: AX=4CFFh in the
+ * VM after Close_VM_Notify, VXSH.386); the stub then ends the VM as usual
+ * (vm_exited) */
+void vm_close(struct vm *v)
+{
+    v->closing = 1;
+    v->idle = 0;
+    if (v->suspended && !v->ended) { v->suspended = 0; vm_wake(v); }
+}
+
+/* at the end of each trap in a closing VM in V86 mode: a program other
+ * than the VM stub's own is sent to the loader's vm_close */
+static void close_step(struct cregs *r)
+{
+    struct vm *v = cur_vm;
+    u16 psp;
+    if (v->ended || !(r->eflags & EFL_VM)) return;
+    if (info->sda_lin) psp = *(u16 *)(info->sda_lin + 0x10);
+    else {                                  /* (a DOS without 5D06h: INT 21h 51h, in the VM) */
+        struct cregs t;
+        memset(&t, 0, sizeof(t));
+        t.eax = 0x5100;
+        v86_int(&t, 0x21);
+        psp = (u16)t.ebx;
+    }
+    if (psp == v->refstk_seg) return;               /* the stub's: it ends the VM */
+    if ((u16)r->cs == info->ldr_cs && (u16)r->eip >= info->vmclose_off
+        && (u16)r->eip < info->vmclose_off + 16) return;
+    /* (inside DOS too, as Windows 3.1, whose AX=4CFFh came while
+     * COMMAND.COM waited for a line: DOS's terminate drops the call it
+     * was in) */
+    if (psp == v->closing_psp) return;      /* sent there already: DOS has it now */
+    trace("VMM: VM %d: program %x ended (closing)\n", v->id, psp);
+    v->closing_psp = psp;
+    r->cs = info->ldr_cs;
+    r->eip = info->vmclose_off;
+    r->eflags |= EFL_IF;
+    v->ndos = 0;
+    v->crit = 0;
+}
+
 /* ---- VM events: a device's procedure run in a given VM (the DDK's
  * Schedule_VM_Event, Call_Priority_VM_Event): at the end of one of its
  * traps, where it can run code in the VM (nested execution). In the
@@ -502,6 +562,7 @@ void vm_end_trap(struct cregs *r)
     struct vm *n;
     struct cregs *o;
     if (events) run_events(r);
+    if (cur_vm->closing) close_step(r);
     if (!resched) return;
     if (cur_vm->ndos) dos_frames_check(r);
     if ((cur_vm->crit > 0 || cur_vm->indos > 0 || cur_vm->ndos > 0) && runnable(cur_vm) && !cur_vm->idle) return;

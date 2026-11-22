@@ -547,10 +547,12 @@ static int int2f_v86(struct cregs *r)
         SETW(r->ebx, cur_vm->id);
         SETLO(r->eax, 0);
         return 1;
-    case 0x1684:                        /* V86 API entry: none (no VxDs yet) */
-        SETW(r->edi, 0);
-        r->es = 0;
+    case 0x1684: {                      /* V86 API entry (vxdapi.c) */
+        u32 idx = vxdapi_v86_get(BX(r));
+        SETW(r->edi, idx ? info->bp_off + idx : 0);
+        r->es = idx ? info->ldr_cs : 0;
         return 1;
+    }
     case 0x1687:                        /* DPMI: observed values (ARCHITECTURE.md 12.2) */
         /* the System VM's only: a DOS VM has no DPMI host yet (UNVERIFIED
          * what Windows 3.1 offers there; its DOS boxes run DPMI programs) */
@@ -624,7 +626,7 @@ static u32 bint_sel, bint_off, bint_now;    /* a frame not yet made */
 
 static void build_int_now(struct cregs *r)
 {
-    trace("VMM: Build_Int_Stack_Frame at %x:%x\n", r->cs, r->eip);
+    trace("VMM: Build_Int_Stack_Frame at %x:%x fl %x ss:sp %x:%x ds %x\n", r->cs, r->eip, r->eflags, r->ss, r->esp, r->ds);
     dpmi_build_int(r, bint_sel, bint_off);
     bint_sel = 0;
 }
@@ -751,6 +753,7 @@ u32 vmm_pdir_entry(u32 i, u32 v)        /* set a page directory entry; the old o
 static void software_int(struct cregs *r, int vec)
 {
     if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->cs, r->eip);
+    if ((r->eflags & EFL_VM) && vxd_v86_int_hooks(r, vec)) return;  /* a device serviced it */
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
         if (vec == 0x2A) vm_int2a(r);   /* DOS's critical sections: noted, then on to DOS's handler */
@@ -788,6 +791,13 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
         k_longjmp(cur_exec->jb, 1);
         break;
     default:
+        if (idx >= W386_BP_V86API && idx < W386_BP_V86API + W386_NV86API) {
+            u32 ip = v86_pop16(r), cs = v86_pop16(r);   /* the far call's return */
+            r->eip = ip;
+            r->cs = cs;
+            vxdapi_v86_call(r, idx);
+            break;
+        }
         panic("unknown V86 breakpoint %d at %x:%x", idx, r->cs, r->eip);
     }
 }
@@ -860,7 +870,19 @@ void __cdecl trap(struct tframe *f)
     u8 *op;
 
     if (!(f->eflags & EFL_VM) && !(f->cs & 3)) {
-        if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) return;     /* not expected: IF=0 in the VMM */
+        if (vec >= IRQ_BASE && vec < IRQ_BASE + 16) {
+            /* an outside VxD's own code with interrupts on (its STI: the
+             * VMM's and w16's devices' code never runs so, their entries
+             * clear IF): the interrupt is VPICD's now, as under Windows
+             * 3.1, whose VMM takes hardware interrupts whenever IF is set
+             * (the DDK). Before, it was dropped without an EOI, and the
+             * 8259 kept that IRQ and every lower one from then on */
+            if (vpicd) {
+                irq_count[vec - IRQ_BASE]++;
+                vpicd->hw_int(vec - IRQ_BASE);
+            }
+            return;
+        }
         if (vec == 0x20) { vxd_link(f); return; }               /* a VxD's dynamic link */
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
@@ -927,6 +949,8 @@ void __cdecl trap(struct tframe *f)
                 }
             } else if (!f->err && io_trap(r, op))
                 ;                       /* a trapped port */
+            else if ((r->eflags & EFL_VM) && cur_vm != &sysvm)
+                vm_crashed(r);          /* a DOS VM's: that VM ends (vm.c) */
             else if (r->eflags & EFL_VM)
                 panic("V86 #GP at %x:%x err %x", r->cs, r->eip, f->err);
             else if (!f->err && pm_cli_sti(r, op))
@@ -943,7 +967,9 @@ void __cdecl trap(struct tframe *f)
             v86_reflect(r, 6);
     } else if (vec < 32) {
         if (r->eflags & EFL_VM) {
-            if (vec == 14) panic("V86 page fault at %x:%x cr2 %x", r->cs, r->eip, get_cr2());
+            if (vec == 14 && cur_vm != &sysvm) vm_crashed(r);
+            else if (vec == 14) panic("V86 page fault at %x:%x cr2 %x", r->cs, r->eip, get_cr2());
+            else
             v86_reflect(r, vec);
         } else
             dpmi_exception(r, vec, f->err);

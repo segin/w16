@@ -89,6 +89,7 @@ global %1
         pushfd
         pop dword [ebp+32]
         cld
+        cli
         pop ebp
         pop edi
         pop esi

@@ -12,6 +12,7 @@ global vxd_entry_common, vxd_svc_common, _vxd_call_proc
 vxd_entry_common:
         push dword 0                    ; arg
         pushfd
+        cli                             ; w16's VxD code never with interrupts on
         pushad
         cld
         push esp
@@ -72,6 +73,7 @@ _vxd_call_proc:
         pushfd
         pop dword [ebp+32]
         cld                             ; whatever the callee left
+        cli
         pop ebp
         pop edi
         pop esi
