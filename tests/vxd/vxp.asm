@@ -7,6 +7,12 @@
 ;   VMM 0000h Get_VMM_Version, 0001h Get_Cur_VM_Handle,
 ;   0003h Get_Sys_VM_Handle; VTD 0000h VTD_Get_Version, 0002h
 ;   VTD_Get_Interrupt_Period.
+; At the first message it also installs two VPICD_Call_When_Hw_Int
+; callbacks that count and chain on with JMP [Next_Callback] (the DDK's
+; use), and at System_Exit logs whether both were called, whether the
+; second's next was the first and the first's not itself, and whether its
+; own DDB_Next was set (Windows 3.1: 1 1 1 1, set; the WIN386 audit, the
+; boot-test case win386audit).
 ; Lines start with "VXP ". Built with IOPROBE defined it is VXI.386, which
 ; also installs an I/O handler (Install_IO_Handler) for ports 2F0h and
 ; 0E0h at Sys_Critical_Init and logs every call the VMM makes to it (the
@@ -278,7 +284,29 @@ services:
         CALLLOG msg_pcdg, 0003000Dh, 16, -1, 0   ;   IRQ 16 (none)
         CALLLOG msg_pce, 0003000Eh, 74h, 0, 0    ; VPICD_Convert_Int_To_IRQ 74h
         CALLLOG msg_pce2, 0003000Eh, 21h, 0, 0   ;   21h
+        ; two VPICD_Call_When_Hw_Int callbacks, each chaining to the one
+        ; the service handed back (the DDK's use: JMP [Next_Callback])
+        pushfd
+        cli
+        mov esi, hwcb1
+        int 20h
+        dd 0003000Fh                    ; VPICD_Call_When_Hw_Int
+        popfd
+        mov [next1], esi
+        pushfd
+        cli
+        mov esi, hwcb2
+        int 20h
+        dd 0003000Fh
+        popfd
+        mov [next2], esi
         ret
+
+; the callbacks: count, then on down the chain
+hwcb1:  inc dword [cb1n]
+        jmp [next1]
+hwcb2:  inc dword [cb2n]
+        jmp [next2]
 
 %ifdef IOPROBE
 ; the I/O handler: EBX VM, ECX type, EDX port, EBP client registers, EAX
@@ -442,6 +470,39 @@ late:   call sysvm
         CALLLOG msg_vmdo, 000C0002h, 0, 0, 0
         CALLLOG msg_pcb1, 0003000Bh, 1, 0, 0
         CALLLOG msg_pcbc, 0003000Bh, 12, 0, 0
+        ; the callbacks: both called (1 1), the second's next the first
+        ; (1), the first's next not itself (1); this DDB's DDB_Next set (1)
+        mov esi, msg_hwcb
+        call puts
+        xor eax, eax
+        cmp dword [cb1n], 0
+        setne al
+        call puthex
+        mov al, ' '
+        call putc
+        xor eax, eax
+        cmp dword [cb2n], 0
+        setne al
+        call puthex
+        mov al, ' '
+        call putc
+        xor eax, eax
+        cmp dword [next2], hwcb1
+        sete al
+        call puthex
+        mov al, ' '
+        call putc
+        xor eax, eax
+        cmp dword [next1], hwcb1
+        setne al
+        call puthex
+        mov esi, msg_ddbn
+        call puts
+        xor eax, eax
+        cmp dword [VXP_DDB], 0
+        setne al
+        call puthex
+        call crlf
         ret
 
 ; the System VM's handle into sysvm_h
@@ -547,3 +608,9 @@ msg_pce  db 'VXP VPICD_Convert_Int_To_IRQ(74h) eax=', 0
 msg_pce2 db 'VXP VPICD_Convert_Int_To_IRQ(21h) eax=', 0
 sysvm_h  dd 0
 tail_done db 0
+msg_hwcb db 'VXP Call_When_Hw_Int called1 called2 next2=cb1 next1!=cb1: ', 0
+msg_ddbn db ' DDB_Next set: ', 0
+next1    dd 0
+next2    dd 0
+cb1n     dd 0
+cb2n     dd 0
