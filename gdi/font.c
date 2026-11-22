@@ -749,7 +749,12 @@ LPFONT font_realize(LPDC dc)
        device; a negative height stays a character height) */
     dh = fo->lf.lfHeight;
     dw = fo->lf.lfWidth;
-    if (dc->mapMode != 1) {
+    /* a stock font keeps its size in device units (GD8 on 3.1: the
+       default System font at 2:1 is System 16, not 16 x 2; GD5: MM_LOMETRIC
+       too). UNVERIFIED for the stock fonts other than SYSTEM_FONT */
+    for (i = 10; i < 20 && stock[i] != dc->hFont; i++)
+        ;
+    if (dc->mapMode != 1 && i == 20) {
         int v = dc_scale_y(dc, dh);
         v = v < 0 ? -v : v;
         dh = dh < 0 ? -v : v;
