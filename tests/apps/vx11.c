@@ -456,6 +456,39 @@ static void sec_ifl(void)
     GlobalDosFree(sel);
 }
 
+/* io: INT 21h 440Dh read track (CL=61h) into a buffer outside DOS memory:
+ * the parameter block holds a far pointer to it (does the host translate
+ * it?); and 440Dh get device parameters (60h), whose block has none */
+static void sec_io(void)
+{
+    static BYTE blk[64];
+    HGLOBAL h = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 4096);
+    BYTE FAR *buf = (BYTE FAR *)GlobalLock(h);
+    WORD i, n = 0;
+    out("io\r\n");
+    for (i = 0; i < sizeof blk; i++) blk[i] = 0;
+    blk[0] = 1;
+    clr(); r[0] = 0x440D; r[1] = 3; r[2] = 0x0860; r[3] = OFFSETOF((void FAR *)blk);
+    r[6] = SELECTOROF((void FAR *)blk);
+    /* (DS:DX: the helper loads ES only; DS is the program's own, as blk) */
+    vx_int21(r);
+    obs("io.60.cf", CF);
+    if (CF) obs("io.60.ax", r[0]);
+    for (i = 0; i < sizeof blk; i++) blk[i] = 0;
+    /* read track: special 0, head 0, cylinder 0, first sector 0, 1 sector, the buffer */
+    blk[7] = 1;
+    *(WORD *)(blk + 9) = OFFSETOF(buf);
+    *(WORD *)(blk + 11) = SELECTOROF(buf);
+    clr(); r[0] = 0x440D; r[1] = 3; r[2] = 0x0861; r[3] = OFFSETOF((void FAR *)blk);
+    vx_int21(r);
+    obs("io.61.cf", CF);
+    if (CF) obs("io.61.ax", r[0]);
+    for (i = 0; i < 512; i++) if (buf[i]) n++;
+    obs("io.61.data", n != 0);
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
+
 /* ---- the runs that might end Windows ---- */
 
 /* E: a selector freed while it is in ES (0001h), a DOS block's selector
@@ -538,6 +571,26 @@ static void run_s(void)
     out("s survived\r\n");
 }
 
+/* K: the bytes the System VM's keyboard handler reads at port 60h for
+ * 20 s (the input script presses Ctrl+Alt+Del with the grey Delete) */
+extern void __cdecl __far vx_kbhook(int on);
+extern BYTE __far vx_kbbuf[];
+extern WORD __far vx_kbn;
+static void run_k(void)
+{
+    DWORD t = GetTickCount();
+    WORD i;
+    MSG m;
+    out("k\r\n");
+    vx_kbhook(1);
+    while (GetTickCount() - t < 20000UL)
+        if (PeekMessage(&m, 0, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessage(&m); }
+    vx_kbhook(0);
+    out("OBS ~k.bytes=");
+    for (i = 0; i < vx_kbn; i++) { out(" "); outhex(vx_kbbuf[i]); }
+    out("\r\n");
+}
+
 /* M: 0800h with a size that wraps the address space */
 static void run_m(void)
 {
@@ -569,12 +622,14 @@ int __cdecl tmain(void)
         sec_vec();
         sec_d48();
         sec_ifl();
+        sec_io();
         break;
     case 'e': run_e(); break;
     case 'p': run_p(); break;
     case 'l': run_l(); break;
     case 's': run_s(); break;
     case 'm': run_m(); break;
+    case 'k': run_k(); break;
     }
     out("VX11 done\r\n");
     return 0;

@@ -1,0 +1,17 @@
+; VX12 B (tests/dos/vx12.asm): A20 through port 92h from a DOS box
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+type vx12 b
+key Return
+sleep 6
+shot 01-a
+type exit
+key Return
+sleep 8
+shot 02-back

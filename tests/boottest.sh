@@ -108,9 +108,15 @@
 #              not survive, must finish under w16; VXP.386's two
 #              VPICD_Call_When_Hw_Int callbacks both called and chained as
 #              under 3.1, its DDB_Next set (DOSBox-X, COM1)
-#   win386doscad  Ctrl+Alt+Del with the MS-DOS Prompt full screen, Escape,
-#              VER, EXIT (dosbox386cad.txt) against Microsoft's WIN386, the
-#              screen itself left out
+#   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
+#              with the MS-DOS Prompt full screen (its screen; Return closes
+#              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
+#              against Microsoft's WIN386
+#   win386dospif  the MS-DOS Prompt from a PIF that starts windowed (mkpif.py
+#              windowed=1): the window, VER, full screen, VER, window, EXIT
+#   win386dosprobe  VX12 in the MS-DOS Prompt (V86 API entries, 80x50 and
+#              40x25 windows) against Microsoft's WIN386; A20 off through
+#              the 8042 and port 92h must not end w16 (it ends 3.1)
 #   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
 #              switching (dosbox386s.txt) and Exit Windows with a box
 #              open (dosbox386x.txt), against Microsoft's WINOA386 and
@@ -886,7 +892,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1492,7 +1498,7 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386dos: the MS-DOS Prompt full screen, VER, EXIT as with Microsoft's WIN386"
         else echo "FAIL win386dos: $r ($out/win386dos-w16)"; fails=$((fails + 1)); fi ;;
-    win386dosw|win386switch|win386two|win386exitbox|win386doscad)
+    win386dosw|win386switch|win386two|win386exitbox|win386dospif)
         # win386dosw: the MS-DOS Prompt full screen, Alt+Enter to a window,
         # VER typed there, Alt+Enter back, EXIT (tests/scripts/input/
         # dosbox386w.txt), Microsoft's VGA.3GR. win386switch: full screen, Alt+Tab, Alt+Tab
@@ -1511,15 +1517,17 @@ runcase() {
             scr=$root/tests/scripts/input/dosbox386s.txt
             shots="01-full 02-alttab 03-back 04-altesc 05-back 06-ctrlesc 07-esc 08-box 09-end"
             set --
-        elif [ $c = win386doscad ]; then
-            # Ctrl+Alt+Del with the box full screen (the WIN386 audit's
-            # C10), then Escape, VER, EXIT: the box must go on as under
-            # 3.1. The screen itself (02-cad) is not compared: Windows 3.1
-            # shows its screen for a DOS application there (Left open in
-            # docs/notes/win386-audit-triage.md)
-            scr=$root/tests/scripts/input/dosbox386cad.txt
-            shots="01-full 03-back 04-ver 05-end"
-            set --
+        elif [ $c = win386dospif ]; then
+            # the MS-DOS Prompt from a PIF that starts it in a window
+            # (tools/mkpif.py windowed=1, started by WIN.INI run=): VER in
+            # the window, Alt+Enter to full screen (a VM that never had the
+            # display: the WIN386 audit's H18), VER, back, EXIT
+            scr=$root/tests/scripts/input/dosbox386win.txt
+            shots="01-window 02-ver 03-full 04-ver 05-window 06-end"
+            python3 "$root/tools/mkpif.py" "$root/.tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF" "$out/WINPRMPT.PIF" windowed=1
+            cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/winprmpt.ini"
+            python3 -I "$root/tests/scripts/iniset.py" "$out/winprmpt.ini" 'windows:run=C:\WINDOWS\WINPRMPT.PIF'
+            set -- -f "$out/WINPRMPT.PIF=WINDOWS/WINPRMPT.PIF" -f "$out/winprmpt.ini=WINDOWS/WIN.INI"
         elif [ $c = win386two ]; then
             scr=$root/tests/scripts/input/dosbox386t.txt
             shots="01-first 02-windows 03-second 04-ver2 05-back 06-first 07-ver1 08-end"
@@ -1544,6 +1552,9 @@ runcase() {
             720x400) m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;  # full screen: the cursor's column
             *) m="rectangle 66,40 590,114 rectangle 96,140 104,215" ;;     # Windows: the window's banner, its caret
             esac
+            case $c:$(magick identify -format '%wx%h' "$b") in
+            win386dospif:640x480) m="$m rectangle 96,216 104,240" ;;      # the window at the top: its caret lower
+            esac
             magick "$a" -fill black -draw "$m" "$out/$c-a.png"
             magick "$b" -fill black -draw "$m" "$out/$c-b.png"
             n=$(magick compare -metric AE "$out/$c-a.png" "$out/$c-b.png" "$out/$c-$s-diff.png" 2>&1 >/dev/null || true)
@@ -1552,6 +1563,85 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   $c: as with Microsoft's WIN386"
         else echo "FAIL $c: $r ($out/$c-w16)"; fails=$((fails + 1)); fi ;;
+    win386dosprobe)
+        # VX12 (tests/dos/vx12.asm) in the MS-DOS Prompt under w16's WIN386
+        # against Microsoft's (DOSBox-X's own DOS): the V86 API entries
+        # (INT 2Fh 1684h: the devices and their function 0, the addresses
+        # left out), 80x50 and 40x25 text full screen, in a window and back
+        # (tests/scripts/input/vx12v.txt; up to 40 pixels for the blinking
+        # cursor on text screens); then A20 switched off through the 8042
+        # and through port 92h (vx12a.txt, vx12b.txt), which ends Windows
+        # 3.1 and must not end w16
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        set -- -r -p 386 -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VX12.COM=WINDOWS/VX12.COM"
+        refrun win386dosprobe-ref win386dosprobe env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 400 "$root/tests/scripts/input/vx12v.txt" "$out/win386dosprobe-ref" "$@"
+        for p in v a b; do
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 400 \
+                "$root/tests/scripts/input/vx12$p.txt" "$out/win386dosprobe-$p" "$@" \
+                -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386dosprobe-$p.txt" 2>&1 || true
+        done
+        r=ok
+        for k in ref v; do
+            d=$out/win386dosprobe-$k; [ $k = ref ] || d=$out/win386dosprobe-v
+            find "$d/work" -iname vx12.log -exec cat {} \; 2>/dev/null | tr -d '\r' | grep '^VX12 V dev' | sed 's/ entry [0-9A-F:]*//' > "$out/win386dosprobe-$k.v"
+        done
+        [ -s "$out/win386dosprobe-ref.v" ] || r="no V86 API entries in the reference"
+        [ "$r" != ok ] || cmp -s "$out/win386dosprobe-ref.v" "$out/win386dosprobe-v.v" ||
+            r="the V86 API entries differ ($out/win386dosprobe-ref.v, win386dosprobe-v.v)"
+        for s in 02-t50 03-t50w 04-t50f 05-f40 06-f40w 07-f40f 08-end 09-back; do
+            [ "$r" = ok ] || break
+            a=$out/win386dosprobe-v/$s.png b=$out/win386dosprobe-ref/$s.png
+            if [ ! -f "$a" ] || [ ! -f "$b" ]; then r="no $s screen"; break; fi
+            n=$(magick compare -metric AE "$a" "$b" "$out/win386dosprobe-$s-diff.png" 2>&1 >/dev/null || true)
+            n=${n%%[. ]*}
+            lim=0; [ "$(magick identify -format '%wx%h' "$b")" = 720x400 ] && lim=40
+            [ "${n:-99999}" -le $lim ] || r="$s: $n pixels differ ($out/win386dosprobe-$s-diff.png)"
+        done
+        for p in a b; do
+            [ "$r" = ok ] || break
+            l=$(find "$out/win386dosprobe-$p/work" -iname vx12.log -exec cat {} \; 2>/dev/null | tr -d '\r')
+            case $p in a) w='8042 on wrap=0' ;; b) w='92h back wrap=0' ;; esac
+            printf '%s\n' "$l" | grep -q "$w" || r="VX12 ${p}: w16 did not go on ($out/win386dosprobe-$p)"
+        done
+        if [ "$r" = ok ]; then echo "ok   win386dosprobe: V86 API entries, 80x50 and 40x25 windows as 3.1's; A20 kept on"
+        else echo "FAIL win386dosprobe: $r"; fails=$((fails + 1)); fi ;;
+    win386doscad)
+        # DOS programs that go wrong, under w16's WIN386 against Microsoft's
+        # (Microsoft's WINOA386 and the rest; DOSBox-X's own DOS): VX12 G
+        # makes a #GP in a full-screen box (the stop box, the box gone),
+        # then Ctrl+Alt+Del in a second box shows the screen for a DOS
+        # program and Return closes it (tests/scripts/input/vx12gc.txt);
+        # and Ctrl+Alt+Del, Escape, VER, EXIT (dosbox386cad.txt). Masked:
+        # the banner's "w16" rows and the blinking cursors
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        r=ok
+        for p in vx12gc dosbox386cad; do
+            set -- -r -p 386 -c "WIN /3 /B" -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VX12.COM=WINDOWS/VX12.COM"
+            refrun win386doscad-$p-ref win386doscad env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+                "$root/tests/inputrun.sh" -s -b 200 -t 400 "$root/tests/scripts/input/$p.txt" "$out/win386doscad-$p-ref" "$@"
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 400 \
+                "$root/tests/scripts/input/$p.txt" "$out/win386doscad-$p-w16" "$@" \
+                -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386doscad-$p-w16.txt" 2>&1 || true
+            for a in "$out/win386doscad-$p-w16"/[0-9]*.png; do
+                [ -f "$a" ] || { r="$p: no screens"; break; }
+                s=$(basename "$a" .png) b=$out/win386doscad-$p-ref/$s.png
+                [ -f "$b" ] || { r="$p: no reference $s"; break; }
+                m="rectangle 0,0 0,0"
+                case $s in
+                *-cad) m="rectangle 522,288 530,319 rectangle 477,304 485,319" ;;    # the cursor under OK / after the prompt
+                *) [ "$(magick identify -format '%wx%h' "$b")" = 720x400 ] && m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;
+                esac
+                magick "$a" -fill black -draw "$m" "$out/win386doscad-a.png"
+                magick "$b" -fill black -draw "$m" "$out/win386doscad-b.png"
+                n=$(magick compare -metric AE "$out/win386doscad-a.png" "$out/win386doscad-b.png" "$out/win386doscad-$p-$s-diff.png" 2>&1 >/dev/null || true)
+                n=${n%%[. ]*}
+                [ "${n:-1}" = 0 ] || { r="$p $s: $n pixels differ ($out/win386doscad-$p-$s-diff.png)"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   win386doscad: a DOS program's fault and Ctrl+Alt+Del (Escape, Return) as with Microsoft's WIN386"
+        else echo "FAIL win386doscad: $r"; fails=$((fails + 1)); fi ;;
     win386plain)
         # the user's report (2026-11-21): after a DOS box, Exit Windows
         # printed KERNEL's "back to DOS" and hung (the DOS VM's first DOS
@@ -1604,7 +1694,7 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
             -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VXP.386=WINDOWS/SYSTEM/VXP.386" \
             -i "386Enh:+device=vxp.386" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386audit-vxp.txt" 2>&1 || true
         if [ "$r" = ok ] && ! tr -d '\r' < "$out/win386audit-vxp.com1" 2>/dev/null |
-            grep -q 'Call_When_Hw_Int.*: 00000001 00000001 00000001 00000001 DDB_Next set: 00000001'; then
+            grep -q 'Call_When_Hw_Int.*: 00000001 00000001 00000001 00000001 DDB_Next set: 00000001 time-out after STI: 00000001'; then
             r="VXP.386's VPICD_Call_When_Hw_Int line is not 3.1's ($out/win386audit-vxp.com1)"
         fi
         if [ "$r" = ok ]; then echo "ok   win386audit: VX11 as under Windows 3.1's WIN386, its P and S runs survived; VXP's callback chain as 3.1's"
