@@ -12,7 +12,9 @@
 ; use), and at System_Exit logs whether both were called, whether the
 ; second's next was the first and the first's not itself, and whether its
 ; own DDB_Next was set (Windows 3.1: 1 1 1 1, set; the WIN386 audit, the
-; boot-test case win386audit).
+; boot-test case win386audit). At Init_Complete it runs with interrupts on
+; (STI) for some 300 ms and then sets a 100 ms time-out, which must fire
+; (the same line: "time-out after STI: 1").
 ; Lines start with "VXP ". Built with IOPROBE defined it is VXI.386, which
 ; also installs an I/O handler (Install_IO_Handler) for ports 2F0h and
 ; 0E0h at Sys_Critical_Init and logs every call the VMM makes to it (the
@@ -144,7 +146,10 @@ vxp_control:
         ret
 .notfirst:
         call crlf
-        cmp edi, 5                      ; System_Exit
+        cmp edi, 2                      ; Init_Complete: interrupts on in ring 0
+        jne .nic
+        call stitest
+.nic:   cmp edi, 5                      ; System_Exit
         jne .nl
         call late
 .nl:    popad
@@ -300,6 +305,32 @@ services:
         dd 0003000Fh
         popfd
         mov [next2], esi
+        ret
+
+; Interrupts on in this VxD's own code for a while (the refresh bit of
+; port 61h toggling 20000 times, some 300 ms: timer interrupts come
+; meanwhile), then a 100 ms global time-out, which needs the timer to
+; go on: late logs whether it fired
+stitest:
+        sti
+        mov ecx, 20000
+        in al, 61h
+        and al, 10h
+        mov ah, al
+.t:     in al, 61h
+        and al, 10h
+        cmp al, ah
+        je .t
+        mov ah, al
+        loop .t
+        cli
+        mov eax, 100
+        xor edx, edx
+        mov esi, tmo_cb
+        int 20h
+        dd 0001003Ch                    ; VMM Set_Global_Time_Out
+        ret
+tmo_cb: mov byte [tmo_fired], 1
         ret
 
 ; the callbacks: count, then on down the chain
@@ -502,6 +533,10 @@ late:   call sysvm
         cmp dword [VXP_DDB], 0
         setne al
         call puthex
+        mov esi, msg_tmo
+        call puts
+        movzx eax, byte [tmo_fired]
+        call puthex
         call crlf
         ret
 
@@ -610,6 +645,8 @@ sysvm_h  dd 0
 tail_done db 0
 msg_hwcb db 'VXP Call_When_Hw_Int called1 called2 next2=cb1 next1!=cb1: ', 0
 msg_ddbn db ' DDB_Next set: ', 0
+msg_tmo  db ' time-out after STI: ', 0
+tmo_fired db 0
 next1    dd 0
 next2    dd 0
 cb1n     dd 0

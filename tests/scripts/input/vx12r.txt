@@ -1,0 +1,15 @@
+; VX12 R (tests/dos/vx12.asm): the 8042 reset pulse from a DOS box
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+type vx12 r
+key Return
+sleep 6
+shot 01-reset
+sleep 6
+shot 02-later

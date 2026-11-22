@@ -112,3 +112,67 @@ _vx_lsl:
         shr edx, 16
         pop bp
         retf
+
+; ---- K: the System VM's keyboard bytes (VX11K) ----
+; void __cdecl __far vx_kbhook(int on): INT 09h's protected-mode vector
+; hooked (DPMI 0204h/0205h); the handler keeps every byte read at port 60h
+; (up to 200) in _vx_kbbuf, _vx_kbn their count, and goes on to the old one
+global _vx_kbhook, _vx_kbbuf, _vx_kbn
+segment _DATA public align=2 class=DATA use16
+_vx_kbn   dw 0
+old9      dd 0
+_vx_kbbuf times 200 db 0
+group DGROUP _DATA
+segment _TEXT
+_vx_kbhook:
+        push bp
+        mov bp, sp
+        push bx
+        push cx
+        push dx
+        cmp word [bp+6], 0
+        je .off
+        mov ax, 0204h
+        mov bl, 9
+        int 31h
+        mov [old9], dx
+        mov [old9 + 2], cx
+        mov cx, cs
+        mov dx, kbint
+        mov ax, 0205h
+        mov bl, 9
+        int 31h
+        jmp .r
+.off:   mov dx, [old9]
+        mov cx, [old9 + 2]
+        mov ax, 0205h
+        mov bl, 9
+        int 31h
+.r:     pop dx
+        pop cx
+        pop bx
+        pop bp
+        retf
+kbint:  sub sp, 4
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        push bx
+        mov ax, seg _vx_kbn
+        mov ds, ax
+        in al, 60h
+        mov bx, [_vx_kbn]
+        cmp bx, 200
+        jae .f
+        mov [_vx_kbbuf + bx], al
+        inc word [_vx_kbn]
+.f:     mov ax, [old9]
+        mov [bp + 2], ax
+        mov ax, [old9 + 2]
+        mov [bp + 4], ax
+        pop bx
+        pop ax
+        pop ds
+        pop bp
+        retf

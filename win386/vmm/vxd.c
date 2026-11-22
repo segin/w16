@@ -378,6 +378,8 @@ void vxd_init(void)
         fatal("Invalid VxD dynamic link call to device number 0003, service 0001.\n"
               "Your w16 configuration is invalid. Run the w16 Setup program\n"
               "again to correct this problem.\n");
+    for (i = 0; i < ndevs; i++)                     /* REBOOT's link (w16vxd.h) */
+        if (devs[i]->device_id == 9 && devs[i]->ref_data) reboot_link_of(devs[i]->ref_data);
     vpicd->deliver = vmm_deliver;
     vpicd->cur_vm = link_cur_vm;
     vpicd->wake = link_wake;
@@ -434,6 +436,16 @@ static void client_store(struct cregs *r, struct client_regs *c)
     r->edx = c->edx; r->ecx = c->ecx; r->eax = c->eax;
     r->eip = c->eip; r->cs = c->cs; r->eflags = c->eflags; r->esp = c->esp;
     r->ss = c->ss; r->es = c->es; r->ds = c->ds; r->fs = c->fs; r->gs = c->gs;
+}
+
+/* a loaded device's V86 API procedure, or 0 */
+u32 vxd_v86_api(u32 id)
+{
+    u32 i;
+    for (i = 0; i < ndevs; i++)
+        if (devs[i] && devs[i] != &VMM_DDB && devs[i]->device_id == id && devs[i]->v86_api)
+            return devs[i]->v86_api;
+    return 0;
 }
 
 /* a loaded device's protected-mode API procedure for INT 2Fh 1684h, or 0 */
@@ -672,6 +684,52 @@ static int nest_service(u32 svc, struct svcregs *s)
     return 0;
 }
 
+/* ---- Hook_V86_Int_Chain (the DDK): procedures called for a software
+ * interrupt in V86 mode, the last installed first, with EAX the vector,
+ * EBX the VM, EBP its client registers; carry clear: serviced, no
+ * reflection. (Simulated hardware interrupts do not go through them here:
+ * UNVERIFIED that any device w16 runs needs it) ---- */
+struct v86hook { struct v86hook *next; u32 vec, proc; };
+static struct v86hook *v86hooks;
+
+int vxd_v86_int_hooks(struct cregs *r, int vec)
+{
+    struct v86hook *h;
+    struct client_regs *c, outer;
+    struct svcregs s;
+    int done = 0;
+    for (h = v86hooks; h && h->vec != (u32)vec; h = h->next)
+        ;
+    if (!h) return 0;
+    c = cur_vm->client;
+    outer = *c;
+    client_fill(c, r);
+    for (; h && !done; h = h->next) {
+        if (h->vec != (u32)vec) continue;
+        memset(&s, 0, sizeof(s));
+        s.eax = vec;
+        s.ebx = VMH(cur_vm);
+        s.ebp = (u32)c;
+        vmm_call_proc(h->proc, &s);
+        done = !(s.eflags & EFL_CF);
+    }
+    client_store(r, c);
+    *c = outer;
+    return done;
+}
+
+static int v86hook_service(u32 svc, struct svcregs *s)
+{
+    struct v86hook *h;
+    if (svc != 0x41) return 0;                  /* Hook_V86_Int_Chain: EAX, ESI */
+    if (s->eax > 0xFF || !s->esi || (h = kmalloc(sizeof(*h))) == NULL) { s->eflags |= EFL_CF; return 1; }
+    h->vec = s->eax;
+    h->proc = s->esi;
+    h->next = v86hooks;
+    v86hooks = h;
+    return 1;
+}
+
 /* ---- the VMM's services ---- */
 void __cdecl svc_dispatch(struct svcregs *s)
 {
@@ -708,6 +766,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && io_service(svc, s)) return;
     if (dev == 1 && tmo_service(svc, s)) return;
     if (dev == 1 && nest_service(svc, s)) return;
+    if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     panic("VxD service %x of device %x is not implemented yet (called from %x)",
           svc, dev, *(u32 *)(s + 1));

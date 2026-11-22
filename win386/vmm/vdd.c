@@ -43,7 +43,7 @@ static int sys_crit;                    /* INT 2Fh 4003h/4004h nesting (the disp
  * attribute), which the grabber reads through the VM's high linear
  * address, and what changed since the grabber last looked (Get_Mod,
  * Clear_Mod) */
-#define TEXT_BYTES 4000                 /* 80 x 25 x 2 */
+#define TEXT_MAX 16000                  /* up to 132 x 60 x 2: the text a window tracks */
 struct vsave {
     struct vsave *next;
     struct vm *vm;
@@ -193,7 +193,7 @@ static void bios_mode(struct vm *v, void *arg)
     if (arg) {
         /* a VM that had run windowed (its text in RAM, arg): the text on
          * the screen again, and its cursor where it was */
-        memcpy((void *)0xB8000, arg, TEXT_BYTES);
+        memcpy((void *)0xB8000, arg, TEXT_MAX);
         kfree(arg);
         memset(&r, 0, sizeof(r));
         r.eax = 0x0200;
@@ -309,14 +309,65 @@ void vdd_window(struct vm *v, int on)
     if (!d) return;
     trace("VDD: VM %d %s\n", v->id, on ? "windowed" : "full screen");
     if (on && v != owner) to_ram(d);
+    if (on && !d->valid && !v->started) {
+        /* windowed from the start (its PIF): its BIOS cannot set a mode on
+         * the VGA, which is Windows'; its data area says 80x25 text (as
+         * the grabber's first Get_State must see) and its RAM is blank
+         * text (UNVERIFIED how Windows 3.1's VDD starts it; its window
+         * shows the same text) */
+        static const u8 bda[] = { 3, 80, 0, 0x00, 0x10, 0, 0 };
+        u8 *t = (u8 *)phys_to_lin(d->vram[0x18]);
+        u32 i;
+        for (i = 0; i < sizeof(bda); i++) *(u8 *)vm_lin(v, 0x449 + i) = bda[i];
+        for (i = 0; i < 16; i++) *(u8 *)vm_lin(v, 0x450 + i) = 0;
+        *(u8 *)vm_lin(v, 0x462) = 0;
+        *(u8 *)vm_lin(v, 0x463) = 0xD4;
+        *(u8 *)vm_lin(v, 0x464) = 0x03;
+        *(u8 *)vm_lin(v, 0x484) = 24;
+        *(u8 *)vm_lin(v, 0x485) = 16;
+        *(u8 *)vm_lin(v, 0x486) = 0;
+        *(u8 *)vm_lin(v, 0x460) = 7;
+        *(u8 *)vm_lin(v, 0x461) = 6;
+        for (i = 0; i < 4096; i += 2) { t[i] = ' '; t[i + 1] = 7; }
+    }
     /* off: the text goes back when the VM gets the display (vdd_focus) */
 }
 
 /* the display goes to v */
+/* A switch away from Windows while its display driver is inside a
+ * critical section (INT 2Fh 4003h) waits until it leaves it (4004h) or
+ * 1000 ms have passed, whichever comes first (the DDAG, Enter Critical
+ * Section: the VDD postpones saving the video state) */
+static struct vm *pend;                 /* the VM the display waits to go to */
+static u32 pend_ticks;
+static void vdd_focus_now(struct vm *v);
+
+static void pend_run(struct vm *sys, void *arg)
+{
+    struct vm *v = pend;
+    (void)sys; (void)arg;
+    if (!v) return;
+    pend = NULL;
+    vdd_focus_now(v);
+}
+
 void vdd_focus(struct vm *v)
 {
-    struct vsave *s;
     if (!owner) owner = &sysvm;
+    if (v == owner) { pend = NULL; return; }
+    if (owner == &sysvm && sys_crit) {
+        if (!pend) pend_ticks = 19;     /* 1000 ms of 54.9 ms ticks */
+        pend = v;
+        trace("VDD: display driver in a critical section: the switch to VM %d waits\n", v->id);
+        return;
+    }
+    pend = NULL;
+    vdd_focus_now(v);
+}
+
+static void vdd_focus_now(struct vm *v)
+{
+    struct vsave *s;
     if (v == owner) return;
     trace("VDD: the display goes from VM %d to VM %d\n", owner->id, v->id);
     /* the VM that had it */
@@ -343,9 +394,13 @@ void vdd_focus(struct vm *v)
          * BIOS sets the mode, then its text comes back (before, its video
          * memory stayed RAM: the screen showed nothing of it, and 128 KB
          * stayed taken) */
-        u8 *t = kmalloc(TEXT_BYTES);
+        u8 *t = kmalloc(TEXT_MAX);
         u32 i;
-        if (t) memcpy(t, (void *)phys_to_lin(s->vram[0x18]), TEXT_BYTES);
+        if (t) {
+            u32 k;
+            for (k = 0; k < TEXT_MAX; k += 4096)
+                memcpy(t + k, (void *)phys_to_lin(s->vram[0x18 + k / 4096]), TEXT_MAX - k < 4096 ? TEXT_MAX - k : 4096);
+        }
         map_video(s, 0);
         for (i = 0; i < 32; i++) page_free(s->vram[i]);
         s->windowed = 0;
@@ -365,6 +420,7 @@ void vdd_vm_init(struct vm *v)
 void vdd_vm_destroy(struct vm *v)
 {
     struct vsave *s;
+    if (pend == v) pend = NULL;
     /* a VM that goes with the display: Windows gets it back */
     if (owner == v) vdd_focus(&sysvm);
     s = save_of(v, 0);
@@ -384,6 +440,21 @@ static u8 *text_of(struct vsave *d)
     return (u8 *)(d->vm->cb->high_linear + 0xB8000);
 }
 
+/* the VM's text screen as its BIOS data says: columns (40:4Ah), rows
+ * (40:84h + 1; 25 when it is 0), its bytes (character and attribute
+ * each). Windows 3.1's window shows the 50 rows of an 80x50 screen and
+ * the 40 columns of mode 1 (VX12 T and F); before, 80x25 was assumed */
+static u32 text_bytes(struct vsave *d, u32 *cp, u32 *rp)
+{
+    u32 cols = *(u16 *)vm_lin(d->vm, 0x44A), rows = *(u8 *)vm_lin(d->vm, 0x484) + 1;
+    if (cols < 1 || cols > 132) cols = 80;
+    if (rows < 2 || rows > 60) rows = 25;
+    if (cols * rows * 2 > TEXT_MAX) rows = TEXT_MAX / (cols * 2);
+    if (cp) *cp = cols;
+    if (rp) *rp = rows;
+    return cols * rows * 2;
+}
+
 static u16 cursor_of(struct vsave *d)
 {
     return *(u16 *)vm_lin(d->vm, 0x450);
@@ -394,14 +465,14 @@ static u16 cursor_of(struct vsave *d)
 void vdd_tick(void)
 {
     struct vsave *d;
+    if (pend && pend_ticks && !--pend_ticks) vm_event(&sysvm, pend_run, NULL);
     for (d = saves; d; d = d->next) {
         int mem, cur;
         if (!d->windowed || d->pending || !d->vm->id || d->vm->ended) continue;
-        mem = !d->shadow_ok || memcmp(text_of(d), d->shadow, TEXT_BYTES);
+        mem = !d->shadow_ok || memcmp(text_of(d), d->shadow, text_bytes(d, NULL, NULL));
         cur = cursor_of(d) != d->last_cur;
         if (mem || cur) {
-            d->pending = 1;
-            shell_display_changed(d->vm, cur && !mem);
+            d->pending = shell_display_changed(d->vm, cur && !mem);
         }
     }
 }
@@ -411,7 +482,10 @@ void vdd_tick(void)
 void vdd_int2f(struct cregs *r)
 {
     if (AX(r) == 0x4003) sys_crit++;
-    else if (AX(r) == 0x4004 && sys_crit) sys_crit--;
+    else if (AX(r) == 0x4004 && sys_crit) {
+        /* (calls not paired with a 4003h are ignored: the DDAG) */
+        if (!--sys_crit && pend) vm_event(&sysvm, pend_run, NULL);
+    }
 }
 
 /* The VDD's protected-mode API (vxdapi.c): function 0 the version (030Ah)
@@ -440,7 +514,9 @@ int vdd_api(struct cregs *r)
             m[2] = (u32)d->font;
             m[3] = 0;
             m[4] = 0;
-            m[5] = m[6] = 0x1000;
+            /* the text's size in whole pages: 1000h for 80x25, 2000h for
+             * 80x50 (Windows 3.1, VXS.386 with VX12 T) */
+            m[5] = m[6] = (text_bytes(d, NULL, NULL) + 0xFFF) & ~0xFFFu;
             m[7] = 0x2000;
             m[8] = 0;
             m[9] = (u32)d->zero;
@@ -488,16 +564,17 @@ int vdd_api(struct cregs *r)
         {
             u8 *t = text_of(d);
             u16 flags = 0;
-            u32 i, l = 80, tp = 25, rt = 0, bt = 0;
+            u32 cols, rows, bytes = text_bytes(d, &cols, &rows);
+            u32 i, l = cols, tp = rows, rt = 0, bt = 0;
             SETW(r->eax, 0xFFFF);
             SETW(r->ebx, 0);
             if (!d->shadow_ok) {
                 flags = 0x38;
                 SETW(r->ebx, 0xFFFF);
             } else {
-                for (i = 0; i < TEXT_BYTES; i += 2)
+                for (i = 0; i < bytes; i += 2)
                     if (t[i] != d->shadow[i] || t[i + 1] != d->shadow[i + 1]) {
-                        u32 c = (i / 2) % 80, rw = (i / 2) / 80;
+                        u32 c = (i / 2) % cols, rw = (i / 2) / cols;
                         if (c < l) l = c;
                         if (c > rt) rt = c;
                         if (rw < tp) tp = rw;
@@ -517,8 +594,8 @@ int vdd_api(struct cregs *r)
             /* what this answer covers: the VM runs on until Clear_Mod
              * (Windows 3.1 held it: UNVERIFIED how long), and a change made
              * meanwhile must come in the next answer, not be taken as seen */
-            if (!d->seen) d->seen = kmalloc(TEXT_BYTES);
-            if (d->seen) { memcpy(d->seen, t, TEXT_BYTES); d->seen_ok = 1; d->seen_cur = cursor_of(d); }
+            if (!d->seen) d->seen = kmalloc(TEXT_MAX);
+            if (d->seen) { memcpy(d->seen, t, TEXT_MAX); d->seen_ok = 1; d->seen_cur = cursor_of(d); }
             if (vm_trace) trace("(MOD %x %x %x cur %x)", flags, AX(r), BX(r), cursor_of(d));
         }
         SETW(r->edx, 0x000C);
@@ -526,9 +603,9 @@ int vdd_api(struct cregs *r)
         return 1;
     case 0x0004:                        /* Clear_Mod */
         if (!d || !d->windowed) return 0;
-        if (!d->shadow) d->shadow = kmalloc(TEXT_BYTES);
+        if (!d->shadow) d->shadow = kmalloc(TEXT_MAX);
         if (d->shadow) {
-            memcpy(d->shadow, d->seen_ok ? d->seen : text_of(d), TEXT_BYTES);
+            memcpy(d->shadow, d->seen_ok ? d->seen : text_of(d), TEXT_MAX);
             d->shadow_ok = 1;
         }
         d->last_cur = d->seen_ok ? d->seen_cur : cursor_of(d);

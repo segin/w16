@@ -84,6 +84,17 @@ struct vpicd_link {
     void (*wake)(vu32 vm);
 };
 
+/* The VMM and w16's REBOOT: the DDB's reference data points at a struct
+ * reboot_link, whose functions the VMM fills in: a DOS VM's title (its
+ * PIF's, as SHELL had it from WINOA386: the Ctrl+Alt+Del screen for a DOS
+ * program shows it) and closing a DOS VM (that screen's Enter) */
+#define REBOOT_LINK_MAGIC 0x4B4E4C52u       /* "RLNK" */
+struct reboot_link {
+    vu32 magic;
+    int (*title)(vu32 vm, char *buf, int n);    /* 0: none */
+    void (*close)(vu32 vm);
+};
+
 /* the VM control block's fields the devices read (the DDK's CB_VM_Status,
  * CB_High_Linear, CB_Client_Pointer, CB_VMID) */
 #define CB_HIGH_LINEAR(vm)  (*(vu32 *)((vm) + 4))

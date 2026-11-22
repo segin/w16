@@ -123,6 +123,9 @@ void __cdecl vmd_service(struct vregs *r)
 
 #define SYS_CRITICAL_INIT 0x00
 #define DEVICE_INIT       0x01
+#define DESTROY_VM        0x0C
+#define SET_DEVICE_FOCUS  0x0F
+#define VMD_ID            0x000C
 
 void __cdecl vmd_control(struct vregs *r)
 {
@@ -130,6 +133,16 @@ void __cdecl vmd_control(struct vregs *r)
     switch (r->eax) {
     case SYS_CRITICAL_INIT:
         sys_vm = r->ebx;
+        break;
+    case SET_DEVICE_FOCUS:
+        /* the mouse goes with VMD's focus (EDX 0: every device's, or VMD's
+         * own): SHELL gives it to a full-screen DOS VM and to the System
+         * VM for a windowed one (shell.c focus3; the DDK: the VM with the
+         * focus owns the mouse) */
+        if (irq_handle && (r->edx == 0 || r->edx == VMD_ID)) owner = r->ebx;
+        break;
+    case DESTROY_VM:
+        if (owner == r->ebx) owner = sys_vm;
         break;
     case DEVICE_INIT:
         /* the PS/2 mouse's IRQ (UNVERIFIED: the message; Windows 3.1's VMD

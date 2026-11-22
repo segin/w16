@@ -35,6 +35,8 @@ typedef unsigned long  w_u32;
 #define W386_BP_VMSTART 6       /* a new DOS VM's first instruction (its VM_Init) */
 #define W386_BP_INT21RET 7      /* the return of a V86 INT 21h (the VM leaves DOS: vm.c) */
 #define W386_BP_FIRSTFREE 8     /* real-mode callbacks and V86 API entries */
+#define W386_BP_V86API  8       /* 8..: the VxDs' V86 API entries (INT 2Fh 1684h in V86 mode) */
+#define W386_NV86API    16
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */
@@ -89,6 +91,7 @@ struct w386_info {
     w_u16 win_fg, win_bg;
     w_u16 min_slice;
     w_u16 win_exclusive;
+    w_u16 vmclose_off;  /* ldr_cs:vmclose_off: ends a DOS VM's program (INT 21h 4CFFh) */
 };
 #pragma pack()
 

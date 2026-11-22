@@ -1,0 +1,43 @@
+; VX12 V, T, F (tests/dos/vx12.asm) in the MS-DOS Prompt: the V86 API entries;
+; 80x50 and 40x25 text full screen, in a window (Alt+Enter) and full screen again
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+type vx12 v
+key Return
+sleep 4
+shot 01-v
+type vx12 t
+key Return
+sleep 4
+shot 02-t50
+key alt+Return
+sleep 8
+shot 03-t50w
+key alt+Return
+sleep 6
+shot 04-t50f
+key Return
+sleep 3
+type vx12 f
+key Return
+sleep 4
+shot 05-f40
+key alt+Return
+sleep 8
+shot 06-f40w
+key alt+Return
+sleep 6
+shot 07-f40f
+key Return
+sleep 3
+shot 08-end
+type exit
+key Return
+sleep 8
+shot 09-back

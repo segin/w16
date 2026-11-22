@@ -244,6 +244,27 @@ void dos_pm(struct cregs *r)
         return;
     }
     case 0x44:                          /* IOCTL: the ones with a DS:DX buffer */
+        if (al == 0x0D && (CL(r) == 0x41 || CL(r) == 0x61)) {
+            /* write/read track: the block (special, head, cylinder, first
+             * sector, count, then a far pointer to the data) with its
+             * pointer translated, the data through the buffer, 512 bytes a
+             * sector (Windows 3.1 reads a track into a buffer outside DOS
+             * memory this way: VX11 "io" on MS-DOS 4.00) */
+            u8 *blk = cptr(r, r->ds, r->edx, 13, 1), *data;
+            u32 n;
+            if (!blk) { bad_ptr(r); return; }
+            n = *(u16 *)(blk + 7) * 512u;
+            if (n + 16 > xbuf_size()) { bad_ptr(r); return; }
+            data = cl_ptr(*(u16 *)(blk + 11), *(u16 *)(blk + 9), n, CL(r) == 0x61);
+            if (!data && n) { bad_ptr(r); return; }
+            memcpy((void *)XB, blk, 13);
+            *(u16 *)(XB + 9) = 16;
+            *(u16 *)(XB + 11) = (u16)XSEG;
+            if (CL(r) == 0x41) memcpy((void *)(XB + 16), data, n);
+            call21(r, XSEG, 0, 0, 0, 0, K_DX);
+            if (CL(r) == 0x61 && !(r->eflags & EFL_CF)) memcpy(data, (void *)(XB + 16), n);
+            return;
+        }
         if (direct(r->ds)) break;
         if (al == 2 || al == 3 || al == 4 || al == 5) {
             /* the count DOS gets is what the buffer here holds (it went
@@ -262,8 +283,7 @@ void dos_pm(struct cregs *r)
         }
         if (al == 0x0C || al == 0x0D) {
             /* the parameter block, 256 bytes at most, in and out as it
-             * was (UNVERIFIED: the forms with a pointer inside the block,
-             * 440Dh 41h/61h track I/O, which DOS gets untranslated) */
+             * was (the track I/O forms above) */
             u8 *d = cptr(r, r->ds, r->edx, 256, 1);
             if (!d) { bad_ptr(r); return; }
             memcpy((void *)XB, d, 256);

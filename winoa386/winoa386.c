@@ -69,6 +69,7 @@ extern void  __far __pascal GrbUnLockApp(LPEPS);                    /* 22 */
 extern DWORD __far __pascal TranslateWinToFScreen(LPEPS);           /* 23 */
 
 #define WM_SHELL_HOTKEY 0x414
+#define WM_SHELL_FAULT  0x41B          /* a fault ended the VM (wParam 4: #GP) */
 #define WM_SHELL_ENDED  0x418
 #define WM_SHELL_DISP   0x41A
 #define WM_SHELL_SWITCH 0x41E
@@ -532,6 +533,12 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         switched(lp);
         return 0;
     case WM_SHELL_ENDED:
+        program_ended(lp);
+        return 0;
+    case WM_SHELL_FAULT:
+        /* Windows 3.1 (VX12 G): a stop box with the window's title, then
+         * the VM goes as when its program ends */
+        message(IDS_GPFAULT, MB_OK | MB_ICONSTOP);
         program_ended(lp);
         return 0;
     case WM_PAINT:

@@ -30,6 +30,7 @@ VKD_DDB:
         ENTRY vkd_eoi, _vkd_eoi_proc
         ENTRY vkd_io60, _vkd_port60
         ENTRY vkd_io64, _vkd_port64
+        ENTRY vkd_io92, _vkd_port92
         SERVICES _vkd_service, 15
 
         VXDCALL _vpicd_virtualize_irq, 3, 01h

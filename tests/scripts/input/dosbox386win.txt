@@ -1,0 +1,23 @@
+; the MS-DOS Prompt from a PIF that starts it in a window (tools/mkpif.py
+; windowed=1; WIN.INI run=), VER there, Alt+Enter to full screen (a VM that
+; never had the display: the WIN386 audit's H18), VER, Alt+Enter back, EXIT
+sleep 15
+shot 01-window
+type ver
+key Return
+sleep 4
+shot 02-ver
+key alt+Return
+sleep 6
+shot 03-full
+type ver
+key Return
+sleep 3
+shot 04-ver
+key alt+Return
+sleep 8
+shot 05-window
+type exit
+key Return
+sleep 8
+shot 06-end

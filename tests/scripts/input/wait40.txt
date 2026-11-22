@@ -1,0 +1,3 @@
+; wait while a probe started by WIN.INI run= works
+sleep 40
+shot 01-done

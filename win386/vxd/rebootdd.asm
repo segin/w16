@@ -8,6 +8,7 @@
 
 segment _TEXT public align=16 class=CODE use32 flat
 global REBOOT_DDB
+extern _reboot_link
 REBOOT_DDB:
         dd 0
         dw 030Ah
@@ -19,7 +20,8 @@ REBOOT_DDB:
         dd rb_ctl
         dd 0
         dd rb_api
-        dd 0, 0, 0
+        dd 0, 0
+        dd _reboot_link         ; DDB_Reference_Data: the link with the VMM (w16vxd.h)
         dd 0                    ; no services
         dd 0
 
@@ -41,3 +43,4 @@ REBOOT_DDB:
         VXDCALL _vmm_restore_client_state, 1, 8Eh
         VXDCALL _vmm_get_sys_vm, 1, 03h
         VXDCALL _vmm_get_cur_vm, 1, 01h
+        VXDCALL _vmm_get_exec_focus, 1, 30h

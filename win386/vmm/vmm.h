@@ -126,6 +126,8 @@ struct vm {
     u16 dos_ss[8], dos_sp[8];   /* return frames, to see one abandoned */
     u32 susp_count;         /* Suspend_VM's count (the services) */
     u32 gen;                /* which VM this slot holds now (vm_create) */
+    int closing;            /* its programs are being ended (vm_close) */
+    u16 closing_psp;
     int idle;               /* HLT, INT 2Fh 1680h: no time until an interrupt */
     int suspended;          /* Suspend_VM, or not executable any more */
     u32 slice;              /* ticks left in its time slice */
@@ -282,6 +284,7 @@ void vm_int21_ret(struct cregs *r);
 #define SET_DEVICE_FOCUS    0x0F
 #define BEGIN_MESSAGE_MODE  0x10
 #define END_MESSAGE_MODE    0x11
+#define CLOSE_VM_NOTIFY     0x19
 u32 vxd_send(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);   /* carry: a device refused */
 void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi);
 int vxd_service_call(u32 dev, u32 svc, struct svcregs *s);
@@ -295,6 +298,14 @@ void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
 void shell_init(void);
 void shell_api(struct cregs *r);
 void shell_vm_ended(struct vm *v);
+void shell_vm_crashed(struct vm *v);
+struct reboot_link *reboot_link_of(u32 ref);
+void vm_crashed(struct cregs *r);
+void vm_close(struct vm *v);
+int vxd_v86_int_hooks(struct cregs *r, int vec);
+u32 vxdapi_v86_get(u32 id);                 /* a V86 API entry's breakpoint, or 0 */
+void vxdapi_v86_call(struct cregs *r, u32 idx);
+u32 vxd_v86_api(u32 id);                    /* a loaded device's V86 API procedure */    /* Hook_V86_Int_Chain's procedures */
 int vdd_api(struct cregs *r);
 void vdd_int2f(struct cregs *r);
 void vdd_focus(struct vm *v);       /* the display goes to v */
@@ -302,7 +313,7 @@ void vdd_vm_init(struct vm *v);
 void vdd_vm_destroy(struct vm *v);
 void vdd_window(struct vm *v, int on);   /* SHELL: windowed or full screen */
 void vdd_tick(void);
-void shell_display_changed(struct vm *v, int cursor);
+int shell_display_changed(struct vm *v, int cursor);
 #define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
 
 /* io.c: I/O port trapping */

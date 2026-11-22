@@ -439,6 +439,27 @@ svc_common:
         mov eax, [esp + 40]             ; the caller's return address
         call puthex
         call svcregs
+        ; Simulate_Push of a ring-0 address (SHELL's event record for
+        ; WINOA386's event procedure): its 72 bytes
+        mov eax, [esp + 36]
+        and eax, 7FFFFFFFh
+        cmp dword [svc_ids + eax * 4], 0001004Dh
+        jne .q1
+        mov eax, [esp + 28]             ; EAX as it came
+        cmp eax, 80000000h
+        jb .q1
+        cmp eax, 0C0000000h
+        jae .q1
+        mov esi, msg_rec
+        call puts
+        mov esi, eax
+        mov ecx, 72
+.rb:    mov al, ' '
+        call putc
+        lodsb
+        call puthex2
+        loop .rb
+        call crlf
 .q1:    popad
         popfd
         push eax
@@ -671,6 +692,7 @@ msg_ptr   db 'VXS   ptr ', 0
 msg_dscx  db 'VXS   ds:cx ', 0
 msg_dsbx  db 'VXS   ds:bx ', 0
 msg_svc   db 'VXS svc ', 0
+msg_rec   db 'VXS   record', 0
 msg_from  db ' from=', 0
 msg_ret   db ' ret', 0
 msg_ccs   db ' client=', 0

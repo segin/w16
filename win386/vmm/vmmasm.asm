@@ -261,6 +261,7 @@ global _svc_common
 extern _svc_dispatch
 _svc_common:
         pushfd
+        cli                             ; the VMM's C code never with interrupts on
         pushad
         cld
         push esp
@@ -305,6 +306,7 @@ _vmm_call_proc:
         pushfd
         pop dword [ebp+32]
         cld                             ; whatever the callee left
+        cli                             ; (an outside VxD may have done STI)
         pop ebp
         pop edi
         pop esi

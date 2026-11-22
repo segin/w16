@@ -87,6 +87,48 @@ void vxdapi_get(struct cregs *r, u32 *sel, u32 *off)
     *sel = *off = 0;
 }
 
+/* ---- V86 mode: Windows 3.1 gives a DOS program entries for VPICD
+ * (0003h), VTD (0005h), VMD (000Ch) and DOSMGR (0015h) (VX12 V, in the
+ * MS-DOS Prompt), whose function 0 returns AX 030Ah, 030Ah, 0300h,
+ * 030Ah, BX 0, carry clear. Here: those, by their function 0 (the rest
+ * fail with carry: UNVERIFIED what they do), and a loaded device's own
+ * V86 API procedure for any device that has one (vxd.c) ---- */
+static const struct { u16 id, ver; } v86_own[] = {
+    { 0x0003, 0x030A }, { 0x0005, 0x030A }, { 0x000C, 0x0300 }, { 0x0015, 0x030A },
+};
+#define NV86OWN (sizeof(v86_own) / sizeof(v86_own[0]))
+static u32 v86_ext[W386_NV86API], n_v86_ext;
+
+u32 vxdapi_v86_get(u32 id)
+{
+    u32 i;
+    if (vxd_v86_api(id)) {
+        for (i = 0; i < n_v86_ext && v86_ext[i] != id; i++)
+            ;
+        if (i == n_v86_ext && NV86OWN + n_v86_ext < W386_NV86API) v86_ext[n_v86_ext++] = id;
+        if (i < n_v86_ext) return W386_BP_V86API + NV86OWN + i;
+    }
+    for (i = 0; i < NV86OWN; i++)
+        if (v86_own[i].id == id) return W386_BP_V86API + i;
+    return 0;
+}
+
+void vxdapi_v86_call(struct cregs *r, u32 idx)
+{
+    u32 n = idx - W386_BP_V86API;
+    if (n >= NV86OWN && n - NV86OWN < n_v86_ext) {
+        vxd_call_api(vxd_v86_api(v86_ext[n - NV86OWN]), r);
+        return;
+    }
+    if (n < NV86OWN && AX(r) == 0) {
+        SETW(r->eax, v86_own[n].ver);
+        SETW(r->ebx, 0);
+        r->eflags &= ~EFL_CF;
+        return;
+    }
+    r->eflags |= EFL_CF;
+}
+
 /* A far call to entry index (PMBP_API + n) */
 void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
 {
