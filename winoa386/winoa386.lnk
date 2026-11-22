@@ -12,6 +12,7 @@ option description 'w16 Non-Windows application component for 386 enhanced mode'
 library windows.lib
 segment WOAFIX_TEXT fixed
 export WNDPROC.1
+export DIALOGPROC.2
 import PAINTSCREEN GRABBER.1
 import SCREENFREE GRABBER.2
 import GETFONTLIST GRABBER.10

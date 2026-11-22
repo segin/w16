@@ -267,6 +267,7 @@ struct vm *vm_create(void)
     memcpy(inst, inst_snap, inst_size);
     v->prio_fg = 100;
     v->prio_bg = 50;
+    v->exclusive = v->background = 0;
     /* the VM stub's registers: DS = SS = the first paragraph after the
      * free memory's MCB, where the stub's 4 KB will be */
     v->refstk_seg = info->free_mcb + 1;
@@ -318,6 +319,44 @@ int vm_set_program(struct vm *v, const char *path, const u8 *tail, const char *d
     memset(b + 0x211, ' ', 11);
     vm_poke(v, base, b, sizeof(b));
     vm_set_message(v, "", 0);
+    return 1;
+}
+
+/* The conventional memory a DOS VM's program gets: the PIF's KB Desired
+ * (SHELL function 3's block +1Ah). Windows 3.1 (tests/pifread.sh, WC1.COM's
+ * PSP:2 under Microsoft's WIN386): the top of memory is the VM's free
+ * memory's start plus that many KB (64 KB: 1C00h, 100 KB: 2500h, from
+ * 0C00h), at most 640 KB's top; FFFFh (-1) all of it; 0 gave 4 KB. Here
+ * the free arena after the stub's 8 KB is cut there: an MCB of the
+ * system's (owner 8) at the limit holds the rest, so the arena's chain
+ * stays as DOS made it. UNVERIFIED: 1-3 KB, and what KB Required does
+ * (a VM that cannot get it: 3.1's message). */
+int vm_set_memory(struct vm *v, u32 kb)
+{
+    u32 mcb = (u32)info->free_mcb << 4, start, end, lim, size;
+    u8 m[16];
+    if (kb == 0xFFFF || !info->free_mcb) return 0;
+    if (kb < 4) kb = 4;
+    if (*(u8 *)vm_lin(v, mcb) != 'M' && *(u8 *)vm_lin(v, mcb) != 'Z') return 0;
+    size = *(u16 *)vm_lin(v, mcb + 3);
+    start = (u32)info->free_mcb + 1;
+    end = start + size;                 /* the paragraph after the free arena */
+    /* the stub's block (its MCB is the free one's), then the program's:
+     * the program sees as much as under 3.1 (tests/pifread.sh -W edmema:
+     * top - PSP FB4h for 64 KB, as 3.1's 1C00h - 0C4Ch; the stub's
+     * block ends a paragraph before DOSVM_BLOCK) */
+    lim = start + DOSVM_BLOCK - 1 + kb * 64;
+    if (lim + 1 >= end) return 0;
+    memset(m, 0, sizeof(m));
+    m[0] = *(u8 *)vm_lin(v, mcb);       /* the new MCB ends the chain if the old did */
+    *(u16 *)(m + 1) = 8;
+    *(u16 *)(m + 3) = (u16)(end - lim - 1);
+    memcpy(m + 8, "SC", 2);
+    vm_poke(v, lim << 4, m, 16);
+    m[0] = 'M';
+    vm_poke(v, mcb, m, 1);
+    size = lim - start;
+    vm_poke(v, mcb + 3, &size, 2);
     return 1;
 }
 
@@ -442,6 +481,9 @@ static struct vm *pick(void)
     /* SYSTEM.INI [386Enh] WinExclusive: while Windows has the focus no
      * other VM runs (Control Panel's "Exclusive in Foreground") */
     if (info->win_exclusive && vm_focus == &sysvm && runnable(&sysvm)) return &sysvm;
+    /* a DOS VM whose PIF says Exclusive, full screen with the focus: the
+     * others wait (UNVERIFIED in a window, where w16 does not apply it) */
+    if (vm_focus != &sysvm && vm_focus->exclusive && runnable(vm_focus)) return vm_focus;
     do {
         v = v->next ? v->next : vm_list;
         if (runnable(v) && !v->idle) return v;

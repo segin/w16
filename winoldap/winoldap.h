@@ -20,6 +20,7 @@
 #define IDS_STILLACTIVE     40
 #define IDS_SECONDINSTANCE  41
 #define IDS_SWITCHING       42
+#define IDS_NOPIFFILE       44  /* the program a PIF names is not there */
 #define IDS_NODIR           45
 #define IDS_NOSWITCHER      55
 #define IDS_TOOMANY         56

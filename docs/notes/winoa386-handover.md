@@ -79,9 +79,12 @@ See the end of this file (kept current).
    windowed box (3.1 opens the menu: a SHELL hot key?).
 3. "Inactive" in the title when suspended; Settings' Display Usage,
    Tasking Options (Exclusive, Background), Priority, Terminate.
-4. The PIF's 386 section (memory, display, exclusive/background,
-   priorities) into SHELL 3's block and registers: vary PIFs on 3.1 and
-   record function 3 with VXS.
+4. (Done 2026-11-22, "The PIF" below.) The PIF's 386 section into SHELL
+   3's block and registers. Left of it: w16's WIN386 acting on Background
+   (a full-screen VM without the focus needs its video memory in RAM, as
+   a windowed one has), KB Required, EMS/XMS, the video settings, the
+   reserved keys and the shortcut key; the 386 Parameters dialog's pixels
+   (template measured from 3.1's screen, not yet compared).
 5. (Done 2026-11-21, ARCHITECTURE.md 6.9.2.) DOS-box fonts of w16's own:
    EGA80WOA/EGA40WOA/CGA80WOA/CGA40WOA.FON (Terminal 8x12, 16x12, 8x8,
    16x8) and DOSAPP.FON (the Fonts dialog's other sizes) are in the tree
@@ -123,3 +126,27 @@ The user's set-up: the tree alone, plain DOSBox 0.74, `WIN /3` (no /B).
   The new case waits for Program Manager's caption instead.
 - Boot-test case `win386plain` (plain DOSBox, tree alone, `WIN /3`: the
   box a text screen, EXIT, Exit Windows back to the prompt).
+
+### The PIF (2026-11-22)
+
+Both WINOLDAP.MOD and WINOA386.MOD read PIFs through `winoldap/pifread.c`
+(walks the section headers as 3.1's do; ARCHITECTURE.md 9.8, 12.11).
+Probe: `tests/pifread.sh [-c] [-W] -m std|386 OUT [FIXTURE...]` (fixtures
+`tests/scripts/pifread/mkpifs.py`; DOSBox-X file log, VXS.386 SHELL
+record, WO2 blocks, WC1.COM). `PIFREAD_KEEP=1` reuses Microsoft's runs
+already in OUT. Results and the differences left: ARCHITECTURE.md 12.11
+"Results". Left to do:
+- WIN386 (w16's): Background for a full-screen VM (video memory to RAM
+  when it loses the display, as for a window), KB Required (3.1's message
+  when the VM cannot get it: not observed), EMS/XMS limits, the video
+  settings (+04h), the reserved keys and the shortcut key (+00h E0h,
+  +01h, the 386 data's +18h-+27h, which WINOA386 reads but 3.1 does not
+  pass in the block: where they go is not observed).
+- WINOA386: ask SHELL for its entry before reading the PIF and call SHELL
+  5 (EAX 1, ECX 1) twice before an error box or the Parameters dialog, as
+  3.1; the Parameters dialog's pixels against 3.1's (template measured);
+  DOSAPP.INI (3.1 writes its window settings there).
+- w16's WIN386 under tests/worun.sh's DOSBox-X set-up with a plain
+  `WIN /3` stayed on WIN.COM's logo (Windows ran behind it: the VM ran and
+  ended); with /B it shows Windows. Not looked into.
+- VXS.386 needs Hook_Device_PM_API (VMM 0092h), which w16's VMM lacks.

@@ -145,6 +145,9 @@ up PROGMAN.INI and `tools/mkbadgrp.py`'s group files),
 INI files, the running saver, USER starting it; `tests/sstree.sh`: on
 w16's install tree alone; the boot-test case `scrnsave`),
 `tests/winoldap.sh`, `tests/swap.sh` (w16's WSWAP/DSWAP against Microsoft's),
+`tests/pifread.sh -c -m std|386` (how w16's WINOLDAP and WINOA386 read
+PIFs against Microsoft's: file reads, SHELL's block, the switcher's
+record, what the program got; fixtures `tests/scripts/pifread/mkpifs.py`),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the

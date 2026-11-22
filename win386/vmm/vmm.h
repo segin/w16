@@ -132,6 +132,8 @@ struct vm {
     int suspended;          /* Suspend_VM, or not executable any more */
     u32 slice;              /* ticks left in its time slice */
     u32 prio_fg, prio_bg;   /* time-slice priorities (PIF, SYSTEM.INI) */
+    int exclusive;          /* PIF: no other VM runs while it has the focus full screen */
+    int background;         /* PIF: it runs on full screen without the focus */
     u32 exit_code;          /* its program's exit code (VM stub) */
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
@@ -243,6 +245,7 @@ void vm_snapshot(void);             /* the instance data new VMs start with */
 struct vm *vm_create(void);         /* a DOS VM, not started */
 int vm_set_program(struct vm *v, const char *path, const u8 *tail, const char *dir);
 void vm_set_message(struct vm *v, const char *msg, u32 n);   /* for standard output first */
+int vm_set_memory(struct vm *v, u32 kb);    /* conventional memory: the PIF's KB Desired */
 void vm_destroy(struct vm *v);
 struct vm *vm_of(u32 handle);       /* NULL if not a VM */
 void vm_end_trap(struct cregs *r);  /* at the end of a trap: switch VMs? */
@@ -265,6 +268,7 @@ void vm_int21_ret(struct cregs *r);
  * PSP, the parameters, a message, the VMM's reflection stack, the stub's
  * stack */
 #define DOSVM_PARAMS        0x100
+#define DOSVM_BLOCK         0x200       /* paragraphs the stub takes (ldrasm.asm VS_BLOCK) */
 #define DOSVM_MSGLEN        0x3FE
 #define DOSVM_MSG           0x400
 #define DOSVM_MSG_MAX       0x800

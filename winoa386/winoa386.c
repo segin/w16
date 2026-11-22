@@ -38,6 +38,7 @@
  */
 #include <windows.h>
 #include "winoa386.h"
+#include "../winoldap/pifread.h"
 #include "../drivers/grabber/vga3gr/grab.h"
 
 /* woa386s.asm */
@@ -97,15 +98,13 @@ static struct {                         /* SHELL function 9's block */
     DWORD off;
     WORD sel, pad;
 } evblk;
-static struct {                         /* SHELL function 3's block */
-    WORD status;                        /* +00 (function 7 writes its low bits) */
-    WORD w2, w4, w6;                    /* +02 4002h, +04 001Fh (as 3.1's) */
+static struct {                         /* SHELL function 3's block (make_block) */
+    BYTE flags[4];                      /* +00 (function 7 writes the low bits) */
+    DWORD video;                        /* +04 */
     DWORD prog_off; WORD prog_sel;      /* +08 */
     DWORD tail_off; WORD tail_sel;      /* +0E */
     DWORD dir_off; WORD dir_sel;        /* +14 */
-    DWORD d1a;                          /* +1A FFFFFFFFh */
-    WORD fgprio, bgprio;                /* +1E, +20 */
-    DWORD d22, d26;                     /* +22, +26 400h each (3.1's) */
+    BYTE mem[16];                       /* +1A the 386 data's +00h-+0Fh */
     WORD hwnd;                          /* +2A */
     WORD hinst;                         /* +2C */
     char title[32];                     /* +2E */
@@ -137,8 +136,11 @@ static VREGS *shell_call(WORD fn, DWORD eax, DWORD ebx, DWORD ecx, DWORD esi, DW
     return &sr;
 }
 
+static DWORD focused;                   /* the VM function 5 gave the focus to last */
+
 static void focus(DWORD v, DWORD edi)
 {
+    focused = v;
     shell_call(5, 0, v, 0, (DWORD)(WORD)hwnd, edi);
 }
 
@@ -147,28 +149,47 @@ static void handback(LPARAM rec)
     shell_call(0x0C, 0, 0, 0, 0, rec);
 }
 
-/* ---- the PIF (the published format; the Windows 286 and 386 sections
-   are not acted on yet: docs/notes/winoa386-handover.md) ---- */
-static struct {
-    char title[31];
-    char program[64];
-    char directory[64];
-    char params[64];
-} pif;
+/* ---- the PIF (winoldap/pifread.c: as Windows 3.1's WINOA386 reads it) ---- */
+static PIFDATA pif;
+static BOOL batch;                      /* a .BAT run through COMMAND.COM */
 
-static BOOL load_pif(const char *path)
+/* SHELL function 3's block from the PIF, as Windows 3.1's WINOA386 fills
+   it (tests/pifread.sh: VXS.386's record of the block for each fixture,
+   one setting changed at a time; ARCHITECTURE.md 12.11):
+     +00  the 386 flags (+10h): E0h (reserved Alt+Tab, Alt+Esc, Alt+Space)
+          as they are, 01h exclusive (the PIF's 04h), 02h background (02h),
+          04h windowed (the PIF's 08h full screen clear)
+     +01  the 386 data's +11h as it is (Alt+Enter ... 10h detect idle
+          time, 20h no high memory area, 40h a shortcut key, 80h EMS locked)
+     +02  +12h as it is (01h XMS locked, 02h fast paste, 04h lock
+          application memory), 08h a batch file
+     +03  40h close window on exit (63h's 10h)
+     +04  the video dword (+14h)
+     +1A  the 386 data's first 16 bytes: KB desired, required, the
+          priorities, EMS and XMS limit and required
+   A PIF without a usable 386 section (a 2.x PIF, a damaged one) gives
+   the defaults with KB desired and required from 20h and 22h, video 17h,
+   full screen with 16Fh's 80h (else windowed), exclusive with its 10h,
+   background with 63h's 01h (63h FFh gave it; which bit: ed2x63_*) */
+static void make_block(void)
 {
-    OFSTRUCT of;
-    HFILE f = OpenFile(path, &of, OF_READ);
-    if (f == HFILE_ERROR)
-        return FALSE;
-    _llseek(f, 0x02, 0); _lread(f, pif.title, 0x1E);
-    _llseek(f, 0x24, 0); _lread(f, pif.program, 0x3F);
-    _llseek(f, 0x65, 0); _lread(f, pif.directory, 0x40);
-    _llseek(f, 0xA5, 0); _lread(f, pif.params, 0x40);
-    _lclose(f);
-    pif.title[30] = pif.program[63] = pif.directory[63] = pif.params[63] = 0;
-    return TRUE;
+    BYTE f0 = pif.d386[D386_F0];
+    int i;
+    if (!pif.found && pif.opened) {     /* (no PIF at all: the defaults, UNVERIFIED) */
+        BYTE b = (BYTE)pif.w_16f;
+        *(WORD *)(pif.d386 + D386_MAX) = pif.maxmem;
+        *(WORD *)(pif.d386 + D386_MIN) = pif.minmem;
+        f0 = (BYTE)(((b & 0x80) ? 0x08 : 0) | ((b & 0x10) ? 0x04 : 0) |
+                    ((pif.flags & 0x01) ? 0x02 : 0));
+    }
+    cblk.flags[0] = (BYTE)((f0 & 0xE0) | ((f0 & 0x04) ? 0x01 : 0) |
+                           ((f0 & 0x02) ? 0x02 : 0) | ((f0 & 0x08) ? 0 : 0x04));
+    cblk.flags[1] = pif.d386[D386_F1];
+    cblk.flags[2] = (BYTE)(pif.d386[D386_F2] | (batch ? 0x08 : 0));
+    cblk.flags[3] = (BYTE)((pif.flags & PIFF_CLOSE) || !pif.opened ? 0x40 : 0);
+    cblk.video = *(DWORD *)(pif.d386 + D386_VIDEO);
+    for (i = 0; i < 16; i++)
+        cblk.mem[i] = pif.d386[i];
 }
 
 static int has_ext(const char *p, const char *ext)
@@ -212,6 +233,45 @@ static BOOL exists(const char *name, char *full)
     if (full)
         lstrcpy(full, of.szPathName);
     return TRUE;
+}
+
+/* a directory there (INT 21h 4300h; a drive's root always) */
+static WORD dos_attr(const char FAR *p);
+#pragma aux dos_attr = "push ds" "mov ds, cx" "mov ax, 4300h" "int 21h" "mov ax, cx" "jnc ok" \
+    "xor ax, ax" "ok:" "pop ds" parm [cx dx] value [ax] modify [cx dx];
+
+static BOOL dir_exists(const char *d)
+{
+    char b[68];
+    int n = lstrlen(d);
+    if ((n == 2 && d[1] == ':') || (n == 3 && d[1] == ':' && d[2] == '\\'))
+        return TRUE;
+    lstrcpyn(b, d, sizeof b);
+    if (n > 3 && b[n - 1] == '\\')
+        b[n - 1] = 0;
+    return (dos_attr(b) & 0x10) != 0;
+}
+
+/* the Parameters dialog ("?" as the PIF's parameters) */
+static char param_buf[64];
+
+BOOL FAR PASCAL DialogProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    (void)lp;
+    switch (msg) {
+    case WM_INITDIALOG:
+        SetWindowText(h, title);
+        SendDlgItemMessage(h, IDC_PARAMS, EM_LIMITTEXT, sizeof param_buf - 1, 0);
+        return TRUE;
+    case WM_COMMAND:
+        if (wp == IDOK || wp == IDCANCEL) {
+            GetDlgItemText(h, IDC_PARAMS, param_buf, sizeof param_buf);
+            EndDialog(h, wp == IDOK);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
 }
 
 static BOOL get_env(const char *name, char *out, int max)
@@ -380,13 +440,54 @@ static void update(LPARAM rec)
 }
 
 /* the program has ended (event 418h) */
+/* the VM goes (function 4) and the window with it */
+static BOOL inactive;                   /* ended, kept: close window on exit off */
+
+static void destroy_vm(void)
+{
+    shell_call(4, 1, vm, 0, 0xB0, 0);
+    if (windowed) {
+        CursorOff(&eps);
+        windowed = FALSE;
+    }
+    ScreenFree(&eps);
+    DestroyWindow(hwnd);
+}
+
 static void program_ended(LPARAM rec)
 {
     ended = TRUE;
     focus(sysvm, rec);
-    shell_call(6, 0, vm, 0, (DWORD)(WORD)hwnd, (DWORD)(WORD)&cblk);
+    /* (3.1: function 6 with AX 418h here, the event's number) */
+    shell_call(6, 0x418, vm, 0, (DWORD)(WORD)hwnd, (DWORD)(WORD)&cblk);
     shell_call(0x16, 0, 0, 0, (DWORD)(WORD)hwnd, rec);
     handback(rec);
+    if (!(cblk.flags[3] & 0x40)) {
+        /* close window on exit off (the PIF's 63h 10h clear; block +03h):
+           Windows 3.1's WINOA386 keeps the VM and shows its screen in a
+           window titled "(Inactive TITLE)" until the user closes it, with
+           SHELL 6 (AX 0, CX 47h), 6 (CX FFFFh), 7 (4) (tests/pifread.sh
+           ednoclose, VXS.386); then function 4 */
+        char t[48];
+        inactive = TRUE;
+        shell_call(6, 0, vm, 0x47, 0x38, (DWORD)(WORD)&cblk);
+        shell_call(6, 0, vm, 0xFFFF, 0x38, (DWORD)(WORD)&cblk);
+        shell_call(7, 4, vm, 0, 0x38, (DWORD)(WORD)&cblk);
+        wsprintf(t, "(Inactive %s)", (LPSTR)title);
+        SetWindowText(hwnd, t);
+        if (!windowed) {
+            windowed = TRUE;
+            eps.EPStatusFlags |= 0x00010000L;
+            eps.EPStatusFlags &= ~EPS_STATEVALID;
+            paint_font();
+        }
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        window_size();
+        scroll_ranges();
+        InvalidateRect(hwnd, NULL, TRUE);
+        focus(sysvm, 0);                /* (3.1: function 5 last) */
+        return;
+    }
     shell_call(4, 1, vm, 0, 0xB0, 0);
     if (windowed) {
         CursorOff(&eps);
@@ -559,12 +660,16 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_ACTIVATE:
         if (running && !ended) {
-            if (wp != WA_INACTIVE && !HIWORD(lp) && windowed)
-                focus(vm, 0);           /* the keyboard to the windowed VM */
+            /* (only when another VM has it: 3.1's windowed start gives
+               the VM the focus once, tests/pifread.sh edwin) */
+            if (wp != WA_INACTIVE && !HIWORD(lp) && windowed) {
+                if (focused != vm)
+                    focus(vm, 0);       /* the keyboard to the windowed VM */
+            }
             else if (wp != WA_INACTIVE && HIWORD(lp) && !windowed && GetFocus() == h) {
                 /* the icon activated by Alt+Tab or Alt+Esc: full screen */
                 PostMessage(h, WM_START, 1, 0);
-            } else if (wp == WA_INACTIVE && windowed)
+            } else if (wp == WA_INACTIVE && windowed && focused != sysvm)
                 focus(sysvm, 0);
         }
         break;
@@ -593,6 +698,11 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             message(IDS_STILLACTIVE, MB_OK | MB_ICONEXCLAMATION);
             return 0;
         }
+        if (inactive) {                 /* the inactive window closed */
+            inactive = FALSE;
+            destroy_vm();
+            return 0;
+        }
         break;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -605,7 +715,7 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 static BOOL setup(LPSTR cmd)
 {
     char path[128], args[130], name[80], pifpath[128], t[130];
-    BOOL has_pif, from_pif;
+    BOOL from_pif;
     int i, n;
 
     /* "args NUL path LF" (WO1) */
@@ -636,16 +746,21 @@ static BOOL setup(LPSTR cmd)
                 lstrcpy(pifpath, "_DEFAULT.PIF");
         }
     }
-    has_pif = load_pif(pifpath);
+    pif_read(pifpath, &pif, PIF_386);
+    /* the title: the PIF's, else the PIF's (or the program's) name in
+       capitals (3.1: a blank title in C:\PROBE.PIF gave "PROBE") */
     lstrcpy(title, pif.title);
-    trim(title);
+    if (!title[0]) {
+        stem(path, title, sizeof title);
+        AnsiUpper(title);
+    }
     if (has_ext(path, ".PIF")) {
-        trim(pif.program);
         if (!lstrcmpi(pif.program, "COMMAND.COM") && get_env("COMSPEC", program, sizeof program))
             ;
         else if (!exists(pif.program, program)) {
-            if (!title[0])
-                stem(pif.program, title, sizeof title);
+            /* 3.1: "Cannot find file." titled with the program as the PIF
+               names it */
+            lstrcpyn(title, pif.program, sizeof title);
             message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
         }
@@ -654,18 +769,34 @@ static BOOL setup(LPSTR cmd)
         message(IDS_NOFILE, MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
-    lstrcpy(t, args[0] ? args : pif.params);
+    /* the parameters: those given to WinExec as they are, else the 386
+       section's (never the base's) after a blank, blanks and case kept
+       (3.1: "  ea  eb  " gave "   ea  eb  "); "?" asks for them */
     from_pif = !args[0];
-    trim(t);
-    if (from_pif && t[0] && t[0] != ' ') {
+    lstrcpy(t, from_pif ? pif.params : args);
+    if (!from_pif)
+        trim(t);
+    if (from_pif && t[0] == '?' && !t[1]) {
+        t[0] = 0;
+        if (DialogBox(hinst, MAKEINTRESOURCE(IDD_PARAMS), NULL, (DLGPROC)MakeProcInstance((FARPROC)DialogProc, hinst)) <= 0)
+            return FALSE;
+        lstrcpy(t, param_buf);
+    }
+    if (from_pif && t[0]) {
         char t2[130];
         t2[0] = ' ';
         lstrcpyn(t2 + 1, t, sizeof t2 - 1);
         lstrcpy(t, t2);
     }
-    if (!title[0]) {
-        stem(has_ext(path, ".PIF") ? pif.program : path, title, sizeof title);
-        AnsiUpper(title);
+    /* a batch file runs through COMMAND.COM: " /c FILE" and a blank
+       before the parameters (3.1: " /c C:\WC1.BAT  enhargs"; block +02h
+       08h) */
+    if (has_ext(program, ".BAT") && get_env("COMSPEC", name, sizeof name)) {
+        char t2[130];
+        batch = TRUE;
+        wsprintf(t2, " /c %s %s", (LPSTR)program, (LPSTR)t);
+        lstrcpyn(t, t2, sizeof t);
+        lstrcpy(program, name);
     }
     n = lstrlen(t);
     if (n > 126) n = 126;
@@ -675,16 +806,20 @@ static BOOL setup(LPSTR cmd)
     tail[1 + n] = '\r';
     tail[2 + n] = 0;
 
-    /* the start-up directory: the PIF's, else the current drive */
-    trim(pif.directory);
-    if (pif.directory[0])
+    /* the start-up directory: the PIF's, else the current drive; one that
+       is not there stops it (3.1's box, titled with the PIF's title) */
+    if (pif.directory[0]) {
         lstrcpy(directory, pif.directory);
-    else {
+        if (!dir_exists(directory)) {
+            message(IDS_NODIR, MB_OK | MB_ICONEXCLAMATION);
+            return FALSE;
+        }
+    } else {
         directory[0] = (char)('A' + get_drive());
         directory[1] = ':';
         directory[2] = 0;
     }
-    (void)has_pif;
+    make_block();
     return TRUE;
 }
 
@@ -757,20 +892,17 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     eps.RNG1DSSEL = LOWORD(r->edx);
 
     /* the VM (function 3): the block as 3.1's WINOA386 fills it */
-    cblk.status = 0x1000;
-    cblk.w2 = 0x4002;
-    cblk.w4 = 0x001F;
     cblk.prog_off = (WORD)program; cblk.prog_sel = ds_;
     cblk.tail_off = (WORD)tail; cblk.tail_sel = ds_;
     cblk.dir_off = (WORD)directory; cblk.dir_sel = ds_;
-    cblk.d1a = 0xFFFFFFFFL;
-    cblk.fgprio = 100;
-    cblk.bgprio = 50;
-    cblk.d22 = cblk.d26 = 0x400;
     cblk.hwnd = (WORD)hwnd;
     cblk.hinst = (WORD)hi;
     lstrcpyn(cblk.title, title, sizeof cblk.title);
-    r = shell_call(3, 0x1902, 0x3E, 0, 8, (DWORD)(WORD)&cblk);
+    /* the registers as 3.1's WINOA386 gives them: EAX 1902h, EBX F0h,
+       ESI 8 for every PIF observed; ECX 07C7h with the 386 data's +12h
+       (XMS locked, fast paste, lock memory) in bits 16-23 (tests/
+       pifread.sh; their meaning is UNVERIFIED) */
+    r = shell_call(3, 0x1902, 0xF0, 0x07C7 | ((DWORD)pif.d386[D386_F2] << 16), 8, (DWORD)(WORD)&cblk);
     if ((r->flags & 1) || !r->eax) {
         message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
         ended = TRUE;
@@ -782,8 +914,26 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     eps.ThisVMHand = vm;
     eps.VM1_Hnd = vm;
     running = TRUE;
-    focus(vm, MAKELONG(1, ds_));
-    shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+    if (cblk.flags[0] & 0x04) {
+        /* windowed from the start (the PIF's Display Usage; 3.1: SHELL 5
+           to the System VM (EDI 0), 5 to the VM (EDI 1), 15h, then the
+           window shows the VM's screen: tests/pifread.sh edwin) */
+        focus(sysvm, 0);
+        focus(vm, 1);
+        shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+        windowed = TRUE;
+        eps.EPStatusFlags |= 0x00010000L;
+        eps.EPStatusFlags &= ~EPS_STATEVALID;
+        paint_font();
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        window_size();
+        scroll_ranges();
+        CursorOn(&eps);
+        InvalidateRect(hwnd, NULL, TRUE);
+    } else {
+        focus(vm, MAKELONG(1, ds_));
+        shell_call(0x15, 0, vm, 0, (DWORD)(WORD)hwnd, 0);
+    }
 
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);

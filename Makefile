@@ -1814,9 +1814,9 @@ $(DOS)/WO%.COM: tests/dos/wo%.asm
 	$(NASM) -f bin -Itests/dos/ -o $@ $<
 
 # ---- WINOLDAP.MOD: w16's Standard-mode DOS application support ----
-WOA_OBJS := $(B)/shell/start.o $(B)/winoldap/winoldap.o $(B)/winoldap/woasm.o
+WOA_OBJS := $(B)/shell/start.o $(B)/winoldap/winoldap.o $(B)/winoldap/pifread.o $(B)/winoldap/woasm.o
 dos: $(DOS)/WINOLDAP.MOD
-$(B)/winoldap/%.o: winoldap/%.c winoldap/winoldap.h
+$(B)/winoldap/%.o: winoldap/%.c winoldap/winoldap.h winoldap/pifread.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/winoldap/woasm.o: winoldap/woasm.asm
@@ -1833,10 +1833,11 @@ $(DOS)/WINOLDAP.MOD: $(WOA_OBJS) $(B)/winoldap/winoldap.res winoldap/winoldap.ln
 	python3 tools/nemark.py $@ 3.10
 
 # ---- WINOA386.MOD: w16's 386 Enhanced-mode DOS application support
-# (winoa386/, ARCHITECTURE.md 12.11): module WINOLDAP, imports GRABBER ----
-WOA3_OBJS := $(B)/shell/start.o $(B)/winoa386/winoa386.o $(B)/winoa386/woa386s.o
+# (winoa386/, ARCHITECTURE.md 12.11): module WINOLDAP, imports GRABBER;
+# the PIF reader is WINOLDAP's (winoldap/pifread.c) ----
+WOA3_OBJS := $(B)/shell/start.o $(B)/winoa386/winoa386.o $(B)/winoldap/pifread.o $(B)/winoa386/woa386s.o
 dos: $(DOS)/WINOA386.MOD
-$(B)/winoa386/winoa386.o: winoa386/winoa386.c winoa386/winoa386.h drivers/grabber/vga3gr/grab.h
+$(B)/winoa386/winoa386.o: winoa386/winoa386.c winoa386/winoa386.h winoldap/pifread.h drivers/grabber/vga3gr/grab.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/winoa386/woa386s.o: winoa386/woa386s.asm

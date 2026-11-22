@@ -68,7 +68,14 @@ struct shvm {
     char title[32];                     /* function 3's block +2Eh: the window's title */
     u32 hwnd;                           /* function 15h */
     u32 cb_sel, cb_off;                 /* function 9: its event procedure */
+    int pif_excl;                       /* the block's +00h bit 01h: Exclusive */
 };
+
+/* the PIF's Exclusive holds while the VM is full screen (sh_mode) */
+static void sh_mode(struct shvm *s)
+{
+    s->vm->exclusive = s->pif_excl && !(s->flags & SHELL_WINDOWED);
+}
 static struct shvm *shvms;
 static int last_fault;                  /* the last event posted was a fault's (41Bh) */
 static u32 next_sel, next_off;          /* function 9's procedure, for the next VM */
@@ -291,7 +298,10 @@ static void set_focus(struct vm *v, u32 edi)
     vm_set_focus(v);
     if (v != &sysvm) resume_vm(v);
     else if (old != &sysvm && (s = sh_of(old)) != NULL && !(s->flags & SHELL_WINDOWED))
-        suspend_vm(old);                /* a full-screen VM in the background: stopped */
+        suspend_vm(old);                /* a full-screen VM in the background: stopped
+                                         * (also with its PIF's Background: its video
+                                         * memory is the VGA's, not RAM, while it is
+                                         * full screen; left to do) */
 }
 
 /* the 48-bit pointer at p (offset, selector) as a linear address, in
@@ -351,7 +361,18 @@ static void create(struct cregs *r)
     shvms = s;
     v->prio_fg = *(u16 *)(b + 0x1E) ? *(u16 *)(b + 0x1E) : 100;
     v->prio_bg = *(u16 *)(b + 0x20) ? *(u16 *)(b + 0x20) : 50;
+    /* the rest of the PIF (WINOA386's block as Windows 3.1's fills it,
+     * tests/pifread.sh): +00h bit 01h Exclusive, 02h Background, +1Ah KB
+     * Desired (the VM's conventional memory, vm_set_memory); Background
+     * is kept (v->background) but not acted on yet (set_focus). UNVERIFIED
+     * and not acted on: +01h-+03h (idle time, HMA, locked memory, fast
+     * paste, the reserved keys; +03h 40h close on exit is WINOA386's),
+     * +04h the video settings, +1Ch KB Required, +22h-+28h EMS and XMS */
+    s->pif_excl = (b[0] & 1) != 0;
+    v->background = (b[0] & 2) != 0;
+    sh_mode(s);
     vm_set_program(v, prog, tail, dir);
+    vm_set_memory(v, *(u16 *)(b + 0x1A));
     if (is_command(prog)) put_banner(v);
     if (vxd_send(CREATE_VM, v, 0, (u32)b, r->edi)) {
         struct shvm **pp;
@@ -510,6 +531,7 @@ void shell_api(struct cregs *r)
             s->flags = AX(r);
             if ((old ^ s->flags) & SHELL_WINDOWED)
                 vdd_window(s->vm, (s->flags & SHELL_WINDOWED) != 0);
+            sh_mode(s);
         }
         return;
     case 0x07:                          /* the block's status word */
