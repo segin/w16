@@ -1,0 +1,9 @@
+; PH07: Help > Contents in 386 Enhanced mode (tests/pifhelp.sh)
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+mark 1
+cmd 65535
+wait 1500
+close
+wait 2000

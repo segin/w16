@@ -28,6 +28,10 @@ is newer. Neither mode needs anything of Microsoft's.
                           REGEDITV.HLP); [w16] RegeditNewStyle=1 in
                           SYSTEM.INI gives it a Windows 95-like Registry
                           Editor view (View > New Style switches)
+  PIFEDIT.EXE             the PIF Editor: program information files
+                          (.PIF) for DOS programs, their Standard and
+                          386 Enhanced mode settings (its help is
+                          PIFEDIT.HLP)
   WINHELP.EXE             Help: shows Windows 3.x .HLP files, and the
                           topics programs ask for (their Help menus and
                           F1). The help files themselves are not part of
@@ -145,6 +149,13 @@ is newer. Neither mode needs anything of Microsoft's.
   SYSTEM\VGAFIX.FON       Fixedsys font
   SYSTEM\VGAOEM.FON       Terminal font
   SYSTEM\SSERIFE.FON      MS Sans Serif font
+  SYSTEM\COURE.FON        Courier font
+  SYSTEM\SERIFE.FON       MS Serif font
+  SYSTEM\SMALLE.FON       Small Fonts (and MS Serif 6 and 7 point)
+  SYSTEM\SYMBOLE.FON      Symbol font
+  SYSTEM\DOSAPP.FON       Terminal sizes for DOS windows
+  SYSTEM\EGA80WOA.FON, EGA40WOA.FON, CGA80WOA.FON, CGA40WOA.FON
+                          the grabber's fonts for DOS windows
   SYSTEM.INI, WIN.INI     w16's default settings (only w16's drivers,
                           fonts and programs)
   CONTROL.INI             Control Panel's colour schemes (w16 Default
@@ -152,7 +163,8 @@ is newer. Neither mode needs anything of Microsoft's.
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (DOS Prompt, Read Me, Control
-                            Panel, File Manager, Registry Editor)
+                            Panel, File Manager, Registry Editor, PIF
+                            Editor)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)
@@ -182,7 +194,9 @@ SYSTEM subdirectory, as there) without overwriting the files above:
   Windows directory:      MORICONS.DLL (Program Manager's extra icons)
   SYSTEM:                 the sound and MCI drivers (*.DRV named in
                           SYSTEM.INI [drivers] and [mci]),
-                          the other fonts (*.FON, *.FOT, *.TTF),
+                          the TrueType fonts (*.FOT, *.TTF) and the
+                          plotter fonts (ROMAN.FON, SCRIPT.FON,
+                          MODERN.FON),
                           DRIVERS.CPL and SND.CPL (Control Panel's
                           Drivers and Sound)
 
@@ -248,5 +262,4 @@ HIMEM.SYS (or another XMS driver) must be loaded. 386 Enhanced mode
 devices it loads are named in SYSTEM.INI's [386Enh] section, and its
 DOS programs run through SYSTEM\WINOA386.MOD. A window of a DOS program
 uses the fonts EGA80WOA.FON, EGA40WOA.FON, CGA80WOA.FON and CGA40WOA.FON
-when they are in SYSTEM (w16 has none of its own yet: you may copy them
-from your Windows 3.1), else the OEM font.
+(w16's own, in SYSTEM), else the OEM font.

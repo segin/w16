@@ -1,0 +1,57 @@
+; PF09: the prompts: Save current changes? at New, Open and Exit; Save As
+; over an existing file (Q1.PIF compared)
+; get: Q1.PIF
+run PIFEDIT.EXE
+wait 3000
+alt t
+wait 200
+type X
+wait 200
+cmd 12
+wait 1200
+wait 300
+snap C:\N1.BMP
+key 1B
+wait 800
+cmd 10
+wait 1200
+wait 300
+snap C:\N2.BMP
+alt n
+wait 1500
+wait 300
+snap C:\N3.BMP
+key 1B
+wait 800
+cmd 15
+wait 1200
+wait 300
+snap C:\N4.BMP
+alt y
+wait 1500
+wait 300
+snap C:\N5.BMP
+key 1B
+wait 800
+alt p
+wait 200
+type A.EXE
+wait 200
+cmd 13
+wait 1200
+type C:\Q1.PIF
+key 0D
+wait 1500
+wait 300
+snap C:\N6.BMP
+cmd 13
+wait 1200
+type C:\Q1.PIF
+key 0D
+wait 1500
+wait 300
+snap C:\N7.BMP
+alt y
+wait 1500
+close
+wait 1500

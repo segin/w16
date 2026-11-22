@@ -120,6 +120,12 @@ CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
 `tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
 in `WIN /3`, `en*w` with w16's WIN386 as well),
 `tests/rescenarios.sh` and `tests/rehelp.sh` (w16's Registration Info Editor against Microsoft's: screens, REG.DAT, WIN.INI and saved .REG files; its New Style scenarios NS* against w16's approved screens in `tests/scripts/regedit/ns-ref/`, `RE_NSREF=update` to approve; `tests/regobs.sh` for observing the original, `REGOBS_TRACE=1` logging its SHELL calls through XHELL.DLL),
+`tests/pifscenarios.sh` and `tests/pifhelp.sh` (w16's PIF Editor against
+Microsoft's: screens within `tests/scripts/pifedit.baseline`, every saved
+.PIF and WIN.INI byte for byte, `PIF_BASELINE=update` to rewrite; the
+WinHelp requests; `tests/pifobs.sh` for observing the original, `; mode:
+/3` for 386 Enhanced mode, `; var:` for variants of the reference
+install's PIFs made at test time),
 `tests/whscenarios.sh` (w16's Windows Help against Microsoft's over the
 reference install's own .HLP files: screens within
 `tests/scripts/winhelp.baseline`, WIN.INI and WINHELP.BMK byte for byte,
@@ -272,7 +278,12 @@ case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
 see the case in `tests/boottest.sh`). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
-service results it saw (ARCHITECTURE.md 12.7).
+service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
+are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
+`tests/refrun.sh VX11.EXE /3`, under w16's WIN386 with
+`REFRUN_FILES=build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE`); the
+boot-test case `win386audit` compares it with Windows 3.1's
+(docs/notes/win386-audit-triage.md).
 
 ## 5. Running on a remote host
 

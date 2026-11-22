@@ -56,6 +56,7 @@ _vxd_call_proc:
         mov esi, [ebp+4]
         mov edi, [ebp+0]
         push dword [ebp+32]
+        and dword [esp], ~600h          ; the VMM's own IF (0) and DF (0)
         popfd
         mov ebp, [ebp+8]
         call [esp]
@@ -70,6 +71,7 @@ _vxd_call_proc:
         pop dword [ebp+8]
         pushfd
         pop dword [ebp+32]
+        cld                             ; whatever the callee left
         pop ebp
         pop edi
         pop esi

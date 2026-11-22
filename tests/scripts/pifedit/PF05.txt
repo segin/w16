@@ -1,0 +1,115 @@
+; PF05: Standard mode: every setting, saved in steps (S1..S6.PIF compared)
+; get: S1.PIF
+; get: S2.PIF
+; get: S3.PIF
+; get: S4.PIF
+; get: S5.PIF
+; get: S6.PIF
+run PIFEDIT.EXE
+wait 3000
+alt p
+wait 200
+type a.exe
+wait 200
+cmd 13
+wait 1200
+type C:\S1.PIF
+key 0D
+wait 1500
+alt t
+wait 200
+type Title
+wait 200
+alt o
+wait 200
+type some params
+wait 200
+alt s
+wait 200
+type c:\dos
+wait 200
+click 250 201
+wait 300
+cmd 13
+wait 1200
+type C:\S2.PIF
+key 0D
+wait 1500
+alt r
+wait 200
+type 200
+wait 200
+alt q
+wait 200
+type 10
+wait 200
+alt i
+wait 200
+type 20
+wait 200
+click 184 272
+wait 300
+click 184 292
+wait 300
+cmd 13
+wait 1200
+type C:\S3.PIF
+key 0D
+wait 1500
+click 269 272
+wait 300
+click 269 292
+wait 300
+click 355 272
+wait 300
+click 37 311
+wait 300
+click 240 311
+wait 300
+cmd 13
+wait 1200
+type C:\S4.PIF
+key 0D
+wait 1500
+click 37 331
+wait 300
+click 240 331
+wait 300
+click 184 352
+wait 300
+click 184 371
+wait 300
+click 269 352
+wait 300
+cmd 13
+wait 1200
+type C:\S5.PIF
+key 0D
+wait 1500
+click 269 371
+wait 300
+click 355 352
+wait 300
+alt o
+wait 200
+type x
+wait 200
+alt t
+wait 200
+type ab
+wait 200
+click 184 201
+wait 300
+alt r
+wait 200
+type -1
+wait 200
+cmd 13
+wait 1200
+type C:\S6.PIF
+key 0D
+wait 1500
+wait 300
+snap C:\X1.BMP
+close
+wait 1500

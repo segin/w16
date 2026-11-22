@@ -40,3 +40,4 @@ REBOOT_DDB:
         VXDCALL _vmm_save_client_state, 1, 8Dh
         VXDCALL _vmm_restore_client_state, 1, 8Eh
         VXDCALL _vmm_get_sys_vm, 1, 03h
+        VXDCALL _vmm_get_cur_vm, 1, 01h

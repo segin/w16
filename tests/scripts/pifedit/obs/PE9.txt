@@ -1,0 +1,91 @@
+; PE9: Standard mode: opening PIFs written by others (Setup's DOSPRMPT.PIF, a
+; Windows/386 2.x PIF with no extension, a file that is no PIF) and saving them
+; again unchanged; shortening a field
+; put: .tools/ref/w386/src/PIF/123.PIF=OLD.PIF
+; put: .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF=DP.PIF
+; put: .tools/ref/win31/cdrive/WINDOWS/_DEFAULT.PIF=DF.PIF
+; get: OLD.PIF
+; get: DP.PIF
+; get: DF.PIF
+; get: SH.PIF
+; get: LC.PIF
+run PIFEDIT.EXE
+wait 3000
+cmd 10
+wait 1500
+type C:\DP.PIF
+key 0D
+wait 1500
+snap C:\O1.BMP
+dump
+cmd 11
+wait 1500
+snap C:\O1S.BMP
+dump
+key 0D
+wait 1000
+cmd 10
+wait 1500
+type C:\OLD.PIF
+key 0D
+wait 1500
+snap C:\O2.BMP
+dump
+cmd 11
+wait 1500
+snap C:\O2S.BMP
+dump
+key 0D
+wait 1000
+cmd 10
+wait 1500
+type C:\DF.PIF
+key 0D
+wait 1500
+snap C:\O3.BMP
+dump
+cmd 11
+wait 1500
+snap C:\O3S.BMP
+dump
+key 0D
+wait 1000
+cmd 10
+wait 1500
+type C:\WINDOWS\WIN.INI
+key 0D
+wait 1500
+snap C:\O4.BMP
+dump
+key 0D
+wait 1000
+snap C:\O4B.BMP
+dump
+cmd 12
+wait 1000
+alt p
+type C:\LONGDIR\LONGNAME.EXE
+alt t
+type A long window title here
+alt s
+type C:\SOME\DIR
+cmd 13
+wait 1200
+type C:\SH.PIF
+key 0D
+wait 1500
+alt p
+type x.exe
+alt t
+type ab
+alt s
+type c:\
+snap C:\O5.BMP
+cmd 13
+wait 1200
+type C:\LC.PIF
+key 0D
+wait 1500
+dump
+close
+wait 1500

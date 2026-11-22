@@ -1,0 +1,394 @@
+# skeleton.txt - w16's stroke designs for its second raster font set
+# (Courier, MS Serif, Small Fonts, Symbol, the DOS-box Terminal sizes).
+# Original design for w16 (public domain, CC0 1.0). tools/fontgen.py
+# rasterises each design into every size's cells (ARCHITECTURE.md 6.9).
+#
+# One character per line:   U+XXXX[/style] FRAME  COMMAND; COMMAND; ...
+#   style   a variant for one style only: serif (MS Serif, Symbol), slab
+#           (Courier), sans (Small Fonts, Terminal)
+#   FRAME   what plain numbers in y mean: c fractions of the cap height,
+#           x of the x-height, f the whole cell (0 bottom row, 1 top row),
+#           n an accent's own box (fontgen places it)
+# Coordinates: x 0..1 across the glyph's ink box (beyond it is clipped);
+# y a number in the frame (0 baseline, 1 the frame's top; negative:
+# fractions of the descender), or an anchor B (baseline), X (x-height),
+# C (cap height), A (ascender), D (descender), or c.5 x.5 a.5 d.5 (a
+# fraction of that height), with ^N / _N for N pixels up / down (X^2).
+# Commands:
+#   L x y x y ...           a polyline
+#   E x0 y0 x1 y1 [a0 a1]   an elliptical arc in a box, degrees counter-
+#                           clockwise from 3 o'clock (default: all of it)
+#   D x y                   a dot (its bottom row at y)
+#   F x0 y0 x1 y1           a filled rectangle; G (same) a filled ellipse
+#   P x y x y ...           a filled polygon
+#   K                       erase instead of drawing from here on
+#   S x y [l|r|lr]          a horizontal serif at a stroke's end (not in
+#                           the sans style); T x y [u|d] a vertical one
+#   g U+XXXX x0 y0 x1 y1    another design drawn small in that box
+#   R U+XXXX                another design drawn whole (then more strokes)
+
+# ---- space and ASCII punctuation
+U+0020 c
+U+0021 c  L .5 C .5 .3; D .5 B
+U+0022 c  L .2 C .2 .7; L .8 C .8 .7
+U+0023 c  L .3 .95 .3 .05; L .7 .95 .7 .05; L 0 .7 1 .7; L 0 .3 1 .3
+U+0024 c  E .05 .5 .95 .92 20 270; E 0 .08 1 .52 90 -160; L .5 1.06 .5 -.25
+U+0025 c  E 0 .62 .42 C; E .58 B 1 .38; L 1 C 0 B
+U+0026 c  E .1 .6 .7 C; L .25 .62 1 B; E 0 B .8 .62 110 330; L .74 .16 .95 .42
+U+0027 c  L .5 C .5 .7
+U+0028 c  E 0 -.3 2.2 1.06 110 250
+U+0029 c  E -1.2 -.3 1 1.06 -70 70
+U+002A c  L .5 C .5 .45; L .05 .88 .95 .57; L .05 .57 .95 .88
+U+002B c  L .5 .8 .5 .1; L 0 .45 1 .45
+U+002C c  D .5 B; L .5 B .15 -.55
+U+002D x  L 0 .5 1 .5
+U+002E c  D .5 B
+U+002F c  L 1 1.02 0 -.2
+U+0030 c  E 0 B 1 C
+U+0031 c  L .2 .78 .55 C .55 B; S .55 B
+U+0031/slab c  L .2 .78 .5 C .5 B; L .1 B .9 B
+U+0032 c  E 0 .42 1 C -35 165; L .9 .52 0 B 1 B
+U+0033 c  E 0 .5 .95 C 150 -90; E 0 B 1 .52 90 -150
+U+0034 c  L .72 B .72 C 0 .3 1 .3; S .72 B
+U+0035 c  L .95 C .08 C .05 .56; E 0 B 1 .64 145 -150
+U+0036 c  E 0 B 1 .62; E 0 B 1 C 50 180; L 0 .5 0 .31
+U+0037 c  L 0 C 1 C .3 B; T 0 C d
+U+0038 c  E .06 .52 .94 C; E 0 B 1 .54
+U+0039 c  E 0 .38 1 C; E 0 B 1 C -130 0; L 1 .5 1 .69
+U+003A x  D .5 .85; D .5 B
+U+003B x  D .5 .85; D .5 B; L .5 B .15 -.55
+U+003C c  L .9 .82 .1 .45 .9 .08
+U+003D c  L 0 .6 1 .6; L 0 .3 1 .3
+U+003E c  L .1 .82 .9 .45 .1 .08
+U+003F c  E 0 .45 1 C 160 -55; L .75 .53 .5 .38 .5 .25; D .5 B
+U+0040 c  E 0 -.15 1 C 0 330; E .28 .18 .72 .66; L .72 .66 .72 .25 .95 .2
+U+005B c  L .9 1.06 .3 1.06 .3 -.3 .9 -.3
+U+005C c  L 0 1.02 1 -.2
+U+005D c  L .1 1.06 .7 1.06 .7 -.3 .1 -.3
+U+005E c  L 0 .6 .5 C 1 .6
+U+005F c  L 0 D 1 D
+U+0060 c  L .3 C .7 .8
+U+007B c  L .9 1.06 .5 .95 .5 .56 .15 .42 .5 .28 .5 -.2 .9 -.3
+U+007C c  L .5 1.06 .5 -.3
+U+007D c  L .1 1.06 .5 .95 .5 .56 .85 .42 .5 .28 .5 -.2 .1 -.3
+U+007E x  L 0 .4 .3 .7 .7 .4 1 .7
+
+# ---- capitals
+U+0041 c  L 0 B .5 C 1 B; L .2 .36 .8 .36; S 0 B; S 1 B
+U+0042 c  L 0 B 0 C .5 C; E .1 .55 .9 C -90 90; L 0 .55 .55 .55; E .1 B 1 .55 -90 90; L 0 B .55 B; S 0 C l; S 0 B l
+U+0043 c  E 0 B 1 C 40 320; T .94 .78 d
+U+0044 c  L 0 B 0 C .4 C; E -.2 B 1 C -90 90; L 0 B .4 B; S 0 C l; S 0 B l
+U+0045 c  L 1 C 0 C 0 B 1 B; L 0 .52 .75 .52; T 1 C d; T 1 B u; S 0 C l; S 0 B l
+U+0046 c  L 1 C 0 C 0 B; L 0 .52 .75 .52; T 1 C d; S 0 C l; S 0 B
+U+0047 c  E 0 B 1 C 40 360; L .55 .48 1 .48; T .94 .78 d
+U+0048 c  L 0 B 0 C; L 1 B 1 C; L 0 .52 1 .52; S 0 B; S 0 C; S 1 B; S 1 C
+U+0049 c  L .5 B .5 C; S .5 B; S .5 C
+U+0049/slab c  L .5 B .5 C; L .15 C .85 C; L .15 B .85 B
+U+004A c  L .8 C .8 .3; E 0 B .8 .55 180 360; S .8 C
+U+004A/slab c  L .75 C .75 .3; E 0 B .75 .55 180 360; L .4 C 1 C
+U+004B c  L 0 B 0 C; L 1 C 0 .38; L .3 .56 1 B; S 0 B; S 0 C; S 1 C; S 1 B
+U+004C c  L 0 C 0 B 1 B; S 0 C; T 1 B u; S 0 B l
+U+004D c  L 0 B 0 C .5 .3 1 C 1 B; S 0 B; S 1 B; S 0 C l; S 1 C r
+U+004E c  L 0 B 0 C 1 B 1 C; S 0 B; S 0 C l; S 1 C
+U+004F c  E 0 B 1 C
+U+0050 c  L 0 B 0 C .5 C; E .05 .45 1 C -90 90; L 0 .45 .52 .45; S 0 B; S 0 C l
+U+0051 c  E 0 B 1 C; L .55 .25 .95 -.45
+U+0052 c  L 0 B 0 C .5 C; E .05 .48 1 C -90 90; L 0 .48 .52 .48; L .45 .48 1 B; S 0 B; S 0 C l; S 1 B r
+U+0053 c  E .03 .5 .97 C 20 270; E 0 B 1 .53 90 -160
+U+0054 c  L 0 C 1 C; L .5 C .5 B; S .5 B; T 0 C d; T 1 C d
+U+0055 c  L 0 C 0 .35; E 0 B 1 .7 180 360; L 1 .35 1 C; S 0 C; S 1 C
+U+0056 c  L 0 C .5 B 1 C; S 0 C; S 1 C
+U+0057 c  L 0 C .25 B .5 .65 .75 B 1 C; S 0 C; S 1 C
+U+0058 c  L 0 C 1 B; L 1 C 0 B; S 0 C; S 1 C; S 0 B; S 1 B
+U+0059 c  L 0 C .5 .48 1 C; L .5 .48 .5 B; S .5 B; S 0 C; S 1 C
+U+005A c  L 0 C 1 C 0 B 1 B; T 0 C d; T 1 B u
+
+# ---- small letters
+U+0061 x  L .92 B .92 .72; E .05 .45 .92 1 0 160; E 0 B .92 .58 90 270; L .46 .58 .92 .58; L .46 B .92 B; S .92 B r
+U+0062 x  L 0 A 0 B; E 0 B 1 X; S 0 A l
+U+0063 x  E 0 B 1 X 40 320
+U+0064 x  L 1 A 1 B; E 0 B 1 X; S 1 A l; S 1 B r
+U+0065 x  E 0 B 1 X 0 320; L 0 .5 1 .5
+U+0066 x  L .35 B .35 a.85; E .35 a.7 1.05 A 40 180; L 0 X .8 X; S .35 B
+U+0066/slab x  L .35 B .35 a.85; E .35 a.7 1.05 A 40 180; L 0 X .8 X; L .05 B .75 B
+U+0067 x  E 0 B .92 X; L .92 X .92 -.5; E .05 D .92 0 210 360; S .92 X r
+U+0068 x  L 0 A 0 B; E 0 .3 1 X 0 180; L 1 .65 1 B; S 0 A l; S 0 B; S 1 B
+U+0069 x  L .5 B .5 X; D .5 X^2; S .5 B; S .5 X l
+U+0069/slab x  L .5 B .5 X .2 X; L .1 B .9 B; D .5 X^2
+U+006A x  L .65 X .65 -.7 .35 D 0 -.75; D .65 X^2; S .65 X l
+U+006A/slab x  L .7 X .7 -.7 .4 D .05 -.7; L .3 X .7 X; D .7 X^2
+U+006B x  L 0 A 0 B; L .9 X 0 .35; L .3 .55 1 B; S 0 A l; S 0 B; S .9 X r; S 1 B r
+U+006C x  L .5 A .5 B; S .5 A l; S .5 B
+U+006C/slab x  L .5 A .5 B; L .2 A .5 A; L .1 B .9 B
+U+006D x  L 0 X 0 B; E 0 .3 .5 X 0 180; L .5 .65 .5 B; E .5 .3 1 X 0 180; L 1 .65 1 B; S 0 X l; S 0 B; S .5 B; S 1 B
+U+006E x  L 0 X 0 B; E 0 .3 1 X 0 180; L 1 .65 1 B; S 0 X l; S 0 B; S 1 B
+U+006F x  E 0 B 1 X
+U+0070 x  L 0 X 0 D; E 0 B 1 X; S 0 D; S 0 X l
+U+0071 x  L 1 X 1 D; E 0 B 1 X; S 1 D
+U+0072 x  L 0 X 0 B; E 0 .25 1.1 X 40 180; S 0 X l; S 0 B
+U+0072/slab x  L 0 X 0 B; E 0 .25 1.1 X 40 180; L 0 X^0 0 X; L 0 B .7 B; S 0 X l
+U+0073 x  E .05 .5 .95 X 20 270; E 0 B 1 .53 90 -160
+U+0074 x  L .35 a.85 .35 .2; E .35 B 1 .4 180 300; L 0 X .85 X
+U+0075 x  L 0 X 0 .35; E 0 B 1 .7 180 360; L 1 X 1 B; S 0 X l; S 1 X l; S 1 B r
+U+0076 x  L 0 X .5 B 1 X; S 0 X; S 1 X
+U+0077 x  L 0 X .25 B .5 .7 .75 B 1 X; S 0 X; S 1 X
+U+0078 x  L 0 X 1 B; L 1 X 0 B; S 0 X; S 1 X; S 0 B; S 1 B
+U+0079 x  L 0 X .55 B; L 1 X .3 -.6 .1 D; S 0 X; S 1 X
+U+007A x  L 0 X 1 X 0 B 1 B; T 0 X d; T 1 B u
+U+0131 x  L .5 B .5 X; S .5 B; S .5 X l
+U+0131/slab x  L .5 B .5 X .2 X; L .1 B .9 B
+
+# ---- accents (fontgen puts them above or below a letter; frame n is
+# the accent's own box)
+U+0300 n  L .1 C .9 B
+U+0301 n  L .9 C .1 B
+U+0302 n  L 0 B .5 C 1 B
+U+0303 n  L 0 B .33 C .67 B 1 C
+U+0308 n  D 0 B; D 1 B
+U+030A n  E .1 B .9 C
+U+030C n  L 0 C .5 B 1 C
+U+0327 n  L .5 C .5 .5 1 .25 .4 B
+
+# ---- Latin-1
+U+00A0 c
+U+00A1 x  D .5 X; L .5 .6 .5 D
+U+00A2 x  E 0 B 1 X 40 320; L .55 1.25 .55 -.25
+U+00A3 c  L 1 B 0 B .25 .2 .25 .66; E .25 .4 1 C 20 180; L 0 .5 .7 .5
+U+00A4 c  E .15 .2 .85 .8; L 0 .05 .15 .2; L 1 .05 .85 .2; L 0 .95 .15 .8; L 1 .95 .85 .8
+U+00A5 c  L 0 C .5 .5 1 C; L .5 .5 .5 B; L .1 .42 .9 .42; L .1 .22 .9 .22
+U+00A6 c  L .5 1.06 .5 .58; L .5 .32 .5 -.3
+U+00A7 c  E .1 .45 .9 1.05 30 210; E .1 .15 .9 .75; E .1 -.1 .9 .5 -150 30
+U+00A8 x  D .2 X^2; D .8 X^2
+U+00A9 c  E 0 B 1 C; E .27 .25 .73 .75 40 320
+U+00AA c  g U+0061 .1 .45 .9 C; L .1 .32 .9 .32
+U+00AB x  L .45 .85 .05 .5 .45 .15; L .95 .85 .55 .5 .95 .15
+U+00AC x  L 0 .62 1 .62 1 .22
+U+00AD x  L 0 .5 1 .5
+U+00AE c  E 0 B 1 C; L .35 .22 .35 .78 .6 .78 .68 .64 .6 .5 .35 .5; L .52 .5 .68 .22
+U+00AF c  L 0 C 1 C
+U+00B0 c  E .15 .58 .85 C
+U+00B1 c  L .5 .9 .5 .3; L 0 .6 1 .6; L 0 .08 1 .08
+U+00B2 c  g U+0032 .1 .45 .9 C
+U+00B3 c  g U+0033 .1 .45 .9 C
+U+00B4 c  L .3 .8 .7 C
+U+00B5 x  R U+0075; L 0 X 0 D
+U+00B6 c  G 0 .48 .55 C; L .5 C .95 C; L .5 C .5 -.3; L .85 C .85 -.3
+U+00B7 x  D .5 .55
+U+00B8 c  L .5 B .5 -.4 .9 -.6 .45 -1
+U+00B9 c  g U+0031 .2 .45 .8 C
+U+00BA c  g U+006F .15 .45 .85 C; L .1 .32 .9 .32
+U+00BB x  L .05 .85 .45 .5 .05 .15; L .55 .85 .95 .5 .55 .15
+U+00BC c  g U+0031 0 .55 .42 C; L .95 C .05 B; g U+0034 .58 B 1 .45
+U+00BD c  g U+0031 0 .55 .42 C; L .95 C .05 B; g U+0032 .58 B 1 .45
+U+00BE c  g U+0033 0 .55 .42 C; L .95 C .05 B; g U+0034 .58 B 1 .45
+U+00BF x  D .5 X; L .5 .65 .5 .4 .2 .25; E 0 D 1 .45 170 330
+U+00C6 c  L 0 B .45 C 1 C; L .45 C .45 B 1 B; L .2 .4 .45 .4; L .45 .52 .9 .52; S 0 B
+U+00D0 c  R U+0044; L -.15 .5 .4 .5
+U+00D7 x  L .1 .9 .9 .1; L .9 .9 .1 .1
+U+00D8 c  E 0 B 1 C; L 1 1.04 0 -.04
+U+00DE c  L 0 B 0 C; L 0 .8 .5 .8; E .05 .22 1 .8 -90 90; L 0 .22 .5 .22; S 0 B; S 0 C
+U+00DF x  L 0 B 0 a.8; E 0 a.55 .85 A 180 -90; E .25 B 1 a.55 90 -90; L .25 B .62 B
+U+00E6 x  E 0 B .52 .58 90 270; L .5 B .5 .8; E 0 .4 .5 1 0 160; E .45 B 1 X 0 320; L .5 .5 1 .5
+U+00F0 x  E 0 B 1 X; L 1 .5 1 .75 .35 A; L .3 a.85 .9 a.65
+U+00F7 x  L 0 .5 1 .5; D .5 .95; D .5 .05
+U+00F8 x  E 0 B 1 X; L 1 1.05 0 -.05
+U+00FE x  L 0 A 0 D; E 0 B 1 X; S 0 A l; S 0 D
+
+# ---- Windows (code page 1252) additions
+U+0152 c  L 1 C .45 C .45 B 1 B; L .45 .52 .9 .52; E 0 B .9 C 90 270
+U+0153 x  E 0 B .55 X; E .45 B 1 X 0 320; L .5 .5 1 .5
+U+0192 x  L .55 a.85 .45 -.8; E .55 a.7 1.1 A 50 180; E -.25 D .45 -.25 200 360; L .1 X .8 X
+U+02C6 c  L .15 .82 .5 C .85 .82
+U+02DC c  L 0 .85 .33 C .67 .85 1 C
+U+2013 x  L 0 .5 1 .5
+U+2014 x  L 0 .5 1 .5
+U+2018 c  L .65 C .35 .72
+U+2019 c  L .65 C .35 .72
+U+201A c  D .5 B; L .5 B .15 -.55
+U+201C c  L .4 C .1 .72; L .95 C .65 .72
+U+201D c  L .4 C .1 .72; L .95 C .65 .72
+U+201E c  L .3 B .05 -.55; L .9 B .65 -.55
+U+2020 c  L .5 C .5 -.3; L .1 .75 .9 .75
+U+2021 c  L .5 C .5 -.3; L .1 .75 .9 .75; L .1 .2 .9 .2
+U+2022 x  G .1 .2 .9 .8
+U+2026 c  D .1 B; D .5 B; D .9 B
+U+2030 c  E 0 .62 .3 C; L .75 C .1 B; E .35 B .62 .35; E .72 B 1 .35
+U+2039 x  L .9 .85 .1 .5 .9 .15
+U+203A x  L .1 .85 .9 .5 .1 .15
+U+2122 c  g U+0054 0 .5 .42 C; g U+004D .5 .5 1 C
+
+# ---- Greek
+U+0391 c  R U+0041
+U+0392 c  R U+0042
+U+0393 c  L 1 C 0 C 0 B; T 1 C d; S 0 B; S 0 C l
+U+0394 c  L 0 B .5 C 1 B 0 B
+U+0395 c  R U+0045
+U+0396 c  R U+005A
+U+0397 c  R U+0048
+U+0398 c  E 0 B 1 C; L .25 .5 .75 .5
+U+0399 c  R U+0049
+U+039A c  R U+004B
+U+039B c  L 0 B .5 C 1 B; S 0 B; S 1 B
+U+039C c  R U+004D
+U+039D c  R U+004E
+U+039E c  L 0 C 1 C; L .15 .52 .85 .52; L 0 B 1 B
+U+039F c  R U+004F
+U+03A0 c  L 0 B 0 C 1 C 1 B; S 0 B; S 1 B
+U+03A1 c  R U+0050
+U+03A3 c  L 1 C 0 C .5 .5 0 B 1 B; T 1 C d; T 1 B u
+U+03A4 c  R U+0054
+U+03A5 c  R U+0059
+U+03A6 c  E 0 .2 1 .8; L .5 C .5 B; S .5 C; S .5 B
+U+03A7 c  R U+0058
+U+03A8 c  L .5 C .5 B; L 0 C 0 .75; E 0 .4 1 1.1 180 360; L 1 .75 1 C; S .5 B
+U+03A9 c  E 0 .25 1 C -50 230; L .18 .34 .3 B 0 B; L .82 .34 .7 B 1 B
+U+03B1 x  E 0 B .75 X; L .7 .8 1 X; L .7 .2 1 B
+U+03B2 x  R U+00DF; L 0 B 0 D
+U+03B3 x  L 0 X .5 -.35 1 X; L .5 -.35 .5 D
+U+03B4 x  E 0 B 1 .75; L .55 .75 .15 a.85 .3 A .9 A
+U+03B5 x  E 0 B 1 X 40 320; L 0 .5 .7 .5
+U+03B6 x  L .2 A .9 A .1 .25 .35 B .8 B .7 D
+U+03B7 x  L 0 X 0 B; E 0 .3 1 X 0 180; L 1 .65 1 D
+U+03B8 x  E 0 B 1 A; L 0 a.5 1 a.5
+U+03B9 x  L .5 X .5 .15 .8 B
+U+03BA x  L 0 X 0 B; L .9 X 0 .4; L .3 .55 1 B
+U+03BB x  L 0 A .25 A 1 B; L .55 .62 0 B
+U+03BC x  R U+00B5
+U+03BD x  R U+0076
+U+03BE x  L .2 A .85 A; E .1 .55 .8 a.95 90 270; E 0 B .9 .6 90 270; L .45 B .8 -.5 .5 D
+U+03BF x  R U+006F
+U+03C0 x  L 0 X 1 X; L .25 X .25 B; L .75 X .75 B
+U+03C1 x  E 0 B 1 X; L 0 .5 0 D
+U+03C2 x  E 0 B 1 X 40 200; E 0 D .7 .2 -40 160
+U+03C3 x  E 0 B .8 X; L .4 X 1 X
+U+03C4 x  L 0 X 1 X; L .5 X .5 .15 .8 B
+U+03C5 x  L 0 X 0 .4; E 0 B 1 .8 180 360; L 1 .4 1 X
+U+03C6 x  E 0 B 1 X; L .5 .6 .5 D
+U+03C7 x  L 0 X 1 D; L 1 X 0 D
+U+03C8 x  L .5 A .5 D; L 0 X 0 .4; E 0 B 1 .8 180 360; L 1 .4 1 X
+U+03C9 x  L 0 X 0 .4; E 0 B .5 .8 180 360; E .5 B 1 .8 180 360; L 1 .4 1 X; L .5 .4 .5 .62
+U+03D1 x  E .2 .55 .8 A; L .2 .55 1 .55; L .25 .55 .25 .3; E .25 B 1 .6 180 300
+U+03D2 c  L 0 .88 .2 C .5 .48 .8 C 1 .88; L .5 .48 .5 B; S .5 B
+U+03D5 x  E 0 B 1 X; L .5 A .5 D
+U+03D6 x  L 0 X 1 X; E 0 B .5 .85 180 360; E .5 B 1 .85 180 360
+
+# ---- mathematics and arrows (Symbol, code page 437)
+U+2032 c  L .7 C .3 .65
+U+2033 c  L .45 C .15 .65; L .95 C .65 .65
+U+2044 c  L 1 C 0 B
+U+2190 x  L 0 .5 1 .5; L .35 .9 0 .5 .35 .1
+U+2191 c  L .5 C .5 B; L .1 .65 .5 C .9 .65
+U+2192 x  L 0 .5 1 .5; L .65 .9 1 .5 .65 .1
+U+2193 c  L .5 C .5 B; L .1 .35 .5 B .9 .35
+U+2194 x  L 0 .5 1 .5; L .25 .9 0 .5 .25 .1; L .75 .9 1 .5 .75 .1
+U+2195 c  L .5 C .5 B; L .1 .75 .5 C .9 .75; L .1 .25 .5 B .9 .25
+U+21A8 c  L .5 C .5 .1; L .1 .75 .5 C .9 .75; L .1 .38 .5 .1 .9 .38; L 0 D 1 D
+U+21B5 c  L 1 C 1 .3 0 .3; L .3 .55 0 .3 .3 .05
+U+21D0 x  L .25 .75 1 .75; L .25 .25 1 .25; L .45 1.05 0 .5 .45 -.05
+U+21D1 c  L .3 .62 .3 B; L .7 .62 .7 B; L 0 .55 .5 C 1 .55
+U+21D2 x  L 0 .75 .75 .75; L 0 .25 .75 .25; L .55 1.05 1 .5 .55 -.05
+U+21D3 c  L .3 C .3 .38; L .7 C .7 .38; L 0 .45 .5 B 1 .45
+U+21D4 x  L .2 .75 .8 .75; L .2 .25 .8 .25; L .35 1.05 0 .5 .35 -.05; L .65 1.05 1 .5 .65 -.05
+U+2111 c  L .1 C .9 C; L .5 C .5 B; L .1 B .9 B; L .1 .9 .1 C
+U+211C c  R U+0052; L 0 C 0 .9
+U+2118 x  E 0 B 1 X; L .2 X .2 D; L 0 .9 .2 X
+U+2135 c  L 0 C 1 B; L 1 C .7 .55; L .3 .45 0 B
+U+2200 c  L 0 C .5 B 1 C; L .2 .6 .8 .6
+U+2202 c  E 0 B 1 .62; E 0 .2 1 C -10 150
+U+2203 c  L 0 C 1 C 1 B 0 B; L .3 .5 1 .5
+U+2205 c  E 0 B 1 C; L 1 1.04 0 -.04
+U+2207 c  L 0 C 1 C .5 B 0 C
+U+2208 x  L 1 X .5 X; E 0 B 1 X 90 270; L 1 B .5 B; L 0 .5 1 .5
+U+2209 x  R U+2208; L .85 1.15 .15 -.2
+U+220B x  L 0 X .5 X; E 0 B 1 X -90 90; L 0 B .5 B; L 0 .5 1 .5
+U+220F c  L 0 C 1 C; L .15 C .15 -.4; L .85 C .85 -.4; S .15 -.4; S .85 -.4
+U+2211 c  L 1 C 0 C .55 .38 0 -.3 1 -.3; T 1 C d; T 1 -.3 u
+U+2212 x  L 0 .5 1 .5
+U+2217 x  L .5 .95 .5 .05; L .08 .75 .92 .25; L .08 .25 .92 .75
+U+2219 x  D .5 .6
+U+221A c  L 0 .42 .2 .52 .45 B .8 C 1 C
+U+221D x  E 0 .1 .6 .9 40 320; L .6 .8 1 .9; L .6 .2 1 .1
+U+221E x  E 0 .15 .55 .85; E .45 .15 1 .85
+U+221F x  L 0 .9 0 .2 1 .2
+U+2220 x  L 1 X 0 B 1 B
+U+2227 x  L 0 B .5 X 1 B
+U+2228 x  L 0 X .5 B 1 X
+U+2229 x  E 0 .1 1 X 0 180; L 0 .55 0 B; L 1 .55 1 B
+U+222A x  L 0 X 0 .45; E 0 B 1 .9 180 360; L 1 .45 1 X
+U+222B c  E .5 .78 1.1 1.05 40 180; L .5 .92 .5 -.15; E -.1 -.45 .5 0 220 360
+U+2234 x  D .5 X; D .1 B; D .9 B
+U+223C x  L 0 .4 .3 .7 .7 .4 1 .7
+U+2245 c  L 0 .45 1 .45; L 0 .15 1 .15; L 0 .7 .3 .95 .7 .7 1 .95
+U+2248 x  L 0 .6 .3 .9 .7 .6 1 .9; L 0 .1 .3 .4 .7 .1 1 .4
+U+2260 x  L 0 .7 1 .7; L 0 .3 1 .3; L .8 1.05 .2 -.05
+U+2261 x  L 0 .9 1 .9; L 0 .5 1 .5; L 0 .1 1 .1
+U+2264 c  L .9 .85 .1 .55 .9 .25; L .1 .05 .9 .05
+U+2265 c  L .1 .85 .9 .55 .1 .25; L .1 .05 .9 .05
+U+2282 x  L 1 X .5 X; E 0 B 1 X 90 270; L 1 B .5 B
+U+2283 x  L 0 X .5 X; E 0 B 1 X -90 90; L 0 B .5 B
+U+2284 x  R U+2282; L .85 1.15 .15 -.2
+U+2286 x  L 1 X .5 X; E 0 .3 1 X 90 270; L 1 .3 .5 .3; L 0 B 1 B
+U+2287 x  L 0 X .5 X; E 0 .3 1 X -90 90; L 0 .3 .5 .3; L 0 B 1 B
+U+2295 c  E 0 .05 1 .85; L .5 .05 .5 .85; L 0 .45 1 .45
+U+2297 c  E 0 .05 1 .85; L .15 .2 .85 .7; L .15 .7 .85 .2
+U+22A5 c  L .5 C .5 B; L 0 B 1 B
+U+22C5 x  D .5 .6
+U+2302 c  L 0 B 0 .5 .5 .95 1 .5 1 B 0 B
+U+2310 x  L 0 .2 0 .6 1 .6
+U+2320 f  L .45 0 .45 .85; E .45 .7 .95 1 30 180
+U+2321 f  L .55 1 .55 .15; E .05 0 .55 .3 210 360
+U+2329 c  L .9 1.06 .1 .38 .9 -.3
+U+232A c  L .1 1.06 .9 .38 .1 -.3
+U+20A7 c  g U+0050 0 B .55 C 1; g U+0074 .5 B 1 .85 1
+U+207F c  g U+006E .1 .5 .9 C
+U+25A0 x  F .1 .1 .9 .9
+U+25AC x  F 0 B 1 .45
+U+25B2 c  P 0 B .5 C 1 B
+U+25BA c  P 0 C 1 .5 0 B
+U+25BC c  P 0 C .5 B 1 C
+U+25C4 c  P 1 C 0 .5 1 B
+U+25CA c  L .5 C 1 .5 .5 B 0 .5 .5 C
+U+25CB c  E .1 .15 .9 .85
+U+25D8 f  F 0 0 1 1; K; G .25 .3 .75 .7
+U+25D9 f  F 0 0 1 1; K; E .1 .2 .9 .8
+U+263A c  E 0 B 1 C; D .3 .68; D .7 .68; E .22 .18 .78 .52 200 340
+U+263B c  G 0 B 1 C; K; D .3 .68; D .7 .68; E .22 .18 .78 .52 200 340
+U+263C c  E .25 .25 .75 .75; L .5 C .5 .85; L .5 B .5 .15; L 0 .5 .12 .5; L 1 .5 .88 .5; L .05 .95 .2 .8; L .95 .95 .8 .8; L .05 .05 .2 .2; L .95 .05 .8 .2
+U+2640 c  E .15 .45 .85 C; L .5 .45 .5 B; L .2 .2 .8 .2
+U+2642 c  E 0 B .65 .65; L .55 .55 1 C; L .55 C 1 C 1 .55
+U+2660 c  P 0 .48 .5 C 1 .48; G 0 .22 .55 .65; G .45 .22 1 .65; L .5 .45 .5 B; L .25 B .75 B
+U+2663 c  G .28 .55 .72 .98; G 0 .2 .45 .62; G .55 .2 1 .62; L .5 .45 .5 B; L .25 B .75 B
+U+2665 c  G 0 .45 .55 C; G .45 .45 1 C; P 0 .7 1 .7 .5 B
+U+2666 c  P .5 C 1 .5 .5 B 0 .5
+U+266A c  L .65 C .65 .25; G .05 B .65 .35; L .65 C 1 .8
+U+266B c  L .35 C .35 .25; L .95 C .95 .3; L .35 C .95 C; G 0 B .4 .32; G .55 B 1 .37
+U+203C c  L .25 C .25 .3; D .25 B; L .75 C .75 .3; D .75 B
+
+# ---- Symbol's private-use pieces (extenders, brackets, braces) and
+# its serif/sans copyright, registered and trade marks
+U+F8E5 f  L 0 1 1 1
+U+F8E6 f  L .5 0 .5 1
+U+F8E7 x  L 0 .5 1 .5
+U+F6D9 c  R U+00A9
+U+F6DA c  R U+00AE
+U+F6DB c  R U+2122
+U+F8EB f  E .3 -1 1.7 1 90 180
+U+F8EC f  L .3 0 .3 1
+U+F8ED f  E .3 0 1.7 2 180 270
+U+F8EE f  L .9 1 .35 1 .35 0
+U+F8EF f  L .35 0 .35 1
+U+F8F0 f  L .35 1 .35 0 .9 0
+U+F8F1 f  E .5 .6 1.5 1 90 180; L .5 .8 .5 0
+U+F8F2 f  L .5 1 .5 .65 .1 .5 .5 .35 .5 0
+U+F8F3 f  L .5 1 .5 .2; E .5 0 1.5 .4 180 270
+U+F8F4 f  L .5 0 .5 1
+U+F8F5 f  L .5 0 .5 1
+U+F8F6 f  E -.7 -1 .7 1 0 90
+U+F8F7 f  L .7 0 .7 1
+U+F8F8 f  E -.7 0 .7 2 270 360
+U+F8F9 f  L .1 1 .65 1 .65 0
+U+F8FA f  L .65 0 .65 1
+U+F8FB f  L .65 1 .65 0 .1 0
+U+F8FC f  E -.5 .6 .5 1 0 90; L .5 .8 .5 0
+U+F8FD f  L .5 1 .5 .65 .9 .5 .5 .35 .5 0
+U+F8FE f  L .5 1 .5 .2; E -.5 0 .5 .4 270 360

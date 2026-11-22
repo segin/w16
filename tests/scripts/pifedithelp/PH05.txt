@@ -1,0 +1,8 @@
+; PH05: Help > Advanced Options (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+mark 1
+cmd 36
+wait 1500
+close
+wait 2000

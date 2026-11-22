@@ -31,6 +31,12 @@ VPICD_DDB:
         ENTRY vpicd_io_entry, _vpicd_io
         ENTRY vpicd_tmo, _vpicd_time_out
 
+; the end of the VPICD_Call_When_Hw_Int chain: the last callback's jump
+; to its Next_Callback comes here, and this returns to VPICD
+global _vpicd_hw_end
+_vpicd_hw_end:
+        ret
+
         VXDCALL _vmm_install_mult_io, 1, 95h
         VXDCALL _vmm_simulate_io, 1, 94h
         VXDCALL _vmm_set_global_time_out, 1, 3Ch

@@ -20,13 +20,6 @@ static int dta_set;
 #define XB      (xbuf_lin())
 #define XSEG    (info->xbuf_seg)
 
-static u32 strlen0(const u8 *s, u32 max)
-{
-    u32 n = 0;
-    while (n < max && s[n]) n++;
-    return n;
-}
-
 /* Can V86 DOS address sel:off as it is? (conventional memory) */
 static int direct(u32 sel)
 {
@@ -57,14 +50,60 @@ static struct cregs call21(struct cregs *r, u32 ds, u32 es, u32 dx, u32 si, u32 
     return v;
 }
 
-/* an ASCIIZ string at sel:off into the buffer at offset at; returns its length */
-static u32 copy_in_str(u32 sel, u32 off, u32 at)
+/* A pointer the client passed that the VMM cannot use (cl_ptr): the call
+ * fails with carry and AX 9 (UNVERIFIED: Windows 3.1 itself ended with
+ * such pointers in the DPMI calls tried, VX11 runs P and S) */
+static void bad_ptr(struct cregs *r)
 {
-    u8 *s = (u8 *)pm_lin(sel, off);
-    u32 n = strlen0(s, 255);
-    memcpy((void *)(XB + at), s, n);
+    r->eflags |= EFL_CF;
+    SETW(r->eax, 9);
+}
+
+/* an ASCIIZ string at sel:off into the buffer at offset at; its length,
+ * or -1 when the client's memory there cannot be read */
+static int copy_in_str(u32 sel, u32 off, u32 at)
+{
+    u8 *s;
+    u32 n = 0;
+    for (;;) {
+        s = cl_ptr(sel, off + n, 1, 0);
+        if (!s) return -1;
+        if (!*s || n == 255) break;
+        *(u8 *)(XB + at + n) = *s;
+        n++;
+    }
     *(u8 *)(XB + at + n) = 0;
-    return n;
+    return (int)n;
+}
+
+/* the client's sel:off for n bytes (16-bit offsets that run past FFFFh
+ * fail: the processor would not wrap them either) */
+static u8 *cptr(struct cregs *r, u32 sel, u32 off, u32 n, int write)
+{
+    (void)r;
+    if (!sysvm.client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
+    return cl_ptr(sel, off, n, write);
+}
+
+/* DOS's current DTA (in V86 mode: INT 21h 2Fh) */
+static void dos_dta(u32 *seg, u32 *off)
+{
+    struct cregs t;
+    memset(&t, 0, sizeof(t));
+    t.eax = 0x2F00;
+    v86_int(&t, 0x21);
+    *seg = t.es & 0xFFFF;
+    *off = t.ebx & 0xFFFF;
+}
+
+static void set_dos_dta(u32 seg, u32 off)
+{
+    struct cregs t;
+    memset(&t, 0, sizeof(t));
+    t.eax = 0x1A00;
+    t.ds = seg;
+    t.edx = off;
+    v86_int(&t, 0x21);
 }
 
 void dos_pm(struct cregs *r)
@@ -94,11 +133,11 @@ void dos_pm(struct cregs *r)
         else SETW(r->ebx, dta_off);
         return;
     case 0x09: {                        /* print a $-terminated string */
-        u8 *s = (u8 *)pm_lin(r->ds, r->edx);
+        u8 *s;
         u32 n = 0;
         if (direct(r->ds)) break;
-        while (n < xbuf_size() - 1 && s[n] != '$') n++;
-        memcpy((void *)XB, s, n);
+        while (n < xbuf_size() - 1 && (s = cl_ptr(r->ds, r->edx + n, 1, 0)) != NULL && *s != '$')
+            *(u8 *)(XB + n++) = *s;
         *(u8 *)(XB + n) = '$';
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
         return;
@@ -106,49 +145,61 @@ void dos_pm(struct cregs *r)
     case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x41:
     case 0x43: case 0x5B:               /* a path at DS:DX */
         if (direct(r->ds)) break;
-        copy_in_str(r->ds, r->edx, 0);
+        if (copy_in_str(r->ds, r->edx, 0) < 0) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
         return;
     case 0x5A: {                        /* temporary file: the path comes back */
-        u32 n;
+        int n;
+        u8 *d;
         if (direct(r->ds)) break;
         n = copy_in_str(r->ds, r->edx, 0);
+        if (n < 0 || (d = cptr(r, r->ds, r->edx, n + 14, 1)) == NULL) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
-        if (!(r->eflags & EFL_CF))
-            memcpy((void *)pm_lin(r->ds, r->edx), (void *)XB, n + 14);
+        if (!(r->eflags & EFL_CF)) memcpy(d, (void *)XB, n + 14);
         return;
     }
     case 0x6C:                          /* extended open: DS:SI */
         if (direct(r->ds)) break;
-        copy_in_str(r->ds, r->esi, 0);
+        if (copy_in_str(r->ds, r->esi, 0) < 0) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_SI);
         return;
     case 0x56:                          /* rename: DS:DX, ES:DI */
         if (direct(r->ds) && direct(r->es)) break;
-        copy_in_str(r->ds, r->edx, 0);
-        copy_in_str(r->es, r->edi, 256);
+        if (copy_in_str(r->ds, r->edx, 0) < 0 || copy_in_str(r->es, r->edi, 256) < 0) { bad_ptr(r); return; }
         call21(r, XSEG, XSEG, 0, 0, 256, K_DX | K_DI);
         return;
-    case 0x47:                          /* current directory to DS:SI */
+    case 0x47: {                        /* current directory to DS:SI */
+        u8 *d;
         if (direct(r->ds)) break;
+        if ((d = cptr(r, r->ds, r->esi, 64, 1)) == NULL) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_SI);
-        if (!(r->eflags & EFL_CF)) memcpy((void *)pm_lin(r->ds, r->esi), (void *)XB, 64);
+        if (!(r->eflags & EFL_CF)) memcpy(d, (void *)XB, 64);
         return;
-    case 0x60:                          /* truename: DS:SI to ES:DI */
+    }
+    case 0x60: {                        /* truename: DS:SI to ES:DI */
+        u8 *d;
         if (direct(r->ds) && direct(r->es)) break;
-        copy_in_str(r->ds, r->esi, 0);
+        if (copy_in_str(r->ds, r->esi, 0) < 0 || (d = cptr(r, r->es, r->edi, 128, 1)) == NULL) { bad_ptr(r); return; }
         call21(r, XSEG, XSEG, 0, 0, 256, K_SI | K_DI);
-        if (!(r->eflags & EFL_CF)) memcpy((void *)pm_lin(r->es, r->edi), (void *)(XB + 256), 128);
+        if (!(r->eflags & EFL_CF)) memcpy(d, (void *)(XB + 256), 128);
         return;
-    case 0x38:                          /* country information to DS:DX */
+    }
+    case 0x38: {                        /* country information to DS:DX */
+        u8 *d;
         if (DX(r) == 0xFFFF || direct(r->ds)) break;
+        if ((d = cptr(r, r->ds, r->edx, 34, 1)) == NULL) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
-        if (!(r->eflags & EFL_CF)) memcpy((void *)pm_lin(r->ds, r->edx), (void *)XB, 34);
+        if (!(r->eflags & EFL_CF)) memcpy(d, (void *)XB, 34);
         return;
+    }
+    case 0x48: case 0x49: case 0x4A:    /* the host's memory (dpmi.c) */
+        if (dpmi_dosmem(r)) return;
+        break;
     case 0x3F: {                        /* read, in pieces */
         u32 want = CX(r), done = 0, got;
-        u8 *dst = (u8 *)pm_lin(r->ds, r->edx);
+        u8 *dst;
         if (direct(r->ds)) break;
+        if ((dst = cptr(r, r->ds, r->edx, want, 1)) == NULL) { bad_ptr(r); return; }
         do {
             u32 n = want - done > xbuf_size() ? xbuf_size() : want - done;
             struct cregs t = *r;
@@ -170,8 +221,9 @@ void dos_pm(struct cregs *r)
     }
     case 0x40: {                        /* write, in pieces (CX=0 truncates: one call) */
         u32 want = CX(r), done = 0, put;
-        u8 *src = (u8 *)pm_lin(r->ds, r->edx);
+        u8 *src;
         if (direct(r->ds)) break;
+        if ((src = cptr(r, r->ds, r->edx, want, 0)) == NULL) { bad_ptr(r); return; }
         do {
             u32 n = want - done > xbuf_size() ? xbuf_size() : want - done;
             struct cregs t = *r;
@@ -194,54 +246,72 @@ void dos_pm(struct cregs *r)
     case 0x44:                          /* IOCTL: the ones with a DS:DX buffer */
         if (direct(r->ds)) break;
         if (al == 2 || al == 3 || al == 4 || al == 5) {
-            u32 n = CX(r) > xbuf_size() ? xbuf_size() : CX(r);
-            if (al == 3 || al == 5) memcpy((void *)XB, (void *)pm_lin(r->ds, r->edx), n);
+            /* the count DOS gets is what the buffer here holds (it went
+             * to DOS as the client's, and a read past 16 KB wrote past
+             * the buffer) */
+            u32 n = CX(r) > xbuf_size() ? xbuf_size() : CX(r), cx = CX(r);
+            u8 *d = cptr(r, r->ds, r->edx, n, al == 2 || al == 4);
+            if (!d) { bad_ptr(r); return; }
+            if (al == 3 || al == 5) memcpy((void *)XB, d, n);
+            SETW(r->ecx, n);
             call21(r, XSEG, 0, 0, 0, 0, K_DX);
+            SETW(r->ecx, cx);
             if ((al == 2 || al == 4) && !(r->eflags & EFL_CF))
-                memcpy((void *)pm_lin(r->ds, r->edx), (void *)XB, AX(r));
+                memcpy(d, (void *)XB, AX(r) < n ? AX(r) : n);
             return;
         }
         if (al == 0x0C || al == 0x0D) {
-            memcpy((void *)XB, (void *)pm_lin(r->ds, r->edx), 256);
+            /* the parameter block, 256 bytes at most, in and out as it
+             * was (UNVERIFIED: the forms with a pointer inside the block,
+             * 440Dh 41h/61h track I/O, which DOS gets untranslated) */
+            u8 *d = cptr(r, r->ds, r->edx, 256, 1);
+            if (!d) { bad_ptr(r); return; }
+            memcpy((void *)XB, d, 256);
             call21(r, XSEG, 0, 0, 0, 0, K_DX);
-            memcpy((void *)pm_lin(r->ds, r->edx), (void *)XB, 256);
+            memcpy(d, (void *)XB, 256);
             return;
         }
         break;
     case 0x4E: case 0x4F: {             /* find first/next: through a DTA here */
-        struct cregs t;
-        u8 *dta = dta_set ? (u8 *)pm_lin(dta_sel, dta_off) : NULL;
-        memset(&t, 0, sizeof(t));
-        t.eax = 0x1A00;
-        t.edx = 512;
-        call21(&t, XSEG, 0, 512, 0, 0, K_DX);           /* DOS's DTA: buffer + 512 */
-        if (dta) memcpy((void *)(XB + 512), dta, 43);
-        if (ah == 0x4E) {
-            copy_in_str(r->ds, r->edx, 0);
-            call21(r, XSEG, 0, 0, 0, 0, K_DX);
-        } else
-            call21(r, 0, 0, 0, 0, 0, 0);
-        if (dta) memcpy(dta, (void *)(XB + 512), 43);
+        /* the program's DTA (1Ah), or, before it set one, DOS's own (the
+         * PSP's), which DOS gets back afterwards: before, the search went
+         * to the buffer and stayed there, and DOS was left pointing at it */
+        u32 oseg, ooff;
+        u8 *dta;
+        dos_dta(&oseg, &ooff);
+        dta = dta_set ? cl_ptr(dta_sel, dta_off, 43, 1) : (u8 *)((oseg << 4) + ooff);
+        if (!dta) { bad_ptr(r); return; }
+        if (ah == 0x4E && copy_in_str(r->ds, r->edx, 0) < 0) { bad_ptr(r); return; }
+        set_dos_dta(XSEG, 512);                         /* DOS's DTA: buffer + 512 */
+        memcpy((void *)(XB + 512), dta, 43);
+        if (ah == 0x4E) call21(r, XSEG, 0, 0, 0, 0, K_DX);
+        else call21(r, 0, 0, 0, 0, 0, 0);
+        memcpy(dta, (void *)(XB + 512), 43);
+        set_dos_dta(oseg, ooff);
         return;
     }
     case 0x11: case 0x12: {             /* FCB search: DS:DX, the result in the DTA */
-        /* 44 bytes in and out (an extended FCB at most) and a DTA here, as
-         * for 4Eh; w16's DOSX translates them too (TK36). File Manager
-         * reads the volume label this way (extended FCB, attribute 08h):
-         * reflected as they were, the label went to DOS's own DTA and
-         * the drive line showed "C: [" with nothing after */
-        struct cregs t;
-        u8 *dta = dta_set ? (u8 *)pm_lin(dta_sel, dta_off) : NULL;
-        u8 *fcb = (u8 *)pm_lin(r->ds, r->edx);
-        memset(&t, 0, sizeof(t));
-        t.eax = 0x1A00;
-        t.edx = 512;
-        call21(&t, XSEG, 0, 512, 0, 0, K_DX);
-        if (dta) memcpy((void *)(XB + 512), dta, 44);
-        memcpy((void *)XB, fcb, 44);
+        /* the FCB (37 bytes, an extended one 44) in and out and a DTA
+         * here, as for 4Eh; w16's DOSX translates them too (TK36). File
+         * Manager reads the volume label this way (extended FCB,
+         * attribute 08h): reflected as they were, the label went to
+         * DOS's own DTA and the drive line showed "C: [" with nothing
+         * after */
+        u32 oseg, ooff, n;
+        u8 *dta, *fcb = cptr(r, r->ds, r->edx, 1, 1);
+        if (!fcb) { bad_ptr(r); return; }
+        n = fcb[0] == 0xFF ? 44 : 37;
+        if ((fcb = cptr(r, r->ds, r->edx, n, 1)) == NULL) { bad_ptr(r); return; }
+        dos_dta(&oseg, &ooff);
+        dta = dta_set ? cl_ptr(dta_sel, dta_off, n, 1) : (u8 *)((oseg << 4) + ooff);
+        if (!dta) { bad_ptr(r); return; }
+        set_dos_dta(XSEG, 512);
+        memcpy((void *)(XB + 512), dta, n);
+        memcpy((void *)XB, fcb, n);
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
-        memcpy(fcb, (void *)XB, 44);
-        if (dta) memcpy(dta, (void *)(XB + 512), 44);
+        memcpy(fcb, (void *)XB, n);
+        memcpy(dta, (void *)(XB + 512), n);
+        set_dos_dta(oseg, ooff);
         return;
     }
     case 0x50: {                        /* set PSP: a selector */
@@ -289,15 +359,19 @@ void video_pm(struct cregs *r)
         case 0x1017: n = CX(r) * 3; out = 1; break;
         }
     }
-    if (!n || n > xbuf_size()) { pm_v86_reflect(r, 0x10, 0); return; }
-    if (in) memcpy((void *)XB, (void *)pm_lin(r->es, r->edx), n);
+    if (!n) { pm_v86_reflect(r, 0x10, 0); return; }
+    /* a count past the buffer (CX over 5461: there are 256 DAC entries)
+     * or a buffer that is not there: nothing is done (before, the call
+     * went to the BIOS with ES 0, which read or wrote the vector table) */
+    if (n > xbuf_size() || !cptr(r, r->es, r->edx, n, out)) return;
+    if (in) memcpy((void *)XB, cptr(r, r->es, r->edx, n, 0), n);
     v = pm;
     v.ss = 0; v.esp = 0;
     v.ds = 0; v.es = XSEG; v.fs = v.gs = 0;
     SETW(v.edx, 0);
     v86_int(&v, 0x10);
     *r = pm;
-    if (out) memcpy((void *)pm_lin(r->es, r->edx), (void *)XB, n);
+    if (out) memcpy(cptr(r, r->es, r->edx, n, 1), (void *)XB, n);
 }
 
 /* INT 25h/26h (absolute disk read/write) from protected mode. DS:BX is
@@ -319,7 +393,7 @@ void disk_pm(struct cregs *r, int vec)
     u8 *pkt;
 
     if (big) {
-        pkt = (u8 *)pm_lin(r->ds, r->ebx);
+        if ((pkt = cptr(r, r->ds, r->ebx, 10, 0)) == NULL) { bad_ptr(r); return; }
         first = *(u32 *)pkt;
         count = *(u16 *)(pkt + 4);
         boff = *(u16 *)(pkt + 6);
@@ -331,11 +405,14 @@ void disk_pm(struct cregs *r, int vec)
         boff = BX(r);
     }
     if (direct(bsel) && !big) { pm_v86_reflect(r, vec, 0); return; }
+    /* the whole buffer the client's (a 16-bit offset past FFFFh would
+     * wrap to the segment's start; UNVERIFIED what Windows 3.1 does) */
+    if (!cptr(r, bsel, boff, count * SECTOR, vec == 0x25)) { bad_ptr(r); return; }
     max = (xbuf_size() - 16) / SECTOR;          /* the packet at the end */
     if (!max) max = 1;
     do {
         n = count - done < max ? count - done : max;
-        if (vec == 0x26) memcpy((void *)XB, (void *)pm_lin(bsel, boff + done * SECTOR), n * SECTOR);
+        if (vec == 0x26) memcpy((void *)XB, cl_ptr(bsel, boff + done * SECTOR, n * SECTOR, 0), n * SECTOR);
         v = pm;
         v.ss = 0; v.esp = 0;
         v.ds = XSEG; v.es = 0; v.fs = v.gs = 0;
@@ -353,7 +430,7 @@ void disk_pm(struct cregs *r, int vec)
         }
         v86_int(&v, vec);
         if (v.eflags & EFL_CF) break;
-        if (vec == 0x25) memcpy((void *)pm_lin(bsel, boff + done * SECTOR), (void *)XB, n * SECTOR);
+        if (vec == 0x25) memcpy(cl_ptr(bsel, boff + done * SECTOR, n * SECTOR, 1), (void *)XB, n * SECTOR);
         done += n;
     } while (done < count);
     *r = pm;

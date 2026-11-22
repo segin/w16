@@ -153,6 +153,7 @@ static void vtrace(const char *fmt, u32 *ap)
             continue;
         }
         fmt++;
+        if (!*fmt) break;
         if (*fmt == '0') pad = '0';
         while (*fmt >= '0' && *fmt <= '9') width = width * 10 + *fmt++ - '0';
         switch (*fmt) {
@@ -282,6 +283,27 @@ void make_user(u32 lin, u32 size)
     flush_tlb();
 }
 
+/* Could ring 3 reach every byte of lin .. lin+len-1 (present, user, and
+ * writable when write)? The VMM's own accesses to a client's memory go
+ * through this first, so that a bad pointer fails the call instead of
+ * faulting in ring 0 (where Windows 3.1 itself ends: probe VX11 runs P
+ * and S, docs/notes/win386-audit-triage.md). */
+int lin_user_ok(u32 lin, u32 len, int write)
+{
+    u32 a, end, pde, pte, need = write ? 7 : 5;
+    if (!len) return 1;
+    end = lin + len - 1;
+    if (end < lin) return 0;                    /* wraps */
+    for (a = lin & ~0xFFFu; ; a += 4096) {
+        pde = pdir()[a >> 22];
+        if ((pde & need) != need) return 0;
+        pte = ((u32 *)phys_to_lin(pde & ~0xFFFu))[(a >> 12) & 0x3FF];
+        if ((pte & need) != need) return 0;
+        if (a >= (end & ~0xFFFu)) break;
+    }
+    return 1;
+}
+
 u32 lin_to_phys(u32 lin)
 {
     u32 pde = pdir()[lin >> 22], pte;
@@ -300,15 +322,14 @@ static u32 kbump, kbump_end;
 void *kmalloc(u32 size)
 {
     u32 need = size + 16, cls = 0, sz = 16, *b;
+    if (size > info->xms_size) return NULL;     /* (and no wrap below) */
     if (need > 4096) {
-        u32 n = (need + 4095) / 4096, first = 0, i, p;
-        for (i = 0; i < n; i++) {
-            if (next_page + 4096 > info->xms_size) return NULL;
-            p = info->xms_phys + next_page;
-            next_page += 4096;
-            nfree_pages--;
-            if (!i) first = p;
-        }
+        u32 n = (need + 4095) / 4096, first;
+        /* contiguous pages from the never-used end; all or none */
+        if (n > (info->xms_size - next_page) / 4096) return NULL;
+        first = info->xms_phys + next_page;
+        next_page += n * 4096;
+        nfree_pages -= n;
         b = (u32 *)phys_to_lin(first);
         memset(b, 0, n * 4096);
         b[0] = n * 4096;
@@ -335,8 +356,16 @@ void *kmalloc(u32 size)
 
 void kfree(void *p)
 {
-    u32 *b = (u32 *)p - 4, sz = b[0], cls = 0, s = 16;
-    if (!p || sz > 4096) return;
+    u32 *b, sz, cls = 0, s = 16;
+    if (!p) return;
+    b = (u32 *)p - 4;
+    sz = b[0];
+    if (sz > 4096) {
+        /* whole pages: each back to the free list */
+        u32 i, phys = info->xms_phys + ((u32)b - W386_VMM_LIN);
+        for (i = 0; i < sz / 4096; i++) page_free(phys + i * 4096);
+        return;
+    }
     while (s < sz) { s <<= 1; cls++; }
     b[1] = (u32)klists[cls];
     klists[cls] = b;
@@ -442,10 +471,16 @@ void v86_int(struct cregs *v, int vec)
         v->ss = cur_vm->refstk_seg;
         v->esp = cur_vm->refsp;
     }
+    /* as the processor's INT: the caller's flags in the frame, the
+     * handler entered with IF and TF clear (Windows 3.1, VX11 "ifl": a
+     * real-mode handler reached through 0300h or from protected mode
+     * sees IF 0 whatever the caller's IF, and 0300h hands back the
+     * structure's flags as the handler's IRET restored them) */
     v->eflags = (v->eflags & 0x0FD5) | EFL_VM | EFL_IOPL | 2;
-    v86_push16(v, (u16)(v->eflags | EFL_IF));
+    v86_push16(v, (u16)(v->eflags & ~EFL_IOPL));
     v86_push16(v, (u16)info->ldr_cs);
     v86_push16(v, (u16)(info->bp_off + W386_BP_REFRET));
+    v->eflags &= ~(EFL_IF | EFL_TF);
     v->eip = ivt[vec * 2];
     v->cs = ivt[vec * 2 + 1];
     if (vec == 0x21 && vm_dos_call(v->eax)) {
@@ -697,6 +732,11 @@ struct cregs *vmm_trap_state(struct cregs *r)
     return o;
 }
 
+u32 vmm_pdir_entry_get(u32 i)
+{
+    return pdir()[i];
+}
+
 u32 vmm_pdir_entry(u32 i, u32 v)        /* set a page directory entry; the old one */
 {
     u32 o = pdir()[i];
@@ -770,14 +810,20 @@ static int pm_cli_sti(struct cregs *r, u8 *op)
     if (op[n] == 0xFA) r->eflags &= ~EFL_IF;
     else if (op[n] == 0xFB) r->eflags |= EFL_IF;
     else return 0;
-    r->eip = sysvm.client32 ? r->eip + n + 1 : ((r->eip & 0xFFFF0000u) | (u16)(r->eip + n + 1));
+    r->eip = seg_32(r->cs) ? r->eip + n + 1 : ((r->eip & 0xFFFF0000u) | (u16)(r->eip + n + 1));
     return 1;
 }
 
+/* The instruction at CS:EIP, or NULL when its first 15 bytes (the most
+ * an instruction has) are not all readable by the client: CS's own
+ * D bit gives the offset's size (a 16-bit client can run 32-bit code
+ * segments: Win32s, Watcom's extender for Windows) */
 static u8 *code_ptr(struct cregs *r)
 {
+    u32 lin;
     if (r->eflags & EFL_VM) return (u8 *)v86_lin(r->cs, r->eip);
-    return (u8 *)(sel_base(r->cs) + (sysvm.client32 ? r->eip : (r->eip & 0xFFFF)));
+    lin = sel_base(r->cs) + (seg_32(r->cs) ? r->eip : (r->eip & 0xFFFF));
+    return lin_user_ok(lin, 15, 0) ? (u8 *)lin : NULL;
 }
 
 /* A heartbeat in the trace every 20 s of timer ticks (BIOS rate): where the
@@ -861,6 +907,8 @@ void __cdecl trap(struct tframe *f)
         if (vm_trace && irq == 1) trace("(K%d)", cur_vm->id);
         if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
         vpicd->hw_int(irq);
+    } else if (vec == 13 && !(r->eflags & EFL_VM) && (op = code_ptr(r)) == NULL) {
+        dpmi_exception(r, 13, f->err);  /* code the VMM cannot read: the client's fault */
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -902,9 +950,12 @@ void __cdecl trap(struct tframe *f)
     } else
         software_int(r, vec);           /* through a DPL 3 gate */
     if (!(r->eflags & EFL_VM)) {
-        /* catch a bad state before the processor does */
-        u8 *d = (r->cs & 4) ? ldt + (r->cs & ~7u) : gdt + (r->cs & ~7u);
-        if ((r->cs & 3) != 3 || !(d[5] & 0x80) || (d[5] & 0x18) != 0x18)
+        /* catch a bad state before the processor does (a GDT index past
+         * the table: its first descriptor, the null one, fails the test) */
+        u8 *d = (r->cs & 4) ? ldt + (r->cs & ~7u)
+              : ((r->cs >> 3) < GDT_ENTRIES ? gdt + (r->cs & ~7u) : gdt);
+        if ((r->cs & 3) != 3 || !(d[5] & 0x80) || (d[5] & 0x18) != 0x18
+            || (!(d[5] & 4) && ((d[5] >> 5) & 3) != 3))
             panic("resuming PM at %x:%x with a bad CS (access %x) after vector %x err %x from %x:%x",
                   r->cs, r->eip, d[5], vec, f->err, f->cs, f->eip);
     }

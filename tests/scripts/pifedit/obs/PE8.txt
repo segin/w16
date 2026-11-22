@@ -1,0 +1,456 @@
+; PE8: 386 Enhanced mode: one setting at a time, saved after each (E00..E39.PIF)
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+alt p
+wait 200
+type A.EXE
+wait 200
+cmd 13
+wait 1200
+type C:\E00.PIF
+key 0D
+wait 1500
+; get: E00.PIF
+alt t
+wait 200
+type T
+wait 200
+cmd 13
+wait 1200
+type C:\E01.PIF
+key 0D
+wait 1500
+; get: E01.PIF
+alt o
+wait 200
+type P
+wait 200
+cmd 13
+wait 1200
+type C:\E02.PIF
+key 0D
+wait 1500
+; get: E02.PIF
+alt s
+wait 200
+type D
+wait 200
+cmd 13
+wait 1200
+type C:\E03.PIF
+key 0D
+wait 1500
+; get: E03.PIF
+click 217 202
+wait 300
+cmd 13
+wait 1200
+type C:\E04.PIF
+key 0D
+wait 1500
+; get: E04.PIF
+click 336 202
+wait 300
+cmd 13
+wait 1200
+type C:\E05.PIF
+key 0D
+wait 1500
+; get: E05.PIF
+alt r
+wait 200
+type 200
+wait 200
+cmd 13
+wait 1200
+type C:\E06.PIF
+key 0D
+wait 1500
+; get: E06.PIF
+alt d
+wait 200
+type 500
+wait 200
+cmd 13
+wait 1200
+type C:\E07.PIF
+key 0D
+wait 1500
+; get: E07.PIF
+alt k
+wait 200
+type 10
+wait 200
+cmd 13
+wait 1200
+type C:\E08.PIF
+key 0D
+wait 1500
+; get: E08.PIF
+alt l
+wait 200
+type 20
+wait 200
+cmd 13
+wait 1200
+type C:\E09.PIF
+key 0D
+wait 1500
+; get: E09.PIF
+alt q
+wait 200
+type 30
+wait 200
+cmd 13
+wait 1200
+type C:\E10.PIF
+key 0D
+wait 1500
+; get: E10.PIF
+alt i
+wait 200
+type 40
+wait 200
+cmd 13
+wait 1200
+type C:\E11.PIF
+key 0D
+wait 1500
+; get: E11.PIF
+click 136 315
+wait 300
+cmd 13
+wait 1200
+type C:\E12.PIF
+key 0D
+wait 1500
+; get: E12.PIF
+click 359 295
+wait 300
+cmd 13
+wait 1200
+type C:\E13.PIF
+key 0D
+wait 1500
+; get: E13.PIF
+click 359 315
+wait 300
+cmd 13
+wait 1200
+type C:\E14.PIF
+key 0D
+wait 1500
+; get: E14.PIF
+click 37 334
+wait 300
+cmd 13
+wait 1200
+type C:\E15.PIF
+key 0D
+wait 1500
+; get: E15.PIF
+alt a
+wait 1200
+alt b
+type 60
+wait 200
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E16.PIF
+key 0D
+wait 1500
+; get: E16.PIF
+alt a
+wait 1200
+alt f
+type 70
+wait 200
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E17.PIF
+key 0D
+wait 1500
+; get: E17.PIF
+alt a
+wait 1200
+click 168 179
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E18.PIF
+key 0D
+wait 1500
+; get: E18.PIF
+alt a
+wait 1200
+click 74 221
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E19.PIF
+key 0D
+wait 1500
+; get: E19.PIF
+alt a
+wait 1200
+click 292 221
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E20.PIF
+key 0D
+wait 1500
+; get: E20.PIF
+alt a
+wait 1200
+click 74 240
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E21.PIF
+key 0D
+wait 1500
+; get: E21.PIF
+alt a
+wait 1200
+click 292 240
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E22.PIF
+key 0D
+wait 1500
+; get: E22.PIF
+alt a
+wait 1200
+click 168 283
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E23.PIF
+key 0D
+wait 1500
+; get: E23.PIF
+alt a
+wait 1200
+click 238 283
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E24.PIF
+key 0D
+wait 1500
+; get: E24.PIF
+alt a
+wait 1200
+click 357 283
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E25.PIF
+key 0D
+wait 1500
+; get: E25.PIF
+alt a
+wait 1200
+click 117 304
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E26.PIF
+key 0D
+wait 1500
+; get: E26.PIF
+alt a
+wait 1200
+click 273 304
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E27.PIF
+key 0D
+wait 1500
+; get: E27.PIF
+alt a
+wait 1200
+click 46 346
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E28.PIF
+key 0D
+wait 1500
+; get: E28.PIF
+alt a
+wait 1200
+click 291 346
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E29.PIF
+key 0D
+wait 1500
+; get: E29.PIF
+alt a
+wait 1200
+click 201 369
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E30.PIF
+key 0D
+wait 1500
+; get: E30.PIF
+alt a
+wait 1200
+click 201 388
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E31.PIF
+key 0D
+wait 1500
+; get: E31.PIF
+alt a
+wait 1200
+click 201 408
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E32.PIF
+key 0D
+wait 1500
+; get: E32.PIF
+alt a
+wait 1200
+click 278 369
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E33.PIF
+key 0D
+wait 1500
+; get: E33.PIF
+alt a
+wait 1200
+click 278 388
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E34.PIF
+key 0D
+wait 1500
+; get: E34.PIF
+alt a
+wait 1200
+click 364 369
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E35.PIF
+key 0D
+wait 1500
+; get: E35.PIF
+alt a
+wait 1200
+click 364 388
+wait 300
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E36.PIF
+key 0D
+wait 1500
+; get: E36.PIF
+alt a
+wait 1200
+alt a
+wait 200
+kdown 11
+kdown 12
+kdown 50
+kup 50
+kup 12
+kup 11
+wait 300
+snap C:\HK1.BMP
+focus
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E37.PIF
+key 0D
+wait 1500
+; get: E37.PIF
+alt a
+wait 1200
+alt a
+wait 200
+kdown 10
+kdown 70
+kup 70
+kup 10
+wait 300
+snap C:\HK2.BMP
+focus
+key 0D
+wait 800
+cmd 13
+wait 1200
+type C:\E38.PIF
+key 0D
+wait 1500
+; get: E38.PIF
+click 136 202
+wait 300
+cmd 13
+wait 1200
+type C:\E39.PIF
+key 0D
+wait 1500
+; get: E39.PIF
+close
+wait 1500

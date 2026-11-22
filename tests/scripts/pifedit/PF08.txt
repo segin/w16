@@ -1,0 +1,86 @@
+; PF08: 386 Enhanced mode: numbers out of range, a priority out of range,
+; Allow Close When Active's warning, a shortcut key without Alt or Ctrl
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+alt p
+wait 200
+type A.EXE
+wait 200
+alt d
+wait 200
+type 700
+wait 200
+cmd 13
+wait 1500
+wait 300
+snap C:\C1.BMP
+key 0D
+wait 1000
+wait 300
+snap C:\C1b.BMP
+key 1B
+wait 800
+alt k
+wait 200
+type 20000
+wait 200
+cmd 13
+wait 1500
+wait 300
+snap C:\C2.BMP
+key 0D
+wait 1000
+wait 300
+snap C:\C2b.BMP
+key 1B
+wait 800
+alt l
+wait 200
+type -2
+wait 200
+cmd 13
+wait 1500
+wait 300
+snap C:\C3.BMP
+key 0D
+wait 1000
+wait 300
+snap C:\C3b.BMP
+key 1B
+wait 800
+alt a
+wait 1200
+type 0
+alt f
+wait 1000
+wait 300
+snap C:\P1.BMP
+key 0D
+wait 800
+wait 300
+snap C:\P2.BMP
+click 291 346
+wait 300
+wait 800
+wait 300
+snap C:\A1.BMP
+key 1B
+wait 800
+alt a
+wait 300
+kdown 51 10
+kup 51 10
+wait 300
+wait 300
+snap C:\H1.BMP
+cmd 1
+wait 1000
+wait 300
+snap C:\H2.BMP
+key 0D
+wait 800
+cmd 2
+wait 800
+close
+wait 1000

@@ -206,7 +206,8 @@ static void vtd_init(void)
  * not reprogrammed yet); the callback gets EBX the current VM, ECX the
  * milliseconds since it was due, EDX its reference data, EBP the client
  * registers ---- */
-struct tmo { struct tmo *next; u32 magic, due, proc, ref; };
+struct tmo { struct tmo *next; u32 magic, due, proc, ref, tick; };
+static u32 tmo_ticks;                       /* timer ticks so far (tmo_tick) */
 #define TMO_MAGIC 0x4F4D4954u               /* "TIMO" */
 static struct tmo *tmos;
 static u32 sys_ms, sys_us;                  /* time since start */
@@ -218,8 +219,11 @@ static void tmo_tick(void)
     sys_us += 54925;
     sys_ms += sys_us / 1000;
     sys_us %= 1000;
+    tmo_ticks++;
     for (pp = &tmos; (t = *pp) != NULL; ) {
-        if ((s32)(sys_ms - t->due) < 0) { pp = &t->next; continue; }
+        /* one set during this tick (by a callback here: a 0 ms time-out
+         * set again each time ran for ever) waits for the next */
+        if ((s32)(sys_ms - t->due) < 0 || t->tick == tmo_ticks) { pp = &t->next; continue; }
         *pp = t->next;                      /* done: unlinked before it runs */
         t->magic = 0;
         memset(&s, 0, sizeof(s));
@@ -241,6 +245,7 @@ static int tmo_service(u32 svc, struct svcregs *s)
         t = kmalloc(sizeof(*t));
         if (!t) { s->esi = 0; return 1; }
         t->magic = TMO_MAGIC;
+        t->tick = tmo_ticks;
         t->due = sys_ms + s->eax;
         t->proc = s->esi;
         t->ref = s->edx;
@@ -357,6 +362,11 @@ void vxd_init(void)
             devs[j] = devs[j - 1];
         devs[j] = d;
     }
+    /* DDB_Next: each device's DDB names the one before it in init order,
+     * the VMM's ends the list. Windows 3.1 links them (VXP.386, last in
+     * init order, found its DDB_Next set: tests/vxd/vxp.asm); UNVERIFIED
+     * in which order */
+    for (i = 0; i < ndevs; i++) devs[i]->next = i ? (u32)devs[i - 1] : 0;
     /* VPICD (w16's module) owns the interrupts: without it nothing runs.
      * Windows 3.1 without *vpicd stops with this message (ARCHITECTURE.md
      * 12.2: device 0003h, service 0001h, VPICD_Virtualize_IRQ) */
@@ -441,10 +451,15 @@ u32 vxd_pm_api(u32 id)
  * client in r */
 void vxd_call_api(u32 proc, struct cregs *r)
 {
-    struct client_regs *c = cur_vm->client;
+    struct client_regs *c = cur_vm->client, outer = *c;
+    struct vm *v = cur_vm;
+    /* the VM's client registers (CB_Client_Pointer) are this call's while
+     * it runs, and an outer call's again after it (an API called from an
+     * interrupt's handler while another API's procedure waited) */
     client_fill(c, r);
     vxd_control(proc, r->eax, VMH(cur_vm), r->esi, r->edx, r->edi, (u32)c);
     client_store(r, c);
+    *v->client = outer;
 }
 
 /* ---- dynamic links ---- */
@@ -467,7 +482,8 @@ void vxd_link(struct tframe *f)
 
     if (dev == 1 && svc < VMM_SERVICES)
         slot = (u32)&vmm_slots[svc];
-    else if (dev != 1 && (d = find_dev(dev)) != NULL && svc < d->svc_count && d->svc_table)
+    else if (dev != 1 && (d = find_dev(dev)) != NULL && svc < d->svc_count && d->svc_table
+             && *(u32 *)(d->svc_table + svc * 4))
         slot = d->svc_table + svc * 4;
     if (!slot && dev != 1) {
         /* a device that is not loaded (or a service it does not have):
@@ -542,7 +558,7 @@ static int list_service(u32 svc, struct svcregs *s)
     case 0x9D:                          /* List_Allocate -> EAX */
         l = list_of(s->esi);
         if ((n = l->pool) != NULL) l->pool = (u32 *)*n;
-        else n = kmalloc(l->node_size + 4);
+        else n = l->node_size < 0x10000000u ? kmalloc(l->node_size + 4) : NULL;
         if (!n) { s->eflags |= EFL_CF; return 1; }
         *n = 0;
         s->eax = (u32)(n + 1);
@@ -585,6 +601,7 @@ static int list_service(u32 svc, struct svcregs *s)
         ZF_SET(s, !s->eax);
         return 1;
     case 0xA4:                          /* List_Get_Next */
+        if (!s->eax) { ZF_SET(s, 1); return 1; }        /* no node: none after it */
         n = (u32 *)*NODE(s->eax);
         s->eax = n ? (u32)(n + 1) : 0;
         ZF_SET(s, !s->eax);
@@ -619,18 +636,27 @@ static int nest_service(u32 svc, struct svcregs *s)
     case 0x83:                          /* Begin_Nest_Exec */
         nest_level++;
         return 1;
-    case 0x84:                          /* Exec_Int: EAX the vector */
+    case 0x84: {                        /* Exec_Int: EAX the vector */
+        /* a VM in protected mode: its DS and ES are selectors, which V86
+         * code gets as the segments they map in conventional memory (else
+         * the transfer buffer's), and keeps when the call leaves them */
+        int pm = !(c->eflags & EFL_VM) && cur_vm == &sysvm && sysvm.pm;
+        int ds = pm ? sel_to_seg(c->ds) : (int)c->ds, es = pm ? sel_to_seg(c->es) : (int)c->es;
+        if (ds < 0) ds = info->xbuf_seg;
+        if (es < 0) es = info->xbuf_seg;
         memset(&v, 0, sizeof(v));
         v.eax = c->eax; v.ebx = c->ebx; v.ecx = c->ecx; v.edx = c->edx;
         v.esi = c->esi; v.edi = c->edi; v.ebp = c->ebp;
-        v.ds = c->ds; v.es = c->es;
+        v.ds = ds; v.es = es;
         v.eflags = c->eflags;
         v86_int(&v, s->eax & 0xFF);
         c->eax = v.eax; c->ebx = v.ebx; c->ecx = v.ecx; c->edx = v.edx;
         c->esi = v.esi; c->edi = v.edi; c->ebp = v.ebp;
-        c->ds = (u16)v.ds; c->es = (u16)v.es;
+        if (!pm || (int)(v.ds & 0xFFFF) != ds) c->ds = (u16)(pm ? seg_to_sel(v.ds & 0xFFFF, 0xF2) : v.ds);
+        if (!pm || (int)(v.es & 0xFFFF) != es) c->es = (u16)(pm ? seg_to_sel(v.es & 0xFFFF, 0xF2) : v.es);
         c->eflags = (c->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
         return 1;
+    }
     case 0x85:                          /* Resume_Exec: nothing is waiting here */
         return 1;
     case 0x86:                          /* End_Nest_Exec */
@@ -663,6 +689,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
         u32 seg = *(u16 *)(c + ((s->eax >> 8) & 0xFF));
         u32 off = (s->eax & 0xFF) == 0xFF ? 0 : *(u32 *)(c + (s->eax & 0xFF));
         if (cur_vm->client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
+        else if (!sel_present(seg)) s->eax = 0xFFFFFFFFu;  /* the DDK: -1 for an invalid selector */
         else s->eax = sel_base(seg) + (sysvm.client32 ? off : (off & 0xFFFF));
         return;
     }

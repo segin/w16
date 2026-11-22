@@ -22,6 +22,8 @@
 #     -m MOD   the WINOLDAP.MOD to test (default build/dos/WINOLDAP.MOD)
 #     -k FILE  run both on this KRNL286.EXE (e.g. build/dos/KRNL286.EXE)
 #     -K       run both on Microsoft's KRNL286 (KRNL386.EXE deleted)
+# WINOLDAP_PIF=FILE: the scenario "pif" runs that PIF instead of the one
+# tools/mkpif.py makes (the same settings: see tests/scripts/winoldap/pif.txt).
 # Prints PASS/FAIL per scenario; exit code = failures. Needs dosbox-x,
 # xvfb-run, xdotool, ImageMagick and `make dos woprobes`.
 set -eu
@@ -62,6 +64,9 @@ printf 'echo batch here\r\nC:\\WC1.COM batarg\r\n' > "$work/files/T.BAT"
 printf 'wait\r\n' > "$work/files/WCWAIT.TXT"
 python3 "$root/tools/mkpif.py" "$ref/WINDOWS/_DEFAULT.PIF" "$work/files/PROBE.PIF" \
     'title=Probe Program' 'program=C:\WC1.COM' 'dir=C:\WINDOWS\SYSTEM' 'params=?'
+# WINOLDAP_PIF=FILE: that PIF (with the same settings) instead, e.g. one
+# saved by w16's PIF Editor (tests/scripts/pifedit/PF12.txt)
+[ -z "${WINOLDAP_PIF:-}" ] || cp "$WINOLDAP_PIF" "$work/files/PROBE.PIF"
 
 run_one() {   # run_one DIR WINOLDAP OPTIONS SCRIPT
     d=$1 m=$2 opts=$3 script=$4

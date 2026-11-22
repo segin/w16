@@ -28,7 +28,9 @@
  *                            the last position, so drag loops see them.
  *     mclick <x> <y>         a click (down and up in one go)
  *     kdown <vk-hex>         a real (journalled) key down / up, so that
- *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.)
+ *     kup <vk-hex>           GetKeyState sees it (Shift+click etc.);
+ *                            [scan-hex] after the key: its scan code (a
+ *                            program may read the key's name from it)
  *     cursor                 log the current cursor: arrow, no, or other
  *     copyfile <from> <to>   copy a file (to catch it mid-session)
  *     append <file> <text>   add the line <text> to <file> (made if need
@@ -1581,10 +1583,15 @@ static void run_line(char *l)
         ev_play();
         pump(300);
     } else if (same(l, "kdown") || same(l, "kup")) {
-        WORD vk = parse_num(arg, 16);
+        char *q = arg;
+        WORD vk = next_num(&q, 16);
         /* paramL: virtual key, scan code in the high byte (Shift 2A,
-           Ctrl 1D; others 0) */
+           Ctrl 1D; others 0 unless given after the key) */
         WORD scan = vk == VK_SHIFT ? 0x2A : vk == VK_CONTROL ? 0x1D : 0;
+        while (*q == ' ')
+            q++;
+        if (*q)
+            scan = next_num(&q, 16);
         ev_add(same(l, "kdown") ? WM_KEYDOWN : WM_KEYUP, vk | (scan << 8), 1);
         ev_play();
         pump(100);

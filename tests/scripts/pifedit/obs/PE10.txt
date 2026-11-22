@@ -1,0 +1,232 @@
+; PE10: Standard mode: values out of range, where and how they are refused
+run PIFEDIT.EXE
+wait 3000
+alt p
+wait 200
+type A.EXE
+wait 200
+alt r
+wait 200
+type 700
+wait 200
+wait 300
+snap C:\B01a.BMP
+cmd 13
+wait 1500
+snap C:\B01b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B01c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type -1
+wait 200
+wait 300
+snap C:\B02a.BMP
+cmd 13
+wait 1500
+snap C:\B02b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B02c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type abc
+wait 200
+wait 300
+snap C:\B03a.BMP
+cmd 13
+wait 1500
+snap C:\B03b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B03c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type 128
+wait 200
+alt q
+wait 200
+type 99999
+wait 200
+wait 300
+snap C:\B04a.BMP
+cmd 13
+wait 1500
+snap C:\B04b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B04c.BMP
+dump
+focus
+key 1B
+wait 800
+alt q
+wait 200
+type 0
+wait 200
+alt i
+wait 200
+type -5
+wait 200
+wait 300
+snap C:\B05a.BMP
+cmd 13
+wait 1500
+snap C:\B05b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B05c.BMP
+dump
+focus
+key 1B
+wait 800
+alt i
+wait 200
+type 0
+wait 200
+alt p
+wait 200
+type A
+wait 200
+wait 300
+snap C:\B06a.BMP
+cmd 13
+wait 1500
+snap C:\B06b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B06c.BMP
+dump
+focus
+key 1B
+wait 800
+alt p
+wait 200
+type A.BAT
+wait 200
+alt r
+wait 200
+type 0
+wait 200
+wait 300
+snap C:\B07a.BMP
+cmd 13
+wait 1500
+snap C:\B07b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B07c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type 641
+wait 200
+wait 300
+snap C:\B08a.BMP
+cmd 13
+wait 1500
+snap C:\B08b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B08c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type 640
+wait 200
+alt q
+wait 200
+type 20000
+wait 200
+wait 300
+snap C:\B09a.BMP
+cmd 13
+wait 1500
+snap C:\B09b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B09c.BMP
+dump
+focus
+key 1B
+wait 800
+alt q
+wait 200
+type 16384
+wait 200
+alt i
+wait 200
+type 16385
+wait 200
+wait 300
+snap C:\B10a.BMP
+cmd 13
+wait 1500
+snap C:\B10b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\B10c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type 999
+wait 200
+key 09
+wait 1000
+snap C:\T1.BMP
+dump
+focus
+key 0D
+wait 800
+cmd 12
+wait 1500
+snap C:\N1.BMP
+dump
+key 0D
+wait 800
+dump
+close
+wait 1500
+dump
