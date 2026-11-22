@@ -191,11 +191,12 @@ static void show_bits(const char *name, BYTE FAR *p, DWORD n)
             if (sz < 3)
                 break;
             /* 3.1's AnimatePalette record holds the probe's pointer to
-               the entries: its selector depends on the run */
+               the entries: it depends on the run and on the probe's
+               layout */
             if (w[(WORD)a + 2] == META_ANIMATEPALETTE && sz >= 7 &&
                 w[(WORD)a + 6] == stack_sel) {
-                obs_env(nm(name, "AnimatePalette selector"), w[(WORD)a + 6]);
-                w[(WORD)a + 6] = 0x5555;
+                obs_env(nm(name, "AnimatePalette pointer"), w[(WORD)a + 5]);
+                w[(WORD)a + 5] = w[(WORD)a + 6] = 0x5555;
             }
             if (w[(WORD)a + 2] == META_CREATEREGION && sz >= 7) {
                 obs_env(nm(name, "region count"), w[(WORD)a + 5]);
