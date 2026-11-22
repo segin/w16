@@ -174,11 +174,24 @@ void window_scrollbar_rects(PWND w, RECT *v, RECT *h)
        outer lines on the frame's (or menu bar's) black lines, the two
        bars sharing a line (US4) */
     RECT c = w->rcClient;
+    int ww = w->rcWindow.right - w->rcWindow.left, wh = w->rcWindow.bottom - w->rcWindow.top;
     OffsetRect(&c, -w->rcWindow.left, -w->rcWindow.top);
     SetRect(v, c.right, c.top - sysmet[SM_CYBORDER],
             c.right + sysmet[SM_CXVSCROLL], c.bottom + sysmet[SM_CYBORDER]);
     SetRect(h, c.left - sysmet[SM_CXBORDER], c.bottom,
             c.right + sysmet[SM_CXBORDER], c.bottom + sysmet[SM_CYHSCROLL]);
+    /* no frame line to share at the window's edge: the bar's own line on
+       it (US35 on 3.1: a bordered multi-line edit, whose client area is
+       the window less its bars, has its bar's top line on the window's
+       top row) */
+    if (v->top < 0)
+        v->top = 0;
+    if (v->bottom > wh && c.bottom <= wh)
+        v->bottom = wh;
+    if (h->left < 0)
+        h->left = 0;
+    if (h->right > ww && c.right <= ww)
+        h->right = ww;
 }
 
 /* called by nc_paint with the window DC */
