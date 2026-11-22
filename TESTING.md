@@ -296,7 +296,12 @@ such as `p` for a program polling the keyboard or `b` for a busy one)
 prints Windows' busy-loop and message counts with 0, 1, 2 and 4 boxes;
 `VMPOLL_VXT=1` adds the scheduling probe VxD VXT.386 (DOSBox-X, its log in
 OUTDIR/com1.txt). The boot-test case `win386idle` runs it under w16's and
-Microsoft's WIN386 (ARCHITECTURE.md 12.12).
+Microsoft's WIN386 (ARCHITECTURE.md 12.12). XMS and EMS in a DOS box:
+`tests/v86mmrun.sh OUTDIR [w16]` runs VX15 (`make vxprobes`) in a box and
+prints its log of XMS and INT 67h results (`V86MM_PIF` the PIF's limits,
+`V86MM_INI` SYSTEM.INI keys such as `386Enh:NoEMMDriver=on`); the case
+`win386xms` compares it with Microsoft's WIN386 for three PIFs
+(ARCHITECTURE.md 12.13).
 
 ## 5. Running on a remote host
 
