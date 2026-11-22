@@ -32,6 +32,7 @@ REBOOT_DDB:
 
         VXDCALL _vkd_define_hot_key, 0Dh, 01h
         VXDCALL _vkd_force_keys, 0Dh, 07h
+        VXDCALL _vsd_bell, 0Bh, 01h
         VXDCALL _vmm_map_flat, 1, 1Ch
         VXDCALL _vmm_build_int_stack_frame, 1, 4Ch
         VXDCALL _vmm_set_global_time_out, 1, 3Ch

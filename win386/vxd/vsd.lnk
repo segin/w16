@@ -1,0 +1,5 @@
+# VSD.386: w16's VSD module (win386/vxd), an LE VxD, device 000Bh
+format windows vxd
+option quiet
+option nodefaultlibs
+export VSD_DDB.1

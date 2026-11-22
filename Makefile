@@ -1075,12 +1075,15 @@ $(W386)/REBOOT.386: $(W386REBOOT) win386/vxd/reboot.lnk
 W386VMPOLL := $(W386)/vxd/vmpollddb.o $(W386)/vxd/vmpoll.o $(W386)/vxd/vxdrt.o
 $(W386)/VMPOLL.386: $(W386VMPOLL) win386/vxd/vmpoll.lnk
 	$(WLINK) @win386/vxd/vmpoll.lnk name $@ option map=$(W386)/vmpoll.map file { $(W386VMPOLL) }
-W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VMPOLL=$(W386)/VMPOLL.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VMPOLL.386 tools/mkw3.py
+W386VSD := $(W386)/vxd/vsdddb.o $(W386)/vxd/vsd.o $(W386)/vxd/vxdrt.o
+$(W386)/VSD.386: $(W386VSD) win386/vxd/vsd.lnk
+	$(WLINK) @win386/vxd/vsd.lnk name $@ option map=$(W386)/vsd.map file { $(W386VSD) }
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1119,6 +1122,10 @@ $(DOS)/VXI.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DIOPROBE -o $(B)/tests/vxi.o tests/vxd/vxp.asm
 	$(WLINK) @tests/vxd/vxp.lnk name $@ file $(B)/tests/vxi.o
+$(DOS)/VXV.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
+	@mkdir -p $(@D) $(B)/tests
+	$(NASM) -f obj -DVSDPROBE -o $(B)/tests/vxv.o tests/vxd/vxp.asm
+	$(WLINK) @tests/vxd/vxp.lnk name $@ file $(B)/tests/vxv.o
 $(DOS)/VXQ.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DBADLINK -o $(B)/tests/vxq.o tests/vxd/vxp.asm
@@ -1137,6 +1144,10 @@ $(DOS)/VXS.386: tests/vxd/vxs.asm tests/vxd/vxs.lnk
 	$(NASM) -f obj -DALLVM -o $(B)/tests/vxss.o tests/vxd/vxs.asm
 	$(WLINK) @tests/vxd/vxs.lnk name $(DOS)/VXSS.386 file $(B)/tests/vxss.o
 	$(WLINK) @tests/vxd/vxs.lnk name $@ file $(B)/tests/vxs.o
+# SPK.COM: the Virtual Sound Device's DOS-side probe (tests/vsdprobe.sh)
+$(DOS)/SPK.COM: tests/dos/spk.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 $(DOS)/VX%.COM: tests/dos/vx%.asm tests/dos/dxlib.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Itests/dos/ -o $@ $<

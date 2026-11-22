@@ -282,7 +282,7 @@ setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
-see the case in `tests/boottest.sh`). `tests/vxpprobe.sh ms|w16` loads the
+see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
 service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
 are probed by VX11 (`tests/apps/vx11.c`, run as the shell with

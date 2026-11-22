@@ -29,6 +29,7 @@
 
 void __cdecl vkd_define_hot_key(struct vregs *r);
 void __cdecl vkd_force_keys(struct vregs *r);
+void __cdecl vsd_bell(struct vregs *r);
 void __cdecl vmm_map_flat(struct vregs *r);
 void __cdecl vmm_build_int_stack_frame(struct vregs *r);
 void __cdecl vmm_set_global_time_out(struct vregs *r);
@@ -275,6 +276,32 @@ static vu8 held[128], seen[128];
 static vu8 orphans[16];
 static vu32 n_orphans;
 
+/* A bell rung from a screen (VSD_Bell) ends with VSD's global time-out,
+ * which cannot come while a screen is up: the screens run in the timer's
+ * or the keyboard's interrupt (a time-out, a hot key). So the loop below
+ * ends it itself after its half second, counted in port 61h's refresh
+ * toggles (15.085 us each; IBM PC/AT technical reference) */
+static vu32 bell_left, bell_ref;
+
+static void bell(void)
+{
+    struct vregs s;
+    zero(&s, sizeof(s));
+    vsd_bell(&s);
+    bell_ref = inb(0x61) & 0x10;
+    bell_left = 33146;                      /* 500 ms */
+}
+
+static void bell_tick(void)
+{
+    vu32 r;
+    if (!bell_left) return;
+    r = inb(0x61) & 0x10;
+    if (r == bell_ref) return;
+    bell_ref = r;
+    if (!--bell_left) outb(0x61, inb(0x61) & ~3u);
+}
+
 static vu32 wait_key(int kind, int *cad)
 {
     vu32 b, code, st, i;
@@ -290,7 +317,7 @@ static vu32 wait_key(int kind, int *cad)
     e0 = 0;
     for (;;) {
         while (!((st = inb(0x64)) & 1))
-            ;
+            bell_tick();
         b = inb(0x60);
         if (st & 0x20) continue;            /* the mouse's */
         if (b == 0xE0) { e0 = 1; continue; }
@@ -313,7 +340,12 @@ static vu32 wait_key(int kind, int *cad)
         if (code == 0x1D || code == 0x38 || code == 0x2A || code == 0x36) continue;
         *cad = (code == 0x53 && held[0x1D] && held[0x38]);
         if (*cad) return code;
-        if ((kind == SCREEN_B || kind == SCREEN_D) && code != 0x01 && code != 0x1C) continue;
+        if ((kind == SCREEN_B || kind == SCREEN_D) && code != 0x01 && code != 0x1C) {
+            /* a key the screen has no use for beeps (Windows 3.1, tests/
+             * vsdprobe.sh hung: x, Space and F1 each a VSD_Bell's tone) */
+            bell();
+            continue;
+        }
         return code;
     }
 }

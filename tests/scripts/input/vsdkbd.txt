@@ -1,0 +1,28 @@
+; the Virtual Sound Device (tests/vsdprobe.sh): keys typed into a DOS box
+; that has interrupts off (SPK X: about 45 s; 160 keys): do they overflow a queue,
+; and does something beep? Then EXIT
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-box
+type spk 820 0 0 x
+key Return
+sleep 2
+type abcdefghijabcdefghijabcdefghijabcdefghij
+type abcdefghijabcdefghijabcdefghijabcdefghij
+type abcdefghijabcdefghijabcdefghijabcdefghij
+type abcdefghijabcdefghijabcdefghijabcdefghij
+sleep 25
+shot 02-after
+key Escape
+key Return
+sleep 2
+type exit
+key Return
+sleep 8
+shot 03-end

@@ -464,7 +464,7 @@ static int load_vmm(void)
  * it does with a name given twice (w16 loads it once). */
 static const char *const builtin[] = {
     "vnetbios", "dosnet", "ebios", "vddvga", "vtd",
-    "vdmad", "vsd", "v86mmgr", "pageswap", "dosmgr",
+    "vdmad", "v86mmgr", "pageswap", "dosmgr",
     "wshell", "blockdev", "pagefile", "vfd", "parity", "biosxlat", "vcd",
     "vmcpd", "combuff", "cdpscsi", "int13", "wdctrl", "qemmfix", 0
 };

@@ -1,0 +1,25 @@
+; the Virtual Sound Device (tests/vsdprobe.sh): Reboot's screens and the
+; keys they do not take. VX8 hung (mode 2): Ctrl+Alt+Del (the "stopped
+; responding" screen), x, space, F1 (keys it has no use for), Escape;
+; Ctrl+Alt+Del again, Return (VX8 closed). (Ctrl+Alt+Del afterwards
+; with nothing hung showed Program Manager's "stopped responding" screen
+; under Windows 3.1 on a loaded host, as win386cad.txt says: left out)
+sleep 6
+key ctrl+alt+Delete
+sleep 4
+shot 01-cad
+key x
+sleep 2
+key space
+sleep 2
+key F1
+sleep 2
+shot 02-keys
+key Escape
+sleep 3
+key ctrl+alt+Delete
+sleep 4
+shot 03-cad2
+key Return
+sleep 6
+shot 04-ret
