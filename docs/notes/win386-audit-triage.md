@@ -250,6 +250,10 @@ M17 (deferral), M21 (V86 API), L18, L23 left open below.
   win386switch, win386two, win386exitbox, win386w16dos, win386tree,
   win386woa, win386plain, k386e, exittree, treealone: all ok; make test
   passes. win386cad caught the E0h change (H30), which was reverted.
+- The full boot test at the end (90a30ed): 147 ok, 8 failed, all of them
+  the known-flaky ones (holdbtn, lzexpand quirks, toolhelp ref286, trails
+  timed, cplclick co-tree, w16write tree, taskman tree) but `control`
+  (tree 06-keyboard), which passed when run again alone; make test passes.
 - Not testable in the harness, by reasoning only: C1 (DOSBox's XMS gives
   page-aligned blocks), H12 (the arena's alignment depends on DOS's
   layout), H9 (no device with a 16 KB IOCTL read), H10 (KRNL386 always
