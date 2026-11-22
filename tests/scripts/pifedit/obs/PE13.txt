@@ -1,0 +1,146 @@
+; PE13: Standard mode: Setup's DOSPRMPT.PIF and variants of it opened and saved
+; again, to see what a Standard-mode save writes into the base section
+; var: V1.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 
+; var: V2.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 1B9=8002 1BB=8000
+; var: V3.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 20=5802 1B9=2C01
+; var: V4.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 20=2C01 22=6400
+; var: V5.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF E5=00
+; var: V6.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 20=0002 1B9=8002
+; var: V7.PIF .tools/ref/win31/cdrive/WINDOWS/DOSPRMPT.PIF 20=FFFF 22=FFFF
+; get: R1.PIF
+; get: R2.PIF
+; get: R3.PIF
+; get: R4.PIF
+; get: R5.PIF
+; get: R6.PIF
+; get: R7.PIF
+run PIFEDIT.EXE
+wait 3000
+cmd 10
+wait 1500
+type C:\V1.PIF
+key 0D
+wait 1500
+snap C:\R1.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R1.PIF
+key 0D
+wait 1500
+snap C:\R1S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V2.PIF
+key 0D
+wait 1500
+snap C:\R2.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R2.PIF
+key 0D
+wait 1500
+snap C:\R2S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V3.PIF
+key 0D
+wait 1500
+snap C:\R3.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R3.PIF
+key 0D
+wait 1500
+snap C:\R3S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V4.PIF
+key 0D
+wait 1500
+snap C:\R4.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R4.PIF
+key 0D
+wait 1500
+snap C:\R4S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V5.PIF
+key 0D
+wait 1500
+snap C:\R5.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R5.PIF
+key 0D
+wait 1500
+snap C:\R5S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V6.PIF
+key 0D
+wait 1500
+snap C:\R6.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R6.PIF
+key 0D
+wait 1500
+snap C:\R6S.BMP
+dump
+key 0D
+wait 800
+cmd 10
+wait 1500
+type C:\V7.PIF
+key 0D
+wait 1500
+snap C:\R7.BMP
+dump
+key 0D
+wait 800
+cmd 13
+wait 1500
+type C:\R7.PIF
+key 0D
+wait 1500
+snap C:\R7S.BMP
+dump
+key 0D
+wait 800
+close
+wait 1500

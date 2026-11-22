@@ -1,0 +1,25 @@
+; PE1: the PIF Editor as it starts in Standard mode: windows, menus, each menu down
+run PIFEDIT.EXE
+wait 3000
+snap C:\S1.BMP
+dump
+info
+dumpmenu
+focus
+menu f
+wait 600
+snap C:\M1.BMP
+key 1B
+key 1B
+menu m
+wait 600
+snap C:\M2.BMP
+key 1B
+key 1B
+menu h
+wait 600
+snap C:\M3.BMP
+key 1B
+key 1B
+close
+wait 1000

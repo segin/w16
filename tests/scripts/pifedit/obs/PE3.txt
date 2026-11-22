@@ -1,0 +1,28 @@
+; PE3: Standard mode: Mode > 386 Enhanced (the warning), then back
+run PIFEDIT.EXE
+wait 3000
+menu m
+wait 400
+key 28
+key 0D
+wait 1000
+snap C:\W1.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\W2.BMP
+dump
+info
+menu m
+wait 400
+key 26
+key 0D
+wait 1000
+snap C:\W3.BMP
+dump
+key 0D
+wait 1000
+snap C:\W4.BMP
+close
+wait 1000

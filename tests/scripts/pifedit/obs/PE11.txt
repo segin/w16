@@ -1,0 +1,284 @@
+; PE11: 386 Enhanced mode: values out of range, where and how they are refused
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+alt p
+wait 200
+type A.EXE
+wait 200
+alt r
+wait 200
+type 700
+wait 200
+wait 300
+snap C:\C01a.BMP
+cmd 13
+wait 1500
+snap C:\C01b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C01c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type -1
+wait 200
+wait 300
+snap C:\C02a.BMP
+cmd 13
+wait 1500
+snap C:\C02b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C02c.BMP
+dump
+focus
+key 1B
+wait 800
+alt r
+wait 200
+type 128
+wait 200
+alt d
+wait 200
+type -1
+wait 200
+wait 300
+snap C:\C03a.BMP
+cmd 13
+wait 1500
+snap C:\C03b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C03c.BMP
+dump
+focus
+key 1B
+wait 800
+alt d
+wait 200
+type 700
+wait 200
+wait 300
+snap C:\C04a.BMP
+cmd 13
+wait 1500
+snap C:\C04b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C04c.BMP
+dump
+focus
+key 1B
+wait 800
+alt d
+wait 200
+type 100
+wait 200
+wait 300
+snap C:\C05a.BMP
+cmd 13
+wait 1500
+snap C:\C05b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C05c.BMP
+dump
+focus
+key 1B
+wait 800
+alt d
+wait 200
+type 640
+wait 200
+alt k
+wait 200
+type 20000
+wait 200
+wait 300
+snap C:\C06a.BMP
+cmd 13
+wait 1500
+snap C:\C06b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C06c.BMP
+dump
+focus
+key 1B
+wait 800
+alt k
+wait 200
+type 0
+wait 200
+alt l
+wait 200
+type -1
+wait 200
+wait 300
+snap C:\C07a.BMP
+cmd 13
+wait 1500
+snap C:\C07b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C07c.BMP
+dump
+focus
+key 1B
+wait 800
+alt l
+wait 200
+type 16384
+wait 200
+alt q
+wait 200
+type 99999
+wait 200
+wait 300
+snap C:\C08a.BMP
+cmd 13
+wait 1500
+snap C:\C08b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C08c.BMP
+dump
+focus
+key 1B
+wait 800
+alt q
+wait 200
+type 0
+wait 200
+alt i
+wait 200
+type -1
+wait 200
+wait 300
+snap C:\C09a.BMP
+cmd 13
+wait 1500
+snap C:\C09b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C09c.BMP
+dump
+focus
+key 1B
+wait 800
+alt i
+wait 200
+type 5
+wait 200
+alt q
+wait 200
+type 10
+wait 200
+wait 300
+snap C:\C10a.BMP
+cmd 13
+wait 1500
+snap C:\C10b.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\C10c.BMP
+dump
+focus
+key 1B
+wait 800
+alt q
+wait 200
+type 0
+wait 200
+alt i
+wait 200
+type 1024
+wait 200
+alt a
+wait 1200
+alt b
+wait 200
+type 0
+wait 200
+key 0D
+wait 1000
+snap C:\D1.BMP
+dump
+focus
+key 0D
+wait 800
+alt b
+wait 200
+type 10001
+wait 200
+key 0D
+wait 1000
+snap C:\D2.BMP
+dump
+focus
+key 0D
+wait 800
+alt b
+wait 200
+type 50
+wait 200
+alt f
+wait 200
+type x
+wait 200
+key 0D
+wait 1000
+snap C:\D3.BMP
+dump
+focus
+key 0D
+wait 800
+alt f
+wait 200
+type 100
+wait 200
+key 1B
+wait 800
+snap C:\D4.BMP
+dump
+menu m
+wait 400
+key 0D
+wait 1000
+snap C:\W1.BMP
+dump
+focus
+key 0D
+wait 1000
+snap C:\W2.BMP
+dump
+close
+wait 1500
+snap C:\W3.BMP
+dump
+alt n
+wait 1000

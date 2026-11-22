@@ -1,0 +1,107 @@
+; PE19: 386 Enhanced: where Advanced Options goes with the window moved; the
+; message texts' raw bytes (TK.LOG); the text boxes' lengths; opening files
+; that are no PIF
+; mode: /3
+; get: WINDOWS/TK.LOG
+; var: JUNK.PIF tests/scripts/pifedit/obs/PE19.txt
+; var: TINY.PIF tests/scripts/pifedit/obs/PE1.txt -nock
+run PIFEDIT.EXE
+wait 4000
+move 100 30 455 331
+wait 800
+alt a
+wait 1500
+dump
+cmd 2
+wait 800
+move 0 0 455 331
+wait 800
+alt a
+wait 1500
+dump
+cmd 2
+wait 800
+move 12 48 455 331
+wait 800
+alt p
+type 0123456789012345678901234567890123456789012345678901234567890123456789
+alt t
+type 0123456789012345678901234567890123456789
+alt o
+type 0123456789012345678901234567890123456789012345678901234567890123456789
+alt s
+type 0123456789012345678901234567890123456789012345678901234567890123456789
+alt r
+type 12345678
+alt d
+type 12345678
+alt k
+type 12345678
+alt l
+type 12345678
+alt q
+type 12345678
+alt i
+type 12345678
+alt a
+wait 1200
+type 1234567890
+alt f
+type 1234567890
+dump
+cmd 2
+wait 800
+dump
+cmd 12
+wait 1000
+dump
+alt n
+wait 800
+alt p
+type A.TXT
+cmd 13
+wait 1200
+type C:\X.PIF
+key 0D
+wait 1500
+dump
+cmd 2
+wait 800
+cmd 10
+wait 1500
+type C:\JUNK.PIF
+key 0D
+wait 1500
+snap C:\J1.BMP
+dump
+key 0D
+wait 800
+snap C:\J2.BMP
+dump
+cmd 10
+wait 1500
+type C:\TINY.PIF
+key 0D
+wait 1500
+snap C:\J3.BMP
+dump
+key 0D
+wait 800
+dump
+cmd 10
+wait 1500
+type C:\WINDOWS\WIN.INI
+key 0D
+wait 1500
+alt o
+wait 1500
+snap C:\J4.BMP
+dump
+key 0D
+wait 800
+snap C:\J5.BMP
+dump
+close
+wait 1500
+alt n
+wait 1000
