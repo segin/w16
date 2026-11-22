@@ -8,7 +8,8 @@ version resource (RT_VERSION).
 
     fontc.py fnt SRC OUT.FNT
     fontc.py fon OUT.FON --module NAME --desc TEXT [--file NAME]
-                 [--info KEY=VALUE ...] ID=SRC [ID=SRC ...]
+                 [--info KEY=VALUE ...] [--shift N] [--pad ID=SIZE ...]
+                 ID=SRC [ID=SRC ...]
     fontc.py check SRC...          parse and check sources only
 
 Formats: the published Windows 3.x font file format (.FNT; SDK "Font
@@ -38,6 +39,9 @@ Source format (one font per file):
     char 0x41 A                        a glyph: code (decimal, 0x.., or a
     ..##..                             quoted 'c'), then 'height' rows; the
     .#..#.                             row length is the advance width
+    ...
+    char 0x20                          a zero-width glyph: rows of '-'
+    -
     ...
     char 0xC0 = 0x41 + grave_cap       composed: a base glyph with pieces
     char 0xC5 = 0x41 + ring@1,-1         or other glyphs ORed over it,
@@ -160,7 +164,9 @@ class Font:
                         self.err(ln, 'glyph ends early (%d of %d rows)' % (len(rows), h))
                     r = lines[i].split(';', 1)[0].strip()
                     i += 1
-                    if not re.fullmatch(r'[#.]+', r):
+                    if r == '-':            # a row of a zero-width glyph
+                        r = ''
+                    elif not re.fullmatch(r'[#.]+', r):
                         self.err(i, 'expected a grid row of # and . (got %r)' % lines[i - 1])
                     rows.append(r)
                 if len({len(r) for r in rows}) != 1:
@@ -250,9 +256,13 @@ class Font:
             raise FontError('%s: widths differ from the observed ones:\n  %s'
                             % (self.path, '\n  '.join(bad)))
         mw = max(g.width for c, g in self.glyphs.items())
-        if h['maxwidth'] is not None and h['maxwidth'] != mw:
+        # dfMaxWidth: the widest glyph, or as given (some of Windows 3.1's
+        # fonts report more than their widest glyph: MS Serif 8 says 11
+        # where GetCharWidth's widest is 10; the header is matched)
+        if h['maxwidth'] is not None and h['maxwidth'] < mw:
             raise FontError('%s: maxwidth %d given, widest glyph is %d' % (self.path, h['maxwidth'], mw))
-        h['maxwidth'] = mw
+        if h['maxwidth'] is None:
+            h['maxwidth'] = mw
         if h['sentinel-width'] is None:
             h['sentinel-width'] = self.glyphs[h['break']].width
 
@@ -358,8 +368,13 @@ def version_resource(info):
     return mkver.versioninfo(fixed, [('040904E4', list(info.items()))], [(0x409, 1252)])
 
 
-def fon(fonts, module, desc, info):
-    """fonts: [(id, fnt bytes)]; returns the .FON file"""
+def fon(fonts, module, desc, info, minshift=4, pad=None):
+    """fonts: [(id, fnt bytes)]; returns the .FON file. minshift: the
+    smallest alignment shift to use (SizeofResource reports a resource's
+    length in these units); pad: {id: bytes} resources padded with zeros
+    after the font to that length (dfSize is unchanged)"""
+    pad = pad or {}
+    fonts = [(rid, f + b'\0' * max(0, pad.get(rid, 0) - len(f))) for rid, f in fonts]
     for rid, _ in fonts:
         if not 1 <= rid <= 0x7FFF:
             raise FontError('resource IDs are 1-32767 (format limit)')
@@ -410,7 +425,7 @@ def fon(fonts, module, desc, info):
     nonres_off = lfa + tables_end
     data_start = nonres_off + len(nonres)
     # alignment: the smallest shift whose 16-bit offset/length fields fit
-    shift = 4
+    shift = minshift
     while True:
         unit = 1 << shift
         pos = (data_start + unit - 1) & ~(unit - 1)
@@ -464,6 +479,8 @@ def main():
     a.add_argument('--module', required=True)
     a.add_argument('--desc', required=True)
     a.add_argument('--info', action='append', default=[], help='version string KEY=VALUE')
+    a.add_argument('--shift', type=int, default=4, help='smallest alignment shift')
+    a.add_argument('--pad', action='append', default=[], help='ID=SIZE: pad a resource')
     a.add_argument('fonts', nargs='+', help='ID=SOURCE')
     a = sub.add_parser('check')
     a.add_argument('srcs', nargs='+')
@@ -486,7 +503,8 @@ def main():
             for kv in args.info:
                 k, _, v = kv.partition('=')
                 info[k] = v
-            data = fon(fonts, args.module, args.desc, info)
+            pad = dict((int(k, 0), int(v, 0)) for k, v in (p.split('=') for p in args.pad))
+            data = fon(fonts, args.module, args.desc, info, args.shift, pad)
             tmp = args.out + '.tmp'
             open(tmp, 'wb').write(data)
             os.replace(tmp, args.out)
