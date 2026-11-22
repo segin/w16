@@ -17,6 +17,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H = 640, 480
 
+
+def version():
+    """w16's version: the one line of the repository's VERSION file."""
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, 'VERSION')) as f:
+        return f.read().strip()
+
 # Standard VGA 16-colour palette, in Windows' system palette order.
 VGA = [
     (0x00, 0x00, 0x00), (0x80, 0x00, 0x00), (0x00, 0x80, 0x00), (0x80, 0x80, 0x00),
@@ -90,7 +98,7 @@ def draw():
            font=font('NotoSans-Regular.ttf', 21), fill=LTGRAY)
 
     # Footer.
-    foot = 'Version 0.1  ·  Clean-room implementation'
+    foot = 'Version %s  ·  Clean-room implementation' % version()
     f = font('NotoSans-Regular.ttf', 14)
     tw = d.textlength(foot, font=f)
     d.text(((W - tw) // 2, 440), foot, font=f, fill=DKGRAY)
