@@ -48,6 +48,10 @@ static char nrec[200];          /* the parent's EN_ notifications */
 static char wrec[1600];         /* the word-break procedure's calls */
 static char line[2400];
 static int wbmode;              /* 0 spaces, 1 hyphens, 2 nothing */
+/* the procedures' instance thunks (MakeProcInstance: an exported
+   function of a program loads its DS from AX, which the thunk sets; a
+   raw pointer hung 3.1 and w16 alike, whatever AX was) */
+static FARPROC wbthunk, wboldthunk;
 
 static void pump(DWORD ms)
 {
@@ -120,6 +124,55 @@ static WORD grab(RECT *a)
     DeleteDC(mem);
     ReleaseDC(NULL, scr);
     return s;
+}
+
+/* the screen saved as C:\US35_nn.BMP (for looking at) */
+static int shot;
+static void snap(void)
+{
+    static char bmpname[16] = "C:\\US35_00.BMP";
+    int cx = GetSystemMetrics(SM_CXSCREEN), cy = GetSystemMetrics(SM_CYSCREEN), y;
+    WORD stride = (WORD)(((cx * 4 + 31) / 32) * 4);
+    HDC scr = GetDC(NULL), mem = CreateCompatibleDC(scr);
+    HBITMAP bm = CreateCompatibleBitmap(scr, cx, cy), old;
+    HGLOBAL hb = GlobalAlloc(GMEM_MOVEABLE, (DWORD)stride * 32);
+    BYTE FAR *buf = (BYTE FAR *)GlobalLock(hb);
+    BITMAPFILEHEADER fh;
+    HFILE f;
+    shot++;
+    bmpname[8] = (char)('0' + shot / 10);
+    bmpname[9] = (char)('0' + shot % 10);
+    old = SelectObject(mem, bm);
+    BitBlt(mem, 0, 0, cx, cy, scr, 0, 0, SRCCOPY);
+    SelectObject(mem, old);
+    bmi.h.biSize = sizeof bmi.h;
+    bmi.h.biWidth = cx;
+    bmi.h.biHeight = cy;
+    bmi.h.biPlanes = 1;
+    bmi.h.biBitCount = 4;
+    bmi.h.biCompression = 0;
+    bmi.h.biSizeImage = 0;
+    for (y = 0; y < cy; y++)
+        bmi.h.biSizeImage += stride;
+    f = _lcreat(bmpname, 0);
+    fh.bfType = 0x4D42;
+    fh.bfOffBits = sizeof fh + sizeof bmi;
+    fh.bfSize = fh.bfOffBits + bmi.h.biSizeImage;
+    fh.bfReserved1 = fh.bfReserved2 = 0;
+    _llseek(f, fh.bfOffBits, 0);
+    for (y = 0; y < cy; y += 32) {
+        GetDIBits(scr, bm, y, 32, buf, (BITMAPINFO FAR *)&bmi, DIB_RGB_COLORS);
+        _lwrite(f, buf, stride * 32);
+    }
+    _llseek(f, 0, 0);
+    _lwrite(f, (LPCSTR)&fh, sizeof fh);
+    _lwrite(f, (LPCSTR)&bmi, sizeof bmi);
+    _lclose(f);
+    GlobalUnlock(hb);
+    GlobalFree(hb);
+    DeleteObject(bm);
+    DeleteDC(mem);
+    ReleaseDC(NULL, scr);
 }
 
 static WORD grab_win(HWND h)
@@ -195,6 +248,21 @@ static void log_text(const char *nm, HWND e)
     obs_str(nm, line);
 }
 
+/* a trace closed after every line, so that it survives a hang
+   (C:\US35WB.LOG; DOSBox keeps TK.LOG's last writes until it exits) */
+static void trace(const char *t)
+{
+    HFILE f = _lopen("C:\\US35WB.LOG", OF_WRITE);
+    if (f == HFILE_ERROR)
+        f = _lcreat("C:\\US35WB.LOG", 0);
+    if (f == HFILE_ERROR)
+        return;
+    _llseek(f, 0, 2);
+    _lwrite(f, t, lstrlen(t));
+    _lwrite(f, "\r\n", 2);
+    _lclose(f);
+}
+
 /* ---- the word-break procedure: its calls logged ---- */
 static int isdelim(char c)
 {
@@ -207,8 +275,16 @@ static int isdelim(char c)
 
 int FAR PASCAL __export __loadds wbproc(LPSTR p, int ich, int cch, int code)
 {
-    char t[40];
+    char t[60];
     int i = ich, r;
+    /* the arguments traced before anything is read through p */
+    wsprintf(t, "call %d %d %d %04X:%04X", code, ich, cch, SELECTOROF(p), OFFSETOF(p));
+    trace(t);
+    if (IsBadReadPtr(p, cch > 0 ? cch : 1) || ich < 0 || ich > cch) {
+        trace("bad");
+        add(wrec, sizeof wrec, " bad");
+        return code == WB_ISDELIMITER ? 0 : ich;
+    }
     if (code == WB_LEFT) {
         while (i > 0 && isdelim(p[i - 1]))
             i--;
@@ -226,9 +302,7 @@ int FAR PASCAL __export __loadds wbproc(LPSTR p, int ich, int cch, int code)
     wsprintf(t, " %d:%d/%d'%c%c'=%d", code, ich, cch, p[0] ? p[0] : '@',
              ich >= 0 && ich < cch && p[ich] >= ' ' ? p[ich] : '$', r);
     add(wrec, sizeof wrec, t);
-    out("WB");
-    out(t);
-    out("\r\n");
+    trace(t);
     return r;
 }
 
@@ -260,7 +334,7 @@ int FAR PASCAL __export __loadds wbold(LPSTR p, int ich, int cch, int code)
      O the old text shown (Notepad's toggle)  P EM_GETRECT
      Y EM_SETWORDBREAKPROC wbproc   Z EM_SETWORDBREAKPROC 0
      J EM_GETWORDBREAKPROC == wbproc, 0, else  V EM_SETWORDBREAK wbold
-     mN word-break mode N */
+     mN word-break mode N    rN EM_SETREADONLY N */
 static int num(const char **s)
 {
     int v = 0, neg = 0;
@@ -406,6 +480,10 @@ static void run_script(const SCRIPT *sc)
         }
         step++;
         wsprintf(name, "%s.%d", (LPSTR)sc->name, step);
+        if (sc->name[0] == 'w' && sc->name[1] == 'b') {
+            wsprintf(t, "step %s %s", (LPSTR)name, (LPSTR)tok);
+            trace(t);
+        }
         switch (*a++) {
         case 's': { int x = num(&a), y = num(&a); ret = SendMessage(ed, EM_SETSEL, 0, MAKELONG(x, y)); break; }
         case 'S': { int x = num(&a), y = num(&a); ret = SendMessage(ed, EM_SETSEL, 1, MAKELONG(x, y)); break; }
@@ -454,6 +532,7 @@ static void run_script(const SCRIPT *sc)
         case 'G': ret = SendMessage(ed, WM_SETFONT, (WPARAM)fnt[num(&a)], 1); break;
         case 'D': dump_lines(name, ed); break;
         case 'Q': ret = grab_win(ed); break;
+        case 'B': UpdateWindow(ed); call_mouse_event(0x8001, 0xFFFF, 0xFFFF, 0); pump(50); snap(); break;
         case 'P': {
             RECT r;
             SendMessage(ed, EM_GETRECT, 0, (LPARAM)(LPRECT)&r);
@@ -461,15 +540,16 @@ static void run_script(const SCRIPT *sc)
             add(nrec, sizeof nrec, t);
             break;
         }
-        case 'Y': ret = SendMessage(ed, EM_SETWORDBREAKPROC, 0, (LPARAM)(FARPROC)wbproc); break;
+        case 'Y': ret = SendMessage(ed, EM_SETWORDBREAKPROC, 0, (LPARAM)wbthunk); break;
         case 'Z': ret = SendMessage(ed, EM_SETWORDBREAKPROC, 0, 0); break;
-        case 'V': ret = SendMessage(ed, WM_USER + 26, 0, (LPARAM)(FARPROC)wbold); break;
+        case 'V': ret = SendMessage(ed, WM_USER + 26, 0, (LPARAM)wboldthunk); break;
         case 'J': {
             DWORD p = SendMessage(ed, EM_GETWORDBREAKPROC, 0, 0);
-            ret = p == (DWORD)(FARPROC)wbproc ? 1 : p == 0 ? 0 : 2;
+            ret = p == (DWORD)wbthunk ? 1 : p == 0 ? 0 : 2;
             break;
         }
         case 'm': wbmode = num(&a); break;
+        case 'r': ret = SendMessage(ed, EM_SETREADONLY, num(&a), 0); break;
         case 'O': {
             /* the Rect of a control made with ES_CENTER etc. is the
                script's own business: the caret at each line's start
@@ -544,7 +624,7 @@ static const SCRIPT scripts[] = {
       "s0,0 D tXXXXX D b b b D s20,20 t~ D t~~~~~~~~~~~~~~ D kE O" },
     /* scrolling */
     { "scroll", MLW | WS_VSCROLL, 130, 52, 0, LONGT,
-      "Q D y2,0 y100,0 y-1,0 y0,3 v1 v3 v7 v5,50 v4,30 g v6 kN kN ^kE ^kH S40,40 s40,40 S80,80 s200,200 s0,0" },
+      "Q B D y2,0 y100,0 y-1,0 y0,3 v1 v3 v7 v5,50 v4,30 g v6 kN kN ^kE ^kH S40,40 s40,40 S80,80 s200,200 s0,0" },
     { "scrollh", MLW | WS_HSCROLL, 130, 80, 0, LONGT, "y0,3 h1 h3 h5,50 kE" },
     /* ES_AUTOHSCROLL: where the view moves as the caret passes the edge */
     { "autoh", MLN, 130, 60, 0, NULL,
@@ -556,7 +636,7 @@ static const SCRIPT scripts[] = {
       "s30,30 D W200 D W100 D W60 D W20 D W4 D W300 D W130 G1 D G2 D G3 D" },
     { "resizescroll", MLW, 130, 52, 0, LONGT, "^kE W80 W200 W130" },
     /* alignment */
-    { "center", MLW | ES_CENTER, 130, 200, 0, LONGT, "D O Q ^kH kD kE kD" },
+    { "center", MLW | ES_CENTER, 130, 200, 0, LONGT, "D O Q B ^kH kD kE kD" },
     { "right", MLW | ES_RIGHT, 130, 200, 0, LONGT, "D O Q ^kH kD kE kD" },
     { "centerms", MLW | ES_CENTER, 130, 200, 1, LONGT, "D O Q" },
     /* the limit */
@@ -610,6 +690,10 @@ static const SCRIPT scripts[] = {
     { "u41", MLW, 300, 60, 0, "hello~world", "s5,5 tab s2,2 b u" },
     { "u42", MLW | ES_READONLY, 300, 60, 0, "hello~world", "s5,5 tab p u z" },
     { "u43", MLW, 300, 60, 0, "hello~world", "s0,5 tX s0,1 tY u u" },
+    /* read-only: made so, and set by EM_SETREADONLY; typed, real keys */
+    { "ro1", MLW | ES_READONLY, 300, 60, 0, "hello~world", "s5,5 kA tb kd kB p r0 tc" },
+    { "ro2", MLW, 300, 60, 0, "hello~world", "r1 s5,5 kA tb kd kB p r0 tc" },
+    { "ro3", WS_BORDER | ES_AUTOHSCROLL | ES_READONLY, 300, 24, 0, "hello~world", "s5,5 kA tb kd p" },
     /* single-line controls */
     { "u1s", WS_BORDER | ES_AUTOHSCROLL, 300, 24, 0, "hello~world", "z s11,11 tabc u u u" },
     { "u3s", WS_BORDER | ES_AUTOHSCROLL, 300, 24, 0, "hello~world", "s6,11 tX u u" },
@@ -623,8 +707,7 @@ static const SCRIPT scripts[] = {
     { 0 }
 };
 
-/* the word-break procedure: last, as a procedure 3.1 does not expect may
-   hang it */
+/* the word-break procedure */
 static const SCRIPT wbscripts[] = {
     { "wb", MLW, 130, 200, 0, NULL,
       "J Y J T" LONGT " D ^kH ^kR ^kR ^kR ^kL ^kL #30,5 s5,5 tQ W100 kE kD Z J T" LONGT " D" },
@@ -879,7 +962,9 @@ int __cdecl tmain(void)
     fnt[1] = CreateFont(-MulDiv(8, GetDeviceCaps(dc, LOGPIXELSY), 72), 0, 0, 0, FW_BOLD, 0, 0, 0,
                         ANSI_CHARSET, 0, 0, 0, VARIABLE_PITCH | FF_SWISS, "MS Sans Serif");
     fnt[2] = GetStockObject(SYSTEM_FIXED_FONT);
-    fnt[3] = GetStockObject(SYSTEM_FONT);   /* WM_SETFONT 0 hung 3.1 */
+    fnt[3] = GetStockObject(SYSTEM_FONT);
+    wbthunk = MakeProcInstance((FARPROC)wbproc, hi);
+    wboldthunk = MakeProcInstance((FARPROC)wbold, hi);   /* WM_SETFONT 0 hung 3.1 */
     ReleaseDC(NULL, dc);
     out("wrap\r\n");
     sec_wrap();

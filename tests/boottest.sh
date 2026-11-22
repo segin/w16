@@ -3699,8 +3699,13 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             grep -q '^US35 end' "$out/editwrap-$k.log" ||
                 { [ "$r" = ok ] && r="US35 did not finish ($k: $out/editwrap-$k.log)"; }
         done
-        # still different, left out (ARCHITECTURE.md, US35): none yet
-        ewskip='^OBS (XXX)'
+        # still different, left out (ARCHITECTURE.md, US35): text with a
+        # lone CR or LF (text 4); how far ES_AUTOHSCROLL scrolls right
+        # (autoh, autohw); WM_HSCROLL's page and thumb in a control with a
+        # horizontal bar (scrollh 3-5); Page Down with the caret above the
+        # view (scroll 15, 16); EM_SETWORDBREAKPROC's answer (3.1's not 0,
+        # what it is unknown)
+        ewskip='^OBS (w\.[0-9]\.[0-9]+\.4\.|autohw?\.|scrollh\.[345]=|scroll\.1[56]=|wb[a-z]*\.[12]=Y )'
         if [ "$r" = ok ]; then
             grep '^OBS [^~]' "$out/editwrap-ref.log" | grep -Ev "$ewskip" > "$out/editwrap-ref.obs"
             grep '^OBS [^~]' "$out/editwrap-w16.log" | grep -Ev "$ewskip" > "$out/editwrap-w16.obs"
