@@ -62,6 +62,16 @@ u32 sel_base(u32 sel)
     return desc_base(gdt + (sel & ~7u));
 }
 
+/* a selector with a present descriptor (Map_Flat's test) */
+int sel_present(u32 sel)
+{
+    sel &= 0xFFFF;
+    if (!(sel & ~3u)) return 0;
+    if (sel & 4) return sel < ldt_limit + 1 && (ldt_desc(sel)[5] & 0x80);
+    if ((sel & ~3u) == (SEL_PMBP & ~3u)) return 1;
+    return (sel >> 3) < GDT_ENTRIES && (gdt[(sel & ~7u) + 5] & 0x80);
+}
+
 /* the D bit of a code segment, the B bit of a stack (bit 6 of byte 6) */
 int seg_32(u32 sel)
 {
@@ -853,6 +863,10 @@ static void dpmi_call(struct cregs *r)
         if (!sel_valid(BX(r))) { set_cf(r, 1); break; }
         d = ldt_desc(BX(r));
         v = (CX(r) << 16) | DX(r);
+        /* past 1 MB the low 12 bits must be set (DPMI 0.9; Windows 3.1,
+         * VX11 "lim": 00100000h fails with carry, AX kept, the limit
+         * unchanged; before, it was rounded up silently) */
+        if (v > 0xFFFFF && (v & 0xFFF) != 0xFFF) { set_cf(r, 1); break; }
         set_desc(d, desc_base(d), v, d[5], (d[6] >> 4) & 0x4);
         break;
     case 0x0009:                        /* set access rights */

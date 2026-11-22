@@ -158,7 +158,10 @@ void vm_snapshot(void)
     add_range(0, 0x500);
     if (info->sda_lin && info->sda_size) add_range(info->sda_lin, info->sda_size);
     if (info->free_mcb && top > mcb + 0x2000) {
-        priv_start = (mcb + 0xFFF) & ~0xFFFu;
+        /* the MCB's paragraph is instance data even when the arena
+         * starts on a page (a page of its own then started there, zeros:
+         * every new VM lost its free MCB) */
+        priv_start = (mcb + 0x10 + 0xFFF) & ~0xFFFu;
         priv_end = top & ~0xFFFu;
         add_range(mcb, priv_start - mcb);
         if (top > priv_end) add_range(priv_end, top - priv_end);
@@ -211,7 +214,10 @@ struct vm *vm_create(void)
         cl = kmalloc(sizeof(*cl));
         inst = kmalloc(inst_size);
         kst = kmalloc(KSTACK_SIZE);
-        if (!v || !cb || !cl || !inst || !kst) return NULL;
+        if (!v || !cb || !cl || !inst || !kst) {
+            kfree(v); kfree(cb); kfree(cl); kfree(inst); kfree(kst);
+            return NULL;
+        }
     }
     memset(v, 0, sizeof(*v));
     memset(cb, 0, VM_CB_SIZE);
@@ -223,16 +229,34 @@ struct vm *vm_create(void)
     v->kesp0 = v->kstack_top;
     v->id = id;
     /* the page table: the System VM's, with pages of its own for the
-     * private range */
+     * private range; short of memory, the VM is not made (its blocks
+     * kept for the next, as a destroyed VM's) */
     p = page_alloc();
-    if (!p) return NULL;
-    pt = (u32 *)phys_to_lin(p);
-    spt = (u32 *)phys_to_lin(sysvm.ptab_phys);
-    memcpy(pt, spt, 4096);
-    for (a = priv_start; a < priv_end; a += 4096) {
-        u32 pg = page_alloc();
-        if (!pg) panic("no memory for a DOS VM");
-        pt[a >> 12] = pg | 7;
+    pt = p ? (u32 *)phys_to_lin(p) : NULL;
+    if (pt) {
+        spt = (u32 *)phys_to_lin(sysvm.ptab_phys);
+        memcpy(pt, spt, 4096);
+        for (a = priv_start; a < priv_end; a += 4096) {
+            u32 pg = page_alloc();
+            if (!pg) break;
+            pt[a >> 12] = pg | 7;
+        }
+    }
+    if (!pt || a < priv_end) {
+        if (pt) {
+            u32 b;
+            for (b = priv_start; b < a; b += 4096) page_free(pt[b >> 12] & ~0xFFFu);
+            page_free(p);
+        }
+        v->id = 0;
+        v->cb = (struct vm_cb *)cb; v->client = cl; v->inst = inst;
+        v->free_next = vm_pool;
+        vm_pool = v;
+        return NULL;
+    }
+    {
+        static u32 gens;
+        v->gen = ++gens;
     }
     v->ptab_phys = p;
     vmm_pdir_entry(HIGH_PDE(id), p | 7);
@@ -341,7 +365,21 @@ void vm_destroy(struct vm *v)
 
 static int runnable(struct vm *v)
 {
-    return !v->suspended && !v->ended;
+    return !v->suspended && !v->susp_count && !v->ended;
+}
+
+/* V86 INT 21h calls whose return frame is gone without the call having
+ * returned through it: a program ended inside DOS, Ctrl+C at COMMAND.COM's
+ * prompt (its handler starts the prompt again on a fresh stack). They no
+ * longer count: the VM kept the processor for good otherwise (the
+ * scheduler leaves a VM in DOS running). The frame is gone when the VM's
+ * stack, the same segment, is above it */
+static void dos_frames_check(struct cregs *r)
+{
+    struct vm *v = cur_vm;
+    while (v->ndos && (r->eflags & EFL_VM) && (u16)r->ss == v->dos_ss[v->ndos - 1]
+           && (u16)r->esp >= (u16)(v->dos_sp[v->ndos - 1] + 6))
+        v->ndos--;
 }
 
 static u32 slice_of(struct vm *v)
@@ -465,7 +503,8 @@ void vm_end_trap(struct cregs *r)
     struct cregs *o;
     if (events) run_events(r);
     if (!resched) return;
-    if ((cur_vm->crit > 0 || cur_vm->indos > 0) && runnable(cur_vm) && !cur_vm->idle) return;
+    if (cur_vm->ndos) dos_frames_check(r);
+    if ((cur_vm->crit > 0 || cur_vm->indos > 0 || cur_vm->ndos > 0) && runnable(cur_vm) && !cur_vm->idle) return;
     resched = 0;
     n = pick();
     if (n == cur_vm) {
@@ -538,7 +577,12 @@ void vm_int21(struct cregs *r)
     v86_push16(r, fl);
     v86_push16(r, (u16)info->ldr_cs);
     v86_push16(r, (u16)(info->bp_off + W386_BP_INT21RET));
-    cur_vm->indos++;
+    dos_frames_check(r);
+    if (cur_vm->ndos < 8) {
+        cur_vm->dos_ss[cur_vm->ndos] = (u16)r->ss;
+        cur_vm->dos_sp[cur_vm->ndos] = (u16)r->esp;
+        cur_vm->ndos++;
+    }
 }
 
 /* DOS has returned: the flags it returned, the caller's CS:IP */
@@ -547,7 +591,7 @@ void vm_int21_ret(struct cregs *r)
     r->eip = v86_pop16(r);
     r->cs = v86_pop16(r);
     v86_pop16(r);
-    if (cur_vm->indos > 0) cur_vm->indos--;
+    if (cur_vm->ndos > 0) cur_vm->ndos--;
 }
 
 /* the VM stub's VMEXIT breakpoint: the VM's program has ended (AX its
@@ -584,14 +628,24 @@ int vm_service(u32 svc, struct svcregs *s)
         if (!vm_of(s->ebx)) s->eflags |= EFL_CF;
         return 1;
     case 0x002B:                        /* Suspend_VM */
+        /* the DDK: a count; VM_Suspend to the devices when the VM was
+         * not suspended already; not the System VM (SHELL's own
+         * suspending of full-screen VMs is separate: shell.c) */
         if ((v = vm_of(s->ebx)) == NULL || v == &sysvm) { s->eflags |= EFL_CF; return 1; }
-        v->suspended = 1;
+        if (!v->susp_count++ && !v->suspended) vxd_send(VM_SUSPEND, v, 0, 0, 0);
         if (v == cur_vm) resched = 1;
         return 1;
     case 0x002C:                        /* Resume_VM */
     case 0x002D:                        /* No_Fail_Resume_VM */
-        if ((v = vm_of(s->ebx)) == NULL) { s->eflags |= EFL_CF; return 1; }
-        v->suspended = 0;
+        /* the count down; at 0 VM_Resume, which a device may refuse
+         * (Resume_VM then fails, the count 1) */
+        if ((v = vm_of(s->ebx)) == NULL || !v->susp_count) { s->eflags |= EFL_CF; return 1; }
+        if (--v->susp_count) return 1;
+        if (!v->suspended && vxd_send(VM_RESUME, v, 0, 0, 0) && svc == 0x002C) {
+            v->susp_count = 1;
+            s->eflags |= EFL_CF;
+            return 1;
+        }
         vm_wake(v);
         return 1;
     case 0x0030:                        /* Get_Execution_Focus */
@@ -614,7 +668,7 @@ int vm_service(u32 svc, struct svcregs *s)
         return 1;
     case 0x00A7: {                      /* _Allocate_Device_CB_Area(size, flags): C, EAX the offset */
         u32 *args = (u32 *)(s + 1) + 1, n = (args[0] + 3) & ~3u;
-        if (cb_next + n > VM_CB_SIZE) { s->eax = 0; return 1; }
+        if (args[0] > VM_CB_SIZE || n > VM_CB_SIZE - cb_next) { s->eax = 0; return 1; }
         s->eax = cb_next;
         cb_next += n;
         return 1;

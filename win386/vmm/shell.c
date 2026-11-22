@@ -212,12 +212,13 @@ void shell_display_changed(struct vm *v, int cursor)
 
 /* SHELL's event: WINOA386's procedure in the System VM, (hwnd, msg,
  * wParam, lParam = the record) */
-struct postarg { u32 msg, wparam; struct vm *vm; };
+struct postarg { u32 msg, wparam; struct vm *vm; u32 gen; };
 
 static void post_now(struct vm *sys, void *arg)
 {
     struct postarg *a = arg;
-    struct shvm *s = sh_of(a->vm);
+    /* the VM it was for, not another made since in its slot */
+    struct shvm *s = a->vm->gen == a->gen && a->vm->id ? sh_of(a->vm) : NULL;
     struct shev *e;
     u16 args[5];
     (void)sys;
@@ -246,6 +247,7 @@ static void post(struct vm *v, u32 msg, u32 wparam)
     a->msg = msg;
     a->wparam = wparam;
     a->vm = v;
+    a->gen = v->gen;
     vm_event(&sysvm, post_now, a);
 }
 
@@ -284,29 +286,40 @@ static void set_focus(struct vm *v, u32 edi)
         suspend_vm(old);                /* a full-screen VM in the background: stopped */
 }
 
-/* the 48-bit pointer at p (offset, selector) as a linear address, in place */
-static u32 fptr_lin(u8 *p)
+/* the 48-bit pointer at p (offset, selector) as a linear address, in
+ * place; 0 when the client could not read n bytes there */
+static u32 fptr_lin(u8 *p, u32 n)
 {
-    u32 off = *(u32 *)p, sel = *(u16 *)(p + 4), lin = sel_base(sel) + (off & 0xFFFF);
-    *(u32 *)p = lin;
-    return lin;
+    u32 off = *(u32 *)p, sel = *(u16 *)(p + 4);
+    u8 *lin = cl_ptr(sel, off & 0xFFFF, n, 0);
+    *(u32 *)p = (u32)lin;
+    return (u32)lin;
 }
 
 static void create(struct cregs *r)
 {
-    u8 *b = (u8 *)pm_lin(r->es, r->edi);
+    u8 *b = cl_ptr(r->es, r->edi, 0x22, 1);
     char *prog, *dir;
     u8 *tail;
     struct vm *v;
     struct shvm *s;
 
-    prog = (char *)fptr_lin(b + 0x08);
-    tail = (u8 *)fptr_lin(b + 0x0E);
-    dir = (char *)fptr_lin(b + 0x14);
+    /* (WINOA386's block and its strings; a pointer the VMM cannot
+     * follow fails the call: UNVERIFIED what Windows 3.1 does) */
+    if (!b) { r->eax = 0; r->eflags |= EFL_CF; return; }
+    prog = (char *)fptr_lin(b + 0x08, 0x80);
+    tail = (u8 *)fptr_lin(b + 0x0E, 0x80);
+    dir = (char *)fptr_lin(b + 0x14, 0x80);
+    if (!prog || !tail || !dir) { r->eax = 0; r->eflags |= EFL_CF; return; }
     trace("SHELL: create a VM for %s, directory %s\n", prog, dir);
     v = vm_create();
-    s = kmalloc(sizeof(*s));
-    if (!v || !s) { r->eax = 0; r->eflags |= EFL_CF; return; }
+    s = v ? kmalloc(sizeof(*s)) : NULL;
+    if (!v || !s) {
+        if (v) vm_destroy(v);
+        r->eax = 0;
+        r->eflags |= EFL_CF;
+        return;
+    }
     s->vm = v;
     s->block = (u32)b;
     s->flags = 0;
@@ -322,8 +335,13 @@ static void create(struct cregs *r)
     vm_set_program(v, prog, tail, dir);
     if (is_command(prog)) put_banner(v);
     if (vxd_send(CREATE_VM, v, 0, (u32)b, r->edi)) {
+        struct shvm **pp;
         trace("SHELL: a device refused the VM\n");
         vxd_send_rev(DESTROY_VM, v, 0, 0, 0);
+        for (pp = &shvms; *pp != s; pp = &(*pp)->next)
+            ;
+        *pp = s->next;
+        kfree(s);
         vm_destroy(v);
         r->eax = 0;
         r->eflags |= EFL_CF;
@@ -413,7 +431,8 @@ void shell_api(struct cregs *r)
         return;
     case 0x09:                          /* the event procedure; the flat selector */
         {
-            u8 *b = (u8 *)pm_lin(r->es, r->edi);
+            u8 *b = cl_ptr(r->es, r->edi, 48, 0);
+            if (!b) { r->eflags |= EFL_CF; return; }
             next_off = *(u32 *)(b + 8);
             next_sel = *(u16 *)(b + 12);
             if (dpmi_verbose) {
@@ -436,7 +455,7 @@ void shell_api(struct cregs *r)
         trace("SHELL: event procedure %x:%x\n", next_sel, next_off);
         return;
     case 0x03:
-        if (dpmi_verbose) {
+        if (dpmi_verbose && cl_ptr(r->es, r->edi, 0x50, 0)) {
             u8 *b = (u8 *)pm_lin(r->es, r->edi);
             u32 i;
             trace("SHELL: 3's block");
@@ -475,7 +494,7 @@ void shell_api(struct cregs *r)
         }
         return;
     case 0x07:                          /* the block's status word */
-        if ((s = sh_of(vm_of(r->ebx))) != NULL)
+        if ((s = sh_of(vm_of(r->ebx))) != NULL && lin_user_ok(s->block, 2, 1))
             *(u16 *)s->block = (u16)((*(u16 *)s->block & ~0x000Fu) | (AX(r) & 0x000F));
         return;
     case 0x15:                          /* WINOA386's window, for the VM just created */

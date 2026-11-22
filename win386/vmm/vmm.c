@@ -153,6 +153,7 @@ static void vtrace(const char *fmt, u32 *ap)
             continue;
         }
         fmt++;
+        if (!*fmt) break;
         if (*fmt == '0') pad = '0';
         while (*fmt >= '0' && *fmt <= '9') width = width * 10 + *fmt++ - '0';
         switch (*fmt) {

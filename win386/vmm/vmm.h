@@ -121,7 +121,11 @@ struct vm {
     u16 refstk_seg, refstk_top;     /* the V86 stack of the VMM's nested calls */
     u8 *inst;               /* its instance data while another VM runs */
     int crit;               /* in a DOS critical section (INT 2Ah 80h/81h) */
-    int indos;              /* inside an INT 21h call (vm_dos_call) */
+    int indos;              /* inside an INT 21h call the VMM made (v86_int) */
+    int ndos;               /* V86 INT 21h calls under way (vm_int21): their */
+    u16 dos_ss[8], dos_sp[8];   /* return frames, to see one abandoned */
+    u32 susp_count;         /* Suspend_VM's count (the services) */
+    u32 gen;                /* which VM this slot holds now (vm_create) */
     int idle;               /* HLT, INT 2Fh 1680h: no time until an interrupt */
     int suspended;          /* Suspend_VM, or not executable any more */
     u32 slice;              /* ticks left in its time slice */
@@ -314,7 +318,8 @@ void dpmi_int(struct cregs *r, int vec, int hw);   /* INT n / IRQ in protected m
 void dpmi_pmbp(struct cregs *r, u32 index);        /* a PM breakpoint (HLT) */
 void dpmi_exception(struct cregs *r, int vec, u32 err);
 u32 sel_base(u32 sel);
-int seg_32(u32 sel);                /* a code segment's D bit, a stack's B bit */
+int seg_32(u32 sel);
+int sel_present(u32 sel);                /* a code segment's D bit, a stack's B bit */
 u8 *cl_ptr(u32 sel, u32 off, u32 len, int write);   /* the client's sel:off, or NULL */
 void sel_gone(struct cregs *r, u32 sel);            /* freed: out of r's segment registers */
 int dpmi_dosmem(struct cregs *r);   /* INT 21h 48h, 49h, 4Ah from protected mode */

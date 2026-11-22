@@ -139,6 +139,12 @@ static u32 simulate(u32 port, u32 type, u32 data, struct client_regs *c)
         for (i = 0; i < count; i++) {
             u32 off = *idx & mask;
             u8 *p = (u8 *)(base + off);
+            /* memory the client cannot reach ends the string here (its
+             * count and index say how far it got) */
+            if (!(c->eflags & EFL_VM) && !lin_user_ok((u32)p, step, !out)) {
+                if (type & IO_REP) c->ecx = (c->ecx & ~mask) | ((count - i) & mask);
+                break;
+            }
             if (out) {
                 u32 v = step == 4 ? *(u32 *)p : step == 2 ? *(u16 *)p : *p;
                 dispatch(port, elem, v, c);
@@ -160,12 +166,12 @@ static u32 simulate(u32 port, u32 type, u32 data, struct client_regs *c)
     /* a word or a dword: byte by byte (UNVERIFIED) */
     n = size == IO_DWORD ? 4 : 2;
     if (out) {
-        for (i = 0; i < n; i++) dispatch(port + i, IO_BYTE | IO_OUTPUT, data >> (8 * i), c);
+        for (i = 0; i < n; i++) dispatch((port + i) & 0xFFFF, IO_BYTE | IO_OUTPUT, data >> (8 * i), c);
         return data;
     }
     {
         u32 v = 0;
-        for (i = 0; i < n; i++) v |= (dispatch(port + i, IO_BYTE, 0, c) & 0xFF) << (8 * i);
+        for (i = 0; i < n; i++) v |= (dispatch((port + i) & 0xFFFF, IO_BYTE, 0, c) & 0xFF) << (8 * i);
         if (n == 2) v |= data & 0xFFFF0000u;
         return v;
     }
@@ -194,23 +200,25 @@ u32 io_traps;                           /* for the heartbeat (vmm.c) */
 
 int io_trap(struct cregs *r, u8 *op)
 {
-    u32 n = 0, opsize32, addr32, rep = 0, seg = 0, type, port, len, data;
-    struct client_regs cr, *c = &cr;
+    u32 n = 0, opsize32, addr32, rep = 0, seg = 0, type, port, len, data, segset = 0;
+    struct client_regs outer, *c = cur_vm->client;
     struct cregs *held;
     int v86 = (r->eflags & EFL_VM) != 0;
 
-    opsize32 = addr32 = v86 ? 0 : sysvm.client32;
+    /* the operand and address sizes of the code segment (its D bit) */
+    opsize32 = addr32 = v86 ? 0 : seg_32(r->cs);
     for (;; n++) {
         if (n >= 14) return 0;
-        if (op[n] == 0x66) opsize32 = !opsize32;
-        else if (op[n] == 0x67) addr32 = !addr32;
+        /* a size prefix gives the other size, however often it comes */
+        if (op[n] == 0x66) opsize32 = v86 ? 1 : !seg_32(r->cs);
+        else if (op[n] == 0x67) addr32 = v86 ? 1 : !seg_32(r->cs);
         else if (op[n] == 0xF2 || op[n] == 0xF3) rep = 1;
-        else if (op[n] == 0x26) seg = r->es;
-        else if (op[n] == 0x2E) seg = r->cs;
-        else if (op[n] == 0x36) seg = r->ss;
-        else if (op[n] == 0x3E) seg = r->ds;
-        else if (op[n] == 0x64) seg = r->fs;
-        else if (op[n] == 0x65) seg = r->gs;
+        else if (op[n] == 0x26) { seg = r->es; segset = 1; }
+        else if (op[n] == 0x2E) { seg = r->cs; segset = 1; }
+        else if (op[n] == 0x36) { seg = r->ss; segset = 1; }
+        else if (op[n] == 0x3E) { seg = r->ds; segset = 1; }
+        else if (op[n] == 0x64) { seg = r->fs; segset = 1; }
+        else if (op[n] == 0x65) { seg = r->gs; segset = 1; }
         else break;
     }
     switch (op[n]) {
@@ -236,19 +244,24 @@ int io_trap(struct cregs *r, u8 *op)
         if (addr32) type |= IO_ADDR32;
         if (r->eflags & EFL_DF) type |= IO_REVERSE;
         if (!(type & IO_OUTPUT)) seg = r->es;       /* INS: always ES */
-        else if (!seg) seg = r->ds;
+        else if (!segset) seg = r->ds;              /* (a prefixed segment 0000h is one too) */
         type |= (seg & 0xFFFF) << 16;
         /* REP with a count of 0 does nothing */
         if (rep && !((addr32 ? r->ecx : (r->ecx & 0xFFFF)))) {
-            r->eip += len;
+            if (v86 || !seg_32(r->cs)) r->eip = (r->eip & 0xFFFF0000u) | (u16)(r->eip + len);
+            else r->eip += len;
             return 1;
         }
     }
     /* past the instruction first: Windows 3.1's handlers see Client_EIP
      * after it (VXI: IN AL,DX at 1A6h gave 1A7h, IN EAX,DX 2 bytes on) */
-    if (v86 || !sysvm.client32) r->eip = (r->eip & 0xFFFF0000u) | (u16)(r->eip + len);
+    if (v86 || !seg_32(r->cs)) r->eip = (r->eip & 0xFFFF0000u) | (u16)(r->eip + len);
     else r->eip += len;
     io_traps++;
+    /* the handler's EBP is the VM's client registers (the control
+     * block's CB_Client_Pointer), so that services it calls (Map_Flat,
+     * Exec_Int ...) see this state; an outer user's are put back */
+    outer = *c;
     vxd_client(r, c);
     held = vmm_hold_delivery(NULL);
     data = dispatch(port, type, r->eax, c);
@@ -262,6 +275,7 @@ int io_trap(struct cregs *r, u8 *op)
     if (vm_trace && cur_vm != &sysvm && (port == 0x60 || port == 0x64 || port == 0x20 || port == 0x21))
         trace("<%x%c%x>", port, (type & IO_OUTPUT) ? '=' : ':', (type & IO_OUTPUT) ? r->eax & 0xFF : c->eax & 0xFF);
     vxd_client_back(r, c);
+    *c = outer;
     return 1;
 }
 
