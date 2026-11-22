@@ -45,7 +45,6 @@ I_VMSTUB_OFF    equ 116
 I_SDA_SIZE      equ 118
 I_FREE_MCB      equ 120
 I_MEM_TOP       equ 122
-I_SIZE          equ 124
 
 BP_EXIT         equ 0
 BP_VMEXIT       equ 5
