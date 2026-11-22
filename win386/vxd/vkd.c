@@ -46,6 +46,7 @@ extern char vkd_eoi[];
 #pragma aux vkd_eoi "*"
 void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
 vu32 __cdecl vmm_alloc_cb_area(vu32 size, vu32 flags);
+void __cdecl vmm_validate_vm(struct vregs *r);
 extern char vkd_hw[];
 #pragma aux vkd_hw "*"
 
@@ -78,8 +79,9 @@ static struct hotkey hot[NHOT];
 static struct vid vkd_vid;
 static vu32 irq_handle, sys_vm;
 static vu32 kfocus;         /* the VM with the keyboard (Set_Device_Focus) */
-static vu32 shift;          /* SS_* */
-static int ext;             /* the last byte was E0h */
+static vu32 shift;          /* SS_*: from phys_mods (set_shift) */
+static int ext;             /* the last byte was E0h, held back (key_byte) */
+static int e1_left;         /* bytes of an E1h sequence (Pause) still to come */
 
 static void vregs_clear(struct vregs *r)
 {
@@ -87,15 +89,16 @@ static void vregs_clear(struct vregs *r)
     for (i = 0; i < sizeof(*r) / 4; i++) p[i] = 0;
 }
 
-static void track_shift(vu32 code, int up)
+static vu32 phys_mods;      /* the shift keys down on the keyboard (MOD_* bits, mod_bit) */
+
+/* the global shift state from the keys down: Shift while either Shift is
+ * down, and so on (before, letting go of one of two held Shifts cleared
+ * it; E0h 2Ah, the fake shift of the extended keys, set it; E1h 1Dh in
+ * Pause's sequence was taken for Ctrl) */
+static void set_shift(void)
 {
-    vu32 bit = 0;
-    switch (code) {
-    case 0x2A: case 0x36: bit = SS_SHIFT; break;
-    case 0x1D: bit = SS_CTRL; break;        /* left, or right with E0h */
-    case 0x38: bit = SS_ALT; break;         /* left, or right with E0h */
-    }
-    if (bit) shift = up ? (shift & ~bit) : (shift | bit);
+    shift = ((phys_mods & 0x03) ? SS_SHIFT : 0) | ((phys_mods & 0x0C) ? SS_CTRL : 0)
+          | ((phys_mods & 0x30) ? SS_ALT : 0);
 }
 
 /* a hot key for this byte? calls it; nonzero: the byte is the hot key's */
@@ -117,11 +120,15 @@ static int hot_key(vu32 code, int up)
         if (up) {
             if (!h->down) continue;
             h->down = 0;
+        } else if (h->down) {
+            /* the keyboard's repeat of a hot key held down: its callback
+             * only when it asked for repeats (the DDK's CallOnRepeat) */
+            if (!(h->flags & HK_REPEAT) || !h->proc) return 1;
         } else {
             if ((shift & (h->shift >> 16)) != (h->shift & 0xFFFF)) continue;
             h->down = 1;
         }
-        if (h->flags & (up ? HK_RELEASE : HK_PRESS)) {
+        if ((h->flags & (up ? HK_RELEASE : HK_PRESS)) && h->proc) {
             vregs_clear(&r);
             r.eax = code | ((up ? 1 : 0) << 8);
             r.ebx = (vu32)h;
@@ -172,7 +179,17 @@ static vu32 mod_bit(vu32 code, int e0)
     return 0;
 }
 static const vu8 mod_code[6] = { 0x2A, 0x36, 0x1D, 0x1D, 0x38, 0x38 };
-static vu32 phys_mods;      /* the shift keys down on the keyboard */
+
+/* a byte of the keyboard's (or forced as if from it): the shift keys
+ * down; e0: E0h came before it */
+static void track_mods(vu32 b, int e0)
+{
+    vu32 m;
+    if (e1_left) { e1_left--; return; }
+    m = mod_bit(b & 0x7F, e0);
+    if (m) phys_mods = (b & 0x80) ? (phys_mods & ~m) : (phys_mods | m);
+    set_shift();
+}
 
 static void present(vu32 vm);
 
@@ -227,15 +244,22 @@ static void key_byte(vu32 b)
 {
     vu32 code = b & 0x7F;
     int up = (b & 0x80) != 0, mine = 0;
-    if (b == 0xE0) ext = 1;
+    if (b == 0xE0) {
+        /* to the VM at once, even when the byte after it is a hot key's
+         * (UNVERIFIED what Windows 3.1's VKD does with an extended hot
+         * key's E0h; holding it back changed when KERNEL's Ctrl+Alt+Del
+         * procedure ran, and its verdict: the win386cad case) */
+        q_put(kfocus, 0xE0);
+        ext = 1;
+        return;
+    }
+    if (b == 0xE1) e1_left = 2;             /* Pause: E1h 1Dh 45h, E1h 9Dh C5h */
     else {
-        vu32 m = mod_bit(code, ext);
-        if (m) phys_mods = up ? (phys_mods & ~m) : (phys_mods | m);
-        mine = hot_key(code, up);
-        track_shift(code, up);
-        ext = 0;
+        if (!e1_left) mine = hot_key(code, up);    /* with the shift state before this byte */
+        track_mods(b, ext);
     }
     if (!mine) q_put(kfocus, b);
+    ext = 0;
 }
 
 /* VID_Hw_Int_Proc for IRQ 1: the byte is taken from the controller now
@@ -264,12 +288,27 @@ void __cdecl vkd_eoi_proc(struct vregs *r)
 
 /* the VM's port 60h (EAX data, ECX the I/O type: Byte_Input 0, Byte_Output
  * 4, as observed with VXI; others through Simulate_IO) */
+/* the controller command a VM wrote last (port 64h): D1h, write the
+ * output port, takes its data byte at 60h */
+static vu32 cmd_vm, cmd_d1;
+
 void __cdecl vkd_port60(struct vregs *r)
 {
     vu32 st;
     struct kq *k = KQ(r->ebx);
     if (r->ecx & ~4u) { vmm_simulate_io(r); return; }
-    if (r->ecx & 4) { outb(0x60, r->eax); return; }      /* a command's data: the keyboard's */
+    if (r->ecx & 4) {                       /* a command's data: the keyboard's */
+        vu32 v = r->eax & 0xFF;
+        /* the output port's A20 line stays on: the VMM and every VM's
+         * memory are above 1 MB, and with A20 off they would fold onto
+         * low memory (a DOS program's HIMEM-style A20 switch in a DOS
+         * box ended Windows); the reset line is left as it is written.
+         * UNVERIFIED: Windows 3.1 keeps A20 per VM (the DDK's V86MMGR) */
+        if (cmd_d1 && cmd_vm == r->ebx) v |= 0x02;
+        cmd_d1 = 0;
+        outb(0x60, v);
+        return;
+    }
     st = inb(0x64);
     if (!k->obf && (st & 0x21) == 0x21) {   /* the pointing device's byte */
         r->eax = (r->eax & ~0xFFu) | inb(0x60);
@@ -290,7 +329,16 @@ void __cdecl vkd_port64(struct vregs *r)
     vu32 st;
     struct kq *k = KQ(r->ebx);
     if (r->ecx & ~4u) { vmm_simulate_io(r); return; }
-    if (r->ecx & 4) { outb(0x64, r->eax); return; }
+    if (r->ecx & 4) {
+        vu32 v = r->eax & 0xFF;
+        cmd_d1 = v == 0xD1;
+        cmd_vm = r->ebx;
+        /* F0h-FFh pulse output port lines low for the bits clear: never
+         * A20's (bit 1; the reset line's FEh goes as it is) */
+        if (v >= 0xF0) v |= 0x02;
+        outb(0x64, v);
+        return;
+    }
     st = inb(0x64);
     if (r->ebx == kfocus && !k->obf && !k->q_len && (st & 0x21) == 0x01) {
         key_byte(inb(0x60));
@@ -356,13 +404,21 @@ void __cdecl vkd_service(struct vregs *r)
     case 0x05:                              /* VKD_Reflect_Hot_Key: EAX the hot key */
         h = (struct hotkey *)r->eax;
         if (h < hot || h >= hot + NHOT || !h->used) return;
-        /* its press to the VM (and its release, when it comes) */
-        if (h->type == 1) q_put(kfocus, 0xE0);
-        q_put(kfocus, h->scan);
-        h->down = 0;
-        present(kfocus);
+        /* its press to the VM EBX names (the DDK; the keyboard's VM if 0)
+         * and its release, when it comes */
+        {
+            vu32 vm = r->ebx ? r->ebx : kfocus;
+            if (h->type == 1) q_put(vm, 0xE0);
+            q_put(vm, h->scan);
+            h->down = 0;
+            present(vm);
+        }
         return;
-    case 0x07:                              /* VKD_Force_Keys: ESI scan codes, ECX count */
+    case 0x07: {                            /* VKD_Force_Keys: ESI scan codes, ECX count */
+        /* as if they came from the keyboard: the shift keys' state
+         * follows them (REBOOT gives back the Ctrl and Alt releases its
+         * screen read) */
+        int fe0 = 0;
         for (i = 0; i < r->ecx; i++) {
             vu8 b = ((vu8 *)r->esi)[i];
             if (!q_put(kfocus, b)) {
@@ -371,10 +427,13 @@ void __cdecl vkd_service(struct vregs *r)
                 present(kfocus);
                 return;
             }
-            if (b != 0xE0) track_shift(b & 0x7F, (b & 0x80) != 0);
+            if (b == 0xE0) { fe0 = 1; continue; }
+            track_mods(b, fe0);
+            fe0 = 0;
         }
         present(kfocus);
         return;
+    }
     case 0x0A:                              /* VKD_Start_Paste: not yet (DOS boxes) */
         r->eflags |= VF_CF;
         return;
@@ -383,6 +442,7 @@ void __cdecl vkd_service(struct vregs *r)
 }
 
 #define SYS_CRITICAL_INIT 0x00
+#define DESTROY_VM        0x0C
 #define SET_DEVICE_FOCUS  0x0F
 #define VKD_ID            0x000D
 
@@ -390,6 +450,16 @@ void __cdecl vkd_control(struct vregs *r)
 {
     struct vregs s;
     r->eflags &= ~VF_CF;
+    if (r->eax == DESTROY_VM) {
+        /* its ID is the next VM's: no hot key stays disabled for it, and
+         * the keyboard is not left with a VM that is gone */
+        vu32 id = CB_VMID(r->ebx), i;
+        if (id < 256)
+            for (i = 0; i < NHOT; i++) hot[i].off[id >> 5] &= ~(1u << (id & 31));
+        if (kfocus == r->ebx) { kfocus = sys_vm; sync_mods(kfocus); }
+        if (cmd_vm == r->ebx) cmd_d1 = 0;
+        return;
+    }
     if (r->eax == SET_DEVICE_FOCUS && (r->edx == 0 || r->edx == VKD_ID)) {
         /* the keyboard to VM EBX: what is queued for the other stays
          * there (UNVERIFIED) */
@@ -429,14 +499,25 @@ void __cdecl vkd_control(struct vregs *r)
     }
 }
 
-/* the PM API: function 0 AX=0200h (VX3); the others UNVERIFIED */
+/* a VM handle (VMM Validate_VM_Handle) */
+static int valid_vm(vu32 vm)
+{
+    struct vregs s;
+    vregs_clear(&s);
+    s.ebx = vm;
+    vmm_validate_vm(&s);
+    return !(s.eflags & VF_CF);
+}
+
+/* the PM API: function 0 AX=0200h (VX3); the others UNVERIFIED. A VM
+ * handle that is not one fails (carry; UNVERIFIED what Windows 3.1 does) */
 void __cdecl vkd_api(struct vregs *r)
 {
     struct client_regs *c = (struct client_regs *)r->ebp;
     if ((c->eax & 0xFFFF) == 0) {
         c->eax = (c->eax & 0xFFFF0000u) | 0x0200;
         c->eflags &= ~VF_CF;
-    } else if ((c->eax & 0xFFFF) == 1 && c->ebx) {
+    } else if ((c->eax & 0xFFFF) == 1 && c->ebx && valid_vm(c->ebx)) {
         /* 1: a key into VM EBX, CH the scan code, CL the count (WINOA386
          * passes on the keys its window gets for a DOS VM that does not
          * have the keyboard, e.g. Tab's or Esc's release after a switch;
