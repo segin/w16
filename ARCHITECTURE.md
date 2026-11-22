@@ -2652,7 +2652,8 @@ w16's is in `shell/ver/`, installed as `SYSTEM\VER.DLL`.
   lengths, pointers as offsets into the block, and after each
   VerInstallFile the destination and current directories (names,
   attributes, contents), to `C:\VRP.LOG`, in sections (`== NAME`:
-  exports, resource, size, query, language, find, install, modules).
+  exports, resource, size, query, language, find, install, modules,
+  audit: malformed input and corners, 20.8).
   `C:\VRP.ARG` selects sections (`k`: KERNEL's GetModuleHandle with file
   names, an exploration not compared).
 - Its files are made at test time by `tests/ver/mkinputs.py`: version
@@ -2679,11 +2680,14 @@ Reading resources:
   applies to names without a path.
 - The resource is looked for in the NE resource table: the file must
   start with "MZ", its new header with "NE"; a resource table at the
-  resident-name table's offset means none. Only integer types and names
-  are found: a named type or name (also the exact upper-case name, or a
-  "#16" string) never is.
+  resident-name table's offset means none, and so does an alignment
+  shift over 12 (12 finds, 13 to FFFFh do not). Only integer types and
+  names are found: a named type or name (also the exact upper-case name,
+  or a "#16" string) never is.
 - GetFileResourceSize: the table's length (length << shift), the file
-  offset to `*lpdwFileOffset`; 0, and the offset untouched, if not found.
+  offset to `*lpdwFileOffset` (NULL is allowed, as for
+  GetFileVersionInfoSize's handle); 0, and the offset untouched, if not
+  found.
   GetFileResource with an offset reads dwResLen bytes from there whatever
   the file is (a text file's bytes too), TRUE only if all were read; with
   0 it looks the resource up and reads at most its length.
@@ -2706,10 +2710,15 @@ key regardless of case; the children of a node start after its value on a
 and each must end within its parent, so a block whose lengths are too
 long loses its later children (OpenWatcom's: CompanyName is found, the
 other strings and VarFileInfo are not). A node of 4 bytes or less ends
-the search (a root length of 0 or 4: nothing, not even the root); the key
-is read no further than the parent's end (for the root, its own), so a
-root of length 5 or 8 has its value at 8. The value is after the key,
-wValueLength bytes; nothing is written when the path is not found.
+the search (a root length of 0 or 4: nothing, not even the root; one of
+8000h or more, read as negative, nothing either); the key is read no
+further than the parent's end (for the root, its own), so a root of
+length 5 or 8 has its value at 8; a child's key is compared up to its
+NUL or one byte before its parent's end (a key running to the parent's
+end without a NUL loses its last character). The value is after the
+key, wValueLength bytes, however many that claims (FFFFh is returned as
+it is); nothing is written when the path is not found. A block whose
+root runs past its segment loses what lies past it, without a fault.
 
 VerLanguageName: 45 identifiers have names (the SDK's list, with
 "Croato-Serbian (latin)" and "Serbo-Croatian (cyrillic)" in lower case),
@@ -2747,9 +2756,13 @@ VerInstallFile:
   directory leaves the name to OpenFile's search) is opened with
   LZOpenFile (failing, also for an unknown algorithm: VIF_CANNOTREADSRC)
   and expanded with LZCopy into "temp.NNN" in the destination directory,
-  NNN the first unused of 000, 001, ... 009, 00A, in hexadecimal (a
-  missing directory: VIF_CANNOTCREATE; data that does not expand:
-  VIF_CANNOTREADSRC, the file deleted).
+  NNN the first unused of 000, 001, ... 009, 00A, ... FFF, in
+  hexadecimal (a directory of that name counts as used; the name is not
+  searched for elsewhere, also with an empty destination directory; all
+  4096 used, or a missing directory: VIF_CANNOTCREATE; data that does
+  not expand: VIF_CANNOTREADSRC, the file deleted). The second call's
+  name is looked for the same way (a directory of that name is
+  "installed": renamed to the destination).
 - Unless forced, it is compared with the destination file (never with the
   copy in lpszCurDir), and only when that has a version (a malformed one
   counts as none): a source without one, or with a lower file version
@@ -2758,16 +2771,25 @@ VerInstallFile:
   file's Translation that the new one's lacks (code page 0 in the old
   one matching any), both having a Translation: VIF_DIFFLANG (code-page
   differences too: VIF_DIFFCODEPG was never returned, also for 932, 1200,
-  437 or FFFFh); VIF_MISMATCH with any of these.
+  437 or FFFFh); VIF_MISMATCH with any of these. What is compared is the
+  resource as long as its table entry says (a root of 20 bytes is
+  compared by the fixed part after it), the fixed part whatever the
+  root's wValueLength, and every entry the Translation's wValueLength
+  claims (one of 2 bytes has none: the old file's languages are all
+  missing; one past the block in the old file gives VIF_DIFFLANG).
 - A read-only destination: VIF_WRITEPROT alone (forced too), the
   temporary file deleted. A destination in use (a loaded module's file):
   VIF_FILEINUSE alone, forced too. Differences: those bits, VIF_TEMPFILE
   and the temporary name (its length with the NUL to *lpwTmpFileLen); a
   buffer too small: VIF_BUFFTOOSMALL instead, the length needed, the file
-  deleted.
+  deleted. A NULL lpwTmpFileLen counts as room enough; a NULL
+  lpszTmpFile gets nothing (forced, it is no second call).
 - Else the destination is deleted (one that cannot be, such as a
   directory of that name: VIF_CANNOTDELETE | VIF_ACCESSVIOLATION, the
-  temporary file deleted), the temporary file renamed to it, and the copy
+  temporary file deleted), the temporary file renamed to it (a rename
+  that fails, as into a directory that is not there: VIF_CANNOTRENAME
+  alone, the temporary file deleted, the caller's in a second call too),
+  and the copy
   in lpszCurDir deleted, unless VIFF_DONTDELETEOLD is given, lpszCurDir
   is NULL or "", or it names the destination's directory however spelt
   ("c:\vt\dst\", or relative); a copy there in use:
@@ -2790,7 +2812,11 @@ the module table's link at offset 6 (Pietrek ch. 3) and compared by full
 name (KERNEL's GetModuleHandle ignores the directory, 20.6); names go through AnsiToOem before MS-DOS calls and
 OpenFile's results through OemToAnsi; a shared copy of Windows is taken
 to be one whose system directory is not inside its Windows directory
-(UNVERIFIED, 20.7).
+(UNVERIFIED, 20.7); VerQueryValue reads nothing past its block's
+segment (KERNEL's GetSelectorLimit), where 3.1 too finds nothing; the
+comparison reads each file's resource into a zeroed block 64 bytes
+longer, so that a fixed part or Translation entries past the resource
+read as zeros (20.8).
 
 ### 20.4 Tests and results
 
@@ -2803,7 +2829,8 @@ to be one whose system directory is not inside its Windows directory
   its log compares with 3.1's line for line; `tests/ver/vmods.sh`: w16's
   modules (20.5); `tests/ver/vfonts.sh`: Control Panel's Fonts applet.
 - Boot-test case **ver**, parts s, 3, x, tree286, tree386, mods, fonts,
-  fontsnew. Results (installation-05, 2026-11-16): every part passes.
+  fontsnew. Results (installation-05, 2026-11-16; again 2026-11-21 with
+  the section audit, 20.8): every part passes.
   s and 3: all eight sections equal Microsoft's (about 50 files sized and
   read, 2000 VerQueryValue calls, 140 VerFindFile, 190 VerInstallFile);
   x: the install section equal in DOSBox-X; tree286 and tree386: w16's VER
@@ -2872,8 +2899,8 @@ give their fixed part, translation and eight strings, identically.
 - A shared copy of Windows (Setup /N): how 3.1 tells, and that shared
   files then go to the Windows directory (SDK), were not observed.
 - VIF_OUTOFSPACE (assumed for a failing write), VIF_OUTOFMEMORY,
-  VIF_CANNOTRENAME, VIF_SHARINGVIOLATION, VIF_CANNOTREADDST and
-  VIF_DIFFCODEPG were not provoked; a read-only copy in lpszCurDir
+  VIF_SHARINGVIOLATION, VIF_CANNOTREADDST and VIF_DIFFCODEPG were not
+  provoked, nor a rename failing other than with "path not found"; a read-only copy in lpszCurDir
   neither (DOSBox-X deletes read-only files).
 - Names with characters above 127 (ANSI/OEM conversion): DOSBox's host
   file names make them unreliable.
@@ -2882,6 +2909,30 @@ give their fixed part, translation and eight strings, identically.
 - WfW 3.11's VER.DLL (3.11.0.300, the same exported names) was not
   probed; 3.1's Setup and DRIVERS.CPL were not driven through their own
   interfaces.
+
+### 20.8 The VER audit
+
+An outside, read-only review of `shell/ver/` (2 High, 5 Medium, 5 Low
+findings) was checked against the code and against 3.1 with the probe's
+section `audit` (`C:\VT\AUD` and the install pool, `tests/ver/
+mkinputs.py`), compared like every other section in the boot-test case
+**ver** (parts s, 3, tree286, tree386); every verdict, its evidence and
+commit are in its triage file, `docs/notes/ver-audit-triage.md`, which
+is in git history (removed once the audit was complete). 3.1's VER.DLL lived
+through every malformed case (keys and roots at a segment's end, values
+claiming 64K, NULL output pointers), so w16 answers as it does rather
+than merely surviving. Fixed: a child's key read past its parent's end
+(lstrcmpi), roots of 8000h and more, alignment shifts over 12, the
+comparison's reading of the root's length instead of the table's,
+Translations under 4 bytes, temporary names searched for with OpenFile
+(the PATH, not directories), TEMP.FFF overwritten when every name was
+taken, the temporary file left after a failed rename, NULL output
+pointers written through, a Windows directory at a drive's root taken
+for a shared copy. Kept as 3.1 has them: wValueLength returned as it is,
+the 24 bytes GetFileVersionInfoSize reads past a short resource, a
+matched key's value placed by its parent's end. Left out of the probe:
+a resource whose table length leaves out the fixed part (3.1 then
+compares what its buffer held before; w16 compares zeros).
 
 ## 21. TIMER.DRV
 

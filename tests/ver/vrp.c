@@ -11,9 +11,11 @@
  * every file of C:\VT\LIST.TXT), query (VerQueryValue paths on blocks
  * read by GetFileVersionInfo and on raw blocks), language
  * (VerLanguageName), find (VerFindFile), install (VerInstallFile),
- * modules (the files named in C:\VT\MODS.TXT, if any: their versions).
+ * modules (the files named in C:\VT\MODS.TXT, if any: their versions),
+ * audit (the VER audit's cases: malformed blocks and NE headers, NULL
+ * pointers, VerInstallFile's corners; files in C:\VT\AUD).
  * C:\VRP.ARG (the shell has no arguments) names the sections to run
- * (letters: e r s q l f i m; default all).
+ * (letters: e r s q l f i m a; default all).
  *
  * Sources: Windows 3.1 SDK, Programmer's Reference Vol. 2 (the Ver*
  * functions, GetFileResource*, OpenFile), Vol. 1 ch. 9 (installation);
@@ -595,7 +597,7 @@ static const char *const paths[] = {
     "\\\\StringFileInfo\\040904E4\\CompanyName", "\\StringFileInfo\\\\040904E4\\CompanyName",
     " \\", "\\ ", "\\StringFileInfo\\040904E4 \\CompanyName", 0 };
 
-static void query(const BYTE FAR *blk, const char *what)
+static void queryp(const BYTE FAR *blk, const char *what, const char *const *paths)
 {
     int i;
     BOOL r;
@@ -621,6 +623,11 @@ static void query(const BYTE FAR *blk, const char *what)
         else
             lg("  \"%s\" = %d off %ld len %u", (LPSTR)paths[i], r, off, len);
     }
+}
+
+static void query(const BYTE FAR *blk, const char *what)
+{
+    queryp(blk, what, paths);
 }
 
 static void qfile(const char *name)
@@ -1282,6 +1289,329 @@ static void t_inst(void)
     clean();
 }
 
+/* ---- the VER audit's cases (ARCHITECTURE.md 20.8): malformed blocks
+   and NE headers, value lengths past their node, keys not ended, blocks
+   at the end of their segment, NULL pointers, VerInstallFile's corners.
+   Windows 3.1's VER.DLL lived through every one. ---- */
+static const char *const apaths[] = {
+    "\\", "\\VarFileInfo", "\\VarFileInfo\\Translation", "\\VarFileInfo\\TranslationQ",
+    "\\StringFileInfo\\040904E4\\CompanyName", "\\StringFileInfo\\040904E4\\ProductVersion",
+    "\\Missing", 0 };
+
+static void aqraw(const char *name)
+{
+    char p[100], w[120];
+    HFILE f;
+    int n;
+    wsprintf(p, "C:\\VT\\AUD\\%s", (LPSTR)name);
+    fill(buf2, 0, 4096);
+    f = _lopen(p, OF_READ);
+    n = _lread(f, buf2, 4000);
+    _lclose(f);
+    wsprintf(w, "raw AUD\\%s (%d bytes, zeros after)", (LPSTR)name, n);
+    queryp(buf2, w, apaths);
+}
+
+/* the resource's size and offset, the version's size and handle, and
+   what is read when that is small */
+static void ares(const char *name)
+{
+    char p[100];
+    DWORD off = 0xDEADBEEFL, h = 0xDEADBEEFL, n, sz;
+    BOOL r;
+    wsprintf(p, "C:\\VT\\AUD\\%s", (LPSTR)name);
+    n = GetFileResourceSize(p, MAKEINTRESOURCE(16), MAKEINTRESOURCE(1), &off);
+    sz = GetFileVersionInfoSize(p, &h);
+    lg(" %s: GetFileResourceSize %ld off %08lX; GetFileVersionInfoSize %ld handle %08lX",
+       (LPSTR)name, n, off, sz, h);
+    if (n && n <= 4000) {
+        fill(buf, 0xAA, 4096);
+        r = GetFileResource(p, MAKEINTRESOURCE(16), MAKEINTRESOURCE(1), 0, n, buf);
+        lg("  GetFileResource(0, n) = %d %s", r, (LPSTR)summ(buf, n + 4));
+    }
+    if (sz && sz <= 4000) {
+        fill(buf, 0xAA, 4096);
+        r = GetFileVersionInfo(p, h, sz, buf);
+        lg("  GFVI(h, n) = %d %s", r, (LPSTR)summ(buf, sz + 4));
+    }
+}
+
+/* a copy of a file's first n bytes in a block of its own, ending where
+   the block's selector ends */
+static BYTE FAR *atend(const char *file, unsigned n, HGLOBAL *g)
+{
+    BYTE FAR *p;
+    DWORD lim;
+    HFILE f;
+    *g = GlobalAlloc(GMEM_FIXED, n);
+    p = (BYTE FAR *)GlobalLock(*g);
+    lim = GetSelectorLimit(SELECTOROF(p));
+    p += (unsigned)(lim + 1 - n);
+    f = _lopen(file, OF_READ);
+    _lread(f, p, n);
+    _lclose(f);
+    return p;
+}
+
+static void wq(const BYTE FAR *b, const char *path)
+{
+    void FAR *v = (void FAR *)MAKELP(0x1234, 0x5678);
+    UINT len = 0xBEEF;
+    BOOL r;
+    r = VerQueryValue(b, path, &v, &len);
+    lg("  \"%s\" = %d off %ld len %u", (LPSTR)path, r,
+       v == (void FAR *)MAKELP(0x1234, 0x5678) ? -99999L :
+       (long)OFFSETOF(v) - (long)OFFSETOF(b), len);
+}
+
+/* GOOD.BIN's first n bytes at the end of their segment, the root's
+   length set to root */
+static void aseg(unsigned n, WORD root, const char *file, const char *what)
+{
+    HGLOBAL g;
+    BYTE FAR *b = atend(file, n, &g);
+    *(WORD FAR *)b = root;
+    lg(" -- %s", (LPSTR)what);
+    wq(b, "\\");
+    wq(b, "\\StringFileInfo\\040904E4\\CompanyName");
+    wq(b, "\\VarFileInfo\\Translation");
+    wq(b, "\\VarFileInfo\\TranslationQ");
+    wq(b, "\\Missing");
+    GlobalFree(g);
+}
+
+static void t_audit(void)
+{
+    static const char *const nefiles[] = {
+        "SH1.DLL", "SH2.DLL", "SH4.DLL", "SH8.DLL", "SH12.DLL", "SH13.DLL", "SH14.DLL",
+        "SH15.DLL", "SH16.DLL", "SH17.DLL", "SH31.DLL", "SH32.DLL", "SH33.DLL", "SH40.DLL",
+        "SH65535.DLL", "SZ1.DLL", "SZ8.DLL", "SZ12.DLL", "SZ13.DLL", "SZ14.DLL", "SZ15.DLL",
+        "SZ16.DLL", "SZ17.DLL", "SZ31.DLL", "SZ32.DLL", "RT0.DLL", "TBL20.DLL", "CUT20.DLL",
+        "CUT22.DLL", "TBL8.DLL", 0 };
+    static const WORD roots[] = { 0x1000, 0x7FFF, 0x8000, 0xFFF8, 0xFFFC, 0xFFFD, 0xFFFF, 0 };
+    char tmp[300], name[20];
+    HINSTANCE h;
+    HFILE f;
+    DWORD r, d;
+    UINT len, k;
+    int i;
+    lg("== audit");
+    /* VER's data segment after loading (its entry calls LocalInit) */
+    h = LoadLibrary("VER.DLL");
+    lg(" VER's data segment: lock count %u", h >= 32 ? GlobalFlags(h) & GMEM_LOCKCOUNT : 999);
+    if (h >= 32)
+        FreeLibrary(h);
+    /* NE headers: the alignment shift (with the resource where it is,
+       and at 0, one unit long), the table's offset; resources shorter
+       than the 24 bytes GetFileVersionInfoSize looks at */
+    for (i = 0; nefiles[i]; i++)
+        ares(nefiles[i]);
+    /* NULL for the offset and the handle */
+    lg(" GetFileVersionInfoSize(GOOD.DLL, NULL) = %ld",
+       GetFileVersionInfoSize("C:\\VT\\GOOD.DLL", NULL));
+    lg(" GetFileResourceSize(GOOD.DLL, 16, 1, NULL) = %ld",
+       GetFileResourceSize("C:\\VT\\GOOD.DLL", MAKEINTRESOURCE(16), MAKEINTRESOURCE(1), NULL));
+    /* VerQueryValue: value lengths past the node, keys not ended */
+    aqraw("TRV100.BIN");
+    aqraw("TRVFFFF.BIN");
+    aqraw("TRV2.BIN");
+    aqraw("TRV8.BIN");
+    aqraw("RTVFFFF.BIN");
+    aqraw("KEYEND.BIN");
+    aqraw("KEYEND0.BIN");
+    aqraw("KEYEND1.BIN");
+    aqraw("KEYENDQ.BIN");
+    /* root lengths, VarFileInfo one byte short, in an 8192-byte block */
+    fill(buf2, 0, 8192);
+    f = _lopen("C:\\VT\\BIN\\GOOD.BIN", OF_READ);
+    _lread(f, buf2, 4000);
+    _lclose(f);
+    for (i = 0; roots[i]; i++) {
+        *(WORD FAR *)buf2 = roots[i];
+        lg(" -- GOOD.BIN in 8192 bytes, root %04X", roots[i]);
+        wq(buf2, "\\");
+        wq(buf2, "\\VarFileInfo\\Translation");
+    }
+    *(WORD FAR *)buf2 = 384;
+    *(WORD FAR *)(buf2 + 0x15C) = 35;
+    lg(" -- GOOD.BIN, VarFileInfo 35");
+    wq(buf2, "\\VarFileInfo\\Translation");
+    *(WORD FAR *)(buf2 + 0x15C) = 36;
+    *(WORD FAR *)buf2 = 383;
+    lg(" -- GOOD.BIN, root 383");
+    wq(buf2, "\\VarFileInfo\\Translation");
+    wq(buf2, "\\VarFileInfo");
+    *(WORD FAR *)buf2 = 0x1000;
+    *(WORD FAR *)(buf2 + 7000) = 0x1000;
+    *(WORD FAR *)(buf2 + 7002) = 0;
+    lg(" -- a root of 1000h at 7000 in the 8192 bytes");
+    wq(buf2 + 7000, "\\");
+    /* blocks ending where their segment ends */
+    aseg(384, 384, "C:\\VT\\BIN\\GOOD.BIN", "GOOD.BIN at its segment's end");
+    aseg(384, 385, "C:\\VT\\BIN\\GOOD.BIN", "the same, root 385");
+    aseg(384, 0x400, "C:\\VT\\BIN\\GOOD.BIN", "the same, root 400h");
+    aseg(384, 0xFFFF, "C:\\VT\\BIN\\GOOD.BIN", "the same, root FFFFh");
+    aseg(380, 384, "C:\\VT\\BIN\\GOOD.BIN", "its first 380 bytes, root 384");
+    aseg(383, 384, "C:\\VT\\BIN\\GOOD.BIN", "its first 383 bytes, root 384");
+    aseg(0x17B, 0x17B, "C:\\VT\\AUD\\KEYEND0.BIN", "KEYEND0.BIN at its segment's end");
+    /* VerInstallFile: a fixed part shorter than VS_FIXEDFILEINFO or past
+       the root, Translations of 2, 8, 100h and FFFFh bytes, in the
+       destination and the source */
+    fill(tmp, 0x55, sizeof tmp);
+    icase(0, "V300.DLL", "T.DLL", "AVLEN0.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "AVLEN0.DLL", 0, tmp);
+    icase(0, "V300.DLL", "T.DLL", "AVLEN40.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "AVLEN40.DLL", 0, tmp);
+    icase(0, "V300.DLL", "T.DLL", "AVLEN8.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "AVLEN8.DLL", 0, tmp);
+    icase(0, "AVLEN0.DLL", "T.DLL", "V400.DLL", 0, tmp);
+    icase(0, "AVLEN8.DLL", "T.DLL", "V400.DLL", 0, tmp);
+    icase(0, "AVLEN8.DLL", "T.DLL", "VSUB.DLL", 0, tmp);
+    icase(0, "V300.DLL", "T.DLL", "ALEN20.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "ALEN20.DLL", 0, tmp);
+    icase(0, "ALEN20.DLL", "T.DLL", "V400.DLL", 0, tmp);
+    icase(0, "ALEN20.DLL", "T.DLL", "VSUB.DLL", 0, tmp);
+    icase(0, "ALEN20.DLL", "T.DLL", "V300.DLL", 0, tmp);
+    icase(0, "V300.DLL", "T.DLL", "ALEN60.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "ALEN60.DLL", 0, tmp);
+    icase(0, "ALEN60.DLL", "T.DLL", "V400.DLL", 0, tmp);
+    icase(0, "V300.DLL", "T.DLL", "ALEN72.DLL", 0, tmp);
+    icase(0, "VSUB.DLL", "T.DLL", "ALEN72.DLL", 0, tmp);
+    icase(0, "V310.DLL", "T.DLL", "ATRV8.DLL", 0, tmp);
+    icase(0, "V310.DLL", "T.DLL", "ATAIL.DLL", 0, tmp);
+    icase(0, "VGER.DLL", "T.DLL", "ATRV2.DLL", 0, tmp);
+    icase(0, "ATRV8.DLL", "T.DLL", "VGER.DLL", 0, tmp);
+    icase(0, "ATAIL.DLL", "T.DLL", "VGER.DLL", 0, tmp);
+    icase(0, "ATRV2.DLL", "T.DLL", "VGER.DLL", 0, tmp);
+    icase(0, "V310.DLL", "T.DLL", "ATRVFFFF.DLL", 0, tmp);
+    icase(0, "ATRVFFFF.DLL", "T.DLL", "V310.DLL", 0, tmp);
+    icase(0, "V310.DLL", "T.DLL", "ATRV100.DLL", 0, tmp);
+    icase(0, "ATRV100.DLL", "T.DLL", "V310.DLL", 0, tmp);
+    /* the destination's name in a directory that is not there: the
+       rename fails (also in the second call, and forced) */
+    clean();
+    tmp[0] = 0;
+    vi(0, "V400.DLL", "NODIR\\T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp, 144);
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    tmp[0] = 0;
+    vi(0, "V300.DLL", "NODIR\\T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp, 144);
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    tmp[0] = 0;
+    vi(VIFF_FORCEINSTALL, "V300.DLL", "NODIR\\T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST",
+       "C:\\VT\\DST", tmp, 144);
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "TEMP.000");
+    lstrcpy(tmp, "TEMP.000");
+    vi(VIFF_FORCEINSTALL, "V300.DLL", "NODIR\\T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST",
+       tmp, 144);
+    /* a directory named TEMP.000 in the destination directory: skipped;
+       named as the temporary file of a second call: installed */
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    lg(" mkdir DST\\TEMP.000: %d", dos_mkdir("C:\\VT\\DST\\TEMP.000"));
+    tmp[0] = 0;
+    vi(0, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp, 144);
+    tmp[0] = 0;
+    vi(0, "V400.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp, 144);
+    lg(" rmdir DST\\TEMP.000: %d", dos_rmdir("C:\\VT\\DST\\TEMP.000"));
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    dos_mkdir("C:\\VT\\DST\\TEMP.000");
+    lstrcpy(tmp, "TEMP.000");
+    vi(VIFF_FORCEINSTALL, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp,
+       144);
+    lg(" DST\\TEMP.000 %d, DST\\T.DLL %d", dos_getattr("C:\\VT\\DST\\TEMP.000"),
+       dos_getattr("C:\\VT\\DST\\T.DLL"));
+    dos_rmdir("C:\\VT\\DST\\TEMP.000");
+    dos_rmdir("C:\\VT\\DST\\T.DLL");
+    /* an empty destination directory (the current one, C:\VT\CUR2),
+       TEMP.000 in a directory of the PATH (C:\VT\PATH): not searched
+       for, neither as a temporary name nor as a second call's file */
+    clean();
+    cleandir("C:\\VT\\CUR2");
+    _lclose(_lcreat("C:\\VT\\PATH\\TEMP.000", 0));
+    place("V310.DLL", "C:\\VT\\CUR2", "T.DLL");
+    dos_chdir("C:\\VT\\CUR2");
+    tmp[0] = 0;
+    vi(0, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "", "", tmp, 144);
+    listdir("C:\\VT\\CUR2");
+    tmp[0] = 0;
+    vi(0, "V400.DLL", "T.DLL", "C:\\VT\\SRC", "", "", tmp, 144);
+    listdir("C:\\VT\\CUR2");
+    cleandir("C:\\VT\\CUR2");
+    place("V310.DLL", "C:\\VT\\CUR2", "T.DLL");
+    lstrcpy(tmp, "TEMP.000");
+    vi(VIFF_FORCEINSTALL, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "", "", tmp, 144);
+    listdir("C:\\VT\\CUR2");
+    dos_chdir(windir);
+    lg(" PATH\\TEMP.000 %d, TEMP.001 %d", dos_getattr("C:\\VT\\PATH\\TEMP.000"),
+       dos_getattr("C:\\VT\\PATH\\TEMP.001"));
+    dos_unlink("C:\\VT\\PATH\\TEMP.000");
+    dos_unlink("C:\\VT\\PATH\\TEMP.001");
+    cleandir("C:\\VT\\CUR2");
+    /* NULL lpszTmpFile (forced, no difference, a difference) and NULL
+       lpwTmpFileLen (a difference) */
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    len = 144;
+    r = VerInstallFile(VIFF_FORCEINSTALL, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST",
+                       "C:\\VT\\DST", NULL, &len);
+    lg(" forced, NULL tmp, V300 over V310: %08lX len %u", r, len);
+    lists();
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    len = 144;
+    r = VerInstallFile(0, "V400.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", NULL,
+                       &len);
+    lg(" NULL tmp, V400 over V310: %08lX len %u", r, len);
+    lists();
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    len = 144;
+    r = VerInstallFile(0, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", NULL,
+                       &len);
+    lg(" NULL tmp, V300 over V310: %08lX len %u", r, len);
+    lists();
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    fill(tmp, 0, 20);
+    r = VerInstallFile(0, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp,
+                       NULL);
+    lg(" NULL len, V300 over V310: %08lX tmp \"%s\"", r, (LPSTR)shows((BYTE *)tmp, 12));
+    lists();
+    /* every temporary name TEMP.000 to TEMP.FFF taken */
+    clean();
+    place("V310.DLL", "C:\\VT\\DST", "T.DLL");
+    for (k = 0; k < 0x1000; k++) {
+        wsprintf(name, "C:\\VT\\DST\\TEMP.%03X", k);
+        _lclose(_lcreat(name, 0));
+    }
+    len = 144;
+    fill(tmp, 0x55, 40);
+    tmp[0] = 0;
+    r = VerInstallFile(0, "V300.DLL", "T.DLL", "C:\\VT\\SRC", "C:\\VT\\DST", "C:\\VT\\DST", tmp,
+                       &len);
+    lg(" TEMP.000 to TEMP.FFF there, V300 over V310: %08lX tmp \"%s\" len %u", r,
+       (LPSTR)shows((BYTE *)tmp, 12), len);
+    for (k = 0, d = 0; k < 0x1000; k++) {
+        wsprintf(name, "C:\\VT\\DST\\TEMP.%03X", k);
+        if (dos_getattr(name) < 0)
+            d++;
+        else {
+            f = _lopen(name, OF_READ);
+            if (_llseek(f, 0, 2) != 0)
+                lg("  %s is not empty", (LPSTR)name);
+            _lclose(f);
+        }
+        dos_unlink(name);
+    }
+    lg("  temporary names gone: %ld", d);
+    lists();
+    clean();
+}
+
 /* ---- the versions of the files named in C:\VT\MODS.TXT ---- */
 static void t_mods(void)
 {
@@ -1345,7 +1675,7 @@ static void t_mods(void)
 
 int __cdecl __far tmain(void)
 {
-    static char arg[40] = "ersqlfim";
+    static char arg[40] = "ersqlfima";
     HGLOBAL g1 = GlobalAlloc(GMEM_FIXED, 8192L), g2 = GlobalAlloc(GMEM_FIXED, 8192L);
     HFILE f;
     buf = (BYTE __far *)GlobalLock(g1);
@@ -1379,6 +1709,7 @@ int __cdecl __far tmain(void)
             case 'i': t_inst(); break;
             case 'm': t_mods(); break;
             case 'k': t_kernel(); break;
+            case 'a': t_audit(); break;
             }
         }
     }

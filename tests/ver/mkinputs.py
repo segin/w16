@@ -85,6 +85,90 @@ def ver(data, rid=1, ovr=None):
     return (16, rid, data, ovr)
 
 
+def resoff(b):
+    """the file offset of the first resource of an mkne file made with
+    shift 0 and one resource"""
+    ne = struct.unpack_from('<I', b, 0x3C)[0]
+    rt = ne + struct.unpack_from('<H', b, ne + 0x24)[0]
+    return struct.unpack_from('<H', b, rt + 2 + 8)[0]
+
+
+def audit(t, good):
+    """the VER audit's cases (probe section a and w, vrp.c): malformed
+    blocks, NE headers and install pool files, in C:\\VT\\AUD and
+    C:\\VT\\POOL (neither is in LIST.TXT). In the good block the
+    Translation node is at 16Ch, its value at 17Ch, the block's end 180h."""
+    def patch(blk, off, val):
+        b = bytearray(blk)
+        struct.pack_into('<H', b, off, val)
+        return bytes(b)
+    # VerQueryValue: value lengths past the node and the block
+    for name, blk in (('TRV100', patch(good, 0x16E, 0x100)),
+                      ('TRVFFFF', patch(good, 0x16E, 0xFFFF)),
+                      ('TRV2', patch(good, 0x16E, 2)),
+                      ('RTVFFFF', patch(good, 2, 0xFFFF))):
+        t.put('VT\\AUD\\%s.BIN' % name, blk)
+    # Translation's key not ended inside the block: the node is its header
+    # and "Translation", the block ends there; the file has "Q" after it
+    keyend = good[:0x16C] + struct.pack('<HH', 15, 0) + b'Translation'
+    keyend = setlen(keyend, len(keyend))
+    keyend = keyend[:0x15C] + struct.pack('<H', len(keyend) - 0x15C) + keyend[0x15E:]
+    t.put('VT\\AUD\\KEYEND.BIN', keyend + b'Q')
+    t.put('VT\\AUD\\KEYEND0.BIN', keyend)
+    # the same with the parent and the root one byte longer: the byte
+    # after "Translation" (NUL, or "Q" and the NUL past the parent's end)
+    # inside them
+    k1 = setlen(keyend + b'\0', len(keyend) + 1)
+    k1 = k1[:0x15C] + struct.pack('<H', len(k1) - 0x15C) + k1[0x15E:]
+    t.put('VT\\AUD\\KEYEND1.BIN', k1)
+    t.put('VT\\AUD\\KEYENDQ.BIN', k1[:-1] + b'Q')
+    # four more bytes in the root after VarFileInfo (a German entry), so
+    # that a Translation value of 8 bytes reads them inside the block
+    tail = setlen(good + struct.pack('<HH', 0x407, 1252) + b'\0' * 4, len(good) + 8)
+    trv8 = patch(tail, 0x16E, 8)
+    t.put('VT\\AUD\\TRV8.BIN', trv8)
+    # VerInstallFile: destinations and sources with such blocks
+    for name, blk in (('AVLEN0', patch(good, 2, 0)), ('AVLEN40', patch(good, 2, 40)),
+                      ('AVLEN8', patch(good, 2, 8)), ('ATRV2', patch(good, 0x16E, 2)),
+                      ('ATRV8', trv8), ('ATAIL', tail),
+                      ('ALEN20', setlen(good, 20)), ('ATRVFFFF', patch(good, 0x16E, 0xFFFF)),
+                      ('ATRV100', patch(good, 0x16E, 0x100))):
+        t.mod('VT\\POOL\\%s.DLL' % name, [ver(blk)], module='VTEST', shift=0)
+        t.mod('VT\\SRC\\%s.DLL' % name, [ver(blk)], module='VTEST', shift=0)
+    # roots of 60 and 72 bytes (one of 20 with a table length of 20 too
+    # is left out: 3.1 then compares whatever its buffer held before)
+    for name, blk in (('ALEN60', setlen(good, 60)), ('ALEN72', setlen(good, 72))):
+        t.mod('VT\\POOL\\%s.DLL' % name, [ver(blk)], module='VTEST', shift=0)
+        t.mod('VT\\SRC\\%s.DLL' % name, [ver(blk)], module='VTEST', shift=0)
+    # NE files: the resource table's alignment shift and offset
+    base = mkne.build('GOOD', 'w16 VER test file', [ver(good)], 0)
+    ne = struct.unpack_from('<I', base, 0x3C)[0]
+    rt = ne + struct.unpack_from('<H', base, ne + 0x24)[0]
+    for sh in (1, 2, 4, 8, 12, 13, 14, 15, 16, 17, 31, 32, 33, 40, 0xFFFF):
+        b = bytearray(base)
+        struct.pack_into('<H', b, rt, sh)
+        t.put('VT\\AUD\\SH%d.DLL' % sh, bytes(b))
+    # the same shifts with the resource at offset 0, one unit long
+    for sh in (1, 8, 12, 13, 14, 15, 16, 17, 31, 32):
+        b = bytearray(base)
+        struct.pack_into('<H', b, rt, sh)
+        struct.pack_into('<HH', b, rt + 2 + 8, 0, 1)
+        t.put('VT\\AUD\\SZ%d.DLL' % sh, bytes(b))
+    b = bytearray(base)
+    struct.pack_into('<H', b, ne + 0x24, 0)                # the table at the header
+    t.put('VT\\AUD\\RT0.DLL', bytes(b))
+    # GetFileVersionInfoSize: a resource of 20 bytes (the table's length),
+    # the signature after it in the file, or the file ending with it
+    l20 = setlen(good, 20)
+    b = mkne.build('TBL20', 'w16 VER test file', [ver(l20, ovr=20)], 0)
+    t.put('VT\\AUD\\TBL20.DLL', b)
+    t.put('VT\\AUD\\CUT20.DLL', b[:resoff(b) + 20])
+    t.put('VT\\AUD\\CUT22.DLL', b[:resoff(b) + 22])
+    l8 = setlen(good, 8)
+    b = mkne.build('TBL8', 'w16 VER test file', [ver(l8, ovr=8)], 0)
+    t.put('VT\\AUD\\TBL8.DLL', b)
+
+
 def main():
     out = sys.argv[1]
     t = Tree(os.path.join(out, 'c'))
@@ -234,6 +318,8 @@ def main():
     t.put('VT\\DST\\KEEP', b'')
     t.put('VT\\CUR\\KEEP', b'')
     t.put('VT\\CUR2\\KEEP', b'')
+
+    audit(t, good)
 
     # ---- D:
     for name, blk in pool[:4]:
