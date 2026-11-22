@@ -1420,6 +1420,36 @@ $(DOS)/REGEDIT.EXE: $(SHELL_RE) $(B)/shell/regedit/regedit.res shell/regedit/reg
 	    option map=$(B)/shell/regedit/regedit.map \
 	    option resource=$(B)/shell/regedit/regedit.res file { $(SHELL_RE) }
 	python3 tools/nemark.py $@ 3.10
+# ---- shell: WINHELP.EXE, Windows Help (shell/winhelp/; ARCHITECTURE.md
+# 15.10) ----
+WH_C     := main view api search macro pict marks hfs hlpio hlp para
+SHELL_WH := $(B)/shell/start.o $(B)/shell/write/i4.o $(WH_C:%=$(B)/shell/winhelp/%.o)
+shell: $(DOS)/WINHELP.EXE
+$(B)/shell/winhelp/%.o: shell/winhelp/%.c shell/winhelp/winhelp.h shell/winhelp/hlp.h shell/winhelp/para.h shell/winhelp/hfs.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/winhelp/winhelp.ico: tools/mkhelpart.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkhelpart.py $(@D)
+$(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo1.bmp $(B)/shell/winhelp/logo2.bmp $(B)/shell/winhelp/annot.bmp: $(B)/shell/winhelp/winhelp.ico
+$(B)/shell/winhelp/winhelp.res: shell/winhelp/winhelp.rc shell/winhelp/winhelp.h $(B)/shell/winhelp/winhelp.ico \
+    $(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo1.bmp $(B)/shell/winhelp/logo2.bmp $(B)/shell/winhelp/annot.bmp
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/winhelp -i=$(B)/shell/winhelp -fo=$@ $<
+$(DOS)/WINHELP.EXE: $(SHELL_WH) $(B)/shell/winhelp/winhelp.res shell/winhelp/winhelp.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/winhelp/winhelp.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/winhelp/winhelp.map \
+	    option resource=$(B)/shell/winhelp/winhelp.res file { $(SHELL_WH) }
+	python3 tools/nemark.py $@ 3.10
+# hlpdump: the .HLP reader on the build host (tests/winhelp/hlpdump.c)
+$(B)/hlpdump: tests/winhelp/hlpdump.c shell/winhelp/hlp.c shell/winhelp/para.c shell/winhelp/hlp.h shell/winhelp/para.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -Wall -DHLP_HOST -Ishell/winhelp -o $@ tests/winhelp/hlpdump.c shell/winhelp/hlp.c shell/winhelp/para.c
+# hfstest: the bookmark and annotation file writer on the build host
+# (tests/winhelp/hfstest.c)
+$(B)/hfstest: tests/winhelp/hfstest.c shell/winhelp/hfs.c shell/winhelp/hlp.c shell/winhelp/hfs.h shell/winhelp/hlp.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -Wall -DHLP_HOST -Ishell/winhelp -o $@ tests/winhelp/hfstest.c shell/winhelp/hfs.c shell/winhelp/hlp.c
 # WRMET.EXE: probe WR9, the font metrics Write's layout depends on
 dos: $(DOS)/WRMET.EXE
 $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
@@ -1874,6 +1904,13 @@ $(SAVERS:%=$(W16)/%.SCR): $(W16)/%: $(DOS)/%
 W16TREE += $(W16)/REGEDIT.EXE
 install-tree: $(W16)/REGEDIT.EXE
 $(W16)/REGEDIT.EXE: $(DOS)/REGEDIT.EXE
+	@mkdir -p $(@D)
+	cp $< $@
+# Windows Help (shell/winhelp/): WINDOWS\WINHELP.EXE, as in 3.1 (USER's
+# WinHelp starts it from the Windows directory)
+W16TREE += $(W16)/WINHELP.EXE
+install-tree: $(W16)/WINHELP.EXE
+$(W16)/WINHELP.EXE: $(DOS)/WINHELP.EXE
 	@mkdir -p $(@D)
 	cp $< $@
 # Write (shell/write/): WINDOWS\WRITE.EXE, as in 3.1

@@ -1,0 +1,35 @@
+; WS01: NOTEPAD.HLP: contents, a jump, Back, a glossary popup, History, Search (typed, Show Topics, Go To)
+; mask: 215,160,428,182
+run WINHELP.EXE NOTEPAD.HLP
+wait 3000
+snap C:\S1.BMP
+click 297 325
+wait 1500
+snap C:\S2.BMP
+click 362 54
+wait 1500
+snap C:\S3.BMP
+click 257 135
+wait 1500
+snap C:\S4.BMP
+click 400 420
+wait 1000
+click 420 54
+wait 1500
+snap C:\S5.BMP
+key 1B
+wait 800
+click 303 54
+wait 1500
+snap C:\S6.BMP
+type find
+wait 800
+snap C:\S7.BMP
+key 0D
+wait 1000
+snap C:\S8.BMP
+key 0D
+wait 1500
+snap C:\S9.BMP
+close
+wait 1500

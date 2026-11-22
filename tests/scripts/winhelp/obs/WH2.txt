@@ -1,0 +1,59 @@
+; WH2: NOTEPAD.HLP: a jump, Back, a glossary popup, History, Search, Glossary, About, Open, How to Use Help
+run WINHELP.EXE NOTEPAD.HLP
+wait 3000
+click 297 325
+wait 1500
+snap C:\S1.BMP
+info
+click 362 54
+wait 1500
+snap C:\S2.BMP
+click 257 135
+wait 1500
+snap C:\S3.BMP
+dump
+click 400 420
+wait 1000
+click 420 54
+wait 1500
+snap C:\S4.BMP
+info
+key 1B
+wait 800
+click 303 54
+wait 1500
+snap C:\S5.BMP
+info
+type find
+wait 800
+snap C:\S5B.BMP
+key 1B
+wait 800
+click 481 54
+wait 2000
+snap C:\S6.BMP
+dump
+info
+close
+wait 1000
+menu h
+char a
+wait 1500
+snap C:\S7.BMP
+info
+key 1B
+wait 800
+menu f
+char o
+wait 1500
+snap C:\S8.BMP
+info
+key 1B
+wait 800
+menu h
+char h
+wait 2000
+snap C:\S9.BMP
+info
+close
+wait 1500

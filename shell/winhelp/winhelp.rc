@@ -1,0 +1,138 @@
+/*
+ * winhelp.rc - w16 Windows Help's resources (ARCHITECTURE.md 15.10). The
+ * menus, dialogs and texts reproduce Windows 3.1's WINHELP as observed
+ * running (SNAP dumps and screenshots, probes WH1-WH4: control IDs,
+ * styles and pixel rectangles converted to dialog units), never read
+ * from its file. "Windows" is "w16" where it names the product
+ * (ARCHITECTURE.md 3). The icon, cursor and pictures are w16's own
+ * (tools/mkhelpart.py).
+ */
+#include <windows.h>
+#include "winhelp.h"
+
+IDI_WINHELP ICON "winhelp.ico"
+IDCUR_HAND CURSOR "hand.cur"
+IDB_LOGO BITMAP "logo1.bmp"
+IDB_LOGO2 BITMAP "logo2.bmp"
+IDB_ANNOTATE BITMAP "annot.bmp"
+
+1 MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open...", IDM_OPEN
+        MENUITEM SEPARATOR
+        MENUITEM "&Print Topic", IDM_PRINT
+        MENUITEM "P&rint Setup...", IDM_PRINTSETUP
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Copy...", IDM_COPY
+        MENUITEM SEPARATOR
+        MENUITEM "&Annotate...", IDM_ANNOTATE
+    END
+    POPUP "Book&mark"
+    BEGIN
+        MENUITEM "&Define...", IDM_DEFINE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&How to Use Help", IDM_HELPHELP
+        MENUITEM "Always on &Top", IDM_ONTOP
+        MENUITEM SEPARATOR
+        MENUITEM "&About Help...", IDM_ABOUT
+    END
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPNAME,    "w16 Help"
+    IDS_HISTORY,    "w16 Help History"
+    IDS_NOFILE,     "Cannot open Help file."
+    IDS_NOTOPIC,    "Help topic does not exist."
+    IDS_NOTHELP,    "This file is not a Windows Help file."
+    IDS_NOMEM,      "Out of memory."
+    IDS_FILTER,     "Help Files (*.HLP)|*.hlp|"
+    IDS_OPENTITLE,  "Open"
+    IDS_ABOUTOTHER, "Help Version 3.10"
+    IDS_ABOUTAPP,   "Help"
+    IDS_BOOKMARK,   "Bookmark Define"
+    IDS_ANNOTATE,   "Annotate"
+    IDS_NOKEYWORD,  "Help topic does not exist."
+    IDS_BADMACRO,   "Error executing macro."
+    IDS_NOPRINTER,  "Unable to setup printer."
+    IDS_COPYTITLE,  "Copy"
+END
+
+/* Search (WH2: client 389 x 302 at 28, 28 in the main window's client) */
+DLG_SEARCH DIALOG 16, 17, 222, 186
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Search"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "Type a &word, or select one from the list.", IDC_SEARCHTEXT, 4, 6, 141, 9
+    LTEXT "Then choose Show Topics.", -1, 4, 15, 141, 9
+    EDITTEXT IDC_SEARCHEDIT, 4, 28, 148, 14, ES_AUTOHSCROLL | WS_GROUP | WS_TABSTOP
+    LISTBOX IDC_KEYWORDS, 14, 42, 204, 50, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_GROUP | WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 164, 7, 54, 14, WS_GROUP | WS_TABSTOP
+    DEFPUSHBUTTON "&Show Topics", IDC_SHOW, 164, 24, 54, 14, WS_DISABLED | WS_GROUP | WS_TABSTOP
+    CONTROL "", -1, "Static", SS_BLACKFRAME, 4, 97, 214, 1
+    PUSHBUTTON "&Go To", IDC_GOTO, 164, 103, 54, 14, WS_DISABLED | WS_GROUP | WS_TABSTOP
+    LTEXT "Select a &topic, then choose Go To.", IDC_TOPICSTEXT, 4, 105, 131, 12
+    LISTBOX IDC_TOPICS, 3, 124, 215, 57, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_DISABLED | WS_TABSTOP
+END
+
+/* Bookmark Define (WH3: client 359 x 156) */
+DLG_DEFINE DIALOG 21, 17, 205, 96
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Bookmark Define"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "&Bookmark Name:", 0x6A, 4, 5, 88, 10
+    EDITTEXT IDC_BMNAME, 4, 17, 150, 14, ES_AUTOHSCROLL | WS_TABSTOP
+    LISTBOX IDC_BMLIST, 3, 33, 151, 57, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_BORDER | WS_TABSTOP
+    DEFPUSHBUTTON "OK", IDOK, 160, 17, 40, 14, WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 160, 35, 40, 14, WS_TABSTOP
+    PUSHBUTTON "&Delete", IDC_BMDELETE, 160, 53, 40, 14, WS_DISABLED | WS_TABSTOP
+END
+
+/* Copy (WH4: placed and sized in pixels by CopyProc) */
+DLG_COPY DIALOG 0, 0, 264, 122
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPSIBLINGS
+CAPTION "Copy"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "&Select text to copy to the Clipboard.", 0x64, 6, 4, 230, 8
+    EDITTEXT IDC_COPYTEXT, 6, 18, 214, 100, ES_MULTILINE | ES_NOHIDESEL | WS_VSCROLL | WS_HSCROLL | WS_GROUP | WS_TABSTOP
+    DEFPUSHBUTTON "&Copy", IDOK, 224, 18, 34, 14, WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 224, 36, 34, 14, WS_TABSTOP
+END
+
+/* Bookmark > More... (w16's: 3.1's not observed) */
+DLG_MORE DIALOG 21, 17, 205, 96
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Bookmark"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "&Go To Bookmark:", -1, 4, 5, 88, 10
+    LISTBOX IDC_BMLIST, 3, 17, 151, 73, LBS_NOTIFY | WS_BORDER | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "OK", IDOK, 160, 17, 40, 14, WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 160, 35, 40, 14, WS_TABSTOP
+END
+
+/* Annotate (WH3: client 299 x 210) */
+DLG_ANNOTATE DIALOG 25, 17, 171, 129
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+CAPTION "Annotate"
+FONT 8, "Helv"
+BEGIN
+    LTEXT "&Annotation:", 0x69, 4, 3, 64, 10
+    EDITTEXT IDC_ANNTEXT, 4, 14, 123, 111, ES_MULTILINE | ES_AUTOVSCROLL | ES_NOHIDESEL | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON "&Save", IDOK, 133, 14, 34, 14, WS_DISABLED | WS_TABSTOP
+    PUSHBUTTON "Cancel", IDCANCEL, 133, 32, 34, 14, WS_TABSTOP
+    PUSHBUTTON "&Delete", IDC_ANNDELETE, 133, 50, 34, 14, WS_DISABLED | WS_TABSTOP
+    PUSHBUTTON "&Copy", IDC_ANNCOPY, 133, 76, 34, 14, WS_DISABLED | WS_TABSTOP
+    PUSHBUTTON "&Paste", IDC_ANNPASTE, 133, 94, 34, 14, WS_DISABLED | WS_TABSTOP
+END
