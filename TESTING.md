@@ -289,7 +289,14 @@ are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
 `tests/refrun.sh VX11.EXE /3`, under w16's WIN386 with
 `REFRUN_FILES=build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE`); the
 boot-test case `win386audit` compares it with Windows 3.1's
-(docs/notes/win386-audit-triage.md).
+(docs/notes/win386-audit-triage.md). How much of the processor Windows
+gets beside DOS boxes: `tests/vmpollrun.sh OUTDIR WHAT [w16]` (VX13 and
+VX14, `make vxprobes`; WHAT is what each box runs: `cmd`, or a VX14 mode
+such as `p` for a program polling the keyboard or `b` for a busy one)
+prints Windows' busy-loop and message counts with 0, 1, 2 and 4 boxes;
+`VMPOLL_VXT=1` adds the scheduling probe VxD VXT.386 (DOSBox-X, its log in
+OUTDIR/com1.txt). The boot-test case `win386idle` runs it under w16's and
+Microsoft's WIN386 (ARCHITECTURE.md 12.12).
 
 ## 5. Running on a remote host
 

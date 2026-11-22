@@ -188,3 +188,10 @@ offset), ECX its size; results in the registers and the buffer.
 WINOLDAP also passes RNG1DSSEL (7Bh, a flat selector) and the VM handle in
 the EXTPAINTSTRUC; w16's grabber maps the linear addresses with its own
 selectors (SetSelectorBase), so they must be valid in the System VM.
+
+## VMPOLL and idle scheduling (2026-11-22, the user's "DOS boxes make it janky")
+
+Done; ARCHITECTURE.md 12.12 has the facts, the design and the numbers.
+- Tools: `tests/vmpollrun.sh OUT WHAT [w16]` (VX13 Windows-side meter, VX14 DOS-side modes, `tools/mkpif.py` 386 options), `VMPOLL_VXT=1` (VXT.386 scheduling probe, runs under w16 too now that Hook_Device_Service exists), `VMPOLL_COM1=1` (w16's VMM trace; the heartbeat now lists traps by kind: `vNN`/`pNN` software interrupts, clisti, hlt, pmbp, io, v86bp, exc), `VMPOLL_SHOTS=N`. On installation-05 a session takes ~5 min at fixed 30,000 cycles; run several in parallel.
+- Findings beyond VMPOLL: minimised windowed boxes never ran under w16 (no SHELL function 5: fixed in function 15h); Background was ignored (fixed: scheduled()); w16 passes Windows messages at about a third of 3.1's rate even with the #GP fast path: each CLI/STI trap costs w16 about five times what it costs 3.1 in DOSBox-X (VX13 cli=: 405,000 pairs in 8 s against 2,056,000). Open: find what 3.1 does cheaper (its trap path, or fewer traps: UNVERIFIED).
+- Not done: VTD catching up an idle VM's missed ticks (an idle box's clock lags: 3.1's too? UNVERIFIED), the ~7 s wake's real cause in 3.1 (not VMPOLL's code), VMPOLL's other hooked interrupts.
