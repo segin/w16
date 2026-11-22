@@ -16,12 +16,14 @@
 #   kbd  keys typed into a box that has interrupts off (SPK X; vsdkbd.txt)
 #   hung Reboot's screens: VX8 hung, keys the screen has no use for,
 #        Escape, Return; the plain screen (vsdhung.txt)
+#   cadd Reboot's screen for a DOS program and keys it has no use for
+#        (vsdcadd.txt)
 #   gp   VX12 G's privileged instruction in a full-screen box (SHELL's
 #        box), Ctrl+Alt+Del in a second box (tests/scripts/input/
 #        vx12gc.txt)
 #   NAME any other input script, tests/scripts/input/NAME.txt (VX12.COM
 #        at hand): what beeps in it
-#   usage: tests/vsdprobe.sh [-o DIR] [-k FILE] ms|w16 [fg] [bg] [two] [kbd] [hung] [gp] [NAME]
+#   usage: tests/vsdprobe.sh [-o DIR] [-k FILE] ms|w16 [fg] [bg] [two] [kbd] [hung] [cadd] [gp] [NAME]
 #        (default: fg bg two)
 #     -o DIR   the output directory (one scenario only)
 #   VSDPROBE_NOVXV=1: without VXV.386 (ports 61h and 42h then trapped by
