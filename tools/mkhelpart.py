@@ -3,7 +3,7 @@
 6.8): the program's icon (a blue book with a yellow question mark), the
 hand cursor shown over hot spots (a pointing hand), the logo shown with
 no file open (a dithered navy-to-black field with "w16 Help" in white
-italics) and the annotation mark (a small paper clip).
+italics) and the annotation mark (a small green paper clip).
 
 usage: mkhelpart.py OUTDIR    writes winhelp.ico, hand.cur, logo1.bmp, logo2.bmp, annot.bmp
 """
@@ -166,27 +166,29 @@ def logo():
 
 
 def annot():
-    """the annotation mark: a 12 x 16 paper clip, silver on white"""
+    """the annotation mark: 14 x 16, a green paper clip leaning right on
+    white (w16's own drawing), sitting on the text's baseline"""
+    from mkicons import GREEN
     rows = [
-        "....####....",
-        "...#....#...",
-        "..#..##..#..",
-        "..#.#..#.#..",
-        "..#.#..#.#..",
-        "..#.#..#.#..",
-        "..#.#..#.#..",
-        "..#.#..#.#..",
-        "..#.#..#.#..",
-        "..#.#....#..",
-        "..#.#....#..",
-        "..#......#..",
-        "..#......#..",
-        "...#....#...",
-        "....####....",
-        "............",
+        "..............",
+        "..............",
+        "..........##..",
+        ".........#..#.",
+        "........#.#.#.",
+        ".......#.#..#.",
+        "......#.#..#..",
+        ".....#.#..#...",
+        "....#.#..#....",
+        "...#.#..#.....",
+        "...#.#.#......",
+        "...#..#.......",
+        "....##........",
+        "..............",
+        "..............",
+        "..............",
     ]
-    px = [[BLACK if c == '#' else WHITE for c in r] for r in rows]
-    return bmp4(12, 16, px)
+    px = [[GREEN if c == '#' else WHITE for c in r] for r in rows]
+    return bmp4(14, 16, px)
 
 
 def main():

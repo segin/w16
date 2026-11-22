@@ -438,7 +438,7 @@ static BOOL run_one(CALL *c)
     } else if (is(c, "CopyDialog", NULL)) {
         copy_dialog();
     } else if (is(c, "CopyTopic", NULL)) {
-        do_command(IDM_COPY);
+        copy_topic();
     } else if (is(c, "Annotate", NULL)) {
         annotate();
     } else if (is(c, "BookmarkDefine", NULL)) {

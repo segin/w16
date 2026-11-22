@@ -42,6 +42,23 @@ void hlp_memcpy(void FAR *d, const void FAR *s, DWORD n)
         *dd++ = *ss++;
 }
 
+void hlp_memset(void FAR *d, int c, DWORD n)
+{
+    LPB dd = (LPB)d;
+    while (n--)
+        *dd++ = (BYTE)c;
+}
+
+int hlp_strcmp(const char FAR *a, const char FAR *b)
+{
+    for (;; a++, b++) {
+        if (*a != *b)
+            return (int)(BYTE)*a - (int)(BYTE)*b;
+        if (!*a)
+            return 0;
+    }
+}
+
 static int lower(int c)
 {
     return c >= 'A' && c <= 'Z' ? c + 32 : c;
@@ -796,6 +813,7 @@ static void read_system(HLP FAR *h, DWORD f)
     if (!hlp_fread(h, f, 0, b, 12))
         return;
     h->minor = hlp_rw(b + 2);
+    h->gendate = hlp_rl(b + 6);
     h->sysflags = hlp_rw(b + 10);
     if (h->minor <= 16) {
         hlp_fread(h, f, 12, h->title, sizeof h->title - 1);

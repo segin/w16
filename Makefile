@@ -1422,10 +1422,10 @@ $(DOS)/REGEDIT.EXE: $(SHELL_RE) $(B)/shell/regedit/regedit.res shell/regedit/reg
 	python3 tools/nemark.py $@ 3.10
 # ---- shell: WINHELP.EXE, Windows Help (shell/winhelp/; ARCHITECTURE.md
 # 15.10) ----
-WH_C     := main view api search macro pict marks hlpio hlp para
+WH_C     := main view api search macro pict marks hfs hlpio hlp para
 SHELL_WH := $(B)/shell/start.o $(B)/shell/write/i4.o $(WH_C:%=$(B)/shell/winhelp/%.o)
 shell: $(DOS)/WINHELP.EXE
-$(B)/shell/winhelp/%.o: shell/winhelp/%.c shell/winhelp/winhelp.h shell/winhelp/hlp.h shell/winhelp/para.h
+$(B)/shell/winhelp/%.o: shell/winhelp/%.c shell/winhelp/winhelp.h shell/winhelp/hlp.h shell/winhelp/para.h shell/winhelp/hfs.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/shell/winhelp/winhelp.ico: tools/mkhelpart.py tools/mkicons.py
@@ -1445,6 +1445,11 @@ $(DOS)/WINHELP.EXE: $(SHELL_WH) $(B)/shell/winhelp/winhelp.res shell/winhelp/win
 $(B)/hlpdump: tests/winhelp/hlpdump.c shell/winhelp/hlp.c shell/winhelp/para.c shell/winhelp/hlp.h shell/winhelp/para.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -Wall -DHLP_HOST -Ishell/winhelp -o $@ tests/winhelp/hlpdump.c shell/winhelp/hlp.c shell/winhelp/para.c
+# hfstest: the bookmark and annotation file writer on the build host
+# (tests/winhelp/hfstest.c)
+$(B)/hfstest: tests/winhelp/hfstest.c shell/winhelp/hfs.c shell/winhelp/hlp.c shell/winhelp/hfs.h shell/winhelp/hlp.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -Wall -DHLP_HOST -Ishell/winhelp -o $@ tests/winhelp/hfstest.c shell/winhelp/hfs.c shell/winhelp/hlp.c
 # WRMET.EXE: probe WR9, the font metrics Write's layout depends on
 dos: $(DOS)/WRMET.EXE
 $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk

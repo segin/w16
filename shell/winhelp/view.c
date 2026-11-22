@@ -35,9 +35,10 @@
 
 /* ---- fonts ---- */
 
+static int lpy;             /* the layout's device's LOGPIXELSY */
+
 static int px(int hp)
 {
-    static int lpy;
     if (!lpy) {
         HDC dc = GetDC(NULL);
         lpy = GetDeviceCaps(dc, LOGPIXELSY);
@@ -140,7 +141,6 @@ void view_clear(VIEW *v)
     v->nitems = v->npool = v->nhots = v->npicts = v->nshg = 0;
     v->height = v->widest = 0;
     v->focus = -1;
-    v->annotated = FALSE;
 }
 
 static WORD pool_add(VIEW *v, const char FAR *s, WORD n)
@@ -199,6 +199,7 @@ typedef struct {
     WORD font;          /* current font slot */
     short hot;          /* current hot spot, -1 none */
     BOOL hotvisible;
+    BOOL marked;        /* the annotation mark is placed */
 } LAY;
 
 /* per-font width tables, made on demand (keyed on the font handle, so
@@ -359,6 +360,13 @@ static void emit_line(LAY *l, int n, BOOL lastline)
     }
     if (left + shift + w > v->widest)
         v->widest = left + shift + w;
+    {
+        DITEM FAR *e = item_add(v);
+        if (e) {
+            e->kind = DI_EOL;
+            e->y = l->y;
+        }
+    }
     l->y += h;
     (void)lastline;
 }
@@ -542,6 +550,33 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
             break;
         case PI_TEXT: {
             WORD i;
+            if (v->annotated && !l->marked) {
+                /* the annotation mark before the topic's first text: a
+                   hot spot that opens Annotate (WH4) */
+                l->marked = TRUE;
+                if (v->npicts < v->maxpicts) {
+                    VPICT FAR *p = &v->picts[v->npicts];
+                    BITMAP bm;
+                    m_set(p, 0, sizeof *p);
+                    p->bm = LoadBitmap(g_inst, MAKEINTRESOURCE(IDB_ANNOTATE));
+                    if (p->bm) {
+                        LATOM m;
+                        GetObject(p->bm, sizeof bm, &bm);
+                        p->cx = bm.bmWidth;
+                        p->cy = bm.bmHeight;
+                        m.kind = A_PICT;
+                        m.pict = v->npicts++;
+                        m.cx = p->cx;
+                        m.font = (BYTE)l->font;
+                        m.hot = hot_add(v, HOT_ANNOTATION, 0, NULL, NULL, NULL, 0);
+                        if (!started) {
+                            para_start(l);
+                            started = TRUE;
+                        }
+                        add_atom(l, &m);
+                    }
+                }
+            }
             if (!started) {
                 para_start(l);
                 ptop = l->y;
@@ -635,16 +670,30 @@ static void layout_link(LAY *l, HLP FAR *h, DWORD pos, HLPLINK FAR *lk)
     }
     if (nline)
         flush_line(l, TRUE);
+    {
+        DITEM FAR *e = item_add(v);
+        if (e) {
+            e->kind = DI_EOP;
+            e->y = l->y;
+        }
+    }
     hio_free(d.mem);
 }
 
 void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width)
 {
+    view_layout_dc(v, h, first, end, width, NULL);
+}
+
+/* lay out for a device (printing); NULL: the view's window */
+void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HDC dev)
+{
     LAY l;
     DWORD pos;
     HLPLINK lk;
     WORD guard = 0;
-    if (v->hlp != h)
+    int oldlpy = lpy;
+    if (v->hlp != h || dev)
         fonts_free(v);
     view_clear(v);
     v->hlp = h;
@@ -655,7 +704,9 @@ void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width)
         return;
     m_set(&l, 0, sizeof l);
     l.v = v;
-    l.dc = GetDC(v->hwnd);
+    l.dc = dev ? dev : GetDC(v->hwnd);
+    if (dev)
+        lpy = GetDeviceCaps(dev, LOGPIXELSY);
     l.width = width;
     l.y = 0;
     l.hot = -1;
@@ -673,7 +724,25 @@ void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width)
             break;
     }
     v->height = l.y;
-    ReleaseDC(v->hwnd, l.dc);
+    if (dev)
+        lpy = oldlpy;
+    else
+        ReleaseDC(v->hwnd, l.dc);
+}
+
+void view_free(VIEW *v)
+{
+    view_clear(v);
+    if (v->items) hio_free(v->items);
+    if (v->pool) hio_free(v->pool);
+    if (v->hots) hio_free(v->hots);
+    if (v->picts) hio_free(v->picts);
+    if (v->shg) hio_free(v->shg);
+    v->items = NULL;
+    v->pool = NULL;
+    v->hots = NULL;
+    v->picts = NULL;
+    v->shg = NULL;
 }
 
 /* ---- painting ---- */
@@ -772,32 +841,32 @@ short view_hit(VIEW *v, short x, short y)
    with CR LF; a block from hio_alloc */
 LPSTR view_text(VIEW *v, DWORD FAR *len)
 {
+    /* 3.1's Copy (WH4): each screen line, its trailing space kept, then
+       CR LF; an empty line after each paragraph record; a gap within a
+       line (a tab) as a tab */
     WORD i;
     DWORD n = 0;
     LPSTR s = (LPSTR)hio_alloc((DWORD)v->npool + (DWORD)v->nitems * 3 + 4);
-    short lasty = -32000;
+    BOOL linestart = TRUE;
     if (!s)
         return NULL;
     for (i = 0; i < v->nitems; i++) {
         DITEM FAR *d = &v->items[i];
-        if (d->kind != DI_TEXT)
-            continue;
-        if (n && d->y + d->ascent != lasty) {
-            /* drop the space a wrapped line ended with */
-            while (n && s[n - 1] == ' ')
-                n--;
+        if (d->kind == DI_EOL || d->kind == DI_EOP) {
             s[n++] = '\r';
             s[n++] = '\n';
-        } else if (n && i && v->items[i - 1].kind == DI_TEXT &&
-                   d->x > v->items[i - 1].x + v->items[i - 1].cx + 2) {
-            s[n++] = '\t';
+            linestart = TRUE;
+            continue;
         }
-        lasty = d->y + d->ascent;
+        if (d->kind != DI_TEXT)
+            continue;
+        if (!linestart && i && v->items[i - 1].kind == DI_TEXT &&
+            d->x > v->items[i - 1].x + v->items[i - 1].cx + 2)
+            s[n++] = '\t';
+        linestart = FALSE;
         m_cpy(s + n, v->pool + d->text, d->len);
         n += d->len;
     }
-    while (n && s[n - 1] == ' ')
-        n--;
     s[n] = 0;
     *len = n;
     return s;
@@ -880,6 +949,9 @@ void view_activate(VIEW *v, short hot, POINT pt)
     if (h->str != 0xFFFF)
         hlp_strcpyn(str, v->pool + h->str, sizeof str);
     switch (h->code) {
+    case HOT_ANNOTATION:
+        annotate();
+        break;
     case 0xC8:
     case 0xCC:
         popup_close();

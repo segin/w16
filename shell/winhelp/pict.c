@@ -15,9 +15,13 @@
  *
  * Of several resolutions w16 takes the one whose dpi matches the
  * display's (VGA: 96) with the most colours the display has, else the
- * first. Metafile pictures (type 8) need GDI's metafiles (PlayMetaFile),
- * which another part of w16 is implementing now: until then they are
- * laid out at their size and left blank.
+ * first. Metafile pictures (type 8): the data is a Windows metafile,
+ * played (SetMetaFileBits, PlayMetaFile) in MM_ANISOTROPIC as the SDK
+ * says Help does (Vol. 4, ch. 15, \bmc), its window extent the
+ * picture's width and height, its viewport the picture's size in pixels
+ * (those numbers taken as 0.01 mm: UNVERIFIED, no reference help file
+ * has a metafile). w16's GDI is getting metafiles separately; until it
+ * has them they draw nothing (its export stubs answer 0).
  */
 #include "winhelp.h"
 
@@ -187,8 +191,30 @@ static BOOL make(LPCB base, DWORD avail, DWORD off, VPICT FAR *pp, VIEW *v)
            Width and Height are in the metafile's units: MM_ANISOTROPIC
            pictures are sized in 0.01 mm (HIMETRIC-like), w16 converts at
            96 dpi */
-        pp->cx = (short)((long)p.w * 96 / 2540);
-        pp->cy = (short)((long)p.h * 96 / 2540);
+        {
+            HDC sdc = GetDC(NULL);
+            int dpx = GetDeviceCaps(sdc, LOGPIXELSX), dpy = GetDeviceCaps(sdc, LOGPIXELSY);
+            ReleaseDC(NULL, sdc);
+            pp->cx = (short)((long)p.w * dpx / 2540);
+            pp->cy = (short)((long)p.h * dpy / 2540);
+        }
+        pp->mfx = (short)p.w;
+        pp->mfy = (short)p.h;
+        if (p.dsize && p.dsize < 0xFF00UL) {
+            LPB bits = unpack(base + off + p.coff, p.csize, p.pack, p.dsize);
+            if (bits) {
+                HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, p.dsize);
+                if (g) {
+                    LPB d = (LPB)GlobalLock(g);
+                    hlp_memcpy(d, bits, p.dsize);
+                    GlobalUnlock(g);
+                    pp->mf = (HGLOBAL)SetMetaFileBits(g);
+                    if (!pp->mf)
+                        GlobalFree(g);
+                }
+                hio_free(bits);
+            }
+        }
         if (p.hsize && p.hoff)
             hotspots(v, pp, base + off + p.hoff, p.hsize);
         return TRUE;
@@ -317,13 +343,27 @@ void pict_free(VPICT FAR *p)
 {
     if (p->bm)
         DeleteObject(p->bm);
+    if (p->mf)
+        DeleteMetaFile((HMETAFILE)p->mf);
     p->bm = NULL;
+    p->mf = NULL;
 }
 
 void pict_draw(HDC dc, VPICT FAR *p, int x, int y)
 {
     HDC m;
     HBITMAP o;
+    if (p->mf) {
+        int s = SaveDC(dc);
+        SetMapMode(dc, MM_ANISOTROPIC);
+        SetWindowOrg(dc, 0, 0);
+        SetWindowExt(dc, p->mfx, p->mfy);
+        SetViewportOrg(dc, x, y);
+        SetViewportExt(dc, p->cx, p->cy);
+        PlayMetaFile(dc, (HMETAFILE)p->mf);
+        RestoreDC(dc, s);
+        return;
+    }
     if (!p->bm)
         return;
     m = CreateCompatibleDC(dc);

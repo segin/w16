@@ -80,7 +80,7 @@
 #define IDC_ANNDELETE   0x68
 #define IDC_ANNCOPY     0x73
 #define IDC_ANNPASTE    0x74
-#define IDC_COPYTEXT    0x65
+#define IDC_COPYTEXT    0x66
 
 #define IDI_WINHELP     1
 #define IDCUR_HAND      1
@@ -94,6 +94,9 @@
 #define DI_PICT     1
 #define DI_LINE     2       /* a border line: x, y, cx (width), cy (thickness) */
 #define DI_ANNOT    3       /* the annotation mark (a picture) */
+#define DI_EOL      4       /* the end of a line (Copy's text) */
+#define DI_EOP      5       /* the end of a paragraph record */
+#define HOT_ANNOTATION 0x01 /* the annotation mark's hot spot */
 
 typedef struct {
     short x, y, cx, cy;
@@ -114,8 +117,9 @@ typedef struct {
 /* a picture laid out in a view */
 typedef struct {
     HBITMAP bm;
-    HGLOBAL mf;             /* a metafile (not drawn yet: see pict.c) */
+    HGLOBAL mf;             /* a metafile (pict.c) */
     short cx, cy;
+    short mfx, mfy;         /* its window extent */
     WORD nhot;              /* SHG hot spots */
     WORD hotfirst;          /* their rectangles in the view's SHG list */
 } VPICT;
@@ -223,6 +227,8 @@ extern int g_nhist;
 void view_init(VIEW *v, HWND hwnd, BOOL nsr, BOOL popup);
 void view_clear(VIEW *v);
 void view_layout(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width);
+void view_layout_dc(VIEW *v, HLP FAR *h, DWORD first, DWORD end, short width, HDC dev);
+void view_free(VIEW *v);
 void view_paint(VIEW *v, HDC dc, RECT *clip, short dx, short dy);
 short view_hit(VIEW *v, short x, short y);
 void view_activate(VIEW *v, short hot, POINT pt);
@@ -264,6 +270,7 @@ void annotate(void);
 BOOL annot_has(LPCSTR file, DWORD off);
 void annot_open_mark(void);
 void copy_dialog(void);
+void copy_topic(void);
 void print_topic(void);
 void print_setup(void);
 

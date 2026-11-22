@@ -83,6 +83,7 @@ typedef struct HLP {
     DWORD dirstart;
     WORD minor;             /* 15 HC30, 21 HC31 */
     WORD sysflags;
+    DWORD gendate;          /* when it was compiled (|SYSTEM) */
     BOOL lz;                /* topic blocks LZ77 compressed */
     WORD blksize;           /* |TOPIC block size, header included */
     DWORD dsize;            /* a block's decompressed size */
@@ -194,5 +195,7 @@ void hlp_strcpyn(char FAR *d, const char FAR *s, WORD n);
 int hlp_stricmp(const char FAR *a, const char FAR *b);
 WORD hlp_strlen(const char FAR *s);
 void hlp_memcpy(void FAR *d, const void FAR *s, DWORD n);
+void hlp_memset(void FAR *d, int c, DWORD n);
+int hlp_strcmp(const char FAR *a, const char FAR *b);
 
 #endif
