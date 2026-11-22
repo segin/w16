@@ -15,6 +15,9 @@
 #   ; help          a logging stand-in WINHELP.EXE (tests/apps/thelp.c);
 #                   the WinHelp requests must be the same
 #   ; log           compare SNAP's log (dump, info, text) as well
+# NP_W16FILES="HOST=C-PATH ..." puts more of w16's files on the w16 side,
+# e.g. $PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE (w16's Notepad on
+# w16's edit control; the screenshots then differ by USER's art too)
 #   usage: tests/npscenarios.sh [-o DIR] [scenario...]   (default: all)
 # Output: DIR (default build/ref/np/<timestamp>)/<scenario>/{orig,w16}/.
 set -eu
@@ -54,7 +57,7 @@ open(sys.argv[3], 'wb').write((line * (n // len(line) + 1))[:n])" "$size" "$len"
         rm -rf "$d"; mkdir -p "$d"
         sed 's/$/\r/' "$s" > "$d/SNAP.TXT"
         extra=
-        [ $who = w16 ] && extra=$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE
+        [ $who = w16 ] && extra="$root/build/dos/NOTEPAD.EXE=WINDOWS/NOTEPAD.EXE ${NP_W16FILES:-}"
         REFRUN_X=$x REFRUN_PRE=$pre REFRUN_TIMEOUT=${REFRUN_TIMEOUT:-300} \
         REFRUN_FILES="$d/SNAP.TXT $wininfiles $files $help $extra" REFRUN_OUT=$d REFRUN_GET="$get" \
             "$root/tests/refrun.sh" "$root/build/dos/SNAP.EXE" /S > "$d/log.txt" 2>&1 || true

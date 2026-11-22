@@ -88,6 +88,7 @@ typedef struct ED {
     RECT   fmt;                 /* the format rectangle */
     BYTE   eol;                 /* the caret shown at the end of the line before */
     BYTE   fmtlines;            /* EM_FMTLINES TRUE */
+    BYTE   wrapmode;            /* its lines wrap (no ES_AUTOHSCROLL, WS_HSCROLL) */
     BYTE   ro;                  /* read-only (EM_SETREADONLY; ES_READONLY for 3.1 programs) */
     FARPROC wbp;                /* EM_SETWORDBREAKPROC */
     /* undo */
@@ -637,6 +638,7 @@ static void relayout(HWND h, PED e)
     if (!E(e)->multi)
         return;
     wrap = wrapping(h);
+    E(e)->wrapmode = (BYTE)wrap;
     W = E(e)->fmt.right - E(e)->fmt.left;
     meas_begin(h, e, &m);
     /* the table is made only for a second line (an empty control has
@@ -660,7 +662,7 @@ static void relayout(HWND h, PED e)
 }
 
 /* the lines made again after a change at pos (rem characters taken out,
-   ins put in): from the line before the change's until a line starts
+   ins put in): from the change's line (see below) until a line starts
    where an old one did (shifted), the rest moved (typing at the end of
    a 20K text took 38 ms a character with the whole text wrapped again,
    3.1 5 ms) */
@@ -678,9 +680,12 @@ static void relayout_change(HWND h, PED e, WORD pos, WORD rem, WORD ins)
         relayout(h, e);
         return;
     }
-    L = line_of(e, pos);        /* the old table, old positions */
-    if (L > 0)
-        L--;
+    /* from the change's line (the old table, old positions): a change
+       does not pull words back up to the line before (3.1's Notepad:
+       "thirteen", typed before "hello", went to the next line with it and
+       stayed there as " fourteen" was typed and Backspace pressed after
+       it, though it would fit on the first line again) */
+    L = line_of(e, pos);
     s = lstart(e, L);
     wrap = wrapping(h);
     W = E(e)->fmt.right - E(e)->fmt.left;
@@ -1233,21 +1238,24 @@ static BOOL undo_keep(PED e, WORD pos, WORD n, BOOL front)
 #define K_NOUNDO  4             /* a multi-line control's EM_REPLACESEL */
 
 /* a change about to be made: s0-s1 replaced by n characters.
-   A multi-line control (US35 on 3.1) keeps one change: an insertion
+   A multi-line control whose lines wrap (US35 on 3.1) keeps one change: an insertion
    alone (a character typed, a paste: the selection it replaced is not
    kept, and every character typed is a change of its own), or a deletion
    (Backspace, Delete, a cut), joined to the deletion before it when the
    two touch (Backspace after Backspace, Delete after Delete, a cut at
    the place an undone paste was); EM_REPLACESEL empties it. A
-   single-line control keeps the run typed since the caret last moved
-   with the text it replaced, and Backspaces and Deletes with it. */
+   single-line control, and a multi-line one that does not wrap, keeps
+   the run typed with the text it replaced, and Backspaces and Deletes
+   with it (3.1's Notepad without Word Wrap: "abc" typed over a
+   selection undone whole, the selection put back; tests/scripts/np/
+   undo.txt). */
 static void undo_record(PED e, WORD s0, WORD s1, WORD n, int kind)
 {
     if (kind == K_NOUNDO) {
         undo_empty(e);
         return;
     }
-    if (E(e)->multi) {
+    if (E(e)->multi && E(e)->wrapmode) {
         if (!n && E(e)->ukind && !E(e)->uins) {
             if (s1 == E(e)->upos) {
                 undo_keep(e, s0, s1 - s0, TRUE);
@@ -1267,16 +1275,17 @@ static void undo_record(PED e, WORD s0, WORD s1, WORD n, int kind)
             undo_keep(e, s0, s1 - s0, FALSE);
         return;
     }
-    if (kind == K_TYPE && s0 == s1 && E(e)->ukind && E(e)->utyped &&
+    /* typing, or a paste, right after the text the record inserted joins
+       it (3.1's Notepad: a paste at the end of "abc" typed over "ld",
+       then Undo, put back "ld") */
+    if ((kind == K_TYPE || kind == K_OTHER) && n && s0 == s1 && E(e)->ukind && E(e)->uins &&
         s0 == E(e)->upos + E(e)->uins) {
-        E(e)->uins += n;        /* the typing goes on */
+        E(e)->uins += n;
         return;
     }
+    /* Backspace after typing starts a deletion, the typing forgotten
+       (3.1's Notepad: "hello world", two Backspaces, Undo: "ld" back) */
     if (kind == K_BACK && s1 == s0 + 1 && E(e)->ukind && E(e)->utyped) {
-        if (E(e)->uins && s1 == E(e)->upos + E(e)->uins) {
-            E(e)->uins--;       /* typed and taken back */
-            return;
-        }
         if (!E(e)->uins && s1 == E(e)->upos) {
             undo_keep(e, s0, 1, TRUE);
             E(e)->upos = s0;
@@ -1382,7 +1391,7 @@ static void replace_sel_n(HWND h, PED e, LPCSTR s, WORD n, int kind)
     }
     /* a multi-line control takes a selection out and puts the new text
        in as two changes (US35: EN_UPDATE and EN_CHANGE twice) */
-    if (E(e)->multi && s1 > s0 && n) {
+    if (E(e)->multi && E(e)->wrapmode && s1 > s0 && n) {
         if (!change(h, e, s0, s1, "", 0, kind == K_NOUNDO ? K_NOUNDO : K_OTHER))
             return;
         s1 = s0;
@@ -2066,8 +2075,9 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_REPLACESEL:
         if (GP_BAD(lp))
             return 0;
-        /* a multi-line control's empties the undo record (US35) */
-        replace_sel(h, e, (LPCSTR)lp, E(e)->multi ? K_NOUNDO : K_OTHER);
+        /* a wrapping multi-line control's empties the undo record (US35;
+           UNVERIFIED without wrapping) */
+        replace_sel(h, e, (LPCSTR)lp, E(e)->multi && E(e)->wrapmode ? K_NOUNDO : K_OTHER);
         return 1;
     case EM_LIMITTEXT:
         /* 0: as much as fits (3.1 answers the limit: 65535 for 0, US35) */

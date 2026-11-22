@@ -111,7 +111,7 @@ Boot-test settings:
 - `BOOTTEST_REFRESH=1`: rerun the Windows 3.1 reference boots instead of using the cache in `build/refcache/` (the cache is keyed on everything a reference depends on, so you rarely need this).
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
-Other test scripts, each documented at its top: `tests/npscenarios.sh`,
+Other test scripts, each documented at its top: `tests/npscenarios.sh` (`NP_W16FILES="$PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"` runs w16's Notepad on w16's edit control too),
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),

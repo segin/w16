@@ -1,0 +1,53 @@
+; NP10: Edit > Undo after typing, Backspace and a paste, with and without Word Wrap; the saved text
+; get OUT3.TXT
+; log
+run NOTEPAD.EXE
+wait 3000
+type hello world
+key 08
+key 08
+menu e
+char u
+wait 500
+info
+type abc
+menu e
+char u
+wait 500
+menu e
+char u
+wait 500
+info
+menu e
+char a
+menu e
+char c
+key 23
+menu e
+char p
+wait 500
+menu e
+char u
+wait 500
+info
+menu e
+char w
+wait 500
+type  one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen
+key 08
+key 08
+key 08
+menu e
+char u
+wait 500
+info
+snap C:\UNDOWRAP.BMP
+menu f
+char a
+wait 1500
+type C:\OUT3.TXT
+key 0D
+wait 1500
+dump
+close
+wait 800
