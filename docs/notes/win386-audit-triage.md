@@ -322,6 +322,15 @@ SHELL's event records), **VXP.386** (an STI test), a windowed PIF
 | H18 test | added | A VM that starts windowed (SHELL 3's bit 2) gets RAM, an 80x25 BIOS data area and blank text at once; no display event before its window exists | `win386dospif` |
 | Also | REAL, fixed | Hook_V86_Int_Chain (VMM 41h), needed by VXS.386 under w16 | `win386doscad` runs no VXS; checked by hand with VXSH |
 
+Tests of the second round: every WIN386 case after each group (win386,
+win386input, win386cad, win386hung, win386close, win386dos, win386dosw,
+win386switch, win386two, win386exitbox, win386tree, win386woa,
+win386plain, win386w16dos, win386audit, win386doscad, win386dosprobe,
+win386dospif, k386e, exittree, treealone): all ok, make test passes. The
+full boot test at the end (f83ac16): 151 ok, 7 failed: holdbtn, lzexpand
+quirks, trails timed, w16write tree, taskman tree (known flaky), control
+tree and scrnsave desktop, which both passed when run again.
+
 ## Left open
 
 - **H30 in the System VM**: there an extended hot key's E0h still goes
