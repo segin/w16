@@ -1,0 +1,29 @@
+; PH09: F1 on controls 5-8 of the Standard-mode window, clicked (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+click 190 201
+wait 400
+mark 5
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 300 201
+wait 400
+mark 6
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 270 224
+wait 400
+mark 7
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 278 248
+wait 400
+mark 8
+kdown 70 3B
+kup 70 3B
+wait 1500
+close
+wait 2000

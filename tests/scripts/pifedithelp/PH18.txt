@@ -1,0 +1,34 @@
+; PH18: F1 on controls 5-8 of Advanced Options, clicked (tests/pifhelp.sh)
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+alt a
+wait 1500
+click 292 221
+wait 400
+mark 5
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 74 240
+wait 400
+mark 6
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 292 240
+wait 400
+mark 7
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 168 283
+wait 400
+mark 8
+kdown 70 3B
+kup 70 3B
+wait 1500
+cmd 2
+wait 800
+close
+wait 2000

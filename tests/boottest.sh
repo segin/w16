@@ -454,7 +454,8 @@
 #              no file of Microsoft's but, in its first run, PROGMAN.EXE;
 #              WSWAP is w16's): its default
 #              PROGMAN.INI and groups (assets/progman) under real keys
-#              (tests/scripts/input/w16groups.txt): Main's Read Me opens
+#              (tests/scripts/input/w16groups.txt): Main's PIF Editor
+#              run and closed, Main's Read Me opens
 #              README.TXT in Notepad, Accessories restored, its Notepad and
 #              Calculator run and closed, Windows ended. Microsoft's
 #              PROGMAN.EXE on the tree (it must read w16's group files: every
@@ -3956,10 +3957,10 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         # each step changed the screen (the reference: Microsoft's Program
         # Manager started every item of w16's groups)
         prev=boot
-        for s in 01-readme 02-readme-notepad 03-back 04-accessories 05-notepad 06-back 07-calculator 08-back; do
+        for s in 00a-pifitem 00b-pifedit 00c-back 01-readme 02-readme-notepad 03-back 04-accessories 05-notepad 06-back 07-calculator 08-back; do
             [ "$r" = ok ] || break
             [ -f "$out/w16groups-ms/$s.png" ] || { r="ms: no $s.png"; break; }
-            case $s in 0[2457]*)
+            case $s in 00b*|0[2457]*)
                 n=$(magick compare -metric AE "$out/w16groups-ms/$prev.png" "$out/w16groups-ms/$s.png" null: 2>&1 || true)
                 [ "${n%% *}" != 0 ] || r="ms: $s is the screen before it" ;;
             esac

@@ -1,0 +1,47 @@
+; PF01: Standard mode: the window as it starts, each menu down, the status
+; line for a menu item and a control
+run PIFEDIT.EXE
+wait 3000
+wait 300
+snap C:\S1.BMP
+menu f
+wait 600
+wait 300
+snap C:\M1.BMP
+key 28
+key 28
+key 28
+wait 300
+wait 300
+snap C:\M2.BMP
+key 1B
+key 1B
+menu m
+wait 600
+wait 300
+snap C:\M3.BMP
+key 1B
+key 1B
+menu h
+wait 600
+wait 300
+snap C:\M4.BMP
+key 28
+key 28
+key 28
+wait 300
+wait 300
+snap C:\M5.BMP
+key 1B
+key 1B
+wait 500
+key 09
+key 09
+key 09
+key 09
+key 09
+wait 300
+wait 300
+snap C:\S2.BMP
+close
+wait 1000

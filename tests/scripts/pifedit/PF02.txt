@@ -1,0 +1,39 @@
+; PF02: 386 Enhanced mode: the window as it starts, the Mode menu, Advanced
+; Options and its status line, a shortcut key typed
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+wait 300
+snap C:\S1.BMP
+menu m
+wait 600
+wait 300
+snap C:\M1.BMP
+key 1B
+key 1B
+wait 500
+alt a
+wait 1500
+wait 300
+snap C:\A1.BMP
+key 09
+key 09
+key 09
+wait 300
+wait 300
+snap C:\A2.BMP
+alt a
+wait 300
+kdown 11
+kdown 12
+kdown 50 19
+kup 50 19
+kup 12
+kup 11
+wait 300
+wait 300
+snap C:\A3.BMP
+cmd 2
+wait 800
+close
+wait 1000

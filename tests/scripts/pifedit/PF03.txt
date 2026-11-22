@@ -1,0 +1,24 @@
+; PF03: Mode: the warning for the other mode (Standard mode running), OK and
+; Cancel, and back
+run PIFEDIT.EXE
+wait 3000
+cmd 18
+wait 1000
+wait 300
+snap C:\W1.BMP
+key 1B
+wait 800
+wait 300
+snap C:\W2.BMP
+cmd 18
+wait 1000
+key 0D
+wait 1200
+wait 300
+snap C:\W3.BMP
+cmd 17
+wait 1200
+wait 300
+snap C:\W4.BMP
+close
+wait 1000

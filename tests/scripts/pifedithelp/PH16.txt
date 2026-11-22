@@ -1,0 +1,30 @@
+; PH16: F1 on controls 9-12 of the 386 Enhanced-mode window, clicked (tests/pifhelp.sh)
+; mode: /3
+run PIFEDIT.EXE
+wait 4000
+click 421 224
+wait 400
+mark 9
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 278 248
+wait 400
+mark 10
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 411 248
+wait 400
+mark 11
+kdown 70 3B
+kup 70 3B
+wait 1500
+click 278 272
+wait 400
+mark 12
+kdown 70 3B
+kup 70 3B
+wait 1500
+close
+wait 2000

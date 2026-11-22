@@ -1,12 +1,26 @@
 ; w16's default groups (assets/progman) in Program Manager, on a C: drive
 ; holding only w16's install tree as C:\W16 (tests/boottest.sh w16groups):
-; Main's Read Me item opens README.TXT in Notepad (its association), Notepad
-; closed; the minimised Accessories group restored (Ctrl+Tab twice from
+; Main's PIF Editor item (second row) run and closed; Main's Read Me item
+; opens README.TXT in Notepad (its association), Notepad closed; the minimised Accessories group restored (Ctrl+Tab twice from
 ; Main: Main, StartUp, Accessories is the z-order), its Notepad item (the
 ; second, after Write) run and closed, then its Calculator item (two to the right) run and closed;
 ; then Windows ended (File > Exit, Enter), which saves the groups.
 ; Run with Microsoft's PROGMAN.EXE and with w16's on the same tree: the
 ; screens must be the same (the minimised groups' own pictures left out)
+key Down
+match 00a-pifitem 20 1
+shot 00a-pifitem
+markcolor 0000aa
+key Return
+waitmoved 0000aa 500 30
+settlecaret 20 2
+matchnow 00b-pifedit 20 2
+markcolor 0000aa
+key alt+F4
+waitmoved 0000aa 500 30
+match 00c-back 20 2
+shot 00c-back
+key Up
 key Right
 match 01-readme 20 1
 shot 01-readme

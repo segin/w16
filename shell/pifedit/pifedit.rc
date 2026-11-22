@@ -1,0 +1,258 @@
+/*
+ * pifedit.rc - w16 PIF Editor's resources (ARCHITECTURE.md 15.11). The
+ * menu, dialogs and texts reproduce Windows 3.1's PIF Editor as observed
+ * running (SNAP dumps and screenshots, probes PE1-PE18; dialog templates
+ * computed from the dumped control rectangles), never read from its file;
+ * "w16" where 3.1 says "Windows" for the running system (ARCHITECTURE.md
+ * 3). The icon is w16's own (tools/mkpificon.py).
+ */
+#include <windows.h>
+#include "pifedit.h"
+
+IDI_PIFEDIT ICON "pifedit.ico"
+
+MENU_PIFEDIT MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New", IDM_NEW
+        MENUITEM "&Open...", IDM_OPEN
+        MENUITEM "&Save", IDM_SAVE
+        MENUITEM "Save &As...", IDM_SAVEAS
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Mode"
+    BEGIN
+        MENUITEM "&Standard", IDM_STANDARD
+        MENUITEM "&386 Enhanced", IDM_ENHANCED
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents", IDM_HELPCONTENTS
+        MENUITEM "&Search for Help on...", IDM_HELPSEARCH
+        MENUITEM SEPARATOR
+        MENUITEM "&Standard Options", IDM_HELPSTD
+        MENUITEM "&386 Enhanced Options", IDM_HELPENH
+        MENUITEM "A&dvanced Options", IDM_HELPADV
+        MENUITEM SEPARATOR
+        MENUITEM "&How to Use Help", IDM_HELPHELP
+        MENUITEM SEPARATOR
+        MENUITEM "&About PIF Editor...", IDM_ABOUT
+    END
+END
+
+/* the views: child dialogs (PE1 Standard, PE2 386 Enhanced) */
+DLG_STANDARD DIALOG 0, 0, 257, 183
+STYLE WS_CHILD | WS_VISIBLE | DS_LOCALEDIT
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "&Program Filename:", 0x0384, "Static", 0x00020000L, 6, 4, 80, 10
+    CONTROL "", 0x0064, "Edit", 0x00030480L | WS_BORDER, 90, 2, 152, 12
+    CONTROL "Window &Title:", 0x0385, "Static", 0x00020000L, 6, 19, 80, 10
+    CONTROL "", 0x0065, "Edit", 0x00030080L | WS_BORDER, 90, 17, 120, 12
+    CONTROL "&Optional Parameters:", 0x0386, "Static", 0x00020000L, 6, 34, 80, 10
+    CONTROL "", 0x0066, "Edit", 0x00030480L | WS_BORDER, 90, 32, 152, 12
+    CONTROL "&Start-up Directory:", 0x0387, "Static", 0x00020000L, 6, 49, 80, 10
+    CONTROL "", 0x0067, "Edit", 0x00030480L | WS_BORDER, 90, 47, 152, 12
+    CONTROL "&Video Mode:", 0x03A2, "Static", 0x00020000L, 6, 63, 53, 10
+    CONTROL "Text", 0x012D, "Button", 0x00030004L, 90, 62, 37, 12
+    CONTROL "Graphics/Multiple Text", 0x012E, "Button", 0x00000004L, 128, 62, 108, 12
+    CONTROL "Memory Requirements:", 0x0388, "Static", 0x00020000L, 6, 77, 83, 10
+    CONTROL "KB &Required", 0x0389, "Static", 0x00020000L, 90, 77, 45, 10
+    CONTROL "", 0x0068, "Edit", 0x00030000L | WS_BORDER, 136, 76, 18, 12
+    CONTROL "XMS Memory:", 0x0390, "Static", 0x00020000L, 6, 92, 56, 10
+    CONTROL "KB Re&quired", 0x0391, "Static", 0x00020000L, 90, 92, 45, 10
+    CONTROL "", 0x025F, "Edit", 0x00030000L | WS_BORDER, 136, 91, 28, 12
+    CONTROL "KB L&imit", 0x0392, "Static", 0x00020000L, 176, 92, 29, 10
+    CONTROL "", 0x0260, "Edit", 0x00030000L | WS_BORDER, 206, 91, 28, 12
+    CONTROL "Directly Modifies:", 0x038B, "Static", 0x00020000L, 6, 107, 70, 10
+    CONTROL "COM&1", 0x00C9, "Button", 0x00030002L, 90, 106, 46, 12
+    CONTROL "COM&2", 0x00CC, "Button", 0x00010002L, 90, 118, 46, 12
+    CONTROL "COM&3", 0x00CE, "Button", 0x00010002L, 139, 106, 41, 12
+    CONTROL "COM&4", 0x00CF, "Button", 0x00010002L, 139, 118, 43, 12
+    CONTROL "&Keyboard", 0x00CB, "Button", 0x00010002L, 188, 106, 46, 12
+    CONTROL "No Screen &Exchange", 0x0190, "Button", 0x00030002L, 6, 130, 92, 12
+    CONTROL "Prevent Program S&witch", 0x012C, "Button", 0x00010002L, 122, 130, 105, 12
+    CONTROL "&Close Window on Exit", 0x01F4, "Button", 0x00010002L, 6, 142, 97, 12
+    CONTROL "&No Save Screen", 0x0134, "Button", 0x00010002L, 122, 142, 97, 12
+    CONTROL "Reserve Shortc&ut Keys:", 0x0396, "Static", 0x00020000L, 6, 156, 83, 10
+    CONTROL "Alt+Tab", 0x0268, "Button", 0x00030002L, 90, 155, 40, 12
+    CONTROL "PrtSc", 0x026D, "Button", 0x00010002L, 90, 167, 33, 12
+    CONTROL "Alt+Esc", 0x0269, "Button", 0x00010002L, 139, 155, 39, 12
+    CONTROL "Alt+PrtSc", 0x026C, "Button", 0x00010002L, 139, 167, 45, 12
+    CONTROL "Ctrl+Esc", 0x026E, "Button", 0x00010002L, 188, 155, 43, 12
+END
+
+DLG_ENHANCED DIALOG 0, 0, 256, 160
+STYLE WS_CHILD | WS_VISIBLE | DS_LOCALEDIT
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "&Program Filename:", 0x0384, "Static", 0x00020000L, 6, 4, 80, 10
+    CONTROL "", 0x0064, "Edit", 0x00030480L | WS_BORDER, 88, 2, 152, 12
+    CONTROL "Window &Title:", 0x0385, "Static", 0x00020000L, 6, 19, 80, 10
+    CONTROL "", 0x0065, "Edit", 0x00030080L | WS_BORDER, 88, 17, 120, 12
+    CONTROL "&Optional Parameters:", 0x0386, "Static", 0x00020000L, 6, 34, 80, 10
+    CONTROL "", 0x0066, "Edit", 0x00030480L | WS_BORDER, 88, 32, 152, 12
+    CONTROL "&Start-up Directory:", 0x0387, "Static", 0x00020000L, 6, 49, 80, 10
+    CONTROL "", 0x0067, "Edit", 0x00030480L | WS_BORDER, 88, 47, 152, 12
+    CONTROL "&Video Memory:", 0x0399, "Static", 0x00020000L, 6, 65, 56, 10
+    CONTROL "Text", 0x02C1, "Button", 0x00030004L, 69, 63, 28, 12
+    CONTROL "Low Graphics", 0x02C2, "Button", 0x00000004L, 109, 63, 60, 12
+    CONTROL "High Graphics", 0x02C3, "Button", 0x00000004L, 177, 63, 64, 12
+    CONTROL "Memory Requirements:", 0x0388, "Static", 0x00020000L, 6, 78, 82, 10
+    CONTROL "KB &Required", 0x0389, "Static", 0x00020000L, 89, 78, 50, 10
+    CONTROL "", 0x0068, "Edit", 0x00030000L | WS_BORDER, 144, 76, 18, 12
+    CONTROL "KB &Desired", 0x038A, "Static", 0x00020000L, 170, 78, 41, 10
+    CONTROL "", 0x0069, "Edit", 0x00030000L | WS_BORDER, 222, 76, 18, 12
+    CONTROL "EMS Memory:", 0x038D, "Static", 0x00020000L, 6, 92, 56, 10
+    CONTROL "&KB Required", 0x038E, "Static", 0x00020000L, 89, 92, 46, 10
+    CONTROL "", 0x025C, "Edit", 0x00030000L | WS_BORDER, 136, 91, 28, 12
+    CONTROL "KB &Limit", 0x038F, "Static", 0x00020000L, 170, 92, 30, 10
+    CONTROL "", 0x025D, "Edit", 0x00030000L | WS_BORDER, 212, 91, 28, 12
+    CONTROL "XMS Memory:", 0x0390, "Static", 0x00020000L, 6, 107, 56, 10
+    CONTROL "KB Re&quired", 0x0391, "Static", 0x00020000L, 89, 107, 46, 10
+    CONTROL "", 0x025F, "Edit", 0x00030000L | WS_BORDER, 136, 106, 28, 12
+    CONTROL "KB L&imit", 0x0392, "Static", 0x00020000L, 170, 107, 30, 10
+    CONTROL "", 0x0260, "Edit", 0x00030000L | WS_BORDER, 212, 106, 28, 12
+    CONTROL "Display Usage:", 0x038B, "Static", 0x00020000L, 6, 121, 56, 10
+    CONTROL "F&ull Screen", 0x0264, "Button", 0x00030004L, 63, 120, 55, 12
+    CONTROL "&Windowed", 0x0263, "Button", 0x00000004L, 63, 132, 48, 12
+    CONTROL "Execution:", 0x0393, "Static", 0x00020000L, 149, 121, 38, 10
+    CONTROL "&Background", 0x0262, "Button", 0x00030002L, 190, 120, 51, 12
+    CONTROL "&Exclusive", 0x0265, "Button", 0x00010002L, 190, 132, 50, 12
+    CONTROL "&Close Window on Exit", 0x01F4, "Button", 0x00030002L, 6, 144, 97, 12
+    CONTROL "&Advanced...", 0x005A, "Button", 0x00030000L, 125, 143, 52, 14
+END
+
+/* Advanced Options (PE2): an overlapped window with a caption, its client
+   at 5, 20 of the frame's client; the last 25 pixels its status line */
+DLG_ADVANCED DIALOG 5, 20, 275, 224
+STYLE WS_CAPTION | WS_SYSMENU | DS_LOCALEDIT
+CAPTION "Advanced Options"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL "Multitasking Options", 0x008F, "Button", 0x00020007L, 3, 3, 219, 39
+    CONTROL "&Background Priority:", 0x038C, "Static", 0x00020000L, 6, 15, 73, 10
+    CONTROL "", 0x025A, "Edit", 0x00030000L | WS_BORDER, 80, 14, 28, 12
+    CONTROL "&Foreground Priority:", 0x0394, "Static", 0x00020000L, 113, 15, 73, 10
+    CONTROL "", 0x0259, "Edit", 0x00030000L | WS_BORDER, 187, 14, 28, 12
+    CONTROL "&Detect Idle Time", 0x025B, "Button", 0x00030002L, 76, 28, 76, 12
+    CONTROL "Memory Options", 0x0090, "Button", 0x00020007L, 3, 43, 256, 38
+    CONTROL "EMS Memory Loc&ked", 0x025E, "Button", 0x00030002L, 22, 54, 100, 12
+    CONTROL "XMS Memory L&ocked", 0x0261, "Button", 0x00010002L, 147, 54, 100, 12
+    CONTROL "Uses &High Memory Area", 0x026F, "Button", 0x00010002L, 22, 66, 107, 12
+    CONTROL "&Lock Application Memory", 0x0271, "Button", 0x00010002L, 147, 66, 108, 12
+    CONTROL "Display Options", 0x0091, "Button", 0x00020007L, 3, 82, 256, 38
+    CONTROL "Monitor Por&ts:", 0x039C, "Static", 0x00020000L, 6, 94, 56, 10
+    CONTROL "Text", 0x02BD, "Button", 0x00030002L, 76, 92, 28, 12
+    CONTROL "Low Graphics", 0x02BE, "Button", 0x00010002L, 116, 92, 60, 12
+    CONTROL "High Graphics", 0x02BF, "Button", 0x00010002L, 184, 92, 64, 12
+    CONTROL "&Emulate Text Mode", 0x02BC, "Button", 0x00010002L, 47, 105, 85, 12
+    CONTROL "Retain Video &Memory", 0x02C0, "Button", 0x00010002L, 136, 105, 92, 12
+    CONTROL "Other Options", 0x0258, "Button", 0x00020007L, 3, 121, 256, 81
+    CONTROL "Allow Fast &Paste", 0x0270, "Button", 0x00030002L, 6, 131, 74, 12
+    CONTROL "Allow &Close When Active", 0x0266, "Button", 0x00010002L, 146, 131, 103, 12
+    CONTROL "Reserve &Shortcut Keys:", 0x0396, "Static", 0x00020000L, 6, 146, 88, 10
+    CONTROL "Alt+Tab", 0x0268, "Button", 0x00030002L, 95, 145, 40, 12
+    CONTROL "PrtSc", 0x026D, "Button", 0x00010002L, 95, 157, 33, 12
+    CONTROL "Alt+Enter", 0x026A, "Button", 0x00010002L, 95, 169, 47, 12
+    CONTROL "Alt+Esc", 0x0269, "Button", 0x00010002L, 139, 145, 39, 12
+    CONTROL "Alt+PrtSc", 0x026C, "Button", 0x00010002L, 139, 157, 45, 12
+    CONTROL "Ctrl+Esc", 0x026E, "Button", 0x00010002L, 188, 145, 43, 12
+    CONTROL "Alt+Space", 0x026B, "Button", 0x00010002L, 188, 157, 49, 12
+    CONTROL "&Application Shortcut Key:", 0x0395, "Static", 0x00020000L, 6, 185, 96, 10
+    CONTROL "", 0x0267, "PifHKy", 0x00830000L, 103, 184, 116, 12
+    CONTROL "OK", 0x0001, "Button", 0x00030001L, 227, 8, 32, 14
+    CONTROL "Cancel", 0x0002, "Button", 0x00010000L, 227, 27, 32, 14
+END
+
+STRINGTABLE
+BEGIN
+    IDS_TITLE, "PIF Editor"
+    IDS_UNTITLED, "(Untitled)"
+    IDS_CLASS, "Pif"
+    IDS_HKCLASS, "PifHKy"
+    IDS_HELPFILE, "PIFEDIT.HLP"
+    IDS_FILTER, "PIF Files (*.PIF)|*.pif|All Files (*.*)|*.*|"
+    IDS_DEFEXT, "*.pif"
+    IDS_NONE, "None"
+    IDS_ALT, "Alt+"
+    IDS_CTRL, "Ctrl+"
+    IDS_SHIFT, "Shift+"
+    IDS_OPENTITLE, "Open"
+    IDS_SAVETITLE, "Save As"
+    IDS_SAVECHANGES, "Save current changes?"
+    IDS_NOT386, "w16 is not running in 386 enhanced mode. The PIF information you enter may not be appropriate. Are you sure you want to switch to this mode?"
+    IDS_NOTSTD, "w16 is not running in standard mode. The PIF information you enter may not be appropriate. Are you sure you want to switch to this mode?"
+    IDS_BADEXT, "Invalid extension in program name. \n\r\rCheck to ensure the extension is .EXE, .COM, or .BAT. Choose OK to ignore this error."
+    IDS_OLDPIF, "This file is an old Windows PIF. If you save it, PIF Editor will convert it to the new PIF format."
+    IDS_NOTPIFEXT, "This file does not have the .PIF filename extension. Are you sure you want to open this file?"
+    IDS_ALLOWCLOSE, "Allowing applications to be closed when active can result in loss of data, and damage to your disk. Are you sure you want to allow this?"
+    IDS_BADHOTKEY, "Invalid shortcut key. \n\r\rPress F1 to determine valid keys or consult your documentation."
+    IDS_MEMREQ640, "Numbers entered are invalid. \n\r\rKB Required numbers must be -1, or between 0 and 640."
+    IDS_MEMDES640, "Numbers entered are invalid. \n\r\rKB Desired numbers must be -1, or between 0 and 640."
+    IDS_REQ16384, "Numbers entered are invalid. \n\r\rKB Required numbers must be between 0 and 16384."
+    IDS_LIM16384, "Numbers entered are invalid. \n\r\rKB Limit numbers must be -1, or between 0 and 16384."
+    IDS_FILENOTFOUND, "File not found. \n\r\rCheck to ensure the path and filename are correct."
+    IDS_PATHNOTFOUND, "Path not found. \n\r\rCheck to ensure the path name is correctly specified, and that the file exists."
+    IDS_INVALIDPIF, "This is an invalid Windows PIF. If you save it, PIF Editor will convert it and information not relevant to Windows may be lost."
+    IDS_PRIORITY, "Numbers entered are invalid. \n\r\rPriorities must be between 1 and 10000."
+    IDS_CANTSAVE, "Cannot save the file."
+    IDS_FMTHELPON, "Press F1 for Help on %s."
+    IDS_ADVBUTTON, "Choose the Advanced button for more PIF Editor options."
+    IDS_ADVOK, "Choose OK to accept changes and close the Advanced window."
+    IDS_ADVCANCEL, "Choose Cancel to discard changes and close the Advanced window."
+    /* the topics of "Press F1 for Help on %s." (PE5, PE6), T_* order */
+    IDS_TOPIC + 1, "Program Filename"
+    IDS_TOPIC + 2, "Window Title"
+    IDS_TOPIC + 3, "Optional Parameters"
+    IDS_TOPIC + 4, "Start-up Directory"
+    IDS_TOPIC + 5, "Video Mode"
+    IDS_TOPIC + 6, "Memory Requirements"
+    IDS_TOPIC + 7, "XMS Memory"
+    IDS_TOPIC + 8, "Directly Modifies"
+    IDS_TOPIC + 9, "No Screen Exchange"
+    IDS_TOPIC + 10, "Prevent Program Switch"
+    IDS_TOPIC + 11, "Close Window on Exit"
+    IDS_TOPIC + 12, "No Save Screen"
+    IDS_TOPIC + 13, "Reserve Shortcut Keys"
+    IDS_TOPIC + 14, "Video Memory"
+    IDS_TOPIC + 15, "EMS Memory"
+    IDS_TOPIC + 16, "Display Usage"
+    IDS_TOPIC + 17, "Execution"
+    IDS_TOPIC + 18, "Priority"
+    IDS_TOPIC + 19, "Detect Idle Time"
+    IDS_TOPIC + 20, "EMS Memory Locked"
+    IDS_TOPIC + 21, "XMS Memory Locked"
+    IDS_TOPIC + 22, "Uses High Memory Area"
+    IDS_TOPIC + 23, "Lock Application Memory"
+    IDS_TOPIC + 24, "Monitor Ports"
+    IDS_TOPIC + 25, "Emulate Text Mode"
+    IDS_TOPIC + 26, "Retain Video Memory"
+    IDS_TOPIC + 27, "Allow Fast Paste"
+    IDS_TOPIC + 28, "Allow Close When Active"
+    IDS_TOPIC + 29, "Application Shortcut Key"
+    /* the menu items' status lines (PE18) */
+    IDS_MENU + IDM_NEW, "Create new PIF."
+    IDS_MENU + IDM_OPEN, "Open a saved PIF."
+    IDS_MENU + IDM_SAVE, "Save PIF."
+    IDS_MENU + IDM_SAVEAS, "Save the PIF using a new name."
+    IDS_MENU + IDM_EXIT, "Quit PIF Editor."
+    IDS_MENU + IDM_STANDARD, "Show settings for standard-mode w16."
+    IDS_MENU + IDM_ENHANCED, "Show settings for 386 enhanced-mode w16."
+    IDS_MENU + 1, "Display Help contents for current mode."
+    IDS_MENU + IDM_HELPSEARCH, "Find help topics using keywords."
+    IDS_MENU + IDM_HELPSTD, "Display Help contents for standard mode."
+    IDS_MENU + IDM_HELPENH, "Display Help contents for enhanced mode."
+    IDS_MENU + IDM_HELPADV, "Display Help contents for advanced settings."
+    IDS_MENU + 2, "Display introduction to w16 Help."
+    IDS_MENU + IDM_ABOUT, "Display program information."
+    IDS_SYSMENU + 0, "Change window size."
+    IDS_SYSMENU + 1, "Change window position."
+    IDS_SYSMENU + 2, "Reduce window to an icon."
+    IDS_SYSMENU + 3, "Enlarge window to full size."
+    IDS_SYSMENU + 6, "Close window and quit PIF Editor."
+    IDS_SYSMENU + 18, "Restore window to previous size."
+    IDS_SYSMENU + 19, "Activate Task List."
+END

@@ -12,7 +12,10 @@
 # 3.1 (ARCHITECTURE.md 15.8, README.TXT): the prompt is titled "DOS
 # Prompt" (3.1: "MS-DOS Prompt"), and the Registration Info Editor
 # (REGEDIT.EXE, its own icon), which 3.1's Setup leaves out of every
-# group, is the fifth item, "Registry Editor". Commands
+# group, is the fifth item, "Registry Editor". The PIF Editor
+# (PIFEDIT.EXE, its own icon; ARCHITECTURE.md 15.11) follows it as
+# "PIF Editor", the title 3.1's Setup gives it in its Main group (there
+# the seventh item, after Windows Setup). Commands
 # and icon files are bare names, found in the w16 directory (or on the
 # PATH), as Setup writes them.
 file MAIN.GRP
@@ -25,3 +28,4 @@ item Read Me | README.TXT | NOTEPAD.EXE
 item Control Panel | CONTROL.EXE | CONTROL.EXE
 item File Manager | WINFILE.EXE | WINFILE.EXE
 item Registry Editor | REGEDIT.EXE | REGEDIT.EXE
+item PIF Editor | PIFEDIT.EXE | PIFEDIT.EXE

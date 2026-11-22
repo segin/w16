@@ -1,0 +1,8 @@
+; PH01: Help > Contents (tests/pifhelp.sh)
+run PIFEDIT.EXE
+wait 3000
+mark 1
+cmd 65535
+wait 1500
+close
+wait 2000
