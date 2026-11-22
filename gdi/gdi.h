@@ -642,6 +642,7 @@ HPALETTE mf_select_palette(HDC h, HPALETTE pal);
 int mf_slot(HDC h, HANDLE obj);
 void mf_deleted(HANDLE obj);
 void mf_palette_changed(HPALETTE pal, WORD fn, WORD n, const WORD __far *w);
+void mf_palette_gone(HPALETTE pal);
 BOOL mf_text(HDC h, int x, int y, LPCSTR s, int n);
 BOOL mf_exttext(HDC h, int x, int y, WORD opt, const RECT __far *rc, LPCSTR s, int n,
                 const short __far *dx);
