@@ -74,28 +74,42 @@ static struct vsave *save_of(struct vm *v, int make)
     if (!s) return NULL;
     s->vm = v;
     s->g = kmalloc(sizeof(struct vga));
+    if (!s->g) { kfree(s); return NULL; }      /* (linked without it, it was found later) */
     s->valid = 0;
     s->next = saves;
     saves = s;
-    return s->g ? s : NULL;
+    return s;
+}
+
+/* the VGA's memory as the processor sees it, whichever VM runs: through
+ * the System VM's high linear window, whose A0000h-BFFFFh is always the
+ * VGA (a windowed DOS VM's own is RAM: saving from there with that VM
+ * current saved its RAM as Windows' screen) */
+static u8 *vga_mem(void)
+{
+    return (u8 *)(sysvm.cb->high_linear + 0xA0000);
 }
 
 static void vga_save(struct vga *g)
 {
     u32 i, p;
+    /* the CRTC and input status 1 at 3Bxh while the VGA is set for a
+     * monochrome display (Misc Output bit 0 clear: mode 7), else 3Dxh */
+    u32 crt;
+    g->misc = inb(0x3CC);
+    crt = (g->misc & 1) ? 0x3D4 : 0x3B4;
     g->seq_i = inb(0x3C4);
     g->gc_i = inb(0x3CE);
-    g->crtc_i = inb(0x3D4);
-    inb(0x3DA);
+    g->crtc_i = inb(crt);
+    inb(crt + 6);
     g->attr_i = inb(0x3C0);
     g->dac_mask = inb(0x3C6);
     g->dac_w = inb(0x3C8);
-    g->misc = inb(0x3CC);
     for (i = 0; i < 5; i++) { outb(0x3C4, i); g->seq[i] = inb(0x3C5); }
     for (i = 0; i < 9; i++) { outb(0x3CE, i); g->gc[i] = inb(0x3CF); }
-    for (i = 0; i < 25; i++) { outb(0x3D4, i); g->crtc[i] = inb(0x3D5); }
-    for (i = 0; i < 21; i++) { inb(0x3DA); outb(0x3C0, i | 0x20); g->attr[i] = inb(0x3C1); }
-    inb(0x3DA);
+    for (i = 0; i < 25; i++) { outb(crt, i); g->crtc[i] = inb(crt + 1); }
+    for (i = 0; i < 21; i++) { inb(crt + 6); outb(0x3C0, i | 0x20); g->attr[i] = inb(0x3C1); }
+    inb(crt + 6);
     outb(0x3C7, 0);
     for (i = 0; i < 768; i++) g->dac[i] = inb(0x3C9);
     /* the planes: odd/even and chain 4 off, A0000h 64 KB, read mode 0 */
@@ -104,13 +118,13 @@ static void vga_save(struct vga *g)
     outb(0x3CE, 6); outb(0x3CF, 0x05);
     for (p = 0; p < 4; p++) {
         outb(0x3CE, 4); outb(0x3CF, p);
-        memcpy(g->planes[p], (void *)0xA0000, 65536);
+        memcpy(g->planes[p], vga_mem(), 65536);
     }
 }
 
 static void vga_restore(struct vga *g)
 {
-    u32 i, p;
+    u32 i, p, crt;
     outb(0x3C4, 4); outb(0x3C5, 0x06);      /* not chain 4, not odd/even */
     outb(0x3CE, 5); outb(0x3CF, 0);         /* write mode 0 */
     outb(0x3CE, 1); outb(0x3CF, 0);         /* no set/reset */
@@ -119,25 +133,26 @@ static void vga_restore(struct vga *g)
     outb(0x3CE, 6); outb(0x3CF, 0x05);      /* A0000h, 64 KB, graphics */
     for (p = 0; p < 4; p++) {
         outb(0x3C4, 2); outb(0x3C5, 1u << p);
-        memcpy((void *)0xA0000, g->planes[p], 65536);
+        memcpy(vga_mem(), g->planes[p], 65536);
     }
     outb(0x3C2, g->misc);
+    crt = (g->misc & 1) ? 0x3D4 : 0x3B4;
     outb(0x3C4, 0); outb(0x3C5, 1);         /* synchronous reset */
     for (i = 1; i < 5; i++) { outb(0x3C4, i); outb(0x3C5, g->seq[i]); }
     outb(0x3C4, 0); outb(0x3C5, g->seq[0] | 3);
-    outb(0x3D4, 0x11); outb(0x3D5, g->crtc[0x11] & 0x7F);
-    for (i = 0; i < 25; i++) { outb(0x3D4, i); outb(0x3D5, g->crtc[i]); }
+    outb(crt, 0x11); outb(crt + 1, g->crtc[0x11] & 0x7F);
+    for (i = 0; i < 25; i++) { outb(crt, i); outb(crt + 1, g->crtc[i]); }
     for (i = 0; i < 9; i++) { outb(0x3CE, i); outb(0x3CF, g->gc[i]); }
-    inb(0x3DA);
+    inb(crt + 6);
     for (i = 0; i < 21; i++) { outb(0x3C0, i); outb(0x3C0, g->attr[i]); }
     outb(0x3C0, 0x20);
     outb(0x3C8, 0);
     for (i = 0; i < 768; i++) outb(0x3C9, g->dac[i]);
     outb(0x3C6, g->dac_mask);
     outb(0x3C8, g->dac_w);
-    inb(0x3DA);
+    inb(crt + 6);
     outb(0x3C0, g->attr_i | 0x20);
-    outb(0x3D4, g->crtc_i);
+    outb(crt, g->crtc_i);
     outb(0x3CE, g->gc_i);
     outb(0x3C4, g->seq_i);
 }
@@ -167,7 +182,7 @@ static void bios_mode(struct vm *v, void *arg)
 {
     struct cregs r;
     u8 mode = *(u8 *)0x449;
-    (void)arg;
+    u16 cur = *(u16 *)0x450;
     if (mode > 3 && mode != 7)
         mode = 3;
     memset(&r, 0, sizeof(r));
@@ -175,6 +190,17 @@ static void bios_mode(struct vm *v, void *arg)
     r.eflags = EFL_IF;
     trace("VDD: VM %d's video mode %x\n", v->id, mode);
     v86_int(&r, 0x10);
+    if (arg) {
+        /* a VM that had run windowed (its text in RAM, arg): the text on
+         * the screen again, and its cursor where it was */
+        memcpy((void *)0xB8000, arg, TEXT_BYTES);
+        kfree(arg);
+        memset(&r, 0, sizeof(r));
+        r.eax = 0x0200;
+        r.edx = cur;
+        r.eflags = EFL_IF;
+        v86_int(&r, 0x10);
+    }
 }
 
 void page_free(u32 phys);
@@ -238,10 +264,13 @@ static void to_ram(struct vsave *d)
         }
     (void)b8;
     if (!d->font) {
+        /* whole pages each, as ring 3 reads them: Get_Mem's colour table
+         * had a slab block, and its page (other VMM data) went to ring 3 */
+        u32 zp = page_alloc();
         d->font = kmalloc(8192);
         d->plane1 = kmalloc(8192);
-        d->zero = kmalloc(1024);
-        if (!d->font || !d->zero) panic("no memory for a windowed DOS VM");
+        d->zero = zp ? (u32 *)phys_to_lin(zp) : NULL;
+        if (!d->font || !d->plane1 || !d->zero) panic("no memory for a windowed DOS VM");
         make_user((u32)d->font, 8192);
         make_user((u32)d->plane1, 8192);
         make_user((u32)d->zero, 1024);
@@ -292,7 +321,9 @@ void vdd_focus(struct vm *v)
     trace("VDD: the display goes from VM %d to VM %d\n", owner->id, v->id);
     /* the VM that had it */
     if (owner == &sysvm) {
+        /* (in another VM: when the System VM next runs, before its code) */
         if (cur_vm == &sysvm) notify_sys(&sysvm, (void *)0x4001);
+        else vm_event(&sysvm, notify_sys, (void *)0x4001);
         if (!saved_sys) saved_sys = kmalloc(sizeof(struct vga));
         if (saved_sys) vga_save(saved_sys);
     } else if ((s = save_of(owner, 1)) != NULL) {
@@ -307,6 +338,18 @@ void vdd_focus(struct vm *v)
     } else if ((s = save_of(v, 0)) != NULL && s->valid) {
         from_ram(s);
         vga_restore(s->g);
+    } else if (s && s->windowed) {
+        /* windowed since it started: no VGA state of its own yet. Its
+         * BIOS sets the mode, then its text comes back (before, its video
+         * memory stayed RAM: the screen showed nothing of it, and 128 KB
+         * stayed taken) */
+        u8 *t = kmalloc(TEXT_BYTES);
+        u32 i;
+        if (t) memcpy(t, (void *)phys_to_lin(s->vram[0x18]), TEXT_BYTES);
+        map_video(s, 0);
+        for (i = 0; i < 32; i++) page_free(s->vram[i]);
+        s->windowed = 0;
+        vm_event(v, bios_mode, t);
     }
     else if (v->started)
         vm_event(v, bios_mode, NULL);
@@ -321,7 +364,10 @@ void vdd_vm_init(struct vm *v)
 
 void vdd_vm_destroy(struct vm *v)
 {
-    struct vsave *s = save_of(v, 0);
+    struct vsave *s;
+    /* a VM that goes with the display: Windows gets it back */
+    if (owner == v) vdd_focus(&sysvm);
+    s = save_of(v, 0);
     if (s) {
         if (s->windowed) {
             u32 i;
@@ -330,7 +376,6 @@ void vdd_vm_destroy(struct vm *v)
         }
         s->valid = 0;
     }
-    if (owner == v) owner = &sysvm;
 }
 
 /* a windowed VM's text and cursor (its BIOS data: 40:50h) */
@@ -380,8 +425,11 @@ int vdd_api(struct cregs *r)
 {
     struct vm *v = vm_of(r->ebx);
     struct vsave *d = v ? save_of(v, 0) : NULL;
-    u8 *b = (u8 *)pm_lin(r->es, r->edi);
+    /* the caller's buffer (the grabber's), as long as Get_Mem's 28h
+     * bytes: functions 1-3 fail without one */
+    u8 *b = cl_ptr(r->es, r->edi, 0x28, 1);
     if (vm_trace) trace("(VDD %x)", AX(r));
+    if (!b && AX(r) >= 1 && AX(r) <= 3) return 0;
     switch (AX(r)) {
     case 0x0001:                        /* Get_Mem: the planes' linear addresses */
         if (!d || !d->windowed) return 0;
@@ -496,7 +544,7 @@ int vdd_api(struct cregs *r)
     case 0x0000:
         SETW(r->eax, 0x030A);
         r->eflags &= ~EFL_CF;
-        if (r->es & ~3u) memcpy((void *)(sel_base(r->es) + DI(r)), "VIDEOVGA", 8);
+        if ((r->es & ~3u) && cl_ptr(r->es, r->edi, 8, 1)) memcpy(cl_ptr(r->es, r->edi, 8, 1), "VIDEOVGA", 8);
         return 1;
     case 0x000C:
         SETW(r->eax, BX(r));
