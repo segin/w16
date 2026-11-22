@@ -152,6 +152,17 @@ HANDLE WINAPI SetClipboardData(UINT fmt, HANDLE h)
         f->fmt = fmt;
     }
     f->h = h;
+    if (h && (fmt == CF_METAFILEPICT || fmt == CF_DSPMETAFILEPICT)) {
+        /* GD9 on 3.1: the METAFILEPICT and its metafile become USER's (so
+           they outlive the program; EmptyClipboard frees both) */
+        METAFILEPICT FAR *mp = (METAFILEPICT FAR *)GlobalLock(h);
+        K_FARSETOWNER(h, hModUser);
+        if (mp) {
+            if (mp->hMF)
+                K_FARSETOWNER(mp->hMF, hModUser);
+            GlobalUnlock(h);
+        }
+    }
     if (clip_is_open)
         clip_changed = TRUE;
     return h;

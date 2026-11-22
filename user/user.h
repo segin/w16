@@ -33,6 +33,7 @@ extern HQUEUE __far __pascal K_SETTASKQUEUE(HTASK, HQUEUE);          /* 34 */
 extern HQUEUE __far __pascal K_GETTASKQUEUE(HTASK);                  /* 35 */
 extern FARPROC __far __pascal K_SETTASKSIGNALPROC(HTASK, FARPROC);   /* 38 */
 extern HMODULE __far __pascal K_GETEXEPTR(HANDLE);                   /* 133 */
+extern void   __far __pascal K_FARSETOWNER(HANDLE, HANDLE);          /* 403 */
 extern WORD   __far __pascal K_DIRECTEDYIELD(HTASK);                 /* 150 */
 extern BOOL   __far __pascal K_ISWINOLDAPTASK(HTASK);                /* 158 */
 extern WORD   __far __pascal K_GETTASKDS(void);                      /* 155 */
