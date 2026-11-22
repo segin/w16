@@ -1431,9 +1431,9 @@ $(B)/shell/winhelp/%.o: shell/winhelp/%.c shell/winhelp/winhelp.h shell/winhelp/
 $(B)/shell/winhelp/winhelp.ico: tools/mkhelpart.py tools/mkicons.py
 	@mkdir -p $(@D)
 	python3 tools/mkhelpart.py $(@D)
-$(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo1.bmp $(B)/shell/winhelp/logo2.bmp $(B)/shell/winhelp/annot.bmp: $(B)/shell/winhelp/winhelp.ico
+$(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo.bmp $(B)/shell/winhelp/annot.bmp: $(B)/shell/winhelp/winhelp.ico
 $(B)/shell/winhelp/winhelp.res: shell/winhelp/winhelp.rc shell/winhelp/winhelp.h $(B)/shell/winhelp/winhelp.ico \
-    $(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo1.bmp $(B)/shell/winhelp/logo2.bmp $(B)/shell/winhelp/annot.bmp
+    $(B)/shell/winhelp/hand.cur $(B)/shell/winhelp/logo.bmp $(B)/shell/winhelp/annot.bmp
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/winhelp -i=$(B)/shell/winhelp -fo=$@ $<
 $(DOS)/WINHELP.EXE: $(SHELL_WH) $(B)/shell/winhelp/winhelp.res shell/winhelp/winhelp.lnk tools/nemark.py
 	@mkdir -p $(@D)

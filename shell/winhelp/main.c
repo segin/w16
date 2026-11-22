@@ -994,6 +994,95 @@ LRESULT CALLBACK __export FrameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(w, msg, wp, lp);
 }
 
+/* The no-file screen (w16's own design; 3.1 shows its own picture):
+   navy fading to black from the top left through a 4 x 4 ordered dither
+   spanning the whole window, and the name centred on it, its shadow 3
+   pixels down and right. Drawn in a memory bitmap and copied in one go
+   (no flicker), in 8 x 8 cells each of one dither level. */
+static void paint_logo(HWND w, HDC dc)
+{
+    static const BYTE bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    HBRUSH br[17];
+    RECT r;
+    HDC m;
+    HBITMAP bm, obm, logo;
+    int lev, x, y, cw, ch;
+    GetClientRect(w, &r);
+    cw = r.right;
+    ch = r.bottom;
+    if (cw <= 0 || ch <= 0)
+        return;
+    m = CreateCompatibleDC(dc);
+    bm = CreateCompatibleBitmap(dc, cw, ch);
+    if (!m || !bm) {
+        if (m)
+            DeleteDC(m);
+        PatBlt(dc, 0, 0, cw, ch, BLACKNESS);
+        return;
+    }
+    obm = SelectObject(m, bm);
+    /* level n: n of the 16 places of each 4 x 4 cell navy */
+    for (lev = 0; lev <= 16; lev++) {
+        BYTE bits[16];
+        HBITMAP pat;
+        int i, k;
+        for (i = 0; i < 8; i++) {
+            BYTE b = 0;
+            for (k = 0; k < 8; k++)
+                if (bayer[i & 3][k & 3] < lev)
+                    b |= (BYTE)(0x80 >> k);
+            bits[2 * i] = b;
+            bits[2 * i + 1] = 0;
+        }
+        pat = CreateBitmap(8, 8, 1, 1, bits);
+        br[lev] = CreatePatternBrush(pat);
+        DeleteObject(pat);
+    }
+    /* a pattern brush's ones take the background colour, zeros the text
+       colour */
+    SetBkColor(m, RGB(0, 0, 128));
+    SetTextColor(m, RGB(0, 0, 0));
+    for (y = 0; y < ch; y += 8)
+        for (x = 0; x < cw; x += 8) {
+            long t = 1150L - ((long)(x + 4) * 700 / cw + (long)(y + 4) * 700 / ch);
+            HBRUSH ob;
+            if (t > 1000)
+                t = 1000;
+            if (t < 0)
+                t = 0;
+            lev = (int)((t * 16 + 500) / 1000);
+            ob = SelectObject(m, br[lev]);
+            PatBlt(m, x, y, 8, 8, PATCOPY);
+            SelectObject(m, ob);
+        }
+    for (lev = 0; lev <= 16; lev++)
+        DeleteObject(br[lev]);
+    logo = LoadBitmap(g_inst, MAKEINTRESOURCE(IDB_LOGO));
+    if (logo) {
+        BITMAP b;
+        HDC lm = CreateCompatibleDC(dc);
+        HBITMAP ol = SelectObject(lm, logo);
+        GetObject(logo, sizeof b, &b);
+        x = (cw - b.bmWidth) / 2;
+        y = (ch - b.bmHeight) / 2;
+        /* the shadow: black where the letters are */
+        SetBkColor(m, RGB(0, 0, 0));
+        SetTextColor(m, RGB(255, 255, 255));
+        BitBlt(m, x + 3, y + 3, b.bmWidth, b.bmHeight, lm, 0, 0, SRCAND);
+        /* the letters: white */
+        SetBkColor(m, RGB(255, 255, 255));
+        SetTextColor(m, RGB(0, 0, 0));
+        BitBlt(m, x, y, b.bmWidth, b.bmHeight, lm, 0, 0, SRCPAINT);
+        SelectObject(lm, ol);
+        DeleteDC(lm);
+        DeleteObject(logo);
+    }
+    BitBlt(dc, 0, 0, cw, ch, m, 0, 0, SRCCOPY);
+    SelectObject(m, obm);
+    DeleteObject(bm);
+    DeleteDC(m);
+}
+
 /* the topic window passes characters on to the frame (button keys) */
 LRESULT CALLBACK __export MainTopicProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -1001,35 +1090,19 @@ LRESULT CALLBACK __export MainTopicProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         if (button_key((char)wp))
             return 0;
     }
-    /* no file: the logo over black (WH1; w16's own picture) */
-    if (w == g_topic && !g_hlp && (msg == WM_PAINT || msg == WM_ERASEBKGND)) {
+    /* no file: w16's own picture, drawn for the window's size (it is
+       redrawn whole whenever the size changes) */
+    if (w == g_topic && !g_hlp) {
         if (msg == WM_ERASEBKGND)
             return 1;
-        {
+        if (msg == WM_SIZE) {
+            InvalidateRect(w, NULL, FALSE);
+            return TopicProc(w, msg, wp, lp);
+        }
+        if (msg == WM_PAINT) {
             PAINTSTRUCT ps;
-            RECT r;
-            int i;
             BeginPaint(w, &ps);
-            GetClientRect(w, &r);
-            PatBlt(ps.hdc, 0, 0, r.right, r.bottom, BLACKNESS);
-            /* the dither's ones navy, then the letters' ones white */
-            for (i = 0; i < 2; i++) {
-                HBITMAP bm = LoadBitmap(g_inst, MAKEINTRESOURCE(i ? IDB_LOGO2 : IDB_LOGO));
-                HDC m;
-                HBITMAP o;
-                BITMAP b;
-                if (!bm)
-                    continue;
-                m = CreateCompatibleDC(ps.hdc);
-                o = SelectObject(m, bm);
-                GetObject(bm, sizeof b, &b);
-                SetTextColor(ps.hdc, RGB(0, 0, 0));
-                SetBkColor(ps.hdc, i ? RGB(255, 255, 255) : RGB(0, 0, 128));
-                BitBlt(ps.hdc, 0, 0, b.bmWidth, b.bmHeight, m, 0, 0, i ? SRCPAINT : SRCCOPY);
-                SelectObject(m, o);
-                DeleteDC(m);
-                DeleteObject(bm);
-            }
+            paint_logo(w, ps.hdc);
             EndPaint(w, &ps);
             return 0;
         }

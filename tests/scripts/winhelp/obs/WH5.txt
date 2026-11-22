@@ -1,0 +1,21 @@
+; WH5: the window with no file, resized: smaller, larger, maximized, restored, very small
+run WINHELP.EXE
+wait 3000
+snap C:\S1.BMP
+movewin 300 50 250 200
+wait 1500
+snap C:\S2.BMP
+movewin 40 20 560 440
+wait 1500
+snap C:\S3.BMP
+syscmd F030
+wait 1500
+snap C:\S4.BMP
+syscmd F120
+wait 1500
+snap C:\S5.BMP
+movewin 100 100 130 90
+wait 1500
+snap C:\S6.BMP
+close
+wait 1500

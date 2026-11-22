@@ -1,0 +1,21 @@
+; tests/whtree.sh with WHTREE_SCRIPT=nofile: the no-file screen resized: smaller, larger, maximized, restored, very small
+run WINHELP.EXE
+wait 3000
+snap C:\N1.BMP
+movewin 300 50 250 200
+wait 1500
+snap C:\N2.BMP
+movewin 40 20 560 440
+wait 1500
+snap C:\N3.BMP
+syscmd F030
+wait 1500
+snap C:\N4.BMP
+syscmd F120
+wait 1500
+snap C:\N5.BMP
+movewin 100 100 130 90
+wait 1500
+snap C:\N6.BMP
+close
+wait 1500

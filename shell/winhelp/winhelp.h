@@ -86,7 +86,6 @@
 #define IDCUR_HAND      1
 #define IDB_LOGO        1
 #define IDB_ANNOTATE    2
-#define IDB_LOGO2       3
 
 /* ---- the display list of a laid-out region ---- */
 

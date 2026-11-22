@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """mkhelpart - w16 Windows Help's artwork, all w16's own (ARCHITECTURE.md
 6.8): the program's icon (a blue book with a yellow question mark), the
-hand cursor shown over hot spots (a pointing hand), the logo shown with
-no file open (a dithered navy-to-black field with "w16 Help" in white
-italics) and the annotation mark (a small green paper clip).
+hand cursor shown over hot spots (a pointing hand), the name shown with
+no file open ("w16 Help" in white italics, over a navy-to-black dither
+the program draws at any size) and the annotation mark (a small green paper clip).
 
-usage: mkhelpart.py OUTDIR    writes winhelp.ico, hand.cur, logo1.bmp, logo2.bmp, annot.bmp
+usage: mkhelpart.py OUTDIR    writes winhelp.ico, hand.cur, logo.bmp, annot.bmp
 """
 import os
 import struct
@@ -121,19 +121,13 @@ def bmp1(w, h, bits):
 
 
 def logo():
-    """417 x 430 (the default topic area on VGA): navy fading to black
-    through an ordered dither, the name in white italics with a shadow.
-    Two monochrome pictures, each well under 64K (the program draws the
-    first with navy for its ones and black for its zeros, then ORs the
-    second's ones in white): the dither (shadow cut out), the letters."""
+    """the name for the no-file screen: "w16" over "Help" in white
+    italics, a monochrome picture cropped to the letters (1: letter); the
+    program draws the navy-to-black dither itself at any window size,
+    then the letters' shadow 3 pixels down and right in black, then the
+    letters in white, centred"""
     from PIL import Image, ImageDraw, ImageFont
-    w, h = 417, 430
-    bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-    dither = [[0] * w for _ in range(h)]
-    for y in range(h):
-        for x in range(w):
-            t = 1.0 - min(1.0, max(0.0, (x / w) * 0.9 + (y / h) * 0.6 - 0.2))
-            dither[y][x] = 1 if t * 16 > bayer[y & 3][x & 3] else 0
+    w, h = 400, 200
     im = Image.new('L', (w, h), 0)
     d = ImageDraw.Draw(im)
     font = None
@@ -148,21 +142,13 @@ def logo():
             break
     if font is None:
         font = ImageFont.load_default()
-    for text, y in (('w16', 150), ('Help', 215)):
+    for text, y in (('w16', 10), ('Help', 75)):
         tw = d.textlength(text, font=font)
-        x = (w - tw) / 2 + 20
-        d.text((x + 3, y + 3), text, fill=1, font=font)
-        d.text((x, y), text, fill=255, font=font)
-    letters = [[0] * w for _ in range(h)]
-    for y in range(h):
-        for x in range(w):
-            v = im.getpixel((x, y))
-            if v > 128:
-                letters[y][x] = 1
-                dither[y][x] = 0
-            elif v == 1:
-                dither[y][x] = 0
-    return bmp1(w, h, dither), bmp1(w, h, letters)
+        d.text(((w - tw) / 2 + 20, y), text, fill=255, font=font)
+    box = im.point(lambda v: 255 if v > 128 else 0).getbbox()
+    im = im.crop(box)
+    bits = [[1 if im.getpixel((x, y)) > 128 else 0 for x in range(im.width)] for y in range(im.height)]
+    return bmp1(im.width, im.height, bits)
 
 
 def annot():
@@ -194,9 +180,8 @@ def annot():
 def main():
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    logo1, logo2 = logo()
-    for name, data in (('winhelp.ico', icon()), ('hand.cur', cursor()), ('logo1.bmp', logo1),
-                       ('logo2.bmp', logo2), ('annot.bmp', annot())):
+    for name, data in (('winhelp.ico', icon()), ('hand.cur', cursor()), ('logo.bmp', logo()),
+                       ('annot.bmp', annot())):
         with open(os.path.join(out, name), 'wb') as f:
             f.write(data)
 

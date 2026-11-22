@@ -17,7 +17,9 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 out=$1 k=${2:-286}
 ref=$root/.tools/ref/win31/cdrive/WINDOWS
 rm -rf "$out"; mkdir -p "$out"
-sed -e 's/\r*$/\r/' "$root/tests/scripts/winhelp/tree/run.txt" > "$out/SNAP.TXT"
+# WHTREE_SCRIPT=NAME runs tests/scripts/winhelp/tree/NAME.txt instead
+# (screens only, no checks): nofile.txt, the no-file screen resized
+sed -e 's/\r*$/\r/' "$root/tests/scripts/winhelp/tree/${WHTREE_SCRIPT:-run}.txt" > "$out/SNAP.TXT"
 set -- -f "$root/build/dos/SNAP.EXE=SNAP.EXE" -f "$out/SNAP.TXT=SNAP.TXT"
 for h in NOTEPAD GLOSSARY REGEDIT; do
     set -- "$@" -f "$ref/$h.HLP=WINDOWS/$h.HLP"
@@ -31,6 +33,7 @@ log=$c/WINDOWS/TK.LOG
 [ -f "$log" ] || { echo "whtree: no TK.LOG ($out/dropin.txt)"; exit 1; }
 tr -d '\r' < "$log" > "$out/tk.log"
 for f in "$c"/*.BMP; do [ -f "$f" ] && magick "$f" "$out/$(basename "$f" .BMP).png"; done
+[ -n "${WHTREE_SCRIPT:-}" ] && exit 0
 python3 -I - "$out/tk.log" <<'PY'
 import sys
 dumps, cur = [], None

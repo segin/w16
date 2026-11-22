@@ -12,8 +12,7 @@
 
 IDI_WINHELP ICON "winhelp.ico"
 IDCUR_HAND CURSOR "hand.cur"
-IDB_LOGO BITMAP "logo1.bmp"
-IDB_LOGO2 BITMAP "logo2.bmp"
+IDB_LOGO BITMAP "logo.bmp"
 IDB_ANNOTATE BITMAP "annot.bmp"
 
 1 MENU
