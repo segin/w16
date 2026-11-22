@@ -1146,17 +1146,17 @@ fonts: $(FONS)
 all: fonts
 $(FNT)/VGASYS.FON: fonts/vgasys.txt tools/fontc.py
 	@mkdir -p $(@D)
-	$(FONTC) fon $@ --module FONTS --desc "FONTRES 100,96,96 : System (w16)" $(FONTINFO) \
+	$(FONTC) fon $@ --module FONTS --desc "FONTRES 100,96,96 : System (w16)" --file-size 7280 $(FONTINFO) \
 	    --info "FileDescription=System font (VGA res)" --info InternalName=FONTS \
 	    --info OriginalFilename=VGASYS.FON 31=$<
 $(FNT)/VGAFIX.FON: fonts/vgafix.txt tools/fontc.py
 	@mkdir -p $(@D)
-	$(FONTC) fon $@ --module FIXFONTS --desc "FONTRES 100,96,96 : Fixedsys (w16)" $(FONTINFO) \
+	$(FONTC) fon $@ --module FIXFONTS --desc "FONTRES 100,96,96 : Fixedsys (w16)" --file-size 5360 $(FONTINFO) \
 	    --info "FileDescription=Fixedsys font (VGA res)" --info InternalName=FIXFONTS \
 	    --info OriginalFilename=VGAFIX.FON 31=$<
 $(FNT)/VGAOEM.FON: fonts/vgaoem.txt tools/fontc.py
 	@mkdir -p $(@D)
-	$(FONTC) fon $@ --module OEMFONTS --desc "FONTRES 100,96,96 : Terminal (US) (w16)" $(FONTINFO) \
+	$(FONTC) fon $@ --module OEMFONTS --desc "FONTRES 100,96,96 : Terminal (US) (w16)" --file-size 5168 $(FONTINFO) \
 	    --info "FileDescription=Terminal font, code page 437 (VGA res)" --info InternalName=OEMFONTS \
 	    --info OriginalFilename=VGAOEM.FON 30=$<
 # the description after the colon is the [fonts] key Control Panel writes
@@ -1164,7 +1164,7 @@ $(FNT)/VGAOEM.FON: fonts/vgaoem.txt tools/fontc.py
 $(FNT)/SSERIFE.FON: $(SSERIFE_SRC) tools/fontc.py
 	@mkdir -p $(@D)
 	$(FONTC) fon $@ --module SSERIFE \
-	    --desc "FONTRES 100,96,96 : MS Sans Serif 8,10,12,14,18,24 (VGA res)" $(FONTINFO) \
+	    --desc "FONTRES 100,96,96 : MS Sans Serif 8,10,12,14,18,24 (VGA res)" --file-size 64544 $(FONTINFO) \
 	    --info "FileDescription=MS Sans Serif font (VGA res)" --info InternalName=SSERIFE \
 	    --info OriginalFilename=SSERIFE.FON \
 	    84=fonts/sserife8.txt 85=fonts/sserife10.txt 86=fonts/sserife12.txt \
@@ -1190,24 +1190,24 @@ $(FNT)/$(1).FON: $(foreach s,$(5),$(word 2,$(subst =, ,$(s)))) tools/fontc.py
 	    --info "FileDescription=$(3)" --info InternalName=$(1) \
 	    --info OriginalFilename=$(1).FON $(4) $(5)
 endef
-$(eval $(call fon-rule,COURE,Courier 10$(comma)12$(comma)15 (VGA res),Courier font (VGA res),,\
+$(eval $(call fon-rule,COURE,Courier 10$(comma)12$(comma)15 (VGA res),Courier font (VGA res),--file-size 23408,\
     90=fonts/coure10.txt 91=fonts/coure12.txt 92=fonts/coure15.txt))
-$(eval $(call fon-rule,SERIFE,MS Serif 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),MS Serif font (VGA res),,\
+$(eval $(call fon-rule,SERIFE,MS Serif 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),MS Serif font (VGA res),--file-size 57936,\
     78=fonts/serife8.txt 79=fonts/serife10.txt 80=fonts/serife12.txt \
     81=fonts/serife14.txt 82=fonts/serife18.txt 83=fonts/serife24.txt))
-$(eval $(call fon-rule,SMALLE,Small Fonts (VGA res),Small Fonts (VGA res),--shift 9,\
+$(eval $(call fon-rule,SMALLE,Small Fonts (VGA res),Small Fonts (VGA res),--shift 9 --file-size 26112,\
     1=fonts/smalle2.txt 2=fonts/smalle3.txt 3=fonts/smalle4.txt 4=fonts/smalle5.txt \
     5=fonts/smalle6.txt 6=fonts/smalle7.txt 7=fonts/serife6.txt 8=fonts/serife7.txt))
-$(eval $(call fon-rule,SYMBOLE,Symbol 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),Symbol font (VGA res),,\
+$(eval $(call fon-rule,SYMBOLE,Symbol 8$(comma)10$(comma)12$(comma)14$(comma)18$(comma)24 (VGA res),Symbol font (VGA res),--file-size 56336,\
     1=fonts/symbole8.txt 2=fonts/symbole10.txt 3=fonts/symbole12.txt \
     4=fonts/symbole14.txt 5=fonts/symbole18.txt 6=fonts/symbole24.txt))
-$(eval $(call fon-rule,DOSAPP,Terminal for DOS windows (w16),DOS window fonts (VGA res),--pad 1=3072 --pad 6=9728,\
+$(eval $(call fon-rule,DOSAPP,Terminal for DOS windows (w16),DOS window fonts (VGA res),--pad 1=3072 --pad 6=9728 --file-size 36656,\
     1=fonts/dosapp4x6.txt 2=fonts/dosapp5x12.txt 3=fonts/dosapp6x8.txt \
     4=fonts/dosapp7x12.txt 5=fonts/dosapp10x18.txt 6=fonts/dosapp12x16.txt))
-$(eval $(call fon-rule,EGA80WOA,Terminal 80 columns (w16),DOS window font 8x12,,131=fonts/ega80woa.txt))
-$(eval $(call fon-rule,EGA40WOA,Terminal 40 columns (w16),DOS window font 16x12,,130=fonts/ega40woa.txt))
-$(eval $(call fon-rule,CGA80WOA,Terminal 80 columns (w16),DOS window font 8x8,,101=fonts/cga80woa.txt))
-$(eval $(call fon-rule,CGA40WOA,Terminal 40 columns (w16),DOS window font 16x8,,100=fonts/cga40woa.txt))
+$(eval $(call fon-rule,EGA80WOA,Terminal 80 columns (w16),DOS window font 8x12,--file-size 5312,131=fonts/ega80woa.txt))
+$(eval $(call fon-rule,EGA40WOA,Terminal 40 columns (w16),DOS window font 16x12,--file-size 8368,130=fonts/ega40woa.txt))
+$(eval $(call fon-rule,CGA80WOA,Terminal 80 columns (w16),DOS window font 8x8,--file-size 4304,101=fonts/cga80woa.txt))
+$(eval $(call fon-rule,CGA40WOA,Terminal 40 columns (w16),DOS window font 16x8,--file-size 6336,100=fonts/cga40woa.txt))
 
 # ---- shell: PROGMAN.EXE, in two builds from one source tree ----
 #   $(DOS)/PROGMAN.EXE    Windows 3.x build (marked 3.0, uses MDI etc.)

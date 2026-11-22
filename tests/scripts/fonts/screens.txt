@@ -57,9 +57,11 @@ snap C:\CPCOUR.BMP
 dump
 char m
 char m
+char m
 wait 1000
 snap C:\CPSERIF.BMP
 dump
+char s
 char s
 wait 1000
 snap C:\CPSMALL.BMP

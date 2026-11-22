@@ -147,7 +147,10 @@ if [ -n "$shots" ]; then
         fi
         magick "$tmp/w16/$s.BMP" "$shots/$low-w16.png"
         magick "$f" "$tmp/w16/$s.BMP" +append "$shots/$low-side.png"
-        if r=$(python3 "$root/tools/layoutdiff.py" "$f" "$tmp/w16/$s.BMP" "$shots/$low-diff.png"); then
+        # the Fonts dialog's samples show sizes up to 24 pt (37-pixel cells)
+        cell=16
+        case $s in CPCOUR|CPSERIF|CPSMALL|CPSYMBOL) cell=37 ;; esac
+        if r=$(python3 "$root/tools/layoutdiff.py" "$f" "$tmp/w16/$s.BMP" "$shots/$low-diff.png" --cell $cell); then
             echo "PASS $s: $r"
         else
             echo "FAIL $s: $r"; status=$((status + 1))

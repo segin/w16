@@ -9,6 +9,7 @@ version resource (RT_VERSION).
     fontc.py fnt SRC OUT.FNT
     fontc.py fon OUT.FON --module NAME --desc TEXT [--file NAME]
                  [--info KEY=VALUE ...] [--shift N] [--pad ID=SIZE ...]
+                 [--file-size N]
                  ID=SRC [ID=SRC ...]
     fontc.py check SRC...          parse and check sources only
 
@@ -480,6 +481,8 @@ def main():
     a.add_argument('--desc', required=True)
     a.add_argument('--info', action='append', default=[], help='version string KEY=VALUE')
     a.add_argument('--shift', type=int, default=4, help='smallest alignment shift')
+    a.add_argument('--file-size', type=lambda v: int(v, 0), default=0,
+                   help='pad the file with zeros to this size')
     a.add_argument('--pad', action='append', default=[], help='ID=SIZE: pad a resource')
     a.add_argument('fonts', nargs='+', help='ID=SOURCE')
     a = sub.add_parser('check')
@@ -505,6 +508,11 @@ def main():
                 info[k] = v
             pad = dict((int(k, 0), int(v, 0)) for k, v in (p.split('=') for p in args.pad))
             data = fon(fonts, args.module, args.desc, info, args.shift, pad)
+            if args.file_size:
+                if len(data) > args.file_size:
+                    raise FontError('%s is %d bytes, more than --file-size %d'
+                                    % (args.out, len(data), args.file_size))
+                data += b'\0' * (args.file_size - len(data))
             tmp = args.out + '.tmp'
             open(tmp, 'wb').write(data)
             os.replace(tmp, args.out)
