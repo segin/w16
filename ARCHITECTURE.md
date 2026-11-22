@@ -2912,7 +2912,8 @@ findings) was checked against the code and against 3.1 with the probe's
 section `audit` (`C:\VT\AUD` and the install pool, `tests/ver/
 mkinputs.py`), compared like every other section in the boot-test case
 **ver** (parts s, 3, tree286, tree386); every verdict, its evidence and
-commit are in `docs/notes/ver-audit-triage.md`. 3.1's VER.DLL lived
+commit are in its triage file, `docs/notes/ver-audit-triage.md`, which
+is in git history (removed once the audit was complete). 3.1's VER.DLL lived
 through every malformed case (keys and roots at a segment's end, values
 claiming 64K, NULL output pointers), so w16 answers as it does rather
 than merely surviving. Fixed: a child's key read past its parent's end
