@@ -56,8 +56,11 @@
  *   on the pixel its middle is in.
  *
  * All integer: font units, 26.6 pixels and 8.24 scales; 80286 code
- * (tests/ttf/cpu286.sh). Memory: the scaled points (16 bytes a vertex) and
- * a few K of segments and edges a glyph, from ttfx_alloc; nothing kept but
+ * (tests/ttf/cpu286.sh); the loops avoid 32-bit multiplies and divides
+ * (helper calls on the 80286). Memory, a glyph's, from ttfx_alloc: the
+ * scaled points (16 bytes a vertex), the font units and contour order
+ * (14), 10 while moving points, and about 5K of segments and edges;
+ * nothing kept but
  * the font's zones and widths in ttfx_font. Not hinted: sizes over
  * HMAXPPEM pixels to the em (it would not show).
  */
