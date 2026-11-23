@@ -44,14 +44,14 @@ static char __far *text;
 static WORD text_size;
 static DWORD text_cap;
 static WORD open_count;
-static int db_bad, dirty;
+static int dirty;
 static int made;                        /* walk() made a key */
 
 static void compact(void);
 static int load_pending;           /* REG.DAT not read yet (reg_init) */
 
 /* the database's blocks belong to SHELL, not to the task whose call made
-   them: REG.DAT is read at the first call (pending_load), and a block
+   them: REG.DAT is read at the first call (begin), and a block
    owned by that program would be freed when it ends */
 static HGLOBAL db_alloc(DWORD size)
 {
@@ -114,46 +114,78 @@ static int write_all(HFILE f, const void __far *p, DWORD n)
     return 1;
 }
 
-static void flush(void)
+static WORD dos_rename(const char __far *from, const char __far *to);
+#pragma aux dos_rename = "push ds" "mov ds, dx" "mov dx, ax" "mov ah, 56h" "int 21h" \
+    "sbb ax, ax" "pop ds" parm [dx ax] [es di] value [ax];
+
+/* REG.DAT is written as a new file that then takes its place, so that a
+   write that fails leaves the old one as it was (SH15 w: a handle opened
+   on REG.DAT before a write still saw the old file afterwards, where a
+   file rewritten with OF_CREATE is the same file; with no file handle
+   left the write failed, the old REG.DAT stayed whole and nothing else
+   was left in the Windows directory). UNVERIFIED: Windows 3.1's own
+   temporary name; w16 uses REG.DAT's with the extension .TMP. Returns 0
+   when the file could not be written: the changes stay to be written. */
+static int flush(void)
 {
     HFILE f;
     OFSTRUCT of;
     DWORD hdr[6];
     WORD w[2];
-    if (db_bad)
-        return;
+    char tmp[sizeof path];
+    char *dot = NULL, *p;
+    int ok;
     free_doomed();
     compact();
-    f = OpenFile(path, &of, OF_CREATE | OF_WRITE);
+    lstrcpy(tmp, path);
+    for (p = tmp; *p; p++)
+        if (*p == '.')
+            dot = p;
+        else if (*p == '\\')
+            dot = NULL;
+    lstrcpy(dot ? dot : p, ".TMP");
+    f = OpenFile(tmp, &of, OF_CREATE | OF_WRITE);
     if (f == HFILE_ERROR)
-        return;
+        return 0;
     hdr[0] = MAGIC0;
     hdr[1] = MAGIC1;
     hdr[2] = HDR_SIZE;
     hdr[3] = HDR_SIZE;
     hdr[4] = n_ent;
     hdr[5] = HDR_SIZE + (DWORD)n_ent * 8;
-    write_all(f, hdr, sizeof hdr);
+    ok = write_all(f, hdr, sizeof hdr);
     hdr[0] = text_size ? text_size : 1;  /* an empty area: 1 (SH2) */
-    write_all(f, hdr, 4);
     w[0] = n_buckets;
     w[1] = free_head;
-    write_all(f, w, 4);
-    write_all(f, E(0), (DWORD)n_ent * 8);
-    if (text_size)
-        write_all(f, text, text_size);
-    else
-        write_all(f, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16);  /* 16 zeros (SH2) */
-    _lclose(f);
+    ok = ok && write_all(f, hdr, 4) && write_all(f, w, 4) &&
+         write_all(f, E(0), (DWORD)n_ent * 8) &&
+         (text_size ? write_all(f, text, text_size)
+                    : write_all(f, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16)); /* 16 zeros (SH2) */
+    if (_lclose(f) == HFILE_ERROR)
+        ok = 0;
+    if (ok) {
+        OpenFile(path, &of, OF_DELETE);
+        if (dos_rename(tmp, path))
+            return 0;                   /* REG.DAT gone, the data in tmp */
+    } else {
+        OpenFile(tmp, &of, OF_DELETE);
+        return 0;
+    }
     dirty = 0;
+    return 1;
 }
 
-/* after a change: written now unless a key is open (SH1) */
-static void changed(void)
+/* The end of a call: a change not yet written is written unless a key is
+   open (SH1). A write that fails makes a call that otherwise succeeded
+   return ERROR_CANTWRITE, whatever the call (RegSetValue, RegCloseKey,
+   RegDeleteKey, and also RegQueryValue and RegEnumKey, which still give
+   their answer), and is tried again at every call until it succeeds; a
+   call's own error comes back as it is (SH15 w). */
+static LONG settle(LONG r)
 {
-    dirty = 1;
-    if (!open_count)
-        flush();
+    if (dirty && !open_count && !flush() && !r)
+        r = ERROR_CANTWRITE;
+    return r;
 }
 
 /* ---- entries ---- */
@@ -263,7 +295,8 @@ static HGLOBAL h_dead;
 static BYTE __far *dead;
 static WORD dead_cap;                   /* bytes of the bitmap */
 
-static void mark_dead(WORD from, WORD n)
+/* 0 when the bitmap cannot grow (the caller then keeps the string) */
+static int mark_dead(WORD from, WORD n)
 {
     WORD need = (WORD)((text_cap + 7) / 8);
     if (dead_cap < need) {
@@ -273,7 +306,7 @@ static void mark_dead(WORD from, WORD n)
         if (!h) {
             if (h_dead)
                 dead = (BYTE __far *)GlobalLock(h_dead);
-            return;                     /* the string is merely kept */
+            return 0;
         }
         h_dead = h;
         dead = (BYTE __far *)GlobalLock(h);
@@ -283,6 +316,7 @@ static void mark_dead(WORD from, WORD n)
         dead[from >> 3] |= (BYTE)(1 << (from & 7));
         from++;
     }
+    return 1;
 }
 
 static void compact(void)
@@ -292,7 +326,9 @@ static void compact(void)
         return;
     while (r < text_size) {
         WORD i, n;
-        if (dead[r >> 3] & (1 << (r & 7))) {
+        /* the text may have grown past the bitmap since a string last
+           died: nothing there is dead */
+        if ((r >> 3) < dead_cap && dead[r >> 3] & (1 << (r & 7))) {
             r++;
             continue;
         }
@@ -329,6 +365,8 @@ static WORD intern(const char __far *s, WORD n, int name)
         }
         last = i;
     }
+    if (n > 0xFFFF - 2)                 /* the text area holds 64K */
+        return 0;
     if (!text_room(n + 2)) {
         compact();
         if (!text_room(n + 2))
@@ -337,6 +375,10 @@ static WORD intern(const char __far *s, WORD n, int name)
     t = alloc_ent();
     if (!t)
         return 0;
+    if (t > 0x7FFF) {                   /* its WORD 2 * t + 1 must fit */
+        free_ent(t);
+        return 0;
+    }
     *(WORD __far *)(text + text_size) = t * 2 + 1;
     sh_move(text + text_size + 2, s, n);
     e = E(t);
@@ -364,8 +406,10 @@ static void unref(WORD t)
             break;
     if (E(p)->a == t)
         E(p)->a = e->a;
-    mark_dead(off - 2, n + 2);
-    free_ent(t);
+    /* out of memory for the bitmap: the string and its entry are kept,
+       as if still used, until the file is next read */
+    if (mark_dead(off - 2, n + 2))
+        free_ent(t);
 }
 
 /* ---- keys ---- */
@@ -486,6 +530,8 @@ static void import_embedding(void)
         if (n < 2)
             continue;
         RegSetValue(HKEY_CLASSES_ROOT, k, REG_SZ, f[0], 0);
+        if (sh_len(k) > MAXNAME)
+            continue;                   /* no such key could be made */
         lstrcpy(sub, k);
         lstrcat(sub, "\\protocol\\StdFileEditing\\server");
         RegSetValue(HKEY_CLASSES_ROOT, sub, REG_SZ, f[2], 0);
@@ -509,9 +555,6 @@ static LONG walk(HKEY k, LPCSTR sub, int create, WORD *node)
     WORD n;
     LONG r;
     const char __far *p;
-    if (db_bad)
-        return ERROR_BADDB;
-    maybe_import();
     if (create && sub && *sub) {
         for (p = sub;;) {
             WORD len = 0;
@@ -576,100 +619,159 @@ static void delete_tree(WORD k)
     ws_free(&st);
 }
 
+
 /* ---- loading ---- */
 
-static void empty_db(void)
+static int empty_db(void)
 {
     WORD i;
     n_buckets = NBUCKETS;
+    text_size = 0;
+    if (!set_entries(1 + NBUCKETS) || !text_room(1))
+        return 0;
     n_ent = 1 + n_buckets;
-    set_entries(n_ent);
     for (i = 1; i <= n_buckets; i++)
         E(i)->a = i;
     free_head = 0;
-    text_size = 0;
-    text_room(1);
+    return 1;
 }
+
+#define SET(m, x) ((m)[(x) >> 3] |= (BYTE)(1 << ((x) & 7)))
+#define HAS(m, x) ((m)[(x) >> 3] & (1 << ((x) & 7)))
 
 /* Windows 3.1 rebuilds the tables when it loads them (SH2, three sessions
    from different files): only what the key tree reaches is kept (not
    even the top node's own value), the free entries are relinked in
    order, the table ends 16 entries after the last one in use, the
-   chains lose their dead entries and the text area its dead strings. */
-static void collect(void)
+   chains lose their dead entries and the text area its dead strings.
+   A file whose tree or text area does not hold together is refused with
+   ERROR_BADDB and left alone (SH15 r: a key's child past the table, a
+   cycle of keys, a string longer than the text area, a free block past
+   its end; a key's name past the table gave ERROR_BADDB in 386 Enhanced
+   mode and was taken in Standard mode, as whatever lay past the table
+   allowed). So every link a loaded database holds is good. */
+static LONG collect(void)
 {
-    HGLOBAL hm = sh_alloc((DWORD)n_ent / 8 + 1);
-    BYTE __far *mark = (BYTE __far *)sh_lock(hm);
+    WORD nb = n_ent / 8 + 1;
+    HGLOBAL hm = sh_alloc((DWORD)nb * 4);
+    BYTE __far *mark = (BYTE __far *)sh_lock(hm), *node, *txt, *chained;
     WSTACK st = { 0 };
-    WORD i, last = 0, prev, k;
-#define MARK(x) (mark[(x) >> 3] |= (BYTE)(1 << ((x) & 7)))
-#define MARKED(x) (mark[(x) >> 3] & (1 << ((x) & 7)))
+    WORD i, last = 0, prev, k, c;
+    LONG res = ERROR_BADDB;
     if (!mark)
-        return;
-    for (i = 0; i <= n_buckets; i++)
-        MARK(i);
-    k = E(0)->b;
-    while (k) {
-        ENT __far *e = k < n_ent ? E(k) : NULL;
-        if (e && !MARKED(k)) {
-            MARK(k);
-            if (e->c && e->c < n_ent)
-                MARK(e->c);
-            if (e->d && e->d < n_ent)
-                MARK(e->d);
-            if (e->a)
-                ws_push(&st, e->a);
-            if (e->b)
-                ws_push(&st, e->b);
+        return ERROR_OUTOFMEMORY;
+    node = mark + nb;
+    txt = node + nb;
+    chained = txt + nb;
+
+    /* the tree: each key a node of the table, reached once */
+    SET(node, 0);
+    for (k = 0;;) {
+        for (c = E(k)->b; c; c = E(c)->a) {
+            if (c >= n_ent || c <= n_buckets || HAS(node, c))
+                goto done;
+            SET(node, c);
+            if (E(c)->b && !ws_push(&st, c)) {
+                res = ERROR_OUTOFMEMORY;
+                goto done;
+            }
         }
+        if (!st.n)
+            break;
         k = ws_pop(&st);
     }
-    ws_free(&st);
+    /* the text area: blocks filling it, each string a text entry's */
+    {
+        WORD r = 0;
+        while ((DWORD)r + 2 <= text_size) {
+            WORD v = *(WORD __far *)(text + r);
+            if (v & 1) {
+                WORD t = v >> 1;
+                if (t >= n_ent || t <= n_buckets || HAS(node, t) || HAS(txt, t) ||
+                    (DWORD)r + 2 + E(t)->c > text_size)
+                    goto done;
+                SET(txt, t);
+                E(t)->d = r + 2;
+                r += 2 + E(t)->c;
+            } else {
+                if (!v || (DWORD)r + v > text_size)
+                    goto done;
+                r += v;
+            }
+        }
+    }
+    /* the keys' names and values: strings; their references counted */
     for (i = 0; i < n_ent; i++)
-        if (MARKED(i))
-            last = i;
-    /* the chains */
+        if (HAS(txt, i))
+            E(i)->b = 0;
+    for (i = 1; i < n_ent; i++) {
+        ENT __far *e = E(i);
+        if (!HAS(node, i))
+            continue;
+        if (!e->c || e->c >= n_ent || !HAS(txt, e->c) ||
+            (e->d && (e->d >= n_ent || !HAS(txt, e->d))))
+            goto done;
+        E(e->c)->b++;
+        if (e->d)
+            E(e->d)->b++;
+    }
+    for (i = 0; i < n_ent; i++)
+        if (i <= n_buckets || HAS(node, i) || (HAS(txt, i) && E(i)->b))
+            SET(mark, i);
+    /* the chains: their live strings in order, each in its own bucket's
+       chain; a string no chain reached goes at the end of its bucket's */
     for (i = 1; i <= n_buckets; i++) {
         WORD p = i, t = E(i)->a, guard = n_ent;
-        while (t != i && guard--) {
-            if (t >= n_ent)
-                break;
-            if (MARKED(t)) {
+        while (t != i && t > n_buckets && t < n_ent && guard--) {
+            WORD next = E(t)->a;
+            if (HAS(mark, t) && HAS(txt, t) && !HAS(chained, t) &&
+                bucket(text + E(t)->d, E(t)->c) == i) {
                 E(p)->a = t;
                 p = t;
+                SET(chained, t);
             }
-            t = E(t)->a;
+            t = next;
         }
         E(p)->a = i;
     }
-    /* the text area */
+    for (i = n_buckets + 1; i < n_ent; i++)
+        if (HAS(mark, i) && HAS(txt, i) && !HAS(chained, i)) {
+            WORD b = bucket(text + E(i)->d, E(i)->c), p = b;
+            while (E(p)->a != b)
+                p = E(p)->a;
+            E(p)->a = i;
+            E(i)->a = b;
+        }
+    /* the text area, packed */
     {
         WORD r = 0, w = 0;
-        while (r + 2 <= text_size) {
+        while ((DWORD)r + 2 <= text_size) {
             WORD v = *(WORD __far *)(text + r), n;
             if (!(v & 1)) {
-                if (!v)
-                    break;
                 r += v;
                 continue;
             }
-            n = (v >> 1) < n_ent ? E(v >> 1)->c : 0;
-            if ((v >> 1) < n_ent && MARKED(v >> 1)) {
-                sh_move(text + w, text + r, n + 2);
+            n = E(v >> 1)->c + 2;
+            if (HAS(mark, v >> 1)) {
+                sh_move(text + w, text + r, n);
                 E(v >> 1)->d = w + 2;
-                w += n + 2;
+                w += n;
             }
-            r += n + 2;
+            r += n;
         }
         text_size = w;
     }
+    for (i = 0; i < n_ent; i++)
+        if (HAS(mark, i))
+            last = i;
     /* the table's new size and its free list */
     k = last + 1;
     if (k <= 0xFFFF - GROW)
         k += GROW;
     if (k != n_ent) {
         WORD old = n_ent;
-        set_entries(k);
+        if (!set_entries(k) && k > old)
+            k = old;                    /* no memory to grow: as it is */
         for (i = old; i < k; i++)
             sh_fill(E(i), 0, sizeof(ENT));
         n_ent = k;
@@ -677,7 +779,7 @@ static void collect(void)
     free_head = 0;
     prev = 0;
     for (i = 0; i < n_ent; i++) {
-        if (i <= last && MARKED(i))
+        if (i <= last && HAS(mark, i))
             continue;
         if (prev)
             E(prev)->a = i;
@@ -688,40 +790,46 @@ static void collect(void)
     }
     if (prev)
         E(prev)->a = 0;
+    res = ERROR_SUCCESS;
+done:
+    ws_free(&st);
     GlobalUnlock(hm);
     GlobalFree(hm);
-#undef MARK
-#undef MARKED
+    return res;
 }
 
-static int load(HFILE f)
+#undef SET
+#undef HAS
+
+/* REG.DAT read: ERROR_CANTREAD when the file ends inside the header or
+   the entry table (SH15 r: an empty file, one of 48 bytes), ERROR_BADDB
+   when the header is wrong or the text area is short or does not hold
+   together (SH15 r) */
+static LONG load(HFILE f)
 {
-    DWORD hdr[6];
+    DWORD hdr[6], at;
     WORD w[2];
-    if (_lread(f, (LPSTR)hdr, sizeof hdr) != sizeof hdr || hdr[0] != MAGIC0 ||
-        hdr[1] != MAGIC1 || hdr[4] > 0xFFFFL || hdr[4] < 1)
-        return 0;
-    if (_lread(f, (LPSTR)&hdr[5], 4) != 4 || _lread(f, (LPSTR)w, 4) != 4)
-        return 0;
-    if (hdr[5] > 0xFFFFL || !w[0] || w[0] >= hdr[4])
-        return 0;
+    if (_lread(f, (LPSTR)hdr, sizeof hdr) != sizeof hdr ||
+        _lread(f, (LPSTR)&hdr[5], 4) != 4 || _lread(f, (LPSTR)w, 4) != 4)
+        return ERROR_CANTREAD;
+    if (hdr[0] != MAGIC0 || hdr[1] != MAGIC1 || hdr[4] > 0xFFFFL || hdr[4] < 1 ||
+        hdr[5] > 0xFFFFL || !w[0] || w[0] >= hdr[4])
+        return ERROR_BADDB;
+    if (!set_entries((WORD)hdr[4]))
+        return ERROR_OUTOFMEMORY;
     n_ent = (WORD)hdr[4];
     n_buckets = w[0];
     free_head = w[1];
-    if (!set_entries(n_ent))
-        return 0;
-    _llseek(f, hdr[2], 0);
-    if (!read_all(f, E(0), (DWORD)n_ent * 8))
-        return 0;
+    if (_llseek(f, hdr[2], 0) != (LONG)hdr[2] || !read_all(f, E(0), (DWORD)n_ent * 8))
+        return ERROR_CANTREAD;
     text_size = 0;
-    if (!text_room((WORD)hdr[5]))
-        return 0;
-    _llseek(f, hdr[2] + (DWORD)n_ent * 8, 0);
-    if (!read_all(f, text, hdr[5]))
-        return 0;
+    if (!text_room(hdr[5] ? (WORD)hdr[5] : 1))
+        return ERROR_OUTOFMEMORY;
+    at = hdr[2] + (DWORD)n_ent * 8;
+    if (_llseek(f, at, 0) != (LONG)at || !read_all(f, text, hdr[5]))
+        return ERROR_BADDB;
     text_size = (WORD)hdr[5];
-    collect();
-    return 1;
+    return collect();
 }
 
 void reg_init(void)
@@ -737,9 +845,13 @@ void reg_init(void)
     f = OpenFile(path, &of, OF_READ);
     if (f == HFILE_ERROR) {
         /* no REG.DAT: an empty one is written at once (SH2) */
-        empty_db();
+        if (!empty_db()) {
+            load_pending = 1;           /* no memory: as if not read yet */
+            return;
+        }
         import_pending = 1;
         init_tick = GetTickCount();
+        dirty = 1;
         flush();
         return;
     }
@@ -751,27 +863,29 @@ void reg_init(void)
     load_pending = 1;
 }
 
-/* the deferred read of REG.DAT (reg_init) */
-static void pending_load(void)
+/* The deferred read of REG.DAT (reg_init), at the start of every call
+   until it succeeds. A REG.DAT that is gone gives ERROR_CANTOPEN and is
+   not made anew; a damaged one gives its error and is left alone; either
+   is read at a later call once a good file is there (SH15 g, r). Then
+   the [embedding] import when its time has come (SH15 i: also when
+   RegEnumKey is the first call). */
+static LONG begin(void)
 {
     HFILE f;
     OFSTRUCT of;
-    if (!load_pending)
-        return;
-    load_pending = 0;
-    f = OpenFile(path, &of, OF_READ);
-    if (f == HFILE_ERROR) {
-        /* UNVERIFIED: REG.DAT gone since SHELL loaded: as a missing one */
-        empty_db();
-        flush();
-        return;
+    LONG r;
+    if (load_pending) {
+        f = OpenFile(path, &of, OF_READ);
+        if (f == HFILE_ERROR)
+            return ERROR_CANTOPEN;
+        r = load(f);
+        _lclose(f);
+        if (r)
+            return r;
+        load_pending = 0;
     }
-    if (!load(f)) {
-        /* UNVERIFIED: what Windows 3.1 does with a damaged REG.DAT; w16
-           answers ERROR_BADDB and leaves the file alone */
-        db_bad = 1;
-    }
-    _lclose(f);
+    maybe_import();
+    return ERROR_SUCCESS;
 }
 
 /* ---- the API ---- */
@@ -779,25 +893,27 @@ static void pending_load(void)
 LONG SHAPI RegOpenKey(HKEY k, LPCSTR sub, HKEY __far *res)
 {
     WORD n;
-    LONG r;
-    pending_load();
-    if (!res)
-        return ERROR_INVALID_PARAMETER;
-    r = walk(k, sub, 0, &n);
+    LONG r = begin();
     if (r)
         return r;
-    *res = MAKELONG(n, 1);
-    open_count++;
-    return ERROR_SUCCESS;
+    if (!res)
+        return settle(ERROR_INVALID_PARAMETER);
+    r = walk(k, sub, 0, &n);
+    if (!r) {
+        *res = MAKELONG(n, 1);
+        open_count++;
+    }
+    return settle(r);
 }
 
 LONG SHAPI RegCreateKey(HKEY k, LPCSTR sub, HKEY __far *res)
 {
     WORD n;
-    LONG r;
-    pending_load();
+    LONG r = begin();
+    if (r)
+        return r;
     if (!res)
-        return ERROR_INVALID_PARAMETER;
+        return settle(ERROR_INVALID_PARAMETER);
     made = 0;
     r = walk(k, sub, 1, &n);
     if (!r) {
@@ -806,34 +922,34 @@ LONG SHAPI RegCreateKey(HKEY k, LPCSTR sub, HKEY __far *res)
         open_count++;
     }
     if (made)
-        changed();
-    return r;
+        dirty = 1;
+    return settle(r);
 }
 
 /* closing only counts down: any handle closes, and closing more often
    than opening gives ERROR_INVALID_PARAMETER (SH1) */
 LONG SHAPI RegCloseKey(HKEY k)
 {
-    pending_load();
     (void)k;
+    begin();
     if (!open_count)
-        return ERROR_INVALID_PARAMETER;
-    if (!--open_count && dirty)
-        flush();
-    return ERROR_SUCCESS;
+        return settle(ERROR_INVALID_PARAMETER);
+    open_count--;
+    return settle(ERROR_SUCCESS);
 }
 
 LONG SHAPI RegDeleteKey(HKEY k, LPCSTR sub)
 {
     WORD n, parent, p;
-    LONG r;
+    LONG r = begin();
     const char __far *last;
-    pending_load();
-    if (!sub || !*sub)
-        return ERROR_BADKEY;
-    r = walk(k, sub, 0, &n);
     if (r)
         return r;
+    if (!sub || !*sub)
+        return settle(ERROR_BADKEY);
+    r = walk(k, sub, 0, &n);
+    if (r)
+        return settle(r);
     /* the parent: walk again without the last component */
     for (last = sub + sh_len(sub); last > sub && last[-1] != '\\'; last--)
         ;
@@ -841,13 +957,13 @@ LONG SHAPI RegDeleteKey(HKEY k, LPCSTR sub)
         HGLOBAL h;
         char __far *s = sh_strdup(sub, &h);
         if (!s)
-            return ERROR_OUTOFMEMORY;
+            return settle(ERROR_OUTOFMEMORY);
         s[last - sub - 1] = 0;
         r = walk(k, s, 0, &parent);
         GlobalUnlock(h);
         GlobalFree(h);
         if (r)
-            return r;
+            return settle(r);
     } else {
         key_node(k, 0, &parent);
     }
@@ -862,49 +978,48 @@ LONG SHAPI RegDeleteKey(HKEY k, LPCSTR sub)
     }
     if (!ws_push(&doomed, n))
         delete_tree(n);
-    changed();
-    return ERROR_SUCCESS;
+    dirty = 1;
+    return settle(ERROR_SUCCESS);
 }
 
 /* cbData is not used: the value is the string (SH1) */
 LONG SHAPI RegSetValue(HKEY k, LPCSTR sub, DWORD type, LPCSTR data, DWORD cb)
 {
     WORD n, t = 0, old;
-    LONG r;
-    pending_load();
+    LONG r = begin();
     (void)cb;
+    if (r)
+        return r;
     if (type != REG_SZ)
-        return ERROR_INVALID_PARAMETER;
+        return settle(ERROR_INVALID_PARAMETER);
     made = 0;
     r = walk(k, sub, 1, &n);
-    if (r) {
-        if (made)
-            changed();
-        return r;
-    }
-    if (data && *data) {
+    if (!r && data && *data) {
         t = intern(data, sh_len(data), 0);
-        if (!t) {
-            if (made)
-                changed();
-            return ERROR_OUTOFMEMORY;
-        }
+        if (!t)
+            r = ERROR_OUTOFMEMORY;
     }
+    if (made)
+        dirty = 1;
+    if (r)
+        return settle(r);
     old = E(n)->d;
     E(n)->d = t;
     unref(old);
-    changed();
-    return ERROR_SUCCESS;
+    dirty = 1;
+    return settle(ERROR_SUCCESS);
 }
 
 /* The value is copied as far as *cb allows (nothing when *cb is 0), and
    *cb becomes the length of what is then in buf, plus 1 (SH1: with
-   *cb = 0, the length of the buffer's old contents). */
+   *cb = 0, the length of the buffer's old contents). ShellExecute's way
+   in too (it does not write REG.DAT). */
 LONG reg_query(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 {
     WORD n, v;
-    LONG r;
-    pending_load();                     /* ShellExecute's way in, too */
+    LONG r = begin();
+    if (r)
+        return r;
     r = walk(k, sub, 0, &n);
     if (r)
         return r;
@@ -929,24 +1044,23 @@ LONG reg_query(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 
 LONG SHAPI RegQueryValue(HKEY k, LPCSTR sub, LPSTR buf, LONG __far *cb)
 {
-    pending_load();
-    return reg_query(k, sub, buf, cb);
+    LONG r = reg_query(k, sub, buf, cb);
+    return load_pending ? r : settle(r);
 }
 
 LONG SHAPI RegEnumKey(HKEY k, DWORD index, LPSTR buf, DWORD cb)
 {
     WORD n, c;
-    LONG r;
-    pending_load();
-    r = key_node(k, 0, &n);
-    if (db_bad)
-        return ERROR_BADDB;
+    LONG r = begin();
     if (r)
         return r;
+    r = key_node(k, 0, &n);
+    if (r)
+        return settle(r);
     for (c = E(n)->b; c && index; c = E(c)->a)
         index--;
     if (!c)
-        return ERROR_BADKEY;
+        return settle(ERROR_BADKEY);
     if (cb && buf) {
         ENT __far *t = E(E(c)->c);
         WORD len = t->c;
@@ -955,5 +1069,5 @@ LONG SHAPI RegEnumKey(HKEY k, DWORD index, LPSTR buf, DWORD cb)
         sh_move(buf, text + t->d, len);
         buf[len] = 0;
     }
-    return ERROR_SUCCESS;
+    return settle(ERROR_SUCCESS);
 }
