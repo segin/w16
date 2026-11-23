@@ -175,9 +175,9 @@ static void unlock_in(WORD sel, HLOCAL h)
 
 /* A copy of the edit control's text (mem_free it), its length in *len;
    NULL if there is no memory for it. Read from the control's block
-   (EM_GETHANDLE), not with GetWindowText, whose count is an int: w16's
-   USER returns nothing for 32767 characters or more (3.1's copies them;
-   Notepad audit C1, ARCHITECTURE.md 15.1). */
+   (EM_GETHANDLE), not with GetWindowText, whose count w16's USER took
+   as an int until probe US36 (3.1's copies past 32767; Notepad audit C1,
+   ARCHITECTURE.md 15.1). */
 LPSTR edit_text(WORD *len)
 {
     WORD n = (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0), i;

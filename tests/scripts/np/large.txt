@@ -4,9 +4,8 @@
 ; text", w16's wraps: either keeps the text; its OK clicked);
 ; Ctrl+Home, Find "zq" (the match past 32767), "Q" typed over it, Save
 ; As; Word Wrap again. Only the saved files are compared: the two
-; Notepads differ on purpose in whether they wrap. With NP_W16FILES the
-; last file differs: w16's USER takes EM_SETSEL past 32767 as negative
-; (ARCHITECTURE 10.3).
+; Notepads differ on purpose in whether they wrap. Passes with NP_W16FILES
+; too (w16's USER took EM_SETSEL past 32767 as negative until probe US36).
 ; gen 51190 64 BIG.TXT
 ; get BIGOUT.TXT BIGWRAP.TXT
 run NOTEPAD.EXE C:\BIG.TXT
